@@ -46,6 +46,7 @@ _REQUEST_FIELDS = {
     "request_id",
     "schema",
 }
+_REQUEST_OPTIONAL_FIELDS = {"objective"}
 _RECORD_FIELDS = {
     "attempt_id",
     "baseline_ref",
@@ -66,6 +67,11 @@ _RECORD_FIELDS = {
     "usage",
     "verdict_id",
     "wall_seconds",
+}
+_RECORD_OPTIONAL_FIELDS = {
+    "candidate_fingerprint",
+    "candidate_fingerprint_ref",
+    "marginal_usage",
 }
 
 
@@ -125,7 +131,7 @@ def _canonical_record_id(record: Mapping[str, Any]) -> str:
     from .supervisor import RECORD_SCHEMA
 
     missing = sorted(_RECORD_FIELDS - set(record))
-    unknown = sorted(str(key) for key in set(record) - _RECORD_FIELDS)
+    unknown = sorted(str(key) for key in set(record) - _RECORD_FIELDS - _RECORD_OPTIONAL_FIELDS)
     if missing:
         raise ContractError("supervisor record is missing fields: " + ", ".join(missing))
     if unknown:
@@ -182,6 +188,20 @@ def _validate_record(
     usage = ResourceUsage.from_mapping(record.get("usage"))
     if usage.to_dict() != record.get("usage"):
         raise ContractError("supervisor record usage is not canonical")
+    marginal_raw = record.get("marginal_usage")
+    if marginal_raw is not None:
+        marginal_usage = ResourceUsage.from_mapping(marginal_raw)
+        if marginal_usage.to_dict() != marginal_raw:
+            raise ContractError("supervisor record marginal_usage is not canonical")
+    fingerprint = record.get("candidate_fingerprint")
+    fingerprint_ref = record.get("candidate_fingerprint_ref")
+    if (fingerprint is None) != (fingerprint_ref is None):
+        raise ContractError("supervisor record candidate fingerprint fields must travel together")
+    if fingerprint is not None:
+        fingerprint = _sha256(fingerprint, "supervisor record candidate_fingerprint")
+        expected_fingerprint_ref = f"refs/crucible/candidate-fingerprints/{fingerprint}"
+        if fingerprint_ref != expected_fingerprint_ref:
+            raise ContractError("supervisor record candidate_fingerprint_ref does not match")
     wall_seconds = record.get("wall_seconds")
     if (
         isinstance(wall_seconds, bool)
@@ -220,10 +240,18 @@ def _validate_proposal_lineage(
 ) -> ResourceUsage:
     from .supervisor import PROPOSAL_SCHEMA, REQUEST_SCHEMA
 
-    if set(request) != _REQUEST_FIELDS:
+    unknown_request_fields = set(request) - _REQUEST_FIELDS - _REQUEST_OPTIONAL_FIELDS
+    if not _REQUEST_FIELDS.issubset(request) or unknown_request_fields:
         raise ContractError("proposal request fields do not match the supervisor schema")
     if request.get("schema") != REQUEST_SCHEMA:
         raise ContractError(f"proposal request schema must be {REQUEST_SCHEMA!r}")
+    objective = request.get("objective")
+    if objective is not None and (
+        not isinstance(objective, str)
+        or not objective.strip()
+        or len(objective.encode("utf-8")) > 16 * 1024
+    ):
+        raise ContractError("proposal request objective must be a bounded non-empty string")
     request_id = _sha256(request.get("request_id"), "proposal request_id")
     request_payload = dict(request)
     del request_payload["request_id"]

@@ -45,6 +45,40 @@ functional change.
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **Crucible family-aware power admission.** Central prepare accepts an
+  optional `crucible.family-power-spec.v1` whose scenarios carry explicit
+  basis files and source digests, which must match before use. It evaluates the
+  actual task→family layout, trial count, and frozen paired-bootstrap rule,
+  persists an opaque deterministic power report without basis paths or
+  contents, stamps its ID into prepare provenance, and emits no launchable
+  config when a scenario's 95% Monte Carlo lower bound misses preregistered
+  `minimum_power`. A standalone `power-audit` command applies the same check to
+  an opaque hidden pack before candidate generation. The audit does not fit a
+  noise model or derive promotion thresholds.
+
+### Fixed
+
+- **Crucible campaign integrity follow-up.** Central prepare now exits 3 on a
+  quota-window `defer` and leaves no launchable config after invalid window
+  input. Producer objectives are bound by the tracked parent program or
+  optional `search.objective`, never an ambient override. Baseline-bound stable
+  candidate patches receive one admissible train verdict per frozen
+  measurement world, preventing stochastic re-ticketing while keeping INVALID
+  retries and evaluator-revision replay available. Cached evidence usage is
+  separated from current marginal spend for budget and window accounting, and
+  bounded producer failures survive the subprocess boundary through a
+  structured sidecar.
+- **Crucible retry and bootstrap identity.** A scoreless infrastructure replay
+  now fast-forwards to the original candidate commit when its parent is
+  unchanged, keeping revision-bound candidate cache rows reusable across quota
+  windows. Corrected-evaluator replay still creates a fresh child. Bootstrap
+  seeding now canonicalizes family deltas, so arbitrary frozen family order
+  cannot change a future verdict.
+
 ## [0.99.311] - 2026-07-13
 
 ### Fixed

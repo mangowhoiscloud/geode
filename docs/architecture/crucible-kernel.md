@@ -313,6 +313,14 @@ by a recoverable compare-and-swap journal. The active repository branch is
 never moved. Each contract names a separate immutable
 `refs/crucible/baselines/<campaign>/<attempt>` ref, so later search-head
 advances do not invalidate historical preflight.
+After an admissible KEEP or REJECT, the supervisor also stores a compact Git
+blob receipt under `refs/crucible/candidate-fingerprints/<sha256>`. The digest
+binds the stable patch to its baseline and frozen evaluator, harness, task pack,
+assay, routes, promotion rule, budget, and veto set. Recommitting that same
+treatment cannot
+buy another stochastic train-gate ticket; it receives a zero-evaluator-call
+`duplicate_candidate` REJECT. INVALID attempts do not write the receipt, and a
+changed measurement or decision identity remains eligible for explicit replay.
 
 The shipped live path keeps the treatment smaller than the evaluator. The only
 candidate-owned file is `plugins/benchmark_harness/tau2_agent_policy.md`.
@@ -354,6 +362,12 @@ complete set, and then passes through the normal snapshot and evidence
 verifiers. Exact full coverage remains mandatory. The launch-side window
 preflight reports `cap_fit`, `history_fit`, or `defer` from explicit quota
 estimates and measured history; none is represented as a provider guarantee.
+Evidence keeps the historical calls, tokens, cash, and wall time that produced
+its rows so verdict and bundle reconstruction remain unchanged. The evaluator
+separately reports `marginal_usage` for work performed in the current launch;
+only that value consumes campaign limits and feeds later window history. A
+full-cache synthesis therefore keeps its attested evidence usage but has zero
+marginal calls, tokens, and cash.
 
 ### Frozen rules, external calibration
 
@@ -368,6 +382,19 @@ adaptive loop until a versioned calibration dataset and validated estimator
 exist. This is less automatic, but it keeps unsupported statistical authority
 out of the promotion contract.
 
+Central prepare can nevertheless audit the power of those explicit choices
+without claiming to fit or derive them. A `crucible.family-power-spec.v1`
+block binds each paired-Bernoulli pilot scenario to a bounded regular source
+artifact whose bytes must match the declared digest, then runs the production
+family-bootstrap rule over the prepared task→family structure and trial count.
+Its opaque `crucible.family-power-report.v1` contains only pack identity,
+counts, assumptions, source digest, and estimated KEEP probabilities—not the
+basis path or contents. If any scenario's 95% Monte Carlo lower bound misses the preregistered
+`minimum_power`, prepare preserves the report but emits no launchable config.
+The audit is conditional on infrastructure, safety, tool-contract, coverage,
+and budget vetoes passing; it neither changes the frozen promotion rule nor
+converts its assumptions into evidence.
+
 The packaged operational surface is:
 
 ```bash
@@ -377,6 +404,13 @@ uv run python -m plugins.crucible tau2-task-pack tasks.json \
   --task-id 17 --task-id 42 \
   --task-split split_tasks.json --task-split-name base \
   --output train.pack.json
+
+# Audit an opaque train or hidden pack without exposing its task contents.
+# promotion.json is the exact frozen PromotionRule object; power-spec.json
+# binds every modeled scenario to a verified pilot artifact.
+uv run python -m plugins.crucible power-audit hidden.pack.json \
+  --promotion promotion.json --spec power-spec.json \
+  --output hidden.power.json
 
 # Normalize each finalized arm. Usage and safety/tool checks are independent
 # manifests; reward is not allowed to imply those checks.
@@ -412,6 +446,9 @@ The independent train loop is started from one JSON configuration:
   "evaluator_entrypoint": "scripts/eval/crucible_tau2_evaluator.py",
   "producer_environment": ["CODEX_HOME"],
   "evaluator_environment": ["CODEX_HOME", "CRUCIBLE_TAU2_HARNESS_ROOT"],
+  "search": {
+    "objective": "Keep multi-step tool workflows monotone."
+  },
   "train_plan": {
     "schema": "crucible.train-plan.v3",
     "name": "verify-claims-train",
@@ -470,9 +507,11 @@ uv run python -m plugins.crucible loop supervisor.json
 
 The producer process starts in the supervisor-created disposable checkout. Its
 request contains the current search SHA, allowed surface, previous compact
-feedback, and remaining campaign budget, but no artifact-store or checkout
-path. The producer receives only `CRUCIBLE_PROPOSAL_REQUEST` and
-`CRUCIBLE_CANDIDATE_OUTPUT`; it never chooses the task pack, evaluator,
+feedback, remaining campaign budget, and any explicit `search.objective`, but
+no artifact-store or checkout path. The tracked program default is bound by the
+parent revision when no override is present. Ambient objective environment
+variables are ignored. The producer receives only supervisor-owned request,
+output, and structured-error paths; it never chooses the task pack, evaluator,
 promotion rule, contract, or campaign budget. The trusted evaluator receives
 the canonical candidate and supervisor-written contract through
 `CRUCIBLE_CANDIDATE` and `CRUCIBLE_CONTRACT`. The supervisor executes the frozen
@@ -518,6 +557,12 @@ artifacts:
   "candidate": "candidate.evidence.json",
   "baseline_raw": "baseline.results.json",
   "candidate_raw": "candidate.results.json",
+  "marginal_usage": {
+    "wall_seconds": 30.0,
+    "calls": 4,
+    "tokens": 12000,
+    "cost_usd": 0.02
+  },
   "feedback": {
     "schema": "crucible.failure-feedback.v3",
     "failure_codes": ["tool_contract"],
@@ -576,21 +621,32 @@ a current core promotion.
 
 ## Operating loop
 
-1. Before launch, compare the frozen campaign cap and completed-run history to
-   the explicitly sourced quota estimate. Defer when neither the cap nor the
-   measured worst run fits.
-2. Start from the current search-head commit. This is not a core-promotion ref.
-3. Choose one causal failure signature and one mutation surface through the
+1. Before a paid stochastic launch, require central prepare to admit the exact
+   family/trial design under digest-bound pilot scenarios and a preregistered
+   minimum power.
+2. Compare the frozen campaign cap and completed-run history to
+   the explicitly sourced quota estimate. `prepare` returns exit 3 on `defer`,
+   so `prepare && loop` cannot launch when neither the cap nor the measured
+   worst run fits.
+3. Start from the current search-head commit. This is not a core-promotion ref.
+4. Choose one causal failure signature and one mutation surface through the
    tracked `plugins/crucible/program.md` contract.
-4. Make the smallest change that could alter that signature.
-5. Commit the candidate. Never measure a dirty worktree.
-6. Freeze `experiment.json`, including evaluator/harness content hashes, task
+5. Make the smallest change that could alter that signature.
+6. Commit the candidate. Never measure a dirty worktree.
+7. Freeze `experiment.json`, including evaluator/harness content hashes, task
    pack, family assignments, and the entire experiment budget.
-7. Run baseline and candidate on the same frozen task order. The tau2 adapter
+8. Run baseline and candidate on the same frozen task order. The tau2 adapter
    preserves upstream order. An identity-proven row cache may satisfy complete
    pairs or narrow execution to missing tasks; it cannot alter coverage or
    verdict rules.
-8. The current runner enforces its wall timeout and rejects finalized evidence
+9. A scoreless infrastructure retry with the same parent fast-forwards to the
+   original candidate commit instead of recommitting its patch. This preserves
+   the revision-bound candidate cache shard; a changed evaluator/parent creates
+   a fresh child because its old rows are ineligible.
+10. Reject a candidate without evaluator calls when the same stable patch,
+   baseline, and frozen measurement/decision identity already has an
+   admissible train verdict. Infrastructure INVALID attempts remain retryable.
+11. The current runner enforces its wall timeout and rejects finalized evidence
    that exceeds the frozen aggregate budget. After a complete train baseline,
    the evaluator computes the best possible candidate vector under the assay's
    metric ceiling; if even that vector cannot clear the frozen materiality,
@@ -598,14 +654,14 @@ a current core promotion.
    REJECT instead of spending the candidate arm. In-run call/token/cash
    cancellation and pairwise sequential stopping remain execution-substrate
    work. `max_steps` is a task failure, not a row to drop.
-9. Normalize both raw artifacts into immutable evidence envelopes. Identity,
+12. Normalize both raw artifacts into immutable evidence envelopes. Identity,
    coverage, or infrastructure defects produce INVALID and no performance
    comparison.
-10. KEEP only when the paired confidence bound and absolute floor clear the
+13. KEEP only when the paired confidence bound and absolute floor clear the
    preregistered rule and every candidate veto passes. Otherwise REJECT and
    leave the search head unchanged. Train KEEP still requires a disjoint sealed
    test before any release claim.
-11. Complexity remains bounded by the frozen changed-line limit; no separate
+14. Complexity remains bounded by the frozen changed-line limit; no separate
     model-judged simplicity gate is used.
 
 ### Core promotion boundary
@@ -1193,6 +1249,26 @@ its structured error on JSON stdout; the resulting supervisor artifact retained
 only `codex exited with status 1`. The wrapper now extracts one bounded message
 from `error` or `turn.failed` events without retaining model output. The frozen
 train and hidden packs remain unconsumed for a fresh campaign after reset.
+That fresh preparation must bind a family-power report for the replicated
+train design, and the trusted runner must apply the packaged `power-audit`
+command to the opaque hidden pack before any provider call. Both audits may use
+the frozen pilot evidence as an explicit assumption source but cannot silently
+reintroduce the removed task-level derivation.
+
+The 2026-07-13 admission audit then rejected the unconsumed r26 cardinalities
+before any provider call. Across 20,000 deterministic simulations per scenario,
+the 9-family × 2-trial train design had a 95% Monte Carlo power lower bound of
+`0.7617–0.7623`, and the 6-family × 1-trial sealed design had
+`0.6425–0.6446`; neither met the preregistered `0.80` minimum. Keeping the
+same ordered task identities while increasing train to three trials and sealed
+to two produced lower-bound ranges of `0.8367–0.8404` and
+`0.8082–0.8092`. The two replacement packs have zero task, content, and
+family overlap, and the opaque sealed selection digest is unchanged from r26.
+Central prepare round-tripped the train packet through the production config
+loader at feature revision `76a09a394`; that draft config is assembly evidence,
+not launch authority, and must be regenerated against the merged develop SHA.
+The digest-bound record is preserved in
+[`docs/eval/crucible-power-admission-2026-07-13.md`](../eval/crucible-power-admission-2026-07-13.md).
 
 The strongest honest claims are:
 

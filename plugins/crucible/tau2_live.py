@@ -348,7 +348,7 @@ def _run_arm(
     run_id: str,
     timeout: float,
     parent_contract_path: Path | None = None,
-) -> tuple[EvidenceEnvelope, Path]:
+) -> tuple[EvidenceEnvelope, Path, ResourceUsage]:
     snapshot_dir = output_dir / "snapshots"
     snapshot_dir.mkdir(exist_ok=True)
     environment = dict(os.environ)
@@ -399,6 +399,7 @@ def _run_arm(
     raw_path = output_dir / f"{arm}.raw.json"
     elapsed = 0.0
     runner_returncode = 0
+    marginal_usage = ResourceUsage(0.0, 0, 0, 0.0)
     if salvage_context is not None and not unfinished_ids:
         # Every expected row is identity-proven in the cache: rebuild the
         # results file without spending a single conversation.
@@ -456,6 +457,13 @@ def _run_arm(
                 f"tau2 {arm} arm did not produce finalized raw and snapshot files"
             )
         fresh = load_json_object(source_raw, f"tau2 {arm} raw", max_bytes=512 * 1024 * 1024)
+        fresh_usage = tau2_resource_usage_floor(fresh)
+        marginal_usage = ResourceUsage(
+            wall_seconds=max(elapsed, fresh_usage.wall_seconds),
+            calls=fresh_usage.calls,
+            tokens=fresh_usage.tokens,
+            cost_usd=fresh_usage.cost_usd,
+        )
         if salvage_context is not None and salvaged:
             fresh_rows = _index_simulations(fresh, f"tau2 {arm} partial-cache raw")
             # A task with one missing trial must be re-run as a whole because
@@ -495,7 +503,7 @@ def _run_arm(
     write_exclusive_json(evidence_path, evidence.to_dict())
     if runner_returncode and evidence.execution_status != "invalid":
         raise Tau2InfrastructureError(f"tau2 {arm} arm exited with status {runner_returncode}")
-    return evidence, raw_path
+    return evidence, raw_path, marginal_usage
 
 
 def _write_skipped_arm(
@@ -504,7 +512,7 @@ def _write_skipped_arm(
     arm: Literal["baseline", "candidate"],
     output_dir: Path,
     trigger: EvidenceEnvelope,
-) -> tuple[EvidenceEnvelope, Path]:
+) -> tuple[EvidenceEnvelope, Path, ResourceUsage]:
     """Attest that one arm was intentionally skipped after paired infrastructure failure."""
 
     if trigger.execution_status != "invalid":
@@ -554,7 +562,7 @@ def _write_skipped_arm(
         }
     )
     write_exclusive_json(output_dir / f"{arm}.evidence.json", evidence.to_dict())
-    return evidence, raw_path
+    return evidence, raw_path, ResourceUsage(0.0, 0, 0, 0.0)
 
 
 def _write_screened_arm(
@@ -563,7 +571,7 @@ def _write_screened_arm(
     output_dir: Path,
     baseline: EvidenceEnvelope,
     reachability: PromotionReachability,
-) -> tuple[EvidenceEnvelope, Path]:
+) -> tuple[EvidenceEnvelope, Path, ResourceUsage]:
     """Attest a zero-call candidate arm whose metric ceiling cannot train-KEEP."""
 
     if baseline.execution_status != "complete" or reachability.reachable:
@@ -611,7 +619,7 @@ def _write_screened_arm(
         }
     )
     write_exclusive_json(output_dir / "candidate.evidence.json", evidence.to_dict())
-    return evidence, raw_path
+    return evidence, raw_path, ResourceUsage(0.0, 0, 0, 0.0)
 
 
 def tau2_failure_feedback(
@@ -692,6 +700,7 @@ def _train_evaluation_response(
     output_dir: Path,
     baseline_raw: Path,
     candidate_raw: Path,
+    marginal_usage: ResourceUsage,
     feedback: Mapping[str, Any] | None,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
@@ -703,6 +712,7 @@ def _train_evaluation_response(
         "candidate": _relative(output_dir / "candidate.evidence.json", output_dir),
         "baseline_raw": _relative(baseline_raw, output_dir),
         "candidate_raw": _relative(candidate_raw, output_dir),
+        "marginal_usage": marginal_usage.to_dict(),
     }
     if feedback is not None:
         payload["feedback"] = dict(feedback)
@@ -776,7 +786,7 @@ class Tau2SealedEvaluator:
                 baseline_sha=plan.baseline_sha,
                 candidate_sha=plan.candidate_sha,
             ) as (baseline_checkout, candidate_checkout):
-                baseline, baseline_raw = _run_arm(
+                baseline, baseline_raw, _baseline_marginal = _run_arm(
                     contract,
                     arm="baseline",
                     checkout=baseline_checkout,
@@ -791,7 +801,7 @@ class Tau2SealedEvaluator:
                     raise Tau2InfrastructureError(
                         f"tau2 baseline arm is invalid: {baseline.failure_class}"
                     )
-                candidate, candidate_raw = _run_arm(
+                candidate, candidate_raw, _candidate_marginal = _run_arm(
                     contract,
                     arm="candidate",
                     checkout=candidate_checkout,
@@ -854,7 +864,7 @@ def run_command_evaluator() -> int:
         if timeout <= 0:
             raise ContractError("evaluator has no remaining wall budget")
         per_arm = max(1.0, timeout / 2.0)
-        baseline, baseline_raw = _run_arm(
+        baseline, baseline_raw, baseline_marginal = _run_arm(
             contract,
             arm="baseline",
             checkout=baseline_checkout,
@@ -865,7 +875,7 @@ def run_command_evaluator() -> int:
             timeout=per_arm,
         )
         if baseline.execution_status == "invalid":
-            candidate, candidate_raw = _write_skipped_arm(
+            candidate, candidate_raw, candidate_marginal = _write_skipped_arm(
                 contract,
                 arm="candidate",
                 output_dir=output_dir,
@@ -878,14 +888,14 @@ def run_command_evaluator() -> int:
                 metric_ceiling=TAU2_ADAPTER.metric_bound(contract.promotion.primary_metric)[1],
             )
             if contract.stage == "train" and not reachability.reachable:
-                candidate, candidate_raw = _write_screened_arm(
+                candidate, candidate_raw, candidate_marginal = _write_screened_arm(
                     contract,
                     output_dir=output_dir,
                     baseline=baseline,
                     reachability=reachability,
                 )
             else:
-                candidate, candidate_raw = _run_arm(
+                candidate, candidate_raw, candidate_marginal = _run_arm(
                     contract,
                     arm="candidate",
                     checkout=candidate_checkout,
@@ -921,6 +931,7 @@ def run_command_evaluator() -> int:
             output_dir=output_dir,
             baseline_raw=baseline_raw,
             candidate_raw=candidate_raw,
+            marginal_usage=baseline_marginal + candidate_marginal,
             feedback=feedback,
         ),
     )
@@ -944,6 +955,7 @@ def _request_for_candidate(row: Mapping[str, Any]) -> Any:
         producer_dir=Path("."),
         feedback=row.get("feedback"),
         remaining_budget=_mapping(row.get("remaining_budget"), "remaining_budget"),
+        objective=(str(row["objective"]) if isinstance(row.get("objective"), str) else None),
     )
 
 

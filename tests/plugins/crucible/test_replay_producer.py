@@ -87,6 +87,27 @@ def _target(
     return _commit(repository, "new runtime baseline")
 
 
+def _target_at_source_parent(
+    repository: Path,
+    *,
+    source: Path,
+    source_parent: str,
+) -> None:
+    _git(source, "branch", "invalid-retry-baseline", source_parent)
+    _git(
+        source,
+        "clone",
+        "-q",
+        "--branch",
+        "invalid-retry-baseline",
+        str(source),
+        str(repository),
+    )
+    _git(repository, "config", "user.name", "fixture")
+    _git(repository, "config", "user.email", "fixture@example.invalid")
+    _git(repository, "config", "commit.gpgsign", "false")
+
+
 def _request(path: Path, parent_sha: str) -> None:
     path.write_text(
         json.dumps(
@@ -250,6 +271,34 @@ def test_replay_candidate_reapplies_only_the_preregistered_surface(
     assert (target / "plugins/benchmark_harness/tau2_agent_policy.md").read_text(
         encoding="utf-8"
     ) == IMPROVED_POLICY
+
+
+def test_invalid_replay_preserves_exact_candidate_revision_for_row_cache(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "source"
+    source_parent, source_candidate = _source(source)
+    target = tmp_path / "target"
+    _target_at_source_parent(target, source=source, source_parent=source_parent)
+    request = tmp_path / "request.json"
+    output = tmp_path / "candidate.json"
+    _request(request, source_parent)
+    monkeypatch.chdir(target)
+
+    _replay(
+        request=request,
+        output=output,
+        source=source,
+        source_candidate=source_candidate,
+        source_parent=source_parent,
+    )
+
+    proposal = json.loads(output.read_text(encoding="utf-8"))
+    assert proposal["parent_sha"] == source_parent
+    assert proposal["candidate_sha"] == source_candidate
+    assert _git(target, "rev-parse", "HEAD") == source_candidate
+    assert _git(target, "status", "--porcelain", "--untracked-files=all") == ""
 
 
 def test_replay_candidate_rejects_a_source_with_extra_changes(

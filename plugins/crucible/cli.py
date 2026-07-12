@@ -12,10 +12,11 @@ from typing import Any
 
 from .artifacts import load_json_object, write_exclusive_json
 from .bundle import PromotionBundle
-from .contract import ContractError, load_contract, task_pack_sha256
+from .contract import ContractError, PromotionRule, load_contract, task_pack_sha256
 from .curation import curate_tau2_pack
 from .evidence import EvidenceEnvelope, ResourceUsage, load_evidence
-from .prepare import prepare_campaign
+from .power import audit_family_power
+from .prepare import load_pack, prepare_campaign
 from .promotion import PromotionVerdict, decide
 from .ref_journal import reconcile_ref_update
 from .supervisor import SupervisorError, run_supervisor
@@ -169,6 +170,17 @@ def _add_prepare(subparsers: Any) -> None:
     )
 
 
+def _add_power_audit(subparsers: Any) -> None:
+    parser = subparsers.add_parser(
+        "power-audit",
+        help="audit one opaque task pack against an explicit family-power specification",
+    )
+    parser.add_argument("pack", type=Path)
+    parser.add_argument("--promotion", type=Path, required=True)
+    parser.add_argument("--spec", type=Path, required=True)
+    parser.add_argument("--output", type=Path, required=True)
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -179,6 +191,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     _add_score(subparsers)
     _add_loop(subparsers)
     _add_prepare(subparsers)
+    _add_power_audit(subparsers)
     _add_bundle(subparsers)
     _add_reconcile_ref(subparsers)
     return parser.parse_args(argv)
@@ -327,6 +340,22 @@ def _bundle(args: argparse.Namespace) -> PromotionBundle:
     return bundle
 
 
+def _power_audit(args: argparse.Namespace) -> dict[str, Any]:
+    units, trials_per_task = load_pack(args.pack)
+    promotion = PromotionRule.from_mapping(load_json_object(args.promotion, "promotion rule"))
+    specification = load_json_object(args.spec, "family power specification")
+    report = audit_family_power(
+        tasks=units,
+        trials_per_task=trials_per_task,
+        task_pack_sha256=task_pack_sha256(units, trials_per_task),
+        promotion=promotion,
+        specification=specification,
+        basis_root=args.spec.resolve().parent,
+    )
+    write_exclusive_json(args.output, report)
+    return report
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     try:
@@ -354,7 +383,12 @@ def main(argv: list[str] | None = None) -> int:
                 remaining_tokens=args.remaining_tokens,
             )
             print(json.dumps(report, sort_keys=True))
-            return 0
+            window = report.get("window")
+            return 3 if isinstance(window, Mapping) and window.get("fit") == "defer" else 0
+        if args.command == "power-audit":
+            report = _power_audit(args)
+            print(json.dumps(report, sort_keys=True))
+            return 0 if report["passes"] else 1
         if args.command == "loop":
             summary = run_supervisor(args.config)
             print(json.dumps(summary.to_dict(), sort_keys=True))

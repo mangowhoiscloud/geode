@@ -312,18 +312,31 @@ def _reject_symlinks(root: Path, paths: Sequence[str], field: str) -> None:
                     raise ContractError(f"{field} contains a symlink: {child_relative}")
 
 
+def _run_git_bytes(
+    repo_root: Path,
+    git: str,
+    *args: str,
+    input_bytes: bytes | None = None,
+    check: bool = False,
+) -> subprocess.CompletedProcess[bytes]:
+    """Run a fixed Git executable without shell interpretation."""
+
+    return subprocess.run(  # noqa: S603 - fixed executable and argv; no shell
+        [git, *args],
+        cwd=repo_root,
+        input=input_bytes,
+        check=check,
+        capture_output=True,
+    )
+
+
 def _run_git(repo_root: Path, *args: str) -> str:
     git = shutil.which("git")
     if git is None:
         raise ContractError("git executable is required to validate a checkout")
     try:
-        return subprocess.run(  # noqa: S603 - fixed executable and argv; no shell
-            [git, *args],
-            cwd=repo_root,
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout
+        result = _run_git_bytes(repo_root, git, *args, check=True)
+        return result.stdout.decode("utf-8", errors="strict")
     except (OSError, subprocess.CalledProcessError) as exc:
         raise ContractError(f"cannot inspect git checkout at {repo_root}: {exc}") from exc
 

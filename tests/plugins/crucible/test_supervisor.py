@@ -27,6 +27,7 @@ from plugins.crucible.ref_journal import load_receipt
 from plugins.crucible.supervisor import (
     CandidateProposal,
     FailureFeedback,
+    GitWorkspace,
     LoopLimits,
     PromotionSupervisor,
     ProposalRequest,
@@ -271,6 +272,24 @@ class _Producer:
         )
 
 
+class _RepeatingProducer(_Producer):
+    def propose(self, request: ProposalRequest, *, timeout: float) -> CandidateProposal:
+        assert timeout > 0
+        self.feedbacks.append(request.feedback)
+        surface = request.worktree / "surface.txt"
+        surface.write_text("same candidate\n", encoding="utf-8")
+        _git(request.worktree, "add", "surface.txt")
+        _git(request.worktree, "commit", "-qm", f"repeated candidate {request.iteration}")
+        return CandidateProposal(
+            attempt_id=request.attempt_id,
+            request_id=request.request_id,
+            parent_sha=request.parent_sha,
+            candidate_sha=_git(request.worktree, "rev-parse", "HEAD"),
+            mutation=Mutation(surface="surface.txt", hypothesis="repeat fixture"),
+            usage=ResourceUsage(0.1, self.calls, 10, 0.1),
+        )
+
+
 class _Evaluator:
     def __init__(
         self,
@@ -394,6 +413,29 @@ class _Evaluator:
         )
         if self.dirty_after_response:
             (checkout / "evaluator-residue.txt").write_text("dirty\n", encoding="utf-8")
+        return response
+
+
+class _MarginalEvaluator(_Evaluator):
+    def evaluate(
+        self,
+        request: ProposalRequest,
+        proposal: CandidateProposal,
+        contract: ExperimentContract,
+        *,
+        checkout: Path,
+        timeout: float,
+    ) -> Path:
+        response = super().evaluate(
+            request,
+            proposal,
+            contract,
+            checkout=checkout,
+            timeout=timeout,
+        )
+        payload = json.loads(response.read_text(encoding="utf-8"))
+        payload["marginal_usage"] = ResourceUsage(0.0, 0, 0, 0.0).to_dict()
+        response.write_text(json.dumps(payload), encoding="utf-8")
         return response
 
 
@@ -545,6 +587,7 @@ def test_command_producer_view_cannot_carry_task_identity_or_verdict_reasons(
             "tokens": 1_000,
             "cost_usd": 1.0,
         },
+        objective="Preserve completed work.",
     )
 
     producer_view = request.to_producer_dict()
@@ -555,6 +598,7 @@ def test_command_producer_view_cannot_carry_task_identity_or_verdict_reasons(
         "schema": "crucible.failure-feedback.v3",
         "failure_codes": ["workflow_completion"],
     }
+    assert producer_view["objective"] == "Preserve completed work."
     assert "private-train-task" not in serialized
     assert "confidence_bound_not_positive" not in serialized
 
@@ -671,6 +715,90 @@ def test_campaign_budget_overrun_blocks_an_evaluator_keep(tmp_path: Path) -> Non
     assert "campaign_budget_exceeded" in _ledger(config)[0]["reasons"]
 
 
+def test_cached_evidence_usage_does_not_consume_the_current_campaign_budget(
+    tmp_path: Path,
+) -> None:
+    config, baseline = _config(tmp_path, attempts=1, max_calls=2)
+    summary = PromotionSupervisor(
+        config,
+        producer=_Producer(calls=1),
+        evaluator=_MarginalEvaluator(["KEEP"], calls_per_arm=2),
+    ).run()
+
+    assert summary.keeps == 1
+    assert summary.final_search_head_sha != baseline
+    assert summary.usage.calls == 1
+    assert summary.evidence_usage.calls == 5
+    record = _ledger(config)[0]
+    assert record["usage"]["calls"] == 5
+    assert record["marginal_usage"]["calls"] == 1
+
+
+def test_valid_candidate_patch_is_measured_once_across_recommits(tmp_path: Path) -> None:
+    config, baseline = _config(tmp_path, attempts=3)
+    producer = _RepeatingProducer()
+    evaluator = _Evaluator(["REJECT"])
+
+    summary = PromotionSupervisor(config, producer=producer, evaluator=evaluator).run()
+
+    assert summary.rejects == 3
+    assert summary.invalids == 0
+    assert summary.final_search_head_sha == baseline
+    assert evaluator.calls == 1
+    ledger = _ledger(config)
+    assert ledger[0]["reasons"] != ["duplicate_candidate"]
+    assert ledger[1]["reasons"] == ["duplicate_candidate"]
+    assert ledger[2]["reasons"] == ["duplicate_candidate"]
+    assert producer.feedbacks[2] is not None
+    assert producer.feedbacks[2]["evaluator"]["failure_codes"] == ["duplicate_candidate"]
+    refs = _git(
+        config.repository,
+        "for-each-ref",
+        "--format=%(refname)",
+        "refs/crucible/candidate-fingerprints/",
+    ).splitlines()
+    assert len(refs) == 1
+
+
+def test_infrastructure_invalid_does_not_poison_candidate_dedup(tmp_path: Path) -> None:
+    config, _baseline = _config(tmp_path, attempts=2, invalid_limit=3)
+    evaluator = _Evaluator(["INVALID", "REJECT"])
+
+    summary = PromotionSupervisor(
+        config,
+        producer=_RepeatingProducer(),
+        evaluator=evaluator,
+    ).run()
+
+    assert summary.invalids == 1
+    assert summary.rejects == 1
+    assert evaluator.calls == 2
+
+
+def test_candidate_fingerprint_changes_with_the_frozen_evaluator(tmp_path: Path) -> None:
+    config, baseline = _config(tmp_path, attempts=1)
+    surface = config.repository / "surface.txt"
+    surface.write_text("same candidate\n", encoding="utf-8")
+    _git(config.repository, "add", "surface.txt")
+    _git(config.repository, "commit", "-qm", "candidate")
+    candidate = _git(config.repository, "rev-parse", "HEAD")
+    contract = config.train_plan.contract(
+        champion_ref="refs/crucible/baselines/fingerprint/attempt",
+        baseline_sha=baseline,
+        candidate_sha=candidate,
+        mutation=Mutation(surface="surface.txt", hypothesis="fixture"),
+    )
+    workspace = GitWorkspace(config.repository, "fingerprint-fixture")
+
+    first = workspace.candidate_fingerprint(contract=contract, surfaces=("surface.txt",))
+    revised = workspace.candidate_fingerprint(
+        contract=replace(contract, evaluator_sha256="f" * 64),
+        surfaces=("surface.txt",),
+    )
+
+    assert first != revised
+
+
 def test_postflight_failure_still_charges_attested_evaluator_usage(tmp_path: Path) -> None:
     config, baseline = _config(tmp_path, attempts=1)
     summary = PromotionSupervisor(
@@ -684,6 +812,36 @@ def test_postflight_failure_still_charges_attested_evaluator_usage(tmp_path: Pat
     assert summary.usage.calls == 5
     assert summary.usage.tokens == 210
     assert summary.usage.cost_usd == pytest.approx(0.6)
+
+
+def test_command_producer_preserves_structured_failure_detail(tmp_path: Path) -> None:
+    config, _baseline = _config(tmp_path, attempts=1)
+    producer = tmp_path / "failing-producer.py"
+    producer.write_text(
+        textwrap.dedent(
+            """
+            import json
+            import os
+            from pathlib import Path
+
+            Path(os.environ["CRUCIBLE_ERROR_OUTPUT"]).write_text(json.dumps({
+                "schema": "crucible.producer-error.v1",
+                "error_type": "ProducerError",
+                "message": "subscription quota exhausted",
+            }))
+            raise SystemExit(2)
+            """
+        ),
+        encoding="utf-8",
+    )
+    config = replace(config, producer_command=(sys.executable, str(producer)))
+
+    summary = PromotionSupervisor(config).run()
+
+    assert summary.invalids == 1
+    attempt = next((config.state_dir / "attempts").iterdir())
+    error = json.loads((attempt / "error.json").read_text(encoding="utf-8"))
+    assert error["message"] == "producer failed: subscription quota exhausted"
 
 
 def test_existing_state_directory_is_never_reused(tmp_path: Path) -> None:
@@ -737,6 +895,32 @@ def test_config_rejects_unknown_top_level_fields(tmp_path: Path) -> None:
     path.write_text(json.dumps(payload), encoding="utf-8")
 
     with pytest.raises(SupervisorError, match="unknown fields: max_attemps"):
+        SupervisorConfig.load(path)
+
+
+def test_config_id_binds_the_optional_search_objective(tmp_path: Path) -> None:
+    config, _baseline = _config(tmp_path)
+    path = tmp_path / "supervisor.json"
+    payload = config.to_dict()
+    payload.pop("config_id")
+    payload["search"] = {"objective": "Preserve completed work."}
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    loaded = SupervisorConfig.load(path)
+
+    assert loaded.producer_objective == "Preserve completed work."
+    assert loaded.config_id != config.config_id
+
+
+def test_config_rejects_unknown_search_fields(tmp_path: Path) -> None:
+    config, _baseline = _config(tmp_path)
+    path = tmp_path / "supervisor.json"
+    payload = config.to_dict()
+    payload.pop("config_id")
+    payload["search"] = {"objective": "Preserve work.", "temperature": 1.0}
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(SupervisorError, match="search has unknown fields: temperature"):
         SupervisorConfig.load(path)
 
 

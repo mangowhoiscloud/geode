@@ -21,6 +21,7 @@ _CANDIDATE_SCHEMA = "crucible.candidate.v2"
 _GRAPH_SCHEMA = "crucible.producer-graph.v1"
 _FEEDBACK_SCHEMA = "crucible.failure-feedback.v3"
 _SUPERVISOR_FEEDBACK_SCHEMA = "crucible.supervisor-feedback.v3"
+_PRODUCER_ERROR_SCHEMA = "crucible.producer-error.v1"
 _GRAPH_LIMIT = 256 * 1024
 _PROGRAM_LIMIT = 64 * 1024
 _CONTEXT_NODE_LIMIT = 16
@@ -28,6 +29,7 @@ _CLOSED_FAILURE_CODES = frozenset(
     {
         "quality",
         "required_user_action",
+        "duplicate_candidate",
         "safety",
         "state_correctness",
         "termination",
@@ -75,6 +77,13 @@ def _objective_from_program(path: Path = _DEFAULT_PROGRAM_PATH) -> str:
 
 
 _DEFAULT_OBJECTIVE = _objective_from_program()
+
+
+def _request_objective(request: Mapping[str, Any]) -> str:
+    """Resolve only the head-bound default or a supervisor-bound override."""
+
+    value = request.get("objective")
+    return _DEFAULT_OBJECTIVE if value is None else _text(value, "producer objective")
 
 
 def _load_object(path: Path, field: str, *, limit: int = 1024 * 1024) -> dict[str, Any]:
@@ -376,16 +385,31 @@ def _write_exclusive(path: Path, payload: Mapping[str, Any]) -> None:
         handle.write("\n")
 
 
+def _write_error_sidecar(exc: BaseException) -> None:
+    raw_path = os.environ.get("CRUCIBLE_ERROR_OUTPUT")
+    if not raw_path:
+        return
+    detail = " ".join(str(exc).split())[:2_000] or "producer failed"
+    try:
+        _write_exclusive(
+            Path(raw_path),
+            {
+                "schema": _PRODUCER_ERROR_SCHEMA,
+                "error_type": type(exc).__name__,
+                "message": detail,
+            },
+        )
+    except (OSError, ValueError):
+        return
+
+
 def run() -> int:
     request_path = Path(os.environ["CRUCIBLE_PROPOSAL_REQUEST"])
     output_path = Path(os.environ["CRUCIBLE_CANDIDATE_OUTPUT"])
-    objective = _text(
-        os.environ.get("CRUCIBLE_PRODUCER_OBJECTIVE", _DEFAULT_OBJECTIVE),
-        "producer objective",
-    )
     request = _load_object(request_path, "proposal request")
     if request.get("schema") != _REQUEST_SCHEMA:
         raise ProducerError(f"proposal request must use {_REQUEST_SCHEMA}")
+    objective = _request_objective(request)
     raw_surfaces = request.get("allowed_surfaces")
     if not isinstance(raw_surfaces, list) or len(raw_surfaces) != 1:
         raise ProducerError("Codex KG producer requires exactly one allowed surface")
@@ -473,6 +497,7 @@ def main() -> int:
     try:
         return run()
     except (KeyError, OSError, ValueError, json.JSONDecodeError, ProducerError) as exc:
+        _write_error_sidecar(exc)
         print(f"crucible Codex producer failed: {exc}", file=sys.stderr)
         return 2
 

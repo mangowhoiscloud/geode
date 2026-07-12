@@ -68,13 +68,13 @@
       "id": "file:plugins/crucible/tau2_live.py",
       "filePath": "plugins/crucible/tau2_live.py",
       "name": "Paired tau2 evaluator",
-      "summary": "Derives frozen runner arguments, screens unreachable train arms at zero candidate cost, isolates measurement state, and projects structural failure codes. Reuses identity-proven cached rows across relaunches (hash-bound row cache): full-cache arms synthesize results without spending conversations, partial hits re-run only unfinished tasks, and interrupted runs donate their finalized simulations at harvest.",
+      "summary": "Derives frozen runner arguments, screens unreachable train arms at zero candidate cost, isolates measurement state, and projects structural failure codes. Reuses identity-proven cached rows across relaunches while reporting historical evidence usage separately from current marginal spend.",
       "tags": [
         "crucible",
         "evaluator",
         "paired"
       ],
-      "contentSha256": "d1b30b1f34c0bb350477a63cb74cc2805b63c1f44c17f657dc19c2c5cad1b328"
+      "contentSha256": "4631b87b698836423f8db7dc9e94976fd62632c724bf7bd23f96cf32174b60b6"
     },
     {
       "id": "file:plugins/crucible/row_cache.py",
@@ -92,13 +92,13 @@
       "id": "file:plugins/crucible/supervisor.py",
       "filePath": "plugins/crucible/supervisor.py",
       "name": "Promotion supervisor",
-      "summary": "Preflights authority inputs, retains task identity only in its audit request, projects closed feedback to producers, and owns evidence plus the monotone search ref.",
+      "summary": "Preflights authority inputs, binds optional producer objectives, rejects duplicate baseline-bound treatments, separates evidence from marginal usage, and owns the monotone search ref.",
       "tags": [
         "crucible",
         "supervisor",
         "promotion"
       ],
-      "contentSha256": "c37d775f02d3ee4e62337d61383ca0daa87ced25c4053d4f45a8dea6aa377359"
+      "contentSha256": "4a88eb0c3707c5420f4fe6a75e02801f58f39e900fe8f743c2a2eea0d11158fc"
     },
     {
       "id": "file:scripts/eval/crucible_tau2_evaluator.py",
@@ -115,37 +115,37 @@
       "id": "file:plugins/crucible/producers/codex_kg.py",
       "filePath": "plugins/crucible/producers/codex_kg.py",
       "name": "Codex KG producer",
-      "summary": "Gives GPT-5.4 a bounded one-hop architecture subgraph plus structural closed failure codes, hides supervisor protocol paths, and accepts one general policy edit.",
+      "summary": "Gives GPT-5.4 a bounded one-hop architecture subgraph plus bound objective and closed failure codes, hides supervisor protocol paths, and emits bounded structured failures.",
       "tags": [
         "crucible",
         "producer",
         "knowledge-graph"
       ],
-      "contentSha256": "53696892a57b7435573337a6b8d9ce066f6844c991880c8fc8458db0c510452f"
+      "contentSha256": "c30d1450dc075017b8ef46d538439bbcc588a09abcd2923301f2a246643da73d"
     },
     {
       "id": "file:plugins/crucible/program.md",
       "filePath": "plugins/crucible/program.md",
       "name": "Crucible program",
-      "summary": "Centralizes experimentation, constraints, preferences, setup, and the closed dynamic-feedback boundary; only its candidate_program section is model-facing.",
+      "summary": "Centralizes experimentation, constraints, preferences, setup, power admission, deduplication, usage accounting, and the closed dynamic-feedback boundary; only its candidate_program section is model-facing.",
       "tags": [
         "crucible",
         "producer",
         "program"
       ],
-      "contentSha256": "a7cf8d4721e58fd49e944303588900bdb985ea96a56bc2778c332709e02641d1"
+      "contentSha256": "e65ffb18e00c929ec0eefbacd3961308fe3d1d1f0ac42f7b630b11b11c59aad1"
     },
     {
       "id": "file:plugins/crucible/producers/replay.py",
       "filePath": "plugins/crucible/producers/replay.py",
       "name": "Candidate replay producer",
-      "summary": "Reapplies one attested candidate after infrastructure invalidation, or after a source-contract-bound evaluator digest change.",
+      "summary": "Reuses the exact candidate revision after scoreless infrastructure invalidation, rebases only across evaluator revisions, and preserves bounded structured producer failures.",
       "tags": [
         "crucible",
         "producer",
         "measurement-retry"
       ],
-      "contentSha256": "95d44a88ed49fffe81f10502e118ccf3cc01be193531b17fec5e197eca498ea5"
+      "contentSha256": "7349e65c20d0454ccce6cef32b8f8849e33116307e9f43a470b10e2482587855"
     }
   ],
   "edges": [

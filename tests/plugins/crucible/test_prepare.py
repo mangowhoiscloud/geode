@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 
 import pytest
+from plugins.crucible.cli import main as crucible_main
 from plugins.crucible.contract import ContractError, TaskUnit, task_pack_sha256
 from plugins.crucible.prepare import prepare_campaign
 from plugins.crucible.supervisor import SupervisorConfig
@@ -54,6 +55,33 @@ def _write_spec(
     return spec_path
 
 
+def _power_audit(
+    tmp_path: Path,
+    *,
+    minimum_power: float,
+    target_improvement_pp: float,
+) -> dict[str, object]:
+    basis = tmp_path / "pilot-evidence.json"
+    basis.write_text('{"schema":"fixture-pilot.v1"}\n', encoding="utf-8")
+    return {
+        "schema": "crucible.family-power-spec.v1",
+        "simulations": 1_000,
+        "seed": 20260713,
+        "minimum_power": minimum_power,
+        "scenarios": [
+            {
+                "name": "prepared-design",
+                "source": "fixture paired pilot evidence",
+                "basis_file": str(basis),
+                "basis_sha256": hashlib.sha256(basis.read_bytes()).hexdigest(),
+                "baseline_pass_probability": 0.1,
+                "target_improvement_pp": target_improvement_pp,
+                "regression_probability_on_baseline_success": 0.0,
+            }
+        ],
+    }
+
+
 def test_prepare_emits_a_config_the_loop_loader_accepts(tmp_path: Path) -> None:
     config, baseline = _config(tmp_path)
     report = prepare_campaign(_write_spec(tmp_path, config))
@@ -64,6 +92,53 @@ def test_prepare_emits_a_config_the_loop_loader_accepts(tmp_path: Path) -> None:
     assert report["evaluator_sha256"] == config.train_plan.payload["evaluator_sha256"]
     assert report["harness_sha256"] == config.train_plan.payload["harness_sha256"]
     assert report["task_count"] == 4
+
+
+def test_prepare_binds_a_passing_family_power_report(tmp_path: Path) -> None:
+    config, _baseline = _config(tmp_path)
+    report = prepare_campaign(
+        _write_spec(
+            tmp_path,
+            config,
+            power_audit=_power_audit(
+                tmp_path,
+                minimum_power=0.5,
+                target_improvement_pp=0.8,
+            ),
+        )
+    )
+
+    power = report["power_audit"]
+    assert power["passes"] is True
+    power_path = Path(power["path"])
+    saved_power = json.loads(power_path.read_text(encoding="utf-8"))
+    prepared = SupervisorConfig.load(Path(report["config_path"]))
+    assert power["power_audit_id"] == saved_power["power_audit_id"]
+    assert prepared.prepared_by is not None
+    assert prepared.prepared_by["power_audit_id"] == saved_power["power_audit_id"]
+
+
+def test_prepare_rejects_low_power_before_emitting_config(tmp_path: Path) -> None:
+    config, _baseline = _config(tmp_path)
+    with pytest.raises(ContractError, match="did not meet minimum_power"):
+        prepare_campaign(
+            _write_spec(
+                tmp_path,
+                config,
+                power_audit=_power_audit(
+                    tmp_path,
+                    minimum_power=0.99,
+                    target_improvement_pp=0.1,
+                ),
+            )
+        )
+
+    campaign_root = tmp_path / "campaigns" / "prepared-campaign"
+    assert not (campaign_root / "config.json").exists()
+    rejected_report = json.loads(
+        (campaign_root / "prepare" / "power.json").read_text(encoding="utf-8")
+    )
+    assert rejected_report["passes"] is False
 
 
 def test_prepare_rejects_feedback_outside_the_pack(tmp_path: Path) -> None:
@@ -127,6 +202,42 @@ def test_prepare_reports_window_verdict_from_history(tmp_path: Path) -> None:
     assert window["fit"] == "history_fit"
     assert window["history_worst_tokens"] == 1_000_000
     # 판정을 요청하지 않으면 window는 None으로 남는다 (별도 캠페인 id로 재실행)
+
+
+def test_prepare_cli_returns_defer_exit_code(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config, _baseline = _config(tmp_path)
+    code = crucible_main(
+        [
+            "prepare",
+            str(_write_spec(tmp_path, config)),
+            "--remaining-tokens",
+            "1",
+        ]
+    )
+
+    report = json.loads(capsys.readouterr().out)
+    assert code == 3
+    assert report["window"]["fit"] == "defer"
+
+
+def test_prepare_rejects_invalid_window_input_without_leaving_config(tmp_path: Path) -> None:
+    config, _baseline = _config(tmp_path)
+    with pytest.raises(ContractError, match="remaining_tokens must be non-negative"):
+        prepare_campaign(_write_spec(tmp_path, config), remaining_tokens=-1)
+
+    assert not (tmp_path / "campaigns" / "prepared-campaign" / "config.json").exists()
+
+
+def test_prepare_binds_search_objective_into_the_supervisor_config(tmp_path: Path) -> None:
+    config, _baseline = _config(tmp_path)
+    objective = "Preserve completed work before requesting the next required action."
+    report = prepare_campaign(_write_spec(tmp_path, config, search={"objective": objective}))
+
+    prepared = SupervisorConfig.load(Path(report["config_path"]))
+    assert prepared.producer_objective == objective
+    assert prepared.to_dict()["search"] == {"objective": objective}
 
 
 def test_prepare_curates_pack_when_spec_carries_curation(

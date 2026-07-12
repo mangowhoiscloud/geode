@@ -33,6 +33,11 @@ from .artifacts import (
     load_json_object,
     write_exclusive_json,
 )
+from .candidate_dedup import (
+    CANDIDATE_FINGERPRINT_OBSERVATION_SCHEMA,
+    CANDIDATE_FINGERPRINT_SCHEMA,
+    CandidateFingerprintStore,
+)
 from .contract import (
     EXPERIMENT_SCHEMA,
     ContractError,
@@ -57,6 +62,7 @@ RECORD_SCHEMA = "crucible.loop-record.v2"
 STATE_SCHEMA = "crucible.loop-state.v2"
 SUMMARY_SCHEMA = "crucible.loop-summary.v2"
 ATTEMPT_ERROR_SCHEMA = "crucible.attempt-error.v1"
+PRODUCER_ERROR_SCHEMA = "crucible.producer-error.v1"
 
 _SHA = re.compile(r"[0-9a-f]{40}")
 _CAMPAIGN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}")
@@ -76,6 +82,7 @@ _FAILURE_CODES = frozenset(
     {
         "quality",
         "required_user_action",
+        "duplicate_candidate",
         "safety",
         "state_correctness",
         "termination",
@@ -85,10 +92,20 @@ _FAILURE_CODES = frozenset(
 )
 _FEEDBACK_MAX_TASK_IDS = 64
 _FEEDBACK_MAX_TASK_ID_BYTES = 64 * 1024
+_PRODUCER_OBJECTIVE_MAX_BYTES = 16 * 1024
 
 
 class SupervisorError(ValueError):
     """The outer loop cannot safely continue."""
+
+
+class _DuplicateCandidateError(RuntimeError):
+    """A valid train verdict already exists for the same stable patch."""
+
+    def __init__(self, fingerprint: str, fingerprint_ref: str) -> None:
+        self.fingerprint = fingerprint
+        self.fingerprint_ref = fingerprint_ref
+        super().__init__("candidate patch already has a valid train verdict")
 
 
 def _hash(payload: Mapping[str, Any]) -> str:
@@ -154,6 +171,20 @@ def _require_fields(
         raise SupervisorError(f"{field} is missing fields: {', '.join(missing)}")
     if unknown:
         raise SupervisorError(f"{field} has unknown fields: {', '.join(unknown)}")
+
+
+def _search_objective(value: object) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, Mapping):
+        raise SupervisorError("search must be an object")
+    _require_fields(value, "search", required={"objective"})
+    objective = _text(value.get("objective"), "search.objective")
+    if len(objective.encode("utf-8")) > _PRODUCER_OBJECTIVE_MAX_BYTES:
+        raise SupervisorError(
+            f"search.objective exceeds {_PRODUCER_OBJECTIVE_MAX_BYTES} UTF-8 bytes"
+        )
+    return objective
 
 
 def _prepared_by(value: object) -> Mapping[str, Any] | None:
@@ -367,6 +398,7 @@ class SupervisorConfig:
     evaluator_environment: tuple[str, ...]
     train_plan: TrainPlan
     limits: LoopLimits
+    producer_objective: str | None = None
     initial_feedback: FailureFeedback | None = None
     prepared_by: Mapping[str, Any] | None = None
 
@@ -391,7 +423,7 @@ class SupervisorConfig:
                 "state_dir",
                 "train_plan",
             },
-            optional={"config_id", "initial_feedback", "prepared_by"},
+            optional={"config_id", "initial_feedback", "prepared_by", "search"},
         )
         if row.get("schema") != CONFIG_SCHEMA:
             raise SupervisorError(f"schema must be {CONFIG_SCHEMA!r}")
@@ -432,6 +464,7 @@ class SupervisorConfig:
             evaluator_environment=evaluator_environment,
             train_plan=TrainPlan.from_mapping(row.get("train_plan")),
             limits=LoopLimits.from_mapping(row.get("limits")),
+            producer_objective=_search_objective(row.get("search")),
             initial_feedback=(
                 None
                 if row.get("initial_feedback") is None
@@ -457,6 +490,8 @@ class SupervisorConfig:
         ):
             _validate_string_sequence(field, values, allow_empty=allow_empty)
         self.limits.validate()
+        if self.producer_objective is not None:
+            _search_objective({"objective": self.producer_objective})
         _validate_train_environment(self.producer_environment, self.evaluator_environment)
         entrypoint = PurePosixPath(self.evaluator_entrypoint)
         if entrypoint.is_absolute() or ".." in entrypoint.parts:
@@ -494,6 +529,8 @@ class SupervisorConfig:
         }
         if self.initial_feedback is not None:
             payload["initial_feedback"] = self.initial_feedback.to_dict()
+        if self.producer_objective is not None:
+            payload["search"] = {"objective": self.producer_objective}
         return payload
 
     @property
@@ -520,9 +557,10 @@ class ProposalRequest:
     producer_dir: Path
     feedback: Mapping[str, Any] | None
     remaining_budget: Mapping[str, float | int]
+    objective: str | None = None
 
     def payload(self) -> dict[str, Any]:
-        return {
+        payload: dict[str, Any] = {
             "schema": REQUEST_SCHEMA,
             "campaign_id": self.campaign_id,
             "config_id": self.config_id,
@@ -533,6 +571,9 @@ class ProposalRequest:
             "feedback": dict(self.feedback) if self.feedback is not None else None,
             "remaining_budget": dict(self.remaining_budget),
         }
+        if self.objective is not None:
+            payload["objective"] = self.objective
+        return payload
 
     @property
     def request_id(self) -> str:
@@ -700,6 +741,7 @@ class FailureFeedback:
 class EvaluationArtifacts:
     baseline: EvidenceEnvelope
     candidate: EvidenceEnvelope
+    marginal_usage: ResourceUsage
     feedback: FailureFeedback | None
 
     @classmethod
@@ -726,7 +768,7 @@ class EvaluationArtifacts:
                 "request_id",
                 "schema",
             },
-            optional={"feedback"},
+            optional={"feedback", "marginal_usage"},
         )
         if row.get("schema") != EVALUATION_SCHEMA:
             raise SupervisorError(f"evaluation schema must be {EVALUATION_SCHEMA!r}")
@@ -767,7 +809,20 @@ class EvaluationArtifacts:
             raise SupervisorError("baseline raw artifact hash does not match evidence")
         if _file_sha256(candidate_raw_path, "candidate_raw") != candidate.raw_artifact_sha256:
             raise SupervisorError("candidate raw artifact hash does not match evidence")
-        return cls(baseline=baseline, candidate=candidate, feedback=feedback)
+        marginal_raw = row.get("marginal_usage")
+        marginal_usage = (
+            baseline.usage + candidate.usage
+            if marginal_raw is None
+            else ResourceUsage.from_mapping(marginal_raw)
+        )
+        if marginal_raw is not None and marginal_usage.to_dict() != marginal_raw:
+            raise SupervisorError("train evaluation marginal_usage is not canonical")
+        return cls(
+            baseline=baseline,
+            candidate=candidate,
+            marginal_usage=marginal_usage,
+            feedback=feedback,
+        )
 
 
 class CandidateProducer(Protocol):
@@ -862,6 +917,24 @@ def _run_process(
         raise SupervisorError(f"subprocess exited with status {return_code}")
 
 
+def _producer_error_detail(path: Path) -> str | None:
+    if not path.exists() and not path.is_symlink():
+        return None
+    try:
+        row = load_json_object(path, "producer error", max_bytes=16 * 1024)
+        _require_fields(
+            row,
+            "producer error",
+            required={"error_type", "message", "schema"},
+        )
+        if row.get("schema") != PRODUCER_ERROR_SCHEMA:
+            return None
+        message = _text(row.get("message"), "producer error message")
+    except (ContractError, SupervisorError):
+        return None
+    return " ".join(message.split())[:2_000]
+
+
 class GitWorkspace:
     """Authority refs plus disposable candidate repositories for one campaign."""
 
@@ -874,6 +947,7 @@ class GitWorkspace:
         self.search_ref = f"refs/crucible/search/{campaign_id}"
         self.baseline_prefix = f"refs/crucible/baselines/{campaign_id}"
         self.candidate_prefix = f"refs/crucible/candidates/{campaign_id}"
+        self.fingerprints = CandidateFingerprintStore(self.repository, self.git)
 
     def run(self, *args: str, check: bool = True) -> str:
         return self.run_at(self.repository, *args, check=check)
@@ -999,6 +1073,27 @@ class GitWorkspace:
         if self.run("rev-parse", "--verify", self.search_ref) != expected_sha:
             raise SupervisorError("campaign search ref changed outside the supervisor")
 
+    def candidate_fingerprint(
+        self,
+        *,
+        contract: ExperimentContract,
+        surfaces: Sequence[str],
+    ) -> str:
+        return self.fingerprints.fingerprint(contract=contract, surfaces=surfaces)
+
+    def fingerprint_ref(self, fingerprint: str) -> str:
+        return self.fingerprints.reference(fingerprint)
+
+    def load_candidate_fingerprint(self, fingerprint: str) -> dict[str, Any] | None:
+        return self.fingerprints.load(fingerprint)
+
+    def persist_candidate_fingerprint(
+        self,
+        fingerprint: str,
+        payload: Mapping[str, Any],
+    ) -> dict[str, Any] | None:
+        return self.fingerprints.persist(fingerprint, payload)
+
     def validate_candidate(
         self,
         worktree: Path,
@@ -1030,6 +1125,7 @@ class CommandProducer:
         request.producer_dir.mkdir()
         request_path = request.producer_dir / "request.json"
         output = request.producer_dir / "candidate-response.json"
+        error_output = request.producer_dir / "producer-error.json"
         write_exclusive_json(request_path, request.to_producer_dict())
         if output.exists() or output.is_symlink():
             raise SupervisorError("candidate response already exists")
@@ -1040,14 +1136,21 @@ class CommandProducer:
             extra={
                 "CRUCIBLE_PROPOSAL_REQUEST": str(request_path),
                 "CRUCIBLE_CANDIDATE_OUTPUT": str(output),
+                "CRUCIBLE_ERROR_OUTPUT": str(error_output),
             },
         )
-        _run_process(
-            self.config.producer_command,
-            cwd=request.worktree,
-            environment=environment,
-            timeout=timeout,
-        )
+        try:
+            _run_process(
+                self.config.producer_command,
+                cwd=request.worktree,
+                environment=environment,
+                timeout=timeout,
+            )
+        except SupervisorError as exc:
+            detail = _producer_error_detail(error_output)
+            if detail is not None:
+                raise SupervisorError(f"producer failed: {detail}") from exc
+            raise
         if output.is_symlink():
             raise SupervisorError("candidate response must not be a symlink")
         return CandidateProposal.load(output, request=request)
@@ -1122,7 +1225,10 @@ class _AttemptResult:
     evaluator_feedback: FailureFeedback | None
     candidate_ref: str | None
     baseline_ref: str | None
+    candidate_fingerprint: str | None
+    candidate_fingerprint_ref: str | None
     usage: ResourceUsage
+    evidence_usage: ResourceUsage
     outcome: Literal["KEEP", "REJECT", "INVALID"]
     reasons: tuple[str, ...]
     next_head: str
@@ -1141,6 +1247,7 @@ class SupervisorSummary:
     invalids: int
     stop_reason: str
     usage: ResourceUsage
+    evidence_usage: ResourceUsage
     elapsed_seconds: float
     state_dir: Path
 
@@ -1148,6 +1255,7 @@ class SupervisorSummary:
         payload = dict(vars(self))
         payload["schema"] = SUMMARY_SCHEMA
         payload["usage"] = self.usage.to_dict()
+        payload["evidence_usage"] = self.evidence_usage.to_dict()
         payload["state_dir"] = str(self.state_dir)
         return payload
 
@@ -1192,6 +1300,7 @@ class PromotionSupervisor:
         head: str,
         counts: Mapping[str, int],
         usage: ResourceUsage,
+        evidence_usage: ResourceUsage,
         elapsed: float,
         record_id: str | None,
         stop_reason: str | None,
@@ -1205,6 +1314,7 @@ class PromotionSupervisor:
             "search_head_sha": head,
             **counts,
             "usage": usage.to_dict(),
+            "evidence_usage": evidence_usage.to_dict(),
             "elapsed_seconds": elapsed,
             "last_record_id": record_id,
             "stop_reason": stop_reason,
@@ -1267,6 +1377,7 @@ class PromotionSupervisor:
             producer_dir=producer_dir,
             feedback=feedback,
             remaining_budget=config.limits.remaining(campaign_usage, elapsed),
+            objective=config.producer_objective,
         )
         proposal: CandidateProposal | None = None
         verdict: PromotionVerdict | None = None
@@ -1274,7 +1385,10 @@ class PromotionSupervisor:
         evaluator_feedback: FailureFeedback | None = None
         candidate_ref: str | None = None
         baseline_ref: str | None = None
+        candidate_fingerprint: str | None = None
+        candidate_fingerprint_ref: str | None = None
         attempt_usage = zero
+        attempt_evidence_usage = zero
         outcome: Literal["KEEP", "REJECT", "INVALID"] = "INVALID"
         reasons: tuple[str, ...] = ()
         next_head = head
@@ -1286,6 +1400,7 @@ class PromotionSupervisor:
                 timeout=float(request.remaining_budget["wall_seconds"]),
             )
             attempt_usage = proposal.usage
+            attempt_evidence_usage = proposal.usage
             write_exclusive_json(attempt_dir / "candidate.json", proposal.to_dict())
             if proposal.mutation.surface not in config.allowed_surfaces:
                 raise SupervisorError("proposal surface is not allowed")
@@ -1313,6 +1428,25 @@ class PromotionSupervisor:
                 baseline_ref=baseline_ref,
             )
             self._preflight(workspace, measurement_checkout, proposal, contract)
+            candidate_fingerprint = workspace.candidate_fingerprint(
+                contract=contract,
+                surfaces=config.allowed_surfaces,
+            )
+            candidate_fingerprint_ref = workspace.fingerprint_ref(candidate_fingerprint)
+            prior_fingerprint = workspace.load_candidate_fingerprint(candidate_fingerprint)
+            if prior_fingerprint is not None:
+                write_exclusive_json(
+                    attempt_dir / "candidate-fingerprint.json",
+                    {
+                        "schema": CANDIDATE_FINGERPRINT_OBSERVATION_SCHEMA,
+                        "status": "duplicate",
+                        "fingerprint_sha256": candidate_fingerprint,
+                        "fingerprint_ref": candidate_fingerprint_ref,
+                        "candidate_sha": proposal.candidate_sha,
+                        "prior": prior_fingerprint,
+                    },
+                )
+                raise _DuplicateCandidateError(candidate_fingerprint, candidate_fingerprint_ref)
             if config.limits.exceeded(
                 campaign_usage + proposal.usage,
                 time.monotonic() - campaign_started,
@@ -1333,7 +1467,10 @@ class PromotionSupervisor:
                 proposal=proposal,
                 contract=contract,
             )
-            attempt_usage = proposal.usage + artifacts.baseline.usage + artifacts.candidate.usage
+            attempt_usage = proposal.usage + artifacts.marginal_usage
+            attempt_evidence_usage = (
+                proposal.usage + artifacts.baseline.usage + artifacts.candidate.usage
+            )
             self._preflight(workspace, measurement_checkout, proposal, contract)
             verdict = decide(contract, artifacts.baseline, artifacts.candidate)
             write_exclusive_json(
@@ -1353,10 +1490,54 @@ class PromotionSupervisor:
             ):
                 outcome = "REJECT"
                 reasons = (*reasons, "campaign_budget_exceeded")
+            if verdict.verdict != "INVALID":
+                fingerprint_receipt = {
+                    "schema": CANDIDATE_FINGERPRINT_SCHEMA,
+                    "fingerprint_sha256": candidate_fingerprint,
+                    "candidate_sha": proposal.candidate_sha,
+                    "contract_id": contract.contract_id,
+                    "verdict_id": verdict.verdict_id,
+                    "verdict": verdict.verdict,
+                }
+                prior_fingerprint = workspace.persist_candidate_fingerprint(
+                    candidate_fingerprint,
+                    fingerprint_receipt,
+                )
+                if prior_fingerprint is not None:
+                    write_exclusive_json(
+                        attempt_dir / "candidate-fingerprint.json",
+                        {
+                            "schema": CANDIDATE_FINGERPRINT_OBSERVATION_SCHEMA,
+                            "status": "duplicate",
+                            "fingerprint_sha256": candidate_fingerprint,
+                            "fingerprint_ref": candidate_fingerprint_ref,
+                            "candidate_sha": proposal.candidate_sha,
+                            "prior": prior_fingerprint,
+                        },
+                    )
+                    raise _DuplicateCandidateError(
+                        candidate_fingerprint,
+                        candidate_fingerprint_ref,
+                    )
+                write_exclusive_json(
+                    attempt_dir / "candidate-fingerprint.json",
+                    {
+                        "schema": CANDIDATE_FINGERPRINT_OBSERVATION_SCHEMA,
+                        "status": "recorded",
+                        "fingerprint_sha256": candidate_fingerprint,
+                        "fingerprint_ref": candidate_fingerprint_ref,
+                        "candidate_sha": proposal.candidate_sha,
+                        "receipt": fingerprint_receipt,
+                    },
+                )
             if outcome == "KEEP":
                 next_head = proposal.candidate_sha
             if outcome != "INVALID":
                 evaluator_feedback = artifacts.feedback
+        except _DuplicateCandidateError:
+            evaluator_feedback = FailureFeedback(("duplicate_candidate",))
+            reasons = ("duplicate_candidate",)
+            outcome = "REJECT"
         except (ContractError, OSError, SupervisorError) as exc:
             detail = " ".join(str(exc).split())[:2_000] or "invalid attempt"
             with suppress(OSError, SupervisorError):
@@ -1379,7 +1560,10 @@ class PromotionSupervisor:
             evaluator_feedback=evaluator_feedback,
             candidate_ref=candidate_ref,
             baseline_ref=baseline_ref,
+            candidate_fingerprint=candidate_fingerprint,
+            candidate_fingerprint_ref=candidate_fingerprint_ref,
             usage=attempt_usage,
+            evidence_usage=attempt_evidence_usage,
             outcome=outcome,
             reasons=reasons,
             next_head=next_head,
@@ -1408,6 +1592,7 @@ class PromotionSupervisor:
 
         zero = ResourceUsage(0.0, 0, 0, 0.0)
         usage = zero
+        evidence_usage = zero
         head = config.initial_search_head_sha
         feedback: Mapping[str, Any] | None = (
             config.initial_feedback.to_dict() if config.initial_feedback is not None else None
@@ -1425,6 +1610,7 @@ class PromotionSupervisor:
                 head=head,
                 counts=counts,
                 usage=usage,
+                evidence_usage=evidence_usage,
                 elapsed=0.0,
                 record_id=None,
                 stop_reason=None,
@@ -1487,9 +1673,13 @@ class PromotionSupervisor:
                 "reasons": list(reasons),
                 "search_head_before": before,
                 "search_head_after": next_head,
-                "usage": attempt_usage.to_dict(),
+                "usage": result.evidence_usage.to_dict(),
+                "marginal_usage": attempt_usage.to_dict(),
                 "wall_seconds": result.wall_seconds,
             }
+            if result.candidate_fingerprint is not None:
+                record_payload["candidate_fingerprint"] = result.candidate_fingerprint
+                record_payload["candidate_fingerprint_ref"] = result.candidate_fingerprint_ref
             record_id = _hash(record_payload)
             record = {**record_payload, "record_id": record_id}
             write_exclusive_json(feedback_path, feedback_payload)
@@ -1529,6 +1719,7 @@ class PromotionSupervisor:
                 counts["invalids"] += 1
                 invalid_streak += 1
             usage = usage + attempt_usage
+            evidence_usage = evidence_usage + result.evidence_usage
             atomic_write_json(
                 config.state_dir / "state.json",
                 self._state(
@@ -1537,6 +1728,7 @@ class PromotionSupervisor:
                     head=head,
                     counts=counts,
                     usage=usage,
+                    evidence_usage=evidence_usage,
                     elapsed=time.monotonic() - started,
                     record_id=previous_record,
                     stop_reason=None,
@@ -1555,6 +1747,7 @@ class PromotionSupervisor:
             invalids=counts["invalids"],
             stop_reason=stop_reason or "complete",
             usage=usage,
+            evidence_usage=evidence_usage,
             elapsed_seconds=final_elapsed,
             state_dir=config.state_dir,
         )
@@ -1567,6 +1760,7 @@ class PromotionSupervisor:
                 head=head,
                 counts=counts,
                 usage=usage,
+                evidence_usage=evidence_usage,
                 elapsed=final_elapsed,
                 record_id=previous_record,
                 stop_reason=summary.stop_reason,
