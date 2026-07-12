@@ -73,6 +73,9 @@ and fail closed when prose and bytes disagree.
   branch or release.
 - Cached rows are reusable only when revision, evaluator, harness, task pack,
   and assay hashes match and both row and context payload hashes verify.
+- A scoreless infrastructure `INVALID` replay preserves the exact candidate
+  revision when its parent is unchanged, so candidate-side cached rows remain
+  addressable. An evaluator-revision replay becomes a new child commit.
 - A baseline-bound stable patch receives one valid train verdict per frozen
   evaluator, harness, task pack, assay, and promotion world. Its receipt lives
   under `refs/crucible/candidate-fingerprints/*`; a repeat is a closed
@@ -95,16 +98,22 @@ and fail closed when prose and bytes disagree.
    candidate generation.
 2. Build a `crucible.supervisor.v4` config from one search-head revision and
    record evaluator, harness, assay, pack, promotion, and budget identities.
-3. Run the quota-window preflight. `cap_fit` and `history_fit` are capacity
+3. For a paid stochastic campaign, bind explicit pilot assumptions to a
+   verified basis file and digest in `power_audit`. Prepare evaluates the
+   frozen task→family structure, trial count, and promotion rule, writes an
+   opaque power report, and emits no launchable config when any preregistered
+   scenario misses `minimum_power`. Audit the opaque hidden pack separately
+   with the packaged `power-audit` command before candidate generation.
+4. Run the quota-window preflight. `cap_fit` and `history_fit` are capacity
    estimates; `defer` makes `prepare` exit 3 and blocks chained launch. None is
    a provider guarantee.
-4. Run the supervisor. Baseline executes first, and an unreachable promotion
+5. Run the supervisor. Baseline executes first, and an unreachable promotion
    rejects the candidate arm without spending it.
-5. With `CRUCIBLE_ROW_CACHE_ROOT` explicitly allowlisted, identity-proven
+6. With `CRUCIBLE_ROW_CACHE_ROOT` explicitly allowlisted, identity-proven
    semantic rows may be reused. Missing tasks run again and exact full coverage
    remains mandatory. Historical evidence usage stays attached to the verdict;
    only fresh marginal usage consumes the current campaign budget.
-6. Build a train bundle only after `KEEP`. Burn the sealed test attempt once,
+7. Build a train bundle only after `KEEP`. Burn the sealed test attempt once,
    then require a separate human-reviewed core promotion change.
 
 ## Dynamic feedback

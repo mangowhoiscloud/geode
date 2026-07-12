@@ -6,7 +6,7 @@ import hashlib
 import json
 import math
 import random
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, cast
 
@@ -60,14 +60,30 @@ def _paired_bootstrap_lower_bound(
     return bootstrap_means[index]
 
 
-def _paired_lower_bound(contract: ExperimentContract, deltas: list[float]) -> float:
-    seed_payload = json.dumps(deltas, separators=(",", ":")).encode("utf-8")
+def paired_bootstrap_lower_bound(
+    deltas: Sequence[float],
+    *,
+    samples: int,
+    confidence_level: float,
+) -> float:
+    """Return the production lower bound independent of arbitrary family order."""
+
+    canonical_deltas = sorted(float(delta) for delta in deltas)
+    seed_payload = json.dumps(canonical_deltas, separators=(",", ":")).encode("utf-8")
     seed = int(hashlib.sha256(seed_payload).hexdigest()[:16], 16)
     return _paired_bootstrap_lower_bound(
+        canonical_deltas,
+        samples=samples,
+        confidence_level=confidence_level,
+        seed=seed,
+    )
+
+
+def _paired_lower_bound(contract: ExperimentContract, deltas: list[float]) -> float:
+    return paired_bootstrap_lower_bound(
         deltas,
         samples=contract.promotion.bootstrap_samples,
         confidence_level=contract.promotion.confidence_level,
-        seed=seed,
     )
 
 

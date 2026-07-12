@@ -382,6 +382,19 @@ adaptive loop until a versioned calibration dataset and validated estimator
 exist. This is less automatic, but it keeps unsupported statistical authority
 out of the promotion contract.
 
+Central prepare can nevertheless audit the power of those explicit choices
+without claiming to fit or derive them. A `crucible.family-power-spec.v1`
+block binds each paired-Bernoulli pilot scenario to a bounded regular source
+artifact whose bytes must match the declared digest, then runs the production
+family-bootstrap rule over the prepared task→family structure and trial count.
+Its opaque `crucible.family-power-report.v1` contains only pack identity,
+counts, assumptions, source digest, and estimated KEEP probabilities—not the
+basis path or contents. If any scenario's 95% Monte Carlo lower bound misses the preregistered
+`minimum_power`, prepare preserves the report but emits no launchable config.
+The audit is conditional on infrastructure, safety, tool-contract, coverage,
+and budget vetoes passing; it neither changes the frozen promotion rule nor
+converts its assumptions into evidence.
+
 The packaged operational surface is:
 
 ```bash
@@ -391,6 +404,13 @@ uv run python -m plugins.crucible tau2-task-pack tasks.json \
   --task-id 17 --task-id 42 \
   --task-split split_tasks.json --task-split-name base \
   --output train.pack.json
+
+# Audit an opaque train or hidden pack without exposing its task contents.
+# promotion.json is the exact frozen PromotionRule object; power-spec.json
+# binds every modeled scenario to a verified pilot artifact.
+uv run python -m plugins.crucible power-audit hidden.pack.json \
+  --promotion promotion.json --spec power-spec.json \
+  --output hidden.power.json
 
 # Normalize each finalized arm. Usage and safety/tool checks are independent
 # manifests; reward is not allowed to imply those checks.
@@ -601,25 +621,32 @@ a current core promotion.
 
 ## Operating loop
 
-1. Before launch, compare the frozen campaign cap and completed-run history to
+1. Before a paid stochastic launch, require central prepare to admit the exact
+   family/trial design under digest-bound pilot scenarios and a preregistered
+   minimum power.
+2. Compare the frozen campaign cap and completed-run history to
    the explicitly sourced quota estimate. `prepare` returns exit 3 on `defer`,
    so `prepare && loop` cannot launch when neither the cap nor the measured
    worst run fits.
-2. Start from the current search-head commit. This is not a core-promotion ref.
-3. Choose one causal failure signature and one mutation surface through the
+3. Start from the current search-head commit. This is not a core-promotion ref.
+4. Choose one causal failure signature and one mutation surface through the
    tracked `plugins/crucible/program.md` contract.
-4. Make the smallest change that could alter that signature.
-5. Commit the candidate. Never measure a dirty worktree.
-6. Freeze `experiment.json`, including evaluator/harness content hashes, task
+5. Make the smallest change that could alter that signature.
+6. Commit the candidate. Never measure a dirty worktree.
+7. Freeze `experiment.json`, including evaluator/harness content hashes, task
    pack, family assignments, and the entire experiment budget.
-7. Run baseline and candidate on the same frozen task order. The tau2 adapter
+8. Run baseline and candidate on the same frozen task order. The tau2 adapter
    preserves upstream order. An identity-proven row cache may satisfy complete
    pairs or narrow execution to missing tasks; it cannot alter coverage or
    verdict rules.
-8. Reject a candidate without evaluator calls when the same stable patch,
+9. A scoreless infrastructure retry with the same parent fast-forwards to the
+   original candidate commit instead of recommitting its patch. This preserves
+   the revision-bound candidate cache shard; a changed evaluator/parent creates
+   a fresh child because its old rows are ineligible.
+10. Reject a candidate without evaluator calls when the same stable patch,
    baseline, and frozen measurement/decision identity already has an
    admissible train verdict. Infrastructure INVALID attempts remain retryable.
-9. The current runner enforces its wall timeout and rejects finalized evidence
+11. The current runner enforces its wall timeout and rejects finalized evidence
    that exceeds the frozen aggregate budget. After a complete train baseline,
    the evaluator computes the best possible candidate vector under the assay's
    metric ceiling; if even that vector cannot clear the frozen materiality,
@@ -627,14 +654,14 @@ a current core promotion.
    REJECT instead of spending the candidate arm. In-run call/token/cash
    cancellation and pairwise sequential stopping remain execution-substrate
    work. `max_steps` is a task failure, not a row to drop.
-10. Normalize both raw artifacts into immutable evidence envelopes. Identity,
+12. Normalize both raw artifacts into immutable evidence envelopes. Identity,
    coverage, or infrastructure defects produce INVALID and no performance
    comparison.
-11. KEEP only when the paired confidence bound and absolute floor clear the
+13. KEEP only when the paired confidence bound and absolute floor clear the
    preregistered rule and every candidate veto passes. Otherwise REJECT and
    leave the search head unchanged. Train KEEP still requires a disjoint sealed
    test before any release claim.
-12. Complexity remains bounded by the frozen changed-line limit; no separate
+14. Complexity remains bounded by the frozen changed-line limit; no separate
     model-judged simplicity gate is used.
 
 ### Core promotion boundary
@@ -1222,6 +1249,11 @@ its structured error on JSON stdout; the resulting supervisor artifact retained
 only `codex exited with status 1`. The wrapper now extracts one bounded message
 from `error` or `turn.failed` events without retaining model output. The frozen
 train and hidden packs remain unconsumed for a fresh campaign after reset.
+That fresh preparation must bind a family-power report for the replicated
+train design, and the trusted runner must apply the packaged `power-audit`
+command to the opaque hidden pack before any provider call. Both audits may use
+the frozen pilot evidence as an explicit assumption source but cannot silently
+reintroduce the removed task-level derivation.
 
 The strongest honest claims are:
 

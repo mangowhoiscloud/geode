@@ -291,27 +291,44 @@ def replay_candidate(
     ):
         raise ProducerError("current surface baseline differs from the source candidate baseline")
 
-    _git(
-        "restore",
-        f"--source={source_candidate}",
-        "--staged",
-        "--worktree",
-        "--",
-        surface,
-    )
-    changed = tuple(
-        path for path in _git("diff", "--cached", "--name-only", "--").splitlines() if path.strip()
-    )
-    if changed != (surface,):
-        raise ProducerError(f"replay must change exactly {(surface,)!r}; observed {changed!r}")
+    exact_revision_retry = source_evaluator_sha is None and parent_sha == source_parent
+    if exact_revision_retry:
+        # A scoreless infrastructure INVALID may retry the identical treatment.
+        # Fast-forwarding the disposable producer checkout preserves the exact
+        # candidate revision, which is part of the row-cache identity. Reapplying
+        # and recommitting the same patch would create a new SHA and strand every
+        # completed candidate row harvested from the interrupted attempt.
+        _git("merge", "--ff-only", source_candidate)
+        candidate_sha = source_candidate
+    else:
+        # A corrected-evaluator replay can have a newer parent. Its source
+        # surface blob is still attested above, but the candidate must become a
+        # fresh child of the current measurement world.
+        _git(
+            "restore",
+            f"--source={source_candidate}",
+            "--staged",
+            "--worktree",
+            "--",
+            surface,
+        )
+        changed = tuple(
+            path
+            for path in _git("diff", "--cached", "--name-only", "--").splitlines()
+            if path.strip()
+        )
+        if changed != (surface,):
+            raise ProducerError(f"replay must change exactly {(surface,)!r}; observed {changed!r}")
+        _git("commit", "-qm", f"crucible: replay candidate {request['iteration']}")
+        candidate_sha = _git("rev-parse", "HEAD")
     surface_path = Path(surface)
     if surface_path.is_symlink() or not surface_path.is_file():
         raise ProducerError("candidate surface must remain a regular file")
     if surface_path.stat().st_size > 16 * 1024:
         raise ProducerError("candidate surface exceeds 16384 bytes")
     _validate_policy_grammar(surface_path.read_text(encoding="utf-8"))
-    _git("commit", "-qm", f"crucible: replay candidate {request['iteration']}")
-    candidate_sha = _git("rev-parse", "HEAD")
+    if _git("status", "--porcelain", "--untracked-files=all"):
+        raise ProducerError("replayed candidate checkout must finish clean")
     payload = {
         "schema": _CANDIDATE_SCHEMA,
         "attempt_id": request["attempt_id"],

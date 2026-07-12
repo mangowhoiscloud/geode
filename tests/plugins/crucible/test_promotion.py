@@ -11,7 +11,12 @@ from plugins.crucible.contract import (
     task_pack_sha256,
 )
 from plugins.crucible.evidence import EvidenceEnvelope
-from plugins.crucible.promotion import PromotionVerdict, decide, promotion_reachability
+from plugins.crucible.promotion import (
+    PromotionVerdict,
+    decide,
+    paired_bootstrap_lower_bound,
+    promotion_reachability,
+)
 
 BASELINE_SHA = "1" * 40
 CANDIDATE_SHA = "2" * 40
@@ -282,6 +287,23 @@ def test_bootstrap_is_family_clustered_and_independent_of_candidate_identity() -
     assert first_verdict.family_count == 4
     assert first_verdict.trials_per_task == 2
     assert first_verdict.improvement_lower_bound == second_verdict.improvement_lower_bound
+
+
+def test_bootstrap_is_independent_of_arbitrary_family_order() -> None:
+    deltas = [0.5, -0.5, 1.0, 0.0, 0.5, 0.0]
+
+    forward = paired_bootstrap_lower_bound(
+        deltas,
+        samples=10_000,
+        confidence_level=0.885,
+    )
+    reverse = paired_bootstrap_lower_bound(
+        list(reversed(deltas)),
+        samples=10_000,
+        confidence_level=0.885,
+    )
+
+    assert forward == reverse
 
 
 def test_reachability_prunes_only_a_mathematically_impossible_baseline() -> None:

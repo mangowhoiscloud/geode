@@ -55,6 +55,33 @@ def _write_spec(
     return spec_path
 
 
+def _power_audit(
+    tmp_path: Path,
+    *,
+    minimum_power: float,
+    target_improvement_pp: float,
+) -> dict[str, object]:
+    basis = tmp_path / "pilot-evidence.json"
+    basis.write_text('{"schema":"fixture-pilot.v1"}\n', encoding="utf-8")
+    return {
+        "schema": "crucible.family-power-spec.v1",
+        "simulations": 1_000,
+        "seed": 20260713,
+        "minimum_power": minimum_power,
+        "scenarios": [
+            {
+                "name": "prepared-design",
+                "source": "fixture paired pilot evidence",
+                "basis_file": str(basis),
+                "basis_sha256": hashlib.sha256(basis.read_bytes()).hexdigest(),
+                "baseline_pass_probability": 0.1,
+                "target_improvement_pp": target_improvement_pp,
+                "regression_probability_on_baseline_success": 0.0,
+            }
+        ],
+    }
+
+
 def test_prepare_emits_a_config_the_loop_loader_accepts(tmp_path: Path) -> None:
     config, baseline = _config(tmp_path)
     report = prepare_campaign(_write_spec(tmp_path, config))
@@ -65,6 +92,53 @@ def test_prepare_emits_a_config_the_loop_loader_accepts(tmp_path: Path) -> None:
     assert report["evaluator_sha256"] == config.train_plan.payload["evaluator_sha256"]
     assert report["harness_sha256"] == config.train_plan.payload["harness_sha256"]
     assert report["task_count"] == 4
+
+
+def test_prepare_binds_a_passing_family_power_report(tmp_path: Path) -> None:
+    config, _baseline = _config(tmp_path)
+    report = prepare_campaign(
+        _write_spec(
+            tmp_path,
+            config,
+            power_audit=_power_audit(
+                tmp_path,
+                minimum_power=0.5,
+                target_improvement_pp=0.8,
+            ),
+        )
+    )
+
+    power = report["power_audit"]
+    assert power["passes"] is True
+    power_path = Path(power["path"])
+    saved_power = json.loads(power_path.read_text(encoding="utf-8"))
+    prepared = SupervisorConfig.load(Path(report["config_path"]))
+    assert power["power_audit_id"] == saved_power["power_audit_id"]
+    assert prepared.prepared_by is not None
+    assert prepared.prepared_by["power_audit_id"] == saved_power["power_audit_id"]
+
+
+def test_prepare_rejects_low_power_before_emitting_config(tmp_path: Path) -> None:
+    config, _baseline = _config(tmp_path)
+    with pytest.raises(ContractError, match="did not meet minimum_power"):
+        prepare_campaign(
+            _write_spec(
+                tmp_path,
+                config,
+                power_audit=_power_audit(
+                    tmp_path,
+                    minimum_power=0.99,
+                    target_improvement_pp=0.1,
+                ),
+            )
+        )
+
+    campaign_root = tmp_path / "campaigns" / "prepared-campaign"
+    assert not (campaign_root / "config.json").exists()
+    rejected_report = json.loads(
+        (campaign_root / "prepare" / "power.json").read_text(encoding="utf-8")
+    )
+    assert rejected_report["passes"] is False
 
 
 def test_prepare_rejects_feedback_outside_the_pack(tmp_path: Path) -> None:

@@ -42,12 +42,14 @@ from . import TRIAD_PREPARE
 from .artifacts import load_json_object, write_exclusive_json
 from .contract import (
     ContractError,
+    PromotionRule,
     TaskUnit,
     content_sha256,
     task_pack_sha256,
     tracked_tree_sha256,
 )
 from .curation import curate_tau2_pack
+from .power import audit_family_power
 from .preflight import campaign_token_cap, completed_campaign_tokens, decide
 from .supervisor import SupervisorConfig, SupervisorError
 
@@ -237,12 +239,44 @@ def prepare_campaign(
         raise ContractError("harness checkout must be clean at prepare time")
     plan["harness_sha256"] = tracked_tree_sha256(harness_root)
 
+    power_report: dict[str, Any] | None = None
+    power_report_path: Path | None = None
+    power_specification = spec.get("power_audit")
+    if power_specification is not None:
+        if not isinstance(power_specification, Mapping):
+            raise ContractError("campaign spec power_audit must be an object")
+        promotion = PromotionRule.from_mapping(plan.get("promotion"))
+        power_report = audit_family_power(
+            tasks=units,
+            trials_per_task=plan["trials_per_task"],
+            task_pack_sha256=plan["task_pack_sha256"],
+            promotion=promotion,
+            specification=power_specification,
+            basis_root=spec_path.resolve().parent,
+        )
+        power_report_path = state_dir_root / "prepare" / "power.json"
+        power_report_path.parent.mkdir(parents=True, exist_ok=True)
+        write_exclusive_json(power_report_path, power_report)
+        if not power_report["passes"]:
+            failed = next(
+                scenario for scenario in power_report["scenarios"] if not scenario["passes"]
+            )
+            raise ContractError(
+                "family power audit did not meet minimum_power: "
+                f"{failed['name']} lower95="
+                f"{failed['results']['keep_probability_95pct_lower_bound']:.6f}; "
+                f"report={power_report_path}"
+            )
+
     config["campaign_id"] = campaign_id
-    config["prepared_by"] = {
+    provenance: dict[str, Any] = {
         "schema": PREPARE_PROVENANCE_SCHEMA,
         "entry": TRIAD_PREPARE,
         "spec_sha256": spec_sha256,
     }
+    if power_report is not None:
+        provenance["power_audit_id"] = power_report["power_audit_id"]
+    config["prepared_by"] = provenance
     config["initial_search_head_sha"] = head_sha
     state_dir = state_dir_root / "state"
     config["state_dir"] = str(state_dir)
@@ -291,6 +325,25 @@ def prepare_campaign(
     except (ContractError, SupervisorError):
         output_path.unlink(missing_ok=True)
         raise
+    power_summary: dict[str, Any] | None = None
+    if power_report is not None and power_report_path is not None:
+        power_summary = {
+            "path": str(power_report_path),
+            "power_audit_id": power_report["power_audit_id"],
+            "passes": power_report["passes"],
+            "minimum_power": power_report["minimum_power"],
+            "scenarios": [
+                {
+                    "name": scenario["name"],
+                    "keep_probability": scenario["results"]["keep_probability"],
+                    "keep_probability_95pct_lower_bound": scenario["results"][
+                        "keep_probability_95pct_lower_bound"
+                    ],
+                    "passes": scenario["passes"],
+                }
+                for scenario in power_report["scenarios"]
+            ],
+        }
     return {
         "schema": PREPARE_REPORT_SCHEMA,
         "campaign_id": campaign_id,
@@ -305,4 +358,5 @@ def prepare_campaign(
         "task_pack_sha256": plan["task_pack_sha256"],
         "evaluator_sha256": plan["evaluator_sha256"],
         "harness_sha256": plan["harness_sha256"],
+        "power_audit": power_summary,
     }
