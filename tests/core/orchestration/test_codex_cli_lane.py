@@ -8,6 +8,7 @@ mirror in ``build_default_lanes``.
 from __future__ import annotations
 
 import pytest
+from core.llm.codex_oauth_usage import CODEX_OAUTH_POLL_DISABLED_ENV
 from core.orchestration.codex_cli_lane import (
     CODEX_CLI_LANE_MAX_ENV,
     CODEX_CLI_LANE_NAME,
@@ -22,6 +23,7 @@ from core.orchestration.codex_cli_lane import (
 @pytest.fixture(autouse=True)
 def _reset_codex_lane(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv(CODEX_CLI_LANE_MAX_ENV, raising=False)
+    monkeypatch.setenv(CODEX_OAUTH_POLL_DISABLED_ENV, "1")
     _reset_codex_cli_lane_for_tests()
 
 
