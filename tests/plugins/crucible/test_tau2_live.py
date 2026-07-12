@@ -602,9 +602,7 @@ def test_run_arm_ignores_row_cache_outside_train_stage(
         revision_sha=contract.baseline_sha,
         raw_results={
             **context,
-            "simulations": [
-                simulation(task_id, 0, 1.0) for task_id in contract.task_ids
-            ],
+            "simulations": [simulation(task_id, 0, 1.0) for task_id in contract.task_ids],
         },
     )
 
@@ -614,9 +612,7 @@ def test_run_arm_ignores_row_cache_outside_train_stage(
         json.dumps(
             {
                 **context,
-                "simulations": [
-                    simulation(task_id, 0, 1.0) for task_id in contract.task_ids
-                ],
+                "simulations": [simulation(task_id, 0, 1.0) for task_id in contract.task_ids],
             }
         ),
         encoding="utf-8",

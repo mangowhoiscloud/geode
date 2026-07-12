@@ -23,8 +23,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from plugins.crucible.contract import ContractError  # noqa: E402
-from plugins.crucible.preflight import (  # noqa: E402
+from plugins.crucible.contract import ContractError
+from plugins.crucible.preflight import (
     campaign_token_cap,
     completed_campaign_tokens,
     decide,

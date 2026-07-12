@@ -38,8 +38,6 @@ from pathlib import Path
 from typing import Any
 
 from .artifacts import load_json_object, write_exclusive_json
-from .curation import curate_tau2_pack
-from .preflight import campaign_token_cap, completed_campaign_tokens, decide
 from .contract import (
     ContractError,
     TaskUnit,
@@ -47,6 +45,8 @@ from .contract import (
     task_pack_sha256,
     tracked_tree_sha256,
 )
+from .curation import curate_tau2_pack
+from .preflight import campaign_token_cap, completed_campaign_tokens, decide
 from .supervisor import SupervisorConfig, SupervisorError
 
 SPEC_SCHEMA = "crucible.campaign-spec.v1"

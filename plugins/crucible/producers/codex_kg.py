@@ -47,6 +47,8 @@ _PROGRAM_TOKENS = frozenset(
         "{{surfaces_json}}",
     }
 )
+
+
 class ProducerError(RuntimeError):
     """A candidate cannot be emitted without violating the producer contract."""
 
@@ -60,9 +62,7 @@ def _objective_from_program(path: Path = _DEFAULT_PROGRAM_PATH) -> str:
     if section is None:
         raise ProducerError("program.md must define an '## Objective' section")
     quoted = [
-        line.lstrip(">").strip()
-        for line in section.group(1).splitlines()
-        if line.startswith(">")
+        line.lstrip(">").strip() for line in section.group(1).splitlines() if line.startswith(">")
     ]
     if not quoted:
         raise ProducerError("program.md '## Objective' must quote the default objective")

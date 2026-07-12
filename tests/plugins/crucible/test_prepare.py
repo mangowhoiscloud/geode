@@ -154,9 +154,7 @@ def test_prepare_curates_pack_when_spec_carries_curation(
         "maximum_per_persona": 2,
         "trials_per_task": 1,
     }
-    report = prepare_campaign(
-        _write_spec(tmp_path, config, include_pack=False, curation=curation)
-    )
+    report = prepare_campaign(_write_spec(tmp_path, config, include_pack=False, curation=curation))
     assert report["pack_file"].endswith("prepare/pack.json")
     assert report["task_count"] == 4
 
