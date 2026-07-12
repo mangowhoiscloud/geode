@@ -937,6 +937,10 @@ function DistillationAct() {
   const ledgerOp = useTransform(scrollYProgress, [0.48, 0.64], [0, 1]);
   const labOp = useTransform(scrollYProgress, [0.74, 0.9], [0, 1]);
   const labPointer = useTransform(labOp, (v) => (v > 0.55 ? "auto" : "none") as "auto" | "none");
+  // The pinned headline recedes as the laboratory rises — same scroll window
+  // as labOp so the two pinned layers never compete for the corner.
+  const headOp = useTransform(scrollYProgress, [0.74, 0.9], [1, 0.12]);
+  const headBlur = useTransform(scrollYProgress, [0.74, 0.9], ["blur(0px)", "blur(6px)"]);
   const ledger: { id: string; verdict: string; keep?: boolean }[] = [
     { id: "gen-2606-i1-004", verdict: "REJECT" },
     { id: "gen-2606-i2-001", verdict: "REJECT" },
@@ -948,14 +952,17 @@ function DistillationAct() {
       {/* nav anchor: jumping to #lab lands where the laboratory has revealed */}
       <div id="lab" aria-hidden className="absolute left-0 top-[76%] h-px w-px" />
       <div className="sticky top-0 flex h-screen flex-col overflow-hidden">
-        <div className="pointer-events-none absolute left-5 top-8 z-20 max-w-[360px] text-left sm:left-10 sm:top-12">
+        <motion.div
+          style={{ opacity: headOp, filter: reduceMotion ? undefined : headBlur }}
+          className="pointer-events-none absolute left-5 top-8 z-20 max-w-[360px] text-left sm:left-10 sm:top-12"
+        >
           <p className="font-mono text-[10.5px] uppercase tracking-[0.3em]" style={{ color: PAPER_75 }}>
             {t(locale, "증류", "the distillation")}
           </p>
           <h2 className="font-serif-display mt-3 text-balance text-[clamp(1.6rem,3.1vw,2.3rem)] font-black leading-[1.22] text-[#FFF0F8]">
             {t(locale, "천 번의 토큰을 걸러, 한 방울로.", "A thousand tokens, filtered to a single drop.")}
           </h2>
-        </div>
+        </motion.div>
 
         <div className="flex min-h-0 flex-1 flex-col justify-center">
           <RainBand phase={0} height="12vh" flakes={96} />
