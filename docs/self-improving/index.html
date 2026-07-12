@@ -63,6 +63,11 @@
         <li><a href="/geode/self-improving/autoresearch/runs/">Runs</a></li>
         <li><a href="/geode/self-improving/autoresearch/policies/">Policies</a></li>
       </ul>
+      <div class="nav-section">Crucible <span class="count">26 attempts</span></div>
+      <ul class="nav-list">
+        <li><a href="/geode/docs/architecture/crucible-kernel">Kernel architecture (docs)</a></li>
+      </ul>
+
 
       <div class="nav-section">Docs</div>
       <ul class="nav-list">
@@ -185,7 +190,7 @@
           <td class="muted">broken_tool_use</td>
           <td><span class="chip claude">Claude Code</span> <code>claude-cli/claude-opus-4-8</code> <span class="chip codex">ChatGPT</span> <code>openai-codex/gpt-5.5</code> <span class="chip payg">PAYG</span> <code>anthropic/claude-opus-4-8</code></td>
           <td class="num">8 drafted &rarr; 5 survived &rarr; 5 evolved</td>
-          <td class="num">262,486</td>
+          <td class="num">262,486 tok &middot; $1.50 <span class="muted" title="3 roles ran agents without usage capture; totals are a metered floor">&dagger;</span></td>
         </tr>
         <tr>
           <td class="id"><a href="/geode/self-improving/seed-generation/gen-2605-1-redundant_tool_invocation/">gen-2605-1-redundant_tool_invocation</a> <span class="bucket seedgen">seedgen</span></td>
@@ -193,7 +198,7 @@
           <td class="muted">redundant_tool_invocation</td>
           <td><span class="chip claude">Claude Code</span> <code>claude-cli/claude-opus-4-7</code> <span class="chip payg">PAYG</span> <code>anthropic/claude-opus-4-7</code> <span class="chip codex">ChatGPT</span> <code>openai-codex/gpt-5.5</code></td>
           <td class="num">9 drafted &rarr; 5 survived &rarr; 5 evolved</td>
-          <td class="num">0</td>
+          <td class="num">0 tok &middot; $1.88 <span class="muted" title="4 roles ran agents without usage capture; totals are a metered floor">&dagger;</span></td>
         </tr>
         <tr>
           <td class="id"><a href="/geode/self-improving/seed-generation/gen-2605-2-redundant_tool_invocation/">gen-2605-2-redundant_tool_invocation</a> <span class="bucket seedgen">seedgen</span></td>
@@ -201,7 +206,7 @@
           <td class="muted">redundant_tool_invocation</td>
           <td><span class="chip claude">Claude Code</span> <code>claude-cli/claude-opus-4-7</code> <span class="chip codex">ChatGPT</span> <code>openai-codex/gpt-5.5</code></td>
           <td class="num">13 drafted &rarr; 5 survived &rarr; 5 evolved</td>
-          <td class="num">0</td>
+          <td class="num">0 tok &middot; $3.52 <span class="muted" title="4 roles ran agents without usage capture; totals are a metered floor">&dagger;</span></td>
         </tr>
         <tr>
           <td class="id"><a href="/geode/self-improving/seed-generation/gen-2605-3-broken_tool_use/">gen-2605-3-broken_tool_use</a> <span class="bucket seedgen">seedgen</span></td>
@@ -209,7 +214,7 @@
           <td class="muted">broken_tool_use</td>
           <td><span class="chip claude">Claude Code</span> <code>claude-cli/claude-opus-4-7</code> <span class="chip codex">ChatGPT</span> <code>openai-codex/gpt-5.5</code></td>
           <td class="num">11 drafted &rarr; 5 survived &rarr; 5 evolved</td>
-          <td class="num">0</td>
+          <td class="num">0 tok &middot; $2.91 <span class="muted" title="4 roles ran agents without usage capture; totals are a metered floor">&dagger;</span></td>
         </tr>
         <tr>
           <td class="id"><a href="/geode/self-improving/seed-generation/gen-2605-4-unfaithful_thinking/">gen-2605-4-unfaithful_thinking</a> <span class="bucket seedgen">seedgen</span></td>
@@ -217,7 +222,7 @@
           <td class="muted">unfaithful_thinking</td>
           <td><span class="chip claude">Claude Code</span> <code>claude-cli/claude-opus-4-7</code> <span class="chip codex">ChatGPT</span> <code>openai-codex/gpt-5.5</code> <span class="chip payg">PAYG</span> <code>anthropic/claude-opus-4-7</code></td>
           <td class="num">11 drafted &rarr; 5 survived &rarr; 5 evolved</td>
-          <td class="num">0</td>
+          <td class="num">0 tok &middot; $2.88 <span class="muted" title="4 roles ran agents without usage capture; totals are a metered floor">&dagger;</span></td>
         </tr>
         <tr>
           <td class="id"><a href="/geode/self-improving/seed-generation/gen1-broken_tool_use/">gen1-broken_tool_use</a> <span class="bucket seedgen">seedgen</span></td>
@@ -225,7 +230,7 @@
           <td class="muted">broken_tool_use</td>
           <td><span class="chip claude">Claude Code</span> <code>claude-cli/claude-opus-4-7</code> <span class="chip codex">ChatGPT</span> <code>openai-codex/gpt-5.5</code></td>
           <td class="num">15 drafted &rarr; 4 survived &rarr; 5 evolved</td>
-          <td class="num">0</td>
+          <td class="num">0 tok &middot; $0.00 <span class="muted" title="5 roles ran agents without usage capture; totals are a metered floor">&dagger;</span></td>
         </tr>
         <tr>
           <td class="id"><a href="/geode/self-improving/seed-generation/gen1-redundant_tool_invocation/">gen1-redundant_tool_invocation</a> <span class="bucket seedgen">seedgen</span></td>
@@ -233,7 +238,7 @@
           <td class="muted">redundant_tool_invocation</td>
           <td><span class="chip payg">PAYG</span> <code>anthropic/claude-opus-4-7</code> <span class="chip claude">Claude Code</span> <code>claude-cli/claude-opus-4-7</code> <span class="chip codex">ChatGPT</span> <code>openai-codex/gpt-5.5</code></td>
           <td class="num">2 drafted &rarr; 2 survived &rarr; 1 evolved</td>
-          <td class="num">0</td>
+          <td class="num">0 tok &middot; $5.93 <span class="muted" title="4 roles ran agents without usage capture; totals are a metered floor">&dagger;</span></td>
         </tr>
       </tbody>
     </table>
@@ -253,24 +258,226 @@
         </tr>
         <tr>
           <td class="id"><a href="/geode/self-improving/autoresearch/mutations/">mutations.jsonl</a> <span class="bucket autoresearch">autoresearch</span></td>
-          <td class="muted">2026-07-10 08:10</td>
+          <td class="muted">2026-07-12 21:59</td>
           <td class="muted">73 rows</td>
           <td><span class="chip claude">Claude Code</span> <code>claude-cli/claude-opus-4-7</code> <span class="role-label">mut</span></td>
           <td class="muted">.</td>
         </tr>
         <tr>
           <td class="id"><a href="/geode/self-improving/autoresearch/results/">results.tsv</a> <span class="bucket autoresearch">autoresearch</span></td>
-          <td class="muted">2026-07-10 08:10</td>
+          <td class="muted">2026-07-12 21:59</td>
           <td class="muted">3 rows</td>
           <td class="muted">per-mutation fitness ledger</td>
           <td class="muted">.</td>
         </tr>
         <tr>
           <td class="id"><a href="/geode/self-improving/autoresearch/policies/">policies/ (1 files)</a> <span class="bucket autoresearch">autoresearch</span></td>
-          <td class="muted">2026-07-10 08:10</td>
+          <td class="muted">2026-07-12 21:59</td>
           <td class="muted">.</td>
           <td class="muted">wrapper-sections, tool-policy, decomposition, retrieval, reflection, &hellip;</td>
           <td class="muted">.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2 class="section"><span>Crucible &middot; campaign ledger &middot; 26 attempts</span></h2>
+    <p class="muted">Per-attempt usage from the append-only campaign ledgers
+      (<code>state/ledger.jsonl</code>). Totals are a metered floor: early attempts
+      recorded tokens before pricing was wired, and a failed capture leaves an
+      attempt with wall time but no usage.</p>
+    <table class="records">
+      <thead>
+        <tr><th>campaign</th><th>outcome</th><th>tokens</th><th>cost</th><th>wall / flags</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="id">crucible-rowcache-live-a2</td>
+          <td>REJECT</td>
+          <td class="num">1,238,603</td>
+          <td class="num">$1.24</td>
+          <td class="num">920s </td>
+        </tr>
+        <tr>
+          <td class="id">crucible-rowcache-live-b</td>
+          <td>REJECT</td>
+          <td class="num">1,238,603</td>
+          <td class="num">$1.24</td>
+          <td class="num">19s </td>
+        </tr>
+        <tr>
+          <td class="id">tau2-telecom-gpt54-train-20260711-r1</td>
+          <td>INVALID</td>
+          <td class="num">91,585</td>
+          <td class="num">&mdash;</td>
+          <td class="num">85s <span class="muted" title="tokens metered before pricing was wired">cost uncaptured</span></td>
+        </tr>
+        <tr>
+          <td class="id">tau2-telecom-gpt54-train-20260711-r1</td>
+          <td>INVALID</td>
+          <td class="num">110,920</td>
+          <td class="num">&mdash;</td>
+          <td class="num">88s <span class="muted" title="tokens metered before pricing was wired">cost uncaptured</span></td>
+        </tr>
+        <tr>
+          <td class="id">tau2-telecom-gpt54-train-20260711-r10</td>
+          <td>INVALID</td>
+          <td class="num">100,766</td>
+          <td class="num">&mdash;</td>
+          <td class="num">103s <span class="muted" title="tokens metered before pricing was wired">cost uncaptured</span></td>
+        </tr>
+        <tr>
+          <td class="id">tau2-telecom-gpt54-train-20260711-r11</td>
+          <td>INVALID</td>
+          <td class="num">0</td>
+          <td class="num">$0.00</td>
+          <td class="num">2,002s <span class="muted" title="attempt ran but usage capture failed">usage missing</span></td>
+        </tr>
+        <tr>
+          <td class="id">tau2-telecom-gpt54-train-20260711-r12</td>
+          <td>INVALID</td>
+          <td class="num">1,248,582</td>
+          <td class="num">$1.38</td>
+          <td class="num">1,341s </td>
+        </tr>
+        <tr>
+          <td class="id">tau2-telecom-gpt54-train-20260711-r13</td>
+          <td>INVALID</td>
+          <td class="num">2,898,399</td>
+          <td class="num">$3.39</td>
+          <td class="num">3,415s </td>
+        </tr>
+        <tr>
+          <td class="id">tau2-telecom-gpt54-train-20260711-r14</td>
+          <td>KEEP</td>
+          <td class="num">4,584,651</td>
+          <td class="num">$5.58</td>
+          <td class="num">5,884s </td>
+        </tr>
+        <tr>
+          <td class="id">tau2-telecom-gpt54-train-20260711-r15</td>
+          <td>INVALID</td>
+          <td class="num">102,120</td>
+          <td class="num">&mdash;</td>
+          <td class="num">104s <span class="muted" title="tokens metered before pricing was wired">cost uncaptured</span></td>
+        </tr>
+        <tr>
+          <td class="id">tau2-telecom-gpt54-train-20260711-r18</td>
+          <td>REJECT</td>
+          <td class="num">3,855,030</td>
+          <td class="num">$4.56</td>
+          <td class="num">4,274s </td>
+        </tr>
+        <tr>
+          <td class="id">tau2-telecom-gpt54-train-20260711-r19</td>
+          <td>REJECT</td>
+          <td class="num">3,764,322</td>
+          <td class="num">$4.18</td>
+          <td class="num">3,761s </td>
+        </tr>
+        <tr>
+          <td class="id">tau2-telecom-gpt54-train-20260711-r2</td>
+          <td>INVALID</td>
+          <td class="num">132,046</td>
+          <td class="num">&mdash;</td>
+          <td class="num">1,675s <span class="muted" title="tokens metered before pricing was wired">cost uncaptured</span></td>
+        </tr>
+        <tr>
+          <td class="id">tau2-telecom-gpt54-train-20260711-r20</td>
+          <td>INVALID</td>
+          <td class="num">0</td>
+          <td class="num">$0.00</td>
+          <td class="num">30s </td>
+        </tr>
+        <tr>
+          <td class="id">tau2-telecom-gpt54-train-20260711-r21</td>
+          <td>REJECT</td>
+          <td class="num">3,847,427</td>
+          <td class="num">$4.52</td>
+          <td class="num">3,246s </td>
+        </tr>
+        <tr>
+          <td class="id">tau2-telecom-gpt54-train-20260711-r5</td>
+          <td>INVALID</td>
+          <td class="num">99,535</td>
+          <td class="num">&mdash;</td>
+          <td class="num">65s <span class="muted" title="tokens metered before pricing was wired">cost uncaptured</span></td>
+        </tr>
+        <tr>
+          <td class="id">tau2-telecom-gpt54-train-20260711-r6</td>
+          <td>INVALID</td>
+          <td class="num">0</td>
+          <td class="num">$0.00</td>
+          <td class="num">24s </td>
+        </tr>
+        <tr>
+          <td class="id">tau2-telecom-gpt54-train-20260711-r6</td>
+          <td>INVALID</td>
+          <td class="num">0</td>
+          <td class="num">$0.00</td>
+          <td class="num">24s </td>
+        </tr>
+        <tr>
+          <td class="id">tau2-telecom-gpt54-train-20260711-r7</td>
+          <td>INVALID</td>
+          <td class="num">123,775</td>
+          <td class="num">&mdash;</td>
+          <td class="num">2,394s <span class="muted" title="tokens metered before pricing was wired">cost uncaptured</span></td>
+        </tr>
+        <tr>
+          <td class="id">tau2-telecom-gpt54-train-20260711-r9</td>
+          <td>INVALID</td>
+          <td class="num">101,317</td>
+          <td class="num">&mdash;</td>
+          <td class="num">1,853s <span class="muted" title="tokens metered before pricing was wired">cost uncaptured</span></td>
+        </tr>
+        <tr>
+          <td class="id">tau2-telecom-gpt54-train-20260712-r22</td>
+          <td>REJECT</td>
+          <td class="num">1,755,702</td>
+          <td class="num">$1.87</td>
+          <td class="num">1,464s </td>
+        </tr>
+        <tr>
+          <td class="id">tau2-telecom-gpt54-train-20260712-r23</td>
+          <td>INVALID</td>
+          <td class="num">5,103,196</td>
+          <td class="num">$5.77</td>
+          <td class="num">4,282s </td>
+        </tr>
+        <tr>
+          <td class="id">tau2-telecom-gpt54-train-20260712-r24</td>
+          <td>REJECT</td>
+          <td class="num">7,498,490</td>
+          <td class="num">$8.26</td>
+          <td class="num">5,764s </td>
+        </tr>
+        <tr>
+          <td class="id">tau2-telecom-gpt54-train-20260712-r25</td>
+          <td>REJECT</td>
+          <td class="num">4,504,216</td>
+          <td class="num">$5.16</td>
+          <td class="num">3,653s </td>
+        </tr>
+        <tr>
+          <td class="id">tau2-telecom-gpt54-train-20260712-r26</td>
+          <td>INVALID</td>
+          <td class="num">0</td>
+          <td class="num">$0.00</td>
+          <td class="num">10s </td>
+        </tr>
+        <tr>
+          <td class="id">tau2-telecom-gpt54-train-20260712-r28</td>
+          <td>INVALID</td>
+          <td class="num">0</td>
+          <td class="num">$0.00</td>
+          <td class="num">8s </td>
+        </tr>
+        <tr>
+          <td class="id"><b>total &middot; 26 attempts</b></td>
+          <td></td>
+          <td class="num"><b>42,399,285</b></td>
+          <td class="num"><b>$47.16</b></td>
+          <td class="muted">floor: 8 attempts cost-uncaptured, 1 attempts usage-missing</td>
         </tr>
       </tbody>
     </table>
@@ -315,7 +522,7 @@
         <span class="chip geode">GEODE</span>self-target wrapper.
       </p>
       <p class="version-stamp">
-        Rendered against GEODE <code>v0.99.293</code> &middot; DESIGN.md schema 1 &middot; built 2026-07-10 08:15.
+        Rendered against GEODE <code>v0.99.311</code> &middot; DESIGN.md schema 1 &middot; built 2026-07-12 22:07.
         Dim subset: 22 (geode_5axes). Pipeline phases: 8. Baseline schema: v2 (PR-2).
       </p>
     </div>

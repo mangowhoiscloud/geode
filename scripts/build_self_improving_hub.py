@@ -40,6 +40,7 @@ import datetime as _dt
 import json
 import logging
 import math
+import os
 import re
 import sys
 from dataclasses import dataclass, field
@@ -400,6 +401,9 @@ class SeedGenRow:
     #: (e.g. ``["claude-cli/claude-opus-4-8", "openai-codex/gpt-5.5"]``).
     #: Empty for legacy listings; renderers fall back to a muted dot.
     harness_models: list[str] = field(default_factory=list)
+    #: Roles that ran agents but metered no usage (subprocess capture gap);
+    #: > 0 means the run's cost/token totals are a floor, not the full spend.
+    uncaptured_roles: int = 0
 
 
 def load_petri(bundle_root: Path) -> list[PetriRow]:
@@ -468,6 +472,7 @@ def load_seedgen(bundle_root: Path) -> list[SeedGenRow]:
                 survivors_count=int(run.get("survivors_count", 0)),
                 evolved_count=int(run.get("evolved_count", 0)),
                 usd_spent=float(run.get("usd_spent", 0.0)),
+                uncaptured_roles=int(run.get("uncaptured_roles", 0) or 0),
                 total_tokens=(
                     int(run.get("prompt_tokens", 0)) + int(run.get("completion_tokens", 0))
                 ),
@@ -607,6 +612,23 @@ def render_petri_rows(rows: list[PetriRow]) -> str:
     return "\n".join(out)
 
 
+def seedgen_cost_cell(row: SeedGenRow) -> str:
+    """Tokens and USD together; a dagger marks metered-floor totals.
+
+    ``uncaptured_roles > 0`` means subprocess roles ran without usage
+    capture, so the number is a lower bound rather than the full spend.
+    """
+    tok = f"{row.total_tokens:,}" if row.total_tokens else "0"
+    usd = f"${row.usd_spent:,.2f}" if row.usd_spent else "$0.00"
+    cell = f"{tok} tok &middot; {usd}"
+    if row.uncaptured_roles:
+        cell += (
+            f' <span class="muted" title="{row.uncaptured_roles} roles ran agents '
+            'without usage capture; totals are a metered floor">&dagger;</span>'
+        )
+    return cell
+
+
 def render_seedgen_rows(rows: list[SeedGenRow]) -> str:
     if not rows:
         return (
@@ -629,7 +651,7 @@ def render_seedgen_rows(rows: list[SeedGenRow]) -> str:
             f'          <td class="muted">{html_escape(row.target_dim)}</td>\n'
             f"          <td>{seedgen_harness_chips(row.harness_models)}</td>\n"
             f'          <td class="num">{flow}</td>\n'
-            f'          <td class="num">{row.total_tokens:,}</td>\n'
+            f'          <td class="num">{seedgen_cost_cell(row)}</td>\n'
             "        </tr>"
         )
     return "\n".join(out)
@@ -779,6 +801,131 @@ def render_sidebar_seedgen(rows: list[SeedGenRow]) -> str:
                 f'            <li class="side-group-leaf"><a href="{url}" '
                 f'title="{html_escape(row.run_id)}">{html_escape(leaf)}</a></li>'
             )
+    return "\n".join(out)
+
+
+# --------------------------------------------------------------------------- #
+# Crucible campaign ledger (artifacts/, present in local builds only)          #
+# --------------------------------------------------------------------------- #
+# artifacts/ is gitignored, so worktrees do not carry the ledgers; the
+# env override lets a worktree build read the main checkout's artifacts.
+CRUCIBLE_CAMPAIGNS_DIR = Path(
+    os.environ.get(
+        "GEODE_CRUCIBLE_CAMPAIGNS_DIR",
+        str(REPO_ROOT / "artifacts" / "eval" / "runs" / "crucible" / "campaigns"),
+    )
+)
+
+
+@dataclass
+class CrucibleAttempt:
+    campaign_id: str
+    outcome: str
+    tokens: int
+    cost_usd: float
+    wall_seconds: float
+
+    @property
+    def cost_uncaptured(self) -> bool:
+        """Tokens were metered but pricing was not wired (early campaigns)."""
+        return self.tokens > 0 and self.cost_usd == 0.0
+
+    @property
+    def usage_missing(self) -> bool:
+        """Long-running attempt with zero metered usage: capture failure."""
+        return self.tokens == 0 and self.wall_seconds > 60.0
+
+
+def load_crucible_attempts(campaigns_dir: Path = CRUCIBLE_CAMPAIGNS_DIR) -> list[CrucibleAttempt]:
+    """Read every campaign's append-only ledger into attempt rows.
+
+    ``artifacts/`` is gitignored, so CI builds see an empty list and the
+    section degrades to an explanatory row; the committed hub HTML comes
+    from local builds where the ledgers exist.
+    """
+    attempts: list[CrucibleAttempt] = []
+    if not campaigns_dir.is_dir():
+        return attempts
+    for ledger in sorted(campaigns_dir.glob("*/state/ledger.jsonl")):
+        campaign_id = ledger.parent.parent.name
+        try:
+            lines = ledger.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            if not line.strip():
+                continue
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if rec.get("kind") != "train_attempt":
+                continue
+            usage = rec.get("usage") or {}
+            attempts.append(
+                CrucibleAttempt(
+                    campaign_id=campaign_id,
+                    outcome=str(rec.get("outcome", "?")),
+                    tokens=int(usage.get("tokens", 0) or 0),
+                    cost_usd=float(usage.get("cost_usd", 0.0) or 0.0),
+                    wall_seconds=float(rec.get("wall_seconds", 0.0) or 0.0),
+                )
+            )
+    return attempts
+
+
+def render_crucible_rows(attempts: list[CrucibleAttempt]) -> str:
+    if not attempts:
+        return (
+            '        <tr><td colspan="5" class="empty">Campaign ledgers live in '
+            "<code>artifacts/eval/runs/crucible/campaigns/</code> and are not part "
+            "of this build environment.</td></tr>"
+        )
+    out: list[str] = []
+    for a in attempts:
+        flags: list[str] = []
+        if a.cost_uncaptured:
+            flags.append(
+                '<span class="muted" title="tokens metered before pricing was wired">'
+                "cost uncaptured</span>"
+            )
+        if a.usage_missing:
+            flags.append(
+                '<span class="muted" title="attempt ran but usage capture failed">'
+                "usage missing</span>"
+            )
+        cost = (
+            f"${a.cost_usd:,.2f}" if a.cost_usd else ("&mdash;" if a.cost_uncaptured else "$0.00")
+        )
+        out.append(
+            "        <tr>\n"
+            f'          <td class="id">{html_escape(a.campaign_id)}</td>\n'
+            f"          <td>{html_escape(a.outcome)}</td>\n"
+            f'          <td class="num">{a.tokens:,}</td>\n'
+            f'          <td class="num">{cost}</td>\n'
+            f'          <td class="num">{a.wall_seconds:,.0f}s '
+            + (" ".join(flags) if flags else "")
+            + "</td>\n        </tr>"
+        )
+    total_tok = sum(a.tokens for a in attempts)
+    total_usd = sum(a.cost_usd for a in attempts)
+    n_uncap = sum(1 for a in attempts if a.cost_uncaptured)
+    n_missing = sum(1 for a in attempts if a.usage_missing)
+    caveats: list[str] = []
+    if n_uncap:
+        caveats.append(f"{n_uncap} attempts cost-uncaptured")
+    if n_missing:
+        caveats.append(f"{n_missing} attempts usage-missing")
+    caveat = f"floor: {', '.join(caveats)}" if caveats else ""
+    out.append(
+        "        <tr>\n"
+        f'          <td class="id"><b>total &middot; {len(attempts)} attempts</b></td>\n'
+        "          <td></td>\n"
+        f'          <td class="num"><b>{total_tok:,}</b></td>\n'
+        f'          <td class="num"><b>${total_usd:,.2f}</b></td>\n'
+        f'          <td class="muted">{caveat}</td>\n'
+        "        </tr>"
+    )
     return "\n".join(out)
 
 
@@ -1923,6 +2070,11 @@ def _render_hub_sidebar(
         <li><a href="{base}/autoresearch/mutations/">Mutations</a></li>
         <li><a href="{base}/autoresearch/results/">Results</a></li>
         <li><a href="{base}/autoresearch/policies/">Policies</a></li>
+      </ul>
+
+      <div class="nav-section">Crucible <span class="count">ledger</span></div>
+      <ul class="nav-list">
+        <li><a href="/geode/docs/architecture/crucible-kernel">Kernel architecture (docs)</a></li>
       </ul>
 
       <div class="nav-section">Docs</div>
@@ -7028,6 +7180,13 @@ def main(argv: list[str] | None = None) -> int:
         else ("live" if autoresearch.baseline_path is not None else "absent")
     )
 
+    crucible_attempts = load_crucible_attempts()
+    crucible_count_label = (
+        f"{len(crucible_attempts)} attempt" + ("s" if len(crucible_attempts) != 1 else "")
+        if crucible_attempts
+        else "local ledgers"
+    )
+
     build_date = _dt.datetime.now(tz=_dt.UTC).strftime("%Y-%m-%d %H:%M")
 
     template = args.template.read_text(encoding="utf-8")
@@ -7045,6 +7204,8 @@ def main(argv: list[str] | None = None) -> int:
         "sidebar_seedgen_runs": render_sidebar_seedgen(seedgen_rows),
         "autoresearch_status_label": autoresearch_status_label,
         "autoresearch_rows": render_autoresearch_rows(autoresearch),
+        "crucible_count_label": crucible_count_label,
+        "crucible_rows": render_crucible_rows(crucible_attempts),
         "stale_baseline_warning": render_stale_banner(autoresearch),
         "geode_version": version,
         "design_schema_version": str(DESIGN_SCHEMA_VERSION),
