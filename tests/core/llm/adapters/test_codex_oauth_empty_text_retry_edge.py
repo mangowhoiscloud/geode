@@ -40,7 +40,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from core.llm.adapters._openai_common import build_responses_kwargs
-from core.llm.adapters.base import AdapterCallRequest, Message
+from core.llm.adapters.base import AdapterCallRequest, EmptyModelOutputError, Message
 from core.llm.adapters.codex_oauth import CodexOAuthAdapter
 
 _VOTE_SCHEMA: dict[str, Any] = {
@@ -163,12 +163,57 @@ def test_acomplete_empty_response_env_fail_fast_still_dumps(
 
     with (
         patch("core.paths.GLOBAL_DIAGNOSTICS_DIR", tmp_path),
-        pytest.raises(RuntimeError, match="empty output_text"),
+        pytest.raises(EmptyModelOutputError, match="empty output_text") as error,
     ):
         asyncio.run(adapter.acomplete(_voter_req(schema=None)))
 
     dumps = list((tmp_path / "codex-oauth-empty-text").glob("*-gpt-5.5.json"))
     assert len(dumps) == 1
+    error.value.mark_recovered()
+    assert Path(f"{dumps[0]}.recovered").is_file()
+
+
+def test_acomplete_empty_response_can_attest_actionable_partial(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _capture = _build_mock_codex_client_empty_response()
+    adapter = CodexOAuthAdapter()
+    adapter._get_client = lambda: client  # type: ignore[method-assign]
+    monkeypatch.setenv("GEODE_CODEX_OAUTH_FAIL_EMPTY_TEXT", "1")
+
+    with (
+        patch("core.paths.GLOBAL_DIAGNOSTICS_DIR", tmp_path),
+        pytest.raises(EmptyModelOutputError) as error,
+    ):
+        asyncio.run(adapter.acomplete(_voter_req(schema=None)))
+
+    dump = next((tmp_path / "codex-oauth-empty-text").glob("*-gpt-5.5.json"))
+    error.value.mark_actionable()
+    assert Path(f"{dump}.actionable").is_file()
+
+
+def test_acomplete_empty_response_cannot_attest_without_dump(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _capture = _build_mock_codex_client_empty_response()
+    adapter = CodexOAuthAdapter()
+    adapter._get_client = lambda: client  # type: ignore[method-assign]
+    monkeypatch.setenv("GEODE_CODEX_OAUTH_FAIL_EMPTY_TEXT", "1")
+
+    with (
+        patch(
+            "core.llm.adapters.codex_oauth._dump_empty_text_postmortem",
+            return_value=None,
+        ),
+        pytest.raises(EmptyModelOutputError) as error,
+    ):
+        asyncio.run(adapter.acomplete(_voter_req(schema=None)))
+
+    with pytest.raises(RuntimeError, match="without its diagnostic dump"):
+        error.value.mark_recovered()
+    with pytest.raises(RuntimeError, match="without its diagnostic dump"):
+        error.value.mark_actionable()
 
 
 def test_acomplete_empty_text_with_function_call_is_not_empty_failure(

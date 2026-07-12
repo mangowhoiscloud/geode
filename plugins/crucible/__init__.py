@@ -1,11 +1,13 @@
 """Frozen experiment contracts for Crucible campaigns."""
 
+from .bundle import PromotionBundle
 from .contract import (
     Budget,
     ContractError,
     ExperimentContract,
     Mutation,
     PromotionRule,
+    TaskUnit,
     content_sha256,
     load_contract,
     task_pack_sha256,
@@ -23,7 +25,24 @@ from .evidence import (
     load_evidence,
     validate_evidence_identity,
 )
-from .promotion import PromotionVerdict, decide
+from .promotion import PromotionReachability, PromotionVerdict, decide, promotion_reachability
+from .ref_journal import (
+    RefIntent,
+    RefJournalError,
+    RefReceipt,
+    commit_ref_update,
+    reconcile_ref_update,
+    verify_ref_update,
+)
+from .sealed import (
+    CorePromotionDecision,
+    SealedError,
+    SealedEvaluationArtifacts,
+    SealedEvaluator,
+    SealedInfrastructureError,
+    SealedPlan,
+    SealedSupervisor,
+)
 from .supervisor import (
     CandidateProducer,
     CandidateProposal,
@@ -38,32 +57,50 @@ from .supervisor import (
     TrustedEvaluator,
     run_supervisor,
 )
+from .tau2_live import Tau2SealedEvaluator
 
 __all__ = [
     "Budget",
     "CandidateProducer",
     "CandidateProposal",
     "ContractError",
+    "CorePromotionDecision",
     "EvaluationArtifacts",
     "EvidenceEnvelope",
     "ExperimentContract",
     "FailureFeedback",
     "LoopLimits",
     "Mutation",
+    "PromotionBundle",
+    "PromotionReachability",
     "PromotionRule",
     "PromotionSupervisor",
     "PromotionVerdict",
+    "RefIntent",
+    "RefJournalError",
+    "RefReceipt",
     "ResourceUsage",
+    "SealedError",
+    "SealedEvaluationArtifacts",
+    "SealedEvaluator",
+    "SealedInfrastructureError",
+    "SealedPlan",
+    "SealedSupervisor",
     "SupervisorConfig",
     "SupervisorError",
     "SupervisorSummary",
     "TaskEvidence",
+    "TaskUnit",
+    "Tau2SealedEvaluator",
     "TrainPlan",
     "TrustedEvaluator",
+    "commit_ref_update",
     "content_sha256",
     "decide",
     "load_contract",
     "load_evidence",
+    "promotion_reachability",
+    "reconcile_ref_update",
     "run_supervisor",
     "task_pack_sha256",
     "tracked_tree_sha256",
@@ -73,4 +110,5 @@ __all__ = [
     "validate_measurement_files",
     "validate_shards",
     "validate_test_parent",
+    "verify_ref_update",
 ]

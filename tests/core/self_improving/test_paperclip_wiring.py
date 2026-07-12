@@ -22,6 +22,13 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+from core.llm.codex_oauth_usage import CODEX_OAUTH_POLL_DISABLED_ENV
+
+
+@pytest.fixture(autouse=True)
+def _isolate_mock_cli_from_live_oauth_usage(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(CODEX_OAUTH_POLL_DISABLED_ENV, "1")
+
 
 # cli_subprocess ------------------------------------------------------------
 

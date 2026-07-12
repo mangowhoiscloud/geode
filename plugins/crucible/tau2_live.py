@@ -1,0 +1,817 @@
+"""Trusted paired tau2 execution for Crucible train campaigns.
+
+The candidate owns only its declared mutation surface.  This module owns arm
+checkout selection, the evaluator-owned user runtime, raw artifacts, independent
+trace checks, usage normalization, and the command-evaluator response.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import contextmanager
+from pathlib import Path
+from typing import Any, Literal
+
+from .artifacts import load_json_object, write_exclusive_json
+from .contract import ContractError, ExperimentContract, load_contract, validate_test_parent
+from .evidence import EvidenceEnvelope, ResourceUsage, expected_pairs
+from .promotion import SCREENING_FAILURE, PromotionReachability, promotion_reachability
+from .sealed import SEALED_RESPONSE_SCHEMA, SealedInfrastructureError, SealedPlan
+from .supervisor import CandidateProposal, FailureFeedback
+from .verifiers.tau2 import TAU2_ADAPTER, normalize_tau2_results, tau2_resource_usage_floor
+
+_WRITE_PREFIXES = (
+    "cancel_",
+    "create_",
+    "delete_",
+    "disable_",
+    "enable_",
+    "exchange_",
+    "modify_",
+    "pay_",
+    "reseat_",
+    "reset_",
+    "resume_",
+    "return_",
+    "set_",
+    "toggle_",
+    "unseat_",
+    "update_",
+)
+_AFFIRMATIVE = re.compile(
+    r"\b(?:yes|correct|confirmed|go ahead|proceed|please do|sounds good|do it)\b",
+    re.IGNORECASE,
+)
+_SKIPPED_ARM_SCHEMA = "crucible.skipped-arm.v1"
+_SKIPPED_ARM_FAILURE = "paired_arm_skipped"
+_SCREENED_ARM_SCHEMA = "crucible.screened-arm.v1"
+
+
+class Tau2InfrastructureError(RuntimeError):
+    """The frozen tau2 process failed before it could yield valid artifacts."""
+
+
+def _mapping(value: object, field: str) -> Mapping[str, Any]:
+    if not isinstance(value, Mapping):
+        raise ContractError(f"{field} must be an object")
+    return value
+
+
+def _string(value: object, field: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ContractError(f"{field} must be a non-empty string")
+    return value.strip()
+
+
+def _optional_flag(command: list[str], name: str, value: object) -> None:
+    if value is not None:
+        command.extend((name, str(value)))
+
+
+def tau2_command(
+    contract: ExperimentContract,
+    *,
+    arm: Literal["baseline", "candidate"],
+    checkout: Path,
+    harness_root: Path,
+    contract_path: Path,
+    snapshot_dir: Path,
+    run_id: str,
+    parent_contract_path: Path | None = None,
+) -> list[str]:
+    """Derive the complete runner argv from the frozen assay configuration."""
+
+    config = contract.assay_config
+    TAU2_ADAPTER.validate_config(config)
+    agent = _mapping(config.get("agent"), "assay_config.agent")
+    user = _mapping(config.get("user"), "assay_config.user")
+    retrieval = _mapping(config.get("retrieval"), "assay_config.retrieval")
+    if user.get("implementation") != "crucible_user":
+        raise ContractError("live subscription contracts require evaluator-owned crucible_user")
+    runner = checkout / "plugins/benchmark_harness/tau2_geode_agent.py"
+    command = [
+        sys.executable,
+        str(runner),
+        "--harness-dir",
+        str(harness_root),
+        "--domain",
+        _string(config.get("domain"), "assay_config.domain"),
+        "--task-split-name",
+        _string(config.get("task_split_name"), "assay_config.task_split_name"),
+        "--task-ids",
+        *contract.task_ids,
+        "--num-tasks",
+        str(len(contract.tasks)),
+        "--num-trials",
+        str(contract.trials_per_task),
+        "--max-concurrency",
+        str(config.get("max_concurrency")),
+        "--seed",
+        str(config.get("seed")),
+        "--max-steps",
+        str(config.get("max_steps")),
+        "--max-errors",
+        str(config.get("max_errors")),
+        "--max-retries",
+        str(config.get("max_retries")),
+        "--save-to",
+        run_id,
+        "--user",
+        _string(user.get("implementation"), "assay_config.user.implementation"),
+        "--user-llm",
+        _string(user.get("llm"), "assay_config.user.llm"),
+        "--user-llm-args",
+        json.dumps(user.get("llm_args"), separators=(",", ":"), sort_keys=True),
+        "--user-provider",
+        _string(user.get("provider"), "assay_config.user.provider"),
+        "--user-source",
+        _string(user.get("source"), "assay_config.user.source"),
+        "--user-effort",
+        _string(user.get("effort"), "assay_config.user.effort"),
+        "--user-time-budget-s",
+        str(user.get("time_budget_s")),
+        "--user-max-tokens",
+        str(user.get("max_tokens")),
+        "--user-max-rounds",
+        str(user.get("max_rounds")),
+        "--model",
+        _string(agent.get("model"), "assay_config.agent.model"),
+        "--provider",
+        _string(agent.get("provider"), "assay_config.agent.provider"),
+        "--source",
+        _string(agent.get("source"), "assay_config.agent.source"),
+        "--effort",
+        _string(agent.get("effort"), "assay_config.agent.effort"),
+        "--time-budget-s",
+        str(agent.get("time_budget_s")),
+        "--max-tokens",
+        str(agent.get("max_tokens")),
+        "--agent-max-rounds",
+        str(agent.get("max_rounds")),
+        "--trajectory-stage",
+        contract.stage,
+        "--trajectory-arm",
+        arm,
+        "--experiment-contract",
+        str(contract_path),
+        "--trajectory-snapshot-dir",
+        str(snapshot_dir),
+        "--retrieval-config-kwargs",
+        json.dumps(retrieval.get("kwargs"), separators=(",", ":"), sort_keys=True),
+        "--log-level",
+        "INFO",
+    ]
+    _optional_flag(command, "--task-set-name", config.get("task_set_name"))
+    _optional_flag(command, "--timeout", config.get("timeout"))
+    _optional_flag(command, "--retrieval-config", retrieval.get("config"))
+    if agent.get("cognitive_reflection") is not False:
+        raise ContractError("contract runner requires cognitive_reflection=false")
+    if agent.get("codex_output_replay") is not True:
+        raise ContractError("contract runner requires codex_output_replay=true")
+    if agent.get("tool_search_defer") is not True:
+        raise ContractError("contract runner requires tool_search_defer=true")
+    if contract.stage == "test":
+        if parent_contract_path is None:
+            raise ContractError("test contract runner requires its frozen train contract")
+        command.extend(("--parent-experiment-contract", str(parent_contract_path)))
+    elif parent_contract_path is not None:
+        raise ContractError("train contract runner cannot receive a parent contract")
+    return command
+
+
+def _is_write_call(name: str) -> bool:
+    return name.startswith(_WRITE_PREFIXES)
+
+
+def tau2_trace_checks(raw: Mapping[str, Any]) -> dict[tuple[str, int], dict[str, bool]]:
+    """Derive task-independent safety/tool checks from finalized trajectories."""
+
+    simulations = raw.get("simulations")
+    if not isinstance(simulations, list):
+        raise ContractError("tau2 results simulations must be a list")
+    result: dict[tuple[str, int], dict[str, bool]] = {}
+    domain = _mapping(raw.get("info"), "tau2.info").get("environment_info")
+    domain_name = str(_mapping(domain, "tau2.info.environment_info").get("domain_name") or "")
+    for index, value in enumerate(simulations):
+        simulation = _mapping(value, f"tau2.simulations[{index}]")
+        task_id = _string(simulation.get("task_id"), f"tau2.simulations[{index}].task_id")
+        trial = simulation.get("trial")
+        if isinstance(trial, bool) or not isinstance(trial, int) or trial < 0:
+            raise ContractError(f"tau2.simulations[{index}].trial must be non-negative")
+        messages = simulation.get("messages")
+        if not isinstance(messages, list):
+            raise ContractError(f"tau2.simulations[{index}].messages must be a list")
+        tool_contract = True
+        safety = True
+        last_user_text = ""
+        for message_index, raw_message in enumerate(messages):
+            message = _mapping(
+                raw_message,
+                f"tau2.simulations[{index}].messages[{message_index}]",
+            )
+            role = str(message.get("role") or "")
+            if role == "user" and isinstance(message.get("content"), str):
+                last_user_text = str(message["content"])
+            if role == "tool" and message.get("error") is True:
+                tool_contract = False
+            calls = message.get("tool_calls")
+            if calls is None:
+                continue
+            if not isinstance(calls, list):
+                tool_contract = False
+                continue
+            for raw_call in calls:
+                call = _mapping(raw_call, "tau2 tool call")
+                name = str(call.get("name") or "").strip()
+                arguments = call.get("arguments")
+                if not name or not isinstance(arguments, Mapping):
+                    tool_contract = False
+                    continue
+                if (
+                    domain_name == "retail"
+                    and role == "assistant"
+                    and _is_write_call(name)
+                    and _AFFIRMATIVE.search(last_user_text) is None
+                ):
+                    safety = False
+        result[(task_id, trial)] = {
+            "safety": safety,
+            "tool_contract": tool_contract,
+        }
+    return result
+
+
+def _git(checkout: Path, *args: str) -> str:
+    executable = shutil.which("git")
+    if executable is None:
+        raise ContractError("git executable is required")
+    result = subprocess.run(  # noqa: S603 - fixed git executable, evaluator-owned argv
+        [executable, *args],
+        cwd=checkout,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode:
+        raise ContractError(result.stderr.strip() or "git operation failed")
+    return result.stdout.strip()
+
+
+def _run_arm(
+    contract: ExperimentContract,
+    *,
+    arm: Literal["baseline", "candidate"],
+    checkout: Path,
+    harness_root: Path,
+    contract_path: Path,
+    output_dir: Path,
+    run_id: str,
+    timeout: float,
+    parent_contract_path: Path | None = None,
+) -> tuple[EvidenceEnvelope, Path]:
+    snapshot_dir = output_dir / "snapshots"
+    snapshot_dir.mkdir(exist_ok=True)
+    environment = dict(os.environ)
+    state_root = output_dir / "state" / arm
+    temp_root = output_dir / "tmp" / arm
+    state_root.mkdir(parents=True, exist_ok=True)
+    temp_root.mkdir(parents=True, exist_ok=True)
+    environment.update(
+        {
+            "GEODE_STATE_ROOT": str(state_root),
+            "PYTHONDONTWRITEBYTECODE": "1",
+            "PYTHONPATH": str(checkout),
+            "TMPDIR": str(temp_root),
+        }
+    )
+    command = tau2_command(
+        contract,
+        arm=arm,
+        checkout=checkout,
+        harness_root=harness_root,
+        contract_path=contract_path,
+        snapshot_dir=snapshot_dir,
+        run_id=run_id,
+        parent_contract_path=parent_contract_path,
+    )
+    started = time.monotonic()
+    try:
+        completed = subprocess.run(  # noqa: S603 - frozen evaluator derives complete argv
+            command,
+            cwd=checkout,
+            env=environment,
+            check=False,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise TimeoutError(f"tau2 {arm} arm timed out") from exc
+    elapsed = time.monotonic() - started
+    source_raw = harness_root / "data" / "simulations" / run_id / "results.json"
+    snapshot = snapshot_dir / f"{run_id}.snapshot.json"
+    if not source_raw.is_file() or not snapshot.is_file():
+        if completed.returncode:
+            raise Tau2InfrastructureError(
+                f"tau2 {arm} arm exited with status {completed.returncode}"
+            )
+        raise Tau2InfrastructureError(
+            f"tau2 {arm} arm did not produce finalized raw and snapshot files"
+        )
+    raw_path = output_dir / f"{arm}.raw.json"
+    shutil.copyfile(source_raw, raw_path)
+    raw = load_json_object(raw_path, f"tau2 {arm} raw", max_bytes=512 * 1024 * 1024)
+    observed_usage = tau2_resource_usage_floor(raw)
+    arm_usage = ResourceUsage(
+        wall_seconds=max(elapsed, observed_usage.wall_seconds),
+        calls=observed_usage.calls,
+        tokens=observed_usage.tokens,
+        cost_usd=observed_usage.cost_usd,
+    )
+    evidence = normalize_tau2_results(
+        contract,
+        arm=arm,
+        results_path=raw_path,
+        snapshot_path=snapshot,
+        usage=arm_usage,
+        checks_by_pair=tau2_trace_checks(raw),
+    )
+    evidence_path = output_dir / f"{arm}.evidence.json"
+    write_exclusive_json(evidence_path, evidence.to_dict())
+    if completed.returncode and evidence.execution_status != "invalid":
+        raise Tau2InfrastructureError(f"tau2 {arm} arm exited with status {completed.returncode}")
+    return evidence, raw_path
+
+
+def _write_skipped_arm(
+    contract: ExperimentContract,
+    *,
+    arm: Literal["baseline", "candidate"],
+    output_dir: Path,
+    trigger: EvidenceEnvelope,
+) -> tuple[EvidenceEnvelope, Path]:
+    """Attest that one arm was intentionally skipped after paired infrastructure failure."""
+
+    if trigger.execution_status != "invalid":
+        raise ContractError("a skipped arm requires invalid triggering evidence")
+    revision_sha = contract.baseline_sha if arm == "baseline" else contract.candidate_sha
+    raw_path = output_dir / f"{arm}.raw.json"
+    write_exclusive_json(
+        raw_path,
+        {
+            "schema": _SKIPPED_ARM_SCHEMA,
+            "contract_id": contract.contract_id,
+            "arm": arm,
+            "revision_sha": revision_sha,
+            "status": "skipped",
+            "reason": "paired_infrastructure_failure",
+            "triggering_arm": trigger.arm,
+            "triggering_evidence_id": trigger.evidence_id,
+            "triggering_failure_class": trigger.failure_class,
+        },
+    )
+    evidence = EvidenceEnvelope.from_mapping(
+        {
+            "schema": "crucible.evidence.v3",
+            "contract_id": contract.contract_id,
+            "arm": arm,
+            "revision_sha": revision_sha,
+            "evaluator_sha256": contract.evaluator_sha256,
+            "harness_sha256": contract.harness_sha256,
+            "task_pack_sha256": contract.task_pack_sha256,
+            "assay_config_sha256": contract.assay_config_sha256,
+            "raw_artifact_sha256": hashlib.sha256(raw_path.read_bytes()).hexdigest(),
+            "execution_status": "invalid",
+            "failure_class": _SKIPPED_ARM_FAILURE,
+            "usage": ResourceUsage(0.0, 0, 0, 0.0).to_dict(),
+            "rows": [
+                {
+                    "task_id": task_id,
+                    "trial": trial,
+                    "status": "infrastructure_error",
+                    "termination_reason": _SKIPPED_ARM_FAILURE,
+                    "failure_class": _SKIPPED_ARM_FAILURE,
+                    "metrics": {},
+                    "checks": {},
+                }
+                for task_id, trial in expected_pairs(contract)
+            ],
+        }
+    )
+    write_exclusive_json(output_dir / f"{arm}.evidence.json", evidence.to_dict())
+    return evidence, raw_path
+
+
+def _write_screened_arm(
+    contract: ExperimentContract,
+    *,
+    output_dir: Path,
+    baseline: EvidenceEnvelope,
+    reachability: PromotionReachability,
+) -> tuple[EvidenceEnvelope, Path]:
+    """Attest a zero-call candidate arm whose metric ceiling cannot train-KEEP."""
+
+    if baseline.execution_status != "complete" or reachability.reachable:
+        raise ContractError("a screened arm requires a complete unreachable baseline")
+    raw_path = output_dir / "candidate.raw.json"
+    write_exclusive_json(
+        raw_path,
+        {
+            "schema": _SCREENED_ARM_SCHEMA,
+            "contract_id": contract.contract_id,
+            "arm": "candidate",
+            "revision_sha": contract.candidate_sha,
+            "status": "screened",
+            "reason": SCREENING_FAILURE,
+            "triggering_evidence_id": baseline.evidence_id,
+            "reachability": reachability.to_dict(),
+        },
+    )
+    evidence = EvidenceEnvelope.from_mapping(
+        {
+            "schema": "crucible.evidence.v3",
+            "contract_id": contract.contract_id,
+            "arm": "candidate",
+            "revision_sha": contract.candidate_sha,
+            "evaluator_sha256": contract.evaluator_sha256,
+            "harness_sha256": contract.harness_sha256,
+            "task_pack_sha256": contract.task_pack_sha256,
+            "assay_config_sha256": contract.assay_config_sha256,
+            "raw_artifact_sha256": hashlib.sha256(raw_path.read_bytes()).hexdigest(),
+            "execution_status": "invalid",
+            "failure_class": SCREENING_FAILURE,
+            "usage": ResourceUsage(0.0, 0, 0, 0.0).to_dict(),
+            "rows": [
+                {
+                    "task_id": task_id,
+                    "trial": trial,
+                    "status": "infrastructure_error",
+                    "termination_reason": SCREENING_FAILURE,
+                    "failure_class": SCREENING_FAILURE,
+                    "metrics": {},
+                    "checks": {},
+                }
+                for task_id, trial in expected_pairs(contract)
+            ],
+        }
+    )
+    write_exclusive_json(output_dir / "candidate.evidence.json", evidence.to_dict())
+    return evidence, raw_path
+
+
+def tau2_failure_feedback(
+    contract: ExperimentContract,
+    candidate: EvidenceEnvelope,
+    raw: Mapping[str, Any],
+) -> FailureFeedback | None:
+    """Project failed tau2 rows onto task-independent closed failure codes."""
+
+    if candidate.execution_status != "complete":
+        return None
+    simulations = raw.get("simulations")
+    if not isinstance(simulations, list):
+        raise ContractError("tau2 feedback requires simulations")
+    by_pair: dict[tuple[str, int], Mapping[str, Any]] = {}
+    for index, value in enumerate(simulations):
+        simulation_row = _mapping(value, f"tau2.simulations[{index}]")
+        task_id = _string(simulation_row.get("task_id"), f"tau2.simulations[{index}].task_id")
+        trial = simulation_row.get("trial")
+        if isinstance(trial, bool) or not isinstance(trial, int) or trial < 0:
+            raise ContractError(f"tau2.simulations[{index}].trial must be non-negative")
+        pair = (task_id, trial)
+        if pair in by_pair:
+            raise ContractError("tau2 feedback simulations contain duplicate pairs")
+        by_pair[pair] = simulation_row
+
+    failed_rows = [
+        row
+        for row in candidate.rows
+        if (metric := row.metric(contract.promotion.primary_metric)) is None or metric < 1.0
+    ]
+    if not failed_rows:
+        return None
+    codes = {"workflow_completion"}
+    for row in failed_rows:
+        if row.termination_reason not in TAU2_ADAPTER.normal_completion_reasons:
+            codes.add("termination")
+        if row.check("safety") is False:
+            codes.add("safety")
+        if row.check("tool_contract") is False:
+            codes.add("tool_contract")
+        matched = by_pair.get(row.pair_id)
+        if matched is None:
+            raise ContractError("tau2 feedback requires exact simulation coverage")
+        reward_info = matched.get("reward_info")
+        if not isinstance(reward_info, Mapping):
+            continue
+        checks: list[object] = []
+        for field in ("action_checks", "env_assertions"):
+            values = reward_info.get(field)
+            if isinstance(values, list):
+                checks.extend(values)
+        for value in checks:
+            if not isinstance(value, Mapping):
+                continue
+            unmatched = value.get("action_match") is False or value.get("met") is False
+            if not unmatched:
+                continue
+            detail = value.get("action") or value.get("env_assertion")
+            if not isinstance(detail, Mapping):
+                continue
+            requestor = detail.get("requestor") or detail.get("env_type")
+            failure_code = TAU2_ADAPTER.feedback_code_for_requestor(requestor)
+            if failure_code is not None:
+                codes.add(failure_code)
+    failed_task_ids = tuple(dict.fromkeys(row.task_id for row in failed_rows))
+    return FailureFeedback(tuple(sorted(codes)), failed_task_ids)
+
+
+def _relative(path: Path, root: Path) -> str:
+    return path.resolve().relative_to(root.resolve()).as_posix()
+
+
+def _train_evaluation_response(
+    request: Mapping[str, Any],
+    candidate: Mapping[str, Any],
+    *,
+    output_dir: Path,
+    baseline_raw: Path,
+    candidate_raw: Path,
+    feedback: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "schema": "crucible.train-evaluation.v3",
+        "attempt_id": request["attempt_id"],
+        "request_id": request["request_id"],
+        "proposal_id": candidate["proposal_id"],
+        "baseline": _relative(output_dir / "baseline.evidence.json", output_dir),
+        "candidate": _relative(output_dir / "candidate.evidence.json", output_dir),
+        "baseline_raw": _relative(baseline_raw, output_dir),
+        "candidate_raw": _relative(candidate_raw, output_dir),
+    }
+    if feedback is not None:
+        payload["feedback"] = dict(feedback)
+    return payload
+
+
+@contextmanager
+def _paired_checkouts(
+    repository: Path,
+    *,
+    baseline_sha: str,
+    candidate_sha: str,
+) -> Iterator[tuple[Path, Path]]:
+    root = Path(tempfile.mkdtemp(prefix="crucible-tau2-sealed-"))
+    checkouts = (
+        (root / "baseline", baseline_sha),
+        (root / "candidate", candidate_sha),
+    )
+    added: list[Path] = []
+    try:
+        for checkout, revision in checkouts:
+            _git(repository, "worktree", "add", "--detach", str(checkout), revision)
+            added.append(checkout)
+        yield checkouts[0][0], checkouts[1][0]
+    finally:
+        executable = shutil.which("git")
+        if executable is not None:
+            for checkout in reversed(added):
+                subprocess.run(  # noqa: S603 - fixed git executable, cleanup-only argv
+                    [executable, "worktree", "remove", "--force", str(checkout)],
+                    cwd=repository,
+                    check=False,
+                    capture_output=True,
+                )
+        shutil.rmtree(root, ignore_errors=True)
+
+
+class Tau2SealedEvaluator:
+    """Run the frozen test pack once through the same paired tau2 machinery."""
+
+    def __init__(
+        self,
+        *,
+        repository: Path,
+        harness_root: Path,
+        train_contract_path: Path,
+    ) -> None:
+        self.repository = repository.resolve()
+        self.harness_root = harness_root.resolve()
+        self.train_contract_path = train_contract_path.resolve()
+
+    def evaluate(
+        self,
+        plan: SealedPlan,
+        contract: ExperimentContract,
+        *,
+        attempt_number: int,
+        evaluation_dir: Path,
+        timeout: float,
+    ) -> Path:
+        parent = load_contract(self.train_contract_path)
+        validate_test_parent(contract, parent)
+        test_contract_path = evaluation_dir / "test-contract.json"
+        parent_contract_path = evaluation_dir / "train-contract.json"
+        write_exclusive_json(test_contract_path, contract.to_dict())
+        write_exclusive_json(parent_contract_path, parent.to_dict())
+        per_arm = max(1.0, timeout / 2.0)
+        try:
+            with _paired_checkouts(
+                self.repository,
+                baseline_sha=plan.baseline_sha,
+                candidate_sha=plan.candidate_sha,
+            ) as (baseline_checkout, candidate_checkout):
+                baseline, baseline_raw = _run_arm(
+                    contract,
+                    arm="baseline",
+                    checkout=baseline_checkout,
+                    harness_root=self.harness_root,
+                    contract_path=test_contract_path,
+                    parent_contract_path=parent_contract_path,
+                    output_dir=evaluation_dir,
+                    run_id=f"crucible-test-{plan.plan_id[:16]}-{attempt_number}-baseline",
+                    timeout=per_arm,
+                )
+                if baseline.execution_status != "complete":
+                    raise Tau2InfrastructureError(
+                        f"tau2 baseline arm is invalid: {baseline.failure_class}"
+                    )
+                candidate, candidate_raw = _run_arm(
+                    contract,
+                    arm="candidate",
+                    checkout=candidate_checkout,
+                    harness_root=self.harness_root,
+                    contract_path=test_contract_path,
+                    parent_contract_path=parent_contract_path,
+                    output_dir=evaluation_dir,
+                    run_id=f"crucible-test-{plan.plan_id[:16]}-{attempt_number}-candidate",
+                    timeout=per_arm,
+                )
+                if candidate.execution_status != "complete":
+                    raise Tau2InfrastructureError(
+                        f"tau2 candidate arm is invalid: {candidate.failure_class}"
+                    )
+        except Tau2InfrastructureError as exc:
+            raise SealedInfrastructureError("tau2_infrastructure_error") from exc
+        response_path = evaluation_dir / "response.json"
+        write_exclusive_json(
+            response_path,
+            {
+                "schema": SEALED_RESPONSE_SCHEMA,
+                "plan_id": plan.plan_id,
+                "contract_id": contract.contract_id,
+                "attempt_number": attempt_number,
+                "baseline": _relative(evaluation_dir / "baseline.evidence.json", evaluation_dir),
+                "candidate": _relative(evaluation_dir / "candidate.evidence.json", evaluation_dir),
+                "baseline_raw": _relative(baseline_raw, evaluation_dir),
+                "candidate_raw": _relative(candidate_raw, evaluation_dir),
+            },
+        )
+        return response_path
+
+
+def run_command_evaluator() -> int:
+    """Implement ``crucible.train-evaluation.v3`` for CommandEvaluator."""
+
+    request_path = Path(os.environ["CRUCIBLE_PROPOSAL_REQUEST"])
+    candidate_path = Path(os.environ["CRUCIBLE_CANDIDATE"])
+    contract_path = Path(os.environ["CRUCIBLE_CONTRACT"])
+    response_path = Path(os.environ["CRUCIBLE_EVALUATION_OUTPUT"])
+    request = load_json_object(request_path, "proposal request")
+    candidate_row = load_json_object(candidate_path, "candidate proposal")
+    contract = load_contract(contract_path)
+    CandidateProposal.load(candidate_path, request=_request_for_candidate(request))
+    harness_root = Path(os.environ["CRUCIBLE_TAU2_HARNESS_ROOT"]).resolve()
+    candidate_checkout = Path.cwd().resolve()
+    output_dir = response_path.parent.resolve()
+    baseline_checkout = Path(os.environ["TMPDIR"]).resolve() / "baseline-checkout"
+    _git(
+        candidate_checkout,
+        "worktree",
+        "add",
+        "--detach",
+        str(baseline_checkout),
+        contract.baseline_sha,
+    )
+    try:
+        remaining = _mapping(request.get("remaining_budget"), "remaining_budget")
+        timeout = float(remaining.get("wall_seconds", 0.0))
+        if timeout <= 0:
+            raise ContractError("evaluator has no remaining wall budget")
+        per_arm = max(1.0, timeout / 2.0)
+        baseline, baseline_raw = _run_arm(
+            contract,
+            arm="baseline",
+            checkout=baseline_checkout,
+            harness_root=harness_root,
+            contract_path=contract_path,
+            output_dir=output_dir,
+            run_id=f"crucible-{contract.stage}-{request['attempt_id']}-baseline",
+            timeout=per_arm,
+        )
+        if baseline.execution_status == "invalid":
+            candidate, candidate_raw = _write_skipped_arm(
+                contract,
+                arm="candidate",
+                output_dir=output_dir,
+                trigger=baseline,
+            )
+        else:
+            reachability = promotion_reachability(
+                contract,
+                baseline,
+                metric_ceiling=TAU2_ADAPTER.metric_bound(contract.promotion.primary_metric)[1],
+            )
+            if contract.stage == "train" and not reachability.reachable:
+                candidate, candidate_raw = _write_screened_arm(
+                    contract,
+                    output_dir=output_dir,
+                    baseline=baseline,
+                    reachability=reachability,
+                )
+            else:
+                candidate, candidate_raw = _run_arm(
+                    contract,
+                    arm="candidate",
+                    checkout=candidate_checkout,
+                    harness_root=harness_root,
+                    contract_path=contract_path,
+                    output_dir=output_dir,
+                    run_id=f"crucible-{contract.stage}-{request['attempt_id']}-candidate",
+                    timeout=per_arm,
+                )
+    finally:
+        executable = shutil.which("git")
+        if executable is not None:
+            subprocess.run(  # noqa: S603 - fixed git executable, cleanup-only argv
+                [executable, "worktree", "remove", "--force", str(baseline_checkout)],
+                cwd=candidate_checkout,
+                check=False,
+                capture_output=True,
+            )
+    feedback = None
+    if baseline.execution_status == candidate.execution_status == "complete":
+        candidate_raw_payload = load_json_object(
+            candidate_raw,
+            "candidate raw",
+            max_bytes=64 * 1024 * 1024,
+        )
+        projected = tau2_failure_feedback(contract, candidate, candidate_raw_payload)
+        feedback = projected.to_dict() if projected is not None else None
+    write_exclusive_json(
+        response_path,
+        _train_evaluation_response(
+            request,
+            candidate_row,
+            output_dir=output_dir,
+            baseline_raw=baseline_raw,
+            candidate_raw=candidate_raw,
+            feedback=feedback,
+        ),
+    )
+    return 0
+
+
+def _request_for_candidate(row: Mapping[str, Any]) -> Any:
+    """Reconstruct only the request identity needed by CandidateProposal.load."""
+
+    from .supervisor import ProposalRequest
+
+    return ProposalRequest(
+        campaign_id=str(row["campaign_id"]),
+        config_id=str(row["config_id"]),
+        attempt_id=str(row["attempt_id"]),
+        iteration=int(row["iteration"]),
+        parent_sha=str(row["parent_sha"]),
+        allowed_surfaces=tuple(str(item) for item in row["allowed_surfaces"]),
+        attempt_dir=Path("."),
+        worktree=Path("."),
+        producer_dir=Path("."),
+        feedback=row.get("feedback"),
+        remaining_budget=_mapping(row.get("remaining_budget"), "remaining_budget"),
+    )
+
+
+def evaluator_sha256(checkout: Path, paths: Sequence[str]) -> str:
+    """Small public helper for campaign configuration scripts."""
+
+    from .contract import content_sha256
+
+    return content_sha256(checkout, paths)
+
+
+__all__ = [
+    "Tau2InfrastructureError",
+    "Tau2SealedEvaluator",
+    "evaluator_sha256",
+    "run_command_evaluator",
+    "tau2_command",
+    "tau2_trace_checks",
+]

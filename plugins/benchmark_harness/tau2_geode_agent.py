@@ -1,15 +1,9 @@
 #!/usr/bin/env python3
 """Run tau2 with GEODE as the agent under test.
 
-This script intentionally does not patch the upstream tau2 checkout. It imports
-the harness from ``--harness-dir``, registers ``geode_agent`` and
-``geode_user`` implementations in tau2's in-process registry, and then calls
-``tau2.run.run_domain``.
-
-The resulting run still uses tau2's domain tools, world-state diff evaluator,
-and output layout. Diagnostic runs may route the user through GEODE, but a
-contract-backed comparison requires tau2's native user implementation so a
-candidate core mutation cannot change both the agent and its assay.
+The adapter leaves upstream unchanged, registers GEODE participants in tau2's
+in-process registry, and retains tau2's tools, evaluator, and output layout.
+Contract runs bind the user runtime outside the candidate mutation surface.
 """
 
 from __future__ import annotations
@@ -29,6 +23,20 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from plugins.benchmark_harness.tau2_turn_supervisor import (
+    GeodeTau2State,
+    _agent_system_prompt,
+    _jsonish,
+    _message_to_prompt,
+    _pre_execution_retry_telemetry,
+    _run_geode_turn,
+    _tau2_terminal_token,
+    _tau2_tool_calls,
+    _Tau2TurnDeadlineError,
+    _tool_mutates_state,
+    _usage_dict,
+    _user_system_prompt,
+)
 from plugins.crucible.contract import (
     ContractError,
     ExperimentContract,
@@ -38,7 +46,7 @@ from plugins.crucible.contract import (
     validate_measurement_files,
     validate_test_parent,
 )
-from plugins.crucible.verifiers.tau2 import TAU2_ADAPTER
+from plugins.crucible.verifiers.tau2 import TAU2_ADAPTER, tau2_task_unit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_HARNESS_DIR = REPO_ROOT / "artifacts" / "eval" / "harnesses" / "tau2-bench"
@@ -158,15 +166,6 @@ def _tool_parameters(tool: Any) -> dict[str, Any]:
     return {"type": "object", "properties": {}, "additionalProperties": False}
 
 
-def _jsonish(value: Any) -> str:
-    if isinstance(value, str):
-        return value
-    try:
-        return json.dumps(value, ensure_ascii=False, default=str)
-    except TypeError:
-        return str(value)
-
-
 @dataclass
 class Tau2GeodeTool:
     """GEODE tool wrapper around a tau2 environment tool."""
@@ -200,98 +199,6 @@ class Tau2GeodeTool:
         return {"result": _jsonish(raw)}
 
 
-@dataclass
-class GeodeTau2State:
-    loop: Any
-    messages_seen: int = 0
-
-
-def _message_to_prompt(message: Any, *, recipient: str) -> str:
-    raw_role = getattr(message, "role", "user") or "user"
-    role = str(getattr(raw_role, "value", raw_role) or "user").lower()
-    if "." in role:
-        role = role.rsplit(".", 1)[-1]
-    tool_messages = getattr(message, "tool_messages", None)
-    if tool_messages:
-        payload = [
-            {
-                "id": getattr(tool_message, "id", ""),
-                "requestor": getattr(tool_message, "requestor", ""),
-                "content": getattr(tool_message, "content", ""),
-                "error": getattr(tool_message, "error", False),
-            }
-            for tool_message in tool_messages
-        ]
-        return f"Tool results to {recipient} from tau2 orchestrator:\n{_jsonish(payload)}"
-    content = str(getattr(message, "content", "") or "").strip()
-    if content:
-        if role == "tool":
-            return f"Tool result to {recipient} from tau2 orchestrator:\n{content}"
-        return f"Message to {recipient} from {role}:\n{content}"
-    tool_calls = getattr(message, "tool_calls", None)
-    if tool_calls:
-        return (
-            f"Message to {recipient} from {role} containing tool calls:\n"
-            f"{_jsonish([tc.model_dump() for tc in tool_calls])}"
-        )
-    return f"Message to {recipient} from {role}: [empty]"
-
-
-def _tool_mutates_state(tool_name: str) -> bool:
-    non_mutating_prefixes = (
-        "get_",
-        "list_",
-        "search_",
-        "find_",
-        "lookup_",
-        "read_",
-        "check_",
-        "validate_",
-    )
-    non_mutating_exact = {"transfer_to_human_agents"}
-    return not (tool_name in non_mutating_exact or tool_name.startswith(non_mutating_prefixes))
-
-
-def _agent_system_prompt(
-    domain_policy: str,
-) -> str:
-    return (
-        "Agent: GEODE running inside tau2-bench.\n"
-        "Follow the domain policy exactly. Use the provided tools to change the "
-        "environment state when the user asks for an operation. Do not invent "
-        "tool results or missing user facts. When calling a tool, provide every "
-        "required argument, but leave optional arguments unset unless the user, "
-        "the policy, or a prior tool result explicitly supplied that value. Do "
-        "not add inferred descriptions, notes, dates, preferences, quantities, "
-        "or metadata. When the requested state change is complete, answer the "
-        "user concisely and do not ask for unrelated follow-up details.\n\n"
-        "<policy>\n"
-        f"{domain_policy}\n"
-        "</policy>"
-    )
-
-
-def _user_system_prompt(
-    instructions: str | None,
-    *,
-    use_tools: bool,
-) -> str:
-    from tau2.user.user_simulator import get_global_user_sim_guidelines
-
-    guidelines = get_global_user_sim_guidelines(use_tools=use_tools)
-    return (
-        "Role: simulated tau2 benchmark user running through GEODE.\n"
-        "Boundary: not the assistant; customer/user in the scenario.\n"
-        "Follow the scenario and simulator guidelines exactly. If the task is "
-        "complete or the conversation should end, use tau2's required stop token "
-        "when the guidelines call for it.\n\n"
-        f"{guidelines}\n\n"
-        "<scenario>\n"
-        f"{instructions or ''}\n"
-        "</scenario>"
-    )
-
-
 def _build_loop(
     *,
     tools: list[Any] | None,
@@ -303,6 +210,7 @@ def _build_loop(
     time_budget_s: float,
     max_tokens: int,
     max_rounds: int,
+    allow_actionable_partial_on_empty: bool = False,
 ) -> Any:
     from core.agent.conversation import ConversationContext
     from core.agent.loop import AgenticLoop
@@ -312,7 +220,7 @@ def _build_loop(
     tool_registry = ToolRegistry()
     handlers: dict[str, Any] = {}
     for tau2_tool in tools or []:
-        wrapped = Tau2GeodeTool(tau2_tool, mutates_state=_tool_mutates_state(str(tau2_tool.name)))
+        wrapped = Tau2GeodeTool(tau2_tool, mutates_state=_tool_mutates_state(tau2_tool))
         tool_registry.register(wrapped)
         handlers[wrapped.name] = wrapped.aexecute
 
@@ -333,54 +241,9 @@ def _build_loop(
         system_prompt_override=system_prompt,
         quiet=True,
         enable_goal_decomposition=False,
+        allow_actionable_partial_on_empty=allow_actionable_partial_on_empty,
+        yield_after_tool_round=True,
     )
-
-
-def _usage_dict(result: Any) -> dict[str, Any] | None:
-    result_usage = getattr(result, "usage", None)
-    if result_usage is None:
-        return None
-    to_dict = getattr(result_usage, "to_dict", None)
-    if callable(to_dict):
-        maybe_dict = to_dict()
-        if isinstance(maybe_dict, Mapping):
-            return {str(key): value for key, value in maybe_dict.items()}
-        return None
-    raw = getattr(result_usage, "__dict__", None)
-    return {str(key): value for key, value in raw.items()} if isinstance(raw, dict) else None
-
-
-def _tau2_tool_calls(result: Any, *, requestor: str) -> list[Any]:
-    from tau2.data_model.message import ToolCall
-
-    calls = []
-    for idx, entry in enumerate(getattr(result, "tool_calls", []) or []):
-        if not isinstance(entry, dict):
-            continue
-        result_payload = entry.get("result")
-        if isinstance(result_payload, dict) and result_payload.get("error"):
-            continue
-        tool_name = str(entry.get("tool", "") or "")
-        tool_input = entry.get("input")
-        if not tool_name or not isinstance(tool_input, dict):
-            continue
-        projected_args = {
-            key: value for key, value in tool_input.items() if value is not None and value != ""
-        }
-        if (
-            tool_name in {"modify_pending_order_address", "modify_user_address"}
-            and "address2" not in projected_args
-        ):
-            projected_args["address2"] = ""
-        calls.append(
-            ToolCall(
-                id=str(entry.get("tool_use_id") or f"geode_{requestor}_{idx}"),
-                name=tool_name,
-                arguments=projected_args,
-                requestor=requestor,
-            )
-        )
-    return calls
 
 
 def register_geode_tau2_participants(
@@ -399,6 +262,7 @@ def register_geode_tau2_participants(
     user_time_budget_s: float,
     user_max_tokens: int,
     user_max_rounds: int,
+    simulation_timeout_s: float | None,
     fail_on_empty_geode_turn: bool = True,
 ) -> None:
     from core.llm.adapters.registry import bootstrap_builtins
@@ -422,7 +286,12 @@ def register_geode_tau2_participants(
                 max_tokens=agent_max_tokens,
                 max_rounds=agent_max_rounds,
             )
-            state = GeodeTau2State(loop=loop)
+            deadline_at = (
+                time.monotonic() + simulation_timeout_s
+                if simulation_timeout_s is not None
+                else None
+            )
+            state = GeodeTau2State(loop=loop, deadline_at=deadline_at)
             if message_history:
                 state.messages_seen = len(message_history)
             return state
@@ -432,15 +301,45 @@ def register_geode_tau2_participants(
         ) -> tuple[Any, GeodeTau2State]:
             started = time.monotonic()
             prompt = _message_to_prompt(message, recipient="assistant agent")
-            result = asyncio.run(state.loop.arun(prompt))
+            try:
+                result = _run_geode_turn(state, prompt)
+            except _Tau2TurnDeadlineError:
+                assistant = AssistantMessage.text(
+                    "The configured tau2 simulation deadline elapsed.",
+                    raw_data={
+                        "geode_termination_reason": "external_deadline",
+                        "geode_tool_call_count": 0,
+                        "geode_progress_supervisor": "tau2_deadline",
+                        **_pre_execution_retry_telemetry(state.loop),
+                    },
+                    generation_time_seconds=time.monotonic() - started,
+                )
+                return assistant, state
             state.messages_seen += 1
+            terminal_token = _tau2_terminal_token(result)
             tool_calls = _tau2_tool_calls(result, requestor="assistant")
+            if terminal_token is not None:
+                tool_calls = []
             if fail_on_empty_geode_turn:
                 _assert_tau2_route_ready(
                     result,
                     projected_tool_calls=tool_calls,
                     role="assistant agent",
                 )
+            if terminal_token is not None:
+                assistant = AssistantMessage.text(
+                    terminal_token,
+                    usage=_usage_dict(result),
+                    raw_data={
+                        "geode_rounds": getattr(result, "rounds", 0),
+                        "geode_termination_reason": getattr(result, "termination_reason", ""),
+                        "geode_tool_call_count": 0,
+                        "geode_progress_supervisor": "tau2_stop",
+                        **_pre_execution_retry_telemetry(state.loop),
+                    },
+                    generation_time_seconds=time.monotonic() - started,
+                )
+                return assistant, state
             if tool_calls:
                 assistant = AssistantMessage(
                     role="assistant",
@@ -451,6 +350,7 @@ def register_geode_tau2_participants(
                         "geode_termination_reason": getattr(result, "termination_reason", ""),
                         "geode_tool_call_count": len(tool_calls),
                         "geode_tool_projection": "tau2_orchestrator",
+                        **_pre_execution_retry_telemetry(state.loop),
                     },
                     generation_time_seconds=time.monotonic() - started,
                 )
@@ -462,10 +362,16 @@ def register_geode_tau2_participants(
                     "geode_rounds": getattr(result, "rounds", 0),
                     "geode_termination_reason": getattr(result, "termination_reason", ""),
                     "geode_tool_call_count": len(getattr(result, "tool_calls", []) or []),
+                    **_pre_execution_retry_telemetry(state.loop),
                 },
                 generation_time_seconds=time.monotonic() - started,
             )
             return assistant, state
+
+        @classmethod
+        def is_stop(cls, message: Any) -> bool:
+            content = getattr(message, "content", None)
+            return isinstance(content, str) and "###STOP###" in content
 
         def set_seed(self, seed: int) -> None:
             return None
@@ -474,6 +380,8 @@ def register_geode_tau2_participants(
         return GeodeTau2Agent(tools=tools, domain_policy=domain_policy)
 
     class GeodeTau2User(HalfDuplexUser[GeodeTau2State]):
+        allow_actionable_partial_on_empty = False
+
         def __init__(
             self,
             instructions: str | None = None,
@@ -496,8 +404,14 @@ def register_geode_tau2_participants(
                 time_budget_s=user_time_budget_s,
                 max_tokens=user_max_tokens,
                 max_rounds=user_max_rounds,
+                allow_actionable_partial_on_empty=self.allow_actionable_partial_on_empty,
             )
-            state = GeodeTau2State(loop=loop)
+            deadline_at = (
+                time.monotonic() + simulation_timeout_s
+                if simulation_timeout_s is not None
+                else None
+            )
+            state = GeodeTau2State(loop=loop, deadline_at=deadline_at)
             if message_history:
                 state.messages_seen = len(message_history)
             return state
@@ -507,15 +421,47 @@ def register_geode_tau2_participants(
         ) -> tuple[Any, GeodeTau2State]:
             started = time.monotonic()
             prompt = _message_to_prompt(message, recipient="simulated user")
-            result = asyncio.run(state.loop.arun(prompt))
+            try:
+                result = _run_geode_turn(state, prompt)
+            except _Tau2TurnDeadlineError:
+                user_message = UserMessage.text(
+                    "The configured tau2 simulation deadline elapsed.",
+                    raw_data={
+                        "geode_role": "user_simulator",
+                        "geode_termination_reason": "external_deadline",
+                        "geode_tool_call_count": 0,
+                        "geode_progress_supervisor": "tau2_deadline",
+                        **_pre_execution_retry_telemetry(state.loop),
+                    },
+                    generation_time_seconds=time.monotonic() - started,
+                )
+                return user_message, state
             state.messages_seen += 1
+            terminal_token = _tau2_terminal_token(result)
             tool_calls = _tau2_tool_calls(result, requestor="user")
+            if terminal_token is not None:
+                tool_calls = []
             if fail_on_empty_geode_turn:
                 _assert_tau2_route_ready(
                     result,
                     projected_tool_calls=tool_calls,
                     role="simulated user",
                 )
+            if terminal_token is not None:
+                user_message = UserMessage.text(
+                    terminal_token,
+                    usage=_usage_dict(result),
+                    raw_data={
+                        "geode_role": "user_simulator",
+                        "geode_rounds": getattr(result, "rounds", 0),
+                        "geode_termination_reason": getattr(result, "termination_reason", ""),
+                        "geode_tool_call_count": 0,
+                        "geode_progress_supervisor": "tau2_stop",
+                        **_pre_execution_retry_telemetry(state.loop),
+                    },
+                    generation_time_seconds=time.monotonic() - started,
+                )
+                return user_message, state
             if tool_calls:
                 user_message = UserMessage(
                     role="user",
@@ -527,6 +473,7 @@ def register_geode_tau2_participants(
                         "geode_termination_reason": getattr(result, "termination_reason", ""),
                         "geode_tool_call_count": len(tool_calls),
                         "geode_tool_projection": "tau2_orchestrator",
+                        **_pre_execution_retry_telemetry(state.loop),
                     },
                     generation_time_seconds=time.monotonic() - started,
                 )
@@ -539,6 +486,7 @@ def register_geode_tau2_participants(
                     "geode_rounds": getattr(result, "rounds", 0),
                     "geode_termination_reason": getattr(result, "termination_reason", ""),
                     "geode_tool_call_count": len(getattr(result, "tool_calls", []) or []),
+                    **_pre_execution_retry_telemetry(state.loop),
                 },
                 generation_time_seconds=time.monotonic() - started,
             )
@@ -547,8 +495,12 @@ def register_geode_tau2_participants(
         def set_seed(self, seed: int) -> None:
             return None
 
+    class CrucibleTau2User(GeodeTau2User):
+        allow_actionable_partial_on_empty = True
+
     registry.register_agent_factory(create_geode_agent, "geode_agent")
     registry.register_user(GeodeTau2User, "geode_user")
+    registry.register_user(CrucibleTau2User, "crucible_user")
 
 
 def _slug(value: str) -> str:
@@ -579,7 +531,7 @@ def _write_trajectory_snapshot(
     shutil.copy2(results_path, trajectory_path)
     raw_artifact_sha256 = hashlib.sha256(trajectory_path.read_bytes()).hexdigest()
     snapshot = {
-        "schema": "crucible_tau2_trajectory_snapshot.v1",
+        "schema": "crucible_tau2_trajectory_snapshot.v3",
         "filename_convention": {
             "run_id": (
                 "crucible-tau2-<stage>-<domain>-<arm>-"
@@ -645,14 +597,16 @@ def _codex_empty_text_dumps() -> set[Path]:
     from core.paths import GLOBAL_DIAGNOSTICS_DIR
 
     dump_dir = GLOBAL_DIAGNOSTICS_DIR / "codex-oauth-empty-text"
-    if not dump_dir.exists():
-        return set()
-    return {path.resolve() for path in dump_dir.glob("*.json") if path.is_file()}
+    paths = dump_dir.glob("*.json") if dump_dir.exists() else ()
+    return {path.resolve() for path in paths if path.is_file()}
 
 
 def _raise_on_new_codex_empty_text_dumps(before: set[Path]) -> None:
-    after = _codex_empty_text_dumps()
-    new_dumps = sorted(after - before)
+    new_dumps = sorted(
+        path
+        for path in _codex_empty_text_dumps() - before
+        if not Path(f"{path}.recovered").is_file() and not Path(f"{path}.actionable").is_file()
+    )
     if not new_dumps:
         return
     sample = ", ".join(str(path) for path in new_dumps[:3])
@@ -682,8 +636,11 @@ def _resolve_num_tasks(task_ids: list[str] | None, num_tasks: int | None) -> int
     return num_tasks
 
 
-def _validate_tau2_task_order(config: Any) -> None:
-    """Fail when tau2's loader would reorder an explicitly frozen task pack."""
+def _validate_tau2_task_order(
+    config: Any,
+    contract: ExperimentContract | None = None,
+) -> None:
+    """Fail when tau2 cannot reproduce the ordered frozen task pack."""
     requested = tuple(config.task_ids or ())
     if not requested:
         return
@@ -704,6 +661,20 @@ def _validate_tau2_task_order(config: Any) -> None:
         raise ValueError(
             "tau2 loader order does not match ordered --task-ids "
             f"(requested={requested!r}, selected={actual!r})"
+        )
+    if contract is None:
+        return
+    observed = tuple(
+        tau2_task_unit(
+            task.model_dump(mode="json"),
+            field=f"tau2 loaded task[{index}]",
+        )
+        for index, task in enumerate(selected)
+    )
+    if observed != contract.tasks:
+        raise ContractError(
+            "tau2 loaded task identities do not match the frozen contract "
+            "(task ID, content, or workflow family changed)"
         )
 
 
@@ -759,7 +730,11 @@ def _validate_contract_runtime_policy(args: argparse.Namespace) -> None:
     mixed into an identity-preflight run under the same git SHA.
     """
     violations: list[str] = []
-    exact_defaults = {"max_retries": 0}
+    exact_defaults = {
+        "agent_max_rounds": 0,
+        "max_retries": 0,
+        "user_max_rounds": 0,
+    }
     for field, expected in exact_defaults.items():
         if getattr(args, field) != expected:
             violations.append(f"--{field.replace('_', '-')}={expected}")
@@ -1023,6 +998,7 @@ def main() -> int:
         user_time_budget_s=args.user_time_budget_s,
         user_max_tokens=args.user_max_tokens,
         user_max_rounds=args.user_max_rounds,
+        simulation_timeout_s=args.timeout,
         fail_on_empty_geode_turn=not args.allow_empty_geode_turn,
     )
 
@@ -1053,8 +1029,8 @@ def main() -> int:
         retrieval_config_kwargs=retrieval_config_kwargs,
     )
     try:
-        _validate_tau2_task_order(config)
-    except ValueError as exc:
+        _validate_tau2_task_order(config, experiment_contract)
+    except (ContractError, ValueError) as exc:
         _restore_tau2_data_root(previous_tau2_data_dir)
         raise SystemExit(str(exc)) from exc
     previous_fail_empty_text = os.environ.get("GEODE_CODEX_OAUTH_FAIL_EMPTY_TEXT")

@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
 from core.agent.conversation import ConversationContext
@@ -25,6 +26,7 @@ from core.agent.tool_executor import (
     ToolExecutor,
 )
 from core.hooks import HookEvent, HookSystem
+from core.llm.adapters.base import EmptyModelOutputError
 from core.llm.agentic_response import AgenticResponse
 from core.llm.errors import BillingError, UserCancelledError
 from core.ui.agentic_ui import OperationLogger
@@ -66,6 +68,82 @@ if TYPE_CHECKING:
     from core.tools.registry import ToolRegistry
 
 log = logging.getLogger(__name__)
+
+_FAIL_FAST_VALUES = frozenset({"1", "true", "yes", "on"})
+_FAIL_FAST_RETRY_DELAY_S = 1.0
+_FAIL_FAST_EMPTY_OUTPUT_MAX_ATTEMPTS = 3
+
+
+def _fail_fast_adapter_errors_enabled() -> bool:
+    return (
+        os.environ.get("GEODE_LLM_FAIL_FAST_ON_ADAPTER_ERROR", "").strip().lower()
+        in _FAIL_FAST_VALUES
+    )
+
+
+async def _acomplete_with_fail_fast_pre_execution_retry(
+    adapter: Any,
+    request: Any,
+    *,
+    on_retry: Callable[[Exception, int, int], Awaitable[None]] | None = None,
+) -> Any:
+    """Retry bounded pre-execution failures without reopening completed tool work.
+
+    Normal AgenticLoop calls already retry after ``_call_llm`` returns
+    ``None``. Strict evaluator routes instead raise adapter errors immediately
+    so infrastructure cannot become semantic output. Preserve that boundary
+    while giving a connection-class stream failure one same-adapter retry. An
+    empty completed response gets at most three total attempts because repeated
+    GPT-5.4 subscription empties have occurred at the previous two-attempt
+    boundary. Every attempt uses the identical request before tool execution.
+    """
+
+    try:
+        return await adapter.acomplete(request)
+    except Exception as exc:
+        if not _fail_fast_adapter_errors_enabled():
+            raise
+        from core.llm.adapters.dispatch import _is_connection_transient
+
+        if isinstance(exc, EmptyModelOutputError):
+            empty_errors = [exc]
+            for attempt in range(2, _FAIL_FAST_EMPTY_OUTPUT_MAX_ATTEMPTS + 1):
+                log.warning(
+                    "AgenticLoop: fail-fast empty model output (%s); "
+                    "retrying the same adapter (attempt %d/%d)",
+                    type(empty_errors[-1]).__name__,
+                    attempt,
+                    _FAIL_FAST_EMPTY_OUTPUT_MAX_ATTEMPTS,
+                )
+                if on_retry is not None:
+                    await on_retry(
+                        empty_errors[-1],
+                        attempt,
+                        _FAIL_FAST_EMPTY_OUTPUT_MAX_ATTEMPTS,
+                    )
+                await asyncio.sleep(_FAIL_FAST_RETRY_DELAY_S * (attempt - 1))
+                try:
+                    result = await adapter.acomplete(request)
+                except EmptyModelOutputError as retry_error:
+                    empty_errors.append(retry_error)
+                    if attempt == _FAIL_FAST_EMPTY_OUTPUT_MAX_ATTEMPTS:
+                        retry_error.include_actionable_attempts(empty_errors[:-1])
+                        raise
+                    continue
+                for empty_error in empty_errors:
+                    empty_error.mark_recovered()
+                return result
+            raise AssertionError("bounded empty-output retry loop did not terminate") from exc
+        if not _is_connection_transient(exc):
+            raise
+        log.warning(
+            "AgenticLoop: fail-fast transport error (%s); retrying the same adapter once",
+            type(exc).__name__,
+        )
+        if on_retry is not None:
+            await on_retry(exc, 2, 2)
+        await asyncio.sleep(_FAIL_FAST_RETRY_DELAY_S)
+        return await adapter.acomplete(request)
 
 
 def _saved_cwd_matches_current(stored_cwd: str, current_cwd: str) -> bool:
@@ -287,6 +365,8 @@ class AgenticLoop:
         source: str = "",
         session_id: str = "",
         response_schema: dict[str, Any] | None = None,
+        allow_actionable_partial_on_empty: bool = False,
+        yield_after_tool_round: bool = False,
     ) -> None:
         self.context = context
         self.executor = tool_executor
@@ -298,6 +378,14 @@ class AgenticLoop:
         # sub-agents off their own role contract.
         self._system_prompt_override = system_prompt_override
         self._quiet = quiet  # suppress spinner (sub-agent, headless)
+        # Evaluator-owned simulators can preserve tool actions from a completed
+        # round when the following model continuation is irrecoverably empty.
+        # Ordinary agents retain the strict exception boundary by default.
+        self._allow_actionable_partial_on_empty = allow_actionable_partial_on_empty
+        # External half-duplex orchestrators can own the next model turn. The
+        # default AgenticLoop contract remains while(tool_use); opted-in callers
+        # yield only after one completed tool batch has been recorded.
+        self._yield_after_tool_round = yield_after_tool_round
         self.max_rounds = max_rounds
         self.max_tokens = max_tokens
         self._thinking_budget = thinking_budget
@@ -479,6 +567,7 @@ class AgenticLoop:
         # model_action_required so the user picks a model via /model.
         self._consecutive_llm_failures: int = 0
         self._LLM_RETRY_CAP: int = 5  # max retries before giving up
+        self._pre_execution_retry_errors: list[str] = []
 
         from core.agent.context_manager import ContextWindowManager
 
@@ -516,6 +605,12 @@ class AgenticLoop:
     # ------------------------------------------------------------------
     # Lifecycle / metrics — delegate to ``_lifecycle``
     # ------------------------------------------------------------------
+
+    @property
+    def pre_execution_retry_errors(self) -> tuple[str, ...]:
+        """Connection/empty-output retries observed in the current arun."""
+
+        return tuple(self._pre_execution_retry_errors)
 
     def _save_checkpoint(self, user_input: str, round_idx: int = 0) -> None:
         """Delegates to :func:`_lifecycle.save_checkpoint`."""
@@ -1289,6 +1384,43 @@ class AgenticLoop:
             termination_reason="model_action_required",
         )
 
+    async def _afinalize_actionable_partial_on_empty(
+        self,
+        exc: EmptyModelOutputError,
+        *,
+        messages: list[dict[str, Any]],
+        user_input: str,
+        round_idx: int,
+    ) -> AgenticResult | None:
+        """Preserve prior tool work when an opted-in continuation is empty."""
+
+        usable_tool_actions = any(
+            not isinstance(entry.get("result"), dict) or not entry["result"].get("error")
+            for entry in self._tool_processor.tool_log
+        )
+        if not self._allow_actionable_partial_on_empty or not usable_tool_actions:
+            return None
+        # The current continuation is empty, but an earlier round in this
+        # same turn already emitted executable tool work. Preserve that work
+        # and attest every exhausted empty attempt. Empty-before-action stays
+        # a hard infrastructure failure.
+        exc.mark_actionable()
+        log.warning(
+            "AgenticLoop: finalized actionable partial turn after empty "
+            "continuation (rounds=%d tools=%d)",
+            round_idx,
+            len(self._tool_processor.tool_log),
+        )
+        self._op_logger.finalize()
+        self._sync_messages_to_context(messages)
+        result = AgenticResult(
+            text="",
+            tool_calls=list(self._tool_processor.tool_log),
+            rounds=round_idx,
+            termination_reason="actionable_partial",
+        )
+        return await self._afinalize_and_return(result, user_input, round_idx)
+
     async def _finalize_context_exhausted(
         self,
         user_input: str,
@@ -1315,6 +1447,43 @@ class AgenticLoop:
             termination_reason="context_exhausted",
         )
         return await self._afinalize_and_return(result, user_input, round_idx + 1)
+
+    async def _afinalize_tool_round_yield(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        user_input: str,
+        round_idx: int,
+    ) -> AgenticResult:
+        """Yield one completed tool batch to an external turn orchestrator."""
+
+        self._op_logger.finalize()
+        self._sync_messages_to_context(messages)
+        result = AgenticResult(
+            text="",
+            tool_calls=list(self._tool_processor.tool_log),
+            rounds=round_idx + 1,
+            termination_reason="tool_use_yield",
+        )
+        return await self._afinalize_and_return(result, user_input, round_idx + 1)
+
+    def _tool_round_assistant_message(self, response: AgenticResponse) -> dict[str, Any]:
+        """Serialize one tool-use response with provider replay sidecars."""
+
+        message: dict[str, Any] = {
+            "role": "assistant",
+            "content": self._serialize_content(response.content),
+        }
+        reasoning_items = getattr(response, "codex_reasoning_items", None)
+        output_items = getattr(response, "codex_output_items", None)
+        phase = getattr(response, "assistant_phase", "")
+        if reasoning_items:
+            message["codex_reasoning_items"] = reasoning_items
+        if output_items:
+            message["codex_output_items"] = output_items
+        if phase:
+            message["phase"] = phase
+        return message
 
     # ------------------------------------------------------------------
     # Tool list refresh — delegate to ``_response``
@@ -1411,6 +1580,7 @@ class AgenticLoop:
         """Run the agentic loop until LLM emits end_turn or max rounds."""
         self._tool_processor.reset()
         self._op_logger.reset()
+        self._pre_execution_retry_errors.clear()
 
         # Wire conversation context so /model command guard can check size
         from core.cli.commands import set_conversation_context
@@ -1544,6 +1714,16 @@ class AgenticLoop:
                 if isinstance(_llm_outcome, AgenticResult):
                     return _llm_outcome
                 response = _llm_outcome
+            except EmptyModelOutputError as exc:
+                partial = await self._afinalize_actionable_partial_on_empty(
+                    exc,
+                    messages=messages,
+                    user_input=user_input,
+                    round_idx=round_idx,
+                )
+                if partial is None:
+                    raise
+                return partial
             except _ContextExhaustedError as exc:
                 _spinner.stop()
                 log.warning("Context exhausted: %s — attempting aggressive recovery", exc)
@@ -1944,7 +2124,7 @@ class AgenticLoop:
                         "Consider a different approach. "
                         "If you cannot verify the answer through tools, "
                         "tell the user what failed and what remains unverified. "
-                        "Do NOT silently answer from training data."
+                        "CANNOT silently answer from training data."
                     ),
                 }
                 tool_results.append(backpressure_hint)
@@ -1996,19 +2176,14 @@ class AgenticLoop:
                     )
 
             # accumulate serialized messages for the next round
-            assistant_content = self._serialize_content(response.content)
-            _assistant_msg = {"role": "assistant", "content": assistant_content}
-            # Codex reasoning passthrough (same as the end_turn branch)
-            if getattr(response, "codex_reasoning_items", None):
-                _assistant_msg["codex_reasoning_items"] = response.codex_reasoning_items
-            if getattr(response, "codex_output_items", None):
-                _assistant_msg["codex_output_items"] = response.codex_output_items
-            # Codex phase on tool-use rounds
-            _phase = getattr(response, "assistant_phase", "")
-            if _phase:
-                _assistant_msg["phase"] = _phase
-            messages.append(_assistant_msg)
+            messages.append(self._tool_round_assistant_message(response))
             messages.append({"role": "user", "content": tool_results})
+            if self._yield_after_tool_round:
+                return await self._afinalize_tool_round_yield(
+                    messages=messages,
+                    user_input=user_input,
+                    round_idx=round_idx,
+                )
             round_idx += 1
 
         # Loop exited via guard — determine reason
@@ -2217,21 +2392,44 @@ class AgenticLoop:
             except Exception:
                 log.debug("LLM_CALL_STARTED hook trigger failed", exc_info=True)
 
+        async def _on_fail_fast_pre_execution_retry(
+            exc: Exception,
+            attempt: int,
+            max_attempts: int,
+        ) -> None:
+            self._pre_execution_retry_errors.append(type(exc).__name__)
+            if self._hooks:
+                try:
+                    await self._hooks.trigger_async(
+                        HookEvent.LLM_CALL_RETRIED,
+                        {
+                            "model": effective_model,
+                            "provider": self._provider,
+                            "adapter": adapter_name,
+                            "error_type": type(exc).__name__,
+                            "delay_s": _FAIL_FAST_RETRY_DELAY_S,
+                            "attempt": attempt,
+                            "max_attempts": max_attempts,
+                        },
+                    )
+                except Exception:
+                    log.debug("LLM_CALL_RETRIED hook trigger failed", exc_info=True)
+
         try:
-            result = await self._new_adapter.acomplete(req)
+            result = await _acomplete_with_fail_fast_pre_execution_retry(
+                self._new_adapter,
+                req,
+                on_retry=_on_fail_fast_pre_execution_retry,
+            )
         except Exception as exc:
-            self._last_llm_error = str(exc)
+            error_detail = str(exc) or type(exc).__name__
+            self._last_llm_error = error_detail
             log.warning(
                 "AgenticLoop: adapter.acomplete failed (adapter=%s): %s",
                 adapter_name,
-                exc,
+                error_detail,
             )
-            if os.environ.get("GEODE_LLM_FAIL_FAST_ON_ADAPTER_ERROR", "").strip().lower() in {
-                "1",
-                "true",
-                "yes",
-                "on",
-            }:
+            if _fail_fast_adapter_errors_enabled():
                 raise
             response = None
             if self._hooks:
@@ -2244,7 +2442,7 @@ class AgenticLoop:
                             "provider": self._provider,
                             "adapter": adapter_name,
                             "latency_ms": (_llm_call_time.monotonic() - _llm_t0) * 1000,
-                            "error": str(exc),
+                            "error": error_detail,
                         },
                     )
                 except Exception:

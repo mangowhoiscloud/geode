@@ -1,0 +1,136 @@
+{
+  "schema": "crucible.producer-graph.v1",
+  "project": {
+    "name": "GEODE",
+    "description": "Source-attested promotion path from a bounded policy mutation to paired tau2 evidence."
+  },
+  "nodes": [
+    {
+      "id": "file:plugins/benchmark_harness/tau2_agent_policy.md",
+      "filePath": "plugins/benchmark_harness/tau2_agent_policy.md",
+      "name": "Tau2 agent policy",
+      "summary": "The sole candidate-owned behavior surface for this campaign.",
+      "tags": ["candidate-surface", "policy"],
+      "contentSha256": "ab1804483a92d352edf97ef000543f95ca0bc08759e9c338d5040d4c689ec1ce"
+    },
+    {
+      "id": "file:plugins/benchmark_harness/tau2_geode_agent.py",
+      "filePath": "plugins/benchmark_harness/tau2_geode_agent.py",
+      "name": "Tau2 GEODE adapter",
+      "summary": "Builds GEODE participants, delegates half-duplex turn control, and persists per-turn pre-execution retry identity.",
+      "tags": ["adapter", "benchmark", "tool-projection"],
+      "contentSha256": "0ad48f845a2eb6de47d7214e4f232f3e123a3b9037bd6ea7f07984ec74e3e9d2"
+    },
+    {
+      "id": "file:plugins/benchmark_harness/tau2_turn_supervisor.py",
+      "filePath": "plugins/benchmark_harness/tau2_turn_supervisor.py",
+      "name": "Tau2 turn supervisor",
+      "summary": "Owns the half-duplex deadline, stop mapping, and retry-telemetry projection while AgenticLoop yields after each completed tool batch.",
+      "tags": ["benchmark", "deadline", "external-loop", "tool-projection"],
+      "contentSha256": "8266ae29e8adaaad7c9649074b00e6a8a480a6197b2339f64f8a71f4007cd05d"
+    },
+    {
+      "id": "file:core/agent/loop/agent_loop.py",
+      "filePath": "core/agent/loop/agent_loop.py",
+      "name": "AgenticLoop",
+      "summary": "Runs model and tool rounds until termination, with default-off external boundaries and current-run pre-execution retry identity for evaluator attestation.",
+      "tags": ["runtime", "while-tool-use"],
+      "contentSha256": "8c8ec6c0ca273317d92e08a12b9ba1a82a6cd8fd3ab17b3e315d6c34cb91d783"
+    },
+    {
+      "id": "file:core/agent/tool_executor/processor.py",
+      "filePath": "core/agent/tool_executor/processor.py",
+      "name": "Tool call processor",
+      "summary": "Executes one model response's tool calls and preserves input order while batching eligible calls.",
+      "tags": ["runtime", "tools", "parallel"],
+      "contentSha256": "44157e3406738803854e3d3acaef3f6a2fe9d2b0be5670b47a73440471a39302"
+    },
+    {
+      "id": "file:plugins/crucible/tau2_live.py",
+      "filePath": "plugins/crucible/tau2_live.py",
+      "name": "Paired tau2 evaluator",
+      "summary": "Derives frozen runner arguments, screens unreachable train arms at zero candidate cost, isolates measurement state, and projects structural failure codes.",
+      "tags": ["crucible", "evaluator", "paired"],
+      "contentSha256": "ef83ebf745a0fa134cf8b65da9a6622cd93cb0cf49cc69725a3ae9914bd9a5f6"
+    },
+    {
+      "id": "file:plugins/crucible/supervisor.py",
+      "filePath": "plugins/crucible/supervisor.py",
+      "name": "Promotion supervisor",
+      "summary": "Preflights authority inputs, retains task identity only in its audit request, projects closed feedback to producers, and owns evidence plus the monotone search ref.",
+      "tags": ["crucible", "supervisor", "promotion"],
+      "contentSha256": "69ad67950dbe2e3b556de32d43324d0f23023c6c704860544e8026dcba1f4b09"
+    },
+    {
+      "id": "file:scripts/eval/crucible_tau2_evaluator.py",
+      "filePath": "scripts/eval/crucible_tau2_evaluator.py",
+      "name": "Evaluator entrypoint",
+      "summary": "Selects the locked runtime and invokes the trusted paired evaluator outside the candidate surface.",
+      "tags": ["entrypoint", "evaluator"],
+      "contentSha256": "0c4a3fc3ba42314284d1c864b56953e9f22d76735a6e640b11af3e571cc498c1"
+    },
+    {
+      "id": "file:plugins/crucible/producers/codex_kg.py",
+      "filePath": "plugins/crucible/producers/codex_kg.py",
+      "name": "Codex KG producer",
+      "summary": "Gives GPT-5.4 a bounded one-hop architecture subgraph plus structural closed failure codes, hides supervisor protocol paths, and accepts one general policy edit.",
+      "tags": ["crucible", "producer", "knowledge-graph"],
+      "contentSha256": "1836723aa1fe283d247321684042e108520d48d9b192ec053d715b7ee0446562"
+    },
+    {
+      "id": "file:plugins/crucible/producers/replay.py",
+      "filePath": "plugins/crucible/producers/replay.py",
+      "name": "Candidate replay producer",
+      "summary": "Reapplies one attested candidate after infrastructure invalidation, or after a source-contract-bound evaluator digest change.",
+      "tags": ["crucible", "producer", "measurement-retry"],
+      "contentSha256": "95d44a88ed49fffe81f10502e118ccf3cc01be193531b17fec5e197eca498ea5"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:plugins/crucible/producers/codex_kg.py",
+      "target": "file:plugins/benchmark_harness/tau2_agent_policy.md",
+      "type": "writes_to"
+    },
+    {
+      "source": "file:plugins/crucible/producers/replay.py",
+      "target": "file:plugins/benchmark_harness/tau2_agent_policy.md",
+      "type": "writes_to"
+    },
+    {
+      "source": "file:plugins/benchmark_harness/tau2_geode_agent.py",
+      "target": "file:plugins/benchmark_harness/tau2_agent_policy.md",
+      "type": "reads_from"
+    },
+    {
+      "source": "file:plugins/benchmark_harness/tau2_geode_agent.py",
+      "target": "file:plugins/benchmark_harness/tau2_turn_supervisor.py",
+      "type": "delegates_to"
+    },
+    {
+      "source": "file:plugins/benchmark_harness/tau2_geode_agent.py",
+      "target": "file:core/agent/loop/agent_loop.py",
+      "type": "depends_on"
+    },
+    {
+      "source": "file:plugins/benchmark_harness/tau2_geode_agent.py",
+      "target": "file:core/agent/tool_executor/processor.py",
+      "type": "depends_on"
+    },
+    {
+      "source": "file:plugins/crucible/tau2_live.py",
+      "target": "file:plugins/benchmark_harness/tau2_geode_agent.py",
+      "type": "calls"
+    },
+    {
+      "source": "file:scripts/eval/crucible_tau2_evaluator.py",
+      "target": "file:plugins/crucible/tau2_live.py",
+      "type": "calls"
+    },
+    {
+      "source": "file:plugins/crucible/supervisor.py",
+      "target": "file:scripts/eval/crucible_tau2_evaluator.py",
+      "type": "calls"
+    }
+  ]
+}
