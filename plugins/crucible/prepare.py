@@ -34,9 +34,11 @@ import shutil
 import subprocess
 import tempfile
 from collections.abc import Mapping, Sequence
+from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
+from . import TRIAD_PREPARE
 from .artifacts import load_json_object, write_exclusive_json
 from .contract import (
     ContractError,
@@ -50,6 +52,7 @@ from .preflight import campaign_token_cap, completed_campaign_tokens, decide
 from .supervisor import SupervisorConfig, SupervisorError
 
 SPEC_SCHEMA = "crucible.campaign-spec.v1"
+PREPARE_PROVENANCE_SCHEMA = "crucible.prepare-provenance.v1"
 PREPARE_REPORT_SCHEMA = "crucible.prepare-report.v1"
 
 # Spec keys copied verbatim onto the supervisor config when present.
@@ -127,6 +130,7 @@ def evaluator_hash_at(repository: Path, head_sha: str, evaluator_paths: Sequence
 def _merged(template: Mapping[str, Any], spec: Mapping[str, Any]) -> dict[str, Any]:
     config: dict[str, Any] = json.loads(json.dumps(dict(template)))
     config.pop("config_id", None)
+    config.pop("prepared_by", None)
     for key in _CONFIG_OVERRIDES:
         if key in spec:
             if spec[key] is None:
@@ -194,6 +198,7 @@ def prepare_campaign(
     remaining_tokens: int | None = None,
 ) -> dict[str, Any]:
     spec = load_json_object(spec_path, "campaign spec")
+    spec_sha256 = sha256(spec_path.read_bytes()).hexdigest()
     if spec.get("schema") != SPEC_SCHEMA:
         raise ContractError(f"campaign spec must use {SPEC_SCHEMA!r}")
     for field in ("campaign_id", "template_config", "head_sha", "state_root"):
@@ -233,6 +238,11 @@ def prepare_campaign(
     plan["harness_sha256"] = tracked_tree_sha256(harness_root)
 
     config["campaign_id"] = campaign_id
+    config["prepared_by"] = {
+        "schema": PREPARE_PROVENANCE_SCHEMA,
+        "entry": TRIAD_PREPARE,
+        "spec_sha256": spec_sha256,
+    }
     config["initial_search_head_sha"] = head_sha
     state_dir = state_dir_root / "state"
     config["state_dir"] = str(state_dir)
@@ -286,6 +296,7 @@ def prepare_campaign(
         "campaign_id": campaign_id,
         "config_path": str(output_path),
         "pack_file": str(pack_path),
+        "spec_sha256": spec_sha256,
         "window": window,
         "state_dir": str(state_dir),
         "initial_search_head_sha": head_sha,

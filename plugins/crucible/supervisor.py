@@ -187,6 +187,16 @@ def _search_objective(value: object) -> str | None:
     return objective
 
 
+def _prepared_by(value: object) -> Mapping[str, Any] | None:
+    """Preparation provenance travels with the config file but stays out of
+    ``payload()`` so it never perturbs the config_id identity hash."""
+    if value is None:
+        return None
+    if not isinstance(value, Mapping):
+        raise SupervisorError("prepared_by must be an object when present")
+    return dict(value)
+
+
 def _validate_string_sequence(
     field: str,
     values: Sequence[str],
@@ -390,6 +400,7 @@ class SupervisorConfig:
     limits: LoopLimits
     producer_objective: str | None = None
     initial_feedback: FailureFeedback | None = None
+    prepared_by: Mapping[str, Any] | None = None
 
     @classmethod
     def load(cls, path: Path) -> SupervisorConfig:
@@ -412,7 +423,7 @@ class SupervisorConfig:
                 "state_dir",
                 "train_plan",
             },
-            optional={"config_id", "initial_feedback", "search"},
+            optional={"config_id", "initial_feedback", "prepared_by", "search"},
         )
         if row.get("schema") != CONFIG_SCHEMA:
             raise SupervisorError(f"schema must be {CONFIG_SCHEMA!r}")
@@ -459,6 +470,7 @@ class SupervisorConfig:
                 if row.get("initial_feedback") is None
                 else FailureFeedback.from_mapping(row.get("initial_feedback"))
             ),
+            prepared_by=_prepared_by(row.get("prepared_by")),
         )
         config.validate()
         supplied_id = row.get("config_id")
@@ -526,7 +538,10 @@ class SupervisorConfig:
         return _hash(self.payload())
 
     def to_dict(self) -> dict[str, Any]:
-        return {**self.payload(), "config_id": self.config_id}
+        serialized = {**self.payload(), "config_id": self.config_id}
+        if self.prepared_by is not None:
+            serialized["prepared_by"] = dict(self.prepared_by)
+        return serialized
 
 
 @dataclass(frozen=True)

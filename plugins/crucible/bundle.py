@@ -193,6 +193,15 @@ def _validate_record(
         marginal_usage = ResourceUsage.from_mapping(marginal_raw)
         if marginal_usage.to_dict() != marginal_raw:
             raise ContractError("supervisor record marginal_usage is not canonical")
+    fingerprint = record.get("candidate_fingerprint")
+    fingerprint_ref = record.get("candidate_fingerprint_ref")
+    if (fingerprint is None) != (fingerprint_ref is None):
+        raise ContractError("supervisor record candidate fingerprint fields must travel together")
+    if fingerprint is not None:
+        fingerprint = _sha256(fingerprint, "supervisor record candidate_fingerprint")
+        expected_fingerprint_ref = f"refs/crucible/candidate-fingerprints/{fingerprint}"
+        if fingerprint_ref != expected_fingerprint_ref:
+            raise ContractError("supervisor record candidate_fingerprint_ref does not match")
     wall_seconds = record.get("wall_seconds")
     if (
         isinstance(wall_seconds, bool)
@@ -236,6 +245,13 @@ def _validate_proposal_lineage(
         raise ContractError("proposal request fields do not match the supervisor schema")
     if request.get("schema") != REQUEST_SCHEMA:
         raise ContractError(f"proposal request schema must be {REQUEST_SCHEMA!r}")
+    objective = request.get("objective")
+    if objective is not None and (
+        not isinstance(objective, str)
+        or not objective.strip()
+        or len(objective.encode("utf-8")) > 16 * 1024
+    ):
+        raise ContractError("proposal request objective must be a bounded non-empty string")
     request_id = _sha256(request.get("request_id"), "proposal request_id")
     request_payload = dict(request)
     del request_payload["request_id"]

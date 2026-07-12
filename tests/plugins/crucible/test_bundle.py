@@ -468,6 +468,18 @@ def test_supervisor_record_is_strict_even_when_rehashed(
         PromotionBundle.build_from_attempt(attempt.repository, attempt.directory)
 
 
+def test_supervisor_record_candidate_fingerprint_ref_must_match(tmp_path: Path) -> None:
+    attempt = _attempt(tmp_path)
+    record = deepcopy(attempt.record)
+    record["candidate_fingerprint"] = "a" * 64
+    record["candidate_fingerprint_ref"] = "refs/crucible/candidate-fingerprints/" + "b" * 64
+    record = _rehash(record, "record_id")
+    _write_json(attempt.directory / "record.json", record)
+
+    with pytest.raises(ContractError, match="candidate_fingerprint_ref does not match"):
+        PromotionBundle.build_from_attempt(attempt.repository, attempt.directory)
+
+
 def test_negative_direct_evidence_usage_fails_canonical_rebuild(tmp_path: Path) -> None:
     attempt = _attempt(tmp_path)
     baseline = attempt.baseline.to_dict()
