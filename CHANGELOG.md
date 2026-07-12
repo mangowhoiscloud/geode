@@ -45,6 +45,19 @@ functional change.
 
 ---
 
+## [0.99.305] - 2026-07-12
+
+### Fixed
+
+- **Release package gate carves out `scripts/macos/`.** The gate banned the
+  whole `scripts/` prefix while `pyproject.toml` deliberately force-includes
+  the computer-use helper source (`build_computer_helper.sh`,
+  `geode_computer_helper.swift`), a runtime asset consumed by onboarding and
+  doctor; the 0.99.304 release dispatch failed on exactly this. The gate now
+  allows the `scripts/macos/` prefix and keeps banning the rest.
+
+---
+
 ## [0.99.304] - 2026-07-12
 
 ### Changed

@@ -148,13 +148,19 @@ def _check_required(label: str, paths: set[str], required: set[str]) -> list[str
     return [f"{label}: missing required path {path}" for path in sorted(required - paths)]
 
 
+# ``scripts/macos/`` ships on purpose (computer-use helper source + build
+# script; consumed at runtime by core/cli/onboarding.py and doctor), so the
+# blanket ``scripts/`` ban carves it out.
+ALLOWED_PREFIXES = ("scripts/macos/",)
+
+
 def _check_banned(label: str, paths: set[str], prefixes: tuple[str, ...]) -> list[str]:
     problems: list[str] = []
     for path in sorted(paths):
         if _has_banned_common(path):
             problems.append(f"{label}: banned cache/generated path {path}")
             continue
-        if path.startswith(prefixes):
+        if path.startswith(prefixes) and not path.startswith(ALLOWED_PREFIXES):
             problems.append(f"{label}: banned path {path}")
     return problems
 
