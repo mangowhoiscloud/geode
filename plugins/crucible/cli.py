@@ -157,6 +157,16 @@ def _add_prepare(subparsers: Any) -> None:
     )
     parser.add_argument("spec", type=Path)
     parser.add_argument("--output", type=Path)
+    parser.add_argument(
+        "--history",
+        type=Path,
+        help="campaigns root holding */state/summary.json for the window verdict",
+    )
+    parser.add_argument(
+        "--remaining-tokens",
+        type=int,
+        help="remaining window tokens; enables the launch-capacity verdict",
+    )
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -337,7 +347,12 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(usage.to_dict(), sort_keys=True))
             return 0
         if args.command == "prepare":
-            report = prepare_campaign(args.spec, output=args.output)
+            report = prepare_campaign(
+                args.spec,
+                output=args.output,
+                history_root=args.history,
+                remaining_tokens=args.remaining_tokens,
+            )
             print(json.dumps(report, sort_keys=True))
             return 0
         if args.command == "loop":

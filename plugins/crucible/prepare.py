@@ -19,6 +19,12 @@ Hashes are never inherited from the template: the evaluator hash is
 recomputed over a pristine temporary checkout of the campaign head, the
 harness hash over the actual harness tree, and the pack hash from the pack
 file's verified task units.
+
+The spec may carry a ``curation`` block instead of a ``pack_file`` — the pack
+is then curated as part of preparation — and callers may pass the remaining
+window budget to fold the launch-capacity verdict (``crucible.preflight``)
+into the report. Sealed plans keep their own promotion-time lifecycle and are
+deliberately out of scope here.
 """
 
 from __future__ import annotations
@@ -32,6 +38,8 @@ from pathlib import Path
 from typing import Any
 
 from .artifacts import load_json_object, write_exclusive_json
+from .curation import curate_tau2_pack
+from .preflight import campaign_token_cap, completed_campaign_tokens, decide
 from .contract import (
     ContractError,
     TaskUnit,
@@ -132,13 +140,68 @@ def _merged(template: Mapping[str, Any], spec: Mapping[str, Any]) -> dict[str, A
     return config
 
 
-def prepare_campaign(spec_path: Path, *, output: Path | None = None) -> dict[str, Any]:
+_CURATION_FIELDS = (
+    "tasks_file",
+    "split_file",
+    "split_name",
+    "domain",
+    "purpose",
+    "salt",
+    "fault_tokens",
+    "take",
+    "maximum_per_intent",
+    "maximum_per_persona",
+    "trials_per_task",
+)
+
+
+def _curate_pack(curation: Mapping[str, Any], *, prepare_dir: Path) -> Path:
+    """Curate the frozen pack as part of preparation (no invented defaults)."""
+    for field in _CURATION_FIELDS:
+        if curation.get(field) in (None, ""):
+            raise ContractError(f"curation block requires {field}")
+    prepare_dir.mkdir(parents=True, exist_ok=True)
+    pack_output = prepare_dir / "pack.json"
+    if pack_output.exists():
+        raise ContractError(f"curated pack already exists: {pack_output}")
+    curate_tau2_pack(
+        tasks_path=Path(str(curation["tasks_file"])).expanduser(),
+        split_path=Path(str(curation["split_file"])).expanduser(),
+        split_name=str(curation["split_name"]),
+        domain=str(curation["domain"]),
+        purpose=str(curation["purpose"]),
+        salt=str(curation["salt"]),
+        fault_tokens=int(curation["fault_tokens"]),
+        take=int(curation["take"]),
+        maximum_per_intent=int(curation["maximum_per_intent"]),
+        maximum_per_persona=int(curation["maximum_per_persona"]),
+        trials_per_task=int(curation["trials_per_task"]),
+        exclude_packs=[
+            Path(str(entry)).expanduser() for entry in curation.get("exclude_packs", ())
+        ],
+        selection_output=prepare_dir / "selection.json",
+        pack_output=pack_output,
+    )
+    return pack_output
+
+
+def prepare_campaign(
+    spec_path: Path,
+    *,
+    output: Path | None = None,
+    history_root: Path | None = None,
+    remaining_tokens: int | None = None,
+) -> dict[str, Any]:
     spec = load_json_object(spec_path, "campaign spec")
     if spec.get("schema") != SPEC_SCHEMA:
         raise ContractError(f"campaign spec must use {SPEC_SCHEMA!r}")
-    for field in ("campaign_id", "template_config", "head_sha", "pack_file", "state_root"):
+    for field in ("campaign_id", "template_config", "head_sha", "state_root"):
         if not spec.get(field):
             raise ContractError(f"campaign spec requires {field}")
+    if not spec.get("pack_file") and not isinstance(spec.get("curation"), Mapping):
+        raise ContractError("campaign spec requires pack_file or a curation block")
+    if spec.get("pack_file") and isinstance(spec.get("curation"), Mapping):
+        raise ContractError("campaign spec cannot carry both pack_file and curation")
 
     campaign_id = str(spec["campaign_id"])
     template = load_json_object(Path(str(spec["template_config"])).expanduser(), "template config")
@@ -149,7 +212,12 @@ def prepare_campaign(spec_path: Path, *, output: Path | None = None) -> dict[str
     head_sha = _git(repository, "rev-parse", "--verify", f"{spec['head_sha']}^{{commit}}")
 
     plan = config["train_plan"]
-    units, pack_trials = load_pack(Path(str(spec["pack_file"])).expanduser())
+    state_dir_root = Path(str(spec["state_root"])).expanduser().resolve() / campaign_id
+    if isinstance(spec.get("curation"), Mapping):
+        pack_path = _curate_pack(spec["curation"], prepare_dir=state_dir_root / "prepare")
+    else:
+        pack_path = Path(str(spec["pack_file"])).expanduser()
+    units, pack_trials = load_pack(pack_path)
     plan["tasks"] = [unit.to_dict() for unit in units]
     plan["trials_per_task"] = int(spec.get("trials_per_task", pack_trials))
     plan["task_pack_sha256"] = task_pack_sha256(units, plan["trials_per_task"])
@@ -163,7 +231,7 @@ def prepare_campaign(spec_path: Path, *, output: Path | None = None) -> dict[str
 
     config["campaign_id"] = campaign_id
     config["initial_search_head_sha"] = head_sha
-    state_dir = Path(str(spec["state_root"])).expanduser().resolve() / campaign_id / "state"
+    state_dir = state_dir_root / "state"
     config["state_dir"] = str(state_dir)
 
     # Launch-time fail-louds, moved to prepare time (all three were paid for
@@ -200,10 +268,22 @@ def prepare_campaign(spec_path: Path, *, output: Path | None = None) -> dict[str
     except (ContractError, SupervisorError):
         output_path.unlink(missing_ok=True)
         raise
+    window: dict[str, Any] | None = None
+    if remaining_tokens is not None:
+        history = completed_campaign_tokens(history_root) if history_root else []
+        window = dict(
+            decide(
+                hard_cap_tokens=campaign_token_cap(output_path),
+                remaining_tokens=remaining_tokens,
+                history_tokens=history,
+            )
+        )
     return {
         "schema": PREPARE_REPORT_SCHEMA,
         "campaign_id": campaign_id,
         "config_path": str(output_path),
+        "pack_file": str(pack_path),
+        "window": window,
         "state_dir": str(state_dir),
         "initial_search_head_sha": head_sha,
         "task_count": len(units),

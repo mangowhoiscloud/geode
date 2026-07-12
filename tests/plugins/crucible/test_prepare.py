@@ -29,7 +29,13 @@ def _write_pack(tmp_path: Path, config: SupervisorConfig) -> Path:
     return pack_path
 
 
-def _write_spec(tmp_path: Path, config: SupervisorConfig, **overrides: object) -> Path:
+def _write_spec(
+    tmp_path: Path,
+    config: SupervisorConfig,
+    *,
+    include_pack: bool = True,
+    **overrides: object,
+) -> Path:
     template_path = tmp_path / "template.config.json"
     template_path.write_text(json.dumps(config.to_dict()), encoding="utf-8")
     spec = {
@@ -37,10 +43,11 @@ def _write_spec(tmp_path: Path, config: SupervisorConfig, **overrides: object) -
         "campaign_id": "prepared-campaign",
         "template_config": str(template_path),
         "head_sha": config.initial_search_head_sha,
-        "pack_file": str(_write_pack(tmp_path, config)),
         "state_root": str(tmp_path / "campaigns"),
         **overrides,
     }
+    if include_pack and "pack_file" not in spec:
+        spec["pack_file"] = str(_write_pack(tmp_path, config))
     spec_path = tmp_path / "spec.json"
     spec_path.write_text(json.dumps(spec), encoding="utf-8")
     return spec_path
@@ -100,3 +107,62 @@ def test_prepare_removes_output_when_round_trip_validation_fails(tmp_path: Path)
     with pytest.raises((ContractError, Exception)):
         prepare_campaign(spec_path)
     assert not (tmp_path / "campaigns" / "prepared-campaign" / "config.json").exists()
+
+
+def test_prepare_reports_window_verdict_from_history(tmp_path: Path) -> None:
+    config, _baseline = _config(tmp_path)
+    history = tmp_path / "history" / "old-campaign" / "state"
+    history.mkdir(parents=True)
+    (history / "summary.json").write_text(
+        json.dumps({"usage": {"tokens": 1_000_000}}), encoding="utf-8"
+    )
+    limits = {**config.to_dict()["limits"], "max_tokens": 5_000_000}
+    report = prepare_campaign(
+        _write_spec(tmp_path, config, limits=limits),
+        history_root=tmp_path / "history",
+        remaining_tokens=1_000_000,
+    )
+    window = report["window"]
+    assert window["fit"] == "history_fit"
+    assert window["history_worst_tokens"] == 1_000_000
+    # 판정을 요청하지 않으면 window는 None으로 남는다 (별도 캠페인 id로 재실행)
+
+
+def test_prepare_curates_pack_when_spec_carries_curation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config, _baseline = _config(tmp_path)
+    reference_pack = _write_pack(tmp_path, config)
+
+    def fake_curate(**kwargs: object) -> dict:
+        pack_output = kwargs["pack_output"]
+        assert isinstance(pack_output, Path)
+        pack_output.write_text(reference_pack.read_text(encoding="utf-8"), encoding="utf-8")
+        return {"pack_sha256": "unused"}
+
+    monkeypatch.setattr("plugins.crucible.prepare.curate_tau2_pack", fake_curate)
+    curation = {
+        "tasks_file": str(tmp_path / "tasks.json"),
+        "split_file": str(tmp_path / "split.json"),
+        "split_name": "base",
+        "domain": "telecom",
+        "purpose": "train",
+        "salt": "salt-1",
+        "fault_tokens": 2,
+        "take": 4,
+        "maximum_per_intent": 2,
+        "maximum_per_persona": 2,
+        "trials_per_task": 1,
+    }
+    report = prepare_campaign(
+        _write_spec(tmp_path, config, include_pack=False, curation=curation)
+    )
+    assert report["pack_file"].endswith("prepare/pack.json")
+    assert report["task_count"] == 4
+
+
+def test_prepare_rejects_pack_file_and_curation_together(tmp_path: Path) -> None:
+    config, _baseline = _config(tmp_path)
+    spec_path = _write_spec(tmp_path, config, curation={"tasks_file": "x"})
+    with pytest.raises(ContractError, match="cannot carry both"):
+        prepare_campaign(spec_path)
