@@ -156,6 +156,35 @@ def _build_row(run_dir: Path) -> dict[str, Any] | None:
 
     survivors_count = _seed_count(state, "survivors")
     candidates_count = _seed_count(state, "candidates")
+    # Older runs never wrote top-level cost fields to state.json; the
+    # measured truth lives in per_phase_costs.json. Sum it as the fallback
+    # and count roles that ran agents but metered nothing (subprocess
+    # roles whose usage is not captured) so the hub can label the total
+    # as a floor instead of publishing $0.00.
+    usd_spent = float(state.get("usd_spent", 0.0) or 0.0)
+    prompt_tokens = int(state.get("prompt_tokens", 0) or 0)
+    completion_tokens = int(state.get("completion_tokens", 0) or 0)
+    uncaptured_roles = 0
+    pp_path = run_dir / "per_phase_costs.json"
+    if pp_path.is_file():
+        try:
+            phases = json.loads(pp_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            phases = {}
+        if isinstance(phases, dict) and phases:
+            pp_usd = sum(float(v.get("cost_usd", 0.0) or 0.0) for v in phases.values())
+            pp_pt = sum(int(v.get("prompt_tokens", 0) or 0) for v in phases.values())
+            pp_ct = sum(int(v.get("completion_tokens", 0) or 0) for v in phases.values())
+            usd_spent = max(usd_spent, pp_usd)
+            prompt_tokens = max(prompt_tokens, pp_pt)
+            completion_tokens = max(completion_tokens, pp_ct)
+            uncaptured_roles = sum(
+                1
+                for v in phases.values()
+                if int(v.get("agent_count", 0) or 0) > 0
+                and float(v.get("cost_usd", 0.0) or 0.0) == 0.0
+                and int(v.get("prompt_tokens", 0) or 0) == 0
+            )
     return {
         "run_id": run_dir.name,
         "gen_tag": str(state.get("gen_tag", "") or ""),
@@ -165,9 +194,10 @@ def _build_row(run_dir: Path) -> dict[str, Any] | None:
         "evolved_count": _seed_count(state, "evolved_candidates"),
         "iterations": int(state.get("current_iteration", 0) or 0),
         "max_iterations": int(state.get("max_iterations", 0) or 0),
-        "usd_spent": float(state.get("usd_spent", 0.0) or 0.0),
-        "prompt_tokens": int(state.get("prompt_tokens", 0) or 0),
-        "completion_tokens": int(state.get("completion_tokens", 0) or 0),
+        "usd_spent": usd_spent,
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "uncaptured_roles": uncaptured_roles,
         "has_meta_review": bool(state.get("meta_review")),
         "has_supervisor_guidance": bool(state.get("supervisor_guidance")),
         "literature_snapshots_count": _seed_count(state, "literature_snapshots"),
