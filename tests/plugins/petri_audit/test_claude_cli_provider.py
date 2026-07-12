@@ -570,9 +570,9 @@ def test_extract_stop_reason_unknown_when_absent() -> None:
     assert _extract_stop_reason(parse_stream_json_events(stdout)) == "unknown"
 
 
-def test_extract_usage_from_result_event() -> None:
+def testextract_usage_from_events_from_result_event() -> None:
     from plugins.petri_audit.claude_cli_provider import (
-        _extract_usage,
+        extract_usage_from_events,
         parse_stream_json_events,
     )
 
@@ -589,20 +589,20 @@ def test_extract_usage_from_result_event() -> None:
             }
         ]
     )
-    usage = _extract_usage(parse_stream_json_events(stdout))
+    usage = extract_usage_from_events(parse_stream_json_events(stdout))
     assert usage["input_tokens"] == 100
     assert usage["output_tokens"] == 50
     assert usage["cache_read_input_tokens"] == 200
     assert usage["cache_creation_input_tokens"] == 300
 
 
-def test_extract_usage_zero_when_absent() -> None:
+def testextract_usage_from_events_zero_when_absent() -> None:
     from plugins.petri_audit.claude_cli_provider import (
-        _extract_usage,
+        extract_usage_from_events,
         parse_stream_json_events,
     )
 
-    usage = _extract_usage(parse_stream_json_events("{}"))
+    usage = extract_usage_from_events(parse_stream_json_events("{}"))
     assert usage == {
         "input_tokens": 0,
         "output_tokens": 0,

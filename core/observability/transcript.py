@@ -186,10 +186,10 @@ class SessionTranscript:
         ``completion_tokens`` are written so the seed-generation
         orchestrator's per-phase cost grid can sum them off each
         sub-agent's ``dialogue.jsonl`` (``_persist_per_phase_costs``
-        already reads these keys). They are 0 for subscription / CLI
-        calls (the subscription path does not expose token usage), so
-        only API-key / payg sub-agents contribute non-zero values —
-        counts are never fabricated.
+        already reads these keys). payg and claude-cli sub-agents
+        contribute real values (the CLI's ``result`` event exposes
+        usage — PR-CLI-USAGE-CAPTURE, 2026-07-13); codex-cli calls
+        remain 0 — counts are never fabricated.
         """
         self._append(
             {
