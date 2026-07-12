@@ -154,8 +154,9 @@
         <tr>
           <th scope="col">phase</th>
           <th scope="col">task</th>
-          <th scope="col">samples</th>
-          <th scope="col">score</th>
+          <th scope="col">agents</th>
+          <th scope="col">tokens</th>
+          <th scope="col">cost</th>
           <th scope="col">SPA link</th>
         </tr>
       </thead>
@@ -185,6 +186,8 @@
       <dd>{{ cost_prompt_tokens }}</dd>
       <dt>completion_tokens</dt>
       <dd>{{ cost_completion_tokens }}</dd>
+      <dt>usd (metered floor)</dt>
+      <dd>{{ cost_usd_total }}</dd>
       <dt>literature_snapshots</dt>
       <dd>{{ literature_snapshots_count }}</dd>
       <dt>debate_transcripts</dt>

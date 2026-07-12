@@ -79,6 +79,21 @@ functional change.
   seeding now canonicalizes family deltas, so arbitrary frozen family order
   cannot change a future verdict.
 
+## [0.99.312] - 2026-07-13
+
+### Changed
+
+- **Seed-generation cost granularity extended to the sub-index and per-run
+  pages (cost-audit follow-up).** The "All runs" table cell and the hub index
+  now share the same tokens-and-USD cell; the run page's phase table replaces
+  the never-wired samples/score dash columns with agents / tokens / cost read
+  from `per_phase_costs.json` (dagger on roles that ran agents without usage
+  capture); the run-page cost grid falls back to per-phase sums for runs that
+  never wrote state.json usage and gains a `usd (metered floor)` row; the
+  index usage rollup adds USD ($18.61 floor) and the uncaptured-role count.
+
+---
+
 ## [0.99.311] - 2026-07-13
 
 ### Fixed

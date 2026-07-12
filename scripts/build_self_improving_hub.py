@@ -1007,26 +1007,30 @@ def _render_seedgen_index_rows(rows: list[SeedGenRow]) -> str:
             f'          <td class="num">{flow}</td>\n'
             f'          <td class="num">{row.evolved_count}</td>\n'
             f'          <td class="muted">{iters}</td>\n'
-            f'          <td class="num">{row.total_tokens:,}</td>\n'
+            f'          <td class="num">{seedgen_cost_cell(row)}</td>\n'
             "        </tr>"
         )
     return "\n".join(out)
 
 
 def _seedgen_cost_totals(rows: list[SeedGenRow], raw_listing: dict[str, Any]) -> dict[str, str]:
-    """Sum tokens across all runs (listing.json has the per-run numbers).
+    """Sum usage across all runs (listing.json has the per-run numbers).
 
-    Subscription runs report ``usd_spent`` as $0.00, so the hub surfaces token
-    counts instead of cost. ``cost_total_tokens`` is the aggregate
-    (prompt + completion); the per-axis breakdown stays available.
+    ``usd_spent`` / ``uncaptured_roles`` come from build_seeds_listing's
+    per_phase_costs fallback; the USD total is a metered floor (uncaptured
+    subprocess roles spent tokens that were never recorded).
     """
     runs_raw = raw_listing.get("runs") or []
     total_prompt = sum(int(r.get("prompt_tokens", 0)) for r in runs_raw)
     total_completion = sum(int(r.get("completion_tokens", 0)) for r in runs_raw)
+    total_usd = sum(float(r.get("usd_spent", 0.0) or 0.0) for r in runs_raw)
+    uncaptured = sum(int(r.get("uncaptured_roles", 0) or 0) for r in runs_raw)
     return {
         "cost_total_tokens": f"{total_prompt + total_completion:,}",
         "cost_prompt_tokens": f"{total_prompt:,}",
         "cost_completion_tokens": f"{total_completion:,}",
+        "cost_usd_total": f"${total_usd:,.2f}",
+        "cost_uncaptured_roles": str(uncaptured),
         "cost_run_count": str(len(rows)),
     }
 
@@ -1276,6 +1280,25 @@ def _read_eval_header(log_path: Path) -> dict[str, Any] | None:
         return None
 
 
+def _load_per_phase_costs(run_id: str) -> dict[str, dict[str, Any]]:
+    """Read the run's ``per_phase_costs.json`` (bundle seeds dir).
+
+    Older runs metered cost only at some roles; a role with ``agent_count > 0``
+    but zero usage is an uncaptured subprocess, not a free one — callers
+    render it as a metered floor, never as $0 spent.
+    """
+    pp_path = (
+        REPO_ROOT / "docs" / "self-improving" / "petri-bundle" / "seeds" / run_id
+    ) / "per_phase_costs.json"
+    if not pp_path.is_file():
+        return {}
+    try:
+        data = json.loads(pp_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
 def _scan_phase_eval_logs(run_id: str) -> dict[str, dict[str, Any]]:
     """Scan the seed-generation bundle's ``logs/`` for
     ``seedgen-<phase>_<run_id>.eval`` files and record each one's path.
@@ -1340,6 +1363,7 @@ def _render_phase_rows(run_id: str) -> tuple[str, int]:
         "meta_reviewer",
     )
     phase_meta = _scan_phase_eval_logs(run_id)
+    phase_costs = _load_per_phase_costs(run_id)
     rows: list[str] = []
     for phase in phases:
         info = phase_meta.get(phase)
@@ -1354,12 +1378,32 @@ def _render_phase_rows(run_id: str) -> tuple[str, int]:
             # No .eval for this phase yet — land on the run list, not a dead hash.
             spa_link = bundle_base
             link_label = "&#x2197; viewer (run list)"
+        cost = phase_costs.get(phase) or {}
+        agent_count = int(cost.get("agent_count", 0) or 0)
+        tok = int(cost.get("prompt_tokens", 0) or 0) + int(cost.get("completion_tokens", 0) or 0)
+        usd = float(cost.get("cost_usd", 0.0) or 0.0)
+        if not cost:
+            agents_cell = tok_cell = usd_cell = "—"
+        elif agent_count and not tok and not usd:
+            # Agents ran but usage capture is missing — mark, don't publish $0.
+            uncaptured = (
+                '<span class="muted" title="ran agents without usage capture; '
+                'metered floor">&dagger;</span>'
+            )
+            agents_cell = str(agent_count)
+            tok_cell = f"0 {uncaptured}"
+            usd_cell = f"$0.00 {uncaptured}"
+        else:
+            agents_cell = str(agent_count)
+            tok_cell = f"{tok:,}"
+            usd_cell = f"${usd:,.2f}"
         rows.append(
             "        <tr>\n"
             f'          <td class="id">{html_escape(phase)}</td>\n'
             f'          <td class="muted"><code>{html_escape(str(task_slug))}</code></td>\n'
-            '          <td class="muted">—</td>\n'
-            '          <td class="muted">—</td>\n'
+            f'          <td class="num">{agents_cell}</td>\n'
+            f'          <td class="num">{tok_cell}</td>\n'
+            f'          <td class="num">{usd_cell}</td>\n'
             f'          <td class="phase-link"><a href="{spa_link}">'
             f"{link_label}</a></td>\n"
             "        </tr>"
@@ -1598,9 +1642,22 @@ def render_seedgen_run(
     pilot_heatmap = _render_pilot_heatmap(state_data)
     meta_review_block = _render_meta_review(meta_doc, state_data)
 
-    # Token numbers — subscription runs report $0.00, so the hub shows tokens.
-    prompt_tk = int(state_data.get("prompt_tokens", 0))
-    completion_tk = int(state_data.get("completion_tokens", 0))
+    # Usage numbers — older runs never wrote the state.json top-level fields,
+    # so fall back to summing per_phase_costs.json (same contract as
+    # build_seeds_listing). Totals are a metered floor, not fabricated.
+    run_costs = _load_per_phase_costs(run_meta.run_id)
+    prompt_tk = max(
+        int(state_data.get("prompt_tokens", 0)),
+        sum(int(c.get("prompt_tokens", 0) or 0) for c in run_costs.values()),
+    )
+    completion_tk = max(
+        int(state_data.get("completion_tokens", 0)),
+        sum(int(c.get("completion_tokens", 0) or 0) for c in run_costs.values()),
+    )
+    usd_spent = max(
+        float(state_data.get("usd_spent", 0.0) or 0.0),
+        sum(float(c.get("cost_usd", 0.0) or 0.0) for c in run_costs.values()),
+    )
     lit_count = len(state_data.get("literature_snapshots") or {})
     debate_count = len(state_data.get("debate_transcripts") or {})
     current_iter = int(state_data.get("current_iteration", 0))
@@ -1633,6 +1690,7 @@ def render_seedgen_run(
         "cost_total_tokens": f"{prompt_tk + completion_tk:,}",
         "cost_prompt_tokens": f"{prompt_tk:,}",
         "cost_completion_tokens": f"{completion_tk:,}",
+        "cost_usd_total": f"${usd_spent:,.2f}",
         "literature_snapshots_count": str(lit_count),
         "debate_transcripts_count": str(debate_count),
         "iterations_label": iter_label,

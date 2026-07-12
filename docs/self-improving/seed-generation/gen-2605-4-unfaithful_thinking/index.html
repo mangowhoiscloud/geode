@@ -291,8 +291,9 @@
         <tr>
           <th scope="col">phase</th>
           <th scope="col">task</th>
-          <th scope="col">samples</th>
-          <th scope="col">score</th>
+          <th scope="col">agents</th>
+          <th scope="col">tokens</th>
+          <th scope="col">cost</th>
           <th scope="col">SPA link</th>
         </tr>
       </thead>
@@ -300,57 +301,65 @@
         <tr>
           <td class="id">supervisor</td>
           <td class="muted"><code>seed-generation/supervisor</code></td>
-          <td class="muted">—</td>
-          <td class="muted">—</td>
+          <td class="num">0</td>
+          <td class="num">0</td>
+          <td class="num">$0.00</td>
           <td class="phase-link"><a href="/geode/self-improving/seed-generation/bundle/#/logs/2026-05-29T12-49-41-00-00_seedgen-supervisor_gen-2605-4-unfaithful_thinking.eval">&#x2197; viewer</a></td>
         </tr>
         <tr>
           <td class="id">generator</td>
           <td class="muted"><code>seed-generation/generator</code></td>
-          <td class="muted">—</td>
-          <td class="muted">—</td>
+          <td class="num">15</td>
+          <td class="num">0 <span class="muted" title="ran agents without usage capture; metered floor">&dagger;</span></td>
+          <td class="num">$0.00 <span class="muted" title="ran agents without usage capture; metered floor">&dagger;</span></td>
           <td class="phase-link"><a href="/geode/self-improving/seed-generation/bundle/#/logs/2026-05-29T12-49-41-00-00_seedgen-generator_gen-2605-4-unfaithful_thinking.eval">&#x2197; viewer</a></td>
         </tr>
         <tr>
           <td class="id">proximity</td>
           <td class="muted"><code>seed-generation/proximity</code></td>
-          <td class="muted">—</td>
-          <td class="muted">—</td>
+          <td class="num">0</td>
+          <td class="num">0</td>
+          <td class="num">$0.00</td>
           <td class="phase-link"><a href="/geode/self-improving/seed-generation/bundle/#/logs/2026-05-29T12-49-41-00-00_seedgen-proximity_gen-2605-4-unfaithful_thinking.eval">&#x2197; viewer</a></td>
         </tr>
         <tr>
           <td class="id">critic</td>
           <td class="muted"><code>seed-generation/critic</code></td>
-          <td class="muted">—</td>
-          <td class="muted">—</td>
+          <td class="num">0</td>
+          <td class="num">0</td>
+          <td class="num">$0.00</td>
           <td class="phase-link"><a href="/geode/self-improving/seed-generation/bundle/#/logs/2026-05-29T12-49-41-00-00_seedgen-critic_gen-2605-4-unfaithful_thinking.eval">&#x2197; viewer</a></td>
         </tr>
         <tr>
           <td class="id">pilot</td>
           <td class="muted"><code>seed-generation/pilot</code></td>
-          <td class="muted">—</td>
-          <td class="muted">—</td>
+          <td class="num">11</td>
+          <td class="num">0 <span class="muted" title="ran agents without usage capture; metered floor">&dagger;</span></td>
+          <td class="num">$0.00 <span class="muted" title="ran agents without usage capture; metered floor">&dagger;</span></td>
           <td class="phase-link"><a href="/geode/self-improving/seed-generation/bundle/#/logs/2026-05-29T12-49-41-00-00_seedgen-pilot_gen-2605-4-unfaithful_thinking.eval">&#x2197; viewer</a></td>
         </tr>
         <tr>
           <td class="id">ranker</td>
           <td class="muted"><code>seed-generation/ranker</code></td>
-          <td class="muted">—</td>
-          <td class="muted">—</td>
+          <td class="num">117</td>
+          <td class="num">0</td>
+          <td class="num">$2.88</td>
           <td class="phase-link"><a href="/geode/self-improving/seed-generation/bundle/#/logs/2026-05-29T12-49-41-00-00_seedgen-ranker_gen-2605-4-unfaithful_thinking.eval">&#x2197; viewer</a></td>
         </tr>
         <tr>
           <td class="id">evolver</td>
           <td class="muted"><code>seed-generation/evolver</code></td>
-          <td class="muted">—</td>
-          <td class="muted">—</td>
+          <td class="num">5</td>
+          <td class="num">0 <span class="muted" title="ran agents without usage capture; metered floor">&dagger;</span></td>
+          <td class="num">$0.00 <span class="muted" title="ran agents without usage capture; metered floor">&dagger;</span></td>
           <td class="phase-link"><a href="/geode/self-improving/seed-generation/bundle/#/logs/2026-05-29T12-49-41-00-00_seedgen-evolver_gen-2605-4-unfaithful_thinking.eval">&#x2197; viewer</a></td>
         </tr>
         <tr>
           <td class="id">meta_reviewer</td>
           <td class="muted"><code>seed-generation/meta_reviewer</code></td>
-          <td class="muted">—</td>
-          <td class="muted">—</td>
+          <td class="num">1</td>
+          <td class="num">0 <span class="muted" title="ran agents without usage capture; metered floor">&dagger;</span></td>
+          <td class="num">$0.00 <span class="muted" title="ran agents without usage capture; metered floor">&dagger;</span></td>
           <td class="phase-link"><a href="/geode/self-improving/seed-generation/bundle/">&#x2197; viewer (run list)</a></td>
         </tr>
       </tbody>
@@ -425,6 +434,8 @@
       <dd>0</dd>
       <dt>completion_tokens</dt>
       <dd>0</dd>
+      <dt>usd (metered floor)</dt>
+      <dd>$2.88</dd>
       <dt>literature_snapshots</dt>
       <dd>0</dd>
       <dt>debate_transcripts</dt>
@@ -444,7 +455,7 @@
         <span class="chip geode">GEODE</span>self-target wrapper.
       </p>
       <p class="version-stamp">
-        Rendered against GEODE <code>v0.99.311</code> &middot; DESIGN.md schema 1 &middot; built 2026-07-12 22:07.
+        Rendered against GEODE <code>v0.99.311</code> &middot; DESIGN.md schema 1 &middot; built 2026-07-12 22:40.
         Dim subset: 22 (geode_5axes). Pipeline phases: 8. Baseline schema: v2 (PR-2).
       </p>
     </div>
