@@ -8,6 +8,7 @@ Skills used by Scaffold during GEODE development (`.claude/skills/`). Separate f
 |-------|----------|---------|
 | `geode-workflow` | workflow, scaffold, feature work, provider/model changes, GUI/computer-use, observability, verification | Evidence-first execution scaffold with progressive-disclosure references |
 | `prompt-writing` | prompt, system prompt, model-facing text, identity, You are, Fable | GEODE prompt-writing standard: metadata/behavioral clauses, no direct identity assertions |
+| `geode-distribution` | homebrew, brew, formula, tap, uvx, 배포 | Release tag → Homebrew tap bump → uv/uvx verification |
 | `geode-gitflow` | branch, git, pr, merge, commit | Gitflow strategy, PR templates, CI fix loops |
 | `geode-changelog` | changelog, release, version, release | CHANGELOG management, SemVer versioning |
 | `agent-ops-debugging` | safe default, root cause, contextvar, multi-gap | Agent-ops debugging patterns — Safe Default anti-pattern, multi-gap root cause, ContextVar DI |
