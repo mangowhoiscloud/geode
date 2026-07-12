@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .contract import ContractError, ExperimentContract
+from .contract import ContractError, ExperimentContract, _run_git_bytes
 
 CANDIDATE_FINGERPRINT_SCHEMA = "crucible.candidate-fingerprint.v1"
 CANDIDATE_FINGERPRINT_OBSERVATION_SCHEMA = "crucible.candidate-fingerprint-observation.v1"
@@ -37,17 +37,26 @@ class CandidateFingerprintStore:
     git: str
     prefix: str = "refs/crucible/candidate-fingerprints"
 
-    def _git(self, *args: str, check: bool = True) -> str:
-        result = subprocess.run(  # noqa: S603 - fixed git executable and argv
-            [self.git, *args],
-            cwd=self.repository,
-            check=False,
-            capture_output=True,
-            text=True,
+    def _run(
+        self,
+        *args: str,
+        input_bytes: bytes | None = None,
+    ) -> subprocess.CompletedProcess[bytes]:
+        """Keep the fixed Git executable boundary in one reviewed call site."""
+
+        return _run_git_bytes(
+            self.repository,
+            self.git,
+            *args,
+            input_bytes=input_bytes,
         )
+
+    def _git(self, *args: str, check: bool = True) -> str:
+        result = self._run(*args)
         if check and result.returncode:
-            raise ContractError(result.stderr.strip() or "candidate fingerprint git failure")
-        return result.stdout.strip()
+            message = result.stderr.decode("utf-8", errors="replace").strip()
+            raise ContractError(message or "candidate fingerprint git failure")
+        return result.stdout.decode("utf-8", errors="strict").strip()
 
     def fingerprint(
         self,
@@ -57,33 +66,20 @@ class CandidateFingerprintStore:
     ) -> str:
         """Bind one stable patch to the baseline and frozen measurement world."""
 
-        diff = subprocess.run(  # noqa: S603 - fixed git executable and argv
-            [
-                self.git,
-                "--no-replace-objects",
-                "diff",
-                "--no-ext-diff",
-                "--no-textconv",
-                "--binary",
-                contract.baseline_sha,
-                contract.candidate_sha,
-                "--",
-                *surfaces,
-            ],
-            cwd=self.repository,
-            check=False,
-            capture_output=True,
+        diff = self._run(
+            "--no-replace-objects",
+            "diff",
+            "--no-ext-diff",
+            "--no-textconv",
+            "--binary",
+            contract.baseline_sha,
+            contract.candidate_sha,
+            "--",
+            *surfaces,
         )
         if diff.returncode:
             raise ContractError("cannot derive the candidate patch fingerprint")
-        patch_id = subprocess.run(  # noqa: S603 - fixed git executable and argv
-            [self.git, "patch-id", "--stable"],
-            cwd=self.repository,
-            input=diff.stdout,
-            check=False,
-            capture_output=True,
-            text=False,
-        )
+        patch_id = self._run("patch-id", "--stable", input_bytes=diff.stdout)
         fields = patch_id.stdout.decode("ascii", errors="strict").split()
         if patch_id.returncode or len(fields) < 2 or _GIT_SHA.fullmatch(fields[0]) is None:
             raise ContractError("candidate patch has no stable git patch identity")
@@ -147,13 +143,7 @@ class CandidateFingerprintStore:
         encoded = (
             json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True) + "\n"
         ).encode("utf-8")
-        blob = subprocess.run(  # noqa: S603 - fixed git executable and argv
-            [self.git, "hash-object", "-w", "--stdin"],
-            cwd=self.repository,
-            input=encoded,
-            check=False,
-            capture_output=True,
-        )
+        blob = self._run("hash-object", "-w", "--stdin", input_bytes=encoded)
         if blob.returncode:
             raise ContractError("cannot persist candidate fingerprint receipt")
         object_id = blob.stdout.decode("ascii", errors="strict").strip()

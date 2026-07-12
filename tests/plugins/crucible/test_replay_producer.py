@@ -94,19 +94,14 @@ def _target_at_source_parent(
     source_parent: str,
 ) -> None:
     _git(source, "branch", "invalid-retry-baseline", source_parent)
-    executable = shutil.which("git")
-    assert executable is not None
-    subprocess.run(  # noqa: S603 - fixed git executable, fixture-owned argv
-        [
-            executable,
-            "clone",
-            "-q",
-            "--branch",
-            "invalid-retry-baseline",
-            str(source),
-            str(repository),
-        ],
-        check=True,
+    _git(
+        source,
+        "clone",
+        "-q",
+        "--branch",
+        "invalid-retry-baseline",
+        str(source),
+        str(repository),
     )
     _git(repository, "config", "user.name", "fixture")
     _git(repository, "config", "user.email", "fixture@example.invalid")
