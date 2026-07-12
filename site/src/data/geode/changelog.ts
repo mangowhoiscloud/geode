@@ -17,6 +17,11 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    "version": "0.99.306",
+    "date": "2026-07-12",
+    "body": "### Added\n\n- **GEODE ships on Homebrew, and the hero replays the install\n  (operator-directed).** New tap `mangowhoiscloud/homebrew-tap` carries a\n  `geode` formula (GitHub source tarball into an isolated python@3.12\n  virtualenv, `geode` + `geode-mcp` symlinked; `brew audit` clean, fetch and\n  sha256 verified; the same venv+pip path smoke-tested via an isolated uv\n  sandbox: `geode version` prints). The portfolio hero terminal replaces the\n  static welcome with the abridged real transcript — brew install, first\n  launch, welcome screen, first prompt — revealed line by line with\n  auto-scroll when lines stack; reduced motion renders the finished\n  transcript statically."
+  },
+  {
     "version": "0.99.305",
     "date": "2026-07-12",
     "body": "### Fixed\n\n- **Release package gate carves out `scripts/macos/`.** The gate banned the\n  whole `scripts/` prefix while `pyproject.toml` deliberately force-includes\n  the computer-use helper source (`build_computer_helper.sh`,\n  `geode_computer_helper.swift`), a runtime asset consumed by onboarding and\n  doctor; the 0.99.304 release dispatch failed on exactly this. The gate now\n  allows the `scripts/macos/` prefix and keeps banning the rest."

@@ -45,6 +45,23 @@ functional change.
 
 ---
 
+## [0.99.306] - 2026-07-12
+
+### Added
+
+- **GEODE ships on Homebrew, and the hero replays the install
+  (operator-directed).** New tap `mangowhoiscloud/homebrew-tap` carries a
+  `geode` formula (GitHub source tarball into an isolated python@3.12
+  virtualenv, `geode` + `geode-mcp` symlinked; `brew audit` clean, fetch and
+  sha256 verified; the same venv+pip path smoke-tested via an isolated uv
+  sandbox: `geode version` prints). The portfolio hero terminal replaces the
+  static welcome with the abridged real transcript — brew install, first
+  launch, welcome screen, first prompt — revealed line by line with
+  auto-scroll when lines stack; reduced motion renders the finished
+  transcript statically.
+
+---
+
 ## [0.99.305] - 2026-07-12
 
 ### Fixed
