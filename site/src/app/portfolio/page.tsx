@@ -8,7 +8,7 @@ import { Token } from "@astryxdesign/core/Token";
 import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion";
 import Image from "next/image";
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { GeodiSprite } from "@/components/geode/geodi-sprite";
 import { LocaleProvider, t, useLocale } from "@/components/geode/locale-context";
@@ -67,10 +67,57 @@ function PlayfulSprite({ scale, blink, className }: { scale?: number; blink?: bo
   );
 }
 
-/* ---------------- terminal: the product moment --------------------------- */
+/* ---------------- terminal: install-to-prompt, abridged ------------------ */
+
+/**
+ * The hero terminal replays the real path in: brew install, first launch,
+ * the welcome screen, the first prompt. Lines reveal on a timer and the
+ * body auto-scrolls when they stack (operator direction 2026-07-12);
+ * reduced motion renders the finished transcript statically.
+ */
+// Transcribed from a real `brew install mangowhoiscloud/tap/geode` run
+// (formula: mangowhoiscloud/homebrew-tap, 2026-07-12), abridged.
+const INSTALL_LINES = [
+  { kind: "cmd" as const, text: "brew install mangowhoiscloud/tap/geode" },
+  { kind: "out" as const, text: "==> Fetching downloads for: geode" },
+  { kind: "out" as const, text: "==> Installing geode from mangowhoiscloud/tap" },
+  { kind: "cmd" as const, text: "geode" },
+  { kind: "welcome" as const, text: "" },
+  { kind: "prompt" as const, text: "" },
+];
 
 function TerminalMock() {
   const locale = useLocale();
+  const reduceMotion = useReducedMotion();
+  const [visibleCount, setVisibleCount] = useState(reduceMotion ? INSTALL_LINES.length : 0);
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (reduceMotion) return;
+    let line = 0;
+    let timer: number;
+    const tick = () => {
+      line += 1;
+      setVisibleCount(line);
+      if (line < INSTALL_LINES.length) {
+        timer = window.setTimeout(tick, line === 4 ? 900 : 620);
+      } else {
+        timer = window.setTimeout(() => {
+          line = 0;
+          setVisibleCount(0);
+          timer = window.setTimeout(tick, 700);
+        }, 5200);
+      }
+    };
+    timer = window.setTimeout(tick, 700);
+    return () => window.clearTimeout(timer);
+  }, [reduceMotion]);
+
+  useEffect(() => {
+    const body = bodyRef.current;
+    if (body) body.scrollTop = body.scrollHeight;
+  }, [visibleCount]);
+
   return (
     <figure className="mx-auto w-full max-w-2xl">
       <div className="overflow-hidden rounded-lg border border-[color-mix(in_srgb,#FFF0F8_35%,transparent)] bg-[var(--paper-deep)] text-left">
@@ -82,36 +129,53 @@ function TerminalMock() {
           </span>
           <span className="ml-2 font-mono text-[11px] text-[var(--ink-3)]">geode</span>
         </div>
-        <div className="px-5 py-5 sm:px-7">
-          <div className="flex items-center gap-6">
-            <PlayfulSprite scale={5} blink className="geodi-bob shrink-0" />
-            <div className="min-w-0 font-mono text-[12px] leading-[1.9] sm:text-[13px]">
-              <p>
-                <span className="text-[var(--acc-artifact)]">◆</span>{" "}
-                <span className="font-semibold text-[var(--acc-artifact)]">GEODE</span>{" "}
-                <span className="text-[var(--ink-2)]">v{GEODE_SOT.version}</span>
+        <div ref={bodyRef} className="h-[248px] overflow-hidden px-5 py-4 sm:px-7">
+          {INSTALL_LINES.slice(0, visibleCount).map((line, i) => {
+            if (line.kind === "cmd") {
+              return (
+                <p key={i} className="py-[3px] font-mono text-[12px] sm:text-[13px]">
+                  <span className="text-[var(--acc-artifact)]">$</span>{" "}
+                  <span className="text-[var(--ink-1)]">{line.text}</span>
+                </p>
+              );
+            }
+            if (line.kind === "out") {
+              return (
+                <p key={i} className="py-[3px] font-mono text-[12px] text-[var(--ink-3)] sm:text-[13px]">
+                  {line.text}
+                </p>
+              );
+            }
+            if (line.kind === "welcome") {
+              return (
+                <div key={i} className="flex items-center gap-6 py-3">
+                  <PlayfulSprite scale={5} blink className="geodi-bob shrink-0" />
+                  <div className="min-w-0 font-mono text-[12px] leading-[1.9] sm:text-[13px]">
+                    <p>
+                      <span className="text-[var(--acc-artifact)]">◆</span>{" "}
+                      <span className="font-semibold text-[var(--acc-artifact)]">GEODE</span>{" "}
+                      <span className="text-[var(--ink-2)]">v{GEODE_SOT.version}</span>
+                    </p>
+                    <p className="text-[var(--ink-3)]">claude-opus-4-8 · ~/workspace</p>
+                    <p className="text-[var(--ink-3)]">/help for commands · type naturally</p>
+                  </div>
+                </div>
+              );
+            }
+            return (
+              <p key={i} className="border-t border-[var(--rule-soft)] pt-3 font-mono text-[12px] sm:text-[13px]">
+                <span className="text-[var(--acc-artifact)]">&gt;</span>{" "}
+                <span className="text-[var(--ink-2)]">
+                  {t(locale, "이 레포 점검하고 릴리스 블로커 요약해줘", "inspect this repo and summarize release blockers")}
+                </span>
+                <span className="geodi-caret ml-1 inline-block h-[13px] w-[7px] translate-y-[2px] bg-[var(--acc-artifact)]" />
               </p>
-              <p className="text-[var(--ink-3)]">claude-opus-4-8 · ~/workspace/geode</p>
-              <p className="text-[var(--ink-3)]">/help for commands · type naturally</p>
-            </div>
-          </div>
-          <div className="mt-4 border-t border-[var(--rule-soft)] pt-4 font-mono text-[12px] sm:text-[13px]">
-            <p className="break-words">
-              <span className="text-[var(--acc-artifact)]">&gt;</span>{" "}
-              <span className="text-[var(--ink-2)]">
-                {t(
-                  locale,
-                  "이 레포 점검하고 릴리스 블로커 요약해줘",
-                  "inspect this repo and summarize release blockers"
-                )}
-              </span>
-              <span className="geodi-caret ml-1 inline-block h-[13px] w-[7px] translate-y-[2px] bg-[var(--acc-artifact)]" />
-            </p>
-          </div>
+            );
+          })}
         </div>
       </div>
       <figcaption className="mx-auto mt-3 w-fit rounded bg-[#FFF0F8] px-3 py-1 text-center font-mono text-[10.5px] text-[#C2447F]">
-        core/ui/mascot.py · geodi_art.py · {t(locale, "CLI 웰컴 스크린을 그대로 옮긴 화면", "the CLI welcome screen, transcribed")}
+        {t(locale, "brew 설치에서 첫 프롬프트까지, 실행 축약본", "from brew install to the first prompt, abridged")}
       </figcaption>
     </figure>
   );
