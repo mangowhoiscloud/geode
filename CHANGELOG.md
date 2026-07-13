@@ -45,6 +45,16 @@ functional change.
 
 ---
 
+## [0.99.326] - 2026-07-14
+
+### Fixed
+
+- **Meta-harness catalog wording deslop.** Removed the classifier word
+  "axis" (KO "축") from the `reference/meta-harness-catalog` page and its
+  sitemap summary per operator slop feedback: section headings now use the
+  bare names ("1. Context Control"), and prose refers to the five sections
+  by name. No structural or data changes.
+
 ## [0.99.325] - 2026-07-13
 
 ### Added
