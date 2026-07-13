@@ -84,7 +84,7 @@ const installChannels: {
       { kind: "out", text: "==> Installing geode from mangowhoiscloud/tap" },
       { kind: "cmd", text: "geode" },
       { kind: "welcome", text: "" },
-      { kind: "prompt", text: "" },
+      { kind: "prompt", text: "Hello World" },
     ],
   },
   {
@@ -138,7 +138,6 @@ const CMD_SETTLE_MS = 380;
 const REPLAY_MS = 4800;
 
 function InstallTerminal({ lines }: { lines: InstallLine[] }) {
-  const locale = useLocale();
   const reduceMotion = useReducedMotion();
   const [lineIndex, setLineIndex] = useState(reduceMotion ? lines.length : 0);
   const [charCount, setCharCount] = useState(0);
@@ -163,10 +162,14 @@ function InstallTerminal({ lines }: { lines: InstallLine[] }) {
         return;
       }
       const current = lines[line];
-      if (current.kind === "cmd" && chars < current.text.length) {
+      if ((current.kind === "cmd" || current.kind === "prompt") && chars < current.text.length) {
+        // The prompt line sits as a bare "> " beat first, then types in
+        // (operator direction 2026-07-13: end on the arrow; if the viewer
+        // is still watching, type a Hello World).
+        const delay = current.kind === "prompt" && chars === 0 ? 1600 : TYPE_MS;
         chars += 1;
         setCharCount(chars);
-        timer = window.setTimeout(step, TYPE_MS);
+        timer = window.setTimeout(step, delay);
         return;
       }
       line += 1;
@@ -228,12 +231,11 @@ function InstallTerminal({ lines }: { lines: InstallLine[] }) {
       );
     }
     if (line.kind === "prompt") {
+      const shown = partial ? line.text.slice(0, charCount) : line.text;
       return (
         <p key={i} className="border-t border-[var(--rule-soft)] pt-3 font-mono text-[12px] sm:text-[13px]">
           <span className="text-[var(--acc-artifact)]">&gt;</span>{" "}
-          <span className="text-[var(--ink-2)]">
-            {t(locale, "이 레포 점검하고 릴리스 블로커 요약해줘", "inspect this repo and summarize release blockers")}
-          </span>
+          <span className="text-[var(--ink-2)]">{shown}</span>
           <span className="geodi-caret ml-1 inline-block h-[13px] w-[7px] translate-y-[2px] bg-[var(--acc-artifact)]" />
         </p>
       );
@@ -257,7 +259,8 @@ function InstallTerminal({ lines }: { lines: InstallLine[] }) {
       </div>
       <div ref={bodyRef} className="h-[248px] overflow-hidden px-5 py-4 sm:px-7">
         {lines.slice(0, lineIndex).map((line, i) => renderLine(line, i, false))}
-        {lineIndex < lines.length && lines[lineIndex].kind === "cmd" && charCount > 0
+        {lineIndex < lines.length &&
+        ((lines[lineIndex].kind === "cmd" && charCount > 0) || lines[lineIndex].kind === "prompt")
           ? renderLine(lines[lineIndex], lineIndex, true)
           : null}
       </div>
