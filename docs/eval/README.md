@@ -70,11 +70,12 @@ Current public routes:
 
 | Route | Role |
 |---|---|
-| `/docs/benchmarks/mcpmark/filesystem-easy` | reference detailed run record |
-| `/docs/benchmarks/mcpmark/verified-available` | MCPMark standard filesystem/postgres/github available-services run |
-| `/docs/benchmarks/mcpmark/service-matrix` | MCP task counts, credentials, infra blockers, adapter coverage |
-| `/docs/benchmarks/tau2/mock-smoke` | single mock verifier-backed run |
-| `/docs/benchmarks/tau2/domain-smoke` | multi-domain smoke matrix and caveats |
+| `/docs/benchmarks/mcpmark` | MCPMark: Verified available-services headline, service coverage/blockers, run ledger, raw-log links |
+| `/docs/benchmarks/tau2` | Tau2: native user-simulator headline, run ledger, raw-log links |
+
+Raw run logs live in the `geode-eval-artifacts` repository
+(https://github.com/mangowhoiscloud/geode-eval-artifacts); each docs page
+links the matching directory.
 
 ## 의존성 그래프
 
