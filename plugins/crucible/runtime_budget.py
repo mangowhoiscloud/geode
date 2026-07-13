@@ -12,9 +12,11 @@ not a sample from the assay's semantic runtime distribution.  Reports contain
 only counts, digests, and aggregate timings—never task identities or rows.
 
 The first campaign under a new evaluator digest has no matching pilot by
-definition.  ``contract_ceiling`` mode closes that bootstrap gap without
-inventing observations: it multiplies the frozen assay timeout by the exact
-paired row count, then adds preregistered evaluator and campaign overhead.
+definition. ``contract_ceiling`` mode closes that bootstrap gap for bounded
+rows without inventing observations: it multiplies the frozen assay timeout by
+the exact paired row count, then adds preregistered evaluator and campaign
+overhead. ``fixed_experiment_wall`` instead mirrors autoresearch: rows have no
+individual wall cap and one preregistered experiment wall owns termination.
 """
 
 from __future__ import annotations
@@ -36,6 +38,7 @@ RUNTIME_SPEC_SCHEMA = "crucible.runtime-budget-spec.v1"
 RUNTIME_REPORT_SCHEMA = "crucible.runtime-budget-report.v1"
 RUNTIME_METHOD = "opaque-family-block-upper-bootstrap.v1"
 RUNTIME_CEILING_METHOD = "contract-timeout-ceiling.v1"
+RUNTIME_FIXED_WALL_METHOD = "fixed-experiment-wall.v1"
 RUNTIME_ACCOUNTING_METHOD = "sum-finalized-simulation-elapsed.v1"
 
 _SHA256 = re.compile(r"[0-9a-f]{64}")
@@ -188,7 +191,7 @@ def _nearest_rank(values: Sequence[float], probability: float) -> float:
 
 def _wall_admission(
     *,
-    required_experiment_wall_seconds: int,
+    required_experiment_wall_seconds: float,
     campaign_overhead_seconds: float,
     configured_experiment_wall_seconds: float,
     configured_campaign_wall_seconds: float | None,
@@ -271,6 +274,53 @@ def audit_runtime_budget(
         "paired_row_count": paired_row_count,
     }
     mode = specification.get("mode", "pilot_bootstrap")
+    if mode == "fixed_experiment_wall":
+        _require_fields(
+            specification,
+            "runtime_audit",
+            {
+                "campaign_overhead_seconds",
+                "mode",
+                "schema",
+                "source",
+            },
+        )
+        if "timeout" not in assay_config or assay_config.get("timeout") is not None:
+            raise ContractError("fixed_experiment_wall requires assay_config.timeout=null")
+        source = _text(specification.get("source"), "runtime_audit.source")
+        campaign_overhead = _nonnegative_number(
+            specification.get("campaign_overhead_seconds"),
+            "runtime_audit.campaign_overhead_seconds",
+        )
+        fixed_experiment_wall = _positive_number(
+            configured_experiment_wall_seconds,
+            "configured_experiment_wall_seconds",
+        )
+        admission, passes = _wall_admission(
+            required_experiment_wall_seconds=fixed_experiment_wall,
+            campaign_overhead_seconds=campaign_overhead,
+            configured_experiment_wall_seconds=configured_experiment_wall_seconds,
+            configured_campaign_wall_seconds=configured_campaign_wall_seconds,
+        )
+        fixed_payload: dict[str, Any] = {
+            "schema": RUNTIME_REPORT_SCHEMA,
+            "method": RUNTIME_FIXED_WALL_METHOD,
+            "scope": "paired_baseline_candidate_wall_envelope",
+            "source": source,
+            "bindings": bindings,
+            "design": design,
+            "fixed_wall": {
+                "timeout_seconds_per_row": None,
+                "experiment_wall_seconds": fixed_experiment_wall,
+                "campaign_overhead_seconds": campaign_overhead,
+            },
+            "admission": admission,
+            "passes": passes,
+        }
+        return {
+            **fixed_payload,
+            "runtime_audit_id": _canonical_hash(fixed_payload),
+        }
     if mode == "contract_ceiling":
         _require_fields(
             specification,
@@ -335,7 +385,9 @@ def audit_runtime_budget(
             "runtime_audit_id": _canonical_hash(ceiling_payload),
         }
     if mode != "pilot_bootstrap":
-        raise ContractError("runtime_audit.mode must be contract_ceiling or pilot_bootstrap")
+        raise ContractError(
+            "runtime_audit.mode must be contract_ceiling, fixed_experiment_wall, or pilot_bootstrap"
+        )
 
     pilot_fields = {
         "admission_quantile",
@@ -475,6 +527,7 @@ def audit_runtime_budget(
 __all__ = [
     "RUNTIME_ACCOUNTING_METHOD",
     "RUNTIME_CEILING_METHOD",
+    "RUNTIME_FIXED_WALL_METHOD",
     "RUNTIME_METHOD",
     "RUNTIME_PILOT_SCHEMA",
     "RUNTIME_REPORT_SCHEMA",

@@ -896,6 +896,30 @@ def test_tau2_command_is_fully_derived_from_frozen_subscription_config(tmp_path:
     assert command[command.index("--max-retries") + 1] == "0"
     assert command[command.index("--agent-max-rounds") + 1] == "0"
     assert command[command.index("--user-max-rounds") + 1] == "0"
+    assert command[command.index("--timeout") + 1] == "600.0"
+
+
+def test_tau2_command_omits_per_simulation_timeout_when_contract_disables_it(
+    tmp_path: Path,
+) -> None:
+    payload = _contract().to_dict()
+    payload.pop("contract_id")
+    assay = dict(payload["assay_config"])
+    assay["timeout"] = None
+    payload["assay_config"] = assay
+    contract = ExperimentContract.from_mapping(payload)
+
+    command = tau2_command(
+        contract,
+        arm="candidate",
+        checkout=tmp_path / "candidate",
+        harness_root=tmp_path / "harness",
+        contract_path=tmp_path / "contract.json",
+        snapshot_dir=tmp_path / "snapshots",
+        run_id="fixture-unbounded-candidate",
+    )
+
+    assert "--timeout" not in command
 
 
 def test_tau2_test_command_binds_the_frozen_train_parent(tmp_path: Path) -> None:

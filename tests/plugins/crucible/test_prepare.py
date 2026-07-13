@@ -132,6 +132,15 @@ def _runtime_ceiling() -> dict[str, object]:
     }
 
 
+def _fixed_experiment_wall() -> dict[str, object]:
+    return {
+        "schema": "crucible.runtime-budget-spec.v1",
+        "mode": "fixed_experiment_wall",
+        "source": "fixture preregistered experiment wall",
+        "campaign_overhead_seconds": 10.0,
+    }
+
+
 def test_prepare_emits_a_config_the_loop_loader_accepts(tmp_path: Path) -> None:
     config, baseline = _config(tmp_path)
     report = prepare_campaign(_write_spec(tmp_path, config))
@@ -238,6 +247,32 @@ def test_prepare_binds_contract_ceiling_before_a_pilot_exists(tmp_path: Path) ->
     assert runtime["required_campaign_wall_seconds"] == 90
     saved = json.loads(Path(runtime["path"]).read_text(encoding="utf-8"))
     assert saved["method"] == "contract-timeout-ceiling.v1"
+
+
+def test_prepare_binds_unbounded_rows_to_the_fixed_experiment_wall(tmp_path: Path) -> None:
+    config, _baseline = _config(tmp_path)
+    budget = {**config.train_plan.payload["budget"], "max_wall_seconds": 80.0}
+    limits = {**config.limits.to_dict(), "max_wall_seconds": 90.0}
+    assay = {**config.train_plan.payload["assay_config"], "timeout": None}
+    report = prepare_campaign(
+        _write_spec(
+            tmp_path,
+            config,
+            assay_config=assay,
+            budget=budget,
+            limits=limits,
+            runtime_audit=_fixed_experiment_wall(),
+        )
+    )
+
+    runtime = report["runtime_audit"]
+    assert runtime["passes"] is True
+    assert runtime["required_experiment_wall_seconds"] == 80.0
+    assert runtime["required_campaign_wall_seconds"] == 90
+    saved = json.loads(Path(runtime["path"]).read_text(encoding="utf-8"))
+    assert saved["method"] == "fixed-experiment-wall.v1"
+    prepared = SupervisorConfig.load(Path(report["config_path"]))
+    assert prepared.train_plan.payload["assay_config"]["timeout"] is None
 
 
 def test_prepare_rejects_short_runtime_budget_before_emitting_config(tmp_path: Path) -> None:

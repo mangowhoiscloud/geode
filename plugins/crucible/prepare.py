@@ -24,9 +24,9 @@ The spec may carry a ``curation`` block instead of a ``pack_file`` — the pack
 is then curated as part of preparation — and callers may pass the remaining
 window budget to fold the launch-capacity verdict (``crucible.preflight``)
 into the report. Sealed plans keep their own promotion-time lifecycle and are
-deliberately out of scope here. An optional runtime audit admits either a
-digest-matched pilot bootstrap or the frozen contract timeout ceiling before
-the config is emitted.
+deliberately out of scope here. An optional runtime audit admits a
+digest-matched pilot bootstrap, a frozen bounded-row contract ceiling, or an
+uncensored fixed experiment wall before the config is emitted.
 """
 
 from __future__ import annotations

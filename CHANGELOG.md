@@ -45,6 +45,17 @@ functional change.
 
 ---
 
+## [Unreleased]
+
+### Changed
+
+- **Crucible tau2 rows can run without an arbitrary semantic wall cap.** A
+  frozen assay now accepts an explicit `timeout: null`, omits tau2's
+  per-simulation timeout, and keeps termination authority at the finite
+  experiment/campaign wall. Prepare can bind this policy through
+  `fixed_experiment_wall` runtime provenance; positive row timeouts remain
+  supported for deliberately censored assays.
+
 ## [0.99.326] - 2026-07-14
 
 ### Fixed

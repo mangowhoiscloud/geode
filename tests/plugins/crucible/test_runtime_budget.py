@@ -145,6 +145,39 @@ def _ceiling_audit(
     )
 
 
+def _fixed_wall_specification(
+    *,
+    campaign_overhead_seconds: float = 1_000.0,
+) -> dict[str, object]:
+    return {
+        "schema": "crucible.runtime-budget-spec.v1",
+        "mode": "fixed_experiment_wall",
+        "source": "preregistered experiment-wide wall budget",
+        "campaign_overhead_seconds": campaign_overhead_seconds,
+    }
+
+
+def _fixed_wall_audit(
+    *,
+    experiment_wall: float = 33_000.0,
+    campaign_wall: float | None = 34_000.0,
+    timeout: object = None,
+) -> dict:
+    return audit_runtime_budget(
+        tasks=_tasks(),
+        trials_per_task=3,
+        evaluator_sha256="a" * 64,
+        harness_sha256="b" * 64,
+        agent_route="agent-route",
+        user_route="user-route",
+        assay_config={"schema": "fixture.v1", "timeout": timeout},
+        configured_experiment_wall_seconds=experiment_wall,
+        configured_campaign_wall_seconds=campaign_wall,
+        specification=_fixed_wall_specification(),
+        basis_root=Path("."),
+    )
+
+
 def _verified_arm(
     tmp_path: Path,
     *,
@@ -220,6 +253,33 @@ def test_contract_ceiling_admits_bootstrap_campaign_without_a_pilot() -> None:
     assert report["admission"]["required_experiment_wall_seconds"] == 33_000
     assert report["admission"]["required_campaign_wall_seconds"] == 34_000
     assert "pilot_sha256" not in report
+
+
+def test_fixed_experiment_wall_admits_rows_without_a_semantic_timeout() -> None:
+    report = _fixed_wall_audit()
+
+    assert report["passes"] is True
+    assert report["method"] == "fixed-experiment-wall.v1"
+    assert report["fixed_wall"] == {
+        "timeout_seconds_per_row": None,
+        "experiment_wall_seconds": 33_000.0,
+        "campaign_overhead_seconds": 1_000.0,
+    }
+    assert report["admission"]["required_experiment_wall_seconds"] == 33_000.0
+    assert report["admission"]["required_campaign_wall_seconds"] == 34_000
+
+
+def test_fixed_experiment_wall_rejects_a_hidden_row_timeout() -> None:
+    with pytest.raises(ContractError, match=r"requires assay_config\.timeout=null"):
+        _fixed_wall_audit(timeout=600.0)
+
+
+def test_fixed_experiment_wall_rejects_short_campaign_wall() -> None:
+    report = _fixed_wall_audit(campaign_wall=33_999.0)
+
+    assert report["passes"] is False
+    assert report["admission"]["experiment_passes"] is True
+    assert report["admission"]["campaign_passes"] is False
 
 
 def test_contract_ceiling_rejects_zero_overhead_campaign_budget() -> None:

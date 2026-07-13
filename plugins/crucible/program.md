@@ -66,6 +66,9 @@ and fail closed when prose and bytes disagree.
 - `ExperimentContract` binds the parent and candidate revisions, evaluator,
   harness, assay, ordered task pack, mutation, changed-line cap, and promotion
   rule. Candidate and evaluator paths cannot overlap.
+- A tau2 assay declares `timeout` explicitly. `null` removes the stochastic
+  row-level wall cap; the frozen experiment and campaign wall budgets still
+  terminate the evaluator and remain part of contract identity.
 - Evidence requires exact task/trial coverage. Infrastructure rows are never
   performance observations, and partial coverage never receives a score.
 - Train `KEEP` advances only a loop-local search ref. A disjoint one-shot sealed
@@ -105,19 +108,24 @@ and fail closed when prose and bytes disagree.
    opaque power report, and emits no launchable config when any preregistered
    scenario misses `minimum_power`. Audit the opaque hidden pack separately
    with the packaged `power-audit` command before candidate generation.
-4. Run the quota-window preflight. `cap_fit` and `history_fit` are capacity
+4. Bind runtime ownership at the experiment boundary. Use
+   `fixed_experiment_wall` with `assay_config.timeout=null` when rows must not
+   be censored individually; use `contract_ceiling` only when a positive row
+   timeout is intentionally part of the assay. Both retain the supervisor's
+   finite experiment and campaign wall budgets.
+5. Run the quota-window preflight. `cap_fit` and `history_fit` are capacity
    estimates; `defer` makes `prepare` exit 3 and blocks chained launch. None is
    a provider guarantee.
-5. Run the supervisor. Baseline executes first, and an unreachable promotion
+6. Run the supervisor. Baseline executes first, and an unreachable promotion
    rejects the candidate arm without spending it.
-6. With `CRUCIBLE_ROW_CACHE_ROOT` explicitly allowlisted, identity-proven,
+7. With `CRUCIBLE_ROW_CACHE_ROOT` explicitly allowlisted, identity-proven,
    infrastructure-clean semantic rows may be reused. Missing tasks run again
    and exact full coverage remains mandatory. A fail-fast infrastructure stop
    emits structured INVALID evidence and observed marginal usage, allowing a
    new campaign to replay the exact candidate without making the interrupted
    row score-bearing. Historical evidence usage stays attached to the verdict;
    only fresh marginal usage consumes the current campaign budget.
-7. Build a train bundle only after `KEEP`. Burn the sealed test attempt once,
+8. Build a train bundle only after `KEEP`. Burn the sealed test attempt once,
    then require a separate human-reviewed core promotion change.
 
 ## Dynamic feedback

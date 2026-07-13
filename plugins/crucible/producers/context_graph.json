@@ -127,13 +127,13 @@
       "id": "file:plugins/crucible/program.md",
       "filePath": "plugins/crucible/program.md",
       "name": "Crucible program",
-      "summary": "Centralizes experimentation, constraints, preferences, setup, power admission, deduplication, infrastructure-safe checkpoint reuse, usage accounting, and the closed dynamic-feedback boundary; only its candidate_program section is model-facing.",
+      "summary": "Centralizes experimentation, constraints, preferences, setup, power and runtime admission, deduplication, infrastructure-safe checkpoint reuse, usage accounting, and the closed dynamic-feedback boundary; only its candidate_program section is model-facing.",
       "tags": [
         "crucible",
         "producer",
         "program"
       ],
-      "contentSha256": "89da5d165957532038c02d93a3e1c9d0bce867103545ce20e49ab2f652dbbc81"
+      "contentSha256": "7d0ce26e9353d2c03e4d7262bdf48a60559b08685c4b7b115c57169b703a64d6"
     },
     {
       "id": "file:plugins/crucible/producers/replay.py",

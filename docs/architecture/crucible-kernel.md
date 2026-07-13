@@ -1281,8 +1281,12 @@ overhead, and explicit headroom to derive the minimum wall envelope; it writes
 `runtime.json`, stamps `runtime_audit_id` into `prepared_by`, and refuses to
 emit a launch config when either the paired-experiment or campaign wall is too
 short. Before the first digest-matched pilot exists, `contract_ceiling` mode
-derives the envelope from the frozen per-row timeout plus explicit setup and
-campaign overhead; it does not fabricate pilot observations. Semantic
+derives the envelope from an intentionally bounded row timeout plus explicit
+setup and campaign overhead; it does not fabricate pilot observations. For
+uncensored stochastic rows, `fixed_experiment_wall` records `timeout=null` and
+places termination authority at the frozen experiment/campaign wall, matching
+autoresearch's experiment-wide budget rather than imposing a per-sample wall.
+Semantic
 timeouts remain runtime samples. Infrastructure interruptions are reported but
 excluded, and the pilot accounting method must sum finalized simulation
 elapsed time, so the old maximum-single-row accounting bug cannot serve as a
@@ -1302,10 +1306,12 @@ campaign budgets, leaving no setup or producer allowance. A finalized row
 carried an HTTP 500 infrastructure termination, so the run was manually
 stopped once its verdict was known to be `INVALID`.
 
-The first campaign under the revised evaluator therefore uses the strict
-pilot-free ceiling: `54 × 600s` rows plus `600s` evaluator setup gives
+The first campaign under the revised evaluator therefore used the strict
+pilot-free ceiling: `54 × 600s` rows plus `600s` evaluator setup gave
 `33,000s` for the paired experiment, and the existing `1,000s` outer allowance
-gives `34,000s` for the campaign. The 6-family × 2-trial sealed design has 24
+gave `34,000s` for the campaign. That r35 contract remains immutable. Later
+campaigns may set the row timeout to `null` while retaining a finite fixed
+experiment wall. The 6-family × 2-trial sealed design has 24
 paired rows; its conservative unopened-pack allowance remains `24 × 600s`
 plus `600s` setup, or `15,000s`. Once one clean digest-matched paired run
 exists, the block-bootstrap report replaces these ceiling values with measured

@@ -178,16 +178,19 @@ class Tau2AssayAdapter:
     def validate_config(self, config: Mapping[str, Any]) -> None:
         if config.get("schema") != self.schema:
             raise ContractError(f"tau2 assay schema must be {self.schema!r}")
+        if "timeout" not in config:
+            raise ContractError(
+                "contract-backed tau2 evidence requires an explicit timeout field; "
+                "null disables the per-simulation wall cap"
+            )
         timeout = config.get("timeout")
-        if (
+        if timeout is not None and (
             isinstance(timeout, bool)
             or not isinstance(timeout, (int, float))
             or not math.isfinite(timeout)
             or timeout <= 0
         ):
-            raise ContractError(
-                "contract-backed tau2 evidence requires a positive per-simulation timeout"
-            )
+            raise ContractError("tau2 assay timeout must be null or a positive finite number")
         user = _mapping(config.get("user"), "assay_config.user")
         implementation = str(user.get("implementation") or "")
         owner = self.user_runtime_owner(implementation)
