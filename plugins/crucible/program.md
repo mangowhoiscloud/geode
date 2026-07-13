@@ -67,8 +67,10 @@ and fail closed when prose and bytes disagree.
   harness, assay, ordered task pack, mutation, changed-line cap, and promotion
   rule. Candidate and evaluator paths cannot overlap.
 - A tau2 assay declares `timeout` explicitly. `null` removes the stochastic
-  row-level wall cap; the frozen experiment and campaign wall budgets still
-  terminate the evaluator and remain part of contract identity.
+  row-level wall cap; one monotonic experiment deadline gives baseline the
+  current remainder and candidate whatever actually remains. The runtime
+  receipt binds both allocations, censoring, and measured cleanup to the exact
+  contract regime. The finite campaign wall remains the outer process bound.
 - Evidence requires exact task/trial coverage. Infrastructure rows are never
   performance observations, and partial coverage never receives a score.
 - Train `KEEP` advances only a loop-local search ref. A disjoint one-shot sealed
@@ -109,15 +111,24 @@ and fail closed when prose and bytes disagree.
    scenario misses `minimum_power`. Audit the opaque hidden pack separately
    with the packaged `power-audit` command before candidate generation.
 4. Bind runtime ownership at the experiment boundary. Use
-   `fixed_experiment_wall` with `assay_config.timeout=null` when rows must not
-   be censored individually; use `contract_ceiling` only when a positive row
-   timeout is intentionally part of the assay. Both retain the supervisor's
-   finite experiment and campaign wall budgets.
+   `operational_deadline` with `assay_config.timeout=null` only with explicit
+   `nonzero_clean_timeout` risk acceptance. It is an operator deadline, not a
+   confidence bound. Use `contract_ceiling` only when a positive row timeout is
+   intentionally part of the assay; that envelope guarantees process
+   termination, not clean completion, and sums bounded rows, fixed setup, and
+   cleanup terms without an arbitrary headroom multiplier. A `pilot_bootstrap` admission requires a
+   completed uncensored `runtime-pilot.v2` from the exact runtime regime. Build
+   each pilot with its verified runtime receipt so a shortened live wall cannot
+   masquerade as the frozen target wall. Treat summed row elapsed as an
+   active-compute planning model; only completed matching-cycle evaluator wall
+   observations may qualify a Wilks upper tolerance bound.
 5. Run the quota-window preflight. `cap_fit` and `history_fit` are capacity
    estimates; `defer` makes `prepare` exit 3 and blocks chained launch. None is
    a provider guarantee.
-6. Run the supervisor. Baseline executes first, and an unreachable promotion
-   rejects the candidate arm without spending it.
+6. Run the supervisor. Baseline executes first against the shared deadline;
+   candidate receives its actual remainder. An unreachable promotion rejects
+   the candidate arm without spending it. A clean timeout is recorded as a
+   right-censored lower bound and never reused as an exact runtime duration.
 7. With `CRUCIBLE_ROW_CACHE_ROOT` explicitly allowlisted, identity-proven,
    infrastructure-clean semantic rows may be reused. Missing tasks run again
    and exact full coverage remains mandatory. A fail-fast infrastructure stop
@@ -127,6 +138,10 @@ and fail closed when prose and bytes disagree.
    only fresh marginal usage consumes the current campaign budget.
 8. Build a train bundle only after `KEEP`. Burn the sealed test attempt once,
    then require a separate human-reviewed core promotion change.
+9. Treat model p95/p99 as forecast markers until exact matching full-cycle
+   observations exist. `runtime-forecast` derives the matching count from the
+   regime IDs; operators cannot increment it manually. Distribution-free
+   certification counts independent completed target cycles, not rows.
 
 ## Dynamic feedback
 

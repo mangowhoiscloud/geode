@@ -25,20 +25,29 @@ from pathlib import Path
 from typing import Any
 
 from .artifacts import DEFAULT_JSON_LIMIT_BYTES
-from .contract import ContractError
+from .contract import ContractError, ExperimentContract
 from .runtime_budget import (
+    LEGACY_RUNTIME_PILOT_SCHEMA,
     RUNTIME_ACCOUNTING_METHOD,
     RUNTIME_PILOT_SCHEMA,
     runtime_pilot_block_rates,
+    validate_runtime_cycle_observation,
+)
+from .runtime_identity import (
+    canonical_runtime_hash,
+    runtime_bindings,
+    runtime_design,
+    runtime_regime,
+    runtime_regime_id,
 )
 
-RUNTIME_FORECAST_SCHEMA = "crucible.runtime-forecast.v1"
-RUNTIME_FORECAST_METHOD = "opaque-campaign-family-upper-bootstrap.v1"
+RUNTIME_FORECAST_SCHEMA = "crucible.runtime-forecast.v2"
+RUNTIME_FORECAST_METHOD = "opaque-campaign-family-upper-bootstrap.v2"
 
 _MAX_SIMULATIONS = 200_000
 _MAX_EXACT_COMPOSITIONS = 200_000
 _SHA256 = re.compile(r"[0-9a-f]{64}")
-_PILOT_FIELDS = {
+_PILOT_V1_FIELDS = {
     "accounting_method",
     "agent_route",
     "assay_config_sha256",
@@ -48,8 +57,14 @@ _PILOT_FIELDS = {
     "schema",
     "user_route",
 }
+_PILOT_V2_FIELDS = _PILOT_V1_FIELDS | {
+    "cycle_observation",
+    "runtime_regime",
+    "runtime_regime_id",
+    "source_contract_id",
+    "source_runtime_receipt_id",
+}
 _BINDING_FIELDS = (
-    "accounting_method",
     "agent_route",
     "assay_config_sha256",
     "evaluator_sha256",
@@ -71,12 +86,6 @@ def _canonical_hash(value: object) -> str:
 def _positive_int(value: object, field: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
         raise ContractError(f"{field} must be a positive integer")
-    return value
-
-
-def _nonnegative_int(value: object, field: str) -> int:
-    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-        raise ContractError(f"{field} must be a non-negative integer")
     return value
 
 
@@ -191,15 +200,24 @@ def load_runtime_pilot(path: Path) -> tuple[str, dict[str, Any]]:
     return hashlib.sha256(encoded).hexdigest(), value
 
 
-def _validate_pilot(pilot: Mapping[str, Any], field: str) -> dict[str, str]:
-    missing = sorted(_PILOT_FIELDS - set(pilot))
-    unknown = sorted(str(key) for key in set(pilot) - _PILOT_FIELDS)
+def _validate_pilot(
+    pilot: Mapping[str, Any], field: str
+) -> tuple[dict[str, str], str | None, str | None, str | None]:
+    schema = pilot.get("schema")
+    if schema == RUNTIME_PILOT_SCHEMA:
+        expected_fields = _PILOT_V2_FIELDS
+    elif schema == LEGACY_RUNTIME_PILOT_SCHEMA:
+        expected_fields = _PILOT_V1_FIELDS
+    else:
+        raise ContractError(
+            f"{field}.schema must be {RUNTIME_PILOT_SCHEMA!r} or {LEGACY_RUNTIME_PILOT_SCHEMA!r}"
+        )
+    missing = sorted(expected_fields - set(pilot))
+    unknown = sorted(str(key) for key in set(pilot) - expected_fields)
     if missing:
         raise ContractError(f"{field} is missing fields: {', '.join(missing)}")
     if unknown:
         raise ContractError(f"{field} has unknown fields: {', '.join(unknown)}")
-    if pilot.get("schema") != RUNTIME_PILOT_SCHEMA:
-        raise ContractError(f"{field}.schema must be {RUNTIME_PILOT_SCHEMA!r}")
     if pilot.get("accounting_method") != RUNTIME_ACCOUNTING_METHOD:
         raise ContractError(f"{field}.accounting_method must be {RUNTIME_ACCOUNTING_METHOD!r}")
 
@@ -211,7 +229,36 @@ def _validate_pilot(pilot: Mapping[str, Any], field: str) -> dict[str, str]:
         if name.endswith("sha256") and _SHA256.fullmatch(value) is None:
             raise ContractError(f"{field}.{name} must be a SHA-256")
         bindings[name] = value
-    return bindings
+    if schema == LEGACY_RUNTIME_PILOT_SCHEMA:
+        return bindings, None, None, None
+
+    source_contract_id = pilot.get("source_contract_id")
+    if not isinstance(source_contract_id, str) or _SHA256.fullmatch(source_contract_id) is None:
+        raise ContractError(f"{field}.source_contract_id must be a SHA-256")
+    source_runtime_receipt_id = pilot.get("source_runtime_receipt_id")
+    if (
+        not isinstance(source_runtime_receipt_id, str)
+        or _SHA256.fullmatch(source_runtime_receipt_id) is None
+    ):
+        raise ContractError(f"{field}.source_runtime_receipt_id must be a SHA-256")
+
+    regime = pilot.get("runtime_regime")
+    if not isinstance(regime, Mapping):
+        raise ContractError(f"{field}.runtime_regime must be an object")
+    regime_digest = pilot.get("runtime_regime_id")
+    if not isinstance(regime_digest, str) or _SHA256.fullmatch(regime_digest) is None:
+        raise ContractError(f"{field}.runtime_regime_id must be a SHA-256")
+    if canonical_runtime_hash(regime) != regime_digest:
+        raise ContractError(f"{field}.runtime_regime_id does not match runtime_regime")
+    if regime.get("bindings") != bindings:
+        raise ContractError(f"{field}.runtime_regime bindings do not match pilot bindings")
+    observation = pilot.get("cycle_observation")
+    if not isinstance(observation, Mapping):
+        raise ContractError(f"{field}.cycle_observation must be an object")
+    status = observation.get("status")
+    if status not in {"complete", "right_censored", "infrastructure_invalid"}:
+        raise ContractError(f"{field}.cycle_observation.status is invalid")
+    return bindings, regime_digest, str(status), source_contract_id
 
 
 def _simulate_cycle_totals(
@@ -273,10 +320,7 @@ def _exact_cycle_distribution(
 def forecast_runtime(
     pilots: Sequence[tuple[str, Mapping[str, Any]]],
     *,
-    target_family_count: int,
-    tasks_per_family: int,
-    trials_per_task: int,
-    matching_target_cycle_count: int,
+    target_contract: ExperimentContract,
     simulations: int,
     seed: int,
     confidence: float,
@@ -288,13 +332,16 @@ def forecast_runtime(
 
     if not pilots:
         raise ContractError("runtime forecast requires at least one pilot")
-    family_count = _positive_int(target_family_count, "target_family_count")
-    per_family = _positive_int(tasks_per_family, "tasks_per_family")
-    trials = _positive_int(trials_per_task, "trials_per_task")
-    matching_cycles = _nonnegative_int(
-        matching_target_cycle_count,
-        "matching_target_cycle_count",
+    target_design = runtime_design(target_contract)
+    family_count = _positive_int(target_design["family_count"], "target family_count")
+    family_task_counts = tuple(
+        _positive_int(value, "target family_task_counts")
+        for value in target_design["family_task_counts"]
     )
+    trials = _positive_int(target_contract.trials_per_task, "target trials_per_task")
+    target_bindings = runtime_bindings(target_contract)
+    target_regime = runtime_regime(target_contract)
+    target_regime_digest = runtime_regime_id(target_contract)
     simulation_count = _positive_int(simulations, "simulations")
     if simulation_count < 1_000 or simulation_count > _MAX_SIMULATIONS:
         raise ContractError(f"simulations must be between 1000 and {_MAX_SIMULATIONS}")
@@ -322,50 +369,79 @@ def forecast_runtime(
     if len(set(digests)) != len(digests):
         raise ContractError("runtime forecast refuses duplicate pilot digests")
 
-    expected_bindings: dict[str, str] | None = None
     clusters: list[list[float]] = []
     aggregate_counts = {
         "block_count": 0,
         "usable_block_count": 0,
         "complete_sample_count": 0,
-        "semantic_timeout_sample_count": 0,
+        "right_censored_sample_count": 0,
+        "right_censored_block_count": 0,
         "infrastructure_sample_count_excluded": 0,
+        "infrastructure_block_count_excluded": 0,
     }
-    for index, (_digest, pilot) in enumerate(ordered_pilots):
+    matching_cycle_digests: list[str] = []
+    matching_cycle_contract_ids: list[str] = []
+    matching_cycle_evaluator_walls: list[float] = []
+    observed_source_contract_ids: set[str] = set()
+    for index, (digest, pilot) in enumerate(ordered_pilots):
         field = f"runtime pilots[{index}]"
-        bindings = _validate_pilot(pilot, field)
-        if expected_bindings is None:
-            expected_bindings = bindings
-        elif bindings != expected_bindings:
+        bindings, pilot_regime_id, cycle_status, source_contract_id = _validate_pilot(pilot, field)
+        if source_contract_id is not None:
+            if source_contract_id in observed_source_contract_ids:
+                raise ContractError("runtime forecast refuses duplicate source_contract_id values")
+            observed_source_contract_ids.add(source_contract_id)
+        if bindings != target_bindings:
             differing = sorted(
-                name for name in _BINDING_FIELDS if bindings[name] != expected_bindings[name]
+                name for name in _BINDING_FIELDS if bindings[name] != target_bindings[name]
             )
-            raise ContractError("runtime forecast pilot bindings differ: " + ", ".join(differing))
+            raise ContractError(
+                "runtime forecast pilot bindings differ from target: " + ", ".join(differing)
+            )
         rates, counts = runtime_pilot_block_rates(pilot)
+        if pilot.get("schema") == RUNTIME_PILOT_SCHEMA:
+            validated_status = validate_runtime_cycle_observation(pilot, counts)
+            if validated_status != cycle_status:  # pragma: no cover - shared validator invariant
+                raise ContractError(f"{field}.cycle_observation status changed during validation")
         if not rates:
             raise ContractError(f"{field} has no usable family blocks")
         clusters.append(rates)
         for name in aggregate_counts:
             aggregate_counts[name] += counts[name]
+        if pilot_regime_id == target_regime_digest and cycle_status == "complete":
+            matching_cycle_digests.append(digest)
+            if source_contract_id is None:  # pragma: no cover - v2 regime invariant
+                raise ContractError(f"{field} matching cycle lacks source_contract_id")
+            matching_cycle_contract_ids.append(source_contract_id)
+            observation = pilot["cycle_observation"]
+            if not isinstance(observation, Mapping):  # pragma: no cover - validated above
+                raise ContractError(f"{field} matching cycle lacks cycle_observation")
+            matching_cycle_evaluator_walls.append(
+                _nonnegative_number(
+                    observation.get("completed_evaluator_wall_seconds"),
+                    f"{field}.cycle_observation.completed_evaluator_wall_seconds",
+                )
+            )
 
-    assert expected_bindings is not None  # pilots is non-empty
-    possible_compositions = sum(
-        math.comb(family_count + len(cluster) - 1, len(cluster) - 1) for cluster in clusters
+    matching_cycles = len(matching_cycle_digests)
+    uniform_tasks_per_family = len(set(family_task_counts)) == 1
+    possible_compositions = (
+        sum(math.comb(family_count + len(cluster) - 1, len(cluster) - 1) for cluster in clusters)
+        if uniform_tasks_per_family
+        else _MAX_EXACT_COMPOSITIONS + 1
     )
     exact_distribution: list[tuple[float, float]] | None = None
     cycle_totals: list[float] | None = None
-    if possible_compositions <= _MAX_EXACT_COMPOSITIONS:
+    if uniform_tasks_per_family and possible_compositions <= _MAX_EXACT_COMPOSITIONS:
         exact_distribution = _exact_cycle_distribution(
             clusters,
             family_count=family_count,
-            tasks_per_family=per_family,
+            tasks_per_family=family_task_counts[0],
             trials_per_task=trials,
         )
         cycle_summary = _weighted_seconds_summary(exact_distribution)
         distribution_evaluation = "exact_multinomial"
         evaluated_draw_count = len(exact_distribution)
     else:
-        family_task_counts = (per_family,) * family_count
         cycle_totals = _simulate_cycle_totals(
             clusters,
             family_task_counts=family_task_counts,
@@ -376,10 +452,9 @@ def forecast_runtime(
         cycle_summary = _seconds_summary(cycle_totals)
         distribution_evaluation = "deterministic_monte_carlo"
         evaluated_draw_count = simulation_count
-    observed_blocks = aggregate_counts["usable_block_count"]
     mean_campaign_active = cycle_summary["mean_seconds"] + experiment_overhead + campaign_overhead
 
-    block_plans: list[dict[str, Any]] = []
+    planning_markers: list[dict[str, Any]] = []
     cycle_plans: list[dict[str, Any]] = []
     for coverage in sorted(coverage_values):
         required = _wilks_minimum_sample_size(coverage, confidence_value)
@@ -390,33 +465,25 @@ def forecast_runtime(
         )
         experiment_wall = math.ceil(cycle_quantile + experiment_overhead)
         campaign_wall = math.ceil(experiment_wall + campaign_overhead)
-
-        additional_blocks = max(0, required - observed_blocks)
-        additional_block_cycles = math.ceil(additional_blocks / family_count)
-        block_plans.append(
+        planning_markers.append(
             {
-                "coverage": coverage,
-                "confidence": confidence_value,
-                "required_independent_blocks": required,
-                "observed_usable_blocks": observed_blocks,
-                "iid_block_assumption_max_coverage_confidence": (1.0 - coverage**observed_blocks),
-                "additional_blocks": additional_blocks,
-                "optimistic_additional_full_cycles": additional_block_cycles,
-                "point_cycle_row_quantile_seconds": cycle_quantile,
-                "point_experiment_wall_seconds": experiment_wall,
-                "point_campaign_wall_seconds": campaign_wall,
-                "expected_collection_active_time": _active_time(
-                    mean_campaign_active,
-                    additional_block_cycles,
-                ),
-                "point_wall_product_time": _active_time(
-                    float(campaign_wall),
-                    additional_block_cycles,
-                ),
+                "coverage_marker": coverage,
+                "class": "model_based_transferred_predictive_quantile",
+                "active_compute_quantile_seconds": cycle_quantile,
+                "experiment_marker_seconds": experiment_wall,
+                "campaign_marker_seconds": campaign_wall,
+                "planning_only": True,
+                "distribution_free": False,
+                "confidence_bound": None,
             }
         )
 
         additional_target_cycles = max(0, required - matching_cycles)
+        confidence_qualified = matching_cycles >= required
+        observed_max_evaluator_wall = (
+            max(matching_cycle_evaluator_walls) if matching_cycle_evaluator_walls else None
+        )
+        evaluator_upper_bound = observed_max_evaluator_wall if confidence_qualified else None
         cycle_plans.append(
             {
                 "coverage": coverage,
@@ -425,11 +492,24 @@ def forecast_runtime(
                 "observed_matching_target_cycles": matching_cycles,
                 "observed_max_coverage_confidence": 1.0 - coverage**matching_cycles,
                 "additional_target_cycles": additional_target_cycles,
-                "expected_collection_active_time": _active_time(
+                "confidence_qualified": confidence_qualified,
+                "observed_sample_max_evaluator_wall_seconds": observed_max_evaluator_wall,
+                "evaluator_wall_upper_tolerance_bound_seconds": evaluator_upper_bound,
+                "experiment_wall_upper_tolerance_bound_seconds": (
+                    None
+                    if evaluator_upper_bound is None
+                    else math.ceil(evaluator_upper_bound + experiment_overhead)
+                ),
+                "campaign_wall_upper_tolerance_bound_seconds": (
+                    None
+                    if evaluator_upper_bound is None
+                    else math.ceil(evaluator_upper_bound + experiment_overhead + campaign_overhead)
+                ),
+                "model_based_expected_collection_active_time": _active_time(
                     mean_campaign_active,
                     additional_target_cycles,
                 ),
-                "point_wall_product_time": _active_time(
+                "model_based_point_wall_product_time": _active_time(
                     float(campaign_wall),
                     additional_target_cycles,
                 ),
@@ -442,13 +522,15 @@ def forecast_runtime(
         "source_pilots": {
             "campaign_cluster_count": len(clusters),
             "sha256": digests,
+            "matching_target_cycle_sha256": matching_cycle_digests,
+            "matching_target_cycle_contract_id": matching_cycle_contract_ids,
+            "matching_target_cycle_evaluator_wall_seconds": matching_cycle_evaluator_walls,
         },
-        "bindings": expected_bindings,
+        "bindings": target_bindings,
+        "runtime_regime": target_regime,
+        "runtime_regime_id": target_regime_digest,
         "design": {
-            "target_family_count": family_count,
-            "tasks_per_family": per_family,
-            "trials_per_task": trials,
-            "paired_row_count": family_count * per_family * trials * 2,
+            **target_design,
             "matching_target_cycle_count": matching_cycles,
         },
         "sampling": {
@@ -458,22 +540,26 @@ def forecast_runtime(
             "monte_carlo_fallback_simulations": simulation_count,
             "monte_carlo_seed": seed,
             "cluster_resampling": "pilot_campaign_then_family",
-            "family_rate": "slowest_semantic_row_in_verified_family_block",
+            "family_rate": "slowest_complete_row_in_fully_observed_family_block",
+            "censoring_policy": (
+                "right-censored blocks are preserved in counts but excluded from point models"
+            ),
         },
         "pilot": aggregate_counts,
         "observed_block_upper_rate_seconds": _seconds_summary(
             [rate for cluster in clusters for rate in cluster]
         ),
-        "target_cycle_row_wall_seconds": cycle_summary,
+        "model_based_target_cycle_active_seconds": cycle_summary,
         "overhead": {
             "experiment_seconds_per_cycle": experiment_overhead,
             "campaign_seconds_per_cycle": campaign_overhead,
         },
-        "model_based_block_plans": block_plans,
+        "model_based_planning_markers": planning_markers,
         "distribution_free_target_cycle_plans": cycle_plans,
         "limitations": [
             "block plans assume family exchangeability inside each source campaign",
             "source campaign clusters are resampled but their count may be small",
+            "family blocks inside one campaign are not independent Wilks observations",
             "distribution-free cycle plans count only exact matching target cycles",
             "calendar diversity and provider-capacity waits are outside active wall time",
         ],

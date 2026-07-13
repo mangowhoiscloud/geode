@@ -25,6 +25,7 @@ from plugins.crucible.contract import (
 )
 from plugins.crucible.evidence import EvidenceEnvelope, ResourceUsage
 from plugins.crucible.ref_journal import load_receipt
+from plugins.crucible.runtime_receipt import SharedRuntimeDeadline
 from plugins.crucible.supervisor import (
     CandidateProposal,
     FailureFeedback,
@@ -104,14 +105,15 @@ EVALUATOR_SCRIPT = "#!/usr/bin/env python3\n" + textwrap.dedent(
     assert not (Path.cwd() / ".venv").exists()
     assert (Path.cwd() / "surface.txt").read_text() == "candidate\\n"
 
+    assay_config = json.dumps(
+        contract["assay_config"],
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode()
+
     def evidence(arm, reward, raw_hash):
         revision = contract[f"{arm}_sha"]
-        assay_config = json.dumps(
-            contract["assay_config"],
-            ensure_ascii=False,
-            separators=(",", ":"),
-            sort_keys=True,
-        ).encode()
         return {
             "schema": "crucible.evidence.v3",
             "contract_id": contract["contract_id"],
@@ -153,8 +155,70 @@ EVALUATOR_SCRIPT = "#!/usr/bin/env python3\n" + textwrap.dedent(
     candidate_path = output.parent / "candidate-evidence.json"
     baseline_path.write_text(json.dumps(evidence("baseline", 0.2, baseline_raw_hash)))
     candidate_path.write_text(json.dumps(evidence("candidate", 0.9, candidate_raw_hash)))
+    family_counts = {}
+    for task in contract["tasks"]:
+        family_counts[task["family_id"]] = family_counts.get(task["family_id"], 0) + 1
+    wall = min(
+        float(os.environ["CRUCIBLE_EVALUATION_WALL_SECONDS"]),
+        contract["budget"]["max_wall_seconds"],
+    )
+    runtime_regime = {
+        "schema": "crucible.runtime-regime.v1",
+        "stage": contract["stage"],
+        "bindings": {
+            "evaluator_sha256": contract["evaluator_sha256"],
+            "harness_sha256": contract["harness_sha256"],
+            "assay_config_sha256": hashlib.sha256(assay_config).hexdigest(),
+            "agent_route": contract["agent_route"],
+            "user_route": contract["user_route"],
+        },
+        "design": {
+            "task_pack_sha256": contract["task_pack_sha256"],
+            "task_count": len(contract["tasks"]),
+            "family_count": len(family_counts),
+            "family_task_counts": sorted(family_counts.values()),
+            "trials_per_task": contract["trials_per_task"],
+            "paired_row_count": len(contract["tasks"]) * contract["trials_per_task"] * 2,
+        },
+        "execution": {
+            "arm_order": "baseline_then_candidate",
+            "arm_wall_policy": "shared_deadline_remaining.v1",
+            "accounting_scope": "fresh_simulation_active_wall",
+            "experiment_wall_seconds": wall,
+            "row_cache": "excluded_from_runtime_model",
+        },
+    }
+    canonical = lambda value: hashlib.sha256(json.dumps(
+        value, ensure_ascii=False, separators=(",", ":"), sort_keys=True
+    ).encode()).hexdigest()
+    receipt_payload = {
+        "schema": "crucible.runtime-receipt.v1",
+        "contract_id": contract["contract_id"],
+        "runtime_regime_id": canonical(runtime_regime),
+        "wall_policy": "shared_deadline_remaining.v1",
+        "configured_experiment_wall_seconds": wall,
+        "observation": {"status": "complete", "observed_wall_seconds": 0.0},
+        "arms": [
+            {"arm": "baseline", "allocated_wall_seconds": wall, "observed_wall_seconds": 0.0, "outcome": "complete"},
+            {"arm": "candidate", "allocated_wall_seconds": wall, "observed_wall_seconds": 0.0, "outcome": "complete"},
+        ],
+        "cleanup": {
+            "measured_scope": "evaluator_inner",
+            "phases": [],
+            "observed_wall_seconds": 0.0,
+            "unmeasured_scopes": [
+                "outer_evaluator_process_startup_and_request_parse",
+                "outer_supervisor_process_reap",
+                "ledger_and_ref_finalization",
+            ],
+        },
+    }
+    runtime_receipt = output.parent / "runtime.receipt.json"
+    runtime_receipt.write_text(json.dumps({
+        **receipt_payload, "runtime_receipt_id": canonical(receipt_payload)
+    }))
     payload = {
-        "schema": "crucible.train-evaluation.v3",
+        "schema": "crucible.train-evaluation.v4",
         "attempt_id": request["attempt_id"],
         "request_id": request["request_id"],
         "proposal_id": candidate["proposal_id"],
@@ -162,6 +226,7 @@ EVALUATOR_SCRIPT = "#!/usr/bin/env python3\n" + textwrap.dedent(
         "candidate": candidate_path.name,
         "baseline_raw": baseline_raw_path.name,
         "candidate_raw": candidate_raw_path.name,
+        "runtime_receipt": runtime_receipt.name,
         "feedback": {
             "schema": "crucible.failure-feedback.v3",
             "failure_codes": [],
@@ -444,11 +509,21 @@ class _Evaluator:
         candidate_path = evaluation_dir / "candidate.json"
         baseline_path.write_text(json.dumps(baseline.to_dict()), encoding="utf-8")
         candidate_path.write_text(json.dumps(candidate.to_dict()), encoding="utf-8")
+        runtime_receipt = evaluation_dir / "runtime.receipt.json"
+        deadline = SharedRuntimeDeadline(contract, min(timeout, contract.budget.max_wall_seconds))
+        baseline_clock = deadline.begin_arm("baseline")
+        deadline.finish_arm(baseline_clock, "complete")
+        candidate_clock = deadline.begin_arm("candidate")
+        deadline.finish_arm(candidate_clock, "invalid" if verdict == "INVALID" else "complete")
+        deadline.write(
+            runtime_receipt,
+            "infrastructure_invalid" if verdict == "INVALID" else "complete",
+        )
         response = evaluation_dir / "response.json"
         response.write_text(
             json.dumps(
                 {
-                    "schema": "crucible.train-evaluation.v3",
+                    "schema": "crucible.train-evaluation.v4",
                     "attempt_id": request.attempt_id,
                     "request_id": request.request_id,
                     "proposal_id": proposal.proposal_id,
@@ -456,6 +531,7 @@ class _Evaluator:
                     "candidate": candidate_path.name,
                     "baseline_raw": baseline_raw.name,
                     "candidate_raw": candidate_raw.name,
+                    "runtime_receipt": runtime_receipt.name,
                     "feedback": FailureFeedback(
                         failure_codes=(self.feedback_code,),
                     ).to_dict(),

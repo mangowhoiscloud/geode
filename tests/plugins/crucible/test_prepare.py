@@ -6,6 +6,11 @@ import pytest
 from plugins.crucible.cli import main as crucible_main
 from plugins.crucible.contract import ContractError, TaskUnit, task_pack_sha256
 from plugins.crucible.prepare import prepare_campaign
+from plugins.crucible.runtime_identity import (
+    canonical_runtime_hash,
+    runtime_design_from_parts,
+    runtime_regime_from_parts,
+)
 from plugins.crucible.supervisor import SupervisorConfig
 
 from tests.plugins.crucible.test_supervisor import _config, _git
@@ -82,12 +87,19 @@ def _power_audit(
     }
 
 
-def _runtime_audit(tmp_path: Path, config: SupervisorConfig) -> dict[str, object]:
+def _runtime_audit(
+    tmp_path: Path,
+    config: SupervisorConfig,
+    *,
+    experiment_wall_seconds: float | None = None,
+) -> dict[str, object]:
     plan = config.train_plan.payload
     assay = plan["assay_config"]
-    pilot_payload = {
-        "schema": "crucible.runtime-pilot.v1",
-        "accounting_method": "sum-finalized-simulation-elapsed.v1",
+    tasks = tuple(
+        TaskUnit.from_mapping(row, field=f"plan tasks[{index}]")
+        for index, row in enumerate(plan["tasks"])
+    )
+    bindings = {
         "evaluator_sha256": plan["evaluator_sha256"],
         "harness_sha256": plan["harness_sha256"],
         "assay_config_sha256": hashlib.sha256(
@@ -100,6 +112,40 @@ def _runtime_audit(tmp_path: Path, config: SupervisorConfig) -> dict[str, object
         ).hexdigest(),
         "agent_route": plan["agent_route"],
         "user_route": plan["user_route"],
+    }
+    design = runtime_design_from_parts(
+        tasks=tasks,
+        trials_per_task=1,
+        task_pack_sha256=task_pack_sha256(tasks, 1),
+    )
+    regime = runtime_regime_from_parts(
+        stage="train",
+        bindings=bindings,
+        design=design,
+        experiment_wall_seconds=(
+            float(plan["budget"]["max_wall_seconds"])
+            if experiment_wall_seconds is None
+            else experiment_wall_seconds
+        ),
+    )
+    pilot_payload = {
+        "schema": "crucible.runtime-pilot.v2",
+        "accounting_method": "sum-finalized-simulation-elapsed.v1",
+        **bindings,
+        "source_contract_id": "d" * 64,
+        "source_runtime_receipt_id": "e" * 64,
+        "runtime_regime": regime,
+        "runtime_regime_id": canonical_runtime_hash(regime),
+        "cycle_observation": {
+            "status": "complete",
+            "observed_active_wall_seconds": 40.0,
+            "observed_evaluator_wall_seconds": 40.0,
+            "active_wall_seconds": 40.0,
+            "completed_evaluator_wall_seconds": 40.0,
+            "complete_sample_count": 4,
+            "right_censored_sample_count": 0,
+            "infrastructure_failure_sample_count": 0,
+        },
         "blocks": [
             {"samples": [{"outcome": "complete", "wall_seconds": 10.0}]} for _index in range(4)
         ],
@@ -107,7 +153,7 @@ def _runtime_audit(tmp_path: Path, config: SupervisorConfig) -> dict[str, object
     pilot = tmp_path / "runtime-pilot.json"
     pilot.write_text(json.dumps(pilot_payload), encoding="utf-8")
     return {
-        "schema": "crucible.runtime-budget-spec.v1",
+        "schema": "crucible.runtime-budget-spec.v2",
         "pilot_file": str(pilot),
         "pilot_sha256": hashlib.sha256(pilot.read_bytes()).hexdigest(),
         "source": "fixture completed campaign runtime pilot",
@@ -123,21 +169,23 @@ def _runtime_audit(tmp_path: Path, config: SupervisorConfig) -> dict[str, object
 
 def _runtime_ceiling() -> dict[str, object]:
     return {
-        "schema": "crucible.runtime-budget-spec.v1",
+        "schema": "crucible.runtime-budget-spec.v2",
         "mode": "contract_ceiling",
         "source": "fixture frozen assay timeout ceiling",
-        "headroom_ratio": 0.0,
         "experiment_overhead_seconds": 0.0,
         "campaign_overhead_seconds": 10.0,
+        "cleanup_grace_seconds": 0.0,
     }
 
 
-def _fixed_experiment_wall() -> dict[str, object]:
+def _operational_deadline() -> dict[str, object]:
     return {
-        "schema": "crucible.runtime-budget-spec.v1",
-        "mode": "fixed_experiment_wall",
+        "schema": "crucible.runtime-budget-spec.v2",
+        "mode": "operational_deadline",
         "source": "fixture preregistered experiment wall",
         "campaign_overhead_seconds": 10.0,
+        "cleanup_grace_seconds": 0.0,
+        "risk_acceptance": "nonzero_clean_timeout",
     }
 
 
@@ -210,7 +258,7 @@ def test_prepare_binds_a_passing_runtime_report(tmp_path: Path) -> None:
             config,
             budget=budget,
             limits=limits,
-            runtime_audit=_runtime_audit(tmp_path, config),
+            runtime_audit=_runtime_audit(tmp_path, config, experiment_wall_seconds=80.0),
         )
     )
 
@@ -246,10 +294,12 @@ def test_prepare_binds_contract_ceiling_before_a_pilot_exists(tmp_path: Path) ->
     assert runtime["required_experiment_wall_seconds"] == 80
     assert runtime["required_campaign_wall_seconds"] == 90
     saved = json.loads(Path(runtime["path"]).read_text(encoding="utf-8"))
-    assert saved["method"] == "contract-timeout-ceiling.v1"
+    assert saved["method"] == "bounded-process-termination-envelope.v2"
 
 
-def test_prepare_binds_unbounded_rows_to_the_fixed_experiment_wall(tmp_path: Path) -> None:
+def test_prepare_binds_unbounded_rows_to_an_explicit_operational_deadline(
+    tmp_path: Path,
+) -> None:
     config, _baseline = _config(tmp_path)
     budget = {**config.train_plan.payload["budget"], "max_wall_seconds": 80.0}
     limits = {**config.limits.to_dict(), "max_wall_seconds": 90.0}
@@ -261,7 +311,7 @@ def test_prepare_binds_unbounded_rows_to_the_fixed_experiment_wall(tmp_path: Pat
             assay_config=assay,
             budget=budget,
             limits=limits,
-            runtime_audit=_fixed_experiment_wall(),
+            runtime_audit=_operational_deadline(),
         )
     )
 
@@ -270,7 +320,9 @@ def test_prepare_binds_unbounded_rows_to_the_fixed_experiment_wall(tmp_path: Pat
     assert runtime["required_experiment_wall_seconds"] == 80.0
     assert runtime["required_campaign_wall_seconds"] == 90
     saved = json.loads(Path(runtime["path"]).read_text(encoding="utf-8"))
-    assert saved["method"] == "fixed-experiment-wall.v1"
+    assert saved["method"] == "operator-selected-deadline.v1"
+    assert saved["operational_deadline"]["statistical_confidence_bound"] is None
+    assert saved["operational_deadline"]["risk_acceptance"] == "nonzero_clean_timeout"
     prepared = SupervisorConfig.load(Path(report["config_path"]))
     assert prepared.train_plan.payload["assay_config"]["timeout"] is None
 

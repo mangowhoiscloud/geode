@@ -33,6 +33,7 @@ from plugins.crucible.promotion import SCREENING_FAILURE, decide, promotion_reac
 from plugins.crucible.row_cache import harvest_arm_rows
 from plugins.crucible.tau2_live import (
     Tau2InfrastructureError,
+    _evaluation_wall_seconds,
     _index_simulations,
     _infrastructure_abort_snapshot,
     _run_arm,
@@ -128,6 +129,17 @@ def test_command_evaluator_entrypoint_uses_the_frozen_uv_runtime() -> None:
     )
 
 
+def test_evaluation_wall_intersects_live_remainder_with_frozen_contract() -> None:
+    contract = _contract()
+
+    assert _evaluation_wall_seconds(contract, 1_200.0) == 1_200.0
+    assert _evaluation_wall_seconds(contract, 7_200.0) == 3_600.0
+    with pytest.raises(ContractError, match="valid actual remaining"):
+        _evaluation_wall_seconds(contract, None)
+    with pytest.raises(ContractError, match="no remaining"):
+        _evaluation_wall_seconds(contract, 0.0)
+
+
 def test_infrastructure_abort_snapshot_is_accepted_by_frozen_verifier() -> None:
     contract = _contract()
     raw_sha256 = "a" * 64
@@ -157,18 +169,26 @@ def test_command_evaluator_emits_paths_relative_to_response_directory(
         output_dir=evaluation_dir,
         baseline_raw=evaluation_dir / "baseline.raw.json",
         candidate_raw=evaluation_dir / "candidate.raw.json",
+        runtime_receipt=evaluation_dir / "runtime.receipt.json",
         marginal_usage=ResourceUsage(0.25, 2, 300, 0.3),
         feedback=None,
     )
 
     assert {
         field: response[field]
-        for field in ("baseline", "candidate", "baseline_raw", "candidate_raw")
+        for field in (
+            "baseline",
+            "candidate",
+            "baseline_raw",
+            "candidate_raw",
+            "runtime_receipt",
+        )
     } == {
         "baseline": "baseline.evidence.json",
         "candidate": "candidate.evidence.json",
         "baseline_raw": "baseline.raw.json",
         "candidate_raw": "candidate.raw.json",
+        "runtime_receipt": "runtime.receipt.json",
     }
     assert response["marginal_usage"] == ResourceUsage(0.25, 2, 300, 0.3).to_dict()
 

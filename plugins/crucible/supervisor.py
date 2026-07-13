@@ -48,14 +48,15 @@ from .contract import (
     validate_measurement_files,
 )
 from .evidence import EvidenceEnvelope, ResourceUsage, load_evidence
-from .promotion import PromotionVerdict, decide
+from .promotion import SCREENING_FAILURE, PromotionVerdict, decide
 from .ref_journal import RefIntent, persist_intent, reconcile_ref_update
+from .runtime_receipt import load_runtime_receipt
 
 CONFIG_SCHEMA = "crucible.supervisor.v4"
 TRAIN_PLAN_SCHEMA = "crucible.train-plan.v3"
 REQUEST_SCHEMA = "crucible.proposal-request.v3"
 PROPOSAL_SCHEMA = "crucible.candidate.v2"
-EVALUATION_SCHEMA = "crucible.train-evaluation.v3"
+EVALUATION_SCHEMA = "crucible.train-evaluation.v4"
 FEEDBACK_SCHEMA = "crucible.failure-feedback.v3"
 SUPERVISOR_FEEDBACK_SCHEMA = "crucible.supervisor-feedback.v3"
 RECORD_SCHEMA = "crucible.loop-record.v2"
@@ -743,6 +744,7 @@ class EvaluationArtifacts:
     candidate: EvidenceEnvelope
     marginal_usage: ResourceUsage
     feedback: FailureFeedback | None
+    runtime_receipt: Mapping[str, Any]
 
     @classmethod
     def load(
@@ -766,6 +768,7 @@ class EvaluationArtifacts:
                 "candidate_raw",
                 "proposal_id",
                 "request_id",
+                "runtime_receipt",
                 "schema",
             },
             optional={"feedback", "marginal_usage"},
@@ -799,6 +802,11 @@ class EvaluationArtifacts:
             _text(row.get("candidate_raw"), "candidate_raw"),
             "candidate_raw",
         )
+        runtime_receipt_path = contained_path(
+            attempt_dir,
+            _text(row.get("runtime_receipt"), "runtime_receipt"),
+            "runtime_receipt",
+        )
         feedback_raw = row.get("feedback")
         feedback = FailureFeedback.from_mapping(feedback_raw) if feedback_raw is not None else None
         if feedback is not None:
@@ -809,6 +817,22 @@ class EvaluationArtifacts:
             raise SupervisorError("baseline raw artifact hash does not match evidence")
         if _file_sha256(candidate_raw_path, "candidate_raw") != candidate.raw_artifact_sha256:
             raise SupervisorError("candidate raw artifact hash does not match evidence")
+        try:
+            runtime_receipt = load_runtime_receipt(runtime_receipt_path, contract=contract)
+        except ContractError as exc:
+            raise SupervisorError(f"invalid runtime receipt: {exc}") from exc
+        receipt_status = runtime_receipt["observation"]["status"]
+        expected_receipt_status = (
+            "complete"
+            if baseline.execution_status == "complete"
+            and (
+                candidate.execution_status == "complete"
+                or candidate.failure_class == SCREENING_FAILURE
+            )
+            else "infrastructure_invalid"
+        )
+        if receipt_status != expected_receipt_status:
+            raise SupervisorError("runtime receipt status does not match evaluation evidence")
         marginal_raw = row.get("marginal_usage")
         marginal_usage = (
             baseline.usage + candidate.usage
@@ -822,6 +846,7 @@ class EvaluationArtifacts:
             candidate=candidate,
             marginal_usage=marginal_usage,
             feedback=feedback,
+            runtime_receipt=runtime_receipt,
         )
 
 
@@ -1219,6 +1244,10 @@ class CommandEvaluator:
                 "CRUCIBLE_CANDIDATE": str(candidate_path),
                 "CRUCIBLE_CONTRACT": str(contract_path),
                 "CRUCIBLE_EVALUATION_OUTPUT": str(output),
+                # The request was frozen before producer execution. Pass the
+                # evaluator's actual remaining campaign wall separately so
+                # the inner shared deadline cannot spend stale budget.
+                "CRUCIBLE_EVALUATION_WALL_SECONDS": repr(timeout),
             },
         )
         _run_process(

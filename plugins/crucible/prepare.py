@@ -289,6 +289,8 @@ def prepare_campaign(
         runtime_report = audit_runtime_budget(
             tasks=units,
             trials_per_task=plan["trials_per_task"],
+            task_pack_sha256=plan["task_pack_sha256"],
+            stage="train",
             evaluator_sha256=plan["evaluator_sha256"],
             harness_sha256=plan["harness_sha256"],
             agent_route=str(plan.get("agent_route", "")),

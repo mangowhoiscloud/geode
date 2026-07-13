@@ -68,13 +68,13 @@
       "id": "file:plugins/crucible/tau2_live.py",
       "filePath": "plugins/crucible/tau2_live.py",
       "name": "Paired tau2 evaluator",
-      "summary": "Derives frozen runner arguments, screens unreachable train arms at zero candidate cost, isolates measurement state, and projects structural failure codes. Reuses identity-proven cached rows across relaunches, stops the paid process group after finalized infrastructure contamination, and converts that stop into structured INVALID evidence with observed marginal usage.",
+      "summary": "Derives frozen runner arguments, gives baseline and candidate one shared monotonic deadline, emits hash-bound runtime receipts, screens unreachable train arms at zero candidate cost, and projects structural failure codes. Reuses identity-proven cached rows across relaunches and stops the paid process group after finalized infrastructure contamination.",
       "tags": [
         "crucible",
         "evaluator",
         "paired"
       ],
-      "contentSha256": "afdec9ac53cba90beb30db5bfb43ba64ce391ca34a79e51f94599212b6cb9d62"
+      "contentSha256": "bc8a84f67a899e74f6f020bf43e433e88385990f1f20b2378dec4d847d1eaf41"
     },
     {
       "id": "file:plugins/crucible/row_cache.py",
@@ -89,16 +89,28 @@
       "contentSha256": "d82eb18f8c24eb7a694653ef09b63d84b299ebf3981a4e4012e84be42943beaa"
     },
     {
+      "id": "file:plugins/crucible/runtime_receipt.py",
+      "filePath": "plugins/crucible/runtime_receipt.py",
+      "name": "Runtime receipt",
+      "summary": "Binds shared-deadline arm allocations, right-censoring, measured cleanup, and explicitly unmeasured outer scopes to the exact experiment runtime regime.",
+      "tags": [
+        "crucible",
+        "deadline",
+        "evidence"
+      ],
+      "contentSha256": "2620dbd8b890ff61c8aa413b987ccf224b1a0d798a9ffe40bbfbcd33354a6f90"
+    },
+    {
       "id": "file:plugins/crucible/supervisor.py",
       "filePath": "plugins/crucible/supervisor.py",
       "name": "Promotion supervisor",
-      "summary": "Preflights authority inputs, binds optional producer objectives, rejects duplicate baseline-bound treatments, separates evidence from marginal usage, reaps role process groups on timeout or operator interruption, and owns the monotone search ref.",
+      "summary": "Preflights authority inputs, binds optional producer objectives, passes the evaluator its live remaining wall, validates runtime receipts, rejects duplicate baseline-bound treatments, reaps role process groups, and owns the monotone search ref.",
       "tags": [
         "crucible",
         "supervisor",
         "promotion"
       ],
-      "contentSha256": "5f4b03a86a15ede11a5a8adff9f8a6a88f9cf93b33c52ec07bcfed1e1438c6c5"
+      "contentSha256": "b850648539bae09ae796438e9d7e62d91968ee41aaf4f76720cda3f1a171575e"
     },
     {
       "id": "file:scripts/eval/crucible_tau2_evaluator.py",
@@ -133,7 +145,7 @@
         "producer",
         "program"
       ],
-      "contentSha256": "7d0ce26e9353d2c03e4d7262bdf48a60559b08685c4b7b115c57169b703a64d6"
+      "contentSha256": "a2d21e6f12a6ef54f5b8538bc9dac68ea8bf99aa66cc76c9c05f691edba0d06e"
     },
     {
       "id": "file:plugins/crucible/producers/replay.py",
@@ -195,6 +207,11 @@
       "type": "depends_on"
     },
     {
+      "source": "file:plugins/crucible/tau2_live.py",
+      "target": "file:plugins/crucible/runtime_receipt.py",
+      "type": "writes"
+    },
+    {
       "source": "file:scripts/eval/crucible_tau2_evaluator.py",
       "target": "file:plugins/crucible/tau2_live.py",
       "type": "calls"
@@ -203,6 +220,11 @@
       "source": "file:plugins/crucible/supervisor.py",
       "target": "file:scripts/eval/crucible_tau2_evaluator.py",
       "type": "calls"
+    },
+    {
+      "source": "file:plugins/crucible/supervisor.py",
+      "target": "file:plugins/crucible/runtime_receipt.py",
+      "type": "validates"
     }
   ]
 }

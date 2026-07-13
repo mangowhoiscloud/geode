@@ -201,6 +201,7 @@ def _add_runtime_pilot(subparsers: Any) -> None:
         help="project verified paired arm artifacts into an opaque runtime pilot",
     )
     parser.add_argument("contract", type=Path)
+    parser.add_argument("--runtime-receipt", type=Path, required=True)
     parser.add_argument("--baseline-results", type=Path, required=True)
     parser.add_argument("--baseline-evidence", type=Path, required=True)
     parser.add_argument("--candidate-results", type=Path, required=True)
@@ -214,10 +215,7 @@ def _add_runtime_forecast(subparsers: Any) -> None:
         help="forecast one target design and its p95/p99 calibration effort",
     )
     parser.add_argument("--pilot", type=Path, action="append", required=True)
-    parser.add_argument("--target-family-count", type=int, required=True)
-    parser.add_argument("--tasks-per-family", type=int, default=1)
-    parser.add_argument("--trials-per-task", type=int, required=True)
-    parser.add_argument("--matching-target-cycle-count", type=int, required=True)
+    parser.add_argument("--target-contract", type=Path, required=True)
     parser.add_argument("--simulations", type=int, default=200_000)
     parser.add_argument("--seed", type=int, required=True)
     parser.add_argument("--confidence", type=float, default=0.95)
@@ -411,6 +409,8 @@ def _runtime_audit(args: argparse.Namespace) -> dict[str, Any]:
     report = audit_runtime_budget(
         tasks=contract.tasks,
         trials_per_task=contract.trials_per_task,
+        task_pack_sha256=contract.task_pack_sha256,
+        stage=contract.stage,
         evaluator_sha256=contract.evaluator_sha256,
         harness_sha256=contract.harness_sha256,
         agent_route=contract.agent_route,
@@ -429,6 +429,7 @@ def _runtime_pilot(args: argparse.Namespace) -> dict[str, Any]:
     contract = load_contract(args.contract)
     pilot = build_runtime_pilot(
         contract,
+        runtime_receipt_path=args.runtime_receipt,
         baseline_results_path=args.baseline_results,
         baseline_evidence=load_evidence(args.baseline_evidence),
         candidate_results_path=args.candidate_results,
@@ -440,12 +441,10 @@ def _runtime_pilot(args: argparse.Namespace) -> dict[str, Any]:
 
 def _runtime_forecast(args: argparse.Namespace) -> dict[str, Any]:
     pilots = tuple(load_runtime_pilot(path) for path in args.pilot)
+    target_contract = load_contract(args.target_contract)
     report = forecast_runtime(
         pilots,
-        target_family_count=args.target_family_count,
-        tasks_per_family=args.tasks_per_family,
-        trials_per_task=args.trials_per_task,
-        matching_target_cycle_count=args.matching_target_cycle_count,
+        target_contract=target_contract,
         simulations=args.simulations,
         seed=args.seed,
         confidence=args.confidence,

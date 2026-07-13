@@ -30,6 +30,7 @@ from plugins.crucible.ref_journal import (
     persist_intent,
 )
 from plugins.crucible.ref_journal import commit_ref_update as real_commit_ref_update
+from plugins.crucible.runtime_receipt import SharedRuntimeDeadline
 from plugins.crucible.sealed import (
     CorePromotionDecision,
     SealedError,
@@ -423,8 +424,15 @@ class _Evaluator:
         candidate_path.write_text(json.dumps(candidate.to_dict()), encoding="utf-8")
         if outcome == "raw_tamper":
             candidate_raw.write_text("tampered\n", encoding="utf-8")
+        runtime_receipt = evaluation_dir / "runtime.receipt.json"
+        deadline = SharedRuntimeDeadline(contract, contract.budget.max_wall_seconds)
+        baseline_clock = deadline.begin_arm("baseline")
+        deadline.finish_arm(baseline_clock, "complete")
+        candidate_clock = deadline.begin_arm("candidate")
+        deadline.finish_arm(candidate_clock, "complete")
+        deadline.write(runtime_receipt, "complete")
         response: dict[str, object] = {
-            "schema": "crucible.sealed-evaluation.v1",
+            "schema": "crucible.sealed-evaluation.v2",
             "plan_id": plan.plan_id,
             "contract_id": contract.contract_id,
             "attempt_number": attempt_number,
@@ -432,6 +440,7 @@ class _Evaluator:
             "candidate": candidate_path.name,
             "baseline_raw": baseline_raw.name,
             "candidate_raw": candidate_raw.name,
+            "runtime_receipt": runtime_receipt.name,
         }
         if outcome == "feedback":
             response["feedback"] = {"failed_task_ids": [contract.task_ids[0]]}

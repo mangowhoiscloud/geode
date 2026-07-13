@@ -51,21 +51,43 @@ functional change.
 
 - **Crucible runtime forecasts are reproducible from verified full cycles.**
   The `runtime-forecast` command combines digest-bound opaque runtime pilots,
-  preserves campaign and family resampling levels, derives p95/p99 wall
-  estimates by exact multinomial enumeration when tractable (with deterministic
-  Monte Carlo fallback), applies Wilks one-sided sample-size planning, and
-  reports exact sample requirements plus expected and point-wall active-compute
-  forecasts for model-based block and distribution-free target-cycle
-  calibration.
+  targets a frozen experiment contract, preserves campaign and family
+  resampling levels, and derives p95/p99 wall estimates by exact multinomial
+  enumeration when tractable (with deterministic Monte Carlo fallback). Wilks
+  planning now counts completed target cycles automatically only when their
+  evaluator, harness, routes, assay, pack, design, stage, and execution policy
+  (including the experiment wall) share the exact runtime-regime digest. The
+  incompatible runtime budget specification and report schemas are now v2;
+  family blocks remain point-model inputs rather than Wilks observations, and
+  repeated serializations of one source contract cannot inflate the cycle
+  count. Model-based active-compute quantiles are labelled planning-only;
+  confidence-qualified wall bounds use the maximum receipt-observed evaluator
+  wall only after the required matching full cycles exist.
+- **Crucible evaluations emit hash-bound runtime receipts.** Train and sealed
+  evaluators record shared-deadline arm allocations, observed timing,
+  right-censoring, inner cleanup, and explicitly unmeasured outer cleanup
+  scopes; evaluation artifact loaders reject missing or inconsistent receipts.
+  Runtime pilots require that receipt and bind its effective wall, so a
+  campaign-shortened evaluation cannot count as a full target-regime cycle.
 
 ### Changed
 
-- **Crucible tau2 rows can run without an arbitrary semantic wall cap.** A
-  frozen assay now accepts an explicit `timeout: null`, omits tau2's
-  per-simulation timeout, and keeps termination authority at the finite
-  experiment/campaign wall. Prepare can bind this policy through
-  `fixed_experiment_wall` runtime provenance; positive row timeouts remain
-  supported for deliberately censored assays.
+- **Crucible runtime walls distinguish forecasts, deadlines, and ceilings.** A
+  frozen assay may set `timeout: null`, but an `operational_deadline` must now
+  acknowledge nonzero clean-timeout risk and cannot claim statistical or
+  clean-completion authority. Positive row timeouts remain available through a
+  `contract_ceiling` explicitly labelled as a process-termination guarantee.
+  Its bounded-row, setup, and cleanup terms are additive rather than hidden
+  behind an arbitrary headroom multiplier.
+  Right-censored pilot blocks remain auditable but no longer enter point-runtime
+  models as if their limits were observed completion times.
+
+### Fixed
+
+- **Crucible no longer splits a stochastic experiment wall equally by arm.**
+  Baseline and candidate now share one monotonic deadline, candidate receives
+  the actual baseline remainder, and the evaluator uses the supervisor's live
+  remaining wall rather than the request snapshot taken before producer work.
 
 ## [0.99.326] - 2026-07-14
 

@@ -6,17 +6,19 @@ same paired experiment finish inside its preregistered wall budget?
 
 The audit consumes an explicit pilot artifact.  Pilot samples are grouped into
 opaque task/family blocks so the bootstrap preserves between-workflow runtime
-heterogeneity.  Semantic timeouts remain runtime observations; infrastructure
-failures are counted but excluded because a 401/429/transport interruption is
-not a sample from the assay's semantic runtime distribution.  Reports contain
-only counts, digests, and aggregate timings—never task identities or rows.
+heterogeneity.  Semantic timeouts remain right-censored lower-bound
+observations rather than exact durations; infrastructure failures are counted
+but excluded because a 401/429/transport interruption is not a sample from the
+assay's semantic runtime distribution.  Reports contain only counts, digests,
+and aggregate timings—never task identities or rows.
 
 The first campaign under a new evaluator digest has no matching pilot by
 definition. ``contract_ceiling`` mode closes that bootstrap gap for bounded
 rows without inventing observations: it multiplies the frozen assay timeout by
-the exact paired row count, then adds preregistered evaluator and campaign
-overhead. ``fixed_experiment_wall`` instead mirrors autoresearch: rows have no
-individual wall cap and one preregistered experiment wall owns termination.
+the exact paired row count, then adds preregistered evaluator, cleanup, and
+campaign overhead. ``operational_deadline`` is deliberately weaker: it records
+an operator-selected wall and the accepted clean-timeout risk, but never labels
+that wall a statistical confidence bound or a clean-completion guarantee.
 """
 
 from __future__ import annotations
@@ -28,17 +30,23 @@ import random
 import re
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from .artifacts import load_json_object
 from .contract import ContractError, TaskUnit
+from .runtime_identity import (
+    canonical_runtime_hash,
+    runtime_design_from_parts,
+    runtime_regime_from_parts,
+)
 
-RUNTIME_PILOT_SCHEMA = "crucible.runtime-pilot.v1"
-RUNTIME_SPEC_SCHEMA = "crucible.runtime-budget-spec.v1"
-RUNTIME_REPORT_SCHEMA = "crucible.runtime-budget-report.v1"
+LEGACY_RUNTIME_PILOT_SCHEMA = "crucible.runtime-pilot.v1"
+RUNTIME_PILOT_SCHEMA = "crucible.runtime-pilot.v2"
+RUNTIME_SPEC_SCHEMA = "crucible.runtime-budget-spec.v2"
+RUNTIME_REPORT_SCHEMA = "crucible.runtime-budget-report.v2"
 RUNTIME_METHOD = "opaque-family-block-upper-bootstrap.v1"
-RUNTIME_CEILING_METHOD = "contract-timeout-ceiling.v1"
-RUNTIME_FIXED_WALL_METHOD = "fixed-experiment-wall.v1"
+RUNTIME_CEILING_METHOD = "bounded-process-termination-envelope.v2"
+RUNTIME_DEADLINE_METHOD = "operator-selected-deadline.v1"
 RUNTIME_ACCOUNTING_METHOD = "sum-finalized-simulation-elapsed.v1"
 
 _SHA256 = re.compile(r"[0-9a-f]{64}")
@@ -84,6 +92,12 @@ def _sha256(value: object, field: str) -> str:
 def _positive_int(value: object, field: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
         raise ContractError(f"{field} must be a positive integer")
+    return value
+
+
+def _nonnegative_int(value: object, field: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ContractError(f"{field} must be a non-negative integer")
     return value
 
 
@@ -133,7 +147,12 @@ def _resolve_pilot(
 def runtime_pilot_block_rates(
     pilot: Mapping[str, Any],
 ) -> tuple[list[float], dict[str, int]]:
-    """Validate one opaque pilot and return its family-level upper rates."""
+    """Validate one opaque pilot and return fully observed family upper rates.
+
+    A right-censored duration is a lower bound on completion time, not an
+    observed duration.  Any block containing censoring or infrastructure loss
+    remains visible in the counters but cannot enter a point-quantile model.
+    """
 
     blocks = pilot.get("blocks")
     if not isinstance(blocks, list) or not blocks:
@@ -144,8 +163,10 @@ def runtime_pilot_block_rates(
         "block_count": len(blocks),
         "usable_block_count": 0,
         "complete_sample_count": 0,
-        "semantic_timeout_sample_count": 0,
+        "right_censored_sample_count": 0,
+        "right_censored_block_count": 0,
         "infrastructure_sample_count_excluded": 0,
+        "infrastructure_block_count_excluded": 0,
     }
     for block_index, block in enumerate(blocks):
         field = f"runtime pilot blocks[{block_index}]"
@@ -155,34 +176,185 @@ def runtime_pilot_block_rates(
         samples = block.get("samples")
         if not isinstance(samples, list) or not samples:
             raise ContractError(f"{field}.samples must be a non-empty list")
-        semantic_seconds: list[float] = []
+        complete_seconds: list[float] = []
+        block_right_censored = False
+        block_infrastructure = False
         for sample_index, sample in enumerate(samples):
             sample_field = f"{field}.samples[{sample_index}]"
             if not isinstance(sample, Mapping):
                 raise ContractError(f"{sample_field} must be an object")
-            _require_fields(sample, sample_field, {"outcome", "wall_seconds"})
             outcome = _text(sample.get("outcome"), f"{sample_field}.outcome", max_bytes=50)
             seconds = _positive_number(sample.get("wall_seconds"), f"{sample_field}.wall_seconds")
             if outcome == "infrastructure_failure":
+                _require_fields(sample, sample_field, {"outcome", "wall_seconds"})
                 counts["infrastructure_sample_count_excluded"] += 1
+                block_infrastructure = True
                 continue
             if outcome == "complete":
+                _require_fields(sample, sample_field, {"outcome", "wall_seconds"})
                 counts["complete_sample_count"] += 1
-            elif outcome == "semantic_timeout":
-                counts["semantic_timeout_sample_count"] += 1
+                complete_seconds.append(seconds)
+            elif outcome in {"right_censored", "semantic_timeout"}:
+                if (
+                    outcome == "semantic_timeout"
+                    and pilot.get("schema") != LEGACY_RUNTIME_PILOT_SCHEMA
+                ):
+                    raise ContractError(
+                        f"{sample_field}.outcome must use right_censored in runtime-pilot.v2"
+                    )
+                required = {"outcome", "wall_seconds"}
+                if outcome == "right_censored":
+                    required.add("censoring")
+                    censoring = sample.get("censoring")
+                    if not isinstance(censoring, Mapping):
+                        raise ContractError(f"{sample_field}.censoring must be an object")
+                    _require_fields(
+                        censoring,
+                        f"{sample_field}.censoring",
+                        {"kind", "limit_seconds", "reason"},
+                    )
+                    if censoring.get("kind") != "right":
+                        raise ContractError(f"{sample_field}.censoring.kind must be 'right'")
+                    limit = _positive_number(
+                        censoring.get("limit_seconds"),
+                        f"{sample_field}.censoring.limit_seconds",
+                    )
+                    if not math.isclose(limit, seconds, rel_tol=0.0, abs_tol=1e-9):
+                        raise ContractError(
+                            f"{sample_field}.censoring.limit_seconds must equal wall_seconds"
+                        )
+                    _text(
+                        censoring.get("reason"),
+                        f"{sample_field}.censoring.reason",
+                        max_bytes=100,
+                    )
+                _require_fields(sample, sample_field, required)
+                counts["right_censored_sample_count"] += 1
+                block_right_censored = True
             else:
                 raise ContractError(
-                    f"{sample_field}.outcome must be complete, semantic_timeout, "
-                    "or infrastructure_failure"
+                    f"{sample_field}.outcome must be complete, right_censored, "
+                    "legacy semantic_timeout, or infrastructure_failure"
                 )
-            semantic_seconds.append(seconds)
-        if semantic_seconds:
+        if block_right_censored:
+            counts["right_censored_block_count"] += 1
+        if block_infrastructure:
+            counts["infrastructure_block_count_excluded"] += 1
+        if complete_seconds and not block_right_censored and not block_infrastructure:
             counts["usable_block_count"] += 1
             # Wall admission is a capacity question, not an estimate of mean
             # latency. Preserve each opaque block's slowest semantic row, then
             # bootstrap those block-level upper rates across the target design.
-            rates.append(max(semantic_seconds))
+            rates.append(max(complete_seconds))
     return rates, counts
+
+
+def validate_runtime_cycle_observation(
+    pilot: Mapping[str, Any],
+    counts: Mapping[str, int],
+) -> str:
+    """Cross-check a v2 cycle classification against its row observations."""
+
+    observation = pilot.get("cycle_observation")
+    if not isinstance(observation, Mapping):
+        raise ContractError("runtime pilot cycle_observation must be an object")
+    status = observation.get("status")
+    if status not in {"complete", "right_censored", "infrastructure_invalid"}:
+        raise ContractError("runtime pilot cycle_observation.status is invalid")
+    required = {
+        "complete_sample_count",
+        "infrastructure_failure_sample_count",
+        "observed_active_wall_seconds",
+        "observed_evaluator_wall_seconds",
+        "right_censored_sample_count",
+        "status",
+    }
+    if status == "complete":
+        required.add("active_wall_seconds")
+        required.add("completed_evaluator_wall_seconds")
+    elif status == "right_censored":
+        required.add("right_censoring_lower_bound_seconds")
+        required.add("right_censoring_evaluator_wall_lower_bound_seconds")
+    _require_fields(observation, "runtime pilot cycle_observation", required)
+
+    complete = _nonnegative_int(
+        observation.get("complete_sample_count"),
+        "runtime pilot cycle_observation.complete_sample_count",
+    )
+    censored = _nonnegative_int(
+        observation.get("right_censored_sample_count"),
+        "runtime pilot cycle_observation.right_censored_sample_count",
+    )
+    infrastructure = _nonnegative_int(
+        observation.get("infrastructure_failure_sample_count"),
+        "runtime pilot cycle_observation.infrastructure_failure_sample_count",
+    )
+    expected_counts = {
+        "complete_sample_count": complete,
+        "right_censored_sample_count": censored,
+        "infrastructure_sample_count_excluded": infrastructure,
+    }
+    for name, observed in expected_counts.items():
+        if counts.get(name) != observed:
+            raise ContractError(
+                f"runtime pilot cycle_observation count does not match blocks: {name}"
+            )
+
+    observed_wall = _nonnegative_number(
+        observation.get("observed_active_wall_seconds"),
+        "runtime pilot cycle_observation.observed_active_wall_seconds",
+    )
+    observed_evaluator_wall = _nonnegative_number(
+        observation.get("observed_evaluator_wall_seconds"),
+        "runtime pilot cycle_observation.observed_evaluator_wall_seconds",
+    )
+    if status == "complete":
+        active_wall = _nonnegative_number(
+            observation.get("active_wall_seconds"),
+            "runtime pilot cycle_observation.active_wall_seconds",
+        )
+        if censored or infrastructure:
+            raise ContractError("a complete runtime pilot cycle cannot contain censoring or infra")
+        if not math.isclose(active_wall, observed_wall, rel_tol=0.0, abs_tol=1e-9):
+            raise ContractError("complete runtime pilot active wall does not match observed wall")
+        completed_evaluator_wall = _nonnegative_number(
+            observation.get("completed_evaluator_wall_seconds"),
+            "runtime pilot cycle_observation.completed_evaluator_wall_seconds",
+        )
+        if not math.isclose(
+            completed_evaluator_wall,
+            observed_evaluator_wall,
+            rel_tol=0.0,
+            abs_tol=1e-9,
+        ):
+            raise ContractError(
+                "complete runtime pilot evaluator wall does not match observed wall"
+            )
+    elif status == "right_censored":
+        lower_bound = _nonnegative_number(
+            observation.get("right_censoring_lower_bound_seconds"),
+            "runtime pilot cycle_observation.right_censoring_lower_bound_seconds",
+        )
+        if not censored or infrastructure:
+            raise ContractError("right-censored runtime pilot status does not match its samples")
+        if not math.isclose(lower_bound, observed_wall, rel_tol=0.0, abs_tol=1e-9):
+            raise ContractError("runtime pilot censoring lower bound does not match observed wall")
+        evaluator_lower_bound = _nonnegative_number(
+            observation.get("right_censoring_evaluator_wall_lower_bound_seconds"),
+            "runtime pilot cycle_observation.right_censoring_evaluator_wall_lower_bound_seconds",
+        )
+        if not math.isclose(
+            evaluator_lower_bound,
+            observed_evaluator_wall,
+            rel_tol=0.0,
+            abs_tol=1e-9,
+        ):
+            raise ContractError(
+                "runtime pilot evaluator censoring lower bound does not match observed wall"
+            )
+    elif not infrastructure:
+        raise ContractError("infrastructure-invalid runtime pilot lacks an infrastructure sample")
+    return str(status)
 
 
 def _nearest_rank(values: Sequence[float], probability: float) -> float:
@@ -234,6 +406,8 @@ def audit_runtime_budget(
     *,
     tasks: Sequence[TaskUnit],
     trials_per_task: int,
+    task_pack_sha256: str,
+    stage: Literal["train", "test"],
     evaluator_sha256: str,
     harness_sha256: str,
     agent_route: str,
@@ -252,6 +426,8 @@ def audit_runtime_budget(
         raise ContractError("runtime audit requires at least one task")
     if trials_per_task <= 0:
         raise ContractError("runtime audit trials_per_task must be positive")
+    if stage not in {"train", "test"}:
+        raise ContractError("runtime audit stage must be 'train' or 'test'")
     evaluator_digest = _sha256(evaluator_sha256, "runtime audit evaluator_sha256")
     harness_digest = _sha256(harness_sha256, "runtime audit harness_sha256")
     assay_config_sha256 = _canonical_hash(assay_config)
@@ -262,66 +438,94 @@ def audit_runtime_budget(
         "agent_route": _text(agent_route, "runtime audit agent_route"),
         "user_route": _text(user_route, "runtime audit user_route"),
     }
+    design = runtime_design_from_parts(
+        tasks=tasks,
+        trials_per_task=trials_per_task,
+        task_pack_sha256=_sha256(task_pack_sha256, "runtime audit task_pack_sha256"),
+    )
+    expected_regime = runtime_regime_from_parts(
+        stage=stage,
+        bindings=bindings,
+        design=design,
+        experiment_wall_seconds=configured_experiment_wall_seconds,
+    )
+    expected_regime_id = canonical_runtime_hash(expected_regime)
     family_task_counts: dict[str, int] = {}
     for task in tasks:
         family_task_counts[task.family_id] = family_task_counts.get(task.family_id, 0) + 1
     ordered_counts = tuple(sorted(family_task_counts.values()))
     rows_per_task = 2 * trials_per_task
     paired_row_count = len(tasks) * rows_per_task
-    design = {
-        "task_count": len(tasks),
-        "family_count": len(ordered_counts),
-        "family_task_counts": list(ordered_counts),
-        "trials_per_task": trials_per_task,
-        "paired_row_count": paired_row_count,
-    }
+    # ``runtime_design_from_parts`` is the single source used by pilots,
+    # forecasts, and prepare-time admission.
     mode = specification.get("mode", "pilot_bootstrap")
     if mode == "fixed_experiment_wall":
+        raise ContractError(
+            "runtime_audit.mode=fixed_experiment_wall is superseded by "
+            "operational_deadline with explicit clean-timeout risk acceptance"
+        )
+    if mode == "operational_deadline":
         _require_fields(
             specification,
             "runtime_audit",
             {
                 "campaign_overhead_seconds",
+                "cleanup_grace_seconds",
                 "mode",
+                "risk_acceptance",
                 "schema",
                 "source",
             },
         )
         if "timeout" not in assay_config or assay_config.get("timeout") is not None:
-            raise ContractError("fixed_experiment_wall requires assay_config.timeout=null")
+            raise ContractError("operational_deadline requires assay_config.timeout=null")
+        if specification.get("risk_acceptance") != "nonzero_clean_timeout":
+            raise ContractError(
+                "operational_deadline requires risk_acceptance='nonzero_clean_timeout'"
+            )
         source = _text(specification.get("source"), "runtime_audit.source")
         campaign_overhead = _nonnegative_number(
             specification.get("campaign_overhead_seconds"),
             "runtime_audit.campaign_overhead_seconds",
         )
-        fixed_experiment_wall = _positive_number(
+        cleanup_grace = _nonnegative_number(
+            specification.get("cleanup_grace_seconds"),
+            "runtime_audit.cleanup_grace_seconds",
+        )
+        operational_deadline = _positive_number(
             configured_experiment_wall_seconds,
             "configured_experiment_wall_seconds",
         )
         admission, passes = _wall_admission(
-            required_experiment_wall_seconds=fixed_experiment_wall,
-            campaign_overhead_seconds=campaign_overhead,
+            required_experiment_wall_seconds=operational_deadline,
+            campaign_overhead_seconds=campaign_overhead + cleanup_grace,
             configured_experiment_wall_seconds=configured_experiment_wall_seconds,
             configured_campaign_wall_seconds=configured_campaign_wall_seconds,
         )
-        fixed_payload: dict[str, Any] = {
+        deadline_payload: dict[str, Any] = {
             "schema": RUNTIME_REPORT_SCHEMA,
-            "method": RUNTIME_FIXED_WALL_METHOD,
+            "method": RUNTIME_DEADLINE_METHOD,
             "scope": "paired_baseline_candidate_wall_envelope",
             "source": source,
             "bindings": bindings,
             "design": design,
-            "fixed_wall": {
+            "runtime_regime": expected_regime,
+            "runtime_regime_id": expected_regime_id,
+            "operational_deadline": {
                 "timeout_seconds_per_row": None,
-                "experiment_wall_seconds": fixed_experiment_wall,
+                "experiment_wall_seconds": operational_deadline,
+                "cleanup_grace_seconds": cleanup_grace,
                 "campaign_overhead_seconds": campaign_overhead,
+                "risk_acceptance": "nonzero_clean_timeout",
+                "statistical_confidence_bound": None,
+                "contract_ceiling_seconds": None,
             },
             "admission": admission,
             "passes": passes,
         }
         return {
-            **fixed_payload,
-            "runtime_audit_id": _canonical_hash(fixed_payload),
+            **deadline_payload,
+            "runtime_audit_id": _canonical_hash(deadline_payload),
         }
     if mode == "contract_ceiling":
         _require_fields(
@@ -329,20 +533,14 @@ def audit_runtime_budget(
             "runtime_audit",
             {
                 "campaign_overhead_seconds",
+                "cleanup_grace_seconds",
                 "experiment_overhead_seconds",
-                "headroom_ratio",
                 "mode",
                 "schema",
                 "source",
             },
         )
         source = _text(specification.get("source"), "runtime_audit.source")
-        headroom = _nonnegative_number(
-            specification.get("headroom_ratio"),
-            "runtime_audit.headroom_ratio",
-        )
-        if headroom > 10.0:
-            raise ContractError("runtime_audit.headroom_ratio must not exceed 10")
         experiment_overhead = _nonnegative_number(
             specification.get("experiment_overhead_seconds"),
             "runtime_audit.experiment_overhead_seconds",
@@ -351,13 +549,17 @@ def audit_runtime_budget(
             specification.get("campaign_overhead_seconds"),
             "runtime_audit.campaign_overhead_seconds",
         )
+        cleanup_grace = _nonnegative_number(
+            specification.get("cleanup_grace_seconds"),
+            "runtime_audit.cleanup_grace_seconds",
+        )
         timeout_seconds = _positive_number(
             assay_config.get("timeout"),
             "assay_config.timeout",
         )
         paired_row_ceiling = paired_row_count * timeout_seconds
         required_experiment_wall = math.ceil(
-            (paired_row_ceiling + experiment_overhead) * (1.0 + headroom)
+            paired_row_ceiling + experiment_overhead + cleanup_grace
         )
         admission, passes = _wall_admission(
             required_experiment_wall_seconds=required_experiment_wall,
@@ -372,12 +574,16 @@ def audit_runtime_budget(
             "source": source,
             "bindings": bindings,
             "design": design,
+            "runtime_regime": expected_regime,
+            "runtime_regime_id": expected_regime_id,
             "ceiling": {
                 "timeout_seconds_per_row": timeout_seconds,
                 "paired_row_ceiling_seconds": paired_row_ceiling,
                 "experiment_overhead_seconds": experiment_overhead,
-                "headroom_ratio": headroom,
+                "cleanup_grace_seconds": cleanup_grace,
                 "campaign_overhead_seconds": campaign_overhead,
+                "guarantee": "process_termination_only",
+                "clean_completion_guaranteed": False,
             },
             "admission": admission,
             "passes": passes,
@@ -388,7 +594,7 @@ def audit_runtime_budget(
         }
     if mode != "pilot_bootstrap":
         raise ContractError(
-            "runtime_audit.mode must be contract_ceiling, fixed_experiment_wall, or pilot_bootstrap"
+            "runtime_audit.mode must be contract_ceiling, operational_deadline, or pilot_bootstrap"
         )
 
     pilot_fields = {
@@ -457,9 +663,14 @@ def audit_runtime_budget(
             "agent_route",
             "assay_config_sha256",
             "blocks",
+            "cycle_observation",
             "evaluator_sha256",
             "harness_sha256",
+            "runtime_regime",
+            "runtime_regime_id",
             "schema",
+            "source_contract_id",
+            "source_runtime_receipt_id",
             "user_route",
         },
     )
@@ -469,11 +680,22 @@ def audit_runtime_budget(
         raise ContractError(
             f"runtime pilot accounting_method must be {RUNTIME_ACCOUNTING_METHOD!r}"
         )
+    _sha256(pilot.get("source_contract_id"), "runtime pilot source_contract_id")
+    _sha256(
+        pilot.get("source_runtime_receipt_id"),
+        "runtime pilot source_runtime_receipt_id",
+    )
     for field, expected in bindings.items():
         if pilot.get(field) != expected:
             raise ContractError(f"runtime pilot {field} does not match the prepared plan")
-
+    if pilot.get("runtime_regime") != expected_regime:
+        raise ContractError("runtime pilot runtime_regime does not match the prepared plan")
+    if pilot.get("runtime_regime_id") != expected_regime_id:
+        raise ContractError("runtime pilot runtime_regime_id does not match the prepared plan")
     block_rates, pilot_counts = runtime_pilot_block_rates(pilot)
+    cycle_status = validate_runtime_cycle_observation(pilot, pilot_counts)
+    if cycle_status != "complete":
+        raise ContractError("runtime admission requires a completed, uncensored pilot cycle")
     if len(block_rates) < minimum_blocks:
         raise ContractError(
             "runtime pilot has fewer usable blocks than minimum_usable_blocks: "
@@ -508,6 +730,8 @@ def audit_runtime_budget(
         "pilot_sha256": pilot_sha256,
         "bindings": bindings,
         "design": design,
+        "runtime_regime": expected_regime,
+        "runtime_regime_id": expected_regime_id,
         "pilot": pilot_counts,
         "bootstrap": {
             "simulations": simulations,
@@ -527,13 +751,15 @@ def audit_runtime_budget(
 
 
 __all__ = [
+    "LEGACY_RUNTIME_PILOT_SCHEMA",
     "RUNTIME_ACCOUNTING_METHOD",
     "RUNTIME_CEILING_METHOD",
-    "RUNTIME_FIXED_WALL_METHOD",
+    "RUNTIME_DEADLINE_METHOD",
     "RUNTIME_METHOD",
     "RUNTIME_PILOT_SCHEMA",
     "RUNTIME_REPORT_SCHEMA",
     "RUNTIME_SPEC_SCHEMA",
     "audit_runtime_budget",
     "runtime_pilot_block_rates",
+    "validate_runtime_cycle_observation",
 ]
