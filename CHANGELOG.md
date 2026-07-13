@@ -45,7 +45,23 @@ functional change.
 
 ---
 
-## [Unreleased]
+## [0.99.324] - 2026-07-13
+
+### Added
+
+- **Meta-harness catalog docs page.** New `reference/meta-harness-catalog`
+  page under the docs Reference section: every runtime harness mechanism on
+  the five-axis framework (Context Control, Plan and Execute, Verify,
+  Observe, Scaffold), rendered from single-sourced bilingual row data. Each
+  entry is code-verified with its control surface and repo path. The Plan
+  and Execute axis binds the cognitive cycle to the AgenticLoop: Plan +
+  Dynamic Replan (`core/agent/plan.py`), the `record_reflection` structured
+  call updating CognitiveState (`core/agent/loop/_reflection.py`), the
+  verify FAIL / cadence / low-confidence replan triggers, and the 16+1
+  named termination paths. The Scaffold axis catalogs the build harness
+  (CLAUDE.md rulebook, Socratic Gate, CI ratchet suite, prompt-hash pins,
+  worktree isolation, merge flow). Korean copy uses inner/outer loop
+  notation. Sitemap entry added in `site/src/lib/geode-docs/sitemap.ts`.
 
 ### Fixed
 

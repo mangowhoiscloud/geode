@@ -2,7 +2,7 @@
 
 > GEODE is a self-evolving autonomous execution agent: an inner agentic loop runs tasks (research, analysis, automation, scheduling) and an outer self-improving loop (Petri audit -> fitness gate) tunes the system that runs them.
 
-Version v0.99.323. Last sync 2026-07-13. Docs links point to clean markdown twins (.md); drop the .md suffix for the rendered page.
+Version v0.99.324. Last sync 2026-07-13. Docs links point to clean markdown twins (.md); drop the .md suffix for the rendered page.
 
 ## Start here
 
@@ -91,6 +91,7 @@ Version v0.99.323. Last sync 2026-07-13. Docs links point to clean markdown twin
 
 - [Frontier comparison](https://mangowhoiscloud.github.io/geode/docs/reference/frontier-comparison.md): What GEODE borrows from Claude Code, Codex CLI, OpenClaw, and Hermes, and where it differs. The reference entry point for GEODE's position in the lineage.
 - [External references](https://mangowhoiscloud.github.io/geode/docs/reference/external-references.md): Frontier agent systems, design standards, and prior work GEODE cites — the self-evolving-agents lineage behind the loop.
+- [Meta-harness catalog](https://mangowhoiscloud.github.io/geode/docs/reference/meta-harness-catalog.md): Every mechanism that converges the stochastic runtime, on five axes: Context Control, Plan and Execute, Verify, Observe, and the Scaffold that builds GEODE itself. Code-verified, with control surfaces and paths.
 - [CLI and slash commands](https://mangowhoiscloud.github.io/geode/docs/harness/cli.md): The exhaustive reference: every geode command, every slash command with its thin-vs-daemon routing, and the geode-mcp surface.
 - [Research, search, and llms.txt](https://mangowhoiscloud.github.io/geode/docs/runtime/research.md): How GEODE explores: llms.txt-first documentation research, web search delegation, local FTS search, and the llms.txt this site publishes.
 - [Auto-trigger sidecar](https://mangowhoiscloud.github.io/geode/docs/runtime/automation.md): The cron-scheduled sidecar that fires the self-improving loop: lock, interval gate, and hook telemetry.
