@@ -9,7 +9,8 @@ import asyncio
 import logging
 import random
 import time
-from typing import TYPE_CHECKING, Any
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, ClassVar
 
 log = logging.getLogger(__name__)
 
@@ -34,6 +35,80 @@ def __getattr__(name: str) -> Any:
             return settings.llm_retry_base_delay
         return settings.llm_retry_max_delay
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+@dataclass
+class StreamProgress:
+    """Per-attempt replay-safety signal for streamed LLM calls.
+
+    Replay-safety rule: a transient failure DURING streaming may be
+    silently auto-retried (full re-call) only while no visible assistant
+    output (text or tool-use delta) has been surfaced to a consumer.
+    Once visible output has been emitted, a full re-call would duplicate
+    the already-shown output — the retry boundary must raise
+    :class:`core.llm.errors.StreamInterruptedError` instead and let the
+    caller / session layer decide.
+
+    Contract:
+
+    - The stream consumer calls :meth:`note_delta` for every delta it
+      surfaces. Only ``"text"`` / ``"tool_use"`` kinds count as visible
+      (:class:`core.llm.adapters.base.StreamEvent` kind vocabulary);
+      ``"thinking"`` / reasoning deltas are not user-visible output and
+      never flip the flag.
+    - The retry loop calls :meth:`reset` at the start of EVERY attempt,
+      so the guard always reflects the attempt that just failed — never
+      stale progress from a previous attempt or a previous call.
+    """
+
+    visible_output_emitted: bool = False
+    partial_chars: int = 0
+
+    _VISIBLE_KINDS: ClassVar[frozenset[str]] = frozenset({"text", "tool_use"})
+
+    def note_delta(self, kind: str, chars: int = 0) -> None:
+        """Record one surfaced stream delta (visible kinds only flip the flag)."""
+        if kind in self._VISIBLE_KINDS:
+            self.visible_output_emitted = True
+            self.partial_chars += chars
+
+    def reset(self) -> None:
+        """Clear per-attempt state — called by the retry loop before each attempt."""
+        self.visible_output_emitted = False
+        self.partial_chars = 0
+
+
+def _guard_stream_replay(
+    stream_progress: StreamProgress | None,
+    exc: Exception,
+    *,
+    provider_label: str,
+    model: str,
+) -> None:
+    """Block a silent retry when the failed attempt already surfaced output.
+
+    No-op when no progress signal is threaded (legacy buffered callers) or
+    when the failed attempt emitted nothing visible. Otherwise raises
+    ``StreamInterruptedError`` chaining ``exc`` — replay-unsafe boundary.
+    """
+    if stream_progress is None or not stream_progress.visible_output_emitted:
+        return
+    from core.llm.errors import StreamInterruptedError
+
+    log.error(
+        "%s stream died mid-output (model=%s, %d visible chars already surfaced) "
+        "— auto-retry suppressed to avoid duplicating shown output",
+        provider_label,
+        model,
+        stream_progress.partial_chars,
+    )
+    raise StreamInterruptedError(
+        f"{provider_label} stream interrupted after visible output was surfaced "
+        f"({stream_progress.partial_chars} chars); auto-retry suppressed as "
+        f"replay-unsafe. Original error: {type(exc).__name__}: {exc}",
+        visible_output_emitted=True,
+        partial_chars=stream_progress.partial_chars,
+    ) from exc
 
 
 def _is_auth_error(exc: Exception) -> bool:
@@ -152,6 +227,7 @@ def retry_with_backoff_generic(
     retry_max_delay: float | None = None,
     provider_label: str = "LLM",
     on_retry: Any | None = None,
+    stream_progress: StreamProgress | None = None,
 ) -> Any:
     """Generic retry with exponential backoff + model fallback.
 
@@ -174,6 +250,14 @@ def retry_with_backoff_generic(
         retry_base_delay: Base delay in seconds.
         retry_max_delay: Max delay cap in seconds.
         provider_label: Label for log messages (e.g. "LLM", "OpenAI").
+        stream_progress: Optional replay-safety signal for callers whose
+            ``fn`` surfaces stream deltas to a consumer mid-call. Reset
+            before every attempt; when the attempt that just failed had
+            emitted visible output, the transient is NOT retried —
+            ``StreamInterruptedError`` is raised instead (see
+            :class:`StreamProgress`). ``None`` (all current callers,
+            which buffer the full response inside ``fn``) keeps the
+            legacy always-retry behavior.
     """
     models_to_try = [model] + [m for m in fallback_models if m != model]
 
@@ -219,6 +303,10 @@ def retry_with_backoff_generic(
 
     for model_idx, current_model in enumerate(models_to_try):
         for attempt in range(max_retries):
+            if stream_progress is not None:
+                # New attempt — the guard must reflect only the attempt
+                # that is about to run, never a previous attempt's output.
+                stream_progress.reset()
             try:
                 result = fn(model=current_model)
                 _notify_success(_provider_for_rotator)
@@ -253,6 +341,13 @@ def retry_with_backoff_generic(
                         plan_display_name=plan_meta.get("plan_display_name", ""),
                         upgrade_url=plan_meta.get("upgrade_url", ""),
                     ) from exc
+                # Replay-safety boundary — a transient that killed the
+                # stream AFTER visible output was surfaced must not be
+                # silently re-called (duplicate output). Raises
+                # StreamInterruptedError; no-op for buffered callers.
+                _guard_stream_replay(
+                    stream_progress, exc, provider_label=provider_label, model=current_model
+                )
                 last_error = exc
                 delay = random.uniform(0, min(retry_base_delay * (2**attempt), retry_max_delay))
                 elapsed = time.monotonic() - t0_retry
@@ -313,6 +408,16 @@ def retry_with_backoff_generic(
                 if _is_auth_error(exc) and attempt == 0:
                     refreshed = _try_oauth_refresh(provider_label)
                     if refreshed:
+                        # Same replay-safety boundary as the transient
+                        # branch — the refresh retry is also a full
+                        # re-call of an attempt that may have surfaced
+                        # visible output.
+                        _guard_stream_replay(
+                            stream_progress,
+                            exc,
+                            provider_label=provider_label,
+                            model=current_model,
+                        )
                         log.info(
                             "OAuth token refreshed for %s, retrying",
                             provider_label,
@@ -348,8 +453,13 @@ async def retry_with_backoff_generic_async(
     retry_max_delay: float | None = None,
     provider_label: str = "LLM",
     on_retry: Any | None = None,
+    stream_progress: StreamProgress | None = None,
 ) -> Any:
-    """Async retry with exponential backoff + model fallback."""
+    """Async retry with exponential backoff + model fallback.
+
+    Same contract as :func:`retry_with_backoff_generic`, including the
+    ``stream_progress`` replay-safety boundary (see :class:`StreamProgress`).
+    """
     models_to_try = [model] + [m for m in fallback_models if m != model]
 
     from core.config import settings as _cfg
@@ -389,6 +499,10 @@ async def retry_with_backoff_generic_async(
 
     for model_idx, current_model in enumerate(models_to_try):
         for attempt in range(max_retries):
+            if stream_progress is not None:
+                # New attempt — the guard must reflect only the attempt
+                # that is about to run, never a previous attempt's output.
+                stream_progress.reset()
             try:
                 result = await fn(model=current_model)
                 _notify_success(_provider_for_rotator)
@@ -416,6 +530,10 @@ async def retry_with_backoff_generic_async(
                         plan_display_name=plan_meta.get("plan_display_name", ""),
                         upgrade_url=plan_meta.get("upgrade_url", ""),
                     ) from exc
+                # Replay-safety boundary — see the sync variant above.
+                _guard_stream_replay(
+                    stream_progress, exc, provider_label=provider_label, model=current_model
+                )
                 last_error = exc
                 delay = random.uniform(0, min(retry_base_delay * (2**attempt), retry_max_delay))
                 elapsed = time.monotonic() - t0_retry
@@ -470,6 +588,13 @@ async def retry_with_backoff_generic_async(
                 if _is_auth_error(exc) and attempt == 0:
                     refreshed = _try_oauth_refresh(provider_label)
                     if refreshed:
+                        # Same replay-safety boundary as the transient branch.
+                        _guard_stream_replay(
+                            stream_progress,
+                            exc,
+                            provider_label=provider_label,
+                            model=current_model,
+                        )
                         log.info("OAuth token refreshed for %s, retrying", provider_label)
                         continue
                 raise

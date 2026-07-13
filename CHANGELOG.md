@@ -45,6 +45,58 @@ functional change.
 
 ---
 
+## [0.99.327] - 2026-07-14
+
+### Added
+
+- **Operator ask/reply channel for headless runs.** A scheduled job that
+  stops with `termination_reason="user_clarification_needed"` no longer
+  drops its question: the scheduler drain persists it as a pending ask
+  (`core/memory/pending_ask.py` — first-reply-wins resolution with an
+  `already_answered` verdict for losing replies, 72h TTL aligned with
+  session-checkpoint cleanup) and best-effort notifies the operator
+  through the configured notification adapter. Replies route back two
+  ways: `ask <id> <answer>` in a bound gateway channel resumes the
+  checkpointed session in-daemon, and `geode ask list/show/answer`
+  resumes it through the existing IPC resume + prompt path (the CLI
+  connects before claiming so a winning reply is never burned on an
+  unreachable daemon). Guards: `tests/core/memory/test_pending_ask.py`,
+  `tests/core/cli/test_scheduler_drain_ask.py`.
+- **Install-drift doctor checks.** `geode doctor` now (1) enumerates
+  every `geode` executable on PATH, classifies each target (homebrew /
+  uv-tool / other) and warns when a shadow hides the intended install —
+  pins the brew-shadows-editable verification incident; (2) compares the
+  CLI version against the running serve daemon (the IPC session greeting
+  now carries `version`) and suggests the `launchctl kickstart` restart
+  on mismatch; (3) probes the `[audit]` extra and warns that a missing
+  extra zero-fills self-improving dim_means. Guard:
+  `tests/core/cli/test_doctor_install_drift.py` (31 tests).
+- **Session export CLI.** `geode session list` (SQLite session index,
+  directory-scan fallback) and `geode session export <id> [--fmt html|md]`
+  render a checkpointed session (SQLite messages SoT) to one
+  self-contained HTML or Markdown file: role-labelled conversation,
+  compact tool-call blocks, `html.escape` on all content, known-pattern
+  secret redaction applied before truncation. Guard:
+  `tests/core/cli/test_typer_session.py`.
+- **Stream replay-safety retry boundary (dormant contract).**
+  `retry_with_backoff_generic(_async)` accepts an optional
+  `StreamProgress` guard and `classify_llm_error` learns
+  `StreamInterruptedError`: a transient failure after visible output
+  (text / tool_use deltas; thinking never counts) raises instead of
+  silently re-calling the model. Dormant by design today — every
+  production path buffers the stream (`get_final_message()`), so no
+  consumer flips the flag yet; the guard becomes load-bearing with the
+  first mid-stream delta consumer. Guard:
+  `tests/core/llm/test_stream_replay_guard.py`.
+
+### Docs
+
+- **Research notebook mode plan (plan only).**
+  `docs/plans/2026-07-14-research-notebook-mode.md` — design sketch for
+  aggregating research runs into `notebook.ipynb` plus a deterministic
+  `report.md`, with the Socratic-gate verdict (weak frontier convergence
+  → deferred) and a phased plan; no implementation in this release.
+
 ## [0.99.326] - 2026-07-14
 
 ### Fixed
