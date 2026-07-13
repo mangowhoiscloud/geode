@@ -691,8 +691,8 @@ function PerceiveBanner() {
  * Tau2 numbers over a measurement slip that separates what is being
  * measured (the agentic harness: GEODE's loop wrapped around a vanilla
  * model) from the ruler (the tau2-bench eval harness), closing on the
- * control and verdict. Values from benchmark-measurements.ts and
- * docs/architecture/crucible.md §2.
+ * control and verdict. Values from benchmark-measurements.ts and the
+ * externally preserved tau2 run artifacts.
  */
 function MeasureBanner() {
   const tau2 = BENCHMARK_GROUPS.find((group) => group.id === "tau2");
