@@ -53,6 +53,7 @@ __all__ = [
     "LLMInternalServerError",
     "LLMRateLimitError",
     "LLMTimeoutError",
+    "StreamInterruptedError",
     "UserCancelledError",
     "build_model_action_message",
     "classify_llm_error",
@@ -187,6 +188,34 @@ class BillingError(Exception):
         return "\n".join(lines)
 
 
+class StreamInterruptedError(Exception):
+    """A streamed LLM call died after visible output had been surfaced.
+
+    Replay-safety rule: a transient failure DURING streaming is safe to
+    auto-retry (full re-call) only while NO visible assistant output
+    (text or tool-use delta) has been emitted to a consumer. Once
+    visible output is on screen, a silent full-call retry would
+    duplicate the already-shown output — the retry boundary raises this
+    classified error instead (chaining the transient cause via
+    ``__cause__``) so the caller / session layer decides how to recover.
+
+    ``visible_output_emitted`` is the boundary condition that fired;
+    ``partial_chars`` counts the visible characters surfaced by the
+    failed attempt (0 when the consumer did not track sizes).
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        visible_output_emitted: bool = True,
+        partial_chars: int = 0,
+    ) -> None:
+        super().__init__(message)
+        self.visible_output_emitted = visible_output_emitted
+        self.partial_chars = partial_chars
+
+
 # ---------------------------------------------------------------------------
 # LLM error type aliases — see TYPE_CHECKING block at top of module for
 # the static surface; ``__getattr__`` resolves the names lazily at runtime.
@@ -250,6 +279,12 @@ _ERROR_CLASSIFICATION: dict[str, tuple[str, str, str]] = {
         "Context window exceeded. Compacting conversation.",
     ),
     "bad_request": ("bad_request", "error", "Invalid request. Check tool schemas or input."),
+    "stream_interrupted": (
+        "stream_interrupted",
+        "error",
+        "Stream died after partial output was shown. Not auto-retried "
+        "(a full re-call would duplicate the visible output) — re-run or continue manually.",
+    ),
     "unknown": ("unknown", "warning", "Unexpected error. Auto-retrying."),
 }
 
@@ -289,6 +324,11 @@ def classify_llm_error(exc: Exception) -> tuple[str, str, str]:
     # --- Anthropic SDK errors ---
     if isinstance(exc, BillingError):
         return _ERROR_CLASSIFICATION["billing"]
+    if isinstance(exc, StreamInterruptedError):
+        # Raised by the retry boundary (core/llm/fallback.py) when a
+        # transient death happened AFTER visible output was surfaced —
+        # deliberately not retryable (replay-unsafe).
+        return _ERROR_CLASSIFICATION["stream_interrupted"]
     # v0.88.0 — fetch the lazy aliases via the module-level ``__getattr__``
     # at first use so this function still works when ``classify_llm_error``
     # runs as the first anthropic-touching code in the process.

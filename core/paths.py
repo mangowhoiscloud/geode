@@ -637,6 +637,15 @@ def get_project_snapshots_dir(workspace_path: str | Path | None = None) -> Path:
     return get_project_data_dir(workspace_path) / "snapshots"
 
 
+def resolve_pending_asks_dir(workspace_path: str | Path | None = None) -> Path:
+    """Pending operator asks: ``~/.geode/projects/{id}/pending_asks/``.
+
+    Lives beside the sessions dir on purpose — every ask references a
+    session checkpoint, so both must share one visibility domain.
+    """
+    return get_project_data_dir(workspace_path) / "pending_asks"
+
+
 # ---------------------------------------------------------------------------
 # Backward-compat: fallback to old project-level paths
 # ---------------------------------------------------------------------------

@@ -17,7 +17,7 @@ Server → Client:
     {"type": "result", "text": "...", "rounds": 3, "tool_calls": [...]}
     {"type": "command_result", "cmd": "...", "output": "..."}
     {"type": "error", "message": "..."}
-    {"type": "session", "session_id": "cli-abc123"}
+    {"type": "session", "session_id": "cli-abc123", "version": "0.99.0"}
 """
 
 from __future__ import annotations
@@ -63,6 +63,20 @@ def _get_client_capability() -> tuple[bool, int]:
     if width <= 0:
         width = 120
     return is_tty, width
+
+
+def _session_greeting(session_id: str) -> dict[str, Any]:
+    """Build the session greeting sent to a newly connected thin CLI.
+
+    Carries the daemon's package version so a client (``geode doctor``'s
+    install-drift check) can detect a stale daemon after a rebuild without a
+    dedicated round-trip. Old clients ignore unknown fields. Imported lazily:
+    ``core.__version__`` pulls ``importlib.metadata``, which must stay off the
+    daemon's cold-start path (see ``core/__init__.py``).
+    """
+    from core import __version__
+
+    return {"type": "session", "session_id": session_id, "version": __version__}
 
 
 def _adopt_skip_permissions(msg: dict[str, Any]) -> None:
@@ -575,7 +589,7 @@ class CLIPoller:
             approval_callback=_ipc_approval,
         )
 
-        await endpoint.send_json_async({"type": "session", "session_id": session_id})
+        await endpoint.send_json_async(_session_greeting(session_id))
 
         # Dedicated reader pump — PR-HITL-APPROVAL-FSM (2026-07-02).
         #
@@ -828,7 +842,7 @@ class CLIPoller:
         )
 
         # Send session ID to client
-        self._send(client, {"type": "session", "session_id": session_id})
+        self._send(client, _session_greeting(session_id))
 
         while not self._stop_event.is_set():
             try:

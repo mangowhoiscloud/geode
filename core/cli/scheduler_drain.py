@@ -110,6 +110,30 @@ async def drain_scheduler_queue(
                     ) -> None:
                         try:
                             r = await asyncio.wait_for(_loop.arun(_p), timeout=300.0)
+                            # A clarification question from a headless run
+                            # would otherwise die with the run — persist it
+                            # as a pending ask and notify the operator.
+                            try:
+                                if (
+                                    r is not None
+                                    and getattr(r, "termination_reason", "")
+                                    == "user_clarification_needed"
+                                ):
+                                    from core.memory.pending_ask import (
+                                        apublish_clarification_ask,
+                                    )
+
+                                    await apublish_clarification_ask(
+                                        r.text,
+                                        session_id=getattr(_loop, "_session_id", ""),
+                                        source=f"scheduled:{_jid}",
+                                    )
+                            except Exception:
+                                log.warning(
+                                    "Pending-ask publish failed for job %s",
+                                    _jid,
+                                    exc_info=True,
+                                )
                             if _cb:
                                 _cb(r, job_id=_jid)
                         except TimeoutError:
