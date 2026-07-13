@@ -37,6 +37,12 @@ from core.llm.model_capabilities import (
 
 _ANTHROPIC_ADAPTIVE_EFFORTS = ("low", "medium", "high", "max", "xhigh")
 _OPENAI_REASONING_EFFORTS = ("none", "minimal", "low", "medium", "high", "xhigh")
+# GPT-5.6 levels are exactly "none, low, medium, high, xhigh, max"
+# (developers.openai.com/api/docs/models, 2026-07-13) — no "minimal",
+# plus the new "max" above xhigh. Mirrors the adapter spec's
+# reasoning_effort_values for the gpt-5.6 entries in _openai_common.py
+# so the picker never persists a value the wire would clamp.
+_OPENAI_REASONING_EFFORTS_56 = ("none", "low", "medium", "high", "xhigh", "max")
 _GLM_HYBRID_EFFORTS = ("disabled", "enabled")
 
 # PR-DRIFT-ANCHORS (2026-06-10) — the capability sets live in the single
@@ -82,6 +88,8 @@ def supported_efforts(model: str, provider: str) -> tuple[str, ...]:
             return _ANTHROPIC_ADAPTIVE_EFFORTS[:-1]
         return ()
     if provider in ("openai", "openai-codex"):
+        if model.startswith("gpt-5.6"):
+            return _OPENAI_REASONING_EFFORTS_56
         if any(model.startswith(p) for p in _OPENAI_RESPONSES_MODELS_PREFIX):
             return _OPENAI_REASONING_EFFORTS
         return ()
@@ -133,12 +141,16 @@ def cycle_effort(current: str, levels: tuple[str, ...], direction: int) -> str:
 
 _MODEL_DESCRIPTIONS: dict[str, str] = {
     # Anthropic
+    "claude-fable-5": "Fable 5 with 1M context · Frontier reasoning, always-on thinking",
     "claude-opus-4-8": "Opus 4.8 with 1M context · Most capable for complex work",
     "claude-opus-4-7": "Opus 4.7 with 1M context · High-capability reasoning",
     "claude-opus-4-6": "Opus 4.6 · Strong general-purpose reasoning",
     "claude-sonnet-4-6": "Sonnet 4.6 · Best for everyday tasks",
     "claude-haiku-4-5": "Haiku 4.5 · Fastest for quick answers",
     # OpenAI / Codex
+    "gpt-5.6-sol": "GPT-5.6 Sol · frontier tier, max-effort capable · API + subscription",
+    "gpt-5.6-terra": "GPT-5.6 Terra · balanced intelligence/cost · API + subscription",
+    "gpt-5.6-luna": "GPT-5.6 Luna · efficient high-volume tier · API + subscription",
     "gpt-5.5": "GPT-5.5 via ChatGPT subscription · subscription-routed",
     "gpt-5.4": "GPT-5.4 · PAYG balanced reasoning",
     "gpt-5.4-mini": "GPT-5.4 Mini · cheap + fast",

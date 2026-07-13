@@ -2,7 +2,7 @@
  * GEODE CHANGELOG, auto-synced from the GEODE repo via `npm run sync-stats`.
  * Do not edit manually. Edit CHANGELOG.md in the GEODE repo and re-run sync.
  *
- * Last sync: 2026-07-12
+ * Last sync: 2026-07-13
  *
  * Each entry's `body` is the raw markdown between two version headings.
  * The Changelog page renders the body with a minimal markdown renderer
@@ -16,6 +16,11 @@ export type ChangelogEntry = {
 };
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    "version": "0.99.316",
+    "date": "2026-07-13",
+    "body": "### Added\n\n- **GPT-5.6 family model support (Sol/Terra/Luna), dual-lane.** `/model`\n  picker, adapter request-shaping, pricing, and routing for OpenAI's\n  GPT-5.6 series (GA 2026-07-09): `gpt-5.6-sol`, `gpt-5.6-terra`,\n  `gpt-5.6-luna` resolve to the `openai` family and the operator's\n  credential source picks the backend per call — subscription OAuth\n  (slugs artifact-verified against `openai/codex`\n  `models-manager/models.json`) or Platform API key (models GA on the\n  API). The bare `gpt-5.6` Platform alias is registered for spec and\n  pricing but stays off the picker (aliases sol; absent from the Codex\n  models.json).\n  Spec entries carry the new `max` reasoning-effort level (doc-verified),\n  1.05M-token context windows, and short-context pricing with the >272K\n  long-context tier noted. Computer-use GA membership is deliberately\n  excluded as `unverified — live test required` (gpt-5.4 doc-vs-backend\n  precedent). Guard: `tests/core/llm/test_gpt56_support.py`.\n\n### Changed\n\n- **Effort picker: per-family OpenAI effort enums.** `gpt-5.6*` models\n  surface the documented `max` level above `xhigh`; older gpt-5.x\n  families keep the existing enum. Added the missing `claude-fable-5`\n  picker description (functional Fable 5 support landed in June)."
+  },
   {
     "version": "0.99.315",
     "date": "2026-07-13",
@@ -2298,4 +2303,4 @@ export const CHANGELOG: ChangelogEntry[] = [
   }
 ];
 
-export const CHANGELOG_SYNCED_AT = "2026-07-12";
+export const CHANGELOG_SYNCED_AT = "2026-07-13";

@@ -41,7 +41,7 @@ export default function Page() {
                 <tr>
                   <td>OpenAI / Codex</td>
                   <td><code>gpt-5.5</code></td>
-                  <td><code>gpt-</code>, <code>o3-</code>, <code>o4-</code> 접두사. 단 <code>gpt-5.5</code>, <code>gpt-5.5-pro</code>와 <code>-codex</code> 계열 접미사는 Codex OAuth 백엔드로만 라우팅</td>
+                  <td><code>gpt-</code>, <code>o3-</code>, <code>o4-</code> 접두사. 단 <code>gpt-5.5</code>, <code>gpt-5.5-pro</code>와 <code>-codex</code> 계열 접미사는 Codex OAuth 백엔드로만 라우팅. <code>gpt-5.6-sol/terra/luna</code>는 듀얼 레인 — 로그인 상태(API 키 ↔ 구독 OAuth)가 백엔드를 결정</td>
                   <td>ChatGPT 구독 OAuth(<code>~/.codex/auth.json</code>) 또는 <code>OPENAI_API_KEY</code></td>
                 </tr>
                 <tr>
@@ -162,7 +162,7 @@ geode about                   # 실효(EFFECTIVE) 모델 + 프로바이더`}</pr
                 <tr>
                   <td><code>gpt-5.5</code>가 API 키로 안 됨</td>
                   <td>codex 전용 모델</td>
-                  <td><code>gpt-5.5</code>와 <code>gpt-5.5-pro</code>는 ChatGPT 구독 OAuth 레인으로만 라우팅됩니다. <code>/login openai</code>로 로그인합니다.</td>
+                  <td><code>gpt-5.5</code>와 <code>gpt-5.5-pro</code>는 ChatGPT 구독 OAuth 레인으로만 라우팅됩니다(<code>gpt-5.6</code> 계열은 API 키로도 동작). <code>/login openai</code>로 로그인합니다.</td>
                 </tr>
               </tbody>
             </table>
@@ -205,7 +205,7 @@ geode about                   # 실효(EFFECTIVE) 모델 + 프로바이더`}</pr
                 <tr>
                   <td>OpenAI / Codex</td>
                   <td><code>gpt-5.5</code></td>
-                  <td><code>gpt-</code>, <code>o3-</code>, <code>o4-</code> prefixes. Exception: <code>gpt-5.5</code>, <code>gpt-5.5-pro</code>, and <code>-codex</code> suffixed models route only to the Codex OAuth backend</td>
+                  <td><code>gpt-</code>, <code>o3-</code>, <code>o4-</code> prefixes. Exception: <code>gpt-5.5</code>, <code>gpt-5.5-pro</code>, and <code>-codex</code> suffixed models route only to the Codex OAuth backend. <code>gpt-5.6-sol/terra/luna</code> are dual-lane — login state (API key ↔ subscription OAuth) picks the backend</td>
                   <td>ChatGPT subscription OAuth (<code>~/.codex/auth.json</code>) or <code>OPENAI_API_KEY</code></td>
                 </tr>
                 <tr>
@@ -327,7 +327,7 @@ geode about                   # the EFFECTIVE model + provider`}</pre>
                 <tr>
                   <td><code>gpt-5.5</code> fails on an API key</td>
                   <td>Codex-only model</td>
-                  <td><code>gpt-5.5</code> and <code>gpt-5.5-pro</code> route only through the ChatGPT subscription OAuth lane. Log in with <code>/login openai</code>.</td>
+                  <td><code>gpt-5.5</code> and <code>gpt-5.5-pro</code> route only through the ChatGPT subscription OAuth lane (the <code>gpt-5.6</code> family also works on an API key). Log in with <code>/login openai</code>.</td>
                 </tr>
               </tbody>
             </table>
