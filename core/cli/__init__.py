@@ -362,10 +362,12 @@ app = typer.Typer(
 from core.cli.commands.adapters import app as adapters_app  # noqa: E402
 from core.cli.commands.config import app as config_app  # noqa: E402
 from core.cli.commands.skill import app as skill_app  # noqa: E402
+from core.cli.typer_ask import ask_app  # noqa: E402
 
 app.add_typer(adapters_app, name="adapters")
 app.add_typer(skill_app, name="skill")
 app.add_typer(config_app, name="config")
+app.add_typer(ask_app, name="ask")
 
 # S-3 (2026-06-11) — scripts→CLI promotion: operator-procedure steps reachable
 # as geode subcommands (repo-only; thin wrappers over scripts/ modules).
@@ -375,6 +377,11 @@ from core.cli.commands.seed_pool import hub_app, seeds_app  # noqa: E402
 app.add_typer(seeds_app, name="seeds")
 app.add_typer(hub_app, name="hub")
 app.add_typer(prompt_app, name="prompt")
+
+# Persisted-session listing + shareable export (checkpoint-backed).
+from core.cli.typer_session import session_app  # noqa: E402
+
+app.add_typer(session_app, name="session")
 
 
 # ---------------------------------------------------------------------------
