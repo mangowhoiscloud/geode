@@ -17,6 +17,11 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    "version": "0.99.323",
+    "date": "2026-07-13",
+    "body": "### Added\n\n- **Deterministic Crucible artifact publication scaffold.**\n  `scripts/eval/publish_crucible_artifacts.py` masks the operator's local\n  username (`/Users/<user>` to `/Users/REDACTED`) idempotently across a tree,\n  and `stage`s one campaign run's allowlisted public subset (config, state,\n  ledger, per-attempt receipts, loop log, opaque power report) into the\n  external evidence store, omitting reproducible-cache and refusing sealed\n  material by name. Documented in the external-artifact-repository publication\n  cycle."
+  },
+  {
     "version": "0.99.322",
     "date": "2026-07-13",
     "body": "### Changed\n\n- **Install terminal prompt ends on the bare arrow, then types \"Hello\n  World\" (operator-directed).** The Homebrew tab's first-prompt line no\n  longer pre-fills a task sentence; it rests as `>` with the caret for a\n  beat, and if the viewer is still watching, \"Hello World\" types in\n  character by character before the replay loop resets."

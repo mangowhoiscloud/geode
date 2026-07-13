@@ -67,6 +67,7 @@ _PLACEHOLDER_USERS: frozenset[str] = frozenset(
         "jane",
         "home",
         "shared",  # /Users/Shared — macOS system dir, not a username
+        "redacted",  # /Users/REDACTED — the artifact masker's anonymized home sentinel
         # Single-letter / second-person placeholders (a real docstring example
         # ``/Users/x/dev`` tripped the ratchet on PR #2468):
         "x",
