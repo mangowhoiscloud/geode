@@ -1,7 +1,9 @@
 # Crucible — frozen experiment kernel
 
 > Status: architecture decision, 2026-07-10. This document supersedes the
-> removed G0-G7 operating procedure. Historical results remain useful as
+> G0-G7 operating procedure; that campaign record (EN/KO) is preserved in the
+> [artifact repository](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/crucible/campaign-records/g0-g7-campaign-record.md).
+> Historical results remain useful as
 > training traces and incident evidence, but not as promotion evidence.
 > External evidence behind the gate design is preserved in
 > [`crucible-evidence-dossier.md`](crucible-evidence-dossier.md).
