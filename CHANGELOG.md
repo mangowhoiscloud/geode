@@ -45,7 +45,7 @@ functional change.
 
 ---
 
-## [0.99.324] - 2026-07-13
+## [0.99.325] - 2026-07-13
 
 ### Added
 
@@ -62,6 +62,8 @@ functional change.
   (CLAUDE.md rulebook, Socratic Gate, CI ratchet suite, prompt-hash pins,
   worktree isolation, merge flow). Korean copy uses inner/outer loop
   notation. Sitemap entry added in `site/src/lib/geode-docs/sitemap.ts`.
+
+## [0.99.324] - 2026-07-13
 
 ### Fixed
 
