@@ -2,7 +2,7 @@
  * GEODE CHANGELOG, auto-synced from the GEODE repo via `npm run sync-stats`.
  * Do not edit manually. Edit CHANGELOG.md in the GEODE repo and re-run sync.
  *
- * Last sync: 2026-07-14
+ * Last sync: 2026-07-15
  *
  * Each entry's `body` is the raw markdown between two version headings.
  * The Changelog page renders the body with a minimal markdown renderer
@@ -17,9 +17,9 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
-    "version": "Unreleased",
-    "date": "",
-    "body": "### Fixed\n\n- **Release documentation remains reproducible after a promotion merge.**\n  `sync-stats` now preserves the committed generation date when the package\n  version is unchanged instead of replacing it with `SOURCE_DATE_EPOCH`. A final\n  `develop -> main` merge can therefore change the release commit timestamp\n  without dirtying `sot.ts`, `changelog.ts`, `llms.txt`, or `llms-full.txt`;\n  genuinely new versions still take their date from the reproducible source\n  epoch.\n\n### Changed\n\n- **Stable installation now uses PyPI/uv as the sole advertised package\n  channel.** The public install surface and stable release workflow no longer\n  expose or publish the custom Homebrew tap, so users are not given a\n  namespace-qualified command or an unqualified command that fails on a clean\n  machine. The repository retains a `geode-agent` formula template for a\n  future Homebrew/core submission; `brew install geode-agent` will return only\n  after that command is independently available and verified."
+    "version": "0.99.332",
+    "date": "2026-07-15",
+    "body": "### Removed\n- **Plan DAG remnants** (PR-PLAN-DAG-CLEANUP): `SubGoal.depends_on` /\n  `PlanStep.depends_on` deleted — fields survived the v0.99.46\n  GoalDecomposer removal (v0.13 DAG/TaskGraph lineage) with zero runtime\n  consumers; plan steps are consumed strictly in `current`-index order.\n  `Plan.advance(completed=...)` replaced by `Plan.abandon_and_advance()`:\n  the success-advance branch was never wired in production (tests only),\n  so the API now states the single real path. Replan prompt template and\n  parser no longer emit/read `depends_on`. `update_plan` tool description\n  now states it is display-only and separate from the internal\n  auto-generated Plan. `CognitiveState` doc table corrected: `subgoals`\n  producer is the reflection node (next_action hints), not a\n  decomposition node.\n\n### Fixed\n\n- **Release documentation remains reproducible after a promotion merge.**\n  `sync-stats` now preserves the committed generation date when the package\n  version is unchanged instead of replacing it with `SOURCE_DATE_EPOCH`. A final\n  `develop -> main` merge can therefore change the release commit timestamp\n  without dirtying `sot.ts`, `changelog.ts`, `llms.txt`, or `llms-full.txt`;\n  genuinely new versions still take their date from the reproducible source\n  epoch.\n\n### Changed\n\n- **Stable installation now uses PyPI/uv as the sole advertised package\n  channel.** The public install surface and stable release workflow no longer\n  expose or publish the custom Homebrew tap, so users are not given a\n  namespace-qualified command or an unqualified command that fails on a clean\n  machine. The repository retains a `geode-agent` formula template for a\n  future Homebrew/core submission; `brew install geode-agent` will return only\n  after that command is independently available and verified."
   },
   {
     "version": "0.99.331",
@@ -2383,4 +2383,4 @@ export const CHANGELOG: ChangelogEntry[] = [
   }
 ];
 
-export const CHANGELOG_SYNCED_AT = "2026-07-14";
+export const CHANGELOG_SYNCED_AT = "2026-07-15";
