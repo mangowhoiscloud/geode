@@ -19,12 +19,13 @@ codebase health if uncaught:
 Usage:
 
     uv run python scripts/slop_audit.py
-    uv run python scripts/slop_audit.py --baseline-out docs/audits/<file>.md
+    uv run python scripts/slop_audit.py --baseline-out scripts/slop_audit_baseline.md
     uv run python scripts/slop_audit.py --check  # exit 1 on new slop vs baseline
 
-The first invocation produces a baseline snapshot
-(`docs/audits/2026-05-18-slop-audit-baseline.md`); subsequent CI runs
-compare against it and fail only when a metric *grows*.
+The committed operational baseline lives beside this script at
+``scripts/slop_audit_baseline.md``. The dated original report is mirrored in
+``geode-eval-artifacts``; runtime checks deliberately do not depend on network
+access to that historical archive.
 
 Pure-script; no test dependencies — runs from a fresh checkout via
 ``uv run``. The skill at ``.geode/skills/slop-audit/SKILL.md`` documents
@@ -43,6 +44,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCAN_ROOTS = ("core/", "plugins/", "autoresearch/", "scripts/")
+BASELINE_FILE = REPO_ROOT / "scripts/slop_audit_baseline.md"
 
 
 @dataclass
@@ -375,7 +377,7 @@ def main() -> int:
     parser.add_argument(
         "--baseline",
         type=Path,
-        default=REPO_ROOT / "docs/audits/2026-05-18-slop-audit-baseline.md",
+        default=BASELINE_FILE,
         help="Baseline markdown file to compare against.",
     )
     parser.add_argument(

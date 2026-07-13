@@ -160,3 +160,22 @@ class TestPerProviderEnumIntegrity:
             else:
                 # Default must be in the enum
                 assert d in levels, f"{p.id} ({p.provider}): default={d} not in {levels}"
+
+
+class TestRenderVersionHeader:
+    """The picker title carries the running version so a stale binary
+    (for example a lagging Homebrew formula) is visible immediately."""
+
+    def test_header_names_running_version(self, capsys) -> None:
+        from core import __version__
+        from core.cli.effort_picker import _render
+
+        _render(
+            [("gpt-5.6-sol", "openai", "GPT-5.6 Sol", "$$", True, None)],
+            cursor=0,
+            effort_per_model={"gpt-5.6-sol": "medium"},
+            initial_model="gpt-5.6-sol",
+        )
+        out = capsys.readouterr().out
+        assert f"GEODE v{__version__}" in out
+        assert "Select model" in out

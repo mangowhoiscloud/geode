@@ -2,6 +2,7 @@ import hashlib
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import textwrap
@@ -34,9 +35,60 @@ from plugins.crucible.supervisor import (
     SupervisorConfig,
     SupervisorError,
     TrainPlan,
+    _run_process,
 )
 
 VerdictName = Literal["KEEP", "REJECT", "INVALID"]
+
+
+def test_role_process_sigterm_reaps_its_session(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    installed: dict[signal.Signals, object] = {}
+    kill_calls: list[tuple[int, int]] = []
+
+    class Process:
+        pid = 12345
+        stopped = False
+
+        def wait(self, timeout: float | None = None) -> int:
+            handler = installed[signal.SIGTERM]
+            assert callable(handler)
+            handler(signal.SIGTERM, None)
+            raise AssertionError("signal handler must interrupt wait")
+
+        def poll(self) -> int | None:
+            return -signal.SIGTERM if self.stopped else None
+
+    process = Process()
+
+    def install(signum: signal.Signals, handler: object) -> object:
+        installed[signum] = handler
+        return signal.SIG_DFL
+
+    def kill_group(pid: int, signum: int) -> None:
+        kill_calls.append((pid, signum))
+        if signum == 0 and process.stopped:
+            raise ProcessLookupError
+        if signum == signal.SIGTERM:
+            process.stopped = True
+
+    monkeypatch.setattr("plugins.crucible.supervisor.subprocess.Popen", lambda *a, **kw: process)
+    monkeypatch.setattr("plugins.crucible.supervisor.signal.signal", install)
+    monkeypatch.setattr("plugins.crucible.supervisor.os.killpg", kill_group)
+
+    with pytest.raises(SystemExit, match=str(128 + signal.SIGTERM)):
+        _run_process(
+            ("fixture",),
+            cwd=tmp_path,
+            environment={},
+            timeout=10.0,
+        )
+
+    assert (12345, signal.SIGTERM) in kill_calls
+    assert (12345, 0) in kill_calls
+
 
 EVALUATOR_SCRIPT = "#!/usr/bin/env python3\n" + textwrap.dedent(
     """
