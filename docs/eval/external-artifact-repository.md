@@ -71,6 +71,8 @@ reports may be public when they contain no selected identity.
 7. Record its merge commit and immutable blob/tree links in the GEODE run
    ledger before publishing a score or improvement claim.
 
+The publication is scripted deterministically by `scripts/eval/publish_crucible_artifacts.py` (`stage` copies one run's allowlisted subset and masks the local username; `mask` re-masks an existing tree idempotently). Both refuse sealed material by name and never rewrite an existing run directory.
+
 There is intentionally no automatic `rsync` from the whole artifact tree. A
 manifest-first, allowlisted copy keeps new credential files and unopened
 holdouts from becoming public merely because they appeared under a familiar
