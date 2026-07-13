@@ -95,7 +95,9 @@ suite(Verified/standard), k, route(`openai-subscription/codex`), effort(xhigh),
 
 원시 실로그는 공개 저장소에 스냅샷으로 게시한다:
 <https://github.com/mangowhoiscloud/geode-eval-artifacts> (MCPMark run
-디렉토리 전체 + 파이프라인 로그 + tau2 simulations). 로컬
+디렉토리 전체 + 파이프라인 로그 + tau2 simulations + Crucible campaign
+스토어·gate provenance + SIL Petri 감사 `.eval` 전량 408건, 허브는 선별 29건
+서빙). 로컬
 `artifacts/eval/harnesses/**` 경로를 인용하는 run record는 이 저장소의 동일
 상대 경로에서 원본을 볼 수 있다. 게시 전 시크릿 스캔이 게이트이며, 스냅샷은
 append-only로 유지한다.

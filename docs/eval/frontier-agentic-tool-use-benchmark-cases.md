@@ -243,9 +243,12 @@ local artifacts so GEODE does not vendor external harness code.
 Raw run logs cited by this ledger are published as append-only snapshots at
 <https://github.com/mangowhoiscloud/geode-eval-artifacts> (MCPMark result
 directories with per-task `meta.json` / `messages.json` / verifier output,
-pipeline logs, and GEODE-owned tau2 simulation JSONs). Local
-`artifacts/eval/harnesses/**` paths cited below map to the same relative paths
-in that repository. A secret scan gates every upload.
+pipeline logs, GEODE-owned tau2 simulation JSONs, the Crucible campaign run
+store with gate provenance, and the full Petri audit log set under
+`sil/petri-audits/`, 408 `.eval` files of which the self-improving hub serves
+a curated 29-log subset). Local `artifacts/eval/harnesses/**` paths cited
+below map to the same relative paths in that repository. A secret scan gates
+every upload.
 
 The benchmark harnesses were fetched under ignored local artifacts so they can
 be used for setup and smoke testing without vendoring third-party repos into
