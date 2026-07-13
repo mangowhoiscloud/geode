@@ -47,6 +47,8 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.324] - 2026-07-13
+
 ### Fixed
 
 - **Crucible infrastructure-safe checkpoint resume.** Tau2 row checkpoints now
