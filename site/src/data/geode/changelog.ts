@@ -17,6 +17,11 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    "version": "0.99.319",
+    "date": "2026-07-13",
+    "body": "### Added\n\n- **Crucible runtime-budget admission.** Central prepare can bind an opaque,\n  digest-matched runtime pilot and use deterministic family-block bootstrap\n  quantiles to reject train or campaign wall budgets that cannot hold the\n  paired design. Reports retain semantic timeouts, exclude and count\n  infrastructure interruptions, stamp `runtime_audit_id` provenance, and are\n  also available for frozen train or sealed contracts through the\n  `runtime-pilot` and `runtime-audit` CLI surfaces."
+  },
+  {
     "version": "0.99.318",
     "date": "2026-07-13",
     "body": "### Changed\n\n- **Benchmarks docs consolidated to one page per benchmark.** The 7-page\n  benchmarks section (results ledger, queue, publishing-cycle, and four\n  per-run record pages) collapses into `/docs/benchmarks/tau2` and\n  `/docs/benchmarks/mcpmark` — each carrying the headline track, the\n  service-coverage/blocker state, the full run-record ledger (rendered\n  from the `benchmark-measurements.ts` SoT), and links into the\n  `geode-eval-artifacts` repository where the raw run logs (per-task\n  verifier results and full transcripts) are preserved.\n- **README links raw eval run logs and updates supported-model badges.**\n  Benchmark snapshot sections now link the exact `geode-eval-artifacts`\n  directories behind the published numbers; the header gains an\n  `Eval artifacts` link, and provider badges advance to Anthropic\n  Fable 5 / OpenAI GPT-5.6."

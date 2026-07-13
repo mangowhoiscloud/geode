@@ -41,6 +41,7 @@ from typing import Any
 from . import TRIAD_PREPARE
 from .artifacts import load_json_object, write_exclusive_json
 from .contract import (
+    Budget,
     ContractError,
     PromotionRule,
     TaskUnit,
@@ -51,7 +52,8 @@ from .contract import (
 from .curation import curate_tau2_pack
 from .power import audit_family_power
 from .preflight import campaign_token_cap, completed_campaign_tokens, decide
-from .supervisor import SupervisorConfig, SupervisorError
+from .runtime_budget import audit_runtime_budget
+from .supervisor import LoopLimits, SupervisorConfig, SupervisorError
 
 SPEC_SCHEMA = "crucible.campaign-spec.v1"
 PREPARE_PROVENANCE_SCHEMA = "crucible.prepare-provenance.v1"
@@ -268,6 +270,47 @@ def prepare_campaign(
                 f"report={power_report_path}"
             )
 
+    runtime_report: dict[str, Any] | None = None
+    runtime_report_path: Path | None = None
+    runtime_specification = spec.get("runtime_audit")
+    if runtime_specification is not None:
+        if not isinstance(runtime_specification, Mapping):
+            raise ContractError("campaign spec runtime_audit must be an object")
+        budget = plan.get("budget")
+        limits = config.get("limits")
+        if not isinstance(budget, Mapping):
+            raise ContractError("train_plan budget must be an object")
+        if not isinstance(limits, Mapping):
+            raise ContractError("campaign limits must be an object")
+        experiment_budget = Budget.from_mapping(budget)
+        campaign_limits = LoopLimits.from_mapping(limits)
+        runtime_report = audit_runtime_budget(
+            tasks=units,
+            trials_per_task=plan["trials_per_task"],
+            evaluator_sha256=plan["evaluator_sha256"],
+            harness_sha256=plan["harness_sha256"],
+            agent_route=str(plan.get("agent_route", "")),
+            user_route=str(plan.get("user_route", "")),
+            assay_config=plan.get("assay_config") or {},
+            configured_experiment_wall_seconds=experiment_budget.max_wall_seconds,
+            configured_campaign_wall_seconds=campaign_limits.max_wall_seconds,
+            specification=runtime_specification,
+            basis_root=spec_path.resolve().parent,
+        )
+        runtime_report_path = state_dir_root / "prepare" / "runtime.json"
+        runtime_report_path.parent.mkdir(parents=True, exist_ok=True)
+        write_exclusive_json(runtime_report_path, runtime_report)
+        if not runtime_report["passes"]:
+            admission = runtime_report["admission"]
+            raise ContractError(
+                "runtime budget audit rejected configured wall: "
+                f"experiment={admission['configured_experiment_wall_seconds']}/"
+                f"{admission['required_experiment_wall_seconds']}, "
+                f"campaign={admission['configured_campaign_wall_seconds']}/"
+                f"{admission['required_campaign_wall_seconds']}; "
+                f"report={runtime_report_path}"
+            )
+
     config["campaign_id"] = campaign_id
     provenance: dict[str, Any] = {
         "schema": PREPARE_PROVENANCE_SCHEMA,
@@ -276,6 +319,8 @@ def prepare_campaign(
     }
     if power_report is not None:
         provenance["power_audit_id"] = power_report["power_audit_id"]
+    if runtime_report is not None:
+        provenance["runtime_audit_id"] = runtime_report["runtime_audit_id"]
     config["prepared_by"] = provenance
     config["initial_search_head_sha"] = head_sha
     state_dir = state_dir_root / "state"
@@ -344,6 +389,14 @@ def prepare_campaign(
                 for scenario in power_report["scenarios"]
             ],
         }
+    runtime_summary: dict[str, Any] | None = None
+    if runtime_report is not None and runtime_report_path is not None:
+        runtime_summary = {
+            "path": str(runtime_report_path),
+            "runtime_audit_id": runtime_report["runtime_audit_id"],
+            "passes": runtime_report["passes"],
+            **runtime_report["admission"],
+        }
     return {
         "schema": PREPARE_REPORT_SCHEMA,
         "campaign_id": campaign_id,
@@ -359,4 +412,5 @@ def prepare_campaign(
         "evaluator_sha256": plan["evaluator_sha256"],
         "harness_sha256": plan["harness_sha256"],
         "power_audit": power_summary,
+        "runtime_audit": runtime_summary,
     }

@@ -45,6 +45,18 @@ functional change.
 
 ---
 
+## [0.99.319] - 2026-07-13
+
+### Added
+
+- **Crucible runtime-budget admission.** Central prepare can bind an opaque,
+  digest-matched runtime pilot and use deterministic family-block bootstrap
+  quantiles to reject train or campaign wall budgets that cannot hold the
+  paired design. Reports retain semantic timeouts, exclude and count
+  infrastructure interruptions, stamp `runtime_audit_id` provenance, and are
+  also available for frozen train or sealed contracts through the
+  `runtime-pilot` and `runtime-audit` CLI surfaces.
+
 ## [0.99.318] - 2026-07-13
 
 ### Changed

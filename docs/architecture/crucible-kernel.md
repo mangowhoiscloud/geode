@@ -1270,6 +1270,45 @@ not launch authority, and must be regenerated against the merged develop SHA.
 The digest-bound record is preserved in
 [`https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/crucible/gate-provenance/crucible-power-admission-2026-07-13.md`](../eval/crucible-power-admission-2026-07-13.md).
 
+Wall-clock capacity is now admitted by the same prepare boundary instead of
+being copied from the previous campaign. A `crucible.runtime-pilot.v1`
+artifact binds the evaluator, harness, canonical assay configuration, and both
+model routes. Its samples are grouped into opaque task/family blocks. Prepare
+uses a preregistered block-bootstrap quantile, explicit experiment/campaign
+overhead, and explicit headroom to derive the minimum wall envelope; it writes
+`runtime.json`, stamps `runtime_audit_id` into `prepared_by`, and refuses to
+emit a launch config when either the paired-experiment or campaign wall is too
+short. Semantic timeouts remain runtime samples. Infrastructure interruptions
+are reported but excluded, and the pilot accounting method must sum finalized
+simulation elapsed time, so the old maximum-single-row accounting bug cannot
+serve as a basis. `runtime-pilot` projects verified paired raw/evidence
+artifacts into that opaque basis, and `runtime-audit` applies it to a frozen
+train or sealed test contract.
+
+The operational envelope immediately after r30 is deliberately provisional,
+not a universal tau2 constant. The inherited 9-family × 2-trial budget encoded
+500 seconds for each of 36 paired rows (`18,000s`). Moving to three trials
+creates 54 paired rows, so preserving that already-preregistered envelope
+requires `27,000s` for evaluation and `28,000s` for the campaign after the
+existing `1,000s` outer allowance. The 6-family × 2-trial sealed design has 24
+paired rows; its conservative unopened-pack allowance is `24 × 600s` plus
+`600s` setup, or `15,000s`. These numbers must be replaced by a report from a
+completed, digest-matched pilot once enough clean blocks exist; the in-flight
+r31 contract remains immutable.
+
+The method, rather than those GEODE-specific numbers, follows the external
+sources. Karpathy's
+[`autoresearch`](https://github.com/karpathy/autoresearch) freezes a wall budget
+before comparison so repeated experiments remain commensurable; its five
+minutes are hardware-specific, not a transferable constant. Google SRE's
+[`Service Level Objectives`](https://sre.google/sre-book/service-level-objectives/)
+chapter recommends latency distributions/percentiles rather than averages,
+and Dean and Barroso's
+[`The Tail at Scale`](https://research.google/pubs/the-tail-at-scale/)
+explains why tail latency, not mean latency, controls completion of multi-step
+services. Crucible therefore derives a tail envelope from its own bound pilot
+instead of borrowing another system's duration.
+
 The strongest honest claims are:
 
 - the frozen external tau2 baseline identified concrete retail wrong-write and
