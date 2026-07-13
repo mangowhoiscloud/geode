@@ -17,6 +17,11 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    "version": "0.99.321",
+    "date": "2026-07-13",
+    "body": "### Changed\n\n- **Portfolio hero terminal folded into the install section\n  (operator-directed).** The standalone hero terminal (brew install, first\n  launch, welcome, first prompt) and the \"every way to install\" Homebrew tab\n  showed near-duplicate transcripts; the install section now carries the full\n  hero sequence on its Homebrew tab (typed command, install output, Geodi\n  welcome banner, first prompt with caret) and the hero keeps only the\n  statement and calls to action. The abridged-transcript caption moved into\n  the channel note; dead `TerminalMock`/`INSTALL_LINES` removed."
+  },
+  {
     "version": "0.99.320",
     "date": "2026-07-13",
     "body": "### Added\n\n- **Crucible runtime-budget admission.** Central prepare can bind an opaque,\n  digest-matched runtime pilot and use deterministic family-block bootstrap\n  quantiles to reject train or campaign wall budgets that cannot hold the\n  paired design. Reports retain semantic timeouts, exclude and count\n  infrastructure interruptions, stamp `runtime_audit_id` provenance, and are\n  also available for frozen train or sealed contracts through the\n  `runtime-pilot` and `runtime-audit` CLI surfaces. A pilot-free\n  `contract_ceiling` mode derives the bootstrap campaign envelope directly\n  from the frozen per-row timeout and explicit setup/campaign overhead.\n\n### Fixed\n\n- **Tau2 contaminated-arm fail-fast.** The live evaluator now polls finalized\n  incremental rows and terminates the whole paid process group as soon as an\n  infrastructure termination or recovered transport retry makes the arm\n  scoreless. SIGINT/SIGTERM also clean up the tau2 process group, preventing\n  the orphan evaluator observed after the interrupted r33 campaign.\n- **Slop audit baseline remains offline-operable after artifact migration.**\n  The historical dated report stays in `geode-eval-artifacts`, while the\n  executable audit now reads a local operational baseline beside its script;\n  fresh checkouts and CI no longer depend on the deleted `docs/audits` copy."
