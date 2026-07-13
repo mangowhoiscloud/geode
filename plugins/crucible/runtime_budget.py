@@ -130,9 +130,11 @@ def _resolve_pilot(
     return resolved, load_json_object(resolved, "runtime pilot")
 
 
-def _pilot_block_rates(
+def runtime_pilot_block_rates(
     pilot: Mapping[str, Any],
 ) -> tuple[list[float], dict[str, int]]:
+    """Validate one opaque pilot and return its family-level upper rates."""
+
     blocks = pilot.get("blocks")
     if not isinstance(blocks, list) or not blocks:
         raise ContractError("runtime pilot blocks must be a non-empty list")
@@ -471,7 +473,7 @@ def audit_runtime_budget(
         if pilot.get(field) != expected:
             raise ContractError(f"runtime pilot {field} does not match the prepared plan")
 
-    block_rates, pilot_counts = _pilot_block_rates(pilot)
+    block_rates, pilot_counts = runtime_pilot_block_rates(pilot)
     if len(block_rates) < minimum_blocks:
         raise ContractError(
             "runtime pilot has fewer usable blocks than minimum_usable_blocks: "
@@ -533,4 +535,5 @@ __all__ = [
     "RUNTIME_REPORT_SCHEMA",
     "RUNTIME_SPEC_SCHEMA",
     "audit_runtime_budget",
+    "runtime_pilot_block_rates",
 ]

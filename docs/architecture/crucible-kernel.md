@@ -1294,6 +1294,19 @@ basis. `runtime-pilot` projects verified paired raw/evidence artifacts into
 that opaque basis, and `runtime-audit` applies it to a frozen train or sealed
 test contract.
 
+`runtime-forecast` is the planning surface for deciding how long that measured
+tail takes to stabilize. It accepts multiple digest-bound pilots only when all
+runtime bindings match, treats each pilot as one campaign regime, then samples
+families inside the selected regime. It enumerates that empirical multinomial
+distribution exactly when the composition space is bounded and otherwise uses
+a preregistered deterministic Monte Carlo fallback. The report keeps two
+claims separate: the model-based Wilks plan may count usable family blocks,
+while the distribution-free plan counts only completed cycles with the exact
+target design. A 6-family × 1-trial source cycle can inform a 9-family ×
+3-trial block forecast, but it is never counted as an observed 9 × 3 target
+cycle. The one-sided sample-maximum requirement follows [Wilks
+(1941)](https://doi.org/10.1214/aoms/1177731788).
+
 The first 9-family × 3-trial planning estimate preserved the inherited
 500-second-per-row allowance (`27,000s` experiment / `28,000s` campaign), but
 r31 stopped after eight of 27 baseline rows and never entered the candidate

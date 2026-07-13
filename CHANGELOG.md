@@ -47,6 +47,17 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **Crucible runtime forecasts are reproducible from verified full cycles.**
+  The `runtime-forecast` command combines digest-bound opaque runtime pilots,
+  preserves campaign and family resampling levels, derives p95/p99 wall
+  estimates by exact multinomial enumeration when tractable (with deterministic
+  Monte Carlo fallback), applies Wilks one-sided sample-size planning, and
+  reports exact sample requirements plus expected and point-wall active-compute
+  forecasts for model-based block and distribution-free target-cycle
+  calibration.
+
 ### Changed
 
 - **Crucible tau2 rows can run without an arbitrary semantic wall cap.** A
