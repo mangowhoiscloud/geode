@@ -45,6 +45,21 @@ functional change.
 
 ---
 
+## [0.99.321] - 2026-07-13
+
+### Changed
+
+- **Portfolio hero terminal folded into the install section
+  (operator-directed).** The standalone hero terminal (brew install, first
+  launch, welcome, first prompt) and the "every way to install" Homebrew tab
+  showed near-duplicate transcripts; the install section now carries the full
+  hero sequence on its Homebrew tab (typed command, install output, Geodi
+  welcome banner, first prompt with caret) and the hero keeps only the
+  statement and calls to action. The abridged-transcript caption moved into
+  the channel note; dead `TerminalMock`/`INSTALL_LINES` removed.
+
+---
+
 ## [0.99.320] - 2026-07-13
 
 ### Added
