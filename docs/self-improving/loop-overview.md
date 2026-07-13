@@ -174,8 +174,8 @@ back to the hierarchical `plugins/petri_audit/seeds/` default.
 - Older 6-module self-improving-loop stub (superseded by this driver):
   `docs/architecture/autoresearch.md`
 - Petri evidence (gen-0 fitness signal):
-  `docs/audits/2026-05-15-petri-insights.md` +
-  `docs/audits/2026-05-15-autoresearch-gen0-plan.md`
+  `https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-15-petri-insights.md` +
+  `https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-15-autoresearch-gen0-plan.md`
 - Wiring sprint plan:
   `docs/plans/2026-05-19-self-improving-loop-wiring-sprint.md`
 

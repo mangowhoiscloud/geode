@@ -1,6 +1,6 @@
 # Render-lint — Pages publish gate for markdown / YAML / JSON
 
-GEODE publishes `docs/petri-bundle/` and links into `docs/audits/` via
+GEODE publishes `docs/petri-bundle/` and links into `https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/` via
 `.github/workflows/pages.yml`. The petri-bundle README is served verbatim
 by GitHub Pages; the audit docs are linked from the bundle and rendered
 by the Next.js `site/` static export. Two surfaces, two markdown
@@ -20,7 +20,7 @@ Files currently gated:
 
 - `docs/petri-bundle/README.md` — Pages landing page. Served verbatim;
   any malformed table renders as raw pipes.
-- `docs/audits/2026-05-12-petri-geode-audit-v3.md`,
+- `https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-12-petri-geode-audit-v3.md`,
   `2026-05-12-petri-insights.md`,
   `2026-05-12-petri-multi-model-partial.md` — the three caveat docs
   PR #2 edited. The README cross-links to all three.
@@ -33,7 +33,7 @@ Files currently gated:
   static-site viewer load.
 
 **Legacy carve-out:** audit reports authored before the gate landed
-(everything under `docs/audits/` other than the four caveat files
+(everything under `https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/` other than the four caveat files
 above) have pre-existing MD032 / MD040 / MD031 violations. Linting
 them would force a content rewrite of historical reports — not the
 goal. New audit docs should be added to the allowlist when they land.
@@ -45,7 +45,7 @@ Out of scope:
   fight the generator.
 - `.eval` archives — zstd-compressed binary.
 - Other markdown under `docs/` — not on the Pages path. Existing
-  `docs/audits/*.md` violations from older reports are deliberately
+  `https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/*.md` violations from older reports are deliberately
   left alone; the gate enforces no regression on the four caveat docs
   PR #2 touched and on any audit added going forward.
 
@@ -142,7 +142,7 @@ sufficient to fail-fast the Pages publish.
 
 ## Related
 
-- PR #2 — added the caveats in `docs/audits/2026-05-12-petri-*.md` and
+- PR #2 — added the caveats in `https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-12-petri-*.md` and
   `docs/petri-bundle/README.md` that motivated this gate.
 - `.github/workflows/pages.yml` — the workflow this gate lives in.
 - `tests/test_render_lint_config.py` — the integrity ratchet.

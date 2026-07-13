@@ -19,7 +19,7 @@ Use this skill when you need to track progress of a long-running background comm
 
 원인 — `tail -F` 가 pipe 에 출력될 때의 **stdout buffering**. macOS BSD `tail` 은 line-buffered 이지만 background task 의 stdout flush 타이밍, file inotify 트리거, Monitor 의 capture 타이밍이 어긋나면 매칭 라인이 buffer 안에 갇혀 시간 내 emit 되지 않음. 본 case 에서 5개 매칭 라인의 총 byte 수가 ~250B 라 stdout 의 4KB block-buffer 한도를 못 채우는 상황도 의심.
 
-상세 분석: `docs/audits/2026-05-11-petri-2b-7-n7-prime-n8-n4.md` 의 N7' Monitor 타임아웃 섹션.
+상세 분석: `https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-11-petri-2b-7-n7-prime-n8-n4.md` 의 N7' Monitor 타임아웃 섹션.
 
 ## 안정 패턴 — 상황별 선택
 
@@ -86,6 +86,6 @@ stdbuf -oL tail -F file 2>/dev/null | stdbuf -oL grep -E "..." | head -200
 - [ ] file mtime 검증으로 task 가 진짜 진행 중인지 확인 (`stat -f mtime`)
 
 ## Reference
-- 사례: `docs/audits/2026-05-11-petri-2b-7-n7-prime-n8-n4.md` § N7' Monitor 타임아웃
+- 사례: `https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-11-petri-2b-7-n7-prime-n8-n4.md` § N7' Monitor 타임아웃
 - 자동 archive: `plugins/petri_audit/runner.py` `_extract_eval_log_path` / `_maybe_auto_archive`
 - inspect_ai eval log 형식: `logs/<ISO-timestamp>_audit_<id>.eval` 끝에 `Log: <path>` line emit

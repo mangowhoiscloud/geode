@@ -1,4 +1,6 @@
-# Crucible — 개선을 불로 시험하는 게이트 루프
+# Crucible -- The Gate Loop That Tests Improvements By Fire
+
+> **English** | [한국어](crucible.ko.md)
 
 > **2026-07-10 correction:** the frozen three-class evidence contract in
 > [`crucible-kernel.md`](crucible-kernel.md) supersedes the G0-G7 campaign
@@ -7,48 +9,52 @@
 > revisions, tune on exposed held-out rows, or merge diagnostic projectors.
 > CLI candidate names mentioned below are historical and are no longer active.
 
-> 상태: 설계 v2 정렬(2026-07-06), M1 기각·S5 판정 보류·iteration-cost 재설계 중. 선행: `docs/architecture/autoresearch.md`(v1 SOT),
-> `docs/adr/ADR-012-self-improvement-surface-tiers.md`(§S6), `core/self_improving/program.md`.
-> 명명: crucible(도가니) — 광석을 녹여 불로 시험하는 그릇, 관용적으로 '혹독한 시험'.
-> 겉보기(황철석, fool's gold)가 아니라 불이 가치를 정한다. GEODE 에서 캐낸 개선 후보를
-> **외부 동결 벤치마크와 게이트 사다리의 불에 통과시켜, 살아남는 승격만 남긴다**는 v2의
-> 정체성. 담금질처럼 시험이 강도를 만든다. GEODE 광물 계보(광석 → 도가니) 정합.
-> 어휘는 CONTENT-CANON §2: 변이·선택·승격·되돌림. 가중치 갱신 없음.
+> Status: design v2 aligned (2026-07-06); M1 rejected, S5 verdict on hold, iteration-cost redesign in progress. Prerequisites: `docs/architecture/autoresearch.md` (v1 SOT),
+> `docs/adr/ADR-012-self-improvement-surface-tiers.md` (§S6), `core/self_improving/program.md`.
+> Naming: a crucible is the vessel that melts ore and tests it by fire; idiomatically, a severe trial.
+> Fire, not appearance (pyrite, fool's gold), determines value. The v2 identity: improvement
+> candidates mined from GEODE are **passed through the fire of a frozen external benchmark and a
+> gate ladder, and only the promotions that survive remain**. As in quenching, the trial creates
+> the strength. Consistent with the GEODE mineral lineage (ore → crucible).
+> Vocabulary follows CONTENT-CANON §2: mutation, selection, promotion, revert. No weight updates.
 
-## 1. self-improving loop v1의 한계 — 왜 새 체계인가
+## 1. Limits Of self-improving loop v1 -- Why A New System
 
-v1은 seed generation + Petri 시뮬레이션 기반이다. 적대 시나리오를 스스로 생성하고
-(co-scientist 토폴로지, proximity 중복 제거, Elo 선별), Petri 감사가 행동을 다차원으로
-측정하고, fitness 게이트가 승격을 판정했다. 2026-06 캠페인의 결론은 채택 0 — 게이트가
-비개선 변이를 정확히 기각한 정직한 기록이지만, 동시에 세 한계의 기록이기도 하다.
+v1 is based on seed generation plus Petri simulation. It generates adversarial scenarios by itself
+(co-scientist topology, proximity dedup, Elo selection), a Petri audit measures behavior across
+multiple dimensions, and a fitness gate decides promotion. The 2026-06 campaign's conclusion was
+zero adoptions, an honest record of the gate correctly rejecting non-improving mutations, but also
+a record of three limits.
 
-1. **신호 분산이 3중이다.** 시드 분포 + auditor 행동 + judge 채점이 전부 확률적이라
-   노이즈 밴드가 넓고, 검출 한계 위로 올라오는 개선이 드물다. 병목은 옵티마이저가 아니라
-   측정이었다.
-2. **폐쇄 회로다.** 시드도 측정도 자기 생성 — 외부 앵커가 없어, 시뮬레이션 위의 개선이
-   실태스크 능력과 얼마나 닿는지 검증할 수 없다.
-3. **판정이 비싸다.** LLM-judge 집계는 replicate 를 늘릴수록 비용이 정비례라, 노이즈를
-   통계로 조일 수단이 사실상 없다.
+1. **Signal variance is threefold.** Seed distribution, auditor behavior, and judge scoring are
+   all stochastic, so the noise band is wide and improvements that rise above the detection floor
+   are rare. The bottleneck was measurement, not the optimizer.
+2. **It is a closed circuit.** Both seeds and measurements are self-generated; with no external
+   anchor, there is no way to verify how much an improvement on the simulation touches real-task
+   capability.
+3. **Verdicts are expensive.** LLM-judge aggregation scales cost linearly with replicates, so
+   there is effectively no way to squeeze the noise down with statistics.
 
-v1이 확립한 것은 남긴다: 무변이·무작위 대조군, 버전 동결 held-out, K-재측정 반증,
-"이진 신호는 평균에 섞지 않는다"(`core/audit/contracts.py`). Crucible 은 이 규율 위에
-**신호만 교체**한다.
+What v1 established is kept: no-mutation/random control arms, version-frozen held-out,
+K-remeasurement falsification, and "binary signals are not averaged" (`core/audit/contracts.py`).
+Crucible **replaces only the signal** on top of this discipline.
 
-## 2. τ²-bench 실측 — 외부 자로 먼저 잰 좌표
+## 2. τ²-bench Measurement -- Coordinates Taken First With An External Ruler
 
 2026-07-03, sierra-research/tau2-bench@1901a30, GEODE v0.99.269, agent gpt-5.2 (high, payg),
 native user_simulator gpt-4.1-2025-04-14, pass^1 (num_trials=1):
 
-| 도메인 | Reward / pass^1 | 세부 |
+| Domain | Reward / pass^1 | Detail |
 |---|---|---|
 | retail | **0.7632** (87/114) | write actions 140/174, db_match 88/113 |
-| telecom | **0.8772** (100/114) | write actions 471/496, 종료 전건 user_stop |
-| airline | 0.8200 (41/50) | 채점 ground-truth 품질 이슈로 추세 참고용 |
-| 가중 집계 | 0.8201 (228/278) | Agent-World 식 내부 비교 전용 |
+| telecom | **0.8772** (100/114) | write actions 471/496, all terminations user_stop |
+| airline | 0.8200 (41/50) | trend reference only, grading ground-truth quality issues |
+| weighted aggregate | 0.8201 (228/278) | Agent-World-style internal comparison only |
 
-좌표: Agent-World 표의 GPT-5.2 High(80.2)와 동급, Claude Sonnet-4.5(84.7)·Gemini-3 Pro(85.4)
-아래, OpenAI 공식 GPT-5.2 Thinking(telecom 98.7 / retail 82.0, 자체 리서치 셋업·airline 제외)
-대비 **-11.0 / -5.7**. 같은 모델에서 나는 격차이므로 손실은 모델이 아니라 하네스 정책 층이다.
+Coordinates: on par with GPT-5.2 High (80.2) in the Agent-World table, below Claude Sonnet-4.5
+(84.7) and Gemini-3 Pro (85.4), and **-11.0 / -5.7** against OpenAI's official GPT-5.2 Thinking
+(telecom 98.7 / retail 82.0, their own research setup, airline excluded). The gap occurs on the
+same model, so the loss lies in the harness policy layer, not the model.
 
 ## 3. Weakness Band — Full Diagnosis Of 41 Failures
 
@@ -273,108 +279,136 @@ connected. If the terminal verifier fails, continue the workflow instead of
 ending or transferring, unless the policy explicitly requires escalation.
 ```
 
-## 5. 첫 사이클 기록 — M1/S5 게이트 시운전
+## 5. First-Cycle Record -- M1/S5 Gate Trial Run
 
-목적 둘: 실측 개선 후보의 검증 + 게이트 사다리 자체의 시운전. **사람 손 수정도 루프
-변이와 같은 사다리를 통과해야 게이트의 공정성이 성립한다.**
+Two purposes: verify a measured improvement candidate, and trial-run the gate ladder itself.
+**Hand-written fixes must pass the same ladder as loop mutations for the gate's fairness to
+hold.**
 
-- 변이: S1 행동 완결 규율. `plugins/benchmark_harness/tau2_geode_agent.py::_agent_system_prompt`
-  의 인자 규율 문단 뒤·`<policy>` 앞. 도메인 무관, 답 유출 없음(OpenAI 가 telecom 에
-  "brief, generally helpful instruction" 을 공개적으로 쓴 것과 같은 범주).
-- G1 통과(2026-07-04): 프롬프트 단언 테스트 7건, branch `feature/sev2-m1-action-discipline`.
-- G2 통과: mock 도메인, G3 동일 배선(gpt-5.2 payg + native user_simulator), DB match 1/1.
-- G3 진행 기록: 실패 서브셋 표적 재실행(retail 27 + telecom 14, 동시성 8 병렬).
-  **해석 규율: 실패분만 재실행은 방향 신호(flip rate)일 뿐** — 통과분 회귀가 안 재지므로,
-  신호 확인 시 도메인 전체 paired 재실행 후에만 수치를 공개한다. 리비전이 다른 run 은
-  평균하지 않는다.
-- 사전 등록(초안, 캠페인 전 hash 봉인): train 서브셋 = retail 실패 27 + 통과 층화 23 = 50,
-  K=3, discordant 정확 이항검정 단측 p<0.05, 승격 상한 캠페인당 2, 무변이 대조 arm 상시.
-- G3 방향 신호 (2026-07-04): 실패 서브셋 표적 재실행 flip-to-pass — retail 10/27 (37%),
-  telecom 6/14 (43%), 합계 16/41 (39%).
-- **M1 최종 판정 (2026-07-04, 전체 paired, 각 n=114): 기각.**
-  retail 0.7632→0.7807 (flip 12 vs 회귀 10, 정확 이항 단측 p=0.416),
-  telecom 0.8772→0.8333 (flip 10 vs 회귀 15, p=0.885 — 점추정 음, 비유의).
-  방향 신호 39% 는 재추첨 노이즈가 지배한 것으로 판명 — 실패 서브셋만 재실행하면
-  회귀가 안 보인다는 설계 경고 그대로다. 회귀 트레이스는 부작용 서명이 아니라
-  동일 실패 모드(write 미실행)의 재추첨: 이 모드는 태스크 집합 전체에 확률적으로
-  분포하며, 프롬프트 문장 하나로는 발생률이 움직이지 않는다.
-  → S1 은 승격하지 않는다. 변이 브랜치(`feature/sev2-m1-action-discipline`)는
-  아카이브로 보존. **처방을 코드 층으로 이동: S5 결정론 종료 가드**
-  (`feature/sev2-s5-termination-guard`, 첫 EVOLVE-BLOCK).
-- **부수 실측 — pass^1 재실행 노이즈 바닥**: 양 도메인 discordance 22/114·25/114
-  (태스크당 flip 확률 ~20%, 準무효과 변이 기준 추정). 단일 pass^1 비교로는
-  ~8pt 미만 효과가 검출 한계 아래 — K=3 replicate 사전 등록의 데이터 확증.
-  (정밀한 노이즈 바닥은 무변이 대조 재실행으로 별도 확정 예정.)
+- Mutation: S1 action-completion discipline. In
+  `plugins/benchmark_harness/tau2_geode_agent.py::_agent_system_prompt`, after the
+  argument-discipline paragraph and before `<policy>`. Domain-agnostic, no answer leakage (the
+  same category as OpenAI publicly using a "brief, generally helpful instruction" for telecom).
+- G1 passed (2026-07-04): 7 prompt assertion tests, branch `feature/sev2-m1-action-discipline`.
+- G2 passed: mock domain, same wiring as G3 (gpt-5.2 payg + native user_simulator), DB match 1/1.
+- G3 progress record: targeted rerun of the failure subset (retail 27 + telecom 14, concurrency
+  8). **Interpretation discipline: rerunning only the failures gives a directional signal (flip
+  rate) and nothing more**, because regressions on passing tasks are not remeasured; once a signal
+  is confirmed, numbers are published only after a full-domain paired rerun. Runs on different
+  revisions are never averaged.
+- Pre-registration (draft, hash-sealed before the campaign): train subset = 27 retail failures +
+  23 stratified passes = 50, K=3, exact one-sided binomial test on discordant pairs at p<0.05,
+  promotion cap of 2 per campaign, always-on no-mutation control arm.
+- G3 directional signal (2026-07-04): flip-to-pass on the targeted failure-subset rerun: retail
+  10/27 (37%), telecom 6/14 (43%), total 16/41 (39%).
+- **M1 final verdict (2026-07-04, full paired, n=114 each): rejected.**
+  retail 0.7632→0.7807 (flip 12 vs regression 10, exact one-sided binomial p=0.416),
+  telecom 0.8772→0.8333 (flip 10 vs regression 15, p=0.885, negative point estimate, not
+  significant). The 39% directional signal turned out to be dominated by redraw noise, exactly the
+  design warning that rerunning only the failure subset hides regressions. The regression traces
+  are not a side-effect signature but a redraw of the same failure mode (missing write): this mode
+  is distributed stochastically across the whole task set, and one prompt sentence does not move
+  its incidence rate.
+  → S1 is not promoted. The mutation branch (`feature/sev2-m1-action-discipline`) is preserved in
+  the archive. **The treatment moves to the code layer: S5 deterministic termination guard**
+  (`feature/sev2-s5-termination-guard`, first EVOLVE-BLOCK).
+- **Incidental measurement, the pass^1 rerun noise floor**: discordance 22/114 and 25/114 across
+  the two domains (per-task flip probability ~20%, estimated against a near-null-effect mutation).
+  A single pass^1 comparison leaves effects under ~8pt below the detection floor, data
+  confirmation for the pre-registered K=3 replicate. (The precise noise floor will be pinned
+  separately with a no-mutation control rerun.)
 
-### S5 측정 경과 (2026-07-04, 판정 미완)
+### S5 Measurement Progress (2026-07-04, Verdict Incomplete)
 
-S5(결정론 종료 가드, `feature/sev2-s5-termination-guard` @ e1b060474) 전체 paired 측정 중
-**OpenAI quota 소진(21:59 KST)으로 retail 43·telecom 58건이 infrastructure_error 로 오염**됐다.
-오염분은 판독에서 제외하고 태스크 ID 를 `tmp/s5_infra_{retail,telecom}.txt` 에 고정 —
-quota 복구 후 동일 리비전으로 패치 측정해 병합한다(사건·병합 프로토콜 공개 전제).
+During the full paired measurement of S5 (deterministic termination guard,
+`feature/sev2-s5-termination-guard` @ e1b060474), **OpenAI quota exhaustion (21:59 KST)
+contaminated 43 retail and 58 telecom tasks with infrastructure_error**. The contaminated tasks
+are excluded from the reading and their task IDs are frozen in
+`tmp/s5_infra_{retail,telecom}.txt`; after quota recovery they will be patch-measured on the same
+revision and merged (with the incident and merge protocol disclosed).
 
-오염 제거 클린 판독 (중간, 판정 아님):
-- retail (train, n=70): 0.771 → 0.871 (+10.0pt), flip 11 vs 회귀 4, p=0.059 —
-  사전 등록 임계(0.05) 직상. 방향 양호하나 게이트 통과 선언 불가, 잔여 43건이 판정을 가른다.
-- telecom (held-out, n≈51 클린): flip 1 vs 클린 회귀 2 — 쉬운 태스크로 편향된 서브셋에서
-  중립 수준. 무회귀 확인은 잔여 58건 측정 후.
-- 회귀 트레이스에 nudge 부작용 서명(과잉 write·스텝 고갈) 없음 — 기존 실패 모드의 재추첨 범위.
+Contamination-removed clean reading (interim, not a verdict):
+- retail (train, n=70): 0.771 → 0.871 (+10.0pt), flip 11 vs regression 4, p=0.059, just above the
+  pre-registered threshold (0.05). Direction is good, but a gate pass cannot be declared; the
+  remaining 43 tasks decide the verdict.
+- telecom (held-out, n≈51 clean): flip 1 vs clean regression 2, roughly neutral on a subset
+  biased toward easy tasks. No-regression confirmation waits for the remaining 58 tasks.
+- Regression traces show no nudge side-effect signature (excess writes, step exhaustion); they
+  stay within the redraw range of the existing failure modes.
 
-패치 측정(2026-07-04 22시대)도 quota 재소진으로 부분 완료. 오염 필터(infrastructure_error
-∨ 메시지 에러 ≥3) 적용 클린 병합 판독:
-- retail (train): 측정 96/114, 0.8021 → 0.8333 (+3.1pt), flip 12 vs 회귀 9, p=0.332 —
-  중간 구간의 +10pt(p=0.059)가 표본 확장에서 수축. 현 증거로는 승격 불가.
-- telecom (held-out): 측정 61/114, flip 1 vs 회귀 3 (-3.3pt, p=0.94) — 회귀가 service_issue
-  (apn/lock_sim) 절차형 태스크에 군집. M1 에서도 telecom 점추정이 음이었다 — retail 의
-  write-skip 을 겨냥한 개입이 telecom 의 다단계 절차 흐름을 방해한다는 가설이 두 사이클에서
-  일관. trigger B(미검증 write nudge)의 도메인 조건화가 evolve-block 1차 변이 후보.
-- 미측정 retail 18 + telecom 53 — quota 복구 후 완결 전까지 최종 판정 보류.
+The patch measurement (2026-07-04, around 22:00) also finished only partially due to renewed
+quota exhaustion. Clean merged reading with the contamination filter applied
+(infrastructure_error ∨ message errors ≥3):
+- retail (train): 96/114 measured, 0.8021 → 0.8333 (+3.1pt), flip 12 vs regression 9, p=0.332.
+  The interim +10pt (p=0.059) shrank as the sample expanded. Promotion is not possible on current
+  evidence.
+- telecom (held-out): 61/114 measured, flip 1 vs regression 3 (-3.3pt, p=0.94). Regressions
+  cluster on service_issue (apn/lock_sim) procedural tasks. The telecom point estimate was
+  negative in M1 as well: the hypothesis that an intervention aimed at retail's write-skip
+  disrupts telecom's multi-step procedural flow is consistent across both cycles.
+  Domain-conditioning trigger B (the unverified write nudge) is the first evolve-block mutation
+  candidate.
+- 18 retail + 53 telecom tasks remain unmeasured; the final verdict is on hold until completion
+  after quota recovery.
 
-두 사이클(M1·S5)의 공통 관찰: pass^1 K=1 의 검출 한계(~8pt) 아래에 하네스 개입의 실효과
-(~3pt급)가 있다. 사전 등록된 K=3 replicate 는 선택이 아니라 이 효과 크기를 재는 유일한
-수단이다. 검증 처리량(quota 헤드룸 포함)이 곧 루프의 상한이라는 본 문서 원칙의 실측 사례.
+Shared observation across the two cycles (M1, S5): the real effect of harness interventions
+(~3pt class) sits below the detection floor of pass^1 K=1 (~8pt). The pre-registered K=3
+replicate is not optional; it is the only instrument that can measure this effect size. A
+measured instance of this document's principle that verification throughput (including quota
+headroom) is the ceiling of the loop.
 
-교훈(운영): 외부 API quota 는 측정 인프라의 단일 장애점 — 캠페인 전 quota 헤드룸 확인을
-G2(smoke) 체크리스트에 추가한다. quota 사망 중 완료된 run 은 termination_reason 필터 없이
-읽으면 변이 효과로 오독된다(본 사건에서 watcher 의 무필터 1차 판독이 실제로 오독을 냈고,
-too_many_errors + 메시지 에러 다발도 부분 오염으로 배제해야 한다).
+Lesson (operations): external API quota is a single point of failure for the measurement
+infrastructure; add a pre-campaign quota headroom check to the G2 (smoke) checklist. Runs that
+complete during a quota outage are misread as mutation effects when read without a
+termination_reason filter (in this incident the watcher's unfiltered first reading actually
+produced that misread, and too_many_errors plus message-error bursts must also be excluded as
+partial contamination).
 
-### sub55 트랙 시도와 이중 한도 소진 (2026-07-04 밤 — 기록)
+### sub55 Track Attempt And Double Limit Exhaustion (2026-07-04 Night, Record)
 
-payg quota 차단을 우회하려 subscription 전용 트랙(sub55: agent gpt-5.5 sub high +
-geode_user gpt-5.5 sub medium, 양팔 = S5 부모 vs S5)을 설계·발사했다. 결과 두 가지:
+To bypass the payg quota block, a subscription-only track (sub55: agent gpt-5.5 sub high +
+geode_user gpt-5.5 sub medium, both arms = S5 parent vs S5) was designed and launched. Two
+outcomes:
 
-1. **실버그 발굴·수정**: tau2 동시성(c3+)에서 codex-oauth 가 RecursionError 로 즉사 —
-   `_codex_sdk_workaround.py::install()` 의 무락 check-then-act 레이스로, 늦은 스레드가
-   패치된 함수를 원본으로 캡처해 전역을 덮어쓰면 자기 호출 사슬이 형성되는 버그.
-   설치 락 + 클로저 캡처 + 멱등 마커로 수정(유닛 5종·8스레드 스트레스·c4 실증 통과,
-   양팔 동일 커밋). 외부 벤치마크를 세게 돌리는 일 자체가 런타임 결함을 드러낸 사례.
-2. **구독 usage limit 실증 소진**: 수정 후 c6 재발사에서 recursion 0 을 확인했으나,
-   plan(prolite)의 사용 창이 소진돼 429 폭풍(rate limit 18k+) 후
-   `usage_limit_reached` (reset 07-07 16:53 KST). r2 데이터는 전량 폐기.
+1. **Real bug found and fixed**: under tau2 concurrency (c3+), codex-oauth died instantly with
+   RecursionError. A lock-free check-then-act race in `_codex_sdk_workaround.py::install()`: a
+   late thread captures the already-patched function as the original and overwrites the global,
+   forming a self-call chain. Fixed with an install lock, closure capture, and an idempotency
+   marker (5 unit tests, an 8-thread stress test, and a live c4 confirmation passed; both arms on
+   the same commit). A case where simply running an external benchmark hard exposed a runtime
+   defect.
+2. **Subscription usage limit exhausted in practice**: the post-fix c6 relaunch confirmed zero
+   recursions, but the plan's (prolite) usage window was exhausted, producing a 429 storm (rate
+   limit 18k+) followed by `usage_limit_reached` (reset 07-07 16:53 KST). All r2 data was
+   discarded.
 
-측정 경로 현황: payg = billing 한도 차단(상향 시 gpt-5.2 트랙 잔여 71건으로 S5 판정 완결
-가능), subscription = 07-07 리셋 대기. **검증 처리량이 루프의 상한이라는 원칙의 세 번째
-실측**(judge 노이즈 → API quota → 구독 창). 캠페인 설계에 quota 헤드룸 사전 확인(G2)과
-플랜 규모 대비 런 예산 산정이 상수로 들어가야 한다.
+Measurement route status: payg = blocked by the billing limit (if raised, the remaining 71 tasks
+on the gpt-5.2 track can complete the S5 verdict), subscription = waiting for the 07-07 reset.
+**The third measured instance of the principle that verification throughput is the ceiling of the
+loop** (judge noise → API quota → subscription window). Campaign design must include a
+pre-campaign quota headroom check (G2) and run-budget sizing against plan scale as constants.
 
-### clop48 트랙 usage 오염 (2026-07-05~06 — 재측정 대상, user-sim은 무결)
+### clop48 Track Usage Contamination (2026-07-05/06, Remeasurement Target; user-sim Intact)
 
-Claude 구독 경로 S5 재판정(opus-4-8 agent + geode_user sonnet user). 4런 완주했으나
-옛 계정(Max 20x)의 **7d 창 소진 이후 태스크가 rate-limit 주입으로 오염**. 태스크 단위 분해:
-rate-limit 없는 태스크는 전부 user_stop 정상 종료했고 **순수 미종료(user-sim 결함)는 0건**
-(retail/s5만 5건). 즉 **user simulator는 무결**했고 초기 진단(종료 결함)은 오진 — 정정.
-오염분은 max_steps로 "완료" 기록돼 auto-resume이 스킵했을 뿐, 재측정 가능.
+S5 re-verdict over the Claude subscription route (opus-4-8 agent + geode_user sonnet user). All 4
+runs finished, but after the old account's (Max 20x) **7d window was exhausted, tasks were
+contaminated by rate-limit injection**. Task-level decomposition: every task without rate-limit
+terminated normally with user_stop, and **pure non-terminations (user-sim defects) were 0**
+(retail/s5 alone: 5 tasks). In other words the **user simulator was intact**, and the initial
+diagnosis (a termination defect) was a misdiagnosis, now corrected. The contaminated tasks were
+merely recorded as "complete" via max_steps so auto-resume skipped them; they can be remeasured.
 
-클린(user_stop) 태스크 수: telecom base 40·s5 19, retail base 31·s5 28. paired 유효는 양팔
-공통 클린 교집합만 → 도메인당 최대 ~19·~28이라 재측정 없이는 검정력 부족.
+Clean (user_stop) task counts: telecom base 40, s5 19; retail base 31, s5 28. Paired validity
+covers only the intersection of clean tasks common to both arms, at most ~19 and ~28 per domain,
+so statistical power is insufficient without remeasurement.
 
-버그 발굴(⑥, main 반입 PR): **rate-limit 에러가 대화 메시지로 주입돼 termination_reason
-필터를 우회**(infrastructure_error로 격리 안 됨) → max_steps로 오완료. 격리 배선이 개선점.
-(⑤ user-sim 종료 결함은 오진으로 철회.)
+Bug found (⑥, PR landed on main): **rate-limit errors are injected as conversation messages and
+bypass the termination_reason filter** (not isolated as infrastructure_error), producing false
+completion via max_steps. The isolation wiring is the improvement point. (⑤ the user-sim
+termination defect is withdrawn as a misdiagnosis.)
 
-재측정 경로: 새 계정(Max 5x, 창 여유) 또는 payg(native user). 오염 task_id는
-`tmp/clop48_contaminated_{dom}_{arm}.txt`로 추출.
+Remeasurement routes: a new account (Max 5x, window headroom) or payg (native user). Contaminated
+task_ids are extracted to `tmp/clop48_contaminated_{dom}_{arm}.txt`.
 
 ### 5.1 First-Cycle Conclusion — The Limiting Reagent (2026-07-06)
 

@@ -1,25 +1,28 @@
-# Provider Login — Architecture SOT
+# Provider Login -- Architecture SOT
 
-> GEODE 의 LLM provider 별 credential 획득 path 의 정합 spec. OpenAI
-> (Codex CLI Plus) 와 Anthropic (Claude subscription) 의 OAuth flow 가
-> 동일 owned-credential 패턴 — `~/.geode/auth.toml` 가 SOT, GEODE 가
-> 직접 OAuth client, claude CLI 같은 외부 binary 의존성 0.
+> **English** | [한국어](provider-login.ko.md)
 
-## 1. 두 provider 의 정합 — owned-credential 패턴
+> The alignment spec for GEODE's per-LLM-provider credential acquisition
+> paths. The OAuth flows for OpenAI (Codex CLI Plus) and Anthropic (Claude
+> subscription) follow the same owned-credential pattern: `~/.geode/auth.toml`
+> is the SOT, GEODE acts as the OAuth client directly, with zero dependency
+> on external binaries such as the claude CLI.
+
+## 1. Alignment of the two providers -- the owned-credential pattern
 
 ```
-사용자 → /login <provider>
+User → /login <provider>
             ↓
   core.cli.commands.login._login_oauth(provider)
             ↓
   ┌─────────────────────┬─────────────────────┐
   ↓                     ↓                     ↓
-openai 분기          anthropic 분기        그 외 → warn
+openai branch        anthropic branch      others → warn
   ↓                     ↓
 login_openai()      login_anthropic()
 (device-code)       (PKCE + manual-paste)
   ↓                     ↓
-  POST /v1/oauth/token (모두)
+  POST /v1/oauth/token (both)
             ↓
   ~/.geode/auth.toml  ← GEODE-owned SOT
             ↓
@@ -28,48 +31,49 @@ login_openai()      login_anthropic()
   reset_<provider>_client()  ← in-process cache invalidation
 ```
 
-두 provider 의 차이점은 **OAuth grant type** 만 — OpenAI = device-code,
-Anthropic = PKCE + manual-paste. 그 외 (storage, refresh, client reset) 는
-모두 정합.
+The only difference between the two providers is the **OAuth grant type**:
+OpenAI = device-code, Anthropic = PKCE + manual-paste. Everything else
+(storage, refresh, client reset) is fully aligned.
 
-## 2. OpenAI flow (device-code grant) — 기존
+## 2. OpenAI flow (device-code grant) -- pre-existing
 
-| 단계 | 동작 |
+| Step | Action |
 |---|---|
-| 1 | GEODE 가 `POST https://auth.openai.com/oauth/device/code` |
-| 2 | response: `device_code`, `user_code`, `verification_uri` |
-| 3 | console 에 verification URL + user_code 표시. 사용자가 browser 에서 입력 |
-| 4 | GEODE 가 background poll `POST /oauth/token` (5초 간격) |
-| 5 | response: `access_token` (JWT, `chatgpt_plan_type` 등 claim 보유), `refresh_token` |
+| 1 | GEODE sends `POST https://auth.openai.com/oauth/device/code` |
+| 2 | Response: `device_code`, `user_code`, `verification_uri` |
+| 3 | The verification URL + user_code are shown on the console. The user enters them in a browser |
+| 4 | GEODE background-polls `POST /oauth/token` (5-second interval) |
+| 5 | Response: `access_token` (JWT, carrying claims such as `chatgpt_plan_type`), `refresh_token` |
 | 6 | `_persist_oauth_to_authtoml(creds)` → `~/.geode/auth.toml` |
-| 7 | `reset_codex_client()` — in-process codex client cache invalidate |
+| 7 | `reset_codex_client()` -- invalidates the in-process codex client cache |
 
-구현: `core/auth/oauth_login.py::login_openai`
+Implementation: `core/auth/oauth_login.py::login_openai`
 
-## 3. Anthropic flow (PKCE + manual-paste) — PR C3 + v0.99.1 fix
+## 3. Anthropic flow (PKCE + manual-paste) -- PR C3 + v0.99.1 fix
 
-PR C3 의 초기 구현은 loopback callback (`http://localhost:54123/callback`)
-을 시도했으나, OAuth client `9d1c250a-…` 에 사전 등록된 redirect URI 는
-서버 측 `https://platform.claude.com/oauth/code/callback` 단 하나 — loopback
-은 authorize 단계에서 거절됨이 v0.99.1 에서 확인됐다. 우회는 불가하므로
-flow 를 Claude Code 의 manual-paste 패턴 1:1 미러로 교체.
+The initial implementation in PR C3 attempted a loopback callback
+(`http://localhost:54123/callback`), but the only redirect URI pre-registered
+for OAuth client `9d1c250a-…` is the server-side
+`https://platform.claude.com/oauth/code/callback`; v0.99.1 confirmed that
+loopback is rejected at the authorize step. Since no workaround exists, the
+flow was replaced with a 1:1 mirror of Claude Code's manual-paste pattern.
 
-| 단계 | 동작 |
+| Step | Action |
 |---|---|
 | 1 | `code_verifier = base64url(secrets.token_bytes(96))` |
 | 2 | `code_challenge = base64url(SHA256(code_verifier))` |
 | 3 | `webbrowser.open("https://platform.claude.com/oauth/authorize?code=true&response_type=code&client_id=<CLAUDE_OAUTH_CLIENT_ID>&redirect_uri=https://platform.claude.com/oauth/code/callback&code_challenge=<challenge>&code_challenge_method=S256&scope=user:inference+user:profile+user:sessions:claude_code+user:mcp_servers&state=<random>")` |
-| 4 | 사용자 browser 에서 Anthropic 로그인 + 동의 |
-| 5 | Anthropic 가 `/oauth/code/callback` 페이지에서 `code#state` 형식 표시 |
-| 6 | 사용자가 CLI 의 `Paste authorization code:` 프롬프트에 paste (URL, `code#state`, 또는 bare code 모두 허용 — `_parse_pasted_code`) |
-| 7 | GEODE 가 state 검증 + `POST https://platform.claude.com/v1/oauth/token` (`Content-Type: application/json`, no `anthropic-beta` header — claude.exe binary 의 `h6.post` 호출 site 와 정합) — JSON body: grant_type=authorization_code, code, redirect_uri, client_id, code_verifier, state |
-| 8 | response: `access_token` (`sk-ant-oat01-...`), `refresh_token` (`sk-ant-ort01-...`), `expires_in`, `scopes` |
-| 9 | `~/.geode/auth.toml` 의 `[providers.anthropic]` section 에 저장 |
-| 10 | `reset_anthropic_client()` — `inspect_ai` stock `AnthropicAPI` per-request 라 cache 없음. claude-code provider 의 in-process state 만 invalidate |
+| 4 | The user logs in to Anthropic in the browser and gives consent |
+| 5 | Anthropic displays a `code#state`-formatted string on the `/oauth/code/callback` page |
+| 6 | The user pastes it into the CLI's `Paste authorization code:` prompt (URL, `code#state`, or bare code all accepted -- `_parse_pasted_code`) |
+| 7 | GEODE validates state + `POST https://platform.claude.com/v1/oauth/token` (`Content-Type: application/json`, no `anthropic-beta` header -- aligned with the `h6.post` call site in the claude.exe binary) -- JSON body: grant_type=authorization_code, code, redirect_uri, client_id, code_verifier, state |
+| 8 | Response: `access_token` (`sk-ant-oat01-...`), `refresh_token` (`sk-ant-ort01-...`), `expires_in`, `scopes` |
+| 9 | Stored in the `[providers.anthropic]` section of `~/.geode/auth.toml` |
+| 10 | `reset_anthropic_client()` -- `inspect_ai`'s stock `AnthropicAPI` is per-request, so there is no cache. Only the claude-code provider's in-process state is invalidated |
 
 ### 3.1 OAuth endpoints (Anthropic)
 
-발견된 endpoint (`claude-code` native binary 의 strings 분석):
+Endpoints discovered (strings analysis of the `claude-code` native binary):
 
 | Endpoint | URL |
 |---|---|
@@ -80,70 +84,72 @@ flow 를 Claude Code 의 manual-paste 패턴 1:1 미러로 교체.
 
 ### 3.2 client_id
 
-Claude Code 의 public OAuth client (PKCE — no secret). 코드 안에서
-`core.auth.oauth_login.CLAUDE_OAUTH_CLIENT_ID` 상수로 노출.
+Claude Code's public OAuth client (PKCE -- no secret). Exposed in code as the
+`core.auth.oauth_login.CLAUDE_OAUTH_CLIENT_ID` constant.
 
-## 4. ToS 정합성 — owned-Anthropic 의 위치
+## 4. ToS alignment -- where owned-Anthropic sits
 
-본 architecture 의 정책적 위치는 GEODE 가 claude CLI 의 OAuth client_id
-를 재사용하여 PKCE flow 를 직접 수행한다는 의미 — 다음 5 단계 spectrum
-에서 **Tier 3 (impersonation, 사용자 자기-책임)**:
+The policy position of this architecture is that GEODE reuses the claude
+CLI's OAuth client_id and performs the PKCE flow directly, which places it at
+**Tier 3 (impersonation, user assumes responsibility)** on the following
+5-step spectrum:
 
-| Tier | Path | ToS 강도 |
+| Tier | Path | ToS strength |
 |---|---|---|
-| 0 | `ANTHROPIC_API_KEY` env + stock `anthropic/` provider | ✅ 명시 허용 |
-| 1 | Anthropic API key + GEODE 직접 발급 (developer portal) | ✅ |
-| 2 | claude CLI subprocess + keychain read-only (PR #1202) | ⚠️ third-party harness — gray, low risk |
-| **3** | **claude CLI 의 client_id reuse + PKCE 직접 수행 (본 PR C3)** | ⚠️⚠️ **impersonation — gray, medium risk** |
-| 4 | User-Agent / IP spoofing | ❌ 명시 회피 — 권장 X |
+| 0 | `ANTHROPIC_API_KEY` env + stock `anthropic/` provider | ✅ explicitly allowed |
+| 1 | Anthropic API key + issued directly by GEODE (developer portal) | ✅ |
+| 2 | claude CLI subprocess + keychain read-only (PR #1202) | ⚠️ third-party harness -- gray, low risk |
+| **3** | **Reuse of the claude CLI's client_id + direct PKCE (this PR C3)** | ⚠️⚠️ **impersonation -- gray, medium risk** |
+| 4 | User-Agent / IP spoofing | ❌ explicit evasion -- not recommended |
 
-### 4.1 Tier 3 의 정확한 trade-off
+### 4.1 The exact trade-off of Tier 3
 
-| 측면 | 본 path |
+| Aspect | This path |
 |---|---|
-| Anthropic 의 시각 | claude CLI 의 OAuth client 의 traffic 으로 분류 — 단 UA/IP 가 GEODE 임을 분석 시 식별 가능 |
-| Detect 확률 | 본인 사용 (single IP, normal cadence) 에서는 매우 낮음 |
-| Revocation risk | medium — Anthropic 측이 본 client_id 의 non-CLI traffic 을 block 시 본 path 작동 정지 |
-| Mitigation | ① 첫 활성 WARNING (`_warn_policy_once`) 으로 사용자 자기-책임 인정 ② API key fallback 보장 ③ `production` / 외부 publish 시 Tier 0 권장 |
+| Anthropic's view | Classified as traffic from the claude CLI's OAuth client -- but UA/IP analysis can identify it as GEODE |
+| Detection probability | Very low for personal use (single IP, normal cadence) |
+| Revocation risk | medium -- if Anthropic blocks non-CLI traffic on this client_id, this path stops working |
+| Mitigation | ① a WARNING on first activation (`_warn_policy_once`) has the user acknowledge self-responsibility ② an API key fallback is guaranteed ③ Tier 0 is recommended for `production` / external publishing |
 
-### 4.2 본 architecture 의 fallback path
+### 4.2 Fallback path of this architecture
 
-본 spec 의 신뢰 보존을 위해:
+To preserve trust in this spec:
 
-1. Anthropic 측의 client_id revocation 시 → `login_anthropic()` 가 명시
-   error message + Tier 0 (API key) 권장
-2. `~/.geode/auth.toml` 의 anthropic profile 갱신 실패 시 → 사용자가
-   `ANTHROPIC_API_KEY` env 또는 `/login add` wizard 의 PAYG path 사용
-3. PR #1202 의 macOS keychain read 도 backwards-compat 으로 유지 —
-   기존 claude CLI 사용자가 즉시 사용 가능
+1. If Anthropic revokes the client_id → `login_anthropic()` shows an explicit
+   error message and recommends Tier 0 (API key)
+2. If refreshing the anthropic profile in `~/.geode/auth.toml` fails → the
+   user uses the `ANTHROPIC_API_KEY` env or the PAYG path of the
+   `/login add` wizard
+3. The macOS keychain read from PR #1202 is also kept for backwards compat --
+   existing claude CLI users can use it immediately
 
-## 5. mismatch 분석 — PR C3 이전 상태
+## 5. Mismatch analysis -- state before PR C3
 
-| # | Mismatch | OpenAI | Anthropic (PR #1202 → C3 후) |
+| # | Mismatch | OpenAI | Anthropic (PR #1202 → after C3) |
 |---|---|---|---|
 | M1 | OAuth client ownership | owned (GEODE) | borrowed (claude CLI) → **owned (GEODE, Tier 3)** |
 | M2 | Token storage | `~/.geode/auth.toml` | macOS keychain → **`~/.geode/auth.toml`** |
-| M3 | Cross-platform | 모든 OS | macOS only → **모든 OS** |
-| M4 | Reset hook | `reset_codex_client()` | (없음) → **`reset_anthropic_client()`** |
-| M5 | Token refresh | refresh_token + auth.toml 재기록 | claude CLI 가 자체 refresh → **refresh_token + auth.toml 재기록** |
+| M3 | Cross-platform | all OSes | macOS only → **all OSes** |
+| M4 | Reset hook | `reset_codex_client()` | (none) → **`reset_anthropic_client()`** |
+| M5 | Token refresh | refresh_token + auth.toml rewrite | claude CLI refreshes on its own → **refresh_token + auth.toml rewrite** |
 
-본 C3 PR 머지 후 모든 5 mismatch 해소.
+All 5 mismatches are resolved after this C3 PR is merged.
 
-## 6. 호환성 정책
+## 6. Compatibility policy
 
-| 시나리오 | 동작 |
+| Scenario | Behavior |
 |---|---|
-| 기존 사용자 (PR #1202 의 keychain token 보유) | `resolve_claude_oauth_token()` 의 fallback path 가 keychain 먼저, auth.toml 차순. 두 source 의 token 동일 시 의미 X |
-| 새 사용자 (auth.toml only) | `login_anthropic()` 로 새로 발급 → auth.toml |
-| API key 사용자 | `anthropic_credential_source = "api_key"` 의 routing 그대로 — OAuth path 안 거침 |
-| `none` 사용자 | anthropic provider 비활성 — error |
+| Existing users (holding a keychain token from PR #1202) | The fallback path in `resolve_claude_oauth_token()` checks the keychain first, then auth.toml. Irrelevant when both sources hold the same token |
+| New users (auth.toml only) | Freshly issued via `login_anthropic()` → auth.toml |
+| API key users | The `anthropic_credential_source = "api_key"` routing is unchanged -- the OAuth path is never taken |
+| `none` users | The anthropic provider is disabled -- error |
 
 ## 7. SOT
 
-- 본 spec: `docs/architecture/provider-login.md`
-- OpenAI 구현: `core/auth/oauth_login.py::login_openai` (PR #1133 이전)
-- Anthropic 구현: `core/auth/oauth_login.py::login_anthropic` (PR C3, 예정)
+- This spec: `docs/architecture/provider-login.md`
+- OpenAI implementation: `core/auth/oauth_login.py::login_openai` (predates PR #1133)
+- Anthropic implementation: `core/auth/oauth_login.py::login_anthropic` (PR C3, planned)
 - `/login` UI: `core/cli/commands/login.py`
 - credential source picker: `core/cli/commands/login.py::_login_source` (PR #1209)
 - routing: `plugins/petri_audit/models.py::to_inspect_model` (PR #1203)
-- ToS 정책 위치: `plugins/petri_audit/claude_code_provider.py` 의 module docstring (PR #1202)
+- ToS policy position: the module docstring of `plugins/petri_audit/claude_code_provider.py` (PR #1202)
