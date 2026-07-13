@@ -45,6 +45,18 @@ functional change.
 
 ---
 
+## [0.99.315] - 2026-07-13
+
+### Added
+
+- **Install channels on the landing page.** A new `install` section on the
+  portfolio landing visualizes every distribution path (Homebrew tap,
+  `uv tool`, `uvx` one-shot, source) as a replayed terminal: commands type
+  in character by character, output reveals line by line like the hero
+  terminal, and each channel carries a selectable command with a copy
+  button. Transcripts are abridged from the real 2026-07-13 publication
+  runs; reduced motion renders the finished transcript statically.
+
 ## [0.99.314] - 2026-07-13
 
 ### Fixed
