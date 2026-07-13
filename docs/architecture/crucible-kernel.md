@@ -1,8 +1,8 @@
 # Crucible — frozen experiment kernel
 
 > Status: architecture decision, 2026-07-10. This document supersedes the
-> G0-G7 operating procedure in `crucible.md`. Historical results remain useful
-> as training traces and incident evidence, but not as promotion evidence.
+> removed G0-G7 operating procedure. Historical results remain useful as
+> training traces and incident evidence, but not as promotion evidence.
 > External evidence behind the gate design is preserved in
 > [`crucible-evidence-dossier.md`](crucible-evidence-dossier.md).
 
