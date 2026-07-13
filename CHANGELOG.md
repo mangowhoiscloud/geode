@@ -45,6 +45,19 @@ functional change.
 
 ---
 
+## [0.99.323] - 2026-07-13
+
+### Added
+
+- **Deterministic Crucible artifact publication scaffold.**
+  `scripts/eval/publish_crucible_artifacts.py` masks the operator's local
+  username (`/Users/<user>` to `/Users/REDACTED`) idempotently across a tree,
+  and `stage`s one campaign run's allowlisted public subset (config, state,
+  ledger, per-attempt receipts, loop log, opaque power report) into the
+  external evidence store, omitting reproducible-cache and refusing sealed
+  material by name. Documented in the external-artifact-repository publication
+  cycle.
+
 ## [0.99.322] - 2026-07-13
 
 ### Changed
