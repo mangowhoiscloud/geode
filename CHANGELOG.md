@@ -66,6 +66,10 @@ functional change.
   infrastructure termination or recovered transport retry makes the arm
   scoreless. SIGINT/SIGTERM also clean up the tau2 process group, preventing
   the orphan evaluator observed after the interrupted r33 campaign.
+- **Slop audit baseline remains offline-operable after artifact migration.**
+  The historical dated report stays in `geode-eval-artifacts`, while the
+  executable audit now reads a local operational baseline beside its script;
+  fresh checkouts and CI no longer depend on the deleted `docs/audits` copy.
 
 ## [0.99.319] - 2026-07-13
 
