@@ -2,8 +2,9 @@
 
 Smoke-tests every lens against the current tree so a refactor that
 breaks the audit script surfaces immediately. The baseline file at
-``docs/audits/2026-05-18-slop-audit-baseline.md`` is the authoritative
-contract for "the slop counts we accept as the current floor".
+``scripts/slop_audit_baseline.md`` is the local operational contract for "the
+slop counts we accept as the current floor". The dated report remains in the
+external evaluation-artifact archive.
 """
 
 from __future__ import annotations
@@ -99,9 +100,9 @@ def test_baseline_load_round_trip(tmp_path: Path, slop_audit: ModuleType) -> Non
         assert loaded[r.name] == r.count, f"round trip mismatch for {r.name}"
 
 
-def test_baseline_file_committed() -> None:
+def test_baseline_file_committed(slop_audit: ModuleType) -> None:
     """The canonical baseline file must exist for `--check` mode."""
-    path = REPO_ROOT / "docs/audits/2026-05-18-slop-audit-baseline.md"
+    path = slop_audit.BASELINE_FILE
     assert path.is_file(), f"missing baseline file at {path}"
 
 

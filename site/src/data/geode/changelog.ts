@@ -17,6 +17,16 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    "version": "0.99.320",
+    "date": "2026-07-13",
+    "body": "### Added\n\n- **Crucible runtime-budget admission.** Central prepare can bind an opaque,\n  digest-matched runtime pilot and use deterministic family-block bootstrap\n  quantiles to reject train or campaign wall budgets that cannot hold the\n  paired design. Reports retain semantic timeouts, exclude and count\n  infrastructure interruptions, stamp `runtime_audit_id` provenance, and are\n  also available for frozen train or sealed contracts through the\n  `runtime-pilot` and `runtime-audit` CLI surfaces. A pilot-free\n  `contract_ceiling` mode derives the bootstrap campaign envelope directly\n  from the frozen per-row timeout and explicit setup/campaign overhead.\n\n### Fixed\n\n- **Tau2 contaminated-arm fail-fast.** The live evaluator now polls finalized\n  incremental rows and terminates the whole paid process group as soon as an\n  infrastructure termination or recovered transport retry makes the arm\n  scoreless. SIGINT/SIGTERM also clean up the tau2 process group, preventing\n  the orphan evaluator observed after the interrupted r33 campaign.\n- **Slop audit baseline remains offline-operable after artifact migration.**\n  The historical dated report stays in `geode-eval-artifacts`, while the\n  executable audit now reads a local operational baseline beside its script;\n  fresh checkouts and CI no longer depend on the deleted `docs/audits` copy."
+  },
+  {
+    "version": "0.99.319",
+    "date": "2026-07-13",
+    "body": "### Added\n\n- **Model picker title shows the running version.** `/model` now renders\n  `Select model · GEODE v{version}` so a stale binary lane (for example a\n  Homebrew formula behind the editable install) is visible the moment the\n  picker opens, instead of surfacing as \"model X is missing\" confusion —\n  the GPT-5.6 rows existed in code while a v0.99.313 brew binary rendered\n  a picker without them."
+  },
+  {
     "version": "0.99.318",
     "date": "2026-07-13",
     "body": "### Changed\n\n- **Benchmarks docs consolidated to one page per benchmark.** The 7-page\n  benchmarks section (results ledger, queue, publishing-cycle, and four\n  per-run record pages) collapses into `/docs/benchmarks/tau2` and\n  `/docs/benchmarks/mcpmark` — each carrying the headline track, the\n  service-coverage/blocker state, the full run-record ledger (rendered\n  from the `benchmark-measurements.ts` SoT), and links into the\n  `geode-eval-artifacts` repository where the raw run logs (per-task\n  verifier results and full transcripts) are preserved.\n- **README links raw eval run logs and updates supported-model badges.**\n  Benchmark snapshot sections now link the exact `geode-eval-artifacts`\n  directories behind the published numbers; the header gains an\n  `Eval artifacts` link, and provider badges advance to Anthropic\n  Fable 5 / OpenAI GPT-5.6."

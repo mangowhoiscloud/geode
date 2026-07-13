@@ -45,6 +45,32 @@ functional change.
 
 ---
 
+## [0.99.320] - 2026-07-13
+
+### Added
+
+- **Crucible runtime-budget admission.** Central prepare can bind an opaque,
+  digest-matched runtime pilot and use deterministic family-block bootstrap
+  quantiles to reject train or campaign wall budgets that cannot hold the
+  paired design. Reports retain semantic timeouts, exclude and count
+  infrastructure interruptions, stamp `runtime_audit_id` provenance, and are
+  also available for frozen train or sealed contracts through the
+  `runtime-pilot` and `runtime-audit` CLI surfaces. A pilot-free
+  `contract_ceiling` mode derives the bootstrap campaign envelope directly
+  from the frozen per-row timeout and explicit setup/campaign overhead.
+
+### Fixed
+
+- **Tau2 contaminated-arm fail-fast.** The live evaluator now polls finalized
+  incremental rows and terminates the whole paid process group as soon as an
+  infrastructure termination or recovered transport retry makes the arm
+  scoreless. SIGINT/SIGTERM also clean up the tau2 process group, preventing
+  the orphan evaluator observed after the interrupted r33 campaign.
+- **Slop audit baseline remains offline-operable after artifact migration.**
+  The historical dated report stays in `geode-eval-artifacts`, while the
+  executable audit now reads a local operational baseline beside its script;
+  fresh checkouts and CI no longer depend on the deleted `docs/audits` copy.
+
 ## [0.99.319] - 2026-07-13
 
 ### Added

@@ -883,34 +883,49 @@ def _run_process(
         )
     except OSError as exc:
         raise SupervisorError(f"cannot start subprocess: {exc}") from exc
+    previous_handlers: dict[signal.Signals, Any] = {}
+
+    def stop_on_signal(signum: int, _frame: object) -> None:
+        # Raising from the handler runs the cleanup block below before the
+        # supervisor exits. Without this bridge, killing the outer campaign
+        # can orphan its evaluator session and continue spending quota.
+        raise SystemExit(128 + signum)
+
+    for signal_number in (signal.SIGINT, signal.SIGTERM):
+        previous_handlers[signal_number] = signal.signal(signal_number, stop_on_signal)
     timed_out = False
     try:
-        return_code = process.wait(timeout=timeout)
-    except subprocess.TimeoutExpired:
-        timed_out = True
-        return_code = -signal.SIGTERM
+        try:
+            return_code = process.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            return_code = -signal.SIGTERM
     finally:
-        # The command is a session leader. Reap ordinary background children on
-        # success as well as timeout so one role cannot keep writing after its
-        # protocol response has been accepted.
-        with suppress(ProcessLookupError, PermissionError):
-            os.killpg(process.pid, signal.SIGTERM)
-        deadline = time.monotonic() + 0.5
-        while time.monotonic() < deadline:
-            try:
-                os.killpg(process.pid, 0)
-            except ProcessLookupError:
-                break
-            except PermissionError:
-                # macOS reports EPERM for a group member mid exec/exit
-                # transition; the group still exists, so keep waiting.
-                pass
-            time.sleep(0.01)
-        else:
+        try:
+            # The command is a session leader. Reap ordinary background
+            # children on success, timeout, or operator interruption so one
+            # role cannot keep writing after its campaign exits.
             with suppress(ProcessLookupError, PermissionError):
-                os.killpg(process.pid, signal.SIGKILL)
-        if process.poll() is None:
-            process.wait()
+                os.killpg(process.pid, signal.SIGTERM)
+            deadline = time.monotonic() + 0.5
+            while time.monotonic() < deadline:
+                try:
+                    os.killpg(process.pid, 0)
+                except ProcessLookupError:
+                    break
+                except PermissionError:
+                    # macOS reports EPERM for a group member mid exec/exit
+                    # transition; the group still exists, so keep waiting.
+                    pass
+                time.sleep(0.01)
+            else:
+                with suppress(ProcessLookupError, PermissionError):
+                    os.killpg(process.pid, signal.SIGKILL)
+            if process.poll() is None:
+                process.wait()
+        finally:
+            for signal_number, handler in previous_handlers.items():
+                signal.signal(signal_number, handler)
     if timed_out:
         raise SupervisorError("subprocess timed out")
     if return_code != 0:

@@ -61,7 +61,7 @@ lens. Inspect samples for patterns:
 
 ```bash
 # First run (after PR 0/1/2 land) — generates the canonical baseline
-uv run python scripts/slop_audit.py --baseline-out docs/audits/2026-05-18-slop-audit-baseline.md
+uv run python scripts/slop_audit.py --baseline-out scripts/slop_audit_baseline.md
 
 # Subsequent CI advisory checks
 uv run python scripts/slop_audit.py --check

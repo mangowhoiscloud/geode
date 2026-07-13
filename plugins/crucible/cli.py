@@ -19,6 +19,8 @@ from .power import audit_family_power
 from .prepare import load_pack, prepare_campaign
 from .promotion import PromotionVerdict, decide
 from .ref_journal import reconcile_ref_update
+from .runtime_budget import audit_runtime_budget
+from .runtime_pilot import build_runtime_pilot
 from .supervisor import SupervisorError, run_supervisor
 from .verifiers import get_assay_adapter, tau2_resource_usage_floor, tau2_task_unit
 
@@ -181,6 +183,30 @@ def _add_power_audit(subparsers: Any) -> None:
     parser.add_argument("--output", type=Path, required=True)
 
 
+def _add_runtime_audit(subparsers: Any) -> None:
+    parser = subparsers.add_parser(
+        "runtime-audit",
+        help="audit a frozen train or sealed contract against a runtime pilot",
+    )
+    parser.add_argument("contract", type=Path)
+    parser.add_argument("--spec", type=Path, required=True)
+    parser.add_argument("--campaign-wall-seconds", type=float)
+    parser.add_argument("--output", type=Path, required=True)
+
+
+def _add_runtime_pilot(subparsers: Any) -> None:
+    parser = subparsers.add_parser(
+        "runtime-pilot",
+        help="project verified paired arm artifacts into an opaque runtime pilot",
+    )
+    parser.add_argument("contract", type=Path)
+    parser.add_argument("--baseline-results", type=Path, required=True)
+    parser.add_argument("--baseline-evidence", type=Path, required=True)
+    parser.add_argument("--candidate-results", type=Path, required=True)
+    parser.add_argument("--candidate-evidence", type=Path, required=True)
+    parser.add_argument("--output", type=Path, required=True)
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -192,6 +218,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     _add_loop(subparsers)
     _add_prepare(subparsers)
     _add_power_audit(subparsers)
+    _add_runtime_pilot(subparsers)
+    _add_runtime_audit(subparsers)
     _add_bundle(subparsers)
     _add_reconcile_ref(subparsers)
     return parser.parse_args(argv)
@@ -356,6 +384,39 @@ def _power_audit(args: argparse.Namespace) -> dict[str, Any]:
     return report
 
 
+def _runtime_audit(args: argparse.Namespace) -> dict[str, Any]:
+    contract = load_contract(args.contract)
+    specification = load_json_object(args.spec, "runtime budget specification")
+    report = audit_runtime_budget(
+        tasks=contract.tasks,
+        trials_per_task=contract.trials_per_task,
+        evaluator_sha256=contract.evaluator_sha256,
+        harness_sha256=contract.harness_sha256,
+        agent_route=contract.agent_route,
+        user_route=contract.user_route,
+        assay_config=contract.assay_config,
+        configured_experiment_wall_seconds=contract.budget.max_wall_seconds,
+        configured_campaign_wall_seconds=args.campaign_wall_seconds,
+        specification=specification,
+        basis_root=args.spec.resolve().parent,
+    )
+    write_exclusive_json(args.output, report)
+    return report
+
+
+def _runtime_pilot(args: argparse.Namespace) -> dict[str, Any]:
+    contract = load_contract(args.contract)
+    pilot = build_runtime_pilot(
+        contract,
+        baseline_results_path=args.baseline_results,
+        baseline_evidence=load_evidence(args.baseline_evidence),
+        candidate_results_path=args.candidate_results,
+        candidate_evidence=load_evidence(args.candidate_evidence),
+    )
+    write_exclusive_json(args.output, pilot)
+    return pilot
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     try:
@@ -387,6 +448,14 @@ def main(argv: list[str] | None = None) -> int:
             return 3 if isinstance(window, Mapping) and window.get("fit") == "defer" else 0
         if args.command == "power-audit":
             report = _power_audit(args)
+            print(json.dumps(report, sort_keys=True))
+            return 0 if report["passes"] else 1
+        if args.command == "runtime-pilot":
+            pilot = _runtime_pilot(args)
+            print(json.dumps(pilot, sort_keys=True))
+            return 0
+        if args.command == "runtime-audit":
+            report = _runtime_audit(args)
             print(json.dumps(report, sort_keys=True))
             return 0 if report["passes"] else 1
         if args.command == "loop":

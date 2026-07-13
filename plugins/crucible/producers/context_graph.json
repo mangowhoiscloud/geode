@@ -68,13 +68,13 @@
       "id": "file:plugins/crucible/tau2_live.py",
       "filePath": "plugins/crucible/tau2_live.py",
       "name": "Paired tau2 evaluator",
-      "summary": "Derives frozen runner arguments, screens unreachable train arms at zero candidate cost, isolates measurement state, and projects structural failure codes. Reuses identity-proven cached rows across relaunches while reporting historical evidence usage separately from current marginal spend.",
+      "summary": "Derives frozen runner arguments, screens unreachable train arms at zero candidate cost, isolates measurement state, and projects structural failure codes. Reuses identity-proven cached rows across relaunches, aborts the paid process group after finalized infrastructure contamination, and reports historical evidence usage separately from current marginal spend.",
       "tags": [
         "crucible",
         "evaluator",
         "paired"
       ],
-      "contentSha256": "4631b87b698836423f8db7dc9e94976fd62632c724bf7bd23f96cf32174b60b6"
+      "contentSha256": "26bd5e744206ccdda7f2e5d7ba466b423176fa8cef11572cc4ba5bd568211070"
     },
     {
       "id": "file:plugins/crucible/row_cache.py",
@@ -92,13 +92,13 @@
       "id": "file:plugins/crucible/supervisor.py",
       "filePath": "plugins/crucible/supervisor.py",
       "name": "Promotion supervisor",
-      "summary": "Preflights authority inputs, binds optional producer objectives, rejects duplicate baseline-bound treatments, separates evidence from marginal usage, and owns the monotone search ref.",
+      "summary": "Preflights authority inputs, binds optional producer objectives, rejects duplicate baseline-bound treatments, separates evidence from marginal usage, reaps role process groups on timeout or operator interruption, and owns the monotone search ref.",
       "tags": [
         "crucible",
         "supervisor",
         "promotion"
       ],
-      "contentSha256": "4a88eb0c3707c5420f4fe6a75e02801f58f39e900fe8f743c2a2eea0d11158fc"
+      "contentSha256": "5f4b03a86a15ede11a5a8adff9f8a6a88f9cf93b33c52ec07bcfed1e1438c6c5"
     },
     {
       "id": "file:scripts/eval/crucible_tau2_evaluator.py",
