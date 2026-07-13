@@ -1,7 +1,7 @@
 # Petri × GEODE Observability — Layered Architecture
 
 > Status: SOT for the post-2026-05-11 architecture (PR #1024 + #1026 + #1027).
-> Companion ground-truth report: `docs/audits/2026-05-11-petri-observability-audit.md`.
+> Companion ground-truth report: `https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-11-petri-observability-audit.md`.
 
 `geode audit --live` is a 3-model dance: an inspect_petri **auditor** (red-team
 prompts), a GEODE-wrapped **target** (`geode/<model>` via
@@ -325,6 +325,6 @@ mutated by GEODE.
 - `core/llm/usage_store.py` — Layer 2 storage
 - `plugins/petri_audit/runner.py:_maybe_auto_archive` — orchestration seam
 - `plugins/petri_audit/eval_archive.py:archive_eval` — Layer 1 copy + YAML
-- `docs/audits/2026-05-11-petri-observability-audit.md` — ground-truth report
+- `https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-11-petri-observability-audit.md` — ground-truth report
 - `docs/architecture/observability-report.md` — older system-wide inventory
 - inspect_ai source: `.venv/lib/python3.12/site-packages/inspect_ai/`

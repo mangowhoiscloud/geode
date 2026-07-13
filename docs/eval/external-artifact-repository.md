@@ -21,6 +21,21 @@ artifact-repository commit.
 | `artifacts/eval/runs/crucible/campaigns/` | `crucible/runs/campaigns/` |
 | `artifacts/eval/runs/crucible/{row-cache,trajectory-snapshots}/` | `crucible/runs/{row-cache,trajectory-snapshots}/` |
 | approved Crucible launch/report packets | `crucible/runs/launch-packets/` |
+| `docs/audits/` dated Petri analysis reports + score matrices (migrated 2026-07-13) | `sil/audit-reports/` |
+| `docs/e2e/` dated validation records (migrated 2026-07-13) | `reports/e2e-validation/` |
+| `docs/eval/crucible-power-admission-2026-07-13.md` (migrated 2026-07-13) | `crucible/gate-provenance/` |
+
+Still in the GEODE repository after the 2026-07-13 migration: the live
+`docs/audits/eval-logs/` manifest ledger (`core/audit/manifest.py` appends to
+it on every `geode audit --live`), the code-referenced
+`docs/audits/2026-05-21-self-improving-loop-5-slot-reader-audit.md` and
+`docs/audits/judge-human-agreement.md`, and the three caveat reports the
+published petri-bundle README cross-links
+(`2026-05-12-petri-geode-audit-v3.md`, `2026-05-12-petri-insights.md`,
+`2026-05-12-petri-multi-model-partial.md`; pinned by
+`tests/integration/test_render_lint_config.py::test_caveat_files_exist`).
+Comments and older documents citing another `docs/audits/<dated-report>.md`
+path resolve under `sil/audit-reports/` in the artifact repository.
 
 Do not mirror third-party harness checkouts, package caches, evaluator scratch
 worktrees, credentials, or byte-reproducible temporary environments.
@@ -64,7 +79,7 @@ directory.
 ## Current Crucible admission packet
 
 The 2026-07-13 family-power admission record is
-[`crucible-power-admission-2026-07-13.md`](crucible-power-admission-2026-07-13.md).
+[`crucible-power-admission-2026-07-13.md`](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/crucible/gate-provenance/crucible-power-admission-2026-07-13.md).
 Its identifier-free record and power reports are publication-eligible. The
 corresponding sealed pack and selection materials remain withheld until the
 sealed claim is consumed and separately reviewed.

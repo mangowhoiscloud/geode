@@ -82,7 +82,7 @@ Options:
    - Phase F3: 옵션 (C) 완전 제거 채택. (A)/(B) 옵션 삭제
    - Phase F4: quota_exhausted IPC event 가 actually 구현됐는지 확인 + 미구현이면 본 plan 의 후속 PR 로 분리
 2. `docs/architecture/self-improving-loop-resume-decision.md` — fallback 관련 언급 검토
-3. `docs/audits/2026-05-12-llm-provider-matrix-gaps.md` — gap 권장 사항 중 fallback 관련 항목 정정
+3. `https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-12-llm-provider-matrix-gaps.md` — gap 권장 사항 중 fallback 관련 항목 정정
 4. `CHANGELOG.md` 의 `[Unreleased] Removed` 섹션에 본 변경 entry
 
 ## 사용자 결정 변경 (2026-05-21 후속 대화)
