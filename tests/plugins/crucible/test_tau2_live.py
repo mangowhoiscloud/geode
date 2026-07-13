@@ -1,4 +1,5 @@
 import hashlib
+import itertools
 import json
 import subprocess
 from pathlib import Path
@@ -421,7 +422,12 @@ def test_run_arm_accounts_for_actual_subprocess_elapsed_time(
         captured["usage"] = usage
         return evidence
 
-    moments = iter((10.0, 13.5))
+    # An inexhaustible clock: the first read anchors at 10.0 and every later
+    # read returns 13.5, so the measured delta stays 3.5 regardless of how
+    # many times the runner consults the clock. A finite two-value iterator
+    # here raised StopIteration under xdist+coverage load (release-train CI,
+    # 2026-07-13) whenever an extra monotonic() call slipped in.
+    moments = itertools.chain((10.0,), itertools.repeat(13.5))
     monkeypatch.setattr("plugins.crucible.tau2_live.time.monotonic", lambda: next(moments))
     monkeypatch.setattr("plugins.crucible.tau2_live.normalize_tau2_results", normalize)
 

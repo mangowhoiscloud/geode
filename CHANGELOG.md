@@ -45,6 +45,44 @@ functional change.
 
 ---
 
+## [0.99.317] - 2026-07-13
+
+### Fixed
+
+- **Release-train flake hardened.** The tau2 elapsed-time test mocked
+  `time.monotonic` with a finite two-value iterator; an extra clock read
+  under xdist+coverage load raised `StopIteration` and blocked the release
+  train twice on 2026-07-13. The mock is now an inexhaustible clock (first
+  read anchors, later reads repeat), preserving the asserted delta for any
+  call count.
+
+## [0.99.316] - 2026-07-13
+
+### Added
+
+- **GPT-5.6 family model support (Sol/Terra/Luna), dual-lane.** `/model`
+  picker, adapter request-shaping, pricing, and routing for OpenAI's
+  GPT-5.6 series (GA 2026-07-09): `gpt-5.6-sol`, `gpt-5.6-terra`,
+  `gpt-5.6-luna` resolve to the `openai` family and the operator's
+  credential source picks the backend per call — subscription OAuth
+  (slugs artifact-verified against `openai/codex`
+  `models-manager/models.json`) or Platform API key (models GA on the
+  API). The bare `gpt-5.6` Platform alias is registered for spec and
+  pricing but stays off the picker (aliases sol; absent from the Codex
+  models.json).
+  Spec entries carry the new `max` reasoning-effort level (doc-verified),
+  1.05M-token context windows, and short-context pricing with the >272K
+  long-context tier noted. Computer-use GA membership is deliberately
+  excluded as `unverified — live test required` (gpt-5.4 doc-vs-backend
+  precedent). Guard: `tests/core/llm/test_gpt56_support.py`.
+
+### Changed
+
+- **Effort picker: per-family OpenAI effort enums.** `gpt-5.6*` models
+  surface the documented `max` level above `xhigh`; older gpt-5.x
+  families keep the existing enum. Added the missing `claude-fable-5`
+  picker description (functional Fable 5 support landed in June).
+
 ## [0.99.315] - 2026-07-13
 
 ### Added

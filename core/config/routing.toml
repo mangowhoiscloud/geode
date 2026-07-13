@@ -71,7 +71,16 @@ glm = []
 
 # Codex-only models — OAuth-only path (chatgpt.com/backend-api/codex). The
 # resolver checks this list before the prefix table so gpt-5.5 routes to
-# openai-codex rather than openai.
+# openai-codex rather than openai. Membership means "the Platform API
+# does NOT serve this id" — dual-lane models stay OFF this list so the
+# gpt- prefix routes them to the openai family and the operator's
+# credential source (oauth ↔ api_key) picks the backend per call.
+#
+# gpt-5.6-{sol,terra,luna} are deliberately NOT listed: dual-lane.
+# Platform API GA 2026-07-09 (developers.openai.com/api/docs/models) AND
+# Codex slugs in openai/codex codex-rs/models-manager/models.json (ctx7,
+# 2026-07-13). The bare "gpt-5.6" Platform alias is likewise absent from
+# the Codex models.json — Platform-only id, prefix-routed to openai.
 [routing]
 codex_only_models = ["gpt-5.5", "gpt-5.5-pro"]
 # Suffix-based codex matches — *-codex, *-codex-max, *-codex-mini.
