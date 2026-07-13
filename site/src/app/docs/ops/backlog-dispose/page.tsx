@@ -28,7 +28,7 @@ export default function Page() {
               <thead><tr><th>표면</th><th>역할</th></tr></thead>
               <tbody>
                 <tr><td><code>docs/progress.md</code></td><td>진행 보드. Backlog, In Progress, In Review, Done 네 열을 main에서만 갱신합니다. 항목은 이슈나 태스크 ID에 1:1로 대응합니다</td></tr>
-                <tr><td><code>docs/audits/YYYY-MM-DD-backlog-dispositions.md</code></td><td>처분 감사 문서. 보류로 결론 난 항목들의 근거를 날짜 박힌 파일 하나에 묶습니다. 예: <code>docs/audits/2026-05-18-backlog-dispositions.md</code></td></tr>
+                <tr><td><code>geode-eval-artifacts:sil/audit-reports/YYYY-MM-DD-backlog-dispositions.md</code></td><td>처분 감사 문서. 보류로 결론 난 항목들의 근거를 날짜 박힌 파일 하나에 묶습니다. 예: <code>sil/audit-reports/2026-05-18-backlog-dispositions.md</code></td></tr>
               </tbody>
             </table>
 
@@ -90,7 +90,7 @@ export default function Page() {
               <thead><tr><th>Surface</th><th>Role</th></tr></thead>
               <tbody>
                 <tr><td><code>docs/progress.md</code></td><td>The progress board: Backlog, In Progress, In Review, Done, updated from main only. Items map 1:1 to an issue or task ID</td></tr>
-                <tr><td><code>docs/audits/YYYY-MM-DD-backlog-dispositions.md</code></td><td>The disposition audit: one dated file bundling the evidence for items concluded as shelved. Example: <code>docs/audits/2026-05-18-backlog-dispositions.md</code></td></tr>
+                <tr><td><code>geode-eval-artifacts:sil/audit-reports/YYYY-MM-DD-backlog-dispositions.md</code></td><td>The disposition audit: one dated file bundling the evidence for items concluded as shelved. Example: <code>sil/audit-reports/2026-05-18-backlog-dispositions.md</code></td></tr>
               </tbody>
             </table>
 

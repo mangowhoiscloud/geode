@@ -573,4 +573,4 @@ Apply? [y/N/d=show-diff/s=show-rationale]:
 - Previous wiring sprint: `docs/plans/2026-05-19-self-improving-loop-wiring-sprint.md`
 - Config consolidation: `docs/plans/2026-05-19-self-improving-loop-config-consolidation.md`
 - Cognitive uplift Phase 2: `docs/plans/2026-05-21-cognitive-loop-uplift.md`
-- Petri × GEODE alignment audit: `docs/audits/2026-05-15-petri-insights.md`
+- Petri × GEODE alignment audit: `https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-15-petri-insights.md`

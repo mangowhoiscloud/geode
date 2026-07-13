@@ -7,7 +7,7 @@
 > 2026-04 implementation and is not a current storage contract. Operational
 > events now live in `sessions.db:hook_events`; see
 > [Event persistence contract](event-persistence.md) and
-> [Hook System](hook-system.en.md).
+> [Hook System](hook-system.md).
 
 ---
 

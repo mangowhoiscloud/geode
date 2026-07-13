@@ -1,48 +1,48 @@
 # GEODE Orchestration Layer — Design Decision
 
-> [English](orchestration-decision.en.md) | **한국어**
+> **English** | [한국어](orchestration-decision.ko.md)
 
-> **결론**: LangGraph StateGraph 자체가 오케스트레이션 레이어. 별도 레이어 불필요.
+> **Conclusion**: LangGraph StateGraph itself is the orchestration layer. No separate layer needed.
 
-## 조사 대상
+## Systems Investigated
 
-| 시스템 | 패턴 | GEODE 적용 |
-|--------|------|------------|
-| **OpenClaw** | Hub-and-spoke Gateway, Lane Queue, Skills | 부적합 — 개인 비서 자동화 목적, 직렬 우선 설계 |
-| **Claude Code** | Master loop (while tool_calls), Sub-agent Task tool, Context compressor | 부적합 — 대화형 tool-use 에이전트용, 구조화된 파이프라인과 다름 |
-| **LangGraph** | StateGraph, Send API, Conditional Edges, Checkpoint | **현재 사용 중 — 최적** |
+| System | Pattern | GEODE Applicability |
+|--------|---------|---------------------|
+| **OpenClaw** | Hub-and-spoke Gateway, Lane Queue, Skills | Not suitable — designed for personal assistant automation, serial-first design |
+| **Claude Code** | Master loop (while tool_calls), Sub-agent Task tool, Context compressor | Not suitable — designed for conversational tool-use agents, differs from structured pipelines |
+| **LangGraph** | StateGraph, Send API, Conditional Edges, Checkpoint | **Currently in use — optimal** |
 
-## LangGraph가 최적인 이유
+## Why LangGraph Is Optimal
 
-1. **Typed State**: `GeodeState(TypedDict)` + Pydantic BaseModel → 타입 안전
-2. **Send API**: 4 Analysts 병렬 실행 + Clean Context (앵커링 방지)
-3. **Conditional Edges**: Router 6-mode 분기, Verification 후 조건부 Synthesizer
-4. **Reducer Pattern**: `Annotated[list[AnalysisResult], operator.add]` → 병렬 결과 자동 병합
-5. **Checkpoint**: SqliteSaver 지원 (장기 실행 시 복구)
+1. **Typed State**: `GeodeState(TypedDict)` + Pydantic BaseModel → type safety
+2. **Send API**: 4 Analysts parallel execution + Clean Context (anchoring prevention)
+3. **Conditional Edges**: Router 6-mode branching, conditional Synthesizer after Verification
+4. **Reducer Pattern**: `Annotated[list[AnalysisResult], operator.add]` → automatic parallel result merging
+5. **Checkpoint**: SqliteSaver support (recovery for long-running executions)
 
-## OpenClaw에서 차용한 패턴
+## Patterns Borrowed from OpenClaw
 
-| OpenClaw 패턴 | GEODE 적용 |
-|---------------|------------|
-| Progressive Disclosure (Skills) | `--verbose`, `--dry-run` 플래그 |
-| Session Isolation | Send API Clean Context (Analyst 간 점수 격리) |
+| OpenClaw Pattern | GEODE Application |
+|------------------|-------------------|
+| Progressive Disclosure (Skills) | `--verbose`, `--dry-run` flags |
+| Session Isolation | Send API Clean Context (score isolation between Analysts) |
 | Gateway routing | Router node + `route_after_router` conditional edges |
 
-## Claude Code에서 차용한 패턴
+## Patterns Borrowed from Claude Code
 
-| Claude Code 패턴 | GEODE 적용 |
-|-------------------|------------|
-| Sub-agent isolated context | Send API: 각 Analyst는 독립 state로 실행 |
-| Step-by-step progress | `graph.stream()` 기반 progress indicator |
-| Effective Harnesses | Fixture-based dry-run (LLM 없이 전체 파이프라인 검증) |
+| Claude Code Pattern | GEODE Application |
+|---------------------|-------------------|
+| Sub-agent isolated context | Send API: each Analyst runs with independent state |
+| Step-by-step progress | `graph.stream()`-based progress indicator |
+| Effective Harnesses | Fixture-based dry-run (full pipeline verification without LLM) |
 
-## 아키텍처 비교
+## Architecture Comparison
 
 ```
-OpenClaw:  Gateway → Lane Queue → Skill → Agent (직렬 기본)
-Claude:    while(tool_calls) { execute(tool) } (대화 루프)
+OpenClaw:  Gateway → Lane Queue → Skill → Agent (serial by default)
+Claude:    while(tool_calls) { execute(tool) } (conversation loop)
 GEODE:     StateGraph: START → Route → Gather → Send(Analyst×4) → Evaluate → Score → Verify → Synthesize → END
 ```
 
-GEODE는 **구조화된 분석 파이프라인**으로, 대화형 에이전트(OpenClaw/Claude)와 근본적으로 다른 토폴로지.
-LangGraph의 StateGraph가 이 패턴에 1:1 대응하므로 별도 오케스트레이션 레이어 불필요.
+GEODE is a **structured analysis pipeline**, fundamentally different in topology from conversational agents (OpenClaw/Claude).
+Since LangGraph's StateGraph maps 1:1 to this pattern, no separate orchestration layer is needed.

@@ -1,51 +1,53 @@
-# ADR — Seed Generation UI/UX × 4-auth path
+# ADR -- Seed Generation UI/UX × 4-auth path
+
+> **English** | [한국어](seed-generation-ui-decision.ko.md)
 
 > **Status**: Accepted (2026-05-18)
-> **Scope**: seed-generation + Petri 의 user-facing surface — credential picker, cost preview, ToS notice, pre-flight check, slash command.
+> **Scope**: user-facing surface of seed-generation + Petri: credential picker, cost preview, ToS notice, pre-flight check, slash command.
 
 ## Context
 
-GEODE 의 4 auth path:
+GEODE's 4 auth paths:
 
-- **A**: local `claude` CLI (Claude subscription via macOS keychain) — `claude_code_provider`
-- **B**: local `codex` CLI (ChatGPT OAuth, device-code) — `codex_provider`
-- **C**: OpenAI PAYG (sk-…) — `openai-payg`
-- **D**: Anthropic PAYG (sk-ant-…) — `anthropic-payg-geode`
+- **A**: local `claude` CLI (Claude subscription via macOS keychain) -- `claude_code_provider`
+- **B**: local `codex` CLI (ChatGPT OAuth, device-code) -- `codex_provider`
+- **C**: OpenAI PAYG (sk-…) -- `openai-payg`
+- **D**: Anthropic PAYG (sk-ant-…) -- `anthropic-payg-geode`
 
-Petri 는 4-path 모두 받침 (P1-C 5-adapter split). seed-generation (ADR-001) 도 동일 coverage 필요. 추가로:
+Petri supports all 4 paths (P1-C 5-adapter split). seed-generation (ADR-001) needs the same coverage. In addition:
 
-- 3-judge panel 의 **provider diversity 강제** (최소 2 family) — single-provider panel bias 방지.
-- subscription path (A, B) 의 **ToS 회색지대** 안내 — 외부 배포 부적합 경고.
-- **cost preview** — PAYG 부담 + subscription quota % 추정 후 user confirm.
-- **auth expiry pre-flight** — OAuth token TTL 검사 + 부족 시 abort + 보수안.
+- **Enforced provider diversity** for the 3-judge panel (minimum 2 families), preventing single-provider panel bias.
+- **ToS gray-area** notice for the subscription paths (A, B), warning that they are unsuitable for external distribution.
+- **cost preview**: estimate the PAYG cost + subscription quota %, then require user confirmation.
+- **auth expiry pre-flight**: check the OAuth token TTL; abort with a recovery suggestion when insufficient.
 
 ## Decision
 
 **7-role × 4-path manifest + TUI picker + cost preview + ToS notice + pre-flight + slash command**.
 
-### 1. Manifest pattern (Petri P1-A 4-layer 차용)
+### 1. Manifest pattern (borrowed from the Petri P1-A 4-layer)
 
-Petri 의 `plugins/petri_audit/petri.plugin.toml` 의 schema (`[petri]` / `[petri.role.*]` / `[petri.source.*]` / `[petri.adapter.*]`) 를 그대로 차용. seed-generation 은 **source / adapter layer 를 재정의하지 않고 Petri 의 것을 참조** — 같은 4-path 를 같은 adapter 로 호출. role layer 만 신규.
+Borrows the schema of Petri's `plugins/petri_audit/petri.plugin.toml` (`[petri]` / `[petri.role.*]` / `[petri.source.*]` / `[petri.adapter.*]`) as-is. seed-generation **does not redefine the source / adapter layers and references Petri's instead**: the same 4 paths are called through the same adapters. Only the role layer is new.
 
 `plugins/seed_generation/seed_generation.plugin.toml`:
 
 ```toml
 # Schema layers:
-#   1. [seed_generation] — enabled roles
-#   2. [seed_generation.role.<name>] — per-role default_model + allowed_models +
-#      role_contract (Petri's [petri.role.*] schema 와 1:1)
-#   3. source / adapter — reuse Petri's [petri.source.*] + [petri.adapter.*]
-#      (seed_generation.manifest.py 의 loader 가 petri.plugin.toml 의 해당
-#      섹션을 read-only 로 import)
+#   1. [seed_generation] -- enabled roles
+#   2. [seed_generation.role.<name>] -- per-role default_model + allowed_models +
+#      role_contract (1:1 with Petri's [petri.role.*] schema)
+#   3. source / adapter -- reuse Petri's [petri.source.*] + [petri.adapter.*]
+#      (the loader in seed_generation.manifest.py imports the corresponding
+#      sections of petri.plugin.toml read-only)
 
 [seed_generation]
 enabled_roles = [
     "generator", "critic", "proximity", "pilot",
     "ranker", "evolver", "meta_reviewer",
 ]
-# 7 role = co-scientist paper 6 agent (generation/reflection/ranking/evolution/
-# proximity/meta-review) + GEODE 추가 pilot (paper 의 scientist-in-the-loop
-# 자리를 automated Petri audit 으로 치환).
+# 7 roles = the co-scientist paper's 6 agents (generation/reflection/ranking/
+# evolution/proximity/meta-review) + a GEODE-added pilot (replaces the paper's
+# scientist-in-the-loop slot with an automated Petri audit).
 
 [seed_generation.role.generator]
 default_model = "claude-sonnet-4-6"
@@ -58,10 +60,10 @@ allowed_models = ["claude-sonnet-4-6", "claude-haiku-4-5", "gpt-5.5"]
 role_contract = "roles/critic.md"
 
 [seed_generation.role.proximity]
-# Embedding-based, not LLM-completion. text_embed tool 호출.
-# default_model = embedding model (Petri 의 family inference 우회 — manifest
-# loader 가 본 role 을 special-case 로 표시, plan_registry 대신 OpenAI PAYG
-# 직 binding).
+# Embedding-based, not LLM-completion. Calls the text_embed tool.
+# default_model = embedding model (bypasses Petri's family inference -- the
+# manifest loader marks this role as a special case and binds it directly to
+# OpenAI PAYG instead of the plan_registry).
 default_model = "text-embedding-3-small"
 allowed_models = ["text-embedding-3-small"]
 role_contract = "roles/proximity.md"
@@ -72,9 +74,9 @@ allowed_models = ["claude-haiku-4-5", "gpt-5.4-mini"]
 role_contract = "roles/pilot.md"
 
 [seed_generation.role.ranker]
-# 3-judge panel orchestrator. 본 role 의 default_model 은 의미 없음 —
-# panel 의 3 voter 가 [seed_generation.judge_panel] 에서 별도 binding.
-default_model = "claude-sonnet-4-6"   # placeholder, panel 이 실제 호출
+# 3-judge panel orchestrator. This role's default_model is meaningless --
+# the panel's 3 voters are bound separately in [seed_generation.judge_panel].
+default_model = "claude-sonnet-4-6"   # placeholder, the panel makes the actual calls
 allowed_models = ["claude-opus-4-7", "claude-sonnet-4-6"]
 role_contract = "roles/ranker.md"
 
@@ -88,10 +90,10 @@ default_model = "claude-opus-4-7"
 allowed_models = ["claude-opus-4-7", "claude-sonnet-4-6"]
 role_contract = "roles/meta_reviewer.md"
 
-# 3-judge panel — Ranker role 의 tournament 안에서 호출되는 3 voter 의
-# binding. enabled_roles 에 들어가지 않는 별도 sub-section.
-# manifest loader 가 본 section 의 voter 3 의 family 가 최소 2 인지 검사.
-# 위반 시 reject.
+# 3-judge panel -- binding for the 3 voters called inside the Ranker role's
+# tournament. A separate sub-section that is not part of enabled_roles.
+# The manifest loader checks that the 3 voters in this section span at least
+# 2 families. Violations are rejected.
 [seed_generation.judge_panel]
 voters = [
     { model = "claude-sonnet-4-6", family = "anthropic", source = "claude-cli" },
@@ -101,36 +103,36 @@ voters = [
 required_diversity_families = 2
 ```
 
-source / adapter binding — Petri 의 `[petri.source.anthropic]` / `[petri.source.openai]` / `[petri.adapter.*]` 를 그대로 재사용. credential_source resolver 도 `plugins.petri_audit.credential_source` 를 직 호출. 즉 **provider diversity = `[seed_generation.judge_panel].voters` 의 `family` field 분포** 로 표현.
+source / adapter binding: reuses Petri's `[petri.source.anthropic]` / `[petri.source.openai]` / `[petri.adapter.*]` as-is. The credential_source resolver also calls `plugins.petri_audit.credential_source` directly. In other words, **provider diversity is expressed as the distribution of the `family` field across `[seed_generation.judge_panel].voters`**.
 
-manifest schema + loader — `plugins/seed_generation/manifest.py` (Petri 의 `plugins/petri_audit/manifest.py` 패턴 재사용, pydantic + drift validator + lazy yaml import + Petri manifest 의 source/adapter import).
+manifest schema + loader: `plugins/seed_generation/manifest.py` (reuses the pattern of Petri's `plugins/petri_audit/manifest.py`; pydantic + drift validator + lazy yaml import + import of the Petri manifest's source/adapter).
 
 ### Default 3-judge panel composition (settled decision)
 
-`[seed_generation.judge_panel].voters` 의 3-element default (위 TOML 의 voters list 와 동일):
+The 3-element default of `[seed_generation.judge_panel].voters` (identical to the voters list in the TOML above):
 
-| Voter | family | source | model | Plan ID (예) |
+| Voter | family | source | model | Plan ID (example) |
 |---|---|---|---|---|
 | voter[0] | anthropic | claude-cli | claude-sonnet-4-6 | claude-max-`<user>` |
 | voter[1] | openai | openai-codex | gpt-5.5 | chatgpt-plus-`<user>` |
 | voter[2] | anthropic | api_key | claude-haiku-4-5 | anthropic-payg-geode |
 
-→ 2 family (anthropic + openai), 3 source, 3 model. diversity validator (`required_diversity_families = 2`) 통과.
+→ 2 families (anthropic + openai), 3 sources, 3 models. Passes the diversity validator (`required_diversity_families = 2`).
 
-Source value 는 Petri 의 `[petri.source.<family>].allowed` 와 1:1 (anthropic 의 `claude-cli` / `api_key` / `auto`, openai 의 `openai-codex` / `api_key` / `auto`). Plan ID 는 user 환경 의 plan_registry 에서 동적 lookup.
+Source values map 1:1 to Petri's `[petri.source.<family>].allowed` (`claude-cli` / `api_key` / `auto` for anthropic, `openai-codex` / `api_key` / `auto` for openai). Plan IDs are looked up dynamically from the plan_registry in the user's environment.
 
 ### text_embed provider (settled decision)
 
-신규 tool `core/tools/text_embed.py` (S4) 가 기본 사용할 provider:
+The provider the new tool `core/tools/text_embed.py` (S4) uses by default:
 
 - **OpenAI `text-embedding-3-small`** ($0.02 / 1M tok), 1536-dim.
-- 다른 provider (Voyage, Cohere) 후순위 — 본 ADR 의 결정은 OpenAI 단일.
-- routing.toml 의 `[embedding]` section 으로 user override 가능 (별도 sub-PR 의 enhancement).
-- credential — OpenAI PAYG (sk-…) 만 사용. ChatGPT OAuth 는 embeddings API 미지원.
+- Other providers (Voyage, Cohere) are deprioritized; this ADR's decision is OpenAI only.
+- User override is possible via the `[embedding]` section of routing.toml (an enhancement in a separate sub-PR).
+- credential: OpenAI PAYG (sk-…) only. ChatGPT OAuth does not support the embeddings API.
 
 ### 2. 7-role × 4-path picker (TUI)
 
-`plugins/seed_generation/picker.py` — TerminalMenu 기반. `/petri` 2-axis picker 의 시각 패턴 차용.
+`plugins/seed_generation/picker.py`: TerminalMenu-based. Borrows the visual pattern of the `/petri` 2-axis picker.
 
 ```
 ╭─ Seed-pipeline 7-role + 3-judge panel binding ─────────────────────────────╮
@@ -158,35 +160,36 @@ Source value 는 Petri 의 `[petri.source.<family>].allowed` 와 1:1 (anthropic 
 ╰────────────────────────────────────────────────────────────────────────────╯
 ```
 
-`required_diversity_families` 위반 시 picker 가 save reject + 재선택 요구.
+On a `required_diversity_families` violation the picker rejects the save and requires reselection.
 
-### 3. ToS notice (subscription path 첫 활성화)
+### 3. ToS notice (first activation of a subscription path)
 
-`claude_code_provider.py:38-56` 의 policy notice 패턴 재사용. 본 ADR 에서 picker 의 inline notice 로 통합 — manifest 의 source 마다 first-activation hook:
+Reuses the policy notice pattern of `claude_code_provider.py:38-56`. This ADR consolidates it into an inline notice in the picker, with a first-activation hook per manifest source:
 
 ```
-첫 Claude subscription path 활성화 — ToS 회색지대:
+First activation of the Claude subscription path -- ToS gray area:
 
-Anthropic Consumer ToS §3 (Acceptable Use) 의 "automated access"
-정의가 OAuth-routed subprocess 호출에 적용되는지 모호. 문자 그대로
-위반 X, 정신적 위반 가능 (좁은 해석). 외부 배포 / 공개 호스팅 부적합.
+Whether the "automated access" definition in Anthropic Consumer ToS §3
+(Acceptable Use) applies to OAuth-routed subprocess calls is ambiguous.
+Not a literal violation; possibly a violation in spirit (narrow
+interpretation). Unsuitable for external distribution / public hosting.
 
-Petri / seed-generation 한정 사용 권장.
-Production chat 은 sk-ant-PAYG 만 사용.
+Recommended for Petri / seed-generation use only.
+Production chat uses sk-ant-PAYG only.
 
-활성화하시겠습니까? [y/N]:
+Activate? [y/N]:
 ```
 
-ChatGPT subscription (B path) 도 동등 notice.
+The ChatGPT subscription (path B) gets an equivalent notice.
 
 ### 4. Cost preview (`geode audit-seeds quota`)
 
-`plugins/seed_generation/cost_preview.py` — `core/llm/pricing_loader.py` (P3-A) + `core/cli/commands/login.py:_login_quota` 의 quota 추정 결합.
+`plugins/seed_generation/cost_preview.py`: combines `core/llm/pricing_loader.py` (P3-A) with the quota estimation of `core/cli/commands/login.py:_login_quota`.
 
 ```
 $ geode audit-seeds quota --pipeline-config seed-generation.toml --candidates 15
 
-추정 cost:
+Estimated cost:
 
   Generation (15 × 8k in / 4k out, claude-cli):  ~180k tok    quota: ~4%
   Reflection (15 × 6k in / 2k out, claude-cli):  ~120k tok    quota: ~3%
@@ -199,14 +202,14 @@ $ geode audit-seeds quota --pipeline-config seed-generation.toml --candidates 15
   Total:                                         ~1.34M tok    ~$0.30 PAYG +
                                                               ~12% Plus + ~8% Max
 
-예상 wall-time: ~25 min (Lane max=16)
+Expected wall-time: ~25 min (Lane max=16)
 
 Continue? [y/N]:
 ```
 
-**Budget guard**: soft warning at $0.30/gen, hard cap at $1.00 (config 가능). 초과 시 pipeline abort.
+**Budget guard**: soft warning at $0.30/gen, hard cap at $1.00 (configurable). The pipeline aborts on overrun.
 
-### 5. Pre-flight check (`geode audit-seeds generate` 진입 시)
+### 5. Pre-flight check (on entering `geode audit-seeds generate`)
 
 ```
 Pre-flight check…
@@ -220,83 +223,83 @@ Pre-flight check…
 Aborting.
 ```
 
-검사 항목: token expiry / quota 잔량 / 3-judge diversity / Lane 가용 capacity / budget guard.
+Checked items: token expiry / remaining quota / 3-judge diversity / available Lane capacity / budget guard.
 
-### 6. CLI / Slash 진입점
+### 6. CLI / Slash entry points
 
 **Typer** (`plugins/seed_generation/cli.py`):
 
-| Sub-command | 책임 |
+| Sub-command | Responsibility |
 |---|---|
 | `geode audit-seeds login` | 4-path status view |
-| `geode audit-seeds picker` | per-role binding 편집 |
+| `geode audit-seeds picker` | edit per-role bindings |
 | `geode audit-seeds quota` | cost preview |
-| `geode audit-seeds generate` | pipeline 시작 (pre-flight 포함) |
-| `geode audit-seeds revoke <plan_id>` | 특정 plan disable |
+| `geode audit-seeds generate` | start the pipeline (includes pre-flight) |
+| `geode audit-seeds revoke <plan_id>` | disable a specific plan |
 
-**Slash** (`core/cli/routing.py` 등록):
+**Slash** (registered in `core/cli/routing.py`):
 
-- `/audit-seeds <sub>` — REPL inside-loop 진입점, Typer sub-app 와 같은 dispatch.
+- `/audit-seeds <sub>`: REPL inside-loop entry point, same dispatch as the Typer sub-app.
 
-`/petri` 와 별도 slash. seed-generation 이 pre-experiment phase 로 conceptually 분리되어 있고, `/petri seed-gen` 같은 nested form 은 menu 깊이 ↑ — UX 손해. 결정: **별도 `/audit-seeds`**.
+A slash command separate from `/petri`. seed-generation is conceptually separated as a pre-experiment phase, and a nested form like `/petri seed-gen` increases menu depth, which hurts UX. Decision: **a separate `/audit-seeds`**.
 
-### 7. `/login` flow 의 4-path 표면
+### 7. 4-path surface of the `/login` flow
 
-기존 `_login_oauth(openai|anthropic)` + `_login_set_key` 그대로 유지. 단 status view 일관성 위해:
+The existing `_login_oauth(openai|anthropic)` + `_login_set_key` are kept as-is. For status-view consistency, however:
 
-- `_login_show_status` 가 seed-generation manifest 의 role binding 도 함께 표시 (선택, S11).
-- `geode login claude-cli status` (keychain inspect) 신규 sub-action — seed-generation picker 가 status 의존.
+- `_login_show_status` also displays the role bindings of the seed-generation manifest (optional, S11).
+- New sub-action `geode login claude-cli status` (keychain inspect); the seed-generation picker depends on this status.
 
 ## Decision Drivers
 
-- **Petri 패턴 재사용**: manifest + adapter + credential_source + picker — 같은 PR 단위 (P1-A~G) 동일.
-- **Co-evolution bias 회피**: 3-judge panel 의 provider diversity 강제 (최소 2 family) — single-provider 매니징 시 ranker 가 한 model 편향.
-- **외부 배포 안전망**: subscription path 사용 시 ToS 회색지대 명시. user 가 production 외부 배포 시 PAYG 단일화 선택 가능하도록.
-- **Cost 가시성**: pipeline 1 회 ≈ $0.30 PAYG + quota — 무인 진화 시 누적 비용 회피 위한 confirmation step.
-- **Auth fragility 완화**: OAuth token expiry 가 silent fail → pre-flight 가 명시적 abort + 복구안 제시.
+- **Petri pattern reuse**: manifest + adapter + credential_source + picker, the same PR-unit breakdown as P1-A~G.
+- **Co-evolution bias avoidance**: enforced provider diversity for the 3-judge panel (minimum 2 families); with single-provider management the ranker skews toward one model.
+- **External-distribution safety net**: the ToS gray area is stated explicitly when a subscription path is used, so the user can choose to consolidate on PAYG for production external distribution.
+- **Cost visibility**: one pipeline run ≈ $0.30 PAYG + quota; a confirmation step to avoid cost accumulation during unattended evolution.
+- **Auth fragility mitigation**: OAuth token expiry is a silent fail; pre-flight turns it into an explicit abort plus a recovery suggestion.
 
 ## Considered Options
 
-1. **Manifest + picker + cost + ToS + pre-flight + `/audit-seeds`** (✓ Accepted): 본 ADR.
-2. Hardcoded all-claude-cli (Option γ, picker 없음): Rejected — diversity 손실, ToS 외 noise 0.
-3. `/petri seed-gen` extension (nested): Rejected — menu depth.
-4. `/login` 에 picker 통합 (sub-pipeline 별 별도 binding 표현 없음): Rejected — login 의 책임 비대화.
-5. Cost guard 없이 generate 즉시 실행: Rejected — 누적 비용 위험.
+1. **Manifest + picker + cost + ToS + pre-flight + `/audit-seeds`** (✓ Accepted): this ADR.
+2. Hardcoded all-claude-cli (Option γ, no picker): Rejected. Diversity loss; zero noise apart from ToS.
+3. `/petri seed-gen` extension (nested): Rejected. Menu depth.
+4. Integrating the picker into `/login` (no way to express separate bindings per sub-pipeline): Rejected. Bloats login's responsibility.
+5. Running generate immediately without a cost guard: Rejected. Cost-accumulation risk.
 
 ## Consequences
 
-### 긍정
+### Positive
 
-- 4-path 모두 first-class. user 가 claude-cli / codex-cli / PAYG 자유롭게 조합.
-- 3-judge panel 의 provider diversity 자동 강제 — bias 회피.
-- ToS 회색지대 명시 — 외부 배포 시 user 가 의식적으로 PAYG 단일화 선택 가능.
-- Cost 가시성 — pipeline 1회 비용 + quota 사용량 사전 확인.
-- Auth fragility 완화 — token expiry 가 silent fail 안 함.
+- All 4 paths are first-class. The user freely combines claude-cli / codex-cli / PAYG.
+- Provider diversity for the 3-judge panel is enforced automatically, avoiding bias.
+- The ToS gray area is stated explicitly; for external distribution the user can consciously consolidate on PAYG.
+- Cost visibility: per-run pipeline cost + quota usage confirmed up front.
+- Auth fragility mitigated: token expiry does not fail silently.
 
-### 부정
+### Negative
 
-- ~1,000 LOC UI/UX 추가 (이전 평가). 16 PR 중 S2.5 + S5.5 + S6.5 + S11 4 개 PR.
-- Picker UX 의 시각 디자인 / TerminalMenu 한계 — color / 멀티 column 정렬 등 platform 의존성.
-- Cost preview 의 token 추정이 사전 합산 — 실제 cost 와 차이 가능 (~20% 오차).
-- ToS notice 가 매 첫 활성화 시 user 인지 부담 — 1회 dismissal 후 안 나타나도록 user-config 추가 가능 (별도 PR).
+- Adds ~1,000 LOC of UI/UX (prior estimate). 4 PRs out of 16: S2.5 + S5.5 + S6.5 + S11.
+- Visual design of the picker UX / TerminalMenu limitations: platform dependencies such as color and multi-column alignment.
+- The cost preview's token estimate is a pre-run aggregate; it can differ from actual cost (~20% error).
+- The ToS notice adds a user-awareness burden on every first activation; a user-config to suppress it after one dismissal can be added (separate PR).
 
-### 중립
+### Neutral
 
-- `_login_show_status` 에 seed-generation binding 표시는 S11 선택 사항. 본 ADR 의 hard requirement 아님.
+- Displaying seed-generation bindings in `_login_show_status` is an S11 option, not a hard requirement of this ADR.
 
 ## Implementation pointers
 
 - S2.5: `plugins/seed_generation/{manifest.py, seed_generation.plugin.toml}` (~220 LOC)
-- S5.5: `plugins/seed_generation/{picker.py, pre_flight.py}` + ToS notice 통합 (~410 LOC)
+- S5.5: `plugins/seed_generation/{picker.py, pre_flight.py}` + ToS notice integration (~410 LOC)
 - S6.5: `plugins/seed_generation/cost_preview.py` + budget guard (~250 LOC)
-- S11: `plugins/seed_generation/cli.py` Typer sub-app + `core/cli/routing.py` slash 등록 (~280 LOC)
+- S11: `plugins/seed_generation/cli.py` Typer sub-app + `core/cli/routing.py` slash registration (~280 LOC)
 
 ## References
 
-- ADR-001 — seed-generation architecture
-- Petri P1-A~G manifest pattern — `plugins/petri_audit/{petri.plugin.toml, manifest.py, cli.py:264,309}`
-- 4-auth path 정의 — `core/llm/routing/plans.py:PlanKind`
-- ToS notice pattern — `plugins/petri_audit/claude_code_provider.py:38-56`
-- Quota 추정 base — `core/cli/commands/login.py:_login_quota` (line 886)
-- Pricing loader (P3-A) — `core/llm/model_pricing.toml`
-- `_login_oauth` flow — `core/cli/commands/login.py:509-700`
+- ADR-001 -- seed-generation architecture
+- Petri P1-A~G manifest pattern -- `plugins/petri_audit/{petri.plugin.toml, manifest.py, cli.py:264,309}`
+- 4-auth path definition -- `core/llm/routing/plans.py:PlanKind`
+- ToS notice pattern -- `plugins/petri_audit/claude_code_provider.py:38-56`
+- Quota estimation base -- `core/cli/commands/login.py:_login_quota` (line 886)
+- Pricing loader (P3-A) -- `core/llm/model_pricing.toml`
+- `_login_oauth` flow -- `core/cli/commands/login.py:509-700`

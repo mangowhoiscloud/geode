@@ -139,7 +139,7 @@ Phase ζ — checkpoint + resume on credential rollout
 | **PR-ζ5** | feat(observability): credential-rollover detection + journal event | ADR settled | ~150 | resume path comparison: checkpoint.active_sources vs current resolved sources → emit `credential_rolled_over` event to journal (P1c), tests | PR-ζ1 + PR-γ1 |
 | **PR-ζ5.5** | feat(petri+auth): wire ProfileRotator into self-improving-loop credential path | 2026-05-19 paperclip/crumb directive | ~300 | `plugins/petri_audit/credential_source.py` (route mark_failure → ProfileRotator), new `resolve_self_improving_loop_binding(family) → (source, profile)`, autoresearch + seed-generation LLM call sites pass profile.name through metadata, tests | PR-β1 + PR-δ1 + PR-δ2 |
 | **PR-ζ5.6** | feat(cli): 2-axis account picker (provider ←→ × profile ↑↓) | 2026-05-19 picker UX directive | ~250 | `core/cli/account_picker.py` (NEW, mirrors `core/cli/effort_picker.py` 2-axis pattern), `/login picker` slash, banner abort-dialog auto-trigger (PR-γ1 wire), agent loop NL phrase recogniser, tests | PR-ζ5.5 + PR-γ1 |
-| **PR-ζ6** | docs + runbook | wrap-up | ~150 | `docs/audits/2026-05-19-resume-rollout-runbook.md` (NEW, operator manual w/ picker screenshots), CHANGELOG entries, plan doc finalisation | Phase ζ |
+| **PR-ζ6** | docs + runbook | wrap-up | ~150 | `https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-19-resume-rollout-runbook.md` (NEW, operator manual w/ picker screenshots), CHANGELOG entries, plan doc finalisation | Phase ζ |
 
 **Total estimate**: ~2,900 LOC (Phase α-ε ~1,050 + Phase ζ ~1,850) + 1 ADR + 1 schema doc + 1 runbook + 1 sample fixture.
 **Sprint estimate**: 5-6 sprint (per-PR Codex MCP audit 포함).
@@ -306,7 +306,7 @@ PR-δ2 (seed-generation + petri user_overrides):
 | co-scientist 원본/reference impl 모두 production-ready resume 미제공 → 우리가 first-class implementer | ADR 의 reference table 에 명시. LangGraph + Inspect_ai + Stripe 의 검증된 패턴 합성, novel design 아님 |
 | ProfileRotator wiring (PR-ζ5.5) 에서 autoresearch + seed-generation 의 LLM call 사이트가 수십 개라 migration 누락 위험 | Codex MCP audit 으로 `grep -r "agentic_call\|llm.*call"` 후 모든 사이트가 profile.name 전달하는지 검증. 누락된 site 는 fallback 으로 기본 profile resolver 의 결과 사용 (행동 변경 없음) |
 | 2-axis picker UX (PR-ζ5.6) 가 non-tty (CI / pipe) 환경에서 깨짐 | `pick_model_and_effort` 와 동일 패턴 — `sys.stdin.isatty()` 체크 후 fallback 으로 numbered list 출력 + arg-by-name 지원 (e.g. `/login picker --provider anthropic --profile work`) |
-| paperclip/crumb subprocess delegate (`claude -p`) 흡수 여부 | 본 sprint scope 외 — `docs/audits/2026-05-18-i2-paperclip-review.md` 가 별도 "Deferred — PAYG path 충분" 결정. Future ADR 으로 분리 |
+| paperclip/crumb subprocess delegate (`claude -p`) 흡수 여부 | 본 sprint scope 외 — `https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-18-i2-paperclip-review.md` 가 별도 "Deferred — PAYG path 충분" 결정. Future ADR 으로 분리 |
 
 ## Reference
 
@@ -332,7 +332,7 @@ PR-δ2 (seed-generation + petri user_overrides):
 - Stripe idempotency keys: https://docs.stripe.com/api/idempotent_requests
 - co-scientist paper: https://arxiv.org/abs/2502.18864 (§4.5 + §5)
 - AI-CoScientist reference impl: https://github.com/The-Swarm-Corporation/AI-CoScientist
-- paperclip / crumb subprocess pattern: `docs/audits/2026-05-18-i2-paperclip-review.md` + 외부 `~/workspace/crumb/src/adapters/claude-local.ts`
+- paperclip / crumb subprocess pattern: `https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-18-i2-paperclip-review.md` + 외부 `~/workspace/crumb/src/adapters/claude-local.ts`
 - GEODE 기존 multi-profile infra: `core/auth/profiles.py` (AuthProfile + ProfileStore), `core/auth/rotation.py` (ProfileRotator), `core/auth/credential_breadcrumb.py` (LLM hint)
 - GEODE 기존 2-axis picker pattern: `core/cli/effort_picker.py` (`pick_model_and_effort` — Claude Code `ModelPicker.tsx` parity)
 

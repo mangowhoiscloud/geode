@@ -81,7 +81,7 @@ Phase F — fill-in
 | **Phase C** | gen-0 baseline smoke run (1-shot real mode) | — | 0 LOC + data | `autoresearch/state/baseline.json` (gen-0 data) | P1a, P1b, P1c |
 | **P2b** | refactor(integration): unified self-improving-loop namespace + Petri sink + GC | #5, #15, #16 | ~300 | migration: `autoresearch/state/`, `~/.geode/seed-generation/`, `~/.geode/petri-audit/seed-stage/` → `~/.geode/self-improving-loop/<session>/{autoresearch,seed-generation,petri}/`; GC for `seed-stage/` (mtime > 7d); `~/.geode/self-improving-loop/<session>/petri/audit_logs/*.eval` 단일 sink | Phase C |
 | **P2** | feat(observability): `geode outer-bundle <session>` viewer | #17 | ~200 | `core/cli/outer_bundle.py` (NEW), `inspect view` re-export wrapping bundle manifest | P2b |
-| **Phase E** | S12 execution + 2nd audit pass | — | 0 LOC + data | `plugins/petri_audit/seeds_gen1/`, `docs/audits/2026-05-XX-self-improving-loop-2nd-audit.md` | P2 |
+| **Phase E** | S12 execution + 2nd audit pass | — | 0 LOC + data | `plugins/petri_audit/seeds_gen1/`, `https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-XX-self-improving-loop-2nd-audit.md` | P2 |
 | **P3** | feat: 2nd-pass fill-in (auto-rollback, multi-gen flag, baseline_means cleanup) | #8, #12, #14, #20? | ~200 | Phase E 결과에 따라 결정 | Phase E |
 
 **Total estimate**: ~1,550 LOC + 2 data runs.

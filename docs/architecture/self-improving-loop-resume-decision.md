@@ -1,13 +1,15 @@
 # ADR — Outer-Loop Checkpoint + Resume on Credential Rollout
 
+> **English** | [한국어](self-improving-loop-resume-decision.ko.md)
+
 > **Status**: Accepted (2026-05-19)
 > **Scope**: GEODE self-improving-loop (autoresearch + seed-generation). When a subscription credential (Claude Code OAuth, ChatGPT OAuth) hits its quota mid-run, the operator must be able to swap accounts and **resume from the last completed unit of work** without re-spending budget on already-finished generations / candidates / matches.
 
 ## Context
 
-The 2026-05-19 self-improving-loop config consolidation plan introduced strict subscription mode (`fallback_to_payg=false` default) so subscription exhaustion aborts with an actionable banner instead of silently rolling over to PAYG. The strict-abort is correct, but creates a new failure mode: a long self-improving-loop run (multi-generation seed evolution or overnight autoresearch ratchet) loses everything in flight at the moment of abort. The user explicitly asked (2026-05-19): "self-improving-loop 가 subscription 초과로 끊겨도, 계정 롤아웃해서 이어갈 수 있게 체크포인트와 같은 replay-resume 조치가 되어있는지 점검."
+The 2026-05-19 self-improving-loop config consolidation plan introduced strict subscription mode (`fallback_to_payg=false` default) so subscription exhaustion aborts with an actionable banner instead of silently rolling over to PAYG. The strict-abort is correct, but creates a new failure mode: a long self-improving-loop run (multi-generation seed evolution or overnight autoresearch ratchet) loses everything in flight at the moment of abort. The user explicitly asked (2026-05-19): "Check whether a checkpoint-like replay-resume measure is in place so that even when the self-improving-loop is cut off by subscription overrun, it can be continued by rolling out to another account."
 
-The user also specified the research-before-decision order: "ADR 들어가기 전에 관련 레퍼런스 디깅 + 원본인 co-scientist 의 패키지 구현본을 살펴서 이에 대한 고려가 되어있는지도 확인."
+The user also specified the research-before-decision order: "Before starting the ADR, dig through the related references and also inspect the package implementation of the original co-scientist to confirm whether this concern has been considered there."
 
 ### Reference findings (2026-05-19 agent research, summarised)
 
@@ -36,7 +38,7 @@ Net: **co-scientist neither in paper nor reference impl provides a usable design
 | C2 | `core/memory/project_journal.py` ProjectJournal | ✅ fsync + append | tail/aggregate only | ❌ audit only |
 | Outer | `~/.geode/self-improving-loop/sessions.jsonl` (P1a) | ✅ append | tail only | ❌ index only |
 | Outer | `~/.geode/self-improving-loop/<session>/journal.jsonl` (P1c) | ✅ append | tail only | ❌ event audit |
-| Seed-pipeline | `<run_dir>/state.json` (S8 `_persist_state`) | ✅ write_text (non-atomic) | ❌ **`_load_state()` 미구현** | ❌ |
+| Seed-pipeline | `<run_dir>/state.json` (S8 `_persist_state`) | ✅ write_text (non-atomic) | ❌ **`_load_state()` not implemented** | ❌ |
 | Autoresearch | `~/.geode/self-improving/baseline.json` (P0a) | ✅ atomic | ✅ `_load_baseline()` | partial (promote/run only) |
 | Primitive | `core/utils/atomic_io.py` | tmp + `os.replace` + `fsync` | — | ✅ |
 
@@ -101,7 +103,7 @@ On resume:
 
 ### Within-source account rotation (paperclip / crumb pattern)
 
-A separate dimension from the cross-source PAYG ramp blocked by PR-β1: **multiple accounts inside the same `family.source`** (e.g., two Claude Code OAuth accounts the operator has both stored). The 2026-05-19 user directive — "paperclip, crumb 의 사례처럼 로컬에 기록된 계정 기록으로 롤아웃" — refers to this case. paperclip / crumb (cf. `docs/audits/2026-05-18-i2-paperclip-review.md`, external repo `~/workspace/crumb/`) achieve it via `claude -p` subprocess picking up `~/.claude/credentials` automatically + symlink swap or env var for account selection. The pattern is **non-interactive subprocess + locally-recorded credential**.
+A separate dimension from the cross-source PAYG ramp blocked by PR-β1: **multiple accounts inside the same `family.source`** (e.g., two Claude Code OAuth accounts the operator has both stored). The 2026-05-19 user directive — "roll out using locally recorded account records, as in the paperclip and crumb cases" — refers to this case. paperclip / crumb (cf. `https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-18-i2-paperclip-review.md`, external repo `~/workspace/crumb/`) achieve it via `claude -p` subprocess picking up `~/.claude/credentials` automatically + symlink swap or env var for account selection. The pattern is **non-interactive subprocess + locally-recorded credential**.
 
 GEODE already has a richer, in-process equivalent — `core/auth/profiles.py` (AuthProfile / ProfileStore / EligibilityResult), `core/auth/rotation.py` (`ProfileRotator.resolve(provider)` returning best-eligible, `mark_failure` → cooldown, managed-token auto-refresh ≤120 s pre-expiry), `core/auth/credential_breadcrumb.py` (LLM-readable hint per ProfileRejectReason — Claude Code `createModelSwitchBreadcrumbs` parity). Outer-loop currently uses none of it; `plugins/petri_audit/credential_source.py` only does process-local `suppress_credential_source(family, source)` (no profile dimension).
 
@@ -116,7 +118,7 @@ GEODE already has a richer, in-process equivalent — `core/auth/profiles.py` (A
 
 ### Account picker UX (2-axis, GEODE slash-command parity)
 
-Per 2026-05-19 user directive — "자연어 뿐 아니라 UI/UX 로도 선택/입력 가능 (GEODE 슬래시 명령어 구조 참고). provider 변경은 좌우, 계정 선택은 위아래" — the picker is a 2D interactive selector mirroring the existing `pick_model_and_effort` pattern in `core/cli/effort_picker.py` (Claude Code `ModelPicker.tsx` parity):
+Per 2026-05-19 user directive — "selection/input must be possible not only via natural language but also via UI/UX (see the GEODE slash-command structure); provider change is left/right, account selection is up/down" — the picker is a 2D interactive selector mirroring the existing `pick_model_and_effort` pattern in `core/cli/effort_picker.py` (Claude Code `ModelPicker.tsx` parity):
 
 ```
 ┌─ Subscription quota exhausted — claude-cli (anthropic:work) ─────────┐
@@ -149,7 +151,7 @@ Implementation reuses `pick_model_and_effort`'s raw-tty 2-axis input loop. Per d
 | Hermes-style auto credential rotation | Silent rotation hides cost (contradicts `feedback_test_cost`) + Hermes's own bug tracker (#11364, #6907, #15099) documents the rotation logic is fragile |
 | Build a parallel checkpoint system | `SessionCheckpoint` already exists and is production-ready; layering on top reuses atomic_write + SQLite + `/resume` CLI |
 | Per-LLM-call checkpointing | Storage churn / IO cost not worth the marginal UX win; unit boundary is sufficient |
-| `CrewAI silent fallback on missing checkpoint ID | violates `anti-deception-checklist` — fail loudly instead |
+| CrewAI silent fallback on missing checkpoint ID | violates `anti-deception-checklist` — fail loudly instead |
 | autoresearch "never pause" policy | works for a single-user single-credential ML run; breaks for multi-credential self-improving loop |
 | Generic re-run on abort (no checkpoint) | re-spends the entire run's budget; defeats the purpose of strict-mode subscription |
 
@@ -182,7 +184,7 @@ Lives as Phase ζ in `docs/plans/2026-05-19-self-improving-loop-config-consolida
 - **PR-ζ5**: credential-rollover detection — at resume, compare active sources to checkpoint; emit `credential_rolled_over_at` event into journal.
 - **PR-ζ5.5** (NEW): wire `ProfileRotator` into the self-improving-loop credential path. `resolve_self_improving_loop_binding(family) → (source, profile)` adds the profile dimension. `plugins/petri_audit/credential_source.py` routes failures through `ProfileRotator.mark_failure(profile)` instead of the in-process suppress set. autoresearch + seed-generation pass `profile.name` through LLM call metadata so cooldowns track per-account.
 - **PR-ζ5.6** (NEW): 2-axis account picker (provider ←→ × profile ↑↓), mirroring `core/cli/effort_picker.py`. Two entry points: (a) `/login picker` slash command + auto-trigger from the red banner abort dialog (PR-γ1 trigger condition), (b) agent loop natural-language phrase recogniser invokes the picker programmatically. Action row: Enter (swap+resume) / n (add new profile via `claude /login` subprocess delegate) / w (wait for reset) / p (opt-in PAYG for this run) / Esc (keep aborted).
-- **PR-ζ6**: docs + sample resume run-book (`docs/audits/2026-05-19-resume-rollout-runbook.md`) + CHANGELOG.
+- **PR-ζ6**: docs + sample resume run-book (`https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-19-resume-rollout-runbook.md`) + CHANGELOG.
 
 ## Reference
 

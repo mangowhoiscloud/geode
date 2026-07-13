@@ -4,7 +4,7 @@
 **Status**: Approved (Option α full scope)
 **Owner**: mangowhoiscloud
 **Driving ADRs**: ADR seed-generation / ADR autoresearch-axis / ADR seed-generation-ui
-**Fidelity amendment**: `docs/audits/2026-05-18-plan-a-fidelity-amendment.md`
+**Fidelity amendment**: `https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-18-plan-a-fidelity-amendment.md`
 
 ## Goal
 
@@ -61,7 +61,7 @@ S12 — First seeds_gen1 generation run + 첫 baseline autoresearch
 | S9 | refactor(autoresearch): 15-axis raw fitness + baseline wrapping 제거 | ~150 | `autoresearch/train.py`, `autoresearch/program.md` | indep |
 | S10 | feat(autoresearch): results.tsv 10-col + results.jsonl raw emit | ~80 | `autoresearch/train.py`, `autoresearch/program.md`, `autoresearch/state/.gitignore` | S9 |
 | S11 | feat(seed-generation): CLI sub-app + slash + human gate | ~280 | `plugins/seed_generation/cli.py`, `core/cli/routing.py`, `core/cli/__init__.py` | S6.5, S8 |
-| S12 | data: first seeds_gen1 generation run + autoresearch baseline | ~50 + data | `plugins/petri_audit/seeds_gen1/`, `autoresearch/state/baseline.json`, `docs/audits/seed-generation-runs/2026-05-XX/` | S11, S10 |
+| S12 | data: first seeds_gen1 generation run + autoresearch baseline | ~50 + data | `plugins/petri_audit/seeds_gen1/`, `autoresearch/state/baseline.json`, `https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/seed-generation-runs/2026-05-XX/` | S11, S10 |
 
 **Total**: ~3,270 LOC + 1 data run.
 **Sprint estimate**: 6-7 sprint (3-4 PR / week).
@@ -74,7 +74,7 @@ S12 — First seeds_gen1 generation run + 첫 baseline autoresearch
 | 2 | DIM_WEIGHTS | critical 0.125/dim × 4 = 0.5 ; auxiliary 0.05/dim × 8 = 0.4 ; stability 0.10 |
 | 3 | First-gen bootstrap | `baseline=None` → gate 비활성, simple weighted sum |
 | 4 | 3-judge panel default | `claude-sonnet-4-6` (claude-cli) + `gpt-5.5` (codex-cli) + `claude-haiku-4-5` (anthropic-payg). 2 family, 3 plan |
-| 5 | Fidelity amendment 위치 | `docs/audits/2026-05-18-plan-a-fidelity-amendment.md` |
+| 5 | Fidelity amendment 위치 | `https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-18-plan-a-fidelity-amendment.md` |
 | 6 | Sprint cadence | 16 PR 연속 (mid-checkpoint 없음, per-PR Codex MCP audit 만) |
 | 7 | seed pool naming | `seeds_gen<N>` (gen suffix, monotonic). `seeds_safe10` 보존 |
 | 8 | `text_embed` provider | OpenAI text-embedding-3-small ($0.02/1M tok) |
@@ -132,7 +132,7 @@ main backmerge — S4, S8, S12 직후 (3 회).
 - ADR-001 (seed-generation-decision.md)
 - ADR-002 (autoresearch-axis-decision.md)
 - ADR-003 (seed-generation-ui-decision.md)
-- Fidelity amendment (`docs/audits/2026-05-18-plan-a-fidelity-amendment.md`)
+- Fidelity amendment (`https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-18-plan-a-fidelity-amendment.md`)
 - AI co-scientist paper — arXiv:2502.18864
 - AlphaEval (parity 폐기) — arXiv:2508.13174
 - open-coscientist (reference only) — https://github.com/jataware/open-coscientist
