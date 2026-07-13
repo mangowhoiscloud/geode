@@ -45,7 +45,7 @@ functional change.
 
 ---
 
-## [0.99.319] - 2026-07-13
+## [0.99.320] - 2026-07-13
 
 ### Added
 
@@ -56,6 +56,17 @@ functional change.
   infrastructure interruptions, stamp `runtime_audit_id` provenance, and are
   also available for frozen train or sealed contracts through the
   `runtime-pilot` and `runtime-audit` CLI surfaces.
+
+## [0.99.319] - 2026-07-13
+
+### Added
+
+- **Model picker title shows the running version.** `/model` now renders
+  `Select model · GEODE v{version}` so a stale binary lane (for example a
+  Homebrew formula behind the editable install) is visible the moment the
+  picker opens, instead of surfacing as "model X is missing" confusion —
+  the GPT-5.6 rows existed in code while a v0.99.313 brew binary rendered
+  a picker without them.
 
 ## [0.99.318] - 2026-07-13
 

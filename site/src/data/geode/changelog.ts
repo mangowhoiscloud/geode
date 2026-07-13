@@ -17,9 +17,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
-    "version": "0.99.319",
+    "version": "0.99.320",
     "date": "2026-07-13",
     "body": "### Added\n\n- **Crucible runtime-budget admission.** Central prepare can bind an opaque,\n  digest-matched runtime pilot and use deterministic family-block bootstrap\n  quantiles to reject train or campaign wall budgets that cannot hold the\n  paired design. Reports retain semantic timeouts, exclude and count\n  infrastructure interruptions, stamp `runtime_audit_id` provenance, and are\n  also available for frozen train or sealed contracts through the\n  `runtime-pilot` and `runtime-audit` CLI surfaces."
+  },
+  {
+    "version": "0.99.319",
+    "date": "2026-07-13",
+    "body": "### Added\n\n- **Model picker title shows the running version.** `/model` now renders\n  `Select model · GEODE v{version}` so a stale binary lane (for example a\n  Homebrew formula behind the editable install) is visible the moment the\n  picker opens, instead of surfacing as \"model X is missing\" confusion —\n  the GPT-5.6 rows existed in code while a v0.99.313 brew binary rendered\n  a picker without them."
   },
   {
     "version": "0.99.318",
