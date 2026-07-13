@@ -38,6 +38,7 @@ from .row_cache import (
 from .sealed import SEALED_RESPONSE_SCHEMA, SealedInfrastructureError, SealedPlan
 from .supervisor import CandidateProposal, FailureFeedback, _file_sha256
 from .verifiers.tau2 import (
+    SNAPSHOT_SCHEMA,
     TAU2_ADAPTER,
     normalize_tau2_results,
     tau2_has_infrastructure_contamination,
@@ -69,6 +70,7 @@ _AFFIRMATIVE = re.compile(
 _SKIPPED_ARM_SCHEMA = "crucible.skipped-arm.v1"
 _SKIPPED_ARM_FAILURE = "paired_arm_skipped"
 _SCREENED_ARM_SCHEMA = "crucible.screened-arm.v1"
+_INFRASTRUCTURE_FAILURE = "tau2_infrastructure_error"
 
 
 class Tau2InfrastructureError(RuntimeError):
@@ -361,6 +363,32 @@ def _terminate_process_group(process: subprocess.Popen[bytes]) -> int:
         return process.wait()
 
 
+def _infrastructure_abort_snapshot(
+    contract: ExperimentContract,
+    *,
+    arm: Literal["baseline", "candidate"],
+    raw_sha256: str,
+) -> dict[str, Any]:
+    """Bind a fail-fast partial artifact to the frozen measurement identity."""
+
+    revision_field = "baseline_sha" if arm == "baseline" else "candidate_sha"
+    revision = contract.baseline_sha if arm == "baseline" else contract.candidate_sha
+    return {
+        "schema": SNAPSHOT_SCHEMA,
+        "experiment_contract_id": contract.contract_id,
+        "evaluator_sha256": contract.evaluator_sha256,
+        "harness_sha256": contract.harness_sha256,
+        "task_pack_sha256": contract.task_pack_sha256,
+        "assay_config_sha256": contract.assay_config_sha256,
+        "arm": arm,
+        revision_field: revision,
+        "raw_artifact_sha256": raw_sha256,
+        "assay_config": json.loads(json.dumps(contract.assay_config)),
+        "execution_status": "invalid",
+        "failure_class": _INFRASTRUCTURE_FAILURE,
+    }
+
+
 def _run_tau2_command(
     command: list[str],
     *,
@@ -525,13 +553,8 @@ def _run_arm(
             raise TimeoutError(f"tau2 {arm} arm timed out") from exc
         elapsed = time.monotonic() - started
         runner_returncode = completed.returncode
-        if infrastructure_abort:
-            _harvest_partial(cache_root, contract, revision_sha, harness_root, run_id)
-            raise Tau2InfrastructureError(
-                f"tau2 {arm} arm aborted after finalized infrastructure contamination"
-            )
         snapshot = snapshot_dir / f"{run_id}.snapshot.json"
-        if not source_raw.is_file() or not snapshot.is_file():
+        if not source_raw.is_file() or (not infrastructure_abort and not snapshot.is_file()):
             # tau2 finalizes each simulation into results.json incrementally;
             # an interrupted arm still donates its completed rows (r23: 18
             # finished executions were discarded for want of this line).
@@ -568,6 +591,16 @@ def _run_arm(
             )
         else:
             shutil.copyfile(source_raw, raw_path)
+        if infrastructure_abort:
+            snapshot = snapshot_dir / f"{run_id}.aborted.snapshot.json"
+            write_exclusive_json(
+                snapshot,
+                _infrastructure_abort_snapshot(
+                    contract,
+                    arm=arm,
+                    raw_sha256=_file_sha256(raw_path, f"{arm} aborted raw"),
+                ),
+            )
         if cache_root is not None:
             harvest_arm_rows(cache_root, contract, revision_sha=revision_sha, raw_results=fresh)
     raw = load_json_object(raw_path, f"tau2 {arm} raw", max_bytes=512 * 1024 * 1024)

@@ -34,6 +34,7 @@ from plugins.crucible.row_cache import harvest_arm_rows
 from plugins.crucible.tau2_live import (
     Tau2InfrastructureError,
     _index_simulations,
+    _infrastructure_abort_snapshot,
     _run_arm,
     _run_tau2_command,
     _train_evaluation_response,
@@ -43,6 +44,7 @@ from plugins.crucible.tau2_live import (
     tau2_failure_feedback,
     tau2_trace_checks,
 )
+from plugins.crucible.verifiers.tau2 import _verify_snapshot
 
 TASKS = (
     TaskUnit("task-1", "1" * 64, "a" * 64),
@@ -124,6 +126,25 @@ def test_command_evaluator_entrypoint_uses_the_frozen_uv_runtime() -> None:
         .splitlines()[0]
         == "#!/usr/bin/env -S uv run --frozen --no-dev python"
     )
+
+
+def test_infrastructure_abort_snapshot_is_accepted_by_frozen_verifier() -> None:
+    contract = _contract()
+    raw_sha256 = "a" * 64
+
+    status, failure_class = _verify_snapshot(
+        contract,
+        arm="baseline",
+        raw_sha256=raw_sha256,
+        snapshot=_infrastructure_abort_snapshot(
+            contract,
+            arm="baseline",
+            raw_sha256=raw_sha256,
+        ),
+    )
+
+    assert status == "invalid"
+    assert failure_class == "tau2_infrastructure_error"
 
 
 def test_command_evaluator_emits_paths_relative_to_response_directory(
@@ -452,7 +473,7 @@ def test_run_arm_preserves_finalized_invalid_evidence_after_nonzero_exit(
     assert (output / "baseline.evidence.json").is_file()
 
 
-def test_run_arm_aborts_immediately_after_infrastructure_contamination(
+def test_run_arm_emits_invalid_evidence_after_infrastructure_fail_fast(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -469,17 +490,27 @@ def test_run_arm_aborts_immediately_after_infrastructure_contamination(
         ),
     )
 
-    with pytest.raises(Tau2InfrastructureError, match="aborted after finalized"):
-        _run_arm(
-            contract,
-            arm="baseline",
-            checkout=checkout,
-            harness_root=harness,
-            contract_path=tmp_path / "contract.json",
-            output_dir=output,
-            run_id="fixture-run",
-            timeout=10.0,
-        )
+    evidence, raw_path, marginal_usage = _run_arm(
+        contract,
+        arm="baseline",
+        checkout=checkout,
+        harness_root=harness,
+        contract_path=tmp_path / "contract.json",
+        output_dir=output,
+        run_id="fixture-run",
+        timeout=10.0,
+    )
+
+    snapshot = json.loads(
+        (output / "snapshots" / "fixture-run.aborted.snapshot.json").read_text(encoding="utf-8")
+    )
+    assert evidence.execution_status == "invalid"
+    assert raw_path == output / "baseline.raw.json"
+    assert marginal_usage.calls == 1
+    assert marginal_usage.tokens == 10
+    assert snapshot["execution_status"] == "invalid"
+    assert snapshot["failure_class"] == "tau2_infrastructure_error"
+    assert snapshot["raw_artifact_sha256"] == hashlib.sha256(raw_path.read_bytes()).hexdigest()
 
 
 def test_run_arm_accounts_for_actual_subprocess_elapsed_time(
