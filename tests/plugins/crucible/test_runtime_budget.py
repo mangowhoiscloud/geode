@@ -103,6 +103,48 @@ def _audit(
     )
 
 
+def _ceiling_specification(
+    *,
+    experiment_overhead_seconds: float = 600.0,
+    campaign_overhead_seconds: float = 1_000.0,
+) -> dict[str, object]:
+    return {
+        "schema": "crucible.runtime-budget-spec.v1",
+        "mode": "contract_ceiling",
+        "source": "frozen assay timeout ceiling",
+        "headroom_ratio": 0.0,
+        "experiment_overhead_seconds": experiment_overhead_seconds,
+        "campaign_overhead_seconds": campaign_overhead_seconds,
+    }
+
+
+def _ceiling_audit(
+    *,
+    task_count: int,
+    trials_per_task: int,
+    experiment_wall: float,
+    campaign_wall: float | None,
+    experiment_overhead_seconds: float = 600.0,
+    campaign_overhead_seconds: float = 1_000.0,
+) -> dict:
+    return audit_runtime_budget(
+        tasks=_tasks(task_count),
+        trials_per_task=trials_per_task,
+        evaluator_sha256="a" * 64,
+        harness_sha256="b" * 64,
+        agent_route="agent-route",
+        user_route="user-route",
+        assay_config={"schema": "fixture.v1", "timeout": 600.0},
+        configured_experiment_wall_seconds=experiment_wall,
+        configured_campaign_wall_seconds=campaign_wall,
+        specification=_ceiling_specification(
+            experiment_overhead_seconds=experiment_overhead_seconds,
+            campaign_overhead_seconds=campaign_overhead_seconds,
+        ),
+        basis_root=Path("."),
+    )
+
+
 def _verified_arm(
     tmp_path: Path,
     *,
@@ -156,6 +198,55 @@ def test_runtime_audit_admits_the_9x3_500_second_row_envelope(tmp_path: Path) ->
     assert "task-1" not in encoded
     assert "family-1" not in encoded
     assert str(tmp_path) not in encoded
+
+
+def test_contract_ceiling_admits_bootstrap_campaign_without_a_pilot() -> None:
+    report = _ceiling_audit(
+        task_count=9,
+        trials_per_task=3,
+        experiment_wall=33_000,
+        campaign_wall=34_000,
+    )
+
+    assert report["passes"] is True
+    assert report["method"] == "contract-timeout-ceiling.v1"
+    assert report["ceiling"] == {
+        "timeout_seconds_per_row": 600.0,
+        "paired_row_ceiling_seconds": 32_400.0,
+        "experiment_overhead_seconds": 600.0,
+        "headroom_ratio": 0.0,
+        "campaign_overhead_seconds": 1_000.0,
+    }
+    assert report["admission"]["required_experiment_wall_seconds"] == 33_000
+    assert report["admission"]["required_campaign_wall_seconds"] == 34_000
+    assert "pilot_sha256" not in report
+
+
+def test_contract_ceiling_rejects_zero_overhead_campaign_budget() -> None:
+    report = _ceiling_audit(
+        task_count=9,
+        trials_per_task=3,
+        experiment_wall=32_400,
+        campaign_wall=32_400,
+    )
+
+    assert report["passes"] is False
+    assert report["admission"]["experiment_passes"] is False
+    assert report["admission"]["campaign_passes"] is False
+
+
+def test_contract_ceiling_sizes_the_6x2_sealed_experiment() -> None:
+    report = _ceiling_audit(
+        task_count=6,
+        trials_per_task=2,
+        experiment_wall=15_000,
+        campaign_wall=None,
+        campaign_overhead_seconds=0.0,
+    )
+
+    assert report["passes"] is True
+    assert report["design"]["paired_row_count"] == 24
+    assert report["admission"]["required_experiment_wall_seconds"] == 15_000
 
 
 def test_runtime_pilot_writer_projects_verified_rows_without_identities(tmp_path: Path) -> None:

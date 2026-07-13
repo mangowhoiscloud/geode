@@ -14,6 +14,7 @@ from plugins.crucible.verifiers.tau2 import (
     TAU2_ADAPTER,
     _canonical_task_sha256,
     normalize_tau2_results,
+    tau2_has_infrastructure_contamination,
     tau2_resource_usage_floor,
     tau2_task_unit,
 )
@@ -43,6 +44,22 @@ def _raw_tasks() -> list[dict[str, object]]:
 
 
 TASKS = tuple(tau2_task_unit(task) for task in _raw_tasks())
+
+
+def test_tau2_incremental_infrastructure_detection_is_fail_fast() -> None:
+    semantic = _raw_results()
+    assert tau2_has_infrastructure_contamination(semantic) is False
+
+    contaminated = _raw_results(second_termination="infrastructure_error")
+    assert tau2_has_infrastructure_contamination(contaminated) is True
+
+    retried = _raw_results()
+    messages = retried["simulations"][0]["messages"]
+    messages[0]["raw_data"] = {
+        "geode_pre_execution_retry_count": 1,
+        "geode_pre_execution_retry_errors": ["APITimeoutError"],
+    }
+    assert tau2_has_infrastructure_contamination(retried) is True
 
 
 def test_tau2_task_content_hash_excludes_only_top_level_id() -> None:

@@ -498,6 +498,30 @@ def _pre_execution_retry_errors(sim: Mapping[str, Any], *, index: int) -> tuple[
     return tuple(observed)
 
 
+def tau2_has_infrastructure_contamination(raw: Mapping[str, Any]) -> bool:
+    """Return whether any finalized tau2 row already makes the arm invalid.
+
+    The live evaluator polls incremental ``results.json`` output and uses this
+    predicate to stop buying rows once an infrastructure-contaminated row has
+    made a score-bearing verdict impossible. Incomplete rows without a
+    termination reason are ignored until tau2 finalizes them.
+    """
+
+    simulations = raw.get("simulations")
+    if not isinstance(simulations, list):
+        raise ContractError("tau2 results simulations must be a list")
+    for index, value in enumerate(simulations):
+        sim = _mapping(value, f"tau2.simulations[{index}]")
+        termination = str(sim.get("termination_reason") or "").strip()
+        if not termination:
+            continue
+        if TAU2_ADAPTER.classify_termination(termination) == "infra":
+            return True
+        if _pre_execution_retry_errors(sim, index=index):
+            return True
+    return False
+
+
 def tau2_resource_usage_floor(raw: Mapping[str, Any]) -> ResourceUsage:
     """Derive the minimum observable arm usage embedded in tau2 messages."""
 

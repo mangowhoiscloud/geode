@@ -12,12 +12,13 @@ import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
 import time
 from collections.abc import Iterator, Mapping, Sequence
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from pathlib import Path
 from typing import Any, Literal
 
@@ -36,7 +37,12 @@ from .row_cache import (
 )
 from .sealed import SEALED_RESPONSE_SCHEMA, SealedInfrastructureError, SealedPlan
 from .supervisor import CandidateProposal, FailureFeedback, _file_sha256
-from .verifiers.tau2 import TAU2_ADAPTER, normalize_tau2_results, tau2_resource_usage_floor
+from .verifiers.tau2 import (
+    TAU2_ADAPTER,
+    normalize_tau2_results,
+    tau2_has_infrastructure_contamination,
+    tau2_resource_usage_floor,
+)
 
 _WRITE_PREFIXES = (
     "cancel_",
@@ -337,6 +343,82 @@ def _harvest_partial(
         return
 
 
+def _terminate_process_group(process: subprocess.Popen[bytes]) -> int:
+    """Stop one tau2 process tree and wait until no paid child is orphaned."""
+
+    returncode = process.poll()
+    if returncode is not None:
+        return returncode
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return process.wait()
+    try:
+        return process.wait(timeout=5.0)
+    except subprocess.TimeoutExpired:
+        with suppress(ProcessLookupError):
+            os.killpg(process.pid, signal.SIGKILL)
+        return process.wait()
+
+
+def _run_tau2_command(
+    command: list[str],
+    *,
+    cwd: Path,
+    env: Mapping[str, str],
+    timeout: float,
+    results_path: Path,
+) -> tuple[subprocess.CompletedProcess[bytes], bool]:
+    """Run tau2 while polling finalized rows for terminal contamination."""
+
+    process = subprocess.Popen(  # noqa: S603 - frozen evaluator derives complete argv
+        command,
+        cwd=cwd,
+        env=env,
+        start_new_session=True,
+    )
+    previous_handlers: dict[signal.Signals, Any] = {}
+
+    def stop_on_signal(signum: int, _frame: object) -> None:
+        _terminate_process_group(process)
+        raise SystemExit(128 + signum)
+
+    for signum in (signal.SIGINT, signal.SIGTERM):
+        previous_handlers[signum] = signal.signal(signum, stop_on_signal)
+    deadline = time.monotonic() + timeout
+    try:
+        while True:
+            returncode = process.poll()
+            if returncode is not None:
+                return subprocess.CompletedProcess(command, returncode), False
+            if results_path.is_file():
+                try:
+                    partial = load_json_object(
+                        results_path,
+                        "incremental tau2 results",
+                        max_bytes=512 * 1024 * 1024,
+                    )
+                    contaminated = tau2_has_infrastructure_contamination(partial)
+                except ContractError:
+                    # Tau2 replaces this file incrementally. A transient
+                    # partial JSON read is retried; the finalized verifier
+                    # remains authoritative for malformed output.
+                    contaminated = False
+                if contaminated:
+                    returncode = _terminate_process_group(process)
+                    return subprocess.CompletedProcess(command, returncode), True
+            remaining = deadline - time.monotonic()
+            if remaining <= 0.0:
+                _terminate_process_group(process)
+                raise subprocess.TimeoutExpired(command, timeout)
+            time.sleep(min(0.25, remaining))
+    finally:
+        if process.poll() is None:
+            _terminate_process_group(process)
+        for signal_number, handler in previous_handlers.items():
+            signal.signal(signal_number, handler)
+
+
 def _run_arm(
     contract: ExperimentContract,
     *,
@@ -428,21 +510,26 @@ def _run_arm(
                 else None
             ),
         )
+        source_raw = harness_root / "data" / "simulations" / run_id / "results.json"
         started = time.monotonic()
         try:
-            completed = subprocess.run(  # noqa: S603 - frozen evaluator derives complete argv
+            completed, infrastructure_abort = _run_tau2_command(
                 command,
                 cwd=checkout,
                 env=environment,
-                check=False,
                 timeout=timeout,
+                results_path=source_raw,
             )
         except subprocess.TimeoutExpired as exc:
             _harvest_partial(cache_root, contract, revision_sha, harness_root, run_id)
             raise TimeoutError(f"tau2 {arm} arm timed out") from exc
         elapsed = time.monotonic() - started
         runner_returncode = completed.returncode
-        source_raw = harness_root / "data" / "simulations" / run_id / "results.json"
+        if infrastructure_abort:
+            _harvest_partial(cache_root, contract, revision_sha, harness_root, run_id)
+            raise Tau2InfrastructureError(
+                f"tau2 {arm} arm aborted after finalized infrastructure contamination"
+            )
         snapshot = snapshot_dir / f"{run_id}.snapshot.json"
         if not source_raw.is_file() or not snapshot.is_file():
             # tau2 finalizes each simulation into results.json incrementally;

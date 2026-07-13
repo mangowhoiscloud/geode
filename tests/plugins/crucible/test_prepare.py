@@ -121,6 +121,17 @@ def _runtime_audit(tmp_path: Path, config: SupervisorConfig) -> dict[str, object
     }
 
 
+def _runtime_ceiling() -> dict[str, object]:
+    return {
+        "schema": "crucible.runtime-budget-spec.v1",
+        "mode": "contract_ceiling",
+        "source": "fixture frozen assay timeout ceiling",
+        "headroom_ratio": 0.0,
+        "experiment_overhead_seconds": 0.0,
+        "campaign_overhead_seconds": 10.0,
+    }
+
+
 def test_prepare_emits_a_config_the_loop_loader_accepts(tmp_path: Path) -> None:
     config, baseline = _config(tmp_path)
     report = prepare_campaign(_write_spec(tmp_path, config))
@@ -203,6 +214,30 @@ def test_prepare_binds_a_passing_runtime_report(tmp_path: Path) -> None:
     assert runtime["runtime_audit_id"] == saved_runtime["runtime_audit_id"]
     assert prepared.prepared_by is not None
     assert prepared.prepared_by["runtime_audit_id"] == saved_runtime["runtime_audit_id"]
+
+
+def test_prepare_binds_contract_ceiling_before_a_pilot_exists(tmp_path: Path) -> None:
+    config, _baseline = _config(tmp_path)
+    budget = {**config.train_plan.payload["budget"], "max_wall_seconds": 80.0}
+    limits = {**config.limits.to_dict(), "max_wall_seconds": 90.0}
+    assay = {**config.train_plan.payload["assay_config"], "timeout": 10.0}
+    report = prepare_campaign(
+        _write_spec(
+            tmp_path,
+            config,
+            assay_config=assay,
+            budget=budget,
+            limits=limits,
+            runtime_audit=_runtime_ceiling(),
+        )
+    )
+
+    runtime = report["runtime_audit"]
+    assert runtime["passes"] is True
+    assert runtime["required_experiment_wall_seconds"] == 80
+    assert runtime["required_campaign_wall_seconds"] == 90
+    saved = json.loads(Path(runtime["path"]).read_text(encoding="utf-8"))
+    assert saved["method"] == "contract-timeout-ceiling.v1"
 
 
 def test_prepare_rejects_short_runtime_budget_before_emitting_config(tmp_path: Path) -> None:

@@ -10,6 +10,11 @@ heterogeneity.  Semantic timeouts remain runtime observations; infrastructure
 failures are counted but excluded because a 401/429/transport interruption is
 not a sample from the assay's semantic runtime distribution.  Reports contain
 only counts, digests, and aggregate timings—never task identities or rows.
+
+The first campaign under a new evaluator digest has no matching pilot by
+definition.  ``contract_ceiling`` mode closes that bootstrap gap without
+inventing observations: it multiplies the frozen assay timeout by the exact
+paired row count, then adds preregistered evaluator and campaign overhead.
 """
 
 from __future__ import annotations
@@ -30,6 +35,7 @@ RUNTIME_PILOT_SCHEMA = "crucible.runtime-pilot.v1"
 RUNTIME_SPEC_SCHEMA = "crucible.runtime-budget-spec.v1"
 RUNTIME_REPORT_SCHEMA = "crucible.runtime-budget-report.v1"
 RUNTIME_METHOD = "opaque-family-block-upper-bootstrap.v1"
+RUNTIME_CEILING_METHOD = "contract-timeout-ceiling.v1"
 RUNTIME_ACCOUNTING_METHOD = "sum-finalized-simulation-elapsed.v1"
 
 _SHA256 = re.compile(r"[0-9a-f]{64}")
@@ -180,6 +186,45 @@ def _nearest_rank(values: Sequence[float], probability: float) -> float:
     return ordered[rank - 1]
 
 
+def _wall_admission(
+    *,
+    required_experiment_wall_seconds: int,
+    campaign_overhead_seconds: float,
+    configured_experiment_wall_seconds: float,
+    configured_campaign_wall_seconds: float | None,
+) -> tuple[dict[str, Any], bool]:
+    required_campaign_wall_seconds = math.ceil(
+        required_experiment_wall_seconds + campaign_overhead_seconds
+    )
+    configured_experiment = _positive_number(
+        configured_experiment_wall_seconds,
+        "configured_experiment_wall_seconds",
+    )
+    configured_campaign = (
+        None
+        if configured_campaign_wall_seconds is None
+        else _positive_number(
+            configured_campaign_wall_seconds,
+            "configured_campaign_wall_seconds",
+        )
+    )
+    experiment_passes = configured_experiment >= required_experiment_wall_seconds
+    campaign_passes = (
+        configured_campaign is None or configured_campaign >= required_campaign_wall_seconds
+    )
+    return (
+        {
+            "required_experiment_wall_seconds": required_experiment_wall_seconds,
+            "configured_experiment_wall_seconds": configured_experiment,
+            "experiment_passes": experiment_passes,
+            "required_campaign_wall_seconds": required_campaign_wall_seconds,
+            "configured_campaign_wall_seconds": configured_campaign,
+            "campaign_passes": campaign_passes,
+        },
+        experiment_passes and campaign_passes,
+    )
+
+
 def audit_runtime_budget(
     *,
     tasks: Sequence[TaskUnit],
@@ -196,23 +241,6 @@ def audit_runtime_budget(
 ) -> dict[str, Any]:
     """Derive and admit a wall envelope for one exact paired design."""
 
-    _require_fields(
-        specification,
-        "runtime_audit",
-        {
-            "admission_quantile",
-            "campaign_overhead_seconds",
-            "experiment_overhead_seconds",
-            "headroom_ratio",
-            "minimum_usable_blocks",
-            "pilot_file",
-            "pilot_sha256",
-            "schema",
-            "seed",
-            "simulations",
-            "source",
-        },
-    )
     if specification.get("schema") != RUNTIME_SPEC_SCHEMA:
         raise ContractError(f"runtime_audit.schema must be {RUNTIME_SPEC_SCHEMA!r}")
     if not tasks:
@@ -221,6 +249,114 @@ def audit_runtime_budget(
         raise ContractError("runtime audit trials_per_task must be positive")
     evaluator_digest = _sha256(evaluator_sha256, "runtime audit evaluator_sha256")
     harness_digest = _sha256(harness_sha256, "runtime audit harness_sha256")
+    assay_config_sha256 = _canonical_hash(assay_config)
+    bindings = {
+        "evaluator_sha256": evaluator_digest,
+        "harness_sha256": harness_digest,
+        "assay_config_sha256": assay_config_sha256,
+        "agent_route": _text(agent_route, "runtime audit agent_route"),
+        "user_route": _text(user_route, "runtime audit user_route"),
+    }
+    family_task_counts: dict[str, int] = {}
+    for task in tasks:
+        family_task_counts[task.family_id] = family_task_counts.get(task.family_id, 0) + 1
+    ordered_counts = tuple(sorted(family_task_counts.values()))
+    rows_per_task = 2 * trials_per_task
+    paired_row_count = len(tasks) * rows_per_task
+    design = {
+        "task_count": len(tasks),
+        "family_count": len(ordered_counts),
+        "family_task_counts": list(ordered_counts),
+        "trials_per_task": trials_per_task,
+        "paired_row_count": paired_row_count,
+    }
+    mode = specification.get("mode", "pilot_bootstrap")
+    if mode == "contract_ceiling":
+        _require_fields(
+            specification,
+            "runtime_audit",
+            {
+                "campaign_overhead_seconds",
+                "experiment_overhead_seconds",
+                "headroom_ratio",
+                "mode",
+                "schema",
+                "source",
+            },
+        )
+        source = _text(specification.get("source"), "runtime_audit.source")
+        headroom = _nonnegative_number(
+            specification.get("headroom_ratio"),
+            "runtime_audit.headroom_ratio",
+        )
+        if headroom > 10.0:
+            raise ContractError("runtime_audit.headroom_ratio must not exceed 10")
+        experiment_overhead = _nonnegative_number(
+            specification.get("experiment_overhead_seconds"),
+            "runtime_audit.experiment_overhead_seconds",
+        )
+        campaign_overhead = _nonnegative_number(
+            specification.get("campaign_overhead_seconds"),
+            "runtime_audit.campaign_overhead_seconds",
+        )
+        timeout_seconds = _positive_number(
+            assay_config.get("timeout"),
+            "assay_config.timeout",
+        )
+        paired_row_ceiling = paired_row_count * timeout_seconds
+        required_experiment_wall = math.ceil(
+            (paired_row_ceiling + experiment_overhead) * (1.0 + headroom)
+        )
+        admission, passes = _wall_admission(
+            required_experiment_wall_seconds=required_experiment_wall,
+            campaign_overhead_seconds=campaign_overhead,
+            configured_experiment_wall_seconds=configured_experiment_wall_seconds,
+            configured_campaign_wall_seconds=configured_campaign_wall_seconds,
+        )
+        ceiling_payload: dict[str, Any] = {
+            "schema": RUNTIME_REPORT_SCHEMA,
+            "method": RUNTIME_CEILING_METHOD,
+            "scope": "paired_baseline_candidate_wall_envelope",
+            "source": source,
+            "bindings": bindings,
+            "design": design,
+            "ceiling": {
+                "timeout_seconds_per_row": timeout_seconds,
+                "paired_row_ceiling_seconds": paired_row_ceiling,
+                "experiment_overhead_seconds": experiment_overhead,
+                "headroom_ratio": headroom,
+                "campaign_overhead_seconds": campaign_overhead,
+            },
+            "admission": admission,
+            "passes": passes,
+        }
+        return {
+            **ceiling_payload,
+            "runtime_audit_id": _canonical_hash(ceiling_payload),
+        }
+    if mode != "pilot_bootstrap":
+        raise ContractError("runtime_audit.mode must be contract_ceiling or pilot_bootstrap")
+
+    pilot_fields = {
+        "admission_quantile",
+        "campaign_overhead_seconds",
+        "experiment_overhead_seconds",
+        "headroom_ratio",
+        "minimum_usable_blocks",
+        "pilot_file",
+        "pilot_sha256",
+        "schema",
+        "seed",
+        "simulations",
+        "source",
+    }
+    if "mode" in specification:
+        pilot_fields.add("mode")
+    _require_fields(
+        specification,
+        "runtime_audit",
+        pilot_fields,
+    )
     simulations = _positive_int(specification.get("simulations"), "runtime_audit.simulations")
     if simulations < 1_000 or simulations > _MAX_SIMULATIONS:
         raise ContractError(
@@ -279,14 +415,6 @@ def audit_runtime_budget(
         raise ContractError(
             f"runtime pilot accounting_method must be {RUNTIME_ACCOUNTING_METHOD!r}"
         )
-    assay_config_sha256 = _canonical_hash(assay_config)
-    bindings = {
-        "evaluator_sha256": evaluator_digest,
-        "harness_sha256": harness_digest,
-        "assay_config_sha256": assay_config_sha256,
-        "agent_route": _text(agent_route, "runtime audit agent_route"),
-        "user_route": _text(user_route, "runtime audit user_route"),
-    }
     for field, expected in bindings.items():
         if pilot.get(field) != expected:
             raise ContractError(f"runtime pilot {field} does not match the prepared plan")
@@ -298,13 +426,8 @@ def audit_runtime_budget(
             f"{len(block_rates)} < {minimum_blocks}"
         )
 
-    family_task_counts: dict[str, int] = {}
-    for task in tasks:
-        family_task_counts[task.family_id] = family_task_counts.get(task.family_id, 0) + 1
-    ordered_counts = tuple(sorted(family_task_counts.values()))
     rng = random.Random(seed)
     totals: list[float] = []
-    rows_per_task = 2 * trials_per_task
     for _simulation in range(simulations):
         total = 0.0
         for task_count in ordered_counts:
@@ -316,21 +439,12 @@ def audit_runtime_budget(
     admitted_experiment_wall = math.ceil(
         (bootstrap_quantile + experiment_overhead) * (1.0 + headroom)
     )
-    admitted_campaign_wall = math.ceil(admitted_experiment_wall + campaign_overhead)
-    configured_experiment = _positive_number(
-        configured_experiment_wall_seconds,
-        "configured_experiment_wall_seconds",
+    admission, passes = _wall_admission(
+        required_experiment_wall_seconds=admitted_experiment_wall,
+        campaign_overhead_seconds=campaign_overhead,
+        configured_experiment_wall_seconds=configured_experiment_wall_seconds,
+        configured_campaign_wall_seconds=configured_campaign_wall_seconds,
     )
-    configured_campaign = (
-        None
-        if configured_campaign_wall_seconds is None
-        else _positive_number(
-            configured_campaign_wall_seconds,
-            "configured_campaign_wall_seconds",
-        )
-    )
-    experiment_passes = configured_experiment >= admitted_experiment_wall
-    campaign_passes = configured_campaign is None or configured_campaign >= admitted_campaign_wall
 
     payload: dict[str, Any] = {
         "schema": RUNTIME_REPORT_SCHEMA,
@@ -339,13 +453,7 @@ def audit_runtime_budget(
         "source": source,
         "pilot_sha256": pilot_sha256,
         "bindings": bindings,
-        "design": {
-            "task_count": len(tasks),
-            "family_count": len(ordered_counts),
-            "family_task_counts": list(ordered_counts),
-            "trials_per_task": trials_per_task,
-            "paired_row_count": len(tasks) * rows_per_task,
-        },
+        "design": design,
         "pilot": pilot_counts,
         "bootstrap": {
             "simulations": simulations,
@@ -358,21 +466,15 @@ def audit_runtime_budget(
             "headroom_ratio": headroom,
             "campaign_overhead_seconds": campaign_overhead,
         },
-        "admission": {
-            "required_experiment_wall_seconds": admitted_experiment_wall,
-            "configured_experiment_wall_seconds": configured_experiment,
-            "experiment_passes": experiment_passes,
-            "required_campaign_wall_seconds": admitted_campaign_wall,
-            "configured_campaign_wall_seconds": configured_campaign,
-            "campaign_passes": campaign_passes,
-        },
-        "passes": experiment_passes and campaign_passes,
+        "admission": admission,
+        "passes": passes,
     }
     return {**payload, "runtime_audit_id": _canonical_hash(payload)}
 
 
 __all__ = [
     "RUNTIME_ACCOUNTING_METHOD",
+    "RUNTIME_CEILING_METHOD",
     "RUNTIME_METHOD",
     "RUNTIME_PILOT_SCHEMA",
     "RUNTIME_REPORT_SCHEMA",

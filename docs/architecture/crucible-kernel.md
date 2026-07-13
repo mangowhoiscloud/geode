@@ -1278,23 +1278,44 @@ uses a preregistered block-bootstrap quantile, explicit experiment/campaign
 overhead, and explicit headroom to derive the minimum wall envelope; it writes
 `runtime.json`, stamps `runtime_audit_id` into `prepared_by`, and refuses to
 emit a launch config when either the paired-experiment or campaign wall is too
-short. Semantic timeouts remain runtime samples. Infrastructure interruptions
-are reported but excluded, and the pilot accounting method must sum finalized
-simulation elapsed time, so the old maximum-single-row accounting bug cannot
-serve as a basis. `runtime-pilot` projects verified paired raw/evidence
-artifacts into that opaque basis, and `runtime-audit` applies it to a frozen
-train or sealed test contract.
+short. Before the first digest-matched pilot exists, `contract_ceiling` mode
+derives the envelope from the frozen per-row timeout plus explicit setup and
+campaign overhead; it does not fabricate pilot observations. Semantic
+timeouts remain runtime samples. Infrastructure interruptions are reported but
+excluded, and the pilot accounting method must sum finalized simulation
+elapsed time, so the old maximum-single-row accounting bug cannot serve as a
+basis. `runtime-pilot` projects verified paired raw/evidence artifacts into
+that opaque basis, and `runtime-audit` applies it to a frozen train or sealed
+test contract.
 
-The operational envelope immediately after r30 is deliberately provisional,
-not a universal tau2 constant. The inherited 9-family × 2-trial budget encoded
-500 seconds for each of 36 paired rows (`18,000s`). Moving to three trials
-creates 54 paired rows, so preserving that already-preregistered envelope
-requires `27,000s` for evaluation and `28,000s` for the campaign after the
-existing `1,000s` outer allowance. The 6-family × 2-trial sealed design has 24
-paired rows; its conservative unopened-pack allowance is `24 × 600s` plus
-`600s` setup, or `15,000s`. These numbers must be replaced by a report from a
-completed, digest-matched pilot once enough clean blocks exist; the in-flight
-r31 contract remains immutable.
+The first 9-family × 3-trial planning estimate preserved the inherited
+500-second-per-row allowance (`27,000s` experiment / `28,000s` campaign), but
+r31 stopped after eight of 27 baseline rows and never entered the candidate
+arm. Its eight semantic rows were harvested into the identity-bound cache;
+the campaign has no score-bearing summary. r32 then proved that increasing
+`geode_agent` concurrency is not an admissible shortcut: the frozen adapter
+rejected concurrency four before measurement. r33 restored concurrency one
+but copied the 54-row timeout total (`32,400s`) into both experiment and
+campaign budgets, leaving no setup or producer allowance. A finalized row
+carried an HTTP 500 infrastructure termination, so the run was manually
+stopped once its verdict was known to be `INVALID`.
+
+The first campaign under the revised evaluator therefore uses the strict
+pilot-free ceiling: `54 × 600s` rows plus `600s` evaluator setup gives
+`33,000s` for the paired experiment, and the existing `1,000s` outer allowance
+gives `34,000s` for the campaign. The 6-family × 2-trial sealed design has 24
+paired rows; its conservative unopened-pack allowance remains `24 × 600s`
+plus `600s` setup, or `15,000s`. Once one clean digest-matched paired run
+exists, the block-bootstrap report replaces these ceiling values with measured
+tail capacity.
+
+The r33 incident also closes an economic failure path. The evaluator now polls
+tau2's incremental results and aborts the entire paid process group after the
+first finalized infrastructure row or attested recovered retry. External
+SIGINT/SIGTERM follows the same group-cleanup path, so killing the campaign
+cannot leave a detached evaluator and harness consuming quota. Clean finalized
+rows are still offered to the train-only cache before the scoreless attempt
+closes.
 
 The method, rather than those GEODE-specific numbers, follows the external
 sources. Karpathy's

@@ -55,7 +55,17 @@ functional change.
   paired design. Reports retain semantic timeouts, exclude and count
   infrastructure interruptions, stamp `runtime_audit_id` provenance, and are
   also available for frozen train or sealed contracts through the
-  `runtime-pilot` and `runtime-audit` CLI surfaces.
+  `runtime-pilot` and `runtime-audit` CLI surfaces. A pilot-free
+  `contract_ceiling` mode derives the bootstrap campaign envelope directly
+  from the frozen per-row timeout and explicit setup/campaign overhead.
+
+### Fixed
+
+- **Tau2 contaminated-arm fail-fast.** The live evaluator now polls finalized
+  incremental rows and terminates the whole paid process group as soon as an
+  infrastructure termination or recovered transport retry makes the arm
+  scoreless. SIGINT/SIGTERM also clean up the tau2 process group, preventing
+  the orphan evaluator observed after the interrupted r33 campaign.
 
 ## [0.99.319] - 2026-07-13
 

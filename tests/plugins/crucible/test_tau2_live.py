@@ -35,6 +35,7 @@ from plugins.crucible.tau2_live import (
     Tau2InfrastructureError,
     _index_simulations,
     _run_arm,
+    _run_tau2_command,
     _train_evaluation_response,
     _write_screened_arm,
     _write_skipped_arm,
@@ -63,6 +64,55 @@ def test_tau2_turn_projects_pre_execution_retry_identity() -> None:
             "EmptyModelOutputError",
         ],
     }
+
+
+def test_run_tau2_command_stops_on_finalized_infrastructure_row(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    results = tmp_path / "results.json"
+    results.write_text(
+        json.dumps(
+            {
+                "simulations": [
+                    {
+                        "termination_reason": "infrastructure_error",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    class Process:
+        pid = 12345
+        returncode: int | None = None
+
+        def poll(self) -> int | None:
+            return self.returncode
+
+    process = Process()
+    stopped: list[int] = []
+
+    def stop(_process: Process) -> int:
+        stopped.append(_process.pid)
+        _process.returncode = -15
+        return -15
+
+    monkeypatch.setattr("plugins.crucible.tau2_live.subprocess.Popen", lambda *a, **kw: process)
+    monkeypatch.setattr("plugins.crucible.tau2_live._terminate_process_group", stop)
+
+    completed, contaminated = _run_tau2_command(
+        ["tau2-fixture"],
+        cwd=tmp_path,
+        env={},
+        timeout=10.0,
+        results_path=results,
+    )
+
+    assert contaminated is True
+    assert completed.returncode == -15
+    assert stopped == [12345]
 
 
 def test_command_evaluator_entrypoint_uses_the_frozen_uv_runtime() -> None:
@@ -358,8 +408,11 @@ def _prepared_arm(
         raw_hash=hashlib.sha256(raw.read_bytes()).hexdigest(),
     )
     monkeypatch.setattr(
-        "plugins.crucible.tau2_live.subprocess.run",
-        lambda *args, **kwargs: subprocess.CompletedProcess(args=[], returncode=1),
+        "plugins.crucible.tau2_live._run_tau2_command",
+        lambda *args, **kwargs: (
+            subprocess.CompletedProcess(args=[], returncode=1),
+            False,
+        ),
     )
     monkeypatch.setattr(
         "plugins.crucible.tau2_live.tau2_resource_usage_floor",
@@ -397,6 +450,36 @@ def test_run_arm_preserves_finalized_invalid_evidence_after_nonzero_exit(
     assert evidence.execution_status == "invalid"
     assert raw_path == output / "baseline.raw.json"
     assert (output / "baseline.evidence.json").is_file()
+
+
+def test_run_arm_aborts_immediately_after_infrastructure_contamination(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    contract, checkout, harness, output = _prepared_arm(
+        tmp_path,
+        monkeypatch,
+        invalid=True,
+    )
+    monkeypatch.setattr(
+        "plugins.crucible.tau2_live._run_tau2_command",
+        lambda *args, **kwargs: (
+            subprocess.CompletedProcess(args=[], returncode=-15),
+            True,
+        ),
+    )
+
+    with pytest.raises(Tau2InfrastructureError, match="aborted after finalized"):
+        _run_arm(
+            contract,
+            arm="baseline",
+            checkout=checkout,
+            harness_root=harness,
+            contract_path=tmp_path / "contract.json",
+            output_dir=output,
+            run_id="fixture-run",
+            timeout=10.0,
+        )
 
 
 def test_run_arm_accounts_for_actual_subprocess_elapsed_time(
@@ -526,12 +609,12 @@ def test_run_arm_partial_cache_reruns_missing_task_and_keeps_original_trial(
     )
     commands: list[list[str]] = []
 
-    def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+    def run(command: list[str], **kwargs: object) -> tuple[subprocess.CompletedProcess[str], bool]:
         commands.append(command)
         snapshot_dir = Path(command[command.index("--trajectory-snapshot-dir") + 1])
         snapshot_dir.mkdir(parents=True, exist_ok=True)
         (snapshot_dir / f"{run_id}.snapshot.json").write_text("{}\n", encoding="utf-8")
-        return subprocess.CompletedProcess(args=command, returncode=0)
+        return subprocess.CompletedProcess(args=command, returncode=0), False
 
     evidence = _arm_evidence(
         contract,
@@ -540,7 +623,7 @@ def test_run_arm_partial_cache_reruns_missing_task_and_keeps_original_trial(
         raw_hash="a" * 64,
     )
     monkeypatch.setenv("CRUCIBLE_ROW_CACHE_ROOT", str(cache))
-    monkeypatch.setattr("plugins.crucible.tau2_live.subprocess.run", run)
+    monkeypatch.setattr("plugins.crucible.tau2_live._run_tau2_command", run)
     monkeypatch.setattr(
         "plugins.crucible.tau2_live.tau2_resource_usage_floor",
         lambda raw: ResourceUsage(0.0, 0, 0, 0.0),
@@ -624,7 +707,7 @@ def test_run_arm_full_cache_spends_zero_marginal_usage(
     )
     monkeypatch.setenv("CRUCIBLE_ROW_CACHE_ROOT", str(cache))
     monkeypatch.setattr(
-        "plugins.crucible.tau2_live.subprocess.run",
+        "plugins.crucible.tau2_live._run_tau2_command",
         lambda *args, **kwargs: pytest.fail("a full-cache arm must not launch tau2"),
     )
     monkeypatch.setattr(
@@ -704,12 +787,12 @@ def test_run_arm_ignores_row_cache_outside_train_stage(
     )
     commands: list[list[str]] = []
 
-    def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+    def run(command: list[str], **kwargs: object) -> tuple[subprocess.CompletedProcess[str], bool]:
         commands.append(command)
         snapshot_dir = Path(command[command.index("--trajectory-snapshot-dir") + 1])
         snapshot_dir.mkdir(parents=True, exist_ok=True)
         (snapshot_dir / f"{run_id}.snapshot.json").write_text("{}\n", encoding="utf-8")
-        return subprocess.CompletedProcess(args=command, returncode=0)
+        return subprocess.CompletedProcess(args=command, returncode=0), False
 
     evidence = _arm_evidence(
         contract,
@@ -718,7 +801,7 @@ def test_run_arm_ignores_row_cache_outside_train_stage(
         raw_hash="a" * 64,
     )
     monkeypatch.setenv("CRUCIBLE_ROW_CACHE_ROOT", str(cache))
-    monkeypatch.setattr("plugins.crucible.tau2_live.subprocess.run", run)
+    monkeypatch.setattr("plugins.crucible.tau2_live._run_tau2_command", run)
     monkeypatch.setattr(
         "plugins.crucible.tau2_live.tau2_resource_usage_floor",
         lambda raw: ResourceUsage(0.0, 0, 0, 0.0),

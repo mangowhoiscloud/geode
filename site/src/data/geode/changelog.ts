@@ -19,7 +19,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "0.99.320",
     "date": "2026-07-13",
-    "body": "### Added\n\n- **Crucible runtime-budget admission.** Central prepare can bind an opaque,\n  digest-matched runtime pilot and use deterministic family-block bootstrap\n  quantiles to reject train or campaign wall budgets that cannot hold the\n  paired design. Reports retain semantic timeouts, exclude and count\n  infrastructure interruptions, stamp `runtime_audit_id` provenance, and are\n  also available for frozen train or sealed contracts through the\n  `runtime-pilot` and `runtime-audit` CLI surfaces."
+    "body": "### Added\n\n- **Crucible runtime-budget admission.** Central prepare can bind an opaque,\n  digest-matched runtime pilot and use deterministic family-block bootstrap\n  quantiles to reject train or campaign wall budgets that cannot hold the\n  paired design. Reports retain semantic timeouts, exclude and count\n  infrastructure interruptions, stamp `runtime_audit_id` provenance, and are\n  also available for frozen train or sealed contracts through the\n  `runtime-pilot` and `runtime-audit` CLI surfaces. A pilot-free\n  `contract_ceiling` mode derives the bootstrap campaign envelope directly\n  from the frozen per-row timeout and explicit setup/campaign overhead.\n\n### Fixed\n\n- **Tau2 contaminated-arm fail-fast.** The live evaluator now polls finalized\n  incremental rows and terminates the whole paid process group as soon as an\n  infrastructure termination or recovered transport retry makes the arm\n  scoreless. SIGINT/SIGTERM also clean up the tau2 process group, preventing\n  the orphan evaluator observed after the interrupted r33 campaign."
   },
   {
     "version": "0.99.319",
