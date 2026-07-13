@@ -17,6 +17,11 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    "version": "0.99.326",
+    "date": "2026-07-14",
+    "body": "### Fixed\n\n- **Meta-harness catalog wording deslop.** Removed the classifier word\n  \"axis\" (KO \"축\") from the `reference/meta-harness-catalog` page and its\n  sitemap summary per operator slop feedback: section headings now use the\n  bare names (\"1. Context Control\"), and prose refers to the five sections\n  by name. No structural or data changes."
+  },
+  {
     "version": "0.99.325",
     "date": "2026-07-13",
     "body": "### Added\n\n- **Meta-harness catalog docs page.** New `reference/meta-harness-catalog`\n  page under the docs Reference section: every runtime harness mechanism on\n  the five-axis framework (Context Control, Plan and Execute, Verify,\n  Observe, Scaffold), rendered from single-sourced bilingual row data. Each\n  entry is code-verified with its control surface and repo path. The Plan\n  and Execute axis binds the cognitive cycle to the AgenticLoop: Plan +\n  Dynamic Replan (`core/agent/plan.py`), the `record_reflection` structured\n  call updating CognitiveState (`core/agent/loop/_reflection.py`), the\n  verify FAIL / cadence / low-confidence replan triggers, and the 16+1\n  named termination paths. The Scaffold axis catalogs the build harness\n  (CLAUDE.md rulebook, Socratic Gate, CI ratchet suite, prompt-hash pins,\n  worktree isolation, merge flow). Korean copy uses inner/outer loop\n  notation. Sitemap entry added in `site/src/lib/geode-docs/sitemap.ts`."
