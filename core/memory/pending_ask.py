@@ -131,11 +131,9 @@ class PendingAskStore:
         """Persist a new pending ask (8-hex id, collision-checked)."""
         self._dir.mkdir(parents=True, exist_ok=True)
         self.purge_stale()
-        for _attempt in range(8):
-            ask_id = uuid.uuid4().hex[:8]
-            if not self._path(ask_id).exists():
-                break
-        else:  # pragma: no cover — 8 collisions on 32-bit ids
+        ask_id = uuid.uuid4().hex[:8]
+        while self._path(ask_id).exists():
+            # 32-bit collision — widen to 64 bits, effectively unique.
             ask_id = uuid.uuid4().hex[:16]
         ask = PendingAsk(
             ask_id=ask_id,
