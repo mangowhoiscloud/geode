@@ -45,6 +45,18 @@ functional change.
 
 ---
 
+## [0.99.322] - 2026-07-13
+
+### Changed
+
+- **Install terminal prompt ends on the bare arrow, then types "Hello
+  World" (operator-directed).** The Homebrew tab's first-prompt line no
+  longer pre-fills a task sentence; it rests as `>` with the caret for a
+  beat, and if the viewer is still watching, "Hello World" types in
+  character by character before the replay loop resets.
+
+---
+
 ## [0.99.321] - 2026-07-13
 
 ### Changed
