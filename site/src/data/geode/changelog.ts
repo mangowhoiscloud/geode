@@ -2,7 +2,7 @@
  * GEODE CHANGELOG, auto-synced from the GEODE repo via `npm run sync-stats`.
  * Do not edit manually. Edit CHANGELOG.md in the GEODE repo and re-run sync.
  *
- * Last sync: 2026-07-12
+ * Last sync: 2026-07-13
  *
  * Each entry's `body` is the raw markdown between two version headings.
  * The Changelog page renders the body with a minimal markdown renderer
@@ -17,9 +17,19 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
-    "version": "0.99.314",
+    "version": "0.99.316",
     "date": "2026-07-13",
     "body": "### Added\n\n- **GPT-5.6 family model support (Sol/Terra/Luna), dual-lane.** `/model`\n  picker, adapter request-shaping, pricing, and routing for OpenAI's\n  GPT-5.6 series (GA 2026-07-09): `gpt-5.6-sol`, `gpt-5.6-terra`,\n  `gpt-5.6-luna` resolve to the `openai` family and the operator's\n  credential source picks the backend per call — subscription OAuth\n  (slugs artifact-verified against `openai/codex`\n  `models-manager/models.json`) or Platform API key (models GA on the\n  API). The bare `gpt-5.6` Platform alias is registered for spec and\n  pricing but stays off the picker (aliases sol; absent from the Codex\n  models.json).\n  Spec entries carry the new `max` reasoning-effort level (doc-verified),\n  1.05M-token context windows, and short-context pricing with the >272K\n  long-context tier noted. Computer-use GA membership is deliberately\n  excluded as `unverified — live test required` (gpt-5.4 doc-vs-backend\n  precedent). Guard: `tests/core/llm/test_gpt56_support.py`.\n\n### Changed\n\n- **Effort picker: per-family OpenAI effort enums.** `gpt-5.6*` models\n  surface the documented `max` level above `xhigh`; older gpt-5.x\n  families keep the existing enum. Added the missing `claude-fable-5`\n  picker description (functional Fable 5 support landed in June)."
+  },
+  {
+    "version": "0.99.315",
+    "date": "2026-07-13",
+    "body": "### Added\n\n- **Install channels on the landing page.** A new `install` section on the\n  portfolio landing visualizes every distribution path (Homebrew tap,\n  `uv tool`, `uvx` one-shot, source) as a replayed terminal: commands type\n  in character by character, output reveals line by line like the hero\n  terminal, and each channel carries a selectable command with a copy\n  button. Transcripts are abridged from the real 2026-07-13 publication\n  runs; reduced motion renders the finished transcript statically."
+  },
+  {
+    "version": "0.99.314",
+    "date": "2026-07-13",
+    "body": "### Fixed\n\n- **claude-cli sub-agents no longer report zero usage (cost-audit gap\n  closed).** The adapter returned an empty `UsageSummary()` with a stale\n  \"subscription path does not expose token usage\" comment, leaving every\n  claude-cli-backed seed-generation role flagged \"uncaptured\" on the hub.\n  The claude CLI's terminal `result` stream-json event does carry token\n  usage (petri's parser, live-verified against CLI 2.1.140) — the petri\n  extractor is now public (`extract_usage_from_events`, one parser for both\n  registries) and the adapter surfaces input/output/cache-read tokens, which\n  flow through translation and TokenTracker into `session_end` and\n  `per_phase_costs.json`. codex-cli stays honestly at zero: plain-text\n  `codex exec` stdout has no usage block (JSON-mode migration noted as\n  unverified, live test required). Stale capture-coverage comments in\n  worker.py, _lifecycle.py, and transcript.py corrected."
   },
   {
     "version": "0.99.313",
@@ -2293,4 +2303,4 @@ export const CHANGELOG: ChangelogEntry[] = [
   }
 ];
 
-export const CHANGELOG_SYNCED_AT = "2026-07-12";
+export const CHANGELOG_SYNCED_AT = "2026-07-13";

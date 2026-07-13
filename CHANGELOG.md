@@ -45,7 +45,7 @@ functional change.
 
 ---
 
-## [0.99.314] - 2026-07-13
+## [0.99.316] - 2026-07-13
 
 ### Added
 
@@ -71,6 +71,38 @@ functional change.
   surface the documented `max` level above `xhigh`; older gpt-5.x
   families keep the existing enum. Added the missing `claude-fable-5`
   picker description (functional Fable 5 support landed in June).
+
+## [0.99.315] - 2026-07-13
+
+### Added
+
+- **Install channels on the landing page.** A new `install` section on the
+  portfolio landing visualizes every distribution path (Homebrew tap,
+  `uv tool`, `uvx` one-shot, source) as a replayed terminal: commands type
+  in character by character, output reveals line by line like the hero
+  terminal, and each channel carries a selectable command with a copy
+  button. Transcripts are abridged from the real 2026-07-13 publication
+  runs; reduced motion renders the finished transcript statically.
+
+## [0.99.314] - 2026-07-13
+
+### Fixed
+
+- **claude-cli sub-agents no longer report zero usage (cost-audit gap
+  closed).** The adapter returned an empty `UsageSummary()` with a stale
+  "subscription path does not expose token usage" comment, leaving every
+  claude-cli-backed seed-generation role flagged "uncaptured" on the hub.
+  The claude CLI's terminal `result` stream-json event does carry token
+  usage (petri's parser, live-verified against CLI 2.1.140) — the petri
+  extractor is now public (`extract_usage_from_events`, one parser for both
+  registries) and the adapter surfaces input/output/cache-read tokens, which
+  flow through translation and TokenTracker into `session_end` and
+  `per_phase_costs.json`. codex-cli stays honestly at zero: plain-text
+  `codex exec` stdout has no usage block (JSON-mode migration noted as
+  unverified, live test required). Stale capture-coverage comments in
+  worker.py, _lifecycle.py, and transcript.py corrected.
+
+---
 
 ## [0.99.313] - 2026-07-13
 

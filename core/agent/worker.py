@@ -178,12 +178,12 @@ class WorkerResult:
     ``WorkerResult`` had no usage fields, so everything serialized to the
     parent reported zeros.
 
-    HARD LIMITATION: subscription / CLI-routed calls (claude-cli,
-    codex-cli) return an empty ``UsageSummary()`` — the subscription path
-    does not expose token usage (see ``core/llm/adapters/claude_cli.py``
-    and ``core/llm/adapters/codex_cli.py``). For those calls these fields
-    are honestly left at 0; only API-key / payg calls populate real
-    numbers. We never fabricate counts.
+    Capture coverage: payg / API-key adapters and claude-cli (PR-CLI-
+    USAGE-CAPTURE, 2026-07-13 — the CLI's terminal ``result`` stream-json
+    event carries token usage even on subscription) populate real numbers.
+    codex-cli remains 0 — its plain-text ``codex exec`` stdout has no usage
+    block (see ``core/llm/adapters/codex_cli.py``). We never fabricate
+    counts; unmetered calls stay honestly at 0.
     """
 
     task_id: str
