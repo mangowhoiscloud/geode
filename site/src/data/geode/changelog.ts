@@ -17,11 +17,6 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
-    "version": "Unreleased",
-    "date": "",
-    "body": ""
-  },
-  {
     "version": "0.99.324",
     "date": "2026-07-13",
     "body": "### Fixed\n\n- **Crucible infrastructure-safe checkpoint resume.** Tau2 row checkpoints now\n  reject source-attested pre-execution retries both when harvesting and when\n  loading legacy cache entries. A contaminated-arm fail-fast still terminates\n  the paid process group immediately, but now emits hash-bound INVALID\n  evidence and observed marginal usage so the supervisor records\n  `infrastructure_contamination` and can authorize an exact-candidate replay\n  without scoring or reusing the contaminated row."

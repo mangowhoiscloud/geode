@@ -45,8 +45,6 @@ functional change.
 
 ---
 
-## [Unreleased]
-
 ## [0.99.324] - 2026-07-13
 
 ### Fixed
