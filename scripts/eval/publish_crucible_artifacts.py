@@ -16,8 +16,8 @@ Two deterministic operations, both idempotent (byte-identical on re-run):
   artifact-repo layout, then mask it.
 
 Usage:
-    python scripts/eval/publish_crucible_artifacts.py mask <tree> [--user mango]
-    python scripts/eval/publish_crucible_artifacts.py stage <run-dir> <dest> [--user mango]
+    python scripts/eval/publish_crucible_artifacts.py mask <tree> [--user <user>]
+    python scripts/eval/publish_crucible_artifacts.py stage <run-dir> <dest> [--user <user>]
 """
 
 from __future__ import annotations
@@ -131,11 +131,11 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     p_mask = sub.add_parser("mask", help="idempotently mask local username in a tree")
     p_mask.add_argument("tree", type=Path)
-    p_mask.add_argument("--user", default="mango")
+    p_mask.add_argument("--user", default=Path.home().name)
     p_stage = sub.add_parser("stage", help="stage one run's allowlisted public subset")
     p_stage.add_argument("run_dir", type=Path)
     p_stage.add_argument("dest_campaigns", type=Path)
-    p_stage.add_argument("--user", default="mango")
+    p_stage.add_argument("--user", default=Path.home().name)
     args = parser.parse_args(argv)
 
     if args.command == "mask":
