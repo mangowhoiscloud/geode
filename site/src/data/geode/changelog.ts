@@ -17,6 +17,11 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    "version": "0.99.322",
+    "date": "2026-07-13",
+    "body": "### Changed\n\n- **Install terminal prompt ends on the bare arrow, then types \"Hello\n  World\" (operator-directed).** The Homebrew tab's first-prompt line no\n  longer pre-fills a task sentence; it rests as `>` with the caret for a\n  beat, and if the viewer is still watching, \"Hello World\" types in\n  character by character before the replay loop resets."
+  },
+  {
     "version": "0.99.321",
     "date": "2026-07-13",
     "body": "### Changed\n\n- **Portfolio hero terminal folded into the install section\n  (operator-directed).** The standalone hero terminal (brew install, first\n  launch, welcome, first prompt) and the \"every way to install\" Homebrew tab\n  showed near-duplicate transcripts; the install section now carries the full\n  hero sequence on its Homebrew tab (typed command, install output, Geodi\n  welcome banner, first prompt with caret) and the hero keeps only the\n  statement and calls to action. The abridged-transcript caption moved into\n  the channel note; dead `TerminalMock`/`INSTALL_LINES` removed."
