@@ -45,6 +45,24 @@ functional change.
 
 ---
 
+## [0.99.318] - 2026-07-13
+
+### Changed
+
+- **Benchmarks docs consolidated to one page per benchmark.** The 7-page
+  benchmarks section (results ledger, queue, publishing-cycle, and four
+  per-run record pages) collapses into `/docs/benchmarks/tau2` and
+  `/docs/benchmarks/mcpmark` — each carrying the headline track, the
+  service-coverage/blocker state, the full run-record ledger (rendered
+  from the `benchmark-measurements.ts` SoT), and links into the
+  `geode-eval-artifacts` repository where the raw run logs (per-task
+  verifier results and full transcripts) are preserved.
+- **README links raw eval run logs and updates supported-model badges.**
+  Benchmark snapshot sections now link the exact `geode-eval-artifacts`
+  directories behind the published numbers; the header gains an
+  `Eval artifacts` link, and provider badges advance to Anthropic
+  Fable 5 / OpenAI GPT-5.6.
+
 ## [0.99.317] - 2026-07-13
 
 ### Fixed

@@ -17,6 +17,11 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    "version": "0.99.318",
+    "date": "2026-07-13",
+    "body": "### Changed\n\n- **Benchmarks docs consolidated to one page per benchmark.** The 7-page\n  benchmarks section (results ledger, queue, publishing-cycle, and four\n  per-run record pages) collapses into `/docs/benchmarks/tau2` and\n  `/docs/benchmarks/mcpmark` — each carrying the headline track, the\n  service-coverage/blocker state, the full run-record ledger (rendered\n  from the `benchmark-measurements.ts` SoT), and links into the\n  `geode-eval-artifacts` repository where the raw run logs (per-task\n  verifier results and full transcripts) are preserved.\n- **README links raw eval run logs and updates supported-model badges.**\n  Benchmark snapshot sections now link the exact `geode-eval-artifacts`\n  directories behind the published numbers; the header gains an\n  `Eval artifacts` link, and provider badges advance to Anthropic\n  Fable 5 / OpenAI GPT-5.6."
+  },
+  {
     "version": "0.99.317",
     "date": "2026-07-13",
     "body": "### Fixed\n\n- **Release-train flake hardened.** The tau2 elapsed-time test mocked\n  `time.monotonic` with a finite two-value iterator; an extra clock read\n  under xdist+coverage load raised `StopIteration` and blocked the release\n  train twice on 2026-07-13. The mock is now an inexhaustible clock (first\n  read anchors, later reads repeat), preserving the asserted delta for any\n  call count."
