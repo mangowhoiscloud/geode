@@ -588,8 +588,8 @@ export default function Page() {
       slug="reference/meta-harness-catalog"
       title="Meta-harness catalog"
       titleKo="메타 하네스 카탈로그"
-      summary="Every mechanism that converges GEODE's stochastic runtime, on five axes: Context Control, Plan and Execute, Verify, Observe, and the Scaffold that builds GEODE itself. Each entry is code-verified with its control surface and path."
-      summaryKo="GEODE의 확률적 런타임을 수렴시키는 메커니즘 전체를 다섯 축으로 정리합니다. Context Control, Plan and Execute, Verify, Observe, 그리고 GEODE 자신을 제작하는 Scaffold 축입니다. 모든 항목은 코드 검증을 거쳐 제어 지점과 경로를 담습니다."
+      summary="Every mechanism that converges GEODE's stochastic runtime: Context Control, Plan and Execute, Verify, Observe, and the Scaffold that builds GEODE itself. Each entry is code-verified with its control surface and path."
+      summaryKo="GEODE의 확률적 런타임을 수렴시키는 메커니즘 전체를 Context Control, Plan and Execute, Verify, Observe, 그리고 GEODE 자신을 제작하는 Scaffold 다섯 부문으로 정리합니다. 모든 항목은 코드 검증을 거쳐 제어 지점과 경로를 담습니다."
     >
       <Bi
         ko={
@@ -615,12 +615,12 @@ export default function Page() {
               <li>
                 <strong>제작</strong>. GEODE의 코드는 다른 하네스(Claude Code,
                 Codex CLI)가 <code>CLAUDE.md</code>와 <code>AGENTS.md</code>라는
-                scaffold를 읽으며 생산합니다. 아래 Scaffold 축이 이 제작
+                scaffold를 읽으며 생산합니다. 아래 Scaffold 부문이 이 제작
                 하네스의 카탈로그입니다.
               </li>
               <li>
                 <strong>실행</strong>. GEODE 자체가 하네스입니다. Context
-                Control, Plan and Execute, Verify, Observe 네 축의 런타임
+                Control, Plan and Execute, Verify, Observe 네 부문의 런타임
                 메커니즘이 모델의 발산을 묶습니다.
               </li>
               <li>
@@ -667,12 +667,12 @@ export default function Page() {
                 <strong>Built by a harness</strong>. GEODE's code is produced by
                 other harnesses (Claude Code, Codex CLI) reading the{" "}
                 <code>CLAUDE.md</code> and <code>AGENTS.md</code> scaffold. The
-                Scaffold axis below catalogs that build harness.
+                Scaffold section below catalogs that build harness.
               </li>
               <li>
                 <strong>Is a harness</strong>. GEODE itself is a harness: the
-                four runtime axes, Context Control, Plan and Execute, Verify,
-                and Observe, bound the model's divergence.
+                runtime mechanisms of Context Control, Plan and Execute, Verify,
+                and Observe bound the model's divergence.
               </li>
               <li>
                 <strong>Re-scaffolds itself</strong>. The{" "}
@@ -699,9 +699,9 @@ export default function Page() {
       <Bi
         ko={
           <>
-            <h2>축 1. Context Control</h2>
+            <h2>1. Context Control</h2>
             <p>
-              모델 컨텍스트에 무엇이 들어가는지를 묶는 축입니다. 루프와
+              모델 컨텍스트에 무엇이 들어가는지를 묶는 메커니즘들입니다. 루프와
               가드레일이 출력의 상한을 결정한다는 원칙의 구현부입니다. 배경
               설명은{" "}
               <a href="/geode/docs/runtime/context">컨텍스트 조립</a>과{" "}
@@ -713,9 +713,9 @@ export default function Page() {
         }
         en={
           <>
-            <h2>Axis 1. Context Control</h2>
+            <h2>1. Context Control</h2>
             <p>
-              The axis that bounds what enters the model's context. This is the
+              The mechanisms that bound what enters the model's context. This is the
               implementation of the principle that the loop and its guardrails
               set the ceiling on output quality. Background:{" "}
               <a href="/geode/docs/runtime/context">Context assembly</a> and{" "}
@@ -732,9 +732,9 @@ export default function Page() {
       <Bi
         ko={
           <>
-            <h2>축 2. Plan and Execute</h2>
+            <h2>2. Plan and Execute</h2>
             <p>
-              모델 출력을 통제된 행동으로 바꾸는 축입니다. 중심은{" "}
+              모델 출력을 통제된 행동으로 바꾸는 메커니즘들입니다. 중심은{" "}
               <a href="/geode/docs/architecture/agentic-loop">AgenticLoop</a>,
               곧 inner 루프입니다. outer 루프(self-improving)가 시스템 자체를
               다듬는 동안, inner 루프는 작업 하나를 끝까지 처리합니다. 루프는
@@ -784,9 +784,9 @@ export default function Page() {
         }
         en={
           <>
-            <h2>Axis 2. Plan and Execute</h2>
+            <h2>2. Plan and Execute</h2>
             <p>
-              The axis that turns model output into controlled action. The
+              The mechanisms that turn model output into controlled action. The
               center is the{" "}
               <a href="/geode/docs/architecture/agentic-loop">AgenticLoop</a>,
               the inner loop. While the outer loop (self-improving) tunes the
@@ -844,9 +844,9 @@ export default function Page() {
       <Bi
         ko={
           <>
-            <h2>축 3. Verify</h2>
+            <h2>3. Verify</h2>
             <p>
-              비결정론적 출력을 신뢰 가능한 수준으로 수렴시키는 축입니다. 턴
+              비결정론적 출력을 신뢰 가능한 수준으로 수렴시키는 메커니즘들입니다. 턴
               단위 검증부터 self-improving 루프의 fitness 게이트, critical
               floor, 대조군까지 이어집니다. 차원 체계는{" "}
               <a href="/geode/docs/petri/judge-dimensions">Judge 차원</a>{" "}
@@ -857,10 +857,10 @@ export default function Page() {
         }
         en={
           <>
-            <h2>Axis 3. Verify</h2>
+            <h2>3. Verify</h2>
             <p>
-              The axis that converges nondeterministic output to a trustable
-              level, from per-turn verification up to the self-improving loop's
+              The mechanisms that converge nondeterministic output to a
+              trustable level, from per-turn verification up to the self-improving loop's
               fitness gate, critical floors, and control arm. For the dimension
               taxonomy see{" "}
               <a href="/geode/docs/petri/judge-dimensions">Judge dimensions</a>.
@@ -873,9 +873,9 @@ export default function Page() {
       <Bi
         ko={
           <>
-            <h2>축 4. Observe</h2>
+            <h2>4. Observe</h2>
             <p>
-              실제 작동을 계측하는 축입니다. 65개 훅 이벤트 버스가 중심이고,
+              실제 작동을 계측하는 메커니즘들입니다. 65개 훅 이벤트 버스가 중심이고,
               모든 계측 저장소에 보존 캡이 있습니다. 운영 관점은{" "}
               <a href="/geode/docs/verification/observability">관측성</a>{" "}
               문서에 있습니다.
@@ -885,9 +885,9 @@ export default function Page() {
         }
         en={
           <>
-            <h2>Axis 4. Observe</h2>
+            <h2>4. Observe</h2>
             <p>
-              The instrumentation axis. The 65-event hook bus is the center,
+              The instrumentation mechanisms. The 65-event hook bus is the center,
               and every store carries a retention cap. For the operator view
               see{" "}
               <a href="/geode/docs/verification/observability">Observability</a>
@@ -901,9 +901,9 @@ export default function Page() {
       <Bi
         ko={
           <>
-            <h2>축 5. Scaffold, 제작 하네스</h2>
+            <h2>5. Scaffold, 제작 하네스</h2>
             <p>
-              위 네 축이 GEODE가 작업을 실행할 때의 하네스라면, 이 축은 GEODE
+              위 네 부문이 GEODE가 작업을 실행할 때의 하네스라면, 이 부문은 GEODE
               자신이 만들어질 때의 하네스입니다. 코드 생성 절차(CLAUDE.md 룰북,
               Socratic Gate), 검증 절차(품질 게이트, CI ratchet, cross-LLM
               검증), 커밋과 PR flow(worktree 격리, squash merge)가 에이전트
@@ -926,10 +926,10 @@ export default function Page() {
         }
         en={
           <>
-            <h2>Axis 5. Scaffold, the build harness</h2>
+            <h2>5. Scaffold, the build harness</h2>
             <p>
-              The four axes above harness GEODE while it runs tasks; this axis
-              harnesses GEODE while it is being built. The code-generation
+              The four sections above harness GEODE while it runs tasks; this
+              one harnesses GEODE while it is being built. The code-generation
               procedure (the CLAUDE.md rulebook, the Socratic Gate), the
               verification procedure (quality gates, CI ratchets, cross-LLM
               review), and the commit-and-PR flow (worktree isolation, squash
