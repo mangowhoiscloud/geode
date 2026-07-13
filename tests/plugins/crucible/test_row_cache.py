@@ -1,3 +1,4 @@
+import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -46,6 +47,19 @@ def _simulation(
         "reward_info": {"reward": reward},
         "messages": [],
     }
+
+
+def _with_pre_execution_retry(row: dict) -> dict:
+    row["messages"] = [
+        {
+            "role": "assistant",
+            "raw_data": {
+                "geode_pre_execution_retry_count": 1,
+                "geode_pre_execution_retry_errors": ["APITimeoutError"],
+            },
+        }
+    ]
+    return row
 
 
 def _partial_raw(rows: list[dict]) -> dict:
@@ -107,6 +121,49 @@ def test_harvest_excludes_r23_infrastructure_placeholders(tmp_path: Path) -> Non
     rows = cached_rows(tmp_path, contract, revision_sha=contract.candidate_sha)
     assert set(rows) == {("task-b", 0)}
     assert missing_task_ids(contract, rows) == ["task-a", "task-c"]
+
+
+def test_harvest_excludes_finalized_pre_execution_retry_rows(tmp_path: Path) -> None:
+    contract = _StubContract(trials_per_task=1)
+    stored = harvest_arm_rows(
+        tmp_path,
+        contract,
+        revision_sha=contract.baseline_sha,
+        raw_results=_partial_raw(
+            [
+                _simulation("task-b", 0, reward=1.0),
+                _with_pre_execution_retry(_simulation("task-a", 0, reward=1.0)),
+            ]
+        ),
+    )
+
+    assert stored == 1
+    rows = cached_rows(tmp_path, contract, revision_sha=contract.baseline_sha)
+    assert set(rows) == {("task-b", 0)}
+    assert missing_task_ids(contract, rows) == ["task-a", "task-c"]
+
+
+def test_lookup_rejects_integrity_valid_legacy_retry_row(tmp_path: Path) -> None:
+    contract = _StubContract(trials_per_task=1)
+    harvest_arm_rows(
+        tmp_path,
+        contract,
+        revision_sha=contract.baseline_sha,
+        raw_results=_partial_raw([_simulation("task-a", 0, reward=1.0)]),
+    )
+    row_path = next(path for path in tmp_path.rglob("*.json") if path.name != "context.json")
+    stored = json.loads(row_path.read_text(encoding="utf-8"))
+    _with_pre_execution_retry(stored["simulation"])
+    encoded = json.dumps(
+        stored["simulation"],
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    stored["row_sha256"] = hashlib.sha256(encoded).hexdigest()
+    row_path.write_text(json.dumps(stored), encoding="utf-8")
+
+    assert cached_rows(tmp_path, contract, revision_sha=contract.baseline_sha) == {}
 
 
 def test_harvest_ignores_unknown_termination_instead_of_masking_abort(tmp_path: Path) -> None:

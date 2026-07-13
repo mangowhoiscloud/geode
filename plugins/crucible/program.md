@@ -72,7 +72,8 @@ and fail closed when prose and bytes disagree.
   test is required before eligibility; neither verdict can move a repository
   branch or release.
 - Cached rows are reusable only when revision, evaluator, harness, task pack,
-  and assay hashes match and both row and context payload hashes verify.
+  and assay hashes match, both payload hashes verify, and the row carries no
+  infrastructure termination or source-attested pre-execution retry.
 - A scoreless infrastructure `INVALID` replay preserves the exact candidate
   revision when its parent is unchanged, so candidate-side cached rows remain
   addressable. An evaluator-revision replay becomes a new child commit.
@@ -109,9 +110,12 @@ and fail closed when prose and bytes disagree.
    a provider guarantee.
 5. Run the supervisor. Baseline executes first, and an unreachable promotion
    rejects the candidate arm without spending it.
-6. With `CRUCIBLE_ROW_CACHE_ROOT` explicitly allowlisted, identity-proven
-   semantic rows may be reused. Missing tasks run again and exact full coverage
-   remains mandatory. Historical evidence usage stays attached to the verdict;
+6. With `CRUCIBLE_ROW_CACHE_ROOT` explicitly allowlisted, identity-proven,
+   infrastructure-clean semantic rows may be reused. Missing tasks run again
+   and exact full coverage remains mandatory. A fail-fast infrastructure stop
+   emits structured INVALID evidence and observed marginal usage, allowing a
+   new campaign to replay the exact candidate without making the interrupted
+   row score-bearing. Historical evidence usage stays attached to the verdict;
    only fresh marginal usage consumes the current campaign budget.
 7. Build a train bundle only after `KEEP`. Burn the sealed test attempt once,
    then require a separate human-reviewed core promotion change.
