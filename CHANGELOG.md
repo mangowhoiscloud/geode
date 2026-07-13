@@ -45,6 +45,17 @@ functional change.
 
 ---
 
+## [0.99.317] - 2026-07-13
+
+### Fixed
+
+- **Release-train flake hardened.** The tau2 elapsed-time test mocked
+  `time.monotonic` with a finite two-value iterator; an extra clock read
+  under xdist+coverage load raised `StopIteration` and blocked the release
+  train twice on 2026-07-13. The mock is now an inexhaustible clock (first
+  read anchors, later reads repeat), preserving the asserted delta for any
+  call count.
+
 ## [0.99.316] - 2026-07-13
 
 ### Added
