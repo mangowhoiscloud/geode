@@ -333,7 +333,12 @@ def _render(
     out = sys.stdout
     lines = 0
 
-    out.write("\n  \033[1mSelect model\033[0m\n")
+    # The running version sits in the title so a stale binary (for example a
+    # lagging Homebrew formula lane) is visible the moment the picker opens,
+    # instead of surfacing as "model X is missing" confusion.
+    from core import __version__
+
+    out.write(f"\n  \033[1mSelect model\033[0m \033[2m· GEODE v{__version__}\033[0m\n")
     out.write(
         _fit_to_width(
             "  \033[2mSwitch between LLM models. Applies to this session and future sessions. "
