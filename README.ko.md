@@ -12,8 +12,8 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Anthropic-Opus_4.8-cc785c?style=flat-square&logo=anthropic&logoColor=white" alt="Anthropic Opus 4.8">
-  <img src="https://img.shields.io/badge/OpenAI-GPT--5.5-412991?style=flat-square&logo=openai&logoColor=white" alt="OpenAI GPT-5.5">
+  <img src="https://img.shields.io/badge/Anthropic-Fable_5-cc785c?style=flat-square&logo=anthropic&logoColor=white" alt="Anthropic Fable 5">
+  <img src="https://img.shields.io/badge/OpenAI-GPT--5.6-412991?style=flat-square&logo=openai&logoColor=white" alt="OpenAI GPT-5.6">
   <img src="https://img.shields.io/badge/ZhipuAI-GLM--5.2-1a73e8?style=flat-square" alt="ZhipuAI GLM-5.2">
 </p>
 
@@ -22,10 +22,12 @@
   ·
   <a href="https://mangowhoiscloud.github.io/geode/self-improving/">Self-improving 허브</a>
   ·
+  <a href="https://github.com/mangowhoiscloud/geode-eval-artifacts">평가 아티팩트</a>
+  ·
   <a href="README.md">English</a>
 </p>
 
-# GEODE v0.99.317 — A Self-improving Autonomous Execution Agent
+# GEODE v0.99.318 — A Self-improving Autonomous Execution Agent
 
 자기 자신이 올라탄 scaffold 를 스스로 고쳐쓰는 범용 자율 에이전트. 자연어로 물으면 GEODE 가 계획을 세우고, 도구를 호출해, 결과를 보고합니다. 1회성 프롬프트도, 장시간 세션도 동일하게. 그 아래에서는 outer loop 가 작업을 수행하는 시스템 자체를 계속 다듬습니다.
 

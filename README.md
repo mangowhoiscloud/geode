@@ -12,8 +12,8 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Anthropic-Opus_4.8-cc785c?style=flat-square&logo=anthropic&logoColor=white" alt="Anthropic Opus 4.8">
-  <img src="https://img.shields.io/badge/OpenAI-GPT--5.5-412991?style=flat-square&logo=openai&logoColor=white" alt="OpenAI GPT-5.5">
+  <img src="https://img.shields.io/badge/Anthropic-Fable_5-cc785c?style=flat-square&logo=anthropic&logoColor=white" alt="Anthropic Fable 5">
+  <img src="https://img.shields.io/badge/OpenAI-GPT--5.6-412991?style=flat-square&logo=openai&logoColor=white" alt="OpenAI GPT-5.6">
   <img src="https://img.shields.io/badge/ZhipuAI-GLM--5.2-1a73e8?style=flat-square" alt="ZhipuAI GLM-5.2">
 </p>
 
@@ -22,10 +22,12 @@
   ·
   <a href="https://mangowhoiscloud.github.io/geode/self-improving/">Self-improving hub</a>
   ·
+  <a href="https://github.com/mangowhoiscloud/geode-eval-artifacts">Eval artifacts</a>
+  ·
   <a href="README.ko.md">한국어</a>
 </p>
 
-# GEODE v0.99.317: A Self-improving Autonomous Execution Agent
+# GEODE v0.99.318: A Self-improving Autonomous Execution Agent
 
 A general-purpose autonomous agent that also rewrites the scaffolding it runs on. You ask in plain language; GEODE plans, calls tools, and reports, for one prompt or a long-running session. Underneath, an outer loop keeps tuning the system that runs your tasks.
 
@@ -51,8 +53,10 @@ the public `plugins/benchmark_harness` tau2 adapter, `sierra-research/tau2-bench
 | Telecom base | 114 | **0.8772** (100 / 114) | write 471/496, generic 20/20 | avg 252.87s / max 818.58s |
 | **Weighted total** | **278** | **0.8201** (228 / 278) | domain action schemas differ | - |
 
-Artifacts are preserved under
-`artifacts/eval/harnesses/tau2-bench/data/simulations/geode-gpt-5-2-high-native-user-*-base-20260703/results.json`.
+Raw run logs are preserved in
+[`geode-eval-artifacts/tau2/simulations/`](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/main/tau2/simulations)
+(`geode-gpt-5-2-high-native-user-*-base-20260703/results.json` — per-task
+rewards, action checks, and full simulation transcripts).
 These numbers are directly comparable to GEODE reruns with the same harness,
 split, user simulator, model route, and max-step settings. They should not be
 mixed with the earlier `geode_user` smoke rows. Compared with frontier Tau2
@@ -83,8 +87,10 @@ Docker images/browser service stack.
 | GitHub standard | 23 | 19 | **82.6%** | Uses `ghcr.io/github/github-mcp-server:v0.15.0`; transient repos cleaned up |
 | **Measured total** | **74** | **64** | **86.5%** | filesystem + postgres + github only |
 
-Artifacts are preserved under
-`artifacts/eval/harnesses/mcpmark/results-geode-agentworld/geode-gpt55-xhigh-20260704-mcpmark-verified-*`.
+Raw run logs are preserved in
+[`geode-eval-artifacts/mcpmark/results-geode-agentworld/`](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/main/mcpmark/results-geode-agentworld)
+(`geode-gpt55-xhigh-20260704-mcpmark-verified-*` — per-task `meta.json`
+verifier results and `messages.json` full agent transcripts).
 These rows are directly comparable only to the same MCPMark commit, service
 set, GEODE adapter, model route, and timeout settings.
 
