@@ -34,7 +34,11 @@ from typing import Any, Literal
 from .artifacts import load_json_object, write_exclusive_json
 from .contract import ContractError, ExperimentContract
 from .evidence import expected_pairs
-from .verifiers.tau2 import SNAPSHOT_SCHEMA, TAU2_ADAPTER
+from .verifiers.tau2 import (
+    SNAPSHOT_SCHEMA,
+    TAU2_ADAPTER,
+    tau2_has_infrastructure_contamination,
+)
 
 ROW_SCHEMA = "crucible.cached-row.v1"
 CONTEXT_SCHEMA = "crucible.cached-arm-context.v2"
@@ -67,6 +71,20 @@ def _row_filename(task_id: str, trial: int) -> str:
     return f"{safe}__{digest}__{trial}.json"
 
 
+def _cacheable_simulation(row: Mapping[str, Any]) -> bool:
+    """Return whether one finalized row is safe to reuse as a measurement."""
+
+    reason = str(row.get("termination_reason") or "").strip()
+    if not reason:
+        return False
+    try:
+        if TAU2_ADAPTER.classify_termination(reason) != "semantic":
+            return False
+        return not tau2_has_infrastructure_contamination({"simulations": [row]})
+    except ContractError:
+        return False
+
+
 def _completed_simulations(raw: Mapping[str, Any]) -> list[Mapping[str, Any]]:
     """Return only finalized semantic rows that may be reused as measurements.
 
@@ -88,14 +106,7 @@ def _completed_simulations(raw: Mapping[str, Any]) -> list[Mapping[str, Any]]:
             continue
         if isinstance(row.get("trial"), bool) or not isinstance(row.get("trial"), int):
             continue
-        reason = str(row.get("termination_reason") or "").strip()
-        if not reason:
-            continue
-        try:
-            termination_class = TAU2_ADAPTER.classify_termination(reason)
-        except ContractError:
-            continue
-        if termination_class == "infra":
+        if not _cacheable_simulation(row):
             continue
         rows.append(row)
     return rows
@@ -182,6 +193,8 @@ def _verified_row(path: Path, identity: Mapping[str, str]) -> Mapping[str, Any] 
     if stored.get("task_id") != str(task_id) or stored.get("trial") != trial:
         return None
     if stored.get("row_sha256") != _canonical_sha256(json.loads(json.dumps(simulation))):
+        return None
+    if not _cacheable_simulation(simulation):
         return None
     return simulation
 

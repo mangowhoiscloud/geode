@@ -68,25 +68,25 @@
       "id": "file:plugins/crucible/tau2_live.py",
       "filePath": "plugins/crucible/tau2_live.py",
       "name": "Paired tau2 evaluator",
-      "summary": "Derives frozen runner arguments, screens unreachable train arms at zero candidate cost, isolates measurement state, and projects structural failure codes. Reuses identity-proven cached rows across relaunches, aborts the paid process group after finalized infrastructure contamination, and reports historical evidence usage separately from current marginal spend.",
+      "summary": "Derives frozen runner arguments, screens unreachable train arms at zero candidate cost, isolates measurement state, and projects structural failure codes. Reuses identity-proven cached rows across relaunches, stops the paid process group after finalized infrastructure contamination, and converts that stop into structured INVALID evidence with observed marginal usage.",
       "tags": [
         "crucible",
         "evaluator",
         "paired"
       ],
-      "contentSha256": "26bd5e744206ccdda7f2e5d7ba466b423176fa8cef11572cc4ba5bd568211070"
+      "contentSha256": "afdec9ac53cba90beb30db5bfb43ba64ce391ca34a79e51f94599212b6cb9d62"
     },
     {
       "id": "file:plugins/crucible/row_cache.py",
       "filePath": "plugins/crucible/row_cache.py",
       "name": "Hash-bound row cache",
-      "summary": "Reuses only semantic tau2 rows whose full measurement identity and row/context payload hashes verify; infrastructure placeholders remain missing work.",
+      "summary": "Reuses only infrastructure-clean semantic tau2 rows whose full measurement identity and row/context payload hashes verify; placeholders and source-attested retry rows remain missing work.",
       "tags": [
         "cache",
         "crucible",
         "recovery"
       ],
-      "contentSha256": "0d00c23707464900c956fd280c77406a7e825520b1cb866ec3c79b1b9a79043a"
+      "contentSha256": "d82eb18f8c24eb7a694653ef09b63d84b299ebf3981a4e4012e84be42943beaa"
     },
     {
       "id": "file:plugins/crucible/supervisor.py",
@@ -127,13 +127,13 @@
       "id": "file:plugins/crucible/program.md",
       "filePath": "plugins/crucible/program.md",
       "name": "Crucible program",
-      "summary": "Centralizes experimentation, constraints, preferences, setup, power admission, deduplication, usage accounting, and the closed dynamic-feedback boundary; only its candidate_program section is model-facing.",
+      "summary": "Centralizes experimentation, constraints, preferences, setup, power admission, deduplication, infrastructure-safe checkpoint reuse, usage accounting, and the closed dynamic-feedback boundary; only its candidate_program section is model-facing.",
       "tags": [
         "crucible",
         "producer",
         "program"
       ],
-      "contentSha256": "e65ffb18e00c929ec0eefbacd3961308fe3d1d1f0ac42f7b630b11b11c59aad1"
+      "contentSha256": "89da5d165957532038c02d93a3e1c9d0bce867103545ce20e49ab2f652dbbc81"
     },
     {
       "id": "file:plugins/crucible/producers/replay.py",

@@ -45,6 +45,18 @@ functional change.
 
 ---
 
+## [0.99.324] - 2026-07-13
+
+### Fixed
+
+- **Crucible infrastructure-safe checkpoint resume.** Tau2 row checkpoints now
+  reject source-attested pre-execution retries both when harvesting and when
+  loading legacy cache entries. A contaminated-arm fail-fast still terminates
+  the paid process group immediately, but now emits hash-bound INVALID
+  evidence and observed marginal usage so the supervisor records
+  `infrastructure_contamination` and can authorize an exact-candidate replay
+  without scoring or reusing the contaminated row.
+
 ## [0.99.323] - 2026-07-13
 
 ### Added
