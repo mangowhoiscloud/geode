@@ -381,17 +381,7 @@ jobs:
             gh release view "$tag" \
               --repo "${{ github.repository }}" \
               --json body > published-release/release.json
-            python - <<'PY'
-            import json
-            from pathlib import Path
-
-            payload = json.loads(
-                Path("published-release/release.json").read_text(encoding="utf-8")
-            )
-            Path("published-release/release-notes.md").write_text(
-                payload["body"], encoding="utf-8"
-            )
-            PY
+            python -c 'import json; from pathlib import Path; source = Path("published-release/release.json"); payload = json.loads(source.read_text(encoding="utf-8")); Path("published-release/release-notes.md").write_text(payload["body"], encoding="utf-8")'
             diff -u release-artifacts/release-notes.md published-release/release-notes.md
           else
             gh release create "$tag" \

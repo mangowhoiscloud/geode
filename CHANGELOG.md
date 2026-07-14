@@ -47,6 +47,13 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Stable-release repair scripts are shell-parse checked.** Existing GitHub
+  release-body extraction no longer embeds an indented heredoc inside a shell
+  conditional, and the release workflow regression suite now runs `bash -n`
+  over every `run` block before a publishing change can merge.
+
 ## [0.99.330] - 2026-07-14
 
 ### Fixed
