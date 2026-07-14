@@ -164,12 +164,27 @@ def test_tau2_geode_agent_rejects_unattested_thread_pool_concurrency() -> None:
         TAU2_ADAPTER.validate_config(config)
 
 
-@pytest.mark.parametrize("timeout", [None, 0, -1.0, float("inf"), True])
-def test_tau2_contract_requires_positive_per_simulation_timeout(timeout: object) -> None:
+def test_tau2_contract_accepts_explicit_unbounded_per_simulation_timeout() -> None:
+    config = _assay_config()
+    config["timeout"] = None
+
+    TAU2_ADAPTER.validate_config(config)
+
+
+def test_tau2_contract_requires_explicit_timeout_policy() -> None:
+    config = _assay_config()
+    del config["timeout"]
+
+    with pytest.raises(ContractError, match="explicit timeout field"):
+        TAU2_ADAPTER.validate_config(config)
+
+
+@pytest.mark.parametrize("timeout", [0, -1.0, float("inf"), True, "600"])
+def test_tau2_contract_rejects_invalid_per_simulation_timeout(timeout: object) -> None:
     config = _assay_config()
     config["timeout"] = timeout
 
-    with pytest.raises(ContractError, match="positive per-simulation timeout"):
+    with pytest.raises(ContractError, match="null or a positive finite number"):
         TAU2_ADAPTER.validate_config(config)
 
 

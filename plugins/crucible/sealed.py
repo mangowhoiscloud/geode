@@ -28,9 +28,10 @@ from .ref_journal import (
     load_intent,
     reconcile_ref_update,
 )
+from .runtime_receipt import load_runtime_receipt, runtime_artifact_bindings
 
 SEALED_PLAN_SCHEMA = "crucible.sealed-plan.v1"
-SEALED_RESPONSE_SCHEMA = "crucible.sealed-evaluation.v1"
+SEALED_RESPONSE_SCHEMA = "crucible.sealed-evaluation.v2"
 CORE_DECISION_SCHEMA = "crucible.core-promotion-decision.v1"
 
 _PACK_CLAIM_SCHEMA = "crucible.sealed-pack-claim.v1"
@@ -370,6 +371,7 @@ class CorePromotionDecision:
 class SealedEvaluationArtifacts:
     baseline: EvidenceEnvelope
     candidate: EvidenceEnvelope
+    runtime_receipt: Mapping[str, Any]
 
     @classmethod
     def load(
@@ -393,6 +395,7 @@ class SealedEvaluationArtifacts:
             "candidate_raw",
             "contract_id",
             "plan_id",
+            "runtime_receipt",
             "schema",
         }
         _keys(row, "sealed response", required)
@@ -411,7 +414,22 @@ class SealedEvaluationArtifacts:
             raise SealedError("baseline raw hash does not match sealed evidence")
         if _file_hash(paths["candidate_raw"]) != candidate.raw_artifact_sha256:
             raise SealedError("candidate raw hash does not match sealed evidence")
-        return cls(baseline, candidate)
+        try:
+            runtime_receipt = load_runtime_receipt(
+                paths["runtime_receipt"],
+                contract=contract,
+                expected_artifacts=runtime_artifact_bindings(baseline, candidate),
+            )
+        except ContractError as exc:
+            raise SealedError(f"invalid sealed runtime receipt: {exc}") from exc
+        if runtime_receipt["observation"]["status"] != "complete":
+            raise SealedError("sealed runtime receipt status does not match returned evidence")
+        arms = runtime_receipt["arms"]
+        if len(arms) != 2 or any(
+            arm["outcome"] != "complete" or arm["measurement_source"] != "fresh" for arm in arms
+        ):
+            raise SealedError("sealed runtime receipt requires two fresh completed arms")
+        return cls(baseline, candidate, runtime_receipt)
 
 
 class SealedEvaluator(Protocol):
@@ -428,7 +446,13 @@ class SealedEvaluator(Protocol):
 
 def _response_paths(row: Mapping[str, Any], root: Path) -> dict[str, Path]:
     result: dict[str, Path] = {}
-    for field in ("baseline", "candidate", "baseline_raw", "candidate_raw"):
+    for field in (
+        "baseline",
+        "candidate",
+        "baseline_raw",
+        "candidate_raw",
+        "runtime_receipt",
+    ):
         raw = row.get(field)
         if not isinstance(raw, str) or not raw:
             raise SealedError(f"sealed response {field} must be a relative path")
