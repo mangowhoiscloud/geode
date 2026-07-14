@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import subprocess
 import tomllib
 from pathlib import Path
 
@@ -31,6 +32,28 @@ def test_release_actions_are_pinned_to_immutable_commits() -> None:
 
     assert uses
     assert all(re.fullmatch(r"[^@]+@[0-9a-f]{40}", value) for value in uses)
+
+
+def test_release_run_blocks_parse_as_bash() -> None:
+    jobs = _workflow()["jobs"]
+    assert isinstance(jobs, dict)
+
+    for job_name, job in jobs.items():
+        assert isinstance(job, dict)
+        for index, step in enumerate(job.get("steps", [])):
+            if not isinstance(step, dict) or not isinstance(step.get("run"), str):
+                continue
+            result = subprocess.run(
+                ["/bin/bash", "-n"],
+                input=step["run"],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            label = step.get("name", f"step {index}")
+            assert result.returncode == 0, (
+                f"{job_name} / {label} is not valid Bash:\n{result.stderr}"
+            )
 
 
 def test_pypi_oidc_is_isolated_from_public_verification() -> None:
