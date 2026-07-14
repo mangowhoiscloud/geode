@@ -56,7 +56,9 @@ functional change.
 - **Homebrew resource refresh spans the CLI transition safely.** Stable
   publication now detects whether the runner's `update-python-resources`
   supports the new main-package cooldown override and only passes that option
-  when available, while retaining exact resource pins on older Homebrew.
+  when available. It registers the checked-out repository as a local tap and
+  resolves its qualified formula name, retaining exact resource pins across
+  both older and current Homebrew.
 
 ## [0.99.330] - 2026-07-14
 

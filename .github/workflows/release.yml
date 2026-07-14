@@ -606,8 +606,11 @@ jobs:
       - name: Refresh pinned Python resources from the published PyPI package
         if: steps.tap-release-state.outputs.current != 'true'
         run: |
+          tap_name=mangowhoiscloud/tap
+          brew tap "$tap_name" "$PWD/tap"
+          tap_formula="$(brew --repo "$tap_name")/Formula/geode.rb"
           resource_args=(
-            tap/Formula/geode.rb
+            "$tap_name/geode"
             --package-name geode-agent
             --version "$GEODE_VERSION"
           )
@@ -615,6 +618,7 @@ jobs:
             resource_args+=(--ignore-main-package-cooldown)
           fi
           brew update-python-resources "${resource_args[@]}"
+          cp "$tap_formula" tap/Formula/geode.rb
 
       - name: Revalidate the complete generated formula
         run: |
