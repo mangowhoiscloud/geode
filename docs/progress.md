@@ -18,6 +18,8 @@
 <!-- Move items here when work begins. -->
 <!-- 3-Checkpoint: (1) alloc → (2) merge (CI 5/5) → (3) verify -->
 
+- [ ] 세션 상태 오토마타 — 파편화 잔여(정체성 다중키·load 폴백·게이트웨이 status 갭) 한 PR 처리 (2026-07-14). 현재 상태그래프 문서화(docs/architecture/session-state-machine) 선행, 전이 테이블 강제+reopen 엣지, 게이트웨이 안정 session id(스레드=머신 인스턴스). worktree=feature/session-state-automaton. (1) alloc 완료.
+
 
 
 - [ ] CLI UI/UX 품질 트랙 (2026-07-06, hermes-이상 목표, fullscreen 제외) — 인벤토리 3소스(hermes-agent 실측 / GEODE 일반 출력 전수 / frontier-ui-ux-catalog) 교차 감사 완료. 근본원인 3: ① 일반 REPL `live_regions=False`로 폴리시 휴면 ② render.py/events.py(Rich 폴백) ↔ event_renderer.py(raw ANSI) 이중 구현 드리프트 ③ ANSI 경로 무팔레트(이스케이프 147개·색 17종 인라인). 플랜 P0 출력배관(run_in_terminal 라우팅+live_regions 활성) / P1 팔레트·심볼 SoT / P2 렌더러 단일화 / P3 plan 라이브 위젯(Claude Code식, 운영자 지정) / P4 상태줄·피드 폴리시. 제약: GEODE 상징색 유지(구조만 hermes 규율). **P1 완료(#2557, main v0.99.279 — `core/ui/palette.py` SoT: 이스케이프 150+/글리프/메트릭 전수 스윕, 제로 시각 diff(ui 387 무변경 green), ratchet 가드 6종. Codex HIGH 1=인접 문자열 f-프리픽스 누락 literal RESET 유출 수정. 브랜드 트루컬러 리스킨은 이제 시맨틱당 1줄 — 운영자 육안 게이트 후속.)** 다음: P2 렌더러 단일화(직접 모드도 EventRenderer 로컬 소비, render.py/events.py Rich 폴백 중복 제거) → P0 출력배관(주의: live_regions 파라미터는 crucible 세션 워킹트리 기준 — develop 재검증 필요) → P3 plan 라이브 위젯 → P4.
