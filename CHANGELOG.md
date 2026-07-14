@@ -45,6 +45,69 @@ functional change.
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **Crucible runtime forecasts are reproducible from verified full cycles.**
+  The `runtime-forecast` command combines digest-bound opaque runtime pilots,
+  targets a frozen experiment contract, preserves campaign and family
+  resampling levels, and derives p95/p99 wall estimates by exact multinomial
+  enumeration when tractable (with deterministic Monte Carlo fallback). Wilks
+  planning now counts completed target cycles automatically only when their
+  evaluator, harness, routes, assay, pack, design, stage, and execution policy
+  (including the experiment wall) share the exact runtime-regime digest and
+  their full source contract binds the same baseline and candidate revisions. The
+  incompatible runtime budget specification and report schemas are now v2;
+  family blocks remain point-model inputs rather than Wilks observations, and
+  repeated serializations of one runtime receipt cannot inflate the cycle
+  count. A completed-cycle claim must also match the regime's exact family,
+  task, trial, arm, and paired-row cardinality. Model-based active-compute
+  quantiles are labelled planning-only;
+  confidence-qualified wall bounds use the maximum receipt-observed evaluator
+  wall only after the required matching full cycles exist.
+- **Crucible evaluations emit hash-bound runtime receipts.** Train and sealed
+  evaluators record supervisor-anchored shared-deadline arm allocations,
+  observed timing, cache provenance, exact arm evidence/raw identities,
+  right-censoring, inner cleanup, and explicitly unmeasured outer cleanup
+  scopes; evaluation artifact loaders reject missing, swapped, or inconsistent
+  receipts. Runtime pilots require that receipt and bind its effective wall;
+  cache-backed cycles cannot count as independent Wilks observations, and a
+  campaign-shortened evaluation cannot count as a full target-regime cycle.
+
+### Changed
+
+- **Crucible runtime walls distinguish forecasts, deadlines, and ceilings.** A
+  frozen assay may set `timeout: null`, but an `operational_deadline` must now
+  acknowledge nonzero clean-timeout risk and cannot claim statistical or
+  clean-completion authority. Positive row timeouts remain available through a
+  `contract_ceiling` explicitly labelled as a process-termination guarantee.
+  Its bounded-row, setup, and cleanup terms are additive rather than hidden
+  behind an arbitrary headroom multiplier. Every operational experiment wall
+  must leave positive active runtime after its declared cleanup grace.
+  Right-censored pilot blocks remain auditable but no longer enter point-runtime
+  models as if their limits were observed completion times.
+
+### Fixed
+
+- **Crucible no longer splits a stochastic experiment wall equally by arm.**
+  Baseline and candidate now share one monotonic deadline, candidate receives
+  the actual baseline remainder, and the evaluator uses an absolute deadline
+  anchored before subprocess startup rather than the request snapshot taken
+  before producer work. Arm setup and finalization consume that same wall;
+  signal exits close the active arm and preserve an operator-invalid receipt.
+  Runtime admission must reserve the fixed 5.5-second process-reap/receipt
+  finalization term inside the experiment envelope, rather than extending the
+  campaign after its frozen wall. Model-based wall markers add that term once;
+  confidence-qualified evaluator-wall observations do not re-add setup they
+  already measured. Complete arm receipts cannot claim time beyond their
+  allocation, and failure receipts are persisted before checkout cleanup or
+  partial-cache salvage. Sealed artifact loading additionally requires two
+  freshly measured completed arms; cached or synthetic receipt provenance can
+  never satisfy the one-shot gate.
+  Exact forecast enumeration is iterative, special-cases one-family designs,
+  computes multinomial weights in log space, generates each composition in
+  O(rate-count) work, and falls back before its dense state can exhaust memory.
 ## [0.99.328] - 2026-07-14
 
 ### Changed
@@ -130,7 +193,6 @@ functional change.
   aggregating research runs into `notebook.ipynb` plus a deterministic
   `report.md`, with the Socratic-gate verdict (weak frontier convergence
   → deferred) and a phased plan; no implementation in this release.
-
 ## [0.99.326] - 2026-07-14
 
 ### Fixed

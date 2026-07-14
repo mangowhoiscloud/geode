@@ -20,6 +20,7 @@ from .prepare import load_pack, prepare_campaign
 from .promotion import PromotionVerdict, decide
 from .ref_journal import reconcile_ref_update
 from .runtime_budget import audit_runtime_budget
+from .runtime_forecast import forecast_runtime, load_runtime_pilot
 from .runtime_pilot import build_runtime_pilot
 from .supervisor import SupervisorError, run_supervisor
 from .verifiers import get_assay_adapter, tau2_resource_usage_floor, tau2_task_unit
@@ -200,10 +201,27 @@ def _add_runtime_pilot(subparsers: Any) -> None:
         help="project verified paired arm artifacts into an opaque runtime pilot",
     )
     parser.add_argument("contract", type=Path)
+    parser.add_argument("--runtime-receipt", type=Path, required=True)
     parser.add_argument("--baseline-results", type=Path, required=True)
     parser.add_argument("--baseline-evidence", type=Path, required=True)
     parser.add_argument("--candidate-results", type=Path, required=True)
     parser.add_argument("--candidate-evidence", type=Path, required=True)
+    parser.add_argument("--output", type=Path, required=True)
+
+
+def _add_runtime_forecast(subparsers: Any) -> None:
+    parser = subparsers.add_parser(
+        "runtime-forecast",
+        help="forecast one target design and its p95/p99 calibration effort",
+    )
+    parser.add_argument("--pilot", type=Path, action="append", required=True)
+    parser.add_argument("--target-contract", type=Path, required=True)
+    parser.add_argument("--simulations", type=int, default=200_000)
+    parser.add_argument("--seed", type=int, required=True)
+    parser.add_argument("--confidence", type=float, default=0.95)
+    parser.add_argument("--coverage", type=float, action="append")
+    parser.add_argument("--experiment-overhead-seconds", type=float, required=True)
+    parser.add_argument("--campaign-overhead-seconds", type=float, required=True)
     parser.add_argument("--output", type=Path, required=True)
 
 
@@ -219,6 +237,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     _add_prepare(subparsers)
     _add_power_audit(subparsers)
     _add_runtime_pilot(subparsers)
+    _add_runtime_forecast(subparsers)
     _add_runtime_audit(subparsers)
     _add_bundle(subparsers)
     _add_reconcile_ref(subparsers)
@@ -390,6 +409,8 @@ def _runtime_audit(args: argparse.Namespace) -> dict[str, Any]:
     report = audit_runtime_budget(
         tasks=contract.tasks,
         trials_per_task=contract.trials_per_task,
+        task_pack_sha256=contract.task_pack_sha256,
+        stage=contract.stage,
         evaluator_sha256=contract.evaluator_sha256,
         harness_sha256=contract.harness_sha256,
         agent_route=contract.agent_route,
@@ -408,6 +429,7 @@ def _runtime_pilot(args: argparse.Namespace) -> dict[str, Any]:
     contract = load_contract(args.contract)
     pilot = build_runtime_pilot(
         contract,
+        runtime_receipt_path=args.runtime_receipt,
         baseline_results_path=args.baseline_results,
         baseline_evidence=load_evidence(args.baseline_evidence),
         candidate_results_path=args.candidate_results,
@@ -415,6 +437,23 @@ def _runtime_pilot(args: argparse.Namespace) -> dict[str, Any]:
     )
     write_exclusive_json(args.output, pilot)
     return pilot
+
+
+def _runtime_forecast(args: argparse.Namespace) -> dict[str, Any]:
+    pilots = tuple(load_runtime_pilot(path) for path in args.pilot)
+    target_contract = load_contract(args.target_contract)
+    report = forecast_runtime(
+        pilots,
+        target_contract=target_contract,
+        simulations=args.simulations,
+        seed=args.seed,
+        confidence=args.confidence,
+        coverages=tuple(args.coverage or (0.95, 0.99)),
+        experiment_overhead_seconds=args.experiment_overhead_seconds,
+        campaign_overhead_seconds=args.campaign_overhead_seconds,
+    )
+    write_exclusive_json(args.output, report)
+    return report
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -453,6 +492,10 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "runtime-pilot":
             pilot = _runtime_pilot(args)
             print(json.dumps(pilot, sort_keys=True))
+            return 0
+        if args.command == "runtime-forecast":
+            report = _runtime_forecast(args)
+            print(json.dumps(report, sort_keys=True))
             return 0
         if args.command == "runtime-audit":
             report = _runtime_audit(args)

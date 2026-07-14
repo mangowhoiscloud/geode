@@ -2,6 +2,8 @@ import hashlib
 import itertools
 import json
 import subprocess
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -31,12 +33,17 @@ from plugins.crucible.producers.codex_kg import (
 )
 from plugins.crucible.promotion import SCREENING_FAILURE, decide, promotion_reachability
 from plugins.crucible.row_cache import harvest_arm_rows
+from plugins.crucible.runtime_receipt import SharedRuntimeDeadline, runtime_artifact_bindings
 from plugins.crucible.tau2_live import (
     Tau2InfrastructureError,
+    _evaluation_wall_seconds,
     _index_simulations,
     _infrastructure_abort_snapshot,
     _run_arm,
+    _run_arm_with_deadline,
     _run_tau2_command,
+    _runtime_status_for_returned_arms,
+    _RuntimeReceiptWriter,
     _train_evaluation_response,
     _write_screened_arm,
     _write_skipped_arm,
@@ -117,6 +124,25 @@ def test_run_tau2_command_stops_on_finalized_infrastructure_row(
     assert stopped == [12345]
 
 
+def test_run_tau2_command_refuses_to_launch_after_absolute_deadline(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "plugins.crucible.tau2_live.subprocess.Popen",
+        lambda *args, **kwargs: pytest.fail("expired work must not launch"),
+    )
+
+    with pytest.raises(subprocess.TimeoutExpired):
+        _run_tau2_command(
+            ["tau2-fixture"],
+            cwd=tmp_path,
+            env={},
+            deadline_seconds=0.0,
+            results_path=tmp_path / "results.json",
+        )
+
+
 def test_command_evaluator_entrypoint_uses_the_frozen_uv_runtime() -> None:
     repository = Path(__file__).parents[3]
 
@@ -126,6 +152,183 @@ def test_command_evaluator_entrypoint_uses_the_frozen_uv_runtime() -> None:
         .splitlines()[0]
         == "#!/usr/bin/env -S uv run --frozen --no-dev python"
     )
+
+
+def test_evaluation_wall_intersects_live_remainder_with_frozen_contract() -> None:
+    contract = _contract()
+
+    assert _evaluation_wall_seconds(contract, 1_200.0) == 1_200.0
+    assert _evaluation_wall_seconds(contract, 7_200.0) == 3_600.0
+    with pytest.raises(ContractError, match="valid actual remaining"):
+        _evaluation_wall_seconds(contract, None)
+    with pytest.raises(ContractError, match="no remaining"):
+        _evaluation_wall_seconds(contract, 0.0)
+
+
+def test_signal_exit_finalizes_the_active_arm_for_receipt(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    contract = _contract()
+    deadline = SharedRuntimeDeadline(contract, 100.0)
+    monkeypatch.setattr(
+        "plugins.crucible.tau2_live._run_arm",
+        lambda *args, **kwargs: (_ for _ in ()).throw(SystemExit(143)),
+    )
+
+    with pytest.raises(SystemExit, match="143"):
+        _run_arm_with_deadline(
+            deadline,
+            contract,
+            arm="baseline",
+            checkout=tmp_path,
+            harness_root=tmp_path,
+            contract_path=tmp_path / "contract.json",
+            output_dir=tmp_path,
+            run_id="signal-fixture",
+        )
+
+    receipt = deadline.payload("operator_invalid")
+    assert receipt["arms"][0]["outcome"] == "invalid"
+
+
+def test_timeout_receipt_write_failure_is_not_masked_by_a_second_arm_finish(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    contract = _contract()
+    deadline = SharedRuntimeDeadline(contract, 100.0)
+
+    def timeout(*args: object, on_timeout: object, **kwargs: object) -> None:
+        assert callable(on_timeout)
+        on_timeout()
+
+    monkeypatch.setattr("plugins.crucible.tau2_live._run_arm", timeout)
+
+    with pytest.raises(OSError, match="receipt write failed"):
+        _run_arm_with_deadline(
+            deadline,
+            contract,
+            arm="baseline",
+            checkout=tmp_path,
+            harness_root=tmp_path,
+            contract_path=tmp_path / "contract.json",
+            output_dir=tmp_path,
+            run_id="receipt-write-failure",
+            on_timeout=lambda: (_ for _ in ()).throw(OSError("receipt write failed")),
+        )
+
+    receipt = deadline.payload("operator_invalid")
+    assert receipt["arms"][0]["outcome"] == "right_censored"
+
+
+def test_timeout_receipt_is_persisted_before_outer_checkout_cleanup(
+    tmp_path: Path,
+) -> None:
+    contract = _contract()
+    deadline = SharedRuntimeDeadline(contract, 100.0)
+    timer = deadline.begin_arm("baseline")
+    deadline.finish_arm(timer, "right_censored")
+    receipt_path = tmp_path / "runtime.receipt.json"
+    writer = _RuntimeReceiptWriter(deadline, receipt_path, lambda: None)
+    cleanup_observed: list[bool] = []
+
+    @contextmanager
+    def checkout_scope() -> Iterator[None]:
+        try:
+            yield
+        finally:
+            cleanup_observed.append(receipt_path.is_file())
+
+    with (
+        pytest.raises(TimeoutError, match="fixture timeout"),
+        checkout_scope(),
+        writer.preserve_failures_before_cleanup(),
+    ):
+        raise TimeoutError("fixture timeout")
+
+    assert cleanup_observed == [True]
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    assert receipt["observation"]["status"] == "right_censored"
+
+
+def test_timeout_receipt_is_written_before_partial_cache_salvage(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    contract = _contract()
+    deadline = SharedRuntimeDeadline(contract, 100.0)
+    output = tmp_path / "output"
+    output.mkdir()
+    receipt_path = output / "runtime.receipt.json"
+    writer = _RuntimeReceiptWriter(deadline, receipt_path, lambda: None)
+    monkeypatch.setenv("CRUCIBLE_ROW_CACHE_ROOT", str(tmp_path / "cache"))
+    monkeypatch.setattr(
+        "plugins.crucible.tau2_live._run_tau2_command",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            subprocess.TimeoutExpired(cmd=["tau2-fixture"], timeout=1.0)
+        ),
+    )
+
+    def harvest(*args: object, **kwargs: object) -> None:
+        assert receipt_path.is_file(), "right-censored receipt must precede cache salvage"
+
+    monkeypatch.setattr("plugins.crucible.tau2_live._harvest_partial", harvest)
+
+    with pytest.raises(TimeoutError, match="arm timed out"):
+        _run_arm_with_deadline(
+            deadline,
+            contract,
+            arm="baseline",
+            checkout=tmp_path,
+            harness_root=tmp_path / "harness",
+            contract_path=tmp_path / "contract.json",
+            output_dir=output,
+            run_id="timeout-before-salvage",
+            on_timeout=lambda: writer.write(
+                "right_censored",
+                censoring_reason="shared_experiment_deadline",
+            ),
+        )
+
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    assert receipt["observation"]["status"] == "right_censored"
+
+
+def test_returned_invalid_receipt_is_persisted_before_checkout_cleanup(
+    tmp_path: Path,
+) -> None:
+    contract = _contract()
+    baseline = _arm_evidence(contract, arm="baseline", invalid=True, raw_hash="a" * 64)
+    candidate = _arm_evidence(contract, arm="candidate", invalid=True, raw_hash="b" * 64)
+    deadline = SharedRuntimeDeadline(contract, 100.0)
+    baseline_clock = deadline.begin_arm("baseline")
+    deadline.finish_arm(baseline_clock, "invalid")
+    candidate_clock = deadline.begin_arm("candidate")
+    deadline.finish_arm(candidate_clock, "invalid")
+    receipt_path = tmp_path / "runtime.receipt.json"
+    writer = _RuntimeReceiptWriter(
+        deadline,
+        receipt_path,
+        lambda: runtime_artifact_bindings(baseline, candidate),
+    )
+    cleanup_observed: list[bool] = []
+
+    @contextmanager
+    def checkout_scope() -> Iterator[None]:
+        try:
+            yield
+        finally:
+            cleanup_observed.append(receipt_path.is_file())
+
+    with checkout_scope(), writer.preserve_failures_before_cleanup():
+        status = _runtime_status_for_returned_arms(baseline, candidate)
+        if status == "infrastructure_invalid":
+            writer.write(status)
+
+    assert cleanup_observed == [True]
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    assert receipt["observation"]["status"] == "infrastructure_invalid"
 
 
 def test_infrastructure_abort_snapshot_is_accepted_by_frozen_verifier() -> None:
@@ -157,18 +360,26 @@ def test_command_evaluator_emits_paths_relative_to_response_directory(
         output_dir=evaluation_dir,
         baseline_raw=evaluation_dir / "baseline.raw.json",
         candidate_raw=evaluation_dir / "candidate.raw.json",
+        runtime_receipt=evaluation_dir / "runtime.receipt.json",
         marginal_usage=ResourceUsage(0.25, 2, 300, 0.3),
         feedback=None,
     )
 
     assert {
         field: response[field]
-        for field in ("baseline", "candidate", "baseline_raw", "candidate_raw")
+        for field in (
+            "baseline",
+            "candidate",
+            "baseline_raw",
+            "candidate_raw",
+            "runtime_receipt",
+        )
     } == {
         "baseline": "baseline.evidence.json",
         "candidate": "candidate.evidence.json",
         "baseline_raw": "baseline.raw.json",
         "candidate_raw": "candidate.raw.json",
+        "runtime_receipt": "runtime.receipt.json",
     }
     assert response["marginal_usage"] == ResourceUsage(0.25, 2, 300, 0.3).to_dict()
 
@@ -457,7 +668,7 @@ def test_run_arm_preserves_finalized_invalid_evidence_after_nonzero_exit(
         invalid=True,
     )
 
-    evidence, raw_path, _marginal_usage = _run_arm(
+    evidence, raw_path, _marginal_usage, measurement_source = _run_arm(
         contract,
         arm="baseline",
         checkout=checkout,
@@ -469,6 +680,7 @@ def test_run_arm_preserves_finalized_invalid_evidence_after_nonzero_exit(
     )
 
     assert evidence.execution_status == "invalid"
+    assert measurement_source == "fresh"
     assert raw_path == output / "baseline.raw.json"
     assert (output / "baseline.evidence.json").is_file()
 
@@ -490,7 +702,7 @@ def test_run_arm_emits_invalid_evidence_after_infrastructure_fail_fast(
         ),
     )
 
-    evidence, raw_path, marginal_usage = _run_arm(
+    evidence, raw_path, marginal_usage, measurement_source = _run_arm(
         contract,
         arm="baseline",
         checkout=checkout,
@@ -505,6 +717,7 @@ def test_run_arm_emits_invalid_evidence_after_infrastructure_fail_fast(
         (output / "snapshots" / "fixture-run.aborted.snapshot.json").read_text(encoding="utf-8")
     )
     assert evidence.execution_status == "invalid"
+    assert measurement_source == "fresh"
     assert raw_path == output / "baseline.raw.json"
     assert marginal_usage.calls == 1
     assert marginal_usage.tokens == 10
@@ -665,7 +878,7 @@ def test_run_arm_partial_cache_reruns_missing_task_and_keeps_original_trial(
         lambda *args, **kwargs: evidence,
     )
 
-    _, merged_path, marginal_usage = _run_arm(
+    _, merged_path, marginal_usage, measurement_source = _run_arm(
         contract,
         arm="baseline",
         checkout=checkout,
@@ -679,6 +892,7 @@ def test_run_arm_partial_cache_reruns_missing_task_and_keeps_original_trial(
     command = commands[0]
     task_slice = command[command.index("--task-ids") + 1 : command.index("--num-tasks")]
     assert task_slice == ["task-1"]
+    assert measurement_source == "partial_cache"
     merged = json.loads(merged_path.read_text(encoding="utf-8"))
     rewards = {
         (row["task_id"], row["trial"]): row["reward_info"]["reward"]
@@ -751,7 +965,7 @@ def test_run_arm_full_cache_spends_zero_marginal_usage(
         lambda *args, **kwargs: evidence,
     )
 
-    _attested, _raw_path, marginal_usage = _run_arm(
+    _attested, _raw_path, marginal_usage, measurement_source = _run_arm(
         contract,
         arm="baseline",
         checkout=checkout,
@@ -763,6 +977,7 @@ def test_run_arm_full_cache_spends_zero_marginal_usage(
     )
 
     assert marginal_usage == ResourceUsage(0.0, 0, 0, 0.0)
+    assert measurement_source == "full_cache"
 
 
 def test_run_arm_ignores_row_cache_outside_train_stage(
@@ -896,6 +1111,30 @@ def test_tau2_command_is_fully_derived_from_frozen_subscription_config(tmp_path:
     assert command[command.index("--max-retries") + 1] == "0"
     assert command[command.index("--agent-max-rounds") + 1] == "0"
     assert command[command.index("--user-max-rounds") + 1] == "0"
+    assert command[command.index("--timeout") + 1] == "600.0"
+
+
+def test_tau2_command_omits_per_simulation_timeout_when_contract_disables_it(
+    tmp_path: Path,
+) -> None:
+    payload = _contract().to_dict()
+    payload.pop("contract_id")
+    assay = dict(payload["assay_config"])
+    assay["timeout"] = None
+    payload["assay_config"] = assay
+    contract = ExperimentContract.from_mapping(payload)
+
+    command = tau2_command(
+        contract,
+        arm="candidate",
+        checkout=tmp_path / "candidate",
+        harness_root=tmp_path / "harness",
+        contract_path=tmp_path / "contract.json",
+        snapshot_dir=tmp_path / "snapshots",
+        run_id="fixture-unbounded-candidate",
+    )
+
+    assert "--timeout" not in command
 
 
 def test_tau2_test_command_binds_the_frozen_train_parent(tmp_path: Path) -> None:
