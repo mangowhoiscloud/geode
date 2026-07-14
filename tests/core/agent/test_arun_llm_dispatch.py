@@ -80,6 +80,10 @@ class _StubLoop:
     def _emit_quota_panel(self, _exc: BillingError) -> None:
         self.quota_panel_calls += 1
 
+    # Real choke-point method — terminal results are born through
+    # ``_terminal_result`` even on the stub (FSM formalization).
+    _terminal_result = AgenticLoop._terminal_result
+
 
 def _run_dispatch(
     stub: _StubLoop, spinner: _StubSpinner, round_idx: int = 0
@@ -233,8 +237,8 @@ def test_arun_no_longer_inlines_billing_or_cancelled_handlers() -> None:
     # handler. The billing_error reason is still raised by the
     # session-start _try_decompose handler — verify it remains there
     # exactly once.
-    assert src.count('termination_reason="billing_error"') == 1
-    assert 'termination_reason="user_cancelled"' not in src
+    assert src.count("TerminationReason.BILLING_ERROR") == 1
+    assert "TerminationReason.USER_CANCELLED" not in src
 
 
 def test_arun_still_handles_context_exhausted_inline() -> None:

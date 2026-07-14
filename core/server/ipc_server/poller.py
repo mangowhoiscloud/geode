@@ -1241,13 +1241,11 @@ class CLIPoller:
             conversation.messages.clear()
             conversation.messages.extend(state.messages)
 
-            # Sync loop session_id for checkpoint continuity
-            loop._session_id = state.session_id
-
-            from core.agent.cognitive_state import CognitiveState
+            # Machine identity — session id + cognitive state + guard
+            # counters through the single shared resume surgery.
             from core.agent.cognitive_state_ctx import set_cognitive_state, set_session_id
 
-            loop.cognitive_state = CognitiveState.from_snapshot(state.cognitive_state)
+            loop.restore_from_checkpoint(state)
             set_cognitive_state(loop.cognitive_state)
             set_session_id(state.session_id)
 

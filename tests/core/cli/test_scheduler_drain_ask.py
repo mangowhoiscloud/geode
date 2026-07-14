@@ -26,17 +26,30 @@ class _FakeLoop:
     def __init__(self, result: Any) -> None:
         self._result = result
         self._session_id = "s-sched-test"
+        self.status_marks: list[str] = []
 
     async def arun(self, _prompt: str) -> Any:
         return self._result
+
+    def mark_session_paused(self) -> None:
+        self.status_marks.append("paused")
+
+    def mark_session_completed(self) -> None:
+        self.status_marks.append("completed")
+
+    def mark_session_error(self) -> None:
+        self.status_marks.append("error")
 
 
 class _FakeServices:
     def __init__(self, result: Any) -> None:
         self._result = result
+        self.loops: list[_FakeLoop] = []
 
     def create_session(self, _mode: Any, **_kwargs: Any) -> tuple[Any, Any]:
-        return None, _FakeLoop(self._result)
+        loop = _FakeLoop(self._result)
+        self.loops.append(loop)
+        return None, loop
 
 
 async def _drain_and_settle(action_queue: Any, services: Any) -> None:
@@ -51,7 +64,7 @@ async def _drain_and_settle(action_queue: Any, services: Any) -> None:
         await asyncio.gather(*list(_INFLIGHT_SCHEDULED_TASKS), return_exceptions=True)
 
 
-def _run_drain(monkeypatch, termination_reason: str) -> list[dict[str, Any]]:
+def _run_drain(monkeypatch, termination_reason: str) -> tuple[list[dict[str, Any]], _FakeServices]:
     published: list[dict[str, Any]] = []
 
     async def _fake_publish(question: str, *, session_id: str, source: str, store: Any = None):
@@ -68,12 +81,13 @@ def _run_drain(monkeypatch, termination_reason: str) -> list[dict[str, Any]]:
     action_queue: queue.Queue = queue.Queue()
     action_queue.put(("job1", "do the nightly thing", True, ""))
 
-    asyncio.run(_drain_and_settle(action_queue, _FakeServices(result)))
-    return published
+    services = _FakeServices(result)
+    asyncio.run(_drain_and_settle(action_queue, services))
+    return published, services
 
 
-def test_clarification_termination_publishes_ask(monkeypatch):
-    published = _run_drain(monkeypatch, "user_clarification_needed")
+def test_clarification_termination_publishes_ask_and_pauses(monkeypatch):
+    published, services = _run_drain(monkeypatch, "user_clarification_needed")
     assert published == [
         {
             "question": "Which repository should I target?",
@@ -81,7 +95,31 @@ def test_clarification_termination_publishes_ask(monkeypatch):
             "source": "scheduled:job1",
         }
     ]
+    # One-shot lifecycle owner: checkpoint parked for the ask continuation.
+    assert services.loops[0].status_marks == ["paused"]
 
 
-def test_natural_termination_publishes_nothing(monkeypatch):
-    assert _run_drain(monkeypatch, "natural") == []
+def test_natural_termination_publishes_nothing_and_completes(monkeypatch):
+    published, services = _run_drain(monkeypatch, "natural")
+    assert published == []
+    assert services.loops[0].status_marks == ["completed"]
+
+
+class _ExplodingLoop(_FakeLoop):
+    async def arun(self, _prompt: str) -> Any:
+        raise RuntimeError("run blew up")
+
+
+def test_run_failure_marks_error():
+    services = _FakeServices(None)
+
+    def _create_exploding(_mode: Any, **_kwargs: Any) -> tuple[Any, Any]:
+        loop = _ExplodingLoop(None)
+        services.loops.append(loop)
+        return None, loop
+
+    services.create_session = _create_exploding  # type: ignore[method-assign]
+    action_queue: queue.Queue = queue.Queue()
+    action_queue.put(("job1", "boom", True, ""))
+    asyncio.run(_drain_and_settle(action_queue, services))
+    assert services.loops[0].status_marks == ["error"]

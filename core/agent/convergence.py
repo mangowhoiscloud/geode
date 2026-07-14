@@ -36,6 +36,27 @@ class ConvergenceDetector:
         self.last_success_tool: str | None = None
         self.last_success_summary: str | None = None
 
+    def to_snapshot(self) -> dict[str, Any]:
+        """Serializable machine state — restored across session resume."""
+        return {
+            "total_consecutive_tool_errors": self.total_consecutive_tool_errors,
+            "recent_errors": list(self.recent_errors),
+            "repeated_success_streak": self.repeated_success_streak,
+            "last_success_fingerprint": self.last_success_fingerprint,
+            "last_success_tool": self.last_success_tool,
+            "last_success_summary": self.last_success_summary,
+        }
+
+    def apply_snapshot(self, data: dict[str, Any]) -> None:
+        """Inverse of :meth:`to_snapshot`; unknown keys are ignored."""
+        self.total_consecutive_tool_errors = int(data.get("total_consecutive_tool_errors", 0))
+        recent = data.get("recent_errors", [])
+        self.recent_errors = [str(e) for e in recent] if isinstance(recent, list) else []
+        self.repeated_success_streak = int(data.get("repeated_success_streak", 0))
+        self.last_success_fingerprint = data.get("last_success_fingerprint")
+        self.last_success_tool = data.get("last_success_tool")
+        self.last_success_summary = data.get("last_success_summary")
+
     def update_tool_error_tracking(
         self, tool_results: list[dict[str, Any]], tool_log: list[dict[str, Any]]
     ) -> None:
