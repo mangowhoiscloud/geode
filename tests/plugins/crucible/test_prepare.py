@@ -7,6 +7,7 @@ from plugins.crucible.cli import main as crucible_main
 from plugins.crucible.contract import ContractError, TaskUnit, task_pack_sha256
 from plugins.crucible.prepare import prepare_campaign
 from plugins.crucible.runtime_identity import (
+    RUNTIME_OUTER_FINALIZATION_GRACE_SECONDS,
     canonical_runtime_hash,
     runtime_design_from_parts,
     runtime_regime_from_parts,
@@ -138,16 +139,24 @@ def _runtime_audit(
         "runtime_regime_id": canonical_runtime_hash(regime),
         "cycle_observation": {
             "status": "complete",
-            "observed_active_wall_seconds": 40.0,
-            "observed_evaluator_wall_seconds": 40.0,
-            "active_wall_seconds": 40.0,
-            "completed_evaluator_wall_seconds": 40.0,
-            "complete_sample_count": 4,
+            "observed_active_wall_seconds": 80.0,
+            "observed_evaluator_wall_seconds": 80.0,
+            "active_wall_seconds": 80.0,
+            "completed_evaluator_wall_seconds": 80.0,
+            "complete_sample_count": 8,
             "right_censored_sample_count": 0,
             "infrastructure_failure_sample_count": 0,
+            "fresh_measurement": True,
+            "cache_reused_arm_count": 0,
         },
         "blocks": [
-            {"samples": [{"outcome": "complete", "wall_seconds": 10.0}]} for _index in range(4)
+            {
+                "samples": [
+                    {"outcome": "complete", "wall_seconds": 10.0},
+                    {"outcome": "complete", "wall_seconds": 10.0},
+                ]
+            }
+            for _index in range(4)
         ],
     }
     pilot = tmp_path / "runtime-pilot.json"
@@ -163,6 +172,7 @@ def _runtime_audit(
         "headroom_ratio": 0.0,
         "experiment_overhead_seconds": 0.0,
         "campaign_overhead_seconds": 10.0,
+        "cleanup_grace_seconds": RUNTIME_OUTER_FINALIZATION_GRACE_SECONDS,
         "minimum_usable_blocks": 4,
     }
 
@@ -174,7 +184,7 @@ def _runtime_ceiling() -> dict[str, object]:
         "source": "fixture frozen assay timeout ceiling",
         "experiment_overhead_seconds": 0.0,
         "campaign_overhead_seconds": 10.0,
-        "cleanup_grace_seconds": 0.0,
+        "cleanup_grace_seconds": RUNTIME_OUTER_FINALIZATION_GRACE_SECONDS,
     }
 
 
@@ -184,7 +194,7 @@ def _operational_deadline() -> dict[str, object]:
         "mode": "operational_deadline",
         "source": "fixture preregistered experiment wall",
         "campaign_overhead_seconds": 10.0,
-        "cleanup_grace_seconds": 0.0,
+        "cleanup_grace_seconds": RUNTIME_OUTER_FINALIZATION_GRACE_SECONDS,
         "risk_acceptance": "nonzero_clean_timeout",
     }
 
@@ -250,22 +260,22 @@ def test_prepare_rejects_low_power_before_emitting_config(tmp_path: Path) -> Non
 
 def test_prepare_binds_a_passing_runtime_report(tmp_path: Path) -> None:
     config, _baseline = _config(tmp_path)
-    budget = {**config.train_plan.payload["budget"], "max_wall_seconds": 80.0}
-    limits = {**config.limits.to_dict(), "max_wall_seconds": 90.0}
+    budget = {**config.train_plan.payload["budget"], "max_wall_seconds": 86.0}
+    limits = {**config.limits.to_dict(), "max_wall_seconds": 96.0}
     report = prepare_campaign(
         _write_spec(
             tmp_path,
             config,
             budget=budget,
             limits=limits,
-            runtime_audit=_runtime_audit(tmp_path, config, experiment_wall_seconds=80.0),
+            runtime_audit=_runtime_audit(tmp_path, config, experiment_wall_seconds=86.0),
         )
     )
 
     runtime = report["runtime_audit"]
     assert runtime["passes"] is True
-    assert runtime["required_experiment_wall_seconds"] == 80
-    assert runtime["required_campaign_wall_seconds"] == 90
+    assert runtime["required_experiment_wall_seconds"] == 86
+    assert runtime["required_campaign_wall_seconds"] == 96
     saved_runtime = json.loads(Path(runtime["path"]).read_text(encoding="utf-8"))
     prepared = SupervisorConfig.load(Path(report["config_path"]))
     assert runtime["runtime_audit_id"] == saved_runtime["runtime_audit_id"]
@@ -275,8 +285,8 @@ def test_prepare_binds_a_passing_runtime_report(tmp_path: Path) -> None:
 
 def test_prepare_binds_contract_ceiling_before_a_pilot_exists(tmp_path: Path) -> None:
     config, _baseline = _config(tmp_path)
-    budget = {**config.train_plan.payload["budget"], "max_wall_seconds": 80.0}
-    limits = {**config.limits.to_dict(), "max_wall_seconds": 90.0}
+    budget = {**config.train_plan.payload["budget"], "max_wall_seconds": 86.0}
+    limits = {**config.limits.to_dict(), "max_wall_seconds": 96.0}
     assay = {**config.train_plan.payload["assay_config"], "timeout": 10.0}
     report = prepare_campaign(
         _write_spec(
@@ -291,8 +301,8 @@ def test_prepare_binds_contract_ceiling_before_a_pilot_exists(tmp_path: Path) ->
 
     runtime = report["runtime_audit"]
     assert runtime["passes"] is True
-    assert runtime["required_experiment_wall_seconds"] == 80
-    assert runtime["required_campaign_wall_seconds"] == 90
+    assert runtime["required_experiment_wall_seconds"] == 86
+    assert runtime["required_campaign_wall_seconds"] == 96
     saved = json.loads(Path(runtime["path"]).read_text(encoding="utf-8"))
     assert saved["method"] == "bounded-process-termination-envelope.v2"
 
@@ -345,7 +355,7 @@ def test_prepare_rejects_short_runtime_budget_before_emitting_config(tmp_path: P
     )
     assert rejected_report["passes"] is False
     assert rejected_report["admission"]["configured_experiment_wall_seconds"] == 60.0
-    assert rejected_report["admission"]["required_experiment_wall_seconds"] == 80
+    assert rejected_report["admission"]["required_experiment_wall_seconds"] == 86
 
 
 def test_prepare_rejects_feedback_outside_the_pack(tmp_path: Path) -> None:

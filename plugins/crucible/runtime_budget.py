@@ -35,6 +35,7 @@ from typing import Any, Literal
 from .artifacts import load_json_object
 from .contract import ContractError, TaskUnit
 from .runtime_identity import (
+    RUNTIME_OUTER_FINALIZATION_GRACE_SECONDS,
     canonical_runtime_hash,
     runtime_design_from_parts,
     runtime_regime_from_parts,
@@ -115,6 +116,16 @@ def _positive_number(value: object, field: str) -> float:
     if result == 0.0:
         raise ContractError(f"{field} must be positive")
     return result
+
+
+def _cleanup_grace(value: object) -> float:
+    grace = _nonnegative_number(value, "runtime_audit.cleanup_grace_seconds")
+    if grace < RUNTIME_OUTER_FINALIZATION_GRACE_SECONDS:
+        raise ContractError(
+            "runtime_audit.cleanup_grace_seconds must cover the fixed "
+            f"{RUNTIME_OUTER_FINALIZATION_GRACE_SECONDS:g}s evaluator finalization grace"
+        )
+    return grace
 
 
 def _probability(value: object, field: str) -> float:
@@ -255,6 +266,64 @@ def validate_runtime_cycle_observation(
 ) -> str:
     """Cross-check a v2 cycle classification against its row observations."""
 
+    regime = pilot.get("runtime_regime")
+    if not isinstance(regime, Mapping):
+        raise ContractError("runtime pilot runtime_regime must be an object")
+    design = regime.get("design")
+    if not isinstance(design, Mapping):
+        raise ContractError("runtime pilot runtime_regime.design must be an object")
+    family_count = _positive_int(
+        design.get("family_count"),
+        "runtime pilot runtime_regime.design.family_count",
+    )
+    task_count = _positive_int(
+        design.get("task_count"),
+        "runtime pilot runtime_regime.design.task_count",
+    )
+    trials_per_task = _positive_int(
+        design.get("trials_per_task"),
+        "runtime pilot runtime_regime.design.trials_per_task",
+    )
+    paired_row_count = _positive_int(
+        design.get("paired_row_count"),
+        "runtime pilot runtime_regime.design.paired_row_count",
+    )
+    family_task_counts_raw = design.get("family_task_counts")
+    if not isinstance(family_task_counts_raw, list) or not family_task_counts_raw:
+        raise ContractError(
+            "runtime pilot runtime_regime.design.family_task_counts must be a non-empty list"
+        )
+    family_task_counts = tuple(
+        _positive_int(
+            value,
+            "runtime pilot runtime_regime.design.family_task_counts[]",
+        )
+        for value in family_task_counts_raw
+    )
+    if len(family_task_counts) != family_count or sum(family_task_counts) != task_count:
+        raise ContractError("runtime pilot family cardinality does not match runtime regime design")
+    if paired_row_count != task_count * trials_per_task * 2:
+        raise ContractError("runtime pilot paired row count does not match runtime regime design")
+
+    blocks = pilot.get("blocks")
+    if not isinstance(blocks, list):  # pragma: no cover - block parser owns this invariant
+        raise ContractError("runtime pilot blocks must be a list")
+    block_sample_counts = tuple(
+        len(block["samples"])
+        for block in blocks
+        if isinstance(block, Mapping) and isinstance(block.get("samples"), list)
+    )
+    expected_block_sample_counts = tuple(
+        task_family_count * trials_per_task * 2 for task_family_count in family_task_counts
+    )
+    if (
+        counts.get("block_count") != family_count
+        or len(block_sample_counts) != family_count
+        or sorted(block_sample_counts) != sorted(expected_block_sample_counts)
+        or sum(block_sample_counts) != paired_row_count
+    ):
+        raise ContractError("runtime pilot block cardinality does not match runtime regime design")
+
     observation = pilot.get("cycle_observation")
     if not isinstance(observation, Mapping):
         raise ContractError("runtime pilot cycle_observation must be an object")
@@ -262,7 +331,9 @@ def validate_runtime_cycle_observation(
     if status not in {"complete", "right_censored", "infrastructure_invalid"}:
         raise ContractError("runtime pilot cycle_observation.status is invalid")
     required = {
+        "cache_reused_arm_count",
         "complete_sample_count",
+        "fresh_measurement",
         "infrastructure_failure_sample_count",
         "observed_active_wall_seconds",
         "observed_evaluator_wall_seconds",
@@ -299,6 +370,19 @@ def validate_runtime_cycle_observation(
             raise ContractError(
                 f"runtime pilot cycle_observation count does not match blocks: {name}"
             )
+    fresh_measurement = observation.get("fresh_measurement")
+    if not isinstance(fresh_measurement, bool):
+        raise ContractError("runtime pilot cycle_observation.fresh_measurement must be boolean")
+    cache_reused_arm_count = _nonnegative_int(
+        observation.get("cache_reused_arm_count"),
+        "runtime pilot cycle_observation.cache_reused_arm_count",
+    )
+    if cache_reused_arm_count > 2:
+        raise ContractError(
+            "runtime pilot cycle_observation.cache_reused_arm_count exceeds two arms"
+        )
+    if fresh_measurement and cache_reused_arm_count != 0:
+        raise ContractError("runtime pilot cannot be fresh when an arm reused cache")
 
     observed_wall = _nonnegative_number(
         observation.get("observed_active_wall_seconds"),
@@ -488,17 +572,18 @@ def audit_runtime_budget(
             specification.get("campaign_overhead_seconds"),
             "runtime_audit.campaign_overhead_seconds",
         )
-        cleanup_grace = _nonnegative_number(
-            specification.get("cleanup_grace_seconds"),
-            "runtime_audit.cleanup_grace_seconds",
-        )
+        cleanup_grace = _cleanup_grace(specification.get("cleanup_grace_seconds"))
         operational_deadline = _positive_number(
             configured_experiment_wall_seconds,
             "configured_experiment_wall_seconds",
         )
+        if operational_deadline <= cleanup_grace:
+            raise ContractError(
+                "operational_deadline experiment wall must exceed cleanup_grace_seconds"
+            )
         admission, passes = _wall_admission(
             required_experiment_wall_seconds=operational_deadline,
-            campaign_overhead_seconds=campaign_overhead + cleanup_grace,
+            campaign_overhead_seconds=campaign_overhead,
             configured_experiment_wall_seconds=configured_experiment_wall_seconds,
             configured_campaign_wall_seconds=configured_campaign_wall_seconds,
         )
@@ -549,10 +634,7 @@ def audit_runtime_budget(
             specification.get("campaign_overhead_seconds"),
             "runtime_audit.campaign_overhead_seconds",
         )
-        cleanup_grace = _nonnegative_number(
-            specification.get("cleanup_grace_seconds"),
-            "runtime_audit.cleanup_grace_seconds",
-        )
+        cleanup_grace = _cleanup_grace(specification.get("cleanup_grace_seconds"))
         timeout_seconds = _positive_number(
             assay_config.get("timeout"),
             "assay_config.timeout",
@@ -600,6 +682,7 @@ def audit_runtime_budget(
     pilot_fields = {
         "admission_quantile",
         "campaign_overhead_seconds",
+        "cleanup_grace_seconds",
         "experiment_overhead_seconds",
         "headroom_ratio",
         "minimum_usable_blocks",
@@ -643,6 +726,7 @@ def audit_runtime_budget(
         specification.get("campaign_overhead_seconds"),
         "runtime_audit.campaign_overhead_seconds",
     )
+    cleanup_grace = _cleanup_grace(specification.get("cleanup_grace_seconds"))
     minimum_blocks = _positive_int(
         specification.get("minimum_usable_blocks"),
         "runtime_audit.minimum_usable_blocks",
@@ -713,7 +797,7 @@ def audit_runtime_budget(
 
     bootstrap_quantile = _nearest_rank(totals, quantile)
     admitted_experiment_wall = math.ceil(
-        (bootstrap_quantile + experiment_overhead) * (1.0 + headroom)
+        (bootstrap_quantile + experiment_overhead) * (1.0 + headroom) + cleanup_grace
     )
     admission, passes = _wall_admission(
         required_experiment_wall_seconds=admitted_experiment_wall,
@@ -741,6 +825,7 @@ def audit_runtime_budget(
             "quantile_seconds": bootstrap_quantile,
             "maximum_seconds": max(totals),
             "experiment_overhead_seconds": experiment_overhead,
+            "cleanup_grace_seconds": cleanup_grace,
             "headroom_ratio": headroom,
             "campaign_overhead_seconds": campaign_overhead,
         },

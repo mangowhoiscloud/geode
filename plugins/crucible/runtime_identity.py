@@ -1,10 +1,12 @@
 """Canonical identity for one Crucible runtime-observation regime.
 
-Runtime forecasts may transfer family-level rates across designs, but a
-distribution-free target-cycle count must be stricter: only a completed cycle
-measured under the exact same evaluator, harness, assay, pack, design, stage,
-and execution policy can increment it.  This module keeps that distinction in
-one hashable vocabulary shared by pilots, forecasts, and evaluator receipts.
+Runtime forecasts may transfer family-level rates across designs, so the
+runtime-regime identity deliberately describes the execution cohort without
+binding one baseline/candidate treatment.  A distribution-free target-cycle
+count is stricter: forecasts additionally require the pilot's full source
+contract ID to equal the frozen target contract ID.  That second comparison
+binds both revisions and keeps adaptive treatments out of a target-specific
+Wilks count while preserving looser point-model transfer.
 """
 
 from __future__ import annotations
@@ -29,6 +31,11 @@ RUNTIME_REGIME_SCHEMA = "crucible.runtime-regime.v1"
 RUNTIME_ARM_ORDER = "baseline_then_candidate"
 RUNTIME_ARM_WALL_POLICY = "shared_deadline_remaining.v1"
 RUNTIME_ACCOUNTING_SCOPE = "fresh_simulation_active_wall"
+# The paid evaluator deadline stops the tau2 process tree.  The outer
+# supervisor then permits only this fixed protocol grace for TERM/KILL reaping
+# and the final atomic receipt write.  It is part of the runtime regime rather
+# than hidden statistical headroom.
+RUNTIME_OUTER_FINALIZATION_GRACE_SECONDS = 5.5
 
 
 def canonical_runtime_hash(value: object) -> str:
@@ -112,6 +119,7 @@ def runtime_regime_from_parts(
             "arm_wall_policy": RUNTIME_ARM_WALL_POLICY,
             "accounting_scope": RUNTIME_ACCOUNTING_SCOPE,
             "experiment_wall_seconds": float(experiment_wall_seconds),
+            "outer_finalization_grace_seconds": RUNTIME_OUTER_FINALIZATION_GRACE_SECONDS,
             # Row-cache hits alter marginal spend, not the fresh-simulation
             # duration projected by runtime pilots.  Keeping that exclusion in
             # the identity prevents a later implementation from silently
@@ -159,6 +167,7 @@ __all__ = [
     "RUNTIME_ACCOUNTING_SCOPE",
     "RUNTIME_ARM_ORDER",
     "RUNTIME_ARM_WALL_POLICY",
+    "RUNTIME_OUTER_FINALIZATION_GRACE_SECONDS",
     "RUNTIME_REGIME_SCHEMA",
     "canonical_runtime_hash",
     "runtime_bindings",

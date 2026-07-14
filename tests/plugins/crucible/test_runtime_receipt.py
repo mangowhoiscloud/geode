@@ -26,12 +26,12 @@ def test_shared_deadline_gives_candidate_the_actual_baseline_remainder(tmp_path:
     deadline = SharedRuntimeDeadline(contract, 100.0, clock=clock)
 
     baseline = deadline.begin_arm("baseline")
-    assert baseline.allocated_wall_seconds == 100.0
+    assert baseline.allocated_wall_seconds == 94.5
     clock.advance(60.0)
     deadline.finish_arm(baseline, "complete")
 
     candidate = deadline.begin_arm("candidate")
-    assert candidate.allocated_wall_seconds == 40.0
+    assert candidate.allocated_wall_seconds == 34.5
     clock.advance(10.0)
     deadline.finish_arm(candidate, "complete")
     cleanup_started = clock()
@@ -66,7 +66,7 @@ def test_runtime_receipt_preserves_a_right_censored_lower_bound(tmp_path: Path) 
     assert loaded["observation"]["observed_wall_seconds"] == 101.0
     assert loaded["observation"]["censoring"] == {
         "kind": "right",
-        "limit_seconds": 100.0,
+        "limit_seconds": 94.5,
         "reason": "shared_experiment_deadline",
     }
     assert receipt["arms"][0]["outcome"] == "right_censored"
@@ -85,6 +85,7 @@ def test_runtime_receipt_binds_a_shortened_live_wall_as_a_distinct_regime(tmp_pa
 
     assert loaded == receipt
     assert loaded["configured_experiment_wall_seconds"] == 80.0
+    assert loaded["active_evaluation_wall_seconds"] == 74.5
     assert loaded["runtime_regime_id"] == runtime_regime_id(
         contract,
         experiment_wall_seconds=80.0,
@@ -139,7 +140,7 @@ def test_runtime_receipt_rejects_candidate_budget_replenishment(tmp_path: Path) 
     deadline.write(path, "complete")
 
     row = json.loads(path.read_text(encoding="utf-8"))
-    row["arms"][1]["allocated_wall_seconds"] = 100.0
+    row["arms"][1]["allocated_wall_seconds"] = 90.0
     payload = {key: value for key, value in row.items() if key != "runtime_receipt_id"}
     row["runtime_receipt_id"] = canonical_runtime_hash(payload)
     path.write_text(json.dumps(row), encoding="utf-8")
@@ -154,11 +155,37 @@ def test_runtime_receipt_cannot_label_an_overrun_complete() -> None:
     deadline = SharedRuntimeDeadline(contract, 100.0, clock=clock)
     baseline = deadline.begin_arm("baseline")
     clock.advance(101.0)
+    with pytest.raises(TimeoutError, match="crossed its shared runtime allocation"):
+        deadline.finish_arm(baseline, "complete")
+
+    receipt = deadline.payload(
+        "right_censored",
+        censoring_reason="shared_experiment_deadline",
+    )
+    assert receipt["arms"][0]["outcome"] == "right_censored"
+
+
+def test_runtime_receipt_rejects_rehashed_complete_arm_above_allocation(
+    tmp_path: Path,
+) -> None:
+    contract = _contract(stage="train")
+    deadline = SharedRuntimeDeadline(contract, 100.0, clock=_Clock())
+    baseline = deadline.begin_arm("baseline")
     deadline.finish_arm(baseline, "complete")
     deadline.record_synthetic_arm("candidate", "screened")
+    path = tmp_path / "runtime.receipt.json"
+    deadline.write(path, "complete")
 
-    with pytest.raises(ContractError, match="exceeds its configured experiment wall"):
-        deadline.payload("complete")
+    row = json.loads(path.read_text(encoding="utf-8"))
+    overrun = row["arms"][0]["allocated_wall_seconds"] + 0.01
+    row["arms"][0]["observed_wall_seconds"] = overrun
+    row["observation"]["observed_wall_seconds"] = overrun
+    payload = {key: value for key, value in row.items() if key != "runtime_receipt_id"}
+    row["runtime_receipt_id"] = canonical_runtime_hash(payload)
+    path.write_text(json.dumps(row), encoding="utf-8")
+
+    with pytest.raises(ContractError, match="complete observation exceeds its allocation"):
+        load_runtime_receipt(path, contract=contract)
 
 
 def test_shared_deadline_rejects_out_of_order_arms() -> None:
@@ -166,3 +193,42 @@ def test_shared_deadline_rejects_out_of_order_arms() -> None:
 
     with pytest.raises(ContractError, match="requires 'baseline'"):
         deadline.begin_arm("candidate")
+
+
+def test_shared_deadline_counts_evaluator_startup_from_supervisor_anchor() -> None:
+    clock = _Clock()
+    clock.advance(10.0)
+    deadline = SharedRuntimeDeadline(
+        _contract(stage="train"),
+        100.0,
+        clock=clock,
+        started_seconds=0.0,
+        deadline_seconds=100.0,
+    )
+
+    baseline = deadline.begin_arm("baseline")
+
+    assert deadline.elapsed_seconds == 10.0
+    assert baseline.allocated_wall_seconds == 84.5
+
+
+def test_runtime_receipt_rejects_artifacts_from_another_execution(tmp_path: Path) -> None:
+    contract = _contract(stage="train")
+    deadline = SharedRuntimeDeadline(contract, 100.0, clock=_Clock())
+    baseline = deadline.begin_arm("baseline")
+    deadline.finish_arm(baseline, "complete")
+    candidate = deadline.begin_arm("candidate")
+    deadline.finish_arm(candidate, "complete")
+    path = tmp_path / "runtime.receipt.json"
+    artifacts = {
+        "baseline": {"evidence_id": "a" * 64, "raw_artifact_sha256": "b" * 64},
+        "candidate": {"evidence_id": "c" * 64, "raw_artifact_sha256": "d" * 64},
+    }
+    deadline.write(path, "complete", artifacts=artifacts)
+    other = {
+        **artifacts,
+        "candidate": {"evidence_id": "e" * 64, "raw_artifact_sha256": "d" * 64},
+    }
+
+    with pytest.raises(ContractError, match="do not match the evaluated arm artifacts"):
+        load_runtime_receipt(path, contract=contract, expected_artifacts=other)

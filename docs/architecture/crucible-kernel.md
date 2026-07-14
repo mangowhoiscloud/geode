@@ -551,7 +551,7 @@ artifacts:
 
 ```json
 {
-  "schema": "crucible.train-evaluation.v3",
+  "schema": "crucible.train-evaluation.v4",
   "attempt_id": "<request attempt>",
   "request_id": "<request hash>",
   "proposal_id": "<proposal hash>",
@@ -559,6 +559,7 @@ artifacts:
   "candidate": "candidate.evidence.json",
   "baseline_raw": "baseline.results.json",
   "candidate_raw": "candidate.results.json",
+  "runtime_receipt": "runtime.receipt.json",
   "marginal_usage": {
     "wall_seconds": 30.0,
     "calls": 4,
@@ -573,7 +574,8 @@ artifacts:
 }
 ```
 
-The raw-file digests must match both evidence envelopes. Oracle content — gold
+The raw-file digests must match both evidence envelopes, and the runtime
+receipt must bind those exact raw/evidence identities. Oracle content — gold
 actions, expected values, task payloads, sealed rows, and free-form trajectory
 excerpts — is never forwarded to the next producer. The bounded feedback may
 name only task IDs from the frozen train contract plus one of the closed,
@@ -1290,11 +1292,22 @@ cleanup, and campaign overhead, without multiplying those deterministic terms
 by an arbitrary headroom ratio. It neither fabricates observations nor claims
 that every clean run completes. For uncapped stochastic rows,
 `operational_deadline` records `timeout=null` and requires explicit acceptance
-of nonzero clean-timeout risk; it is not a confidence bound. One monotonic
-deadline owns the paired evaluation: baseline receives the current remainder
-and candidate receives what actually remains, rather than an equal half. A
-hash-bound runtime receipt records those allocations, right-censoring, inner
-cleanup, and the outer cleanup scopes it cannot observe. A timeout is a
+of nonzero clean-timeout risk; it is not a confidence bound, and its experiment
+wall must exceed the declared cleanup grace. One monotonic
+deadline, anchored by the supervisor before evaluator startup, owns the paired
+evaluation: baseline receives the current remainder and candidate receives
+what actually remains, rather than an equal half. Paid arm setup and artifact
+finalization consume the same envelope. A fixed 5.5-second outer protocol grace
+is reserved at its end and bound into the runtime regime for process-tree
+reaping and the atomic receipt write; it is an additive contract term, not
+statistical headroom. A hash-bound runtime
+receipt records those allocations, cache provenance, exact evidence/raw arm
+identities, right-censoring, inner cleanup, and the outer cleanup scopes it
+cannot observe. Failure receipts are written before partial-cache salvage and
+checkout cleanup begin, so a slow salvage or worktree removal cannot erase a
+right-censored observation. Sealed loading accepts only two freshly measured,
+completed receipt arms; cached or synthetic provenance cannot satisfy the
+one-shot gate. A timeout is a
 right-censored lower bound, never an exact completion time. Infrastructure
 interruptions remain visible but are excluded from performance and runtime
 point models. `runtime-pilot` projects verified paired raw/evidence artifacts
@@ -1307,22 +1320,36 @@ sealed test contract.
 `runtime-forecast` is the planning surface for deciding how long that measured
 tail takes to stabilize. Its target is a frozen contract; compatible pilots
 may inform the campaign-then-family point model, but the distribution-free
-matching-cycle count is derived automatically from exact regime digests. The
+matching-cycle count requires both the exact regime digest and the exact
+frozen source contract ID, including baseline and candidate revisions. The
 tool enumerates the empirical multinomial distribution exactly when the
 composition space is bounded and otherwise uses a preregistered deterministic
-Monte Carlo fallback. The report keeps two claims separate: the model-based
+Monte Carlo fallback; exact composition generation is iterative, one-family
+designs avoid dense count vectors, multinomial weights are evaluated in log
+space to avoid large-integer conversion overflow, and the remaining path is
+bounded by both composition count and dense-state size. The report keeps two claims
+separate: the model-based
 point forecast may resample opaque family blocks, while Wilks certification
 counts only completed uncensored target cycles. Family blocks from one
 campaign share provider and quota conditions and are never treated as
 independent Wilks observations. The block model reports active-compute
-planning markers; it is not relabelled as an observed campaign wall. The
+planning markers and adds the fixed finalization grace exactly once when
+turning active-compute quantiles into experiment walls; it is not relabelled
+as an observed campaign wall. The
 distribution-free plan instead uses the evaluator-wall elapsed time bound by
 each runtime receipt and exposes a one-sided sample-maximum upper tolerance
-bound only after the required matching cycles exist. A 6-family × 1-trial source cycle can inform a
+bound only after the required matching cycles exist. That observed evaluator
+wall already contains setup, so the qualified wall adds only the still
+unmeasured finalization grace and campaign overhead. A 6-family × 1-trial source cycle can inform a
 9-family × 3-trial block forecast, but it is never counted as an observed 9 × 3
 target cycle. Neither operators nor configs can increment that count manually,
-and duplicate pilot files from one source contract are refused rather than
-counted twice. The one-sided sample-maximum requirement follows [Wilks
+cache-backed cycles are excluded from that count, and duplicate pilot files
+from one runtime receipt are refused rather than counted twice; distinct fresh
+cycles of the same frozen source contract remain valid independent observations.
+A claimed full
+cycle is also rejected unless its block/sample cardinality exactly matches the
+family/task/trial/arm design inside its regime. The one-sided
+sample-maximum requirement follows [Wilks
 (1941)](https://doi.org/10.1214/aoms/1177731788).
 
 The first 9-family × 3-trial planning estimate preserved the inherited
@@ -1337,15 +1364,17 @@ campaign budgets, leaving no setup or producer allowance. A finalized row
 carried an HTTP 500 infrastructure termination, so the run was manually
 stopped once its verdict was known to be `INVALID`.
 
-The first campaign under the revised evaluator therefore used the strict
-pilot-free ceiling: `54 × 600s` rows plus `600s` evaluator setup gave
-`33,000s` for the paired experiment, and the existing `1,000s` outer allowance
-gave `34,000s` for the campaign. That r35 contract remains immutable. Later
-campaigns may set the row timeout to `null` while retaining a finite
+The first r35 draft under the revised evaluator used `54 × 600s` rows plus
+`600s` evaluator setup, giving `33,000s` for the paired experiment and
+`34,000s` with the outer campaign allowance. That historical contract remains
+immutable, but receipt v2 made its missing finalization term explicit: a
+successor with the same bounded-row design requires `33,006s` and `34,006s`
+after ceiling rounding. Later campaigns may set the row timeout to `null` while retaining a finite
 operational experiment deadline with the risk classification above. The
 6-family × 2-trial sealed design has 24
 paired rows; its conservative unopened-pack allowance remains `24 × 600s`
-plus `600s` setup, or `15,000s`. Once one clean digest-matched paired run
+plus `600s` setup and the fixed finalization term, or `15,006s` after ceiling
+rounding. Once one clean digest-matched paired run
 exists, the block-bootstrap report replaces these ceiling values with measured
 tail capacity.
 

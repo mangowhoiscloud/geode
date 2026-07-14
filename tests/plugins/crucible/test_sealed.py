@@ -30,7 +30,7 @@ from plugins.crucible.ref_journal import (
     persist_intent,
 )
 from plugins.crucible.ref_journal import commit_ref_update as real_commit_ref_update
-from plugins.crucible.runtime_receipt import SharedRuntimeDeadline
+from plugins.crucible.runtime_receipt import SharedRuntimeDeadline, runtime_artifact_bindings
 from plugins.crucible.sealed import (
     CorePromotionDecision,
     SealedError,
@@ -427,10 +427,25 @@ class _Evaluator:
         runtime_receipt = evaluation_dir / "runtime.receipt.json"
         deadline = SharedRuntimeDeadline(contract, contract.budget.max_wall_seconds)
         baseline_clock = deadline.begin_arm("baseline")
-        deadline.finish_arm(baseline_clock, "complete")
-        candidate_clock = deadline.begin_arm("candidate")
-        deadline.finish_arm(candidate_clock, "complete")
-        deadline.write(runtime_receipt, "complete")
+        deadline.finish_arm(
+            baseline_clock,
+            "complete",
+            measurement_source="full_cache" if outcome == "cached_receipt" else "fresh",
+        )
+        if outcome == "screened_receipt":
+            deadline.record_synthetic_arm("candidate", "screened")
+        else:
+            candidate_clock = deadline.begin_arm("candidate")
+            deadline.finish_arm(
+                candidate_clock,
+                "complete",
+                measurement_source="full_cache" if outcome == "cached_receipt" else "fresh",
+            )
+        deadline.write(
+            runtime_receipt,
+            "complete",
+            artifacts=runtime_artifact_bindings(baseline, candidate),
+        )
         response: dict[str, object] = {
             "schema": "crucible.sealed-evaluation.v2",
             "plan_id": plan.plan_id,
@@ -651,6 +666,21 @@ def test_protocol_tamper_is_terminal_and_never_spends_retry(
         assert detail["schema"] == "crucible.sealed-operator-error.v1"
         assert detail["message"]
         assert decision.reasons == ("artifact_validation_failed",)
+
+
+@pytest.mark.parametrize("outcome", ["cached_receipt", "screened_receipt"])
+def test_sealed_receipt_requires_two_fresh_measured_arms(
+    tmp_path: Path,
+    outcome: str,
+) -> None:
+    fixture = _fixture(tmp_path)
+    evaluator = _Evaluator([outcome])
+
+    decision = _supervisor(fixture, evaluator).run()
+
+    assert decision.decision == "INVALID"
+    assert decision.reasons == ("artifact_validation_failed",)
+    assert evaluator.calls == 1
 
 
 def test_global_terminal_rebuilds_deleted_local_state_without_rerun(tmp_path: Path) -> None:

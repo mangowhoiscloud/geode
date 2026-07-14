@@ -26,7 +26,8 @@ window budget to fold the launch-capacity verdict (``crucible.preflight``)
 into the report. Sealed plans keep their own promotion-time lifecycle and are
 deliberately out of scope here. An optional runtime audit admits a
 digest-matched pilot bootstrap, a frozen bounded-row contract ceiling, or an
-uncensored fixed experiment wall before the config is emitted.
+operator-selected experiment deadline with explicit clean-timeout risk before
+the config is emitted.
 """
 
 from __future__ import annotations

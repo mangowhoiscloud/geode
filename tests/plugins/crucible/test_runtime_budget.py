@@ -14,13 +14,14 @@ from plugins.crucible.contract import (
 from plugins.crucible.evidence import EvidenceEnvelope
 from plugins.crucible.runtime_budget import audit_runtime_budget, runtime_pilot_block_rates
 from plugins.crucible.runtime_identity import (
+    RUNTIME_OUTER_FINALIZATION_GRACE_SECONDS,
     canonical_runtime_hash,
     runtime_design_from_parts,
     runtime_regime_from_parts,
     runtime_regime_id,
 )
 from plugins.crucible.runtime_pilot import build_runtime_pilot
-from plugins.crucible.runtime_receipt import SharedRuntimeDeadline
+from plugins.crucible.runtime_receipt import SharedRuntimeDeadline, runtime_artifact_bindings
 
 from tests.plugins.crucible.test_promotion import _contract, _evidence
 
@@ -31,6 +32,8 @@ def _runtime_receipt(
     *,
     infrastructure_invalid: bool = False,
     wall_seconds: float | None = None,
+    baseline_evidence: EvidenceEnvelope | None = None,
+    candidate_evidence: EvidenceEnvelope | None = None,
 ) -> Path:
     deadline = SharedRuntimeDeadline(
         contract,
@@ -41,7 +44,16 @@ def _runtime_receipt(
     candidate = deadline.begin_arm("candidate")
     deadline.finish_arm(candidate, "invalid" if infrastructure_invalid else "complete")
     path = tmp_path / "runtime.receipt.json"
-    deadline.write(path, "infrastructure_invalid" if infrastructure_invalid else "complete")
+    artifacts = (
+        runtime_artifact_bindings(baseline_evidence, candidate_evidence)
+        if baseline_evidence is not None and candidate_evidence is not None
+        else None
+    )
+    deadline.write(
+        path,
+        "infrastructure_invalid" if infrastructure_invalid else "complete",
+        artifacts=artifacts,
+    )
     return path
 
 
@@ -67,7 +79,10 @@ def _pilot(
     experiment_wall_seconds: float = 27_000.0,
 ) -> tuple[Path, str]:
     selected_tasks = tasks or _tasks()
-    samples = block_samples or [[("complete", 500.0)] for _index in range(9)]
+    samples = block_samples or [
+        [("complete", 500.0)] * (trials_per_task * 2)
+        for _index in range(len({task.family_id for task in selected_tasks}))
+    ]
     bindings = {
         "evaluator_sha256": evaluator_sha256,
         "harness_sha256": harness_sha256,
@@ -124,6 +139,8 @@ def _pilot(
         "infrastructure_failure_sample_count": sum(
             outcome == "infrastructure_failure" for block in samples for outcome, _seconds in block
         ),
+        "fresh_measurement": True,
+        "cache_reused_arm_count": 0,
     }
     if cycle_status == "complete":
         cycle_observation["active_wall_seconds"] = observed_active_wall
@@ -181,6 +198,7 @@ def _specification(
         "headroom_ratio": 0.0,
         "experiment_overhead_seconds": 0.0,
         "campaign_overhead_seconds": 1_000.0,
+        "cleanup_grace_seconds": RUNTIME_OUTER_FINALIZATION_GRACE_SECONDS,
         "minimum_usable_blocks": minimum_usable_blocks,
     }
 
@@ -220,7 +238,7 @@ def _ceiling_specification(
     *,
     experiment_overhead_seconds: float = 600.0,
     campaign_overhead_seconds: float = 1_000.0,
-    cleanup_grace_seconds: float = 0.0,
+    cleanup_grace_seconds: float = RUNTIME_OUTER_FINALIZATION_GRACE_SECONDS,
 ) -> dict[str, object]:
     return {
         "schema": "crucible.runtime-budget-spec.v2",
@@ -240,7 +258,7 @@ def _ceiling_audit(
     campaign_wall: float | None,
     experiment_overhead_seconds: float = 600.0,
     campaign_overhead_seconds: float = 1_000.0,
-    cleanup_grace_seconds: float = 0.0,
+    cleanup_grace_seconds: float = RUNTIME_OUTER_FINALIZATION_GRACE_SECONDS,
 ) -> dict:
     return audit_runtime_budget(
         tasks=(tasks := _tasks(task_count)),
@@ -272,7 +290,7 @@ def _operational_deadline_specification(
         "mode": "operational_deadline",
         "source": "preregistered experiment-wide wall budget",
         "campaign_overhead_seconds": campaign_overhead_seconds,
-        "cleanup_grace_seconds": 0.0,
+        "cleanup_grace_seconds": RUNTIME_OUTER_FINALIZATION_GRACE_SECONDS,
         "risk_acceptance": "nonzero_clean_timeout",
     }
 
@@ -337,16 +355,16 @@ def _verified_arm(
 
 
 def test_runtime_audit_admits_the_9x3_500_second_row_envelope(tmp_path: Path) -> None:
-    report = _audit(tmp_path, experiment_wall=27_000, campaign_wall=28_000)
+    report = _audit(tmp_path, experiment_wall=27_006, campaign_wall=28_006)
 
     assert report["passes"] is True
     assert report["design"]["paired_row_count"] == 54
     assert report["admission"] == {
-        "required_experiment_wall_seconds": 27_000,
-        "configured_experiment_wall_seconds": 27_000.0,
+        "required_experiment_wall_seconds": 27_006,
+        "configured_experiment_wall_seconds": 27_006.0,
         "experiment_passes": True,
-        "required_campaign_wall_seconds": 28_000,
-        "configured_campaign_wall_seconds": 28_000.0,
+        "required_campaign_wall_seconds": 28_006,
+        "configured_campaign_wall_seconds": 28_006.0,
         "campaign_passes": True,
     }
     encoded = str(report)
@@ -359,8 +377,8 @@ def test_contract_ceiling_admits_bootstrap_campaign_without_a_pilot() -> None:
     report = _ceiling_audit(
         task_count=9,
         trials_per_task=3,
-        experiment_wall=33_000,
-        campaign_wall=34_000,
+        experiment_wall=33_006,
+        campaign_wall=34_006,
     )
 
     assert report["passes"] is True
@@ -369,13 +387,13 @@ def test_contract_ceiling_admits_bootstrap_campaign_without_a_pilot() -> None:
         "timeout_seconds_per_row": 600.0,
         "paired_row_ceiling_seconds": 32_400.0,
         "experiment_overhead_seconds": 600.0,
-        "cleanup_grace_seconds": 0.0,
+        "cleanup_grace_seconds": RUNTIME_OUTER_FINALIZATION_GRACE_SECONDS,
         "campaign_overhead_seconds": 1_000.0,
         "guarantee": "process_termination_only",
         "clean_completion_guaranteed": False,
     }
-    assert report["admission"]["required_experiment_wall_seconds"] == 33_000
-    assert report["admission"]["required_campaign_wall_seconds"] == 34_000
+    assert report["admission"]["required_experiment_wall_seconds"] == 33_006
+    assert report["admission"]["required_campaign_wall_seconds"] == 34_006
     assert "pilot_sha256" not in report
 
 
@@ -387,7 +405,7 @@ def test_operational_deadline_admits_rows_with_explicit_clean_timeout_risk() -> 
     assert report["operational_deadline"] == {
         "timeout_seconds_per_row": None,
         "experiment_wall_seconds": 33_000.0,
-        "cleanup_grace_seconds": 0.0,
+        "cleanup_grace_seconds": RUNTIME_OUTER_FINALIZATION_GRACE_SECONDS,
         "campaign_overhead_seconds": 1_000.0,
         "risk_acceptance": "nonzero_clean_timeout",
         "statistical_confidence_bound": None,
@@ -410,6 +428,14 @@ def test_operational_deadline_rejects_short_campaign_wall() -> None:
     assert report["admission"]["campaign_passes"] is False
 
 
+def test_operational_deadline_rejects_wall_without_active_runtime() -> None:
+    with pytest.raises(ContractError, match="must exceed cleanup_grace_seconds"):
+        _operational_deadline_audit(
+            experiment_wall=RUNTIME_OUTER_FINALIZATION_GRACE_SECONDS,
+            campaign_wall=6.0,
+        )
+
+
 def test_contract_ceiling_rejects_zero_overhead_campaign_budget() -> None:
     report = _ceiling_audit(
         task_count=9,
@@ -427,14 +453,14 @@ def test_contract_ceiling_sizes_the_6x2_sealed_experiment() -> None:
     report = _ceiling_audit(
         task_count=6,
         trials_per_task=2,
-        experiment_wall=15_000,
+        experiment_wall=15_006,
         campaign_wall=None,
         campaign_overhead_seconds=0.0,
     )
 
     assert report["passes"] is True
     assert report["design"]["paired_row_count"] == 24
-    assert report["admission"]["required_experiment_wall_seconds"] == 15_000
+    assert report["admission"]["required_experiment_wall_seconds"] == 15_006
 
 
 def test_contract_ceiling_accounts_for_cleanup_as_a_separate_term() -> None:
@@ -452,6 +478,17 @@ def test_contract_ceiling_accounts_for_cleanup_as_a_separate_term() -> None:
     assert report["ceiling"]["paired_row_ceiling_seconds"] == 1_200.0
     assert report["ceiling"]["cleanup_grace_seconds"] == 10.0
     assert report["admission"]["required_experiment_wall_seconds"] == 1_810
+
+
+def test_runtime_admission_rejects_cleanup_below_protocol_finalization_grace() -> None:
+    with pytest.raises(ContractError, match=r"fixed 5\.5s evaluator finalization grace"):
+        _ceiling_audit(
+            task_count=1,
+            trials_per_task=1,
+            experiment_wall=1_800,
+            campaign_wall=1_800,
+            cleanup_grace_seconds=0.0,
+        )
 
 
 def test_legacy_fixed_wall_mode_is_rejected_instead_of_relabelled() -> None:
@@ -495,6 +532,8 @@ def test_runtime_pilot_writer_projects_verified_rows_without_identities(tmp_path
             tmp_path,
             contract,
             infrastructure_invalid=True,
+            baseline_evidence=baseline_evidence,
+            candidate_evidence=candidate_evidence,
         ),
         baseline_results_path=baseline_results,
         baseline_evidence=baseline_evidence,
@@ -526,7 +565,12 @@ def test_runtime_pilot_cli_writes_the_digest_basis(
     candidate_evidence_path = tmp_path / "candidate.evidence.json"
     baseline_evidence_path.write_text(json.dumps(baseline_evidence.to_dict()), encoding="utf-8")
     candidate_evidence_path.write_text(json.dumps(candidate_evidence.to_dict()), encoding="utf-8")
-    runtime_receipt = _runtime_receipt(tmp_path, contract)
+    runtime_receipt = _runtime_receipt(
+        tmp_path,
+        contract,
+        baseline_evidence=baseline_evidence,
+        candidate_evidence=candidate_evidence,
+    )
     output = tmp_path / "runtime-pilot.json"
 
     code = crucible_main(
@@ -561,7 +605,13 @@ def test_runtime_pilot_uses_the_receipts_effective_wall_for_regime_identity(
 
     pilot = build_runtime_pilot(
         contract,
-        runtime_receipt_path=_runtime_receipt(tmp_path, contract, wall_seconds=80.0),
+        runtime_receipt_path=_runtime_receipt(
+            tmp_path,
+            contract,
+            wall_seconds=80.0,
+            baseline_evidence=baseline_evidence,
+            candidate_evidence=candidate_evidence,
+        ),
         baseline_results_path=baseline_results,
         baseline_evidence=baseline_evidence,
         candidate_results_path=candidate_results,
@@ -582,6 +632,33 @@ def test_runtime_audit_rejects_the_inherited_18k_19k_budget(tmp_path: Path) -> N
     assert report["passes"] is False
     assert report["admission"]["experiment_passes"] is False
     assert report["admission"]["campaign_passes"] is False
+
+
+def test_runtime_audit_rejects_incomplete_pilot_cycle_cardinality(tmp_path: Path) -> None:
+    assay = {"schema": "fixture.v1", "timeout_seconds": 600}
+    pilot, digest = _pilot(
+        tmp_path,
+        assay_config=assay,
+        block_samples=[[("complete", 500.0)] * 6 for _index in range(4)],
+        experiment_wall_seconds=27_006.0,
+    )
+
+    with pytest.raises(ContractError, match="block cardinality"):
+        audit_runtime_budget(
+            tasks=(tasks := _tasks()),
+            trials_per_task=3,
+            task_pack_sha256=task_pack_sha256(tasks, 3),
+            stage="train",
+            evaluator_sha256="a" * 64,
+            harness_sha256="b" * 64,
+            agent_route="agent-route",
+            user_route="user-route",
+            assay_config=assay,
+            configured_experiment_wall_seconds=27_006.0,
+            configured_campaign_wall_seconds=28_006.0,
+            specification=_specification(pilot, digest),
+            basis_root=tmp_path,
+        )
 
 
 def test_runtime_pilot_counts_censoring_without_treating_it_as_an_exact_duration(
@@ -669,7 +746,7 @@ def test_runtime_audit_cli_accepts_a_sealed_test_contract(
     pilot, digest = _pilot(
         tmp_path,
         assay_config=contract.assay_config,
-        block_samples=[[("complete", 10.0)] for _index in range(4)],
+        block_samples=[[("complete", 10.0), ("complete", 10.0)] for _index in range(4)],
         agent_route=contract.agent_route,
         user_route=contract.user_route,
         tasks=contract.tasks,
@@ -701,6 +778,6 @@ def test_runtime_audit_cli_accepts_a_sealed_test_contract(
     assert code == 0
     assert printed == saved
     assert saved["passes"] is True
-    assert saved["admission"]["required_experiment_wall_seconds"] == 80
+    assert saved["admission"]["required_experiment_wall_seconds"] == 86
     assert saved["admission"]["configured_campaign_wall_seconds"] is None
     assert "task-1" not in str(saved)

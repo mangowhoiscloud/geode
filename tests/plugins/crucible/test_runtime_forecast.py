@@ -1,6 +1,8 @@
 import hashlib
 import json
+import math
 from copy import deepcopy
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -11,7 +13,11 @@ from plugins.crucible.contract import (
     TaskUnit,
     task_pack_sha256,
 )
-from plugins.crucible.runtime_forecast import forecast_runtime, load_runtime_pilot
+from plugins.crucible.runtime_forecast import (
+    _exact_cycle_distribution,
+    forecast_runtime,
+    load_runtime_pilot,
+)
 from plugins.crucible.runtime_identity import runtime_regime, runtime_regime_id
 
 from tests.plugins.crucible.test_promotion import _contract
@@ -52,8 +58,10 @@ def _pilot(
     evaluator: str | None = None,
     matching_cycle: bool = False,
     source_contract_id: str | None = None,
+    source_runtime_receipt_id: str | None = None,
 ) -> dict[str, object]:
     target = contract or _target_contract()
+    samples_per_block = 2 * target.trials_per_task if matching_cycle else 2
     payload: dict[str, object] = {
         "schema": "crucible.runtime-pilot.v2" if matching_cycle else "crucible.runtime-pilot.v1",
         "accounting_method": "sum-finalized-simulation-elapsed.v1",
@@ -65,19 +73,19 @@ def _pilot(
         "blocks": [
             {
                 "samples": [
-                    {"outcome": "complete", "wall_seconds": rate - 1.0},
-                    {"outcome": "complete", "wall_seconds": rate},
+                    {"outcome": "complete", "wall_seconds": rate}
+                    for _sample in range(samples_per_block)
                 ]
             }
             for rate in rates
         ],
     }
     if matching_cycle:
-        observed = sum(rate * 2.0 - 1.0 for rate in rates)
+        observed = sum(rate * samples_per_block for rate in rates)
         payload.update(
             {
                 "source_contract_id": source_contract_id or target.contract_id,
-                "source_runtime_receipt_id": "f" * 64,
+                "source_runtime_receipt_id": source_runtime_receipt_id or "f" * 64,
                 "runtime_regime": runtime_regime(target),
                 "runtime_regime_id": runtime_regime_id(target),
                 "cycle_observation": {
@@ -86,9 +94,11 @@ def _pilot(
                     "observed_evaluator_wall_seconds": observed,
                     "active_wall_seconds": observed,
                     "completed_evaluator_wall_seconds": observed,
-                    "complete_sample_count": len(rates) * 2,
+                    "complete_sample_count": len(rates) * samples_per_block,
                     "right_censored_sample_count": 0,
                     "infrastructure_failure_sample_count": 0,
+                    "fresh_measurement": True,
+                    "cache_reused_arm_count": 0,
                 },
             }
         )
@@ -105,22 +115,23 @@ def _forecast(
     matching_target_cycles: bool = False,
 ) -> dict:
     contract = _target_contract()
+    source_block_count = 9 if matching_target_cycles else 6
     return forecast_runtime(
         (
             _record(
                 _pilot(
-                    [200.0] * 6,
+                    [200.0] * source_block_count,
                     contract=contract,
                     matching_cycle=matching_target_cycles,
-                    source_contract_id="d" * 64,
+                    source_runtime_receipt_id="d" * 64,
                 )
             ),
             _record(
                 _pilot(
-                    [400.0] * 6,
+                    [400.0] * source_block_count,
                     contract=contract,
                     matching_cycle=matching_target_cycles,
-                    source_contract_id="e" * 64,
+                    source_runtime_receipt_id="e" * 64,
                 )
             ),
         ),
@@ -148,7 +159,14 @@ def test_forecast_uses_blocks_for_points_but_only_cycles_for_wilks() -> None:
     assert p95_marker["planning_only"] is True
     assert p95_marker["distribution_free"] is False
     assert p95_marker["confidence_bound"] is None
+    assert p95_marker["experiment_marker_seconds"] == math.ceil(
+        p95_marker["active_compute_quantile_seconds"] + 600.0 + 5.5
+    )
+    assert p95_marker["campaign_marker_seconds"] == (
+        p95_marker["experiment_marker_seconds"] + 1_000
+    )
     assert p99_marker["class"] == "model_based_transferred_predictive_quantile"
+    assert report["overhead"]["outer_finalization_grace_seconds_per_cycle"] == 5.5
 
     assert "model_based_block_plans" not in report
 
@@ -178,10 +196,10 @@ def test_wilks_upper_bound_uses_only_the_max_of_59_matching_cycle_walls() -> Non
     pilots = tuple(
         _record(
             _pilot(
-                [float(100 + index % 3)] * 6,
+                [float(100 + index % 3)] * 9,
                 contract=target,
                 matching_cycle=True,
-                source_contract_id=f"{index + 1:064x}",
+                source_runtime_receipt_id=f"{index + 1:064x}",
             )
         )
         for index in range(59)
@@ -201,19 +219,46 @@ def test_wilks_upper_bound_uses_only_the_max_of_59_matching_cycle_walls() -> Non
     plan = report["distribution_free_target_cycle_plans"][0]
     assert plan["confidence_qualified"] is True
     assert plan["observed_matching_target_cycles"] == 59
-    assert plan["observed_sample_max_evaluator_wall_seconds"] == 1_218.0
-    assert plan["evaluator_wall_upper_tolerance_bound_seconds"] == 1_218.0
-    assert plan["experiment_wall_upper_tolerance_bound_seconds"] == 1_818
-    assert plan["campaign_wall_upper_tolerance_bound_seconds"] == 2_818
+    assert plan["observed_sample_max_evaluator_wall_seconds"] == 5_508.0
+    assert plan["evaluator_wall_upper_tolerance_bound_seconds"] == 5_508.0
+    assert plan["experiment_wall_upper_tolerance_bound_seconds"] == 5_514
+    assert plan["campaign_wall_upper_tolerance_bound_seconds"] == 6_514
+
+
+def test_forecast_transfers_points_but_not_wilks_cycles_across_treatments() -> None:
+    target = _target_contract()
+    other_treatment = replace(target, candidate_sha="f" * 40)
+    assert runtime_regime_id(other_treatment) == runtime_regime_id(target)
+    assert other_treatment.contract_id != target.contract_id
+    pilot = _pilot(
+        [200.0] * 9,
+        contract=other_treatment,
+        matching_cycle=True,
+    )
+
+    report = forecast_runtime(
+        (_record(pilot),),
+        target_contract=target,
+        simulations=1_000,
+        seed=1,
+        confidence=0.95,
+        coverages=(0.95,),
+        experiment_overhead_seconds=0.0,
+        campaign_overhead_seconds=0.0,
+    )
+
+    assert report["pilot"]["usable_block_count"] == 9
+    assert report["design"]["matching_target_cycle_count"] == 0
+    assert report["source_pilots"]["matching_target_cycle_contract_id"] == []
 
 
 def test_forecast_does_not_count_censored_or_different_wall_cycles() -> None:
     target = _target_contract()
     censored = _pilot(
-        [200.0] * 6,
+        [200.0] * 9,
         contract=target,
         matching_cycle=True,
-        source_contract_id="d" * 64,
+        source_runtime_receipt_id="d" * 64,
     )
     first_sample = censored["blocks"][0]["samples"][0]
     first_sample["outcome"] = "right_censored"
@@ -235,10 +280,10 @@ def test_forecast_does_not_count_censored_or_different_wall_cycles() -> None:
 
     other_wall = _contract_with_wall(target, target.budget.max_wall_seconds + 1.0)
     transferred = _pilot(
-        [300.0] * 6,
+        [300.0] * 9,
         contract=other_wall,
         matching_cycle=True,
-        source_contract_id="e" * 64,
+        source_runtime_receipt_id="e" * 64,
     )
     report = forecast_runtime(
         (_record(censored), _record(transferred)),
@@ -274,6 +319,166 @@ def test_forecast_falls_back_to_deterministic_monte_carlo() -> None:
     assert report["sampling"]["evaluated_draw_count"] == 1_000
 
 
+def test_forecast_exact_path_handles_one_thousand_source_blocks() -> None:
+    payload = _target_contract().to_dict()
+    payload.pop("contract_id")
+    task = TaskUnit("task-only", "family-only", "a" * 64)
+    payload.update(
+        {
+            "tasks": [task.to_dict()],
+            "trials_per_task": 1,
+            "task_pack_sha256": task_pack_sha256((task,), 1),
+        }
+    )
+    target = ExperimentContract.from_mapping(payload)
+    report = forecast_runtime(
+        (_record(_pilot([float(index + 2) for index in range(1_000)], contract=target)),),
+        target_contract=target,
+        simulations=1_000,
+        seed=1,
+        confidence=0.95,
+        coverages=(0.95,),
+        experiment_overhead_seconds=0.0,
+        campaign_overhead_seconds=0.0,
+    )
+
+    assert report["sampling"]["distribution_evaluation"] == "exact_multinomial"
+    assert report["sampling"]["possible_composition_count"] == 1_000
+    assert report["sampling"]["exact_state_cell_count"] == 1_000
+
+
+def test_forecast_exact_weights_do_not_overflow_for_many_target_families() -> None:
+    payload = _target_contract().to_dict()
+    payload.pop("contract_id")
+    tasks = tuple(
+        TaskUnit(f"task-{index}", f"family-{index}", f"{index:064x}") for index in range(1, 1_025)
+    )
+    payload.update(
+        {
+            "tasks": [task.to_dict() for task in tasks],
+            "trials_per_task": 1,
+            "task_pack_sha256": task_pack_sha256(tasks, 1),
+        }
+    )
+    target = ExperimentContract.from_mapping(payload)
+
+    report = forecast_runtime(
+        (_record(_pilot([1.0, 2.0], contract=target)),),
+        target_contract=target,
+        simulations=1_000,
+        seed=1,
+        confidence=0.95,
+        coverages=(0.95,),
+        experiment_overhead_seconds=0.0,
+        campaign_overhead_seconds=0.0,
+    )
+
+    assert report["sampling"]["distribution_evaluation"] == "exact_multinomial"
+    assert report["sampling"]["possible_composition_count"] == 1_025
+    assert report["sampling"]["evaluated_draw_count"] == 1_025
+
+
+def test_exact_distribution_scales_with_state_count_for_large_two_rate_cluster() -> None:
+    distribution = _exact_cycle_distribution(
+        ((1.0, 2.0),),
+        family_count=100_000,
+        tasks_per_family=1,
+        trials_per_task=1,
+    )
+
+    assert len(distribution) == 100_001
+    assert distribution[0][0] == 400_000.0
+    assert distribution[-1][0] == 200_000.0
+    assert math.fsum(weight for _seconds, weight in distribution) == pytest.approx(1.0)
+
+
+def test_forecast_dense_composition_state_falls_back_before_memory_growth() -> None:
+    payload = _target_contract().to_dict()
+    payload.pop("contract_id")
+    tasks = (
+        TaskUnit("task-a", "family-a", "a" * 64),
+        TaskUnit("task-b", "family-b", "b" * 64),
+    )
+    payload.update(
+        {
+            "tasks": [task.to_dict() for task in tasks],
+            "trials_per_task": 1,
+            "task_pack_sha256": task_pack_sha256(tasks, 1),
+        }
+    )
+    target = ExperimentContract.from_mapping(payload)
+    report = forecast_runtime(
+        (_record(_pilot([float(index + 2) for index in range(500)], contract=target)),),
+        target_contract=target,
+        simulations=1_000,
+        seed=1,
+        confidence=0.95,
+        coverages=(0.95,),
+        experiment_overhead_seconds=0.0,
+        campaign_overhead_seconds=0.0,
+    )
+
+    assert report["sampling"]["possible_composition_count"] == 125_250
+    assert report["sampling"]["exact_state_cell_count"] == 62_625_000
+    assert report["sampling"]["distribution_evaluation"] == "deterministic_monte_carlo"
+
+
+def test_forecast_rejects_incomplete_cycle_claimed_as_matching_regime() -> None:
+    target = _target_contract()
+    incomplete = _pilot(
+        [200.0] * 9,
+        contract=target,
+        matching_cycle=True,
+        source_contract_id="d" * 64,
+    )
+    incomplete["blocks"] = incomplete["blocks"][:4]
+    observation = incomplete["cycle_observation"]
+    observation["complete_sample_count"] = 24
+    observation["observed_active_wall_seconds"] = 4_800.0
+    observation["observed_evaluator_wall_seconds"] = 4_800.0
+    observation["active_wall_seconds"] = 4_800.0
+    observation["completed_evaluator_wall_seconds"] = 4_800.0
+
+    with pytest.raises(ContractError, match="block cardinality"):
+        forecast_runtime(
+            (_record(incomplete),),
+            target_contract=target,
+            simulations=1_000,
+            seed=1,
+            confidence=0.95,
+            coverages=(0.95,),
+            experiment_overhead_seconds=0.0,
+            campaign_overhead_seconds=0.0,
+        )
+
+
+def test_forecast_does_not_count_cache_backed_cycles_for_wilks() -> None:
+    target = _target_contract()
+    cached = _pilot(
+        [200.0] * 9,
+        contract=target,
+        matching_cycle=True,
+        source_contract_id="d" * 64,
+    )
+    observation = cached["cycle_observation"]
+    observation["fresh_measurement"] = False
+    observation["cache_reused_arm_count"] = 2
+
+    report = forecast_runtime(
+        (_record(cached),),
+        target_contract=target,
+        simulations=1_000,
+        seed=1,
+        confidence=0.95,
+        coverages=(0.95,),
+        experiment_overhead_seconds=0.0,
+        campaign_overhead_seconds=0.0,
+    )
+
+    assert report["design"]["matching_target_cycle_count"] == 0
+    assert report["source_pilots"]["matching_target_cycle_sha256"] == []
+
+
 def test_forecast_rejects_duplicate_or_mismatched_pilots() -> None:
     contract = _target_contract()
     first = _record(_pilot([100.0] * 6, contract=contract))
@@ -305,21 +510,21 @@ def test_forecast_rejects_duplicate_or_mismatched_pilots() -> None:
 
     same_cycle_first = _record(
         _pilot(
-            [100.0] * 6,
+            [100.0] * 9,
             contract=contract,
             matching_cycle=True,
-            source_contract_id="d" * 64,
+            source_runtime_receipt_id="d" * 64,
         )
     )
     same_cycle_second = _record(
         _pilot(
-            [101.0] * 6,
+            [101.0] * 9,
             contract=contract,
             matching_cycle=True,
-            source_contract_id="d" * 64,
+            source_runtime_receipt_id="d" * 64,
         )
     )
-    with pytest.raises(ContractError, match="duplicate source_contract_id"):
+    with pytest.raises(ContractError, match="duplicate source_runtime_receipt_id"):
         forecast_runtime(
             (same_cycle_first, same_cycle_second),
             target_contract=contract,

@@ -50,7 +50,7 @@ from .contract import (
 from .evidence import EvidenceEnvelope, ResourceUsage, load_evidence
 from .promotion import SCREENING_FAILURE, PromotionVerdict, decide
 from .ref_journal import RefIntent, persist_intent, reconcile_ref_update
-from .runtime_receipt import load_runtime_receipt
+from .runtime_receipt import load_runtime_receipt, runtime_artifact_bindings
 
 CONFIG_SCHEMA = "crucible.supervisor.v4"
 TRAIN_PLAN_SCHEMA = "crucible.train-plan.v3"
@@ -818,7 +818,11 @@ class EvaluationArtifacts:
         if _file_sha256(candidate_raw_path, "candidate_raw") != candidate.raw_artifact_sha256:
             raise SupervisorError("candidate raw artifact hash does not match evidence")
         try:
-            runtime_receipt = load_runtime_receipt(runtime_receipt_path, contract=contract)
+            runtime_receipt = load_runtime_receipt(
+                runtime_receipt_path,
+                contract=contract,
+                expected_artifacts=runtime_artifact_bindings(baseline, candidate),
+            )
         except ContractError as exc:
             raise SupervisorError(f"invalid runtime receipt: {exc}") from exc
         receipt_status = runtime_receipt["observation"]["status"]
@@ -1235,6 +1239,9 @@ class CommandEvaluator:
         write_exclusive_json(contract_path, contract.to_dict())
         if output.exists() or output.is_symlink():  # pragma: no cover - fresh directory invariant
             raise SupervisorError("evaluation response already exists")
+        effective_wall = min(timeout, contract.budget.max_wall_seconds)
+        evaluation_started = time.monotonic()
+        evaluation_deadline = evaluation_started + effective_wall
         environment = _role_environment(
             self.config.evaluator_environment,
             attempt_dir=evaluation_dir,
@@ -1247,14 +1254,18 @@ class CommandEvaluator:
                 # The request was frozen before producer execution. Pass the
                 # evaluator's actual remaining campaign wall separately so
                 # the inner shared deadline cannot spend stale budget.
-                "CRUCIBLE_EVALUATION_WALL_SECONDS": repr(timeout),
+                "CRUCIBLE_EVALUATION_WALL_SECONDS": repr(effective_wall),
+                "CRUCIBLE_EVALUATION_STARTED_MONOTONIC": repr(evaluation_started),
+                "CRUCIBLE_EVALUATION_DEADLINE_MONOTONIC": repr(evaluation_deadline),
             },
         )
         _run_process(
             (str(entrypoint),),
             cwd=checkout,
             environment=environment,
-            timeout=timeout,
+            # The child reserves the final part of this total envelope for
+            # process-group reaping and the atomic runtime-receipt write.
+            timeout=effective_wall,
         )
         if output.is_symlink():
             raise SupervisorError("evaluation response must not be a symlink")

@@ -20,7 +20,7 @@ import math
 import random
 import re
 import stat
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +34,7 @@ from .runtime_budget import (
     validate_runtime_cycle_observation,
 )
 from .runtime_identity import (
+    RUNTIME_OUTER_FINALIZATION_GRACE_SECONDS,
     canonical_runtime_hash,
     runtime_bindings,
     runtime_design,
@@ -46,6 +47,7 @@ RUNTIME_FORECAST_METHOD = "opaque-campaign-family-upper-bootstrap.v2"
 
 _MAX_SIMULATIONS = 200_000
 _MAX_EXACT_COMPOSITIONS = 200_000
+_MAX_EXACT_COMPOSITION_CELLS = 2_000_000
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 _PILOT_V1_FIELDS = {
     "accounting_method",
@@ -202,7 +204,13 @@ def load_runtime_pilot(path: Path) -> tuple[str, dict[str, Any]]:
 
 def _validate_pilot(
     pilot: Mapping[str, Any], field: str
-) -> tuple[dict[str, str], str | None, str | None, str | None]:
+) -> tuple[
+    dict[str, str],
+    str | None,
+    str | None,
+    str | None,
+    str | None,
+]:
     schema = pilot.get("schema")
     if schema == RUNTIME_PILOT_SCHEMA:
         expected_fields = _PILOT_V2_FIELDS
@@ -230,7 +238,7 @@ def _validate_pilot(
             raise ContractError(f"{field}.{name} must be a SHA-256")
         bindings[name] = value
     if schema == LEGACY_RUNTIME_PILOT_SCHEMA:
-        return bindings, None, None, None
+        return bindings, None, None, None, None
 
     source_contract_id = pilot.get("source_contract_id")
     if not isinstance(source_contract_id, str) or _SHA256.fullmatch(source_contract_id) is None:
@@ -258,7 +266,13 @@ def _validate_pilot(
     status = observation.get("status")
     if status not in {"complete", "right_censored", "infrastructure_invalid"}:
         raise ContractError(f"{field}.cycle_observation.status is invalid")
-    return bindings, regime_digest, str(status), source_contract_id
+    return (
+        bindings,
+        regime_digest,
+        str(status),
+        source_contract_id,
+        source_runtime_receipt_id,
+    )
 
 
 def _simulate_cycle_totals(
@@ -283,14 +297,29 @@ def _simulate_cycle_totals(
     return totals
 
 
-def _compositions(total: int, parts: int) -> Sequence[tuple[int, ...]]:
-    if parts == 1:
-        return ((total,),)
-    return tuple(
-        (head, *tail)
-        for head in range(total + 1)
-        for tail in _compositions(total - head, parts - 1)
-    )
+def _compositions(total: int, parts: int) -> Iterator[tuple[int, ...]]:
+    """Yield weak compositions in O(parts) work per state and O(parts) memory."""
+
+    if total < 0 or parts <= 0:
+        raise ContractError("composition dimensions must be non-negative and non-empty")
+    counts = [0] * parts
+    counts[-1] = total
+    while True:
+        yield tuple(counts)
+        if counts[0] == total:
+            return
+
+        # Find the rightmost non-empty part, move one item left, and place
+        # the remainder in the final part.  Unlike materializing a length-
+        # ``total`` multiset for every state, this cost follows the number of
+        # rates and stays bounded by ``exact_state_cells``.
+        source = parts - 1
+        while counts[source] == 0:
+            source -= 1
+        remainder = counts[source] - 1
+        counts[source] = 0
+        counts[source - 1] += 1
+        counts[-1] = remainder
 
 
 def _exact_cycle_distribution(
@@ -304,16 +333,43 @@ def _exact_cycle_distribution(
 
     rows_per_family = tasks_per_family * 2 * trials_per_task
     cluster_probability = 1.0 / len(clusters)
-    factorial = math.factorial(family_count)
     values: list[tuple[float, float]] = []
+    if family_count == 1:
+        for cluster in clusters:
+            sample_probability = cluster_probability / len(cluster)
+            values.extend((rows_per_family * rate, sample_probability) for rate in cluster)
+        return values
+
     for cluster in clusters:
-        denominator = len(cluster) ** family_count
+        log_denominator = family_count * math.log(len(cluster))
+        log_factorial = math.lgamma(family_count + 1)
+        cluster_values: list[tuple[float, float]] = []
         for counts in _compositions(family_count, len(cluster)):
-            ways = factorial // math.prod(math.factorial(count) for count in counts)
+            log_probability = (
+                log_factorial
+                - math.fsum(math.lgamma(count + 1) for count in counts)
+                - log_denominator
+            )
             seconds = rows_per_family * math.fsum(
                 count * rate for count, rate in zip(counts, cluster, strict=True)
             )
-            values.append((seconds, cluster_probability * ways / denominator))
+            cluster_values.append((seconds, log_probability))
+        maximum_log_probability = max(
+            log_probability for _seconds, log_probability in cluster_values
+        )
+        scaled_weights = [
+            math.exp(log_probability - maximum_log_probability)
+            for _seconds, log_probability in cluster_values
+        ]
+        normalization = math.fsum(scaled_weights)
+        values.extend(
+            (seconds, cluster_probability * weight / normalization)
+            for (seconds, _log_probability), weight in zip(
+                cluster_values,
+                scaled_weights,
+                strict=True,
+            )
+        )
     return values
 
 
@@ -382,14 +438,22 @@ def forecast_runtime(
     matching_cycle_digests: list[str] = []
     matching_cycle_contract_ids: list[str] = []
     matching_cycle_evaluator_walls: list[float] = []
-    observed_source_contract_ids: set[str] = set()
+    observed_source_runtime_receipt_ids: set[str] = set()
     for index, (digest, pilot) in enumerate(ordered_pilots):
         field = f"runtime pilots[{index}]"
-        bindings, pilot_regime_id, cycle_status, source_contract_id = _validate_pilot(pilot, field)
-        if source_contract_id is not None:
-            if source_contract_id in observed_source_contract_ids:
-                raise ContractError("runtime forecast refuses duplicate source_contract_id values")
-            observed_source_contract_ids.add(source_contract_id)
+        (
+            bindings,
+            pilot_regime_id,
+            cycle_status,
+            source_contract_id,
+            source_runtime_receipt_id,
+        ) = _validate_pilot(pilot, field)
+        if source_runtime_receipt_id is not None:
+            if source_runtime_receipt_id in observed_source_runtime_receipt_ids:
+                raise ContractError(
+                    "runtime forecast refuses duplicate source_runtime_receipt_id values"
+                )
+            observed_source_runtime_receipt_ids.add(source_runtime_receipt_id)
         if bindings != target_bindings:
             differing = sorted(
                 name for name in _BINDING_FIELDS if bindings[name] != target_bindings[name]
@@ -407,12 +471,20 @@ def forecast_runtime(
         clusters.append(rates)
         for name in aggregate_counts:
             aggregate_counts[name] += counts[name]
-        if pilot_regime_id == target_regime_digest and cycle_status == "complete":
+        observation = pilot.get("cycle_observation")
+        fresh_measurement = (
+            isinstance(observation, Mapping) and observation.get("fresh_measurement") is True
+        )
+        if (
+            pilot_regime_id == target_regime_digest
+            and source_contract_id == target_contract.contract_id
+            and cycle_status == "complete"
+            and fresh_measurement
+        ):
             matching_cycle_digests.append(digest)
             if source_contract_id is None:  # pragma: no cover - v2 regime invariant
                 raise ContractError(f"{field} matching cycle lacks source_contract_id")
             matching_cycle_contract_ids.append(source_contract_id)
-            observation = pilot["cycle_observation"]
             if not isinstance(observation, Mapping):  # pragma: no cover - validated above
                 raise ContractError(f"{field} matching cycle lacks cycle_observation")
             matching_cycle_evaluator_walls.append(
@@ -429,9 +501,25 @@ def forecast_runtime(
         if uniform_tasks_per_family
         else _MAX_EXACT_COMPOSITIONS + 1
     )
+    exact_state_cells = (
+        sum(
+            (
+                len(cluster)
+                if family_count == 1
+                else math.comb(family_count + len(cluster) - 1, len(cluster) - 1) * len(cluster)
+            )
+            for cluster in clusters
+        )
+        if uniform_tasks_per_family
+        else _MAX_EXACT_COMPOSITION_CELLS + 1
+    )
     exact_distribution: list[tuple[float, float]] | None = None
     cycle_totals: list[float] | None = None
-    if uniform_tasks_per_family and possible_compositions <= _MAX_EXACT_COMPOSITIONS:
+    if (
+        uniform_tasks_per_family
+        and possible_compositions <= _MAX_EXACT_COMPOSITIONS
+        and exact_state_cells <= _MAX_EXACT_COMPOSITION_CELLS
+    ):
         exact_distribution = _exact_cycle_distribution(
             clusters,
             family_count=family_count,
@@ -463,7 +551,9 @@ def forecast_runtime(
             if exact_distribution is not None
             else _nearest_rank(cycle_totals or (), coverage)
         )
-        experiment_wall = math.ceil(cycle_quantile + experiment_overhead)
+        experiment_wall = math.ceil(
+            cycle_quantile + experiment_overhead + RUNTIME_OUTER_FINALIZATION_GRACE_SECONDS
+        )
         campaign_wall = math.ceil(experiment_wall + campaign_overhead)
         planning_markers.append(
             {
@@ -498,12 +588,16 @@ def forecast_runtime(
                 "experiment_wall_upper_tolerance_bound_seconds": (
                     None
                     if evaluator_upper_bound is None
-                    else math.ceil(evaluator_upper_bound + experiment_overhead)
+                    else math.ceil(evaluator_upper_bound + RUNTIME_OUTER_FINALIZATION_GRACE_SECONDS)
                 ),
                 "campaign_wall_upper_tolerance_bound_seconds": (
                     None
                     if evaluator_upper_bound is None
-                    else math.ceil(evaluator_upper_bound + experiment_overhead + campaign_overhead)
+                    else math.ceil(
+                        evaluator_upper_bound
+                        + RUNTIME_OUTER_FINALIZATION_GRACE_SECONDS
+                        + campaign_overhead
+                    )
                 ),
                 "model_based_expected_collection_active_time": _active_time(
                     mean_campaign_active,
@@ -536,6 +630,7 @@ def forecast_runtime(
         "sampling": {
             "distribution_evaluation": distribution_evaluation,
             "possible_composition_count": possible_compositions,
+            "exact_state_cell_count": exact_state_cells,
             "evaluated_draw_count": evaluated_draw_count,
             "monte_carlo_fallback_simulations": simulation_count,
             "monte_carlo_seed": seed,
@@ -552,6 +647,9 @@ def forecast_runtime(
         "model_based_target_cycle_active_seconds": cycle_summary,
         "overhead": {
             "experiment_seconds_per_cycle": experiment_overhead,
+            "outer_finalization_grace_seconds_per_cycle": (
+                RUNTIME_OUTER_FINALIZATION_GRACE_SECONDS
+            ),
             "campaign_seconds_per_cycle": campaign_overhead,
         },
         "model_based_planning_markers": planning_markers,
@@ -560,7 +658,7 @@ def forecast_runtime(
             "block plans assume family exchangeability inside each source campaign",
             "source campaign clusters are resampled but their count may be small",
             "family blocks inside one campaign are not independent Wilks observations",
-            "distribution-free cycle plans count only exact matching target cycles",
+            "distribution-free cycle plans require the exact frozen source contract",
             "calendar diversity and provider-capacity waits are outside active wall time",
         ],
     }

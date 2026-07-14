@@ -13,7 +13,7 @@ from .contract import ContractError, ExperimentContract
 from .evidence import EvidenceEnvelope, expected_pairs, validate_evidence_identity
 from .runtime_budget import RUNTIME_ACCOUNTING_METHOD, RUNTIME_PILOT_SCHEMA
 from .runtime_identity import runtime_regime, runtime_regime_id
-from .runtime_receipt import load_runtime_receipt
+from .runtime_receipt import load_runtime_receipt, runtime_artifact_bindings
 
 
 def _raw_durations(path: Path, field: str) -> tuple[str, dict[tuple[str, int], float]]:
@@ -98,8 +98,6 @@ def build_runtime_pilot(
 ) -> dict[str, Any]:
     """Project verified paired arm artifacts into identity-free family blocks."""
 
-    receipt = load_runtime_receipt(runtime_receipt_path, contract=contract)
-
     baseline = _arm_samples(
         contract,
         arm="baseline",
@@ -111,6 +109,11 @@ def build_runtime_pilot(
         arm="candidate",
         results_path=candidate_results_path,
         evidence=candidate_evidence,
+    )
+    receipt = load_runtime_receipt(
+        runtime_receipt_path,
+        contract=contract,
+        expected_artifacts=runtime_artifact_bindings(baseline_evidence, candidate_evidence),
     )
     family_samples: dict[str, list[dict[str, Any]]] = {}
     family_order: list[str] = []
@@ -138,6 +141,19 @@ def build_runtime_pilot(
     expected_receipt_status = "infrastructure_invalid" if infrastructure_count else "complete"
     if receipt["observation"]["status"] != expected_receipt_status:
         raise ContractError("runtime receipt status does not match pilot arm artifacts")
+    measured_arms = [
+        arm
+        for arm in receipt["arms"]
+        if isinstance(arm, Mapping) and arm.get("outcome") not in {"skipped", "screened"}
+    ]
+    cache_reused_arm_count = sum(
+        arm.get("measurement_source") in {"partial_cache", "full_cache"} for arm in measured_arms
+    )
+    fresh_measurement = (
+        len(measured_arms) == 2
+        and cache_reused_arm_count == 0
+        and all(arm.get("measurement_source") == "fresh" for arm in measured_arms)
+    )
 
     cycle_observation: dict[str, Any] = {
         "status": cycle_status,
@@ -146,6 +162,8 @@ def build_runtime_pilot(
         "complete_sample_count": len(flattened) - infrastructure_count - censored_count,
         "right_censored_sample_count": censored_count,
         "infrastructure_failure_sample_count": infrastructure_count,
+        "fresh_measurement": fresh_measurement,
+        "cache_reused_arm_count": cache_reused_arm_count,
     }
     if cycle_status == "complete":
         cycle_observation["active_wall_seconds"] = observed_active_wall

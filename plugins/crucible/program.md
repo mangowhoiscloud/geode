@@ -113,22 +113,34 @@ and fail closed when prose and bytes disagree.
 4. Bind runtime ownership at the experiment boundary. Use
    `operational_deadline` with `assay_config.timeout=null` only with explicit
    `nonzero_clean_timeout` risk acceptance. It is an operator deadline, not a
-   confidence bound. Use `contract_ceiling` only when a positive row timeout is
+   confidence bound, and it must exceed its declared cleanup grace so the
+   experiment retains positive active runtime. Use `contract_ceiling` only when a positive row timeout is
    intentionally part of the assay; that envelope guarantees process
    termination, not clean completion, and sums bounded rows, fixed setup, and
-   cleanup terms without an arbitrary headroom multiplier. A `pilot_bootstrap` admission requires a
+   cleanup terms without an arbitrary headroom multiplier. Reserve the fixed
+   5.5-second process-reap/receipt finalization term inside every experiment
+   envelope. A `pilot_bootstrap` admission requires a
    completed uncensored `runtime-pilot.v2` from the exact runtime regime. Build
    each pilot with its verified runtime receipt so a shortened live wall cannot
-   masquerade as the frozen target wall. Treat summed row elapsed as an
+   masquerade as the frozen target wall. The receipt must bind the exact arm
+   evidence/raw identities and record fresh/cache provenance; a cache-backed
+   cycle may inform replay economics but never increments the independent
+   target-cycle count. A complete cycle must contain exactly the family blocks
+   and paired rows declared by its runtime regime. Treat summed row elapsed as an
    active-compute planning model; only completed matching-cycle evaluator wall
-   observations may qualify a Wilks upper tolerance bound.
+   observations from the exact same frozen source contract may qualify a Wilks
+   upper tolerance bound. Repeated cycles share that contract ID but must carry
+   distinct hash-bound runtime receipt IDs.
 5. Run the quota-window preflight. `cap_fit` and `history_fit` are capacity
    estimates; `defer` makes `prepare` exit 3 and blocks chained launch. None is
    a provider guarantee.
-6. Run the supervisor. Baseline executes first against the shared deadline;
-   candidate receives its actual remainder. An unreachable promotion rejects
+6. Run the supervisor. Its absolute shared deadline starts before evaluator
+   process startup; baseline executes first and candidate receives its actual
+   remainder. The separately bound fixed finalization grace is only for paid
+   process-tree reaping and the receipt write. An unreachable promotion rejects
    the candidate arm without spending it. A clean timeout is recorded as a
-   right-censored lower bound and never reused as an exact runtime duration.
+   right-censored lower bound before checkout cleanup starts and is never
+   reused as an exact runtime duration.
 7. With `CRUCIBLE_ROW_CACHE_ROOT` explicitly allowlisted, identity-proven,
    infrastructure-clean semantic rows may be reused. Missing tasks run again
    and exact full coverage remains mandatory. A fail-fast infrastructure stop
@@ -140,7 +152,7 @@ and fail closed when prose and bytes disagree.
    then require a separate human-reviewed core promotion change.
 9. Treat model p95/p99 as forecast markers until exact matching full-cycle
    observations exist. `runtime-forecast` derives the matching count from the
-   regime IDs; operators cannot increment it manually. Distribution-free
+   regime and exact source-contract IDs; operators cannot increment it manually. Distribution-free
    certification counts independent completed target cycles, not rows.
 
 ## Dynamic feedback

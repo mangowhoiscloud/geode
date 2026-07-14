@@ -68,13 +68,13 @@
       "id": "file:plugins/crucible/tau2_live.py",
       "filePath": "plugins/crucible/tau2_live.py",
       "name": "Paired tau2 evaluator",
-      "summary": "Derives frozen runner arguments, gives baseline and candidate one shared monotonic deadline, emits hash-bound runtime receipts, screens unreachable train arms at zero candidate cost, and projects structural failure codes. Reuses identity-proven cached rows across relaunches and stops the paid process group after finalized infrastructure contamination.",
+      "summary": "Derives frozen runner arguments, gives baseline and candidate one supervisor-anchored shared deadline, and emits receipts bound to exact arm artifacts and cache provenance. Screens unreachable train arms at zero candidate cost, projects structural failure codes, reuses identity-proven cached rows across relaunches, and stops the paid process group after finalized infrastructure contamination.",
       "tags": [
         "crucible",
         "evaluator",
         "paired"
       ],
-      "contentSha256": "bc8a84f67a899e74f6f020bf43e433e88385990f1f20b2378dec4d847d1eaf41"
+      "contentSha256": "4deee0c2a96fc3c208a4010a18c752beac0d6397288a149d037832ba459283ce"
     },
     {
       "id": "file:plugins/crucible/row_cache.py",
@@ -92,25 +92,25 @@
       "id": "file:plugins/crucible/runtime_receipt.py",
       "filePath": "plugins/crucible/runtime_receipt.py",
       "name": "Runtime receipt",
-      "summary": "Binds shared-deadline arm allocations, right-censoring, measured cleanup, and explicitly unmeasured outer scopes to the exact experiment runtime regime.",
+      "summary": "Binds supervisor-anchored shared-deadline arm allocations, cache provenance, exact evidence and raw artifact identities, right-censoring, measured cleanup, and explicitly unmeasured outer scopes to the experiment runtime regime.",
       "tags": [
         "crucible",
         "deadline",
         "evidence"
       ],
-      "contentSha256": "2620dbd8b890ff61c8aa413b987ccf224b1a0d798a9ffe40bbfbcd33354a6f90"
+      "contentSha256": "c54202ce3bd60059005303357c6632b5ea10b36aa0cc8140d0aad996df624811"
     },
     {
       "id": "file:plugins/crucible/supervisor.py",
       "filePath": "plugins/crucible/supervisor.py",
       "name": "Promotion supervisor",
-      "summary": "Preflights authority inputs, binds optional producer objectives, passes the evaluator its live remaining wall, validates runtime receipts, rejects duplicate baseline-bound treatments, reaps role process groups, and owns the monotone search ref.",
+      "summary": "Preflights authority inputs, binds optional producer objectives, anchors the evaluator to an absolute live deadline with fixed finalization grace, validates artifact-bound runtime receipts, rejects duplicate baseline-bound treatments, reaps role process groups, and owns the monotone search ref.",
       "tags": [
         "crucible",
         "supervisor",
         "promotion"
       ],
-      "contentSha256": "b850648539bae09ae796438e9d7e62d91968ee41aaf4f76720cda3f1a171575e"
+      "contentSha256": "d7068b703cbd428c87000d230275887300a74074718b0f97ae65435f68ba84b9"
     },
     {
       "id": "file:scripts/eval/crucible_tau2_evaluator.py",
@@ -139,13 +139,13 @@
       "id": "file:plugins/crucible/program.md",
       "filePath": "plugins/crucible/program.md",
       "name": "Crucible program",
-      "summary": "Centralizes experimentation, constraints, preferences, setup, power and runtime admission, deduplication, infrastructure-safe checkpoint reuse, usage accounting, and the closed dynamic-feedback boundary; only its candidate_program section is model-facing.",
+      "summary": "Centralizes experimentation, constraints, preferences, setup, power and runtime admission, artifact-bound runtime evidence, deduplication, infrastructure-safe checkpoint reuse, usage accounting, and the closed dynamic-feedback boundary; only its candidate_program section is model-facing.",
       "tags": [
         "crucible",
         "producer",
         "program"
       ],
-      "contentSha256": "a2d21e6f12a6ef54f5b8538bc9dac68ea8bf99aa66cc76c9c05f691edba0d06e"
+      "contentSha256": "d23a227b4ec1a13147f4fb307df89457882c853b4323e1cef16e0cc18d88e1fc"
     },
     {
       "id": "file:plugins/crucible/producers/replay.py",

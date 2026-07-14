@@ -11,13 +11,15 @@ from typing import Any, Literal
 
 from .artifacts import load_json_object, write_exclusive_json
 from .contract import ContractError, ExperimentContract
+from .evidence import EvidenceEnvelope
 from .runtime_identity import (
     RUNTIME_ARM_WALL_POLICY,
+    RUNTIME_OUTER_FINALIZATION_GRACE_SECONDS,
     canonical_runtime_hash,
     runtime_regime_id,
 )
 
-RUNTIME_RECEIPT_SCHEMA = "crucible.runtime-receipt.v1"
+RUNTIME_RECEIPT_SCHEMA = "crucible.runtime-receipt.v2"
 
 RuntimeStatus = Literal[
     "complete",
@@ -26,6 +28,7 @@ RuntimeStatus = Literal[
     "operator_invalid",
 ]
 ArmOutcome = Literal["complete", "skipped", "screened", "invalid", "right_censored"]
+MeasurementSource = Literal["fresh", "partial_cache", "full_cache", "synthetic"]
 _RUNTIME_STATUSES = {
     "complete",
     "right_censored",
@@ -33,11 +36,12 @@ _RUNTIME_STATUSES = {
     "operator_invalid",
 }
 _ARM_OUTCOMES = {"complete", "skipped", "screened", "invalid", "right_censored"}
+_MEASUREMENT_SOURCES = {"fresh", "partial_cache", "full_cache", "synthetic"}
 _UNMEASURED_CLEANUP_SCOPES = [
-    "outer_evaluator_process_startup_and_request_parse",
     "outer_supervisor_process_reap",
     "ledger_and_ref_finalization",
 ]
+_CLOCK_TOLERANCE_SECONDS = 1e-6
 
 
 def _require_fields(value: Mapping[str, Any], field: str, required: set[str]) -> None:
@@ -90,14 +94,35 @@ class SharedRuntimeDeadline:
         budget_seconds: float,
         *,
         clock: Callable[[], float] = time.monotonic,
+        started_seconds: float | None = None,
+        deadline_seconds: float | None = None,
     ) -> None:
         if not math.isfinite(budget_seconds) or budget_seconds <= 0.0:
             raise ContractError("runtime deadline budget_seconds must be positive and finite")
+        if budget_seconds <= RUNTIME_OUTER_FINALIZATION_GRACE_SECONDS:
+            raise ContractError("runtime deadline must exceed its fixed finalization grace")
         self.contract = contract
         self.budget_seconds = float(budget_seconds)
         self._clock = clock
-        self._started = clock()
-        self._deadline = self._started + self.budget_seconds
+        now = clock()
+        self._started = now if started_seconds is None else float(started_seconds)
+        self._outer_deadline = (
+            self._started + self.budget_seconds
+            if deadline_seconds is None
+            else float(deadline_seconds)
+        )
+        self._deadline = self._outer_deadline - RUNTIME_OUTER_FINALIZATION_GRACE_SECONDS
+        if not math.isfinite(self._started) or not math.isfinite(self._outer_deadline):
+            raise ContractError("runtime deadline bounds must be finite")
+        if self._started > now + 1e-9:
+            raise ContractError("runtime deadline cannot start in the future")
+        if not math.isclose(
+            self._outer_deadline - self._started,
+            self.budget_seconds,
+            rel_tol=0.0,
+            abs_tol=1e-6,
+        ):
+            raise ContractError("runtime deadline bounds do not match budget_seconds")
         self._arms: list[dict[str, Any]] = []
         self._cleanup: list[dict[str, Any]] = []
         self._active_arm: ArmClock | None = None
@@ -105,6 +130,12 @@ class SharedRuntimeDeadline:
     @property
     def elapsed_seconds(self) -> float:
         return max(0.0, self._clock() - self._started)
+
+    @property
+    def deadline_seconds(self) -> float:
+        """Absolute deadline for paid arm work, before fixed finalization grace."""
+
+        return self._deadline
 
     def remaining_seconds(self) -> float:
         remaining = self._deadline - self._clock()
@@ -130,18 +161,35 @@ class SharedRuntimeDeadline:
         self._active_arm = timer
         return timer
 
-    def finish_arm(self, timer: ArmClock, outcome: ArmOutcome) -> None:
+    def finish_arm(
+        self,
+        timer: ArmClock,
+        outcome: ArmOutcome,
+        *,
+        measurement_source: MeasurementSource = "fresh",
+    ) -> None:
         if self._active_arm != timer:
             raise ContractError("runtime arm timer is not active")
+        if measurement_source not in _MEASUREMENT_SOURCES:
+            raise ContractError("runtime arm measurement_source is invalid")
+        observed_wall_seconds = max(0.0, self._clock() - timer.started_seconds)
+        crossed_deadline = (
+            outcome == "complete"
+            and observed_wall_seconds > timer.allocated_wall_seconds + _CLOCK_TOLERANCE_SECONDS
+        )
+        recorded_outcome: ArmOutcome = "right_censored" if crossed_deadline else outcome
         self._arms.append(
             {
                 "arm": timer.arm,
                 "allocated_wall_seconds": timer.allocated_wall_seconds,
-                "observed_wall_seconds": max(0.0, self._clock() - timer.started_seconds),
-                "outcome": outcome,
+                "observed_wall_seconds": observed_wall_seconds,
+                "outcome": recorded_outcome,
+                "measurement_source": measurement_source,
             }
         )
         self._active_arm = None
+        if crossed_deadline:
+            raise TimeoutError(f"{timer.arm} arm crossed its shared runtime allocation")
 
     def record_synthetic_arm(
         self,
@@ -159,6 +207,7 @@ class SharedRuntimeDeadline:
                 "allocated_wall_seconds": 0.0,
                 "observed_wall_seconds": 0.0,
                 "outcome": outcome,
+                "measurement_source": "synthetic",
             }
         )
 
@@ -177,6 +226,7 @@ class SharedRuntimeDeadline:
         status: RuntimeStatus,
         *,
         censoring_reason: str | None = None,
+        artifacts: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         if self._active_arm is not None:
             raise ContractError("cannot finalize a runtime receipt with an active arm")
@@ -192,7 +242,7 @@ class SharedRuntimeDeadline:
                 raise ContractError("right-censored runtime receipt requires a reason")
             observation["censoring"] = {
                 "kind": "right",
-                "limit_seconds": self.budget_seconds,
+                "limit_seconds": self.budget_seconds - RUNTIME_OUTER_FINALIZATION_GRACE_SECONDS,
                 "reason": censoring_reason,
             }
         elif censoring_reason is not None:
@@ -208,8 +258,11 @@ class SharedRuntimeDeadline:
             ),
             "wall_policy": RUNTIME_ARM_WALL_POLICY,
             "configured_experiment_wall_seconds": self.budget_seconds,
+            "active_evaluation_wall_seconds": self.budget_seconds
+            - RUNTIME_OUTER_FINALIZATION_GRACE_SECONDS,
             "observation": observation,
             "arms": list(self._arms),
+            "artifacts": dict(artifacts or {}),
             "cleanup": {
                 "measured_scope": "evaluator_inner",
                 "phases": list(self._cleanup),
@@ -226,8 +279,13 @@ class SharedRuntimeDeadline:
         status: RuntimeStatus,
         *,
         censoring_reason: str | None = None,
+        artifacts: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
-        payload = self.payload(status, censoring_reason=censoring_reason)
+        payload = self.payload(
+            status,
+            censoring_reason=censoring_reason,
+            artifacts=artifacts,
+        )
         receipt = {**payload, "runtime_receipt_id": canonical_runtime_hash(payload)}
         write_exclusive_json(path, receipt)
         return receipt
@@ -237,6 +295,7 @@ def load_runtime_receipt(
     path: Path,
     *,
     contract: ExperimentContract,
+    expected_artifacts: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Validate a contained receipt before trusting its timing classification."""
 
@@ -245,6 +304,8 @@ def load_runtime_receipt(
         row,
         "runtime receipt",
         {
+            "artifacts",
+            "active_evaluation_wall_seconds",
             "arms",
             "cleanup",
             "configured_experiment_wall_seconds",
@@ -272,6 +333,13 @@ def load_runtime_receipt(
     )
     if configured_wall > contract.budget.max_wall_seconds + 1e-9:
         raise ContractError("runtime receipt configured wall exceeds the frozen contract wall")
+    active_wall = _finite_positive(
+        row.get("active_evaluation_wall_seconds"),
+        "runtime receipt active_evaluation_wall_seconds",
+    )
+    expected_active_wall = configured_wall - RUNTIME_OUTER_FINALIZATION_GRACE_SECONDS
+    if not math.isclose(active_wall, expected_active_wall, rel_tol=0.0, abs_tol=1e-9):
+        raise ContractError("runtime receipt active wall does not reserve fixed finalization grace")
     if row.get("runtime_regime_id") != runtime_regime_id(
         contract,
         experiment_wall_seconds=configured_wall,
@@ -308,8 +376,8 @@ def load_runtime_receipt(
             censoring.get("limit_seconds"),
             "runtime receipt observation.censoring.limit_seconds",
         )
-        if not math.isclose(censoring_limit, configured_wall, rel_tol=0.0, abs_tol=1e-9):
-            raise ContractError("runtime receipt censoring limit must equal configured wall")
+        if not math.isclose(censoring_limit, active_wall, rel_tol=0.0, abs_tol=1e-9):
+            raise ContractError("runtime receipt censoring limit must equal the active wall")
         _bounded_text(
             censoring.get("reason"),
             "runtime receipt observation.censoring.reason",
@@ -326,7 +394,13 @@ def load_runtime_receipt(
         _require_fields(
             arm,
             field,
-            {"allocated_wall_seconds", "arm", "observed_wall_seconds", "outcome"},
+            {
+                "allocated_wall_seconds",
+                "arm",
+                "measurement_source",
+                "observed_wall_seconds",
+                "outcome",
+            },
         )
         expected_arm = "baseline" if index == 0 else "candidate"
         if arm.get("arm") != expected_arm:
@@ -334,6 +408,9 @@ def load_runtime_receipt(
         outcome = arm.get("outcome")
         if outcome not in _ARM_OUTCOMES:
             raise ContractError(f"{field}.outcome is invalid")
+        measurement_source = arm.get("measurement_source")
+        if measurement_source not in _MEASUREMENT_SOURCES:
+            raise ContractError(f"{field}.measurement_source is invalid")
         allocated = _finite_nonnegative(
             arm.get("allocated_wall_seconds"),
             f"{field}.allocated_wall_seconds",
@@ -344,10 +421,16 @@ def load_runtime_receipt(
         )
         if outcome in {"skipped", "screened"} and (allocated != 0.0 or arm_observed != 0.0):
             raise ContractError(f"{field} synthetic outcomes must have zero timing")
+        if outcome in {"skipped", "screened"} and measurement_source != "synthetic":
+            raise ContractError(f"{field} synthetic outcomes require synthetic provenance")
+        if outcome not in {"skipped", "screened"} and measurement_source == "synthetic":
+            raise ContractError(f"{field} measured outcomes cannot use synthetic provenance")
         if outcome not in {"skipped", "screened"} and allocated <= 0.0:
             raise ContractError(f"{field} measured outcomes require positive allocation")
-        if allocated > configured_wall + 1e-9:
-            raise ContractError(f"{field}.allocated_wall_seconds exceeds configured wall")
+        if allocated > active_wall + 1e-9:
+            raise ContractError(f"{field}.allocated_wall_seconds exceeds active wall")
+        if outcome == "complete" and arm_observed > allocated + _CLOCK_TOLERANCE_SECONDS:
+            raise ContractError(f"{field} complete observation exceeds its allocation")
         observed_components.append(arm_observed)
 
     outcomes = [arm.get("outcome") for arm in arms if isinstance(arm, Mapping)]
@@ -371,6 +454,27 @@ def load_runtime_receipt(
         raise ContractError("infrastructure-invalid runtime receipt lacks an invalid arm")
     if status == "right_censored" and len(outcomes) == 2 and "right_censored" not in outcomes:
         raise ContractError("right-censored runtime receipt lacks a censored arm")
+
+    artifacts = row.get("artifacts")
+    if not isinstance(artifacts, Mapping):
+        raise ContractError("runtime receipt artifacts must be an object")
+    if set(artifacts) - {"baseline", "candidate"}:
+        raise ContractError("runtime receipt artifacts contains an unknown arm")
+    for arm_name, binding in artifacts.items():
+        field = f"runtime receipt artifacts.{arm_name}"
+        if not isinstance(binding, Mapping):
+            raise ContractError(f"{field} must be an object")
+        _require_fields(binding, field, {"evidence_id", "raw_artifact_sha256"})
+        for digest_field in ("evidence_id", "raw_artifact_sha256"):
+            digest = binding.get(digest_field)
+            if (
+                not isinstance(digest, str)
+                or len(digest) != 64
+                or any(char not in "0123456789abcdef" for char in digest)
+            ):
+                raise ContractError(f"{field}.{digest_field} must be a SHA-256")
+    if expected_artifacts is not None and dict(artifacts) != dict(expected_artifacts):
+        raise ContractError("runtime receipt artifacts do not match the evaluated arm artifacts")
 
     cleanup = row.get("cleanup")
     if not isinstance(cleanup, Mapping):
@@ -412,8 +516,27 @@ def load_runtime_receipt(
     return row
 
 
+def runtime_artifact_bindings(
+    baseline: EvidenceEnvelope,
+    candidate: EvidenceEnvelope,
+) -> dict[str, dict[str, str]]:
+    """Bind a runtime observation to the exact evidence and raw arm bytes."""
+
+    return {
+        "baseline": {
+            "evidence_id": baseline.evidence_id,
+            "raw_artifact_sha256": baseline.raw_artifact_sha256,
+        },
+        "candidate": {
+            "evidence_id": candidate.evidence_id,
+            "raw_artifact_sha256": candidate.raw_artifact_sha256,
+        },
+    }
+
+
 __all__ = [
     "RUNTIME_RECEIPT_SCHEMA",
     "SharedRuntimeDeadline",
     "load_runtime_receipt",
+    "runtime_artifact_bindings",
 ]
