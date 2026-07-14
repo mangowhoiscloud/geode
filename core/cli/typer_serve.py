@@ -21,6 +21,20 @@ from core.wiring.startup import check_readiness
 log = logging.getLogger(__name__)
 
 
+def _gateway_checkpoint_session_id(session_key: str) -> str:
+    """Stable machine-instance id for a gateway thread.
+
+    One messaging thread (channel/thread/sender ``session_key``) maps to
+    ONE session-checkpoint instance across turns, so guard counters and
+    cognitive state persist per thread and per-turn checkpoints stop
+    accumulating (docs/architecture/session-state-machine.md).
+    """
+    import hashlib
+
+    digest = hashlib.sha256(session_key.encode("utf-8")).hexdigest()[:12]
+    return f"s-gw-{digest}"
+
+
 def serve(
     poll_interval: float = typer.Option(
         3.0, "--poll", "-p", help="Gateway poll interval (seconds)"
@@ -209,14 +223,37 @@ def serve(
                     session_key,
                 )
 
-        # Single factory — DAEMON mode (hitl=0, quiet, time-based)
+        # Single factory — DAEMON mode (hitl=0, quiet, time-based).
+        # A messaging thread is ONE machine instance: the stable derived
+        # session id makes every turn share one checkpoint chain instead of
+        # leaving an immortal per-turn ``s-<uuid>`` checkpoint behind
+        # (docs/architecture/session-state-machine.md).
+        _gw_session_id = _gateway_checkpoint_session_id(session_key) if session_key else ""
         _executor, loop = _gw_services.create_session(
             SessionMode.DAEMON,
             conversation=ctx,
             system_suffix=_GATEWAY_SUFFIX,
             time_budget_override=_gw_time_budget,
             propagate_context=True,
+            session_id=_gw_session_id,
         )
+        if _gw_session_id:
+            # Machine continuity across turns — cognitive state + guard
+            # counters come from the thread's checkpoint; the conversation
+            # itself stays session_store-owned (restored above). A TERMINAL
+            # prior state (context exhaustion completed the instance) means
+            # the thread starts a FRESH machine under the same id: reopen
+            # the edge explicitly and skip the restore so the old goal and
+            # guard counters do not leak into the new topic.
+            from core.memory.session_checkpoint import SessionCheckpoint, SessionStatus
+
+            _cp = SessionCheckpoint()
+            _prior_state = _cp.load(_gw_session_id)
+            if _prior_state is not None:
+                if _prior_state.status in (SessionStatus.ACTIVE, SessionStatus.PAUSED):
+                    loop.restore_from_checkpoint(_prior_state)
+                else:
+                    _cp.reopen(_gw_session_id)
         try:
             result = await loop.arun(content)
 
@@ -225,6 +262,9 @@ def serve(
                 if result and result.termination_reason == "context_exhausted":
                     # Context exhausted → clear session so next message starts fresh
                     runtime.session_store.delete(session_key)
+                    # Terminal edge the gateway DOES own: the thread's
+                    # machine instance is finished.
+                    loop.mark_session_completed()
                     log.info("Session cleared after context exhaustion: %s", session_key)
                 else:
                     runtime.session_store.set(

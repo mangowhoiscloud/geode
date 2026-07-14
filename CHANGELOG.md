@@ -45,10 +45,40 @@ functional change.
 
 ---
 
-## [Unreleased]
+## [0.99.329] - 2026-07-14
 
 ### Added
 
+- **Session state machine — enforced transition graph + docs.** The
+  session automaton is now a documented, enforced machine
+  (`docs/architecture/session-state-machine.md` + `.ko.md`: state graph,
+  transition owners, machine-instance identity, accepted gaps).
+  `SessionCheckpoint.transition()` validates every status write against
+  `_LEGAL_TRANSITIONS`; COMPLETED/ERROR are terminal and re-enter ACTIVE
+  only through the explicit `reopen()` edge (taken by the IPC
+  resume-by-id handler). An illegal edge is refused with a warning;
+  `save()` on a terminal instance performs a warned implicit reopen so a
+  resumed conversation's data is never dropped. Persisted status strings
+  normalize into the closed `SessionStatus` alphabet on load (unknown →
+  ERROR with a warning).
+- **Transitions ledger (observability).** Every edge — legal transition,
+  reopen, implicit reopen, and REFUSED attempt — appends one structured
+  row to `<sessions>/transitions.jsonl` (`{ts, session_id, edge, from,
+  to}`), best-effort and append-only, making "how did this session reach
+  this state" answerable after the fact. Hook-system integration is
+  deliberately deferred to the upcoming hook-system redesign; the ledger
+  is the substrate it will consume.
+- **Gateway machine-instance identity.** A messaging thread now maps to
+  ONE checkpoint instance: the gateway derives a stable
+  `s-gw-<sha256[:12]>` session id from the binding session_key
+  (`create_session` gained an explicit `session_id` parameter), restores
+  cognitive state + guard counters from the thread's checkpoint each
+  turn, and owns two terminal edges — context exhaustion marks the
+  instance COMPLETED, ask parking marks it PAUSED. Previously every
+  gateway turn abandoned an immortal per-turn `s-<uuid>` checkpoint.
+  Guards: `tests/core/agent/test_loop_state_machine.py` (transition
+  enforcement, reopen, implicit reopen, normalization, ledger),
+  `tests/core/cli/test_gateway_session_identity.py`.
 - **Crucible runtime forecasts are reproducible from verified full cycles.**
   The `runtime-forecast` command combines digest-bound opaque runtime pilots,
   targets a frozen experiment contract, preserves campaign and family
@@ -108,6 +138,7 @@ functional change.
   Exact forecast enumeration is iterative, special-cases one-family designs,
   computes multinomial weights in log space, generates each composition in
   O(rate-count) work, and falls back before its dense state can exhaust memory.
+
 ## [0.99.328] - 2026-07-14
 
 ### Changed

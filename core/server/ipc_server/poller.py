@@ -758,6 +758,14 @@ class CLIPoller:
             return {"type": "ack"}
 
         if msg_type == "exit":
+            # Clean client exit — the REPL surface's ACTIVE -> COMPLETED
+            # edge (docs/architecture/session-state-machine.md § owners).
+            try:
+                _mark_done = getattr(loop, "mark_session_completed", None)
+                if callable(_mark_done):
+                    _mark_done()
+            except Exception:
+                log.debug("mark_session_completed on exit failed", exc_info=True)
             return None
 
         if msg_type == "approval_response":
@@ -885,6 +893,14 @@ class CLIPoller:
         msg_type = msg.get("type", "")
 
         if msg_type == "exit":
+            # Clean client exit — the REPL surface's ACTIVE -> COMPLETED
+            # edge (docs/architecture/session-state-machine.md § owners).
+            try:
+                _mark_done = getattr(loop, "mark_session_completed", None)
+                if callable(_mark_done):
+                    _mark_done()
+            except Exception:
+                log.debug("mark_session_completed on exit failed", exc_info=True)
             return None
 
         if msg_type == "prompt":
@@ -1236,6 +1252,11 @@ class CLIPoller:
                     state = cp.load(sid)
             if state is None:
                 return {"type": "resume_error", "message": "No resumable session found"}
+
+            # Resume-by-id of a terminal (completed/error) instance takes
+            # the explicit reopen edge of the session automaton — the
+            # per-turn save() would otherwise warn about an implicit reopen.
+            cp.reopen(state.session_id)
 
             # Restore conversation messages
             conversation.messages.clear()
