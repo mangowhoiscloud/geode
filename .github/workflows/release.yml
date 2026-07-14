@@ -606,10 +606,15 @@ jobs:
       - name: Refresh pinned Python resources from the published PyPI package
         if: steps.tap-release-state.outputs.current != 'true'
         run: |
-          brew update-python-resources tap/Formula/geode.rb \
-            --package-name geode-agent \
-            --version "$GEODE_VERSION" \
-            --ignore-main-package-cooldown
+          resource_args=(
+            tap/Formula/geode.rb
+            --package-name geode-agent
+            --version "$GEODE_VERSION"
+          )
+          if [[ "$(brew update-python-resources --help)" == *"--ignore-main-package-cooldown"* ]]; then
+            resource_args+=(--ignore-main-package-cooldown)
+          fi
+          brew update-python-resources "${resource_args[@]}"
 
       - name: Revalidate the complete generated formula
         run: |
