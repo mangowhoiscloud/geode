@@ -129,7 +129,7 @@ hooks.register_prefix("*", mirror_everything)  # 와일드카드 구독`}</pre>
             <p>
               모든 <code>trigger*()</code> 호출은 활성 <code>RunTranscript</code>에
               타입이 지정된 Activity row 한 줄로 미러링됩니다. 56개 이벤트 전부
-              구체 타입의 row를 가집니다 (19 lifecycle + 43 K-group). <code>action</code>
+              구체 타입의 row를 가집니다 (19 lifecycle + 37 K-group). <code>action</code>
               필드가 discriminator이고, <code>GenericActivityRow</code>는 정상 경로
               목적지가 아니라 fail-soft 폴백 전용입니다.
             </p>

@@ -309,10 +309,20 @@ def _emit_state_event(
     from core.hooks import HookEvent
     from core.hooks.dispatch import fire_hook
 
+    payload: dict[str, Any] = {
+        "trigger_id": trigger_id,
+        "ts": ts,
+        "detail": detail,
+        "stage": state,
+    }
+    # Failure stages surface ``error`` so the persistence sink derives
+    # status="failed" (it keys on error/has_error, not on payload stage).
+    if state in ("runner_error", "parse_error"):
+        payload["error"] = detail or state
     fire_hook(
         hooks,
         HookEvent.SELF_IMPROVING_AUTO_TRIGGER,
-        {"trigger_id": trigger_id, "ts": ts, "detail": detail, "stage": state},
+        payload,
     )
 
 

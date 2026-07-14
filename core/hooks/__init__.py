@@ -7,6 +7,7 @@ without depending on core.orchestration:
 """
 
 from core.hooks.system import (
+    COLLAPSED_EVENT_VALUES,
     LEGACY_EVENT_VALUES,
     DuplicateHookRegistrationError,
     HookDispatch,
@@ -22,6 +23,7 @@ from core.hooks.system import (
 )
 
 __all__ = [
+    "COLLAPSED_EVENT_VALUES",
     "LEGACY_EVENT_VALUES",
     "DuplicateHookRegistrationError",
     "HookDispatch",

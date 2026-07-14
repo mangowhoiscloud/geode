@@ -8,21 +8,21 @@ import { useLocale, t } from "../locale-context";
 
 /* ── Event data ── */
 const events = [
-  { id: "pipeline_end", label: "PIPELINE_END", color: "#4ECDC4",
-    handlers: ["RunLog", "Journal", "Snapshot", "MemWriteBack", "Notification"],
-    priorities: [50, 60, 80, 85, 200],
-    handlerColors: ["#60A5FA", "#34D399", "#4ECDC4", "#4ECDC4", "#F5C542"],
-    descKo: "파이프라인 완료 시 5 핸들러 연쇄", descEn: "5 handlers chain on pipeline completion" },
-  { id: "drift_detected", label: "DRIFT_DETECTED", color: "#F5C542",
-    handlers: ["DriftLogger", "AutoSnapshot", "PipelineTrigger", "Notification"],
-    priorities: [90, 80, 70, 200],
-    handlerColors: ["#F5C542", "#4ECDC4", "#4ECDC4", "#F5C542"],
-    descKo: "드리프트 감지 → 스냅샷 + 재분석 트리거", descEn: "Drift detected: snapshot + re-analysis trigger" },
-  { id: "context_overflow", label: "CONTEXT_OVERFLOW", color: "#E87080",
+  { id: "turn_completed", label: "TURN_COMPLETED", color: "#4ECDC4",
+    handlers: ["TurnAutoMemory", "AutoLearn", "LLMExtract", "Dreaming"],
+    priorities: [50, 60, 80, 85],
+    handlerColors: ["#60A5FA", "#34D399", "#4ECDC4", "#4ECDC4"],
+    descKo: "턴 완료 시 4 핸들러 연쇄 (자동 학습 파이프)", descEn: "4 handlers chain on turn completion (auto-learn pipe)" },
+  { id: "session_ended", label: "SESSION_ENDED", color: "#F5C542",
+    handlers: ["CostSummary", "AdapterUsage", "ToolOffload"],
+    priorities: [50, 60, 90],
+    handlerColors: ["#F5C542", "#4ECDC4", "#4ECDC4"],
+    descKo: "세션 종료 → 비용 요약 + 어댑터 사용 집계", descEn: "Session end: cost summary + adapter usage rollup" },
+  { id: "context_overflow_action", label: "CONTEXT_OVERFLOW_ACTION", color: "#E87080",
     handlers: ["ContextAction"],
     priorities: [50],
     handlerColors: ["#E87080"],
-    descKo: "유일한 feedback hook. 압축 전략을 핸들러가 결정", descEn: "The only feedback hook. Handler decides compaction strategy",
+    descKo: "feedback hook. 압축 전략을 핸들러가 결정", descEn: "Feedback hook. Handler decides compaction strategy",
     isBoomerang: true },
   { id: "subagent_completed", label: "SUBAGENT_COMPLETED", color: "#C084FC",
     handlers: ["RunLog", "JournalSub"],
@@ -335,7 +335,7 @@ export function HooksSection() {
                     <animate attributeName="opacity" values="1;0.6;1" dur="0.5s" repeatCount="indefinite" />
                   </motion.circle>
 
-                  {/* Boomerang return path for CONTEXT_OVERFLOW */}
+                  {/* Boomerang return path for CONTEXT_OVERFLOW_ACTION */}
                   {ev.isBoomerang && showBoomerang && (
                     <g>
                       <motion.path

@@ -43,13 +43,23 @@ def _emitting_caller() -> str:
             break
         frame = frame_back
         module = frame.f_globals.get("__name__", "")
-        if not module.startswith("core.hooks"):
+        # Skip dispatch plumbing AND asyncio internals — an async trigger
+        # executes inside the event loop's Handle._run, whose frames say
+        # nothing about the emitting site.
+        if not module.startswith(("core.hooks", "asyncio")):
             return f"{module}:{frame.f_lineno}"
     return "<unknown>"
 
 
+_WARNED_CONTRACT_SITES: set[tuple[str, str]] = set()
+
+
 def _validate_payload(event: HookEvent, data: dict[str, Any]) -> None:
-    """Warn (never raise) when a payload misses its contract keys."""
+    """Warn (never raise) when a payload misses its contract keys.
+
+    Once per (event, emitting caller) — a hot broken emitter (e.g. a
+    per-tool-call TOOL_EXEC_ENDED) must not flood the daemon log.
+    """
     from core.hooks.catalog import REQUIRED_PAYLOAD_KEYS
 
     required = REQUIRED_PAYLOAD_KEYS.get(event)
@@ -57,6 +67,11 @@ def _validate_payload(event: HookEvent, data: dict[str, Any]) -> None:
         return
     missing = sorted(required - data.keys())
     if missing:
+        caller = _emitting_caller()
+        site = (event.value, caller)
+        if site in _WARNED_CONTRACT_SITES:
+            return
+        _WARNED_CONTRACT_SITES.add(site)
         log.warning(
             "Hook payload contract: %s emitted without required keys %s (caller %s)",
             event.value,
@@ -99,7 +114,6 @@ def fire_hook(
         return
     try:
         resolved = _coerce_event(event)
-        _validate_payload(resolved, data)
         hooks.trigger(resolved, data)
     except Exception:
         _warn_dispatch_failure(event)
@@ -115,7 +129,6 @@ async def fire_hook_async(
         return
     try:
         resolved = _coerce_event(event)
-        _validate_payload(resolved, data)
         await hooks.trigger_async(resolved, data)
     except Exception:
         _warn_dispatch_failure(event)
@@ -136,7 +149,6 @@ async def fire_interceptor_async(
         return None
     try:
         resolved = _coerce_event(event)
-        _validate_payload(resolved, data)
         return await hooks.trigger_interceptor_async(resolved, data)
     except Exception:
         _warn_dispatch_failure(event)
@@ -156,7 +168,6 @@ async def fire_with_result_async(
         return []
     try:
         resolved = _coerce_event(event)
-        _validate_payload(resolved, data)
         return await hooks.trigger_with_result_async(resolved, data)
     except Exception:
         _warn_dispatch_failure(event)

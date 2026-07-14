@@ -203,6 +203,7 @@ def test_required_keys_warning_fires_on_async_path(
 ) -> None:
     import asyncio
 
+    hooks_dispatch._WARNED_CONTRACT_SITES.clear()
     hooks = HookSystem()
     with caplog.at_level(logging.WARNING, logger="core.hooks.dispatch"):
         asyncio.run(hooks_dispatch.fire_hook_async(hooks, HookEvent.SESSION_ENDED, {"model": "m"}))
@@ -322,3 +323,91 @@ def test_collapsed_events_have_no_per_state_members() -> None:
     assert not any(n.startswith("RULE_") and n != "RULE_CHANGED" for n in names)
     assert "TOOL_APPROVAL_GRANTED" not in names
     assert "TOOL_APPROVAL_DENIED" not in names
+
+
+# ---------------------------------------------------------------------------
+# Codex review round (v0.99.330) — regression pins
+# ---------------------------------------------------------------------------
+
+
+def test_auto_trigger_failure_stages_persist_as_failures():
+    """runner_error/parse_error rows carry level=error + error payload so
+    level/status-filtered readers see mutator crashes (Codex MED-1)."""
+    from core.observability.activity import AUTO_TRIGGER_STAGE_LEVELS
+    from core.observability.activity_registry import map_hook_to_activity
+
+    assert AUTO_TRIGGER_STAGE_LEVELS["runner_error"] == "error"
+    assert AUTO_TRIGGER_STAGE_LEVELS["lock_busy"] == "warn"
+    assert AUTO_TRIGGER_STAGE_LEVELS["fired"] == "info"
+
+    row = map_hook_to_activity(
+        HookEvent.SELF_IMPROVING_AUTO_TRIGGER,
+        {"trigger_id": "t1", "ts": 1.0, "detail": "boom", "stage": "runner_error"},
+        run_id="r1",
+    )
+    assert row.level == "error"
+    assert row.details.stage == "runner_error"
+
+
+def test_auto_trigger_emit_carries_error_key_on_failure_stages(monkeypatch):
+    from core.self_improving.loop import auto_trigger as at
+
+    captured: list[dict] = []
+    monkeypatch.setattr(
+        "core.hooks.dispatch.fire_hook",
+        lambda _hooks, _event, data: captured.append(data),
+    )
+    at._emit_state_event(object(), state="runner_error", detail="boom", ts=1.0, trigger_id="t1")
+    at._emit_state_event(object(), state="fired", detail="", ts=2.0, trigger_id="t1")
+    assert captured[0]["error"] == "boom"
+    assert "error" not in captured[1]
+
+
+def test_collapsed_family_filters_match_precollapse_rows(tmp_path):
+    """A canonical rule_changed / auto-trigger filter returns rows stored
+    under the pre-collapse per-state names (Codex MED-2)."""
+    from core.observability.event_store import _event_filter_variants
+
+    rule_variants = _event_filter_variants("rule_changed")
+    assert {"rule_created", "rule_updated", "rule_deleted"} <= set(rule_variants)
+    at_variants = _event_filter_variants("self_improving_auto_trigger")
+    assert "self_improving_auto_trigger_runner_error" in at_variants
+
+
+def test_direct_trigger_validates_payload_contract(caplog):
+    """Validation lives at the HookSystem dispatch choke point — a DIRECT
+    trigger() call (bypassing the dispatch wrappers) still warns
+    (Codex MED-3), once per emitting site (Codex LOW-1)."""
+    import core.hooks.dispatch as dispatch_mod
+
+    dispatch_mod._WARNED_CONTRACT_SITES.clear()
+    hs = HookSystem()
+    with caplog.at_level("WARNING"):
+        for _attempt in range(3):
+            hs.trigger(HookEvent.SESSION_ENDED, {})
+    warnings = [r for r in caplog.records if "payload contract" in r.message]
+    assert len(warnings) == 1  # same site -> deduped
+
+
+def test_activity_schema_version_bumped():
+    from core.observability.activity import ActivityRowBase
+    from core.observability.event_store import EVENT_SCHEMA_VERSION
+
+    assert ActivityRowBase.model_fields["schema_version"].default == 2
+    assert EVENT_SCHEMA_VERSION == 2
+
+
+def test_single_approval_requested_per_gate():
+    """The outer safety gates no longer double-emit TOOL_APPROVAL_REQUESTED
+    around confirm_* (which emits internally, with the richer payload) —
+    Codex LOW-2. Pin: 8 emission sites, all inside confirm_*/request_*."""
+    import inspect
+
+    from core.agent import approval as approval_mod
+
+    src = inspect.getsource(approval_mod)
+    assert src.count("HookEvent.TOOL_APPROVAL_REQUESTED") == 8
+    gates_src = inspect.getsource(approval_mod.ApprovalWorkflow.apply_safety_gates)
+    assert "TOOL_APPROVAL_REQUESTED" not in gates_src
+    gates_async_src = inspect.getsource(approval_mod.ApprovalWorkflow.apply_safety_gates_async)
+    assert "TOOL_APPROVAL_REQUESTED" not in gates_async_src

@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from core.hooks.catalog import EventRetentionClass
-from core.hooks.system import LEGACY_EVENT_VALUES
+from core.hooks.system import COLLAPSED_EVENT_VALUES, LEGACY_EVENT_VALUES
 from core.observability.redaction import redact_secrets
 
 log = logging.getLogger(__name__)
@@ -34,10 +34,15 @@ def _event_filter_variants(event_filter: str) -> list[str]:
     if canonical is not None:
         variants.append(canonical)
     variants.extend(old for old, new in LEGACY_EVENT_VALUES.items() if new == event_filter)
+    # Collapsed families (D2/D3): a canonical filter also returns the
+    # pre-collapse per-state rows.
+    variants.extend(COLLAPSED_EVENT_VALUES.get(event_filter, ()))
     return variants
 
 
-EVENT_SCHEMA_VERSION = 1
+# v2 (PR-HOOK-TAXONOMY, 2026-07-14): event vocabulary — tense-aligned
+# values, collapsed D2/D3 families; readers use the alias/collapsed maps.
+EVENT_SCHEMA_VERSION = 2
 
 _CREATE_HOOK_EVENTS_TABLE_SQL = """\
 CREATE TABLE IF NOT EXISTS hook_events (

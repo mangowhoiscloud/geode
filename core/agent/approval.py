@@ -389,10 +389,8 @@ class ApprovalWorkflow:
                     self.record_transition(record, "granted", auto_reason)
                     approved = True
                 else:
-                    self._fire_hook(
-                        HookEvent.TOOL_APPROVAL_REQUESTED,
-                        {"tool_name": tool_name, "safety_level": "write"},
-                    )
+                    # REQUESTED fires inside confirm_write (richer payload);
+                    # a second outer emission double-notified handlers.
                     if not self.confirm_write(tool_name, tool_input, record=record):
                         return _write_denial_with_fallback(tool_name), False
                     approved = True
@@ -406,10 +404,6 @@ class ApprovalWorkflow:
                     approved = True
                 else:
                     cost = EXPENSIVE_TOOLS[tool_name]
-                    self._fire_hook(
-                        HookEvent.TOOL_APPROVAL_REQUESTED,
-                        {"tool_name": tool_name, "safety_level": "cost"},
-                    )
                     if not self.confirm_cost(tool_name, cost, record=record):
                         return {
                             "error": "User denied expensive operation",
@@ -438,10 +432,6 @@ class ApprovalWorkflow:
                 if auto_reason:
                     self.record_transition(record, "granted", auto_reason)
                     return None, True
-                await self._fire_hook_async(
-                    HookEvent.TOOL_APPROVAL_REQUESTED,
-                    {"tool_name": tool_name, "safety_level": "write"},
-                )
                 if not await self.confirm_write_async(tool_name, tool_input, record=record):
                     return _write_denial_with_fallback(tool_name), False
                 return None, True
@@ -458,10 +448,6 @@ class ApprovalWorkflow:
                     self.record_transition(record, "granted", auto_reason)
                     return None, True
                 cost = EXPENSIVE_TOOLS[tool_name]
-                await self._fire_hook_async(
-                    HookEvent.TOOL_APPROVAL_REQUESTED,
-                    {"tool_name": tool_name, "safety_level": "cost"},
-                )
                 if not await self.confirm_cost_async(tool_name, cost, record=record):
                     return {"error": "User denied expensive operation", "denied": True}, False
                 return None, True

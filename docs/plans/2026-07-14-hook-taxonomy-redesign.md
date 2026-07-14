@@ -1,6 +1,6 @@
 # Hook System 재설계 — 택소노미 통합·명명 규약·디스패치 단일화·emit 계약
 
-> 상태: 구현 중 (2026-07-14, feature/hook-taxonomy-redesign). 파편화 감사
+> 상태: 구현 완료 (2026-07-14, PR #2714, v0.99.330). 파편화 감사
 > (v0.99.329 기준, 세션 내 Explore 감사)의 판정을 근거로 한 재설계 결정
 > 기록. 구현 완료 후 docs/architecture/hook-system.md에 정본 반영.
 
@@ -35,7 +35,7 @@
 | D2 | SELF_IMPROVING_AUTO_TRIGGER_* 6종 → SELF_IMPROVING_AUTO_TRIGGER 1종 + payload `stage` 필드(fired/lock_busy/interval_blocked/runner_error/parse_error/max_generation_reached) | 전부 싱크 전용 텔레메트리 — 판별자는 페이로드가 담당 |
 | D3 | RULE_CREATED/UPDATED/DELETED 3종 → RULE_CHANGED 1종 + payload `action` 필드 | 싱크 전용, 동일 도메인 |
 | D4 | PROGRAM_MD_UNREADABLE의 trigger_with_result 의존 제거 — 일반 notify 발화로 강등(불발 피드백 경로 삭제). trigger_with_result(_async)의 다른 사용자가 없으면 메서드도 삭제(디스패치 표면 6→4) | 등록 핸들러 0인 피드백 계약은 죽은 계약 |
-| D5 | NAME↔VALUE 정합: tense-split 7종의 VALUE를 NAME 소문자로 변경(session_start→session_started 등) + 저장 데이터 리더(activity_registry/catalog)에 구값→신값 alias 맵 + alias 맵이 정확히 7종만 커버함을 핀하는 테스트 + "신규 이벤트는 NAME==lower(VALUE), 과거분사" 규약 가드 테스트 | 하나의 enum 안 두 규약 제거. 스토리지 호환은 read-side alias로 |
+| D5 | NAME↔VALUE 정합: tense-split VALUE를 NAME 소문자로 변경(설계 7종, 구현 중 llm_call_retry 8번째 발견 — 8종)(session_start→session_started 등) + 저장 데이터 리더(activity_registry/catalog)에 구값→신값 alias 맵 + alias 맵이 정확히 7종만 커버함을 핀하는 테스트 + "신규 이벤트는 NAME==lower(VALUE), 과거분사" 규약 가드 테스트 | 하나의 enum 안 두 규약 제거. 스토리지 호환은 read-side alias로 |
 | D6 | 디스패치 단일화: dispatch.py를 유일 구현으로(sync/async/interceptor 커버), 재구현 5곳을 위임으로 교체, executor.py:134 데드 삭제 | "four copies 제거" 선언의 원상 복구 |
 | D7 | emit 계약: dispatch.fire_hook에 페이로드 키 검증(이벤트별 요구 키 카탈로그 대조, 누락 시 WARNING — fail-loud, 차단 아님) + 침묵 단절 3건의 발화 페이로드 수선 | 계약을 emit 측으로; 기존 침묵 실패를 가시화 |
 | D8 | docs/architecture/hook-system.md에 규약(명명·emit 계약·등록 표면)과 이벤트 카탈로그 갱신 | 정본 문서 동기화 |

@@ -262,10 +262,12 @@ class HookEvent(Enum):
 # string is parsed back into a :class:`HookEvent` (``resolve_event_value``,
 # filesystem hook discovery) and expanded by
 # ``HookEventStore.read(event_filter=...)`` so canonical filters still
-# match legacy SQLite rows. Deliberately NOT covered: the collapsed
-# D1/D2/D3 families (``tool_approval_granted``, ``rule_created``,
-# ``self_improving_auto_trigger_fired``, ...) — their discriminator moved
-# into the payload, so an old name has no faithful single-event mapping.
+# match legacy SQLite rows. Deliberately NOT covered here: the collapsed
+# D1/D2/D3 families — an old per-state name has no faithful single-event
+# mapping for *parsing back into a member* (the discriminator moved into
+# the payload). Their HISTORY visibility is handled separately by
+# :data:`COLLAPSED_EVENT_VALUES` below, which the event store folds into
+# filter expansion (read-only, never used to construct members).
 LEGACY_EVENT_VALUES: dict[str, str] = {
     "session_start": "session_started",
     "session_end": "session_ended",
@@ -275,6 +277,24 @@ LEGACY_EVENT_VALUES: dict[str, str] = {
     "llm_call_retry": "llm_call_retried",
     "tool_exec_start": "tool_exec_started",
     "tool_exec_end": "tool_exec_ended",
+}
+
+
+# Collapsed-family history map (PR-HOOK-TAXONOMY D2/D3): CURRENT enum
+# value -> the pre-collapse stored event strings it absorbed. Used ONLY
+# for query/filter expansion (a canonical filter also returns the old
+# rows); never for member construction — the old rows keep their original
+# event string and payload shape.
+COLLAPSED_EVENT_VALUES: dict[str, tuple[str, ...]] = {
+    "rule_changed": ("rule_created", "rule_updated", "rule_deleted"),
+    "self_improving_auto_trigger": (
+        "self_improving_auto_trigger_fired",
+        "self_improving_auto_trigger_lock_busy",
+        "self_improving_auto_trigger_interval_blocked",
+        "self_improving_auto_trigger_runner_error",
+        "self_improving_auto_trigger_parse_error",
+        "self_improving_auto_trigger_max_generation_reached",
+    ),
 }
 
 
@@ -836,6 +856,12 @@ class HookSystem:
     ) -> HookDispatch:
         started_at = time.time()
         working = dict(data) if data is not None else {}
+        # Emit-side payload contract (PR-HOOK-TAXONOMY D7) — validated at
+        # the dispatch choke point so DIRECT trigger() callers are covered
+        # too, not only the core.hooks.dispatch wrappers.
+        from core.hooks.dispatch import _validate_payload
+
+        _validate_payload(event, working)
         if self.closed:
             return HookDispatch(
                 event=event,
@@ -908,6 +934,12 @@ class HookSystem:
     ) -> HookDispatch:
         started_at = time.time()
         working = dict(data) if data is not None else {}
+        # Emit-side payload contract (PR-HOOK-TAXONOMY D7) — validated at
+        # the dispatch choke point so DIRECT trigger() callers are covered
+        # too, not only the core.hooks.dispatch wrappers.
+        from core.hooks.dispatch import _validate_payload
+
+        _validate_payload(event, working)
         if self.closed:
             return HookDispatch(
                 event=event,

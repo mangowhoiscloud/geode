@@ -14,9 +14,10 @@ Structure (PR-OBS-CONTRACT, 2026-06-13 — full coverage):
   - 4 lifecycle detail mixins (started / completed / failed / retried)
   - 19 lifecycle concrete classes (A=6 started, B=7 completed, C=5 failed,
     D=1 retried) with discriminator on ``action``
-  - 45 K-group concrete classes covering every remaining HookEvent, each
-    with a typed ``details`` sub-schema (25 shared details models — one per
-    event family, e.g. ``CognitivePhaseDetails`` for 6 cognitive phases)
+  - 37 K-group concrete classes covering every remaining HookEvent, each
+    with a typed ``details`` sub-schema (collapsed families carry their
+    discriminator in details: ``RuleChangeDetails.action``,
+    ``AutoTriggerDetails.stage``)
   - ``GenericActivityRow`` is now ONLY a fail-soft fallback (a typed
     builder that hits a malformed payload), never a routine destination —
     every one of the 65 events has a concrete typed row.
@@ -151,10 +152,14 @@ class ActivityRowBase(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: int = 1
+    schema_version: int = 2
     """Row-schema version (PR-OBS-CONTRACT, 2026-06-13). Bump when a
     field is added/renamed/retyped on any row class so JSONL re-readers
-    can branch on shape instead of guessing from key presence."""
+    can branch on shape instead of guessing from key presence.
+    v2 (PR-HOOK-TAXONOMY, 2026-07-14): collapsed families — RuleChangedRow
+    (+details.action) replaces the rule.* trio, AutoTriggerRow
+    (+details.stage) replaces six per-state auto-trigger rows, approval
+    granted/denied rows deleted."""
 
     ts: float
     run_id: str
@@ -856,12 +861,26 @@ class MutationRevertedRow(ActivityRowBase):
 class AutoTriggerRow(ActivityRowBase):
     """One row per auto-trigger terminal state; ``details.stage`` is the
     discriminator (PR-HOOK-TAXONOMY D2 collapsed the former six per-state
-    row classes — per-state ``level`` nuance now lives in the stage
-    field, every row persists at ``info``)."""
+    row classes). The per-state ``level`` nuance is preserved by deriving
+    ``level`` from the stage (:data:`AUTO_TRIGGER_STAGE_LEVELS`), so
+    failure stages stay visible to level-filtered readers."""
 
     action: Literal["self.improving.auto.trigger"] = "self.improving.auto.trigger"
     entity_type: Literal["auto_trigger"] = "auto_trigger"
     details: AutoTriggerDetails
+
+
+# Stage -> row level, mirroring the deleted per-state row classes:
+# fired was info; lock/interval/max-generation gating was warn; runner and
+# parse failures were error.
+AUTO_TRIGGER_STAGE_LEVELS: dict[str, str] = {
+    "fired": "info",
+    "lock_busy": "warn",
+    "interval_blocked": "warn",
+    "max_generation_reached": "warn",
+    "runner_error": "error",
+    "parse_error": "error",
+}
 
 
 class ShutdownStartedRow(ActivityRowBase):

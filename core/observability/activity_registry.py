@@ -23,6 +23,7 @@ from pydantic import BaseModel, ValidationError
 
 from core.hooks.system import HookEvent
 from core.observability.activity import (
+    AUTO_TRIGGER_STAGE_LEVELS,
     ActivityRowBase,
     AdapterDispatchAttemptDetails,
     AdapterDispatchAttemptRow,
@@ -361,6 +362,9 @@ class _TypedRowSpec:
     entity_id_key: str = ""  # payload key -> entity_id; "" => event.value
     actor_id_key: str = "session_id"
     derive: Callable[[dict[str, Any]], dict[str, Any]] | None = None
+    # Payload -> row ``level`` override (e.g. auto-trigger failure stages
+    # persist at error even though the collapsed event is one member).
+    level_derive: Callable[[dict[str, Any]], str | None] | None = None
 
 
 # Payload keys carrying raw user content or oversized blobs that must NEVER
@@ -427,15 +431,20 @@ def _build_from_spec(
     entity_id = (str(data.get(spec.entity_id_key)) if spec.entity_id_key else "") or event.value
     actor_id = str(data.get(spec.actor_id_key) or spec.actor_type)
     task_id = str(data["task_id"]) if data.get("task_id") else None
-    return spec.row_cls(  # type: ignore[call-arg]  # action/entity_type are Literal class defaults; mypy can't see through dynamic type[]
-        ts=time.time(),
-        run_id=run_id,
-        actor_type=spec.actor_type,
-        actor_id=actor_id,
-        entity_id=entity_id,
-        task_id=task_id,
-        details=details,
-    )
+    row_kwargs: dict[str, Any] = {
+        "ts": time.time(),
+        "run_id": run_id,
+        "actor_type": spec.actor_type,
+        "actor_id": actor_id,
+        "entity_id": entity_id,
+        "task_id": task_id,
+        "details": details,
+    }
+    if spec.level_derive is not None:
+        derived_level = spec.level_derive(data)
+        if derived_level is not None:
+            row_kwargs["level"] = derived_level
+    return spec.row_cls(**row_kwargs)
 
 
 _TYPED_ROW_SPECS: dict[HookEvent, _TypedRowSpec] = {
@@ -603,6 +612,7 @@ _TYPED_ROW_SPECS: dict[HookEvent, _TypedRowSpec] = {
         details_cls=AutoTriggerDetails,
         actor_type="system",
         entity_id_key="trigger_id",
+        level_derive=lambda data: AUTO_TRIGGER_STAGE_LEVELS.get(str(data.get("stage", ""))),
     ),
     HookEvent.SHUTDOWN_STARTED: _TypedRowSpec(
         row_cls=ShutdownStartedRow, details_cls=ShutdownStartedDetails, actor_type="system"
