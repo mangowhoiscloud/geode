@@ -1,10 +1,24 @@
 [project]
 name = "geode-agent"
 version = "0.99.329"
-description = "GEODE — 범용 자율 실행 에이전트"
+description = "Self-hosting autonomous agent harness with a while-tool-use runtime"
 license = "Apache-2.0"
 readme = "README.md"
 requires-python = ">=3.12"
+authors = [{ name = "Jihwan Ryu" }]
+keywords = ["agent", "agentic", "autonomous-agent", "llm", "mcp"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+]
 dependencies = [
     "anthropic>=0.96.0",
     "beautifulsoup4>=4.12.0",
@@ -44,6 +58,13 @@ dependencies = [
     "latex2sympy2>=1.9",
     "sympy>=1.12",
 ]
+
+[project.urls]
+Homepage = "https://mangowhoiscloud.github.io/geode"
+Documentation = "https://mangowhoiscloud.github.io/geode/docs"
+Repository = "https://github.com/mangowhoiscloud/geode"
+Issues = "https://github.com/mangowhoiscloud/geode/issues"
+Changelog = "https://github.com/mangowhoiscloud/geode/blob/main/CHANGELOG.md"
 
 [project.scripts]
 geode = "core.cli:app"
@@ -85,13 +106,18 @@ desktop = [
     "pyobjc-framework-Cocoa>=10.0; sys_platform == 'darwin'",
 ]
 # Petri × GEODE alignment audit (PoC, P2-a). Opt-in via `uv sync --extra audit`.
-# Pinned to inspect_petri main commit because v3.0 has no release tag yet
-# (latest tagged release is v2.0.0 from 2026-01-22; v3.0.x lives on main).
+# inspect-petri 3.x is published on PyPI, so the extra remains installable from
+# public indexes and does not leak a direct VCS reference into wheel metadata.
 # Lazy-imported in plugins/petri_audit/ so cold-start is unaffected when not
 # installed. See docs/plans/eval-petri-integration.md.
 audit = [
-    "inspect-ai>=0.3.211",
-    "inspect-petri @ git+https://github.com/meridianlabs-ai/inspect_petri@6d9b9e1dbc19bcc06544aca982427cfb37357ffc",
+    "inspect-ai>=0.3.236",
+    "inspect-petri>=3.0.11,<4",
+    # inspect-ai 0.3.246 imports the current Anthropic beta block schema. Keep
+    # the stricter SDK floor scoped to audit installs; the base provider still
+    # supports the wider project-level compatibility range above.
+    "anthropic>=0.115.0",
+    "openai>=2.45.0",
     # CSA-2 (2026-05-22) — paperclip-pattern auditor tool_use bridge.
     # plugins/petri_audit/mcp_bridge/ stands up a stdio MCP server that
     # exposes inspect_ai ToolInfo[] as MCP tools so the claude CLI
@@ -143,13 +169,6 @@ reason = [
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
-
-[tool.hatch.metadata]
-# Allow `@ git+https://...` direct references — required by the [audit]
-# optional-dependency that pins inspect-petri to a main-branch commit
-# (Petri 3.0 has no PyPI release yet). Confined to optional extras so
-# default `uv sync` is unaffected.
-allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["core", "plugins"]

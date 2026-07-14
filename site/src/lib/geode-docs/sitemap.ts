@@ -188,7 +188,7 @@ export const DOCS_SITEMAP: DocSection[] = [
       { slug: "explanation/4-layer", title: "Why five layers", titleKo: "왜 5계층인가", summary: "Model, Runtime, Harness, Agent, Self-Improving. Why the boundaries fall where they do.", summaryKo: "Model, Runtime, Harness, Agent, Self-Improving. 경계가 왜 그 자리에 있는지 설명합니다.", quadrant: "explanation" },
       { slug: "explanation/self-hosting", title: "Why a self-hosting harness", titleKo: "왜 self-hosting 하네스인가", summary: "The runtime and the build line share primitives. Why that mattered.", summaryKo: "런타임과 빌드 라인이 같은 기본 단위를 공유합니다. 그게 왜 중요했는지 설명합니다.", quadrant: "explanation" },
       { slug: "explanation/ratchet", title: "Why ratchet discipline", titleKo: "왜 ratchet 규율인가", summary: "Pinned prompt hashes and a staged CI. The shape that prevents drift.", summaryKo: "프롬프트 해시 핀과 단계별 CI입니다. drift를 막는 형태를 설명합니다.", quadrant: "explanation" },
-      { slug: "ops/release-pypi-lifecycle", title: "Release and PyPI lifecycle", titleKo: "릴리스와 PyPI 라이프사이클", summary: "The version-bump locations, the release workflow, and the rebuild cadence.", summaryKo: "버전 bump 위치, 릴리스 워크플로우, rebuild 주기를 다룹니다.", quadrant: "how-to" },
+      { slug: "ops/release-pypi-lifecycle", title: "Release and PyPI lifecycle", titleKo: "릴리스와 PyPI 라이프사이클", summary: "Version locations, coordinated stable promotion across GitHub, PyPI, and Homebrew, and the rebuild cadence.", summaryKo: "버전 위치, GitHub·PyPI·Homebrew의 일관된 stable promotion, rebuild 주기를 다룹니다.", quadrant: "how-to" },
       { slug: "ops/backlog-dispose", title: "Backlog disposal", titleKo: "백로그 처분", summary: "Retire an idea with a paper trail instead of a silent delete.", summaryKo: "조용히 삭제하는 대신 흔적을 남기며 아이디어를 정리합니다.", quadrant: "how-to" },
     ],
   },

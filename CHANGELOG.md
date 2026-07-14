@@ -45,6 +45,58 @@ functional change.
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Every install channel now reaches the same first-run experience.** The
+  landing-page Homebrew, `uv tool`, `uvx`, and source terminals all launch
+  GEODE and render the Geodi welcome plus first prompt. Stable uv installs now
+  use the shorter PyPI commands (`uv tool install geode-agent` and
+  `uvx --from geode-agent geode`), while source setup relies on `uv run` to
+  synchronize the project environment before launch. A
+  hydration-safe reduced-motion subscription renders each completed transcript
+  immediately without the prior React server/client mismatch.
+- **The public-site dependency graph is free of known npm advisories.** Next
+  and `eslint-config-next` move from 16.1.2 to 16.2.10, compatible transitive
+  packages receive their security patches, and Next's exact vulnerable
+  PostCSS pin is overridden with 8.5.19. Existing site lint errors are cleared
+  and `npm run lint` is now a release gate. The official-docs gate now exports
+  the Markdown twins and committed `llms-full.txt` after the static build, so
+  release documentation cannot retain stale workflow instructions, then fails
+  if a generator changed any committed public index. Generator timestamps are
+  anchored to the source commit through `SOURCE_DATE_EPOCH`, so a later repair
+  run does not fail merely because the calendar date changed. Both full and
+  production-only `npm audit` report zero vulnerabilities.
+
+### Infrastructure
+
+- **Stable distribution is one guarded promotion.** The manual release
+  workflow now treats GitHub Release, PyPI Trusted Publishing, and the
+  Homebrew tap as one serialized `publish_stable` path. It requires the current
+  `origin/main` SHA (or the exact existing tag target on a repair run), a
+  tap-scoped SSH deploy key, and conflict-free PyPI state before mutation. All
+  external actions are pinned to immutable commits; the OIDC-bearing PyPI job
+  contains only artifact retrieval and publication, while public smoke tests
+  run in a separate read-only job. The promotion creates an annotated tag,
+  publishes PyPI attestations, verifies the exact public PyPI install, audits
+  the Homebrew formula against the immutable release sdist, builds/tests both
+  the candidate and public tap path on macOS, and finishes with cross-channel
+  parity. Same-version retries repair only missing GitHub/PyPI files after
+  byte-validating the published subset, compare the GitHub release body without
+  `jq`-introduced newline drift, and preserve an already-published Homebrew
+  formula verbatim.
+- **Homebrew and PyPI package surfaces are publishable rather than
+  placeholders.** The formula renderer rejects tag auto-tarballs, missing or
+  unpinned or executable resource blocks, invalid Python formula names, and
+  version-mismatched release assets; its template now carries the native-build
+  dependencies, OpenSSL linkage, livecheck, and both executable checks used by
+  the real tap. Concurrent tap changes fail a compare-and-swap publish instead
+  of entering the already-audited commit through a late rebase. PyPI metadata
+  now includes author, classifiers, keywords, and project URLs, and the audit
+  extra uses the public `inspect-petri` 3.x release rather than a PyPI-rejected
+  direct VCS requirement.
+
 ## [0.99.329] - 2026-07-14
 
 ### Added
