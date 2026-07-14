@@ -256,7 +256,7 @@ geode serve --poll 5     # 5-second poll interval`}</pre>
                 </tr>
                 <tr>
                   <td>/model switch never reaches the daemon</td>
-                  <td>A model env var pinned into the daemon's environment (older releases)</td>
+                  <td>A model env var pinned into the daemon’s environment (older releases)</td>
                   <td>Dropping model env keys at daemon startup is the default now. Restart the daemon; if it persists, run <code>geode config explain model</code>.</td>
                 </tr>
               </tbody>

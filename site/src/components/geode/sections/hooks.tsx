@@ -113,6 +113,8 @@ export function HooksSection() {
   };
 
   /* On event change or mount, fire ripple */
+  // The effect intentionally resets animation state when its selected event changes.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { runRipple(); return clearTimers; }, [selected]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* Waterfall lane layout */

@@ -1,92 +1,133 @@
 ---
 name: geode-distribution
-description: Publish a released GEODE version to end-user install channels — git tag, Homebrew tap (mangowhoiscloud/tap), and uv/uvx. Triggers on "homebrew", "brew", "formula", "tap", "uv tool", "uvx", "배포", "설치 채널", "release tag".
+description: Publish a released GEODE version to GitHub Release, PyPI/uv, and the Homebrew tap as one verified stable promotion. Triggers on "homebrew", "brew", "formula", "tap", "uv tool", "uvx", "배포", "설치 채널", "release tag".
 ---
 
-# GEODE Distribution — Homebrew Tap + uv
+# GEODE Distribution
 
-Scope: publishing an already-landed release to install channels. This runs
-AFTER the `geode-gitflow` release flow (version stamped across 5 locations,
-develop → main merged). It never changes repo code.
+Scope: promote an already-landed, version-stamped `origin/main` commit to all
+stable end-user channels. The release workflow owns the tag, package upload,
+formula generation, tap write, and post-publish checks. Do not edit the tap or
+create a release tag by hand during the normal path.
 
-## Channel map
+## Channel contract
 
-| Channel | Consumer | Source of truth |
-|---------|----------|-----------------|
-| `uv tool install -e ".[audit]"` | Operator dev machine (serve daemon, editable) | workspace checkout |
-| Homebrew `mangowhoiscloud/tap/geode` | End users on macOS | `Formula/geode.rb` in the tap repo, pinned to a release tag tarball |
-| `uv tool install git+…@vX` / `uvx --from git+…@vX` | Python-toolchain users | the same release tag |
+| Channel | End-user command | Immutable source |
+|---------|------------------|------------------|
+| PyPI / uv | `uv tool install geode-agent` | wheel + sdist for the promoted version |
+| uv one-shot | `uvx --from geode-agent geode` | the same PyPI version |
+| Homebrew | `brew install mangowhoiscloud/tap/geode` | GitHub Release sdist asset |
+| GitHub | release `vX.Y.Z` | annotated tag on the promoted main SHA |
 
-The three MUST resolve the same version after a publication pass.
+Source-edge installs are deliberately separate from stable distribution:
 
-## Step 1 — Release tag (both channels key off it)
+```bash
+uv tool install git+https://github.com/mangowhoiscloud/geode
+uvx --from git+https://github.com/mangowhoiscloud/geode geode
+```
 
-Tag the latest develop → main **merge commit** (precedent: v0.99.308 →
-merge commit, not the kanban docs commit), annotated:
+The operator development install is also separate:
+
+```bash
+uv tool install -e ".[audit]" --force --python 3.12
+```
+
+## Stable promotion
+
+### 1. Preflight
 
 ```bash
 git fetch origin
-TARGET=$(git log origin/main --merges -1 --format=%H)
-# Ground-truth the version at that commit — titles can lie:
-git show $TARGET:pyproject.toml | grep '^version'
-git tag -a vX.Y.Z -m "GEODE vX.Y.Z" $TARGET
-git push origin vX.Y.Z
+git status --short --branch
+git show origin/main:pyproject.toml | grep '^version'
+git show origin/main:CHANGELOG.md | grep '^## \[X.Y.Z\]'
 ```
 
-Trap: `git ls-remote --tags` sorts lexically ("v0.99.308" sorts before
-"v0.99.43") — grep for the exact tag instead of eyeballing the tail.
+Confirm:
 
-## Step 2 — Homebrew tap update
+- the requested version is stamped on the current `origin/main` commit (or,
+  for a repair run, on the existing annotated release tag target that remains
+  an ancestor of `origin/main`);
+- CI for that commit is green;
+- the protected `release` environment is ready;
+- `HOMEBREW_TAP_DEPLOY_KEY` is the write-enabled deploy key for only
+  `mangowhoiscloud/homebrew-tap`;
+- the PyPI Trusted Publisher is bound to this repository, workflow, and
+  release environment.
 
-Tap clone: `brew --repository mangowhoiscloud/tap` → `Formula/geode.rb`.
-Template lives in this repo at `packaging/homebrew/geode.rb.in`.
-
-1. **Check the tap for uncommitted WIP first** (`git status`). A prior
-   session may have installed from an uncommitted formula — fold it into
-   your commit rather than clobbering it.
-2. Bump the pin:
-   ```bash
-   curl -sL https://github.com/mangowhoiscloud/geode/archive/refs/tags/vX.Y.Z.tar.gz -o /tmp/geode.tar.gz
-   shasum -a 256 /tmp/geode.tar.gz
-   # edit Formula/geode.rb: url → new tag, sha256 → new hash
-   ```
-3. **Resource stanzas**: only regenerate when base dependencies changed —
-   `diff <(git show vOLD:pyproject.toml | sed -n '/^dependencies = \[/,/^\]/p') <(git show vNEW:pyproject.toml | sed -n '/^dependencies = \[/,/^\]/p')`
-   (run in the geode repo, not the tap). If it differs:
-   `brew update-python-resources geode`.
-4. Build + verify before pushing:
-   ```bash
-   brew reinstall geode        # source build; rust deps take minutes
-   /opt/homebrew/bin/geode version   # must print vX.Y.Z
-   brew test geode
-   ```
-5. Commit + push the tap repo (plain push to its default branch — the tap
-   is not governed by geode's GitFlow).
-
-## Step 3 — uv channel verification
-
-Never test by overwriting the operator's editable tool install — the tool
-name collides (`geode-agent`) and the serve daemon depends on it. Verify in
-an ephemeral env:
+### 2. Dispatch one promotion
 
 ```bash
-uvx --from "git+https://github.com/mangowhoiscloud/geode@vX.Y.Z" geode version
+gh workflow run release.yml \
+  --ref main \
+  -f ref=main \
+  -f version=X.Y.Z \
+  -f publish_stable=true \
+  -f publish_huggingface_artifacts=false
 ```
 
-End users install with either of:
+The workflow serializes stable promotions and performs:
+
+1. full release validation, package-content gates, clean-wheel smoke, notes,
+   and checksums;
+2. a tap-credential and existing-PyPI conflict preflight before any channel is
+   mutated;
+3. an annotated tag and GitHub Release with wheel, sdist, and SHA256SUMS;
+4. PyPI Trusted Publishing followed by an exact-version public `uvx` smoke;
+5. Homebrew formula rendering from the GitHub Release sdist, PyPI resource
+   refresh, strict audit, source build, exact-version test, then tap push.
+
+### 3. Watch to completion
 
 ```bash
-uv tool install "geode-agent @ git+https://github.com/mangowhoiscloud/geode@vX.Y.Z"
-brew install mangowhoiscloud/tap/geode
+gh run list --workflow release.yml --limit 5
+gh run watch <run-id>
 ```
 
-## Known traps (all incurred 2026-07-13)
+Do not report success while a downstream channel job is queued, awaiting
+environment approval, or skipped.
 
-| Trap | Rule |
-|------|------|
-| PATH shadowing | `/opt/homebrew/bin/geode` precedes `~/.local/bin/geode`. The operator's dev CLI and the brew consumer CLI coexist — after publishing, `which -a geode` and confirm BOTH print the released version. A stale Cellar version silently shadows the dev install. |
-| Operator install breakage | The dev editable install needs `uv tool install -e ".[audit]" --force --python 3.12` — the `[audit]` chain (inspect-harbor → harbor → litellm) fails to build on Python 3.14. |
-| Version at the tag | The `-S`/title of a release commit can disagree with the stamped version — always read `git show TAG:pyproject.toml`. |
-| Formula test block | The formula's `test do` asserts `GEODE vX.Y.Z` in `geode version` output — a version/url mismatch fails at `brew test`, not at install. |
-| Tap default branch | The tap's default branch is `master`, not `main` — `git reset --hard origin/main` fails silently confusingly. |
-| Tap remote divergence | Another session may push the tap while you edit the local clone (brew's clone doubles as a working copy). On non-fast-forward, `git diff origin/master HEAD -- Formula/geode.rb` first: if only the url/sha bump differs, rebase and resolve with your file. |
+## Public postconditions
+
+Run these after the workflow is green:
+
+```bash
+gh release view vX.Y.Z
+uvx --no-cache --from "geode-agent==X.Y.Z" geode version
+brew update
+brew upgrade geode
+brew test mangowhoiscloud/tap/geode
+```
+
+The GitHub release, public PyPI JSON, `Formula/geode.rb`, and both CLI smokes
+must all resolve `X.Y.Z`. The formula URL must be:
+
+```text
+https://github.com/mangowhoiscloud/geode/releases/download/vX.Y.Z/geode_agent-X.Y.Z.tar.gz
+```
+
+Tag auto-tarballs under `archive/refs/tags`, a formula test that matches only
+`"GEODE v"`, or a VCS-main install described as a stable release are failures.
+
+## Recovery
+
+The workflow is retry-safe for the same version:
+
+- an existing annotated tag must resolve to the same validated SHA;
+- an existing GitHub release may be repaired from a matching partial asset set;
+  every existing asset must byte-match before any missing asset is uploaded;
+- an existing PyPI version may be repaired from a matching partial file set;
+  every existing filename and SHA-256 must match before the publisher skips it
+  and uploads only missing files, followed by the exact-version smoke;
+- an already-current Homebrew formula is never regenerated from a later live
+  dependency graph; it still runs audit/build/test and treats the no-diff
+  publication step as success.
+
+If `main` advanced after a partial promotion created the annotated tag, rerun
+with both workflow refs set to that tag (for example `--ref vX.Y.Z` and
+`-f ref=vX.Y.Z`). The workflow verifies that the tag target is unchanged and
+still belongs to `main` before repairing the release.
+
+If a channel fails, fix the cause and rerun the same workflow/version. Never
+delete or overwrite a GitHub/PyPI release, move a published tag, loosen the exact
+version checks, or hand-edit the tap merely to make the run green.

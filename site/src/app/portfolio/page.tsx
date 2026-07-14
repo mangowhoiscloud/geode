@@ -8,7 +8,7 @@ import { Token } from "@astryxdesign/core/Token";
 import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion";
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { GeodiSprite } from "@/components/geode/geodi-sprite";
 import { LocaleProvider, t, useLocale } from "@/components/geode/locale-context";
@@ -54,10 +54,15 @@ const navItems = [
  * character by character (operator direction 2026-07-13), then output
  * reveals line by line exactly like the hero terminal. Transcripts are
  * abridged from the real 2026-07-13 publication runs (brew source build,
- * uv tool install, uvx ephemeral env); reduced motion renders the finished
+ * PyPI uv tool install, uvx ephemeral env); reduced motion renders the finished
  * transcript statically.
  */
 type InstallLine = { kind: "cmd" | "out" | "ok" | "welcome" | "prompt"; text: string };
+
+const FIRST_PROMPT_LINES: InstallLine[] = [
+  { kind: "welcome", text: "" },
+  { kind: "prompt", text: "Hello World" },
+];
 
 const installChannels: {
   id: string;
@@ -83,51 +88,49 @@ const installChannels: {
       { kind: "out", text: "==> Fetching downloads for: geode" },
       { kind: "out", text: "==> Installing geode from mangowhoiscloud/tap" },
       { kind: "cmd", text: "geode" },
-      { kind: "welcome", text: "" },
-      { kind: "prompt", text: "Hello World" },
+      ...FIRST_PROMPT_LINES,
     ],
   },
   {
     id: "uv-tool",
     labelKo: "uv tool",
     labelEn: "uv tool",
-    noteKo: "파이썬 툴체인 사용자용. 릴리스 태그를 격리 환경에 설치합니다.",
-    noteEn: "For Python-toolchain users. Installs the release tag into an isolated env.",
-    copy: 'uv tool install "geode-agent @ git+https://github.com/mangowhoiscloud/geode"',
+    noteKo: "파이썬 툴체인 사용자용. 최신 안정 버전을 격리된 도구 환경에 설치합니다.",
+    noteEn: "For Python-toolchain users. Installs the latest stable release in an isolated tool env.",
+    copy: "uv tool install geode-agent",
     lines: [
-      { kind: "cmd", text: 'uv tool install "geode-agent @ git+https://github.com/mangowhoiscloud/geode"' },
+      { kind: "cmd", text: "uv tool install geode-agent" },
       { kind: "out", text: "Installed 2 executables: geode, geode-mcp" },
-      { kind: "cmd", text: "geode version" },
-      { kind: "ok", text: "" },
+      { kind: "cmd", text: "geode" },
+      ...FIRST_PROMPT_LINES,
     ],
   },
   {
     id: "uvx",
     labelKo: "uvx · 설치 없이",
     labelEn: "uvx · no install",
-    noteKo: "설치 없이 1회 실행. 일회성 환경을 만들고 지웁니다.",
-    noteEn: "One-shot run without installing. Ephemeral env, then gone.",
-    copy: "uvx --from git+https://github.com/mangowhoiscloud/geode geode",
+    noteKo: "설치 없이 1회 실행. PATH에 명령을 남기지 않습니다.",
+    noteEn: "One-shot run without installing. Adds no command to your PATH.",
+    copy: "uvx --from geode-agent geode",
     lines: [
-      { kind: "cmd", text: "uvx --from git+https://github.com/mangowhoiscloud/geode geode version" },
+      { kind: "cmd", text: "uvx --from geode-agent geode" },
       { kind: "out", text: "Installed 64 packages in 434ms" },
-      { kind: "ok", text: "" },
+      ...FIRST_PROMPT_LINES,
     ],
   },
   {
     id: "source",
     labelKo: "소스",
     labelEn: "Source",
-    noteKo: "개발·기여용. 클론한 트리에서 바로 실행합니다.",
-    noteEn: "For development and contributions. Runs straight from the clone.",
-    copy: "git clone https://github.com/mangowhoiscloud/geode && cd geode && uv sync",
+    noteKo: "개발·기여용. uv run이 프로젝트 환경을 맞춘 뒤 바로 실행합니다.",
+    noteEn: "For development and contributions. uv run syncs the project env and starts GEODE.",
+    copy: "git clone https://github.com/mangowhoiscloud/geode.git && cd geode && uv run geode",
     lines: [
-      { kind: "cmd", text: "git clone https://github.com/mangowhoiscloud/geode && cd geode" },
+      { kind: "cmd", text: "git clone https://github.com/mangowhoiscloud/geode.git && cd geode" },
       { kind: "out", text: "Cloning into 'geode'..." },
-      { kind: "cmd", text: "uv sync" },
+      { kind: "cmd", text: "uv run geode" },
       { kind: "out", text: "Installed 120 packages in 256ms" },
-      { kind: "cmd", text: "uv run geode version" },
-      { kind: "ok", text: "" },
+      ...FIRST_PROMPT_LINES,
     ],
   },
 ];
@@ -136,25 +139,44 @@ const TYPE_MS = 26;
 const LINE_MS = 520;
 const CMD_SETTLE_MS = 380;
 const REPLAY_MS = 4800;
+const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
+
+function subscribeToReducedMotion(onChange: () => void) {
+  const media = window.matchMedia(REDUCED_MOTION_QUERY);
+  media.addEventListener("change", onChange);
+  return () => media.removeEventListener("change", onChange);
+}
+
+function getReducedMotionSnapshot() {
+  return window.matchMedia(REDUCED_MOTION_QUERY).matches;
+}
+
+function useHydrationSafeReducedMotion() {
+  // Hydration must begin from the same snapshot the server rendered. React
+  // checks the real media query immediately after hydration without an effect.
+  return useSyncExternalStore(subscribeToReducedMotion, getReducedMotionSnapshot, () => false);
+}
 
 function InstallTerminal({ lines }: { lines: InstallLine[] }) {
-  const reduceMotion = useReducedMotion();
-  const [lineIndex, setLineIndex] = useState(reduceMotion ? lines.length : 0);
+  const reduceMotion = useHydrationSafeReducedMotion();
+  const [lineIndex, setLineIndex] = useState(0);
   const [charCount, setCharCount] = useState(0);
+  const progressRef = useRef({ line: 0, chars: 0 });
   const bodyRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    // Initial state already reflects reduceMotion; the terminal remounts per
-    // channel (key), so the effect never needs a synchronous reset.
     if (reduceMotion) return;
-    let line = 0;
-    let chars = 0;
+    // Resume from the exact visible frame after a live reduced-motion toggle.
+    // Resetting local counters to zero while React retained the old frame made
+    // the terminal briefly mismatch and then jump backwards.
+    let { line, chars } = progressRef.current;
     let timer: number;
     const step = () => {
       if (line >= lines.length) {
         timer = window.setTimeout(() => {
           line = 0;
           chars = 0;
+          progressRef.current = { line, chars };
           setLineIndex(0);
           setCharCount(0);
           timer = window.setTimeout(step, 600);
@@ -168,12 +190,14 @@ function InstallTerminal({ lines }: { lines: InstallLine[] }) {
         // is still watching, type a Hello World).
         const delay = current.kind === "prompt" && chars === 0 ? 1600 : TYPE_MS;
         chars += 1;
+        progressRef.current = { line, chars };
         setCharCount(chars);
         timer = window.setTimeout(step, delay);
         return;
       }
       line += 1;
       chars = 0;
+      progressRef.current = { line, chars };
       setLineIndex(line);
       setCharCount(0);
       // The welcome banner gets a longer beat, matching the former hero
@@ -190,7 +214,9 @@ function InstallTerminal({ lines }: { lines: InstallLine[] }) {
   useEffect(() => {
     const body = bodyRef.current;
     if (body) body.scrollTop = body.scrollHeight;
-  }, [lineIndex, charCount]);
+  }, [lineIndex, charCount, reduceMotion]);
+
+  const visibleLineIndex = reduceMotion ? lines.length : lineIndex;
 
   const renderLine = (line: InstallLine, i: number, partial: boolean) => {
     if (line.kind === "cmd") {
@@ -258,8 +284,9 @@ function InstallTerminal({ lines }: { lines: InstallLine[] }) {
         <span className="ml-2 font-mono text-[11px] text-[var(--ink-3)]">install</span>
       </div>
       <div ref={bodyRef} className="h-[248px] overflow-hidden px-5 py-4 sm:px-7">
-        {lines.slice(0, lineIndex).map((line, i) => renderLine(line, i, false))}
-        {lineIndex < lines.length &&
+        {lines.slice(0, visibleLineIndex).map((line, i) => renderLine(line, i, false))}
+        {!reduceMotion &&
+        lineIndex < lines.length &&
         ((lines[lineIndex].kind === "cmd" && charCount > 0) || lines[lineIndex].kind === "prompt")
           ? renderLine(lines[lineIndex], lineIndex, true)
           : null}
