@@ -2,7 +2,7 @@
  * GEODE CHANGELOG, auto-synced from the GEODE repo via `npm run sync-stats`.
  * Do not edit manually. Edit CHANGELOG.md in the GEODE repo and re-run sync.
  *
- * Last sync: 2026-07-13
+ * Last sync: 2026-07-14
  *
  * Each entry's `body` is the raw markdown between two version headings.
  * The Changelog page renders the body with a minimal markdown renderer
@@ -16,6 +16,11 @@ export type ChangelogEntry = {
 };
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    "version": "0.99.328",
+    "date": "2026-07-14",
+    "body": "### Changed\n\n- **AgenticLoop state-machine formalization — closed terminal alphabet.**\n  `TerminationReason` StrEnum (20 members, including the previously\n  undocumented `session_time_budget_handoff`/`_expired`) replaces the\n  comment-only string dictionary, and every terminal `AgenticResult` is\n  born through the single `_terminal_result` choke-point — the source\n  ratchet pins `AgenticResult(` to exactly one occurrence in\n  agent_loop.py. Post-response/post-tool guards (cost budget,\n  overthinking, model refusal, convergence, repeated-success) moved\n  verbatim into named `_guard_*` methods whose call order in `arun` IS\n  the documented priority order. Behaviour-preserving: StrEnum members\n  compare equal to the legacy strings, serialization unchanged.\n- **Snapshot completeness for resume.** Guard counters the conversation\n  messages don't carry (overthinking streak, LLM-failure counter,\n  diversity tracker, `ConvergenceDetector` state) now persist in the\n  checkpoint (`SessionState.loop_guards`, via\n  `_lifecycle.collect_guard_state`) and restore through the single shared\n  resume surgery `AgenticLoop.restore_from_checkpoint` — used by both the\n  IPC resume handler and the gateway ask continuation, closing the\n  manual-restore drift class a review caught in v0.99.327.\n- **Session-status transition ownership.** `SessionStatus` StrEnum with\n  documented transition owners plus a `mark_paused` primitive; the\n  scheduler drain (one-shot surface) now marks its checkpoint PAUSED when\n  parking behind a pending ask and COMPLETED otherwise, so scheduled\n  sessions stop polluting `list_resumable()` as immortal \"active\"\n  entries. Documented remaining gap: the gateway multi-turn surface\n  cannot know whether another message follows and stays ACTIVE until\n  cleanup. Guards: `tests/core/agent/test_loop_state_machine.py`\n  (state-space closure ratchet, guard-state roundtrip, status\n  transitions), extended `tests/core/cli/test_scheduler_drain_ask.py`."
+  },
   {
     "version": "0.99.327",
     "date": "2026-07-14",
@@ -2358,4 +2363,4 @@ export const CHANGELOG: ChangelogEntry[] = [
   }
 ];
 
-export const CHANGELOG_SYNCED_AT = "2026-07-13";
+export const CHANGELOG_SYNCED_AT = "2026-07-14";

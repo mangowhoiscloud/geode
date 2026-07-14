@@ -677,6 +677,19 @@ class SessionManager:
             )
             self._conn.commit()
 
+    def update_status(self, session_id: str, status: str) -> None:
+        """Update one session's status in place (no-op when the row is
+        absent) — keeps the SQLite index in step with the state.json
+        transition primitives (``SessionCheckpoint._write_status``)."""
+        import time as _time
+
+        with self._lock:
+            self._conn.execute(
+                "UPDATE sessions SET status = ?, updated_at = ? WHERE session_id = ?",
+                (status, _time.time(), session_id),
+            )
+            self._conn.commit()
+
     def get(self, session_id: str) -> SessionMeta | None:
         """Fetch a single session by ID."""
         row = self._conn.execute(

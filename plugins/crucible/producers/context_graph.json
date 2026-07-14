@@ -50,7 +50,7 @@
         "runtime",
         "while-tool-use"
       ],
-      "contentSha256": "8c8ec6c0ca273317d92e08a12b9ba1a82a6cd8fd3ab17b3e315d6c34cb91d783"
+      "contentSha256": "42b9ed70bc27ec856a031baeaa56a6b73e8a101e9b0d57a28abd4ea997844af4"
     },
     {
       "id": "file:core/agent/tool_executor/processor.py",

@@ -685,8 +685,9 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
 #
 # The fallback path always sets ``termination_reason`` to one of the
 # explicit failure sentinels below — gate ``success`` on the absence of
-# those plus the absence of ``error``. Sentinels enumerated from
-# ``agent_loop.py`` (search ``termination_reason="``):
+# those plus the absence of ``error``. Sentinels are members of
+# ``core.agent.loop.models.TerminationReason`` (the loop's closed terminal
+# alphabet; every terminal is born in ``AgenticLoop._terminal_result``):
 #
 # * Failure exits (text is fallback / diagnostic UI, NOT a real answer):
 #   ``model_action_required``, ``context_exhausted``, ``llm_error``,

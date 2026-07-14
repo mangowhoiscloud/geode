@@ -507,6 +507,16 @@ class TestCLIChannelIntegration:
         mock_services = MagicMock()
         mock_loop = MagicMock()
         mock_loop.model = "claude-opus-4-6"
+
+        # v0.99.328 resume contract — the poller delegates the machine-state
+        # surgery to loop.restore_from_checkpoint; the double implements it.
+        def _restore(state_arg):
+            from core.agent.cognitive_state import CognitiveState
+
+            mock_loop._session_id = state_arg.session_id
+            mock_loop.cognitive_state = CognitiveState.from_snapshot(state_arg.cognitive_state)
+
+        mock_loop.restore_from_checkpoint = _restore
         mock_services.create_session.return_value = (MagicMock(), mock_loop)
 
         poller = CLIPoller(mock_services, socket_path=sock_path)
@@ -566,6 +576,14 @@ class TestCLIChannelIntegration:
         mock_services = MagicMock()
         mock_loop = MagicMock()
         mock_loop.model = "claude-opus-4-6"
+
+        def _restore(state_arg):
+            from core.agent.cognitive_state import CognitiveState
+
+            mock_loop._session_id = state_arg.session_id
+            mock_loop.cognitive_state = CognitiveState.from_snapshot(state_arg.cognitive_state)
+
+        mock_loop.restore_from_checkpoint = _restore
         mock_services.create_session.return_value = (MagicMock(), mock_loop)
 
         poller = CLIPoller(mock_services, socket_path=sock_path)
