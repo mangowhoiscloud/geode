@@ -21,7 +21,10 @@ def test_distinct_threads_get_distinct_instances():
     assert base != _gateway_checkpoint_session_id("telegram:C123:U9:thread-1")
 
 
-def test_id_shape():
-    sid = _gateway_checkpoint_session_id("slack:C1:U1:t1")
+def test_id_shape_pins_sha256():
+    import hashlib
+
+    key = "slack:C1:U1:t1"
+    sid = _gateway_checkpoint_session_id(key)
     assert sid.startswith("s-gw-")
-    assert len(sid) == len("s-gw-") + 12
+    assert sid == "s-gw-" + hashlib.sha256(key.encode("utf-8")).hexdigest()[:12]

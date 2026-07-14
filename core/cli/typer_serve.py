@@ -240,12 +240,20 @@ def serve(
         if _gw_session_id:
             # Machine continuity across turns — cognitive state + guard
             # counters come from the thread's checkpoint; the conversation
-            # itself stays session_store-owned (restored above).
-            from core.memory.session_checkpoint import SessionCheckpoint
+            # itself stays session_store-owned (restored above). A TERMINAL
+            # prior state (context exhaustion completed the instance) means
+            # the thread starts a FRESH machine under the same id: reopen
+            # the edge explicitly and skip the restore so the old goal and
+            # guard counters do not leak into the new topic.
+            from core.memory.session_checkpoint import SessionCheckpoint, SessionStatus
 
-            _prior_state = SessionCheckpoint().load(_gw_session_id)
+            _cp = SessionCheckpoint()
+            _prior_state = _cp.load(_gw_session_id)
             if _prior_state is not None:
-                loop.restore_from_checkpoint(_prior_state)
+                if _prior_state.status in (SessionStatus.ACTIVE, SessionStatus.PAUSED):
+                    loop.restore_from_checkpoint(_prior_state)
+                else:
+                    _cp.reopen(_gw_session_id)
         try:
             result = await loop.arun(content)
 

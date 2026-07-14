@@ -10,9 +10,12 @@ Persists session state to .geode/session/{id}/ so that:
 
 from __future__ import annotations
 
+import fcntl
 import json
 import logging
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from pathlib import Path
@@ -32,6 +35,8 @@ def _get_default_session_dir() -> Path:
 
 DEFAULT_SESSION_DIR = _get_default_session_dir()
 CLEANUP_AGE_HOURS = 72
+# Transitions-ledger retention bound (rows kept by cleanup()).
+_LEDGER_MAX_ROWS = 10_000
 
 
 class SessionStatus(StrEnum):
@@ -136,24 +141,11 @@ class SessionCheckpoint:
         the only place that has the full conversation.
         """
         state.updated_at = time.time()
+        # The persisted alphabet is closed — a caller-supplied junk status
+        # never reaches disk (it coerces to ERROR with a warning).
+        incoming = normalize_status(state.status)
+        state.status = str(incoming)
         session_path = self._dir / state.session_id
-        # Terminal-state writes are an implicit reopen — tolerated (losing a
-        # resumed conversation is worse than a noisy edge) but warned, so a
-        # writer that bypassed reopen() stays visible.
-        current = self.current_status(state.session_id)
-        if current in (SessionStatus.COMPLETED, SessionStatus.ERROR):
-            log.warning(
-                "save() on terminal session %s (%s) — implicit reopen; "
-                "resume surfaces should call reopen() explicitly",
-                state.session_id,
-                current,
-            )
-            self._record_transition(
-                state.session_id,
-                "implicit_reopen",
-                from_status=current,
-                to_status=SessionStatus.ACTIVE,
-            )
         session_path.mkdir(parents=True, exist_ok=True)
 
         data = {
@@ -169,10 +161,37 @@ class SessionCheckpoint:
             "cognitive_state": state.cognitive_state,
             "loop_guards": state.loop_guards,
         }
-
-        # Write state.json (metadata)
         state_file = session_path / "state.json"
-        atomic_write_json(state_file, data, indent=2)
+
+        with self._status_lock():
+            current = self.current_status(state.session_id)
+            if current in (SessionStatus.COMPLETED, SessionStatus.ERROR):
+                # Terminal-state writes are an implicit reopen — tolerated
+                # (losing a resumed conversation is worse than a noisy edge)
+                # but warned, so a writer that bypassed reopen() stays
+                # visible.
+                log.warning(
+                    "save() on terminal session %s (%s) — implicit reopen; "
+                    "resume surfaces should call reopen() explicitly",
+                    state.session_id,
+                    current,
+                )
+                self._record_transition(
+                    state.session_id,
+                    "implicit_reopen",
+                    from_status=current,
+                    to_status=incoming,
+                )
+            elif current != incoming:
+                # Status-changing save (absent -> active, paused -> active on
+                # a resume turn). Steady-state ACTIVE -> ACTIVE saves are NOT
+                # ledgered — one row per round would be noise, not signal.
+                self._record_transition(
+                    state.session_id, "save", from_status=current, to_status=incoming
+                )
+            # Write state.json (metadata) inside the lock so a concurrent
+            # transition cannot interleave its read-check-write with ours.
+            atomic_write_json(state_file, data, indent=2)
 
         self._sync_cognitive_state_to_db(state)
         persisted_state = replace(
@@ -333,6 +352,24 @@ class SessionCheckpoint:
             log.debug("DB-first message load failed for %s", session_id, exc_info=True)
             return None
 
+    @contextmanager
+    def _status_lock(self) -> Iterator[None]:
+        """Cross-process serialization for status read-check-write sections.
+
+        Same fcntl pattern as ``PendingAskStore._locked`` — the daemon and a
+        concurrent CLI process must not interleave a transition's
+        read-check-write (a lost COMPLETED write would silently resurrect a
+        finished machine).
+        """
+        self._dir.mkdir(parents=True, exist_ok=True)
+        lock_path = self._dir / ".status.lock"
+        with open(lock_path, "w", encoding="utf-8") as lock_file:
+            fcntl.flock(lock_file, fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(lock_file, fcntl.LOCK_UN)
+
     def _record_transition(
         self,
         session_id: str,
@@ -413,22 +450,23 @@ class SessionCheckpoint:
         with a warning — the fail-loud signal that a writer bypassed the
         graph; re-entering a terminal state goes through :meth:`reopen`.
         """
-        current = self.current_status(session_id)
-        if current is None:
-            return False
-        if to not in _LEGAL_TRANSITIONS[current]:
-            log.warning(
-                "Illegal session transition %s -> %s refused (session=%s); "
-                "terminal states re-enter only via reopen()",
-                current,
-                to,
-                session_id,
-            )
-            self._record_transition(session_id, "refused", from_status=current, to_status=to)
-            return False
-        self._write_status(session_id, to)
-        self._record_transition(session_id, "transition", from_status=current, to_status=to)
-        return True
+        with self._status_lock():
+            current = self.current_status(session_id)
+            if current is None:
+                return False
+            if to not in _LEGAL_TRANSITIONS[current]:
+                log.warning(
+                    "Illegal session transition %s -> %s refused (session=%s); "
+                    "terminal states re-enter only via reopen()",
+                    current,
+                    to,
+                    session_id,
+                )
+                self._record_transition(session_id, "refused", from_status=current, to_status=to)
+                return False
+            self._write_status(session_id, to)
+            self._record_transition(session_id, "transition", from_status=current, to_status=to)
+            return True
 
     def reopen(self, session_id: str) -> bool:
         """Explicit terminal -> ACTIVE edge (resume-by-id surfaces).
@@ -436,15 +474,16 @@ class SessionCheckpoint:
         No-op success when the session is already non-terminal; False when
         the session is absent.
         """
-        current = self.current_status(session_id)
-        if current is None:
-            return False
-        if current in (SessionStatus.COMPLETED, SessionStatus.ERROR):
-            log.info("Session %s reopened (%s -> active)", session_id, current)
-            self._write_status(session_id, SessionStatus.ACTIVE)
-            self._record_transition(
-                session_id, "reopen", from_status=current, to_status=SessionStatus.ACTIVE
-            )
+        with self._status_lock():
+            current = self.current_status(session_id)
+            if current is None:
+                return False
+            if current in (SessionStatus.COMPLETED, SessionStatus.ERROR):
+                log.info("Session %s reopened (%s -> active)", session_id, current)
+                self._write_status(session_id, SessionStatus.ACTIVE)
+                self._record_transition(
+                    session_id, "reopen", from_status=current, to_status=SessionStatus.ACTIVE
+                )
         return True
 
     def mark_completed(self, session_id: str) -> None:
@@ -485,6 +524,20 @@ class SessionCheckpoint:
 
         cutoff = time.time() - (max_age_hours * 3600)
         removed = 0
+
+        # Transitions-ledger retention — the ledger lives in the sessions
+        # ROOT (not a session dir), so directory removal below never prunes
+        # it. Keep the newest rows only.
+        ledger = self._dir / "transitions.jsonl"
+        try:
+            if ledger.exists():
+                lines = ledger.read_text(encoding="utf-8").splitlines()
+                if len(lines) > _LEDGER_MAX_ROWS:
+                    from core.memory.atomic_write import atomic_write_text
+
+                    atomic_write_text(ledger, "\n".join(lines[-_LEDGER_MAX_ROWS:]) + "\n")
+        except OSError:
+            log.debug("Transition ledger retention failed", exc_info=True)
 
         for entry in list(self._dir.iterdir()):
             if not entry.is_dir():

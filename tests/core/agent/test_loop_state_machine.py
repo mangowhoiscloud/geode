@@ -322,6 +322,7 @@ def test_transitions_ledger_records_every_edge(tmp_path):
     ledger = tmp_path / "sessions" / "transitions.jsonl"
     rows = [_json.loads(line) for line in ledger.read_text().splitlines()]
     edges = [(r["edge"], r["from"], r["to"]) for r in rows]
+    assert ("save", None, "active") in edges  # absent -> active (first save)
     assert ("transition", "active", "paused") in edges
     assert ("refused", "completed", "paused") in edges
     assert ("reopen", "completed", "active") in edges

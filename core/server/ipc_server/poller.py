@@ -758,6 +758,14 @@ class CLIPoller:
             return {"type": "ack"}
 
         if msg_type == "exit":
+            # Clean client exit — the REPL surface's ACTIVE -> COMPLETED
+            # edge (docs/architecture/session-state-machine.md § owners).
+            try:
+                _mark_done = getattr(loop, "mark_session_completed", None)
+                if callable(_mark_done):
+                    _mark_done()
+            except Exception:
+                log.debug("mark_session_completed on exit failed", exc_info=True)
             return None
 
         if msg_type == "approval_response":
@@ -885,6 +893,14 @@ class CLIPoller:
         msg_type = msg.get("type", "")
 
         if msg_type == "exit":
+            # Clean client exit — the REPL surface's ACTIVE -> COMPLETED
+            # edge (docs/architecture/session-state-machine.md § owners).
+            try:
+                _mark_done = getattr(loop, "mark_session_completed", None)
+                if callable(_mark_done):
+                    _mark_done()
+            except Exception:
+                log.debug("mark_session_completed on exit failed", exc_info=True)
             return None
 
         if msg_type == "prompt":
