@@ -14,6 +14,7 @@ import json
 import logging
 import time
 from dataclasses import dataclass, field, replace
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +34,28 @@ DEFAULT_SESSION_DIR = _get_default_session_dir()
 CLEANUP_AGE_HOURS = 72
 
 
+class SessionStatus(StrEnum):
+    """Closed session-status space with explicit transition owners.
+
+    - ACTIVE: written by every per-turn ``save()`` — the session may take
+      more turns.
+    - PAUSED: a one-shot surface (scheduler drain) parked the session
+      awaiting operator input (pending ask); resumable.
+    - COMPLETED: clean REPL exit, or a one-shot run that terminated with
+      no pending ask; ``cleanup()`` may remove it.
+    - ERROR: unrecoverable session failure.
+
+    Known remaining gap: the gateway multi-turn surface never marks its
+    sessions (it cannot know whether another inbound message follows), so
+    gateway checkpoints stay ACTIVE until the 72h cleanup.
+    """
+
+    ACTIVE = "active"
+    PAUSED = "paused"
+    COMPLETED = "completed"
+    ERROR = "error"
+
+
 @dataclass
 class SessionState:
     """Serializable session checkpoint."""
@@ -43,12 +66,16 @@ class SessionState:
     round_idx: int = 0
     model: str = ""
     provider: str = "anthropic"
-    status: str = "active"  # active | paused | completed | error
+    status: str = SessionStatus.ACTIVE  # see SessionStatus
     messages: list[dict[str, Any]] = field(default_factory=list)
     tool_log: list[dict[str, Any]] = field(default_factory=list)
     cognitive_state: dict[str, Any] = field(default_factory=dict)
     system_prompt_hash: str = ""
     user_input: str = ""  # original user request for context
+    # Guard counters the messages don't carry (overthinking streak, LLM
+    # retry counter, diversity tracker, convergence detector) — written by
+    # ``_lifecycle.collect_guard_state``, restored by ``restore_loop_state``.
+    loop_guards: dict[str, Any] = field(default_factory=dict)
 
 
 class SessionCheckpoint:
@@ -95,6 +122,7 @@ class SessionCheckpoint:
             "system_prompt_hash": state.system_prompt_hash,
             "user_input": state.user_input,
             "cognitive_state": state.cognitive_state,
+            "loop_guards": state.loop_guards,
         }
 
         # Write state.json (metadata)
@@ -207,6 +235,9 @@ class SessionCheckpoint:
                 cognitive_state=cognitive_state,
                 system_prompt_hash=data.get("system_prompt_hash", ""),
                 user_input=data.get("user_input", ""),
+                loop_guards=(
+                    data["loop_guards"] if isinstance(data.get("loop_guards"), dict) else {}
+                ),
             )
         except (json.JSONDecodeError, KeyError, OSError) as e:
             log.warning("Failed to load session %s: %s", session_id, e)
@@ -257,22 +288,28 @@ class SessionCheckpoint:
             log.debug("DB-first message load failed for %s", session_id, exc_info=True)
             return None
 
-    def mark_completed(self, session_id: str) -> None:
-        """Mark a session as completed (no longer resumable)."""
-        session_path = self._dir / session_id
-        state_file = session_path / "state.json"
+    def _write_status(self, session_id: str, status: SessionStatus) -> None:
+        """Rewrite one session's persisted status (transition primitive)."""
+        state_file = self._dir / session_id / "state.json"
         if not state_file.exists():
             return
         try:
             data = json.loads(state_file.read_text(encoding="utf-8"))
-            data["status"] = "completed"
+            data["status"] = str(status)
             data["updated_at"] = time.time()
             atomic_write_json(state_file, data, indent=2)
         except (json.JSONDecodeError, OSError):
             pass
 
+    def mark_completed(self, session_id: str) -> None:
+        """Mark a session as completed (no longer resumable)."""
+        self._write_status(session_id, SessionStatus.COMPLETED)
         # Clear active pointer if it points to this session
         self._clear_active_if_matches(session_id)
+
+    def mark_paused(self, session_id: str) -> None:
+        """Mark a session as paused — parked awaiting operator input."""
+        self._write_status(session_id, SessionStatus.PAUSED)
 
     def list_resumable(self) -> list[SessionState]:
         """List sessions that can be resumed (status=active or paused)."""

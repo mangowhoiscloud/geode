@@ -22,6 +22,61 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
+def collect_guard_state(loop: AgenticLoop) -> dict[str, Any]:
+    """Serialize the loop's guard counters — the machine state that the
+    conversation messages do NOT carry.
+
+    Snapshot-completeness contract: everything a resumed session needs to
+    keep its guard progress (overthinking streak, retry counter, diversity
+    tracker, convergence detector) lives here, so
+    ``apply_guard_state(collect_guard_state(loop))`` round-trips. Pinned by
+    ``tests/core/agent/test_loop_state_machine.py``.
+    """
+    return {
+        "consecutive_text_only_rounds": loop._consecutive_text_only_rounds,
+        "consecutive_llm_failures": loop._consecutive_llm_failures,
+        "total_empty_rounds": loop._total_empty_rounds,
+        "budget_warned": bool(getattr(loop, "_budget_warned", False)),
+        "consecutive_tool_tracker": [list(sig) for sig in loop._consecutive_tool_tracker],
+        "convergence": loop._convergence.to_snapshot(),
+    }
+
+
+def apply_guard_state(loop: AgenticLoop, data: dict[str, Any]) -> None:
+    """Inverse of :func:`collect_guard_state`; missing keys keep defaults."""
+    if not data:
+        return
+    loop._consecutive_text_only_rounds = int(data.get("consecutive_text_only_rounds", 0))
+    loop._consecutive_llm_failures = int(data.get("consecutive_llm_failures", 0))
+    loop._total_empty_rounds = int(data.get("total_empty_rounds", 0))
+    loop._budget_warned = bool(data.get("budget_warned", False))
+    tracker = data.get("consecutive_tool_tracker", [])
+    if isinstance(tracker, list):
+        loop._consecutive_tool_tracker = [
+            (str(sig[0]), str(sig[1]))
+            for sig in tracker
+            if isinstance(sig, (list, tuple)) and len(sig) == 2
+        ]
+    convergence = data.get("convergence", {})
+    if isinstance(convergence, dict):
+        loop._convergence.apply_snapshot(convergence)
+
+
+def restore_loop_state(loop: AgenticLoop, state: Any) -> None:
+    """Restore a checkpointed session's machine identity onto *loop*.
+
+    The single resume surgery shared by every resume path (IPC
+    ``_handle_resume``, gateway ask continuation) — session id, cognitive
+    state, and guard counters in one place, so no path can forget a field.
+    Model restore stays with the caller (sync vs async contexts differ).
+    """
+    from core.agent.cognitive_state import CognitiveState
+
+    loop._session_id = state.session_id
+    loop.cognitive_state = CognitiveState.from_snapshot(state.cognitive_state)
+    apply_guard_state(loop, getattr(state, "loop_guards", {}) or {})
+
+
 def save_checkpoint(loop: AgenticLoop, user_input: str, round_idx: int = 0) -> None:
     """Persist session checkpoint for resume (per-turn, Claude Code pattern)."""
     if loop._checkpoint is None or not loop._session_id:
@@ -39,6 +94,7 @@ def save_checkpoint(loop: AgenticLoop, user_input: str, round_idx: int = 0) -> N
             tool_log=loop._tool_processor.tool_log,
             cognitive_state=loop.cognitive_state.to_snapshot(),
             user_input=user_input,
+            loop_guards=collect_guard_state(loop),
         )
         loop._checkpoint.save(state)
 
@@ -62,6 +118,18 @@ def mark_session_completed(loop: AgenticLoop) -> None:
         loop._checkpoint.mark_completed(loop._session_id)
     except Exception:
         log.debug("Checkpoint mark_completed failed", exc_info=True)
+
+
+def mark_session_paused(loop: AgenticLoop) -> None:
+    """Mark the current session as paused — a one-shot surface parked it
+    awaiting operator input (pending ask); the checkpoint stays resumable.
+    """
+    if loop._checkpoint is None or not loop._session_id:
+        return
+    try:
+        loop._checkpoint.mark_paused(loop._session_id)
+    except Exception:
+        log.debug("Checkpoint mark_paused failed", exc_info=True)
 
 
 def record_transcript_end(loop: AgenticLoop, result: Any) -> None:

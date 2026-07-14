@@ -110,9 +110,11 @@ async def drain_scheduler_queue(
                     ) -> None:
                         try:
                             r = await asyncio.wait_for(_loop.arun(_p), timeout=300.0)
-                            # A clarification question from a headless run
-                            # would otherwise die with the run — persist it
-                            # as a pending ask and notify the operator.
+                            # One-shot surface owns the session lifecycle: a
+                            # clarification question parks the checkpoint as
+                            # PAUSED behind a pending ask; every other
+                            # terminal marks it COMPLETED. (getattr-guarded:
+                            # tests drive stub loops without these methods.)
                             try:
                                 if (
                                     r is not None
@@ -128,6 +130,13 @@ async def drain_scheduler_queue(
                                         session_id=getattr(_loop, "_session_id", ""),
                                         source=f"scheduled:{_jid}",
                                     )
+                                    _mark_paused = getattr(_loop, "mark_session_paused", None)
+                                    if callable(_mark_paused):
+                                        _mark_paused()
+                                else:
+                                    _mark_done = getattr(_loop, "mark_session_completed", None)
+                                    if callable(_mark_done):
+                                        _mark_done()
                             except Exception:
                                 log.warning(
                                     "Pending-ask publish failed for job %s",

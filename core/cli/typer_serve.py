@@ -149,14 +149,10 @@ def serve(
             time_budget_override=_gw_time_budget,
             propagate_context=True,
         )
-        # Checkpoint continuity — restore session id, cognitive state, and
-        # model like the IPC resume handler, so the continuation runs under
-        # the paused run's identity (arun() re-binds the ContextVars from
-        # these restored objects).
-        from core.agent.cognitive_state import CognitiveState
-
-        _ask_loop._session_id = state.session_id
-        _ask_loop.cognitive_state = CognitiveState.from_snapshot(state.cognitive_state)
+        # Checkpoint continuity — the single shared resume surgery (same
+        # path as the IPC resume handler); arun() re-binds the ContextVars
+        # from the restored objects.
+        _ask_loop.restore_from_checkpoint(state)
         if state.model and state.model != _ask_loop.model:
             await _ask_loop.update_model_async(state.model)
         _res = await _ask_loop.arun(answer)

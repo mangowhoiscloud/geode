@@ -45,6 +45,40 @@ functional change.
 
 ---
 
+## [0.99.328] - 2026-07-14
+
+### Changed
+
+- **AgenticLoop state-machine formalization — closed terminal alphabet.**
+  `TerminationReason` StrEnum (20 members, including the previously
+  undocumented `session_time_budget_handoff`/`_expired`) replaces the
+  comment-only string dictionary, and every terminal `AgenticResult` is
+  born through the single `_terminal_result` choke-point — the source
+  ratchet pins `AgenticResult(` to exactly one occurrence in
+  agent_loop.py. Post-response/post-tool guards (cost budget,
+  overthinking, model refusal, convergence, repeated-success) moved
+  verbatim into named `_guard_*` methods whose call order in `arun` IS
+  the documented priority order. Behaviour-preserving: StrEnum members
+  compare equal to the legacy strings, serialization unchanged.
+- **Snapshot completeness for resume.** Guard counters the conversation
+  messages don't carry (overthinking streak, LLM-failure counter,
+  diversity tracker, `ConvergenceDetector` state) now persist in the
+  checkpoint (`SessionState.loop_guards`, via
+  `_lifecycle.collect_guard_state`) and restore through the single shared
+  resume surgery `AgenticLoop.restore_from_checkpoint` — used by both the
+  IPC resume handler and the gateway ask continuation, closing the
+  manual-restore drift class a review caught in v0.99.327.
+- **Session-status transition ownership.** `SessionStatus` StrEnum with
+  documented transition owners plus a `mark_paused` primitive; the
+  scheduler drain (one-shot surface) now marks its checkpoint PAUSED when
+  parking behind a pending ask and COMPLETED otherwise, so scheduled
+  sessions stop polluting `list_resumable()` as immortal "active"
+  entries. Documented remaining gap: the gateway multi-turn surface
+  cannot know whether another message follows and stays ACTIVE until
+  cleanup. Guards: `tests/core/agent/test_loop_state_machine.py`
+  (state-space closure ratchet, guard-state roundtrip, status
+  transitions), extended `tests/core/cli/test_scheduler_drain_ask.py`.
+
 ## [0.99.327] - 2026-07-14
 
 ### Added

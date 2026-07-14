@@ -1,0 +1,184 @@
+"""AgenticLoop state-machine contracts.
+
+Three invariants introduced by the FSM formalization:
+
+1. State-space closure — every terminal ``AgenticResult`` is born in
+   exactly ONE place (``AgenticLoop._terminal_result``) with a
+   :class:`TerminationReason` member; no inline string reasons remain.
+2. Snapshot completeness — ``collect_guard_state``/``apply_guard_state``
+   round-trip the guard counters the conversation messages don't carry,
+   and the checkpoint persists them.
+3. Session-status transitions — ``SessionStatus`` writes go through the
+   transition primitives (save→active, mark_paused, mark_completed).
+"""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+from types import SimpleNamespace
+
+from core.agent.convergence import ConvergenceDetector
+from core.agent.loop import _lifecycle
+from core.agent.loop.models import TerminationReason
+from core.memory.session_checkpoint import SessionCheckpoint, SessionState, SessionStatus
+
+_AGENT_LOOP_SRC = (
+    Path(__file__).resolve().parents[3] / "core" / "agent" / "loop" / "agent_loop.py"
+).read_text(encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
+# 1. State-space closure (source ratchet)
+# ---------------------------------------------------------------------------
+
+
+def test_terminal_results_born_in_one_place():
+    """``AgenticResult(`` appears once in agent_loop.py — inside
+    ``_terminal_result``. New exits must route through the choke-point."""
+    assert _AGENT_LOOP_SRC.count("AgenticResult(") == 1
+
+
+def test_no_inline_string_termination_reasons():
+    """No ``termination_reason="..."`` code literals (docstring mentions,
+    wrapped in double backticks, are exempt)."""
+    assert re.search(r'(?<!`)termination_reason="', _AGENT_LOOP_SRC) is None
+
+
+def test_enum_covers_documented_terminal_alphabet():
+    expected = {
+        "natural",
+        "forced_text",
+        "max_rounds",
+        "time_budget_expired",
+        "session_time_budget_handoff",
+        "session_time_budget_expired",
+        "context_exhausted",
+        "cost_budget_exceeded",
+        "billing_error",
+        "model_action_required",
+        "model_refusal",
+        "user_clarification_needed",
+        "convergence_detected",
+        "repeated_success_no_progress",
+        "input_blocked",
+        "user_cancelled",
+        "actionable_partial",
+        "tool_use_yield",
+        "llm_error",
+        "unknown",
+    }
+    assert {member.value for member in TerminationReason} == expected
+
+
+def test_enum_members_compare_equal_to_legacy_strings():
+    """StrEnum keeps every existing string comparison working."""
+    assert TerminationReason.USER_CLARIFICATION_NEEDED == "user_clarification_needed"
+    assert TerminationReason.CONTEXT_EXHAUSTED == "context_exhausted"
+    assert str(TerminationReason.MAX_ROUNDS) == "max_rounds"
+
+
+# ---------------------------------------------------------------------------
+# 2. Snapshot completeness
+# ---------------------------------------------------------------------------
+
+
+def _fake_loop() -> SimpleNamespace:
+    return SimpleNamespace(
+        _consecutive_text_only_rounds=0,
+        _consecutive_llm_failures=0,
+        _total_empty_rounds=0,
+        _budget_warned=False,
+        _consecutive_tool_tracker=[],
+        _convergence=ConvergenceDetector(),
+        _session_id="",
+        cognitive_state=None,
+    )
+
+
+def test_guard_state_roundtrip():
+    src = _fake_loop()
+    src._consecutive_text_only_rounds = 1
+    src._consecutive_llm_failures = 3
+    src._total_empty_rounds = 2
+    src._budget_warned = True
+    src._consecutive_tool_tracker = [("grep_files", "sig-a"), ("read_file", "sig-b")]
+    src._convergence.total_consecutive_tool_errors = 2
+    src._convergence.recent_errors = ["boom", "boom"]
+    src._convergence.repeated_success_streak = 4
+    src._convergence.last_success_tool = "list_dir"
+
+    snapshot = _lifecycle.collect_guard_state(src)
+
+    dst = _fake_loop()
+    _lifecycle.apply_guard_state(dst, snapshot)
+
+    assert dst._consecutive_text_only_rounds == 1
+    assert dst._consecutive_llm_failures == 3
+    assert dst._total_empty_rounds == 2
+    assert dst._budget_warned is True
+    assert dst._consecutive_tool_tracker == [("grep_files", "sig-a"), ("read_file", "sig-b")]
+    assert dst._convergence.to_snapshot() == src._convergence.to_snapshot()
+
+
+def test_apply_guard_state_tolerates_empty_and_partial():
+    dst = _fake_loop()
+    _lifecycle.apply_guard_state(dst, {})
+    assert dst._consecutive_llm_failures == 0
+    _lifecycle.apply_guard_state(dst, {"consecutive_llm_failures": 2})
+    assert dst._consecutive_llm_failures == 2
+    assert dst._consecutive_tool_tracker == []
+
+
+def test_restore_loop_state_is_the_single_surgery():
+    dst = _fake_loop()
+    state = SimpleNamespace(
+        session_id="s-resume-1",
+        cognitive_state={},
+        loop_guards={"consecutive_text_only_rounds": 1, "budget_warned": True},
+    )
+    _lifecycle.restore_loop_state(dst, state)
+    assert dst._session_id == "s-resume-1"
+    assert dst.cognitive_state is not None
+    assert dst._consecutive_text_only_rounds == 1
+    assert dst._budget_warned is True
+
+
+def test_checkpoint_persists_loop_guards(tmp_path):
+    cp = SessionCheckpoint(tmp_path / "sessions")
+    guards = {
+        "consecutive_text_only_rounds": 1,
+        "consecutive_llm_failures": 2,
+        "total_empty_rounds": 1,
+        "budget_warned": True,
+        "consecutive_tool_tracker": [["grep_files", "sig-a"]],
+        "convergence": ConvergenceDetector().to_snapshot(),
+    }
+    cp.save(SessionState(session_id="s-guards", messages=[], loop_guards=guards))
+    loaded = cp.load("s-guards")
+    assert loaded is not None
+    assert loaded.loop_guards == guards
+
+
+# ---------------------------------------------------------------------------
+# 3. Session-status transitions
+# ---------------------------------------------------------------------------
+
+
+def test_session_status_transitions(tmp_path):
+    cp = SessionCheckpoint(tmp_path / "sessions")
+    cp.save(SessionState(session_id="s-status", messages=[]))
+    assert cp.load("s-status").status == SessionStatus.ACTIVE
+
+    cp.mark_paused("s-status")
+    assert cp.load("s-status").status == SessionStatus.PAUSED
+    assert any(s.session_id == "s-status" for s in cp.list_resumable())
+
+    cp.mark_completed("s-status")
+    assert cp.load("s-status").status == SessionStatus.COMPLETED
+    assert all(s.session_id != "s-status" for s in cp.list_resumable())
+
+
+def test_mark_paused_missing_session_is_noop(tmp_path):
+    cp = SessionCheckpoint(tmp_path / "sessions")
+    cp.mark_paused("does-not-exist")  # must not raise
