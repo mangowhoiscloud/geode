@@ -47,6 +47,8 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.330] - 2026-07-14
+
 ### Fixed
 
 - **Every install channel now reaches the same first-run experience.** The
