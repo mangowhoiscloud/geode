@@ -35,25 +35,53 @@ CLEANUP_AGE_HOURS = 72
 
 
 class SessionStatus(StrEnum):
-    """Closed session-status space with explicit transition owners.
+    """Closed session-status space with an enforced transition graph.
 
     - ACTIVE: written by every per-turn ``save()`` — the session may take
       more turns.
-    - PAUSED: a one-shot surface (scheduler drain) parked the session
-      awaiting operator input (pending ask); resumable.
-    - COMPLETED: clean REPL exit, or a one-shot run that terminated with
-      no pending ask; ``cleanup()`` may remove it.
-    - ERROR: unrecoverable session failure.
+    - PAUSED: a one-shot surface parked the session awaiting operator
+      input (pending ask); resumable.
+    - COMPLETED: clean finish (REPL exit, one-shot run, ask continuation,
+      gateway context exhaustion); ``cleanup()`` may remove it.
+    - ERROR: a one-shot run died (timeout / unhandled exception).
 
-    Known remaining gap: the gateway multi-turn surface never marks its
-    sessions (it cannot know whether another inbound message follows), so
-    gateway checkpoints stay ACTIVE until the 72h cleanup.
+    Transitions go through :meth:`SessionCheckpoint.transition` against
+    ``_LEGAL_TRANSITIONS``; the terminal states re-enter ACTIVE only via
+    the explicit :meth:`SessionCheckpoint.reopen` edge. Full graph, owners,
+    and accepted gaps: ``docs/architecture/session-state-machine.md``.
     """
 
     ACTIVE = "active"
     PAUSED = "paused"
     COMPLETED = "completed"
     ERROR = "error"
+
+
+# The session automaton's transition function. Terminal states have no
+# outgoing edges here — ``reopen()`` is the single deliberate exception.
+_LEGAL_TRANSITIONS: dict[SessionStatus, frozenset[SessionStatus]] = {
+    SessionStatus.ACTIVE: frozenset(
+        {SessionStatus.ACTIVE, SessionStatus.PAUSED, SessionStatus.COMPLETED, SessionStatus.ERROR}
+    ),
+    SessionStatus.PAUSED: frozenset(
+        {SessionStatus.ACTIVE, SessionStatus.PAUSED, SessionStatus.COMPLETED, SessionStatus.ERROR}
+    ),
+    SessionStatus.COMPLETED: frozenset(),
+    SessionStatus.ERROR: frozenset(),
+}
+
+
+def normalize_status(raw: Any) -> SessionStatus:
+    """Coerce a persisted status string into the closed state space.
+
+    Unknown values coerce to ERROR with a warning — an out-of-alphabet
+    status means some writer bypassed the transition primitives.
+    """
+    try:
+        return SessionStatus(str(raw))
+    except ValueError:
+        log.warning("Unknown session status %r — coercing to ERROR", raw)
+        return SessionStatus.ERROR
 
 
 @dataclass
@@ -109,6 +137,23 @@ class SessionCheckpoint:
         """
         state.updated_at = time.time()
         session_path = self._dir / state.session_id
+        # Terminal-state writes are an implicit reopen — tolerated (losing a
+        # resumed conversation is worse than a noisy edge) but warned, so a
+        # writer that bypassed reopen() stays visible.
+        current = self.current_status(state.session_id)
+        if current in (SessionStatus.COMPLETED, SessionStatus.ERROR):
+            log.warning(
+                "save() on terminal session %s (%s) — implicit reopen; "
+                "resume surfaces should call reopen() explicitly",
+                state.session_id,
+                current,
+            )
+            self._record_transition(
+                state.session_id,
+                "implicit_reopen",
+                from_status=current,
+                to_status=SessionStatus.ACTIVE,
+            )
         session_path.mkdir(parents=True, exist_ok=True)
 
         data = {
@@ -229,7 +274,7 @@ class SessionCheckpoint:
                 round_idx=data.get("round_idx", 0),
                 model=data.get("model", ""),
                 provider=data.get("provider", "anthropic"),
-                status=data.get("status", "paused"),
+                status=normalize_status(data.get("status", SessionStatus.PAUSED)),
                 messages=messages,
                 tool_log=tool_log,
                 cognitive_state=cognitive_state,
@@ -288,8 +333,52 @@ class SessionCheckpoint:
             log.debug("DB-first message load failed for %s", session_id, exc_info=True)
             return None
 
+    def _record_transition(
+        self,
+        session_id: str,
+        edge: str,
+        *,
+        from_status: SessionStatus | None,
+        to_status: SessionStatus | None,
+    ) -> None:
+        """Append one row to the transitions ledger (observability).
+
+        ``<sessions>/transitions.jsonl`` is the automaton's audit trail:
+        every legal edge, reopen, implicit reopen, and REFUSED attempt
+        lands here as one bounded structured record, so "how did this
+        session get into this state" is answerable after the fact.
+        Best-effort: ledger failure never blocks a transition.
+        """
+        try:
+            from core.memory.atomic_write import append_jsonl
+
+            append_jsonl(
+                self._dir / "transitions.jsonl",
+                {
+                    "ts": time.time(),
+                    "session_id": session_id,
+                    "edge": edge,
+                    "from": str(from_status) if from_status else None,
+                    "to": str(to_status) if to_status else None,
+                },
+            )
+        except Exception:
+            log.debug("Transition ledger append failed", exc_info=True)
+
+    def current_status(self, session_id: str) -> SessionStatus | None:
+        """Read one session's persisted status (None when absent)."""
+        state_file = self._dir / session_id / "state.json"
+        if not state_file.exists():
+            return None
+        try:
+            data = json.loads(state_file.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return None
+        return normalize_status(data.get("status", SessionStatus.ACTIVE))
+
     def _write_status(self, session_id: str, status: SessionStatus) -> None:
-        """Rewrite one session's persisted status (transition primitive).
+        """Unvalidated status write (both SoTs) — callers go through
+        :meth:`transition` / :meth:`reopen`; never call this directly.
 
         Updates BOTH SoTs: ``state.json`` and the SQLite index row —
         ``geode session list`` reads the index first, so a JSON-only write
@@ -316,19 +405,61 @@ class SessionCheckpoint:
         except Exception:
             log.debug("SQLite status sync failed for %s", session_id, exc_info=True)
 
+    def transition(self, session_id: str, to: SessionStatus) -> bool:
+        """Apply one edge of the session automaton.
+
+        Returns True when the edge is legal and written. An illegal edge
+        (e.g. writing over a terminal COMPLETED/ERROR state) is refused
+        with a warning — the fail-loud signal that a writer bypassed the
+        graph; re-entering a terminal state goes through :meth:`reopen`.
+        """
+        current = self.current_status(session_id)
+        if current is None:
+            return False
+        if to not in _LEGAL_TRANSITIONS[current]:
+            log.warning(
+                "Illegal session transition %s -> %s refused (session=%s); "
+                "terminal states re-enter only via reopen()",
+                current,
+                to,
+                session_id,
+            )
+            self._record_transition(session_id, "refused", from_status=current, to_status=to)
+            return False
+        self._write_status(session_id, to)
+        self._record_transition(session_id, "transition", from_status=current, to_status=to)
+        return True
+
+    def reopen(self, session_id: str) -> bool:
+        """Explicit terminal -> ACTIVE edge (resume-by-id surfaces).
+
+        No-op success when the session is already non-terminal; False when
+        the session is absent.
+        """
+        current = self.current_status(session_id)
+        if current is None:
+            return False
+        if current in (SessionStatus.COMPLETED, SessionStatus.ERROR):
+            log.info("Session %s reopened (%s -> active)", session_id, current)
+            self._write_status(session_id, SessionStatus.ACTIVE)
+            self._record_transition(
+                session_id, "reopen", from_status=current, to_status=SessionStatus.ACTIVE
+            )
+        return True
+
     def mark_completed(self, session_id: str) -> None:
         """Mark a session as completed (no longer resumable)."""
-        self._write_status(session_id, SessionStatus.COMPLETED)
-        # Clear active pointer if it points to this session
-        self._clear_active_if_matches(session_id)
+        if self.transition(session_id, SessionStatus.COMPLETED):
+            # Clear active pointer if it points to this session
+            self._clear_active_if_matches(session_id)
 
     def mark_paused(self, session_id: str) -> None:
         """Mark a session as paused — parked awaiting operator input."""
-        self._write_status(session_id, SessionStatus.PAUSED)
+        self.transition(session_id, SessionStatus.PAUSED)
 
     def mark_error(self, session_id: str) -> None:
         """Mark a session as errored (one-shot run died; not resumable)."""
-        self._write_status(session_id, SessionStatus.ERROR)
+        self.transition(session_id, SessionStatus.ERROR)
 
     def list_resumable(self) -> list[SessionState]:
         """List sessions that can be resumed (status=active or paused)."""

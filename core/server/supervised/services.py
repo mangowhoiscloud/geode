@@ -127,6 +127,7 @@ class SharedServices:
         time_budget_override: float | None = None,
         verbose: bool = False,
         propagate_context: bool = False,
+        session_id: str = "",
         **kwargs: Any,
     ) -> tuple[ToolExecutor, AgenticLoop]:
         """Build a fully-wired (ToolExecutor, AgenticLoop) for *mode*.
@@ -218,6 +219,10 @@ class SharedServices:
             hooks=self.hook_system,
             system_suffix=system_suffix,
             quiet=quiet,
+            # Caller-provided machine-instance id — gateway threads pass a
+            # stable derived id so a thread's turns share ONE checkpoint
+            # chain; empty keeps the loop's fresh ``s-<uuid>``.
+            session_id=session_id,
         )
         # Set per-thread ContextVar so tool handlers see the correct loop
         from core.cli.session_state import set_current_loop

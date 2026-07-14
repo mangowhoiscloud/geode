@@ -1237,6 +1237,11 @@ class CLIPoller:
             if state is None:
                 return {"type": "resume_error", "message": "No resumable session found"}
 
+            # Resume-by-id of a terminal (completed/error) instance takes
+            # the explicit reopen edge of the session automaton — the
+            # per-turn save() would otherwise warn about an implicit reopen.
+            cp.reopen(state.session_id)
+
             # Restore conversation messages
             conversation.messages.clear()
             conversation.messages.extend(state.messages)
