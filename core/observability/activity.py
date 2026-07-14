@@ -14,9 +14,10 @@ Structure (PR-OBS-CONTRACT, 2026-06-13 — full coverage):
   - 4 lifecycle detail mixins (started / completed / failed / retried)
   - 19 lifecycle concrete classes (A=6 started, B=7 completed, C=5 failed,
     D=1 retried) with discriminator on ``action``
-  - 45 K-group concrete classes covering every remaining HookEvent, each
-    with a typed ``details`` sub-schema (25 shared details models — one per
-    event family, e.g. ``CognitivePhaseDetails`` for 6 cognitive phases)
+  - 37 K-group concrete classes covering every remaining HookEvent, each
+    with a typed ``details`` sub-schema (collapsed families carry their
+    discriminator in details: ``RuleChangeDetails.action``,
+    ``AutoTriggerDetails.stage``)
   - ``GenericActivityRow`` is now ONLY a fail-soft fallback (a typed
     builder that hits a malformed payload), never a routine destination —
     every one of the 65 events has a concrete typed row.
@@ -40,12 +41,7 @@ __all__ = [
     "ApprovalTransitionDetails",
     "ApprovalTransitionRow",
     "AutoTriggerDetails",
-    "AutoTriggerFiredRow",
-    "AutoTriggerIntervalBlockedRow",
-    "AutoTriggerLockBusyRow",
-    "AutoTriggerMaxGenerationReachedRow",
-    "AutoTriggerParseErrorRow",
-    "AutoTriggerRunnerErrorRow",
+    "AutoTriggerRow",
     "BaselinePromotedDetails",
     "BaselinePromotedRow",
     "CognitiveActRow",
@@ -104,9 +100,7 @@ __all__ = [
     "ResultFeedbackDetails",
     "ResultFeedbackRow",
     "RuleChangeDetails",
-    "RuleCreatedRow",
-    "RuleDeletedRow",
-    "RuleUpdatedRow",
+    "RuleChangedRow",
     "SessionEndedRow",
     "SessionStartedRow",
     "ShutdownStartedDetails",
@@ -114,9 +108,7 @@ __all__ = [
     "SubAgentCompletedRow",
     "SubAgentFailedRow",
     "SubAgentStartedRow",
-    "ToolApprovalDeniedRow",
     "ToolApprovalDetails",
-    "ToolApprovalGrantedRow",
     "ToolApprovalRequestedRow",
     "ToolExecEndedRow",
     "ToolExecFailedRow",
@@ -147,7 +139,7 @@ __all__ = [
 class ActivityRowBase(BaseModel):
     """paperclip ``PluginEvent`` envelope equivalent + GEODE run metadata.
 
-    Every mapped HookEvent produces one of 65 concrete subclasses or a
+    Every mapped HookEvent produces one of 56 concrete subclasses or a
     :class:`GenericActivityRow` fail-soft fallback. ``HookPersistenceSink``
     uses this envelope as its projection; the catalog excludes compatibility
     duplicates before SQL or active-run transcript persistence.
@@ -160,10 +152,14 @@ class ActivityRowBase(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: int = 1
+    schema_version: int = 2
     """Row-schema version (PR-OBS-CONTRACT, 2026-06-13). Bump when a
     field is added/renamed/retyped on any row class so JSONL re-readers
-    can branch on shape instead of guessing from key presence."""
+    can branch on shape instead of guessing from key presence.
+    v2 (PR-HOOK-TAXONOMY, 2026-07-14): collapsed families — RuleChangedRow
+    (+details.action) replaces the rule.* trio, AutoTriggerRow
+    (+details.stage) replaces six per-state auto-trigger rows, approval
+    granted/denied rows deleted."""
 
     ts: float
     run_id: str
@@ -574,11 +570,15 @@ class ReasoningMetricsDetails(BaseModel):
 
 
 class AutoTriggerDetails(BaseModel):
-    """SELF_IMPROVING_AUTO_TRIGGER_* family — one terminal state per row."""
+    """SELF_IMPROVING_AUTO_TRIGGER — one terminal state per row; the
+    ``stage`` field carries the state discriminator (fired / lock_busy /
+    interval_blocked / runner_error / parse_error /
+    max_generation_reached)."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     trigger_id: str
+    stage: str = ""
     detail: str = ""
     ts: float = 0.0
 
@@ -592,7 +592,8 @@ class ShutdownStartedDetails(BaseModel):
 
 
 class ToolApprovalDetails(BaseModel):
-    """TOOL_APPROVAL_REQUESTED/GRANTED/DENIED — HITL gate telemetry."""
+    """TOOL_APPROVAL_REQUESTED — HITL gate telemetry (grant/deny outcomes
+    live on the APPROVAL_TRANSITION rail)."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -644,11 +645,13 @@ class ToolResultTransformDetails(BaseModel):
 
 
 class RuleChangeDetails(BaseModel):
-    """RULE_CREATED/UPDATED/DELETED — analysis-rule CRUD."""
+    """RULE_CHANGED — analysis-rule CRUD; ``action`` carries
+    created / updated / deleted."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     name: str
+    action: str = ""
     paths: tuple[str, ...] = ()
 
 
@@ -672,13 +675,14 @@ class UserInputReceivedDetails(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Tier 3 — 44 K-group concrete classes (PR-OBS-CONTRACT, 2026-06-13)
+# Tier 3 — 37 K-group concrete classes (PR-OBS-CONTRACT, 2026-06-13)
 #
 # Each formerly-generic HookEvent now has a concrete typed row with a
 # Literal ``action`` discriminator + a typed ``details`` sub-schema. The
 # details models (shared across event families — one CognitivePhaseDetails
 # for 6 cognitive phases, one MutationDetails for 4 mutation verbs, one
-# AutoTriggerDetails for 6 auto-trigger terminal states) are defined above.
+# AutoTriggerDetails carrying the auto-trigger terminal ``stage``) are
+# defined above.
 # Construction is driven by the single declarative ``_TYPED_ROW_SPECS`` table
 # in activity_registry.py — NOT 43 hand-written builders.
 # ---------------------------------------------------------------------------
@@ -804,20 +808,8 @@ class ResultFeedbackRow(ActivityRowBase):
     details: ResultFeedbackDetails
 
 
-class RuleCreatedRow(ActivityRowBase):
-    action: Literal["rule.created"] = "rule.created"
-    entity_type: Literal["rule"] = "rule"
-    details: RuleChangeDetails
-
-
-class RuleUpdatedRow(ActivityRowBase):
-    action: Literal["rule.updated"] = "rule.updated"
-    entity_type: Literal["rule"] = "rule"
-    details: RuleChangeDetails
-
-
-class RuleDeletedRow(ActivityRowBase):
-    action: Literal["rule.deleted"] = "rule.deleted"
+class RuleChangedRow(ActivityRowBase):
+    action: Literal["rule.changed"] = "rule.changed"
     entity_type: Literal["rule"] = "rule"
     details: RuleChangeDetails
 
@@ -866,55 +858,29 @@ class MutationRevertedRow(ActivityRowBase):
     details: MutationDetails
 
 
-class AutoTriggerFiredRow(ActivityRowBase):
-    action: Literal["self.improving.auto.trigger.fired"] = "self.improving.auto.trigger.fired"
+class AutoTriggerRow(ActivityRowBase):
+    """One row per auto-trigger terminal state; ``details.stage`` is the
+    discriminator (PR-HOOK-TAXONOMY D2 collapsed the former six per-state
+    row classes). The per-state ``level`` nuance is preserved by deriving
+    ``level`` from the stage (:data:`AUTO_TRIGGER_STAGE_LEVELS`), so
+    failure stages stay visible to level-filtered readers."""
+
+    action: Literal["self.improving.auto.trigger"] = "self.improving.auto.trigger"
     entity_type: Literal["auto_trigger"] = "auto_trigger"
     details: AutoTriggerDetails
 
 
-class AutoTriggerLockBusyRow(ActivityRowBase):
-    level: Literal["info", "warn", "error"] = "warn"
-    action: Literal["self.improving.auto.trigger.lock.busy"] = (
-        "self.improving.auto.trigger.lock.busy"
-    )
-    entity_type: Literal["auto_trigger"] = "auto_trigger"
-    details: AutoTriggerDetails
-
-
-class AutoTriggerIntervalBlockedRow(ActivityRowBase):
-    level: Literal["info", "warn", "error"] = "warn"
-    action: Literal["self.improving.auto.trigger.interval.blocked"] = (
-        "self.improving.auto.trigger.interval.blocked"
-    )
-    entity_type: Literal["auto_trigger"] = "auto_trigger"
-    details: AutoTriggerDetails
-
-
-class AutoTriggerRunnerErrorRow(ActivityRowBase):
-    level: Literal["info", "warn", "error"] = "error"
-    action: Literal["self.improving.auto.trigger.runner.error"] = (
-        "self.improving.auto.trigger.runner.error"
-    )
-    entity_type: Literal["auto_trigger"] = "auto_trigger"
-    details: AutoTriggerDetails
-
-
-class AutoTriggerParseErrorRow(ActivityRowBase):
-    level: Literal["info", "warn", "error"] = "warn"
-    action: Literal["self.improving.auto.trigger.parse.error"] = (
-        "self.improving.auto.trigger.parse.error"
-    )
-    entity_type: Literal["auto_trigger"] = "auto_trigger"
-    details: AutoTriggerDetails
-
-
-class AutoTriggerMaxGenerationReachedRow(ActivityRowBase):
-    level: Literal["info", "warn", "error"] = "warn"
-    action: Literal["self.improving.auto.trigger.max.generation.reached"] = (
-        "self.improving.auto.trigger.max.generation.reached"
-    )
-    entity_type: Literal["auto_trigger"] = "auto_trigger"
-    details: AutoTriggerDetails
+# Stage -> row level, mirroring the deleted per-state row classes:
+# fired was info; lock/interval/max-generation gating was warn; runner and
+# parse failures were error.
+AUTO_TRIGGER_STAGE_LEVELS: dict[str, str] = {
+    "fired": "info",
+    "lock_busy": "warn",
+    "interval_blocked": "warn",
+    "max_generation_reached": "warn",
+    "runner_error": "error",
+    "parse_error": "error",
+}
 
 
 class ShutdownStartedRow(ActivityRowBase):
@@ -925,19 +891,6 @@ class ShutdownStartedRow(ActivityRowBase):
 
 class ToolApprovalRequestedRow(ActivityRowBase):
     action: Literal["tool.approval.requested"] = "tool.approval.requested"
-    entity_type: Literal["tool_approval"] = "tool_approval"
-    details: ToolApprovalDetails
-
-
-class ToolApprovalGrantedRow(ActivityRowBase):
-    action: Literal["tool.approval.granted"] = "tool.approval.granted"
-    entity_type: Literal["tool_approval"] = "tool_approval"
-    details: ToolApprovalDetails
-
-
-class ToolApprovalDeniedRow(ActivityRowBase):
-    level: Literal["info", "warn", "error"] = "warn"
-    action: Literal["tool.approval.denied"] = "tool.approval.denied"
     entity_type: Literal["tool_approval"] = "tool_approval"
     details: ToolApprovalDetails
 
@@ -1015,7 +968,7 @@ TypedActivityRow = Annotated[
         TurnVerifyFailedRow,
         # D
         LLMCallRetriedRow,
-        # K (PR-OBS-CONTRACT — 43 formerly-generic events)
+        # K (PR-OBS-CONTRACT — 37 formerly-generic events)
         AdapterDispatchAttemptRow,
         BaselinePromotedRow,
         CognitivePerceiveRow,
@@ -1035,9 +988,7 @@ TypedActivityRow = Annotated[
         MemorySavedRow,
         MemoryPromotionProposedRow,
         ResultFeedbackRow,
-        RuleCreatedRow,
-        RuleUpdatedRow,
-        RuleDeletedRow,
+        RuleChangedRow,
         ModelSwitchedRow,
         PromptAssembledRow,
         ReasoningMetricsRow,
@@ -1045,16 +996,9 @@ TypedActivityRow = Annotated[
         MutationAppliedRow,
         MutationRejectedRow,
         MutationRevertedRow,
-        AutoTriggerFiredRow,
-        AutoTriggerLockBusyRow,
-        AutoTriggerIntervalBlockedRow,
-        AutoTriggerRunnerErrorRow,
-        AutoTriggerParseErrorRow,
-        AutoTriggerMaxGenerationReachedRow,
+        AutoTriggerRow,
         ShutdownStartedRow,
         ToolApprovalRequestedRow,
-        ToolApprovalGrantedRow,
-        ToolApprovalDeniedRow,
         ApprovalTransitionRow,
         ToolResultOffloadedRow,
         ToolResultTransformRow,

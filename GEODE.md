@@ -62,7 +62,7 @@ Headless modes (DAEMON / SCHEDULER) have no user to approve, so `run_bash`, `del
 SELF-IMPROVING: train.py (mutation surface + loop) ← measure / fitness / gate / ledger
                 ← loop/{mutate, observe, inject}
 AGENT:    AgenticLoop (while tool_use), SubAgentManager, CLIPoller, Gateway
-HARNESS:  SessionLane, LaneQueue(global:50), PolicyChain, TaskGraph, HookSystem(65 events)
+HARNESS:  SessionLane, LaneQueue(global:50), PolicyChain, TaskGraph, HookSystem(56 events)
 RUNTIME:  ToolRegistry(66), MCP Registry, Skills, Memory(5-Tier), Reports
 MODEL:    ClaudeAdapter, OpenAIAdapter, GLMAdapter (3-provider routing)
 ```
@@ -108,7 +108,7 @@ Primary / secondary / node defaults come from `core/config/routing.toml` `[model
 - **Structured output**: Anthropic `messages.parse()` with typed Pydantic models; `call_llm_json()` with robust JSON extraction is the legacy fallback.
 - **Fixture vs real**: external data = fixture, LLM calls = real.
 - **Verbose gating**: debug prints only under the `--verbose` flag.
-- **Hook-driven**: `core.hooks` — 65 lifecycle events, cross-cutting and accessible from all layers.
+- **Hook-driven**: `core.hooks` — 56 lifecycle events, cross-cutting and accessible from all layers.
 
 ## Defaults
 

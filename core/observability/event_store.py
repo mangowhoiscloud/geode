@@ -16,11 +16,33 @@ from pathlib import Path
 from typing import Any
 
 from core.hooks.catalog import EventRetentionClass
+from core.hooks.system import COLLAPSED_EVENT_VALUES, LEGACY_EVENT_VALUES
 from core.observability.redaction import redact_secrets
 
 log = logging.getLogger(__name__)
 
-EVENT_SCHEMA_VERSION = 1
+
+def _event_filter_variants(event_filter: str) -> list[str]:
+    """Expand an event filter with its legacy/canonical value siblings.
+
+    ``LEGACY_EVENT_VALUES`` maps old stored value -> current enum value;
+    a canonical filter gains its legacy spellings and a legacy filter
+    gains the canonical one, so pre-rename SQLite rows keep matching.
+    """
+    variants = [event_filter]
+    canonical = LEGACY_EVENT_VALUES.get(event_filter)
+    if canonical is not None:
+        variants.append(canonical)
+    variants.extend(old for old, new in LEGACY_EVENT_VALUES.items() if new == event_filter)
+    # Collapsed families (D2/D3): a canonical filter also returns the
+    # pre-collapse per-state rows.
+    variants.extend(COLLAPSED_EVENT_VALUES.get(event_filter, ()))
+    return variants
+
+
+# v2 (PR-HOOK-TAXONOMY, 2026-07-14): event vocabulary — tense-aligned
+# values, collapsed D2/D3 families; readers use the alias/collapsed maps.
+EVENT_SCHEMA_VERSION = 2
 
 _CREATE_HOOK_EVENTS_TABLE_SQL = """\
 CREATE TABLE IF NOT EXISTS hook_events (
@@ -291,18 +313,28 @@ class HookEventStore:
         occurred_after: float | None = None,
         occurred_before: float | None = None,
     ) -> list[PersistedHookEvent]:
-        """Read newest events with indexed filters."""
+        """Read newest events with indexed filters.
+
+        ``event_filter`` is alias-aware (PR-HOOK-TAXONOMY D5): filtering on
+        a canonical event value also matches rows stored under its legacy
+        pre-rename value (and vice versa), so history written before the
+        NAME == VALUE.upper() alignment stays queryable.
+        """
         clauses: list[str] = []
         params: list[Any] = []
         for column, value in (
             ("session_key", session_key),
             ("run_id", run_id),
-            ("event", event_filter),
             ("status", status_filter),
         ):
             if value is not None:
                 clauses.append(f"{column} = ?")
                 params.append(value)
+        if event_filter is not None:
+            variants = _event_filter_variants(event_filter)
+            placeholders = ", ".join("?" for _variant in variants)
+            clauses.append(f"event IN ({placeholders})")
+            params.extend(variants)
         if occurred_after is not None:
             clauses.append("occurred_at >= ?")
             params.append(occurred_after)

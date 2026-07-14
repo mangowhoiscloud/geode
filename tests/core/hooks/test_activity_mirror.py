@@ -209,7 +209,7 @@ def test_m3_malformed_value_still_produces_a_row() -> None:
         # The row landed via GenericActivityRow fall-through (the builder
         # raised ValueError → registry caught it → generic emit).
         # The action keeps the dotted-name convention.
-        assert row["action"] == "llm.call.end"
+        assert row["action"] == "llm.call.ended"
 
 
 def test_m1_async_mirror_appends_one_row() -> None:

@@ -2,9 +2,9 @@
 
 Spec: ``docs/plans/2026-05-24-hookevent-activity-schema.md`` §3, §7.1.
 
-Every one of the 65 HookEvents maps to a builder that produces a
+Every one of the 56 HookEvents maps to a builder that produces a
 concrete typed ``ActivityRow`` subclass with a validated payload:
-19 lifecycle events via the curry builders below, and the 46 K-group
+19 lifecycle events via the curry builders below, and the 37 K-group
 events via the single declarative ``_TYPED_ROW_SPECS`` table +
 ``_build_from_spec`` (PR-OBS-CONTRACT, 2026-06-13). ``GenericActivityRow``
 is now ONLY the fail-soft fallback for a typed builder that meets a
@@ -23,18 +23,14 @@ from pydantic import BaseModel, ValidationError
 
 from core.hooks.system import HookEvent
 from core.observability.activity import (
+    AUTO_TRIGGER_STAGE_LEVELS,
     ActivityRowBase,
     AdapterDispatchAttemptDetails,
     AdapterDispatchAttemptRow,
     ApprovalTransitionDetails,
     ApprovalTransitionRow,
     AutoTriggerDetails,
-    AutoTriggerFiredRow,
-    AutoTriggerIntervalBlockedRow,
-    AutoTriggerLockBusyRow,
-    AutoTriggerMaxGenerationReachedRow,
-    AutoTriggerParseErrorRow,
-    AutoTriggerRunnerErrorRow,
+    AutoTriggerRow,
     BaselinePromotedDetails,
     BaselinePromotedRow,
     CognitiveActRow,
@@ -93,9 +89,7 @@ from core.observability.activity import (
     ResultFeedbackDetails,
     ResultFeedbackRow,
     RuleChangeDetails,
-    RuleCreatedRow,
-    RuleDeletedRow,
-    RuleUpdatedRow,
+    RuleChangedRow,
     SessionEndedRow,
     SessionStartedRow,
     ShutdownStartedDetails,
@@ -103,9 +97,7 @@ from core.observability.activity import (
     SubAgentCompletedRow,
     SubAgentFailedRow,
     SubAgentStartedRow,
-    ToolApprovalDeniedRow,
     ToolApprovalDetails,
-    ToolApprovalGrantedRow,
     ToolApprovalRequestedRow,
     ToolExecEndedRow,
     ToolExecFailedRow,
@@ -346,8 +338,8 @@ HOOK_EVENT_TO_ROW_BUILDER: dict[HookEvent, Callable[[dict[str, Any], str], Activ
 # ---------------------------------------------------------------------------
 # K-group typed rows (PR-OBS-CONTRACT, 2026-06-13) — centralized spec table
 #
-# The 43 formerly-generic events are typed via ONE declarative table +
-# ONE builder, not 43 hand-written functions. Each _TypedRowSpec names the
+# The 37 formerly-generic events are typed via ONE declarative table +
+# ONE builder, not 37 hand-written functions. Each _TypedRowSpec names the
 # concrete row class, its details model, the envelope actor_type, and which
 # payload key becomes entity_id. Construction pulls the intersection of the
 # details model's declared fields and the live payload keys — which works
@@ -370,6 +362,9 @@ class _TypedRowSpec:
     entity_id_key: str = ""  # payload key -> entity_id; "" => event.value
     actor_id_key: str = "session_id"
     derive: Callable[[dict[str, Any]], dict[str, Any]] | None = None
+    # Payload -> row ``level`` override (e.g. auto-trigger failure stages
+    # persist at error even though the collapsed event is one member).
+    level_derive: Callable[[dict[str, Any]], str | None] | None = None
 
 
 # Payload keys carrying raw user content or oversized blobs that must NEVER
@@ -436,15 +431,20 @@ def _build_from_spec(
     entity_id = (str(data.get(spec.entity_id_key)) if spec.entity_id_key else "") or event.value
     actor_id = str(data.get(spec.actor_id_key) or spec.actor_type)
     task_id = str(data["task_id"]) if data.get("task_id") else None
-    return spec.row_cls(  # type: ignore[call-arg]  # action/entity_type are Literal class defaults; mypy can't see through dynamic type[]
-        ts=time.time(),
-        run_id=run_id,
-        actor_type=spec.actor_type,
-        actor_id=actor_id,
-        entity_id=entity_id,
-        task_id=task_id,
-        details=details,
-    )
+    row_kwargs: dict[str, Any] = {
+        "ts": time.time(),
+        "run_id": run_id,
+        "actor_type": spec.actor_type,
+        "actor_id": actor_id,
+        "entity_id": entity_id,
+        "task_id": task_id,
+        "details": details,
+    }
+    if spec.level_derive is not None:
+        derived_level = spec.level_derive(data)
+        if derived_level is not None:
+            row_kwargs["level"] = derived_level
+    return spec.row_cls(**row_kwargs)
 
 
 _TYPED_ROW_SPECS: dict[HookEvent, _TypedRowSpec] = {
@@ -562,20 +562,8 @@ _TYPED_ROW_SPECS: dict[HookEvent, _TypedRowSpec] = {
         actor_type="agent",
         entity_id_key="subject",
     ),
-    HookEvent.RULE_CREATED: _TypedRowSpec(
-        row_cls=RuleCreatedRow,
-        details_cls=RuleChangeDetails,
-        actor_type="agent",
-        entity_id_key="name",
-    ),
-    HookEvent.RULE_UPDATED: _TypedRowSpec(
-        row_cls=RuleUpdatedRow,
-        details_cls=RuleChangeDetails,
-        actor_type="agent",
-        entity_id_key="name",
-    ),
-    HookEvent.RULE_DELETED: _TypedRowSpec(
-        row_cls=RuleDeletedRow,
+    HookEvent.RULE_CHANGED: _TypedRowSpec(
+        row_cls=RuleChangedRow,
         details_cls=RuleChangeDetails,
         actor_type="agent",
         entity_id_key="name",
@@ -619,59 +607,18 @@ _TYPED_ROW_SPECS: dict[HookEvent, _TypedRowSpec] = {
         actor_type="system",
         entity_id_key="mutation_id",
     ),
-    HookEvent.SELF_IMPROVING_AUTO_TRIGGER_FIRED: _TypedRowSpec(
-        row_cls=AutoTriggerFiredRow,
+    HookEvent.SELF_IMPROVING_AUTO_TRIGGER: _TypedRowSpec(
+        row_cls=AutoTriggerRow,
         details_cls=AutoTriggerDetails,
         actor_type="system",
         entity_id_key="trigger_id",
-    ),
-    HookEvent.SELF_IMPROVING_AUTO_TRIGGER_LOCK_BUSY: _TypedRowSpec(
-        row_cls=AutoTriggerLockBusyRow,
-        details_cls=AutoTriggerDetails,
-        actor_type="system",
-        entity_id_key="trigger_id",
-    ),
-    HookEvent.SELF_IMPROVING_AUTO_TRIGGER_INTERVAL_BLOCKED: _TypedRowSpec(
-        row_cls=AutoTriggerIntervalBlockedRow,
-        details_cls=AutoTriggerDetails,
-        actor_type="system",
-        entity_id_key="trigger_id",
-    ),
-    HookEvent.SELF_IMPROVING_AUTO_TRIGGER_RUNNER_ERROR: _TypedRowSpec(
-        row_cls=AutoTriggerRunnerErrorRow,
-        details_cls=AutoTriggerDetails,
-        actor_type="system",
-        entity_id_key="trigger_id",
-    ),
-    HookEvent.SELF_IMPROVING_AUTO_TRIGGER_PARSE_ERROR: _TypedRowSpec(
-        row_cls=AutoTriggerParseErrorRow,
-        details_cls=AutoTriggerDetails,
-        actor_type="system",
-        entity_id_key="trigger_id",
-    ),
-    HookEvent.SELF_IMPROVING_AUTO_TRIGGER_MAX_GENERATION_REACHED: _TypedRowSpec(
-        row_cls=AutoTriggerMaxGenerationReachedRow,
-        details_cls=AutoTriggerDetails,
-        actor_type="system",
-        entity_id_key="trigger_id",
+        level_derive=lambda data: AUTO_TRIGGER_STAGE_LEVELS.get(str(data.get("stage", ""))),
     ),
     HookEvent.SHUTDOWN_STARTED: _TypedRowSpec(
         row_cls=ShutdownStartedRow, details_cls=ShutdownStartedDetails, actor_type="system"
     ),
     HookEvent.TOOL_APPROVAL_REQUESTED: _TypedRowSpec(
         row_cls=ToolApprovalRequestedRow,
-        details_cls=ToolApprovalDetails,
-        actor_type="agent",
-        entity_id_key="tool_name",
-    ),
-    HookEvent.TOOL_APPROVAL_GRANTED: _TypedRowSpec(
-        row_cls=ToolApprovalGrantedRow,
-        details_cls=ToolApprovalDetails,
-        actor_type="agent",
-        entity_id_key="tool_name",
-    ),
-    HookEvent.TOOL_APPROVAL_DENIED: _TypedRowSpec(
-        row_cls=ToolApprovalDeniedRow,
         details_cls=ToolApprovalDetails,
         actor_type="agent",
         entity_id_key="tool_name",
@@ -753,7 +700,7 @@ def map_hook_to_activity(
     """Convert a ``HookEvent`` + ``data`` dict into a typed
     :class:`ActivityRowBase` subclass.
 
-    All 65 events (see :data:`HOOK_EVENT_TO_ROW_BUILDER`) get full
+    All 56 events (see :data:`HOOK_EVENT_TO_ROW_BUILDER`) get full
     pydantic validation against their per-event details schema — a
     payload bug surfaces at dispatch time with a precise
     ``ValidationError`` instead of much later at the handler.
@@ -824,7 +771,7 @@ def _build_generic(
     *,
     run_id: str,
 ) -> GenericActivityRow:
-    """Build the catch-all :class:`GenericActivityRow`. With 65/65
+    """Build the catch-all :class:`GenericActivityRow`. With 56/56
     coverage this is now ONLY reached when a typed builder fails on a
     malformed payload (carrying ``_fallback_reason``) or, defensively,
     for a future event added without a registry entry. The ``actor_type``

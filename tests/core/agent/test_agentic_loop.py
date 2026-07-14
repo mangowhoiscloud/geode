@@ -129,10 +129,16 @@ class TestToolExecutor:
         assert result["thread"] != main_thread
 
     def test_aexecute_write_approval_uses_async_path(self) -> None:
-        """Async safety gates should offload approval prompts and await async hooks."""
+        """Async safety gates should offload approval prompts and await async hooks.
+
+        PR-HOOK-TAXONOMY D1 deleted TOOL_APPROVAL_GRANTED — the grant
+        outcome now travels on the APPROVAL_TRANSITION rail
+        (``state="granted"``), asserted via a sync recorder below.
+        """
         main_thread = threading.get_ident()
         callback_thread = 0
         hook_events: list[HookEvent] = []
+        transition_states: list[str] = []
 
         def approval_callback(_tool: str, _detail: str, _level: str) -> str:
             nonlocal callback_thread
@@ -143,9 +149,12 @@ class TestToolExecutor:
             await asyncio.sleep(0)
             hook_events.append(event)
 
+        def record_transition(_event: HookEvent, data: dict[str, Any]) -> None:
+            transition_states.append(str(data.get("state", "")))
+
         hooks = HookSystem()
         hooks.register(HookEvent.TOOL_APPROVAL_REQUESTED, record_hook, name="requested")
-        hooks.register(HookEvent.TOOL_APPROVAL_GRANTED, record_hook, name="granted")
+        hooks.register(HookEvent.APPROVAL_TRANSITION, record_transition, name="transitions")
 
         executor = ToolExecutor(
             action_handlers={"memory_save": MagicMock(return_value={"status": "ok"})},
@@ -157,7 +166,7 @@ class TestToolExecutor:
         assert result["status"] == "ok"
         assert callback_thread != main_thread
         assert HookEvent.TOOL_APPROVAL_REQUESTED in hook_events
-        assert HookEvent.TOOL_APPROVAL_GRANTED in hook_events
+        assert "granted" in transition_states
 
     def test_aexecute_bash_approval_uses_async_method(self) -> None:
         """Dangerous tools should not route through the sync approval method in aexecute()."""

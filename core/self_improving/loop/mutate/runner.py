@@ -579,32 +579,27 @@ def _build_system_prompt() -> str:
     program.md ships with the package and is read at every invocation (the
     runner is genuinely "program.md-driven" — G5b). When it is unreadable
     (missing/permission — a packaging bug, not a routine state), fire the
-    ``PROGRAM_MD_UNREADABLE`` hook: a handler MAY return
-    ``{"program_md": "<body>"}`` to supply a replacement (the single
-    programmatic control point). With no handler the runner fails loud rather
-    than silently substituting a drift-prone literal — the former
-    ``_FALLBACK_SYSTEM_PROMPT`` (removed PR-FALLBACK-HOOK-CONTROL, 2026-06-09;
-    it had already drifted to a stale schema missing target_kind/expected_dim/
-    principle). The mutation-contract suffix is appended in every path so the
-    output schema can't drift.
+    ``PROGRAM_MD_UNREADABLE`` notify hook for observability, then fail loud —
+    never silently substitute a drift-prone literal (the former
+    ``_FALLBACK_SYSTEM_PROMPT`` was removed by PR-FALLBACK-HOOK-CONTROL,
+    2026-06-09, after it drifted to a stale schema missing
+    target_kind/expected_dim/principle). PR-HOOK-TAXONOMY D4 also removed
+    the ``trigger_with_result`` override contract (a handler could once
+    return a replacement body): no such handler was ever registered, so the
+    feedback path was structurally dead. The mutation-contract suffix is
+    appended so the output schema can't drift.
     """
     program_md = _load_program_md()
     if program_md is None:
         from core.hooks.system import HookEvent
-        from core.self_improving.loop._hooks import _fire_hook_with_result
+        from core.self_improving.loop._hooks import _fire_hook
 
-        override = _fire_hook_with_result(
-            HookEvent.PROGRAM_MD_UNREADABLE, {"path": str(_program_md_path())}
+        _fire_hook(HookEvent.PROGRAM_MD_UNREADABLE, {"path": str(_program_md_path())})
+        raise RuntimeError(
+            f"self-improving-loop runner: program.md unreadable at "
+            f"{_program_md_path()}. program.md ships with the package — a "
+            f"missing file is a packaging bug, not a runtime fallback."
         )
-        body = override.get("program_md") if isinstance(override, dict) else None
-        if not (isinstance(body, str) and body.strip()):
-            raise RuntimeError(
-                f"self-improving-loop runner: program.md unreadable at "
-                f"{_program_md_path()} and no PROGRAM_MD_UNREADABLE hook supplied a "
-                f"replacement. program.md ships with the package — a missing file "
-                f"is a packaging bug, not a runtime fallback."
-            )
-        program_md = body
     return program_md.rstrip() + _MUTATION_CONTRACT_SUFFIX
 
 

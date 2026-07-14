@@ -20,7 +20,7 @@ from typing import Any, Protocol, runtime_checkable
 
 import yaml
 
-from core.hooks.system import HookEvent, HookSystem
+from core.hooks.system import HookEvent, HookSystem, resolve_event_value
 
 log = logging.getLogger(__name__)
 
@@ -28,8 +28,10 @@ log = logging.getLogger(__name__)
 def _resolve_event(name: str) -> HookEvent:
     """Resolve a string event name to a HookEvent enum member.
 
-    Accepts both the enum member name (e.g. ``NODE_EXIT``) and the
-    enum value (e.g. ``node_exit``), case-insensitively.
+    Accepts the enum member name (e.g. ``SESSION_ENDED``), the enum value
+    (e.g. ``session_ended``), and legacy pre-rename values
+    (``session_end`` — see ``core.hooks.system.LEGACY_EVENT_VALUES``),
+    case-insensitively.
 
     Raises ``ValueError`` for unrecognised names.
     """
@@ -41,10 +43,11 @@ def _resolve_event(name: str) -> HookEvent:
     except KeyError:
         pass
 
-    # Fall back to matching by enum .value
-    for member in HookEvent:
-        if member.value == name.strip().lower():
-            return member
+    # Fall back to matching by enum .value (with legacy-value aliasing)
+    try:
+        return resolve_event_value(name.strip().lower())
+    except ValueError:
+        pass
 
     valid = ", ".join(m.value for m in HookEvent)
     msg = f"Invalid hook event '{name}'. Valid events: {valid}"

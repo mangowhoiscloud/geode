@@ -1,7 +1,7 @@
 [project]
 name = "geode-agent"
-version = "0.99.330"
-description = "Self-hosting autonomous agent harness with a while-tool-use runtime"
+version = "0.99.331"
+description = "GEODE — 범용 자율 실행 에이전트"
 license = "Apache-2.0"
 readme = "README.md"
 requires-python = ">=3.12"

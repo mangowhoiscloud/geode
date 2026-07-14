@@ -16,7 +16,6 @@ if TYPE_CHECKING:
     from core.tools.base import ToolContext
 
 from core.agent.safety import DANGEROUS_TOOLS
-from core.hooks.system import HookEvent
 from core.tools.bash_tool import BashTool
 
 log = logging.getLogger(__name__)
@@ -130,15 +129,6 @@ class ToolExecutor:
             hooks=hooks,
             approval_callback=approval_callback,
         )
-
-    def _fire_hook(self, event: HookEvent, data: dict[str, Any]) -> None:
-        """Fire a hook event if HookSystem is available. No-op otherwise."""
-        if self._hooks is None:
-            return
-        try:
-            self._hooks.trigger(event, data)
-        except Exception:
-            log.debug("Hook fire failed for %s", event, exc_info=True)
 
     def attach_evidence_ledger(self, ledger: Any | None) -> None:
         """Attach the session EvidenceLedger for approval-FSM terminal rows.

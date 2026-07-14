@@ -246,7 +246,7 @@ class TestAuditLoggerCompleteness:
 
         # Previously missing — now should exist
         assert "llm_failed" in all_hooks.get("llm_call_failed", [])
-        assert "llm_retry" in all_hooks.get("llm_call_retry", [])
+        assert "llm_retry" in all_hooks.get("llm_call_retried", [])
         assert "recovery_ok" in all_hooks.get("tool_recovery_succeeded", [])
         assert "mcp_ok" in all_hooks.get("mcp_server_connected", [])
         assert "tool_offload" in all_hooks.get("tool_result_offloaded", [])

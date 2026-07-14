@@ -623,41 +623,24 @@ class ToolCallProcessor:
         return result
 
     async def _fire_hook(self, event: HookEvent, data: dict[str, Any]) -> None:
-        """Emit a hook event if HookSystem is configured."""
-        if self._hooks is None:
-            return
-        try:
-            await self._hooks.trigger_async(event, data)
-        except Exception:
-            log.debug("Hook trigger failed for %s", event, exc_info=True)
+        """Emit a hook event via the single shared dispatch path."""
+        from core.hooks.dispatch import fire_hook_async
+
+        await fire_hook_async(self._hooks, event, data)
 
     async def _fire_interceptor(
         self, event: HookEvent, data: dict[str, Any]
     ) -> InterceptResult | None:
-        """Emit a hook event as interceptor (block/modify semantics).
+        """Interceptor dispatch (block/modify) via the shared path."""
+        from core.hooks.dispatch import fire_interceptor_async
 
-        Returns InterceptResult if hooks are configured, None otherwise.
-        """
-        if self._hooks is None:
-            return None
-        try:
-            return await self._hooks.trigger_interceptor_async(event, data)
-        except Exception:
-            log.debug("Interceptor trigger failed for %s", event, exc_info=True)
-            return None
+        return await fire_interceptor_async(self._hooks, event, data)
 
     async def _fire_with_result(self, event: HookEvent, data: dict[str, Any]) -> list[HookResult]:
-        """Emit a hook event capturing handler return values.
+        """Feedback dispatch (handler return values) via the shared path."""
+        from core.hooks.dispatch import fire_with_result_async
 
-        Returns list of HookResult with handler-returned data.
-        """
-        if self._hooks is None:
-            return []
-        try:
-            return await self._hooks.trigger_with_result_async(event, data)
-        except Exception:
-            log.debug("Hook trigger_with_result failed for %s", event, exc_info=True)
-            return []
+        return await fire_with_result_async(self._hooks, event, data)
 
     @staticmethod
     def _make_denial_result(block: Any, reason: str) -> dict[str, Any]:
