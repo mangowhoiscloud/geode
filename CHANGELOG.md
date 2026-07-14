@@ -53,6 +53,10 @@ functional change.
   release-body extraction no longer embeds an indented heredoc inside a shell
   conditional, and the release workflow regression suite now runs `bash -n`
   over every `run` block before a publishing change can merge.
+- **Homebrew resource refresh spans the CLI transition safely.** Stable
+  publication now detects whether the runner's `update-python-resources`
+  supports the new main-package cooldown override and only passes that option
+  when available, while retaining exact resource pins on older Homebrew.
 
 ## [0.99.330] - 2026-07-14
 

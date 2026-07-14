@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 import tomllib
@@ -78,11 +79,86 @@ def test_homebrew_publish_uses_scoped_key_and_retry_guards() -> None:
 
     assert "HOMEBREW_TAP_TOKEN" not in text
     assert "HOMEBREW_TAP_DEPLOY_KEY" in text
+    assert "brew update-python-resources --help" in text
     assert "--ignore-main-package-cooldown" in text
     assert text.count("--template geode/packaging/homebrew/geode.rb.in") == 3
     assert "git pull --rebase" not in text
     assert "steps.tap-base.outputs.sha" in text
     assert "skip-existing: true" in text
+
+
+def test_homebrew_resource_refresh_adapts_to_brew_cli(tmp_path: Path) -> None:
+    jobs = _workflow()["jobs"]
+    assert isinstance(jobs, dict)
+    publish = jobs["publish-homebrew"]
+    assert isinstance(publish, dict)
+    steps = publish["steps"]
+    assert isinstance(steps, list)
+    run = next(
+        step["run"]
+        for step in steps
+        if isinstance(step, dict)
+        and step.get("name") == "Refresh pinned Python resources from the published PyPI package"
+    )
+    assert isinstance(run, str)
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    brew = bin_dir / "brew"
+    brew.write_text(
+        """#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == "update-python-resources" && "${2:-}" == "--help" ]]; then
+  printf '%s\\n' "${BREW_HELP_TEXT:-}"
+  exit 0
+fi
+printf '%s\\n' "$@" > "$BREW_CAPTURE"
+""",
+        encoding="utf-8",
+    )
+    brew.chmod(0o755)
+
+    base_args = [
+        "update-python-resources",
+        "tap/Formula/geode.rb",
+        "--package-name",
+        "geode-agent",
+        "--version",
+        "0.99.330",
+    ]
+    cases: tuple[tuple[str, str, list[str]], ...] = (
+        ("legacy", "", []),
+        (
+            "cooldown",
+            "--ignore-main-package-cooldown",
+            ["--ignore-main-package-cooldown"],
+        ),
+    )
+    for label, help_text, extra_args in cases:
+        capture = tmp_path / f"{label}.args"
+        env = os.environ.copy()
+        env.update(
+            {
+                "BREW_CAPTURE": str(capture),
+                "BREW_HELP_TEXT": help_text,
+                "GEODE_VERSION": "0.99.330",
+                "PATH": f"{bin_dir}:{env['PATH']}",
+            }
+        )
+        result = subprocess.run(
+            ["/bin/bash", "-e"],
+            input=run,
+            text=True,
+            capture_output=True,
+            check=False,
+            cwd=tmp_path,
+            env=env,
+        )
+        assert result.returncode == 0, result.stderr
+        assert capture.read_text(encoding="utf-8").splitlines() == [
+            *base_args,
+            *extra_args,
+        ]
 
 
 def test_release_retry_preserves_release_body_bytes() -> None:
