@@ -87,7 +87,9 @@ def test_homebrew_publish_uses_scoped_key_and_retry_guards() -> None:
     assert "skip-existing: true" in text
 
 
-def test_homebrew_resource_refresh_adapts_to_brew_cli(tmp_path: Path) -> None:
+def test_homebrew_resource_refresh_uses_local_tap_and_adapts_cli(
+    tmp_path: Path,
+) -> None:
     jobs = _workflow()["jobs"]
     assert isinstance(jobs, dict)
     publish = jobs["publish-homebrew"]
@@ -104,15 +106,29 @@ def test_homebrew_resource_refresh_adapts_to_brew_cli(tmp_path: Path) -> None:
 
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
+    checkout_formula = tmp_path / "tap" / "Formula" / "geode.rb"
+    checkout_formula.parent.mkdir(parents=True)
+    tap_repo = tmp_path / "homebrew-tap"
+    (tap_repo / "Formula").mkdir(parents=True)
     brew = bin_dir / "brew"
     brew.write_text(
         """#!/usr/bin/env bash
 set -euo pipefail
+if [[ "${1:-}" == "tap" ]]; then
+  printf '%s\\n' "$@" > "$BREW_TAP_CAPTURE"
+  exit 0
+fi
+if [[ "${1:-}" == "--repo" ]]; then
+  [[ "${2:-}" == "mangowhoiscloud/tap" ]]
+  printf '%s\\n' "$BREW_TAP_REPO"
+  exit 0
+fi
 if [[ "${1:-}" == "update-python-resources" && "${2:-}" == "--help" ]]; then
   printf '%s\\n' "${BREW_HELP_TEXT:-}"
   exit 0
 fi
 printf '%s\\n' "$@" > "$BREW_CAPTURE"
+printf 'updated formula\\n' > "$BREW_TAP_REPO/Formula/geode.rb"
 """,
         encoding="utf-8",
     )
@@ -120,7 +136,7 @@ printf '%s\\n' "$@" > "$BREW_CAPTURE"
 
     base_args = [
         "update-python-resources",
-        "tap/Formula/geode.rb",
+        "mangowhoiscloud/tap/geode",
         "--package-name",
         "geode-agent",
         "--version",
@@ -136,11 +152,19 @@ printf '%s\\n' "$@" > "$BREW_CAPTURE"
     )
     for label, help_text, extra_args in cases:
         capture = tmp_path / f"{label}.args"
+        tap_capture = tmp_path / f"{label}.tap"
+        checkout_formula.write_text("checkout formula\n", encoding="utf-8")
+        (tap_repo / "Formula" / "geode.rb").write_text(
+            "tapped formula\n",
+            encoding="utf-8",
+        )
         env = os.environ.copy()
         env.update(
             {
                 "BREW_CAPTURE": str(capture),
                 "BREW_HELP_TEXT": help_text,
+                "BREW_TAP_CAPTURE": str(tap_capture),
+                "BREW_TAP_REPO": str(tap_repo),
                 "GEODE_VERSION": "0.99.330",
                 "PATH": f"{bin_dir}:{env['PATH']}",
             }
@@ -159,6 +183,12 @@ printf '%s\\n' "$@" > "$BREW_CAPTURE"
             *base_args,
             *extra_args,
         ]
+        assert tap_capture.read_text(encoding="utf-8").splitlines() == [
+            "tap",
+            "mangowhoiscloud/tap",
+            str(tmp_path / "tap"),
+        ]
+        assert checkout_formula.read_text(encoding="utf-8") == "updated formula\n"
 
 
 def test_release_retry_preserves_release_body_bytes() -> None:
