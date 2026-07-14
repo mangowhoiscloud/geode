@@ -267,7 +267,7 @@ export default function Page() {
               <code>core/agent/context_manager.py</code>. Thresholds are not a
               fixed 80/95: <code>resolve_context_budget_policy</code> in{" "}
               <code>core/orchestration/context_budget.py</code> sizes a{" "}
-              <code>ContextBudgetPolicy</code> to the model's context window and
+              <code>ContextBudgetPolicy</code> to the model’s context window and
               picks one of three tiers.
             </p>
             <table>

@@ -34,7 +34,10 @@ export function LocaleProvider({
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const lang = params.get("lang");
-    if (lang === "en" || lang === "ko") setLocale(lang);
+    if (lang !== "en" && lang !== "ko") return;
+    // Defer until after hydration; the server cannot observe the query string.
+    const timer = window.setTimeout(() => setLocale(lang), 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   // Update html lang attribute + URL param (param present only when the

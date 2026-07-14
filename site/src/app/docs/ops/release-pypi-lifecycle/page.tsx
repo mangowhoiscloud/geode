@@ -8,8 +8,8 @@ export default function Page() {
       slug="ops/release-pypi-lifecycle"
       title="Release and PyPI lifecycle"
       titleKo="릴리스와 PyPI 라이프사이클"
-      summary="The five version locations, the gitflow rotation, the manual-only release workflow, and the rebuild cadence including the [audit] extra."
-      summaryKo="버전 5개 위치, gitflow 로테이션, 수동 전용 릴리스 워크플로우, 그리고 [audit] extra를 포함한 rebuild 절차를 다룹니다."
+      summary="The five version locations, GitFlow rotation, coordinated stable promotion across GitHub, PyPI, and Homebrew, and the rebuild cadence."
+      summaryKo="버전 5개 위치, GitFlow 로테이션, GitHub·PyPI·Homebrew의 일관된 stable promotion과 rebuild 절차를 다룹니다."
     >
       <Bi
         ko={
@@ -59,15 +59,19 @@ export default function Page() {
               <thead><tr><th>입력</th><th>의미</th></tr></thead>
               <tbody>
                 <tr><td><code>ref</code> / <code>version</code></td><td>릴리스할 ref와 기대 버전. 메타데이터 불일치는 validate 단계에서 실패</td></tr>
-                <tr><td><code>publish_github_release</code></td><td>검증 후 GitHub 릴리스 생성 (기본 false)</td></tr>
-                <tr><td><code>publish_pypi</code></td><td>Trusted Publishing으로 PyPI 업로드 (기본 false)</td></tr>
+                <tr><td><code>publish_stable</code></td><td>GitHub Release, PyPI, Homebrew tap을 한 승격으로 출하 (기본 false)</td></tr>
                 <tr><td><code>publish_huggingface_artifacts</code></td><td>버전드 릴리스 번들을 HF dataset repo로 업로드 (기본 false)</td></tr>
               </tbody>
             </table>
             <p>
               validate-build 잡이 lint와 hygiene, 타입 체크, 프롬프트 무결성,
               공식 문서 생성 게이트, 테스트, 런타임 E2E 스모크, twine check를
-              모두 통과해야 배포 잡이 시작됩니다.
+              모두 통과해야 배포 잡이 시작됩니다. stable promotion은 현재{" "}
+              <code>origin/main</code> SHA만 허용하고, tap 쓰기 자격을 먼저
+              확인한 뒤 annotated tag와 GitHub Release, Trusted Publishing,
+              공개 PyPI exact-version 설치 검증을 거칩니다. 마지막으로
+              Homebrew 리소스를 새로 고치고 strict audit, 소스 빌드,
+              exact-version test를 통과한 formula만 tap에 push합니다.
             </p>
 
             <h2>릴리스 후 rebuild</h2>
@@ -142,8 +146,7 @@ geode serve &                            # 데몬 재기동`}</pre>
               <thead><tr><th>Input</th><th>Meaning</th></tr></thead>
               <tbody>
                 <tr><td><code>ref</code> / <code>version</code></td><td>The ref to release and the expected version; a metadata mismatch fails validation</td></tr>
-                <tr><td><code>publish_github_release</code></td><td>Create the GitHub release after validation (default false)</td></tr>
-                <tr><td><code>publish_pypi</code></td><td>Upload to PyPI via Trusted Publishing (default false)</td></tr>
+                <tr><td><code>publish_stable</code></td><td>Ship GitHub Release, PyPI, and the Homebrew tap as one promotion (default false)</td></tr>
                 <tr><td><code>publish_huggingface_artifacts</code></td><td>Upload the versioned bundle to an HF dataset repo (default false)</td></tr>
               </tbody>
             </table>
@@ -151,6 +154,13 @@ geode serve &                            # 데몬 재기동`}</pre>
               The validate-build job must pass lint and hygiene, type check,
               prompt integrity, the official docs generation gate, tests, the
               runtime E2E smoke, and twine check before any publish job starts.
+              A stable promotion accepts only the current <code>origin/main</code>{" "}
+              SHA and checks the tap credential before publication. It then
+              creates an annotated tag and GitHub Release, publishes through
+              PyPI Trusted Publishing, verifies an exact-version install from
+              the public index, refreshes Homebrew resources, and pushes only a
+              formula that passed strict audit, source build, and exact-version
+              test.
             </p>
 
             <h2>Rebuild after a release</h2>

@@ -21,6 +21,12 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SITE_DIR = REPO_ROOT / "site"
 VENV_BIN = REPO_ROOT / ".venv" / "bin"
+GENERATED_DOCS = (
+    "site/src/data/geode/sot.ts",
+    "site/src/data/geode/changelog.ts",
+    "site/public/llms.txt",
+    "site/public/llms-full.txt",
+)
 
 
 @dataclass(frozen=True)
@@ -39,9 +45,10 @@ def _resolve_executable(name: str) -> str:
 
 def build_docs_commands(*, skip_build: bool = False) -> list[DocsCommand]:
     npm = _resolve_executable("npm")
+    git = _resolve_executable("git")
     commands = [
         DocsCommand(
-            "sync site SOT, changelog, and llms indexes",
+            "sync site SOT, changelog, and llms index",
             (npm, "run", "sync-stats"),
             SITE_DIR,
         ),
@@ -58,6 +65,21 @@ def build_docs_commands(*, skip_build: bool = False) -> list[DocsCommand]:
     ]
     if not skip_build:
         commands.append(DocsCommand("build static docs site", (npm, "run", "build"), SITE_DIR))
+        commands.append(
+            DocsCommand(
+                "export docs markdown and llms-full index",
+                (npm, "run", "export-md"),
+                SITE_DIR,
+            )
+        )
+    checked_files = GENERATED_DOCS[:-1] if skip_build else GENERATED_DOCS
+    commands.append(
+        DocsCommand(
+            "verify generated docs are committed",
+            (git, "diff", "--exit-code", "--", *checked_files),
+            REPO_ROOT,
+        )
+    )
     return commands
 
 

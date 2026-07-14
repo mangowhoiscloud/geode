@@ -189,6 +189,7 @@ docs/progress-report.html
 # Playwright MCP browser captures (console logs + screenshots from
 # transient debugging sessions). Never part of the tracked tree.
 .playwright-mcp/
+.playwright-cli/
 
 # Ad-hoc artifact dumps from local audit/benchmark runs.
 artifacts/

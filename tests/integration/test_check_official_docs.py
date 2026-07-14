@@ -20,15 +20,25 @@ def test_build_docs_commands_orders_generation_before_validation(
     commands = check_official_docs.build_docs_commands()
 
     assert [command.label for command in commands] == [
-        "sync site SOT, changelog, and llms indexes",
+        "sync site SOT, changelog, and llms index",
         "check docs links",
         "lint render-gated markdown",
         "build static docs site",
+        "export docs markdown and llms-full index",
+        "verify generated docs are committed",
     ]
     assert commands[0].argv == ("/usr/bin/npm", "run", "sync-stats")
     assert commands[1].argv[1:] == ("scripts/check_docs_links.py", "--quiet")
     assert commands[2].argv == ("/bin/bash", "scripts/lint_pages_markdown.sh")
     assert commands[3].argv == ("/usr/bin/npm", "run", "build")
+    assert commands[4].argv == ("/usr/bin/npm", "run", "export-md")
+    assert commands[5].argv == (
+        "/usr/bin/git",
+        "diff",
+        "--exit-code",
+        "--",
+        *check_official_docs.GENERATED_DOCS,
+    )
 
 
 def test_build_docs_commands_can_skip_site_build(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -41,10 +51,18 @@ def test_build_docs_commands_can_skip_site_build(monkeypatch: pytest.MonkeyPatch
     commands = check_official_docs.build_docs_commands(skip_build=True)
 
     assert [command.label for command in commands] == [
-        "sync site SOT, changelog, and llms indexes",
+        "sync site SOT, changelog, and llms index",
         "check docs links",
         "lint render-gated markdown",
+        "verify generated docs are committed",
     ]
+    assert commands[3].argv == (
+        "/usr/bin/git",
+        "diff",
+        "--exit-code",
+        "--",
+        *check_official_docs.GENERATED_DOCS[:-1],
+    )
 
 
 def test_run_docs_gate_uses_repo_env(
