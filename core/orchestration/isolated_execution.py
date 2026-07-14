@@ -783,17 +783,26 @@ class IsolatedRunner:
             "message": message,
             "success": result.success,
             "duration_ms": result.duration_ms,
+            # PR-HOOK-TAXONOMY D7 — the bootstrap SUBAGENT_COMPLETED
+            # handler (``record_subagent_completed``) keys the runtime-state
+            # row on ``task_id`` and persists ``component``/``status``; the
+            # former payload carried none of them, so every PostToMain
+            # dispatch silently early-returned. IsolationConfig.session_id
+            # IS the sub-agent task id (SubAgentManager wires
+            # ``IsolationConfig(session_id=task.task_id)``).
+            "task_id": result.session_id,
+            "component": "isolated_execution",
+            "status": "completed" if result.success else "failed",
         }
 
-        try:
-            self._hooks.trigger(HookEvent.SUBAGENT_COMPLETED, data)
-            log.debug(
-                "PostToMain delivered for session %s (mode=%s)",
-                result.session_id,
-                config.post_mode.value,
-            )
-        except Exception:
-            log.exception("PostToMain failed for session %s", result.session_id)
+        from core.hooks.dispatch import fire_hook
+
+        fire_hook(self._hooks, HookEvent.SUBAGENT_COMPLETED, data)
+        log.debug(
+            "PostToMain delivered for session %s (mode=%s)",
+            result.session_id,
+            config.post_mode.value,
+        )
 
     def _truncate(self, text: str, max_chars: int) -> str:
         """Truncate text to *max_chars*, appending an indicator if trimmed."""

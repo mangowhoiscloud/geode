@@ -304,19 +304,15 @@ def test_register_auto_trigger_forwards_max_generation(
     assert forwarded["max_generation"] == 42
 
 
-def test_max_generation_hook_event_reserved() -> None:
-    """Codex MCP review #1 (FAIL must-fix #3) — pin that the new
-    ``SELF_IMPROVING_AUTO_TRIGGER_MAX_GENERATION_REACHED`` HookEvent
-    is reserved in ``core/hooks/system.py``. Without this the
-    ``STATE_TO_HOOK_EVENT`` mapping references a nonexistent enum
-    name and ``_emit_state_event`` silently skips telemetry."""
+def test_max_generation_stage_registered() -> None:
+    """PR-HOOK-TAXONOMY D2 — ``max_generation_reached`` is a telemetry
+    stage of the single ``SELF_IMPROVING_AUTO_TRIGGER`` event. Without
+    the stage entry ``_emit_state_event`` silently skips telemetry."""
     from core.hooks import HookEvent
+    from core.self_improving.loop.auto_trigger import AUTO_TRIGGER_TELEMETRY_STAGES
 
-    assert hasattr(HookEvent, "SELF_IMPROVING_AUTO_TRIGGER_MAX_GENERATION_REACHED")
-    assert (
-        HookEvent.SELF_IMPROVING_AUTO_TRIGGER_MAX_GENERATION_REACHED.value
-        == "self_improving_auto_trigger_max_generation_reached"
-    )
+    assert "max_generation_reached" in AUTO_TRIGGER_TELEMETRY_STAGES
+    assert HookEvent.SELF_IMPROVING_AUTO_TRIGGER.value == "self_improving_auto_trigger"
 
 
 def test_max_generation_post_lock_recheck_blocks_overshoot(
@@ -363,10 +359,10 @@ def test_max_generation_post_lock_recheck_blocks_overshoot(
 def test_max_generation_emits_hook_event(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Codex MCP review #2 (FAIL must-fix #3) — direct emission test.
     When the cap fires, the registered HookSystem must receive a
-    ``SELF_IMPROVING_AUTO_TRIGGER_MAX_GENERATION_REACHED`` event with
-    the ``{trigger_id, ts, detail}`` payload. Pins the wiring from
+    ``SELF_IMPROVING_AUTO_TRIGGER`` event with the
+    ``{trigger_id, ts, detail, stage}`` payload. Pins the wiring from
     ``_finalize_status`` → ``_emit_state_event`` →
-    ``STATE_TO_HOOK_EVENT[max_generation_reached]`` → ``HookEvent``."""
+    ``stage="max_generation_reached"``."""
     from core.hooks import HookEvent
     from core.self_improving.loop import auto_trigger as mod
 
@@ -398,7 +394,8 @@ def test_max_generation_emits_hook_event(tmp_path: Path, monkeypatch: pytest.Mon
     # auto-trigger payload schema.
     assert len(captured) == 1
     event, payload = captured[0]
-    assert event is HookEvent.SELF_IMPROVING_AUTO_TRIGGER_MAX_GENERATION_REACHED
+    assert event is HookEvent.SELF_IMPROVING_AUTO_TRIGGER
+    assert payload["stage"] == "max_generation_reached"
     assert payload["trigger_id"] == mod.AUTO_TRIGGER_TRIGGER_ID
     assert "ts" in payload
     assert "3/3" in payload["detail"]

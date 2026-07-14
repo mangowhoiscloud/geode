@@ -45,7 +45,48 @@ functional change.
 
 ---
 
-## [Unreleased]
+## [0.99.331] - 2026-07-14
+
+### Changed
+
+- **Hook system taxonomy redesign — 65 → 56 events, one dispatch path,
+  emit-side payload contract.** Grounded in a fragmentation audit (23/65
+  events had no dedicated consumer beyond the SQLite sink; 2 were fully
+  dead; dispatch had regressed into 11 `_fire_hook` reimplementations;
+  payload schemas lived only on the reader side, silently half-breaking
+  three emit sites). Design record:
+  `docs/plans/2026-07-14-hook-taxonomy-redesign.md`.
+  - Dead events deleted: `TOOL_APPROVAL_GRANTED`/`DENIED` (zero handlers,
+    catalog-excluded from persistence; `APPROVAL_TRANSITION` is the
+    canonical carrier) — all 30 no-op emission blocks removed from
+    `core/agent/approval.py`.
+  - Sink-only telemetry families collapsed with payload discriminators:
+    six `SELF_IMPROVING_AUTO_TRIGGER_*` → one event + `stage`;
+    `RULE_CREATED`/`UPDATED`/`DELETED` → `RULE_CHANGED` + `action`.
+  - Naming aligned: eight tense-split values renamed to `NAME ==
+    upper(value)` (`session_start` → `session_started` ...); stored rows
+    stay readable through a read-side `LEGACY_EVENT_VALUES` alias map
+    applied at every parse-back point (event store filters both
+    directions, discovery manifests, string-form dispatch); a pinned test
+    keeps the map at exactly 8 entries and a convention guard covers the
+    whole enum. `PROGRAM_MD_UNREADABLE`'s dead feedback contract (no
+    handler existed) demoted to plain notify.
+  - Dispatch single path: `core/hooks/dispatch.py` is the only
+    implementation (sync/async/interceptor/with-result, graceful,
+    alias-aware); the five self-reimplemented `_fire_hook` bodies now
+    delegate; the dead `ToolExecutor._fire_hook` is deleted.
+  - Emit contract: `REQUIRED_PAYLOAD_KEYS` in `core/hooks/catalog.py`
+    (each entry citing the bootstrap handler that reads it) validated at
+    dispatch — missing keys log a warning naming the emitting caller,
+    never raise. The three silently-broken emit sites now pass the keys
+    their handlers need (isolated execution and seed-generation
+    orchestrator sub-agent events); the router one-off `LLM_CALL_ENDED`
+    emission stays exempt by design (bootstrap documents the filtering).
+  - Docs: `docs/architecture/hook-system.md` (+`.ko.md`) updated to 56
+    events with the naming convention, alias table, and emit contract.
+  Guards: `tests/core/hooks/test_hook_taxonomy.py` (16 tests) plus 13
+  migrated suites; slop-ratchet baseline paid down (bypass 254→253,
+  duplicated signatures 83→82).
 
 ### Fixed
 

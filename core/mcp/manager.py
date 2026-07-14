@@ -79,12 +79,9 @@ def _fire_mcp_hook(event: Any, data: dict[str, Any]) -> None:
     annotation does not require importing HookEvent at module top level,
     which would create a circular dependency in some bootstrap paths).
     """
-    if _mcp_hooks is None:
-        return
-    try:
-        _mcp_hooks.trigger(event, data)
-    except Exception:
-        log.debug("MCP hook fire failed for %s", event, exc_info=True)
+    from core.hooks.dispatch import fire_hook
+
+    fire_hook(_mcp_hooks, event, data)
 
 
 # Singleton instance — prevents duplicate MCP server processes

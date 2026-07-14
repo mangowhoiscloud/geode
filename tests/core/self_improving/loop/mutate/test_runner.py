@@ -494,42 +494,31 @@ def test_system_prompt_loads_program_md_when_present(
     assert "target_section" in prompt
 
 
-def test_system_prompt_fails_loud_when_program_md_missing_and_no_hook(
+def test_system_prompt_fails_loud_when_program_md_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """program.md unreadable + no PROGRAM_MD_UNREADABLE handler → fail loud.
+    """program.md unreadable → notify hook fires, then fail loud.
 
     Replaces the former ``_FALLBACK_SYSTEM_PROMPT`` literal: a missing
     program.md is a packaging bug, not a routine fallback, so the runner
     raises rather than silently substituting a drift-prone literal.
+    PR-HOOK-TAXONOMY D4 also removed the ``trigger_with_result`` override
+    contract (no handler was ever registered) — the emission is now a
+    plain notify that always precedes the raise.
     """
+    from core.hooks.system import HookEvent
     from core.self_improving.loop.mutate import runner
 
+    fired: list[tuple[HookEvent, dict[str, str]]] = []
     monkeypatch.setattr(runner, "_load_program_md", lambda: None)
     monkeypatch.setattr(
-        "core.self_improving.loop._hooks._fire_hook_with_result",
-        lambda event, data: None,
+        "core.self_improving.loop._hooks._fire_hook",
+        lambda event, data: fired.append((event, data)),
     )
     with pytest.raises(RuntimeError, match=r"program\.md unreadable"):
         runner._build_system_prompt()
-
-
-def test_system_prompt_uses_hook_override_when_program_md_missing(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A PROGRAM_MD_UNREADABLE handler may return {'program_md': ...} to override."""
-    from core.self_improving.loop.mutate import runner
-
-    monkeypatch.setattr(runner, "_load_program_md", lambda: None)
-    monkeypatch.setattr(
-        "core.self_improving.loop._hooks._fire_hook_with_result",
-        lambda event, data: {"program_md": "## HOOK OVERRIDE BODY"},
-    )
-    prompt = runner._build_system_prompt()
-    assert "## HOOK OVERRIDE BODY" in prompt
-    # The mutation-contract suffix is still appended to the override body.
-    assert "Response schema:" in prompt
-    assert "target_section" in prompt
+    assert [event for event, _data in fired] == [HookEvent.PROGRAM_MD_UNREADABLE]
+    assert "path" in fired[0][1]
 
 
 def test_load_program_md_reads_real_file_in_repo() -> None:

@@ -957,7 +957,7 @@ class TestWorkerHookBundle:
             from core.observability.event_store import HookEventStore
 
             reader = HookEventStore(tmp_path / "events.db")
-            assert [row.event for row in reader.read()] == ["tool_exec_end"]
+            assert [row.event for row in reader.read()] == ["tool_exec_ended"]
             reader.close()
             hooks.close()
         finally:

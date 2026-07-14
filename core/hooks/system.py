@@ -31,6 +31,12 @@ log = logging.getLogger(__name__)
 class HookEvent(Enum):
     """Runtime lifecycle events.
 
+    Naming convention (PR-HOOK-TAXONOMY, 2026-07-14): every member
+    satisfies ``NAME == VALUE.upper()`` and new event names use the
+    past-participle form (``*_STARTED`` / ``*_ENDED`` / ``*_COMPLETED``).
+    Legacy stored-event strings from before the value alignment are
+    resolved via :data:`LEGACY_EVENT_VALUES` on every read path.
+
     PR-DEAD-PIPELINE (2026-06-10) — the legacy analysis-pipeline event
     family (PIPELINE_*, NODE_*, ANALYST/EVALUATOR/SCORING_COMPLETED) and
     its cascade (DRIFT_DETECTED, OUTCOME_COLLECTED, MODEL_PROMOTED,
@@ -43,11 +49,13 @@ class HookEvent(Enum):
     TRIGGER_FIRED = "trigger_fired"
     POST_ANALYSIS = "post_analysis"
 
-    # Memory Autonomy (triggered by memory_save/manage_rule tool handlers)
+    # Memory Autonomy (triggered by memory_save/manage_rule tool handlers).
+    # RULE_CHANGED collapses the former RULE_CREATED/UPDATED/DELETED trio
+    # (PR-HOOK-TAXONOMY D3) — the payload carries
+    # ``action="created" | "updated" | "deleted"`` plus ``name`` (and
+    # ``paths`` for creations).
     MEMORY_SAVED = "memory_saved"
-    RULE_CREATED = "rule_created"
-    RULE_UPDATED = "rule_updated"
-    RULE_DELETED = "rule_deleted"
+    RULE_CHANGED = "rule_changed"
     # Human result feedback (rate/accept/reject_result tool handlers). The
     # canonical SQLite sink persists operator verdicts for indexed history.
     RESULT_FEEDBACK = "result_feedback"
@@ -67,32 +75,33 @@ class HookEvent(Enum):
 
     # Agentic turn lifecycle (OpenClaw command:new pattern; milestone-style —
     # fires once per turn on completion)
-    TURN_COMPLETED = "turn_complete"
+    TURN_COMPLETED = "turn_completed"
 
     # Context overflow detection (Karpathy P6 Context Budget)
     CONTEXT_CRITICAL = "context_critical"
     CONTEXT_OVERFLOW_ACTION = "context_overflow_action"
 
     # Session lifecycle (OpenClaw agent:bootstrap pattern; lifecycle pair)
-    SESSION_STARTED = "session_start"
-    SESSION_ENDED = "session_end"
+    SESSION_STARTED = "session_started"
+    SESSION_ENDED = "session_ended"
 
     # Model switching (L1 Observe)
     MODEL_SWITCHED = "model_switched"
 
-    # LLM call lifecycle (model-level latency/cost observability; START/ENDED
+    # LLM call lifecycle (model-level latency/cost observability; STARTED/ENDED
     # are the lifecycle pair, ENDED fires on success+error with ``error`` key,
     # FAILED is a legacy alias retained for plugin compatibility, RETRIED is
     # the action-past form for retry attempts)
-    LLM_CALL_STARTED = "llm_call_start"
-    LLM_CALL_ENDED = "llm_call_end"
+    LLM_CALL_STARTED = "llm_call_started"
+    LLM_CALL_ENDED = "llm_call_ended"
     LLM_CALL_FAILED = "llm_call_failed"
-    LLM_CALL_RETRIED = "llm_call_retry"
+    LLM_CALL_RETRIED = "llm_call_retried"
 
-    # Tool approval HITL lifecycle
+    # Tool approval HITL lifecycle. TOOL_APPROVAL_GRANTED/DENIED were
+    # deleted (PR-HOOK-TAXONOMY D1): they had zero handlers and the catalog
+    # already excluded them from persistence — APPROVAL_TRANSITION carries
+    # the granted/denied states with more context.
     TOOL_APPROVAL_REQUESTED = "tool_approval_requested"
-    TOOL_APPROVAL_GRANTED = "tool_approval_granted"
-    TOOL_APPROVAL_DENIED = "tool_approval_denied"
     # Approval FSM — ONE event per ApprovalRecord state transition, with the
     # target ``state`` (requested / displayed / user_selected / parsed /
     # granted / denied / propagated / executed / skipped) in the payload
@@ -127,8 +136,8 @@ class HookEvent(Enum):
     # error variant. TOOL_RESULT_TRANSFORM is a separate feedback hook (post
     # observation, result rewriting).
     USER_INPUT_RECEIVED = "user_input_received"
-    TOOL_EXEC_STARTED = "tool_exec_start"
-    TOOL_EXEC_ENDED = "tool_exec_end"
+    TOOL_EXEC_STARTED = "tool_exec_started"
+    TOOL_EXEC_ENDED = "tool_exec_ended"
     TOOL_EXEC_FAILED = "tool_exec_failed"
     TOOL_RESULT_TRANSFORM = "tool_result_transform"
     COST_WARNING = "cost_warning"
@@ -164,28 +173,22 @@ class HookEvent(Enum):
     COGNITIVE_REFLECT = "cognitive_reflect"
     COGNITIVE_UPDATE_MEMORY = "cognitive_update_memory"
 
-    # Self-improving loop auto-trigger telemetry (OL-A1.5 — 2026-05-22).
-    # One event per terminal state of ``auto_trigger_mutator`` so a
-    # downstream subscriber (audit log writer, Inspect viewer, FE) can
-    # count firings, distinguish lock contention from interval gating,
-    # and surface runner failures without parsing the daemon log.
-    # Payload schema (every variant):
-    #   {"trigger_id": str, "ts": float, "detail": str}
+    # Self-improving loop auto-trigger telemetry (OL-A1.5 — 2026-05-22;
+    # collapsed to ONE event in PR-HOOK-TAXONOMY D2). One emission per
+    # terminal state of ``auto_trigger_mutator`` so a downstream
+    # subscriber (audit log writer, Inspect viewer, FE) can count
+    # firings, distinguish lock contention from interval gating, and
+    # surface runner failures without parsing the daemon log. The
+    # terminal state travels in the payload instead of six enums:
+    #   {"trigger_id": str, "ts": float, "detail": str,
+    #    "stage": "fired" | "lock_busy" | "interval_blocked" |
+    #             "runner_error" | "parse_error" | "max_generation_reached"}
     # The ``trigger_id`` is the canonical id from
     # ``AUTO_TRIGGER_TRIGGER_ID`` so subscribers can filter by id when
-    # multiple trigger families coexist in the same scheduler.
-    SELF_IMPROVING_AUTO_TRIGGER_FIRED = "self_improving_auto_trigger_fired"
-    SELF_IMPROVING_AUTO_TRIGGER_LOCK_BUSY = "self_improving_auto_trigger_lock_busy"
-    SELF_IMPROVING_AUTO_TRIGGER_INTERVAL_BLOCKED = "self_improving_auto_trigger_interval_blocked"
-    SELF_IMPROVING_AUTO_TRIGGER_RUNNER_ERROR = "self_improving_auto_trigger_runner_error"
-    SELF_IMPROVING_AUTO_TRIGGER_PARSE_ERROR = "self_improving_auto_trigger_parse_error"
-    # PR-MAX-GEN (2026-05-26) — emitted when the auto-trigger hits the
-    # ``max_generation`` cap in ``~/.geode/autoresearch/handoff/auto_trigger_history.jsonl``.
-    # Same ``{trigger_id, ts, detail}`` payload schema; ``detail`` carries
+    # multiple trigger families coexist in the same scheduler. For the
+    # ``max_generation_reached`` stage, ``detail`` carries
     # ``"current/max"`` (e.g. ``"100/100"``).
-    SELF_IMPROVING_AUTO_TRIGGER_MAX_GENERATION_REACHED = (
-        "self_improving_auto_trigger_max_generation_reached"
-    )
+    SELF_IMPROVING_AUTO_TRIGGER = "self_improving_auto_trigger"
 
     # Wall-clock budget hand-off (PR-CL-BUDGET, 2026-05-23). Replaces the
     # prior turn hard-cap with a 2h time-cap + automatic T-10min hand-off.
@@ -231,17 +234,14 @@ class HookEvent(Enum):
     BASELINE_PROMOTED = "baseline_promoted"
 
     # Self-improving runner system-prompt source (PR-FALLBACK-HOOK-CONTROL,
-    # 2026-06-09). Fired by
+    # 2026-06-09; demoted to plain notify in PR-HOOK-TAXONOMY D4). Fired by
     # ``core.self_improving.loop.mutate.runner._build_system_prompt`` when
-    # ``program.md`` is unreadable. Replaces the former inline
-    # ``_FALLBACK_SYSTEM_PROMPT`` literal (a drift-prone dual SoT — the
-    # literal had already drifted to a stale schema missing
-    # target_kind/expected_dim/principle) with one programmatic control
-    # point: a handler MAY return ``{"program_md": "<replacement body>"}``
-    # (captured via ``trigger_with_result``) to override; with no handler
-    # the runner fails loud, because program.md ships with the package and a
-    # missing file is a packaging bug, not a routine fallback.
-    # Payload: ``{"path": str}``.
+    # ``program.md`` is unreadable, then the runner fails loud —
+    # program.md ships with the package, so a missing file is a packaging
+    # bug, not a routine fallback. The former ``trigger_with_result``
+    # override contract (a handler could return a replacement body) was
+    # removed: no handler was ever registered anywhere, so the feedback
+    # path was structurally dead. Payload: ``{"path": str}``.
     PROGRAM_MD_UNREADABLE = "program_md_unreadable"
 
     # Memory promotion proposal (PR-MEMORY-LIFECYCLE, 2026-07-03). Fired by
@@ -254,6 +254,57 @@ class HookEvent(Enum):
     # Payload: ``{"slug": str, "proposal_path": str, "session_ids": list[str],
     #             "source_count": int, "ts": float}``.
     MEMORY_PROMOTION_PROPOSED = "memory_promotion_proposed"
+
+
+# Read-side alias map for stored event strings written before the
+# NAME == VALUE.upper() alignment (PR-HOOK-TAXONOMY D5). Maps the OLD
+# stored value to the CURRENT enum value. Applied wherever an event
+# string is parsed back into a :class:`HookEvent` (``resolve_event_value``,
+# filesystem hook discovery) and expanded by
+# ``HookEventStore.read(event_filter=...)`` so canonical filters still
+# match legacy SQLite rows. Deliberately NOT covered here: the collapsed
+# D1/D2/D3 families — an old per-state name has no faithful single-event
+# mapping for *parsing back into a member* (the discriminator moved into
+# the payload). Their HISTORY visibility is handled separately by
+# :data:`COLLAPSED_EVENT_VALUES` below, which the event store folds into
+# filter expansion (read-only, never used to construct members).
+LEGACY_EVENT_VALUES: dict[str, str] = {
+    "session_start": "session_started",
+    "session_end": "session_ended",
+    "turn_complete": "turn_completed",
+    "llm_call_start": "llm_call_started",
+    "llm_call_end": "llm_call_ended",
+    "llm_call_retry": "llm_call_retried",
+    "tool_exec_start": "tool_exec_started",
+    "tool_exec_end": "tool_exec_ended",
+}
+
+
+# Collapsed-family history map (PR-HOOK-TAXONOMY D2/D3): CURRENT enum
+# value -> the pre-collapse stored event strings it absorbed. Used ONLY
+# for query/filter expansion (a canonical filter also returns the old
+# rows); never for member construction — the old rows keep their original
+# event string and payload shape.
+COLLAPSED_EVENT_VALUES: dict[str, tuple[str, ...]] = {
+    "rule_changed": ("rule_created", "rule_updated", "rule_deleted"),
+    "self_improving_auto_trigger": (
+        "self_improving_auto_trigger_fired",
+        "self_improving_auto_trigger_lock_busy",
+        "self_improving_auto_trigger_interval_blocked",
+        "self_improving_auto_trigger_runner_error",
+        "self_improving_auto_trigger_parse_error",
+        "self_improving_auto_trigger_max_generation_reached",
+    ),
+}
+
+
+def resolve_event_value(value: str) -> HookEvent:
+    """Resolve an event value string to a member, accepting legacy values.
+
+    Raises ``ValueError`` (from the enum constructor) when the string is
+    neither a current value nor a :data:`LEGACY_EVENT_VALUES` key.
+    """
+    return HookEvent(LEGACY_EVENT_VALUES.get(value, value))
 
 
 @dataclass
@@ -805,6 +856,12 @@ class HookSystem:
     ) -> HookDispatch:
         started_at = time.time()
         working = dict(data) if data is not None else {}
+        # Emit-side payload contract (PR-HOOK-TAXONOMY D7) — validated at
+        # the dispatch choke point so DIRECT trigger() callers are covered
+        # too, not only the core.hooks.dispatch wrappers.
+        from core.hooks.dispatch import _validate_payload
+
+        _validate_payload(event, working)
         if self.closed:
             return HookDispatch(
                 event=event,
@@ -877,6 +934,12 @@ class HookSystem:
     ) -> HookDispatch:
         started_at = time.time()
         working = dict(data) if data is not None else {}
+        # Emit-side payload contract (PR-HOOK-TAXONOMY D7) — validated at
+        # the dispatch choke point so DIRECT trigger() callers are covered
+        # too, not only the core.hooks.dispatch wrappers.
+        from core.hooks.dispatch import _validate_payload
+
+        _validate_payload(event, working)
         if self.closed:
             return HookDispatch(
                 event=event,

@@ -7,6 +7,8 @@ without depending on core.orchestration:
 """
 
 from core.hooks.system import (
+    COLLAPSED_EVENT_VALUES,
+    LEGACY_EVENT_VALUES,
     DuplicateHookRegistrationError,
     HookDispatch,
     HookDispatchMode,
@@ -17,9 +19,12 @@ from core.hooks.system import (
     HookSystem,
     HookTimeoutUnsupportedError,
     InterceptResult,
+    resolve_event_value,
 )
 
 __all__ = [
+    "COLLAPSED_EVENT_VALUES",
+    "LEGACY_EVENT_VALUES",
     "DuplicateHookRegistrationError",
     "HookDispatch",
     "HookDispatchMode",
@@ -30,4 +35,5 @@ __all__ = [
     "HookSystem",
     "HookTimeoutUnsupportedError",
     "InterceptResult",
+    "resolve_event_value",
 ]

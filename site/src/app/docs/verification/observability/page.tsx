@@ -6,7 +6,7 @@ const queryExample = `from core.observability.event_store import HookEventStore
 
 store = HookEventStore()
 try:
-    for row in store.read(limit=50, event_filter="tool_exec_end"):
+    for row in store.read(limit=50, event_filter="tool_exec_ended"):
         print(row.session_key, row.status, row.action, row.occurred_at)
 finally:
     store.close()`;

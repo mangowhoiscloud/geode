@@ -1414,14 +1414,27 @@ class Pipeline:
     def _emit_hook(self, event: HookEvent, role: str, **extra: Any) -> None:
         if self._hooks is None:
             return
+        # PR-HOOK-TAXONOMY D7 — the bootstrap SUBAGENT_* handlers key on
+        # ``task_id`` (runtime-state row + journal) and read ``task_type`` /
+        # ``component`` / ``status``; the former payload carried only the
+        # seed-generation vocabulary (subject/role), so the audit logger and
+        # runtime-state writer silently early-returned on every phase.
         payload: dict[str, Any] = {
             "subject": f"seed-generation/{self.state.run_id}/{role}",
             "subject_id": self.state.run_id,
             "role": role,
             "target_dim": self.state.target_dim,
+            "task_id": f"{self.state.run_id}:{role}",
+            "task_type": role,
+            "component": "seed_generation",
             **extra,
         }
-        try:
-            self._hooks.trigger(event, payload)
-        except Exception:
-            log.warning("seed-generation hook trigger failed: %s", event, exc_info=True)
+        status = {
+            HookEvent.SUBAGENT_COMPLETED: "completed",
+            HookEvent.SUBAGENT_FAILED: "failed",
+        }.get(event)
+        if status is not None:
+            payload.setdefault("status", status)
+        from core.hooks.dispatch import fire_hook
+
+        fire_hook(self._hooks, event, payload)
