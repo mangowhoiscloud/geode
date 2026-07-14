@@ -464,7 +464,7 @@ def forecast_runtime(
         rates, counts = runtime_pilot_block_rates(pilot)
         if pilot.get("schema") == RUNTIME_PILOT_SCHEMA:
             validated_status = validate_runtime_cycle_observation(pilot, counts)
-            if validated_status != cycle_status:  # pragma: no cover - shared validator invariant
+            if validated_status != cycle_status:
                 raise ContractError(f"{field}.cycle_observation status changed during validation")
         if not rates:
             raise ContractError(f"{field} has no usable family blocks")
@@ -482,10 +482,10 @@ def forecast_runtime(
             and fresh_measurement
         ):
             matching_cycle_digests.append(digest)
-            if source_contract_id is None:  # pragma: no cover - v2 regime invariant
+            if source_contract_id is None:
                 raise ContractError(f"{field} matching cycle lacks source_contract_id")
             matching_cycle_contract_ids.append(source_contract_id)
-            if not isinstance(observation, Mapping):  # pragma: no cover - validated above
+            if not isinstance(observation, Mapping):
                 raise ContractError(f"{field} matching cycle lacks cycle_observation")
             matching_cycle_evaluator_walls.append(
                 _nonnegative_number(

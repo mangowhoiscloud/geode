@@ -306,7 +306,7 @@ def validate_runtime_cycle_observation(
         raise ContractError("runtime pilot paired row count does not match runtime regime design")
 
     blocks = pilot.get("blocks")
-    if not isinstance(blocks, list):  # pragma: no cover - block parser owns this invariant
+    if not isinstance(blocks, list):
         raise ContractError("runtime pilot blocks must be a list")
     block_sample_counts = tuple(
         len(block["samples"])
