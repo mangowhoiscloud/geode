@@ -646,7 +646,7 @@ export default function Page() {
           <>
             <h2>Terminology: harness and scaffold</h2>
             <p>
-              The agent community's 2026 convention separates two layers. The{" "}
+              The agent community’s 2026 convention separates two layers. The{" "}
               <strong>harness</strong> is the execution layer: it runs the loop,
               executes tools, and decides when to stop. The{" "}
               <strong>scaffold</strong> is the behavior-defining layer: prompts,
@@ -664,7 +664,7 @@ export default function Page() {
             <p>GEODE is a meta-harness because of three stacked relations.</p>
             <ul>
               <li>
-                <strong>Built by a harness</strong>. GEODE's code is produced by
+                <strong>Built by a harness</strong>. GEODE’s code is produced by
                 other harnesses (Claude Code, Codex CLI) reading the{" "}
                 <code>CLAUDE.md</code> and <code>AGENTS.md</code> scaffold. The
                 Scaffold section below catalogs that build harness.
@@ -672,7 +672,7 @@ export default function Page() {
               <li>
                 <strong>Is a harness</strong>. GEODE itself is a harness: the
                 runtime mechanisms of Context Control, Plan and Execute, Verify,
-                and Observe bound the model's divergence.
+                and Observe bound the model’s divergence.
               </li>
               <li>
                 <strong>Re-scaffolds itself</strong>. The{" "}
@@ -715,7 +715,7 @@ export default function Page() {
           <>
             <h2>1. Context Control</h2>
             <p>
-              The mechanisms that bound what enters the model's context. This is the
+              The mechanisms that bound what enters the model’s context. This is the
               implementation of the principle that the loop and its guardrails
               set the ceiling on output quality. Background:{" "}
               <a href="/geode/docs/runtime/context">Context assembly</a> and{" "}
@@ -860,7 +860,7 @@ export default function Page() {
             <h2>3. Verify</h2>
             <p>
               The mechanisms that converge nondeterministic output to a
-              trustable level, from per-turn verification up to the self-improving loop's
+              trustable level, from per-turn verification up to the self-improving loop’s
               fitness gate, critical floors, and control arm. For the dimension
               taxonomy see{" "}
               <a href="/geode/docs/petri/judge-dimensions">Judge dimensions</a>.

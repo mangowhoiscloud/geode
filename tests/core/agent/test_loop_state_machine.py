@@ -220,10 +220,111 @@ def test_session_status_transitions(tmp_path):
     assert _index_status(tmp_path, "s-status") == SessionStatus.COMPLETED
     assert all(s.session_id != "s-status" for s in cp.list_resumable())
 
+    # COMPLETED is terminal — a further mark_error is an illegal edge and
+    # must be refused (v0.99.329 transition enforcement).
     cp.mark_error("s-status")
-    assert cp.load("s-status").status == SessionStatus.ERROR
+    assert cp.load("s-status").status == SessionStatus.COMPLETED
 
 
 def test_mark_paused_missing_session_is_noop(tmp_path):
     cp = SessionCheckpoint(tmp_path / "sessions")
     cp.mark_paused("does-not-exist")  # must not raise
+
+
+# ---------------------------------------------------------------------------
+# 4. Transition-graph enforcement (v0.99.329)
+# ---------------------------------------------------------------------------
+
+
+def test_illegal_transition_out_of_terminal_is_refused(tmp_path, caplog):
+    cp = SessionCheckpoint(tmp_path / "sessions")
+    cp.save(SessionState(session_id="s-term", messages=[]))
+    cp.mark_completed("s-term")
+
+    with caplog.at_level("WARNING"):
+        cp.mark_paused("s-term")
+        assert cp.transition("s-term", SessionStatus.ACTIVE) is False
+
+    assert cp.load("s-term").status == SessionStatus.COMPLETED
+    assert "Illegal session transition" in caplog.text
+
+
+def test_error_is_terminal_too(tmp_path):
+    cp = SessionCheckpoint(tmp_path / "sessions")
+    cp.save(SessionState(session_id="s-err", messages=[]))
+    cp.mark_error("s-err")
+    assert cp.transition("s-err", SessionStatus.COMPLETED) is False
+    assert cp.load("s-err").status == SessionStatus.ERROR
+
+
+def test_paused_repark_is_idempotent(tmp_path):
+    cp = SessionCheckpoint(tmp_path / "sessions")
+    cp.save(SessionState(session_id="s-park", messages=[]))
+    cp.mark_paused("s-park")
+    cp.mark_paused("s-park")  # PAUSED -> PAUSED legal (re-park)
+    assert cp.load("s-park").status == SessionStatus.PAUSED
+
+
+def test_reopen_edge(tmp_path):
+    cp = SessionCheckpoint(tmp_path / "sessions")
+    cp.save(SessionState(session_id="s-re", messages=[]))
+    cp.mark_completed("s-re")
+
+    assert cp.reopen("s-re") is True
+    assert cp.load("s-re").status == SessionStatus.ACTIVE
+    assert cp.reopen("s-re") is True  # non-terminal -> no-op success
+    assert cp.reopen("does-not-exist") is False
+
+
+def test_save_on_terminal_is_implicit_reopen_with_warning(tmp_path, caplog):
+    cp = SessionCheckpoint(tmp_path / "sessions")
+    cp.save(SessionState(session_id="s-imp", messages=[]))
+    cp.mark_completed("s-imp")
+
+    with caplog.at_level("WARNING"):
+        cp.save(SessionState(session_id="s-imp", messages=[{"role": "user", "content": "x"}]))
+
+    assert "implicit reopen" in caplog.text
+    # The turn's data is never dropped — the machine re-entered ACTIVE.
+    assert cp.load("s-imp").status == SessionStatus.ACTIVE
+
+
+def test_unknown_status_normalizes_to_error(tmp_path, caplog):
+    import json as _json
+
+    cp = SessionCheckpoint(tmp_path / "sessions")
+    cp.save(SessionState(session_id="s-junk", messages=[]))
+    state_file = tmp_path / "sessions" / "s-junk" / "state.json"
+    data = _json.loads(state_file.read_text())
+    data["status"] = "definitely-not-a-status"
+    state_file.write_text(_json.dumps(data))
+
+    with caplog.at_level("WARNING"):
+        loaded = cp.load("s-junk")
+    assert loaded is not None
+    assert loaded.status == SessionStatus.ERROR
+    assert "Unknown session status" in caplog.text
+
+
+def test_transitions_ledger_records_every_edge(tmp_path):
+    """Observability — the automaton's audit trail catches every edge kind."""
+    import json as _json
+
+    cp = SessionCheckpoint(tmp_path / "sessions")
+    cp.save(SessionState(session_id="s-led", messages=[]))
+    cp.mark_paused("s-led")  # transition active -> paused
+    cp.mark_completed("s-led")  # transition paused -> completed
+    cp.mark_paused("s-led")  # refused (terminal)
+    cp.reopen("s-led")  # reopen completed -> active
+    cp.mark_completed("s-led")  # transition active -> completed
+    cp.save(SessionState(session_id="s-led", messages=[]))  # implicit_reopen
+
+    ledger = tmp_path / "sessions" / "transitions.jsonl"
+    rows = [_json.loads(line) for line in ledger.read_text().splitlines()]
+    edges = [(r["edge"], r["from"], r["to"]) for r in rows]
+    assert ("save", None, "active") in edges  # absent -> active (first save)
+    assert ("transition", "active", "paused") in edges
+    assert ("refused", "completed", "paused") in edges
+    assert ("reopen", "completed", "active") in edges
+    assert ("implicit_reopen", "completed", "active") in edges
+    assert all(r["session_id"] == "s-led" and r["ts"] > 0 for r in rows)

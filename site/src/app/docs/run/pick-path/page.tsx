@@ -238,7 +238,7 @@ geode about              # 실효 모델 + 자격 상태 확인`}</pre>
 
             <h2>Credential source values</h2>
             <p>
-              Each provider's credential source is one of four values from
+              Each provider’s credential source is one of four values from
               <code>core/config/credential_source.py</code>.
             </p>
             <table>

@@ -51,6 +51,13 @@ function fail(msg) {
   process.exit(1);
 }
 
+function generationDate() {
+  const sot = readFileSync(SOT_FILE, "utf8");
+  const match = sot.match(/syncedAt:\s*"(\d{4}-\d{2}-\d{2})"/);
+  if (!match) fail(`could not parse syncedAt from ${SOT_FILE} (run sync-stats first)`);
+  return match[1];
+}
+
 function readVersion() {
   const sot = readFileSync(SOT_FILE, "utf8");
   const m = sot.match(/version:\s*"([^"]+)"/);
@@ -170,7 +177,7 @@ function exportPage(td, page) {
 }
 
 function writeLlmsFull(pages, bodies, version) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = generationDate();
   const lines = [];
   lines.push("# GEODE");
   lines.push("");

@@ -45,6 +45,27 @@ function fail(msg) {
   process.exit(1);
 }
 
+function generationDate(version) {
+  const epoch = process.env.SOURCE_DATE_EPOCH;
+  if (epoch !== undefined) {
+    if (!/^\d+$/.test(epoch)) fail(`invalid SOURCE_DATE_EPOCH: ${epoch}`);
+    const date = new Date(Number(epoch) * 1000);
+    if (Number.isNaN(date.getTime())) fail(`invalid SOURCE_DATE_EPOCH: ${epoch}`);
+    return date.toISOString().slice(0, 10);
+  }
+
+  // A same-version verification or repair run must not dirty committed docs
+  // merely because the wall clock advanced. Preserve the existing sync date;
+  // a new version (or a missing snapshot) receives today's UTC date.
+  if (existsSync(SOT_FILE)) {
+    const previous = readFileSync(SOT_FILE, "utf8");
+    const previousVersion = previous.match(/version:\s*"([^"]+)"/)?.[1];
+    const previousDate = previous.match(/syncedAt:\s*"(\d{4}-\d{2}-\d{2})"/)?.[1];
+    if (previousVersion === version && previousDate) return previousDate;
+  }
+  return new Date().toISOString().slice(0, 10);
+}
+
 function readVersion() {
   const pyproject = readFileSync(resolve(GEODE_REPO, "pyproject.toml"), "utf8");
   const m = pyproject.match(/^version\s*=\s*"([^"]+)"/m);
@@ -92,8 +113,7 @@ function parseChangelog() {
   return entries;
 }
 
-function writeSot(v) {
-  const today = new Date().toISOString().slice(0, 10);
+function writeSot(v, today) {
 
   // PR-DOCS-REDESIGN (2026-05-30) — the SOT no longer carries inventory counts
   // (modules / tests / releases). The docs describe what the system does, not
@@ -117,8 +137,7 @@ export const GEODE_SOT = {
   writeFileSync(SOT_FILE, body);
 }
 
-function writeChangelog(entries) {
-  const today = new Date().toISOString().slice(0, 10);
+function writeChangelog(entries, today) {
   // JSON.stringify handles escaping cleanly for embed-as-TS-literal.
   const data = entries.map((e) => ({
     version: e.version,
@@ -159,9 +178,8 @@ export const CHANGELOG_SYNCED_AT = "${today}";
  * Consumed by LLM agents that fetch /llms.txt before exploring the site
  * (the convention GEODE's own router prompt follows for external docs).
  */
-function writeLlmsTxt(pages, version) {
+function writeLlmsTxt(pages, version, today) {
   const base = PAGES_BASE_URL;
-  const today = new Date().toISOString().slice(0, 10);
 
   const lines = [];
   lines.push("# GEODE");
@@ -222,17 +240,18 @@ function writeLlmsTxt(pages, version) {
 function main() {
   console.log(`sync-stats: reading from ${GEODE_REPO}`);
   const version = readVersion();
+  const syncDate = generationDate(version);
   console.log(`  version  : ${version}`);
 
-  writeSot({ version });
+  writeSot({ version }, syncDate);
   console.log(`sync-stats: wrote ${SOT_FILE}`);
 
   const entries = parseChangelog();
-  writeChangelog(entries);
+  writeChangelog(entries, syncDate);
   console.log(`sync-stats: wrote ${CHANGELOG_FILE} (${entries.length} entries)`);
 
   const pages = parseSitemap(SITEMAP_TS_FILE);
-  writeLlmsTxt(pages, version);
+  writeLlmsTxt(pages, version, syncDate);
   console.log(`sync-stats: wrote ${LLMS_TXT_FILE} (${pages.length} pages)`);
   console.log("sync-stats: llms-full.txt is owned by export-docs-md.mjs (run after build)");
 }

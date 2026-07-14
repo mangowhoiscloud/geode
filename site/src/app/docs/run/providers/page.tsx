@@ -316,8 +316,8 @@ geode about                   # the EFFECTIVE model + provider`}</pre>
                 </tr>
                 <tr>
                   <td>Only the daemon answers with the old model</td>
-                  <td>A model env var got pinned into the daemon's environment</td>
-                  <td>Dropping model env keys at daemon startup is the default. <code>pkill -f &quot;geode serve&quot;</code> and restart. To pin the daemon's model via env on purpose, <code>GEODE_SERVE_KEEP_MODEL_ENV=1</code> is the escape hatch.</td>
+                  <td>A model env var got pinned into the daemon’s environment</td>
+                  <td>Dropping model env keys at daemon startup is the default. <code>pkill -f &quot;geode serve&quot;</code> and restart. To pin the daemon’s model via env on purpose, <code>GEODE_SERVE_KEEP_MODEL_ENV=1</code> is the escape hatch.</td>
                 </tr>
                 <tr>
                   <td>GLM subscription, yet metered billing</td>

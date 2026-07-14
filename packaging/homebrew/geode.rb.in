@@ -1,21 +1,36 @@
 class Geode < Formula
   include Language::Python::Virtualenv
 
-  desc "General-purpose autonomous execution agent harness"
-  homepage "https://github.com/mangowhoiscloud/geode"
+  desc "Self-hosting autonomous execution agent harness"
+  homepage "https://mangowhoiscloud.github.io/geode"
   url "{{SDIST_URL}}"
   sha256 "{{SDIST_SHA256}}"
   license "Apache-2.0"
+  head "https://github.com/mangowhoiscloud/geode.git", branch: "main"
 
+  livecheck do
+    url :stable
+    strategy :github_latest
+  end
+
+  depends_on "pkgconf" => :build
+  depends_on "rust" => :build
+  depends_on "libyaml"
+  depends_on "openssl@3"
   depends_on "{{PYTHON_FORMULA}}"
 
 {{RESOURCE_STANZAS}}
 
   def install
+    # Native Python resources must link against Homebrew OpenSSL instead of
+    # building a vendored copy. All Python dependencies are pinned resources.
+    ENV["OPENSSL_DIR"] = formula_opt_prefix("openssl@3")
+    ENV["OPENSSL_NO_VENDOR"] = "1"
     virtualenv_install_with_resources
   end
 
   test do
     assert_match "GEODE v{{VERSION}}", shell_output("#{bin}/geode version")
+    assert_match "usage: geode-mcp", shell_output("#{bin}/geode-mcp --help")
   end
 end
