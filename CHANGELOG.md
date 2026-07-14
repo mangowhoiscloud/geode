@@ -95,11 +95,11 @@ functional change.
   conditional, and the release workflow regression suite now runs `bash -n`
   over every `run` block before a publishing change can merge.
 - **Homebrew resource refresh spans the CLI transition safely.** Stable
-  publication now detects whether the runner's `update-python-resources`
-  supports the new main-package cooldown override and only passes that option
-  when available. It registers the checked-out repository as a local tap and
-  resolves its qualified formula name, retaining exact resource pins across
-  both older and current Homebrew.
+  publication uses the main-package cooldown override when available and falls
+  back to the formula's exact GitHub Release sdist on older Homebrew, while
+  dependency resolution retains the 24-hour supply-chain cooldown. The local
+  candidate receives formula-scoped trust before Homebrew loads it, and the
+  qualified tap formula is copied back with exact resource pins.
 
 ## [0.99.330] - 2026-07-14
 

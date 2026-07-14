@@ -608,14 +608,19 @@ jobs:
         run: |
           tap_name=mangowhoiscloud/tap
           brew tap "$tap_name" "$PWD/tap"
+          if brew trust --help >/dev/null 2>&1; then
+            brew trust --formula "$tap_name/geode"
+          fi
           tap_formula="$(brew --repo "$tap_name")/Formula/geode.rb"
-          resource_args=(
-            "$tap_name/geode"
-            --package-name geode-agent
-            --version "$GEODE_VERSION"
-          )
+          resource_args=("$tap_name/geode")
           if [[ "$(brew update-python-resources --help)" == *"--ignore-main-package-cooldown"* ]]; then
-            resource_args+=(--ignore-main-package-cooldown)
+            resource_args+=(
+              --package-name geode-agent
+              --version "$GEODE_VERSION"
+              --ignore-main-package-cooldown
+            )
+          else
+            echo "::notice::Using the exact release sdist as the direct main-package reference"
           fi
           brew update-python-resources "${resource_args[@]}"
           cp "$tap_formula" tap/Formula/geode.rb
