@@ -1,8 +1,10 @@
 """OL-A1.5 — auto-trigger HookEvent + audit log JSONL invariants.
 
 Pins:
-- 5 new HookEvent variants exist (one per terminal state, except ``disabled``).
-- ``STATE_TO_HOOK_EVENT`` maps each state correctly + does NOT include ``disabled``.
+- ``SELF_IMPROVING_AUTO_TRIGGER`` is ONE HookEvent (PR-HOOK-TAXONOMY D2);
+  the terminal state travels in the payload ``stage`` field.
+- ``AUTO_TRIGGER_TELEMETRY_STAGES`` covers each terminal state and does
+  NOT include ``disabled``.
 - ``append_history_entry`` writes one JSONL row per call, round-trips.
 - ``append_history_entry`` graceful on OSError (returns False, no raise).
 - ``auto_trigger_mutator`` emits the right HookEvent + appends one
@@ -62,53 +64,30 @@ class _CapturingHooks:
 # ---------------------------------------------------------------------------
 
 
-def test_hook_event_has_auto_trigger_variants() -> None:
-    """PR-MAX-GEN (2026-05-26) added a sixth auto-trigger variant:
-    ``SELF_IMPROVING_AUTO_TRIGGER_MAX_GENERATION_REACHED``."""
+def test_hook_event_is_single_auto_trigger_member() -> None:
+    """PR-HOOK-TAXONOMY D2 — the six per-state variants collapsed into
+    ONE member; the terminal state is the payload ``stage`` field."""
     from core.hooks import HookEvent
 
-    assert HookEvent.SELF_IMPROVING_AUTO_TRIGGER_FIRED.value == "self_improving_auto_trigger_fired"
-    assert HookEvent.SELF_IMPROVING_AUTO_TRIGGER_LOCK_BUSY.value == (
-        "self_improving_auto_trigger_lock_busy"
-    )
-    assert HookEvent.SELF_IMPROVING_AUTO_TRIGGER_INTERVAL_BLOCKED.value == (
-        "self_improving_auto_trigger_interval_blocked"
-    )
-    assert HookEvent.SELF_IMPROVING_AUTO_TRIGGER_RUNNER_ERROR.value == (
-        "self_improving_auto_trigger_runner_error"
-    )
-    assert HookEvent.SELF_IMPROVING_AUTO_TRIGGER_PARSE_ERROR.value == (
-        "self_improving_auto_trigger_parse_error"
-    )
-    assert HookEvent.SELF_IMPROVING_AUTO_TRIGGER_MAX_GENERATION_REACHED.value == (
-        "self_improving_auto_trigger_max_generation_reached"
-    )
+    assert HookEvent.SELF_IMPROVING_AUTO_TRIGGER.value == "self_improving_auto_trigger"
+    assert not any(m.name.startswith("SELF_IMPROVING_AUTO_TRIGGER_") for m in HookEvent)
 
 
-def test_state_to_hook_event_map_covers_terminal_states() -> None:
+def test_telemetry_stages_cover_terminal_states() -> None:
     """`disabled` is intentionally absent — see module docstring.
     PR-MAX-GEN (2026-05-26) added ``max_generation_reached`` for the
-    generation-cap state, bringing the map to six entries."""
-    from core.self_improving.loop.auto_trigger import STATE_TO_HOOK_EVENT
+    generation-cap state, bringing the set to six stages."""
+    from core.self_improving.loop.auto_trigger import AUTO_TRIGGER_TELEMETRY_STAGES
 
-    assert set(STATE_TO_HOOK_EVENT) == {
+    assert {
         "fired",
         "lock_busy",
         "interval_blocked",
         "runner_error",
         "parse_error",
         "max_generation_reached",
-    }
-    assert "disabled" not in STATE_TO_HOOK_EVENT
-
-
-def test_state_to_hook_event_values_resolve_via_getattr() -> None:
-    """Each mapped string MUST resolve via `getattr(HookEvent, name)`."""
-    from core.hooks import HookEvent
-    from core.self_improving.loop.auto_trigger import STATE_TO_HOOK_EVENT
-
-    for hook_name in STATE_TO_HOOK_EVENT.values():
-        assert hasattr(HookEvent, hook_name), f"HookEvent missing {hook_name}"
+    } == AUTO_TRIGGER_TELEMETRY_STAGES
+    assert "disabled" not in AUTO_TRIGGER_TELEMETRY_STAGES
 
 
 # ---------------------------------------------------------------------------
@@ -219,10 +198,11 @@ def test_fired_emits_hook_and_appends_history(
         now=2000000.0,
     )
     assert status.state == "fired"
-    # Hook emitted exactly once with the FIRED variant
+    # Hook emitted exactly once with stage="fired"
     assert len(hooks.emitted) == 1
     event, payload = hooks.emitted[0]
-    assert event == HookEvent.SELF_IMPROVING_AUTO_TRIGGER_FIRED
+    assert event == HookEvent.SELF_IMPROVING_AUTO_TRIGGER
+    assert payload["stage"] == "fired"
     assert payload["ts"] == 2000000.0
     assert "wrapper.intro" in payload["detail"]
     # History appended exactly once
@@ -258,7 +238,8 @@ def test_lock_busy_emits_hook_and_appends_history(
         )
         assert status.state == "lock_busy"
         assert len(hooks.emitted) == 1
-        assert hooks.emitted[0][0] == HookEvent.SELF_IMPROVING_AUTO_TRIGGER_LOCK_BUSY
+        assert hooks.emitted[0][0] == HookEvent.SELF_IMPROVING_AUTO_TRIGGER
+        assert hooks.emitted[0][1]["stage"] == "lock_busy"
         assert hist.read_text(encoding="utf-8").strip().splitlines()
     finally:
         release_auto_trigger_lock(held)
@@ -289,7 +270,8 @@ def test_interval_blocked_emits_hook_and_appends_history(
     )
     assert status.state == "interval_blocked"
     assert len(hooks.emitted) == 1
-    assert hooks.emitted[0][0] == HookEvent.SELF_IMPROVING_AUTO_TRIGGER_INTERVAL_BLOCKED
+    assert hooks.emitted[0][0] == HookEvent.SELF_IMPROVING_AUTO_TRIGGER
+    assert hooks.emitted[0][1]["stage"] == "interval_blocked"
 
 
 def test_runner_error_emits_hook_and_appends_history(
@@ -312,7 +294,8 @@ def test_runner_error_emits_hook_and_appends_history(
     )
     assert status.state == "runner_error"
     assert len(hooks.emitted) == 1
-    assert hooks.emitted[0][0] == HookEvent.SELF_IMPROVING_AUTO_TRIGGER_RUNNER_ERROR
+    assert hooks.emitted[0][0] == HookEvent.SELF_IMPROVING_AUTO_TRIGGER
+    assert hooks.emitted[0][1]["stage"] == "runner_error"
 
 
 def test_parse_error_emits_hook_and_appends_history(
@@ -335,14 +318,15 @@ def test_parse_error_emits_hook_and_appends_history(
     )
     assert status.state == "parse_error"
     assert len(hooks.emitted) == 1
-    assert hooks.emitted[0][0] == HookEvent.SELF_IMPROVING_AUTO_TRIGGER_PARSE_ERROR
+    assert hooks.emitted[0][0] == HookEvent.SELF_IMPROVING_AUTO_TRIGGER
+    assert hooks.emitted[0][1]["stage"] == "parse_error"
 
 
 def test_disabled_skips_hook_and_history(
     trigger_paths: tuple[Path, Path, Path],
 ) -> None:
     """`disabled` is the only state that does NOT emit a hook OR
-    append a row — see STATE_TO_HOOK_EVENT docstring for rationale.
+    append a row — see AUTO_TRIGGER_TELEMETRY_STAGES docstring for rationale.
     """
     from core.self_improving.loop.auto_trigger import auto_trigger_mutator
 

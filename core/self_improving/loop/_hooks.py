@@ -58,29 +58,10 @@ def _fire_hook(event: HookEvent, data: dict[str, Any]) -> None:
     isolated unit tests). Failure to fire is non-blocking — the
     mutator's SoT writes are the correctness boundary, observability
     is best-effort.
+
+    PR-HOOK-TAXONOMY D4 removed the sibling ``_fire_hook_with_result``:
+    its only caller was the ``PROGRAM_MD_UNREADABLE`` override contract,
+    which never had a registered handler anywhere — a structurally dead
+    feedback path. The runner now fires this plain notify and fails loud.
     """
     fire_hook(_hooks_ctx, event, data)
-
-
-def _fire_hook_with_result(event: HookEvent, data: dict[str, Any]) -> dict[str, Any] | None:
-    """Fire a hook and return the first successful handler's result dict.
-
-    Like :func:`_fire_hook` but captures handler return values via
-    ``HookSystem.trigger_with_result`` so a handler can feed data back to
-    the caller (e.g. supply a replacement ``program.md`` body for
-    ``HookEvent.PROGRAM_MD_UNREADABLE``). Returns ``None`` when the
-    HookSystem isn't wired (cold-start / isolated tests) or no handler
-    returned a dict — the caller decides the no-override behaviour (the
-    runner fails loud rather than silently substituting a literal).
-    """
-    if _hooks_ctx is None:
-        return None
-    try:
-        results = _hooks_ctx.trigger_with_result(event, data)
-    except Exception:  # pragma: no cover — observability must never block
-        log.debug("trigger_with_result failed for %s", event, exc_info=True)
-        return None
-    for result in results:
-        if getattr(result, "success", False) and getattr(result, "data", None):
-            return dict(result.data)
-    return None

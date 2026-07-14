@@ -201,6 +201,6 @@ def make_metrics_hook_handler(
         metrics.record_tool_recovery()
 
     return [
-        ("llm_call_end", "metrics_llm", _on_llm_end),
+        ("llm_call_ended", "metrics_llm", _on_llm_end),
         ("tool_recovery_succeeded", "metrics_recovery", _on_tool_recovery_succeeded),
     ]

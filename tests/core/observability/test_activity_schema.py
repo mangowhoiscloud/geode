@@ -228,11 +228,11 @@ _SUPERSET_PAYLOAD = {
 
 def test_i5_all_hookevents_produce_a_row() -> None:
     """Every HookEvent now has a typed builder (PR-OBS-CONTRACT closed the
-    44 K-group fall-throughs; PR-HITL-APPROVAL-FSM added the 45th;
-    PR-MEMORY-LIFECYCLE the 46th). With a well-formed payload each maps to
-    its concrete row — never GenericActivityRow, never raises."""
+    K-group fall-throughs; PR-HOOK-TAXONOMY collapsed the enum 65 -> 56).
+    With a well-formed payload each maps to its concrete row — never
+    GenericActivityRow, never raises."""
     all_events = list(HookEvent)
-    assert len(all_events) >= 65, f"expected at least 65 HookEvents, got {len(all_events)}"
+    assert len(all_events) == 56, f"expected 56 HookEvents, got {len(all_events)}"
 
     typed_count = 0
     for event in all_events:
@@ -245,9 +245,9 @@ def test_i5_all_hookevents_produce_a_row() -> None:
                 f"under a well-formed payload"
             )
 
-    # 100% typed coverage. +MEMORY_PROMOTION_PROPOSED (PR-MEMORY-LIFECYCLE) → 65.
-    assert typed_count == 65, f"expected 65 typed events (full coverage), got {typed_count}"
-    assert len(HOOK_EVENT_TO_ROW_BUILDER) == 65, "every HookEvent must have a registry entry"
+    # 100% typed coverage over the 56-member enum (PR-HOOK-TAXONOMY).
+    assert typed_count == 56, f"expected 56 typed events (full coverage), got {typed_count}"
+    assert len(HOOK_EVENT_TO_ROW_BUILDER) == 56, "every HookEvent must have a registry entry"
 
 
 def test_i5_registry_action_matches_concrete_action_literal() -> None:
@@ -315,17 +315,20 @@ _KGROUP_REAL_PAYLOADS: dict[str, dict[str, object]] = {
         "cost_per_tool_call": 0.03,
         "overthinking_detected": False,
     },
-    "SELF_IMPROVING_AUTO_TRIGGER_RUNNER_ERROR": {
+    "SELF_IMPROVING_AUTO_TRIGGER": {
         "trigger_id": "auto-1",
+        "stage": "runner_error",
         "detail": "RuntimeError('boom')",
         "ts": 3.0,
     },
-    "TOOL_APPROVAL_DENIED": {
+    "TOOL_APPROVAL_REQUESTED": {
         "tool_name": "run_bash",
         "safety_level": "write",
-        "permission_level": "HITL",
-        "decision": "denied",
-        "latency_ms": 40.0,
+    },
+    "RULE_CHANGED": {
+        "action": "created",
+        "name": "rule1",
+        "paths": ["*.py"],
     },
 }
 
@@ -393,15 +396,21 @@ def test_k2_raw_user_content_never_persists_to_timeline() -> None:
 
 def test_k3_payload_divergence_degrades_gracefully() -> None:
     """Events with multiple emit sites that send *different* key sets
-    (MEMORY_SAVED tool-vs-CLI; RULE_UPDATED carries no ``paths``) must
+    (MEMORY_SAVED tool-vs-CLI; RULE_CHANGED updates carry no ``paths``) must
     build cleanly via field defaults — an accepted, documented divergence."""
     # CLI memory_handler omits ``persistent``.
     cli_mem = map_hook_to_activity(HookEvent.MEMORY_SAVED, {"key": "k"}, run_id="r1")
     assert cli_mem.details.model_dump() == {"key": "k", "persistent": False}  # type: ignore[union-attr]
 
-    # RULE_UPDATED carries only ``name`` (no ``paths``).
-    rule = map_hook_to_activity(HookEvent.RULE_UPDATED, {"name": "n"}, run_id="r1")
-    assert rule.details.model_dump() == {"name": "n", "paths": ()}  # type: ignore[union-attr]
+    # RULE_CHANGED update emissions carry only ``action``+``name`` (no ``paths``).
+    rule = map_hook_to_activity(
+        HookEvent.RULE_CHANGED, {"action": "updated", "name": "n"}, run_id="r1"
+    )
+    assert rule.details.model_dump() == {  # type: ignore[union-attr]
+        "name": "n",
+        "action": "updated",
+        "paths": (),
+    }
 
 
 def test_k4_fallback_path_also_scrubs_raw_content() -> None:

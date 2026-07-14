@@ -433,7 +433,10 @@ class RuleCreateTool(_AsyncExecuteMixin):
 
         success = proj.create_rule(rule_name, paths, content)
         if success:
-            _fire_hook(HookEvent.RULE_CREATED, {"name": rule_name, "paths": paths})
+            _fire_hook(
+                HookEvent.RULE_CHANGED,
+                {"action": "created", "name": rule_name, "paths": paths},
+            )
         return {
             "result": {
                 "created": success,
@@ -484,7 +487,7 @@ class RuleUpdateTool(_AsyncExecuteMixin):
 
         success = proj.update_rule(rule_name, content)
         if success:
-            _fire_hook(HookEvent.RULE_UPDATED, {"name": rule_name})
+            _fire_hook(HookEvent.RULE_CHANGED, {"action": "updated", "name": rule_name})
         return {
             "result": {
                 "updated": success,
@@ -526,7 +529,7 @@ class RuleDeleteTool(_AsyncExecuteMixin):
 
         success = proj.delete_rule(rule_name)
         if success:
-            _fire_hook(HookEvent.RULE_DELETED, {"name": rule_name})
+            _fire_hook(HookEvent.RULE_CHANGED, {"action": "deleted", "name": rule_name})
         return {
             "result": {
                 "deleted": success,

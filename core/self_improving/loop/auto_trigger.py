@@ -24,8 +24,9 @@ The wrapper does three things on top of ``SelfImprovingLoopRunner.run_once``:
 The wrapper returns a status dict (instead of raising) so the
 scheduler's :class:`HookEvent.TRIGGER_FIRED` handler does not crash the
 scheduler loop when a single firing fails. Telemetry-wise, every
-firing emits ``HookEvent.SELF_IMPROVING_AUTO_TRIGGER_*`` (out of scope
-for OL-A1 — added in OL-A2).
+firing emits ``HookEvent.SELF_IMPROVING_AUTO_TRIGGER`` with the terminal
+state in the payload ``stage`` field (out of scope for OL-A1 — added in
+OL-A2; collapsed from six per-state events in PR-HOOK-TAXONOMY D2).
 """
 
 from __future__ import annotations
@@ -48,9 +49,9 @@ log = logging.getLogger(__name__)
 __all__ = [
     "AUTO_TRIGGER_HISTORY_PATH",
     "AUTO_TRIGGER_LOCK_PATH",
+    "AUTO_TRIGGER_TELEMETRY_STAGES",
     "AUTO_TRIGGER_TIMESTAMP_PATH",
     "AUTO_TRIGGER_TRIGGER_ID",
-    "STATE_TO_HOOK_EVENT",
     "AutoTriggerStatus",
     "acquire_auto_trigger_lock",
     "append_history_entry",
@@ -94,20 +95,23 @@ the file is operator-private and not subject to the repo's
 ``.gitignore`` rules — no "claims to be git-tracked but isn't" risk."""
 
 
-STATE_TO_HOOK_EVENT: dict[str, str] = {
-    "fired": "SELF_IMPROVING_AUTO_TRIGGER_FIRED",
-    "lock_busy": "SELF_IMPROVING_AUTO_TRIGGER_LOCK_BUSY",
-    "interval_blocked": "SELF_IMPROVING_AUTO_TRIGGER_INTERVAL_BLOCKED",
-    "runner_error": "SELF_IMPROVING_AUTO_TRIGGER_RUNNER_ERROR",
-    "parse_error": "SELF_IMPROVING_AUTO_TRIGGER_PARSE_ERROR",
-    # PR-MAX-GEN (2026-05-26) — generation cap state. HookEvent reserved
-    # in ``core/hooks/system.py`` alongside the sibling auto-trigger
-    # events; same ``{trigger_id, ts, detail}`` payload schema.
-    "max_generation_reached": "SELF_IMPROVING_AUTO_TRIGGER_MAX_GENERATION_REACHED",
-}
-"""Maps terminal :class:`AutoTriggerStatus.state` → HookEvent enum name.
+AUTO_TRIGGER_TELEMETRY_STAGES: frozenset[str] = frozenset(
+    {
+        "fired",
+        "lock_busy",
+        "interval_blocked",
+        "runner_error",
+        "parse_error",
+        # PR-MAX-GEN (2026-05-26) — generation cap state; ``detail``
+        # carries ``"current/max"``.
+        "max_generation_reached",
+    }
+)
+"""Terminal :class:`AutoTriggerStatus.state` values that emit
+``HookEvent.SELF_IMPROVING_AUTO_TRIGGER`` with ``stage=<state>`` in the
+payload (PR-HOOK-TAXONOMY D2 — one event, payload discriminator).
 
-The ``disabled`` state is intentionally NOT in this map — when the
+The ``disabled`` state is intentionally NOT in this set — when the
 defensive guard at the top of :func:`auto_trigger_mutator` returns
 early, the wiring layer should have already prevented registration
 (``enabled=False`` skips ``trigger_manager.register``). Emitting
@@ -290,32 +294,26 @@ def _emit_state_event(
     ts: float,
     trigger_id: str,
 ) -> None:
-    """Emit the HookEvent variant for the given terminal state.
+    """Emit ``SELF_IMPROVING_AUTO_TRIGGER`` with ``stage=state``.
 
     ``hooks`` is the :class:`core.hooks.HookSystem` instance (typed as
     Any to avoid the import cost at module load — telemetry must not
     drag the hook system into the cold path of the manual REPL caller).
-    When ``hooks`` is None, the function is a no-op so unit tests and
-    one-off CLI invocations can use the auto-trigger without wiring
-    the hook system.
-
-    Exception isolation: a misbehaving hook handler must NOT crash the
-    auto-trigger. We swallow any exception and log at WARNING — same
-    contract as :meth:`HookSystem.trigger` itself, which also isolates,
-    but defending against a buggy custom hook injection.
+    When ``hooks`` is None, :func:`core.hooks.dispatch.fire_hook` is a
+    no-op so unit tests and one-off CLI invocations can use the
+    auto-trigger without wiring the hook system. Dispatch failures are
+    isolated by ``fire_hook`` (warn-once, never raised).
     """
-    if hooks is None:
-        return
-    hook_event_name = STATE_TO_HOOK_EVENT.get(state)
-    if hook_event_name is None:
+    if state not in AUTO_TRIGGER_TELEMETRY_STAGES:
         return  # "disabled" — intentionally not telemetry-emitted
-    try:
-        from core.hooks import HookEvent
+    from core.hooks import HookEvent
+    from core.hooks.dispatch import fire_hook
 
-        event = getattr(HookEvent, hook_event_name)
-        hooks.trigger(event, {"trigger_id": trigger_id, "ts": ts, "detail": detail})
-    except Exception:
-        log.exception("auto_trigger: hook emit failed for state=%s", state)
+    fire_hook(
+        hooks,
+        HookEvent.SELF_IMPROVING_AUTO_TRIGGER,
+        {"trigger_id": trigger_id, "ts": ts, "detail": detail, "stage": state},
+    )
 
 
 def _finalize_status(
@@ -374,7 +372,8 @@ def auto_trigger_mutator(
         history_path: JSONL audit log path override (tests).
         hooks: :class:`HookSystem` instance. When provided, every
             terminal state (except ``disabled``) emits a
-            ``SELF_IMPROVING_AUTO_TRIGGER_*`` event. None → no telemetry
+            ``SELF_IMPROVING_AUTO_TRIGGER`` event (stage in the
+            payload). None → no telemetry
             (graceful for unit tests / manual CLI use).
         now: Wall-clock override (tests).
 
@@ -386,7 +385,7 @@ def auto_trigger_mutator(
     ts_now = now if now is not None else time.time()
     if not enabled:
         # ``disabled`` is the only state that skips telemetry + history
-        # (see STATE_TO_HOOK_EVENT docstring for rationale).
+        # (see AUTO_TRIGGER_TELEMETRY_STAGES docstring for rationale).
         return AutoTriggerStatus(state="disabled")
 
     # PR-MAX-GEN (2026-05-26) — generation cap. Evaluated BEFORE the

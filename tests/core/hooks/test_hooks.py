@@ -23,22 +23,25 @@ class TestHookEvent:
         # so every new HookEvent broke 4 tests in lockstep. They now
         # assert only their topic-specific event existence; total count
         # lives here.
-        # Tally: +6 PR-2 cognitive + 5 OL-A1.5 auto-trigger
-        # + 3 PR-CL-BUDGET handoff + 5 PR-HOOKEVENT-RESERVE (mutation /
-        # baseline lifecycle) + 1 PR-MAX-GEN
-        # (SELF_IMPROVING_AUTO_TRIGGER_MAX_GENERATION_REACHED) +
-        # 1 PR-NO-FALLBACK (ADAPTER_DISPATCH_ATTEMPT)
+        # Tally: +6 PR-2 cognitive + 3 PR-CL-BUDGET handoff
+        # + 5 PR-HOOKEVENT-RESERVE (mutation / baseline lifecycle)
+        # + 1 PR-NO-FALLBACK (ADAPTER_DISPATCH_ATTEMPT)
         # + 1 PR-HITL-APPROVAL-FSM (APPROVAL_TRANSITION)
         # + 1 PR-MEMORY-LIFECYCLE (MEMORY_PROMOTION_PROPOSED).
-        assert len(HookEvent) == 65
+        # PR-HOOK-TAXONOMY (2026-07-14): 65 -> 56 — deleted
+        # TOOL_APPROVAL_GRANTED/DENIED (D1), collapsed the six
+        # SELF_IMPROVING_AUTO_TRIGGER_* into SELF_IMPROVING_AUTO_TRIGGER
+        # (D2), and the RULE_CREATED/UPDATED/DELETED trio into
+        # RULE_CHANGED (D3).
+        assert len(HookEvent) == 56
 
     def test_event_values(self):
-        assert HookEvent.SESSION_STARTED.value == "session_start"
-        assert HookEvent.SESSION_ENDED.value == "session_end"
+        assert HookEvent.SESSION_STARTED.value == "session_started"
+        assert HookEvent.SESSION_ENDED.value == "session_ended"
         assert HookEvent.SUBAGENT_STARTED.value == "subagent_started"
         assert HookEvent.SUBAGENT_COMPLETED.value == "subagent_completed"
         assert HookEvent.SUBAGENT_FAILED.value == "subagent_failed"
-        assert HookEvent.TURN_COMPLETED.value == "turn_complete"
+        assert HookEvent.TURN_COMPLETED.value == "turn_completed"
         assert HookEvent.TRIGGER_FIRED.value == "trigger_fired"
 
     def test_new_audit_events(self):
@@ -51,8 +54,8 @@ class TestHookEvent:
     def test_production_p0_events(self):
         """P0 production hooks: interceptor + cost enforcement + audit."""
         assert HookEvent.USER_INPUT_RECEIVED.value == "user_input_received"
-        assert HookEvent.TOOL_EXEC_STARTED.value == "tool_exec_start"
-        assert HookEvent.TOOL_EXEC_ENDED.value == "tool_exec_end"
+        assert HookEvent.TOOL_EXEC_STARTED.value == "tool_exec_started"
+        assert HookEvent.TOOL_EXEC_ENDED.value == "tool_exec_ended"
         assert HookEvent.TOOL_EXEC_FAILED.value == "tool_exec_failed"
         assert HookEvent.TOOL_RESULT_TRANSFORM.value == "tool_result_transform"
         assert HookEvent.COST_WARNING.value == "cost_warning"
@@ -76,7 +79,7 @@ class TestAuditLoggers:
         # Check a representative sample of audit loggers
         all_hooks = hooks.list_hooks()
         assert "ctx_critical" in all_hooks.get("context_critical", [])
-        assert "llm_start" in all_hooks.get("llm_call_start", [])
+        assert "llm_start" in all_hooks.get("llm_call_started", [])
         assert "shutdown" in all_hooks.get("shutdown_started", [])
         assert "mcp_fail" in all_hooks.get("mcp_server_failed", [])
         hooks.close()
@@ -93,8 +96,8 @@ class TestAuditLoggers:
 
         all_hooks = hooks.list_hooks()
         assert "user_input" in all_hooks.get("user_input_received", [])
-        assert "tool_start" in all_hooks.get("tool_exec_start", [])
-        assert "tool_end" in all_hooks.get("tool_exec_end", [])
+        assert "tool_start" in all_hooks.get("tool_exec_started", [])
+        assert "tool_end" in all_hooks.get("tool_exec_ended", [])
         assert "cost_warn" in all_hooks.get("cost_warning", [])
         assert "cost_exceeded" in all_hooks.get("cost_limit_exceeded", [])
         assert "exec_cancel" in all_hooks.get("execution_cancelled", [])
@@ -105,7 +108,7 @@ class TestMemoryToolHooks:
     """S4 fix: memory tools fire hook events symmetrically with CLI."""
 
     def test_rule_create_fires_hook(self):
-        """RuleCreateTool.execute() fires RULE_CREATED hook."""
+        """RuleCreateTool.execute() fires RULE_CHANGED with action=created."""
         from unittest.mock import MagicMock, patch
 
         from core.tools.memory_tools import RuleCreateTool, set_memory_hooks
@@ -123,7 +126,8 @@ class TestMemoryToolHooks:
 
         mock_hooks.trigger.assert_called_once()
         call_args = mock_hooks.trigger.call_args
-        assert call_args[0][0].value == "rule_created"
+        assert call_args[0][0].value == "rule_changed"
+        assert call_args[0][1]["action"] == "created"
         assert call_args[0][1]["name"] == "test-rule"
 
         set_memory_hooks(None)  # cleanup
@@ -243,12 +247,12 @@ class TestHookSystem:
         hooks.register(HookEvent.TOOL_EXEC_ENDED, lambda e, d: None, name="h2")
 
         all_hooks = hooks.list_hooks()
-        assert "tool_exec_start" in all_hooks
-        assert "h1" in all_hooks["tool_exec_start"]
+        assert "tool_exec_started" in all_hooks
+        assert "h1" in all_hooks["tool_exec_started"]
 
         filtered = hooks.list_hooks(HookEvent.TOOL_EXEC_ENDED)
-        assert "tool_exec_end" in filtered
-        assert "h2" in filtered["tool_exec_end"]
+        assert "tool_exec_ended" in filtered
+        assert "h2" in filtered["tool_exec_ended"]
 
     def test_clear_specific_event(self):
         hooks = HookSystem()
@@ -256,8 +260,8 @@ class TestHookSystem:
         hooks.register(HookEvent.TOOL_EXEC_ENDED, lambda e, d: None, name="b")
 
         hooks.clear(HookEvent.TOOL_EXEC_STARTED)
-        assert hooks.list_hooks(HookEvent.TOOL_EXEC_STARTED) == {"tool_exec_start": []}
-        assert "b" in hooks.list_hooks(HookEvent.TOOL_EXEC_ENDED)["tool_exec_end"]
+        assert hooks.list_hooks(HookEvent.TOOL_EXEC_STARTED) == {"tool_exec_started": []}
+        assert "b" in hooks.list_hooks(HookEvent.TOOL_EXEC_ENDED)["tool_exec_ended"]
 
     def test_clear_all(self):
         hooks = HookSystem()
@@ -275,7 +279,7 @@ class TestHookSystem:
 
         hooks.register(HookEvent.SESSION_STARTED, my_handler)
         all_hooks = hooks.list_hooks()
-        assert "my_handler" in all_hooks["session_start"]
+        assert "my_handler" in all_hooks["session_started"]
 
     def test_trigger_with_none_data(self):
         hooks = HookSystem()

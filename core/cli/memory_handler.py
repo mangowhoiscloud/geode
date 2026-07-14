@@ -89,7 +89,10 @@ def _handle_rule_action(
         if ok:
             console.print(f"  [success]Rule '{name}' created.[/success]")
             if fire_hook:
-                fire_hook(HookEvent.RULE_CREATED, {"name": name, "paths": paths})
+                fire_hook(
+                    HookEvent.RULE_CHANGED,
+                    {"action": "created", "name": name, "paths": paths},
+                )
         else:
             console.print(
                 f"  [warning]Failed to create rule '{name}' (may already exist).[/warning]"
@@ -105,7 +108,7 @@ def _handle_rule_action(
         if ok:
             console.print(f"  [success]Rule '{name}' updated.[/success]")
             if fire_hook:
-                fire_hook(HookEvent.RULE_UPDATED, {"name": name})
+                fire_hook(HookEvent.RULE_CHANGED, {"action": "updated", "name": name})
         else:
             console.print(f"  [warning]Failed to update rule '{name}'.[/warning]")
         console.print()
@@ -118,7 +121,7 @@ def _handle_rule_action(
         if ok:
             console.print(f"  [success]Rule '{name}' deleted.[/success]")
             if fire_hook:
-                fire_hook(HookEvent.RULE_DELETED, {"name": name})
+                fire_hook(HookEvent.RULE_CHANGED, {"action": "deleted", "name": name})
         else:
             console.print(f"  [warning]Rule '{name}' not found.[/warning]")
         console.print()

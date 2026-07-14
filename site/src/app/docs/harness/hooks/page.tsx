@@ -17,7 +17,7 @@ export default function Page() {
             <p>
               HookSystem(<code>core/hooks/system.py</code>)은 런타임의 모든 의미
               있는 경계에서 이벤트를 발화하는 단일 버스입니다.{" "}
-              <code>HookEvent</code> enum은 정확히 65개의 라이프사이클 이벤트를
+              <code>HookEvent</code> enum은 정확히 56개의 라이프사이클 이벤트를
               정의합니다. 새 동작은 루프 코드를 고치는 대신 이 이벤트들 위에
               핸들러로 쌓입니다.
             </p>
@@ -57,7 +57,7 @@ export default function Page() {
             <p>비동기 변형으로 <code>trigger_async</code>가 있습니다.</p>
 
             <h2>이벤트 카테고리</h2>
-            <p>65개 이벤트는 enum 안의 섹션 주석으로 분류됩니다. 대표만 추리면 이렇습니다.</p>
+            <p>56개 이벤트는 enum 안의 섹션 주석으로 분류됩니다. 대표만 추리면 이렇습니다.</p>
             <table>
               <thead>
                 <tr><th>카테고리</th><th>대표 이벤트</th></tr>
@@ -65,12 +65,12 @@ export default function Page() {
               <tbody>
                 <tr><td>agentic 턴 / 세션</td><td><code>TURN_COMPLETED</code>, <code>SESSION_STARTED</code>, <code>SESSION_ENDED</code></td></tr>
                 <tr><td>LLM 호출</td><td><code>LLM_CALL_STARTED/ENDED/FAILED/RETRIED</code>, <code>ADAPTER_DISPATCH_ATTEMPT</code>, <code>MODEL_SWITCHED</code></td></tr>
-                <tr><td>도구 실행 / 승인</td><td><code>TOOL_EXEC_STARTED/ENDED/FAILED</code>, <code>TOOL_RESULT_TRANSFORM</code>, <code>TOOL_APPROVAL_REQUESTED/GRANTED/DENIED</code>, <code>TOOL_RECOVERY_ATTEMPTED/SUCCEEDED/FAILED</code></td></tr>
+                <tr><td>도구 실행 / 승인</td><td><code>TOOL_EXEC_STARTED/ENDED/FAILED</code>, <code>TOOL_RESULT_TRANSFORM</code>, <code>TOOL_APPROVAL_REQUESTED</code>, <code>APPROVAL_TRANSITION</code>, <code>TOOL_RECOVERY_ATTEMPTED/SUCCEEDED/FAILED</code></td></tr>
                 <tr><td>컨텍스트 / 오프로드</td><td><code>CONTEXT_CRITICAL</code>, <code>CONTEXT_OVERFLOW_ACTION</code>, <code>TOOL_RESULT_OFFLOADED</code></td></tr>
-                <tr><td>프롬프트 / 메모리</td><td><code>PROMPT_ASSEMBLED</code>, <code>PROGRAM_MD_UNREADABLE</code>, <code>MEMORY_SAVED</code>, <code>RULE_CREATED/UPDATED/DELETED</code></td></tr>
+                <tr><td>프롬프트 / 메모리</td><td><code>PROMPT_ASSEMBLED</code>, <code>PROGRAM_MD_UNREADABLE</code>, <code>MEMORY_SAVED</code>, <code>RULE_CHANGED</code></td></tr>
                 <tr><td>비용 / 인터셉터</td><td><code>USER_INPUT_RECEIVED</code>, <code>COST_WARNING</code>, <code>COST_LIMIT_EXCEEDED</code>, <code>EXECUTION_CANCELLED</code></td></tr>
                 <tr><td>서브에이전트 / 핸드오프</td><td><code>SUBAGENT_STARTED/COMPLETED/FAILED</code>, <code>HANDOFF_TRIGGERED/COMPLETED/FAILED</code></td></tr>
-                <tr><td>자기개선 루프</td><td><code>MUTATION_PROPOSED/APPLIED/REJECTED/REVERTED</code>, <code>BASELINE_PROMOTED</code>, <code>SELF_IMPROVING_AUTO_TRIGGER_*</code></td></tr>
+                <tr><td>자기개선 루프</td><td><code>MUTATION_PROPOSED/APPLIED/REJECTED/REVERTED</code>, <code>BASELINE_PROMOTED</code>, <code>SELF_IMPROVING_AUTO_TRIGGER</code></td></tr>
                 <tr><td>인프라</td><td><code>TRIGGER_FIRED</code>, <code>CONFIG_RELOADED</code>, <code>SHUTDOWN_STARTED</code>, <code>MCP_SERVER_CONNECTED/FAILED</code></td></tr>
               </tbody>
             </table>
@@ -128,7 +128,7 @@ hooks.register_prefix("*", mirror_everything)  # 와일드카드 구독`}</pre>
             <h2>Activity row 스키마와 에러 정책</h2>
             <p>
               모든 <code>trigger*()</code> 호출은 활성 <code>RunTranscript</code>에
-              타입이 지정된 Activity row 한 줄로 미러링됩니다. 65개 이벤트 전부
+              타입이 지정된 Activity row 한 줄로 미러링됩니다. 56개 이벤트 전부
               구체 타입의 row를 가집니다 (19 lifecycle + 43 K-group). <code>action</code>
               필드가 discriminator이고, <code>GenericActivityRow</code>는 정상 경로
               목적지가 아니라 fail-soft 폴백 전용입니다.
@@ -140,7 +140,7 @@ hooks.register_prefix("*", mirror_everything)  # 와일드카드 구독`}</pre>
               <tbody>
                 <tr>
                   <td>커버리지</td>
-                  <td>65/65 타입 지정. 46 K-group은 선언적 spec 테이블 + 단일 빌더로 구성</td>
+                  <td>56/56 타입 지정. 37 K-group은 선언적 spec 테이블 + 단일 빌더로 구성</td>
                 </tr>
                 <tr>
                   <td>details 스키마</td>
@@ -170,7 +170,7 @@ hooks.register_prefix("*", mirror_everything)  # 와일드카드 구독`}</pre>
             <p>
               The HookSystem (<code>core/hooks/system.py</code>) is the single
               bus that fires events at every meaningful boundary of the runtime.
-              The <code>HookEvent</code> enum defines exactly 65 lifecycle
+              The <code>HookEvent</code> enum defines exactly 56 lifecycle
               events. New behaviour stacks onto these events as handlers instead
               of editing loop code.
             </p>
@@ -210,7 +210,7 @@ hooks.register_prefix("*", mirror_everything)  # 와일드카드 구독`}</pre>
             <p>An async variant, <code>trigger_async</code>, also exists.</p>
 
             <h2>Event categories</h2>
-            <p>The 65 events are grouped by section comments inside the enum. The highlights:</p>
+            <p>The 56 events are grouped by section comments inside the enum. The highlights:</p>
             <table>
               <thead>
                 <tr><th>Category</th><th>Representative events</th></tr>
@@ -218,12 +218,12 @@ hooks.register_prefix("*", mirror_everything)  # 와일드카드 구독`}</pre>
               <tbody>
                 <tr><td>Agentic turn / session</td><td><code>TURN_COMPLETED</code>, <code>SESSION_STARTED</code>, <code>SESSION_ENDED</code></td></tr>
                 <tr><td>LLM calls</td><td><code>LLM_CALL_STARTED/ENDED/FAILED/RETRIED</code>, <code>ADAPTER_DISPATCH_ATTEMPT</code>, <code>MODEL_SWITCHED</code></td></tr>
-                <tr><td>Tool execution / approval</td><td><code>TOOL_EXEC_STARTED/ENDED/FAILED</code>, <code>TOOL_RESULT_TRANSFORM</code>, <code>TOOL_APPROVAL_REQUESTED/GRANTED/DENIED</code>, <code>TOOL_RECOVERY_ATTEMPTED/SUCCEEDED/FAILED</code></td></tr>
+                <tr><td>Tool execution / approval</td><td><code>TOOL_EXEC_STARTED/ENDED/FAILED</code>, <code>TOOL_RESULT_TRANSFORM</code>, <code>TOOL_APPROVAL_REQUESTED</code>, <code>APPROVAL_TRANSITION</code>, <code>TOOL_RECOVERY_ATTEMPTED/SUCCEEDED/FAILED</code></td></tr>
                 <tr><td>Context / offload</td><td><code>CONTEXT_CRITICAL</code>, <code>CONTEXT_OVERFLOW_ACTION</code>, <code>TOOL_RESULT_OFFLOADED</code></td></tr>
-                <tr><td>Prompt / memory</td><td><code>PROMPT_ASSEMBLED</code>, <code>PROGRAM_MD_UNREADABLE</code>, <code>MEMORY_SAVED</code>, <code>RULE_CREATED/UPDATED/DELETED</code></td></tr>
+                <tr><td>Prompt / memory</td><td><code>PROMPT_ASSEMBLED</code>, <code>PROGRAM_MD_UNREADABLE</code>, <code>MEMORY_SAVED</code>, <code>RULE_CHANGED</code></td></tr>
                 <tr><td>Cost / interceptors</td><td><code>USER_INPUT_RECEIVED</code>, <code>COST_WARNING</code>, <code>COST_LIMIT_EXCEEDED</code>, <code>EXECUTION_CANCELLED</code></td></tr>
                 <tr><td>Sub-agents / handoff</td><td><code>SUBAGENT_STARTED/COMPLETED/FAILED</code>, <code>HANDOFF_TRIGGERED/COMPLETED/FAILED</code></td></tr>
-                <tr><td>Self-improving loop</td><td><code>MUTATION_PROPOSED/APPLIED/REJECTED/REVERTED</code>, <code>BASELINE_PROMOTED</code>, <code>SELF_IMPROVING_AUTO_TRIGGER_*</code></td></tr>
+                <tr><td>Self-improving loop</td><td><code>MUTATION_PROPOSED/APPLIED/REJECTED/REVERTED</code>, <code>BASELINE_PROMOTED</code>, <code>SELF_IMPROVING_AUTO_TRIGGER</code></td></tr>
                 <tr><td>Infrastructure</td><td><code>TRIGGER_FIRED</code>, <code>CONFIG_RELOADED</code>, <code>SHUTDOWN_STARTED</code>, <code>MCP_SERVER_CONNECTED/FAILED</code></td></tr>
               </tbody>
             </table>
@@ -281,7 +281,7 @@ hooks.register_prefix("*", mirror_everything)  # wildcard subscription`}</pre>
             <h2>Activity row schema and error policy</h2>
             <p>
               Every <code>trigger*()</code> call mirrors as one typed Activity
-              row into the active <code>RunTranscript</code>. All 65 events have
+              row into the active <code>RunTranscript</code>. All 56 events have
               a concrete typed row (19 lifecycle plus 43 K-group). The{" "}
               <code>action</code> field is the discriminator, and{" "}
               <code>GenericActivityRow</code> is a fail-soft fallback only, not a
@@ -294,7 +294,7 @@ hooks.register_prefix("*", mirror_everything)  # wildcard subscription`}</pre>
               <tbody>
                 <tr>
                   <td>Coverage</td>
-                  <td>65/65 typed. The 46 K-group rows build from one declarative spec table plus a single builder</td>
+                  <td>56/56 typed. The 37 K-group rows build from one declarative spec table plus a single builder</td>
                 </tr>
                 <tr>
                   <td>details schema</td>

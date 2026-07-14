@@ -181,6 +181,10 @@ class TestClassDiscovery:
 
 class TestRegistration:
     def test_register_discovered_hooks_into_hook_system(self, hooks_dir: Path) -> None:
+        # Deliberately uses the LEGACY pre-rename event values — a
+        # ``.geode/hooks/`` manifest written before PR-HOOK-TAXONOMY D5
+        # must keep loading, resolved onto the canonical members via
+        # ``LEGACY_EVENT_VALUES``.
         _make_yaml_plugin(
             hooks_dir, "hook-a", events=["tool_exec_start", "tool_exec_end"], priority=40
         )
@@ -193,9 +197,9 @@ class TestRegistration:
         loader.register_all(hooks)
 
         all_hooks = hooks.list_hooks()
-        assert "hook-a" in all_hooks.get("tool_exec_start", [])
-        assert "hook-a" in all_hooks.get("tool_exec_end", [])
-        assert "hook-b" in all_hooks.get("session_start", [])
+        assert "hook-a" in all_hooks.get("tool_exec_started", [])
+        assert "hook-a" in all_hooks.get("tool_exec_ended", [])
+        assert "hook-b" in all_hooks.get("session_started", [])
 
     def test_priority_ordering_respected(self, hooks_dir: Path) -> None:
         """Plugins with lower priority number should run first."""

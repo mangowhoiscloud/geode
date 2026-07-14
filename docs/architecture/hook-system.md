@@ -3,9 +3,12 @@
 > **English** | [한국어](hook-system.ko.md)
 
 `core/hooks/` is GEODE's storage-agnostic runtime event bus. It exposes the
-65-event `HookEvent` compatibility surface, ordered handlers,
+56-event `HookEvent` compatibility surface, ordered handlers,
 interceptor/feedback modes, and post-dispatch sinks. Persistence policy is
 documented separately in [`event-persistence.md`](event-persistence.md).
+The 2026-07-14 taxonomy redesign (event collapse, naming alignment, dispatch
+single-path, emit contract) is recorded in
+[`../plans/2026-07-14-hook-taxonomy-redesign.md`](../plans/2026-07-14-hook-taxonomy-redesign.md).
 
 ## Core contract
 
@@ -19,6 +22,55 @@ documented separately in [`event-persistence.md`](event-persistence.md).
 7. `HookSystem.close()` deterministically releases registrations, global
    bindings, and sinks, and is idempotent. Each SQLite operation closes its
    connection before returning.
+
+## Naming convention and legacy aliases
+
+- Every `HookEvent` member satisfies `NAME == VALUE.upper()`; new event names
+  use the past-participle form (`*_STARTED` / `*_ENDED` / `*_COMPLETED`).
+  Pinned by `tests/core/hooks/test_hook_taxonomy.py`.
+- Families whose only difference was a terminal state collapsed into one
+  event with a payload discriminator: `SELF_IMPROVING_AUTO_TRIGGER`
+  (`stage=fired|lock_busy|interval_blocked|runner_error|parse_error|max_generation_reached`)
+  and `RULE_CHANGED` (`action=created|updated|deleted`).
+- `TOOL_APPROVAL_GRANTED/DENIED` were deleted (zero handlers, zero
+  persistence); `APPROVAL_TRANSITION` carries the granted/denied states.
+- Stored event strings written before the value alignment resolve through
+  `core.hooks.system.LEGACY_EVENT_VALUES` (old value to new value, 8 entries:
+  `session_start`, `session_end`, `turn_complete`, `llm_call_start`,
+  `llm_call_end`, `llm_call_retry`, `tool_exec_start`, `tool_exec_end`).
+  Applied by `resolve_event_value()`, filesystem hook discovery, and
+  `HookEventStore.read(event_filter=...)` expansion, so legacy SQLite rows
+  and `.geode/hooks/` manifests keep working. The dialogue-transcript rail
+  (`SessionTranscript` `session_start`/`session_end` markers) is a separate
+  vocabulary and is unaffected.
+
+## Emit path and payload contract
+
+`core/hooks/dispatch.py` is the single emit implementation: `fire_hook`,
+`fire_hook_async`, `fire_interceptor_async`, `fire_with_result_async`. Every
+emit site delegates to it (approval workflow, tool-call processor, MCP
+manager, LLM router, memory tools, self-improving loop, CLI, isolated
+execution, seed-generation orchestrator) instead of re-implementing the
+`if hooks is None / try / except` rail. The helpers add:
+
+- graceful degradation — a failing dispatch logs WARNING once per event
+  (then DEBUG) and never breaks the surrounding call;
+- payload-contract validation — `core.hooks.catalog.REQUIRED_PAYLOAD_KEYS`
+  maps an event to the payload keys its registered bootstrap handlers
+  demonstrably require (`SESSION_ENDED`, `SUBAGENT_STARTED`,
+  `SUBAGENT_COMPLETED`, `TOOL_EXEC_ENDED`). A missing key logs a WARNING
+  naming the event, keys, and emitting caller — never raises.
+  `LLM_CALL_ENDED` is deliberately not in the map: the one-off LLM router
+  path legitimately has no session/usage context and the handler's
+  empty-payload early return is by-design filtering (see the catalog
+  comment).
+
+`PROGRAM_MD_UNREADABLE` is a plain notify event: the runner fires it for
+observability and fails loud. The former `trigger_with_result` override
+contract (a handler could return a replacement `program.md` body) was
+removed — no handler was ever registered. `trigger_with_result(_async)`
+remain on `HookSystem` for their live feedback users
+(`CONTEXT_OVERFLOW_ACTION`, `TOOL_RESULT_TRANSFORM`).
 
 ## Dispatch shape
 

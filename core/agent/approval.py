@@ -10,7 +10,6 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
-import time
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any, TypeVar
 
@@ -136,20 +135,14 @@ class ApprovalWorkflow:
         return current_skip_permissions()
 
     def _fire_hook(self, event: HookEvent, data: dict[str, Any]) -> None:
-        if self._hooks is None:
-            return
-        try:
-            self._hooks.trigger(event, data)
-        except Exception:
-            log.debug("Hook fire failed for %s", event, exc_info=True)
+        from core.hooks.dispatch import fire_hook
+
+        fire_hook(self._hooks, event, data)
 
     async def _fire_hook_async(self, event: HookEvent, data: dict[str, Any]) -> None:
-        if self._hooks is None:
-            return
-        try:
-            await self._hooks.trigger_async(event, data)
-        except Exception:
-            log.debug("Async hook fire failed for %s", event, exc_info=True)
+        from core.hooks.dispatch import fire_hook_async
+
+        await fire_hook_async(self._hooks, event, data)
 
     async def _with_approval_locks(self, body: Callable[[], Awaitable[_T]]) -> _T:
         """Serialize async prompts with both async and legacy sync approval paths."""
@@ -401,25 +394,7 @@ class ApprovalWorkflow:
                         {"tool_name": tool_name, "safety_level": "write"},
                     )
                     if not self.confirm_write(tool_name, tool_input, record=record):
-                        self._fire_hook(
-                            HookEvent.TOOL_APPROVAL_DENIED,
-                            {
-                                "tool_name": tool_name,
-                                "safety_level": "write",
-                                "permission_level": "HITL",
-                                "decision": "denied",
-                                "latency_ms": 0.0,
-                            },
-                        )
                         return _write_denial_with_fallback(tool_name), False
-                    self._fire_hook(
-                        HookEvent.TOOL_APPROVAL_GRANTED,
-                        {
-                            "tool_name": tool_name,
-                            "safety_level": "write",
-                            "always": "write" in self._always_approved_categories,
-                        },
-                    )
                     approved = True
 
         # Expensive tools
@@ -436,28 +411,10 @@ class ApprovalWorkflow:
                         {"tool_name": tool_name, "safety_level": "cost"},
                     )
                     if not self.confirm_cost(tool_name, cost, record=record):
-                        self._fire_hook(
-                            HookEvent.TOOL_APPROVAL_DENIED,
-                            {
-                                "tool_name": tool_name,
-                                "safety_level": "cost",
-                                "permission_level": "HITL",
-                                "decision": "denied",
-                                "latency_ms": 0.0,
-                            },
-                        )
                         return {
                             "error": "User denied expensive operation",
                             "denied": True,
                         }, False
-                    self._fire_hook(
-                        HookEvent.TOOL_APPROVAL_GRANTED,
-                        {
-                            "tool_name": tool_name,
-                            "safety_level": "cost",
-                            "always": "cost" in self._always_approved_categories,
-                        },
-                    )
                     approved = True
 
         return None, approved
@@ -486,25 +443,7 @@ class ApprovalWorkflow:
                     {"tool_name": tool_name, "safety_level": "write"},
                 )
                 if not await self.confirm_write_async(tool_name, tool_input, record=record):
-                    await self._fire_hook_async(
-                        HookEvent.TOOL_APPROVAL_DENIED,
-                        {
-                            "tool_name": tool_name,
-                            "safety_level": "write",
-                            "permission_level": "HITL",
-                            "decision": "denied",
-                            "latency_ms": 0.0,
-                        },
-                    )
                     return _write_denial_with_fallback(tool_name), False
-                await self._fire_hook_async(
-                    HookEvent.TOOL_APPROVAL_GRANTED,
-                    {
-                        "tool_name": tool_name,
-                        "safety_level": "write",
-                        "always": "write" in self._always_approved_categories,
-                    },
-                )
                 return None, True
 
             gate_result, approved = await self._with_approval_locks(write_gate)
@@ -524,25 +463,7 @@ class ApprovalWorkflow:
                     {"tool_name": tool_name, "safety_level": "cost"},
                 )
                 if not await self.confirm_cost_async(tool_name, cost, record=record):
-                    await self._fire_hook_async(
-                        HookEvent.TOOL_APPROVAL_DENIED,
-                        {
-                            "tool_name": tool_name,
-                            "safety_level": "cost",
-                            "permission_level": "HITL",
-                            "decision": "denied",
-                            "latency_ms": 0.0,
-                        },
-                    )
                     return {"error": "User denied expensive operation", "denied": True}, False
-                await self._fire_hook_async(
-                    HookEvent.TOOL_APPROVAL_GRANTED,
-                    {
-                        "tool_name": tool_name,
-                        "safety_level": "cost",
-                        "always": "cost" in self._always_approved_categories,
-                    },
-                )
                 return None, True
 
             gate_result, approved = await self._with_approval_locks(cost_gate)
@@ -577,7 +498,6 @@ class ApprovalWorkflow:
             },
         )
 
-        t0 = time.monotonic()
         response = self.prompt_with_always(
             "Allow?",
             f"{server}/{tool_name}",
@@ -585,31 +505,12 @@ class ApprovalWorkflow:
             tool_name=tool_name,
             record=record,
         )
-        latency_ms = (time.monotonic() - t0) * 1000
         if response in ("a", "y"):
             if response == "a":
                 self._always_approved_categories.add(f"mcp:{server}")
             self.record_transition(record, "granted", f"user:{response}")
-            self._fire_hook(
-                HookEvent.TOOL_APPROVAL_GRANTED,
-                {
-                    "tool_name": tool_name,
-                    "permission_level": "MCP",
-                    "decision": "approved",
-                    "latency_ms": latency_ms,
-                },
-            )
             return True
         self.record_transition(record, "denied", f"user:{response}")
-        self._fire_hook(
-            HookEvent.TOOL_APPROVAL_DENIED,
-            {
-                "tool_name": tool_name,
-                "permission_level": "MCP",
-                "decision": "denied",
-                "latency_ms": latency_ms,
-            },
-        )
         return False
 
     async def confirm_mcp_async(
@@ -637,7 +538,6 @@ class ApprovalWorkflow:
                 },
             )
 
-            t0 = time.monotonic()
             response = await self.prompt_with_always_async(
                 "Allow?",
                 f"{server}/{tool_name}",
@@ -645,31 +545,12 @@ class ApprovalWorkflow:
                 tool_name=tool_name,
                 record=record,
             )
-            latency_ms = (time.monotonic() - t0) * 1000
             if response in ("a", "y"):
                 if response == "a":
                     self._always_approved_categories.add(f"mcp:{server}")
                 self.record_transition(record, "granted", f"user:{response}")
-                await self._fire_hook_async(
-                    HookEvent.TOOL_APPROVAL_GRANTED,
-                    {
-                        "tool_name": tool_name,
-                        "permission_level": "MCP",
-                        "decision": "approved",
-                        "latency_ms": latency_ms,
-                    },
-                )
                 return True
             self.record_transition(record, "denied", f"user:{response}")
-            await self._fire_hook_async(
-                HookEvent.TOOL_APPROVAL_DENIED,
-                {
-                    "tool_name": tool_name,
-                    "permission_level": "MCP",
-                    "decision": "denied",
-                    "latency_ms": latency_ms,
-                },
-            )
             return False
 
         return await self._with_approval_locks(gate)
@@ -718,15 +599,6 @@ class ApprovalWorkflow:
 
         if self.check_auto_deny(tool_name):
             self.record_transition(record, "denied", "auto_denied:3-strikes")
-            self._fire_hook(
-                HookEvent.TOOL_APPROVAL_DENIED,
-                {
-                    "tool_name": tool_name,
-                    "permission_level": "WRITE",
-                    "decision": "auto_denied",
-                    "latency_ms": 0.0,
-                },
-            )
             return False
 
         self._fire_hook(
@@ -738,37 +610,16 @@ class ApprovalWorkflow:
             },
         )
 
-        t0 = time.monotonic()
         response = self.prompt_with_always(
             "Allow?", tool_name, safety_level="write", tool_name=tool_name, record=record
         )
-        latency_ms = (time.monotonic() - t0) * 1000
         self.track_decision(tool_name, response)
         if response in ("a", "y"):
             if response == "a":
                 self._always_approved_categories.add("write")
             self.record_transition(record, "granted", f"user:{response}")
-            self._fire_hook(
-                HookEvent.TOOL_APPROVAL_GRANTED,
-                {
-                    "tool_name": tool_name,
-                    "permission_level": "WRITE",
-                    "decision": "approved",
-                    "latency_ms": latency_ms,
-                    "response_type": response,
-                },
-            )
             return True
         self.record_transition(record, "denied", f"user:{response}")
-        self._fire_hook(
-            HookEvent.TOOL_APPROVAL_DENIED,
-            {
-                "tool_name": tool_name,
-                "permission_level": "WRITE",
-                "decision": "denied",
-                "latency_ms": latency_ms,
-            },
-        )
         return False
 
     async def confirm_write_async(
@@ -791,15 +642,6 @@ class ApprovalWorkflow:
 
         if self.check_auto_deny(tool_name):
             self.record_transition(record, "denied", "auto_denied:3-strikes")
-            await self._fire_hook_async(
-                HookEvent.TOOL_APPROVAL_DENIED,
-                {
-                    "tool_name": tool_name,
-                    "permission_level": "WRITE",
-                    "decision": "auto_denied",
-                    "latency_ms": 0.0,
-                },
-            )
             return False
 
         await self._fire_hook_async(
@@ -811,37 +653,16 @@ class ApprovalWorkflow:
             },
         )
 
-        t0 = time.monotonic()
         response = await self.prompt_with_always_async(
             "Allow?", tool_name, safety_level="write", tool_name=tool_name, record=record
         )
-        latency_ms = (time.monotonic() - t0) * 1000
         self.track_decision(tool_name, response)
         if response in ("a", "y"):
             if response == "a":
                 self._always_approved_categories.add("write")
             self.record_transition(record, "granted", f"user:{response}")
-            await self._fire_hook_async(
-                HookEvent.TOOL_APPROVAL_GRANTED,
-                {
-                    "tool_name": tool_name,
-                    "permission_level": "WRITE",
-                    "decision": "approved",
-                    "latency_ms": latency_ms,
-                    "response_type": response,
-                },
-            )
             return True
         self.record_transition(record, "denied", f"user:{response}")
-        await self._fire_hook_async(
-            HookEvent.TOOL_APPROVAL_DENIED,
-            {
-                "tool_name": tool_name,
-                "permission_level": "WRITE",
-                "decision": "denied",
-                "latency_ms": latency_ms,
-            },
-        )
         return False
 
     def confirm_cost(
@@ -871,48 +692,18 @@ class ApprovalWorkflow:
 
         if self.check_auto_deny(tool_name):
             self.record_transition(record, "denied", "auto_denied:3-strikes")
-            self._fire_hook(
-                HookEvent.TOOL_APPROVAL_DENIED,
-                {
-                    "tool_name": tool_name,
-                    "permission_level": "EXPENSIVE",
-                    "decision": "auto_denied",
-                    "latency_ms": 0.0,
-                },
-            )
             return False
 
-        t0 = time.monotonic()
         response = self.prompt_with_always(
             "Proceed?", tool_name, safety_level="cost", tool_name=tool_name, record=record
         )
-        latency_ms = (time.monotonic() - t0) * 1000
         self.track_decision(tool_name, response)
         if response in ("a", "y"):
             if response == "a":
                 self._always_approved_categories.add("cost")
             self.record_transition(record, "granted", f"user:{response}")
-            self._fire_hook(
-                HookEvent.TOOL_APPROVAL_GRANTED,
-                {
-                    "tool_name": tool_name,
-                    "permission_level": "EXPENSIVE",
-                    "decision": "approved",
-                    "latency_ms": latency_ms,
-                    "response_type": response,
-                },
-            )
             return True
         self.record_transition(record, "denied", f"user:{response}")
-        self._fire_hook(
-            HookEvent.TOOL_APPROVAL_DENIED,
-            {
-                "tool_name": tool_name,
-                "permission_level": "EXPENSIVE",
-                "decision": "denied",
-                "latency_ms": latency_ms,
-            },
-        )
         return False
 
     async def confirm_cost_async(
@@ -942,48 +733,18 @@ class ApprovalWorkflow:
 
         if self.check_auto_deny(tool_name):
             self.record_transition(record, "denied", "auto_denied:3-strikes")
-            await self._fire_hook_async(
-                HookEvent.TOOL_APPROVAL_DENIED,
-                {
-                    "tool_name": tool_name,
-                    "permission_level": "EXPENSIVE",
-                    "decision": "auto_denied",
-                    "latency_ms": 0.0,
-                },
-            )
             return False
 
-        t0 = time.monotonic()
         response = await self.prompt_with_always_async(
             "Proceed?", tool_name, safety_level="cost", tool_name=tool_name, record=record
         )
-        latency_ms = (time.monotonic() - t0) * 1000
         self.track_decision(tool_name, response)
         if response in ("a", "y"):
             if response == "a":
                 self._always_approved_categories.add("cost")
             self.record_transition(record, "granted", f"user:{response}")
-            await self._fire_hook_async(
-                HookEvent.TOOL_APPROVAL_GRANTED,
-                {
-                    "tool_name": tool_name,
-                    "permission_level": "EXPENSIVE",
-                    "decision": "approved",
-                    "latency_ms": latency_ms,
-                    "response_type": response,
-                },
-            )
             return True
         self.record_transition(record, "denied", f"user:{response}")
-        await self._fire_hook_async(
-            HookEvent.TOOL_APPROVAL_DENIED,
-            {
-                "tool_name": tool_name,
-                "permission_level": "EXPENSIVE",
-                "decision": "denied",
-                "latency_ms": latency_ms,
-            },
-        )
         return False
 
     def request_bash_approval(
@@ -1012,48 +773,18 @@ class ApprovalWorkflow:
 
         if self.check_auto_deny("run_bash"):
             self.record_transition(record, "denied", "auto_denied:3-strikes")
-            self._fire_hook(
-                HookEvent.TOOL_APPROVAL_DENIED,
-                {
-                    "tool_name": "run_bash",
-                    "permission_level": "DANGEROUS",
-                    "decision": "auto_denied",
-                    "latency_ms": 0.0,
-                },
-            )
             return False
 
-        t0 = time.monotonic()
         response = self.prompt_with_always(
             "Allow?", command, safety_level="dangerous", tool_name="run_bash", record=record
         )
-        latency_ms = (time.monotonic() - t0) * 1000
         self.track_decision("run_bash", response)
         if response in ("a", "y"):
             if response == "a":
                 self._always_approved_categories.add("bash")
             self.record_transition(record, "granted", f"user:{response}")
-            self._fire_hook(
-                HookEvent.TOOL_APPROVAL_GRANTED,
-                {
-                    "tool_name": "run_bash",
-                    "permission_level": "DANGEROUS",
-                    "decision": "approved",
-                    "latency_ms": latency_ms,
-                    "response_type": response,
-                },
-            )
             return True
         self.record_transition(record, "denied", f"user:{response}")
-        self._fire_hook(
-            HookEvent.TOOL_APPROVAL_DENIED,
-            {
-                "tool_name": "run_bash",
-                "permission_level": "DANGEROUS",
-                "decision": "denied",
-                "latency_ms": latency_ms,
-            },
-        )
         return False
 
     async def request_bash_approval_async(
@@ -1084,48 +815,18 @@ class ApprovalWorkflow:
 
             if self.check_auto_deny("run_bash"):
                 self.record_transition(record, "denied", "auto_denied:3-strikes")
-                await self._fire_hook_async(
-                    HookEvent.TOOL_APPROVAL_DENIED,
-                    {
-                        "tool_name": "run_bash",
-                        "permission_level": "DANGEROUS",
-                        "decision": "auto_denied",
-                        "latency_ms": 0.0,
-                    },
-                )
                 return False
 
-            t0 = time.monotonic()
             response = await self.prompt_with_always_async(
                 "Allow?", command, safety_level="dangerous", tool_name="run_bash", record=record
             )
-            latency_ms = (time.monotonic() - t0) * 1000
             self.track_decision("run_bash", response)
             if response in ("a", "y"):
                 if response == "a":
                     self._always_approved_categories.add("bash")
                 self.record_transition(record, "granted", f"user:{response}")
-                await self._fire_hook_async(
-                    HookEvent.TOOL_APPROVAL_GRANTED,
-                    {
-                        "tool_name": "run_bash",
-                        "permission_level": "DANGEROUS",
-                        "decision": "approved",
-                        "latency_ms": latency_ms,
-                        "response_type": response,
-                    },
-                )
                 return True
             self.record_transition(record, "denied", f"user:{response}")
-            await self._fire_hook_async(
-                HookEvent.TOOL_APPROVAL_DENIED,
-                {
-                    "tool_name": "run_bash",
-                    "permission_level": "DANGEROUS",
-                    "decision": "denied",
-                    "latency_ms": latency_ms,
-                },
-            )
             return False
 
         return await self._with_approval_locks(gate)

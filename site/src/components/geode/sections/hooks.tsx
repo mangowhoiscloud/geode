@@ -29,7 +29,7 @@ const events = [
     priorities: [50, 60],
     handlerColors: ["#60A5FA", "#34D399"],
     descKo: "서브에이전트 완료 → 저널 기록", descEn: "Sub-agent complete: journal recording" },
-  { id: "turn_complete", label: "TURN_COMPLETE", color: "#F4B8C8",
+  { id: "turn_completed", label: "TURN_COMPLETED", color: "#F4B8C8",
     handlers: ["RunLog", "AutoMemory"],
     priorities: [50, 85],
     handlerColors: ["#60A5FA", "#4ECDC4"],

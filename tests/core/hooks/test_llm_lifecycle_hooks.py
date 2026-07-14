@@ -20,10 +20,10 @@ class TestLLMLifecycleEvents:
     """HookEvent enum contains LLM_CALL_START and LLM_CALL_END."""
 
     def test_llm_call_start_exists(self) -> None:
-        assert HookEvent.LLM_CALL_STARTED.value == "llm_call_start"
+        assert HookEvent.LLM_CALL_STARTED.value == "llm_call_started"
 
     def test_llm_call_end_exists(self) -> None:
-        assert HookEvent.LLM_CALL_ENDED.value == "llm_call_end"
+        assert HookEvent.LLM_CALL_ENDED.value == "llm_call_ended"
 
     # Total HookEvent count assertion intentionally lives in
     # tests/core/hooks/test_hooks.py::TestHookEvent::test_all_events_exist —
@@ -43,6 +43,8 @@ class TestFireHook:
         hooks.register(HookEvent.LLM_CALL_STARTED, recorder, name="test_recorder")
         set_router_hooks(hooks)
         try:
+            # Legacy pre-rename value string — must resolve via the
+            # LEGACY_EVENT_VALUES alias map (PR-HOOK-TAXONOMY D5).
             _fire_hook("llm_call_start", {"model": "test-model", "provider": "anthropic"})
 
             assert len(captured) == 1

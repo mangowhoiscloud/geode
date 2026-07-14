@@ -2,10 +2,13 @@
 
 > [English](hook-system.md) | **한국어**
 
-`core/hooks/`는 GEODE 런타임의 저장소 독립적인 이벤트 버스다. 65개
+`core/hooks/`는 GEODE 런타임의 저장소 독립적인 이벤트 버스다. 56개
 `HookEvent` 호환 표면, 우선순위 핸들러, interceptor/feedback, 그리고
 post-dispatch sink를 제공한다. 영속성 정책은
 [`event-persistence.md`](event-persistence.md)에 별도로 정의한다.
+2026-07-14 택소노미 재설계(이벤트 축약·명명 정합·디스패치 단일화·emit
+계약)의 결정 기록은
+[`../plans/2026-07-14-hook-taxonomy-redesign.md`](../plans/2026-07-14-hook-taxonomy-redesign.md)다.
 
 ## 핵심 계약
 
@@ -19,6 +22,54 @@ post-dispatch sink를 제공한다. 영속성 정책은
 7. `HookSystem.close()`는 등록·전역 바인딩·sink를 결정적으로 해제하며
    여러 번 호출해도 안전하다. SQLite 연결은 각 저장 연산이 반환되기
    전에 닫힌다.
+
+## 명명 규약과 legacy alias
+
+- 모든 `HookEvent` 멤버는 `NAME == VALUE.upper()`를 만족하고, 새 이벤트
+  이름은 과거분사형(`*_STARTED` / `*_ENDED` / `*_COMPLETED`)을 쓴다.
+  `tests/core/hooks/test_hook_taxonomy.py`가 고정한다.
+- 종료 상태만 다르던 이벤트 가족은 payload 판별자를 가진 하나의
+  이벤트로 축약했다: `SELF_IMPROVING_AUTO_TRIGGER`
+  (`stage=fired|lock_busy|interval_blocked|runner_error|parse_error|max_generation_reached`),
+  `RULE_CHANGED`(`action=created|updated|deleted`).
+- `TOOL_APPROVAL_GRANTED/DENIED`는 삭제했다(핸들러 0, 저장 0).
+  granted/denied 상태는 `APPROVAL_TRANSITION`이 담는다.
+- 값 정합 이전에 저장된 이벤트 문자열은
+  `core.hooks.system.LEGACY_EVENT_VALUES`(구값→신값, 8종:
+  `session_start`, `session_end`, `turn_complete`, `llm_call_start`,
+  `llm_call_end`, `llm_call_retry`, `tool_exec_start`, `tool_exec_end`)로
+  해석한다. `resolve_event_value()`, filesystem hook discovery,
+  `HookEventStore.read(event_filter=...)` 확장이 적용 지점이라 legacy
+  SQLite 행과 `.geode/hooks/` manifest가 그대로 동작한다.
+  dialogue transcript 레일(`SessionTranscript`의
+  `session_start`/`session_end` 마커)은 별개 어휘라 영향이 없다.
+
+## Emit 경로와 payload 계약
+
+`core/hooks/dispatch.py`가 유일한 emit 구현이다: `fire_hook`,
+`fire_hook_async`, `fire_interceptor_async`, `fire_with_result_async`.
+모든 발화 사이트(approval workflow, tool-call processor, MCP manager,
+LLM router, memory tools, self-improving loop, CLI, isolated execution,
+seed-generation orchestrator)가 `if hooks is None / try / except` 레일을
+재구현하는 대신 여기에 위임한다. 헬퍼가 더하는 것:
+
+- graceful degradation — 디스패치 실패는 이벤트당 1회 WARNING(이후
+  DEBUG)으로 기록하고 절대 호출부를 깨지 않는다.
+- payload 계약 검증 — `core.hooks.catalog.REQUIRED_PAYLOAD_KEYS`가
+  등록된 bootstrap 핸들러가 실제로 요구하는 키를 이벤트별로 정의한다
+  (`SESSION_ENDED`, `SUBAGENT_STARTED`, `SUBAGENT_COMPLETED`,
+  `TOOL_EXEC_ENDED`). 키 누락은 이벤트·키·발화 caller를 담은 WARNING으로
+  기록하며 절대 raise하지 않는다. `LLM_CALL_ENDED`는 의도적으로 맵에
+  없다: one-off LLM router 경로에는 session/usage 컨텍스트가 원래 없고,
+  핸들러의 empty-payload early return이 설계된 필터링이다(catalog 주석
+  참조).
+
+`PROGRAM_MD_UNREADABLE`은 평범한 notify 이벤트다: runner는 관측을 위해
+발화한 뒤 fail-loud한다. 핸들러가 대체 `program.md` 본문을 반환하던
+`trigger_with_result` override 계약은 제거했다 — 등록된 핸들러가 어디에도
+없었다. `trigger_with_result(_async)` 메서드 자체는 실사용 feedback
+소비자(`CONTEXT_OVERFLOW_ACTION`, `TOOL_RESULT_TRANSFORM`) 때문에
+유지한다.
 
 ## 디스패치 구조
 

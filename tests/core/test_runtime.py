@@ -58,9 +58,9 @@ class TestRuntimeHookEvents:
 
         entries = runtime.event_store.read(limit=20)
         assert len(entries) >= 2
-        exit_entry = next(e for e in entries if e.event == "tool_exec_end")
+        exit_entry = next(e for e in entries if e.event == "tool_exec_ended")
         assert exit_entry.payload["duration_ms"] == 42.0
-        assert next(e for e in entries if e.event == "tool_exec_start")
+        assert next(e for e in entries if e.event == "tool_exec_started")
 
     def test_all_hook_events_logged(self, tmp_path: Path):
         runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
@@ -87,7 +87,7 @@ class TestRuntimeHookEvents:
         )
 
         entries = runtime.event_store.read(limit=10)
-        error_entries = [e for e in entries if e.event == "tool_exec_end"]
+        error_entries = [e for e in entries if e.event == "tool_exec_ended"]
         assert len(error_entries) >= 1
         assert error_entries[0].status == "failed"
         assert "result" not in error_entries[0].payload
@@ -179,7 +179,7 @@ class TestDefaultBuilders:
         hooks.trigger(HookEvent.SESSION_STARTED, {"session_id": "s-1"})
         entries = event_store.read(limit=1)
         assert len(entries) == 1
-        assert entries[0].event == "session_start"
+        assert entries[0].event == "session_started"
         hooks.close()
 
     def test_default_lanes(self):
