@@ -68,13 +68,13 @@
       "id": "file:plugins/crucible/tau2_live.py",
       "filePath": "plugins/crucible/tau2_live.py",
       "name": "Paired tau2 evaluator",
-      "summary": "Derives frozen runner arguments, screens unreachable train arms at zero candidate cost, isolates measurement state, and projects structural failure codes. Reuses identity-proven cached rows across relaunches, stops the paid process group after finalized infrastructure contamination, and converts that stop into structured INVALID evidence with observed marginal usage.",
+      "summary": "Derives frozen runner arguments, gives baseline and candidate one supervisor-anchored shared deadline, and emits receipts bound to exact arm artifacts and cache provenance. Screens unreachable train arms at zero candidate cost, projects structural failure codes, reuses identity-proven cached rows across relaunches, and stops the paid process group after finalized infrastructure contamination.",
       "tags": [
         "crucible",
         "evaluator",
         "paired"
       ],
-      "contentSha256": "afdec9ac53cba90beb30db5bfb43ba64ce391ca34a79e51f94599212b6cb9d62"
+      "contentSha256": "4deee0c2a96fc3c208a4010a18c752beac0d6397288a149d037832ba459283ce"
     },
     {
       "id": "file:plugins/crucible/row_cache.py",
@@ -89,16 +89,28 @@
       "contentSha256": "d82eb18f8c24eb7a694653ef09b63d84b299ebf3981a4e4012e84be42943beaa"
     },
     {
+      "id": "file:plugins/crucible/runtime_receipt.py",
+      "filePath": "plugins/crucible/runtime_receipt.py",
+      "name": "Runtime receipt",
+      "summary": "Binds supervisor-anchored shared-deadline arm allocations, cache provenance, exact evidence and raw artifact identities, right-censoring, measured cleanup, and explicitly unmeasured outer scopes to the experiment runtime regime.",
+      "tags": [
+        "crucible",
+        "deadline",
+        "evidence"
+      ],
+      "contentSha256": "c54202ce3bd60059005303357c6632b5ea10b36aa0cc8140d0aad996df624811"
+    },
+    {
       "id": "file:plugins/crucible/supervisor.py",
       "filePath": "plugins/crucible/supervisor.py",
       "name": "Promotion supervisor",
-      "summary": "Preflights authority inputs, binds optional producer objectives, rejects duplicate baseline-bound treatments, separates evidence from marginal usage, reaps role process groups on timeout or operator interruption, and owns the monotone search ref.",
+      "summary": "Preflights authority inputs, binds optional producer objectives, anchors the evaluator to an absolute live deadline with fixed finalization grace, validates artifact-bound runtime receipts, rejects duplicate baseline-bound treatments, reaps role process groups, and owns the monotone search ref.",
       "tags": [
         "crucible",
         "supervisor",
         "promotion"
       ],
-      "contentSha256": "5f4b03a86a15ede11a5a8adff9f8a6a88f9cf93b33c52ec07bcfed1e1438c6c5"
+      "contentSha256": "d7068b703cbd428c87000d230275887300a74074718b0f97ae65435f68ba84b9"
     },
     {
       "id": "file:scripts/eval/crucible_tau2_evaluator.py",
@@ -127,13 +139,13 @@
       "id": "file:plugins/crucible/program.md",
       "filePath": "plugins/crucible/program.md",
       "name": "Crucible program",
-      "summary": "Centralizes experimentation, constraints, preferences, setup, power admission, deduplication, infrastructure-safe checkpoint reuse, usage accounting, and the closed dynamic-feedback boundary; only its candidate_program section is model-facing.",
+      "summary": "Centralizes experimentation, constraints, preferences, setup, power and runtime admission, artifact-bound runtime evidence, deduplication, infrastructure-safe checkpoint reuse, usage accounting, and the closed dynamic-feedback boundary; only its candidate_program section is model-facing.",
       "tags": [
         "crucible",
         "producer",
         "program"
       ],
-      "contentSha256": "89da5d165957532038c02d93a3e1c9d0bce867103545ce20e49ab2f652dbbc81"
+      "contentSha256": "d23a227b4ec1a13147f4fb307df89457882c853b4323e1cef16e0cc18d88e1fc"
     },
     {
       "id": "file:plugins/crucible/producers/replay.py",
@@ -195,6 +207,11 @@
       "type": "depends_on"
     },
     {
+      "source": "file:plugins/crucible/tau2_live.py",
+      "target": "file:plugins/crucible/runtime_receipt.py",
+      "type": "writes"
+    },
+    {
       "source": "file:scripts/eval/crucible_tau2_evaluator.py",
       "target": "file:plugins/crucible/tau2_live.py",
       "type": "calls"
@@ -203,6 +220,11 @@
       "source": "file:plugins/crucible/supervisor.py",
       "target": "file:scripts/eval/crucible_tau2_evaluator.py",
       "type": "calls"
+    },
+    {
+      "source": "file:plugins/crucible/supervisor.py",
+      "target": "file:plugins/crucible/runtime_receipt.py",
+      "type": "validates"
     }
   ]
 }

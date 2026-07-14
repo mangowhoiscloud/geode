@@ -12,6 +12,8 @@ from .artifacts import load_json_object
 from .contract import ContractError, ExperimentContract
 from .evidence import EvidenceEnvelope, expected_pairs, validate_evidence_identity
 from .runtime_budget import RUNTIME_ACCOUNTING_METHOD, RUNTIME_PILOT_SCHEMA
+from .runtime_identity import runtime_regime, runtime_regime_id
+from .runtime_receipt import load_runtime_receipt, runtime_artifact_bindings
 
 
 def _raw_durations(path: Path, field: str) -> tuple[str, dict[tuple[str, int], float]]:
@@ -52,7 +54,7 @@ def _arm_samples(
     arm: Literal["baseline", "candidate"],
     results_path: Path,
     evidence: EvidenceEnvelope,
-) -> dict[tuple[str, int], dict[str, float | str]]:
+) -> dict[tuple[str, int], dict[str, Any]]:
     validate_evidence_identity(contract, evidence, arm=arm)
     raw_sha256, durations = _raw_durations(results_path, f"{arm} results")
     if evidence.raw_artifact_sha256 != raw_sha256:
@@ -62,25 +64,33 @@ def _arm_samples(
     if set(rows) != set(expected) or set(durations) != set(expected):
         raise ContractError(f"{arm} runtime pilot artifacts do not have exact task coverage")
 
-    samples: dict[tuple[str, int], dict[str, float | str]] = {}
+    samples: dict[tuple[str, int], dict[str, Any]] = {}
     for pair in expected:
         row = rows[pair]
         if row.status == "infrastructure_error":
             outcome = "infrastructure_failure"
         elif row.termination_reason == "timeout":
-            outcome = "semantic_timeout"
+            outcome = "right_censored"
         else:
             outcome = "complete"
-        samples[pair] = {
+        sample: dict[str, Any] = {
             "outcome": outcome,
             "wall_seconds": durations[pair],
         }
+        if outcome == "right_censored":
+            sample["censoring"] = {
+                "kind": "right",
+                "limit_seconds": durations[pair],
+                "reason": "semantic_timeout",
+            }
+        samples[pair] = sample
     return samples
 
 
 def build_runtime_pilot(
     contract: ExperimentContract,
     *,
+    runtime_receipt_path: Path,
     baseline_results_path: Path,
     baseline_evidence: EvidenceEnvelope,
     candidate_results_path: Path,
@@ -100,7 +110,12 @@ def build_runtime_pilot(
         results_path=candidate_results_path,
         evidence=candidate_evidence,
     )
-    family_samples: dict[str, list[dict[str, float | str]]] = {}
+    receipt = load_runtime_receipt(
+        runtime_receipt_path,
+        contract=contract,
+        expected_artifacts=runtime_artifact_bindings(baseline_evidence, candidate_evidence),
+    )
+    family_samples: dict[str, list[dict[str, Any]]] = {}
     family_order: list[str] = []
     for task in contract.tasks:
         if task.family_id not in family_samples:
@@ -111,14 +126,75 @@ def build_runtime_pilot(
             family_samples[task.family_id].append(baseline[pair])
             family_samples[task.family_id].append(candidate[pair])
 
+    flattened = [sample for family in family_order for sample in family_samples[family]]
+    infrastructure_count = sum(
+        sample["outcome"] == "infrastructure_failure" for sample in flattened
+    )
+    censored_count = sum(sample["outcome"] == "right_censored" for sample in flattened)
+    observed_active_wall = math.fsum(float(sample["wall_seconds"]) for sample in flattened)
+    if infrastructure_count:
+        cycle_status = "infrastructure_invalid"
+    elif censored_count:
+        cycle_status = "right_censored"
+    else:
+        cycle_status = "complete"
+    expected_receipt_status = "infrastructure_invalid" if infrastructure_count else "complete"
+    if receipt["observation"]["status"] != expected_receipt_status:
+        raise ContractError("runtime receipt status does not match pilot arm artifacts")
+    measured_arms = [
+        arm
+        for arm in receipt["arms"]
+        if isinstance(arm, Mapping) and arm.get("outcome") not in {"skipped", "screened"}
+    ]
+    cache_reused_arm_count = sum(
+        arm.get("measurement_source") in {"partial_cache", "full_cache"} for arm in measured_arms
+    )
+    fresh_measurement = (
+        len(measured_arms) == 2
+        and cache_reused_arm_count == 0
+        and all(arm.get("measurement_source") == "fresh" for arm in measured_arms)
+    )
+
+    cycle_observation: dict[str, Any] = {
+        "status": cycle_status,
+        "observed_active_wall_seconds": observed_active_wall,
+        "observed_evaluator_wall_seconds": float(receipt["observation"]["observed_wall_seconds"]),
+        "complete_sample_count": len(flattened) - infrastructure_count - censored_count,
+        "right_censored_sample_count": censored_count,
+        "infrastructure_failure_sample_count": infrastructure_count,
+        "fresh_measurement": fresh_measurement,
+        "cache_reused_arm_count": cache_reused_arm_count,
+    }
+    if cycle_status == "complete":
+        cycle_observation["active_wall_seconds"] = observed_active_wall
+        cycle_observation["completed_evaluator_wall_seconds"] = float(
+            receipt["observation"]["observed_wall_seconds"]
+        )
+    elif cycle_status == "right_censored":
+        cycle_observation["right_censoring_lower_bound_seconds"] = observed_active_wall
+        cycle_observation["right_censoring_evaluator_wall_lower_bound_seconds"] = float(
+            receipt["observation"]["observed_wall_seconds"]
+        )
+
+    effective_wall = float(receipt["configured_experiment_wall_seconds"])
+    regime = runtime_regime(contract, experiment_wall_seconds=effective_wall)
+
     return {
         "schema": RUNTIME_PILOT_SCHEMA,
         "accounting_method": RUNTIME_ACCOUNTING_METHOD,
+        "source_contract_id": contract.contract_id,
+        "source_runtime_receipt_id": receipt["runtime_receipt_id"],
         "evaluator_sha256": contract.evaluator_sha256,
         "harness_sha256": contract.harness_sha256,
         "assay_config_sha256": contract.assay_config_sha256,
         "agent_route": contract.agent_route,
         "user_route": contract.user_route,
+        "runtime_regime": regime,
+        "runtime_regime_id": runtime_regime_id(
+            contract,
+            experiment_wall_seconds=effective_wall,
+        ),
+        "cycle_observation": cycle_observation,
         "blocks": [{"samples": family_samples[family]} for family in family_order],
     }
 

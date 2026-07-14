@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
@@ -17,7 +18,7 @@ import subprocess
 import sys
 import tempfile
 import time
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from pathlib import Path
 from typing import Any, Literal
@@ -34,6 +35,11 @@ from .row_cache import (
     missing_task_ids,
     selected_expected_rows,
     synthesized_snapshot,
+)
+from .runtime_receipt import (
+    MeasurementSource,
+    SharedRuntimeDeadline,
+    runtime_artifact_bindings,
 )
 from .sealed import SEALED_RESPONSE_SCHEMA, SealedInfrastructureError, SealedPlan
 from .supervisor import CandidateProposal, FailureFeedback, _file_sha256
@@ -75,6 +81,65 @@ _INFRASTRUCTURE_FAILURE = "tau2_infrastructure_error"
 
 class Tau2InfrastructureError(RuntimeError):
     """The frozen tau2 process failed before it could yield valid artifacts."""
+
+
+def _paired_runtime_artifacts(
+    baseline: EvidenceEnvelope | None,
+    candidate: EvidenceEnvelope | None,
+) -> Mapping[str, Any] | None:
+    if baseline is None or candidate is None:
+        return None
+    return runtime_artifact_bindings(baseline, candidate)
+
+
+class _RuntimeReceiptWriter:
+    """Persist failure evidence before an enclosing checkout starts cleanup."""
+
+    def __init__(
+        self,
+        deadline: SharedRuntimeDeadline,
+        path: Path,
+        artifacts: Callable[[], Mapping[str, Any] | None],
+    ) -> None:
+        self.deadline = deadline
+        self.path = path
+        self._artifacts = artifacts
+        self.written = False
+
+    def write(
+        self,
+        status: Literal["complete", "right_censored", "infrastructure_invalid", "operator_invalid"],
+        *,
+        censoring_reason: str | None = None,
+    ) -> None:
+        if self.written:
+            return
+        self.deadline.write(
+            self.path,
+            status,
+            censoring_reason=censoring_reason,
+            artifacts=self._artifacts(),
+        )
+        self.written = True
+
+    @contextmanager
+    def preserve_failures_before_cleanup(self) -> Iterator[None]:
+        """Write the terminal receipt before an outer context manager unwinds."""
+
+        try:
+            yield
+        except TimeoutError:
+            self.write(
+                "right_censored",
+                censoring_reason="shared_experiment_deadline",
+            )
+            raise
+        except Tau2InfrastructureError:
+            self.write("infrastructure_invalid")
+            raise
+        except BaseException:
+            self.write("operator_invalid")
+            raise
 
 
 def _mapping(value: object, field: str) -> Mapping[str, Any]:
@@ -394,10 +459,21 @@ def _run_tau2_command(
     *,
     cwd: Path,
     env: Mapping[str, str],
-    timeout: float,
+    timeout: float | None = None,
+    deadline_seconds: float | None = None,
     results_path: Path,
 ) -> tuple[subprocess.CompletedProcess[bytes], bool]:
     """Run tau2 while polling finalized rows for terminal contamination."""
+
+    if deadline_seconds is None:
+        if timeout is None or not math.isfinite(timeout) or timeout <= 0.0:
+            raise ContractError("tau2 command requires a positive timeout or absolute deadline")
+        deadline_seconds = time.monotonic() + timeout
+    elif not math.isfinite(deadline_seconds):
+        raise ContractError("tau2 command deadline must be finite")
+    initial_remaining = deadline_seconds - time.monotonic()
+    if initial_remaining <= 0.0:
+        raise subprocess.TimeoutExpired(command, 0.0)
 
     process = subprocess.Popen(  # noqa: S603 - frozen evaluator derives complete argv
         command,
@@ -413,7 +489,6 @@ def _run_tau2_command(
 
     for signum in (signal.SIGINT, signal.SIGTERM):
         previous_handlers[signum] = signal.signal(signum, stop_on_signal)
-    deadline = time.monotonic() + timeout
     try:
         while True:
             returncode = process.poll()
@@ -435,10 +510,10 @@ def _run_tau2_command(
                 if contaminated:
                     returncode = _terminate_process_group(process)
                     return subprocess.CompletedProcess(command, returncode), True
-            remaining = deadline - time.monotonic()
+            remaining = deadline_seconds - time.monotonic()
             if remaining <= 0.0:
                 _terminate_process_group(process)
-                raise subprocess.TimeoutExpired(command, timeout)
+                raise subprocess.TimeoutExpired(command, initial_remaining)
             time.sleep(min(0.25, remaining))
     finally:
         if process.poll() is None:
@@ -457,8 +532,11 @@ def _run_arm(
     output_dir: Path,
     run_id: str,
     timeout: float,
+    deadline_seconds: float | None = None,
     parent_contract_path: Path | None = None,
-) -> tuple[EvidenceEnvelope, Path, ResourceUsage]:
+    on_timeout: Callable[[], None] | None = None,
+) -> tuple[EvidenceEnvelope, Path, ResourceUsage, MeasurementSource]:
+    absolute_deadline = deadline_seconds
     snapshot_dir = output_dir / "snapshots"
     snapshot_dir.mkdir(exist_ok=True)
     environment = dict(os.environ)
@@ -511,6 +589,7 @@ def _run_arm(
     runner_returncode = 0
     marginal_usage = ResourceUsage(0.0, 0, 0, 0.0)
     if salvage_context is not None and not unfinished_ids:
+        measurement_source: MeasurementSource = "full_cache"
         # Every expected row is identity-proven in the cache: rebuild the
         # results file without spending a single conversation.
         raw = merge_results(salvage_context, salvaged)
@@ -523,6 +602,9 @@ def _run_arm(
             ),
         )
     else:
+        measurement_source = (
+            "partial_cache" if salvage_context is not None and salvaged else "fresh"
+        )
         command = tau2_command(
             contract,
             arm=arm,
@@ -545,12 +627,18 @@ def _run_arm(
                 command,
                 cwd=checkout,
                 env=environment,
-                timeout=timeout,
+                timeout=timeout if absolute_deadline is None else None,
+                deadline_seconds=absolute_deadline,
                 results_path=source_raw,
             )
         except subprocess.TimeoutExpired as exc:
+            if on_timeout is not None:
+                on_timeout()
             _harvest_partial(cache_root, contract, revision_sha, harness_root, run_id)
             raise TimeoutError(f"tau2 {arm} arm timed out") from exc
+        except BaseException:
+            _harvest_partial(cache_root, contract, revision_sha, harness_root, run_id)
+            raise
         elapsed = time.monotonic() - started
         runner_returncode = completed.returncode
         snapshot = snapshot_dir / f"{run_id}.snapshot.json"
@@ -623,7 +711,76 @@ def _run_arm(
     write_exclusive_json(evidence_path, evidence.to_dict())
     if runner_returncode and evidence.execution_status != "invalid":
         raise Tau2InfrastructureError(f"tau2 {arm} arm exited with status {runner_returncode}")
-    return evidence, raw_path, marginal_usage
+    if absolute_deadline is not None and time.monotonic() >= absolute_deadline:
+        raise TimeoutError(f"tau2 {arm} arm exhausted the shared deadline during finalization")
+    return evidence, raw_path, marginal_usage, measurement_source
+
+
+def _run_arm_with_deadline(
+    deadline: SharedRuntimeDeadline,
+    contract: ExperimentContract,
+    *,
+    arm: Literal["baseline", "candidate"],
+    checkout: Path,
+    harness_root: Path,
+    contract_path: Path,
+    output_dir: Path,
+    run_id: str,
+    parent_contract_path: Path | None = None,
+    on_timeout: Callable[[], None] | None = None,
+) -> tuple[EvidenceEnvelope, Path, ResourceUsage]:
+    """Run one arm against the actual remainder of the shared experiment wall."""
+
+    timer = deadline.begin_arm(arm)
+    timeout_recorded = False
+
+    def record_timeout() -> None:
+        nonlocal timeout_recorded
+        if timeout_recorded:
+            return
+        deadline.finish_arm(timer, "right_censored")
+        timeout_recorded = True
+        if on_timeout is not None:
+            on_timeout()
+
+    try:
+        result = _run_arm(
+            contract,
+            arm=arm,
+            checkout=checkout,
+            harness_root=harness_root,
+            contract_path=contract_path,
+            output_dir=output_dir,
+            run_id=run_id,
+            timeout=timer.allocated_wall_seconds,
+            deadline_seconds=deadline.deadline_seconds,
+            parent_contract_path=parent_contract_path,
+            on_timeout=record_timeout,
+        )
+    except TimeoutError:
+        record_timeout()
+        raise
+    except BaseException:
+        if not timeout_recorded:
+            deadline.finish_arm(timer, "invalid")
+        raise
+    deadline.finish_arm(
+        timer,
+        "invalid" if result[0].execution_status == "invalid" else "complete",
+        measurement_source=result[3],
+    )
+    return result[:3]
+
+
+def _runtime_status_for_returned_arms(
+    baseline: EvidenceEnvelope,
+    candidate: EvidenceEnvelope,
+) -> Literal["complete", "infrastructure_invalid"]:
+    if baseline.execution_status == "invalid" or (
+        candidate.execution_status == "invalid" and candidate.failure_class != SCREENING_FAILURE
+    ):
+        return "infrastructure_invalid"
+    return "complete"
 
 
 def _write_skipped_arm(
@@ -813,6 +970,61 @@ def _relative(path: Path, root: Path) -> str:
     return path.resolve().relative_to(root.resolve()).as_posix()
 
 
+def _evaluation_wall_seconds(
+    contract: ExperimentContract,
+    supervisor_remaining: object,
+) -> float:
+    """Intersect the frozen experiment wall with the live outer remainder."""
+
+    if isinstance(supervisor_remaining, bool) or not isinstance(
+        supervisor_remaining, (str, int, float)
+    ):
+        raise ContractError("evaluator requires a valid actual remaining wall budget")
+    try:
+        remaining = float(supervisor_remaining)
+    except ValueError as exc:
+        raise ContractError("evaluator requires a valid actual remaining wall budget") from exc
+    wall = min(remaining, contract.budget.max_wall_seconds)
+    if not math.isfinite(wall) or wall <= 0.0:
+        raise ContractError("evaluator has no remaining wall budget")
+    return wall
+
+
+def _command_runtime_deadline(contract: ExperimentContract) -> SharedRuntimeDeadline:
+    """Recover the supervisor-anchored deadline, including evaluator startup."""
+
+    wall = _evaluation_wall_seconds(
+        contract,
+        os.environ.get("CRUCIBLE_EVALUATION_WALL_SECONDS"),
+    )
+    started_raw = os.environ.get("CRUCIBLE_EVALUATION_STARTED_MONOTONIC")
+    deadline_raw = os.environ.get("CRUCIBLE_EVALUATION_DEADLINE_MONOTONIC")
+    if started_raw is None and deadline_raw is None:
+        # Direct/manual evaluator invocation remains supported, but the
+        # production supervisor always supplies the absolute pair.
+        return SharedRuntimeDeadline(contract, wall)
+    if started_raw is None or deadline_raw is None:
+        raise ContractError("evaluator absolute runtime bounds must be supplied together")
+    try:
+        started_seconds = float(started_raw)
+        deadline_seconds = float(deadline_raw)
+    except ValueError as exc:
+        raise ContractError("evaluator absolute runtime bounds must be finite numbers") from exc
+    if not math.isclose(
+        deadline_seconds - started_seconds,
+        wall,
+        rel_tol=0.0,
+        abs_tol=1e-6,
+    ):
+        raise ContractError("evaluator absolute runtime bounds do not match the effective wall")
+    return SharedRuntimeDeadline(
+        contract,
+        wall,
+        started_seconds=started_seconds,
+        deadline_seconds=deadline_seconds,
+    )
+
+
 def _train_evaluation_response(
     request: Mapping[str, Any],
     candidate: Mapping[str, Any],
@@ -820,11 +1032,12 @@ def _train_evaluation_response(
     output_dir: Path,
     baseline_raw: Path,
     candidate_raw: Path,
+    runtime_receipt: Path,
     marginal_usage: ResourceUsage,
     feedback: Mapping[str, Any] | None,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
-        "schema": "crucible.train-evaluation.v3",
+        "schema": "crucible.train-evaluation.v4",
         "attempt_id": request["attempt_id"],
         "request_id": request["request_id"],
         "proposal_id": candidate["proposal_id"],
@@ -832,6 +1045,7 @@ def _train_evaluation_response(
         "candidate": _relative(output_dir / "candidate.evidence.json", output_dir),
         "baseline_raw": _relative(baseline_raw, output_dir),
         "candidate_raw": _relative(candidate_raw, output_dir),
+        "runtime_receipt": _relative(runtime_receipt, output_dir),
         "marginal_usage": marginal_usage.to_dict(),
     }
     if feedback is not None:
@@ -845,6 +1059,7 @@ def _paired_checkouts(
     *,
     baseline_sha: str,
     candidate_sha: str,
+    deadline: SharedRuntimeDeadline | None = None,
 ) -> Iterator[tuple[Path, Path]]:
     root = Path(tempfile.mkdtemp(prefix="crucible-tau2-sealed-"))
     checkouts = (
@@ -858,6 +1073,7 @@ def _paired_checkouts(
             added.append(checkout)
         yield checkouts[0][0], checkouts[1][0]
     finally:
+        cleanup_started = time.monotonic()
         executable = shutil.which("git")
         if executable is not None:
             for checkout in reversed(added):
@@ -868,6 +1084,8 @@ def _paired_checkouts(
                     capture_output=True,
                 )
         shutil.rmtree(root, ignore_errors=True)
+        if deadline is not None:
+            deadline.record_cleanup("paired_checkout_remove", cleanup_started)
 
 
 class Tau2SealedEvaluator:
@@ -899,14 +1117,34 @@ class Tau2SealedEvaluator:
         parent_contract_path = evaluation_dir / "train-contract.json"
         write_exclusive_json(test_contract_path, contract.to_dict())
         write_exclusive_json(parent_contract_path, parent.to_dict())
-        per_arm = max(1.0, timeout / 2.0)
+        deadline = SharedRuntimeDeadline(contract, _evaluation_wall_seconds(contract, timeout))
+        runtime_receipt = evaluation_dir / "runtime.receipt.json"
+        baseline: EvidenceEnvelope | None = None
+        candidate: EvidenceEnvelope | None = None
+        receipt_writer = _RuntimeReceiptWriter(
+            deadline,
+            runtime_receipt,
+            lambda: _paired_runtime_artifacts(baseline, candidate),
+        )
+
+        def persist_timeout() -> None:
+            receipt_writer.write(
+                "right_censored",
+                censoring_reason="shared_experiment_deadline",
+            )
+
         try:
-            with _paired_checkouts(
-                self.repository,
-                baseline_sha=plan.baseline_sha,
-                candidate_sha=plan.candidate_sha,
-            ) as (baseline_checkout, candidate_checkout):
-                baseline, baseline_raw, _baseline_marginal = _run_arm(
+            with (
+                _paired_checkouts(
+                    self.repository,
+                    baseline_sha=plan.baseline_sha,
+                    candidate_sha=plan.candidate_sha,
+                    deadline=deadline,
+                ) as (baseline_checkout, candidate_checkout),
+                receipt_writer.preserve_failures_before_cleanup(),
+            ):
+                baseline, baseline_raw, _baseline_marginal = _run_arm_with_deadline(
+                    deadline,
                     contract,
                     arm="baseline",
                     checkout=baseline_checkout,
@@ -915,13 +1153,14 @@ class Tau2SealedEvaluator:
                     parent_contract_path=parent_contract_path,
                     output_dir=evaluation_dir,
                     run_id=f"crucible-test-{plan.plan_id[:16]}-{attempt_number}-baseline",
-                    timeout=per_arm,
+                    on_timeout=persist_timeout,
                 )
                 if baseline.execution_status != "complete":
                     raise Tau2InfrastructureError(
                         f"tau2 baseline arm is invalid: {baseline.failure_class}"
                     )
-                candidate, candidate_raw, _candidate_marginal = _run_arm(
+                candidate, candidate_raw, _candidate_marginal = _run_arm_with_deadline(
+                    deadline,
                     contract,
                     arm="candidate",
                     checkout=candidate_checkout,
@@ -930,14 +1169,25 @@ class Tau2SealedEvaluator:
                     parent_contract_path=parent_contract_path,
                     output_dir=evaluation_dir,
                     run_id=f"crucible-test-{plan.plan_id[:16]}-{attempt_number}-candidate",
-                    timeout=per_arm,
+                    on_timeout=persist_timeout,
                 )
                 if candidate.execution_status != "complete":
                     raise Tau2InfrastructureError(
                         f"tau2 candidate arm is invalid: {candidate.failure_class}"
                     )
+        except TimeoutError:
+            receipt_writer.write(
+                "right_censored",
+                censoring_reason="shared_experiment_deadline",
+            )
+            raise
         except Tau2InfrastructureError as exc:
+            receipt_writer.write("infrastructure_invalid")
             raise SealedInfrastructureError("tau2_infrastructure_error") from exc
+        except BaseException:
+            receipt_writer.write("operator_invalid")
+            raise
+        receipt_writer.write("complete")
         response_path = evaluation_dir / "response.json"
         write_exclusive_json(
             response_path,
@@ -950,13 +1200,14 @@ class Tau2SealedEvaluator:
                 "candidate": _relative(evaluation_dir / "candidate.evidence.json", evaluation_dir),
                 "baseline_raw": _relative(baseline_raw, evaluation_dir),
                 "candidate_raw": _relative(candidate_raw, evaluation_dir),
+                "runtime_receipt": _relative(runtime_receipt, evaluation_dir),
             },
         )
         return response_path
 
 
 def run_command_evaluator() -> int:
-    """Implement ``crucible.train-evaluation.v3`` for CommandEvaluator."""
+    """Implement ``crucible.train-evaluation.v4`` for CommandEvaluator."""
 
     request_path = Path(os.environ["CRUCIBLE_PROPOSAL_REQUEST"])
     candidate_path = Path(os.environ["CRUCIBLE_CANDIDATE"])
@@ -970,91 +1221,133 @@ def run_command_evaluator() -> int:
     candidate_checkout = Path.cwd().resolve()
     output_dir = response_path.parent.resolve()
     baseline_checkout = Path(os.environ["TMPDIR"]).resolve() / "baseline-checkout"
-    _git(
-        candidate_checkout,
-        "worktree",
-        "add",
-        "--detach",
-        str(baseline_checkout),
-        contract.baseline_sha,
+    deadline = _command_runtime_deadline(contract)
+    runtime_receipt = output_dir / "runtime.receipt.json"
+    runtime_status: Literal[
+        "complete", "right_censored", "infrastructure_invalid", "operator_invalid"
+    ] = "operator_invalid"
+    censoring_reason: str | None = None
+    baseline: EvidenceEnvelope | None = None
+    candidate: EvidenceEnvelope | None = None
+    receipt_writer = _RuntimeReceiptWriter(
+        deadline,
+        runtime_receipt,
+        lambda: _paired_runtime_artifacts(baseline, candidate),
     )
-    try:
-        remaining = _mapping(request.get("remaining_budget"), "remaining_budget")
-        timeout = float(remaining.get("wall_seconds", 0.0))
-        if timeout <= 0:
-            raise ContractError("evaluator has no remaining wall budget")
-        per_arm = max(1.0, timeout / 2.0)
-        baseline, baseline_raw, baseline_marginal = _run_arm(
-            contract,
-            arm="baseline",
-            checkout=baseline_checkout,
-            harness_root=harness_root,
-            contract_path=contract_path,
-            output_dir=output_dir,
-            run_id=f"crucible-{contract.stage}-{request['attempt_id']}-baseline",
-            timeout=per_arm,
+
+    def persist_timeout() -> None:
+        receipt_writer.write(
+            "right_censored",
+            censoring_reason="shared_experiment_deadline",
         )
-        if baseline.execution_status == "invalid":
-            candidate, candidate_raw, candidate_marginal = _write_skipped_arm(
-                contract,
-                arm="candidate",
-                output_dir=output_dir,
-                trigger=baseline,
-            )
-        else:
-            reachability = promotion_reachability(
-                contract,
-                baseline,
-                metric_ceiling=TAU2_ADAPTER.metric_bound(contract.promotion.primary_metric)[1],
-            )
-            if contract.stage == "train" and not reachability.reachable:
-                candidate, candidate_raw, candidate_marginal = _write_screened_arm(
+
+    try:
+        _git(
+            candidate_checkout,
+            "worktree",
+            "add",
+            "--detach",
+            str(baseline_checkout),
+            contract.baseline_sha,
+        )
+        try:
+            with receipt_writer.preserve_failures_before_cleanup():
+                baseline, baseline_raw, baseline_marginal = _run_arm_with_deadline(
+                    deadline,
                     contract,
-                    output_dir=output_dir,
-                    baseline=baseline,
-                    reachability=reachability,
-                )
-            else:
-                candidate, candidate_raw, candidate_marginal = _run_arm(
-                    contract,
-                    arm="candidate",
-                    checkout=candidate_checkout,
+                    arm="baseline",
+                    checkout=baseline_checkout,
                     harness_root=harness_root,
                     contract_path=contract_path,
                     output_dir=output_dir,
-                    run_id=f"crucible-{contract.stage}-{request['attempt_id']}-candidate",
-                    timeout=per_arm,
+                    run_id=f"crucible-{contract.stage}-{request['attempt_id']}-baseline",
+                    on_timeout=persist_timeout,
                 )
-    finally:
-        executable = shutil.which("git")
-        if executable is not None:
-            subprocess.run(  # noqa: S603 - fixed git executable, cleanup-only argv
-                [executable, "worktree", "remove", "--force", str(baseline_checkout)],
-                cwd=candidate_checkout,
-                check=False,
-                capture_output=True,
+                if baseline.execution_status == "invalid":
+                    candidate, candidate_raw, candidate_marginal = _write_skipped_arm(
+                        contract,
+                        arm="candidate",
+                        output_dir=output_dir,
+                        trigger=baseline,
+                    )
+                    deadline.record_synthetic_arm("candidate", "skipped")
+                else:
+                    reachability = promotion_reachability(
+                        contract,
+                        baseline,
+                        metric_ceiling=TAU2_ADAPTER.metric_bound(contract.promotion.primary_metric)[
+                            1
+                        ],
+                    )
+                    if contract.stage == "train" and not reachability.reachable:
+                        candidate, candidate_raw, candidate_marginal = _write_screened_arm(
+                            contract,
+                            output_dir=output_dir,
+                            baseline=baseline,
+                            reachability=reachability,
+                        )
+                        deadline.record_synthetic_arm("candidate", "screened")
+                    else:
+                        candidate, candidate_raw, candidate_marginal = _run_arm_with_deadline(
+                            deadline,
+                            contract,
+                            arm="candidate",
+                            checkout=candidate_checkout,
+                            harness_root=harness_root,
+                            contract_path=contract_path,
+                            output_dir=output_dir,
+                            run_id=f"crucible-{contract.stage}-{request['attempt_id']}-candidate",
+                            on_timeout=persist_timeout,
+                        )
+                runtime_status = _runtime_status_for_returned_arms(baseline, candidate)
+                if runtime_status == "infrastructure_invalid":
+                    receipt_writer.write(runtime_status)
+        finally:
+            cleanup_started = time.monotonic()
+            executable = shutil.which("git")
+            if executable is not None:
+                subprocess.run(  # noqa: S603 - fixed git executable, cleanup-only argv
+                    [executable, "worktree", "remove", "--force", str(baseline_checkout)],
+                    cwd=candidate_checkout,
+                    check=False,
+                    capture_output=True,
+                )
+            deadline.record_cleanup("baseline_checkout_remove", cleanup_started)
+
+        feedback = None
+        if baseline.execution_status == candidate.execution_status == "complete":
+            candidate_raw_payload = load_json_object(
+                candidate_raw,
+                "candidate raw",
+                max_bytes=64 * 1024 * 1024,
             )
-    feedback = None
-    if baseline.execution_status == candidate.execution_status == "complete":
-        candidate_raw_payload = load_json_object(
-            candidate_raw,
-            "candidate raw",
-            max_bytes=64 * 1024 * 1024,
+            projected = tau2_failure_feedback(contract, candidate, candidate_raw_payload)
+            feedback = projected.to_dict() if projected is not None else None
+        write_exclusive_json(
+            response_path,
+            _train_evaluation_response(
+                request,
+                candidate_row,
+                output_dir=output_dir,
+                baseline_raw=baseline_raw,
+                candidate_raw=candidate_raw,
+                runtime_receipt=runtime_receipt,
+                marginal_usage=baseline_marginal + candidate_marginal,
+                feedback=feedback,
+            ),
         )
-        projected = tau2_failure_feedback(contract, candidate, candidate_raw_payload)
-        feedback = projected.to_dict() if projected is not None else None
-    write_exclusive_json(
-        response_path,
-        _train_evaluation_response(
-            request,
-            candidate_row,
-            output_dir=output_dir,
-            baseline_raw=baseline_raw,
-            candidate_raw=candidate_raw,
-            marginal_usage=baseline_marginal + candidate_marginal,
-            feedback=feedback,
-        ),
-    )
+    except TimeoutError:
+        runtime_status = "right_censored"
+        censoring_reason = "shared_experiment_deadline"
+        raise
+    except Tau2InfrastructureError:
+        runtime_status = "infrastructure_invalid"
+        raise
+    finally:
+        receipt_writer.write(
+            runtime_status,
+            censoring_reason=censoring_reason,
+        )
     return 0
 
 
