@@ -40,9 +40,9 @@ def test_terminal_results_born_in_one_place():
 
 
 def test_no_inline_string_termination_reasons():
-    """No ``termination_reason="..."`` code literals (docstring mentions,
-    wrapped in double backticks, are exempt)."""
-    assert re.search(r'(?<!`)termination_reason="', _AGENT_LOOP_SRC) is None
+    """No ``termination_reason=<string literal>`` in code — either quote
+    style, any spacing (docstring mentions wrapped in backticks exempt)."""
+    assert re.search(r"(?<!`)termination_reason\s*=\s*[\"']", _AGENT_LOOP_SRC) is None
 
 
 def test_enum_covers_documented_terminal_alphabet():
@@ -89,6 +89,7 @@ def _fake_loop() -> SimpleNamespace:
         _consecutive_llm_failures=0,
         _total_empty_rounds=0,
         _budget_warned=False,
+        _low_confidence_replan_armed=True,
         _consecutive_tool_tracker=[],
         _convergence=ConvergenceDetector(),
         _session_id="",
@@ -121,13 +122,40 @@ def test_guard_state_roundtrip():
     assert dst._convergence.to_snapshot() == src._convergence.to_snapshot()
 
 
-def test_apply_guard_state_tolerates_empty_and_partial():
+def test_apply_guard_state_is_replacement_not_merge():
+    """A legacy checkpoint (no loop_guards) must RESET a reused loop's
+    counters — never inherit the previous conversation's guard state."""
     dst = _fake_loop()
+    dst._consecutive_llm_failures = 4
+    dst._budget_warned = True
+    dst._consecutive_tool_tracker = [("grep_files", "sig-a")]
+    dst._convergence.total_consecutive_tool_errors = 3
+
     _lifecycle.apply_guard_state(dst, {})
+
     assert dst._consecutive_llm_failures == 0
-    _lifecycle.apply_guard_state(dst, {"consecutive_llm_failures": 2})
-    assert dst._consecutive_llm_failures == 2
+    assert dst._budget_warned is False
     assert dst._consecutive_tool_tracker == []
+    assert dst._convergence.total_consecutive_tool_errors == 0
+    assert dst._low_confidence_replan_armed is True  # fresh-loop default
+
+
+def test_apply_guard_state_coerces_malformed_values():
+    """A malformed checkpoint can never leave the loop half-restored."""
+    dst = _fake_loop()
+    _lifecycle.apply_guard_state(
+        dst,
+        {
+            "consecutive_llm_failures": None,
+            "consecutive_text_only_rounds": "not-a-number",
+            "consecutive_tool_tracker": "garbage",
+            "convergence": "garbage",
+        },
+    )
+    assert dst._consecutive_llm_failures == 0
+    assert dst._consecutive_text_only_rounds == 0
+    assert dst._consecutive_tool_tracker == []
+    assert dst._convergence.to_snapshot() == ConvergenceDetector().to_snapshot()
 
 
 def test_restore_loop_state_is_the_single_surgery():
@@ -165,6 +193,17 @@ def test_checkpoint_persists_loop_guards(tmp_path):
 # ---------------------------------------------------------------------------
 
 
+def _index_status(tmp_path, session_id: str) -> str:
+    from core.memory.session_manager import SessionManager
+
+    mgr = SessionManager(tmp_path / "sessions" / "sessions.db")
+    try:
+        meta = mgr.get(session_id)
+        return meta.status if meta else "missing"
+    finally:
+        mgr.close()
+
+
 def test_session_status_transitions(tmp_path):
     cp = SessionCheckpoint(tmp_path / "sessions")
     cp.save(SessionState(session_id="s-status", messages=[]))
@@ -172,11 +211,17 @@ def test_session_status_transitions(tmp_path):
 
     cp.mark_paused("s-status")
     assert cp.load("s-status").status == SessionStatus.PAUSED
+    # Both SoTs move together — geode session list reads the SQLite index.
+    assert _index_status(tmp_path, "s-status") == SessionStatus.PAUSED
     assert any(s.session_id == "s-status" for s in cp.list_resumable())
 
     cp.mark_completed("s-status")
     assert cp.load("s-status").status == SessionStatus.COMPLETED
+    assert _index_status(tmp_path, "s-status") == SessionStatus.COMPLETED
     assert all(s.session_id != "s-status" for s in cp.list_resumable())
+
+    cp.mark_error("s-status")
+    assert cp.load("s-status").status == SessionStatus.ERROR
 
 
 def test_mark_paused_missing_session_is_noop(tmp_path):

@@ -289,7 +289,12 @@ class SessionCheckpoint:
             return None
 
     def _write_status(self, session_id: str, status: SessionStatus) -> None:
-        """Rewrite one session's persisted status (transition primitive)."""
+        """Rewrite one session's persisted status (transition primitive).
+
+        Updates BOTH SoTs: ``state.json`` and the SQLite index row —
+        ``geode session list`` reads the index first, so a JSON-only write
+        would keep showing parked/finished sessions as active.
+        """
         state_file = self._dir / session_id / "state.json"
         if not state_file.exists():
             return
@@ -300,6 +305,16 @@ class SessionCheckpoint:
             atomic_write_json(state_file, data, indent=2)
         except (json.JSONDecodeError, OSError):
             pass
+        try:
+            from core.memory.session_manager import SessionManager
+
+            mgr = SessionManager(self._dir / "sessions.db")
+            try:
+                mgr.update_status(session_id, str(status))
+            finally:
+                mgr.close()
+        except Exception:
+            log.debug("SQLite status sync failed for %s", session_id, exc_info=True)
 
     def mark_completed(self, session_id: str) -> None:
         """Mark a session as completed (no longer resumable)."""
@@ -310,6 +325,10 @@ class SessionCheckpoint:
     def mark_paused(self, session_id: str) -> None:
         """Mark a session as paused — parked awaiting operator input."""
         self._write_status(session_id, SessionStatus.PAUSED)
+
+    def mark_error(self, session_id: str) -> None:
+        """Mark a session as errored (one-shot run died; not resumable)."""
+        self._write_status(session_id, SessionStatus.ERROR)
 
     def list_resumable(self) -> list[SessionState]:
         """List sessions that can be resumed (status=active or paused)."""

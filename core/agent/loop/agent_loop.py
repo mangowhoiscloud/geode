@@ -629,6 +629,10 @@ class AgenticLoop:
         """Delegates to :func:`_lifecycle.mark_session_paused`."""
         return _lifecycle.mark_session_paused(self)
 
+    def mark_session_error(self) -> None:
+        """Delegates to :func:`_lifecycle.mark_session_error`."""
+        return _lifecycle.mark_session_error(self)
+
     def restore_from_checkpoint(self, state: Any) -> None:
         """Delegates to :func:`_lifecycle.restore_loop_state` — the single
         resume surgery (session id + cognitive state + guard counters)."""
@@ -2083,11 +2087,13 @@ class AgenticLoop:
                             },
                         )
 
+                self._consecutive_llm_failures += 1
+
                 # auto-checkpoint before retry (resume after a model switch)
+                # — after the increment so the persisted guard state carries
+                # the failure just observed (crash-recovery parity).
                 self._sync_messages_to_context(messages)
                 self._save_checkpoint(user_input, round_idx=round_idx)
-
-                self._consecutive_llm_failures += 1
 
                 # rate_limit → surface to user (no auto-swap; the diagnostic
                 # carries the suggested fallback chain)

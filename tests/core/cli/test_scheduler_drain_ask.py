@@ -37,6 +37,9 @@ class _FakeLoop:
     def mark_session_completed(self) -> None:
         self.status_marks.append("completed")
 
+    def mark_session_error(self) -> None:
+        self.status_marks.append("error")
+
 
 class _FakeServices:
     def __init__(self, result: Any) -> None:
@@ -100,3 +103,23 @@ def test_natural_termination_publishes_nothing_and_completes(monkeypatch):
     published, services = _run_drain(monkeypatch, "natural")
     assert published == []
     assert services.loops[0].status_marks == ["completed"]
+
+
+class _ExplodingLoop(_FakeLoop):
+    async def arun(self, _prompt: str) -> Any:
+        raise RuntimeError("run blew up")
+
+
+def test_run_failure_marks_error():
+    services = _FakeServices(None)
+
+    def _create_exploding(_mode: Any, **_kwargs: Any) -> tuple[Any, Any]:
+        loop = _ExplodingLoop(None)
+        services.loops.append(loop)
+        return None, loop
+
+    services.create_session = _create_exploding  # type: ignore[method-assign]
+    action_queue: queue.Queue = queue.Queue()
+    action_queue.put(("job1", "boom", True, ""))
+    asyncio.run(_drain_and_settle(action_queue, services))
+    assert services.loops[0].status_marks == ["error"]

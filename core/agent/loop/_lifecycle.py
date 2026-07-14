@@ -37,29 +37,43 @@ def collect_guard_state(loop: AgenticLoop) -> dict[str, Any]:
         "consecutive_llm_failures": loop._consecutive_llm_failures,
         "total_empty_rounds": loop._total_empty_rounds,
         "budget_warned": bool(getattr(loop, "_budget_warned", False)),
+        "low_confidence_replan_armed": bool(getattr(loop, "_low_confidence_replan_armed", True)),
         "consecutive_tool_tracker": [list(sig) for sig in loop._consecutive_tool_tracker],
         "convergence": loop._convergence.to_snapshot(),
     }
 
 
-def apply_guard_state(loop: AgenticLoop, data: dict[str, Any]) -> None:
-    """Inverse of :func:`collect_guard_state`; missing keys keep defaults."""
-    if not data:
-        return
-    loop._consecutive_text_only_rounds = int(data.get("consecutive_text_only_rounds", 0))
-    loop._consecutive_llm_failures = int(data.get("consecutive_llm_failures", 0))
-    loop._total_empty_rounds = int(data.get("total_empty_rounds", 0))
+def _as_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def apply_guard_state(loop: AgenticLoop, data: Any) -> None:
+    """Inverse of :func:`collect_guard_state` — REPLACEMENT semantics.
+
+    Missing or malformed fields reset to their fresh-loop defaults, never
+    keep the live loop's values: the IPC poller reuses ONE loop across
+    resumes, so a legacy checkpoint (no ``loop_guards``) must not inherit
+    the previous conversation's counters. Field coercion is defensive so a
+    malformed checkpoint can never leave the loop half-restored.
+    """
+    if not isinstance(data, dict):
+        data = {}
+    loop._consecutive_text_only_rounds = _as_int(data.get("consecutive_text_only_rounds"))
+    loop._consecutive_llm_failures = _as_int(data.get("consecutive_llm_failures"))
+    loop._total_empty_rounds = _as_int(data.get("total_empty_rounds"))
     loop._budget_warned = bool(data.get("budget_warned", False))
+    loop._low_confidence_replan_armed = bool(data.get("low_confidence_replan_armed", True))
     tracker = data.get("consecutive_tool_tracker", [])
-    if isinstance(tracker, list):
-        loop._consecutive_tool_tracker = [
-            (str(sig[0]), str(sig[1]))
-            for sig in tracker
-            if isinstance(sig, (list, tuple)) and len(sig) == 2
-        ]
+    loop._consecutive_tool_tracker = [
+        (str(sig[0]), str(sig[1]))
+        for sig in (tracker if isinstance(tracker, list) else [])
+        if isinstance(sig, (list, tuple)) and len(sig) == 2
+    ]
     convergence = data.get("convergence", {})
-    if isinstance(convergence, dict):
-        loop._convergence.apply_snapshot(convergence)
+    loop._convergence.apply_snapshot(convergence if isinstance(convergence, dict) else {})
 
 
 def restore_loop_state(loop: AgenticLoop, state: Any) -> None:
@@ -130,6 +144,17 @@ def mark_session_paused(loop: AgenticLoop) -> None:
         loop._checkpoint.mark_paused(loop._session_id)
     except Exception:
         log.debug("Checkpoint mark_paused failed", exc_info=True)
+
+
+def mark_session_error(loop: AgenticLoop) -> None:
+    """Mark the current session as errored — a one-shot surface died on a
+    timeout or unhandled exception; the checkpoint is not resumable."""
+    if loop._checkpoint is None or not loop._session_id:
+        return
+    try:
+        loop._checkpoint.mark_error(loop._session_id)
+    except Exception:
+        log.debug("Checkpoint mark_error failed", exc_info=True)
 
 
 def record_transcript_end(loop: AgenticLoop, result: Any) -> None:

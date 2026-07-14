@@ -156,6 +156,23 @@ def serve(
         if state.model and state.model != _ask_loop.model:
             await _ask_loop.update_model_async(state.model)
         _res = await _ask_loop.arun(answer)
+        # Close the one-shot lifecycle (finalize re-wrote status "active"):
+        # a fresh clarification re-parks the checkpoint behind a NEW ask;
+        # any other terminal completes it.
+        try:
+            if _res is not None and _res.termination_reason == "user_clarification_needed":
+                from core.memory.pending_ask import apublish_clarification_ask
+
+                await apublish_clarification_ask(
+                    _res.text,
+                    session_id=state.session_id,
+                    source=f"ask-continuation:{state.session_id}",
+                )
+                _ask_loop.mark_session_paused()
+            else:
+                _ask_loop.mark_session_completed()
+        except Exception:
+            log.warning("Ask continuation lifecycle close failed", exc_info=True)
         return _res.text if _res else ""
 
     async def _gateway_processor(content: str, metadata: dict[str, Any]) -> str:

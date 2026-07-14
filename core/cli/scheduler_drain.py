@@ -147,8 +147,14 @@ async def drain_scheduler_queue(
                                 _cb(r, job_id=_jid)
                         except TimeoutError:
                             log.warning("Scheduler job %s timed out after 300s", _jid)
+                            _mark_err = getattr(_loop, "mark_session_error", None)
+                            if callable(_mark_err):
+                                _mark_err()
                         except Exception:
                             log.warning("Scheduler job %s execution failed", _jid, exc_info=True)
+                            _mark_err = getattr(_loop, "mark_session_error", None)
+                            if callable(_mark_err):
+                                _mark_err()
                         finally:
                             _glob.manual_release(_key)
                             _sess.manual_release(_key)
