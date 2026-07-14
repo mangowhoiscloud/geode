@@ -49,7 +49,12 @@ from ._tool_factory import (
     TOOL_LAZY_LOAD_THRESHOLD,
     get_agentic_tools,
 )
-from .models import AgenticResult, _context_exhausted_message, _ContextExhaustedError
+from .models import (
+    AgenticResult,
+    TerminationReason,
+    _context_exhausted_message,
+    _ContextExhaustedError,
+)
 
 # Confidence-adaptive compute allocation — the reflection node's
 # ``CognitiveState.confidence`` (0..1) steers how much extra LLM compute
@@ -620,6 +625,19 @@ class AgenticLoop:
         """Delegates to :func:`_lifecycle.mark_session_completed`."""
         return _lifecycle.mark_session_completed(self)
 
+    def mark_session_paused(self) -> None:
+        """Delegates to :func:`_lifecycle.mark_session_paused`."""
+        return _lifecycle.mark_session_paused(self)
+
+    def mark_session_error(self) -> None:
+        """Delegates to :func:`_lifecycle.mark_session_error`."""
+        return _lifecycle.mark_session_error(self)
+
+    def restore_from_checkpoint(self, state: Any) -> None:
+        """Delegates to :func:`_lifecycle.restore_loop_state` — the single
+        resume surgery (session id + cognitive state + guard counters)."""
+        return _lifecycle.restore_loop_state(self, state)
+
     def _record_transcript_end(self, result: Any) -> None:
         """Delegates to :func:`_lifecycle.record_transcript_end`."""
         return _lifecycle.record_transcript_end(self, result)
@@ -817,10 +835,10 @@ class AgenticLoop:
                 {"user_input": user_input, "session_id": self._session_id},
             )
             if intercept.blocked:
-                return AgenticResult(
-                    text=intercept.reason,
+                return self._terminal_result(
+                    TerminationReason.INPUT_BLOCKED,
+                    intercept.reason,
                     rounds=0,
-                    termination_reason="input_blocked",
                 )
 
         # goal = first arun()'s input (later calls keep it so observations
@@ -900,18 +918,18 @@ class AgenticLoop:
         except BillingError as exc:
             spinner.stop()
             self._emit_quota_panel(exc)
-            return AgenticResult(
-                text=exc.user_message(),
+            return self._terminal_result(
+                TerminationReason.BILLING_ERROR,
+                exc.user_message(),
                 rounds=round_idx + 1,
-                termination_reason="billing_error",
             )
         except UserCancelledError:
             spinner.stop()
             log.info("LLM call interrupted by user")
-            return AgenticResult(
-                text="Interrupted.",
+            return self._terminal_result(
+                TerminationReason.USER_CANCELLED,
+                "Interrupted.",
                 rounds=round_idx + 1,
-                termination_reason="user_cancelled",
             )
 
     async def _sync_model_and_rebuild_prompt(
@@ -986,12 +1004,245 @@ class AgenticLoop:
                 return handoff_reason
         return None
 
+    def _terminal_result(
+        self,
+        reason: TerminationReason,
+        text: str,
+        *,
+        rounds: int,
+        error: bool = False,
+        tool_calls: list[dict[str, Any]] | None = None,
+    ) -> AgenticResult:
+        """Sole birth-place of terminal results — the loop's exit alphabet.
+
+        Every terminal exit constructs its :class:`AgenticResult` here, so
+        the reachable terminal-state space is exactly
+        :class:`TerminationReason` (pinned by
+        ``tests/core/agent/test_loop_state_machine.py``). ``error=True``
+        mirrors *reason* into ``AgenticResult.error`` — the legacy dual
+        encoding some consumers still read. ``tool_calls=None`` keeps the
+        dataclass default (empty list) for pre-tool exits; pass
+        ``self._tool_processor.tool_log`` explicitly where the exit carries
+        tool work.
+        """
+        result = AgenticResult(
+            text=text,
+            rounds=rounds,
+            error=str(reason) if error else None,
+            termination_reason=reason,
+        )
+        if tool_calls is not None:
+            result.tool_calls = tool_calls
+        return result
+
+    # ------------------------------------------------------------------
+    # Guard chain — the loop's transition guards, in priority order
+    # ------------------------------------------------------------------
+    # Call order in ``arun`` IS the priority order:
+    #   post-response: cost_budget → overthinking → model_refusal
+    #   post-tool:     convergence → repeated_success_no_progress
+    # Each guard returns a terminal AgenticResult (born via
+    # ``_terminal_result``) or None to proceed. Guard counters live on
+    # ``self`` and are checkpointed via ``_lifecycle.collect_guard_state``
+    # so a resumed session keeps its guard progress.
+
+    def _guard_cost_budget(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        round_idx: int,
+    ) -> AgenticResult | None:
+        """Cost budget guard (Karpathy P3 — resource budget).
+
+        Warns once at 80% of budget; terminates with
+        ``cost_budget_exceeded`` at 100%.
+        """
+        if self._cost_budget <= 0:
+            return None
+        try:
+            from core.llm.token_tracker import get_tracker as _get_cost_tracker
+
+            _cost_tracker = _get_cost_tracker()
+            _session_cost = _cost_tracker.accumulator.total_cost_usd
+
+            _warn_threshold = self._cost_budget * 0.8
+            if (
+                _session_cost >= _warn_threshold
+                and _session_cost < self._cost_budget
+                and not getattr(self, "_budget_warned", False)
+            ):
+                self._budget_warned = True
+                if not self._quiet:
+                    from core.ui.agentic_ui import emit_budget_warning
+
+                    emit_budget_warning(
+                        self._cost_budget,
+                        _session_cost,
+                        pct=_session_cost / self._cost_budget * 100,
+                    )
+
+            if _session_cost >= self._cost_budget:
+                from core.ui.agentic_ui import emit_cost_budget_exceeded
+
+                emit_cost_budget_exceeded(self._cost_budget, _session_cost)
+                self._op_logger.finalize()
+                self._sync_messages_to_context(messages)
+                text = (
+                    f"Cost budget (${self._cost_budget:.2f}) exceeded. "
+                    f"Session cost: ${_session_cost:.2f}"
+                )
+                log.warning(text)
+                return self._terminal_result(
+                    TerminationReason.COST_BUDGET_EXCEEDED,
+                    text,
+                    rounds=round_idx + 1,
+                    error=True,
+                    tool_calls=self._tool_processor.tool_log,
+                )
+        except Exception:
+            log.debug("Cost budget check failed", exc_info=True)
+        return None
+
+    async def _guard_overthinking(
+        self,
+        response: Any,
+        *,
+        messages: list[dict[str, Any]],
+        round_idx: int,
+    ) -> AgenticResult | None:
+        """Overthinking guard — N consecutive long-text/no-tool rounds stop
+        the loop with ``user_clarification_needed`` (threshold is
+        context-proportional, 1% / floor 1024). Owns the counter reset on
+        tool-use rounds.
+        """
+        if response.stop_reason != "tool_use":
+            out_tok = getattr(response.usage, "output_tokens", 0) if response.usage else 0
+            threshold = self._overthinking_token_threshold()
+            if out_tok > threshold:
+                self._consecutive_text_only_rounds += 1
+            else:
+                self._consecutive_text_only_rounds = 0
+            if self._consecutive_text_only_rounds >= 2:
+                # count this flagged round ONCE — adding the running
+                # consec would inflate the total quadratically
+                self._total_empty_rounds += 1
+                log.warning(
+                    "Overthinking detected: %d consecutive text-only rounds "
+                    "(>%d tok each) — surfacing user_clarification_needed",
+                    self._consecutive_text_only_rounds,
+                    threshold,
+                )
+                self._op_logger.finalize()
+                self._sync_messages_to_context(messages)
+                last_text = self._extract_text(response).strip()
+                summary = last_text[:400] + ("…" if len(last_text) > 400 else "")
+                clarification = (
+                    f"~ I've spent {self._consecutive_text_only_rounds} consecutive "
+                    f"rounds reasoning without taking any action "
+                    f"(>{threshold} output tokens each). "
+                    "Could you narrow the request — point at a specific file, "
+                    "behaviour, or step you want me to focus on next?\n\n"
+                    f"Most recent reasoning (truncated):\n{summary}"
+                )
+                await self._record_text_only_round(round_idx, text=last_text)
+                return self._terminal_result(
+                    TerminationReason.USER_CLARIFICATION_NEEDED,
+                    clarification,
+                    rounds=round_idx + 1,
+                    tool_calls=self._tool_processor.tool_log,
+                )
+        else:
+            self._consecutive_text_only_rounds = 0
+        return None
+
+    def _guard_model_refusal(
+        self,
+        response: Any,
+        *,
+        messages: list[dict[str, Any]],
+        round_idx: int,
+    ) -> AgenticResult | None:
+        """Fable 5 safety decline (HTTP 200, often empty) — surface it
+        honestly instead of a silent empty turn.
+
+        ref: https://platform.claude.com/docs/en/about-claude/models/migration-guide
+        """
+        if response.stop_reason != "refusal":
+            return None
+        self._op_logger.finalize()
+        self._sync_messages_to_context(messages)
+        stop_details = getattr(response, "stop_details", None)
+        category = stop_details.get("category") if isinstance(stop_details, dict) else None
+        refusal_text = self._extract_text(response).strip() or (
+            "The model declined this request"
+            + (f" (safety classifier category: {category})" if category else "")
+            + ". Rephrase the request or retry on another model via /model."
+        )
+        return self._terminal_result(
+            TerminationReason.MODEL_REFUSAL,
+            refusal_text,
+            rounds=round_idx + 1,
+            tool_calls=self._tool_processor.tool_log,
+        )
+
+    def _guard_convergence(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        round_idx: int,
+    ) -> AgenticResult | None:
+        """Convergence guard — 3 identical tool errors break the loop."""
+        if not self._check_convergence_break():
+            return None
+        from core.ui.agentic_ui import emit_convergence_detected
+
+        last_err = (
+            self._convergence.recent_errors[-1] if self._convergence.recent_errors else "unknown"
+        )
+        emit_convergence_detected(last_err, round_idx + 1)
+        self._op_logger.finalize()
+        self._sync_messages_to_context(messages)
+        return self._terminal_result(
+            TerminationReason.CONVERGENCE_DETECTED,
+            "Detected repeating failure pattern. Breaking loop to avoid infinite retry.",
+            rounds=round_idx + 1,
+            error=True,
+            tool_calls=self._tool_processor.tool_log,
+        )
+
+    def _guard_repeated_success(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        round_idx: int,
+    ) -> AgenticResult | None:
+        """Repeated-success guard — identical successful results without new
+        progress stop the loop (polling the same state indefinitely).
+        """
+        if not self._check_repeated_success_no_progress():
+            return None
+        from core.ui.agentic_ui import emit_repeated_success_no_progress
+
+        tool_name = self._convergence.last_success_tool or "unknown"
+        streak = self._convergence.repeated_success_streak
+        emit_repeated_success_no_progress(tool_name, streak, round_idx + 1)
+        self._op_logger.finalize()
+        self._sync_messages_to_context(messages)
+        return self._terminal_result(
+            TerminationReason.REPEATED_SUCCESS_NO_PROGRESS,
+            "Detected repeated successful tool results without new progress. "
+            "Breaking loop to avoid polling the same state indefinitely.",
+            rounds=round_idx + 1,
+            error=True,
+            tool_calls=self._tool_processor.tool_log,
+        )
+
     def _guard_exit_result(
         self,
         guard_reason: str | None,
         *,
         rounds: int,
-    ) -> tuple[str, str]:
+    ) -> tuple[TerminationReason, str]:
         """Map a loop-entry guard reason to a terminal result.
 
         The guard helper returns precise internal reasons. Preserve that
@@ -1000,7 +1251,7 @@ class AgenticLoop:
         """
         if guard_reason == "time_budget":
             return (
-                "time_budget_expired",
+                TerminationReason.TIME_BUDGET_EXPIRED,
                 f"Time budget ({self._time_budget_s:.0f}s) expired after {rounds} rounds.",
             )
         if guard_reason in {"session_time_budget_handoff", "session_time_budget_expired"}:
@@ -1027,7 +1278,7 @@ class AgenticLoop:
                         "Session time budget is in the handoff window. "
                         "Start a new GEODE session or restart GEODE to continue safely."
                     )
-                return "session_time_budget_handoff", text
+                return TerminationReason.SESSION_TIME_BUDGET_HANDOFF, text
 
             if remaining is not None and total is not None and total > 0:
                 text = (
@@ -1040,11 +1291,14 @@ class AgenticLoop:
                     "Session time budget expired. "
                     "Start a new GEODE session or restart GEODE to continue."
                 )
-            return "session_time_budget_expired", text
+            return TerminationReason.SESSION_TIME_BUDGET_EXPIRED, text
 
         # Back-compat: an exhausted positive max_rounds cap keeps the legacy
         # result text/termination reason.
-        return "max_rounds", "Max agentic rounds reached. Please try a more specific request."
+        return (
+            TerminationReason.MAX_ROUNDS,
+            "Max agentic rounds reached. Please try a more specific request.",
+        )
 
     def _persist_handoff_request(self) -> None:
         """Flip the ``sessions`` row to ``handoff_state='pending'`` via the
@@ -1376,12 +1630,12 @@ class AgenticLoop:
             suggested_models=self._fallback_chain_suggestions() or None,
             detail=clean_detail,
         )
-        return AgenticResult(
-            text=text,
-            tool_calls=self._tool_processor.tool_log,
+        return self._terminal_result(
+            TerminationReason.MODEL_ACTION_REQUIRED,
+            text,
             rounds=rounds,
-            error="model_action_required",
-            termination_reason="model_action_required",
+            error=True,
+            tool_calls=self._tool_processor.tool_log,
         )
 
     async def _afinalize_actionable_partial_on_empty(
@@ -1413,11 +1667,11 @@ class AgenticLoop:
         )
         self._op_logger.finalize()
         self._sync_messages_to_context(messages)
-        result = AgenticResult(
-            text="",
-            tool_calls=list(self._tool_processor.tool_log),
+        result = self._terminal_result(
+            TerminationReason.ACTIONABLE_PARTIAL,
+            "",
             rounds=round_idx,
-            termination_reason="actionable_partial",
+            tool_calls=list(self._tool_processor.tool_log),
         )
         return await self._afinalize_and_return(result, user_input, round_idx)
 
@@ -1439,12 +1693,12 @@ class AgenticLoop:
             new_count=len(messages),
         )
         self._sync_messages_to_context(messages)
-        result = AgenticResult(
-            text=await _context_exhausted_message(user_input),
-            tool_calls=self._tool_processor.tool_log,
+        result = self._terminal_result(
+            TerminationReason.CONTEXT_EXHAUSTED,
+            await _context_exhausted_message(user_input),
             rounds=round_idx + 1,
-            error="context_exhausted",
-            termination_reason="context_exhausted",
+            error=True,
+            tool_calls=self._tool_processor.tool_log,
         )
         return await self._afinalize_and_return(result, user_input, round_idx + 1)
 
@@ -1459,11 +1713,11 @@ class AgenticLoop:
 
         self._op_logger.finalize()
         self._sync_messages_to_context(messages)
-        result = AgenticResult(
-            text="",
-            tool_calls=list(self._tool_processor.tool_log),
+        result = self._terminal_result(
+            TerminationReason.TOOL_USE_YIELD,
+            "",
             rounds=round_idx + 1,
-            termination_reason="tool_use_yield",
+            tool_calls=list(self._tool_processor.tool_log),
         )
         return await self._afinalize_and_return(result, user_input, round_idx + 1)
 
@@ -1601,10 +1855,10 @@ class AgenticLoop:
             decomposition_hint = await self._try_decompose(user_input)
         except BillingError as exc:
             self._emit_quota_panel(exc)
-            return AgenticResult(
-                text=exc.user_message(),
+            return self._terminal_result(
+                TerminationReason.BILLING_ERROR,
+                exc.user_message(),
                 rounds=0,
-                termination_reason="billing_error",
             )
 
         intercept_result = await self._emit_session_start_signals(user_input)
@@ -1833,11 +2087,13 @@ class AgenticLoop:
                             },
                         )
 
+                self._consecutive_llm_failures += 1
+
                 # auto-checkpoint before retry (resume after a model switch)
+                # — after the increment so the persisted guard state carries
+                # the failure just observed (crash-recovery parity).
                 self._sync_messages_to_context(messages)
                 self._save_checkpoint(user_input, round_idx=round_idx)
-
-                self._consecutive_llm_failures += 1
 
                 # rate_limit → surface to user (no auto-swap; the diagnostic
                 # carries the suggested fallback chain)
@@ -1921,116 +2177,20 @@ class AgenticLoop:
             # Track usage + Claude Code-style token display
             await self._track_usage_async(response)
 
-            # Guard 3: Cost budget (Karpathy P3 — resource budget)
-            if self._cost_budget > 0:
-                try:
-                    from core.llm.token_tracker import get_tracker as _get_cost_tracker
-
-                    _cost_tracker = _get_cost_tracker()
-                    _session_cost = _cost_tracker.accumulator.total_cost_usd
-
-                    # Proactive warning at 80% of budget (once per session)
-                    _warn_threshold = self._cost_budget * 0.8
-                    if (
-                        _session_cost >= _warn_threshold
-                        and _session_cost < self._cost_budget
-                        and not getattr(self, "_budget_warned", False)
-                    ):
-                        self._budget_warned = True
-                        if not self._quiet:
-                            from core.ui.agentic_ui import emit_budget_warning
-
-                            emit_budget_warning(
-                                self._cost_budget,
-                                _session_cost,
-                                pct=_session_cost / self._cost_budget * 100,
-                            )
-
-                    if _session_cost >= self._cost_budget:
-                        from core.ui.agentic_ui import emit_cost_budget_exceeded
-
-                        emit_cost_budget_exceeded(self._cost_budget, _session_cost)
-                        self._op_logger.finalize()
-                        self._sync_messages_to_context(messages)
-                        text = (
-                            f"Cost budget (${self._cost_budget:.2f}) exceeded. "
-                            f"Session cost: ${_session_cost:.2f}"
-                        )
-                        log.warning(text)
-                        result = AgenticResult(
-                            text=text,
-                            tool_calls=self._tool_processor.tool_log,
-                            rounds=round_idx + 1,
-                            error="cost_budget_exceeded",
-                            termination_reason="cost_budget_exceeded",
-                        )
-                        return await self._afinalize_and_return(result, user_input, round_idx + 1)
-                except Exception:
-                    log.debug("Cost budget check failed", exc_info=True)
-
-            # Overthinking detection — N consecutive long-text/no-tool
-            # rounds stop the loop with user_clarification_needed (threshold
-            # is context-proportional, 1% / floor 1024).
-            if response.stop_reason != "tool_use":
-                out_tok = getattr(response.usage, "output_tokens", 0) if response.usage else 0
-                threshold = self._overthinking_token_threshold()
-                if out_tok > threshold:
-                    self._consecutive_text_only_rounds += 1
-                else:
-                    self._consecutive_text_only_rounds = 0
-                if self._consecutive_text_only_rounds >= 2:
-                    # count this flagged round ONCE — adding the running
-                    # consec would inflate the total quadratically
-                    self._total_empty_rounds += 1
-                    log.warning(
-                        "Overthinking detected: %d consecutive text-only rounds "
-                        "(>%d tok each) — surfacing user_clarification_needed",
-                        self._consecutive_text_only_rounds,
-                        threshold,
-                    )
-                    self._op_logger.finalize()
-                    self._sync_messages_to_context(messages)
-                    last_text = self._extract_text(response).strip()
-                    summary = last_text[:400] + ("…" if len(last_text) > 400 else "")
-                    clarification = (
-                        f"~ I've spent {self._consecutive_text_only_rounds} consecutive "
-                        f"rounds reasoning without taking any action "
-                        f"(>{threshold} output tokens each). "
-                        "Could you narrow the request — point at a specific file, "
-                        "behaviour, or step you want me to focus on next?\n\n"
-                        f"Most recent reasoning (truncated):\n{summary}"
-                    )
-                    await self._record_text_only_round(round_idx, text=last_text)
-                    result = AgenticResult(
-                        text=clarification,
-                        tool_calls=self._tool_processor.tool_log,
-                        rounds=round_idx + 1,
-                        termination_reason="user_clarification_needed",
-                    )
-                    return await self._afinalize_and_return(result, user_input, round_idx + 1)
-            else:
-                self._consecutive_text_only_rounds = 0
-
-            if response.stop_reason == "refusal":
-                # Fable 5 safety decline (HTTP 200, often empty) — surface it
-                # honestly instead of a silent empty turn.
-                # ref: https://platform.claude.com/docs/en/about-claude/models/migration-guide
-                self._op_logger.finalize()
-                self._sync_messages_to_context(messages)
-                stop_details = getattr(response, "stop_details", None)
-                category = stop_details.get("category") if isinstance(stop_details, dict) else None
-                refusal_text = self._extract_text(response).strip() or (
-                    "The model declined this request"
-                    + (f" (safety classifier category: {category})" if category else "")
-                    + ". Rephrase the request or retry on another model via /model."
-                )
-                result = AgenticResult(
-                    text=refusal_text,
-                    tool_calls=self._tool_processor.tool_log,
-                    rounds=round_idx + 1,
-                    termination_reason="model_refusal",
-                )
-                return await self._afinalize_and_return(result, user_input, round_idx + 1)
+            # --- Post-response guard chain — priority order IS this call
+            # order; the first terminal outcome wins. Guard bodies live in
+            # the "guard chain" section next to ``_terminal_result``.
+            _terminal = self._guard_cost_budget(messages=messages, round_idx=round_idx)
+            if _terminal is not None:
+                return await self._afinalize_and_return(_terminal, user_input, round_idx + 1)
+            _terminal = await self._guard_overthinking(
+                response, messages=messages, round_idx=round_idx
+            )
+            if _terminal is not None:
+                return await self._afinalize_and_return(_terminal, user_input, round_idx + 1)
+            _terminal = self._guard_model_refusal(response, messages=messages, round_idx=round_idx)
+            if _terminal is not None:
+                return await self._afinalize_and_return(_terminal, user_input, round_idx + 1)
 
             if response.stop_reason != "tool_use":
                 # end_turn or max_tokens → extract text, done
@@ -2055,12 +2215,14 @@ class AgenticLoop:
                 messages.append(_assistant_msg)
                 self._sync_messages_to_context(messages)
                 await self._record_text_only_round(round_idx, text=text)
-                reason = "forced_text" if is_last_round else "natural"
-                result = AgenticResult(
-                    text=text,
-                    tool_calls=self._tool_processor.tool_log,
+                reason = (
+                    TerminationReason.FORCED_TEXT if is_last_round else TerminationReason.NATURAL
+                )
+                result = self._terminal_result(
+                    reason,
+                    text,
                     rounds=round_idx + 1,
-                    termination_reason=reason,
+                    tool_calls=self._tool_processor.tool_log,
                 )
                 return await self._afinalize_and_return(result, user_input, round_idx + 1)
 
@@ -2069,47 +2231,13 @@ class AgenticLoop:
             # backpressure on consecutive tool failures + convergence detection
             self._update_tool_error_tracking(tool_results)
 
-            if self._check_convergence_break():
-                from core.ui.agentic_ui import emit_convergence_detected
-
-                last_err = (
-                    self._convergence.recent_errors[-1]
-                    if self._convergence.recent_errors
-                    else "unknown"
-                )
-                emit_convergence_detected(last_err, round_idx + 1)
-                self._op_logger.finalize()
-                self._sync_messages_to_context(messages)
-                result = AgenticResult(
-                    text=(
-                        "Detected repeating failure pattern. Breaking loop to avoid infinite retry."
-                    ),
-                    tool_calls=self._tool_processor.tool_log,
-                    rounds=round_idx + 1,
-                    error="convergence_detected",
-                    termination_reason="convergence_detected",
-                )
-                return await self._afinalize_and_return(result, user_input, round_idx + 1)
-
-            if self._check_repeated_success_no_progress():
-                from core.ui.agentic_ui import emit_repeated_success_no_progress
-
-                tool_name = self._convergence.last_success_tool or "unknown"
-                streak = self._convergence.repeated_success_streak
-                emit_repeated_success_no_progress(tool_name, streak, round_idx + 1)
-                self._op_logger.finalize()
-                self._sync_messages_to_context(messages)
-                result = AgenticResult(
-                    text=(
-                        "Detected repeated successful tool results without new progress. "
-                        "Breaking loop to avoid polling the same state indefinitely."
-                    ),
-                    tool_calls=self._tool_processor.tool_log,
-                    rounds=round_idx + 1,
-                    error="repeated_success_no_progress",
-                    termination_reason="repeated_success_no_progress",
-                )
-                return await self._afinalize_and_return(result, user_input, round_idx + 1)
+            # --- Post-tool guard chain — same first-terminal-wins contract.
+            _terminal = self._guard_convergence(messages=messages, round_idx=round_idx)
+            if _terminal is not None:
+                return await self._afinalize_and_return(_terminal, user_input, round_idx + 1)
+            _terminal = self._guard_repeated_success(messages=messages, round_idx=round_idx)
+            if _terminal is not None:
+                return await self._afinalize_and_return(_terminal, user_input, round_idx + 1)
 
             if self._convergence.total_consecutive_tool_errors >= 3:
                 # backpressure cooldown hint
@@ -2204,12 +2332,12 @@ class AgenticLoop:
             }
         )
         self._sync_messages_to_context(messages)
-        result = AgenticResult(
-            text=text,
-            tool_calls=self._tool_processor.tool_log,
+        result = self._terminal_result(
+            reason,
+            text,
             rounds=round_idx,
-            error=reason,
-            termination_reason=reason,
+            error=True,
+            tool_calls=self._tool_processor.tool_log,
         )
         return await self._afinalize_and_return(result, user_input, round_idx)
 

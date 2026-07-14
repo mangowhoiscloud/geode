@@ -3,7 +3,9 @@
 Verifies the things a beginner would otherwise have to debug by hand:
 Python version, ``geode`` on PATH, ``~/.geode/.env`` state, Codex CLI
 OAuth credentials, registered ProfileStore profiles, serve daemon
-status, IPC socket presence.
+status, IPC socket presence, and install drift (PATH shadow between
+multiple ``geode`` binaries, daemon/CLI version parity, ``[audit]``
+extra presence).
 
 Used by ``geode doctor`` (default target ``bootstrap``).
 """
@@ -13,6 +15,7 @@ from __future__ import annotations
 import logging
 import os
 import platform
+import re
 import shutil
 import socket
 import sys
@@ -21,6 +24,28 @@ from importlib.util import find_spec
 from pathlib import Path
 
 log = logging.getLogger(__name__)
+
+# Repo root pyproject.toml — present for editable/source installs, absent for
+# wheel installs (where the [audit] extra check degrades to a skip).
+_PYPROJECT_PATH = Path(__file__).resolve().parents[2] / "pyproject.toml"
+
+# [audit] extra: distribution name (PEP 503 normalized) -> top-level import
+# name, verified against the imports the codebase itself performs
+# (core/self_improving/bench_means.py, core/audit/). Only distributions with
+# an unambiguous import name are probed — ``mcp`` is deliberately absent
+# because the separate [mcp] extra provides the same module, so its presence
+# proves nothing about [audit].
+_AUDIT_DIST_IMPORTS: dict[str, str] = {
+    "inspect-ai": "inspect_ai",
+    "inspect-petri": "inspect_petri",
+    "inspect-evals": "inspect_evals",
+    "inspect-harbor": "inspect_harbor",
+}
+
+_SERVE_RESTART_FIX = (
+    "Rebuild landed but serve still runs the old code — restart it: "
+    "`launchctl kickstart -k gui/$(id -u)/com.geode.serve`"
+)
 
 
 @dataclass
@@ -194,6 +219,209 @@ def _check_local_bin_on_path() -> CheckResult:
         ok=ok,
         detail="present" if ok else f"missing — PATH does not include {local_bin}",
         fix="" if ok else 'Add `export PATH="$HOME/.local/bin:$PATH"` to ~/.zshrc or ~/.bashrc',
+    )
+
+
+def _iter_path_geode_installs() -> list[tuple[Path, Path]]:
+    """Collect every executable named ``geode`` on PATH, in PATH order.
+
+    Returns ``(candidate, resolved)`` pairs. ``shutil.which`` stops at the
+    first hit; this walks the PATH entries itself because the whole point is
+    seeing the SHADOWED installs behind the winner. Duplicate PATH entries
+    are visited once (only the first occurrence of a directory can win).
+    """
+    installs: list[tuple[Path, Path]] = []
+    seen_dirs: set[str] = set()
+    for entry in os.environ.get("PATH", "").split(os.pathsep):
+        if not entry or entry in seen_dirs:
+            continue
+        seen_dirs.add(entry)
+        candidate = Path(entry) / "geode"
+        try:
+            if not candidate.is_file() or not os.access(candidate, os.X_OK):
+                continue
+            installs.append((candidate, candidate.resolve()))
+        except OSError:
+            continue
+    return installs
+
+
+def _classify_geode_install(resolved: Path) -> str:
+    """Classify a resolved ``geode`` binary: homebrew / uv-tool / other."""
+    text = str(resolved)
+    if "/Cellar/" in text or text.startswith(("/opt/homebrew/", "/usr/local/Cellar/")):
+        return "homebrew"
+    home = Path.home()
+    uv_tools = home / ".local" / "share" / "uv" / "tools"
+    local_bin = home / ".local" / "bin"
+    if resolved.is_relative_to(uv_tools) or resolved.is_relative_to(local_bin):
+        return "uv-tool"
+    return "other"
+
+
+def _check_path_install_shadow() -> CheckResult:
+    """Detect multiple distinct ``geode`` binaries shadowing each other on PATH.
+
+    Incident: a Homebrew ``geode`` earlier on PATH shadowed the editable
+    uv-tool install, so operators verified changes against the wrong (stale)
+    binary. The first PATH hit wins; every other distinct target is dead
+    weight that will eventually be run by accident.
+    """
+    name = "geode PATH shadow"
+    installs = _iter_path_geode_installs()
+    if not installs:
+        return CheckResult(
+            name=name,
+            ok=True,
+            detail="no geode on PATH — nothing to shadow (see `geode` on PATH check)",
+        )
+
+    distinct: dict[Path, str] = {}
+    for _candidate, resolved in installs:
+        distinct.setdefault(resolved, _classify_geode_install(resolved))
+
+    _winner_candidate, winner_resolved = installs[0]
+    winner_kind = distinct[winner_resolved]
+    if len(distinct) == 1:
+        return CheckResult(
+            name=name,
+            ok=True,
+            detail=f"single install: {winner_resolved} ({winner_kind})",
+        )
+
+    shadowed = ", ".join(
+        f"{path} ({kind})" for path, kind in distinct.items() if path != winner_resolved
+    )
+    if any(kind == "homebrew" for kind in distinct.values()):
+        fix = (
+            f"PATH picks the {winner_kind} install. Remove the Homebrew copy "
+            "(`brew uninstall geode`) or reorder PATH so the intended binary wins"
+        )
+    else:
+        fix = (
+            f"PATH picks the {winner_kind} install. Remove the unintended install "
+            "or reorder PATH so the intended binary wins"
+        )
+    return CheckResult(
+        name=name,
+        ok=False,
+        detail=(
+            f"{len(distinct)} distinct installs — winner: {winner_resolved} "
+            f"({winner_kind}); shadowed: {shadowed}"
+        ),
+        fix=fix,
+    )
+
+
+def _check_serve_version_drift() -> CheckResult:
+    """Compare the CLI's own version against the running serve daemon's.
+
+    The daemon reports its version in the IPC session greeting
+    (``core/server/ipc_server/poller.py::_session_greeting``). After a
+    rebuild, a daemon that was never restarted keeps answering prompts with
+    the old code while ``geode version`` prints the new one — the classic
+    "verified against the wrong build" drift.
+    """
+    from core import __version__
+    from core.cli.ipc_client import query_serve_version
+
+    name = "serve/CLI version"
+    daemon_version = query_serve_version()
+    if daemon_version is None:
+        return CheckResult(
+            name=name,
+            ok=True,
+            detail=f"CLI v{__version__}; daemon not running — skipped",
+        )
+    if not daemon_version:
+        return CheckResult(
+            name=name,
+            ok=False,
+            detail=(
+                f"CLI v{__version__}; daemon greeting carries no version "
+                "(daemon build predates the version handshake)"
+            ),
+            fix=_SERVE_RESTART_FIX,
+        )
+    if daemon_version != __version__:
+        return CheckResult(
+            name=name,
+            ok=False,
+            detail=f"CLI v{__version__} != daemon v{daemon_version}",
+            fix=_SERVE_RESTART_FIX,
+        )
+    return CheckResult(name=name, ok=True, detail=f"CLI and daemon both v{__version__}")
+
+
+def _audit_extra_dists() -> list[str] | None:
+    """Read the ``[audit]`` optional-dependency distribution names.
+
+    Parses ``pyproject.toml`` at the repo root and returns PEP 503-normalized
+    distribution names, or ``None`` when no pyproject is present next to the
+    installed package (wheel installs).
+    """
+    import tomllib
+
+    if not _PYPROJECT_PATH.exists():
+        return None
+    data = tomllib.loads(_PYPROJECT_PATH.read_text(encoding="utf-8"))
+    requirements = data.get("project", {}).get("optional-dependencies", {}).get("audit", [])
+    names: list[str] = []
+    for requirement in requirements:
+        dist = re.split(r"[\s\[<>=!~;@]", str(requirement).strip(), maxsplit=1)[0]
+        if dist:
+            names.append(dist.lower().replace("_", "-").replace(".", "-"))
+    return names
+
+
+def _check_audit_extra() -> CheckResult:
+    """Verify the ``[audit]`` extra's packages are importable.
+
+    Incident: rebuilding with plain ``uv tool install -e . --force`` (no
+    ``[audit]`` extra) silently zero-fills the self-improving loop's
+    dim_means — the loop keeps running, the numbers are fiction.
+    """
+    name = "[audit] extra"
+    try:
+        dists = _audit_extra_dists()
+    except (OSError, ValueError) as exc:
+        return CheckResult(name=name, ok=True, detail=f"pyproject probe failed ({exc}) — skipped")
+    if dists is None:
+        return CheckResult(
+            name=name,
+            ok=True,
+            detail="pyproject.toml not found (wheel install) — skipped",
+        )
+    probes = [(dist, _AUDIT_DIST_IMPORTS[dist]) for dist in dists if dist in _AUDIT_DIST_IMPORTS]
+    if not probes:
+        return CheckResult(
+            name=name,
+            ok=True,
+            detail="no probeable [audit] distributions declared — skipped",
+        )
+
+    missing: list[str] = []
+    for _dist, module in probes:
+        try:
+            spec = find_spec(module)
+        except (ImportError, ValueError):
+            spec = None
+        if spec is None:
+            missing.append(module)
+    if missing:
+        return CheckResult(
+            name=name,
+            ok=False,
+            detail=(
+                "installed without [audit] extra — self-improving dim_means will "
+                f"zero-fill (missing: {', '.join(missing)})"
+            ),
+            fix='uv tool install -e ".[audit]" --force',
+        )
+    return CheckResult(
+        name=name,
+        ok=True,
+        detail=f"all {len(probes)} probed package(s) importable",
     )
 
 
@@ -389,6 +617,7 @@ def run_bootstrap_doctor() -> BootstrapReport:
     report = BootstrapReport()
     report.checks.append(_check_python_version())
     report.checks.append(_check_geode_on_path())
+    report.checks.append(_check_path_install_shadow())
     report.checks.append(_check_local_bin_on_path())
     report.checks.append(_check_env_file())
     report.checks.append(_check_codex_oauth())
@@ -396,6 +625,8 @@ def run_bootstrap_doctor() -> BootstrapReport:
     report.checks.append(_check_bash_sandbox())
     report.checks.append(_check_desktop_computer_use())
     report.checks.append(_check_serve_socket())
+    report.checks.append(_check_serve_version_drift())
+    report.checks.append(_check_audit_extra())
     return report
 
 

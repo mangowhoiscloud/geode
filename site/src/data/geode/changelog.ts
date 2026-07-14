@@ -2,7 +2,7 @@
  * GEODE CHANGELOG, auto-synced from the GEODE repo via `npm run sync-stats`.
  * Do not edit manually. Edit CHANGELOG.md in the GEODE repo and re-run sync.
  *
- * Last sync: 2026-07-13
+ * Last sync: 2026-07-14
  *
  * Each entry's `body` is the raw markdown between two version headings.
  * The Changelog page renders the body with a minimal markdown renderer
@@ -16,6 +16,16 @@ export type ChangelogEntry = {
 };
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    "version": "0.99.328",
+    "date": "2026-07-14",
+    "body": "### Changed\n\n- **AgenticLoop state-machine formalization — closed terminal alphabet.**\n  `TerminationReason` StrEnum (20 members, including the previously\n  undocumented `session_time_budget_handoff`/`_expired`) replaces the\n  comment-only string dictionary, and every terminal `AgenticResult` is\n  born through the single `_terminal_result` choke-point — the source\n  ratchet pins `AgenticResult(` to exactly one occurrence in\n  agent_loop.py. Post-response/post-tool guards (cost budget,\n  overthinking, model refusal, convergence, repeated-success) moved\n  verbatim into named `_guard_*` methods whose call order in `arun` IS\n  the documented priority order. Behaviour-preserving: StrEnum members\n  compare equal to the legacy strings, serialization unchanged.\n- **Snapshot completeness for resume.** Guard counters the conversation\n  messages don't carry (overthinking streak, LLM-failure counter,\n  diversity tracker, `ConvergenceDetector` state) now persist in the\n  checkpoint (`SessionState.loop_guards`, via\n  `_lifecycle.collect_guard_state`) and restore through the single shared\n  resume surgery `AgenticLoop.restore_from_checkpoint` — used by both the\n  IPC resume handler and the gateway ask continuation, closing the\n  manual-restore drift class a review caught in v0.99.327.\n- **Session-status transition ownership.** `SessionStatus` StrEnum with\n  documented transition owners plus a `mark_paused` primitive; the\n  scheduler drain (one-shot surface) now marks its checkpoint PAUSED when\n  parking behind a pending ask and COMPLETED otherwise, so scheduled\n  sessions stop polluting `list_resumable()` as immortal \"active\"\n  entries. Documented remaining gap: the gateway multi-turn surface\n  cannot know whether another message follows and stays ACTIVE until\n  cleanup. Guards: `tests/core/agent/test_loop_state_machine.py`\n  (state-space closure ratchet, guard-state roundtrip, status\n  transitions), extended `tests/core/cli/test_scheduler_drain_ask.py`."
+  },
+  {
+    "version": "0.99.327",
+    "date": "2026-07-14",
+    "body": "### Added\n\n- **Operator ask/reply channel for headless runs.** A scheduled job that\n  stops with `termination_reason=\"user_clarification_needed\"` no longer\n  drops its question: the scheduler drain persists it as a pending ask\n  (`core/memory/pending_ask.py` — first-reply-wins resolution with an\n  `already_answered` verdict for losing replies, 72h TTL aligned with\n  session-checkpoint cleanup) and best-effort notifies the operator\n  through the configured notification adapter. Replies route back two\n  ways: `ask <id> <answer>` in a bound gateway channel resumes the\n  checkpointed session in-daemon, and `geode ask list/show/answer`\n  resumes it through the existing IPC resume + prompt path (the CLI\n  connects before claiming so a winning reply is never burned on an\n  unreachable daemon). Guards: `tests/core/memory/test_pending_ask.py`,\n  `tests/core/cli/test_scheduler_drain_ask.py`.\n- **Install-drift doctor checks.** `geode doctor` now (1) enumerates\n  every `geode` executable on PATH, classifies each target (homebrew /\n  uv-tool / other) and warns when a shadow hides the intended install —\n  pins the brew-shadows-editable verification incident; (2) compares the\n  CLI version against the running serve daemon (the IPC session greeting\n  now carries `version`) and suggests the `launchctl kickstart` restart\n  on mismatch; (3) probes the `[audit]` extra and warns that a missing\n  extra zero-fills self-improving dim_means. Guard:\n  `tests/core/cli/test_doctor_install_drift.py` (31 tests).\n- **Session export CLI.** `geode session list` (SQLite session index,\n  directory-scan fallback) and `geode session export <id> [--fmt html|md]`\n  render a checkpointed session (SQLite messages SoT) to one\n  self-contained HTML or Markdown file: role-labelled conversation,\n  compact tool-call blocks, `html.escape` on all content, known-pattern\n  secret redaction applied before truncation. Guard:\n  `tests/core/cli/test_typer_session.py`.\n- **Stream replay-safety retry boundary (dormant contract).**\n  `retry_with_backoff_generic(_async)` accepts an optional\n  `StreamProgress` guard and `classify_llm_error` learns\n  `StreamInterruptedError`: a transient failure after visible output\n  (text / tool_use deltas; thinking never counts) raises instead of\n  silently re-calling the model. Dormant by design today — every\n  production path buffers the stream (`get_final_message()`), so no\n  consumer flips the flag yet; the guard becomes load-bearing with the\n  first mid-stream delta consumer. Guard:\n  `tests/core/llm/test_stream_replay_guard.py`.\n\n### Docs\n\n- **Research notebook mode plan (plan only).**\n  `docs/plans/2026-07-14-research-notebook-mode.md` — design sketch for\n  aggregating research runs into `notebook.ipynb` plus a deterministic\n  `report.md`, with the Socratic-gate verdict (weak frontier convergence\n  → deferred) and a phased plan; no implementation in this release."
+  },
   {
     "version": "0.99.326",
     "date": "2026-07-14",
@@ -2353,4 +2363,4 @@ export const CHANGELOG: ChangelogEntry[] = [
   }
 ];
 
-export const CHANGELOG_SYNCED_AT = "2026-07-13";
+export const CHANGELOG_SYNCED_AT = "2026-07-14";

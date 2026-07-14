@@ -138,6 +138,43 @@ def serve(
     _serve_session_lane = _gw_services.lane_queue.session_lane
     _serve_global_lane = _gw_services.lane_queue.get_lane("global")
 
+    async def _arun_ask_continuation(state: Any, answer: str) -> str:
+        """Resume a checkpointed session with the operator's ask answer."""
+        _ask_ctx = ConversationContext(max_turns=_gw_max_turns)
+        _ask_ctx.messages = list(state.messages)
+        _ask_executor, _ask_loop = _gw_services.create_session(
+            SessionMode.DAEMON,
+            conversation=_ask_ctx,
+            system_suffix=_GATEWAY_SUFFIX,
+            time_budget_override=_gw_time_budget,
+            propagate_context=True,
+        )
+        # Checkpoint continuity — the single shared resume surgery (same
+        # path as the IPC resume handler); arun() re-binds the ContextVars
+        # from the restored objects.
+        _ask_loop.restore_from_checkpoint(state)
+        if state.model and state.model != _ask_loop.model:
+            await _ask_loop.update_model_async(state.model)
+        _res = await _ask_loop.arun(answer)
+        # Close the one-shot lifecycle (finalize re-wrote status "active"):
+        # a fresh clarification re-parks the checkpoint behind a NEW ask;
+        # any other terminal completes it.
+        try:
+            if _res is not None and _res.termination_reason == "user_clarification_needed":
+                from core.memory.pending_ask import apublish_clarification_ask
+
+                await apublish_clarification_ask(
+                    _res.text,
+                    session_id=state.session_id,
+                    source=f"ask-continuation:{state.session_id}",
+                )
+                _ask_loop.mark_session_paused()
+            else:
+                _ask_loop.mark_session_completed()
+        except Exception:
+            log.warning("Ask continuation lifecycle close failed", exc_info=True)
+        return _res.text if _res else ""
+
     async def _gateway_processor(content: str, metadata: dict[str, Any]) -> str:
         """Process a gateway message with multi-turn context.
 
@@ -145,6 +182,20 @@ def serve(
         as REPL, only mode-specific behavior differs.
         """
         session_key = metadata.get("session_key", "")
+
+        # Pending-ask replies ("ask <id> <answer>") short-circuit normal
+        # routing: the answer resumes the checkpointed session that raised
+        # the question. Trust inherits from binding exact-match — only
+        # bound channels reach this processor.
+        from core.memory.pending_ask import ahandle_ask_reply
+
+        _ask_response = await ahandle_ask_reply(
+            content,
+            answered_by=(f"{metadata.get('channel', '')}:{metadata.get('sender_id', '')}"),
+            run_continuation=_arun_ask_continuation,
+        )
+        if _ask_response is not None:
+            return _ask_response
 
         # --- Load prior conversation from session store ---
         ctx = ConversationContext(max_turns=_gw_max_turns)

@@ -111,6 +111,44 @@ def is_serve_running(socket_path: Path | None = None) -> bool:
         return False
 
 
+def query_serve_version(socket_path: Path | None = None, timeout_s: float = 2.0) -> str | None:
+    """Read the running daemon's version from its IPC session greeting.
+
+    Connects, reads the one-line ``{"type": "session", ...}`` greeting, and
+    disconnects — no session exchange. Used by ``geode doctor`` to detect
+    daemon/CLI install drift (a stale daemon serving old code after a rebuild).
+
+    Returns the daemon's version string, ``""`` when the daemon greeted but
+    its greeting has no ``version`` field (a build predating the version
+    handshake — itself a drift signal), or ``None`` when the daemon is not
+    reachable at all.
+    """
+    path = socket_path or DEFAULT_SOCKET_PATH
+    if not path.exists():
+        return None
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        sock.settimeout(timeout_s)
+        sock.connect(str(path))
+        buf = b""
+        while b"\n" not in buf:
+            chunk = sock.recv(65536)
+            if not chunk:
+                return None
+            buf += chunk
+        line = buf.split(b"\n", 1)[0]
+        greeting = json.loads(line.decode("utf-8"))
+        if not isinstance(greeting, dict) or greeting.get("type") != "session":
+            return None
+        return str(greeting.get("version", ""))
+    except (OSError, ValueError):
+        # ValueError covers json.JSONDecodeError; OSError covers connect
+        # refusal, socket timeout, and reset.
+        return None
+    finally:
+        sock.close()
+
+
 class IPCClient:
     """Thin client that relays prompts to geode serve via Unix socket.
 

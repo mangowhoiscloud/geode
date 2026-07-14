@@ -108,7 +108,91 @@ functional change.
   Exact forecast enumeration is iterative, special-cases one-family designs,
   computes multinomial weights in log space, generates each composition in
   O(rate-count) work, and falls back before its dense state can exhaust memory.
+## [0.99.328] - 2026-07-14
 
+### Changed
+
+- **AgenticLoop state-machine formalization — closed terminal alphabet.**
+  `TerminationReason` StrEnum (20 members, including the previously
+  undocumented `session_time_budget_handoff`/`_expired`) replaces the
+  comment-only string dictionary, and every terminal `AgenticResult` is
+  born through the single `_terminal_result` choke-point — the source
+  ratchet pins `AgenticResult(` to exactly one occurrence in
+  agent_loop.py. Post-response/post-tool guards (cost budget,
+  overthinking, model refusal, convergence, repeated-success) moved
+  verbatim into named `_guard_*` methods whose call order in `arun` IS
+  the documented priority order. Behaviour-preserving: StrEnum members
+  compare equal to the legacy strings, serialization unchanged.
+- **Snapshot completeness for resume.** Guard counters the conversation
+  messages don't carry (overthinking streak, LLM-failure counter,
+  diversity tracker, `ConvergenceDetector` state) now persist in the
+  checkpoint (`SessionState.loop_guards`, via
+  `_lifecycle.collect_guard_state`) and restore through the single shared
+  resume surgery `AgenticLoop.restore_from_checkpoint` — used by both the
+  IPC resume handler and the gateway ask continuation, closing the
+  manual-restore drift class a review caught in v0.99.327.
+- **Session-status transition ownership.** `SessionStatus` StrEnum with
+  documented transition owners plus a `mark_paused` primitive; the
+  scheduler drain (one-shot surface) now marks its checkpoint PAUSED when
+  parking behind a pending ask and COMPLETED otherwise, so scheduled
+  sessions stop polluting `list_resumable()` as immortal "active"
+  entries. Documented remaining gap: the gateway multi-turn surface
+  cannot know whether another message follows and stays ACTIVE until
+  cleanup. Guards: `tests/core/agent/test_loop_state_machine.py`
+  (state-space closure ratchet, guard-state roundtrip, status
+  transitions), extended `tests/core/cli/test_scheduler_drain_ask.py`.
+
+## [0.99.327] - 2026-07-14
+
+### Added
+
+- **Operator ask/reply channel for headless runs.** A scheduled job that
+  stops with `termination_reason="user_clarification_needed"` no longer
+  drops its question: the scheduler drain persists it as a pending ask
+  (`core/memory/pending_ask.py` — first-reply-wins resolution with an
+  `already_answered` verdict for losing replies, 72h TTL aligned with
+  session-checkpoint cleanup) and best-effort notifies the operator
+  through the configured notification adapter. Replies route back two
+  ways: `ask <id> <answer>` in a bound gateway channel resumes the
+  checkpointed session in-daemon, and `geode ask list/show/answer`
+  resumes it through the existing IPC resume + prompt path (the CLI
+  connects before claiming so a winning reply is never burned on an
+  unreachable daemon). Guards: `tests/core/memory/test_pending_ask.py`,
+  `tests/core/cli/test_scheduler_drain_ask.py`.
+- **Install-drift doctor checks.** `geode doctor` now (1) enumerates
+  every `geode` executable on PATH, classifies each target (homebrew /
+  uv-tool / other) and warns when a shadow hides the intended install —
+  pins the brew-shadows-editable verification incident; (2) compares the
+  CLI version against the running serve daemon (the IPC session greeting
+  now carries `version`) and suggests the `launchctl kickstart` restart
+  on mismatch; (3) probes the `[audit]` extra and warns that a missing
+  extra zero-fills self-improving dim_means. Guard:
+  `tests/core/cli/test_doctor_install_drift.py` (31 tests).
+- **Session export CLI.** `geode session list` (SQLite session index,
+  directory-scan fallback) and `geode session export <id> [--fmt html|md]`
+  render a checkpointed session (SQLite messages SoT) to one
+  self-contained HTML or Markdown file: role-labelled conversation,
+  compact tool-call blocks, `html.escape` on all content, known-pattern
+  secret redaction applied before truncation. Guard:
+  `tests/core/cli/test_typer_session.py`.
+- **Stream replay-safety retry boundary (dormant contract).**
+  `retry_with_backoff_generic(_async)` accepts an optional
+  `StreamProgress` guard and `classify_llm_error` learns
+  `StreamInterruptedError`: a transient failure after visible output
+  (text / tool_use deltas; thinking never counts) raises instead of
+  silently re-calling the model. Dormant by design today — every
+  production path buffers the stream (`get_final_message()`), so no
+  consumer flips the flag yet; the guard becomes load-bearing with the
+  first mid-stream delta consumer. Guard:
+  `tests/core/llm/test_stream_replay_guard.py`.
+
+### Docs
+
+- **Research notebook mode plan (plan only).**
+  `docs/plans/2026-07-14-research-notebook-mode.md` — design sketch for
+  aggregating research runs into `notebook.ipynb` plus a deterministic
+  `report.md`, with the Socratic-gate verdict (weak frontier convergence
+  → deferred) and a phased plan; no implementation in this release.
 ## [0.99.326] - 2026-07-14
 
 ### Fixed

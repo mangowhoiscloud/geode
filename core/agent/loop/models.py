@@ -8,12 +8,62 @@ from __future__ import annotations
 import dataclasses
 import logging
 from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from core.llm.token_tracker import LLMUsage
 
 log = logging.getLogger(__name__)
+
+
+class TerminationReason(StrEnum):
+    """Closed alphabet of AgenticLoop terminal states.
+
+    Every terminal :class:`AgenticResult` is born through
+    ``AgenticLoop._terminal_result`` with one of these members — the loop's
+    exit state space is this enum, nothing else. ``StrEnum`` keeps every
+    existing string comparison and JSON serialization working unchanged.
+
+    Consumers that persist or transport results (worker sub-agent protocol,
+    checkpoints, transcripts) see plain strings; parse back leniently with
+    ``TerminationReason(value)`` and catch ``ValueError`` for forward
+    compatibility.
+    """
+
+    # Ordinary completion
+    NATURAL = "natural"  # model produced a final text answer
+    FORCED_TEXT = "forced_text"  # last allowed round forced a text answer
+
+    # Round/time budget guards (while-condition exits)
+    MAX_ROUNDS = "max_rounds"
+    TIME_BUDGET_EXPIRED = "time_budget_expired"
+    SESSION_TIME_BUDGET_HANDOFF = "session_time_budget_handoff"
+    SESSION_TIME_BUDGET_EXPIRED = "session_time_budget_expired"
+
+    # Resource/limit terminals
+    CONTEXT_EXHAUSTED = "context_exhausted"
+    COST_BUDGET_EXCEEDED = "cost_budget_exceeded"
+    BILLING_ERROR = "billing_error"
+
+    # Model-behaviour guards
+    MODEL_ACTION_REQUIRED = "model_action_required"  # LLM error retry cap hit
+    MODEL_REFUSAL = "model_refusal"  # safety classifier declined (HTTP 200)
+    USER_CLARIFICATION_NEEDED = "user_clarification_needed"  # overthinking
+    CONVERGENCE_DETECTED = "convergence_detected"  # repeating failure pattern
+    REPEATED_SUCCESS_NO_PROGRESS = "repeated_success_no_progress"
+
+    # Caller-driven exits
+    INPUT_BLOCKED = "input_blocked"  # USER_INPUT_RECEIVED interceptor
+    USER_CANCELLED = "user_cancelled"
+    ACTIONABLE_PARTIAL = "actionable_partial"  # opted-in partial preserve
+    TOOL_USE_YIELD = "tool_use_yield"  # external orchestrator owns next turn
+
+    # Legacy — documented consumers exist (worker retry catalogue, UI event
+    # lists) but no current producer site constructs it.
+    LLM_ERROR = "llm_error"
+
+    UNKNOWN = "unknown"
 
 
 class _ContextExhaustedError(Exception):
@@ -107,20 +157,10 @@ class AgenticResult:
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
     rounds: int = 0
     error: str | None = None
-    # "natural" | "forced_text" | "max_rounds" | "time_budget_expired"
-    # | "llm_error" | "context_exhausted" | "cost_budget_exceeded"
-    # | "model_action_required" — LLM error retried up to cap; user must
-    #   switch model/provider via /model and re-run. Diagnostic in ``text``.
-    # | "model_refusal" — Fable 5 safety classifier declined (stop_reason
-    #   "refusal", HTTP 200); text carries the category when reported.
-    # | "user_clarification_needed" — overthinking detected (consecutive
-    #   high-token text-only rounds with no tool use). Loop stops and asks
-    #   the user to narrow the request.
-    # | "actionable_partial" — an opted-in evaluator caller preserves tool
-    #   actions from completed rounds after an empty continuation.
-    # | "tool_use_yield" — an opted-in external orchestrator owns the next
-    #   model turn after one completed tool batch.
-    termination_reason: str = "unknown"
+    # Closed value space — see :class:`TerminationReason`. StrEnum members
+    # ARE strings, so serialized results and string comparisons are
+    # unchanged; deserializers may still carry plain str.
+    termination_reason: TerminationReason | str = TerminationReason.UNKNOWN
     summary: str = ""  # Tier 1 compact action summary (auto-generated)
     reasoning_metrics: dict[str, object] | None = None
     usage: "LLMUsage | None" = None  # noqa: UP037 — forward-ref for cycle avoidance

@@ -110,12 +110,51 @@ async def drain_scheduler_queue(
                     ) -> None:
                         try:
                             r = await asyncio.wait_for(_loop.arun(_p), timeout=300.0)
+                            # One-shot surface owns the session lifecycle: a
+                            # clarification question parks the checkpoint as
+                            # PAUSED behind a pending ask; every other
+                            # terminal marks it COMPLETED. (getattr-guarded:
+                            # tests drive stub loops without these methods.)
+                            try:
+                                if (
+                                    r is not None
+                                    and getattr(r, "termination_reason", "")
+                                    == "user_clarification_needed"
+                                ):
+                                    from core.memory.pending_ask import (
+                                        apublish_clarification_ask,
+                                    )
+
+                                    await apublish_clarification_ask(
+                                        r.text,
+                                        session_id=getattr(_loop, "_session_id", ""),
+                                        source=f"scheduled:{_jid}",
+                                    )
+                                    _mark_paused = getattr(_loop, "mark_session_paused", None)
+                                    if callable(_mark_paused):
+                                        _mark_paused()
+                                else:
+                                    _mark_done = getattr(_loop, "mark_session_completed", None)
+                                    if callable(_mark_done):
+                                        _mark_done()
+                            except Exception:
+                                log.warning(
+                                    "Pending-ask publish failed for job %s",
+                                    _jid,
+                                    exc_info=True,
+                                )
                             if _cb:
                                 _cb(r, job_id=_jid)
                         except TimeoutError:
                             log.warning("Scheduler job %s timed out after 300s", _jid)
+                            _mark_err = getattr(_loop, "mark_session_error", None)
+                            if callable(_mark_err):
+                                _mark_err()
                         except Exception:
                             log.warning("Scheduler job %s execution failed", _jid, exc_info=True)
+                            _mark_err = getattr(_loop, "mark_session_error", None)
+                            if callable(_mark_err):
+                                _mark_err()
                         finally:
                             _glob.manual_release(_key)
                             _sess.manual_release(_key)
