@@ -13,6 +13,7 @@ Official refs:
 
 from __future__ import annotations
 
+import inspect
 import tomllib
 from pathlib import Path
 
@@ -66,12 +67,21 @@ def test_plugin_allowlists_include_fable() -> None:
 
 
 def test_refusal_stop_reason_flows_to_result() -> None:
-    """normalize_anthropic carries stop_details; the loop branch exists."""
+    """normalize_anthropic carries stop_details; the refusal guard exists.
+
+    v0.99.328 FSM formalization moved the branch into the named guard
+    ``_guard_model_refusal`` (early-return on non-refusal stop reasons)
+    terminating with ``TerminationReason.MODEL_REFUSAL``.
+    """
+    from core.agent.loop.agent_loop import AgenticLoop
+    from core.agent.loop.models import TerminationReason
     from core.llm.agentic_response import AgenticResponse
 
     resp = AgenticResponse(stop_reason="refusal", stop_details={"category": "cyber"})
     assert resp.stop_details == {"category": "cyber"}
 
-    loop_src = (REPO_ROOT / "core" / "agent" / "loop" / "agent_loop.py").read_text(encoding="utf-8")
-    assert 'response.stop_reason == "refusal"' in loop_src
-    assert '"model_refusal"' in loop_src
+    assert callable(getattr(AgenticLoop, "_guard_model_refusal", None))
+    guard_src = inspect.getsource(AgenticLoop._guard_model_refusal)
+    assert 'response.stop_reason != "refusal"' in guard_src
+    assert "TerminationReason.MODEL_REFUSAL" in guard_src
+    assert TerminationReason.MODEL_REFUSAL == "model_refusal"
