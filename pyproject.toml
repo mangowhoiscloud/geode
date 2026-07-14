@@ -1,6 +1,6 @@
 [project]
 name = "geode-agent"
-version = "0.99.329"
+version = "0.99.330"
 description = "Self-hosting autonomous agent harness with a while-tool-use runtime"
 license = "Apache-2.0"
 readme = "README.md"
