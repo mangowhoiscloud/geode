@@ -45,6 +45,15 @@ functional change.
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Homebrew resource refresh preserves the rendered release candidate.** The
+  workflow now seeds Homebrew's registered local tap with the newly rendered
+  formula before dependency resolution, rather than letting `brew tap` reload
+  the older committed formula and overwrite the release URL and metadata.
+
 ## [0.99.331] - 2026-07-14
 
 ### Changed
