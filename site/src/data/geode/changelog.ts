@@ -19,7 +19,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": "### Changed\n\n- **Stable installation now uses PyPI/uv as the sole advertised package\n  channel.** The public install surface and stable release workflow no longer\n  expose or publish the custom Homebrew tap, so users are not given a\n  namespace-qualified command or an unqualified command that fails on a clean\n  machine. The repository retains a `geode-agent` formula template for a\n  future Homebrew/core submission; `brew install geode-agent` will return only\n  after that command is independently available and verified."
+    "body": "### Fixed\n\n- **Release documentation remains reproducible after a promotion merge.**\n  `sync-stats` now preserves the committed generation date when the package\n  version is unchanged instead of replacing it with `SOURCE_DATE_EPOCH`. A final\n  `develop -> main` merge can therefore change the release commit timestamp\n  without dirtying `sot.ts`, `changelog.ts`, `llms.txt`, or `llms-full.txt`;\n  genuinely new versions still take their date from the reproducible source\n  epoch.\n\n### Changed\n\n- **Stable installation now uses PyPI/uv as the sole advertised package\n  channel.** The public install surface and stable release workflow no longer\n  expose or publish the custom Homebrew tap, so users are not given a\n  namespace-qualified command or an unqualified command that fails on a clean\n  machine. The repository retains a `geode-agent` formula template for a\n  future Homebrew/core submission; `brew install geode-agent` will return only\n  after that command is independently available and verified."
   },
   {
     "version": "0.99.331",

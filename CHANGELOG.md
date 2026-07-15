@@ -47,6 +47,16 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Release documentation remains reproducible after a promotion merge.**
+  `sync-stats` now preserves the committed generation date when the package
+  version is unchanged instead of replacing it with `SOURCE_DATE_EPOCH`. A final
+  `develop -> main` merge can therefore change the release commit timestamp
+  without dirtying `sot.ts`, `changelog.ts`, `llms.txt`, or `llms-full.txt`;
+  genuinely new versions still take their date from the reproducible source
+  epoch.
+
 ### Changed
 
 - **Stable installation now uses PyPI/uv as the sole advertised package
