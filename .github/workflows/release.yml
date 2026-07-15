@@ -521,6 +521,7 @@ jobs:
     permissions:
       contents: read
     steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
 
       - name: Verify GitHub and PyPI agree on one version
@@ -530,76 +531,10 @@ jobs:
           GEODE_REPOSITORY: ${{ github.repository }}
           GEODE_SHA: ${{ needs.validate-build.outputs.sha }}
         run: |
-          python - <<'PY'
-          import json
-          import os
-          import urllib.request
-
-          version = os.environ["GEODE_VERSION"]
-          repository = os.environ["GEODE_REPOSITORY"]
-          source_sha = os.environ["GEODE_SHA"]
-          token = os.environ["GH_TOKEN"]
-
-          def read_json(url: str, *, github: bool = False) -> dict:
-              headers = {"Accept": "application/vnd.github+json"}
-              if github:
-                  headers["Authorization"] = f"Bearer {token}"
-                  headers["X-GitHub-Api-Version"] = "2022-11-28"
-              with urllib.request.urlopen(
-                  urllib.request.Request(url, headers=headers), timeout=30
-              ) as response:
-                  return json.load(response)
-
-          pypi = read_json("https://pypi.org/pypi/geode-agent/json")
-          assert pypi["info"]["version"] == version, pypi["info"]["version"]
-          pypi_files = {item["filename"] for item in pypi["urls"]}
-          assert f"geode_agent-{version}-py3-none-any.whl" in pypi_files
-          assert f"geode_agent-{version}.tar.gz" in pypi_files
-
-          release = read_json(
-              f"https://api.github.com/repos/{repository}/releases/tags/v{version}",
-              github=True,
-          )
-          assert release["tag_name"] == f"v{version}"
-          assert not release["draft"]
-          assert not release["prerelease"]
-          release_assets = {item["name"] for item in release["assets"]}
-          assert release_assets == {
-              f"geode_agent-{version}-py3-none-any.whl",
-              f"geode_agent-{version}.tar.gz",
-              "SHA256SUMS",
-          }
-
-          tag_ref = read_json(
-              f"https://api.github.com/repos/{repository}/git/ref/tags/v{version}",
-              github=True,
-          )
-          assert tag_ref["object"]["type"] == "tag"
-          tag = read_json(
-              f"https://api.github.com/repos/{repository}/git/tags/"
-              f"{tag_ref['object']['sha']}",
-              github=True,
-          )
-          assert tag["object"]["type"] == "commit"
-          assert tag["object"]["sha"] == source_sha
-
-          with urllib.request.urlopen(
-              f"https://github.com/{repository}/releases/download/v{version}/SHA256SUMS",
-              timeout=30,
-          ) as response:
-              checksums = {
-                  filename: digest
-                  for digest, filename in (
-                      line.decode().split(maxsplit=1) for line in response.readlines()
-                  )
-              }
-          assert set(checksums) == {
-              f"geode_agent-{version}-py3-none-any.whl",
-              f"geode_agent-{version}.tar.gz",
-          }
-          for item in pypi["urls"]:
-              assert item["digests"]["sha256"] == checksums[item["filename"]]
-          PY
+          python scripts/verify_public_distribution.py \
+            --version "$GEODE_VERSION" \
+            --repository "$GEODE_REPOSITORY" \
+            --source-sha "$GEODE_SHA"
 
       - name: Verify the public uv command once more
         run: |

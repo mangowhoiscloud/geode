@@ -3,7 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from scripts.render_homebrew_formula import extract_resource_stanzas, render_formula
+from scripts.render_homebrew_formula import (
+    DEFAULT_PYTHON_FORMULA,
+    extract_resource_stanzas,
+    render_formula,
+)
 
 RESOURCE = (
     '  resource "rich" do\n'
@@ -18,7 +22,7 @@ def test_render_homebrew_formula_replaces_release_metadata() -> None:
         version="0.99.11",
         sdist_url="https://github.com/mangowhoiscloud/geode/releases/download/v0.99.11/geode_agent-0.99.11.tar.gz",
         sdist_sha256="a" * 64,
-        python_formula="python@3.12",
+        python_formula=DEFAULT_PYTHON_FORMULA,
         resources=RESOURCE,
         template=Path("packaging/homebrew/geode-agent.rb.in"),
     )
@@ -30,7 +34,7 @@ def test_render_homebrew_formula_replaces_release_metadata() -> None:
         in formula
     )
     assert 'sha256 "' + "a" * 64 + '"' in formula
-    assert 'depends_on "python@3.12"' in formula
+    assert 'depends_on "python@3.14"' in formula
     assert 'depends_on "rust" => :build' in formula
     assert 'depends_on "libyaml"' in formula
     assert 'depends_on "openssl@3"' in formula
@@ -48,7 +52,7 @@ def test_render_homebrew_formula_rejects_invalid_sha() -> None:
             version="0.99.11",
             sdist_url="https://github.com/mangowhoiscloud/geode/releases/download/v0.99.11/geode_agent-0.99.11.tar.gz",
             sdist_sha256="not-a-sha",
-            python_formula="python@3.12",
+            python_formula=DEFAULT_PYTHON_FORMULA,
             resources=RESOURCE,
             template=Path("packaging/homebrew/geode-agent.rb.in"),
         )
@@ -60,7 +64,7 @@ def test_render_homebrew_formula_rejects_tag_auto_tarball() -> None:
             version="0.99.11",
             sdist_url="https://github.com/mangowhoiscloud/geode/archive/refs/tags/v0.99.11.tar.gz",
             sdist_sha256="a" * 64,
-            python_formula="python@3.12",
+            python_formula=DEFAULT_PYTHON_FORMULA,
             resources=RESOURCE,
             template=Path("packaging/homebrew/geode-agent.rb.in"),
         )
@@ -72,7 +76,7 @@ def test_render_homebrew_formula_requires_complete_resources() -> None:
             version="0.99.11",
             sdist_url="https://github.com/mangowhoiscloud/geode/releases/download/v0.99.11/geode_agent-0.99.11.tar.gz",
             sdist_sha256="a" * 64,
-            python_formula="python@3.12",
+            python_formula=DEFAULT_PYTHON_FORMULA,
             resources="",
             template=Path("packaging/homebrew/geode-agent.rb.in"),
         )
@@ -110,7 +114,7 @@ def test_render_homebrew_formula_rejects_noncanonical_resource_blocks(
             version="0.99.11",
             sdist_url="https://github.com/mangowhoiscloud/geode/releases/download/v0.99.11/geode_agent-0.99.11.tar.gz",
             sdist_sha256="a" * 64,
-            python_formula="python@3.12",
+            python_formula=DEFAULT_PYTHON_FORMULA,
             resources=resource,
             template=Path("packaging/homebrew/geode-agent.rb.in"),
         )
