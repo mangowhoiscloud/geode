@@ -82,6 +82,7 @@ def test_homebrew_publish_uses_scoped_key_and_retry_guards() -> None:
     assert "brew update-python-resources --help" in text
     assert "--ignore-main-package-cooldown" in text
     assert 'brew trust --formula "$tap_name/geode"' in text
+    assert 'cp tap/Formula/geode.rb "$tap_formula"' in text
     assert text.count("--template geode/packaging/homebrew/geode.rb.in") == 3
     assert "git pull --rebase" not in text
     assert "steps.tap-base.outputs.sha" in text
@@ -136,6 +137,7 @@ if [[ "${1:-}" == "update-python-resources" && "${2:-}" == "--help" ]]; then
   exit 0
 fi
 printf '%s\\n' "$@" > "$BREW_CAPTURE"
+cp "$BREW_TAP_REPO/Formula/geode.rb" "$BREW_SEED_CAPTURE"
 printf 'updated formula\\n' > "$BREW_TAP_REPO/Formula/geode.rb"
 """,
         encoding="utf-8",
@@ -166,6 +168,7 @@ printf 'updated formula\\n' > "$BREW_TAP_REPO/Formula/geode.rb"
         capture = tmp_path / f"{label}.args"
         tap_capture = tmp_path / f"{label}.tap"
         trust_capture = tmp_path / f"{label}.trust"
+        seed_capture = tmp_path / f"{label}.seed"
         checkout_formula.write_text("checkout formula\n", encoding="utf-8")
         (tap_repo / "Formula" / "geode.rb").write_text(
             "tapped formula\n",
@@ -176,6 +179,7 @@ printf 'updated formula\\n' > "$BREW_TAP_REPO/Formula/geode.rb"
             {
                 "BREW_CAPTURE": str(capture),
                 "BREW_HELP_TEXT": help_text,
+                "BREW_SEED_CAPTURE": str(seed_capture),
                 "BREW_TAP_CAPTURE": str(tap_capture),
                 "BREW_TAP_REPO": str(tap_repo),
                 "BREW_TRUST_CAPTURE": str(trust_capture),
@@ -204,6 +208,7 @@ printf 'updated formula\\n' > "$BREW_TAP_REPO/Formula/geode.rb"
             "--formula",
             "mangowhoiscloud/tap/geode",
         ]
+        assert seed_capture.read_text(encoding="utf-8") == "checkout formula\n"
         assert checkout_formula.read_text(encoding="utf-8") == "updated formula\n"
 
 
