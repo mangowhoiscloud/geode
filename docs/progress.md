@@ -19,6 +19,8 @@
 <!-- Move items here when work begins. -->
 <!-- 3-Checkpoint: (1) alloc → (2) merge (CI 5/5) → (3) verify -->
 
+- [ ] Slack 수리 사이클 (2026-07-15) — 감사 확정 결함: MCP slack 기동 레이스(10s ready-wait vs npx 실측 10.1s)·설정 파편화(바인딩이 프로젝트 config에만, cwd 의존)·doctor 이중 오판·notification ContextVar 스레드 미전파·데몬 v0.99.319 정체. 플랜=PR-A(2011e659a Plan DAG 재착륙, 리빌드 봉인 해제) → PR-B(slack_sdk 직접 전송층 재작성+루트레벨 SoT+삭제 범위) → 리빌드+kickstart. 검증=Codex(gpt-5.6-sol xhigh) 검사/GAP/Dedup + 라이브 E2E. worktree=feature/plan-dag-reland, feature/slack-transport-rewrite. (1) alloc.
+
 
 
 
