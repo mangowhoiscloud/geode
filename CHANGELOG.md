@@ -45,6 +45,27 @@ functional change.
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Public release verification handles checksum manifests deterministically.**
+  The stable-release tail now calls a reusable standard-library verifier that
+  strips line terminators before comparing `SHA256SUMS`, retries complete
+  public snapshots, and checks the exact requested PyPI version against the
+  annotated tag target and GitHub release assets. Repairing an older immutable
+  release no longer depends on whichever package version is currently latest.
+
+### Changed
+
+- **Homebrew distribution is core-only.** The former custom distribution
+  repository has been deleted, and release automation, public docs, and the
+  distribution skill now forbid recreating a qualified-tap fallback. The
+  `geode-agent` Homebrew/core candidate defaults to Homebrew's current Python
+  3.14 formula and must pass strict audit, source build, formula tests, official
+  API discovery, and an unqualified clean-machine install before the brew
+  command can return to the public installation surface.
+
 ## [0.99.333] - 2026-07-15
 
 ### Changed

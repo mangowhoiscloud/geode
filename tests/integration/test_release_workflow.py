@@ -10,6 +10,9 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_PATH = REPO_ROOT / ".github/workflows/release.yml"
 PORTFOLIO_PATH = REPO_ROOT / "site/src/app/portfolio/page.tsx"
+DISTRIBUTION_SKILL_PATH = REPO_ROOT / ".claude/skills/geode-distribution/SKILL.md"
+RELEASE_DOC_PATH = REPO_ROOT / "site/src/app/docs/ops/release-pypi-lifecycle/page.tsx"
+HOMEBREW_GUIDE_PATH = REPO_ROOT / "packaging/homebrew/README.md"
 
 
 def _workflow() -> dict[str, object]:
@@ -89,6 +92,44 @@ def test_stable_release_has_no_custom_homebrew_tap_channel() -> None:
     assert "mangowhoiscloud/tap" not in text
 
 
+def test_public_distribution_uses_the_reusable_exact_version_verifier() -> None:
+    jobs = _workflow()["jobs"]
+    assert isinstance(jobs, dict)
+    verify = jobs["verify-stable-distribution"]
+    assert isinstance(verify, dict)
+    steps = verify["steps"]
+    assert isinstance(steps, list)
+
+    assert any(
+        isinstance(step, dict) and str(step.get("uses", "")).startswith("actions/checkout@")
+        for step in steps
+    )
+    assert any(
+        isinstance(step, dict)
+        and "python scripts/verify_public_distribution.py" in str(step.get("run", ""))
+        for step in steps
+    )
+    assert "line.decode().split(maxsplit=1)" not in WORKFLOW_PATH.read_text(encoding="utf-8")
+
+
+def test_current_distribution_surfaces_do_not_restore_the_deleted_tap() -> None:
+    text = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in (
+            WORKFLOW_PATH,
+            PORTFOLIO_PATH,
+            DISTRIBUTION_SKILL_PATH,
+            RELEASE_DOC_PATH,
+            HOMEBREW_GUIDE_PATH,
+        )
+    )
+
+    assert "mangowhoiscloud/homebrew-tap" not in text
+    assert "mangowhoiscloud/tap" not in text
+    assert "HOMEBREW_TAP_DEPLOY_KEY" not in text
+    assert "publish-homebrew" not in text
+
+
 def test_release_retry_preserves_release_body_bytes() -> None:
     text = WORKFLOW_PATH.read_text(encoding="utf-8")
 
@@ -100,8 +141,10 @@ def test_release_retry_preserves_release_body_bytes() -> None:
 
 def test_public_install_commands_use_the_stable_pypi_channel() -> None:
     text = PORTFOLIO_PATH.read_text(encoding="utf-8")
+    release_doc = RELEASE_DOC_PATH.read_text(encoding="utf-8")
 
     assert "brew install" not in text
+    assert "brew install geode-agent" not in release_doc
     assert "mangowhoiscloud/tap" not in text
     assert 'useState("uv-tool")' in text
     assert 'copy: "uv tool install geode-agent"' in text
