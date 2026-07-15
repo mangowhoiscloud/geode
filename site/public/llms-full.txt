@@ -2,7 +2,7 @@
 
 > GEODE is a self-evolving autonomous execution agent: an inner agentic loop runs tasks (research, analysis, automation, scheduling) and an outer self-improving loop (Petri audit -> fitness gate) tunes the system that runs them.
 
-Version v0.99.333. Last sync 2026-07-14. Full content of every docs page, one file (llms-full.txt convention). Per-page index: /llms.txt.
+Version v0.99.333. Last sync 2026-07-15. Full content of every docs page, one file (llms-full.txt convention). Per-page index: /llms.txt.
 
 ## Overview . 개요
 
@@ -4868,7 +4868,7 @@ Tier 2  latex2sympy2 + sympy.pretty  블록 전용. 분수·적분을 2D Unicode
 URL: https://mangowhoiscloud.github.io/geode/docs/reference/changelog
 Markdown: https://mangowhoiscloud.github.io/geode/docs/reference/changelog.md
 
-(body omitted from llms-full: 1443 KB — fetch the Markdown twin above for the complete page)
+(body omitted from llms-full: 1447 KB — fetch the Markdown twin above for the complete page)
 
 ---
 
@@ -5250,10 +5250,16 @@ main 푸시는 CI와 Pages만 돌립니다. 패키지 배포는 `.github/workflo
 | 입력 | 의미 |
 | --- | --- |
 | `ref` / `version` | 릴리스할 ref와 기대 버전. 메타데이터 불일치는 validate 단계에서 실패 |
-| `publish_stable` | GitHub Release, PyPI, Homebrew tap을 한 승격으로 출하 (기본 false) |
+| `publish_stable` | GitHub Release와 PyPI를 한 승격으로 출하 (기본 false) |
 | `publish_huggingface_artifacts` | 버전드 릴리스 번들을 HF dataset repo로 업로드 (기본 false) |
 
-validate-build 잡이 lint와 hygiene, 타입 체크, 프롬프트 무결성, 공식 문서 생성 게이트, 테스트, 런타임 E2E 스모크, twine check를 모두 통과해야 배포 잡이 시작됩니다. stable promotion은 현재 `origin/main` SHA만 허용하고, tap 쓰기 자격을 먼저 확인한 뒤 annotated tag와 GitHub Release, Trusted Publishing, 공개 PyPI exact-version 설치 검증을 거칩니다. 마지막으로 Homebrew 리소스를 새로 고치고 strict audit, 소스 빌드, exact-version test를 통과한 formula만 tap에 push합니다.
+validate-build 잡이 lint와 hygiene, 타입 체크, 프롬프트 무결성, 공식 문서 생성 게이트, 테스트, 런타임 E2E 스모크, twine check를 모두 통과해야 배포 잡이 시작됩니다. stable promotion은 현재 `origin/main` SHA를 사용하고, 복구 실행에서는 변경되지 않은 기존 annotated tag target만 허용합니다. 그 뒤 annotated tag와 GitHub Release, Trusted Publishing, 공개 PyPI exact-version 설치 검증을 거칩니다. 마지막 읽기 전용 검증기는 tag target, GitHub asset, PyPI 파일, SHA-256이 모두 같은 릴리스인지 확인합니다.
+
+## Homebrew는 core 입성 절차가 따로 있습니다
+
+Homebrew는 stable promotion의 일부가 아닙니다. 기존 custom 배포 저장소는 삭제됐고, namespace가 붙는 설치 명령도 다시 만들지 않습니다. `packaging/homebrew`의 formula template과 renderer는 immutable GitHub Release sdist를 쓰는 `geode-agent` Homebrew/core 후보만 만듭니다.
+
+첫 upstream PR은 Homebrew의 최신 acceptable-formula 정책을 따릅니다. GEODE가 beta 표기를 벗어나고 외부 사용 및 notability 조건을 충족하기 전에는 검증된 후보를 fork에만 보관합니다. Homebrew/core가 수락한 뒤 공식 formula API와 깨끗한 macOS·Linux 환경에서 unqualified install, version, formula test, uninstall 게이트가 모두 통과해야 공개 설치 화면에 Homebrew를 다시 추가할 수 있습니다. 실제 후보 갱신과 검증 명령은 저장소의 `packaging/homebrew/README.md`에만 둡니다.
 
 ## 릴리스 후 rebuild
 
@@ -5272,6 +5278,8 @@ geode serve &                            # 데몬 재기동
 -   `.github/workflows/release.yml`. 수동 검증 + 배포 파이프라인.
 -   `.github/workflows/install-smoke.yml`. macOS와 Ubuntu의 설치 회귀.
 -   `.github/workflows/auto-backmerge.yml`. develop 뒤처짐 안전망.
+-   `scripts/verify_public_distribution.py`. GitHub·PyPI 공개 배포 일치 검증.
+-   `packaging/homebrew`. Homebrew/core 후보 template과 운영 지침.
 -   `CHANGELOG.md`. Keep a Changelog + SemVer 정본.
 
 ---

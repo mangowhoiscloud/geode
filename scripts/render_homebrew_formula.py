@@ -16,6 +16,7 @@ _VERSION_RE = re.compile(r"^\d+\.\d+\.\d+(?:[a-zA-Z0-9.-]+)?$")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _PYTHON_FORMULA_RE = re.compile(r"^python@\d+\.\d+$")
 _RESOURCE_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]*$")
+DEFAULT_PYTHON_FORMULA = "python@3.14"
 
 
 def _validate_version(version: str) -> str:
@@ -164,7 +165,7 @@ def main() -> None:
         type=Path,
         help="Existing formula whose Python resource blocks should be reused",
     )
-    parser.add_argument("--python-formula", default="python@3.12")
+    parser.add_argument("--python-formula", default=DEFAULT_PYTHON_FORMULA)
     parser.add_argument(
         "--template",
         type=Path,

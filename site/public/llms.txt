@@ -107,7 +107,7 @@ Version v0.99.333. Last sync 2026-07-15. Docs links point to clean markdown twin
 - [Why five layers](https://mangowhoiscloud.github.io/geode/docs/explanation/4-layer.md): Model, Runtime, Harness, Agent, Self-Improving. Why the boundaries fall where they do.
 - [Why a self-hosting harness](https://mangowhoiscloud.github.io/geode/docs/explanation/self-hosting.md): The runtime and the build line share primitives. Why that mattered.
 - [Why ratchet discipline](https://mangowhoiscloud.github.io/geode/docs/explanation/ratchet.md): Pinned prompt hashes and a staged CI. The shape that prevents drift.
-- [Release and PyPI lifecycle](https://mangowhoiscloud.github.io/geode/docs/ops/release-pypi-lifecycle.md): Version locations, coordinated stable promotion across GitHub, PyPI, and Homebrew, and the rebuild cadence.
+- [Release and PyPI lifecycle](https://mangowhoiscloud.github.io/geode/docs/ops/release-pypi-lifecycle.md): Version locations, verified GitHub and PyPI promotion, Homebrew/core admission, and the rebuild cadence.
 - [Backlog disposal](https://mangowhoiscloud.github.io/geode/docs/ops/backlog-dispose.md): Retire an idea with a paper trail instead of a silent delete.
 
 ## Codebase Map
