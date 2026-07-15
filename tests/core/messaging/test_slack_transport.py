@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import json
 from typing import Any
+from urllib.parse import parse_qsl
 
 import httpx
 import pytest
@@ -15,6 +16,7 @@ from core.messaging.slack_transport import (
     SlackTransportError,
     get_slack_transport,
     reset_slack_transport,
+    resolve_app_token,
     resolve_bot_token,
 )
 
@@ -24,17 +26,24 @@ class _FakeAPI:
 
     def __init__(self) -> None:
         self.calls: list[tuple[str, dict[str, Any]]] = []
+        self.content_types: list[str] = []
         self.responses: dict[str, list[dict[str, Any]]] = {}
         self.rate_limit_once: set[str] = set()
+        self.retry_after = "0"
 
     def transport(self) -> httpx.MockTransport:
         def handler(request: httpx.Request) -> httpx.Response:
             method = request.url.path.rsplit("/", 1)[-1]
-            payload = json.loads(request.content or b"{}")
+            content_type = request.headers.get("Content-Type", "")
+            self.content_types.append(content_type)
+            if content_type.startswith("application/x-www-form-urlencoded"):
+                payload = dict(parse_qsl(request.content.decode()))
+            else:
+                payload = json.loads(request.content or b"{}")
             self.calls.append((method, payload))
             if method in self.rate_limit_once:
                 self.rate_limit_once.discard(method)
-                return httpx.Response(429, headers={"Retry-After": "0"})
+                return httpx.Response(429, headers={"Retry-After": self.retry_after})
             queued = self.responses.get(method)
             body = queued.pop(0) if queued else {"ok": True, "ts": "111.222"}
             return httpx.Response(200, json=body)
@@ -78,6 +87,18 @@ def test_resolve_token_prefers_env_then_dotenv(
     assert resolve_bot_token() == "xoxb-dotenv"
 
 
+def test_resolve_app_token_prefers_env_then_dotenv(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+) -> None:
+    monkeypatch.setenv("SLACK_APP_TOKEN", "xapp-env")
+    assert resolve_app_token() == "xapp-env"
+    monkeypatch.delenv("SLACK_APP_TOKEN")
+    env_file = tmp_path / ".env"
+    env_file.write_text("SLACK_APP_TOKEN=xapp-dotenv\n")
+    monkeypatch.setattr("core.paths.GLOBAL_ENV_FILE", env_file)
+    assert resolve_app_token() == "xapp-dotenv"
+
+
 def test_post_message_short_text(fake_api: _FakeAPI) -> None:
     data = asyncio.run(_transport().post_message("C123", "hello"))
     assert data["ts"] == "111.222"
@@ -114,6 +135,22 @@ def test_rate_limit_retries_then_succeeds(fake_api: _FakeAPI) -> None:
     assert len(fake_api.calls) == 2  # 429 then success
 
 
+def test_rate_limit_honors_full_retry_after(
+    fake_api: _FakeAPI,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sleeps: list[float] = []
+
+    async def fake_sleep(delay: float) -> None:
+        sleeps.append(delay)
+
+    fake_api.retry_after = "61"
+    fake_api.rate_limit_once.add("chat.postMessage")
+    monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+    asyncio.run(_transport().post_message("C123", "hello"))
+    assert sleeps == [61.0]
+
+
 def test_api_error_raises(fake_api: _FakeAPI) -> None:
     fake_api.responses["chat.postMessage"] = [{"ok": False, "error": "channel_not_found"}]
     with pytest.raises(SlackTransportError, match="channel_not_found"):
@@ -127,6 +164,16 @@ def test_channel_history_passes_oldest(fake_api: _FakeAPI) -> None:
     messages = asyncio.run(_transport().channel_history("C123", oldest="1.0", limit=5))
     assert messages == [{"ts": "2.0", "text": "hi"}]
     assert fake_api.calls[0][1] == {"channel": "C123", "limit": 5, "oldest": "1.0"}
+
+
+def test_channel_info_returns_conversation(fake_api: _FakeAPI) -> None:
+    fake_api.responses["conversations.info"] = [
+        {"ok": True, "channel": {"id": "C123", "name": "general", "is_member": True}}
+    ]
+    channel = asyncio.run(_transport().channel_info("C123"))
+    assert channel == {"id": "C123", "name": "general", "is_member": True}
+    assert fake_api.calls[0] == ("conversations.info", {"channel": "C123"})
+    assert fake_api.content_types[0].startswith("application/x-www-form-urlencoded")
 
 
 def test_add_reaction_already_reacted_is_success(fake_api: _FakeAPI) -> None:

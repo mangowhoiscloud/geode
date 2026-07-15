@@ -35,6 +35,39 @@ def _gateway_checkpoint_session_id(session_key: str) -> str:
     return f"s-gw-{digest}"
 
 
+def _gateway_checkpoint_is_resumable(state: Any) -> bool:
+    """Only ACTIVE/PAUSED gateway machines may accept implicit continuation."""
+    return str(getattr(state, "status", "")) in {"active", "paused"}
+
+
+def _gateway_resume_messages(
+    stored_session: dict[str, Any] | None,
+    checkpoint_state: Any,
+) -> list[dict[str, Any]]:
+    """Load conversation history from L2, then the durable CLI checkpoint."""
+    if stored_session and isinstance(stored_session.get("messages"), list):
+        return list(stored_session["messages"])
+    messages = getattr(checkpoint_state, "messages", None)
+    if _gateway_checkpoint_is_resumable(checkpoint_state) and isinstance(messages, list):
+        return list(messages)
+    return []
+
+
+def _gateway_session_can_resume(session_key: str, session_store: Any, checkpoint: Any) -> bool:
+    """Check durable machine state before falling back to the L2 session store."""
+    state = checkpoint.load(_gateway_checkpoint_session_id(session_key))
+    if state is not None:
+        return _gateway_checkpoint_is_resumable(state)
+    return bool(session_store.exists(session_key))
+
+
+async def _restore_gateway_loop(loop: Any, state: Any) -> None:
+    """Apply the same machine and model restore contract as CLI resume."""
+    loop.restore_from_checkpoint(state)
+    if state.model and state.model != loop.model:
+        await loop.update_model_async(state.model)
+
+
 def serve(
     poll_interval: float = typer.Option(
         3.0, "--poll", "-p", help="Gateway poll interval (seconds)"
@@ -90,6 +123,21 @@ def serve(
     if gateway is None:
         console.print("  [warning]No gateway available after runtime init.[/warning]")
         raise typer.Exit(1)
+
+    # Thread-aware adapters may receive a continuation without another
+    # explicit mention after a daemon restart. Reuse the same durable
+    # checkpoint substrate as CLI resume; the L2 store is the fast path while
+    # the checkpoint preserves history and machine state across restarts.
+    from core.memory.session_checkpoint import SessionCheckpoint
+
+    _gw_checkpoint = SessionCheckpoint()
+    gateway.set_session_exists_checker(
+        lambda session_key: _gateway_session_can_resume(
+            session_key,
+            runtime.session_store,
+            _gw_checkpoint,
+        )
+    )
 
     _GATEWAY_SUFFIX = (
         "## Gateway mode\n"
@@ -166,9 +214,7 @@ def serve(
         # Checkpoint continuity — the single shared resume surgery (same
         # path as the IPC resume handler); arun() re-binds the ContextVars
         # from the restored objects.
-        _ask_loop.restore_from_checkpoint(state)
-        if state.model and state.model != _ask_loop.model:
-            await _ask_loop.update_model_async(state.model)
+        await _restore_gateway_loop(_ask_loop, state)
         _res = await _ask_loop.arun(answer)
         # Close the one-shot lifecycle (finalize re-wrote status "active"):
         # a fresh clarification re-parks the checkpoint behind a NEW ask;
@@ -211,24 +257,24 @@ def serve(
         if _ask_response is not None:
             return _ask_response
 
-        # --- Load prior conversation from session store ---
+        # --- Load prior conversation from L2 or the durable checkpoint ---
         ctx = ConversationContext(max_turns=_gw_max_turns)
-        if session_key:
-            prior = runtime.session_store.get(session_key)
-            if prior and isinstance(prior.get("messages"), list):
-                ctx.messages = prior["messages"]
-                log.info(
-                    "Gateway multi-turn: loaded %d messages for %s",
-                    len(ctx.messages),
-                    session_key,
-                )
+        _gw_session_id = _gateway_checkpoint_session_id(session_key) if session_key else ""
+        _prior_state = _gw_checkpoint.load(_gw_session_id) if _gw_session_id else None
+        prior = runtime.session_store.get(session_key) if session_key else None
+        ctx.messages = _gateway_resume_messages(prior, _prior_state)
+        if ctx.messages:
+            log.info(
+                "Gateway multi-turn: loaded %d messages for %s",
+                len(ctx.messages),
+                session_key,
+            )
 
         # Single factory — DAEMON mode (hitl=0, quiet, time-based).
         # A messaging thread is ONE machine instance: the stable derived
         # session id makes every turn share one checkpoint chain instead of
         # leaving an immortal per-turn ``s-<uuid>`` checkpoint behind
         # (docs/architecture/session-state-machine.md).
-        _gw_session_id = _gateway_checkpoint_session_id(session_key) if session_key else ""
         _executor, loop = _gw_services.create_session(
             SessionMode.DAEMON,
             conversation=ctx,
@@ -245,15 +291,13 @@ def serve(
             # the thread starts a FRESH machine under the same id: reopen
             # the edge explicitly and skip the restore so the old goal and
             # guard counters do not leak into the new topic.
-            from core.memory.session_checkpoint import SessionCheckpoint, SessionStatus
+            from core.memory.session_checkpoint import SessionStatus
 
-            _cp = SessionCheckpoint()
-            _prior_state = _cp.load(_gw_session_id)
             if _prior_state is not None:
                 if _prior_state.status in (SessionStatus.ACTIVE, SessionStatus.PAUSED):
-                    loop.restore_from_checkpoint(_prior_state)
+                    await _restore_gateway_loop(loop, _prior_state)
                 else:
-                    _cp.reopen(_gw_session_id)
+                    _gw_checkpoint.reopen(_gw_session_id)
         try:
             result = await loop.arun(content)
 

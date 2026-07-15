@@ -17,7 +17,7 @@ from core.config.env_io import mask_key
 log = logging.getLogger(__name__)
 
 # Required Slack Bot Token scopes for full functionality
-REQUIRED_SCOPES = ["chat:write", "channels:history", "channels:read"]
+REQUIRED_SCOPES = ["app_mentions:read", "chat:write", "channels:history", "channels:read"]
 OPTIONAL_SCOPES = ["reactions:write"]
 
 # Slack App Manifest — current GEODE event schema
@@ -31,6 +31,7 @@ SLACK_APP_MANIFEST: dict[str, Any] = {
     "oauth_config": {
         "scopes": {
             "bot": [
+                "app_mentions:read",
                 "channels:history",
                 "channels:read",
                 "chat:write",
@@ -40,8 +41,11 @@ SLACK_APP_MANIFEST: dict[str, Any] = {
         }
     },
     "settings": {
+        "event_subscriptions": {
+            "bot_events": ["app_mention", "message.channels"],
+        },
         "org_deploy_enabled": False,
-        "socket_mode_enabled": False,
+        "socket_mode_enabled": True,
         "token_rotation_enabled": False,
     },
 }
@@ -90,6 +94,28 @@ def _check_env() -> list[dict[str, Any]]:
             }
         )
 
+    app_token, app_token_src = _resolve_env_or_dotenv("SLACK_APP_TOKEN")
+    if app_token:
+        results.append(
+            {
+                "name": "SLACK_APP_TOKEN",
+                "ok": True,
+                "detail": f"{mask_key(app_token)} ({app_token_src})",
+            }
+        )
+    else:
+        results.append(
+            {
+                "name": "SLACK_APP_TOKEN",
+                "ok": False,
+                "detail": "not set (inbound is using the polling fallback)",
+                "hint": (
+                    "Enable Socket Mode, create an app-level token with connections:write, "
+                    "then add SLACK_APP_TOKEN=xapp-... to ~/.geode/.env"
+                ),
+            }
+        )
+
     team_id, team_src = _resolve_env_or_dotenv("SLACK_TEAM_ID")
     if team_id:
         results.append({"name": "SLACK_TEAM_ID", "ok": True, "detail": f"{team_id} ({team_src})"})
@@ -123,6 +149,7 @@ def _check_token_validity() -> dict[str, Any]:
             "detail": f"workspace={data.get('team', '?')}, bot={data.get('user', '?')}",
             "bot_user_id": data.get("user_id", ""),
             "team": data.get("team", ""),
+            "team_id": data.get("team_id", ""),
         }
     except Exception as exc:
         return {"ok": False, "detail": f"auth.test failed: {exc}"}
@@ -167,6 +194,29 @@ def _check_scopes() -> dict[str, Any]:
         }
     except Exception as exc:
         return {"ok": False, "detail": f"scope check failed: {exc}"}
+
+
+def _check_socket_mode() -> dict[str, Any]:
+    """Validate the app token by issuing a redacted temporary socket URL."""
+    import asyncio
+
+    from core.messaging.slack_transport import open_socket_mode_url
+
+    app_token, _source = _resolve_env_or_dotenv("SLACK_APP_TOKEN")
+    if not app_token:
+        return {
+            "ok": False,
+            "detail": "polling fallback (no SLACK_APP_TOKEN)",
+            "hint": "Add an xapp- token with connections:write, then restart geode serve",
+        }
+    try:
+        asyncio.run(open_socket_mode_url(app_token))
+        return {
+            "ok": True,
+            "detail": "app token accepted; temporary WebSocket URL issued (ticket redacted)",
+        }
+    except Exception as exc:
+        return {"ok": False, "detail": f"apps.connections.open failed: {exc}"}
 
 
 def _check_bindings() -> list[dict[str, Any]]:
@@ -228,6 +278,65 @@ def _check_bindings() -> list[dict[str, Any]]:
             )
 
     return results
+
+
+def _check_binding_access(auth_team_id: str = "") -> list[dict[str, Any]]:
+    """Verify that the bot is a member of every bound Slack channel."""
+    import asyncio
+
+    from core.messaging.slack_transport import SlackTransport
+    from core.wiring.adapters import _load_gateway_config
+
+    transport = SlackTransport()
+    if not transport.configured:
+        return []
+    try:
+        merged, _sources = _load_gateway_config()
+    except Exception:
+        return []
+    rules = merged.get("gateway", {}).get("bindings", {}).get("rules", [])
+    channel_ids = [
+        str(rule.get("channel_id", ""))
+        for rule in rules
+        if rule.get("channel") == "slack" and rule.get("channel_id")
+    ]
+    if not channel_ids:
+        return []
+
+    configured_team_id, _team_src = _resolve_env_or_dotenv("SLACK_TEAM_ID")
+    team_id = auth_team_id or configured_team_id
+
+    async def _probe() -> list[dict[str, Any]]:
+        results: list[dict[str, Any]] = []
+        for channel_id in channel_ids:
+            try:
+                channel = await transport.channel_info(channel_id)
+                is_member = channel.get("is_member") is True
+                name = str(channel.get("name", channel_id))
+                link = f"https://app.slack.com/client/{team_id}/{channel_id}" if team_id else ""
+                detail = f"#{name}, bot_member={is_member}"
+                if link:
+                    detail += f", {link}"
+                results.append(
+                    {
+                        "name": f"binding_access:{channel_id}",
+                        "ok": is_member,
+                        "detail": detail,
+                        "hint": "Run /invite @geode in this channel" if not is_member else "",
+                    }
+                )
+            except Exception as exc:
+                results.append(
+                    {
+                        "name": f"binding_access:{channel_id}",
+                        "ok": False,
+                        "detail": str(exc),
+                        "hint": "Verify the channel ID and run /invite @geode in the channel",
+                    }
+                )
+        return results
+
+    return asyncio.run(_probe())
 
 
 def _check_serve() -> dict[str, Any]:
@@ -306,7 +415,13 @@ def run_doctor_slack() -> dict[str, Any]:
     if not token_result["ok"]:
         report["ok"] = False
 
-    # 3. Scopes
+    # 3. Socket Mode app token
+    socket_mode_result = _check_socket_mode()
+    report["checks"].append({"name": "socket_mode", **socket_mode_result})
+    if not socket_mode_result["ok"]:
+        report["ok"] = False
+
+    # 4. Scopes
     scope_result = _check_scopes()
     report["checks"].append({"name": "bot_scopes", **scope_result})
     if not scope_result["ok"]:
@@ -314,25 +429,29 @@ def run_doctor_slack() -> dict[str, Any]:
     if scope_result.get("warnings"):
         report["warnings"].extend(scope_result["warnings"])
 
-    # 4. Bindings
+    # 5. Bindings + live bot membership
     for item in _check_bindings():
         report["checks"].append(item)
         if not item["ok"]:
             report["ok"] = False
+    for item in _check_binding_access(str(token_result.get("team_id", ""))):
+        report["checks"].append(item)
+        if not item["ok"]:
+            report["ok"] = False
 
-    # 5. Serve process
+    # 6. Serve process
     serve_result = _check_serve()
     report["checks"].append({"name": "geode_serve", **serve_result})
     if not serve_result["ok"]:
         report["ok"] = False
 
-    # 6. MCP Slack server
+    # 7. Direct Web API transport
     transport_result = _check_transport()
     report["checks"].append({"name": "slack_transport", **transport_result})
     if not transport_result["ok"]:
         report["ok"] = False
 
-    # 7. IPC socket
+    # 8. IPC socket
     sock_result = _check_socket()
     report["checks"].append({"name": "ipc_socket", **sock_result})
     if not sock_result["ok"]:

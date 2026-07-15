@@ -45,7 +45,69 @@ functional change.
 
 ---
 
-## [Unreleased]
+## [0.99.334] - 2026-07-15
+
+### Added
+
+- **Slack inbound now uses Socket Mode push.** A dependency-free
+  `SlackSocketModeClient` (built on the already-installed `httpx` and
+  `websockets` packages) obtains redacted temporary URLs from
+  `apps.connections.open`, acknowledges every envelope before dispatch,
+  reconnects on Slack refreshes or connection loss, and routes only Events API
+  `message` / `app_mention` payloads from explicitly bound channels.
+  `SlackPoller` keeps its registry name for compatibility but selects Socket
+  Mode whenever `SLACK_APP_TOKEN=xapp-...` is present; the bot-token Web API
+  transport remains the single owner of outbound posts, reactions, formatting,
+  and thread replies.
+
+## [1.1.0] - 2026-07-17
+
+### Added
+
+- **Slack inbound now uses Socket Mode push.** A dependency-free
+  `SlackSocketModeClient` (built on the already-installed `httpx` and
+  `websockets` packages) obtains redacted temporary URLs from
+  `apps.connections.open`, acknowledges every envelope before dispatch,
+  reconnects on Slack refreshes or connection loss, and routes only Events API
+  `message` / `app_mention` payloads from explicitly bound channels.
+  `SlackPoller` keeps its registry name for compatibility but selects Socket
+  Mode whenever `SLACK_APP_TOKEN=xapp-...` is present; the bot-token Web API
+  transport remains the single owner of outbound posts, reactions, formatting,
+  and thread replies.
+
+### Fixed
+
+- **Slack threads now continue without repeated mentions or state splits.**
+  The first addressed message's root timestamp is used as the thread id from
+  turn one, so its replies reuse one gateway lane, conversation, and stable
+  checkpoint. Channel-scoped engaged-thread state admits later replies without
+  another `@geode`; after a daemon restart, ACTIVE/PAUSED checkpoints restore
+  both routing eligibility and message history through the same resume path as
+  CLI sessions. Terminal checkpoints do not reopen implicitly.
+- **Slack diagnostics now verify the actual inbound contract.**
+  `geode doctor slack` validates the app-level token, requires
+  `app_mentions:read`, emits a Socket-Mode-enabled manifest with
+  `app_mention` / `message.channels` subscriptions, and probes
+  form-encoded `conversations.info` for every binding (Slack can ignore the
+  `channel` field in a JSON body for this method). Missing channel membership
+  is now a failing check with an `/invite @geode` hint and a clickable Slack
+  channel link instead of an apparently operational but unreadable binding.
+- **Polling is an explicit, quieter migration fallback.** Deployments without
+  an app token log `polling fallback` and report DEGRADED rather than silently
+  presenting polling as the production mode. Inaccessible channels enter a
+  60-second cooldown instead of generating an API error every three seconds,
+  and Web API 429 handling now honors Slack's full `Retry-After` value rather
+  than capping the delay at 30 seconds.
+
+### Changed
+
+- **Homebrew distribution is core-only.** The former custom distribution
+  repository has been deleted, and release automation, public docs, and the
+  distribution skill now forbid recreating a qualified-tap fallback. The
+  `geode-agent` Homebrew/core candidate defaults to Homebrew's current Python
+  3.14 formula and must pass strict audit, source build, formula tests, official
+  API discovery, and an unqualified clean-machine install before the brew
+  command can return to the public installation surface.
 
 ## [1.0.0] - 2026-07-16
 
@@ -77,6 +139,7 @@ functional change.
 
 ### Fixed
 
+<<<<<<< HEAD
 - **Stable releases tolerate split PyPI index convergence.** Post-publish
   verification keeps the bounded exact-version `uvx` install loop, then delegates
   JSON metadata and SHA-256 parity to the reusable full-snapshot verifier that
@@ -118,12 +181,35 @@ functional change.
   remounts, so following a deep docs link no longer jumps the menu to the top.
 - **Wide docs tables stay inside the mobile viewport.** Reference tables now
   scroll horizontally within the article instead of widening the whole page.
+=======
+- **Slack threads now continue without repeated mentions or state splits.**
+  The first addressed message's root timestamp is used as the thread id from
+  turn one, so its replies reuse one gateway lane, conversation, and stable
+  checkpoint. Channel-scoped engaged-thread state admits later replies without
+  another `@geode`; after a daemon restart, ACTIVE/PAUSED checkpoints restore
+  both routing eligibility and message history through the same resume path as
+  CLI sessions. Terminal checkpoints do not reopen implicitly.
+>>>>>>> 1f9cf70b2 (feat(slack): receive inbound events over Socket Mode)
 - **Public release verification handles checksum manifests deterministically.**
   The stable-release tail now calls a reusable standard-library verifier that
   strips line terminators before comparing `SHA256SUMS`, retries complete
   public snapshots, and checks the exact requested PyPI version against the
   annotated tag target and GitHub release assets. Repairing an older immutable
   release no longer depends on whichever package version is currently latest.
+- **Slack diagnostics now verify the actual inbound contract.**
+  `geode doctor slack` validates the app-level token, requires
+  `app_mentions:read`, emits a Socket-Mode-enabled manifest with
+  `app_mention` / `message.channels` subscriptions, and probes
+  form-encoded `conversations.info` for every binding (Slack can ignore the
+  `channel` field in a JSON body for this method). Missing channel membership
+  is now a failing check with an `/invite @geode` hint and a clickable Slack
+  channel link instead of an apparently operational but unreadable binding.
+- **Polling is an explicit, quieter migration fallback.** Deployments without
+  an app token log `polling fallback` and report DEGRADED rather than silently
+  presenting polling as the production mode. Inaccessible channels enter a
+  60-second cooldown instead of generating an API error every three seconds,
+  and Web API 429 handling now honors Slack's full `Retry-After` value rather
+  than capping the delay at 30 seconds.
 
 ### Changed
 

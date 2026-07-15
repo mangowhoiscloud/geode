@@ -149,6 +149,41 @@ class TestChannelManager:
         msg.content = "hey @geode analyze this"
         assert asyncio.run(manager.aroute_message(msg)) == "processed"
 
+    def test_mention_override_preserves_clean_content(self):
+        manager = ChannelManager()
+        received: list[str] = []
+        manager.set_async_processor(lambda content, meta: received.append(content) or "processed")
+        manager.add_binding(ChannelBinding(channel="slack", channel_id="C1", require_mention=True))
+        msg = InboundMessage(
+            channel="slack",
+            channel_id="C1",
+            sender_id="U1",
+            sender_name="Alice",
+            content="continue this thread",
+            timestamp=time.time(),
+            thread_id="171.1",
+        )
+
+        assert asyncio.run(manager.aroute_message(msg, mention_override=True)) == "processed"
+        assert received == ["continue this thread"]
+
+    def test_persisted_session_probe_uses_exact_gateway_key(self):
+        manager = ChannelManager()
+        checked: list[str] = []
+        manager.set_session_exists_checker(lambda key: checked.append(key) or True)
+        msg = InboundMessage(
+            channel="slack",
+            channel_id="C1",
+            sender_id="U1",
+            sender_name="Alice",
+            content="continue",
+            timestamp=time.time(),
+            thread_id="171.1",
+        )
+
+        assert manager.has_persisted_session(msg) is True
+        assert checked == ["gateway:slack:c1:u1:171_1"]
+
     def test_remove_binding(self):
         manager = ChannelManager()
         manager.add_binding(ChannelBinding(channel="slack", channel_id="C1"))

@@ -8,24 +8,24 @@ export default function Page() {
       slug="harness/serve-gateway"
       title="Serve and gateway"
       titleKo="Serve와 게이트웨이"
-      summary="Operating the serve daemon's messaging gateway. Pollers, binding routing, lane queue."
-      summaryKo="serve 데몬의 메신저 게이트웨이를 운영합니다. poller, binding 라우팅, lane queue를 다룹니다."
+      summary="Operating the serve daemon's messaging gateway. Receivers, binding routing, lane queue."
+      summaryKo="serve 데몬의 메신저 게이트웨이를 운영합니다. receiver, binding 라우팅, lane queue를 다룹니다."
     >
       <Bi
         ko={
           <>
             <p>
               게이트웨이는 serve 데몬 안에서 메신저 메시지를 받아 GEODE 실행으로
-              넘기는 라우터입니다. poller가 메시지를 끌어오고, binding이 어느
-              채널을 받을지 결정하고, lane queue가 동시성을 제한합니다. 라우팅에
-              LLM은 쓰지 않습니다. 정적 규칙만 씁니다.
+              넘기는 라우터입니다. Slack Socket Mode와 플랫폼 poller가 메시지를
+              받고, binding이 어느 채널을 받을지 결정하며, lane queue가 동시성을
+              제한합니다. 라우팅에는 LLM 대신 정적 규칙만 씁니다.
             </p>
 
             <h2>동작 구조</h2>
             <figure>
               <img
                 src="/geode/diagrams/gateway-routing.svg"
-                alt="Gateway routing: Slack, Discord, and Telegram pollers feed the ChannelManager binding match; unmatched messages are ignored, matched ones pass the LaneQueue into AgenticLoop in DAEMON mode"
+                alt="Gateway routing: Slack Socket Mode and Discord or Telegram pollers feed the ChannelManager binding match; unmatched messages are ignored, matched ones pass the LaneQueue into AgenticLoop in DAEMON mode"
               />
               <figcaption>binding에 일치한 메시지만 레인을 거쳐 루프에 닿습니다. 불일치는 무시됩니다.</figcaption>
             </figure>
@@ -35,8 +35,8 @@ export default function Page() {
               </thead>
               <tbody>
                 <tr>
-                  <td>Poller</td>
-                  <td>Slack, Discord, Telegram에서 새 메시지를 주기적으로 조회합니다. 공통 라이프사이클은 BasePoller가 가집니다.</td>
+                  <td>메신저 receiver</td>
+                  <td>Slack은 Socket Mode push를 ACK 후 처리합니다. Discord와 Telegram은 주기적으로 조회합니다. 공통 스레드 수명주기는 BasePoller가 가집니다.</td>
                   <td><code>core/server/supervised/</code></td>
                 </tr>
                 <tr>
@@ -51,7 +51,7 @@ export default function Page() {
                 </tr>
                 <tr>
                   <td>CLIPoller</td>
-                  <td>thin CLI의 IPC 요청을 받는 데몬 쪽 서버입니다. 메신저 poller와 같은 lane 규칙을 따릅니다.</td>
+                  <td>thin CLI의 IPC 요청을 받는 데몬 쪽 서버입니다. 메신저 receiver와 같은 lane 규칙을 따릅니다.</td>
                   <td><code>core/server/ipc_server/poller.py</code></td>
                 </tr>
               </tbody>
@@ -73,7 +73,7 @@ export default function Page() {
             </p>
             <pre>{`# 게이트웨이 켜기
 echo 'GEODE_GATEWAY_ENABLED=true' >> ~/.geode/.env
-geode serve            # 포그라운드, --poll로 폴링 주기 조정
+geode serve            # 포그라운드, --poll은 poll 기반 receiver 주기
 
 # 살아 있는지 확인
 pgrep -f "geode serve"
@@ -95,7 +95,7 @@ geode serve &`}</pre>
             </p>
             <pre>{`# .geode/config.toml
 [gateway]
-pollers = ["slack"]          # 띄울 poller 목록
+pollers = ["slack"]          # 띄울 receiver 등록명
 time_budget_s = 120          # 메시지당 wall-clock 기본값
 
 [[gateway.bindings.rules]]
@@ -116,8 +116,8 @@ require_mention = true`}</pre>
                 </tr>
                 <tr>
                   <td>메시지에 반응이 없음</td>
-                  <td>binding 불일치 또는 토큰 누락</td>
-                  <td><code>geode doctor slack</code>으로 점검하고, 규칙의 <code>channel_id</code>가 실제 채널 ID와 일치하는지 확인합니다.</td>
+                  <td>binding 불일치, 앱 토큰 누락, 또는 채널 멤버십 없음</td>
+                  <td><code>geode doctor slack</code>으로 점검하고, 출력된 링크의 채널에서 <code>/invite @geode</code>를 실행합니다.</td>
                 </tr>
                 <tr>
                   <td>배너 모델과 응답 모델이 다름</td>
@@ -149,16 +149,17 @@ require_mention = true`}</pre>
           <>
             <p>
               The gateway is the router inside the serve daemon that turns
-              messenger traffic into GEODE runs. Pollers pull messages in,
-              bindings decide which channels are allowed, and the lane queue
-              bounds concurrency. Routing uses static rules only, never an LLM.
+              messenger traffic into GEODE runs. Slack Socket Mode and
+              platform pollers receive messages, bindings decide which
+              channels are allowed, and the lane queue bounds concurrency.
+              Routing uses static rules only, never an LLM.
             </p>
 
             <h2>How it works</h2>
             <figure>
               <img
                 src="/geode/diagrams/gateway-routing.svg"
-                alt="Gateway routing: Slack, Discord, and Telegram pollers feed the ChannelManager binding match; unmatched messages are ignored, matched ones pass the LaneQueue into AgenticLoop in DAEMON mode"
+                alt="Gateway routing: Slack Socket Mode and Discord or Telegram pollers feed the ChannelManager binding match; unmatched messages are ignored, matched ones pass the LaneQueue into AgenticLoop in DAEMON mode"
               />
               <figcaption>Only a message that matches a binding passes the lanes into the loop; the rest are ignored.</figcaption>
             </figure>
@@ -168,8 +169,8 @@ require_mention = true`}</pre>
               </thead>
               <tbody>
                 <tr>
-                  <td>Pollers</td>
-                  <td>Poll Slack, Discord, and Telegram for new messages. BasePoller owns the shared lifecycle.</td>
+                  <td>Messaging receivers</td>
+                  <td>Slack ACKs pushed Socket Mode events before processing. Discord and Telegram poll. BasePoller owns the shared thread lifecycle.</td>
                   <td><code>core/server/supervised/</code></td>
                 </tr>
                 <tr>
@@ -184,7 +185,7 @@ require_mention = true`}</pre>
                 </tr>
                 <tr>
                   <td>CLIPoller</td>
-                  <td>The daemon-side server for thin-CLI IPC requests. It follows the same lane rules as the messenger pollers.</td>
+                  <td>The daemon-side server for thin-CLI IPC requests. It follows the same lane rules as the messaging receivers.</td>
                   <td><code>core/server/ipc_server/poller.py</code></td>
                 </tr>
               </tbody>
@@ -206,7 +207,7 @@ require_mention = true`}</pre>
             </p>
             <pre>{`# enable the gateway
 echo 'GEODE_GATEWAY_ENABLED=true' >> ~/.geode/.env
-geode serve            # foreground; --poll tunes the poll interval
+geode serve            # foreground; --poll tunes poll-based receivers
 
 # is it alive?
 pgrep -f "geode serve"
@@ -229,7 +230,7 @@ geode serve &`}</pre>
             </p>
             <pre>{`# .geode/config.toml
 [gateway]
-pollers = ["slack"]          # which pollers to start
+pollers = ["slack"]          # receiver registration names
 time_budget_s = 120          # default wall-clock per message
 
 [[gateway.bindings.rules]]
@@ -250,8 +251,8 @@ require_mention = true`}</pre>
                 </tr>
                 <tr>
                   <td>No reaction to messages</td>
-                  <td>Binding mismatch or a missing bot token</td>
-                  <td>Run <code>geode doctor slack</code> and check the rule&apos;s <code>channel_id</code> against the real channel ID.</td>
+                  <td>Binding mismatch, missing app token, or missing channel membership</td>
+                  <td>Run <code>geode doctor slack</code>, open its channel link, and run <code>/invite @geode</code>.</td>
                 </tr>
                 <tr>
                   <td>Banner model differs from the answering model</td>

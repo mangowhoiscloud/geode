@@ -2,7 +2,7 @@
 
 > GEODE is a self-evolving autonomous execution agent: an inner agentic loop runs tasks (research, analysis, automation, scheduling) and an outer self-improving loop (Petri audit -> fitness gate) tunes the system that runs them.
 
-Version v1.0.0. Last sync 2026-07-16. Docs links point to clean markdown twins (.md); drop the .md suffix for the rendered page.
+Version v0.99.334. Last sync 2026-07-15. Docs links point to clean markdown twins (.md); drop the .md suffix for the rendered page.
 
 ## Start here
 
@@ -20,7 +20,6 @@ Version v1.0.0. Last sync 2026-07-16. Docs links point to clean markdown twins (
 ## Getting Started
 
 - [Quick Start](https://mangowhoiscloud.github.io/geode/docs/quick-start.md): Install GEODE and run your first task in a few minutes.
-- [Connect Google Workspace](https://mangowhoiscloud.github.io/geode/docs/run/google-workspace.md): Bring your own Google Desktop OAuth client for Gmail, Calendar, Drive, Docs, Sheets, Tasks, and Contacts.
 - [Pick a path](https://mangowhoiscloud.github.io/geode/docs/run/pick-path.md): Subscription, API key, or free path. How to choose for your situation.
 - [Configure providers](https://mangowhoiscloud.github.io/geode/docs/run/providers.md): Anthropic, OpenAI, Codex, GLM. Where keys go, and what fallback chain you get.
 - [Run as a daemon](https://mangowhoiscloud.github.io/geode/docs/run/serve.md): Start, restart, and stop serve. A thin CLI talks to an IPC-served runtime.
@@ -35,8 +34,6 @@ Version v1.0.0. Last sync 2026-07-16. Docs links point to clean markdown twins (
 - [Tools and toolsets](https://mangowhoiscloud.github.io/geode/docs/runtime/tools/protocol.md): The tool registry and deferred loading. A few tools load up front, the rest are fetched on demand.
 - [Hooks and observability](https://mangowhoiscloud.github.io/geode/docs/harness/hooks.md): Lifecycle events that handlers subscribe to. How observe, react, decide, and act stack on one event.
 - [LLM routing](https://mangowhoiscloud.github.io/geode/docs/runtime/llm/providers.md): Provider selection and model resolution. Fallback chains ship empty by default; fatal errors fast-fail instead of retrying.
-- [Tool calling](https://mangowhoiscloud.github.io/geode/docs/runtime/llm/tool-calling.md): How GEODE advertises tools, translates tool choice, executes calls, and replays results across provider adapters.
-- [Structured output](https://mangowhoiscloud.github.io/geode/docs/runtime/llm/structured-output.md): GEODE's JSON Schema contract, adapter wiring, strictness rules, and worker-side validation and retry boundary.
 - [Sub-agent orchestration](https://mangowhoiscloud.github.io/geode/docs/runtime/orchestration.md): Spawning sub-agents as isolated worker processes in parallel lanes. The parent gets back a summary; write access is governed by toolkit composition.
 - [Skills](https://mangowhoiscloud.github.io/geode/docs/runtime/skills.md): User-invocable skills, distinct from tools. Discovery, lifecycle, override.
 

@@ -15,6 +15,7 @@ from core.cli.doctor import (
 class TestCheckEnv:
     def test_token_present(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("SLACK_BOT_TOKEN", "xoxb-test-1234567890")
+        monkeypatch.setenv("SLACK_APP_TOKEN", "xapp-test-1234567890")
         monkeypatch.setenv("SLACK_TEAM_ID", "T12345")
         from core.cli.doctor import _check_env
 
@@ -23,6 +24,7 @@ class TestCheckEnv:
 
     def test_token_missing(self, monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
         monkeypatch.delenv("SLACK_BOT_TOKEN", raising=False)
+        monkeypatch.delenv("SLACK_APP_TOKEN", raising=False)
         monkeypatch.delenv("SLACK_TEAM_ID", raising=False)
         # The resolver falls back to the global ~/.geode/.env — isolate it
         # from the real machine state (PR-SLACK-TRANSPORT).
@@ -33,6 +35,8 @@ class TestCheckEnv:
         by_name = {r["name"]: r for r in results}
         assert not by_name["SLACK_BOT_TOKEN"]["ok"]
         assert "hint" in by_name["SLACK_BOT_TOKEN"]
+        assert not by_name["SLACK_APP_TOKEN"]["ok"]
+        assert "polling fallback" in by_name["SLACK_APP_TOKEN"]["detail"]
         # SLACK_TEAM_ID is informational since the direct transport
         # never reads it (PR-SLACK-TRANSPORT).
         assert by_name["SLACK_TEAM_ID"]["ok"]
@@ -80,6 +84,33 @@ class TestCheckTokenValidity:
         assert not result["ok"]
 
 
+class TestCheckSocketMode:
+    def test_valid_app_token(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("SLACK_APP_TOKEN", "xapp-test")
+
+        async def fake_open(self) -> str:
+            return "wss://wss-primary.slack.com/link/?ticket=redacted"
+
+        monkeypatch.setattr(
+            "core.messaging.slack_transport.open_socket_mode_url",
+            fake_open,
+        )
+        from core.cli.doctor import _check_socket_mode
+
+        result = _check_socket_mode()
+        assert result["ok"]
+        assert "ticket redacted" in result["detail"]
+
+    def test_missing_app_token(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        monkeypatch.delenv("SLACK_APP_TOKEN", raising=False)
+        monkeypatch.setattr("core.paths.GLOBAL_ENV_FILE", tmp_path / "absent.env")
+        from core.cli.doctor import _check_socket_mode
+
+        result = _check_socket_mode()
+        assert not result["ok"]
+        assert "polling fallback" in result["detail"]
+
+
 class TestCheckBindings:
     @pytest.fixture(autouse=True)
     def _isolate_global_config(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -99,6 +130,8 @@ channel_id = "C0ALUA25DKK"
 auto_respond = true
 require_mention = true
 """)
+        monkeypatch.setattr("core.paths.GLOBAL_CONFIG_TOML", tmp_path / "absent.toml")
+        monkeypatch.setattr("core.paths.PROJECT_CONFIG_TOML", config)
         from core.cli.doctor import _check_bindings
 
         results = _check_bindings()
@@ -115,6 +148,8 @@ require_mention = true
 channel = "slack"
 channel_id = "C0XXXXXXXXX"
 """)
+        monkeypatch.setattr("core.paths.GLOBAL_CONFIG_TOML", tmp_path / "absent.toml")
+        monkeypatch.setattr("core.paths.PROJECT_CONFIG_TOML", config)
         from core.cli.doctor import _check_bindings
 
         results = _check_bindings()
@@ -123,6 +158,8 @@ channel_id = "C0XXXXXXXXX"
 
     def test_missing_config(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr("core.paths.GLOBAL_CONFIG_TOML", tmp_path / "absent.toml")
+        monkeypatch.setattr("core.paths.PROJECT_CONFIG_TOML", tmp_path / "absent2.toml")
         from core.cli.doctor import _check_bindings
 
         results = _check_bindings()
@@ -130,10 +167,41 @@ channel_id = "C0XXXXXXXXX"
         assert "hint" in results[0]
 
 
+class TestCheckBindingAccess:
+    def test_reports_membership_and_channel_link(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("SLACK_BOT_TOKEN", "xoxb-test")
+        monkeypatch.setenv("SLACK_TEAM_ID", "T123")
+        monkeypatch.setattr(
+            "core.wiring.adapters._load_gateway_config",
+            lambda: (
+                {"gateway": {"bindings": {"rules": [{"channel": "slack", "channel_id": "C123"}]}}},
+                ["test"],
+            ),
+        )
+
+        async def fake_channel_info(self, channel_id: str):
+            return {"id": channel_id, "name": "general", "is_member": False}
+
+        monkeypatch.setattr(
+            "core.messaging.slack_transport.SlackTransport.channel_info",
+            fake_channel_info,
+        )
+        from core.cli.doctor import _check_binding_access
+
+        result = _check_binding_access()[0]
+        assert not result["ok"]
+        assert "https://app.slack.com/client/T123/C123" in result["detail"]
+        assert "/invite @geode" in result["hint"]
+
+
 class TestRunDoctorSlack:
     def test_all_fail_gracefully(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         monkeypatch.chdir(tmp_path)
         monkeypatch.delenv("SLACK_BOT_TOKEN", raising=False)
+        monkeypatch.delenv("SLACK_APP_TOKEN", raising=False)
         monkeypatch.delenv("SLACK_TEAM_ID", raising=False)
         # Machine isolation: without this the resolvers fall back to the
         # REAL ~/.geode/.env and the doctor makes live auth.test calls.
@@ -167,3 +235,13 @@ class TestManifest:
         url = get_manifest_url()
         assert url.startswith("https://api.slack.com/apps?new_app=1&manifest_json=")
         assert "GEODE" in url
+
+    def test_manifest_enables_socket_mode_events(self) -> None:
+        from core.cli.doctor import SLACK_APP_MANIFEST
+
+        settings = SLACK_APP_MANIFEST["settings"]
+        assert settings["socket_mode_enabled"] is True
+        assert settings["event_subscriptions"]["bot_events"] == [
+            "app_mention",
+            "message.channels",
+        ]
