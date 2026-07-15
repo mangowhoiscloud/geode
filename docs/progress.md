@@ -7,6 +7,7 @@
 
 <!-- Add items here when identified. Format: -->
 <!-- - [ ] #issue-number — Short description (@assignee) -->
+- [ ] hook 후속: frontier 조사(2026-07-14, CC 30·Codex 11·OpenClaw ~40·Cline 6·gajae 25/39 실측+문서) 채택 후보 — ① Codex식 해시 고정 훅 신뢰 리뷰(.geode/hooks 디스커버리에 변경 시 재승인) ② OpenClaw식 결정=priority 순차/관찰=병렬 실행 분리(핫패스 지연 절감) ③ Cline SDK식 핸들러별 fail_open/fail_closed ④ 외부 노출 훅 표면은 CC stdin-JSON/exit-2 계약 호환(사실상 표준 수렴). 레일 중복 제거(hook↔transcript 이중 기록)와 COGNITIVE_* 섀도잉 해소는 기존 보류 그대로.
 - [ ] CLI white-line — operator TTY visual confirm at idle prompt (post-rebuild v0.99.147)
 - [ ] 10-cycle self-improving campaign — runtime resync (A+B merged) + operator launch
 - [ ] viz-sync — geode_hero / critical_floor / autoresearch_compare → 18-dim
@@ -18,7 +19,6 @@
 <!-- Move items here when work begins. -->
 <!-- 3-Checkpoint: (1) alloc → (2) merge (CI 5/5) → (3) verify -->
 
-- [ ] hook system 재설계 — 파편화 감사 완료(65 이벤트 중 전용 소비자 42·싱크 전용 23·사망 2, _fire_hook 11개 역행, 페이로드 계약 리더 측 편재, 침묵 배선 단절 3건 검증). 스코프=택소노미 통합+명명 규약+디스패치 단일화+emit 계약+배선 수선; 레일 중복 제거는 문서화 후 후속. worktree=feature/hook-taxonomy-redesign. (1) alloc 완료. (2026-07-14)
 
 
 
@@ -34,6 +34,7 @@
 ## Done
 
 <!-- Completed items. Keep recent 10, archive older ones. -->
+- [x] hook system 택소노미 재설계 (#2714, 프리싱크 #2724, 승격 #2725, main v0.99.331, 2026-07-14) — 감사(전용 소비자 42/65·싱크 전용 23·사망 2·_fire_hook 11 역행·emit 무계약·침묵 단절 3건) 기반 D1~D8: 이벤트 65→56(승인 사망 2 삭제, auto-trigger 6→1+stage, rule 3→1+action), NAME==VALUE 정합 8종+LEGACY/COLLAPSED read-side alias(전 parse-back 지점+event store 양방향 필터), 디스패치 단일 경로+HookSystem 초크포인트 페이로드 검증(직접 trigger도 커버, 사이트당 1회 경고), 침묵 단절 수선, 스키마 v2, 승인 REQUESTED 이중발화 4곳 제거(선재 버그), docs/architecture/hook-system.md(+ko) 정본화. 설계 SoT=docs/plans/2026-07-14-hook-taxonomy-redesign.md. 구현 에이전트 크레딧 사망→자동 재개 동시편집 경합을 SendMessage 조정으로 수습(교훈 메모리化). Codex(gpt-5.6-sol xhigh) 2라운드 11건 전부 반영, subscription 라이브 E2E PASS(신규 D5 값 저장·계약 경고 0·축약 계보 필터·실패 stage status=failed). 동시세션 0.99.330 선점 → 0.99.331 재스탬프 폴드. ratchet paydown 252/82 고정.
 - [x] 세션 상태 오토마타 (#2709, 프리싱크 #2712, 승격 #2713, main v0.99.329, 2026-07-14) — 상태그래프 정본 문서(docs/architecture/session-state-machine.md+.ko.md) + 전이 테이블 강제(_LEGAL_TRANSITIONS·불법 거부·reopen 명시 엣지·flock 직렬화·save 암묵 reopen 경고) + 전이 원장 transitions.jsonl(거부 포함 전 엣지, 1만 행 보존) + 게이트웨이 스레드=안정 s-gw-<sha256[:12]> 머신 인스턴스(턴당 불멸 체크포인트 유기 제거, 소진 시 COMPLETED) + REPL exit 완결 배선 + status 정규화(미지→ERROR). 동시세션 crucible runtime-forecast [Unreleased]를 0.99.329로 폴드. Codex(gpt-5.6-sol xhigh) 6건 반영, subscription 라이브 E2E PASS(전 엣지 실확인). 잔여(문서화): 레인 키 미통일 시 대화 수준 last-writer-wins, Phase 1b messages.json 폴백.
 - [x] AgenticLoop 상태머신 형식화 (#2706, 프리싱크 #2707, 승격 #2708, main v0.99.328, 2026-07-14) — 파편화 감사 상위 3지점 해소: ① TerminationReason StrEnum 20종(주석 사전에 없던 session_time_budget_* 포함)+단일 터미널 생성자 `_terminal_result`(파일 내 AgenticResult( 생성 1곳 소스 래칫) ② 가드 5종을 이름 있는 메서드로 verbatim 추출 — arun 호출 순서=우선순위 명세 ③ 스냅샷 완전성: 가드 카운터 7필드(low-confidence replan armed 포함)+ConvergenceDetector를 SessionState.loop_guards로 영속, restore_from_checkpoint 단일 resume 수술(IPC+게이트웨이 continuation 공용) ④ SessionStatus 전이 소유권: 스케줄 원샷=PAUSED(ask 파킹)/COMPLETED/ERROR(신규 생산자), _write_status가 JSON+SQLite 이중 SoT 동기화, ask continuation도 수명주기 닫음(재질문=새 ask+PAUSED). Codex(gpt-5.6-sol xhigh) 7건 반영(레거시 체크포인트 교체 시맨틱·리트라이 카운터 저장 순서 등), CI 파생 2건(fable5 refusal 소스스캔, crucible 지식그래프 해시) 정합. gpt-5.6-sol subscription 라이브 E2E PASS(2턴+resume+수명주기, .audit/smoke-archives/2026-07-14-fsm-live-e2e-gpt56sol.log). 잔여: 게이트웨이 멀티턴 표면은 설계상 ACTIVE 유지(문서화), 리빌드는 미착륙 커밋 2011e659a 처리 후.
 - [x] 운영자 ask/reply 채널 + 설치 드리프트 doctor + 세션 export + replay-safety 가드 + 노트북 플랜 (#2703, 프리싱크 #2704, 승격 #2705, main v0.99.327, 2026-07-14) — frontier 하네스 비교 감사에서 도출한 4구현+1플랜. ① pending ask: 스케줄 잡의 user_clarification_needed 질문을 영속화(first-reply-wins, 72h TTL)+알림 발송, 바운드 채널 `ask <id> <답변>`/`geode ask answer`가 체크포인트 세션 resume(모델·cognitive state 복원 포함) ② geode doctor: PATH 그림자 분류(brew가 editable 가린 사건 핀)·serve 그리팅 version 핸드셰이크·[audit] extra 프로브(dim_means zero-fill 사건 핀) ③ geode session list/export: 단독 HTML/MD(escape+redaction) ④ StreamProgress+StreamInterruptedError: 가시출력 후 transient는 재호출 대신 명시 에러 — 전 경로 버퍼링 확인으로 dormant 계약 명시 ⑤ docs/plans/2026-07-14-research-notebook-mode.md 플랜만(Q5 수렴 약함, 보류). 신규 테스트 84, Codex(gpt-5.5 high) 실결함 3건(record_notified 경합 클로버 HIGH 외) 수정, slop ratchet은 pragma 제거+필수 noqa 2건만 baseline 승인. CI 12/12. **리빌드 보류**: 공유 체크아웃 main에 미착륙 직접커밋 2011e659a(Plan DAG 잔재 제거, 버전스탬프 v0.99.324 충돌) 잔존 — GitFlow 재착륙 후 pull+rebuild 필요(운영자 결정 대기).
