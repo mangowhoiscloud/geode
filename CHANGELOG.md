@@ -47,8 +47,36 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **`geode update` now updates persistent uv installs without crossing a
+  release series by default.** The command detects uv ownership from its tool
+  receipt, replaces the standard stored request with
+  `geode-agent~=CURRENT_VERSION`, installs the newest compatible patch, verifies
+  the CLI, and restarts a running daemon. `--latest` is the explicit opt-in for
+  minor or major package upgrades. Editable installs still pull, sync, and
+  refresh their CLI, but now resolve the GEODE checkout from PEP 610 metadata
+  and project identity instead of treating an arbitrary current git repository
+  as GEODE source. Registry resolution runs from an isolated temporary directory
+  with uv config discovery disabled, so the caller's project configuration
+  cannot redirect it. Non-default uv tool and executable directories are
+  preserved from the receipt, and verification plus daemon restart use that
+  recorded executable even when it is absent from `PATH`. Customized receipts
+  and non-editable direct installs stop instead of silently dropping options or
+  changing install mode; source-backed recovery guidance keeps the original
+  source reference instead of redirecting the install to PyPI and identifies
+  the receipt that holds every custom option. Metadata-free installs no longer
+  fall back to the caller's Git checkout. A running daemon stays up until the uv
+  replacement passes verification, then restart proceeds only after its old
+  socket is confirmed closed and its new socket is confirmed ready.
+
 ### Fixed
 
+- **Docs sidebar keeps its place across page navigation.** The independently
+  scrolling desktop navigation now restores its position when `DocsShell`
+  remounts, so following a deep docs link no longer jumps the menu to the top.
+- **Wide docs tables stay inside the mobile viewport.** Reference tables now
+  scroll horizontally within the article instead of widening the whole page.
 - **Public release verification handles checksum manifests deterministically.**
   The stable-release tail now calls a reusable standard-library verifier that
   strips line terminators before comparing `SHA256SUMS`, retries complete

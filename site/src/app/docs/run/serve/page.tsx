@@ -93,7 +93,7 @@ geode serve --poll 5     # 폴링 주기 5초`}</pre>
                 </tr>
                 <tr>
                   <td>업데이트 + 재시작</td>
-                  <td><code>geode update</code>. 소스 체크아웃을 갱신하고, 데몬이 돌고 있었으면 종료 후 백그라운드로 다시 띄웁니다.</td>
+                  <td><code>geode update</code>. uv tool이면 현재 major/minor의 최신 patch를 설치하고, editable 설치면 실제 GEODE 소스 체크아웃을 갱신합니다. 데몬이 돌고 있었으면 새 코드로 다시 띄웁니다. minor/major 패키지 업데이트는 <code>--latest</code>를 명시합니다.</td>
                 </tr>
               </tbody>
             </table>
@@ -222,7 +222,7 @@ geode serve --poll 5     # 5-second poll interval`}</pre>
                 </tr>
                 <tr>
                   <td>Update + restart</td>
-                  <td><code>geode update</code>. Refreshes a source checkout and, if the daemon was running, stops it and restarts it in the background.</td>
+                  <td><code>geode update</code>. A uv tool gets the newest patch in its current major/minor series; an editable install refreshes the actual GEODE checkout. A running daemon restarts on the new code. Use <code>--latest</code> to opt into minor or major package upgrades.</td>
                 </tr>
               </tbody>
             </table>

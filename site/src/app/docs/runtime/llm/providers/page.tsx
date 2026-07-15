@@ -132,6 +132,8 @@ export default function Page() {
             <h2>다음</h2>
             <ul>
               <li><a href="/geode/docs/run/providers">프로바이더 설정 가이드</a>. 자격과 경로 선택.</li>
+              <li><a href="/geode/docs/runtime/llm/tool-calling">도구 호출</a>. ToolSpec, 선택 모드, 실행과 결과 replay.</li>
+              <li><a href="/geode/docs/runtime/llm/structured-output">구조화 출력</a>. JSON Schema 배선과 검증 경계.</li>
               <li><a href="/geode/docs/runtime/auth">인증</a>. OAuth, API 키, CLI 레인.</li>
               <li><a href="/geode/docs/guides/llm-adapter">어댑터 추가 가이드</a>. 새 모델, 새 레인 붙이기.</li>
             </ul>
@@ -257,6 +259,8 @@ export default function Page() {
             <h2>Next</h2>
             <ul>
               <li><a href="/geode/docs/run/providers">Provider setup guide</a>. Credentials and path selection.</li>
+              <li><a href="/geode/docs/runtime/llm/tool-calling">Tool calling</a>. ToolSpec, selection modes, execution, and result replay.</li>
+              <li><a href="/geode/docs/runtime/llm/structured-output">Structured output</a>. JSON Schema wiring and validation boundaries.</li>
               <li><a href="/geode/docs/runtime/auth">Authentication</a>. OAuth, API keys, CLI lanes.</li>
               <li><a href="/geode/docs/guides/llm-adapter">Add an LLM adapter</a>. Attaching a new model or lane.</li>
             </ul>

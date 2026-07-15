@@ -100,11 +100,21 @@ geode version
 업데이트와 삭제 경로는 설치 방식에 따라 다릅니다.
 
 ```bash
-uv tool upgrade geode-agent   # PyPI 설치
-geode update                  # 소스 체크아웃 설치
+geode update                  # uv: 최신 patch; 소스: pull + rebuild
+geode update --latest         # uv 전용: minor/major 업데이트 허용
+geode update --dry-run        # 설치 경로를 판별하고 변경 없이 미리 보기
 geode uninstall               # 런타임 데이터 + 설치된 CLI 제거
 uv tool uninstall geode-agent # CLI만 제거
 ```
+
+`geode update`는 현재 디렉터리를 추측하지 않고 설치 메타데이터를 읽습니다.
+표준 registry 기반 uv 도구는 현재 major/minor 계열의 최신 patch로 제한하고,
+editable 설치는 실제 GEODE 소스 체크아웃을 갱신합니다. 사용자 정의 uv
+receipt는 설치 설정을 버리지 않고 receipt 경로를 알리며 중단합니다.
+메타데이터가 없으면 현재 Git checkout으로 추측하지 않습니다. registry 해석은
+현재 프로젝트의 uv 설정과 격리됩니다. 실행 중인 daemon은 업데이트 검증 후에만
+중지하며, 새 daemon의 준비 상태까지 확인합니다. CLI 시작 시 암묵적인 네트워크
+업데이트는 실행하지 않습니다.
 
 ---
 
