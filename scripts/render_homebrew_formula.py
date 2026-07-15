@@ -1,8 +1,8 @@
 """Render the GEODE Homebrew formula from immutable release metadata.
 
-The renderer is shared by the release workflow and the ``homebrew-tap`` update
-path. It refuses tag auto-tarballs, incomplete resources, and version-mismatched
-sdist URLs so a formula cannot look valid while pointing at the wrong build.
+The renderer prepares a Homebrew/core candidate from a published GEODE release.
+It refuses tag auto-tarballs, incomplete resources, and version-mismatched sdist
+URLs so a formula cannot look valid while pointing at the wrong build.
 """
 
 from __future__ import annotations
@@ -168,7 +168,7 @@ def main() -> None:
     parser.add_argument(
         "--template",
         type=Path,
-        default=Path("packaging/homebrew/geode.rb.in"),
+        default=Path("packaging/homebrew/geode-agent.rb.in"),
     )
     args = parser.parse_args()
 

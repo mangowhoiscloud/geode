@@ -1,14 +1,14 @@
 ---
 name: geode-distribution
-description: Publish a released GEODE version to GitHub Release, PyPI/uv, and the Homebrew tap as one verified stable promotion. Triggers on "homebrew", "brew", "formula", "tap", "uv tool", "uvx", "배포", "설치 채널", "release tag".
+description: Publish a released GEODE version to GitHub Release and PyPI/uv as one verified stable promotion, while keeping unsupported Homebrew commands out of the public install surface. Triggers on "homebrew", "brew", "formula", "tap", "uv tool", "uvx", "배포", "설치 채널", "release tag".
 ---
 
 # GEODE Distribution
 
 Scope: promote an already-landed, version-stamped `origin/main` commit to all
 stable end-user channels. The release workflow owns the tag, package upload,
-formula generation, tap write, and post-publish checks. Do not edit the tap or
-create a release tag by hand during the normal path.
+and post-publish checks. Do not create a release tag by hand during the normal
+path.
 
 ## Channel contract
 
@@ -16,8 +16,12 @@ create a release tag by hand during the normal path.
 |---------|------------------|------------------|
 | PyPI / uv | `uv tool install geode-agent` | wheel + sdist for the promoted version |
 | uv one-shot | `uvx --from geode-agent geode` | the same PyPI version |
-| Homebrew | `brew install mangowhoiscloud/tap/geode` | GitHub Release sdist asset |
 | GitHub | release `vX.Y.Z` | annotated tag on the promoted main SHA |
+
+Homebrew is not an active stable channel. Do not publish a custom-tap command
+or advertise `brew install geode-agent` until the formula is actually present
+in Homebrew/core and the unqualified command passes on a clean machine. The
+existing custom tap is legacy-only and is outside the normal promotion path.
 
 Source-edge installs are deliberately separate from stable distribution:
 
@@ -50,8 +54,6 @@ Confirm:
   an ancestor of `origin/main`);
 - CI for that commit is green;
 - the protected `release` environment is ready;
-- `HOMEBREW_TAP_DEPLOY_KEY` is the write-enabled deploy key for only
-  `mangowhoiscloud/homebrew-tap`;
 - the PyPI Trusted Publisher is bound to this repository, workflow, and
   release environment.
 
@@ -70,12 +72,9 @@ The workflow serializes stable promotions and performs:
 
 1. full release validation, package-content gates, clean-wheel smoke, notes,
    and checksums;
-2. a tap-credential and existing-PyPI conflict preflight before any channel is
-   mutated;
+2. an existing-PyPI conflict preflight before any channel is mutated;
 3. an annotated tag and GitHub Release with wheel, sdist, and SHA256SUMS;
 4. PyPI Trusted Publishing followed by an exact-version public `uvx` smoke;
-5. Homebrew formula rendering from the GitHub Release sdist, PyPI resource
-   refresh, strict audit, source build, exact-version test, then tap push.
 
 ### 3. Watch to completion
 
@@ -94,20 +93,17 @@ Run these after the workflow is green:
 ```bash
 gh release view vX.Y.Z
 uvx --no-cache --from "geode-agent==X.Y.Z" geode version
-brew update
-brew upgrade geode
-brew test mangowhoiscloud/tap/geode
 ```
 
-The GitHub release, public PyPI JSON, `Formula/geode.rb`, and both CLI smokes
-must all resolve `X.Y.Z`. The formula URL must be:
+The GitHub release, public PyPI JSON, and both CLI smokes must all resolve
+`X.Y.Z`. Release artifacts must use the immutable URL shape:
 
 ```text
 https://github.com/mangowhoiscloud/geode/releases/download/vX.Y.Z/geode_agent-X.Y.Z.tar.gz
 ```
 
-Tag auto-tarballs under `archive/refs/tags`, a formula test that matches only
-`"GEODE v"`, or a VCS-main install described as a stable release are failures.
+Tag auto-tarballs under `archive/refs/tags` or a VCS-main install described as
+a stable release are failures.
 
 ## Recovery
 
@@ -119,15 +115,14 @@ The workflow is retry-safe for the same version:
 - an existing PyPI version may be repaired from a matching partial file set;
   every existing filename and SHA-256 must match before the publisher skips it
   and uploads only missing files, followed by the exact-version smoke;
-- an already-current Homebrew formula is never regenerated from a later live
-  dependency graph; it still runs audit/build/test and treats the no-diff
-  publication step as success.
 
-If `main` advanced after a partial promotion created the annotated tag, rerun
-with both workflow refs set to that tag (for example `--ref vX.Y.Z` and
-`-f ref=vX.Y.Z`). The workflow verifies that the tag target is unchanged and
-still belongs to `main` before repairing the release.
+If `main` advanced after a partial promotion created the annotated tag, keep
+the workflow revision on current `main` and set only the release input to the
+tag (for example `--ref main` and `-f ref=vX.Y.Z`). This uses the latest repair
+tooling while the workflow verifies that the immutable tag target is unchanged
+and still belongs to `main`.
 
 If a channel fails, fix the cause and rerun the same workflow/version. Never
 delete or overwrite a GitHub/PyPI release, move a published tag, loosen the exact
-version checks, or hand-edit the tap merely to make the run green.
+version checks, or substitute an unverified install channel merely to make the
+run green.
