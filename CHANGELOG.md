@@ -47,6 +47,17 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Stable releases tolerate split PyPI index convergence.** Post-publish
+  verification keeps the bounded exact-version `uvx` install loop, then delegates
+  JSON metadata and SHA-256 parity to the reusable full-snapshot verifier that
+  already retries GitHub and PyPI together. The redundant one-shot PyPI JSON
+  lookup is removed, so a successful upload cannot be reported as failed merely
+  because the exact-version JSON endpoint briefly lags the simple index. The
+  read-only smoke job also disables its unused uv cache instead of warning about
+  a checkout-free cache key.
+
 ## [0.99.333] - 2026-07-15
 
 ### Added

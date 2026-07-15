@@ -455,12 +455,9 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: geode-${{ inputs.version }}-release-artifacts
-          path: release-artifacts
-
       - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+        with:
+          enable-cache: false
 
       - name: Verify the exact package from the public PyPI index
         run: |
@@ -476,39 +473,6 @@ jobs:
           done
           echo "::error::geode-agent==${version} was not installable from public PyPI"
           exit 1
-
-      - name: Verify PyPI files match the validated release artifacts
-        env:
-          GEODE_VERSION: ${{ inputs.version }}
-        run: |
-          python - <<'PY'
-          import hashlib
-          import json
-          import os
-          import urllib.request
-          from pathlib import Path
-
-          version = os.environ["GEODE_VERSION"]
-          expected = {}
-          for line in Path("release-artifacts/SHA256SUMS").read_text().splitlines():
-              digest, filename = line.split(maxsplit=1)
-              expected[filename] = digest
-
-          with urllib.request.urlopen(
-              f"https://pypi.org/pypi/geode-agent/{version}/json", timeout=30
-          ) as response:
-              payload = json.load(response)
-          published = {
-              item["filename"]: item["digests"]["sha256"]
-              for item in payload["urls"]
-          }
-          assert published == expected, {"expected": expected, "published": published}
-
-          for artifact in Path("release-artifacts/dist").iterdir():
-              if artifact.name in expected:
-                  actual = hashlib.sha256(artifact.read_bytes()).hexdigest()
-                  assert actual == expected[artifact.name]
-          PY
 
   verify-stable-distribution:
     name: Verify public stable distribution
