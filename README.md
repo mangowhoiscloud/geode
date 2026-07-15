@@ -265,8 +265,8 @@ If you see this, you're done. If you see an error, run `geode doctor` for a diag
 ```bash
 geode about           # version, model, registered auth, paths, daemon status
 geode doctor          # 7-check bootstrap diagnosis with fix hints
-uv tool upgrade geode-agent  # update a PyPI-installed CLI
-geode update          # update a source checkout and refresh its editable CLI
+geode update          # uv install: latest patch; source install: pull + rebuild
+geode update --latest # explicitly allow minor/major uv package upgrades
 geode uninstall       # remove runtime data and the installed CLI
 geode setup --reset   # wipe ~/.geode/.env and re-run the wizard
 ```
@@ -275,26 +275,37 @@ geode setup --reset   # wipe ~/.geode/.env and re-run the wizard
 
 ### Updating
 
-For a PyPI install, update the CLI package with uv:
-
-```bash
-uv tool upgrade geode-agent
-geode version
-```
-
-For a source checkout install, let GEODE run the same update sequence it uses in smoke tests:
+GEODE detects whether it is a persistent uv tool or an editable source install:
 
 ```bash
 geode update
+geode version
 ```
 
-This runs `git pull --ff-only`, `uv sync`, `uv tool install -e . --force`, then `geode version`.
-If `geode serve` was running, GEODE restarts it so the daemon loads the new code. Preview the
-steps without changing files with:
+For a standard registry-backed uv tool, this replaces the stored install request
+with a compatible-release constraint and installs the newest patch in the
+current major/minor series. Minor and major upgrades require an explicit opt-in:
+
+```bash
+geode update --latest
+```
+
+For an editable source checkout, `geode update` instead runs `git pull
+--ff-only`, `uv sync`, `uv tool install -e . --force`, then `geode version`.
+It resolves the actual GEODE checkout from install metadata rather than using
+an unrelated current repository; missing metadata is an error, never a cwd
+fallback. If `geode serve` was running, GEODE verifies the update before
+stopping it, then confirms the replacement daemon is ready. Preview either path
+without changing files:
 
 ```bash
 geode update --dry-run
 ```
+
+Custom uv tool receipts with extras, `--with` packages, constraints, an explicit
+Python, or resolver settings stop with a manual-update hint so those settings
+are never discarded silently. The hint identifies the receipt and preserves a
+recorded source reference instead of silently switching it to PyPI.
 
 ---
 
@@ -439,8 +450,8 @@ Check `geode model`, some models are better at tool use than others. Default is 
 <summary><strong>How do I update?</strong></summary>
 
 ```bash
-uv tool upgrade geode-agent   # PyPI install
-geode update                  # source checkout
+geode update          # uv tool: latest patch; source: pull + rebuild
+geode update --latest # uv tool: explicitly allow minor/major upgrades
 ```
 </details>
 

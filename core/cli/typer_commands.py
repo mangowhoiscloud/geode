@@ -192,11 +192,16 @@ def update(
         "--restart/--no-restart",
         help="Restart geode serve when it was running before the update",
     ),
+    latest: bool = typer.Option(
+        False,
+        "--latest",
+        help="Allow minor or major upgrades for uv tool installs (default: patch only)",
+    ),
 ) -> None:
-    """Update a source checkout and refresh the installed CLI."""
+    """Update an editable checkout or uv tool install."""
     from core.cli.commands.lifecycle import do_update
 
-    if not do_update(dry_run=dry_run, force=force, restart=restart):
+    if not do_update(dry_run=dry_run, force=force, restart=restart, latest=latest):
         raise typer.Exit(1)
 
 

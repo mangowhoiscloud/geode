@@ -106,8 +106,8 @@ geode setup -r     # 처음부터 다시`}</pre>
             </ol>
 
             <h2>업데이트와 삭제</h2>
-            <pre>{`uv tool upgrade geode-agent   # PyPI 설치 업데이트
-geode update                  # 소스 체크아웃 업데이트 (데몬 재시작 포함)
+            <pre>{`geode update                  # uv: 최신 patch; 소스: pull + rebuild
+geode update --latest         # uv: minor/major 업데이트를 명시적으로 허용
 geode uninstall               # 런타임 데이터 + CLI 제거`}</pre>
 
             <h2>다음 단계</h2>
@@ -213,8 +213,8 @@ geode setup -r     # start over`}</pre>
             </ol>
 
             <h2>Update and uninstall</h2>
-            <pre>{`uv tool upgrade geode-agent   # update a PyPI install
-geode update                  # update a source checkout (restarts the daemon)
+            <pre>{`geode update                  # uv: latest patch; source: pull + rebuild
+geode update --latest         # uv: explicitly allow minor/major upgrades
 geode uninstall               # remove runtime data + installed CLI`}</pre>
 
             <h2>Next</h2>
