@@ -48,7 +48,9 @@ def build_notification_adapter() -> None:
         return
 
     adapters = [
-        SlackNotificationAdapter(manager=manager),
+        # Slack posts directly to the Web API (PR-SLACK-TRANSPORT);
+        # Discord/Telegram remain MCP-backed.
+        SlackNotificationAdapter(),
         DiscordNotificationAdapter(manager=manager),
         TelegramNotificationAdapter(manager=manager),
     ]
@@ -103,9 +105,9 @@ def _load_poller_class(dotted_path: str) -> type:
 
 def _resolve_slack_bot_user_id() -> str:
     """Resolve GEODE's Slack bot user ID via auth.test API (best-effort)."""
-    import os
+    from core.messaging.slack_transport import resolve_bot_token
 
-    token = os.environ.get("SLACK_BOT_TOKEN", "")
+    token = resolve_bot_token()
     if not token:
         return ""
     try:
@@ -125,6 +127,45 @@ def _resolve_slack_bot_user_id() -> str:
     except Exception as exc:
         log.debug("Failed to resolve Slack bot user ID: %s", exc)
     return ""
+
+
+def _load_gateway_config() -> tuple[dict[str, Any], list[str]]:
+    """Merge the [gateway] config: global SoT + project overlay.
+
+    Returns ``(merged_config, source_labels)``. Scalar keys: project
+    overrides global. ``bindings.rules``: global rules first, project
+    rules appended (both active). Either file may be absent.
+    """
+    import tomllib
+
+    from core.paths import GLOBAL_CONFIG_TOML, PROJECT_CONFIG_TOML
+
+    merged_gateway: dict[str, Any] = {}
+    merged_rules: list[dict[str, Any]] = []
+    sources: list[str] = []
+    for label, path in (("global", GLOBAL_CONFIG_TOML), ("project", PROJECT_CONFIG_TOML)):
+        if not path.exists():
+            continue
+        try:
+            with open(path, "rb") as fh:
+                raw = tomllib.load(fh)
+        except Exception:
+            log.warning("Gateway config unreadable: %s", path, exc_info=True)
+            continue
+        gw = raw.get("gateway")
+        if not isinstance(gw, dict):
+            continue
+        sources.append(f"{label}:{path}")
+        for key, value in gw.items():
+            if key == "bindings":
+                rules = value.get("rules", []) if isinstance(value, dict) else []
+                if isinstance(rules, list):
+                    merged_rules.extend(r for r in rules if isinstance(r, dict))
+            else:
+                merged_gateway[key] = value  # later (project) wins on scalars
+    if merged_rules:
+        merged_gateway["bindings"] = {"rules": merged_rules}
+    return ({"gateway": merged_gateway} if merged_gateway else {}), sources
 
 
 def build_gateway() -> None:
@@ -157,27 +198,28 @@ def build_gateway() -> None:
     # Prefers SLACK_BOT_USER_ID env var; falls back to auth.test API call.
     import os
 
+    from core.messaging.slack_transport import resolve_bot_token
+
     bot_user_id = os.environ.get("SLACK_BOT_USER_ID", "")
-    if not bot_user_id and os.environ.get("SLACK_BOT_TOKEN"):
+    if not bot_user_id and resolve_bot_token():
         bot_user_id = _resolve_slack_bot_user_id()
 
     manager = ChannelManager(lane_queue=lane_queue, bot_user_id=bot_user_id)
     notification = get_notification()
     poll_interval = settings.gateway_poll_interval_s
 
-    # Load config from TOML
+    # Load config from TOML — root-level SoT (PR-SLACK-TRANSPORT).
+    # The user-level ~/.geode/config.toml [gateway] is authoritative; the
+    # project .geode/config.toml may OVERLAY it (scalar keys win, binding
+    # rules append). Previously only the project file was read, so the
+    # daemon's entire Slack surface silently depended on its launchd
+    # WorkingDirectory.
     toml_config: dict[str, Any] = {}
-    config_path = None
     try:
-        import tomllib
-
-        from core.paths import PROJECT_CONFIG_TOML
-
-        config_path = PROJECT_CONFIG_TOML
-        if config_path.exists():
-            with open(config_path, "rb") as f:
-                toml_config = tomllib.load(f)
+        toml_config, config_sources = _load_gateway_config()
+        if toml_config.get("gateway"):
             manager.load_bindings_from_config(toml_config)
+            log.info("Gateway config sources: %s", ", ".join(config_sources) or "none")
     except Exception as exc:
         _plugin_status["gateway_bindings"] = "skipped"
         log.warning("Plugin gateway_bindings: config load failed (%s)", exc)
@@ -216,25 +258,30 @@ def build_gateway() -> None:
 
     # Hot-reload bindings on config.toml change
     try:
-        import tomllib
-        from pathlib import Path
-
         from core.orchestration.hot_reload import ConfigWatcher
 
         def _reload_bindings(path: Any, mtime: float) -> None:
             try:
-                reload_config: dict[str, Any] = {}
-                if Path(path).exists():
-                    with open(path, "rb") as fh:
-                        reload_config = tomllib.load(fh)
+                reload_config, reload_sources = _load_gateway_config()
                 manager.load_bindings_from_config(reload_config)
-                log.info("Gateway bindings reloaded from %s", path)
+                log.info(
+                    "Gateway bindings reloaded (trigger=%s, sources=%s)",
+                    path,
+                    ", ".join(reload_sources) or "none",
+                )
             except Exception as reload_exc:
                 log.warning("Gateway binding reload failed: %s", reload_exc)
 
-        if config_path and config_path.exists():
-            _watcher = ConfigWatcher()
-            _watcher.watch(config_path, _reload_bindings, name="gateway-bindings")
+        from core.paths import GLOBAL_CONFIG_TOML as _GLOBAL_TOML
+        from core.paths import PROJECT_CONFIG_TOML as _PROJECT_TOML
+
+        _watcher = ConfigWatcher()
+        _watched_any = False
+        for _cfg in (_GLOBAL_TOML, _PROJECT_TOML):
+            if _cfg.exists():
+                _watcher.watch(_cfg, _reload_bindings, name=f"gateway-bindings:{_cfg}")
+                _watched_any = True
+        if _watched_any:
             _watcher.start()
             # Attach to manager to prevent GC (daemon thread lifetime)
             manager._binding_watcher = _watcher  # type: ignore[attr-defined]

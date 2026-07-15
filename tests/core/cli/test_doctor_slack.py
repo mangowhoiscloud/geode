@@ -22,9 +22,12 @@ class TestCheckEnv:
         results = _check_env()
         assert all(r["ok"] for r in results)
 
-    def test_token_missing(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_token_missing(self, monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
         monkeypatch.delenv("SLACK_BOT_TOKEN", raising=False)
         monkeypatch.delenv("SLACK_TEAM_ID", raising=False)
+        # The resolver falls back to the global ~/.geode/.env — isolate it
+        # from the real machine state (PR-SLACK-TRANSPORT).
+        monkeypatch.setattr("core.paths.GLOBAL_ENV_FILE", tmp_path / "absent.env")
         from core.cli.doctor import _check_env
 
         results = _check_env()
@@ -74,8 +77,9 @@ class TestCheckTokenValidity:
             assert not result["ok"]
             assert "invalid_auth" in result["detail"]
 
-    def test_no_token(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_no_token(self, monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
         monkeypatch.delenv("SLACK_BOT_TOKEN", raising=False)
+        monkeypatch.setattr("core.paths.GLOBAL_ENV_FILE", tmp_path / "absent.env")
         from core.cli.doctor import _check_token_validity
 
         result = _check_token_validity()

@@ -36,9 +36,34 @@ def mock_manager() -> MagicMock:
     return mgr
 
 
+class _FakeSlackTransport:
+    """Double for core.messaging.slack_transport.SlackTransport."""
+
+    def __init__(self, *, configured: bool = True, fail: str = "") -> None:
+        self.configured = configured
+        self._fail = fail
+        self.posted: list[dict] = []
+
+    async def ais_available(self) -> bool:
+        return self.configured and not self._fail
+
+    async def post_message(self, channel_id, text, *, thread_ts="", mrkdwn=True):
+        if self._fail:
+            from core.messaging.slack_transport import SlackTransportError
+
+            raise SlackTransportError(self._fail)
+        self.posted.append({"channel": channel_id, "text": text, "thread_ts": thread_ts})
+        return {"ok": True, "ts": "async-ts"}
+
+
 @pytest.fixture()
-def slack_adapter(mock_manager: MagicMock) -> SlackNotificationAdapter:
-    return SlackNotificationAdapter(manager=mock_manager)
+def slack_transport() -> _FakeSlackTransport:
+    return _FakeSlackTransport()
+
+
+@pytest.fixture()
+def slack_adapter(slack_transport: _FakeSlackTransport) -> SlackNotificationAdapter:
+    return SlackNotificationAdapter(transport=slack_transport)
 
 
 @pytest.fixture()
@@ -101,43 +126,48 @@ class TestNotificationResult:
 
 class TestSlackNotificationAdapter:
     def test_send_message_success(
-        self, slack_adapter: SlackNotificationAdapter, mock_manager: MagicMock
+        self,
+        slack_adapter: SlackNotificationAdapter,
+        slack_transport: _FakeSlackTransport,
     ):
         result = asyncio.run(slack_adapter.asend_message("slack", "#general", "Hello!"))
         assert result.success
         assert result.channel == "slack"
         assert result.message_id == "async-ts"
-        mock_manager.acall_tool.assert_awaited_once_with(
-            "slack", "slack_post_message", {"channel_id": "#general", "text": "Hello!"}
-        )
+        assert slack_transport.posted == [
+            {"channel": "#general", "text": "Hello!", "thread_ts": ""}
+        ]
 
-    def test_asend_message_uses_async_mcp_call(
-        self, slack_adapter: SlackNotificationAdapter, mock_manager: MagicMock
+    def test_asend_message_forwards_thread_ts(
+        self,
+        slack_adapter: SlackNotificationAdapter,
+        slack_transport: _FakeSlackTransport,
     ):
-        result = asyncio.run(slack_adapter.asend_message("slack", "#general", "Hello async!"))
-
+        result = asyncio.run(
+            slack_adapter.asend_message(
+                "slack", "#general", "Hello async!", thread_ts="171234.5678"
+            )
+        )
         assert result.success
         assert result.message_id == "async-ts"
-        mock_manager.acall_tool.assert_awaited_once_with(
-            "slack", "slack_post_message", {"channel_id": "#general", "text": "Hello async!"}
-        )
+        assert slack_transport.posted[0]["thread_ts"] == "171234.5678"
 
-    def test_send_message_error(
-        self, slack_adapter: SlackNotificationAdapter, mock_manager: MagicMock
-    ):
-        mock_manager.acall_tool.return_value = {"error": "channel_not_found"}
-        result = asyncio.run(slack_adapter.asend_message("slack", "#nonexistent", "Hello!"))
+    def test_send_message_error(self):
+        adapter = SlackNotificationAdapter(
+            transport=_FakeSlackTransport(fail="chat.postMessage: channel_not_found")
+        )
+        result = asyncio.run(adapter.asend_message("slack", "#nonexistent", "Hello!"))
         assert not result.success
         assert "channel_not_found" in result.error
 
-    def test_send_message_unavailable(self, mock_manager: MagicMock):
-        mock_manager.check_health.return_value = {"slack": False}
-        adapter = SlackNotificationAdapter(manager=mock_manager)
+    def test_send_message_unconfigured(self):
+        adapter = SlackNotificationAdapter(transport=_FakeSlackTransport(configured=False))
         result = asyncio.run(adapter.asend_message("slack", "#general", "Hello!"))
         assert not result.success
+        assert "not configured" in result.error
 
-    def test_send_message_no_manager(self):
-        adapter = SlackNotificationAdapter(manager=None)
+    def test_unconfigured_transport_not_available(self):
+        adapter = SlackNotificationAdapter(transport=_FakeSlackTransport(configured=False))
         assert not adapter.is_available()
 
     def test_is_available(self, slack_adapter: SlackNotificationAdapter):
@@ -146,11 +176,9 @@ class TestSlackNotificationAdapter:
     def test_list_channels(self, slack_adapter: SlackNotificationAdapter):
         assert slack_adapter.list_channels() == ["slack"]
 
-    def test_send_message_exception(
-        self, slack_adapter: SlackNotificationAdapter, mock_manager: MagicMock
-    ):
-        mock_manager.acall_tool.side_effect = Exception("connection lost")
-        result = asyncio.run(slack_adapter.asend_message("slack", "#general", "Hello!"))
+    def test_send_message_exception(self):
+        adapter = SlackNotificationAdapter(transport=_FakeSlackTransport(fail="connection lost"))
+        result = asyncio.run(adapter.asend_message("slack", "#general", "Hello!"))
         assert not result.success
         assert "connection lost" in result.error
 
@@ -227,7 +255,7 @@ class TestTelegramNotificationAdapter:
 
 class TestCompositeNotificationAdapter:
     def test_route_to_slack(self, mock_manager: MagicMock):
-        slack = SlackNotificationAdapter(manager=mock_manager)
+        slack = SlackNotificationAdapter(transport=_FakeSlackTransport())
         discord = DiscordNotificationAdapter(manager=mock_manager)
         composite = CompositeNotificationAdapter([slack, discord])
 
@@ -237,7 +265,7 @@ class TestCompositeNotificationAdapter:
 
     def test_route_to_discord(self, mock_manager: MagicMock):
         mock_manager.acall_tool.return_value = {"id": "msg_1"}
-        slack = SlackNotificationAdapter(manager=mock_manager)
+        slack = SlackNotificationAdapter(transport=_FakeSlackTransport())
         discord = DiscordNotificationAdapter(manager=mock_manager)
         composite = CompositeNotificationAdapter([slack, discord])
 
@@ -246,16 +274,15 @@ class TestCompositeNotificationAdapter:
         assert result.channel == "discord"
 
     def test_unknown_channel(self, mock_manager: MagicMock):
-        slack = SlackNotificationAdapter(manager=mock_manager)
+        slack = SlackNotificationAdapter(transport=_FakeSlackTransport())
         composite = CompositeNotificationAdapter([slack])
 
         result = asyncio.run(composite.asend_message("email", "user@test.com", "Hello!"))
         assert not result.success
         assert "No adapter" in result.error
 
-    def test_unavailable_channel(self, mock_manager: MagicMock):
-        mock_manager.check_health.return_value = {"slack": False}
-        slack = SlackNotificationAdapter(manager=mock_manager)
+    def test_unavailable_channel(self):
+        slack = SlackNotificationAdapter(transport=_FakeSlackTransport(configured=False))
         composite = CompositeNotificationAdapter([slack])
 
         result = asyncio.run(composite.asend_message("slack", "#general", "Hello!"))
@@ -263,19 +290,19 @@ class TestCompositeNotificationAdapter:
         assert "not available" in result.error
 
     def test_is_available_any(self, mock_manager: MagicMock):
-        slack = SlackNotificationAdapter(manager=mock_manager)
+        slack = SlackNotificationAdapter(transport=_FakeSlackTransport())
         discord = DiscordNotificationAdapter(manager=mock_manager)
         composite = CompositeNotificationAdapter([slack, discord])
         assert asyncio.run(composite.ais_available())
 
     def test_is_available_specific_channel(self, mock_manager: MagicMock):
-        slack = SlackNotificationAdapter(manager=mock_manager)
+        slack = SlackNotificationAdapter(transport=_FakeSlackTransport())
         composite = CompositeNotificationAdapter([slack])
         assert asyncio.run(composite.ais_available("slack"))
         assert not asyncio.run(composite.ais_available("discord"))
 
     def test_list_channels(self, mock_manager: MagicMock):
-        slack = SlackNotificationAdapter(manager=mock_manager)
+        slack = SlackNotificationAdapter(transport=_FakeSlackTransport())
         discord = DiscordNotificationAdapter(manager=mock_manager)
         telegram = TelegramNotificationAdapter(manager=mock_manager)
         composite = CompositeNotificationAdapter([slack, discord, telegram])

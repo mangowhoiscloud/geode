@@ -47,13 +47,39 @@ SLACK_APP_MANIFEST: dict[str, Any] = {
 }
 
 
+def _resolve_env_or_dotenv(name: str) -> tuple[str, str]:
+    """Resolve *name* from os.environ, else the global ~/.geode/.env.
+
+    Returns ``(value, source)`` where source is ``env`` / ``dotenv`` /
+    empty. The doctor previously checked os.environ only and reported a
+    perfectly valid dotenv-stored token as "not set" (2026-07-15).
+    """
+    val = os.environ.get(name, "")
+    if val:
+        return val, "env"
+    try:
+        from dotenv import dotenv_values
+
+        from core.paths import GLOBAL_ENV_FILE
+
+        if GLOBAL_ENV_FILE.exists():
+            dotenv_val = dotenv_values(str(GLOBAL_ENV_FILE)).get(name) or ""
+            if dotenv_val:
+                return dotenv_val, "dotenv"
+    except Exception:
+        log.debug("dotenv fallback read failed for %s", name, exc_info=True)
+    return "", ""
+
+
 def _check_env() -> list[dict[str, Any]]:
-    """Check Slack environment variables."""
+    """Check Slack credentials (os.environ, then ~/.geode/.env)."""
     results: list[dict[str, Any]] = []
 
-    token = os.environ.get("SLACK_BOT_TOKEN", "")
+    token, token_src = _resolve_env_or_dotenv("SLACK_BOT_TOKEN")
     if token:
-        results.append({"name": "SLACK_BOT_TOKEN", "ok": True, "detail": mask_key(token)})
+        results.append(
+            {"name": "SLACK_BOT_TOKEN", "ok": True, "detail": f"{mask_key(token)} ({token_src})"}
+        )
     else:
         results.append(
             {
@@ -64,9 +90,9 @@ def _check_env() -> list[dict[str, Any]]:
             }
         )
 
-    team_id = os.environ.get("SLACK_TEAM_ID", "")
+    team_id, team_src = _resolve_env_or_dotenv("SLACK_TEAM_ID")
     if team_id:
-        results.append({"name": "SLACK_TEAM_ID", "ok": True, "detail": team_id})
+        results.append({"name": "SLACK_TEAM_ID", "ok": True, "detail": f"{team_id} ({team_src})"})
     else:
         results.append(
             {
@@ -82,7 +108,7 @@ def _check_env() -> list[dict[str, Any]]:
 
 def _check_token_validity() -> dict[str, Any]:
     """Validate Slack Bot Token via auth.test API."""
-    token = os.environ.get("SLACK_BOT_TOKEN", "")
+    token, _src = _resolve_env_or_dotenv("SLACK_BOT_TOKEN")
     if not token:
         return {"ok": False, "detail": "no token to validate"}
 
@@ -109,7 +135,7 @@ def _check_token_validity() -> dict[str, Any]:
 
 def _check_scopes() -> dict[str, Any]:
     """Check bot token scopes via auth.test + headers."""
-    token = os.environ.get("SLACK_BOT_TOKEN", "")
+    token, _src = _resolve_env_or_dotenv("SLACK_BOT_TOKEN")
     if not token:
         return {"ok": False, "detail": "no token", "missing": REQUIRED_SCOPES}
 
@@ -228,26 +254,32 @@ def _check_serve() -> dict[str, Any]:
         return {"ok": False, "detail": "pgrep check failed"}
 
 
-def _check_mcp_slack() -> dict[str, Any]:
-    """Check if Slack MCP server process is running."""
+def _check_transport() -> dict[str, Any]:
+    """Probe the direct Web API transport (PR-SLACK-TRANSPORT).
+
+    Replaces the old ``pgrep server-slack`` process check — Slack no
+    longer runs through an MCP subprocess, so the health question is
+    "can THIS machine call chat.postMessage's API family", answered by a
+    live ``auth.test`` through the same transport the daemon uses.
+    """
+    import asyncio
+
+    from core.messaging.slack_transport import SlackTransport
+
+    transport = SlackTransport()
+    if not transport.configured:
+        return {"ok": False, "detail": "transport unconfigured (no SLACK_BOT_TOKEN)"}
     try:
-        result = subprocess.run(
-            ["/usr/bin/pgrep", "-f", "server-slack"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        pids = result.stdout.strip().split("\n")
-        pids = [p for p in pids if p]
-        if pids:
-            return {"ok": True, "detail": f"MCP server-slack PID {pids[0]}"}
+        data = asyncio.run(transport.auth_test())
         return {
-            "ok": False,
-            "detail": "Slack MCP server not running",
-            "hint": "geode serve starts it automatically",
+            "ok": True,
+            "detail": (
+                f"direct Web API OK (workspace={data.get('team', '?')}, "
+                f"bot={data.get('user', '?')})"
+            ),
         }
-    except Exception:
-        return {"ok": False, "detail": "process check failed"}
+    except Exception as exc:
+        return {"ok": False, "detail": f"transport auth.test failed: {exc}"}
 
 
 def _check_socket() -> dict[str, Any]:
@@ -297,9 +329,9 @@ def run_doctor_slack() -> dict[str, Any]:
         report["ok"] = False
 
     # 6. MCP Slack server
-    mcp_result = _check_mcp_slack()
-    report["checks"].append({"name": "mcp_slack", **mcp_result})
-    if not mcp_result["ok"]:
+    transport_result = _check_transport()
+    report["checks"].append({"name": "slack_transport", **transport_result})
+    if not transport_result["ok"]:
         report["ok"] = False
 
     # 7. IPC socket

@@ -1,10 +1,19 @@
-"""Slack Poller — polls Slack for new messages via MCP server."""
+"""Slack Poller — polls Slack channels via the direct Web API transport.
+
+PR-SLACK-TRANSPORT (2026-07-15): previously polled through the ``slack``
+MCP server, which lost a 10s startup race on every daemon boot and left
+this poller as a silent no-op behind its health gate. Now consumes
+:class:`core.messaging.slack_transport.SlackTransport` directly; the MCP
+manager argument is accepted for BasePoller signature compatibility but
+unused. Inbound remains polling (Socket Mode needs an app-level xapp
+token the deployment does not have yet — documented follow-up).
+"""
 
 from __future__ import annotations
 
 import logging
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from core.messaging.models import InboundMessage
 from core.server.supervised.poller_base import BasePoller
@@ -18,11 +27,7 @@ if TYPE_CHECKING:
 
 
 class SlackPoller(BasePoller):
-    """Poll Slack for new messages via MCP server.
-
-    Uses Slack MCP tools to read channel history and detect new messages.
-    Sends responses back via NotificationPort.
-    """
+    """Poll Slack channels for new messages via the Web API transport."""
 
     DEDUP_TTL_S = 300  # 5 minutes — matches Kiki's event dedup window
     _env_config_var = "SLACK_BOT_TOKEN"
@@ -41,6 +46,9 @@ class SlackPoller(BasePoller):
             notification=notification,
             poll_interval_s=poll_interval_s,
         )
+        from core.messaging.slack_transport import get_slack_transport
+
+        self._transport = get_slack_transport()
         self._last_ts: dict[str, str] = {}  # channel_id → last message ts
         self._seen_events: dict[str, float] = {}  # "channel:ts" → seen_at (dedup)
 
@@ -49,7 +57,7 @@ class SlackPoller(BasePoller):
         return "slack"
 
     async def _apoll_once(self) -> None:
-        if not self._check_mcp_health():
+        if not await self._transport.ais_available():
             return
 
         # Evict expired dedup entries
@@ -65,35 +73,11 @@ class SlackPoller(BasePoller):
         successfully processed. If processing fails mid-batch, unprocessed
         messages will be re-fetched on the next poll cycle.
         """
-        import json as _json
-
-        # ``_poll_once`` (caller) gates this method behind
-        # ``_check_mcp_health`` which already guarantees ``_mcp is not None``;
-        # the assert localises that invariant for mypy.
-        assert self._mcp is not None
-
         try:
-            args: dict[str, Any] = {"channel_id": channel_id, "limit": 5}
             oldest = self._last_ts.get(channel_id)
-            if oldest:
-                args["oldest"] = oldest
-
-            result = await self._mcp.acall_tool("slack", "slack_get_channel_history", args)
-
-            # MCP returns {"content": [{"text": "{\"ok\":true,\"messages\":[...]}"}]}
-            parsed = result
-            if "content" in result and isinstance(result["content"], list):
-                try:
-                    text = result["content"][0].get("text", "")
-                    parsed = _json.loads(text) if text else result
-                except (IndexError, _json.JSONDecodeError, KeyError):
-                    parsed = result
-
-            if "error" in parsed or not parsed.get("ok", True):
-                log.debug("Slack history error: %s", parsed.get("error", "unknown"))
-                return
-
-            messages = parsed.get("messages", [])
+            messages = await self._transport.channel_history(
+                channel_id, oldest=oldest or "", limit=5
+            )
             if not messages:
                 return
 
@@ -192,29 +176,19 @@ class SlackPoller(BasePoller):
 
     async def _add_reaction(self, channel_id: str, message_ts: str, emoji: str) -> None:
         """Add a reaction emoji to a message (best-effort, non-blocking)."""
-        if self._mcp is None:
-            return
         try:
-            await self._mcp.acall_tool(
-                "slack",
-                "slack_add_reaction",
-                {"channel_id": channel_id, "timestamp": message_ts, "reaction": emoji},
-            )
+            await self._transport.add_reaction(channel_id, message_ts, emoji)
         except Exception:
             log.debug("add_reaction failed for %s", channel_id)
 
     async def _send_response(self, channel_id: str, text: str, *, thread_ts: str = "") -> None:
-        """Send response back to Slack via the same MCP connection used for polling."""
-        if self._mcp is None:
-            return
+        """Send the routed response back through the Web API transport."""
         try:
-            from core.messaging.slack_formatter import markdown_to_slack_mrkdwn
-
-            text = markdown_to_slack_mrkdwn(text)
-            args: dict[str, Any] = {"channel_id": channel_id, "text": text}
-            if thread_ts:
-                args["thread_ts"] = thread_ts
-            await self._mcp.acall_tool("slack", "slack_post_message", args)
+            await self._transport.post_message(
+                channel_id,
+                text,
+                thread_ts=thread_ts,
+            )
             log.info("Slack response sent to %s", channel_id)
         except Exception as exc:
             log.warning("Failed to send Slack response: %s", exc)

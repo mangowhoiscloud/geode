@@ -45,6 +45,51 @@ functional change.
 
 ---
 
+## [0.99.333] - 2026-07-15
+
+### Changed
+
+- **Slack transport rewritten — direct Web API, no MCP subprocess.**
+  Root cause of the dead Slack surface: the ``slack`` MCP server lost a
+  startup race on every daemon boot (``StdioMCPClient.connect`` waits at
+  most 10s while a warm-cache ``npx @modelcontextprotocol/server-slack``
+  spawn measures 10.1s), so the poller's health gate silently disabled
+  ALL inbound and outbound Slack while the bot token was valid the whole
+  time. New ``core/messaging/slack_transport.py`` posts straight to the
+  Web API over httpx (``chat.postMessage`` with 39k chunking + threaded
+  follow-ups, ``conversations.history``, ``reactions.add`` with
+  already-reacted tolerance, 429 Retry-After backoff, cached
+  ``auth.test`` availability, token resolution falling back to the
+  global ``~/.geode/.env``). ``SlackNotificationAdapter`` and
+  ``SlackPoller`` now consume the transport (names and NotificationPort/
+  ChannelManager contracts unchanged); the deprecated npm package, the
+  10s race, and the MCP health-gate coupling are gone. Inbound stays
+  polling — Socket Mode needs an app-level ``xapp-`` token the
+  deployment does not have yet (documented follow-up).
+- **Gateway config has a root-level SoT.** ``[gateway]`` (+ binding
+  rules) now loads from the user-level ``~/.geode/config.toml`` as the
+  authoritative source with the project ``.geode/config.toml`` as an
+  explicit overlay (scalar keys override, binding rules append), and the
+  hot-reload watcher observes both files. Previously only the project
+  file was read, so the daemon's entire Slack surface depended on its
+  launchd WorkingDirectory. Boot logs now name the config sources used.
+- **Notification adapter survives daemon threads.**
+  ``get_notification()`` falls back to a process-wide last-set adapter
+  (mirroring the gateway's module global) — ``send_notification`` and
+  ask/reply publishes from poller/IPC threads previously read a
+  thread-empty ContextVar and silently no-oped.
+- **`geode doctor slack` diagnoses instead of misreporting.** Credential
+  checks resolve os.environ THEN the global ``.env`` (a valid
+  dotenv-stored token was reported "not set"); the stale
+  ``pgrep server-slack`` process check is replaced by a live
+  ``auth.test`` probe through the same transport the daemon uses.
+  Deleted per the rewrite: MCP tool calls in the poller, the MCP-backed
+  Slack adapter body, the legacy constructor shape, and the
+  ``server-slack`` doctor check. Guards:
+  ``tests/core/messaging/test_slack_transport.py`` (13),
+  ``tests/core/wiring/test_gateway_config_sot.py`` (5), migrated
+  ``tests/core/mcp/test_notification_adapters.py``.
+
 ## [0.99.332] - 2026-07-15
 
 ### Removed
