@@ -81,6 +81,7 @@ def test_homebrew_publish_uses_scoped_key_and_retry_guards() -> None:
     assert "HOMEBREW_TAP_DEPLOY_KEY" in text
     assert "brew update-python-resources --help" in text
     assert "--ignore-main-package-cooldown" in text
+    assert 'brew trust --formula "$tap_name/geode"' in text
     assert text.count("--template geode/packaging/homebrew/geode.rb.in") == 3
     assert "git pull --rebase" not in text
     assert "steps.tap-base.outputs.sha" in text
@@ -118,6 +119,13 @@ if [[ "${1:-}" == "tap" ]]; then
   printf '%s\\n' "$@" > "$BREW_TAP_CAPTURE"
   exit 0
 fi
+if [[ "${1:-}" == "trust" && "${2:-}" == "--help" ]]; then
+  exit 0
+fi
+if [[ "${1:-}" == "trust" ]]; then
+  printf '%s\\n' "$@" > "$BREW_TRUST_CAPTURE"
+  exit 0
+fi
 if [[ "${1:-}" == "--repo" ]]; then
   [[ "${2:-}" == "mangowhoiscloud/tap" ]]
   printf '%s\\n' "$BREW_TAP_REPO"
@@ -134,25 +142,30 @@ printf 'updated formula\\n' > "$BREW_TAP_REPO/Formula/geode.rb"
     )
     brew.chmod(0o755)
 
-    base_args = [
-        "update-python-resources",
-        "mangowhoiscloud/tap/geode",
-        "--package-name",
-        "geode-agent",
-        "--version",
-        "0.99.330",
-    ]
     cases: tuple[tuple[str, str, list[str]], ...] = (
-        ("legacy", "", []),
+        (
+            "legacy",
+            "",
+            ["update-python-resources", "mangowhoiscloud/tap/geode"],
+        ),
         (
             "cooldown",
             "--ignore-main-package-cooldown",
-            ["--ignore-main-package-cooldown"],
+            [
+                "update-python-resources",
+                "mangowhoiscloud/tap/geode",
+                "--package-name",
+                "geode-agent",
+                "--version",
+                "0.99.330",
+                "--ignore-main-package-cooldown",
+            ],
         ),
     )
-    for label, help_text, extra_args in cases:
+    for label, help_text, expected_args in cases:
         capture = tmp_path / f"{label}.args"
         tap_capture = tmp_path / f"{label}.tap"
+        trust_capture = tmp_path / f"{label}.trust"
         checkout_formula.write_text("checkout formula\n", encoding="utf-8")
         (tap_repo / "Formula" / "geode.rb").write_text(
             "tapped formula\n",
@@ -165,6 +178,7 @@ printf 'updated formula\\n' > "$BREW_TAP_REPO/Formula/geode.rb"
                 "BREW_HELP_TEXT": help_text,
                 "BREW_TAP_CAPTURE": str(tap_capture),
                 "BREW_TAP_REPO": str(tap_repo),
+                "BREW_TRUST_CAPTURE": str(trust_capture),
                 "GEODE_VERSION": "0.99.330",
                 "PATH": f"{bin_dir}:{env['PATH']}",
             }
@@ -179,14 +193,16 @@ printf 'updated formula\\n' > "$BREW_TAP_REPO/Formula/geode.rb"
             env=env,
         )
         assert result.returncode == 0, result.stderr
-        assert capture.read_text(encoding="utf-8").splitlines() == [
-            *base_args,
-            *extra_args,
-        ]
+        assert capture.read_text(encoding="utf-8").splitlines() == expected_args
         assert tap_capture.read_text(encoding="utf-8").splitlines() == [
             "tap",
             "mangowhoiscloud/tap",
             str(tmp_path / "tap"),
+        ]
+        assert trust_capture.read_text(encoding="utf-8").splitlines() == [
+            "trust",
+            "--formula",
+            "mangowhoiscloud/tap/geode",
         ]
         assert checkout_formula.read_text(encoding="utf-8") == "updated formula\n"
 
