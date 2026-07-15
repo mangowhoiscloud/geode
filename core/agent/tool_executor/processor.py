@@ -18,10 +18,17 @@ from core.agent.safety import (
     DANGEROUS_TOOLS,
     EXPENSIVE_TOOLS,
     SAFE_TOOLS,
+    SENSITIVE_TOOLS,
     WRITE_TOOLS,
 )
 from core.hooks.system import HookEvent
 from core.tools.computer_observation import sanitize_computer_payload
+from core.tools.personal_data import (
+    PERSONAL_DATA_ERROR_OMITTED,
+    PERSONAL_DATA_TOOLS,
+    personal_data_omitted,
+    sanitize_personal_data_payload,
+)
 
 from .executor import ToolExecutor
 from .result_token_guard import _compute_model_tool_limit, _guard_tool_result
@@ -120,18 +127,31 @@ class ToolCallProcessor:
         tool_use_id: str = "",
     ) -> None:
         """Log result, record transcript events, and append to tool_log."""
+        personal = tool_name in PERSONAL_DATA_TOOLS
+        durable_input = personal_data_omitted(tool_name) if personal else tool_input
+        durable_result = personal_data_omitted(tool_name) if personal else result
+
         # Progressive log: show tool result summary (skip if already logged)
         if isinstance(result, dict):
             skip_log = result.get("skipped")
             if not skip_log:
-                self._op_logger.log_tool_result(tool_name, result, visible=visible)
+                display_result = (
+                    {"error": "personal account operation failed; details were not retained"}
+                    if personal and result.get("error")
+                    else (
+                        {"summary": "personal account data returned (not retained)"}
+                        if personal
+                        else durable_result
+                    )
+                )
+                self._op_logger.log_tool_result(tool_name, display_result, visible=visible)
 
         # Transcript: tool_call + tool_result events
         if self._transcript is not None:
-            self._transcript.record_tool_call(tool_name, tool_input)
+            self._transcript.record_tool_call(tool_name, durable_input)
             status = "error" if isinstance(result, dict) and result.get("error") else "ok"
-            summary = ""
-            if isinstance(result, dict):
+            summary = "personal account data omitted" if personal else ""
+            if isinstance(result, dict) and not personal:
                 summary = str(result.get("summary", result.get("error", "")))
             self._transcript.record_tool_result(tool_name, status, summary)
             if tool_name in {"computer", "computer_use"} and isinstance(result, dict):
@@ -148,17 +168,19 @@ class ToolCallProcessor:
                     )
 
         stored_result = (
-            sanitize_computer_payload(result)
+            sanitize_computer_payload(durable_result)
             if tool_name in {"computer", "computer_use"} and isinstance(result, dict)
-            else result
+            else durable_result
         )
         self._tool_log.append(
-            {
-                "tool": tool_name,
-                "input": tool_input,
-                "result": stored_result,
-                "tool_use_id": tool_use_id,
-            }
+            sanitize_personal_data_payload(
+                {
+                    "tool": tool_name,
+                    "input": durable_input,
+                    "result": stored_result,
+                    "tool_use_id": tool_use_id,
+                }
+            )
         )
         if len(self._tool_log) > self.MAX_TOOL_LOG_ENTRIES:
             del self._tool_log[: len(self._tool_log) - self.MAX_TOOL_LOG_ENTRIES]
@@ -251,6 +273,7 @@ class ToolCallProcessor:
             offload_store
             and offload_store.threshold > 0
             and estimated_tokens > offload_store.threshold
+            and tool_name not in PERSONAL_DATA_TOOLS
         ):
             from core.orchestration.tool_offload import extract_result_summary
 
@@ -299,7 +322,7 @@ class ToolCallProcessor:
         tool_name = block.name
         tool_input: dict[str, Any] = block.input
 
-        log.info("ToolCallProcessor: tool_use %s(%s)", tool_name, tool_input)
+        log.info("ToolCallProcessor: tool_use %s(keys=%s)", tool_name, sorted(tool_input))
 
         # Every accepted tool attempt has one start and one terminal end,
         # including interceptor blocks, adaptive recovery, and exceptions.
@@ -418,13 +441,16 @@ class ToolCallProcessor:
             },
         )
         if has_error:
+            hook_error = result.get("error") if isinstance(result, dict) else str(result)
+            if tool_name in PERSONAL_DATA_TOOLS:
+                hook_error = PERSONAL_DATA_ERROR_OMITTED
             await self._fire_hook(
                 HookEvent.TOOL_EXEC_FAILED,
                 {
                     "tool_name": tool_name,
                     "tool_input": tool_input,
                     "duration_ms": elapsed_ms,
-                    "error": result.get("error") if isinstance(result, dict) else str(result),
+                    "error": hook_error,
                     "error_type": result.get("error_type", "unknown")
                     if isinstance(result, dict)
                     else "unknown",
@@ -469,6 +495,8 @@ class ToolCallProcessor:
         """
         if tool_name in DANGEROUS_TOOLS:
             return 4
+        if tool_name in SENSITIVE_TOOLS:
+            return 3
         if tool_name in WRITE_TOOLS:
             return 3
         if tool_name in EXPENSIVE_TOOLS:

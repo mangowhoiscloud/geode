@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import logging
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -43,11 +45,15 @@ def _processor(
     return processor, hooks, executor
 
 
-def _block() -> SimpleNamespace:
+def _block(
+    *,
+    name: str = "read_file",
+    tool_input: dict | None = None,
+) -> SimpleNamespace:
     return SimpleNamespace(
         type="tool_use",
-        name="read_file",
-        input={"path": "notes.md"},
+        name=name,
+        input=tool_input or {"path": "notes.md"},
         id="tool-1",
     )
 
@@ -114,3 +120,66 @@ def test_executor_exception_becomes_failed_terminal_result() -> None:
         HookEvent.TOOL_EXEC_FAILED,
     ]
     assert "boom" in result["content"]
+
+
+def test_personal_failure_is_omitted_from_hooks_logs_and_event_store(tmp_path, caplog) -> None:
+    from core.memory.episodic import EpisodicStore, get_episodic_store, set_episodic_store
+    from core.tools.personal_data import PERSONAL_DATA_ERROR_OMITTED
+    from core.wiring.bootstrap import build_hooks
+
+    private_error = "private-cell-value-4f93bd"
+    executor = MagicMock(spec=ToolExecutor)
+    executor.aexecute = AsyncMock(
+        return_value={
+            "error": private_error,
+            "error_type": "connection",
+            "recoverable": True,
+        }
+    )
+    error_recovery = MagicMock()
+    error_recovery.arecover = AsyncMock()
+    op_logger = MagicMock()
+    op_logger.log_tool_call.return_value = True
+    previous_episodic_store = get_episodic_store()
+    set_episodic_store(EpisodicStore(path=tmp_path / "episodes.jsonl"))
+    hooks, event_store, _metrics = build_hooks(
+        session_key="privacy-test", run_id="privacy-run", log_dir=tmp_path
+    )
+    failed_payloads: list[dict] = []
+    hooks.register(
+        HookEvent.TOOL_EXEC_FAILED,
+        lambda _event, data: failed_payloads.append(dict(data)),
+        name="privacy_capture",
+        priority=85,
+    )
+    processor = ToolCallProcessor(
+        executor=executor,
+        op_logger=op_logger,
+        error_recovery=error_recovery,
+        hooks=hooks,
+    )
+
+    try:
+        with caplog.at_level(logging.INFO, logger="core.wiring.bootstrap"):
+            result = asyncio.run(
+                processor._execute_single(
+                    _block(
+                        name="google_sheets_read",
+                        tool_input={"spreadsheet_id": "private-sheet"},
+                    )
+                )
+            )
+        persisted = event_store.read(limit=100)
+    finally:
+        hooks.close()
+        set_episodic_store(previous_episodic_store)
+
+    assert private_error in result["content"]
+    assert private_error not in json.dumps(failed_payloads)
+    assert PERSONAL_DATA_ERROR_OMITTED in failed_payloads[0]["error"]
+    assert private_error not in caplog.text
+    assert "private-sheet" not in caplog.text
+    assert PERSONAL_DATA_ERROR_OMITTED in caplog.text
+    persisted_payload = json.dumps([row.payload for row in persisted])
+    assert private_error not in persisted_payload
+    assert "private-sheet" not in persisted_payload

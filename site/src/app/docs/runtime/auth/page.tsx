@@ -67,6 +67,7 @@ export default function Page() {
               <tbody>
                 <tr><td><code>/login openai</code></td><td>ChatGPT 구독 OAuth 로그인. device-code 플로우는 <code>core/auth/oauth_login.py</code>이고, 결과는 <code>auth.toml</code>에 OAUTH_BORROWED 플랜 + 프로파일 쌍으로 저장됩니다.</td></tr>
                 <tr><td><code>/login anthropic</code></td><td>Claude 구독 OAuth. macOS 키체인의 <code>&quot;Claude Code-credentials&quot;</code> 항목을 읽습니다(routing.toml <code>[credentials.keychain]</code>, override는 <code>GEODE_ANTHROPIC_KEYCHAIN_SERVICE</code>).</td></tr>
+                <tr><td><code>/login google</code></td><td>Gmail, Calendar, Drive, Docs, Sheets, Tasks, Contacts용 Google Workspace OAuth. 사용자가 만든 Desktop 앱 클라이언트를 가져오며 LLM 프로바이더 자격과 분리됩니다.</td></tr>
                 <tr><td><code>/login add</code></td><td>자격 추가. 키 모양(<code>sk-ant-</code>, <code>sk-proj-</code>, GLM {`{id}.{secret}`})으로 프로바이더를 추정합니다.</td></tr>
                 <tr><td><code>/login use</code> / <code>remove</code></td><td>프로파일 선택과 제거.</td></tr>
                 <tr><td><code>/login route</code></td><td>프로바이더와 플랜 라우팅 확인.</td></tr>
@@ -74,6 +75,56 @@ export default function Page() {
                 <tr><td><code>/login source &lt;provider&gt; &lt;type&gt;</code></td><td>자격 소스 영속화. config.toml <code>[llm]</code>에 기록.</td></tr>
               </tbody>
             </table>
+
+            <h2>Google Workspace</h2>
+            <p>
+              uv나 GitHub에서 설치한 사용자도 중앙 GEODE OAuth 앱 없이 자신의
+              Google Cloud Desktop 클라이언트로 연결할 수 있습니다. 권장 진입점은
+              <code>/login google</code>입니다. 첫 연결에서는 client JSON 경로와
+              필요한 서비스 번들을 명시적으로 고릅니다. 자동화하려면 다음처럼
+              한 줄로 지정할 수 있습니다.
+            </p>
+            <pre>{`/login google --client-json ~/Downloads/client_secret.json \\
+  --services gmail-send,calendar-read,workspace-files
+
+/login google services
+/login google status
+/login google use user@example.com
+/login google --new-account --services calendar-read
+/login google --services calendar-read --replace-services
+/login google logout user@example.com`}</pre>
+            <p>
+              인증은 시스템 브라우저, 임의의 <code>127.0.0.1</code> 포트,
+              Authorization Code + PKCE S256 + state 검증을 씁니다. Google이
+              Desktop 앱의 incremental auth를 지원하지 않으므로 서비스를 더할
+              때는 대상 활성 계정의 기존 번들과 새 번들의 합집합으로 재동의합니다.
+              브라우저에서 다른 계정을 고르면 저장하지 않고 실패하며, 두 번째
+              계정은 <code>--new-account</code>로 연결합니다.
+              권한을 줄일 때는 유지할 전체 번들과 <code>--replace-services</code>를
+              함께 지정합니다.
+              <code>gmail-read</code>는 Restricted scope라 기본 권장 묶음에
+              포함되지 않습니다. Drive·Docs·Sheets는 전체 Drive 대신
+              non-sensitive <code>drive.file</code>로 GEODE가 만들거나 파일별로
+              허용된 항목만 다룹니다.
+            </p>
+            <table>
+              <thead><tr><th>저장소</th><th>내용</th></tr></thead>
+              <tbody>
+                <tr><td>OS keyring<br/><code>geode.google.oauth</code></td><td>refresh token, client secret, 계정 이메일과 표시 이름. 안전한 백엔드가 없으면 로그인은 실패하며 평문 fallback은 없습니다.</td></tr>
+                <tr><td><code>~/.geode/google/accounts.json</code></td><td>schema version, 단조 증가 revision, 활성 account id, client/project id, 서비스 번들, 실제 granted scopes, 상태와 시각만. 프로세스 간 <code>.accounts.lock</code> 뒤 atomic write, 디렉터리 0700·파일 0600.</td></tr>
+                <tr><td>프로세스 메모리</td><td>짧은 수명의 access token과 expiry. 데몬 auth reload와 logout 때 폐기.</td></tr>
+                <tr><td>세션 영속 저장소</td><td>Workspace 도구의 원문 입력·결과는 JSON·SQLite·도구 로그에 저장하지 않고 호출 ID가 붙은 <code>_personal_data_omitted</code> 표식으로 치환합니다. API 오류 상세도 영속 telemetry·회전 로그에서 생략하고, 개인 도구가 포함된 batch는 별도 reflection provider 호출을 건너뜁니다. 사용자가 직접 쓴 대화문과 모델이 대화문으로 작성한 요약은 일반 세션 보존 정책을 따릅니다.</td></tr>
+              </tbody>
+            </table>
+            <p>
+              Workspace 읽기 결과는 선택한 LLM 프로바이더로 전달될 수 있으므로
+              매 도구 호출 직전에 개인 데이터 disclosure와 affirmative consent가
+              뜹니다. 이 승인은 always-allow할 수 없고 headless·서브에이전트에서는
+              닫힌 채로 거부됩니다. Gmail 전송과 Drive/Docs/Sheets/Tasks/Calendar
+              변경도 같은 비캐시형 매 호출 승인을 거쳐 HITL 0·권한 건너뛰기로
+              우회할 수 없습니다. 자세한 스키마와 Hermes 비교는 설계 기록
+              <code>docs/architecture/google-workspace-oauth.md</code>에 있습니다.
+            </p>
 
             <h2>Codex 토큰 감지</h2>
             <p>
@@ -196,6 +247,7 @@ ZAI_API_KEY={id}.{secret}`}</pre>
               <tbody>
                 <tr><td><code>/login openai</code></td><td>ChatGPT subscription OAuth login. The device-code flow lives in <code>core/auth/oauth_login.py</code>; the result lands in <code>auth.toml</code> as an OAUTH_BORROWED plan plus profile pair.</td></tr>
                 <tr><td><code>/login anthropic</code></td><td>Claude subscription OAuth. Reads the macOS keychain entry <code>&quot;Claude Code-credentials&quot;</code> (routing.toml <code>[credentials.keychain]</code>; override with <code>GEODE_ANTHROPIC_KEYCHAIN_SERVICE</code>).</td></tr>
+                <tr><td><code>/login google</code></td><td>Google Workspace OAuth for Gmail, Calendar, Drive, Docs, Sheets, Tasks, and Contacts. Imports a user-owned Desktop app client and stays separate from LLM-provider credentials.</td></tr>
                 <tr><td><code>/login add</code></td><td>Add a credential. The provider is sniffed from the key shape (<code>sk-ant-</code>, <code>sk-proj-</code>, GLM {`{id}.{secret}`}).</td></tr>
                 <tr><td><code>/login use</code> / <code>remove</code></td><td>Select and remove profiles.</td></tr>
                 <tr><td><code>/login route</code></td><td>Inspect provider and plan routing.</td></tr>
@@ -203,6 +255,60 @@ ZAI_API_KEY={id}.{secret}`}</pre>
                 <tr><td><code>/login source &lt;provider&gt; &lt;type&gt;</code></td><td>Persist the credential source into config.toml <code>[llm]</code>.</td></tr>
               </tbody>
             </table>
+
+            <h2>Google Workspace</h2>
+            <p>
+              Users installing from uv or GitHub can connect with their own
+              Google Cloud Desktop client; GEODE does not need a central OAuth
+              app. The recommended entry point is <code>/login google</code>.
+              On the first connection it explicitly asks for the client JSON
+              path and the service bundles needed. For a scripted choice:
+            </p>
+            <pre>{`/login google --client-json ~/Downloads/client_secret.json \\
+  --services gmail-send,calendar-read,workspace-files
+
+/login google services
+/login google status
+/login google use user@example.com
+/login google --new-account --services calendar-read
+/login google --services calendar-read --replace-services
+/login google logout user@example.com`}</pre>
+            <p>
+              Authentication uses the system browser, a random
+              <code>127.0.0.1</code> port, Authorization Code + PKCE S256, and
+              state validation. Google does not support incremental auth for
+              Desktop apps, so adding a service reauthorizes the union of old
+              and new bundles for the targeted active account. GEODE refuses
+              to save a different browser identity; connect a second identity
+              with <code>--new-account</code>. To narrow a grant, provide the
+              complete bundle set to keep together with
+              <code>--replace-services</code>.
+              <code>gmail-read</code> is a Restricted scope and
+              is excluded from the recommended set. Drive, Docs, and Sheets use
+              the non-sensitive <code>drive.file</code> scope instead of whole-
+              Drive access, limiting GEODE to files it creates or that are
+              individually granted to the app.
+            </p>
+            <table>
+              <thead><tr><th>Store</th><th>Contents</th></tr></thead>
+              <tbody>
+                <tr><td>OS keyring<br/><code>geode.google.oauth</code></td><td>Refresh token, client secret, account email, and display name. Login fails when no secure backend exists; there is no plaintext fallback.</td></tr>
+                <tr><td><code>~/.geode/google/accounts.json</code></td><td>Schema version, monotonic revision, active account id, client/project ids, service bundles, actual granted scopes, status, and timestamps only. Atomic write behind a cross-process <code>.accounts.lock</code>; directory 0700 and file 0600.</td></tr>
+                <tr><td>Process memory</td><td>Short-lived access token and expiry, cleared on daemon auth reload and logout.</td></tr>
+                <tr><td>Durable session stores</td><td>Raw Workspace tool inputs and results are replaced in JSON, SQLite, and tool logs by a call-linked <code>_personal_data_omitted</code> marker. API error details are also omitted from durable telemetry and rotating logs, and batches containing a personal tool skip any separate reflection provider. User-authored conversation text and assistant summaries written as ordinary conversation follow the general session-retention policy.</td></tr>
+              </tbody>
+            </table>
+            <p>
+              Because Workspace read results may be sent to the selected LLM
+              provider, every read invocation is immediately preceded by a
+              personal-data disclosure and affirmative consent. It cannot be
+              always-allowed and fails closed in headless and sub-agent
+              sessions. Gmail sends and Drive/Docs/Sheets/Tasks/Calendar
+              mutations use the same non-cacheable per-invocation gate; HITL 0
+              and skip-permissions cannot bypass it. The full schema and Hermes
+              comparison are in the architecture record
+              <code>docs/architecture/google-workspace-oauth.md</code>.
+            </p>
 
             <h2>Codex token detection</h2>
             <p>

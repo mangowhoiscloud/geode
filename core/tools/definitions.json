@@ -1393,6 +1393,209 @@
     }
   },
   {
+    "name": "gmail_search",
+    "description": "Search Gmail or fetch one message from the connected Google account. Reading Workspace data requires explicit approval because returned content is sent to the configured LLM provider. Requires /login google --services gmail-read (Google Restricted scope).",
+    "category": "external",
+    "cost_tier": "free",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "Gmail search syntax, for example 'from:alice newer_than:7d'. Ignored when message_id is set."
+        },
+        "message_id": {
+          "type": "string",
+          "description": "Fetch one exact Gmail message instead of searching."
+        },
+        "max_results": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20,
+          "default": 10
+        },
+        "include_body": {
+          "type": "boolean",
+          "default": false,
+          "description": "Include bounded plain-text message bodies. Default false returns metadata and snippets."
+        },
+        "max_body_chars": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 50000,
+          "default": 12000
+        }
+      },
+      "required": []
+    }
+  },
+  {
+    "name": "gmail_send",
+    "description": "Send an email through the connected Gmail account. Requires explicit user approval and the gmail-send service bundle. Use gmail_search only when mailbox read access was separately authorized.",
+    "category": "external",
+    "cost_tier": "free",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "to": {"type": "string", "description": "Recipient address or comma-separated addresses."},
+        "subject": {"type": "string"},
+        "body": {"type": "string", "description": "Plain-text message body."},
+        "cc": {"type": "string"},
+        "bcc": {"type": "string"},
+        "reply_to_message_id": {"type": "string", "description": "Optional RFC Message-ID header value for a reply."},
+        "thread_id": {"type": "string", "description": "Optional Gmail thread id."}
+      },
+      "required": ["to", "subject", "body"]
+    }
+  },
+  {
+    "name": "google_drive_search",
+    "description": "Search Google Drive files visible through drive.file. This is intentionally not whole-Drive search: it sees files GEODE created or the user explicitly opened/shared with the app. Reading results requires approval.",
+    "category": "external",
+    "cost_tier": "free",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "query": {"type": "string", "description": "Case-insensitive filename fragment."},
+        "max_results": {"type": "integer", "minimum": 1, "maximum": 100, "default": 20}
+      },
+      "required": []
+    }
+  },
+  {
+    "name": "google_drive_create",
+    "description": "Create a text file or folder in Google Drive using the least-privilege drive.file scope. Requires explicit user approval.",
+    "category": "external",
+    "cost_tier": "free",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "kind": {"type": "string", "enum": ["text", "folder"]},
+        "name": {"type": "string"},
+        "content": {"type": "string", "description": "Text content; used only for kind=text."},
+        "parent_id": {"type": "string", "description": "Optional Drive parent folder id."}
+      },
+      "required": ["kind", "name"]
+    }
+  },
+  {
+    "name": "google_docs_read",
+    "description": "Read bounded plain text from a Google Doc visible through the workspace-files bundle. Requires approval before Workspace data is sent to the configured LLM.",
+    "category": "external",
+    "cost_tier": "free",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "document_id": {"type": "string"},
+        "max_chars": {"type": "integer", "minimum": 0, "maximum": 100000, "default": 30000}
+      },
+      "required": ["document_id"]
+    }
+  },
+  {
+    "name": "google_docs_write",
+    "description": "Create a Google Doc or append text to an existing app-visible document. Requires explicit user approval.",
+    "category": "external",
+    "cost_tier": "free",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "action": {"type": "string", "enum": ["create", "append"]},
+        "document_id": {"type": "string", "description": "Required for append."},
+        "title": {"type": "string", "description": "Required for create."},
+        "text": {"type": "string"}
+      },
+      "required": ["action", "text"]
+    }
+  },
+  {
+    "name": "google_sheets_read",
+    "description": "Read a bounded A1 range from a Google Sheet visible through workspace-files. Requires approval before values are sent to the configured LLM.",
+    "category": "external",
+    "cost_tier": "free",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "spreadsheet_id": {"type": "string"},
+        "range": {"type": "string", "description": "A1 notation, for example Sheet1!A1:D20."},
+        "major_dimension": {"type": "string", "enum": ["ROWS", "COLUMNS"], "default": "ROWS"}
+      },
+      "required": ["spreadsheet_id", "range"]
+    }
+  },
+  {
+    "name": "google_sheets_write",
+    "description": "Create a spreadsheet, update an A1 range, or append rows. Requires explicit user approval.",
+    "category": "external",
+    "cost_tier": "free",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "action": {"type": "string", "enum": ["create", "update", "append"]},
+        "spreadsheet_id": {"type": "string", "description": "Required for update/append."},
+        "title": {"type": "string", "description": "Required for create."},
+        "range": {"type": "string", "description": "A1 notation; required for update/append."},
+        "values": {
+          "type": "array",
+          "items": {"type": "array", "items": {}},
+          "description": "Rows of cell values."
+        }
+      },
+      "required": ["action"]
+    }
+  },
+  {
+    "name": "google_tasks_list",
+    "description": "List Google Tasks. Requires approval before task content is sent to the configured LLM. Accepts tasks-read or tasks-write authorization.",
+    "category": "external",
+    "cost_tier": "free",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "tasklist_id": {"type": "string", "default": "@default"},
+        "max_results": {"type": "integer", "minimum": 1, "maximum": 100, "default": 50},
+        "show_completed": {"type": "boolean", "default": false}
+      },
+      "required": []
+    }
+  },
+  {
+    "name": "google_tasks_write",
+    "description": "Create, complete, or delete a Google Task. Requires explicit user approval and tasks-write authorization.",
+    "category": "external",
+    "cost_tier": "free",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "action": {"type": "string", "enum": ["create", "complete", "delete"]},
+        "tasklist_id": {"type": "string", "default": "@default"},
+        "task_id": {"type": "string", "description": "Required for complete/delete."},
+        "title": {"type": "string", "description": "Required for create."},
+        "notes": {"type": "string"},
+        "due": {"type": "string", "description": "RFC 3339 due timestamp. Google Tasks stores the date component."}
+      },
+      "required": ["action"]
+    }
+  },
+  {
+    "name": "google_contacts_list",
+    "description": "List names, email addresses, phone numbers, and organizations from Google Contacts. Requires explicit approval before results are sent to the configured LLM.",
+    "category": "external",
+    "cost_tier": "free",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "max_results": {"type": "integer", "minimum": 1, "maximum": 1000, "default": 100},
+        "sort_order": {
+          "type": "string",
+          "enum": ["LAST_MODIFIED_ASCENDING", "LAST_MODIFIED_DESCENDING", "FIRST_NAME_ASCENDING", "LAST_NAME_ASCENDING"],
+          "default": "LAST_MODIFIED_DESCENDING"
+        }
+      },
+      "required": []
+    }
+  },
+  {
     "name": "calendar_list_events",
     "description": "List events from the connected calendar (Google/Apple) within a date range (defaults: now to +7 days). Use when the user asks what's on their calendar or schedule. To add an event use calendar_create_event.",
     "category": "calendar",

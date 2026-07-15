@@ -34,6 +34,7 @@ from core.orchestration.isolated_execution import (
 )
 from core.orchestration.task_system import Task, TaskGraph
 from core.tools.base import load_tool_definition
+from core.tools.personal_data import PERSONAL_DATA_TOOLS
 
 if TYPE_CHECKING:
     from core.skills.agents import AgentRegistry
@@ -234,8 +235,7 @@ SUBAGENT_DENIED_TOOLS: set[str] = {
     "manage_auth",  # auth profile management — parent only
     "manage_login",  # plans + credentials + routing — parent only
     "profile_update",  # user profile changes — parent only
-    "calendar_create_event",  # external system mutation — parent only
-    "calendar_sync_scheduler",  # external system mutation — parent only
+    *PERSONAL_DATA_TOOLS,  # personal Workspace data — parent approval only
     "delegate_task",  # recursive delegation — explicit depth control preferred
 }
 
@@ -482,8 +482,13 @@ class SubAgentManager:
         # SubAgentManager is built once per session (services.py
         # ``_build_sub_agent_manager``), so this counts the session total.
         self._spawned_total = 0
-        # Sandbox hardening: filter denied tools from action_handlers
-        self._denied_tools: set[str] = denied_tools or set()
+        # Sandbox hardening is additive and cannot be disabled by omitting or
+        # passing an empty custom set. Production constructors historically
+        # omitted ``denied_tools`` entirely, so a constant that was not folded
+        # in here provided no protection to the worker request.
+        self._custom_denied_tools: set[str] = set(denied_tools or ())
+        self._denied_tools: set[str] = set(SUBAGENT_DENIED_TOOLS)
+        self._denied_tools.update(self._custom_denied_tools)
         # Sandbox: additional working directories for sub-agent
         self._working_dirs = working_dirs or []
         # Announce mechanism (OpenClaw Spawn+Announce pattern)
@@ -1073,7 +1078,11 @@ class SubAgentManager:
         NOTE: Thread mode cannot enforce denied_tools because the task_handler
         callback is opaque. Use subprocess mode (action_handlers) for security.
         """
-        if self._denied_tools:
+        # The legacy callback receives no GEODE action-tool registry, so the
+        # built-in worker baseline has nothing to filter here. A caller-supplied
+        # restriction still implies a capability contract the opaque callback
+        # cannot enforce, and therefore fails closed.
+        if self._custom_denied_tools:
             raise RuntimeError(
                 f"Thread mode cannot enforce denied_tools for task {task.task_id}. "
                 "Use subprocess mode (action_handlers) for security."

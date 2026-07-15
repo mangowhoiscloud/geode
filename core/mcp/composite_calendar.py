@@ -32,7 +32,7 @@ class CompositeCalendarAdapter:
         """Async event listing across child adapters."""
         merged: list[CalendarEvent] = []
         for adapter in self._adapters:
-            if not await adapter.ais_available():
+            if not await _supports(adapter, "read"):
                 continue
             try:
                 events = await adapter.alist_events(
@@ -44,8 +44,17 @@ class CompositeCalendarAdapter:
                 merged.extend(events)
             except Exception as exc:
                 log.warning("Calendar adapter %s failed: %s", type(adapter).__name__, exc)
-        merged.sort(key=lambda e: e.start)
-        return merged[:max_results]
+        # Native /login-google and the legacy Google Calendar MCP can both
+        # point at the same account. Keep compatibility without returning the
+        # same Google event twice when both adapters are available.
+        unique: dict[tuple[str, str], CalendarEvent] = {}
+        for event in merged:
+            key = (event.source, event.event_id)
+            if not event.event_id:
+                key = (event.source, f"{event.start.isoformat()}:{event.title}")
+            unique.setdefault(key, event)
+        deduplicated = sorted(unique.values(), key=lambda e: e.start)
+        return deduplicated[:max_results]
 
     async def acreate_event(
         self,
@@ -59,7 +68,7 @@ class CompositeCalendarAdapter:
     ) -> CalendarEvent:
         """Async event creation, dispatching to the first available adapter."""
         for adapter in self._adapters:
-            if not await adapter.ais_available():
+            if not await _supports(adapter, "write"):
                 continue
             return await adapter.acreate_event(
                 title,
@@ -74,7 +83,7 @@ class CompositeCalendarAdapter:
     async def adelete_event(self, event_id: str) -> bool:
         """Async event deletion across available adapters."""
         for adapter in self._adapters:
-            if not await adapter.ais_available():
+            if not await _supports(adapter, "write"):
                 continue
             try:
                 deleted = await adapter.adelete_event(event_id)
@@ -86,12 +95,12 @@ class CompositeCalendarAdapter:
         return False
 
     async def ais_available(self) -> bool:
-        return any([await adapter.ais_available() for adapter in self._adapters])
+        return any([await _supports(adapter, "read") for adapter in self._adapters])
 
     async def alist_calendars(self) -> list[str]:
         calendars: list[str] = []
         for adapter in self._adapters:
-            if await adapter.ais_available():
+            if await _supports(adapter, "read"):
                 calendars.extend(await adapter.alist_calendars())
         return calendars
 
@@ -99,6 +108,20 @@ class CompositeCalendarAdapter:
         """Return names of available calendar source adapters."""
         sources: list[str] = []
         for adapter in self._adapters:
-            if await adapter.ais_available():
+            if await _supports(adapter, "read"):
                 sources.append(type(adapter).__name__)
         return sources
+
+
+async def _supports(adapter: CalendarPort, capability: str) -> bool:
+    """Check an optional capability probe, falling back to availability.
+
+    Older adapters expose only ``ais_available`` and are assumed to support
+    both reads and writes. Newer adapters can advertise ``acan_read`` and
+    ``acan_write`` independently so a read-only source cannot capture a
+    mutation intended for a later writable source.
+    """
+    probe = getattr(adapter, f"acan_{capability}", None)
+    if callable(probe):
+        return bool(await probe())
+    return bool(await adapter.ais_available())
