@@ -47,22 +47,27 @@ function fail(msg) {
 
 function generationDate(version) {
   const epoch = process.env.SOURCE_DATE_EPOCH;
+  let sourceDate;
   if (epoch !== undefined) {
     if (!/^\d+$/.test(epoch)) fail(`invalid SOURCE_DATE_EPOCH: ${epoch}`);
     const date = new Date(Number(epoch) * 1000);
     if (Number.isNaN(date.getTime())) fail(`invalid SOURCE_DATE_EPOCH: ${epoch}`);
-    return date.toISOString().slice(0, 10);
+    sourceDate = date.toISOString().slice(0, 10);
   }
 
   // A same-version verification or repair run must not dirty committed docs
   // merely because the wall clock advanced. Preserve the existing sync date;
-  // a new version (or a missing snapshot) receives today's UTC date.
+  // a new version (or a missing snapshot) receives the reproducible source
+  // date when available, otherwise today's UTC date.
   if (existsSync(SOT_FILE)) {
     const previous = readFileSync(SOT_FILE, "utf8");
     const previousVersion = previous.match(/version:\s*"([^"]+)"/)?.[1];
     const previousDate = previous.match(/syncedAt:\s*"(\d{4}-\d{2}-\d{2})"/)?.[1];
     if (previousVersion === version && previousDate) return previousDate;
   }
+
+  if (sourceDate !== undefined) return sourceDate;
+
   return new Date().toISOString().slice(0, 10);
 }
 
