@@ -47,6 +47,8 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.333] - 2026-07-15
+
 ### Added
 
 - **`geode update` now updates persistent uv installs without crossing a
@@ -93,10 +95,6 @@ functional change.
   3.14 formula and must pass strict audit, source build, formula tests, official
   API discovery, and an unqualified clean-machine install before the brew
   command can return to the public installation surface.
-
-## [0.99.333] - 2026-07-15
-
-### Changed
 
 - **Slack transport rewritten — direct Web API, no MCP subprocess.**
   Root cause of the dead Slack surface: the ``slack`` MCP server lost a
