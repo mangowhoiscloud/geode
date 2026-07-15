@@ -127,6 +127,13 @@ The workflow serializes stable promotions and performs:
 5. a read-only cross-channel verifier for the annotated tag, release assets,
    exact PyPI files, and SHA-256 parity.
 
+PyPI's simple index and exact-version JSON endpoint can converge at different
+times. Keep the bounded `uvx` retry as the installability gate, then let
+`verify_public_distribution.py` retry the complete JSON/tag/assets/checksum
+snapshot. Do not insert a one-shot JSON/digest check between those two gates;
+it duplicates the final verifier and can fail after a successful upload solely
+because one CDN surface still returns 404.
+
 ### 3. Watch to completion
 
 ```bash

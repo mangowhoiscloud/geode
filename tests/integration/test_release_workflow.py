@@ -95,11 +95,30 @@ def test_stable_release_has_no_custom_homebrew_tap_channel() -> None:
 def test_public_distribution_uses_the_reusable_exact_version_verifier() -> None:
     jobs = _workflow()["jobs"]
     assert isinstance(jobs, dict)
+    verify_pypi = jobs["verify-pypi"]
     verify = jobs["verify-stable-distribution"]
+    assert isinstance(verify_pypi, dict)
     assert isinstance(verify, dict)
+    pypi_steps = verify_pypi["steps"]
     steps = verify["steps"]
+    assert isinstance(pypi_steps, list)
     assert isinstance(steps, list)
 
+    pypi_step_text = "\n".join(
+        str(step.get("run", "")) for step in pypi_steps if isinstance(step, dict)
+    )
+    assert "for attempt in $(seq 1 12)" in pypi_step_text
+    assert "pypi.org/pypi" not in pypi_step_text
+    assert not any(
+        isinstance(step, dict) and "download-artifact" in str(step.get("uses", ""))
+        for step in pypi_steps
+    )
+    assert any(
+        isinstance(step, dict)
+        and "setup-uv" in str(step.get("uses", ""))
+        and step.get("with") == {"enable-cache": False}
+        for step in pypi_steps
+    )
     assert any(
         isinstance(step, dict) and str(step.get("uses", "")).startswith("actions/checkout@")
         for step in steps
