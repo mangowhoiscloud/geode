@@ -85,9 +85,6 @@ class SubGoal(BaseModel):
     tool_args: dict[str, Any] = PydanticField(
         default_factory=dict, description="Arguments for the tool"
     )
-    depends_on: list[str] = PydanticField(
-        default_factory=list, description="IDs of sub-goals that must complete first"
-    )
     difficulty: Literal["low", "medium", "high"] = PydanticField(
         default="medium",
         description="Complexity: low=lookup, medium=analysis, high=reasoning",
@@ -126,8 +123,9 @@ class PlanStep:
     """One executable step in a :class:`Plan`.
 
     Frozen so the step is safe to share across threads and serialize to
-    JSON without races. ``depends_on`` carries other step ``id`` values
-    that must finish before this one is eligible. ``expected_outcome``
+    JSON without races. Steps are consumed strictly in ``current``-index
+    order (the v0.13 DAG/topological execution was retired with
+    GoalDecomposer in v0.99.46). ``expected_outcome``
     is the comparison anchor PR-CL-A3 verify's
     ``step_expected_mismatch`` rubric uses — if the turn's output text
     contains none of the expected keywords, the step is flagged.
@@ -138,7 +136,6 @@ class PlanStep:
     expected_outcome: str = ""
     tool_name: str = ""
     tool_args: dict[str, Any] = field(default_factory=dict)
-    depends_on: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -147,7 +144,6 @@ class PlanStep:
             "expected_outcome": self.expected_outcome,
             "tool_name": self.tool_name,
             "tool_args": dict(self.tool_args),
-            "depends_on": list(self.depends_on),
         }
 
 
@@ -189,24 +185,23 @@ class Plan:
     def remaining_steps(self) -> tuple[PlanStep, ...]:
         return tuple(self.steps[self.current :])
 
-    def advance(self, *, completed: bool = True) -> Plan:
-        """Move to the next step. ``completed=False`` marks the current
-        step as ``abandoned`` instead — used after exceeding
-        ``GEODE_REPLAN_MAX_ATTEMPTS`` retries on the same step."""
+    def abandon_and_advance(self) -> Plan:
+        """Mark the current step ``abandoned`` and move to the next one.
+
+        Used after exceeding ``GEODE_REPLAN_MAX_ATTEMPTS`` retries on the
+        same step. There is no success-advance counterpart by design:
+        step completion is expressed by replan (plan replacement) or by
+        the plan simply being consumed to the end, never by a
+        ``completed`` marker (the unwired ``advance(completed=True)``
+        path was removed together with the v0.13 DAG remnants).
+        """
         if self.current >= len(self.steps):
             return self
-        bucket = "completed" if completed else "abandoned"
-        if bucket == "completed":
-            new_completed = tuple(sorted({*self.completed, self.current}))
-            new_abandoned = self.abandoned
-        else:
-            new_completed = self.completed
-            new_abandoned = tuple(sorted({*self.abandoned, self.current}))
         return Plan(
             steps=self.steps,
             current=self.current + 1,
-            completed=new_completed,
-            abandoned=new_abandoned,
+            completed=self.completed,
+            abandoned=tuple(sorted({*self.abandoned, self.current})),
             reasoning=self.reasoning,
             revision=self.revision,
         )
@@ -244,7 +239,6 @@ def build_plan_from_decomposition(decomp_result: Any) -> Plan | None:
                     expected_outcome=str(getattr(goal, "expected_outcome", "")),
                     tool_name=str(getattr(goal, "tool_name", "")),
                     tool_args=dict(getattr(goal, "tool_args", {}) or {}),
-                    depends_on=tuple(str(d) for d in (getattr(goal, "depends_on", None) or [])),
                 )
             )
         return Plan(
@@ -431,7 +425,7 @@ JSON object — no prose:
   {
     "steps": [
       {"id": "step_1", "description": "...", "expected_outcome": "...",
-       "tool_name": "...", "depends_on": []},
+       "tool_name": "..."},
       ...
     ],
     "reasoning": "<one sentence>"
@@ -471,7 +465,6 @@ def parse_replan_response(raw: str) -> tuple[list[PlanStep], str] | None:
                 expected_outcome=str(raw_step.get("expected_outcome") or ""),
                 tool_name=str(raw_step.get("tool_name") or ""),
                 tool_args=dict(raw_step.get("tool_args") or {}),
-                depends_on=tuple(str(d) for d in (raw_step.get("depends_on") or [])),
             )
         )
     if not steps:

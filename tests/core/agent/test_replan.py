@@ -2,7 +2,7 @@
 
 Coverage:
 - :class:`Plan` + :class:`PlanStep` dataclass shape (frozen, slots,
-  to_dict / to_json / current_step / advance / done).
+  to_dict / to_json / current_step / abandon_and_advance / done).
 - :func:`build_plan_from_decomposition` survives mocked / partial inputs.
 - :func:`render_plan_for_prompt` emits a ``<plan>...</plan>`` block with
   current-step marker; empty plan → empty string.
@@ -120,25 +120,17 @@ def test_plan_current_step() -> None:
     assert done.done is True
 
 
-def test_plan_advance_completed_marks_step() -> None:
+def test_plan_abandon_and_advance_marks_step() -> None:
     plan = _make_plan("s1", "s2", "s3")
-    advanced = plan.advance(completed=True)
-    assert advanced.current == 1
-    assert advanced.completed == (0,)
-    assert advanced.abandoned == ()
-
-
-def test_plan_advance_abandoned_marks_step() -> None:
-    plan = _make_plan("s1", "s2", "s3")
-    advanced = plan.advance(completed=False)
+    advanced = plan.abandon_and_advance()
     assert advanced.current == 1
     assert advanced.abandoned == (0,)
     assert advanced.completed == ()
 
 
-def test_plan_advance_when_done_is_noop() -> None:
+def test_plan_abandon_and_advance_when_done_is_noop() -> None:
     plan = Plan(steps=(PlanStep(id="s1", description="x"),), current=1)
-    assert plan.advance(completed=True) is plan
+    assert plan.abandon_and_advance() is plan
 
 
 def test_remaining_steps() -> None:
@@ -166,7 +158,6 @@ def test_build_plan_extracts_goals() -> None:
         description="first",
         tool_name="search",
         tool_args={"q": "x"},
-        depends_on=[],
         expected_outcome="found",
     )
     g2 = SimpleNamespace(
@@ -174,7 +165,6 @@ def test_build_plan_extracts_goals() -> None:
         description="second",
         tool_name="fetch",
         tool_args={},
-        depends_on=["g1"],
         expected_outcome="",
     )
     decomp = SimpleNamespace(goals=[g1, g2], reasoning="my plan")
@@ -183,7 +173,7 @@ def test_build_plan_extracts_goals() -> None:
     assert len(plan.steps) == 2
     assert plan.steps[0].id == "g1"
     assert plan.steps[0].expected_outcome == "found"
-    assert plan.steps[1].depends_on == ("g1",)
+    assert plan.steps[1].id == "g2"
     assert plan.reasoning == "my plan"
 
 
@@ -767,14 +757,12 @@ def test_decompose_async_passes_response_schema() -> None:
                             "description": "Search for current release notes",
                             "tool_name": "general_web_search",
                             "tool_args": {"query": "current release notes"},
-                            "depends_on": [],
                         },
                         {
                             "id": "step_2",
                             "description": "Summarize the results",
                             "tool_name": "summarize",
                             "tool_args": {},
-                            "depends_on": ["step_1"],
                         },
                     ],
                     "reasoning": "search then summarize",

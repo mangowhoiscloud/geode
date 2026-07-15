@@ -45,7 +45,21 @@ functional change.
 
 ---
 
-## [Unreleased]
+## [0.99.332] - 2026-07-15
+
+### Removed
+- **Plan DAG remnants** (PR-PLAN-DAG-CLEANUP): `SubGoal.depends_on` /
+  `PlanStep.depends_on` deleted — fields survived the v0.99.46
+  GoalDecomposer removal (v0.13 DAG/TaskGraph lineage) with zero runtime
+  consumers; plan steps are consumed strictly in `current`-index order.
+  `Plan.advance(completed=...)` replaced by `Plan.abandon_and_advance()`:
+  the success-advance branch was never wired in production (tests only),
+  so the API now states the single real path. Replan prompt template and
+  parser no longer emit/read `depends_on`. `update_plan` tool description
+  now states it is display-only and separate from the internal
+  auto-generated Plan. `CognitiveState` doc table corrected: `subgoals`
+  producer is the reflection node (next_action hints), not a
+  decomposition node.
 
 ### Fixed
 
