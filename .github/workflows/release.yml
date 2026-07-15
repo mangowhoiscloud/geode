@@ -15,7 +15,7 @@ on:
         description: "Expected GEODE version, e.g. 0.99.11"
         required: true
       publish_stable:
-        description: "Promote one version to GitHub Release, PyPI, and Homebrew"
+        description: "Promote one version to GitHub Release and PyPI"
         type: boolean
         default: false
       publish_huggingface_artifacts:
@@ -247,27 +247,6 @@ jobs:
         with:
           name: geode-${{ inputs.version }}-release-artifacts
           path: release-artifacts
-
-      - name: Verify the tap-scoped deploy key before publishing anything
-        env:
-          HOMEBREW_TAP_DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
-        run: |
-          test -n "$HOMEBREW_TAP_DEPLOY_KEY"
-          git clone --filter=blob:none --single-branch --branch master \
-            https://github.com/mangowhoiscloud/homebrew-tap.git tap-auth
-          key_path="$RUNNER_TEMP/homebrew-tap-deploy-key"
-          known_hosts="$RUNNER_TEMP/github-known-hosts"
-          trap 'rm -f "$key_path" "$known_hosts"' EXIT
-          umask 077
-          printf '%s\n' "$HOMEBREW_TAP_DEPLOY_KEY" > "$key_path"
-          printf '%s\n' \
-            'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl' \
-            > "$known_hosts"
-          git -C tap-auth remote set-url origin \
-            git@github.com:mangowhoiscloud/homebrew-tap.git
-          GIT_SSH_COMMAND="ssh -i $key_path -o IdentitiesOnly=yes -o UserKnownHostsFile=$known_hosts" \
-            git -C tap-auth push --dry-run origin \
-            HEAD:refs/heads/geode-release-credential-probe
 
       - id: pypi
         name: Verify any existing PyPI release files
@@ -531,185 +510,12 @@ jobs:
                   assert actual == expected[artifact.name]
           PY
 
-  publish-homebrew:
-    name: Publish Homebrew tap
-    needs:
-      - validate-build
-      - stable-promotion-preflight
-      - publish-github-release
-      - verify-pypi
-    if: inputs.publish_stable == true
-    runs-on: macos-latest
-    environment: release
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-        with:
-          ref: ${{ needs.validate-build.outputs.sha }}
-          path: geode
-          persist-credentials: false
-
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-        with:
-          repository: mangowhoiscloud/homebrew-tap
-          ref: master
-          path: tap
-          persist-credentials: false
-
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: geode-${{ inputs.version }}-release-artifacts
-          path: release-artifacts
-
-      - id: tap-base
-        name: Record the audited tap base
-        working-directory: tap
-        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-
-      - id: tap-release-state
-        name: Preserve an already-published formula on same-version retries
-        run: |
-          version="$GEODE_VERSION"
-          sdist="geode_agent-${version}.tar.gz"
-          sdist_url="https://github.com/${{ github.repository }}/releases/download/v${version}/${sdist}"
-          sdist_sha=$(awk -v path="$sdist" '$2 == path { print $1 }' release-artifacts/SHA256SUMS)
-          if grep -Fqx "  url \"${sdist_url}\"" tap/Formula/geode.rb; then
-            python3 geode/scripts/render_homebrew_formula.py \
-              --version "$version" \
-              --sdist-url "$sdist_url" \
-              --sdist-sha256 "$sdist_sha" \
-              --resources-from-formula tap/Formula/geode.rb \
-              --template geode/packaging/homebrew/geode.rb.in \
-              --output /tmp/geode-existing.rb
-            cmp tap/Formula/geode.rb /tmp/geode-existing.rb
-            echo "current=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "current=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Render the formula from the published sdist
-        if: steps.tap-release-state.outputs.current != 'true'
-        run: |
-          version="$GEODE_VERSION"
-          sdist="geode_agent-${version}.tar.gz"
-          sdist_sha=$(awk -v path="$sdist" '$2 == path { print $1 }' release-artifacts/SHA256SUMS)
-          [[ "$sdist_sha" =~ ^[0-9a-f]{64}$ ]]
-          python3 geode/scripts/render_homebrew_formula.py \
-            --version "$version" \
-            --sdist-url "https://github.com/${{ github.repository }}/releases/download/v${version}/${sdist}" \
-            --sdist-sha256 "$sdist_sha" \
-            --resources-from-formula tap/Formula/geode.rb \
-            --template geode/packaging/homebrew/geode.rb.in \
-            --output tap/Formula/geode.rb
-
-      - name: Refresh pinned Python resources from the published PyPI package
-        if: steps.tap-release-state.outputs.current != 'true'
-        run: |
-          tap_name=mangowhoiscloud/tap
-          brew tap "$tap_name" "$PWD/tap"
-          tap_formula="$(brew --repo "$tap_name")/Formula/geode.rb"
-          cp tap/Formula/geode.rb "$tap_formula"
-          if brew trust --help >/dev/null 2>&1; then
-            brew trust --formula "$tap_name/geode"
-          fi
-          resource_args=("$tap_name/geode")
-          if [[ "$(brew update-python-resources --help)" == *"--ignore-main-package-cooldown"* ]]; then
-            resource_args+=(
-              --package-name geode-agent
-              --version "$GEODE_VERSION"
-              --ignore-main-package-cooldown
-            )
-          else
-            echo "::notice::Using the exact release sdist as the direct main-package reference"
-          fi
-          brew update-python-resources "${resource_args[@]}"
-          cp "$tap_formula" tap/Formula/geode.rb
-
-      - name: Revalidate the complete generated formula
-        run: |
-          version="$GEODE_VERSION"
-          sdist="geode_agent-${version}.tar.gz"
-          sdist_sha=$(awk -v path="$sdist" '$2 == path { print $1 }' release-artifacts/SHA256SUMS)
-          python3 geode/scripts/render_homebrew_formula.py \
-            --version "$version" \
-            --sdist-url "https://github.com/${{ github.repository }}/releases/download/v${version}/${sdist}" \
-            --sdist-sha256 "$sdist_sha" \
-            --resources-from-formula tap/Formula/geode.rb \
-            --template geode/packaging/homebrew/geode.rb.in \
-            --output /tmp/geode.rb
-          cmp tap/Formula/geode.rb /tmp/geode.rb
-
-      - id: tap-candidate
-        name: Commit the candidate formula locally
-        working-directory: tap
-        run: |
-          git diff --check
-          if git diff --quiet -- Formula/geode.rb; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Formula/geode.rb
-          git commit -m "geode $GEODE_VERSION"
-          echo "changed=true" >> "$GITHUB_OUTPUT"
-
-      - name: Register the candidate as a local Homebrew tap
-        run: brew tap mangowhoiscloud/tap "$GITHUB_WORKSPACE/tap"
-
-      - name: Audit, build, and test the formula
-        run: |
-          version="$GEODE_VERSION"
-          brew audit --strict mangowhoiscloud/tap/geode
-          brew install --build-from-source mangowhoiscloud/tap/geode
-          output=$("$(brew --prefix)/bin/geode" version)
-          echo "$output"
-          grep -q "GEODE v${version}" <<< "$output"
-          brew test mangowhoiscloud/tap/geode
-
-      - name: Commit and publish the verified formula
-        if: steps.tap-candidate.outputs.changed == 'true'
-        working-directory: tap
-        env:
-          HOMEBREW_TAP_DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
-        run: |
-          test -n "$HOMEBREW_TAP_DEPLOY_KEY"
-          git fetch --force --no-tags origin \
-            "refs/heads/master:refs/remotes/origin/master"
-          test "$(git rev-parse origin/master)" = \
-            "${{ steps.tap-base.outputs.sha }}"
-          key_path="$RUNNER_TEMP/homebrew-tap-deploy-key"
-          known_hosts="$RUNNER_TEMP/github-known-hosts"
-          trap 'rm -f "$key_path" "$known_hosts"' EXIT
-          umask 077
-          printf '%s\n' "$HOMEBREW_TAP_DEPLOY_KEY" > "$key_path"
-          printf '%s\n' \
-            'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl' \
-            > "$known_hosts"
-          GIT_SSH_COMMAND="ssh -i $key_path -o IdentitiesOnly=yes -o UserKnownHostsFile=$known_hosts" \
-            git push git@github.com:mangowhoiscloud/homebrew-tap.git \
-            HEAD:master
-
-      - name: Verify the public tap consumer path
-        run: |
-          version="$GEODE_VERSION"
-          brew uninstall geode
-          brew untap mangowhoiscloud/tap || true
-          brew tap mangowhoiscloud/tap
-          brew install --build-from-source mangowhoiscloud/tap/geode
-          output=$("$(brew --prefix)/bin/geode" version)
-          echo "$output"
-          grep -q "GEODE v${version}" <<< "$output"
-          brew test mangowhoiscloud/tap/geode
-
   verify-stable-distribution:
     name: Verify public stable distribution
     needs:
       - validate-build
       - publish-github-release
       - verify-pypi
-      - publish-homebrew
     if: inputs.publish_stable == true
     runs-on: ubuntu-latest
     permissions:
@@ -717,7 +523,7 @@ jobs:
     steps:
       - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
 
-      - name: Verify GitHub, PyPI, and tap agree on one version
+      - name: Verify GitHub and PyPI agree on one version
         env:
           GH_TOKEN: ${{ github.token }}
           GEODE_VERSION: ${{ inputs.version }}
@@ -725,7 +531,6 @@ jobs:
           GEODE_SHA: ${{ needs.validate-build.outputs.sha }}
         run: |
           python - <<'PY'
-          import base64
           import json
           import os
           import urllib.request
@@ -794,25 +599,6 @@ jobs:
           }
           for item in pypi["urls"]:
               assert item["digests"]["sha256"] == checksums[item["filename"]]
-
-          formula_payload = read_json(
-              "https://api.github.com/repos/mangowhoiscloud/homebrew-tap/"
-              "contents/Formula/geode.rb?ref=master",
-              github=True,
-          )
-          formula = base64.b64decode(formula_payload["content"]).decode()
-          expected_url = (
-              f"https://github.com/{repository}/releases/download/v{version}/"
-              f"geode_agent-{version}.tar.gz"
-          )
-          assert f'url "{expected_url}"' in formula
-          assert f'sha256 "{checksums[f"geode_agent-{version}.tar.gz"]}"' in formula
-          assert (
-              f'assert_match "GEODE v{version}", '
-              'shell_output("#{bin}/geode version")'
-          ) in formula
-          assert 'shell_output("#{bin}/geode-mcp --help")' in formula
-          assert "/archive/refs/tags/" not in formula
           PY
 
       - name: Verify the public uv command once more
