@@ -19,7 +19,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": ""
+    "body": "### Fixed\n\n- **Stable releases tolerate split PyPI index convergence.** Post-publish\n  verification keeps the bounded exact-version `uvx` install loop, then delegates\n  JSON metadata and SHA-256 parity to the reusable full-snapshot verifier that\n  already retries GitHub and PyPI together. The redundant one-shot PyPI JSON\n  lookup is removed, so a successful upload cannot be reported as failed merely\n  because the exact-version JSON endpoint briefly lags the simple index. The\n  read-only smoke job also disables its unused uv cache instead of warning about\n  a checkout-free cache key."
   },
   {
     "version": "0.99.333",
