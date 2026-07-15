@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 from core.cli.doctor import (
@@ -31,51 +30,46 @@ class TestCheckEnv:
         from core.cli.doctor import _check_env
 
         results = _check_env()
-        assert not any(r["ok"] for r in results)
-        assert any("hint" in r for r in results)
+        by_name = {r["name"]: r for r in results}
+        assert not by_name["SLACK_BOT_TOKEN"]["ok"]
+        assert "hint" in by_name["SLACK_BOT_TOKEN"]
+        # SLACK_TEAM_ID is informational since the direct transport
+        # never reads it (PR-SLACK-TRANSPORT).
+        assert by_name["SLACK_TEAM_ID"]["ok"]
 
 
 class TestCheckTokenValidity:
     def test_valid_token(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("SLACK_BOT_TOKEN", "xoxb-test")
 
-        mock_resp = type(
-            "R",
-            (),
-            {
-                "json": lambda self: {
-                    "ok": True,
-                    "team": "test-ws",
-                    "user": "geode",
-                    "user_id": "U123",
-                },
-            },
-        )()
+        async def _fake_auth_test(self):
+            return {"ok": True, "team": "test-ws", "user": "geode", "user_id": "U123"}
 
-        with patch("httpx.get", return_value=mock_resp):
-            from core.cli.doctor import _check_token_validity
+        monkeypatch.setattr(
+            "core.messaging.slack_transport.SlackTransport.auth_test", _fake_auth_test
+        )
+        from core.cli.doctor import _check_token_validity
 
-            result = _check_token_validity()
-            assert result["ok"]
-            assert "test-ws" in result["detail"]
+        result = _check_token_validity()
+        assert result["ok"]
+        assert "test-ws" in result["detail"]
 
     def test_invalid_token(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("SLACK_BOT_TOKEN", "xoxb-bad")
 
-        mock_resp = type(
-            "R",
-            (),
-            {
-                "json": lambda self: {"ok": False, "error": "invalid_auth"},
-            },
-        )()
+        async def _fake_auth_test(self):
+            from core.messaging.slack_transport import SlackTransportError
 
-        with patch("httpx.get", return_value=mock_resp):
-            from core.cli.doctor import _check_token_validity
+            raise SlackTransportError("auth.test: invalid_auth")
 
-            result = _check_token_validity()
-            assert not result["ok"]
-            assert "invalid_auth" in result["detail"]
+        monkeypatch.setattr(
+            "core.messaging.slack_transport.SlackTransport.auth_test", _fake_auth_test
+        )
+        from core.cli.doctor import _check_token_validity
+
+        result = _check_token_validity()
+        assert not result["ok"]
+        assert "invalid_auth" in result["detail"]
 
     def test_no_token(self, monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
         monkeypatch.delenv("SLACK_BOT_TOKEN", raising=False)
@@ -136,6 +130,11 @@ class TestRunDoctorSlack:
         monkeypatch.chdir(tmp_path)
         monkeypatch.delenv("SLACK_BOT_TOKEN", raising=False)
         monkeypatch.delenv("SLACK_TEAM_ID", raising=False)
+        # Machine isolation: without this the resolvers fall back to the
+        # REAL ~/.geode/.env and the doctor makes live auth.test calls.
+        monkeypatch.setattr("core.paths.GLOBAL_ENV_FILE", tmp_path / "absent.env")
+        monkeypatch.setattr("core.paths.GLOBAL_CONFIG_TOML", tmp_path / "absent.toml")
+        monkeypatch.setattr("core.paths.PROJECT_CONFIG_TOML", tmp_path / "absent2.toml")
 
         report = run_doctor_slack()
         assert report["status"].startswith("DEGRADED")

@@ -56,6 +56,12 @@ class SlackPoller(BasePoller):
     def channel_name(self) -> str:
         return "slack"
 
+    def is_configured(self) -> bool:
+        """Configured when the transport resolved a token (env OR the
+        global .env) — the base env-only check refused to start on a
+        dotenv-only deployment."""
+        return bool(self._transport.configured)
+
     async def _apoll_once(self) -> None:
         if not await self._transport.ais_available():
             return

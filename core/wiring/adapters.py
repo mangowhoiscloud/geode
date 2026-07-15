@@ -105,25 +105,19 @@ def _load_poller_class(dotted_path: str) -> type:
 
 def _resolve_slack_bot_user_id() -> str:
     """Resolve GEODE's Slack bot user ID via auth.test API (best-effort)."""
-    from core.messaging.slack_transport import resolve_bot_token
+    import asyncio
 
-    token = resolve_bot_token()
-    if not token:
+    from core.messaging.slack_transport import get_slack_transport
+
+    transport = get_slack_transport()
+    if not transport.configured:
         return ""
     try:
-        import httpx
-
-        resp = httpx.get(
-            "https://slack.com/api/auth.test",
-            headers={"Authorization": f"Bearer {token}"},
-            timeout=5.0,
-        )
-        data = resp.json()
-        if data.get("ok"):
-            uid: str = data.get("user_id", "")
-            if uid:
-                log.info("Resolved Slack bot user ID: %s", uid)
-            return uid
+        data = asyncio.run(transport.auth_test())
+        uid: str = data.get("user_id", "")
+        if uid:
+            log.info("Resolved Slack bot user ID: %s", uid)
+        return uid
     except Exception as exc:
         log.debug("Failed to resolve Slack bot user ID: %s", exc)
     return ""
@@ -141,7 +135,11 @@ def _load_gateway_config() -> tuple[dict[str, Any], list[str]]:
     from core.paths import GLOBAL_CONFIG_TOML, PROJECT_CONFIG_TOML
 
     merged_gateway: dict[str, Any] = {}
-    merged_rules: list[dict[str, Any]] = []
+    # (channel, channel_id) -> rule; a project rule REPLACES the global
+    # rule for the same key (override, not duplicate — a duplicate would
+    # double-poll the channel and shadow the project's settings behind
+    # first-match routing).
+    merged_rules: dict[tuple[str, str], dict[str, Any]] = {}
     sources: list[str] = []
     for label, path in (("global", GLOBAL_CONFIG_TOML), ("project", PROJECT_CONFIG_TOML)):
         if not path.exists():
@@ -160,11 +158,17 @@ def _load_gateway_config() -> tuple[dict[str, Any], list[str]]:
             if key == "bindings":
                 rules = value.get("rules", []) if isinstance(value, dict) else []
                 if isinstance(rules, list):
-                    merged_rules.extend(r for r in rules if isinstance(r, dict))
+                    for rule in rules:
+                        if isinstance(rule, dict):
+                            rule_key = (
+                                str(rule.get("channel", "")),
+                                str(rule.get("channel_id", "")),
+                            )
+                            merged_rules[rule_key] = rule
             else:
                 merged_gateway[key] = value  # later (project) wins on scalars
     if merged_rules:
-        merged_gateway["bindings"] = {"rules": merged_rules}
+        merged_gateway["bindings"] = {"rules": list(merged_rules.values())}
     return ({"gateway": merged_gateway} if merged_gateway else {}), sources
 
 
@@ -276,15 +280,13 @@ def build_gateway() -> None:
         from core.paths import PROJECT_CONFIG_TOML as _PROJECT_TOML
 
         _watcher = ConfigWatcher()
-        _watched_any = False
+        # Watch BOTH paths even when absent at boot — an overlay created
+        # (or removed) later must re-merge without a daemon restart.
         for _cfg in (_GLOBAL_TOML, _PROJECT_TOML):
-            if _cfg.exists():
-                _watcher.watch(_cfg, _reload_bindings, name=f"gateway-bindings:{_cfg}")
-                _watched_any = True
-        if _watched_any:
-            _watcher.start()
-            # Attach to manager to prevent GC (daemon thread lifetime)
-            manager._binding_watcher = _watcher  # type: ignore[attr-defined]
+            _watcher.watch(_cfg, _reload_bindings, name=f"gateway-bindings:{_cfg}")
+        _watcher.start()
+        # Attach to manager to prevent GC (daemon thread lifetime)
+        manager._binding_watcher = _watcher  # type: ignore[attr-defined]
     except Exception as exc:
         _plugin_status["gateway_hot_reload"] = "unavailable"
         log.debug("Gateway binding hot-reload not available: %s", exc)

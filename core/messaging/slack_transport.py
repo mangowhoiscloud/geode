@@ -36,6 +36,9 @@ _MAX_RATE_LIMIT_RETRIES = 3
 # auth.test result cache — availability probes must not hit the API on
 # every send.
 _AUTH_CACHE_TTL_S = 300.0
+# Failed verdicts expire quickly — a Slack outage must not disable the
+# poller for the full positive-cache window.
+_AUTH_FAIL_CACHE_TTL_S = 30.0
 
 
 def resolve_bot_token(explicit: str | None = None) -> str:
@@ -91,6 +94,11 @@ class SlackTransport:
             "Authorization": f"Bearer {self._token}",
             "Content-Type": "application/json; charset=utf-8",
         }
+        # Per-call client, deliberately: the singleton transport is shared
+        # across event loops (main-thread adapter vs poller-thread Runner),
+        # and httpx.AsyncClient is loop-affine. Connection reuse would need
+        # per-loop clients — revisit only if poll volume makes TLS setup
+        # measurable.
         async with httpx.AsyncClient(timeout=15.0) as client:
             for attempt in range(_MAX_RATE_LIMIT_RETRIES + 1):
                 resp = await client.post(f"{_API_BASE}/{method}", json=payload, headers=headers)
@@ -107,30 +115,46 @@ class SlackTransport:
         raise SlackTransportError(f"{method}: rate-limited after retries")
 
     async def auth_test(self) -> dict[str, Any]:
-        """``auth.test`` — identity probe (also refreshes the availability cache)."""
+        """``auth.test`` — identity probe (also refreshes the availability cache).
+
+        Only an API-level rejection (``SlackTransportError``, e.g.
+        ``invalid_auth``) caches a negative verdict; transient transport
+        failures (DNS, timeout, 5xx) leave the verdict UNKNOWN so the next
+        cycle retries instead of parking the poller for the cache window.
+        """
         try:
             data = await self._call("auth.test", {})
             self._auth_ok = True
-        except Exception:
+        except SlackTransportError:
             self._auth_ok = False
+            raise
+        except Exception:
+            self._auth_ok = None
             raise
         finally:
             self._auth_checked_at = time.monotonic()
         return data
 
+    def _cached_verdict(self) -> bool | None:
+        """Return the cached availability verdict if still fresh."""
+        if self._auth_ok is None:
+            return None
+        ttl = _AUTH_CACHE_TTL_S if self._auth_ok else _AUTH_FAIL_CACHE_TTL_S
+        if time.monotonic() - self._auth_checked_at < ttl:
+            return self._auth_ok
+        return None
+
     async def ais_available(self) -> bool:
         """Cached availability: token present AND auth.test passed recently."""
         if not self.configured:
             return False
-        if (
-            self._auth_ok is not None
-            and time.monotonic() - self._auth_checked_at < _AUTH_CACHE_TTL_S
-        ):
-            return self._auth_ok
+        cached = self._cached_verdict()
+        if cached is not None:
+            return cached
         try:
             await self.auth_test()
         except Exception:
-            log.warning("Slack auth.test failed — transport unavailable")
+            log.warning("Slack auth.test failed — transport unavailable this cycle")
         return bool(self._auth_ok)
 
     async def post_message(

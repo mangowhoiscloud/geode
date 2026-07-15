@@ -257,18 +257,32 @@ class TestBasePoller:
 
 
 class TestSlackPoller:
-    def test_is_configured(self):
-        manager = ChannelManager()
-        poller = SlackPoller(manager)
-        # Without SLACK_BOT_TOKEN env var, should not be configured
-        with patch.dict("os.environ", {}, clear=True):
-            assert not poller.is_configured()
+    def test_is_configured(self, monkeypatch, tmp_path):
+        # PR-SLACK-TRANSPORT: configured == transport resolved a token
+        # (constructor-time). Isolate from the machine env AND .env.
+        monkeypatch.delenv("SLACK_BOT_TOKEN", raising=False)
+        monkeypatch.setattr("core.paths.GLOBAL_ENV_FILE", tmp_path / "absent.env")
+        from core.messaging.slack_transport import reset_slack_transport
 
-    def test_is_configured_with_token(self):
-        manager = ChannelManager()
-        poller = SlackPoller(manager)
-        with patch.dict("os.environ", {"SLACK_BOT_TOKEN": "xoxb-test"}):
+        reset_slack_transport()
+        try:
+            manager = ChannelManager()
+            poller = SlackPoller(manager)
+            assert not poller.is_configured()
+        finally:
+            reset_slack_transport()
+
+    def test_is_configured_with_token(self, monkeypatch):
+        monkeypatch.setenv("SLACK_BOT_TOKEN", "xoxb-test")
+        from core.messaging.slack_transport import reset_slack_transport
+
+        reset_slack_transport()
+        try:
+            manager = ChannelManager()
+            poller = SlackPoller(manager)
             assert poller.is_configured()
+        finally:
+            reset_slack_transport()
 
     def test_channel_name(self):
         manager = ChannelManager()

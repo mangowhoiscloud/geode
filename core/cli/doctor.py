@@ -94,12 +94,13 @@ def _check_env() -> list[dict[str, Any]]:
     if team_id:
         results.append({"name": "SLACK_TEAM_ID", "ok": True, "detail": f"{team_id} ({team_src})"})
     else:
+        # Informational only — the direct Web API transport never reads it
+        # (it was a requirement of the removed MCP server).
         results.append(
             {
                 "name": "SLACK_TEAM_ID",
-                "ok": False,
-                "detail": "not set",
-                "hint": "Add to ~/.geode/.env: SLACK_TEAM_ID=T...",
+                "ok": True,
+                "detail": "not set (unused by the direct transport)",
             }
         )
 
@@ -107,30 +108,24 @@ def _check_env() -> list[dict[str, Any]]:
 
 
 def _check_token_validity() -> dict[str, Any]:
-    """Validate Slack Bot Token via auth.test API."""
-    token, _src = _resolve_env_or_dotenv("SLACK_BOT_TOKEN")
-    if not token:
+    """Validate Slack Bot Token via the same transport the daemon uses."""
+    import asyncio
+
+    from core.messaging.slack_transport import SlackTransport
+
+    transport = SlackTransport()
+    if not transport.configured:
         return {"ok": False, "detail": "no token to validate"}
-
     try:
-        import httpx
-
-        resp = httpx.get(
-            "https://slack.com/api/auth.test",
-            headers={"Authorization": f"Bearer {token}"},
-            timeout=10.0,
-        )
-        data = resp.json()
-        if data.get("ok"):
-            return {
-                "ok": True,
-                "detail": f"workspace={data.get('team', '?')}, bot={data.get('user', '?')}",
-                "bot_user_id": data.get("user_id", ""),
-                "team": data.get("team", ""),
-            }
-        return {"ok": False, "detail": f"auth.test failed: {data.get('error', '?')}"}
+        data = asyncio.run(transport.auth_test())
+        return {
+            "ok": True,
+            "detail": f"workspace={data.get('team', '?')}, bot={data.get('user', '?')}",
+            "bot_user_id": data.get("user_id", ""),
+            "team": data.get("team", ""),
+        }
     except Exception as exc:
-        return {"ok": False, "detail": f"API call failed: {exc}"}
+        return {"ok": False, "detail": f"auth.test failed: {exc}"}
 
 
 def _check_scopes() -> dict[str, Any]:
@@ -175,59 +170,62 @@ def _check_scopes() -> dict[str, Any]:
 
 
 def _check_bindings() -> list[dict[str, Any]]:
-    """Check config.toml gateway bindings."""
-    from core.paths import PROJECT_CONFIG_TOML
+    """Check gateway bindings through the daemon's own merged config loader.
+
+    PR-SLACK-TRANSPORT: the daemon merges the user-level
+    ``~/.geode/config.toml`` (authoritative) with the project overlay —
+    the doctor must diagnose the SAME view, with sources named. The old
+    check read only the project file and called a working global-only
+    deployment "config.toml not found".
+    """
+    from core.wiring.adapters import _load_gateway_config
 
     results: list[dict[str, Any]] = []
-    config_path = PROJECT_CONFIG_TOML
+    try:
+        merged, sources = _load_gateway_config()
+    except Exception as exc:
+        results.append({"name": "gateway config", "ok": False, "detail": str(exc)})
+        return results
 
-    if not config_path.exists():
+    if not sources:
         results.append(
             {
-                "name": "config.toml",
+                "name": "gateway config",
                 "ok": False,
-                "detail": "not found",
-                "hint": "cp .geode/config.toml.example .geode/config.toml",
+                "detail": "no [gateway] section in ~/.geode/config.toml or ./.geode/config.toml",
+                "hint": "Add [gateway] + [[gateway.bindings.rules]] to ~/.geode/config.toml",
             }
         )
         return results
 
-    results.append({"name": "config.toml", "ok": True, "detail": str(config_path)})
+    results.append({"name": "gateway config", "ok": True, "detail": "; ".join(sources)})
 
-    try:
-        import tomllib
+    rules = merged.get("gateway", {}).get("bindings", {}).get("rules", [])
+    slack_rules = [r for r in rules if r.get("channel") == "slack"]
 
-        with open(config_path, "rb") as f:
-            config = tomllib.load(f)
-
-        rules = config.get("gateway", {}).get("bindings", {}).get("rules", [])
-        slack_rules = [r for r in rules if r.get("channel") == "slack"]
-
-        if not slack_rules:
+    if not slack_rules:
+        results.append(
+            {
+                "name": "slack binding",
+                "ok": False,
+                "detail": "no slack binding in merged gateway config",
+                "hint": "Add [[gateway.bindings.rules]] with channel='slack' and channel_id",
+            }
+        )
+    else:
+        for rule in slack_rules:
+            ch_id = rule.get("channel_id", "")
+            mention = rule.get("require_mention", False)
             results.append(
                 {
-                    "name": "slack binding",
-                    "ok": False,
-                    "detail": "no slack binding in config.toml",
-                    "hint": "Add [[gateway.bindings.rules]] with channel='slack' and channel_id",
+                    "name": f"binding:{ch_id}",
+                    "ok": bool(ch_id and ch_id != "C0XXXXXXXXX"),
+                    "detail": f"channel_id={ch_id}, require_mention={mention}",
+                    "hint": "Replace C0XXXXXXXXX with actual channel ID"
+                    if ch_id == "C0XXXXXXXXX"
+                    else "",
                 }
             )
-        else:
-            for rule in slack_rules:
-                ch_id = rule.get("channel_id", "")
-                mention = rule.get("require_mention", False)
-                results.append(
-                    {
-                        "name": f"binding:{ch_id}",
-                        "ok": bool(ch_id and ch_id != "C0XXXXXXXXX"),
-                        "detail": f"channel_id={ch_id}, require_mention={mention}",
-                        "hint": "Replace C0XXXXXXXXX with actual channel ID"
-                        if ch_id == "C0XXXXXXXXX"
-                        else "",
-                    }
-                )
-    except Exception as exc:
-        results.append({"name": "config.toml parse", "ok": False, "detail": str(exc)})
 
     return results
 
