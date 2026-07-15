@@ -19,7 +19,7 @@ round. Field producers land incrementally across PR-2 → PR-6:
   last_action    tool-call list of the last round       PR-2
   last_observation tool-result summary                   PR-2
   observations   running list of round summaries        PR-2
-  subgoals       LLM decomposition node                 PR-3
+  subgoals       reflection node next_action hints      PR-3 (C-2)
   hypotheses     reflection node output                 PR-3 (C-2)
   confidence     reflection node output                 PR-3 (C-2)
   ============== ====================================== =========

@@ -1,6 +1,6 @@
 [project]
 name = "geode-agent"
-version = "0.99.331"
+version = "0.99.333"
 description = "GEODE — 범용 자율 실행 에이전트"
 license = "Apache-2.0"
 readme = "README.md"
@@ -273,6 +273,16 @@ ignore_imports = [
     "core.cli.typer_serve -> core.messaging.binding",
     "core.cli.scheduler_drain -> core.server.supervised.services",
     "core.wiring.adapters -> core.messaging.binding",
+    # PR-SLACK-TRANSPORT (2026-07-15) — wiring constructs the messaging-layer
+    # Slack transport, and the notification adapter consumes it (a pure
+    # httpx capability client, not a process surface; same exception class
+    # as the binding entry above).
+    "core.wiring.adapters -> core.messaging.slack_transport",
+    "core.mcp.slack_adapter -> core.messaging.slack_transport",
+    # PR-SLACK-TRANSPORT (2026-07-15) — the doctor probes the SAME direct
+    # Web API transport the daemon uses (auth.test), same diagnostics-read
+    # exception class as typer_serve above. Lazy import inside the check.
+    "core.cli.doctor -> core.messaging.slack_transport",
 ]
 
 [[tool.importlinter.contracts]]

@@ -2,7 +2,7 @@
  * GEODE CHANGELOG, auto-synced from the GEODE repo via `npm run sync-stats`.
  * Do not edit manually. Edit CHANGELOG.md in the GEODE repo and re-run sync.
  *
- * Last sync: 2026-07-14
+ * Last sync: 2026-07-15
  *
  * Each entry's `body` is the raw markdown between two version headings.
  * The Changelog page renders the body with a minimal markdown renderer
@@ -17,9 +17,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
-    "version": "Unreleased",
-    "date": "",
-    "body": "### Fixed\n\n- **Release documentation remains reproducible after a promotion merge.**\n  `sync-stats` now preserves the committed generation date when the package\n  version is unchanged instead of replacing it with `SOURCE_DATE_EPOCH`. A final\n  `develop -> main` merge can therefore change the release commit timestamp\n  without dirtying `sot.ts`, `changelog.ts`, `llms.txt`, or `llms-full.txt`;\n  genuinely new versions still take their date from the reproducible source\n  epoch.\n\n### Changed\n\n- **Stable installation now uses PyPI/uv as the sole advertised package\n  channel.** The public install surface and stable release workflow no longer\n  expose or publish the custom Homebrew tap, so users are not given a\n  namespace-qualified command or an unqualified command that fails on a clean\n  machine. The repository retains a `geode-agent` formula template for a\n  future Homebrew/core submission; `brew install geode-agent` will return only\n  after that command is independently available and verified."
+    "version": "0.99.333",
+    "date": "2026-07-15",
+    "body": "### Changed\n\n- **Slack transport rewritten — direct Web API, no MCP subprocess.**\n  Root cause of the dead Slack surface: the ``slack`` MCP server lost a\n  startup race on every daemon boot (``StdioMCPClient.connect`` waits at\n  most 10s while a warm-cache ``npx @modelcontextprotocol/server-slack``\n  spawn measures 10.1s), so the poller's health gate silently disabled\n  ALL inbound and outbound Slack while the bot token was valid the whole\n  time. New ``core/messaging/slack_transport.py`` posts straight to the\n  Web API over httpx (``chat.postMessage`` with 39k chunking + threaded\n  follow-ups, ``conversations.history``, ``reactions.add`` with\n  already-reacted tolerance, 429 Retry-After backoff, cached\n  ``auth.test`` availability, token resolution falling back to the\n  global ``~/.geode/.env``). ``SlackNotificationAdapter`` and\n  ``SlackPoller`` now consume the transport (names and NotificationPort/\n  ChannelManager contracts unchanged); the deprecated npm package, the\n  10s race, and the MCP health-gate coupling are gone. Inbound stays\n  polling — Socket Mode needs an app-level ``xapp-`` token the\n  deployment does not have yet (documented follow-up).\n- **Gateway config has a root-level SoT.** ``[gateway]`` (+ binding\n  rules) now loads from the user-level ``~/.geode/config.toml`` as the\n  authoritative source with the project ``.geode/config.toml`` as an\n  explicit overlay (scalar keys override, binding rules append), and the\n  hot-reload watcher observes both files. Previously only the project\n  file was read, so the daemon's entire Slack surface depended on its\n  launchd WorkingDirectory. Boot logs now name the config sources used.\n- **Notification adapter survives daemon threads.**\n  ``get_notification()`` falls back to a process-wide last-set adapter\n  (mirroring the gateway's module global) — ``send_notification`` and\n  ask/reply publishes from poller/IPC threads previously read a\n  thread-empty ContextVar and silently no-oped.\n- **`geode doctor slack` diagnoses instead of misreporting.** Credential\n  checks resolve os.environ THEN the global ``.env`` (a valid\n  dotenv-stored token was reported \"not set\"); the stale\n  ``pgrep server-slack`` process check is replaced by a live\n  ``auth.test`` probe through the same transport the daemon uses.\n  Deleted per the rewrite: MCP tool calls in the poller, the MCP-backed\n  Slack adapter body, the legacy constructor shape, and the\n  ``server-slack`` doctor check. Guards:\n  ``tests/core/messaging/test_slack_transport.py`` (13),\n  ``tests/core/wiring/test_gateway_config_sot.py`` (5), migrated\n  ``tests/core/mcp/test_notification_adapters.py``."
+  },
+  {
+    "version": "0.99.332",
+    "date": "2026-07-15",
+    "body": "### Removed\n- **Plan DAG remnants** (PR-PLAN-DAG-CLEANUP): `SubGoal.depends_on` /\n  `PlanStep.depends_on` deleted — fields survived the v0.99.46\n  GoalDecomposer removal (v0.13 DAG/TaskGraph lineage) with zero runtime\n  consumers; plan steps are consumed strictly in `current`-index order.\n  `Plan.advance(completed=...)` replaced by `Plan.abandon_and_advance()`:\n  the success-advance branch was never wired in production (tests only),\n  so the API now states the single real path. Replan prompt template and\n  parser no longer emit/read `depends_on`. `update_plan` tool description\n  now states it is display-only and separate from the internal\n  auto-generated Plan. `CognitiveState` doc table corrected: `subgoals`\n  producer is the reflection node (next_action hints), not a\n  decomposition node.\n\n### Fixed\n\n- **Release documentation remains reproducible after a promotion merge.**\n  `sync-stats` now preserves the committed generation date when the package\n  version is unchanged instead of replacing it with `SOURCE_DATE_EPOCH`. A final\n  `develop -> main` merge can therefore change the release commit timestamp\n  without dirtying `sot.ts`, `changelog.ts`, `llms.txt`, or `llms-full.txt`;\n  genuinely new versions still take their date from the reproducible source\n  epoch.\n\n### Changed\n\n- **Stable installation now uses PyPI/uv as the sole advertised package\n  channel.** The public install surface and stable release workflow no longer\n  expose or publish the custom Homebrew tap, so users are not given a\n  namespace-qualified command or an unqualified command that fails on a clean\n  machine. The repository retains a `geode-agent` formula template for a\n  future Homebrew/core submission; `brew install geode-agent` will return only\n  after that command is independently available and verified."
   },
   {
     "version": "0.99.331",
@@ -2383,4 +2388,4 @@ export const CHANGELOG: ChangelogEntry[] = [
   }
 ];
 
-export const CHANGELOG_SYNCED_AT = "2026-07-14";
+export const CHANGELOG_SYNCED_AT = "2026-07-15";

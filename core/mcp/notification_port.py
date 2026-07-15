@@ -67,13 +67,22 @@ class NotificationPort(Protocol):
 _notification_ctx: ContextVar[NotificationPort | None] = ContextVar(
     "notification_port", default=None
 )
+# Process-wide fallback (PR-SLACK-TRANSPORT, 2026-07-15). ContextVars do
+# not cross threads, and poller/IPC daemon threads never ran a
+# ``set_notification`` — so ``send_notification`` and notification hooks
+# fired from those threads silently read None while the gateway (a module
+# global) survived. The last adapter set in ANY thread is the process
+# fallback, mirroring ``core.messaging.binding.set_gateway``.
+_notification_fallback: NotificationPort | None = None
 
 
 def set_notification(adapter: NotificationPort | None) -> None:
-    """Set the active notification adapter for the current context."""
+    """Set the active notification adapter (context + process fallback)."""
+    global _notification_fallback
     _notification_ctx.set(adapter)
+    _notification_fallback = adapter
 
 
 def get_notification() -> NotificationPort | None:
-    """Get the active notification adapter, or None if not set."""
-    return _notification_ctx.get()
+    """Get the adapter: current context first, then the process fallback."""
+    return _notification_ctx.get() or _notification_fallback

@@ -1383,7 +1383,7 @@ class AgenticLoop:
                 metrics.record_step_attempt()
                 cap = _replan_max_attempts()
                 if metrics.replan_attempts_on_current_step > cap:
-                    advanced = metrics.active_plan.advance(completed=False)
+                    advanced = metrics.active_plan.abandon_and_advance()
                     # new step → reset the per-step counter
                     metrics.set_active_plan(advanced, reset_attempts=True)
                     self._prompt_dirty = True
