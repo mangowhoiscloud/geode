@@ -53,8 +53,8 @@ const navItems = [
  * Every distribution channel as a replayed terminal: the command types in
  * character by character (operator direction 2026-07-13), then output
  * reveals line by line exactly like the hero terminal. Transcripts are
- * abridged from the real 2026-07-13 publication runs (brew source build,
- * PyPI uv tool install, uvx ephemeral env); reduced motion renders the finished
+ * abridged from the real 2026-07-13 publication runs (PyPI uv tool install,
+ * uvx ephemeral env); reduced motion renders the finished
  * transcript statically.
  */
 type InstallLine = { kind: "cmd" | "out" | "ok" | "welcome" | "prompt"; text: string };
@@ -73,24 +73,6 @@ const installChannels: {
   copy: string;
   lines: InstallLine[];
 }[] = [
-  {
-    // Carries the former hero terminal wholesale (operator direction
-    // 2026-07-13, "merge the two terminals into the install section"):
-    // install, first launch, the welcome screen, the first prompt.
-    id: "brew",
-    labelKo: "Homebrew",
-    labelEn: "Homebrew",
-    noteKo: "macOS 사용자용. brew 설치에서 첫 프롬프트까지, 실행 축약본.",
-    noteEn: "For macOS users. From brew install to the first prompt, abridged.",
-    copy: "brew install mangowhoiscloud/tap/geode",
-    lines: [
-      { kind: "cmd", text: "brew install mangowhoiscloud/tap/geode" },
-      { kind: "out", text: "==> Fetching downloads for: geode" },
-      { kind: "out", text: "==> Installing geode from mangowhoiscloud/tap" },
-      { kind: "cmd", text: "geode" },
-      ...FIRST_PROMPT_LINES,
-    ],
-  },
   {
     id: "uv-tool",
     labelKo: "uv tool",
@@ -298,7 +280,7 @@ function InstallTerminal({ lines }: { lines: InstallLine[] }) {
 function InstallChannels() {
   const locale = useLocale();
   const reduceMotion = useReducedMotion();
-  const [activeChannel, setActiveChannel] = useState("brew");
+  const [activeChannel, setActiveChannel] = useState("uv-tool");
   const [copied, setCopied] = useState(false);
   const channel = installChannels.find((c) => c.id === activeChannel) ?? installChannels[0];
 

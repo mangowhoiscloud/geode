@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import re
 import subprocess
 import tomllib
@@ -74,142 +73,20 @@ def test_pypi_oidc_is_isolated_from_public_verification() -> None:
     )
 
 
-def test_homebrew_publish_uses_scoped_key_and_retry_guards() -> None:
-    text = WORKFLOW_PATH.read_text(encoding="utf-8")
-
-    assert "HOMEBREW_TAP_TOKEN" not in text
-    assert "HOMEBREW_TAP_DEPLOY_KEY" in text
-    assert "brew update-python-resources --help" in text
-    assert "--ignore-main-package-cooldown" in text
-    assert 'brew trust --formula "$tap_name/geode"' in text
-    assert 'cp tap/Formula/geode.rb "$tap_formula"' in text
-    assert text.count("--template geode/packaging/homebrew/geode.rb.in") == 3
-    assert "git pull --rebase" not in text
-    assert "steps.tap-base.outputs.sha" in text
-    assert "skip-existing: true" in text
-
-
-def test_homebrew_resource_refresh_uses_local_tap_and_adapts_cli(
-    tmp_path: Path,
-) -> None:
-    jobs = _workflow()["jobs"]
+def test_stable_release_has_no_custom_homebrew_tap_channel() -> None:
+    workflow = _workflow()
+    jobs = workflow["jobs"]
     assert isinstance(jobs, dict)
-    publish = jobs["publish-homebrew"]
-    assert isinstance(publish, dict)
-    steps = publish["steps"]
-    assert isinstance(steps, list)
-    run = next(
-        step["run"]
-        for step in steps
-        if isinstance(step, dict)
-        and step.get("name") == "Refresh pinned Python resources from the published PyPI package"
-    )
-    assert isinstance(run, str)
+    assert "publish-homebrew" not in jobs
 
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    checkout_formula = tmp_path / "tap" / "Formula" / "geode.rb"
-    checkout_formula.parent.mkdir(parents=True)
-    tap_repo = tmp_path / "homebrew-tap"
-    (tap_repo / "Formula").mkdir(parents=True)
-    brew = bin_dir / "brew"
-    brew.write_text(
-        """#!/usr/bin/env bash
-set -euo pipefail
-if [[ "${1:-}" == "tap" ]]; then
-  printf '%s\\n' "$@" > "$BREW_TAP_CAPTURE"
-  exit 0
-fi
-if [[ "${1:-}" == "trust" && "${2:-}" == "--help" ]]; then
-  exit 0
-fi
-if [[ "${1:-}" == "trust" ]]; then
-  printf '%s\\n' "$@" > "$BREW_TRUST_CAPTURE"
-  exit 0
-fi
-if [[ "${1:-}" == "--repo" ]]; then
-  [[ "${2:-}" == "mangowhoiscloud/tap" ]]
-  printf '%s\\n' "$BREW_TAP_REPO"
-  exit 0
-fi
-if [[ "${1:-}" == "update-python-resources" && "${2:-}" == "--help" ]]; then
-  printf '%s\\n' "${BREW_HELP_TEXT:-}"
-  exit 0
-fi
-printf '%s\\n' "$@" > "$BREW_CAPTURE"
-cp "$BREW_TAP_REPO/Formula/geode.rb" "$BREW_SEED_CAPTURE"
-printf 'updated formula\\n' > "$BREW_TAP_REPO/Formula/geode.rb"
-""",
-        encoding="utf-8",
-    )
-    brew.chmod(0o755)
+    verify = jobs["verify-stable-distribution"]
+    assert isinstance(verify, dict)
+    assert verify["needs"] == ["validate-build", "publish-github-release", "verify-pypi"]
 
-    cases: tuple[tuple[str, str, list[str]], ...] = (
-        (
-            "legacy",
-            "",
-            ["update-python-resources", "mangowhoiscloud/tap/geode"],
-        ),
-        (
-            "cooldown",
-            "--ignore-main-package-cooldown",
-            [
-                "update-python-resources",
-                "mangowhoiscloud/tap/geode",
-                "--package-name",
-                "geode-agent",
-                "--version",
-                "0.99.330",
-                "--ignore-main-package-cooldown",
-            ],
-        ),
-    )
-    for label, help_text, expected_args in cases:
-        capture = tmp_path / f"{label}.args"
-        tap_capture = tmp_path / f"{label}.tap"
-        trust_capture = tmp_path / f"{label}.trust"
-        seed_capture = tmp_path / f"{label}.seed"
-        checkout_formula.write_text("checkout formula\n", encoding="utf-8")
-        (tap_repo / "Formula" / "geode.rb").write_text(
-            "tapped formula\n",
-            encoding="utf-8",
-        )
-        env = os.environ.copy()
-        env.update(
-            {
-                "BREW_CAPTURE": str(capture),
-                "BREW_HELP_TEXT": help_text,
-                "BREW_SEED_CAPTURE": str(seed_capture),
-                "BREW_TAP_CAPTURE": str(tap_capture),
-                "BREW_TAP_REPO": str(tap_repo),
-                "BREW_TRUST_CAPTURE": str(trust_capture),
-                "GEODE_VERSION": "0.99.330",
-                "PATH": f"{bin_dir}:{env['PATH']}",
-            }
-        )
-        result = subprocess.run(
-            ["/bin/bash", "-e"],
-            input=run,
-            text=True,
-            capture_output=True,
-            check=False,
-            cwd=tmp_path,
-            env=env,
-        )
-        assert result.returncode == 0, result.stderr
-        assert capture.read_text(encoding="utf-8").splitlines() == expected_args
-        assert tap_capture.read_text(encoding="utf-8").splitlines() == [
-            "tap",
-            "mangowhoiscloud/tap",
-            str(tmp_path / "tap"),
-        ]
-        assert trust_capture.read_text(encoding="utf-8").splitlines() == [
-            "trust",
-            "--formula",
-            "mangowhoiscloud/tap/geode",
-        ]
-        assert seed_capture.read_text(encoding="utf-8") == "checkout formula\n"
-        assert checkout_formula.read_text(encoding="utf-8") == "updated formula\n"
+    text = WORKFLOW_PATH.read_text(encoding="utf-8")
+    assert "HOMEBREW_TAP_DEPLOY_KEY" not in text
+    assert "homebrew-tap" not in text
+    assert "mangowhoiscloud/tap" not in text
 
 
 def test_release_retry_preserves_release_body_bytes() -> None:
@@ -221,9 +98,12 @@ def test_release_retry_preserves_release_body_bytes() -> None:
     assert "--jq .body > published-release/release-notes.md" not in text
 
 
-def test_public_uv_commands_use_the_stable_pypi_channel() -> None:
+def test_public_install_commands_use_the_stable_pypi_channel() -> None:
     text = PORTFOLIO_PATH.read_text(encoding="utf-8")
 
+    assert "brew install" not in text
+    assert "mangowhoiscloud/tap" not in text
+    assert 'useState("uv-tool")' in text
     assert 'copy: "uv tool install geode-agent"' in text
     assert 'copy: "uvx --from geode-agent geode"' in text
     assert "GEODE_GIT_SOURCE" not in text

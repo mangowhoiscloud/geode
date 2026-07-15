@@ -20,10 +20,10 @@ def test_render_homebrew_formula_replaces_release_metadata() -> None:
         sdist_sha256="a" * 64,
         python_formula="python@3.12",
         resources=RESOURCE,
-        template=Path("packaging/homebrew/geode.rb.in"),
+        template=Path("packaging/homebrew/geode-agent.rb.in"),
     )
 
-    assert "class Geode < Formula" in formula
+    assert "class GeodeAgent < Formula" in formula
     assert "include Language::Python::Virtualenv" in formula
     assert (
         'url "https://github.com/mangowhoiscloud/geode/releases/download/v0.99.11/geode_agent-0.99.11.tar.gz"'
@@ -50,7 +50,7 @@ def test_render_homebrew_formula_rejects_invalid_sha() -> None:
             sdist_sha256="not-a-sha",
             python_formula="python@3.12",
             resources=RESOURCE,
-            template=Path("packaging/homebrew/geode.rb.in"),
+            template=Path("packaging/homebrew/geode-agent.rb.in"),
         )
 
 
@@ -62,7 +62,7 @@ def test_render_homebrew_formula_rejects_tag_auto_tarball() -> None:
             sdist_sha256="a" * 64,
             python_formula="python@3.12",
             resources=RESOURCE,
-            template=Path("packaging/homebrew/geode.rb.in"),
+            template=Path("packaging/homebrew/geode-agent.rb.in"),
         )
 
 
@@ -74,12 +74,12 @@ def test_render_homebrew_formula_requires_complete_resources() -> None:
             sdist_sha256="a" * 64,
             python_formula="python@3.12",
             resources="",
-            template=Path("packaging/homebrew/geode.rb.in"),
+            template=Path("packaging/homebrew/geode-agent.rb.in"),
         )
 
 
 def test_extract_resource_stanzas_ignores_formula_code() -> None:
-    formula = f"class Geode < Formula\n{RESOURCE}\n  def install\n  end\nend\n"
+    formula = f"class GeodeAgent < Formula\n{RESOURCE}\n  def install\n  end\nend\n"
 
     assert extract_resource_stanzas(formula) == RESOURCE
 
@@ -112,5 +112,5 @@ def test_render_homebrew_formula_rejects_noncanonical_resource_blocks(
             sdist_sha256="a" * 64,
             python_formula="python@3.12",
             resources=resource,
-            template=Path("packaging/homebrew/geode.rb.in"),
+            template=Path("packaging/homebrew/geode-agent.rb.in"),
         )

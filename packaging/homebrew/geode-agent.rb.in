@@ -1,4 +1,4 @@
-class Geode < Formula
+class GeodeAgent < Formula
   include Language::Python::Virtualenv
 
   desc "Self-hosting autonomous execution agent harness"

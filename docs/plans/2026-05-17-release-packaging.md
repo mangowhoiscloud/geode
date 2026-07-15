@@ -11,7 +11,8 @@ actual user surfaces:
 
 - PyPI / `uv tool install` for the Python CLI.
 - GitHub release assets for immutable source distributions and checksums.
-- Homebrew tap/formula for macOS CLI users.
+- A future Homebrew/core formula for macOS CLI users; no custom tap is exposed
+  as a stable install channel.
 - Hugging Face Hub for agent traces, evaluation artifacts, and optional demo
   surfaces, not as a model-weight release.
 
@@ -19,8 +20,8 @@ actual user surfaces:
 
 | Source | Relevant pattern | GEODE decision |
 |---|---|---|
-| Homebrew Python for Formula Authors | Python applications should be installed into a `libexec` virtualenv, with Python dependencies declared as formula resources and installed into that virtualenv. `brew update-python-resources` is the intended helper for resource stanzas. | Build `packaging/homebrew/geode.rb` around `Language::Python::Virtualenv`, a semver release sdist, and explicit resource stanzas. |
-| Homebrew Formula Cookbook | A formula is a Ruby package definition created from an upstream tarball, installed with `brew install`, debugged with `brew install --debug --verbose`, and verified with formula tests/audit. | Treat `brew audit --new --strict geode` and `brew test geode` as release gates before publishing a tap. |
+| Homebrew Python for Formula Authors | Python applications should be installed into a `libexec` virtualenv, with Python dependencies declared as formula resources and installed into that virtualenv. `brew update-python-resources` is the intended helper for resource stanzas. | Build `packaging/homebrew/geode-agent.rb` around `Language::Python::Virtualenv`, a semver release sdist, and explicit resource stanzas. |
+| Homebrew Formula Cookbook | A formula is a Ruby package definition created from an upstream tarball, installed with `brew install`, debugged with `brew install --debug --verbose`, and verified with formula tests/audit. | Treat `brew audit --new --strict geode-agent` and `brew test geode-agent` as gates before submitting to Homebrew/core. |
 | `../hermes-agent/packaging/homebrew` | Stable Homebrew source should target the semver-named sdist release asset, not a repository auto-tarball. The wrapper exports managed-install environment variables and verifies that self-update routes users back to Homebrew. | Publish the `geode_agent-<version>.tar.gz` sdist as a GitHub release asset and make the formula point there. Add `GEODE_MANAGED=homebrew` once update/install commands exist. |
 | `huggingface/ml-intern` | CLI install is `uv sync` + `uv tool install -e .`; runtime relies on `HF_TOKEN`; sandbox tools can use HF Spaces; sessions are uploaded to a private HF dataset in Claude-Code-style JSONL for trace viewing. Its Space deploy notes keep PR review separate from pushes to the HF Space remote. | Keep local CLI install first-class. For this release, publish release artifacts to a versioned HF dataset repo only after the manual release workflow is approved; consider trace export and a Space demo after packaging is stable. |
 | `../openclaw/extensions/huggingface` | Hugging Face is modeled as a provider with `HF_TOKEN` / `HUGGINGFACE_HUB_TOKEN`, provider-specific config, and OpenAI-compatible router defaults. | If GEODE adds a Hugging Face provider, use provider-scoped auth/config instead of mixing it with packaging. Packaging remains separate from model routing. |
@@ -65,7 +66,8 @@ This gives the desired sequence:
 4. Trigger the release workflow manually against the known SHA or `main`.
 5. Inspect artifacts and release notes.
 6. Approve selected publish jobs: GitHub release, PyPI, Hugging Face artifacts.
-7. Update Homebrew formula after the GitHub release asset checksum is final.
+7. Update the Homebrew/core candidate only after the GitHub release asset
+   checksum is final and core eligibility is satisfied.
 
 ## Skill Packaging Gate
 
@@ -84,7 +86,7 @@ workflow now checks that both wheel and sdist include:
 
 Future optional skill marketplace publishing should be a separate manual step,
 not bundled into a normal package push. The package gate should first prove the
-built-in runtime skills are present and loadable; marketplace/tap publishing can
+built-in runtime skills are present and loadable; external registry publishing can
 then operate on a signed release artifact.
 
 ## Official Docs Generation Gate
@@ -157,9 +159,14 @@ artifact.
 
 ### 3. Homebrew
 
+Status: deferred until Homebrew/core accepts the project. The public site must
+not advertise either a custom-tap command or `brew install geode-agent` before
+the unqualified command works on a clean machine. PyPI/uv remains the canonical
+stable install channel in the meantime.
+
 Initial formula shape:
 
-- `class Geode < Formula`
+- `class GeodeAgent < Formula`
 - `include Language::Python::Virtualenv`
 - `url` points to `geode_agent-0.99.12.tar.gz`
 - `depends_on "python@3.y"` using the current Homebrew Python accepted by the
@@ -177,30 +184,29 @@ Open items:
 - Verify whether `inspect-petri` git dependency in the optional `audit` extra
   should remain excluded from Homebrew resources.
 
-GEODE keeps the formula source in this repo as a renderable template, not as
-the tap itself:
+GEODE keeps a core-ready formula source in this repo as a renderable template:
 
 ```bash
 uv run python scripts/render_homebrew_formula.py \
   --version 0.99.12 \
   --sdist-url https://github.com/mangowhoiscloud/geode/releases/download/v0.99.12/geode_agent-0.99.12.tar.gz \
   --sdist-sha256 <sha256-from-SHA256SUMS> \
-  --output packaging/homebrew/geode.rb
+  --output packaging/homebrew/geode-agent.rb
 ```
 
-Before copying `geode.rb` into `homebrew-geode`, fill the Python dependency
-resources in the tap checkout with Homebrew's official helper:
+Before copying `geode-agent.rb` into a Homebrew/core submission checkout, fill
+the Python dependency resources with Homebrew's official helper:
 
 ```bash
-brew update-python-resources --print-only geode
+brew update-python-resources --print-only geode-agent
 ```
 
-Then run the tap-local gates:
+Then run the Homebrew/core new-formula gates:
 
 ```bash
-brew audit --new --strict geode
-brew install --build-from-source ./Formula/geode.rb
-brew test geode
+brew audit --new --strict --online geode-agent
+brew install --build-from-source ./Formula/geode-agent.rb
+brew test geode-agent
 ```
 
 ### 4. Hugging Face Hub

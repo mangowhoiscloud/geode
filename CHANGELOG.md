@@ -47,12 +47,15 @@ functional change.
 
 ## [Unreleased]
 
-### Fixed
+### Changed
 
-- **Homebrew resource refresh preserves the rendered release candidate.** The
-  workflow now seeds Homebrew's registered local tap with the newly rendered
-  formula before dependency resolution, rather than letting `brew tap` reload
-  the older committed formula and overwrite the release URL and metadata.
+- **Stable installation now uses PyPI/uv as the sole advertised package
+  channel.** The public install surface and stable release workflow no longer
+  expose or publish the custom Homebrew tap, so users are not given a
+  namespace-qualified command or an unqualified command that fails on a clean
+  machine. The repository retains a `geode-agent` formula template for a
+  future Homebrew/core submission; `brew install geode-agent` will return only
+  after that command is independently available and verified.
 
 ## [0.99.331] - 2026-07-14
 
