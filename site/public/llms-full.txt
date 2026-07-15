@@ -1063,8 +1063,218 @@ CLI 인자
 ## 다음
 
 -   [프로바이더 설정 가이드](https://mangowhoiscloud.github.io/geode/docs/run/providers.md). 자격과 경로 선택.
+-   [도구 호출](https://mangowhoiscloud.github.io/geode/docs/runtime/llm/tool-calling.md). ToolSpec, 선택 모드, 실행과 결과 replay.
+-   [구조화 출력](https://mangowhoiscloud.github.io/geode/docs/runtime/llm/structured-output.md). JSON Schema 배선과 검증 경계.
 -   [인증](https://mangowhoiscloud.github.io/geode/docs/runtime/auth.md). OAuth, API 키, CLI 레인.
 -   [어댑터 추가 가이드](https://mangowhoiscloud.github.io/geode/docs/guides/llm-adapter.md). 새 모델, 새 레인 붙이기.
+
+---
+
+### Tool calling (도구 호출)
+
+URL: https://mangowhoiscloud.github.io/geode/docs/runtime/llm/tool-calling
+Markdown: https://mangowhoiscloud.github.io/geode/docs/runtime/llm/tool-calling.md
+
+GEODE의 도구 호출은 특정 프로바이더 payload가 아니라 `AgenticLoop`의 공통 계약에서 시작합니다. 도구 정의를 adapter-neutral `ToolSpec`으로 만들고, 선택한 adapter가 wire 형식으로 변환합니다. 모델이 반환한 호출은 다시 하나의 `ToolUseBlock`으로 정규화되므로 실행기와 다음 턴은 프로바이더 문법을 알 필요가 없습니다.
+
+## 한 라운드의 계약
+
+```
+definitions.json / MCP discovery
+  → ToolSpec(name, description, input_schema)
+  → AdapterCallRequest(tools, tool_choice)
+  → provider tool call
+  → ToolUseBlock(id, name, input)
+  → ToolCallProcessor → tool_result
+  → assistant call + result replay → next model round
+```
+
+1.  `core/tools/definitions.json`과 MCP discovery 결과가 이번 호출의 도구 목록을 만듭니다.
+2.  `AgenticLoop`가 목록과 `tool_choice`를 `AdapterCallRequest`에 싣습니다.
+3.  adapter가 프로바이더별 tool definition과 선택 문법으로 변환합니다.
+4.  응답의 호출 id, 이름, 인자를 `ToolUseBlock`으로 정규화합니다.
+5.  `ToolCallProcessor`가 도구를 실행하고 id가 연결된 결과를 만듭니다.
+6.  assistant의 호출과 tool result를 함께 history에 넣어 다음 모델 라운드로 보냅니다.
+
+## 도구 정의
+
+| `ToolSpec` 필드 | 의미 | 출처 |
+| --- | --- | --- |
+| `name` | 모델이 호출하고 registry가 handler를 찾는 안정된 이름 | `definitions.json` 또는 MCP tool name |
+| `description` | 도구 선택에 쓰는 모델 가시 설명 | 도구 metadata |
+| `input_schema` | 호출 인자의 JSON Schema | 도구 metadata의 입력 계약 |
+
+이 스키마는 도구 _입력_ 계약입니다. 모델의 최종 답변 shape를 고정하는 `response_schema`와는 별개입니다. 레지스트리, deferred loading, toolkit 구성은 [도구와 툴셋](https://mangowhoiscloud.github.io/geode/docs/runtime/tools/protocol.md)에서 설명합니다.
+
+## 도구 선택 모드
+
+| Adapter-neutral 값 | 의미 | `AgenticLoop` 기본 경로 |
+| --- | --- | --- |
+| `auto` | 모델이 도구 호출과 텍스트 응답 중 선택 | 일반 라운드에서 사용 |
+| `none` | 도구 호출 금지 | round 또는 time budget의 wrap-up 구간에서 강제 |
+| `required` / `any` | 하나 이상의 도구 호출 요구 | adapter request 계약은 번역하지만 일반 loop는 현재 생성하지 않음 |
+| `{"type":"tool","name":"…"}` | 이름으로 한 도구 강제 | adapter request 계약은 지원하지만 일반 loop의 사용자 설정 표면은 아님 |
+
+즉, GEODE CLI에서 평소 도구 호출은 `auto`이고 종료 여유가 부족해지면 `none`으로 전환됩니다. `required`와 named forcing은 adapter-neutral 내부 표면이지 현재 일반 실행의 사용자 옵션이 아닙니다.
+
+## 내장 adapter 배선
+
+| 경로 | GEODE가 만드는 요청 | 선택 변환 | 결과 replay |
+| --- | --- | --- | --- |
+| `anthropic-payg`<br>`anthropic-oauth` | Messages API tool definition | `required`→`any`, named→`tool` | `tool_use_id`가 있는 `tool_result` |
+| `openai-payg`<br>`codex-oauth` | Responses API의 flat function tool, `parallel_tool_calls=true` | `any`→`required`, named→flat function | `call_id`로 묶인 `function_call` / `function_call_output` |
+| `glm-payg`<br>`glm-coding-plan` | Chat Completions의 nested function tool | `any`→`required`, named→nested function | `tool_call_id`가 있는 `role=tool` message |
+| `claude-cli`<br>`codex-cli` | GEODE adapter 경계는 text-only이며 `supports_tools=False` | 전달하지 않음 | GEODE tool result replay 없음 |
+
+이 표는 GEODE request builder의 보장입니다. 특정 모델이 모든 선택 모드나 tool schema를 받아들인다는 모델별 호환성 주장까지 포함하지 않습니다.
+
+## 복수 호출과 실행
+
+한 응답에 `tool_use` block이 둘 이상이면 `ToolCallProcessor`가 safety tier별 batch를 만듭니다. SAFE, MCP auto-approved, 사용자가 batch 승인한 EXPENSIVE 도구는 `asyncio.gather`로 병렬 실행합니다. WRITE와 DANGEROUS 도구는 개별 승인 뒤 순차 실행하고, 최종 result 순서는 원래 call 순서를 유지합니다. 호출이 하나면 곧바로 순차 fast path를 사용합니다. OpenAI Responses 경로는 모델 쪽 병렬 호출도 명시적으로 켜지만, Anthropic과 GLM 요청에는 GEODE 별도 parallel toggle이 없습니다.
+
+## 결과 직렬화와 다음 턴
+
+-   일반 결과는 JSON으로 직렬화하고 원래 call id를 유지합니다.
+-   computer-use screenshot은 텍스트 base64가 아니라 image content block으로 되돌립니다.
+-   큰 결과는 token guard를 거친 뒤 필요하면 파일로 offload하고 요약과 `ref_id`만 context에 남깁니다.
+-   assistant의 호출 message와 user 쪽 tool result를 연달아 history에 추가해야 다음 턴의 id pairing이 유지됩니다.
+
+## 실패와 종료
+
+| 상황 | GEODE 동작 |
+| --- | --- |
+| 모델이 tool call 없이 텍스트로 끝냄 | 자연 종료로 처리하고 최종 텍스트를 반환 |
+| 같은 도구가 연속 실패 | 2회 실패를 기록한 뒤 다음 호출에서 adaptive recovery chain을 시작 |
+| 전체 도구 오류가 3회 이상 연속 | 다른 접근을 요구하는 backpressure hint를 다음 턴에 삽입 |
+| 서로 다른 라운드에서 같은 도구와 같은 인자를 5회 반복 | no-progress loop로 보고 diversity hint를 삽입 |
+| CLI adapter를 선택 | 도구 schema를 subprocess에 전달하지 않는 text-only 경로 |
+
+## 구현 기준점
+
+-   `core/llm/adapters/base.py`: `ToolSpec`, `AdapterCallRequest`.
+-   `core/llm/tool_choice.py`: provider별 선택 모드 정규화.
+-   `core/llm/adapters/translation.py`: loop와 adapter 사이 공통 shape.
+-   `core/agent/tool_executor/processor.py`: 실행, 병렬화, 결과 직렬화.
+-   `core/agent/loop/agent_loop.py`: wrap-up 선택과 다음 라운드 replay.
+
+## 다음
+
+-   [구조화 출력](https://mangowhoiscloud.github.io/geode/docs/runtime/llm/structured-output.md). 최종 답변의 JSON Schema 계약.
+-   [도구와 툴셋](https://mangowhoiscloud.github.io/geode/docs/runtime/tools/protocol.md). registry, deferred loading, 접근 제어.
+-   [커스텀 도구 만들기](https://mangowhoiscloud.github.io/geode/docs/guides/custom-tool.md). 새 `ToolSpec`의 원천을 추가하는 절차.
+
+---
+
+### Structured output (구조화 출력)
+
+URL: https://mangowhoiscloud.github.io/geode/docs/runtime/llm/structured-output
+Markdown: https://mangowhoiscloud.github.io/geode/docs/runtime/llm/structured-output.md
+
+GEODE의 구조화 출력 표면은 `response_schema` 하나입니다. caller가 JSON Schema를 loop 또는 특정 LLM call에 붙이면 선택된 adapter가 자신이 지원하는 wire 형식으로 전달합니다. 다만 필드가 존재한다는 사실만으로 강제력이 생기지는 않습니다. 실제 보장은 adapter 배선, schema strictness, worker-side 검증을 나눠 읽어야 합니다.
+
+## 계약 범위
+
+| 항목 | 현재 GEODE 계약 |
+| --- | --- |
+| 입력 | `dict[str, Any]` 형태의 JSON Schema 하나 |
+| 기본값 | `None`. 구조화 출력 필드를 wire에 싣지 않음 |
+| 적용 범위 | loop 전체 schema 또는 한 번의 `_call_llm` override |
+| 문서화된 worker 결과 | top-level JSON object. worker validator가 object와 `required` key를 검사 |
+| 별도 constraint 종류 | choice, regex, grammar를 위한 first-class GEODE 필드는 없음 |
+
+도구의 `input_schema`는 tool call 인자를 정의하고, `response_schema`는 모델의 최종 응답을 정의합니다. 둘은 독립적인 계약이며 하나가 다른 하나를 대신하지 않습니다.
+
+## 전달 경로
+
+```
+SubTask.response_schema
+  → WorkerRequest.response_schema
+  → AgenticLoop(response_schema=...)
+  → AdapterCallRequest.response_schema
+  → adapter-specific output constraint
+```
+
+일반 sub-agent 작업은 위 경로로 schema를 전달합니다. planner나 judge 같은 보조 호출은 `_call_llm(response_schema=...)`으로 loop-level schema를 한 번만 덮어쓸 수 있습니다. override가 없으면 loop에 설정된 schema를 모든 LLM call에 사용합니다.
+
+## Schema 작성 기준
+
+```
+DECISION_SCHEMA = {
+    "title": "Decision",
+    "type": "object",
+    "properties": {
+        "decision": {"type": "string", "enum": ["accept", "reject"]},
+        "reason": {"type": "string"},
+    },
+    "required": ["decision", "reason"],
+    "additionalProperties": False,
+}
+
+task = SubTask(..., response_schema=DECISION_SCHEMA)
+```
+
+-   `title`은 OpenAI Responses 경로의 schema name이 됩니다. 없으면 `response`를 사용합니다.
+-   worker validation을 쓰는 작업은 top-level `object`와 명시적인 `required`를 둡니다.
+-   OpenAI strict enforcement가 필요하면 모든 object에서 `additionalProperties: false`를 설정하고 모든 property를 `required`에 넣습니다.
+-   타입, enum, nested constraint까지 최종적으로 믿어야 하는 caller는 반환 뒤 full schema validation을 수행합니다.
+
+## 내장 adapter 배선
+
+| 경로 | `response_schema` wire | 보장 경계 |
+| --- | --- | --- |
+| `openai-payg`<br>`codex-oauth` | Responses API `text.format`의 `json_schema` | strict-compatible schema면 `strict=true`, 아니면 `strict=false` hint |
+| `claude-cli` | `--json-schema <inline JSON>` | CLI subprocess 경계에서 schema flag를 전달 |
+| `codex-cli` | 임시 JSON 파일을 만든 뒤 `--output-schema <FILE>` | subprocess 종료 뒤 임시 파일 삭제 |
+| `anthropic-payg`<br>`anthropic-oauth` | 현재 공통 Messages request builder가 읽지 않음 | schema field는 무시됨. JSON discipline이 필요하면 caller prompt와 downstream validation이 별도로 필요 |
+| `glm-payg`<br>`glm-coding-plan` | 현재 Chat Completions request builder가 읽지 않음 | 이 경로에서는 provider-side schema enforcement 없음 |
+
+따라서 `response_schema`가 설정되어도 adapter 선택에 따라 wire에서 무시될 수 있습니다. GEODE에는 아직 structured-output capability를 기준으로 adapter를 선제 차단하는 registry field가 없습니다. schema 강제가 필요한 작업은 위에서 배선된 경로를 명시적으로 선택해야 합니다.
+
+OpenAI Responses request builder는 tools가 있으면 tool payload와 `text.format`을 같은 요청에 함께 실을 수 있습니다. 반대로 두 CLI adapter는 structured-output flag는 전달하지만 GEODE tool calling은 지원하지 않습니다. 두 capability는 독립적이며, 이 배선 사실을 모든 모델의 조합 수용 보장으로 확대하지 않습니다.
+
+## OpenAI strict 판정
+
+OpenAI Responses 경로는 schema를 무조건 `strict=true`로 보내지 않습니다. `_is_openai_strict_compatible`이 다음 조건을 재귀적으로 검사합니다.
+
+-   모든 `type: object`가 `additionalProperties: false`인가.
+-   각 object의 property key 전체가 정확히 `required`에 들어 있는가.
+-   array의 `items` schema도 같은 조건을 만족하는가.
+-   `oneOf`, `anyOf`, `allOf`의 모든 branch가 같은 조건을 만족하는가.
+
+모두 만족하면 `strict=true`, 하나라도 어기면 `strict=false`로 보냅니다. 후자는 schema shape를 전달하는 hint이지 hard guarantee가 아닙니다. 이 판정 함수를 다른 provider의 schema subset에 재사용하지 않습니다.
+
+## Worker 검증과 한 번의 retry
+
+`WorkerRequest`에 schema가 있는 sub-agent 작업은 첫 실행 뒤 별도 안전망을 거칩니다. 다음 중 하나면 validator feedback을 user turn으로 넣고 loop를 정확히 한 번 다시 실행합니다.
+
+-   결과가 없거나 명시적인 failure termination을 반환함.
+-   텍스트가 비어 있음.
+-   본문에서 balanced JSON object를 찾거나 parse할 수 없음.
+-   parse한 object에 schema의 `required` key가 빠짐.
+
+retry는 첫 실행 시간이 task timeout의 50% 미만일 때만 허용합니다. `input_blocked`, `user_cancelled`, `user_clarification_needed`는 의도된 non-JSON 종료라서 retry하지 않습니다. 이 worker validator는 property type, enum, nested constraint를 검사하지 않습니다. 그런 full validation은 downstream parser의 책임입니다.
+
+## 보장 수준을 읽는 법
+
+| 층 | 하는 일 | 하지 않는 일 |
+| --- | --- | --- |
+| Provider/CLI constraint | 선택된 backend에 schema를 전달하거나 강제 | 미지원 adapter를 자동으로 다른 경로로 교체하지 않음 |
+| Worker retry | 빈 출력, parse 실패, required key 누락을 한 번 복구 | JSON Schema 전체 검증은 하지 않음 |
+| Downstream parser | 도메인별 type, enum, semantic constraint를 최종 판정 | adapter의 wire 지원을 대신 만들지 않음 |
+
+## 구현 기준점
+
+-   `core/llm/adapters/base.py`: `AdapterCallRequest.response_schema`.
+-   `core/agent/loop/agent_loop.py`: loop-level schema와 per-call override.
+-   `core/llm/adapters/_openai_common.py`: Responses wire와 strict compatibility.
+-   `core/llm/adapters/claude_cli.py`, `codex_cli.py`: CLI flags.
+-   `core/agent/worker.py`: JSON object 검사와 one-retry gate.
+
+## 다음
+
+-   [도구 호출](https://mangowhoiscloud.github.io/geode/docs/runtime/llm/tool-calling.md). Tool input schema와 실행/replay 계약.
+-   [LLM adapter 추가](https://mangowhoiscloud.github.io/geode/docs/guides/llm-adapter.md). 새 경로에 이 schema 표면을 배선하는 절차.
+-   [LLM 라우팅](https://mangowhoiscloud.github.io/geode/docs/runtime/llm/providers.md). 어떤 adapter가 선택되는지 결정하는 순서.
 
 ---
 
@@ -3377,7 +3587,7 @@ _참조:_ [Hook system](https://mangowhoiscloud.github.io/geode/docs/harness/hoo
 URL: https://mangowhoiscloud.github.io/geode/docs/guides/llm-adapter
 Markdown: https://mangowhoiscloud.github.io/geode/docs/guides/llm-adapter.md
 
-어댑터는 하나의 `(provider, source)` 조합을 실제 호출로 바꾸는 계층입니다. PAYG API 키 호출이든, OAuth 구독 호출이든, 로컬 CLI 서브프로세스든 전부 같은 프로토콜을 따릅니다. 새 백엔드를 붙이는 작업은 어댑터 작성, 레지스트리 등록, 폴백 체인 편입 세 단계입니다.
+어댑터는 하나의 `(provider, source)` 조합을 실제 호출로 바꾸는 계층입니다. PAYG API 키 호출이든, OAuth 구독 호출이든, 로컬 CLI 서브프로세스든 전부 같은 프로토콜을 따릅니다. 새 백엔드를 붙이는 작업은 어댑터 작성, 레지스트리 등록, 라우팅 연결, 호출 계약 문서화의 네 단계입니다.
 
 ## 1\. 어댑터를 작성합니다
 
@@ -3440,7 +3650,20 @@ for adapter_cls in (..., AcmePaygAdapter):
 
 `core/llm/router/calls/_route.py`의 `_route_provider(model)`이 모델 이름을 프로바이더로 해석합니다. 등록된 Plan이 있으면 그것을 따르고, 없으면 `core.config`의 정적 `_resolve_provider`로 떨어집니다. 모델 접두사와 프로바이더의 매핑은 `core/config/routing.toml`의 `[routing.prefixes]`가 SoT이고, 사용자 override는 `~/.geode/routing.toml`입니다. 새 프로바이더의 모델 접두사를 여기에 추가합니다. 다중 모델 폴백은 `core/llm/router/calls/_failover.py`의 `call_with_failover(models, call_fn)`이 처리합니다. 모델 체인을 순서대로 시도하며, 재시도 가능한 오류(rate-limit, timeout, connection, server)는 백오프 후 다음 모델로 넘어가고, 인증 오류 같은 비재시도 오류는 즉시 전파됩니다. 단, 폴백 체인은 기본 출하값이 전부 빈 리스트입니다(`[model.fallbacks]`). 조용한 모델 교체 대신 실패를 드러내는 설계이므로, 새 어댑터의 모델을 폴백 후보로 쓰려면 `~/.geode/routing.toml`에서 직접 체인을 켜야 합니다.
 
-## 확인
+## 4\. 호출 계약을 문서화합니다
+
+adapter가 등록됐다는 사실과 agentic 기능이 보장된다는 주장은 다릅니다. 새 경로의 실제 request builder를 확인한 뒤 [도구 호출](https://mangowhoiscloud.github.io/geode/docs/runtime/llm/tool-calling.md)과 [구조화 출력](https://mangowhoiscloud.github.io/geode/docs/runtime/llm/structured-output.md) 표에 provider/source/adapter 경계를 추가합니다.
+
+| 항목 | 기록할 내용 |
+| --- | --- |
+| 도구 호출 | `ToolSpec` encoding, `tool_choice` 변환, 복수 호출, call id와 result replay |
+| 구조화 출력 | `response_schema` wire field, strict 판정, local validation과 retry 범위 |
+| 미지원 경계 | 필드를 무시하는 경로와 모델별 확인이 필요한 부분을 지원으로 뭉개지 않고 명시 |
+| 근거 | 공식 provider 문서 또는 source, local request builder, request-shape test, 남은 live test |
+
+SDK type에 필드가 있다는 사실만으로 지원을 선언하지 않습니다. adapter가 값을 실제 wire payload에 싣는지와, GEODE가 결과를 어떻게 정규화·검증하는지를 함께 적습니다.
+
+## 5\. 확인합니다
 
 `(provider, source)` 쌍이 정확히 어댑터로 해석되는지 확인합니다.
 
@@ -3456,7 +3679,7 @@ print(a.test_environment().ok)
 
 어댑터 이름이 출력되면 라우팅이 그 쌍을 찾을 수 있습니다. `test_environment().ok`는 자격증명 상태를 정직하게 보고합니다.
 
-_참조:_ [Providers](https://mangowhoiscloud.github.io/geode/docs/runtime/llm/providers.md), [Pick a path](https://mangowhoiscloud.github.io/geode/docs/run/pick-path.md).
+_참조:_ [Providers](https://mangowhoiscloud.github.io/geode/docs/runtime/llm/providers.md), [Tool calling](https://mangowhoiscloud.github.io/geode/docs/runtime/llm/tool-calling.md), [Structured output](https://mangowhoiscloud.github.io/geode/docs/runtime/llm/structured-output.md), [Pick a path](https://mangowhoiscloud.github.io/geode/docs/run/pick-path.md).
 
 ---
 
@@ -4868,7 +5091,7 @@ Tier 2  latex2sympy2 + sympy.pretty  블록 전용. 분수·적분을 2D Unicode
 URL: https://mangowhoiscloud.github.io/geode/docs/reference/changelog
 Markdown: https://mangowhoiscloud.github.io/geode/docs/reference/changelog.md
 
-(body omitted from llms-full: 1447 KB — fetch the Markdown twin above for the complete page)
+(body omitted from llms-full: 1448 KB — fetch the Markdown twin above for the complete page)
 
 ---
 
