@@ -95,11 +95,22 @@ geode version
 Update and uninstall paths depend on how the CLI was installed:
 
 ```bash
-uv tool upgrade geode-agent   # PyPI install
-geode update                  # source checkout install
+geode update                  # uv: latest patch; source: pull + rebuild
+geode update --latest         # uv only: allow minor/major upgrades
+geode update --dry-run        # detect and preview without changing anything
 geode uninstall               # runtime data + installed CLI
 uv tool uninstall geode-agent # CLI only
 ```
+
+`geode update` reads installation metadata instead of guessing from the current
+directory. A standard registry-backed uv tool is constrained to the newest
+patch in its current major/minor series; an editable install updates the actual
+GEODE source checkout. Custom uv receipts stop rather than discarding their
+installation settings and report the receipt path. Missing metadata never falls
+back to the current Git checkout. Registry resolution is isolated from the
+current project's uv configuration. A running daemon is stopped only after the
+update verifies, and the replacement must become ready. No network update runs
+implicitly at CLI startup.
 
 ---
 

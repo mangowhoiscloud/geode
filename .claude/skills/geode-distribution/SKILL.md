@@ -38,6 +38,53 @@ The operator development install is also separate:
 uv tool install -e ".[audit]" --force --python 3.12
 ```
 
+## Installed-tool updates
+
+Use GEODE's provenance-aware updater for an existing install:
+
+```bash
+geode update          # uv tool: latest compatible patch; source: pull + rebuild
+geode update --latest # uv tool only: explicitly allow minor/major upgrades
+geode update --dry-run
+```
+
+For a standard registry-backed uv tool, the default command replaces its stored
+install request with `geode-agent~=CURRENT_VERSION` and asks uv to upgrade. The
+compatible-release bound permits only newer patches in the current
+major/minor series. `--latest` deliberately replaces that bound with
+`geode-agent@latest`. For an editable install, the command resolves the source
+root from PEP 610 metadata, verifies that it is the GEODE git checkout, and
+keeps the existing pull/sync/reinstall path.
+
+Reinstalling a uv tool can discard extras, `--with` dependencies, explicit
+Python requests, constraints, and resolver settings. Detect these custom
+receipts and stop with actionable manual guidance instead of silently replacing
+their metadata. The error must name the receipt path and recorded source;
+registry-backed guidance includes a concrete patch-bound starting command,
+while source-backed recovery retains the original editable, directory, URL, or
+VCS reference and every recorded option instead of redirecting the install to
+PyPI. Run the
+standard registry update from a fresh temporary directory with `--no-config
+--no-sources`; together these prevent an unrelated caller's `pyproject.toml`,
+`uv.toml`, or `tool.uv.sources` from redirecting the package. Preserve the
+receipt's tool root and entrypoint directory through
+`UV_TOOL_DIR` and `UV_TOOL_BIN_DIR`, including when they are non-default. Accept
+only a receipt with a valid `geode` entrypoint, and use its absolute executable
+for verification and daemon restart instead of assuming the directory is on
+`PATH`. Accept a source update only when PEP 610 says `editable=true` and any uv
+receipt is a plain editable request for that same checkout. Never infer a source
+checkout from the caller's current Git directory when installation metadata is
+absent.
+
+When a daemon is already running, resolve, install, and verify the uv update
+before stopping it. Stop must satisfy the socket-closed postcondition; only then
+start the receipt-derived executable and wait for its socket to become ready.
+If installation or verification fails, leave the existing daemon process alone.
+
+Do not add a hidden startup-time network check or background self-update. The
+automatic part is installation detection, constraint selection, daemon
+restart, and verification inside the explicit `geode update` operation.
+
 ## Stable promotion
 
 ### 1. Preflight
@@ -131,6 +178,14 @@ Confirm that the release is stable rather than alpha/beta, the project has
 external users, and the current Homebrew notability requirements are met. If
 any gate fails, stop before opening the upstream PR. Keep the audited candidate
 in the `mangowhoiscloud/homebrew-core` fork instead.
+
+The dated 2026-07-15 decision record lives in
+`packaging/homebrew/README.md`: GEODE was marked beta with 12 stars, 2 forks,
+and 0 subscribers/watchers. The then-current normal thresholds were 75 stars,
+30 forks, or 30 watchers; self-submission thresholds were 225, 90, or 90.
+Treat those figures as a snapshot and refresh the official policy and GitHub
+API before any future admission decision. Recording the state does not
+authorize an upstream PR.
 
 ### 2. Refresh the core candidate
 
