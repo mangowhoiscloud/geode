@@ -15,8 +15,8 @@ user-invocable: false
 geode serve
   → runtime.py: Load .geode/config.toml → ChannelManager.load_bindings_from_config()
   → SlackPoller._poll_once(): Filter slack channels from bindings → _poll_channel() loop
-  → _poll_channel(): MCP slack_get_channel_history → Detect new messages → route_message()
-  → _send_response(): MCP slack_post_message (thread reply)
+  → _poll_channel(): SlackTransport.channel_history (direct Web API) → Detect new messages → route_message()
+  → _send_response(): SlackTransport.post_message (direct Web API, thread reply)
 ```
 
 ## Prerequisites
@@ -26,7 +26,7 @@ geode serve
 | `SLACK_BOT_TOKEN` | `echo $SLACK_BOT_TOKEN` — `xoxb-...` |
 | `SLACK_TEAM_ID` | `echo $SLACK_TEAM_ID` — `T...` |
 | `.geode/config.toml` | `cat .geode/config.toml` — bindings.rules exist |
-| MCP slack server | Log shows `MCP connected: npx ... slack` |
+| Slack transport | `geode doctor slack` shows `slack_transport: direct Web API OK` (PR-SLACK-TRANSPORT: MCP slack server removed) |
 
 ## config.toml Setup
 
@@ -77,8 +77,10 @@ grep "binding" /tmp/geode-gateway.log
 # If 0 → config.toml missing or parse error
 
 # 3. Verify Slack MCP connection
-grep "slack" /tmp/geode-gateway.log | grep -i "connect"
-# Expected: "MCP connected: npx ... slack"
+grep -i "gateway config sources" ~/.geode/logs/geode-serve.log
+# Expected: "Gateway config sources: global:... [, project:...]"
+# Slack settings SoT = user-level ~/.geode/config.toml [gateway] (+ project overlay).
+# Socket Mode (push inbound) is a follow-up — needs an app-level xapp token; inbound is polling.
 
 # 4. Verify polling seed
 grep "seeded" /tmp/geode-gateway.log

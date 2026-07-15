@@ -47,13 +47,39 @@ SLACK_APP_MANIFEST: dict[str, Any] = {
 }
 
 
+def _resolve_env_or_dotenv(name: str) -> tuple[str, str]:
+    """Resolve *name* from os.environ, else the global ~/.geode/.env.
+
+    Returns ``(value, source)`` where source is ``env`` / ``dotenv`` /
+    empty. The doctor previously checked os.environ only and reported a
+    perfectly valid dotenv-stored token as "not set" (2026-07-15).
+    """
+    val = os.environ.get(name, "")
+    if val:
+        return val, "env"
+    try:
+        from dotenv import dotenv_values
+
+        from core.paths import GLOBAL_ENV_FILE
+
+        if GLOBAL_ENV_FILE.exists():
+            dotenv_val = dotenv_values(str(GLOBAL_ENV_FILE)).get(name) or ""
+            if dotenv_val:
+                return dotenv_val, "dotenv"
+    except Exception:
+        log.debug("dotenv fallback read failed for %s", name, exc_info=True)
+    return "", ""
+
+
 def _check_env() -> list[dict[str, Any]]:
-    """Check Slack environment variables."""
+    """Check Slack credentials (os.environ, then ~/.geode/.env)."""
     results: list[dict[str, Any]] = []
 
-    token = os.environ.get("SLACK_BOT_TOKEN", "")
+    token, token_src = _resolve_env_or_dotenv("SLACK_BOT_TOKEN")
     if token:
-        results.append({"name": "SLACK_BOT_TOKEN", "ok": True, "detail": mask_key(token)})
+        results.append(
+            {"name": "SLACK_BOT_TOKEN", "ok": True, "detail": f"{mask_key(token)} ({token_src})"}
+        )
     else:
         results.append(
             {
@@ -64,16 +90,17 @@ def _check_env() -> list[dict[str, Any]]:
             }
         )
 
-    team_id = os.environ.get("SLACK_TEAM_ID", "")
+    team_id, team_src = _resolve_env_or_dotenv("SLACK_TEAM_ID")
     if team_id:
-        results.append({"name": "SLACK_TEAM_ID", "ok": True, "detail": team_id})
+        results.append({"name": "SLACK_TEAM_ID", "ok": True, "detail": f"{team_id} ({team_src})"})
     else:
+        # Informational only — the direct Web API transport never reads it
+        # (it was a requirement of the removed MCP server).
         results.append(
             {
                 "name": "SLACK_TEAM_ID",
-                "ok": False,
-                "detail": "not set",
-                "hint": "Add to ~/.geode/.env: SLACK_TEAM_ID=T...",
+                "ok": True,
+                "detail": "not set (unused by the direct transport)",
             }
         )
 
@@ -81,35 +108,29 @@ def _check_env() -> list[dict[str, Any]]:
 
 
 def _check_token_validity() -> dict[str, Any]:
-    """Validate Slack Bot Token via auth.test API."""
-    token = os.environ.get("SLACK_BOT_TOKEN", "")
-    if not token:
+    """Validate Slack Bot Token via the same transport the daemon uses."""
+    import asyncio
+
+    from core.messaging.slack_transport import SlackTransport
+
+    transport = SlackTransport()
+    if not transport.configured:
         return {"ok": False, "detail": "no token to validate"}
-
     try:
-        import httpx
-
-        resp = httpx.get(
-            "https://slack.com/api/auth.test",
-            headers={"Authorization": f"Bearer {token}"},
-            timeout=10.0,
-        )
-        data = resp.json()
-        if data.get("ok"):
-            return {
-                "ok": True,
-                "detail": f"workspace={data.get('team', '?')}, bot={data.get('user', '?')}",
-                "bot_user_id": data.get("user_id", ""),
-                "team": data.get("team", ""),
-            }
-        return {"ok": False, "detail": f"auth.test failed: {data.get('error', '?')}"}
+        data = asyncio.run(transport.auth_test())
+        return {
+            "ok": True,
+            "detail": f"workspace={data.get('team', '?')}, bot={data.get('user', '?')}",
+            "bot_user_id": data.get("user_id", ""),
+            "team": data.get("team", ""),
+        }
     except Exception as exc:
-        return {"ok": False, "detail": f"API call failed: {exc}"}
+        return {"ok": False, "detail": f"auth.test failed: {exc}"}
 
 
 def _check_scopes() -> dict[str, Any]:
     """Check bot token scopes via auth.test + headers."""
-    token = os.environ.get("SLACK_BOT_TOKEN", "")
+    token, _src = _resolve_env_or_dotenv("SLACK_BOT_TOKEN")
     if not token:
         return {"ok": False, "detail": "no token", "missing": REQUIRED_SCOPES}
 
@@ -149,59 +170,62 @@ def _check_scopes() -> dict[str, Any]:
 
 
 def _check_bindings() -> list[dict[str, Any]]:
-    """Check config.toml gateway bindings."""
-    from core.paths import PROJECT_CONFIG_TOML
+    """Check gateway bindings through the daemon's own merged config loader.
+
+    PR-SLACK-TRANSPORT: the daemon merges the user-level
+    ``~/.geode/config.toml`` (authoritative) with the project overlay —
+    the doctor must diagnose the SAME view, with sources named. The old
+    check read only the project file and called a working global-only
+    deployment "config.toml not found".
+    """
+    from core.wiring.adapters import _load_gateway_config
 
     results: list[dict[str, Any]] = []
-    config_path = PROJECT_CONFIG_TOML
+    try:
+        merged, sources = _load_gateway_config()
+    except Exception as exc:
+        results.append({"name": "gateway config", "ok": False, "detail": str(exc)})
+        return results
 
-    if not config_path.exists():
+    if not sources:
         results.append(
             {
-                "name": "config.toml",
+                "name": "gateway config",
                 "ok": False,
-                "detail": "not found",
-                "hint": "cp .geode/config.toml.example .geode/config.toml",
+                "detail": "no [gateway] section in ~/.geode/config.toml or ./.geode/config.toml",
+                "hint": "Add [gateway] + [[gateway.bindings.rules]] to ~/.geode/config.toml",
             }
         )
         return results
 
-    results.append({"name": "config.toml", "ok": True, "detail": str(config_path)})
+    results.append({"name": "gateway config", "ok": True, "detail": "; ".join(sources)})
 
-    try:
-        import tomllib
+    rules = merged.get("gateway", {}).get("bindings", {}).get("rules", [])
+    slack_rules = [r for r in rules if r.get("channel") == "slack"]
 
-        with open(config_path, "rb") as f:
-            config = tomllib.load(f)
-
-        rules = config.get("gateway", {}).get("bindings", {}).get("rules", [])
-        slack_rules = [r for r in rules if r.get("channel") == "slack"]
-
-        if not slack_rules:
+    if not slack_rules:
+        results.append(
+            {
+                "name": "slack binding",
+                "ok": False,
+                "detail": "no slack binding in merged gateway config",
+                "hint": "Add [[gateway.bindings.rules]] with channel='slack' and channel_id",
+            }
+        )
+    else:
+        for rule in slack_rules:
+            ch_id = rule.get("channel_id", "")
+            mention = rule.get("require_mention", False)
             results.append(
                 {
-                    "name": "slack binding",
-                    "ok": False,
-                    "detail": "no slack binding in config.toml",
-                    "hint": "Add [[gateway.bindings.rules]] with channel='slack' and channel_id",
+                    "name": f"binding:{ch_id}",
+                    "ok": bool(ch_id and ch_id != "C0XXXXXXXXX"),
+                    "detail": f"channel_id={ch_id}, require_mention={mention}",
+                    "hint": "Replace C0XXXXXXXXX with actual channel ID"
+                    if ch_id == "C0XXXXXXXXX"
+                    else "",
                 }
             )
-        else:
-            for rule in slack_rules:
-                ch_id = rule.get("channel_id", "")
-                mention = rule.get("require_mention", False)
-                results.append(
-                    {
-                        "name": f"binding:{ch_id}",
-                        "ok": bool(ch_id and ch_id != "C0XXXXXXXXX"),
-                        "detail": f"channel_id={ch_id}, require_mention={mention}",
-                        "hint": "Replace C0XXXXXXXXX with actual channel ID"
-                        if ch_id == "C0XXXXXXXXX"
-                        else "",
-                    }
-                )
-    except Exception as exc:
-        results.append({"name": "config.toml parse", "ok": False, "detail": str(exc)})
 
     return results
 
@@ -228,26 +252,32 @@ def _check_serve() -> dict[str, Any]:
         return {"ok": False, "detail": "pgrep check failed"}
 
 
-def _check_mcp_slack() -> dict[str, Any]:
-    """Check if Slack MCP server process is running."""
+def _check_transport() -> dict[str, Any]:
+    """Probe the direct Web API transport (PR-SLACK-TRANSPORT).
+
+    Replaces the old ``pgrep server-slack`` process check — Slack no
+    longer runs through an MCP subprocess, so the health question is
+    "can THIS machine call chat.postMessage's API family", answered by a
+    live ``auth.test`` through the same transport the daemon uses.
+    """
+    import asyncio
+
+    from core.messaging.slack_transport import SlackTransport
+
+    transport = SlackTransport()
+    if not transport.configured:
+        return {"ok": False, "detail": "transport unconfigured (no SLACK_BOT_TOKEN)"}
     try:
-        result = subprocess.run(
-            ["/usr/bin/pgrep", "-f", "server-slack"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        pids = result.stdout.strip().split("\n")
-        pids = [p for p in pids if p]
-        if pids:
-            return {"ok": True, "detail": f"MCP server-slack PID {pids[0]}"}
+        data = asyncio.run(transport.auth_test())
         return {
-            "ok": False,
-            "detail": "Slack MCP server not running",
-            "hint": "geode serve starts it automatically",
+            "ok": True,
+            "detail": (
+                f"direct Web API OK (workspace={data.get('team', '?')}, "
+                f"bot={data.get('user', '?')})"
+            ),
         }
-    except Exception:
-        return {"ok": False, "detail": "process check failed"}
+    except Exception as exc:
+        return {"ok": False, "detail": f"transport auth.test failed: {exc}"}
 
 
 def _check_socket() -> dict[str, Any]:
@@ -297,9 +327,9 @@ def run_doctor_slack() -> dict[str, Any]:
         report["ok"] = False
 
     # 6. MCP Slack server
-    mcp_result = _check_mcp_slack()
-    report["checks"].append({"name": "mcp_slack", **mcp_result})
-    if not mcp_result["ok"]:
+    transport_result = _check_transport()
+    report["checks"].append({"name": "slack_transport", **transport_result})
+    if not transport_result["ok"]:
         report["ok"] = False
 
     # 7. IPC socket

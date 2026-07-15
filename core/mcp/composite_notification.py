@@ -46,7 +46,7 @@ class CompositeNotificationAdapter:
             return NotificationResult(
                 success=False,
                 channel=channel,
-                error=f"Channel '{channel}' not available (MCP server down or key missing)",
+                error=f"Channel '{channel}' not available (transport down or key missing)",
             )
         return await adapter.asend_message(channel, recipient, message, severity=severity, **kwargs)
 
