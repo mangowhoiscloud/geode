@@ -608,10 +608,11 @@ jobs:
         run: |
           tap_name=mangowhoiscloud/tap
           brew tap "$tap_name" "$PWD/tap"
+          tap_formula="$(brew --repo "$tap_name")/Formula/geode.rb"
+          cp tap/Formula/geode.rb "$tap_formula"
           if brew trust --help >/dev/null 2>&1; then
             brew trust --formula "$tap_name/geode"
           fi
-          tap_formula="$(brew --repo "$tap_name")/Formula/geode.rb"
           resource_args=("$tap_name/geode")
           if [[ "$(brew update-python-resources --help)" == *"--ignore-main-package-cooldown"* ]]; then
             resource_args+=(
