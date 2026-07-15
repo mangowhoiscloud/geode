@@ -1,7 +1,7 @@
 """Lifecycle commands — stop, status, clean, update, uninstall.
 
 Provides process management, disk usage reporting, selective cleanup,
-source-checkout updates, and complete system removal for GEODE installations.
+installation-aware updates, and complete system removal for GEODE installations.
 """
 
 from __future__ import annotations
@@ -11,11 +11,17 @@ import os
 import shutil
 import signal
 import subprocess  # nosec B404 — used for pgrep process discovery
+import tempfile
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from core.cli.update_provenance import (
+    UpdateKind,
+    detect_update_target,
+    patch_requirement,
+)
 from core.paths import (
     APPROVE_HISTORY,
     CLI_SOCKET_PATH,
@@ -186,8 +192,8 @@ def _confirm_typed(prompt: str, expected: str, *, force: bool = False) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def stop_serve(*, force: bool = False, timeout: int = 30) -> None:
-    """Stop geode serve daemon and all child processes."""
+def stop_serve(*, force: bool = False, timeout: int = 30) -> bool:
+    """Stop geode serve and return whether the socket postcondition is met."""
     from core.cli.ipc_client import is_serve_running
 
     pid = _find_serve_pid()
@@ -195,12 +201,12 @@ def stop_serve(*, force: bool = False, timeout: int = 30) -> None:
     if pid is None and not is_serve_running():
         console.print("  [muted]Serve is not running.[/muted]")
         _clean_stale_artifacts()
-        return
+        return True
 
     if pid is None:
         console.print("  [warning]Serve socket is active but PID not found.[/warning]")
         _clean_stale_artifacts()
-        return
+        return False
 
     # Collect children before killing parent
     children = _find_child_pids(pid)
@@ -212,7 +218,7 @@ def stop_serve(*, force: bool = False, timeout: int = 30) -> None:
     except ProcessLookupError:
         console.print("  [muted]Process already exited.[/muted]")
         _clean_stale_artifacts()
-        return
+        return not is_serve_running()
 
     # Phase 2: Wait for graceful shutdown
     deadline = time.monotonic() + timeout
@@ -232,7 +238,7 @@ def stop_serve(*, force: bool = False, timeout: int = 30) -> None:
             console.print(
                 f"  [error]Serve did not stop within {timeout}s. Use --force to SIGKILL.[/error]"
             )
-            return
+            return False
 
     # Phase 3: Clean up children
     killed_children = 0
@@ -254,9 +260,14 @@ def stop_serve(*, force: bool = False, timeout: int = 30) -> None:
     # Phase 4: Clean stale artifacts
     _clean_stale_artifacts()
 
+    if is_serve_running():
+        console.print("  [error]Serve socket is still active after the stop attempt.[/error]")
+        return False
+
     console.print(f"  [success]Stopped serve (PID {pid}).[/success]")
     if killed_children:
         console.print(f"  [muted]Cleaned {killed_children} child process(es).[/muted]")
+    return True
 
 
 def _clean_stale_artifacts() -> None:
@@ -619,24 +630,6 @@ def do_clean(
 # ---------------------------------------------------------------------------
 
 
-def _resolve_git_root(start: Path) -> Path | None:
-    """Return the enclosing git checkout root, if this is a source install."""
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],  # noqa: S607
-            cwd=start,
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-    except (subprocess.TimeoutExpired, OSError):
-        return None
-    if result.returncode != 0:
-        return None
-    root = result.stdout.strip()
-    return Path(root) if root else None
-
-
 def _has_dirty_worktree(repo_root: Path) -> bool:
     """Return True when the checkout has uncommitted changes."""
     try:
@@ -659,18 +652,27 @@ def _run_update_step(
     cwd: Path,
     dry_run: bool = False,
     timeout: int = 300,
+    extra_env: dict[str, str] | None = None,
 ) -> bool:
     """Run one update command and print a compact lifecycle status line."""
     quoted = " ".join(command)
+    if extra_env:
+        env_prefix = " ".join(f"{key}={value}" for key, value in extra_env.items())
+        quoted = f"{env_prefix} {quoted}"
     if dry_run:
         console.print(f"  [muted]Would run:[/muted] {quoted}")
         return True
 
     console.print(f"  {label}...")
+    environment = None
+    if extra_env:
+        environment = os.environ.copy()
+        environment.update(extra_env)
     try:
         result = subprocess.run(  # noqa: S603
             command,
             cwd=cwd,
+            env=environment,
             capture_output=True,
             text=True,
             timeout=timeout,
@@ -690,15 +692,20 @@ def _run_update_step(
     return False
 
 
-def _start_serve_background(*, dry_run: bool = False) -> bool:
-    """Start ``geode serve`` detached after an update."""
+def _start_serve_background(
+    *,
+    dry_run: bool = False,
+    executable: str = "geode",
+    timeout: float = 10.0,
+) -> bool:
+    """Start ``geode serve`` detached and verify socket readiness."""
     if dry_run:
-        console.print("  [muted]Would restart serve: geode serve[/muted]")
+        console.print(f"  [muted]Would restart serve: {executable} serve[/muted]")
         return True
     try:
         with Path(os.devnull).open("w") as devnull:
-            subprocess.Popen(
-                ["geode", "serve"],  # noqa: S607
+            process = subprocess.Popen(  # noqa: S603
+                [executable, "serve"],
                 stdout=devnull,
                 stderr=devnull,
                 start_new_session=True,
@@ -706,30 +713,32 @@ def _start_serve_background(*, dry_run: bool = False) -> bool:
     except OSError as exc:
         console.print(f"  [warning]Updated, but failed to restart serve: {exc}[/warning]")
         return False
-    console.print("  [success]Serve restart requested.[/success]")
-    return True
+
+    from core.cli.ipc_client import is_serve_running
+
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if is_serve_running():
+            console.print("  [success]Serve restarted and is ready.[/success]")
+            return True
+        time.sleep(0.1)
+
+    with contextlib.suppress(OSError):
+        process.terminate()
+    console.print("  [warning]Updated, but restarted serve did not become ready.[/warning]")
+    return False
 
 
-def do_update(
+def _do_source_update(
+    repo_root: Path,
     *,
     dry_run: bool = False,
     force: bool = False,
     restart: bool = True,
+    uv_tool_dir: Path | None = None,
+    uv_tool_bin_dir: Path | None = None,
 ) -> bool:
-    """Update a source checkout and refresh the installed ``geode`` console script."""
-    mode_label = "[muted](dry-run)[/muted] " if dry_run else ""
-    console.print()
-    console.print(f"  {mode_label}[header]GEODE Update[/header]")
-    console.print()
-
-    repo_root = _resolve_git_root(Path.cwd())
-    if repo_root is None:
-        console.print(
-            "  [error]This update path requires a git source checkout.[/error]\n"
-            "  [muted]For packaged installs, use the package manager that installed GEODE.[/muted]"
-        )
-        return False
-
+    """Update an already-validated GEODE source checkout."""
     console.print(f"  Source: [muted]{repo_root}[/muted]")
 
     dirty = _has_dirty_worktree(repo_root)
@@ -747,29 +756,210 @@ def do_update(
     from core.cli.ipc_client import is_serve_running
 
     serve_was_running = is_serve_running()
+    tool_env = None
+    geode_executable = "geode"
+    if uv_tool_dir is not None and uv_tool_bin_dir is not None:
+        tool_env = {
+            "UV_TOOL_DIR": str(uv_tool_dir),
+            "UV_TOOL_BIN_DIR": str(uv_tool_bin_dir),
+        }
+        geode_executable = str(uv_tool_bin_dir / "geode")
+    elif uv_tool_dir is not None or uv_tool_bin_dir is not None:
+        console.print("  [error]The uv tool receipt has incomplete directory metadata.[/error]")
+        return False
+
     steps = [
-        ("Pull latest source", ["git", "pull", "--ff-only"], 120),
-        ("Sync dependencies", ["uv", "sync"], 300),
-        ("Refresh CLI install", ["uv", "tool", "install", "-e", ".", "--force"], 300),
-        ("Verify CLI version", ["geode", "version"], 30),
+        ("Pull latest source", ["git", "pull", "--ff-only"], 120, None),
+        ("Sync dependencies", ["uv", "sync"], 300, None),
+        (
+            "Refresh CLI install",
+            ["uv", "tool", "install", "-e", ".", "--force"],
+            300,
+            tool_env,
+        ),
+        ("Verify CLI version", [geode_executable, "version"], 30, None),
     ]
-    for label, command, timeout in steps:
-        if not _run_update_step(label, command, cwd=repo_root, dry_run=dry_run, timeout=timeout):
+    for label, command, timeout, extra_env in steps:
+        if not _run_update_step(
+            label,
+            command,
+            cwd=repo_root,
+            dry_run=dry_run,
+            timeout=timeout,
+            extra_env=extra_env,
+        ):
             return False
 
     if restart and serve_was_running:
         console.print("  Restarting serve...")
-        if not dry_run:
-            stop_serve(force=True, timeout=10)
-        _start_serve_background(dry_run=dry_run)
+        if dry_run:
+            console.print("  [muted]Would stop the verified existing serve.[/muted]")
+        elif not stop_serve(force=True, timeout=10):
+            console.print(
+                "  [error]Updated CLI, but existing serve could not be stopped; "
+                "no replacement daemon was started.[/error]"
+            )
+            return False
+        if not _start_serve_background(
+            dry_run=dry_run,
+            executable=geode_executable,
+        ):
+            return False
     elif serve_was_running:
         console.print(
             "  [warning]Serve was running; restart it manually to load new code.[/warning]"
         )
 
-    console.print()
-    console.print("  [success]Update complete.[/success]")
     return True
+
+
+def _do_uv_tool_update(
+    *,
+    uv_tool_dir: Path,
+    uv_tool_bin_dir: Path,
+    dry_run: bool = False,
+    restart: bool = True,
+    latest: bool = False,
+) -> bool:
+    """Replace a uv tool's constraint and upgrade within the requested scope."""
+    from core import __version__
+    from core.cli.ipc_client import is_serve_running
+
+    try:
+        requirement = "geode-agent@latest" if latest else patch_requirement(__version__)
+    except ValueError as exc:
+        console.print(f"  [error]{exc}[/error]")
+        return False
+
+    scope = "latest stable release" if latest else f"latest {__version__.rsplit('.', 1)[0]}.x patch"
+    console.print("  Install: [muted]uv tool (package registry)[/muted]")
+    console.print(f"  Scope: [muted]{scope}[/muted]")
+
+    try:
+        update_dir = tempfile.TemporaryDirectory(
+            prefix="geode-update-",
+            ignore_cleanup_errors=True,
+        )
+    except OSError as exc:
+        console.print(f"  [error]Cannot create an isolated update directory: {exc}[/error]")
+        return False
+
+    with update_dir as isolated_dir:
+        isolated_cwd = Path(isolated_dir)
+        tool_env = {
+            "UV_TOOL_DIR": str(uv_tool_dir),
+            "UV_TOOL_BIN_DIR": str(uv_tool_bin_dir),
+        }
+        geode_executable = str(uv_tool_bin_dir / "geode")
+        serve_was_running = is_serve_running()
+        restart_needed = restart and serve_was_running
+
+        steps = [
+            (
+                "Resolve and install GEODE update",
+                [
+                    "uv",
+                    "tool",
+                    "install",
+                    "--upgrade",
+                    "--no-config",
+                    "--no-sources",
+                    requirement,
+                ],
+                300,
+                tool_env,
+            ),
+            ("Verify CLI version", [geode_executable, "version"], 30, None),
+        ]
+        for label, command, timeout, extra_env in steps:
+            if _run_update_step(
+                label,
+                command,
+                cwd=isolated_cwd,
+                dry_run=dry_run,
+                timeout=timeout,
+                extra_env=extra_env,
+            ):
+                continue
+            if serve_was_running:
+                console.print(
+                    "  [warning]Update failed; the existing serve process was not "
+                    "stopped.[/warning]"
+                )
+            return False
+
+        if restart_needed:
+            if dry_run:
+                console.print("  [muted]Would stop serve after verifying the uv update.[/muted]")
+            else:
+                console.print("  Stopping serve after verifying the uv update...")
+                if not stop_serve(force=True, timeout=10):
+                    console.print(
+                        "  [error]Updated CLI, but existing serve could not be stopped; "
+                        "no replacement daemon was started.[/error]"
+                    )
+                    return False
+            if not _start_serve_background(
+                dry_run=dry_run,
+                executable=geode_executable,
+            ):
+                return False
+        elif serve_was_running:
+            console.print(
+                "  [warning]Serve was running; restart it manually to load the "
+                "updated package.[/warning]"
+            )
+        return True
+
+
+def do_update(
+    *,
+    dry_run: bool = False,
+    force: bool = False,
+    restart: bool = True,
+    latest: bool = False,
+) -> bool:
+    """Update GEODE according to its editable-source or uv-tool provenance."""
+    mode_label = "[muted](dry-run)[/muted] " if dry_run else ""
+    console.print()
+    console.print(f"  {mode_label}[header]GEODE Update[/header]")
+    console.print()
+
+    target = detect_update_target()
+    if target.kind is UpdateKind.SOURCE and target.source_root is not None:
+        success = _do_source_update(
+            target.source_root,
+            dry_run=dry_run,
+            force=force,
+            restart=restart,
+            uv_tool_dir=target.uv_tool_dir,
+            uv_tool_bin_dir=target.uv_tool_bin_dir,
+        )
+    elif (
+        target.kind is UpdateKind.UV_TOOL
+        and target.uv_tool_dir is not None
+        and target.uv_tool_bin_dir is not None
+    ):
+        success = _do_uv_tool_update(
+            uv_tool_dir=target.uv_tool_dir,
+            uv_tool_bin_dir=target.uv_tool_bin_dir,
+            dry_run=dry_run,
+            restart=restart,
+            latest=latest,
+        )
+    elif target.kind is UpdateKind.UV_TOOL:
+        console.print(
+            "  [error]The uv receipt does not identify its tool and executable directories.[/error]"
+        )
+        return False
+    else:
+        console.print(f"  [error]{target.reason}[/error]")
+        return False
+
+    if success:
+        console.print()
+        console.print("  [success]Update complete.[/success]")
+    return success
 
 
 # ---------------------------------------------------------------------------

@@ -59,6 +59,33 @@ Before opening a first-submission PR, re-read Homebrew's current
 Do not submit while GEODE is marked beta or misses upstream usage/notability
 requirements. Keep the candidate in the fork instead.
 
+### Eligibility record — 2026-07-15
+
+This is a dated decision record, not an instruction to submit. Homebrew's
+official policy required all of the following when last checked:
+
+- a tagged stable release that upstream does not describe as alpha, beta, or
+  unstable;
+- a maintainable build without outstanding unpatched security issues on all
+  supported Homebrew platforms;
+- external use and a homepage;
+- for a normal submission, at least one of 75 GitHub stars, 30 forks, or 30
+  watchers; for a self-submission, at least one of 225 stars, 90 forks, or 90
+  watchers.
+
+GEODE's recorded snapshot was `Development Status :: 4 - Beta`, 12 stars, 2
+forks, and 0 repository subscribers/watchers. The formula candidate passed its
+local audit, source build, and tests, but the upstream eligibility gates did
+not. Outcome: keep the candidate in the fork and do not open a Homebrew/core PR.
+
+Refresh both policy and project state before revisiting the decision:
+
+```bash
+gh api repos/mangowhoiscloud/geode \
+  --jq '{stars: .stargazers_count, forks: .forks_count, watchers: .subscribers_count}'
+rg 'Development Status ::' pyproject.toml
+```
+
 After Homebrew/core accepts the formula, verify the official surface before
 adding Homebrew to public installation UI:
 

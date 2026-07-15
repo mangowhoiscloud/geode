@@ -278,8 +278,8 @@ geode
 ## 업데이트와 삭제
 
 ```
-uv tool upgrade geode-agent   # PyPI 설치 업데이트
-geode update                  # 소스 체크아웃 업데이트 (데몬 재시작 포함)
+geode update                  # uv: 최신 patch; 소스: pull + rebuild
+geode update --latest         # uv: minor/major 업데이트를 명시적으로 허용
 geode uninstall               # 런타임 데이터 + CLI 제거
 ```
 
@@ -488,7 +488,7 @@ geode serve --poll 5     # 폴링 주기 5초
 | 데몬 종료 | `pkill -f "geode serve"`. `ps aux | grep`은 긴 파이썬 경로가 잘려 못 잡는 경우가 있으니 `pgrep -f` 계열을 씁니다. |
 | 살아 있는지 확인 | `pgrep -f "geode serve"`, 또는 `geode about`의 데몬 소켓 상태. |
 | 상태 자세히 | REPL 안에서 `/status`. 데몬, 모델, MCP, 디스크 사용량을 보여줍니다. |
-| 업데이트 + 재시작 | `geode update`. 소스 체크아웃을 갱신하고, 데몬이 돌고 있었으면 종료 후 백그라운드로 다시 띄웁니다. |
+| 업데이트 + 재시작 | `geode update`. uv tool이면 현재 major/minor의 최신 patch를 설치하고, editable 설치면 실제 GEODE 소스 체크아웃을 갱신합니다. 데몬이 돌고 있었으면 새 코드로 다시 띄웁니다. minor/major 패키지 업데이트는 `--latest`를 명시합니다. |
 
 SIGTERM을 받으면 데몬은 단계적으로 내려갑니다. 새 요청 수락 중지, 30초 세션 드레인, 스케줄러 저장과 정지, MCP 종료, 게이트웨이 정지 순서입니다 (`core/cli/typer_serve.py`).
 
@@ -4569,7 +4569,7 @@ HITL 승인 프롬프트(`core/cli/ipc_client.py`의 `_handle_approval_request`)
 | `geode about` | 실행 중인 것의 한 화면 요약. EFFECTIVE 모델, env가 toml을 가리는 경고, 경로, 데몬 소켓 상태 | 없음 | `core/cli/typer_commands.py` |
 | `geode setup` | 최초 설정 마법사. ChatGPT 구독 OAuth(`~/.codex/auth.json`)를 API 키보다 먼저 감지 | `--reset/-r` | `core/cli/onboarding.py` |
 | `geode doctor [target]` | 진단. 기본 `bootstrap`은 Python, PATH, 자격, 데몬 점검. `slack`은 게이트웨이 점검 | positional `bootstrap` | `slack` | `core/cli/doctor_bootstrap.py`, `core/cli/doctor.py` |
-| `geode update` | 소스 체크아웃 업데이트와 CLI 재설치. 떠 있던 serve는 재시작 | `--dry-run`, `--force/-f`, `--restart/--no-restart` | `core/cli/commands/lifecycle.py` |
+| `geode update` | 설치 경로 판별 후 uv patch 업데이트 또는 소스 재설치. 떠 있던 serve는 재시작 | `--latest`, `--dry-run`, `--force/-f`, `--restart/--no-restart` | `core/cli/commands/lifecycle.py` |
 | `geode uninstall` | 런타임 데이터와 CLI 제거 | `--dry-run`, `--force/-f`, `--keep-config`, `--keep-data` | `core/cli/commands/lifecycle.py` |
 | `geode init` | `.geode/` 프로젝트 골격 생성. 프로젝트 타입 자동 감지 | `--force/-f` | `core/cli/typer_init.py` |
 | `geode history` | 실행 이력과 월간 비용 요약 | `--limit/-n`, `--month/-m YYYY-MM` | `core/llm/usage_store.py` |
@@ -4868,7 +4868,7 @@ Tier 2  latex2sympy2 + sympy.pretty  블록 전용. 분수·적분을 2D Unicode
 URL: https://mangowhoiscloud.github.io/geode/docs/reference/changelog
 Markdown: https://mangowhoiscloud.github.io/geode/docs/reference/changelog.md
 
-(body omitted from llms-full: 1447 KB — fetch the Markdown twin above for the complete page)
+(body omitted from llms-full: 1449 KB — fetch the Markdown twin above for the complete page)
 
 ---
 
