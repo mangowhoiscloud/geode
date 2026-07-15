@@ -18,8 +18,8 @@ export default function Page() {
               어댑터는 하나의 <code>(provider, source)</code> 조합을 실제 호출로
               바꾸는 계층입니다. PAYG API 키 호출이든, OAuth 구독 호출이든,
               로컬 CLI 서브프로세스든 전부 같은 프로토콜을 따릅니다. 새 백엔드를
-              붙이는 작업은 어댑터 작성, 레지스트리 등록, 폴백 체인 편입 세
-              단계입니다.
+              붙이는 작업은 어댑터 작성, 레지스트리 등록, 라우팅 연결,
+              호출 계약 문서화의 네 단계입니다.
             </p>
 
             <h2>1. 어댑터를 작성합니다</h2>
@@ -126,7 +126,32 @@ for adapter_cls in (..., AcmePaygAdapter):
               직접 체인을 켜야 합니다.
             </p>
 
-            <h2>확인</h2>
+            <h2>4. 호출 계약을 문서화합니다</h2>
+            <p>
+              adapter가 등록됐다는 사실과 agentic 기능이 보장된다는 주장은
+              다릅니다. 새 경로의 실제 request builder를 확인한 뒤{" "}
+              <a href="/geode/docs/runtime/llm/tool-calling">도구 호출</a>과{" "}
+              <a href="/geode/docs/runtime/llm/structured-output">구조화 출력</a>{" "}
+              표에 provider/source/adapter 경계를 추가합니다.
+            </p>
+            <table>
+              <thead>
+                <tr><th>항목</th><th>기록할 내용</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>도구 호출</td><td><code>ToolSpec</code> encoding, <code>tool_choice</code> 변환, 복수 호출, call id와 result replay</td></tr>
+                <tr><td>구조화 출력</td><td><code>response_schema</code> wire field, strict 판정, local validation과 retry 범위</td></tr>
+                <tr><td>미지원 경계</td><td>필드를 무시하는 경로와 모델별 확인이 필요한 부분을 지원으로 뭉개지 않고 명시</td></tr>
+                <tr><td>근거</td><td>공식 provider 문서 또는 source, local request builder, request-shape test, 남은 live test</td></tr>
+              </tbody>
+            </table>
+            <p>
+              SDK type에 필드가 있다는 사실만으로 지원을 선언하지 않습니다.
+              adapter가 값을 실제 wire payload에 싣는지와, GEODE가 결과를 어떻게
+              정규화·검증하는지를 함께 적습니다.
+            </p>
+
+            <h2>5. 확인합니다</h2>
             <p>
               <code>(provider, source)</code> 쌍이 정확히 어댑터로 해석되는지
               확인합니다.
@@ -147,6 +172,8 @@ print(a.test_environment().ok)
             <p className="text-[var(--ink-3)] text-sm">
               <em>참조:</em>{" "}
               <a href="/geode/docs/runtime/llm/providers">Providers</a>,{" "}
+              <a href="/geode/docs/runtime/llm/tool-calling">Tool calling</a>,{" "}
+              <a href="/geode/docs/runtime/llm/structured-output">Structured output</a>,{" "}
               <a href="/geode/docs/run/pick-path">Pick a path</a>.
             </p>
           </>
@@ -157,8 +184,8 @@ print(a.test_environment().ok)
               An adapter is the layer that turns one{" "}
               <code>(provider, source)</code> pair into a real call. PAYG API-key
               calls, OAuth subscription calls, and local CLI subprocess calls all
-              satisfy the same protocol. Adding a backend is three steps: write the
-              adapter, register it, and wire it into the fallback chain.
+              satisfy the same protocol. Adding a backend has four parts: write the
+              adapter, register it, wire routing, and document the call contract.
             </p>
 
             <h2>1. Write the adapter</h2>
@@ -266,7 +293,31 @@ for adapter_cls in (..., AcmePaygAdapter):
               by editing the chain in <code>~/.geode/routing.toml</code>.
             </p>
 
-            <h2>Verify</h2>
+            <h2>4. Document the call contract</h2>
+            <p>
+              Adapter registration does not prove an agentic feature. Inspect
+              the request builder, then add the provider/source/adapter boundary
+              to <a href="/geode/docs/runtime/llm/tool-calling">Tool calling</a>{" "}
+              and <a href="/geode/docs/runtime/llm/structured-output">Structured output</a>.
+            </p>
+            <table>
+              <thead>
+                <tr><th>Field</th><th>What to record</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Tool calling</td><td><code>ToolSpec</code> encoding, <code>tool_choice</code> translation, multiple calls, call ids, and result replay</td></tr>
+                <tr><td>Structured output</td><td><code>response_schema</code> wire field, strictness, local validation, and retry boundary</td></tr>
+                <tr><td>Unsupported boundary</td><td>State which paths ignore the field and which model claims still need verification</td></tr>
+                <tr><td>Evidence</td><td>Official provider docs or source, local request builder, request-shape test, and remaining live test</td></tr>
+              </tbody>
+            </table>
+            <p>
+              An SDK field alone is not evidence of support. Record both the
+              wire payload the adapter actually builds and how GEODE normalizes
+              or validates the result.
+            </p>
+
+            <h2>5. Verify</h2>
             <p>
               Confirm the <code>(provider, source)</code> pair resolves to exactly
               your adapter.
@@ -287,6 +338,8 @@ print(a.test_environment().ok)
             <p className="text-[var(--ink-3)] text-sm">
               <em>See:</em>{" "}
               <a href="/geode/docs/runtime/llm/providers">Providers</a>,{" "}
+              <a href="/geode/docs/runtime/llm/tool-calling">Tool calling</a>,{" "}
+              <a href="/geode/docs/runtime/llm/structured-output">Structured output</a>,{" "}
               <a href="/geode/docs/run/pick-path">Pick a path</a>.
             </p>
           </>

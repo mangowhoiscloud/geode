@@ -72,6 +72,11 @@ functional change.
 
 ### Fixed
 
+- **Docs sidebar keeps its place across page navigation.** The independently
+  scrolling desktop navigation now restores its position when `DocsShell`
+  remounts, so following a deep docs link no longer jumps the menu to the top.
+- **Wide docs tables stay inside the mobile viewport.** Reference tables now
+  scroll horizontally within the article instead of widening the whole page.
 - **Public release verification handles checksum manifests deterministically.**
   The stable-release tail now calls a reusable standard-library verifier that
   strips line terminators before comparing `SHA256SUMS`, retries complete

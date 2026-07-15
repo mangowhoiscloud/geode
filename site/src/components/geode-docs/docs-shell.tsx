@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { type ReactNode, type CSSProperties } from "react";
+import { useLayoutEffect, useRef, type ReactNode, type CSSProperties } from "react";
 import { GeodiSprite } from "@/components/geode/geodi-sprite";
 import { useLocale, useSetLocale, t } from "@/components/geode/locale-context";
 import { DOCS_SITEMAP, adjacentPages, findPage, QUADRANT_META, type DocQuadrant } from "@/lib/geode-docs/sitemap";
@@ -11,6 +11,63 @@ import { galmuri } from "@/fonts/galmuri";
 import { serifDisplay } from "@/fonts/serif";
 
 const DOCS_BASE = "/docs";
+const SIDEBAR_SCROLL_STORAGE_KEY = "geode:docs-sidebar-scroll-top";
+const DESKTOP_SIDEBAR_QUERY = "(min-width: 768px)";
+
+let lastSidebarScrollTop = 0;
+
+function useRememberedSidebarScroll() {
+  const sidebarRef = useRef<HTMLElement>(null);
+
+  useLayoutEffect(() => {
+    const sidebar = sidebarRef.current;
+    if (!sidebar) return;
+
+    const desktop = window.matchMedia(DESKTOP_SIDEBAR_QUERY);
+    const remember = () => {
+      if (!desktop.matches) return;
+
+      lastSidebarScrollTop = sidebar.scrollTop;
+      try {
+        window.sessionStorage.setItem(
+          SIDEBAR_SCROLL_STORAGE_KEY,
+          String(lastSidebarScrollTop)
+        );
+      } catch {
+        // Route-to-route restoration still works through the module fallback.
+      }
+    };
+    const restore = () => {
+      if (!desktop.matches) return;
+
+      let scrollTop = lastSidebarScrollTop;
+      try {
+        const stored = window.sessionStorage.getItem(SIDEBAR_SCROLL_STORAGE_KEY);
+        if (stored !== null) {
+          const parsed = Number(stored);
+          if (Number.isFinite(parsed) && parsed >= 0) scrollTop = parsed;
+        }
+      } catch {
+        // Keep the in-memory fallback when storage is unavailable.
+      }
+      sidebar.scrollTop = scrollTop;
+    };
+
+    restore();
+    sidebar.addEventListener("scroll", remember, { passive: true });
+    desktop.addEventListener("change", restore);
+
+    return () => {
+      sidebar.removeEventListener("scroll", remember);
+      desktop.removeEventListener("change", restore);
+      // A display:none aside reports scrollTop=0. Do not erase the last
+      // desktop position when navigating through docs on a mobile viewport.
+      remember();
+    };
+  }, []);
+
+  return sidebarRef;
+}
 
 function pageHref(slug: string): string {
   return slug ? `${DOCS_BASE}/${slug}` : DOCS_BASE;
@@ -186,6 +243,7 @@ export function DocsShell({
   children: ReactNode;
 }) {
   const locale = useLocale();
+  const sidebarRef = useRememberedSidebarScroll();
   const displayTitle = titleKo ? t(locale, titleKo, title) : title;
   const displaySummary =
     summary && summaryKo ? t(locale, summaryKo, summary) : summary;
@@ -233,7 +291,10 @@ export function DocsShell({
       </header>
 
       <div className="max-w-7xl mx-auto flex gap-8 px-6 py-10">
-        <aside className="w-64 shrink-0 hidden md:block sticky top-20 self-start max-h-[calc(100vh-6rem)] overflow-y-auto pr-3">
+        <aside
+          ref={sidebarRef}
+          className="w-64 shrink-0 hidden md:block sticky top-20 self-start max-h-[calc(100vh-6rem)] overflow-y-auto pr-3"
+        >
           <Sidebar />
         </aside>
 
