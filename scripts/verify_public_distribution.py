@@ -9,14 +9,14 @@ before declaring the immutable channels inconsistent.
 from __future__ import annotations
 
 import argparse
+import http.client
 import json
 import os
 import re
 import sys
 import time
-import urllib.request
 from typing import Any, cast
-from urllib.parse import urlsplit
+from urllib.parse import SplitResult, urljoin, urlsplit
 
 DEFAULT_REPOSITORY = "mangowhoiscloud/geode"
 PACKAGE_NAME = "geode-agent"
@@ -24,6 +24,8 @@ _VERSION_RE = re.compile(r"^\d+\.\d+\.\d+(?:[A-Za-z0-9.-]+)?$")
 _SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _ALLOWED_HOSTS = frozenset({"api.github.com", "github.com", "pypi.org"})
+_REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
+_MAX_REDIRECTS = 5
 
 
 class DistributionVerificationError(RuntimeError):
@@ -149,28 +151,64 @@ def verify_metadata(
         )
 
 
-def _request(url: str, *, token: str | None = None, accept: str) -> bytes:
+def _validated_url(url: str) -> SplitResult:
     parsed = urlsplit(url)
+    hostname = parsed.hostname
+    allowed_host = hostname in _ALLOWED_HOSTS or (
+        hostname is not None and hostname.endswith(".githubusercontent.com")
+    )
     _expect(
         parsed.scheme == "https"
-        and parsed.hostname in _ALLOWED_HOSTS
+        and allowed_host
         and parsed.username is None
         and parsed.password is None,
         f"refusing non-public distribution URL: {url!r}",
     )
-    headers = {
-        "Accept": accept,
-        "User-Agent": "geode-public-distribution-verifier/1",
-    }
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-        headers["X-GitHub-Api-Version"] = "2022-11-28"
-    request = urllib.request.Request(url, headers=headers)  # noqa: S310
-    with urllib.request.urlopen(request, timeout=30) as response:  # noqa: S310
-        payload = response.read()
-    if not isinstance(payload, bytes):
-        raise DistributionVerificationError(f"{url} returned a non-byte response")
-    return payload
+    try:
+        port = parsed.port
+    except ValueError as error:
+        raise DistributionVerificationError(f"invalid HTTPS port in {url!r}") from error
+    _expect(port in (None, 443), f"refusing non-standard HTTPS port in {url!r}")
+    _expect(not parsed.fragment, f"refusing URL fragment in {url!r}")
+    return parsed
+
+
+def _request(url: str, *, token: str | None = None, accept: str) -> bytes:
+    current_url = url
+    for _redirect in range(_MAX_REDIRECTS + 1):
+        parsed = _validated_url(current_url)
+        hostname = cast(str, parsed.hostname)
+        target = parsed.path or "/"
+        if parsed.query:
+            target = f"{target}?{parsed.query}"
+        headers = {
+            "Accept": accept,
+            "User-Agent": "geode-public-distribution-verifier/1",
+        }
+        if token and hostname == "api.github.com":
+            headers["Authorization"] = f"Bearer {token}"
+            headers["X-GitHub-Api-Version"] = "2022-11-28"
+
+        connection = http.client.HTTPSConnection(hostname, timeout=30)
+        try:
+            connection.request("GET", target, headers=headers)
+            response = connection.getresponse()
+            payload = response.read()
+            status = response.status
+            location = response.getheader("Location")
+        finally:
+            connection.close()
+
+        if status in _REDIRECT_STATUSES:
+            _expect(location is not None, f"redirect from {current_url} omitted Location")
+            current_url = urljoin(current_url, location)
+            continue
+        _expect(
+            200 <= status < 300,
+            f"GET {current_url} returned HTTP {status}",
+        )
+        return payload
+    raise DistributionVerificationError(f"GET {url} exceeded {_MAX_REDIRECTS} redirects")
 
 
 def _json(url: str, *, token: str | None = None) -> dict[str, Any]:
