@@ -2,7 +2,7 @@
  * GEODE CHANGELOG, auto-synced from the GEODE repo via `npm run sync-stats`.
  * Do not edit manually. Edit CHANGELOG.md in the GEODE repo and re-run sync.
  *
- * Last sync: 2026-07-15
+ * Last sync: 2026-07-16
  *
  * Each entry's `body` is the raw markdown between two version headings.
  * The Changelog page renders the body with a minimal markdown renderer
@@ -19,7 +19,12 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": "### Fixed\n\n- **Stable releases tolerate split PyPI index convergence.** Post-publish\n  verification keeps the bounded exact-version `uvx` install loop, then delegates\n  JSON metadata and SHA-256 parity to the reusable full-snapshot verifier that\n  already retries GitHub and PyPI together. The redundant one-shot PyPI JSON\n  lookup is removed, so a successful upload cannot be reported as failed merely\n  because the exact-version JSON endpoint briefly lags the simple index. The\n  read-only smoke job also disables its unused uv cache instead of warning about\n  a checkout-free cache key."
+    "body": ""
+  },
+  {
+    "version": "1.0.0",
+    "date": "2026-07-16",
+    "body": "> First stable GEODE release, adding self-managed Google Workspace OAuth and\n> hardening stable distribution verification.\n\n### Added\n\n- **Native Google Workspace OAuth and tools.** `/login google` now imports a\n  user-owned Google Desktop OAuth client, uses a system-browser loopback\n  Authorization Code flow with PKCE and state, and supports multiple accounts,\n  scope bundles, status, switching, reauthorization, and revocation. Refresh\n  tokens, client secrets, and private account labels live in the OS keyring;\n  the versioned JSON registry contains metadata only and access tokens remain\n  in memory. Eleven Gmail, Drive, Docs, Sheets, Tasks, and Contacts tools join\n  the existing Calendar surface. Personal-data reads require an affirmative\n  confirmation for every invocation, including Workspace mutations; cached\n  write approvals, HITL 0, and skip-permissions cannot bypass it. Raw Calendar\n  MCP tools remain adapter-only, every personal Workspace capability fails\n  closed in headless and sub-agent sessions, and raw tool inputs/results are\n  marker-redacted from durable transcripts, checkpoints, SQLite, and offload\n  storage. Personal API errors are omitted from durable telemetry and rotating\n  logs, and personal-tool batches skip secondary reflection. The metadata\n  registry uses a cross-process lock, monotonic revision, and stale-refresh-safe\n  field patches; `--new-account` separates account scope selection from\n  active-account reauthorization.\n\n### Fixed\n\n- **Stable releases tolerate split PyPI index convergence.** Post-publish\n  verification keeps the bounded exact-version `uvx` install loop, then delegates\n  JSON metadata and SHA-256 parity to the reusable full-snapshot verifier that\n  already retries GitHub and PyPI together. The redundant one-shot PyPI JSON\n  lookup is removed, so a successful upload cannot be reported as failed merely\n  because the exact-version JSON endpoint briefly lags the simple index. The\n  read-only smoke job also disables its unused uv cache instead of warning about\n  a checkout-free cache key."
   },
   {
     "version": "0.99.333",
@@ -2393,4 +2398,4 @@ export const CHANGELOG: ChangelogEntry[] = [
   }
 ];
 
-export const CHANGELOG_SYNCED_AT = "2026-07-15";
+export const CHANGELOG_SYNCED_AT = "2026-07-16";

@@ -47,6 +47,11 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-07-16
+
+> First stable GEODE release, adding self-managed Google Workspace OAuth and
+> hardening stable distribution verification.
+
 ### Added
 
 - **Native Google Workspace OAuth and tools.** `/login google` now imports a
