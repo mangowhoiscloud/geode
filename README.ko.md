@@ -18,11 +18,9 @@
 </p>
 
 <p align="center">
+  <a href="https://mangowhoiscloud.github.io/geode/">랜딩</a>
+  ·
   <a href="https://mangowhoiscloud.github.io/geode/docs">문서</a>
-  ·
-  <a href="https://mangowhoiscloud.github.io/geode/docs/run/google-workspace">Google Workspace</a>
-  ·
-  <a href="https://github.com/mangowhoiscloud/geode/releases/latest">v1.0.0 릴리스</a>
   ·
   <a href="https://mangowhoiscloud.github.io/geode/self-improving/">Self-improving 허브</a>
   ·
