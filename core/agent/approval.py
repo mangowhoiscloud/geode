@@ -24,6 +24,7 @@ from core.agent.safety import (
     AUTO_APPROVED_MCP_SERVERS,
     DANGEROUS_TOOLS,
     EXPENSIVE_TOOLS,
+    SENSITIVE_TOOLS,
     WRITE_TOOLS,
     is_bash_command_read_only,
 )
@@ -72,6 +73,11 @@ def _write_denial_with_fallback(tool_name: str) -> dict[str, Any]:
         "profile_learn": "Show current learning patterns with profile_get instead.",
         "calendar_create_event": "Try calendar_list_events to show existing events.",
         "calendar_sync_scheduler": "Show the user /schedule command to manage manually.",
+        "gmail_send": "Draft the email in the response without sending it.",
+        "google_drive_create": "Describe the file or folder that would be created.",
+        "google_docs_write": "Return the proposed document text without changing Google Docs.",
+        "google_sheets_write": "Return the proposed cell values as a table.",
+        "google_tasks_write": "Describe the proposed task change without applying it.",
     }
     hint = _WRITE_FALLBACK_HINTS.get(tool_name, "")
     msg = (
@@ -81,6 +87,17 @@ def _write_denial_with_fallback(tool_name: str) -> dict[str, Any]:
     if hint:
         msg += f" Suggestion: {hint}"
     return {"error": msg, "denied": True, "fallback_hint": hint}
+
+
+def _sensitive_denial(tool_name: str) -> dict[str, Any]:
+    return {
+        "error": (
+            f"User denied access to personal account data for '{tool_name}'. "
+            "Do NOT retry without a new explicit request."
+        ),
+        "denied": True,
+        "fallback_hint": "Ask the user to provide only the specific data they want analyzed.",
+    }
 
 
 class ApprovalWorkflow:
@@ -172,6 +189,8 @@ class ApprovalWorkflow:
             category = "bash"
         elif tool_name in DANGEROUS_TOOLS:
             category = "dangerous"
+        elif tool_name in SENSITIVE_TOOLS:
+            category = "sensitive"
         elif tool_name in WRITE_TOOLS:
             category = "write"
         elif tool_name in EXPENSIVE_TOOLS:
@@ -288,6 +307,7 @@ class ApprovalWorkflow:
         safety_level: str = "write",
         tool_name: str = "",
         record: ApprovalRecord | None = None,
+        allow_always: bool = True,
     ) -> str:
         """Show the approval options line and return 'y', 'n', or 'a'.
 
@@ -303,6 +323,8 @@ class ApprovalWorkflow:
                 safety_level,
                 record.approval_id if record is not None else "",
             )
+            if not allow_always and decision == "a":
+                decision = "n"
             log.debug("HITL: IPC callback decision=%s tool=%s", decision, tool_name or label)
             self.record_transition(record, "displayed", "ipc")
             self.record_transition(record, "user_selected", decision)
@@ -318,7 +340,12 @@ class ApprovalWorkflow:
             console.print(f"  [bold]{label}[/bold]")
         self.record_transition(record, "displayed", "console")
         try:
-            raw = console.input("  [muted]y allow · n deny · a always-allow[/muted] ")
+            options = (
+                "y allow · n deny · a always-allow"
+                if allow_always
+                else "y allow this request · n deny"
+            )
+            raw = console.input(f"  [muted]{options}[/muted] ")
         except (KeyboardInterrupt, EOFError):
             console.print()
             self.record_transition(record, "user_selected", "<interrupt>")
@@ -326,6 +353,8 @@ class ApprovalWorkflow:
             return "n"
         self.record_transition(record, "user_selected", raw.strip()[:20])
         decision, verdict = parse_decision(raw)
+        if not allow_always and decision == "a":
+            decision, verdict = "n", VERDICT_DENY
         self.record_transition(record, "parsed", verdict)
         return decision
 
@@ -337,6 +366,7 @@ class ApprovalWorkflow:
         safety_level: str = "write",
         tool_name: str = "",
         record: ApprovalRecord | None = None,
+        allow_always: bool = True,
     ) -> str:
         """Async wrapper for approval prompts.
 
@@ -350,6 +380,7 @@ class ApprovalWorkflow:
             safety_level=safety_level,
             tool_name=tool_name,
             record=record,
+            allow_always=allow_always,
         )
 
     # -----------------------------------------------------------------
@@ -369,6 +400,16 @@ class ApprovalWorkflow:
 
         approved = False
 
+        if tool_name in SENSITIVE_TOOLS:
+            with self._approval_lock:
+                # Google Workspace policy requires an in-context affirmative
+                # action immediately before each agentic data invocation.
+                # Session-wide always-allow and skip-permissions therefore do
+                # not bypass this boundary.
+                if not self.confirm_sensitive(tool_name, tool_input, record=record):
+                    return _sensitive_denial(tool_name), False
+                approved = True
+
         # v0.52.2 — wrap the HITL prompt + always-set mutation under a single
         # mutex so parallel tool calls in the same round serialize their
         # approval prompts. Without this, two concurrent confirm_write() calls
@@ -382,7 +423,7 @@ class ApprovalWorkflow:
         # without re-prompting the user.
 
         # Write tools
-        if tool_name in WRITE_TOOLS:
+        if tool_name in WRITE_TOOLS and tool_name not in SENSITIVE_TOOLS:
             with self._approval_lock:
                 auto_reason = self._auto_grant_reason("write", tool_name)
                 if auto_reason:
@@ -425,7 +466,18 @@ class ApprovalWorkflow:
 
         approved = False
 
-        if tool_name in WRITE_TOOLS:
+        if tool_name in SENSITIVE_TOOLS:
+
+            async def sensitive_gate() -> tuple[dict[str, Any] | None, bool]:
+                if not await self.confirm_sensitive_async(tool_name, tool_input, record=record):
+                    return _sensitive_denial(tool_name), False
+                return None, True
+
+            gate_result, approved = await self._with_approval_locks(sensitive_gate)
+            if gate_result is not None:
+                return gate_result, False
+
+        if tool_name in WRITE_TOOLS and tool_name not in SENSITIVE_TOOLS:
 
             async def write_gate() -> tuple[dict[str, Any] | None, bool]:
                 auto_reason = self._auto_grant_reason("write", tool_name)
@@ -562,7 +614,128 @@ class ApprovalWorkflow:
             return f"{tool_input.get('key', '?')}={tool_input.get('value', '?')}"
         if tool_name == "profile_learn":
             return str(tool_input.get("pattern", ""))[:80]
+        if tool_name == "calendar_create_event":
+            return (
+                f"title={tool_input.get('title', '?')!s} "
+                f"start={tool_input.get('start_datetime', '?')!s}"
+            )[:160]
+        if tool_name == "gmail_send":
+            return (f"to={tool_input.get('to', '?')!s} subject={tool_input.get('subject', '?')!s}")[
+                :160
+            ]
+        if tool_name == "google_drive_create":
+            return (
+                f"kind={tool_input.get('kind', '?')!s} "
+                f"name={tool_input.get('name', '?')!s} "
+                f"parent={tool_input.get('parent_id', 'root')!s}"
+            )[:160]
+        if tool_name == "google_docs_write":
+            text = str(tool_input.get("text", ""))
+            return (
+                f"action={tool_input.get('action', '?')!s} "
+                f"document={tool_input.get('document_id') or tool_input.get('title') or '?'} "
+                f"text={text[:80]!r}"
+            )[:200]
+        if tool_name == "google_sheets_write":
+            values = tool_input.get("values", [])
+            rows = len(values) if isinstance(values, list) else 0
+            return (
+                f"action={tool_input.get('action', '?')!s} "
+                f"sheet={tool_input.get('spreadsheet_id') or tool_input.get('title') or '?'} "
+                f"range={tool_input.get('range', '-')!s} rows={rows}"
+            )[:200]
+        if tool_name == "google_tasks_write":
+            return (
+                f"action={tool_input.get('action', '?')!s} "
+                f"task={tool_input.get('task_id') or tool_input.get('title') or '?'} "
+                f"due={tool_input.get('due', '-')!s}"
+            )[:160]
         return ""
+
+    def confirm_sensitive(
+        self,
+        tool_name: str,
+        tool_input: dict[str, Any],
+        record: ApprovalRecord | None = None,
+    ) -> bool:
+        """Confirm one personal-data read or mutation without a cached bypass."""
+        service = "Calendar" if tool_name.startswith("calendar_") else "Google Workspace"
+        is_mutation = tool_name in WRITE_TOOLS
+        summary = (
+            self._write_summary(tool_name, tool_input)
+            if is_mutation
+            else self._sensitive_summary(tool_input)
+        )
+        boundary = (
+            f"This {service} mutation will change personal account data."
+            if is_mutation
+            else f"Personal {service} data may be sent to your configured LLM provider."
+        )
+        disclosure = boundary + (f" Request: {summary}" if summary else "")
+        if self._approval_callback is None:
+            from core.cli import _restore_terminal
+
+            _restore_terminal()
+            console.print()
+            console.print(_approval_header(tool_name, "personal data"))
+            console.print(f"  [dim]{disclosure}[/dim]")
+            console.print()
+        if self.check_auto_deny(tool_name):
+            self.record_transition(record, "denied", "auto_denied:3-strikes")
+            return False
+        self._fire_hook(
+            HookEvent.TOOL_APPROVAL_REQUESTED,
+            {
+                "tool_name": tool_name,
+                "safety_level": "SENSITIVE",
+                "args_preview": summary,
+            },
+        )
+        response = self.prompt_with_always(
+            "Allow?",
+            disclosure,
+            safety_level="sensitive",
+            tool_name=tool_name,
+            record=record,
+            allow_always=False,
+        )
+        if response == "y":
+            self.record_transition(record, "granted", f"user:{response}")
+            return True
+        self.record_transition(record, "denied", f"user:{response}")
+        return False
+
+    async def confirm_sensitive_async(
+        self,
+        tool_name: str,
+        tool_input: dict[str, Any],
+        record: ApprovalRecord | None = None,
+    ) -> bool:
+        """Async personal-data confirmation."""
+        return await asyncio.to_thread(
+            self.confirm_sensitive,
+            tool_name,
+            tool_input,
+            record,
+        )
+
+    @staticmethod
+    def _sensitive_summary(tool_input: dict[str, Any]) -> str:
+        bounded: list[str] = []
+        for key in (
+            "query",
+            "message_id",
+            "document_id",
+            "spreadsheet_id",
+            "range",
+            "tasklist_id",
+            "start_date",
+            "end_date",
+        ):
+            value = tool_input.get(key)
+            if value not in (None, ""):
+                bounded.append(f"{key}={str(value)[:80]}")
+        return ", ".join(bounded)[:240]
 
     def confirm_write(
         self,
@@ -571,12 +744,11 @@ class ApprovalWorkflow:
         record: ApprovalRecord | None = None,
     ) -> bool:
         """Prompt user for write operation confirmation."""
+        summary = self._write_summary(tool_name, tool_input)
         if self._approval_callback is None:
             from core.cli import _restore_terminal
 
             _restore_terminal()
-            summary = self._write_summary(tool_name, tool_input)
-
             console.print()
             console.print(_approval_header(tool_name, "write"))
             if summary:
@@ -597,7 +769,11 @@ class ApprovalWorkflow:
         )
 
         response = self.prompt_with_always(
-            "Allow?", tool_name, safety_level="write", tool_name=tool_name, record=record
+            "Allow?",
+            summary or tool_name,
+            safety_level="write",
+            tool_name=tool_name,
+            record=record,
         )
         self.track_decision(tool_name, response)
         if response in ("a", "y"):
@@ -615,11 +791,11 @@ class ApprovalWorkflow:
         record: ApprovalRecord | None = None,
     ) -> bool:
         """Async write operation confirmation."""
+        summary = self._write_summary(tool_name, tool_input)
         if self._approval_callback is None:
             from core.cli import _restore_terminal
 
             _restore_terminal()
-            summary = self._write_summary(tool_name, tool_input)
             console.print()
             console.print(_approval_header(tool_name, "write"))
             if summary:
@@ -640,7 +816,11 @@ class ApprovalWorkflow:
         )
 
         response = await self.prompt_with_always_async(
-            "Allow?", tool_name, safety_level="write", tool_name=tool_name, record=record
+            "Allow?",
+            summary or tool_name,
+            safety_level="write",
+            tool_name=tool_name,
+            record=record,
         )
         self.track_decision(tool_name, response)
         if response in ("a", "y"):

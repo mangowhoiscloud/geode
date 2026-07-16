@@ -47,6 +47,27 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **Native Google Workspace OAuth and tools.** `/login google` now imports a
+  user-owned Google Desktop OAuth client, uses a system-browser loopback
+  Authorization Code flow with PKCE and state, and supports multiple accounts,
+  scope bundles, status, switching, reauthorization, and revocation. Refresh
+  tokens, client secrets, and private account labels live in the OS keyring;
+  the versioned JSON registry contains metadata only and access tokens remain
+  in memory. Eleven Gmail, Drive, Docs, Sheets, Tasks, and Contacts tools join
+  the existing Calendar surface. Personal-data reads require an affirmative
+  confirmation for every invocation, including Workspace mutations; cached
+  write approvals, HITL 0, and skip-permissions cannot bypass it. Raw Calendar
+  MCP tools remain adapter-only, every personal Workspace capability fails
+  closed in headless and sub-agent sessions, and raw tool inputs/results are
+  marker-redacted from durable transcripts, checkpoints, SQLite, and offload
+  storage. Personal API errors are omitted from durable telemetry and rotating
+  logs, and personal-tool batches skip secondary reflection. The metadata
+  registry uses a cross-process lock, monotonic revision, and stale-refresh-safe
+  field patches; `--new-account` separates account scope selection from
+  active-account reauthorization.
+
 ### Fixed
 
 - **Stable releases tolerate split PyPI index convergence.** Post-publish

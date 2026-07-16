@@ -351,3 +351,30 @@ def test_set_episodic_store_overrides_singleton(tmp_path: Path) -> None:
     custom = EpisodicStore(path=tmp_path / "x.jsonl")
     set_episodic_store(custom)
     assert get_episodic_store() is custom
+
+
+def test_episodic_recorder_omits_personal_tool_input_and_error(tmp_path: Path) -> None:
+    from core.hooks import HookEvent
+    from core.memory.episodic import set_episodic_store
+    from core.wiring.bootstrap import make_episodic_recorder_handler
+
+    store = EpisodicStore(path=tmp_path / "episodes.jsonl")
+    set_episodic_store(store)
+    _name, handler = make_episodic_recorder_handler()
+
+    handler(
+        HookEvent.TOOL_EXEC_ENDED,
+        {
+            "tool_name": "gmail_search",
+            "tool_input": {"query": "from:private@example.com"},
+            "has_error": True,
+            "result": {"error": "private mailbox body"},
+            "duration_ms": 1.0,
+        },
+    )
+
+    raw = store.path.read_text(encoding="utf-8")
+    assert "private@example.com" not in raw
+    assert "private mailbox body" not in raw
+    assert "_personal_data_omitted" in raw
+    assert "details omitted" in raw

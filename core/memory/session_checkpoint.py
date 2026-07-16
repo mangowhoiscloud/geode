@@ -23,6 +23,7 @@ from typing import Any
 
 from core.memory.atomic_write import atomic_write_json
 from core.tools.computer_observation import sanitize_computer_payload
+from core.tools.personal_data import sanitize_personal_data_payload
 
 log = logging.getLogger(__name__)
 
@@ -194,10 +195,16 @@ class SessionCheckpoint:
             atomic_write_json(state_file, data, indent=2)
 
         self._sync_cognitive_state_to_db(state)
+        personal_safe = sanitize_personal_data_payload(
+            {
+                "messages": sanitize_computer_payload(state.messages),
+                "tool_log": sanitize_computer_payload(state.tool_log),
+            }
+        )
         persisted_state = replace(
             state,
-            messages=sanitize_computer_payload(state.messages),
-            tool_log=sanitize_computer_payload(state.tool_log),
+            messages=personal_safe["messages"],
+            tool_log=personal_safe["tool_log"],
         )
 
         # Phase 1b: SoT lives in SQLite ``messages`` table. Mirror the

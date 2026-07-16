@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 
 import pytest
-from core.agent.sub_agent import SubAgentManager, SubTask
+from core.agent.sub_agent import SUBAGENT_DENIED_TOOLS, SubAgentManager, SubTask
 from core.agent.subagent_roles import (
     SUBAGENT_ROLES,
     ResearchFindings,
@@ -237,7 +237,7 @@ class TestWorkerRequestRoleWiring:
         req = _manager()._build_worker_request(
             SubTask(task_id="t0", description="d", task_type="analyze")
         )
-        assert set(req.denied_tools) == {"delegate_task"}
+        assert set(req.denied_tools) == SUBAGENT_DENIED_TOOLS
         assert "ONLY a JSON object" not in req.description
 
 

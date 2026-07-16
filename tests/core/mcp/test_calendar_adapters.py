@@ -272,6 +272,29 @@ class TestCompositeCalendarAdapter:
         event = asyncio.run(composite.acreate_event("Test", NOW, NOW + timedelta(hours=1)))
         assert event.source == "google"
 
+    def test_create_skips_read_only_adapter_for_writable_fallback(self):
+        read_only = MagicMock()
+        read_only.acan_write = AsyncMock(return_value=False)
+        read_only.acreate_event = AsyncMock()
+        writable = MagicMock()
+        writable.acan_write = AsyncMock(return_value=True)
+        writable.acreate_event = AsyncMock(
+            return_value=CalendarEvent(
+                event_id="w1",
+                title="Writable",
+                start=NOW,
+                end=NOW + timedelta(hours=1),
+                source="caldav",
+            )
+        )
+        composite = CompositeCalendarAdapter([read_only, writable])
+
+        event = asyncio.run(composite.acreate_event("Test", NOW, NOW + timedelta(hours=1)))
+
+        assert event.event_id == "w1"
+        read_only.acreate_event.assert_not_awaited()
+        writable.acreate_event.assert_awaited_once()
+
     def test_no_adapters_available(self, mock_manager: MagicMock):
         mock_manager.check_health.return_value = {}
         google = GoogleCalendarAdapter(manager=mock_manager)

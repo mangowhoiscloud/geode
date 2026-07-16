@@ -32,6 +32,11 @@ from core.paths import GLOBAL_ENV_FILE, get_project_root
 
 log = logging.getLogger(__name__)
 
+# Calendar MCP servers are implementation adapters behind GEODE's native
+# ``calendar_*`` tools. Exposing their raw ``list_events`` / ``create_event``
+# definitions would bypass the native per-invocation personal-data gate.
+ADAPTER_ONLY_MCP_SERVERS: frozenset[str] = frozenset({"google-calendar", "caldav"})
+
 _GLOBAL_DOTENV_PATH = GLOBAL_ENV_FILE
 
 _EMPTY_SCHEMA: dict[str, Any] = {"type": "object", "properties": {}}
@@ -555,6 +560,8 @@ class MCPServerManager:
 
         all_tools: list[dict[str, Any]] = []
         for server_name in self._servers:
+            if server_name in ADAPTER_ONLY_MCP_SERVERS:
+                continue
             client = self._get_client(server_name)
             if client is None:
                 continue
@@ -696,8 +703,10 @@ class MCPServerManager:
             return None
 
     def find_server_for_tool(self, tool_name: str) -> str | None:
-        """Find which server provides a given tool."""
+        """Find a model-dispatchable server providing a given tool."""
         for server_name in self._servers:
+            if server_name in ADAPTER_ONLY_MCP_SERVERS:
+                continue
             client = self._get_client(server_name)
             if client is None:
                 continue

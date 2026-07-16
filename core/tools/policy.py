@@ -205,6 +205,11 @@ class ProfilePolicy:
                         "profile_update",
                         "calendar_create_event",
                         "calendar_sync_scheduler",
+                        "gmail_send",
+                        "google_drive_create",
+                        "google_docs_write",
+                        "google_sheets_write",
+                        "google_tasks_write",
                     },
                 )
             )

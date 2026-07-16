@@ -293,6 +293,8 @@ GLOBAL_RUNS_DIR = GEODE_HOME / "runs"
 GLOBAL_USAGE_DIR = GEODE_HOME / "usage"
 GLOBAL_MCP_DIR = GEODE_HOME / "mcp"
 GLOBAL_SCHEDULER_DIR = GEODE_HOME / "scheduler"
+GLOBAL_GOOGLE_DIR = GEODE_HOME / "google"
+GLOBAL_GOOGLE_ACCOUNTS_FILE = GLOBAL_GOOGLE_DIR / "accounts.json"
 # P4 (v0.95.x) — added during lint-guardrail rollout. fa4 diagnostics
 # log dir (cross-process append-only) and the auth.toml SoT path.
 # `core.auth.auth_toml` overrides via `GEODE_AUTH_TOML` env var; this
@@ -725,6 +727,7 @@ def ensure_directories() -> None:
         GLOBAL_USAGE_DIR,
         GLOBAL_MCP_DIR,
         GLOBAL_SCHEDULER_DIR,
+        GLOBAL_GOOGLE_DIR,
         GLOBAL_PROJECTS_DIR,
         GLOBAL_IDENTITY_DIR,
         GLOBAL_USER_PROFILE_DIR,

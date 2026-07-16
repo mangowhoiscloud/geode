@@ -65,7 +65,10 @@ class CalendarListEventsTool:
                 "result": {
                     "events": [],
                     "count": 0,
-                    "note": "No calendar adapter available. Configure credentials.",
+                    "note": (
+                        "No calendar adapter available. Run /login google "
+                        "--services calendar-read or configure a calendar MCP server."
+                    ),
                 }
             }
 
@@ -140,7 +143,10 @@ class CalendarCreateEventTool:
                 "No calendar adapter available.",
                 error_type="dependency",
                 recoverable=False,
-                hint="Run /key to configure calendar API credentials.",
+                hint=(
+                    "Run /login google --services calendar-write or configure "
+                    "a calendar MCP server."
+                ),
             )
 
         title: str = kwargs["title"]

@@ -57,6 +57,18 @@ _DELEGATED_TOOLS: dict[str, tuple[str, str]] = {
     "profile_update": ("core.tools.profile_tools", "ProfileUpdateTool"),
     "profile_preference": ("core.tools.profile_tools", "ProfilePreferenceTool"),
     "profile_learn": ("core.tools.profile_tools", "ProfileLearnTool"),
+    # Google Workspace — credentials are registered by /login google.
+    "gmail_search": ("core.tools.google_workspace", "GmailSearchTool"),
+    "gmail_send": ("core.tools.google_workspace", "GmailSendTool"),
+    "google_drive_search": ("core.tools.google_workspace", "GoogleDriveSearchTool"),
+    "google_drive_create": ("core.tools.google_workspace", "GoogleDriveCreateTool"),
+    "google_docs_read": ("core.tools.google_workspace", "GoogleDocsReadTool"),
+    "google_docs_write": ("core.tools.google_workspace", "GoogleDocsWriteTool"),
+    "google_sheets_read": ("core.tools.google_workspace", "GoogleSheetsReadTool"),
+    "google_sheets_write": ("core.tools.google_workspace", "GoogleSheetsWriteTool"),
+    "google_tasks_list": ("core.tools.google_workspace", "GoogleTasksListTool"),
+    "google_tasks_write": ("core.tools.google_workspace", "GoogleTasksWriteTool"),
+    "google_contacts_list": ("core.tools.google_workspace", "GoogleContactsListTool"),
 }
 
 

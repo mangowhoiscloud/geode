@@ -80,6 +80,12 @@ def cmd_login(args: str) -> None:
     sub = parts[0].lower()
     rest = parts[1] if len(parts) > 1 else ""
 
+    if sub == "google":
+        from core.cli.commands.google_login import cmd_login_google
+
+        cmd_login_google(rest)
+        return
+
     # Provider-as-parameter dispatch: ``/login openai`` /
     # ``/login anthropic`` (+ aliases) run the OAuth flow directly. This
     # path is reached before any subcommand match so a provider name and
@@ -90,6 +96,11 @@ def cmd_login(args: str) -> None:
         return
 
     if sub in ("status", "list", "ls"):
+        if rest.strip().lower() == "google":
+            from core.cli.commands.google_login import render_google_status
+
+            render_google_status()
+            return
         _login_show_status()
         return
     if sub in ("add", "new"):
@@ -148,6 +159,7 @@ def cmd_login(args: str) -> None:
             from core.auth.codex_cli_oauth import invalidate_cache as invalidate_codex_cli_cache
             from core.llm.providers.codex import reset_codex_client
             from core.llm.strategies.plan_registry import get_plan_registry
+            from core.mcp.google_workspace_client import reset_google_workspace_client
             from core.wiring.container import ensure_profile_store
 
             registry = get_plan_registry()
@@ -157,6 +169,7 @@ def cmd_login(args: str) -> None:
             ok = load_auth_toml()
             invalidate_codex_cli_cache()
             reset_codex_client()
+            reset_google_workspace_client()
             plans_after = {p.id for p in registry.list_all()}
             profiles_after = {p.name for p in store.list_all()}
             new_plans = plans_after - plans_before
@@ -244,6 +257,7 @@ def _login_help() -> None:
         "  [label]/login[/label]                       Show all plans, profiles, routing\n"
         "  [label]/login openai[/label]                OAuth flow (ChatGPT subscription quota)\n"
         "  [label]/login anthropic[/label]             Explain Anthropic API-key setup\n"
+        "  [label]/login google[/label]                Google Workspace OAuth (BYO client)\n"
         "  [label]/login add[/label]                   Interactive wizard\n"
         "  [label]/login source[/label] <prov> <type>   Pick credential source per provider\n"
         "  [label]/login set-key[/label] <plan> <key>  Update a plan's API key\n"
@@ -315,10 +329,16 @@ def _login_show_status() -> None:
     registry = get_plan_registry()
     plans = registry.list_all()
     profiles = store.list_all()
+    try:
+        from core.auth.google_oauth import google_account_status
+
+        google_accounts = google_account_status()
+    except Exception:
+        google_accounts = []
 
     _pkg.console.print()
     _pkg.console.print("  [header]Plans[/header]")
-    if not plans and not profiles:
+    if not plans and not profiles and not google_accounts:
         _pkg.console.print("  [muted]No plans or credentials registered yet.[/muted]")
         _pkg.console.print(
             "  [muted]Run /login add to register a plan, or paste an API key.[/muted]"
@@ -450,6 +470,17 @@ def _login_show_status() -> None:
                 f"{s.get('email') or '-':<24} "
                 f"{s.get('expires_in', ''):<10} "
                 f"[muted]({s.get('source', '')})[/muted]"
+            )
+        _pkg.console.print()
+
+    if google_accounts:
+        _pkg.console.print("  [header]Google Workspace[/header]")
+        for account in google_accounts:
+            marker = "[success]●[/success]" if account["active"] else "[muted]○[/muted]"
+            bundles = ", ".join(account["services"]) or "identity"
+            _pkg.console.print(
+                f"  {marker} {account['email']:<28} "
+                f"[muted]{bundles} · {len(account['granted_scopes'])} scopes[/muted]"
             )
         _pkg.console.print()
 

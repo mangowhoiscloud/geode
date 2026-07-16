@@ -469,7 +469,12 @@ class IPCClient:
 
         t0 = time.monotonic()
         try:
-            resp = self._read_approval_line("  y allow · n deny · a always-allow > ")
+            prompt = (
+                "  y allow this request · n deny > "
+                if level == "sensitive"
+                else "  y allow · n deny · a always-allow > "
+            )
+            resp = self._read_approval_line(prompt)
         except (KeyboardInterrupt, EOFError):
             c.print()
             log.info(
@@ -481,7 +486,7 @@ class IPCClient:
 
         elapsed = time.monotonic() - t0
         resp = resp.replace("\r", "").strip().lower()
-        if resp in ("a", "always"):
+        if resp in ("a", "always") and level != "sensitive":
             decision = "a"
         elif resp in ("", "y", "yes"):
             decision = "y"
