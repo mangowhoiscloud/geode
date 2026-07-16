@@ -220,6 +220,11 @@ export default function DocsIndex() {
             <h2>다음에 어디로</h2>
             <ul>
               <li>
+                <a href="/geode/docs/run/google-workspace">Google Workspace 연결</a>.
+                직접 만든 Desktop OAuth 클라이언트로 Gmail, Calendar, Drive,
+                Docs, Sheets, Tasks, Contacts를 붙입니다.
+              </li>
+              <li>
                 <a href="/geode/docs/overview/how-it-runs">GEODE가 작업을 처리하는 흐름</a>.
                 요청 하나가 처음부터 끝까지 어떻게 흐르는지 따라갑니다.
               </li>
@@ -242,6 +247,11 @@ export default function DocsIndex() {
           <>
             <h2>Where to go next</h2>
             <ul>
+              <li>
+                <a href="/geode/docs/run/google-workspace">Connect Google Workspace</a>.
+                Bring your own Desktop OAuth client for Gmail, Calendar, Drive,
+                Docs, Sheets, Tasks, and Contacts.
+              </li>
               <li>
                 <a href="/geode/docs/overview/how-it-runs">How GEODE runs a task</a>.
                 One request, traced end to end.

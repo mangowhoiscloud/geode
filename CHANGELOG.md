@@ -67,8 +67,10 @@ functional change.
   MCP tools remain adapter-only, every personal Workspace capability fails
   closed in headless and sub-agent sessions, and raw tool inputs/results are
   marker-redacted from durable transcripts, checkpoints, SQLite, and offload
-  storage. Personal API errors are omitted from durable telemetry and rotating
-  logs, and personal-tool batches skip secondary reflection. The metadata
+  storage. Personal API errors are omitted from durable telemetry, while
+  rotating runtime logs remain under normal operational retention and may carry
+  bounded Google error diagnostics. Personal-tool batches skip secondary
+  reflection. The metadata
   registry uses a cross-process lock, monotonic revision, and stale-refresh-safe
   field patches; `--new-account` separates account scope selection from
   active-account reauthorization.

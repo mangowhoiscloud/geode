@@ -42,15 +42,16 @@ registry.
 | `gmail-send` | `gmail.send` | Sensitive | `gmail_send` |
 | `gmail-read` | `gmail.readonly` | Restricted | `gmail_search` |
 | `calendar-read` | `calendar.events.owned.readonly` | Sensitive | `calendar_list_events` |
-| `calendar-write` | `calendar.events.owned` | Sensitive | `calendar_list_events`, `calendar_create_event` |
+| `calendar-write` | `calendar.events.owned` | Sensitive | `calendar_list_events`, `calendar_create_event`, `calendar_sync_scheduler`; no general update/delete tool in v1.0.0 |
 | `workspace-files` | `drive.file` | Non-sensitive, per-file | Drive search/create, Docs read/write, Sheets read/write |
 | `tasks-read` | `tasks.readonly` | Sensitive | `google_tasks_list` |
 | `tasks-write` | `tasks` | Sensitive | `google_tasks_list`, `google_tasks_write` |
 | `contacts-read` | `contacts.readonly` | Sensitive | `google_contacts_list` |
 
-`drive.file` deliberately does not expose the user's whole Drive. It covers
-files GEODE creates and files individually granted to the OAuth app. A future
-Google Picker surface can extend the latter path without adopting the
+`drive.file` deliberately does not expose the user's whole Drive. The supported
+v1.0.0 path covers files GEODE creates. The scope can also cover files a user
+opens through a Google Picker, but GEODE v1.0.0 does not ship that Picker; a
+future Picker surface can add the existing-file path without adopting the
 restricted whole-Drive scopes.
 
 If a user deselects a scope on Google's consent screen, GEODE records only the
@@ -122,13 +123,16 @@ the active turn but are not added to this account store. Built-in durable tool
 logs, transcripts, session-checkpoint JSON, and the SQLite message store replace
 raw Workspace tool inputs and results with a `_personal_data_omitted` marker;
 large Workspace results are never written to the tool-result offload store,
-personal API error details are omitted from lifecycle telemetry and rotating
-logs, and a batch containing a personal tool skips the secondary reflection
-provider so its hypotheses cannot retain a result excerpt. The marker preserves
-the tool name and call ID so a resumed session can explain that the operation
-must be invoked again with consent. Text the user types directly, or an
-assistant summary already written into ordinary conversation text, still
-follows GEODE's general session-retention policy.
+personal API error details are omitted from durable lifecycle telemetry, and a
+batch containing a personal tool skips the secondary reflection provider so its
+hypotheses cannot retain a result excerpt. The marker preserves the tool name;
+its enclosing tool row preserves the call ID so a resumed session can explain
+that the operation must be invoked again with consent. Separate rotating
+runtime logs do not intentionally copy Workspace result payloads, but may retain
+bounded Google API error diagnostics and follow the normal operational-log
+retention policy. Text the user types directly, or an assistant summary already
+written into ordinary conversation text, still follows GEODE's general
+session-retention policy.
 
 Account operations:
 
