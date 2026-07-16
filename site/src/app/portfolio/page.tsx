@@ -435,6 +435,13 @@ function HeroField() {
           >
             GitHub
           </Link>
+          <Link
+            href="https://github.com/mangowhoiscloud/geode/releases/latest"
+            target="_blank"
+            className="font-mono text-[13px] text-[#FFF0F8] underline decoration-[color-mix(in_srgb,#FFF0F8_45%,transparent)] underline-offset-4 transition-opacity hover:opacity-75"
+          >
+            {t(locale, "v" + GEODE_SOT.version + " 릴리스", "v" + GEODE_SOT.version + " release")}
+          </Link>
         </motion.div>
       </motion.div>
       <div
@@ -769,7 +776,8 @@ function ConnectBanner() {
     <div className="flex h-full w-full flex-col items-center justify-center gap-4 px-6 text-center">
       <div className="font-mono text-[12px] leading-relaxed">
         <p style={{ color: ROSE_INK }}>one agent · one memory · every surface</p>
-        <p style={{ color: ROSE_INK_70 }}>openai / codex · glm · oauth you own</p>
+        <p style={{ color: ROSE_INK_70 }}>gmail · calendar · drive · docs · sheets</p>
+        <p style={{ color: ROSE_INK_70 }}>/login google · desktop oauth you own</p>
       </div>
       <div className="flex flex-wrap justify-center gap-1.5">
         {surfaceChips.map((chip) => (
@@ -892,8 +900,8 @@ const features: {
     index: "#3 connect",
     headKo: "하나의 에이전트, 모든 표면",
     headEn: "ONE AGENT, EVERY SURFACE",
-    ko: "CLI, MCP 서버, Slack, cron 게이트웨이. 하나의 에이전트가 하나의 메모리로 모든 표면에, 직접 소유한 OAuth로 상주합니다.",
-    en: "CLI, MCP server, Slack, and the cron gateway. One agent with one memory on every surface, over OAuth you own.",
+    ko: "CLI, MCP 서버, Slack, cron 게이트웨이. /login google로 직접 만든 Desktop OAuth 클라이언트를 연결해 Gmail, Calendar, Drive, Docs, Sheets, Tasks, Contacts를 같은 메모리 위에서 사용합니다.",
+    en: "CLI, MCP server, Slack, and the cron gateway. Connect your own Desktop OAuth client with /login google, then use Gmail, Calendar, Drive, Docs, Sheets, Tasks, and Contacts over the same memory.",
     banner: <ConnectBanner />,
   },
   {

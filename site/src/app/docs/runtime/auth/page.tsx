@@ -82,7 +82,9 @@ export default function Page() {
               Google Cloud Desktop 클라이언트로 연결할 수 있습니다. 권장 진입점은
               <code>/login google</code>입니다. 첫 연결에서는 client JSON 경로와
               필요한 서비스 번들을 명시적으로 고릅니다. 자동화하려면 다음처럼
-              한 줄로 지정할 수 있습니다.
+              한 줄로 지정할 수 있습니다. Google Cloud 콘솔부터 시작하는 절차는{" "}
+              <a href="/geode/docs/run/google-workspace">Google Workspace 연결 가이드</a>에
+              있습니다.
             </p>
             <pre>{`/login google --client-json ~/Downloads/client_secret.json \\
   --services gmail-send,calendar-read,workspace-files
@@ -113,7 +115,7 @@ export default function Page() {
                 <tr><td>OS keyring<br/><code>geode.google.oauth</code></td><td>refresh token, client secret, 계정 이메일과 표시 이름. 안전한 백엔드가 없으면 로그인은 실패하며 평문 fallback은 없습니다.</td></tr>
                 <tr><td><code>~/.geode/google/accounts.json</code></td><td>schema version, 단조 증가 revision, 활성 account id, client/project id, 서비스 번들, 실제 granted scopes, 상태와 시각만. 프로세스 간 <code>.accounts.lock</code> 뒤 atomic write, 디렉터리 0700·파일 0600.</td></tr>
                 <tr><td>프로세스 메모리</td><td>짧은 수명의 access token과 expiry. 데몬 auth reload와 logout 때 폐기.</td></tr>
-                <tr><td>세션 영속 저장소</td><td>Workspace 도구의 원문 입력·결과는 JSON·SQLite·도구 로그에 저장하지 않고 호출 ID가 붙은 <code>_personal_data_omitted</code> 표식으로 치환합니다. API 오류 상세도 영속 telemetry·회전 로그에서 생략하고, 개인 도구가 포함된 batch는 별도 reflection provider 호출을 건너뜁니다. 사용자가 직접 쓴 대화문과 모델이 대화문으로 작성한 요약은 일반 세션 보존 정책을 따릅니다.</td></tr>
+                <tr><td>세션 영속 저장소</td><td>Workspace 도구의 원문 입력·결과는 JSON·SQLite·도구 로그에서 도구 이름을 담은 <code>_personal_data_omitted</code> 표식으로 치환하고, 바깥 호출 행만 call id를 유지합니다. 영속 telemetry에는 API 오류 상세를 복사하지 않고, 개인 도구가 포함된 batch는 별도 reflection provider 호출을 건너뜁니다. 별도의 회전형 런타임 로그에는 제한된 Google API 오류 진단이 남을 수 있습니다. 사용자가 직접 쓴 대화문과 모델이 대화문으로 작성한 요약은 일반 세션 보존 정책을 따릅니다.</td></tr>
               </tbody>
             </table>
             <p>
@@ -184,6 +186,7 @@ ZAI_API_KEY={id}.{secret}`}</pre>
 
             <h2>다음</h2>
             <ul>
+              <li><a href="/geode/docs/run/google-workspace">Google Workspace 연결</a>. Cloud 프로젝트와 Desktop OAuth client 설정.</li>
               <li><a href="/geode/docs/ops/oauth">OAuth 토큰 회전</a>. 갱신과 쿨다운의 런타임 동작.</li>
               <li><a href="/geode/docs/run/providers">프로바이더 설정</a>. 처음 자격을 붙이는 절차.</li>
               <li><a href="/geode/docs/config/basics">설정 기초</a>. 시크릿 층과 해석 사다리.</li>
@@ -262,7 +265,9 @@ ZAI_API_KEY={id}.{secret}`}</pre>
               Google Cloud Desktop client; GEODE does not need a central OAuth
               app. The recommended entry point is <code>/login google</code>.
               On the first connection it explicitly asks for the client JSON
-              path and the service bundles needed. For a scripted choice:
+              path and the service bundles needed. Start from the Google Cloud
+              console with <a href="/geode/docs/run/google-workspace">Connect Google Workspace</a>.
+              For a scripted choice:
             </p>
             <pre>{`/login google --client-json ~/Downloads/client_secret.json \\
   --services gmail-send,calendar-read,workspace-files
@@ -295,7 +300,7 @@ ZAI_API_KEY={id}.{secret}`}</pre>
                 <tr><td>OS keyring<br/><code>geode.google.oauth</code></td><td>Refresh token, client secret, account email, and display name. Login fails when no secure backend exists; there is no plaintext fallback.</td></tr>
                 <tr><td><code>~/.geode/google/accounts.json</code></td><td>Schema version, monotonic revision, active account id, client/project ids, service bundles, actual granted scopes, status, and timestamps only. Atomic write behind a cross-process <code>.accounts.lock</code>; directory 0700 and file 0600.</td></tr>
                 <tr><td>Process memory</td><td>Short-lived access token and expiry, cleared on daemon auth reload and logout.</td></tr>
-                <tr><td>Durable session stores</td><td>Raw Workspace tool inputs and results are replaced in JSON, SQLite, and tool logs by a call-linked <code>_personal_data_omitted</code> marker. API error details are also omitted from durable telemetry and rotating logs, and batches containing a personal tool skip any separate reflection provider. User-authored conversation text and assistant summaries written as ordinary conversation follow the general session-retention policy.</td></tr>
+                <tr><td>Durable session stores</td><td>Raw Workspace tool inputs and results are replaced in JSON, SQLite, and tool logs by a <code>_personal_data_omitted</code> marker carrying the tool name; the enclosing call row retains the call id. API error details are not copied into durable telemetry, and batches containing a personal tool skip any separate reflection provider. Separate rotating runtime logs may retain bounded Google API error diagnostics. User-authored conversation text and assistant summaries written as ordinary conversation follow the general session-retention policy.</td></tr>
               </tbody>
             </table>
             <p>
@@ -369,6 +374,7 @@ ZAI_API_KEY={id}.{secret}`}</pre>
 
             <h2>Next</h2>
             <ul>
+              <li><a href="/geode/docs/run/google-workspace">Connect Google Workspace</a>. Cloud project and Desktop OAuth client setup.</li>
               <li><a href="/geode/docs/ops/oauth">OAuth token rotation</a>. The runtime behavior of refresh and cooldown.</li>
               <li><a href="/geode/docs/run/providers">Configure providers</a>. First-time credential setup.</li>
               <li><a href="/geode/docs/config/basics">Configuration basics</a>. The secrets layer and the resolution ladder.</li>

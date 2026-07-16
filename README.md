@@ -20,6 +20,10 @@
 <p align="center">
   <a href="https://mangowhoiscloud.github.io/geode/docs">Docs</a>
   ·
+  <a href="https://mangowhoiscloud.github.io/geode/docs/run/google-workspace">Google Workspace</a>
+  ·
+  <a href="https://github.com/mangowhoiscloud/geode/releases/latest">v1.0.0 release</a>
+  ·
   <a href="https://mangowhoiscloud.github.io/geode/self-improving/">Self-improving hub</a>
   ·
   <a href="https://github.com/mangowhoiscloud/geode-eval-artifacts">Eval artifacts</a>
@@ -124,6 +128,7 @@ Copy-paste these to see what it does:
 "Schedule a 9 AM standup reminder every weekday"
 "Watch hacker news for posts about LangGraph and DM me on Slack"
 "Compare gpt-5.5 vs claude-opus-4.7 for code review"
+"Find launch emails, summarize them, and add the follow-up to my Calendar"
 ```
 
 GEODE chooses the right tools (web search, file ops, MCP servers, sub-agents), runs them, and shows you the answer with sources and cost.
@@ -260,6 +265,23 @@ You should see something like:
 
 If you see this, you're done. If you see an error, run `geode doctor` for a diagnosis or jump to [Troubleshooting](#troubleshooting).
 
+### Optional: Connect Google Workspace
+
+GEODE v1.0.0 can use Gmail, Calendar, Drive, Docs, Sheets, Tasks, and Contacts
+through a Google Desktop OAuth client you own. Start `geode`, then run the
+recommended slash command:
+
+```text
+> /login google
+```
+
+The prompt asks for the downloaded client JSON and least-privilege service
+bundles. See [Connect Google Workspace](https://mangowhoiscloud.github.io/geode/docs/run/google-workspace)
+for the Google Cloud console steps, seven-day External Testing expiry,
+multi-account commands, storage schema, and per-invocation consent boundary.
+In v1.0.0, `workspace-files` supports files created through GEODE; an
+existing-file Google Picker is not included yet.
+
 ### Other useful commands
 
 ```bash
@@ -371,7 +393,8 @@ Secrets live in `.env`, behavior lives in `config.toml`. The two never collide, 
 
 - The global `~/.geode/.env` is the authoritative secret store. A project `./.env` fills only the keys it lacks and never shadows a global key. An `OPENAI_API_KEY` in `~/.geode/.env` wins even when a project `./.env` leaves it blank.
 - The project `./.geode/config.toml` overrides the global `~/.geode/config.toml`. Behavior is tuned per project.
-- `~/.geode/auth.toml` stores credential profiles, plan metadata, and OAuth-derived account state. Raw API keys still live in `~/.geode/.env`.
+- `~/.geode/auth.toml` stores LLM-provider credential profiles, plan metadata, and provider OAuth account state. Raw API keys still live in `~/.geode/.env`.
+- Google Workspace is separate: non-secret account and scope metadata lives in `~/.geode/google/accounts.json`, long-lived secrets in the OS keyring service `geode.google.oauth`, and access tokens only in process memory.
 - Runtime history, usage, diagnostics, daemon logs, and per-project private data live under `~/.geode/`. Project context that should travel with a workspace lives under `./.geode/`.
 
 Every field rides one ladder. Higher wins:
@@ -392,6 +415,7 @@ Add or switch a credential:
 ```bash
 geode setup                          # re-run the wizard (subscription OAuth or API key)
 /login openai                        # in a session: subscription OAuth
+/login google                        # in a session: Google Workspace OAuth
 /key openai sk-proj-...              # in a session: paste an API key
 echo 'OPENAI_API_KEY=sk-proj-...' >> ~/.geode/.env    # edit the authoritative file
 ```
@@ -463,7 +487,7 @@ geode update --latest # uv tool: explicitly allow minor/major upgrades
 |---------|-------------|
 | **`while(tool_use)` loop** | The single primitive every behavior is built on. Sub-agents, plans, batches are all instances of the same loop |
 | **Self-improving outer loop** | Mutates GEODE's own scaffolding, audits each change against an adversarial safety rubric, and promotes only on a real gain. See [the closed loop](https://mangowhoiscloud.github.io/geode/docs/capabilities/autoresearch) |
-| **Agentic tools + MCP catalog** | Web search, file ops, scheduling, memory, calendar, Slack/Discord, Korean job-board search, plus the Anthropic-published MCP registry (cached at `~/.geode/mcp/registry-cache.json`). Auto-installed on first use |
+| **Agentic tools + MCP catalog** | Web search, file ops, scheduling, memory, Slack/Discord, and native Gmail, Calendar, Drive, Docs, Sheets, Tasks, and Contacts through [user-owned Google OAuth](https://mangowhoiscloud.github.io/geode/docs/run/google-workspace), plus the Anthropic-published MCP registry (cached at `~/.geode/mcp/registry-cache.json`). Auto-installed on first use |
 | **3-provider failover** | Anthropic + OpenAI + ZhipuAI. ChatGPT subscription OAuth is auto-detected through Codex CLI; Anthropic/OpenAI/ZhipuAI pay-as-you-go API keys also work. Failover is in-provider only (no surprise cross-vendor charges, v0.53.0 governance) |
 | **5-tier memory** | SOUL (0) → User Profile (0.5) → Organization (1) → Project (2) → Session (3). Persistent, survives daemon restarts |
 | **Progress plans + review checkpoints** | `update_plan` shows a Codex-style per-turn checklist without blocking execution. `create_plan` + `approve_plan` remain for explicit review checkpoints, persisted in `.geode/plans.json` |

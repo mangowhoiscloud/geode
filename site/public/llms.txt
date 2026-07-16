@@ -20,6 +20,7 @@ Version v1.0.0. Last sync 2026-07-16. Docs links point to clean markdown twins (
 ## Getting Started
 
 - [Quick Start](https://mangowhoiscloud.github.io/geode/docs/quick-start.md): Install GEODE and run your first task in a few minutes.
+- [Connect Google Workspace](https://mangowhoiscloud.github.io/geode/docs/run/google-workspace.md): Bring your own Google Desktop OAuth client for Gmail, Calendar, Drive, Docs, Sheets, Tasks, and Contacts.
 - [Pick a path](https://mangowhoiscloud.github.io/geode/docs/run/pick-path.md): Subscription, API key, or free path. How to choose for your situation.
 - [Configure providers](https://mangowhoiscloud.github.io/geode/docs/run/providers.md): Anthropic, OpenAI, Codex, GLM. Where keys go, and what fallback chain you get.
 - [Run as a daemon](https://mangowhoiscloud.github.io/geode/docs/run/serve.md): Start, restart, and stop serve. A thin CLI talks to an IPC-served runtime.
