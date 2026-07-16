@@ -69,6 +69,7 @@ export const DOCS_SITEMAP: DocSection[] = [
     titleKo: "시작하기",
     pages: [
       { slug: "quick-start", title: "Quick Start", titleKo: "빠른 시작", summary: "Install GEODE and run your first task in a few minutes.", summaryKo: "GEODE를 설치하고 몇 분 안에 첫 작업을 실행합니다.", quadrant: "tutorial" },
+      { slug: "run/google-workspace", title: "Connect Google Workspace", titleKo: "Google Workspace 연결", summary: "Bring your own Google Desktop OAuth client for Gmail, Calendar, Drive, Docs, Sheets, Tasks, and Contacts.", summaryKo: "직접 만든 Google Desktop OAuth 클라이언트로 Gmail, Calendar, Drive, Docs, Sheets, Tasks, Contacts를 연결합니다.", quadrant: "how-to" },
       { slug: "run/pick-path", title: "Pick a path", titleKo: "경로 선택", summary: "Subscription, API key, or free path. How to choose for your situation.", summaryKo: "구독, API 키, 무료 경로 중에서 상황에 맞는 것을 고르는 방법입니다.", quadrant: "how-to" },
       { slug: "run/providers", title: "Configure providers", titleKo: "프로바이더 설정", summary: "Anthropic, OpenAI, Codex, GLM. Where keys go, and what fallback chain you get.", summaryKo: "Anthropic, OpenAI, Codex, GLM. 키를 어디에 두는지, 어떤 폴백 체인이 동작하는지 다룹니다.", quadrant: "how-to" },
       { slug: "run/serve", title: "Run as a daemon", titleKo: "데몬으로 실행", summary: "Start, restart, and stop serve. A thin CLI talks to an IPC-served runtime.", summaryKo: "serve를 시작하고 재시작하고 종료합니다. thin CLI가 IPC로 동작하는 런타임과 통신합니다.", quadrant: "how-to" },

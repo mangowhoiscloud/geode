@@ -110,8 +110,25 @@ geode setup -r     # 처음부터 다시`}</pre>
 geode update --latest         # uv: minor/major 업데이트를 명시적으로 허용
 geode uninstall               # 런타임 데이터 + CLI 제거`}</pre>
 
+            <h2>선택: Google Workspace 연결</h2>
+            <p>
+              Gmail, Calendar, Drive, Docs, Sheets, Tasks, Contacts를 쓰려면
+              직접 만든 Google Desktop OAuth 클라이언트를 연결합니다. 대화형
+              화면에서 <code>/login google</code>을 실행하면 client JSON과 최소
+              권한 번들을 차례로 고를 수 있습니다.
+            </p>
+            <pre>{`geode
+
+> /login google`}</pre>
+            <p>
+              Cloud 프로젝트, API 활성화, 7일 Testing 만료, 저장 스키마까지는{" "}
+              <a href="/geode/docs/run/google-workspace">Google Workspace 연결 가이드</a>를
+              따르십시오.
+            </p>
+
             <h2>다음 단계</h2>
             <ul>
+              <li><a href="/geode/docs/run/google-workspace">Google Workspace 연결</a>. 사용자 소유 OAuth로 Gmail과 Calendar 등을 붙입니다.</li>
               <li><a href="/geode/docs/run/pick-path">경로 선택</a>. 구독, API 키, 무료 경로 중 무엇이 맞는지 고릅니다.</li>
               <li><a href="/geode/docs/concepts/two-loops">두 개의 루프</a>. GEODE의 핵심 멘탈 모델입니다.</li>
               <li><a href="/geode/docs/run/serve">데몬으로 실행</a>. 메신저와 스케줄을 붙이는 길입니다.</li>
@@ -217,8 +234,25 @@ geode setup -r     # start over`}</pre>
 geode update --latest         # uv: explicitly allow minor/major upgrades
 geode uninstall               # remove runtime data + installed CLI`}</pre>
 
+            <h2>Optional: connect Google Workspace</h2>
+            <p>
+              To use Gmail, Calendar, Drive, Docs, Sheets, Tasks, or Contacts,
+              connect a Google Desktop OAuth client you own. Run{" "}
+              <code>/login google</code> in the interactive screen to choose
+              the client JSON and least-privilege bundles.
+            </p>
+            <pre>{`geode
+
+> /login google`}</pre>
+            <p>
+              Follow <a href="/geode/docs/run/google-workspace">Connect Google Workspace</a> for
+              the Cloud project, API enablement, seven-day Testing expiry,
+              and storage schema.
+            </p>
+
             <h2>Next</h2>
             <ul>
+              <li><a href="/geode/docs/run/google-workspace">Connect Google Workspace</a>. Bring your own OAuth client for Gmail, Calendar, and more.</li>
               <li><a href="/geode/docs/run/pick-path">Pick a path</a>. Subscription, API key, or the free path.</li>
               <li><a href="/geode/docs/concepts/two-loops">The two loops</a>. The mental model the rest of the docs build on.</li>
               <li><a href="/geode/docs/run/serve">Run as a daemon</a>. The road to messaging and schedules.</li>
