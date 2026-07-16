@@ -60,25 +60,28 @@ def build_notification_adapter() -> None:
 
 
 def build_calendar_adapter() -> None:
-    """Build and inject CompositeCalendarAdapter with MCP-backed sources.
+    """Build and inject direct Google OAuth plus MCP-backed calendar sources.
 
-    Chains Google Calendar + CalDAV (Apple Calendar) adapters.
-    If no calendar MCP servers are available, calendar tools return empty.
+    The direct Google adapter is always present and discovers credentials at
+    call time, so /login google takes effect without restarting the daemon.
+    Google/Apple MCP adapters remain available as compatibility fallbacks.
     """
     from core.mcp.apple_calendar_adapter import AppleCalendarAdapter
     from core.mcp.calendar_port import set_calendar
     from core.mcp.composite_calendar import CompositeCalendarAdapter
     from core.mcp.google_calendar_adapter import GoogleCalendarAdapter
+    from core.mcp.google_workspace_calendar import GoogleWorkspaceCalendarAdapter
 
+    adapters: list[Any] = [GoogleWorkspaceCalendarAdapter()]
     manager = _load_mcp_manager_for_plugin("calendar_adapter", set_calendar)
-    if manager is None:
-        return
-
-    adapters = [
-        GoogleCalendarAdapter(manager=manager),
-        AppleCalendarAdapter(manager=manager),
-    ]
-    composite = CompositeCalendarAdapter(adapters)  # type: ignore[arg-type]
+    if manager is not None:
+        adapters.extend(
+            [
+                GoogleCalendarAdapter(manager=manager),
+                AppleCalendarAdapter(manager=manager),
+            ]
+        )
+    composite = CompositeCalendarAdapter(adapters)
     log.info("Calendar adapter wired; availability will be checked at call time")
     set_calendar(composite)
 

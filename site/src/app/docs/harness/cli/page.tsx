@@ -153,7 +153,7 @@ export default function Page() {
               </thead>
               <tbody>
                 <tr><td><code>/help</code></td><td></td><td>THIN</td><td>대화형 도움말</td><td><code>core/cli/commands/_state.py</code></td></tr>
-                <tr><td><code>/login</code></td><td></td><td>THIN</td><td>플랜과 자격 대시보드. <code>openai</code>, <code>anthropic</code>, <code>add</code>, <code>use</code>, <code>route</code>, <code>quota</code>, <code>source</code></td><td><code>core/cli/commands/login.py</code></td></tr>
+                <tr><td><code>/login</code></td><td></td><td>THIN</td><td>플랜과 자격 대시보드. <code>openai</code>, <code>anthropic</code>, <code>google</code>, <code>add</code>, <code>use</code>, <code>route</code>, <code>quota</code>, <code>source</code></td><td><code>core/cli/commands/login.py</code></td></tr>
                 <tr><td><code>/key &lt;value&gt;</code></td><td></td><td>THIN</td><td>PAYG API 키 빠른 등록(/login의 legacy 별칭)</td><td><code>core/cli/commands/key.py</code></td></tr>
                 <tr><td><code>/model</code></td><td></td><td>THIN</td><td>모델 확인과 전환. Tab으로 역할(primary, reflection, mutator) 순환</td><td><code>core/cli/commands/model.py</code></td></tr>
                 <tr><td><code>/audit</code></td><td></td><td>THIN</td><td><code>geode audit</code>의 슬래시 형태</td><td><code>plugins/petri_audit/cli_audit.py</code></td></tr>
@@ -387,7 +387,7 @@ export default function Page() {
               </thead>
               <tbody>
                 <tr><td><code>/help</code></td><td></td><td>THIN</td><td>Interactive-mode help</td><td><code>core/cli/commands/_state.py</code></td></tr>
-                <tr><td><code>/login</code></td><td></td><td>THIN</td><td>Plans and credentials dashboard: <code>openai</code>, <code>anthropic</code>, <code>add</code>, <code>use</code>, <code>route</code>, <code>quota</code>, <code>source</code></td><td><code>core/cli/commands/login.py</code></td></tr>
+                <tr><td><code>/login</code></td><td></td><td>THIN</td><td>Plans and credentials dashboard: <code>openai</code>, <code>anthropic</code>, <code>google</code>, <code>add</code>, <code>use</code>, <code>route</code>, <code>quota</code>, <code>source</code></td><td><code>core/cli/commands/login.py</code></td></tr>
                 <tr><td><code>/key &lt;value&gt;</code></td><td></td><td>THIN</td><td>Quick PAYG API key (legacy alias for /login)</td><td><code>core/cli/commands/key.py</code></td></tr>
                 <tr><td><code>/model</code></td><td></td><td>THIN</td><td>Show and switch models; Tab cycles agent roles (primary, reflection, mutator)</td><td><code>core/cli/commands/model.py</code></td></tr>
                 <tr><td><code>/audit</code></td><td></td><td>THIN</td><td>Slash form of <code>geode audit</code></td><td><code>plugins/petri_audit/cli_audit.py</code></td></tr>

@@ -21,12 +21,12 @@ class TestSubAgentDeniedTools:
         runner = IsolatedRunner()
         denied = {"set_api_key", "manage_auth"}
         mgr = SubAgentManager(runner, denied_tools=denied)
-        assert mgr._denied_tools == denied
+        assert mgr._denied_tools == SUBAGENT_DENIED_TOOLS | denied
 
-    def test_denied_tools_default_empty(self) -> None:
+    def test_denied_tools_default_to_security_baseline(self) -> None:
         runner = IsolatedRunner()
         mgr = SubAgentManager(runner)
-        assert mgr._denied_tools == set()
+        assert mgr._denied_tools == SUBAGENT_DENIED_TOOLS
 
     def test_default_subagent_denied_tools_defined(self) -> None:
         """SUBAGENT_DENIED_TOOLS constant contains expected tools."""

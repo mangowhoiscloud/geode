@@ -138,6 +138,7 @@ ToolErrorType = Literal[
     "validation",  # bad input / missing required params
     "not_found",  # resource not found
     "permission",  # access denied / policy blocked
+    "authorization",  # missing or expired third-party OAuth grant
     "connection",  # network / external service failure
     "timeout",  # operation timed out
     "dependency",  # missing library / unconfigured service

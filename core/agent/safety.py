@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from contextvars import ContextVar
 
+from core.tools.personal_data import PERSONAL_DATA_TOOLS
+
 # --dangerously-skip-permissions — PER-SESSION state (not process-global).
 #
 # Set by the IPC ``client_capability`` handshake in the connection's task /
@@ -57,10 +59,15 @@ SAFE_TOOLS: frozenset[str] = frozenset(
         "glob_files",
         "grep_files",
         "profile_show",
-        "calendar_list_events",
         "wanted_jobs_search",
     }
 )
+
+# Personal Workspace reads and mutations cross a user-data trust boundary.
+# Google requires an affirmative action immediately before every agentic
+# invocation, so this category cannot inherit the normal write cache, HITL-0,
+# or --dangerously-skip-permissions bypasses.
+SENSITIVE_TOOLS: frozenset[str] = PERSONAL_DATA_TOOLS
 
 # System-access tools — always require HITL approval
 DANGEROUS_TOOLS: frozenset[str] = frozenset(
@@ -85,6 +92,11 @@ WRITE_TOOLS: frozenset[str] = frozenset(
         "profile_learn",
         "calendar_create_event",
         "calendar_sync_scheduler",
+        "gmail_send",
+        "google_drive_create",
+        "google_docs_write",
+        "google_sheets_write",
+        "google_tasks_write",
         "manage_context",
         "switch_model",
         "document_ingest",
@@ -96,7 +108,13 @@ WRITE_TOOLS: frozenset[str] = frozenset(
 # Tools denied on headless (no-human-to-approve) sessions: scheduler, daemon,
 # and the MCP run_agent fork.
 HEADLESS_DENIED_TOOLS: frozenset[str] = frozenset(
-    {"run_bash", "delegate_task", "computer", "computer_use"}
+    {
+        "run_bash",
+        "delegate_task",
+        "computer",
+        "computer_use",
+        *SENSITIVE_TOOLS,
+    }
 )
 
 # Expensive tools require cost confirmation before execution

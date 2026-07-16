@@ -18,7 +18,11 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from core.hooks import HookEvent
-from core.mcp.manager import MCPServerManager, _normalise_mcp_tool
+from core.mcp.manager import (
+    ADAPTER_ONLY_MCP_SERVERS,
+    MCPServerManager,
+    _normalise_mcp_tool,
+)
 from core.mcp.stdio_client import _CLOSE_TIMEOUT_S, StdioMCPClient
 
 # ---------------------------------------------------------------------------
@@ -144,6 +148,31 @@ class TestMCPManagerStartup:
             result = mgr.startup()
 
         assert result == 1
+
+    def test_calendar_adapter_servers_do_not_expose_raw_tools(self) -> None:
+        manager = MCPServerManager()
+        manager._servers = {
+            "google-calendar": {},
+            "caldav": {},
+            "ordinary": {},
+        }
+        calendar_client = MagicMock()
+        calendar_client.list_tools.return_value = [{"name": "list_events", "inputSchema": {}}]
+        ordinary_client = MagicMock()
+        ordinary_client.list_tools.return_value = [{"name": "other_tool", "inputSchema": {}}]
+        manager._clients = {
+            "google-calendar": calendar_client,
+            "caldav": calendar_client,
+            "ordinary": ordinary_client,
+        }
+
+        tools = manager.get_all_tools()
+
+        assert {"google-calendar", "caldav"} == ADAPTER_ONLY_MCP_SERVERS
+        assert [tool["name"] for tool in tools] == ["other_tool"]
+        assert manager.find_server_for_tool("list_events") is None
+        assert manager.find_server_for_tool("other_tool") == "ordinary"
+        calendar_client.list_tools.assert_not_called()
 
 
 class TestMCPManagerShutdown:

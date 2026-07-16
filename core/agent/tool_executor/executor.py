@@ -170,7 +170,7 @@ class ToolExecutor:
         isolated behind ``asyncio.to_thread`` so the agent loop no longer wraps
         the entire executor in a thread.
         """
-        log.debug("ToolExecutor.async: %s(%s)", tool_name, tool_input)
+        log.debug("ToolExecutor.async: %s(keys=%s)", tool_name, sorted(tool_input))
 
         if context and context.cancellation and context.cancellation.is_set():
             return {"error": "Tool execution cancelled before start", "cancelled": True}

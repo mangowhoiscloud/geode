@@ -29,6 +29,7 @@ from core.hooks import HookEvent, HookSystem
 from core.llm.adapters.base import EmptyModelOutputError
 from core.llm.agentic_response import AgenticResponse
 from core.llm.errors import BillingError, UserCancelledError
+from core.tools.personal_data import PERSONAL_DATA_TOOLS
 from core.ui.agentic_ui import OperationLogger
 from core.ui.status import TextSpinner
 
@@ -749,9 +750,21 @@ class AgenticLoop:
             observation=f"{len(tool_results)} tool result(s)",
         )
 
-        # reflection runs before the REFLECT hook so listeners see the
-        # LLM-derived belief update, not the deterministic snapshot
-        await self._maybe_reflect(tool_results)
+        # Raw personal Workspace results stay in the active model turn only.
+        # Reflection can use a separately configured provider and persists its
+        # hypotheses, so skip that secondary processing for the whole batch if
+        # any personal-data tool ran.  The deterministic count/tool-name
+        # snapshot above remains available to cognitive listeners.
+        personal_tools = sorted(set(tool_names).intersection(PERSONAL_DATA_TOOLS))
+        if personal_tools:
+            log.info(
+                "reflection skipped for personal-data tool batch: tools=%s",
+                ",".join(personal_tools),
+            )
+        else:
+            # reflection runs before the REFLECT hook so listeners see the
+            # LLM-derived belief update, not the deterministic snapshot
+            await self._maybe_reflect(tool_results)
 
         await self._emit_cognitive(HookEvent.COGNITIVE_REFLECT, round=round_idx + 1)
         await self._emit_cognitive(HookEvent.COGNITIVE_UPDATE_MEMORY, round=round_idx + 1)

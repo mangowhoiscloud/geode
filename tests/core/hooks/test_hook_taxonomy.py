@@ -400,13 +400,13 @@ def test_activity_schema_version_bumped():
 def test_single_approval_requested_per_gate():
     """The outer safety gates no longer double-emit TOOL_APPROVAL_REQUESTED
     around confirm_* (which emits internally, with the richer payload) —
-    Codex LOW-2. Pin: 8 emission sites, all inside confirm_*/request_*."""
+    Codex LOW-2. Pin: 9 emission sites, all inside confirm_*/request_*."""
     import inspect
 
     from core.agent import approval as approval_mod
 
     src = inspect.getsource(approval_mod)
-    assert src.count("HookEvent.TOOL_APPROVAL_REQUESTED") == 8
+    assert src.count("HookEvent.TOOL_APPROVAL_REQUESTED") == 9
     gates_src = inspect.getsource(approval_mod.ApprovalWorkflow.apply_safety_gates)
     assert "TOOL_APPROVAL_REQUESTED" not in gates_src
     gates_async_src = inspect.getsource(approval_mod.ApprovalWorkflow.apply_safety_gates_async)

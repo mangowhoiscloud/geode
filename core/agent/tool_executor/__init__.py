@@ -18,6 +18,7 @@ from core.agent.safety import DANGEROUS_TOOLS as DANGEROUS_TOOLS
 from core.agent.safety import EXPENSIVE_TOOLS as EXPENSIVE_TOOLS
 from core.agent.safety import SAFE_BASH_PREFIXES as SAFE_BASH_PREFIXES
 from core.agent.safety import SAFE_TOOLS as SAFE_TOOLS
+from core.agent.safety import SENSITIVE_TOOLS as SENSITIVE_TOOLS
 from core.agent.safety import WRITE_TOOLS as WRITE_TOOLS
 from core.ui.console import console as console
 
@@ -32,6 +33,7 @@ __all__ = [
     "EXPENSIVE_TOOLS",
     "SAFE_BASH_PREFIXES",
     "SAFE_TOOLS",
+    "SENSITIVE_TOOLS",
     "WRITE_TOOLS",
     "ToolCallProcessor",
     "ToolExecutor",

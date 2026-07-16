@@ -260,6 +260,63 @@ class TestSessionCheckpoint:
         )
         assert loaded.tool_log[0]["result"]["screenshot_omitted"] is True
 
+    def test_personal_tool_inputs_and_results_are_omitted_everywhere(self, tmp_path):
+        import json
+
+        cp = SessionCheckpoint(tmp_path / "session")
+        cp.save(
+            SessionState(
+                session_id="personal-redact",
+                messages=[
+                    {
+                        "role": "assistant",
+                        "content": [
+                            {
+                                "type": "tool_use",
+                                "id": "google-call",
+                                "name": "gmail_search",
+                                "input": {"query": "from:private@example.com"},
+                            }
+                        ],
+                    },
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": "google-call",
+                                "content": "private mailbox body",
+                            }
+                        ],
+                    },
+                ],
+                tool_log=[
+                    {
+                        "tool": "gmail_search",
+                        "input": {"query": "from:private@example.com"},
+                        "result": {"messages": [{"body": "private mailbox body"}]},
+                    }
+                ],
+            )
+        )
+
+        session_dir = tmp_path / "session" / "personal-redact"
+        persisted = (
+            (session_dir / "messages.json").read_text(encoding="utf-8")
+            + (session_dir / "tools.json").read_text(encoding="utf-8")
+            + (tmp_path / "session" / "sessions.db").read_bytes().decode("utf-8", errors="ignore")
+        )
+        assert "private@example.com" not in persisted
+        assert "private mailbox body" not in persisted
+        assert "_personal_data_omitted" in persisted
+
+        loaded = cp.load("personal-redact")
+        assert loaded is not None
+        restored = json.dumps({"messages": loaded.messages, "tool_log": loaded.tool_log})
+        assert "private@example.com" not in restored
+        assert "private mailbox body" not in restored
+        assert "_personal_data_omitted" in restored
+
 
 class TestPhase1bDbFirst:
     """Phase 1b — load() reads messages from the SQLite SoT first; JSON is a
