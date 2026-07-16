@@ -81,6 +81,11 @@ class TestCheckTokenValidity:
 
 
 class TestCheckBindings:
+    @pytest.fixture(autouse=True)
+    def _isolate_global_config(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Keep binding diagnostics independent of the operator's config."""
+        monkeypatch.setattr("core.paths.GLOBAL_CONFIG_TOML", tmp_path / "absent-global.toml")
+
     def test_valid_config(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.chdir(tmp_path)
         geode_dir = tmp_path / ".geode"

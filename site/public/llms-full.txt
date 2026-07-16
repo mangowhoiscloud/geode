@@ -2,7 +2,7 @@
 
 > GEODE is a self-evolving autonomous execution agent: an inner agentic loop runs tasks (research, analysis, automation, scheduling) and an outer self-improving loop (Petri audit -> fitness gate) tunes the system that runs them.
 
-Version v0.99.333. Last sync 2026-07-15. Full content of every docs page, one file (llms-full.txt convention). Per-page index: /llms.txt.
+Version v1.0.0. Last sync 2026-07-16. Full content of every docs page, one file (llms-full.txt convention). Per-page index: /llms.txt.
 
 ## Overview . 개요
 
@@ -4141,11 +4141,39 @@ GEODE는 프로바이더마다 두 종류의 자격을 받습니다. 구독 OAut
 | --- | --- |
 | `/login openai` | ChatGPT 구독 OAuth 로그인. device-code 플로우는 `core/auth/oauth_login.py`이고, 결과는 `auth.toml`에 OAUTH\_BORROWED 플랜 + 프로파일 쌍으로 저장됩니다. |
 | `/login anthropic` | Claude 구독 OAuth. macOS 키체인의 `"Claude Code-credentials"` 항목을 읽습니다(routing.toml `[credentials.keychain]`, override는 `GEODE_ANTHROPIC_KEYCHAIN_SERVICE`). |
+| `/login google` | Gmail, Calendar, Drive, Docs, Sheets, Tasks, Contacts용 Google Workspace OAuth. 사용자가 만든 Desktop 앱 클라이언트를 가져오며 LLM 프로바이더 자격과 분리됩니다. |
 | `/login add` | 자격 추가. 키 모양(`sk-ant-`, `sk-proj-`, GLM {id}.{secret})으로 프로바이더를 추정합니다. |
 | `/login use` / `remove` | 프로파일 선택과 제거. |
 | `/login route` | 프로바이더와 플랜 라우팅 확인. |
 | `/login quota` | 구독 쿼터 상태. |
 | `/login source <provider> <type>` | 자격 소스 영속화. config.toml `[llm]`에 기록. |
+
+## Google Workspace
+
+uv나 GitHub에서 설치한 사용자도 중앙 GEODE OAuth 앱 없이 자신의 Google Cloud Desktop 클라이언트로 연결할 수 있습니다. 권장 진입점은`/login google`입니다. 첫 연결에서는 client JSON 경로와 필요한 서비스 번들을 명시적으로 고릅니다. 자동화하려면 다음처럼 한 줄로 지정할 수 있습니다.
+
+```
+/login google --client-json ~/Downloads/client_secret.json \
+  --services gmail-send,calendar-read,workspace-files
+
+/login google services
+/login google status
+/login google use user@example.com
+/login google --new-account --services calendar-read
+/login google --services calendar-read --replace-services
+/login google logout user@example.com
+```
+
+인증은 시스템 브라우저, 임의의 `127.0.0.1` 포트, Authorization Code + PKCE S256 + state 검증을 씁니다. Google이 Desktop 앱의 incremental auth를 지원하지 않으므로 서비스를 더할 때는 대상 활성 계정의 기존 번들과 새 번들의 합집합으로 재동의합니다. 브라우저에서 다른 계정을 고르면 저장하지 않고 실패하며, 두 번째 계정은 `--new-account`로 연결합니다. 권한을 줄일 때는 유지할 전체 번들과 `--replace-services`를 함께 지정합니다.`gmail-read`는 Restricted scope라 기본 권장 묶음에 포함되지 않습니다. Drive·Docs·Sheets는 전체 Drive 대신 non-sensitive `drive.file`로 GEODE가 만들거나 파일별로 허용된 항목만 다룹니다.
+
+| 저장소 | 내용 |
+| --- | --- |
+| OS keyring<br>`geode.google.oauth` | refresh token, client secret, 계정 이메일과 표시 이름. 안전한 백엔드가 없으면 로그인은 실패하며 평문 fallback은 없습니다. |
+| `~/.geode/google/accounts.json` | schema version, 단조 증가 revision, 활성 account id, client/project id, 서비스 번들, 실제 granted scopes, 상태와 시각만. 프로세스 간 `.accounts.lock` 뒤 atomic write, 디렉터리 0700·파일 0600. |
+| 프로세스 메모리 | 짧은 수명의 access token과 expiry. 데몬 auth reload와 logout 때 폐기. |
+| 세션 영속 저장소 | Workspace 도구의 원문 입력·결과는 JSON·SQLite·도구 로그에 저장하지 않고 호출 ID가 붙은 `_personal_data_omitted` 표식으로 치환합니다. API 오류 상세도 영속 telemetry·회전 로그에서 생략하고, 개인 도구가 포함된 batch는 별도 reflection provider 호출을 건너뜁니다. 사용자가 직접 쓴 대화문과 모델이 대화문으로 작성한 요약은 일반 세션 보존 정책을 따릅니다. |
+
+Workspace 읽기 결과는 선택한 LLM 프로바이더로 전달될 수 있으므로 매 도구 호출 직전에 개인 데이터 disclosure와 affirmative consent가 뜹니다. 이 승인은 always-allow할 수 없고 headless·서브에이전트에서는 닫힌 채로 거부됩니다. Gmail 전송과 Drive/Docs/Sheets/Tasks/Calendar 변경도 같은 비캐시형 매 호출 승인을 거쳐 HITL 0·권한 건너뛰기로 우회할 수 없습니다. 자세한 스키마와 Hermes 비교는 설계 기록`docs/architecture/google-workspace-oauth.md`에 있습니다.
 
 ## Codex 토큰 감지
 
@@ -4823,7 +4851,7 @@ SoT는 `core/cli/commands/_state.py`의 `COMMAND_MAP`이고, 실행 위치는 `c
 | 명령 | 별칭 | 실행 위치 | 용도 | 핸들러 |
 | --- | --- | --- | --- | --- |
 | `/help` |  | THIN | 대화형 도움말 | `core/cli/commands/_state.py` |
-| `/login` |  | THIN | 플랜과 자격 대시보드. `openai`, `anthropic`, `add`, `use`, `route`, `quota`, `source` | `core/cli/commands/login.py` |
+| `/login` |  | THIN | 플랜과 자격 대시보드. `openai`, `anthropic`, `google`, `add`, `use`, `route`, `quota`, `source` | `core/cli/commands/login.py` |
 | `/key <value>` |  | THIN | PAYG API 키 빠른 등록(/login의 legacy 별칭) | `core/cli/commands/key.py` |
 | `/model` |  | THIN | 모델 확인과 전환. Tab으로 역할(primary, reflection, mutator) 순환 | `core/cli/commands/model.py` |
 | `/audit` |  | THIN | `geode audit`의 슬래시 형태 | `plugins/petri_audit/cli_audit.py` |
@@ -5091,7 +5119,7 @@ Tier 2  latex2sympy2 + sympy.pretty  블록 전용. 분수·적분을 2D Unicode
 URL: https://mangowhoiscloud.github.io/geode/docs/reference/changelog
 Markdown: https://mangowhoiscloud.github.io/geode/docs/reference/changelog.md
 
-(body omitted from llms-full: 1449 KB — fetch the Markdown twin above for the complete page)
+(body omitted from llms-full: 1451 KB — fetch the Markdown twin above for the complete page)
 
 ---
 
