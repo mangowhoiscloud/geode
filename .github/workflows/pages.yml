@@ -35,6 +35,7 @@ on:
   pull_request:
     paths:
       - "site/**"
+      - "CHANGELOG.md"
       - "docs/self-improving/**"
       - "docs/audits/**"
       - "plugins/petri_audit/judge_dims/**"
@@ -172,6 +173,14 @@ jobs:
       # are converted from the static-export HTML.
       - name: Export docs markdown twins + llms-full.txt
         run: npm run export-md
+
+      - name: Verify committed public-doc generators are current
+        run: >-
+          git diff --exit-code --
+          public/llms.txt
+          public/llms-full.txt
+          src/data/geode/sot.ts
+          src/data/geode/changelog.ts
 
       - name: Copy docs/self-improving into site/out (hub root + petri-bundle)
         working-directory: ${{ github.workspace }}

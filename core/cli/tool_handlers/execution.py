@@ -5,12 +5,13 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from core.cli.tool_handlers.registration import UniqueEntries
 from core.ui.console import console
 
 log = logging.getLogger(__name__)
 
 
-def _build_execution_handlers() -> dict[str, Any]:
+def _build_execution_handlers() -> UniqueEntries[str, Any]:
     """Build execution-related tool handlers."""
     from core.cli import _scheduler_service_ctx
     from core.cli.commands import cmd_trigger
@@ -153,7 +154,9 @@ def _build_execution_handlers() -> dict[str, Any]:
             "event_name": event_name,
         }
 
-    return {
-        "schedule_job": handle_schedule_job,
-        "trigger_event": handle_trigger_event,
-    }
+    return UniqueEntries[str, Any](
+        (
+            ("schedule_job", handle_schedule_job),
+            ("trigger_event", handle_trigger_event),
+        )
+    )

@@ -6,8 +6,10 @@
 //   - CHANGELOG.md   → the full per-version body (src/data/geode/changelog.ts)
 //   - sitemap.ts     → the page list for public/llms.txt + llms-full.txt
 //
-// Inventory counts (modules / tests / releases) are intentionally NOT synced:
-// the docs describe what the system does, not how much of it there is.
+// Architecture inventory is generated separately by
+// scripts/architecture_baseline.py into src/data/geode/architecture-baseline.json.
+// This script validates and consumes that artifact; it never re-counts Python
+// sources, tools, hooks, or imports.
 //
 // Run:  npm run sync-stats
 // Override GEODE repo: GEODE_REPO=/abs/path npm run sync-stats
@@ -37,6 +39,10 @@ const PAGES_BASE_URL = "https://mangowhoiscloud.github.io/geode";
 const REPO_URL = "https://github.com/mangowhoiscloud/geode";
 const SOT_FILE = resolve(SITE_ROOT, "src/data/geode/sot.ts");
 const CHANGELOG_FILE = resolve(SITE_ROOT, "src/data/geode/changelog.ts");
+const ARCHITECTURE_BASELINE_FILE = resolve(
+  SITE_ROOT,
+  "src/data/geode/architecture-baseline.json",
+);
 const LLMS_TXT_FILE = resolve(SITE_ROOT, "public/llms.txt");
 const SITEMAP_TS_FILE = resolve(SITE_ROOT, "src/lib/geode-docs/sitemap.ts");
 
@@ -76,6 +82,31 @@ function readVersion() {
   const m = pyproject.match(/^version\s*=\s*"([^"]+)"/m);
   if (!m) fail("could not parse version from pyproject.toml");
   return m[1];
+}
+
+function readArchitectureBaseline() {
+  let baseline;
+  try {
+    baseline = JSON.parse(readFileSync(ARCHITECTURE_BASELINE_FILE, "utf8"));
+  } catch (error) {
+    fail(
+      `cannot read generated architecture baseline at ${ARCHITECTURE_BASELINE_FILE}: ${error.message}`,
+    );
+  }
+  if (
+    baseline?.schema_version !== 1 ||
+    !Number.isInteger(baseline?.packages?.core?.python_files) ||
+    !Number.isInteger(baseline?.packages?.plugins?.python_files) ||
+    !Number.isInteger(baseline?.packages?.tests?.python_files) ||
+    !Number.isInteger(baseline?.tools?.definition_count) ||
+    !Number.isInteger(baseline?.hook_events?.count)
+  ) {
+    fail(
+      "generated architecture baseline has an unsupported or incomplete schema; " +
+        "run `uv run python scripts/architecture_baseline.py --update`",
+    );
+  }
+  return baseline;
 }
 
 // Parse CHANGELOG.md into structured entries.
@@ -245,8 +276,13 @@ function writeLlmsTxt(pages, version, today) {
 function main() {
   console.log(`sync-stats: reading from ${GEODE_REPO}`);
   const version = readVersion();
+  const architecture = readArchitectureBaseline();
   const syncDate = generationDate(version);
   console.log(`  version  : ${version}`);
+  console.log(
+    `  architecture: ${architecture.tools.definition_count} tools, ` +
+      `${architecture.hook_events.count} hooks`,
+  );
 
   writeSot({ version }, syncDate);
   console.log(`sync-stats: wrote ${SOT_FILE}`);

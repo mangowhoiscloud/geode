@@ -20,6 +20,7 @@ def test_build_docs_commands_orders_generation_before_validation(
     commands = check_official_docs.build_docs_commands()
 
     assert [command.label for command in commands] == [
+        "check generated architecture baseline",
         "sync site SOT, changelog, and llms index",
         "check docs links",
         "lint render-gated markdown",
@@ -27,12 +28,13 @@ def test_build_docs_commands_orders_generation_before_validation(
         "export docs markdown and llms-full index",
         "verify generated docs are committed",
     ]
-    assert commands[0].argv == ("/usr/bin/npm", "run", "sync-stats")
-    assert commands[1].argv[1:] == ("scripts/check_docs_links.py", "--quiet")
-    assert commands[2].argv == ("/bin/bash", "scripts/lint_pages_markdown.sh")
-    assert commands[3].argv == ("/usr/bin/npm", "run", "build")
-    assert commands[4].argv == ("/usr/bin/npm", "run", "export-md")
-    assert commands[5].argv == (
+    assert commands[0].argv[1:] == ("scripts/architecture_baseline.py", "--check")
+    assert commands[1].argv == ("/usr/bin/npm", "run", "sync-stats")
+    assert commands[2].argv[1:] == ("scripts/check_docs_links.py", "--quiet")
+    assert commands[3].argv == ("/bin/bash", "scripts/lint_pages_markdown.sh")
+    assert commands[4].argv == ("/usr/bin/npm", "run", "build")
+    assert commands[5].argv == ("/usr/bin/npm", "run", "export-md")
+    assert commands[6].argv == (
         "/usr/bin/git",
         "diff",
         "--exit-code",
@@ -51,12 +53,13 @@ def test_build_docs_commands_can_skip_site_build(monkeypatch: pytest.MonkeyPatch
     commands = check_official_docs.build_docs_commands(skip_build=True)
 
     assert [command.label for command in commands] == [
+        "check generated architecture baseline",
         "sync site SOT, changelog, and llms index",
         "check docs links",
         "lint render-gated markdown",
         "verify generated docs are committed",
     ]
-    assert commands[3].argv == (
+    assert commands[4].argv == (
         "/usr/bin/git",
         "diff",
         "--exit-code",

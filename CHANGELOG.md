@@ -45,6 +45,30 @@ functional change.
 
 ---
 
+## [Unreleased]
+
+### Architecture
+
+- **Generated architecture baseline and roadmap state-machine gate.** One
+  deterministic generator now owns Python file/LOC counts, tool
+  definition/execution/schema parity, hooks, built-in adapters, ContextVars,
+  reverse imports, import-linter debt, coordinator structure, and Ruff
+  thresholds. Its committed JSON feeds the site plus generated `AGENTS.md` and
+  roadmap summaries, and the public system index renders that JSON directly,
+  while check mode blocks drift. CLI tool-handler composition now preserves
+  each registration origin and fails closed on duplicate names instead of
+  silently overwriting an earlier handler. A target-aware roadmap validator
+  rejects duplicate IDs, dependency cycles, package/ledger and claim
+  mismatches, prospective or reused evidence, malformed durable references,
+  non-atomic packages, destructive evidence edits, and illegal base-relative
+  status transitions. Evidence parsing strips comments/entities, requires
+  exact command-backed PASS markers, and validates dependency deltas plus
+  terminal-decision reconciliation. It separates tracking-only main closure
+  from an exact, same-repository `develop` → `main` promotion (the sole
+  bootstrap path), validates `main` → `develop` resynchronization against the
+  canonical main ledger, and compares push events to
+  `github.event.before` rather than the already-updated remote ref.
+
 ## [1.1.0] - 2026-07-17
 
 ### Added

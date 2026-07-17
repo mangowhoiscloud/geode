@@ -17,12 +17,13 @@ import logging
 from typing import Any
 
 from core.cli.tool_handlers.clarification import _clarify
+from core.cli.tool_handlers.registration import UniqueEntries
 from core.ui.console import console
 
 log = logging.getLogger(__name__)
 
 
-def _build_plan_handlers(force_dry: bool) -> dict[str, Any]:
+def _build_plan_handlers(force_dry: bool) -> UniqueEntries[str, Any]:
     """Build plan mode tool handlers (multi-plan store keyed by plan_id)."""
     from core.cli.tool_handlers import _get_plan_store
 
@@ -337,11 +338,13 @@ def _build_plan_handlers(force_dry: bool) -> dict[str, Any]:
             "plans": plans,
         }
 
-    return {
-        "update_plan": handle_update_plan,
-        "create_plan": handle_create_plan,
-        "approve_plan": handle_approve_plan,
-        "reject_plan": handle_reject_plan,
-        "modify_plan": handle_modify_plan,
-        "list_plans": handle_list_plans,
-    }
+    return UniqueEntries[str, Any](
+        (
+            ("update_plan", handle_update_plan),
+            ("create_plan", handle_create_plan),
+            ("approve_plan", handle_approve_plan),
+            ("reject_plan", handle_reject_plan),
+            ("modify_plan", handle_modify_plan),
+            ("list_plans", handle_list_plans),
+        )
+    )

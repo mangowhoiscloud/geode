@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
+from core.cli.tool_handlers.registration import UniqueEntries
 
-def _build_context_handlers() -> dict[str, Any]:
+
+def _build_context_handlers() -> UniqueEntries[str, Any]:
     """Build context management tool handlers (manage_context)."""
 
     def handle_manage_context(**kwargs: Any) -> dict[str, Any]:
@@ -75,4 +77,4 @@ def _build_context_handlers() -> dict[str, Any]:
 
         return {"error": f"Unknown action: {action}"}
 
-    return {"manage_context": handle_manage_context}
+    return UniqueEntries[str, Any]((("manage_context", handle_manage_context),))

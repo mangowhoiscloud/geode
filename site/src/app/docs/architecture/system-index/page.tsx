@@ -1,6 +1,89 @@
 import { DocsShell, Bi } from "@/components/geode-docs/docs-shell";
+import architectureBaseline from "@/data/geode/architecture-baseline.json";
 
 export const metadata = { title: "System index — GEODE Docs" };
+
+const number = new Intl.NumberFormat("en-US");
+
+function ArchitectureBaselineTable({ locale }: { locale: "ko" | "en" }) {
+  const productionFiles =
+    architectureBaseline.packages.core.python_files +
+    architectureBaseline.packages.plugins.python_files;
+  const rows =
+    locale === "ko"
+      ? [
+          ["프로덕션 Python 파일", number.format(productionFiles)],
+          [
+            "테스트 Python 파일",
+            number.format(architectureBaseline.packages.tests.python_files),
+          ],
+          [
+            "도구 정의 / 실행 등록 / 유효 스키마",
+            `${architectureBaseline.tools.definition_count} / ${architectureBaseline.tools.execution_registration_count} / ${architectureBaseline.tools.schema_count}`,
+          ],
+          ["HookEvent 멤버", number.format(architectureBaseline.hook_events.count)],
+          ["기본 LLM 어댑터", number.format(architectureBaseline.built_in_adapters.count)],
+          ["모듈 수준 ContextVar", number.format(architectureBaseline.context_vars.count)],
+          [
+            "core → plugins import 지점 / 파일",
+            `${architectureBaseline.core_to_plugins_imports.site_count} / ${architectureBaseline.core_to_plugins_imports.file_count}`,
+          ],
+          [
+            "import-linter 예외 edge",
+            number.format(architectureBaseline.import_linter.ignored_edge_count),
+          ],
+        ]
+      : [
+          ["Production Python files", number.format(productionFiles)],
+          [
+            "Test Python files",
+            number.format(architectureBaseline.packages.tests.python_files),
+          ],
+          [
+            "Tool definitions / execution bindings / valid schemas",
+            `${architectureBaseline.tools.definition_count} / ${architectureBaseline.tools.execution_registration_count} / ${architectureBaseline.tools.schema_count}`,
+          ],
+          ["HookEvent members", number.format(architectureBaseline.hook_events.count)],
+          ["Built-in LLM adapters", number.format(architectureBaseline.built_in_adapters.count)],
+          ["Module-level ContextVars", number.format(architectureBaseline.context_vars.count)],
+          [
+            "core → plugins import sites / files",
+            `${architectureBaseline.core_to_plugins_imports.site_count} / ${architectureBaseline.core_to_plugins_imports.file_count}`,
+          ],
+          [
+            "import-linter ignored edges",
+            number.format(architectureBaseline.import_linter.ignored_edge_count),
+          ],
+        ];
+
+  return (
+    <>
+      <h2>{locale === "ko" ? "생성된 아키텍처 인벤토리" : "Generated architecture inventory"}</h2>
+      <p>
+        {locale === "ko"
+          ? "아래 값은 문서에 손으로 복사한 수치가 아니라, CI가 검증하는 결정적 JSON 스냅숏을 이 페이지가 직접 렌더링한 결과입니다."
+          : "These values are rendered directly from the deterministic JSON snapshot checked by CI, rather than copied into this page by hand."}{" "}
+        <code>site/src/data/geode/architecture-baseline.json</code>
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>{locale === "ko" ? "측정값" : "Measure"}</th>
+            <th>{locale === "ko" ? "현재 트리" : "Current tree"}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(([label, value]) => (
+            <tr key={label}>
+              <td>{label}</td>
+              <td>{value}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </>
+  );
+}
 
 export default function Page() {
   return (
@@ -21,6 +104,8 @@ export default function Page() {
               <a href="/geode/docs/explanation/4-layer">왜 5계층인가</a>가
               다룹니다.
             </p>
+
+            <ArchitectureBaselineTable locale="ko" />
 
             <h2>최상위 진입 모듈</h2>
             <table>
@@ -114,6 +199,8 @@ export default function Page() {
               for why the layers split this way, see{" "}
               <a href="/geode/docs/explanation/4-layer">Why five layers</a>.
             </p>
+
+            <ArchitectureBaselineTable locale="en" />
 
             <h2>Top-level entry modules</h2>
             <table>
