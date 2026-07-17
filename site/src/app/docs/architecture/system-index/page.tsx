@@ -59,7 +59,7 @@ export default function Page() {
               <thead><tr><th>서브시스템</th><th>루트</th><th>핵심 모듈</th></tr></thead>
               <tbody>
                 <tr><td>thin CLI</td><td><code>core/cli/</code></td><td><code>__init__.py</code> (Typer app), <code>commands/</code>, <code>routing.py</code>, <code>dispatcher.py</code>, <code>ipc_client.py</code>, <code>onboarding.py</code></td></tr>
-                <tr><td>serve 데몬</td><td><code>core/server/</code></td><td><code>ipc_server/poller.py</code> (CLIPoller), <code>supervised/</code> (slack/discord/telegram 폴러, webhook, services)</td></tr>
+                <tr><td>serve 데몬</td><td><code>core/server/</code></td><td><code>ipc_server/poller.py</code> (CLIPoller), <code>supervised/</code> (Slack Socket Mode, Discord/Telegram 폴러, webhook, services)</td></tr>
                 <tr><td>게이트웨이</td><td><code>core/messaging/</code></td><td><code>binding.py</code> (ChannelManager), <code>models.py</code>, <code>slack_formatter.py</code></td></tr>
                 <tr><td>훅</td><td><code>core/hooks/</code></td><td><code>system.py</code> (HookSystem + HookEvent), <code>dispatch.py</code>, <code>discovery.py</code></td></tr>
                 <tr><td>오케스트레이션</td><td><code>core/orchestration/</code></td><td><code>lane_queue.py</code>, <code>task_system.py</code>, <code>compaction.py</code>, <code>tool_offload.py</code>, <code>isolated_execution.py</code></td></tr>
@@ -152,7 +152,7 @@ export default function Page() {
               <thead><tr><th>Subsystem</th><th>Root</th><th>Key modules</th></tr></thead>
               <tbody>
                 <tr><td>Thin CLI</td><td><code>core/cli/</code></td><td><code>__init__.py</code> (Typer app), <code>commands/</code>, <code>routing.py</code>, <code>dispatcher.py</code>, <code>ipc_client.py</code>, <code>onboarding.py</code></td></tr>
-                <tr><td>Serve daemon</td><td><code>core/server/</code></td><td><code>ipc_server/poller.py</code> (CLIPoller), <code>supervised/</code> (slack/discord/telegram pollers, webhook, services)</td></tr>
+                <tr><td>Serve daemon</td><td><code>core/server/</code></td><td><code>ipc_server/poller.py</code> (CLIPoller), <code>supervised/</code> (Slack Socket Mode, Discord/Telegram pollers, webhook, services)</td></tr>
                 <tr><td>Gateway</td><td><code>core/messaging/</code></td><td><code>binding.py</code> (ChannelManager), <code>models.py</code>, <code>slack_formatter.py</code></td></tr>
                 <tr><td>Hooks</td><td><code>core/hooks/</code></td><td><code>system.py</code> (HookSystem + HookEvent), <code>dispatch.py</code>, <code>discovery.py</code></td></tr>
                 <tr><td>Orchestration</td><td><code>core/orchestration/</code></td><td><code>lane_queue.py</code>, <code>task_system.py</code>, <code>compaction.py</code>, <code>tool_offload.py</code>, <code>isolated_execution.py</code></td></tr>

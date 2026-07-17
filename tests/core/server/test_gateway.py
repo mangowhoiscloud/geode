@@ -149,6 +149,41 @@ class TestChannelManager:
         msg.content = "hey @geode analyze this"
         assert asyncio.run(manager.aroute_message(msg)) == "processed"
 
+    def test_mention_override_preserves_clean_content(self):
+        manager = ChannelManager()
+        received: list[str] = []
+        manager.set_async_processor(lambda content, meta: received.append(content) or "processed")
+        manager.add_binding(ChannelBinding(channel="slack", channel_id="C1", require_mention=True))
+        msg = InboundMessage(
+            channel="slack",
+            channel_id="C1",
+            sender_id="U1",
+            sender_name="Alice",
+            content="continue this thread",
+            timestamp=time.time(),
+            thread_id="171.1",
+        )
+
+        assert asyncio.run(manager.aroute_message(msg, mention_override=True)) == "processed"
+        assert received == ["continue this thread"]
+
+    def test_persisted_session_probe_uses_exact_gateway_key(self):
+        manager = ChannelManager()
+        checked: list[str] = []
+        manager.set_session_exists_checker(lambda key: checked.append(key) or True)
+        msg = InboundMessage(
+            channel="slack",
+            channel_id="C1",
+            sender_id="U1",
+            sender_name="Alice",
+            content="continue",
+            timestamp=time.time(),
+            thread_id="171.1",
+        )
+
+        assert manager.has_persisted_session(msg) is True
+        assert checked == ["gateway:slack:c1:u1:171_1"]
+
     def test_remove_binding(self):
         manager = ChannelManager()
         manager.add_binding(ChannelBinding(channel="slack", channel_id="C1"))
@@ -253,6 +288,37 @@ class TestBasePoller:
         poller = UnconfiguredPoller(manager)
         poller.start()
         # Thread should not be started
+        assert poller._thread is None
+
+    def test_stop_keeps_thread_ref_when_join_times_out(self):
+        """A timed-out join must not clear the ref — start() would otherwise
+        spawn a second loop while the old one is still winding down."""
+        import threading
+
+        manager = ChannelManager()
+
+        class SlowPoller(BasePoller):
+            channel_name = "test"
+            STOP_JOIN_TIMEOUT_S = 0.05
+
+            async def _apoll_once(self):
+                pass
+
+            def is_configured(self):
+                return True
+
+        poller = SlowPoller(manager)
+        blocker = threading.Event()
+        slow_thread = threading.Thread(target=blocker.wait, daemon=True)
+        slow_thread.start()
+        poller._thread = slow_thread
+
+        poller.stop()
+        assert poller._thread is slow_thread
+
+        blocker.set()
+        slow_thread.join(timeout=1.0)
+        poller.stop()
         assert poller._thread is None
 
 

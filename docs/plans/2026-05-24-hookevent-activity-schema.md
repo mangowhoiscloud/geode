@@ -1,9 +1,16 @@
 # PR-COMM-1 — HookEvent → ActivityRow schema + union channel (S2 scope)
 
+> [!NOTE]
+> Historical implementation plan: the 74-event taxonomy and follow-up order
+> predate the current 56-event HookSystem contract. Its status and follow-up
+> tables are frozen provenance, not live execution authority. Current program
+> work rolls up to PROTO-001 and STORE-001/002 in
+> [`docs/architecture/extensibility-roadmap.md`](../architecture/extensibility-roadmap.md).
+>
 > **작성**: 2026-05-24
 > **목적**: 74 HookEvent 의 payload 를 paperclip activity_log + openclaw discriminatedUnion 패턴으로 정렬. HookSystem.trigger 호출이 active RunTranscript 에 자동 mirror — unified timeline 의 sub-agent dialogue 외 카테고리도 한 SoT 에서 가시화.
 > **검증**: ruff/format/mypy/lint-imports/pytest + Codex MCP review.
-> **SoT**: 이 문서. drift 시 코드/문서 동시 갱신.
+> **Original SoT claim (superseded)**: 이 문서. drift 시 코드/문서 동시 갱신.
 
 ---
 
@@ -266,7 +273,7 @@ def _mirror_to_active_transcript(self, event: HookEvent, data: dict[str, Any]) -
 
 ---
 
-## 7. Status
+## 7. Original status snapshot
 
 | Item | 상태 |
 |---|---|
@@ -308,7 +315,7 @@ S2 의 §1 "11 group" 표는 emit-site 감사 *이전*에 작성된 **이상화 
 
 ---
 
-## 8. Follow-up PRs (잔여 PR 영향 — 우선순위 boost 이유)
+## 8. Original follow-up proposals (historical)
 
 - PR2 (V) — paperclip `--resume` + sessionId. `agent_runtime_state.sessionId` 등가물 추가. **본 PR 의 activity row 에 `agent_session_id` 필드 추가** 시 PR2 의 session.json 적재 흐름과 자연 연결.
 - PR-COMM-2 — `HookSystem.register` wildcard prefix. **본 PR 의 dotted action namespace** (`pipeline.*` / `subagent.*` / `llm.*`) 가 wildcard 의 prefix 가 됨. 본 PR 의 dotted naming 이 PR-COMM-2 의 전제.

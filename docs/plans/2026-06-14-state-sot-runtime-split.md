@@ -1,5 +1,12 @@
 # `./state` 분리 — tracked SoT (in-repo) vs runtime (~/.geode)
 
+> [!NOTE]
+> Historical path/storage migration plan. The pending table and implementation
+> language below are a frozen 2026-06-14 snapshot, not current execution
+> status. Re-audit current code and storage contracts; architecture residuals
+> roll up to STORE-001/002 in the
+> [architecture roadmap](../architecture/extensibility-roadmap.md).
+>
 > **작성**: 2026-06-14
 > **운영자 결정**: ① tracked SoT는 in-repo로, runtime은 ② **`~/.geode/`(레포 밖)**으로. repo-루트 `state/` 소멸.
 > **배경**: CSP-7(2026-05-22)이 `~/.geode/self-improving-loop/` + `~/.geode/seed-generation/`를 repo-루트 `state/`로 끌어왔는데, 그때 tracked SoT(버전관리 必)와 runtime(머신-로컬)을 한 묶음으로 옮긴 게 혼선의 근원. 이 PR이 둘을 다른 집으로 분리.

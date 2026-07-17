@@ -2,6 +2,9 @@
 
 > Copy this template to `docs/plans/<feature-name>.md` when planning a new feature.
 > Move to `docs/plans/_done/` when implementation is complete.
+> Architecture/extensibility plans must reference a stable GAP ID from
+> `docs/architecture/extensibility-roadmap.md`; that roadmap alone owns program
+> status and closure evidence.
 
 ## Problem
 

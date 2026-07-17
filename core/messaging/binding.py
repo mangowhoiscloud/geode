@@ -17,6 +17,7 @@ from core.messaging.models import ChannelBinding, InboundMessage
 from core.server.supervised.poller_base import BasePoller
 
 MessageProcessor = Callable[[str, dict[str, Any]], Awaitable[str] | str]
+SessionExistsChecker = Callable[[str], bool]
 
 _gateway: ChannelManager | None = None
 
@@ -48,6 +49,8 @@ class ChannelManager:
         self._bindings: list[ChannelBinding] = []
         self._pollers: list[BasePoller] = []
         self._processor: MessageProcessor | None = None
+        self._session_exists_checker: SessionExistsChecker | None = None
+        self._session_terminal_checker: SessionExistsChecker | None = None
         self._lane_queue = lane_queue  # LaneQueue for concurrency control
         self._lock = threading.Lock()
         self._stats: dict[str, int] = {"received": 0, "processed": 0, "ignored": 0}
@@ -79,6 +82,51 @@ class ChannelManager:
         """Set the async message processor for channel adapters."""
         self._processor = processor
 
+    def set_session_exists_checker(self, checker: SessionExistsChecker) -> None:
+        """Set the persistent-session probe used by thread-aware adapters."""
+        self._session_exists_checker = checker
+
+    def has_persisted_session(self, message: InboundMessage) -> bool:
+        """Return whether this exact channel/user/thread session can resume."""
+        if self._session_exists_checker is None or not message.thread_id:
+            return False
+        session_key = build_gateway_session_key(
+            message.channel,
+            message.channel_id,
+            message.sender_id,
+            thread_id=message.thread_id,
+        )
+        try:
+            return self._session_exists_checker(session_key)
+        except Exception:
+            log.warning("Gateway session existence check failed for %s", session_key, exc_info=True)
+            return False
+
+    def set_session_terminal_checker(self, checker: SessionExistsChecker) -> None:
+        """Set the probe that reports a durably terminal (non-resumable) session."""
+        self._session_terminal_checker = checker
+
+    def session_is_terminal(self, message: InboundMessage) -> bool:
+        """Return whether this thread's durable machine state has ended.
+
+        ``False`` covers both "no durable record yet" (an engagement cache may
+        legitimately bridge the pre-checkpoint window) and "resumable". Only an
+        explicit non-resumable checkpoint returns ``True``.
+        """
+        if self._session_terminal_checker is None or not message.thread_id:
+            return False
+        session_key = build_gateway_session_key(
+            message.channel,
+            message.channel_id,
+            message.sender_id,
+            thread_id=message.thread_id,
+        )
+        try:
+            return self._session_terminal_checker(session_key)
+        except Exception:
+            log.warning("Gateway session terminal check failed for %s", session_key, exc_info=True)
+            return False
+
     def add_binding(self, binding: ChannelBinding) -> None:
         """Add a channel binding rule."""
         with self._lock:
@@ -103,11 +151,21 @@ class ChannelManager:
             ]
             return len(self._bindings) < before
 
-    async def aroute_message(self, message: InboundMessage) -> str | None:
+    async def aroute_message(
+        self,
+        message: InboundMessage,
+        *,
+        mention_override: bool = False,
+    ) -> str | None:
         """Route an inbound message through bindings.
 
         OpenClaw pattern: Session Lane → Global Lane → execution.
         Also enforces allowed_tools from ChannelBinding.
+
+        ``mention_override`` is reserved for adapters that have independently
+        established an already-engaged conversation, such as a reply in a
+        Slack thread with a persisted gateway session. It bypasses only the
+        mention gate; exact binding checks still apply.
 
         Returns response string if processed, None if ignored.
         """
@@ -123,7 +181,7 @@ class ChannelManager:
             )
             return None
 
-        if binding.require_mention and not self._is_mentioned(message):
+        if binding.require_mention and not mention_override and not self._is_mentioned(message):
             self._stats["ignored"] += 1
             return None
 

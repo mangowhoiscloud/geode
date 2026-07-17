@@ -20,6 +20,13 @@
 | Transcript / evidence ledger | 같은 `session_id`로 키된 write-only 싱크 |
 | 스케줄러 레인 키(`sched:<job>`) | 동시성 제어 전용; 발화된 잡마다 새 인스턴스 |
 
+Slack 스레드 라우팅은 첫 턴 전에 최상위 메시지 `ts`를 `thread_id`로
+정규화한다. 따라서 루트 멘션과 이후 모든 대댓글은 같은 게이트웨이 키와
+체크포인트 id를 만든다. 데몬 재시작 뒤 프로세스 로컬 L2 세션이 비어 있으면
+serve는 CLI resume 기질인 영속 체크포인트에서 메시지 히스토리를 복원한다.
+ACTIVE와 PAUSED 머신만 암묵적 스레드 연속의 대상이며, COMPLETED와 ERROR는
+새로 주소 지정된 턴과 명시적 reopen 엣지가 필요하다.
+
 ## 상태 공간
 
 `SessionStatus` (`core/memory/session_checkpoint.py`):

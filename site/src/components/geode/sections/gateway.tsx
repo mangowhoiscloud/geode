@@ -24,10 +24,10 @@ const modes: Record<Mode, {
   },
   daemon: {
     label: "Daemon", sub: "SessionMode.DAEMON", color: "#818CF8",
-    descKo: "Slack/Discord/Telegram 폴러가 외부 메시지를 수신. config.toml [gateway] pollers에서 동적 등록(_POLLER_REGISTRY). hitl=0, quiet 모드, DANGEROUS 차단.",
-    descEn: "Slack/Discord/Telegram pollers receive external messages. Dynamically registered via config.toml [gateway] pollers (_POLLER_REGISTRY). hitl=0, quiet mode, DANGEROUS blocked.",
-    detailsKo: ["Config-driven pollers", "ChannelBinding 라우팅", "SessionLane 동시성"],
-    detailsEn: ["Config-driven pollers", "ChannelBinding routing", "SessionLane concurrency"],
+    descKo: "Slack Socket Mode와 Discord/Telegram 폴러가 외부 메시지를 수신. config.toml [gateway] pollers에서 동적 등록(_POLLER_REGISTRY). hitl=0, quiet 모드, DANGEROUS 차단.",
+    descEn: "Slack Socket Mode and Discord/Telegram pollers receive external messages. Dynamically registered via config.toml [gateway] pollers (_POLLER_REGISTRY). hitl=0, quiet mode, DANGEROUS blocked.",
+    detailsKo: ["Config-driven receivers", "ChannelBinding 라우팅", "SessionLane 동시성"],
+    detailsEn: ["Config-driven receivers", "ChannelBinding routing", "SessionLane concurrency"],
     source: "Slack / Discord", poller: "Gateway",
   },
   scheduler: {

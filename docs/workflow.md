@@ -28,6 +28,27 @@ audits. The full procedure is split across the `geode-workflow` skill and its
 9. **Report/GitFlow**: state what changed, what ran, what failed or was
    skipped, and only claim merge/push/cleanup after commands complete.
 
+## Architecture And Extensibility Program
+
+Architecture/extensibility changes use
+[`docs/architecture/extensibility-roadmap.md`](architecture/extensibility-roadmap.md)
+as their execution SOT. Before implementation, a reconciliation PR atomically
+promotes every row in a dependency-satisfied package from `OPEN` to `READY`.
+Select that package, re-audit it against current `origin/develop`, and merge a
+roadmap-only claim PR that records `IN_PROGRESS`, its owner, and its intended
+implementation branch. Only then allocate the implementation worktree. The
+implementation PR references that canonical claim and does not predict its own
+merge. After it merges, the roadmap's narrow, explicitly authorized
+reconciliation PR atomically records `IN_DEVELOP` for the whole package; a
+main-based tracking PR atomically records `DONE` plus per-GAP closure evidence
+after release. That tracking worktree starts from current `origin/main`, its PR
+targets `main`, and its merge is followed by a CI-gated `main -> develop` sync
+PR. Detailed subsystem docs continue to own behavior contracts, but they do
+not independently claim program completion or reorder the roadmap. Untracked
+architecture scope discovered during implementation is registered as an
+`OPEN` package in a separate roadmap-only GAP-registration PR; registration
+does not claim the package or authorize expanding the implementation diff.
+
 ## Progressive Disclosure Map
 
 | Need | Skill reference |
@@ -44,7 +65,10 @@ audits. The full procedure is split across the `geode-workflow` skill and its
 feature/<name> -> develop -> main
 ```
 
-- Feature branches start from `develop`.
+- Feature branches and develop-targeted roadmap branches start from the
+  fetched `origin/develop` tip.
+- A roadmap tracking-only `DONE` branch starts from `origin/main`, targets
+  `main`, and is followed by a CI-gated `main -> develop` sync.
 - Feature PRs merge into `develop` with squash merge.
 - Before `develop -> main`, sync `main -> develop` if main has drift.
 - `develop -> main` is a pass-through merge after gates are satisfied.

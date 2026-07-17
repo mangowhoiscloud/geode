@@ -29,7 +29,7 @@
   <a href="README.ko.md">한국어</a>
 </p>
 
-# GEODE v1.0.0: A Self-improving Autonomous Execution Agent
+# GEODE v1.1.0: A Self-improving Autonomous Execution Agent
 
 A general-purpose autonomous agent that also rewrites the scaffolding it runs on. You ask in plain language; GEODE plans, calls tools, and reports, for one prompt or a long-running session. Underneath, an outer loop keeps tuning the system that runs your tasks.
 
@@ -370,7 +370,7 @@ Once GEODE works in your terminal, you can let it answer on the messaging channe
 geode serve                          # starts the always-on Gateway daemon
 ```
 
-Put channel secrets such as `SLACK_BOT_TOKEN` in `~/.geode/.env`; put channel bindings, poller choices, and project-specific Gateway behavior in `.geode/config.toml`. See [docs/setup.md → Gateway](docs/setup.md#gateway) for the full setup. After that, mentioning the bot in a channel routes the message into the same agent loop you use locally.
+Put Slack's `SLACK_BOT_TOKEN` (`xoxb-`) and Socket Mode `SLACK_APP_TOKEN` (`xapp-`) in `~/.geode/.env`; put channel bindings, receiver choices, and project-specific Gateway behavior in `.geode/config.toml`. See [docs/setup.md → Gateway](docs/setup.md#gateway) for the full setup. After that, mentioning the bot in a bound channel routes the pushed event into the same agent loop you use locally; later replies in that thread continue the same checkpoint without another mention.
 
 ### Optional: Self-improving loop config (`~/.geode/config.toml`)
 
@@ -490,7 +490,7 @@ geode update --latest # uv tool: explicitly allow minor/major upgrades
 | **5-tier memory** | SOUL (0) → User Profile (0.5) → Organization (1) → Project (2) → Session (3). Persistent, survives daemon restarts |
 | **Progress plans + review checkpoints** | `update_plan` shows a Codex-style per-turn checklist without blocking execution. `create_plan` + `approve_plan` remain for explicit review checkpoints, persisted in `.geode/plans.json` |
 | **MCP server (`geode-mcp`)** | Exposes GEODE itself as an MCP server (stdio): `run_agent`, `self_improving_status`, `self_improving_propose`/`apply` (2-step confirm gate), `query_memory`, `get_health`. Registered for Claude Code via the repo-shipped `.mcp.json` |
-| **Long-running daemon** | `geode serve` runs as background daemon. Slack / Discord / Telegram pollers + scheduler tick + IPC for the thin CLI |
+| **Long-running daemon** | `geode serve` runs as background daemon. Slack Socket Mode + Discord / Telegram pollers + scheduler tick + IPC for the thin CLI |
 | **Sub-agents** | Full inheritance of parent capability, depth/cost guards, isolation by Lane |
 | **Turn verification** | Rule-based per-turn checks (empty turn, tool errors, plan-step mismatch) + opt-in LLM-judge scoring (`core/agent/verify.py`); a verify FAIL triggers replanning |
 

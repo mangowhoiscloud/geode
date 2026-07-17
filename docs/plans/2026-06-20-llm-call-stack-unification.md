@@ -1,7 +1,14 @@
 # LLM Call-Stack Unification — zero-regression resolution of the dual/triple retry stack
 
-Status: in progress (2026-06-20)
-Owner: scaffold session (feature/llm-stack-unify)
+> [!NOTE]
+> This plan retains detailed retry and behavior-preservation evidence. Its
+> current delivery status rolls up to LLM-004 in
+> [`docs/architecture/extensibility-roadmap.md`](../architecture/extensibility-roadmap.md);
+> only that roadmap owns current execution state. The status and owner fields
+> below are a frozen 2026-06-20 snapshot, not an active claim.
+
+Historical status (frozen 2026-06-20): in progress
+Historical owner (frozen): scaffold session (`feature/llm-stack-unify`)
 Constraint: **no observable behavior change.** Every item in §4 must stay true.
 
 ## 1. Problem

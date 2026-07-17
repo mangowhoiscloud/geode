@@ -2,7 +2,7 @@
 
 Accepts multiple concurrent CLI client connections. Each connected client
 gets an independent IPC session backed by serve's SharedServices (same MCP,
-skills, hooks, memory as Slack/Discord pollers). SessionLane per-key
+skills, hooks, memory as Slack/Discord messaging receivers). SessionLane per-key
 serialization ensures same-session ordering; different sessions run in parallel.
 
 Protocol: line-delimited JSON over Unix domain socket.
