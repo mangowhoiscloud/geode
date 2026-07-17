@@ -22,6 +22,15 @@ log = logging.getLogger(__name__)
 
 ToolHandler = Callable[..., dict[str, Any] | Awaitable[dict[str, Any]] | Any]
 
+# Execution bindings that bypass the ordinary handler map.  Architecture
+# inventory imports this set so the model-visible schema and executable surface
+# can be compared without duplicating these names in an audit script.
+DELEGATE_TASK_TOOL_NAME = "delegate_task"
+RUN_BASH_TOOL_NAME = "run_bash"
+SPECIAL_EXECUTION_BINDINGS: frozenset[str] = frozenset(
+    {DELEGATE_TASK_TOOL_NAME, RUN_BASH_TOOL_NAME}
+)
+
 # ---------------------------------------------------------------------------
 # Tool wall-clock deadline — PR-LOOP-POLLUTION-FIX (2026-06-12)
 # ---------------------------------------------------------------------------
@@ -239,7 +248,7 @@ class ToolExecutor:
         once after, regardless of which branch (delegate / bash / handler /
         MCP / unknown) serves the call.
         """
-        if tool_name == "delegate_task":
+        if tool_name == DELEGATE_TASK_TOOL_NAME:
             # PR-Async-Phase-C step 3 (2026-05-22) — switched to native
             # async delegate dispatch. The old asyncio.to_thread bridge
             # over sync ``_execute_delegate`` is gone.
@@ -249,7 +258,7 @@ class ToolExecutor:
             # which can lag a mid-session ``/model`` switch.
             return await self._aexecute_delegate(tool_input, context)
 
-        if tool_name == "run_bash":
+        if tool_name == RUN_BASH_TOOL_NAME:
             # Validation + approval already cleared in the gate; this is the
             # subprocess execution, dispatched uniformly like any handler.
             return await self._run_bash_exec_async(tool_input, context=context)
@@ -352,7 +361,7 @@ class ToolExecutor:
         FAILS CLOSED — returns a denial so it can never dispatch unapproved
         (even with a registered handler); add a branch to gate a new one.
         """
-        if tool_name == "run_bash":
+        if tool_name == RUN_BASH_TOOL_NAME:
             command = tool_input.get("command", "")
             if command:
                 blocked = self._bash.validate(command)

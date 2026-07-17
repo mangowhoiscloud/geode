@@ -13,10 +13,10 @@ Usage:
 from __future__ import annotations
 
 import re
-import shutil
-import subprocess
 import sys
 from pathlib import Path
+
+from scripts.git_command import GitExecutableNotFoundError, run_git
 
 LEGACY_PATTERNS: list[tuple[str, str]] = [
     (r"from core\.nodes\b", "external package nodes"),
@@ -103,16 +103,12 @@ def main() -> int:
         if idx + 1 < len(sys.argv):
             base = sys.argv[idx + 1]
 
-    git = shutil.which("git")
-    if git is None:
-        raise SystemExit("git executable not found")
-
-    result = subprocess.run(  # noqa: S603 - fixed git command; only base ref is user-provided.
-        [git, "diff", "--name-only", "--diff-filter=ACMR", base, "HEAD"],
-        capture_output=True,
-        check=False,
-        text=True,
-    )
+    try:
+        result = run_git(
+            ["diff", "--name-only", "--diff-filter=ACMR", base, "HEAD"],
+        )
+    except GitExecutableNotFoundError:
+        raise SystemExit("git executable not found") from None
     changed = [
         f for f in result.stdout.strip().split("\n") if f.endswith(".py") and f not in EXEMPT_FILES
     ]

@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from core.cli.tool_handlers.registration import UniqueEntries
 from core.tools.computer_observation import (
     ComputerActionEvent,
     build_action_event,
@@ -34,7 +35,7 @@ from core.tools.computer_observation import (
 # ---------------------------------------------------------------------------
 
 
-def _build_math_handlers() -> dict[str, Any]:
+def _build_math_handlers() -> UniqueEntries[str, Any]:
     """Build exact-first math tool handlers."""
     from core.tools.math_tools import CalculateTool
 
@@ -43,9 +44,7 @@ def _build_math_handlers() -> dict[str, Any]:
     async def handle_calculate(**kwargs: Any) -> dict[str, Any]:
         return await calculate_tool.aexecute(**kwargs)
 
-    return {
-        "calculate": handle_calculate,
-    }
+    return UniqueEntries[str, Any]((("calculate", handle_calculate),))
 
 
 # ---------------------------------------------------------------------------
@@ -53,7 +52,7 @@ def _build_math_handlers() -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def _build_data_handlers() -> dict[str, Any]:
+def _build_data_handlers() -> UniqueEntries[str, Any]:
     """Build synthetic data tool handlers."""
     from core.tools.data_tools import GenerateDataTool
 
@@ -62,9 +61,7 @@ def _build_data_handlers() -> dict[str, Any]:
     async def handle_generate_data(**kwargs: Any) -> dict[str, Any]:
         return await generate_data_tool.aexecute(**kwargs)
 
-    return {
-        "generate_data": handle_generate_data,
-    }
+    return UniqueEntries[str, Any]((("generate_data", handle_generate_data),))
 
 
 # ---------------------------------------------------------------------------
@@ -72,7 +69,7 @@ def _build_data_handlers() -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def _build_notification_handlers() -> dict[str, Any]:
+def _build_notification_handlers() -> UniqueEntries[str, Any]:
     """Build notification tool handlers."""
     from core.tools.output_tools import SendNotificationTool
 
@@ -81,9 +78,7 @@ def _build_notification_handlers() -> dict[str, Any]:
     async def handle_send_notification(**kwargs: Any) -> dict[str, Any]:
         return await notification_tool.aexecute(**kwargs)
 
-    return {
-        "send_notification": handle_send_notification,
-    }
+    return UniqueEntries[str, Any]((("send_notification", handle_send_notification),))
 
 
 # ---------------------------------------------------------------------------
@@ -91,7 +86,7 @@ def _build_notification_handlers() -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def _build_output_handlers() -> dict[str, Any]:
+def _build_output_handlers() -> UniqueEntries[str, Any]:
     """Build artifact/output tool handlers."""
     from core.tools.output_tools import ExportJsonTool, GenerateReportTool
 
@@ -104,10 +99,12 @@ def _build_output_handlers() -> dict[str, Any]:
     async def handle_export_json(**kwargs: Any) -> dict[str, Any]:
         return await export_tool.aexecute(**kwargs)
 
-    return {
-        "generate_report": handle_generate_report,
-        "export_json": handle_export_json,
-    }
+    return UniqueEntries[str, Any](
+        (
+            ("generate_report", handle_generate_report),
+            ("export_json", handle_export_json),
+        )
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -115,7 +112,7 @@ def _build_output_handlers() -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def _build_offload_handlers() -> dict[str, Any]:
+def _build_offload_handlers() -> UniqueEntries[str, Any]:
     """Build recall_tool_result handler for retrieving offloaded tool results."""
 
     def handle_recall_tool_result(**kwargs: Any) -> dict[str, Any]:
@@ -130,9 +127,7 @@ def _build_offload_handlers() -> dict[str, Any]:
         result: dict[str, Any] = store.recall(ref_id)
         return result
 
-    return {
-        "recall_tool_result": handle_recall_tool_result,
-    }
+    return UniqueEntries[str, Any]((("recall_tool_result", handle_recall_tool_result),))
 
 
 # ---------------------------------------------------------------------------
@@ -220,7 +215,7 @@ def _openai_action_to_harness(action: dict[str, Any]) -> tuple[str, dict[str, An
     return atype or "<missing-type>", {}
 
 
-def _build_computer_use_handler() -> dict[str, Any]:
+def _build_computer_use_handler() -> UniqueEntries[str, Any]:
     """Build computer-use handler (screenshot + mouse + keyboard).
 
     Handlers are always registered so the declarative tool metadata has an
@@ -266,7 +261,12 @@ def _build_computer_use_handler() -> dict[str, Any]:
             }
         return await execute_emulated_computer_use(harness, **kwargs)
 
-    return {"computer": handle_computer, "computer_use": handle_computer_use}
+    return UniqueEntries[str, Any](
+        (
+            ("computer", handle_computer),
+            ("computer_use", handle_computer_use),
+        )
+    )
 
 
 async def _run_batched_actions(harness: Any, kwargs: dict[str, Any]) -> dict[str, Any]:
@@ -366,7 +366,7 @@ async def _run_batched_actions(harness: Any, kwargs: dict[str, Any]) -> dict[str
 # ---------------------------------------------------------------------------
 
 
-def _build_calendar_handlers() -> dict[str, Any]:
+def _build_calendar_handlers() -> UniqueEntries[str, Any]:
     """Build calendar tool handlers."""
     from core.tools.calendar_tools import (
         CalendarCreateEventTool,
@@ -387,11 +387,13 @@ def _build_calendar_handlers() -> dict[str, Any]:
     async def handle_calendar_sync_scheduler(**kwargs: Any) -> dict[str, Any]:
         return await sync_tool.aexecute(**kwargs)
 
-    return {
-        "calendar_list_events": handle_calendar_list_events,
-        "calendar_create_event": handle_calendar_create_event,
-        "calendar_sync_scheduler": handle_calendar_sync_scheduler,
-    }
+    return UniqueEntries[str, Any](
+        (
+            ("calendar_list_events", handle_calendar_list_events),
+            ("calendar_create_event", handle_calendar_create_event),
+            ("calendar_sync_scheduler", handle_calendar_sync_scheduler),
+        )
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -399,7 +401,9 @@ def _build_calendar_handlers() -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def _build_use_skill_handler(skill_registry: Any = None) -> dict[str, Any]:
+def _build_use_skill_handler(
+    skill_registry: Any = None,
+) -> UniqueEntries[str, Any]:
     """Build the use_skill handler — load a skill's full instructions.
 
     The system prompt advertises skill metadata only (``<available_skills>``);
@@ -438,4 +442,4 @@ def _build_use_skill_handler(skill_registry: Any = None) -> dict[str, Any]:
             )
         return {"result": {"name": skill.name, "instructions": instructions}}
 
-    return {"use_skill": handle_use_skill}
+    return UniqueEntries[str, Any]((("use_skill", handle_use_skill),))
