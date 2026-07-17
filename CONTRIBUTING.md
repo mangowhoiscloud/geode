@@ -21,16 +21,35 @@ uv run mypy core/
 
 ## Development Workflow
 
+Use [`docs/workflow.md`](docs/workflow.md) for the canonical evidence-first
+workflow. Architecture and extensibility changes must also carry one work
+package and its stable GAP IDs from the
+[`Architecture and Extensibility Completion Roadmap`](docs/architecture/extensibility-roadmap.md).
+A roadmap-only claim PR selects a wholly `READY` package, atomically records
+`IN_PROGRESS` for all its GAPs, and names the exclusive owner/implementation
+branch on canonical `develop`. Allocate the implementation worktree only after
+that claim merges. The implementation PR references the existing claim and
+must not predict a merge by changing a GAP to `IN_DEVELOP` or `DONE`; the
+roadmap's package-atomic post-merge reconciliation protocol owns those
+transitions.
+If implementation reveals untracked architecture scope, stop before expanding
+the diff and merge a separate roadmap-only GAP-registration PR. Registration
+adds an `OPEN` package; it is not an implementation claim.
+After a package's implementation reaches `main`, its tracking-only `DONE`
+worktree starts from `origin/main`, targets `main`, and is followed by a
+CI-gated `main -> develop` sync PR.
+
 We use GitFlow branching:
 
-```
+```text
 feature/<name> → develop → main
 ```
 
-1. Create a feature branch from `develop`
+1. Fetch and create a feature branch from `origin/develop` (except the
+   roadmap's tracking-only `DONE` path above)
 2. Make your changes
 3. Ensure all quality gates pass (see below)
-4. Submit a PR to `develop`
+4. Submit a PR to `develop` (`DONE` tracking-only PRs target `main`)
 
 ## Quality Gates
 
@@ -74,7 +93,7 @@ By contributing to this project, you certify that:
 You indicate your acceptance of the DCO by adding a `Signed-off-by` line
 to your commit messages:
 
-```
+```text
 Signed-off-by: Your Name <your.email@example.com>
 ```
 
