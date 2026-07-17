@@ -1,5 +1,12 @@
 # Observability / Logging / Config convergence + llms.txt version sync (pre-v1.0)
 
+> Historical pre-v1.0 execution plan. Its SoT and phase-status language below is
+> a frozen snapshot, not current program state. Re-audit behavior against code
+> and tests; register any remaining architecture work in
+> [`docs/architecture/extensibility-roadmap.md`](../architecture/extensibility-roadmap.md).
+
+---
+
 > **작성**: 2026-06-14
 > **목적**: v1.0.0 전, 로깅·설정·llms.txt 동기화를 프론티어 에이전트 CLI에 수렴시킨다. 코드베이스 스캔 결과 GEODE는 **typed ActivityRow·pydantic Settings·OTel 배선은 선도**, **구조화 로깅·자동 redaction·config TOML 매핑·검증은 지연**.
 > **검증**: ruff/format/mypy/lint-imports/pytest + Codex MCP(gpt-5.5) review.

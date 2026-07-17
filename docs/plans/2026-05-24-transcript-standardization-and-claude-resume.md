@@ -1,10 +1,17 @@
 # Transcript 표준화 + claude-cli `--resume` 정렬 — 2-PR sprint plan
 
+> [!NOTE]
+> Historical sprint plan: its transcript/resume contracts remain design
+> evidence, but its branch table is a frozen 2026-05-24 snapshot and no longer
+> owns live status or execution order. Current work rolls up to STORE-002 and
+> LLM-004 in
+> [`docs/architecture/extensibility-roadmap.md`](../architecture/extensibility-roadmap.md).
+>
 > **작성**: 2026-05-24
 > **목적**: GEODE 의 observability + adapter 계층을 paperclip 의 frontier 패턴에 정렬.
 > **2 PR** — PR1 (Q.5 + U): 식별자 정렬 + paperclip-style timeline. PR2 (V): adapter `--resume` + per-agent sessionId.
 > **검증**: 각 PR 마다 ruff/format/mypy/lint-imports/pytest + Codex MCP cross-LLM review.
-> **SoT**: 이 문서. 구현 중 모든 변경은 이 문서의 "스펙" 섹션과 1:1 매핑. drift 발견 시 코드/문서 동시 갱신.
+> **Original SoT claim (superseded)**: 이 문서. 구현 중 모든 변경은 이 문서의 "스펙" 섹션과 1:1 매핑. drift 발견 시 코드/문서 동시 갱신.
 
 ---
 
@@ -440,7 +447,7 @@ mcp__codex__review(
 
 ---
 
-## 5. Status (live, PR 진척에 따라 갱신)
+## 5. Original status snapshot (frozen 2026-05-24)
 
 | PR | 브랜치 | 상태 | CI | PR# | 머지 ts |
 |---|---|---|---|---|---|

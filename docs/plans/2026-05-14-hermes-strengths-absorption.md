@@ -1,5 +1,11 @@
 # Plan: Hermes 강점 흡수 — Long-term Recall + Platform-aware + 4-phase Compaction + Multi-proc WAL
 
+> [!NOTE]
+> Historical comparison: both GEODE and Hermes have changed since this audit.
+> Re-audit current code and commit-pinned upstream source before implementation.
+> Current architecture-program status is owned by
+> [`docs/architecture/extensibility-roadmap.md`](../architecture/extensibility-roadmap.md).
+>
 > 작성일: 2026-05-14
 > 상태: 계획만, 구현 대기
 

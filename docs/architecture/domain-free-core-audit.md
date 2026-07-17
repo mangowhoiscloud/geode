@@ -11,6 +11,13 @@ related:
 
 # Domain-free core — audit + cut-line design
 
+> [!NOTE]
+> Historical audit: its motivation and cut-line reasoning remain useful, but
+> package names, counts, and implementation status describe 2026-05-06.
+> Current GAP status and execution order are owned by
+> [`extensibility-roadmap.md`](extensibility-roadmap.md), especially BND-001
+> through BND-004.
+
 ## TL;DR
 
 - **Strategy**: GEODE pivots to a multi-fork model. This repo stays as `geode-with-game_ip`. A future REODE fork reuses `core/` for a migration agent. Both share `core/` infra; sync requires `core/` to be **truly domain-free**.

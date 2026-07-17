@@ -57,6 +57,12 @@ class TestRedactSecrets:
         assert "xoxb-" not in result
         assert "[REDACTED]" in result
 
+    def test_slack_app_token(self) -> None:
+        text = "SLACK_APP_TOKEN=xapp-1-A1234567890-abcdef123456"
+        result = redact_secrets(text)
+        assert "xapp-" not in result
+        assert "[REDACTED]" in result
+
     def test_plain_text_unchanged(self) -> None:
         text = "Hello world, this is normal text without any secrets."
         assert redact_secrets(text) == text

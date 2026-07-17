@@ -15,22 +15,21 @@ export default function Page() {
         ko={
           <>
             <p>
-              메신저 연동은 serve 데몬의 게이트웨이가 담당합니다. 플랫폼별
-              poller가 메시지를 끌어오고, binding 규칙에 맞는 채널만 GEODE
-              실행으로 흘러갑니다. 연동에 필요한 것은 셋입니다. 봇 토큰, 게이트웨이
-              활성화, binding 규칙입니다.
+              메신저 연동은 serve 데몬의 게이트웨이가 담당합니다. Slack은 Socket
+              Mode로 이벤트를 push 받고, Discord와 Telegram은 poller가 메시지를
+              가져옵니다. binding 규칙에 맞는 채널만 GEODE 실행으로 흘러갑니다.
             </p>
 
             <h2>지원 채널</h2>
             <table>
               <thead>
-                <tr><th>채널</th><th>토큰 환경 변수</th><th>Poller</th></tr>
+                <tr><th>채널</th><th>토큰 환경 변수</th><th>수신 방식</th></tr>
               </thead>
               <tbody>
                 <tr>
                   <td>Slack</td>
-                  <td><code>SLACK_BOT_TOKEN</code></td>
-                  <td><code>core/server/supervised/slack_poller.py</code></td>
+                  <td><code>SLACK_BOT_TOKEN</code> + <code>SLACK_APP_TOKEN</code></td>
+                  <td>Socket Mode (push)</td>
                 </tr>
                 <tr>
                   <td>Discord</td>
@@ -45,14 +44,24 @@ export default function Page() {
               </tbody>
             </table>
             <p>
-              토큰은 시크릿이므로 <code>~/.geode/.env</code>에 둡니다. poller는
-              해당 환경 변수가 비어 있으면 자신을 미설정 상태로 보고합니다
-              (<code>core/server/supervised/poller_base.py</code>).
+              토큰은 시크릿이므로 <code>~/.geode/.env</code>에 둡니다. Slack의
+              <code>xoxb-</code> 봇 토큰은 Web API 발신에, <code>xapp-</code> 앱
+              토큰은 Socket Mode 연결에 각각 사용됩니다. 앱 토큰이 없으면 이전
+              history polling 경로로 폴백하지만 doctor는 이를 DEGRADED로 표시합니다.
             </p>
 
             <h2>Slack 연동 절차</h2>
-            <pre>{`# 1) 토큰을 시크릿 레이어에 저장
+            <p>
+              Slack 앱에서 Socket Mode를 켜고, <code>connections:write</code> 범위의
+              app-level token을 만듭니다. Bot Token Scopes에는{" "}
+              <code>app_mentions:read</code>, <code>chat:write</code>,{" "}
+              <code>channels:history</code>, <code>channels:read</code>를 넣고 bot
+              event <code>app_mention</code>, <code>message.channels</code>를 구독한 뒤
+              앱을 재설치합니다.
+            </p>
+            <pre>{`# 1) 두 토큰을 시크릿 레이어에 저장
 echo 'SLACK_BOT_TOKEN=xoxb-...' >> ~/.geode/.env
+echo 'SLACK_APP_TOKEN=xapp-...' >> ~/.geode/.env
 echo 'GEODE_GATEWAY_ENABLED=true' >> ~/.geode/.env
 
 # 2) binding 규칙 선언 (.geode/config.toml)
@@ -65,7 +74,7 @@ channel = "slack"
 channel_id = "C0ABCDEF1"
 require_mention = true
 
-# 3) 데몬 재시작
+# 3) Slack 채널에서 /invite @geode 후 데몬 재시작
 pkill -f "geode serve"
 geode serve &
 
@@ -74,8 +83,8 @@ geode doctor slack`}</pre>
             <p>
               binding 필드 각각의 의미와 검증 방법은{" "}
               <a href="/geode/docs/guides/binding">바인딩 설정 가이드</a>에
-              있습니다. Discord와 Telegram도 같은 구조입니다. 토큰 환경 변수와{" "}
-              <code>pollers</code> 목록, <code>channel</code> 값만 바뀝니다.
+              있습니다. <code>geode doctor slack</code>은 앱 토큰, 봇 scope, 각
+              binding의 채널 멤버십과 클릭 가능한 채널 링크까지 검사합니다.
             </p>
 
             <h2>메시지가 실행되는 방식</h2>
@@ -87,6 +96,14 @@ geode doctor slack`}</pre>
               <code>delegate_task</code>는 차단됩니다. 메시지당 wall-clock
               예산은 binding의 <code>time_budget_s</code>가 정하며 기본 120초입니다
               (<code>core/messaging/models.py</code>).
+            </p>
+            <p>
+              <code>require_mention = true</code>여도 새 대화의 첫 메시지만
+              GEODE를 멘션하면 됩니다. 첫 메시지의 루트 timestamp가 처음부터
+              thread/session/checkpoint 키가 되며, GEODE가 참여한 스레드의 이후
+              사람 대댓글은 재멘션 없이 같은 문맥을 이어갑니다. 데몬 재시작
+              뒤에도 ACTIVE 또는 PAUSED 체크포인트의 메시지와 상태를 CLI resume
+              경로로 복원합니다.
             </p>
 
             <h2>실패 모드</h2>
@@ -102,13 +119,18 @@ geode doctor slack`}</pre>
                 </tr>
                 <tr>
                   <td><code>geode doctor slack</code>이 토큰 누락 보고</td>
-                  <td><code>SLACK_BOT_TOKEN</code>이 .env에 없음</td>
-                  <td><code>~/.geode/.env</code>에 추가하고 데몬을 재시작합니다.</td>
+                  <td><code>SLACK_BOT_TOKEN</code> 또는 <code>SLACK_APP_TOKEN</code>이 .env에 없음</td>
+                  <td>두 토큰을 <code>~/.geode/.env</code>에 추가하고 데몬을 재시작합니다.</td>
                 </tr>
                 <tr>
-                  <td>멘션 없는 메시지에 응답하지 않음</td>
+                  <td><code>bot_member=False</code></td>
+                  <td>봇이 바운드 채널에 없음</td>
+                  <td>doctor가 제시한 채널 링크를 열고 <code>/invite @geode</code>를 실행합니다.</td>
+                </tr>
+                <tr>
+                  <td>새 대화의 멘션 없는 메시지에 응답하지 않음</td>
                   <td><code>require_mention = true</code></td>
-                  <td>의도된 동작입니다. 모든 메시지에 반응하게 하려면 false로 둡니다.</td>
+                  <td>첫 메시지는 멘션해야 합니다. 한 번 참여한 스레드의 대댓글은 재멘션 없이 이어집니다.</td>
                 </tr>
                 <tr>
                   <td>응답이 120초 부근에서 끊김</td>
@@ -120,7 +142,7 @@ geode doctor slack`}</pre>
 
             <h2>다음</h2>
             <ul>
-              <li><a href="/geode/docs/harness/serve-gateway">Serve와 게이트웨이</a>. poller와 lane의 동작 구조.</li>
+              <li><a href="/geode/docs/harness/serve-gateway">Serve와 게이트웨이</a>. receiver와 lane의 동작 구조.</li>
               <li><a href="/geode/docs/guides/binding">바인딩 설정</a>. 규칙 필드와 리로드.</li>
               <li><a href="/geode/docs/run/schedule">작업 예약</a>. 메신저로 결과를 받는 정기 작업.</li>
             </ul>
@@ -129,22 +151,22 @@ geode doctor slack`}</pre>
         en={
           <>
             <p>
-              Messaging runs through the serve daemon&apos;s gateway. A
-              per-platform poller pulls messages in, and only channels matching
-              a binding rule flow into GEODE execution. Three things are
-              required: a bot token, the gateway flag, and a binding rule.
+              Messaging runs through the serve daemon&apos;s gateway. Slack
+              receives pushed events over Socket Mode, while Discord and
+              Telegram poll. Only channels matching a binding rule flow into
+              GEODE execution.
             </p>
 
             <h2>Supported channels</h2>
             <table>
               <thead>
-                <tr><th>Channel</th><th>Token env var</th><th>Poller</th></tr>
+                <tr><th>Channel</th><th>Token env var</th><th>Receiver</th></tr>
               </thead>
               <tbody>
                 <tr>
                   <td>Slack</td>
-                  <td><code>SLACK_BOT_TOKEN</code></td>
-                  <td><code>core/server/supervised/slack_poller.py</code></td>
+                  <td><code>SLACK_BOT_TOKEN</code> + <code>SLACK_APP_TOKEN</code></td>
+                  <td>Socket Mode (push)</td>
                 </tr>
                 <tr>
                   <td>Discord</td>
@@ -160,13 +182,24 @@ geode doctor slack`}</pre>
             </table>
             <p>
               Tokens are secrets, so they belong in <code>~/.geode/.env</code>.
-              A poller reports itself unconfigured while its env var is empty
-              (<code>core/server/supervised/poller_base.py</code>).
+              Slack uses the <code>xoxb-</code> bot token for outbound Web API
+              calls and the <code>xapp-</code> app token for Socket Mode. Without
+              the app token, GEODE falls back to history polling and doctor
+              reports DEGRADED.
             </p>
 
             <h2>Wiring Slack</h2>
-            <pre>{`# 1) put the token on the secrets layer
+            <p>
+              Enable Socket Mode in the Slack app and create an app-level token
+              with <code>connections:write</code>. Add bot scopes{" "}
+              <code>app_mentions:read</code>, <code>chat:write</code>,{" "}
+              <code>channels:history</code>, and <code>channels:read</code>;
+              subscribe to <code>app_mention</code> and{" "}
+              <code>message.channels</code>, then reinstall the app.
+            </p>
+            <pre>{`# 1) put both tokens on the secrets layer
 echo 'SLACK_BOT_TOKEN=xoxb-...' >> ~/.geode/.env
+echo 'SLACK_APP_TOKEN=xapp-...' >> ~/.geode/.env
 echo 'GEODE_GATEWAY_ENABLED=true' >> ~/.geode/.env
 
 # 2) declare a binding (.geode/config.toml)
@@ -179,7 +212,7 @@ channel = "slack"
 channel_id = "C0ABCDEF1"
 require_mention = true
 
-# 3) restart the daemon
+# 3) run /invite @geode in Slack, then restart the daemon
 pkill -f "geode serve"
 geode serve &
 
@@ -187,10 +220,10 @@ geode serve &
 geode doctor slack`}</pre>
             <p>
               Field semantics and verification live in the{" "}
-              <a href="/geode/docs/guides/binding">binding guide</a>. Discord
-              and Telegram follow the same shape; only the token env var, the{" "}
-              <code>pollers</code> list, and the <code>channel</code> value
-              change.
+              <a href="/geode/docs/guides/binding">binding guide</a>.{" "}
+              <code>geode doctor slack</code> validates the app token, bot
+              scopes, membership for every binding, and prints clickable
+              channel links.
             </p>
 
             <h2>How a message executes</h2>
@@ -203,6 +236,15 @@ geode doctor slack`}</pre>
               The per-message wall-clock budget comes from the binding&apos;s{" "}
               <code>time_budget_s</code>, 120 seconds by default
               (<code>core/messaging/models.py</code>).
+            </p>
+            <p>
+              Even with <code>require_mention = true</code>, only the first
+              message of a new conversation must mention GEODE. Its root
+              timestamp becomes the thread/session/checkpoint key from turn
+              one, and later human replies in the engaged thread continue the
+              same context without another mention. After a daemon restart,
+              ACTIVE or PAUSED checkpoint messages and machine state are
+              restored through the CLI resume path.
             </p>
 
             <h2>Failure modes</h2>
@@ -218,13 +260,18 @@ geode doctor slack`}</pre>
                 </tr>
                 <tr>
                   <td><code>geode doctor slack</code> reports a missing token</td>
-                  <td><code>SLACK_BOT_TOKEN</code> absent from .env</td>
-                  <td>Add it to <code>~/.geode/.env</code> and restart the daemon.</td>
+                  <td><code>SLACK_BOT_TOKEN</code> or <code>SLACK_APP_TOKEN</code> absent from .env</td>
+                  <td>Add both to <code>~/.geode/.env</code> and restart the daemon.</td>
                 </tr>
                 <tr>
-                  <td>No reply unless mentioned</td>
+                  <td><code>bot_member=False</code></td>
+                  <td>The bot is absent from a bound channel</td>
+                  <td>Open the channel link from doctor and run <code>/invite @geode</code>.</td>
+                </tr>
+                <tr>
+                  <td>No reply to an unmentioned new conversation</td>
                   <td><code>require_mention = true</code></td>
-                  <td>Intended. Set it to false to react to every message.</td>
+                  <td>Mention once to engage the thread; later replies do not need another mention.</td>
                 </tr>
                 <tr>
                   <td>Replies cut off around 120 seconds</td>
@@ -236,7 +283,7 @@ geode doctor slack`}</pre>
 
             <h2>Next</h2>
             <ul>
-              <li><a href="/geode/docs/harness/serve-gateway">Serve and gateway</a>. How pollers and lanes fit together.</li>
+              <li><a href="/geode/docs/harness/serve-gateway">Serve and gateway</a>. How receivers and lanes fit together.</li>
               <li><a href="/geode/docs/guides/binding">Configure a binding</a>. Rule fields and reload.</li>
               <li><a href="/geode/docs/run/schedule">Schedule tasks</a>. Recurring work delivered to a messenger.</li>
             </ul>

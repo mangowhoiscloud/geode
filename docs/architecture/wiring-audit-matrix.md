@@ -1,5 +1,11 @@
 # GEODE Hook/Persistence Wiring Audit Matrix
 
+> [!NOTE]
+> Historical wiring snapshot. Executable hook counts may have changed; current
+> architecture-program status and generated-baseline work are owned by
+> [`extensibility-roadmap.md`](extensibility-roadmap.md) under GOV-002,
+> PROTO-001, and STORE-001.
+>
 > Current wiring snapshot for the 65-event HookSystem compatibility surface.
 > The executable sources of truth are `core/hooks/system.py`,
 > `core/hooks/catalog.py`, `core/observability/hook_persistence.py`, and

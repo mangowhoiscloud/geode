@@ -1,5 +1,12 @@
 # PR-COMM-3 (pre-impl) — runtime.db vs sessions.db integration audit
 
+> Historical storage decision audit. The alternatives and status below are
+> frozen evidence and no longer represent a pending operator decision. Current
+> architecture work and status roll up to STORE-001/002 in
+> [`docs/architecture/extensibility-roadmap.md`](../architecture/extensibility-roadmap.md).
+
+---
+
 > **작성**: 2026-05-24
 > **상태**: PR-COMM-3 implementation 전 통합 가능성 검토 (operator 결정 대기).
 > **이유**: DB/table 교체 비용이 높음 — 초기 스키마 결정이 굳어지면 변경 어려움. 신규 `runtime.db` 만들기 전에 기존 `sessions.db` 와 역할 / anchor / 통합 가능성 검토 우선.

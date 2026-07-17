@@ -519,14 +519,14 @@ class LaneQueue:
                 if name == "session":
                     if self._session_lane is None:
                         continue
-                    if not await asyncio.to_thread(self._session_lane._raw_acquire, key):
+                    if not await self._acquire_cancel_safe(self._session_lane, key):
                         raise TimeoutError(f"SessionLane timeout for key '{key}'")
                     acquired.append(self._session_lane)
                 else:
                     lane = self._lanes.get(name)
                     if lane is None:
                         raise KeyError(f"Lane '{name}' not found")
-                    if not await asyncio.to_thread(lane._raw_acquire, key):
+                    if not await self._acquire_cancel_safe(lane, key):
                         raise TimeoutError(
                             f"Lane '{name}' timeout after {lane.timeout_s}s "
                             f"(max_concurrent={lane.max_concurrent})"
@@ -538,6 +538,31 @@ class LaneQueue:
         finally:
             for item in reversed(acquired):
                 item._raw_release(key)
+
+    @staticmethod
+    async def _acquire_cancel_safe(lane_like: Lane | SessionLane, key: str) -> bool:
+        """Off-thread ``_raw_acquire`` whose eventual grant survives cancellation.
+
+        A blocking semaphore acquire cannot be interrupted. When the awaiting
+        task is cancelled (e.g. shutdown drain cancelling a Socket Mode
+        worker), the abandoned thread may still be GRANTED the lane later —
+        with no coroutine left to release it, every subsequent waiter on that
+        key would starve until the lane timeout. Shield the executor future
+        and, on cancellation, attach a callback that releases the stray grant.
+        The parked executor thread itself still runs to grant-or-timeout; it
+        only delays interpreter teardown, never correctness.
+        """
+        future = asyncio.get_running_loop().run_in_executor(None, lane_like._raw_acquire, key)
+        try:
+            return await asyncio.shield(future)
+        except asyncio.CancelledError:
+
+            def _release_stray_grant(done: Any) -> None:
+                if not done.cancelled() and done.exception() is None and done.result():
+                    lane_like._raw_release(key)
+
+            future.add_done_callback(_release_stray_grant)
+            raise
 
     @contextmanager
     def acquire_all(

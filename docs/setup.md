@@ -58,7 +58,8 @@ ZAI_API_KEY=...                    # https://open.bigmodel.cn/usercenter/apikeys
 
 # Messaging (Slack Gateway)
 SLACK_BOT_TOKEN=xoxb-...           # https://api.slack.com/apps → OAuth & Permissions
-SLACK_TEAM_ID=T...                 # Slack workspace settings
+SLACK_APP_TOKEN=xapp-...           # Basic Information → App-Level Tokens (connections:write)
+SLACK_TEAM_ID=T...                 # optional; enables clickable doctor links
 EOF
 chmod 600 ~/.geode/.env
 ```
@@ -122,7 +123,7 @@ implicitly at CLI startup.
 
 ```bash
 geode serve                # foreground (Ctrl+C to stop)
-geode serve -p 5.0         # poll interval 5초 (default: 3.0)
+geode serve -p 5.0         # Discord/Telegram + Slack fallback poll interval (default: 3.0)
 
 # Background (production) — stdout/stderr go to ~/.geode/logs/serve.log
 # via the internal logger; redirect only if you need a separate stream.
@@ -133,7 +134,7 @@ nohup geode serve >/dev/null 2>&1 &
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `--poll`, `-p` | `3.0` | Gateway poll interval (seconds) |
+| `--poll`, `-p` | `3.0` | Discord/Telegram and Slack compatibility-fallback poll interval (seconds) |
 
 ### Startup Sequence
 
@@ -141,7 +142,7 @@ nohup geode serve >/dev/null 2>&1 &
 2. Readiness check (API keys)
 3. GeodeRuntime (MCP 13 servers, 10-30s)
 4. SchedulerService (load jobs, start 60s tick)
-5. Gateway pollers (Slack, Discord, Telegram)
+5. Gateway receivers (Slack Socket Mode, Discord/Telegram pollers)
 6. CLIPoller (Unix socket `~/.geode/cli.sock`)
 
 ### Auto-Start
@@ -162,8 +163,16 @@ geode → is_serve_running()? → No → start_serve_if_needed(30s) → connect 
 ### 1. Slack Bot 생성
 
 - [api.slack.com/apps](https://api.slack.com/apps) → Create New App
-- Bot Token Scopes: `chat:write`, `channels:history`, `channels:read`
-- Bot Token (`xoxb-...`)과 Team ID를 `~/.geode/.env`에 설정
+- **OAuth & Permissions** → Bot Token Scopes:
+  `app_mentions:read`, `chat:write`, `channels:history`, `channels:read`
+  (`reactions:write` is optional but enables progress reactions)
+- **Socket Mode** → Enable Socket Mode
+- **Basic Information** → App-Level Tokens → create an `xapp-...` token with
+  `connections:write`
+- **Event Subscriptions** → subscribe to bot events `app_mention` and
+  `message.channels`, then install/reinstall the app
+- Put both `SLACK_BOT_TOKEN=xoxb-...` and `SLACK_APP_TOKEN=xapp-...` in
+  `~/.geode/.env`, and run `/invite @geode` in every bound channel
 
 ### 2. Channel Binding (`.geode/config.toml`)
 
@@ -189,16 +198,31 @@ max_rounds = 5
 
 ```bash
 geode serve &
+grep -E "Slack inbound mode|Slack Socket Mode connected" ~/.geode/logs/serve.log
+# → Slack inbound mode: Socket Mode (push)
+# → Slack Socket Mode connected
+
 grep "binding" ~/.geode/logs/serve.log
 # → Channel binding added: slack/C0XXXXXXXXX (auto_respond=True)
 
-grep "Slack poller seeded" ~/.geode/logs/serve.log
-# → Slack poller seeded ts=... for C0XXXXXXXXX
+geode doctor slack
+# Every binding_access row must say bot_member=True and include its channel link.
 ```
+
+Without `SLACK_APP_TOKEN`, GEODE logs `polling fallback` and keeps the old
+history polling path for migration compatibility. `geode doctor slack` reports
+that state as `DEGRADED`; it is not the production target.
 
 ### Reactions
 
 @mention message → :eyes: (received) → AgenticLoop → :white_check_mark: (done) → thread reply
+
+With `require_mention = true`, only a new top-level conversation (or an
+unengaged thread) needs the mention. After GEODE joins a thread, later human
+replies continue the same session without repeating `@geode`; they receive the
+same reaction lifecycle and thread response. The root timestamp is also the
+session/checkpoint identity from the first turn, so an ACTIVE or PAUSED thread
+can resume after a daemon restart.
 
 ---
 
@@ -303,7 +327,8 @@ advanced fallback that only fills missing global secrets. Behavior belongs in
 | **Gateway** | | |
 | `GEODE_GATEWAY_ENABLED` | `false` | Manual session override; prefer `[gateway] enabled = true` in `config.toml` |
 | `SLACK_BOT_TOKEN` | | Slack bot token |
-| `SLACK_TEAM_ID` | | Slack workspace ID |
+| `SLACK_APP_TOKEN` | | Slack Socket Mode app token (`xapp-`, `connections:write`) |
+| `SLACK_TEAM_ID` | | Optional workspace ID for clickable diagnostic links |
 | **Pipeline** | | |
 | **Observability** | | |
 | _(no env vars — built-in event sink)_ | | Lifecycle events flow into project-local `sessions.db:hook_events`; active autoresearch runs also mirror sanitized rows to `transcript.jsonl` |

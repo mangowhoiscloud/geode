@@ -21,6 +21,14 @@ into it:
 | Transcript / evidence ledger | Write-only sinks keyed by the same `session_id` |
 | Scheduler lane key (`sched:<job>`) | Concurrency control only; each fired job builds a fresh instance |
 
+Slack thread routing normalizes the top-level message `ts` into `thread_id`
+before the first turn. The root mention and every later reply therefore derive
+the same gateway key and checkpoint id. If the process-local L2 session is
+empty after a daemon restart, serve restores message history from that durable
+checkpoint through the CLI resume substrate. Only ACTIVE and PAUSED machines
+are eligible for implicit thread continuation; COMPLETED and ERROR require a
+new addressed turn and the explicit reopen edge.
+
 ## State space
 
 `SessionStatus` (`core/memory/session_checkpoint.py`):

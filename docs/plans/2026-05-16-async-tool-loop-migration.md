@@ -1,5 +1,11 @@
 # Plan: Async Tool And Agent Loop Migration
 
+> [!NOTE]
+> Historical async-migration record. Re-audit current code before treating any
+> item below as pending; architecture residuals roll up to LOOP-002/003,
+> DI-003, and PROTO-002 in the
+> [architecture roadmap](../architecture/extensibility-roadmap.md).
+>
 > Scope: convert GEODE's agent loop, tool execution, approval, hooks, IPC, and
 > lane control from sync-wrapped execution to a first-class async runtime.
 

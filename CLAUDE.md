@@ -8,12 +8,12 @@
 
 A general-purpose autonomous execution agent. The core runtime is an **AgenticLoop** (`while tool_use`) — sub-agents, plans, and batches are all instances of the same loop. Autonomously performs research, analysis, automation, and scheduling.
 
-- **Version**: 1.0.0
+- **Version**: 1.1.0
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Points**: `geode` (`core.cli:app`, Typer) / `geode-mcp` (`core.mcp_server:main`)
-- **Modules**: 426 core + 109 plugins = 535
-- **Tests**: 10068 (+1 live)
+- **Modules**: 427 core + 109 plugins = 536
+- **Tests**: 10116 (+1 live)
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
 ## Quick Start
@@ -39,6 +39,7 @@ uv run geode "schedule daily standup reminder at 9am"
 |----------|------|---------|
 | Agent Identity | `GEODE.md` | Identity, Voice & Conduct, runtime architecture, LLM models |
 | Operational Workflow | `docs/workflow.md` + `.claude/skills/geode-workflow/` | Evidence-first execution scaffold shared by Claude Code, Codex, and contributors |
+| Architecture/Extensibility Program | `docs/architecture/extensibility-roadmap.md` | Single execution SOT for GAP IDs, merge order, status, acceptance, and closure evidence |
 | Hook System | `docs/architecture/hook-system.md` | HookSystem 56 events |
 | Scaffold | `CLAUDE.md` | Development workflow, quality gates, CANNOT/CAN (this file) |
 
@@ -75,6 +76,8 @@ The canonical execution loop is `docs/workflow.md` plus the Claude Code project
 skill `.claude/skills/geode-workflow/`. Claude Code should use the skill as the
 step-by-step scaffold with progressive disclosure, while this file remains the
 rulebook for constraints, quality gates, and project-specific rationale.
+Architecture/extensibility work additionally selects and updates a stable GAP
+ID in `docs/architecture/extensibility-roadmap.md`.
 
 > **Design Principle**: CANNOT (guardrails) comes before CAN (freedom). Constraints guarantee quality. (Karpathy P1, OpenClaw Policy Chain, Codex Sandbox)
 
@@ -92,7 +95,7 @@ Rationale cites the originating incident when one exists. The `karpathy-patterns
 | | No direct push to main/develop — PR → CI → merge | Ratchet (P4) |
 | | No deleting other sessions' worktrees (`.owner` mismatch) | Ownership protection |
 | | No `git checkout` switching within a worktree | Isolation maintenance |
-| | No modifying tracking documents from feature/develop | Single source of truth on main |
+| | No modifying tracking documents from feature/develop, except the user-authorized roadmap-only readiness, claim, GAP-registration, reconciliation, and full-ledger audit PRs for `docs/architecture/extensibility-roadmap.md` defined in that file's §0.3 | Single source of truth on main, with one serialized program-ledger exception |
 | | No branch creation when remote is out of sync | Conflict prevention |
 | | No claiming "branch needs sync" from commit count alone — verify content with `git diff A B --stat` first | Graph asymmetry ≠ content asymmetry (gitflow merge commits) |
 | **Planning** | No starting implementation without Socratic Gate (except bugs/docs) | Prevent over-engineering |
@@ -257,6 +260,12 @@ See `geode-changelog` skill.
 See `geode-gitflow` skill. **Flow**: `feature → develop` **squash-merged** (one commit per change — collapses Codex-round fix commits; no per-feature merge commit on main), then `develop → main` pass-through `--merge`. HEREDOC PR. CI 5/5 required.
 
 > **Before EVERY `develop → main` merge, sync `main → develop` first** (`gh pr create --base develop --head main` → merge) so develop ⊇ main and never merges while lagging. The only recurring main-only drift is the kanban (`docs/progress.md`, committed on main post-merge); the pre-sync pulls the prior cycle's kanban into develop each time, so it self-heals and never accumulates. *This replaces the deleted `auto-backmerge.yml` workflow, which fired on every push to main and piled up unmerged main→develop PRs (10 open at once, 2026-06-14) because the feature/main divergence is never a fast-forward. Manual pre-sync is the single, deliberate back-merge per cycle.*
+
+> **Architecture closure exception**: only a tracking-only roadmap PR that
+> records package-atomic `DONE` after release starts from `origin/main` and
+> targets `main`. It carries no implementation code and is immediately
+> followed by a CI-gated `main → develop` sync PR. All implementation and
+> ordinary roadmap ledger work still starts from `origin/develop`.
 
 > **Concurrent-session drift is expected, not an anomaly.** While your feature PR is open, another session (Tau2 promotion, a scheduled routine) may merge to develop — your PR then goes `CONFLICTING`/`DIRTY` (usually a CHANGELOG top-entry collision) and/or your version number gets taken. Recover per `geode-gitflow` skill § "Concurrent-session drift & CI-trigger recovery": merge `origin/develop`, **fold** the concurrent `[Unreleased]`/entry into your release version (never leave `[Unreleased]`), re-verify the version number is still free, then **regenerate the derived version SoT** (`sync-stats.mjs` + `check_llms_version.py --fix`) or the CI ratchet blocks on a stale `changelog.ts`. Separately, a freshly-opened PR that attaches **0 CI checks** (webhook miss — verify with `gh api commits/<sha>/check-runs .total_count`, not `gh pr checks` alone) is re-triggered by `gh pr close <N> && gh pr reopen <N>`; don't leave a monitor spinning on the repeating "no checks" error.
 

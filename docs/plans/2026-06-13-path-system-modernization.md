@@ -1,9 +1,15 @@
 # Path-System Modernization — frontier convergence + debt/slop sweep
 
+> [!NOTE]
+> Historical path-convergence sprint. Its SoT/status language is frozen; use
+> current code and storage contracts for behavior. Architecture residuals roll
+> up to STORE-001/002 and DI-003 in the
+> [architecture roadmap](../architecture/extensibility-roadmap.md).
+>
 > **작성**: 2026-06-13
 > **목적**: GEODE의 경로 정책(`core/paths.py` SoT + 가드 + 소비자)에 쌓인 기술부채·slop을 **전수** 정돈하고, 프론티어 에이전트 CLI의 수렴 패턴(`{APP}_HOME` override)에 맞춰 현대화한다.
 > **검증**: ruff/format/mypy/lint-imports/pytest(가드 포함) + Codex MCP(gpt-5.5) review.
-> **SoT**: 이 문서. drift 시 코드/문서 동시 갱신.
+> **Historical SoT**: 이 문서. 당시 drift 시 코드/문서를 함께 갱신했다.
 > **근거 감사**: 3-차원 Explore 감사(legacy/migration · paths.py 조직·slop · 리터럴 우회·가드) + frontier 수렴 조사(2026-06-13).
 
 ---

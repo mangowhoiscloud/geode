@@ -1,5 +1,11 @@
 # LLM Adapter Abstraction — paperclip pattern adoption
 
+> [!NOTE]
+> Historical design provenance: the adapter layer has partially landed since
+> this plan was written. Current gaps, dependencies, and status are owned by
+> [`docs/architecture/extensibility-roadmap.md`](../architecture/extensibility-roadmap.md),
+> especially LLM-001 through LLM-004.
+
 **Date**: 2026-05-23
 **Branch**: `feature/llm-adapter-abstraction`
 **Scope**: Single PR
