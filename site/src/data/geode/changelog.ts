@@ -19,7 +19,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": ""
+    "body": "### Changed\n\n- **Portfolio now presents one English-only surface.** The portfolio fixes its\n  locale to English and ignores language query overrides, while documentation\n  keeps its bilingual behavior. The install copy action stays pinned to the\n  right of concise channel guidance; the landing demo identifies the Anthropic\n  Fable 5 route and lists the three supported provider families in a compact\n  rail. The minimal hero keeps its static pixel sky in a right-side crop, with\n  a solid rose copy-safe zone and a contrast-safe deep-rose headline outline\n  preventing white pixels from obscuring the title. Static English language\n  semantics and accessible field-label contrast cover assistive technology and\n  no-JavaScript rendering."
   },
   {
     "version": "1.0.0",

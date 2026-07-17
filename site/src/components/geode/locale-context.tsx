@@ -23,22 +23,25 @@ export function t(locale: Locale, ko: string, en: string): string {
 export function LocaleProvider({
   children,
   defaultLocale = "ko",
+  allowQueryOverride = true,
 }: {
   children: ReactNode;
   defaultLocale?: Locale;
+  allowQueryOverride?: boolean;
 }) {
   const [locale, setLocale] = useState<Locale>(defaultLocale);
 
   // Explicit ?lang= param only — never the browser locale. The param wins
-  // over the surface default (portfolio defaults en, docs defaults ko).
+  // over the surface default when that surface allows language switching.
   useEffect(() => {
+    if (!allowQueryOverride) return;
     const params = new URLSearchParams(window.location.search);
     const lang = params.get("lang");
     if (lang !== "en" && lang !== "ko") return;
     // Defer until after hydration; the server cannot observe the query string.
     const timer = window.setTimeout(() => setLocale(lang), 0);
     return () => window.clearTimeout(timer);
-  }, []);
+  }, [allowQueryOverride]);
 
   // Update html lang attribute + URL param (param present only when the
   // locale differs from this surface's default, so default URLs stay clean).
