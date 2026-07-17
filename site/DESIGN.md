@@ -103,6 +103,11 @@ curtain-stack sections over a pinned hero, `StageLight` scroll-linked
 dimming, the distillation act (token rain converging band-by-band through
 hairline filters labeled with Astryx `Token` chips, piling onto the GEODE
 word as a top-down fill), and the wordmark-to-laboratory crossfade finale.
+The hero keeps decorative pixels inside a right-side crop. A solid rose
+copy-safe layer clears the title area without a gradient, while a deep-rose
+outline preserves the warm-white letterforms at unusual zoom levels or aspect
+ratios. Compact field labels use the same accessible deep-rose ink
+(`#7F1747`, 4.88:1 against the signature field).
 The docs surface keeps the single dark substrate rule.
 
 **Texture.** `.rose-grid` (globals.css) is a 1px rose dot grid at 5% opacity,
@@ -251,7 +256,7 @@ When asked to build or modify UI in this portfolio repo:
 3. **Single substrate.** Every page wraps in `bg-[var(--paper)] text-[var(--ink)]`. Section-level dark or light overrides are forbidden.
 4. **Mascot images sit naturally on the substrate** — do not wrap in inset containers. Geodi was authored for dark mediums.
 5. **Two-mode accents.** When emitting an artifact (OS, runtime, prompt, hash) reference, use `--acc-artifact`. When emitting a line (scaffold, ratchet, CI, kanban) reference, use `--acc-line`. Mixing them within a single section is acceptable only when comparing the two modes (recursion table).
-6. **Korean default.** `<html lang="ko">` from `src/app/layout.tsx`. Bilingual content uses `<Bi ko={...} en={...} />` for the docs site or the `t(locale, ko, en)` helper for components.
+6. **English portfolio, Korean-first docs.** `<html lang="ko">` comes from `src/app/layout.tsx`. The portfolio fixes its surface locale to English, marks its content root with `lang="en"`, hides the locale control, and disables query-string language overrides. Docs remain fully bilingual through `<Bi ko={...} en={...} />`, and localized component prose uses `t(locale, ko, en)`.
 7. **Verification**: after edits, run `node ./node_modules/typescript/bin/tsc --noEmit -p tsconfig.json` and `next build`. Both must exit 0.
 
 **Forbidden additions** (without explicit user approval):

@@ -19,6 +19,8 @@
 <!-- Move items here when work begins. -->
 <!-- 3-Checkpoint: (1) alloc → (2) merge (CI 5/5) → (3) verify -->
 
+- [ ] Slack Socket Mode 인바운드 착지 (2026-07-17) — 타 세션 구현(1f9cf70b2, 라이브 검증 완료)을 fresh 브랜치 feature/slack-socket-landing에 replay 후 리뷰 발견 전건 해소하고 PR #2771(v1.1.0, develop행) 오픈. 해소: bounded admission 후 ACK(만석=unACK→Slack 재전송)+워커풀 8+정지 드레인 20s, 이중발화 app_mention 업그레이드(판정은 await 전 고정 — 핫리로드 내성), 터미널 체크포인트의 engagement 캐시 축출(session_is_terminal 프로브), serve ingress 선정지+poller join 타임아웃 25s(타임아웃 시 스레드 ref 유지), lane_queue 취소-안전 acquire(stray grant 반환 — 근본수정), doctor auth.test 단일 프로브. SoT 재구성: --theirs가 되돌린 1.0.0 콘텐츠(keyring 의존성·Workspace 문서·llms-full 470줄) develop 기준 복원+Slack 훙크 재적용+1.1.0 재스탬프+ratchet +1 승인. 게이트: 정적 전부+풀 스위트 bare exit 0. Codex(gpt-5.6-sol xhigh) 4라운드(발견 5→해소→신규 3→해소) 최종 LAND. (5) pr — CI 대기.
+
 
 
 

@@ -17,10 +17,13 @@ const defaultNavItems: NavItem[] = [
 export function GeodeNav({
   items = defaultNavItems,
   light = false,
+  showLocaleToggle = true,
 }: {
   items?: NavItem[];
   /** Light chrome for the white-substrate portfolio surface. */
   light?: boolean;
+  /** Hide language controls on surfaces whose copy is intentionally fixed. */
+  showLocaleToggle?: boolean;
 }) {
   const [activeSection, setActiveSection] = useState(items[0]?.id ?? "hero");
   const [visible, setVisible] = useState(false);
@@ -105,7 +108,7 @@ export function GeodeNav({
             );
           })}
         </div>
-        <LocaleToggle />
+        {showLocaleToggle ? <LocaleToggle /> : null}
       </div>
     </nav>
   );

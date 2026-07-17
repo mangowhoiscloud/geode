@@ -100,6 +100,19 @@ functional change.
   and Web API 429 handling now honors Slack's full `Retry-After` value rather
   than capping the delay at 30 seconds.
 
+### Changed
+
+- **Portfolio now presents one English-only surface.** The portfolio fixes its
+  locale to English and ignores language query overrides, while documentation
+  keeps its bilingual behavior. The install copy action stays pinned to the
+  right of concise channel guidance; the landing demo identifies the Anthropic
+  Fable 5 route and lists the three supported provider families in a compact
+  rail. The minimal hero keeps its static pixel sky in a right-side crop, with
+  a solid rose copy-safe zone and a contrast-safe deep-rose headline outline
+  preventing white pixels from obscuring the title. Static English language
+  semantics and accessible field-label contrast cover assistive technology and
+  no-JavaScript rendering.
+
 ## [1.0.0] - 2026-07-16
 
 > First stable GEODE release, adding self-managed Google Workspace OAuth and

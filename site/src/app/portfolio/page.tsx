@@ -37,6 +37,9 @@ const PAPER_55 = "color-mix(in srgb, #FFF0F8 55%, transparent)";
 // white plates (~4.5:1 vs #FFF0F8; the signature itself is ~1.8:1 as ink).
 const ROSE_INK = "#C2447F";
 const ROSE_INK_70 = "color-mix(in srgb, #C2447F 72%, transparent)";
+// Small text written directly on the signature field needs a deeper value
+// than plate ink (4.88:1 against #F49BC4).
+const ROSE_FIELD_INK = "#7F1747";
 
 const navItems = [
   { id: "hero", label: "Intro" },
@@ -64,6 +67,8 @@ const FIRST_PROMPT_LINES: InstallLine[] = [
   { kind: "prompt", text: "Hello World" },
 ];
 
+const supportedProviders = ["Anthropic", "OpenAI / Codex", "ZhipuAI GLM"] as const;
+
 const installChannels: {
   id: string;
   labelKo: string;
@@ -78,7 +83,7 @@ const installChannels: {
     labelKo: "uv tool",
     labelEn: "uv tool",
     noteKo: "파이썬 툴체인 사용자용. 최신 안정 버전을 격리된 도구 환경에 설치합니다.",
-    noteEn: "For Python-toolchain users. Installs the latest stable release in an isolated tool env.",
+    noteEn: "Latest stable release in an isolated tool environment.",
     copy: "uv tool install geode-agent",
     lines: [
       { kind: "cmd", text: "uv tool install geode-agent" },
@@ -92,7 +97,7 @@ const installChannels: {
     labelKo: "uvx · 설치 없이",
     labelEn: "uvx · no install",
     noteKo: "설치 없이 1회 실행. PATH에 명령을 남기지 않습니다.",
-    noteEn: "One-shot run without installing. Adds no command to your PATH.",
+    noteEn: "One-shot run with no install and no PATH changes.",
     copy: "uvx --from geode-agent geode",
     lines: [
       { kind: "cmd", text: "uvx --from geode-agent geode" },
@@ -105,7 +110,7 @@ const installChannels: {
     labelKo: "소스",
     labelEn: "Source",
     noteKo: "개발·기여용. uv run이 프로젝트 환경을 맞춘 뒤 바로 실행합니다.",
-    noteEn: "For development and contributions. uv run syncs the project env and starts GEODE.",
+    noteEn: "Development checkout with its environment managed by uv.",
     copy: "git clone https://github.com/mangowhoiscloud/geode.git && cd geode && uv run geode",
     lines: [
       { kind: "cmd", text: "git clone https://github.com/mangowhoiscloud/geode.git && cd geode" },
@@ -232,7 +237,7 @@ function InstallTerminal({ lines }: { lines: InstallLine[] }) {
               <span className="font-semibold text-[var(--acc-artifact)]">GEODE</span>{" "}
               <span className="text-[var(--ink-2)]">v{GEODE_SOT.version}</span>
             </p>
-            <p className="text-[var(--ink-3)]">claude-opus-4-8 · ~/workspace</p>
+            <p className="text-[var(--ink-3)]">anthropic / claude-fable-5 · ~/workspace</p>
             <p className="text-[var(--ink-3)]">/help for commands · type naturally</p>
           </div>
         </div>
@@ -336,13 +341,13 @@ function InstallChannels() {
           <div className="mt-6">
             <InstallTerminal key={channel.id} lines={channel.lines} />
           </div>
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-            <p className="font-mono text-[12px]" style={{ color: PAPER_75 }}>
+          <div className="mt-4 flex flex-nowrap items-center justify-between gap-x-4">
+            <p className="min-w-0 flex-1 font-mono text-[12px]" style={{ color: PAPER_75 }}>
               {t(locale, channel.noteKo, channel.noteEn)}
             </p>
             <button
               onClick={handleCopy}
-              className="touch-manipulation rounded border border-[color-mix(in_srgb,#FFF0F8_45%,transparent)] px-3 py-1 font-mono text-[11px] text-[#FFF0F8] transition-opacity hover:opacity-75"
+              className="shrink-0 touch-manipulation rounded border border-[color-mix(in_srgb,#FFF0F8_45%,transparent)] px-3 py-1 font-mono text-[11px] text-[#FFF0F8] transition-opacity hover:opacity-75"
             >
               {copied ? t(locale, "복사됨", "copied") : t(locale, "명령 복사", "copy command")}
             </button>
@@ -350,6 +355,22 @@ function InstallChannels() {
           <p className="mt-2 select-all break-all font-mono text-[11.5px]" style={{ color: PAPER_75 }}>
             {channel.copy}
           </p>
+          <div className="mt-5 flex flex-col gap-2 border-t border-[color-mix(in_srgb,#FFF0F8_25%,transparent)] pt-3.5 sm:flex-row sm:items-center sm:justify-between">
+            <p
+              className="shrink-0 font-mono text-[9px] uppercase tracking-[0.22em]"
+              style={{ color: ROSE_FIELD_INK }}
+            >
+              supported providers
+            </p>
+            <ul className="flex flex-wrap items-center gap-x-3.5 gap-y-1.5" aria-label="Supported providers">
+              {supportedProviders.map((provider) => (
+                <li key={provider} className="inline-flex items-center gap-1.5">
+                  <span aria-hidden="true" className="h-[3px] w-[3px] rotate-45 bg-[#7F1747]" />
+                  <span className="font-mono text-[10.5px] text-[#7F1747]">{provider}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
         </motion.div>
       </div>
     </section>
@@ -388,15 +409,21 @@ function HeroField() {
   };
   return (
     <section id="hero" className="relative overflow-hidden">
-      <Image
-        src="/geode/images/geode-sky.png"
-        alt=""
+      <div className="pointer-events-none absolute inset-y-0 right-0 hidden w-[44%] overflow-hidden lg:block">
+        <Image
+          src="/geode/images/geode-sky.png"
+          alt=""
+          aria-hidden
+          fill
+          priority
+          sizes="44vw"
+          className="select-none object-cover object-center opacity-90"
+          style={{ imageRendering: "pixelated" }}
+        />
+      </div>
+      <div
         aria-hidden
-        fill
-        priority
-        sizes="100vw"
-        className="pointer-events-none select-none object-cover opacity-90"
-        style={{ imageRendering: "pixelated" }}
+        className="pointer-events-none absolute inset-y-0 left-0 z-[1] hidden bg-[#F49BC4] lg:block lg:w-[74%] xl:w-[62%]"
       />
       <motion.div
         className="relative z-10 mx-auto max-w-7xl px-5 pb-16 pt-14 sm:px-8 lg:pt-20"
@@ -413,7 +440,8 @@ function HeroField() {
         </motion.p>
         <motion.h1
           variants={heroItem}
-          className="font-serif-display mt-7 max-w-4xl text-balance text-[clamp(2.5rem,5.6vw,4.3rem)] font-black leading-[1.12] text-[#FFF0F8]"
+          className="font-serif-display mt-7 max-w-[700px] text-balance text-[clamp(2.5rem,5.2vw,4.2rem)] font-black leading-[1.12] text-[#FFF0F8]"
+          style={{ WebkitTextStroke: "1.25px #7F1747", paintOrder: "stroke fill" }}
         >
           {t(locale, "일을 맡기면", "The agent that")}
           <br />
@@ -448,8 +476,8 @@ function HeroField() {
         className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-end justify-between px-5 pb-4 font-mono text-[10px] uppercase tracking-[0.18em] sm:px-8"
         style={{ color: PAPER_55 }}
       >
-        <span>geode v{GEODE_SOT.version}</span>
-        <span>apache-2.0 · 2026</span>
+        <span className="bg-[#F49BC4] px-1">geode v{GEODE_SOT.version}</span>
+        <span className="bg-[#F49BC4] px-1">apache-2.0 · 2026</span>
       </div>
     </section>
   );
@@ -1320,12 +1348,13 @@ function DistillationAct() {
 
 export default function GeodePortfolioPage() {
   return (
-    <LocaleProvider defaultLocale="en">
+    <LocaleProvider defaultLocale="en" allowQueryOverride={false}>
       <main
+        lang="en"
         data-astryx-theme="neutral"
         className={`${galmuri.variable} ${serifDisplay.variable} min-h-screen overflow-x-clip bg-[var(--acc-artifact)] text-[#FFF0F8]`}
       >
-        <GeodeNav items={navItems} light />
+        <GeodeNav items={navItems} light showLocaleToggle={false} />
         <HeroField />
         <InstallChannels />
         <RunRow />
