@@ -225,7 +225,7 @@ normal review and CI; implementations start only after the claim merges.
 
 | Closure package | GAP IDs | Owner/session | Implementation branch | Claim evidence | Claimed at (UTC) |
 |---|---|---|---|---|---|
-| R0.2 | GOV-002, VER-003 | `session=codex-2026-07-17 task=architecture-baseline` | `feature/architecture-baseline` | R0.2 readiness reconciled by [#2768](https://github.com/mangowhoiscloud/geode/pull/2768); claim PR [#2769](https://github.com/mangowhoiscloud/geode/pull/2769) | 2026-07-17T10:58:22Z |
+| _none yet_ | — | — | — | — | — |
 
 ## 1. Program objective
 
@@ -502,10 +502,10 @@ and closure evidence are appended in §10.
 | ID | Audit | Baseline evidence | Exit condition | Closure package | Depends on | Status |
 |---|---|---|---|---|---|---|
 | GOV-001 | `ABSENT` | Status is fragmented across dated plans and architecture docs | This file is linked from contributor entry points and governs status | R0.1 | — | `IN_DEVELOP` |
-| GOV-002 | `PARTIAL` | Hand-audited counts disagree with `AGENTS.md` (78 tools/56 hooks vs 67/65 prose) | One generated architecture baseline and a drift check own the counts | R0.2 | GOV-001 | `IN_PROGRESS` |
+| GOV-002 | `PARTIAL` | Hand-audited counts disagree with `AGENTS.md` (78 tools/56 hooks vs 67/65 prose) | One generated architecture baseline and a drift check own the counts | R0.2 | GOV-001 | `IN_DEVELOP` |
 | GOV-003 | `MISFIT` | Old plans describe removed paths and implemented work as current gaps | Overlapping docs carry a historical-status banner and point here | R0.1 | GOV-001 | `IN_DEVELOP` |
-| GOV-004 | `PARTIAL` | 24 import ignores and very high global Ruff ceilings lack uniform owner/expiry metadata | Every exception is removed or recorded per symbol/edge with owner, rationale, expiry, and ratchet | R0.3 | GOV-002 | `OPEN` |
-| BND-001 | `MISFIT` | `plugins/` contains first-party features that `core` imports | Every package is classified kernel, product shell, bundled feature, or external extension; names match semantics | R1.1 | GOV-002 | `OPEN` |
+| GOV-004 | `PARTIAL` | 24 import ignores and very high global Ruff ceilings lack uniform owner/expiry metadata | Every exception is removed or recorded per symbol/edge with owner, rationale, expiry, and ratchet | R0.3 | GOV-002 | `READY` |
+| BND-001 | `MISFIT` | `plugins/` contains first-party features that `core` imports | Every package is classified kernel, product shell, bundled feature, or external extension; names match semantics | R1.1 | GOV-002 | `READY` |
 | BND-002 | `MISFIT` | 31 `core` → `plugins` import sites across 14 files | AST gate reports zero reverse dependency; composition owns feature registration | R1.2 | BND-001 | `OPEN` |
 | BND-003 | `ABSENT` | One-off core-only probe fails at `core.cli`; CI does not test an installed kernel without features | Isolated wheel/package test boots and runs kernel tests without bundled/third-party modules | R1.3 | BND-001, BND-002 | `OPEN` |
 | BND-004 | `PARTIAL` | Skills/hooks/MCP have different discovery rules; Python feature collision/trust behavior is not unified | Each supported external surface declares non-executing discovery, precedence, collision, enablement, trust-before-load, reload, isolation, and teardown | R6.3 | BND-001, LLM-002 | `OPEN` |
@@ -537,7 +537,7 @@ and closure evidence are appended in §10.
 | TRUST-003 | `ABSENT` | Mutation serialization is not derived from explicit tool resource metadata | `resource_keys(args)` drives per-resource serialization; no argument-name heuristic | R2.4 | CAP-004 | `OPEN` |
 | VER-001 | `PARTIAL` | Quality gates pass but lack core-only, reverse-import, exception-budget, and tool-plan drift tests | All architecture gates in §9 run in CI and locally | R7.1 | BND-003, BND-004, CAP-005, LOOP-004, DI-003, LLM-002, PROTO-002, GOV-004, VER-003 | `OPEN` |
 | VER-002 | `ABSENT` | No contract suite measures how many central edits each extension type requires | Six extension scenarios in §8 pass without forbidden edits | R7.2 | CAP-006, LLM-002, BND-004 | `OPEN` |
-| VER-003 | `PARTIAL` | Public/internal metric prose drifts from executable counts | `sync-stats` or one shared generator updates site, AGENTS facts, and roadmap baseline; check mode is green | R0.2 | GOV-001 | `IN_PROGRESS` |
+| VER-003 | `PARTIAL` | Public/internal metric prose drifts from executable counts | `sync-stats` or one shared generator updates site, AGENTS facts, and roadmap baseline; check mode is green | R0.2 | GOV-001 | `IN_DEVELOP` |
 | VER-004 | `PARTIAL` | Cold-start and runtime metrics exist, but refactors lack one architecture regression baseline | Startup, first-turn, tool-plan build, memory, and event-write budgets are pinned and non-regressing | R7.3 | CAP-005, LOOP-003, DI-004, LLM-004, PROTO-002, STORE-002 | `OPEN` |
 
 ## 6. Dependency and merge sequence
@@ -1157,6 +1157,7 @@ pre-release delivery evidence survives after the claim row is gone.
 | Closure package | GAP IDs | Feature PR | Develop merge commit | Verification / handoff evidence |
 |---|---|---|---|---|
 | R0.1 | GOV-001, GOV-003 | [#2767](https://github.com/mangowhoiscloud/geode/pull/2767) | `ab1a80e91f9947defc15fa97f5b4ce66126c0c13` | CI Gate, lint/format, security, tests, type check, and macOS/Ubuntu install smoke passed; committed-diff re-review returned no findings |
+| R0.2 | GOV-002, VER-003 | [#2775](https://github.com/mangowhoiscloud/geode/pull/2775) | `7e3d2b2595306f8fbad44b961d53a2fc1d4f9180` | `uv run python scripts/architecture_baseline.py --check`; `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (CI Gate, full non-live tests, type check, lint/format, security, Pages build, and macOS/Ubuntu install smoke all green; committed-diff review found no findings) |
 
 ### 10.2 Main closure evidence
 
@@ -1267,11 +1268,11 @@ Commit-pinned primary source references used by the 2026-07-17 audit:
 
 ## 14. Immediate next unit
 
-After this claim merges, allocate `feature/architecture-baseline` from the
-updated `origin/develop` tip and verify that its branch and owner match the
-canonical R0.2 active claim before changing production or verification code.
+R0.2 is delivered on `develop`; its active claim is released and its durable
+feature/merge evidence is recorded in §10.1. The dependency and exit-criteria
+re-audit makes both R0.3 and R1.1 `READY`.
 
-R0.2 turns the hand-measured baseline in §2 into executable data and prevents
-the new SOT from becoming another stale plan. R1 does not start until that
-implementation can detect reverse imports, exception debt, ledger corruption,
-and metric drift.
+The next serialized ledger transaction claims the earliest ready package,
+R0.3 (`GOV-004`), before allocating its implementation worktree. R1.1
+(`BND-001`) remains ready but unclaimed until that earlier package is claimed
+or delivered.
