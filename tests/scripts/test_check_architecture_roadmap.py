@@ -7,8 +7,24 @@ from pathlib import Path
 import pytest
 from scripts import check_architecture_roadmap as checker
 
-ROADMAP = Path("docs/architecture/extensibility-roadmap.md").read_text(encoding="utf-8")
+CURRENT_ROADMAP = Path("docs/architecture/extensibility-roadmap.md").read_text(encoding="utf-8")
 CI_WORKFLOW = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
+R02_CLAIM_ROW = (
+    "| R0.2 | GOV-002, VER-003 | "
+    "`session=codex-2026-07-17 task=architecture-baseline` | "
+    "`feature/architecture-baseline` | "
+    "R0.2 readiness reconciled by "
+    "[#2768](https://github.com/mangowhoiscloud/geode/pull/2768); "
+    "claim PR [#2769](https://github.com/mangowhoiscloud/geode/pull/2769) | "
+    "2026-07-17T10:58:22Z |"
+)
+R01_DEVELOP_ROW = (
+    "| R0.1 | GOV-001, GOV-003 | "
+    "[#2767](https://github.com/mangowhoiscloud/geode/pull/2767) | "
+    "`ab1a80e91f9947defc15fa97f5b4ce66126c0c13` | "
+    "CI Gate, lint/format, security, tests, type check, and macOS/Ubuntu "
+    "install smoke passed; committed-diff re-review returned no findings |"
+)
 
 
 def _replace_ledger_cell(text: str, gap_id: str, column: int, value: str) -> str:
@@ -38,6 +54,78 @@ def _add_evidence_row(text: str, heading: str, row: str) -> str:
     return f"{text[:section_start]}{'\n'.join(lines)}{text[section_end:]}"
 
 
+def _replace_table_body(
+    text: str,
+    *,
+    heading: str,
+    next_heading: str,
+    header_prefix: str,
+    rows: tuple[str, ...],
+) -> str:
+    section_start = text.index(heading)
+    section_end = text.index(next_heading, section_start + len(heading))
+    lines = text[section_start:section_end].splitlines()
+    header_index = next(index for index, line in enumerate(lines) if line.startswith(header_prefix))
+    separator_index = header_index + 1
+    body_end = separator_index + 1
+    while body_end < len(lines) and lines[body_end].startswith("|"):
+        body_end += 1
+    lines[separator_index + 1 : body_end] = rows
+    return f"{text[:section_start]}{'\n'.join(lines)}{text[section_end:]}"
+
+
+def _claimed_r02_fixture(text: str) -> str:
+    """Normalize live delivery fields into one fixed hostile-test baseline."""
+    claimed = text
+    for gap in checker.parse_roadmap(text).gaps:
+        if gap.id in {"GOV-001", "GOV-003"}:
+            status = "`IN_DEVELOP`"
+        elif gap.id in {"GOV-002", "VER-003"}:
+            status = "`IN_PROGRESS`"
+        else:
+            status = "`OPEN`"
+        claimed = _replace_ledger_cell(claimed, gap.id, 6, status)
+
+    claimed = _replace_table_body(
+        claimed,
+        heading="### 0.4 Active claims",
+        next_heading="\n## 1.",
+        header_prefix="| Closure package | GAP IDs | Owner/session |",
+        rows=(R02_CLAIM_ROW,),
+    )
+    claimed = _replace_table_body(
+        claimed,
+        heading="### 10.1 Develop transition evidence",
+        next_heading="\n### 10.2",
+        header_prefix="| Closure package | GAP IDs | Feature PR |",
+        rows=(R01_DEVELOP_ROW,),
+    )
+    claimed = _replace_table_body(
+        claimed,
+        heading="### 10.2 Main closure evidence",
+        next_heading="\n### 10.3",
+        header_prefix="| GAP ID | Feature PR / develop commit |",
+        rows=("| _none yet_ | — | — | — | — | — |",),
+    )
+    claimed = _replace_table_body(
+        claimed,
+        heading="### 10.3 Non-closure decision evidence",
+        next_heading="\n### 10.4",
+        header_prefix="| GAP ID | Decision |",
+        rows=("| _none yet_ | — | — | — | — | — |",),
+    )
+    return _replace_table_body(
+        claimed,
+        heading="### 10.4 Blocker evidence",
+        next_heading="\n## 11.",
+        header_prefix="| Closure package | GAP IDs | Transition |",
+        rows=("| _none yet_ | — | — | — | — | — |",),
+    )
+
+
+ROADMAP = _claimed_r02_fixture(CURRENT_ROADMAP)
+
+
 def _deliver_r02(text: str, verification: str) -> str:
     delivered = _replace_ledger_cell(text, "GOV-002", 6, "`IN_DEVELOP`")
     delivered = _replace_ledger_cell(delivered, "VER-003", 6, "`IN_DEVELOP`")
@@ -57,10 +145,32 @@ def _deliver_r02(text: str, verification: str) -> str:
 
 
 def test_current_roadmap_satisfies_every_structural_invariant() -> None:
-    roadmap = checker.parse_roadmap(ROADMAP)
+    roadmap = checker.parse_roadmap(CURRENT_ROADMAP)
 
     assert checker.validate_structure(roadmap) == []
     assert checker.validate_transitions(roadmap, roadmap, base_ref="origin/develop") == []
+
+
+def test_hostile_fixture_is_independent_of_the_current_r02_delivery_state() -> None:
+    delivered = _deliver_r02(
+        ROADMAP,
+        "`uv run pytest tests/scripts/test_check_architecture_roadmap.py` — RESULT: PASS",
+    )
+    delivered = _replace_ledger_cell(delivered, "GOV-004", 6, "`READY`")
+    delivered = _replace_ledger_cell(delivered, "BND-001", 6, "`READY`")
+
+    fixture = checker.parse_roadmap(_claimed_r02_fixture(delivered))
+    gaps = {gap.id: gap for gap in fixture.gaps}
+
+    assert gaps["GOV-002"].status == "IN_PROGRESS"
+    assert gaps["VER-003"].status == "IN_PROGRESS"
+    assert gaps["GOV-004"].status == "OPEN"
+    assert gaps["BND-001"].status == "OPEN"
+    assert tuple(claim.package for claim in fixture.claims) == ("R0.2",)
+    assert tuple(row.key for row in fixture.develop_evidence) == ("R0.1",)
+    assert fixture.main_evidence == ()
+    assert fixture.decision_evidence == ()
+    assert fixture.blocker_evidence == ()
 
 
 def test_duplicate_gap_and_package_ids_fail() -> None:

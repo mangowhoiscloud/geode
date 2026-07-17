@@ -49,6 +49,12 @@ functional change.
 
 ### Architecture
 
+- **Roadmap checker fixture isolation.** Hostile state-machine tests now derive
+  a fixed claimed-R0.2 fixture from the current roadmap while the SOT validity
+  test continues to read the live document. Legal post-merge status, claim,
+  evidence, and readiness transitions therefore no longer invalidate their own
+  checker test setup.
+
 - **Generated architecture baseline and roadmap state-machine gate.** One
   deterministic generator now owns Python file/LOC counts, tool
   definition/execution/schema parity, hooks, built-in adapters, ContextVars,
