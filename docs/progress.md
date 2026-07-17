@@ -19,7 +19,7 @@
 <!-- Move items here when work begins. -->
 <!-- 3-Checkpoint: (1) alloc → (2) merge (CI 5/5) → (3) verify -->
 
-- [ ] Slack Socket Mode 인바운드 (2026-07-17) — xapp 토큰 발급·apps.connections.open wss 핸드셰이크 검증 완료(운영자), GEODE 소비자 구현: ws envelope ack+이벤트 라우팅(ts dedup, message/app_mention 이중발화 억제)+disconnect 재연결, xapp 존재 시 폴링 대체(부재 시 폴백 유지), doctor 프로브. websockets는 기존 선언 의존성. 부수: poller not_in_channel(C0ALD5084UW) 대응. worktree=feature/slack-socket-mode. (1) alloc.
+- [ ] Slack Socket Mode 인바운드 — **리뷰 완료, 착지 대기** (2026-07-17). 구현은 타 세션 소유 worktree=slack-socket-mode(feature/slack-socket-mode, 커밋 1f9cf70b2, v0.99.334 스탬프·develop보다 25커밋 후행)에 실존, 라이브 동작 검증됨. 본 세션 점검 결과: 정적 게이트 전부 clean·slack 스위트 rc=0·ratchet +1(SlackTransport/SocketModeClient .configured 프로토콜 쌍 — baseline 승인 권고). Codex(gpt-5.6-sol xhigh) 판정=구조 견고하나 as-is 착지 불가: HIGH 1(ACK-선행-무한정 admission — 스톰 시 무한 태스크+ACK 후 크래시=이벤트 영구 유실; bounded queue 후 ACK로 수정), MED 3(bot-ID 부재 시 message→app_mention 순서에서 멘션 유실, engaged_threads 7d 캐시가 터미널 체크포인트 암묵 reopen — 상태머신 문서와 모순, shutdown이 Slack ingress를 먼저 안 멈춤+join 5s<open 15s), LOW 1(doctor auth.test 3회). 착지 체크리스트=fresh 브랜치서 Slack 커밋만 replay(395fa78df remote-computer-use 분리, 그 커밋 안의 Slack 문서 훙크는 보존), HIGH 수정+회귀 5종, [Unreleased] 재스탬프, 미변경 SVG 4개 churn 제거. 수정·착지는 소유 세션 몫.
 
 
 
