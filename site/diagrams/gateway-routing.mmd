@@ -1,9 +1,9 @@
-%% gateway-routing — messenger pollers through binding and lanes to the loop.
+%% gateway-routing — messenger receivers through binding and lanes to the loop.
 %% SoT for site/public/diagrams/gateway-routing.svg (npm run render-diagrams).
 %% Grounded in site/src/app/docs/harness/serve-gateway/page.tsx
 %% (core/messaging/binding.py, core/orchestration/lane_queue.py).
 flowchart TD
-  SLACK["Slack poller"] --> CM
+  SLACK["Slack Socket Mode"] --> CM
   DISCORD["Discord poller"] --> CM
   TELEGRAM["Telegram poller"] --> CM
   CM{"binding match?<br/>ChannelManager"}

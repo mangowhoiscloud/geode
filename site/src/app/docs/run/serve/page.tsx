@@ -16,7 +16,7 @@ export default function Page() {
           <>
             <p>
               <code>geode serve</code>는 REPL 없이 도는 헤드리스 게이트웨이
-              데몬입니다. 메신저 폴러, 스케줄러, 선택적 웹훅, 그리고 thin
+              데몬입니다. 메신저 receiver, 스케줄러, 선택적 웹훅, 그리고 thin
               CLI가 붙는 IPC 소켓을 한 프로세스에서 호스팅합니다.
             </p>
 
@@ -27,8 +27,8 @@ export default function Page() {
               </thead>
               <tbody>
                 <tr>
-                  <td>메신저 폴러</td>
-                  <td>Slack, Discord, Telegram 메시지를 폴링해 에이전트 세션으로 라우팅합니다. 폴링 주기는 <code>--poll/-p</code>(기본 3초).</td>
+                  <td>메신저 receiver</td>
+                  <td>Slack은 Socket Mode push로, Discord와 Telegram은 polling으로 메시지를 받아 에이전트 세션에 라우팅합니다. <code>--poll/-p</code>는 poll 기반 경로에만 적용됩니다.</td>
                   <td><code>core/cli/typer_serve.py</code></td>
                 </tr>
                 <tr>
@@ -67,7 +67,7 @@ export default function Page() {
             <pre>{`# ~/.geode/.env
 GEODE_GATEWAY_ENABLED=true`}</pre>
             <pre>{`geode serve              # 포그라운드 실행
-geode serve --poll 5     # 폴링 주기 5초`}</pre>
+geode serve --poll 5     # poll 기반 receiver 주기 5초`}</pre>
 
             <h2>종료와 상태: 있는 그대로</h2>
             <p>
@@ -134,7 +134,7 @@ geode serve --poll 5     # 폴링 주기 5초`}</pre>
 
             <h2>설정 레퍼런스</h2>
             <ul>
-              <li><a href="/geode/docs/harness/serve-gateway">Serve와 게이트웨이</a>. 폴러, 바인딩, lane queue 운영.</li>
+              <li><a href="/geode/docs/harness/serve-gateway">Serve와 게이트웨이</a>. receiver, 바인딩, lane queue 운영.</li>
               <li><a href="/geode/docs/run/messaging">메신저 연동</a>. Slack, Discord, Telegram 연결.</li>
               <li><a href="/geode/docs/run/schedule">작업 예약</a>. 자연어와 cron 예약.</li>
               <li><a href="/geode/docs/harness/lifecycle">라이프사이클</a>. 부트스트랩과 종료 순서의 내부.</li>
@@ -145,7 +145,7 @@ geode serve --poll 5     # 폴링 주기 5초`}</pre>
           <>
             <p>
               <code>geode serve</code> is the headless gateway daemon, no REPL
-              attached. One process hosts the messaging pollers, the scheduler,
+              attached. One process hosts the messaging receivers, the scheduler,
               an optional webhook, and the IPC socket the thin CLI connects to.
             </p>
 
@@ -156,8 +156,8 @@ geode serve --poll 5     # 폴링 주기 5초`}</pre>
               </thead>
               <tbody>
                 <tr>
-                  <td>Messaging pollers</td>
-                  <td>Poll Slack, Discord, and Telegram and route messages into agent sessions. Poll interval via <code>--poll/-p</code> (default 3 seconds).</td>
+                  <td>Messaging receivers</td>
+                  <td>Receive Slack over Socket Mode push and poll Discord or Telegram, then route messages into agent sessions. <code>--poll/-p</code> applies only to polling paths.</td>
                   <td><code>core/cli/typer_serve.py</code></td>
                 </tr>
                 <tr>
@@ -196,7 +196,7 @@ geode serve --poll 5     # 폴링 주기 5초`}</pre>
             <pre>{`# ~/.geode/.env
 GEODE_GATEWAY_ENABLED=true`}</pre>
             <pre>{`geode serve              # run in the foreground
-geode serve --poll 5     # 5-second poll interval`}</pre>
+geode serve --poll 5     # 5-second interval for polling paths`}</pre>
 
             <h2>Stop and status, honestly</h2>
             <p>

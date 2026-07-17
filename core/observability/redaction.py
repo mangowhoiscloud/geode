@@ -24,6 +24,7 @@ _SECRET_PATTERNS: list[re.Pattern[str]] = [
     ),  # OAuth/JWT bearer token
     re.compile(r"xoxb-[a-zA-Z0-9\-]+"),  # Slack bot token
     re.compile(r"xoxp-[a-zA-Z0-9\-]+"),  # Slack user token
+    re.compile(r"xapp-[a-zA-Z0-9\-]+"),  # Slack app-level token
 ]
 
 

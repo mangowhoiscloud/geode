@@ -234,6 +234,39 @@ class TestLaneQueue:
         assert q.session_lane is not None and q.session_lane.active_count == 0
         gl._semaphore.release()
 
+    def test_cancelled_acquire_releases_stray_grant(self):
+        """An abandoned off-thread acquire that is granted AFTER cancellation
+        must release itself — otherwise the lane starves every later waiter
+        for that key (shutdown-drain cancelling a Socket Mode worker)."""
+        q = LaneQueue()
+        q.add_lane("global", max_concurrent=1, timeout_s=5.0)
+        gl = q.get_lane("global")
+        assert gl is not None
+        # Hold the lane so the acquire below parks in the executor thread.
+        gl._semaphore.acquire()
+
+        async def scenario() -> None:
+            async def use_lane() -> None:
+                async with q.acquire_all_async("key", ["global"]):
+                    raise AssertionError("must not be granted while cancelled")
+
+            waiter = asyncio.create_task(use_lane())
+            await asyncio.sleep(0.2)  # let the executor thread park on acquire
+            waiter.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await waiter
+            # Grant the abandoned acquire; the stray-grant callback releases.
+            gl._semaphore.release()
+            deadline = time.monotonic() + 3.0
+            while time.monotonic() < deadline:
+                if gl._semaphore.acquire(blocking=False):
+                    gl._semaphore.release()
+                    return
+                await asyncio.sleep(0.05)
+            raise AssertionError("stray grant was never released — lane leaked")
+
+        asyncio.run(scenario())
+
     def test_status_with_session_lane(self):
         q = LaneQueue()
         q.set_session_lane(SessionLane(max_sessions=256))

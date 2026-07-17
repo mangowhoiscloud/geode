@@ -28,6 +28,7 @@ class BasePoller(ABC):
     """
 
     _env_config_var: str = ""  # Override in subclass for auto is_configured()
+    STOP_JOIN_TIMEOUT_S: float = 5.0  # Override when the loop holds long-lived I/O
 
     def __init__(
         self,
@@ -103,10 +104,20 @@ class BasePoller(ABC):
         )
 
     def stop(self) -> None:
-        """Signal the poller to stop."""
+        """Signal the poller to stop and join its thread."""
         self._stop_event.set()
-        if self._thread is not None:
-            self._thread.join(timeout=5.0)
+        thread = self._thread
+        if thread is not None:
+            thread.join(timeout=self.STOP_JOIN_TIMEOUT_S)
+            if thread.is_alive():
+                # Keep the ref: clearing it would let start() spawn a second
+                # loop while this one is still winding down.
+                log.warning(
+                    "Gateway poller %s still stopping after %.0fs join timeout",
+                    self.channel_name,
+                    self.STOP_JOIN_TIMEOUT_S,
+                )
+                return
             self._thread = None
         log.info("Gateway poller stopped: %s", self.channel_name)
 

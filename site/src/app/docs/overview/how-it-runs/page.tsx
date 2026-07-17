@@ -122,7 +122,7 @@ export default function Page() {
                 </tr>
                 <tr>
                   <td>메신저 메시지</td>
-                  <td>Slack, Discord, Telegram poller(<code>core/server/supervised/</code>)가 메시지를 받고, binding(<code>core/messaging/binding.py</code>)이 세션으로 라우팅한 뒤 같은 레인과 루프를 지납니다.</td>
+                  <td>Slack Socket Mode 또는 Discord/Telegram poller(<code>core/server/supervised/</code>)가 메시지를 받고, binding(<code>core/messaging/binding.py</code>)이 세션으로 라우팅한 뒤 같은 레인과 루프를 지납니다.</td>
                 </tr>
                 <tr>
                   <td>예약 실행</td>
@@ -260,7 +260,7 @@ export default function Page() {
                 </tr>
                 <tr>
                   <td>Messenger message</td>
-                  <td>A Slack, Discord, or Telegram poller (<code>core/server/supervised/</code>) picks up the message, the binding (<code>core/messaging/binding.py</code>) routes it to a session, and it flows through the same lanes and loop.</td>
+                  <td>Slack Socket Mode or a Discord/Telegram poller (<code>core/server/supervised/</code>) receives the message, the binding (<code>core/messaging/binding.py</code>) routes it to a session, and it flows through the same lanes and loop.</td>
                 </tr>
                 <tr>
                   <td>Scheduled run</td>

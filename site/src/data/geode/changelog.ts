@@ -2,7 +2,7 @@
  * GEODE CHANGELOG, auto-synced from the GEODE repo via `npm run sync-stats`.
  * Do not edit manually. Edit CHANGELOG.md in the GEODE repo and re-run sync.
  *
- * Last sync: 2026-07-16
+ * Last sync: 2026-07-17
  *
  * Each entry's `body` is the raw markdown between two version headings.
  * The Changelog page renders the body with a minimal markdown renderer
@@ -17,9 +17,9 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
-    "version": "Unreleased",
-    "date": "",
-    "body": ""
+    "version": "1.1.0",
+    "date": "2026-07-17",
+    "body": "### Added\n\n- **Slack inbound now uses Socket Mode push.** A dependency-free\n  `SlackSocketModeClient` (built on the already-installed `httpx` and\n  `websockets` packages) obtains redacted temporary URLs from\n  `apps.connections.open`, admits each Events API envelope into a bounded\n  queue before acknowledging it (a full queue leaves the envelope unACKed so\n  Slack redelivers instead of unbounded local task growth), consumes the queue\n  on a fixed worker pool, drains admitted events on stop for a bounded\n  window, reconnects on\n  Slack refreshes or connection loss, and routes only `message` /\n  `app_mention` payloads from explicitly bound channels. `SlackPoller` keeps\n  its registry name for compatibility but selects Socket Mode whenever\n  `SLACK_APP_TOKEN=xapp-...` is present; the bot-token Web API transport\n  remains the single owner of outbound posts, reactions, formatting, and\n  thread replies.\n\n### Fixed\n\n- **Slack threads now continue without repeated mentions or state splits.**\n  The first addressed message's root timestamp is used as the thread id from\n  turn one, so its replies reuse one gateway lane, conversation, and stable\n  checkpoint. Channel-scoped engaged-thread state admits later replies without\n  another `@geode`; after a daemon restart, ACTIVE/PAUSED checkpoints restore\n  both routing eligibility and message history through the same resume path as\n  CLI sessions. Terminal checkpoints do not reopen implicitly — a durable\n  COMPLETED/ERROR verdict now also evicts the in-memory engaged-thread entry\n  instead of being outvoted by it. Slack's `message`/`app_mention` double-fire\n  is deduplicated by `channel:ts`, but an `app_mention` may still upgrade a\n  same-timestamp message that was first seen unaddressed (bot user ID not yet\n  known), so a mention can no longer be silently swallowed by its own\n  duplicate. Serve shutdown stops channel ingress before draining active\n  sessions, the Slack receiver's stop-join outlasts the socket connect\n  timeout so a stop during connection setup cannot leak a second loop, and a\n  cancelled off-thread lane acquisition now hands its eventual stray grant\n  back instead of starving that session lane for later waiters.\n- **Slack diagnostics now verify the actual inbound contract.**\n  `geode doctor slack` runs one live `auth.test` probe whose result feeds the\n  token, scope, and transport rows (previously three independent network\n  calls), validates the app-level token, requires\n  `app_mentions:read`, emits a Socket-Mode-enabled manifest with\n  `app_mention` / `message.channels` subscriptions, and probes\n  form-encoded `conversations.info` for every binding (Slack can ignore the\n  `channel` field in a JSON body for this method). Missing channel membership\n  is now a failing check with an `/invite @geode` hint and a clickable Slack\n  channel link instead of an apparently operational but unreadable binding.\n- **Polling is an explicit, quieter migration fallback.** Deployments without\n  an app token log `polling fallback` and report DEGRADED rather than silently\n  presenting polling as the production mode. Inaccessible channels enter a\n  60-second cooldown instead of generating an API error every three seconds,\n  and Web API 429 handling now honors Slack's full `Retry-After` value rather\n  than capping the delay at 30 seconds."
   },
   {
     "version": "1.0.0",
@@ -2398,4 +2398,4 @@ export const CHANGELOG: ChangelogEntry[] = [
   }
 ];
 
-export const CHANGELOG_SYNCED_AT = "2026-07-16";
+export const CHANGELOG_SYNCED_AT = "2026-07-17";

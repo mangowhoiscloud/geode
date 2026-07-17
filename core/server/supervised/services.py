@@ -37,7 +37,7 @@ class SessionMode(StrEnum):
 
     REPL = "repl"  # Interactive terminal — hitl=2, verbose=user, time=unlimited
     IPC = "ipc"  # Thin CLI via Unix socket — hitl=0, WRITE ok, DANGEROUS blocked
-    DAEMON = "daemon"  # Slack/Discord poller — hitl=0, quiet, time=config
+    DAEMON = "daemon"  # Messaging receivers — hitl=0, quiet, time=config
     SCHEDULER = "scheduler"  # Cron/scheduled jobs — hitl=0, quiet, time=300s cap
 
 
