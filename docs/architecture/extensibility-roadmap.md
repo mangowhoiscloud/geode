@@ -212,7 +212,7 @@ normal review and CI; implementations start only after the claim merges.
 
 | Closure package | GAP IDs | Owner/session | Implementation branch | Claim evidence | Claimed at (UTC) |
 |---|---|---|---|---|---|
-| _none yet_ | — | — | — | — | — |
+| R0.2 | GOV-002, VER-003 | `session=codex-2026-07-17 task=architecture-baseline` | `feature/architecture-baseline` | R0.2 readiness reconciled by [#2768](https://github.com/mangowhoiscloud/geode/pull/2768); claim PR [#2769](https://github.com/mangowhoiscloud/geode/pull/2769) | 2026-07-17T10:58:22Z |
 
 ## 1. Program objective
 
@@ -481,7 +481,7 @@ package. Delivery and closure evidence are appended in §10.
 | ID | Audit | Baseline evidence | Exit condition | Closure package | Depends on | Status |
 |---|---|---|---|---|---|---|
 | GOV-001 | `ABSENT` | Status is fragmented across dated plans and architecture docs | This file is linked from contributor entry points and governs status | R0.1 | — | `IN_DEVELOP` |
-| GOV-002 | `PARTIAL` | Hand-audited counts disagree with `AGENTS.md` (78 tools/56 hooks vs 67/65 prose) | One generated architecture baseline and a drift check own the counts | R0.2 | GOV-001 | `READY` |
+| GOV-002 | `PARTIAL` | Hand-audited counts disagree with `AGENTS.md` (78 tools/56 hooks vs 67/65 prose) | One generated architecture baseline and a drift check own the counts | R0.2 | GOV-001 | `IN_PROGRESS` |
 | GOV-003 | `MISFIT` | Old plans describe removed paths and implemented work as current gaps | Overlapping docs carry a historical-status banner and point here | R0.1 | GOV-001 | `IN_DEVELOP` |
 | GOV-004 | `PARTIAL` | 24 import ignores and very high global Ruff ceilings lack uniform owner/expiry metadata | Every exception is removed or recorded per symbol/edge with owner, rationale, expiry, and ratchet | R0.3 | GOV-002 | `OPEN` |
 | BND-001 | `MISFIT` | `plugins/` contains first-party features that `core` imports | Every package is classified kernel, product shell, bundled feature, or external extension; names match semantics | R1.1 | GOV-002 | `OPEN` |
@@ -516,7 +516,7 @@ package. Delivery and closure evidence are appended in §10.
 | TRUST-003 | `ABSENT` | Mutation serialization is not derived from explicit tool resource metadata | `resource_keys(args)` drives per-resource serialization; no argument-name heuristic | R2.4 | CAP-004 | `OPEN` |
 | VER-001 | `PARTIAL` | Quality gates pass but lack core-only, reverse-import, exception-budget, and tool-plan drift tests | All architecture gates in §9 run in CI and locally | R7.1 | BND-003, BND-004, CAP-005, LOOP-004, DI-003, LLM-002, PROTO-002, GOV-004, VER-003 | `OPEN` |
 | VER-002 | `ABSENT` | No contract suite measures how many central edits each extension type requires | Six extension scenarios in §8 pass without forbidden edits | R7.2 | CAP-006, LLM-002, BND-004 | `OPEN` |
-| VER-003 | `PARTIAL` | Public/internal metric prose drifts from executable counts | `sync-stats` or one shared generator updates site, AGENTS facts, and roadmap baseline; check mode is green | R0.2 | GOV-001 | `READY` |
+| VER-003 | `PARTIAL` | Public/internal metric prose drifts from executable counts | `sync-stats` or one shared generator updates site, AGENTS facts, and roadmap baseline; check mode is green | R0.2 | GOV-001 | `IN_PROGRESS` |
 | VER-004 | `PARTIAL` | Cold-start and runtime metrics exist, but refactors lack one architecture regression baseline | Startup, first-turn, tool-plan build, memory, and event-write budgets are pinned and non-regressing | R7.3 | CAP-005, LOOP-003, DI-004, LLM-004, PROTO-002, STORE-002 | `OPEN` |
 
 ## 6. Dependency and merge sequence
@@ -1205,11 +1205,9 @@ Commit-pinned primary source references used by the 2026-07-17 audit:
 
 ## 14. Immediate next unit
 
-After this reconciliation merges, the next governance action is a separate
-roadmap-only claim PR that atomically moves GOV-002 and VER-003 from `READY` to
-`IN_PROGRESS` and records the R0.2 owner and implementation branch. Only after
-that claim merges may the generated-baseline implementation worktree be
-allocated.
+After this claim merges, allocate `feature/architecture-baseline` from the
+updated `origin/develop` tip and verify that its branch and owner match the
+canonical R0.2 active claim before changing production or verification code.
 
 R0.2 turns the hand-measured baseline in §2 into executable data and prevents
 the new SOT from becoming another stale plan. R1 does not start until that
