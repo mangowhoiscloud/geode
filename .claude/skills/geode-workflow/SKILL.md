@@ -14,7 +14,10 @@ then report honestly.
 
 1. **Scope**: confirm branch, dirty files, objective, and unrelated work.
 2. **GAP audit**: search before designing; classify existing, partial, absent,
-   or misfit.
+   or misfit. For architecture/extensibility work, read
+   `docs/architecture/extensibility-roadmap.md`, claim a `READY` work package
+   on canonical `develop`, and carry its stable GAP IDs through the PR and
+   reconciliation flow.
 3. **Grounding**: use official docs/source for provider, SDK, model, OS,
    browser, package, or current external behaviour.
 4. **Preflight**: classify task type, affected providers, required tools,
@@ -50,6 +53,19 @@ that do not affect the task.
 
 - Do not switch branches inside an active worktree.
 - Do not revert unrelated dirty work.
+- Architecture/extensibility implementation work starts only after a
+  roadmap-only claim PR moves the package from `READY` to `IN_PROGRESS` on
+  canonical `develop` and names its owner/implementation branch. Claim and
+  reconciliation PRs establish that prerequisite; they do not require an
+  earlier claim. The implementation PR preserves the claimed status and never
+  predicts `IN_DEVELOP` or `DONE`.
+- Register architecture scope discovered during implementation through a
+  separate roadmap-only GAP-registration PR. Registration may add an `OPEN`
+  package without a prior claim, but does not authorize implementing it.
+- Within the architecture/extensibility program, use `origin/main` only for a
+  tracking-only roadmap `DONE` worktree after release. Its PR targets `main`,
+  carries no implementation code, and is followed by a CI-gated
+  `main -> develop` sync.
 - Do not mark unsupported provider behaviour as supported without grounding.
 - Do not add ad hoc observability strings when the capability/evidence
   vocabulary should be extended.

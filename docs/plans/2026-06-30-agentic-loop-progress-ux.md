@@ -1,7 +1,13 @@
 # Agentic Loop Progress Guard + CLI Operator UX
 
-Status: draft plan (2026-06-30)
-Owner: scaffold session (`feature/loop-progress-ux-plan`)
+> [!NOTE]
+> Historical liveness and operator-UX design. Current behavior is owned by code
+> and tests; architecture residuals roll up to LOOP-003/004 and CAP-004/005 in
+> the [architecture roadmap](../architecture/extensibility-roadmap.md). The
+> metadata and proposed stages below are preserved as a 2026-06-30 snapshot.
+
+Historical status: draft plan (2026-06-30)
+Historical owner: scaffold session (`feature/loop-progress-ux-plan`)
 Constraint: **Do not add a default round cap.** `DEFAULT_MAX_ROUNDS = 0`
 remains the default because GEODE's inner runtime is intentionally an
 unbounded `while(tool_use)` loop. This plan adds progress/liveness controls

@@ -64,6 +64,21 @@ second-opinion review before push:
 - Fix or explicitly accept every finding; amend and re-verify fixes.
 - Historical yield: ~1.6 real catches per PR that local gates missed.
 
+For architecture/extensibility **implementation PRs**, verification also
+confirms that canonical `develop` contains the selected package's
+`IN_PROGRESS` active claim, the implementation branch/owner match it, the
+implementation diff does not prospectively change status, and a post-merge
+reconciliation path exists. Roadmap-only readiness, claim, GAP-registration,
+reconciliation, full-ledger audit, and main-based tracking PRs perform ledger
+maintenance and are exempt from the implementation active-claim prerequisite.
+A registration PR adds only `OPEN` scope and does not authorize implementation.
+Neither local gates nor review can justify a prospective `IN_DEVELOP` or `DONE`
+status in an implementation PR.
+
+After R0.2 lands, every roadmap-only PR runs the canonical ledger validator
+against its actual target: `--base-ref origin/develop` for ordinary ledger
+work and `--base-ref origin/main` for a tracking-only closure PR.
+
 ## Repo Hygiene Ratchet
 
 Run before every push (CI's Lint & Format job includes it; local ruff does not):

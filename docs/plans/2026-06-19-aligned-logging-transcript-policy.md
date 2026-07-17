@@ -1,6 +1,14 @@
 # Aligned Logging / Transcript / Resume / Replay Policy
 
-> **Status**: design SoT — agreed scope is "full-layer policy doc first, implementation as staged PRs after".
+> [!NOTE]
+> Historical behavior-contract evidence: this plan preserves the storage,
+> transcript, resume, and replay questions identified on 2026-06-19, but it no
+> longer owns implementation status or ordering. Current execution status rolls
+> up to STORE-001/002 in
+> [`docs/architecture/extensibility-roadmap.md`](../architecture/extensibility-roadmap.md).
+>
+> **Original status**: design SoT — agreed scope was "full-layer policy doc
+> first, implementation as staged PRs after".
 > **Date**: 2026-06-19. **Owner decision pending** on the open questions in §7.
 > This doc defines ONE policy for how the four execution subsystems record, resume, and replay their runs, and how their append-logs are written/read. It does not change code; each layer below ships as its own PR.
 
@@ -40,6 +48,7 @@ This is the same class of issue as the registry / config-TOML / helper duplicati
 **Adjacent, distinct concern (out of scope here).** Diagnostic `logging` — the Python `logging` module's JSON formatter + auto-redaction filter + Settings→TOML mapping — is `docs/plans/2026-06-14-obs-logging-config-convergence.md`. That doc governs `log.info(...)` *diagnostic output* (format + secret redaction). This doc governs the *execution transcript / append-ledger* (`SessionTranscript`, `RunTranscript`, `mutations.jsonl`, `.eval`) — the record of what a run DID, not its diagnostic chatter. The two never overlap: a transcript row is structured data the producer emits deliberately; a log line is a diagnostic the `logging` framework formats. Redaction (that doc's A2) does apply to any PII a transcript payload carries — noted as a shared dependency, owned there.
 
 **Non-goals.**
+
 - Do **not** replace or wrap inspect_ai's `.eval` format. petri's execution trace is vendored and stays vendored; only its GEODE-authored side-logs (`MANIFEST.jsonl`, usage) align.
 - Do **not** force a single transcript *file* across subsystems — the tracked-vs-runtime split and the per-domain artifacts stay. Alignment is of **policy** (schema, write discipline, read contract, resume contract, replay doctrine), not of storage location.
 - Do **not** build a distributed/streamed log bus. These are local append files read by the same host.

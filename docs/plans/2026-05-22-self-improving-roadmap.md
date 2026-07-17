@@ -1,8 +1,17 @@
 # Self-Improving Roadmap — 30 항목 3-tier 진행 계획
 
+> [!NOTE]
+> Historical 2026-05-22 roadmap: its 30-item inventory and recommended order
+> are provenance, not an active execution ledger. Architecture-shaped residual
+> work in its memory, hook, and agent-loop tiers rolls up to LOOP-001 through
+> LOOP-005, DI-001 through DI-003, PROTO-001, and STORE-002 in
+> [`docs/architecture/extensibility-roadmap.md`](../architecture/extensibility-roadmap.md).
+> Self-improving domain behavior remains governed by current code and its
+> dedicated architecture contracts.
+>
 > Created: 2026-05-22
-> Status: Active
-> Driving directive: outer (co-scientist → petri → autoresearch) → inner (Hermes) → cognitive (agentic loop) 순서
+> Original status (frozen): Active
+> Original driving directive: outer (co-scientist → petri → autoresearch) → inner (Hermes) → cognitive (agentic loop) 순서
 
 ## Driving observation
 
@@ -295,7 +304,7 @@ D2 (data-threshold trigger) + D3 (`/self-improving run` manual override) 은 D1 
 | 측정 | success rate × token cost Pareto frontier |
 | 의존 | CL-A1 (Plan) + CL-A3 (Verify) + CL-A6 (model separation 으로 비용 제어) 안정 |
 
-## 진행 순서 (recommended)
+## Original 진행 순서 (historical recommendation)
 
 ```
 Phase 1 — Outer closure (12 항목, 최우선)

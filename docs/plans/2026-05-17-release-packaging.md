@@ -1,7 +1,13 @@
 # GEODE v0.99.12 Packaging and Distribution Plan
 
+> [!NOTE]
+> Historical v0.99.12 packaging plan. Current distribution behavior is owned
+> by code and the release workflow; architecture-program release closure is
+> tracked by R7.4 in the
+> [architecture roadmap](../architecture/extensibility-roadmap.md).
+
 Date: 2026-05-17
-Status: pre-release plan
+Historical status: pre-release plan
 
 ## Goal
 

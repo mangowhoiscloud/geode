@@ -1,5 +1,12 @@
 # Plan: Agentic Loop Evolution (Plan → Gather → Action → Verify)
 
+> [!NOTE]
+> Historical capability plan: several premises and paths no longer describe
+> the current runtime. Current agent-kernel GAPs, ordering, and completion
+> evidence are owned by
+> [`docs/architecture/extensibility-roadmap.md`](../architecture/extensibility-roadmap.md),
+> especially LOOP-001 through LOOP-005.
+>
 > Companion research: [`docs/research/agentic-loop-optimization.md`](../research/agentic-loop-optimization.md)
 > Scope: `core/agent/loop/agent_loop.py` + `core/agent/*` runtime.
 > Status: planning (not yet implementation)
