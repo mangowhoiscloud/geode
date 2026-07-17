@@ -15,7 +15,7 @@ user-invocable: false
 geode serve
   → core/wiring/adapters.py: Merge ~/.geode/config.toml + project overlay
   → SlackPoller: SLACK_APP_TOKEN present → SlackSocketModeClient.run()
-  → ACK Events API envelope → filter exact bound channel → route_message()
+  → bounded-queue admit → ACK Events API envelope → filter exact bound channel → route_message()
   → _send_response(): SlackTransport.post_message (direct Web API, thread reply)
 
 No `SLACK_APP_TOKEN` selects an explicit degraded polling fallback. It is a

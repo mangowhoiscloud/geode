@@ -32,6 +32,10 @@ class SlackPoller(BasePoller):
     """Receive Slack messages through Socket Mode or the legacy poll fallback."""
 
     DEDUP_TTL_S = 300
+    # Socket Mode connect (open_timeout=15s), close (5s), or the bounded
+    # event drain (20s) may be in flight when stop() is called; the join
+    # must outlast the longest of them.
+    STOP_JOIN_TIMEOUT_S = 25.0
     THREAD_CONTINUATION_TTL_S = 7 * 24 * 60 * 60
     THREAD_CONTINUATION_MAX = 5000
     POLL_CHANNEL_ERROR_COOLDOWN_S = 60.0
@@ -56,7 +60,12 @@ class SlackPoller(BasePoller):
         self._transport = get_slack_transport()
         self._socket_mode = SlackSocketModeClient()
         self._last_ts: dict[str, str] = {}
-        self._seen_events: dict[str, float] = {}
+        # dedup_key -> (seen_at, upgradable). ``upgradable`` is decided at
+        # first-pass time: True only when the pass was GATED by the binding's
+        # require_mention (bot user ID unknown), so the app_mention half of
+        # Slack's double-fire may still upgrade the same channel:ts. Deciding
+        # at record time pins the verdict against binding hot-reloads.
+        self._seen_events: dict[str, tuple[float, bool]] = {}
         self._inflight_events: set[str] = set()
         self._engaged_threads: dict[tuple[str, str], float] = {}
         self._poll_retry_after: dict[str, float] = {}
@@ -202,7 +211,10 @@ class SlackPoller(BasePoller):
         timestamp = str(message.get("ts") or message.get("event_ts") or "")
         if not timestamp:
             return True
-        if dedup_key in self._seen_events or dedup_key in self._inflight_events:
+        if dedup_key in self._inflight_events:
+            return True
+        seen = self._seen_events.get(dedup_key)
+        if seen is not None and not seen[1]:
             return True
         if message.get("subtype") == "bot_message" or "bot_id" in message:
             return True
@@ -216,9 +228,6 @@ class SlackPoller(BasePoller):
         except ValueError:
             log.warning("Slack ignored message with invalid timestamp")
             return True
-
-        self._inflight_events.add(dedup_key)
-        log.info("Slack message from %s: %s", message.get("user", "?"), content[:80])
 
         raw_thread_id = str(message.get("thread_ts", ""))
         # GEODE always replies to a top-level Slack message in a thread. Use
@@ -236,11 +245,31 @@ class SlackPoller(BasePoller):
         )
         is_mention = self._manager._is_mentioned(inbound)
         is_thread_reply = bool(raw_thread_id and raw_thread_id != timestamp)
+        engaged = is_thread_reply and self._is_engaged_thread(channel_id, thread_id)
+        if engaged and self._manager.session_is_terminal(inbound):
+            # Durable terminal state outranks the in-memory engagement cache —
+            # otherwise a completed/errored session is implicitly reopened for
+            # up to THREAD_CONTINUATION_TTL_S after its machine ended.
+            self._engaged_threads.pop((channel_id, thread_id), None)
+            engaged = False
         is_thread_continuation = is_thread_reply and (
-            self._is_engaged_thread(channel_id, thread_id)
-            or self._manager.has_persisted_session(inbound)
+            engaged or self._manager.has_persisted_session(inbound)
         )
         is_addressed = is_mention or is_thread_continuation
+        if seen is not None and not is_addressed:
+            # The upgrade window is open, but this retry is not addressed
+            # either — nothing new to do.
+            return True
+
+        # Sample the gate verdict BEFORE awaiting the processor: a binding
+        # hot-reload during the (long) await must not retroactively open the
+        # upgrade window for an already-processed message. The residual
+        # sample-vs-route window is a no-await, instruction-level gap
+        # (only a cross-thread reload could interleave).
+        upgradable = not is_addressed and self._binding_requires_mention(channel_id)
+
+        self._inflight_events.add(dedup_key)
+        log.info("Slack message from %s: %s", message.get("user", "?"), content[:80])
 
         # A top-level mention becomes the root of the response thread. A
         # mention inside an existing thread engages that root instead. Record
@@ -274,8 +303,15 @@ class SlackPoller(BasePoller):
         finally:
             self._inflight_events.discard(dedup_key)
 
-        self._seen_events[dedup_key] = time.monotonic()
+        self._seen_events[dedup_key] = (time.monotonic(), upgradable)
         return True
+
+    def _binding_requires_mention(self, channel_id: str) -> bool:
+        """Whether this channel's binding gates routing on a mention."""
+        for binding in self._manager.list_bindings():
+            if binding["channel"] == self.channel_name and binding.get("channel_id") == channel_id:
+                return bool(binding.get("require_mention", False))
+        return False
 
     def _is_engaged_thread(self, channel_id: str, thread_ts: str) -> bool:
         """Return whether GEODE is already participating in this Slack thread."""
@@ -308,7 +344,9 @@ class SlackPoller(BasePoller):
     def _evict_stale_dedup(self) -> None:
         now = time.monotonic()
         stale = [
-            key for key, seen_at in self._seen_events.items() if now - seen_at > self.DEDUP_TTL_S
+            key
+            for key, (seen_at, _addressed) in self._seen_events.items()
+            if now - seen_at > self.DEDUP_TTL_S
         ]
         for key in stale:
             del self._seen_events[key]

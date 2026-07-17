@@ -50,6 +50,7 @@ class ChannelManager:
         self._pollers: list[BasePoller] = []
         self._processor: MessageProcessor | None = None
         self._session_exists_checker: SessionExistsChecker | None = None
+        self._session_terminal_checker: SessionExistsChecker | None = None
         self._lane_queue = lane_queue  # LaneQueue for concurrency control
         self._lock = threading.Lock()
         self._stats: dict[str, int] = {"received": 0, "processed": 0, "ignored": 0}
@@ -99,6 +100,31 @@ class ChannelManager:
             return self._session_exists_checker(session_key)
         except Exception:
             log.warning("Gateway session existence check failed for %s", session_key, exc_info=True)
+            return False
+
+    def set_session_terminal_checker(self, checker: SessionExistsChecker) -> None:
+        """Set the probe that reports a durably terminal (non-resumable) session."""
+        self._session_terminal_checker = checker
+
+    def session_is_terminal(self, message: InboundMessage) -> bool:
+        """Return whether this thread's durable machine state has ended.
+
+        ``False`` covers both "no durable record yet" (an engagement cache may
+        legitimately bridge the pre-checkpoint window) and "resumable". Only an
+        explicit non-resumable checkpoint returns ``True``.
+        """
+        if self._session_terminal_checker is None or not message.thread_id:
+            return False
+        session_key = build_gateway_session_key(
+            message.channel,
+            message.channel_id,
+            message.sender_id,
+            thread_id=message.thread_id,
+        )
+        try:
+            return self._session_terminal_checker(session_key)
+        except Exception:
+            log.warning("Gateway session terminal check failed for %s", session_key, exc_info=True)
             return False
 
     def add_binding(self, binding: ChannelBinding) -> None:

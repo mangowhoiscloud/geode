@@ -290,6 +290,37 @@ class TestBasePoller:
         # Thread should not be started
         assert poller._thread is None
 
+    def test_stop_keeps_thread_ref_when_join_times_out(self):
+        """A timed-out join must not clear the ref — start() would otherwise
+        spawn a second loop while the old one is still winding down."""
+        import threading
+
+        manager = ChannelManager()
+
+        class SlowPoller(BasePoller):
+            channel_name = "test"
+            STOP_JOIN_TIMEOUT_S = 0.05
+
+            async def _apoll_once(self):
+                pass
+
+            def is_configured(self):
+                return True
+
+        poller = SlowPoller(manager)
+        blocker = threading.Event()
+        slow_thread = threading.Thread(target=blocker.wait, daemon=True)
+        slow_thread.start()
+        poller._thread = slow_thread
+
+        poller.stop()
+        assert poller._thread is slow_thread
+
+        blocker.set()
+        slow_thread.join(timeout=1.0)
+        poller.stop()
+        assert poller._thread is None
+
 
 class TestSlackPoller:
     def test_is_configured(self, monkeypatch, tmp_path):

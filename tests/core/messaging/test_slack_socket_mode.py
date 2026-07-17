@@ -116,16 +116,11 @@ def test_open_connection_url_honors_retry_after(
     assert sleeps == [61.0]
 
 
-def test_events_api_frame_is_acked_before_dispatch() -> None:
+def test_events_api_frame_is_admitted_then_acked() -> None:
     socket = _FakeSocket()
-    pending: set[asyncio.Task[None]] = set()
-    handled: list[dict[str, Any]] = []
 
     async def scenario() -> None:
-        async def on_event(payload: dict[str, Any]) -> None:
-            assert socket.sent == ['{"envelope_id":"env-1"}']
-            handled.append(payload)
-
+        queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=1)
         reconnect = await SlackSocketModeClient._handle_frame(
             socket,
             json.dumps(
@@ -135,71 +130,84 @@ def test_events_api_frame_is_acked_before_dispatch() -> None:
                     "payload": {"event": {"type": "app_mention"}},
                 }
             ),
-            on_event,
-            pending,
+            queue,
         )
         assert reconnect is False
-        assert len(pending) == 1
-        await asyncio.gather(*tuple(pending))
+        assert socket.sent == ['{"envelope_id":"env-1"}']
+        assert queue.get_nowait() == {"event": {"type": "app_mention"}}
 
     asyncio.run(scenario())
-    assert handled == [{"event": {"type": "app_mention"}}]
+
+
+def test_full_admission_queue_leaves_envelope_unacked() -> None:
+    """No ACK on overload — Slack redelivers instead of local unbounded tasks."""
+    socket = _FakeSocket()
+
+    async def scenario() -> None:
+        queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=1)
+        queue.put_nowait({"event": {"type": "app_mention"}})
+        reconnect = await SlackSocketModeClient._handle_frame(
+            socket,
+            json.dumps(
+                {
+                    "type": "events_api",
+                    "envelope_id": "env-overflow",
+                    "payload": {"event": {"type": "message"}},
+                }
+            ),
+            queue,
+        )
+        assert reconnect is False
+        assert socket.sent == []
+        assert queue.qsize() == 1
+
+    asyncio.run(scenario())
 
 
 def test_unsupported_envelope_is_acknowledged_without_dispatch() -> None:
     socket = _FakeSocket()
-    pending: set[asyncio.Task[None]] = set()
-    handled = False
 
     async def scenario() -> None:
-        async def on_event(payload: dict[str, Any]) -> None:
-            nonlocal handled
-            handled = True
-
+        queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=1)
         reconnect = await SlackSocketModeClient._handle_frame(
             socket,
             '{"type":"slash_commands","envelope_id":"env-2","payload":{}}',
-            on_event,
-            pending,
+            queue,
         )
         assert reconnect is False
+        assert queue.empty()
 
     asyncio.run(scenario())
     assert socket.sent == ['{"envelope_id":"env-2"}']
-    assert handled is False
-    assert not pending
 
 
 def test_disconnect_requests_fresh_connection() -> None:
     socket = _FakeSocket()
-    pending: set[asyncio.Task[None]] = set()
 
-    async def on_event(payload: dict[str, Any]) -> None:
-        raise AssertionError("disconnect must not dispatch")
-
-    reconnect = asyncio.run(
-        SlackSocketModeClient._handle_frame(
+    async def scenario() -> bool:
+        queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=1)
+        return await SlackSocketModeClient._handle_frame(
             socket,
             '{"type":"disconnect","reason":"refresh_requested"}',
-            on_event,
-            pending,
+            queue,
         )
-    )
-    assert reconnect is True
+
+    assert asyncio.run(scenario()) is True
+    assert not socket.sent
 
 
 @pytest.mark.parametrize("raw", ["not-json", "[]", b"\xff"])
 def test_malformed_frames_are_ignored(raw: str | bytes) -> None:
     socket = _FakeSocket()
-    pending: set[asyncio.Task[None]] = set()
 
-    async def on_event(payload: dict[str, Any]) -> None:
-        raise AssertionError("malformed frame must not dispatch")
+    async def scenario() -> None:
+        queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=1)
+        reconnect = await SlackSocketModeClient._handle_frame(socket, raw, queue)
+        assert reconnect is False
+        assert queue.empty()
 
-    reconnect = asyncio.run(SlackSocketModeClient._handle_frame(socket, raw, on_event, pending))
-    assert reconnect is False
+    asyncio.run(scenario())
     assert not socket.sent
-    assert not pending
 
 
 def test_missing_app_token_is_unconfigured(
@@ -217,6 +225,57 @@ def test_missing_app_token_is_unconfigured(
 def test_safe_error_never_echoes_unknown_exception_text() -> None:
     error = RuntimeError("wss://wss-primary.slack.com/link/?ticket=secret")
     assert SlackSocketModeClient._safe_error(error) == "RuntimeError"
+
+
+def test_run_drains_admitted_events_before_returning(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ACKed events still in the queue at stop are finished, not abandoned."""
+    import websockets
+
+    stopped = False
+    handled: list[dict[str, Any]] = []
+
+    class OneEventSocket(_FakeSocket):
+        def __init__(self) -> None:
+            super().__init__()
+            self.frames = [
+                json.dumps(
+                    {
+                        "type": "events_api",
+                        "envelope_id": "env-1",
+                        "payload": {"event": {"type": "app_mention"}},
+                    }
+                )
+            ]
+
+        async def recv(self) -> str:
+            nonlocal stopped
+            if self.frames:
+                return self.frames.pop(0)
+            stopped = True
+            raise ConnectionError("closed")
+
+    class FakeContext:
+        async def __aenter__(self) -> OneEventSocket:
+            return OneEventSocket()
+
+        async def __aexit__(self, *args: Any) -> None:
+            return None
+
+    async def fake_open(self) -> str:
+        return "wss://wss-primary.slack.com/link/?ticket=secret"
+
+    monkeypatch.setattr(websockets, "connect", lambda url, **kwargs: FakeContext())
+    monkeypatch.setattr(SlackSocketModeClient, "open_connection_url", fake_open)
+
+    async def on_event(payload: dict[str, Any]) -> None:
+        await asyncio.sleep(0.05)
+        handled.append(payload)
+
+    client = SlackSocketModeClient(app_token="xapp-test")
+    asyncio.run(client.run(on_event, lambda: stopped))
+    assert handled == [{"event": {"type": "app_mention"}}]
 
 
 def test_run_backs_off_across_connections_that_never_receive_a_frame(

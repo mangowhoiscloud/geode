@@ -8,9 +8,12 @@ Protocol references:
 - https://docs.slack.dev/apis/events-api/using-socket-mode/
 - https://docs.slack.dev/reference/methods/apps.connections.open/
 
-Every envelope is acknowledged before its event handler is scheduled. This
-keeps Slack's acknowledgement path independent from a potentially long GEODE
-agent turn. WebSocket URLs contain a temporary ticket and are never logged.
+Events API envelopes are admitted into a bounded queue BEFORE they are
+acknowledged; a full queue leaves the envelope unACKed so Slack redelivers
+it. A fixed worker pool consumes the queue, keeping the acknowledgement
+path independent from a potentially long GEODE agent turn without
+accumulating unbounded local tasks. WebSocket URLs contain a temporary
+ticket and are never logged.
 """
 
 from __future__ import annotations
@@ -32,6 +35,15 @@ log = logging.getLogger(__name__)
 
 _MAX_RECONNECT_DELAY_S = 30.0
 _RECV_STOP_POLL_S = 1.0
+# Bounded ingress (PR-SLACK-SOCKET-LANDING): events are admitted to this
+# queue BEFORE their envelope is acknowledged. A full queue leaves the
+# envelope unACKed so Slack redelivers it — overload sheds to Slack's
+# retry path instead of accumulating unbounded local tasks. (An event that
+# WAS acked lives in process memory; a crash before its handler finishes
+# still loses it — Slack's retry only covers the unacked window.)
+_ADMISSION_QUEUE_MAX = 64
+_EVENT_WORKERS = 8
+_DRAIN_TIMEOUT_S = 20.0
 
 SocketEventHandler = Callable[[dict[str, Any]], Awaitable[None]]
 StopPredicate = Callable[[], bool]
@@ -72,17 +84,38 @@ class SlackSocketModeClient:
             raise SlackSocketModeError(str(exc)) from exc
 
     async def run(self, on_event: SocketEventHandler, should_stop: StopPredicate) -> None:
-        """Receive, acknowledge, and dispatch events until ``should_stop``.
+        """Receive, admit, acknowledge, and dispatch events until ``should_stop``.
 
         Connection failures use bounded exponential backoff. Slack-requested
         refreshes immediately leave the current socket and obtain a fresh URL.
+        On stop, already-ACKed events are drained for a bounded window.
         """
         if not self.configured:
             raise SlackSocketModeError("SLACK_APP_TOKEN not configured")
 
         import websockets
 
-        pending: set[asyncio.Task[None]] = set()
+        queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=_ADMISSION_QUEUE_MAX)
+
+        in_flight = 0
+
+        async def worker() -> None:
+            nonlocal in_flight
+            while True:
+                payload = await queue.get()
+                in_flight += 1
+                try:
+                    await on_event(payload)
+                except Exception as exc:
+                    log.warning("Slack Socket Mode event handler failed: %s", exc)
+                finally:
+                    in_flight -= 1
+                    queue.task_done()
+
+        workers = [
+            asyncio.create_task(worker(), name=f"geode-slack-event-worker-{i}")
+            for i in range(_EVENT_WORKERS)
+        ]
         reconnect_delay = 1.0
         try:
             while not should_stop():
@@ -113,8 +146,7 @@ class SlackSocketModeClient:
                             reconnect = await self._handle_frame(
                                 socket,
                                 raw,
-                                on_event,
-                                pending,
+                                queue,
                             )
                             if reconnect:
                                 break
@@ -134,10 +166,20 @@ class SlackSocketModeClient:
                         _MAX_RECONNECT_DELAY_S,
                     )
         finally:
-            for task in pending:
+            # Ingress has stopped (loop exited). Drain admitted events for a
+            # bounded window — they were ACKed, so abandoning them silently
+            # would lose delivered work; after the window, cancel loudly.
+            try:
+                await asyncio.wait_for(queue.join(), timeout=_DRAIN_TIMEOUT_S)
+            except TimeoutError:
+                log.warning(
+                    "Slack Socket Mode drain timed out: %d queued + %d in-flight event(s)",
+                    queue.qsize(),
+                    in_flight,
+                )
+            for task in workers:
                 task.cancel()
-            if pending:
-                await asyncio.gather(*pending, return_exceptions=True)
+            await asyncio.gather(*workers, return_exceptions=True)
             log.info("Slack Socket Mode stopped")
 
     @classmethod
@@ -145,10 +187,13 @@ class SlackSocketModeClient:
         cls,
         socket: _SocketConnection,
         raw: str | bytes,
-        on_event: SocketEventHandler,
-        pending: set[asyncio.Task[None]],
+        queue: asyncio.Queue[dict[str, Any]],
     ) -> bool:
-        """Handle one frame. Return ``True`` when Slack requests reconnect."""
+        """Handle one frame. Return ``True`` when Slack requests reconnect.
+
+        Events API envelopes are ACKed only AFTER queue admission — a full
+        queue skips the ACK so Slack redelivers the envelope later.
+        """
         try:
             decoded = raw.decode("utf-8") if isinstance(raw, bytes) else raw
             envelope = json.loads(decoded)
@@ -169,40 +214,37 @@ class SlackSocketModeClient:
             return True
 
         envelope_id = str(envelope.get("envelope_id", ""))
-        if envelope_id:
-            await socket.send(json.dumps({"envelope_id": envelope_id}, separators=(",", ":")))
 
         if envelope_type != "events_api":
+            if envelope_id:
+                await cls._ack(socket, envelope_id)
             log.debug("Slack Socket Mode acknowledged unsupported envelope type=%s", envelope_type)
             return False
 
         payload = envelope.get("payload")
         if not isinstance(payload, dict):
+            if envelope_id:
+                await cls._ack(socket, envelope_id)
             log.warning("Slack Socket Mode event envelope had no object payload")
             return False
 
-        async def dispatch() -> None:
-            await on_event(payload)
-
-        task: asyncio.Task[None] = asyncio.create_task(
-            dispatch(),
-            name="geode-slack-event",
-        )
-        pending.add(task)
-        task.add_done_callback(lambda done: cls._finish_event_task(done, pending))
+        try:
+            queue.put_nowait(payload)
+        except asyncio.QueueFull:
+            # No ACK: Slack will redeliver; channel:ts dedup absorbs any
+            # duplicate that arrives after pressure clears.
+            log.warning(
+                "Slack Socket Mode admission queue full (%d) — leaving envelope unACKed",
+                queue.maxsize,
+            )
+            return False
+        if envelope_id:
+            await cls._ack(socket, envelope_id)
         return False
 
     @staticmethod
-    def _finish_event_task(
-        task: asyncio.Task[None],
-        pending: set[asyncio.Task[None]],
-    ) -> None:
-        pending.discard(task)
-        if task.cancelled():
-            return
-        error = task.exception()
-        if error is not None:
-            log.warning("Slack Socket Mode event handler failed: %s", error)
+    async def _ack(socket: _SocketConnection, envelope_id: str) -> None:
+        await socket.send(json.dumps({"envelope_id": envelope_id}, separators=(",", ":")))
 
     @staticmethod
     async def _wait_or_stop(delay_s: float, should_stop: StopPredicate) -> None:

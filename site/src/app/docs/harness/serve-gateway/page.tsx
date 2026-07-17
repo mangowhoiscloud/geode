@@ -36,7 +36,7 @@ export default function Page() {
               <tbody>
                 <tr>
                   <td>메신저 receiver</td>
-                  <td>Slack은 Socket Mode push를 ACK 후 처리합니다. Discord와 Telegram은 주기적으로 조회합니다. 공통 스레드 수명주기는 BasePoller가 가집니다.</td>
+                  <td>Slack은 Socket Mode push를 바운드 큐에 넣은 뒤 ACK하고 처리합니다(큐가 가득 차면 unACK로 Slack 재전송). Discord와 Telegram은 주기적으로 조회합니다. 공통 스레드 수명주기는 BasePoller가 가집니다.</td>
                   <td><code>core/server/supervised/</code></td>
                 </tr>
                 <tr>
@@ -170,7 +170,7 @@ require_mention = true`}</pre>
               <tbody>
                 <tr>
                   <td>Messaging receivers</td>
-                  <td>Slack ACKs pushed Socket Mode events before processing. Discord and Telegram poll. BasePoller owns the shared thread lifecycle.</td>
+                  <td>Slack admits pushed Socket Mode events into a bounded queue, then ACKs (a full queue leaves the envelope unACKed so Slack redelivers). Discord and Telegram poll. BasePoller owns the shared thread lifecycle.</td>
                   <td><code>core/server/supervised/</code></td>
                 </tr>
                 <tr>

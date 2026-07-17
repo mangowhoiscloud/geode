@@ -370,6 +370,195 @@ def test_app_mention_routes_when_bootstrap_bot_id_lookup_failed(poller_factory: 
     assert transport.posts == [("CBOUND", "done", "172.6")]
 
 
+def test_app_mention_upgrades_previously_unaddressed_message(poller_factory: Any) -> None:
+    """The message half lands unaddressed (bot ID unknown) — the app_mention
+    half for the same ts must still route instead of being deduplicated."""
+    poller, manager, transport = poller_factory(bot_user_id="")
+    processed: list[str] = []
+
+    async def processor(content: str, metadata: dict[str, Any]) -> str:
+        processed.append(content)
+        return "upgraded"
+
+    manager.set_async_processor(processor)
+
+    async def scenario() -> None:
+        base = {
+            "channel": "CBOUND",
+            "user": "U1",
+            "text": "<@UUNKNOWN> late mention",
+            "ts": "173.5",
+        }
+        await poller._handle_socket_event(
+            {"event_id": "Ev-msg-half", "event": {"type": "message", **base}}
+        )
+        assert processed == []
+        await poller._handle_socket_event(
+            {"event_id": "Ev-mention-half", "event": {"type": "app_mention", **base}}
+        )
+
+    asyncio.run(scenario())
+    assert processed == ["late mention"]
+    assert transport.posts == [("CBOUND", "upgraded", "173.5")]
+
+
+def test_no_mention_binding_never_reprocesses_double_fire(poller_factory: Any) -> None:
+    """require_mention=False + unknown bot ID: the message half already
+    processed, so the app_mention half must dedup instead of double-running."""
+    poller, manager, transport = poller_factory(require_mention=False, bot_user_id="")
+    calls = 0
+
+    async def processor(content: str, metadata: dict[str, Any]) -> str:
+        nonlocal calls
+        calls += 1
+        return "once"
+
+    manager.set_async_processor(processor)
+
+    async def scenario() -> None:
+        base = {
+            "channel": "CBOUND",
+            "user": "U1",
+            "text": "<@UUNKNOWN> open door",
+            "ts": "174.5",
+        }
+        await poller._handle_socket_event(
+            {"event_id": "Ev-msg", "event": {"type": "message", **base}}
+        )
+        await poller._handle_socket_event(
+            {"event_id": "Ev-mention", "event": {"type": "app_mention", **base}}
+        )
+
+    asyncio.run(scenario())
+    assert calls == 1
+    assert transport.posts == [("CBOUND", "once", "174.5")]
+
+    # Hot-reload race: flipping the binding to require_mention AFTER the
+    # first pass must not reopen the upgrade window — the verdict was
+    # pinned at first-pass time.
+    manager.remove_binding("slack", "CBOUND")
+    manager.add_binding(ChannelBinding(channel="slack", channel_id="CBOUND", require_mention=True))
+    asyncio.run(
+        poller._handle_socket_event(
+            {
+                "event_id": "Ev-mention-after-reload",
+                "event": {
+                    "type": "app_mention",
+                    "channel": "CBOUND",
+                    "user": "U1",
+                    "text": "<@UUNKNOWN> open door",
+                    "ts": "174.5",
+                },
+            }
+        )
+    )
+    assert calls == 1
+
+
+def test_binding_reload_during_processing_does_not_reopen_upgrade_window(
+    poller_factory: Any,
+) -> None:
+    """The gate verdict is sampled BEFORE the processor await — a hot reload
+    happening WHILE the first pass is processing must not let the app_mention
+    half double-run an already-processed message."""
+    poller, manager, transport = poller_factory(require_mention=False, bot_user_id="")
+    calls = 0
+
+    async def processor(content: str, metadata: dict[str, Any]) -> str:
+        nonlocal calls
+        calls += 1
+        # Hot reload mid-await: flip the binding to require_mention=True.
+        manager.remove_binding("slack", "CBOUND")
+        manager.add_binding(
+            ChannelBinding(channel="slack", channel_id="CBOUND", require_mention=True)
+        )
+        return "once"
+
+    manager.set_async_processor(processor)
+
+    async def scenario() -> None:
+        base = {
+            "channel": "CBOUND",
+            "user": "U1",
+            "text": "<@UUNKNOWN> reload race",
+            "ts": "175.5",
+        }
+        await poller._handle_socket_event(
+            {"event_id": "Ev-msg-race", "event": {"type": "message", **base}}
+        )
+        await poller._handle_socket_event(
+            {"event_id": "Ev-mention-race", "event": {"type": "app_mention", **base}}
+        )
+
+    asyncio.run(scenario())
+    assert calls == 1
+
+
+def test_terminal_checkpoint_outranks_engagement_cache(poller_factory: Any) -> None:
+    """A completed/errored durable machine must not be implicitly reopened by
+    the in-memory engaged-threads cache."""
+    import time as _time
+
+    poller, manager, transport = poller_factory()
+    calls = 0
+
+    async def processor(content: str, metadata: dict[str, Any]) -> str:
+        nonlocal calls
+        calls += 1
+        return "reply"
+
+    manager.set_async_processor(processor)
+    manager.set_session_exists_checker(lambda key: False)
+    manager.set_session_terminal_checker(lambda key: True)
+    poller._engaged_threads[("CBOUND", "180.10")] = _time.monotonic()
+
+    asyncio.run(
+        poller._handle_socket_event(
+            {
+                "event_id": "Ev-after-terminal",
+                "event": {
+                    "type": "message",
+                    "channel": "CBOUND",
+                    "user": "U1",
+                    "text": "are you still there",
+                    "thread_ts": "180.10",
+                    "ts": "180.11",
+                },
+            }
+        )
+    )
+    assert calls == 0
+    assert transport.posts == []
+    assert ("CBOUND", "180.10") not in poller._engaged_threads
+
+    # Control: without the terminal verdict the same reply continues.
+    manager.set_session_terminal_checker(lambda key: False)
+    poller._engaged_threads[("CBOUND", "180.10")] = _time.monotonic()
+    asyncio.run(
+        poller._handle_socket_event(
+            {
+                "event_id": "Ev-still-active",
+                "event": {
+                    "type": "message",
+                    "channel": "CBOUND",
+                    "user": "U1",
+                    "text": "and now?",
+                    "thread_ts": "180.10",
+                    "ts": "180.12",
+                },
+            }
+        )
+    )
+    assert calls == 1
+
+
+def test_slack_stop_join_outlasts_socket_open_timeout(poller_factory: Any) -> None:
+    """websockets connect(open_timeout=15, close_timeout=5) may be in flight
+    at stop(); the thread join must outlast both."""
+    poller, _manager, _transport = poller_factory()
+    assert poller.STOP_JOIN_TIMEOUT_S >= 20.0
+
+
 def test_unbound_and_bot_events_are_ignored(poller_factory: Any) -> None:
     poller, manager, transport = poller_factory(require_mention=False)
     calls = 0

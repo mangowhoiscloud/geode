@@ -61,6 +61,12 @@ def _gateway_session_can_resume(session_key: str, session_store: Any, checkpoint
     return bool(session_store.exists(session_key))
 
 
+def _gateway_session_is_terminal(session_key: str, checkpoint: Any) -> bool:
+    """A durable checkpoint exists and its machine ended (not active/paused)."""
+    state = checkpoint.load(_gateway_checkpoint_session_id(session_key))
+    return state is not None and not _gateway_checkpoint_is_resumable(state)
+
+
 async def _restore_gateway_loop(loop: Any, state: Any) -> None:
     """Apply the same machine and model restore contract as CLI resume."""
     loop.restore_from_checkpoint(state)
@@ -137,6 +143,9 @@ def serve(
             runtime.session_store,
             _gw_checkpoint,
         )
+    )
+    gateway.set_session_terminal_checker(
+        lambda session_key: _gateway_session_is_terminal(session_key, _gw_checkpoint)
     )
 
     _GATEWAY_SUFFIX = (
@@ -454,6 +463,9 @@ def serve(
         # Active client handler threads continue running.
         if _cli_poller is not None:
             _cli_poller.stop_accepting()
+        # Stop channel ingress (Slack Socket Mode / pollers) before draining —
+        # otherwise new inbound events keep starting sessions during drain.
+        gateway.stop()
 
         # --- Phase 2: drain active sessions ---
         _drain_timeout_s = 30  # max seconds to wait for active sessions
@@ -498,7 +510,6 @@ def serve(
             _cli_poller.stop()
         if _webhook_server is not None:
             _webhook_server.shutdown()
-        gateway.stop()
         if runtime is not None:
             try:
                 runtime.shutdown()

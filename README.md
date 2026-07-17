@@ -18,6 +18,8 @@
 </p>
 
 <p align="center">
+  <a href="https://mangowhoiscloud.github.io/geode/">Landing</a>
+  ·
   <a href="https://mangowhoiscloud.github.io/geode/docs">Docs</a>
   ·
   <a href="https://mangowhoiscloud.github.io/geode/self-improving/">Self-improving hub</a>
@@ -27,7 +29,7 @@
   <a href="README.ko.md">한국어</a>
 </p>
 
-# GEODE v0.99.334: A Self-improving Autonomous Execution Agent
+# GEODE v1.1.0: A Self-improving Autonomous Execution Agent
 
 A general-purpose autonomous agent that also rewrites the scaffolding it runs on. You ask in plain language; GEODE plans, calls tools, and reports, for one prompt or a long-running session. Underneath, an outer loop keeps tuning the system that runs your tasks.
 
@@ -124,6 +126,7 @@ Copy-paste these to see what it does:
 "Schedule a 9 AM standup reminder every weekday"
 "Watch hacker news for posts about LangGraph and DM me on Slack"
 "Compare gpt-5.5 vs claude-opus-4.7 for code review"
+"Find launch emails, summarize them, and add the follow-up to my Calendar"
 ```
 
 GEODE chooses the right tools (web search, file ops, MCP servers, sub-agents), runs them, and shows you the answer with sources and cost.
@@ -260,13 +263,30 @@ You should see something like:
 
 If you see this, you're done. If you see an error, run `geode doctor` for a diagnosis or jump to [Troubleshooting](#troubleshooting).
 
+### Optional: Connect Google Workspace
+
+GEODE v1.0.0 can use Gmail, Calendar, Drive, Docs, Sheets, Tasks, and Contacts
+through a Google Desktop OAuth client you own. Start `geode`, then run the
+recommended slash command:
+
+```text
+> /login google
+```
+
+The prompt asks for the downloaded client JSON and least-privilege service
+bundles. See [Connect Google Workspace](https://mangowhoiscloud.github.io/geode/docs/run/google-workspace)
+for the Google Cloud console steps, seven-day External Testing expiry,
+multi-account commands, storage schema, and per-invocation consent boundary.
+In v1.0.0, `workspace-files` supports files created through GEODE; an
+existing-file Google Picker is not included yet.
+
 ### Other useful commands
 
 ```bash
 geode about           # version, model, registered auth, paths, daemon status
 geode doctor          # 7-check bootstrap diagnosis with fix hints
-uv tool upgrade geode-agent  # update a PyPI-installed CLI
-geode update          # update a source checkout and refresh its editable CLI
+geode update          # uv install: latest patch; source install: pull + rebuild
+geode update --latest # explicitly allow minor/major uv package upgrades
 geode uninstall       # remove runtime data and the installed CLI
 geode setup --reset   # wipe ~/.geode/.env and re-run the wizard
 ```
@@ -275,26 +295,37 @@ geode setup --reset   # wipe ~/.geode/.env and re-run the wizard
 
 ### Updating
 
-For a PyPI install, update the CLI package with uv:
-
-```bash
-uv tool upgrade geode-agent
-geode version
-```
-
-For a source checkout install, let GEODE run the same update sequence it uses in smoke tests:
+GEODE detects whether it is a persistent uv tool or an editable source install:
 
 ```bash
 geode update
+geode version
 ```
 
-This runs `git pull --ff-only`, `uv sync`, `uv tool install -e . --force`, then `geode version`.
-If `geode serve` was running, GEODE restarts it so the daemon loads the new code. Preview the
-steps without changing files with:
+For a standard registry-backed uv tool, this replaces the stored install request
+with a compatible-release constraint and installs the newest patch in the
+current major/minor series. Minor and major upgrades require an explicit opt-in:
+
+```bash
+geode update --latest
+```
+
+For an editable source checkout, `geode update` instead runs `git pull
+--ff-only`, `uv sync`, `uv tool install -e . --force`, then `geode version`.
+It resolves the actual GEODE checkout from install metadata rather than using
+an unrelated current repository; missing metadata is an error, never a cwd
+fallback. If `geode serve` was running, GEODE verifies the update before
+stopping it, then confirms the replacement daemon is ready. Preview either path
+without changing files:
 
 ```bash
 geode update --dry-run
 ```
+
+Custom uv tool receipts with extras, `--with` packages, constraints, an explicit
+Python, or resolver settings stop with a manual-update hint so those settings
+are never discarded silently. The hint identifies the receipt and preserves a
+recorded source reference instead of silently switching it to PyPI.
 
 ---
 
@@ -360,7 +391,8 @@ Secrets live in `.env`, behavior lives in `config.toml`. The two never collide, 
 
 - The global `~/.geode/.env` is the authoritative secret store. A project `./.env` fills only the keys it lacks and never shadows a global key. An `OPENAI_API_KEY` in `~/.geode/.env` wins even when a project `./.env` leaves it blank.
 - The project `./.geode/config.toml` overrides the global `~/.geode/config.toml`. Behavior is tuned per project.
-- `~/.geode/auth.toml` stores credential profiles, plan metadata, and OAuth-derived account state. Raw API keys still live in `~/.geode/.env`.
+- `~/.geode/auth.toml` stores LLM-provider credential profiles, plan metadata, and provider OAuth account state. Raw API keys still live in `~/.geode/.env`.
+- Google Workspace is separate: non-secret account and scope metadata lives in `~/.geode/google/accounts.json`, long-lived secrets in the OS keyring service `geode.google.oauth`, and access tokens only in process memory.
 - Runtime history, usage, diagnostics, daemon logs, and per-project private data live under `~/.geode/`. Project context that should travel with a workspace lives under `./.geode/`.
 
 Every field rides one ladder. Higher wins:
@@ -381,6 +413,7 @@ Add or switch a credential:
 ```bash
 geode setup                          # re-run the wizard (subscription OAuth or API key)
 /login openai                        # in a session: subscription OAuth
+/login google                        # in a session: Google Workspace OAuth
 /key openai sk-proj-...              # in a session: paste an API key
 echo 'OPENAI_API_KEY=sk-proj-...' >> ~/.geode/.env    # edit the authoritative file
 ```
@@ -439,8 +472,8 @@ Check `geode model`, some models are better at tool use than others. Default is 
 <summary><strong>How do I update?</strong></summary>
 
 ```bash
-uv tool upgrade geode-agent   # PyPI install
-geode update                  # source checkout
+geode update          # uv tool: latest patch; source: pull + rebuild
+geode update --latest # uv tool: explicitly allow minor/major upgrades
 ```
 </details>
 
@@ -452,7 +485,7 @@ geode update                  # source checkout
 |---------|-------------|
 | **`while(tool_use)` loop** | The single primitive every behavior is built on. Sub-agents, plans, batches are all instances of the same loop |
 | **Self-improving outer loop** | Mutates GEODE's own scaffolding, audits each change against an adversarial safety rubric, and promotes only on a real gain. See [the closed loop](https://mangowhoiscloud.github.io/geode/docs/capabilities/autoresearch) |
-| **Agentic tools + MCP catalog** | Web search, file ops, scheduling, memory, calendar, Slack/Discord, Korean job-board search, plus the Anthropic-published MCP registry (cached at `~/.geode/mcp/registry-cache.json`). Auto-installed on first use |
+| **Agentic tools + MCP catalog** | Web search, file ops, scheduling, memory, Slack/Discord, and native Gmail, Calendar, Drive, Docs, Sheets, Tasks, and Contacts through [user-owned Google OAuth](https://mangowhoiscloud.github.io/geode/docs/run/google-workspace), plus the Anthropic-published MCP registry (cached at `~/.geode/mcp/registry-cache.json`). Auto-installed on first use |
 | **3-provider failover** | Anthropic + OpenAI + ZhipuAI. ChatGPT subscription OAuth is auto-detected through Codex CLI; Anthropic/OpenAI/ZhipuAI pay-as-you-go API keys also work. Failover is in-provider only (no surprise cross-vendor charges, v0.53.0 governance) |
 | **5-tier memory** | SOUL (0) → User Profile (0.5) → Organization (1) → Project (2) → Session (3). Persistent, survives daemon restarts |
 | **Progress plans + review checkpoints** | `update_plan` shows a Codex-style per-turn checklist without blocking execution. `create_plan` + `approve_plan` remain for explicit review checkpoints, persisted in `.geode/plans.json` |

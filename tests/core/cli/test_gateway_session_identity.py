@@ -16,6 +16,7 @@ from core.cli.typer_serve import (
     _gateway_checkpoint_session_id,
     _gateway_resume_messages,
     _gateway_session_can_resume,
+    _gateway_session_is_terminal,
     _restore_gateway_loop,
 )
 
@@ -87,6 +88,29 @@ def test_gateway_resume_probe_prefers_durable_machine_status():
     assert _gateway_session_can_resume(session_key, Store(), checkpoint)
     checkpoint.state = SimpleNamespace(status="completed")
     assert not _gateway_session_can_resume(session_key, Store(), checkpoint)
+
+
+def test_terminal_probe_requires_explicit_ended_checkpoint():
+    session_key = "gateway:slack:c1:u1:171_2"
+    expected_id = _gateway_checkpoint_session_id(session_key)
+
+    class Checkpoint:
+        def __init__(self, state):
+            self.state = state
+
+        def load(self, session_id):
+            assert session_id == expected_id
+            return self.state
+
+    completed = SimpleNamespace(status="completed")
+    errored = SimpleNamespace(status="error")
+    paused = SimpleNamespace(status="paused")
+    assert _gateway_session_is_terminal(session_key, Checkpoint(completed))
+    assert _gateway_session_is_terminal(session_key, Checkpoint(errored))
+    assert not _gateway_session_is_terminal(session_key, Checkpoint(paused))
+    # No durable record at all is NOT terminal — the engagement cache may
+    # legitimately bridge the pre-checkpoint window.
+    assert not _gateway_session_is_terminal(session_key, Checkpoint(None))
 
 
 def test_gateway_checkpoint_round_trip_restores_thread_history(tmp_path: Path):

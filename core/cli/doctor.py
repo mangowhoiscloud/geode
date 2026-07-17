@@ -133,8 +133,13 @@ def _check_env() -> list[dict[str, Any]]:
     return results
 
 
-def _check_token_validity() -> dict[str, Any]:
-    """Validate Slack Bot Token via the same transport the daemon uses."""
+def _probe_auth() -> dict[str, Any]:
+    """Run ONE live ``auth.test`` through the daemon's transport.
+
+    The token, scope, and transport rows are all views over this single
+    probe — the old shape made three independent network calls for one
+    question (PR-SLACK-SOCKET-LANDING).
+    """
     import asyncio
 
     from core.messaging.slack_transport import SlackTransport
@@ -144,56 +149,52 @@ def _check_token_validity() -> dict[str, Any]:
         return {"ok": False, "detail": "no token to validate"}
     try:
         data = asyncio.run(transport.auth_test())
-        return {
-            "ok": True,
-            "detail": f"workspace={data.get('team', '?')}, bot={data.get('user', '?')}",
-            "bot_user_id": data.get("user_id", ""),
-            "team": data.get("team", ""),
-            "team_id": data.get("team_id", ""),
-        }
     except Exception as exc:
         return {"ok": False, "detail": f"auth.test failed: {exc}"}
+    return {"ok": True, "data": data, "scopes": set(transport.oauth_scopes())}
 
 
-def _check_scopes() -> dict[str, Any]:
-    """Check bot token scopes via auth.test + headers."""
-    token, _src = _resolve_env_or_dotenv("SLACK_BOT_TOKEN")
-    if not token:
-        return {"ok": False, "detail": "no token", "missing": REQUIRED_SCOPES}
+def _check_token_validity(probe: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Report bot identity from the shared auth probe."""
+    probe = probe if probe is not None else _probe_auth()
+    if not probe["ok"]:
+        return {"ok": False, "detail": probe["detail"]}
+    data = probe["data"]
+    return {
+        "ok": True,
+        "detail": f"workspace={data.get('team', '?')}, bot={data.get('user', '?')}",
+        "bot_user_id": data.get("user_id", ""),
+        "team": data.get("team", ""),
+        "team_id": data.get("team_id", ""),
+    }
 
-    try:
-        import httpx
 
-        resp = httpx.post(
-            "https://slack.com/api/auth.test",
-            headers={"Authorization": f"Bearer {token}"},
-            timeout=10.0,
-        )
-        # Slack returns scopes in x-oauth-scopes header
-        scope_header = resp.headers.get("x-oauth-scopes", "")
-        granted = {s.strip() for s in scope_header.split(",") if s.strip()}
+def _check_scopes(probe: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Compare granted ``x-oauth-scopes`` from the shared probe to the manifest."""
+    probe = probe if probe is not None else _probe_auth()
+    if not probe["ok"]:
+        return {"ok": False, "detail": probe["detail"], "missing": REQUIRED_SCOPES}
+    granted = probe["scopes"]
 
-        missing_required = [s for s in REQUIRED_SCOPES if s not in granted]
-        missing_optional = [s for s in OPTIONAL_SCOPES if s not in granted]
+    missing_required = [s for s in REQUIRED_SCOPES if s not in granted]
+    missing_optional = [s for s in OPTIONAL_SCOPES if s not in granted]
 
-        if missing_required:
-            return {
-                "ok": False,
-                "detail": f"missing required: {', '.join(missing_required)}",
-                "granted": sorted(granted),
-                "missing": missing_required,
-            }
-        warnings = []
-        if missing_optional:
-            warnings = [f"optional missing: {', '.join(missing_optional)} (reactions disabled)"]
+    if missing_required:
         return {
-            "ok": True,
-            "detail": f"{len(granted)} scopes granted",
+            "ok": False,
+            "detail": f"missing required: {', '.join(missing_required)}",
             "granted": sorted(granted),
-            "warnings": warnings,
+            "missing": missing_required,
         }
-    except Exception as exc:
-        return {"ok": False, "detail": f"scope check failed: {exc}"}
+    warnings = []
+    if missing_optional:
+        warnings = [f"optional missing: {', '.join(missing_optional)} (reactions disabled)"]
+    return {
+        "ok": True,
+        "detail": f"{len(granted)} scopes granted",
+        "granted": sorted(granted),
+        "warnings": warnings,
+    }
 
 
 def _check_socket_mode() -> dict[str, Any]:
@@ -361,32 +362,24 @@ def _check_serve() -> dict[str, Any]:
         return {"ok": False, "detail": "pgrep check failed"}
 
 
-def _check_transport() -> dict[str, Any]:
-    """Probe the direct Web API transport (PR-SLACK-TRANSPORT).
+def _check_transport(probe: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Report direct Web API health from the shared auth probe.
 
     Replaces the old ``pgrep server-slack`` process check — Slack no
     longer runs through an MCP subprocess, so the health question is
-    "can THIS machine call chat.postMessage's API family", answered by a
-    live ``auth.test`` through the same transport the daemon uses.
+    "can THIS machine call chat.postMessage's API family", answered by
+    the single ``auth.test`` the daemon's transport already ran.
     """
-    import asyncio
-
-    from core.messaging.slack_transport import SlackTransport
-
-    transport = SlackTransport()
-    if not transport.configured:
-        return {"ok": False, "detail": "transport unconfigured (no SLACK_BOT_TOKEN)"}
-    try:
-        data = asyncio.run(transport.auth_test())
-        return {
-            "ok": True,
-            "detail": (
-                f"direct Web API OK (workspace={data.get('team', '?')}, "
-                f"bot={data.get('user', '?')})"
-            ),
-        }
-    except Exception as exc:
-        return {"ok": False, "detail": f"transport auth.test failed: {exc}"}
+    probe = probe if probe is not None else _probe_auth()
+    if not probe["ok"]:
+        return {"ok": False, "detail": f"transport {probe['detail']}"}
+    data = probe["data"]
+    return {
+        "ok": True,
+        "detail": (
+            f"direct Web API OK (workspace={data.get('team', '?')}, bot={data.get('user', '?')})"
+        ),
+    }
 
 
 def _check_socket() -> dict[str, Any]:
@@ -409,8 +402,11 @@ def run_doctor_slack() -> dict[str, Any]:
         if not item["ok"]:
             report["ok"] = False
 
+    # 2-4-7 share one live auth.test probe.
+    auth_probe = _probe_auth()
+
     # 2. Token validity
-    token_result = _check_token_validity()
+    token_result = _check_token_validity(auth_probe)
     report["checks"].append({"name": "token_validity", **token_result})
     if not token_result["ok"]:
         report["ok"] = False
@@ -422,7 +418,7 @@ def run_doctor_slack() -> dict[str, Any]:
         report["ok"] = False
 
     # 4. Scopes
-    scope_result = _check_scopes()
+    scope_result = _check_scopes(auth_probe)
     report["checks"].append({"name": "bot_scopes", **scope_result})
     if not scope_result["ok"]:
         report["ok"] = False
@@ -446,7 +442,7 @@ def run_doctor_slack() -> dict[str, Any]:
         report["ok"] = False
 
     # 7. Direct Web API transport
-    transport_result = _check_transport()
+    transport_result = _check_transport(auth_probe)
     report["checks"].append({"name": "slack_transport", **transport_result})
     if not transport_result["ok"]:
         report["ok"] = False

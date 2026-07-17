@@ -1,6 +1,6 @@
 [project]
 name = "geode-agent"
-version = "0.99.334"
+version = "1.1.0"
 description = "GEODE — 범용 자율 실행 에이전트"
 license = "Apache-2.0"
 readme = "README.md"
@@ -34,6 +34,9 @@ dependencies = [
     # so the build never relies on a dep that could vanish.
     "markdown-it-py>=3.0",
     "httpx>=0.27.0",
+    # Google Workspace refresh tokens and OAuth client secrets are stored in
+    # the operator's OS credential vault, never in auth.toml or project files.
+    "keyring>=25.7.0",
     # websockets — direct import in core/tools/browser_tools.py's CDP client.
     # Was only transitively present; declared explicitly so the browser tools
     # never rely on a dep that could vanish (cf. markdown-it-py precedent).

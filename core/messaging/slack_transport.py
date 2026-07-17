@@ -130,6 +130,7 @@ class SlackTransport:
         self._token = resolve_bot_token(token)
         self._auth_ok: bool | None = None
         self._auth_checked_at = 0.0
+        self._last_headers: dict[str, str] = {}
 
     @property
     def configured(self) -> bool:
@@ -176,11 +177,17 @@ class SlackTransport:
                     await asyncio.sleep(max(delay, 0.0))
                     continue
                 resp.raise_for_status()
+                self._last_headers = dict(resp.headers)
                 data: dict[str, Any] = resp.json()
                 if not data.get("ok", False):
                     raise SlackTransportError(f"{method}: {data.get('error', 'unknown')}")
                 return data
         raise SlackTransportError(f"{method}: rate-limited after retries")
+
+    def oauth_scopes(self) -> tuple[str, ...]:
+        """Bot-token scopes from the last call's ``x-oauth-scopes`` header."""
+        raw = self._last_headers.get("x-oauth-scopes", "")
+        return tuple(s.strip() for s in raw.split(",") if s.strip())
 
     async def auth_test(self) -> dict[str, Any]:
         """``auth.test`` — identity probe (also refreshes the availability cache).
