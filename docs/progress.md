@@ -19,6 +19,8 @@
 <!-- Move items here when work begins. -->
 <!-- 3-Checkpoint: (1) alloc → (2) merge (CI 5/5) → (3) verify -->
 
+- [ ] Slack Socket Mode 인바운드 (2026-07-17) — xapp 토큰 발급·apps.connections.open wss 핸드셰이크 검증 완료(운영자), GEODE 소비자 구현: ws envelope ack+이벤트 라우팅(ts dedup, message/app_mention 이중발화 억제)+disconnect 재연결, xapp 존재 시 폴링 대체(부재 시 폴백 유지), doctor 프로브. websockets는 기존 선언 의존성. 부수: poller not_in_channel(C0ALD5084UW) 대응. worktree=feature/slack-socket-mode. (1) alloc.
+
 
 
 
