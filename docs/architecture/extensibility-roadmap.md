@@ -225,6 +225,7 @@ normal review and CI; implementations start only after the claim merges.
 
 | Closure package | GAP IDs | Owner/session | Implementation branch | Claim evidence | Claimed at (UTC) |
 |---|---|---|---|---|---|
+| R1.1 | BND-001 | `session=codex-2026-07-18 task=architecture-package-classification` | `feature/architecture-package-classification` | R1.1 readiness reconciled by [#2776](https://github.com/mangowhoiscloud/geode/pull/2776); current `develop` re-audit confirms delivered GOV-002 and the measurable §7 classification/migration-map contract | 2026-07-18T09:15:41Z |
 
 ## 1. Program objective
 
@@ -510,7 +511,7 @@ and closure evidence are appended in §10.
 | GOV-002 | `PARTIAL` | Hand-audited counts disagree with `AGENTS.md` (78 tools/56 hooks vs 67/65 prose) | One generated architecture baseline and a drift check own the counts | R0.2 | GOV-001 | `IN_DEVELOP` |
 | GOV-003 | `MISFIT` | Old plans describe removed paths and implemented work as current gaps | Overlapping docs carry a historical-status banner and point here | R0.1 | GOV-001 | `IN_DEVELOP` |
 | GOV-004 | `PARTIAL` | 24 import ignores and very high global Ruff ceilings lack uniform owner/expiry metadata | Every exception is removed or recorded per symbol/edge with owner, rationale, expiry, and ratchet | R0.3 | GOV-002 | `IN_DEVELOP` |
-| BND-001 | `MISFIT` | `plugins/` contains first-party features that `core` imports | Every package is classified kernel, product shell, bundled feature, or external extension; names match semantics | R1.1 | GOV-002 | `READY` |
+| BND-001 | `MISFIT` | `plugins/` contains first-party features that `core` imports | Every package is classified kernel, product shell, bundled feature, or external extension; names match semantics | R1.1 | GOV-002 | `IN_PROGRESS` |
 | BND-002 | `MISFIT` | 31 `core` → `plugins` import sites across 14 files | AST gate reports zero reverse dependency; composition owns feature registration | R1.2 | BND-001 | `OPEN` |
 | BND-003 | `ABSENT` | One-off core-only probe fails at `core.cli`; CI does not test an installed kernel without features | Isolated wheel/package test boots and runs kernel tests without bundled/third-party modules | R1.3 | BND-001, BND-002, BND-006 | `OPEN` |
 | BND-004 | `PARTIAL` | Skills/hooks/MCP have different discovery rules; Python feature collision/trust behavior is not unified | Each supported external surface declares non-executing discovery, precedence, collision, enablement, trust-before-load, reload, isolation, and teardown | R6.3 | BND-001, LLM-002 | `OPEN` |
@@ -1584,15 +1585,15 @@ Commit-pinned primary source references used by the 2026-07-17 audit:
 
 ## 14. Immediate next unit
 
-R0.3 is delivered on `develop` by [#2788](https://github.com/mangowhoiscloud/geode/pull/2788).
-The next transaction is a roadmap-only claim PR for R1.1 (`BND-001`) that
-atomically moves the package from `READY` to `IN_PROGRESS` and records its
-owner and intended implementation branch in §0.4. Do not allocate the R1.1
-implementation worktree before that claim merges. R1.4 (`BND-005`) remains
-`OPEN` until R1.1 supplies the classification and product-shell migration map.
-R1.5 (`BND-006`) then waits for both the neutral seams in R1.4 and the
-reverse-dependency removal in R1.2; the registered BND-007 retirement package
-now satisfies its planning prerequisite without authorizing removal.
+After this claim merges, allocate `feature/architecture-package-classification`
+from the updated `origin/develop` tip and verify that its branch and owner match
+the canonical R1.1 active claim. R1.1 delivers only the package-classification
+ADR and product-shell migration map; it does not move implementation modules.
+R1.4 (`BND-005`) and R1.2 (`BND-002`) remain `OPEN` until R1.1 supplies that
+classification contract. R1.5 (`BND-006`) then waits for both the neutral seams
+in R1.4 and the reverse-dependency removal in R1.2; the registered BND-007
+retirement package now satisfies its planning prerequisite without authorizing
+removal.
 R1.6 (`REL-001`) remains `OPEN` until R0.3, R1.3, and R1.5 are delivered; it
 then owns the v1.0.1 release checkpoint and does not authorize facade removal.
 R8.0 (`REL-002`) remains `OPEN` until REL-001 reaches `DONE`; its 30-day clock
