@@ -225,7 +225,7 @@ normal review and CI; implementations start only after the claim merges.
 
 | Closure package | GAP IDs | Owner/session | Implementation branch | Claim evidence | Claimed at (UTC) |
 |---|---|---|---|---|---|
-| _none yet_ | — | — | — | — | — |
+| R0.3 | GOV-004 | `session=codex-2026-07-18 task=architecture-exception-debt` | `feature/architecture-exception-debt` | R0.3 readiness reconciled by [#2776](https://github.com/mangowhoiscloud/geode/pull/2776); claim PR [#2784](https://github.com/mangowhoiscloud/geode/pull/2784) | 2026-07-18T06:38:30Z |
 
 ## 1. Program objective
 
@@ -510,7 +510,7 @@ and closure evidence are appended in §10.
 | GOV-001 | `ABSENT` | Status is fragmented across dated plans and architecture docs | This file is linked from contributor entry points and governs status | R0.1 | — | `IN_DEVELOP` |
 | GOV-002 | `PARTIAL` | Hand-audited counts disagree with `AGENTS.md` (78 tools/56 hooks vs 67/65 prose) | One generated architecture baseline and a drift check own the counts | R0.2 | GOV-001 | `IN_DEVELOP` |
 | GOV-003 | `MISFIT` | Old plans describe removed paths and implemented work as current gaps | Overlapping docs carry a historical-status banner and point here | R0.1 | GOV-001 | `IN_DEVELOP` |
-| GOV-004 | `PARTIAL` | 24 import ignores and very high global Ruff ceilings lack uniform owner/expiry metadata | Every exception is removed or recorded per symbol/edge with owner, rationale, expiry, and ratchet | R0.3 | GOV-002 | `READY` |
+| GOV-004 | `PARTIAL` | 24 import ignores and very high global Ruff ceilings lack uniform owner/expiry metadata | Every exception is removed or recorded per symbol/edge with owner, rationale, expiry, and ratchet | R0.3 | GOV-002 | `IN_PROGRESS` |
 | BND-001 | `MISFIT` | `plugins/` contains first-party features that `core` imports | Every package is classified kernel, product shell, bundled feature, or external extension; names match semantics | R1.1 | GOV-002 | `READY` |
 | BND-002 | `MISFIT` | 31 `core` → `plugins` import sites across 14 files | AST gate reports zero reverse dependency; composition owns feature registration | R1.2 | BND-001 | `OPEN` |
 | BND-003 | `ABSENT` | One-off core-only probe fails at `core.cli`; CI does not test an installed kernel without features | Isolated wheel/package test boots and runs kernel tests without bundled/third-party modules | R1.3 | BND-001, BND-002, BND-006 | `OPEN` |
@@ -1581,14 +1581,11 @@ Commit-pinned primary source references used by the 2026-07-17 audit:
 
 ## 14. Immediate next unit
 
-R0.2 is delivered on `develop`; its active claim is released and its durable
-feature/merge evidence is recorded in §10.1. The dependency and exit-criteria
-re-audit makes both R0.3 and R1.1 `READY`.
-
-The next serialized ledger transaction claims the earliest ready package,
-R0.3 (`GOV-004`), before allocating its implementation worktree. R1.1
-(`BND-001`) remains ready but unclaimed until that earlier package is claimed
-or delivered. R1.4 (`BND-005`) remains `OPEN` until R1.1 supplies the
+After this claim merges, allocate `feature/architecture-exception-debt` from
+the updated `origin/develop` tip and verify that its branch and owner match the
+canonical R0.3 active claim before changing production or verification code.
+R1.1 (`BND-001`) remains ready but unclaimed while R0.3 is active. R1.4
+(`BND-005`) remains `OPEN` until R1.1 supplies the
 classification and product-shell migration map. R1.5 (`BND-006`) then waits
 for both the neutral seams in R1.4 and the reverse-dependency removal in R1.2;
 the registered BND-007 retirement package now satisfies its planning
