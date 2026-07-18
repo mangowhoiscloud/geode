@@ -492,6 +492,7 @@ as testable phases without replacing the loop with an opaque framework.
 | D-012 Mechanism moves before state | Neutral policy/context/activity contracts are extracted before the product move; code/import migration, compatibility-facade retirement, and durable-state relocation are separate transactions with one canonical implementation and writer at every stage |
 | D-013 Released evidence is immutable | The v1.0.0 tag, portfolio commit links, commands, and historical package paths remain truthful snapshots; later releases describe boundary evolution instead of rewriting prior-release claims |
 | D-014 Compatibility windows start at publication | The v1.0.1 facade and preserved state roots remain publicly available for a final qualifying interval of at least 30 consecutive days measured from confirmed GitHub Release and PyPI publication; every release inside that interval retains them |
+| D-015 Facade retirement is removal-only | Retiring `core.self_improving` removes only forwarding imports and legacy source/module launchers after the publication gate; canonical product code, configuration, durable state, and unrelated APIs do not move in the same transaction |
 
 ## 5. Master GAP ledger
 
@@ -547,6 +548,7 @@ and closure evidence are appended in §10.
 | BND-006 | `MISFIT` | `core/self_improving` contains 39 Python files and 16,159 LOC of opt-in campaign, Petri/seed orchestration, mutation, gate, CLI/MCP, scheduler, and state policy | One cohesive first-party bundled feature owns the control plane outside the kernel; outer composition wires it, classified kernel modules import it zero times outside the exact forwarding-facade allowlist, a retirement GAP is registered before implementation, and v1.0 commands/imports/config/state behavior pass compatibility and installed-wheel tests | R1.5 | BND-002, BND-005 | `OPEN` |
 | REL-001 | `MISFIT` | PyPI and GitHub Releases still publish v1.0.0, while repository metadata and the changelog declare an untagged, unpublished v1.1.0; the operator selected v1.0.1 as the next public release | Wheel, sdist, CLI, daemon, site SOT, changelog, tag, GitHub release, and PyPI all report v1.0.1 with artifact-hash parity and no rewritten v1.0.0 evidence | R1.6 | BND-003, BND-006, GOV-004 | `OPEN` |
 | REL-002 | `ABSENT` | No registered gate prevents the v1.0.1 compatibility facade or preserved state roots from being retired immediately after a local tag, draft release, or registry publication | Official GitHub Release and PyPI evidence proves compatible public artifacts continuously exposed the facade and preserved roots for a final qualifying interval of at least 30 consecutive days, starting no earlier than v1.0.1, and every release inside that interval retained them | R8.0 | REL-001 | `OPEN` |
+| BND-007 | `ABSENT` | The current `core/self_improving` import and source/module launcher surface has no enumerated consumer census, old-to-new migration map, or removal-only closure gate | After REL-002, every repository and documented consumer is classified, migration guidance names canonical replacements, only the forwarding facade and legacy launchers are removed, and installed-wheel import/CLI/MCP/config/state parity proves the canonical product remains intact | R8.1 | REL-002 | `OPEN` |
 
 ## 6. Dependency and merge sequence
 
@@ -800,9 +802,9 @@ core.self_improving.{train,campaign,prepare,watch_campaign}` entry points, and
 the documented source-checkout launchers at
 `core/self_improving/{train,campaign,prepare,watch_campaign}.py` delegate to
 that canonical implementation through the R8.0 window; they must not duplicate
-a ContextVar, hook bridge, singleton, registry, or writer. A stable
-facade-retirement GAP must be registered through a later serialized transaction
-before R1.5 is claimed.
+a ContextVar, hook bridge, singleton, registry, or writer. BND-007 is the stable
+facade-retirement GAP. Its registration satisfies R1.5's planning prerequisite;
+its REL-002 dependency forbids retirement before the publication window closes.
 
 The boundary move preserves:
 
@@ -1266,6 +1268,37 @@ timestamp, tag, draft release, planned date, or elapsed time since merge. No
 facade-retirement or state-location package may treat REL-002 as satisfied
 before the complete publication interval is verified.
 
+#### R8.1 Self-improving facade retirement
+
+GAP: BND-007.
+
+Retire the compatibility surface as a narrow removal transaction after R8.0:
+
+- census imports, module invocations, source-checkout launchers, tests, docs,
+  site examples, and release guidance that reference `core.self_improving`;
+- classify each hit as canonical product use, supported compatibility use,
+  historical v1.0.0 evidence, or stale internal use, and publish an exact
+  old-to-new import/command map;
+- verify that v1.0.1 release notes and public migration guidance exposed the
+  canonical replacements throughout the qualifying R8.0 interval;
+- remove only the `core/self_improving` forwarding files, legacy
+  `python -m core.self_improving.*` entry points, and source-checkout path
+  launchers; retain historical tagged documentation unchanged;
+- remove the R1.5 AST facade allowlist rather than broadening it or replacing
+  the facade with dynamic import indirection.
+
+Acceptance:
+
+- the retirement lands in a public release after REL-002 is `DONE`, never in
+  v1.0.1 or an artifact inside its qualifying compatibility interval;
+- repository source and active docs contain no unclassified old import or
+  launcher, while frozen v1.0.0 evidence remains truthful;
+- clean installed-wheel probes prove old imports/launchers are deliberately
+  absent and canonical imports plus CLI, MCP, scheduler, prompt/provider,
+  configuration, and state behavior still pass;
+- canonical object identity, writer ownership, and every state root preserved
+  by R1.5 are unchanged; no durable-state migration rides this package.
+
 ## 8. Change-surface acceptance scenarios
 
 These black-box scenarios define extensibility more usefully than class count.
@@ -1411,6 +1444,7 @@ package to `OPEN` or proved every readiness condition for `READY`.
 |---|---|
 | Package/ring migration breaks imports | One seam per PR, compatibility import with removal ID, installed-wheel smoke |
 | Compatibility facade forks runtime identity | Old and new imports delegate to one canonical module; assert ContextVar, hook, registry, and class identity rather than copying implementations |
+| Facade retirement hides another package or state move | Removal-only diff, current consumer census, old-to-new map, installed-wheel probes, and unchanged canonical object/writer/state identities |
 | Compatibility window is shortened by repository-only time | Measure from the later official GitHub/PyPI publication, inspect intervening releases, and require 30 continuous days of installed facade/state compatibility |
 | Unpublished repository version conflicts with the public release | Re-query official registries, converge every version consumer on v1.0.1, reject an already-published v1.1.0, and preserve immutable v1.0.0 evidence |
 | Tool metadata changes policy behavior | Plan parity plus read/write/personal-data/approval characterization tests |
@@ -1490,8 +1524,10 @@ R0.3 (`GOV-004`), before allocating its implementation worktree. R1.1
 or delivered. R1.4 (`BND-005`) remains `OPEN` until R1.1 supplies the
 classification and product-shell migration map. R1.5 (`BND-006`) then waits
 for both the neutral seams in R1.4 and the reverse-dependency removal in R1.2;
-its separately registered facade-retirement GAP must also exist before claim.
+the registered BND-007 retirement package now satisfies its planning
+prerequisite without authorizing removal.
 R1.6 (`REL-001`) remains `OPEN` until R0.3, R1.3, and R1.5 are delivered; it
 then owns the v1.0.1 release checkpoint and does not authorize facade removal.
 R8.0 (`REL-002`) remains `OPEN` until REL-001 reaches `DONE`; its 30-day clock
 starts from public registry evidence, never from the implementation merge.
+R8.1 (`BND-007`) remains `OPEN` behind REL-002 and cannot ship in v1.0.1.
