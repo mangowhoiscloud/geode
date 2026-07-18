@@ -539,6 +539,7 @@ and closure evidence are appended in §10.
 | VER-002 | `ABSENT` | No contract suite measures how many central edits each extension type requires | Six extension scenarios in §8 pass without forbidden edits | R7.2 | CAP-006, LLM-002, BND-004 | `OPEN` |
 | VER-003 | `PARTIAL` | Public/internal metric prose drifts from executable counts | `sync-stats` or one shared generator updates site, AGENTS facts, and roadmap baseline; check mode is green | R0.2 | GOV-001 | `IN_DEVELOP` |
 | VER-004 | `PARTIAL` | Cold-start and runtime metrics exist, but refactors lack one architecture regression baseline | Startup, first-turn, tool-plan build, memory, and event-write budgets are pinned and non-regressing | R7.3 | CAP-005, LOOP-003, DI-004, LLM-004, PROTO-002, STORE-002 | `OPEN` |
+| BND-005 | `MISFIT` | Generic agent/provider/observability consumers import self-improving transcript, SoT-resolution, and prompt-injection helpers | Neutral policy snapshot/source, context-contribution, run identity, and activity-sink contracts replace every classified-kernel import of a self-improving helper without changing runtime behavior | R1.4 | BND-001 | `OPEN` |
 
 ## 6. Dependency and merge sequence
 
@@ -692,6 +693,37 @@ isolated environment, then run:
 - package metadata inspection proving no hidden import dependency.
 
 The test must not rename directories in-place or rely on import cache.
+
+#### R1.4 Neutral self-improving host seams
+
+GAP: BND-005.
+
+Characterize the current daily runtime and then extract only the neutral
+mechanisms that the closed kernel legitimately owns. Names may change during
+implementation, but the responsibilities remain separate:
+
+- immutable policy snapshot/source selection presented to a step without
+  exposing autoresearch paths;
+- provider-neutral context/prompt contributions registered at composition,
+  not imported from one provider adapter;
+- bounded run identity and activity/transcript sink contracts;
+- generic hook dispatch and scheduler ports, without promoting
+  mutation/campaign/Petri payloads into stable kernel APIs.
+
+The existing product-shaped `RunTranscript`, autoresearch SoT resolution, and
+in-context recipes do not remain in the kernel merely because generic callers
+currently import them. They implement the neutral ports from the product side.
+
+Acceptance:
+
+- prompt bytes/hashes, termination reasons, hook ordering, retry/cost behavior,
+  and no-SoT fast paths are characterized before extraction;
+- `core.agent`, `core.llm`, `core.memory`, `core.observability`, and
+  `core.skills` no longer import `core.self_improving`;
+- a neutral contract can run with no self-improving feature installed or
+  registered;
+- no mega `SelfImprovementPort` or service-locator `ContextVar` replaces the
+  direct imports.
 
 ### R2 — Unified capability and tool plane
 
@@ -1275,4 +1307,5 @@ re-audit makes both R0.3 and R1.1 `READY`.
 The next serialized ledger transaction claims the earliest ready package,
 R0.3 (`GOV-004`), before allocating its implementation worktree. R1.1
 (`BND-001`) remains ready but unclaimed until that earlier package is claimed
-or delivered.
+or delivered. R1.4 (`BND-005`) remains `OPEN` until R1.1 supplies the
+classification and product-shell migration map.
