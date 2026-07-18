@@ -1300,8 +1300,9 @@ Acceptance:
 - clean installed-wheel probes prove old imports/launchers are deliberately
   absent and canonical imports plus CLI, MCP, scheduler, prompt/provider,
   configuration, and state behavior still pass;
-- canonical object identity, writer ownership, and every state root preserved
-  by R1.5 are unchanged; no durable-state migration rides this package.
+- canonical object identity, writer ownership, and the state locations finalized
+  by R8.2 are unchanged; the R8.1 retirement transaction performs no
+  durable-state migration.
 
 #### R8.2 Self-improving state ownership
 
@@ -1325,9 +1326,11 @@ feature. Each logical dataset record declares at least:
 The inventory includes tracked policies, mutations, baseline archive/epochs,
 results and seed pools; runtime baseline/logs/handoff/campaign/seed-generation
 artifacts; operator-local policies, sessions, transcripts, and auto-trigger
-lock/timestamp/history; and the `GEODE_STATE_ROOT/autoresearch` worker layout.
-It resolves the current mismatch where `GLOBAL_AUTORESEARCH_HANDOFF_DIR` is
-described as legacy while active writers still use it.
+lock/timestamp/history; the `GEODE_STATE_ROOT/autoresearch` worker layout; and
+the sibling per-worker `transcript.jsonl` selected through
+`GEODE_RUN_TRANSCRIPT_PATH` directly under the raw worker root. It resolves the
+current mismatch where `GLOBAL_AUTORESEARCH_HANDOFF_DIR` is described as legacy
+while active writers still use it.
 
 Migration order:
 
