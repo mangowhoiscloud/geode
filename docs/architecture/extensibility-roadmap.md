@@ -490,6 +490,7 @@ as testable phases without replacing the loop with an opaque framework.
 | D-010 Trust is separate from enablement | An extension can be installed/enabled without automatically receiving sensitive authority |
 | D-011 Self-improving is a bundled product control plane | Campaign, mutation, evaluation, promotion, and their CLI/MCP/scheduler surfaces move outside the closed kernel; this first-party feature remains bundled and is not presented as a third-party plugin |
 | D-012 Mechanism moves before state | Neutral policy/context/activity contracts are extracted before the product move; code/import migration, compatibility-facade retirement, and durable-state relocation are separate transactions with one canonical implementation and writer at every stage |
+| D-013 Released evidence is immutable | The v1.0.0 tag, portfolio commit links, commands, and historical package paths remain truthful snapshots; later releases describe boundary evolution instead of rewriting prior-release claims |
 
 ## 5. Master GAP ledger
 
@@ -543,6 +544,7 @@ and closure evidence are appended in §10.
 | VER-004 | `PARTIAL` | Cold-start and runtime metrics exist, but refactors lack one architecture regression baseline | Startup, first-turn, tool-plan build, memory, and event-write budgets are pinned and non-regressing | R7.3 | CAP-005, LOOP-003, DI-004, LLM-004, PROTO-002, STORE-002 | `OPEN` |
 | BND-005 | `MISFIT` | Generic agent/provider/observability consumers import self-improving transcript, SoT-resolution, and prompt-injection helpers | Neutral policy snapshot/source, context-contribution, run identity, and activity-sink contracts replace every classified-kernel import of a self-improving helper without changing runtime behavior | R1.4 | BND-001 | `OPEN` |
 | BND-006 | `MISFIT` | `core/self_improving` contains 39 Python files and 16,159 LOC of opt-in campaign, Petri/seed orchestration, mutation, gate, CLI/MCP, scheduler, and state policy | One cohesive first-party bundled feature owns the control plane outside the kernel; outer composition wires it, classified kernel modules import it zero times outside the exact forwarding-facade allowlist, a retirement GAP is registered before implementation, and v1.0 commands/imports/config/state behavior pass compatibility and installed-wheel tests | R1.5 | BND-002, BND-005 | `OPEN` |
+| REL-001 | `MISFIT` | PyPI and GitHub Releases still publish v1.0.0, while repository metadata and the changelog declare an untagged, unpublished v1.1.0; the operator selected v1.0.1 as the next public release | Wheel, sdist, CLI, daemon, site SOT, changelog, tag, GitHub release, and PyPI all report v1.0.1 with artifact-hash parity and no rewritten v1.0.0 evidence | R1.6 | BND-003, BND-006, GOV-004 | `OPEN` |
 
 ## 6. Dependency and merge sequence
 
@@ -571,6 +573,35 @@ rather than inventing a competing tool snapshot. The remaining R2 and R3
 packages may then progress in parallel. R5 and most of R6 may progress in
 parallel after the composition root is stable, but R6.3 waits for R5.2 because
 its unified extension lifecycle includes LLM-adapter discovery.
+
+### 6.1 v1.0.1 boundary-release train
+
+v1.0.1 is an intermediate, explicitly registered architecture checkpoint. It
+does not claim that the complete R0-R7 program is finished, and it does not
+remove the compatibility facade introduced by R1.5.
+
+| Wave | Package | Required outcome |
+|---|---|---|
+| 0 | R0.3 | Ratchet existing architecture exceptions before adding boundary-specific allowlists |
+| 1 | R1.1 | Fix the package classification and product-shell migration map |
+| 2A | R1.4 | Extract neutral host seams without changing self-improving behavior |
+| 2B | R1.2 | Remove kernel-to-feature reverse dependencies through outer composition |
+| 3 | R1.5 | Move the bundled self-improving control plane and retain the exact compatibility facade |
+| 4 | R1.3 | Prove the installed kernel boots without bundled or third-party features |
+| 5A | R1.6 | Reconcile, build, publish, and verify v1.0.1 |
+| 5B | R0.1/R0.2 and checkpoint packages | Record main/release closure evidence and synchronize `main` back to `develop` |
+
+Section 5 remains the status authority. The table is a release-specific view of
+already registered packages, not an alternate ledger or permission to skip
+claim and reconciliation transactions. The rest of R2-R7 remains in the
+master-ledger order and continues after the checkpoint.
+
+Public release truth is re-audited against the official
+[PyPI project](https://pypi.org/project/geode-agent/) and
+[GitHub Releases](https://github.com/mangowhoiscloud/geode/releases) surfaces
+immediately before the cut. As audited on 2026-07-18, both still identify
+v1.0.0 as the latest public release; repository-only v1.1.0 metadata is not
+treated as a published version.
 
 ## 7. Phase work packages
 
@@ -792,6 +823,36 @@ Acceptance:
   and auto-trigger writes under the preserved roots;
 - no physical state relocation or compatibility-facade removal is hidden in
   the package move.
+
+#### R1.6 v1.0.1 boundary release checkpoint
+
+GAP: REL-001.
+
+Reconcile and publish the boundary refactor as v1.0.1 without rewriting the
+historical v1.0.0 record:
+
+- re-query the official PyPI and GitHub Releases surfaces immediately before
+  the cut and fail closed if a v1.1.0 artifact has appeared;
+- reconcile `pyproject.toml`, lock/build metadata, CLI and daemon version
+  reporting, generated site SOT, changelog, public docs, tag, and release notes
+  to one v1.0.1 value;
+- fold material under the untagged v1.1.0 changelog heading into the actual
+  v1.0.1 release or `[Unreleased]`; two competing current-release headings are
+  forbidden;
+- preserve the v1.0.0 tag, release notes, portfolio commit links, commands, and
+  historical package-path claims as released evidence;
+- run the complete non-live quality gates, build wheel and sdist, and verify
+  clean-environment `uv`/`uvx`, CLI, daemon, bundled-feature, compatibility,
+  and kernel-only installation smoke tests;
+- record SHA-256 parity from locally verified artifacts through the GitHub
+  release assets and PyPI files, then complete roadmap promotion and
+  main-to-develop tracking transactions.
+
+The release narrative states the architecture evolution explicitly: v1.0.0
+physically consolidated the product under `core`; v1.0.1 aligns the package
+boundary with the already documented outer-loop model while preserving the
+public compatibility window. Facade retirement and durable-state relocation
+require separately registered packages and cannot ride this release.
 
 ### R2 — Unified capability and tool plane
 
@@ -1143,11 +1204,17 @@ Characterization suites pin termination, retry, approval, Google consent,
 storage, and protocol behavior. Regressions require an explicit accepted
 tradeoff, not an averaged-away benchmark.
 
-#### R7.4 Documentation and release closure
+#### R7.4 Full-program documentation and release closure
 
 Uses: VER-003, which closes in R0.2. This release step promotes every remaining
 `IN_DEVELOP` closure package atomically only after that whole package and its
 per-GAP evidence are complete; it is not a second GAP selection.
+
+A separately registered intermediate release checkpoint such as R1.6 may
+promote its dependency-closed slice without marking unrelated `OPEN` work
+complete. It must carry the complete canonical roadmap, satisfy its own release
+acceptance, and preserve all unresolved rows and their status. This exception
+does not weaken the final full-program closure below.
 
 - Update `AGENTS.md`, `CLAUDE.md`, internal architecture docs, public docs,
   landing claims, `README.md`, generated SOT, and release notes from executable
@@ -1155,8 +1222,8 @@ per-GAP evidence are complete; it is not a second GAP selection.
 - Remove compatibility shims whose window has ended.
 - Run the full non-live quality gates.
 - Complete independent second-opinion review.
-- Merge `develop` to `main` only after the master ledger has no unexplained
-  `OPEN`, `READY`, `IN_PROGRESS`, or `BLOCKED` row.
+- For the full-program closure, merge `develop` to `main` only after the master
+  ledger has no unexplained `OPEN`, `READY`, `IN_PROGRESS`, or `BLOCKED` row.
 
 ## 8. Change-surface acceptance scenarios
 
@@ -1303,6 +1370,7 @@ package to `OPEN` or proved every readiness condition for `READY`.
 |---|---|
 | Package/ring migration breaks imports | One seam per PR, compatibility import with removal ID, installed-wheel smoke |
 | Compatibility facade forks runtime identity | Old and new imports delegate to one canonical module; assert ContextVar, hook, registry, and class identity rather than copying implementations |
+| Unpublished repository version conflicts with the public release | Re-query official registries, converge every version consumer on v1.0.1, reject an already-published v1.1.0, and preserve immutable v1.0.0 evidence |
 | Tool metadata changes policy behavior | Plan parity plus read/write/personal-data/approval characterization tests |
 | Loop extraction changes termination/retry | Golden turn fixtures and event-order assertions before moving code |
 | DI hides a new service locator | Group size/cohesion gate and forbidden service `ContextVar` check |
@@ -1381,3 +1449,5 @@ or delivered. R1.4 (`BND-005`) remains `OPEN` until R1.1 supplies the
 classification and product-shell migration map. R1.5 (`BND-006`) then waits
 for both the neutral seams in R1.4 and the reverse-dependency removal in R1.2;
 its separately registered facade-retirement GAP must also exist before claim.
+R1.6 (`REL-001`) remains `OPEN` until R0.3, R1.3, and R1.5 are delivered; it
+then owns the v1.0.1 release checkpoint and does not authorize facade removal.
