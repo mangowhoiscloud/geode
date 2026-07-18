@@ -493,6 +493,7 @@ as testable phases without replacing the loop with an opaque framework.
 | D-013 Released evidence is immutable | The v1.0.0 tag, portfolio commit links, commands, and historical package paths remain truthful snapshots; later releases describe boundary evolution instead of rewriting prior-release claims |
 | D-014 Compatibility windows start at publication | The v1.0.1 facade and preserved state roots remain publicly available for a final qualifying interval of at least 30 consecutive days measured from confirmed GitHub Release and PyPI publication; every release inside that interval retains them |
 | D-015 Facade retirement is removal-only | Retiring `core.self_improving` removes only forwarding imports and legacy source/module launchers after the publication gate; canonical product code, configuration, durable state, and unrelated APIs do not move in the same transaction |
+| D-016 State follows declared ownership | A feature-owned dataset manifest declares lifecycle, schema, path, writer, and migration policy; the code move does not relocate data, tracked SoT moves in R8.2 before facade retirement, and runtime cutovers remain additive, idempotent, and single-writer |
 
 ## 5. Master GAP ledger
 
@@ -548,7 +549,8 @@ and closure evidence are appended in §10.
 | BND-006 | `MISFIT` | `core/self_improving` contains 39 Python files and 16,159 LOC of opt-in campaign, Petri/seed orchestration, mutation, gate, CLI/MCP, scheduler, and state policy | One cohesive first-party bundled feature owns the control plane outside the kernel; outer composition wires it, classified kernel modules import it zero times outside the exact forwarding-facade allowlist, a retirement GAP is registered before implementation, and v1.0 commands/imports/config/state behavior pass compatibility and installed-wheel tests | R1.5 | BND-002, BND-005 | `OPEN` |
 | REL-001 | `MISFIT` | PyPI and GitHub Releases still publish v1.0.0, while repository metadata and the changelog declare an untagged, unpublished v1.1.0; the operator selected v1.0.1 as the next public release | Wheel, sdist, CLI, daemon, site SOT, changelog, tag, GitHub release, and PyPI all report v1.0.1 with artifact-hash parity and no rewritten v1.0.0 evidence | R1.6 | BND-003, BND-006, GOV-004 | `OPEN` |
 | REL-002 | `ABSENT` | No registered gate prevents the v1.0.1 compatibility facade or preserved state roots from being retired immediately after a local tag, draft release, or registry publication | Official GitHub Release and PyPI evidence proves compatible public artifacts continuously exposed the facade and preserved roots for a final qualifying interval of at least 30 consecutive days, starting no earlier than v1.0.1, and every release inside that interval retained them | R8.0 | REL-001 | `OPEN` |
-| BND-007 | `ABSENT` | The current `core/self_improving` import and source/module launcher surface has no enumerated consumer census, old-to-new migration map, or removal-only closure gate | After REL-002, every repository and documented consumer is classified, migration guidance names canonical replacements, only the forwarding facade and legacy launchers are removed, and installed-wheel import/CLI/MCP/config/state parity proves the canonical product remains intact | R8.1 | REL-002 | `OPEN` |
+| BND-007 | `ABSENT` | The current `core/self_improving` import and source/module launcher surface has no enumerated consumer census, old-to-new migration map, or removal-only closure gate | After REL-002, every repository and documented consumer is classified, migration guidance names canonical replacements, only the forwarding facade and legacy launchers are removed, and installed-wheel import/CLI/MCP/config/state parity proves the canonical product remains intact | R8.1 | REL-002, STORE-003 | `OPEN` |
+| STORE-003 | `MISFIT` | Self-improving datasets span tracked `core/self_improving/state`, runtime `~/.geode/self-improving`, actively written `~/.geode/autoresearch/handoff`, and isolated `GEODE_STATE_ROOT/autoresearch` roots without one dataset-level ownership manifest | A feature-owned manifest declares every dataset's lifecycle, schema/version, root, writer/readers, concurrency, retention/redaction, migration, rollback, and rebuild contract; tracked SoT leaves `core` with hash/history parity, while runtime/override/worker roots remain compatible or migrate additively with one writer | R8.2 | REL-002, STORE-001 | `OPEN` |
 
 ## 6. Dependency and merge sequence
 
@@ -1239,7 +1241,9 @@ does not weaken the final full-program closure below.
 
 R8 package numbers describe the v1.0.1 compatibility lifecycle; they do not
 imply a dependency on every R7 package. Readiness comes only from the explicit
-§5 edges, so this lifecycle can progress alongside unrelated R2-R7 work.
+§5 edges, so this lifecycle can progress alongside unrelated R2-R7 work. R8.2
+precedes R8.1 because tracked state must leave the facade directory in its own
+transaction before the forwarding package can disappear cleanly.
 
 #### R8.0 Publication grace evidence
 
@@ -1296,8 +1300,69 @@ Acceptance:
 - clean installed-wheel probes prove old imports/launchers are deliberately
   absent and canonical imports plus CLI, MCP, scheduler, prompt/provider,
   configuration, and state behavior still pass;
-- canonical object identity, writer ownership, and every state root preserved
-  by R1.5 are unchanged; no durable-state migration rides this package.
+- canonical object identity, writer ownership, and the state locations finalized
+  by R8.2 are unchanged; the R8.1 retirement transaction performs no
+  durable-state migration.
+
+#### R8.2 Self-improving state ownership
+
+GAP: STORE-003.
+
+Introduce a machine-readable state manifest owned by the canonical bundled
+feature. Each logical dataset record declares at least:
+
+| Field | Required meaning |
+|---|---|
+| `dataset_id` | Stable logical identity independent of a filesystem path |
+| `lifecycle` | `tracked_sot`, `user_runtime`, `operator_override`, or `worker_ephemeral` |
+| `format` / `schema_version` | JSON, JSONL, TSV, text, directory, or lock format and compatible reader version |
+| `root_resolver` / `relative_path` | Named path resolver plus relative location; no consumer literal reconstruction |
+| `source_of_truth` | Canonical state versus rebuildable projection, cache, pointer, or archive |
+| `writer` / `readers` | Exactly one canonical writer and the bounded reader set |
+| `atomicity` / `concurrency` | Atomic replace, append/lock discipline, conflict behavior, and worker isolation |
+| `retention` / `redaction` | Lifetime, sensitivity, permissions, and prohibited payloads |
+| `migration` / `rollback` / `rebuild` | Version marker, cutover/fallback rule, rollback source, and deterministic rebuild procedure |
+
+The inventory includes tracked policies, mutations, baseline archive/epochs,
+results and seed pools; runtime baseline/logs/handoff/campaign/seed-generation
+artifacts; operator-local policies, sessions, transcripts, and auto-trigger
+lock/timestamp/history; the `GEODE_STATE_ROOT/autoresearch` worker layout; and
+the sibling per-worker `transcript.jsonl` selected through
+`GEODE_RUN_TRANSCRIPT_PATH` directly under the raw worker root. It resolves the
+current mismatch where `GLOBAL_AUTORESEARCH_HANDOFF_DIR` is described as legacy
+while active writers still use it.
+
+Migration order:
+
+1. Freeze fixtures for every JSON/JSONL/TSV schema, path resolver, file mode,
+   append/atomicity rule, and isolated-worker layout.
+2. Move the tracked SoT with git history into the canonical product package
+   selected by R1.1; preserve byte hashes and update all code, scripts, hub
+   builders, package data, tests, and active docs from the manifest.
+3. Keep `~/.geode/self-improving/`,
+   `~/.geode/autoresearch/handoff/`, and
+   `GEODE_STATE_ROOT/autoresearch` readable at their existing semantics unless
+   an individual manifest record declares a versioned cutover.
+4. For a runtime cutover, copy additively, validate schema and content hashes,
+   switch exactly one canonical writer, then read new-first with an old-root
+   fallback. Never dual-write, overwrite a conflict, or delete the rollback
+   source in this package.
+
+Acceptance:
+
+- tracked SoT has one canonical location outside `core`, one writer per
+  dataset, preserved git provenance/bytes, and installed-wheel package-data
+  tests; `core/self_improving/state` no longer creates a data-only namespace;
+- mutable JSON uses atomic replace, append-only JSONL/TSV preserves ordering
+  and schemas, lock/timestamp/history records retain cross-process behavior,
+  and user-private data retains restrictive permissions and redaction;
+- migration is lossless and idempotent under empty, legacy-only, both-present,
+  partial-copy, corrupt-row, interrupted-cutover, rollback, and concurrent
+  worker fixtures;
+- config keys, logical dataset IDs, runtime behavior, hub/eval outputs, and
+  `GEODE_HOME`/`GEODE_STATE_ROOT` overrides remain compatible;
+- no active runtime or operator root is deleted without another registered,
+  versioned retirement GAP after its fallback window.
 
 ## 8. Change-surface acceptance scenarios
 
@@ -1426,6 +1491,7 @@ supersets cannot authorize a later or unrelated edit.
 | GAP ID | Decision | Replacement GAPs / changed edges | Rationale | PR / commit | Affected packages re-audited |
 |---|---|---|---|---|---|
 | BND-003 | DEPENDENCY_ADDED | BND-006 | The distribution gate must validate the final self-improving product layout rather than close on the pre-move package tree; this edge makes R1.3 wait for R1.5 | `cef746de5f74204260cdbfcacd517e567beda191` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS |
+| BND-007 | DEPENDENCY_ADDED | STORE-003 | Tracked state currently sits under the facade directory; R8.2 must move it in a separate transaction so R8.1 can retire forwarders without hiding a state move or leaving a data-only `core.self_improving` namespace | `2c14d8c982b8112d68e29dc49ce16ad8fcc95fdd` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS |
 | _none yet_ | — | — | — | — | — |
 
 ### 10.4 Blocker evidence
@@ -1445,6 +1511,7 @@ package to `OPEN` or proved every readiness condition for `READY`.
 | Package/ring migration breaks imports | One seam per PR, compatibility import with removal ID, installed-wheel smoke |
 | Compatibility facade forks runtime identity | Old and new imports delegate to one canonical module; assert ContextVar, hook, registry, and class identity rather than copying implementations |
 | Facade retirement hides another package or state move | Removal-only diff, current consumer census, old-to-new map, installed-wheel probes, and unchanged canonical object/writer/state identities |
+| State relocation forks the experiment truth | Dataset manifest, byte/schema parity, git-history proof, one-writer cutover, old-root fallback, idempotent migration, and conflict/rollback fixtures |
 | Compatibility window is shortened by repository-only time | Measure from the later official GitHub/PyPI publication, inspect intervening releases, and require 30 continuous days of installed facade/state compatibility |
 | Unpublished repository version conflicts with the public release | Re-query official registries, converge every version consumer on v1.0.1, reject an already-published v1.1.0, and preserve immutable v1.0.0 evidence |
 | Tool metadata changes policy behavior | Plan parity plus read/write/personal-data/approval characterization tests |
@@ -1530,4 +1597,5 @@ R1.6 (`REL-001`) remains `OPEN` until R0.3, R1.3, and R1.5 are delivered; it
 then owns the v1.0.1 release checkpoint and does not authorize facade removal.
 R8.0 (`REL-002`) remains `OPEN` until REL-001 reaches `DONE`; its 30-day clock
 starts from public registry evidence, never from the implementation merge.
-R8.1 (`BND-007`) remains `OPEN` behind REL-002 and cannot ship in v1.0.1.
+R8.2 (`STORE-003`) remains `OPEN` behind REL-002 and STORE-001. R8.1
+(`BND-007`) additionally waits for STORE-003, so neither can ship in v1.0.1.
