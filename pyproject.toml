@@ -266,9 +266,8 @@ name = "CLI must not import server/messaging (process boundary)"
 type = "forbidden"
 source_modules = ["core.cli"]
 forbidden_modules = ["core.server", "core.messaging"]
-# v0.52 phase 6 — geode serve 명령이 cli/__init__.py 안에 있어서
-# daemon entry 가 cli/ 의 일부로 남아있음. v0.53 에서 server/entrypoint.py
-# 로 분리하면 이들 ignore 제거.
+# Owner, rationale, age, target, and expiry metadata are enforced from
+# docs/architecture/exception-debt.toml.
 ignore_imports = [
     "core.cli.typer_serve -> core.server.supervised.services",
     "core.cli.typer_serve -> core.server.supervised.webhook_handler",
@@ -276,15 +275,8 @@ ignore_imports = [
     "core.cli.typer_serve -> core.messaging.binding",
     "core.cli.scheduler_drain -> core.server.supervised.services",
     "core.wiring.adapters -> core.messaging.binding",
-    # PR-SLACK-TRANSPORT (2026-07-15) — wiring constructs the messaging-layer
-    # Slack transport, and the notification adapter consumes it (a pure
-    # httpx capability client, not a process surface; same exception class
-    # as the binding entry above).
     "core.wiring.adapters -> core.messaging.slack_transport",
     "core.mcp.slack_adapter -> core.messaging.slack_transport",
-    # PR-SLACK-TRANSPORT (2026-07-15) — the doctor probes the SAME direct
-    # Web API transport the daemon uses (auth.test), same diagnostics-read
-    # exception class as typer_serve above. Lazy import inside the check.
     "core.cli.doctor -> core.messaging.slack_transport",
 ]
 
@@ -293,21 +285,11 @@ name = "Agent stays pure (no CLI/server)"
 type = "forbidden"
 source_modules = ["core.agent"]
 forbidden_modules = ["core.cli", "core.server"]
-# Historical exceptions while agent/ still imports selected CLI utilities
-# (session_checkpoint, transcript, redaction, bash_tool, commands).
+# Metadata and expiry are enforced from the exception-debt ledger.
 ignore_imports = [
-    # AgenticLoop implementation lives in core/agent/loop/agent_loop.py.
     "core.agent.loop.agent_loop -> core.cli.commands",
     "core.agent.approval -> core.cli",
     "core.agent.worker -> core.cli.tool_handlers",
-    # PR-SELF-IMPROVING-UMBRELLA (2026-05-31) — the self-improving audit runner
-    # moved under ``core`` (was ``autoresearch.train``, outside root_package so
-    # the edge was invisible). The import is a LAZY, ImportError-guarded read of
-    # the quota banner inside ``run_audit`` (``core/self_improving/train.py``
-    # ~L1304: ``try: from core.cli.quota_banner import …; except ImportError: skip``)
-    # so a packaged distro without ``core.cli`` degrades gracefully. It is the
-    # same "selected-CLI-utility from a non-CLI module" exception the entries
-    # above document, not a module-load coupling.
     "core.self_improving.measure -> core.cli.quota_banner",
 ]
 
@@ -316,24 +298,17 @@ name = "Server may host agent but never CLI"
 type = "forbidden"
 source_modules = ["core.server"]
 forbidden_modules = ["core.cli"]
-# v0.52 phase 6 — server/supervised/services.py (구 gateway/shared_services) 가
-# 여전히 cli/{commands,session_state,tool_handlers} + wiring/bootstrap 을 통해
-# cli/startup 을 import. v0.53 에서 daemon-side handler 를 server/ipc_server/handlers/
-# 로 옮기면서 정리.
+# Metadata and expiry are enforced from the exception-debt ledger.
 ignore_imports = [
     "core.server.supervised.services -> core.cli.commands",
     "core.server.supervised.services -> core.cli.session_state",
     "core.server.supervised.services -> core.cli.tool_handlers",
     "core.server.supervised.services -> core.cli.bootstrap",
     "core.agent.worker -> core.cli.tool_handlers",
-    # AgenticLoop implementation lives in core/agent/loop/agent_loop.py.
     "core.agent.loop.agent_loop -> core.cli.commands",
     "core.agent.approval -> core.cli",
     "core.server.ipc_server.poller -> core.cli",
     "core.server.ipc_server.poller -> core.cli.session_state",
-    # PR-SELF-IMPROVING-UMBRELLA (2026-05-31) — see the matching note on the
-    # "Agent stays pure" contract above. Lazy, ImportError-guarded read of the
-    # quota banner from the relocated audit runner.
     "core.self_improving.measure -> core.cli.quota_banner",
 ]
 
@@ -342,9 +317,7 @@ name = "Messaging integration is capability-pure (no process imports)"
 type = "forbidden"
 source_modules = ["core.messaging"]
 forbidden_modules = ["core.cli", "core.server", "core.agent"]
-# v0.52 phase 6 — channel_manager (구) 의 BasePoller 의존은 사실 channels 가
-# poller 추상화를 알아야 함. v0.53 에서 poller_base 를 channels/ 로 승격할지
-# server/ 에 둘지 결정.
+# Metadata and expiry are enforced from the exception-debt ledger.
 ignore_imports = [
     "core.messaging.binding -> core.server.supervised.poller_base",
 ]
@@ -390,7 +363,6 @@ ignore = [
     # PLR rule subset — informational rather than actionable for the current codebase:
     "PLR2004", # magic-value comparison — too noisy on score thresholds, status codes
     "PLR0904", # too-many-public-methods — incompatible with Pydantic / Typer command classes
-    "PLR0911", # too-many-return-statements — flagged separately when it matters
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -403,17 +375,18 @@ ignore = [
 "core/ui/geodi_art.py" = ["E501"]
 # Generated inline-image data: one long base64 PNG string literal.
 
-# Complexity ratchets — thresholds set to current worst offender (day-1 failures = 0).
-# Ratchet down per release as step 4-8 of the domain-free-core refactor extracts god methods.
-# See docs/architecture/domain-free-core-audit.md §6 for the planned reductions.
+# Exact ceiling witnesses and the one symbol override are owned by
+# docs/architecture/exception-debt.toml. CI probes Ruff one point below each
+# value, rejects unregistered symbols, and requires this value to fall whenever
+# the measured maximum falls.
 [tool.ruff.lint.mccabe]
-max-complexity = 62
+max-complexity = 54
 
 [tool.ruff.lint.pylint]
-max-args = 23         # Worst: 23 (_append_baseline_registry_row — a provenance wiring sink: per-role/seed/bench/held-out/control-arm/power fields; E4 added the bundled power_stats arg, E5 the bundled run_provenance arg, baseline-lineage the bundled historical_spec override). Target: 8.
-max-branches = 68     # Worst: 68. Target: 15.
-max-returns = 18      # Worst: 18 (PLR0911 silenced project-wide; this kept for ratchet visibility).
-max-statements = 273  # Worst: 273 (god method in cli/__init__.py). Target: 60.
+max-args = 23
+max-branches = 56
+max-returns = 18
+max-statements = 223
 
 # TID251 — banned imports with educational error messages (LangGraph pattern).
 # Symbol-level guardrail complementary to import-linter (which is module-level
@@ -517,8 +490,8 @@ pyyaml = "yaml"
 
 # codespell — typo detection in identifiers/strings/comments. Run via pre-commit.
 [tool.codespell]
-skip = "*.lock,uv.lock,*.svg,*.json,docs/architecture/domain-free-core-audit.md,CHANGELOG.md,.geode/*,.claude/*"
-ignore-words-list = "statics,ot,ans,nd,thi,ist,ines,recuse,cant,blockd,Anser,socio-economic,wit"
+skip = "*.lock,uv.lock,*.svg,*.json,docs/architecture/domain-free-core-audit.md,CHANGELOG.md,site/public/llms.txt,site/public/llms-full.txt,site/src/data/geode/sot.ts,site/src/data/geode/changelog.ts,.geode/*,.claude/*"
+ignore-words-list = "statics,ot,ans,nd,thi,ist,ines,recuse,cant,blockd,Anser,socio-economic,wit,crate"
 check-filenames = ""
 check-hidden = ""
 

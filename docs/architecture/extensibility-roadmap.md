@@ -283,20 +283,20 @@ machine-readable artifact is
 | Measure | Current tree |
 |---|---:|
 | Production Python files (`core/` + `plugins/`) | 537 |
-| Test Python files | 668 |
-| `core/` Python LOC | 131,672 |
+| Test Python files | 669 |
+| `core/` Python LOC | 131,671 |
 | `plugins/` Python LOC | 40,248 |
-| Test Python LOC | 172,771 |
+| Test Python LOC | 173,044 |
 | Tool definitions / executable registrations / valid schemas | 78 / 81 / 78 (definition-only 0; execution-only 3; invalid schema 0) |
 | `HookEvent` members | 56 |
 | Built-in LLM adapters | 8 |
 | Module-level `ContextVar` declarations under `core/` | 26 |
 | `core` → `plugins` import sites | 31 across 14 files |
 | Import-linter contracts / ignored edges | 4 / 24 |
-| `AgenticLoop` file LOC / methods / constructor args | 2,714 / 67 / 27 |
+| `AgenticLoop` file LOC / methods / constructor args | 2,713 / 67 / 27 |
 | `SubAgentManager` file LOC / methods / constructor args | 1,277 / 15 / 15 |
 | `RuntimeCoreConfig` fields | 17 |
-| Global Ruff ratchets | complexity 62; args 23; branches 68; returns 18; statements 273 |
+| Global Ruff ratchets | complexity 54; args 23; branches 56; returns 18; statements 223 |
 <!-- generated:architecture-baseline:end -->
 
 `uv run lint-imports` passes all four configured contracts. That is useful
@@ -1390,6 +1390,9 @@ uv run ruff check core/ tests/ plugins/ scripts/
 uv run ruff format --check core/ tests/ plugins/ scripts/
 uv run mypy core/ plugins/
 uv run lint-imports
+uv run python scripts/check_architecture_exceptions.py \
+  --check \
+  --base-ref <target-base>
 uv run pytest tests/ -m "not live"
 uv run geode version
 git diff --check
