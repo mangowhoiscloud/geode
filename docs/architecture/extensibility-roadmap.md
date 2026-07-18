@@ -386,10 +386,10 @@ closed agent kernel
    explicitly supported Python entry points. They receive narrow capability
    contexts, never the entire runtime container.
 
-The exact package migration is staged. A compatibility import may remain for
-one release, but the dependency direction is not negotiable. If a directory
-cannot be installed, disabled, and tested independently, it must not be called
-a third-party plugin.
+The exact package migration is staged. A compatibility import remains for its
+registered publication-based window, but the dependency direction is not
+negotiable. If a directory cannot be installed, disabled, and tested
+independently, it must not be called a third-party plugin.
 
 ### 3.2 Step capability and tool plan
 
@@ -491,6 +491,7 @@ as testable phases without replacing the loop with an opaque framework.
 | D-011 Self-improving is a bundled product control plane | Campaign, mutation, evaluation, promotion, and their CLI/MCP/scheduler surfaces move outside the closed kernel; this first-party feature remains bundled and is not presented as a third-party plugin |
 | D-012 Mechanism moves before state | Neutral policy/context/activity contracts are extracted before the product move; code/import migration, compatibility-facade retirement, and durable-state relocation are separate transactions with one canonical implementation and writer at every stage |
 | D-013 Released evidence is immutable | The v1.0.0 tag, portfolio commit links, commands, and historical package paths remain truthful snapshots; later releases describe boundary evolution instead of rewriting prior-release claims |
+| D-014 Compatibility windows start at publication | The v1.0.1 facade and preserved state roots remain publicly available for a final qualifying interval of at least 30 consecutive days measured from confirmed GitHub Release and PyPI publication; every release inside that interval retains them |
 
 ## 5. Master GAP ledger
 
@@ -545,6 +546,7 @@ and closure evidence are appended in §10.
 | BND-005 | `MISFIT` | Generic agent/provider/observability consumers import self-improving transcript, SoT-resolution, and prompt-injection helpers | Neutral policy snapshot/source, context-contribution, run identity, and activity-sink contracts replace every classified-kernel import of a self-improving helper without changing runtime behavior | R1.4 | BND-001 | `OPEN` |
 | BND-006 | `MISFIT` | `core/self_improving` contains 39 Python files and 16,159 LOC of opt-in campaign, Petri/seed orchestration, mutation, gate, CLI/MCP, scheduler, and state policy | One cohesive first-party bundled feature owns the control plane outside the kernel; outer composition wires it, classified kernel modules import it zero times outside the exact forwarding-facade allowlist, a retirement GAP is registered before implementation, and v1.0 commands/imports/config/state behavior pass compatibility and installed-wheel tests | R1.5 | BND-002, BND-005 | `OPEN` |
 | REL-001 | `MISFIT` | PyPI and GitHub Releases still publish v1.0.0, while repository metadata and the changelog declare an untagged, unpublished v1.1.0; the operator selected v1.0.1 as the next public release | Wheel, sdist, CLI, daemon, site SOT, changelog, tag, GitHub release, and PyPI all report v1.0.1 with artifact-hash parity and no rewritten v1.0.0 evidence | R1.6 | BND-003, BND-006, GOV-004 | `OPEN` |
+| REL-002 | `ABSENT` | No registered gate prevents the v1.0.1 compatibility facade or preserved state roots from being retired immediately after a local tag, draft release, or registry publication | Official GitHub Release and PyPI evidence proves compatible public artifacts continuously exposed the facade and preserved roots for a final qualifying interval of at least 30 consecutive days, starting no earlier than v1.0.1, and every release inside that interval retained them | R8.0 | REL-001 | `OPEN` |
 
 ## 6. Dependency and merge sequence
 
@@ -595,6 +597,11 @@ Section 5 remains the status authority. The table is a release-specific view of
 already registered packages, not an alternate ledger or permission to skip
 claim and reconciliation transactions. The rest of R2-R7 remains in the
 master-ledger order and continues after the checkpoint.
+
+REL-001 must be `DONE` before R8.0 can become `READY`, but that ledger
+transition does not set the historical compatibility clock. The interval starts
+at the later official GitHub/PyPI publication timestamp defined by R8.0; local
+commits, tags, draft releases, and repository metadata consume none of it.
 
 Public release truth is re-audited against the official
 [PyPI project](https://pypi.org/project/geode-agent/) and
@@ -787,14 +794,15 @@ mega-module. Outer composition supplies narrow evaluator, seed/baseline,
 policy, and activity ports. The closed kernel imports none of those concrete
 features.
 
-The canonical implementation moves once. A one-release
+The canonical implementation moves once. A publication-gated
 `core.self_improving.*` compatibility facade, the legacy `python -m
 core.self_improving.{train,campaign,prepare,watch_campaign}` entry points, and
 the documented source-checkout launchers at
 `core/self_improving/{train,campaign,prepare,watch_campaign}.py` delegate to
-that canonical implementation; they must not duplicate a ContextVar, hook
-bridge, singleton, registry, or writer. A stable facade-retirement GAP must be
-registered through a later serialized transaction before R1.5 is claimed.
+that canonical implementation through the R8.0 window; they must not duplicate
+a ContextVar, hook bridge, singleton, registry, or writer. A stable
+facade-retirement GAP must be registered through a later serialized transaction
+before R1.5 is claimed.
 
 The boundary move preserves:
 
@@ -1225,6 +1233,39 @@ does not weaken the final full-program closure below.
 - For the full-program closure, merge `develop` to `main` only after the master
   ledger has no unexplained `OPEN`, `READY`, `IN_PROGRESS`, or `BLOCKED` row.
 
+### R8 — Post-checkpoint compatibility lifecycle
+
+R8 package numbers describe the v1.0.1 compatibility lifecycle; they do not
+imply a dependency on every R7 package. Readiness comes only from the explicit
+§5 edges, so this lifecycle can progress alongside unrelated R2-R7 work.
+
+#### R8.0 Publication grace evidence
+
+GAP: REL-002.
+
+Protect the compatibility window with release evidence rather than branch
+intent:
+
+- start the 30-day clock at the later of the confirmed v1.0.1 GitHub Release
+  publication timestamp and PyPI file availability timestamp;
+- verify that the published wheel exposes the documented
+  `core.self_improving.*` facade, legacy module/path launchers, and preserved
+  state roots named by R1.5;
+- inspect every public GEODE release inside the candidate interval; if one
+  omits or breaks those surfaces, invalidate that interval and start a new
+  candidate clock at the later official GitHub/PyPI publication timestamp of
+  the corrective release that restores them;
+- count only releases inside the final qualifying continuous interval when
+  deciding whether REL-002's exit condition is satisfied;
+- record immutable official URLs, timestamps, artifact hashes, and installed
+  smoke results as closure evidence.
+
+R8.0 is evidence-only. Ordinary readiness may be reconciled after REL-001 is
+`DONE`, but it cannot become `IN_DEVELOP` or `DONE` from a local build, branch
+timestamp, tag, draft release, planned date, or elapsed time since merge. No
+facade-retirement or state-location package may treat REL-002 as satisfied
+before the complete publication interval is verified.
+
 ## 8. Change-surface acceptance scenarios
 
 These black-box scenarios define extensibility more usefully than class count.
@@ -1370,6 +1411,7 @@ package to `OPEN` or proved every readiness condition for `READY`.
 |---|---|
 | Package/ring migration breaks imports | One seam per PR, compatibility import with removal ID, installed-wheel smoke |
 | Compatibility facade forks runtime identity | Old and new imports delegate to one canonical module; assert ContextVar, hook, registry, and class identity rather than copying implementations |
+| Compatibility window is shortened by repository-only time | Measure from the later official GitHub/PyPI publication, inspect intervening releases, and require 30 continuous days of installed facade/state compatibility |
 | Unpublished repository version conflicts with the public release | Re-query official registries, converge every version consumer on v1.0.1, reject an already-published v1.1.0, and preserve immutable v1.0.0 evidence |
 | Tool metadata changes policy behavior | Plan parity plus read/write/personal-data/approval characterization tests |
 | Loop extraction changes termination/retry | Golden turn fixtures and event-order assertions before moving code |
@@ -1451,3 +1493,5 @@ for both the neutral seams in R1.4 and the reverse-dependency removal in R1.2;
 its separately registered facade-retirement GAP must also exist before claim.
 R1.6 (`REL-001`) remains `OPEN` until R0.3, R1.3, and R1.5 are delivered; it
 then owns the v1.0.1 release checkpoint and does not authorize facade removal.
+R8.0 (`REL-002`) remains `OPEN` until REL-001 reaches `DONE`; its 30-day clock
+starts from public registry evidence, never from the implementation merge.
