@@ -225,7 +225,6 @@ normal review and CI; implementations start only after the claim merges.
 
 | Closure package | GAP IDs | Owner/session | Implementation branch | Claim evidence | Claimed at (UTC) |
 |---|---|---|---|---|---|
-| R0.3 | GOV-004 | `session=codex-2026-07-18 task=architecture-exception-debt` | `feature/architecture-exception-debt` | R0.3 readiness reconciled by [#2776](https://github.com/mangowhoiscloud/geode/pull/2776); claim PR [#2784](https://github.com/mangowhoiscloud/geode/pull/2784) | 2026-07-18T06:38:30Z |
 
 ## 1. Program objective
 
@@ -510,7 +509,7 @@ and closure evidence are appended in §10.
 | GOV-001 | `ABSENT` | Status is fragmented across dated plans and architecture docs | This file is linked from contributor entry points and governs status | R0.1 | — | `IN_DEVELOP` |
 | GOV-002 | `PARTIAL` | Hand-audited counts disagree with `AGENTS.md` (78 tools/56 hooks vs 67/65 prose) | One generated architecture baseline and a drift check own the counts | R0.2 | GOV-001 | `IN_DEVELOP` |
 | GOV-003 | `MISFIT` | Old plans describe removed paths and implemented work as current gaps | Overlapping docs carry a historical-status banner and point here | R0.1 | GOV-001 | `IN_DEVELOP` |
-| GOV-004 | `PARTIAL` | 24 import ignores and very high global Ruff ceilings lack uniform owner/expiry metadata | Every exception is removed or recorded per symbol/edge with owner, rationale, expiry, and ratchet | R0.3 | GOV-002 | `IN_PROGRESS` |
+| GOV-004 | `PARTIAL` | 24 import ignores and very high global Ruff ceilings lack uniform owner/expiry metadata | Every exception is removed or recorded per symbol/edge with owner, rationale, expiry, and ratchet | R0.3 | GOV-002 | `IN_DEVELOP` |
 | BND-001 | `MISFIT` | `plugins/` contains first-party features that `core` imports | Every package is classified kernel, product shell, bundled feature, or external extension; names match semantics | R1.1 | GOV-002 | `READY` |
 | BND-002 | `MISFIT` | 31 `core` → `plugins` import sites across 14 files | AST gate reports zero reverse dependency; composition owns feature registration | R1.2 | BND-001 | `OPEN` |
 | BND-003 | `ABSENT` | One-off core-only probe fails at `core.cli`; CI does not test an installed kernel without features | Isolated wheel/package test boots and runs kernel tests without bundled/third-party modules | R1.3 | BND-001, BND-002, BND-006 | `OPEN` |
@@ -1467,6 +1466,7 @@ pre-release delivery evidence survives after the claim row is gone.
 |---|---|---|---|---|
 | R0.1 | GOV-001, GOV-003 | [#2767](https://github.com/mangowhoiscloud/geode/pull/2767) | `ab1a80e91f9947defc15fa97f5b4ce66126c0c13` | CI Gate, lint/format, security, tests, type check, and macOS/Ubuntu install smoke passed; committed-diff re-review returned no findings |
 | R0.2 | GOV-002, VER-003 | [#2775](https://github.com/mangowhoiscloud/geode/pull/2775) | `7e3d2b2595306f8fbad44b961d53a2fc1d4f9180` | `uv run python scripts/architecture_baseline.py --check`; `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (CI Gate, full non-live tests, type check, lint/format, security, Pages build, and macOS/Ubuntu install smoke all green; committed-diff review found no findings) |
+| R0.3 | GOV-004 | [#2788](https://github.com/mangowhoiscloud/geode/pull/2788) | `15a9d674be790303f2034c89c7631d5c93978aee` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (CI Gate, 10,178 standard tests, type check, lint/format, security, Pages build, macOS/Ubuntu install smoke, and committed-diff review all passed) |
 
 ### 10.2 Main closure evidence
 
@@ -1584,15 +1584,15 @@ Commit-pinned primary source references used by the 2026-07-17 audit:
 
 ## 14. Immediate next unit
 
-After this claim merges, allocate `feature/architecture-exception-debt` from
-the updated `origin/develop` tip and verify that its branch and owner match the
-canonical R0.3 active claim before changing production or verification code.
-R1.1 (`BND-001`) remains ready but unclaimed while R0.3 is active. R1.4
-(`BND-005`) remains `OPEN` until R1.1 supplies the
-classification and product-shell migration map. R1.5 (`BND-006`) then waits
-for both the neutral seams in R1.4 and the reverse-dependency removal in R1.2;
-the registered BND-007 retirement package now satisfies its planning
-prerequisite without authorizing removal.
+R0.3 is delivered on `develop` by [#2788](https://github.com/mangowhoiscloud/geode/pull/2788).
+The next transaction is a roadmap-only claim PR for R1.1 (`BND-001`) that
+atomically moves the package from `READY` to `IN_PROGRESS` and records its
+owner and intended implementation branch in §0.4. Do not allocate the R1.1
+implementation worktree before that claim merges. R1.4 (`BND-005`) remains
+`OPEN` until R1.1 supplies the classification and product-shell migration map.
+R1.5 (`BND-006`) then waits for both the neutral seams in R1.4 and the
+reverse-dependency removal in R1.2; the registered BND-007 retirement package
+now satisfies its planning prerequisite without authorizing removal.
 R1.6 (`REL-001`) remains `OPEN` until R0.3, R1.3, and R1.5 are delivered; it
 then owns the v1.0.1 release checkpoint and does not authorize facade removal.
 R8.0 (`REL-002`) remains `OPEN` until REL-001 reaches `DONE`; its 30-day clock
