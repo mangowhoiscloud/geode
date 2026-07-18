@@ -75,7 +75,13 @@ functional change.
   canonical main ledger, and compares push events to
   `github.event.before` rather than the already-updated remote ref.
 
-## [1.1.0] - 2026-07-17
+## [1.0.1] - 2026-07-18
+
+> Originally mis-stamped v1.1.0 on 2026-07-17 and retracted before any tag,
+> GitHub release, or PyPI artifact existed. Post-1.0 releases default to
+> PATCH; minors are operator-declared milestones (v1.1.0 stays pledged to
+> the legacy-config removals in `core/config/self_improving.py`). Policy:
+> `.claude/skills/geode-changelog` § Versioning Policy.
 
 ### Added
 
@@ -123,6 +129,11 @@ functional change.
   `channel` field in a JSON body for this method). Missing channel membership
   is now a failing check with an `/invite @geode` hint and a clickable Slack
   channel link instead of an apparently operational but unreadable binding.
+- **Socket Mode stop path and probe plumbing polish (v1.0.1 correction PR).**
+  A stop that races the temporary URL issue no longer opens a fresh socket;
+  the drain-timeout warning reports queued plus in-flight handler counts; the
+  twin gateway session probes (`has_persisted_session` /
+  `session_is_terminal`) share one plumbing helper.
 - **Polling is an explicit, quieter migration fallback.** Deployments without
   an app token log `polling fallback` and report DEGRADED rather than silently
   presenting polling as the production mode. Inaccessible channels enter a

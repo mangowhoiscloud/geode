@@ -8,12 +8,12 @@
 
 A general-purpose autonomous execution agent. The core runtime is an **AgenticLoop** (`while tool_use`) — sub-agents, plans, and batches are all instances of the same loop. Autonomously performs research, analysis, automation, and scheduling.
 
-- **Version**: 1.1.0
+- **Version**: 1.0.1
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Points**: `geode` (`core.cli:app`, Typer) / `geode-mcp` (`core.mcp_server:main`)
-- **Modules**: 427 core + 109 plugins = 536
-- **Tests**: 10116 (+1 live)
+- **Modules**: 428 core + 109 plugins = 537
+- **Tests**: 10178 (+1 live)
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
 ## Quick Start
@@ -253,7 +253,7 @@ See `geode-changelog` skill.
 | Metrics | Tests, Modules, Commands — measured values |
 | 사이트 버전 SoT | `site/public/llms.txt` + `llms-full.txt`의 `Version vX` 헤더 **및** `site/src/data/geode/sot.ts`의 `version` == pyproject. 버전 범프 시 `node site/scripts/sync-stats.mjs` (llms.txt + sot.ts + changelog.ts 재생성) + `uv run python scripts/check_llms_version.py --fix` (llms-full 헤더). 드리프트는 ci.yml `check_llms_version.py` ratchet가 3파일 전부 차단(committed 스냅샷이 12버전 stale했던 사건). llms-full 본문은 배포 빌드(pages.yml)가 갱신. |
 
-**Versioning**: New feature = MINOR, Bug fix = PATCH, Docs only = none.
+**Versioning**: post-1.0 default = **PATCH for every routine landing** (features included — the 0.99.x patch-train continues as 1.0.x). MINOR/MAJOR are operator-declared milestones only; before proposing one, grep `removed in v` for pledged numbers and get explicit operator approval. Docs only = none. Full policy + mis-stamp correction procedure: `geode-changelog` skill.
 
 #### 6. PR & Merge
 

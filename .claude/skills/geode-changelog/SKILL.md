@@ -26,15 +26,56 @@ description: GEODE CHANGELOG.md management rules. Version releases, change loggi
 
 ## Versioning Policy
 
+**Post-1.0 default: every routine landing is a PATCH — features included.**
+The 0.99.x patch-train (~330 releases where features, fixes, and refactors
+all bumped PATCH) continues unchanged as 1.0.x. Textbook SemVer's
+"feature = MINOR" does NOT apply here.
+
 ```
 MAJOR.MINOR.PATCH
 
-MAJOR: Breaking changes (pipeline structure, State schema changes)
-MINOR: New feature additions (new nodes, new evaluators, new tools)
-PATCH: Bug fixes, performance improvements
+PATCH: default for every release — features, fixes, refactors, docs+code
+MINOR: operator-declared milestone ONLY (never chosen unilaterally)
+MAJOR: operator-declared ONLY (breaking pipeline/State schema)
 ```
 
-Current: `0.x.y` — pre-release phase. MINOR = feature milestones.
+### Before choosing ANY non-patch version
+
+1. `grep -rn "removed in v" core/` — minors may be pledged in advance to
+   deprecation removals (v1.1.0 is pledged to the legacy
+   `[self_improving_loop.petri.*]` / `[self_improving_loop.mutator]`
+   removals in `core/config/self_improving.py`). A pledged number is
+   RESERVED; landing unrelated work under it breaks the pledge.
+2. Ask the operator. A minor is a product statement, not a diff size.
+
+### Incident: the v1.1.0 mis-stamp (2026-07-17, corrected as v1.0.1)
+
+The Slack Socket Mode landing was stamped v1.1.0 by mechanically applying
+"New feature = MINOR" from this skill's old text + CLAUDE.md §5. Three
+gaps compounded:
+
+1. **Rule/practice divergence** — the written rule said feature=MINOR
+   while actual practice was patch-train; the written rule won because it
+   was the only thing in context.
+2. **Pledge invisibility** — v1.1.0's reservation existed only inside
+   runtime deprecation strings, which no release step consults. The grep
+   step above is the guard.
+3. **Compaction lock-in** — once "restamp 1.1.0" entered a session
+   summary, later steps treated the number as settled instead of a
+   decision still needing operator sign-off.
+
+### Mis-stamp correction procedure
+
+A wrong version may be RECLAIMED (renamed in place) only while it exists
+purely as file stamps. Verify against the REMOTE, not a possibly-stale
+checkout: `git ls-remote --tags origin "vX.Y.Z*"` (empty), `gh release
+view vX.Y.Z` (errors with not-found), and the exact-version PyPI JSON
+`https://pypi.org/pypi/geode-agent/X.Y.Z/json` (404). Once any tag/release/artifact exists, the number is
+burned — correct forward with the next free number instead. To reclaim:
+rename the CHANGELOG heading in place with a retraction blurb, restamp the
+5 locations + site SoT (`sync-stats.mjs` + `check_llms_version.py --fix`)
++ `scripts/slop_ratchet_baseline.json` + `uv.lock`, and land through the
+normal PR chain.
 
 ## Scope Rules — What to Record / What Not to Record
 
