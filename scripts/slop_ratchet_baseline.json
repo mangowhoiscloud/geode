@@ -1,18 +1,18 @@
 {
   "bypass_markers": {
     "count": 251,
-    "stamped": "1.1.0"
+    "stamped": "1.0.1"
   },
   "stale_todos": {
     "count": 2,
-    "stamped": "1.1.0"
+    "stamped": "1.0.1"
   },
   "dead_flags": {
     "count": 0,
-    "stamped": "1.1.0"
+    "stamped": "1.0.1"
   },
   "duplicated_signatures": {
     "count": 85,
-    "stamped": "1.1.0"
+    "stamped": "1.0.1"
   }
 }

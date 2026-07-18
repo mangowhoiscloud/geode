@@ -28,8 +28,8 @@ export default function Page() {
             <h2>SemVer 기준</h2>
             <ul>
               <li><strong>MAJOR</strong>. 호환성 파괴. CLI 플래그 제거, 공개 API 리네임.</li>
-              <li><strong>MINOR</strong>. 새 기능. 새 도구, 훅, 프로바이더.</li>
-              <li><strong>PATCH</strong>. 버그 수정과 내부 리팩토링.</li>
+              <li><strong>MINOR</strong>. 운영자가 선언한 마일스톤 전용. deprecation 문자열에 예약된 번호(<code>removed in v…</code>)를 먼저 확인.</li>
+              <li><strong>PATCH</strong>. 기본값 — 새 기능·버그 수정·리팩토링 등 일상 릴리스 전부(0.99.x patch-train의 연속).</li>
               <li>문서만 바뀌면 버전을 올리지 않습니다.</li>
             </ul>
 
@@ -134,8 +134,8 @@ geode serve &                            # 데몬 재기동`}</pre>
             <h2>SemVer policy</h2>
             <ul>
               <li><strong>MAJOR</strong>. Compatibility break: a CLI flag removed, a public API renamed.</li>
-              <li><strong>MINOR</strong>. New feature: a new tool, hook, or provider.</li>
-              <li><strong>PATCH</strong>. Bug fix or internal refactor.</li>
+              <li><strong>MINOR</strong>. Operator-declared milestones only. Check numbers pledged in deprecation strings (<code>removed in v…</code>) first.</li>
+              <li><strong>PATCH</strong>. The default — every routine release including features, fixes, and refactors (the 0.99.x patch-train, continued).</li>
               <li>Docs-only changes do not bump the version.</li>
             </ul>
 

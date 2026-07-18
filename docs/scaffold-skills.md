@@ -10,7 +10,7 @@ Skills used by Scaffold during GEODE development (`.claude/skills/`). Separate f
 | `prompt-writing` | prompt, system prompt, model-facing text, identity, You are, Fable | GEODE prompt-writing standard: metadata/behavioral clauses, no direct identity assertions |
 | `geode-distribution` | homebrew, brew, formula, tap, uvx, 배포 | Coordinated GitHub Release + PyPI + Homebrew stable promotion |
 | `geode-gitflow` | branch, git, pr, merge, commit | Gitflow strategy, PR templates, CI fix loops |
-| `geode-changelog` | changelog, release, version, release | CHANGELOG management, SemVer versioning |
+| `geode-changelog` | changelog, release, version, release | CHANGELOG management, post-1.0 patch-first versioning (minors are operator-declared; mis-stamp correction procedure) |
 | `agent-ops-debugging` | safe default, root cause, contextvar, multi-gap | Agent-ops debugging patterns — Safe Default anti-pattern, multi-gap root cause, ContextVar DI |
 | `architecture-patterns` | architecture, layering, pattern, design | Cross-harness architecture patterns reference |
 | `karpathy-patterns` | autoresearch, agenthub, ratchet, context budget | 10 autonomous agent design principles (P1-P10) |
