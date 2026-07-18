@@ -225,7 +225,7 @@ normal review and CI; implementations start only after the claim merges.
 
 | Closure package | GAP IDs | Owner/session | Implementation branch | Claim evidence | Claimed at (UTC) |
 |---|---|---|---|---|---|
-| R1.1 | BND-001 | `session=codex-2026-07-18 task=architecture-package-classification` | `feature/architecture-package-classification` | R1.1 readiness reconciled by [#2776](https://github.com/mangowhoiscloud/geode/pull/2776); current `develop` re-audit confirms delivered GOV-002 and the measurable §7 classification/migration-map contract | 2026-07-18T09:15:41Z |
+| R1.1 | BND-001 | `session=codex-2026-07-18 task=architecture-package-classification` | `feature/architecture-package-classification` | R1.1 readiness reconciled by [#2776](https://github.com/mangowhoiscloud/geode/pull/2776); claim PR [#2790](https://github.com/mangowhoiscloud/geode/pull/2790); current `develop` re-audit confirms delivered GOV-002 and the measurable §7 classification/migration-map contract | 2026-07-18T09:15:41Z |
 
 ## 1. Program objective
 
