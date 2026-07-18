@@ -2,7 +2,7 @@
 
 > GEODE is a self-evolving autonomous execution agent: an inner agentic loop runs tasks (research, analysis, automation, scheduling) and an outer self-improving loop (Petri audit -> fitness gate) tunes the system that runs them.
 
-Version v1.0.1. Last sync 2026-07-17. Full content of every docs page, one file (llms-full.txt convention). Per-page index: /llms.txt.
+Version v1.0.1. Last sync 2026-07-18. Full content of every docs page, one file (llms-full.txt convention). Per-page index: /llms.txt.
 
 ## Overview . 개요
 
@@ -5645,8 +5645,8 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/ops/release-pypi-lifecycl
 ## SemVer 기준
 
 -   **MAJOR**. 호환성 파괴. CLI 플래그 제거, 공개 API 리네임.
--   **MINOR**. 새 기능. 새 도구, 훅, 프로바이더.
--   **PATCH**. 버그 수정과 내부 리팩토링.
+-   **MINOR**. 운영자가 선언한 마일스톤 전용. deprecation 문자열에 예약된 번호(`removed in v…`)를 먼저 확인.
+-   **PATCH**. 기본값 — 새 기능·버그 수정·리팩토링 등 일상 릴리스 전부(0.99.x patch-train의 연속).
 -   문서만 바뀌면 버전을 올리지 않습니다.
 
 ## 릴리스 흐름
