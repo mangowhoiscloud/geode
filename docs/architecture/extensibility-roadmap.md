@@ -1284,6 +1284,7 @@ supersets cannot authorize a later or unrelated edit.
 
 | GAP ID | Decision | Replacement GAPs / changed edges | Rationale | PR / commit | Affected packages re-audited |
 |---|---|---|---|---|---|
+| BND-003 | DEPENDENCY_ADDED | BND-006 | The distribution gate must validate the final self-improving product layout rather than close on the pre-move package tree; this edge makes R1.3 wait for R1.5 | `cef746de5f74204260cdbfcacd517e567beda191` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS |
 | _none yet_ | — | — | — | — | — |
 
 ### 10.4 Blocker evidence
