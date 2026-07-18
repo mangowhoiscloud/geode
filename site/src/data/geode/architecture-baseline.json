@@ -14,10 +14,10 @@
   },
   "complexity_thresholds": {
     "max_args": 23,
-    "max_branches": 68,
-    "max_complexity": 62,
+    "max_branches": 56,
+    "max_complexity": 54,
     "max_returns": 18,
-    "max_statements": 273
+    "max_statements": 223
   },
   "context_vars": {
     "count": 26,
@@ -209,7 +209,7 @@
   "coordinators": {
     "AgenticLoop": {
       "constructor_arg_count": 27,
-      "file_loc": 2714,
+      "file_loc": 2713,
       "method_count": 67,
       "path": "core/agent/loop/agent_loop.py"
     },
@@ -499,15 +499,15 @@
   "packages": {
     "core": {
       "python_files": 428,
-      "python_loc": 131672
+      "python_loc": 131671
     },
     "plugins": {
       "python_files": 109,
       "python_loc": 40248
     },
     "tests": {
-      "python_files": 668,
-      "python_loc": 172771
+      "python_files": 669,
+      "python_loc": 173044
     }
   },
   "schema_version": 1,

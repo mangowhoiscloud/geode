@@ -49,6 +49,16 @@ functional change.
 
 ### Architecture
 
+- **Machine-readable architecture exception debt.** Import-linter ignores and
+  Ruff complexity witnesses now have an exact-parity TOML ledger with owner,
+  age, closure target, and expiry metadata. A fail-closed checker runs in CI
+  and pre-commit, rejects unregistered or stale edges and symbol overrides,
+  and prevents Ruff ceilings from rising against the target branch. The
+  enforced maxima are tightened to current measurements, and `PLR0911` is no
+  longer globally disabled. Deterministic public-doc mirrors now inherit the
+  spell-check policy of their source files instead of re-linting copied
+  historical text.
+
 - **Roadmap checker fixture isolation.** Hostile state-machine tests now derive
   a fixed claimed-R0.2 fixture from the current roadmap while the SOT validity
   test continues to read the live document. Legal post-merge status, claim,

@@ -37,6 +37,8 @@ jobs:
               - 'tests/**'
               - 'AGENTS.md'
               - 'CHANGELOG.md'
+              - '.pre-commit-config.yaml'
+              - 'docs/architecture/exception-debt.*'
               - 'docs/architecture/extensibility-roadmap.md'
               - 'site/scripts/sync-stats.mjs'
               - 'site/public/llms.txt'
@@ -85,6 +87,25 @@ jobs:
       - name: Generated architecture baseline
         if: needs.changes.outputs.code == 'true'
         run: uv run python scripts/architecture_baseline.py --check
+      - name: Architecture exception debt
+        if: needs.changes.outputs.code == 'true'
+        env:
+          EXCEPTION_EVENT_MODE: ${{ github.event_name }}
+          EXCEPTION_PR_BASE_REF: origin/${{ github.base_ref || github.ref_name }}
+          EXCEPTION_PUSH_BASE_REF: ${{ github.event.before }}
+        run: |
+          base_ref="$EXCEPTION_PR_BASE_REF"
+          if [[ "$EXCEPTION_EVENT_MODE" == "push" ]]; then
+            if [[ ! "$EXCEPTION_PUSH_BASE_REF" =~ ^[0-9a-f]{40}$ ]] ||
+               [[ "$EXCEPTION_PUSH_BASE_REF" == "0000000000000000000000000000000000000000" ]]; then
+              echo "::error::Exception validation requires a non-zero github.event.before SHA."
+              exit 1
+            fi
+            base_ref="$EXCEPTION_PUSH_BASE_REF"
+          fi
+          uv run python scripts/check_architecture_exceptions.py \
+            --check \
+            --base-ref "$base_ref"
       - name: Architecture roadmap invariants
         if: needs.changes.outputs.code == 'true'
         env:
