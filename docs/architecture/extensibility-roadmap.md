@@ -488,6 +488,8 @@ as testable phases without replacing the loop with an opaque framework.
 | D-008 Storage policy is preserved | SQLite/JSONL ownership follows existing architecture docs; no second truth source |
 | D-009 Google secrets remain keyring-only | Capability convergence does not move secrets or personal labels to plaintext |
 | D-010 Trust is separate from enablement | An extension can be installed/enabled without automatically receiving sensitive authority |
+| D-011 Self-improving is a bundled product control plane | Campaign, mutation, evaluation, promotion, and their CLI/MCP/scheduler surfaces move outside the closed kernel; this first-party feature remains bundled and is not presented as a third-party plugin |
+| D-012 Mechanism moves before state | Neutral policy/context/activity contracts are extracted before the product move; code/import migration, compatibility-facade retirement, and durable-state relocation are separate transactions with one canonical implementation and writer at every stage |
 
 ## 5. Master GAP ledger
 
@@ -507,7 +509,7 @@ and closure evidence are appended in §10.
 | GOV-004 | `PARTIAL` | 24 import ignores and very high global Ruff ceilings lack uniform owner/expiry metadata | Every exception is removed or recorded per symbol/edge with owner, rationale, expiry, and ratchet | R0.3 | GOV-002 | `READY` |
 | BND-001 | `MISFIT` | `plugins/` contains first-party features that `core` imports | Every package is classified kernel, product shell, bundled feature, or external extension; names match semantics | R1.1 | GOV-002 | `READY` |
 | BND-002 | `MISFIT` | 31 `core` → `plugins` import sites across 14 files | AST gate reports zero reverse dependency; composition owns feature registration | R1.2 | BND-001 | `OPEN` |
-| BND-003 | `ABSENT` | One-off core-only probe fails at `core.cli`; CI does not test an installed kernel without features | Isolated wheel/package test boots and runs kernel tests without bundled/third-party modules | R1.3 | BND-001, BND-002 | `OPEN` |
+| BND-003 | `ABSENT` | One-off core-only probe fails at `core.cli`; CI does not test an installed kernel without features | Isolated wheel/package test boots and runs kernel tests without bundled/third-party modules | R1.3 | BND-001, BND-002, BND-006 | `OPEN` |
 | BND-004 | `PARTIAL` | Skills/hooks/MCP have different discovery rules; Python feature collision/trust behavior is not unified | Each supported external surface declares non-executing discovery, precedence, collision, enablement, trust-before-load, reload, isolation, and teardown | R6.3 | BND-001, LLM-002 | `OPEN` |
 | CAP-001 | `PARTIAL` | Google service bundles exist but do not own all tool/policy relationships | Generic capability records plus `GoogleServiceDescriptor` are executable SOTs | R2.1 | BND-002 | `OPEN` |
 | CAP-002 | `ABSENT` | `ToolRegistry` owns tool objects while other registries/lists own execution and safety | Immutable `ToolRegistration` and `ToolPlan` derive every tool consumer | R2.1 | CAP-001 | `OPEN` |
@@ -540,6 +542,7 @@ and closure evidence are appended in §10.
 | VER-003 | `PARTIAL` | Public/internal metric prose drifts from executable counts | `sync-stats` or one shared generator updates site, AGENTS facts, and roadmap baseline; check mode is green | R0.2 | GOV-001 | `IN_DEVELOP` |
 | VER-004 | `PARTIAL` | Cold-start and runtime metrics exist, but refactors lack one architecture regression baseline | Startup, first-turn, tool-plan build, memory, and event-write budgets are pinned and non-regressing | R7.3 | CAP-005, LOOP-003, DI-004, LLM-004, PROTO-002, STORE-002 | `OPEN` |
 | BND-005 | `MISFIT` | Generic agent/provider/observability consumers import self-improving transcript, SoT-resolution, and prompt-injection helpers | Neutral policy snapshot/source, context-contribution, run identity, and activity-sink contracts replace every classified-kernel import of a self-improving helper without changing runtime behavior | R1.4 | BND-001 | `OPEN` |
+| BND-006 | `MISFIT` | `core/self_improving` contains 39 Python files and 16,159 LOC of opt-in campaign, Petri/seed orchestration, mutation, gate, CLI/MCP, scheduler, and state policy | One cohesive first-party bundled feature owns the control plane outside the kernel; outer composition wires it, classified kernel modules import it zero times outside the exact forwarding-facade allowlist, a retirement GAP is registered before implementation, and v1.0 commands/imports/config/state behavior pass compatibility and installed-wheel tests | R1.5 | BND-002, BND-005 | `OPEN` |
 
 ## 6. Dependency and merge sequence
 
@@ -649,12 +652,21 @@ GAP: BND-001.
 Enables: BND-004. This package supplies its package-classification evidence but
 does not transition BND-004; R6.3 owns that GAP's closure.
 
-Classify every current `plugins/*` package:
+Classify every current `plugins/*` package and the current
+`core/self_improving` umbrella:
 
 - independently removable external extension;
 - bundled product feature;
 - kernel concern in the wrong directory;
 - compatibility shim scheduled for removal.
+
+Per D-011, the classification outcome for the self-improving control plane is
+already fixed as a first-party bundled product feature. R1.1 chooses the
+product-shell package and migration map; it does not reopen whether that
+control plane belongs in the closed kernel or mislabel it as a third-party
+plugin. Petri, seed generation, and self-improving remain cohesive sibling
+features in one product ring and distribution unless independent installation
+is later proven necessary.
 
 The migration map names source, target ring, public imports, entry points,
 state paths, test ownership, and rollback. It must decide the product-shell
@@ -724,6 +736,62 @@ Acceptance:
   registered;
 - no mega `SelfImprovementPort` or service-locator `ContextVar` replaces the
   direct imports.
+
+#### R1.5 Bundled self-improving product relocation
+
+GAP: BND-006.
+
+Move the high-variance control plane into the product-shell namespace selected
+by R1.1 as one cohesive bundled feature:
+
+- campaign, train, prepare, fitness, gate, measure, and ledger;
+- mutation runner/policies, attribution, benchmark/statistical observers, and
+  inference-time contribution recipes;
+- Petri/seed-generation orchestration and self-improving configuration;
+- feature-specific CLI, MCP, hook, and scheduler registrations.
+
+Petri and seed generation remain cohesive sibling bundled features rather than
+being fragmented into independent distributions or swallowed by one
+mega-module. Outer composition supplies narrow evaluator, seed/baseline,
+policy, and activity ports. The closed kernel imports none of those concrete
+features.
+
+The canonical implementation moves once. A one-release
+`core.self_improving.*` compatibility facade, the legacy `python -m
+core.self_improving.{train,campaign,prepare,watch_campaign}` entry points, and
+the documented source-checkout launchers at
+`core/self_improving/{train,campaign,prepare,watch_campaign}.py` delegate to
+that canonical implementation; they must not duplicate a ContextVar, hook
+bridge, singleton, registry, or writer. A stable facade-retirement GAP must be
+registered through a later serialized transaction before R1.5 is claimed.
+
+The boundary move preserves:
+
+- `/self-improving`, `geode campaign`, and MCP propose/apply/status behavior;
+- `[self_improving_loop.*]` config keys and validation;
+- `~/.geode/self-improving/`, `~/.geode/autoresearch/handoff/`,
+  `GEODE_STATE_ROOT/autoresearch`, and the current tracked-SoT location/schema
+  for the compatibility window, including local policy overrides, transcripts,
+  handoff indexes, and scheduler lock/timestamp/history records;
+- JSON/JSONL/TSV schemas, append-only ledgers, worker isolation, confirmation
+  gates, and optional audit-extra degradation;
+- one base wheel containing the kernel and bundled product features.
+
+Acceptance:
+
+- AST probes report zero classified-kernel → relocated-feature imports; the
+  exact `core/self_improving` forwarding files are a narrow, separately checked
+  allowlist and may import only the canonical relocated modules;
+- installed-wheel probes verify both feature-absent kernel boot and
+  facade-present bundled-product behavior without import obfuscation;
+- old and new imports resolve the same canonical class/function/context
+  objects, and the supported `python -m` plus source-checkout path launchers
+  have output/exit-code parity;
+- CLI/MCP/scheduler/prompt/provider behavior and state fixtures pass
+  characterization tests, including override reads and transcript, handoff,
+  and auto-trigger writes under the preserved roots;
+- no physical state relocation or compatibility-facade removal is hidden in
+  the package move.
 
 ### R2 — Unified capability and tool plane
 
@@ -1233,6 +1301,7 @@ package to `OPEN` or proved every readiness condition for `READY`.
 | Risk | Required control |
 |---|---|
 | Package/ring migration breaks imports | One seam per PR, compatibility import with removal ID, installed-wheel smoke |
+| Compatibility facade forks runtime identity | Old and new imports delegate to one canonical module; assert ContextVar, hook, registry, and class identity rather than copying implementations |
 | Tool metadata changes policy behavior | Plan parity plus read/write/personal-data/approval characterization tests |
 | Loop extraction changes termination/retry | Golden turn fixtures and event-order assertions before moving code |
 | DI hides a new service locator | Group size/cohesion gate and forbidden service `ContextVar` check |
@@ -1308,4 +1377,6 @@ The next serialized ledger transaction claims the earliest ready package,
 R0.3 (`GOV-004`), before allocating its implementation worktree. R1.1
 (`BND-001`) remains ready but unclaimed until that earlier package is claimed
 or delivered. R1.4 (`BND-005`) remains `OPEN` until R1.1 supplies the
-classification and product-shell migration map.
+classification and product-shell migration map. R1.5 (`BND-006`) then waits
+for both the neutral seams in R1.4 and the reverse-dependency removal in R1.2;
+its separately registered facade-retirement GAP must also exist before claim.
