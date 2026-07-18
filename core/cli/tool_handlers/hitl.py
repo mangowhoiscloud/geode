@@ -12,6 +12,7 @@ import logging
 from typing import Any
 
 from core.cli.tool_handlers.clarification import _clarify
+from core.cli.tool_handlers.registration import UniqueEntries
 from core.hooks.system import HookEvent
 from core.hooks.tool_hooks import fire_tool_hook
 from core.ui.console import console
@@ -19,7 +20,7 @@ from core.ui.console import console
 log = logging.getLogger(__name__)
 
 
-def _build_hitl_handlers() -> dict[str, Any]:
+def _build_hitl_handlers() -> UniqueEntries[str, Any]:
     """Build HITL feedback tool handlers."""
 
     def handle_rate_result(**kwargs: Any) -> dict[str, Any]:
@@ -78,8 +79,10 @@ def _build_hitl_handlers() -> dict[str, Any]:
             "reason": reason,
         }
 
-    return {
-        "rate_result": handle_rate_result,
-        "accept_result": handle_accept_result,
-        "reject_result": handle_reject_result,
-    }
+    return UniqueEntries[str, Any](
+        (
+            ("rate_result", handle_rate_result),
+            ("accept_result", handle_accept_result),
+            ("reject_result", handle_reject_result),
+        )
+    )

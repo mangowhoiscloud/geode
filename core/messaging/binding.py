@@ -86,9 +86,14 @@ class ChannelManager:
         """Set the persistent-session probe used by thread-aware adapters."""
         self._session_exists_checker = checker
 
-    def has_persisted_session(self, message: InboundMessage) -> bool:
-        """Return whether this exact channel/user/thread session can resume."""
-        if self._session_exists_checker is None or not message.thread_id:
+    def _probe_session(
+        self,
+        checker: SessionExistsChecker | None,
+        message: InboundMessage,
+        probe_name: str,
+    ) -> bool:
+        """Run one session-key probe; unset checker or probe failure is False."""
+        if checker is None or not message.thread_id:
             return False
         session_key = build_gateway_session_key(
             message.channel,
@@ -97,10 +102,16 @@ class ChannelManager:
             thread_id=message.thread_id,
         )
         try:
-            return self._session_exists_checker(session_key)
+            return checker(session_key)
         except Exception:
-            log.warning("Gateway session existence check failed for %s", session_key, exc_info=True)
+            log.warning(
+                "Gateway session %s check failed for %s", probe_name, session_key, exc_info=True
+            )
             return False
+
+    def has_persisted_session(self, message: InboundMessage) -> bool:
+        """Return whether this exact channel/user/thread session can resume."""
+        return self._probe_session(self._session_exists_checker, message, "existence")
 
     def set_session_terminal_checker(self, checker: SessionExistsChecker) -> None:
         """Set the probe that reports a durably terminal (non-resumable) session."""
@@ -113,19 +124,7 @@ class ChannelManager:
         legitimately bridge the pre-checkpoint window) and "resumable". Only an
         explicit non-resumable checkpoint returns ``True``.
         """
-        if self._session_terminal_checker is None or not message.thread_id:
-            return False
-        session_key = build_gateway_session_key(
-            message.channel,
-            message.channel_id,
-            message.sender_id,
-            thread_id=message.thread_id,
-        )
-        try:
-            return self._session_terminal_checker(session_key)
-        except Exception:
-            log.warning("Gateway session terminal check failed for %s", session_key, exc_info=True)
-            return False
+        return self._probe_session(self._session_terminal_checker, message, "terminal")
 
     def add_binding(self, binding: ChannelBinding) -> None:
         """Add a channel binding rule."""

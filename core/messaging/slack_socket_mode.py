@@ -121,6 +121,10 @@ class SlackSocketModeClient:
             while not should_stop():
                 try:
                     url = await self.open_connection_url()
+                    if should_stop():
+                        # A stop that raced the URL issue (HTTP retries can
+                        # take tens of seconds) must not open a fresh socket.
+                        break
                     async with websockets.connect(
                         url,
                         open_timeout=15.0,

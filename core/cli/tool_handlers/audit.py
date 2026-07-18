@@ -23,8 +23,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from core.cli.tool_handlers.registration import UniqueEntries
 
-def _build_audit_handlers() -> dict[str, Any]:
+
+def _build_audit_handlers() -> UniqueEntries[str, Any]:
     """Build evaluation tool name -> handler mapping for ToolExecutor."""
     from plugins.petri_audit.optimize import (
         DEFAULT_COMPILE_USD_CAP,
@@ -185,8 +187,10 @@ def _build_audit_handlers() -> dict[str, Any]:
             "optimize": report.to_dict(),
         }
 
-    return {
-        "petri_audit": handle_petri_audit,
-        "eval_inspect_viz": handle_eval_inspect_viz,
-        "eval_dspy_optimize": handle_eval_dspy_optimize,
-    }
+    return UniqueEntries[str, Any](
+        (
+            ("petri_audit", handle_petri_audit),
+            ("eval_inspect_viz", handle_eval_inspect_viz),
+            ("eval_dspy_optimize", handle_eval_dspy_optimize),
+        )
+    )

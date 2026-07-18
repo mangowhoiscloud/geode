@@ -36,6 +36,9 @@ sub-module — see ``tests/core/orchestration/test_plan_mode.py`` for the fixtur
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Any
 
 from core.cli.tool_handlers.audit import _build_audit_handlers
@@ -55,6 +58,7 @@ from core.cli.tool_handlers.mcp import _build_mcp_handler
 from core.cli.tool_handlers.memory import _build_memory_handlers
 from core.cli.tool_handlers.observability import _build_observability_handlers
 from core.cli.tool_handlers.plan import _build_plan_handlers
+from core.cli.tool_handlers.registration import UniqueEntries
 from core.cli.tool_handlers.single_tool import (
     _build_calendar_handlers,
     _build_computer_use_handler,
@@ -111,6 +115,50 @@ __all__ = [
 _PLAN_STORE: Any | None = None
 
 
+@dataclass(frozen=True)
+class _ToolHandlerCatalog:
+    """Immutable handler snapshot with one traceable origin per tool name."""
+
+    handlers: Mapping[str, Any]
+    origins: Mapping[str, str]
+
+
+class _HandlerRegistrar:
+    """Fail-closed composer for the legacy CLI handler groups.
+
+    ``dict.update`` silently replaced an earlier handler when two builder
+    groups claimed the same name.  That made runtime behavior depend on merge
+    order and left architecture inventory unable to observe the collision.
+    This registrar is the single composition point: every name keeps its
+    source and duplicate registration aborts before a ``ToolExecutor`` exists.
+    """
+
+    def __init__(self) -> None:
+        self._handlers: dict[str, Any] = {}
+        self._origins: dict[str, str] = {}
+
+    def add(self, source: str, handlers: UniqueEntries[str, Any]) -> None:
+        if not isinstance(handlers, UniqueEntries):
+            raise TypeError(
+                f"{source}: handler builders must return lossless UniqueEntries, "
+                f"not {type(handlers).__name__}"
+            )
+        duplicates = sorted(set(handlers) & set(self._handlers))
+        if duplicates:
+            detail = ", ".join(
+                f"{name!r} ({self._origins[name]} vs {source})" for name in duplicates
+            )
+            raise ValueError(f"duplicate tool handler registration: {detail}")
+        self._handlers.update(handlers)
+        self._origins.update(dict.fromkeys(handlers, source))
+
+    def snapshot(self) -> _ToolHandlerCatalog:
+        return _ToolHandlerCatalog(
+            handlers=MappingProxyType(dict(self._handlers)),
+            origins=MappingProxyType(dict(self._origins)),
+        )
+
+
 def _get_plan_store() -> Any:
     """Lazy singleton accessor for the disk-persistent PlanStore.
 
@@ -125,13 +173,47 @@ def _get_plan_store() -> Any:
     return _PLAN_STORE
 
 
+def _build_tool_handler_catalog(
+    *,
+    mcp_manager: Any = None,
+    skill_registry: Any = None,
+) -> _ToolHandlerCatalog:
+    """Build the collision-checked handler catalog used by ToolExecutor."""
+    from core.cli import _get_readiness
+
+    readiness = _get_readiness()
+    force_dry = readiness.force_dry_run if readiness else True
+
+    registrar = _HandlerRegistrar()
+    registrar.add("memory", _build_memory_handlers())
+    registrar.add("plan", _build_plan_handlers(force_dry))
+    registrar.add("hitl", _build_hitl_handlers())
+    registrar.add("system", _build_system_handlers(readiness, force_dry, mcp_manager))
+    registrar.add("execution", _build_execution_handlers())
+    registrar.add("math", _build_math_handlers())
+    registrar.add("data", _build_data_handlers())
+    registrar.add("delegated", _build_delegated_handlers())
+    registrar.add("output", _build_output_handlers())
+    registrar.add("notification", _build_notification_handlers())
+    registrar.add("calendar", _build_calendar_handlers())
+    registrar.add("mcp", _build_mcp_handler(mcp_manager))
+    registrar.add("context", _build_context_handlers())
+    registrar.add("task", _build_task_handlers())
+    registrar.add("offload", _build_offload_handlers())
+    registrar.add("computer-use", _build_computer_use_handler())
+    registrar.add("audit", _build_audit_handlers())
+    registrar.add("observability", _build_observability_handlers())
+    registrar.add("skill", _build_use_skill_handler(skill_registry))
+    return registrar.snapshot()
+
+
 def _build_tool_handlers(
     verbose: bool = False,
     *,
     mcp_manager: Any = None,
     skill_registry: Any = None,
 ) -> dict[str, Any]:
-    """Build tool name -> handler function mapping for ToolExecutor.
+    """Build the backwards-compatible handler mapping for ToolExecutor.
 
     Each handler receives tool_input kwargs and returns a dict result.
     ``mcp_manager`` is used by install_mcp_server.
@@ -140,29 +222,9 @@ def _build_tool_handlers(
 
     Delegates to group-specific builder functions and merges the results.
     """
-    from core.cli import _get_readiness
-
-    readiness = _get_readiness()
-    force_dry = readiness.force_dry_run if readiness else True
-
-    handlers: dict[str, Any] = {}
-    handlers.update(_build_memory_handlers())
-    handlers.update(_build_plan_handlers(force_dry))
-    handlers.update(_build_hitl_handlers())
-    handlers.update(_build_system_handlers(readiness, force_dry, mcp_manager))
-    handlers.update(_build_execution_handlers())
-    handlers.update(_build_math_handlers())
-    handlers.update(_build_data_handlers())
-    handlers.update(_build_delegated_handlers())
-    handlers.update(_build_output_handlers())
-    handlers.update(_build_notification_handlers())
-    handlers.update(_build_calendar_handlers())
-    handlers.update(_build_mcp_handler(mcp_manager))
-    handlers.update(_build_context_handlers())
-    handlers.update(_build_task_handlers())
-    handlers.update(_build_offload_handlers())
-    handlers.update(_build_computer_use_handler())
-    handlers.update(_build_audit_handlers())
-    handlers.update(_build_observability_handlers())
-    handlers.update(_build_use_skill_handler(skill_registry))
-    return handlers
+    _ = verbose  # retained for API compatibility with existing callers
+    catalog = _build_tool_handler_catalog(
+        mcp_manager=mcp_manager,
+        skill_registry=skill_registry,
+    )
+    return dict(catalog.handlers)

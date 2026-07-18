@@ -6,12 +6,13 @@ import logging
 from typing import Any
 
 from core.cli.tool_handlers.clarification import _clarify
+from core.cli.tool_handlers.registration import UniqueEntries
 from core.ui.console import console
 
 log = logging.getLogger(__name__)
 
 
-def _build_memory_handlers() -> dict[str, Any]:
+def _build_memory_handlers() -> UniqueEntries[str, Any]:
     """Build memory-related tool handlers."""
     from core.cli import _handle_memory_action
     from core.memory.project import ProjectMemory
@@ -73,9 +74,11 @@ def _build_memory_handlers() -> dict[str, Any]:
 
         return SessionSearchTool()._execute_sync(**kwargs)
 
-    return {
-        "memory_search": handle_memory_search,
-        "memory_save": handle_memory_save,
-        "manage_rule": handle_manage_rule,
-        "session_search": handle_session_search,
-    }
+    return UniqueEntries[str, Any](
+        (
+            ("memory_search", handle_memory_search),
+            ("memory_save", handle_memory_save),
+            ("manage_rule", handle_manage_rule),
+            ("session_search", handle_session_search),
+        )
+    )

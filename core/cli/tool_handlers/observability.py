@@ -9,8 +9,10 @@ from __future__ import annotations
 
 from typing import Any
 
+from core.cli.tool_handlers.registration import UniqueEntries
 
-def _build_observability_handlers() -> dict[str, Any]:
+
+def _build_observability_handlers() -> UniqueEntries[str, Any]:
     """Build observability tool name -> handler mapping."""
     from core.observability import OtelExportError, disable, enable, status
 
@@ -42,4 +44,4 @@ def _build_observability_handlers() -> dict[str, Any]:
             "obs": snap.to_dict(),
         }
 
-    return {"obs_otel_export": handle_obs_otel_export}
+    return UniqueEntries[str, Any]((("obs_otel_export", handle_obs_otel_export),))

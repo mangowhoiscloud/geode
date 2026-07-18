@@ -48,6 +48,11 @@ def build_docs_commands(*, skip_build: bool = False) -> list[DocsCommand]:
     git = _resolve_executable("git")
     commands = [
         DocsCommand(
+            "check generated architecture baseline",
+            (sys.executable, "scripts/architecture_baseline.py", "--check"),
+            REPO_ROOT,
+        ),
+        DocsCommand(
             "sync site SOT, changelog, and llms index",
             (npm, "run", "sync-stats"),
             SITE_DIR,

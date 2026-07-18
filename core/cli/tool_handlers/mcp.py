@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from core.cli.tool_handlers.registration import UniqueEntries
+
 
 def _build_mcp_handler(
     mcp_manager: Any,
-) -> dict[str, Any]:
+) -> UniqueEntries[str, Any]:
     """Build MCP server installation handler."""
 
     def handle_install_mcp_server(**kwargs: Any) -> dict[str, Any]:
@@ -46,6 +48,4 @@ def _build_mcp_handler(
             ),
         }
 
-    return {
-        "install_mcp_server": handle_install_mcp_server,
-    }
+    return UniqueEntries[str, Any]((("install_mcp_server", handle_install_mcp_server),))

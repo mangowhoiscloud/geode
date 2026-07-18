@@ -5,9 +5,10 @@ from __future__ import annotations
 from typing import Any
 
 from core.cli.tool_handlers.clarification import _clarify
+from core.cli.tool_handlers.registration import UniqueEntries
 
 
-def _build_task_handlers() -> dict[str, Any]:
+def _build_task_handlers() -> UniqueEntries[str, Any]:
     """Build user-facing task management handlers (task_create/update/get/list/stop)."""
     import uuid
 
@@ -140,10 +141,12 @@ def _build_task_handlers() -> dict[str, Any]:
             return {"error": str(exc)}
         return {"status": "ok", "action": "stopped", "task_id": task_id, "reason": reason}
 
-    return {
-        "task_create": handle_task_create,
-        "task_update": handle_task_update,
-        "task_get": handle_task_get,
-        "task_list": handle_task_list,
-        "task_stop": handle_task_stop,
-    }
+    return UniqueEntries[str, Any](
+        (
+            ("task_create", handle_task_create),
+            ("task_update", handle_task_update),
+            ("task_get", handle_task_get),
+            ("task_list", handle_task_list),
+            ("task_stop", handle_task_stop),
+        )
+    )

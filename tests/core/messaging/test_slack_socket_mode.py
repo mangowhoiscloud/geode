@@ -278,6 +278,97 @@ def test_run_drains_admitted_events_before_returning(
     assert handled == [{"event": {"type": "app_mention"}}]
 
 
+def test_stop_racing_url_issue_skips_fresh_connect(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A stop landing during the URL issue must not open a new socket."""
+    import websockets
+
+    stopped = False
+    connects = 0
+
+    async def fake_open(self) -> str:
+        nonlocal stopped
+        stopped = True  # stop arrives while the URL call is in flight
+        return "wss://wss-primary.slack.com/link/?ticket=secret"
+
+    def fake_connect(url: str, **kwargs: Any) -> Any:
+        nonlocal connects
+        connects += 1
+        raise AssertionError("must not connect after stop")
+
+    monkeypatch.setattr(websockets, "connect", fake_connect)
+    monkeypatch.setattr(SlackSocketModeClient, "open_connection_url", fake_open)
+
+    async def on_event(payload: dict[str, Any]) -> None:
+        raise AssertionError("no events expected")
+
+    client = SlackSocketModeClient(app_token="xapp-test")
+    asyncio.run(client.run(on_event, lambda: stopped))
+    assert connects == 0
+
+
+def test_drain_timeout_reports_in_flight_events(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A handler still running past the drain window is reported, not hidden."""
+    import websockets
+    from core.messaging import slack_socket_mode as socket_module
+
+    stopped = False
+    release = None
+
+    class OneEventSocket(_FakeSocket):
+        def __init__(self) -> None:
+            super().__init__()
+            self.frames = [
+                json.dumps(
+                    {
+                        "type": "events_api",
+                        "envelope_id": "env-1",
+                        "payload": {"event": {"type": "app_mention"}},
+                    }
+                )
+            ]
+
+        async def recv(self) -> str:
+            nonlocal stopped
+            if self.frames:
+                return self.frames.pop(0)
+            stopped = True
+            raise ConnectionError("closed")
+
+    class FakeContext:
+        async def __aenter__(self) -> OneEventSocket:
+            return OneEventSocket()
+
+        async def __aexit__(self, *args: Any) -> None:
+            return None
+
+    async def fake_open(self) -> str:
+        return "wss://wss-primary.slack.com/link/?ticket=secret"
+
+    monkeypatch.setattr(websockets, "connect", lambda url, **kwargs: FakeContext())
+    monkeypatch.setattr(SlackSocketModeClient, "open_connection_url", fake_open)
+    monkeypatch.setattr(socket_module, "_DRAIN_TIMEOUT_S", 0.1)
+
+    async def scenario() -> None:
+        nonlocal release
+        release = asyncio.Event()
+
+        async def on_event(payload: dict[str, Any]) -> None:
+            await release.wait()  # outlives the shrunken drain window
+
+        client = SlackSocketModeClient(app_token="xapp-test")
+        await client.run(on_event, lambda: stopped)
+        release.set()
+
+    with caplog.at_level("WARNING", logger="core.messaging.slack_socket_mode"):
+        asyncio.run(scenario())
+    assert any("0 queued + 1 in-flight" in record.getMessage() for record in caplog.records)
+
+
 def test_run_backs_off_across_connections_that_never_receive_a_frame(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

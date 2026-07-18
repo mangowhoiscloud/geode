@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from core.cli.tool_handlers.registration import UniqueEntries
 from core.ui.console import console
 
 
@@ -11,7 +12,7 @@ def _build_system_handlers(
     readiness: Any,
     force_dry: bool,
     mcp_manager: Any,
-) -> dict[str, Any]:
+) -> UniqueEntries[str, Any]:
     """Build system management tool handlers."""
     from core.cli import _set_readiness
     from core.cli.commands import cmd_key, cmd_login, cmd_model, show_help
@@ -222,12 +223,14 @@ def _build_system_handlers(
         report = run_doctor_slack()
         return {"text": format_doctor_report(report), "raw": report}
 
-    return {
-        "show_help": handle_show_help,
-        "check_status": handle_check_status,
-        "switch_model": handle_switch_model,
-        "set_api_key": handle_set_api_key,
-        "manage_auth": handle_manage_auth,
-        "manage_login": handle_manage_login,
-        "doctor_slack": handle_doctor_slack,
-    }
+    return UniqueEntries[str, Any](
+        (
+            ("show_help", handle_show_help),
+            ("check_status", handle_check_status),
+            ("switch_model", handle_switch_model),
+            ("set_api_key", handle_set_api_key),
+            ("manage_auth", handle_manage_auth),
+            ("manage_login", handle_manage_login),
+            ("doctor_slack", handle_doctor_slack),
+        )
+    )

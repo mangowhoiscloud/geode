@@ -1,0 +1,959 @@
+{
+  "built_in_adapters": {
+    "classes": [
+      "AnthropicPaygAdapter",
+      "AnthropicOAuthAdapter",
+      "ClaudeCliAdapter",
+      "OpenAIPaygAdapter",
+      "CodexOAuthAdapter",
+      "CodexCliAdapter",
+      "GlmPaygAdapter",
+      "GlmCodingPlanAdapter"
+    ],
+    "count": 8
+  },
+  "complexity_thresholds": {
+    "max_args": 23,
+    "max_branches": 68,
+    "max_complexity": 62,
+    "max_returns": 18,
+    "max_statements": 273
+  },
+  "context_vars": {
+    "count": 26,
+    "items": [
+      {
+        "context_name": "geode_active_cognitive_state",
+        "has_default": true,
+        "line": 33,
+        "path": "core/agent/cognitive_state_ctx.py",
+        "symbol": "_active_state"
+      },
+      {
+        "context_name": "geode_active_session_id",
+        "has_default": true,
+        "line": 36,
+        "path": "core/agent/cognitive_state_ctx.py",
+        "symbol": "_active_session_id"
+      },
+      {
+        "context_name": "geode_active_parent_session_key",
+        "has_default": true,
+        "line": 52,
+        "path": "core/agent/cognitive_state_ctx.py",
+        "symbol": "_active_parent_session_key"
+      },
+      {
+        "context_name": "geode_active_parent_session_id",
+        "has_default": true,
+        "line": 63,
+        "path": "core/agent/cognitive_state_ctx.py",
+        "symbol": "_active_parent_session_id"
+      },
+      {
+        "context_name": "geode_skip_permissions",
+        "has_default": true,
+        "line": 24,
+        "path": "core/agent/safety.py",
+        "symbol": "_skip_permissions_var"
+      },
+      {
+        "context_name": "geode_task_isolated_cwd",
+        "has_default": true,
+        "line": 32,
+        "path": "core/agent/task_isolation.py",
+        "symbol": "_task_isolated_cwd"
+      },
+      {
+        "context_name": "conversation_ctx",
+        "has_default": true,
+        "line": 222,
+        "path": "core/cli/commands/_state.py",
+        "symbol": "_conversation_ctx"
+      },
+      {
+        "context_name": "readiness",
+        "has_default": true,
+        "line": 22,
+        "path": "core/cli/session_state.py",
+        "symbol": "_readiness_ctx"
+      },
+      {
+        "context_name": "scheduler_service",
+        "has_default": true,
+        "line": 23,
+        "path": "core/cli/session_state.py",
+        "symbol": "_scheduler_service_ctx"
+      },
+      {
+        "context_name": "user_task_graph",
+        "has_default": true,
+        "line": 24,
+        "path": "core/cli/session_state.py",
+        "symbol": "_user_task_graph_ctx"
+      },
+      {
+        "context_name": "current_agentic_loop",
+        "has_default": true,
+        "line": 25,
+        "path": "core/cli/session_state.py",
+        "symbol": "_current_loop_ctx"
+      },
+      {
+        "context_name": "tool_hooks",
+        "has_default": true,
+        "line": 19,
+        "path": "core/hooks/tool_hooks.py",
+        "symbol": "_tool_hooks_ctx"
+      },
+      {
+        "context_name": "session_adapter_usage",
+        "has_default": true,
+        "line": 86,
+        "path": "core/llm/adapters/dispatch.py",
+        "symbol": "_session_adapter_usage_ctx"
+      },
+      {
+        "context_name": "geode_surface_type",
+        "has_default": true,
+        "line": 125,
+        "path": "core/llm/platform_hints.py",
+        "symbol": "_current_surface"
+      },
+      {
+        "context_name": "token_tracker",
+        "has_default": true,
+        "line": 459,
+        "path": "core/llm/token_tracker.py",
+        "symbol": "_tracker_ctx"
+      },
+      {
+        "context_name": "calendar_port",
+        "has_default": true,
+        "line": 100,
+        "path": "core/mcp/calendar_port.py",
+        "symbol": "_calendar_ctx"
+      },
+      {
+        "context_name": "notification_port",
+        "has_default": true,
+        "line": 67,
+        "path": "core/mcp/notification_port.py",
+        "symbol": "_notification_ctx"
+      },
+      {
+        "context_name": "geode_active_run_dir",
+        "has_default": true,
+        "line": 58,
+        "path": "core/observability/run_dir.py",
+        "symbol": "_active_run_dir"
+      },
+      {
+        "context_name": "session_metrics",
+        "has_default": true,
+        "line": 90,
+        "path": "core/observability/session_metrics.py",
+        "symbol": "_current_metrics"
+      },
+      {
+        "context_name": "tool_offload_store",
+        "has_default": true,
+        "line": 26,
+        "path": "core/orchestration/tool_offload.py",
+        "symbol": "_offload_store_ctx"
+      },
+      {
+        "context_name": "self_improving_loop_run_transcript",
+        "has_default": true,
+        "line": 58,
+        "path": "core/self_improving/loop/observe/run_transcript.py",
+        "symbol": "_current_run_transcript"
+      },
+      {
+        "context_name": "default_session_store",
+        "has_default": true,
+        "line": 31,
+        "path": "core/tools/memory_tools.py",
+        "symbol": "_default_session_store_ctx"
+      },
+      {
+        "context_name": "project_memory_tools",
+        "has_default": true,
+        "line": 34,
+        "path": "core/tools/memory_tools.py",
+        "symbol": "_project_memory_ctx"
+      },
+      {
+        "context_name": "org_memory_tools",
+        "has_default": true,
+        "line": 37,
+        "path": "core/tools/memory_tools.py",
+        "symbol": "_org_memory_ctx"
+      },
+      {
+        "context_name": "memory_tools_hooks",
+        "has_default": true,
+        "line": 58,
+        "path": "core/tools/memory_tools.py",
+        "symbol": "_hooks_ctx"
+      },
+      {
+        "context_name": "user_profile_tools",
+        "has_default": true,
+        "line": 23,
+        "path": "core/tools/profile_tools.py",
+        "symbol": "_user_profile_ctx"
+      }
+    ]
+  },
+  "coordinators": {
+    "AgenticLoop": {
+      "constructor_arg_count": 27,
+      "file_loc": 2714,
+      "method_count": 67,
+      "path": "core/agent/loop/agent_loop.py"
+    },
+    "RuntimeCoreConfig": {
+      "field_count": 17,
+      "path": "core/runtime.py"
+    },
+    "SubAgentManager": {
+      "constructor_arg_count": 15,
+      "file_loc": 1277,
+      "method_count": 15,
+      "path": "core/agent/sub_agent.py"
+    }
+  },
+  "core_to_plugins_imports": {
+    "file_count": 14,
+    "site_count": 31,
+    "sites": [
+      {
+        "line": 20,
+        "module": "plugins.petri_audit.cli_agreement",
+        "path": "core/cli/__init__.py"
+      },
+      {
+        "line": 21,
+        "module": "plugins.petri_audit.cli_audit",
+        "path": "core/cli/__init__.py"
+      },
+      {
+        "line": 22,
+        "module": "plugins.seed_generation.cli",
+        "path": "core/cli/__init__.py"
+      },
+      {
+        "line": 122,
+        "module": "plugins.petri_audit.user_overrides",
+        "path": "core/cli/commands/config.py"
+      },
+      {
+        "line": 737,
+        "module": "plugins.petri_audit.claude_code_provider",
+        "path": "core/cli/commands/login.py"
+      },
+      {
+        "line": 749,
+        "module": "plugins.petri_audit.codex_provider",
+        "path": "core/cli/commands/login.py"
+      },
+      {
+        "line": 18,
+        "module": "plugins.petri_audit.cli",
+        "path": "core/cli/commands/petri.py"
+      },
+      {
+        "line": 172,
+        "module": "plugins.petri_audit.cli_audit",
+        "path": "core/cli/dispatcher.py"
+      },
+      {
+        "line": 31,
+        "module": "plugins.petri_audit.optimize",
+        "path": "core/cli/tool_handlers/audit.py"
+      },
+      {
+        "line": 36,
+        "module": "plugins.petri_audit.runner",
+        "path": "core/cli/tool_handlers/audit.py"
+      },
+      {
+        "line": 37,
+        "module": "plugins.petri_audit.viz",
+        "path": "core/cli/tool_handlers/audit.py"
+      },
+      {
+        "line": 40,
+        "module": "plugins.petri_audit.claude_cli_provider",
+        "path": "core/llm/adapters/claude_cli.py"
+      },
+      {
+        "line": 73,
+        "module": "plugins.petri_audit.claude_cli_provider",
+        "path": "core/llm/adapters/claude_cli.py"
+      },
+      {
+        "line": 247,
+        "module": "plugins.petri_audit.claude_cli_provider",
+        "path": "core/llm/adapters/claude_cli.py"
+      },
+      {
+        "line": 290,
+        "module": "plugins.petri_audit.adapters.claude_cli_backend",
+        "path": "core/llm/adapters/claude_cli.py"
+      },
+      {
+        "line": 293,
+        "module": "plugins.petri_audit.claude_cli_provider",
+        "path": "core/llm/adapters/claude_cli.py"
+      },
+      {
+        "line": 353,
+        "module": "plugins.petri_audit.adapters.claude_cli_backend",
+        "path": "core/llm/adapters/claude_cli.py"
+      },
+      {
+        "line": 372,
+        "module": "plugins.petri_audit.adapters.claude_cli_backend",
+        "path": "core/llm/adapters/claude_cli.py"
+      },
+      {
+        "line": 58,
+        "module": "plugins.petri_audit.codex_provider",
+        "path": "core/llm/adapters/provider_inference.py"
+      },
+      {
+        "line": 315,
+        "module": "plugins.petri_audit.claude_cli_provider",
+        "path": "core/llm/errors.py"
+      },
+      {
+        "line": 152,
+        "module": "plugins.petri_audit.claude_cli_provider",
+        "path": "core/llm/router/calls/_failover.py"
+      },
+      {
+        "line": 268,
+        "module": "plugins.petri_audit.pool_validation",
+        "path": "core/self_improving/campaign.py"
+      },
+      {
+        "line": 2207,
+        "module": "plugins.petri_audit.runner",
+        "path": "core/self_improving/campaign.py"
+      },
+      {
+        "line": 2286,
+        "module": "plugins.petri_audit.pool_validation",
+        "path": "core/self_improving/campaign.py"
+      },
+      {
+        "line": 385,
+        "module": "plugins.seed_generation.baseline_reader",
+        "path": "core/self_improving/loop/mutate/runner.py"
+      },
+      {
+        "line": 608,
+        "module": "plugins.seed_generation.baseline_reader",
+        "path": "core/self_improving/loop/mutate/runner.py"
+      },
+      {
+        "line": 49,
+        "module": "plugins.seed_generation.baseline_reader",
+        "path": "core/self_improving/loop/observe/attribution.py"
+      },
+      {
+        "line": 235,
+        "module": "plugins.petri_audit.manifest",
+        "path": "core/self_improving/train.py"
+      },
+      {
+        "line": 236,
+        "module": "plugins.petri_audit.user_overrides",
+        "path": "core/self_improving/train.py"
+      },
+      {
+        "line": 596,
+        "module": "plugins.petri_audit.runner",
+        "path": "core/self_improving/train.py"
+      },
+      {
+        "line": 1366,
+        "module": "plugins.seed_generation.baseline_reader",
+        "path": "core/self_improving/train.py"
+      }
+    ]
+  },
+  "hook_events": {
+    "count": 56,
+    "members": [
+      "TRIGGER_FIRED",
+      "POST_ANALYSIS",
+      "MEMORY_SAVED",
+      "RULE_CHANGED",
+      "RESULT_FEEDBACK",
+      "PROMPT_ASSEMBLED",
+      "SUBAGENT_STARTED",
+      "SUBAGENT_COMPLETED",
+      "SUBAGENT_FAILED",
+      "TOOL_RECOVERY_ATTEMPTED",
+      "TOOL_RECOVERY_SUCCEEDED",
+      "TOOL_RECOVERY_FAILED",
+      "TURN_COMPLETED",
+      "CONTEXT_CRITICAL",
+      "CONTEXT_OVERFLOW_ACTION",
+      "SESSION_STARTED",
+      "SESSION_ENDED",
+      "MODEL_SWITCHED",
+      "LLM_CALL_STARTED",
+      "LLM_CALL_ENDED",
+      "LLM_CALL_FAILED",
+      "LLM_CALL_RETRIED",
+      "TOOL_APPROVAL_REQUESTED",
+      "APPROVAL_TRANSITION",
+      "ADAPTER_DISPATCH_ATTEMPT",
+      "SHUTDOWN_STARTED",
+      "CONFIG_RELOADED",
+      "TOOL_RESULT_OFFLOADED",
+      "MCP_SERVER_CONNECTED",
+      "MCP_SERVER_FAILED",
+      "USER_INPUT_RECEIVED",
+      "TOOL_EXEC_STARTED",
+      "TOOL_EXEC_ENDED",
+      "TOOL_EXEC_FAILED",
+      "TOOL_RESULT_TRANSFORM",
+      "COST_WARNING",
+      "COST_LIMIT_EXCEEDED",
+      "EXECUTION_CANCELLED",
+      "REASONING_METRICS",
+      "COGNITIVE_PERCEIVE",
+      "COGNITIVE_PLAN",
+      "COGNITIVE_ACT",
+      "COGNITIVE_OBSERVE",
+      "COGNITIVE_REFLECT",
+      "COGNITIVE_UPDATE_MEMORY",
+      "SELF_IMPROVING_AUTO_TRIGGER",
+      "HANDOFF_TRIGGERED",
+      "TURN_VERIFY_PASSED",
+      "TURN_VERIFY_FAILED",
+      "MUTATION_PROPOSED",
+      "MUTATION_APPLIED",
+      "MUTATION_REJECTED",
+      "MUTATION_REVERTED",
+      "BASELINE_PROMOTED",
+      "PROGRAM_MD_UNREADABLE",
+      "MEMORY_PROMOTION_PROPOSED"
+    ]
+  },
+  "import_linter": {
+    "contract_count": 4,
+    "contracts": [
+      {
+        "ignored_edges": [
+          "core.cli.doctor -> core.messaging.slack_transport",
+          "core.cli.scheduler_drain -> core.server.supervised.services",
+          "core.cli.typer_serve -> core.messaging.binding",
+          "core.cli.typer_serve -> core.server.ipc_server.poller",
+          "core.cli.typer_serve -> core.server.supervised.services",
+          "core.cli.typer_serve -> core.server.supervised.webhook_handler",
+          "core.mcp.slack_adapter -> core.messaging.slack_transport",
+          "core.wiring.adapters -> core.messaging.binding",
+          "core.wiring.adapters -> core.messaging.slack_transport"
+        ],
+        "name": "CLI must not import server/messaging (process boundary)"
+      },
+      {
+        "ignored_edges": [
+          "core.agent.approval -> core.cli",
+          "core.agent.loop.agent_loop -> core.cli.commands",
+          "core.agent.worker -> core.cli.tool_handlers",
+          "core.self_improving.measure -> core.cli.quota_banner"
+        ],
+        "name": "Agent stays pure (no CLI/server)"
+      },
+      {
+        "ignored_edges": [
+          "core.agent.approval -> core.cli",
+          "core.agent.loop.agent_loop -> core.cli.commands",
+          "core.agent.worker -> core.cli.tool_handlers",
+          "core.self_improving.measure -> core.cli.quota_banner",
+          "core.server.ipc_server.poller -> core.cli",
+          "core.server.ipc_server.poller -> core.cli.session_state",
+          "core.server.supervised.services -> core.cli.bootstrap",
+          "core.server.supervised.services -> core.cli.commands",
+          "core.server.supervised.services -> core.cli.session_state",
+          "core.server.supervised.services -> core.cli.tool_handlers"
+        ],
+        "name": "Server may host agent but never CLI"
+      },
+      {
+        "ignored_edges": [
+          "core.messaging.binding -> core.server.supervised.poller_base"
+        ],
+        "name": "Messaging integration is capability-pure (no process imports)"
+      }
+    ],
+    "ignored_edge_count": 24
+  },
+  "packages": {
+    "core": {
+      "python_files": 428,
+      "python_loc": 131672
+    },
+    "plugins": {
+      "python_files": 109,
+      "python_loc": 40248
+    },
+    "tests": {
+      "python_files": 668,
+      "python_loc": 172771
+    }
+  },
+  "schema_version": 1,
+  "tools": {
+    "deferred_loading": {
+      "always_loaded_count": 13,
+      "always_loaded_names": [
+        "calculate",
+        "check_status",
+        "general_web_search",
+        "glob_files",
+        "grep_files",
+        "llms_txt_index",
+        "memory_save",
+        "memory_search",
+        "note_read",
+        "note_save",
+        "read_document",
+        "use_skill",
+        "web_fetch"
+      ],
+      "unknown_always_loaded_names": []
+    },
+    "definition_count": 78,
+    "definition_names": [
+      "accept_result",
+      "approve_plan",
+      "arxiv_search",
+      "browser_execute_js",
+      "browser_scan",
+      "calculate",
+      "calendar_create_event",
+      "calendar_list_events",
+      "calendar_sync_scheduler",
+      "check_status",
+      "computer_use",
+      "create_plan",
+      "delegate_task",
+      "document_ingest",
+      "edit_file",
+      "eval_dspy_optimize",
+      "eval_inspect_viz",
+      "export_json",
+      "freeze_paper_snapshot",
+      "general_web_search",
+      "generate_data",
+      "generate_report",
+      "geode_seed_pool_search",
+      "glob_files",
+      "gmail_search",
+      "gmail_send",
+      "google_contacts_list",
+      "google_docs_read",
+      "google_docs_write",
+      "google_drive_create",
+      "google_drive_search",
+      "google_sheets_read",
+      "google_sheets_write",
+      "google_tasks_list",
+      "google_tasks_write",
+      "grep_files",
+      "install_mcp_server",
+      "list_plans",
+      "llms_txt_index",
+      "manage_auth",
+      "manage_context",
+      "manage_login",
+      "manage_rule",
+      "memory_save",
+      "memory_search",
+      "modify_plan",
+      "note_read",
+      "note_save",
+      "obs_otel_export",
+      "paper_fetch_arxiv",
+      "petri_audit",
+      "profile_learn",
+      "profile_preference",
+      "profile_show",
+      "profile_update",
+      "rate_result",
+      "read_document",
+      "reject_plan",
+      "reject_result",
+      "run_bash",
+      "schedule_job",
+      "seed_debate_turn",
+      "send_notification",
+      "session_search",
+      "set_api_key",
+      "show_help",
+      "switch_model",
+      "task_create",
+      "task_get",
+      "task_list",
+      "task_stop",
+      "task_update",
+      "trigger_event",
+      "ui_probe",
+      "update_plan",
+      "use_skill",
+      "web_fetch",
+      "write_file"
+    ],
+    "definition_only": [],
+    "definition_without_valid_schema": [],
+    "duplicate_definition_names": [],
+    "exact_parity": false,
+    "execution_only": [
+      "computer",
+      "doctor_slack",
+      "recall_tool_result"
+    ],
+    "execution_registration_count": 81,
+    "execution_registration_names": [
+      "accept_result",
+      "approve_plan",
+      "arxiv_search",
+      "browser_execute_js",
+      "browser_scan",
+      "calculate",
+      "calendar_create_event",
+      "calendar_list_events",
+      "calendar_sync_scheduler",
+      "check_status",
+      "computer",
+      "computer_use",
+      "create_plan",
+      "delegate_task",
+      "doctor_slack",
+      "document_ingest",
+      "edit_file",
+      "eval_dspy_optimize",
+      "eval_inspect_viz",
+      "export_json",
+      "freeze_paper_snapshot",
+      "general_web_search",
+      "generate_data",
+      "generate_report",
+      "geode_seed_pool_search",
+      "glob_files",
+      "gmail_search",
+      "gmail_send",
+      "google_contacts_list",
+      "google_docs_read",
+      "google_docs_write",
+      "google_drive_create",
+      "google_drive_search",
+      "google_sheets_read",
+      "google_sheets_write",
+      "google_tasks_list",
+      "google_tasks_write",
+      "grep_files",
+      "install_mcp_server",
+      "list_plans",
+      "llms_txt_index",
+      "manage_auth",
+      "manage_context",
+      "manage_login",
+      "manage_rule",
+      "memory_save",
+      "memory_search",
+      "modify_plan",
+      "note_read",
+      "note_save",
+      "obs_otel_export",
+      "paper_fetch_arxiv",
+      "petri_audit",
+      "profile_learn",
+      "profile_preference",
+      "profile_show",
+      "profile_update",
+      "rate_result",
+      "read_document",
+      "recall_tool_result",
+      "reject_plan",
+      "reject_result",
+      "run_bash",
+      "schedule_job",
+      "seed_debate_turn",
+      "send_notification",
+      "session_search",
+      "set_api_key",
+      "show_help",
+      "switch_model",
+      "task_create",
+      "task_get",
+      "task_list",
+      "task_stop",
+      "task_update",
+      "trigger_event",
+      "ui_probe",
+      "update_plan",
+      "use_skill",
+      "web_fetch",
+      "write_file"
+    ],
+    "handler_registration_count": 79,
+    "handler_registration_names": [
+      "accept_result",
+      "approve_plan",
+      "arxiv_search",
+      "browser_execute_js",
+      "browser_scan",
+      "calculate",
+      "calendar_create_event",
+      "calendar_list_events",
+      "calendar_sync_scheduler",
+      "check_status",
+      "computer",
+      "computer_use",
+      "create_plan",
+      "doctor_slack",
+      "document_ingest",
+      "edit_file",
+      "eval_dspy_optimize",
+      "eval_inspect_viz",
+      "export_json",
+      "freeze_paper_snapshot",
+      "general_web_search",
+      "generate_data",
+      "generate_report",
+      "geode_seed_pool_search",
+      "glob_files",
+      "gmail_search",
+      "gmail_send",
+      "google_contacts_list",
+      "google_docs_read",
+      "google_docs_write",
+      "google_drive_create",
+      "google_drive_search",
+      "google_sheets_read",
+      "google_sheets_write",
+      "google_tasks_list",
+      "google_tasks_write",
+      "grep_files",
+      "install_mcp_server",
+      "list_plans",
+      "llms_txt_index",
+      "manage_auth",
+      "manage_context",
+      "manage_login",
+      "manage_rule",
+      "memory_save",
+      "memory_search",
+      "modify_plan",
+      "note_read",
+      "note_save",
+      "obs_otel_export",
+      "paper_fetch_arxiv",
+      "petri_audit",
+      "profile_learn",
+      "profile_preference",
+      "profile_show",
+      "profile_update",
+      "rate_result",
+      "read_document",
+      "recall_tool_result",
+      "reject_plan",
+      "reject_result",
+      "schedule_job",
+      "seed_debate_turn",
+      "send_notification",
+      "session_search",
+      "set_api_key",
+      "show_help",
+      "switch_model",
+      "task_create",
+      "task_get",
+      "task_list",
+      "task_stop",
+      "task_update",
+      "trigger_event",
+      "ui_probe",
+      "update_plan",
+      "use_skill",
+      "web_fetch",
+      "write_file"
+    ],
+    "handler_registration_origins": {
+      "accept_result": "hitl",
+      "approve_plan": "plan",
+      "arxiv_search": "delegated",
+      "browser_execute_js": "delegated",
+      "browser_scan": "delegated",
+      "calculate": "math",
+      "calendar_create_event": "calendar",
+      "calendar_list_events": "calendar",
+      "calendar_sync_scheduler": "calendar",
+      "check_status": "system",
+      "computer": "computer-use",
+      "computer_use": "computer-use",
+      "create_plan": "plan",
+      "doctor_slack": "system",
+      "document_ingest": "delegated",
+      "edit_file": "delegated",
+      "eval_dspy_optimize": "audit",
+      "eval_inspect_viz": "audit",
+      "export_json": "output",
+      "freeze_paper_snapshot": "delegated",
+      "general_web_search": "delegated",
+      "generate_data": "data",
+      "generate_report": "output",
+      "geode_seed_pool_search": "delegated",
+      "glob_files": "delegated",
+      "gmail_search": "delegated",
+      "gmail_send": "delegated",
+      "google_contacts_list": "delegated",
+      "google_docs_read": "delegated",
+      "google_docs_write": "delegated",
+      "google_drive_create": "delegated",
+      "google_drive_search": "delegated",
+      "google_sheets_read": "delegated",
+      "google_sheets_write": "delegated",
+      "google_tasks_list": "delegated",
+      "google_tasks_write": "delegated",
+      "grep_files": "delegated",
+      "install_mcp_server": "mcp",
+      "list_plans": "plan",
+      "llms_txt_index": "delegated",
+      "manage_auth": "system",
+      "manage_context": "context",
+      "manage_login": "system",
+      "manage_rule": "memory",
+      "memory_save": "memory",
+      "memory_search": "memory",
+      "modify_plan": "plan",
+      "note_read": "delegated",
+      "note_save": "delegated",
+      "obs_otel_export": "observability",
+      "paper_fetch_arxiv": "delegated",
+      "petri_audit": "audit",
+      "profile_learn": "delegated",
+      "profile_preference": "delegated",
+      "profile_show": "delegated",
+      "profile_update": "delegated",
+      "rate_result": "hitl",
+      "read_document": "delegated",
+      "recall_tool_result": "offload",
+      "reject_plan": "plan",
+      "reject_result": "hitl",
+      "schedule_job": "execution",
+      "seed_debate_turn": "delegated",
+      "send_notification": "notification",
+      "session_search": "memory",
+      "set_api_key": "system",
+      "show_help": "system",
+      "switch_model": "system",
+      "task_create": "task",
+      "task_get": "task",
+      "task_list": "task",
+      "task_stop": "task",
+      "task_update": "task",
+      "trigger_event": "execution",
+      "ui_probe": "delegated",
+      "update_plan": "plan",
+      "use_skill": "skill",
+      "web_fetch": "delegated",
+      "write_file": "delegated"
+    },
+    "schema_count": 78,
+    "schema_errors": [],
+    "schema_names": [
+      "accept_result",
+      "approve_plan",
+      "arxiv_search",
+      "browser_execute_js",
+      "browser_scan",
+      "calculate",
+      "calendar_create_event",
+      "calendar_list_events",
+      "calendar_sync_scheduler",
+      "check_status",
+      "computer_use",
+      "create_plan",
+      "delegate_task",
+      "document_ingest",
+      "edit_file",
+      "eval_dspy_optimize",
+      "eval_inspect_viz",
+      "export_json",
+      "freeze_paper_snapshot",
+      "general_web_search",
+      "generate_data",
+      "generate_report",
+      "geode_seed_pool_search",
+      "glob_files",
+      "gmail_search",
+      "gmail_send",
+      "google_contacts_list",
+      "google_docs_read",
+      "google_docs_write",
+      "google_drive_create",
+      "google_drive_search",
+      "google_sheets_read",
+      "google_sheets_write",
+      "google_tasks_list",
+      "google_tasks_write",
+      "grep_files",
+      "install_mcp_server",
+      "list_plans",
+      "llms_txt_index",
+      "manage_auth",
+      "manage_context",
+      "manage_login",
+      "manage_rule",
+      "memory_save",
+      "memory_search",
+      "modify_plan",
+      "note_read",
+      "note_save",
+      "obs_otel_export",
+      "paper_fetch_arxiv",
+      "petri_audit",
+      "profile_learn",
+      "profile_preference",
+      "profile_show",
+      "profile_update",
+      "rate_result",
+      "read_document",
+      "reject_plan",
+      "reject_result",
+      "run_bash",
+      "schedule_job",
+      "seed_debate_turn",
+      "send_notification",
+      "session_search",
+      "set_api_key",
+      "show_help",
+      "switch_model",
+      "task_create",
+      "task_get",
+      "task_list",
+      "task_stop",
+      "task_update",
+      "trigger_event",
+      "ui_probe",
+      "update_plan",
+      "use_skill",
+      "web_fetch",
+      "write_file"
+    ],
+    "schema_without_definition": [],
+    "special_execution_bindings": [
+      "delegate_task",
+      "run_bash"
+    ]
+  }
+}
