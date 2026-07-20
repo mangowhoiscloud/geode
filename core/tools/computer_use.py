@@ -24,6 +24,7 @@ import base64
 import io
 import json
 import logging
+import os
 import re
 import shutil
 import subprocess
@@ -78,10 +79,9 @@ def computer_use_env() -> str:
 
     Fail-safe on a misconfig: host execution drives the operator's REAL desktop,
     so it requires an EXACT "host" (or unset = documented default). A non-empty
-    invalid value (a config.toml typo bypasses the pydantic validator via
-    ``object.__setattr__``) must NOT silently fall through to host — it routes to
-    "sandbox" (which fails loud if no container) so a typo can never re-expose
-    the real desktop.
+    invalid value (for example, direct legacy runtime mutation) must NOT
+    silently fall through to host — it routes to "sandbox" (which fails loud if
+    no container) so a typo can never re-expose the real desktop.
     """
     from core.config import settings
 
@@ -129,18 +129,24 @@ def _default_helper_path() -> Path:
 
 
 def computer_use_helper_path() -> Path | None:
-    """Return the configured/default helper executable path, if present."""
+    """Return the configured/default helper path only when it is executable."""
     from core.config import settings
+
+    def _usable(path: Path) -> bool:
+        return path.is_file() and os.access(path, os.X_OK)
 
     explicit = str(getattr(settings, "computer_use_helper_path", "") or "").strip()
     if explicit:
         path = Path(explicit).expanduser()
-        return path if path.exists() else None
+        return path if _usable(path) else None
     default = _default_helper_path()
-    if default.exists():
+    if _usable(default):
         return default
     found = shutil.which("geode-computer-helper")
-    return Path(found) if found else None
+    if found:
+        path = Path(found)
+        return path if _usable(path) else None
+    return None
 
 
 def _helper_request_sync(
@@ -430,10 +436,24 @@ class ComputerUseHarness:
         return self.screenshot()
 
     def move(self, x: int, y: int) -> str:
-        """Move mouse to coordinates."""
+        """Move the cursor and verify that the operating system accepted it.
+
+        macOS can silently discard Quartz input events when the active driver
+        lacks Accessibility permission. ``pyautogui.moveTo`` may then return
+        normally even though the cursor did not move, so success requires a
+        bounded postcondition check.
+        """
         pag = self._ensure_pyautogui()
         sx, sy = self._scale_to_screen(x, y)
         pag.moveTo(sx, sy)
+        observed = pag.position()
+        if abs(int(observed.x) - sx) > 2 or abs(int(observed.y) - sy) > 2:
+            raise PermissionError(
+                "mouse move postcondition failed: requested "
+                f"screen({sx},{sy}), observed screen({observed.x},{observed.y}); "
+                "grant Accessibility permission to the GEODE desktop driver "
+                "and re-run `geode doctor`"
+            )
         log.info("move(%d,%d) → screen(%d,%d)", x, y, sx, sy)
         return self.screenshot()
 
@@ -568,12 +588,15 @@ class ComputerUseHarness:
 
         try:
             screenshot_b64 = handler()
+            result: dict[str, Any] = {
+                "result": "success",
+                "action": action,
+                "screenshot": screenshot_b64,
+            }
+            if action == "move":
+                result["postcondition_verified"] = True
             return self._enrich_result(
-                {
-                    "result": "success",
-                    "action": action,
-                    "screenshot": screenshot_b64,
-                },
+                result,
                 action=action,
                 params=params,
             )

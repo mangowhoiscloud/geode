@@ -68,6 +68,7 @@ echo 'GEODE_GATEWAY_ENABLED=true' >> ~/.geode/.env
 #    channel_id가 없는 규칙은 안전상 건너뜁니다
 [gateway]
 pollers = ["slack"]
+allow_computer_use = false
 
 [[gateway.bindings.rules]]
 channel = "slack"
@@ -93,8 +94,9 @@ geode doctor slack`}</pre>
               만들어 같은 스레드의 대화가 하나의 세션으로 이어집니다
               (<code>core/memory/session_key.py</code>). 실행은 DAEMON 모드라
               승인 프롬프트가 없고, 그래서 <code>run_bash</code>와{" "}
-              <code>delegate_task</code>는 차단됩니다. 메시지당 wall-clock
-              예산은 binding의 <code>time_budget_s</code>가 정하며 기본 120초입니다
+              <code>delegate_task</code>, 원격 desktop control은 기본
+              차단됩니다. 메시지당 wall-clock 예산은 binding의{" "}
+              <code>time_budget_s</code>가 정하며 기본 120초입니다
               (<code>core/messaging/models.py</code>).
             </p>
             <p>
@@ -104,6 +106,31 @@ geode doctor slack`}</pre>
               사람 대댓글은 재멘션 없이 같은 문맥을 이어갑니다. 데몬 재시작
               뒤에도 ACTIVE 또는 PAUSED 체크포인트의 메시지와 상태를 CLI resume
               경로로 복원합니다.
+            </p>
+
+            <h2>메신저에서 computer use</h2>
+            <p>
+              먼저 <code>geode doctor</code>에서{" "}
+              <code>computer-use desktop</code>이 정상인지 확인합니다. 그 다음
+              멤버십이 제한된 비공개 binding에서만 아래처럼 원격 제어를
+              명시적으로 엽니다. 옵션이 꺼져 있으면 provider-visible schema가
+              있더라도 DAEMON executor가 <code>computer</code>와{" "}
+              <code>computer_use</code>를 dispatch 전에 거부합니다.
+            </p>
+            <pre>{`[computer_use]
+enabled = true
+env = "host"
+driver = "helper"
+
+[gateway]
+allow_computer_use = true`}</pre>
+            <p>
+              이 옵션은 Slack뿐 아니라 같은 DAEMON 실행 경계를 쓰는 모든
+              gateway binding에 적용됩니다. binding을 통과한 모든 발신자가
+              desktop action을 요청할 수 있으므로 제한된 채널에서만 사용하세요.
+              <code>run_bash</code>, <code>delegate_task</code>,
+              personal-workspace 도구, scheduler, MCP <code>run_agent</code> 차단은
+              유지됩니다.
             </p>
 
             <h2>실패 모드</h2>
@@ -206,6 +233,7 @@ echo 'GEODE_GATEWAY_ENABLED=true' >> ~/.geode/.env
 #    a rule without channel_id is skipped for safety
 [gateway]
 pollers = ["slack"]
+allow_computer_use = false
 
 [[gateway.bindings.rules]]
 channel = "slack"
@@ -232,8 +260,9 @@ geode doctor slack`}</pre>
               sender, and thread, so a thread&apos;s conversation continues as
               one session (<code>core/memory/session_key.py</code>). Execution
               runs in DAEMON mode with no approval prompt, which is why{" "}
-              <code>run_bash</code> and <code>delegate_task</code> are denied.
-              The per-message wall-clock budget comes from the binding&apos;s{" "}
+              <code>run_bash</code>, <code>delegate_task</code>, and remote
+              desktop control are denied by default. The per-message wall-clock
+              budget comes from the binding&apos;s{" "}
               <code>time_budget_s</code>, 120 seconds by default
               (<code>core/messaging/models.py</code>).
             </p>
@@ -245,6 +274,31 @@ geode doctor slack`}</pre>
               same context without another mention. After a daemon restart,
               ACTIVE or PAUSED checkpoint messages and machine state are
               restored through the CLI resume path.
+            </p>
+
+            <h2>Computer use from a messenger</h2>
+            <p>
+              First make <code>geode doctor</code> report a healthy{" "}
+              <code>computer-use desktop</code> check. Then opt in only for a
+              private, membership-restricted binding. While the option is off,
+              the DAEMON executor rejects <code>computer</code> and{" "}
+              <code>computer_use</code> before dispatch even if a
+              provider-visible schema is present.
+            </p>
+            <pre>{`[computer_use]
+enabled = true
+env = "host"
+driver = "helper"
+
+[gateway]
+allow_computer_use = true`}</pre>
+            <p>
+              The option applies to every gateway binding that shares the
+              DAEMON execution boundary, not only Slack. Every sender admitted
+              by a binding can request desktop actions once enabled, so use it
+              only with restricted channels. <code>run_bash</code>,{" "}
+              <code>delegate_task</code>, personal-workspace tools, scheduler,
+              and MCP <code>run_agent</code> remain denied.
             </p>
 
             <h2>Failure modes</h2>

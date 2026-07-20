@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import logging
 import os
+from contextvars import Token
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -46,6 +47,7 @@ __all__ = [
     "apply_to_profile_policy",
     "from_config",
     "from_env",
+    "publish_runtime_state",
     "resolve",
 ]
 
@@ -165,6 +167,13 @@ def resolve(cli_flag: bool | None = None, config_path: Path | str | None = None)
         # explicit `--no-unrestricted` overrides env but not config
         mode.enabled = False
     return mode
+
+
+def publish_runtime_state(mode: AuditMode) -> Token[bool | None]:
+    """Publish resolved plugin state to core's context-local audit boundary."""
+    from core.runtime_audit import set_runtime_audit_active
+
+    return set_runtime_audit_active(mode.enabled)
 
 
 def apply_to_profile_policy(policy: ProfilePolicy, mode: AuditMode) -> ProfilePolicy:

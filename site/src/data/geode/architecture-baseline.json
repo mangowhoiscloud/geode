@@ -20,7 +20,7 @@
     "max_statements": 223
   },
   "context_vars": {
-    "count": 26,
+    "count": 27,
     "items": [
       {
         "context_name": "geode_active_cognitive_state",
@@ -161,6 +161,13 @@
         "line": 26,
         "path": "core/orchestration/tool_offload.py",
         "symbol": "_offload_store_ctx"
+      },
+      {
+        "context_name": "geode_runtime_audit_active",
+        "has_default": true,
+        "line": 19,
+        "path": "core/runtime_audit.py",
+        "symbol": "_runtime_audit_active"
       },
       {
         "context_name": "self_improving_loop_run_transcript",
@@ -498,16 +505,16 @@
   },
   "packages": {
     "core": {
-      "python_files": 428,
-      "python_loc": 131671
+      "python_files": 429,
+      "python_loc": 131815
     },
     "plugins": {
       "python_files": 109,
-      "python_loc": 40248
+      "python_loc": 40262
     },
     "tests": {
-      "python_files": 669,
-      "python_loc": 173044
+      "python_files": 670,
+      "python_loc": 173518
     }
   },
   "schema_version": 1,

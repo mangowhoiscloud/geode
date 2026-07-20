@@ -507,6 +507,11 @@ class Settings(BaseSettings):
     # Gateway — inbound messaging
     gateway_enabled: bool = False  # GEODE_GATEWAY_ENABLED=true to enable
     gateway_poll_interval_s: float = 3.0
+    # Remote desktop control is a separate, fail-closed gateway capability.
+    # ``computer_use_enabled`` controls the tool globally; this second gate is
+    # required because DAEMON sessions cannot present an approval prompt and a
+    # bound channel may admit more than one human.
+    gateway_allow_computer_use: bool = False
 
     # L4 Gateway Hooks — external webhook endpoint
     webhook_enabled: bool = False  # GEODE_WEBHOOK_ENABLED=true to enable

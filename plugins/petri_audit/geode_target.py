@@ -208,6 +208,7 @@ async def _default_geode_runner(
     from plugins.petri_audit.audit_mode import (
         apply_to_profile_policy,
         apply_to_readiness,
+        publish_runtime_state,
         resolve,
     )
 
@@ -216,6 +217,10 @@ async def _default_geode_runner(
     # the inspect_ai child sees it. When enabled, lifts ProfilePolicy
     # / Readiness guardrails for this one petri run only.
     audit_mode = resolve()
+    # Config-file activation never enters os.environ.  Publish the resolved
+    # state on a ContextVar so core prompt/provider boundaries share the same
+    # audit signal without a forbidden core -> plugins dependency.
+    publish_runtime_state(audit_mode)
 
     system_text, history, last_user = _split_messages(messages)
 

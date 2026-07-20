@@ -308,6 +308,11 @@ geode serve                          # 백그라운드 Gateway 데몬 시작
 
 Slack의 `SLACK_BOT_TOKEN`(`xoxb-`)과 Socket Mode `SLACK_APP_TOKEN`(`xapp-`)은 `~/.geode/.env`에, 채널 바인딩과 receiver 설정은 `.geode/config.toml`에 둡니다. 자세한 setup은 [docs/setup.md → Gateway](docs/setup.md#gateway)를 참고하세요. 설정 후 바운드 채널에서 봇을 멘션하면 push 이벤트가 로컬과 동일한 에이전트 루프로 라우팅되며, 같은 스레드의 후속 대댓글은 재멘션 없이 동일 체크포인트를 이어갑니다.
 
+Gateway의 원격 desktop control은 운영자가
+`[gateway] allow_computer_use = true`를 명시하기 전까지 차단됩니다. 제한된
+binding에서 열기 전에 [computer-use 안내](docs/setup.ko.md#선택-바운드-채널에서-computer-use)를
+확인하세요.
+
 ### Optional — Self-improving loop 설정 (`~/.geode/config.toml`)
 
 autoresearch / seed-generation / petri audit 드라이버의 model / dim set / banner threshold / PAYG fallback 정책을 조정하려면 [`docs/examples/self_improving_loop.config.toml.example`](docs/examples/self_improving_loop.config.toml.example) 의 `[self_improving_loop.*]` 섹션을 `~/.geode/config.toml` 로 복사하세요. 미설정 섹션은 문서화된 default 로 폴백합니다. 기존 `~/.geode/petri.toml` 의 role 별 entry 를 이전하려면:

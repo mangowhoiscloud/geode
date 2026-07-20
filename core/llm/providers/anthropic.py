@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import contextlib
 import logging
-import os
 import threading
 from typing import TYPE_CHECKING, Any
 
@@ -851,7 +850,7 @@ _COMPUTER_USE_TOOL: dict[str, Any] = {
 
 
 def is_computer_use_enabled() -> bool:
-    """Check if computer-use is enabled (requires pyautogui + opt-in).
+    """Check if computer-use is enabled for the selected execution driver.
 
     Audit safety (Phase E): a Petri audit runs unattended, so it must NEVER be
     able to drive the operator's real desktop. When audit mode is active
@@ -860,15 +859,18 @@ def is_computer_use_enabled() -> bool:
     the host). Without this an audit scenario that emitted a computer tool_use
     would control the live screen.
     """
-    import os
-
     from core.config import settings
-    from core.tools.computer_use import computer_use_env
+    from core.runtime_audit import runtime_audit_active
+    from core.tools.computer_use import (
+        computer_use_driver,
+        computer_use_env,
+        computer_use_helper_path,
+    )
 
     if not getattr(settings, "computer_use_enabled", False):
         return False
     env = computer_use_env()
-    if os.environ.get("GEODE_AUDIT_UNRESTRICTED") == "1" and env != "sandbox":
+    if runtime_audit_active() and env != "sandbox":
         log.debug("computer-use disabled under audit (env != sandbox; no real-desktop control)")
         return False
     if env == "sandbox":
@@ -876,7 +878,16 @@ def is_computer_use_enabled() -> bool:
         # the container, so the host does NOT need it. (fail-loud if the
         # container is unreachable — handled at dispatch.)
         return True
-    # Host mode drives the real desktop via local pyautogui.
+    driver = computer_use_driver()
+    if driver == "helper":
+        available = computer_use_helper_path() is not None
+        if not available:
+            log.debug("computer-use disabled: required macOS helper is not installed")
+        return available
+    if driver == "auto" and computer_use_helper_path() is not None:
+        return True
+    # Host python mode, or auto with no helper, drives the desktop via
+    # pyautogui.
     try:
         import pyautogui  # type: ignore[import-untyped]  # noqa: F401
 
@@ -1177,7 +1188,9 @@ class ClaudeAgenticAdapter:
             # Booster E (2026-05-12) — surface the failure in
             # ``~/.geode/diagnostics/`` so an inspect_ai subprocess crash
             # leaves a trail outside the (subprocess-local) Python logger.
-            if os.environ.get("GEODE_AUDIT_UNRESTRICTED") == "1":
+            from core.runtime_audit import runtime_audit_active
+
+            if runtime_audit_active():
                 from core.audit.diagnostics import diag
 
                 diag("petri.anthropic", f"BadRequest model={model}: {msg[:200]}")
@@ -1210,7 +1223,9 @@ class ClaudeAgenticAdapter:
             self.last_error = exc
             log.warning("Agentic LLM call failed", exc_info=True)
             # Booster E — same rationale as the BadRequest branch above.
-            if os.environ.get("GEODE_AUDIT_UNRESTRICTED") == "1":
+            from core.runtime_audit import runtime_audit_active
+
+            if runtime_audit_active():
                 from core.audit.diagnostics import diag
 
                 diag("petri.anthropic", f"call_failed model={model}: {exc!r}")

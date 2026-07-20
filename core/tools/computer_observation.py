@@ -19,6 +19,7 @@ ErrorKind = Literal[
     "sandbox_config",
     "sandbox_unreachable",
     "no_display",
+    "permission",
     "execution_error",
 ]
 
@@ -160,6 +161,8 @@ def classify_computer_error(error: str) -> ErrorKind:
         return "sandbox_unreachable"
     if "no display" in lower or "cannot connect to display" in lower:
         return "no_display"
+    if "accessibility permission" in lower or "input monitoring permission" in lower:
+        return "permission"
     return "execution_error"
 
 
@@ -171,7 +174,7 @@ def recovery_hint(error_kind: ErrorKind) -> dict[str, Any]:
             "retryable": False,
             "reason": "provider emitted an action outside the harness vocabulary",
         }
-    if error_kind in {"sandbox_config", "sandbox_unreachable", "no_display"}:
+    if error_kind in {"sandbox_config", "sandbox_unreachable", "no_display", "permission"}:
         return {
             "policy": "escalate",
             "retryable": False,

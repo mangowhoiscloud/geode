@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -9,6 +10,7 @@ from core.server.supervised.services import (
     _MODE_DEFAULTS,
     SessionMode,
     SharedServices,
+    _headless_denied_tools_for_mode,
     build_shared_services,
 )
 
@@ -89,6 +91,129 @@ class TestSharedServicesCreateSession:
     def test_daemon_hitl_0(self, services: SharedServices) -> None:
         executor, _ = services.create_session(SessionMode.DAEMON)
         assert executor._hitl_level == 0
+
+    def test_daemon_computer_use_is_fail_closed_by_default(self) -> None:
+        denied = _headless_denied_tools_for_mode(
+            SessionMode.DAEMON,
+            gateway_allow_computer_use=False,
+        )
+        assert {"computer", "computer_use", "run_bash", "delegate_task"} <= denied
+
+    def test_daemon_computer_use_opt_in_preserves_other_denials(self) -> None:
+        from core.agent.safety import SENSITIVE_TOOLS
+
+        denied = _headless_denied_tools_for_mode(
+            SessionMode.DAEMON,
+            gateway_allow_computer_use=True,
+        )
+        assert "computer" not in denied
+        assert "computer_use" not in denied
+        assert {"run_bash", "delegate_task"} <= denied
+        assert denied >= SENSITIVE_TOOLS
+
+    def test_daemon_non_boolean_opt_in_stays_fail_closed(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Defense in depth for legacy/mutated settings that skipped schema validation."""
+        from core.config import settings
+
+        computer = MagicMock(return_value={"result": "unexpected"})
+        services = SharedServices(
+            hook_system=MagicMock(),
+            tool_handlers={"computer": computer, "computer_use": MagicMock()},
+        )
+        monkeypatch.setattr(settings, "gateway_allow_computer_use", "false")
+        with patch("core.config.reload_settings_from_disk"):
+            executor, _ = services.create_session(SessionMode.DAEMON)
+
+        assert {"computer", "computer_use"} <= executor._denied_tools
+        result = asyncio.run(executor.aexecute("computer", {}))
+        assert result["denied"] is True
+        computer.assert_not_called()
+
+    def test_daemon_quoted_toml_false_is_denied_end_to_end(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from core import config
+
+        monkeypatch.delenv("GEODE_GATEWAY_ALLOW_COMPUTER_USE", raising=False)
+        monkeypatch.setattr(
+            config,
+            "_load_toml_config",
+            lambda **_kw: {"gateway_allow_computer_use": "false"},
+        )
+        services = SharedServices(
+            hook_system=MagicMock(),
+            tool_handlers={"computer": MagicMock(), "computer_use": MagicMock()},
+        )
+
+        executor, _ = services.create_session(SessionMode.DAEMON)
+
+        assert config.settings.gateway_allow_computer_use is False
+        assert {"computer", "computer_use"} <= executor._denied_tools
+
+    def test_daemon_env_true_outranks_toml_false_end_to_end(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from core import config
+
+        monkeypatch.setenv("GEODE_GATEWAY_ALLOW_COMPUTER_USE", "true")
+        monkeypatch.setattr(
+            config,
+            "_load_toml_config",
+            lambda **_kw: {"gateway_allow_computer_use": False},
+        )
+        services = SharedServices(
+            hook_system=MagicMock(),
+            tool_handlers={"computer": MagicMock(), "computer_use": MagicMock()},
+        )
+
+        executor, _ = services.create_session(SessionMode.DAEMON)
+
+        assert config.settings.gateway_allow_computer_use is True
+        assert {"computer", "computer_use"}.isdisjoint(executor._denied_tools)
+
+    def test_scheduler_ignores_gateway_computer_use_opt_in(self) -> None:
+        denied = _headless_denied_tools_for_mode(
+            SessionMode.SCHEDULER,
+            gateway_allow_computer_use=True,
+        )
+        assert {"computer", "computer_use", "run_bash", "delegate_task"} <= denied
+
+    def test_non_headless_modes_ignore_gateway_computer_use_policy(self) -> None:
+        for mode in (SessionMode.REPL, SessionMode.IPC):
+            assert not _headless_denied_tools_for_mode(
+                mode,
+                gateway_allow_computer_use=False,
+            )
+
+    def test_daemon_opt_in_wires_only_computer_handlers(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from core.config import settings
+
+        services = SharedServices(
+            hook_system=MagicMock(),
+            tool_handlers={
+                "computer": MagicMock(),
+                "computer_use": MagicMock(),
+                "run_bash": MagicMock(),
+                "gmail_send": MagicMock(),
+            },
+        )
+        monkeypatch.setattr(settings, "gateway_allow_computer_use", True)
+        with patch("core.config.reload_settings_from_disk"):
+            executor, _ = services.create_session(SessionMode.DAEMON)
+
+        assert {"computer", "computer_use"} <= executor._handlers.keys()
+        assert "run_bash" not in executor._handlers
+        assert "gmail_send" not in executor._handlers
+        assert {"computer", "computer_use"}.isdisjoint(executor._denied_tools)
+        assert {"run_bash", "gmail_send"} <= executor._denied_tools
 
     def test_scheduler_time_budget(self, services: SharedServices) -> None:
         _, loop = services.create_session(SessionMode.SCHEDULER)

@@ -18,7 +18,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from core.agent.safety import HEADLESS_DENIED_TOOLS
+from core.agent.safety import COMPUTER_USE_TOOLS, HEADLESS_DENIED_TOOLS
 
 if TYPE_CHECKING:
     from core.agent.loop import AgenticLoop
@@ -39,6 +39,25 @@ class SessionMode(StrEnum):
     IPC = "ipc"  # Thin CLI via Unix socket — hitl=0, WRITE ok, DANGEROUS blocked
     DAEMON = "daemon"  # Messaging receivers — hitl=0, quiet, time=config
     SCHEDULER = "scheduler"  # Cron/scheduled jobs — hitl=0, quiet, time=300s cap
+
+
+def _headless_denied_tools_for_mode(
+    mode: SessionMode,
+    *,
+    gateway_allow_computer_use: bool,
+) -> frozenset[str]:
+    """Resolve the enforced denylist for one session mode.
+
+    Messaging may expose the same desktop-control handlers as the interactive
+    CLI, but only through a dedicated fail-closed operator opt-in. Scheduled
+    jobs and MCP ``run_agent`` have no equivalent trusted conversation
+    boundary and retain the canonical denylist.
+    """
+    if mode not in (SessionMode.SCHEDULER, SessionMode.DAEMON):
+        return frozenset()
+    if mode == SessionMode.DAEMON and gateway_allow_computer_use is True:
+        return HEADLESS_DENIED_TOOLS - COMPUTER_USE_TOOLS
+    return HEADLESS_DENIED_TOOLS
 
 
 # ---------------------------------------------------------------------------
@@ -153,6 +172,13 @@ class SharedServices:
         if mode == SessionMode.REPL:
             quiet = not verbose
 
+        # Reload before deriving mode policy so a long-running daemon honors an
+        # operator's explicit remote-control opt-in on the next turn, just as
+        # it already honors model and effort changes.
+        from core.config import _resolve_provider, reload_settings_from_disk, settings
+
+        reload_settings_from_disk()
+
         # Conversation context
         if conversation is None:
             from core.agent.conversation import ConversationContext
@@ -161,17 +187,27 @@ class SharedServices:
 
         # Filter DANGEROUS tools for truly headless modes (no user to approve).
         # IPC mode has HITL relay — tools are gated by approval, not denied.
+        # A messaging daemon may expose only the two computer-use surfaces via
+        # its separate opt-in; every other headless denial remains enforced.
         handlers = self.tool_handlers
-        headless_denied: frozenset[str] = frozenset()
-        if mode in (SessionMode.SCHEDULER, SessionMode.DAEMON):
-            headless_denied = HEADLESS_DENIED_TOOLS
-            denied = headless_denied & set(handlers)
-            if denied:
-                log.info("Headless mode %s: denied tools filtered — %s", mode, denied)
+        # Defense in depth: only the literal boolean True opens remote desktop
+        # control.  Settings validation normally guarantees the type, but this
+        # boundary stays fail-closed against legacy/mutated singleton state.
+        gateway_computer_use_enabled = settings.gateway_allow_computer_use is True
+        headless_denied = _headless_denied_tools_for_mode(
+            mode,
+            gateway_allow_computer_use=gateway_computer_use_enabled,
+        )
+        denied = headless_denied & set(handlers)
+        if denied:
+            log.info("Headless mode %s: denied tools filtered — %s", mode, denied)
+        if headless_denied:
             handlers = {k: v for k, v in handlers.items() if k not in headless_denied}
+        if mode == SessionMode.DAEMON and gateway_computer_use_enabled:
+            log.info("Gateway remote computer use explicitly enabled for DAEMON session")
 
-        # Reload the settings singleton from disk (.env + config.toml) FIRST —
-        # before anything below reads it. v0.82.0 + PR-R6 (2026-05-24): `/model`
+        # Settings were reloaded above before mode policy. v0.82.0 + PR-R6
+        # (2026-05-24): `/model`
         # writes disk + the CLI's settings but not the daemon's pydantic
         # singleton, so without this in-place reload a long-lived daemon keeps
         # its boot-time values and `/model gpt-5.5` is ignored at the next
@@ -179,10 +215,6 @@ class SharedServices:
         # manager build (was after) so the manager's caps
         # (max_subagent_depth / max_total_subagents) no longer initialize from
         # a stale pre-reload singleton.
-        from core.config import _resolve_provider, reload_settings_from_disk, settings
-
-        reload_settings_from_disk()
-
         # Build sub-agent manager + executor + loop
         sub_mgr = self._build_sub_agent_manager()
         approval_cb = kwargs.get("approval_callback")

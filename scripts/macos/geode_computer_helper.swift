@@ -69,13 +69,57 @@ func mouseEventType(button: CGMouseButton, down: Bool) -> CGEventType {
     }
 }
 
+func loginSessionEventSource() -> CGEventSource {
+    guard let source = CGEventSource(stateID: .combinedSessionState) else {
+        fail("failed to create the login-session input event source")
+    }
+    return source
+}
+
+func currentCursorPosition() -> CGPoint {
+    guard let event = CGEvent(source: nil) else {
+        fail("failed to read the current cursor position", type: "permission")
+    }
+    return event.location
+}
+
+func warpCursor(to point: CGPoint) {
+    let warpError = CGWarpMouseCursorPosition(point)
+    guard warpError == .success else {
+        fail(
+            "mouse move failed with CoreGraphics error \(warpError.rawValue); " +
+            "grant Accessibility permission to GEODE Computer Use Helper.app",
+            type: "permission"
+        )
+    }
+    usleep(50_000)
+    let observed = currentCursorPosition()
+    guard abs(observed.x - point.x) <= 2,
+          abs(observed.y - point.y) <= 2
+    else {
+        fail(
+            "mouse move postcondition failed: requested screen(\(Int(point.x)),\(Int(point.y))), " +
+            "observed screen(\(Int(observed.x)),\(Int(observed.y))); grant Accessibility " +
+            "permission to GEODE Computer Use Helper.app and re-run geode doctor",
+            type: "permission"
+        )
+    }
+}
+
 func postMouse(_ type: CGEventType, at point: CGPoint, button: CGMouseButton) {
-    let event = CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: point, mouseButton: button)
-    event?.post(tap: .cghidEventTap)
+    guard let event = CGEvent(
+        mouseEventSource: loginSessionEventSource(),
+        mouseType: type,
+        mouseCursorPosition: point,
+        mouseButton: button
+    ) else {
+        fail("failed to create a mouse event", type: "permission")
+    }
+    event.post(tap: .cghidEventTap)
 }
 
 func click(at point: CGPoint, button: CGMouseButton, count: Int) {
-    CGWarpMouseCursorPosition(point)
+    warpCursor(to: point)
     for _ in 0..<max(count, 1) {
         postMouse(mouseEventType(button: button, down: true), at: point, button: button)
         usleep(35_000)
@@ -113,26 +157,55 @@ func flagsFor(_ parts: [String]) -> CGEventFlags {
 }
 
 func postKey(code: CGKeyCode, flags: CGEventFlags = []) {
-    let down = CGEvent(keyboardEventSource: nil, virtualKey: code, keyDown: true)
-    down?.flags = flags
-    down?.post(tap: .cghidEventTap)
-    usleep(20_000)
-    let up = CGEvent(keyboardEventSource: nil, virtualKey: code, keyDown: false)
-    up?.flags = flags
-    up?.post(tap: .cghidEventTap)
+    let source = loginSessionEventSource()
+    guard let down = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: true) else {
+        fail("failed to create a key-down event", type: "permission")
+    }
+    down.flags = flags
+    down.post(tap: .cghidEventTap)
+    usleep(8_000)
+    guard let up = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: false) else {
+        fail("failed to create a key-up event", type: "permission")
+    }
+    up.flags = flags
+    up.post(tap: .cghidEventTap)
 }
 
 func postText(_ text: String) {
-    for unit in text.utf16 {
-        var char = UniChar(unit)
-        let down = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: true)
-        down?.keyboardSetUnicodeString(stringLength: 1, unicodeString: &char)
-        down?.post(tap: .cghidEventTap)
-        usleep(10_000)
-        let up = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: false)
-        up?.keyboardSetUnicodeString(stringLength: 1, unicodeString: &char)
-        up?.post(tap: .cghidEventTap)
-        usleep(10_000)
+    let source = loginSessionEventSource()
+
+    // Apple recommends combinedSessionState for events posted from the current
+    // login session. Emit one Swift Character at a time so every grapheme's
+    // complete UTF-16 buffer reaches keyboardSetUnicodeString together.
+    // https://developer.apple.com/documentation/coregraphics/cgeventsourcestateid
+    // https://developer.apple.com/documentation/coregraphics/cgevent/keyboardsetunicodestring(stringlength:unicodestring:)
+    for character in text {
+        let units = Array(String(character).utf16)
+        units.withUnsafeBufferPointer { buffer in
+            guard let base = buffer.baseAddress else { return }
+            guard let down = CGEvent(
+                keyboardEventSource: source,
+                virtualKey: 0,
+                keyDown: true
+            ) else {
+                fail("failed to create a Unicode key-down event", type: "permission")
+            }
+            down.keyboardSetUnicodeString(stringLength: buffer.count, unicodeString: base)
+            down.flags = []
+            down.post(tap: .cghidEventTap)
+            usleep(8_000)
+            guard let up = CGEvent(
+                keyboardEventSource: source,
+                virtualKey: 0,
+                keyDown: false
+            ) else {
+                fail("failed to create a Unicode key-up event", type: "permission")
+            }
+            up.keyboardSetUnicodeString(stringLength: buffer.count, unicodeString: base)
+            up.flags = []
+            up.post(tap: .cghidEventTap)
+            usleep(8_000)
+        }
     }
 }
 
@@ -168,6 +241,18 @@ if action == "status" {
     ])
 }
 
+let mutatingActions: Set<String> = [
+    "click", "left_click", "right_click", "middle_click", "triple_click",
+    "double_click", "move", "scroll", "key", "keypress", "type", "drag",
+]
+if mutatingActions.contains(action), !AXIsProcessTrusted() {
+    fail(
+        "Accessibility permission is required for desktop input; grant it to " +
+        "GEODE Computer Use Helper.app and re-run geode doctor",
+        type: "permission"
+    )
+}
+
 do {
     switch action {
     case "screenshot":
@@ -186,14 +271,24 @@ do {
     case "move":
         let x = params["x"] as? Int ?? 0
         let y = params["y"] as? Int ?? 0
-        CGWarpMouseCursorPosition(targetToScreen(x, y, targetWidth: targetWidth, targetHeight: targetHeight))
+        let point = targetToScreen(x, y, targetWidth: targetWidth, targetHeight: targetHeight)
+        warpCursor(to: point)
     case "scroll":
         let amount = params["amount"] as? Int ?? 3
         let direction = (params["direction"] as? String ?? "down").lowercased()
         let dy = direction == "up" ? amount : direction == "down" ? -amount : 0
         let dx = direction == "right" ? amount : direction == "left" ? -amount : 0
-        let event = CGEvent(scrollWheelEvent2Source: nil, units: .line, wheelCount: 2, wheel1: Int32(dy), wheel2: Int32(dx), wheel3: 0)
-        event?.post(tap: .cghidEventTap)
+        guard let event = CGEvent(
+            scrollWheelEvent2Source: loginSessionEventSource(),
+            units: .line,
+            wheelCount: 2,
+            wheel1: Int32(dy),
+            wheel2: Int32(dx),
+            wheel3: 0
+        ) else {
+            fail("failed to create a scroll event", type: "permission")
+        }
+        event.post(tap: .cghidEventTap)
     case "key", "keypress":
         let keys = (params["keys"] as? String ?? params["key"] as? String ?? "")
         let parts = keys.split(separator: "+").map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
@@ -207,31 +302,33 @@ do {
         let ms = params["ms"] as? Int ?? 1000
         usleep(useconds_t(max(ms, 0) * 1000))
     case "cursor_position":
-        if let event = CGEvent(source: nil) {
-            let point = event.location
-            let tx = Int(point.x * CGFloat(targetWidth) / CGFloat(max(size.width, 1)))
-            let ty = Int(point.y * CGFloat(targetHeight) / CGFloat(max(size.height, 1)))
-            emit([
-                "result": "success",
-                "action": action,
-                "driver": "macos_helper",
-                "cursor": [tx, ty],
-                "screen_width": size.width,
-                "screen_height": size.height,
-                "screenshot": try screenshotBase64(),
-            ])
-        }
+        let point = currentCursorPosition()
+        let tx = Int(point.x * CGFloat(targetWidth) / CGFloat(max(size.width, 1)))
+        let ty = Int(point.y * CGFloat(targetHeight) / CGFloat(max(size.height, 1)))
+        emit([
+            "result": "success",
+            "action": action,
+            "driver": "macos_helper",
+            "cursor": [tx, ty],
+            "screen_width": size.width,
+            "screen_height": size.height,
+            "screenshot": try screenshotBase64(),
+        ])
     default:
         fail("unknown action: \(action)", type: "validation")
     }
-    emit([
+    var response: [String: Any] = [
         "result": "success",
         "action": action,
         "driver": "macos_helper",
         "screen_width": size.width,
         "screen_height": size.height,
         "screenshot": try screenshotBase64(),
-    ])
+    ]
+    if action == "move" {
+        response["postcondition_verified"] = true
+    }
+    emit(response)
 } catch {
     fail(String(describing: error))
 }

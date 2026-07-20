@@ -187,6 +187,7 @@ cp .geode/config.toml.example .geode/config.toml
 ```toml
 [gateway]
 enabled = true
+allow_computer_use = false  # 원격 desktop control은 기본 차단
 
 [gateway.bindings]
 
@@ -212,6 +213,28 @@ grep "binding" ~/.geode/logs/serve.log
 geode doctor slack
 # 모든 binding_access 행이 bot_member=True이고 채널 링크를 포함해야 합니다.
 ```
+
+### 선택: 바운드 채널에서 computer use
+
+게이트웨이 세션의 원격 desktop control은 기본적으로 거부됩니다. 먼저
+`geode doctor`의 `computer-use desktop`을 정상으로 만든 뒤, 멤버십이 제한된
+비공개 binding에서만 명시적으로 옵트인하세요.
+
+```toml
+[computer_use]
+enabled = true
+env = "host"
+driver = "helper"
+
+[gateway]
+allow_computer_use = true
+```
+
+이 설정은 binding을 통과한 모든 발신자에게 desktop action 요청 권한을
+줍니다. 실행 예외는 `computer`와 `computer_use`만 허용하며 `run_bash`,
+`delegate_task`, personal-workspace 도구, scheduler 세션, MCP `run_agent`는
+계속 차단됩니다. 옵션이 꺼져 있으면 provider-visible schema가 있더라도
+executor가 승인·dispatch 전에 두 desktop 도구를 거부합니다.
 
 `SLACK_APP_TOKEN`이 없으면 GEODE는 `polling fallback`을 로그로 명시하고 이전
 history poll 경로를 마이그레이션 호환용으로 유지합니다. `geode doctor slack`은
