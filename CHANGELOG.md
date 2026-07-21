@@ -85,6 +85,34 @@ functional change.
   canonical main ledger, and compares push events to
   `github.event.before` rather than the already-updated remote ref.
 
+### Added
+
+- **Gateway computer use now requires an explicit remote-control opt-in.**
+  DAEMON executors permit the provider-native `computer` and emulated
+  `computer_use` handlers only when `[gateway] allow_computer_use = true` (or
+  `GEODE_GATEWAY_ALLOW_COMPUTER_USE=true`). The default remains fail-closed at
+  the pre-dispatch executor rail; `run_bash`, `delegate_task`,
+  personal-workspace tools, scheduler sessions, and MCP `run_agent` keep their
+  existing denials.
+
+### Fixed
+
+- **macOS computer use now verifies input delivery.** Python and Swift host
+  drivers fail loud when a cursor move is discarded instead of recording a
+  false successful action. The Swift helper posts through the current login
+  session, preflights Accessibility for every mutating action, rejects event
+  allocation failures, and sends each full Unicode grapheme buffer together,
+  preserving Korean and emoji input. Helper-only installations now satisfy the
+  computer-use activation gate without requiring pyautogui, but directories
+  and non-executable files no longer count as installed helpers.
+
+- **Remote-control configuration and audit mode now share fail-closed schema
+  boundaries.** TOML overlays are validated atomically through `Settings`, the
+  gateway opens only on literal boolean `True`, and provider activation reads
+  one context-local audit signal covering `1`, `true`, `yes`, and
+  `.geode/audit-mode.toml`. Unattended audits may use only the sandbox desktop,
+  never a host helper or pyautogui driver.
+
 ## [1.0.1] - 2026-07-18
 
 > Originally mis-stamped v1.1.0 on 2026-07-17 and retracted before any tag,

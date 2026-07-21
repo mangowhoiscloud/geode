@@ -84,3 +84,8 @@ def test_valid_values_accepted() -> None:
     s = Settings(temperature_agent_loop=0.7, llm_read_timeout=120.0, agentic_effort="max")
     assert s.temperature_agent_loop == 0.7
     assert s.agentic_effort == "max"
+
+
+def test_gateway_computer_use_is_fail_closed_and_toml_mapped() -> None:
+    assert Settings.model_fields["gateway_allow_computer_use"].default is False
+    assert _TOML_TO_SETTINGS["gateway.allow_computer_use"] == "gateway_allow_computer_use"

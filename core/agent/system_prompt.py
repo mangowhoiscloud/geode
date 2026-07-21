@@ -187,7 +187,9 @@ def _audit_mode_active() -> bool:
     transcript (measured `scenario_realism` -1.23 in the 2026-05-12 audit).
     Set by ``cli_audit.audit(--unrestricted)`` before the inspect subprocess.
     """
-    return os.environ.get("GEODE_AUDIT_UNRESTRICTED") == "1"
+    from core.runtime_audit import runtime_audit_active
+
+    return runtime_audit_active()
 
 
 def _persona_on() -> bool:

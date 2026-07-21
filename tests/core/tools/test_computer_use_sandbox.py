@@ -9,7 +9,8 @@ round-trip is live-only (`docker/computer-use-sandbox/`, unverified).
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import patch
+import sys
+from unittest.mock import MagicMock, patch
 
 import pytest
 from core.tools import computer_use as cu
@@ -111,11 +112,35 @@ class TestExecuteBranch:
         assert out["observation"]["driver"] == "macos_helper"
         assert out["observation"]["screen_width"] == 3420
 
+    def test_helper_move_preserves_verified_postcondition(self, _env, monkeypatch) -> None:
+        from core.config import settings
+
+        _env("host")
+        monkeypatch.setattr(settings, "computer_use_driver", "helper", raising=False)
+        h = ComputerUseHarness()
+        with patch(
+            "core.tools.computer_use._helper_request_sync",
+            return_value={
+                "result": "success",
+                "action": "move",
+                "driver": "macos_helper",
+                "screen_width": 1280,
+                "screen_height": 800,
+                "screenshot": "B64",
+                "postcondition_verified": True,
+            },
+        ):
+            out = _run(h.aexecute("move", x=640, y=400))
+
+        assert out["postcondition_verified"] is True
+        assert out["requires_verification"] is True
+
     def test_auto_driver_prefers_installed_helper(self, _env, monkeypatch, tmp_path) -> None:
         from core.config import settings
 
         helper = tmp_path / "geode-computer-helper"
         helper.write_text("#!/bin/sh\n")
+        helper.chmod(0o755)
         _env("host")
         monkeypatch.setattr(settings, "computer_use_driver", "auto", raising=False)
         monkeypatch.setattr(settings, "computer_use_helper_path", str(helper), raising=False)
@@ -214,15 +239,69 @@ class TestSandboxClient:
 
 
 class TestAuditSafetyGuard:
-    def test_audit_with_host_env_disables_computer_use(self, _env, monkeypatch) -> None:
-        """A Petri audit must never drive the REAL desktop: audit + env=host → off."""
+    @pytest.mark.parametrize("audit_value", ["1", "true", "TRUE", "yes", "YeS"])
+    @pytest.mark.parametrize("driver", ["helper", "auto", "python"])
+    def test_every_audit_env_spelling_disables_every_host_driver(
+        self,
+        _env,
+        monkeypatch,
+        tmp_path,
+        audit_value: str,
+        driver: str,
+    ) -> None:
+        """Every canonical audit spelling must disable every REAL desktop driver."""
         from core.config import settings
         from core.llm.providers.anthropic import is_computer_use_enabled
+        from core.runtime_audit import reset_runtime_audit_active, set_runtime_audit_active
 
         monkeypatch.setattr(settings, "computer_use_enabled", True, raising=False)
-        monkeypatch.setenv("GEODE_AUDIT_UNRESTRICTED", "1")
+        monkeypatch.setattr(settings, "computer_use_driver", driver, raising=False)
+        monkeypatch.setenv("GEODE_AUDIT_UNRESTRICTED", audit_value)
         _env("host")
-        assert is_computer_use_enabled() is False
+        monkeypatch.setattr(settings, "computer_use_driver", driver, raising=False)
+        helper = tmp_path / "geode-computer-helper"
+        helper.write_text("#!/bin/sh\n")
+        helper.chmod(0o755)
+        monkeypatch.setattr(settings, "computer_use_helper_path", str(helper), raising=False)
+        token = set_runtime_audit_active(None)
+        try:
+            with patch.dict(sys.modules, {"pyautogui": MagicMock()}):
+                assert is_computer_use_enabled() is False
+        finally:
+            reset_runtime_audit_active(token)
+
+    @pytest.mark.parametrize("driver", ["helper", "auto", "python"])
+    def test_config_activated_audit_disables_every_host_driver(
+        self,
+        _env,
+        monkeypatch,
+        tmp_path,
+        driver: str,
+    ) -> None:
+        from core.config import settings
+        from core.llm.providers.anthropic import is_computer_use_enabled
+        from core.runtime_audit import reset_runtime_audit_active
+        from plugins.petri_audit.audit_mode import publish_runtime_state, resolve
+
+        monkeypatch.delenv("GEODE_AUDIT_UNRESTRICTED", raising=False)
+        config = tmp_path / "audit-mode.toml"
+        config.write_text("[audit_mode]\nenabled = true\n", encoding="utf-8")
+        mode = resolve(config_path=config)
+        assert mode.enabled is True
+
+        _env("host")
+        monkeypatch.setattr(settings, "computer_use_enabled", True, raising=False)
+        monkeypatch.setattr(settings, "computer_use_driver", driver, raising=False)
+        helper = tmp_path / "geode-computer-helper"
+        helper.write_text("#!/bin/sh\n")
+        helper.chmod(0o755)
+        monkeypatch.setattr(settings, "computer_use_helper_path", str(helper), raising=False)
+        token = publish_runtime_state(mode)
+        try:
+            with patch.dict(sys.modules, {"pyautogui": MagicMock()}):
+                assert is_computer_use_enabled() is False
+        finally:
+            reset_runtime_audit_active(token)
 
     def test_sandbox_env_enabled_without_host_pyautogui(self, _env, monkeypatch) -> None:
         """Sandbox mode needs only HTTP on the host (pyautogui lives in the
@@ -235,6 +314,28 @@ class TestAuditSafetyGuard:
         monkeypatch.setenv("GEODE_AUDIT_UNRESTRICTED", "1")
         _env("sandbox")
         assert ap.is_computer_use_enabled() is True  # no pyautogui requirement on the host
+
+    def test_config_activated_audit_still_allows_sandbox(
+        self,
+        _env,
+        monkeypatch,
+        tmp_path,
+    ) -> None:
+        from core.config import settings
+        from core.llm.providers import anthropic as ap
+        from core.runtime_audit import reset_runtime_audit_active
+        from plugins.petri_audit.audit_mode import publish_runtime_state, resolve
+
+        monkeypatch.delenv("GEODE_AUDIT_UNRESTRICTED", raising=False)
+        config = tmp_path / "audit-mode.toml"
+        config.write_text("[audit_mode]\nenabled = true\n", encoding="utf-8")
+        token = publish_runtime_state(resolve(config_path=config))
+        try:
+            monkeypatch.setattr(settings, "computer_use_enabled", True, raising=False)
+            _env("sandbox")
+            assert ap.is_computer_use_enabled() is True
+        finally:
+            reset_runtime_audit_active(token)
 
     def test_host_env_requires_pyautogui(self, _env, monkeypatch) -> None:
         from core.config import settings
@@ -249,3 +350,78 @@ class TestAuditSafetyGuard:
             assert ap.is_computer_use_enabled() is True
         except ImportError:
             assert ap.is_computer_use_enabled() is False
+
+    def test_host_helper_driver_does_not_require_pyautogui(
+        self,
+        _env,
+        monkeypatch,
+        tmp_path,
+    ) -> None:
+        from core.config import settings
+        from core.llm.providers import anthropic as ap
+
+        monkeypatch.setattr(settings, "computer_use_enabled", True, raising=False)
+        monkeypatch.setattr(settings, "computer_use_driver", "helper", raising=False)
+        monkeypatch.delenv("GEODE_AUDIT_UNRESTRICTED", raising=False)
+        _env("host")
+        monkeypatch.setattr(settings, "computer_use_driver", "helper", raising=False)
+        helper = tmp_path / "helper"
+        helper.write_text("#!/bin/sh\n")
+        helper.chmod(0o755)
+        monkeypatch.setattr(settings, "computer_use_helper_path", str(helper), raising=False)
+        assert ap.is_computer_use_enabled() is True
+
+    def test_required_host_helper_missing_fails_closed(self, _env, monkeypatch) -> None:
+        from core.config import settings
+        from core.llm.providers import anthropic as ap
+
+        monkeypatch.setattr(settings, "computer_use_enabled", True, raising=False)
+        monkeypatch.delenv("GEODE_AUDIT_UNRESTRICTED", raising=False)
+        _env("host")
+        monkeypatch.setattr(settings, "computer_use_driver", "helper", raising=False)
+        with patch("core.tools.computer_use.computer_use_helper_path", return_value=None):
+            assert ap.is_computer_use_enabled() is False
+
+
+class TestHelperReadiness:
+    def test_explicit_directory_is_not_a_helper(
+        self,
+        _env,
+        monkeypatch,
+        tmp_path,
+    ) -> None:
+        from core.config import settings
+
+        _env("host")
+        monkeypatch.setattr(settings, "computer_use_helper_path", str(tmp_path), raising=False)
+        assert cu.computer_use_helper_path() is None
+
+    def test_non_executable_file_is_not_a_helper(
+        self,
+        _env,
+        monkeypatch,
+        tmp_path,
+    ) -> None:
+        from core.config import settings
+
+        helper = tmp_path / "geode-computer-helper"
+        helper.write_text("#!/bin/sh\n")
+        helper.chmod(0o644)
+        _env("host")
+        monkeypatch.setattr(settings, "computer_use_helper_path", str(helper), raising=False)
+        assert cu.computer_use_helper_path() is None
+
+    def test_regular_executable_file_is_available(
+        self,
+        _env,
+        monkeypatch,
+        tmp_path,
+    ) -> None:
+        from core.config import settings
+
+        helper = tmp_path / "geode-computer-helper"
+        helper.write_text("#!/bin/sh\n")
+        helper.chmod(0o755)
+        _env("host")
+        monkeypatch.setattr(settings, "computer_use_helper_path", str(helper), raising=False)
+        assert cu.computer_use_helper_path() == helper

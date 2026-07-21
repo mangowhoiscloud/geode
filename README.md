@@ -372,6 +372,11 @@ geode serve                          # starts the always-on Gateway daemon
 
 Put Slack's `SLACK_BOT_TOKEN` (`xoxb-`) and Socket Mode `SLACK_APP_TOKEN` (`xapp-`) in `~/.geode/.env`; put channel bindings, receiver choices, and project-specific Gateway behavior in `.geode/config.toml`. See [docs/setup.md → Gateway](docs/setup.md#gateway) for the full setup. After that, mentioning the bot in a bound channel routes the pushed event into the same agent loop you use locally; later replies in that thread continue the same checkpoint without another mention.
 
+Remote desktop control stays disabled in Gateway sessions unless the operator
+explicitly sets `[gateway] allow_computer_use = true`; see the
+[computer-use guide](docs/setup.md#optional-computer-use-from-a-bound-channel)
+before enabling it for a restricted binding.
+
 ### Optional: Self-improving loop config (`~/.geode/config.toml`)
 
 Tune the autoresearch / seed-generation / petri audit drivers, model picks, dim set, banner thresholds, PAYG fallback policy, by copying the `[self_improving_loop.*]` sections from [`docs/examples/self_improving_loop.config.toml.example`](docs/examples/self_improving_loop.config.toml.example) into `~/.geode/config.toml`. Absent sections fall back to documented defaults. To migrate per-role entries from the legacy `~/.geode/petri.toml`:

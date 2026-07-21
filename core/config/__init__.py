@@ -141,6 +141,7 @@ _TOML_TO_SETTINGS: dict[str, str] = {
     "gateway.enabled": "gateway_enabled",
     "gateway.max_concurrent": "gateway_max_concurrent",
     "gateway.poll_interval_s": "gateway_poll_interval_s",
+    "gateway.allow_computer_use": "gateway_allow_computer_use",
 }
 
 #: Settings fields intentionally NOT in the TOML map — env/CLI-only because
@@ -244,6 +245,7 @@ def _apply_toml_overlay(s: Settings, *, env_set_fields: set[str] | None = None) 
         return
 
     env_set = env_set_fields if env_set_fields is not None else s.model_fields_set
+    overlay: dict[str, Any] = {}
     for field_name, toml_value in toml_values.items():
         # Env layer (real env var OR .env file) outranks TOML — don't overlay.
         if field_name in env_set:
@@ -252,7 +254,22 @@ def _apply_toml_overlay(s: Settings, *, env_set_fields: set[str] | None = None) 
         if field_name in ("anthropic_api_key", "openai_api_key", "zai_api_key"):
             continue
         if hasattr(s, field_name):
-            object.__setattr__(s, field_name, toml_value)
+            overlay[field_name] = toml_value
+
+    if not overlay:
+        return
+
+    # TOML is a first-class Settings source, so it must cross the same schema
+    # boundary as env/.env values.  The previous per-field object.__setattr__
+    # bypassed Pydantic entirely: e.g. ``allow_computer_use = "false"`` stayed
+    # a truthy string and could open the remote-desktop gate.  Validate one
+    # complete candidate before mutating the live singleton so an invalid
+    # overlay is rejected atomically rather than leaving a half-applied config.
+    candidate = s.model_dump()
+    candidate.update(overlay)
+    validated = type(s).model_validate(candidate)
+    for field_name in overlay:
+        object.__setattr__(s, field_name, getattr(validated, field_name))
 
 
 GLOBAL_ENV_PATH = GLOBAL_ENV_FILE

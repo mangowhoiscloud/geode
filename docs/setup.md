@@ -183,6 +183,7 @@ cp .geode/config.toml.example .geode/config.toml
 ```toml
 [gateway]
 enabled = true
+allow_computer_use = false  # remote desktop control stays fail-closed
 
 [gateway.bindings]
 
@@ -208,6 +209,29 @@ grep "binding" ~/.geode/logs/serve.log
 geode doctor slack
 # Every binding_access row must say bot_member=True and include its channel link.
 ```
+
+### Optional: computer use from a bound channel
+
+Remote desktop control is denied in gateway sessions by default. First make
+`geode doctor` report `computer-use desktop` as healthy, then opt in only for a
+private, membership-restricted binding:
+
+```toml
+[computer_use]
+enabled = true
+env = "host"
+driver = "helper"
+
+[gateway]
+allow_computer_use = true
+```
+
+This grants every sender admitted by a binding the ability to request desktop
+actions. The execution exception permits only `computer` and `computer_use`;
+`run_bash`, `delegate_task`, personal-workspace tools, scheduler sessions, and
+MCP `run_agent` remain denied. When the option is off, the executor rejects
+either desktop tool before approval or dispatch even if a provider-visible
+schema is present.
 
 Without `SLACK_APP_TOKEN`, GEODE logs `polling fallback` and keeps the old
 history polling path for migration compatibility. `geode doctor slack` reports
