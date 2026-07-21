@@ -49,6 +49,14 @@ functional change.
 
 ### Architecture
 
+- **Conflict-resolvable main-to-develop roadmap sync.** One executable trust
+  resolver now grants main-ledger import only to canonical direct branches or
+  a same-repository `sync/main-into-develop-*` head whose parents exactly match
+  the current fully qualified remote-tracking tips. This preserves canonical
+  `DONE` evidence through roadmap conflicts, rejects tag-shadowed refs, forks,
+  arbitrary branches, and stale graphs at validation time, and supplies the
+  same verifier for the required immediate pre-merge operator check.
+
 - **Machine-readable architecture exception debt.** Import-linter ignores and
   Ruff complexity witnesses now have an exact-parity TOML ledger with owner,
   age, closure target, and expiry metadata. A fail-closed checker runs in CI
