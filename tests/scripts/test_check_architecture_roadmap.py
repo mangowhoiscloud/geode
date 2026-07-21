@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -935,10 +936,15 @@ def test_failed_language_and_one_character_main_evidence_fail_closed() -> None:
 def test_ci_covers_managed_outputs_and_main_to_develop_sync() -> None:
     assert "- 'AGENTS.md'" in CI_WORKFLOW
     assert "- 'site/src/data/geode/architecture-baseline.json'" in CI_WORKFLOW
-    assert "github.event.pull_request.head.repo.full_name == github.repository" in CI_WORKFLOW
-    assert "github.base_ref == 'develop' && github.head_ref == 'main'" in CI_WORKFLOW
+    assert "ROADMAP_PR_HEAD_REPO" in CI_WORKFLOW
+    assert "ROADMAP_REPOSITORY" in CI_WORKFLOW
+    assert "ROADMAP_PR_HEAD_SHA" in CI_WORKFLOW
+    assert "refs/remotes/origin/${{ github.base_ref || github.ref_name }}" in CI_WORKFLOW
+    assert "scripts/resolve_architecture_roadmap_trust.py" in CI_WORKFLOW
+    assert 'case "$trusted_ref" in' in CI_WORKFLOW
+    assert "refs/remotes/origin/main" in CI_WORKFLOW
+    assert "refs/remotes/origin/develop" in CI_WORKFLOW
     assert "--trusted-main-ref" in CI_WORKFLOW
-    assert "github.base_ref == 'main' && github.head_ref == 'develop'" in CI_WORKFLOW
     assert "--trusted-develop-ref" in CI_WORKFLOW
     assert "--target-branch" in CI_WORKFLOW
     assert "--event-mode" in CI_WORKFLOW
@@ -946,3 +952,21 @@ def test_ci_covers_managed_outputs_and_main_to_develop_sync() -> None:
     assert "ROADMAP_PUSH_BASE_REF" in CI_WORKFLOW
     assert "0000000000000000000000000000000000000000" in CI_WORKFLOW
     assert "- 'CHANGELOG.md'" in CI_WORKFLOW
+
+
+def test_base_loader_expands_short_origin_alias_before_git_resolution(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[str, ...]] = []
+
+    def fake_run_git(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
+        del cwd
+        calls.append(tuple(args))
+        return subprocess.CompletedProcess(args, 0, stdout="roadmap\n", stderr="")
+
+    monkeypatch.setattr(checker, "run_git", fake_run_git)
+
+    assert checker._load_base("origin/main") == "roadmap\n"
+    assert calls == [
+        ("show", "refs/remotes/origin/main:docs/architecture/extensibility-roadmap.md")
+    ]

@@ -155,9 +155,10 @@ the eventual main state.
 moves main's tip up to develop's. Abbreviated PR body (Summary +
 Verification only) is fine here.
 
-**No backmerge step.** Develop already has every commit that main has.
-After release, the two are content-identical (modulo gitflow merge-commit
-asymmetry).
+**No release-generated backmerge step.** Develop already has every release
+commit that main has. After release, the two are content-identical modulo
+gitflow merge-commit asymmetry. Main-maintained tracking transactions are a
+separate source of drift and use the deliberate pre-sync below.
 
 ```bash
 # ── Release flow (rotation) ──
@@ -182,15 +183,34 @@ gh pr create --base main --head develop \
 # → CI ratchet → merge → Pages workflow fires
 ```
 
-### Backmerge safety net
+### Deliberate main-to-develop pre-sync
 
-`.github/workflows/auto-backmerge.yml` watches main pushes. If for any
-reason (rotation skipped, force-push, hotfix landed directly on main) main
-moves ahead of develop, the workflow opens an auto-backmerge PR. Manual
-intervention required only if the auto-PR has conflicts.
+There is no automatic backmerge workflow. Before every `develop -> main`
+promotion, fetch both protected branches and compare their content. If main
+has unique tracking work, merge current main into a branch created from
+current develop and open a CI-gated PR back to develop.
 
-The safety net should fire **rarely** under the rotation pattern — it
-exists so a one-off mistake doesn't silently drift develop behind main.
+When the roadmap conflicts, the sync head must be one merge commit whose first
+parent is exactly `refs/remotes/origin/develop` and whose second parent is
+exactly `refs/remotes/origin/main`. CI grants main-ledger trust only to that
+same-repository graph. Pull-request events do not rerun merely because the
+unrelated main branch advances, so fetch and run the same resolver immediately
+before merge:
+
+```bash
+git fetch origin
+uv run python scripts/resolve_architecture_roadmap_trust.py \
+  --event-mode pull_request \
+  --target-branch develop \
+  --head-ref "<sync-branch>" \
+  --head-repo mangowhoiscloud/geode \
+  --repository mangowhoiscloud/geode \
+  --head-sha "$(git rev-parse HEAD)" \
+  --require-trust main
+```
+
+If the resolver fails, recreate the sync head from the new tips and rerun CI;
+never merge the previously green but now-stale PR.
 
 ### Docs pipeline compatibility
 
@@ -204,8 +224,8 @@ trigger:
 | `release.yml` | `workflow_dispatch` (manual, default `ref: main`) | Manual trigger unchanged. The `version` input matches both `pyproject.toml` and `CHANGELOG.md` `## [X.Y.Z]` header. |
 | `site/scripts/sync-stats.mjs` | invoked by `pages.yml` build | Counts CHANGELOG `## [X.Y.Z]` headers excluding `[Unreleased]`. Rotation's fresh-`[Unreleased]` block is correctly skipped. |
 
-No workflow file needs editing for the rotation. `auto-backmerge.yml` is
-additive.
+No release workflow needs editing for the rotation. Main-maintained tracking
+work still follows the explicit pre-sync above.
 
 ---
 

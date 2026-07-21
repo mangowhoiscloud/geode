@@ -110,16 +110,13 @@ jobs:
         if: needs.changes.outputs.code == 'true'
         env:
           ROADMAP_EVENT_MODE: ${{ github.event_name }}
-          ROADMAP_PR_BASE_REF: origin/${{ github.base_ref || github.ref_name }}
+          ROADMAP_PR_BASE_REF: refs/remotes/origin/${{ github.base_ref || github.ref_name }}
+          ROADMAP_PR_HEAD_REF: ${{ github.head_ref }}
+          ROADMAP_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          ROADMAP_PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          ROADMAP_REPOSITORY: ${{ github.repository }}
           ROADMAP_PUSH_BASE_REF: ${{ github.event.before }}
           ROADMAP_TARGET_BRANCH: ${{ github.base_ref || github.ref_name }}
-          # Only same-repository main -> develop PRs may import DONE evidence
-          # already validated on main. A fork branch merely named "main" must
-          # never receive this trust.
-          ROADMAP_TRUSTED_MAIN_REF: ${{ ((github.event_name == 'pull_request' && github.base_ref == 'develop' && github.head_ref == 'main' && github.event.pull_request.head.repo.full_name == github.repository) || (github.event_name == 'push' && github.ref_name == 'develop')) && 'origin/main' || '' }}
-          # Only the repository's canonical develop branch may bootstrap or
-          # promote the exact develop ledger into main.
-          ROADMAP_TRUSTED_DEVELOP_REF: ${{ ((github.event_name == 'pull_request' && github.base_ref == 'main' && github.head_ref == 'develop' && github.event.pull_request.head.repo.full_name == github.repository) || (github.event_name == 'push' && github.ref_name == 'main')) && 'origin/develop' || '' }}
         run: |
           base_ref="$ROADMAP_PR_BASE_REF"
           if [[ "$ROADMAP_EVENT_MODE" == "push" ]]; then
@@ -130,18 +127,32 @@ jobs:
             fi
             base_ref="$ROADMAP_PUSH_BASE_REF"
           fi
+          trusted_ref="$(uv run python scripts/resolve_architecture_roadmap_trust.py \
+            --event-mode "$ROADMAP_EVENT_MODE" \
+            --target-branch "$ROADMAP_TARGET_BRANCH" \
+            --head-ref "$ROADMAP_PR_HEAD_REF" \
+            --head-repo "$ROADMAP_PR_HEAD_REPO" \
+            --repository "$ROADMAP_REPOSITORY" \
+            --head-sha "$ROADMAP_PR_HEAD_SHA")"
           args=(
             --check
             --base-ref "$base_ref"
             --target-branch "$ROADMAP_TARGET_BRANCH"
             --event-mode "$ROADMAP_EVENT_MODE"
           )
-          if [[ -n "$ROADMAP_TRUSTED_MAIN_REF" ]]; then
-            args+=(--trusted-main-ref "$ROADMAP_TRUSTED_MAIN_REF")
-          fi
-          if [[ -n "$ROADMAP_TRUSTED_DEVELOP_REF" ]]; then
-            args+=(--trusted-develop-ref "$ROADMAP_TRUSTED_DEVELOP_REF")
-          fi
+          case "$trusted_ref" in
+            refs/remotes/origin/main)
+              args+=(--trusted-main-ref "$trusted_ref")
+              ;;
+            refs/remotes/origin/develop)
+              args+=(--trusted-develop-ref "$trusted_ref")
+              ;;
+            "") ;;
+            *)
+              echo "::error::Roadmap trust resolver returned an unknown ref: $trusted_ref"
+              exit 1
+              ;;
+          esac
           uv run python scripts/check_architecture_roadmap.py "${args[@]}"
       - name: llms.txt version drift ratchet
         if: needs.changes.outputs.code == 'true'

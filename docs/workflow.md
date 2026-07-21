@@ -69,6 +69,14 @@ feature/<name> -> develop -> main
   fetched `origin/develop` tip.
 - A roadmap tracking-only `DONE` branch starts from `origin/main`, targets
   `main`, and is followed by a CI-gated `main -> develop` sync.
+- When that sync needs conflict resolution, its head must be the exact
+  two-parent merge of the current `refs/remotes/origin/develop` and
+  `refs/remotes/origin/main` tips, in that order. Immediately before merge,
+  fetch both refs and rerun `scripts/resolve_architecture_roadmap_trust.py`
+  with `--require-trust main`; if either tip moved, rebuild the sync head and
+  rerun CI. GitHub does not bind this operator check to the merge or emit a PR
+  event when unrelated `main` moves, so the maintainer must run it immediately
+  before merging and treat any elapsed window as unverified.
 - Feature PRs merge into `develop` with squash merge.
 - Before `develop -> main`, sync `main -> develop` if main has drift.
 - `develop -> main` is a pass-through merge after gates are satisfied.
