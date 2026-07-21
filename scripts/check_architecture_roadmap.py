@@ -41,6 +41,12 @@ PR_LINK_PATTERN = re.compile(
     r"\)"
 )
 FULL_SHA_PATTERN = re.compile(r"(?<![0-9a-f])[0-9a-f]{40}(?![0-9a-f])", re.IGNORECASE)
+REMOTE_MAIN_REFS = frozenset({"origin/main", "refs/remotes/origin/main"})
+REMOTE_DEVELOP_REFS = frozenset({"origin/develop", "refs/remotes/origin/develop"})
+REMOTE_REF_ALIASES = {
+    "origin/main": "refs/remotes/origin/main",
+    "origin/develop": "refs/remotes/origin/develop",
+}
 RELEASE_PATTERN = re.compile(r"\bv\d+\.\d+\.\d+\b")
 UTC_TIMESTAMP_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 VERIFICATION_RESULT_PATTERN = re.compile(
@@ -49,7 +55,8 @@ VERIFICATION_RESULT_PATTERN = re.compile(
 )
 NEGATIVE_VERIFICATION_PATTERN = re.compile(
     r"\b(?:failed|failure|failing|error|errors|red|false|"
-    r"(?:not|never|no|didn['’]t|doesn['’]t|don['’]t|wasn['’]t|"
+    r"(?:not|never|no|didn['’]t|doesn['’]t|don['’]t|was"
+    r"n['’]t|"
     r"isn['’]t|cannot|can['’]t)\s+(?:\w+\s+){0,3}"
     r"(?:passed|pass|green|succeeded|verified|audited))\b|"
     r"(?:실패|미통과|오류|검증되지\s*않)",
@@ -1260,6 +1267,7 @@ def validate_main_promotion(
 
 
 def _load_base(base_ref: str) -> str | None:
+    base_ref = REMOTE_REF_ALIASES.get(base_ref, base_ref)
     try:
         process = run_git(
             ["show", f"{base_ref}:{ROADMAP_RELATIVE}"],
@@ -1298,10 +1306,13 @@ def check(
     if target_branch not in {"develop", "main"}:
         errors.append(f"unknown target branch {target_branch!r}")
     if event_mode == "pull_request":
-        expected_base_ref = f"origin/{target_branch}"
-        if base_ref != expected_base_ref:
+        expected_base_refs = {
+            f"origin/{target_branch}",
+            f"refs/remotes/origin/{target_branch}",
+        }
+        if base_ref not in expected_base_refs:
             errors.append(
-                f"target {target_branch} requires --base-ref {expected_base_ref}, found {base_ref}"
+                f"target {target_branch} requires its origin remote-tracking ref, found {base_ref}"
             )
     elif event_mode == "push":
         if FULL_SHA_PATTERN.fullmatch(base_ref) is None or set(base_ref) == {"0"}:
@@ -1423,10 +1434,14 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
-        if args.trusted_main_ref and args.trusted_main_ref != "origin/main":
-            raise RoadmapParseError("--trusted-main-ref must be exactly origin/main")
-        if args.trusted_develop_ref and args.trusted_develop_ref != "origin/develop":
-            raise RoadmapParseError("--trusted-develop-ref must be exactly origin/develop")
+        if args.trusted_main_ref and args.trusted_main_ref not in REMOTE_MAIN_REFS:
+            raise RoadmapParseError(
+                "--trusted-main-ref must be the origin/main remote-tracking ref"
+            )
+        if args.trusted_develop_ref and args.trusted_develop_ref not in REMOTE_DEVELOP_REFS:
+            raise RoadmapParseError(
+                "--trusted-develop-ref must be the origin/develop remote-tracking ref"
+            )
         if args.trusted_main_ref and args.trusted_develop_ref:
             raise RoadmapParseError(
                 "--trusted-main-ref and --trusted-develop-ref are mutually exclusive"

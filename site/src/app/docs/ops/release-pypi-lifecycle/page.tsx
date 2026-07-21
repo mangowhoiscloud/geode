@@ -38,15 +38,19 @@ export default function Page() {
               평소에는 feature가 develop으로 머지됩니다. 릴리스는{" "}
               <code>release/*</code> 브랜치가 버전 스탬프와 CHANGELOG 정리를
               싣고 develop에 먼저 머지된 뒤, develop이 main으로 그대로
-              통과합니다. develop이 main보다 뒤처지지 않게 하는 순서입니다.
-              어떤 릴리스가 이 로테이션을 건너뛰어 develop이 main보다 뒤처지면{" "}
-              <code>.github/workflows/auto-backmerge.yml</code>이 안전망으로
-              발화합니다.
+              통과합니다. 승격 직전에는 두 원격 브랜치를 fetch하고 내용을
+              비교합니다. main에 추적 전용 변경이 있고 충돌이 없으면 현재 main
+              head에서 develop로 직접 CI-gated PR을 엽니다. 충돌 해결이 필요할
+              때만 현재 develop에서 <code>sync/main-into-develop-*</code> 브랜치를
+              만들고 현재 main을 명시적 merge commit으로 병합합니다. 이 sync
+              head는 두 원격 tip을 정확한 부모로 가져야 하며 merge 직전에 trust
+              resolver를 다시 통과해야 합니다. 자동 backmerge workflow는 없습니다.
             </p>
             <pre>{`# 1. CHANGELOG [Unreleased] → [vX.Y.Z] - YYYY-MM-DD
 # 2. 다섯 위치 동시 bump (CHANGELOG / pyproject / CLAUDE.md / README.md / README.ko.md)
-# 3. release PR: release/* → develop → main (develop→main PR은 Summary + Verification 축약형 허용)
-# 4. 패키지 배포는 main 머지로 자동 발화하지 않음. 아래 워크플로우를 수동 dispatch`}</pre>
+# 3. main drift: clean이면 main → develop PR, 충돌 시에만 sync/main-into-develop-*
+# 4. release PR: release/* → develop → main (develop→main PR은 Summary + Verification 축약형 허용)
+# 5. 패키지 배포는 main 머지로 자동 발화하지 않음. 아래 워크플로우를 수동 dispatch`}</pre>
 
             <h2>release.yml은 수동 전용입니다</h2>
             <p>
@@ -112,7 +116,8 @@ geode serve &                            # 데몬 재기동`}</pre>
             <ul>
               <li><code>.github/workflows/release.yml</code>. 수동 검증 + 배포 파이프라인.</li>
               <li><code>.github/workflows/install-smoke.yml</code>. macOS와 Ubuntu의 설치 회귀.</li>
-              <li><code>.github/workflows/auto-backmerge.yml</code>. develop 뒤처짐 안전망.</li>
+              <li><code>scripts/resolve_architecture_roadmap_trust.py</code>. 충돌 해결형 main → develop sync의 정확한 부모·출처 검증.</li>
+              <li><code>docs/workflow.md</code>. pre-sync와 GitFlow 운영 정본.</li>
               <li><code>scripts/verify_public_distribution.py</code>. GitHub·PyPI 공개 배포 일치 검증.</li>
               <li><code>packaging/homebrew</code>. Homebrew/core 후보 template과 운영 지침.</li>
               <li><code>CHANGELOG.md</code>. Keep a Changelog + SemVer 정본.</li>
@@ -144,16 +149,22 @@ geode serve &                            # 데몬 재기동`}</pre>
               Day to day, features merge into develop. For a release, a{" "}
               <code>release/*</code> branch carries the version stamp and
               CHANGELOG cleanup, merges into develop first, and develop then
-              passes straight through to main. That order keeps develop from
-              lagging main. If a release ever skips the rotation,{" "}
-              <code>.github/workflows/auto-backmerge.yml</code> fires as the
-              safety net.
+              passes straight through to main. Immediately before promotion,
+              fetch and compare both remote branches. If main contains unique
+              tracking changes and the sync is conflict-free, open a CI-gated PR
+              directly from the current main head to develop. Only when conflict
+              resolution is required, create <code>sync/main-into-develop-*</code>
+              from current develop and merge current main in an explicit merge
+              commit. That sync head must have the two current remote tips as its
+              exact parents and rerun the trust resolver immediately before merge.
+              There is no automatic backmerge workflow.
             </p>
             <pre>{`# 1. CHANGELOG [Unreleased] → [vX.Y.Z] - YYYY-MM-DD
 # 2. bump all five locations (CHANGELOG / pyproject / CLAUDE.md / README.md / README.ko.md)
-# 3. release PR: release/* → develop → main (develop→main PRs may use the
+# 3. main drift: main → develop PR if clean; sync/main-into-develop-* only on conflict
+# 4. release PR: release/* → develop → main (develop→main PRs may use the
 #    abbreviated Summary + Verification body)
-# 4. package publishing does NOT fire on the main merge. dispatch the
+# 5. package publishing does NOT fire on the main merge. dispatch the
 #    workflow below manually`}</pre>
 
             <h2>release.yml is manual-only</h2>
@@ -225,7 +236,8 @@ geode serve &                            # restart the daemon`}</pre>
             <ul>
               <li><code>.github/workflows/release.yml</code>. The manual validate + publish pipeline.</li>
               <li><code>.github/workflows/install-smoke.yml</code>. Install regression on macOS and Ubuntu.</li>
-              <li><code>.github/workflows/auto-backmerge.yml</code>. The develop-lag safety net.</li>
+              <li><code>scripts/resolve_architecture_roadmap_trust.py</code>. Exact-parent and source validation for conflict-resolved main → develop syncs.</li>
+              <li><code>docs/workflow.md</code>. Canonical pre-sync and GitFlow procedure.</li>
               <li><code>scripts/verify_public_distribution.py</code>. Public GitHub/PyPI parity verification.</li>
               <li><code>packaging/homebrew</code>. Homebrew/core candidate template and operating guide.</li>
               <li><code>CHANGELOG.md</code>. Keep a Changelog + SemVer source of truth.</li>

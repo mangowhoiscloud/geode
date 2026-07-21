@@ -96,7 +96,10 @@ Docker images/browser service stack.
 Raw run logs are preserved in
 [`geode-eval-artifacts/mcpmark/results-geode-agentworld/`](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/main/mcpmark/results-geode-agentworld)
 (`geode-gpt55-xhigh-20260704-mcpmark-verified-*` — per-task `meta.json`
-verifier results and `messages.json` full agent transcripts).
+verifier results, `messages.json` final answers or empty placeholders, and
+`execution.log` ordered MCP action/result records where produced). The public
+MCPMark snapshot does not retain full model dialogue; see its
+[trajectory contract](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/TRAJECTORIES.md).
 These rows are directly comparable only to the same MCPMark commit, service
 set, GEODE adapter, model route, and timeout settings.
 
@@ -371,6 +374,11 @@ geode serve                          # starts the always-on Gateway daemon
 ```
 
 Put Slack's `SLACK_BOT_TOKEN` (`xoxb-`) and Socket Mode `SLACK_APP_TOKEN` (`xapp-`) in `~/.geode/.env`; put channel bindings, receiver choices, and project-specific Gateway behavior in `.geode/config.toml`. See [docs/setup.md → Gateway](docs/setup.md#gateway) for the full setup. After that, mentioning the bot in a bound channel routes the pushed event into the same agent loop you use locally; later replies in that thread continue the same checkpoint without another mention.
+
+Remote desktop control stays disabled in Gateway sessions unless the operator
+explicitly sets `[gateway] allow_computer_use = true`; see the
+[computer-use guide](docs/setup.md#optional-computer-use-from-a-bound-channel)
+before enabling it for a restricted binding.
 
 ### Optional: Self-improving loop config (`~/.geode/config.toml`)
 

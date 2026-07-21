@@ -225,7 +225,7 @@ normal review and CI; implementations start only after the claim merges.
 
 | Closure package | GAP IDs | Owner/session | Implementation branch | Claim evidence | Claimed at (UTC) |
 |---|---|---|---|---|---|
-| R0.3 | GOV-004 | `session=codex-2026-07-18 task=architecture-exception-debt` | `feature/architecture-exception-debt` | R0.3 readiness reconciled by [#2776](https://github.com/mangowhoiscloud/geode/pull/2776); claim PR [#2784](https://github.com/mangowhoiscloud/geode/pull/2784) | 2026-07-18T06:38:30Z |
+| R1.1 | BND-001 | `session=codex-2026-07-18 task=architecture-package-classification` | `feature/architecture-package-classification` | R1.1 readiness reconciled by [#2776](https://github.com/mangowhoiscloud/geode/pull/2776); claim PR [#2790](https://github.com/mangowhoiscloud/geode/pull/2790); current `develop` re-audit confirms delivered GOV-002 and the measurable §7 classification/migration-map contract | 2026-07-18T09:15:41Z |
 
 ## 1. Program objective
 
@@ -282,21 +282,21 @@ machine-readable artifact is
 
 | Measure | Current tree |
 |---|---:|
-| Production Python files (`core/` + `plugins/`) | 537 |
-| Test Python files | 668 |
-| `core/` Python LOC | 131,672 |
-| `plugins/` Python LOC | 40,248 |
-| Test Python LOC | 172,771 |
+| Production Python files (`core/` + `plugins/`) | 538 |
+| Test Python files | 671 |
+| `core/` Python LOC | 131,815 |
+| `plugins/` Python LOC | 40,262 |
+| Test Python LOC | 173,717 |
 | Tool definitions / executable registrations / valid schemas | 78 / 81 / 78 (definition-only 0; execution-only 3; invalid schema 0) |
 | `HookEvent` members | 56 |
 | Built-in LLM adapters | 8 |
-| Module-level `ContextVar` declarations under `core/` | 26 |
+| Module-level `ContextVar` declarations under `core/` | 27 |
 | `core` → `plugins` import sites | 31 across 14 files |
 | Import-linter contracts / ignored edges | 4 / 24 |
-| `AgenticLoop` file LOC / methods / constructor args | 2,714 / 67 / 27 |
+| `AgenticLoop` file LOC / methods / constructor args | 2,713 / 67 / 27 |
 | `SubAgentManager` file LOC / methods / constructor args | 1,277 / 15 / 15 |
 | `RuntimeCoreConfig` fields | 17 |
-| Global Ruff ratchets | complexity 62; args 23; branches 68; returns 18; statements 273 |
+| Global Ruff ratchets | complexity 54; args 23; branches 56; returns 18; statements 223 |
 <!-- generated:architecture-baseline:end -->
 
 `uv run lint-imports` passes all four configured contracts. That is useful
@@ -510,8 +510,8 @@ and closure evidence are appended in §10.
 | GOV-001 | `ABSENT` | Status is fragmented across dated plans and architecture docs | This file is linked from contributor entry points and governs status | R0.1 | — | `DONE` |
 | GOV-002 | `PARTIAL` | Hand-audited counts disagree with `AGENTS.md` (78 tools/56 hooks vs 67/65 prose) | One generated architecture baseline and a drift check own the counts | R0.2 | GOV-001 | `DONE` |
 | GOV-003 | `MISFIT` | Old plans describe removed paths and implemented work as current gaps | Overlapping docs carry a historical-status banner and point here | R0.1 | GOV-001 | `DONE` |
-| GOV-004 | `PARTIAL` | 24 import ignores and very high global Ruff ceilings lack uniform owner/expiry metadata | Every exception is removed or recorded per symbol/edge with owner, rationale, expiry, and ratchet | R0.3 | GOV-002 | `IN_PROGRESS` |
-| BND-001 | `MISFIT` | `plugins/` contains first-party features that `core` imports | Every package is classified kernel, product shell, bundled feature, or external extension; names match semantics | R1.1 | GOV-002 | `READY` |
+| GOV-004 | `PARTIAL` | 24 import ignores and very high global Ruff ceilings lack uniform owner/expiry metadata | Every exception is removed or recorded per symbol/edge with owner, rationale, expiry, and ratchet | R0.3 | GOV-002 | `IN_DEVELOP` |
+| BND-001 | `MISFIT` | `plugins/` contains first-party features that `core` imports | Every package is classified kernel, product shell, bundled feature, or external extension; names match semantics | R1.1 | GOV-002 | `IN_PROGRESS` |
 | BND-002 | `MISFIT` | 31 `core` → `plugins` import sites across 14 files | AST gate reports zero reverse dependency; composition owns feature registration | R1.2 | BND-001 | `OPEN` |
 | BND-003 | `ABSENT` | One-off core-only probe fails at `core.cli`; CI does not test an installed kernel without features | Isolated wheel/package test boots and runs kernel tests without bundled/third-party modules | R1.3 | BND-001, BND-002, BND-006 | `OPEN` |
 | BND-004 | `PARTIAL` | Skills/hooks/MCP have different discovery rules; Python feature collision/trust behavior is not unified | Each supported external surface declares non-executing discovery, precedence, collision, enablement, trust-before-load, reload, isolation, and teardown | R6.3 | BND-001, LLM-002 | `OPEN` |
@@ -1390,6 +1390,9 @@ uv run ruff check core/ tests/ plugins/ scripts/
 uv run ruff format --check core/ tests/ plugins/ scripts/
 uv run mypy core/ plugins/
 uv run lint-imports
+uv run python scripts/check_architecture_exceptions.py \
+  --check \
+  --base-ref <target-base>
 uv run pytest tests/ -m "not live"
 uv run geode version
 git diff --check
@@ -1464,6 +1467,7 @@ pre-release delivery evidence survives after the claim row is gone.
 |---|---|---|---|---|
 | R0.1 | GOV-001, GOV-003 | [#2767](https://github.com/mangowhoiscloud/geode/pull/2767) | `ab1a80e91f9947defc15fa97f5b4ce66126c0c13` | CI Gate, lint/format, security, tests, type check, and macOS/Ubuntu install smoke passed; committed-diff re-review returned no findings |
 | R0.2 | GOV-002, VER-003 | [#2775](https://github.com/mangowhoiscloud/geode/pull/2775) | `7e3d2b2595306f8fbad44b961d53a2fc1d4f9180` | `uv run python scripts/architecture_baseline.py --check`; `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (CI Gate, full non-live tests, type check, lint/format, security, Pages build, and macOS/Ubuntu install smoke all green; committed-diff review found no findings) |
+| R0.3 | GOV-004 | [#2788](https://github.com/mangowhoiscloud/geode/pull/2788) | `15a9d674be790303f2034c89c7631d5c93978aee` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (CI Gate, 10,178 standard tests, type check, lint/format, security, Pages build, macOS/Ubuntu install smoke, and committed-diff review all passed) |
 
 ### 10.2 Main closure evidence
 
@@ -1584,15 +1588,15 @@ Commit-pinned primary source references used by the 2026-07-17 audit:
 
 ## 14. Immediate next unit
 
-After this claim merges, allocate `feature/architecture-exception-debt` from
-the updated `origin/develop` tip and verify that its branch and owner match the
-canonical R0.3 active claim before changing production or verification code.
-R1.1 (`BND-001`) remains ready but unclaimed while R0.3 is active. R1.4
-(`BND-005`) remains `OPEN` until R1.1 supplies the
-classification and product-shell migration map. R1.5 (`BND-006`) then waits
-for both the neutral seams in R1.4 and the reverse-dependency removal in R1.2;
-the registered BND-007 retirement package now satisfies its planning
-prerequisite without authorizing removal.
+After this claim merges, allocate `feature/architecture-package-classification`
+from the updated `origin/develop` tip and verify that its branch and owner match
+the canonical R1.1 active claim. R1.1 delivers only the package-classification
+ADR and product-shell migration map; it does not move implementation modules.
+R1.4 (`BND-005`) and R1.2 (`BND-002`) remain `OPEN` until R1.1 supplies that
+classification contract. R1.5 (`BND-006`) then waits for both the neutral seams
+in R1.4 and the reverse-dependency removal in R1.2; the registered BND-007
+retirement package now satisfies its planning prerequisite without authorizing
+removal.
 R1.6 (`REL-001`) remains `OPEN` until R0.3, R1.3, and R1.5 are delivered; it
 then owns the v1.0.1 release checkpoint and does not authorize facade removal.
 R8.0 (`REL-002`) remains `OPEN` until REL-001 reaches `DONE`; its 30-day clock

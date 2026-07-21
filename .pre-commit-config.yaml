@@ -89,3 +89,10 @@ repos:
         language: system
         pass_filenames: false
         types: [python]
+
+      - id: architecture-exception-debt
+        name: architecture exception debt
+        entry: uv run --frozen python scripts/check_architecture_exceptions.py --check
+        language: system
+        pass_filenames: false
+        files: ^(core/|plugins/|scripts/|pyproject\.toml|docs/architecture/(exception-debt\.(toml|md)|extensibility-roadmap\.md)|\.pre-commit-config\.yaml)$

@@ -395,8 +395,8 @@ def _env_vars_for_provider(provider: str) -> list[str]:
     return out
 
 
-# Quiet noqa for symbols only used by the slash dispatcher wiring.
-_ = (resolve_credential_source,)  # type: ignore[unused-ignore]
+# Keep this compatibility symbol importable for existing slash-dispatch wiring.
+_ = (resolve_credential_source,)
 
 
 def _smoke() -> dict[str, Any]:  # pragma: no cover — manual REPL aid

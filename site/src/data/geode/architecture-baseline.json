@@ -14,13 +14,13 @@
   },
   "complexity_thresholds": {
     "max_args": 23,
-    "max_branches": 68,
-    "max_complexity": 62,
+    "max_branches": 56,
+    "max_complexity": 54,
     "max_returns": 18,
-    "max_statements": 273
+    "max_statements": 223
   },
   "context_vars": {
-    "count": 26,
+    "count": 27,
     "items": [
       {
         "context_name": "geode_active_cognitive_state",
@@ -163,6 +163,13 @@
         "symbol": "_offload_store_ctx"
       },
       {
+        "context_name": "geode_runtime_audit_active",
+        "has_default": true,
+        "line": 19,
+        "path": "core/runtime_audit.py",
+        "symbol": "_runtime_audit_active"
+      },
+      {
         "context_name": "self_improving_loop_run_transcript",
         "has_default": true,
         "line": 58,
@@ -209,7 +216,7 @@
   "coordinators": {
     "AgenticLoop": {
       "constructor_arg_count": 27,
-      "file_loc": 2714,
+      "file_loc": 2713,
       "method_count": 67,
       "path": "core/agent/loop/agent_loop.py"
     },
@@ -498,16 +505,16 @@
   },
   "packages": {
     "core": {
-      "python_files": 428,
-      "python_loc": 131672
+      "python_files": 429,
+      "python_loc": 131815
     },
     "plugins": {
       "python_files": 109,
-      "python_loc": 40248
+      "python_loc": 40262
     },
     "tests": {
-      "python_files": 668,
-      "python_loc": 172771
+      "python_files": 671,
+      "python_loc": 173717
     }
   },
   "schema_version": 1,

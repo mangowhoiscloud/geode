@@ -28,8 +28,8 @@ owns only the package version and sync date.
 The generated architecture inventory lives at
 `site/src/data/geode/architecture-baseline.json`. Refresh it with
 `uv run python scripts/architecture_baseline.py --update`; CI uses `--check`.
-The current snapshot records 537 production Python files,
-668 test Python files,
+The current snapshot records 538 production Python files,
+671 test Python files,
 78 tool definitions, and
 56 `HookEvent` members.
 <!-- generated:architecture-baseline:end -->
@@ -207,6 +207,13 @@ Claude Code compatible scaffold.
   `origin/main`, targets `main`, and is followed by a CI-gated
   `main -> develop` sync PR. Other main-maintained tracking documents use their
   own dedicated `origin/main` worktree under the repository's tracking rules.
+- **Clean syncs use the canonical head**: when `main -> develop` is
+  conflict-free, open the PR directly from the current `main` head. Do not put
+  a fast-forwarded copy of `main` behind the trusted sync-branch prefix.
+- **Trusted sync branch naming**: a conflict-resolved roadmap sync branch must
+  start with `sync/main-into-develop-`. Its head must be the exact two-parent
+  merge of the current `origin/develop` and `origin/main` tips, in that order,
+  and the trust resolver must pass again immediately before merge.
 - **No branch switching inside a worktree**: never use `git checkout` to reuse
   a checkout for another branch. Allocate or enter the correct worktree instead.
 - **Fetch before allocating branches**: run `git fetch origin` before creating

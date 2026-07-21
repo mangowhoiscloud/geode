@@ -1,0 +1,324 @@
+schema_version = 1
+
+# One record owns one unique import edge. `contracts` expands the record into
+# the exact import-linter contract occurrences configured in pyproject.toml.
+
+[[import_edge]]
+id = "IMP-001"
+edge = "core.agent.approval -> core.cli"
+contracts = [
+  "Agent stays pure (no CLI/server)",
+  "Server may host agent but never CLI",
+]
+owner = "core.agent"
+reason = "Approval policy still reaches interactive CLI rendering through a process-layer facade."
+created = "2026-04-26"
+target = "DI-003"
+expires_when = "An injected approval port removes the core.cli edge and both contracts pass without it."
+
+[[import_edge]]
+id = "IMP-002"
+edge = "core.agent.loop.agent_loop -> core.cli.commands"
+contracts = [
+  "Agent stays pure (no CLI/server)",
+  "Server may host agent but never CLI",
+]
+owner = "core.agent"
+reason = "AgenticLoop still writes conversation command context through the CLI command module."
+created = "2026-05-17"
+target = "DI-003"
+expires_when = "Session context ownership moves behind an injected runtime port and both ignores disappear."
+
+[[import_edge]]
+id = "IMP-003"
+edge = "core.agent.worker -> core.cli.tool_handlers"
+contracts = [
+  "Agent stays pure (no CLI/server)",
+  "Server may host agent but never CLI",
+]
+owner = "core.agent"
+reason = "Worker execution still obtains product tool handlers from the CLI composition surface."
+created = "2026-04-26"
+target = "DI-003"
+expires_when = "Outer composition injects the handler catalog and both contract occurrences are removed."
+
+[[import_edge]]
+id = "IMP-004"
+edge = "core.cli.doctor -> core.messaging.slack_transport"
+contracts = ["CLI must not import server/messaging (process boundary)"]
+owner = "core.cli"
+reason = "The doctor command probes Slack auth through the same transport used by the daemon."
+created = "2026-07-15"
+target = "DI-003"
+expires_when = "A diagnostics capability is injected into the CLI and the direct messaging import is removed."
+
+[[import_edge]]
+id = "IMP-005"
+edge = "core.cli.scheduler_drain -> core.server.supervised.services"
+contracts = ["CLI must not import server/messaging (process boundary)"]
+owner = "core.cli"
+reason = "Scheduler drain still invokes daemon-side service construction from the CLI process layer."
+created = "2026-04-26"
+target = "DI-003"
+expires_when = "The command uses a daemon protocol or injected scheduler service and the ignore is deleted."
+
+[[import_edge]]
+id = "IMP-006"
+edge = "core.cli.typer_serve -> core.messaging.binding"
+contracts = ["CLI must not import server/messaging (process boundary)"]
+owner = "core.cli"
+reason = "The serve launcher still performs messaging binding inside the CLI package."
+created = "2026-06-11"
+target = "DI-003"
+expires_when = "A product composition entry point owns messaging binding outside core.cli."
+
+[[import_edge]]
+id = "IMP-007"
+edge = "core.cli.typer_serve -> core.server.ipc_server.poller"
+contracts = ["CLI must not import server/messaging (process boundary)"]
+owner = "core.cli"
+reason = "The serve launcher imports the daemon poller while bootstrap remains in the CLI package."
+created = "2026-05-08"
+target = "DI-003"
+expires_when = "Daemon bootstrap moves to outer composition and the CLI no longer imports the poller."
+
+[[import_edge]]
+id = "IMP-008"
+edge = "core.cli.typer_serve -> core.server.supervised.services"
+contracts = ["CLI must not import server/messaging (process boundary)"]
+owner = "core.cli"
+reason = "The serve launcher constructs supervised daemon services from the CLI process package."
+created = "2026-05-08"
+target = "DI-003"
+expires_when = "Outer composition constructs supervised services and this direct edge is removed."
+
+[[import_edge]]
+id = "IMP-009"
+edge = "core.cli.typer_serve -> core.server.supervised.webhook_handler"
+contracts = ["CLI must not import server/messaging (process boundary)"]
+owner = "core.cli"
+reason = "The serve launcher selects the supervised webhook handler inside the CLI package."
+created = "2026-05-08"
+target = "DI-003"
+expires_when = "Outer composition selects webhook handling and the CLI import is removed."
+
+[[import_edge]]
+id = "IMP-010"
+edge = "core.mcp.slack_adapter -> core.messaging.slack_transport"
+contracts = ["CLI must not import server/messaging (process boundary)"]
+owner = "core.mcp"
+reason = "The Slack MCP adapter constructs a concrete messaging transport on an indirect CLI path."
+created = "2026-07-15"
+target = "DI-003"
+expires_when = "Composition injects a Slack capability port and import-linter no longer needs this edge."
+
+[[import_edge]]
+id = "IMP-011"
+edge = "core.messaging.binding -> core.server.supervised.poller_base"
+contracts = ["Messaging integration is capability-pure (no process imports)"]
+owner = "core.messaging"
+reason = "Messaging binding depends on a poller abstraction that is still owned by the server process."
+created = "2026-06-11"
+target = "DI-003"
+expires_when = "The poller contract moves to a neutral capability module and the dependency is inverted."
+
+[[import_edge]]
+id = "IMP-012"
+edge = "core.self_improving.measure -> core.cli.quota_banner"
+contracts = [
+  "Agent stays pure (no CLI/server)",
+  "Server may host agent but never CLI",
+]
+owner = "core.self_improving"
+reason = "The self-improving runner lazily imports CLI quota presentation as a degraded optional path."
+created = "2026-06-11"
+target = "BND-006"
+expires_when = "The bundled product composition injects quota reporting and both ignores are removed."
+
+[[import_edge]]
+id = "IMP-013"
+edge = "core.server.ipc_server.poller -> core.cli"
+contracts = ["Server may host agent but never CLI"]
+owner = "core.server"
+reason = "The IPC poller still reaches CLI-owned session helpers through the package facade."
+created = "2026-04-26"
+target = "DI-003"
+expires_when = "Daemon composition receives the required session capability without importing core.cli."
+
+[[import_edge]]
+id = "IMP-014"
+edge = "core.server.ipc_server.poller -> core.cli.session_state"
+contracts = ["Server may host agent but never CLI"]
+owner = "core.server"
+reason = "The IPC poller directly reads session state that remains owned by the CLI package."
+created = "2026-04-26"
+target = "DI-003"
+expires_when = "Session state moves behind a runtime port and the server-to-CLI edge is removed."
+
+[[import_edge]]
+id = "IMP-015"
+edge = "core.server.supervised.services -> core.cli.bootstrap"
+contracts = ["Server may host agent but never CLI"]
+owner = "core.server"
+reason = "Supervised services still call CLI bootstrap to assemble daemon runtime dependencies."
+created = "2026-04-26"
+target = "DI-003"
+expires_when = "A non-CLI composition root builds the runtime and this bootstrap edge is deleted."
+
+[[import_edge]]
+id = "IMP-016"
+edge = "core.server.supervised.services -> core.cli.commands"
+contracts = ["Server may host agent but never CLI"]
+owner = "core.server"
+reason = "Supervised services still depend on command-layer helpers owned by the CLI package."
+created = "2026-04-26"
+target = "DI-003"
+expires_when = "The required command behavior is exposed through an injected runtime capability."
+
+[[import_edge]]
+id = "IMP-017"
+edge = "core.server.supervised.services -> core.cli.session_state"
+contracts = ["Server may host agent but never CLI"]
+owner = "core.server"
+reason = "Supervised services still obtain mutable session state from the CLI package."
+created = "2026-04-26"
+target = "DI-003"
+expires_when = "Runtime session ownership moves behind a server-safe port and the edge is removed."
+
+[[import_edge]]
+id = "IMP-018"
+edge = "core.server.supervised.services -> core.cli.tool_handlers"
+contracts = ["Server may host agent but never CLI"]
+owner = "core.server"
+reason = "Supervised services still assemble executable tool handlers from the CLI package."
+created = "2026-04-26"
+target = "DI-003"
+expires_when = "Outer composition injects an immutable handler catalog and this edge disappears."
+
+[[import_edge]]
+id = "IMP-019"
+edge = "core.wiring.adapters -> core.messaging.binding"
+contracts = ["CLI must not import server/messaging (process boundary)"]
+owner = "core.wiring"
+reason = "Legal outer composition is currently traversed as an indirect edge of the CLI contract."
+created = "2026-06-11"
+target = "BND-001"
+expires_when = "Package classification scopes the contract around core.cli without masking composition."
+
+[[import_edge]]
+id = "IMP-020"
+edge = "core.wiring.adapters -> core.messaging.slack_transport"
+contracts = ["CLI must not import server/messaging (process boundary)"]
+owner = "core.wiring"
+reason = "Outer composition constructs Slack transport but appears on an indirect forbidden path."
+created = "2026-07-15"
+target = "BND-001"
+expires_when = "The package map distinguishes product composition and the indirect ignore is unnecessary."
+
+# `ceiling` records identify every symbol exactly at a configured global limit.
+# `override` records identify every symbol above a limit and require a
+# rule-specific noqa at that symbol. The checker rejects all other shapes.
+
+[[ruff_debt]]
+id = "RUFF-001"
+rule = "C901"
+mode = "ceiling"
+path = "core/agent/loop/agent_loop.py"
+symbol = "AgenticLoop.arun"
+observed = 54
+owner = "core.agent"
+reason = "The visible agent loop still coordinates model, tool, observation, and termination phases."
+created = "2026-05-06"
+target = "LOOP-003"
+expires_when = "Phase extraction makes Ruff report complexity below 54 and the ceiling is lowered."
+
+[[ruff_debt]]
+id = "RUFF-002"
+rule = "PLR0912"
+mode = "ceiling"
+path = "core/agent/loop/agent_loop.py"
+symbol = "AgenticLoop.arun"
+observed = 56
+owner = "core.agent"
+reason = "The visible loop still owns the branch-heavy retry, guard, and tool-result control flow."
+created = "2026-05-06"
+target = "LOOP-003"
+expires_when = "Phase extraction makes Ruff report fewer than 56 branches and the ceiling is lowered."
+
+[[ruff_debt]]
+id = "RUFF-003"
+rule = "PLR0911"
+mode = "ceiling"
+path = "core/agent/loop/agent_loop.py"
+symbol = "AgenticLoop.arun"
+observed = 18
+owner = "core.agent"
+reason = "Terminal outcomes still return directly from the visible orchestration loop."
+created = "2026-05-06"
+target = "LOOP-003"
+expires_when = "Termination phase extraction reports fewer than 18 returns and the ceiling is lowered."
+
+[[ruff_debt]]
+id = "RUFF-004"
+rule = "PLR0913"
+mode = "override"
+path = "core/agent/loop/agent_loop.py"
+symbol = "AgenticLoop.__init__"
+observed = 27
+owner = "core.agent"
+reason = "The legacy AgenticLoop constructor still receives multiple lifecycle service groups."
+created = "2026-05-17"
+target = "DI-002"
+expires_when = "Cohesive runtime groups reduce the constructor to at most the global argument ceiling."
+
+[[ruff_debt]]
+id = "RUFF-005"
+rule = "PLR0913"
+mode = "ceiling"
+path = "core/self_improving/ledger.py"
+symbol = "_append_baseline_registry_row"
+observed = 23
+owner = "core.self_improving"
+reason = "The baseline writer still accepts provenance and evaluation fields as separate arguments."
+created = "2026-05-30"
+target = "STORE-003"
+expires_when = "A typed dataset record reduces the writer below 23 arguments and the ceiling is lowered."
+
+[[ruff_debt]]
+id = "RUFF-006"
+rule = "PLR0915"
+mode = "ceiling"
+path = "core/self_improving/train.py"
+symbol = "main"
+observed = 223
+owner = "core.self_improving"
+reason = "The self-improving launcher still combines parsing, composition, execution, and reporting."
+created = "2026-05-06"
+target = "BND-006"
+expires_when = "Product-boundary extraction reduces main below 223 statements and the ceiling is lowered."
+
+[[ruff_debt]]
+id = "RUFF-007"
+rule = "PLR0911"
+mode = "ceiling"
+path = "core/cli/commands/login.py"
+symbol = "cmd_login"
+observed = 18
+owner = "core.cli"
+reason = "The login command still dispatches provider-specific credential and account workflows inline."
+created = "2026-05-06"
+target = "DI-003"
+expires_when = "Injected authentication handlers reduce cmd_login below 18 returns and the ceiling is lowered."
+
+[[ruff_debt]]
+id = "RUFF-008"
+rule = "PLR0911"
+mode = "ceiling"
+path = "core/cli/commands/schedule.py"
+symbol = "cmd_schedule"
+observed = 18
+owner = "core.cli"
+reason = "The schedule command still combines parsing, validation, dispatch, and rendering branches."
+created = "2026-05-06"
+target = "DI-003"
+expires_when = "Injected scheduling services reduce cmd_schedule below 18 returns and the ceiling is lowered."

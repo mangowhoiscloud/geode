@@ -105,14 +105,20 @@ WRITE_TOOLS: frozenset[str] = frozenset(
     }
 )
 
+# Both provider-native and emulated desktop-control surfaces. Keep the pair in
+# one home so a narrowly-scoped opt-in cannot accidentally expose only one
+# execution route.
+COMPUTER_USE_TOOLS: frozenset[str] = frozenset({"computer", "computer_use"})
+
 # Tools denied on headless (no-human-to-approve) sessions: scheduler, daemon,
-# and the MCP run_agent fork.
+# and the MCP run_agent fork. A messaging DAEMON may subtract only
+# ``COMPUTER_USE_TOOLS`` behind the explicit gateway opt-in; scheduler,
+# run_agent, and personal-workspace consent boundaries remain fail-closed.
 HEADLESS_DENIED_TOOLS: frozenset[str] = frozenset(
     {
         "run_bash",
         "delegate_task",
-        "computer",
-        "computer_use",
+        *COMPUTER_USE_TOOLS,
         *SENSITIVE_TOOLS,
     }
 )

@@ -559,6 +559,38 @@ class TestExecuteDispatch:
         assert "error" in result
         assert "no display" in result["error"]
 
+    def test_move_fails_loud_when_os_discards_event(self):
+        h = ComputerUseHarness(target_width=1280, target_height=800)
+        h._screen_width = 1280
+        h._screen_height = 800
+        pag = MagicMock()
+        pag.position.return_value = MagicMock(x=10, y=20)
+
+        with patch.object(h, "_ensure_pyautogui", return_value=pag):
+            result = asyncio.run(h.aexecute("move", x=640, y=400))
+
+        pag.moveTo.assert_called_once_with(640, 400)
+        assert result["error_kind"] == "permission"
+        assert result["recovery"]["policy"] == "escalate"
+        assert result["recovery"]["retryable"] is False
+        assert "Accessibility permission" in result["error"]
+
+    def test_move_marks_verified_only_after_cursor_reaches_target(self):
+        h = ComputerUseHarness(target_width=1280, target_height=800)
+        h._screen_width = 1280
+        h._screen_height = 800
+        pag = MagicMock()
+        pag.position.return_value = MagicMock(x=640, y=400)
+
+        with (
+            patch.object(h, "_ensure_pyautogui", return_value=pag),
+            patch.object(h, "screenshot", return_value="base64data"),
+        ):
+            result = asyncio.run(h.aexecute("move", x=640, y=400))
+
+        assert result["result"] == "success"
+        assert result["postcondition_verified"] is True
+
 
 class TestGetToolParams:
     def test_anthropic_params(self):

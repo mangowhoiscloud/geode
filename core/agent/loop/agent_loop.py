@@ -2194,11 +2194,10 @@ class AgenticLoop:
             # order; the first terminal outcome wins. Guard bodies live in
             # the "guard chain" section next to ``_terminal_result``.
             _terminal = self._guard_cost_budget(messages=messages, round_idx=round_idx)
-            if _terminal is not None:
-                return await self._afinalize_and_return(_terminal, user_input, round_idx + 1)
-            _terminal = await self._guard_overthinking(
-                response, messages=messages, round_idx=round_idx
-            )
+            if _terminal is None:
+                _terminal = await self._guard_overthinking(
+                    response, messages=messages, round_idx=round_idx
+                )
             if _terminal is not None:
                 return await self._afinalize_and_return(_terminal, user_input, round_idx + 1)
             _terminal = self._guard_model_refusal(response, messages=messages, round_idx=round_idx)

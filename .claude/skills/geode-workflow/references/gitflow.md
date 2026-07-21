@@ -39,6 +39,13 @@ That PR targets `main`, changes only the canonical roadmap, records
 package-atomic `DONE` plus per-GAP closure evidence, and carries no
 implementation code. After it merges, open and merge a CI-gated
 `main -> develop` sync PR before further develop-targeted ledger work.
+If it is conflict-free, use the current `main` head directly as the PR head.
+If it needs conflict resolution, create it from current
+`origin/develop` with a branch name starting `sync/main-into-develop-`, merge
+current `origin/main` in an explicit merge commit as the exact second parent,
+and rerun
+`scripts/resolve_architecture_roadmap_trust.py --require-trust main`
+immediately before merge.
 
 ## Merge Rules
 

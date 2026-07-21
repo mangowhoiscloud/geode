@@ -2,6 +2,7 @@
 
 import textwrap
 
+import pytest
 from core.config import (
     DEFAULT_CONFIG_TOML,
     Settings,
@@ -9,6 +10,7 @@ from core.config import (
     _flatten_toml,
     _load_toml_config,
 )
+from pydantic import ValidationError
 
 
 class TestFlattenToml:
@@ -122,6 +124,21 @@ class TestLoadTomlConfig:
         )
         assert result == {}
 
+    def test_gateway_computer_use_opt_in_is_loaded(self, tmp_path):
+        toml_file = tmp_path / "config.toml"
+        toml_file.write_text(
+            textwrap.dedent("""\
+                [gateway]
+                allow_computer_use = true
+            """),
+            encoding="utf-8",
+        )
+        result = _load_toml_config(
+            global_path=toml_file,
+            project_path=tmp_path / "nonexistent.toml",
+        )
+        assert result["gateway_allow_computer_use"] is True
+
 
 class TestApplyTomlOverlay:
     def test_overlay_sets_unset_field(self, tmp_path, monkeypatch):
@@ -186,6 +203,45 @@ class TestApplyTomlOverlay:
         original_model = s.model
         _apply_toml_overlay(s)
         assert s.model == original_model
+
+    def test_quoted_false_is_schema_coerced_before_overlay(self, monkeypatch):
+        """A quoted TOML false must never remain a truthy gate value."""
+        monkeypatch.setattr(
+            "core.config._load_toml_config",
+            lambda **_kw: {"gateway_allow_computer_use": "false"},
+        )
+        s = Settings()
+
+        _apply_toml_overlay(s, env_set_fields=set())
+
+        assert s.gateway_allow_computer_use is False
+
+    def test_invalid_toml_value_is_rejected_atomically(self, monkeypatch):
+        monkeypatch.setattr(
+            "core.config._load_toml_config",
+            lambda **_kw: {
+                "gateway_allow_computer_use": "not-a-boolean",
+                "sandbox_max_read_tokens": 1,
+            },
+        )
+        s = Settings()
+        original_limit = s.sandbox_max_read_tokens
+
+        with pytest.raises(ValidationError, match="gateway_allow_computer_use"):
+            _apply_toml_overlay(s, env_set_fields=set())
+
+        assert s.sandbox_max_read_tokens == original_limit
+
+    def test_env_boolean_still_outranks_toml(self, monkeypatch):
+        monkeypatch.setattr(
+            "core.config._load_toml_config",
+            lambda **_kw: {"gateway_allow_computer_use": False},
+        )
+        s = Settings(gateway_allow_computer_use=True)
+
+        _apply_toml_overlay(s)
+
+        assert s.gateway_allow_computer_use is True
 
 
 class TestDefaultConfigToml:

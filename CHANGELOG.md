@@ -49,6 +49,24 @@ functional change.
 
 ### Architecture
 
+- **Conflict-resolvable main-to-develop roadmap sync.** One executable trust
+  resolver now grants main-ledger import only to canonical direct branches or
+  a same-repository `sync/main-into-develop-*` head whose parents exactly match
+  the current fully qualified remote-tracking tips. This preserves canonical
+  `DONE` evidence through roadmap conflicts, rejects tag-shadowed refs, forks,
+  arbitrary branches, and stale graphs at validation time, and supplies the
+  same verifier for the required immediate pre-merge operator check.
+
+- **Machine-readable architecture exception debt.** Import-linter ignores and
+  Ruff complexity witnesses now have an exact-parity TOML ledger with owner,
+  age, closure target, and expiry metadata. A fail-closed checker runs in CI
+  and pre-commit, rejects unregistered or stale edges and symbol overrides,
+  and prevents Ruff ceilings from rising against the target branch. The
+  enforced maxima are tightened to current measurements, and `PLR0911` is no
+  longer globally disabled. Deterministic public-doc mirrors now inherit the
+  spell-check policy of their source files instead of re-linting copied
+  historical text.
+
 - **Roadmap checker fixture isolation.** Hostile state-machine tests now derive
   a fixed claimed-R0.2 fixture from the current roadmap while the SOT validity
   test continues to read the live document. Legal post-merge status, claim,
@@ -74,6 +92,34 @@ functional change.
   bootstrap path), validates `main` → `develop` resynchronization against the
   canonical main ledger, and compares push events to
   `github.event.before` rather than the already-updated remote ref.
+
+### Added
+
+- **Gateway computer use now requires an explicit remote-control opt-in.**
+  DAEMON executors permit the provider-native `computer` and emulated
+  `computer_use` handlers only when `[gateway] allow_computer_use = true` (or
+  `GEODE_GATEWAY_ALLOW_COMPUTER_USE=true`). The default remains fail-closed at
+  the pre-dispatch executor rail; `run_bash`, `delegate_task`,
+  personal-workspace tools, scheduler sessions, and MCP `run_agent` keep their
+  existing denials.
+
+### Fixed
+
+- **macOS computer use now verifies input delivery.** Python and Swift host
+  drivers fail loud when a cursor move is discarded instead of recording a
+  false successful action. The Swift helper posts through the current login
+  session, preflights Accessibility for every mutating action, rejects event
+  allocation failures, and sends each full Unicode grapheme buffer together,
+  preserving Korean and emoji input. Helper-only installations now satisfy the
+  computer-use activation gate without requiring pyautogui, but directories
+  and non-executable files no longer count as installed helpers.
+
+- **Remote-control configuration and audit mode now share fail-closed schema
+  boundaries.** TOML overlays are validated atomically through `Settings`, the
+  gateway opens only on literal boolean `True`, and provider activation reads
+  one context-local audit signal covering `1`, `true`, `yes`, and
+  `.geode/audit-mode.toml`. Unattended audits may use only the sandbox desktop,
+  never a host helper or pyautogui driver.
 
 ## [1.0.1] - 2026-07-18
 
