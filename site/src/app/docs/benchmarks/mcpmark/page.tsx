@@ -108,8 +108,12 @@ export default function Page() {
             <h2>Run 로그</h2>
             <p>
               태스크별 <code>meta.json</code>(route, 소요시간, 토큰, verifier 결과)과{" "}
-              <code>messages.json</code>(전체 agent transcript)은{" "}
-              <EvalArtifactsRepoLink /> 레포에 무수정 보존됩니다.
+              <code>messages.json</code>(최종 답변 문자열 또는 빈 목록 placeholder),
+              생성된 경우 <code>execution.log</code>(순서가 보존된 MCP
+              action/result)는 민감한 로컬 경로를 마스킹한 공개용 copy로{" "}
+              <EvalArtifactsRepoLink /> 레포에 보존됩니다.
+              이 공개 snapshot에는 전체 model dialogue와 hidden turn이 없으므로{" "}
+              <code>messages.json</code>만으로 대화를 복원할 수 없습니다.
             </p>
             <ul>
               <li>
@@ -164,8 +168,13 @@ export default function Page() {
             <h2>Run Logs</h2>
             <p>
               Per-task <code>meta.json</code> (route, timing, tokens, verifier
-              result) and <code>messages.json</code> (full agent transcript) are
-              preserved unmodified in the <EvalArtifactsRepoLink /> repository.
+              result), <code>messages.json</code> (a final-answer string or empty-list
+              placeholder), and, when produced, <code>execution.log</code> (ordered
+              MCP action/result records) are preserved as public copies with
+              sensitive local paths redacted in the <EvalArtifactsRepoLink />{" "}
+              repository. The public snapshot omits full
+              model dialogue and hidden turns, so <code>messages.json</code> cannot
+              reconstruct the conversation.
             </p>
             <ul>
               <li>

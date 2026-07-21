@@ -187,12 +187,16 @@ gh pr create --base main --head develop \
 
 There is no automatic backmerge workflow. Before every `develop -> main`
 promotion, fetch both protected branches and compare their content. If main
-has unique tracking work, merge current main into a branch created from
-current develop and open a CI-gated PR back to develop.
+has unique tracking work and the sync is conflict-free, open a CI-gated PR
+directly from the current `main` head to `develop`. Do not put that clean sync
+behind the trusted sync-branch prefix: a merge from current main may simply
+fast-forward and therefore has no two-parent head.
 
-When the roadmap conflicts, the sync head must be one merge commit whose first
-parent is exactly `refs/remotes/origin/develop` and whose second parent is
-exactly `refs/remotes/origin/main`. CI grants main-ledger trust only to that
+When conflict resolution is required, create
+`sync/main-into-develop-<task>` from current develop and make an explicit merge
+commit from current main. The sync head must have first parent exactly
+`refs/remotes/origin/develop` and second parent exactly
+`refs/remotes/origin/main`. CI grants main-ledger trust only to that
 same-repository graph. Pull-request events do not rerun merely because the
 unrelated main branch advances, so fetch and run the same resolver immediately
 before merge:
@@ -202,7 +206,7 @@ git fetch origin
 uv run python scripts/resolve_architecture_roadmap_trust.py \
   --event-mode pull_request \
   --target-branch develop \
-  --head-ref "<sync-branch>" \
+  --head-ref "sync/main-into-develop-<task>" \
   --head-repo mangowhoiscloud/geode \
   --repository mangowhoiscloud/geode \
   --head-sha "$(git rev-parse HEAD)" \

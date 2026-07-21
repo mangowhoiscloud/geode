@@ -96,7 +96,10 @@ Docker images/browser service stack.
 Raw run logs are preserved in
 [`geode-eval-artifacts/mcpmark/results-geode-agentworld/`](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/main/mcpmark/results-geode-agentworld)
 (`geode-gpt55-xhigh-20260704-mcpmark-verified-*` — per-task `meta.json`
-verifier results and `messages.json` full agent transcripts).
+verifier results, `messages.json` final answers or empty placeholders, and
+`execution.log` ordered MCP action/result records where produced). The public
+MCPMark snapshot does not retain full model dialogue; see its
+[trajectory contract](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/TRAJECTORIES.md).
 These rows are directly comparable only to the same MCPMark commit, service
 set, GEODE adapter, model route, and timeout settings.
 

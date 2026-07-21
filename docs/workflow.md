@@ -69,8 +69,11 @@ feature/<name> -> develop -> main
   fetched `origin/develop` tip.
 - A roadmap tracking-only `DONE` branch starts from `origin/main`, targets
   `main`, and is followed by a CI-gated `main -> develop` sync.
-- When that sync needs conflict resolution, its head must be the exact
-  two-parent merge of the current `refs/remotes/origin/develop` and
+- A conflict-free sync uses the current `main` head directly as the PR head;
+  do not wrap it in a prefixed branch that would merely fast-forward.
+- When that sync needs conflict resolution, its branch name must start with
+  `sync/main-into-develop-` and its head must be the exact two-parent merge of
+  the current `refs/remotes/origin/develop` and
   `refs/remotes/origin/main` tips, in that order. Immediately before merge,
   fetch both refs and rerun `scripts/resolve_architecture_roadmap_trust.py`
   with `--require-trust main`; if either tip moved, rebuild the sync head and
