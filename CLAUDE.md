@@ -259,7 +259,18 @@ See `geode-changelog` skill.
 
 See `geode-gitflow` skill. **Flow**: `feature → develop` **squash-merged** (one commit per change — collapses Codex-round fix commits; no per-feature merge commit on main), then `develop → main` pass-through `--merge`. HEREDOC PR. CI 5/5 required.
 
-> **Before EVERY `develop → main` merge, sync `main → develop` first** (`gh pr create --base develop --head main` → merge) so develop ⊇ main and never merges while lagging. The only recurring main-only drift is the kanban (`docs/progress.md`, committed on main post-merge); the pre-sync pulls the prior cycle's kanban into develop each time, so it self-heals and never accumulates. *This replaces the deleted `auto-backmerge.yml` workflow, which fired on every push to main and piled up unmerged main→develop PRs (10 open at once, 2026-06-14) because the feature/main divergence is never a fast-forward. Manual pre-sync is the single, deliberate back-merge per cycle.*
+> **Before EVERY `develop → main` merge, fetch and compare `origin/main` with
+> `origin/develop`.** If main has unique tracking work and a direct sync is
+> conflict-free, open a CI-gated PR from the current `main` head to `develop`.
+> If conflict resolution is required, create `sync/main-into-develop-<task>`
+> from the current `origin/develop` and make an explicit merge commit from the
+> current `origin/main`. That sync head must be the exact two-parent merge of
+> those remote tips (develop first, main second), and
+> `scripts/resolve_architecture_roadmap_trust.py --require-trust main` must pass
+> immediately before merge. This deliberate pre-sync covers both the kanban and
+> main-maintained architecture closure records. It replaces the deleted
+> `auto-backmerge.yml`, whose per-push PRs accumulated against divergent
+> histories.
 
 > **Architecture closure exception**: only a tracking-only roadmap PR that
 > records package-atomic `DONE` after release starts from `origin/main` and

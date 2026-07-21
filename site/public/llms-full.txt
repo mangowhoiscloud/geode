@@ -3548,7 +3548,7 @@ OPENAI_API_KEY=dummy \
 
 ## Run 로그
 
-태스크별 `meta.json`(route, 소요시간, 토큰, verifier 결과)과 `messages.json`(전체 agent transcript)은 [geode-eval-artifacts](https://github.com/mangowhoiscloud/geode-eval-artifacts) 레포에 무수정 보존됩니다.
+태스크별 `meta.json`(route, 소요시간, 토큰, verifier 결과)과 `messages.json`(최종 답변 문자열 또는 빈 목록 placeholder), 생성된 경우 `execution.log`(순서가 보존된 MCP action/result)는 민감한 로컬 경로를 마스킹한 공개용 copy로 [geode-eval-artifacts](https://github.com/mangowhoiscloud/geode-eval-artifacts) 레포에 보존됩니다. 이 공개 snapshot에는 전체 model dialogue와 hidden turn이 없으므로 `messages.json`만으로 대화를 복원할 수 없습니다.
 
 -   [`geode-eval-artifacts/mcpmark/results-geode-agentworld`](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/main/mcpmark/results-geode-agentworld): Verified 트랙 run 디렉터리(`geode-gpt55-xhigh-20260704-mcpmark-verified-*`).
 -   [`geode-eval-artifacts/mcpmark/logs`](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/main/mcpmark/logs), [`geode-eval-artifacts/mcpmark/logs-cycle`](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/main/mcpmark/logs-cycle): 파이프라인 stdout 로그(state duplication, verification, cleanup 단계).
@@ -5680,13 +5680,14 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/ops/release-pypi-lifecycl
 
 ## 릴리스 흐름
 
-평소에는 feature가 develop으로 머지됩니다. 릴리스는 `release/*` 브랜치가 버전 스탬프와 CHANGELOG 정리를 싣고 develop에 먼저 머지된 뒤, develop이 main으로 그대로 통과합니다. develop이 main보다 뒤처지지 않게 하는 순서입니다. 어떤 릴리스가 이 로테이션을 건너뛰어 develop이 main보다 뒤처지면 `.github/workflows/auto-backmerge.yml`이 안전망으로 발화합니다.
+평소에는 feature가 develop으로 머지됩니다. 릴리스는 `release/*` 브랜치가 버전 스탬프와 CHANGELOG 정리를 싣고 develop에 먼저 머지된 뒤, develop이 main으로 그대로 통과합니다. 승격 직전에는 두 원격 브랜치를 fetch하고 내용을 비교합니다. main에 추적 전용 변경이 있고 충돌이 없으면 현재 main head에서 develop로 직접 CI-gated PR을 엽니다. 충돌 해결이 필요할 때만 현재 develop에서 `sync/main-into-develop-*` 브랜치를 만들고 현재 main을 명시적 merge commit으로 병합합니다. 이 sync head는 두 원격 tip을 정확한 부모로 가져야 하며 merge 직전에 trust resolver를 다시 통과해야 합니다. 자동 backmerge workflow는 없습니다.
 
 ```
 # 1. CHANGELOG [Unreleased] → [vX.Y.Z] - YYYY-MM-DD
 # 2. 다섯 위치 동시 bump (CHANGELOG / pyproject / CLAUDE.md / README.md / README.ko.md)
-# 3. release PR: release/* → develop → main (develop→main PR은 Summary + Verification 축약형 허용)
-# 4. 패키지 배포는 main 머지로 자동 발화하지 않음. 아래 워크플로우를 수동 dispatch
+# 3. main drift: clean이면 main → develop PR, 충돌 시에만 sync/main-into-develop-*
+# 4. release PR: release/* → develop → main (develop→main PR은 Summary + Verification 축약형 허용)
+# 5. 패키지 배포는 main 머지로 자동 발화하지 않음. 아래 워크플로우를 수동 dispatch
 ```
 
 ## release.yml은 수동 전용입니다
@@ -5723,7 +5724,8 @@ geode serve &                            # 데몬 재기동
 
 -   `.github/workflows/release.yml`. 수동 검증 + 배포 파이프라인.
 -   `.github/workflows/install-smoke.yml`. macOS와 Ubuntu의 설치 회귀.
--   `.github/workflows/auto-backmerge.yml`. develop 뒤처짐 안전망.
+-   `scripts/resolve_architecture_roadmap_trust.py`. 충돌 해결형 main → develop sync의 정확한 부모·출처 검증.
+-   `docs/workflow.md`. pre-sync와 GitFlow 운영 정본.
 -   `scripts/verify_public_distribution.py`. GitHub·PyPI 공개 배포 일치 검증.
 -   `packaging/homebrew`. Homebrew/core 후보 template과 운영 지침.
 -   `CHANGELOG.md`. Keep a Changelog + SemVer 정본.
