@@ -268,6 +268,7 @@ def _stringify_relative(path: Path) -> str:
 # Global config & credentials
 GLOBAL_CONFIG_TOML = GEODE_HOME / "config.toml"
 GLOBAL_ENV_FILE = GEODE_HOME / ".env"
+GLOBAL_DRY_RUN_MARKER = GEODE_HOME / ".dry-run-opt-in"
 
 # Petri audit runtime logs — single SoT (PR-CLEANUP-D2, 2026-06-10).
 # Writer: plugins/petri_audit/cli_audit.py maintains the latest.eval

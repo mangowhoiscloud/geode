@@ -204,13 +204,13 @@ export default function Page() {
                 <tr><th>필드</th><th>기본값</th><th>용도</th></tr>
               </thead>
               <tbody>
-                <tr><td><code>gateway_enabled</code></td><td>false</td><td>메신저 게이트웨이. <code>geode serve</code>의 전제 조건입니다.</td></tr>
+                <tr><td><code>gateway_enabled</code></td><td>false</td><td>메신저와 webhook 등 외부 채널 활성화. CLI IPC는 이 값과 무관합니다.</td></tr>
                 <tr><td><code>gateway_poll_interval_s</code></td><td>3.0</td><td>게이트웨이 폴 간격.</td></tr>
                 <tr><td><code>gateway_max_concurrent</code></td><td>4</td><td>동시 처리 상한.</td></tr>
                 <tr><td><code>gateway_allow_computer_use</code></td><td>false</td><td>바운드 채널의 원격 desktop control 명시적 옵트인.</td></tr>
                 <tr><td><code>notification_channel</code></td><td><code>&quot;slack&quot;</code></td><td>알림 채널 종류.</td></tr>
                 <tr><td><code>notification_recipient</code></td><td><code>&quot;#geode-alerts&quot;</code></td><td>알림 수신처.</td></tr>
-                <tr><td><code>webhook_enabled</code></td><td>false</td><td>웹훅 HTTP 엔드포인트.</td></tr>
+                <tr><td><code>webhook_enabled</code></td><td>false</td><td>gateway 활성 시 웹훅 HTTP 엔드포인트.</td></tr>
                 <tr><td><code>webhook_port</code></td><td>8765</td><td>웹훅 포트.</td></tr>
               </tbody>
             </table>
@@ -568,13 +568,13 @@ export default function Page() {
                 <tr><th>Field</th><th>Default</th><th>Purpose</th></tr>
               </thead>
               <tbody>
-                <tr><td><code>gateway_enabled</code></td><td>false</td><td>Messaging gateway. Precondition for <code>geode serve</code>.</td></tr>
+                <tr><td><code>gateway_enabled</code></td><td>false</td><td>Enables external channels such as messaging and webhooks. CLI IPC is independent.</td></tr>
                 <tr><td><code>gateway_poll_interval_s</code></td><td>3.0</td><td>Gateway poll interval.</td></tr>
                 <tr><td><code>gateway_max_concurrent</code></td><td>4</td><td>Concurrency cap.</td></tr>
                 <tr><td><code>gateway_allow_computer_use</code></td><td>false</td><td>Explicit remote-desktop opt-in for bound channels.</td></tr>
                 <tr><td><code>notification_channel</code></td><td><code>&quot;slack&quot;</code></td><td>Notification channel kind.</td></tr>
                 <tr><td><code>notification_recipient</code></td><td><code>&quot;#geode-alerts&quot;</code></td><td>Notification recipient.</td></tr>
-                <tr><td><code>webhook_enabled</code></td><td>false</td><td>Webhook HTTP endpoint.</td></tr>
+                <tr><td><code>webhook_enabled</code></td><td>false</td><td>Webhook HTTP endpoint when the gateway is enabled.</td></tr>
                 <tr><td><code>webhook_port</code></td><td>8765</td><td>Webhook port.</td></tr>
               </tbody>
             </table>

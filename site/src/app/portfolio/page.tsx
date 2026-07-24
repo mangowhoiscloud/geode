@@ -650,8 +650,8 @@ const runModes = [
     titleKo: "터미널",
     titleEn: "Terminal",
     cmd: "$ geode",
-    ko: "그대로 치면 대화형 세션. geode \"한 문장\"은 그 일을 끝까지 실행하고, serve 데몬은 알아서 기동합니다.",
-    en: "Bare geode opens the session; geode \"a sentence\" runs that one job to the end. The serve daemon auto-starts.",
+    ko: "그대로 치면 대화형 세션. REPL에 일을 입력하면 끝까지 실행하고, serve 데몬은 알아서 기동합니다.",
+    en: "Bare geode opens the session. Type a job in the REPL; the serve daemon auto-starts.",
   },
   {
     eyebrow: "any mcp client",
@@ -864,7 +864,7 @@ function ScheduleBanner() {
   return (
     <div className="flex h-full w-full flex-col items-center justify-center gap-3.5 px-6 text-center font-mono">
       <p className="rounded bg-[#C2447F] px-4 py-2 text-[12px] text-[#FFF0F8]">
-        $ geode &quot;schedule daily standup reminder at 9am&quot;
+        $ geode → schedule daily standup reminder at 9am
       </p>
       <p className="text-[11px]" style={{ color: ROSE_INK_70 }}>
         cron · briefings · unattended through the gateway

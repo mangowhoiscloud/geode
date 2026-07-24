@@ -23,6 +23,8 @@ from dataclasses import dataclass, field
 from importlib.util import find_spec
 from pathlib import Path
 
+from rich.markup import escape
+
 log = logging.getLogger(__name__)
 
 # Repo root pyproject.toml — present for editable/source installs, absent for
@@ -46,6 +48,22 @@ _SERVE_RESTART_FIX = (
     "Rebuild landed but serve still runs the old code — restart it: "
     "`launchctl kickstart -k gui/$(id -u)/com.geode.serve`"
 )
+
+
+def _desktop_install_fix() -> str:
+    """Return the desktop-extra command for this install shape."""
+    if _PYPROJECT_PATH.exists():
+        project_root = _PYPROJECT_PATH.parent.resolve()
+        if Path(sys.prefix).resolve().is_relative_to(project_root):
+            return "Install the desktop extra: `uv sync --extra desktop --group dev`."
+        return (
+            "Reinstall the editable tool from the GEODE checkout: "
+            '`uv tool install -e ".[desktop]" --force`.'
+        )
+    return (
+        "Reinstall the tool with the desktop extra: "
+        '`uv tool install "geode-agent[desktop]" --force`.'
+    )
 
 
 @dataclass
@@ -484,7 +502,7 @@ def _check_desktop_computer_use() -> CheckResult:
             name="computer-use desktop",
             ok=False,
             detail=f"config probe failed: {exc}",
-            fix="Run `uv sync --extra desktop --group dev`, then retry `geode doctor`.",
+            fix=f"{_desktop_install_fix()} Then retry `geode doctor`.",
         )
 
     if not getattr(settings, "computer_use_enabled", False):
@@ -563,7 +581,7 @@ def _check_desktop_computer_use() -> CheckResult:
             name="computer-use desktop",
             ok=False,
             detail=f"missing host dependency: {', '.join(missing)}",
-            fix="Install the desktop extra: `uv sync --extra desktop --group dev`.",
+            fix=_desktop_install_fix(),
         )
 
     if platform.system() != "Darwin":
@@ -581,7 +599,7 @@ def _check_desktop_computer_use() -> CheckResult:
             name="computer-use desktop",
             ok=False,
             detail=f"missing macOS AX bridge: {', '.join(missing_ax)}",
-            fix="Install the desktop extra: `uv sync --extra desktop --group dev`.",
+            fix=_desktop_install_fix(),
         )
 
     try:
@@ -591,7 +609,7 @@ def _check_desktop_computer_use() -> CheckResult:
             name="computer-use desktop",
             ok=False,
             detail=f"AX trust probe failed: {exc}",
-            fix="Install the desktop extra: `uv sync --extra desktop --group dev`.",
+            fix=_desktop_install_fix(),
         )
 
     if not AXIsProcessTrusted():
@@ -638,9 +656,11 @@ def format_bootstrap_report(report: BootstrapReport) -> str:
     lines.append("")
     for c in report.checks:
         marker = "[success]✓[/success]" if c.ok else "[warning]✗[/warning]"
-        lines.append(f"  {marker}  [bold]{c.name}[/bold]  [muted]{c.detail}[/muted]")
+        lines.append(
+            f"  {marker}  [bold]{escape(c.name)}[/bold]  [muted]{escape(c.detail)}[/muted]"
+        )
         if not c.ok and c.fix:
-            lines.append(f"        [muted]→ {c.fix}[/muted]")
+            lines.append(f"        [muted]→ {escape(c.fix)}[/muted]")
     lines.append("")
     if report.all_ok:
         lines.append("  [success]All checks passed.[/success]")

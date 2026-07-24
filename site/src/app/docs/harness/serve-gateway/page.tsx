@@ -65,11 +65,11 @@ export default function Page() {
 
             <h2>시작과 종료</h2>
             <p>
-              <code>geode serve</code>는 <code>gateway_enabled</code>가 꺼져
-              있으면 시작을 거부합니다. <code>~/.geode/.env</code>에{" "}
-              <code>GEODE_GATEWAY_ENABLED=true</code>를 추가해야 합니다. 대화만
-              한다면 serve를 직접 띄울 필요가 없습니다. bare <code>geode</code>가
-              데몬을 자동으로 시작합니다.
+              <code>geode serve</code>는 <code>gateway_enabled</code>가 꺼져도
+              CLI IPC와 스케줄러를 시작합니다. 외부 채널도 운영하려면
+              <code>~/.geode/.env</code>에 <code>GEODE_GATEWAY_ENABLED=true</code>를
+              추가합니다. 대화만 한다면 bare <code>geode</code>가 데몬을
+              자동으로 시작합니다.
             </p>
             <pre>{`# 게이트웨이 켜기
 echo 'GEODE_GATEWAY_ENABLED=true' >> ~/.geode/.env
@@ -110,9 +110,9 @@ require_mention = true`}</pre>
               </thead>
               <tbody>
                 <tr>
-                  <td><code>geode serve</code>가 즉시 종료</td>
+                  <td>외부 채널 메시지가 들어오지 않음</td>
                   <td><code>gateway_enabled</code> 꺼짐</td>
-                  <td><code>GEODE_GATEWAY_ENABLED=true</code>를 <code>~/.geode/.env</code>에 추가합니다.</td>
+                  <td>CLI IPC는 계속 동작합니다. 외부 채널도 쓰려면 <code>GEODE_GATEWAY_ENABLED=true</code>를 설정합니다.</td>
                 </tr>
                 <tr>
                   <td>메시지에 반응이 없음</td>
@@ -199,11 +199,11 @@ require_mention = true`}</pre>
 
             <h2>Start and stop</h2>
             <p>
-              <code>geode serve</code> refuses to start while{" "}
-              <code>gateway_enabled</code> is off. Add{" "}
-              <code>GEODE_GATEWAY_ENABLED=true</code> to{" "}
-              <code>~/.geode/.env</code>. For chat only you never start serve
-              yourself; bare <code>geode</code> auto-starts the daemon.
+              <code>geode serve</code> starts CLI IPC and the scheduler while{" "}
+              <code>gateway_enabled</code> is off. To operate external channels,
+              add <code>GEODE_GATEWAY_ENABLED=true</code> to{" "}
+              <code>~/.geode/.env</code>. For chat only, bare <code>geode</code>
+              auto-starts the daemon.
             </p>
             <pre>{`# enable the gateway
 echo 'GEODE_GATEWAY_ENABLED=true' >> ~/.geode/.env
@@ -245,9 +245,9 @@ require_mention = true`}</pre>
               </thead>
               <tbody>
                 <tr>
-                  <td><code>geode serve</code> exits immediately</td>
+                  <td>External channel messages do not arrive</td>
                   <td><code>gateway_enabled</code> is off</td>
-                  <td>Add <code>GEODE_GATEWAY_ENABLED=true</code> to <code>~/.geode/.env</code>.</td>
+                  <td>CLI IPC keeps working. Set <code>GEODE_GATEWAY_ENABLED=true</code> to also run external channels.</td>
                 </tr>
                 <tr>
                   <td>No reaction to messages</td>

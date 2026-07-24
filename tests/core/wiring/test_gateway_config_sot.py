@@ -6,9 +6,11 @@ silently depended on its launchd WorkingDirectory."""
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
-from core.wiring.adapters import _load_gateway_config
+from core.messaging.binding import ChannelManager, get_gateway, set_gateway
+from core.wiring.adapters import _load_gateway_config, build_gateway
 
 
 @pytest.fixture()
@@ -74,3 +76,17 @@ def test_unreadable_file_is_skipped(config_files: dict[str, Path]) -> None:
     merged, sources = _load_gateway_config()
     assert [r["channel_id"] for r in merged["gateway"]["bindings"]["rules"]] == ["C_OK"]
     assert len(sources) == 1
+
+
+def test_disabled_external_gateway_still_builds_local_cli_manager(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("core.config.settings", SimpleNamespace(gateway_enabled=False))
+    set_gateway(None)
+    try:
+        build_gateway()
+        gateway = get_gateway()
+        assert isinstance(gateway, ChannelManager)
+        assert gateway._pollers == []
+    finally:
+        set_gateway(None)

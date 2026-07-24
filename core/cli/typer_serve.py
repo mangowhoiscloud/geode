@@ -79,7 +79,7 @@ def serve(
         3.0, "--poll", "-p", help="Gateway poll interval (seconds)"
     ),
 ) -> None:
-    """Run GEODE Gateway in headless mode (no REPL, Slack/Discord/Telegram only)."""
+    """Run the GEODE daemon for CLI IPC and optional external channels."""
     import asyncio
     import signal
     import time as _time
@@ -99,13 +99,9 @@ def serve(
 
     from core.config import settings
 
-    if not settings.gateway_enabled:
-        console.print("  [warning]Gateway is disabled.[/warning]")
-        console.print("  [dim]Set [gateway] enabled = true in ~/.geode/config.toml[/dim]")
-        raise typer.Exit(1)
-
     console.print()
-    console.print("  [header]GEODE Gateway — headless mode[/header]")
+    mode = "Gateway + CLI IPC" if settings.gateway_enabled else "CLI IPC"
+    console.print(f"  [header]GEODE Daemon — {mode}[/header]")
     console.print(f"  [dim]Poll interval: {poll_interval}s[/dim]")
     console.print("  [dim]Press Ctrl+C to stop[/dim]")
     console.print()
@@ -368,7 +364,7 @@ def serve(
 
     # L4 Gateway Hooks: optional webhook endpoint
     _webhook_server = None
-    if settings.webhook_enabled:
+    if settings.gateway_enabled and settings.webhook_enabled:
         try:
             from core.server.supervised.webhook_handler import start_webhook_server
 
@@ -392,12 +388,27 @@ def serve(
         _cli_poller = CLIPoller(_gw_services, scheduler_service=_sched_svc)
         _cli_poller.start()
         console.print(f"  [success]CLI channel: {_cli_poller.socket_path}[/success]")
-    except Exception:
+    except Exception as exc:
         log.warning("CLI channel init failed", exc_info=True)
+        if _cli_poller is not None:
+            _cli_poller.stop()
+        _cli_poller = None
+        if not settings.gateway_enabled:
+            console.print("  [error]CLI channel failed to start; daemon stopped.[/error]")
+            if _sched_svc is not None:
+                _sched_svc.stop()
+            if runtime is not None:
+                runtime.shutdown()
+            raise typer.Exit(1) from exc
 
     # Start gateway pollers
     gateway.start()
-    console.print("  [success]Gateway started. Listening...[/success]")
+    if settings.gateway_enabled and _cli_poller is not None:
+        console.print("  [success]Gateway and CLI daemon started. Listening...[/success]")
+    elif settings.gateway_enabled:
+        console.print("  [warning]Gateway started; CLI channel unavailable.[/warning]")
+    else:
+        console.print("  [success]CLI daemon started. External gateway disabled.[/success]")
 
     console.print()
 
@@ -516,7 +527,7 @@ def serve(
             except Exception:
                 log.debug("Runtime shutdown error", exc_info=True)
         console.print()
-        console.print("  [dim]Gateway stopped.[/dim]")
+        console.print("  [dim]GEODE daemon stopped.[/dim]")
 
 
 def _build_runtime_for_serve() -> Any:

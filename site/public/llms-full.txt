@@ -262,7 +262,7 @@ geode
 | 증상 | 원인 | 해법 |
 | --- | --- | --- |
 | 모델을 바꿨는데 그대로 | 상위 레이어가 가리는 중 | `geode config explain model`로 어느 레이어가 이기는지 확인합니다. `geode about`이 실효값입니다. |
-| `geode serve`가 거부 | gateway 비활성 | `~/.geode/.env`에 `GEODE_GATEWAY_ENABLED=true`를 추가합니다. 대화만 하려면 serve를 직접 띄울 필요가 없습니다. |
+| 외부 채널 메시지가 들어오지 않음 | gateway 비활성 | 로컬 대화는 그대로 동작합니다. 외부 채널도 쓰려면 `GEODE_GATEWAY_ENABLED=true`를 설정합니다. |
 | 응답이 비거나 끊김 | 자격 만료 또는 무효 | `geode doctor`로 키와 OAuth 상태를 점검하고 `/login`으로 갱신합니다. |
 | 배너 모델과 실제 응답 모델이 다름 | 오래된 데몬이 살아 있음 | `pkill -f "geode serve"` 후 다시 `geode`를 실행합니다. |
 
@@ -602,16 +602,16 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/run/serve.md
 | --- | --- | --- |
 | 메신저 receiver | Slack은 Socket Mode push로, Discord와 Telegram은 polling으로 메시지를 받아 에이전트 세션에 라우팅합니다. `--poll/-p`는 poll 기반 경로에만 적용됩니다. | `core/cli/typer_serve.py` |
 | 스케줄러 | 예약 작업을 로드하고, 놓친 실행을 복구하고, 주기 실행합니다. | `core/cli/typer_serve.py` |
-| 웹훅 (선택) | `webhook_enabled`일 때 HTTP 엔드포인트를 엽니다. | `core/server/supervised/webhook_handler.py` |
+| 웹훅 (선택) | gateway와 webhook이 모두 활성일 때 HTTP 엔드포인트를 엽니다. | `core/server/supervised/webhook_handler.py` |
 | CLI IPC 소켓 | `~/.geode/cli.sock` Unix 소켓. thin CLI의 자유 텍스트와 슬래시 명령이 여기로 들어옵니다. | `core/server/ipc_server/poller.py` |
 
 ## 대부분은 직접 띄울 필요가 없습니다
 
 `geode`를 실행하면 소켓을 확인하고, 데몬이 없으면 백그라운드로 자동 시작한 뒤 IPC로 붙습니다 (`core/cli/ipc_client.py`). 대화만 할 거라면`geode serve`를 직접 칠 일이 없습니다. 직접 실행은 메신저와 스케줄을 명시적으로 운영할 때의 선택지입니다.
 
-## 시작 조건: gateway\_enabled
+## CLI IPC는 기본, 외부 gateway는 선택
 
-`geode serve`는 `gateway_enabled`가 꺼져 있으면 시작을 거부하고 안내를 출력합니다. 켜려면`~/.geode/.env`에 한 줄을 추가합니다.
+`geode serve`는 `gateway_enabled`가 꺼져도 로컬 CLI IPC와 스케줄러를 시작합니다. Slack, Discord, Telegram, webhook도 쓰려면 `~/.geode/.env`에 한 줄을 추가합니다.
 
 ```
 # ~/.geode/.env
@@ -640,7 +640,7 @@ SIGTERM을 받으면 데몬은 단계적으로 내려갑니다. 새 요청 수�
 
 | 증상 | 원인 | 해법 |
 | --- | --- | --- |
-| `geode serve`가 시작을 거부 | gateway 비활성 | `~/.geode/.env`에 `GEODE_GATEWAY_ENABLED=true`를 추가합니다. |
+| 외부 채널 메시지가 들어오지 않음 | gateway 비활성 | 로컬 CLI는 그대로 동작합니다. 외부 채널도 쓰려면 `GEODE_GATEWAY_ENABLED=true`를 설정합니다. |
 | 배너 모델과 응답 모델이 다름 | 업데이트 전의 오래된 데몬이 살아 있음 | `pkill -f "geode serve"`로 전부 내리고 `geode`를 다시 실행합니다. |
 | 동작이 들쭉날쭉, 소켓 충돌 | 데몬 여러 개가 `~/.geode/cli.sock`을 두고 경합 | `pgrep -f "geode serve"`로 개수를 확인하고 전부 종료 후 하나만 띄웁니다. |
 | /model을 바꿔도 데몬이 옛 모델 유지 | 데몬 환경에 모델 env가 박제됨 (구버전 잔재) | 데몬은 시작 시 모델 계열 env 키를 버리는 것이 기본입니다. 데몬을 재시작하고, 그래도 안 되면 `geode config explain model`을 봅니다. |
@@ -2467,7 +2467,7 @@ binding에 일치한 메시지만 레인을 거쳐 루프에 닿습니다. 불�
 
 ## 시작과 종료
 
-`geode serve`는 `gateway_enabled`가 꺼져 있으면 시작을 거부합니다. `~/.geode/.env`에 `GEODE_GATEWAY_ENABLED=true`를 추가해야 합니다. 대화만 한다면 serve를 직접 띄울 필요가 없습니다. bare `geode`가 데몬을 자동으로 시작합니다.
+`geode serve`는 `gateway_enabled`가 꺼져도 CLI IPC와 스케줄러를 시작합니다. 외부 채널도 운영하려면`~/.geode/.env`에 `GEODE_GATEWAY_ENABLED=true`를 추가합니다. 대화만 한다면 bare `geode`가 데몬을 자동으로 시작합니다.
 
 ```
 # 게이트웨이 켜기
@@ -2504,7 +2504,7 @@ require_mention = true
 
 | 증상 | 원인 | 해법 |
 | --- | --- | --- |
-| `geode serve`가 즉시 종료 | `gateway_enabled` 꺼짐 | `GEODE_GATEWAY_ENABLED=true`를 `~/.geode/.env`에 추가합니다. |
+| 외부 채널 메시지가 들어오지 않음 | `gateway_enabled` 꺼짐 | CLI IPC는 계속 동작합니다. 외부 채널도 쓰려면 `GEODE_GATEWAY_ENABLED=true`를 설정합니다. |
 | 메시지에 반응이 없음 | binding 불일치, 앱 토큰 누락, 또는 채널 멤버십 없음 | `geode doctor slack`으로 점검하고, 출력된 링크의 채널에서 `/invite @geode`를 실행합니다. |
 | 배너 모델과 응답 모델이 다름 | 데몬이 둘 이상 떠서 소켓을 두고 경합 | `pkill -f "geode serve"`로 전부 내린 뒤 하나만 다시 띄웁니다. `ps aux | grep`은 경로가 잘려 빈 결과가 나오므로 `pgrep -f`를 씁니다. |
 | 같은 채널 요청이 밀림 | 같은 세션 키는 의도적으로 직렬화 | 정상 동작입니다. 다른 스레드나 채널로 보내면 병렬로 처리됩니다. |
@@ -2776,7 +2776,7 @@ geode serve (데몬)  ←  하나의 GeodeRuntime이 전부 소유
 -   CLI IPC 서버 (`core/server/ipc_server/poller.py`). thin CLI의 자유 텍스트와 슬래시 명령 처리.
 -   메신저 poller와 게이트웨이 (`core/server/supervised/`, `core/messaging/binding.py`).
 -   SchedulerService. 부팅 시 저장 작업 로드와 놓친 발화 복구, serve 루프에서 drain.
--   옵션 webhook HTTP 엔드포인트 (`settings.webhook_enabled`).
+-   gateway와 webhook이 모두 활성일 때의 HTTP 엔드포인트.
 
 ## 종료 순서
 
@@ -2796,7 +2796,7 @@ geode serve (데몬)  ←  하나의 GeodeRuntime이 전부 소유
 | 증상 | 원인 | 해법 |
 | --- | --- | --- |
 | 업데이트했는데 옛 동작이 계속됨 | 오래된 데몬이 살아남아 소켓을 점유 | `pkill -f "geode serve"` 후 재진입합니다. `geode update`는 이 재시작을 대신 해줍니다. |
-| `geode serve` 시작 거부 | `gateway_enabled` 꺼짐 | 헤드리스 데몬이 필요할 때만 `GEODE_GATEWAY_ENABLED=true`를 켭니다. |
+| 외부 채널이 동작하지 않음 | `gateway_enabled` 꺼짐 | CLI IPC는 계속 동작합니다. 외부 채널이 필요할 때만 `GEODE_GATEWAY_ENABLED=true`를 켭니다. |
 | 기능이 조용히 동작하지 않음 | 핸들러 미등록 또는 ContextVar 미주입 | bootstrap 등록 여부를 먼저 봅니다. `core/wiring/bootstrap.py`의 `get_plugin_status()`가 플러그인별 등록 상태를 보고합니다. |
 
 ## 다음
@@ -4167,13 +4167,13 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/config/reference.md
 
 | 필드 | 기본값 | 용도 |
 | --- | --- | --- |
-| `gateway_enabled` | false | 메신저 게이트웨이. `geode serve`의 전제 조건입니다. |
+| `gateway_enabled` | false | 메신저와 webhook 등 외부 채널 활성화. CLI IPC는 이 값과 무관합니다. |
 | `gateway_poll_interval_s` | 3.0 | 게이트웨이 폴 간격. |
 | `gateway_max_concurrent` | 4 | 동시 처리 상한. |
 | `gateway_allow_computer_use` | false | 바운드 채널의 원격 desktop control 명시적 옵트인. |
 | `notification_channel` | `"slack"` | 알림 채널 종류. |
 | `notification_recipient` | `"#geode-alerts"` | 알림 수신처. |
-| `webhook_enabled` | false | 웹훅 HTTP 엔드포인트. |
+| `webhook_enabled` | false | gateway 활성 시 웹훅 HTTP 엔드포인트. |
 | `webhook_port` | 8765 | 웹훅 포트. |
 
 ### HITL, 플랜, 비용, 데스크탑
@@ -4993,7 +4993,7 @@ HITL 승인 프롬프트(`core/cli/ipc_client.py`의 `_handle_approval_request`)
 | `geode uninstall` | 런타임 데이터와 CLI 제거 | `--dry-run`, `--force/-f`, `--keep-config`, `--keep-data` | `core/cli/commands/lifecycle.py` |
 | `geode init` | `.geode/` 프로젝트 골격 생성. 프로젝트 타입 자동 감지 | `--force/-f` | `core/cli/typer_init.py` |
 | `geode history` | 실행 이력과 월간 비용 요약 | `--limit/-n`, `--month/-m YYYY-MM` | `core/llm/usage_store.py` |
-| `geode serve` | 헤드리스 게이트웨이 데몬. 메신저 폴러, 스케줄러, IPC 소켓. `gateway_enabled` 필요 | `--poll/-p` | `core/cli/typer_serve.py` |
+| `geode serve` | CLI IPC 데몬. `gateway_enabled`를 켜면 메신저 폴러도 함께 실행 | `--poll/-p` | `core/cli/typer_serve.py` |
 | `geode audit` | Petri × GEODE 정렬 감사 실행 | `--judge/-j`, `--auditor/-a`, `--target/-t`, `--seeds/-s`, `--max-turns/-m`, `--seed-select`, `--dim-set`, `--dry-run/--live`, `--unrestricted`, `--cache/--no-cache` | `plugins/petri_audit/cli_audit.py` |
 | `geode petri-archive` | petri eval 로그를 워크트리 밖으로 보존하고 YAML 요약 작성 | `--raw-archive-dir`, `--summary-dir` | `plugins/petri_audit/cli_audit.py` |
 | `geode outer-bundle` | 자기개선 루프 활동을 하나의 타임라인으로 묶어 보는 뷰어 | `--limit`, `--json` | `core/cli/outer_bundle.py` |
@@ -5067,7 +5067,7 @@ picker 키 계약(`core/cli/effort_picker.py`): Tab이 역할 탭(Primary, Refle
 | 증상 | 원인 | 해법 |
 | --- | --- | --- |
 | `geode "..."`가 No such command | 원샷 미지원 | bare `geode`로 REPL에 들어가 자유 텍스트를 입력합니다. |
-| `geode serve` 기동 거부 | `gateway_enabled` 꺼짐 | `~/.geode/.env`에 `GEODE_GATEWAY_ENABLED=true`를 추가합니다. |
+| 외부 채널 메시지가 들어오지 않음 | `gateway_enabled` 꺼짐 | 로컬 REPL은 그대로 동작합니다. Slack/Discord/Telegram도 쓰려면 `~/.geode/.env`에 `GEODE_GATEWAY_ENABLED=true`를 추가합니다. |
 | 배너 모델과 응답 모델 불일치 | 오래된 데몬 둘 이상이 소켓을 두고 경합 | `pkill -f "geode serve"` 후 재진입합니다. `ps aux | grep`은 긴 경로가 잘려 못 잡습니다. |
 | `geode seeds assemble`이 exit 2 | wheel 설치에는 `scripts/`가 없음 | repo 체크아웃에서 실행합니다. |
 

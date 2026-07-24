@@ -256,12 +256,12 @@
         "path": "core/cli/commands/config.py"
       },
       {
-        "line": 737,
+        "line": 741,
         "module": "plugins.petri_audit.claude_code_provider",
         "path": "core/cli/commands/login.py"
       },
       {
-        "line": 749,
+        "line": 753,
         "module": "plugins.petri_audit.codex_provider",
         "path": "core/cli/commands/login.py"
       },
@@ -506,7 +506,7 @@
   "packages": {
     "core": {
       "python_files": 429,
-      "python_loc": 131815
+      "python_loc": 131904
     },
     "plugins": {
       "python_files": 109,
@@ -514,7 +514,7 @@
     },
     "tests": {
       "python_files": 671,
-      "python_loc": 173717
+      "python_loc": 173986
     }
   },
   "schema_version": 1,

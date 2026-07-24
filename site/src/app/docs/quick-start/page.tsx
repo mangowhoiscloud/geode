@@ -78,9 +78,9 @@ geode setup -r     # 처음부터 다시`}</pre>
                   <td><code>geode config explain model</code>로 어느 레이어가 이기는지 확인합니다. <code>geode about</code>이 실효값입니다.</td>
                 </tr>
                 <tr>
-                  <td><code>geode serve</code>가 거부</td>
+                  <td>외부 채널 메시지가 들어오지 않음</td>
                   <td>gateway 비활성</td>
-                  <td><code>~/.geode/.env</code>에 <code>GEODE_GATEWAY_ENABLED=true</code>를 추가합니다. 대화만 하려면 serve를 직접 띄울 필요가 없습니다.</td>
+                  <td>로컬 대화는 그대로 동작합니다. 외부 채널도 쓰려면 <code>GEODE_GATEWAY_ENABLED=true</code>를 설정합니다.</td>
                 </tr>
                 <tr>
                   <td>응답이 비거나 끊김</td>
@@ -202,9 +202,9 @@ geode setup -r     # start over`}</pre>
                   <td>Run <code>geode config explain model</code> to see which layer wins. <code>geode about</code> shows the effective value.</td>
                 </tr>
                 <tr>
-                  <td><code>geode serve</code> refuses to start</td>
+                  <td>External channel messages do not arrive</td>
                   <td>Gateway disabled</td>
-                  <td>Add <code>GEODE_GATEWAY_ENABLED=true</code> to <code>~/.geode/.env</code>. For chat only, you never need to start serve yourself.</td>
+                  <td>Local chat still works. Set <code>GEODE_GATEWAY_ENABLED=true</code> to also run external channels.</td>
                 </tr>
                 <tr>
                   <td>Empty or broken replies</td>

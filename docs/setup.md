@@ -15,10 +15,10 @@ cd geode && uv sync
 # Thin CLI (auto-starts serve daemon if needed)
 uv run geode
 
-# One-shot prompt
-uv run geode "summarize the latest AI research trends"
+# Then type a prompt in the REPL
+# summarize the latest AI research trends
 
-# Headless daemon (Slack/Discord/Telegram + scheduler)
+# Daemon (CLI IPC; also Slack/Discord/Telegram when gateway is enabled)
 uv run geode serve
 ```
 
@@ -319,7 +319,6 @@ write model choices to `config.toml`, not `.env`.
 
 ```bash
 geode                                  # Interactive thin CLI
-geode "prompt"                         # One-shot prompt via IPC
 geode --continue                       # Resume last session
 geode --resume <session_id>            # Resume specific session
 
