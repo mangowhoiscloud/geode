@@ -38,7 +38,7 @@ export default function Page() {
                 </tr>
                 <tr>
                   <td>웹훅 (선택)</td>
-                  <td><code>webhook_enabled</code>일 때 HTTP 엔드포인트를 엽니다.</td>
+                  <td>gateway와 webhook이 모두 활성일 때 HTTP 엔드포인트를 엽니다.</td>
                   <td><code>core/server/supervised/webhook_handler.py</code></td>
                 </tr>
                 <tr>
@@ -58,11 +58,11 @@ export default function Page() {
               메신저와 스케줄을 명시적으로 운영할 때의 선택지입니다.
             </p>
 
-            <h2>시작 조건: gateway_enabled</h2>
+            <h2>CLI IPC는 기본, 외부 gateway는 선택</h2>
             <p>
-              <code>geode serve</code>는 <code>gateway_enabled</code>가 꺼져
-              있으면 시작을 거부하고 안내를 출력합니다. 켜려면
-              <code>~/.geode/.env</code>에 한 줄을 추가합니다.
+              <code>geode serve</code>는 <code>gateway_enabled</code>가 꺼져도
+              로컬 CLI IPC와 스케줄러를 시작합니다. Slack, Discord, Telegram,
+              webhook도 쓰려면 <code>~/.geode/.env</code>에 한 줄을 추가합니다.
             </p>
             <pre>{`# ~/.geode/.env
 GEODE_GATEWAY_ENABLED=true`}</pre>
@@ -110,9 +110,9 @@ geode serve --poll 5     # poll 기반 receiver 주기 5초`}</pre>
               </thead>
               <tbody>
                 <tr>
-                  <td><code>geode serve</code>가 시작을 거부</td>
+                  <td>외부 채널 메시지가 들어오지 않음</td>
                   <td>gateway 비활성</td>
-                  <td><code>~/.geode/.env</code>에 <code>GEODE_GATEWAY_ENABLED=true</code>를 추가합니다.</td>
+                  <td>로컬 CLI는 그대로 동작합니다. 외부 채널도 쓰려면 <code>GEODE_GATEWAY_ENABLED=true</code>를 설정합니다.</td>
                 </tr>
                 <tr>
                   <td>배너 모델과 응답 모델이 다름</td>
@@ -167,7 +167,7 @@ geode serve --poll 5     # poll 기반 receiver 주기 5초`}</pre>
                 </tr>
                 <tr>
                   <td>Webhook (optional)</td>
-                  <td>Opens an HTTP endpoint when <code>webhook_enabled</code> is set.</td>
+                  <td>Opens an HTTP endpoint when both gateway and webhook are enabled.</td>
                   <td><code>core/server/supervised/webhook_handler.py</code></td>
                 </tr>
                 <tr>
@@ -187,11 +187,12 @@ geode serve --poll 5     # poll 기반 receiver 주기 5초`}</pre>
               operating messaging and schedules deliberately.
             </p>
 
-            <h2>Start requirement: gateway_enabled</h2>
+            <h2>CLI IPC by default, external gateway by choice</h2>
             <p>
-              <code>geode serve</code> refuses to start while
-              <code>gateway_enabled</code> is off, and prints the hint. Enable
-              it with one line in <code>~/.geode/.env</code>.
+              <code>geode serve</code> starts local CLI IPC and the scheduler
+              even while <code>gateway_enabled</code> is off. To also run Slack,
+              Discord, Telegram, and webhooks, add one line to
+              <code>~/.geode/.env</code>.
             </p>
             <pre>{`# ~/.geode/.env
 GEODE_GATEWAY_ENABLED=true`}</pre>
@@ -240,9 +241,9 @@ geode serve --poll 5     # 5-second interval for polling paths`}</pre>
               </thead>
               <tbody>
                 <tr>
-                  <td><code>geode serve</code> refuses to start</td>
+                  <td>External channel messages do not arrive</td>
                   <td>Gateway disabled</td>
-                  <td>Add <code>GEODE_GATEWAY_ENABLED=true</code> to <code>~/.geode/.env</code>.</td>
+                  <td>The local CLI still works. Set <code>GEODE_GATEWAY_ENABLED=true</code> to also run external channels.</td>
                 </tr>
                 <tr>
                   <td>Banner model differs from the answering model</td>

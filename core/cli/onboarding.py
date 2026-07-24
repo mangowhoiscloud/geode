@@ -33,6 +33,35 @@ from core.wiring.startup import ReadinessReport, _has_any_llm_key, detect_subscr
 log = logging.getLogger(__name__)
 
 
+def dry_run_opted_in() -> bool:
+    """Return whether the user explicitly skipped credential setup."""
+    from core.paths import GLOBAL_DRY_RUN_MARKER
+
+    return GLOBAL_DRY_RUN_MARKER.exists()
+
+
+def _set_dry_run_opt_in(enabled: bool) -> bool:
+    """Persist or clear the credential-wizard skip choice."""
+    from core.paths import GLOBAL_DRY_RUN_MARKER
+
+    try:
+        if enabled:
+            GLOBAL_DRY_RUN_MARKER.parent.mkdir(parents=True, exist_ok=True)
+            GLOBAL_DRY_RUN_MARKER.touch(mode=0o600)
+            GLOBAL_DRY_RUN_MARKER.chmod(0o600)
+        else:
+            GLOBAL_DRY_RUN_MARKER.unlink(missing_ok=True)
+        return True
+    except OSError as exc:
+        log.warning("Failed to persist dry-run setup choice: %s", exc)
+        return False
+
+
+def clear_dry_run_opt_in() -> bool:
+    """Clear a stale skip marker after credential state changes."""
+    return _set_dry_run_opt_in(False)
+
+
 def __getattr__(name: str) -> Any:
     """PEP 562 lazy ``settings`` alias for legacy patch sites."""
     if name == "settings":
@@ -77,13 +106,25 @@ def env_setup_wizard() -> bool:
         return False
 
     if choice == "1":
-        return _wizard_subscription_path()
+        configured = _wizard_subscription_path()
+        if configured:
+            clear_dry_run_opt_in()
+        return configured
     if choice == "3":
+        if _set_dry_run_opt_in(True):
+            console.print(
+                "\n  [muted]Skipped. Run [cyan]geode setup[/cyan] later "
+                "to add a credential.[/muted]\n"
+            )
+            return True  # persisted skip suppresses the next-launch prompt
         console.print(
-            "\n  [muted]Skipped. Run [cyan]geode setup[/cyan] later to add a credential.[/muted]\n"
+            "\n  [warning]Could not save the dry-run choice under GEODE_HOME.[/warning]\n"
         )
-        return True  # user explicitly chose dry-run; suppress re-prompt
-    return _wizard_api_key_path()
+        return False
+    configured = _wizard_api_key_path()
+    if configured:
+        clear_dry_run_opt_in()
+    return configured
 
 
 def _wizard_subscription_path() -> bool:

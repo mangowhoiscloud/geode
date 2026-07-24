@@ -176,19 +176,20 @@ def _load_gateway_config() -> tuple[dict[str, Any], list[str]]:
 
 
 def build_gateway() -> None:
-    """Build and inject Gateway with config-driven channel pollers.
+    """Build the channel manager and optional external-channel pollers.
 
     Reads ``[gateway] pollers`` from ``.geode/config.toml`` to determine
     which pollers to register. Defaults to all three (slack, discord,
-    telegram) when the config key is absent.
+    telegram) when the config key is absent. When the external gateway is
+    disabled, an empty manager still backs the local CLI IPC daemon.
     """
     from core.config import settings
     from core.mcp.notification_port import get_notification
     from core.messaging.binding import ChannelManager, set_gateway
 
     if not settings.gateway_enabled:
-        log.debug("Gateway disabled (GEODE_GATEWAY_ENABLED=false)")
-        set_gateway(None)
+        set_gateway(ChannelManager())
+        log.debug("External gateway disabled; local CLI channel remains available")
         return
 
     # Use the unified LaneQueue from runtime (gateway lane already registered)

@@ -8,7 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from core import __version__
-from core.cli.onboarding import env_setup_wizard
+from core.cli.onboarding import clear_dry_run_opt_in, dry_run_opted_in, env_setup_wizard
 from core.cli.session_state import _set_readiness
 from core.ui.console import console
 from core.wiring.startup import (
@@ -67,14 +67,15 @@ def _welcome_screen() -> None:
     # reuse — see ``core/lifecycle/container.py:271``).
     from core.wiring.startup import _has_any_llm_key, detect_subscription_oauth
 
-    if not _has_any_llm_key():
+    if _has_any_llm_key():
+        clear_dry_run_opt_in()
+    else:
         oauth_provider = detect_subscription_oauth()
         if oauth_provider:
+            clear_dry_run_opt_in()
             console.print(f"  [success]OAuth detected: {oauth_provider}[/success]\n")
-        else:
-            env_path = Path(".env")
-            if not env_path.exists():
-                env_setup_wizard()
+        elif not dry_run_opted_in():
+            env_setup_wizard()
 
     # OpenClaw gateway:startup — readiness check
     readiness = check_readiness()

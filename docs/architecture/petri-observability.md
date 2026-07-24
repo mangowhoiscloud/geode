@@ -107,7 +107,7 @@ Two producers append to the same monthly file:
 `core.llm.token_tracker.TokenTracker._persist_usage` writes one row per LLM
 call from inside `AgenticLoop`. Triggered by `_response.track_usage` after
 every provider response. `source=""` (default), `role=""`. This is how
-`geode "<prompt>"` and every non-petri agentic call lands in the ledger.
+Interactive `geode` turns and every non-petri agentic call land in the ledger.
 
 ### Producer 2b — per-eval rollup (petri path)
 

@@ -31,7 +31,7 @@
 
 # GEODE v1.0.1 — A Self-improving Autonomous Execution Agent
 
-자기 자신이 올라탄 scaffold 를 스스로 고쳐쓰는 범용 자율 에이전트. 자연어로 물으면 GEODE 가 계획을 세우고, 도구를 호출해, 결과를 보고합니다. 1회성 프롬프트도, 장시간 세션도 동일하게. 그 아래에서는 outer loop 가 작업을 수행하는 시스템 자체를 계속 다듬습니다.
+자기 자신이 올라탄 scaffold 를 스스로 고쳐쓰는 범용 자율 에이전트. 자연어로 물으면 GEODE 가 계획을 세우고, 도구를 호출해, 결과를 보고합니다. 짧은 프롬프트도, 장시간 세션도 동일하게. 그 아래에서는 outer loop 가 작업을 수행하는 시스템 자체를 계속 다듬습니다.
 
 > **ChatGPT Plus, Pro, Business, Edu, Enterprise 결제 중이신가요?** 그 구독을 GEODE 가 그대로 씁니다. API 키 필요 없습니다. [구독 setup ↓](#path-a--chatgpt-구독-openai-사용자에게-권장)
 >
@@ -181,7 +181,7 @@ limit_usd = 5
 
 ```bash
 geode                                                # 인터랙티브 채팅
-geode "오늘 AI 새 소식 뭐야?"                         # 1회성 프롬프트
+# 프롬프트에서 입력: 오늘 AI 새 소식 뭐야?
 ```
 
 이런 모습이 보이면:

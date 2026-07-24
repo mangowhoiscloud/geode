@@ -100,12 +100,14 @@ class TestSetKeyAndUse:
         registry = get_plan_registry()
         plan = default_plan_for_payg("openai", "")
         registry.add(plan)
-        cmd_login(f"set-key {plan.id} sk-fresh-key-1234567890")
+        with patch("core.cli.commands.login.clear_dry_run_opt_in") as clear_opt_in:
+            cmd_login(f"set-key {plan.id} sk-fresh-key-1234567890")
         from core.wiring.container import ensure_profile_store
 
         store = ensure_profile_store()
         bound = [p for p in store.list_all() if p.plan_id == plan.id]
         assert bound and bound[0].key == "sk-fresh-key-1234567890"
+        clear_opt_in.assert_called_once_with()
 
     def test_set_key_unknown_plan_warns(self) -> None:
         _reset_state()
@@ -173,3 +175,15 @@ class TestLegacyKeyAlias:
             )
             # Either the deprecation hint or the dashboard "Plans" header must show
             assert "Plans" in text or "redirects" in text
+
+    def test_key_write_clears_dry_run_opt_in(self) -> None:
+        _reset_state()
+        from core.cli.commands import cmd_key
+
+        with (
+            patch("core.cli.commands.console"),
+            patch("core.cli.commands._upsert_env"),
+            patch("core.cli.commands.key.clear_dry_run_opt_in") as clear_opt_in,
+        ):
+            assert cmd_key("openai sk-fresh-key-1234567890") is True
+        clear_opt_in.assert_called_once_with()

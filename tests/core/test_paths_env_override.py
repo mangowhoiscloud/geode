@@ -14,6 +14,8 @@ from __future__ import annotations
 
 import importlib
 import os
+import subprocess
+import sys
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -69,6 +71,22 @@ def test_geode_home_tilde_expands(monkeypatch: pytest.MonkeyPatch, reload_paths:
     importlib.reload(paths)
     assert Path.home() / "customgeode" == paths.GEODE_HOME
     assert "~" not in str(paths.GEODE_HOME)
+
+
+def test_geode_home_redirects_legacy_scheduler_migration(tmp_path: Path) -> None:
+    env = {**os.environ, "GEODE_HOME": str(tmp_path / "isolated-home")}
+    proc = subprocess.run(  # noqa: S603
+        [
+            sys.executable,
+            "-c",
+            "from core.scheduler.models import _LEGACY_STORE_PATH; print(_LEGACY_STORE_PATH)",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert proc.stdout.strip() == str(tmp_path / "isolated-home" / "scheduler" / "jobs.json")
 
 
 def test_geode_state_root_env_override_and_tilde(

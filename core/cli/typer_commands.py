@@ -116,6 +116,7 @@ def setup(
     credentials and start over.
     """
     from core.cli.onboarding import (
+        clear_dry_run_opt_in,
         configure_bash_sandbox,
         configure_computer_use_helper,
         env_setup_wizard,
@@ -126,6 +127,7 @@ def setup(
         from core.paths import GLOBAL_ENV_FILE  # PR-CLEANUP-D2 anchor
 
         env_path = GLOBAL_ENV_FILE
+        clear_dry_run_opt_in()
         if env_path.exists():
             env_path.unlink()
             console.print(f"  [muted]Removed {env_path}[/muted]")
@@ -135,9 +137,11 @@ def setup(
     # including ones with credentials already configured and no Docker.
     oauth_provider = detect_subscription_oauth()
     if oauth_provider:
+        clear_dry_run_opt_in()
         console.print(f"  [success]OAuth detected: {oauth_provider}[/success]")
         console.print("  [muted]No further credential setup needed.[/muted]")
     elif _has_any_llm_key() and not reset:
+        clear_dry_run_opt_in()
         console.print(
             "  [success]API key already configured.[/success]\n"
             "  [muted]Run [cyan]geode setup --reset[/cyan] to start over.[/muted]"

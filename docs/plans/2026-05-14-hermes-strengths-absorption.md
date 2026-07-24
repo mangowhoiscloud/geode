@@ -203,12 +203,12 @@ uv run mypy core/ plugins/
 uv run pytest tests/ -m "not live"
 
 # Phase 1 후 — 회상 E2E
-uv run geode "지난 세션에서 OAuth 마이그레이션 무엇이라고 했지?"
+# `uv run geode` REPL에서 입력: 지난 세션에서 OAuth 마이그레이션 무엇이라고 했지?
 # session_search 도구 호출 + 결과 회상 + 응답
 
 # Phase 2 후 — surface 별 차별
-GEODE_SURFACE=slack uv run geode "안녕"  # Slack 톤
-GEODE_SURFACE=cli   uv run geode "안녕"  # CLI 톤
+GEODE_SURFACE=slack uv run geode  # REPL에서 "안녕" 입력 — Slack 톤
+GEODE_SURFACE=cli   uv run geode  # REPL에서 "안녕" 입력 — CLI 톤
 
 # Phase 3 후 — compaction 품질
 # 컨택스트 80% 도달 시 structured summary 12-section 생성 확인 (~/.geode/logs/serve.log)

@@ -24,6 +24,7 @@ from core.cli.doctor_bootstrap import (
     _check_profile_store,
     _check_python_version,
     _check_serve_socket,
+    _desktop_install_fix,
     format_bootstrap_report,
     run_bootstrap_doctor,
 )
@@ -179,6 +180,22 @@ class TestCheckDesktopComputerUse:
         assert "pyautogui" in result.detail
         assert "uv sync --extra desktop" in result.fix
 
+    def test_wheel_install_uses_uv_tool_extra_command(self, tmp_path):
+        with patch("core.cli.doctor_bootstrap._PYPROJECT_PATH", tmp_path / "missing"):
+            fix = _desktop_install_fix()
+        assert 'uv tool install "geode-agent[desktop]" --force' in fix
+
+    def test_editable_tool_install_uses_editable_extra_command(self, tmp_path):
+        pyproject = tmp_path / "checkout" / "pyproject.toml"
+        pyproject.parent.mkdir()
+        pyproject.write_text("[project]\nname = 'geode-agent'\n")
+        with (
+            patch("core.cli.doctor_bootstrap._PYPROJECT_PATH", pyproject),
+            patch("core.cli.doctor_bootstrap.sys.prefix", str(tmp_path / "uv-tools")),
+        ):
+            fix = _desktop_install_fix()
+        assert 'uv tool install -e ".[desktop]" --force' in fix
+
     def test_macos_ax_untrusted_fails_after_dependencies_present(self):
         fake_settings = type("Settings", (), {"computer_use_enabled": True})()
 
@@ -258,6 +275,21 @@ class TestRunAndFormat:
         assert "bad-check" in rendered
         assert "run setup" in rendered
         assert "1 check(s) need attention" in rendered
+
+    def test_format_escapes_dynamic_rich_markup(self):
+        rendered = format_bootstrap_report(
+            BootstrapReport(
+                checks=[
+                    CheckResult(
+                        name="[audit] extra",
+                        ok=False,
+                        fix='uv tool install "geode-agent[desktop]" --force',
+                    )
+                ]
+            )
+        )
+        assert r"\[audit]" in rendered
+        assert r"geode-agent\[desktop]" in rendered
 
     def test_all_ok_summary(self):
         report = BootstrapReport(

@@ -77,7 +77,7 @@ geode serve (데몬)  ←  하나의 GeodeRuntime이 전부 소유`}</pre>
               <li>CLI IPC 서버 (<code>core/server/ipc_server/poller.py</code>). thin CLI의 자유 텍스트와 슬래시 명령 처리.</li>
               <li>메신저 poller와 게이트웨이 (<code>core/server/supervised/</code>, <code>core/messaging/binding.py</code>).</li>
               <li>SchedulerService. 부팅 시 저장 작업 로드와 놓친 발화 복구, serve 루프에서 drain.</li>
-              <li>옵션 webhook HTTP 엔드포인트 (<code>settings.webhook_enabled</code>).</li>
+              <li>gateway와 webhook이 모두 활성일 때의 HTTP 엔드포인트.</li>
             </ul>
 
             <h2>종료 순서</h2>
@@ -104,9 +104,9 @@ geode serve (데몬)  ←  하나의 GeodeRuntime이 전부 소유`}</pre>
                   <td><code>pkill -f &quot;geode serve&quot;</code> 후 재진입합니다. <code>geode update</code>는 이 재시작을 대신 해줍니다.</td>
                 </tr>
                 <tr>
-                  <td><code>geode serve</code> 시작 거부</td>
+                  <td>외부 채널이 동작하지 않음</td>
                   <td><code>gateway_enabled</code> 꺼짐</td>
-                  <td>헤드리스 데몬이 필요할 때만 <code>GEODE_GATEWAY_ENABLED=true</code>를 켭니다.</td>
+                  <td>CLI IPC는 계속 동작합니다. 외부 채널이 필요할 때만 <code>GEODE_GATEWAY_ENABLED=true</code>를 켭니다.</td>
                 </tr>
                 <tr>
                   <td>기능이 조용히 동작하지 않음</td>
@@ -192,7 +192,7 @@ geode serve (daemon)  ←  one GeodeRuntime owns everything`}</pre>
               <li>The CLI IPC server (<code>core/server/ipc_server/poller.py</code>): free text and slash commands from the thin CLI.</li>
               <li>Messenger pollers and the gateway (<code>core/server/supervised/</code>, <code>core/messaging/binding.py</code>).</li>
               <li>SchedulerService: load saved jobs and recover missed fires on boot, drain in the serve loop.</li>
-              <li>An optional webhook HTTP endpoint (<code>settings.webhook_enabled</code>).</li>
+              <li>An HTTP endpoint when both gateway and webhook are enabled.</li>
             </ul>
 
             <h2>Shutdown order</h2>
@@ -220,9 +220,9 @@ geode serve (daemon)  ←  one GeodeRuntime owns everything`}</pre>
                   <td><code>pkill -f &quot;geode serve&quot;</code>, then re-enter. <code>geode update</code> performs this restart for you.</td>
                 </tr>
                 <tr>
-                  <td><code>geode serve</code> refuses to start</td>
+                  <td>External channels do not work</td>
                   <td><code>gateway_enabled</code> is off</td>
-                  <td>Set <code>GEODE_GATEWAY_ENABLED=true</code> only when you actually want the headless daemon.</td>
+                  <td>CLI IPC keeps working. Set <code>GEODE_GATEWAY_ENABLED=true</code> only when you need external channels.</td>
                 </tr>
                 <tr>
                   <td>A feature silently does nothing</td>

@@ -105,6 +105,13 @@ functional change.
 
 ### Fixed
 
+- **Fresh installs now reach the local REPL without enabling external gateways.**
+  The daemon always exposes its CLI IPC channel while Slack/Discord/Telegram
+  remain opt-in, an explicit dry-run setup choice persists across launches,
+  legacy scheduler migration follows `GEODE_HOME` instead of reading the host
+  home, wheel installs receive a usable desktop-extra doctor command, and
+  public setup examples no longer advertise the unsupported shell one-shot.
+
 - **macOS computer use now verifies input delivery.** Python and Swift host
   drivers fail loud when a cursor move is discarded instead of recording a
   false successful action. The Swift helper posts through the current login
