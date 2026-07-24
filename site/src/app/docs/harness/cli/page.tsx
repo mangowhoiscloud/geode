@@ -106,7 +106,7 @@ export default function Page() {
                 <tr><td><code>geode uninstall</code></td><td>런타임 데이터와 CLI 제거</td><td><code>--dry-run</code>, <code>--force/-f</code>, <code>--keep-config</code>, <code>--keep-data</code></td><td><code>core/cli/commands/lifecycle.py</code></td></tr>
                 <tr><td><code>geode init</code></td><td><code>.geode/</code> 프로젝트 골격 생성. 프로젝트 타입 자동 감지</td><td><code>--force/-f</code></td><td><code>core/cli/typer_init.py</code></td></tr>
                 <tr><td><code>geode history</code></td><td>실행 이력과 월간 비용 요약</td><td><code>--limit/-n</code>, <code>--month/-m YYYY-MM</code></td><td><code>core/llm/usage_store.py</code></td></tr>
-                <tr><td><code>geode serve</code></td><td>헤드리스 게이트웨이 데몬. 메신저 폴러, 스케줄러, IPC 소켓. <code>gateway_enabled</code> 필요</td><td><code>--poll/-p</code></td><td><code>core/cli/typer_serve.py</code></td></tr>
+                <tr><td><code>geode serve</code></td><td>CLI IPC 데몬. <code>gateway_enabled</code>를 켜면 메신저 폴러도 함께 실행</td><td><code>--poll/-p</code></td><td><code>core/cli/typer_serve.py</code></td></tr>
                 <tr><td><code>geode audit</code></td><td>Petri × GEODE 정렬 감사 실행</td><td><code>--judge/-j</code>, <code>--auditor/-a</code>, <code>--target/-t</code>, <code>--seeds/-s</code>, <code>--max-turns/-m</code>, <code>--seed-select</code>, <code>--dim-set</code>, <code>--dry-run/--live</code>, <code>--unrestricted</code>, <code>--cache/--no-cache</code></td><td><code>plugins/petri_audit/cli_audit.py</code></td></tr>
                 <tr><td><code>geode petri-archive</code></td><td>petri eval 로그를 워크트리 밖으로 보존하고 YAML 요약 작성</td><td><code>--raw-archive-dir</code>, <code>--summary-dir</code></td><td><code>plugins/petri_audit/cli_audit.py</code></td></tr>
                 <tr><td><code>geode outer-bundle</code></td><td>자기개선 루프 활동을 하나의 타임라인으로 묶어 보는 뷰어</td><td><code>--limit</code>, <code>--json</code></td><td><code>core/cli/outer_bundle.py</code></td></tr>
@@ -227,7 +227,7 @@ export default function Page() {
               </thead>
               <tbody>
                 <tr><td><code>geode &quot;...&quot;</code>가 No such command</td><td>원샷 미지원</td><td>bare <code>geode</code>로 REPL에 들어가 자유 텍스트를 입력합니다.</td></tr>
-                <tr><td><code>geode serve</code> 기동 거부</td><td><code>gateway_enabled</code> 꺼짐</td><td><code>~/.geode/.env</code>에 <code>GEODE_GATEWAY_ENABLED=true</code>를 추가합니다.</td></tr>
+                <tr><td>외부 채널 메시지가 들어오지 않음</td><td><code>gateway_enabled</code> 꺼짐</td><td>로컬 REPL은 그대로 동작합니다. Slack/Discord/Telegram도 쓰려면 <code>~/.geode/.env</code>에 <code>GEODE_GATEWAY_ENABLED=true</code>를 추가합니다.</td></tr>
                 <tr><td>배너 모델과 응답 모델 불일치</td><td>오래된 데몬 둘 이상이 소켓을 두고 경합</td><td><code>pkill -f &quot;geode serve&quot;</code> 후 재진입합니다. <code>ps aux | grep</code>은 긴 경로가 잘려 못 잡습니다.</td></tr>
                 <tr><td><code>geode seeds assemble</code>이 exit 2</td><td>wheel 설치에는 <code>scripts/</code>가 없음</td><td>repo 체크아웃에서 실행합니다.</td></tr>
               </tbody>
@@ -340,7 +340,7 @@ export default function Page() {
                 <tr><td><code>geode uninstall</code></td><td>Remove runtime data and the installed CLI</td><td><code>--dry-run</code>, <code>--force/-f</code>, <code>--keep-config</code>, <code>--keep-data</code></td><td><code>core/cli/commands/lifecycle.py</code></td></tr>
                 <tr><td><code>geode init</code></td><td>Create the <code>.geode/</code> project skeleton; auto-detects the project type</td><td><code>--force/-f</code></td><td><code>core/cli/typer_init.py</code></td></tr>
                 <tr><td><code>geode history</code></td><td>Execution history and monthly cost summary</td><td><code>--limit/-n</code>, <code>--month/-m YYYY-MM</code></td><td><code>core/llm/usage_store.py</code></td></tr>
-                <tr><td><code>geode serve</code></td><td>Headless gateway daemon: messenger pollers, scheduler, IPC socket. Requires <code>gateway_enabled</code></td><td><code>--poll/-p</code></td><td><code>core/cli/typer_serve.py</code></td></tr>
+                <tr><td><code>geode serve</code></td><td>CLI IPC daemon; also runs messenger pollers when <code>gateway_enabled</code> is on</td><td><code>--poll/-p</code></td><td><code>core/cli/typer_serve.py</code></td></tr>
                 <tr><td><code>geode audit</code></td><td>Run a Petri × GEODE alignment audit</td><td><code>--judge/-j</code>, <code>--auditor/-a</code>, <code>--target/-t</code>, <code>--seeds/-s</code>, <code>--max-turns/-m</code>, <code>--seed-select</code>, <code>--dim-set</code>, <code>--dry-run/--live</code>, <code>--unrestricted</code>, <code>--cache/--no-cache</code></td><td><code>plugins/petri_audit/cli_audit.py</code></td></tr>
                 <tr><td><code>geode petri-archive</code></td><td>Persist a petri eval log outside the worktree plus a YAML summary</td><td><code>--raw-archive-dir</code>, <code>--summary-dir</code></td><td><code>plugins/petri_audit/cli_audit.py</code></td></tr>
                 <tr><td><code>geode outer-bundle</code></td><td>Crosswalk self-improving activity into one timeline</td><td><code>--limit</code>, <code>--json</code></td><td><code>core/cli/outer_bundle.py</code></td></tr>
@@ -464,7 +464,7 @@ export default function Page() {
               </thead>
               <tbody>
                 <tr><td><code>geode &quot;...&quot;</code> says No such command</td><td>One-shots are not supported</td><td>Enter the REPL with bare <code>geode</code> and type free text there.</td></tr>
-                <tr><td><code>geode serve</code> refuses to start</td><td><code>gateway_enabled</code> is off</td><td>Add <code>GEODE_GATEWAY_ENABLED=true</code> to <code>~/.geode/.env</code>.</td></tr>
+                <tr><td>External channel messages do not arrive</td><td><code>gateway_enabled</code> is off</td><td>The local REPL still works. To also use Slack/Discord/Telegram, add <code>GEODE_GATEWAY_ENABLED=true</code> to <code>~/.geode/.env</code>.</td></tr>
                 <tr><td>Banner model differs from the answering model</td><td>Multiple stale daemons fight over the socket</td><td><code>pkill -f &quot;geode serve&quot;</code>, then re-enter. <code>ps aux | grep</code> truncates the long path and misses them.</td></tr>
                 <tr><td><code>geode seeds assemble</code> exits 2</td><td>Wheel installs ship no <code>scripts/</code></td><td>Run from a repo checkout.</td></tr>
               </tbody>

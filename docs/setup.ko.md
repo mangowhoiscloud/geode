@@ -15,10 +15,10 @@ cd geode && uv sync
 # Thin CLI (serve daemon이 없으면 자동 시작)
 uv run geode
 
-# 원샷 프롬프트
-uv run geode "summarize the latest AI research trends"
+# REPL에 들어간 뒤 프롬프트 입력
+# summarize the latest AI research trends
 
-# Headless daemon (Slack/Discord/Telegram + scheduler)
+# 데몬 (CLI IPC, gateway 활성화 시 Slack/Discord/Telegram 포함)
 uv run geode serve
 ```
 
@@ -312,7 +312,6 @@ history poll 경로를 마이그레이션 호환용으로 유지합니다. `geod
 
 ```bash
 geode                                  # 인터랙티브 thin CLI
-geode "prompt"                         # IPC 경유 원샷 프롬프트
 geode --continue                       # 마지막 세션 이어서
 geode --resume <session_id>            # 특정 세션 재개
 

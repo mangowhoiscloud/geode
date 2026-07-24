@@ -247,7 +247,7 @@ limit_usd = 5
 
 ```bash
 geode                                                # interactive chat
-geode "what's new in AI today?"                      # one-shot prompt
+# Then type: what's new in AI today?
 ```
 
 You should see something like:

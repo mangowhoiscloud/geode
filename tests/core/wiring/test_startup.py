@@ -6,7 +6,8 @@ import asyncio
 from pathlib import Path
 from unittest.mock import patch
 
-from core.cli.onboarding import detect_api_key, env_setup_wizard
+import pytest
+from core.cli.onboarding import detect_api_key, dry_run_opted_in, env_setup_wizard
 from core.config import ANTHROPIC_PRIMARY, GLM_PRIMARY, OPENAI_PRIMARY
 from core.wiring.startup import (
     Capability,
@@ -299,6 +300,13 @@ class TestDetectApiKey:
 class TestEnvSetupWizard:
     """v0.54.0 — three-branch menu (1: subscription / 2: API key / 3: skip)."""
 
+    @pytest.fixture(autouse=True)
+    def isolate_dry_run_marker(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(
+            "core.paths.GLOBAL_DRY_RUN_MARKER",
+            tmp_path / ".dry-run-opt-in",
+        )
+
     def test_wizard_skips_on_enter_after_choosing_path_b(self, tmp_path):
         """User picks Path B then presses Enter for every key → no keys set."""
         with (
@@ -373,6 +381,90 @@ class TestEnvSetupWizard:
             mock_console.input.side_effect = ["3"]
             result = env_setup_wizard()
         assert result is True
+        assert dry_run_opted_in() is True
+
+    def test_wizard_reports_skip_marker_write_failure(self, monkeypatch, tmp_path):
+        blocker = tmp_path / "not-a-directory"
+        blocker.write_text("x")
+        monkeypatch.setattr(
+            "core.paths.GLOBAL_DRY_RUN_MARKER",
+            blocker / ".dry-run-opt-in",
+        )
+        with patch("core.cli.onboarding.console") as mock_console:
+            mock_console.input.side_effect = ["3"]
+            result = env_setup_wizard()
+        assert result is False
+        rendered = " ".join(str(call.args[0]) for call in mock_console.print.call_args_list)
+        assert "Could not save" in rendered
+
+
+def test_welcome_does_not_repeat_wizard_after_dry_run_opt_in():
+    """A persisted skip choice, not project .env presence, gates re-prompting."""
+    from core.cli.welcome import _welcome_screen
+
+    report = ReadinessReport(force_dry_run=True)
+    with (
+        patch("core.cli.welcome._suppress_noisy_warnings"),
+        patch("core.cli.welcome._render_welcome_brand"),
+        patch("core.cli.welcome.auto_generate_env"),
+        patch("core.wiring.startup._has_any_llm_key", return_value=False),
+        patch("core.wiring.startup.detect_subscription_oauth", return_value=None),
+        patch("core.cli.welcome.dry_run_opted_in", return_value=True),
+        patch("core.cli.welcome.env_setup_wizard") as wizard,
+        patch("core.cli.welcome.check_readiness", return_value=report),
+        patch("core.cli.welcome._render_readiness_compact"),
+        patch("core.cli.welcome.setup_project_memory"),
+        patch("core.cli.welcome.setup_user_profile"),
+        patch("core.cli.welcome.console"),
+    ):
+        _welcome_screen()
+
+    wizard.assert_not_called()
+
+
+def test_welcome_clears_dry_run_opt_in_when_oauth_is_detected():
+    """A discovered credential makes a previous skip choice stale."""
+    from core.cli.welcome import _welcome_screen
+
+    report = ReadinessReport()
+    with (
+        patch("core.cli.welcome._suppress_noisy_warnings"),
+        patch("core.cli.welcome._render_welcome_brand"),
+        patch("core.cli.welcome.auto_generate_env"),
+        patch("core.wiring.startup._has_any_llm_key", return_value=False),
+        patch("core.wiring.startup.detect_subscription_oauth", return_value="openai-codex"),
+        patch("core.cli.welcome.clear_dry_run_opt_in") as clear_opt_in,
+        patch("core.cli.welcome.check_readiness", return_value=report),
+        patch("core.cli.welcome._render_readiness_compact"),
+        patch("core.cli.welcome.setup_project_memory"),
+        patch("core.cli.welcome.setup_user_profile"),
+        patch("core.cli.welcome.console"),
+    ):
+        _welcome_screen()
+
+    clear_opt_in.assert_called_once_with()
+
+
+def test_welcome_clears_dry_run_opt_in_when_api_key_is_detected():
+    """An existing API key also makes a previous skip choice stale."""
+    from core.cli.welcome import _welcome_screen
+
+    report = ReadinessReport()
+    with (
+        patch("core.cli.welcome._suppress_noisy_warnings"),
+        patch("core.cli.welcome._render_welcome_brand"),
+        patch("core.cli.welcome.auto_generate_env"),
+        patch("core.wiring.startup._has_any_llm_key", return_value=True),
+        patch("core.cli.welcome.clear_dry_run_opt_in") as clear_opt_in,
+        patch("core.cli.welcome.check_readiness", return_value=report),
+        patch("core.cli.welcome._render_readiness_compact"),
+        patch("core.cli.welcome.setup_project_memory"),
+        patch("core.cli.welcome.setup_user_profile"),
+        patch("core.cli.welcome.console"),
+    ):
+        _welcome_screen()
+
+    clear_opt_in.assert_called_once_with()
 
 
 class TestDetectSubscriptionOAuth:

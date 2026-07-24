@@ -21,6 +21,7 @@ from typing import Any
 from simple_term_menu import TerminalMenu
 
 from core.auth.profiles import AuthProfile
+from core.cli.onboarding import clear_dry_run_opt_in
 
 log = logging.getLogger(__name__)
 
@@ -586,6 +587,7 @@ def _login_add_interactive(_args: str) -> None:
         except Exception:  # noqa: S110 — best-effort cache invalidation
             pass
         _pkg._persist_auth_state()
+        clear_dry_run_opt_in()
         _pkg.console.print(
             f"  [success]Registered[/success] {plan.display_name}  "
             f"[muted]({plan.base_url})[/muted]\n"
@@ -640,6 +642,7 @@ def _login_add_interactive(_args: str) -> None:
             object.__setattr__(settings, field_name, key)
             _pkg._upsert_env(env_var, key)
         _pkg._persist_auth_state()
+        clear_dry_run_opt_in()
         _pkg.console.print(
             f"  [success]Registered[/success] {plan.display_name}  "
             f"[muted](key {_pkg._mask_key(key)})[/muted]\n"
@@ -698,6 +701,7 @@ def _login_oauth(target: str) -> None:
                     from core.llm.providers.codex import reset_codex_client
 
                     reset_codex_client()
+                clear_dry_run_opt_in()
                 _pkg.console.print(
                     "  [success]ChatGPT subscription OAuth registered.[/success]  "
                     "[muted]Provider: openai-codex[/muted]\n"
@@ -927,6 +931,7 @@ def _login_anthropic_api_key() -> None:
         save_auth_toml()
     except Exception:
         log.debug("auth.toml persist after anthropic login failed", exc_info=True)
+    clear_dry_run_opt_in()
 
     _pkg.console.print()
     _pkg.console.print("  [success]✓ Anthropic API key saved.[/success]")
@@ -975,6 +980,7 @@ def _login_set_key(rest: str) -> None:
 
         reset_glm_client()
     _pkg._persist_auth_state()
+    clear_dry_run_opt_in()
     _pkg.console.print(
         f"  [success]Updated key[/success] for {plan.display_name}  "
         f"[muted]({_pkg._mask_key(key)})[/muted]\n"

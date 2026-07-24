@@ -16,6 +16,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from core.cli.onboarding import clear_dry_run_opt_in
+
 if TYPE_CHECKING:
     from core.cli.commands._state import ModelProfile
 
@@ -74,6 +76,7 @@ def cmd_key(args: str) -> bool:
             reset_openai_client()
         except ImportError:
             pass
+        clear_dry_run_opt_in()
         _pkg.console.print(f"  [success]OpenAI API key set[/success]  {_pkg._mask_key(value)}")
         _pkg.console.print()
         return True
@@ -92,6 +95,7 @@ def cmd_key(args: str) -> bool:
             reset_glm_client()
         except ImportError:
             pass
+        clear_dry_run_opt_in()
         _pkg.console.print(f"  [success]ZhipuAI API key set[/success]  {_pkg._mask_key(value)}")
         _pkg.console.print()
         return True
@@ -135,6 +139,7 @@ def cmd_key(args: str) -> bool:
         )
         _pkg.console.print()
         return False
+    clear_dry_run_opt_in()
     _pkg.console.print(
         "  [muted]Tip: /login add to register a Coding Plan "
         "(cheaper than PAYG for heavy use).[/muted]"

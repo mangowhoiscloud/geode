@@ -9,10 +9,9 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from pathlib import Path
 from typing import Any
 
-from core.paths import PROJECT_SCHEDULER_FILE, PROJECT_SCHEDULER_LOG_DIR
+from core.paths import GLOBAL_SCHEDULER_DIR, PROJECT_SCHEDULER_FILE, PROJECT_SCHEDULER_LOG_DIR
 
 OnJobFired = Callable[[str, str, bool, str], None]
 """Callback: (job_id, action, isolated, agent_id) -> None."""
@@ -21,7 +20,7 @@ DEFAULT_STORE_PATH = PROJECT_SCHEDULER_FILE
 DEFAULT_LOG_DIR = PROJECT_SCHEDULER_LOG_DIR
 
 # Backward-compat: old global store path for migration detection
-_LEGACY_STORE_PATH = Path.home() / ".geode" / "scheduler" / "jobs.json"
+_LEGACY_STORE_PATH = GLOBAL_SCHEDULER_DIR / "jobs.json"
 
 # Missed task recovery: 1 hour grace window
 MISSED_TASK_GRACE_MS: float = 3_600_000.0
