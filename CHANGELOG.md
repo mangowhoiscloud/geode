@@ -47,6 +47,10 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.4] - 2026-07-29
+
+> Prompt-assembly grammar alignment: the entire Anthropic cache apparatus (1h-TTL static split, message breakpoints, T5 policy, S5 slots, adaptive thinking) un-stranded from a never-registered legacy adapter onto the live path; runtime injections unified on XML-in-envelope; reflection no longer discarded on OpenAI-family backends; legacy adapter classes deleted (net -540 lines).
+
 ### Changed
 
 - **Prompt assembly grammar unified on XML-in-envelope.** Every per-turn
