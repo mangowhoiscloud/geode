@@ -10,7 +10,7 @@ Why an internal tool rather than an MCP server:
 * Wanted's endpoint is a single GET with JSON response — running a separate
   subprocess for that is pure overhead.
 * GEODE already has ``httpx`` as a runtime dep.
-* The MCP layer adds ``mcp__<server>__<tool>`` naming + per-call permission
+* The MCP layer adds a separate server subprocess + per-call dispatch
   overhead the user does not want for a low-risk read-only HTTP call.
 
 Frontier reference: Manus / Devin lean on paid scraping providers (Apify,

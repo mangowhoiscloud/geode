@@ -470,6 +470,9 @@ class AgenticLoop:
         # merge native + MCP tools; allowlist as force_include so the global
         # tool_policy can't strip a tool the sub-agent's toolkit granted
         mcp_tool_list = mcp_manager.get_all_tools() if mcp_manager is not None else None
+        # Epoch snapshot pairs with the arun refresh gate: a server recycle
+        # bumps the manager epoch and invalidates this tool snapshot.
+        self._mcp_epoch = mcp_manager.connection_epoch if mcp_manager is not None else 0
         self._tools = get_agentic_tools(
             tool_registry,
             mcp_tools=mcp_tool_list,
@@ -1854,9 +1857,15 @@ class AgenticLoop:
 
         set_conversation_context(self.context)
 
-        # Lazy MCP tool refresh — load tools empty at init (startup timing gap)
-        if self._mcp_manager is not None and len(self._tools) < TOOL_LAZY_LOAD_THRESHOLD:
+        # Lazy MCP tool refresh — load tools empty at init (startup timing
+        # gap), and re-snapshot after any server recycle (epoch drift): a
+        # reconnected server may advertise a different tool set (ADR-014 R5).
+        if self._mcp_manager is not None and (
+            len(self._tools) < TOOL_LAZY_LOAD_THRESHOLD
+            or self._mcp_manager.connection_epoch != self._mcp_epoch
+        ):
             added = self.refresh_tools()
+            self._mcp_epoch = self._mcp_manager.connection_epoch
             if added > 0:
                 log.info("MCP tools lazy-loaded: +%d tools (total %d)", added, len(self._tools))
 

@@ -161,6 +161,15 @@ uv run ruff check core/ tests/ plugins/ autoresearch/ scripts/
 uv run mypy core/ plugins/
 uv run geode version   # confirms version stamp lands
 
+# 3b. Derived-SoT regeneration (CI blocks on any of these being stale)
+uv run python scripts/architecture_baseline.py --update   # CHANGELOG/[Unreleased] edits + core LOC drift
+node site/scripts/sync-stats.mjs
+uv run python scripts/check_llms_version.py --fix
+(cd site && npm ci && npm run build && npm run export-md) # llms-full body + size markers
+# Incident: v1.0.2 train (2026-07-29) — CHANGELOG growth alone drifted the
+# changelog page size marker in llms-full.txt (1460→1462 KB) and the
+# architecture baseline; two CI rounds were spent rediscovering this list.
+
 # 4. PR release → develop (NOT main — rotation pattern)
 gh pr create --base develop --head release/vX.Y.Z \
   --title "release: vX.Y.Z — <summary>" \
