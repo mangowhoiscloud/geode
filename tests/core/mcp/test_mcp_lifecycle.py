@@ -121,6 +121,25 @@ class TestStdioMCPClientLifecycle:
         assert client.server_protocol_version is None
         assert client.is_connected() is False
 
+    def test_non_string_negotiated_version_disconnects(self) -> None:
+        """A non-string protocolVersion (array/object) must not raise on the
+        frozenset membership test — it is rejected and the child is closed."""
+        client = StdioMCPClient(command="echo", timeout_s=0.5)
+        mock_proc = MagicMock()
+        mock_proc.pid = 12349
+        mock_proc.poll.return_value = None
+        mock_proc.stdin = MagicMock()
+        mock_proc.stdout = MagicMock()
+
+        init_resp = b'{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":["2025-06-18"]}}\n'
+        mock_proc.stdout.readline.side_effect = [init_resp]
+
+        with patch("subprocess.Popen", return_value=mock_proc):
+            assert client.connect() is False
+
+        assert client.server_protocol_version is None
+        mock_proc.terminate.assert_called_once()
+
     def test_missing_negotiated_version_disconnects(self) -> None:
         """An initialize result without protocolVersion is nonconforming —
         rejected instead of silently accepted."""

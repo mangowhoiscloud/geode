@@ -139,7 +139,9 @@ class StdioMCPClient:
             # Version negotiation: the server answers with the revision it
             # will speak. Outside our supported set → disconnect (spec SHOULD).
             negotiated = init_response.get("protocolVersion")
-            if negotiated not in _SUPPORTED_PROTOCOL_VERSIONS:
+            # isinstance first: a non-string (array/object) value would raise
+            # TypeError on the frozenset membership test and leak the child.
+            if not isinstance(negotiated, str) or negotiated not in _SUPPORTED_PROTOCOL_VERSIONS:
                 log.warning(
                     "MCP server %s negotiated unsupported protocol %r "
                     "(client supports %s) — disconnecting",

@@ -33,7 +33,7 @@ Accepted (2026-07-29)
 **지금 (이 ADR과 함께 랜딩):**
 
 1. `mcp>=1.28,<2` — 두 extras 모두, 공식 권고 범위 그대로. v1 라인은 maintenance mode지만 GEODE의 전 MCP 표면(FastMCP 서버, petri bridge, HTTP transport 테스트)이 v1 API에 결합돼 있고, v2 서버·클라이언트 생태계는 classic 개정판을 계속 서빙하므로 즉각적 상호운용 손실이 없다.
-2. stdio 클라이언트 선언 개정판을 `2025-06-18`로 상향(모듈 상수 `_PROTOCOL_VERSION`). initialize 응답의 협상 결과는 지원 집합(`_SUPPORTED_PROTOCOL_VERSIONS` = 4개 classic 개정판) 검증 후 `server_protocol_version`으로 기록 — 집합 밖(미래 개정판·누락 포함)이면 스펙의 SHOULD대로 연결을 끊고 warning 로그, 집합 안 불일치는 info 로그만(기저 연산 wire shape 동일).
+2. stdio 클라이언트 선언 개정판을 `2025-06-18`로 상향(모듈 상수 `_PROTOCOL_VERSION`) — 지원 집합 최신은 `2025-11-25`지만 outbound 선언은 배포 폭이 가장 넓은 `2025-06-18`을 유지(서버가 상위를 원하면 협상으로 올라감). initialize 응답의 협상 결과는 지원 집합(`_SUPPORTED_PROTOCOL_VERSIONS` = 4개 classic 개정판) 검증 후 `server_protocol_version`으로 기록 — 집합 밖(미래 개정판·누락 포함)이면 스펙의 SHOULD대로 연결을 끊고 warning 로그, 집합 안 불일치는 info 로그만(기저 연산 wire shape 동일).
 
 **보류 (후속 작업 — SDK v2 마이그레이션):**
 
