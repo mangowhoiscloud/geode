@@ -216,6 +216,12 @@ class MCPServerManager:
         self._servers: dict[str, dict[str, Any]] = {}
         self._clients: dict[str, StdioMCPClient] = {}
         self._failed_at: dict[str, float] = {}
+        # Bumped whenever a NEW client connects — lets long-lived AgenticLoop
+        # sessions detect a server recycle and refresh their tool snapshot.
+        self._connection_epoch = 0
+        # tool name -> server that last advertised it; distinguishes "server
+        # down" from "tool never existed" when find_server_for_tool misses.
+        self._last_seen_tools: dict[str, str] = {}
         self._dotenv_cache: dict[str, str | None] = {}
         self._text_read_cache: dict[tuple[str, str], str] = {}
         self._signal_installed = False
@@ -498,7 +504,9 @@ class MCPServerManager:
             client = self._clients[server_name]
             if client.is_connected():
                 return client
-            self._clients.pop(server_name, None)
+            stale = self._clients.pop(server_name, None)
+            if stale is not None:
+                stale.close()  # reap the dead Popen instead of leaking it
 
         failed_at = self._failed_at.get(server_name)
         if failed_at is not None and (time.monotonic() - failed_at) < _FAILED_RETRY_COOLDOWN_S:
@@ -528,6 +536,7 @@ class MCPServerManager:
         client = StdioMCPClient(command=command, args=args, env=env)
         if client.connect():
             self._clients[server_name] = client
+            self._connection_epoch += 1
             self._failed_at.pop(server_name, None)
             _fire_mcp_hook(HookEvent.MCP_SERVER_CONNECTED, {"server_name": server_name})
             return client
@@ -569,8 +578,20 @@ class MCPServerManager:
             for tool in tools:
                 normalised = _normalise_mcp_tool(tool)
                 normalised["_mcp_server"] = server_name
+                name = normalised.get("name")
+                if isinstance(name, str):
+                    self._last_seen_tools[name] = server_name
                 all_tools.append(normalised)
         return all_tools
+
+    @property
+    def connection_epoch(self) -> int:
+        """Monotonic count of client connects — changes signal a recycle."""
+        return self._connection_epoch
+
+    def last_known_server_for_tool(self, tool_name: str) -> str | None:
+        """Server that previously advertised ``tool_name`` (may be down now)."""
+        return self._last_seen_tools.get(tool_name)
 
     # MCP server fallback hints: when a server is unavailable or fails,
     # the error message includes a hint so the LLM can try an alternative.
@@ -607,7 +628,33 @@ class MCPServerManager:
                 tool_name=tool_name,
                 args=normalised_args,
             )
-            result = await client.acall_tool(tool_name, normalised_args)
+            try:
+                result = await client.acall_tool(tool_name, normalised_args)
+                died_mid_call = (
+                    isinstance(result, dict)
+                    and bool(result.get("error"))
+                    and not client.is_connected()
+                )
+            except ConnectionError:
+                result = {}
+                died_mid_call = True
+            if died_mid_call:
+                # Stateless-era servers may recycle between rounds (ADR-014):
+                # retry ONCE on a fresh client before surfacing the failure.
+                stale = self._clients.pop(server_name, None)
+                if stale is not None:
+                    stale.close()
+                fresh = await asyncio.to_thread(self._get_client, server_name)
+                if fresh is None:
+                    raise ConnectionError(
+                        f"MCP server '{server_name}' died mid-call and did not reconnect"
+                    )
+                log.info(
+                    "MCP server '%s' respawned mid-call; retrying %s",
+                    server_name,
+                    tool_name,
+                )
+                result = await fresh.acall_tool(tool_name, normalised_args)
             self._record_text_read_result(
                 server_name=server_name,
                 tool_name=tool_name,
@@ -749,8 +796,9 @@ class MCPServerManager:
 
             if not alive and auto_restart:
                 log.info("MCP server '%s' is down, attempting restart", name)
-                # Remove dead client reference
-                self._clients.pop(name, None)
+                dead = self._clients.pop(name, None)
+                if dead is not None:
+                    dead.close()  # reap the dead Popen instead of leaking it
                 self._failed_at.pop(name, None)
                 new_client = self._get_client(name)
                 alive = new_client is not None and new_client.is_connected()

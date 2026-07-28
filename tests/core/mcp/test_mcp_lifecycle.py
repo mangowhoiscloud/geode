@@ -140,6 +140,50 @@ class TestStdioMCPClientLifecycle:
         assert client.server_protocol_version is None
         mock_proc.terminate.assert_called_once()
 
+    def test_unsolicited_notification_frame_skipped(self) -> None:
+        """A server-initiated notification interleaved before the response
+        must not desynchronize the stream (JSON-RPC id matching, ADR-014 R1)."""
+        client = StdioMCPClient(command="echo", timeout_s=2.0)
+        mock_proc = MagicMock()
+        mock_proc.poll.return_value = None
+        client._process = mock_proc
+        client._connected = True
+        client._pid = 111
+
+        notif = b'{"jsonrpc":"2.0","method":"notifications/message","params":{"level":"info"}}\n'
+        resp = b'{"jsonrpc":"2.0","id":1,"result":{"content":[]}}\n'
+        mock_proc.stdout.readline.side_effect = [notif, resp]
+
+        result = asyncio.run(client.acall_tool("some_tool", {}))
+        assert result == {"content": []}
+
+    def test_chatty_stderr_does_not_wedge_connect(self) -> None:
+        """A child writing >64 KB to stderr before serving must not deadlock —
+        the drain thread keeps the pipe moving (ADR-014 R2). Real subprocess."""
+        import sys as _sys
+
+        script = (
+            "import sys\n"
+            "sys.stderr.write('x'*262144)\n"
+            "sys.stderr.flush()\n"
+            "import json\n"
+            "req=json.loads(sys.stdin.readline())\n"
+            "sys.stdout.write(json.dumps({'jsonrpc':'2.0','id':req['id'],"
+            "'result':{'protocolVersion':'2025-06-18'}})+'\\n')\n"
+            "sys.stdout.flush()\n"
+            "sys.stdin.readline()\n"
+            "req=json.loads(sys.stdin.readline())\n"
+            "sys.stdout.write(json.dumps({'jsonrpc':'2.0','id':req['id'],"
+            "'result':{'tools':[]}})+'\\n')\n"
+            "sys.stdout.flush()\n"
+            "sys.stdin.readline()\n"
+        )
+        client = StdioMCPClient(command=_sys.executable, args=["-c", script], timeout_s=3.0)
+        try:
+            assert client.connect() is True
+        finally:
+            client.close()
+
     def test_missing_negotiated_version_disconnects(self) -> None:
         """An initialize result without protocolVersion is nonconforming —
         rejected instead of silently accepted."""
@@ -819,3 +863,81 @@ class TestMCPFallbackHints:
         assert "error" in result
         # Hint is in dedicated field (LLM-friendly structured error)
         assert "playwright" in result.get("hint", "")
+
+
+class TestServerRecycleResilience:
+    """Stateless-era hardening (ADR-014 R3/R4/R5): server subprocesses may
+    recycle mid-session; the manager retries, the executor stays honest, and
+    the loop can detect the recycle via the connection epoch."""
+
+    def test_acall_tool_retries_once_after_mid_call_death(self) -> None:
+        mgr = MCPServerManager()
+        mgr._servers["srv"] = {"command": "echo", "args": [], "env": {}}
+
+        dead = MagicMock()
+        dead.list_tools.return_value = [{"name": "t", "input_schema": {}}]
+        dead.acall_tool = AsyncMock(return_value={"error": "MCP tool call failed: t"})
+        dead.is_connected.return_value = False
+        mgr._clients["srv"] = dead
+
+        fresh = MagicMock()
+        fresh.acall_tool = AsyncMock(return_value={"content": [{"type": "text", "text": "ok"}]})
+
+        with patch.object(mgr, "_get_client", side_effect=[dead, fresh]):
+            result = asyncio.run(mgr.acall_tool("srv", "t", {}))
+
+        assert result == {"content": [{"type": "text", "text": "ok"}]}
+        dead.close.assert_called_once()
+
+    def test_acall_tool_mid_call_death_without_respawn_is_connection_error(self) -> None:
+        mgr = MCPServerManager()
+        mgr._servers["srv"] = {"command": "echo", "args": [], "env": {}}
+
+        dead = MagicMock()
+        dead.list_tools.return_value = [{"name": "t", "input_schema": {}}]
+        dead.acall_tool = AsyncMock(return_value={"error": "MCP tool call failed: t"})
+        dead.is_connected.return_value = False
+
+        with patch.object(mgr, "_get_client", side_effect=[dead, None]):
+            result = asyncio.run(mgr.acall_tool("srv", "t", {}))
+
+        assert result.get("error_type") == "connection"
+        assert "MCP tool call failed" in result.get("error", "")
+
+    def test_connection_epoch_bumps_on_new_client(self) -> None:
+        mgr = MCPServerManager()
+        mgr._servers["srv"] = {"command": "echo", "args": [], "env": {}}
+        assert mgr.connection_epoch == 0
+
+        good = MagicMock()
+        good.connect.return_value = True
+        with patch("core.mcp.manager.StdioMCPClient", return_value=good):
+            client = mgr._get_client("srv")
+
+        assert client is good
+        assert mgr.connection_epoch == 1
+
+    def test_unavailable_mcp_tool_not_reported_as_unknown(self) -> None:
+        from core.agent.tool_executor import ToolExecutor
+
+        mgr = MCPServerManager()
+        mgr._last_seen_tools["gone_tool"] = "srv"
+
+        executor = ToolExecutor(action_handlers={}, mcp_manager=mgr, hitl_level=0)
+        with patch.object(mgr, "find_server_for_tool", return_value=None):
+            result = asyncio.run(executor._dispatch_async("gone_tool", {}))
+
+        assert "currently unavailable" in result.get("error", "")
+        assert "Unknown tool" not in result.get("error", "")
+
+    def test_last_seen_tools_recorded_by_get_all_tools(self) -> None:
+        mgr = MCPServerManager()
+        mgr._servers["srv"] = {"command": "echo", "args": [], "env": {}}
+        client = MagicMock()
+        client.is_connected.return_value = True
+        client.list_tools.return_value = [{"name": "t1", "inputSchema": {}}]
+        mgr._clients["srv"] = client
+
+        _tools = mgr.get_all_tools()
+        assert mgr.last_known_server_for_tool("t1") == "srv"
+        assert mgr.last_known_server_for_tool("nope") is None

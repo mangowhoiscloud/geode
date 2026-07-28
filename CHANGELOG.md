@@ -47,6 +47,34 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+
+- **MCP stdio stream can no longer be permanently poisoned by unsolicited
+  server frames.** `StdioMCPClient` now matches JSON-RPC response ids and
+  skips interleaved notifications (`notifications/message`, progress,
+  `tools/list_changed`); previously a single server-initiated frame
+  desynchronized the stream forever while `is_connected()` kept reporting
+  healthy. A daemon thread now drains child stderr, removing the 64 KB
+  pipe-buffer wedge chatty servers could hit (ADR-014 R1/R2).
+
+- **MCP server recycle mid-session now recovers instead of failing the
+  round.** `MCPServerManager.acall_tool` retries once on a freshly respawned
+  client when the subprocess died mid-call, dead clients are reaped
+  (`close()`) when popped, a down server's tools are reported to the model as
+  "currently unavailable" instead of the misinforming "Unknown tool", and
+  `AgenticLoop` re-snapshots its MCP tool list when the manager's connection
+  epoch changes — a recycle previously left long-lived sessions with stale
+  schemas for their whole lifetime (ADR-014 R3/R4/R5).
+
+### Architecture
+
+- **ADR-014 verification + records.** Live E2E trajectory (subscription
+  backend, loopback geode-mcp + stateless-only rejection) published to the
+  external evidence store as the first normalized `trajectories/` release;
+  ADR-014, `AGENTS.md` (core/mcp), the stability contract §C line refs, and
+  the geode-changelog skill's derived-SoT regeneration checklist updated with
+  the observations.
+
 ## [1.0.2] - 2026-07-29
 
 > MCP 2026-07-28 stateless spec response (SDK v1 pin + client negotiation validation, ADR-014), riding with the accumulated develop train: roadmap sync trust resolver, architecture exception ledger, generated architecture baseline gate, gateway computer-use opt-in, fresh-install REPL fixes, and macOS computer-use input verification.

@@ -251,7 +251,7 @@ See `geode-changelog` skill.
 |-------------|--------------|
 | Version across 5 locations | CHANGELOG, CLAUDE.md, README.md, README.ko.md, pyproject.toml |
 | Metrics | Tests, Modules, Commands — measured values |
-| 사이트 버전 SoT | `site/public/llms.txt` + `llms-full.txt`의 `Version vX` 헤더 **및** `site/src/data/geode/sot.ts`의 `version` == pyproject. 버전 범프 시 `node site/scripts/sync-stats.mjs` (llms.txt + sot.ts + changelog.ts 재생성) + `uv run python scripts/check_llms_version.py --fix` (llms-full 헤더). 드리프트는 ci.yml `check_llms_version.py` ratchet가 3파일 전부 차단(committed 스냅샷이 12버전 stale했던 사건). llms-full 본문은 배포 빌드(pages.yml)가 갱신. |
+| 사이트 버전 SoT | `site/public/llms.txt` + `llms-full.txt`의 `Version vX` 헤더 **및** `site/src/data/geode/sot.ts`의 `version` == pyproject. 버전 범프 시 `node site/scripts/sync-stats.mjs` (llms.txt + sot.ts + changelog.ts 재생성) + `uv run python scripts/check_llms_version.py --fix` (llms-full 헤더). 드리프트는 ci.yml `check_llms_version.py` ratchet가 3파일 전부 차단(committed 스냅샷이 12버전 stale했던 사건). llms-full **본문·크기 마커도 로컬 재생성 대상** — `site/`에서 `npm run build && npm run export-md` 후 커밋해야 pages.yml의 public-doc 생성기 검증 게이트를 통과(v1.0.2 트레인: CHANGELOG 성장만으로 changelog 페이지 크기 마커 1460→1462 KB 드리프트, CI 1회 반려 실측). CHANGELOG/[Unreleased] 편집이나 core LOC 변동 시 `scripts/architecture_baseline.py --update`(baseline JSON+AGENTS.md+roadmap §2.1)도 같은 커밋에. |
 
 **Versioning**: post-1.0 default = **PATCH for every routine landing** (features included — the 0.99.x patch-train continues as 1.0.x). MINOR/MAJOR are operator-declared milestones only; before proposing one, grep `removed in v` for pledged numbers and get explicit operator approval. Docs only = none. Full policy + mis-stamp correction procedure: `geode-changelog` skill.
 

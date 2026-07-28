@@ -15,6 +15,7 @@ import logging
 import os
 import subprocess  # nosec B404 — intentional: MCP server launch from trusted config
 import threading
+import time
 from typing import Any
 
 log = logging.getLogger(__name__)
@@ -105,6 +106,23 @@ class StdioMCPClient:
                 self._command,
                 self._pid,
             )
+
+            # Drain stderr in a daemon thread — an undrained PIPE wedges the
+            # child at the 64 KB buffer while is_connected() keeps reporting
+            # healthy (every call then times out). Skipped for mocked pipes.
+            stderr_pipe = self._process.stderr
+            if stderr_pipe is not None:
+                try:
+                    real_fd = isinstance(stderr_pipe.fileno(), int)
+                except Exception:
+                    real_fd = False
+                if real_fd:
+                    threading.Thread(
+                        target=self._drain_stderr,
+                        args=(stderr_pipe,),
+                        daemon=True,
+                        name=f"mcp-stderr-{self._pid}",
+                    ).start()
 
             # Wait for server to be ready (npx may download packages first)
             import time
@@ -257,36 +275,72 @@ class StdioMCPClient:
                 self._process.stdin.write(message.encode("utf-8"))
                 self._process.stdin.flush()
 
-                # Read response with timeout (select-based, fallback to blocking)
-                try:
-                    import select
-
-                    ready, _, _ = select.select(
-                        [self._process.stdout],
-                        [],
-                        [],
-                        self._timeout_s,
-                    )
-                    if not ready:
+                # Read frames until the response matching OUR request id.
+                # Servers may interleave unsolicited traffic (notifications/
+                # message, progress, tools/list_changed); before id matching a
+                # single such frame permanently desynchronized the stream while
+                # is_connected() kept reporting healthy.
+                deadline = time.monotonic() + self._timeout_s
+                while True:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
                         log.warning("MCP timeout waiting for %s response", method)
                         return None
-                except (TypeError, ValueError):
-                    pass  # mock/non-real fd — fall through to blocking read
 
-                line = self._process.stdout.readline()
-                if not line:
-                    return None
+                    try:
+                        import select
 
-                response = json.loads(line.decode("utf-8"))
-                if "error" in response:
-                    log.warning("MCP error: %s", response["error"])
-                    return None
+                        ready, _, _ = select.select(
+                            [self._process.stdout],
+                            [],
+                            [],
+                            remaining,
+                        )
+                        if not ready:
+                            log.warning("MCP timeout waiting for %s response", method)
+                            return None
+                    except (TypeError, ValueError):
+                        pass  # mock/non-real fd — fall through to blocking read
 
-                result: dict[str, Any] | None = response.get("result")
-                return result
-            except (json.JSONDecodeError, OSError, BrokenPipeError) as exc:
+                    line = self._process.stdout.readline()
+                    if not line:
+                        return None
+
+                    try:
+                        response = json.loads(line.decode("utf-8"))
+                    except json.JSONDecodeError:
+                        log.debug("MCP: skipping non-JSON frame on stdout")
+                        continue
+
+                    if response.get("id") != request["id"]:
+                        log.debug(
+                            "MCP: skipping unsolicited frame (method=%s, id=%s)",
+                            response.get("method"),
+                            response.get("id"),
+                        )
+                        continue
+
+                    if "error" in response:
+                        log.warning("MCP error: %s", response["error"])
+                        return None
+
+                    result: dict[str, Any] | None = response.get("result")
+                    return result
+            except (OSError, BrokenPipeError) as exc:
                 log.warning("MCP communication error: %s", exc)
                 return None
+
+    def _drain_stderr(self, pipe: Any) -> None:
+        """Consume the child's stderr so it can never block on a full pipe."""
+        with contextlib.suppress(Exception):  # drain thread must never propagate
+            for raw in iter(pipe.readline, b""):
+                log.debug(
+                    "MCP stderr[%s]: %s",
+                    self._command,
+                    raw.decode("utf-8", "replace").rstrip(),
+                )
+        with contextlib.suppress(Exception):
+            pipe.close()
 
     def _send_notification(self, method: str, params: dict[str, Any]) -> None:
         """Send a JSON-RPC notification (no response expected)."""
