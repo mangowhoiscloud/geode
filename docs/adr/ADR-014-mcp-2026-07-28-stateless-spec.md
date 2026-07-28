@@ -52,11 +52,11 @@ Accepted (2026-07-29)
 
 | # | 결함 | 처분 |
 |---|------|------|
-| R1 | JSON-RPC 응답 id 미대조 — 서버발 notification 1프레임이 스트림을 영구 오염, health는 계속 정상 보고 | 수정: id 매칭 + 비대상 프레임 skip (`stdio_client._send_request`) |
+| R1 | JSON-RPC 응답 id 미대조 — 서버발 notification 1프레임이 스트림을 영구 오염, health는 계속 정상 보고 | 수정: id 매칭 + 비대상 프레임 skip + **stdout unbuffered(`bufsize=0`)** — 기본 버퍼링에선 notification+응답이 한 write로 오면 select가 Python 버퍼 속 응답을 못 봐 타임아웃(Codex 재현) |
 | R2 | 자식 stderr 미배수 — 64 KB 버퍼에서 웨지, 전 호출 타임아웃 | 수정: 데몬 배수 스레드 (`_drain_stderr`) |
-| R3 | 다운/쿨다운 서버의 도구가 모델에 "Unknown tool"로 오보(스키마에는 존재) | 수정: `last_known_server_for_tool` 메모 + executor "currently unavailable" 응답 |
-| R4 | 미드콜 사망 시 재시도 부재 — 일시 recycle이 라운드를 소실 | 수정: fresh 클라이언트로 1회 재시도 (`manager.acall_tool`) |
-| R5 | 루프 도구 스냅샷이 재연결 후 stale (IPC 세션 수명 동안) | 수정: `connection_epoch` + arun 리프레시 게이트 |
+| R3 | 다운/쿨다운 서버의 도구가 모델에 "Unknown tool"로 오보(스키마에는 존재) | 수정: `last_known_server_for_tool` 메모(get_all_tools + find_server_for_tool 양쪽 기록) + executor "currently unavailable" 응답 |
+| R4 | 미드콜 사망 시 재시도 부재 — 일시 recycle이 라운드를 소실 | 수정: **`readOnlyHint`/`idempotentHint` 도구만** fresh 클라이언트로 1회 재시도(사망≠미실행 증거 — 무조건 재시도는 at-least-once 중복 실행 위험), 비멱등은 "outcome unknown" connection 오류. 동시 사망은 `_respawn_lock`으로 직렬화 |
+| R5 | 루프 도구 스냅샷이 재연결 후 stale (IPC 세션 수명 동안) | 수정: `connection_epoch` + arun 리프레시 게이트. 잔여: 같은 arun 내 recycle은 다음 arun에서 반영 |
 | R6 | 주기 헬스 스윕 부재 | 보류 (위 표) |
 | R7 | `_pending_proposals` 프로세스 친화성 | 보류 (기존 체크리스트 항목) |
 

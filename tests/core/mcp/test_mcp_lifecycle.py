@@ -875,7 +875,9 @@ class TestServerRecycleResilience:
         mgr._servers["srv"] = {"command": "echo", "args": [], "env": {}}
 
         dead = MagicMock()
-        dead.list_tools.return_value = [{"name": "t", "input_schema": {}}]
+        dead.list_tools.return_value = [
+            {"name": "t", "input_schema": {}, "annotations": {"idempotentHint": True}}
+        ]
         dead.acall_tool = AsyncMock(return_value={"error": "MCP tool call failed: t"})
         dead.is_connected.return_value = False
         mgr._clients["srv"] = dead
@@ -894,7 +896,9 @@ class TestServerRecycleResilience:
         mgr._servers["srv"] = {"command": "echo", "args": [], "env": {}}
 
         dead = MagicMock()
-        dead.list_tools.return_value = [{"name": "t", "input_schema": {}}]
+        dead.list_tools.return_value = [
+            {"name": "t", "input_schema": {}, "annotations": {"readOnlyHint": True}}
+        ]
         dead.acall_tool = AsyncMock(return_value={"error": "MCP tool call failed: t"})
         dead.is_connected.return_value = False
 
@@ -941,3 +945,63 @@ class TestServerRecycleResilience:
         _tools = mgr.get_all_tools()
         assert mgr.last_known_server_for_tool("t1") == "srv"
         assert mgr.last_known_server_for_tool("nope") is None
+
+    def test_acall_tool_no_retry_for_non_idempotent_tool(self) -> None:
+        """Mid-call death of an unannotated tool must NOT auto-retry — the
+        original call may have executed (at-least-once hazard)."""
+        mgr = MCPServerManager()
+        mgr._servers["srv"] = {"command": "echo", "args": [], "env": {}}
+        dead = MagicMock()
+        dead.list_tools.return_value = [{"name": "t", "input_schema": {}}]
+        dead.acall_tool = AsyncMock(return_value={"error": "MCP tool call failed: t"})
+        dead.is_connected.return_value = False
+
+        with patch.object(mgr, "_get_client", side_effect=[dead]) as getc:
+            result = asyncio.run(mgr.acall_tool("srv", "t", {}))
+
+        assert result.get("error_type") == "connection"
+        assert "outcome unknown" in result.get("error", "")
+        assert getc.call_count == 1
+
+    def test_find_server_for_tool_records_last_seen(self) -> None:
+        mgr = MCPServerManager()
+        mgr._servers["srv"] = {"command": "echo", "args": [], "env": {}}
+        client = MagicMock()
+        client.is_connected.return_value = True
+        client.list_tools.return_value = [{"name": "t9"}]
+        mgr._clients["srv"] = client
+
+        assert mgr.find_server_for_tool("t9") == "srv"
+        assert mgr.last_known_server_for_tool("t9") == "srv"
+
+    def test_coalesced_notification_and_response_single_write(self) -> None:
+        """Notification + response arriving in ONE stdout write must not
+        starve the next select() — stdout is unbuffered (ADR-014 R1).
+        Real subprocess."""
+        import sys as _sys
+
+        script = (
+            "import sys,json\n"
+            "def serve(result):\n"
+            "    req=json.loads(sys.stdin.readline())\n"
+            "    sys.stdout.write(json.dumps({'jsonrpc':'2.0','id':req['id'],"
+            "'result':result})+'\\n')\n"
+            "    sys.stdout.flush()\n"
+            "serve({'protocolVersion':'2025-06-18'})\n"
+            "sys.stdin.readline()\n"
+            "serve({'tools':[{'name':'t','inputSchema':{}}]})\n"
+            "req=json.loads(sys.stdin.readline())\n"
+            "notif=json.dumps({'jsonrpc':'2.0','method':'notifications/message','params':{}})\n"
+            "resp=json.dumps({'jsonrpc':'2.0','id':req['id'],"
+            "'result':{'content':[{'type':'text','text':'ok'}]}})\n"
+            "sys.stdout.write(notif+'\\n'+resp+'\\n')\n"
+            "sys.stdout.flush()\n"
+            "sys.stdin.readline()\n"
+        )
+        client = StdioMCPClient(command=_sys.executable, args=["-c", script], timeout_s=3.0)
+        try:
+            assert client.connect() is True
+            result = asyncio.run(client.acall_tool("t", {}))
+            assert result == {"content": [{"type": "text", "text": "ok"}]}
+        finally:
+            client.close()

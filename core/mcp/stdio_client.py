@@ -93,12 +93,18 @@ class StdioMCPClient:
             env = dict(os.environ)
             env.update(self._env)
 
+            # bufsize=0: stdout stays UNBUFFERED so readline() never pulls a
+            # second frame into a Python-side buffer select() cannot see —
+            # with default buffering, a notification+response arriving
+            # together left the response invisible to the next select() and
+            # the call timed out despite the data being buffered.
             self._process = subprocess.Popen(  # noqa: S603  # nosec B603
                 [self._command, *self._args],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 env=env,
+                bufsize=0,
             )
             self._pid = self._process.pid
             log.debug(
@@ -300,7 +306,10 @@ class StdioMCPClient:
                             log.warning("MCP timeout waiting for %s response", method)
                             return None
                     except (TypeError, ValueError):
-                        pass  # mock/non-real fd — fall through to blocking read
+                        # Mock/non-real fd (tests) — fall through to a blocking
+                        # read. Real pipes always take the select() path above,
+                        # so the timeout contract holds outside of mocks.
+                        pass
 
                     line = self._process.stdout.readline()
                     if not line:

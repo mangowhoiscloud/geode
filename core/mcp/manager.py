@@ -20,6 +20,7 @@ import json
 import logging
 import os
 import signal
+import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -222,6 +223,9 @@ class MCPServerManager:
         # tool name -> server that last advertised it; distinguishes "server
         # down" from "tool never existed" when find_server_for_tool misses.
         self._last_seen_tools: dict[str, str] = {}
+        # Serializes mid-call respawns so concurrent failures on the same
+        # server can't each spawn a subprocess and orphan the loser.
+        self._respawn_lock = threading.Lock()
         self._dotenv_cache: dict[str, str | None] = {}
         self._text_read_cache: dict[tuple[str, str], str] = {}
         self._signal_installed = False
@@ -640,11 +644,17 @@ class MCPServerManager:
                 died_mid_call = True
             if died_mid_call:
                 # Stateless-era servers may recycle between rounds (ADR-014):
-                # retry ONCE on a fresh client before surfacing the failure.
-                stale = self._clients.pop(server_name, None)
-                if stale is not None:
-                    stale.close()
-                fresh = await asyncio.to_thread(self._get_client, server_name)
+                # retry ONCE on a fresh client — but only for tools annotated
+                # read-only/idempotent. The death is no proof the original
+                # call did NOT execute, so blind retry would be at-least-once.
+                annotations = (raw_tool or {}).get("annotations") or {}
+                if not (annotations.get("readOnlyHint") or annotations.get("idempotentHint")):
+                    raise ConnectionError(
+                        f"MCP server '{server_name}' died during '{tool_name}'; "
+                        "the tool is not marked read-only/idempotent so it was "
+                        "not retried — outcome unknown"
+                    )
+                fresh = await asyncio.to_thread(self._respawn_after_death, server_name)
                 if fresh is None:
                     raise ConnectionError(
                         f"MCP server '{server_name}' died mid-call and did not reconnect"
@@ -666,12 +676,29 @@ class MCPServerManager:
             log.error("MCP async tool call failed: %s/%s: %s", server_name, tool_name, exc)
             hint = self._FALLBACK_HINTS.get(server_name, "")
             is_timeout = "timeout" in str(exc).lower()
+            detail = f" ({exc})" if str(exc) else ""
             return tool_error(
-                f"MCP tool call failed: {tool_name}",
+                f"MCP tool call failed: {tool_name}{detail}",
                 error_type="timeout" if is_timeout else "connection",
                 hint=f"Use {hint} instead" if hint else "Retry or use an alternative tool.",
                 context={"server": server_name, "tool": tool_name},
             )
+
+    def _respawn_after_death(self, server_name: str) -> StdioMCPClient | None:
+        """Replace a mid-call-dead client under the respawn lock.
+
+        Concurrent callers observing the same death serialize here; the
+        second caller reuses the first one's fresh client instead of
+        spawning a competing subprocess and orphaning one of them.
+        """
+        with self._respawn_lock:
+            existing = self._clients.get(server_name)
+            if existing is not None and existing.is_connected():
+                return existing
+            stale = self._clients.pop(server_name, None)
+            if stale is not None:
+                stale.close()
+            return self._get_client(server_name)
 
     def _raw_tool_for_client(self, client: StdioMCPClient, tool_name: str) -> dict[str, Any] | None:
         try:
@@ -759,6 +786,10 @@ class MCPServerManager:
                 continue
             for tool in client.list_tools():
                 if tool.get("name") == tool_name:
+                    # Memo here too — sessions that never called
+                    # get_all_tools still get the honest "unavailable"
+                    # error (instead of "Unknown tool") after a recycle.
+                    self._last_seen_tools[tool_name] = server_name
                     return server_name
         return None
 
