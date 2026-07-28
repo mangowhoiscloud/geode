@@ -100,17 +100,17 @@ def test_call_site_reads_kill_switch() -> None:
     from pathlib import Path
 
     repo_root = Path(__file__).resolve().parents[3]
-    adapter_source = (repo_root / "core" / "llm" / "providers" / "anthropic.py").read_text(
+    adapter_source = (repo_root / "core" / "llm" / "adapters" / "_anthropic_common.py").read_text(
         encoding="utf-8"
     )
     assert "tool_search_defer" in adapter_source
-    assert "apply_tool_search_defer(" in adapter_source.split("async def agentic_call", 1)[1]
+    assert "apply_tool_search_defer(" in adapter_source.split("def _shape_tools", 1)[1]
 
 
 # ---------------------------------------------------------------------------
 # LIVE adapter path — build_create_kwargs / build_stream_kwargs
 # (Codex review of PR #2226, finding 1: the first wiring landed on the
-# legacy ClaudeAgenticAdapter only; the production AgenticLoop reaches
+# the since-deleted legacy adapter only; the production AgenticLoop reaches
 # Anthropic through the adapter-registry request builders pinned here.)
 # ---------------------------------------------------------------------------
 

@@ -385,11 +385,11 @@ ignore = [
 # value, rejects unregistered symbols, and requires this value to fall whenever
 # the measured maximum falls.
 [tool.ruff.lint.mccabe]
-max-complexity = 54
+max-complexity = 52
 
 [tool.ruff.lint.pylint]
 max-args = 23
-max-branches = 56
+max-branches = 52
 max-returns = 18
 max-statements = 223
 

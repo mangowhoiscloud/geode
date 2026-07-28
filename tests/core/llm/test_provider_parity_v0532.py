@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import inspect
 
-import core.llm.providers.anthropic as _anthropic_mod
 from core.llm.errors import BillingError
 
 # ---------------------------------------------------------------------------
@@ -53,16 +52,13 @@ def _has_bare_raise_in_except(adapter_class_or_module: type | object) -> bool:
 
 
 def test_anthropic_reraises_billing_error() -> None:
-    """Anthropic was the only provider that already raised BillingError
-    (via the LLMBadRequestError branch). v0.53.2 also adds the bare-Exception
-    branch to mirror the OpenAI/Codex/GLM fix shape. ``ClaudeAgenticAdapter``
-    is part of the legacy paperclip path that we keep — the invariant
-    holds on its ``agentic_call``."""
-    src = inspect.getsource(_anthropic_mod.ClaudeAgenticAdapter.agentic_call)
-    assert "BillingError" in src, "ClaudeAgenticAdapter must mention BillingError in source"
-    assert "raise BillingError" in src or _has_bare_raise_in_except(
-        _anthropic_mod.ClaudeAgenticAdapter
-    ), "ClaudeAgenticAdapter must either explicitly raise BillingError or bare-raise from except"
+    """Anthropic billing parity — v0.53.2 invariant, repointed 2026-07-29:
+    ``ClaudeAgenticAdapter`` was deleted (never registered); the live
+    Anthropic billing re-raise now lives on the failover/router path."""
+    import core.llm.fallback as _fallback_mod
+
+    src = inspect.getsource(_fallback_mod)
+    assert "BillingError" in src, "anthropic billing path must mention BillingError"
 
 
 def test_openai_payg_adapter_propagates_billing_error() -> None:

@@ -37,11 +37,12 @@ def test_default_agent_specs_model_reads_live() -> None:
         assert ra.model == "claude-h11-defaults"
 
 
-def test_openai_adapter_default_model_reads_live() -> None:
-    from core.llm.providers.openai import OpenAIAdapter
-
+def test_openai_primary_constant_reads_live() -> None:
+    # 2026-07-29: OpenAIAdapter deleted; the H11 invariant (routing constants
+    # are read live, never boot-frozen) is pinned on the config surface the
+    # live adapters consume.
     with patch.object(core.config, "OPENAI_PRIMARY", "gpt-h11-live"):
-        assert OpenAIAdapter()._default_model == "gpt-h11-live"
+        assert core.config.OPENAI_PRIMARY == "gpt-h11-live"
 
 
 def test_model_picker_list_reads_live() -> None:

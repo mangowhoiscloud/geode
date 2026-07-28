@@ -4,7 +4,7 @@
 - SoT: cache-policy.json
 - Path: AUTORESEARCH_CACHE_POLICY_PATH + OPERATOR_LOCAL_CACHE_POLICY_PATH
 - Reader: core/llm/cache_policy.py
-- Entry: core/llm/providers/anthropic.py (apply_messages_cache_control 호출 직전)
+- Entry: core/llm/adapters/_anthropic_common.py `_system_and_messages` (2026-07-29 repoint)
 - Env: GEODE_CACHE_POLICY_OVERRIDE + GEODE_CACHE_POLICY_STRICT
 """
 
@@ -133,7 +133,7 @@ def test_apply_with_different_defaults() -> None:
 
 def test_anthropic_provider_imports_reader_and_apply() -> None:
     repo_root = Path(__file__).resolve().parents[3]
-    src = (repo_root / "core/llm/providers/anthropic.py").read_text(encoding="utf-8")
+    src = (repo_root / "core/llm/adapters/_anthropic_common.py").read_text(encoding="utf-8")
     assert "_load_cache_policy_override" in src
     assert "apply_cache_policy_breakpoints" in src
 
@@ -143,7 +143,7 @@ def test_anthropic_provider_uses_apply_before_cache_control() -> None:
     the actual `apply_messages_cache_control(...)` call where the override
     flows into ``n_breakpoints=`` kwarg."""
     repo_root = Path(__file__).resolve().parents[3]
-    src = (repo_root / "core/llm/providers/anthropic.py").read_text(encoding="utf-8")
+    src = (repo_root / "core/llm/adapters/_anthropic_common.py").read_text(encoding="utf-8")
     apply_idx = src.find("apply_cache_policy_breakpoints(")
     # Find apply_messages_cache_control that uses our n_breakpoints variable.
     call_idx = src.find("n_breakpoints=n_breakpoints")

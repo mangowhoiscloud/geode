@@ -951,30 +951,30 @@ class AgenticLoop:
     async def _sync_model_and_rebuild_prompt(
         self,
         system_prompt: str,
-        decomposition_hint: str | None,
         reflection_hint: str | None = None,
     ) -> str:
         """Sync model drift + rebuild the system prompt.
 
         Rebuilds when the model drifted (``settings.model`` changed) or
         ``_prompt_dirty`` is set (direct ``update_model_async``). On
-        rebuild, re-applies the decomposition / reflection / plan hints so
-        a mid-arun drift doesn't drop them. Returns the (possibly-rebuilt)
-        prompt; clears ``_prompt_dirty``.
+        rebuild, re-applies the preflight / reflection / plan hints inside
+        the dynamic envelope so a mid-arun drift doesn't drop them (the
+        preflight hint was silently lost here before 2026-07-29). Returns
+        the (possibly-rebuilt) prompt; clears ``_prompt_dirty``.
         """
         drift_detected = await self._sync_model_from_settings_async()
         prompt_dirty = self._prompt_dirty
         if drift_detected or prompt_dirty:
-            system_prompt = self._build_system_prompt()
-            if decomposition_hint:
-                system_prompt += "\n\n" + decomposition_hint
-            if reflection_hint:
-                system_prompt += "\n\n" + reflection_hint
-            # re-apply the active plan on rebuild (getattr tolerates stub loops)
+            from core.agent.loop._context import inject_runtime_hints
+
             _plan_consume = getattr(self, "_consume_plan_hint", None)
             plan_hint = _plan_consume() if callable(_plan_consume) else ""
-            if isinstance(plan_hint, str) and plan_hint:
-                system_prompt += "\n\n" + plan_hint
+            system_prompt = inject_runtime_hints(
+                self._build_system_prompt(),
+                getattr(self, "_preflight_hint", ""),
+                reflection_hint,
+                plan_hint if isinstance(plan_hint, str) else "",
+            )
             self._prompt_dirty = False
             # Fire PROMPT_ASSEMBLED on each per-round rebuild (no-op if no hooks)
             hooks = getattr(self, "_hooks", None)
@@ -1870,11 +1870,15 @@ class AgenticLoop:
                 log.info("MCP tools lazy-loaded: +%d tools (total %d)", added, len(self._tools))
 
         preflight_hint = self._prepare_task_preflight(user_input)
+        # Retained on self so mid-arun prompt rebuilds re-apply it.
+        self._preflight_hint = preflight_hint
 
         # Goal decomposition — break compound requests into sub-goal DAGs
-        # (planner LLM call; the Plan is installed on SessionMetrics).
+        # (planner LLM call; the Plan is installed on SessionMetrics and
+        # rendered via ``_consume_plan_hint`` — the hint return was removed
+        # as dead plumbing, it had been None-only since the Plan migration).
         try:
-            decomposition_hint = await self._try_decompose(user_input)
+            await self._try_decompose(user_input)
         except BillingError as exc:
             self._emit_quota_panel(exc)
             return self._terminal_result(
@@ -1889,23 +1893,18 @@ class AgenticLoop:
 
         messages = self.context.get_messages()
 
-        system_prompt = self._build_system_prompt()
-        if decomposition_hint:
-            system_prompt += "\n\n" + decomposition_hint
-        if preflight_hint:
-            system_prompt += "\n\n" + preflight_hint
+        # Unified runtime-hint grammar: every per-turn injection is an XML
+        # block INSIDE <dynamic_context> — preflight, prior-turn reflection
+        # (consume semantics), and the current-step <plan>.
+        from core.agent.loop._context import inject_runtime_hints
 
-        # Failure reflection injection — prepend the prior turn's verify-FAIL
-        # analysis (consume semantics; cleared after read).
         reflection_hint = self._consume_reflection_hint()
-        if reflection_hint:
-            system_prompt += "\n\n" + reflection_hint
-
-        # Plan injection — render the current-step ``<plan>`` block
-        # (read-only consume; plan persists until advance / replan).
-        plan_hint = self._consume_plan_hint()
-        if plan_hint:
-            system_prompt += "\n\n" + plan_hint
+        system_prompt = inject_runtime_hints(
+            self._build_system_prompt(),
+            preflight_hint,
+            reflection_hint,
+            self._consume_plan_hint(),
+        )
 
         # Prune old messages to stay within context budget (Karpathy P6)
         self._maybe_prune_messages(messages)
@@ -1936,7 +1935,7 @@ class AgenticLoop:
             await self._maybe_replan_async(round_idx)
 
             system_prompt = await self._sync_model_and_rebuild_prompt(
-                system_prompt, decomposition_hint, reflection_hint=reflection_hint
+                system_prompt, reflection_hint=reflection_hint
             )
 
             # Poll for sub-agent announced results (OpenClaw Spawn+Announce)

@@ -1,6 +1,6 @@
 """Computer-use on the LIVE Anthropic adapter path (Phase A).
 
-Computer-use was wired only into the legacy ``ClaudeAgenticAdapter.agentic_call``
+Computer-use was once wired only into a legacy adapter (deleted 2026-07-29)
 request builder; PR-MAINPATH-67 (2026-05-24) deleted that branch, so the
 production AgenticLoop — which reaches Anthropic through
 ``_anthropic_common.build_create_kwargs`` / ``build_stream_kwargs`` — never
