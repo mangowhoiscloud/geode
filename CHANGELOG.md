@@ -47,6 +47,10 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.5] - 2026-07-29
+
+> Live verification of the v1.0.4 prompt-cache wiring (7,590-token writes read back across process restarts) plus the two deferred Anthropic re-wires: server-side context management, and hosted web tools behind a default-off opt-in because provider-executed tools escape GEODE's tool policy.
+
 ### Added
 
 - **Server-side context management and native web tools now ride the live
