@@ -180,21 +180,41 @@ def _extract_reflection_input(result: Any) -> dict[str, Any] | None:
     ``AgenticResponse`` keep passing during the rollout.
     """
     # Path-B shape: ``AdapterCallResult.tool_uses: tuple[dict, ...]``.
+    # ``input`` is provider-asymmetric: Anthropic adapters deliver a parsed
+    # dict, OpenAI-family adapters (codex/chat) deliver the raw ``arguments``
+    # JSON string — accept both (the string case silently discarded every
+    # reflection on codex-oauth until 2026-07-29).
     tool_uses = getattr(result, "tool_uses", None)
     if isinstance(tool_uses, tuple | list):
         for entry in tool_uses:
             if isinstance(entry, dict) and entry.get("name") == REFLECTION_TOOL_NAME:
-                payload = entry.get("input")
-                if isinstance(payload, dict):
+                payload = _coerce_reflection_payload(entry.get("input"))
+                if payload is not None:
                     return payload
     # Legacy shape: ``AgenticResponse.content: list[ToolUseBlock]``.
     for block in getattr(result, "content", []) or []:
         if getattr(block, "type", None) == "tool_use" and getattr(block, "name", "") == (
             REFLECTION_TOOL_NAME
         ):
-            payload = getattr(block, "input", None)
-            if isinstance(payload, dict):
+            payload = _coerce_reflection_payload(getattr(block, "input", None))
+            if payload is not None:
                 return payload
+    return None
+
+
+def _coerce_reflection_payload(payload: Any) -> dict[str, Any] | None:
+    """Normalize a tool_use ``input`` to a dict (parses raw JSON strings)."""
+    if isinstance(payload, dict):
+        return payload
+    if isinstance(payload, str) and payload.strip():
+        import json
+
+        try:
+            parsed = json.loads(payload)
+        except json.JSONDecodeError:
+            return None
+        if isinstance(parsed, dict):
+            return parsed
     return None
 
 

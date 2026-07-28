@@ -275,7 +275,6 @@ def test_codex_call_kwargs_replays_prior_output_items_before_legacy_reasoning() 
     assert kwargs["input"] == [
         {"role": "user", "content": "first"},
         {
-            "id": "rs_official",
             "type": "reasoning",
             "encrypted_content": "blob_from_output",
             "summary": [],

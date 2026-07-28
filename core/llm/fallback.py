@@ -232,7 +232,7 @@ def retry_with_backoff_generic(
     """Generic retry with exponential backoff + model fallback.
 
     Shared by Anthropic (``_retry_with_backoff``) and OpenAI
-    (``OpenAIAdapter._retry_with_backoff``) to eliminate DRY violation.
+    (the since-deleted ``OpenAIAdapter._retry_with_backoff``) to eliminate DRY violation.
 
     Stage 1: Retry same model with exponential backoff.
     Stage 2: On persistent failure, try fallback models.

@@ -630,6 +630,10 @@ def build_codex_input(req: AdapterCallRequest) -> list[dict[str, Any]]:
         if m.role == "user":
             out.extend(_convert_user_msg_to_responses(m.content))
             continue
+        if m.role == "system":
+            # Parity with inject_reasoning_replay: system text travels via
+            # ``instructions``, never as an input item (Codex rejects it).
+            continue
         out.append({"role": m.role, "content": _stringify(m.content)})
     return out
 
@@ -1323,7 +1327,14 @@ def _responses_input_safe_output_item(item: dict[str, Any]) -> dict[str, Any]:
     """
     safe = _json_safe(dict(item))
     if isinstance(safe, dict):
-        return {k: v for k, v in safe.items() if k != "status" and v is not None}
+        drop = {"status"}
+        if safe.get("type") == "reasoning":
+            # Align with the codex_reasoning_items replay path: under
+            # ``store=False`` the server cannot resolve items by id, so a
+            # replayed reasoning id risks a 404-class reject (same rationale
+            # as build_codex_input's id-strip).
+            drop.add("id")
+        return {k: v for k, v in safe.items() if k not in drop and v is not None}
     return dict(item)
 
 

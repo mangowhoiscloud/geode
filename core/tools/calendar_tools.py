@@ -27,7 +27,8 @@ class CalendarListEventsTool:
         return (
             "List upcoming calendar events from Google Calendar or Apple Calendar. "
             "Shows events within a date range. "
-            "Examples: '내일 일정 뭐 있어?', 'show my schedule for next week'"
+            "Examples: 'what's on tomorrow?', 'show my schedule for next week' "
+            "(also matches equivalent Korean-language requests)"
         )
 
     @property
@@ -98,7 +99,8 @@ class CalendarCreateEventTool:
     def description(self) -> str:
         return (
             "Create a new event on Google Calendar or Apple Calendar. "
-            "Examples: '금요일 3시에 분석 미팅 잡아줘', 'schedule a meeting tomorrow at 2pm'"
+            "Examples: 'book an analysis meeting Friday 3pm', 'schedule a meeting "
+            "tomorrow at 2pm' (also matches equivalent Korean-language requests)"
         )
 
     @property

@@ -283,17 +283,17 @@ machine-readable artifact is
 | Measure | Current tree |
 |---|---:|
 | Production Python files (`core/` + `plugins/`) | 538 |
-| Test Python files | 671 |
-| `core/` Python LOC | 132,130 |
+| Test Python files | 672 |
+| `core/` Python LOC | 131,756 |
 | `plugins/` Python LOC | 40,262 |
-| Test Python LOC | 174,254 |
+| Test Python LOC | 174,038 |
 | Tool definitions / executable registrations / valid schemas | 78 / 81 / 78 (definition-only 0; execution-only 3; invalid schema 0) |
 | `HookEvent` members | 56 |
 | Built-in LLM adapters | 8 |
 | Module-level `ContextVar` declarations under `core/` | 27 |
 | `core` → `plugins` import sites | 31 across 14 files |
 | Import-linter contracts / ignored edges | 4 / 24 |
-| `AgenticLoop` file LOC / methods / constructor args | 2,722 / 67 / 27 |
+| `AgenticLoop` file LOC / methods / constructor args | 2,721 / 67 / 27 |
 | `SubAgentManager` file LOC / methods / constructor args | 1,277 / 15 / 15 |
 | `RuntimeCoreConfig` fields | 17 |
 | Global Ruff ratchets | complexity 54; args 23; branches 56; returns 18; statements 223 |

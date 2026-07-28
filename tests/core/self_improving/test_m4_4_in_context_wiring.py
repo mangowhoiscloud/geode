@@ -192,21 +192,21 @@ def test_system_passthrough_when_no_slot_targets_it(monkeypatch: pytest.MonkeyPa
 # Provider wiring smoke ------------------------------------------------------
 
 
-def test_anthropic_agentic_call_imports_orchestrator() -> None:
-    """anthropic.py 의 agentic_call 본문 안에서 ``apply_in_context_slots`` import 가 일어남.
-
-    PR-M4.4 의 wiring claim 을 grep-provable 하게 pin.
+def test_anthropic_live_path_imports_orchestrator() -> None:
+    """LIVE Anthropic 빌더(`_system_and_messages`) 안에서
+    ``apply_in_context_slots`` wiring 이 일어남 — PR-M4.4 claim 을
+    grep-provable 하게 pin (2026-07-29: dead adapter에서 repoint).
     """
     import inspect
 
-    from core.llm.providers import anthropic as _anth
+    from core.llm.adapters import _anthropic_common as _anth
 
-    src = inspect.getsource(_anth.ClaudeAgenticAdapter.agentic_call)
+    src = inspect.getsource(_anth._system_and_messages)
     assert (
         "from core.self_improving.loop.inject.in_context_wiring import apply_in_context_slots"
         in src
     )
-    assert "apply_in_context_slots(messages, system=system)" in src
+    assert "apply_in_context_slots(messages, system=req.system_prompt)" in src
 
 
 # PR-LEGACY-PROVIDER-REMOVAL (2026-05-28) — the
@@ -216,7 +216,7 @@ def test_anthropic_agentic_call_imports_orchestrator() -> None:
 # subscription paths now route through ``core/llm/adapters/*`` instead.
 # Wiring ``apply_in_context_slots`` into those adapters is tracked as
 # follow-up scope (the orchestrator currently only fires for the
-# Anthropic ``ClaudeAgenticAdapter`` paperclip wrapper).
+# production Anthropic adapter request builders).
 
 
 def test_orchestrator_module_public_api() -> None:

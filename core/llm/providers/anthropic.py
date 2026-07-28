@@ -21,7 +21,6 @@ from core.llm.model_capabilities import (
     ANTHROPIC_CONTEXT_MGMT_MODELS,
     ANTHROPIC_XHIGH_MODELS,
 )
-from core.llm.token_tracker import MODEL_CONTEXT_WINDOW
 
 if TYPE_CHECKING:
     import anthropic
@@ -482,6 +481,27 @@ def _content_block_count(content: Any) -> int:
     return 1 if content else 0
 
 
+# Opening tag of the per-request system reminder. SoT for the tag name is
+# ``core.agent.system_injection._REMINDER_TAG``; the literal is duplicated
+# here to keep this low-level module free of core.agent imports — pinned by
+# ``test_reminder_tag_constant_drift`` (dual-SoT anchor + drift invariant).
+_SYSTEM_REMINDER_OPEN = "<system-reminder>"
+
+
+def _is_volatile_reminder(content: Any) -> bool:
+    """Per-round system reminder — byte-different every round (``Current
+    round: N``), so a breakpoint on it can never be read back; marking it
+    structurally wastes 1 of the 3 message slots."""
+    if isinstance(content, str):
+        return content.lstrip().startswith(_SYSTEM_REMINDER_OPEN)
+    if isinstance(content, list):
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "text":
+                text = block.get("text") or ""
+                return text.lstrip().startswith(_SYSTEM_REMINDER_OPEN)
+    return False
+
+
 def _is_markable(content: Any) -> bool:
     """Whether :func:`apply_messages_cache_control` would actually attach a
     breakpoint to this message (mirrors its empty-text guards).
@@ -525,7 +545,12 @@ def _select_breakpoint_targets(
     if not non_system or n_breakpoints <= 0:
         return []
 
-    markable = [i for i in non_system if _is_markable(messages[i].get("content"))]
+    markable = [
+        i
+        for i in non_system
+        if _is_markable(messages[i].get("content"))
+        and not _is_volatile_reminder(messages[i].get("content"))
+    ]
     if not markable:
         return []
 
@@ -897,372 +922,12 @@ def is_computer_use_enabled() -> bool:
         return False
 
 
-class ClaudeAgenticAdapter:
-    """Anthropic agentic adapter (P1 Gateway pattern).
-
-    Features:
-    - Context management beta (clear_tool_uses)
-    - Tool schema key filtering (_API_ALLOWED_KEYS)
-    - BadRequest -> repair_messages -> retry
-    - KeyboardInterrupt -> UserCancelledError
-    """
-
-    def __init__(self) -> None:
-        self._client: Any | None = None
-        self.last_error: Exception | None = None
-
-    @property
-    def provider_name(self) -> str:
-        return "anthropic"
-
-    @property
-    def fallback_chain(self) -> list[str]:
-        from core.config import ANTHROPIC_FALLBACK_CHAIN  # H11-tail: live read
-
-        return list(ANTHROPIC_FALLBACK_CHAIN)
-
-    async def agentic_call(
-        self,
-        *,
-        model: str,
-        system: str,
-        messages: list[dict[str, Any]],
-        tools: list[dict[str, Any]],
-        tool_choice: dict[str, str] | str,
-        max_tokens: int,
-        temperature: float,
-        thinking_budget: int = 0,
-        effort: str = "high",
-    ) -> Any | None:
-        from core.config import settings
-        from core.llm.agentic_response import normalize_anthropic
-        from core.llm.errors import LLMBadRequestError, UserCancelledError
-        from core.llm.router import call_with_failover
-
-        api_key = settings.anthropic_api_key
-        if not api_key:
-            self.last_error = ValueError("ANTHROPIC_API_KEY not configured")
-            log.warning("No Anthropic API key for agentic loop")
-            return None
-
-        # PR-LOOP-POLLUTION-FIX (2026-06-12) — resolve the client PER CALL
-        # so it is always the current event loop's client (the provider
-        # getter is loop-affine; an instance slot would re-pin the first
-        # loop's client across loops and reintroduce the pollution).
-        # ``self._client`` survives only as a test seam: when pre-seeded it
-        # wins; production code never assigns it.
-        client = self._client or get_async_anthropic_client(api_key)
-
-        # PR-M4.4 (2026-05-21) — 4-slot in-context wiring. No-op fast
-        # path inside ``apply_in_context_slots`` when no SoT is
-        # configured (the GEODE default), so this call adds zero
-        # overhead for operators who have not opted in. Per-slot
-        # graceful: any reader/apply failure is logged at DEBUG and
-        # the original ``messages`` / ``system`` flow through unchanged.
-        from core.self_improving.loop.inject.in_context_wiring import apply_in_context_slots
-
-        messages, system = apply_in_context_slots(messages, system=system)
-
-        # GAP-T1 — normalize cross-provider tool_choice into the Anthropic
-        # dict shape ({"type": "auto"|"any"|"tool"|"none", "name"?: ...}).
-        from core.llm.tool_choice import normalize as _normalize_tool_choice
-
-        tool_choice = _normalize_tool_choice("anthropic", tool_choice) or {"type": "auto"}
-
-        api_tools = [{k: v for k, v in t.items() if k in _API_ALLOWED_KEYS} for t in tools]
-
-        # Inject Anthropic native tools (web_search, web_fetch) with dedup
-        existing_names = {t.get("name") for t in api_tools}
-        for native in _ANTHROPIC_NATIVE_TOOLS:
-            if native["name"] not in existing_names:
-                api_tools.append(native)
-
-        # Inject computer-use tool if enabled
-        if is_computer_use_enabled() and "computer" not in existing_names:
-            api_tools.append(_COMPUTER_USE_TOOL)
-
-        # PR-TOOL-SEARCH-WIRE — large tool sets defer behind the hosted
-        # tool-search tool (kill switch: settings.tool_search_defer).
-        from core.config import settings as _settings
-
-        api_tools = apply_tool_search_defer(
-            api_tools, enabled=getattr(_settings, "tool_search_defer", True)
-        )
-
-        from core.config import ANTHROPIC_FALLBACK_CHAIN  # H11-tail: live read
-
-        failover_models = [model] + [m for m in ANTHROPIC_FALLBACK_CHAIN if m != model]
-
-        async def _do_call(m: str) -> Any:
-            # ``client`` is resolved right before this nested function in
-            # the outer scope — loop-affine, current loop's instance.
-            assert client is not None
-
-            # Server-side context management only for models that support it.
-            # Haiku 4.5 rejects the compact beta → 400 misclassified as overflow.
-            extra_h: dict[str, str] = {}
-            extra_b: dict[str, Any] = {}
-            if m in _CONTEXT_MGMT_MODELS:
-                from core.orchestration.context_budget import resolve_context_budget_policy
-
-                m_trigger = resolve_context_budget_policy(
-                    m,
-                    context_window=MODEL_CONTEXT_WINDOW.get(m),
-                ).anthropic_compact_trigger_tokens
-                extra_h["anthropic-beta"] = "context-management-2025-06-27,compact-2026-01-12"
-                extra_b["context_management"] = {
-                    "edits": [
-                        {
-                            "type": "clear_tool_uses_20250919",
-                            "keep": {"type": "tool_uses", "value": 5},
-                        },
-                        {
-                            "type": "compact_20260112",
-                            "trigger": {
-                                "type": "input_tokens",
-                                "value": m_trigger,
-                            },
-                        },
-                    ]
-                }
-
-            # Thinking mode: adaptive (4.6+) or legacy budget (older models)
-            call_temperature: float | None = temperature
-            call_max_tokens = max_tokens
-            thinking_param: dict[str, Any] | None = None
-            output_config: dict[str, str] | None = None
-
-            if m in _ADAPTIVE_MODELS:
-                # Adaptive thinking (Opus 4.6+ and Sonnet 4.6): effort controls depth.
-                # Sampling parameters (temperature/top_p/top_k) are rejected — omit.
-                #
-                # v0.56.0 R4-mini — explicit ``display: "summarized"``. Opus 4.7
-                # changed the default to ``"omitted"`` (whats-new-claude-4-7) which
-                # makes thinking blocks arrive empty; without summaries the
-                # GEODE activity feed has no reasoning trace to render. Hermes
-                # forces this same value (``anthropic_adapter.py:1440``) for the
-                # same reason: *"explicit override preserves UX."*
-                thinking_param = {"type": "adaptive", "display": "summarized"}
-                # v0.56.0 R4-mini — version-gate ``xhigh``. Opus 4.7 accepts it
-                # (Anthropic recommends as starting effort for coding/agentic);
-                # 4.6 / Sonnet 4.6 reject with 400. Downgrade to ``"max"`` on
-                # the older models. Mirrors Hermes ``_supports_xhigh_effort``.
-                effective_effort = effort
-                if effort == "xhigh" and not _supports_xhigh_effort(m):
-                    effective_effort = "max"
-                output_config = {"effort": effective_effort}
-                call_temperature = None
-            elif thinking_budget > 0:
-                # Legacy: manual budget_tokens for older models
-                thinking_param = {
-                    "type": "enabled",
-                    "budget_tokens": thinking_budget,
-                }
-                call_temperature = 1.0
-                call_max_tokens = max(max_tokens, thinking_budget + max_tokens)
-
-            # Prompt caching split: static content before boundary gets
-            # cache_control for reuse across turns; dynamic content after
-            # boundary is ephemeral.  (Claude Code STATIC/DYNAMIC pattern)
-            from core.agent.system_prompt import PROMPT_CACHE_BOUNDARY
-
-            if PROMPT_CACHE_BOUNDARY in system:
-                static_part, dynamic_part = system.split(PROMPT_CACHE_BOUNDARY, 1)
-                static_text = static_part.rstrip()
-                dynamic_text = dynamic_part.lstrip()
-                # G-A2 (2026-05-12) — audit-mode (G3 strip) leaves
-                # ``static_part`` empty when GEODE identity + memory layers are
-                # all stripped; the boundary marker becomes the very first
-                # character of ``system``. Attaching ``cache_control`` to an
-                # empty text block trips
-                # ``system.0: cache_control cannot be set for empty text
-                # blocks`` (Anthropic 400). Promote the dynamic side to the
-                # single cacheable block when ``static_text`` is empty so the
-                # boundary still applies somewhere useful.
-                if static_text and dynamic_text:
-                    sys_blocks: list[dict[str, Any]] = [
-                        {
-                            "type": "text",
-                            "text": static_text,
-                            "cache_control": _static_system_cache_control(),
-                        },
-                        {"type": "text", "text": dynamic_text},
-                    ]
-                elif dynamic_text:
-                    sys_blocks = [
-                        {
-                            "type": "text",
-                            "text": dynamic_text,
-                            "cache_control": {"type": "ephemeral"},
-                        }
-                    ]
-                elif static_text:
-                    sys_blocks = [
-                        {
-                            "type": "text",
-                            "text": static_text,
-                            "cache_control": _static_system_cache_control(),
-                        }
-                    ]
-                else:
-                    # Both halves empty — drop the system block entirely.
-                    sys_blocks = []
-            else:
-                sys_blocks = [
-                    {
-                        "type": "text",
-                        "text": system,
-                        "cache_control": {"type": "ephemeral"},
-                    }
-                ]
-
-            # Rolling messages-level cache breakpoints (Hermes system_and_3).
-            # Combined with the system block above, this fills up to 4 of
-            # Anthropic's cache_control slots and caches the long history
-            # window in multi-turn agentic loops.
-            # ADR-013 T5 (2026-05-21) — cache-policy.json mutation SoT.
-            # Default 3 (Anthropic cap minus 1 for system). Policy 가 부재면
-            # default 그대로 (no behavior change).
-            from core.llm.cache_policy import (
-                _load_cache_policy_override,
-                apply_cache_policy_breakpoints,
-            )
-
-            n_breakpoints = apply_cache_policy_breakpoints(
-                MAX_MESSAGE_CACHE_BREAKPOINTS, _load_cache_policy_override()
-            )
-            cached_messages = apply_messages_cache_control(messages, n_breakpoints=n_breakpoints)
-
-            create_kwargs: dict[str, Any] = {
-                "model": m,
-                "system": sys_blocks,
-                "messages": cached_messages,
-                "tools": api_tools,
-                "tool_choice": tool_choice,
-                "max_tokens": call_max_tokens,
-            }
-            if call_temperature is not None:
-                create_kwargs["temperature"] = call_temperature
-            if thinking_param is not None:
-                create_kwargs["thinking"] = thinking_param
-            if output_config is not None:
-                create_kwargs["output_config"] = output_config
-            if extra_h:
-                create_kwargs["extra_headers"] = extra_h
-            if extra_b:
-                create_kwargs["extra_body"] = extra_b
-
-            # GAP-S1 — stream API 로 TTFB 단축 + chunk-level 수신.
-            # ``get_final_message()`` 가 stream 을 완전 소비 한 뒤
-            # ``anthropic.types.Message`` 를 반환 — ``messages.create`` 와
-            # 동일 schema 이므로 ``normalize_anthropic`` / 회계 path 가
-            # 변경 없이 작동. agentic 소비자 interface 불변.
-            async with client.messages.stream(**create_kwargs) as _stream:
-                return await _stream.get_final_message()
-
-        try:
-            response, used_model = await call_with_failover(failover_models, _do_call)
-        except KeyboardInterrupt:
-            raise UserCancelledError("LLM call interrupted by user") from None
-        except LLMBadRequestError as exc:
-            self.last_error = exc
-            msg = str(exc)
-            # Billing/credit errors — propagate as BillingError for clean UI.
-            # v0.53.2 — carry plan context so AgenticLoop renders the
-            # quota_exhausted IPC panel (parity with OpenAI/Codex/GLM).
-            if "credit balance" in msg.lower() or "billing" in msg.lower():
-                from core.llm.errors import BillingError
-
-                plan_meta = _resolve_plan_meta(model)
-                raise BillingError(
-                    "Anthropic API credit balance too low. "
-                    "Visit https://console.anthropic.com/settings/billing to add credits.",
-                    provider=plan_meta.get("provider", "anthropic"),
-                    plan_id=plan_meta.get("plan_id", ""),
-                    plan_display_name=plan_meta.get("plan_display_name", ""),
-                    upgrade_url=plan_meta.get(
-                        "upgrade_url", "https://console.anthropic.com/settings/billing"
-                    ),
-                ) from exc
-            log.warning("Anthropic BadRequest in agentic loop: %s", msg)
-            # Booster E (2026-05-12) — surface the failure in
-            # ``~/.geode/diagnostics/`` so an inspect_ai subprocess crash
-            # leaves a trail outside the (subprocess-local) Python logger.
-            from core.runtime_audit import runtime_audit_active
-
-            if runtime_audit_active():
-                from core.audit.diagnostics import diag
-
-                diag("petri.anthropic", f"BadRequest model={model}: {msg[:200]}")
-            if "tool_use_id" in msg or "tool_result" in msg:
-                from core.agent.loop import AgenticLoop
-
-                AgenticLoop._repair_messages(messages)
-                log.info("Repaired orphaned tool_result in conversation history")
-                try:
-                    response = await _do_call(model)
-                    return normalize_anthropic(response)
-                except Exception:
-                    log.warning("Retry after repair failed", exc_info=True)
-                    return None
-            if "input_schema" in msg:
-                log.error(
-                    "Tool schema error — likely an MCP tool missing input_schema. tools=%d",
-                    len(tools),
-                )
-            return None
-        except Exception as exc:
-            # v0.53.2 — preserve BillingError propagation (mirror of the
-            # OpenAI/Codex/GLM fix). Without the early re-raise the loop
-            # treats quota exhaustion as a generic failure → no
-            # quota_exhausted IPC event fires.
-            from core.llm.errors import BillingError
-
-            if isinstance(exc, BillingError):
-                raise
-            self.last_error = exc
-            log.warning("Agentic LLM call failed", exc_info=True)
-            # Booster E — same rationale as the BadRequest branch above.
-            from core.runtime_audit import runtime_audit_active
-
-            if runtime_audit_active():
-                from core.audit.diagnostics import diag
-
-                diag("petri.anthropic", f"call_failed model={model}: {exc!r}")
-            return None
-
-        if response is None:
-            return None
-
-        if used_model and used_model != model:
-            log.warning("Model failover: %s -> %s", model, used_model)
-
-        return normalize_anthropic(response)
-
-    async def areset_client(self) -> None:
-        self._client = None
-
-
-def _resolve_plan_meta(model: str) -> dict[str, str]:
-    """v0.53.2 — resolve Plan metadata for BillingError context.
-
-    Mirrors ``core/llm/fallback.py:_resolve_plan_for_billing_error``;
-    duplicated here because the Anthropic adapter uses the async router
-    path (``call_with_failover``) instead of ``retry_with_backoff_generic``.
-    """
-    try:
-        from core.llm.strategies.plan_registry import resolve_routing
-
-        target = resolve_routing(model)
-        if target is None:
-            return {}
-        plan = target.plan
-        return {
-            "provider": plan.provider,
-            "plan_id": plan.id,
-            "plan_display_name": plan.display_name,
-            "upgrade_url": plan.upgrade_url or "",
-        }
-    except Exception:
-        log.debug("Plan resolution for Anthropic billing error failed", exc_info=True)
-        return {}
+# ── 2026-07-29 prune ───────────────────────────────────────────────────────
+# ``ClaudeAgenticAdapter`` (and its private ``_resolve_plan_meta``) were
+# deleted here: the class was registered nowhere and instantiated nowhere —
+# the production AgenticLoop reaches Anthropic exclusively through
+# ``core/llm/adapters/_anthropic_common.build_create_kwargs`` /
+# ``build_stream_kwargs``, which now own the prompt-cache split, message
+# breakpoints, and the ADR-012 M4.4 in-context slot wiring this class had
+# stranded. This module is a low-level utility layer (clients, retry,
+# quota, cache helpers, native-tool shaping) consumed by ``core/llm/adapters``.

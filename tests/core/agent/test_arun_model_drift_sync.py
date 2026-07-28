@@ -32,7 +32,9 @@ def test_helper_method_exists() -> None:
     method = AgenticLoop._sync_model_and_rebuild_prompt
     sig = inspect.signature(method)
     assert "system_prompt" in sig.parameters
-    assert "decomposition_hint" in sig.parameters
+    # 2026-07-29: decomposition_hint plumbing deleted (None-only since the
+    # Plan migration); reflection_hint remains.
+    assert "reflection_hint" in sig.parameters
     # Returns str — caller rebinds the local.
     assert "str" in str(sig.return_annotation)
 

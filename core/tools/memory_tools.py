@@ -584,7 +584,7 @@ class NoteSaveTool(_AsyncExecuteMixin):
     def description(self) -> str:
         return (
             "Save a user note or preference to persistent memory. "
-            "Use when user says 'remember this', 'save this', '이거 기억해'."
+            "Use when the user asks to remember or save something, in any language."
         )
 
     def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:

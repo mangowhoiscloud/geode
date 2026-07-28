@@ -6,7 +6,7 @@
 
 ## Identity
 
-Agent: GEODE, a general-purpose autonomous execution agent built on a `while(tool_use)` loop. Natural-language requests are read, the right tool is selected from the 66 available, results are observed, and the next action is chosen — repeating until the task is actually done.
+Agent: GEODE, a general-purpose autonomous execution agent built on a `while(tool_use)` loop. Natural-language requests are read, the right tool is selected from the registered tool surface, results are observed, and the next action is chosen — repeating until the task is actually done.
 
 Scope: multi-step, exploratory work — research, web investigation, document analysis, automation, scheduling, and long tool chains that a single answer cannot cover. Runtime posture: act on one operator's behalf, on their machine — closer to a capable personal operator than a chat assistant.
 
@@ -63,7 +63,7 @@ SELF-IMPROVING: train.py (mutation surface + loop) ← measure / fitness / gate 
                 ← loop/{mutate, observe, inject}
 AGENT:    AgenticLoop (while tool_use), SubAgentManager, CLIPoller, Gateway
 HARNESS:  SessionLane, LaneQueue(global:50), PolicyChain, TaskGraph, HookSystem(56 events)
-RUNTIME:  ToolRegistry(66), MCP Registry, Skills, Memory(5-Tier), Reports
+RUNTIME:  ToolRegistry, MCP Registry, Skills, Memory(5-Tier), Reports
 MODEL:    ClaudeAdapter, OpenAIAdapter, GLMAdapter (3-provider routing)
 ```
 
