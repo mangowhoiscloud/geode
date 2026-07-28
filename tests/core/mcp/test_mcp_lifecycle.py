@@ -96,6 +96,49 @@ class TestStdioMCPClientLifecycle:
 
         assert client.server_protocol_version == "2025-11-25"
 
+        # The outbound initialize declared the pinned revision.
+        import json
+
+        first_write = mock_proc.stdin.write.call_args_list[0][0][0]
+        assert json.loads(first_write)["params"]["protocolVersion"] == "2025-06-18"
+
+    def test_unsupported_negotiated_version_disconnects(self) -> None:
+        """Server answering with a revision outside the supported set is
+        rejected (spec SHOULD: disconnect on unsupported negotiation)."""
+        client = StdioMCPClient(command="echo", timeout_s=0.5)
+        mock_proc = MagicMock()
+        mock_proc.pid = 12347
+        mock_proc.poll.return_value = None
+        mock_proc.stdin = MagicMock()
+        mock_proc.stdout = MagicMock()
+
+        init_resp = b'{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2026-07-28"}}\n'
+        mock_proc.stdout.readline.side_effect = [init_resp]
+
+        with patch("subprocess.Popen", return_value=mock_proc):
+            assert client.connect() is False
+
+        assert client.server_protocol_version is None
+        assert client.is_connected() is False
+
+    def test_missing_negotiated_version_disconnects(self) -> None:
+        """An initialize result without protocolVersion is nonconforming —
+        rejected instead of silently accepted."""
+        client = StdioMCPClient(command="echo", timeout_s=0.5)
+        mock_proc = MagicMock()
+        mock_proc.pid = 12348
+        mock_proc.poll.return_value = None
+        mock_proc.stdin = MagicMock()
+        mock_proc.stdout = MagicMock()
+
+        init_resp = b'{"jsonrpc":"2.0","id":1,"result":{}}\n'
+        mock_proc.stdout.readline.side_effect = [init_resp]
+
+        with patch("subprocess.Popen", return_value=mock_proc):
+            assert client.connect() is False
+
+        assert client.server_protocol_version is None
+
     def test_pid_cleared_after_close(self) -> None:
         """PID should be None after close."""
         client = StdioMCPClient(command="echo")

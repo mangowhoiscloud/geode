@@ -45,6 +45,12 @@ _CLOSE_TIMEOUT_S = 5
 # classic clients — see docs/adr/ADR-014-mcp-2026-07-28-stateless-spec.md.
 _PROTOCOL_VERSION = "2025-06-18"
 
+# Revisions whose wire shape this client can speak (base operations:
+# initialize / tools/list / tools/call are identical across these). Per the
+# spec's version negotiation, the client SHOULD disconnect when the server
+# answers with a revision outside this set.
+_SUPPORTED_PROTOCOL_VERSIONS = frozenset({"2024-11-05", "2025-03-26", "2025-06-18", "2025-11-25"})
+
 
 class StdioMCPClient:
     """MCP client using stdio transport (subprocess JSON-RPC)."""
@@ -82,6 +88,7 @@ class StdioMCPClient:
     def connect(self) -> bool:
         """Start the MCP server subprocess and initialize."""
         try:
+            self.server_protocol_version = None  # reset on (re)connect
             env = dict(os.environ)
             env.update(self._env)
 
@@ -129,14 +136,25 @@ class StdioMCPClient:
                 self.close()
                 return False
 
-            # Record the negotiated revision — base operations are identical
-            # across published revisions, so a mismatch is diagnostic, not fatal.
-            self.server_protocol_version = init_response.get("protocolVersion")
-            if self.server_protocol_version != _PROTOCOL_VERSION:
+            # Version negotiation: the server answers with the revision it
+            # will speak. Outside our supported set → disconnect (spec SHOULD).
+            negotiated = init_response.get("protocolVersion")
+            if negotiated not in _SUPPORTED_PROTOCOL_VERSIONS:
+                log.warning(
+                    "MCP server %s negotiated unsupported protocol %r "
+                    "(client supports %s) — disconnecting",
+                    self._command,
+                    negotiated,
+                    sorted(_SUPPORTED_PROTOCOL_VERSIONS),
+                )
+                self.close()
+                return False
+            self.server_protocol_version = negotiated
+            if negotiated != _PROTOCOL_VERSION:
                 log.info(
                     "MCP server %s negotiated protocol %s (client requested %s)",
                     self._command,
-                    self.server_protocol_version,
+                    negotiated,
                     _PROTOCOL_VERSION,
                 )
 

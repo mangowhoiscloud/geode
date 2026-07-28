@@ -14,7 +14,7 @@ Accepted (2026-07-29)
 | initialize 핸드셰이크 제거 (SEP-2575), `Mcp-Session-Id`·프로토콜 세션 제거 (SEP-2567) | 스펙 릴리스 후보 공지 + The Register (2026-07-23) |
 | 신규 기능: `server/discover`, `subscriptions/listen`, Multi Round-Trip Requests, Extensions, MCP Apps | python-sdk v2.0.0 릴리스 노트 |
 | python-sdk v2.0.0: `pip install mcp`가 이제 2.x 설치. `FastMCP` → `MCPServer` 개명, `ClientSession`+`initialize()` 층이 단일 `Client`로 대체 | github.com/modelcontextprotocol/python-sdk releases/v2.0.0 (2026-07-28) |
-| v1.x는 maintenance mode (보안 픽스만). 공식 권고: 미마이그레이션 프로젝트는 `mcp>=1.28,<2` 상한 유지 | 동일 릴리스 노트 |
+| v1.x는 maintenance mode (critical bug fix + 보안 패치만, 지원 하한 1.28). 공식 권고: 미마이그레이션 프로젝트는 `mcp>=1.28,<2` | 동일 릴리스 노트 |
 | v2 서버는 양쪽 프로토콜 시대를 모두 서빙 — stdio는 opening request로 시대 판별, classic 클라이언트 계속 수용 | 동일 릴리스 노트 + v2.0.0rc1 노트 (#3152) |
 | Tier 1 SDK 검증 윈도우 10주 | 릴리스 후보 공지 |
 
@@ -32,8 +32,8 @@ Accepted (2026-07-29)
 
 **지금 (이 ADR과 함께 랜딩):**
 
-1. `mcp>=1.0.0,<2` — 두 extras 모두 상한. v1 라인은 maintenance mode지만 GEODE의 전 MCP 표면(FastMCP 서버, petri bridge, HTTP transport 테스트)이 v1 API에 결합돼 있고, v2 서버·클라이언트 생태계는 classic 개정판을 계속 서빙하므로 즉각적 상호운용 손실이 없다.
-2. stdio 클라이언트 선언 개정판을 `2025-06-18`로 상향(모듈 상수 `_PROTOCOL_VERSION`), initialize 응답의 협상 결과를 `server_protocol_version`으로 기록하고 불일치 시 info 로그. 클라이언트는 전 개정판 공통의 기저 연산(initialize / tools/list / tools/call)만 사용하므로 협상 불일치는 진단 정보이지 실패 조건이 아니다.
+1. `mcp>=1.28,<2` — 두 extras 모두, 공식 권고 범위 그대로. v1 라인은 maintenance mode지만 GEODE의 전 MCP 표면(FastMCP 서버, petri bridge, HTTP transport 테스트)이 v1 API에 결합돼 있고, v2 서버·클라이언트 생태계는 classic 개정판을 계속 서빙하므로 즉각적 상호운용 손실이 없다.
+2. stdio 클라이언트 선언 개정판을 `2025-06-18`로 상향(모듈 상수 `_PROTOCOL_VERSION`). initialize 응답의 협상 결과는 지원 집합(`_SUPPORTED_PROTOCOL_VERSIONS` = 4개 classic 개정판) 검증 후 `server_protocol_version`으로 기록 — 집합 밖(미래 개정판·누락 포함)이면 스펙의 SHOULD대로 연결을 끊고 warning 로그, 집합 안 불일치는 info 로그만(기저 연산 wire shape 동일).
 
 **보류 (후속 작업 — SDK v2 마이그레이션):**
 
@@ -45,12 +45,12 @@ Accepted (2026-07-29)
 | HTTP transport | v2의 stateless 기본값 재검토 — 정적 bearer 토큰 검증(`_StaticTokenVerifier`)은 per-request라 stateless 친화적, 변경 불요 예상 |
 | 테스트 격리 | MCP 테스트의 `importorskip("mcp")` — extra 미설치 CI job에서 조용히 skip되므로, v2 마이그레이션 PR은 `[mcp]` extra가 설치된 잡에서 게이트되는지 확인 |
 
-v2 마이그레이션 시점: Tier 1 SDK 검증 윈도우(10주, ~2026-10 초) 내 자유 선택. 외부 압력 신호는 (a) 주요 원격 MCP 서버의 classic 개정판 서빙 중단, (b) v1 라인 보안 픽스 종료 공지.
+v2 마이그레이션 시점: 고정 기한 없음 (스펙의 10주 검증 윈도우는 RC→GA 구간으로 2026-07-28에 이미 종료). 외부 압력 신호가 트리거 — (a) 주요 원격 MCP 서버의 classic 개정판 서빙 중단, (b) v1 라인 유지보수(critical bug fix·보안 패치) 종료 공지.
 
 ## Consequences
 
-- 신규 설치(`uv sync`, `pip install geode-agent[mcp]`)가 v2 SDK를 우발적으로 받는 경로가 차단된다.
-- GEODE가 붙는 외부 MCP 서버에 대해 협상된 개정판이 처음으로 관측 가능해진다 (`server_protocol_version`).
+- 신규 설치(`uv sync --extra mcp` / `--extra audit`, `pip install geode-agent[mcp]`)가 v2 SDK를 우발적으로 받는 경로가 차단된다.
+- GEODE가 붙는 외부 MCP 서버에 대해 협상된 개정판이 처음으로 관측 가능해지고 (`server_protocol_version`), 미지원 개정판은 generic 실패 대신 명시적 warning으로 표면화된다.
 - v2 신기능(`server/discover`, MRTR, Extensions)은 마이그레이션 전까지 사용 불가 — 현재 GEODE 표면은 어느 것도 요구하지 않는다.
 
 ## References

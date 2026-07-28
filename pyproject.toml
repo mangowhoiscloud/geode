@@ -100,9 +100,10 @@ claude-code = "plugins.petri_audit"
 
 [project.optional-dependencies]
 # mcp 2.0.0 (2026-07-28 stateless spec) renames FastMCP -> MCPServer and
-# restructures the client stack; the v1 line is maintenance-mode. Upper bound
-# until the ADR-014 v2 migration lands.
-mcp = ["mcp>=1.0.0,<2"]
+# restructures the client stack; the v1 line is maintenance-mode and its
+# supported floor is 1.28 (official guidance: mcp>=1.28,<2). Bounded until the
+# ADR-014 v2 migration lands.
+mcp = ["mcp>=1.28,<2"]
 desktop = [
     "pyautogui>=0.9.54",
     "Pillow>=10.0.0",
@@ -129,9 +130,9 @@ audit = [
     # exposes inspect_ai ToolInfo[] as MCP tools so the claude CLI
     # subprocess (--mcp-config + --strict-mcp-config + --allowed-tools)
     # can emit tool_use blocks under --max-turns 1 without raw-SDK
-    # 429 enforcement on Claude Max OAuth tokens. <2: same bound as the
+    # 429 enforcement on Claude Max OAuth tokens. Same bound as the
     # [mcp] extra (ADR-014) — the bridge uses the v1 low-level Server API.
-    "mcp>=1.0.0,<2",
+    "mcp>=1.28,<2",
     # PR-SIL-5THEME C2 (2026-05-23) — S6b production wiring 의 7-bench
     # federation dependencies. ``inspect-evals`` 가 6 bench
     # (livecodebench_pro / tau2_telecom / gpqa_diamond / hle / osworld /
