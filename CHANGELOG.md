@@ -55,10 +55,16 @@ functional change.
   context-management (clear_tool_uses + compact triggers, beta tokens MERGED
   into `anthropic-beta` — clobbering the header 400s computer-use) returned
   200, and hosted `web_search`/`web_fetch` returned 200 with a real
-  `server_tool_use` round. Native web tools inject only when the caller
-  declares a tool surface; context management stays gated to supporting
-  models. A combined payload (custom tool + computer-use + web tools + 3
-  beta tokens + context management + cache blocks) was confirmed live.
+  `server_tool_use` round. Hosted web tools are **opt-in**
+  (`[llm] anthropic_native_web_tools`, default off) and model-gated: the
+  server executes them itself, so they are invisible to `allowed_tools` /
+  `forbidden_tools` and the sub-agent whitelist that govern GEODE's own
+  `general_web_search` / `web_fetch` handlers, and the dated
+  `web_*_20260209` tags reject unlisted models. Context management is gated
+  to supporting models with dated snapshot ids normalized to their family.
+  A combined payload (custom tool + computer-use + web tools + 3 beta tokens
+  + context management + cache blocks) was confirmed live in both gate
+  states.
 
 ### Fixed
 

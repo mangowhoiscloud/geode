@@ -122,27 +122,6 @@ def test_context_management_absent_for_unsupported_model() -> None:
     assert "context_management" not in (kwargs.get("extra_body") or {})
 
 
-def test_native_web_tools_injected_only_with_tool_surface() -> None:
-    from core.llm.adapters.base import ToolSpec
-
-    bare = build_create_kwargs(_req("s"))
-    assert not any(
-        t.get("name") in {"web_search", "web_fetch"} for t in bare.get("tools", []) or []
-    ), "plain completions stay tool-free"
-
-    req = AdapterCallRequest(
-        model="claude-sonnet-4-6",
-        system_prompt="s",
-        messages=(Message(role="user", content="hi"),),
-        max_tokens=64,
-        tools=(ToolSpec(name="my_tool", description="d", input_schema={"type": "object"}),),
-    )
-    kwargs = build_create_kwargs(req)
-    names = [t.get("name") for t in kwargs["tools"]]
-    assert "web_search" in names and "web_fetch" in names
-    assert names.count("web_search") == 1, "dedup by name"
-
-
 def test_beta_merge_never_clobbers_existing_tokens() -> None:
     from core.llm.adapters._anthropic_common import _merge_beta
 
@@ -150,3 +129,73 @@ def test_beta_merge_never_clobbers_existing_tokens() -> None:
     _merge_beta(kwargs, "context-management-2025-06-27", "computer-use-x")
     beta = kwargs["extra_headers"]["anthropic-beta"]
     assert beta.split(",") == ["computer-use-x", "context-management-2025-06-27"]
+
+
+def _tool_req(model: str = "claude-sonnet-4-6") -> AdapterCallRequest:
+    from core.llm.adapters.base import ToolSpec
+
+    return AdapterCallRequest(
+        model=model,
+        system_prompt="s",
+        messages=(Message(role="user", content="hi"),),
+        max_tokens=64,
+        tools=(ToolSpec(name="my_tool", description="d", input_schema={"type": "object"}),),
+    )
+
+
+def test_native_web_tools_off_by_default() -> None:
+    """Provider-side web tools bypass allowed_tools/forbidden_tools and the
+    sub-agent whitelist, so they must never appear without an explicit opt-in
+    (Codex review 2026-07-29)."""
+    names = [t.get("name") for t in build_create_kwargs(_tool_req())["tools"]]
+    assert "web_search" not in names and "web_fetch" not in names
+
+
+def test_native_web_tools_injected_when_opted_in(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    from core.config import settings
+
+    monkeypatch.setattr(settings, "anthropic_native_web_tools", True, raising=False)
+    names = [t.get("name") for t in build_create_kwargs(_tool_req())["tools"]]
+    assert "web_search" in names and "web_fetch" in names
+    assert names.count("web_search") == 1, "dedup by name"
+
+    # A tool-free completion stays tool-free even when opted in.
+    bare = build_create_kwargs(_req("s"))
+    assert not any(
+        x.get("name") in {"web_search", "web_fetch"} for x in bare.get("tools", []) or []
+    )
+
+
+def test_native_web_tools_skipped_on_unsupported_model(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """``web_*_20260209`` 400s on models outside the documented set — the
+    budget-lane haiku must never receive it."""
+    from core.config import settings
+
+    monkeypatch.setattr(settings, "anthropic_native_web_tools", True, raising=False)
+    names = [t.get("name") for t in build_create_kwargs(_tool_req("claude-haiku-4-5"))["tools"]]
+    assert "web_search" not in names
+
+
+def test_dated_model_alias_resolves_capabilities() -> None:
+    """A dated snapshot id must resolve to the family's capability gates."""
+    from core.llm.adapters._anthropic_common import _base_model
+
+    assert _base_model("claude-sonnet-4-5-20250929") == "claude-sonnet-4-5"
+    assert _base_model("claude-sonnet-4-6") == "claude-sonnet-4-6"
+    kwargs = build_create_kwargs(
+        AdapterCallRequest(
+            model="claude-sonnet-4-5-20250929",
+            system_prompt="s",
+            messages=(Message(role="user", content="hi"),),
+            max_tokens=64,
+        )
+    )
+    assert "context_management" in (kwargs.get("extra_body") or {})
+
+
+def test_merge_beta_dedups_existing_and_strips_space() -> None:
+    from core.llm.adapters._anthropic_common import _merge_beta
+
+    kwargs = {"extra_headers": {"anthropic-beta": "first, second,first"}}
+    _merge_beta(kwargs, "second", "third")
+    assert kwargs["extra_headers"]["anthropic-beta"] == "first,second,third"

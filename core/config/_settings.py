@@ -306,6 +306,12 @@ class Settings(BaseSettings):
 
     # Tool search — hosted defer_loading on the Anthropic adapter
     # (PR-TOOL-SEARCH-WIRE; reader: core/llm/providers/anthropic.py)
+    # Anthropic-hosted web_search/web_fetch server tools. DEFAULT OFF: the
+    # server executes them itself, so they bypass ``allowed_tools`` /
+    # ``forbidden_tools`` and the sub-agent whitelist that govern GEODE's own
+    # (policy-checked) ``general_web_search`` / ``web_fetch`` handlers. Opt in
+    # only for surfaces where provider-side web access is acceptable.
+    anthropic_native_web_tools: bool = False
     tool_search_defer: bool = True  # kill switch for deferred tool loading
     # Codex backend acceptance of OpenAI tool_search: live-verified
     # 2026-06-13 — 20 defer_loading defs + {"type": "tool_search"} through

@@ -195,6 +195,17 @@ def _maybe_inject_computer_use(kwargs: dict[str, Any]) -> None:
     _merge_beta(kwargs, beta)
 
 
+def _base_model(model: str) -> str:
+    """Strip a trailing dated snapshot suffix (``-20250929``).
+
+    Capability sets are keyed on the family id; a dated alias must resolve
+    to the same capabilities (Codex review 2026-07-29 —
+    ``claude-sonnet-4-5-20250929`` silently missed the context-mgmt gate).
+    """
+    head, sep, tail = model.rpartition("-")
+    return head if sep and len(tail) == 8 and tail.isdigit() else model
+
+
 def _merge_beta(kwargs: dict[str, Any], *betas: str) -> None:
     """Merge beta tokens into ``anthropic-beta`` — never clobber the header.
 
@@ -202,10 +213,11 @@ def _merge_beta(kwargs: dict[str, Any], *betas: str) -> None:
     dropped computer-use's beta token and 400'd on the computer tool tag.
     """
     headers = dict(kwargs.get("extra_headers") or {})
-    tokens = [t for t in headers.get("anthropic-beta", "").split(",") if t]
-    for beta in betas:
-        if beta not in tokens:
-            tokens.append(beta)
+    tokens: list[str] = []
+    for raw in [*headers.get("anthropic-beta", "").split(","), *betas]:
+        token = raw.strip()
+        if token and token not in tokens:
+            tokens.append(token)
     headers["anthropic-beta"] = ",".join(tokens)
     kwargs["extra_headers"] = headers
 
@@ -220,7 +232,7 @@ def _maybe_inject_context_management(kwargs: dict[str, Any]) -> None:
     """
     from core.llm.providers.anthropic import _CONTEXT_MGMT_MODELS
 
-    model = str(kwargs.get("model", ""))
+    model = _base_model(str(kwargs.get("model", "")))
     if model not in _CONTEXT_MGMT_MODELS:
         return
     from core.llm.token_tracker import MODEL_CONTEXT_WINDOW
@@ -245,21 +257,38 @@ def _inject_native_web_tools(kwargs: dict[str, Any], req: AdapterCallRequest) ->
 
     Ported from the deleted ClaudeAgenticAdapter; live-verified on
     anthropic-oauth 2026-07-29 (probe B2: 200 + ``server_tool_use`` block
-    actually invoked). Injected only when the request already carries a tool
-    surface (agentic calls) — plain text completions stay tool-free.
-    ``translate_response`` skips unknown block types, so server-side rounds
-    surface through the model's final text.
+    actually invoked). ``translate_response`` skips server-tool block types,
+    so hosted rounds surface through the model's final text.
+
+    Three gates, all required (Codex review 2026-07-29):
+
+    1. **Opt-in** (``settings.anthropic_native_web_tools``, default False).
+       The server runs these itself, so they are invisible to
+       ``allowed_tools`` / ``forbidden_tools`` and the sub-agent whitelist —
+       a narrowed surface would otherwise regain provider-side web access.
+       GEODE's own ``general_web_search`` / ``web_fetch`` handlers stay the
+       policy-checked default path.
+    2. **Model support** — ``ANTHROPIC_WEB_SEARCH_20260209_MODELS``; the
+       dated ``web_*_20260209`` tags 400 on unlisted models (e.g. the
+       budget-lane haiku).
+    3. **Tool surface present** — the caller declared tools; plain text
+       completions stay tool-free.
     """
+    from core.config import settings
+    from core.llm.model_capabilities import ANTHROPIC_WEB_SEARCH_20260209_MODELS
     from core.llm.providers.anthropic import _ANTHROPIC_NATIVE_TOOLS
 
-    # Gate on the CALLER's declared tool surface (req.tools), not kwargs —
-    # machine-local computer-use injection must not drag web tools into
-    # otherwise tool-free completions.
+    if not getattr(settings, "anthropic_native_web_tools", False):
+        return
+    if _base_model(str(kwargs.get("model", ""))) not in ANTHROPIC_WEB_SEARCH_20260209_MODELS:
+        return
     if not req.tools:
         return
     tools = kwargs.get("tools")
     if not isinstance(tools, list):
         return
+    # Appended AFTER _shape_tools so hosted server tools are excluded from
+    # the defer threshold (they are never deferrable — the server owns them).
     existing = {t.get("name") for t in tools if isinstance(t, dict)}
     for native in _ANTHROPIC_NATIVE_TOOLS:
         if native["name"] not in existing:
