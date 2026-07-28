@@ -7,6 +7,7 @@ The whole cache apparatus previously lived only inside the never-registered
 
 from __future__ import annotations
 
+import pytest
 from core.agent.system_injection import _REMINDER_TAG
 from core.agent.system_prompt import PROMPT_CACHE_BOUNDARY
 from core.llm.adapters._anthropic_common import build_create_kwargs, build_stream_kwargs
@@ -151,7 +152,7 @@ def test_native_web_tools_off_by_default() -> None:
     assert "web_search" not in names and "web_fetch" not in names
 
 
-def test_native_web_tools_injected_when_opted_in(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_native_web_tools_injected_when_opted_in(monkeypatch: pytest.MonkeyPatch) -> None:
     from core.config import settings
 
     monkeypatch.setattr(settings, "anthropic_native_web_tools", True, raising=False)
@@ -166,7 +167,7 @@ def test_native_web_tools_injected_when_opted_in(monkeypatch) -> None:  # type: 
     )
 
 
-def test_native_web_tools_skipped_on_unsupported_model(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_native_web_tools_skipped_on_unsupported_model(monkeypatch: pytest.MonkeyPatch) -> None:
     """``web_*_20260209`` 400s on models outside the documented set — the
     budget-lane haiku must never receive it."""
     from core.config import settings
