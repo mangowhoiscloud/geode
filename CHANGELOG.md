@@ -47,6 +47,10 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.3] - 2026-07-29
+
+> MCP stateless-era loop hardening: JSON-RPC id matching + unbuffered stdio (stream-poisoning fix), stderr drain, idempotency-gated mid-call retry, honest unavailable-tool errors, connection-epoch tool refresh; plus the ADR-014 live-E2E verification records.
+
 ### Fixed
 
 - **MCP stdio stream can no longer be permanently poisoned by unsolicited
