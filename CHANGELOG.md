@@ -47,7 +47,32 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- **MCP stdio client now declares protocol revision 2025-06-18 and records the
+  server-negotiated revision.** `StdioMCPClient` was frozen at the original
+  `2024-11-05` revision and discarded the server's `initialize` response; the
+  negotiated revision is now captured in `server_protocol_version` and logged
+  on mismatch, so version-support failures surface as diagnostics instead of
+  generic connection errors (ADR-014).
+
+### Infrastructure
+
+- **MCP SDK pinned to the v1 line (`mcp>=1.0.0,<2`) in the `[mcp]` and
+  `[audit]` extras.** mcp 2.0.0 (released 2026-07-28 alongside the stateless
+  MCP spec revision) renames `FastMCP` to `MCPServer` and restructures the
+  client stack; `pip install mcp` now resolves to 2.x. The bound keeps fresh
+  installs on the API line GEODE's server, petri bridge, and tests are built
+  against, per the SDK's own guidance for unmigrated projects. Migration
+  checklist: ADR-014.
+
 ### Architecture
+
+- **ADR-014: MCP 2026-07-28 stateless-spec response.** Exposure audit of the
+  `geode-mcp` server, hand-rolled stdio client, and petri MCP bridge against
+  the 2026-07-28 spec (initialize handshake and protocol-level sessions
+  removed), immediate mitigations, and the deferred SDK-v2 migration
+  checklist.
 
 - **Conflict-resolvable main-to-develop roadmap sync.** One executable trust
   resolver now grants main-ledger import only to canonical direct branches or

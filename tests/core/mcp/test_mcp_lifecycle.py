@@ -66,7 +66,7 @@ class TestStdioMCPClientLifecycle:
         mock_proc.stderr = MagicMock()
 
         # Mock the initialize response
-        init_resp = b'{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2024-11-05"}}\n'
+        init_resp = b'{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18"}}\n'
         tools_resp = b'{"jsonrpc":"2.0","id":2,"result":{"tools":[]}}\n'
         mock_proc.stdout.readline.side_effect = [init_resp, tools_resp]
 
@@ -75,6 +75,26 @@ class TestStdioMCPClientLifecycle:
 
         assert result is True
         assert client.pid == 12345
+        assert client.server_protocol_version == "2025-06-18"
+
+    def test_negotiated_protocol_version_recorded(self) -> None:
+        """A server negotiating a different revision still connects; the
+        negotiated version is recorded for diagnostics (ADR-014)."""
+        client = StdioMCPClient(command="echo", timeout_s=0.5)
+        mock_proc = MagicMock()
+        mock_proc.pid = 12346
+        mock_proc.poll.return_value = None
+        mock_proc.stdin = MagicMock()
+        mock_proc.stdout = MagicMock()
+
+        init_resp = b'{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-11-25"}}\n'
+        tools_resp = b'{"jsonrpc":"2.0","id":2,"result":{"tools":[]}}\n'
+        mock_proc.stdout.readline.side_effect = [init_resp, tools_resp]
+
+        with patch("subprocess.Popen", return_value=mock_proc):
+            assert client.connect() is True
+
+        assert client.server_protocol_version == "2025-11-25"
 
     def test_pid_cleared_after_close(self) -> None:
         """PID should be None after close."""

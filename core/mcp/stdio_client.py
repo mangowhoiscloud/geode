@@ -35,6 +35,16 @@ def _geode_version() -> str:
 # Graceful shutdown timeout before force kill (seconds)
 _CLOSE_TIMEOUT_S = 5
 
+# MCP protocol revision declared in `initialize`. This client only uses the
+# base operations (initialize / tools/list / tools/call) shared by every
+# published pre-2026 revision; the server answers with the revision it will
+# actually speak, captured in ``server_protocol_version``.
+# ref: mcp/shared/version.py SUPPORTED_PROTOCOL_VERSIONS (python-sdk v1 line).
+# The 2026-07-28 stateless revision removes `initialize` entirely, but SDK-v2
+# servers detect the protocol era from this opening request and keep serving
+# classic clients — see docs/adr/ADR-014-mcp-2026-07-28-stateless-spec.md.
+_PROTOCOL_VERSION = "2025-06-18"
+
 
 class StdioMCPClient:
     """MCP client using stdio transport (subprocess JSON-RPC)."""
@@ -57,6 +67,9 @@ class StdioMCPClient:
         self._request_id = 0
         self._pid: int | None = None
         self._request_lock = threading.Lock()
+        # Revision the server negotiated in the `initialize` response;
+        # None until connected (or if the server omitted it).
+        self.server_protocol_version: str | None = None
 
     @property
     def pid(self) -> int | None:
@@ -106,7 +119,7 @@ class StdioMCPClient:
             init_response = self._send_request(
                 "initialize",
                 {
-                    "protocolVersion": "2024-11-05",
+                    "protocolVersion": _PROTOCOL_VERSION,
                     "capabilities": {},
                     "clientInfo": {"name": "geode", "version": _geode_version()},
                 },
@@ -115,6 +128,17 @@ class StdioMCPClient:
             if init_response is None:
                 self.close()
                 return False
+
+            # Record the negotiated revision — base operations are identical
+            # across published revisions, so a mismatch is diagnostic, not fatal.
+            self.server_protocol_version = init_response.get("protocolVersion")
+            if self.server_protocol_version != _PROTOCOL_VERSION:
+                log.info(
+                    "MCP server %s negotiated protocol %s (client requested %s)",
+                    self._command,
+                    self.server_protocol_version,
+                    _PROTOCOL_VERSION,
+                )
 
             # Send initialized notification
             self._send_notification("notifications/initialized", {})
