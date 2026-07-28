@@ -263,6 +263,20 @@ class StdioMCPClient:
         self._request_id += 1
         return self._request_id
 
+    @staticmethod
+    def _write_all(stdin: Any, data: bytes) -> None:
+        """Write the whole frame — unbuffered stdin (bufsize=0) may short-write.
+
+        Buffered/mocked streams return None (or a non-int) from write() and
+        are treated as complete; raw FileIO returns the byte count and loops.
+        """
+        offset = 0
+        while offset < len(data):
+            n = stdin.write(data[offset:])
+            if not isinstance(n, int):
+                return
+            offset += n
+
     def _send_request(self, method: str, params: dict[str, Any]) -> dict[str, Any] | None:
         """Send a JSON-RPC request and wait for response with timeout."""
         with self._request_lock:
@@ -278,7 +292,7 @@ class StdioMCPClient:
 
             try:
                 message = json.dumps(request) + "\n"
-                self._process.stdin.write(message.encode("utf-8"))
+                self._write_all(self._process.stdin, message.encode("utf-8"))
                 self._process.stdin.flush()
 
                 # Read frames until the response matching OUR request id.
@@ -364,7 +378,7 @@ class StdioMCPClient:
 
         try:
             message = json.dumps(notification) + "\n"
-            self._process.stdin.write(message.encode("utf-8"))
+            self._write_all(self._process.stdin, message.encode("utf-8"))
             self._process.stdin.flush()
         except (OSError, BrokenPipeError):
             pass
