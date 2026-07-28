@@ -44,6 +44,21 @@ Accepted (2026-07-29)
 | petri bridge | low-level `Server` API의 v2 대응 (`서버는 양시대 서빙`이므로 v1 핀 유지 중엔 무변경) |
 | HTTP transport | v2의 stateless 기본값 재검토 — 정적 bearer 토큰 검증(`_StaticTokenVerifier`)은 per-request라 stateless 친화적, 변경 불요 예상 |
 | 테스트 격리 | MCP 테스트의 `importorskip("mcp")` — extra 미설치 CI job에서 조용히 skip되므로, v2 마이그레이션 PR은 `[mcp]` extra가 설치된 잡에서 게이트되는지 확인 |
+| 주기 헬스 스윕 (R6) | `check_health(auto_restart=True)`의 프로덕션 호출자 부재 — 복구는 호출-시점 반응형(미드콜 1회 재시도)뿐. serve 데몬 주기 스윕은 후속 |
+
+### ReAct 루프 stateless 감사 (2026-07-29, 후속 하드닝)
+
+서버 recycle 관점의 루프↔MCP 배선 감사 결과와 처분. R1~R5는 같은 트레인에서 수정, R6·R7은 위 보류 표.
+
+| # | 결함 | 처분 |
+|---|------|------|
+| R1 | JSON-RPC 응답 id 미대조 — 서버발 notification 1프레임이 스트림을 영구 오염, health는 계속 정상 보고 | 수정: id 매칭 + 비대상 프레임 skip + **stdout unbuffered(`bufsize=0`)** — 기본 버퍼링에선 notification+응답이 한 write로 오면 select가 Python 버퍼 속 응답을 못 봐 타임아웃(Codex 재현) |
+| R2 | 자식 stderr 미배수 — 64 KB 버퍼에서 웨지, 전 호출 타임아웃 | 수정: 데몬 배수 스레드 (`_drain_stderr`) |
+| R3 | 다운/쿨다운 서버의 도구가 모델에 "Unknown tool"로 오보(스키마에는 존재) | 수정: `last_known_server_for_tool` 메모(get_all_tools + find_server_for_tool 양쪽 기록) + executor "currently unavailable" 응답 |
+| R4 | 미드콜 사망 시 재시도 부재 — 일시 recycle이 라운드를 소실 | 수정: **`readOnlyHint`/`idempotentHint` 도구만** fresh 클라이언트로 1회 재시도(사망≠미실행 증거 — 무조건 재시도는 at-least-once 중복 실행 위험), 비멱등은 "outcome unknown" connection 오류. 동시 사망은 `_respawn_lock`으로 직렬화 |
+| R5 | 루프 도구 스냅샷이 재연결 후 stale (IPC 세션 수명 동안) | 수정: `connection_epoch` + arun 리프레시 게이트. 잔여: 같은 arun 내 recycle은 다음 arun에서 반영 |
+| R6 | 주기 헬스 스윕 부재 | 보류 (위 표) |
+| R7 | `_pending_proposals` 프로세스 친화성 | 보류 (기존 체크리스트 항목) |
 
 v2 마이그레이션 시점: 고정 기한 없음 (스펙의 10주 검증 윈도우는 RC→GA 구간으로 2026-07-28에 이미 종료). 외부 압력 신호가 트리거 — (a) 주요 원격 MCP 서버의 classic 개정판 서빙 중단, (b) v1 라인 유지보수(critical bug fix·보안 패치) 종료 공지.
 
@@ -52,6 +67,14 @@ v2 마이그레이션 시점: 고정 기한 없음 (스펙의 10주 검증 윈�
 - 신규 설치(`uv sync --extra mcp` / `--extra audit`, `pip install geode-agent[mcp]`)가 v2 SDK를 우발적으로 받는 경로가 차단된다.
 - GEODE가 붙는 외부 MCP 서버에 대해 협상된 개정판이 처음으로 관측 가능해지고 (`server_protocol_version`), 미지원 개정판은 generic 실패 대신 명시적 warning으로 표면화된다.
 - v2 신기능(`server/discover`, MRTR, Extensions)은 마이그레이션 전까지 사용 불가 — 현재 GEODE 표면은 어느 것도 요구하지 않는다.
+
+## Verification (live E2E, 2026-07-28 UTC)
+
+착지 직후 구독 백엔드(gpt-5.5, codex-oauth)로 라이브 E2E 프로브를 실행해 전 경로를 검증했다: 루프백 `geode-mcp`(python-sdk 1.29.0) 협상 `2025-06-18` 기록·도구 6종, stateless-only 가짜 서버(`2026-07-28` 응답) fail-loud 거부, AgenticLoop의 MCP 디스패치 2회(natural 종료, rounds 3/6). 정규화 궤적과 검증 리포트는 외부 증거 저장소에 발행:
+
+- `mangowhoiscloud/geode-eval-artifacts` @ `647583b3455d16e0769c2b2dc21b380aa24f7bde`
+  - `trajectories/geode-agenticloop-mcp-2026-07-28-spec-e2e-20260728T202349Z-7acb62a4184c/` — `trajectory.json` sha256 `8b77e3b05eeba51374cef5b640ddf1109c323f4e3defe869934bbadd43138b42` (9 events, dialogue+tool)
+  - `reports/e2e-validation/2026-07-28-mcp-stateless-spec-e2e.md`
 
 ## References
 

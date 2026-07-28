@@ -293,6 +293,22 @@ class ToolExecutor:
                             ),
                             "timeout": True,
                         }
+                known = self._mcp_manager.last_known_server_for_tool(tool_name)
+                if known is not None:
+                    # The tool IS in the model's schema list — telling the
+                    # model it doesn't exist would misinform it (ADR-014 R3).
+                    log.warning(
+                        "MCP tool %s unavailable: server '%s' down or cooling",
+                        tool_name,
+                        known,
+                    )
+                    return {
+                        "error": (
+                            f"MCP server '{known}' providing '{tool_name}' is "
+                            "currently unavailable (down or in retry cooldown). "
+                            "Retry later or use an alternative tool."
+                        )
+                    }
             log.warning("No handler for tool: %s", tool_name)
             return {"error": f"Unknown tool: '{tool_name}'. Use 'show_help' for available tools."}
 

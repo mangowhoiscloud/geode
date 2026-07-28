@@ -110,8 +110,15 @@ register in `registry.py`, expose schema in `definitions.json`.
 
 MCP server adapters plus 25K result guard.
 
-- `manager.py` — `MCPManager`.
-- `stdio_client.py` — STDIO transport.
+- `manager.py` — `MCPServerManager`.
+- `stdio_client.py` — STDIO transport. Declares protocol revision
+  `2025-06-18`, records the server-negotiated revision in
+  `server_protocol_version`, and fail-loud-rejects revisions outside the
+  supported classic set (ADR-014; SDK pinned `mcp>=1.28,<2`). Live E2E
+  2026-07-28: loopback negotiation + agent-level MCP dispatch verified on the
+  subscription backend.
+- Client-path MCP tools surface under their **raw server-side names** — the
+  `mcp__geode__*` prefix appears only on external hosts consuming geode-mcp.
 - Calendar / Steam / etc. adapters.
 
 ### `core/memory/`

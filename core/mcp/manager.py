@@ -20,6 +20,7 @@ import json
 import logging
 import os
 import signal
+import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -216,6 +217,15 @@ class MCPServerManager:
         self._servers: dict[str, dict[str, Any]] = {}
         self._clients: dict[str, StdioMCPClient] = {}
         self._failed_at: dict[str, float] = {}
+        # Bumped whenever a NEW client connects — lets long-lived AgenticLoop
+        # sessions detect a server recycle and refresh their tool snapshot.
+        self._connection_epoch = 0
+        # tool name -> server that last advertised it; distinguishes "server
+        # down" from "tool never existed" when find_server_for_tool misses.
+        self._last_seen_tools: dict[str, str] = {}
+        # Serializes mid-call respawns so concurrent failures on the same
+        # server can't each spawn a subprocess and orphan the loser.
+        self._respawn_lock = threading.Lock()
         self._dotenv_cache: dict[str, str | None] = {}
         self._text_read_cache: dict[tuple[str, str], str] = {}
         self._signal_installed = False
@@ -498,7 +508,9 @@ class MCPServerManager:
             client = self._clients[server_name]
             if client.is_connected():
                 return client
-            self._clients.pop(server_name, None)
+            stale = self._clients.pop(server_name, None)
+            if stale is not None:
+                stale.close()  # reap the dead Popen instead of leaking it
 
         failed_at = self._failed_at.get(server_name)
         if failed_at is not None and (time.monotonic() - failed_at) < _FAILED_RETRY_COOLDOWN_S:
@@ -528,6 +540,7 @@ class MCPServerManager:
         client = StdioMCPClient(command=command, args=args, env=env)
         if client.connect():
             self._clients[server_name] = client
+            self._connection_epoch += 1
             self._failed_at.pop(server_name, None)
             _fire_mcp_hook(HookEvent.MCP_SERVER_CONNECTED, {"server_name": server_name})
             return client
@@ -569,8 +582,20 @@ class MCPServerManager:
             for tool in tools:
                 normalised = _normalise_mcp_tool(tool)
                 normalised["_mcp_server"] = server_name
+                name = normalised.get("name")
+                if isinstance(name, str):
+                    self._last_seen_tools[name] = server_name
                 all_tools.append(normalised)
         return all_tools
+
+    @property
+    def connection_epoch(self) -> int:
+        """Monotonic count of client connects — changes signal a recycle."""
+        return self._connection_epoch
+
+    def last_known_server_for_tool(self, tool_name: str) -> str | None:
+        """Server that previously advertised ``tool_name`` (may be down now)."""
+        return self._last_seen_tools.get(tool_name)
 
     # MCP server fallback hints: when a server is unavailable or fails,
     # the error message includes a hint so the LLM can try an alternative.
@@ -607,7 +632,39 @@ class MCPServerManager:
                 tool_name=tool_name,
                 args=normalised_args,
             )
-            result = await client.acall_tool(tool_name, normalised_args)
+            try:
+                result = await client.acall_tool(tool_name, normalised_args)
+                died_mid_call = (
+                    isinstance(result, dict)
+                    and bool(result.get("error"))
+                    and not client.is_connected()
+                )
+            except ConnectionError:
+                result = {}
+                died_mid_call = True
+            if died_mid_call:
+                # Stateless-era servers may recycle between rounds (ADR-014):
+                # retry ONCE on a fresh client — but only for tools annotated
+                # read-only/idempotent. The death is no proof the original
+                # call did NOT execute, so blind retry would be at-least-once.
+                annotations = (raw_tool or {}).get("annotations") or {}
+                if not (annotations.get("readOnlyHint") or annotations.get("idempotentHint")):
+                    raise ConnectionError(
+                        f"MCP server '{server_name}' died during '{tool_name}'; "
+                        "the tool is not marked read-only/idempotent so it was "
+                        "not retried — outcome unknown"
+                    )
+                fresh = await asyncio.to_thread(self._respawn_after_death, server_name)
+                if fresh is None:
+                    raise ConnectionError(
+                        f"MCP server '{server_name}' died mid-call and did not reconnect"
+                    )
+                log.info(
+                    "MCP server '%s' respawned mid-call; retrying %s",
+                    server_name,
+                    tool_name,
+                )
+                result = await fresh.acall_tool(tool_name, normalised_args)
             self._record_text_read_result(
                 server_name=server_name,
                 tool_name=tool_name,
@@ -619,12 +676,29 @@ class MCPServerManager:
             log.error("MCP async tool call failed: %s/%s: %s", server_name, tool_name, exc)
             hint = self._FALLBACK_HINTS.get(server_name, "")
             is_timeout = "timeout" in str(exc).lower()
+            detail = f" ({exc})" if str(exc) else ""
             return tool_error(
-                f"MCP tool call failed: {tool_name}",
+                f"MCP tool call failed: {tool_name}{detail}",
                 error_type="timeout" if is_timeout else "connection",
                 hint=f"Use {hint} instead" if hint else "Retry or use an alternative tool.",
                 context={"server": server_name, "tool": tool_name},
             )
+
+    def _respawn_after_death(self, server_name: str) -> StdioMCPClient | None:
+        """Replace a mid-call-dead client under the respawn lock.
+
+        Concurrent callers observing the same death serialize here; the
+        second caller reuses the first one's fresh client instead of
+        spawning a competing subprocess and orphaning one of them.
+        """
+        with self._respawn_lock:
+            existing = self._clients.get(server_name)
+            if existing is not None and existing.is_connected():
+                return existing
+            stale = self._clients.pop(server_name, None)
+            if stale is not None:
+                stale.close()
+            return self._get_client(server_name)
 
     def _raw_tool_for_client(self, client: StdioMCPClient, tool_name: str) -> dict[str, Any] | None:
         try:
@@ -712,6 +786,10 @@ class MCPServerManager:
                 continue
             for tool in client.list_tools():
                 if tool.get("name") == tool_name:
+                    # Memo here too — sessions that never called
+                    # get_all_tools still get the honest "unavailable"
+                    # error (instead of "Unknown tool") after a recycle.
+                    self._last_seen_tools[tool_name] = server_name
                     return server_name
         return None
 
@@ -749,8 +827,9 @@ class MCPServerManager:
 
             if not alive and auto_restart:
                 log.info("MCP server '%s' is down, attempting restart", name)
-                # Remove dead client reference
-                self._clients.pop(name, None)
+                dead = self._clients.pop(name, None)
+                if dead is not None:
+                    dead.close()  # reap the dead Popen instead of leaking it
                 self._failed_at.pop(name, None)
                 new_client = self._get_client(name)
                 alive = new_client is not None and new_client.is_connected()
