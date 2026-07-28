@@ -246,6 +246,7 @@ def _system_and_messages(req: AdapterCallRequest) -> tuple[Any, list[dict[str, A
     the in-context mutation surface). No-op fast path when no SoT is
     configured; per-slot graceful on reader failure.
     """
+    from core.agent.system_prompt import PROMPT_CACHE_BOUNDARY
     from core.llm.cache_policy import (
         _load_cache_policy_override,
         apply_cache_policy_breakpoints,
@@ -257,7 +258,19 @@ def _system_and_messages(req: AdapterCallRequest) -> tuple[Any, list[dict[str, A
     from core.self_improving.loop.inject.in_context_wiring import apply_in_context_slots
 
     messages = build_messages(req)
-    messages, system = apply_in_context_slots(messages, system=req.system_prompt)
+    system = req.system_prompt
+    if system and PROMPT_CACHE_BOUNDARY in system:
+        # S5 slot content is per-call volatile — inject it into the DYNAMIC
+        # half (inside the envelope, before the closing tag) so it can never
+        # invalidate the 1h static prefix cache (Codex review 2026-07-29).
+        static_part, dynamic_part = system.split(PROMPT_CACHE_BOUNDARY, 1)
+        closing = "</dynamic_context>"
+        core, sep, tail = dynamic_part.rpartition(closing)
+        inner, suffix = (core, sep + tail) if sep and not tail.strip() else (dynamic_part, "")
+        messages, inner = apply_in_context_slots(messages, system=inner)
+        system = static_part + PROMPT_CACHE_BOUNDARY + inner + suffix
+    else:
+        messages, system = apply_in_context_slots(messages, system=system)
     # ADR-013 T5 — cache-breakpoint policy SoT governs the message budget
     # (was likewise stranded in the dead adapter).
     n_breakpoints = apply_cache_policy_breakpoints(
@@ -290,11 +303,16 @@ def build_create_kwargs(req: AdapterCallRequest) -> dict[str, Any]:
         kwargs["thinking"] = {"type": "adaptive", "display": "summarized"}
         effort = req.effort if req.effort != "xhigh" or _supports_xhigh_effort(req.model) else "max"
         kwargs["output_config"] = {"effort": effort}
-    else:
-        if req.temperature is not None:
-            kwargs["temperature"] = req.temperature
-        if req.thinking_budget > 0:
-            kwargs["thinking"] = {"type": "enabled", "budget_tokens": req.thinking_budget}
+    elif req.thinking_budget > 0:
+        # Anthropic contract: ``budget_tokens < max_tokens`` and extended
+        # thinking requires temperature=1 — extend max_tokens to preserve
+        # the visible-output budget (ported from the deleted adapter; the
+        # first port dropped this and produced an API-invalid payload).
+        kwargs["thinking"] = {"type": "enabled", "budget_tokens": req.thinking_budget}
+        kwargs["max_tokens"] = req.max_tokens + req.thinking_budget
+        kwargs["temperature"] = 1.0
+    elif req.temperature is not None:
+        kwargs["temperature"] = req.temperature
     if req.tools:
         tc = _translate_tool_choice(req.tool_choice)
         kwargs["tools"] = _shape_tools(req, tc)

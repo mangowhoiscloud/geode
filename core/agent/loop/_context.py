@@ -139,6 +139,8 @@ def inject_runtime_hints(system_prompt: str, *hints: str | None) -> str:
     payload = "\n\n".join(blocks)
     closing = "</dynamic_context>"
     idx = system_prompt.rfind(closing)
-    if idx >= 0:
+    # Only treat the tag as the envelope when nothing but whitespace follows —
+    # an override prompt merely MENTIONING the tag mid-body gets plain append.
+    if idx >= 0 and not system_prompt[idx + len(closing) :].strip():
         return system_prompt[:idx] + payload + "\n\n" + system_prompt[idx:]
     return system_prompt + "\n\n" + payload

@@ -206,7 +206,7 @@ def test_anthropic_live_path_imports_orchestrator() -> None:
         "from core.self_improving.loop.inject.in_context_wiring import apply_in_context_slots"
         in src
     )
-    assert "apply_in_context_slots(messages, system=req.system_prompt)" in src
+    assert "apply_in_context_slots(messages, system=" in src
 
 
 # PR-LEGACY-PROVIDER-REMOVAL (2026-05-28) — the

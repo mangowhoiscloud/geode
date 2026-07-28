@@ -931,3 +931,10 @@ def is_computer_use_enabled() -> bool:
 # breakpoints, and the ADR-012 M4.4 in-context slot wiring this class had
 # stranded. This module is a low-level utility layer (clients, retry,
 # quota, cache helpers, native-tool shaping) consumed by ``core/llm/adapters``.
+#
+# Deferred re-wires (deliberate, NOT omissions — tracked in the prompt-grammar
+# scope ledger + kanban): the dead class also carried (a) context management
+# (``_CONTEXT_MGMT_MODELS`` clear_tool_uses/compact blocks) and (b) native
+# web_search/web_fetch injection (``_ANTHROPIC_NATIVE_TOOLS``). Both change
+# live request semantics beyond this refactor's blast radius and need their
+# own live verification before landing on the production builders.

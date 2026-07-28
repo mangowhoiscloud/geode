@@ -32,6 +32,7 @@ def test_boundary_split_marks_static_block_with_ttl() -> None:
     assert isinstance(blocks, list) and len(blocks) == 2
     assert blocks[0]["text"] == "STATIC RULES"
     assert blocks[0]["cache_control"]["type"] == "ephemeral"
+    assert blocks[0]["cache_control"].get("ttl") == "1h", "static prefix must carry the 1h TTL"
     # dynamic block keeps the envelope BALANCED (open tag retained)
     assert blocks[1]["text"].startswith(PROMPT_CACHE_BOUNDARY)
     assert "cache_control" not in blocks[1]
