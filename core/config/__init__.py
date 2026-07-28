@@ -60,6 +60,7 @@ _TOML_TO_SETTINGS: dict[str, str] = {
     # but nothing read them back (dead write); now they are part of the cascade.
     "llm.anthropic_credential_source": "anthropic_credential_source",
     # PR-TOOL-SEARCH-WIRE (2026-06-13) — hosted tool-search defer kill switch.
+    "llm.anthropic_native_web_tools": "anthropic_native_web_tools",
     "llm.tool_search_defer": "tool_search_defer",
     "llm.tool_search_defer_codex": "tool_search_defer_codex",
     # PR-ANTHROPIC-CACHE-HARDENING (2026-06-23) — 1h prompt-cache TTL kill switch.

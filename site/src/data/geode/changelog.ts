@@ -19,7 +19,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": ""
+    "body": "### Added\n\n- **Server-side context management and native web tools now ride the live\n  Anthropic path (the last two stranded behaviors from the deleted legacy\n  adapter).** Both were live-verified on anthropic-oauth before wiring:\n  context-management (clear_tool_uses + compact triggers, beta tokens MERGED\n  into `anthropic-beta` — clobbering the header 400s computer-use) returned\n  200, and hosted `web_search`/`web_fetch` returned 200 with a real\n  `server_tool_use` round. Hosted web tools are **opt-in**\n  (`[llm] anthropic_native_web_tools`, default off) and model-gated: the\n  server executes them itself, so they are invisible to `allowed_tools` /\n  `forbidden_tools` and the sub-agent whitelist that govern GEODE's own\n  `general_web_search` / `web_fetch` handlers, and the dated\n  `web_*_20260209` tags reject unlisted models. Context management is gated\n  to supporting models with dated snapshot ids normalized to their family.\n  A combined payload (custom tool + computer-use + web tools + 3 beta tokens\n  + context management + cache blocks) was confirmed live in both gate\n  states.\n\n### Fixed\n\n- **Prompt-cache efficacy confirmed live and cross-process.** The v1.0.4\n  wiring produces real cache economics on anthropic-oauth: call 1 wrote\n  7,590 tokens against the 1h-TTL static block, call 2 read 7,249 back, and\n  a later process start still hit the same prefix (write 0 / read 7,590)."
   },
   {
     "version": "1.0.4",

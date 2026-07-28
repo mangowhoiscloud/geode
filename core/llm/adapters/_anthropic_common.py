@@ -191,14 +191,108 @@ def _maybe_inject_computer_use(kwargs: dict[str, Any]) -> None:
             )
         )
         kwargs["tools"] = tools
-    # Always ensure the model's beta token when the native tool is present
-    # (merge, never clobber an existing anthropic-beta header).
+    # Always ensure the model's beta token when the native tool is present.
+    _merge_beta(kwargs, beta)
+
+
+def _base_model(model: str) -> str:
+    """Strip a trailing dated snapshot suffix (``-20250929``).
+
+    Capability sets are keyed on the family id; a dated alias must resolve
+    to the same capabilities (Codex review 2026-07-29 —
+    ``claude-sonnet-4-5-20250929`` silently missed the context-mgmt gate).
+    """
+    head, sep, tail = model.rpartition("-")
+    return head if sep and len(tail) == 8 and tail.isdigit() else model
+
+
+def _merge_beta(kwargs: dict[str, Any], *betas: str) -> None:
+    """Merge beta tokens into ``anthropic-beta`` — never clobber the header.
+
+    Live incident (probe, 2026-07-29): replacing ``extra_headers`` wholesale
+    dropped computer-use's beta token and 400'd on the computer tool tag.
+    """
     headers = dict(kwargs.get("extra_headers") or {})
-    tokens = [t for t in headers.get("anthropic-beta", "").split(",") if t]
-    if beta not in tokens:
-        tokens.append(beta)
+    tokens: list[str] = []
+    for raw in [*headers.get("anthropic-beta", "").split(","), *betas]:
+        token = raw.strip()
+        if token and token not in tokens:
+            tokens.append(token)
     headers["anthropic-beta"] = ",".join(tokens)
     kwargs["extra_headers"] = headers
+
+
+def _maybe_inject_context_management(kwargs: dict[str, Any]) -> None:
+    """Server-side context editing for supporting models.
+
+    Ported from the deleted ClaudeAgenticAdapter (stranded, never live);
+    live-verified 200 on anthropic-oauth 2026-07-29 (probe B1: merged beta
+    tokens, trigger from ``resolve_context_budget_policy``). Haiku 4.5
+    rejects the compact beta, hence the model gate.
+    """
+    from core.llm.providers.anthropic import _CONTEXT_MGMT_MODELS
+
+    model = _base_model(str(kwargs.get("model", "")))
+    if model not in _CONTEXT_MGMT_MODELS:
+        return
+    from core.llm.token_tracker import MODEL_CONTEXT_WINDOW
+    from core.orchestration.context_budget import resolve_context_budget_policy
+
+    trigger = resolve_context_budget_policy(
+        model, context_window=MODEL_CONTEXT_WINDOW.get(model)
+    ).anthropic_compact_trigger_tokens
+    _merge_beta(kwargs, "context-management-2025-06-27", "compact-2026-01-12")
+    body = dict(kwargs.get("extra_body") or {})
+    body["context_management"] = {
+        "edits": [
+            {"type": "clear_tool_uses_20250919", "keep": {"type": "tool_uses", "value": 5}},
+            {"type": "compact_20260112", "trigger": {"type": "input_tokens", "value": trigger}},
+        ]
+    }
+    kwargs["extra_body"] = body
+
+
+def _inject_native_web_tools(kwargs: dict[str, Any], req: AdapterCallRequest) -> None:
+    """Append Anthropic-hosted web_search / web_fetch server tools.
+
+    Ported from the deleted ClaudeAgenticAdapter; live-verified on
+    anthropic-oauth 2026-07-29 (probe B2: 200 + ``server_tool_use`` block
+    actually invoked). ``translate_response`` skips server-tool block types,
+    so hosted rounds surface through the model's final text.
+
+    Three gates, all required (Codex review 2026-07-29):
+
+    1. **Opt-in** (``settings.anthropic_native_web_tools``, default False).
+       The server runs these itself, so they are invisible to
+       ``allowed_tools`` / ``forbidden_tools`` and the sub-agent whitelist —
+       a narrowed surface would otherwise regain provider-side web access.
+       GEODE's own ``general_web_search`` / ``web_fetch`` handlers stay the
+       policy-checked default path.
+    2. **Model support** — ``ANTHROPIC_WEB_SEARCH_20260209_MODELS``; the
+       dated ``web_*_20260209`` tags 400 on unlisted models (e.g. the
+       budget-lane haiku).
+    3. **Tool surface present** — the caller declared tools; plain text
+       completions stay tool-free.
+    """
+    from core.config import settings
+    from core.llm.model_capabilities import ANTHROPIC_WEB_SEARCH_20260209_MODELS
+    from core.llm.providers.anthropic import _ANTHROPIC_NATIVE_TOOLS
+
+    if not getattr(settings, "anthropic_native_web_tools", False):
+        return
+    if _base_model(str(kwargs.get("model", ""))) not in ANTHROPIC_WEB_SEARCH_20260209_MODELS:
+        return
+    if not req.tools:
+        return
+    tools = kwargs.get("tools")
+    if not isinstance(tools, list):
+        return
+    # Appended AFTER _shape_tools so hosted server tools are excluded from
+    # the defer threshold (they are never deferrable — the server owns them).
+    existing = {t.get("name") for t in tools if isinstance(t, dict)}
+    for native in _ANTHROPIC_NATIVE_TOOLS:
+        if native["name"] not in existing:
+            tools.append(dict(native))
 
 
 def _cache_shaped_system(system: str) -> str | list[dict[str, Any]]:
@@ -321,6 +415,8 @@ def build_create_kwargs(req: AdapterCallRequest) -> dict[str, Any]:
     if req.stop_sequences:
         kwargs["stop_sequences"] = list(req.stop_sequences)
     _maybe_inject_computer_use(kwargs)
+    _inject_native_web_tools(kwargs, req)
+    _maybe_inject_context_management(kwargs)
     return kwargs
 
 
@@ -385,6 +481,8 @@ def build_stream_kwargs(req: AdapterCallRequest) -> dict[str, Any]:
         if tc is not None:
             kwargs["tool_choice"] = tc
     _maybe_inject_computer_use(kwargs)
+    _inject_native_web_tools(kwargs, req)
+    _maybe_inject_context_management(kwargs)
     return kwargs
 
 

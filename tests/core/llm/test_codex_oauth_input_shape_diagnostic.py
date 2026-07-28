@@ -15,10 +15,11 @@ from __future__ import annotations
 
 import logging
 
+import pytest
 from core.llm.adapters.codex_oauth import _log_codex_input_shape
 
 
-def test_log_emits_warning_when_any_content_is_null(caplog) -> None:  # type: ignore[no-untyped-def]
+def test_log_emits_warning_when_any_content_is_null(caplog: pytest.LogCaptureFixture) -> None:
     """``content=None`` anywhere in the first 30 entries triggers WARN."""
     resp_input = [
         {"role": "user", "content": "hello"},
@@ -35,7 +36,9 @@ def test_log_emits_warning_when_any_content_is_null(caplog) -> None:  # type: ig
     assert "[2]user content=str(9)" in msg
 
 
-def test_log_silent_when_all_content_present_and_not_debug(caplog) -> None:  # type: ignore[no-untyped-def]
+def test_log_silent_when_all_content_present_and_not_debug(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     """No null content + WARN-only logger → silent (avoids per-call spam)."""
     resp_input = [
         {"role": "user", "content": "hello"},
@@ -49,7 +52,7 @@ def test_log_silent_when_all_content_present_and_not_debug(caplog) -> None:  # t
     )
 
 
-def test_log_emits_at_debug_when_logger_is_debug(caplog) -> None:  # type: ignore[no-untyped-def]
+def test_log_emits_at_debug_when_logger_is_debug(caplog: pytest.LogCaptureFixture) -> None:
     """DEBUG logger → emit unconditionally (developer trace mode)."""
     resp_input = [{"role": "user", "content": "hi"}]
     with caplog.at_level(logging.DEBUG, logger="core.llm.adapters.codex_oauth"):
@@ -58,7 +61,7 @@ def test_log_emits_at_debug_when_logger_is_debug(caplog) -> None:  # type: ignor
     assert matching, "diagnostic not emitted at DEBUG level"
 
 
-def test_log_handles_function_call_typed_items(caplog) -> None:  # type: ignore[no-untyped-def]
+def test_log_handles_function_call_typed_items(caplog: pytest.LogCaptureFixture) -> None:
     """Typed items (function_call / function_call_output) have no
     ``content`` key — the diagnostic must still format them."""
     resp_input = [
@@ -84,7 +87,7 @@ def test_log_handles_empty_or_non_list_input() -> None:
     _log_codex_input_shape("not a list")  # type: ignore[arg-type]
 
 
-def test_log_silent_for_typed_items_without_content_key(caplog) -> None:  # type: ignore[no-untyped-def]
+def test_log_silent_for_typed_items_without_content_key(caplog: pytest.LogCaptureFixture) -> None:
     """function_call / function_call_output / reasoning items legitimately
     carry NO content key — they must not trip the null-content WARN
     (pre-2026-07-29 this fired on every tool-bearing Codex round)."""

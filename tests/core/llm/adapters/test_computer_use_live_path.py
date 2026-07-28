@@ -82,7 +82,8 @@ class TestLivePathInjection:
         with patch(_ENABLED, return_value=False):
             kwargs = common.build_create_kwargs(_req())
         assert not any(t.get("name") == "computer" for t in kwargs.get("tools", []))
-        assert "extra_headers" not in kwargs
+        beta = (kwargs.get("extra_headers") or {}).get("anthropic-beta", "")
+        assert "computer-use" not in beta
 
     def test_injects_even_with_no_registry_tools(self) -> None:
         """The model must be offered ``computer`` even when the request carries
