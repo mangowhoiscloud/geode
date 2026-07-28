@@ -125,7 +125,8 @@ def create_mcp_server(
         from mcp.server.fastmcp import FastMCP
     except ImportError:
         raise ImportError(
-            "MCP server requires the 'mcp' package. Install with: uv add mcp"
+            "MCP server requires the 'mcp' package (v1 line — mcp 2.x renames "
+            "FastMCP, see ADR-014). Install with: uv sync --extra mcp"
         ) from None
 
     server_kwargs: dict[str, Any] = {}
