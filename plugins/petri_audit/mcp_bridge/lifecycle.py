@@ -17,7 +17,7 @@ never see each other's tool schemas.
 Why ``sys.executable`` for the bridge command
 =============================================
 
-The audit extra venv has ``mcp>=1.0.0`` installed; the operator's
+The audit extra venv has ``mcp>=1.28,<2`` installed; the operator's
 system ``python`` does not. Pinning ``sys.executable`` ensures the
 spawned bridge subprocess uses the same interpreter (and therefore the
 same site-packages) as the parent, even if claude inherits a different

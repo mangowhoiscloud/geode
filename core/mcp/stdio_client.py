@@ -35,6 +35,22 @@ def _geode_version() -> str:
 # Graceful shutdown timeout before force kill (seconds)
 _CLOSE_TIMEOUT_S = 5
 
+# MCP protocol revision declared in `initialize`. This client only uses the
+# base operations (initialize / tools/list / tools/call) shared by every
+# published pre-2026 revision; the server answers with the revision it will
+# actually speak, captured in ``server_protocol_version``.
+# ref: mcp/shared/version.py SUPPORTED_PROTOCOL_VERSIONS (python-sdk v1 line).
+# The 2026-07-28 stateless revision removes `initialize` entirely, but SDK-v2
+# servers detect the protocol era from this opening request and keep serving
+# classic clients — see docs/adr/ADR-014-mcp-2026-07-28-stateless-spec.md.
+_PROTOCOL_VERSION = "2025-06-18"
+
+# Revisions whose wire shape this client can speak (base operations:
+# initialize / tools/list / tools/call are identical across these). Per the
+# spec's version negotiation, the client SHOULD disconnect when the server
+# answers with a revision outside this set.
+_SUPPORTED_PROTOCOL_VERSIONS = frozenset({"2024-11-05", "2025-03-26", "2025-06-18", "2025-11-25"})
+
 
 class StdioMCPClient:
     """MCP client using stdio transport (subprocess JSON-RPC)."""
@@ -57,6 +73,9 @@ class StdioMCPClient:
         self._request_id = 0
         self._pid: int | None = None
         self._request_lock = threading.Lock()
+        # Revision the server negotiated in the `initialize` response;
+        # None until connected (or if the server omitted it).
+        self.server_protocol_version: str | None = None
 
     @property
     def pid(self) -> int | None:
@@ -69,6 +88,7 @@ class StdioMCPClient:
     def connect(self) -> bool:
         """Start the MCP server subprocess and initialize."""
         try:
+            self.server_protocol_version = None  # reset on (re)connect
             env = dict(os.environ)
             env.update(self._env)
 
@@ -106,7 +126,7 @@ class StdioMCPClient:
             init_response = self._send_request(
                 "initialize",
                 {
-                    "protocolVersion": "2024-11-05",
+                    "protocolVersion": _PROTOCOL_VERSION,
                     "capabilities": {},
                     "clientInfo": {"name": "geode", "version": _geode_version()},
                 },
@@ -115,6 +135,30 @@ class StdioMCPClient:
             if init_response is None:
                 self.close()
                 return False
+
+            # Version negotiation: the server answers with the revision it
+            # will speak. Outside our supported set → disconnect (spec SHOULD).
+            negotiated = init_response.get("protocolVersion")
+            # isinstance first: a non-string (array/object) value would raise
+            # TypeError on the frozenset membership test and leak the child.
+            if not isinstance(negotiated, str) or negotiated not in _SUPPORTED_PROTOCOL_VERSIONS:
+                log.warning(
+                    "MCP server %s negotiated unsupported protocol %r "
+                    "(client supports %s) — disconnecting",
+                    self._command,
+                    negotiated,
+                    sorted(_SUPPORTED_PROTOCOL_VERSIONS),
+                )
+                self.close()
+                return False
+            self.server_protocol_version = negotiated
+            if negotiated != _PROTOCOL_VERSION:
+                log.info(
+                    "MCP server %s negotiated protocol %s (client requested %s)",
+                    self._command,
+                    negotiated,
+                    _PROTOCOL_VERSION,
+                )
 
             # Send initialized notification
             self._send_notification("notifications/initialized", {})
