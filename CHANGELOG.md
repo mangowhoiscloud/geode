@@ -47,6 +47,10 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-07-29
+
+> MCP 2026-07-28 stateless spec response (SDK v1 pin + client negotiation validation, ADR-014), riding with the accumulated develop train: roadmap sync trust resolver, architecture exception ledger, generated architecture baseline gate, gateway computer-use opt-in, fresh-install REPL fixes, and macOS computer-use input verification.
+
 ### Changed
 
 - **MCP stdio client now declares protocol revision 2025-06-18 and validates
