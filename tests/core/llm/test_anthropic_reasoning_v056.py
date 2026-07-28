@@ -82,7 +82,9 @@ class TestThinkingDisplaySummarized:
     a unit test."""
 
     def test_adapter_source_sets_display_summarized(self) -> None:
-        from core.llm.providers import anthropic as adapter
+        # 2026-07-29: adaptive branch ported from the deleted
+        # ClaudeAgenticAdapter to the LIVE builder module.
+        from core.llm.adapters import _anthropic_common as adapter
 
         with open(adapter.__file__, encoding="utf-8") as f:
             text = f.read()

@@ -3,10 +3,8 @@
 Covers:
   1. build_system_reminder: content assembly, budget enforcement
   2. append_system_reminder: end-adjacent injection, input immutability,
-     legacy-prefix strip
   3. TestCacheContract: prompt-cache prefix stability guard
      (PR-CACHE-REMINDER, 2026-06-10)
-  4. _is_system_reminder: tag detection
 """
 
 from __future__ import annotations
@@ -17,7 +15,6 @@ from unittest.mock import patch
 from core.agent.system_injection import (
     _MAX_REMINDER_CHARS,
     _REMINDER_TAG,
-    _is_system_reminder,
     append_system_reminder,
     build_system_reminder,
 )
@@ -111,7 +108,7 @@ class TestAppendSystemReminder:
         result = append_system_reminder(messages)
         assert len(result) == 2
         assert result[0]["content"] == "Hello"
-        assert _is_system_reminder(result[1])
+        assert f"<{_REMINDER_TAG}>" in str(result[1].get("content", ""))
 
     def test_preserves_existing_messages(self) -> None:
         """Full history preserved in order, reminder appended last."""
@@ -123,25 +120,7 @@ class TestAppendSystemReminder:
         result = append_system_reminder(messages)
         assert len(result) == 4
         assert [m["content"] for m in result[:3]] == ["first", "reply", "second"]
-        assert _is_system_reminder(result[3])
-
-    def test_strips_legacy_position0_reminder(self) -> None:
-        """A reminder persisted at [0] by the old prepend design is dropped."""
-        legacy = f"<{_REMINDER_TAG}>\nCurrent date: stale\n</{_REMINDER_TAG}>"
-        messages = [
-            {"role": "user", "content": legacy},
-            {"role": "user", "content": "Hello"},
-        ]
-        result = append_system_reminder(messages)
-        assert len(result) == 2
-        assert result[0]["content"] == "Hello"
-        assert _is_system_reminder(result[1])
-        assert "stale" not in result[1]["content"]
-
-
-# ---------------------------------------------------------------------------
-# Cache contract — prefix stability (PR-CACHE-REMINDER, 2026-06-10)
-# ---------------------------------------------------------------------------
+        assert f"<{_REMINDER_TAG}>" in str(result[3].get("content", ""))
 
 
 class TestCacheContract:
@@ -174,44 +153,6 @@ class TestCacheContract:
         round2 = append_system_reminder(history, round_idx=2)
         assert round1[:-1] == round2[:-1] == history
         assert round1[-1] != round2[-1]  # round counter differs, as intended
-
-    def test_reminder_never_first_message(self) -> None:
-        """With non-empty history the reminder must not occupy messages[0]."""
-        messages = [{"role": "user", "content": "Hello"}]
-        result = append_system_reminder(messages, round_idx=1)
-        assert not _is_system_reminder(result[0])
-        assert _is_system_reminder(result[-1])
-
-
-# ---------------------------------------------------------------------------
-# _is_system_reminder
-# ---------------------------------------------------------------------------
-
-
-class TestIsSystemReminder:
-    """Tests for _is_system_reminder()."""
-
-    def test_detects_reminder(self) -> None:
-        msg = {"role": "user", "content": f"<{_REMINDER_TAG}>\nsome context\n</{_REMINDER_TAG}>"}
-        assert _is_system_reminder(msg) is True
-
-    def test_rejects_assistant(self) -> None:
-        msg = {"role": "assistant", "content": f"<{_REMINDER_TAG}>\nfoo"}
-        assert _is_system_reminder(msg) is False
-
-    def test_rejects_normal_user(self) -> None:
-        msg = {"role": "user", "content": "Hello, please analyze Project Atlas"}
-        assert _is_system_reminder(msg) is False
-
-    def test_rejects_list_content(self) -> None:
-        """Tool result messages (list content) are not reminders."""
-        msg = {"role": "user", "content": [{"type": "tool_result", "content": "ok"}]}
-        assert _is_system_reminder(msg) is False
-
-
-# ---------------------------------------------------------------------------
-# Integration: AgenticLoop wiring (source-based)
-# ---------------------------------------------------------------------------
 
 
 class TestAgenticLoopIntegration:

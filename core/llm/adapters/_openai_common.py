@@ -563,7 +563,7 @@ def build_messages(req: AdapterCallRequest) -> list[dict[str, Any]]:
     return out
 
 
-def build_codex_input(req: AdapterCallRequest) -> list[dict[str, Any]]:
+def build_codex_input(req: AdapterCallRequest, *, backend: str = "codex") -> list[dict[str, Any]]:
     """Translate :class:`Message` list → Codex Responses API ``input`` array.
 
     Differences from Chat shape:
@@ -601,7 +601,10 @@ def build_codex_input(req: AdapterCallRequest) -> list[dict[str, Any]]:
     for m in req.messages:
         if m.role == "assistant":
             if m.codex_output_items and not disable_output_replay:
-                out.extend(_responses_input_safe_output_item(item) for item in m.codex_output_items)
+                out.extend(
+                    _responses_input_safe_output_item(item, strip_reasoning_id=backend == "codex")
+                    for item in m.codex_output_items
+                )
                 continue
             # Replay this turn's encrypted reasoning items (id-stripped)
             # right before the assistant's converted entries.
@@ -629,6 +632,10 @@ def build_codex_input(req: AdapterCallRequest) -> list[dict[str, Any]]:
             continue
         if m.role == "user":
             out.extend(_convert_user_msg_to_responses(m.content))
+            continue
+        if m.role == "system":
+            # Parity with inject_reasoning_replay: system text travels via
+            # ``instructions``, never as an input item (Codex rejects it).
             continue
         out.append({"role": m.role, "content": _stringify(m.content)})
     return out
@@ -1312,7 +1319,9 @@ def _json_safe(value: Any) -> Any:
     return value
 
 
-def _responses_input_safe_output_item(item: dict[str, Any]) -> dict[str, Any]:
+def _responses_input_safe_output_item(
+    item: dict[str, Any], *, strip_reasoning_id: bool = True
+) -> dict[str, Any]:
     """Return a prior Responses output item in the shape Codex accepts as input.
 
     OpenAI documents manual context management as passing prior ``response.output``
@@ -1323,7 +1332,14 @@ def _responses_input_safe_output_item(item: dict[str, Any]) -> dict[str, Any]:
     """
     safe = _json_safe(dict(item))
     if isinstance(safe, dict):
-        return {k: v for k, v in safe.items() if k != "status" and v is not None}
+        drop = {"status"}
+        if strip_reasoning_id and safe.get("type") == "reasoning":
+            # Codex subscription backend only (store=False, no server-side
+            # item resolution) — the PLATFORM backend keeps ids per OpenAI's
+            # manual-context-management guidance, where output items are
+            # replayed verbatim (Codex review 2026-07-29).
+            drop.add("id")
+        return {k: v for k, v in safe.items() if k not in drop and v is not None}
     return dict(item)
 
 
@@ -1515,7 +1531,7 @@ def build_responses_kwargs(
       reasoning models go through the same branch automatically.
     """
     spec = get_openai_model_spec(req.model)
-    resp_input = build_codex_input(req)
+    resp_input = build_codex_input(req, backend=backend)
     kwargs: dict[str, Any] = {
         "model": req.model,
         "instructions": req.system_prompt or "Mode: general assistance.",

@@ -118,5 +118,29 @@ def build_system_prompt(loop: AgenticLoop) -> str:
         base = _build_system_prompt(model=loop.model)
         prompt = base.replace("{skill_context}", skill_replacement)
     if loop._system_suffix:
-        prompt += "\n\n" + loop._system_suffix
+        prompt = inject_runtime_hints(
+            prompt, "<session_directives>\n" + loop._system_suffix + "\n</session_directives>"
+        )
     return prompt
+
+
+def inject_runtime_hints(system_prompt: str, *hints: str | None) -> str:
+    """Insert runtime XML hint blocks INSIDE the ``<dynamic_context>`` envelope.
+
+    All per-turn injections (session directives, task preflight, reflection,
+    plan) share one grammar: XML blocks living in the dynamic envelope, never
+    appended after ``</dynamic_context>`` (pre-2026-07-29 they trailed the
+    closed envelope, contradicting the zone rule in ``prompt_assembler``).
+    Prompts without the envelope (override spawns) get a plain append.
+    """
+    blocks = [h for h in hints if isinstance(h, str) and h]
+    if not blocks:
+        return system_prompt
+    payload = "\n\n".join(blocks)
+    closing = "</dynamic_context>"
+    idx = system_prompt.rfind(closing)
+    # Only treat the tag as the envelope when nothing but whitespace follows —
+    # an override prompt merely MENTIONING the tag mid-body gets plain append.
+    if idx >= 0 and not system_prompt[idx + len(closing) :].strip():
+        return system_prompt[:idx] + payload + "\n\n" + system_prompt[idx:]
+    return system_prompt + "\n\n" + payload

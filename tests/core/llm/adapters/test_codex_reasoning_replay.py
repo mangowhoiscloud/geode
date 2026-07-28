@@ -275,7 +275,6 @@ def test_codex_call_kwargs_replays_prior_output_items_before_legacy_reasoning() 
     assert kwargs["input"] == [
         {"role": "user", "content": "first"},
         {
-            "id": "rs_official",
             "type": "reasoning",
             "encrypted_content": "blob_from_output",
             "summary": [],
@@ -527,3 +526,16 @@ def test_chat_tool_choice_translation(tool_choice: str | dict, expected: str | d
     from core.llm.tool_choice import normalize
 
     assert normalize("glm", tool_choice) == expected
+
+
+def test_platform_backend_keeps_reasoning_ids_on_output_replay() -> None:
+    """OpenAI platform manual context management replays output items
+    VERBATIM (ids kept); only the Codex subscription backend strips
+    reasoning ids (store=False, no server-side item resolution)."""
+    from core.llm.adapters._openai_common import _responses_input_safe_output_item
+
+    item = {"id": "rs_1", "type": "reasoning", "encrypted_content": "b", "summary": []}
+    kept = _responses_input_safe_output_item(item, strip_reasoning_id=False)
+    stripped = _responses_input_safe_output_item(item, strip_reasoning_id=True)
+    assert kept["id"] == "rs_1"
+    assert "id" not in stripped

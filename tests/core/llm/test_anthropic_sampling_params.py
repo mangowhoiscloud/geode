@@ -1,134 +1,69 @@
-"""Regression tests for Anthropic sampling-parameter handling.
+"""Sampling-param shaping on the LIVE Anthropic adapter path.
 
-Anthropic deprecated `temperature`, `top_p`, and `top_k` for Opus 4.7
-(and the same constraint applies to Opus 4.6 / Sonnet 4.6 when adaptive
-thinking is on). Sending those parameters returns a 400 BadRequest with
-"temperature is deprecated for this model."
-
-Source: https://platform.claude.com/docs/en/about-claude/models/whats-new-claude-4-7
+Repointed 2026-07-29: previously drove the deleted ``ClaudeAgenticAdapter``;
+the production surface is ``build_create_kwargs`` / ``build_stream_kwargs``.
 """
 
 from __future__ import annotations
 
-import asyncio
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
+from core.llm.adapters._anthropic_common import build_create_kwargs, build_stream_kwargs
+from core.llm.adapters.base import AdapterCallRequest, Message
 
 
-def _run_agentic_call(model: str) -> dict[str, Any]:
-    """Invoke ClaudeAgenticAdapter.agentic_call once and capture create kwargs.
-
-    Post GAP-S1 (v0.95+) the adapter calls ``messages.stream`` instead of
-    ``messages.create``; we mock both to stay compatible with future
-    re-wirings and to capture kwargs whichever transport ships.
-    """
-    from core.llm.providers.anthropic import ClaudeAgenticAdapter
-
-    adapter = ClaudeAgenticAdapter()
-
-    response = MagicMock()
-    response.content = [MagicMock(type="text", text="ok")]
-    response.stop_reason = "end_turn"
-    response.usage = MagicMock(input_tokens=1, output_tokens=1)
-    response.model = model
-
-    captured: dict[str, Any] = {}
-
-    async def fake_create(**kwargs: Any) -> Any:
-        captured.update(kwargs)
-        return response
-
-    class _StubStream:
-        async def __aenter__(self) -> Any:
-            return self
-
-        async def __aexit__(self, *_args: Any) -> None:
-            return None
-
-        async def get_final_message(self) -> Any:
-            return response
-
-    def fake_stream(**kwargs: Any) -> Any:
-        captured.update(kwargs)
-        return _StubStream()
-
-    client = MagicMock()
-    client.messages = MagicMock()
-    client.messages.create = AsyncMock(side_effect=fake_create)
-    client.messages.stream = MagicMock(side_effect=fake_stream)
-    adapter._client = client  # ClaudeAgenticAdapter test seam (pre-seeded client wins)
-
-    async def fake_failover(models: list[str], do_call: Any) -> tuple[Any, str]:
-        return await do_call(models[0]), models[0]
-
-    with (
-        patch("core.config.settings") as mock_settings,
-        patch("core.llm.router.call_with_failover", side_effect=fake_failover),
-    ):
-        mock_settings.anthropic_api_key = "test-key"
-        asyncio.run(
-            adapter.agentic_call(
-                model=model,
-                system="sys",
-                messages=[{"role": "user", "content": "hi"}],
-                tools=[
-                    {
-                        "name": "noop",
-                        "description": "noop",
-                        "input_schema": {"type": "object"},
-                    }
-                ],
-                tool_choice={"type": "auto"},
-                max_tokens=1024,
-                temperature=0.0,
-            )
-        )
-
-    return captured
+def _req(**overrides: object) -> AdapterCallRequest:
+    base: dict = {
+        "model": "claude-sonnet-5",
+        "system_prompt": "static rules",
+        "messages": (Message(role="user", content="hi"),),
+        "max_tokens": 512,
+    }
+    base.update(overrides)
+    return AdapterCallRequest(**base)
 
 
-@pytest.mark.parametrize(
-    "model",
-    ["claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6", "claude-sonnet-4-6"],
-)
-def test_adaptive_models_omit_sampling_params(model: str) -> None:
-    """Opus 4.6+ / Sonnet 4.6 reject temperature; it must not be sent."""
-    kwargs = _run_agentic_call(model)
-    assert "temperature" not in kwargs, (
-        f"{model} must not receive `temperature` (rejected with 400). Got: {sorted(kwargs)}"
+def test_temperature_omitted_when_none() -> None:
+    kwargs = build_create_kwargs(_req())
+    assert "temperature" not in kwargs
+
+
+def test_temperature_forwarded_when_set() -> None:
+    kwargs = build_create_kwargs(_req(temperature=0.2))
+    assert kwargs["temperature"] == 0.2
+
+
+def test_thinking_budget_maps_to_thinking_block() -> None:
+    kwargs = build_create_kwargs(_req(thinking_budget=2048))
+    assert kwargs["thinking"] == {"type": "enabled", "budget_tokens": 2048}
+    # Anthropic contract: budget_tokens < max_tokens; extended thinking pins
+    # temperature=1 (the first port dropped both — API-invalid payload).
+    assert kwargs["max_tokens"] == 512 + 2048
+    assert kwargs["temperature"] == 1.0
+
+
+def test_adaptive_model_omits_sampling_and_sets_display() -> None:
+    kwargs = build_create_kwargs(
+        _req(model="claude-opus-4-7", temperature=0.3, thinking_budget=2048)
     )
-    # v0.56.0 R4-mini — ``display: "summarized"`` added to keep Opus
-    # 4.7 thinking blocks visible (default is now "omitted"). Accept
-    # both the legacy shape and the new explicit-display shape so
-    # this regression test stays valid across the upgrade.
-    assert kwargs.get("thinking") == {"type": "adaptive", "display": "summarized"}
+    assert kwargs["thinking"] == {"type": "adaptive", "display": "summarized"}
+    assert "temperature" not in kwargs, "adaptive models reject sampling params"
+    assert kwargs["output_config"]["effort"]
 
 
-def test_opus_4_7_registered_for_context_management() -> None:
-    """Opus 4.7 must enable the context-management + compaction beta header."""
-    kwargs = _run_agentic_call("claude-opus-4-7")
-    headers = kwargs.get("extra_headers") or {}
-    beta = headers.get("anthropic-beta", "")
-    assert "context-management-2025-06-27" in beta
-    assert "compact-2026-01-12" in beta
+def test_oauth_identity_composes_with_cache_blocks() -> None:
+    from core.llm.adapters.anthropic_oauth import (
+        CLAUDE_CODE_IDENTITY,
+        _apply_claude_code_identity,
+    )
+
+    system = "STATIC\n\n<dynamic_context>\n\nd\n\n</dynamic_context>"
+    kwargs = build_create_kwargs(_req(system_prompt=system))
+    out = _apply_claude_code_identity(kwargs)
+    blocks = out["system"]
+    assert blocks[0]["text"] == CLAUDE_CODE_IDENTITY, "identity must stay the EXACT first block"
+    assert blocks[1]["cache_control"]["type"] == "ephemeral", "static cache metadata preserved"
 
 
-def test_opus_4_8_registered_for_context_management() -> None:
-    """Opus 4.8 (1M context) inherits the context-management + compaction beta."""
-    kwargs = _run_agentic_call("claude-opus-4-8")
-    headers = kwargs.get("extra_headers") or {}
-    beta = headers.get("anthropic-beta", "")
-    assert "context-management-2025-06-27" in beta
-    assert "compact-2026-01-12" in beta
-
-
-def test_legacy_model_keeps_temperature() -> None:
-    """Older models (no adaptive thinking) still accept temperature."""
-    kwargs = _run_agentic_call("claude-haiku-4-5-20251001")
-    assert "temperature" in kwargs
-    assert kwargs["temperature"] == 0.0
-    # Haiku 4.5 must not receive the context-management beta header
-    headers = kwargs.get("extra_headers") or {}
-    assert "anthropic-beta" not in headers
+def test_stream_kwargs_omit_thinking_and_stops() -> None:
+    kwargs = build_stream_kwargs(_req(thinking_budget=2048, stop_sequences=("x",)))
+    assert "thinking" not in kwargs
+    assert "stop_sequences" not in kwargs

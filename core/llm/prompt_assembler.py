@@ -12,7 +12,7 @@ from typing import Final
 
 MATH_OUTPUT_FORMATTING_INSTRUCTION: Final[str] = """## Math formatting
 When writing formulas, do not emit raw LaTeX-like text.
-- Inline math: wrap with `$...$` (예: 수익률은 $r_t = (P_t - P_{t-1}) / P_{t-1}$ 입니다).
+- Inline math: wrap with `$...$` (e.g. the return is $r_t = (P_t - P_{t-1}) / P_{t-1}$).
 - Display math: put `$$...$$` on its own lines.
 $$
 IC_t = \\frac{\\sum_i S_i y_i}{\\sqrt{\\sum_i S_i^2}\\sqrt{\\sum_i y_i^2}}

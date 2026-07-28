@@ -201,15 +201,117 @@ def _maybe_inject_computer_use(kwargs: dict[str, Any]) -> None:
     kwargs["extra_headers"] = headers
 
 
+def _cache_shaped_system(system: str) -> str | list[dict[str, Any]]:
+    """STATIC/DYNAMIC prompt-cache split for the LIVE adapter path.
+
+    Ported 2026-07-29 from the never-registered ``ClaudeAgenticAdapter``
+    (the entire cache apparatus was unreachable in production — same
+    docstring-vs-live-path class as the tool-search defer fix above).
+    Static prefix (before ``<dynamic_context>``) gets the 1h-TTL
+    ``cache_control``; the dynamic tail stays unmarked. Unlike the dead
+    original, the boundary tag itself is KEPT in the dynamic block so the
+    ``<dynamic_context>…</dynamic_context>`` envelope stays balanced on
+    the wire. No boundary → plain string passthrough.
+    """
+    from core.agent.system_prompt import PROMPT_CACHE_BOUNDARY
+    from core.llm.providers.anthropic import _static_system_cache_control
+
+    if not system or PROMPT_CACHE_BOUNDARY not in system:
+        return system
+    static_part, dynamic_part = system.split(PROMPT_CACHE_BOUNDARY, 1)
+    static_text = static_part.rstrip()
+    dynamic_text = (PROMPT_CACHE_BOUNDARY + dynamic_part).strip()
+    if static_text and dynamic_text:
+        return [
+            {"type": "text", "text": static_text, "cache_control": _static_system_cache_control()},
+            {"type": "text", "text": dynamic_text},
+        ]
+    if dynamic_text:
+        # Audit-mode strip can empty the static half (G-A2): an empty text
+        # block with cache_control is an Anthropic 400 — mark the dynamic
+        # side with the 5-minute default instead.
+        return [{"type": "text", "text": dynamic_text, "cache_control": {"type": "ephemeral"}}]
+    if static_text:
+        return [
+            {"type": "text", "text": static_text, "cache_control": _static_system_cache_control()}
+        ]
+    return system
+
+
+def _system_and_messages(req: AdapterCallRequest) -> tuple[Any, list[dict[str, Any]]]:
+    """Shared system/messages shaping: S5 slots -> cache split -> breakpoints.
+
+    ADR-012 M4.4 ``apply_in_context_slots`` is re-wired here (it was
+    stranded inside the dead ClaudeAgenticAdapter, silently disconnecting
+    the in-context mutation surface). No-op fast path when no SoT is
+    configured; per-slot graceful on reader failure.
+    """
+    from core.agent.system_prompt import PROMPT_CACHE_BOUNDARY
+    from core.llm.cache_policy import (
+        _load_cache_policy_override,
+        apply_cache_policy_breakpoints,
+    )
+    from core.llm.providers.anthropic import (
+        MAX_MESSAGE_CACHE_BREAKPOINTS,
+        apply_messages_cache_control,
+    )
+    from core.self_improving.loop.inject.in_context_wiring import apply_in_context_slots
+
+    messages = build_messages(req)
+    system = req.system_prompt
+    if system and PROMPT_CACHE_BOUNDARY in system:
+        # S5 slot content is per-call volatile — inject it into the DYNAMIC
+        # half (inside the envelope, before the closing tag) so it can never
+        # invalidate the 1h static prefix cache (Codex review 2026-07-29).
+        static_part, dynamic_part = system.split(PROMPT_CACHE_BOUNDARY, 1)
+        closing = "</dynamic_context>"
+        core, sep, tail = dynamic_part.rpartition(closing)
+        inner, suffix = (core, sep + tail) if sep and not tail.strip() else (dynamic_part, "")
+        messages, inner = apply_in_context_slots(messages, system=inner)
+        system = static_part + PROMPT_CACHE_BOUNDARY + inner + suffix
+    else:
+        messages, system = apply_in_context_slots(messages, system=system)
+    # ADR-013 T5 — cache-breakpoint policy SoT governs the message budget
+    # (was likewise stranded in the dead adapter).
+    n_breakpoints = apply_cache_policy_breakpoints(
+        MAX_MESSAGE_CACHE_BREAKPOINTS, _load_cache_policy_override()
+    )
+    return _cache_shaped_system(system), apply_messages_cache_control(
+        messages, n_breakpoints=n_breakpoints
+    )
+
+
 def build_create_kwargs(req: AdapterCallRequest) -> dict[str, Any]:
     """Shared ``messages.create`` kwargs for both PAYG + OAuth Anthropic adapters."""
+    system, messages = _system_and_messages(req)
     kwargs: dict[str, Any] = {
         "model": req.model,
-        "system": req.system_prompt,
-        "messages": build_messages(req),
+        "system": system,
+        "messages": messages,
         "max_tokens": req.max_tokens,
     }
-    if req.temperature is not None:
+    from core.llm.providers.anthropic import _ADAPTIVE_MODELS, _supports_xhigh_effort
+
+    if req.model in _ADAPTIVE_MODELS:
+        # Adaptive thinking (Opus/Sonnet 4.6+): effort controls depth and
+        # sampling params are rejected — omit temperature. Explicit
+        # ``display: "summarized"`` because Opus 4.7 defaults to "omitted"
+        # (empty thinking blocks → no reasoning trace in the activity feed).
+        # Ported 2026-07-29 from the deleted ClaudeAgenticAdapter, where the
+        # branch had been stranded (production never sent it); rationale +
+        # Hermes parity refs preserved from the original.
+        kwargs["thinking"] = {"type": "adaptive", "display": "summarized"}
+        effort = req.effort if req.effort != "xhigh" or _supports_xhigh_effort(req.model) else "max"
+        kwargs["output_config"] = {"effort": effort}
+    elif req.thinking_budget > 0:
+        # Anthropic contract: ``budget_tokens < max_tokens`` and extended
+        # thinking requires temperature=1 — extend max_tokens to preserve
+        # the visible-output budget (ported from the deleted adapter; the
+        # first port dropped this and produced an API-invalid payload).
+        kwargs["thinking"] = {"type": "enabled", "budget_tokens": req.thinking_budget}
+        kwargs["max_tokens"] = req.max_tokens + req.thinking_budget
+        kwargs["temperature"] = 1.0
+    elif req.temperature is not None:
         kwargs["temperature"] = req.temperature
     if req.tools:
         tc = _translate_tool_choice(req.tool_choice)
@@ -218,8 +320,6 @@ def build_create_kwargs(req: AdapterCallRequest) -> dict[str, Any]:
             kwargs["tool_choice"] = tc
     if req.stop_sequences:
         kwargs["stop_sequences"] = list(req.stop_sequences)
-    if req.thinking_budget > 0:
-        kwargs["thinking"] = {"type": "enabled", "budget_tokens": req.thinking_budget}
     _maybe_inject_computer_use(kwargs)
     return kwargs
 
@@ -270,10 +370,11 @@ def build_stream_kwargs(req: AdapterCallRequest) -> dict[str, Any]:
     Streaming does not accept ``thinking`` / ``stop_sequences`` for the
     same models as ``create``, so the kwargs are trimmed.
     """
+    system, messages = _system_and_messages(req)
     kwargs: dict[str, Any] = {
         "model": req.model,
-        "system": req.system_prompt,
-        "messages": build_messages(req),
+        "system": system,
+        "messages": messages,
         "max_tokens": req.max_tokens,
     }
     if req.temperature is not None:

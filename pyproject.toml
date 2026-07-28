@@ -1,6 +1,6 @@
 [project]
 name = "geode-agent"
-version = "1.0.3"
+version = "1.0.4"
 description = "GEODE — 범용 자율 실행 에이전트"
 license = "Apache-2.0"
 readme = "README.md"
@@ -385,11 +385,11 @@ ignore = [
 # value, rejects unregistered symbols, and requires this value to fall whenever
 # the measured maximum falls.
 [tool.ruff.lint.mccabe]
-max-complexity = 54
+max-complexity = 52
 
 [tool.ruff.lint.pylint]
 max-args = 23
-max-branches = 56
+max-branches = 52
 max-returns = 18
 max-statements = 223
 

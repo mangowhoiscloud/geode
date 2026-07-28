@@ -82,3 +82,23 @@ def test_log_handles_empty_or_non_list_input() -> None:
     _log_codex_input_shape(None)
     _log_codex_input_shape([])
     _log_codex_input_shape("not a list")  # type: ignore[arg-type]
+
+
+def test_log_silent_for_typed_items_without_content_key(caplog) -> None:  # type: ignore[no-untyped-def]
+    """function_call / function_call_output / reasoning items legitimately
+    carry NO content key — they must not trip the null-content WARN
+    (pre-2026-07-29 this fired on every tool-bearing Codex round)."""
+    import logging
+
+    from core.llm.adapters.codex_oauth import _log_codex_input_shape
+
+    resp_input = [
+        {"role": "user", "content": "hi"},
+        {"type": "reasoning", "encrypted_content": "blob", "summary": []},
+        {"type": "function_call", "name": "t", "arguments": "{}", "call_id": "c1"},
+        {"type": "function_call_output", "call_id": "c1", "output": "ok"},
+        {"role": "user", "content": "next"},
+    ]
+    with caplog.at_level(logging.INFO, logger="core.llm.adapters.codex_oauth"):
+        _log_codex_input_shape(resp_input)
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]

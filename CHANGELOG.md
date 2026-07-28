@@ -47,6 +47,60 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.4] - 2026-07-29
+
+> Prompt-assembly grammar alignment: the entire Anthropic cache apparatus (1h-TTL static split, message breakpoints, T5 policy, S5 slots, adaptive thinking) un-stranded from a never-registered legacy adapter onto the live path; runtime injections unified on XML-in-envelope; reflection no longer discarded on OpenAI-family backends; legacy adapter classes deleted (net -540 lines).
+
+### Changed
+
+- **Prompt assembly grammar unified on XML-in-envelope.** Every per-turn
+  injection (session directives, task preflight, verify-FAIL reflection,
+  current-step plan) now lands INSIDE the ``<dynamic_context>`` envelope via
+  one ``inject_runtime_hints`` helper — previously four blocks trailed the
+  closed envelope, the gateway/petri ``system_suffix`` was untagged (now
+  ``<session_directives>``), and a mid-run prompt rebuild silently dropped
+  the preflight hint. Dead ``decomposition_hint`` plumbing (None-only since
+  the Plan migration) was removed.
+
+- **Anthropic prompt caching, S5 in-context slots, T5 cache policy, and
+  adaptive thinking now run on the LIVE adapter path.** The entire apparatus
+  (STATIC/DYNAMIC ``cache_control`` split with 1h TTL, rolling message
+  breakpoints, ADR-012 M4.4 ``apply_in_context_slots``, ADR-013 T5
+  breakpoint policy, Opus/Sonnet 4.6+ adaptive thinking with
+  ``display: summarized``) was stranded inside the never-registered
+  ``ClaudeAgenticAdapter`` — production requests carried none of it. Wired
+  into ``build_create_kwargs`` / ``build_stream_kwargs``; the per-round
+  ``<system-reminder>`` (byte-volatile) is excluded from breakpoint slots,
+  and the envelope's opening tag is preserved in the dynamic block so the
+  wire-visible XML stays balanced.
+
+### Fixed
+
+- **Reflection results are no longer discarded on OpenAI-family providers.**
+  ``record_reflection`` tool_use payloads arrive as raw JSON strings from
+  codex/chat adapters; the extractor only accepted dicts, so every live
+  reflection on codex-oauth was dropped with a spurious warning.
+
+- **codex-oauth input-shape diagnostic no longer false-positives.** Typed
+  Responses items (function_call / function_call_output / reasoning) carry no
+  ``content`` key and were counted as null-content — the WARN fired on every
+  tool-bearing round, burying the real 400 diagnostic it was built for.
+
+- Model-facing English-only rule restored in four strings (math formatting
+  instruction in the cache-static zone, calendar/memory tool descriptions);
+  ``GEODE.md`` no longer hardcodes a stale tool count; Codex replay paths
+  agree on stripping reasoning-item ids under ``store=False``; system-role
+  entries can no longer leak into Responses ``input``.
+
+### Removed
+
+- **Legacy LLM classes deleted; ``core/llm/adapters`` is the single
+  AgenticLoop entry.** ``ClaudeAgenticAdapter`` (never registered, ~360
+  lines) and ``OpenAIAdapter`` (no callers, ~160 lines) are gone;
+  ``core/llm/providers`` is now strictly the low-level layer (clients,
+  retry, quota, cache helpers, native-tool shaping). The pre-2026-06-10
+  legacy position-0 system-reminder strip was removed past its grace window.
+
 ## [1.0.3] - 2026-07-29
 
 > MCP stateless-era loop hardening: JSON-RPC id matching + unbuffered stdio (stream-poisoning fix), stderr drain, idempotency-gated mid-call retry, honest unavailable-tool errors, connection-epoch tool refresh; plus the ADR-014 live-E2E verification records.

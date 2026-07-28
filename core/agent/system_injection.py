@@ -110,10 +110,6 @@ def append_system_reminder(
     per-request copy, never in the stored conversation history (see module
     docstring for the prompt-cache contract this protects).
 
-    A legacy reminder persisted at position 0 by the pre-2026-06-10 prepend
-    design is stripped, so long-lived sessions converge to a stable prefix
-    after one call.
-
     Args:
         messages: Conversation history (left untouched).
         model: Current model name (for context).
@@ -125,8 +121,6 @@ def append_system_reminder(
         when there is nothing to inject.
     """
     base = messages
-    if base and _is_system_reminder(base[0]):
-        base = base[1:]
 
     reminder = build_system_reminder(
         model=model,
@@ -143,13 +137,3 @@ def append_system_reminder(
     }
 
     return [*base, reminder_message]
-
-
-def _is_system_reminder(message: dict[str, Any]) -> bool:
-    """Check if a message is a system reminder (for legacy-prefix strip)."""
-    if message.get("role") != "user":
-        return False
-    content = message.get("content", "")
-    if isinstance(content, str):
-        return content.startswith(f"<{_REMINDER_TAG}>")
-    return False

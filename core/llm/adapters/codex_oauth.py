@@ -553,7 +553,12 @@ def _log_codex_input_shape(resp_input: Any, *, cap: int = 30) -> None:
     """
     if not isinstance(resp_input, list) or not resp_input:
         return
-    has_null = any(isinstance(m, dict) and m.get("content") is None for m in resp_input[:cap])
+    # "content" must be PRESENT and null — typed items (function_call /
+    # function_call_output / reasoning) legitimately have no content key and
+    # must not trip the diagnostic (pre-fix this WARNed on every tool round).
+    has_null = any(
+        isinstance(m, dict) and "content" in m and m["content"] is None for m in resp_input[:cap]
+    )
     if not (has_null or log.isEnabledFor(logging.DEBUG)):
         return
     shape_parts: list[str] = []

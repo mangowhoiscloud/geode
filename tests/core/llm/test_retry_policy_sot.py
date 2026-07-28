@@ -16,38 +16,6 @@ from __future__ import annotations
 from typing import Any
 
 import core.llm.providers.openai as openai_provider
-from core.llm.providers.openai import OpenAIAdapter
-
-
-def test_openai_adapter_does_not_pin_retry_constants(monkeypatch: Any) -> None:
-    """OpenAIAdapter._aretry_with_backoff must leave retry knobs unset so
-    fallback.py resolves them from ``settings.llm_*``.
-
-    PR-LLMCLIENTPORT-COLLAPSE (2026-05-28) — the sync ``_retry_with_backoff``
-    counterpart (which only fed the removed ``OpenAIAdapter.generate``
-    surface) is gone; the async path is the surviving retry source.
-    """
-    import asyncio
-
-    captured: dict[str, Any] = {}
-
-    async def _fake_generic_async(fn: Any, **kwargs: Any) -> Any:
-        captured.update(kwargs)
-        return await fn(model=kwargs["model"])
-
-    monkeypatch.setattr(openai_provider, "retry_with_backoff_generic_async", _fake_generic_async)
-
-    async def _ok(*, model: str) -> str:
-        return "ok"
-
-    adapter = OpenAIAdapter()
-    result = asyncio.run(adapter._aretry_with_backoff(_ok, model="gpt-5.5"))
-
-    assert result == "ok"
-    # GAP-E1 regression: None → fallback.py reads ``settings.llm_*``
-    assert captured.get("max_retries") is None
-    assert captured.get("retry_base_delay") is None
-    assert captured.get("retry_max_delay") is None
 
 
 def test_module_no_local_retry_constants() -> None:
