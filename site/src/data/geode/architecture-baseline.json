@@ -14,8 +14,8 @@
   },
   "complexity_thresholds": {
     "max_args": 23,
-    "max_branches": 56,
-    "max_complexity": 54,
+    "max_branches": 52,
+    "max_complexity": 52,
     "max_returns": 18,
     "max_statements": 223
   },

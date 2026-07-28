@@ -296,7 +296,7 @@ machine-readable artifact is
 | `AgenticLoop` file LOC / methods / constructor args | 2,721 / 67 / 27 |
 | `SubAgentManager` file LOC / methods / constructor args | 1,277 / 15 / 15 |
 | `RuntimeCoreConfig` fields | 17 |
-| Global Ruff ratchets | complexity 54; args 23; branches 56; returns 18; statements 223 |
+| Global Ruff ratchets | complexity 52; args 23; branches 52; returns 18; statements 223 |
 <!-- generated:architecture-baseline:end -->
 
 `uv run lint-imports` passes all four configured contracts. That is useful
