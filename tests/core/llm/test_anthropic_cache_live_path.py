@@ -86,3 +86,67 @@ def test_volatile_reminder_excluded_from_breakpoints() -> None:
     targets = _select_breakpoint_targets(messages, 3)
     assert 1 not in targets, "byte-volatile reminder must never hold a breakpoint slot"
     assert 0 in targets
+
+
+def test_context_management_injected_for_supported_model() -> None:
+    """Context-management beta (ported + live-verified 2026-07-29) rides the
+    live builder for supporting models, with beta tokens MERGED."""
+    kwargs = build_create_kwargs(_req("s"))
+    if "extra_body" not in kwargs:  # model gate — probe with a supported one
+        kwargs = build_create_kwargs(
+            AdapterCallRequest(
+                model="claude-sonnet-4-6",
+                system_prompt="s",
+                messages=(Message(role="user", content="hi"),),
+                max_tokens=64,
+            )
+        )
+    cm = kwargs["extra_body"]["context_management"]
+    kinds = [e["type"] for e in cm["edits"]]
+    assert kinds == ["clear_tool_uses_20250919", "compact_20260112"]
+    assert cm["edits"][1]["trigger"]["value"] > 0
+    beta = kwargs["extra_headers"]["anthropic-beta"]
+    assert "context-management-2025-06-27" in beta
+    assert "compact-2026-01-12" in beta
+
+
+def test_context_management_absent_for_unsupported_model() -> None:
+    kwargs = build_create_kwargs(
+        AdapterCallRequest(
+            model="claude-haiku-4-5",
+            system_prompt="s",
+            messages=(Message(role="user", content="hi"),),
+            max_tokens=64,
+        )
+    )
+    assert "context_management" not in (kwargs.get("extra_body") or {})
+
+
+def test_native_web_tools_injected_only_with_tool_surface() -> None:
+    from core.llm.adapters.base import ToolSpec
+
+    bare = build_create_kwargs(_req("s"))
+    assert not any(
+        t.get("name") in {"web_search", "web_fetch"} for t in bare.get("tools", []) or []
+    ), "plain completions stay tool-free"
+
+    req = AdapterCallRequest(
+        model="claude-sonnet-4-6",
+        system_prompt="s",
+        messages=(Message(role="user", content="hi"),),
+        max_tokens=64,
+        tools=(ToolSpec(name="my_tool", description="d", input_schema={"type": "object"}),),
+    )
+    kwargs = build_create_kwargs(req)
+    names = [t.get("name") for t in kwargs["tools"]]
+    assert "web_search" in names and "web_fetch" in names
+    assert names.count("web_search") == 1, "dedup by name"
+
+
+def test_beta_merge_never_clobbers_existing_tokens() -> None:
+    from core.llm.adapters._anthropic_common import _merge_beta
+
+    kwargs = {"extra_headers": {"anthropic-beta": "computer-use-x"}}
+    _merge_beta(kwargs, "context-management-2025-06-27", "computer-use-x")
+    beta = kwargs["extra_headers"]["anthropic-beta"]
+    assert beta.split(",") == ["computer-use-x", "context-management-2025-06-27"]

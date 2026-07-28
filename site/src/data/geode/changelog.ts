@@ -19,7 +19,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": ""
+    "body": "### Added\n\n- **Server-side context management and native web tools now ride the live\n  Anthropic path (the last two stranded behaviors from the deleted legacy\n  adapter).** Both were live-verified on anthropic-oauth before wiring:\n  context-management (clear_tool_uses + compact triggers, beta tokens MERGED\n  into `anthropic-beta` — clobbering the header 400s computer-use) returned\n  200, and hosted `web_search`/`web_fetch` returned 200 with a real\n  `server_tool_use` round. Native web tools inject only when the caller\n  declares a tool surface; context management stays gated to supporting\n  models. A combined payload (custom tool + computer-use + web tools + 3\n  beta tokens + context management + cache blocks) was confirmed live.\n\n### Fixed\n\n- **Prompt-cache efficacy confirmed live and cross-process.** The v1.0.4\n  wiring produces real cache economics on anthropic-oauth: call 1 wrote\n  7,590 tokens against the 1h-TTL static block, call 2 read 7,249 back, and\n  a later process start still hit the same prefix (write 0 / read 7,590)."
   },
   {
     "version": "1.0.4",

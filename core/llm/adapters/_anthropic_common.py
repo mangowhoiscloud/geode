@@ -191,14 +191,79 @@ def _maybe_inject_computer_use(kwargs: dict[str, Any]) -> None:
             )
         )
         kwargs["tools"] = tools
-    # Always ensure the model's beta token when the native tool is present
-    # (merge, never clobber an existing anthropic-beta header).
+    # Always ensure the model's beta token when the native tool is present.
+    _merge_beta(kwargs, beta)
+
+
+def _merge_beta(kwargs: dict[str, Any], *betas: str) -> None:
+    """Merge beta tokens into ``anthropic-beta`` — never clobber the header.
+
+    Live incident (probe, 2026-07-29): replacing ``extra_headers`` wholesale
+    dropped computer-use's beta token and 400'd on the computer tool tag.
+    """
     headers = dict(kwargs.get("extra_headers") or {})
     tokens = [t for t in headers.get("anthropic-beta", "").split(",") if t]
-    if beta not in tokens:
-        tokens.append(beta)
+    for beta in betas:
+        if beta not in tokens:
+            tokens.append(beta)
     headers["anthropic-beta"] = ",".join(tokens)
     kwargs["extra_headers"] = headers
+
+
+def _maybe_inject_context_management(kwargs: dict[str, Any]) -> None:
+    """Server-side context editing for supporting models.
+
+    Ported from the deleted ClaudeAgenticAdapter (stranded, never live);
+    live-verified 200 on anthropic-oauth 2026-07-29 (probe B1: merged beta
+    tokens, trigger from ``resolve_context_budget_policy``). Haiku 4.5
+    rejects the compact beta, hence the model gate.
+    """
+    from core.llm.providers.anthropic import _CONTEXT_MGMT_MODELS
+
+    model = str(kwargs.get("model", ""))
+    if model not in _CONTEXT_MGMT_MODELS:
+        return
+    from core.llm.token_tracker import MODEL_CONTEXT_WINDOW
+    from core.orchestration.context_budget import resolve_context_budget_policy
+
+    trigger = resolve_context_budget_policy(
+        model, context_window=MODEL_CONTEXT_WINDOW.get(model)
+    ).anthropic_compact_trigger_tokens
+    _merge_beta(kwargs, "context-management-2025-06-27", "compact-2026-01-12")
+    body = dict(kwargs.get("extra_body") or {})
+    body["context_management"] = {
+        "edits": [
+            {"type": "clear_tool_uses_20250919", "keep": {"type": "tool_uses", "value": 5}},
+            {"type": "compact_20260112", "trigger": {"type": "input_tokens", "value": trigger}},
+        ]
+    }
+    kwargs["extra_body"] = body
+
+
+def _inject_native_web_tools(kwargs: dict[str, Any], req: AdapterCallRequest) -> None:
+    """Append Anthropic-hosted web_search / web_fetch server tools.
+
+    Ported from the deleted ClaudeAgenticAdapter; live-verified on
+    anthropic-oauth 2026-07-29 (probe B2: 200 + ``server_tool_use`` block
+    actually invoked). Injected only when the request already carries a tool
+    surface (agentic calls) — plain text completions stay tool-free.
+    ``translate_response`` skips unknown block types, so server-side rounds
+    surface through the model's final text.
+    """
+    from core.llm.providers.anthropic import _ANTHROPIC_NATIVE_TOOLS
+
+    # Gate on the CALLER's declared tool surface (req.tools), not kwargs —
+    # machine-local computer-use injection must not drag web tools into
+    # otherwise tool-free completions.
+    if not req.tools:
+        return
+    tools = kwargs.get("tools")
+    if not isinstance(tools, list):
+        return
+    existing = {t.get("name") for t in tools if isinstance(t, dict)}
+    for native in _ANTHROPIC_NATIVE_TOOLS:
+        if native["name"] not in existing:
+            tools.append(dict(native))
 
 
 def _cache_shaped_system(system: str) -> str | list[dict[str, Any]]:
@@ -321,6 +386,8 @@ def build_create_kwargs(req: AdapterCallRequest) -> dict[str, Any]:
     if req.stop_sequences:
         kwargs["stop_sequences"] = list(req.stop_sequences)
     _maybe_inject_computer_use(kwargs)
+    _inject_native_web_tools(kwargs, req)
+    _maybe_inject_context_management(kwargs)
     return kwargs
 
 
@@ -385,6 +452,8 @@ def build_stream_kwargs(req: AdapterCallRequest) -> dict[str, Any]:
         if tc is not None:
             kwargs["tool_choice"] = tc
     _maybe_inject_computer_use(kwargs)
+    _inject_native_web_tools(kwargs, req)
+    _maybe_inject_context_management(kwargs)
     return kwargs
 
 
