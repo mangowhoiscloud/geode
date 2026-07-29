@@ -47,6 +47,41 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- `core/observability/trajectory.py` — read-only projection of GEODE and Codex sessions onto one
+  K3-shaped message list (`user` / `assistant{think,response,tools}` / `tool{results}`) with
+  per-message `run` numbering and a `pairing` report stating whether each tool result was matched
+  by call id or by row order. `python -m core.observability.trajectory <session|--merge N>`.
+
+### Fixed
+
+- `record_tool_call` / `record_tool_result` now persist the provider's `call_id`, which the executor
+  already held and echoed back over the protocol but dropped before writing the transcript. Without
+  it a reader could only pair calls with results by row order, which crosses when two concurrent
+  calls to the same tool return out of order (7 of 23,072 results measured).
+- Transcript replay orders rows by `(ts, seq)`. `seq` restarts at 1 for every `SessionTranscript`
+  instance, so a session id reused across runs yields repeating and decreasing `seq` inside one file
+  (189 of 14,970 decrease, 357 repeat); ordering by `seq` alone interleaved those runs and dropped
+  earlier ones. `s-gw-4556638f96b8` replayed as 22 messages in a single run instead of 42 across 7.
+
+### Changed
+
+- `task_preflight` transcript rows reference the capability graph by `capability_graph_sha256`
+  instead of re-serialising it every turn. The graph is invariant across a run while the preflight
+  body is not: 185,700 rows carried 43.4 MB of graph across only 19 distinct values (33% of
+  preflight bytes, 10.6% of all transcript storage). The full graph is still emitted on first use
+  per run and `EvidenceLedger` keeps recording it in full, so judgment-grade evidence is unchanged.
+
+### Architecture
+
+- A transcript file accumulates every run that reused its `session_id`, while `sessions.db:messages`
+  is a mutable mirror of the live message list — `save_messages` upserts on `(session_id, seq)` and
+  deletes every `seq` outside the current list. The transcript is therefore the canonical history
+  and `messages` only adds within-turn resolution for the newest run. Measured: sessions with 2+
+  `session_start` events mismatch on tool-call count at 11.31% (31/274) versus 0.07% (5/6,787) for
+  single-run sessions. See `docs/trajectory-redesign.md`.
+
 ## [1.0.7] - 2026-07-29
 
 > The synchronous LLM stack is gone — its entry point had no caller, so commentary, `call_llm`, the provider dispatcher and the sync SDK clients below it were all unreachable. Removing them exposed that `/key` and `/login` had been resetting singletons the live path abandoned long ago, leaving rotated credentials stale until restart; every credential path now drops the adapter clients that actually serve traffic.
