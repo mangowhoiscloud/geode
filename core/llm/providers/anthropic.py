@@ -932,9 +932,10 @@ def is_computer_use_enabled() -> bool:
 # stranded. This module is a low-level utility layer (clients, retry,
 # quota, cache helpers, native-tool shaping) consumed by ``core/llm/adapters``.
 #
-# Deferred re-wires (deliberate, NOT omissions — tracked in the prompt-grammar
-# scope ledger + kanban): the dead class also carried (a) context management
-# (``_CONTEXT_MGMT_MODELS`` clear_tool_uses/compact blocks) and (b) native
-# web_search/web_fetch injection (``_ANTHROPIC_NATIVE_TOOLS``). Both change
-# live request semantics beyond this refactor's blast radius and need their
-# own live verification before landing on the production builders.
+# 2026-07-29 (같은 날 후속): the two deferred re-wires — context management
+# (``_CONTEXT_MGMT_MODELS``) and native web_search/web_fetch injection
+# (``_ANTHROPIC_NATIVE_TOOLS``) — were live-verified on anthropic-oauth
+# (context-mgmt 200 with merged beta tokens; web_search 200 with a real
+# ``server_tool_use`` round) and now run on the live builders in
+# ``core/llm/adapters/_anthropic_common.py``. This module keeps the constants
+# as the low-level SoT.

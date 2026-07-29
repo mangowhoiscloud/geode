@@ -47,6 +47,36 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.5] - 2026-07-29
+
+> Live verification of the v1.0.4 prompt-cache wiring (7,590-token writes read back across process restarts) plus the two deferred Anthropic re-wires: server-side context management, and hosted web tools behind a default-off opt-in because provider-executed tools escape GEODE's tool policy.
+
+### Added
+
+- **Server-side context management and native web tools now ride the live
+  Anthropic path (the last two stranded behaviors from the deleted legacy
+  adapter).** Both were live-verified on anthropic-oauth before wiring:
+  context-management (clear_tool_uses + compact triggers, beta tokens MERGED
+  into `anthropic-beta` — clobbering the header 400s computer-use) returned
+  200, and hosted `web_search`/`web_fetch` returned 200 with a real
+  `server_tool_use` round. Hosted web tools are **opt-in**
+  (`[llm] anthropic_native_web_tools`, default off) and model-gated: the
+  server executes them itself, so they are invisible to `allowed_tools` /
+  `forbidden_tools` and the sub-agent whitelist that govern GEODE's own
+  `general_web_search` / `web_fetch` handlers, and the dated
+  `web_*_20260209` tags reject unlisted models. Context management is gated
+  to supporting models with dated snapshot ids normalized to their family.
+  A combined payload (custom tool + computer-use + web tools + 3 beta tokens
+  + context management + cache blocks) was confirmed live in both gate
+  states.
+
+### Fixed
+
+- **Prompt-cache efficacy confirmed live and cross-process.** The v1.0.4
+  wiring produces real cache economics on anthropic-oauth: call 1 wrote
+  7,590 tokens against the 1h-TTL static block, call 2 read 7,249 back, and
+  a later process start still hit the same prefix (write 0 / read 7,590).
+
 ## [1.0.4] - 2026-07-29
 
 > Prompt-assembly grammar alignment: the entire Anthropic cache apparatus (1h-TTL static split, message breakpoints, T5 policy, S5 slots, adaptive thinking) un-stranded from a never-registered legacy adapter onto the live path; runtime injections unified on XML-in-envelope; reflection no longer discarded on OpenAI-family backends; legacy adapter classes deleted (net -540 lines).
