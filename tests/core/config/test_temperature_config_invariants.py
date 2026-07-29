@@ -1,7 +1,7 @@
 """PR-TEMP (2026-05-23) invariants — temperature is config-driven, not hardcoded.
 
 Six former code constants (agent_loop 0.0 / reflection 0.2 / verification 0.1 /
-commentary 0.4 / self-improving mutation 0.3 / progressive compression 0.0)
+self-improving mutation 0.3 / progressive compression 0.0)
 were lifted into ``Settings.temperature_*`` knobs so operators can tune each
 call path via ``~/.geode/config.toml`` or env vars.
 
@@ -34,7 +34,6 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
     [
         ("temperature_agent_loop", 1.0),
         ("temperature_reflection", 1.0),
-        ("temperature_commentary", 1.0),
         ("temperature_self_improving_mutation", 1.0),
     ],
 )
@@ -64,7 +63,6 @@ def test_temperature_setting_range_validation() -> None:
     for attr in (
         "temperature_agent_loop",
         "temperature_reflection",
-        "temperature_commentary",
         "temperature_self_improving_mutation",
     ):
         with pytest.raises(ValidationError):
@@ -89,10 +87,6 @@ _RATCHET_SITES = (
     (
         Path("core/agent/loop/_reflection.py"),
         "_settings.temperature_reflection",
-    ),
-    (
-        Path("core/llm/commentary.py"),
-        "_settings.temperature_commentary",
     ),
     (
         Path("core/self_improving/loop/mutate/runner.py"),

@@ -38,12 +38,6 @@ from ._hooks import (
     set_router_hooks as set_router_hooks,
 )
 from .calls import (
-    _route_provider as _route_provider,
-)
-from .calls import (
-    call_llm as call_llm,
-)
-from .calls import (
     call_with_failover as call_with_failover,
 )
 from .models import (

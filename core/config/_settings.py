@@ -257,19 +257,6 @@ class Settings(BaseSettings):
             "confidence call. Previously hardcoded to 0.2."
         ),
     )
-    temperature_commentary: float = Field(
-        default=1.0,
-        ge=0.0,
-        le=2.0,
-        validation_alias=AliasChoices(
-            "temperature_commentary",
-            "GEODE_TEMPERATURE_COMMENTARY",
-        ),
-        description=(
-            "Sampling temperature for tool-result commentary generation. "
-            "Previously hardcoded to 0.4 (signature default)."
-        ),
-    )
     temperature_self_improving_mutation: float = Field(
         default=1.0,
         ge=0.0,

@@ -228,7 +228,6 @@ def test_math_formatting_instruction_reaches_agentic_system_prompt(
 @pytest.mark.parametrize(
     "name,expected_keys",
     [
-        ("commentary", {"system", "user"}),
         ("decomposer", {"system"}),
         ("router", {"system", "agentic_suffix"}),
     ],

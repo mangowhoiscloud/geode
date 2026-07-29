@@ -28,7 +28,7 @@ owns only the package version and sync date.
 The generated architecture inventory lives at
 `site/src/data/geode/architecture-baseline.json`. Refresh it with
 `uv run python scripts/architecture_baseline.py --update`; CI uses `--check`.
-The current snapshot records 538 production Python files,
+The current snapshot records 532 production Python files,
 673 test Python files,
 78 tool definitions, and
 56 `HookEvent` members.
@@ -74,14 +74,17 @@ LLM router, providers, prompt assembly, hashing.
 
 - `prompt_assembler.py` — `PromptAssembler.assemble()`. Six-step assembly
   producing an immutable `AssembledPrompt`. Emits `PROMPT_ASSEMBLED` hook.
-- `providers/anthropic.py` — `messages.stream()` async context (v0.95+).
-- `providers/openai.py` — Responses API, HTML data-URL guard (v0.94+),
-  `prompt_cache_key` auto-derivation (v0.94+).
+- `providers/` — low-level utilities only (retry, quota, cache and
+  native-tool shaping) consumed by `adapters/`; the sync client layer and
+  `providers/openai.py` were deleted 2026-07-29 — LLM completion is
+  async-only and every SDK client is owned by `adapters/`.
+- `providers/anthropic.py` — retry/quota, prompt-cache + breakpoint helpers,
+  native-tool and defer shaping.
 - `providers/glm.py` — GLM 5.x family. Context window 202_752 (not 200_000).
   Thinking gate (`thinking.type="off"|"none"`).
-- `providers/codex.py` — OAuth + reasoning sidecar.
-- `prompts/__init__.py` — `_PINNED_HASHES` (4 entries). Karpathy P4 ratchet.
-- `prompts/*.md` — 3 templates (`commentary` / `decomposer` / `router`).
+- `providers/codex.py` — OAuth token resolution + async client.
+- `prompts/__init__.py` — `_PINNED_HASHES` (2 entries). Karpathy P4 ratchet.
+- `prompts/*.md` — 2 templates (`decomposer` / `router`).
 - `postprocess/html_output.py` — strips OpenAI data-URL HTML.
 
 Read this first when changing prompt content (will break the hash ratchet),

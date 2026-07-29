@@ -18,6 +18,19 @@ from typing import TYPE_CHECKING
 
 from core.cli.onboarding import clear_dry_run_opt_in
 
+
+def _invalidate(provider: str) -> None:
+    """Drop cached adapter clients so a key change takes effect immediately.
+
+    2026-07-29: these call sites used to reset the ``providers/`` SYNC
+    singletons, which the live path no longer used — a rotated key kept
+    flowing through a stale adapter client until restart.
+    """
+    from core.llm.adapters.registry import invalidate_provider_clients
+
+    invalidate_provider_clients(provider)
+
+
 if TYPE_CHECKING:
     from core.cli.commands._state import ModelProfile
 
@@ -70,12 +83,7 @@ def cmd_key(args: str) -> bool:
         value = parts[1].strip()
         settings.openai_api_key = value
         _pkg._upsert_env("OPENAI_API_KEY", value)
-        try:
-            from core.llm.providers.openai import reset_openai_client
-
-            reset_openai_client()
-        except ImportError:
-            pass
+        _invalidate("openai")
         clear_dry_run_opt_in()
         _pkg.console.print(f"  [success]OpenAI API key set[/success]  {_pkg._mask_key(value)}")
         _pkg.console.print()
@@ -93,6 +101,7 @@ def cmd_key(args: str) -> bool:
             from core.llm.providers.glm import reset_glm_client
 
             reset_glm_client()
+            _invalidate("glm")
         except ImportError:
             pass
         clear_dry_run_opt_in()
@@ -106,16 +115,12 @@ def cmd_key(args: str) -> bool:
         settings.anthropic_api_key = value
         _pkg._upsert_env("ANTHROPIC_API_KEY", value)
         _pkg._seed_payg_plan_from_key("anthropic", value)
+        _invalidate("anthropic")
         _pkg.console.print(f"  [success]Anthropic API key set[/success]  {_pkg._mask_key(value)}")
     elif value.startswith("sk-proj-") or value.startswith("sk-"):
         settings.openai_api_key = value
         _pkg._upsert_env("OPENAI_API_KEY", value)
-        try:
-            from core.llm.providers.openai import reset_openai_client
-
-            reset_openai_client()
-        except ImportError:
-            pass
+        _invalidate("openai")
         _pkg._seed_payg_plan_from_key("openai", value)
         _pkg.console.print(f"  [success]OpenAI API key set[/success]  {_pkg._mask_key(value)}")
     elif _pkg._is_glm_key(value):
@@ -125,6 +130,7 @@ def cmd_key(args: str) -> bool:
             from core.llm.providers.glm import reset_glm_client
 
             reset_glm_client()
+            _invalidate("glm")
         except ImportError:
             pass
         _pkg._seed_payg_plan_from_key("glm", value)

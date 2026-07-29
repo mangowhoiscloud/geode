@@ -718,32 +718,6 @@ class TestUpdateModel:
 class TestGlmClient:
     """Test GLM client creation with custom base_url."""
 
-    def test_get_glm_client_base_url(self):
-        from unittest.mock import MagicMock
-        from unittest.mock import patch as _p
-
-        from core.config import GLM_BASE_URL
-
-        mock_openai_mod = MagicMock()
-
-        with (
-            _p.dict("sys.modules", {"openai": mock_openai_mod}),
-            _p("core.llm.providers.glm._glm_client", None),
-            _p("core.config.settings") as ms,
-        ):
-            ms.zai_api_key = "test-key"
-            from core.llm.providers.glm import _get_glm_client
-
-            _get_glm_client()
-            # PR-ADAPTER-TIMEOUT-AND-SERIALIZATION (2026-05-28) — singleton
-            # builder now pins ``max_retries=0`` so SDK retry does not
-            # compound with GEODE app retry.
-            mock_openai_mod.OpenAI.assert_called_once_with(
-                api_key="test-key",
-                base_url=GLM_BASE_URL,
-                max_retries=0,
-            )
-
 
 class TestModelProfiles:
     """Test the model picker list includes GLM entries."""
