@@ -252,6 +252,19 @@ DISCOVER (investigate harnesses via parallel Agents)
 
 ---
 
+## Step 0: One-time machine setup
+
+`.pre-commit-config.yaml` defines 17 hooks, but they only run once the git hook
+is installed — and a fresh clone has no `.git/hooks/pre-commit`. Worktrees share
+the main repo's hooks directory, so installing once covers every worktree.
+
+```bash
+uv run pre-commit install     # verify: ls .git/hooks/pre-commit
+```
+
+Even installed, pre-commit covers 2 of the 17 gates CI enforces; `scripts/preflight.sh`
+is what closes the rest. Install both.
+
 ## Step 1: Worktree Open (alloc)
 
 **Every work unit** starts by opening a worktree. No exceptions.
@@ -296,11 +309,8 @@ Code changes complete
 ┌─────────────────────────────────────────┐
 │  Step 1: CI Guardrails (all must pass)  │
 │                                         │
-│  uv run ruff check core/ tests/         │ → On fail: ruff --fix then re-run
-│  uv run ruff format --check core/ tests/│ → On fail: ruff format then re-run
-│  uv run mypy core/                      │ → On fail: fix types then re-run
-│  uv run bandit -r core/ -c pyproject.toml│ → On fail: fix security then re-run
-│  uv run pytest tests/ -m "not live" -q  │ → On fail: fix tests then re-run
+│  scripts/preflight.sh                   │ → runs every gate CI enforces
+│  scripts/preflight.sh --fast            │ → same minus tests + site build
 │                                         │
 │  Any failure → fix → re-run Step 1      │
 │                                         │
@@ -530,10 +540,15 @@ gh pr checks <PR#> --watch --repo mangowhoiscloud/geode
 - Alternative comparison: Option A (pros/cons) vs Option B (pros/cons) → selection rationale
 
 ## Pre-PR Quality Gate (required — paste actual execution results)
-- [x] `ruff check` — 0 errors
-- [x] `ruff format --check` — OK (N files)
-- [x] `mypy core/` — Success (N source files)
-- [x] `bandit -r core/` — 0 issues
+
+<!-- Why one script instead of a command list: CI enforces 17 gates while this
+     checklist listed 5, and 3 of those 5 were documented at a NARROWER scope
+     than CI runs them (`mypy core/` vs CI's `mypy core/ plugins/ scripts/`).
+     A branch could pass the checklist verbatim and still fail CI — 5 of 60
+     sampled July 2026 failures were exactly that scope gap. Keep preflight.sh
+     as the single source; if CI gains a gate, add it there, not here. -->
+
+- [x] `scripts/preflight.sh` — **all gates passed** (paste the final line)
 - [x] `pytest -m "not live"` — **N passed** in Xs
 - [x] CHANGELOG.md [Unreleased] entry added
 - [x] README.md metric consistency verified
