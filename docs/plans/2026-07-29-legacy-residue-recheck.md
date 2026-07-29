@@ -173,3 +173,19 @@ core/llm/adapters/_anthropic_common.py:61:        _async_response_hook,
 core/llm/adapters/_anthropic_common.py:69:        event_hooks={"response": [_async_response_hook]},
 (출력 없음 = 전부 제거됨)
 ```
+
+
+## R11. Codex 라운드1 반영 (2026-07-29)
+Codex 판정 FAIL(LOW) — "레거시 잔존은 주석·이력뿐"이라는 감사 결론이 부정확했다. stale 서술 4곳 정정:
+
+| 위치 | 내용 | 처분 |
+|------|------|------|
+| `tests/core/agent/test_arun_model_drift_sync.py` | 삭제된 `decomposition_hint`가 모듈 독스트링+실행 테스트 함수명 3개에 현재형으로 잔존(실제 대상은 reflection hint) | 함수명·서술 전부 reflection로 정정 |
+| `core/llm/providers/anthropic.py:3` | 모듈 독스트링 "sync/async clients 소유" — async는 adapters 층 소유 | 저수준 유틸 층 실태로 재작성 |
+| `core/llm/providers/{anthropic,openai}.py` | 제거된 async 캐시를 설명하는 고아 주석 | 삭제 |
+| `core/llm/providers/anthropic.py` | `ClaudeAgenticAdapter` 섹션 헤더 | 실제 내용(adapters가 소비하는 request shaping 헬퍼)로 개명 |
+| `tests/core/llm/test_loop_pollution_guardrails.py` | 존재하지 않는 형제 테스트명 참조 | 실제 이름으로 정정 |
+
+Codex PASS 판정 항목: 제거 5심볼 소비자 0(getattr/`__import__`/import_module 패턴 포함 재검색), `_async_response_hook` 복원 정확성(실행 본문 동일), liveness 가드 실효성(hook 삭제 재현 시 ImportError 검출, adapter provider import 15노드/19심볼 커버), 가드레일 축소의 커버리지 보존, 연쇄 고아 0.
+
+가드 한계(문서화): AST 워크는 직접 파일의 absolute `ImportFrom`만 처리 — 상대/동적 import는 미커버, `TYPE_CHECKING` 조건부는 오탐 가능(현재 해당 형태 없음).

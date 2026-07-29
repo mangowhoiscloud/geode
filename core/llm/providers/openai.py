@@ -26,8 +26,6 @@ log = logging.getLogger(__name__)
 
 _openai_client: Any = None  # openai.OpenAI | None — lazy import
 _openai_lock = threading.Lock()
-# PR-LOOP-POLLUTION-FIX (2026-06-12) — async client is per-event-loop, not
-# process-global (see core/llm/loop_affinity.py).
 
 
 def _resolve_openai_key() -> str:

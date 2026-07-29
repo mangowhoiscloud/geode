@@ -1,6 +1,10 @@
-"""Anthropic provider — singleton clients + retry wrapper.
+"""Anthropic provider — low-level client + retry/quota utilities.
 
-Owns sync/async Anthropic clients with configured httpx connection pool.
+Owns the SYNC Anthropic client (configured httpx pool), retry/backoff, quota
+banner feeding, prompt-cache helpers, and native-tool shaping consumed by
+``core/llm/adapters``. Async clients live in the adapters layer
+(``build_async_anthropic_client``) — the provider-level async getter was
+removed 2026-07-29 once its last caller (the legacy agentic adapter) was gone.
 """
 
 from __future__ import annotations
@@ -145,9 +149,6 @@ def _build_httpx_limits() -> httpx.Limits:
 # ---------------------------------------------------------------------------
 _sync_client: anthropic.Anthropic | None = None
 _sync_client_lock = threading.Lock()
-
-# PR-LOOP-POLLUTION-FIX (2026-06-12) — async client is per-event-loop, not
-# process-global (see core/llm/loop_affinity.py).
 
 
 # ---------------------------------------------------------------------------
@@ -692,7 +693,7 @@ async def retry_with_backoff_async(
 
 
 # ---------------------------------------------------------------------------
-# ClaudeAgenticAdapter — Anthropic LLM adapter for agentic loop
+# Request shaping helpers consumed by core/llm/adapters/_anthropic_common
 # ---------------------------------------------------------------------------
 
 _API_ALLOWED_KEYS = frozenset(

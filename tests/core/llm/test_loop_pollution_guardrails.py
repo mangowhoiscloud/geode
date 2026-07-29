@@ -255,7 +255,8 @@ def test_provider_async_clients_are_per_loop(monkeypatch: pytest.MonkeyPatch) ->
     2026-07-29: the anthropic/openai provider getters were deleted — their
     only caller was the legacy adapter pair removed in v1.0.4, and
     Anthropic/OpenAI traffic now builds clients in ``core/llm/adapters``
-    (covered by ``test_all_registry_adapters_use_loop_affine_cache`` above).
+    (covered by ``test_builtin_adapters_with_get_client_use_loop_affine_cache``
+    above).
     GLM's getter is still consumed directly (``core/tools/computer_grounding``)
     so the provider-level pin survives for it."""
     from core.llm.providers import glm as glm_provider
