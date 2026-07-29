@@ -56,7 +56,7 @@ functional change.
   and `improve`). No event is added or removed — all 56 stay live — and `ACTION_FAMILY_ALIASES`
   keeps rows already on disk resolving — verified against every `action` in the live
   `hook_events` table, pre-fold segments included. For scale, read from source rather than docs:
-  Hermes declares 23 hooks (`hermes_cli/plugins.py` `VALID_HOOKS`), Codex 51 metric constants plus
+  Hermes declares 23 hooks (`hermes_cli/plugins.py` `VALID_HOOKS`), Codex 50 metric constants plus
   14 event names (`codex-rs/otel/src/metrics/names.rs`, `events/session_telemetry.rs`).
 - Dispatch stamps `schema_version` on every payload (`OBSERVER_SCHEMA_VERSION`, `geode.observer.v1`).
   A subscriber that only receives the payload — a plugin, an exporter — could not otherwise tell

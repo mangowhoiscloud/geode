@@ -11,7 +11,7 @@
 | | 이벤트/hook | family | 밀도 |
 |---|---:|---:|---|
 | Hermes (`hermes_cli/plugins.py` `VALID_HOOKS`) | **23** | 6 문서 계열 | 3.8 |
-| Codex (`metrics/names.rs` + `events/session_telemetry.rs`) | **51 metric + 14 event** | ~12 도메인 | 5.4 |
+| Codex (`metrics/names.rs` + `events/session_telemetry.rs`) | **50 metric + 14 event** | ~12 도메인 | 5.3 |
 | **GEODE 현재** | 56 | **27** | **2.1** |
 | GEODE 목표 | 56 | 13 | 4.3 |
 
