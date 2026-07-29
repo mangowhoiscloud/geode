@@ -47,6 +47,8 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.8] - 2026-07-30
+
 ### Added
 
 - `core/observability/trajectory.py` — read-only projection of GEODE and Codex sessions onto one
