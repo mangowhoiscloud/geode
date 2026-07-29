@@ -47,6 +47,29 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- `core/observability/trajectory.py` — read-only projection of GEODE and Codex sessions onto one
+  K3-shaped message list (`user` / `assistant{think,response,tools}` / `tool{results}`) with
+  per-message `run` numbering and a `pairing` report stating whether each tool result was matched
+  by call id or by row order. `python -m core.observability.trajectory <session|--merge N>`.
+
+### Fixed
+
+- `record_tool_call` / `record_tool_result` now persist the provider's `call_id`, which the executor
+  already held and echoed back over the protocol but dropped before writing the transcript. Without
+  it a reader could only pair calls with results by row order, which crosses when two concurrent
+  calls to the same tool return out of order (7 of 23,072 results measured).
+
+### Architecture
+
+- A transcript file accumulates every run that reused its `session_id`, while `sessions.db:messages`
+  is a mutable mirror of the live message list — `save_messages` upserts on `(session_id, seq)` and
+  deletes every `seq` outside the current list. The transcript is therefore the canonical history
+  and `messages` only adds within-turn resolution for the newest run. Measured: sessions with 2+
+  `session_start` events mismatch on tool-call count at 11.31% (31/274) versus 0.07% (5/6,787) for
+  single-run sessions. See `docs/trajectory-redesign.md`.
+
 ## [1.0.7] - 2026-07-29
 
 > The synchronous LLM stack is gone — its entry point had no caller, so commentary, `call_llm`, the provider dispatcher and the sync SDK clients below it were all unreachable. Removing them exposed that `/key` and `/login` had been resetting singletons the live path abandoned long ago, leaving rotated credentials stale until restart; every credential path now drops the adapter clients that actually serve traffic.

@@ -223,10 +223,16 @@ class SessionTranscript:
             details={"text": _truncate(text, MAX_PREVIEW_CHARS)},
         )
 
-    def record_tool_call(self, tool: str, tool_input: dict[str, Any]) -> None:
+    def record_tool_call(self, tool: str, tool_input: dict[str, Any], call_id: str = "") -> None:
         input_str = json.dumps(tool_input, ensure_ascii=False, default=str)
         truncated_input = _truncate(input_str, MAX_INPUT_CHARS)
-        self._append({"event": "tool_call", "tool": tool, "input": truncated_input})
+        row: dict[str, Any] = {"event": "tool_call", "tool": tool, "input": truncated_input}
+        if call_id:
+            # The provider issues this id and the protocol already echoes it back;
+            # writing it here is what lets a reader pair calls with results exactly
+            # instead of guessing from row order.
+            row["call_id"] = call_id
+        self._append(row)
         self._mirror_to_run_transcript(
             action="agent.tool_call",
             entity_type="task",
@@ -234,16 +240,19 @@ class SessionTranscript:
             details={"tool": tool, "input": truncated_input},
         )
 
-    def record_tool_result(self, tool: str, status: str, summary: str = "") -> None:
+    def record_tool_result(
+        self, tool: str, status: str, summary: str = "", call_id: str = ""
+    ) -> None:
         truncated_summary = _truncate(summary, MAX_INPUT_CHARS)
-        self._append(
-            {
-                "event": "tool_result",
-                "tool": tool,
-                "status": status,
-                "summary": truncated_summary,
-            }
-        )
+        row: dict[str, Any] = {
+            "event": "tool_result",
+            "tool": tool,
+            "status": status,
+            "summary": truncated_summary,
+        }
+        if call_id:
+            row["call_id"] = call_id
+        self._append(row)
         self._mirror_to_run_transcript(
             action="agent.tool_result",
             entity_type="task",
