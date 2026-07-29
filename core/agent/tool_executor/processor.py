@@ -148,12 +148,12 @@ class ToolCallProcessor:
 
         # Transcript: tool_call + tool_result events
         if self._transcript is not None:
-            self._transcript.record_tool_call(tool_name, durable_input)
+            self._transcript.record_tool_call(tool_name, durable_input, call_id=tool_use_id)
             status = "error" if isinstance(result, dict) and result.get("error") else "ok"
             summary = "personal account data omitted" if personal else ""
             if isinstance(result, dict) and not personal:
                 summary = str(result.get("summary", result.get("error", "")))
-            self._transcript.record_tool_result(tool_name, status, summary)
+            self._transcript.record_tool_result(tool_name, status, summary, call_id=tool_use_id)
             if tool_name in {"computer", "computer_use"} and isinstance(result, dict):
                 payload = self._computer_gui_payload(tool_input, result, tool_use_id)
                 if payload:

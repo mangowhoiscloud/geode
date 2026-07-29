@@ -2,7 +2,7 @@
 
 > GEODE is a self-evolving autonomous execution agent: an inner agentic loop runs tasks (research, analysis, automation, scheduling) and an outer self-improving loop (Petri audit -> fitness gate) tunes the system that runs them.
 
-Version v1.0.7. Last sync 2026-07-29. Full content of every docs page, one file (llms-full.txt convention). Per-page index: /llms.txt.
+Version v1.0.8. Last sync 2026-07-29. Full content of every docs page, one file (llms-full.txt convention). Per-page index: /llms.txt.
 
 ## Overview . 개요
 
@@ -5299,7 +5299,7 @@ Tier 2  latex2sympy2 + sympy.pretty  블록 전용. 분수·적분을 2D Unicode
 URL: https://mangowhoiscloud.github.io/geode/docs/reference/changelog
 Markdown: https://mangowhoiscloud.github.io/geode/docs/reference/changelog.md
 
-(body omitted from llms-full: 1472 KB — fetch the Markdown twin above for the complete page)
+(body omitted from llms-full: 1475 KB — fetch the Markdown twin above for the complete page)
 
 ---
 
@@ -5459,8 +5459,8 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 
 | 측정값 | 현재 트리 |
 | --- | --- |
-| 프로덕션 Python 파일 | 532 |
-| 테스트 Python 파일 | 673 |
+| 프로덕션 Python 파일 | 533 |
+| 테스트 Python 파일 | 674 |
 | 도구 정의 / 실행 등록 / 유효 스키마 | 78 / 81 / 78 |
 | HookEvent 멤버 | 56 |
 | 기본 LLM 어댑터 | 8 |
