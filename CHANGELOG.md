@@ -47,6 +47,10 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.6] - 2026-07-29
+
+> Legacy-removal recheck: orphaned async provider clients pruned, and a lazy-import liveness guard added after a near-miss where deleting an apparent orphan would have broken every Anthropic subscription call at runtime (ruff, mypy, and the unit suite all missed it).
+
 ### Removed
 
 - **Orphaned async provider-client chain deleted.** `providers.anthropic`'s
