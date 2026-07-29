@@ -1,6 +1,8 @@
 # Observability 실태 조사 — GEODE · Codex · Hermes · OpenClaw
 
 작성 2026-07-29. GEODE와 Codex는 **이 머신의 실측**이고, Hermes·OpenClaw는 **공개 저장소·문서**다.
+
+> **정정 (2026-07-29).** Hermes·Codex·OpenClaw의 소스 체크아웃이 `~/workspace/`에 있다. `which hermes` 부재는 런타임 미설치이지 소스 부재가 아니었다. 로컬 원문으로 다시 읽은 결과는 `docs/observability-alignment.md`에 있고, 아래 §3 Hermes 절의 결론 일부를 정정한다.
 근거 층위를 열마다 표시하며, 백분율에는 분모를 붙인다. 모든 DB는 `mode=ro`로 열었고 쓰지 않았다.
 
 ---
