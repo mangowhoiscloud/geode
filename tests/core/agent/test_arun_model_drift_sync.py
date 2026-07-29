@@ -10,7 +10,7 @@ exact pre-refactor semantics:
   * OR-chained with ``_prompt_dirty`` so direct
     ``update_model_async`` callers (v0.52.5) still trigger rebuild.
   * On rebuild: ``_build_system_prompt()`` produces a new prompt;
-    ``decomposition_hint`` (if present) appended.
+    ``reflection_hint`` / preflight / plan hints (if present) re-applied.
   * Side effect: ``_prompt_dirty`` cleared post-rebuild.
 """
 
@@ -144,15 +144,15 @@ def test_no_rebuild_leaves_prompt_dirty_flag_untouched() -> None:
     assert stub._prompt_dirty is False
 
 
-def test_decomposition_hint_appended_when_rebuilding() -> None:
-    """If a decomposition hint exists, it's appended to the rebuilt
-    prompt with two newline separator (matches pre-refactor)."""
+def test_reflection_hint_applied_when_rebuilding() -> None:
+    """If a reflection hint exists, the rebuild re-applies it.
+    (2026-07-29: was ``decomposition_hint``, whose plumbing was deleted.)"""
     stub = _StubLoop(sync_returns_drifted=True)
     result = _call_helper(stub, "ORIGINAL", "HINT_TEXT")
     assert result == "REBUILT_PROMPT\n\nHINT_TEXT"
 
 
-def test_decomposition_hint_none_not_appended() -> None:
+def test_reflection_hint_none_not_applied() -> None:
     """No hint = no append (no ``None`` string concatenation
     accident)."""
     stub = _StubLoop(sync_returns_drifted=True)
@@ -161,7 +161,7 @@ def test_decomposition_hint_none_not_appended() -> None:
     assert "None" not in result
 
 
-def test_decomposition_hint_ignored_when_not_rebuilding() -> None:
+def test_reflection_hint_ignored_when_not_rebuilding() -> None:
     """If no rebuild happens, the hint doesn't matter — original
     prompt returned unchanged."""
     stub = _StubLoop(sync_returns_drifted=False, prompt_dirty=False)
