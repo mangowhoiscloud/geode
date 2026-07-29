@@ -47,6 +47,10 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.7] - 2026-07-29
+
+> The synchronous LLM stack is gone — its entry point had no caller, so commentary, `call_llm`, the provider dispatcher and the sync SDK clients below it were all unreachable. Removing them exposed that `/key` and `/login` had been resetting singletons the live path abandoned long ago, leaving rotated credentials stale until restart; every credential path now drops the adapter clients that actually serve traffic.
+
 ### Removed
 
 - **The synchronous LLM call stack is gone — LLM completion is async-only.** Its
