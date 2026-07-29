@@ -53,6 +53,15 @@ functional change.
   K3-shaped message list (`user` / `assistant{think,response,tools}` / `tool{results}`) with
   per-message `run` numbering and a `pairing` report stating whether each tool result was matched
   by call id or by row order. `python -m core.observability.trajectory <session|--merge N>`.
+- `scripts/preflight.sh` runs every gate CI enforces, in CI's own scope, as one
+  command (`--fast` skips the test suite and site build). The Pre-PR checklist
+  listed 5 commands while CI enforced 17 gates, and 3 of the 5 were documented
+  at a narrower scope than CI runs them — `mypy core/` against CI's
+  `mypy core/ plugins/ scripts/`. 5 of 60 sampled July failures were that scope
+  gap alone; the largest recurring class was stale generated artifacts
+  (architecture baseline, `llms-full.txt`, slop ratchet), none of which the
+  checklist mentioned. Exit code is the failed-gate count, so it chains safely
+  with `&&`.
 
 ### Fixed
 
