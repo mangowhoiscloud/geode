@@ -162,7 +162,7 @@ class TestInterceptResult:
         r = InterceptResult()
         assert r.blocked is False
         assert r.reason == ""
-        assert _emitted(r.data) == {}
+        assert r.data == {}
 
     def test_blocked_with_reason(self):
         r = InterceptResult(blocked=True, reason="input rejected")
@@ -840,7 +840,7 @@ class TestToolExecInterceptor:
         )
         assert len(results) == 1
         assert results[0].success is True
-        assert _emitted(results[0].data) == {}
+        assert results[0].data == {}
 
 
 class TestAggressiveRecoveryHook:
@@ -1198,7 +1198,7 @@ class TestToolResultTransformEvent:
             {"tool_name": "fetch", "result": {"data": "raw"}},
         )
         assert len(results) == 1
-        assert _emitted(results[0].data) == {}
+        assert results[0].data == {}
 
 
 class TestNewAuditLoggers:

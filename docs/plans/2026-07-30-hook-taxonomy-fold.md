@@ -10,8 +10,8 @@
 
 | | 이벤트/hook | family | 밀도 |
 |---|---:|---:|---|
-| Hermes (`hermes_cli/plugins.py:135` `VALID_HOOKS`) | ~15 | **6** | 2.5 |
-| Codex (`codex-rs/otel/src/metrics/names.rs`) | 16 events + ~50 metrics | ~12 | 5.5 |
+| Hermes (`hermes_cli/plugins.py` `VALID_HOOKS`) | **23** | 6 문서 계열 | 3.8 |
+| Codex (`metrics/names.rs` + `events/session_telemetry.rs`) | **51 metric + 14 event** | ~12 도메인 | 5.4 |
 | **GEODE 현재** | 56 | **27** | **2.1** |
 | GEODE 목표 | 56 | 13 | 4.3 |
 
@@ -123,3 +123,22 @@ enum은 불변이고 alias는 한 층으로 끝난다.
 - `HookEvent` enum 값 변경 (§3 버린 대안)
 - `mirror_transcript` 기본값 변경 (§2.4)
 - 구독자 0 게이팅 (§2.5, 2번 이후 재평가)
+
+## 6. Codex 감사 반영 (2026-07-30)
+
+`codex exec`(gpt-5.6-sol) DEDUP/SLOP/GAP 감사가 PASS 4 / FAIL 7을 냈고, 기계로 확인되는 것을
+전부 재측정한 뒤 반영했다.
+
+| 지적 | 재확인 | 조치 |
+|---|---|---|
+| **`action_family()` 프로덕션 사용처 0** | 사실. grep 결과 catalog 밖 호출 0건 | `HookEventStore.read(family_filter=...)` 배선. 실데이터 전 행에서 family별 건수 일치 확인 |
+| Hermes "~15 hook / 6 family" | 사실. `VALID_HOOKS`는 **23개**. 6은 문서의 계열 수 | 코드 기준 23으로 교정하고 출처를 구분해 표기 |
+| Codex "~66 신호" | 근사. metric 상수 **51** + event 이름 **14** | 두 수를 분리해 표기 |
+| `hook_events` 2,179행 | 라이브 DB라 계속 증가 (감사 시 2,109, 재측정 시 2,199) | 고정 수치를 빼고 "전 행" 표현으로 교체 |
+| 완화 8곳 중 3곳 불필요 | 사실. 해당 경로엔 `schema_version`이 주입되지 않는다 | 정확 단언으로 복원. 복원 후에도 실패 0건 |
+| 계획 56/56 대 구현 18/56 | 사실. §2.2가 "전 이벤트"로 읽혔다 | 아래로 정정 |
+
+**계약 커버리지를 56/56으로 적은 것은 과장이었다.** 실제로는 수기 4종과 pydantic 14종의 합집합인
+**18/56**이다. family 단위 공통 필수키를 실데이터로 찾아보면 `mcp`의 `server_name`과 `cognitive`의
+5개를 빼면 100% 등장하는 키가 없어, family 계약은 성립하지 않는다. 나머지 38종의 계약은 새로
+작성해야 하며 이 PR의 범위 밖이다.

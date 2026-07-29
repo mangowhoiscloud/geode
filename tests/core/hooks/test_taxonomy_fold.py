@@ -118,3 +118,51 @@ def test_caller_supplied_schema_version_is_not_overwritten():
     hooks.register(HookEvent.USER_INPUT_RECEIVED, probe, name="probe")
     hooks.trigger(HookEvent.USER_INPUT_RECEIVED, {"text": "x", "schema_version": "archived.v0"})
     assert seen["schema_version"] == "archived.v0"
+
+
+def test_family_filter_matches_pre_fold_rows(tmp_path):
+    """The fold is only real if a reader uses it. A SQL ``LIKE 'llm.%'`` would
+    miss every ``adapter.``/``prompt.``/``model.``/``reasoning.`` row already on
+    disk, so the filter expands through the alias map instead."""
+    from core.hooks.catalog import EventRetentionClass
+    from core.observability.event_store import HookEventStore, HookEventWrite
+
+    store = HookEventStore(db_path=tmp_path / "e.db")
+    for i, action in enumerate(
+        ["llm.call.started", "adapter.dispatch.attempt", "prompt.assembled", "tool.exec.started"]
+    ):
+        store.append(
+            HookEventWrite(
+                occurred_at=1000.0 + i,
+                session_key="s",
+                run_id="r",
+                event="llm_call_started",
+                dispatch_mode="observe",
+                status="ok",
+                retention_class=EventRetentionClass.STANDARD,
+                actor_type="system",
+                actor_id="a",
+                action=action,
+                entity_type="e",
+                entity_id="1",
+                level="info",
+                payload={},
+                handler_count=0,
+                handler_error_count=0,
+                blocked=False,
+                block_reason="",
+                task_id=None,
+            )
+        )
+    llm = {r.action for r in store.read(family_filter="llm", limit=100)}
+    assert llm == {"llm.call.started", "adapter.dispatch.attempt", "prompt.assembled"}
+    assert {r.action for r in store.read(family_filter="tool", limit=100)} == {"tool.exec.started"}
+
+
+def test_alias_map_covers_every_folded_singleton():
+    """16 singletons were folded; each one's old segment must still resolve or a
+    pre-fold row becomes unreachable by family."""
+    assert len(ACTION_FAMILY_ALIASES) == 16
+    for old, new in ACTION_FAMILY_ALIASES.items():
+        assert action_family(f"{old}.anything") == new
+        assert new in ACTION_FAMILIES

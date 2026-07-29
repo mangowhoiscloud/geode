@@ -309,6 +309,7 @@ class HookEventStore:
         session_key: str | None = None,
         run_id: str | None = None,
         event_filter: str | None = None,
+        family_filter: str | None = None,
         status_filter: str | None = None,
         occurred_after: float | None = None,
         occurred_before: float | None = None,
@@ -319,6 +320,12 @@ class HookEventStore:
         a canonical event value also matches rows stored under its legacy
         pre-rename value (and vice versa), so history written before the
         NAME == VALUE.upper() alignment stays queryable.
+
+        ``family_filter`` selects a whole action family (``core.hooks.catalog``
+        ``ACTION_FAMILIES``). Rows written before the 27→13 fold carry the old
+        first segment, so the match is resolved through ``action_family`` rather
+        than by SQL prefix — a ``LIKE 'llm.%'`` would miss every
+        ``adapter.``/``prompt.``/``model.``/``reasoning.`` row already on disk.
         """
         clauses: list[str] = []
         params: list[Any] = []
@@ -335,6 +342,17 @@ class HookEventStore:
             placeholders = ", ".join("?" for _variant in variants)
             clauses.append(f"event IN ({placeholders})")
             params.extend(variants)
+        if family_filter is not None:
+            from core.hooks.catalog import ACTION_FAMILY_ALIASES
+
+            heads = sorted(
+                {family_filter}
+                | {old for old, new in ACTION_FAMILY_ALIASES.items() if new == family_filter}
+            )
+            like = " OR ".join("action = ? OR action LIKE ?" for _h in heads)
+            clauses.append(f"({like})")
+            for head in heads:
+                params.extend((head, f"{head}.%"))
         if occurred_after is not None:
             clauses.append("occurred_at >= ?")
             params.append(occurred_after)
