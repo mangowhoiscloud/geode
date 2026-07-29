@@ -9,8 +9,6 @@ import logging
 import threading
 from typing import Any
 
-from core.llm.loop_affinity import LoopAffineClientCache
-
 log = logging.getLogger(__name__)
 
 # Retry policy values (max_retries / retry_base_delay / retry_max_delay) are
@@ -30,7 +28,6 @@ _openai_client: Any = None  # openai.OpenAI | None — lazy import
 _openai_lock = threading.Lock()
 # PR-LOOP-POLLUTION-FIX (2026-06-12) — async client is per-event-loop, not
 # process-global (see core/llm/loop_affinity.py).
-_async_openai_clients = LoopAffineClientCache("openai-provider")
 
 
 def _resolve_openai_key() -> str:
@@ -46,10 +43,10 @@ def _get_openai_client() -> Any:
 
     PR-ADAPTER-TIMEOUT-AND-SERIALIZATION (2026-05-28, Codex MCP MED) —
     ``max_retries=0`` matches the adapter-side invariant
-    (``_openai_common.build_async_openai_client``) so legacy callers that
-    still hit this singleton (paperclip ``OpenAIAdapter``,
-    ``llm_extract_learning``, ``models.py``) don't compound SDK + app
-    retry loops on stalled streams.
+    (``_openai_common.build_async_openai_client``) so the callers that hit
+    this singleton don't compound SDK + app retry loops on stalled streams.
+    Live consumer today: ``core/llm/provider_dispatch.py`` (the named
+    ``OpenAIAdapter`` / ``models.py`` consumers were deleted by 2026-07-29).
     """
     global _openai_client
     if _openai_client is None:
@@ -61,27 +58,11 @@ def _get_openai_client() -> Any:
     return _openai_client
 
 
-def _get_async_openai_client() -> Any:
-    """Return the async OpenAI client bound to the CURRENT event loop.
-
-    See :func:`_get_openai_client` for the ``max_retries=0`` rationale and
-    ``core/llm/loop_affinity.py`` for why the cache is per-loop.
-    """
-
-    def _build() -> Any:
-        import openai
-
-        return openai.AsyncOpenAI(api_key=_resolve_openai_key(), max_retries=0)
-
-    return _async_openai_clients.get(_build)
-
-
 def reset_openai_client() -> None:
     """Reset cached OpenAI client (e.g. after /key openai changes)."""
     global _openai_client
     with _openai_lock:
         _openai_client = None
-    _async_openai_clients.invalidate()
 
 
 # ── 2026-07-29 prune ───────────────────────────────────────────────────────

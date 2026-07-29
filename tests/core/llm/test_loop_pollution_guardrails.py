@@ -250,21 +250,19 @@ def test_builtin_adapters_with_get_client_use_loop_affine_cache() -> None:
 
 
 def test_provider_async_clients_are_per_loop(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The provider-level getters (main agentic path — crosses the gateway
-    main loop and the CLIPoller loop) must ALL be loop-affine. Covers
-    anthropic + openai + glm (Codex MCP review 2026-06-12 — the original
-    pin only exercised anthropic)."""
-    from core.llm.providers import anthropic as anthropic_provider
-    from core.llm.providers import glm as glm_provider
-    from core.llm.providers import openai as openai_provider
+    """Every LIVE provider-level async getter must be loop-affine.
 
-    monkeypatch.setattr(anthropic_provider, "_resolve_anthropic_key", lambda: "test-key")
-    monkeypatch.setattr(openai_provider, "_resolve_openai_key", lambda: "test-key")
+    2026-07-29: the anthropic/openai provider getters were deleted — their
+    only caller was the legacy adapter pair removed in v1.0.4, and
+    Anthropic/OpenAI traffic now builds clients in ``core/llm/adapters``
+    (covered by ``test_all_registry_adapters_use_loop_affine_cache`` above).
+    GLM's getter is still consumed directly (``core/tools/computer_grounding``)
+    so the provider-level pin survives for it."""
+    from core.llm.providers import glm as glm_provider
+
     monkeypatch.setattr(glm_provider, "_resolve_glm_endpoint", lambda: ("test-key", "https://e"))
 
     getters = [
-        (anthropic_provider._async_clients, anthropic_provider.get_async_anthropic_client),
-        (openai_provider._async_openai_clients, openai_provider._get_async_openai_client),
         (glm_provider._async_glm_clients, glm_provider._get_async_glm_client),
     ]
     for cache, getter in getters:

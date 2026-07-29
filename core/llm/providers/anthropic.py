@@ -5,7 +5,6 @@ Owns sync/async Anthropic clients with configured httpx connection pool.
 
 from __future__ import annotations
 
-import contextlib
 import logging
 import threading
 from typing import TYPE_CHECKING, Any
@@ -15,7 +14,6 @@ from core.llm.fallback import (
     retry_with_backoff_generic,
     retry_with_backoff_generic_async,
 )
-from core.llm.loop_affinity import LoopAffineClientCache
 from core.llm.model_capabilities import (
     ANTHROPIC_ADAPTIVE_MODELS,
     ANTHROPIC_CONTEXT_MGMT_MODELS,
@@ -150,7 +148,6 @@ _sync_client_lock = threading.Lock()
 
 # PR-LOOP-POLLUTION-FIX (2026-06-12) — async client is per-event-loop, not
 # process-global (see core/llm/loop_affinity.py).
-_async_clients = LoopAffineClientCache("anthropic-provider")
 
 
 # ---------------------------------------------------------------------------
@@ -253,7 +250,12 @@ def _sync_response_hook(response: object) -> None:
 
 
 async def _async_response_hook(response: object) -> None:
-    """httpx async event hook — delegates to the banner feeder."""
+    """httpx async event hook — delegates to the banner feeder.
+
+    Consumed by ``core/llm/adapters/_anthropic_common.build_async_anthropic_client``
+    via a lazy in-function import (the live Anthropic client path), NOT by
+    this module — a 2026-07-29 prune pass nearly dropped it as an orphan.
+    """
     _feed_banner_from_anthropic_response(response)
 
 
@@ -356,60 +358,6 @@ def get_anthropic_client() -> anthropic.Anthropic:
                 http_client=http_client,
             )
         return _sync_client
-
-
-def get_async_anthropic_client(api_key: str | None = None) -> anthropic.AsyncAnthropic:
-    """Return the async Anthropic client bound to the CURRENT event loop.
-
-    PR-LOOP-POLLUTION-FIX (2026-06-12) — previously a process-global
-    singleton. The serve daemon runs multiple event loops (main serve loop
-    for gateway turns, CLIPoller thread loop for CLI sessions); httpx
-    connection-pool primitives bind to the loop that first drives them, so
-    one shared client poisoned the pool across loops (instant
-    APIConnectionError / eternal hang — see ``core/llm/loop_affinity.py``).
-    Now one client per owning loop; same key-resolution and pool settings.
-    SDK-level retries stay disabled (max_retries=0) — app-level retry
-    (AgenticLoop) and the dispatch connection-transient retry own that.
-
-    Args:
-        api_key: Optional API key override. If None, uses settings.
-        Note: the override only affects the loop that triggers the build
-        (same first-caller-wins semantics as the old singleton).
-    """
-    import anthropic
-    import httpx
-
-    def _build() -> anthropic.AsyncAnthropic:
-        key = api_key or _resolve_anthropic_key()
-        http_client = httpx.AsyncClient(
-            limits=_build_httpx_limits(),
-            timeout=_build_httpx_timeout(),
-            event_hooks={"response": [_async_response_hook]},
-        )
-        return anthropic.AsyncAnthropic(
-            api_key=key,
-            max_retries=0,  # app-level retry handles this
-            http_client=http_client,
-        )
-
-    client: anthropic.AsyncAnthropic = _async_clients.get(_build)
-    return client
-
-
-async def areset_clients() -> None:
-    """Reset cached clients. Used in tests and on API key change.
-
-    Async clients are dropped (not closed) — ``aclose()`` requires each
-    client's owning event loop, which may not be the current one; GC
-    finalizers reclaim the sockets (see core/llm/loop_affinity.py).
-    """
-    global _sync_client
-    with _sync_client_lock:
-        if _sync_client is not None:
-            with contextlib.suppress(Exception):
-                _sync_client.close()
-            _sync_client = None
-    _async_clients.invalidate()
 
 
 def system_with_cache(system: str) -> list[TextBlockParam]:

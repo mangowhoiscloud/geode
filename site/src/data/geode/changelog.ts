@@ -19,7 +19,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": ""
+    "body": "### Removed\n\n- **Orphaned async provider-client chain deleted.** `providers.anthropic`'s\n  `get_async_anthropic_client` / `areset_clients` / its loop-affine cache and\n  `providers.openai`'s `_get_async_openai_client` / cache had zero production\n  consumers after the v1.0.4 legacy-adapter removal — Anthropic and OpenAI\n  traffic builds clients in `core/llm/adapters`. GLM's provider getter stays\n  (consumed by `core/tools/computer_grounding`), and the loop-affinity\n  guardrail was narrowed to it plus the adapter-level pin.\n\n### Fixed\n\n- **Lazy provider imports in adapters are now pinned.** A prune pass nearly\n  deleted `_async_response_hook`, which `build_async_anthropic_client`\n  imports *inside the function* — invisible to ruff and mypy, and untouched\n  by unit tests, so every Anthropic subscription call would have failed with\n  ImportError at runtime. A new liveness test walks the adapters' AST and\n  resolves every `core.llm.providers` import (lazy ones included) and\n  constructs the real async client; it was verified to fail on a replay of\n  the incident. Two docstrings naming since-deleted consumers of the OpenAI\n  client singleton were corrected to the live one (`provider_dispatch`)."
   },
   {
     "version": "1.0.5",
