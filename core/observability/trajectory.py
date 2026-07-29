@@ -103,7 +103,12 @@ def _rows(path: Path) -> list[dict[str, Any]]:
             out.append(json.loads(line))
         except json.JSONDecodeError:
             continue  # a truncated tail row must not sink the whole replay
-    out.sort(key=lambda r: r.get("seq", 0))
+    # ``seq`` restarts at 1 for every SessionTranscript instance, so a session id
+    # reused across runs produces repeating and decreasing seq within one file
+    # (189 of 14,970 decrease, 357 repeat). Ordering by seq alone interleaves
+    # those runs; ``ts`` separates them and the stable sort keeps append order
+    # for rows written inside the same clock tick.
+    out.sort(key=lambda r: (r.get("ts", 0.0), r.get("seq", 0)))
     return out
 
 
@@ -114,9 +119,12 @@ def _messages(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     pending: list[tuple[str, int]] = []  # (tool name, index) awaiting a result
     by_call_id: dict[str, int] = {}
     starts = 0
+    ended = False
 
     def run() -> int:
-        return max(0, starts - 1)
+        # dialogue after session_end with no new session_start belongs to its own
+        # run, not to the one that already closed
+        return max(0, starts - 1) + (1 if ended else 0)
 
     def open_asst() -> dict[str, Any]:
         nonlocal asst
@@ -137,11 +145,15 @@ def _messages(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     for r in rows:
         event = r.get("event")
 
-        if event == "session_start":
+        if event in ("session_start", "session_end"):
             # One transcript file accumulates every run that reused this
-            # session_id, so a flat message list would splice unrelated
+            # session_id, so a flat message list would splice separate
             # conversations into one. Runs are numbered, not merged.
-            starts += 1
+            # session_end closes the run too: 7 files continue emitting dialogue
+            # after an end with no following start, and those 23 events would
+            # otherwise be attributed to the run that already finished.
+            starts += 1 if event == "session_start" else 0
+            ended = event == "session_end"
             asst = tool = None
             pending.clear()
             by_call_id.clear()
@@ -149,6 +161,10 @@ def _messages(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
         if event not in _DIALOGUE_EVENTS:
             continue
+
+        if ended:
+            starts += 1
+            ended = False
 
         if event == "user_message":
             asst = tool = None
@@ -360,6 +376,39 @@ def _codex_messages(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return msgs
 
 
+_MODELLED_EVENTS = _DIALOGUE_EVENTS | {"session_start", "session_end", "task_preflight"}
+
+
+def _preflight(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Per-run environment snapshot — GEODE's analogue of Codex ``turn_context``.
+
+    ``task_preflight`` is 18.4% of all transcript rows (185,688 of 1,009,468) and
+    records the capability graph and required evidence the run started under. It
+    is not conversation, so it stays out of the message list, but dropping it
+    loses the answer to "what was this run configured to do".
+    """
+    out = []
+    run = 0
+    for r in rows:
+        event = r.get("event")
+        if event == "session_start":
+            run += 1
+        elif event == "task_preflight":
+            payload = r.get("payload")
+            out.append({"run": max(0, run - 1), "payload": payload if payload else {}})
+    return out
+
+
+def _unmodelled(rows: list[dict[str, Any]]) -> dict[str, int]:
+    """Events this projection drops, counted rather than silently discarded."""
+    counts: dict[str, int] = {}
+    for r in rows:
+        event = r.get("event")
+        if event and event not in _MODELLED_EVENTS:
+            counts[str(event)] = counts.get(str(event), 0) + 1
+    return counts
+
+
 def _pairing(messages: list[dict[str, Any]]) -> dict[str, Any]:
     """How each tool result got its index — exactly, or by guessing at order.
 
@@ -422,7 +471,11 @@ def load(session: str | Path, *, evidence: bool = True) -> dict[str, Any]:
         "harness": "geode",
         "session_id": session_id,
         "source": str(path),
-        "meta": {"runs": max((m["run"] for m in messages), default=-1) + 1},
+        "meta": {
+            "runs": max((m["run"] for m in messages), default=-1) + 1,
+            "preflight": _preflight(rows),
+            "unmodelled_events": _unmodelled(rows),
+        },
         "pairing": _pairing(messages),
         "messages": messages,
     }

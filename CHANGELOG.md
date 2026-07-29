@@ -60,6 +60,10 @@ functional change.
   already held and echoed back over the protocol but dropped before writing the transcript. Without
   it a reader could only pair calls with results by row order, which crosses when two concurrent
   calls to the same tool return out of order (7 of 23,072 results measured).
+- Transcript replay orders rows by `(ts, seq)`. `seq` restarts at 1 for every `SessionTranscript`
+  instance, so a session id reused across runs yields repeating and decreasing `seq` inside one file
+  (189 of 14,970 decrease, 357 repeat); ordering by `seq` alone interleaved those runs and dropped
+  earlier ones. `s-gw-4556638f96b8` replayed as 22 messages in a single run instead of 42 across 7.
 
 ### Architecture
 

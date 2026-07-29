@@ -506,7 +506,7 @@
   "packages": {
     "core": {
       "python_files": 424,
-      "python_loc": 131450
+      "python_loc": 131503
     },
     "plugins": {
       "python_files": 109,
@@ -514,7 +514,7 @@
     },
     "tests": {
       "python_files": 674,
-      "python_loc": 173944
+      "python_loc": 174128
     }
   },
   "schema_version": 1,
