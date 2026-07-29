@@ -20,5 +20,3 @@ Tests that need to monkeypatch a provider client (``get_anthropic_client``,
 from __future__ import annotations
 
 from ._failover import call_with_failover as call_with_failover
-from ._route import _route_provider as _route_provider
-from .text import call_llm as call_llm

@@ -71,9 +71,9 @@ def cmd_key(args: str) -> bool:
         settings.openai_api_key = value
         _pkg._upsert_env("OPENAI_API_KEY", value)
         try:
-            from core.llm.providers.openai import reset_openai_client
+            from core.llm.adapters.registry import invalidate_provider_clients
 
-            reset_openai_client()
+            invalidate_provider_clients("openai")
         except ImportError:
             pass
         clear_dry_run_opt_in()
@@ -90,9 +90,11 @@ def cmd_key(args: str) -> bool:
         settings.zai_api_key = value
         _pkg._upsert_env("ZAI_API_KEY", value)
         try:
+            from core.llm.adapters.registry import invalidate_provider_clients
             from core.llm.providers.glm import reset_glm_client
 
             reset_glm_client()
+            invalidate_provider_clients("glm")
         except ImportError:
             pass
         clear_dry_run_opt_in()
@@ -111,9 +113,9 @@ def cmd_key(args: str) -> bool:
         settings.openai_api_key = value
         _pkg._upsert_env("OPENAI_API_KEY", value)
         try:
-            from core.llm.providers.openai import reset_openai_client
+            from core.llm.adapters.registry import invalidate_provider_clients
 
-            reset_openai_client()
+            invalidate_provider_clients("openai")
         except ImportError:
             pass
         _pkg._seed_payg_plan_from_key("openai", value)
@@ -122,9 +124,11 @@ def cmd_key(args: str) -> bool:
         settings.zai_api_key = value
         _pkg._upsert_env("ZAI_API_KEY", value)
         try:
+            from core.llm.adapters.registry import invalidate_provider_clients
             from core.llm.providers.glm import reset_glm_client
 
             reset_glm_client()
+            invalidate_provider_clients("glm")
         except ImportError:
             pass
         _pkg._seed_payg_plan_from_key("glm", value)

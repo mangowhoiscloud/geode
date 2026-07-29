@@ -147,10 +147,12 @@ def _try_oauth_refresh(provider_label: str) -> bool:
             from core.auth.codex_cli_oauth import (
                 refresh_codex_cli_token,
             )
-            from core.llm.providers.openai import reset_openai_client
+            from core.llm.adapters.registry import invalidate_provider_clients
 
             if refresh_codex_cli_token(profile):
-                reset_openai_client()
+                # Live path is the adapter cache (the providers/ sync client
+                # this used to reset was deleted 2026-07-29 as dead code).
+                invalidate_provider_clients("openai")
                 return True
     except Exception as exc:
         log.debug("OAuth refresh failed: %s", exc)

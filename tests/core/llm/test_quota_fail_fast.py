@@ -43,7 +43,6 @@ from unittest.mock import MagicMock
 import core.agent.loop as _loop_mod
 import core.agent.loop._model_switching as _switching_mod
 import core.llm.adapters as _adapters_mod
-import core.llm.provider_dispatch as _provider_dispatch_mod
 from core.config._settings import Settings
 from core.llm.errors import BillingError
 
@@ -63,11 +62,6 @@ def test_cross_provider_fallback_symbol_removed() -> None:
         "globally forbidden. Quota exhaustion fires ``quota_exhausted`` "
         "and the user picks the next model via /model."
     )
-
-
-def test_provider_dispatch_has_no_cross_provider_dispatcher() -> None:
-    """Router calls must not have a shared cross-provider fallback entry point."""
-    assert not hasattr(_provider_dispatch_mod, "_cross_provider_dispatch")
 
 
 def test_settings_class_has_no_cross_provider_failover_field() -> None:

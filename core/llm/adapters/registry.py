@@ -186,6 +186,28 @@ def resolve_for(provider: str, source: str) -> LLMAdapter:
     return candidates[0]
 
 
+def invalidate_provider_clients(provider: str | None = None) -> int:
+    """Drop cached SDK clients so a credential change takes effect at once.
+
+    2026-07-29: ``/key`` and ``/login`` previously reset the ``providers/``
+    SYNC client singletons — which the live path stopped using long ago, so a
+    rotated key kept flowing through a stale ADAPTER client until restart.
+    Adapters are registry singletons holding ``LoopAffineClientCache``; this
+    invalidates them (all, or one provider's).
+
+    Returns the number of adapters whose cache was dropped.
+    """
+    dropped = 0
+    for adapter in _REGISTRY.values():
+        if provider is not None and adapter.provider != normalize_registry_provider(provider):
+            continue
+        cache = getattr(adapter, "_clients", None)
+        if cache is not None and hasattr(cache, "invalidate"):
+            cache.invalidate()
+            dropped += 1
+    return dropped
+
+
 def bootstrap_builtins() -> None:
     """Register the 8 built-in adapters.
 
@@ -233,6 +255,7 @@ __all__ = [
     "adapter_health",
     "bootstrap_builtins",
     "get_adapter",
+    "invalidate_provider_clients",
     "list_adapters",
     "register_adapter",
     "resolve_for",

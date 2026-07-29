@@ -581,9 +581,11 @@ def _login_add_interactive(_args: str) -> None:
         )
         # Reset the GLM client so the next call picks up the new endpoint+key
         try:
+            from core.llm.adapters.registry import invalidate_provider_clients
             from core.llm.providers.glm import reset_glm_client
 
             reset_glm_client()
+            invalidate_provider_clients("glm")
         except Exception:  # noqa: S110 — best-effort cache invalidation
             pass
         _pkg._persist_auth_state()

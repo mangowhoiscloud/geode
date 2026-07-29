@@ -95,7 +95,6 @@ _TOML_TO_SETTINGS: dict[str, str] = {
     "llm.retry_max_delay": "llm_retry_max_delay",
     "temperature.agent_loop": "temperature_agent_loop",
     "temperature.reflection": "temperature_reflection",
-    "temperature.commentary": "temperature_commentary",
     "temperature.self_improving_mutation": "temperature_self_improving_mutation",
     "subagent.max_depth": "max_subagent_depth",
     "subagent.max_total": "max_total_subagents",

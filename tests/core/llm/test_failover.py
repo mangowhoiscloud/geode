@@ -9,7 +9,6 @@ import pytest
 from core.config import ANTHROPIC_FALLBACK_CHAIN
 from core.llm.fallback import MAX_RETRIES
 from core.llm.providers.anthropic import retry_with_backoff as _retry_with_backoff
-from core.llm.router import call_llm
 
 
 class TestRetryWithBackoff:
@@ -90,36 +89,6 @@ class TestRetryWithBackoff:
         fn = MagicMock(side_effect=rate_err)
         with pytest.raises(anthropic.RateLimitError):
             _retry_with_backoff(fn, model="primary-model")
-
-
-class TestCallLlmFailover:
-    @patch("core.llm.router.calls.text.get_anthropic_client")
-    def test_call_llm_success(self, mock_client_fn):
-        mock_response = MagicMock()
-        mock_block = MagicMock()
-        mock_block.text = "response text"
-        mock_response.content = [mock_block]
-        mock_client_fn.return_value.messages.create.return_value = mock_response
-
-        result = call_llm("sys", "usr", model="claude-test")
-        assert result == "response text"
-
-    @patch("core.llm.fallback.time.sleep")
-    @patch("core.llm.router.calls.text.get_anthropic_client")
-    def test_call_llm_retries_on_failure(self, mock_client_fn, mock_sleep):
-        rate_err = anthropic.RateLimitError.__new__(anthropic.RateLimitError)
-        rate_err.status_code = 429
-        rate_err.message = "rate limited"
-
-        mock_response = MagicMock()
-        mock_block = MagicMock()
-        mock_block.text = "recovered"
-        mock_response.content = [mock_block]
-
-        mock_client_fn.return_value.messages.create.side_effect = [rate_err, mock_response]
-
-        result = call_llm("sys", "usr", model="claude-test")
-        assert result == "recovered"
 
 
 class TestFallbackModels:

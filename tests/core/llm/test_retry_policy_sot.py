@@ -15,24 +15,6 @@ from __future__ import annotations
 
 from typing import Any
 
-import core.llm.providers.openai as openai_provider
-
-
-def test_module_no_local_retry_constants() -> None:
-    """The local retry constants must not return — they bypass the SOT.
-
-    If a future refactor reintroduces module-local retry knobs, this
-    regression test will fail before the issue ships.
-    """
-    assert not hasattr(openai_provider, "_MAX_RETRIES")
-    assert not hasattr(openai_provider, "_RETRY_BASE_DELAY")
-    assert not hasattr(openai_provider, "_RETRY_MAX_DELAY")
-
-
-# ---------------------------------------------------------------------------
-# P1a — 529 Overloaded retry classification (audit §4 row)
-# ---------------------------------------------------------------------------
-
 
 def test_529_overloaded_class_is_sibling_of_internal_server_error() -> None:
     """``OverloadedError`` (Anthropic status 529) inherits from

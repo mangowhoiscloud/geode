@@ -88,10 +88,6 @@ def hash_rendered_prompt(template: str, **kwargs: Any) -> str:
 # Module-level constants (loaded from .md templates)
 # ---------------------------------------------------------------------------
 
-_commentary = _load_template("commentary")
-COMMENTARY_SYSTEM: str = _commentary["system"]
-COMMENTARY_USER: str = _commentary["user"]
-
 _router = _load_template("router")
 ROUTER_SYSTEM: str = _router["system"]
 AGENTIC_SUFFIX: str = _router["agentic_suffix"]
@@ -103,8 +99,6 @@ AGENTIC_SUFFIX: str = _router["agentic_suffix"]
 PROMPT_VERSIONS: dict[str, str] = {
     "ROUTER_SYSTEM": _hash_prompt(ROUTER_SYSTEM),
     "AGENTIC_SUFFIX": _hash_prompt(AGENTIC_SUFFIX),
-    "COMMENTARY_SYSTEM": _hash_prompt(COMMENTARY_SYSTEM),
-    "COMMENTARY_USER": _hash_prompt(COMMENTARY_USER),
 }
 
 _log.debug("Prompt versions loaded (%d): %s", len(PROMPT_VERSIONS), PROMPT_VERSIONS)
@@ -120,8 +114,6 @@ _log.debug("Prompt versions loaded (%d): %s", len(PROMPT_VERSIONS), PROMPT_VERSI
 #     print(dict(sorted(V.items())))"
 _PINNED_HASHES: dict[str, str] = {
     "AGENTIC_SUFFIX": "0fd3ecbc37ff",
-    "COMMENTARY_SYSTEM": "4dbd522d0d5b",
-    "COMMENTARY_USER": "2024ac4eba69",
     "ROUTER_SYSTEM": "6e86f4dc622c",
 }
 

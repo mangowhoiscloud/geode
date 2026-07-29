@@ -10,7 +10,6 @@ removed 2026-07-29 once its last caller (the legacy agentic adapter) was gone.
 from __future__ import annotations
 
 import logging
-import threading
 from typing import TYPE_CHECKING, Any
 
 from core.config import is_model_allowed
@@ -25,7 +24,6 @@ from core.llm.model_capabilities import (
 )
 
 if TYPE_CHECKING:
-    import anthropic
     import httpx
     from anthropic.types import TextBlockParam
 
@@ -147,8 +145,6 @@ def _build_httpx_limits() -> httpx.Limits:
 # ---------------------------------------------------------------------------
 # Singleton Anthropic clients — reuse connection pool across all calls
 # ---------------------------------------------------------------------------
-_sync_client: anthropic.Anthropic | None = None
-_sync_client_lock = threading.Lock()
 
 
 # ---------------------------------------------------------------------------
@@ -330,35 +326,6 @@ def _resolve_anthropic_key() -> str:
     from core.llm.credentials import resolve_provider_key
 
     return resolve_provider_key("anthropic", settings.anthropic_api_key)
-
-
-def get_anthropic_client() -> anthropic.Anthropic:
-    """Return a singleton sync Anthropic client with configured connection pool.
-
-    Thread-safe. The client is created once and reused for all sync LLM calls,
-    ensuring httpx connection pooling works effectively across calls.
-    SDK-level retries are disabled (max_retries=0) to avoid conflict with
-    app-level retry logic in ``_retry_with_backoff()``.
-    """
-    import anthropic
-    import httpx
-
-    global _sync_client
-    if _sync_client is not None:
-        return _sync_client
-    with _sync_client_lock:
-        if _sync_client is None:
-            http_client = httpx.Client(
-                limits=_build_httpx_limits(),
-                timeout=_build_httpx_timeout(),
-                event_hooks={"response": [_sync_response_hook]},
-            )
-            _sync_client = anthropic.Anthropic(
-                api_key=_resolve_anthropic_key(),
-                max_retries=0,  # app-level retry handles this
-                http_client=http_client,
-            )
-        return _sync_client
 
 
 def system_with_cache(system: str) -> list[TextBlockParam]:

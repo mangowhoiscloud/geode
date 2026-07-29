@@ -45,20 +45,6 @@ def test_codex_oauth_builder_pins_max_retries_zero() -> None:
     )
 
 
-def test_legacy_openai_provider_singleton_pins_max_retries_zero() -> None:
-    """``core/llm/providers/openai.py`` singleton is still consumed by
-    ``core/llm/provider_dispatch.py`` — same spinning risk if SDK retry
-    compounds with app retry. (2026-07-29: the previously-named
-    ``OpenAIAdapter`` / ``models.py`` consumers no longer exist.)"""
-    src = (
-        Path(__file__).resolve().parents[3] / "core" / "llm" / "providers" / "openai.py"
-    ).read_text(encoding="utf-8")
-    assert "max_retries=0" in src, (
-        "Legacy openai provider singleton lost max_retries=0 — spinning "
-        "regresses for paperclip / llm_extract_learning callers."
-    )
-
-
 def test_legacy_codex_provider_singleton_pins_max_retries_zero() -> None:
     src = (
         Path(__file__).resolve().parents[3] / "core" / "llm" / "providers" / "codex.py"

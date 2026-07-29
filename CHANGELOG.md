@@ -47,6 +47,33 @@ functional change.
 
 ## [Unreleased]
 
+### Removed
+
+- **The synchronous LLM call stack is gone — the runtime is async-only.** Its
+  single entry point (`_show_commentary`) had no caller, so the whole chain
+  below it was dead: `generate_commentary` → `call_llm` → `provider_dispatch`
+  → the `providers/` **sync SDK clients**. Deleted with it: the commentary
+  prompt template and its integrity pins, the `_route_provider` helper that
+  only `call_llm` used, `core/llm/providers/openai.py` (fully dead once the
+  sync client went), GLM's sync client twin, and the now-dead
+  `temperature_commentary` setting. Anthropic/OpenAI/GLM traffic runs through
+  `core/llm/adapters`, which own their async clients.
+
+### Fixed
+
+- **Credential changes now invalidate the clients that actually serve
+  traffic.** `/key` and `/login` reset the `providers/` sync singletons — a
+  surface the live path stopped using long ago — so a rotated key kept
+  flowing through a stale adapter client until restart. Both now call
+  `adapters.registry.invalidate_provider_clients`, and the codex-cli token
+  refresh in the failover path does the same.
+
+- **A lapsed removal pledge is no longer false.** The seed-generation picker
+  promised its legacy `~/.geode/seed_generation.toml` fallback would be
+  "removed in v1.0.0"; six patches later the file is still the only source of
+  a live per-role configuration. The warning now states the real position:
+  removal is deferred until operators migrate.
+
 ## [1.0.6] - 2026-07-29
 
 > Legacy-removal recheck: orphaned async provider clients pruned, and a lazy-import liveness guard added after a near-miss where deleting an apparent orphan would have broken every Anthropic subscription call at runtime (ruff, mypy, and the unit suite all missed it).
