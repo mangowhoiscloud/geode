@@ -69,7 +69,6 @@ from core.cli.welcome import _suppress_noisy_warnings as _suppress_noisy_warning
 from core.cli.welcome import _welcome_screen as _welcome_screen
 from core.hooks import HookEvent, HookSystem
 from core.hooks.dispatch import fire_hook
-from core.llm.commentary import generate_commentary
 
 # PR-CLEANUP-D2 (2026-06-10) — campaign CLI defaults come from the campaign
 # module (they were re-hardcoded literals here, with help text asserting the
@@ -84,7 +83,6 @@ from core.self_improving.campaign import (
     DEFAULT_MAX_PROPOSE_ATTEMPTS as _CAMPAIGN_DEFAULT_MAX_PROPOSE_ATTEMPTS,
 )
 from core.ui.console import console
-from core.ui.status import GeodeStatus
 
 log = logging.getLogger(__name__)
 
@@ -95,23 +93,6 @@ _hooks_ctx: HookSystem | None = None
 def _fire_hook(event: HookEvent, data: dict[str, Any]) -> None:
     """Fire a hook event if HookSystem is wired (or no-op)."""
     fire_hook(_hooks_ctx, event, data)
-
-
-def _show_commentary(
-    user_text: str, action: str, context: dict[str, Any], *, is_offline: bool
-) -> None:
-    """Generate and display LLM commentary after tool call results."""
-    if is_offline:
-        return
-    from core.config import settings
-
-    with GeodeStatus("Generating response...", model=settings.model) as status:
-        text = generate_commentary(user_query=user_text, action=action, context=context)
-        status.stop("response" if text else "response (skipped)")
-    if text:
-        console.print()
-        console.print(f"  {text}")
-        console.print()
 
 
 def _handle_memory_action(intent: Any, user_text: str, is_offline: bool) -> None:

@@ -158,7 +158,7 @@ def cmd_login(args: str) -> None:
         try:
             from core.auth.auth_toml import auth_toml_path, load_auth_toml
             from core.auth.codex_cli_oauth import invalidate_cache as invalidate_codex_cli_cache
-            from core.llm.providers.codex import reset_codex_client
+            from core.llm.adapters.registry import invalidate_provider_clients
             from core.llm.strategies.plan_registry import get_plan_registry
             from core.mcp.google_workspace_client import reset_google_workspace_client
             from core.wiring.container import ensure_profile_store
@@ -169,7 +169,9 @@ def cmd_login(args: str) -> None:
             profiles_before = {p.name for p in store.list_all()}
             ok = load_auth_toml()
             invalidate_codex_cli_cache()
-            reset_codex_client()
+            # Live path is the adapter cache — the providers/ sync singletons
+            # these resets target no longer serve traffic (2026-07-29).
+            invalidate_provider_clients("openai")
             reset_google_workspace_client()
             plans_after = {p.id for p in registry.list_all()}
             profiles_after = {p.name for p in store.list_all()}
@@ -581,9 +583,11 @@ def _login_add_interactive(_args: str) -> None:
         )
         # Reset the GLM client so the next call picks up the new endpoint+key
         try:
+            from core.llm.adapters.registry import invalidate_provider_clients
             from core.llm.providers.glm import reset_glm_client
 
             reset_glm_client()
+            invalidate_provider_clients("glm")
         except Exception:  # noqa: S110 — best-effort cache invalidation
             pass
         _pkg._persist_auth_state()
@@ -698,9 +702,9 @@ def _login_oauth(target: str) -> None:
                 import contextlib
 
                 with contextlib.suppress(Exception):
-                    from core.llm.providers.codex import reset_codex_client
+                    from core.llm.adapters.registry import invalidate_provider_clients
 
-                    reset_codex_client()
+                    invalidate_provider_clients("openai")
                 clear_dry_run_opt_in()
                 _pkg.console.print(
                     "  [success]ChatGPT subscription OAuth registered.[/success]  "
@@ -976,9 +980,11 @@ def _login_set_key(rest: str) -> None:
             )
         )
     if plan.provider == "glm-coding":
+        from core.llm.adapters.registry import invalidate_provider_clients
         from core.llm.providers.glm import reset_glm_client
 
         reset_glm_client()
+        invalidate_provider_clients("glm")
     _pkg._persist_auth_state()
     clear_dry_run_opt_in()
     _pkg.console.print(

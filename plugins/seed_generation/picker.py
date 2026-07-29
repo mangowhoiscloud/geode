@@ -254,7 +254,10 @@ def load_user_overrides(
                 "seed-generation picker: reading legacy %s. Migrate per-role "
                 "overrides to ~/.geode/config.toml under [seed_generation.role.<role>] "
                 "(see docs/plans/2026-05-23-llm-adapter-abstraction.md). "
-                "The legacy file will be removed in v1.0.0.",
+                "Removal is deferred until operators have migrated — the "
+                "original 'removed in v1.0.0' pledge lapsed unmet (2026-07-29 "
+                "audit); it will not be dropped while this fallback is the "
+                "only source of a live configuration.",
                 GLOBAL_SEED_PIPELINE_TOML,
             )
             _LEGACY_OVERRIDE_WARNED = True

@@ -27,14 +27,12 @@ Three contracts pinned here:
 
 from __future__ import annotations
 
-import inspect
 from pathlib import Path
+from unittest.mock import patch
 
-import core.llm.router as _router_mod
 import pytest
 from core.auth.profiles import AuthProfile, CredentialType
 from core.llm.registry import equivalent_providers
-from core.llm.router import calls as _calls_mod
 from core.llm.strategies.plan_registry import resolve_routing
 from core.llm.strategies.plans import PLAN_KIND_PRIORITY, Plan, PlanKind
 
@@ -210,78 +208,27 @@ def test_forced_login_method_default_keeps_subscription_priority(
 # ---------------------------------------------------------------------------
 
 
-def test_router_route_provider_helper_exists() -> None:
-    """``core/llm/router.py`` must define ``_route_provider`` and use it
-    in every call_llm* entry. Pre-v0.52.4 the call sites used the static
-    ``_resolve_provider`` directly, which bypassed PlanRegistry entirely.
+def test_failover_enforces_model_allowlist_per_model() -> None:
+    """The live async entry consults the routing policy for EVERY model.
+
+    2026-07-29: ``call_llm`` / ``_route_provider`` were deleted with the sync
+    stack. This pins behaviour (not a source-string grep — the first
+    replacement did exactly that and passed vacuously, Codex review): a model
+    the policy disallows must never reach the call function.
     """
-    import importlib
-    import pkgutil
+    import asyncio
 
-    # _route_provider is defined in the leaf sub-module ``_route.py``.
-    from core.llm.router.calls import _route as _route_mod
+    from core.llm.router.calls import _failover as _failover_mod
 
-    route_src = inspect.getsource(_route_mod)
-    assert "def _route_provider(" in route_src, (
-        "_route_provider helper missing — without it the policy is invisible to actual LLM calls."
-    )
+    attempted: list[str] = []
 
-    # Each call_llm* entry lives in its own leaf sub-module. Aggregate their
-    # sources so the call-site count stays meaningful after the package split.
-    aggregated_src = ""
-    for mod_info in pkgutil.iter_modules(_calls_mod.__path__, prefix="core.llm.router.calls."):
-        mod = importlib.import_module(mod_info.name)
-        aggregated_src += inspect.getsource(mod)
+    async def _call(model: str) -> str:
+        attempted.append(model)
+        return "ok"
 
-    # The surviving provider-resolving entry (``call_llm`` in ``text.py``)
-    # must use the helper. ``call_with_failover`` resolves per-model inside
-    # its own loop, so the count is the live ``call_llm*`` surface, not a
-    # fixed 5-module tally (PR-LLM-STACK-A1 deleted the json/parsed/streaming/
-    # tools call modules).
-    assert aggregated_src.count("_route_provider(target_model)") >= 1, (
-        f"expected ≥1 call site using _route_provider; got "
-        f"{aggregated_src.count('_route_provider(target_model)')}. "
-        "Some call_llm* path still uses the static _resolve_provider."
-    )
-    # And the static helper must NOT be called directly with target_model
-    # in a router function body (the only allowed direct uses are inside
-    # _route_provider's own fallback path).
-    static_calls = aggregated_src.count("_resolve_provider(target_model)")
-    assert static_calls == 0, (
-        f"{static_calls} call sites still use _resolve_provider(target_model) "
-        f"directly — should go through _route_provider for plan-awareness"
-    )
+    with patch.object(_failover_mod, "is_model_allowed", side_effect=lambda m: m != "blocked"):
+        result, used = asyncio.run(_failover_mod.call_with_failover(["blocked", "allowed"], _call))
 
-
-def test_route_provider_falls_back_when_resolve_routing_returns_none(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """When PlanRegistry has no plan for the model, ``_route_provider``
-    must fall back to the static ``_resolve_provider`` so legacy env-var
-    users (no /login add) still route correctly."""
-    monkeypatch.setattr("core.llm.strategies.plan_registry.resolve_routing", lambda _model: None)
-    monkeypatch.setattr("core.llm.router.calls._route._resolve_provider", lambda _m: "anthropic")
-    assert _router_mod._route_provider("claude-opus-4-7") == "anthropic"
-
-
-def test_route_provider_returns_routed_provider_when_plan_found(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """When resolve_routing returns a Plan, ``_route_provider`` must
-    return the Plan's provider — not the static map."""
-    fake_plan = Plan(
-        id="openai-codex-geode",
-        provider="openai-codex",
-        kind=PlanKind.OAUTH_BORROWED,
-        display_name="OpenAI Codex",
-        base_url="https://chatgpt.com/backend-api/codex",
-    )
-    fake_target = type(
-        "T",
-        (),
-        {"plan": fake_plan, "profile": None, "base_url": fake_plan.base_url},
-    )()
-    monkeypatch.setattr("core.llm.strategies.plan_registry.resolve_routing", lambda _m: fake_target)
-    # Static fallback would have returned "openai"; the Plan-aware path
-    # must override to "openai-codex".
-    assert _router_mod._route_provider("gpt-5.4") == "openai-codex"
+    assert attempted == ["allowed"], "policy-disallowed model must not be called"
+    assert used == "allowed"
+    assert result == "ok"

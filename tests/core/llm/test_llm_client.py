@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import re
-from unittest.mock import MagicMock, patch
 
 from core.config import ANTHROPIC_BUDGET, ANTHROPIC_PRIMARY, OPENAI_PRIMARY
 from core.llm.router import (
@@ -194,49 +193,3 @@ class TestLLMUsageEdgeCases:
 
 class TestProviderRouting:
     """Verify call_llm routes to the correct SDK based on model."""
-
-    def test_call_llm_routes_to_openai_for_glm(self):
-        """call_llm should use OpenAI-compatible SDK when model is glm-*."""
-        mock_choice = MagicMock()
-        mock_choice.message.content = "glm text response"
-
-        mock_response = MagicMock()
-        mock_response.choices = [mock_choice]
-        mock_response.usage = MagicMock(prompt_tokens=10, completion_tokens=5)
-
-        mock_glm_client = MagicMock()
-        mock_glm_client.chat.completions.create.return_value = mock_response
-
-        with patch("core.llm.router.calls.text._get_provider_client", return_value=mock_glm_client):
-            from core.llm.router import call_llm
-
-            result = call_llm("system", "user", model="glm-5")
-
-            assert result == "glm text response"
-            mock_glm_client.chat.completions.create.assert_called_once()
-
-    def test_call_llm_routes_to_anthropic_for_claude(self):
-        """call_llm should use Anthropic SDK when model is claude-*."""
-        mock_block = MagicMock()
-        mock_block.text = "anthropic response"
-
-        mock_response = MagicMock()
-        mock_response.content = [mock_block]
-        mock_response.usage = MagicMock(
-            input_tokens=10,
-            output_tokens=5,
-            cache_creation_input_tokens=0,
-            cache_read_input_tokens=0,
-        )
-
-        with patch("core.llm.router.calls.text.get_anthropic_client") as mock_get:
-            mock_client = MagicMock()
-            mock_client.messages.create.return_value = mock_response
-            mock_get.return_value = mock_client
-
-            from core.llm.router import call_llm
-
-            result = call_llm("system", "user", model="claude-opus-4-6")
-
-            assert result == "anthropic response"
-            mock_client.messages.create.assert_called_once()

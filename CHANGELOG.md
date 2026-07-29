@@ -47,6 +47,42 @@ functional change.
 
 ## [Unreleased]
 
+### Removed
+
+- **The synchronous LLM call stack is gone — LLM completion is async-only.** Its
+  single entry point (`_show_commentary`) had no caller, so the whole chain
+  below it was dead: `generate_commentary` → `call_llm` → `provider_dispatch`
+  → the `providers/` **sync SDK clients**. Deleted with it: the commentary
+  prompt template and its integrity pins, the `_route_provider` helper that
+  only `call_llm` used, `core/llm/providers/openai.py` (fully dead once the
+  sync client went), GLM's sync client twin, and the now-dead
+  `temperature_commentary` setting. A second pass removed what that exposed:
+  `router/_usage.py` (the router re-exports the token tracker instead), the
+  Anthropic sync helpers left behind (`_sync_response_hook`,
+  `_resolve_anthropic_key`, `system_with_cache`, the sync `retry_with_backoff`),
+  and Codex's sync client twin. Anthropic/OpenAI/GLM traffic runs through
+  `core/llm/adapters`, which own their async clients; the retry/fallback
+  invariants moved to `retry_with_backoff_async`. Scope note: this covers the
+  LLM completion stack — tools that wrap a third-party sync SDK in
+  `asyncio.to_thread` (document ingest, the prompt-dump token probe) are a
+  separate layer and unchanged.
+
+### Fixed
+
+- **Credential changes now invalidate the clients that actually serve
+  traffic.** Every `/key` and `/login` path reset the `providers/` sync
+  singletons — a surface the live path stopped using long ago — so a rotated
+  key kept flowing through a stale adapter client until restart. All seven
+  sites (including `/key <sk-ant-…>`, GLM coding-plan `set-key`, `/login
+  refresh`, OpenAI OAuth login, and the codex-cli refresh in the failover
+  path) now call `adapters.registry.invalidate_provider_clients`.
+
+- **A lapsed removal pledge is no longer false.** The seed-generation picker
+  promised its legacy `~/.geode/seed_generation.toml` fallback would be
+  "removed in v1.0.0"; six patches later the file is still the only source of
+  a live per-role configuration. The warning now states the real position:
+  removal is deferred until operators migrate.
+
 ## [1.0.6] - 2026-07-29
 
 > Legacy-removal recheck: orphaned async provider clients pruned, and a lazy-import liveness guard added after a near-miss where deleting an apparent orphan would have broken every Anthropic subscription call at runtime (ruff, mypy, and the unit suite all missed it).

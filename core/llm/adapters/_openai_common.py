@@ -369,7 +369,7 @@ def build_async_openai_client(api_key: str, *, base_url: str | None = None) -> o
 def build_async_codex_client(api_key: str) -> openai.AsyncOpenAI:
     """Construct a fresh ``AsyncOpenAI`` bound to the Codex OAuth endpoint.
 
-    Mirrors ``core.llm.providers.codex._get_async_codex_client`` (which uses a
+    Mirrors the loop-affine client caching used across adapters (which uses a
     module-level singleton — the adapter must NOT reuse it, so we replicate
     the header + base_url plumbing here). The ``originator: codex_cli_rs``
     header and ``ChatGPT-Account-ID`` (extracted from the JWT) are mandatory

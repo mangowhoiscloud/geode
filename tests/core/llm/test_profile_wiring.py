@@ -156,33 +156,44 @@ class TestNotifyFailure:
 
 
 class TestFallbackIntegration:
-    """Verify _notify_success/_notify_failure are called from retry_with_backoff_generic."""
+    """Verify _notify_success/_notify_failure fire from the async retry
+    (the sync twin was deleted 2026-07-29 with the sync LLM stack)."""
 
     def test_success_path_calls_notify(self):
-        from core.llm.fallback import retry_with_backoff_generic
+        import asyncio
+
+        from core.llm.fallback import retry_with_backoff_generic_async
 
         calls: list[str] = []
 
         with patch(
             "core.llm.fallback._notify_success", side_effect=lambda p: calls.append(f"ok:{p}")
         ):
-            result = retry_with_backoff_generic(
-                lambda model: "response",
-                model="test-model",
-                fallback_models=[],
-                retryable_errors=(ConnectionError,),
-                provider_label="openai",
+
+            async def _ok(*, model: str) -> str:
+                return "response"
+
+            result = asyncio.run(
+                retry_with_backoff_generic_async(
+                    _ok,
+                    model="test-model",
+                    fallback_models=[],
+                    retryable_errors=(ConnectionError,),
+                    provider_label="openai",
+                )
             )
 
         assert result == "response"
         assert calls == ["ok:openai"]
 
     def test_failure_path_calls_notify(self):
-        from core.llm.fallback import retry_with_backoff_generic
+        import asyncio
+
+        from core.llm.fallback import retry_with_backoff_generic_async
 
         calls: list[str] = []
 
-        def failing_fn(model: str) -> None:
+        async def failing_fn(*, model: str) -> None:
             raise ConnectionError("timeout")
 
         with patch(
@@ -192,15 +203,17 @@ class TestFallbackIntegration:
             import contextlib
 
             with contextlib.suppress(ConnectionError):
-                retry_with_backoff_generic(
-                    failing_fn,
-                    model="test-model",
-                    fallback_models=[],
-                    retryable_errors=(ConnectionError,),
-                    provider_label="LLM",
-                    max_retries=1,
-                    retry_base_delay=0.0,
-                    retry_max_delay=0.0,
+                asyncio.run(
+                    retry_with_backoff_generic_async(
+                        failing_fn,
+                        model="test-model",
+                        fallback_models=[],
+                        retryable_errors=(ConnectionError,),
+                        provider_label="LLM",
+                        max_retries=1,
+                        retry_base_delay=0.0,
+                        retry_max_delay=0.0,
+                    )
                 )
 
         assert calls == ["fail:anthropic"]  # "LLM" maps to "anthropic"
