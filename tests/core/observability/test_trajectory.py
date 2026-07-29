@@ -172,6 +172,50 @@ def test_preflight_and_unmodelled_are_reported_not_dropped():
     assert _unmodelled(rows) == {"gui_step": 1, "handoff_triggered": 1}
 
 
+def test_capability_graph_digest_resolves_against_the_first_emission():
+    """The writer emits the graph once per run and then references its digest —
+    43.4 MB across only 19 distinct values before. A later row carrying only the
+    hash must still read back the full graph."""
+    graph = {"provider": "anthropic", "tools": ["Read"]}
+    rows = [
+        ev(1, "session_start"),
+        {
+            "ts": 1.1,
+            "seq": 2,
+            "event": "task_preflight",
+            "payload": {
+                "capability_graph_sha256": "d1",
+                "capability_graph": graph,
+                "preflight": {"turn": 1},
+            },
+        },
+        {
+            "ts": 1.2,
+            "seq": 3,
+            "event": "task_preflight",
+            "payload": {"capability_graph_sha256": "d1", "preflight": {"turn": 2}},
+        },
+    ]
+    out = _preflight(rows)
+    assert [e["payload"]["capability_graph"] for e in out] == [graph, graph]
+    assert [e["payload"]["preflight"]["turn"] for e in out] == [1, 2]
+
+
+def test_unknown_capability_graph_digest_is_left_unresolved():
+    """A digest whose full emission was rotated away must not silently resolve
+    to some other run's graph."""
+    rows = [
+        ev(1, "session_start"),
+        {
+            "ts": 1.1,
+            "seq": 2,
+            "event": "task_preflight",
+            "payload": {"capability_graph_sha256": "gone", "preflight": {}},
+        },
+    ]
+    assert "capability_graph" not in _preflight(rows)[0]["payload"]
+
+
 def test_resolve_rejects_unknown_session():
     with pytest.raises(FileNotFoundError):
         resolve("no-such-session-id-exists")

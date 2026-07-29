@@ -14,6 +14,8 @@ Supports:
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import logging
 import os
 from collections.abc import Awaitable, Callable
@@ -484,6 +486,7 @@ class AgenticLoop:
             self._tools = [t for t in self._tools if t.get("name") in allowed_tool_names]
         self._capability_graph: CapabilityGraph | None = None
         self._task_preflight: TaskPreflight | None = None
+        self._capability_graph_digest: str = ""
         self._last_llm_error: str | None = None  # last error type for user message
         # Per-loop structured-output JSON schema (None = free-form text);
         # threaded into every _call_llm's AdapterCallRequest.response_schema.
@@ -1829,14 +1832,26 @@ class AgenticLoop:
                     preflight=self._task_preflight,
                 )
             if self._transcript is not None:
+                summary = graph_summary(capability_graph)
+                digest = hashlib.sha256(
+                    json.dumps(summary, sort_keys=True, ensure_ascii=False, default=str).encode()
+                ).hexdigest()
+                # The graph is invariant across a run while preflight varies per
+                # turn, so re-serialising it every turn cost 43.4 MB across only
+                # 19 distinct values. Emit it once, then reference the digest;
+                # readers resolve a digest against the last full emission.
+                payload: dict[str, Any] = {
+                    "capability_graph_sha256": digest,
+                    "preflight": self._task_preflight,
+                }
+                if digest != self._capability_graph_digest:
+                    payload["capability_graph"] = summary
+                    self._capability_graph_digest = digest
                 self._transcript.record_lifecycle_event(
                     event="task_preflight",
                     component="agentic_loop",
                     level="info",
-                    payload={
-                        "capability_graph": graph_summary(capability_graph),
-                        "preflight": self._task_preflight,
-                    },
+                    payload=payload,
                     action="agent.preflight",
                     entity_type="session",
                     entity_id=self._session_id,

@@ -387,15 +387,26 @@ def _preflight(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     is not conversation, so it stays out of the message list, but dropping it
     loses the answer to "what was this run configured to do".
     """
-    out = []
+    out: list[dict[str, Any]] = []
+    graphs: dict[str, Any] = {}
     run = 0
     for r in rows:
         event = r.get("event")
         if event == "session_start":
             run += 1
         elif event == "task_preflight":
-            payload = r.get("payload")
-            out.append({"run": max(0, run - 1), "payload": payload if payload else {}})
+            payload = dict(r.get("payload") or {})
+            # The writer emits the capability graph once and then references it
+            # by digest, so a later row carries only the hash. Resolving it here
+            # keeps every entry self-contained without storing 43.4 MB of
+            # repeated graph across 19 distinct values.
+            digest = payload.get("capability_graph_sha256")
+            if "capability_graph" in payload:
+                if digest:
+                    graphs[str(digest)] = payload["capability_graph"]
+            elif digest and str(digest) in graphs:
+                payload["capability_graph"] = graphs[str(digest)]
+            out.append({"run": max(0, run - 1), "payload": payload})
     return out
 
 

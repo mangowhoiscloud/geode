@@ -65,6 +65,14 @@ functional change.
   (189 of 14,970 decrease, 357 repeat); ordering by `seq` alone interleaved those runs and dropped
   earlier ones. `s-gw-4556638f96b8` replayed as 22 messages in a single run instead of 42 across 7.
 
+### Changed
+
+- `task_preflight` transcript rows reference the capability graph by `capability_graph_sha256`
+  instead of re-serialising it every turn. The graph is invariant across a run while the preflight
+  body is not: 185,700 rows carried 43.4 MB of graph across only 19 distinct values (33% of
+  preflight bytes, 10.6% of all transcript storage). The full graph is still emitted on first use
+  per run and `EvidenceLedger` keeps recording it in full, so judgment-grade evidence is unchanged.
+
 ### Architecture
 
 - A transcript file accumulates every run that reused its `session_id`, while `sessions.db:messages`
