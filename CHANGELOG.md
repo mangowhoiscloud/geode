@@ -56,17 +56,23 @@ functional change.
   prompt template and its integrity pins, the `_route_provider` helper that
   only `call_llm` used, `core/llm/providers/openai.py` (fully dead once the
   sync client went), GLM's sync client twin, and the now-dead
-  `temperature_commentary` setting. Anthropic/OpenAI/GLM traffic runs through
-  `core/llm/adapters`, which own their async clients.
+  `temperature_commentary` setting. A second pass removed what that exposed:
+  `router/_usage.py` (the router re-exports the token tracker instead), the
+  Anthropic sync helpers left behind (`_sync_response_hook`,
+  `_resolve_anthropic_key`, `system_with_cache`, the sync `retry_with_backoff`),
+  and Codex's sync client twin. Anthropic/OpenAI/GLM traffic runs through
+  `core/llm/adapters`, which own their async clients; the retry/fallback
+  invariants moved to `retry_with_backoff_async`.
 
 ### Fixed
 
 - **Credential changes now invalidate the clients that actually serve
-  traffic.** `/key` and `/login` reset the `providers/` sync singletons — a
-  surface the live path stopped using long ago — so a rotated key kept
-  flowing through a stale adapter client until restart. Both now call
-  `adapters.registry.invalidate_provider_clients`, and the codex-cli token
-  refresh in the failover path does the same.
+  traffic.** Every `/key` and `/login` path reset the `providers/` sync
+  singletons — a surface the live path stopped using long ago — so a rotated
+  key kept flowing through a stale adapter client until restart. All seven
+  sites (including `/key <sk-ant-…>`, GLM coding-plan `set-key`, `/login
+  refresh`, OpenAI OAuth login, and the codex-cli refresh in the failover
+  path) now call `adapters.registry.invalidate_provider_clients`.
 
 - **A lapsed removal pledge is no longer false.** The seed-generation picker
   promised its legacy `~/.geode/seed_generation.toml` fallback would be

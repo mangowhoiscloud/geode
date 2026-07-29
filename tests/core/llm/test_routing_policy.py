@@ -28,6 +28,7 @@ Three contracts pinned here:
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from core.auth.profiles import AuthProfile, CredentialType
@@ -207,18 +208,27 @@ def test_forced_login_method_default_keeps_subscription_priority(
 # ---------------------------------------------------------------------------
 
 
-def test_failover_resolves_routing_per_model() -> None:
-    """Plan-aware routing survives the 2026-07-29 sync-path removal.
+def test_failover_enforces_model_allowlist_per_model() -> None:
+    """The live async entry consults the routing policy for EVERY model.
 
-    ``call_llm`` / ``_route_provider`` were deleted with the sync stack; the
-    live async entry (``call_with_failover``) resolves routing per model
-    inside its own loop, so the policy stays visible to real LLM calls.
+    2026-07-29: ``call_llm`` / ``_route_provider`` were deleted with the sync
+    stack. This pins behaviour (not a source-string grep — the first
+    replacement did exactly that and passed vacuously, Codex review): a model
+    the policy disallows must never reach the call function.
     """
-    import inspect as _inspect
+    import asyncio
 
     from core.llm.router.calls import _failover as _failover_mod
 
-    src = _inspect.getsource(_failover_mod)
-    assert "is_model_allowed" in src or "resolve_routing" in src, (
-        "failover must consult the routing policy per model"
-    )
+    attempted: list[str] = []
+
+    async def _call(model: str) -> str:
+        attempted.append(model)
+        return "ok"
+
+    with patch.object(_failover_mod, "is_model_allowed", side_effect=lambda m: m != "blocked"):
+        result, used = asyncio.run(_failover_mod.call_with_failover(["blocked", "allowed"], _call))
+
+    assert attempted == ["allowed"], "policy-disallowed model must not be called"
+    assert used == "allowed"
+    assert result == "ok"

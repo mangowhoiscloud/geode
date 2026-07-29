@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING, Any
 
 from core.config import is_model_allowed
 from core.llm.fallback import (
-    retry_with_backoff_generic,
     retry_with_backoff_generic_async,
 )
 from core.llm.model_capabilities import (
@@ -25,7 +24,6 @@ from core.llm.model_capabilities import (
 
 if TYPE_CHECKING:
     import httpx
-    from anthropic.types import TextBlockParam
 
     # v0.88.0 — declare the lazy module-level tuples so mypy / IDEs see a
     # concrete type for ``except RETRYABLE_ERRORS:`` etc.  Runtime values
@@ -241,11 +239,6 @@ def _feed_banner_from_anthropic_response(response: object) -> None:
         log.debug("anthropic quota banner feed failed", exc_info=True)
 
 
-def _sync_response_hook(response: object) -> None:
-    """httpx sync event hook — delegates to the banner feeder."""
-    _feed_banner_from_anthropic_response(response)
-
-
 async def _async_response_hook(response: object) -> None:
     """httpx async event hook — delegates to the banner feeder.
 
@@ -318,32 +311,6 @@ def _on_retry_journal_emit(
 # ANTHROPIC_FALLBACK_CHAIN, also re-exported to router/calls/streaming.py) was
 # replaced by function-local ``from core.config import ANTHROPIC_FALLBACK_CHAIN``
 # reads at each consumer so a routing.toml reload is seen without a restart.
-
-
-def _resolve_anthropic_key() -> str:
-    """Resolve Anthropic API key from ProfileRotator (OAuth preferred) or settings."""
-    from core.config import settings
-    from core.llm.credentials import resolve_provider_key
-
-    return resolve_provider_key("anthropic", settings.anthropic_api_key)
-
-
-def system_with_cache(system: str) -> list[TextBlockParam]:
-    """Convert a system prompt string to content block format with cache_control.
-
-    Enables Anthropic Prompt Caching so that repeated calls sharing the same
-    system prompt (e.g., 4 analysts or 3 evaluators) get cache hits and
-    reduced latency/cost.
-    """
-    from anthropic.types import TextBlockParam as _TextBlockParam
-
-    return [
-        _TextBlockParam(
-            type="text",
-            text=system,
-            cache_control={"type": "ephemeral"},
-        )
-    ]
 
 
 def _static_system_cache_control() -> dict[str, str]:
@@ -571,52 +538,6 @@ def apply_messages_cache_control(
         out[i] = msg
 
     return out
-
-
-def retry_with_backoff(
-    fn: Any,
-    *,
-    model: str,
-    max_retries: int | None = None,
-) -> Any:
-    """Execute fn with retry + exponential backoff + model fallback (Anthropic).
-
-    Delegates to ``retry_with_backoff_generic`` with Anthropic-specific config.
-    """
-    import anthropic
-
-    from core.config import ANTHROPIC_FALLBACK_CHAIN  # H11-tail: live read
-    from core.llm.fallback import MAX_RETRIES as _DEFAULT_MAX_RETRIES
-
-    _max_retries = max_retries if max_retries is not None else _DEFAULT_MAX_RETRIES
-
-    candidates = [model] + [m for m in ANTHROPIC_FALLBACK_CHAIN if m != model]
-    models_to_try = [m for m in candidates if is_model_allowed(m)]
-    if not models_to_try:
-        raise RuntimeError(f"All models blocked by policy: {candidates}")
-
-    # v0.88.0 — same-module ``__getattr__`` is bypassed for unqualified
-    # references, so we resolve ``RETRYABLE_ERRORS`` via direct attribute
-    # lookup on the module object (which DOES go through ``__getattr__``).
-    import sys
-
-    _retryable_errors = sys.modules[__name__].RETRYABLE_ERRORS
-
-    return retry_with_backoff_generic(
-        fn,
-        model=models_to_try[0],
-        fallback_models=models_to_try[1:],
-        retryable_errors=_retryable_errors,
-        bad_request_error=anthropic.BadRequestError,
-        billing_message=(
-            "Anthropic API credit balance too low. "
-            "Visit https://console.anthropic.com/settings/billing to add credits, "
-            "or use --dry-run mode."
-        ),
-        max_retries=_max_retries,
-        provider_label="LLM",
-        on_retry=_on_retry_journal_emit,
-    )
 
 
 async def retry_with_backoff_async(

@@ -33,9 +33,8 @@ log = logging.getLogger(__name__)
 # consumer. Removed; live values come from ``core.config`` via function-local
 # imports so a routing.toml reload is seen without a restart.
 
-_codex_client: Any = None
-_codex_client_fingerprint = ""
-_codex_lock = threading.Lock()
+# Async client only — the sync twin was deleted 2026-07-29 with the rest of
+# the sync LLM stack (runtime is async-only).
 _async_codex_client: Any = None
 _async_codex_client_fingerprint = ""
 _async_codex_lock = threading.Lock()
@@ -158,34 +157,6 @@ def _resolve_codex_token() -> str:
     return resolved.token if resolved else ""
 
 
-def _get_codex_client() -> Any:
-    """Lazy import and return cached Codex client (thread-safe)."""
-    global _codex_client, _codex_client_fingerprint
-    resolved = _resolve_codex_token_info(force_refresh=True)
-    if not resolved:
-        log.warning("Codex OAuth token not available")
-        return None
-    with _codex_lock:
-        if _codex_client is not None and _codex_client_fingerprint == resolved.fingerprint:
-            return _codex_client
-
-        import openai
-
-        _codex_client = openai.OpenAI(
-            api_key=resolved.token,
-            base_url=CODEX_BASE_URL,
-            default_headers=build_codex_oauth_headers(resolved.token),
-            max_retries=0,  # PR-ADAPTER-TIMEOUT-AND-SERIALIZATION
-        )
-        _codex_client_fingerprint = resolved.fingerprint
-        log.info(
-            "Codex OAuth client rebuilt from %s token=%s",
-            resolved.source,
-            resolved.fingerprint,
-        )
-    return _codex_client
-
-
 def _get_async_codex_client() -> Any:
     """Lazy import and return cached async Codex client (thread-safe)."""
     global _async_codex_client, _async_codex_client_fingerprint
@@ -226,11 +197,7 @@ def _get_async_codex_client() -> Any:
 
 def reset_codex_client() -> None:
     """Reset cached client (e.g. after token refresh)."""
-    global _async_codex_client, _async_codex_client_fingerprint, _codex_client
-    global _codex_client_fingerprint
-    with _codex_lock:
-        _codex_client = None
-        _codex_client_fingerprint = ""
+    global _async_codex_client, _async_codex_client_fingerprint
     with _async_codex_lock:
         _async_codex_client = None
         _async_codex_client_fingerprint = ""

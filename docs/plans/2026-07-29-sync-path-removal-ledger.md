@@ -285,3 +285,18 @@ tests/core/llm/test_llm_client.py
 | seed_generation legacy toml fallback | pledge 위반(v1.0.0 약속, 현 v1.0.6) **이나 운영자 유일 설정원** | 삭제 불가 — 거짓 pledge 문구만 정정, 마이그레이션 필요를 운영자에게 보고 |
 | self_improving [petri.*]/[mutator] v1.1.0 pledge | 유효(patch-train, v1.1.0 예약) | 유지 |
 | LEGACY_SOT_DIR·LEGACY_OAUTH_ALIAS·_OPENAI_LEGACY_DEFAULT·AsyncTool·token_tracker wrappers | 라이브 소비자 존재 | 유지 |
+
+
+## P11. Codex 라운드1 반영 (FAIL → 전건 처리)
+Codex 판정 FAIL(HIGH) — 재배선이 불완전했고 삭제도 미완이었다.
+
+| # | 지적 | 처분 |
+|---|------|------|
+| HIGH | `/key <sk-ant-…>`·GLM `set-key`·`/login refresh`·OpenAI OAuth 로그인이 어댑터 캐시를 안 비움 | 누락 4곳 포함 전 7개소를 `invalidate_provider_clients`로 배선 |
+| MED | `prompts.__all__`에 삭제 상수 잔존 → `from core.llm.prompts import *`가 AttributeError | `__all__`·독스트링 정리 |
+| MED | 연쇄 고아 잔존(router/_usage.py, anthropic sync helper 4종, codex sync client) | 전부 삭제 |
+| MED | 대체 라우팅 핀이 소스 문자열 검사라 공허 통과 | 행위 검증으로 교체(정책 불허 모델이 호출되지 않음을 단언) |
+| MED | AGENTS.md가 삭제된 providers/openai.py·commentary 템플릿·"4개 hash" 기술 | 실태로 정정(2 템플릿/2 hash, providers=저수준 유틸) |
+| MED | "런타임 async-only"는 중앙 completion 스택 한정 | 표현 정정 — document_ingest·prompt_dump의 sync SDK 호출은 별개 층(범위 밖) |
+
+자체 발견 파손 2건(삭제 정규식이 `_async_codex_client` 선언까지 제거, failover 테스트가 삭제된 sync retry 참조)도 같이 수리 — 후자는 5개 invariant를 `retry_with_backoff_async`로 이관.

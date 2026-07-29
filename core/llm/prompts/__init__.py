@@ -12,7 +12,7 @@ Slop-cleanup (2026-06-11): the analyst / evaluator / synthesizer /
 tool_augmented templates and the empty-husk ``axes.py`` were deleted —
 they served the Game-IP analysis pipeline removed in v0.99.149 and had
 zero production callers since. Live templates: ``router`` (AgenticLoop
-system + agentic suffix), ``commentary``, ``decomposer`` (loaded via
+system + agentic suffix) and ``decomposer`` (loaded via
 ``load_prompt`` at call sites).
 """
 
@@ -58,7 +58,7 @@ def load_prompt(name: str, section: str = "system") -> str:
     """Public API — load a prompt section by template name.
 
     >>> system = load_prompt("decomposer", "system")
-    >>> commentary = load_prompt("commentary", "user")
+    >>> router_system = load_prompt("router", "system")
     """
     sections = _load_template(name)
     key = section.lower()
@@ -142,8 +142,6 @@ def verify_prompt_integrity(*, raise_on_drift: bool = False) -> list[str]:
 
 __all__ = [
     "AGENTIC_SUFFIX",
-    "COMMENTARY_SYSTEM",
-    "COMMENTARY_USER",
     "PROMPT_VERSIONS",
     "ROUTER_SYSTEM",
     "_hash_prompt",

@@ -190,11 +190,9 @@ def test_anthropic_retry_paths_wire_on_retry_callback(monkeypatch: Any) -> None:
 
     import core.llm.providers.anthropic as ap
 
-    monkeypatch.setattr(ap, "retry_with_backoff_generic", _fake_sync)
+    # 2026-07-29: the sync retry twin was deleted with the sync LLM stack;
+    # the async path is the whole surface now.
     monkeypatch.setattr(ap, "retry_with_backoff_generic_async", _fake_async)
-
-    ap.retry_with_backoff(lambda model: "x", model="claude-opus-4-7")
-    assert captured_sync.get("on_retry") is ap._on_retry_journal_emit
 
     import asyncio
 
