@@ -163,7 +163,7 @@ def calculate_cost(
 
 ## P6. 운영자 로컬에 legacy seed_generation.toml 실존하나
 ```
--rw-r--r--@ 1 mango  staff  1164  6  3 16:57 /Users/mango/.geode/seed_generation.toml
+-rw-r--r--@ 1 mango  staff  1164  6  3 16:57 ~/.geode/seed_generation.toml
 core/paths.py:498:GLOBAL_SEED_PIPELINE_TOML = GEODE_HOME / "seed_generation.toml"
 plugins/seed_generation/picker.py:52:- **P4 Environment Anchor**: ``GLOBAL_SEED_PIPELINE_TOML`` is the single
 plugins/seed_generation/picker.py:67:from core.paths import GLOBAL_CONFIG_TOML, GLOBAL_SEED_PIPELINE_TOML
