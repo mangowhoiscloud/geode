@@ -19,7 +19,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": ""
+    "body": "### Changed\n\n- Hook `action` namespaces fold from 27 first-segments to 13 families. 16 of the 27 held a single\n  event each, so the namespace classified nothing for more than half the vocabulary; the singletons\n  now sit in the domain they belong to (`adapter`/`prompt`/`model`/`reasoning` → `llm`,\n  `user`/`execution`/`result`/`post` → `turn`, `shutdown`/`handoff` → `session`, plus new `policy`\n  and `improve`). No event is added or removed — all 56 stay live — and `ACTION_FAMILY_ALIASES`\n  keeps the 2,179 rows already on disk resolving. For scale: Hermes groups ~15 hooks into 6\n  families, Codex ~66 signals into ~12 domains.\n- Dispatch stamps `schema_version` on every payload (`OBSERVER_SCHEMA_VERSION`, `geode.observer.v1`).\n  A subscriber that only receives the payload — a plugin, an exporter — could not otherwise tell\n  which contract it was reading, since `hook_events.schema_version` is visible to SQL readers only.\n  `setdefault`, so a replayer feeding an archived payload keeps that payload's version.\n\n### Fixed\n\n- The emit-side payload validator now reads both contract registries instead of one.\n  `REQUIRED_PAYLOAD_KEYS` covers 4 events by hand while the declarative `_TYPED_ROW_SPECS` table\n  carries pydantic `details_cls` models whose required fields are a contract for 14 more — a\n  disjoint set the validator never consulted. Deriving rather than transcribing raises emit-time\n  coverage from 4/56 to 18/56 without adding a hand-written contract."
   },
   {
     "version": "1.0.8",

@@ -859,8 +859,15 @@ class HookSystem:
         # Emit-side payload contract (PR-HOOK-TAXONOMY D7) — validated at
         # the dispatch choke point so DIRECT trigger() callers are covered
         # too, not only the core.hooks.dispatch wrappers.
+        from core.hooks.catalog import OBSERVER_SCHEMA_VERSION
         from core.hooks.dispatch import _validate_payload
 
+        # Stamp the contract version on the payload itself, not just on the
+        # hook_events column: a subscriber that only receives the payload (a
+        # plugin, an exporter) otherwise cannot tell which contract it is
+        # reading. Hermes injects the same field at its own dispatch point
+        # (hermes_cli/plugins.py, telemetry_schema_version).
+        working.setdefault("schema_version", OBSERVER_SCHEMA_VERSION)
         _validate_payload(event, working)
         if self.closed:
             return HookDispatch(
@@ -937,8 +944,15 @@ class HookSystem:
         # Emit-side payload contract (PR-HOOK-TAXONOMY D7) — validated at
         # the dispatch choke point so DIRECT trigger() callers are covered
         # too, not only the core.hooks.dispatch wrappers.
+        from core.hooks.catalog import OBSERVER_SCHEMA_VERSION
         from core.hooks.dispatch import _validate_payload
 
+        # Stamp the contract version on the payload itself, not just on the
+        # hook_events column: a subscriber that only receives the payload (a
+        # plugin, an exporter) otherwise cannot tell which contract it is
+        # reading. Hermes injects the same field at its own dispatch point
+        # (hermes_cli/plugins.py, telemetry_schema_version).
+        working.setdefault("schema_version", OBSERVER_SCHEMA_VERSION)
         _validate_payload(event, working)
         if self.closed:
             return HookDispatch(

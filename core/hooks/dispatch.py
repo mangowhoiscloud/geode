@@ -60,9 +60,12 @@ def _validate_payload(event: HookEvent, data: dict[str, Any]) -> None:
     Once per (event, emitting caller) — a hot broken emitter (e.g. a
     per-tool-call TOOL_EXEC_ENDED) must not flood the daemon log.
     """
-    from core.hooks.catalog import REQUIRED_PAYLOAD_KEYS
+    from core.hooks.catalog import required_payload_keys
 
-    required = REQUIRED_PAYLOAD_KEYS.get(event)
+    # Unions the hand-written table with the pydantic details models, so the 14
+    # contracts that only existed as row-model fields are checked at emit time
+    # too (they were silently unenforced before).
+    required = required_payload_keys(event)
     if not required:
         return
     missing = sorted(required - data.keys())

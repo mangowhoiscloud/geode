@@ -16,6 +16,13 @@ from core.hooks import (
 )
 
 
+# Dispatch stamps ``schema_version`` on every payload (core.hooks.catalog
+# OBSERVER_SCHEMA_VERSION). These cases assert delivery, isolation and timeout —
+# not the literal key set — so the system field is dropped before comparing.
+def _emitted(data):
+    return {k: v for k, v in (data or {}).items() if k != "schema_version"}
+
+
 def test_subscription_cancel_is_idempotent() -> None:
     hooks = HookSystem()
     calls: list[str] = []
@@ -63,7 +70,7 @@ def test_observer_top_level_mutation_does_not_bleed_to_later_handlers() -> None:
     original = {"session_id": "s-1"}
     hooks.trigger(HookEvent.SESSION_STARTED, original)
 
-    assert observed == [{"session_id": "s-1"}]
+    assert [_emitted(d) for d in observed] == [{"session_id": "s-1"}]
     assert original == {"session_id": "s-1"}
 
 
@@ -99,7 +106,7 @@ def test_async_timeout_cancels_handler_without_waiting_for_full_delay() -> None:
 
     elapsed, data = asyncio.run(_run())
     assert elapsed < 0.5
-    assert data == {}
+    assert _emitted(data) == {}
     assert cancelled.is_set()
 
 
