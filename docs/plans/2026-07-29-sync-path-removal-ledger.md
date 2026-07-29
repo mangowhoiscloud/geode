@@ -313,3 +313,14 @@ Codex 판정 FAIL(HIGH) — 재배선이 불완전했고 삭제도 미완이었�
 | 신규 무효화 배선의 회귀 테스트 부재 | `tests/core/llm/test_credential_invalidation_wiring.py` 신설 6종 — 캐시 실제 비움/프로바이더 스코프/자격증명 3모듈이 진입점 참조/`/key` 3분기 전부 AST 단언 |
 
 이관 원칙: **삭제된 sync 표면의 invariant는 async 쌍으로 옮기고, 옮길 곳이 없을 때만 테스트를 버린다.** 이번에 버린 것은 삭제된 싱글턴 자체를 겨냥하던 3종뿐이다.
+
+
+## P13. Codex 라운드3 반영 (회귀 테스트가 공허 통과였음)
+지적: 신설 무효화 테스트가 실제 캐시 상태를 검증하지 않았다. `LoopAffineClientCache.get()`은 **실행 중 event loop가 없으면 캐시하지 않고 빌드만** 하므로(loop_affinity.py:71), 동기 테스트에서 seed한 캐시는 항상 비어 있었고 `invalidate_provider_clients`의 반환값이 "실제 삭제 수"가 아니라 "invalidate 호출한 어댑터 수"라서 통과했다.
+
+수정:
+- 모든 상태 단언을 `asyncio.run` 안에서 수행, `bound_loop_count()`로 seed 전 1 / invalidate 후 0을 단언.
+- provider 스코프 테스트는 대상만 0, 나머지는 1 유지를 단언(이전엔 개수 비교뿐).
+- autouse fixture로 테스트 간 캐시 격리.
+- 문자열 존재 검사였던 3모듈 핀 중 2개를 **행위 핀으로 승격**: `/login refresh`는 `invalidate_provider_clients("openai")` 호출을 mock으로 단언, codex-cli refresh는 실제 `_try_oauth_refresh` 경로(rotator→profile→refresh)를 태워 `assert_called_once_with("openai")`. 나머지 breadth 검사는 저비용 보조로 유지.
+- **사보타주 역검증**: fallback의 invalidation 호출과 `/key` anthropic 분기를 각각 제거하면 해당 테스트가 FAIL, 복원하면 PASS.
