@@ -23,6 +23,7 @@ FAST=0
 
 FAILED=0
 declare -a FAILURES=()
+declare -a SKIPPED=()
 
 run() {
   local name="$1"
@@ -65,7 +66,17 @@ run "prompt integrity"       uv run python -c \
 
 if [ "$FAST" -eq 0 ]; then
   echo "── tests ──"
-  run "pytest" uv run pytest tests/ -m "not live" -q
+  # CI's Test job installs `uv sync --extra audit`; a plain `uv sync` leaves
+  # inspect_ai out and 4 seed-generation tests fail on import alone. Naming that
+  # beats letting preflight sit permanently red — a gate nobody believes is worse
+  # than no gate.
+  if uv run python -c "import inspect_ai" >/dev/null 2>&1; then
+    run "pytest" uv run pytest tests/ -m "not live" -q
+  else
+    printf '\033[33m··\033[0m pytest \033[33mSKIPPED\033[0m — optional extra missing\n'
+    printf '     run: uv sync --extra audit   (CI installs this for the Test job)\n'
+    SKIPPED+=("pytest")
+  fi
 
   # llms-full.txt is written by export-docs-md.mjs, which runs AFTER the site
   # build — sync-stats alone leaves it stale and the pages gate then fails on a
@@ -78,16 +89,26 @@ if [ "$FAST" -eq 0 ]; then
       site/public/llms.txt site/public/llms-full.txt \
       site/src/data/geode/sot.ts site/src/data/geode/changelog.ts
   else
-    echo "── site generated docs ── \033[33mskipped\033[0m (site/node_modules absent; run 'cd site && npm ci')"
+    printf '\033[33m··\033[0m site generated docs \033[33mSKIPPED\033[0m — site/node_modules absent\n'
+    printf "     run: (cd site && npm ci)\n"
+    SKIPPED+=("site generated docs")
   fi
 else
   echo "── tests / site ── skipped (--fast)"
 fi
 
 echo
-if [ "$FAILED" -eq 0 ]; then
-  echo -e "\033[32mall gates passed\033[0m"
-else
+if [ "$FAILED" -ne 0 ]; then
   echo -e "\033[31m$FAILED gate(s) failed:\033[0m ${FAILURES[*]}"
+elif [ "$FAST" -eq 1 ] || [ ${#SKIPPED[@]} -gt 0 ]; then
+  # --fast skips exactly the gates that fail most often (stale generated docs,
+  # the test suite). Saying "passed" here would be the same false green the
+  # narrow checklist produced, so name what was not run.
+  notrun="${SKIPPED[*]:-}"
+  [ "$FAST" -eq 1 ] && notrun="pytest, site generated docs"
+  echo -e "\033[33mgates passed, but NOT all ran — skipped: ${notrun}\033[0m"
+  echo "  a green here does not mean CI is green; resolve the skips before opening a PR"
+else
+  echo -e "\033[32mall gates passed\033[0m"
 fi
 exit "$FAILED"
