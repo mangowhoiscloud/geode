@@ -47,6 +47,32 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.6] - 2026-07-29
+
+> Legacy-removal recheck: orphaned async provider clients pruned, and a lazy-import liveness guard added after a near-miss where deleting an apparent orphan would have broken every Anthropic subscription call at runtime (ruff, mypy, and the unit suite all missed it).
+
+### Removed
+
+- **Orphaned async provider-client chain deleted.** `providers.anthropic`'s
+  `get_async_anthropic_client` / `areset_clients` / its loop-affine cache and
+  `providers.openai`'s `_get_async_openai_client` / cache had zero production
+  consumers after the v1.0.4 legacy-adapter removal — Anthropic and OpenAI
+  traffic builds clients in `core/llm/adapters`. GLM's provider getter stays
+  (consumed by `core/tools/computer_grounding`), and the loop-affinity
+  guardrail was narrowed to it plus the adapter-level pin.
+
+### Fixed
+
+- **Lazy provider imports in adapters are now pinned.** A prune pass nearly
+  deleted `_async_response_hook`, which `build_async_anthropic_client`
+  imports *inside the function* — invisible to ruff and mypy, and untouched
+  by unit tests, so every Anthropic subscription call would have failed with
+  ImportError at runtime. A new liveness test walks the adapters' AST and
+  resolves every `core.llm.providers` import (lazy ones included) and
+  constructs the real async client; it was verified to fail on a replay of
+  the incident. Two docstrings naming since-deleted consumers of the OpenAI
+  client singleton were corrected to the live one (`provider_dispatch`).
+
 ## [1.0.5] - 2026-07-29
 
 > Live verification of the v1.0.4 prompt-cache wiring (7,590-token writes read back across process restarts) plus the two deferred Anthropic re-wires: server-side context management, and hosted web tools behind a default-off opt-in because provider-executed tools escape GEODE's tool policy.
