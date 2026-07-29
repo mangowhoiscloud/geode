@@ -114,11 +114,11 @@ def test_fallback_loop_calls_is_billing_fatal_before_retry() -> None:
     next_except = src.find("except Exception as exc:", block_start)
     block = src[block_start : next_except if next_except > 0 else len(src)]
     fatal_pos = block.find("is_billing_fatal(exc)")
-    sleep_pos = block.find("time.sleep(delay)")
+    sleep_pos = block.find("asyncio.sleep(delay)")
     assert fatal_pos >= 0, "is_billing_fatal call missing inside retryable block"
-    assert sleep_pos >= 0, "time.sleep removed?"
+    assert sleep_pos >= 0, "retry sleep removed?"
     assert fatal_pos < sleep_pos, (
-        "is_billing_fatal must be checked BEFORE time.sleep — otherwise we "
+        "is_billing_fatal must be checked BEFORE the retry sleep — otherwise we "
         "waste an entire backoff cycle on a billing-fatal error"
     )
 
@@ -126,14 +126,16 @@ def test_fallback_loop_calls_is_billing_fatal_before_retry() -> None:
 def test_fallback_loop_raises_billing_error_on_glm_1113() -> None:
     """End-to-end: a fake fn() that raises a 429-with-code-1113 must propagate
     as BillingError out of run_with_retries, no retries observed."""
-    from core.llm.fallback import retry_with_backoff_generic
+    import asyncio
+
+    from core.llm.fallback import retry_with_backoff_generic_async
 
     call_count = 0
 
     class FakeRateLimitError(Exception):
         pass
 
-    def fn(*, model: str) -> None:
+    async def fn(*, model: str) -> None:
         nonlocal call_count
         call_count += 1
         exc = FakeRateLimitError("429")
@@ -141,15 +143,17 @@ def test_fallback_loop_raises_billing_error_on_glm_1113() -> None:
         raise exc
 
     with pytest.raises(BillingError) as exc_info:
-        retry_with_backoff_generic(
-            fn,
-            model="glm-5.1",
-            fallback_models=["glm-5", "glm-5-turbo"],
-            retryable_errors=(FakeRateLimitError,),
-            bad_request_error=None,
-            billing_message="GLM billing exhausted",
-            max_retries=5,
-            provider_label="GLM",
+        asyncio.run(
+            retry_with_backoff_generic_async(
+                fn,
+                model="glm-5.1",
+                fallback_models=["glm-5", "glm-5-turbo"],
+                retryable_errors=(FakeRateLimitError,),
+                bad_request_error=None,
+                billing_message="GLM billing exhausted",
+                max_retries=5,
+                provider_label="GLM",
+            )
         )
     assert "Insufficient balance" in str(exc_info.value)
     assert call_count == 1, (

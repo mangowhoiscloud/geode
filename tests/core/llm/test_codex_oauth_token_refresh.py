@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import time
-from types import SimpleNamespace
-from unittest.mock import patch
 
 
 class _FakeOpenAI:
@@ -60,39 +58,3 @@ def test_codex_oauth_adapter_invalidates_loop_cache_when_token_changes(monkeypat
     assert first["api_key"] == "access-old"
     assert second["api_key"] == "access-new"
     assert fake_cache.invalidations == 2
-
-
-def test_login_refresh_invalidates_codex_runtime_caches(
-    capsys,
-    monkeypatch,
-) -> None:
-    from core.cli.commands.login import cmd_login
-
-    plan_store = SimpleNamespace(
-        list_all=lambda: [SimpleNamespace(id="existing-plan")],
-    )
-    profile_store = SimpleNamespace(
-        list_all=lambda: [SimpleNamespace(name="existing:env")],
-    )
-    invalidate_calls: list[str] = []
-    reset_calls: list[str] = []
-
-    monkeypatch.setattr("core.llm.strategies.plan_registry.get_plan_registry", lambda: plan_store)
-    monkeypatch.setattr("core.wiring.container.ensure_profile_store", lambda: profile_store)
-    monkeypatch.setattr("core.auth.auth_toml.load_auth_toml", lambda: True)
-    monkeypatch.setattr("core.auth.auth_toml.auth_toml_path", lambda: "/tmp/auth.toml")  # noqa: S108
-    with (
-        patch(
-            "core.auth.codex_cli_oauth.invalidate_cache",
-            side_effect=lambda: invalidate_calls.append("codex-cli"),
-        ),
-        patch(
-            "core.llm.providers.codex.reset_codex_client",
-            side_effect=lambda: reset_calls.append("codex"),
-        ),
-    ):
-        cmd_login("refresh")
-
-    assert "auth.toml reloaded" in capsys.readouterr().out
-    assert invalidate_calls == ["codex-cli"]
-    assert reset_calls == ["codex"]

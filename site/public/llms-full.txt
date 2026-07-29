@@ -5460,7 +5460,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 | 측정값 | 현재 트리 |
 | --- | --- |
 | 프로덕션 Python 파일 | 532 |
-| 테스트 Python 파일 | 672 |
+| 테스트 Python 파일 | 673 |
 | 도구 정의 / 실행 등록 / 유효 스키마 | 78 / 81 / 78 |
 | HookEvent 멤버 | 56 |
 | 기본 LLM 어댑터 | 8 |

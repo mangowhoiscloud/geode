@@ -165,20 +165,6 @@ def test_codex_client_builder_installs_workaround() -> None:
     )
 
 
-def test_legacy_codex_provider_installs_workaround() -> None:
-    """Source-level pin: legacy provider client builder also triggers install()."""
-    provider_source = (
-        Path(__file__).resolve().parents[3] / "core" / "llm" / "providers" / "codex.py"
-    ).read_text(encoding="utf-8")
-    assert "_codex_sdk_workaround" in provider_source, (
-        "_get_async_codex_client no longer installs the parse_response "
-        "workaround; the legacy provider path will crash on subscription."
-    )
-
-
-# Ensure the patch is re-applied for any downstream tests that may run
-# after this module — leaving the SDK unpatched would break unrelated
-# Codex subscription tests.
 def teardown_module(module: object) -> None:
     from core.llm.adapters import _codex_sdk_workaround as wa
 

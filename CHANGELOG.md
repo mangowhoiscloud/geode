@@ -49,7 +49,7 @@ functional change.
 
 ### Removed
 
-- **The synchronous LLM call stack is gone — the runtime is async-only.** Its
+- **The synchronous LLM call stack is gone — LLM completion is async-only.** Its
   single entry point (`_show_commentary`) had no caller, so the whole chain
   below it was dead: `generate_commentary` → `call_llm` → `provider_dispatch`
   → the `providers/` **sync SDK clients**. Deleted with it: the commentary
@@ -62,7 +62,10 @@ functional change.
   `_resolve_anthropic_key`, `system_with_cache`, the sync `retry_with_backoff`),
   and Codex's sync client twin. Anthropic/OpenAI/GLM traffic runs through
   `core/llm/adapters`, which own their async clients; the retry/fallback
-  invariants moved to `retry_with_backoff_async`.
+  invariants moved to `retry_with_backoff_async`. Scope note: this covers the
+  LLM completion stack — tools that wrap a third-party sync SDK in
+  `asyncio.to_thread` (document ingest, the prompt-dump token probe) are a
+  separate layer and unchanged.
 
 ### Fixed
 

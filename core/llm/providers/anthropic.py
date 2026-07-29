@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     # v0.88.0 — declare the lazy module-level tuples so mypy / IDEs see a
     # concrete type for ``except RETRYABLE_ERRORS:`` etc.  Runtime values
     # come from ``__getattr__`` below.  Use ``Exception`` (not
-    # ``BaseException``) to match the ``retry_with_backoff_generic``
+    # ``BaseException``) to match the ``retry_with_backoff_generic_async``
     # signature + ``except`` blocks in failover/streaming.
     RETRYABLE_ERRORS: tuple[type[Exception], ...]
     NON_RETRYABLE_ERRORS: tuple[type[Exception], ...]

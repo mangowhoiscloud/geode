@@ -300,3 +300,16 @@ Codex 판정 FAIL(HIGH) — 재배선이 불완전했고 삭제도 미완이었�
 | MED | "런타임 async-only"는 중앙 completion 스택 한정 | 표현 정정 — document_ingest·prompt_dump의 sync SDK 호출은 별개 층(범위 밖) |
 
 자체 발견 파손 2건(삭제 정규식이 `_async_codex_client` 선언까지 제거, failover 테스트가 삭제된 sync retry 참조)도 같이 수리 — 후자는 5개 invariant를 `retry_with_backoff_async`로 이관.
+
+
+## P12. Codex 라운드2 반영 (FAIL → 처리)
+"전건 반영" 주장이 과했다 — 3건이 남아 있었다.
+
+| 지적 | 처분 |
+|------|------|
+| sync `retry_with_backoff_generic`(fallback.py)가 프로덕션 소비자 0인데 테스트로만 생존 | 삭제. 6+4 invariant를 `retry_with_backoff_generic_async`로 이관(스트림 replay 경계 4종 포함, 손실 0) |
+| codex `_get_async_codex_client`/`reset_codex_client`도 live adapter 미사용 test-pinned orphan | 삭제. `CodexOAuthAdapter`가 자체 클라이언트 소유 확인 후 login.py 호출부도 정리 |
+| "runtime is async-only" 표현이 CHANGELOG/AGENTS/생성 site changelog에서 무제한 주장 | "LLM completion is async-only"로 한정 + document_ingest·prompt_dump의 `asyncio.to_thread` sync SDK 층은 별개임을 명기 |
+| 신규 무효화 배선의 회귀 테스트 부재 | `tests/core/llm/test_credential_invalidation_wiring.py` 신설 6종 — 캐시 실제 비움/프로바이더 스코프/자격증명 3모듈이 진입점 참조/`/key` 3분기 전부 AST 단언 |
+
+이관 원칙: **삭제된 sync 표면의 invariant는 async 쌍으로 옮기고, 옮길 곳이 없을 때만 테스트를 버린다.** 이번에 버린 것은 삭제된 싱글턴 자체를 겨냥하던 3종뿐이다.

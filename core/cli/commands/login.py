@@ -159,7 +159,6 @@ def cmd_login(args: str) -> None:
             from core.auth.auth_toml import auth_toml_path, load_auth_toml
             from core.auth.codex_cli_oauth import invalidate_cache as invalidate_codex_cli_cache
             from core.llm.adapters.registry import invalidate_provider_clients
-            from core.llm.providers.codex import reset_codex_client
             from core.llm.strategies.plan_registry import get_plan_registry
             from core.mcp.google_workspace_client import reset_google_workspace_client
             from core.wiring.container import ensure_profile_store
@@ -170,7 +169,6 @@ def cmd_login(args: str) -> None:
             profiles_before = {p.name for p in store.list_all()}
             ok = load_auth_toml()
             invalidate_codex_cli_cache()
-            reset_codex_client()
             # Live path is the adapter cache — the providers/ sync singletons
             # these resets target no longer serve traffic (2026-07-29).
             invalidate_provider_clients("openai")
@@ -705,9 +703,7 @@ def _login_oauth(target: str) -> None:
 
                 with contextlib.suppress(Exception):
                     from core.llm.adapters.registry import invalidate_provider_clients
-                    from core.llm.providers.codex import reset_codex_client
 
-                    reset_codex_client()
                     invalidate_provider_clients("openai")
                 clear_dry_run_opt_in()
                 _pkg.console.print(
