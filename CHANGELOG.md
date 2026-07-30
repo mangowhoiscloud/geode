@@ -47,6 +47,30 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- Hook `action` namespaces fold from 27 first-segments to 13 families. 16 of the 27 held a single
+  event each, so the namespace classified nothing for more than half the vocabulary; the singletons
+  now sit in the domain they belong to (`adapter`/`prompt`/`model`/`reasoning` → `llm`,
+  `user`/`execution`/`result`/`post` → `turn`, `shutdown`/`handoff` → `session`, plus new `policy`
+  and `improve`). No event is added or removed — all 56 stay live — and `ACTION_FAMILY_ALIASES`
+  keeps rows already on disk resolving — verified against every `action` in the live
+  `hook_events` table, pre-fold segments included. For scale, read from source rather than docs:
+  Hermes declares 23 hooks (`hermes_cli/plugins.py` `VALID_HOOKS`), Codex 50 metric constants plus
+  14 event names (`codex-rs/otel/src/metrics/names.rs`, `events/session_telemetry.rs`).
+- Dispatch stamps `schema_version` on every payload (`OBSERVER_SCHEMA_VERSION`, `geode.observer.v1`).
+  A subscriber that only receives the payload — a plugin, an exporter — could not otherwise tell
+  which contract it was reading, since `hook_events.schema_version` is visible to SQL readers only.
+  `setdefault`, so a replayer feeding an archived payload keeps that payload's version.
+
+### Fixed
+
+- The emit-side payload validator now reads both contract registries instead of one.
+  `REQUIRED_PAYLOAD_KEYS` covers 4 events by hand while the declarative `_TYPED_ROW_SPECS` table
+  carries pydantic `details_cls` models whose required fields are a contract for 14 more — a
+  disjoint set the validator never consulted. Deriving rather than transcribing raises emit-time
+  coverage from 4/56 to 18/56 without adding a hand-written contract.
+
 ## [1.0.8] - 2026-07-30
 
 ### Added

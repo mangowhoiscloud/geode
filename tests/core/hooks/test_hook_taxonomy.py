@@ -25,6 +25,14 @@ import pytest
 from core.hooks import dispatch as hooks_dispatch
 from core.hooks.system import LEGACY_EVENT_VALUES, HookEvent, HookSystem, resolve_event_value
 
+
+# Dispatch stamps ``schema_version`` on every payload (core.hooks.catalog
+# OBSERVER_SCHEMA_VERSION). These cases assert delivery, isolation and timeout —
+# not the literal key set — so the system field is dropped before comparing.
+def _emitted(data):
+    return {k: v for k, v in (data or {}).items() if k != "schema_version"}
+
+
 # ---------------------------------------------------------------------------
 # D5 — naming convention + alias map
 # ---------------------------------------------------------------------------
@@ -195,7 +203,7 @@ def test_required_keys_warning_never_raises_and_still_dispatches() -> None:
     hooks.register(HookEvent.SUBAGENT_COMPLETED, lambda _e, d: received.append(d), name="recorder")
     hooks_dispatch.fire_hook(hooks, HookEvent.SUBAGENT_COMPLETED, {})
     hooks.close()
-    assert received == [{}]  # warned, not blocked
+    assert [_emitted(d) for d in received] == [{}]  # warned, not blocked
 
 
 def test_required_keys_warning_fires_on_async_path(

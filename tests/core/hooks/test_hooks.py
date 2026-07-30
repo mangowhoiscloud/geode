@@ -14,6 +14,13 @@ from core.hooks import (
 )
 
 
+# Dispatch stamps ``schema_version`` on every payload (core.hooks.catalog
+# OBSERVER_SCHEMA_VERSION). These cases assert delivery, isolation and timeout —
+# not the literal key set — so the system field is dropped before comparing.
+def _emitted(data):
+    return {k: v for k, v in (data or {}).items() if k != "schema_version"}
+
+
 class TestHookEvent:
     def test_all_events_exist(self):
         # Canonical total-count assertion for the HookEvent enum.
@@ -290,7 +297,7 @@ class TestHookSystem:
 
         hooks.register(HookEvent.SESSION_STARTED, handler)
         hooks.trigger(HookEvent.SESSION_STARTED)  # No data arg
-        assert received == [{}]
+        assert [_emitted(d) for d in received] == [{}]
 
 
 class TestRegisterPrefix:
@@ -716,7 +723,7 @@ class TestInterceptor:
         hooks = HookSystem()
         result = hooks.trigger_interceptor(HookEvent.USER_INPUT_RECEIVED, {"x": 1})
         assert result.blocked is False
-        assert result.data == {"x": 1}
+        assert _emitted(result.data) == {"x": 1}
 
     def test_interceptor_defensive_copy(self):
         """Input data dict is not mutated."""
