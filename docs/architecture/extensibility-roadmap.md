@@ -551,9 +551,8 @@ and closure evidence are appended in §10.
 | REL-002 | `ABSENT` | No registered gate prevents the v1.0.1 compatibility facade or preserved state roots from being retired immediately after a local tag, draft release, or registry publication | Official GitHub Release and PyPI evidence proves compatible public artifacts continuously exposed the facade and preserved roots for a final qualifying interval of at least 30 consecutive days, starting no earlier than v1.0.1, and every release inside that interval retained them | R8.0 | REL-001 | `OPEN` |
 | BND-007 | `ABSENT` | The current `core/self_improving` import and source/module launcher surface has no enumerated consumer census, old-to-new migration map, or removal-only closure gate | After REL-002, every repository and documented consumer is classified, migration guidance names canonical replacements, only the forwarding facade and legacy launchers are removed, and installed-wheel import/CLI/MCP/config/state parity proves the canonical product remains intact | R8.1 | REL-002, STORE-003 | `OPEN` |
 | STORE-003 | `MISFIT` | Self-improving datasets span tracked `core/self_improving/state`, runtime `~/.geode/self-improving`, actively written `~/.geode/autoresearch/handoff`, and isolated `GEODE_STATE_ROOT/autoresearch` roots without one dataset-level ownership manifest | A feature-owned manifest declares every dataset's lifecycle, schema/version, root, writer/readers, concurrency, retention/redaction, migration, rollback, and rebuild contract; tracked SoT leaves `core` with hash/history parity, while runtime/override/worker roots remain compatible or migrate additively with one writer | R8.2 | REL-002, STORE-001 | `OPEN` |
-| HOOK-001 | `MISFIT` | The 56-member internal `HookEvent` enum is exported at the package root and one registry mixes observer, result-transform, and control-interceptor authority without a stable public allowlist | Exactly 13 versioned public hook contracts expose the Codex 11-event lifecycle plus `PreVerify`/`PostVerify`; typed authority, redaction, correlation, unknown-name rejection, and compatibility tests prevent internal RuntimeEvent growth from expanding the ABI | R6.4 | PROTO-001, STORE-001, TRUST-002 | `OPEN` |
+| HOOK-001 | `MISFIT` | The 56-member internal `HookEvent` enum is exported at the package root, one registry mixes observer, result-transform, and control-interceptor authority without a stable public allowlist, and verification is emitted only inside terminal finalization | Exactly 13 versioned `HookName` contracts expose the Codex 11-event lifecycle plus `PreVerify`/`PostVerify`; typed authority, redaction, correlation, unknown-name rejection, and compatibility tests prevent internal RuntimeEvent growth from expanding the ABI, while one monotone bounded `PreVerify` → verifier → `PostVerify` → `Stop` state machine supports executable external continuation without erasing built-in failure or replaying side effects | R6.4 | PROTO-001, STORE-001, TRUST-002, LOOP-003 | `OPEN` |
 | HOOK-002 | `PARTIAL` | Tool request interception is mixed with `TOOL_EXEC_STARTED`; no typed sequential tool/LLM request transform or async `next_call` chain wraps the accepted executor and provider call across every runtime path | `tool_request`, `tool_execution`, `llm_request`, and `llm_execution` are four typed join points with N→N+1 request composition, original/effective trace, single-use async `next_call`, exception identity, policy-before-execution ordering, and all-path parity tests | R6.4 | CAP-002, LOOP-003, LLM-003, HOOK-001 | `OPEN` |
-| HOOK-003 | `ABSENT` | Turn verification is persisted and emitted only inside terminal finalization, so no external policy can consume one immutable `VerifyResult` and request a bounded same-turn revision before delivery | One finalization state machine executes `PreVerify` → verifier → `PostVerify` → `Stop`; monotone decisions cannot erase built-in failures, retry/idempotency budgets prevent loops or side-effect replay, and a redacted correlated envelope drives an executable continuation test | R6.4 | LOOP-003, HOOK-001 | `OPEN` |
 
 ## 6. Dependency and merge sequence
 
@@ -1176,7 +1175,7 @@ uses descriptor-provided keys, not argument-name guessing.
 
 #### R6.4 Public hooks, middleware join points, and finalization control
 
-GAPs: HOOK-001, HOOK-002, HOOK-003.
+GAPs: HOOK-001, HOOK-002.
 
 The measured design evidence is carried by
 [#2832](https://github.com/mangowhoiscloud/geode/pull/2832), grounded against
@@ -1195,13 +1194,43 @@ PreVerify, PostVerify, Stop
 ```
 
 The 56 current runtime signals remain internal and retain their stored values.
-Public hook dispatch, trusted request/execution middleware, internal
-RuntimeEvent observation/persistence, and stateful domain services are separate
-planes. Unknown public names fail closed; a versioned JSON-safe schema fixes
-each hook's input, result, authority, redaction, timeout, composition, and
-correlation behavior.
+There are three authority surfaces, not four generic planes:
 
-The four middleware join points are roles, not enum-like extension kinds:
+- `HookName` + `HookRegistry` is the bounded public ABI;
+- `MiddlewareRegistry` owns the four trusted request/execution methods;
+- `RuntimeEvent` + `RuntimeEventBus` is internal observation and persistence.
+
+Stateful compaction, approval, subagent, and verification services remain
+domain owners rather than becoming a fourth extension surface. Unknown public
+names fail closed; a versioned JSON-safe schema fixes each hook's input, result,
+authority, redaction, timeout, composition, and correlation behavior.
+
+The canonical names are deliberately small. No `PublicHookRegistry`,
+`MiddlewarePipeline`, `MiddlewareKind`, `MiddlewarePoint`, or
+`ExtensionRuntime` abstraction is introduced. Request and execution role
+protocols consistently end in `Middleware`. The legacy names `HookEvent` and
+`HookSystem` migrate to `RuntimeEvent` and `RuntimeEventBus`; they are never
+reused for public-hook semantics.
+
+Migration is value-preserving:
+
+| Current surface | Canonical target | Compatibility rule |
+|---|---|---|
+| `HookEvent` / `HookSystem` | `RuntimeEvent` / `RuntimeEventBus` | legacy Python aliases for the declared migration window; stored enum values and rows never change |
+| observer `register` / `trigger*` | `subscribe` / `emit*` | move callers mechanically, keep sinks and prefix subscription internal |
+| `USER_INPUT_RECEIVED` interceptor | `HookName.USER_PROMPT_SUBMIT` | old row remains a legacy observation |
+| `TOOL_EXEC_STARTED` interceptor | `HookName.PRE_TOOL_USE` plus actual execution-start event | emit start only after policy and approval, immediately before the executor |
+| `TOOL_RESULT_TRANSFORM` feedback | `HookName.POST_TOOL_USE` | stop new compatibility-event writes; keep old-reader projection |
+| `CONTEXT_OVERFLOW_ACTION` feedback | typed compaction policy port | `PreCompact`/`PostCompact` surround the domain service, not its strategy selection |
+| per-turn `SESSION_STARTED/ENDED` | durable public session hooks plus internal turn boundaries | do not rewrite historical JSONL/SQLite rows |
+| verify result events | `PostVerify` input plus internal outcomes | preserve the immutable built-in result and stored outcome |
+
+Compatibility control APIs are removable only after production
+`trigger_interceptor*`/`trigger_with_result*` callers reach zero, the declared
+release window ends, and stored-reader fixtures still pass.
+
+The four middleware join points are methods on one registry, not enum-like
+extension kinds:
 
 - `tool_request`: immutable N→N+1 transformation before validation, policy,
   and approval;
@@ -1232,7 +1261,11 @@ Acceptance:
   prove that adding an internal RuntimeEvent does not change the public ABI;
 - all public payloads are bounded and redacted, unknown names are rejected,
   handler authority is type-specific, and compatibility fixtures cover the
-  previous `HookSystem` facade during its declared migration window;
+  previous `HookSystem` facade during its declared migration window without
+  ever reassigning `HookEvent` to public semantics;
+- production callers of `trigger_interceptor*` and `trigger_with_result*`
+  reach zero before those control APIs are removed, while stored-value and
+  historical-row fixtures remain readable;
 - request transforms prove N→N+1 order, immutable original input, invalid
   output rejection, and original/effective trace correlation;
 - execution chains prove onion order, single-use async `next_call`,
