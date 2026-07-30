@@ -164,6 +164,29 @@ def test_blocked_pre_tool_use_never_emits_execution_started() -> None:
     assert starts == []
 
 
+def test_tool_runtime_events_keep_session_correlation() -> None:
+    events = RuntimeEventBus()
+    observed: list[dict[str, Any]] = []
+    for event in (RuntimeEvent.TOOL_EXEC_STARTED, RuntimeEvent.TOOL_EXEC_ENDED):
+        events.subscribe(
+            event,
+            lambda _event, payload: observed.append(payload),
+            name=event.value,
+        )
+    set_session_id("session-1")
+    set_turn_id("turn-1")
+    executor = ToolExecutor(
+        action_handlers={"check": lambda **_kwargs: {"ok": True}},
+        hooks=events,
+    )
+
+    assert asyncio.run(executor.aexecute("check", {})) == {"ok": True}
+    assert [(row["session_id"], row["turn_id"]) for row in observed] == [
+        ("session-1", "turn-1"),
+        ("session-1", "turn-1"),
+    ]
+
+
 def test_pre_tool_use_rewrite_reaches_the_effective_handler_request() -> None:
     observed: list[str] = []
     registry = HookRegistry()

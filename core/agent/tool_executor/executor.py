@@ -431,6 +431,7 @@ class ToolExecutor:
         event_tool_input = (
             personal_data_omitted(tool_name) if contains_personal_data else tool_input
         )
+        event_correlation = dict(request.correlation)
 
         async def dispatch(current: ToolCallRequest) -> dict[str, Any]:
             nonlocal terminal_started
@@ -446,6 +447,7 @@ class ToolExecutor:
                 self._hooks,
                 RuntimeEvent.TOOL_EXEC_STARTED,
                 {
+                    **event_correlation,
                     "tool_name": tool_name,
                     "tool_input": event_tool_input,
                 },
@@ -473,6 +475,7 @@ class ToolExecutor:
                 self._hooks,
                 RuntimeEvent.TOOL_EXEC_FAILED,
                 {
+                    **event_correlation,
                     "tool_name": tool_name,
                     "tool_input": event_tool_input,
                     "duration_ms": (time.monotonic() - started_at) * 1_000,
@@ -502,6 +505,7 @@ class ToolExecutor:
             self._hooks,
             RuntimeEvent.TOOL_EXEC_ENDED,
             {
+                **event_correlation,
                 "tool_name": tool_name,
                 "tool_input": event_tool_input,
                 "duration_ms": (time.monotonic() - started_at) * 1_000,
@@ -515,6 +519,7 @@ class ToolExecutor:
                 self._hooks,
                 RuntimeEvent.TOOL_EXEC_FAILED,
                 {
+                    **event_correlation,
                     "tool_name": tool_name,
                     "tool_input": event_tool_input,
                     "duration_ms": (time.monotonic() - started_at) * 1_000,

@@ -86,7 +86,9 @@ functional change.
   transcript, tool-log, and offload policy. Batch cost approval is scoped only
   to the original expensive-operation cost gate and cannot authorize a
   rewritten MCP/write/dangerous tool. Headless hook-requested permission fails
-  closed rather than opening a console prompt.
+  closed rather than opening a console prompt. Tool lifecycle runtime events
+  retain session/turn correlation after the middleware boundary moved into the
+  executor.
 - Public hook dispatch keeps required schema fields when bounding payloads,
   isolates handler payload copies, rejects in-place mutation, and permits
   payload updates only for `REWRITE`. Tool-execution short circuits now close
