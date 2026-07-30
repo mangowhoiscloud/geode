@@ -145,7 +145,7 @@ enum은 불변이고 alias는 한 층으로 끝난다.
 
 ---
 
-## 7. 2026-07-31 후속 계획 — Hermes-shaped hook planes
+## 7. 2026-07-31 후속 계획 — Hermes-shaped extension surfaces
 
 ### 7.1 문서 범위
 
@@ -227,7 +227,7 @@ Codex는 이 공개 표면과 별개로 in-process extension API를 둔다. immu
 `ThreadLifecycleContributor`, `TurnLifecycleContributor`, `ToolLifecycleContributor`, context/tool/input
 contributor를 등록하고, public hook처럼 raw JSON을 범용 노출하지 않는다. 특히 tool lifecycle은
 input/output 변경 권한 없이 `Completed/Blocked/Failed/Aborted`를 관측한다. GEODE의 exposure level은
-이처럼 안정 ABI와 trusted typed seam을 별도 plane으로 둔다.
+이처럼 안정 ABI와 trusted typed seam을 별도 surface로 둔다.
 
 Codex `Stop`은 finalization을 block하고 continuation prompt를 돌려 같은 turn을 이어갈 수 있다.
 handler exit code 2의 stderr도 같은 continuation으로 해석하며 여러 handler의 block을 합성한다.
@@ -247,26 +247,30 @@ GEODE 공개 ABI로 복제하지 않는다. 제품·gateway·channel lifecycle�
 
 ## 8. 목표 구조
 
-### 8.1 네 평면
+### 8.1 세 extension surface와 domain owner
 
-| 평면 | 책임 | 데이터 노출 | 제어 가능 |
-|---|---|---|---|
-| `PublicHook` | 사용자·plugin용 안정 ABI | redacted, JSON-safe | hook 계약별로 제한 |
-| `MiddlewarePipeline` | 실제 요청 변형·실행 wrapping | trusted raw/effective request | 예 |
-| `RuntimeEvent` | 운영, audit, persistence, trajectory | 내부 상세 payload | 아니오 |
-| domain service | compaction, approval, subagent 등 상태ful 기능 | 전용 typed contract | 서비스가 소유 |
+공개 범위가 아니라 **권한**으로 세 표면을 나눈다. compaction, approval, subagent, verification은
+네 번째 표면이 아니라 상태와 불변식을 소유하는 domain service다.
 
-현재 `HookSystem` 하나가 `trigger`, `trigger_with_result`, `trigger_interceptor`를 모두 제공하는 구조는
-호환 facade로만 남기고 책임을 다음과 같이 이동한다.
+| 표면 | canonical API | 책임 | 데이터 노출 | 제어 가능 |
+|---|---|---|---|---|
+| public hook | `HookName` + `HookRegistry` | 사용자·plugin용 안정 ABI | bounded, redacted, JSON-safe | hook 계약별 제한 |
+| trusted middleware | `MiddlewareRegistry` | 실제 요청 변형·실행 wrapping | capability가 허용한 raw/effective request | 예 |
+| internal event | `RuntimeEvent` + `RuntimeEventBus` | 운영, audit, persistence, trajectory | 내부 상세 payload | 아니오 |
+| domain owner | 기존 전용 service | compaction, approval, subagent, verification 상태 전이 | 전용 typed state | service만 소유 |
 
-- `RuntimeEventBus`: observe + sink만 제공한다.
-- `PublicHookRegistry`: hook별 typed input/output을 제공한다.
-- `MiddlewarePipeline`: request transform과 execution chain을 제공한다.
-- `ExtensionRuntime`: 위 세 컴포넌트를 wiring하는 composition root다.
+현재 `HookSystem` 하나가 `trigger`, `trigger_with_result`, `trigger_interceptor`를 모두 제공하는 구조에서
+새로 필요한 런타임 객체는 `HookRegistry`와 `MiddlewareRegistry` 두 개뿐이다.
+`RuntimeEventBus`는 새 subsystem이 아니라 현재 `HookSystem`의 observer/sink 책임에 붙이는 canonical
+이름이다. 세 객체를 다시 감싸는 `ExtensionRuntime` composition root는 만들지 않고 기존 wiring이
+직접 주입한다.
 
 ### 8.2 공개 hook 13개
 
-| Public hook | 시점 | 허용 반환 |
+공개 enum의 이름은 `HookName`이다. 현재 내부 enum `HookEvent`와 의미를 바꿔 재사용하지 않는다.
+enum value는 Codex/Hermes 사용자가 알아볼 수 있는 아래 PascalCase 문자열로 고정한다.
+
+| `HookName` value | 시점 | 허용 반환 |
 |---|---|---|
 | `UserPromptSubmit` | user input admission 전 | rewrite / block |
 | `PreToolUse` | `tool_request` transform 후, policy/approval 전 | rewrite / block / request permission |
@@ -293,39 +297,104 @@ lifecycle hook을 별도 GAP으로 등록한다.
 
 ### 8.3 RuntimeEvent
 
-현재 `HookEvent` 56종은 내부 `RuntimeEvent`로 이동한다. 저장된 enum value와 SQLite row는 바꾸지
-않는다.
+현재 `HookEvent` 56종은 내부 `RuntimeEvent`로 이름과 역할을 교정한다. 저장된 enum value와 SQLite
+row는 바꾸지 않는다.
 
-- `HookEvent = RuntimeEvent` 호환 alias를 한 migration window 유지한다.
+- `HookEvent = RuntimeEvent`, `HookSystem = RuntimeEventBus` 호환 alias를 선언된 migration window
+  동안 유지한다.
+- 기존 `HookEvent` 이름은 호환 기간이 끝나도 public hook 의미로 재사용하지 않는다. 같은 import가
+  조용히 다른 권한을 얻는 semantic swap을 금지한다.
+- `RuntimeEventBus`는 `subscribe`/`emit`/sink만 제공한다. feedback과 interceptor 권한은 각 domain
+  owner, `HookRegistry`, `MiddlewareRegistry`로 이동한다.
 - `LLM_CALL_STARTED/ENDED`, `TOOL_EXEC_STARTED/ENDED`, approval transition, cognitive, cost, mutation,
   persistence signal은 공개 hook allowlist에 들어가지 않는다.
 - `TOOL_EXEC_STARTED`는 permission이 끝나고 실제 executor를 호출하기 직전에만 발화한다.
 - `TurnStarted` / `TurnCompleted`를 내부 경계로 사용하고 public `SessionStart/End`와 혼용하지 않는다.
-- public hook dispatch 결과도 별도 RuntimeEvent로 기록해 어느 extension이 결과를 바꿨는지 추적한다.
+- hook과 middleware 실행 이력은 hook별 event enum을 늘리지 않고 하나의 내부
+  `EXTENSION_INVOKED` RuntimeEvent에 `surface`, `name`, `outcome`, correlation을 기록한다.
 
 ### 8.4 Middleware 명명과 계약
 
-`MiddlewareKind`는 사용하지 않는다. 네 값은 종류가 아니라 실행 그래프의 join point이므로 내부
-registry key가 필요할 때만 `MiddlewarePoint`라고 부른다. 외부 등록 API는 역할 타입을 직접 받는다.
+`MiddlewareKind`, `MiddlewarePoint`, `MiddlewarePipeline`은 모두 만들지 않는다. 네 값은 독립된
+plugin 종류가 아니라 한 registry가 제공하는 네 typed registration method다. request와 execution의
+역할 차이는 protocol 이름에만 남기고 모두 `*Middleware`로 끝낸다.
 
 ```python
-register_tool_request(transform: ToolRequestTransform)
-register_tool_execution(middleware: ToolExecutionMiddleware)
-register_llm_request(transform: LlmRequestTransform)
-register_llm_execution(middleware: LlmExecutionMiddleware)
+registry = MiddlewareRegistry()
+registry.register_tool_request(middleware: ToolRequestMiddleware)
+registry.register_tool_execution(middleware: ToolExecutionMiddleware)
+registry.register_llm_request(middleware: LlmRequestMiddleware)
+registry.register_llm_execution(middleware: LlmExecutionMiddleware)
 ```
 
 계약:
 
 - request transform은 immutable input을 받고 새 request/args를 반환한다.
 - transform N의 출력이 N+1의 입력이다.
-- original과 effective payload, extension name, reason을 `MiddlewareTrace`에 남긴다.
+- original과 effective payload hash, extension name, reason을
+  `RuntimeEvent.EXTENSION_INVOKED`에 남긴다.
 - execution middleware는 async `next_call(effective_payload)`을 정확히 한 번 호출할 수 있다.
 - `next_call`을 호출하지 않으면 명시적인 short-circuit result를 반환해야 한다.
 - downstream exception은 원형을 보존한다.
 - execution middleware는 policy/approval을 감싸지 않고 승인된 실제 executor/provider 호출만 감싼다.
 - middleware 자체의 timeout/error 정책은 registration capability에 고정하고 RuntimeEvent로 남긴다.
 - public hook에는 raw provider request, secret, base64, unrestricted tool output을 노출하지 않는다.
+
+### 8.5 가지치기 결과
+
+아래는 구현 전에 제거하는 **plan-only 이름**이다. production compatibility 대상이 아니므로 alias도
+만들지 않는다.
+
+| 제거할 이름 | canonical replacement | 이유 |
+|---|---|---|
+| `PublicHook` | hook / `HookName` | public 여부는 registry와 schema가 보장하며 타입 접두사가 불필요 |
+| `PublicHookRegistry` | `HookRegistry` | 공개 hook registry는 하나뿐 |
+| `MiddlewarePipeline` | `MiddlewareRegistry` | 같은 객체가 등록과 chain 실행을 소유하면 별도 pipeline 객체가 불필요 |
+| `MiddlewareKind` / `MiddlewarePoint` | 없음 | 네 typed method가 join point를 이미 표현 |
+| `ToolRequestTransform` / `LlmRequestTransform` | `ToolRequestMiddleware` / `LlmRequestMiddleware` | transform과 middleware 접미사 혼용 제거 |
+| `ExtensionRuntime` | 없음 | 기존 wiring 위에 새 service locator를 만들 이유가 없음 |
+| public `HookEvent` | `HookName` | 내부 legacy `HookEvent`와 semantic collision 방지 |
+
+즉 canonical symbol은 다섯 개의 축으로 끝난다:
+`HookName`, `HookRegistry`, `MiddlewareRegistry`, `RuntimeEvent`,
+`RuntimeEventBus`. 나머지는 네 middleware protocol과 hook별 input/decision schema처럼 실제
+타입 안전성에 필요한 이름만 둔다.
+
+### 8.6 마이그레이션 맵
+
+#### API와 호출 지점
+
+2026-07-31 production tree 실측은 `core.hooks` 직접 import 50개,
+`HookEvent`/`HookSystem` 참조 538개다. 따라서 대량 rename PR 대신 owner별로 이동한다.
+
+| 현재 | canonical target | 이전 규칙 | 저장 호환 |
+|---|---|---|---|
+| `HookEvent` | `RuntimeEvent` | enum member와 value를 그대로 둔 rename; legacy import alias 유지 | 기존 문자열/row 무변경 |
+| `HookSystem` | `RuntimeEventBus` | observer와 sink만 남김; legacy class alias 유지 | 기존 sink가 같은 event를 소비 |
+| `register` / `trigger*` observer 경로 | `subscribe` / `emit*` | 호출자별 기계적 rename 후 old method 사용처 0 확인 | 무변경 |
+| `register_prefix` | `subscribe_prefix` | internal-only API로 이동; public registry에는 wildcard 없음 | 무변경 |
+| `USER_INPUT_RECEIVED` interceptor | `HookName.USER_PROMPT_SUBMIT` | admission owner가 typed decision을 실행한 뒤 internal observation emit | 기존 event row는 legacy observation으로 읽음 |
+| `TOOL_EXEC_STARTED` interceptor | `HookName.PRE_TOOL_USE` + real `RuntimeEvent.TOOL_EXEC_STARTED` | control은 validation/policy 앞 checkpoint로 이동; start는 승인 뒤 실제 executor 직전에 emit | stored start 값 무변경 |
+| `TOOL_RESULT_TRANSFORM` feedback | `HookName.POST_TOOL_USE` | typed post-use decision으로 이동하고 compatibility event 신규 write 중단 | 기존 row는 catalog의 `TOOL_EXEC_ENDED` compatibility projection 유지 |
+| `CONTEXT_OVERFLOW_ACTION` feedback | compaction domain policy | generic hook 반환이 아니라 typed strategy port로 이동; Pre/PostCompact는 그 service 경계만 감쌈 | 기존 row 보존 |
+| `TOOL_APPROVAL_REQUESTED` | `HookName.PERMISSION_REQUEST` + internal approval transition | human prompt 직전 decision과 상태 telemetry를 분리 | 기존 row는 `APPROVAL_TRANSITION` compatibility projection 유지 |
+| per-turn `SESSION_STARTED/ENDED` | durable `SessionStart/End` + internal turn boundary | 먼저 turn 소비자를 이동한 뒤 durable lifecycle 의미로 교정 | 과거 JSONL/SQLite row를 rewrite하지 않고 legacy turn boundary로 해석 |
+| `SUBAGENT_STARTED/COMPLETED/FAILED` | `SubagentStart/Stop` projection | internal 세 결과는 유지하고 terminal outcome을 typed Stop payload로 projection | 무변경 |
+| `TURN_VERIFY_PASSED/FAILED` | `PostVerify` input + internal verify outcome | immutable verifier 결과를 public checkpoint에 projection; internal outcome은 유지 | 무변경 |
+| `LLM_CALL_*` | internal `RuntimeEvent` + LLM middleware | 이벤트를 middleware 이름으로 alias하지 않음 | 무변경 |
+
+#### 순서와 제거 조건
+
+| 단계 | 변경 | exit |
+|---:|---|---|
+| M0 | 기존 dispatch mode, payload, stored value characterization | fixtures가 56개 value와 현재 reader를 고정 |
+| M1 | 내부 canonical name `RuntimeEvent` / `RuntimeEventBus` 도입 | production 신규 import는 canonical name만 사용; legacy alias 동작 |
+| M2 | `HookRegistry`와 domain policy로 interceptor/feedback 호출처 이동 | `trigger_interceptor*`와 `trigger_with_result*` production caller 0 |
+| M3 | `MiddlewareRegistry`를 tool/LLM의 단일 terminal에 배선 | 네 join point parity와 exactly-once test |
+| M4 | legacy API 제거 | telemetry로 외부 사용 0 확인, 문서화된 deprecation/release window 종료, stored reader fixture 유지 |
+
+M4에서도 저장 문자열을 rename하거나 과거 row를 재작성하지 않는다. 제거 대상은 Python compatibility
+surface뿐이다.
 
 ## 9. `PostVerify` 외부 루프 계약
 
@@ -549,7 +618,6 @@ JSONL telemetry 근거로 간주해서는 안 된다.
 
 ## 11. 구현·머지 순서
 
-아래 H0~H7은 설계 분해이지 지금 바로 만들 수 있는 branch 목록이 아니다.
 `docs/architecture/extensibility-roadmap.md`가 실행 SOT이며, GAP package의 readiness/claim 순서를
 먼저 만족해야 한다. 기능 PR마다 `[Unreleased]`를 갱신한다.
 
@@ -565,46 +633,46 @@ JSONL telemetry 근거로 간주해서는 안 된다.
   의존한다.
 - discovery/trust/exposure는 `BND-004`, `TRUST-001`, `TRUST-002`가 소유한다.
 - 네 middleware join point와 `PreVerify/PostVerify` finalization gate는 기존 GAP exit condition에
-  명시적으로 등록되지 않았다. 구현 전에 별도 roadmap-only GAP-registration PR로 stable ID,
-  measurable exit condition, dependency와 closure package를 추가해야 한다.
+  명시적으로 등록되지 않았다. roadmap-only PR #2833이 stable ID, measurable exit condition,
+  dependency와 closure package를 등록한다.
 
-등록안은 한 closure package R6.4와 세 GAP으로 고정한다. canonical ledger에 merge되기 전까지 아래
-ID는 계획안이지 status authority가 아니다.
+가지치기 후 등록 단위는 한 closure package R6.4와 두 GAP이다. verification/finalization은 13개
+hook 계약과 분리해서 닫을 수 없으므로 별도 `HOOK-003`으로 만들지 않고 `HOOK-001`의 executable
+exit에 포함한다. PR #2833이 canonical ledger에 merge되기 전까지 아래 ID는 계획안이지 status
+authority가 아니다.
 
 | proposed GAP | outcome | dependency |
 |---|---|---|
-| `HOOK-001` | Codex 11 + `PreVerify/PostVerify`의 versioned public ABI, 56 internal event 비노출 | `PROTO-001`, `STORE-001`, `TRUST-002` |
+| `HOOK-001` | 13개 versioned hook ABI, 56 internal event 비노출, PreVerify → verifier → PostVerify → Stop의 monotone bounded finalization | `PROTO-001`, `STORE-001`, `TRUST-002`, `LOOP-003` |
 | `HOOK-002` | `tool_request/tool_execution/llm_request/llm_execution` 네 typed join point와 전 경로 choke point | `CAP-002`, `LOOP-003`, `LLM-003`, `HOOK-001` |
-| `HOOK-003` | 단일 finalization state machine의 PreVerify → verifier → PostVerify → Stop과 bounded external continuation | `LOOP-003`, `HOOK-001` |
 
 따라서 이 문서를 고치는 현재 PR에서 production code를 시작하지 않는다. 실행 순서는 다음으로
 고정한다.
 
 1. PR #2832에는 taxonomy fold와 이 measured design record만 둔다.
-2. current `origin/develop`에서 middleware/verify GAP-registration ledger PR을 별도로 연다.
+2. PR #2833에서 두 GAP과 R6.4 closure package를 canonical ledger에 등록한다.
 3. 기존 선행 package가 `DONE` 또는 `IN_DEVELOP`에 도달한 뒤 해당 package 전체를 `READY`로
    reconciliation한다.
 4. claim PR을 merge한 뒤에만 명시된 implementation branch/worktree를 만든다.
-5. H0~H7을 claimed GAP와 1:1로 다시 매핑하고 code/test/change log를 시작한다.
+5. §8.6의 M0~M4를 claimed GAP의 acceptance에 매핑하고 code/test/change log를 시작한다.
 
 이 gate는 최소 구현을 강요하는 Socratic anchor가 아니라 여러 architecture session이 같은 kernel
 경계를 동시에 바꾸지 못하게 하는 ownership protocol이다.
 
 ### 11.2 구현 stage
 
+아래 네 줄은 acceptance checkpoint이며 새 GAP, class, branch 이름이 아니다.
+
 | 순서 | 작업 | 완료 기준 |
 |---:|---|---|
-| H0 | 계약 고정 | public 13 hook input/output, authority, redaction, correlation schema 테스트 |
-| H1 | 평면 분리 | `RuntimeEventBus`, `PublicHookRegistry`, `MiddlewarePipeline`; 기존 호출 호환 |
-| H2 | tool choke point | 모든 tool path 단일 terminal, tool middleware pair, exactly-once/TOCTOU 테스트 |
-| H3 | LLM choke point | immutable request transform, async execution chain, retry/error/cache 테스트 |
-| H4 | lifecycle | durable Session과 Turn 분리, SQLite state transition, crash reconciliation, SubagentStart/Stop immutable payload |
-| H5 | compaction | 모든 runtime-owned 경로 공통 boundary, Pre/PostCompact commit parity |
-| H6 | verify/stop | PreVerify → verifier → PostVerify → Stop → persist, bounded continuation |
-| H7 | exposure/trust | manifest-first, hash trust, capability gate, unknown name reject, 구 API deprecation |
+| 1 | 계약과 migration 고정 | `HookName` 13개, authority/redaction/correlation schema, 56 stored value와 legacy reader fixture |
+| 2 | hook/event 책임 분리 | `HookRegistry`, observer-only `RuntimeEventBus`, domain feedback port; interceptor/result production caller 0 |
+| 3 | middleware 단일 registry 배선 | tool/LLM 네 typed method, 모든 경로 단일 terminal, sequential transform, exactly-once/TOCTOU 테스트 |
+| 4 | domain 경계 완결 | durable Session/Turn, compaction pair, Subagent projection, PreVerify → PostVerify → Stop bounded continuation |
 
-H1에서 현재 `HookSystem`을 즉시 삭제하지 않는다. 기존 56-event subscriber와 persistence sink가
-`RuntimeEventBus`로 이동한 뒤 compatibility facade의 호출자 수가 0이 된 시점에 제거한다.
+2단계에서 현재 `HookSystem`을 즉시 삭제하지 않는다. 기존 56-event subscriber와 persistence sink가
+`RuntimeEventBus`로 이동하고 migration window가 끝난 뒤 compatibility alias와 old method를
+제거한다.
 
 ## 12. 검증 계획
 
