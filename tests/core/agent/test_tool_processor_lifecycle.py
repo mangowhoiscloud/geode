@@ -11,7 +11,14 @@ from unittest.mock import AsyncMock, MagicMock
 from core.agent.error_recovery import RecoveryResult, RecoveryStrategy
 from core.agent.tool_executor import ToolExecutor
 from core.agent.tool_executor.processor import ToolCallProcessor
-from core.hooks import HookEvent, HookSystem
+from core.hooks import (
+    HookAction,
+    HookDecision,
+    HookEvent,
+    HookName,
+    HookRegistry,
+    HookSystem,
+)
 
 
 def _processor(
@@ -64,25 +71,37 @@ def _capture_events(hooks: HookSystem) -> list[HookEvent]:
     return events
 
 
-def test_interceptor_block_still_emits_terminal_end_and_failure() -> None:
-    processor, hooks, executor = _processor()
-    events = _capture_events(hooks)
-    hooks.register(
-        HookEvent.TOOL_EXEC_STARTED,
-        lambda _event, _data: {"block": True, "reason": "policy"},
+def test_public_block_never_emits_execution_started() -> None:
+    hooks = HookSystem()
+    registry = HookRegistry(events=hooks)
+    registry.register(
+        HookName.PRE_TOOL_USE,
+        lambda _invocation: HookDecision(
+            action=HookAction.BLOCK,
+            reason="policy",
+        ),
         name="policy",
-        priority=1,
     )
+    handler = MagicMock(return_value={"ok": True})
+    executor = ToolExecutor(
+        action_handlers={"read_file": handler},
+        hooks=hooks,
+        hook_registry=registry,
+    )
+    processor = ToolCallProcessor(
+        executor=executor,
+        op_logger=MagicMock(),
+        error_recovery=MagicMock(),
+        hooks=hooks,
+    )
+    events = _capture_events(hooks)
 
     asyncio.run(processor._execute_single(_block()))
 
-    assert events == [
-        HookEvent.TOOL_EXEC_STARTED,
-        HookEvent.TOOL_RESULT_TRANSFORM,
-        HookEvent.TOOL_EXEC_ENDED,
-        HookEvent.TOOL_EXEC_FAILED,
-    ]
-    executor.aexecute.assert_not_awaited()
+    assert HookEvent.TOOL_EXEC_STARTED not in events
+    assert HookEvent.TOOL_EXEC_ENDED not in events
+    assert HookEvent.TOOL_EXEC_FAILED not in events
+    handler.assert_not_called()
 
 
 def test_adaptive_recovery_is_inside_tool_lifecycle_pair() -> None:
@@ -98,11 +117,8 @@ def test_adaptive_recovery_is_inside_tool_lifecycle_pair() -> None:
     asyncio.run(processor._execute_single(_block()))
 
     assert events == [
-        HookEvent.TOOL_EXEC_STARTED,
         HookEvent.TOOL_RECOVERY_ATTEMPTED,
         HookEvent.TOOL_RECOVERY_SUCCEEDED,
-        HookEvent.TOOL_RESULT_TRANSFORM,
-        HookEvent.TOOL_EXEC_ENDED,
     ]
     executor.aexecute.assert_not_awaited()
 
@@ -113,12 +129,7 @@ def test_executor_exception_becomes_failed_terminal_result() -> None:
 
     result = asyncio.run(processor._execute_single(_block()))
 
-    assert events == [
-        HookEvent.TOOL_EXEC_STARTED,
-        HookEvent.TOOL_RESULT_TRANSFORM,
-        HookEvent.TOOL_EXEC_ENDED,
-        HookEvent.TOOL_EXEC_FAILED,
-    ]
+    assert events == []
     assert "boom" in result["content"]
 
 
@@ -128,14 +139,14 @@ def test_personal_failure_is_omitted_from_hooks_logs_and_event_store(tmp_path, c
     from core.wiring.bootstrap import build_hooks
 
     private_error = "private-cell-value-4f93bd"
-    executor = MagicMock(spec=ToolExecutor)
-    executor.aexecute = AsyncMock(
-        return_value={
+
+    def personal_handler(**_kwargs: object) -> dict[str, object]:
+        return {
             "error": private_error,
             "error_type": "connection",
             "recoverable": True,
         }
-    )
+
     error_recovery = MagicMock()
     error_recovery.arecover = AsyncMock()
     op_logger = MagicMock()
@@ -144,6 +155,16 @@ def test_personal_failure_is_omitted_from_hooks_logs_and_event_store(tmp_path, c
     set_episodic_store(EpisodicStore(path=tmp_path / "episodes.jsonl"))
     hooks, event_store, _metrics = build_hooks(
         session_key="privacy-test", run_id="privacy-run", log_dir=tmp_path
+    )
+    registry = HookRegistry(events=hooks)
+    registry.register(
+        HookName.PERMISSION_REQUEST,
+        lambda _invocation: HookDecision(action=HookAction.ALLOW),
+    )
+    executor = ToolExecutor(
+        action_handlers={"google_sheets_read": personal_handler},
+        hooks=hooks,
+        hook_registry=registry,
     )
     failed_payloads: list[dict] = []
     hooks.register(
@@ -165,7 +186,10 @@ def test_personal_failure_is_omitted_from_hooks_logs_and_event_store(tmp_path, c
                 processor._execute_single(
                     _block(
                         name="google_sheets_read",
-                        tool_input={"spreadsheet_id": "private-sheet"},
+                        tool_input={
+                            "spreadsheet_id": "private-sheet",
+                            "range": "Sheet1!A1",
+                        },
                     )
                 )
             )

@@ -46,9 +46,9 @@ export default function Page() {
 
             <h2>한 trigger, 한 durable row</h2>
             <p>
-              <code>HookSystem</code>은 handler chain이 끝난 뒤
+              <code>RuntimeEventBus</code>는 handler chain이 끝난 뒤
               <code>HookDispatch</code>를 sink에 한 번 보냅니다. 그래서 sync/async,
-              feedback/interceptor 경로마다 writer를 반복하지 않습니다. legacy 실패나
+              emit 경로마다 writer를 반복하지 않습니다. legacy 실패나
               승인 이벤트처럼 canonical 이벤트와 의미가 겹치는 신호는 외부 handler에는
               전달하지만 SQL과 transcript에는 중복 기록하지 않습니다.
             </p>
@@ -104,9 +104,9 @@ export default function Page() {
 
             <h2>One trigger, one durable row</h2>
             <p>
-              After the handler chain completes, <code>HookSystem</code> sends one
+              After the handler chain completes, <code>RuntimeEventBus</code> sends one
               <code>HookDispatch</code> to the sink. Writer logic is therefore not
-              repeated across sync, async, feedback, and interceptor paths.
+              repeated across sync and async emit paths.
               Compatibility signals that duplicate a canonical failure or approval
               transition still reach handlers but do not create another SQL or
               transcript row.

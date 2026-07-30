@@ -50,7 +50,7 @@ geode serve (데몬)  ←  하나의 GeodeRuntime이 전부 소유`}</pre>
                 <tr><th>단계</th><th>만드는 것</th><th>코드</th></tr>
               </thead>
               <tbody>
-                <tr><td>1</td><td>HookSystem + SQLite event sink. 모든 프로덕션 훅과 teardown이 여기서 등록됩니다.</td><td><code>core/wiring/bootstrap.py</code></td></tr>
+                <tr><td>1</td><td>RuntimeEventBus + SQLite sink + 공개 훅·미들웨어 registry. 프로세스 단위로 한 번 구성됩니다.</td><td><code>core/wiring/bootstrap.py</code>, <code>core/server/supervised/services.py</code></td></tr>
                 <tr><td>2</td><td>PolicyChain, ToolRegistry, LaneQueue, 인증 스토어</td><td><code>core/wiring/container.py</code></td></tr>
                 <tr><td>3</td><td>TriggerManager + SchedulerService</td><td><code>core/wiring/scheduling.py</code></td></tr>
                 <tr><td>4</td><td>MCP, 알림, 캘린더, 게이트웨이 어댑터</td><td><code>core/wiring/adapters.py</code></td></tr>
@@ -85,7 +85,7 @@ geode serve (데몬)  ←  하나의 GeodeRuntime이 전부 소유`}</pre>
               순서가 곧 안전입니다. 새 요청을 먼저 끊고, 하던 일을 마치게 하고,
               상태를 저장한 뒤 연결을 닫습니다 (<code>core/cli/typer_serve.py</code>).
             </p>
-            <pre>{`1. HookEvent.SHUTDOWN_STARTED 발화
+            <pre>{`1. RuntimeEvent.SHUTDOWN_STARTED 발화
 2. IPC 소켓 닫기 (신규 클라이언트 차단)
 3. 활성 세션 drain (최대 30초)
 4. 스케줄러 save + stop
@@ -164,7 +164,7 @@ geode serve (daemon)  ←  one GeodeRuntime owns everything`}</pre>
                 <tr><th>Stage</th><th>What it builds</th><th>Code</th></tr>
               </thead>
               <tbody>
-                <tr><td>1</td><td>HookSystem plus the run-log handler. Every production hook registers here.</td><td><code>core/wiring/bootstrap.py</code></td></tr>
+                <tr><td>1</td><td>RuntimeEventBus, SQLite sink, and process-owned public hook and middleware registries.</td><td><code>core/wiring/bootstrap.py</code>, <code>core/server/supervised/services.py</code></td></tr>
                 <tr><td>2</td><td>PolicyChain, ToolRegistry, LaneQueue, auth stores</td><td><code>core/wiring/container.py</code></td></tr>
                 <tr><td>3</td><td>TriggerManager + SchedulerService</td><td><code>core/wiring/scheduling.py</code></td></tr>
                 <tr><td>4</td><td>MCP, notification, calendar, and gateway adapters</td><td><code>core/wiring/adapters.py</code></td></tr>
@@ -201,7 +201,7 @@ geode serve (daemon)  ←  one GeodeRuntime owns everything`}</pre>
               finish, save state, then close connections
               (<code>core/cli/typer_serve.py</code>).
             </p>
-            <pre>{`1. fire HookEvent.SHUTDOWN_STARTED
+            <pre>{`1. fire RuntimeEvent.SHUTDOWN_STARTED
 2. close the IPC socket (no new clients)
 3. drain active sessions (up to 30s)
 4. scheduler save + stop

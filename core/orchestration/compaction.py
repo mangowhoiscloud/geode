@@ -142,7 +142,7 @@ async def compact_conversation(
         log.warning("Compaction summary generation failed — keeping original messages")
         return messages, False
     if session_id:
-        _persist_compaction_summary(
+        persisted = _persist_compaction_summary(
             session_id=session_id,
             session_manager=session_manager,
             summary=summary,
@@ -154,6 +154,9 @@ async def compact_conversation(
             original_message_count=len(messages),
             summarized_message_count=len(to_summarize),
         )
+        if not persisted:
+            log.warning("Compaction summary was not persisted — keeping original messages")
+            return messages, False
 
     # Phase 4 — carry forward
     new_messages = repair_tool_pairs(_carry_forward(summary, to_keep))
@@ -182,7 +185,7 @@ def _persist_compaction_summary(
     trigger: str,
     original_message_count: int,
     summarized_message_count: int,
-) -> None:
+) -> bool:
     try:
         manager = session_manager
         owns_manager = False
@@ -207,8 +210,10 @@ def _persist_compaction_summary(
         )
         if owns_manager:
             manager.close()
+        return True
     except Exception:
-        log.debug("Failed to persist compaction summary artifact", exc_info=True)
+        log.warning("Failed to persist compaction summary artifact", exc_info=True)
+        return False
 
 
 def _message_seq(message: dict[str, Any]) -> int | None:

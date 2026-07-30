@@ -19,9 +19,7 @@ from typing import Any
 
 from core.hooks.system import (
     HookEvent,
-    HookResult,
     HookSystem,
-    InterceptResult,
     resolve_event_value,
 )
 
@@ -60,9 +58,12 @@ def _validate_payload(event: HookEvent, data: dict[str, Any]) -> None:
     Once per (event, emitting caller) — a hot broken emitter (e.g. a
     per-tool-call TOOL_EXEC_ENDED) must not flood the daemon log.
     """
-    from core.hooks.catalog import REQUIRED_PAYLOAD_KEYS
+    from core.hooks.catalog import required_payload_keys
 
-    required = REQUIRED_PAYLOAD_KEYS.get(event)
+    # Unions the hand-written table with the pydantic details models, so the 14
+    # contracts that only existed as row-model fields are checked at emit time
+    # too (they were silently unenforced before).
+    required = required_payload_keys(event)
     if not required:
         return
     missing = sorted(required - data.keys())
@@ -134,49 +135,7 @@ async def fire_hook_async(
         _warn_dispatch_failure(event)
 
 
-async def fire_interceptor_async(
-    hooks: HookSystem | None,
-    event: HookEvent | str,
-    data: dict[str, Any],
-) -> InterceptResult | None:
-    """Fire an interceptor chain (block/modify semantics), gracefully.
-
-    Returns the :class:`InterceptResult` when hooks are configured and the
-    dispatch succeeded, ``None`` otherwise — callers treat ``None`` as
-    "not blocked, unmodified".
-    """
-    if hooks is None:
-        return None
-    try:
-        resolved = _coerce_event(event)
-        return await hooks.trigger_interceptor_async(resolved, data)
-    except Exception:
-        _warn_dispatch_failure(event)
-        return None
-
-
-async def fire_with_result_async(
-    hooks: HookSystem | None,
-    event: HookEvent | str,
-    data: dict[str, Any],
-) -> list[HookResult]:
-    """Fire a feedback hook capturing handler return values, gracefully.
-
-    Returns an empty list when hooks are unset or the dispatch failed.
-    """
-    if hooks is None:
-        return []
-    try:
-        resolved = _coerce_event(event)
-        return await hooks.trigger_with_result_async(resolved, data)
-    except Exception:
-        _warn_dispatch_failure(event)
-        return []
-
-
 __all__ = [
     "fire_hook",
     "fire_hook_async",
-    "fire_interceptor_async",
-    "fire_with_result_async",
 ]

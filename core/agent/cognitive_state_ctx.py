@@ -34,6 +34,7 @@ _active_state: ContextVar[CognitiveState | None] = ContextVar(
     "geode_active_cognitive_state", default=None
 )
 _active_session_id: ContextVar[str] = ContextVar("geode_active_session_id", default="")
+_active_turn_id: ContextVar[str] = ContextVar("geode_active_turn_id", default="")
 # PR-F (2026-05-21) — sub-agent lineage. When the active loop is a
 # child spawned via the OpenClaw spawn pattern, this carries the
 # parent loop's ``_parent_session_key`` (the OpenClaw routing key,
@@ -90,6 +91,16 @@ def set_session_id(session_id: str) -> None:
     _active_session_id.set(session_id)
 
 
+def get_turn_id() -> str:
+    """Return the active agentic turn id, or ``""`` outside a turn."""
+    return _active_turn_id.get()
+
+
+def set_turn_id(turn_id: str) -> None:
+    """Bind the active turn id to the current async context."""
+    _active_turn_id.set(turn_id)
+
+
 def get_parent_session_key() -> str:
     """PR-F (2026-05-21) — return the active loop's parent
     ``_parent_session_key`` (OpenClaw routing-key format like
@@ -129,8 +140,10 @@ __all__ = [
     "get_parent_session_id",
     "get_parent_session_key",
     "get_session_id",
+    "get_turn_id",
     "set_cognitive_state",
     "set_parent_session_id",
     "set_parent_session_key",
     "set_session_id",
+    "set_turn_id",
 ]

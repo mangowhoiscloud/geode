@@ -47,6 +47,64 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.9] - 2026-07-31
+
+> Public extension control is now a small, versioned hook ABI backed by
+> trusted tool/LLM middleware and a separate internal runtime-event plane.
+
+### Changed
+
+- Extension authority is split into three explicit surfaces: 13 versioned,
+  bounded public hooks (`HookName` / `HookRegistry`), four trusted request and
+  execution middleware join points (`MiddlewareRegistry`), and the
+  observation-only `RuntimeEventBus`. Tool and LLM execution now have real
+  async onion boundaries; compaction, approval, sub-agent, durable session,
+  and verification checkpoints are wired to their owning state transitions.
+  `PostVerify` supports monotone bounded continuation without replaying tool
+  side effects. Escalation now withholds the candidate, parks the session under
+  `external_verification_required`, and exposes `AgenticResult.pending_text`
+  only to the owning outer loop. The existing 56 stored runtime-event values
+  and SQLite rows are unchanged; compatibility aliases retain `HookEvent` /
+  `HookSystem`.
+- Extension invocation audit metadata is canonical in
+  `sessions.db:hook_events` and conditionally mirrored to an active run
+  `transcript.jsonl`. Request/response bodies and handler reasons are omitted.
+  The single new `EXTENSION_INVOKED` runtime event uses audit retention.
+- Hook `action` namespaces fold from 27 first-segments to 13 families. 16 of the 27 held a single
+  event each, so the namespace classified nothing for more than half the vocabulary; the singletons
+  now sit in the domain they belong to (`adapter`/`prompt`/`model`/`reasoning` → `llm`,
+  `user`/`execution`/`result`/`post` → `turn`, `shutdown`/`handoff` → `session`, plus new `policy`
+  and `improve`). No event is added or removed — all 56 stay live — and `ACTION_FAMILY_ALIASES`
+  keeps rows already on disk resolving — verified against every `action` in the live
+  `hook_events` table, pre-fold segments included. For scale, read from source rather than docs:
+  Hermes declares 23 hooks (`hermes_cli/plugins.py` `VALID_HOOKS`), Codex 50 metric constants plus
+  14 event names (`codex-rs/otel/src/metrics/names.rs`, `events/session_telemetry.rs`).
+- Dispatch stamps `schema_version` on every payload (`OBSERVER_SCHEMA_VERSION`, `geode.observer.v1`).
+  A subscriber that only receives the payload — a plugin, an exporter — could not otherwise tell
+  which contract it was reading, since `hook_events.schema_version` is visible to SQL readers only.
+  `setdefault`, so a replayer feeding an archived payload keeps that payload's version.
+
+### Fixed
+
+- Trusted/public tool rewrites now propagate the effective tool name,
+  arguments, and cumulative personal-data classification into approval,
+  transcript, tool-log, and offload policy. Batch cost approval is scoped only
+  to the original expensive-operation cost gate and cannot authorize a
+  rewritten MCP/write/dangerous tool. Headless hook-requested permission fails
+  closed rather than opening a console prompt. Tool lifecycle runtime events
+  retain session/turn correlation after the middleware boundary moved into the
+  executor.
+- Public hook dispatch keeps required schema fields when bounding payloads,
+  isolates handler payload copies, rejects in-place mutation, and permits
+  payload updates only for `REWRITE`. Tool-execution short circuits now close
+  approval records as `skipped`, and IPC/scheduler terminal owners call the
+  async `SessionEnd` path.
+- The emit-side payload validator now reads both contract registries instead of one.
+  `REQUIRED_PAYLOAD_KEYS` covers 4 events by hand while the declarative `_TYPED_ROW_SPECS` table
+  carries pydantic `details_cls` models whose required fields are a contract for 14 more — a
+  disjoint set the validator never consulted. Deriving rather than transcribing raises emit-time
+  coverage from 4/56 to 18/56 without adding a hand-written contract.
+
 ## [1.0.8] - 2026-07-30
 
 ### Added

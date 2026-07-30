@@ -5,12 +5,11 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import time
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from core.agent.error_recovery import ErrorRecoveryStrategy
-    from core.hooks import HookResult, HookSystem, InterceptResult
+    from core.hooks import HookSystem
     from core.ui.agentic_ui import OperationLogger
 
 from core.agent.safety import (
@@ -24,7 +23,6 @@ from core.agent.safety import (
 from core.hooks.system import HookEvent
 from core.tools.computer_observation import sanitize_computer_payload
 from core.tools.personal_data import (
-    PERSONAL_DATA_ERROR_OMITTED,
     PERSONAL_DATA_TOOLS,
     personal_data_omitted,
     sanitize_personal_data_payload,
@@ -125,9 +123,11 @@ class ToolCallProcessor:
         result: Any,
         visible: bool,
         tool_use_id: str = "",
+        *,
+        contains_personal_data: bool = False,
     ) -> None:
         """Log result, record transcript events, and append to tool_log."""
-        personal = tool_name in PERSONAL_DATA_TOOLS
+        personal = contains_personal_data or tool_name in PERSONAL_DATA_TOOLS
         durable_input = personal_data_omitted(tool_name) if personal else tool_input
         durable_result = personal_data_omitted(tool_name) if personal else result
 
@@ -244,7 +244,12 @@ class ToolCallProcessor:
         return {"type": "tool_result", "tool_use_id": block_id, "content": content}
 
     async def _serialize_tool_result(
-        self, result: Any, block_id: str, tool_name: str = ""
+        self,
+        result: Any,
+        block_id: str,
+        tool_name: str = "",
+        *,
+        contains_personal_data: bool = False,
     ) -> dict[str, Any]:
         """Apply token guard, offload large results, and serialize for LLM."""
         # Computer-use screenshots return as an image block (see above) —
@@ -273,6 +278,7 @@ class ToolCallProcessor:
             offload_store
             and offload_store.threshold > 0
             and estimated_tokens > offload_store.threshold
+            and not contains_personal_data
             and tool_name not in PERSONAL_DATA_TOOLS
         ):
             from core.orchestration.tool_offload import extract_result_summary
@@ -310,7 +316,12 @@ class ToolCallProcessor:
             "content": content,
         }
 
-    async def _execute_single(self, block: Any) -> dict[str, Any]:
+    async def _execute_single(
+        self,
+        block: Any,
+        *,
+        batch_cost_approved: bool = False,
+    ) -> dict[str, Any]:
         """Execute a single tool_use block and return its processed result dict.
 
         Handles consecutive failure tracking, recovery, clarification guards,
@@ -324,30 +335,12 @@ class ToolCallProcessor:
 
         log.info("ToolCallProcessor: tool_use %s(keys=%s)", tool_name, sorted(tool_input))
 
-        # Every accepted tool attempt has one start and one terminal end,
-        # including interceptor blocks, adaptive recovery, and exceptions.
         fail_count = self._consecutive_failures.get(tool_name, 0)
         visible = self._op_logger.log_tool_call(tool_name, tool_input)
-        started_at = time.monotonic()
-        intercept = await self._fire_interceptor(
-            HookEvent.TOOL_EXEC_STARTED,
-            {"tool_name": tool_name, "tool_input": tool_input},
-        )
-        if intercept is not None:
-            modified_input = intercept.data.get("tool_input")
-            if isinstance(modified_input, dict):
-                tool_input = modified_input
+        tool_ctx: Any | None = None
 
         last_recoverable = self._last_error_recoverable.get(tool_name, True)
-        if intercept is not None and intercept.blocked:
-            log.info("Tool %s blocked by TOOL_EXEC_START hook: %s", tool_name, intercept.reason)
-            result: Any = {
-                "error": intercept.reason,
-                "error_type": "hook_blocked",
-                "blocked_by_hook": True,
-                "recoverable": False,
-            }
-        elif fail_count >= self.MAX_CONSECUTIVE_FAILURES and last_recoverable:
+        if fail_count >= self.MAX_CONSECUTIVE_FAILURES and last_recoverable:
             try:
                 result = await self._attempt_recovery(tool_name, tool_input, fail_count)
             except Exception as exc:
@@ -377,6 +370,7 @@ class ToolCallProcessor:
                 source=self._source,
                 model=self._model,
                 adapter_name=self._adapter_name,
+                batch_cost_approved=batch_cost_approved,
             )
             try:
                 result = await self._executor.aexecute(tool_name, tool_input, context=tool_ctx)
@@ -388,34 +382,22 @@ class ToolCallProcessor:
                     "recoverable": False,
                 }
 
-        # One feedback stage owns result rewriting. Legacy ``updated_result``
-        # and ``additional_context`` keys are accepted here during migration;
-        # TOOL_EXEC_ENDED is now a terminal observer, not a second transformer.
-        preliminary_error = isinstance(result, dict) and bool(result.get("error"))
-        transform_results = await self._fire_with_result(
-            HookEvent.TOOL_RESULT_TRANSFORM,
-            {
-                "tool_name": tool_name,
-                "tool_input": tool_input,
-                "result": result,
-                "has_error": preliminary_error,
-            },
+        effective_tool_name = (
+            tool_ctx.effective_tool_name
+            if tool_ctx is not None and tool_ctx.effective_tool_name
+            else tool_name
         )
-        for hook_result in transform_results:
-            if not hook_result.success or not isinstance(hook_result.data, dict):
-                continue
-            transformed = hook_result.data.get("transformed_result")
-            if not isinstance(transformed, dict):
-                transformed = hook_result.data.get("updated_result")
-            if isinstance(transformed, dict):
-                result = transformed
-            extra_ctx = hook_result.data.get("additional_context")
-            if extra_ctx and isinstance(result, dict):
-                previous = result.get("additional_context", "")
-                result["additional_context"] = f"{previous}\n{extra_ctx}" if previous else extra_ctx
+        effective_tool_input = (
+            dict(tool_ctx.effective_tool_arguments)
+            if tool_ctx is not None and tool_ctx.effective_tool_arguments is not None
+            else tool_input
+        )
+        contains_personal_data = (
+            bool(tool_ctx is not None and tool_ctx.contains_personal_data)
+            or effective_tool_name in PERSONAL_DATA_TOOLS
+        )
 
-        # Apply clarification guard before the terminal event so persisted
-        # status always reflects the value returned to the model.
+        # Apply clarification guard before the result reaches model context.
         if isinstance(result, dict) and result.get("clarification_needed"):
             self._clarification_count += 1
             if self._clarification_count > self.MAX_CLARIFICATION_ROUNDS:
@@ -428,49 +410,29 @@ class ToolCallProcessor:
                     "recoverable": False,
                 }
 
-        elapsed_ms = (time.monotonic() - started_at) * 1_000
-        has_error = isinstance(result, dict) and bool(result.get("error"))
-        await self._fire_hook(
-            HookEvent.TOOL_EXEC_ENDED,
-            {
-                "tool_name": tool_name,
-                "tool_input": tool_input,
-                "duration_ms": elapsed_ms,
-                "has_error": has_error,
-                "result": result,
-            },
-        )
-        if has_error:
-            hook_error = result.get("error") if isinstance(result, dict) else str(result)
-            if tool_name in PERSONAL_DATA_TOOLS:
-                hook_error = PERSONAL_DATA_ERROR_OMITTED
-            await self._fire_hook(
-                HookEvent.TOOL_EXEC_FAILED,
-                {
-                    "tool_name": tool_name,
-                    "tool_input": tool_input,
-                    "duration_ms": elapsed_ms,
-                    "error": hook_error,
-                    "error_type": result.get("error_type", "unknown")
-                    if isinstance(result, dict)
-                    else "unknown",
-                    "recoverable": result.get("recoverable", True)
-                    if isinstance(result, dict)
-                    else False,
-                },
-            )
-
         # Track consecutive failures + recoverability breadcrumb
         if isinstance(result, dict) and result.get("error"):
             if not result.get("recovery_attempted"):
-                self._consecutive_failures[tool_name] = fail_count + 1
-                self._last_error_recoverable[tool_name] = result.get("recoverable", True)
+                self._consecutive_failures[effective_tool_name] = fail_count + 1
+                self._last_error_recoverable[effective_tool_name] = result.get("recoverable", True)
         else:
-            self._consecutive_failures[tool_name] = 0
-            self._last_error_recoverable.pop(tool_name, None)
+            self._consecutive_failures[effective_tool_name] = 0
+            self._last_error_recoverable.pop(effective_tool_name, None)
 
-        self._record_tool_activity(tool_name, tool_input, result, visible, block.id)
-        return await self._serialize_tool_result(result, block.id, tool_name)
+        self._record_tool_activity(
+            effective_tool_name,
+            effective_tool_input,
+            result,
+            visible,
+            block.id,
+            contains_personal_data=contains_personal_data,
+        )
+        return await self._serialize_tool_result(
+            result,
+            block.id,
+            effective_tool_name,
+            contains_personal_data=contains_personal_data,
+        )
 
     async def _execute_sequential(self, tool_blocks: list[Any]) -> list[dict[str, Any]]:
         """Execute tool blocks one by one (single-tool fast path)."""
@@ -556,17 +518,16 @@ class ToolCallProcessor:
 
         # Step 4: Execute parallel pool
         if parallel_items:
-            old_auto_approve = self._executor._auto_approve
-            if tier2_approved and tiered[2]:
-                self._executor._auto_approve = True
-
-            try:
-                gathered = await asyncio.gather(
-                    *[self._safe_execute_single(block) for _, block in parallel_items]
-                )
-            finally:
-                if tier2_approved and tiered[2]:
-                    self._executor._auto_approve = old_auto_approve
+            batch_approved_indexes = {idx for idx, _block in tiered[2]}
+            gathered = await asyncio.gather(
+                *[
+                    self._safe_execute_single(
+                        block,
+                        batch_cost_approved=idx in batch_approved_indexes,
+                    )
+                    for idx, block in parallel_items
+                ]
+            )
 
             for (idx, _block), result in zip(parallel_items, gathered, strict=True):
                 results[idx] = result
@@ -578,10 +539,18 @@ class ToolCallProcessor:
 
         return [r for r in results if r is not None]
 
-    async def _safe_execute_single(self, block: Any) -> dict[str, Any]:
+    async def _safe_execute_single(
+        self,
+        block: Any,
+        *,
+        batch_cost_approved: bool = False,
+    ) -> dict[str, Any]:
         """Wrapper that catches unexpected exceptions per tool."""
         try:
-            return await self._execute_single(block)
+            return await self._execute_single(
+                block,
+                batch_cost_approved=batch_cost_approved,
+            )
         except Exception as exc:
             log.error(
                 "Parallel tool %s raised unexpected error: %s",
@@ -655,20 +624,6 @@ class ToolCallProcessor:
         from core.hooks.dispatch import fire_hook_async
 
         await fire_hook_async(self._hooks, event, data)
-
-    async def _fire_interceptor(
-        self, event: HookEvent, data: dict[str, Any]
-    ) -> InterceptResult | None:
-        """Interceptor dispatch (block/modify) via the shared path."""
-        from core.hooks.dispatch import fire_interceptor_async
-
-        return await fire_interceptor_async(self._hooks, event, data)
-
-    async def _fire_with_result(self, event: HookEvent, data: dict[str, Any]) -> list[HookResult]:
-        """Feedback dispatch (handler return values) via the shared path."""
-        from core.hooks.dispatch import fire_with_result_async
-
-        return await fire_with_result_async(self._hooks, event, data)
 
     @staticmethod
     def _make_denial_result(block: Any, reason: str) -> dict[str, Any]:

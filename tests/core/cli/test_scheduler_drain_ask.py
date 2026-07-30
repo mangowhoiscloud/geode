@@ -40,6 +40,15 @@ class _FakeLoop:
     def mark_session_error(self) -> None:
         self.status_marks.append("error")
 
+    async def amark_session_paused(self) -> None:
+        self.status_marks.append("paused")
+
+    async def amark_session_completed(self) -> None:
+        self.status_marks.append("completed")
+
+    async def amark_session_error(self) -> None:
+        self.status_marks.append("error")
+
 
 class _FakeServices:
     def __init__(self, result: Any) -> None:
@@ -103,6 +112,12 @@ def test_natural_termination_publishes_nothing_and_completes(monkeypatch):
     published, services = _run_drain(monkeypatch, "natural")
     assert published == []
     assert services.loops[0].status_marks == ["completed"]
+
+
+def test_external_verification_termination_pauses_without_pending_ask(monkeypatch):
+    published, services = _run_drain(monkeypatch, "external_verification_required")
+    assert published == []
+    assert services.loops[0].status_marks == ["paused"]
 
 
 class _ExplodingLoop(_FakeLoop):

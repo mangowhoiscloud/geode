@@ -135,7 +135,7 @@ export default function Page() {
               (<code>core/self_improving/loop/mutate/runner.py</code>)는{" "}
               <code>program.md</code>를 읽지 못하면 코드에 박힌 리터럴 미러로
               조용히 대체하지 않습니다. 대신{" "}
-              <code>HookEvent.PROGRAM_MD_UNREADABLE</code>을 발화합니다.
+              <code>RuntimeEvent.PROGRAM_MD_UNREADABLE</code>을 발화합니다.
               핸들러가 대체 내용을 돌려줄 수 있고, 핸들러가 없으면 러너는
               시끄럽게 실패합니다. 폴백을 데이터 미러가 아니라 코드의 제어
               지점으로 두는 설계입니다. 디스크와 리터럴의 이중 SoT는 반드시
@@ -297,7 +297,7 @@ export default function Page() {
               (<code>core/self_improving/loop/mutate/runner.py</code>) does not
               silently substitute a code-embedded literal mirror when{" "}
               <code>program.md</code> is unreadable. It fires{" "}
-              <code>HookEvent.PROGRAM_MD_UNREADABLE</code> instead. A handler may
+              <code>RuntimeEvent.PROGRAM_MD_UNREADABLE</code> instead. A handler may
               return replacement content; with no handler, the runner fails
               loudly. Fallback is a control point in code, not a data mirror: a
               dual source of truth between disk and a literal always drifts.

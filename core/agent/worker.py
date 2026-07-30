@@ -456,6 +456,7 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
         # denylist, PR-EXEC-HARDENING). This is what makes a role
         # allowlist (e.g. repo_researcher without run_bash) actually hold.
         denied_tools=frozenset(request.denied_tools) | {"delegate_task"},
+        interactive_approval=False,
     )
 
     # 4. Build ConversationContext
@@ -588,7 +589,7 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
     # PR-WORKER-SCHEMA-AWARE-RETRY (2026-05-26) — when the caller declared
     # a ``response_schema`` (PR-JSON-WIRE wired per-role schemas through
     # ``WorkerRequest`` → ``AgenticLoop``) but the first run produced
-    # empty / unparseable / schema-missing-keys output, the prompt-level
+    # empty / unparsable / schema-missing-keys output, the prompt-level
     # PR-HANDOFF-SCHEMAS gate already failed for this task. Inject the
     # validator's verdict as a follow-up user turn (paperclip + open-
     # scientist validation-feedback pattern) and re-issue the loop once.
@@ -694,7 +695,9 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
 #   ``billing_error``, ``cost_budget_exceeded``, ``convergence_detected``
 #   (loop bailed after detecting a repeating error pattern — see
 #   ``agent_loop.py`` ~1828 where ``error="convergence_detected"`` is
-#   set alongside termination_reason).
+#   set alongside termination_reason), ``external_verification_required``
+#   (the candidate is held in ``pending_text`` until an external verifier
+#   resolves the delivery gate).
 # * Success exits (text IS the legitimate output):
 #   ``unknown`` (default success exit), ``input_blocked`` (text is the
 #   block diagnostic that the parent expects to surface),
@@ -708,6 +711,7 @@ _FAILURE_TERMINATION_REASONS: frozenset[str] = frozenset(
         "billing_error",
         "cost_budget_exceeded",
         "convergence_detected",
+        "external_verification_required",
     }
 )
 
@@ -723,16 +727,18 @@ _FAILURE_TERMINATION_REASONS: frozenset[str] = frozenset(
 # * ``user_clarification_needed`` — overthinking detected; text IS the
 #   follow-up question. Retrying re-burns the budget that the loop
 #   bailed out of in the first place.
+# * ``external_verification_required`` — PostVerify escalated the candidate
+#   to an external verifier. Retrying would bypass that authority boundary.
 #
-# Sourced from ``_resolve_worker_outcome``'s success-exit catalogue
-# (worker.py ~480-490 docstring) — anything classified as success there
-# must stay success here, otherwise the retry would invalidate the
-# parent's classification.
+# Sourced from ``_resolve_worker_outcome``'s terminal catalogue and the
+# PostVerify delivery-gate contract. Success exits stay successful, while
+# external verification stays paused rather than being silently retried.
 _NO_RETRY_TERMINATION_REASONS: frozenset[str] = frozenset(
     {
         "input_blocked",
         "user_cancelled",
         "user_clarification_needed",
+        "external_verification_required",
     }
 )
 
@@ -771,8 +777,10 @@ def _needs_schema_retry(
     as-is. ``_resolve_worker_outcome`` already classifies them as
     ``success=True``. Returning ``True`` here would re-call the loop on
     a cancelled / blocked / clarification task — wasted budget and
-    semantically wrong. The ``_NO_RETRY_TERMINATION_REASONS`` check
-    below short-circuits those before the text-parse branch.
+    semantically wrong. ``external_verification_required`` is likewise
+    terminal: the candidate has moved to ``pending_text`` for an external
+    verifier. The ``_NO_RETRY_TERMINATION_REASONS`` check short-circuits
+    all four before the text-parse branch.
     """
     if agentic_result is None:
         return True

@@ -113,6 +113,8 @@ class SharedServices:
     mcp_manager: Any = None
     skill_registry: Any = None
     hook_system: Any = None  # HookSystem — never None after init
+    hook_registry: Any = None  # process-owned public HookRegistry
+    middleware_registry: Any = None  # process-owned trusted MiddlewareRegistry
     _owns_hook_system: bool = False
     lane_queue: Any = None  # Unified LaneQueue — single concurrency gate
     tool_handlers: dict[str, Any] = field(default_factory=dict)
@@ -131,6 +133,15 @@ class SharedServices:
     _cost_budget: float = 0.0
 
     # --- public API -----------------------------------------------------------
+
+    def __post_init__(self) -> None:
+        """Ensure directly-constructed services still own one registry pair."""
+        from core.hooks import HookRegistry, MiddlewareRegistry
+
+        if self.hook_registry is None:
+            self.hook_registry = HookRegistry(events=self.hook_system)
+        if self.middleware_registry is None:
+            self.middleware_registry = MiddlewareRegistry(events=self.hook_system)
 
     def close(self) -> None:
         """Release resources created by :func:`build_shared_services`."""
@@ -224,8 +235,11 @@ class SharedServices:
             sub_agent_manager=sub_mgr,
             hitl_level=hitl,
             hooks=self.hook_system,
+            hook_registry=self.hook_registry,
+            middleware_registry=self.middleware_registry,
             approval_callback=approval_cb,
             denied_tools=headless_denied,
+            interactive_approval=mode in {SessionMode.REPL, SessionMode.IPC},
         )
 
         # PR-R6 (2026-05-24) — operator's effort choice from ``/model``
@@ -288,6 +302,7 @@ class SharedServices:
             skill_registry=self.skill_registry,
             agent_registry=agent_registry,
             hooks=self.hook_system,
+            hook_registry=self.hook_registry,
             max_depth=settings.max_subagent_depth,
             max_total_subagents=settings.max_total_subagents,
         )
@@ -388,6 +403,8 @@ def build_shared_services(
     mcp_manager: Any = None,
     skill_registry: Any = None,
     hook_system: Any = None,
+    hook_registry: Any = None,
+    middleware_registry: Any = None,
     lane_queue: Any = None,
     verbose: bool = False,
 ) -> SharedServices:
@@ -407,6 +424,13 @@ def build_shared_services(
             run_id=uuid.uuid4().hex[:12],
             log_dir=None,
         )
+
+    from core.hooks import HookRegistry, MiddlewareRegistry
+
+    if hook_registry is None:
+        hook_registry = HookRegistry(events=hook_system)
+    if middleware_registry is None:
+        middleware_registry = MiddlewareRegistry(events=hook_system)
 
     # P0: Tool result offloading
     from core.wiring.bootstrap import build_tool_offload
@@ -444,6 +468,8 @@ def build_shared_services(
         mcp_manager=mcp_manager,
         skill_registry=skill_registry,
         hook_system=hook_system,
+        hook_registry=hook_registry,
+        middleware_registry=middleware_registry,
         _owns_hook_system=owns_hook_system,
         lane_queue=lane_queue,
         tool_handlers=tool_handlers,

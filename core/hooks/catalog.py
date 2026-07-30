@@ -57,6 +57,7 @@ _AUDIT_EVENTS = frozenset(
         HookEvent.COST_WARNING,
         HookEvent.COST_LIMIT_EXCEEDED,
         HookEvent.EXECUTION_CANCELLED,
+        HookEvent.EXTENSION_INVOKED,
         HookEvent.HANDOFF_TRIGGERED,
         HookEvent.MEMORY_PROMOTION_PROPOSED,
         HookEvent.MUTATION_PROPOSED,
@@ -112,6 +113,102 @@ REQUIRED_PAYLOAD_KEYS: dict[HookEvent, frozenset[str]] = {
 }
 
 
+# Contract version carried on every dispatched payload. Bump when a payload
+# contract changes shape; readers pin on it the way SQL readers pin on the
+# hook_events.schema_version column.
+OBSERVER_SCHEMA_VERSION = "geode.observer.v1"
+
+
+# Action-namespace families (2026-07-30). The first ``action`` segment is the
+# only grouping key observability readers have, and 16 of the 27 segments held a
+# single event each — a namespace that classifies nothing. Folding the singletons
+# into the domain they already belong to leaves 13 families and 0 singletons
+# without adding or removing an event.
+#
+# Hermes groups ~15 observer hooks into 6 families (hermes_cli/plugins.py
+# VALID_HOOKS); Codex names ~66 signals across ~12 domains
+# (codex-rs/otel/src/metrics/names.rs). GEODE sat at 56 events / 27 families.
+#
+# Old first segments stay readable through ACTION_FAMILY_ALIASES, the same shape
+# the v1→v2 event rename used (core.hooks.system.LEGACY_EVENT_VALUES).
+ACTION_FAMILY_ALIASES: dict[str, str] = {
+    # the LLM call path — assembly, dispatch, switch, and its reasoning output
+    "adapter": "llm",
+    "prompt": "llm",
+    "model": "llm",
+    "reasoning": "llm",
+    # one user turn, from input to cancellation, feedback, and post-analysis
+    "user": "turn",
+    "execution": "turn",
+    "result": "turn",
+    "post": "turn",
+    # session lifetime boundaries
+    "shutdown": "session",
+    "handoff": "session",
+    # operator-facing policy surfaces
+    "rule": "policy",
+    "config": "policy",
+    "extension": "policy",
+    "program": "policy",
+    # the self-improvement loop
+    "trigger": "improve",
+    "self": "improve",
+    "baseline": "improve",
+}
+
+ACTION_FAMILIES: frozenset[str] = frozenset(
+    {
+        "cognitive",
+        "context",
+        "cost",
+        "improve",
+        "llm",
+        "mcp",
+        "memory",
+        "mutation",
+        "policy",
+        "session",
+        "subagent",
+        "tool",
+        "turn",
+    }
+)
+
+
+def action_family(action: str) -> str:
+    """Return the canonical family for an ``action`` string.
+
+    Accepts both the folded form and any pre-fold value still on disk, so the
+    2,179 rows already in ``hook_events`` keep resolving.
+    """
+    head = action.split(".", 1)[0]
+    return ACTION_FAMILY_ALIASES.get(head, head)
+
+
+def required_payload_keys(event: HookEvent) -> frozenset[str]:
+    """The emit-side payload contract for ``event``, from both places it lives.
+
+    Two registries described the same thing and neither knew about the other:
+    ``REQUIRED_PAYLOAD_KEYS`` is hand-written and covers the 4 events built by
+    dedicated row classes, while the declarative ``_TYPED_ROW_SPECS`` table
+    carries pydantic ``details_cls`` models whose required fields are a contract
+    for 14 more — a disjoint set. The dispatch validator only consulted the
+    hand-written half, so 14 contracts that already existed went unchecked.
+
+    Deriving the pydantic half instead of transcribing it keeps one source per
+    event (CLAUDE.md CANNOT: no two registries for the same domain).
+    """
+    manual = REQUIRED_PAYLOAD_KEYS.get(event, frozenset())
+    from core.observability.activity_registry import _TYPED_ROW_SPECS
+
+    spec = _TYPED_ROW_SPECS.get(event)
+    details = getattr(spec, "details_cls", None) if spec is not None else None
+    derived = frozenset(
+        name for name, field in getattr(details, "model_fields", {}).items() if field.is_required()
+    )
+    return manual | derived
+
+
 def event_persistence_spec(event: HookEvent) -> EventPersistenceSpec:
     """Return the single persistence policy for ``event``."""
     canonical = _COMPATIBILITY_EVENTS.get(event)
@@ -130,8 +227,13 @@ def event_persistence_spec(event: HookEvent) -> EventPersistenceSpec:
 
 
 __all__ = [
+    "ACTION_FAMILIES",
+    "ACTION_FAMILY_ALIASES",
+    "OBSERVER_SCHEMA_VERSION",
     "REQUIRED_PAYLOAD_KEYS",
     "EventPersistenceSpec",
     "EventRetentionClass",
+    "action_family",
     "event_persistence_spec",
+    "required_payload_keys",
 ]

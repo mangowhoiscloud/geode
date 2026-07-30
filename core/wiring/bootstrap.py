@@ -576,12 +576,11 @@ def build_hooks(
     # (tool_name, tool_input, has_error, result, duration_ms); we record
     # an Episode row + the COGNITIVE_UPDATE_MEMORY hook (PR-2) snapshot
     # so PR-5 can compute "tool X succeeded in situation Y at rate Z"
-    # deltas. Hook is registered at priority 70 — observer, runs after
-    # the TOOL_EXEC_ENDED interceptors but before audit loggers.
+    # deltas. Hook is registered at priority 70 — observer, runs before
+    # lower-priority audit loggers.
     #
     # Threading note: the EpisodicStore.append path is synchronous file
-    # I/O. It fires inside the asyncio hook flow (the agent loop awaits
-    # ``trigger_with_result_async``) so it briefly blocks the event
+    # I/O. It fires inside the awaited async event flow, so it briefly blocks the event
     # loop. Per-write cost is one ``write()`` + occasional rotation
     # (capped at max_rows * 1.25 ≈ 1250 rows, with an atomic temp-file
     # rewrite). Bounded enough that async-to-thread offload would add

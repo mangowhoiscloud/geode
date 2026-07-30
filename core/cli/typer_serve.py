@@ -169,6 +169,8 @@ def serve(
         mcp_manager=runtime.mcp_manager,
         skill_registry=runtime.skill_registry,
         hook_system=runtime.hooks,
+        hook_registry=runtime.hook_registry,
+        middleware_registry=runtime.middleware_registry,
         lane_queue=runtime.lane_queue,
     )
 
@@ -233,9 +235,9 @@ def serve(
                     session_id=state.session_id,
                     source=f"ask-continuation:{state.session_id}",
                 )
-                _ask_loop.mark_session_paused()
+                await _ask_loop.amark_session_paused()
             else:
-                _ask_loop.mark_session_completed()
+                await _ask_loop.amark_session_completed()
         except Exception:
             log.warning("Ask continuation lifecycle close failed", exc_info=True)
         return _res.text if _res else ""
@@ -313,7 +315,7 @@ def serve(
                     runtime.session_store.delete(session_key)
                     # Terminal edge the gateway DOES own: the thread's
                     # machine instance is finished.
-                    loop.mark_session_completed()
+                    await loop.amark_session_completed()
                     log.info("Session cleared after context exhaustion: %s", session_key)
                 else:
                     runtime.session_store.set(

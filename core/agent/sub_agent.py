@@ -25,8 +25,15 @@ from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
+from core.agent.cognitive_state_ctx import get_session_id, get_turn_id
 from core.agent.worker import WorkerRequest
-from core.hooks import HookEvent, HookSystem
+from core.hooks import (
+    HookCorrelation,
+    HookName,
+    HookRegistry,
+    RuntimeEvent,
+    RuntimeEventBus,
+)
 from core.orchestration.isolated_execution import (
     IsolatedRunner,
     IsolationConfig,
@@ -440,7 +447,8 @@ class SubAgentManager:
         # multi-round tool reasoning the headroom it needs. Override
         # via ``GEODE_SUBAGENT_TIMEOUT_S`` env (clamped [10, 3600]).
         timeout_s: float = 600.0,
-        hooks: HookSystem | None = None,
+        hooks: RuntimeEventBus | None = None,
+        hook_registry: HookRegistry | None = None,
         agent_registry: AgentRegistry | None = None,
         parent_session_key: str = "",
         # P2-B: Full AgenticLoop inheritance
@@ -467,6 +475,7 @@ class SubAgentManager:
         self._timeout_s = _resolve_timeout_s(timeout_s)
         self._time_budget_s = time_budget_s
         self._hooks = hooks
+        self._hook_registry = hook_registry
         self._agent_registry = agent_registry
         self._parent_session_key = parent_session_key
         self._run_records: dict[str, SubagentRunRecord] = {}
@@ -603,7 +612,7 @@ class SubAgentManager:
         per_task_setup: list[tuple[SubTask, Any, IsolationConfig]] = []
         for task in tasks:
             graph.mark_running(task.task_id)
-            await self._emit_hook(HookEvent.SUBAGENT_STARTED, task)
+            await self._emit_hook(RuntimeEvent.SUBAGENT_STARTED, task)
 
             child_key = build_subagent_session_key(
                 task.args.get("subject_id", task.args.get("subject", "unknown")), task.task_id
@@ -636,6 +645,7 @@ class SubAgentManager:
                     "child_session_key": child_key,
                 },
             )
+            await self._emit_public_subagent_start(task, record)
             fn_or_request: Any
             if self._action_handlers is not None:
                 fn_or_request = self._build_worker_request(
@@ -670,7 +680,11 @@ class SubAgentManager:
             sub_result = self._to_sub_result(task, isolation)
             if sub_result.success:
                 graph.mark_completed(task.task_id, result=sub_result.output)
-                await self._emit_hook(HookEvent.SUBAGENT_COMPLETED, task, sub_result=sub_result)
+                await self._emit_hook(
+                    RuntimeEvent.SUBAGENT_COMPLETED,
+                    task,
+                    sub_result=sub_result,
+                )
             else:
                 graph.mark_failed(task.task_id, error=sub_result.error or "unknown")
                 # PR-COMM-3b — pass ``sub_result`` so the agent_runtime_state
@@ -678,11 +692,12 @@ class SubAgentManager:
                 # was passed and the status field was silently missing on
                 # production failures (Codex MCP review catch).
                 await self._emit_hook(
-                    HookEvent.SUBAGENT_FAILED,
+                    RuntimeEvent.SUBAGENT_FAILED,
                     task,
                     sub_result=sub_result,
                     error=sub_result.error,
                 )
+            await self._emit_public_subagent_stop(task, sub_result)
             if on_progress is not None:
                 try:
                     on_progress(sub_result)
@@ -755,7 +770,7 @@ class SubAgentManager:
         return list(results) + cap_overflow
 
     @property
-    def hooks(self) -> HookSystem | None:
+    def hooks(self) -> RuntimeEventBus | None:
         return self._hooks
 
     def get_run_records(self) -> dict[str, SubagentRunRecord]:
@@ -1013,7 +1028,7 @@ class SubAgentManager:
 
     async def _emit_hook(
         self,
-        event: HookEvent,
+        event: RuntimeEvent,
         task: SubTask,
         *,
         sub_result: SubResult | None = None,
@@ -1051,7 +1066,7 @@ class SubAgentManager:
             data["status"] = "completed" if sub_result.success else "failed"
             # Include result summary in SUBAGENT_COMPLETED hook data
             # (OpenClaw Announce pattern — hooks carry the completion summary)
-            if event == HookEvent.SUBAGENT_COMPLETED:
+            if event == RuntimeEvent.SUBAGENT_COMPLETED:
                 summary = sub_result.output.get("summary", "") if sub_result.output else ""
                 if not summary:
                     summary = str(sub_result.output)[:200] if sub_result.output else ""
@@ -1067,6 +1082,58 @@ class SubAgentManager:
                 task.task_id,
                 exc_info=True,
             )
+
+    async def _emit_public_subagent_start(
+        self,
+        task: SubTask,
+        record: SubagentRunRecord,
+    ) -> None:
+        """Project a start only after child identity and isolation are fixed."""
+        if self._hook_registry is None:
+            return
+        await self._hook_registry.invoke(
+            HookName.SUBAGENT_START,
+            payload={
+                "task_id": task.task_id,
+                "task_type": task.task_type,
+                "description": task.description,
+                "child_session_key": record.child_session_key,
+                "parent_session_key": record.parent_session_key,
+            },
+            correlation=HookCorrelation(
+                session_id=get_session_id(),
+                turn_id=get_turn_id(),
+                run_id=record.run_id,
+            ),
+        )
+
+    async def _emit_public_subagent_stop(
+        self,
+        task: SubTask,
+        result: SubResult,
+    ) -> None:
+        """Project the single terminal result for both success and failure."""
+        if self._hook_registry is None:
+            return
+        with self._records_lock:
+            record = self._run_records.get(task.task_id)
+        await self._hook_registry.invoke(
+            HookName.SUBAGENT_STOP,
+            payload={
+                "task_id": task.task_id,
+                "task_type": task.task_type,
+                "success": result.success,
+                "status": "completed" if result.success else "failed",
+                "duration_ms": result.duration_ms,
+                "error": result.error or "",
+                "child_session_key": record.child_session_key if record else "",
+            },
+            correlation=HookCorrelation(
+                session_id=get_session_id(),
+                turn_id=get_turn_id(),
+                run_id=record.run_id if record else "",
+            ),
+        )
 
     def _execute_subtask(self, task: SubTask) -> str:
         """Execute a single sub-task in thread mode (legacy handler path only).

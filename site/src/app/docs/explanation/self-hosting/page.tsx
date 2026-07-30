@@ -39,7 +39,7 @@ export default function Page() {
               <tbody>
                 <tr><td>해시 ratchet</td><td>프롬프트 해시 핀 (<code>core/llm/prompts/__init__.py</code>의 <code>_PINNED_HASHES</code>)</td><td>CI 게이트. lint, type, test, security + 카운트 바닥 ratchet들</td></tr>
                 <tr><td>계층 메모리</td><td>5-tier ContextAssembler (<code>core/memory/context.py</code>)</td><td>다층 CLAUDE.md (프로젝트 + 사용자 메모리)</td></tr>
-                <tr><td>훅</td><td>HookSystem 라이프사이클 이벤트 (<code>core/hooks/system.py</code>)</td><td>scaffold skills (트리거 키워드로 발화)</td></tr>
+                <tr><td>확장 표면</td><td>HookRegistry / MiddlewareRegistry / RuntimeEventBus (<code>core/hooks/</code>)</td><td>scaffold skills (트리거 키워드로 발화)</td></tr>
                 <tr><td>선언적 가드레일</td><td>RUNTIME CANNOT (GEODE.md) + 6계층 PolicyChain (<code>core/tools/policy.py</code>)</td><td>CANNOT/CAN 규칙 (CLAUDE.md)</td></tr>
                 <tr><td>루프 + 종료 경로</td><td>while(tool_use) + 라운드/시간/비용 가드 (<code>core/agent/loop/agent_loop.py</code>)</td><td>8단계 워크플로우 (Board → GAP → Plan → Implement → Verify → Docs → PR → Rebuild)</td></tr>
                 <tr><td>선택과 되돌림</td><td>margin 게이트의 promote/revert (<code>core/self_improving/gate.py</code>)</td><td>PR 게이트. CI 실패는 머지되지 않고, 머지된 것만 main에 남음</td></tr>
@@ -97,7 +97,7 @@ export default function Page() {
               <tbody>
                 <tr><td>Hash ratchet</td><td>Prompt hash pins (<code>_PINNED_HASHES</code> in <code>core/llm/prompts/__init__.py</code>)</td><td>CI gate: lint, type, test, security plus count-floor ratchets</td></tr>
                 <tr><td>Layered memory</td><td>5-tier ContextAssembler (<code>core/memory/context.py</code>)</td><td>Multi-level CLAUDE.md (project + user memory)</td></tr>
-                <tr><td>Hooks</td><td>HookSystem lifecycle events (<code>core/hooks/system.py</code>)</td><td>Scaffold skills (fired by trigger keywords)</td></tr>
+                <tr><td>Extension surfaces</td><td>HookRegistry / MiddlewareRegistry / RuntimeEventBus (<code>core/hooks/</code>)</td><td>Scaffold skills (fired by trigger keywords)</td></tr>
                 <tr><td>Declarative guardrails</td><td>RUNTIME CANNOT (GEODE.md) + 6-layer PolicyChain (<code>core/tools/policy.py</code>)</td><td>CANNOT/CAN rules (CLAUDE.md)</td></tr>
                 <tr><td>Loop + termination</td><td>while(tool_use) with round/time/cost guards (<code>core/agent/loop/agent_loop.py</code>)</td><td>The 8-step workflow (Board → GAP → Plan → Implement → Verify → Docs → PR → Rebuild)</td></tr>
                 <tr><td>Selection + revert</td><td>Promote/revert at the margin gate (<code>core/self_improving/gate.py</code>)</td><td>The PR gate: red CI never merges, only merged work survives on main</td></tr>

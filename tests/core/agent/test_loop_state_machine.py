@@ -65,6 +65,7 @@ def test_enum_covers_documented_terminal_alphabet():
         "user_cancelled",
         "actionable_partial",
         "tool_use_yield",
+        "external_verification_required",
         "llm_error",
         "unknown",
     }

@@ -256,7 +256,7 @@ export default function Page() {
                 <tr><td><code>model_action_required</code></td><td>The model signalled that external action is required</td></tr>
                 <tr><td><code>user_clarification_needed</code></td><td>The model asked for confirmation, or overthinking detection stopped the run</td></tr>
                 <tr><td><code>model_refusal</code></td><td>The model declined on safety grounds (next section)</td></tr>
-                <tr><td><code>input_blocked</code></td><td>Input was blocked by an interceptor</td></tr>
+                <tr><td><code>input_blocked</code></td><td>Input was blocked by <code>UserPromptSubmit</code></td></tr>
                 <tr><td><code>billing_error</code></td><td>Fatal billing or quota error</td></tr>
                 <tr><td><code>user_cancelled</code></td><td>Cancelled by the user</td></tr>
                 <tr><td><code>convergence_detected</code></td><td>Repetition without progress detected</td></tr>

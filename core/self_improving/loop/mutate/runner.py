@@ -700,7 +700,11 @@ def _consume_last_llm_call_usage() -> dict[str, Any]:
     return snapshot
 
 
-def _default_llm_call(system_prompt: str, user_prompt: str) -> str:
+def _default_llm_call(
+    system_prompt: str,
+    user_prompt: str,
+    middleware_registry: Any | None = None,
+) -> str:
     """Mutator LLM call.
 
     Step J-b.2 (2026-05-23) — the **API path** (``source=api_key`` /
@@ -808,7 +812,13 @@ def _default_llm_call(system_prompt: str, user_prompt: str) -> str:
             max_tokens=max_tokens,
             temperature=mutator_temperature,
         )
-        return await adapter.acomplete(req)
+        if middleware_registry is None:
+            from core.hooks import MiddlewareRegistry
+
+            active_middleware = MiddlewareRegistry()
+        else:
+            active_middleware = middleware_registry
+        return await active_middleware.call_llm(adapter, req)
 
     # ``call_with_failover`` is the router's async dispatcher (transport
     # layer) — accepts an ordered model list. PR-1 keeps it single-
@@ -1349,6 +1359,7 @@ class SelfImprovingLoopRunner:
     """
 
     llm_call: LLMCallable = field(default=_default_llm_call)
+    middleware_registry: Any | None = None
     audit_log_path: Path | None = None
     commit_enabled: bool = True
     rerun_enabled: bool = False
@@ -1383,7 +1394,14 @@ class SelfImprovingLoopRunner:
         # 인 경우 빈 dict 가 그대로 남음 → consume_usage() 가 빈 dict 반환
         # → Mutation.cost_* 가 default 0 / "" 유지.
         _reset_last_llm_call_usage()
-        raw_response = self.llm_call(_build_system_prompt(), user_prompt)
+        if self.llm_call is _default_llm_call:
+            raw_response = _default_llm_call(
+                _build_system_prompt(),
+                user_prompt,
+                self.middleware_registry,
+            )
+        else:
+            raw_response = self.llm_call(_build_system_prompt(), user_prompt)
         usage_snapshot = _consume_last_llm_call_usage()
         mutation = parse_mutation(raw_response)
         # PR-SIL-5THEME C4 — usage → mutation cost field. ``Mutation`` 은

@@ -282,21 +282,21 @@ machine-readable artifact is
 
 | Measure | Current tree |
 |---|---:|
-| Production Python files (`core/` + `plugins/`) | 533 |
-| Test Python files | 674 |
-| `core/` Python LOC | 131,529 |
+| Production Python files (`core/` + `plugins/`) | 535 |
+| Test Python files | 678 |
+| `core/` Python LOC | 134,477 |
 | `plugins/` Python LOC | 40,265 |
-| Test Python LOC | 174,172 |
+| Test Python LOC | 176,153 |
 | Tool definitions / executable registrations / valid schemas | 78 / 81 / 78 (definition-only 0; execution-only 3; invalid schema 0) |
-| `HookEvent` members | 56 |
+| `RuntimeEvent` members | 57 |
 | Built-in LLM adapters | 8 |
-| Module-level `ContextVar` declarations under `core/` | 27 |
+| Module-level `ContextVar` declarations under `core/` | 28 |
 | `core` → `plugins` import sites | 31 across 14 files |
 | Import-linter contracts / ignored edges | 4 / 24 |
-| `AgenticLoop` file LOC / methods / constructor args | 2,736 / 67 / 27 |
-| `SubAgentManager` file LOC / methods / constructor args | 1,277 / 15 / 15 |
-| `RuntimeCoreConfig` fields | 17 |
-| Global Ruff ratchets | complexity 52; args 23; branches 52; returns 18; statements 223 |
+| `AgenticLoop` file LOC / methods / constructor args | 2,902 / 74 / 27 |
+| `SubAgentManager` file LOC / methods / constructor args | 1,344 / 17 / 16 |
+| `RuntimeCoreConfig` fields | 19 |
+| Global Ruff ratchets | complexity 52; args 23; branches 51; returns 18; statements 223 |
 <!-- generated:architecture-baseline:end -->
 
 `uv run lint-imports` passes all four configured contracts. That is useful
@@ -551,6 +551,8 @@ and closure evidence are appended in §10.
 | REL-002 | `ABSENT` | No registered gate prevents the v1.0.1 compatibility facade or preserved state roots from being retired immediately after a local tag, draft release, or registry publication | Official GitHub Release and PyPI evidence proves compatible public artifacts continuously exposed the facade and preserved roots for a final qualifying interval of at least 30 consecutive days, starting no earlier than v1.0.1, and every release inside that interval retained them | R8.0 | REL-001 | `OPEN` |
 | BND-007 | `ABSENT` | The current `core/self_improving` import and source/module launcher surface has no enumerated consumer census, old-to-new migration map, or removal-only closure gate | After REL-002, every repository and documented consumer is classified, migration guidance names canonical replacements, only the forwarding facade and legacy launchers are removed, and installed-wheel import/CLI/MCP/config/state parity proves the canonical product remains intact | R8.1 | REL-002, STORE-003 | `OPEN` |
 | STORE-003 | `MISFIT` | Self-improving datasets span tracked `core/self_improving/state`, runtime `~/.geode/self-improving`, actively written `~/.geode/autoresearch/handoff`, and isolated `GEODE_STATE_ROOT/autoresearch` roots without one dataset-level ownership manifest | A feature-owned manifest declares every dataset's lifecycle, schema/version, root, writer/readers, concurrency, retention/redaction, migration, rollback, and rebuild contract; tracked SoT leaves `core` with hash/history parity, while runtime/override/worker roots remain compatible or migrate additively with one writer | R8.2 | REL-002, STORE-001 | `OPEN` |
+| HOOK-001 | `MISFIT` | The 56-member internal `HookEvent` enum is exported at the package root, one registry mixes observer, result-transform, and control-interceptor authority without a stable public allowlist, and verification is emitted only inside terminal finalization | Exactly 13 versioned `HookName` contracts expose the Codex 11-event lifecycle plus `PreVerify`/`PostVerify`; typed authority, redaction, correlation, unknown-name rejection, and compatibility tests prevent internal RuntimeEvent growth from expanding the ABI, while one monotone bounded `PreVerify` → verifier → `PostVerify` → `Stop` state machine supports executable external continuation without erasing built-in failure or replaying side effects | R6.4 | — | `IN_DEVELOP` |
+| HOOK-002 | `PARTIAL` | Tool request interception is mixed with `TOOL_EXEC_STARTED`; no typed sequential tool/LLM request transform or async `next_call` chain wraps the accepted executor and provider call across every runtime path | `tool_request`, `tool_execution`, `llm_request`, and `llm_execution` are four typed join points with N→N+1 request composition, original/effective trace, single-use async `next_call`, exception identity, policy-before-execution ordering, and all-path parity tests | R6.4 | HOOK-001 | `IN_DEVELOP` |
 
 ## 6. Dependency and merge sequence
 
@@ -578,7 +580,11 @@ R3.1 starts after R2.1 so `StepSnapshot` consumes the new immutable `ToolPlan`
 rather than inventing a competing tool snapshot. The remaining R2 and R3
 packages may then progress in parallel. R5 and most of R6 may progress in
 parallel after the composition root is stable, but R6.3 waits for R5.2 because
-its unified extension lifecycle includes LLM-adapter discovery.
+its unified extension lifecycle includes LLM-adapter discovery. R6.4 is a
+narrow compatibility-preserving package over the current measured call sites
+and sinks. It owns convergence of those call sites into its four middleware
+join points, but does not claim or bypass the broader owner replacements
+elsewhere in R2-R6.
 
 ### 6.1 v1.0.1 boundary-release train
 
@@ -949,7 +955,7 @@ GAPs: LOOP-001, LOOP-002.
 Add immutable step identity and an explicit mutable turn accumulator before
 extracting loop phases. Pin:
 
-- all 20 `TerminationReason` members, their current producer map, persisted
+- all current `TerminationReason` members, their producer map, persisted
   string compatibility, and the explicitly producerless legacy/unknown cases;
 - unlimited-round default with time-budget control;
 - context-overflow recovery;
@@ -1167,6 +1173,144 @@ bypass the broker to obtain filesystem, network, credential, or runtime-global
 authority. Startup reports collisions, rejected manifests, missing capability
 grants, and degraded extensions. Teardown is deterministic. Resource mutation
 uses descriptor-provided keys, not argument-name guessing.
+
+#### R6.4 Public hooks, middleware join points, and finalization control
+
+GAPs: HOOK-001, HOOK-002.
+
+The measured design evidence is carried by
+[#2832](https://github.com/mangowhoiscloud/geode/pull/2832), grounded against
+Hermes `36e41c09ed02bd783c1186564bf08cca5c8e821d`, OpenClaw
+`90a22b4f50226b13735e77dde81a92340ae724cf`, and Codex
+`578c1b2230288104041e880a86d0f7f3a5ca6e47`. The 2026-07-31 readiness
+re-audit found that the initially registered external dependencies described
+desirable future owners, not prerequisites for this package. Current `develop`
+has one injected hook system, a primary `ToolCallProcessor` executor terminal,
+three direct recovery executor calls, async adapter calls in the main loop,
+reflection, candidate sampling, and the API mutator. It also has the
+finalization helper, a bounded SQLite hook event sink, and conditional JSONL
+projections. R6.4 owns convergence of this finite measured tool and
+`AdapterCallRequest`-based completion set into the four middleware join points
+and characterizes the existing persistence behavior directly. It can do so
+without waiting for the broader tool-plan, loop-decomposition,
+provider-profile, storage-ownership, trust-broker, or protocol programs. It
+does not implement or claim those programs, replace their future types, expose
+untrusted code in-process, or change persisted event values.
+
+This section remains the execution SOT. The public ABI contains exactly:
+
+```text
+UserPromptSubmit
+PreToolUse, PermissionRequest, PostToolUse
+PreCompact, PostCompact
+SessionStart, SessionEnd
+SubagentStart, SubagentStop
+PreVerify, PostVerify, Stop
+```
+
+The 56 current runtime signals remain internal and retain their stored values.
+There are three authority surfaces, not four generic planes:
+
+- `HookName` + `HookRegistry` is the bounded public ABI;
+- `MiddlewareRegistry` owns the four trusted request/execution methods;
+- `RuntimeEvent` + `RuntimeEventBus` is internal observation and persistence.
+
+Stateful compaction, approval, subagent, and verification services remain
+domain owners rather than becoming a fourth extension surface. Unknown public
+names fail closed; a versioned JSON-safe schema fixes each hook's input, result,
+authority, redaction, timeout, composition, and correlation behavior.
+
+The canonical names are deliberately small. No `PublicHookRegistry`,
+`MiddlewarePipeline`, `MiddlewareKind`, `MiddlewarePoint`, or
+`ExtensionRuntime` abstraction is introduced. Request and execution role
+protocols consistently end in `Middleware`. The legacy names `HookEvent` and
+`HookSystem` migrate to `RuntimeEvent` and `RuntimeEventBus`; they are never
+reused for public-hook semantics.
+
+Migration is value-preserving:
+
+| Current surface | Canonical target | Compatibility rule |
+|---|---|---|
+| `HookEvent` / `HookSystem` | `RuntimeEvent` / `RuntimeEventBus` | legacy Python aliases for the declared migration window; stored enum values and rows never change |
+| observer `register` / `trigger*` | `subscribe` / `emit*` | move callers mechanically, keep sinks and prefix subscription internal |
+| `USER_INPUT_RECEIVED` interceptor | `HookName.USER_PROMPT_SUBMIT` | old row remains a legacy observation |
+| `TOOL_EXEC_STARTED` interceptor | `HookName.PRE_TOOL_USE` plus actual execution-start event | emit start only after policy and approval, immediately before the executor |
+| `TOOL_RESULT_TRANSFORM` feedback | `HookName.POST_TOOL_USE` | stop new compatibility-event writes; keep old-reader projection |
+| `CONTEXT_OVERFLOW_ACTION` feedback | typed compaction policy port | `PreCompact`/`PostCompact` surround the domain service, not its strategy selection |
+| per-turn `SESSION_STARTED/ENDED` | durable public session hooks plus internal turn boundaries | do not rewrite historical JSONL/SQLite rows |
+| verify result events | `PostVerify` input plus internal outcomes | preserve the immutable built-in result and stored outcome |
+
+Compatibility control APIs are removable only after production
+`trigger_interceptor*`/`trigger_with_result*` callers reach zero, the declared
+release window ends, and stored-reader fixtures still pass.
+
+The four middleware join points are methods on one registry, not enum-like
+extension kinds:
+
+- `tool_request`: immutable N→N+1 transformation before validation, policy,
+  and approval;
+- `tool_execution`: async onion around the accepted exactly-once executor only;
+- `llm_request`: immutable N→N+1 transformation of the assembled adapter
+  request while preserving prompt-cache invariants;
+- `llm_execution`: async onion around the actual provider call.
+
+The LLM join points deliberately cover the runtime's
+`AdapterCallRequest` → `LLMAdapter.acomplete` completion contract. Optional
+adapter capabilities such as text completion and web search, provider SDK calls
+owned inside tool handlers such as computer grounding and document ingestion,
+and plugin-owned evaluator backends are not silently folded into the same
+request type. Their outer tool call still passes `tool_execution`; a future
+typed seam requires its own measured consumer instead of overloading
+`llm_request`.
+
+Every parallel, sequential, MCP, recovered, deferred, and subagent tool path,
+and every declared adapter-completion and retry path, uses its corresponding
+terminal. Execution middleware cannot wrap or weaken hard policy and approval.
+It receives the effective accepted payload, may call its `next_call` at most
+once, and preserves downstream exception identity. Original and effective
+payload hashes plus extension provenance are observable without persisting
+secrets or unrestricted content.
+
+Verification and stopping are three checkpoints in one internal finalization
+state machine, not three competing dispatch pipelines. `PreVerify` can add
+requirements, the built-in verifier creates one immutable `VerifyResult`,
+`PostVerify` can accept, strengthen to revision, or escalate but cannot turn a
+failure into a pass, and `Stop` controls only final delivery versus bounded
+continuation. Continuation appends a correlated follow-up; it never rewinds or
+replays a successful side effect. Attempt and idempotency budgets close the
+loop.
+
+Acceptance:
+
+- generated schema and round-trip fixtures pin exactly 13 public names and
+  prove that adding an internal RuntimeEvent does not change the public ABI;
+- all public payloads are bounded and redacted, unknown names are rejected,
+  handler authority is type-specific, and compatibility fixtures cover the
+  previous `HookSystem` facade during its declared migration window without
+  ever reassigning `HookEvent` to public semantics;
+- production callers of `trigger_interceptor*` and `trigger_with_result*`
+  reach zero before those control APIs are removed, while stored-value and
+  historical-row fixtures remain readable;
+- request transforms prove N→N+1 order, immutable original input, invalid
+  output rejection, and original/effective trace correlation;
+- execution chains prove onion order, single-use async `next_call`,
+  short-circuit semantics, cancellation, timeout/failure policy, exception
+  identity, and exactly one accepted terminal call across every declared tool
+  and `AdapterCallRequest`-based completion path;
+- tool tests prove transformed final arguments are revalidated and approved,
+  hard denial cannot be weakened, blocked calls never emit execution-start,
+  and start/end/error outcomes have exact cardinality;
+- LLM tests prove request replacement reaches the adapter, retry correlation is
+  stable, and system prompt/history/tool cache prefixes cannot change without
+  an explicit capability and invalidation trace;
+- lifecycle fixtures distinguish durable session generation from turn and
+  step, pair runtime-owned compaction boundaries honestly, and characterize
+  the current bounded SQLite hook-event sink plus conditional JSONL projections
+  without relying on the future R6.2 storage-ownership contract;
+- finalization fixtures prove monotone verify composition, built-in
+  fail-to-pass rejection, bounded revise and Stop continuation, no side-effect
+  replay, timeout fallback, external evidence correlation, and final
+  persistence/delivery ordering.
 
 ### R7 — Closure, hardening, and release
 
@@ -1468,6 +1612,7 @@ pre-release delivery evidence survives after the claim row is gone.
 | R0.1 | GOV-001, GOV-003 | [#2767](https://github.com/mangowhoiscloud/geode/pull/2767) | `ab1a80e91f9947defc15fa97f5b4ce66126c0c13` | CI Gate, lint/format, security, tests, type check, and macOS/Ubuntu install smoke passed; committed-diff re-review returned no findings |
 | R0.2 | GOV-002, VER-003 | [#2775](https://github.com/mangowhoiscloud/geode/pull/2775) | `7e3d2b2595306f8fbad44b961d53a2fc1d4f9180` | `uv run python scripts/architecture_baseline.py --check`; `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (CI Gate, full non-live tests, type check, lint/format, security, Pages build, and macOS/Ubuntu install smoke all green; committed-diff review found no findings) |
 | R0.3 | GOV-004 | [#2788](https://github.com/mangowhoiscloud/geode/pull/2788) | `15a9d674be790303f2034c89c7631d5c93978aee` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (CI Gate, 10,178 standard tests, type check, lint/format, security, Pages build, macOS/Ubuntu install smoke, and committed-diff review all passed) |
+| R6.4 | HOOK-001, HOOK-002 | [#2836](https://github.com/mangowhoiscloud/geode/pull/2836) | `95a474789645d4f3af5487f082cedf3eb60e66a4` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (CI Gate, 10,345 non-live tests, type check, lint/format, security, Pages build, macOS/Ubuntu install smoke, two GPT subscription E2E passes, and the committed consumer handoff all passed) |
 
 ### 10.2 Main closure evidence
 
@@ -1500,6 +1645,8 @@ supersets cannot authorize a later or unrelated edit.
 |---|---|---|---|---|---|
 | BND-003 | DEPENDENCY_ADDED | BND-006 | The distribution gate must validate the final self-improving product layout rather than close on the pre-move package tree; this edge makes R1.3 wait for R1.5 | `cef746de5f74204260cdbfcacd517e567beda191` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS |
 | BND-007 | DEPENDENCY_ADDED | STORE-003 | Tracked state currently sits under the facade directory; R8.2 must move it in a separate transaction so R8.1 can retire forwarders without hiding a state move or leaving a data-only `core.self_improving` namespace | `2c14d8c982b8112d68e29dc49ce16ad8fcc95fdd` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS |
+| HOOK-001 | DEPENDENCY_REMOVED | PROTO-001, STORE-001, TRUST-002, LOOP-003 | Current develop already has an injected hook owner, finalization seam, bounded SQLite hook-event sink, and conditional JSONL projections; R6.4 will characterize those concrete behaviors directly rather than depending on R6.2's future storage-ownership contract, and can add its narrow public registry without exposing untrusted code in-process | [#2834](https://github.com/mangowhoiscloud/geode/pull/2834) | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS |
+| HOOK-002 | DEPENDENCY_REMOVED | CAP-002, LOOP-003, LLM-003 | R6.4 explicitly owns convergence of the measured primary/recovery tool terminals and main-loop/reflection/candidate/API-mutator `AdapterCallRequest` paths into its four join points; optional adapter capabilities, tool-internal provider SDK calls, and plugin evaluators remain outside this typed contract, while future ToolPlan, loop-phase, and provider-profile types need not land first | [#2834](https://github.com/mangowhoiscloud/geode/pull/2834) | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS |
 | _none yet_ | — | — | — | — | — |
 
 ### 10.4 Blocker evidence

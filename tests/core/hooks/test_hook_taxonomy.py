@@ -25,6 +25,14 @@ import pytest
 from core.hooks import dispatch as hooks_dispatch
 from core.hooks.system import LEGACY_EVENT_VALUES, HookEvent, HookSystem, resolve_event_value
 
+
+# Dispatch stamps ``schema_version`` on every payload (core.hooks.catalog
+# OBSERVER_SCHEMA_VERSION). These cases assert delivery, isolation and timeout —
+# not the literal key set — so the system field is dropped before comparing.
+def _emitted(data):
+    return {k: v for k, v in (data or {}).items() if k != "schema_version"}
+
+
 # ---------------------------------------------------------------------------
 # D5 — naming convention + alias map
 # ---------------------------------------------------------------------------
@@ -132,8 +140,6 @@ def test_replaced_fire_hook_sites_delegate_to_dispatch() -> None:
         inspect.getsource(ApprovalWorkflow._fire_hook),
         inspect.getsource(ApprovalWorkflow._fire_hook_async),
         inspect.getsource(ToolCallProcessor._fire_hook),
-        inspect.getsource(ToolCallProcessor._fire_interceptor),
-        inspect.getsource(ToolCallProcessor._fire_with_result),
         inspect.getsource(mcp_manager._fire_mcp_hook),
         inspect.getsource(IsolatedRunner._post_to_main),
         inspect.getsource(seed_orchestrator.Pipeline._emit_hook),
@@ -142,6 +148,9 @@ def test_replaced_fire_hook_sites_delegate_to_dispatch() -> None:
         assert "core.hooks.dispatch" in source, source
         # No open-coded exception swallowing around the trigger call.
         assert "except Exception" not in source, source
+    processor_source = inspect.getsource(ToolCallProcessor)
+    assert "trigger_interceptor" not in processor_source
+    assert "trigger_with_result" not in processor_source
 
 
 def test_dead_executor_fire_hook_stays_deleted() -> None:
@@ -195,7 +204,7 @@ def test_required_keys_warning_never_raises_and_still_dispatches() -> None:
     hooks.register(HookEvent.SUBAGENT_COMPLETED, lambda _e, d: received.append(d), name="recorder")
     hooks_dispatch.fire_hook(hooks, HookEvent.SUBAGENT_COMPLETED, {})
     hooks.close()
-    assert received == [{}]  # warned, not blocked
+    assert [_emitted(d) for d in received] == [{}]  # warned, not blocked
 
 
 def test_required_keys_warning_fires_on_async_path(
@@ -400,13 +409,14 @@ def test_activity_schema_version_bumped():
 def test_single_approval_requested_per_gate():
     """The outer safety gates no longer double-emit TOOL_APPROVAL_REQUESTED
     around confirm_* (which emits internally, with the richer payload) —
-    Codex LOW-2. Pin: 9 emission sites, all inside confirm_*/request_*."""
+    Codex LOW-2. Pin: 10 sync/async emission sites, all inside
+    confirm_*/request_*."""
     import inspect
 
     from core.agent import approval as approval_mod
 
     src = inspect.getsource(approval_mod)
-    assert src.count("HookEvent.TOOL_APPROVAL_REQUESTED") == 9
+    assert src.count("HookEvent.TOOL_APPROVAL_REQUESTED") == 10
     gates_src = inspect.getsource(approval_mod.ApprovalWorkflow.apply_safety_gates)
     assert "TOOL_APPROVAL_REQUESTED" not in gates_src
     gates_async_src = inspect.getsource(approval_mod.ApprovalWorkflow.apply_safety_gates_async)

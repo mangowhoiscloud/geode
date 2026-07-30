@@ -122,6 +122,16 @@ class ToolContext:
     source: str = ""
     model: str = ""
     adapter_name: str = ""
+    # Effective request metadata is written by ToolExecutor after trusted and
+    # public request transforms. ToolCallProcessor consumes it for persistence,
+    # privacy classification, and result offload decisions.
+    effective_tool_name: str = ""
+    effective_tool_arguments: dict[str, Any] | None = None
+    contains_personal_data: bool = False
+    # Narrow grant from the processor's batch-cost gate. It exempts only the
+    # EXPENSIVE cost prompt; it never bypasses MCP/write/dangerous approval
+    # when middleware rewrites the tool identity.
+    batch_cost_approved: bool = False
 
 
 @runtime_checkable

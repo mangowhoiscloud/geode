@@ -166,6 +166,7 @@ async def judge_candidates(
     provider: str | None = None,
     source: str | None = None,
     max_tokens: int = 512,
+    middleware_registry: Any | None = None,
 ) -> CandidateVerdict:
     """Pick the best of *candidates* with one judge LLM call.
 
@@ -214,7 +215,13 @@ async def judge_candidates(
                 max_tokens=max_tokens,
                 temperature=_settings.temperature_reflection,
             )
-            return await adapter.acomplete(req)
+            if middleware_registry is None:
+                from core.hooks import MiddlewareRegistry
+
+                active_middleware = MiddlewareRegistry()
+            else:
+                active_middleware = middleware_registry
+            return await active_middleware.call_llm(adapter, req)
 
         response, _used_model = await call_with_failover([model], _do_call)
     except Exception as exc:

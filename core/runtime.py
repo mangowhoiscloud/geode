@@ -46,7 +46,11 @@ if TYPE_CHECKING:
 from core.auth.cooldown import CooldownTracker
 from core.auth.profiles import ProfileStore
 from core.auth.rotation import ProfileRotator
-from core.hooks import HookSystem
+from core.hooks import (
+    HookRegistry,
+    MiddlewareRegistry,
+    RuntimeEventBus,
+)
 from core.memory.port import SessionStorePort
 from core.memory.session_key import build_session_key
 from core.observability.event_store import HookEventStore
@@ -71,7 +75,9 @@ DEFAULT_SESSION_TTL = 3600.0  # 1 hour
 class RuntimeCoreConfig:
     """Essential infrastructure parameters (always required)."""
 
-    hooks: HookSystem
+    hooks: RuntimeEventBus
+    hook_registry: HookRegistry
+    middleware_registry: MiddlewareRegistry
     session_store: SessionStorePort
     policy_chain: PolicyChain
     tool_registry: ToolRegistry
@@ -130,6 +136,8 @@ class GeodeRuntime:
     ) -> None:
         # Unpack core (flat attributes for backward compat)
         self.hooks = core.hooks
+        self.hook_registry = core.hook_registry
+        self.middleware_registry = core.middleware_registry
         self.session_store = core.session_store
         self.policy_chain = core.policy_chain
         self.tool_registry = core.tool_registry
@@ -223,6 +231,8 @@ class GeodeRuntime:
         # Stage 4: Assembly
         core_config = RuntimeCoreConfig(
             hooks=core["hooks"],
+            hook_registry=core["hook_registry"],
+            middleware_registry=core["middleware_registry"],
             session_store=core["session_store"],
             policy_chain=core["policy_chain"],
             tool_registry=core["tool_registry"],
@@ -266,6 +276,8 @@ class GeodeRuntime:
             run_id=run_id,
             log_dir=log_dir,
         )
+        hook_registry = HookRegistry(events=hooks)
+        middleware_registry = MiddlewareRegistry(events=hooks)
         session_store = bootstrap.build_session_store(session_ttl=session_ttl)
         policy_chain = infra.build_default_policies()
         tool_registry = infra.build_default_registry()
@@ -282,6 +294,8 @@ class GeodeRuntime:
         lane_queue = infra.build_default_lanes()
         return {
             "hooks": hooks,
+            "hook_registry": hook_registry,
+            "middleware_registry": middleware_registry,
             "event_store": event_store,
             "hook_metrics": hook_metrics,
             "session_store": session_store,

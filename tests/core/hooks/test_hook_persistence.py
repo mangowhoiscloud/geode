@@ -2,10 +2,17 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 
-from core.hooks import HookEvent, HookSystem
+from core.hooks import (
+    HookCorrelation,
+    HookEvent,
+    HookName,
+    HookRegistry,
+    HookSystem,
+)
 from core.observability.event_store import HookEventStore
 from core.observability.hook_persistence import HookPersistenceSink
 from core.self_improving.loop.observe.run_transcript import RunTranscript, run_transcript_scope
@@ -115,6 +122,53 @@ def test_handler_failure_is_counted_without_dropping_dispatch(tmp_path: Path) ->
     assert row.handler_error_count == 1
     assert row.payload["_failed_handlers"] == ["broken"]
     assert "sensitive failure detail" not in str(row.payload)
+    hooks.close()
+
+
+def test_public_extension_audit_uses_sqlite_and_active_transcript_only(
+    tmp_path: Path,
+) -> None:
+    hooks, store = _wired_hooks(tmp_path)
+    public_hooks = HookRegistry(events=hooks)
+    public_hooks.register(HookName.SESSION_END, lambda _invocation: None, name="audit-probe")
+
+    asyncio.run(
+        public_hooks.invoke(
+            HookName.SESSION_END,
+            payload={"reason": "completed", "status": "completed"},
+            correlation=HookCorrelation(session_id="s-1", turn_id="t-1", run_id="run-1"),
+        )
+    )
+
+    row = store.read()[0]
+    assert row.event == HookEvent.EXTENSION_INVOKED.value
+    assert row.action == "extension.invoked"
+    assert row.payload == {
+        "surface": "hook",
+        "name": HookName.SESSION_END.value,
+        "extension": "audit-probe",
+        "status": "ok",
+        "duration_ms": row.payload["duration_ms"],
+        "turn_id": "t-1",
+        "session_generation": 0,
+        "verify_attempt": 0,
+        "_dispatch_duration_ms": row.payload["_dispatch_duration_ms"],
+    }
+    assert not (tmp_path / "transcript.jsonl").exists()
+
+    with run_transcript_scope(_transcript(tmp_path)):
+        asyncio.run(
+            public_hooks.invoke(
+                HookName.SESSION_END,
+                payload={"reason": "completed", "status": "completed"},
+                correlation=HookCorrelation(session_id="s-1", turn_id="t-2", run_id="run-1"),
+            )
+        )
+
+    transcript_rows = _read_transcript(tmp_path / "transcript.jsonl")
+    assert len(transcript_rows) == 1
+    assert transcript_rows[0]["event"] == HookEvent.EXTENSION_INVOKED.value
+    assert transcript_rows[0]["payload"]["turn_id"] == "t-2"
     hooks.close()
 
 

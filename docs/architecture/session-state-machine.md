@@ -36,7 +36,7 @@ new addressed turn and the explicit reopen edge.
 | State | Meaning | Terminal |
 |---|---|---|
 | ACTIVE | The machine may take more turns | no |
-| PAUSED | Parked awaiting operator input (pending ask) | no |
+| PAUSED | Parked awaiting operator input or external verification | no |
 | COMPLETED | Cleanly finished; cleanup may remove it | yes (reopen edge only) |
 | ERROR | One-shot run died (timeout / unhandled exception) | yes (reopen edge only) |
 
@@ -77,7 +77,7 @@ edge, and the warning plus its pinned test keep the edge visible.
 | Edge | Owner |
 |---|---|
 | absent → ACTIVE, ACTIVE → ACTIVE | `_lifecycle.save_checkpoint` (per turn, every surface) |
-| ACTIVE → PAUSED | scheduler drain (pending-ask park); gateway ask continuation (re-ask) |
+| ACTIVE → PAUSED | scheduler drain (pending-ask/external-verification park); gateway ask continuation (re-ask) |
 | ACTIVE → COMPLETED | REPL clean exit; scheduler drain one-shot finish; gateway ask continuation finish; gateway context-exhaustion |
 | ACTIVE → ERROR | scheduler drain timeout / unhandled exception |
 | PAUSED → ACTIVE | ask answer → continuation's per-turn save |

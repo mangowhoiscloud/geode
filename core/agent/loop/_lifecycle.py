@@ -9,12 +9,18 @@ thin one-line delegators.
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
-from core.hooks import HookEvent
+from core.hooks import (
+    HookAction,
+    HookCorrelation,
+    HookName,
+    RuntimeEvent,
+)
 from core.llm.errors import BillingError
 
-from .models import AgenticResult
+from .models import AgenticResult, TerminationReason
 
 if TYPE_CHECKING:
     from .agent_loop import AgenticLoop
@@ -87,14 +93,17 @@ def restore_loop_state(loop: AgenticLoop, state: Any) -> None:
     from core.agent.cognitive_state import CognitiveState
 
     loop._session_id = state.session_id
+    loop._session_generation = int(getattr(loop, "_session_generation", 1)) + 1
+    loop._public_session_started = False
+    loop._public_session_ended = False
     loop.cognitive_state = CognitiveState.from_snapshot(state.cognitive_state)
     apply_guard_state(loop, getattr(state, "loop_guards", {}) or {})
 
 
-def save_checkpoint(loop: AgenticLoop, user_input: str, round_idx: int = 0) -> None:
+def save_checkpoint(loop: AgenticLoop, user_input: str, round_idx: int = 0) -> bool:
     """Persist session checkpoint for resume (per-turn, Claude Code pattern)."""
     if loop._checkpoint is None or not loop._session_id:
-        return
+        return False
     try:
         from core.memory.session_checkpoint import SessionState
 
@@ -115,8 +124,61 @@ def save_checkpoint(loop: AgenticLoop, user_input: str, round_idx: int = 0) -> N
         from core.ui.agentic_ui import emit_checkpoint_saved
 
         emit_checkpoint_saved(loop._session_id, round_idx)
+        return True
     except Exception:
         log.debug("Checkpoint save failed", exc_info=True)
+        return False
+
+
+async def emit_public_session_start(loop: AgenticLoop) -> None:
+    """Emit SessionStart once, after the active checkpoint is durable."""
+    if getattr(loop, "_public_session_started", False):
+        return
+    await loop._hook_registry.invoke(
+        HookName.SESSION_START,
+        payload={
+            "model": loop.model,
+            "provider": loop._provider,
+            "resumed": int(getattr(loop, "_session_generation", 1)) > 1,
+            "status": "active",
+        },
+        correlation=HookCorrelation(
+            session_id=loop._session_id,
+            turn_id=getattr(loop, "_turn_id", ""),
+            session_generation=int(getattr(loop, "_session_generation", 1)),
+        ),
+    )
+    loop._public_session_started = True
+    loop._public_session_ended = False
+
+
+async def _emit_public_session_end(loop: AgenticLoop, *, reason: str) -> None:
+    """Emit SessionEnd once, after a durable terminal transition."""
+    if getattr(loop, "_public_session_ended", False):
+        return
+    await loop._hook_registry.invoke(
+        HookName.SESSION_END,
+        payload={"reason": reason, "status": reason},
+        correlation=HookCorrelation(
+            session_id=loop._session_id,
+            turn_id=getattr(loop, "_turn_id", ""),
+            session_generation=int(getattr(loop, "_session_generation", 1)),
+        ),
+    )
+    loop._public_session_ended = True
+
+
+def _mark_session_status(loop: AgenticLoop, *, reason: str) -> bool:
+    if loop._checkpoint is None or not loop._session_id:
+        return False
+    try:
+        transition = getattr(loop._checkpoint, f"mark_{reason}")
+        transition(loop._session_id)
+        current = loop._checkpoint.current_status(loop._session_id)
+        return current is not None and str(current) == reason
+    except Exception:
+        log.debug("Checkpoint mark_%s failed", reason, exc_info=True)
+        return False
 
 
 def mark_session_completed(loop: AgenticLoop) -> None:
@@ -126,35 +188,41 @@ def mark_session_completed(loop: AgenticLoop) -> None:
         from core.agent.sub_agent import cleanup_announce_queue
 
         cleanup_announce_queue(loop._parent_session_key)
-    if loop._checkpoint is None or not loop._session_id:
-        return
-    try:
-        loop._checkpoint.mark_completed(loop._session_id)
-    except Exception:
-        log.debug("Checkpoint mark_completed failed", exc_info=True)
+    _mark_session_status(loop, reason="completed")
 
 
 def mark_session_paused(loop: AgenticLoop) -> None:
     """Mark the current session as paused — a one-shot surface parked it
     awaiting operator input (pending ask); the checkpoint stays resumable.
     """
-    if loop._checkpoint is None or not loop._session_id:
-        return
-    try:
-        loop._checkpoint.mark_paused(loop._session_id)
-    except Exception:
-        log.debug("Checkpoint mark_paused failed", exc_info=True)
+    _mark_session_status(loop, reason="paused")
 
 
 def mark_session_error(loop: AgenticLoop) -> None:
     """Mark the current session as errored — a one-shot surface died on a
     timeout or unhandled exception; the checkpoint is not resumable."""
-    if loop._checkpoint is None or not loop._session_id:
-        return
-    try:
-        loop._checkpoint.mark_error(loop._session_id)
-    except Exception:
-        log.debug("Checkpoint mark_error failed", exc_info=True)
+    _mark_session_status(loop, reason="error")
+
+
+async def mark_session_completed_async(loop: AgenticLoop) -> None:
+    """Durably complete the session, then publish its public terminal edge."""
+    if loop._parent_session_key:
+        from core.agent.sub_agent import cleanup_announce_queue
+
+        cleanup_announce_queue(loop._parent_session_key)
+    if _mark_session_status(loop, reason="completed"):
+        await _emit_public_session_end(loop, reason="completed")
+
+
+async def mark_session_paused_async(loop: AgenticLoop) -> None:
+    """Durably pause a resumable session without ending its lifetime."""
+    _mark_session_status(loop, reason="paused")
+
+
+async def mark_session_error_async(loop: AgenticLoop) -> None:
+    """Durably mark error, then publish its public terminal edge."""
+    if _mark_session_status(loop, reason="error"):
+        await _emit_public_session_end(loop, reason="error")
 
 
 def record_transcript_end(loop: AgenticLoop, result: Any) -> None:
@@ -202,8 +270,14 @@ def _prepare_final_result(
     result: AgenticResult,
     user_input: str,
     round_idx: int,
+    *,
+    persist: bool = True,
 ) -> None:
-    """Apply shared finalization side effects before hook emission."""
+    """Prepare result metadata, optionally committing final persistence."""
+    # ToolCallProcessor owns a reusable list and clears it at the next arun.
+    # A terminal result is a value snapshot, especially across bounded
+    # PostVerify continuations, so detach it before any subsequent turn reset.
+    result.tool_calls = [dict(tool_call) for tool_call in result.tool_calls]
     log.info(
         "AgenticLoop: reason=%s rounds=%d/%d tools=%d",
         result.termination_reason,
@@ -244,6 +318,17 @@ def _prepare_final_result(
         except Exception:
             log.debug("usage delta snapshot failed", exc_info=True)
 
+    if persist:
+        _persist_final_result(loop, result, user_input, round_idx)
+
+
+def _persist_final_result(
+    loop: AgenticLoop,
+    result: AgenticResult,
+    user_input: str,
+    round_idx: int,
+) -> None:
+    """Commit transcript, evidence, and checkpoint after stop is final."""
     loop._record_transcript_end(result)
     ledger = getattr(loop, "_evidence_ledger", None)
     if ledger is not None:
@@ -344,6 +429,7 @@ def _final_hook_payloads(
     }
     turn_completed = {
         "session_id": loop._session_id,
+        "turn_id": getattr(loop, "_turn_id", ""),
         "model": loop.model,
         "provider": loop._provider,
         "user_input": user_input,
@@ -426,6 +512,224 @@ async def _run_turn_verify_async(loop: AgenticLoop, result: AgenticResult) -> di
         return None
 
 
+def _finalization_correlation(loop: AgenticLoop) -> HookCorrelation:
+    """Correlate all verify attempts back to the originating user turn."""
+    return HookCorrelation(
+        session_id=getattr(loop, "_session_id", ""),
+        turn_id=(getattr(loop, "_verify_root_turn_id", "") or getattr(loop, "_turn_id", "")),
+        run_id=getattr(loop, "run_id", ""),
+        session_generation=int(getattr(loop, "_session_generation", 1)),
+        verify_attempt=int(getattr(loop, "_verify_attempt", 0)),
+    )
+
+
+async def _run_public_finalization_async(
+    loop: AgenticLoop,
+    result: AgenticResult,
+) -> tuple[dict[str, Any] | None, str, bool, HookCorrelation]:
+    """Run PreVerify -> verifier -> PostVerify -> Stop monotonically.
+
+    Returns ``(verify_payload, follow_up, escalated, correlation)``.
+    ``follow_up`` is non-empty only when a bounded replay-free continuation
+    was accepted.
+    """
+    from core.agent.verify import VerifyMode, verify_turn_async
+
+    correlation = _finalization_correlation(loop)
+    candidate = {
+        "termination_reason": result.termination_reason,
+        "rounds": result.rounds,
+        "tool_call_count": len(result.tool_calls),
+        "candidate_summary": (result.text or "")[:500],
+    }
+    pre = await loop._hook_registry.invoke(
+        HookName.PRE_VERIFY,
+        payload=candidate,
+        correlation=correlation,
+    )
+    additional_misses = tuple(
+        miss
+        for decision in pre.decisions
+        if decision.action is HookAction.STRENGTHEN
+        for miss in decision.additional_misses
+    )
+    requirements = tuple(
+        decision.instruction
+        for decision in pre.decisions
+        if decision.action is HookAction.STRENGTHEN and decision.instruction
+    )
+
+    vr = await verify_turn_async(result, loop=loop)
+    if additional_misses:
+        misses = tuple(dict.fromkeys((*vr.rubric_misses, *additional_misses)))
+        hint_parts = [vr.reflection_hint, *requirements]
+        vr = replace(
+            vr,
+            passed=False,
+            rubric_misses=misses,
+            reflection_hint="\n".join(part for part in hint_parts if part),
+            should_retry=True,
+        )
+
+    verify_payload = (
+        None
+        if vr.mode is VerifyMode.OFF and not additional_misses
+        else _finalize_verify_outcome(loop, result, vr)
+    )
+    public_verify_payload = {
+        "passed": vr.passed,
+        "mode": vr.mode.value,
+        "effective_mode": vr.effective_mode.value,
+        "score": round(vr.score, 4),
+        "rubric_misses": list(vr.rubric_misses),
+        "should_retry": vr.should_retry,
+        **candidate,
+    }
+
+    post = await loop._hook_registry.invoke(
+        HookName.POST_VERIFY,
+        payload=public_verify_payload,
+        correlation=correlation,
+    )
+    evidence_refs = tuple(
+        dict.fromkeys(
+            ref
+            for outcome in (pre, post)
+            for decision in outcome.decisions
+            for ref in decision.evidence_refs
+        )
+    )
+    actions = {decision.action for decision in post.decisions}
+    invalid_accept = not vr.passed and HookAction.ACCEPT in actions
+    escalated = HookAction.ESCALATE in actions or invalid_accept
+    follow_up = ""
+    policy_action = "escalate" if escalated else ("accept" if vr.passed else "built_in_fail")
+    if HookAction.REVISE in actions and not escalated:
+        policy_action = "revise"
+        follow_up = next(
+            (
+                decision.instruction
+                for decision in post.decisions
+                if decision.action is HookAction.REVISE and decision.instruction
+            ),
+            "",
+        )
+
+    stop = await loop._hook_registry.invoke(
+        HookName.STOP,
+        payload={
+            **public_verify_payload,
+            "policy_action": policy_action,
+            "evidence_refs": evidence_refs,
+        },
+        correlation=correlation,
+    )
+    if not escalated:
+        stop_follow_up = next(
+            (
+                decision.instruction
+                for decision in stop.decisions
+                if decision.action is HookAction.CONTINUE and decision.instruction
+            ),
+            "",
+        )
+        if stop_follow_up:
+            policy_action = "continue"
+            follow_up = stop_follow_up
+
+    budget = int(getattr(loop, "_verify_continuation_budget", 0))
+    if follow_up and correlation.verify_attempt >= budget:
+        log.warning(
+            "Verification continuation budget exhausted (%d/%d)",
+            correlation.verify_attempt,
+            budget,
+        )
+        follow_up = ""
+        escalated = True
+        policy_action = "escalate_budget_exhausted"
+
+    ledger = getattr(loop, "_evidence_ledger", None)
+    if ledger is not None and (post.decisions or stop.decisions or evidence_refs):
+        try:
+            ledger.append(
+                kind="verification_policy",
+                summary=f"External verification policy resolved to {policy_action}.",
+                payload={
+                    "turn_id": correlation.turn_id,
+                    "verify_attempt": correlation.verify_attempt,
+                    "built_in_passed": vr.passed,
+                    "policy_action": policy_action,
+                    "rubric_misses": list(vr.rubric_misses),
+                    "evidence_refs": list(evidence_refs),
+                },
+            )
+        except Exception:
+            log.debug("Verification policy evidence row failed", exc_info=True)
+
+    return verify_payload, follow_up, escalated, correlation
+
+
+def _merge_verify_attempts(loop: AgenticLoop, result: AgenticResult) -> None:
+    """Merge bounded continuation attempts before final persistence."""
+    prior = list(getattr(loop, "_verify_attempt_results", ()))
+    if not prior:
+        return
+    all_results = [*prior, result]
+    result.tool_calls = [tool_call for attempt in all_results for tool_call in attempt.tool_calls]
+    result.rounds = sum(attempt.rounds for attempt in all_results)
+    usages = [attempt.usage for attempt in all_results if attempt.usage is not None]
+    if usages:
+        from core.llm.token_tracker import LLMUsage
+
+        result.usage = LLMUsage(
+            model=result.usage.model if result.usage is not None else usages[-1].model,
+            input_tokens=sum(usage.input_tokens for usage in usages),
+            output_tokens=sum(usage.output_tokens for usage in usages),
+            thinking_tokens=sum(usage.thinking_tokens for usage in usages),
+            cache_creation_tokens=sum(usage.cache_creation_tokens for usage in usages),
+            cache_read_tokens=sum(usage.cache_read_tokens for usage in usages),
+            cost_usd=sum(usage.cost_usd for usage in usages),
+        )
+    result.reasoning_metrics = loop._build_reasoning_metrics(result).to_dict()
+    loop._verify_attempt_results = []
+
+
+async def _close_verify_attempt(
+    loop: AgenticLoop,
+    result: AgenticResult,
+    user_input: str,
+    round_idx: int,
+    verify_payload: dict[str, Any] | None,
+) -> None:
+    """Close legacy per-turn telemetry without committing final evidence."""
+    loop._record_transcript_end(result)
+    loop._save_checkpoint(user_input, round_idx=round_idx)
+    if loop._hooks:
+        session_ended, turn_completed, reasoning_metrics = _final_hook_payloads(
+            loop,
+            result,
+            user_input,
+            verify_payload=verify_payload,
+        )
+        await loop._hooks.emit_async(RuntimeEvent.SESSION_ENDED, session_ended)
+        await loop._hooks.emit_async(RuntimeEvent.TURN_COMPLETED, turn_completed)
+        await loop._hooks.emit_async(RuntimeEvent.REASONING_METRICS, reasoning_metrics)
+
+
+async def _emit_verify_runtime_event(
+    loop: AgenticLoop,
+    verify_payload: dict[str, Any] | None,
+) -> None:
+    if verify_payload is None or loop._hooks is None:
+        return
+    event = (
+        RuntimeEvent.TURN_VERIFY_PASSED
+        if verify_payload.get("passed")
+        else RuntimeEvent.TURN_VERIFY_FAILED
+    )
+    await loop._hooks.emit_async(event, verify_payload)
+
+
 def _persist_verify_state(loop: AgenticLoop, metrics: Any, should_retry: bool) -> None:
     """Mirror SessionMetrics verify telemetry into the SessionManager DB row.
 
@@ -468,34 +772,35 @@ def finalize_and_return(
     round_idx: int,
 ) -> AgenticResult:
     """Log result, record transcript end, save checkpoint, and return (DRY)."""
-    _prepare_final_result(loop, result, user_input, round_idx)
+    _prepare_final_result(loop, result, user_input, round_idx, persist=False)
     # Verify/reflection belongs to the task-completion boundary. Run it
     # before SESSION_ENDED/TURN_COMPLETED hooks so lifecycle consumers can
     # read the final self-evaluation from the same terminal payload.
     verify_payload = _run_turn_verify(loop, result)
+    _persist_final_result(loop, result, user_input, round_idx)
     if loop._hooks:
         session_ended, turn_completed, reasoning_metrics = _final_hook_payloads(
             loop, result, user_input, verify_payload=verify_payload
         )
-        loop._hooks.trigger(
-            HookEvent.SESSION_ENDED,
+        loop._hooks.emit(
+            RuntimeEvent.SESSION_ENDED,
             session_ended,
         )
-        loop._hooks.trigger(
-            HookEvent.TURN_COMPLETED,
+        loop._hooks.emit(
+            RuntimeEvent.TURN_COMPLETED,
             turn_completed,
         )
-        loop._hooks.trigger(
-            HookEvent.REASONING_METRICS,
+        loop._hooks.emit(
+            RuntimeEvent.REASONING_METRICS,
             reasoning_metrics,
         )
     if verify_payload is not None and loop._hooks:
         event = (
-            HookEvent.TURN_VERIFY_PASSED
+            RuntimeEvent.TURN_VERIFY_PASSED
             if verify_payload.get("passed")
-            else HookEvent.TURN_VERIFY_FAILED
+            else RuntimeEvent.TURN_VERIFY_FAILED
         )
-        loop._hooks.trigger(event, verify_payload)
+        loop._hooks.emit(event, verify_payload)
     return result
 
 
@@ -506,25 +811,45 @@ async def finalize_and_return_async(
     round_idx: int,
 ) -> AgenticResult:
     """Async finalizer for ``AgenticLoop.arun`` hook emission."""
-    _prepare_final_result(loop, result, user_input, round_idx)
-    # Verify/reflection belongs to the task-completion boundary. Run it
-    # before SESSION_ENDED/TURN_COMPLETED hooks so lifecycle consumers can
-    # read the final self-evaluation from the same terminal payload.
-    verify_payload = await _run_turn_verify_async(loop, result)
+    _prepare_final_result(loop, result, user_input, round_idx, persist=False)
+    verify_payload, follow_up, escalated, correlation = await _run_public_finalization_async(
+        loop, result
+    )
+    await _emit_verify_runtime_event(loop, verify_payload)
+    if follow_up:
+        await _close_verify_attempt(loop, result, user_input, round_idx, verify_payload)
+        loop._verify_attempt_results.append(result)
+        continued = await loop.arun(
+            follow_up,
+            _verify_continuation=replace(
+                correlation,
+                verify_attempt=correlation.verify_attempt + 1,
+            ),
+        )
+        return continued
+
+    if escalated:
+        # PostVerify escalation is a delivery gate, not telemetry. Preserve the
+        # candidate for an external owner, withhold it from ordinary response
+        # surfaces, and park the durable session before returning.
+        _merge_verify_attempts(loop, result)
+        result.pending_text = result.text
+        result.text = ""
+        result.error = str(TerminationReason.EXTERNAL_VERIFICATION_REQUIRED)
+        result.termination_reason = TerminationReason.EXTERNAL_VERIFICATION_REQUIRED
+        _mark_session_status(loop, reason="paused")
+        return result
+
+    _merge_verify_attempts(loop, result)
+    root_input = getattr(loop, "_verify_root_user_input", "") or user_input
+    _persist_final_result(loop, result, root_input, round_idx)
     if loop._hooks:
         session_ended, turn_completed, reasoning_metrics = _final_hook_payloads(
-            loop, result, user_input, verify_payload=verify_payload
+            loop, result, root_input, verify_payload=verify_payload
         )
-        await loop._hooks.trigger_async(HookEvent.SESSION_ENDED, session_ended)
-        await loop._hooks.trigger_async(HookEvent.TURN_COMPLETED, turn_completed)
-        await loop._hooks.trigger_async(HookEvent.REASONING_METRICS, reasoning_metrics)
-    if verify_payload is not None and loop._hooks:
-        event = (
-            HookEvent.TURN_VERIFY_PASSED
-            if verify_payload.get("passed")
-            else HookEvent.TURN_VERIFY_FAILED
-        )
-        await loop._hooks.trigger_async(event, verify_payload)
+        await loop._hooks.emit_async(RuntimeEvent.SESSION_ENDED, session_ended)
+        await loop._hooks.emit_async(RuntimeEvent.TURN_COMPLETED, turn_completed)
+        await loop._hooks.emit_async(RuntimeEvent.REASONING_METRICS, reasoning_metrics)
     return result
 
 

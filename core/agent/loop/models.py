@@ -58,6 +58,9 @@ class TerminationReason(StrEnum):
     USER_CANCELLED = "user_cancelled"
     ACTIONABLE_PARTIAL = "actionable_partial"  # opted-in partial preserve
     TOOL_USE_YIELD = "tool_use_yield"  # external orchestrator owns next turn
+    EXTERNAL_VERIFICATION_REQUIRED = (
+        "external_verification_required"  # PostVerify requires an outside decision
+    )
 
     # Legacy — documented consumers exist (worker retry catalogue, UI event
     # lists) but no current producer site constructs it.
@@ -164,6 +167,10 @@ class AgenticResult:
     summary: str = ""  # Tier 1 compact action summary (auto-generated)
     reasoning_metrics: dict[str, object] | None = None
     usage: "LLMUsage | None" = None  # noqa: UP037 — forward-ref for cycle avoidance
+    # Candidate withheld from ordinary delivery when PostVerify escalates.
+    # Direct external-loop callers can inspect it and make the pending
+    # decision; normal successful results omit the field on serialization.
+    pending_text: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to dict, omitting None-valued fields."""

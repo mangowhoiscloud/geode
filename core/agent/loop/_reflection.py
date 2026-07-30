@@ -309,6 +309,7 @@ async def reflect_async(
     max_tokens: int,
     provider: str | None = None,
     source: str | None = None,
+    middleware_registry: Any | None = None,
 ) -> None:
     """Run the reflection LLM call and update ``state`` in place.
 
@@ -408,7 +409,13 @@ async def reflect_async(
                 max_tokens=max_tokens,
                 temperature=_settings.temperature_reflection,
             )
-            return await adapter.acomplete(req)
+            if middleware_registry is None:
+                from core.hooks import MiddlewareRegistry
+
+                active_middleware = MiddlewareRegistry()
+            else:
+                active_middleware = middleware_registry
+            return await active_middleware.call_llm(adapter, req)
 
         response, _used_model = await call_with_failover([model], _do_call)
     except Exception:

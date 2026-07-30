@@ -1,0 +1,237 @@
+from __future__ import annotations
+
+import asyncio
+import json
+from collections.abc import Awaitable, Callable
+from functools import wraps
+from typing import Any, cast
+
+import pytest
+from core.hooks import (
+    PUBLIC_HOOK_SCHEMA_VERSION,
+    HookAction,
+    HookDecision,
+    HookName,
+    HookRegistry,
+    InvalidHookPayloadError,
+    public_hook_schema,
+)
+from jsonschema import Draft202012Validator
+
+
+def _async_test(func: Callable[[], Awaitable[None]]) -> Callable[[], None]:
+    @wraps(func)
+    def run() -> None:
+        asyncio.run(func())
+
+    return run
+
+
+def test_public_hook_allowlist_is_exactly_the_version_one_contract() -> None:
+    assert [hook.value for hook in HookName] == [
+        "UserPromptSubmit",
+        "PreToolUse",
+        "PermissionRequest",
+        "PostToolUse",
+        "PreCompact",
+        "PostCompact",
+        "SessionStart",
+        "SessionEnd",
+        "SubagentStart",
+        "SubagentStop",
+        "PreVerify",
+        "PostVerify",
+        "Stop",
+    ]
+    assert PUBLIC_HOOK_SCHEMA_VERSION == "geode.public-hook.v1"
+
+
+def test_unknown_hook_name_is_rejected() -> None:
+    registry = HookRegistry()
+
+    with pytest.raises(ValueError):
+        registry.register(cast(HookName, "LLMCallStart"), lambda _invocation: None)
+
+
+def test_all_public_hook_schemas_are_generated_and_json_round_trip() -> None:
+    schemas = {hook.value: public_hook_schema(hook) for hook in HookName}
+
+    assert len(schemas) == 13
+    round_tripped = json.loads(json.dumps(schemas, sort_keys=True))
+    assert set(round_tripped) == {hook.value for hook in HookName}
+    for schema in round_tripped.values():
+        Draft202012Validator.check_schema(schema)
+
+
+@_async_test
+async def test_invalid_public_payload_is_rejected_before_dispatch() -> None:
+    registry = HookRegistry()
+
+    with pytest.raises(InvalidHookPayloadError, match="UserPromptSubmit"):
+        await registry.invoke(HookName.USER_PROMPT_SUBMIT, payload={})
+
+
+@_async_test
+async def test_unknown_public_payload_field_is_rejected_before_dispatch() -> None:
+    registry = HookRegistry()
+
+    with pytest.raises(InvalidHookPayloadError, match="unexpected"):
+        await registry.invoke(
+            HookName.USER_PROMPT_SUBMIT,
+            payload={"user_input": "hello", "unexpected": True},
+        )
+
+
+def test_exported_schema_is_a_defensive_copy() -> None:
+    first = public_hook_schema(HookName.USER_PROMPT_SUBMIT)
+    first["properties"]["payload"]["properties"].clear()
+
+    second = public_hook_schema(HookName.USER_PROMPT_SUBMIT)
+
+    assert "user_input" in second["properties"]["payload"]["properties"]
+
+
+@_async_test
+async def test_rewrites_compose_sequentially_and_payload_is_redacted() -> None:
+    registry = HookRegistry()
+    seen: list[dict[str, Any]] = []
+
+    async def first(invocation: Any) -> HookDecision:
+        seen.append(dict(invocation.payload))
+        return HookDecision(
+            action=HookAction.REWRITE,
+            updates={"user_input": f"{invocation.payload['user_input']} one"},
+        )
+
+    async def second(invocation: Any) -> HookDecision:
+        seen.append(dict(invocation.payload))
+        return HookDecision(
+            action=HookAction.REWRITE,
+            updates={"user_input": f"{invocation.payload['user_input']} two"},
+        )
+
+    registry.register(HookName.USER_PROMPT_SUBMIT, first, name="first")
+    registry.register(HookName.USER_PROMPT_SUBMIT, second, name="second")
+
+    outcome = await registry.invoke(
+        HookName.USER_PROMPT_SUBMIT,
+        payload={
+            "user_input": "start",
+            "authorization": "Bearer secret",
+        },
+    )
+
+    assert seen[0]["user_input"] == "start"
+    assert seen[1]["user_input"] == "start one"
+    assert outcome.invocation.payload["user_input"] == "start one two"
+    assert "authorization" not in outcome.invocation.payload
+    assert outcome.invocation.payload["_redacted_fields"] == ["authorization"]
+
+
+@_async_test
+async def test_hook_cannot_return_an_action_owned_by_another_hook() -> None:
+    registry = HookRegistry()
+
+    async def invalid(_invocation: Any) -> HookDecision:
+        return HookDecision(action=HookAction.ACCEPT)
+
+    registry.register(HookName.USER_PROMPT_SUBMIT, invalid, name="invalid")
+
+    outcome = await registry.invoke(
+        HookName.USER_PROMPT_SUBMIT,
+        payload={"user_input": "hello"},
+    )
+
+    assert not outcome.decisions
+    assert outcome.handler_errors == ("invalid: accept is not allowed for UserPromptSubmit",)
+
+
+@_async_test
+async def test_large_payload_keeps_the_hook_schema_envelope() -> None:
+    registry = HookRegistry()
+
+    outcome = await registry.invoke(
+        HookName.POST_TOOL_USE,
+        payload={
+            "tool_name": "check",
+            "arguments": {},
+            "result": {f"row-{index}": "x" * 4_096 for index in range(20)},
+            "has_error": False,
+            "executed": True,
+        },
+    )
+
+    assert set(outcome.invocation.payload) == {
+        "tool_name",
+        "arguments",
+        "result",
+        "has_error",
+        "executed",
+    }
+    assert outcome.invocation.payload["result"]["_truncated"] is True
+    assert len(json.dumps(outcome.invocation.payload).encode()) <= 32 * 1_024
+
+
+@_async_test
+async def test_handler_payload_mutation_is_isolated_and_rejected() -> None:
+    registry = HookRegistry()
+
+    def mutate(invocation: Any) -> None:
+        cast(dict[str, Any], invocation.payload)["user_input"] = "mutated"
+
+    registry.register(HookName.USER_PROMPT_SUBMIT, mutate, name="mutator")
+
+    outcome = await registry.invoke(
+        HookName.USER_PROMPT_SUBMIT,
+        payload={"user_input": "original"},
+    )
+
+    assert outcome.invocation.payload["user_input"] == "original"
+    assert outcome.handler_errors == (
+        "mutator: hook handlers cannot mutate invocation.payload; return REWRITE updates",
+    )
+
+
+@_async_test
+async def test_non_rewrite_action_cannot_smuggle_payload_updates() -> None:
+    registry = HookRegistry()
+    registry.register(
+        HookName.USER_PROMPT_SUBMIT,
+        lambda _invocation: HookDecision(
+            action=HookAction.CONTINUE,
+            updates={"user_input": "smuggled"},
+        ),
+        name="smuggler",
+    )
+
+    outcome = await registry.invoke(
+        HookName.USER_PROMPT_SUBMIT,
+        payload={"user_input": "original"},
+    )
+
+    assert outcome.invocation.payload["user_input"] == "original"
+    assert outcome.handler_errors == ("smuggler: updates are only allowed for rewrite decisions",)
+
+
+@_async_test
+async def test_block_stops_lower_priority_handlers() -> None:
+    registry = HookRegistry()
+    called: list[str] = []
+
+    async def block(_invocation: Any) -> HookDecision:
+        called.append("block")
+        return HookDecision(action=HookAction.BLOCK, reason="policy")
+
+    async def late(_invocation: Any) -> None:
+        called.append("late")
+
+    registry.register(HookName.PRE_TOOL_USE, late, name="late", priority=200)
+    registry.register(HookName.PRE_TOOL_USE, block, name="block", priority=10)
+
+    outcome = await registry.invoke(
+        HookName.PRE_TOOL_USE,
+        payload={"tool_name": "run_bash", "arguments": {}},
+    )
+
+    assert outcome.blocked is True
+    assert called == ["block"]
