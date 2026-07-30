@@ -57,6 +57,7 @@ _AUDIT_EVENTS = frozenset(
         HookEvent.COST_WARNING,
         HookEvent.COST_LIMIT_EXCEEDED,
         HookEvent.EXECUTION_CANCELLED,
+        HookEvent.EXTENSION_INVOKED,
         HookEvent.HANDOFF_TRIGGERED,
         HookEvent.MEMORY_PROMOTION_PROPOSED,
         HookEvent.MUTATION_PROPOSED,
@@ -147,6 +148,7 @@ ACTION_FAMILY_ALIASES: dict[str, str] = {
     # operator-facing policy surfaces
     "rule": "policy",
     "config": "policy",
+    "extension": "policy",
     "program": "policy",
     # the self-improvement loop
     "trigger": "improve",

@@ -35,7 +35,7 @@ Agent           core/agent/           AgenticLoop(while tool_use), sub_agent, sy
 Harness         core/cli/             thin CLI + commands/ + IPC 클라이언트
                 core/server/          serve 데몬. ipc_server(CLIPoller) + supervised(메신저 폴러)
                 core/messaging/       바인딩 기반 게이트웨이 라우팅
-                core/hooks/           라이프사이클 이벤트 (HookSystem)
+                core/hooks/           공개 훅, 신뢰 미들웨어, 런타임 이벤트
                 core/orchestration/   LaneQueue, TaskGraph, compaction, tool offload
                 core/scheduler/       cron/이벤트 트리거 + 예약 작업
                 core/wiring/          부트스트랩 주입 (container, bootstrap, scheduling)
@@ -160,7 +160,7 @@ Agent           core/agent/           AgenticLoop (while tool_use), sub_agent, s
 Harness         core/cli/             thin CLI + commands/ + IPC client
                 core/server/          serve daemon: ipc_server (CLIPoller) + supervised (messenger pollers)
                 core/messaging/       binding-based gateway routing
-                core/hooks/           lifecycle events (HookSystem)
+                core/hooks/           public hooks, trusted middleware, runtime events
                 core/orchestration/   LaneQueue, TaskGraph, compaction, tool offload
                 core/scheduler/       cron/event triggers + scheduled jobs
                 core/wiring/          bootstrap injection (container, bootstrap, scheduling)

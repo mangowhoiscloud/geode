@@ -761,9 +761,13 @@ class CLIPoller:
             # Clean client exit — the REPL surface's ACTIVE -> COMPLETED
             # edge (docs/architecture/session-state-machine.md § owners).
             try:
-                _mark_done = getattr(loop, "mark_session_completed", None)
-                if callable(_mark_done):
-                    _mark_done()
+                _mark_done_async = getattr(loop, "amark_session_completed", None)
+                if callable(_mark_done_async):
+                    await _mark_done_async()
+                else:
+                    _mark_done = getattr(loop, "mark_session_completed", None)
+                    if callable(_mark_done):
+                        _mark_done()
             except Exception:
                 log.debug("mark_session_completed on exit failed", exc_info=True)
             return None
@@ -896,9 +900,15 @@ class CLIPoller:
             # Clean client exit — the REPL surface's ACTIVE -> COMPLETED
             # edge (docs/architecture/session-state-machine.md § owners).
             try:
-                _mark_done = getattr(loop, "mark_session_completed", None)
-                if callable(_mark_done):
-                    _mark_done()
+                _mark_done_async = getattr(loop, "amark_session_completed", None)
+                if callable(_mark_done_async):
+                    from core.async_runtime import run_process_coroutine
+
+                    run_process_coroutine(_mark_done_async())
+                else:
+                    _mark_done = getattr(loop, "mark_session_completed", None)
+                    if callable(_mark_done):
+                        _mark_done()
             except Exception:
                 log.debug("mark_session_completed on exit failed", exc_info=True)
             return None

@@ -33,7 +33,7 @@ from core.ui import spinner_glyph
 from core.ui.console import console
 
 if TYPE_CHECKING:
-    from core.hooks import HookSystem
+    from core.hooks import HookRegistry, HookSystem
 
 log = logging.getLogger(__name__)
 
@@ -113,12 +113,16 @@ class ApprovalWorkflow:
         auto_approve: bool = False,
         hitl_level: int = 2,
         hooks: HookSystem | None = None,
+        hook_registry: HookRegistry | None = None,
         approval_callback: Callable[..., str] | None = None,
+        interactive_approval: bool = True,
     ) -> None:
         self._auto_approve = auto_approve
         self._hitl_level = hitl_level
         self._hooks = hooks
+        self._hook_registry = hook_registry
         self._approval_callback = approval_callback
+        self._interactive_approval = interactive_approval
         # Session EvidenceLedger — attached by AgenticLoop via
         # ToolExecutor.attach_evidence_ledger (best-effort rail; None when the
         # workflow runs outside a loop, e.g. tests / CLI utilities).
@@ -367,12 +371,25 @@ class ApprovalWorkflow:
         tool_name: str = "",
         record: ApprovalRecord | None = None,
         allow_always: bool = True,
+        allow_human_prompt: bool | None = None,
     ) -> str:
         """Async wrapper for approval prompts.
 
         Console input and IPC approval callbacks are blocking from the event
         loop's perspective, so they run in a worker thread.
         """
+        public_decision = await self._public_permission_decision(
+            tool_name=tool_name or label,
+            safety_level=safety_level,
+            detail=detail,
+        )
+        if public_decision is not None:
+            return public_decision
+        can_prompt = (
+            self._interactive_approval if allow_human_prompt is None else allow_human_prompt
+        )
+        if not can_prompt:
+            return "n"
         return await asyncio.to_thread(
             self.prompt_with_always,
             label,
@@ -382,6 +399,46 @@ class ApprovalWorkflow:
             record=record,
             allow_always=allow_always,
         )
+
+    async def _public_permission_decision(
+        self,
+        *,
+        tool_name: str,
+        safety_level: str,
+        detail: str,
+    ) -> str | None:
+        """Return ``y``/``n`` for a decisive public hook, else ask the user."""
+        if self._hook_registry is None:
+            return None
+        from core.agent.cognitive_state_ctx import get_session_id, get_turn_id
+        from core.hooks.public import (
+            HookAction,
+            HookCorrelation,
+            HookName,
+        )
+
+        outcome = await self._hook_registry.invoke(
+            HookName.PERMISSION_REQUEST,
+            payload={
+                "tool_name": tool_name,
+                "safety_level": safety_level,
+                "detail": (
+                    "personal data request (details omitted)"
+                    if safety_level == "sensitive"
+                    else detail
+                ),
+            },
+            correlation=HookCorrelation(
+                session_id=get_session_id(),
+                turn_id=get_turn_id(),
+            ),
+        )
+        actions = {decision.action for decision in outcome.decisions}
+        if HookAction.DENY in actions:
+            return "n"
+        if HookAction.ALLOW in actions:
+            return "y"
+        return None
 
     # -----------------------------------------------------------------
     # Safety gate orchestration
@@ -459,6 +516,8 @@ class ApprovalWorkflow:
         tool_name: str,
         tool_input: dict[str, Any],
         record: ApprovalRecord | None = None,
+        *,
+        batch_cost_approved: bool = False,
     ) -> tuple[dict[str, Any] | None, bool]:
         """Async HITL gate path used by ToolExecutor.aexecute()."""
         if tool_name in DANGEROUS_TOOLS:
@@ -492,7 +551,10 @@ class ApprovalWorkflow:
             if gate_result is not None:
                 return gate_result, False
 
-        if tool_name in EXPENSIVE_TOOLS and not self._auto_approve:
+        if tool_name in EXPENSIVE_TOOLS and batch_cost_approved:
+            self.record_transition(record, "granted", "batch:cost-approved")
+            approved = True
+        elif tool_name in EXPENSIVE_TOOLS and not self._auto_approve:
 
             async def cost_gate() -> tuple[dict[str, Any] | None, bool]:
                 auto_reason = self._auto_grant_reason("cost", tool_name)
@@ -518,7 +580,7 @@ class ApprovalWorkflow:
         self, server: str, tool_name: str, record: ApprovalRecord | None = None
     ) -> bool:
         """Prompt user for MCP tool confirmation with A=Always option."""
-        if self._approval_callback is None:
+        if self._approval_callback is None and self._interactive_approval:
             from core.cli import _restore_terminal
 
             _restore_terminal()
@@ -557,7 +619,7 @@ class ApprovalWorkflow:
         """Async MCP tool confirmation with A=Always option."""
 
         async def gate() -> bool:
-            if self._approval_callback is None:
+            if self._approval_callback is None and self._interactive_approval:
                 from core.cli import _restore_terminal
 
                 _restore_terminal()
@@ -672,7 +734,7 @@ class ApprovalWorkflow:
             else f"Personal {service} data may be sent to your configured LLM provider."
         )
         disclosure = boundary + (f" Request: {summary}" if summary else "")
-        if self._approval_callback is None:
+        if self._approval_callback is None and self._interactive_approval:
             from core.cli import _restore_terminal
 
             _restore_terminal()
@@ -712,12 +774,51 @@ class ApprovalWorkflow:
         record: ApprovalRecord | None = None,
     ) -> bool:
         """Async personal-data confirmation."""
-        return await asyncio.to_thread(
-            self.confirm_sensitive,
-            tool_name,
-            tool_input,
-            record,
+        service = "Calendar" if tool_name.startswith("calendar_") else "Google Workspace"
+        is_mutation = tool_name in WRITE_TOOLS
+        summary = (
+            self._write_summary(tool_name, tool_input)
+            if is_mutation
+            else self._sensitive_summary(tool_input)
         )
+        boundary = (
+            f"This {service} mutation will change personal account data."
+            if is_mutation
+            else f"Personal {service} data may be sent to your configured LLM provider."
+        )
+        disclosure = boundary + (f" Request: {summary}" if summary else "")
+        if self._approval_callback is None and self._interactive_approval:
+            from core.cli import _restore_terminal
+
+            _restore_terminal()
+            console.print()
+            console.print(_approval_header(tool_name, "personal data"))
+            console.print(f"  [dim]{disclosure}[/dim]")
+            console.print()
+        if self.check_auto_deny(tool_name):
+            self.record_transition(record, "denied", "auto_denied:3-strikes")
+            return False
+        await self._fire_hook_async(
+            HookEvent.TOOL_APPROVAL_REQUESTED,
+            {
+                "tool_name": tool_name,
+                "safety_level": "SENSITIVE",
+                "args_preview": summary,
+            },
+        )
+        response = await self.prompt_with_always_async(
+            "Allow?",
+            disclosure,
+            safety_level="sensitive",
+            tool_name=tool_name,
+            record=record,
+            allow_always=False,
+        )
+        if response == "y":
+            self.record_transition(record, "granted", f"user:{response}")
+            return True
+        self.record_transition(record, "denied", f"user:{response}")
+        return False
 
     @staticmethod
     def _sensitive_summary(tool_input: dict[str, Any]) -> str:
@@ -745,7 +846,7 @@ class ApprovalWorkflow:
     ) -> bool:
         """Prompt user for write operation confirmation."""
         summary = self._write_summary(tool_name, tool_input)
-        if self._approval_callback is None:
+        if self._approval_callback is None and self._interactive_approval:
             from core.cli import _restore_terminal
 
             _restore_terminal()
@@ -792,7 +893,7 @@ class ApprovalWorkflow:
     ) -> bool:
         """Async write operation confirmation."""
         summary = self._write_summary(tool_name, tool_input)
-        if self._approval_callback is None:
+        if self._approval_callback is None and self._interactive_approval:
             from core.cli import _restore_terminal
 
             _restore_terminal()
@@ -838,7 +939,7 @@ class ApprovalWorkflow:
         record: ApprovalRecord | None = None,
     ) -> bool:
         """Prompt user for cost confirmation with A=Always option."""
-        if self._approval_callback is None:
+        if self._approval_callback is None and self._interactive_approval:
             from core.cli import _restore_terminal
 
             _restore_terminal()
@@ -879,7 +980,7 @@ class ApprovalWorkflow:
         record: ApprovalRecord | None = None,
     ) -> bool:
         """Async cost confirmation with A=Always option."""
-        if self._approval_callback is None:
+        if self._approval_callback is None and self._interactive_approval:
             from core.cli import _restore_terminal
 
             _restore_terminal()
@@ -917,7 +1018,7 @@ class ApprovalWorkflow:
         self, command: str, reason: str, record: ApprovalRecord | None = None
     ) -> bool:
         """Prompt user for bash command approval with A=Always option."""
-        if self._approval_callback is None:
+        if self._approval_callback is None and self._interactive_approval:
             from core.cli import _restore_terminal
 
             _restore_terminal()
@@ -959,7 +1060,7 @@ class ApprovalWorkflow:
         """Async bash command approval with A=Always option."""
 
         async def gate() -> bool:
-            if self._approval_callback is None:
+            if self._approval_callback is None and self._interactive_approval:
                 from core.cli import _restore_terminal
 
                 _restore_terminal()

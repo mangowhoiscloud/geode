@@ -11,7 +11,15 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
-from core.hooks import HookEvent, HookSystem
+from core.agent.cognitive_state_ctx import get_turn_id
+from core.hooks import (
+    HookAction,
+    HookCorrelation,
+    HookName,
+    HookRegistry,
+    RuntimeEvent,
+    RuntimeEventBus,
+)
 from core.orchestration.context_budget import (
     ABSOLUTE_TOKEN_CEILING,
     PRUNE_ACTIVATION_MESSAGE_COUNT,
@@ -31,11 +39,13 @@ class ContextWindowManager:
     def __init__(
         self,
         *,
-        hooks: HookSystem | None,
+        hooks: RuntimeEventBus | None,
+        hook_registry: HookRegistry | None = None,
         quiet: bool,
         session_id_provider: Callable[[], str | None] | None = None,
     ) -> None:
         self._hooks = hooks
+        self._hook_registry = hook_registry
         self._quiet = quiet
         # Late-bound: the loop's session_id is assigned after construction, so
         # compaction resolves it at call time — without it the primary overflow
@@ -103,8 +113,9 @@ class ContextWindowManager:
         The policy also carries the absolute ceiling that avoids large-context
         rate-limit pool separation before percentage thresholds become relevant.
 
-        Compression strategy is delegated to the CONTEXT_OVERFLOW_ACTION hook handler.
-        If no handler is registered or all fail, falls back to the resolved policy.
+        The domain policy chooses the compression strategy. Public PreCompact
+        handlers may adjust bounded inputs or defer a soft compaction, but they
+        cannot replace the policy at a hard safety boundary.
         """
         try:
             from core.config import settings
@@ -121,7 +132,7 @@ class ContextWindowManager:
                 )
                 if self._hooks:
                     await self._hooks.trigger_async(
-                        HookEvent.CONTEXT_CRITICAL,
+                        RuntimeEvent.CONTEXT_CRITICAL,
                         {"metrics": dataclasses.asdict(metrics), "model": model},
                     )
 
@@ -136,6 +147,7 @@ class ContextWindowManager:
                 )
                 metrics = check_context(messages, model, system_prompt=system)
                 strategy = await self._resolve_overflow_strategy(metrics, settings, model, provider)
+                strategy["hard"] = True
                 await self._apply_overflow_strategy(strategy, messages, settings, model, provider)
 
                 # Re-check: if still critical after pruning, context is exhausted
@@ -226,6 +238,7 @@ class ContextWindowManager:
                         "keep_recent": keep_recent,
                         "policy": post.policy,
                         "trigger": "ceiling",
+                        "hard": True,
                     }
                     await self._apply_overflow_strategy(
                         strategy, messages, settings, model, provider
@@ -257,6 +270,32 @@ class ContextWindowManager:
 
             try:
                 session_id = self._session_id_provider() if self._session_id_provider else None
+                correlation = HookCorrelation(
+                    session_id=session_id or "",
+                    turn_id=get_turn_id(),
+                )
+                if self._hook_registry is not None:
+                    pre_compact = await self._hook_registry.invoke(
+                        HookName.PRE_COMPACT,
+                        payload={
+                            "model": model,
+                            "provider": provider,
+                            "message_count": len(messages),
+                            "keep_recent": keep_recent,
+                            "trigger": strategy.get("trigger", "overflow"),
+                            "hard": bool(strategy.get("hard", False)),
+                        },
+                        correlation=correlation,
+                    )
+                    effective_keep = pre_compact.invocation.payload.get("keep_recent")
+                    if isinstance(effective_keep, int) and not isinstance(effective_keep, bool):
+                        keep_recent = max(1, min(effective_keep, 1_000))
+                    deferred = any(
+                        decision.action is HookAction.DEFER for decision in pre_compact.decisions
+                    )
+                    if deferred and not strategy.get("hard", False):
+                        log.info("Soft context compaction deferred by PreCompact")
+                        return
                 new_msgs, did_compact = await compact_conversation(
                     messages,
                     provider=provider,
@@ -275,6 +314,20 @@ class ContextWindowManager:
                         original_count=original_count,
                         new_count=len(new_msgs),
                     )
+                    if self._hook_registry is not None:
+                        await self._hook_registry.invoke(
+                            HookName.POST_COMPACT,
+                            payload={
+                                "model": model,
+                                "provider": provider,
+                                "original_message_count": original_count,
+                                "new_message_count": len(new_msgs),
+                                "keep_recent": keep_recent,
+                                "trigger": strategy.get("trigger", "overflow"),
+                                "persisted": bool(session_id),
+                            },
+                            correlation=correlation,
+                        )
                     return
             except Exception:
                 log.warning("Client compaction failed — falling back to prune", exc_info=True)
@@ -310,8 +363,9 @@ class ContextWindowManager:
     ) -> int:
         """Last-resort context recovery: aggressive prune + tool result summarization.
 
-        Delegates strategy selection to CONTEXT_OVERFLOW_ACTION hook (same path
-        as normal overflow) with aggressive keep_recent override.
+        Uses the same deterministic domain policy as normal overflow, with an
+        aggressive keep_recent override. Public hooks cannot disable this hard
+        recovery boundary.
 
         Returns number of messages freed, or 0 if recovery failed.
         """
@@ -338,7 +392,7 @@ class ContextWindowManager:
             if not post.is_critical:
                 return original_count - len(messages) + summarized
 
-            # Phase 2: delegate to CONTEXT_OVERFLOW_ACTION hook for strategy
+            # Phase 2: resolve the domain policy and tighten its retention.
             strategy = await self._resolve_overflow_strategy(post, settings, model, provider)
 
             aggressive_keep = (
@@ -347,6 +401,7 @@ class ContextWindowManager:
                 else max(3, settings.compact_keep_recent // 2)
             )
             strategy["keep_recent"] = aggressive_keep
+            strategy["hard"] = True
 
             # Force prune if hook returned "none" — aggressive recovery must act
             if strategy.get("strategy") == "none":
@@ -384,22 +439,7 @@ class ContextWindowManager:
     async def _resolve_overflow_strategy(
         self, metrics: Any, settings: Any, model: str, provider: str
     ) -> dict[str, Any]:
-        """Ask CONTEXT_OVERFLOW_ACTION hook for compression strategy, with fallback."""
-        if self._hooks:
-            results = await self._hooks.trigger_with_result_async(
-                HookEvent.CONTEXT_OVERFLOW_ACTION,
-                {
-                    "metrics": dataclasses.asdict(metrics),
-                    "model": model,
-                    "provider": provider,
-                },
-            )
-            for result in results:
-                if result.success and result.data.get("strategy"):
-                    result.data.setdefault("policy", getattr(metrics, "policy", None))
-                    result.data.setdefault("trigger", "overflow_hook")
-                    return result.data
-
+        """Resolve the provider-aware domain policy for context pressure."""
         policy = getattr(metrics, "policy", None)
         if policy is None:
             policy = resolve_context_budget_policy(

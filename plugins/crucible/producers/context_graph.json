@@ -50,7 +50,7 @@
         "runtime",
         "while-tool-use"
       ],
-      "contentSha256": "a108caea63a98629675fc6cc90c35845dac31dd530663bf4fbe7e927db4802bb"
+      "contentSha256": "432dbc97c150d3e120bbf93ae9e8647cd4d74e46e87ed739309cd05e0ff19f35"
     },
     {
       "id": "file:core/agent/tool_executor/processor.py",
@@ -62,7 +62,7 @@
         "tools",
         "parallel"
       ],
-      "contentSha256": "ed23a302ae3a2559d039cdf20388e1c8b8963758c3ceb483470b4b75b4082dcc"
+      "contentSha256": "30040e016d96f0e1bb51bf0aa9167cc5a46a6eea95a497fb645b334638bdea21"
     },
     {
       "id": "file:plugins/crucible/tau2_live.py",

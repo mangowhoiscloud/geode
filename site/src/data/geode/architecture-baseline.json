@@ -14,13 +14,13 @@
   },
   "complexity_thresholds": {
     "max_args": 23,
-    "max_branches": 52,
+    "max_branches": 51,
     "max_complexity": 52,
     "max_returns": 18,
     "max_statements": 223
   },
   "context_vars": {
-    "count": 27,
+    "count": 28,
     "items": [
       {
         "context_name": "geode_active_cognitive_state",
@@ -37,16 +37,23 @@
         "symbol": "_active_session_id"
       },
       {
+        "context_name": "geode_active_turn_id",
+        "has_default": true,
+        "line": 37,
+        "path": "core/agent/cognitive_state_ctx.py",
+        "symbol": "_active_turn_id"
+      },
+      {
         "context_name": "geode_active_parent_session_key",
         "has_default": true,
-        "line": 52,
+        "line": 53,
         "path": "core/agent/cognitive_state_ctx.py",
         "symbol": "_active_parent_session_key"
       },
       {
         "context_name": "geode_active_parent_session_id",
         "has_default": true,
-        "line": 63,
+        "line": 64,
         "path": "core/agent/cognitive_state_ctx.py",
         "symbol": "_active_parent_session_id"
       },
@@ -216,18 +223,18 @@
   "coordinators": {
     "AgenticLoop": {
       "constructor_arg_count": 27,
-      "file_loc": 2736,
-      "method_count": 67,
+      "file_loc": 2902,
+      "method_count": 74,
       "path": "core/agent/loop/agent_loop.py"
     },
     "RuntimeCoreConfig": {
-      "field_count": 17,
+      "field_count": 19,
       "path": "core/runtime.py"
     },
     "SubAgentManager": {
-      "constructor_arg_count": 15,
-      "file_loc": 1277,
-      "method_count": 15,
+      "constructor_arg_count": 16,
+      "file_loc": 1344,
+      "method_count": 17,
       "path": "core/agent/sub_agent.py"
     }
   },
@@ -393,7 +400,7 @@
     ]
   },
   "hook_events": {
-    "count": 56,
+    "count": 57,
     "members": [
       "TRIGGER_FIRED",
       "POST_ANALYSIS",
@@ -422,6 +429,7 @@
       "ADAPTER_DISPATCH_ATTEMPT",
       "SHUTDOWN_STARTED",
       "CONFIG_RELOADED",
+      "EXTENSION_INVOKED",
       "TOOL_RESULT_OFFLOADED",
       "MCP_SERVER_CONNECTED",
       "MCP_SERVER_FAILED",
@@ -505,16 +513,16 @@
   },
   "packages": {
     "core": {
-      "python_files": 424,
-      "python_loc": 131664
+      "python_files": 426,
+      "python_loc": 134472
     },
     "plugins": {
       "python_files": 109,
       "python_loc": 40265
     },
     "tests": {
-      "python_files": 675,
-      "python_loc": 174362
+      "python_files": 678,
+      "python_loc": 176130
     }
   },
   "schema_version": 1,

@@ -19,9 +19,7 @@ from typing import Any
 
 from core.hooks.system import (
     HookEvent,
-    HookResult,
     HookSystem,
-    InterceptResult,
     resolve_event_value,
 )
 
@@ -137,49 +135,7 @@ async def fire_hook_async(
         _warn_dispatch_failure(event)
 
 
-async def fire_interceptor_async(
-    hooks: HookSystem | None,
-    event: HookEvent | str,
-    data: dict[str, Any],
-) -> InterceptResult | None:
-    """Fire an interceptor chain (block/modify semantics), gracefully.
-
-    Returns the :class:`InterceptResult` when hooks are configured and the
-    dispatch succeeded, ``None`` otherwise — callers treat ``None`` as
-    "not blocked, unmodified".
-    """
-    if hooks is None:
-        return None
-    try:
-        resolved = _coerce_event(event)
-        return await hooks.trigger_interceptor_async(resolved, data)
-    except Exception:
-        _warn_dispatch_failure(event)
-        return None
-
-
-async def fire_with_result_async(
-    hooks: HookSystem | None,
-    event: HookEvent | str,
-    data: dict[str, Any],
-) -> list[HookResult]:
-    """Fire a feedback hook capturing handler return values, gracefully.
-
-    Returns an empty list when hooks are unset or the dispatch failed.
-    """
-    if hooks is None:
-        return []
-    try:
-        resolved = _coerce_event(event)
-        return await hooks.trigger_with_result_async(resolved, data)
-    except Exception:
-        _warn_dispatch_failure(event)
-        return []
-
-
 __all__ = [
     "fire_hook",
     "fire_hook_async",
-    "fire_interceptor_async",
-    "fire_with_result_async",
 ]

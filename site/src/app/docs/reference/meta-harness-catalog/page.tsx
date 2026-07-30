@@ -220,11 +220,11 @@ const EXECUTE_ROWS: Row[] = [
     path: "core/agent/approval_fsm.py",
   },
   {
-    name: "Hook interceptor",
-    ko: "interceptor 모드 훅이 도구, LLM 호출을 실행 중에 차단하거나 수정",
-    en: "Interceptor-mode hooks block or modify tool and LLM execution mid-flight",
-    control: "handler returns block:true, per-handler timeout_s",
-    path: "core/hooks/system.py",
+    name: "Trusted middleware",
+    ko: "도구·LLM 요청 변환과 실제 실행 래핑을 네 개의 typed 결합점으로 분리",
+    en: "Four typed join points separate tool and LLM request transforms from execution wrapping",
+    control: "single-use next_call, request mutation rejection, per-handler timeout_s",
+    path: "core/hooks/middleware.py",
   },
   {
     name: "PlanMode",
@@ -331,10 +331,10 @@ const VERIFY_ROWS: Row[] = [
 
 const OBSERVE_ROWS: Row[] = [
   {
-    name: "HookSystem",
-    ko: "65개 이벤트의 중앙 계측 버스. observe, feedback, interceptor 3채널",
-    en: "Central instrumentation bus of 65 events with observe, feedback, and interceptor channels",
-    control: "trigger / trigger_with_result / trigger_interceptor",
+    name: "RuntimeEventBus",
+    ko: "내부 운영 이벤트의 중앙 계측 버스. 공개 제어 계약과 분리",
+    en: "Central internal instrumentation bus, separate from the public control contract",
+    control: "emit / emit_async / subscribe_prefix",
     path: "core/hooks/system.py",
   },
   {
@@ -522,6 +522,7 @@ const TERMINATION_REASONS = [
   "actionable_partial",
   "context_exhausted",
   "tool_use_yield",
+  "external_verification_required",
   "cost_budget_exceeded",
   "user_clarification_needed",
   "model_refusal",

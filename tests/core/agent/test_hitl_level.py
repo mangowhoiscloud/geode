@@ -121,7 +121,11 @@ class TestAlwaysApproval:
         executor = ToolExecutor(action_handlers={"memory_save": handler})
         executor._always_approved_categories.add("write")
         with patch.object(executor._approval, "prompt_with_always") as mock_prompt:
-            result = _run_executor(executor, "memory_save", {"content": "data"})
+            result = _run_executor(
+                executor,
+                "memory_save",
+                {"key": "data", "content": "data"},
+            )
             mock_prompt.assert_not_called()
         assert result["status"] == "ok"
 
@@ -199,7 +203,11 @@ class TestHITLLevel:
         handler = MagicMock(return_value={"status": "ok"})
         executor = ToolExecutor(action_handlers={"memory_save": handler}, hitl_level=0)
         with patch.object(executor._approval, "prompt_with_always") as mock_prompt:
-            result = _run_executor(executor, "memory_save", {"content": "data"})
+            result = _run_executor(
+                executor,
+                "memory_save",
+                {"key": "data", "content": "data"},
+            )
             mock_prompt.assert_not_called()
         assert result["status"] == "ok"
 
@@ -211,7 +219,11 @@ class TestHITLLevel:
             patch.object(executor._approval, "prompt_with_always", return_value="y"),
             patch("core.agent.approval.console"),
         ):
-            _run_executor(executor, "memory_save", {"content": "data"})
+            _run_executor(
+                executor,
+                "memory_save",
+                {"key": "data", "content": "data"},
+            )
             # Write tools at hitl_level=1 should still prompt (write-only)
 
     def test_hitl_level_0_skips_cost_approval(self) -> None:

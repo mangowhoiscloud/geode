@@ -456,10 +456,10 @@ class TestAlwaysAllowRegression:
             return "a"
 
         executor = self._executor(callback)
-        first = asyncio.run(executor.aexecute("memory_save", {"content": "one"}))
+        first = asyncio.run(executor.aexecute("memory_save", {"key": "one", "content": "one"}))
         assert first == {"status": "saved"}, f"A must execute, got {first}"
         assert "denied" not in first
-        second = asyncio.run(executor.aexecute("memory_save", {"content": "two"}))
+        second = asyncio.run(executor.aexecute("memory_save", {"key": "two", "content": "two"}))
         assert second == {"status": "saved"}
         assert prompt_count == 1, "second call must skip the prompt after always-allow"
         assert executor._handler_calls == ["executed", "executed"]  # type: ignore[attr-defined]
@@ -469,7 +469,7 @@ class TestAlwaysAllowRegression:
             return "y"
 
         executor = self._executor(callback)
-        result = asyncio.run(executor.aexecute("memory_save", {"content": "x"}))
+        result = asyncio.run(executor.aexecute("memory_save", {"key": "x", "content": "x"}))
         assert result == {"status": "saved"}
 
     def test_deny_records_skipped_and_full_trail(self) -> None:
@@ -479,7 +479,7 @@ class TestAlwaysAllowRegression:
             return "n"
 
         executor = self._executor(callback, hooks=hooks)
-        result = asyncio.run(executor.aexecute("memory_save", {"content": "x"}))
+        result = asyncio.run(executor.aexecute("memory_save", {"key": "x", "content": "x"}))
         assert result.get("denied") is True
         assert hooks.states() == [
             "requested",
@@ -497,7 +497,7 @@ class TestAlwaysAllowRegression:
             return "y"
 
         executor = self._executor(callback, hooks=hooks)
-        result = asyncio.run(executor.aexecute("memory_save", {"content": "x"}))
+        result = asyncio.run(executor.aexecute("memory_save", {"key": "x", "content": "x"}))
         assert result == {"status": "saved"}
         assert hooks.states() == [
             "requested",

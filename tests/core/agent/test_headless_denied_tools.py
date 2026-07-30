@@ -82,6 +82,11 @@ def test_executor_denied_tools_refuses_run_bash_at_top() -> None:
     from core.agent.tool_executor.executor import ToolExecutor
 
     executor = ToolExecutor(hitl_level=0, denied_tools=frozenset({"run_bash"}))
-    result = asyncio.run(executor.aexecute("run_bash", {"command": "echo pwned"}))
+    result = asyncio.run(
+        executor.aexecute(
+            "run_bash",
+            {"command": "echo pwned", "reason": "regression"},
+        )
+    )
     assert result.get("denied") is True
     assert "not available" in result.get("error", "")

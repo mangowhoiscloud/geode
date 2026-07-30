@@ -27,7 +27,16 @@ from core.agent.tool_executor import (
     ToolCallProcessor,
     ToolExecutor,
 )
-from core.hooks import HookEvent, HookSystem
+from core.hooks import (
+    HookAction,
+    HookCorrelation,
+    HookEvent,
+    HookName,
+    HookRegistry,
+    HookSystem,
+    LlmCallRequest,
+    MiddlewareRegistry,
+)
 from core.llm.adapters.base import EmptyModelOutputError
 from core.llm.agentic_response import AgenticResponse
 from core.llm.errors import BillingError, UserCancelledError
@@ -94,6 +103,7 @@ async def _acomplete_with_fail_fast_pre_execution_retry(
     request: Any,
     *,
     on_retry: Callable[[Exception, int, int], Awaitable[None]] | None = None,
+    complete: Callable[[Any, Any], Awaitable[Any]] | None = None,
 ) -> Any:
     """Retry bounded pre-execution failures without reopening completed tool work.
 
@@ -106,8 +116,13 @@ async def _acomplete_with_fail_fast_pre_execution_retry(
     boundary. Every attempt uses the identical request before tool execution.
     """
 
-    try:
+    async def invoke() -> Any:
+        if complete is not None:
+            return await complete(adapter, request)
         return await adapter.acomplete(request)
+
+    try:
+        return await invoke()
     except Exception as exc:
         if not _fail_fast_adapter_errors_enabled():
             raise
@@ -131,7 +146,7 @@ async def _acomplete_with_fail_fast_pre_execution_retry(
                     )
                 await asyncio.sleep(_FAIL_FAST_RETRY_DELAY_S * (attempt - 1))
                 try:
-                    result = await adapter.acomplete(request)
+                    result = await invoke()
                 except EmptyModelOutputError as retry_error:
                     empty_errors.append(retry_error)
                     if attempt == _FAIL_FAST_EMPTY_OUTPUT_MAX_ATTEMPTS:
@@ -151,7 +166,7 @@ async def _acomplete_with_fail_fast_pre_execution_retry(
         if on_retry is not None:
             await on_retry(exc, 2, 2)
         await asyncio.sleep(_FAIL_FAST_RETRY_DELAY_S)
-        return await adapter.acomplete(request)
+        return await invoke()
 
 
 def _saved_cwd_matches_current(stored_cwd: str, current_cwd: str) -> bool:
@@ -456,6 +471,27 @@ class AgenticLoop:
         self._mcp_manager = mcp_manager
         self._skill_registry = skill_registry
         self._hooks = hooks
+        executor_hooks = getattr(tool_executor, "hook_registry", None)
+        executor_middleware = getattr(tool_executor, "middleware_registry", None)
+        self._hook_registry = (
+            executor_hooks
+            if isinstance(executor_hooks, HookRegistry)
+            else HookRegistry(events=hooks)
+        )
+        self._middleware_registry = (
+            executor_middleware
+            if isinstance(executor_middleware, MiddlewareRegistry)
+            else MiddlewareRegistry(events=hooks)
+        )
+        self._turn_id = ""
+        self._verify_root_turn_id = ""
+        self._verify_root_user_input = ""
+        self._verify_attempt = 0
+        self._verify_attempt_results: list[AgenticResult] = []
+        self._verify_continuation_budget = 2
+        self._session_generation = 1
+        self._public_session_started = False
+        self._public_session_ended = False
         # No explicit source → infer_source promotes an OAuth provider to
         # "subscription". _source_explicit tracks the pin so a cross-provider
         # /model switch only re-infers when the source was inferred here.
@@ -585,6 +621,7 @@ class AgenticLoop:
 
         self._ctx_mgr = ContextWindowManager(
             hooks=hooks,
+            hook_registry=self._hook_registry,
             quiet=quiet,
             session_id_provider=lambda: self._session_id or None,
         )
@@ -624,7 +661,7 @@ class AgenticLoop:
 
         return tuple(self._pre_execution_retry_errors)
 
-    def _save_checkpoint(self, user_input: str, round_idx: int = 0) -> None:
+    def _save_checkpoint(self, user_input: str, round_idx: int = 0) -> bool:
         """Delegates to :func:`_lifecycle.save_checkpoint`."""
         return _lifecycle.save_checkpoint(self, user_input, round_idx)
 
@@ -639,6 +676,18 @@ class AgenticLoop:
     def mark_session_error(self) -> None:
         """Delegates to :func:`_lifecycle.mark_session_error`."""
         return _lifecycle.mark_session_error(self)
+
+    async def amark_session_completed(self) -> None:
+        """Durably complete and emit the public SessionEnd boundary."""
+        await _lifecycle.mark_session_completed_async(self)
+
+    async def amark_session_paused(self) -> None:
+        """Durably pause while keeping the public session lifetime open."""
+        await _lifecycle.mark_session_paused_async(self)
+
+    async def amark_session_error(self) -> None:
+        """Durably error and emit the public SessionEnd boundary."""
+        await _lifecycle.mark_session_error_async(self)
 
     def restore_from_checkpoint(self, state: Any) -> None:
         """Delegates to :func:`_lifecycle.restore_loop_state` — the single
@@ -826,6 +875,10 @@ class AgenticLoop:
             getattr(self._new_adapter, "source", self._source) if inherit_loop_model else None
         )
 
+        reflection_kwargs: dict[str, Any] = {}
+        active_middleware = getattr(self, "_middleware_registry", None)
+        if active_middleware is not None:
+            reflection_kwargs["middleware_registry"] = active_middleware
         await reflect_async(
             self.cognitive_state,
             tool_results,
@@ -833,32 +886,31 @@ class AgenticLoop:
             max_tokens=settings.cognitive_reflection_max_tokens,
             provider=reflection_provider,
             source=reflection_source,
+            **reflection_kwargs,
         )
 
     async def _emit_session_start_signals(self, user_input: str) -> AgenticResult | None:
-        """Emit the session-start signals. Owns the USER_INPUT_RECEIVED
-        interceptor, cognitive-state goal init + ContextVar bind,
+        """Emit the turn-start signals. Owns the USER_INPUT_RECEIVED
+        observation, cognitive-state goal init + ContextVar bind,
         COGNITIVE_PERCEIVE emit, conversation-context append, transcript
         ``record_session_start`` / ``record_user_message``, and the
         SESSION_STARTED hook.
 
         Returns ``None`` on the happy path. Returns an
         :class:`AgenticResult` (with ``termination_reason="input_blocked"``)
-        when the USER_INPUT_RECEIVED interceptor blocks the input —
-        ``arun`` surfaces that result back to the caller verbatim.
+        The public UserPromptSubmit decision runs at the start of ``arun``
+        before preflight or decomposition.
         """
-        # Hook: USER_INPUT_RECEIVED (interceptor — can block input)
+        # Internal observation only; public control belongs to HookRegistry.
         if self._hooks:
-            intercept = await self._hooks.trigger_interceptor_async(
+            await self._hooks.trigger_async(
                 HookEvent.USER_INPUT_RECEIVED,
-                {"user_input": user_input, "session_id": self._session_id},
+                {
+                    "user_input": user_input,
+                    "session_id": self._session_id,
+                    "turn_id": self._turn_id,
+                },
             )
-            if intercept.blocked:
-                return self._terminal_result(
-                    TerminationReason.INPUT_BLOCKED,
-                    intercept.reason,
-                    rounds=0,
-                )
 
         # goal = first arun()'s input (later calls keep it so observations
         # accumulate against one goal)
@@ -872,10 +924,12 @@ class AgenticLoop:
             set_parent_session_id,
             set_parent_session_key,
             set_session_id,
+            set_turn_id,
         )
 
         set_cognitive_state(self.cognitive_state)
         set_session_id(self._session_id)
+        set_turn_id(getattr(self, "_turn_id", ""))
         # Sub-agent lineage → Episode rows (empty for top-level loops)
         set_parent_session_key(self._parent_session_key)
         set_parent_session_id(self._parent_session_id)
@@ -1053,6 +1107,88 @@ class AgenticLoop:
         if tool_calls is not None:
             result.tool_calls = tool_calls
         return result
+
+    async def _apply_user_prompt_hook(
+        self,
+        user_input: str,
+    ) -> tuple[str, AgenticResult | None]:
+        """Apply the public input boundary before any planning or model work."""
+        outcome = await self._hook_registry.invoke(
+            HookName.USER_PROMPT_SUBMIT,
+            payload={"user_input": user_input},
+            correlation=HookCorrelation(
+                session_id=self._session_id,
+                turn_id=self._turn_id,
+            ),
+        )
+        if outcome.blocked:
+            reason = next(
+                (
+                    decision.reason
+                    for decision in outcome.decisions
+                    if decision.action is HookAction.BLOCK
+                ),
+                "Blocked by UserPromptSubmit hook",
+            )
+            return user_input, self._terminal_result(
+                TerminationReason.INPUT_BLOCKED,
+                reason,
+                rounds=0,
+            )
+        effective = outcome.invocation.payload.get("user_input")
+        return (effective if isinstance(effective, str) else user_input), None
+
+    async def _begin_turn(
+        self,
+        user_input: str,
+        continuation: HookCorrelation | None,
+    ) -> tuple[str, AgenticResult | None]:
+        """Reset per-turn state and cross the public input boundary."""
+        import uuid
+
+        self._tool_processor.reset()
+        self._op_logger.reset()
+        self._pre_execution_retry_errors.clear()
+        self._turn_id = f"t-{uuid.uuid4().hex[:12]}"
+        if continuation is None:
+            self._verify_root_turn_id = self._turn_id
+            self._verify_root_user_input = ""
+            self._verify_attempt = 0
+            self._verify_attempt_results = []
+        else:
+            self._verify_root_turn_id = continuation.turn_id or self._turn_id
+            self._verify_attempt = continuation.verify_attempt
+
+        from core.agent.cognitive_state_ctx import set_session_id, set_turn_id
+
+        set_session_id(self._session_id)
+        set_turn_id(self._turn_id)
+        if continuation is not None:
+            return user_input, None
+        effective, blocked = await self._apply_user_prompt_hook(user_input)
+        self._verify_root_user_input = effective
+        return effective, blocked
+
+    def _refresh_mcp_tools_at_turn_start(self) -> None:
+        """Refresh a lazy or stale MCP schema snapshot."""
+        if self._mcp_manager is None or (
+            len(self._tools) >= TOOL_LAZY_LOAD_THRESHOLD
+            and self._mcp_manager.connection_epoch == self._mcp_epoch
+        ):
+            return
+        added = self.refresh_tools()
+        self._mcp_epoch = self._mcp_manager.connection_epoch
+        if added > 0:
+            log.info("MCP tools lazy-loaded: +%d tools (total %d)", added, len(self._tools))
+
+    async def _open_turn(self, user_input: str) -> AgenticResult | None:
+        """Publish legacy start signals, then the durable public boundary."""
+        intercepted = await self._emit_session_start_signals(user_input)
+        if intercepted is not None:
+            return intercepted
+        if self._save_checkpoint(user_input, round_idx=0):
+            await _lifecycle.emit_public_session_start(self)
+        return None
 
     # ------------------------------------------------------------------
     # Guard chain — the loop's transition guards, in priority order
@@ -1861,11 +1997,16 @@ class AgenticLoop:
             log.debug("Task preflight failed", exc_info=True)
             return ""
 
-    async def arun(self, user_input: str) -> AgenticResult:
+    async def arun(
+        self,
+        user_input: str,
+        *,
+        _verify_continuation: HookCorrelation | None = None,
+    ) -> AgenticResult:
         """Run the agentic loop until LLM emits end_turn or max rounds."""
-        self._tool_processor.reset()
-        self._op_logger.reset()
-        self._pre_execution_retry_errors.clear()
+        user_input, blocked = await self._begin_turn(user_input, _verify_continuation)
+        if blocked is not None:
+            return blocked
 
         # Wire conversation context so /model command guard can check size
         from core.cli.commands import set_conversation_context
@@ -1875,14 +2016,7 @@ class AgenticLoop:
         # Lazy MCP tool refresh — load tools empty at init (startup timing
         # gap), and re-snapshot after any server recycle (epoch drift): a
         # reconnected server may advertise a different tool set (ADR-014 R5).
-        if self._mcp_manager is not None and (
-            len(self._tools) < TOOL_LAZY_LOAD_THRESHOLD
-            or self._mcp_manager.connection_epoch != self._mcp_epoch
-        ):
-            added = self.refresh_tools()
-            self._mcp_epoch = self._mcp_manager.connection_epoch
-            if added > 0:
-                log.info("MCP tools lazy-loaded: +%d tools (total %d)", added, len(self._tools))
+        self._refresh_mcp_tools_at_turn_start()
 
         preflight_hint = self._prepare_task_preflight(user_input)
         # Retained on self so mid-arun prompt rebuilds re-apply it.
@@ -1902,7 +2036,7 @@ class AgenticLoop:
                 rounds=0,
             )
 
-        intercept_result = await self._emit_session_start_signals(user_input)
+        intercept_result = await self._open_turn(user_input)
         if intercept_result is not None:
             return intercept_result
 
@@ -2221,9 +2355,12 @@ class AgenticLoop:
                 _terminal = await self._guard_overthinking(
                     response, messages=messages, round_idx=round_idx
                 )
-            if _terminal is not None:
-                return await self._afinalize_and_return(_terminal, user_input, round_idx + 1)
-            _terminal = self._guard_model_refusal(response, messages=messages, round_idx=round_idx)
+            if _terminal is None:
+                _terminal = self._guard_model_refusal(
+                    response,
+                    messages=messages,
+                    round_idx=round_idx,
+                )
             if _terminal is not None:
                 return await self._afinalize_and_return(_terminal, user_input, round_idx + 1)
 
@@ -2268,9 +2405,11 @@ class AgenticLoop:
 
             # --- Post-tool guard chain — same first-terminal-wins contract.
             _terminal = self._guard_convergence(messages=messages, round_idx=round_idx)
-            if _terminal is not None:
-                return await self._afinalize_and_return(_terminal, user_input, round_idx + 1)
-            _terminal = self._guard_repeated_success(messages=messages, round_idx=round_idx)
+            if _terminal is None:
+                _terminal = self._guard_repeated_success(
+                    messages=messages,
+                    round_idx=round_idx,
+                )
             if _terminal is not None:
                 return await self._afinalize_and_return(_terminal, user_input, round_idx + 1)
 
@@ -2535,25 +2674,114 @@ class AgenticLoop:
                 response_schema if response_schema is not None else self._response_schema
             ),
         )
-        # Fire LLM_CALL_STARTED/ENDED with usage+cost for the SQLite
-        # token/cost accumulator.
-        import time as _llm_call_time
+        correlation = {
+            "session_id": self._session_id,
+            "turn_id": self._turn_id,
+        }
+        llm_request = await self._middleware_registry.llm_request(
+            LlmCallRequest(
+                adapter=self._new_adapter,
+                request=req,
+                correlation=correlation,
+            )
+        )
+        call_adapter = llm_request.adapter
+        req = llm_request.request
+        effective_model = req.model
+        adapter_name = getattr(call_adapter, "name", "<unknown>")
+        effective_provider = getattr(call_adapter, "provider", self._provider)
 
-        _llm_t0 = _llm_call_time.monotonic()
-        adapter_name = getattr(self._new_adapter, "name", "<unknown>")
-        if self._hooks:
-            try:
-                await self._hooks.trigger_async(
+        async def _complete_attempt(adapter: Any, request: Any) -> Any:
+            current = LlmCallRequest(
+                adapter=adapter,
+                request=request,
+                correlation=correlation,
+            )
+
+            async def terminal(effective: LlmCallRequest) -> Any:
+                import time as _llm_call_time
+
+                from core.hooks.dispatch import fire_hook_async
+
+                started_at = _llm_call_time.monotonic()
+                active_adapter = effective.adapter
+                active_request = effective.request
+                active_name = getattr(active_adapter, "name", "<unknown>")
+                active_provider = getattr(active_adapter, "provider", effective_provider)
+                await fire_hook_async(
+                    self._hooks,
                     HookEvent.LLM_CALL_STARTED,
                     {
                         "session_id": self._session_id,
-                        "model": effective_model,
-                        "provider": self._provider,
-                        "adapter": adapter_name,
+                        "turn_id": self._turn_id,
+                        "model": active_request.model,
+                        "provider": active_provider,
+                        "adapter": active_name,
                     },
                 )
-            except Exception:
-                log.debug("LLM_CALL_STARTED hook trigger failed", exc_info=True)
+                try:
+                    attempt_result = await active_adapter.acomplete(active_request)
+                except BaseException as exc:
+                    await fire_hook_async(
+                        self._hooks,
+                        HookEvent.LLM_CALL_ENDED,
+                        {
+                            "session_id": self._session_id,
+                            "turn_id": self._turn_id,
+                            "model": active_request.model,
+                            "provider": active_provider,
+                            "adapter": active_name,
+                            "latency_ms": (_llm_call_time.monotonic() - started_at) * 1_000,
+                            "error": str(exc) or type(exc).__name__,
+                        },
+                    )
+                    raise
+
+                usage = getattr(attempt_result, "usage", None)
+                input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
+                output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
+                cached_input_tokens = int(getattr(usage, "cached_input_tokens", 0) or 0)
+                try:
+                    from core.llm.token_tracker import calculate_cost
+
+                    cost_usd = float(
+                        calculate_cost(
+                            active_request.model,
+                            input_tokens,
+                            output_tokens,
+                            cache_read_tokens=cached_input_tokens,
+                        )
+                    )
+                except Exception:
+                    log.warning(
+                        "calculate_cost failed for model=%s — recording cost_usd=0.0 "
+                        "(cost limiter will under-count this call)",
+                        active_request.model,
+                        exc_info=True,
+                    )
+                    cost_usd = 0.0
+                await fire_hook_async(
+                    self._hooks,
+                    HookEvent.LLM_CALL_ENDED,
+                    {
+                        "session_id": self._session_id,
+                        "turn_id": self._turn_id,
+                        "model": active_request.model,
+                        "provider": active_provider,
+                        "adapter": active_name,
+                        "latency_ms": (_llm_call_time.monotonic() - started_at) * 1_000,
+                        "error": None,
+                        "usage": {
+                            "input_tokens": input_tokens,
+                            "output_tokens": output_tokens,
+                            "cached_input_tokens": cached_input_tokens,
+                        },
+                        "cost_usd": cost_usd,
+                    },
+                )
+                return attempt_result
+
+            return await self._middleware_registry.llm_execution(current, terminal)
 
         async def _on_fail_fast_pre_execution_retry(
             exc: Exception,
@@ -2567,7 +2795,7 @@ class AgenticLoop:
                         HookEvent.LLM_CALL_RETRIED,
                         {
                             "model": effective_model,
-                            "provider": self._provider,
+                            "provider": effective_provider,
                             "adapter": adapter_name,
                             "error_type": type(exc).__name__,
                             "delay_s": _FAIL_FAST_RETRY_DELAY_S,
@@ -2580,9 +2808,10 @@ class AgenticLoop:
 
         try:
             result = await _acomplete_with_fail_fast_pre_execution_retry(
-                self._new_adapter,
+                call_adapter,
                 req,
                 on_retry=_on_fail_fast_pre_execution_retry,
+                complete=_complete_attempt,
             )
         except Exception as exc:
             error_detail = str(exc) or type(exc).__name__
@@ -2595,21 +2824,6 @@ class AgenticLoop:
             if _fail_fast_adapter_errors_enabled():
                 raise
             response = None
-            if self._hooks:
-                try:
-                    await self._hooks.trigger_async(
-                        HookEvent.LLM_CALL_ENDED,
-                        {
-                            "session_id": self._session_id,
-                            "model": effective_model,
-                            "provider": self._provider,
-                            "adapter": adapter_name,
-                            "latency_ms": (_llm_call_time.monotonic() - _llm_t0) * 1000,
-                            "error": error_detail,
-                        },
-                    )
-                except Exception:
-                    log.debug("LLM_CALL_ENDED (error) hook trigger failed", exc_info=True)
         else:
             response = agentic_response_from_adapter_result(result)
             # persist the emitted session_id for the next turn's resume
@@ -2619,57 +2833,9 @@ class AgenticLoop:
             # cache for the SESSION_ENDED claude_cli_session_id write
             if emitted_sid:
                 self._last_emitted_session_id = emitted_sid
-            # LLM_CALL_ENDED with usage + locally-computed cost (no
-            # double-count — the accumulator already records)
-            if self._hooks:
-                usage = getattr(result, "usage", None)
-                input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
-                output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
-                cached_input_tokens = int(getattr(usage, "cached_input_tokens", 0) or 0)
-                try:
-                    from core.llm.token_tracker import calculate_cost
-
-                    cost_usd = float(
-                        calculate_cost(
-                            effective_model,
-                            input_tokens,
-                            output_tokens,
-                            cache_read_tokens=cached_input_tokens,
-                        )
-                    )
-                except Exception:
-                    # graceful 0.0, but logged — an unpriced model would
-                    # otherwise be FREE to the cost limiter (under-count)
-                    log.warning(
-                        "calculate_cost failed for model=%s — recording cost_usd=0.0 "
-                        "(cost limiter will under-count this call)",
-                        effective_model,
-                        exc_info=True,
-                    )
-                    cost_usd = 0.0
-                try:
-                    await self._hooks.trigger_async(
-                        HookEvent.LLM_CALL_ENDED,
-                        {
-                            "session_id": self._session_id,
-                            "model": effective_model,
-                            "provider": self._provider,
-                            "adapter": adapter_name,
-                            "latency_ms": (_llm_call_time.monotonic() - _llm_t0) * 1000,
-                            "error": None,
-                            "usage": {
-                                "input_tokens": input_tokens,
-                                "output_tokens": output_tokens,
-                                "cached_input_tokens": cached_input_tokens,
-                            },
-                            "cost_usd": cost_usd,
-                        },
-                    )
-                except Exception:
-                    log.debug("LLM_CALL_ENDED (success) hook trigger failed", exc_info=True)
 
         if response is None:
-            adapter_err = getattr(self._new_adapter, "_last_error", None)
+            adapter_err = getattr(call_adapter, "_last_error", None)
             if adapter_err:
                 self._last_llm_error = str(adapter_err)
             elif not self._last_llm_error:

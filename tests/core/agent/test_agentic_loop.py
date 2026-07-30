@@ -6,6 +6,8 @@ import asyncio
 import inspect
 import logging
 import threading
+from dataclasses import replace
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -20,7 +22,15 @@ from core.agent.tool_executor import (
     ToolCallProcessor,
     ToolExecutor,
 )
-from core.hooks import HookEvent, HookSystem
+from core.hooks import (
+    HookAction,
+    HookDecision,
+    HookEvent,
+    HookName,
+    HookRegistry,
+    HookSystem,
+    MiddlewareRegistry,
+)
 from core.llm.adapters.base import EmptyModelOutputError
 from core.orchestration.isolated_execution import IsolatedRunner
 from core.tools.base import ToolContext
@@ -161,7 +171,7 @@ class TestToolExecutor:
             approval_callback=approval_callback,
             hooks=hooks,
         )
-        result = asyncio.run(executor.aexecute("memory_save", {"content": "data"}))
+        result = asyncio.run(executor.aexecute("memory_save", {"key": "data", "content": "data"}))
 
         assert result["status"] == "ok"
         assert callback_thread != main_thread
@@ -266,8 +276,57 @@ class TestToolExecutor:
         assert results[0]["tool_use_id"] == "toolu_async"
         assert '"status": "ok"' in results[0]["content"]
 
-    def test_process_awaits_async_hooks(self) -> None:
-        """ToolCallProcessor should await async hook interceptors and result hooks."""
+    def test_batch_cost_grant_does_not_approve_rewritten_mcp_tool(self) -> None:
+        class RewriteExpensiveToMcp:
+            async def tool_request(self, request):
+                if request.tool_name != "petri_audit":
+                    return request
+                return replace(
+                    request,
+                    tool_name="restricted_mcp_tool",
+                    arguments={"query": "private"},
+                )
+
+        middleware = MiddlewareRegistry()
+        middleware.register_tool_request(RewriteExpensiveToMcp(), name="rewrite")
+        mcp = MagicMock()
+        mcp.find_server_for_tool.side_effect = lambda name: (
+            "restricted" if name == "restricted_mcp_tool" else None
+        )
+        mcp.last_known_server_for_tool.return_value = None
+        mcp.acall_tool = AsyncMock(return_value={"ok": True})
+        executor = ToolExecutor(
+            action_handlers={"check": lambda **_kwargs: {"ok": True}},
+            mcp_manager=mcp,
+            middleware_registry=middleware,
+        )
+        executor._approval.batch_cost_approval = AsyncMock(return_value=True)
+        executor._approval.confirm_mcp_async = AsyncMock(return_value=False)
+        op_logger = MagicMock()
+        op_logger.log_tool_call.return_value = True
+        processor = ToolCallProcessor(
+            executor=executor,
+            op_logger=op_logger,
+            error_recovery=MagicMock(),
+            mcp_manager=mcp,
+        )
+        expensive = SimpleNamespace(
+            type="tool_use",
+            name="petri_audit",
+            input={"seeds": 1},
+            id="expensive",
+        )
+        safe = SimpleNamespace(type="tool_use", name="check", input={}, id="safe")
+
+        results = asyncio.run(processor.process(MagicMock(content=[expensive, safe])))
+
+        assert len(results) == 2
+        executor._approval.confirm_mcp_async.assert_awaited_once()
+        mcp.acall_tool.assert_not_awaited()
+        assert executor._auto_approve is False
+
+    def test_runtime_event_observers_do_not_control_tool_calls(self) -> None:
+        """Legacy event callbacks are observation-only after the surface split."""
         executor = MagicMock(spec=ToolExecutor)
         executor.aexecute = AsyncMock(return_value={"status": "raw"})
 
@@ -305,9 +364,9 @@ class TestToolExecutor:
         # PR-TOOL-EXEC-CONTEXT (2026-05-28) — see test_process_uses_executor_aexecute
         executor.aexecute.assert_awaited_once()
         call = executor.aexecute.await_args
-        assert call.args == ("list_subjects", {"limit": 3})
+        assert call.args == ("list_subjects", {"limit": 1})
         assert "context" in call.kwargs
-        assert '"status": "hooked"' in results[0]["content"]
+        assert '"status": "raw"' in results[0]["content"]
 
     def test_serialize_offloaded_result_awaits_async_hook(self, tmp_path: Any) -> None:
         """Tool result offload observability should support async hooks."""
@@ -370,7 +429,11 @@ class TestToolExecutor:
         with patch.object(
             executor._approval, "confirm_write_async", AsyncMock(return_value=False)
         ) as mock:
-            result = _run_executor(executor, "memory_save", {"content": "test"})
+            result = _run_executor(
+                executor,
+                "memory_save",
+                {"key": "test", "content": "test"},
+            )
             mock.assert_awaited_once()
             assert result.get("denied") is True
             handler.assert_not_called()
@@ -382,7 +445,11 @@ class TestToolExecutor:
         with patch.object(
             executor._approval, "confirm_write_async", AsyncMock(return_value=True)
         ) as mock:
-            result = _run_executor(executor, "memory_save", {"content": "test"})
+            result = _run_executor(
+                executor,
+                "memory_save",
+                {"key": "test", "content": "test"},
+            )
             mock.assert_awaited_once()
             assert result["status"] == "ok"
             handler.assert_called_once()
@@ -392,7 +459,11 @@ class TestToolExecutor:
         handler = MagicMock(return_value={"status": "ok"})
         executor = ToolExecutor(action_handlers={"memory_save": handler}, auto_approve=True)
         with patch.object(executor._approval, "confirm_write_async", AsyncMock(return_value=False)):
-            result = _run_executor(executor, "memory_save", {"content": "test"})
+            result = _run_executor(
+                executor,
+                "memory_save",
+                {"key": "test", "content": "test"},
+            )
             assert result.get("denied") is True
             handler.assert_not_called()
 
@@ -544,20 +615,22 @@ class TestAgenticLoop:
         assert observed[2][1]["text"] == "Lifecycle complete."
         assert observed[3][1]["total_rounds"] == 1
 
-    def test_arun_awaits_async_user_input_interceptor(
+    def test_arun_awaits_async_user_prompt_hook(
         self, context: ConversationContext, executor: ToolExecutor
     ) -> None:
-        """Async user input interceptors can block before the first LLM call."""
+        """Async public input hooks can block before the first LLM call."""
         hooks = HookSystem()
+        hook_registry = HookRegistry(events=hooks)
 
-        async def block_input(_event: HookEvent, _data: dict[str, Any]) -> dict[str, Any]:
+        async def block_input(_invocation: Any) -> HookDecision:
             await asyncio.sleep(0)
-            return {"block": True, "reason": "blocked async"}
+            return HookDecision(action=HookAction.BLOCK, reason="blocked async")
 
-        hooks.register(HookEvent.USER_INPUT_RECEIVED, block_input, name="block_input")
+        hook_registry.register(HookName.USER_PROMPT_SUBMIT, block_input, name="block_input")
+        executor_with_hooks = ToolExecutor(hooks=hooks, hook_registry=hook_registry)
         loop = AgenticLoop(
             context,
-            executor,
+            executor_with_hooks,
             hooks=hooks,
             quiet=True,
             enable_goal_decomposition=False,

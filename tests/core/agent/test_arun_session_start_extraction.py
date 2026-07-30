@@ -107,7 +107,9 @@ def test_arun_calls_session_start_helper() -> None:
     behaviour silently reverts to pre-refactor (inline block missing).
     Mirrors the DONT-table "stub disguise" lens."""
     src = inspect.getsource(AgenticLoop.arun)
-    assert "await self._emit_session_start_signals(user_input)" in src
+    open_src = inspect.getsource(AgenticLoop._open_turn)
+    assert "await self._open_turn(user_input)" in src
+    assert "await self._emit_session_start_signals(user_input)" in open_src
 
 
 def test_arun_surfaces_intercept_result_verbatim() -> None:
@@ -116,8 +118,11 @@ def test_arun_surfaces_intercept_result_verbatim() -> None:
     the early-exit pattern so a future refactor doesn't accidentally
     swallow the blocked result."""
     src = inspect.getsource(AgenticLoop.arun)
+    open_src = inspect.getsource(AgenticLoop._open_turn)
+    assert "intercepted = await self._emit_session_start_signals(user_input)" in open_src
+    assert "if intercepted is not None:\n            return intercepted" in open_src
     # The exact pattern arun uses:
-    assert "intercept_result = await self._emit_session_start_signals(user_input)" in src
+    assert "intercept_result = await self._open_turn(user_input)" in src
     assert "if intercept_result is not None:\n            return intercept_result" in src
 
 

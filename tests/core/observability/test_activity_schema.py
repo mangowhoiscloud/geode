@@ -223,16 +223,19 @@ _SUPERSET_PAYLOAD = {
     "tool_name": "run_bash",
     "name": "rule1",
     "trigger_id": "tg1",
+    "surface": "hook",
+    "extension": "test-extension",
+    "status": "ok",
 }
 
 
 def test_i5_all_hookevents_produce_a_row() -> None:
     """Every HookEvent now has a typed builder (PR-OBS-CONTRACT closed the
-    K-group fall-throughs; PR-HOOK-TAXONOMY collapsed the enum 65 -> 56).
+    K-group fall-throughs; the extension audit event is typed as well).
     With a well-formed payload each maps to its concrete row — never
     GenericActivityRow, never raises."""
     all_events = list(HookEvent)
-    assert len(all_events) == 56, f"expected 56 HookEvents, got {len(all_events)}"
+    assert len(all_events) == 57, f"expected 57 HookEvents, got {len(all_events)}"
 
     typed_count = 0
     for event in all_events:
@@ -245,9 +248,9 @@ def test_i5_all_hookevents_produce_a_row() -> None:
                 f"under a well-formed payload"
             )
 
-    # 100% typed coverage over the 56-member enum (PR-HOOK-TAXONOMY).
-    assert typed_count == 56, f"expected 56 typed events (full coverage), got {typed_count}"
-    assert len(HOOK_EVENT_TO_ROW_BUILDER) == 56, "every HookEvent must have a registry entry"
+    # 100% typed coverage over the current enum.
+    assert typed_count == 57, f"expected 57 typed events (full coverage), got {typed_count}"
+    assert len(HOOK_EVENT_TO_ROW_BUILDER) == 57, "every HookEvent must have a registry entry"
 
 
 def test_i5_registry_action_matches_concrete_action_literal() -> None:

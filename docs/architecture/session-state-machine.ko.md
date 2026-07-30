@@ -34,7 +34,7 @@ ACTIVE와 PAUSED 머신만 암묵적 스레드 연속의 대상이며, COMPLETED
 | 상태 | 의미 | 터미널 |
 |---|---|---|
 | ACTIVE | 머신이 턴을 더 받을 수 있음 | 아니오 |
-| PAUSED | 운영자 입력(pending ask) 대기로 파킹됨 | 아니오 |
+| PAUSED | 운영자 입력(pending ask) 또는 외부 검증 대기로 파킹됨 | 아니오 |
 | COMPLETED | 깨끗하게 종료; cleanup 대상 | 예 (reopen 엣지로만 재진입) |
 | ERROR | 원샷 실행 사망(타임아웃/미처리 예외) | 예 (reopen 엣지로만 재진입) |
 
@@ -74,7 +74,7 @@ COMPLETED, ERROR}; PAUSED → {ACTIVE, PAUSED, COMPLETED, ERROR}(재파킹
 | 엣지 | 소유자 |
 |---|---|
 | 부재 → ACTIVE, ACTIVE → ACTIVE | `_lifecycle.save_checkpoint` (매 턴, 전 표면) |
-| ACTIVE → PAUSED | 스케줄러 드레인(pending-ask 파킹); 게이트웨이 ask continuation(재질문) |
+| ACTIVE → PAUSED | 스케줄러 드레인(pending-ask/외부 검증 파킹); 게이트웨이 ask continuation(재질문) |
 | ACTIVE → COMPLETED | REPL 클린 종료; 스케줄러 원샷 종결; ask continuation 종결; 게이트웨이 컨텍스트 소진 |
 | ACTIVE → ERROR | 스케줄러 드레인 타임아웃/미처리 예외 |
 | PAUSED → ACTIVE | ask 답변 → continuation의 매 턴 save |

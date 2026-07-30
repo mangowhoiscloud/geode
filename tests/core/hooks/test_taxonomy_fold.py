@@ -35,8 +35,9 @@ def _declared_action(event: HookEvent) -> str:
 
 
 def test_every_event_lands_in_a_declared_family():
-    """56 events resolved into 27 first-segments before the fold, 16 of them
-    holding a single event. Every event must land in one of the 13 declared
+    """The original 56 events resolved into 27 first-segments before the fold.
+    EXTENSION_INVOKED joins the existing policy family rather than creating a
+    singleton namespace. Every event must land in one of the 13 declared
     families or the namespace stops classifying."""
     stray = {
         e.value: action_family(_declared_action(e))
@@ -160,9 +161,9 @@ def test_family_filter_matches_pre_fold_rows(tmp_path):
 
 
 def test_alias_map_covers_every_folded_singleton():
-    """16 singletons were folded; each one's old segment must still resolve or a
-    pre-fold row becomes unreachable by family."""
-    assert len(ACTION_FAMILY_ALIASES) == 16
+    """The 16 folded legacy segments plus the extension audit segment must
+    resolve into existing families rather than creating singleton families."""
+    assert len(ACTION_FAMILY_ALIASES) == 17
     for old, new in ACTION_FAMILY_ALIASES.items():
         assert action_family(f"{old}.anything") == new
         assert new in ACTION_FAMILIES

@@ -1,4 +1,4 @@
-"""Hook Plugin Discovery — directory-based plugin loading for HookSystem.
+"""Hook Plugin Discovery — directory-based plugin loading for RuntimeEventBus.
 
 Scans directories for hook plugins in two formats:
   1. Python module: directory with ``hook.py`` containing a class implementing HookPlugin
@@ -20,13 +20,13 @@ from typing import Any, Protocol, runtime_checkable
 
 import yaml
 
-from core.hooks.system import HookEvent, HookSystem, resolve_event_value
+from core.hooks.system import RuntimeEvent, RuntimeEventBus, resolve_event_value
 
 log = logging.getLogger(__name__)
 
 
-def _resolve_event(name: str) -> HookEvent:
-    """Resolve a string event name to a HookEvent enum member.
+def _resolve_event(name: str) -> RuntimeEvent:
+    """Resolve a string event name to a RuntimeEvent enum member.
 
     Accepts the enum member name (e.g. ``SESSION_ENDED``), the enum value
     (e.g. ``session_ended``), and legacy pre-rename values
@@ -39,7 +39,7 @@ def _resolve_event(name: str) -> HookEvent:
 
     # Try direct member name lookup first
     try:
-        return HookEvent[upper]
+        return RuntimeEvent[upper]
     except KeyError:
         pass
 
@@ -49,7 +49,7 @@ def _resolve_event(name: str) -> HookEvent:
     except ValueError:
         pass
 
-    valid = ", ".join(m.value for m in HookEvent)
+    valid = ", ".join(m.value for m in RuntimeEvent)
     msg = f"Invalid hook event '{name}'. Valid events: {valid}"
     raise ValueError(msg)
 
@@ -64,7 +64,7 @@ class HookPluginMetadata:
     """Metadata describing a discovered hook plugin."""
 
     name: str
-    events: list[HookEvent]
+    events: list[RuntimeEvent]
     priority: int = 100
     description: str = ""
     requires: list[str] = field(default_factory=list)
@@ -79,7 +79,7 @@ class HookPlugin(Protocol):
     @property
     def metadata(self) -> HookPluginMetadata: ...
 
-    def handle(self, event: HookEvent, data: dict[str, Any]) -> Any: ...
+    def handle(self, event: RuntimeEvent, data: dict[str, Any]) -> Any: ...
 
 
 # ---------------------------------------------------------------------------
@@ -130,13 +130,13 @@ class _YAMLPlugin:
     """A loaded YAML-driven plugin — wraps a plain handler function."""
 
     _metadata: HookPluginMetadata
-    _handler_fn: Any  # Callable[[HookEvent, dict], None]
+    _handler_fn: Any  # Callable[[RuntimeEvent, dict], None]
 
     @property
     def metadata(self) -> HookPluginMetadata:
         return self._metadata
 
-    def handle(self, event: HookEvent, data: dict[str, Any]) -> Any:
+    def handle(self, event: RuntimeEvent, data: dict[str, Any]) -> Any:
         return self._handler_fn(event, data)
 
 
@@ -359,8 +359,8 @@ class HookPluginLoader:
         self._loaded = plugins
         return list(plugins)
 
-    def register_all(self, hooks: HookSystem) -> None:
-        """Register all loaded plugins into the given *HookSystem*."""
+    def register_all(self, hooks: RuntimeEventBus) -> None:
+        """Register all loaded plugins into the given runtime event bus."""
         for plugin in self._loaded:
             meta: HookPluginMetadata = plugin.metadata
             for event in meta.events:
@@ -376,8 +376,8 @@ class HookPluginLoader:
                 [e.value for e in meta.events],
             )
 
-    def unregister_all(self, hooks: HookSystem) -> None:
-        """Remove all loaded plugins from the given *HookSystem*."""
+    def unregister_all(self, hooks: RuntimeEventBus) -> None:
+        """Remove all loaded plugins from the given runtime event bus."""
         for plugin in self._loaded:
             meta: HookPluginMetadata = plugin.metadata
             for event in meta.events:

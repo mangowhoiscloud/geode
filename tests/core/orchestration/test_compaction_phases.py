@@ -452,6 +452,38 @@ def test_compaction_persists_summary_artifact(monkeypatch: pytest.MonkeyPatch, t
         mgr.close()
 
 
+def test_compaction_persistence_failure_is_no_op(monkeypatch: pytest.MonkeyPatch):
+    """A failed durable artifact write cannot commit the in-memory compaction."""
+
+    async def _fake_summarize(
+        text: str,
+        provider: str,
+        model: str,
+        *,
+        max_tokens: int,
+    ) -> str | None:
+        return "UNPERSISTED SUMMARY"
+
+    class FailingSessionManager:
+        def upsert_context_artifact(self, **kwargs: object) -> None:
+            raise OSError("disk full")
+
+    monkeypatch.setattr(compaction, "_call_summarize", _fake_summarize)
+    msgs = _build_long_conversation(20)
+    new_msgs, did = asyncio.run(
+        compact_conversation(
+            msgs,
+            provider="openai",
+            model="gpt-5",
+            keep_recent=8,
+            session_id="s1",
+            session_manager=FailingSessionManager(),
+        )
+    )
+    assert did is False
+    assert new_msgs is msgs
+
+
 def test_summary_failure_no_op(monkeypatch: pytest.MonkeyPatch):
     """If the summarizer returns None, the original messages survive."""
 

@@ -12,11 +12,31 @@ from typing import TYPE_CHECKING, Any, cast
 if TYPE_CHECKING:
     from core.agent.approval_fsm import ApprovalRecord
     from core.agent.sub_agent import SubAgentManager
-    from core.hooks import HookSystem
+    from core.hooks import HookRegistry, HookSystem, MiddlewareRegistry
     from core.tools.base import ToolContext
 
-from core.agent.safety import DANGEROUS_TOOLS
+from core.agent.safety import (
+    DANGEROUS_TOOLS,
+    EXPENSIVE_TOOLS,
+    SENSITIVE_TOOLS,
+    WRITE_TOOLS,
+)
+from core.hooks.middleware import (
+    InvalidMiddlewareResultError,
+    ToolCallRequest,
+)
+from core.hooks.public import (
+    HookAction,
+    HookCorrelation,
+    HookName,
+    HookRegistry,
+)
 from core.tools.bash_tool import BashTool
+from core.tools.personal_data import (
+    PERSONAL_DATA_ERROR_OMITTED,
+    PERSONAL_DATA_TOOLS,
+    personal_data_omitted,
+)
 
 log = logging.getLogger(__name__)
 
@@ -107,11 +127,14 @@ class ToolExecutor:
         mcp_manager: Any | None = None,
         hitl_level: int = 2,
         hooks: HookSystem | None = None,
+        hook_registry: HookRegistry | None = None,
+        middleware_registry: MiddlewareRegistry | None = None,
         # (tool_name, detail, safety_level[, approval_id]) -> decision char.
         # 4-arg callbacks receive the ApprovalRecord id for reply matching;
         # legacy 3-arg callbacks are detected and called without it.
         approval_callback: Callable[..., str] | None = None,
         denied_tools: frozenset[str] = frozenset(),
+        interactive_approval: bool = True,
     ) -> None:
         self._handlers: dict[str, ToolHandler] = action_handlers or {}
         self._bash = bash_tool or BashTool()
@@ -127,7 +150,18 @@ class ToolExecutor:
         # no human can approve. (Codex MCP review, PR-EXEC-HARDENING.)
         self._denied_tools = denied_tools
         self._hooks: HookSystem | None = hooks
+        if hook_registry is None:
+            from core.hooks.public import HookRegistry as _HookRegistry
+
+            hook_registry = _HookRegistry(events=hooks)
+        if middleware_registry is None:
+            from core.hooks.middleware import MiddlewareRegistry as _MiddlewareRegistry
+
+            middleware_registry = _MiddlewareRegistry(events=hooks)
+        self._hook_registry = hook_registry
+        self._middleware_registry = middleware_registry
         self._approval_callback = approval_callback
+        self._interactive_approval = interactive_approval
 
         # HITL approval workflow (extracted — SRP)
         from core.agent.approval import ApprovalWorkflow
@@ -136,8 +170,20 @@ class ToolExecutor:
             auto_approve=auto_approve,
             hitl_level=hitl_level,
             hooks=hooks,
+            hook_registry=hook_registry,
             approval_callback=approval_callback,
+            interactive_approval=interactive_approval,
         )
+
+    @property
+    def hook_registry(self) -> HookRegistry:
+        """Public hook registry shared with the owning agent loop."""
+        return self._hook_registry
+
+    @property
+    def middleware_registry(self) -> MiddlewareRegistry:
+        """Trusted middleware registry shared with the owning agent loop."""
+        return self._middleware_registry
 
     def attach_evidence_ledger(self, ledger: Any | None) -> None:
         """Attach the session EvidenceLedger for approval-FSM terminal rows.
@@ -179,6 +225,142 @@ class ToolExecutor:
         isolated behind ``asyncio.to_thread`` so the agent loop no longer wraps
         the entire executor in a thread.
         """
+        contains_personal_data = tool_name in PERSONAL_DATA_TOOLS
+        batch_cost_approved = bool(context and context.batch_cost_approved)
+        if context is not None:
+            context.contains_personal_data = (
+                context.contains_personal_data or contains_personal_data
+            )
+        correlation = self._tool_correlation()
+        request = await self._middleware_registry.tool_request(
+            ToolCallRequest(
+                tool_name=tool_name,
+                arguments=dict(tool_input),
+                context=context,
+                correlation={
+                    "session_id": correlation.session_id,
+                    "turn_id": correlation.turn_id,
+                    "run_id": correlation.run_id,
+                },
+            )
+        )
+        tool_name = request.tool_name
+        tool_input = dict(request.arguments)
+        if context is not None:
+            # Request middleware owns name/argument transforms, not approval
+            # grants carried by the processor-owned execution context.
+            context.batch_cost_approved = batch_cost_approved
+        contains_personal_data = contains_personal_data or tool_name in PERSONAL_DATA_TOOLS
+        self._record_effective_request(
+            context,
+            tool_name,
+            tool_input,
+            contains_personal_data=contains_personal_data,
+        )
+        if contains_personal_data and tool_name not in PERSONAL_DATA_TOOLS:
+            return {
+                "error": "Personal-data classification cannot be downgraded by a tool rewrite.",
+                "error_type": "privacy_classification_downgrade",
+                "denied": True,
+                "recoverable": False,
+            }
+        validation_error = self._validate_tool_input(tool_name, tool_input)
+        if validation_error:
+            return {
+                "error": validation_error,
+                "error_type": "invalid_tool_input",
+                "recoverable": True,
+            }
+
+        pre_use = await self._hook_registry.invoke(
+            HookName.PRE_TOOL_USE,
+            payload={
+                "tool_name": tool_name,
+                "arguments": (
+                    personal_data_omitted(tool_name) if contains_personal_data else tool_input
+                ),
+            },
+            correlation=correlation,
+        )
+        if pre_use.blocked:
+            reason = next(
+                (
+                    decision.reason
+                    for decision in pre_use.decisions
+                    if decision.action is HookAction.BLOCK
+                ),
+                "Blocked by PreToolUse hook",
+            )
+            return {
+                "error": reason,
+                "error_type": "hook_blocked",
+                "blocked_by_hook": True,
+                "recoverable": False,
+            }
+        rewrite_decisions = [
+            decision for decision in pre_use.decisions if decision.action is HookAction.REWRITE
+        ]
+        if rewrite_decisions:
+            effective_name = pre_use.invocation.payload.get("tool_name")
+            effective_arguments = pre_use.invocation.payload.get("arguments")
+            if any(
+                "tool_name" in decision.updates for decision in rewrite_decisions
+            ) and isinstance(effective_name, str):
+                tool_name = effective_name
+            if any(
+                "arguments" in decision.updates for decision in rewrite_decisions
+            ) and isinstance(effective_arguments, dict):
+                tool_input = dict(effective_arguments)
+        contains_personal_data = contains_personal_data or tool_name in PERSONAL_DATA_TOOLS
+        self._record_effective_request(
+            context,
+            tool_name,
+            tool_input,
+            contains_personal_data=contains_personal_data,
+        )
+        if contains_personal_data and tool_name not in PERSONAL_DATA_TOOLS:
+            return {
+                "error": "Personal-data classification cannot be downgraded by a tool rewrite.",
+                "error_type": "privacy_classification_downgrade",
+                "denied": True,
+                "recoverable": False,
+            }
+        validation_error = self._validate_tool_input(tool_name, tool_input)
+        if validation_error:
+            return {
+                "error": validation_error,
+                "error_type": "invalid_tool_input",
+                "recoverable": True,
+            }
+        force_permission = any(
+            decision.action is HookAction.REQUEST_PERMISSION for decision in pre_use.decisions
+        ) and tool_name not in (
+            set(DANGEROUS_TOOLS) | set(EXPENSIVE_TOOLS) | set(SENSITIVE_TOOLS) | set(WRITE_TOOLS)
+        )
+
+        return await self._aexecute_effective(
+            ToolCallRequest(
+                tool_name=tool_name,
+                arguments=tool_input,
+                context=context,
+                correlation=request.correlation,
+            ),
+            force_permission=force_permission,
+        )
+
+    async def _aexecute_effective(
+        self,
+        request: ToolCallRequest,
+        *,
+        force_permission: bool = False,
+    ) -> dict[str, Any]:
+        """Gate one effective request, then wrap only its accepted dispatch."""
+        tool_name = request.tool_name
+        tool_input = dict(request.arguments)
+        context = cast("ToolContext | None", request.context)
+        contains_personal_data = tool_name in PERSONAL_DATA_TOOLS or bool(
+            context and context.contains_personal_data
+        )
         log.debug("ToolExecutor.async: %s(keys=%s)", tool_name, sorted(tool_input))
 
         if context and context.cancellation and context.cancellation.is_set():
@@ -193,6 +375,20 @@ class ToolExecutor:
                 "error": f"Tool '{tool_name}' is not available in this session.",
                 "denied": True,
             }
+        if force_permission:
+            permission = await self._approval.prompt_with_always_async(
+                "Allow?",
+                tool_name,
+                safety_level="hook_requested",
+                tool_name=tool_name,
+                allow_always=False,
+                allow_human_prompt=self._interactive_approval,
+            )
+            if permission != "y":
+                return {
+                    "error": f"Permission denied for '{tool_name}'",
+                    "denied": True,
+                }
 
         # Fleet view Stage 1.5 — the single per-tool dispatch boundary. A no-op
         # unless this is a worker subprocess that opted in (WorkerRequest.
@@ -215,7 +411,12 @@ class ToolExecutor:
         # misrouted decision (the A-but-denied incident) is diagnosable from
         # the transition trail instead of a bare denial string.
         record = self._approval.begin_record(tool_name)
-        gate_result, approved_via_hitl = await self._gate_async(tool_name, tool_input, record)
+        gate_result, approved_via_hitl = await self._gate_async(
+            tool_name,
+            tool_input,
+            record,
+            batch_cost_approved=bool(context and context.batch_cost_approved),
+        )
         if gate_result is not None:
             self._approval.record_transition(record, "skipped", "gate-rejected")
             return gate_result
@@ -225,13 +426,185 @@ class ToolExecutor:
             # explicitly so the dispatch transitions stay legal.
             self._approval.record_transition(record, "granted", "auto:ungated")
         self._approval.record_transition(record, "propagated", "dispatch")
-        result = await self._dispatch_async(
-            tool_name, tool_input, context=context, approved_via_hitl=approved_via_hitl
+        terminal_started = False
+        started_at = time.monotonic()
+        event_tool_input = (
+            personal_data_omitted(tool_name) if contains_personal_data else tool_input
         )
+
+        async def dispatch(current: ToolCallRequest) -> dict[str, Any]:
+            nonlocal terminal_started
+            if current.tool_name != tool_name or dict(current.arguments) != tool_input:
+                raise InvalidMiddlewareResultError(
+                    "tool_execution middleware cannot change an already-approved request"
+                )
+            terminal_started = True
+            from core.hooks.dispatch import fire_hook_async
+            from core.hooks.system import RuntimeEvent
+
+            await fire_hook_async(
+                self._hooks,
+                RuntimeEvent.TOOL_EXEC_STARTED,
+                {
+                    "tool_name": tool_name,
+                    "tool_input": event_tool_input,
+                },
+            )
+            return await self._dispatch_async(
+                tool_name,
+                tool_input,
+                context=context,
+                approved_via_hitl=approved_via_hitl,
+            )
+
+        try:
+            result = await self._middleware_registry.tool_execution(request, dispatch)
+        except BaseException as exc:
+            from core.hooks.dispatch import fire_hook_async
+            from core.hooks.system import RuntimeEvent
+
+            if record is not None:
+                self._approval.record_transition(
+                    record,
+                    "executed" if terminal_started else "skipped",
+                    f"exception:{type(exc).__name__}",
+                )
+            await fire_hook_async(
+                self._hooks,
+                RuntimeEvent.TOOL_EXEC_FAILED,
+                {
+                    "tool_name": tool_name,
+                    "tool_input": event_tool_input,
+                    "duration_ms": (time.monotonic() - started_at) * 1_000,
+                    "error": (PERSONAL_DATA_ERROR_OMITTED if contains_personal_data else str(exc)),
+                    "error_type": type(exc).__name__,
+                    "recoverable": False,
+                    "executed": terminal_started,
+                },
+            )
+            raise
+
         if record is not None:
             has_error = isinstance(result, dict) and bool(result.get("error"))
-            self._approval.record_transition(record, "executed", "error" if has_error else "ok")
+            self._approval.record_transition(
+                record,
+                "executed" if terminal_started else "skipped",
+                ("error" if has_error else "ok")
+                if terminal_started
+                else "middleware-short-circuit",
+            )
+
+        from core.hooks.dispatch import fire_hook_async
+        from core.hooks.system import RuntimeEvent
+
+        has_error = bool(result.get("error"))
+        await fire_hook_async(
+            self._hooks,
+            RuntimeEvent.TOOL_EXEC_ENDED,
+            {
+                "tool_name": tool_name,
+                "tool_input": event_tool_input,
+                "duration_ms": (time.monotonic() - started_at) * 1_000,
+                "has_error": has_error,
+                "result": (personal_data_omitted(tool_name) if contains_personal_data else result),
+                "executed": terminal_started,
+            },
+        )
+        if has_error:
+            await fire_hook_async(
+                self._hooks,
+                RuntimeEvent.TOOL_EXEC_FAILED,
+                {
+                    "tool_name": tool_name,
+                    "tool_input": event_tool_input,
+                    "duration_ms": (time.monotonic() - started_at) * 1_000,
+                    "error": (
+                        PERSONAL_DATA_ERROR_OMITTED
+                        if contains_personal_data
+                        else str(result.get("error", ""))
+                    ),
+                    "error_type": str(result.get("error_type", "unknown")),
+                    "recoverable": bool(result.get("recoverable", True)),
+                    "executed": terminal_started,
+                },
+            )
+
+        post_use = await self._hook_registry.invoke(
+            HookName.POST_TOOL_USE,
+            payload={
+                "tool_name": tool_name,
+                "arguments": event_tool_input,
+                "result": (personal_data_omitted(tool_name) if contains_personal_data else result),
+                "has_error": has_error,
+                "executed": terminal_started,
+            },
+            correlation=self._tool_correlation(),
+        )
+        for decision in post_use.decisions:
+            if decision.action is HookAction.ADD_CONTEXT and decision.instruction:
+                previous = str(result.get("additional_context", ""))
+                result["additional_context"] = (
+                    f"{previous}\n{decision.instruction}" if previous else decision.instruction
+                )
+        if post_use.blocked:
+            return {
+                "error": "Tool result withheld by PostToolUse hook",
+                "error_type": "hook_blocked",
+                "blocked_by_hook": True,
+                "recoverable": False,
+            }
         return result
+
+    @staticmethod
+    def _record_effective_request(
+        context: ToolContext | None,
+        tool_name: str,
+        tool_input: dict[str, Any],
+        *,
+        contains_personal_data: bool,
+    ) -> None:
+        if context is None:
+            return
+        context.effective_tool_name = tool_name
+        context.effective_tool_arguments = dict(tool_input)
+        context.contains_personal_data = contains_personal_data
+
+    @staticmethod
+    def _tool_correlation() -> HookCorrelation:
+        try:
+            from core.agent.cognitive_state_ctx import get_session_id, get_turn_id
+
+            return HookCorrelation(
+                session_id=get_session_id(),
+                turn_id=get_turn_id(),
+            )
+        except Exception:
+            return HookCorrelation()
+
+    @staticmethod
+    def _validate_tool_input(tool_name: str, tool_input: dict[str, Any]) -> str:
+        """Validate known tool inputs; dynamic MCP schemas stay server-owned."""
+        try:
+            from jsonschema import Draft202012Validator
+
+            from core.tools.base import load_tool_definition
+
+            schema = load_tool_definition(tool_name).get("input_schema", {})
+        except KeyError:
+            return ""
+        except Exception as exc:
+            log.warning("Tool schema lookup failed for %s: %s", tool_name, exc)
+            return ""
+        errors = sorted(
+            Draft202012Validator(schema).iter_errors(tool_input),
+            key=lambda error: tuple(str(part) for part in error.path),
+        )
+        if not errors:
+            return ""
+        first = errors[0]
+        location = ".".join(str(part) for part in first.path)
+        prefix = f"{location}: " if location else ""
+        return f"Invalid input for '{tool_name}': {prefix}{first.message}"
 
     async def _dispatch_async(
         self,
@@ -349,6 +722,8 @@ class ToolExecutor:
         tool_name: str,
         tool_input: dict[str, Any],
         record: ApprovalRecord | None = None,
+        *,
+        batch_cost_approved: bool = False,
     ) -> tuple[dict[str, Any] | None, bool]:
         """Single safety gate for EVERY tool — classify by safety level + approve.
 
@@ -360,7 +735,12 @@ class ToolExecutor:
         """
         if tool_name in DANGEROUS_TOOLS:
             return await self._gate_dangerous_async(tool_name, tool_input, record)
-        return await self._approval.apply_safety_gates_async(tool_name, tool_input, record=record)
+        return await self._approval.apply_safety_gates_async(
+            tool_name,
+            tool_input,
+            record=record,
+            batch_cost_approved=batch_cost_approved,
+        )
 
     async def _gate_dangerous_async(
         self,
@@ -765,6 +1145,7 @@ class ToolExecutor:
             model=model,
             provider=judge_provider,
             source=judge_source,
+            middleware_registry=self._middleware_registry,
         )
         winner = successful[verdict.winner_index]
         block: dict[str, Any] = {

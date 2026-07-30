@@ -1,321 +1,221 @@
 import { DocsShell, Bi } from "@/components/geode-docs/docs-shell";
+import architectureBaseline from "@/data/geode/architecture-baseline.json";
 
-export const metadata = { title: "Hooks and observability — GEODE Docs" };
+export const metadata = { title: "Hooks and middleware — GEODE Docs" };
+
+const publicHooks = [
+  "UserPromptSubmit",
+  "PreToolUse",
+  "PermissionRequest",
+  "PostToolUse",
+  "PreCompact",
+  "PostCompact",
+  "SessionStart",
+  "SessionEnd",
+  "SubagentStart",
+  "SubagentStop",
+  "PreVerify",
+  "PostVerify",
+  "Stop",
+];
 
 export default function Page() {
   return (
     <DocsShell
       slug="harness/hooks"
-      title="Hooks and observability"
-      titleKo="훅과 관측성"
-      summary="Lifecycle events that handlers subscribe to. How observe, react, decide, and act stack on one event."
-      summaryKo="핸들러가 구독하는 라이프사이클 이벤트입니다. 하나의 이벤트 위에 observe, react, decide, act가 어떻게 쌓이는지 설명합니다."
+      title="Hooks and middleware"
+      titleKo="훅과 미들웨어"
+      summary="Three extension surfaces: a small public contract, four trusted execution join points, and internal runtime telemetry."
+      summaryKo="작은 공개 계약, 네 개의 신뢰 실행 결합점, 내부 런타임 텔레메트리로 나뉜 세 확장 표면입니다."
     >
       <Bi
         ko={
           <>
             <p>
-              HookSystem(<code>core/hooks/system.py</code>)은 런타임의 모든 의미
-              있는 경계에서 이벤트를 발화하는 단일 버스입니다.{" "}
-              <code>HookEvent</code> enum은 정확히 56개의 라이프사이클 이벤트를
-              정의합니다. 새 동작은 루프 코드를 고치는 대신 이 이벤트들 위에
-              핸들러로 쌓입니다.
+              GEODE의 확장 표면은 하나의 거대한 이벤트 목록이 아닙니다. 외부
+              통합이 의존할 수 있는 <code>HookName</code>, 실행을 감싸는 신뢰
+              표면 <code>MiddlewareRegistry</code>, 운영 관측을 위한{" "}
+              <code>RuntimeEvent</code>로 역할과 권한을 분리합니다.
             </p>
 
-            <h2>하나의 이벤트, 네 가지 쌓기</h2>
-            <p>
-              같은 이벤트라도 핸들러가 무엇을 하느냐에 따라 네 층위로
-              쌓입니다.
-            </p>
+            <h2>세 표면</h2>
             <table>
-              <thead>
-                <tr><th>층위</th><th>호출 방식</th><th>의미</th></tr>
-              </thead>
+              <thead><tr><th>표면</th><th>용도</th><th>권한</th></tr></thead>
               <tbody>
-                <tr>
-                  <td>Observe</td>
-                  <td><code>trigger()</code></td>
-                  <td>fire-and-forget 관찰. 핸들러 오류는 로깅 후 격리됩니다</td>
-                </tr>
-                <tr>
-                  <td>React</td>
-                  <td><code>trigger()</code> 구독 핸들러</td>
-                  <td>이벤트를 계기로 부수 작업을 실행 (알림, 저널, 메트릭)</td>
-                </tr>
-                <tr>
-                  <td>Decide</td>
-                  <td><code>trigger_with_result()</code></td>
-                  <td>핸들러 반환값을 호출자가 수집해 전략을 결정 (예: <code>CONTEXT_OVERFLOW_ACTION</code>)</td>
-                </tr>
-                <tr>
-                  <td>Act</td>
-                  <td><code>trigger_interceptor()</code></td>
-                  <td>핸들러가 실행 자체를 차단하거나 수정 (인터셉터 패턴)</td>
-                </tr>
-              </tbody>
-            </table>
-            <p>비동기 변형으로 <code>trigger_async</code>가 있습니다.</p>
-
-            <h2>이벤트 카테고리</h2>
-            <p>56개 이벤트는 enum 안의 섹션 주석으로 분류됩니다. 대표만 추리면 이렇습니다.</p>
-            <table>
-              <thead>
-                <tr><th>카테고리</th><th>대표 이벤트</th></tr>
-              </thead>
-              <tbody>
-                <tr><td>agentic 턴 / 세션</td><td><code>TURN_COMPLETED</code>, <code>SESSION_STARTED</code>, <code>SESSION_ENDED</code></td></tr>
-                <tr><td>LLM 호출</td><td><code>LLM_CALL_STARTED/ENDED/FAILED/RETRIED</code>, <code>ADAPTER_DISPATCH_ATTEMPT</code>, <code>MODEL_SWITCHED</code></td></tr>
-                <tr><td>도구 실행 / 승인</td><td><code>TOOL_EXEC_STARTED/ENDED/FAILED</code>, <code>TOOL_RESULT_TRANSFORM</code>, <code>TOOL_APPROVAL_REQUESTED</code>, <code>APPROVAL_TRANSITION</code>, <code>TOOL_RECOVERY_ATTEMPTED/SUCCEEDED/FAILED</code></td></tr>
-                <tr><td>컨텍스트 / 오프로드</td><td><code>CONTEXT_CRITICAL</code>, <code>CONTEXT_OVERFLOW_ACTION</code>, <code>TOOL_RESULT_OFFLOADED</code></td></tr>
-                <tr><td>프롬프트 / 메모리</td><td><code>PROMPT_ASSEMBLED</code>, <code>PROGRAM_MD_UNREADABLE</code>, <code>MEMORY_SAVED</code>, <code>RULE_CHANGED</code></td></tr>
-                <tr><td>비용 / 인터셉터</td><td><code>USER_INPUT_RECEIVED</code>, <code>COST_WARNING</code>, <code>COST_LIMIT_EXCEEDED</code>, <code>EXECUTION_CANCELLED</code></td></tr>
-                <tr><td>서브에이전트 / 핸드오프</td><td><code>SUBAGENT_STARTED/COMPLETED/FAILED</code>, <code>HANDOFF_TRIGGERED/COMPLETED/FAILED</code></td></tr>
-                <tr><td>자기개선 루프</td><td><code>MUTATION_PROPOSED/APPLIED/REJECTED/REVERTED</code>, <code>BASELINE_PROMOTED</code>, <code>SELF_IMPROVING_AUTO_TRIGGER</code></td></tr>
-                <tr><td>인프라</td><td><code>TRIGGER_FIRED</code>, <code>CONFIG_RELOADED</code>, <code>SHUTDOWN_STARTED</code>, <code>MCP_SERVER_CONNECTED/FAILED</code></td></tr>
+                <tr><td>공개 훅</td><td>사용자 입력, 도구, 압축, 세션, 서브에이전트, 검증 경계</td><td>이름별로 허용된 typed decision만 반환</td></tr>
+                <tr><td>신뢰 미들웨어</td><td>도구·LLM 요청 변환과 실제 실행 래핑</td><td>요청 단계는 변환, 실행 단계는 감싸기·단축 반환</td></tr>
+                <tr><td>런타임 이벤트</td><td>메트릭, 감사, 저장, 운영 진단</td><td>내부 관측 전용. 실행 제어 계약이 아님</td></tr>
               </tbody>
             </table>
 
-            <h2>등록</h2>
-            <pre>{`from core.hooks.system import HookSystem, HookEvent
-
-hooks.register(
-    HookEvent.TURN_COMPLETED,
-    my_handler,
-    name="my-plugin",
-    priority=100,   # 낮을수록 먼저 실행, 안정 정렬
-)
-hooks.register_prefix("*", mirror_everything)  # 와일드카드 구독`}</pre>
-
-            <h2>부트스트랩 등록이 필수</h2>
+            <h2>공개 훅 13종</h2>
             <p>
-              핸들러가 존재한다는 사실과 핸들러가 발화한다는 사실은 다릅니다.
-              프로덕션 핸들러는 전부{" "}
-              <code>core/wiring/bootstrap.py</code>에서 등록됩니다. 거기 없는
-              핸들러는 코드로 존재해도 영원히 호출되지 않습니다. 이 규칙은
-              저장소의 wiring 검증 인바리언트로 핀 고정되어 있습니다.
+              공개 목록은 의도적으로 작고 버전이 고정됩니다. 와일드카드 구독은
+              없으며, 입력은 크기 제한·JSON 안전화·비밀값 제거를 거칩니다.
             </p>
+            <p>{publicHooks.map((name) => <code key={name}>{name} </code>)}</p>
             <p>
-              부트스트랩에는 priority 50의 <code>&quot;*&quot;</code> prefix
-              핸들러가 하나 있어, 모든 트리거를 활성 RunTranscript의 activity
-              log 행으로 미러링합니다. 훅 버스 자체가 관측 파이프라인의
-              입구입니다.
+              각 훅은 서로 다른 action 집합을 가집니다. 예를 들어{" "}
+              <code>PreToolUse</code>는 continue/rewrite/block/request_permission,
+              <code>PostVerify</code>는 accept/revise/escalate만 허용합니다. 실패한
+              내장 검증을 외부 훅이 pass로 뒤집을 수는 없습니다.
             </p>
 
-            <h2>실패 모드</h2>
+            <h2>PostVerify와 외부 루프</h2>
+            <p>
+              <code>PostVerify</code>는 이미 실행된 부수 효과를 재생하지 않고,
+              완성된 후보와 내장 검증 결과를 외부 평가기·CI 정책·오케스트레이터가
+              판정하게 합니다. revise는 구체적인 후속 지시가 있어야 하며 최대 2회
+              연속 시도로 제한됩니다. 최종 결과에는 모든 시도의 rounds, tool calls,
+              usage가 합산된 뒤 증거와 체크포인트가 저장됩니다. escalate는 단순
+              telemetry가 아니라 delivery gate입니다. 세션을 pause하고 후보를
+              외부 소유자에게만 pending_text로 반환하며 최종 transcript에는 쓰지
+              않습니다.
+            </p>
+
+            <h2>신뢰 미들웨어 4개 결합점</h2>
             <table>
-              <thead>
-                <tr><th>증상</th><th>원인</th><th>해법</th></tr>
-              </thead>
+              <thead><tr><th>결합점</th><th>계약</th></tr></thead>
               <tbody>
-                <tr>
-                  <td>핸들러를 만들었는데 한 번도 안 불림</td>
-                  <td>부트스트랩 미등록</td>
-                  <td><code>core/wiring/bootstrap.py</code>에 등록을 추가합니다</td>
-                </tr>
-                <tr>
-                  <td>핸들러 실행 순서가 뒤섞임</td>
-                  <td>priority 미지정 (기본 100)</td>
-                  <td>순서가 중요하면 명시적 priority를 부여합니다. 낮은 값이 먼저입니다</td>
-                </tr>
-                <tr>
-                  <td>observe 핸들러의 예외가 보이지 않음</td>
-                  <td><code>trigger()</code>는 오류를 격리하고 로깅만 합니다</td>
-                  <td>로그를 확인합니다. 흐름을 막아야 하는 로직이면 인터셉터로 옮깁니다</td>
-                </tr>
+                <tr><td><code>tool_request</code></td><td>승인 전 도구명·인자를 순차 변환하고 다시 스키마 검증</td></tr>
+                <tr><td><code>tool_execution</code></td><td>승인된 요청을 변경하지 않고 실제 executor를 async onion으로 감쌈</td></tr>
+                <tr><td><code>llm_request</code></td><td>조립된 adapter request를 순차 변환. 캐시 prefix 변경은 명시 권한과 사유가 필요</td></tr>
+                <tr><td><code>llm_execution</code></td><td>요청을 변경하지 않고 provider 실행을 감싸거나 단축 반환</td></tr>
               </tbody>
             </table>
-
-            <h2>Activity row 스키마와 에러 정책</h2>
             <p>
-              모든 <code>trigger*()</code> 호출은 활성 <code>RunTranscript</code>에
-              타입이 지정된 Activity row 한 줄로 미러링됩니다. 56개 이벤트 전부
-              구체 타입의 row를 가집니다 (19 lifecycle + 37 K-group). <code>action</code>
-              필드가 discriminator이고, <code>GenericActivityRow</code>는 정상 경로
-              목적지가 아니라 fail-soft 폴백 전용입니다.
+              실행 미들웨어의 <code>next_call</code>은 한 번만 호출할 수 있습니다.
+              변환이 필요하면 반드시 request 결합점을 사용합니다.
+            </p>
+
+            <h2>내부 이벤트와 저장</h2>
+            <p>
+              현재 <code>RuntimeEvent</code>는{" "}
+              {architectureBaseline.hook_events.count}개의 내부 관측 이벤트를
+              가집니다. <code>HookEvent</code>/<code>HookSystem</code>은 기존
+              통합을 위한 타입 별칭이며, 새 코드는{" "}
+              <code>RuntimeEvent</code>/<code>RuntimeEventBus</code>를 사용합니다.
             </p>
             <table>
-              <thead>
-                <tr><th>정책</th><th>내용</th></tr>
-              </thead>
+              <thead><tr><th>저장소</th><th>동작</th></tr></thead>
               <tbody>
-                <tr>
-                  <td>커버리지</td>
-                  <td>56/56 타입 지정. 37 K-group은 선언적 spec 테이블 + 단일 빌더로 구성</td>
-                </tr>
-                <tr>
-                  <td>details 스키마</td>
-                  <td>23 공유 모델, <code>frozen</code> + <code>extra=forbid</code>. 모든 row에 <code>schema_version</code></td>
-                </tr>
-                <tr>
-                  <td>silent fallback 금지</td>
-                  <td>강제 generic 폴백은 <code>_fallback_reason</code>을 동봉해 timeline에서 구분 가능. 미러링 / dispatch / 학습 저장 실패는 이벤트당 한 번만 WARNING</td>
-                </tr>
-                <tr>
-                  <td>프라이버시 드롭</td>
-                  <td>raw <code>user_input</code>, cognitive-state 스냅샷, 전체 tool result는 적재 금지. <code>input_len</code> 같은 파생 스칼라만</td>
-                </tr>
+                <tr><td>SQLite activity store</td><td>운영 이벤트의 정본. 공개 훅과 미들웨어 호출도 <code>extension.invoked</code> 행으로 저장</td></tr>
+                <tr><td>RunTranscript JSONL</td><td>활성 transcript가 있을 때만 같은 typed activity row를 미러링</td></tr>
               </tbody>
             </table>
+            <p>
+              확장 호출 행은 표면, 이름, 확장자, 상태, 지연, 상관 ID만 보존합니다.
+              원문 사용자 입력, 전체 요청·응답, 개인 데이터, 비밀값은 저장하지
+              않습니다.
+            </p>
+
+            <h2>도구 경계 순서</h2>
+            <pre>{`tool_request → schema validation → PreToolUse → revalidation
+→ hard deny / policy → PermissionRequest
+→ tool_execution → TOOL_EXEC_STARTED → executor exactly once
+→ TOOL_EXEC_ENDED or TOOL_EXEC_FAILED → PostToolUse`}</pre>
 
             <h2>다음</h2>
             <ul>
-              <li><a href="/geode/docs/guides/register-hook">훅 핸들러 등록 가이드</a>. 손으로 따라가는 절차.</li>
-              <li><a href="/geode/docs/architecture/agentic-loop">안쪽 agentic 루프</a>. 이벤트가 발화되는 본진.</li>
-              <li><a href="/geode/docs/harness/lifecycle">하네스 라이프사이클</a>. serve 데몬에서의 이벤트 흐름.</li>
+              <li><a href="/geode/docs/guides/register-hook">공개 훅과 미들웨어 등록</a></li>
+              <li><a href="/geode/docs/architecture/agentic-loop">Agentic loop</a></li>
+              <li><a href="/geode/docs/harness/lifecycle">하네스 라이프사이클</a></li>
             </ul>
           </>
         }
         en={
           <>
             <p>
-              The HookSystem (<code>core/hooks/system.py</code>) is the single
-              bus that fires events at every meaningful boundary of the runtime.
-              The <code>HookEvent</code> enum defines exactly 56 lifecycle
-              events. New behaviour stacks onto these events as handlers instead
-              of editing loop code.
+              GEODE does not expose one giant event list as an extension API.
+              It separates a stable external contract, <code>HookName</code>,
+              trusted execution wrapping through <code>MiddlewareRegistry</code>,
+              and operational telemetry through <code>RuntimeEvent</code>.
             </p>
 
-            <h2>One event, four ways to stack</h2>
-            <p>
-              The same event supports four levels of involvement, depending on
-              what the handler does.
-            </p>
+            <h2>Three surfaces</h2>
             <table>
-              <thead>
-                <tr><th>Level</th><th>Call form</th><th>Meaning</th></tr>
-              </thead>
+              <thead><tr><th>Surface</th><th>Purpose</th><th>Authority</th></tr></thead>
               <tbody>
-                <tr>
-                  <td>Observe</td>
-                  <td><code>trigger()</code></td>
-                  <td>Fire-and-forget observation; handler errors are logged and isolated</td>
-                </tr>
-                <tr>
-                  <td>React</td>
-                  <td>a <code>trigger()</code> subscriber</td>
-                  <td>Run side work off the event (notifications, journal, metrics)</td>
-                </tr>
-                <tr>
-                  <td>Decide</td>
-                  <td><code>trigger_with_result()</code></td>
-                  <td>The caller collects handler return values to pick a strategy (e.g. <code>CONTEXT_OVERFLOW_ACTION</code>)</td>
-                </tr>
-                <tr>
-                  <td>Act</td>
-                  <td><code>trigger_interceptor()</code></td>
-                  <td>Handlers can block or modify the execution itself (interceptor pattern)</td>
-                </tr>
-              </tbody>
-            </table>
-            <p>An async variant, <code>trigger_async</code>, also exists.</p>
-
-            <h2>Event categories</h2>
-            <p>The 56 events are grouped by section comments inside the enum. The highlights:</p>
-            <table>
-              <thead>
-                <tr><th>Category</th><th>Representative events</th></tr>
-              </thead>
-              <tbody>
-                <tr><td>Agentic turn / session</td><td><code>TURN_COMPLETED</code>, <code>SESSION_STARTED</code>, <code>SESSION_ENDED</code></td></tr>
-                <tr><td>LLM calls</td><td><code>LLM_CALL_STARTED/ENDED/FAILED/RETRIED</code>, <code>ADAPTER_DISPATCH_ATTEMPT</code>, <code>MODEL_SWITCHED</code></td></tr>
-                <tr><td>Tool execution / approval</td><td><code>TOOL_EXEC_STARTED/ENDED/FAILED</code>, <code>TOOL_RESULT_TRANSFORM</code>, <code>TOOL_APPROVAL_REQUESTED</code>, <code>APPROVAL_TRANSITION</code>, <code>TOOL_RECOVERY_ATTEMPTED/SUCCEEDED/FAILED</code></td></tr>
-                <tr><td>Context / offload</td><td><code>CONTEXT_CRITICAL</code>, <code>CONTEXT_OVERFLOW_ACTION</code>, <code>TOOL_RESULT_OFFLOADED</code></td></tr>
-                <tr><td>Prompt / memory</td><td><code>PROMPT_ASSEMBLED</code>, <code>PROGRAM_MD_UNREADABLE</code>, <code>MEMORY_SAVED</code>, <code>RULE_CHANGED</code></td></tr>
-                <tr><td>Cost / interceptors</td><td><code>USER_INPUT_RECEIVED</code>, <code>COST_WARNING</code>, <code>COST_LIMIT_EXCEEDED</code>, <code>EXECUTION_CANCELLED</code></td></tr>
-                <tr><td>Sub-agents / handoff</td><td><code>SUBAGENT_STARTED/COMPLETED/FAILED</code>, <code>HANDOFF_TRIGGERED/COMPLETED/FAILED</code></td></tr>
-                <tr><td>Self-improving loop</td><td><code>MUTATION_PROPOSED/APPLIED/REJECTED/REVERTED</code>, <code>BASELINE_PROMOTED</code>, <code>SELF_IMPROVING_AUTO_TRIGGER</code></td></tr>
-                <tr><td>Infrastructure</td><td><code>TRIGGER_FIRED</code>, <code>CONFIG_RELOADED</code>, <code>SHUTDOWN_STARTED</code>, <code>MCP_SERVER_CONNECTED/FAILED</code></td></tr>
+                <tr><td>Public hooks</td><td>Input, tools, compaction, sessions, sub-agents, verification</td><td>Only hook-specific typed decisions</td></tr>
+                <tr><td>Trusted middleware</td><td>Tool and LLM request transforms and execution wrapping</td><td>Transform at request time; wrap or short-circuit at execution time</td></tr>
+                <tr><td>Runtime events</td><td>Metrics, audit, persistence, diagnostics</td><td>Internal observation, not an execution-control API</td></tr>
               </tbody>
             </table>
 
-            <h2>Registration</h2>
-            <pre>{`from core.hooks.system import HookSystem, HookEvent
-
-hooks.register(
-    HookEvent.TURN_COMPLETED,
-    my_handler,
-    name="my-plugin",
-    priority=100,   # lower runs first, stable sort
-)
-hooks.register_prefix("*", mirror_everything)  # wildcard subscription`}</pre>
-
-            <h2>Bootstrap registration is mandatory</h2>
+            <h2>Thirteen public hooks</h2>
             <p>
-              A handler existing and a handler firing are two different facts.
-              Every production handler is registered in{" "}
-              <code>core/wiring/bootstrap.py</code>. A handler that is not wired
-              there exists in code but is never called. This rule is pinned as a
-              wiring-verification invariant of the repo.
+              The public allowlist is intentionally small and versioned. There
+              are no wildcard subscriptions. Inputs are bounded, JSON-safe, and
+              secret-redacted.
             </p>
+            <p>{publicHooks.map((name) => <code key={name}>{name} </code>)}</p>
             <p>
-              Bootstrap also installs one <code>&quot;*&quot;</code> prefix
-              handler at priority 50 that mirrors every trigger into the active
-              RunTranscript as an activity-log row. The hook bus itself is the
-              entrance of the observability pipeline.
+              Each hook owns a distinct action set. For example,{" "}
+              <code>PreToolUse</code> permits continue/rewrite/block/request_permission,
+              while <code>PostVerify</code> permits accept/revise/escalate. An
+              external hook cannot turn a failed built-in verification into a pass.
             </p>
 
-            <h2>Failure modes</h2>
+            <h2>PostVerify for external loops</h2>
+            <p>
+              <code>PostVerify</code> lets an evaluator, CI policy, or outer
+              orchestrator judge a completed candidate without replaying prior
+              side effects. A revision requires a concrete follow-up instruction
+              and is bounded to two continuation attempts. Before final evidence
+              and checkpoint persistence, rounds, tool calls, and usage from all
+              attempts are aggregated. Escalation is a delivery gate, not
+              telemetry: it pauses the session, exposes the withheld candidate
+              only to the owning loop as pending_text, and does not write it to
+              the final transcript.
+            </p>
+
+            <h2>Four trusted middleware join points</h2>
             <table>
-              <thead>
-                <tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr>
-              </thead>
+              <thead><tr><th>Join point</th><th>Contract</th></tr></thead>
               <tbody>
-                <tr>
-                  <td>You wrote a handler and it never fires</td>
-                  <td>Not registered in bootstrap</td>
-                  <td>Add the registration in <code>core/wiring/bootstrap.py</code></td>
-                </tr>
-                <tr>
-                  <td>Handlers run in a surprising order</td>
-                  <td>No explicit priority (default 100)</td>
-                  <td>Assign explicit priorities where order matters; lower runs first</td>
-                </tr>
-                <tr>
-                  <td>Exceptions in an observe handler are invisible</td>
-                  <td><code>trigger()</code> isolates errors and only logs them</td>
-                  <td>Check the logs; move flow-blocking logic to an interceptor</td>
-                </tr>
+                <tr><td><code>tool_request</code></td><td>Sequentially transform tool name and arguments before approval, then revalidate</td></tr>
+                <tr><td><code>tool_execution</code></td><td>Wrap the real executor as an async onion without changing the approved request</td></tr>
+                <tr><td><code>llm_request</code></td><td>Sequentially transform the assembled adapter request; cache-prefix changes require capability and reason</td></tr>
+                <tr><td><code>llm_execution</code></td><td>Wrap or short-circuit provider execution without changing the request</td></tr>
               </tbody>
             </table>
-
-            <h2>Activity row schema and error policy</h2>
             <p>
-              Every <code>trigger*()</code> call mirrors as one typed Activity
-              row into the active <code>RunTranscript</code>. All 56 events have
-              a concrete typed row (19 lifecycle plus 43 K-group). The{" "}
-              <code>action</code> field is the discriminator, and{" "}
-              <code>GenericActivityRow</code> is a fail-soft fallback only, not a
-              routine destination.
+              Execution middleware may call <code>next_call</code> once. Any
+              transform belongs at the corresponding request join point.
+            </p>
+
+            <h2>Internal events and persistence</h2>
+            <p>
+              <code>RuntimeEvent</code> currently contains{" "}
+              {architectureBaseline.hook_events.count} internal observability
+              events. <code>HookEvent</code>/<code>HookSystem</code> remain
+              compatibility type aliases; new code uses{" "}
+              <code>RuntimeEvent</code>/<code>RuntimeEventBus</code>.
             </p>
             <table>
-              <thead>
-                <tr><th>Policy</th><th>Detail</th></tr>
-              </thead>
+              <thead><tr><th>Store</th><th>Behavior</th></tr></thead>
               <tbody>
-                <tr>
-                  <td>Coverage</td>
-                  <td>56/56 typed. The 37 K-group rows build from one declarative spec table plus a single builder</td>
-                </tr>
-                <tr>
-                  <td>details schema</td>
-                  <td>23 shared models, <code>frozen</code> plus <code>extra=forbid</code>. Every row carries <code>schema_version</code></td>
-                </tr>
-                <tr>
-                  <td>No silent fallback</td>
-                  <td>A forced-generic row carries <code>_fallback_reason</code> so it is distinguishable in the timeline. Mirror, dispatch, and learning-save failures warn once per event</td>
-                </tr>
-                <tr>
-                  <td>Privacy drops</td>
-                  <td>Raw <code>user_input</code>, cognitive-state snapshots, and full tool results are never written. Only derived scalars like <code>input_len</code></td>
-                </tr>
+                <tr><td>SQLite activity store</td><td>Canonical operational record, including <code>extension.invoked</code> rows</td></tr>
+                <tr><td>RunTranscript JSONL</td><td>Mirrors the same typed row only while a transcript is active</td></tr>
               </tbody>
             </table>
+            <p>
+              Extension rows keep surface, name, extension, status, duration,
+              and correlation IDs. Raw prompts, full requests or responses,
+              personal data, and secrets are not persisted.
+            </p>
+
+            <h2>Tool boundary order</h2>
+            <pre>{`tool_request → schema validation → PreToolUse → revalidation
+→ hard deny / policy → PermissionRequest
+→ tool_execution → TOOL_EXEC_STARTED → executor exactly once
+→ TOOL_EXEC_ENDED or TOOL_EXEC_FAILED → PostToolUse`}</pre>
 
             <h2>Next</h2>
             <ul>
-              <li><a href="/geode/docs/guides/register-hook">Register a hook handler</a>. The hands-on walkthrough.</li>
-              <li><a href="/geode/docs/architecture/agentic-loop">The inner agentic loop</a>. Where most events originate.</li>
-              <li><a href="/geode/docs/harness/lifecycle">Harness lifecycle</a>. Event flow inside the serve daemon.</li>
+              <li><a href="/geode/docs/guides/register-hook">Register public hooks and middleware</a></li>
+              <li><a href="/geode/docs/architecture/agentic-loop">Agentic loop</a></li>
+              <li><a href="/geode/docs/harness/lifecycle">Harness lifecycle</a></li>
             </ul>
           </>
         }
