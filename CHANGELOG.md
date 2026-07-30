@@ -47,6 +47,11 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+
+- Preserve runtime `session_id` and `turn_id` correlation through the
+  canonical SQLite and active JSONL hook-event projections.
+
 ## [1.0.9] - 2026-07-31
 
 > Public extension control is now a small, versioned hook ABI backed by

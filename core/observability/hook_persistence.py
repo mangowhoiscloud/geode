@@ -132,6 +132,10 @@ class HookPersistenceSink:
                 details = row_details
             else:
                 details = {"_omitted_details_type": type(row_details).__name__}
+            for key in ("session_id", "turn_id"):
+                value = dispatch.data.get(key)
+                if isinstance(value, str) and value:
+                    details[key] = value
             if type(row).__name__ == "GenericActivityRow":
                 # A future/untyped event must not turn its arbitrary source
                 # payload into durable storage. Preserve only value-free
