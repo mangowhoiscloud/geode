@@ -581,9 +581,10 @@ rather than inventing a competing tool snapshot. The remaining R2 and R3
 packages may then progress in parallel. R5 and most of R6 may progress in
 parallel after the composition root is stable, but R6.3 waits for R5.2 because
 its unified extension lifecycle includes LLM-adapter discovery. R6.4 is a
-narrow compatibility-preserving package over current shared terminals and
-sinks; it does not claim or bypass the broader owner replacements elsewhere in
-R2-R6.
+narrow compatibility-preserving package over the current measured call sites
+and sinks. It owns convergence of those call sites into its four middleware
+join points, but does not claim or bypass the broader owner replacements
+elsewhere in R2-R6.
 
 ### 6.1 v1.0.1 boundary-release train
 
@@ -1182,16 +1183,20 @@ The measured design evidence is carried by
 Hermes `36e41c09ed02bd783c1186564bf08cca5c8e821d`, OpenClaw
 `90a22b4f50226b13735e77dde81a92340ae724cf`, and Codex
 `578c1b2230288104041e880a86d0f7f3a5ca6e47`. The 2026-07-31 readiness
-re-audit found that the initially registered external
-dependencies described desirable future owners, not prerequisites for this
-package. Current `develop` already has one injected hook system, a shared
-`ToolCallProcessor` execution terminal, centralized async adapter dispatch,
-the finalization helper, and bounded SQLite/JSONL projection sinks. R6.4 can
-therefore introduce narrow registries around those existing seams without
-waiting for the broader tool-plan, loop-decomposition, provider-profile,
-storage-ownership, trust-broker, or protocol programs. It does not implement or
-claim those programs, replace their future types, expose untrusted code
-in-process, or change persisted event values.
+re-audit found that the initially registered external dependencies described
+desirable future owners, not prerequisites for this package. Current `develop`
+has one injected hook system, a primary `ToolCallProcessor` executor terminal,
+three direct recovery executor calls, async adapter calls in the main loop,
+reflection, candidate sampling, and the API mutator, the shared adapter
+text-completion dispatcher, plus dedicated CLI mutator transports. It also has
+the finalization helper, a bounded SQLite hook event sink, and conditional
+JSONL projections. R6.4 owns convergence of this finite measured tool/LLM
+call-site set into the four middleware join points and characterizes the
+existing persistence behavior directly. It can do so without waiting for the
+broader tool-plan, loop-decomposition, provider-profile, storage-ownership,
+trust-broker, or protocol programs. It does not implement or claim those
+programs, replace their future types, expose untrusted code in-process, or
+change persisted event values.
 
 This section remains the execution SOT. The public ABI contains exactly:
 
@@ -1290,8 +1295,9 @@ Acceptance:
   stable, and system prompt/history/tool cache prefixes cannot change without
   an explicit capability and invalidation trace;
 - lifecycle fixtures distinguish durable session generation from turn and
-  step, pair runtime-owned compaction boundaries honestly, and preserve
-  SQLite-as-SOT/JSONL-as-projection behavior from R6.2;
+  step, pair runtime-owned compaction boundaries honestly, and characterize
+  the current bounded SQLite hook-event sink plus conditional JSONL projections
+  without relying on the future R6.2 storage-ownership contract;
 - finalization fixtures prove monotone verify composition, built-in
   fail-to-pass rejection, bounded revise and Stop continuation, no side-effect
   replay, timeout fallback, external evidence correlation, and final
@@ -1629,8 +1635,8 @@ supersets cannot authorize a later or unrelated edit.
 |---|---|---|---|---|---|
 | BND-003 | DEPENDENCY_ADDED | BND-006 | The distribution gate must validate the final self-improving product layout rather than close on the pre-move package tree; this edge makes R1.3 wait for R1.5 | `cef746de5f74204260cdbfcacd517e567beda191` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS |
 | BND-007 | DEPENDENCY_ADDED | STORE-003 | Tracked state currently sits under the facade directory; R8.2 must move it in a separate transaction so R8.1 can retire forwarders without hiding a state move or leaving a data-only `core.self_improving` namespace | `2c14d8c982b8112d68e29dc49ce16ad8fcc95fdd` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS |
-| HOOK-001 | DEPENDENCY_REMOVED | PROTO-001, STORE-001, TRUST-002, LOOP-003 | Current develop already has bounded event projections, persistence sinks, injected hook ownership, and a finalization seam; R6.4 can add its narrow public registry and finalization checkpoints without waiting for those broader replacement programs or exposing untrusted code in-process | [#2834](https://github.com/mangowhoiscloud/geode/pull/2834) | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS |
-| HOOK-002 | DEPENDENCY_REMOVED | CAP-002, LOOP-003, LLM-003 | The current shared ToolCallProcessor executor terminal and async adapter dispatch are sufficient choke points for middleware; future ToolPlan, loop-phase, and provider-profile types remain outside this package and need not land first | [#2834](https://github.com/mangowhoiscloud/geode/pull/2834) | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS |
+| HOOK-001 | DEPENDENCY_REMOVED | PROTO-001, STORE-001, TRUST-002, LOOP-003 | Current develop already has an injected hook owner, finalization seam, bounded SQLite hook-event sink, and conditional JSONL projections; R6.4 will characterize those concrete behaviors directly rather than depending on R6.2's future storage-ownership contract, and can add its narrow public registry without exposing untrusted code in-process | [#2834](https://github.com/mangowhoiscloud/geode/pull/2834) | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS |
+| HOOK-002 | DEPENDENCY_REMOVED | CAP-002, LOOP-003, LLM-003 | R6.4 explicitly owns convergence of the measured primary/recovery tool terminals and main-loop/reflection/candidate/API-mutator/adapter-text/CLI-mutator LLM paths into its four join points; future ToolPlan, loop-phase, and provider-profile types remain outside this package and need not land first | [#2834](https://github.com/mangowhoiscloud/geode/pull/2834) | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS |
 | _none yet_ | — | — | — | — | — |
 
 ### 10.4 Blocker evidence
