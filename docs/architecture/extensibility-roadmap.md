@@ -226,7 +226,7 @@ normal review and CI; implementations start only after the claim merges.
 | Closure package | GAP IDs | Owner/session | Implementation branch | Claim evidence | Claimed at (UTC) |
 |---|---|---|---|---|---|
 | R1.1 | BND-001 | `session=codex-2026-07-18 task=architecture-package-classification` | `feature/architecture-package-classification` | R1.1 readiness reconciled by [#2776](https://github.com/mangowhoiscloud/geode/pull/2776); claim PR [#2790](https://github.com/mangowhoiscloud/geode/pull/2790); current `develop` re-audit confirms delivered GOV-002 and the measurable §7 classification/migration-map contract | 2026-07-18T09:15:41Z |
-| R6.4 | HOOK-001, HOOK-002 | `session=codex-2026-07-31 task=hook-middleware-surfaces` | `feature/hook-middleware-surfaces` | R6.4 readiness and dependency re-audit merged in [#2834](https://github.com/mangowhoiscloud/geode/pull/2834); current `develop` confirms package-atomic READY status and the bounded §7 public-hook, middleware, lifecycle, and finalization acceptance contract | 2026-07-30T17:06:51Z |
+| R6.4 | HOOK-001, HOOK-002 | `session=codex-2026-07-31 task=hook-middleware-surfaces` | `feature/hook-middleware-surfaces` | R6.4 readiness and dependency re-audit merged in [#2834](https://github.com/mangowhoiscloud/geode/pull/2834); claim transaction [#2835](https://github.com/mangowhoiscloud/geode/pull/2835); current `develop` confirms package-atomic READY status and the bounded §7 public-hook, middleware, lifecycle, and finalization acceptance contract | 2026-07-30T17:06:51Z |
 
 ## 1. Program objective
 
