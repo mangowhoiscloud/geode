@@ -1181,8 +1181,19 @@ The measured design evidence is carried by
 [#2832](https://github.com/mangowhoiscloud/geode/pull/2832), grounded against
 Hermes `36e41c09ed02bd783c1186564bf08cca5c8e821d`, OpenClaw
 `90a22b4f50226b13735e77dde81a92340ae724cf`, and Codex
-`578c1b2230288104041e880a86d0f7f3a5ca6e47`. This section remains the
-execution SOT. The public ABI contains exactly:
+`578c1b2230288104041e880a86d0f7f3a5ca6e47`. The 2026-07-31 readiness
+re-audit found that the initially registered external
+dependencies described desirable future owners, not prerequisites for this
+package. Current `develop` already has one injected hook system, a shared
+`ToolCallProcessor` execution terminal, centralized async adapter dispatch,
+the finalization helper, and bounded SQLite/JSONL projection sinks. R6.4 can
+therefore introduce narrow registries around those existing seams without
+waiting for the broader tool-plan, loop-decomposition, provider-profile,
+storage-ownership, trust-broker, or protocol programs. It does not implement or
+claim those programs, replace their future types, expose untrusted code
+in-process, or change persisted event values.
+
+This section remains the execution SOT. The public ABI contains exactly:
 
 ```text
 UserPromptSubmit
