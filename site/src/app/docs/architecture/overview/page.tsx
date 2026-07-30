@@ -86,7 +86,7 @@ export default function Page() {
               프로파일부터 서브에이전트 위임까지 층층이 해석합니다. 서브 작업의
               의존성 그래프는 TaskGraph
               (<code>core/orchestration/task_system.py</code>)가 추적하고,
-              라이프사이클 이벤트는 HookSystem(<code>core/hooks/system.py</code>)
+              내부 라이프사이클 이벤트는 RuntimeEventBus(<code>core/hooks/system.py</code>)
               이 발행해 핸들러가 관찰, 개입, 차단할 수 있게 합니다. 핸들러는{" "}
               <code>core/wiring/bootstrap.py</code>에 등록되어야 실제로
               발화합니다.
@@ -244,7 +244,7 @@ export default function Page() {
               layered from profile down to sub-agent delegation. Sub-task
               dependency graphs are tracked by TaskGraph
               (<code>core/orchestration/task_system.py</code>), and lifecycle
-              events are published by the HookSystem
+              internal events are published by the RuntimeEventBus
               (<code>core/hooks/system.py</code>) so handlers can observe,
               intervene, or block. A handler only fires once it is registered
               in <code>core/wiring/bootstrap.py</code>.

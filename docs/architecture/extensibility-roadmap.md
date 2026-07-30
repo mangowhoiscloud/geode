@@ -283,21 +283,21 @@ machine-readable artifact is
 
 | Measure | Current tree |
 |---|---:|
-| Production Python files (`core/` + `plugins/`) | 533 |
-| Test Python files | 675 |
-| `core/` Python LOC | 131,664 |
+| Production Python files (`core/` + `plugins/`) | 535 |
+| Test Python files | 678 |
+| `core/` Python LOC | 134,477 |
 | `plugins/` Python LOC | 40,265 |
-| Test Python LOC | 174,362 |
+| Test Python LOC | 176,153 |
 | Tool definitions / executable registrations / valid schemas | 78 / 81 / 78 (definition-only 0; execution-only 3; invalid schema 0) |
-| `HookEvent` members | 56 |
+| `RuntimeEvent` members | 57 |
 | Built-in LLM adapters | 8 |
-| Module-level `ContextVar` declarations under `core/` | 27 |
+| Module-level `ContextVar` declarations under `core/` | 28 |
 | `core` → `plugins` import sites | 31 across 14 files |
 | Import-linter contracts / ignored edges | 4 / 24 |
-| `AgenticLoop` file LOC / methods / constructor args | 2,736 / 67 / 27 |
-| `SubAgentManager` file LOC / methods / constructor args | 1,277 / 15 / 15 |
-| `RuntimeCoreConfig` fields | 17 |
-| Global Ruff ratchets | complexity 52; args 23; branches 52; returns 18; statements 223 |
+| `AgenticLoop` file LOC / methods / constructor args | 2,902 / 74 / 27 |
+| `SubAgentManager` file LOC / methods / constructor args | 1,344 / 17 / 16 |
+| `RuntimeCoreConfig` fields | 19 |
+| Global Ruff ratchets | complexity 52; args 23; branches 51; returns 18; statements 223 |
 <!-- generated:architecture-baseline:end -->
 
 `uv run lint-imports` passes all four configured contracts. That is useful
@@ -956,7 +956,7 @@ GAPs: LOOP-001, LOOP-002.
 Add immutable step identity and an explicit mutable turn accumulator before
 extracting loop phases. Pin:
 
-- all 20 `TerminationReason` members, their current producer map, persisted
+- all current `TerminationReason` members, their producer map, persisted
   string compatibility, and the explicitly producerless legacy/unknown cases;
 - unlimited-round default with time-budget control;
 - context-overflow recovery;

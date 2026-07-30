@@ -14,8 +14,10 @@ Coverage:
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 import os
+from types import SimpleNamespace
 
 import pytest
 from core.agent.loop.models import AgenticResult
@@ -27,6 +29,13 @@ from core.agent.verify import (
     synthesize_reflection_hint,
     synthesize_reflexion_hint,
     verify_turn,
+)
+from core.hooks import (
+    HookAction,
+    HookDecision,
+    HookInvocation,
+    HookName,
+    HookRegistry,
 )
 from core.observability.session_metrics import (
     current_session_metrics,
@@ -436,11 +445,235 @@ def test_finalizers_run_verify_before_lifecycle_hooks() -> None:
     async_src = inspect.getsource(_lifecycle.finalize_and_return_async)
 
     assert sync_src.index("verify_payload = _run_turn_verify(") < sync_src.index(
-        "HookEvent.SESSION_ENDED"
+        "_persist_final_result("
     )
-    assert async_src.index("verify_payload = await _run_turn_verify_async(") < async_src.index(
-        "HookEvent.SESSION_ENDED"
+    assert async_src.index("await _run_public_finalization_async(") < async_src.index(
+        "_persist_final_result("
     )
+    assert async_src.index("_persist_final_result(") < async_src.index("RuntimeEvent.SESSION_ENDED")
+
+
+def test_post_verify_failure_cannot_be_accepted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from core.agent.loop import _lifecycle
+
+    registry = HookRegistry()
+    registry.register(
+        HookName.POST_VERIFY,
+        lambda _invocation: HookDecision(action=HookAction.ACCEPT),
+    )
+    loop = SimpleNamespace(
+        _hook_registry=registry,
+        _session_id="",
+        _turn_id="t-1",
+        _verify_root_turn_id="t-1",
+        _verify_attempt=0,
+        _verify_continuation_budget=2,
+        _session_generation=1,
+        _evidence_ledger=None,
+    )
+
+    async def failed_verify(*args: object, **kwargs: object) -> VerifyResult:
+        return VerifyResult(
+            passed=False,
+            mode=VerifyMode.RULE_BASED,
+            rubric_misses=("tool_error",),
+            should_retry=True,
+        )
+
+    monkeypatch.setattr("core.agent.verify.verify_turn_async", failed_verify)
+    with session_metrics_scope(session_id="post-fail"):
+        _payload, follow_up, escalated, _correlation = asyncio.run(
+            _lifecycle._run_public_finalization_async(
+                loop,
+                _make_result(text="candidate"),
+            )
+        )
+
+    assert escalated is True
+    assert follow_up == ""
+
+
+def test_post_verify_escalation_withholds_candidate_before_persistence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from core.agent.loop import _lifecycle
+    from core.agent.loop.models import TerminationReason
+    from core.hooks import HookCorrelation
+
+    checkpoint = SimpleNamespace(status="active")
+    checkpoint.mark_paused = lambda _session_id: setattr(checkpoint, "status", "paused")
+    checkpoint.current_status = lambda _session_id: checkpoint.status
+    loop = SimpleNamespace(
+        _verify_attempt_results=[],
+        _checkpoint=checkpoint,
+        _session_id="s-escalated",
+    )
+    correlation = HookCorrelation(session_id="s-escalated", turn_id="t-1")
+
+    monkeypatch.setattr(_lifecycle, "_prepare_final_result", lambda *_args, **_kwargs: None)
+
+    async def escalate(*_args: object, **_kwargs: object):
+        return None, "", True, correlation
+
+    async def emit(*_args: object, **_kwargs: object) -> None:
+        return None
+
+    monkeypatch.setattr(_lifecycle, "_run_public_finalization_async", escalate)
+    monkeypatch.setattr(_lifecycle, "_emit_verify_runtime_event", emit)
+    monkeypatch.setattr(
+        _lifecycle,
+        "_persist_final_result",
+        lambda *_args, **_kwargs: pytest.fail("escalated candidate was persisted"),
+    )
+    result = _make_result(text="withheld candidate")
+
+    finalized = asyncio.run(_lifecycle.finalize_and_return_async(loop, result, "request", 0))
+
+    assert finalized.text == ""
+    assert finalized.pending_text == "withheld candidate"
+    assert finalized.error == "external_verification_required"
+    assert finalized.termination_reason is TerminationReason.EXTERNAL_VERIFICATION_REQUIRED
+    assert checkpoint.status == "paused"
+
+
+def test_post_verify_revision_returns_bounded_follow_up(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from core.agent.loop import _lifecycle
+
+    registry = HookRegistry()
+    registry.register(
+        HookName.POST_VERIFY,
+        lambda _invocation: HookDecision(
+            action=HookAction.REVISE,
+            instruction="Run the missing validation, then answer again.",
+        ),
+    )
+    loop = SimpleNamespace(
+        _hook_registry=registry,
+        _session_id="",
+        _turn_id="t-1",
+        _verify_root_turn_id="t-1",
+        _verify_attempt=0,
+        _verify_continuation_budget=2,
+        _session_generation=1,
+        _evidence_ledger=None,
+    )
+
+    async def passed_verify(*args: object, **kwargs: object) -> VerifyResult:
+        return VerifyResult(passed=True, mode=VerifyMode.RULE_BASED)
+
+    monkeypatch.setattr("core.agent.verify.verify_turn_async", passed_verify)
+    with session_metrics_scope(session_id="post-revise"):
+        _payload, follow_up, escalated, correlation = asyncio.run(
+            _lifecycle._run_public_finalization_async(
+                loop,
+                _make_result(text="candidate"),
+            )
+        )
+
+    assert escalated is False
+    assert follow_up == "Run the missing validation, then answer again."
+    assert correlation.turn_id == "t-1"
+    assert correlation.verify_attempt == 0
+
+
+def test_post_verify_timeout_preserves_the_builtin_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from core.agent.loop import _lifecycle
+
+    registry = HookRegistry()
+
+    async def slow_policy(_invocation: HookInvocation) -> HookDecision:
+        await asyncio.sleep(0.05)
+        return HookDecision(action=HookAction.REVISE, instruction="too late")
+
+    registry.register(
+        HookName.POST_VERIFY,
+        slow_policy,
+        name="slow_policy",
+        timeout_s=0.001,
+    )
+    loop = SimpleNamespace(
+        _hook_registry=registry,
+        _session_id="",
+        _turn_id="t-1",
+        _verify_root_turn_id="t-1",
+        _verify_attempt=0,
+        _verify_continuation_budget=2,
+        _session_generation=1,
+        _evidence_ledger=None,
+    )
+
+    async def passed_verify(*args: object, **kwargs: object) -> VerifyResult:
+        return VerifyResult(passed=True, mode=VerifyMode.RULE_BASED)
+
+    monkeypatch.setattr("core.agent.verify.verify_turn_async", passed_verify)
+    with session_metrics_scope(session_id="post-timeout"):
+        payload, follow_up, escalated, _correlation = asyncio.run(
+            _lifecycle._run_public_finalization_async(
+                loop,
+                _make_result(text="candidate"),
+            )
+        )
+
+    assert payload is not None
+    assert payload["passed"] is True
+    assert follow_up == ""
+    assert escalated is False
+
+
+def test_pre_verify_strengthening_is_monotone(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from core.agent.loop import _lifecycle
+
+    observed_passed: list[bool] = []
+    registry = HookRegistry()
+    registry.register(
+        HookName.PRE_VERIFY,
+        lambda _invocation: HookDecision(
+            action=HookAction.STRENGTHEN,
+            instruction="Require a CI result.",
+            additional_misses=("ci_missing",),
+        ),
+    )
+
+    def observe_post(invocation: HookInvocation) -> HookDecision:
+        observed_passed.append(bool(invocation.payload["passed"]))
+        return HookDecision(action=HookAction.ESCALATE)
+
+    registry.register(HookName.POST_VERIFY, observe_post)
+    loop = SimpleNamespace(
+        _hook_registry=registry,
+        _session_id="",
+        _turn_id="t-1",
+        _verify_root_turn_id="t-1",
+        _verify_attempt=0,
+        _verify_continuation_budget=2,
+        _session_generation=1,
+        _evidence_ledger=None,
+    )
+
+    async def passed_verify(*args: object, **kwargs: object) -> VerifyResult:
+        return VerifyResult(passed=True, mode=VerifyMode.RULE_BASED)
+
+    monkeypatch.setattr("core.agent.verify.verify_turn_async", passed_verify)
+    with session_metrics_scope(session_id="pre-strengthen"):
+        payload, _follow_up, _escalated, _correlation = asyncio.run(
+            _lifecycle._run_public_finalization_async(
+                loop,
+                _make_result(text="candidate"),
+            )
+        )
+
+    assert payload is not None
+    assert payload["passed"] is False
+    assert payload["rubric_misses"] == ["ci_missing"]
+    assert observed_passed == [False]
 
 
 def test_final_hook_payloads_include_verify_payload(
@@ -480,6 +713,64 @@ def test_final_hook_payloads_include_verify_payload(
 
     assert session_ended["turn_verify"] is verify_payload
     assert turn_completed["turn_verify"] is verify_payload
+
+
+def test_verify_continuation_results_merge_before_final_persistence() -> None:
+    from core.agent.loop import _lifecycle
+    from core.llm.token_tracker import LLMUsage
+
+    first = _make_result(
+        text="first",
+        tool_calls=[{"name": "search"}],
+    )
+    first.rounds = 2
+    first.usage = LLMUsage(model="model", input_tokens=10, output_tokens=3, cost_usd=0.1)
+    final = _make_result(
+        text="final",
+        tool_calls=[{"name": "verify"}],
+    )
+    final.rounds = 1
+    final.usage = LLMUsage(model="model", input_tokens=5, output_tokens=2, cost_usd=0.2)
+    loop = SimpleNamespace(
+        _verify_attempt_results=[first],
+        _build_reasoning_metrics=lambda result: SimpleNamespace(
+            to_dict=lambda: {
+                "rounds": result.rounds,
+                "tools": len(result.tool_calls),
+            }
+        ),
+    )
+
+    _lifecycle._merge_verify_attempts(loop, final)
+
+    assert final.rounds == 3
+    assert [call["name"] for call in final.tool_calls] == ["search", "verify"]
+    assert final.usage is not None
+    assert final.usage.input_tokens == 15
+    assert final.usage.output_tokens == 5
+    assert final.usage.cost_usd == pytest.approx(0.3)
+    assert final.reasoning_metrics == {"rounds": 3, "tools": 2}
+    assert loop._verify_attempt_results == []
+
+
+def test_final_result_detaches_from_the_reusable_tool_log() -> None:
+    from core.agent.loop import _lifecycle
+
+    shared_log = [{"name": "search"}]
+    result = _make_result(text="done")
+    result.rounds = 1
+    result.tool_calls = shared_log
+    loop = SimpleNamespace(
+        max_rounds=0,
+        model="model",
+        _usage_snapshot=None,
+        _build_reasoning_metrics=lambda _result: SimpleNamespace(to_dict=lambda: {"rounds": 1}),
+    )
+
+    _lifecycle._prepare_final_result(loop, result, "work", 1, persist=False)
+    shared_log.clear()
+
+    assert result.tool_calls == [{"name": "search"}]
 
 
 def test_should_retry_signal_for_recoverable_miss() -> None:

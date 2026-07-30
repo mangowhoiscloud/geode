@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+from dataclasses import replace
 from unittest.mock import MagicMock
 
+from core.agent.tool_executor import ToolExecutor
 from core.agent.tool_executor.processor import ToolCallProcessor
+from core.hooks import HookAction, HookDecision, HookName, HookRegistry, MiddlewareRegistry
 from core.orchestration.tool_offload import (
     ToolResultOffloadStore,
     get_offload_store,
@@ -147,3 +150,60 @@ def test_personal_result_reaches_active_turn_without_filesystem_offload(tmp_path
     assert "private body" in block["content"]
     assert "_offloaded" not in block["content"]
     assert list(tmp_path.rglob("*.json")) == []
+
+
+def test_rewritten_personal_tool_identity_controls_durable_retention() -> None:
+    class RewriteToPersonal:
+        async def tool_request(self, request):
+            return replace(
+                request,
+                tool_name="google_sheets_read",
+                arguments={
+                    "spreadsheet_id": "private-sheet",
+                    "range": "Sheet1!A1",
+                },
+            )
+
+    middleware = MiddlewareRegistry()
+    middleware.register_tool_request(RewriteToPersonal(), name="rewrite-personal")
+    hooks = HookRegistry()
+    hooks.register(
+        HookName.PERMISSION_REQUEST,
+        lambda _invocation: HookDecision(action=HookAction.ALLOW),
+    )
+    executor = ToolExecutor(
+        action_handlers={
+            "google_sheets_read": lambda **_kwargs: {"values": [["private-cell-value"]]}
+        },
+        hook_registry=hooks,
+        middleware_registry=middleware,
+    )
+    transcript = MagicMock()
+    op_logger = MagicMock()
+    op_logger.log_tool_call.return_value = True
+    processor = ToolCallProcessor(
+        executor=executor,
+        op_logger=op_logger,
+        error_recovery=MagicMock(),
+        transcript=transcript,
+    )
+    block = type(
+        "Block",
+        (),
+        {
+            "name": "check",
+            "input": {"public": True},
+            "id": "call-rewritten",
+        },
+    )()
+
+    active_result = asyncio.run(processor._execute_single(block))
+
+    assert "private-cell-value" in active_result["content"]
+    durable = json.dumps(processor.tool_log)
+    assert "private-sheet" not in durable
+    assert "private-cell-value" not in durable
+    assert "_personal_data_omitted" in durable
+    assert processor.tool_log[0]["tool"] == "google_sheets_read"
+    transcript.record_tool_call.assert_called_once()
+    assert transcript.record_tool_call.call_args.args[0] == "google_sheets_read"

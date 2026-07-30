@@ -11,6 +11,8 @@ from core.hooks import (
     HookResult,
     HookSystem,
     InterceptResult,
+    RuntimeEvent,
+    RuntimeEventBus,
 )
 
 
@@ -40,7 +42,74 @@ class TestHookEvent:
         # SELF_IMPROVING_AUTO_TRIGGER_* into SELF_IMPROVING_AUTO_TRIGGER
         # (D2), and the RULE_CREATED/UPDATED/DELETED trio into
         # RULE_CHANGED (D3).
-        assert len(HookEvent) == 56
+        assert len(HookEvent) == 57
+
+    def test_legacy_stored_values_are_unchanged(self):
+        """R6.4 adds one audit signal without rewriting the prior 56 values."""
+        legacy_values = {
+            "trigger_fired",
+            "post_analysis",
+            "memory_saved",
+            "rule_changed",
+            "result_feedback",
+            "prompt_assembled",
+            "subagent_started",
+            "subagent_completed",
+            "subagent_failed",
+            "tool_recovery_attempted",
+            "tool_recovery_succeeded",
+            "tool_recovery_failed",
+            "turn_completed",
+            "context_critical",
+            "context_overflow_action",
+            "session_started",
+            "session_ended",
+            "model_switched",
+            "llm_call_started",
+            "llm_call_ended",
+            "llm_call_failed",
+            "llm_call_retried",
+            "tool_approval_requested",
+            "approval_transition",
+            "adapter_dispatch_attempt",
+            "shutdown_started",
+            "config_reloaded",
+            "tool_result_offloaded",
+            "mcp_server_connected",
+            "mcp_server_failed",
+            "user_input_received",
+            "tool_exec_started",
+            "tool_exec_ended",
+            "tool_exec_failed",
+            "tool_result_transform",
+            "cost_warning",
+            "cost_limit_exceeded",
+            "execution_cancelled",
+            "reasoning_metrics",
+            "cognitive_perceive",
+            "cognitive_plan",
+            "cognitive_act",
+            "cognitive_observe",
+            "cognitive_reflect",
+            "cognitive_update_memory",
+            "self_improving_auto_trigger",
+            "handoff_triggered",
+            "turn_verify_passed",
+            "turn_verify_failed",
+            "mutation_proposed",
+            "mutation_applied",
+            "mutation_rejected",
+            "mutation_reverted",
+            "baseline_promoted",
+            "program_md_unreadable",
+            "memory_promotion_proposed",
+        }
+        current_values = {event.value for event in RuntimeEvent}
+        assert len(legacy_values) == 56
+        assert current_values - legacy_values == {"extension_invoked"}
+        assert legacy_values <= current_values
+        assert HookEvent is RuntimeEvent
+        assert HookSystem is RuntimeEventBus
 
     def test_event_values(self):
         assert HookEvent.SESSION_STARTED.value == "session_started"
@@ -847,7 +916,7 @@ class TestAggressiveRecoveryHook:
     """aggressive_context_recovery delegates to CONTEXT_OVERFLOW_ACTION hook."""
 
     def test_aggressive_recovery_uses_hook(self):
-        """aggressive_context_recovery fires CONTEXT_OVERFLOW_ACTION via _resolve_overflow_strategy."""
+        """Aggressive recovery no longer delegates policy to a generic hook."""
         from unittest.mock import MagicMock, patch
 
         from core.orchestration.context_monitor import ContextMetrics
@@ -907,10 +976,8 @@ class TestAggressiveRecoveryHook:
                 )
             )
 
-        # Verify hook was called
-        assert len(hook_calls) == 1
-        assert hook_calls[0]["provider"] == "openai"
-        assert hook_calls[0]["model"] == "gpt-4o"
+        # Legacy feedback handlers remain readable but no longer own policy.
+        assert hook_calls == []
 
 
 class TestHookTimeout:

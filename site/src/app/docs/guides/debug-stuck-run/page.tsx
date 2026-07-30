@@ -45,7 +45,7 @@ export default function Page() {
             <ul>
               <li><code>llm_call_start</code> 뒤 <code>llm_call_end</code>가 없으면 model adapter 대기를 확인합니다.</li>
               <li><code>tool_exec_start</code> 뒤 <code>tool_exec_end</code>가 없으면 tool 실행 또는 process 종료 경계를 확인합니다.</li>
-              <li><code>status=blocked</code>는 interceptor가 의도적으로 막은 실행입니다.</li>
+              <li><code>status=blocked</code>는 공개 훅 또는 정책이 의도적으로 막은 실행입니다.</li>
               <li><code>status=failed</code>는 canonical terminal row에 실패가 반영된 경우입니다.</li>
             </ul>
 
@@ -90,7 +90,7 @@ export default function Page() {
             <ul>
               <li>A missing <code>llm_call_end</code> after <code>llm_call_start</code> points at the model adapter boundary.</li>
               <li>A missing <code>tool_exec_end</code> after <code>tool_exec_start</code> points at tool execution or process termination.</li>
-              <li><code>status=blocked</code> means an interceptor intentionally denied the operation.</li>
+              <li><code>status=blocked</code> means a public hook or policy intentionally denied the operation.</li>
               <li><code>status=failed</code> records failure on the canonical terminal row.</li>
             </ul>
 

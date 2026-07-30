@@ -164,7 +164,7 @@ GEODE는 오랫동안 4-계층(Model, Runtime, Harness, Agent)으로 서술됐�
 
 ## HARNESS. 규율과 관측
 
-하네스 계층은 실행에 규율을 부과합니다. 동시성은 SessionLane과 LaneQueue(`core/orchestration/lane_queue.py`)가 맡습니다. 같은 세션 키의 요청은 직렬, 다른 키는 병렬입니다. 도구 접근 권한은 PolicyChain(`core/tools/policy.py`)이 프로파일부터 서브에이전트 위임까지 층층이 해석합니다. 서브 작업의 의존성 그래프는 TaskGraph (`core/orchestration/task_system.py`)가 추적하고, 라이프사이클 이벤트는 HookSystem(`core/hooks/system.py`) 이 발행해 핸들러가 관찰, 개입, 차단할 수 있게 합니다. 핸들러는 `core/wiring/bootstrap.py`에 등록되어야 실제로 발화합니다.
+하네스 계층은 실행에 규율을 부과합니다. 동시성은 SessionLane과 LaneQueue(`core/orchestration/lane_queue.py`)가 맡습니다. 같은 세션 키의 요청은 직렬, 다른 키는 병렬입니다. 도구 접근 권한은 PolicyChain(`core/tools/policy.py`)이 프로파일부터 서브에이전트 위임까지 층층이 해석합니다. 서브 작업의 의존성 그래프는 TaskGraph (`core/orchestration/task_system.py`)가 추적하고, 내부 라이프사이클 이벤트는 RuntimeEventBus(`core/hooks/system.py`) 이 발행해 핸들러가 관찰, 개입, 차단할 수 있게 합니다. 핸들러는 `core/wiring/bootstrap.py`에 등록되어야 실제로 발화합니다.
 
 책임의 끝: 하네스는 무엇이 실행되는지에 관심이 없습니다. 어떤 순서로, 어떤 권한으로, 얼마나 관측 가능하게 실행되는지만 책임집니다.
 
@@ -984,7 +984,7 @@ import 시점에 각 상수의 sha256\[:12\] 해시를 계산해 `PROMPT_VERSION
 
 ## program.md: 훅 제어 폴백
 
-자기개선 루프의 변이 러너 (`core/self_improving/loop/mutate/runner.py`)는 `program.md`를 읽지 못하면 코드에 박힌 리터럴 미러로 조용히 대체하지 않습니다. 대신 `HookEvent.PROGRAM_MD_UNREADABLE`을 발화합니다. 핸들러가 대체 내용을 돌려줄 수 있고, 핸들러가 없으면 러너는 시끄럽게 실패합니다. 폴백을 데이터 미러가 아니라 코드의 제어 지점으로 두는 설계입니다. 디스크와 리터럴의 이중 SoT는 반드시 드리프트합니다.
+자기개선 루프의 변이 러너 (`core/self_improving/loop/mutate/runner.py`)는 `program.md`를 읽지 못하면 코드에 박힌 리터럴 미러로 조용히 대체하지 않습니다. 대신 `RuntimeEvent.PROGRAM_MD_UNREADABLE`을 발화합니다. 핸들러가 대체 내용을 돌려줄 수 있고, 핸들러가 없으면 러너는 시끄럽게 실패합니다. 폴백을 데이터 미러가 아니라 코드의 제어 지점으로 두는 설계입니다. 디스크와 리터럴의 이중 SoT는 반드시 드리프트합니다.
 
 ## 실패 모드
 
@@ -1066,81 +1066,64 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/runtime/tools/protocol.md
 URL: https://mangowhoiscloud.github.io/geode/docs/harness/hooks
 Markdown: https://mangowhoiscloud.github.io/geode/docs/harness/hooks.md
 
-HookSystem(`core/hooks/system.py`)은 런타임의 모든 의미 있는 경계에서 이벤트를 발화하는 단일 버스입니다. `HookEvent` enum은 정확히 56개의 라이프사이클 이벤트를 정의합니다. 새 동작은 루프 코드를 고치는 대신 이 이벤트들 위에 핸들러로 쌓입니다.
+GEODE의 확장 표면은 하나의 거대한 이벤트 목록이 아닙니다. 외부 통합이 의존할 수 있는 `HookName`, 실행을 감싸는 신뢰 표면 `MiddlewareRegistry`, 운영 관측을 위한 `RuntimeEvent`로 역할과 권한을 분리합니다.
 
-## 하나의 이벤트, 네 가지 쌓기
+## 세 표면
 
-같은 이벤트라도 핸들러가 무엇을 하느냐에 따라 네 층위로 쌓입니다.
-
-| 층위 | 호출 방식 | 의미 |
+| 표면 | 용도 | 권한 |
 | --- | --- | --- |
-| Observe | `trigger()` | fire-and-forget 관찰. 핸들러 오류는 로깅 후 격리됩니다 |
-| React | `trigger()` 구독 핸들러 | 이벤트를 계기로 부수 작업을 실행 (알림, 저널, 메트릭) |
-| Decide | `trigger_with_result()` | 핸들러 반환값을 호출자가 수집해 전략을 결정 (예: `CONTEXT_OVERFLOW_ACTION`) |
-| Act | `trigger_interceptor()` | 핸들러가 실행 자체를 차단하거나 수정 (인터셉터 패턴) |
+| 공개 훅 | 사용자 입력, 도구, 압축, 세션, 서브에이전트, 검증 경계 | 이름별로 허용된 typed decision만 반환 |
+| 신뢰 미들웨어 | 도구·LLM 요청 변환과 실제 실행 래핑 | 요청 단계는 변환, 실행 단계는 감싸기·단축 반환 |
+| 런타임 이벤트 | 메트릭, 감사, 저장, 운영 진단 | 내부 관측 전용. 실행 제어 계약이 아님 |
 
-비동기 변형으로 `trigger_async`가 있습니다.
+## 공개 훅 13종
 
-## 이벤트 카테고리
+공개 목록은 의도적으로 작고 버전이 고정됩니다. 와일드카드 구독은 없으며, 입력은 크기 제한·JSON 안전화·비밀값 제거를 거칩니다.
 
-56개 이벤트는 enum 안의 섹션 주석으로 분류됩니다. 대표만 추리면 이렇습니다.
+`UserPromptSubmit` `PreToolUse` `PermissionRequest` `PostToolUse` `PreCompact` `PostCompact` `SessionStart` `SessionEnd` `SubagentStart` `SubagentStop` `PreVerify` `PostVerify` `Stop`
 
-| 카테고리 | 대표 이벤트 |
+각 훅은 서로 다른 action 집합을 가집니다. 예를 들어 `PreToolUse`는 continue/rewrite/block/request\_permission,`PostVerify`는 accept/revise/escalate만 허용합니다. 실패한 내장 검증을 외부 훅이 pass로 뒤집을 수는 없습니다.
+
+## PostVerify와 외부 루프
+
+`PostVerify`는 이미 실행된 부수 효과를 재생하지 않고, 완성된 후보와 내장 검증 결과를 외부 평가기·CI 정책·오케스트레이터가 판정하게 합니다. revise는 구체적인 후속 지시가 있어야 하며 최대 2회 연속 시도로 제한됩니다. 최종 결과에는 모든 시도의 rounds, tool calls, usage가 합산된 뒤 증거와 체크포인트가 저장됩니다. escalate는 단순 telemetry가 아니라 delivery gate입니다. 세션을 pause하고 후보를 외부 소유자에게만 pending\_text로 반환하며 최종 transcript에는 쓰지 않습니다.
+
+## 신뢰 미들웨어 4개 결합점
+
+| 결합점 | 계약 |
 | --- | --- |
-| agentic 턴 / 세션 | `TURN_COMPLETED`, `SESSION_STARTED`, `SESSION_ENDED` |
-| LLM 호출 | `LLM_CALL_STARTED/ENDED/FAILED/RETRIED`, `ADAPTER_DISPATCH_ATTEMPT`, `MODEL_SWITCHED` |
-| 도구 실행 / 승인 | `TOOL_EXEC_STARTED/ENDED/FAILED`, `TOOL_RESULT_TRANSFORM`, `TOOL_APPROVAL_REQUESTED`, `APPROVAL_TRANSITION`, `TOOL_RECOVERY_ATTEMPTED/SUCCEEDED/FAILED` |
-| 컨텍스트 / 오프로드 | `CONTEXT_CRITICAL`, `CONTEXT_OVERFLOW_ACTION`, `TOOL_RESULT_OFFLOADED` |
-| 프롬프트 / 메모리 | `PROMPT_ASSEMBLED`, `PROGRAM_MD_UNREADABLE`, `MEMORY_SAVED`, `RULE_CHANGED` |
-| 비용 / 인터셉터 | `USER_INPUT_RECEIVED`, `COST_WARNING`, `COST_LIMIT_EXCEEDED`, `EXECUTION_CANCELLED` |
-| 서브에이전트 / 핸드오프 | `SUBAGENT_STARTED/COMPLETED/FAILED`, `HANDOFF_TRIGGERED/COMPLETED/FAILED` |
-| 자기개선 루프 | `MUTATION_PROPOSED/APPLIED/REJECTED/REVERTED`, `BASELINE_PROMOTED`, `SELF_IMPROVING_AUTO_TRIGGER` |
-| 인프라 | `TRIGGER_FIRED`, `CONFIG_RELOADED`, `SHUTDOWN_STARTED`, `MCP_SERVER_CONNECTED/FAILED` |
+| `tool_request` | 승인 전 도구명·인자를 순차 변환하고 다시 스키마 검증 |
+| `tool_execution` | 승인된 요청을 변경하지 않고 실제 executor를 async onion으로 감쌈 |
+| `llm_request` | 조립된 adapter request를 순차 변환. 캐시 prefix 변경은 명시 권한과 사유가 필요 |
+| `llm_execution` | 요청을 변경하지 않고 provider 실행을 감싸거나 단축 반환 |
 
-## 등록
+실행 미들웨어의 `next_call`은 한 번만 호출할 수 있습니다. 변환이 필요하면 반드시 request 결합점을 사용합니다.
+
+## 내부 이벤트와 저장
+
+현재 `RuntimeEvent`는 57개의 내부 관측 이벤트를 가집니다. `HookEvent`/`HookSystem`은 기존 통합을 위한 타입 별칭이며, 새 코드는 `RuntimeEvent`/`RuntimeEventBus`를 사용합니다.
+
+| 저장소 | 동작 |
+| --- | --- |
+| SQLite activity store | 운영 이벤트의 정본. 공개 훅과 미들웨어 호출도 `extension.invoked` 행으로 저장 |
+| RunTranscript JSONL | 활성 transcript가 있을 때만 같은 typed activity row를 미러링 |
+
+확장 호출 행은 표면, 이름, 확장자, 상태, 지연, 상관 ID만 보존합니다. 원문 사용자 입력, 전체 요청·응답, 개인 데이터, 비밀값은 저장하지 않습니다.
+
+## 도구 경계 순서
 
 ```
-from core.hooks.system import HookSystem, HookEvent
-
-hooks.register(
-    HookEvent.TURN_COMPLETED,
-    my_handler,
-    name="my-plugin",
-    priority=100,   # 낮을수록 먼저 실행, 안정 정렬
-)
-hooks.register_prefix("*", mirror_everything)  # 와일드카드 구독
+tool_request → schema validation → PreToolUse → revalidation
+→ hard deny / policy → PermissionRequest
+→ tool_execution → TOOL_EXEC_STARTED → executor exactly once
+→ TOOL_EXEC_ENDED or TOOL_EXEC_FAILED → PostToolUse
 ```
-
-## 부트스트랩 등록이 필수
-
-핸들러가 존재한다는 사실과 핸들러가 발화한다는 사실은 다릅니다. 프로덕션 핸들러는 전부 `core/wiring/bootstrap.py`에서 등록됩니다. 거기 없는 핸들러는 코드로 존재해도 영원히 호출되지 않습니다. 이 규칙은 저장소의 wiring 검증 인바리언트로 핀 고정되어 있습니다.
-
-부트스트랩에는 priority 50의 `"*"` prefix 핸들러가 하나 있어, 모든 트리거를 활성 RunTranscript의 activity log 행으로 미러링합니다. 훅 버스 자체가 관측 파이프라인의 입구입니다.
-
-## 실패 모드
-
-| 증상 | 원인 | 해법 |
-| --- | --- | --- |
-| 핸들러를 만들었는데 한 번도 안 불림 | 부트스트랩 미등록 | `core/wiring/bootstrap.py`에 등록을 추가합니다 |
-| 핸들러 실행 순서가 뒤섞임 | priority 미지정 (기본 100) | 순서가 중요하면 명시적 priority를 부여합니다. 낮은 값이 먼저입니다 |
-| observe 핸들러의 예외가 보이지 않음 | `trigger()`는 오류를 격리하고 로깅만 합니다 | 로그를 확인합니다. 흐름을 막아야 하는 로직이면 인터셉터로 옮깁니다 |
-
-## Activity row 스키마와 에러 정책
-
-모든 `trigger*()` 호출은 활성 `RunTranscript`에 타입이 지정된 Activity row 한 줄로 미러링됩니다. 56개 이벤트 전부 구체 타입의 row를 가집니다 (19 lifecycle + 37 K-group). `action`필드가 discriminator이고, `GenericActivityRow`는 정상 경로 목적지가 아니라 fail-soft 폴백 전용입니다.
-
-| 정책 | 내용 |
-| --- | --- |
-| 커버리지 | 56/56 타입 지정. 37 K-group은 선언적 spec 테이블 + 단일 빌더로 구성 |
-| details 스키마 | 23 공유 모델, `frozen` + `extra=forbid`. 모든 row에 `schema_version` |
-| silent fallback 금지 | 강제 generic 폴백은 `_fallback_reason`을 동봉해 timeline에서 구분 가능. 미러링 / dispatch / 학습 저장 실패는 이벤트당 한 번만 WARNING |
-| 프라이버시 드롭 | raw `user_input`, cognitive-state 스냅샷, 전체 tool result는 적재 금지. `input_len` 같은 파생 스칼라만 |
 
 ## 다음
 
--   [훅 핸들러 등록 가이드](https://mangowhoiscloud.github.io/geode/docs/guides/register-hook.md). 손으로 따라가는 절차.
--   [안쪽 agentic 루프](https://mangowhoiscloud.github.io/geode/docs/architecture/agentic-loop.md). 이벤트가 발화되는 본진.
--   [하네스 라이프사이클](https://mangowhoiscloud.github.io/geode/docs/harness/lifecycle.md). serve 데몬에서의 이벤트 흐름.
+-   [공개 훅과 미들웨어 등록](https://mangowhoiscloud.github.io/geode/docs/guides/register-hook.md)
+-   [Agentic loop](https://mangowhoiscloud.github.io/geode/docs/architecture/agentic-loop.md)
+-   [하네스 라이프사이클](https://mangowhoiscloud.github.io/geode/docs/harness/lifecycle.md)
 
 ---
 
@@ -2684,7 +2667,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/runtime/scheduler.md
 | `cron` | cron 표현식 매칭 | `cron_expr` (분 시 일 월 요일, 요일 0=일요일) |
 | `at` | 1회 실행 | 실행 시각 |
 
-cron 매칭은 `core/scheduler/triggers.py`의 최소 구현 `CronParser`가 담당합니다. 5필드 형식이고 요일은 cron 표준 관례(0=일요일)를 따릅니다. 트리거 타입은 manual, scheduled(cron), event-driven(HookSystem 이벤트 구독) 셋입니다.
+cron 매칭은 `core/scheduler/triggers.py`의 최소 구현 `CronParser`가 담당합니다. 5필드 형식이고 요일은 cron 표준 관례(0=일요일)를 따릅니다. 트리거 타입은 manual, scheduled(cron), event-driven(RuntimeEventBus 구독) 셋입니다.
 
 ## 영속화
 
@@ -2701,7 +2684,7 @@ jitter = min(frac * interval * 0.1, 15min)  # 전방 오프셋
 fire_at = nominal + jitter
 ```
 
-같은 작업은 재시작 후에도 항상 같은 오프셋에 발화하고, 같은 정각을 공유하는 다른 작업들은 시간상 분산됩니다. 발화된 작업의 액션 프롬프트는 SCHEDULER 모드 세션(wall-clock 300초 상한, headless 도구 차단)으로 실행되고, 트리거 시점에 `HookEvent.TRIGGER_FIRED`가 발화됩니다 (`core/scheduler/triggers.py`).
+같은 작업은 재시작 후에도 항상 같은 오프셋에 발화하고, 같은 정각을 공유하는 다른 작업들은 시간상 분산됩니다. 발화된 작업의 액션 프롬프트는 SCHEDULER 모드 세션(wall-clock 300초 상한, headless 도구 차단)으로 실행되고, 트리거 시점에 `RuntimeEvent.TRIGGER_FIRED`가 발화됩니다 (`core/scheduler/triggers.py`).
 
 ## 설정 손잡이
 
@@ -2762,7 +2745,7 @@ geode serve (데몬)  ←  하나의 GeodeRuntime이 전부 소유
 
 | 단계 | 만드는 것 | 코드 |
 | --- | --- | --- |
-| 1 | HookSystem + SQLite event sink. 모든 프로덕션 훅과 teardown이 여기서 등록됩니다. | `core/wiring/bootstrap.py` |
+| 1 | RuntimeEventBus + SQLite sink + 공개 훅·미들웨어 registry. 프로세스 단위로 한 번 구성됩니다. | `core/wiring/bootstrap.py`, `core/server/supervised/services.py` |
 | 2 | PolicyChain, ToolRegistry, LaneQueue, 인증 스토어 | `core/wiring/container.py` |
 | 3 | TriggerManager + SchedulerService | `core/wiring/scheduling.py` |
 | 4 | MCP, 알림, 캘린더, 게이트웨이 어댑터 | `core/wiring/adapters.py` |
@@ -2783,7 +2766,7 @@ geode serve (데몬)  ←  하나의 GeodeRuntime이 전부 소유
 순서가 곧 안전입니다. 새 요청을 먼저 끊고, 하던 일을 마치게 하고, 상태를 저장한 뒤 연결을 닫습니다 (`core/cli/typer_serve.py`).
 
 ```
-1. HookEvent.SHUTDOWN_STARTED 발화
+1. RuntimeEvent.SHUTDOWN_STARTED 발화
 2. IPC 소켓 닫기 (신규 클라이언트 차단)
 3. 활성 세션 drain (최대 30초)
 4. 스케줄러 save + stop
@@ -2963,7 +2946,7 @@ GEODE의 관측성은 목적별 저장소를 사용합니다. query/filter/aggre
 
 ## 한 trigger, 한 durable row
 
-`HookSystem`은 handler chain이 끝난 뒤`HookDispatch`를 sink에 한 번 보냅니다. 그래서 sync/async, feedback/interceptor 경로마다 writer를 반복하지 않습니다. legacy 실패나 승인 이벤트처럼 canonical 이벤트와 의미가 겹치는 신호는 외부 handler에는 전달하지만 SQL과 transcript에는 중복 기록하지 않습니다.
+`RuntimeEventBus`는 handler chain이 끝난 뒤`HookDispatch`를 sink에 한 번 보냅니다. 그래서 sync/async, emit 경로마다 writer를 반복하지 않습니다. legacy 실패나 승인 이벤트처럼 canonical 이벤트와 의미가 겹치는 신호는 외부 handler에는 전달하지만 SQL과 transcript에는 중복 기록하지 않습니다.
 
 ## 이벤트 조회
 
@@ -3689,63 +3672,85 @@ _참조:_ [Tool protocol](https://mangowhoiscloud.github.io/geode/docs/runtime/t
 URL: https://mangowhoiscloud.github.io/geode/docs/guides/register-hook
 Markdown: https://mangowhoiscloud.github.io/geode/docs/guides/register-hook.md
 
-훅은 루프가 의미 있는 경계에서 발화하는 이벤트에 핸들러를 붙이는 방법입니다. 관측, 비용 집계, 감사 로그 같은 횡단 관심사를 루프 코드를 건드리지 않고 추가할 때 씁니다. 가장 흔한 함정은 핸들러를 작성하고도 bootstrap에 등록하지 않는 것입니다. 핸들러가 존재한다고 발화하지는 않습니다.
+먼저 필요한 권한을 고릅니다. 외부 통합의 안정된 경계라면 공개 훅, 요청 변경이나 실제 실행 래핑이라면 신뢰 미들웨어, 관측만 한다면 런타임 이벤트를 사용합니다. 내부 이벤트를 실행 제어에 사용하는 것은 지원 계약이 아닙니다.
 
-## 1\. 이벤트를 고릅니다
+## 1\. 공개 훅 등록
 
-발화 지점은 `core/hooks/system.py`의 `HookEvent` enum에 모두 정의되어 있습니다. 도구 실행을 듣고 싶으면 `TOOL_EXEC_STARTED` / `TOOL_EXEC_ENDED` / `TOOL_EXEC_FAILED`, 세션 경계는 `SESSION_STARTED` / `SESSION_ENDED`, LLM 호출은 `LLM_CALL_STARTED` / `LLM_CALL_ENDED`를 고릅니다. 없는 이벤트가 필요하면 enum에 멤버를 추가하고 발화 지점도 같은 PR에 함께 넣습니다. 예약만 하고 emit-site를 미루면 발화하지 않는 죽은 이벤트가 됩니다.
-
-## 2\. 핸들러를 작성합니다
-
-핸들러 시그니처는 `(event: HookEvent, data: dict) -> None`입니다. fire-and-forget 관측자는 `None`을 돌려주고, 권고 값을 호출자에게 돌려주는 피드백 훅은 dict을 돌려줍니다. 핸들러 안의 예외는 `HookSystem.trigger`가 잡아서 경고 로그로 남기므로 다른 핸들러를 막지 않습니다. 동기·비동기 둘 다 지원합니다.
+`HookRegistry`는 13개의 `HookName`만 받습니다. 같은 훅 안에서 이름은 고유해야 하고 낮은 priority가 먼저 실행됩니다. handler는 `HookDecision` 또는 `None`을 반환합니다.
 
 ```
-from core.hooks import HookEvent
+from core.hooks import HookAction, HookDecision, HookName
 
-def on_tool_failed(event: HookEvent, data: dict) -> None:
-    tool_name = data.get("tool_name", "")
-    error = data.get("error", "")
-    # observe only — no return value needed
-    log.warning("tool %s failed: %s", tool_name, error)
+def require_ticket(invocation):
+    args = invocation.payload["arguments"]
+    if invocation.payload["tool_name"] == "run_bash" and "ticket" not in args:
+        return HookDecision(
+            action=HookAction.REQUEST_PERMISSION,
+            reason="run_bash requires an operator decision",
+        )
+    return HookDecision(action=HookAction.CONTINUE)
+
+hook_registry.register(
+    HookName.PRE_TOOL_USE,
+    require_ticket,
+    name="require_ticket",
+    priority=50,
+)
 ```
 
-## 3\. bootstrap에서 등록합니다
+rewrite는 payload의 실제 필드명을 사용합니다. 도구 인자를 바꾸려면 `updates={"arguments": {...}}`를 반환하며, GEODE가 변경된 요청을 다시 스키마 검증한 뒤 정책과 승인을 수행합니다.
 
-이 단계가 핵심입니다. `core/wiring/bootstrap.py`의 `build_hooks()`가 `HookSystem`을 만들고 모든 핵심 핸들러를 붙이는 곳입니다. 거기서 `hooks.register(event, handler, name=..., priority=...)`를 호출합니다. `name`은 겹치는 exact/prefix 범위에서 고유해야 합니다. 다른 핸들러를 같은 이름으로 등록하면 fail-loud하며, 의도적 교체만 `replace=True`를 사용합니다.
+## 2\. 신뢰 미들웨어 등록
+
+요청 변환과 실행 래핑을 섞지 않습니다. 아래 예시는 실제 provider 호출의 지연만 측정하고 요청은 그대로 전달합니다.
 
 ```
-# core/wiring/bootstrap.py — build_hooks()
-hooks.register(
-    HookEvent.TOOL_EXEC_FAILED,
-    on_tool_failed,
-    name="tool_failure_observer",
+class LlmLatency:
+    async def llm_execution(self, request, next_call):
+        started = time.monotonic()
+        try:
+            return await next_call(request)
+        finally:
+            metrics.observe("llm", time.monotonic() - started)
+
+middleware_registry.register_llm_execution(
+    LlmLatency(),
+    name="llm_latency",
+    priority=100,
+)
+```
+
+`tool_request`, `tool_execution`, `llm_request`, `llm_execution`마다 별도의 등록 메서드가 있습니다. execution에서 다른 요청을 `next_call`에 넘기거나 두 번 호출하면 fail-loud합니다.
+
+## 3\. 내부 런타임 이벤트 구독
+
+운영 메트릭이나 저장 sink처럼 제어권이 필요 없는 코드는 `RuntimeEventBus`를 구독합니다. prefix 구독은 내부 관측자용이며 공개 훅에는 없습니다.
+
+```
+from core.hooks import RuntimeEvent
+
+events.subscribe(
+    RuntimeEvent.TOOL_EXEC_FAILED,
+    record_tool_failure,
+    name="tool_failure_metrics",
     priority=60,
 )
 ```
 
-한 핸들러를 이벤트 family에 붙이려면 `register_prefix("SUBAGENT", handler, ...)`를 씁니다. 운영 이벤트 저장은 일반 핸들러가 아니라 post-dispatch sink가 담당합니다.
+## 4\. 한 번만 소유하고 실제 경계를 검증
 
-## 4\. 우선순위 등급을 정합니다
+프로덕션에서는 `SharedServices`가 `HookRegistry`와 `MiddlewareRegistry`를 각각 한 번 만들고 `ToolExecutor`에 주입합니다. `AgenticLoop`는 executor의 같은 인스턴스를 공유합니다. 요청마다 새 registry를 만들면 등록이 보이지 않으므로 금지합니다.
 
-`priority`는 낮을수록 먼저 실행됩니다(기본 100). 데이터를 보강하는 인터셉터는 낮게, 단순 관측자는 높게 둡니다. 기존 bootstrap의 등급을 기준으로 삼으면 됩니다. metrics는 45, agent\_runtime\_state 기록은 55, 세션 라이프사이클 로거는 90입니다.`trigger_interceptor()` 경로의 핸들러는 `{"block": True}` 또는 `{"modify": {...}}`를 돌려줘 체인을 막거나 데이터를 수정할 수 있습니다.
+-   public hook은 해당 경계의 payload schema와 action 제한을 테스트합니다.
+-   tool middleware는 승인 전 변환과 승인 후 실행 순서를 함께 테스트합니다.
+-   LLM middleware는 모든 adapter call 경로와 retry마다 실행되는지 확인합니다.
+-   관측 행은 transcript가 없어도 SQLite에 남고, transcript 활성 시에만 JSONL에도 남는지 확인합니다.
 
-## 확인
+## PostVerify 등록 시 주의
 
-발화되는지 직접 트리거해서 확인합니다. `list_hooks()`는 와일드카드 구독자까지 합쳐 어떤 핸들러가 실제로 발화될지 보여줍니다.
+revise와 Stop continue는 빈 지시를 반환할 수 없습니다. 실패한 내장 검증에 accept를 반환하면 escalation으로 처리됩니다. 연속 시도는 기본 2회로 제한되며 이전 도구 부수 효과는 재생하지 않습니다.
 
-```
-from core.hooks import HookEvent, HookSystem
-
-hooks = HookSystem()
-hooks.register(HookEvent.TOOL_EXEC_FAILED, on_tool_failed, name="tool_failure_observer")
-print(hooks.list_hooks(HookEvent.TOOL_EXEC_FAILED))
-# {'tool_exec_failed': ['tool_failure_observer']}
-
-results = hooks.trigger(HookEvent.TOOL_EXEC_FAILED, {"tool_name": "web_fetch", "error": "timeout"})
-print([r.success for r in results])  # [True]
-```
-
-_참조:_ [Hook system](https://mangowhoiscloud.github.io/geode/docs/harness/hooks.md), [Agentic loop](https://mangowhoiscloud.github.io/geode/docs/architecture/agentic-loop.md).
+_참조:_ [훅과 미들웨어 계약](https://mangowhoiscloud.github.io/geode/docs/harness/hooks.md), [Agentic loop](https://mangowhoiscloud.github.io/geode/docs/architecture/agentic-loop.md).
 
 ---
 
@@ -3940,7 +3945,7 @@ PY
 
 -   `llm_call_start` 뒤 `llm_call_end`가 없으면 model adapter 대기를 확인합니다.
 -   `tool_exec_start` 뒤 `tool_exec_end`가 없으면 tool 실행 또는 process 종료 경계를 확인합니다.
--   `status=blocked`는 interceptor가 의도적으로 막은 실행입니다.
+-   `status=blocked`는 공개 훅 또는 정책이 의도적으로 막은 실행입니다.
 -   `status=failed`는 canonical terminal row에 실패가 반영된 경우입니다.
 
 ## 3\. transcript와 daemon log를 맞춥니다
@@ -4857,6 +4862,7 @@ GEODE가 메타 하네스인 이유는 세 겹의 관계 때문입니다.
 -   `actionable_partial`
 -   `context_exhausted`
 -   `tool_use_yield`
+-   `external_verification_required`
 -   `cost_budget_exceeded`
 -   `user_clarification_needed`
 -   `model_refusal`
@@ -4880,7 +4886,7 @@ GEODE가 메타 하네스인 이유는 세 겹의 관계 때문입니다.
 | **Safety classification** | 도구별 위험 분류. DANGEROUS 도구는 HITL 승인 필수 | DANGEROUS\_TOOLS set, GEODE\_DANGEROUSLY\_SKIP\_PERMISSIONS | `core/agent/safety.py` |
 | **Computer-use HITL** | 화면 제어 도구는 명시적 사용자 거부 경로가 있는 게이트를 통과 | 600s tool deadline, denied result contract | `core/agent/tool_executor/executor.py` |
 | **Approval FSM** | HITL 승인 상태기계. 3-strike 자동 거부, 모든 전이를 기록 | legal-transition table, APPROVAL\_TRANSITION hook | `core/agent/approval_fsm.py` |
-| **Hook interceptor** | interceptor 모드 훅이 도구, LLM 호출을 실행 중에 차단하거나 수정 | handler returns block:true, per-handler timeout\_s | `core/hooks/system.py` |
+| **Trusted middleware** | 도구·LLM 요청 변환과 실제 실행 래핑을 네 개의 typed 결합점으로 분리 | single-use next\_call, request mutation rejection, per-handler timeout\_s | `core/hooks/middleware.py` |
 | **PlanMode** | 다단계 작업의 plan, approve, execute 게이트 | MANUAL (default) vs AUTO execution mode | `core/orchestration/plan_mode.py` |
 | **SchedulerService** | lock과 jitter로 반복 작업의 동시 발화를 억제 | enable\_jitter, max\_jitter\_ms, SchedulerLock | `core/scheduler/service.py` |
 | **Model switching** | /model 전환 시 drift-health 체크와 캐시 안전 breadcrumb 주입 | /model command, MODEL\_SWITCHED hook | `core/agent/loop/_model_switching.py` |
@@ -4909,7 +4915,7 @@ GEODE가 메타 하네스인 이유는 세 겹의 관계 때문입니다.
 
 | 메커니즘 | 묶는 발산 | 제어 지점 | 위치 |
 | --- | --- | --- | --- |
-| **HookSystem** | 65개 이벤트의 중앙 계측 버스. observe, feedback, interceptor 3채널 | trigger / trigger\_with\_result / trigger\_interceptor | `core/hooks/system.py` |
+| **RuntimeEventBus** | 내부 운영 이벤트의 중앙 계측 버스. 공개 제어 계약과 분리 | emit / emit\_async / subscribe\_prefix | `core/hooks/system.py` |
 | **Event persistence spec** | 이벤트별 보존 클래스와 SQL, transcript 지속 여부를 선언하는 카탈로그 | 4 retention classes (high-volume/standard/audit/transient) | `core/hooks/catalog.py` |
 | **HookEventStore** | row, age, payload 캡이 있는 SQLite 이벤트 보존 | 7/30/180d retention, max 100k rows, 8KB payload | `core/observability/event_store.py` |
 | **HookPersistenceSink** | 각 dispatch를 spec에 따라 SQL과 transcript로 라우팅 | persist\_sql / mirror\_transcript flags | `core/observability/hook_persistence.py` |
@@ -5171,7 +5177,7 @@ status dict 반환 (절대 raise하지 않음) + 히스토리 append
 
 | 표면 | 내용 |
 | --- | --- |
-| `HookEvent.SELF_IMPROVING_AUTO_TRIGGER_*` | 발화 결과별 이벤트. `FIRED`, `LOCK_BUSY`, `INTERVAL_BLOCKED`, `RUNNER_ERROR`, `PARSE_ERROR`, `MAX_GENERATION_REACHED` (`core/hooks/system.py`) |
+| `RuntimeEvent.SELF_IMPROVING_AUTO_TRIGGER_*` | 발화 결과별 내부 이벤트. `FIRED`, `LOCK_BUSY`, `INTERVAL_BLOCKED`, `RUNNER_ERROR`, `PARSE_ERROR`, `MAX_GENERATION_REACHED` (`core/hooks/system.py`) |
 | `auto_trigger_history.jsonl` | 발화 기록 append-only 로그 (`~/.geode/autoresearch/handoff/`) |
 | `geode outer-bundle` | 발화 기록을 `mutations.jsonl`, `baseline.json`과 교차해 하나의 타임라인으로 보여 주는 뷰어 (`core/cli/outer_bundle.py`) |
 | `/schedule` | 등록된 트리거 목록에서 `self_improving_loop_auto_trigger`로 식별 |
@@ -5299,7 +5305,7 @@ Tier 2  latex2sympy2 + sympy.pretty  블록 전용. 분수·적분을 2D Unicode
 URL: https://mangowhoiscloud.github.io/geode/docs/reference/changelog
 Markdown: https://mangowhoiscloud.github.io/geode/docs/reference/changelog.md
 
-(body omitted from llms-full: 1477 KB — fetch the Markdown twin above for the complete page)
+(body omitted from llms-full: 1479 KB — fetch the Markdown twin above for the complete page)
 
 ---
 
@@ -5365,7 +5371,7 @@ Agent           core/agent/           AgenticLoop(while tool_use), sub_agent, sy
 Harness         core/cli/             thin CLI + commands/ + IPC 클라이언트
                 core/server/          serve 데몬. ipc_server(CLIPoller) + supervised(메신저 폴러)
                 core/messaging/       바인딩 기반 게이트웨이 라우팅
-                core/hooks/           라이프사이클 이벤트 (HookSystem)
+                core/hooks/           공개 훅, 신뢰 미들웨어, 런타임 이벤트
                 core/orchestration/   LaneQueue, TaskGraph, compaction, tool offload
                 core/scheduler/       cron/이벤트 트리거 + 예약 작업
                 core/wiring/          부트스트랩 주입 (container, bootstrap, scheduling)
@@ -5459,12 +5465,12 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 
 | 측정값 | 현재 트리 |
 | --- | --- |
-| 프로덕션 Python 파일 | 533 |
-| 테스트 Python 파일 | 675 |
+| 프로덕션 Python 파일 | 535 |
+| 테스트 Python 파일 | 678 |
 | 도구 정의 / 실행 등록 / 유효 스키마 | 78 / 81 / 78 |
-| HookEvent 멤버 | 56 |
+| RuntimeEvent 멤버 | 57 |
 | 기본 LLM 어댑터 | 8 |
-| 모듈 수준 ContextVar | 27 |
+| 모듈 수준 ContextVar | 28 |
 | core → plugins import 지점 / 파일 | 31 / 14 |
 | import-linter 예외 edge | 24 |
 
@@ -5501,7 +5507,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 | thin CLI | `core/cli/` | `__init__.py` (Typer app), `commands/`, `routing.py`, `dispatcher.py`, `ipc_client.py`, `onboarding.py` |
 | serve 데몬 | `core/server/` | `ipc_server/poller.py` (CLIPoller), `supervised/` (Slack Socket Mode, Discord/Telegram 폴러, webhook, services) |
 | 게이트웨이 | `core/messaging/` | `binding.py` (ChannelManager), `models.py`, `slack_formatter.py` |
-| 훅 | `core/hooks/` | `system.py` (HookSystem + HookEvent), `dispatch.py`, `discovery.py` |
+| 확장 표면 | `core/hooks/` | `public.py` (HookRegistry), `middleware.py` (MiddlewareRegistry), `system.py` (RuntimeEventBus) |
 | 오케스트레이션 | `core/orchestration/` | `lane_queue.py`, `task_system.py`, `compaction.py`, `tool_offload.py`, `isolated_execution.py` |
 | 스케줄러 | `core/scheduler/` | `service.py`, `triggers.py`, `nl_scheduler.py`, `jitter.py` |
 | 배선 | `core/wiring/` | `bootstrap.py`, `container.py`, `scheduling.py`, `startup.py` |
@@ -5601,7 +5607,7 @@ GEODE 런타임이 출하되는 에이전트의 동작을 안정시키는 방식
 | --- | --- | --- |
 | 해시 ratchet | 프롬프트 해시 핀 (`core/llm/prompts/__init__.py`의 `_PINNED_HASHES`) | CI 게이트. lint, type, test, security + 카운트 바닥 ratchet들 |
 | 계층 메모리 | 5-tier ContextAssembler (`core/memory/context.py`) | 다층 CLAUDE.md (프로젝트 + 사용자 메모리) |
-| 훅 | HookSystem 라이프사이클 이벤트 (`core/hooks/system.py`) | scaffold skills (트리거 키워드로 발화) |
+| 확장 표면 | HookRegistry / MiddlewareRegistry / RuntimeEventBus (`core/hooks/`) | scaffold skills (트리거 키워드로 발화) |
 | 선언적 가드레일 | RUNTIME CANNOT (GEODE.md) + 6계층 PolicyChain (`core/tools/policy.py`) | CANNOT/CAN 규칙 (CLAUDE.md) |
 | 루프 + 종료 경로 | while(tool\_use) + 라운드/시간/비용 가드 (`core/agent/loop/agent_loop.py`) | 8단계 워크플로우 (Board → GAP → Plan → Implement → Verify → Docs → PR → Rebuild) |
 | 선택과 되돌림 | margin 게이트의 promote/revert (`core/self_improving/gate.py`) | PR 게이트. CI 실패는 머지되지 않고, 머지된 것만 main에 남음 |

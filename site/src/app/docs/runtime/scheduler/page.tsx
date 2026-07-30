@@ -43,7 +43,7 @@ export default function Page() {
               cron 매칭은 <code>core/scheduler/triggers.py</code>의 최소
               구현 <code>CronParser</code>가 담당합니다. 5필드 형식이고 요일은
               cron 표준 관례(0=일요일)를 따릅니다. 트리거 타입은 manual,
-              scheduled(cron), event-driven(HookSystem 이벤트 구독) 셋입니다.
+              scheduled(cron), event-driven(RuntimeEventBus 구독) 셋입니다.
             </p>
 
             <h2>영속화</h2>
@@ -72,7 +72,7 @@ fire_at = nominal + jitter`}</pre>
               공유하는 다른 작업들은 시간상 분산됩니다. 발화된 작업의 액션
               프롬프트는 SCHEDULER 모드 세션(wall-clock 300초 상한, headless
               도구 차단)으로 실행되고, 트리거 시점에{" "}
-              <code>HookEvent.TRIGGER_FIRED</code>가 발화됩니다
+              <code>RuntimeEvent.TRIGGER_FIRED</code>가 발화됩니다
               (<code>core/scheduler/triggers.py</code>).
             </p>
 
@@ -162,7 +162,7 @@ fire_at = nominal + jitter`}</pre>
               Cron matching is the minimal <code>CronParser</code> in{" "}
               <code>core/scheduler/triggers.py</code>: five fields, weekday in
               the standard cron convention (0=Sunday). Trigger types are manual,
-              scheduled (cron), and event-driven (a HookSystem subscription).
+              scheduled (cron), and event-driven (a RuntimeEventBus subscription).
             </p>
 
             <h2>Persistence</h2>
@@ -191,7 +191,7 @@ fire_at = nominal + jitter`}</pre>
               sharing a nominal time spread out. A fired job&apos;s action
               prompt runs as a SCHEDULER-mode session (300-second wall-clock
               cap, headless tool denial), and{" "}
-              <code>HookEvent.TRIGGER_FIRED</code> fires at trigger time
+              <code>RuntimeEvent.TRIGGER_FIRED</code> fires at trigger time
               (<code>core/scheduler/triggers.py</code>).
             </p>
 

@@ -72,6 +72,21 @@ class TestSharedServicesCreateSession:
             assert loop._hooks is not None
             assert loop._hooks is services.hook_system
 
+    def test_public_and_middleware_registries_are_process_owned(
+        self, services: SharedServices
+    ) -> None:
+        executor_a, loop_a = services.create_session(SessionMode.REPL)
+        executor_b, loop_b = services.create_session(SessionMode.DAEMON)
+
+        assert executor_a.hook_registry is services.hook_registry
+        assert executor_b.hook_registry is services.hook_registry
+        assert loop_a._hook_registry is services.hook_registry
+        assert loop_b._hook_registry is services.hook_registry
+        assert executor_a.middleware_registry is services.middleware_registry
+        assert executor_b.middleware_registry is services.middleware_registry
+        assert loop_a._middleware_registry is services.middleware_registry
+        assert loop_b._middleware_registry is services.middleware_registry
+
     def test_mcp_shared_across_modes(self, services: SharedServices) -> None:
         """All modes receive the same MCP manager instance."""
         _, loop_repl = services.create_session(SessionMode.REPL)

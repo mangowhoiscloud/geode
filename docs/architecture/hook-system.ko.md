@@ -1,198 +1,204 @@
-# GEODE Hook System
+# GEODE Extension Surface
 
 > [English](hook-system.md) | **한국어**
 
-`core/hooks/`는 GEODE 런타임의 저장소 독립적인 이벤트 버스다. 56개
-`HookEvent` 호환 표면, 우선순위 핸들러, interceptor/feedback, 그리고
-post-dispatch sink를 제공한다. 영속성 정책은
-[`event-persistence.md`](event-persistence.md)에 별도로 정의한다.
-2026-07-14 택소노미 재설계(이벤트 축약·명명 정합·디스패치 단일화·emit
-계약)의 결정 기록은
-[`../plans/2026-07-14-hook-taxonomy-redesign.md`](../plans/2026-07-14-hook-taxonomy-redesign.md)다.
+GEODE는 extension 권한을 세 표면으로 분리한다. 사용자 계약은
+Hermes처럼 작게 유지하되, GEODE의 세밀한 운영 타임라인은 내부에 보존한다.
 
-## 핵심 계약
-
-1. 핸들러는 낮은 priority부터 순차 실행한다.
-2. 한 핸들러의 예외는 이후 핸들러를 중단하지 않는다.
-3. observer/feedback 핸들러는 각각 top-level payload 복사본을 받는다.
-4. interceptor의 `modify`만 다음 핸들러의 입력에 명시적으로 반영된다.
-5. 한 trigger 호출은 완료 후 sink마다 정확히 한 `HookDispatch`를 보낸다.
-6. 이름 충돌은 묵시적으로 덮어쓰지 않는다. 의도적 교체는
-   `replace=True`가 필요하다.
-7. `HookSystem.close()`는 등록·전역 바인딩·sink를 결정적으로 해제하며
-   여러 번 호출해도 안전하다. SQLite 연결은 각 저장 연산이 반환되기
-   전에 닫힌다.
-
-## 명명 규약과 legacy alias
-
-- 모든 `HookEvent` 멤버는 `NAME == VALUE.upper()`를 만족하고, 새 이벤트
-  이름은 과거분사형(`*_STARTED` / `*_ENDED` / `*_COMPLETED`)을 쓴다.
-  `tests/core/hooks/test_hook_taxonomy.py`가 고정한다.
-- 종료 상태만 다르던 이벤트 가족은 payload 판별자를 가진 하나의
-  이벤트로 축약했다: `SELF_IMPROVING_AUTO_TRIGGER`
-  (`stage=fired|lock_busy|interval_blocked|runner_error|parse_error|max_generation_reached`),
-  `RULE_CHANGED`(`action=created|updated|deleted`).
-- `TOOL_APPROVAL_GRANTED/DENIED`는 삭제했다(핸들러 0, 저장 0).
-  granted/denied 상태는 `APPROVAL_TRANSITION`이 담는다.
-- 값 정합 이전에 저장된 이벤트 문자열은
-  `core.hooks.system.LEGACY_EVENT_VALUES`(구값→신값, 8종:
-  `session_start`, `session_end`, `turn_complete`, `llm_call_start`,
-  `llm_call_end`, `llm_call_retry`, `tool_exec_start`, `tool_exec_end`)로
-  해석한다. `resolve_event_value()`, filesystem hook discovery,
-  `HookEventStore.read(event_filter=...)` 확장이 적용 지점이라 legacy
-  SQLite 행과 `.geode/hooks/` manifest가 그대로 동작한다.
-  dialogue transcript 레일(`SessionTranscript`의
-  `session_start`/`session_end` 마커)은 별개 어휘라 영향이 없다.
-
-## Emit 경로와 payload 계약
-
-`core/hooks/dispatch.py`가 유일한 emit 구현이다: `fire_hook`,
-`fire_hook_async`, `fire_interceptor_async`, `fire_with_result_async`.
-모든 발화 사이트(approval workflow, tool-call processor, MCP manager,
-LLM router, memory tools, self-improving loop, CLI, isolated execution,
-seed-generation orchestrator)가 `if hooks is None / try / except` 레일을
-재구현하는 대신 여기에 위임한다. 헬퍼가 더하는 것:
-
-- graceful degradation — 디스패치 실패는 이벤트당 1회 WARNING(이후
-  DEBUG)으로 기록하고 절대 호출부를 깨지 않는다.
-- payload 계약 검증 — `core.hooks.catalog.REQUIRED_PAYLOAD_KEYS`가
-  등록된 bootstrap 핸들러가 실제로 요구하는 키를 이벤트별로 정의한다
-  (`SESSION_ENDED`, `SUBAGENT_STARTED`, `SUBAGENT_COMPLETED`,
-  `TOOL_EXEC_ENDED`). 키 누락은 이벤트·키·발화 caller를 담은 WARNING으로
-  기록하며 절대 raise하지 않는다. `LLM_CALL_ENDED`는 의도적으로 맵에
-  없다: one-off LLM router 경로에는 session/usage 컨텍스트가 원래 없고,
-  핸들러의 empty-payload early return이 설계된 필터링이다(catalog 주석
-  참조).
-
-`PROGRAM_MD_UNREADABLE`은 평범한 notify 이벤트다: runner는 관측을 위해
-발화한 뒤 fail-loud한다. 핸들러가 대체 `program.md` 본문을 반환하던
-`trigger_with_result` override 계약은 제거했다 — 등록된 핸들러가 어디에도
-없었다. `trigger_with_result(_async)` 메서드 자체는 실사용 feedback
-소비자(`CONTEXT_OVERFLOW_ACTION`, `TOOL_RESULT_TRANSFORM`) 때문에
-유지한다.
-
-## 디스패치 구조
-
-```text
-event source
-  -> exact + prefix handler resolve
-  -> priority sort / name dedup
-  -> handler chain
-  -> HookDispatch(final data, results, block state, timing)
-  -> post-dispatch sinks (once each)
-       -> HookPersistenceSink
-            -> sessions.db:hook_events
-            -> active run transcript (선별 mirror)
-```
-
-`HookSystem` 자체는 `core.observability`를 import하지 않는다. 생산
-부트스트랩이 `HookPersistenceSink`를 등록하므로 단위 테스트나 임베디드
-사용자는 원하는 sink를 선택할 수 있다.
-
-## 트리거 모드
-
-| 의미 | 동기 API | 비동기 API | 반환 |
+| 표면 | canonical API | 권한 | 대상 |
 |---|---|---|---|
-| Observe | `trigger()` | `trigger_async()` | `list[HookResult]` |
-| Feedback | `trigger_with_result()` | `trigger_with_result_async()` | handler 반환 dict를 담은 결과 |
-| Interceptor | `trigger_interceptor()` | `trigger_interceptor_async()` | `InterceptResult` |
+| 공개 hook | `HookName`, `HookRegistry` | 안정된 13개 checkpoint의 제한된 결정 | 사용자·plugin |
+| trusted middleware | `MiddlewareRegistry` | 요청 변형과 실제 실행 wrapping | 신뢰된 in-process extension |
+| runtime event | `RuntimeEvent`, `RuntimeEventBus` | 관측·감사·영속화 전용 | 런타임·운영자 |
 
-Interceptor 반환 규약:
+compaction, approval, sub-agent 실행, verification은 상태 전이를 소유하는
+domain service다. checkpoint를 노출하지만 네 번째 extension 표면은 아니다.
+
+설계 기록과 실측 마이그레이션 맵은
+[`../plans/2026-07-30-hook-taxonomy-fold.md`](../plans/2026-07-30-hook-taxonomy-fold.md),
+영속성 정책은 [`event-persistence.md`](event-persistence.md)에 있다.
+
+## 공개 hook
+
+`HookRegistry`는 아래 `HookName`만 받으며 wildcard 등록을 제공하지 않는다.
+handler는 priority 순서로 실행되고 rewrite는 앞 결과를 다음 입력으로
+합성한다. block/deny가 나오면 chain을 멈춘다.
+
+| Hook | 경계 | 허용 결정 |
+|---|---|---|
+| `UserPromptSubmit` | user input admission 전 | continue, rewrite, block |
+| `PreToolUse` | `tool_request` 후, policy/approval 전 | continue, rewrite, block, request permission |
+| `PermissionRequest` | 실제 사람에게 묻기 직전 | allow, deny, ask |
+| `PostToolUse` | 결과 생성 후 model context 반영 전 | continue, add context, block |
+| `PreCompact` | runtime-owned compaction 직전 | continue, rewrite, soft defer |
+| `PostCompact` | compacted state commit 후 | continue |
+| `SessionStart` | durable create/resume 성공 후 | continue |
+| `SessionEnd` | durable terminal state 성공 후 | continue |
+| `SubagentStart` | child identity·격리 확정 후 | continue |
+| `SubagentStop` | terminal child result 확정 후 | continue |
+| `PreVerify` | built-in verifier 전 | continue, strengthen |
+| `PostVerify` | immutable verifier 결과 후 | accept, revise, escalate |
+| `Stop` | 최종 전달 직전 | finalize, bounded continue |
+
+모든 호출은 버전이 고정된 `geode.public-hook.v1` envelope를 쓴다.
 
 ```python
-{"block": True, "reason": "policy"}
-{"modify": {"tool_input": {"path": "safe.txt"}}}
-None
+from core.hooks import HookName, HookRegistry, public_hook_schema
+
+hooks = HookRegistry()
+schema = public_hook_schema(HookName.POST_VERIFY)
 ```
 
-도구 결과 변경은 `TOOL_RESULT_TRANSFORM` 한 단계가 소유한다.
-`transformed_result`, 이전 호환 키인 `updated_result`,
-`additional_context`를 처리한 뒤 최종 `TOOL_EXEC_ENDED`가 발생한다.
-`TOOL_EXEC_FAILED`는 외부 핸들러 호환 신호이며 영속성에서는
-`TOOL_EXEC_ENDED(has_error=True)`와 중복 저장하지 않는다.
+입력은 JSON-safe, secret-redacted, 깊이·크기 제한을 거치며 hook별 JSON
+Schema로 최초 입력과 rewrite 후 입력을 모두 검증한다. raw provider request,
+인증 정보, personal tool argument, screenshot, base64, 무제한 tool output은
+공개 payload에 넣지 않는다.
 
-## 등록과 해제
+### Verification과 외부 loop
 
-```python
-subscription = hooks.register(
-    HookEvent.SESSION_ENDED,
-    on_session_end,
-    name="session_index",
-    priority=60,
-)
-
-subscription.cancel()  # idempotent
-```
-
-- `register_prefix("SUBAGENT", ...)`는 `SUBAGENT_*`를 구독한다.
-- `register_prefix("*", ...)`는 모든 이벤트를 구독한다.
-- 같은 이름이 겹치는 exact/prefix 범위에서 서로 다른 핸들러를 가리키면
-  `DuplicateHookRegistrationError`가 발생한다.
-- tool matcher 정규식은 등록 시 compile된다. 잘못된 정규식은 fail-open이
-  아니라 즉시 `ValueError`다.
-- matcher가 있는 핸들러는 `tool_name`이 없는 payload에 실행되지 않는다.
-
-## Timeout
-
-동기 Python 함수를 안전하게 강제 중단할 방법은 없다. 따라서
-`timeout_s > 0`인 동기 interceptor는 실행하지 않고
-`HookTimeoutUnsupportedError`를 `HookResult` 실패로 기록한다. 이전
-ThreadPoolExecutor 방식처럼 timeout 이후에도 버려진 thread가 살아남지 않는다.
-
-비동기 핸들러는 `asyncio.wait_for`로 취소되며
-`HookExecutionTimeoutError`로 분류된다.
-
-## 생산 영속성
-
-`build_hooks()`는 wildcard 기록 핸들러 대신 post-dispatch sink 하나를
-등록한다.
-
-- 쿼리·필터·보존 정책이 필요한 운영 이벤트: `sessions.db:hook_events`
-- 활성 autoresearch 실행의 portable timeline: `transcript.jsonl`
-- 호환 중복 이벤트: 핸들러에는 전달, SQL/transcript에는 미기록
-- raw `user_input`, prompt, tool input/result, cognitive snapshot, 인증 헤더:
-  미기록
-- payload: 깊이/문자열/collection/전체 bytes 제한 및 secret redaction
-- retention: high-volume 7일, standard 30일, audit 180일, 전체 100,000행
-
-최근 실행 컨텍스트도 더 이상 `runs/*.jsonl`을 scan하지 않고
-`hook_events`의 `SESSION_ENDED`를 조회한다.
-
-## 도구 라이프사이클
-
-모든 허용된 도구 시도는 다음 pair를 완결한다.
+finalization은 하나의 state machine이다.
 
 ```text
-TOOL_EXEC_STARTED (interceptor)
-  -> blocked | execute | adaptive recovery
-  -> TOOL_RESULT_TRANSFORM (feedback, transient)
-  -> TOOL_EXEC_ENDED (canonical terminal)
-  -> TOOL_EXEC_FAILED (error compatibility signal only)
+candidate -> PreVerify -> built-in verifier -> PostVerify -> Stop -> persist/deliver
+                                                |             |
+                                                +-- revise ---+
 ```
 
-차단, 복구, executor 예외도 terminal event를 건너뛰지 않는다. 최종
-`has_error`는 transformation과 clarification guard가 끝난 뒤 계산한다.
+`PreVerify`는 검증 요구를 추가만 할 수 있다. `PostVerify`는 immutable한
+built-in 결과를 받아 pass 수용·증거 강화, 명시적 지시가 있는 bounded
+revision, 외부 판단 escalation을 선택한다.
 
-## 플러그인
+hook은 built-in 실패를 성공으로 뒤집을 수 없다. revision 횟수는 고정되어
+있고 이미 끝난 tool side effect를 재생하지 않은 채 follow-up turn을 시작한다.
+따라서 evaluator, CI, human-review 같은 외부 loop가 `PostVerify`를 안전하게
+사용하면서도 GEODE verifier의 단조 권위를 보존한다. escalation은 telemetry
+표식이 아니라 delivery gate다. GEODE는 세션을
+`external_verification_required`로 pause하고 후보를
+`AgenticResult.pending_text`로 외부 소유자에게만 돌려주며 최종
+transcript/checkpoint 경로에는 쓰지 않는다. `Stop`은 더 좁다. verification
+policy를 통과한 뒤 최종 전달과 한 번의 bounded continuation만 결정한다.
 
-외부 플러그인은 `.geode/hooks/<name>/hook.py` 또는 `hook.yaml`에서만
-자동 발견한다. `core/hooks/plugins/`의 built-in은 부트스트랩에서 명시적으로
-한 번 등록한다. 이 구분으로 notification 같은 built-in이 explicit wiring과
-filesystem discovery 양쪽에서 두 번 등록되는 문제를 막는다.
+## Trusted middleware
 
-동적 모듈 로더는 임시 `sys.modules` 항목을 load 후 복원해 반복 reload 시
-module 객체를 누수하지 않는다.
+`MiddlewareRegistry` 하나에 네 typed registration method만 둔다.
+`MiddlewareKind`, `MiddlewarePoint`, 별도 pipeline 객체는 없다.
 
-## 수명주기
+```python
+registry.register_tool_request(tool_request_middleware)
+registry.register_tool_execution(tool_execution_middleware)
+registry.register_llm_request(llm_request_middleware)
+registry.register_llm_execution(llm_execution_middleware)
+```
 
-`HookSystem.close()`는 다음 순서로 동작한다.
+request middleware는 immutable snapshot을 N→N+1로 변형한다. execution
+middleware는 승인된 executor/provider 호출을 감싸는 async onion이다.
+`next_call`은 한 번만 호출할 수 있고, 호출하지 않으면 명시적
+short-circuit다. downstream exception과 cancellation의 identity는 보존한다.
 
-1. 새 등록을 차단하고 handler/prefix 참조를 제거한다.
-2. 역순 cleanup callback으로 router/MCP/tool ContextVar와 보조 SQLite
-   store를 해제한다. owner cleanup은 약한 참조를 사용해 자기 참조
-   cycle을 만들지 않는다.
-3. 역순 sink close로 `HookEventStore`를 비활성화한다. DB/WAL/SHM
-   descriptor는 이미 각 저장 연산이 끝날 때 닫힌 상태다.
+도구 경로:
 
-Runtime, serve, worker, 일회성 memory-lifecycle command는 각자 소유한
-HookSystem을 종료해야 한다.
+```text
+tool_request transform
+  -> schema validation
+  -> PreToolUse
+  -> schema revalidation
+  -> hard policy
+  -> PermissionRequest / approval
+  -> tool_execution onion
+  -> TOOL_EXEC_STARTED
+  -> executor exactly once
+  -> TOOL_EXEC_ENDED
+  -> PostToolUse
+```
+
+execution middleware는 이미 승인된 tool name/arguments를 바꿀 수 없다.
+personal-data 분류는 request rewrite를 가로질러 단조적으로 유지되므로
+rename으로 consent나 retention policy를 낮출 수 없다. short-circuit는
+`TOOL_EXEC_STARTED`를 발화하지 않는다.
+
+LLM 경로:
+
+```text
+assembled AdapterCallRequest
+  -> llm_request transform
+  -> llm_execution onion
+  -> LLMAdapter.acomplete()
+```
+
+main loop, reflection, candidate sampling, API mutation을 포함한다.
+cache-sensitive한 prompt/messages/tools 변경은 등록 capability와 명시적인
+cache-invalidation reason을 모두 요구한다.
+
+## Runtime event
+
+관측의 canonical API는 `RuntimeEventBus.subscribe()`와 `emit()`이다.
+기존 stored value 56개는 그대로 두고, 확장 호출 감사용
+`EXTENSION_INVOKED` 하나만 추가해 내부 어휘는 57개다. 이 이벤트는
+`surface`, checkpoint, extension, status, duration, correlation 같은 제한된
+귀속 정보만 기록하며 request/response 본문은 기록하지 않는다.
+
+마이그레이션 동안 `HookEvent = RuntimeEvent`,
+`HookSystem = RuntimeEventBus` runtime identity alias를 유지한다.
+legacy feedback/interceptor method도 source compatibility를 위해 남지만
+production control path는 더 이상 호출하지 않는다. 새 제어는 공개 hook,
+trusted middleware, 또는 상태를 소유한 domain service에 둔다.
+
+내부 `SESSION_STARTED/ENDED`의 과거 행 의미는 old reader를 위해 유지한다.
+공개 `SessionStart/End`는 durable session lifetime이며 매 turn 경계를
+그대로 projection한 것이 아니다.
+
+## Telemetry와 lifecycle 경계
+
+event bus는 저장소를 모른다. production wiring이
+`HookPersistenceSink` 하나를 등록한다.
+
+```text
+RuntimeEventBus
+  -> HookPersistenceSink
+       -> sessions.db:hook_events       canonical 운영 이력
+       -> active run transcript.jsonl   조건부 portable projection
+```
+
+- SQLite가 canonical indexed history이며 transcript 존재에 의존하지 않는다.
+- JSONL은 active `RunTranscript`가 bind된 동안만 쓴다.
+- `EXTENSION_INVOKED`는 audit retention bucket을 쓴다.
+- compatibility duplicate는 legacy subscriber에는 전달하지만 두 번 저장하지 않는다.
+- raw prompt, personal data, tool body/result, cognitive snapshot, 인증 정보는
+  제외하거나 제한된 metadata로 줄인다.
+- telemetry sink 실패는 hook, middleware, lifecycle의 정합성을 바꾸지 않는다.
+
+`SessionStart`는 최초/resume checkpoint 성공 후에만 발화한다.
+`SessionEnd`는 completed/error terminal state가 durable해진 뒤에만 발화한다.
+paused turn은 session을 끝내지 않는다. `PostCompact`도 compacted state
+영속화가 성공한 뒤에만 발화한다.
+
+## 마이그레이션 맵
+
+| legacy/control 형태 | canonical owner | 호환 |
+|---|---|---|
+| `HookEvent` | `RuntimeEvent` | alias, stored value 무변경 |
+| `HookSystem` | `RuntimeEventBus` | alias, sink/subscriber 무변경 |
+| observer `register` / `trigger*` | `subscribe` / `emit*` | legacy method 유지 |
+| `USER_INPUT_RECEIVED` interception | `UserPromptSubmit` | 내부 event는 observation |
+| `TOOL_EXEC_STARTED` interception | `PreToolUse` + 실제 start event | start는 approval 뒤로 이동 |
+| `TOOL_RESULT_TRANSFORM` feedback | `PostToolUse` | legacy event는 non-canonical |
+| `CONTEXT_OVERFLOW_ACTION` feedback | compaction policy + Pre/PostCompact | hard invariant는 domain service 소유 |
+| approval control event | `PermissionRequest` + approval transition | 기존 audit value 계속 읽음 |
+| sub-agent event 3종 | `SubagentStart/Stop` projection | 내부 outcome 유지 |
+| verify pass/fail event | `PreVerify`/`PostVerify` + 내부 outcome | stored outcome 유지 |
+| executor/provider wrapping 누락 | tool/LLM execution middleware | event alias 없음 |
+
+canonical name은 `HookName`, `HookRegistry`, `MiddlewareRegistry`,
+`RuntimeEvent`, `RuntimeEventBus`와 네 role-specific middleware protocol에서
+끝난다. service locator나 네 번째 extension plane은 만들지 않는다.
+
+## 등록과 종료
+
+공개 hook과 middleware 등록 이름은 묵시적으로 교체되지 않는다.
+process-owned registry pair를 main loop, tool executor, approval workflow,
+context manager, sub-agent manager에 주입한다. runtime, serve, worker는
+process마다 한 pair를 공유한다.
+
+`RuntimeEventBus.close()`는 새 등록을 막고 subscriber를 비운 뒤 cleanup과
+sink를 역순으로 닫는다. SQLite 연결은 각 연산 후 닫히며 close는
+idempotent하다.

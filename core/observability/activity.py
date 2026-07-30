@@ -14,17 +14,17 @@ Structure (PR-OBS-CONTRACT, 2026-06-13 — full coverage):
   - 4 lifecycle detail mixins (started / completed / failed / retried)
   - 19 lifecycle concrete classes (A=6 started, B=7 completed, C=5 failed,
     D=1 retried) with discriminator on ``action``
-  - 37 K-group concrete classes covering every remaining HookEvent, each
+  - 38 K-group concrete classes covering every remaining HookEvent, each
     with a typed ``details`` sub-schema (collapsed families carry their
     discriminator in details: ``RuleChangeDetails.action``,
     ``AutoTriggerDetails.stage``)
   - ``GenericActivityRow`` is now ONLY a fail-soft fallback (a typed
     builder that hits a malformed payload), never a routine destination —
-    every one of the 65 events has a concrete typed row.
+    every current event has a concrete typed row.
 
 Construction is centralized in ``activity_registry.py``: 19 lifecycle
 curry-builders + a single declarative ``_TYPED_ROW_SPECS`` table that drives
-all 45 K-group rows through one ``_build_from_spec`` builder.
+all K-group rows through one ``_build_from_spec`` builder.
 """
 
 from __future__ import annotations
@@ -61,6 +61,8 @@ __all__ = [
     "CostWarningRow",
     "ExecutionCancelledDetails",
     "ExecutionCancelledRow",
+    "ExtensionInvokedDetails",
+    "ExtensionInvokedRow",
     "GenericActivityRow",
     "HandoffTriggeredRow",
     "LLMCallEndedRow",
@@ -139,7 +141,7 @@ __all__ = [
 class ActivityRowBase(BaseModel):
     """paperclip ``PluginEvent`` envelope equivalent + GEODE run metadata.
 
-    Every mapped HookEvent produces one of 56 concrete subclasses or a
+    Every mapped HookEvent produces a concrete subclass or a
     :class:`GenericActivityRow` fail-soft fallback. ``HookPersistenceSink``
     uses this envelope as its projection; the catalog excludes compatibility
     duplicates before SQL or active-run transcript persistence.
@@ -534,7 +536,7 @@ class PostAnalysisDetails(BaseModel):
 
 
 class ProgramMdUnreadableDetails(BaseModel):
-    """PROGRAM_MD_UNREADABLE — feedback hook (trigger_with_result)."""
+    """PROGRAM_MD_UNREADABLE — fail-loud packaging telemetry."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -589,6 +591,26 @@ class ShutdownStartedDetails(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     active_sessions: int = 0
+
+
+class ExtensionInvokedDetails(BaseModel):
+    """EXTENSION_INVOKED — bounded audit metadata for one extension call.
+
+    Handler-provided reasons and request/response bodies are intentionally
+    absent. The runtime event remains useful for operational attribution
+    without turning the activity timeline into a content store.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    surface: str
+    name: str
+    extension: str
+    status: str
+    duration_ms: float = 0.0
+    turn_id: str = ""
+    session_generation: int = 0
+    verify_attempt: int = 0
 
 
 class ToolApprovalDetails(BaseModel):
@@ -889,6 +911,12 @@ class ShutdownStartedRow(ActivityRowBase):
     details: ShutdownStartedDetails
 
 
+class ExtensionInvokedRow(ActivityRowBase):
+    action: Literal["extension.invoked"] = "extension.invoked"
+    entity_type: Literal["extension"] = "extension"
+    details: ExtensionInvokedDetails
+
+
 class ToolApprovalRequestedRow(ActivityRowBase):
     action: Literal["tool.approval.requested"] = "tool.approval.requested"
     entity_type: Literal["tool_approval"] = "tool_approval"
@@ -968,7 +996,7 @@ TypedActivityRow = Annotated[
         TurnVerifyFailedRow,
         # D
         LLMCallRetriedRow,
-        # K (PR-OBS-CONTRACT — 37 formerly-generic events)
+        # K (PR-OBS-CONTRACT — declarative typed events)
         AdapterDispatchAttemptRow,
         BaselinePromotedRow,
         CognitivePerceiveRow,
@@ -998,6 +1026,7 @@ TypedActivityRow = Annotated[
         MutationRevertedRow,
         AutoTriggerRow,
         ShutdownStartedRow,
+        ExtensionInvokedRow,
         ToolApprovalRequestedRow,
         ApprovalTransitionRow,
         ToolResultOffloadedRow,

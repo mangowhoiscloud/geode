@@ -127,7 +127,7 @@ def _coordinator_metrics(root: Path) -> dict[str, dict[str, int | str]]:
 
 def _hook_events(root: Path) -> dict[str, Any]:
     path = root / "core/hooks/system.py"
-    node = _class_node(path, "HookEvent")
+    node = _class_node(path, "RuntimeEvent")
     members: list[str] = []
     for child in node.body:
         if isinstance(child, ast.Assign):
@@ -521,7 +521,7 @@ def render_agents_block(baseline: dict[str, Any]) -> str:
             f"The current snapshot records {_number(production_files)} production Python files,",
             f"{_number(packages['tests']['python_files'])} test Python files,",
             f"{_number(tools['definition_count'])} tool definitions, and",
-            f"{_number(baseline['hook_events']['count'])} `HookEvent` members.",
+            f"{_number(baseline['hook_events']['count'])} `RuntimeEvent` members.",
             AGENTS_END,
         )
     )
@@ -564,7 +564,7 @@ def render_roadmap_block(baseline: dict[str, Any]) -> str:
                 f"{_number(tools['execution_registration_count'])} / "
                 f"{_number(tools['schema_count'])} ({parity}) |"
             ),
-            f"| `HookEvent` members | {_number(baseline['hook_events']['count'])} |",
+            f"| `RuntimeEvent` members | {_number(baseline['hook_events']['count'])} |",
             f"| Built-in LLM adapters | {_number(baseline['built_in_adapters']['count'])} |",
             (
                 "| Module-level `ContextVar` declarations under `core/` | "

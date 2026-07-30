@@ -201,7 +201,11 @@ class TestWriteToolSpinner:
 
         handler = MagicMock(return_value={"saved": True})
         executor = ToolExecutor(action_handlers={"memory_save": handler})
-        _run_executor(executor, "memory_save", {"content": "test data"})
+        _run_executor(
+            executor,
+            "memory_save",
+            {"key": "test", "content": "test data"},
+        )
 
         mock_spinner.assert_called_once()
         label = mock_spinner.call_args[0][0]
@@ -219,7 +223,11 @@ class TestWriteToolSpinner:
 
         handler = MagicMock(return_value={"saved": True})
         executor = ToolExecutor(action_handlers={"memory_save": handler})
-        result = _run_executor(executor, "memory_save", {"content": "test data"})
+        result = _run_executor(
+            executor,
+            "memory_save",
+            {"key": "test", "content": "test data"},
+        )
 
         mock_spinner.assert_not_called()
         assert result.get("denied") is True

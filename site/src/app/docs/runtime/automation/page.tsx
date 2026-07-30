@@ -76,7 +76,7 @@ status dict 반환 (절대 raise하지 않음) + 히스토리 append`}</pre>
                 <tr><th>표면</th><th>내용</th></tr>
               </thead>
               <tbody>
-                <tr><td><code>HookEvent.SELF_IMPROVING_AUTO_TRIGGER_*</code></td><td>발화 결과별 이벤트. <code>FIRED</code>, <code>LOCK_BUSY</code>, <code>INTERVAL_BLOCKED</code>, <code>RUNNER_ERROR</code>, <code>PARSE_ERROR</code>, <code>MAX_GENERATION_REACHED</code> (<code>core/hooks/system.py</code>)</td></tr>
+                <tr><td><code>RuntimeEvent.SELF_IMPROVING_AUTO_TRIGGER_*</code></td><td>발화 결과별 내부 이벤트. <code>FIRED</code>, <code>LOCK_BUSY</code>, <code>INTERVAL_BLOCKED</code>, <code>RUNNER_ERROR</code>, <code>PARSE_ERROR</code>, <code>MAX_GENERATION_REACHED</code> (<code>core/hooks/system.py</code>)</td></tr>
                 <tr><td><code>auto_trigger_history.jsonl</code></td><td>발화 기록 append-only 로그 (<code>~/.geode/autoresearch/handoff/</code>)</td></tr>
                 <tr><td><code>geode outer-bundle</code></td><td>발화 기록을 <code>mutations.jsonl</code>, <code>baseline.json</code>과 교차해 하나의 타임라인으로 보여 주는 뷰어 (<code>core/cli/outer_bundle.py</code>)</td></tr>
                 <tr><td><code>/schedule</code></td><td>등록된 트리거 목록에서 <code>self_improving_loop_auto_trigger</code>로 식별</td></tr>
@@ -169,7 +169,7 @@ returns a status dict (never raises) + appends history`}</pre>
                 <tr><th>Surface</th><th>What it shows</th></tr>
               </thead>
               <tbody>
-                <tr><td><code>HookEvent.SELF_IMPROVING_AUTO_TRIGGER_*</code></td><td>One event per outcome: <code>FIRED</code>, <code>LOCK_BUSY</code>, <code>INTERVAL_BLOCKED</code>, <code>RUNNER_ERROR</code>, <code>PARSE_ERROR</code>, <code>MAX_GENERATION_REACHED</code> (<code>core/hooks/system.py</code>)</td></tr>
+                <tr><td><code>RuntimeEvent.SELF_IMPROVING_AUTO_TRIGGER_*</code></td><td>One internal event per outcome: <code>FIRED</code>, <code>LOCK_BUSY</code>, <code>INTERVAL_BLOCKED</code>, <code>RUNNER_ERROR</code>, <code>PARSE_ERROR</code>, <code>MAX_GENERATION_REACHED</code> (<code>core/hooks/system.py</code>)</td></tr>
                 <tr><td><code>auto_trigger_history.jsonl</code></td><td>Append-only firing log under <code>~/.geode/autoresearch/handoff/</code></td></tr>
                 <tr><td><code>geode outer-bundle</code></td><td>Crosswalks the firing log with <code>mutations.jsonl</code> and <code>baseline.json</code> into one timeline (<code>core/cli/outer_bundle.py</code>)</td></tr>
                 <tr><td><code>/schedule</code></td><td>The trigger appears as <code>self_improving_loop_auto_trigger</code> in the registered list</td></tr>

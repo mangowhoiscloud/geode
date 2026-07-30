@@ -317,9 +317,11 @@ def test_agentic_loop_arun_binds_contextvars() -> None:
     from core.agent.loop.agent_loop import AgenticLoop
 
     arun_src = inspect.getsource(AgenticLoop.arun)
+    open_src = inspect.getsource(AgenticLoop._open_turn)
     helper_src = inspect.getsource(AgenticLoop._emit_session_start_signals)
-    # arun must AT LEAST call the helper that owns the bind.
-    assert "_emit_session_start_signals" in arun_src
+    # arun must AT LEAST call the phase that calls the helper owning the bind.
+    assert "_open_turn" in arun_src
+    assert "_emit_session_start_signals" in open_src
     # And the helper must do the bind (so the parity claim holds
     # transitively).
     assert "set_cognitive_state(self.cognitive_state)" in helper_src

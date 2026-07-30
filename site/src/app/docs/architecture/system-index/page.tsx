@@ -21,7 +21,7 @@ function ArchitectureBaselineTable({ locale }: { locale: "ko" | "en" }) {
             "도구 정의 / 실행 등록 / 유효 스키마",
             `${architectureBaseline.tools.definition_count} / ${architectureBaseline.tools.execution_registration_count} / ${architectureBaseline.tools.schema_count}`,
           ],
-          ["HookEvent 멤버", number.format(architectureBaseline.hook_events.count)],
+          ["RuntimeEvent 멤버", number.format(architectureBaseline.hook_events.count)],
           ["기본 LLM 어댑터", number.format(architectureBaseline.built_in_adapters.count)],
           ["모듈 수준 ContextVar", number.format(architectureBaseline.context_vars.count)],
           [
@@ -43,7 +43,7 @@ function ArchitectureBaselineTable({ locale }: { locale: "ko" | "en" }) {
             "Tool definitions / execution bindings / valid schemas",
             `${architectureBaseline.tools.definition_count} / ${architectureBaseline.tools.execution_registration_count} / ${architectureBaseline.tools.schema_count}`,
           ],
-          ["HookEvent members", number.format(architectureBaseline.hook_events.count)],
+          ["RuntimeEvent members", number.format(architectureBaseline.hook_events.count)],
           ["Built-in LLM adapters", number.format(architectureBaseline.built_in_adapters.count)],
           ["Module-level ContextVars", number.format(architectureBaseline.context_vars.count)],
           [
@@ -146,7 +146,7 @@ export default function Page() {
                 <tr><td>thin CLI</td><td><code>core/cli/</code></td><td><code>__init__.py</code> (Typer app), <code>commands/</code>, <code>routing.py</code>, <code>dispatcher.py</code>, <code>ipc_client.py</code>, <code>onboarding.py</code></td></tr>
                 <tr><td>serve 데몬</td><td><code>core/server/</code></td><td><code>ipc_server/poller.py</code> (CLIPoller), <code>supervised/</code> (Slack Socket Mode, Discord/Telegram 폴러, webhook, services)</td></tr>
                 <tr><td>게이트웨이</td><td><code>core/messaging/</code></td><td><code>binding.py</code> (ChannelManager), <code>models.py</code>, <code>slack_formatter.py</code></td></tr>
-                <tr><td>훅</td><td><code>core/hooks/</code></td><td><code>system.py</code> (HookSystem + HookEvent), <code>dispatch.py</code>, <code>discovery.py</code></td></tr>
+                <tr><td>확장 표면</td><td><code>core/hooks/</code></td><td><code>public.py</code> (HookRegistry), <code>middleware.py</code> (MiddlewareRegistry), <code>system.py</code> (RuntimeEventBus)</td></tr>
                 <tr><td>오케스트레이션</td><td><code>core/orchestration/</code></td><td><code>lane_queue.py</code>, <code>task_system.py</code>, <code>compaction.py</code>, <code>tool_offload.py</code>, <code>isolated_execution.py</code></td></tr>
                 <tr><td>스케줄러</td><td><code>core/scheduler/</code></td><td><code>service.py</code>, <code>triggers.py</code>, <code>nl_scheduler.py</code>, <code>jitter.py</code></td></tr>
                 <tr><td>배선</td><td><code>core/wiring/</code></td><td><code>bootstrap.py</code>, <code>container.py</code>, <code>scheduling.py</code>, <code>startup.py</code></td></tr>
@@ -241,7 +241,7 @@ export default function Page() {
                 <tr><td>Thin CLI</td><td><code>core/cli/</code></td><td><code>__init__.py</code> (Typer app), <code>commands/</code>, <code>routing.py</code>, <code>dispatcher.py</code>, <code>ipc_client.py</code>, <code>onboarding.py</code></td></tr>
                 <tr><td>Serve daemon</td><td><code>core/server/</code></td><td><code>ipc_server/poller.py</code> (CLIPoller), <code>supervised/</code> (Slack Socket Mode, Discord/Telegram pollers, webhook, services)</td></tr>
                 <tr><td>Gateway</td><td><code>core/messaging/</code></td><td><code>binding.py</code> (ChannelManager), <code>models.py</code>, <code>slack_formatter.py</code></td></tr>
-                <tr><td>Hooks</td><td><code>core/hooks/</code></td><td><code>system.py</code> (HookSystem + HookEvent), <code>dispatch.py</code>, <code>discovery.py</code></td></tr>
+                <tr><td>Extension surfaces</td><td><code>core/hooks/</code></td><td><code>public.py</code> (HookRegistry), <code>middleware.py</code> (MiddlewareRegistry), <code>system.py</code> (RuntimeEventBus)</td></tr>
                 <tr><td>Orchestration</td><td><code>core/orchestration/</code></td><td><code>lane_queue.py</code>, <code>task_system.py</code>, <code>compaction.py</code>, <code>tool_offload.py</code>, <code>isolated_execution.py</code></td></tr>
                 <tr><td>Scheduler</td><td><code>core/scheduler/</code></td><td><code>service.py</code>, <code>triggers.py</code>, <code>nl_scheduler.py</code>, <code>jitter.py</code></td></tr>
                 <tr><td>Wiring</td><td><code>core/wiring/</code></td><td><code>bootstrap.py</code>, <code>container.py</code>, <code>scheduling.py</code>, <code>startup.py</code></td></tr>

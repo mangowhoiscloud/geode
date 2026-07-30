@@ -58,7 +58,7 @@ class TestRunBashSplitGateExec:
             patch.object(ex._bash, "aexecute", new=AsyncMock(return_value=MagicMock())),
             patch.object(ex._bash, "to_tool_result", return_value={"stdout": "ok"}),
         ):
-            result = _run(ex.aexecute("run_bash", {"command": "ls"}))
+            result = _run(ex.aexecute("run_bash", {"command": "ls", "reason": "test"}))
         assert result == {"stdout": "ok"}
 
     def test_bash_validation_block_short_circuits_in_gate(self) -> None:
@@ -68,7 +68,12 @@ class TestRunBashSplitGateExec:
             patch.object(ex._bash, "to_tool_result", return_value={"error": "blocked"}),
             patch.object(ex._bash, "aexecute", new=AsyncMock()) as mock_exec,
         ):
-            result = _run(ex.aexecute("run_bash", {"command": "rm -rf /"}))
+            result = _run(
+                ex.aexecute(
+                    "run_bash",
+                    {"command": "rm -rf /", "reason": "test"},
+                )
+            )
         assert result == {"error": "blocked"}
         mock_exec.assert_not_awaited()  # never executed when validation blocks
 
@@ -82,13 +87,13 @@ class TestRunBashSplitGateExec:
             ),
             patch.object(ex._bash, "aexecute", new=AsyncMock()) as mock_exec,
         ):
-            result = _run(ex.aexecute("run_bash", {"command": "rm x"}))
+            result = _run(ex.aexecute("run_bash", {"command": "rm x", "reason": "test"}))
         assert result.get("denied") is True
         mock_exec.assert_not_awaited()
 
     def test_empty_command_returns_no_command(self) -> None:
         ex = ToolExecutor(hitl_level=0)
-        result = _run(ex.aexecute("run_bash", {"command": ""}))
+        result = _run(ex.aexecute("run_bash", {"command": "", "reason": "test"}))
         assert "No command" in result["error"]
 
 
@@ -155,5 +160,14 @@ class TestGateConsolidation:
             "apply_safety_gates_async",
             new=AsyncMock(return_value=({"denied": True}, False)),
         ):
-            result = _run(ex.aexecute("edit_file", {"path": "x"}))
+            result = _run(
+                ex.aexecute(
+                    "edit_file",
+                    {
+                        "file_path": "x",
+                        "old_string": "a",
+                        "new_string": "b",
+                    },
+                )
+            )
         assert result.get("denied") is True

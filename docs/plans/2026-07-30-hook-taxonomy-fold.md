@@ -451,6 +451,9 @@ class PostVerifyDecision:
   무한 verify loop를 막는다.
 - revision은 새 follow-up을 append하며 이미 성공한 side effect를 rewind/replay하지 않는다. 구현이
   replay 없는 continuation을 보장할 수 없으면 `REVISE`를 `ESCALATE`로 낮춘다.
+- `ESCALATE`는 관측용 표식이 아니라 delivery gate다.
+  `external_verification_required`로 세션을 pause하고 후보는
+  `AgenticResult.pending_text`로 외부 소유자에게만 반환하며, 최종 transcript/checkpoint에는 쓰지 않는다.
 - 후보 원문과 raw tool output은 기본 payload에서 제외한다. 필요한 extension만 manifest capability로
   별도 허용한다.
 
@@ -483,8 +486,8 @@ model tool call
 → modified-args revalidation
 → hard deny / scope / safety policy
 → PermissionRequest when needed
-→ RuntimeEvent.TOOL_EXEC_STARTED
 → tool_execution middleware onion
+→ RuntimeEvent.TOOL_EXEC_STARTED
 → next_call(final args): exactly-once executor dispatch
 → middleware unwind
 → RuntimeEvent.TOOL_EXEC_ENDED
@@ -495,6 +498,7 @@ model tool call
 
 - parallel, sequential, recovered, deferred-tool, MCP, subagent tool path가 모두 같은 terminal을 통과한다.
 - approval은 middleware가 바꾼 최종 args를 대상으로 한다.
+- personal-data 분류는 rewrite 전후 합집합으로 유지하며 rename으로 consent/retention을 강등하지 않는다.
 - hard deny는 `PermissionRequest(ALLOW)`로 우회할 수 없다.
 - blocked/cancelled/error도 start 없는 terminal outcome으로 관측 가능하지만, 실제 실행하지 않은 호출에
   `TOOL_EXEC_STARTED`를 발화하지 않는다.

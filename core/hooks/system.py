@@ -1,13 +1,10 @@
-"""Hook System — event-driven extension points for the GEODE pipeline.
+"""Internal runtime-event bus for GEODE observability.
 
 Cross-cutting infrastructure accessible by all layers.
-Allows registering callbacks for pipeline events (pre/post node execution,
-errors, sub-agent lifecycle, etc.).
-
-Supports three trigger modes:
-- trigger()              — fire-and-forget observer (L1 Observe)
-- trigger_with_result()  — capture handler return values (L3 Decide)
-- trigger_interceptor()  — block/modify execution (Interceptor pattern)
+New code uses ``subscribe``/``emit`` for observation. The legacy
+``register``/``trigger`` spellings and feedback/interceptor methods remain
+only for source compatibility; production control belongs to HookRegistry,
+MiddlewareRegistry, or the owning domain service.
 """
 
 from __future__ import annotations
@@ -28,7 +25,7 @@ from typing import Any
 log = logging.getLogger(__name__)
 
 
-class HookEvent(Enum):
+class RuntimeEvent(Enum):
     """Runtime lifecycle events.
 
     Naming convention (PR-HOOK-TAXONOMY, 2026-07-14): every member
@@ -123,6 +120,11 @@ class HookEvent(Enum):
 
     # Config hot-reload
     CONFIG_RELOADED = "config_reloaded"
+
+    # Extension-surface audit record. Public hooks and trusted middleware
+    # project their bounded invocation metadata through this one event rather
+    # than growing the internal enum once per extension name.
+    EXTENSION_INVOKED = "extension_invoked"
 
     # Tool result offloading (P0 token optimization)
     TOOL_RESULT_OFFLOADED = "tool_result_offloaded"
@@ -254,6 +256,11 @@ class HookEvent(Enum):
     # Payload: ``{"slug": str, "proposal_path": str, "session_ids": list[str],
     #             "source_count": int, "ts": float}``.
     MEMORY_PROMOTION_PROPOSED = "memory_promotion_proposed"
+
+
+# Legacy internal-event import. It keeps identical enum members and stored
+# values; it is never reused for the public hook ABI.
+HookEvent = RuntimeEvent
 
 
 # Read-side alias map for stored event strings written before the
@@ -421,7 +428,7 @@ class HookSubscription:
         return owner._cancel_subscription(self)
 
 
-class HookSystem:
+class RuntimeEventBus:
     """Register and trigger hooks on runtime events.
 
     Hooks execute in priority order (lower number = higher priority).
@@ -454,7 +461,7 @@ class HookSystem:
         self._closed = False
         self._lock = threading.Lock()
 
-    def register(
+    def _register_event(
         self,
         event: HookEvent,
         handler: HookHandler,
@@ -464,7 +471,7 @@ class HookSystem:
         matcher: str = "",
         replace: bool = False,
     ) -> HookSubscription:
-        """Register a hook handler for an event.
+        """Register an internal runtime-event observer.
 
         Args:
             event: The hook event to listen for.
@@ -517,6 +524,34 @@ class HookSystem:
             hooks.sort(key=lambda h: h.priority)
             self._hooks[event] = hooks
         return HookSubscription(weakref.ref(self), "event", event, hook_name, entry)
+
+    # Source-compatible spelling for legacy HookSystem callers. New internal
+    # observation code uses ``subscribe``; public extensions use HookRegistry.
+    register = _register_event
+
+    def subscribe(
+        self,
+        event: HookEvent,
+        handler: HookHandler,
+        *,
+        name: str | None = None,
+        priority: int = 100,
+        matcher: str = "",
+        replace: bool = False,
+    ) -> HookSubscription:
+        """Canonical observer registration API.
+
+        ``register`` remains as a compatibility spelling while internal
+        callers migrate to :class:`RuntimeEventBus`.
+        """
+        return self._register_event(
+            event,
+            handler,
+            name=name,
+            priority=priority,
+            matcher=matcher,
+            replace=replace,
+        )
 
     def register_prefix(
         self,
@@ -592,6 +627,24 @@ class HookSystem:
             hooks.sort(key=lambda h: h.priority)
             self._prefix_hooks[prefix] = hooks
         return HookSubscription(weakref.ref(self), "prefix", prefix, hook_name, entry)
+
+    def subscribe_prefix(
+        self,
+        prefix: str,
+        handler: HookHandler,
+        *,
+        name: str | None = None,
+        priority: int = 100,
+        replace: bool = False,
+    ) -> HookSubscription:
+        """Canonical internal wildcard observer registration API."""
+        return self.register_prefix(
+            prefix,
+            handler,
+            name=name,
+            priority=priority,
+            replace=replace,
+        )
 
     def register_sink(
         self,
@@ -768,6 +821,10 @@ class HookSystem:
         dispatch = self._dispatch_sync(event, data, HookDispatchMode.OBSERVE)
         return list(dispatch.results)
 
+    def emit(self, event: HookEvent, data: dict[str, Any] | None = None) -> list[HookResult]:
+        """Canonical synchronous observer emission API."""
+        return self.trigger(event, data)
+
     async def trigger_async(
         self, event: HookEvent, data: dict[str, Any] | None = None
     ) -> list[HookResult]:
@@ -778,6 +835,12 @@ class HookSystem:
         """
         dispatch = await self._dispatch_async(event, data, HookDispatchMode.OBSERVE)
         return list(dispatch.results)
+
+    async def emit_async(
+        self, event: HookEvent, data: dict[str, Any] | None = None
+    ) -> list[HookResult]:
+        """Canonical asynchronous observer emission API."""
+        return await self.trigger_async(event, data)
 
     def trigger_with_result(
         self, event: HookEvent, data: dict[str, Any] | None = None
@@ -1167,7 +1230,7 @@ class HookSystem:
 
     def _assert_open_locked(self) -> None:
         if self._closed:
-            raise RuntimeError("HookSystem is closed")
+            raise RuntimeError("RuntimeEventBus is closed")
 
     @property
     def closed(self) -> bool:
@@ -1270,8 +1333,8 @@ class HookSystem:
             log.warning("Hook sink '%s' close failed", name, exc_info=True)
 
 
-# Populate _TOOL_EVENTS after HookEvent members are available.
-HookSystem._TOOL_EVENTS = frozenset(
+# Populate _TOOL_EVENTS after RuntimeEvent members are available.
+RuntimeEventBus._TOOL_EVENTS = frozenset(
     {
         HookEvent.TOOL_EXEC_STARTED,
         HookEvent.TOOL_EXEC_ENDED,
@@ -1279,3 +1342,9 @@ HookSystem._TOOL_EVENTS = frozenset(
         HookEvent.TOOL_RESULT_TRANSFORM,
     }
 )
+
+# Compatibility window for the hook-taxonomy migration. The public hook ABI
+# lives in ``core.hooks.public`` and deliberately does not reuse HookEvent.
+# Stored values and existing Python imports keep working while new production
+# code imports the canonical internal name below.
+HookSystem = RuntimeEventBus

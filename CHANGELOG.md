@@ -49,6 +49,22 @@ functional change.
 
 ### Changed
 
+- Extension authority is split into three explicit surfaces: 13 versioned,
+  bounded public hooks (`HookName` / `HookRegistry`), four trusted request and
+  execution middleware join points (`MiddlewareRegistry`), and the
+  observation-only `RuntimeEventBus`. Tool and LLM execution now have real
+  async onion boundaries; compaction, approval, sub-agent, durable session,
+  and verification checkpoints are wired to their owning state transitions.
+  `PostVerify` supports monotone bounded continuation without replaying tool
+  side effects. Escalation now withholds the candidate, parks the session under
+  `external_verification_required`, and exposes `AgenticResult.pending_text`
+  only to the owning outer loop. The existing 56 stored runtime-event values
+  and SQLite rows are unchanged; compatibility aliases retain `HookEvent` /
+  `HookSystem`.
+- Extension invocation audit metadata is canonical in
+  `sessions.db:hook_events` and conditionally mirrored to an active run
+  `transcript.jsonl`. Request/response bodies and handler reasons are omitted.
+  The single new `EXTENSION_INVOKED` runtime event uses audit retention.
 - Hook `action` namespaces fold from 27 first-segments to 13 families. 16 of the 27 held a single
   event each, so the namespace classified nothing for more than half the vocabulary; the singletons
   now sit in the domain they belong to (`adapter`/`prompt`/`model`/`reasoning` → `llm`,
@@ -65,6 +81,19 @@ functional change.
 
 ### Fixed
 
+- Trusted/public tool rewrites now propagate the effective tool name,
+  arguments, and cumulative personal-data classification into approval,
+  transcript, tool-log, and offload policy. Batch cost approval is scoped only
+  to the original expensive-operation cost gate and cannot authorize a
+  rewritten MCP/write/dangerous tool. Headless hook-requested permission fails
+  closed rather than opening a console prompt. Tool lifecycle runtime events
+  retain session/turn correlation after the middleware boundary moved into the
+  executor.
+- Public hook dispatch keeps required schema fields when bounding payloads,
+  isolates handler payload copies, rejects in-place mutation, and permits
+  payload updates only for `REWRITE`. Tool-execution short circuits now close
+  approval records as `skipped`, and IPC/scheduler terminal owners call the
+  async `SessionEnd` path.
 - The emit-side payload validator now reads both contract registries instead of one.
   `REQUIRED_PAYLOAD_KEYS` covers 4 events by hand while the declarative `_TYPED_ROW_SPECS` table
   carries pydantic `details_cls` models whose required fields are a contract for 14 more — a

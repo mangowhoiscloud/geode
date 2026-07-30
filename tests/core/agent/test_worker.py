@@ -11,6 +11,7 @@ import pytest
 from core.agent.loop.models import AgenticResult
 from core.agent.worker import (
     _FAILURE_TERMINATION_REASONS,
+    _NO_RETRY_TERMINATION_REASONS,
     WorkerRequest,
     WorkerResult,
     _build_schema_retry_prompt,
@@ -367,7 +368,7 @@ class TestResolveWorkerOutcome:
         If a new failure-tagged ``termination_reason`` is added to
         ``agent_loop.py`` without being added to
         ``_FAILURE_TERMINATION_REASONS``, this test won't catch it
-        directly — but it pins the existing six so removal would
+        directly — but it pins the existing seven so removal would
         require explicit acknowledgment.
         """
         expected = frozenset(
@@ -378,6 +379,7 @@ class TestResolveWorkerOutcome:
                 "billing_error",
                 "cost_budget_exceeded",
                 "convergence_detected",
+                "external_verification_required",
             }
         )
         assert expected == _FAILURE_TERMINATION_REASONS
@@ -504,7 +506,7 @@ class TestNeedsSchemaRetry:
 
     @pytest.mark.parametrize(
         "termination_reason",
-        sorted(_FAILURE_TERMINATION_REASONS),
+        sorted(_FAILURE_TERMINATION_REASONS - _NO_RETRY_TERMINATION_REASONS),
     )
     def test_failure_termination_triggers_retry(self, termination_reason: str) -> None:
         """Even with a syntactically valid JSON in ``text``, a failure-
@@ -560,14 +562,12 @@ class TestNeedsSchemaRetry:
 
     @pytest.mark.parametrize(
         "termination_reason",
-        ["input_blocked", "user_cancelled", "user_clarification_needed"],
+        sorted(_NO_RETRY_TERMINATION_REASONS),
     )
-    def test_no_retry_success_exits_do_not_trigger_retry(self, termination_reason: str) -> None:
-        """Codex MCP catch (2026-05-26) — the success exits whose text
-        is intentional non-JSON must not be re-issued, otherwise the
-        retry would override the cancel / block / clarification intent
-        and invalidate ``_resolve_worker_outcome``'s success
-        classification."""
+    def test_no_retry_terminals_do_not_trigger_retry(self, termination_reason: str) -> None:
+        """Intentional non-JSON or externally gated terminals must not
+        be re-issued. A retry would override operator intent or bypass
+        the external verification hand-off."""
         result = AgenticResult(
             text="Interrupted." if termination_reason == "user_cancelled" else "non-JSON body",
             termination_reason=termination_reason,
@@ -766,16 +766,16 @@ class TestSchemaAwareRetryWiring:
 
     @pytest.mark.parametrize(
         "termination_reason",
-        ["input_blocked", "user_cancelled", "user_clarification_needed"],
+        sorted(_NO_RETRY_TERMINATION_REASONS),
     )
-    def test_no_retry_on_success_exits_even_with_schema_set(
+    def test_no_retry_on_terminal_even_with_schema_set(
         self, monkeypatch, tmp_path, termination_reason: str
     ) -> None:
-        """Codex MCP catch (2026-05-26) — when the loop terminates with
-        ``input_blocked`` / ``user_cancelled`` / ``user_clarification_needed``
-        the text is intentional and the parent must surface it as-is.
-        Re-calling the loop on these terminations would be semantically
-        wrong (cancel intent overridden) and a budget burn."""
+        """No-retry terminals remain terminal for structured workers.
+
+        This includes operator/policy exits and the external-verification
+        delivery gate; re-calling the loop would override authority.
+        """
         from unittest.mock import AsyncMock, MagicMock, patch
 
         mock_loop = MagicMock()

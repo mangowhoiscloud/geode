@@ -274,7 +274,10 @@ async def arun_agentic_oneshot(
     # special-cased ahead of handler lookup, so the filter above alone cannot
     # stop them (handler-filter is defense-in-depth for handler-dispatched tools).
     executor = ToolExecutor(
-        action_handlers=handlers, hitl_level=0, denied_tools=HEADLESS_DENIED_TOOLS
+        action_handlers=handlers,
+        hitl_level=0,
+        denied_tools=HEADLESS_DENIED_TOOLS,
+        interactive_approval=False,
     )
     loop = AgenticLoop(
         conversation,

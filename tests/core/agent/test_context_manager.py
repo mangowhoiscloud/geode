@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from core.agent.context_manager import ContextWindowManager
 from core.agent.loop import _ContextExhaustedError
+from core.hooks import HookAction, HookDecision, HookName, HookRegistry
 
 
 class TestContextWindowManager:
@@ -167,6 +168,65 @@ class TestContextWindowManager:
 
         compact.assert_awaited_once()
         assert messages == compacted
+
+    def test_soft_pre_compact_can_defer(self) -> None:
+        registry = HookRegistry()
+        registry.register(
+            HookName.PRE_COMPACT,
+            lambda _invocation: HookDecision(action=HookAction.DEFER),
+        )
+        mgr = ContextWindowManager(hooks=None, hook_registry=registry, quiet=True)
+        messages = [{"role": "user", "content": "old"}] * 20
+        settings = SimpleNamespace(compact_keep_recent=8)
+
+        asyncio.run(
+            mgr._apply_overflow_strategy(
+                {"strategy": "compact", "trigger": "warning"},
+                messages,
+                settings,
+                "gpt-5",
+                "openai",
+            )
+        )
+
+        assert len(messages) == 20
+
+    def test_post_compact_fires_only_after_commit(self) -> None:
+        observed: list[HookName] = []
+        registry = HookRegistry()
+        registry.register(
+            HookName.PRE_COMPACT,
+            lambda invocation: (
+                observed.append(invocation.name)
+                or HookDecision(
+                    action=HookAction.REWRITE,
+                    updates={"keep_recent": 6},
+                )
+            ),
+        )
+        registry.register(
+            HookName.POST_COMPACT,
+            lambda invocation: observed.append(invocation.name),
+        )
+        mgr = ContextWindowManager(hooks=None, hook_registry=registry, quiet=True)
+        messages = [{"role": "user", "content": "old"}] * 20
+        settings = SimpleNamespace(compact_keep_recent=8)
+        compact = AsyncMock(return_value=([{"role": "user", "content": "summary"}], True))
+
+        async def _run() -> None:
+            with patch("core.orchestration.compaction.compact_conversation", compact):
+                await mgr._apply_overflow_strategy(
+                    {"strategy": "compact", "trigger": "warning"},
+                    messages,
+                    settings,
+                    "gpt-5",
+                    "openai",
+                )
+
+        asyncio.run(_run())
+
+        assert observed == [HookName.PRE_COMPACT, HookName.POST_COMPACT]
+        assert compact.await_args.kwargs["keep_recent"] == 6
 
     def test_check_context_overflow_raises_context_exhausted(self) -> None:
         """Unrecoverable critical context should propagate to AgenticLoop."""
