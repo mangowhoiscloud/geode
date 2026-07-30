@@ -551,8 +551,8 @@ and closure evidence are appended in §10.
 | REL-002 | `ABSENT` | No registered gate prevents the v1.0.1 compatibility facade or preserved state roots from being retired immediately after a local tag, draft release, or registry publication | Official GitHub Release and PyPI evidence proves compatible public artifacts continuously exposed the facade and preserved roots for a final qualifying interval of at least 30 consecutive days, starting no earlier than v1.0.1, and every release inside that interval retained them | R8.0 | REL-001 | `OPEN` |
 | BND-007 | `ABSENT` | The current `core/self_improving` import and source/module launcher surface has no enumerated consumer census, old-to-new migration map, or removal-only closure gate | After REL-002, every repository and documented consumer is classified, migration guidance names canonical replacements, only the forwarding facade and legacy launchers are removed, and installed-wheel import/CLI/MCP/config/state parity proves the canonical product remains intact | R8.1 | REL-002, STORE-003 | `OPEN` |
 | STORE-003 | `MISFIT` | Self-improving datasets span tracked `core/self_improving/state`, runtime `~/.geode/self-improving`, actively written `~/.geode/autoresearch/handoff`, and isolated `GEODE_STATE_ROOT/autoresearch` roots without one dataset-level ownership manifest | A feature-owned manifest declares every dataset's lifecycle, schema/version, root, writer/readers, concurrency, retention/redaction, migration, rollback, and rebuild contract; tracked SoT leaves `core` with hash/history parity, while runtime/override/worker roots remain compatible or migrate additively with one writer | R8.2 | REL-002, STORE-001 | `OPEN` |
-| HOOK-001 | `MISFIT` | The 56-member internal `HookEvent` enum is exported at the package root, one registry mixes observer, result-transform, and control-interceptor authority without a stable public allowlist, and verification is emitted only inside terminal finalization | Exactly 13 versioned `HookName` contracts expose the Codex 11-event lifecycle plus `PreVerify`/`PostVerify`; typed authority, redaction, correlation, unknown-name rejection, and compatibility tests prevent internal RuntimeEvent growth from expanding the ABI, while one monotone bounded `PreVerify` → verifier → `PostVerify` → `Stop` state machine supports executable external continuation without erasing built-in failure or replaying side effects | R6.4 | PROTO-001, STORE-001, TRUST-002, LOOP-003 | `OPEN` |
-| HOOK-002 | `PARTIAL` | Tool request interception is mixed with `TOOL_EXEC_STARTED`; no typed sequential tool/LLM request transform or async `next_call` chain wraps the accepted executor and provider call across every runtime path | `tool_request`, `tool_execution`, `llm_request`, and `llm_execution` are four typed join points with N→N+1 request composition, original/effective trace, single-use async `next_call`, exception identity, policy-before-execution ordering, and all-path parity tests | R6.4 | CAP-002, LOOP-003, LLM-003, HOOK-001 | `OPEN` |
+| HOOK-001 | `MISFIT` | The 56-member internal `HookEvent` enum is exported at the package root, one registry mixes observer, result-transform, and control-interceptor authority without a stable public allowlist, and verification is emitted only inside terminal finalization | Exactly 13 versioned `HookName` contracts expose the Codex 11-event lifecycle plus `PreVerify`/`PostVerify`; typed authority, redaction, correlation, unknown-name rejection, and compatibility tests prevent internal RuntimeEvent growth from expanding the ABI, while one monotone bounded `PreVerify` → verifier → `PostVerify` → `Stop` state machine supports executable external continuation without erasing built-in failure or replaying side effects | R6.4 | — | `READY` |
+| HOOK-002 | `PARTIAL` | Tool request interception is mixed with `TOOL_EXEC_STARTED`; no typed sequential tool/LLM request transform or async `next_call` chain wraps the accepted executor and provider call across every runtime path | `tool_request`, `tool_execution`, `llm_request`, and `llm_execution` are four typed join points with N→N+1 request composition, original/effective trace, single-use async `next_call`, exception identity, policy-before-execution ordering, and all-path parity tests | R6.4 | HOOK-001 | `READY` |
 
 ## 6. Dependency and merge sequence
 
@@ -580,10 +580,11 @@ R3.1 starts after R2.1 so `StepSnapshot` consumes the new immutable `ToolPlan`
 rather than inventing a competing tool snapshot. The remaining R2 and R3
 packages may then progress in parallel. R5 and most of R6 may progress in
 parallel after the composition root is stable, but R6.3 waits for R5.2 because
-its unified extension lifecycle includes LLM-adapter discovery. R6.4 begins
-only after its public projection, lifecycle store, trust boundary, tool plan,
-loop phase, and provider-profile dependencies have landed; it does not use a
-hook facade to bypass those owners.
+its unified extension lifecycle includes LLM-adapter discovery. R6.4 is a
+narrow compatibility-preserving package over the current measured call sites
+and sinks. It owns convergence of those call sites into its four middleware
+join points, but does not claim or bypass the broader owner replacements
+elsewhere in R2-R6.
 
 ### 6.1 v1.0.1 boundary-release train
 
@@ -1181,8 +1182,22 @@ The measured design evidence is carried by
 [#2832](https://github.com/mangowhoiscloud/geode/pull/2832), grounded against
 Hermes `36e41c09ed02bd783c1186564bf08cca5c8e821d`, OpenClaw
 `90a22b4f50226b13735e77dde81a92340ae724cf`, and Codex
-`578c1b2230288104041e880a86d0f7f3a5ca6e47`. This section remains the
-execution SOT. The public ABI contains exactly:
+`578c1b2230288104041e880a86d0f7f3a5ca6e47`. The 2026-07-31 readiness
+re-audit found that the initially registered external dependencies described
+desirable future owners, not prerequisites for this package. Current `develop`
+has one injected hook system, a primary `ToolCallProcessor` executor terminal,
+three direct recovery executor calls, async adapter calls in the main loop,
+reflection, candidate sampling, and the API mutator. It also has the
+finalization helper, a bounded SQLite hook event sink, and conditional JSONL
+projections. R6.4 owns convergence of this finite measured tool and
+`AdapterCallRequest`-based completion set into the four middleware join points
+and characterizes the existing persistence behavior directly. It can do so
+without waiting for the broader tool-plan, loop-decomposition,
+provider-profile, storage-ownership, trust-broker, or protocol programs. It
+does not implement or claim those programs, replace their future types, expose
+untrusted code in-process, or change persisted event values.
+
+This section remains the execution SOT. The public ABI contains exactly:
 
 ```text
 UserPromptSubmit
@@ -1239,12 +1254,22 @@ extension kinds:
   request while preserving prompt-cache invariants;
 - `llm_execution`: async onion around the actual provider call.
 
-Every parallel, sequential, MCP, recovered, deferred, subagent, and retry path
-uses the same terminal. Execution middleware cannot wrap or weaken hard policy
-and approval. It receives the effective accepted payload, may call its
-`next_call` at most once, and preserves downstream exception identity. Original
-and effective payload hashes plus extension provenance are observable without
-persisting secrets or unrestricted content.
+The LLM join points deliberately cover the runtime's
+`AdapterCallRequest` → `LLMAdapter.acomplete` completion contract. Optional
+adapter capabilities such as text completion and web search, provider SDK calls
+owned inside tool handlers such as computer grounding and document ingestion,
+and plugin-owned evaluator backends are not silently folded into the same
+request type. Their outer tool call still passes `tool_execution`; a future
+typed seam requires its own measured consumer instead of overloading
+`llm_request`.
+
+Every parallel, sequential, MCP, recovered, deferred, and subagent tool path,
+and every declared adapter-completion and retry path, uses its corresponding
+terminal. Execution middleware cannot wrap or weaken hard policy and approval.
+It receives the effective accepted payload, may call its `next_call` at most
+once, and preserves downstream exception identity. Original and effective
+payload hashes plus extension provenance are observable without persisting
+secrets or unrestricted content.
 
 Verification and stopping are three checkpoints in one internal finalization
 state machine, not three competing dispatch pipelines. `PreVerify` can add
@@ -1270,8 +1295,8 @@ Acceptance:
   output rejection, and original/effective trace correlation;
 - execution chains prove onion order, single-use async `next_call`,
   short-circuit semantics, cancellation, timeout/failure policy, exception
-  identity, and exactly one accepted terminal call across every tool and LLM
-  path;
+  identity, and exactly one accepted terminal call across every declared tool
+  and `AdapterCallRequest`-based completion path;
 - tool tests prove transformed final arguments are revalidated and approved,
   hard denial cannot be weakened, blocked calls never emit execution-start,
   and start/end/error outcomes have exact cardinality;
@@ -1279,8 +1304,9 @@ Acceptance:
   stable, and system prompt/history/tool cache prefixes cannot change without
   an explicit capability and invalidation trace;
 - lifecycle fixtures distinguish durable session generation from turn and
-  step, pair runtime-owned compaction boundaries honestly, and preserve
-  SQLite-as-SOT/JSONL-as-projection behavior from R6.2;
+  step, pair runtime-owned compaction boundaries honestly, and characterize
+  the current bounded SQLite hook-event sink plus conditional JSONL projections
+  without relying on the future R6.2 storage-ownership contract;
 - finalization fixtures prove monotone verify composition, built-in
   fail-to-pass rejection, bounded revise and Stop continuation, no side-effect
   replay, timeout fallback, external evidence correlation, and final
@@ -1618,6 +1644,8 @@ supersets cannot authorize a later or unrelated edit.
 |---|---|---|---|---|---|
 | BND-003 | DEPENDENCY_ADDED | BND-006 | The distribution gate must validate the final self-improving product layout rather than close on the pre-move package tree; this edge makes R1.3 wait for R1.5 | `cef746de5f74204260cdbfcacd517e567beda191` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS |
 | BND-007 | DEPENDENCY_ADDED | STORE-003 | Tracked state currently sits under the facade directory; R8.2 must move it in a separate transaction so R8.1 can retire forwarders without hiding a state move or leaving a data-only `core.self_improving` namespace | `2c14d8c982b8112d68e29dc49ce16ad8fcc95fdd` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS |
+| HOOK-001 | DEPENDENCY_REMOVED | PROTO-001, STORE-001, TRUST-002, LOOP-003 | Current develop already has an injected hook owner, finalization seam, bounded SQLite hook-event sink, and conditional JSONL projections; R6.4 will characterize those concrete behaviors directly rather than depending on R6.2's future storage-ownership contract, and can add its narrow public registry without exposing untrusted code in-process | [#2834](https://github.com/mangowhoiscloud/geode/pull/2834) | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS |
+| HOOK-002 | DEPENDENCY_REMOVED | CAP-002, LOOP-003, LLM-003 | R6.4 explicitly owns convergence of the measured primary/recovery tool terminals and main-loop/reflection/candidate/API-mutator `AdapterCallRequest` paths into its four join points; optional adapter capabilities, tool-internal provider SDK calls, and plugin evaluators remain outside this typed contract, while future ToolPlan, loop-phase, and provider-profile types need not land first | [#2834](https://github.com/mangowhoiscloud/geode/pull/2834) | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS |
 | _none yet_ | — | — | — | — | — |
 
 ### 10.4 Blocker evidence
