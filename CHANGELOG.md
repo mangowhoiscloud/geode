@@ -47,6 +47,11 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.9] - 2026-07-31
+
+> Public extension control is now a small, versioned hook ABI backed by
+> trusted tool/LLM middleware and a separate internal runtime-event plane.
+
 ### Changed
 
 - Extension authority is split into three explicit surfaces: 13 versioned,
