@@ -19,7 +19,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": ""
+    "body": "### Fixed\n\n- Benchmark-owned dynamic tool schemas now take precedence over same-named\n  built-in schemas during execution validation, so MCPMark filesystem tools\n  accept their native `path` contract and τ² tools cannot be rejected by an\n  unrelated GEODE definition before reaching the benchmark environment."
   },
   {
     "version": "1.0.9",
