@@ -228,7 +228,7 @@ def verify_trajectory_release(
     require_directory_binding: bool = True,
 ) -> dict[str, Any]:
     """Read a staged release back and verify every manifest-bound byte."""
-    root = Path(release_dir)
+    root = Path(release_dir).resolve()
     manifest_path = root / "manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     if not isinstance(manifest, dict):

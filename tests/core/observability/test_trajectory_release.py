@@ -137,6 +137,25 @@ def test_release_readback_requires_expected_manifest_anchor(tmp_path):
         )
 
 
+def test_release_readback_accepts_relative_release_path(tmp_path, monkeypatch):
+    release = stage_trajectory_release(
+        tmp_path / "releases",
+        release_source="test",
+        release_scope="relative-path",
+        trajectories={"trajectory.json": _trajectory()},
+        privacy_review=_privacy_review("relative-path"),
+    )
+    manifest_sha256 = sha256((release / "manifest.json").read_bytes()).hexdigest()
+    monkeypatch.chdir(tmp_path)
+
+    manifest = verify_trajectory_release(
+        release.relative_to(tmp_path),
+        expected_manifest_sha256=manifest_sha256,
+    )
+
+    assert manifest["quality"]["scope_complete_trajectories"] == 1
+
+
 def test_release_readback_recomputes_manifest_quality(tmp_path):
     release = stage_trajectory_release(
         tmp_path,
