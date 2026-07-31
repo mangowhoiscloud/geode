@@ -47,6 +47,12 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.11] - 2026-07-31
+
+> Hooks, trusted middleware, durable session records, and reviewed
+> trajectories now form one versioned outer-loop contract without collapsing
+> SIL or Crucible's native evidence authority.
+
 ### Added
 
 - `sessions.db:session_events` now stores versioned, append-only session
