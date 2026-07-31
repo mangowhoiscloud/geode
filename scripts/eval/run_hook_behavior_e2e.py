@@ -75,6 +75,11 @@ def _payload_digest(payload: Any) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+def _require(condition: bool, message: Any) -> None:
+    if not condition:
+        raise RuntimeError(f"hook behavior E2E gate failed: {message!r}")
+
+
 async def _run(output_dir: Path, *, model: str, effort: str) -> dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=False)
     runtime_home = output_dir / "geode-home"
@@ -519,23 +524,92 @@ async def _run(output_dir: Path, *, model: str, effort: str) -> dict[str, Any]:
         "llm_request",
         "llm_execution",
     }
+    hook_counts = {
+        hook.value: sum(
+            event["kind"] == "public_hook" and event["payload"]["hook"] == hook.value
+            for event in events
+        )
+        for hook in HookName
+    }
+    expected_hook_counts = {
+        hook.value: 2 if hook is HookName.PRE_TOOL_USE else 1 for hook in HookName
+    }
+    expected_middleware_counts = {
+        "tool_request": 1,
+        "tool_execution": 1,
+        "llm_request": 3,
+        "llm_execution": 3,
+    }
+    expected_extension_rows = sum(expected_hook_counts.values()) + sum(
+        expected_middleware_counts.values()
+    )
 
-    assert observed_hooks == expected_hooks, sorted(expected_hooks - observed_hooks)
-    assert observed_middleware == expected_middleware, sorted(
-        expected_middleware - observed_middleware
+    _require(
+        observed_hooks == expected_hooks,
+        {"missing_hooks": sorted(expected_hooks - observed_hooks)},
     )
-    assert probe_tool.calls == ["public-hook-rewrite"], probe_tool.calls
-    assert len(subagent_results) == 1 and subagent_results[0].success
-    assert len(compact_messages) < before_compaction
-    assert all(count > 0 for count in probe_middleware.counts.values())
-    assert probe_middleware.counts["tool_request"] == 1
-    assert probe_middleware.counts["tool_execution"] == 1
-    assert len(sqlite_tools) == 2
-    assert all(
-        payload.get("session_id") and payload.get("turn_id") for _event, payload in sqlite_tools
+    _require(
+        hook_counts == expected_hook_counts,
+        {"expected_hook_counts": expected_hook_counts, "observed": hook_counts},
     )
-    assert len(sqlite_extensions) == len(transcript_extensions)
-    assert sqlite_extensions
+    _require(
+        observed_middleware == expected_middleware,
+        {"missing_middleware": sorted(expected_middleware - observed_middleware)},
+    )
+    _require(
+        probe_middleware.counts == expected_middleware_counts,
+        {
+            "expected_middleware_counts": expected_middleware_counts,
+            "observed": probe_middleware.counts,
+        },
+    )
+    _require(
+        probe_tool.calls == ["public-hook-rewrite"],
+        {"tool_executor_calls": probe_tool.calls},
+    )
+    _require(
+        len(subagent_results) == 1 and subagent_results[0].success,
+        {"subagent_results": [result.success for result in subagent_results]},
+    )
+    _require(
+        len(compact_messages) < before_compaction,
+        {
+            "compaction_after": len(compact_messages),
+            "compaction_before": before_compaction,
+        },
+    )
+    _require(
+        [event for event, _payload in sqlite_tools]
+        == [RuntimeEvent.TOOL_EXEC_STARTED.value, RuntimeEvent.TOOL_EXEC_ENDED.value],
+        {"tool_events": [event for event, _payload in sqlite_tools]},
+    )
+    _require(
+        all(
+            payload.get("session_id") and payload.get("turn_id") for _event, payload in sqlite_tools
+        ),
+        {"tool_event_payloads": sqlite_tools},
+    )
+    tool_correlations = {
+        (payload["session_id"], payload["turn_id"]) for _event, payload in sqlite_tools
+    }
+    _require(
+        len(tool_correlations) == 1,
+        {"tool_correlations": sorted(tool_correlations)},
+    )
+    _require(
+        len(sqlite_extensions) == expected_extension_rows,
+        {
+            "expected_sqlite_extension_rows": expected_extension_rows,
+            "observed": len(sqlite_extensions),
+        },
+    )
+    _require(
+        len(transcript_extensions) == expected_extension_rows,
+        {
+            "expected_transcript_extension_rows": expected_extension_rows,
+            "observed": len(transcript_extensions),
+        },
+    )
 
     session_databases = [
         path
@@ -554,7 +628,10 @@ async def _run(output_dir: Path, *, model: str, effort: str) -> dict[str, Any]:
             persisted_compactions += int(row[0] if row else 0)
         finally:
             connection.close()
-    assert persisted_compactions == 1, persisted_compactions
+    _require(
+        persisted_compactions == 1,
+        {"persisted_compactions": persisted_compactions},
+    )
 
     published_at = _utc_now()
     revision = _git_revision()
@@ -592,8 +669,8 @@ async def _run(output_dir: Path, *, model: str, effort: str) -> dict[str, Any]:
             "transcript_extension_rows": len(transcript_extensions),
             "unscored_reason": "release validation probe, not a benchmark task",
             "verifier": (
-                "probe assertions over hook/middleware coverage, exactly-once tool execution, "
-                "SQLite/JSONL parity, correlation, and persisted compaction"
+                "explicit release gates over exact hook/middleware multiplicity, exactly-once "
+                "tool execution, SQLite/JSONL parity, correlation, and persisted compaction"
             ),
         },
         "privacy": {
@@ -658,7 +735,9 @@ async def _run(output_dir: Path, *, model: str, effort: str) -> dict[str, Any]:
         "release_scope": "hook-middleware-behavior-e2e",
         "release_source": "geode-agenticloop",
         "schema_id": "geode.trajectory@2026-07-31",
-        "supersedes": None,
+        "supersedes": (
+            "geode-agenticloop-hook-middleware-behavior-e2e-20260730T235004Z-0434a17a1b0c"
+        ),
     }
     manifest_path = publication_staging / "manifest.json"
     _write_json(manifest_path, manifest)
@@ -668,28 +747,52 @@ async def _run(output_dir: Path, *, model: str, effort: str) -> dict[str, Any]:
         f"{_sha256(manifest_path)[:12]}"
     )
     publication_dir = output_dir / "publication" / release_id
-    publication_dir.parent.mkdir(parents=True, exist_ok=True)
-    publication_staging.rename(publication_dir)
 
     secret_patterns = {
-        "absolute_home": re.compile(r"/Users/(?!REDACTED|x/)[^/\\s]+"),
-        "email": re.compile(r"\\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}\\b", re.I),
-        "github_token": re.compile(r"\\bgh[opsu]_[A-Za-z0-9_]{20,}\\b"),
-        "openai_key": re.compile(r"\\bsk-[A-Za-z0-9_-]{20,}\\b"),
-        "bearer": re.compile(r"\\bBearer\\s+[A-Za-z0-9._~+/=-]{12,}\\b", re.I),
+        "absolute_home": re.compile(r"/Users/(?!REDACTED(?:/|$)|x(?:/|$))[^/\s]+"),
+        "email": re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.I),
+        "github_token": re.compile(r"\bgh[opsu]_[A-Za-z0-9_]{20,}\b"),
+        "openai_key": re.compile(r"\bsk-[A-Za-z0-9_-]{20,}\b"),
+        "bearer": re.compile(r"\bBearer\s+[A-Za-z0-9._~+/=-]{12,}\b", re.I),
     }
+    secret_positive_samples = {
+        "absolute_home": "/Users/private-user/project",
+        "email": "owner@example.com",
+        "github_token": "ghp_0123456789abcdefghijklmnop",
+        "openai_key": "sk-0123456789abcdefghijklmnop",
+        "bearer": "Bearer abcdefghijklmnopqrstuvwxyz",
+    }
+    _require(
+        all(
+            pattern.search(secret_positive_samples[name])
+            for name, pattern in secret_patterns.items()
+        ),
+        "secret scanner failed its known-positive self-check",
+    )
+    staged_files = sorted(
+        path.relative_to(publication_staging).as_posix()
+        for path in publication_staging.rglob("*")
+        if path.is_file()
+    )
+    _require(
+        staged_files == ["manifest.json", "trajectory.json"],
+        {"publication_allowlist": staged_files},
+    )
     scan_texts = [
         path.read_text(encoding="utf-8", errors="replace")
-        for path in output_dir.rglob("*")
+        for path in publication_staging.rglob("*")
         if path.is_file() and path.suffix in {".json", ".jsonl", ".md", ".toml", ".txt"}
     ]
-    scan_texts.extend(json.dumps(payload, sort_keys=True) for payload in sqlite_extensions)
-    scan_texts.extend(json.dumps(payload, sort_keys=True) for _event, payload in sqlite_tools)
     scan_blob = "\n".join(scan_texts)
     secret_findings = {
         name: sorted(set(pattern.findall(scan_blob))) for name, pattern in secret_patterns.items()
     }
-    assert not any(secret_findings.values()), secret_findings
+    _require(
+        not any(secret_findings.values()),
+        {"publication_secret_findings": secret_findings},
+    )
+    publication_dir.parent.mkdir(parents=True, exist_ok=True)
+    publication_staging.rename(publication_dir)
 
     generated_files = []
     for path in sorted(output_dir.rglob("*")):
