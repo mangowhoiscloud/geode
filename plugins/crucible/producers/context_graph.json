@@ -26,7 +26,7 @@
         "benchmark",
         "tool-projection"
       ],
-      "contentSha256": "0ad48f845a2eb6de47d7214e4f232f3e123a3b9037bd6ea7f07984ec74e3e9d2"
+      "contentSha256": "3921da35f3d45931a55a55ff9b6b716ec5fbcb8b7d4e22c5f88acb631fc2a12a"
     },
     {
       "id": "file:plugins/benchmark_harness/tau2_turn_supervisor.py",
