@@ -27,10 +27,14 @@ from core.observability.redaction import redact_secrets
 log = logging.getLogger(__name__)
 
 PUBLIC_HOOK_SCHEMA_VERSION = "geode.public-hook.v1"
+PUBLIC_HOOK_DEFAULT_TIMEOUT_S = 10.0
 _MAX_STRING_CHARS = 4_096
 _MAX_PAYLOAD_BYTES = 32 * 1_024
 _MAX_COLLECTION_ITEMS = 64
 _MAX_DEPTH = 8
+_EVIDENCE_KINDS = frozenset(
+    {"runtime_event", "sil_eval", "crucible_evidence", "native_receipt", "legacy"}
+)
 _SECRET_KEYS = frozenset(
     {
         "access_token",
@@ -90,6 +94,24 @@ class HookAction(StrEnum):
     FINALIZE = "finalize"
 
 
+@dataclass(frozen=True, slots=True)
+class HookEvidenceReference:
+    """Typed join from a verification decision to external authority."""
+
+    kind: str
+    schema_id: str
+    authority: str
+    reference: str
+
+    def as_dict(self) -> dict[str, str]:
+        return {
+            "kind": self.kind,
+            "schema_id": self.schema_id,
+            "authority": self.authority,
+            "reference": self.reference,
+        }
+
+
 _ALLOWED_ACTIONS: dict[HookName, frozenset[HookAction]] = {
     HookName.USER_PROMPT_SUBMIT: frozenset(
         {HookAction.CONTINUE, HookAction.REWRITE, HookAction.BLOCK}
@@ -136,6 +158,22 @@ _NUMBER = {"type": "number"}
 _BOOLEAN = {"type": "boolean"}
 _OBJECT = {"type": "object"}
 _STRING_ARRAY = {"type": "array", "items": {"type": "string"}}
+_EVIDENCE_REFERENCE = {
+    "type": "object",
+    "properties": {
+        "kind": {"enum": sorted(_EVIDENCE_KINDS)},
+        "schema_id": _STRING,
+        "authority": _STRING,
+        "reference": _STRING,
+    },
+    "required": ["kind", "schema_id", "authority", "reference"],
+    "additionalProperties": False,
+}
+_EVIDENCE_REFERENCE_ARRAY = {
+    "type": "array",
+    "items": _EVIDENCE_REFERENCE,
+    "maxItems": 32,
+}
 _VERIFY_PROPERTIES: dict[str, dict[str, Any]] = {
     "passed": _BOOLEAN,
     "mode": _STRING,
@@ -288,7 +326,7 @@ _PAYLOAD_SCHEMAS: dict[HookName, dict[str, Any]] = {
         "properties": {
             **_VERIFY_PROPERTIES,
             "policy_action": _STRING,
-            "evidence_refs": _STRING_ARRAY,
+            "evidence_refs": _EVIDENCE_REFERENCE_ARRAY,
         },
         "required": [
             "passed",
@@ -327,6 +365,9 @@ def public_hook_schema(hook: HookName) -> dict[str, Any]:
                         "run_id": _STRING,
                         "session_generation": _INTEGER,
                         "verify_attempt": _INTEGER,
+                        "tool_call_id": _STRING,
+                        "llm_call_id": _STRING,
+                        "llm_attempt_id": _STRING,
                     },
                     "required": [
                         "session_id",
@@ -334,6 +375,9 @@ def public_hook_schema(hook: HookName) -> dict[str, Any]:
                         "run_id",
                         "session_generation",
                         "verify_attempt",
+                        "tool_call_id",
+                        "llm_call_id",
+                        "llm_attempt_id",
                     ],
                     "additionalProperties": False,
                 },
@@ -356,7 +400,7 @@ def public_hook_schema(hook: HookName) -> dict[str, Any]:
                         "updates": _OBJECT,
                         "instruction": _STRING,
                         "additional_misses": _STRING_ARRAY,
-                        "evidence_refs": _STRING_ARRAY,
+                        "evidence_refs": _EVIDENCE_REFERENCE_ARRAY,
                     },
                     "required": ["action"],
                     "additionalProperties": False,
@@ -377,6 +421,9 @@ class HookCorrelation:
     run_id: str = ""
     session_generation: int = 0
     verify_attempt: int = 0
+    tool_call_id: str = ""
+    llm_call_id: str = ""
+    llm_attempt_id: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -401,7 +448,7 @@ class HookDecision:
     updates: Mapping[str, Any] = field(default_factory=dict)
     instruction: str = ""
     additional_misses: tuple[str, ...] = ()
-    evidence_refs: tuple[str, ...] = ()
+    evidence_refs: tuple[HookEvidenceReference, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -448,11 +495,14 @@ class HookRegistry:
         *,
         name: str | None = None,
         priority: int = 100,
-        timeout_s: float = 0,
+        timeout_s: float | None = None,
     ) -> None:
         resolved = HookName(hook)
         handler_name = name or str(getattr(handler, "__name__", type(handler).__name__))
-        entry = _RegisteredHook(handler, handler_name, priority, max(0.0, timeout_s))
+        resolved_timeout = (
+            PUBLIC_HOOK_DEFAULT_TIMEOUT_S if timeout_s is None else max(0.0, timeout_s)
+        )
+        entry = _RegisteredHook(handler, handler_name, priority, resolved_timeout)
         with self._lock:
             registered = self._handlers.setdefault(resolved, [])
             if any(item.name == handler_name for item in registered):
@@ -552,7 +602,11 @@ class HookRegistry:
     @staticmethod
     async def _call(handler: _RegisteredHook, invocation: HookInvocation) -> HookDecision | None:
         async def run() -> HookDecision | None:
-            value = handler.handler(invocation)
+            # A synchronous extension must not own the runtime event-loop
+            # thread. ``to_thread`` also propagates ContextVars. Calling an
+            # async function there only creates its coroutine object; the
+            # coroutine itself is still awaited and cancelled on this loop.
+            value = await asyncio.to_thread(handler.handler, invocation)
             if inspect.isawaitable(value):
                 return await value
             return value
@@ -636,6 +690,9 @@ class HookRegistry:
                     "run_id": correlation.run_id,
                     "session_generation": correlation.session_generation,
                     "verify_attempt": correlation.verify_attempt,
+                    "tool_call_id": correlation.tool_call_id,
+                    "llm_call_id": correlation.llm_call_id,
+                    "llm_attempt_id": correlation.llm_attempt_id,
                 },
             )
         except Exception:
@@ -655,9 +712,37 @@ def _sanitize_decision(decision: HookDecision) -> HookDecision:
         updates=_sanitize_payload(decision.updates),
         additional_misses=tuple(str(item)[:128] for item in decision.additional_misses[:32]),
         evidence_refs=tuple(
-            redact_secrets(str(item))[:512] for item in decision.evidence_refs[:32]
+            _normalize_evidence_reference(item) for item in decision.evidence_refs[:32]
         ),
     )
+
+
+def _normalize_evidence_reference(value: Any) -> HookEvidenceReference:
+    if isinstance(value, HookEvidenceReference):
+        raw = value.as_dict()
+    elif isinstance(value, Mapping):
+        raw = dict(value)
+    elif isinstance(value, str):
+        raw = {
+            "kind": "legacy",
+            "schema_id": "geode.hook-evidence-handle@1",
+            "authority": "public hook extension",
+            "reference": value,
+        }
+    else:
+        raise InvalidHookDecisionError(
+            f"unsupported evidence reference type: {type(value).__name__}"
+        )
+    kind = str(raw.get("kind") or "")
+    if kind not in _EVIDENCE_KINDS:
+        raise InvalidHookDecisionError(f"unsupported evidence reference kind: {kind!r}")
+    fields = {
+        key: redact_secrets(str(raw.get(key) or ""))[:512]
+        for key in ("kind", "schema_id", "authority", "reference")
+    }
+    if any(not fields[key] for key in fields):
+        raise InvalidHookDecisionError("evidence reference fields must be non-empty")
+    return HookEvidenceReference(**fields)
 
 
 def _sanitize_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
@@ -798,11 +883,13 @@ def _sanitize_value(value: Any, *, depth: int) -> Any:
 
 
 __all__ = [
+    "PUBLIC_HOOK_DEFAULT_TIMEOUT_S",
     "PUBLIC_HOOK_SCHEMA_VERSION",
     "DuplicateHookError",
     "HookAction",
     "HookCorrelation",
     "HookDecision",
+    "HookEvidenceReference",
     "HookInvocation",
     "HookName",
     "HookOutcome",

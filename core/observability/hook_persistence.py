@@ -1,4 +1,4 @@
-"""Canonical HookSystem dispatch persistence and transcript mirroring."""
+"""Canonical HookSystem dispatch persistence and run-event projection."""
 
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ class HookPersistenceSink:
 
     The sink is deliberately outside :mod:`core.hooks`: the event bus stays
     storage-agnostic, while production bootstrap opts into SQLite and the
-    active per-run transcript mirror as one atomic policy decision.
+    active per-run event projection as one policy decision.
     """
 
     def __init__(
@@ -55,7 +55,7 @@ class HookPersistenceSink:
 
     def __call__(self, dispatch: HookDispatch) -> None:
         spec = event_persistence_spec(dispatch.event)
-        if not spec.persist_sql and not spec.mirror_transcript:
+        if not spec.persist_sql and not spec.mirror_run_projection:
             return
 
         activity = self._map_activity(dispatch)
@@ -88,11 +88,21 @@ class HookPersistenceSink:
         else:
             status = "ok"
         if spec.persist_sql:
+            live_session_id = str(dispatch.data.get("session_id") or "")
+            live_turn_id = str(dispatch.data.get("turn_id") or "")
+            tool_call_id = str(dispatch.data.get("tool_call_id") or "")
+            llm_call_id = str(dispatch.data.get("llm_call_id") or "")
+            llm_attempt_id = str(dispatch.data.get("llm_attempt_id") or "")
             self.store.append(
                 HookEventWrite(
                     occurred_at=activity.occurred_at,
                     session_key=self.session_key,
                     run_id=self.run_id,
+                    session_id=live_session_id,
+                    turn_id=live_turn_id,
+                    tool_call_id=tool_call_id,
+                    llm_call_id=llm_call_id,
+                    llm_attempt_id=llm_attempt_id,
                     event=dispatch.event.value,
                     dispatch_mode=dispatch.mode.value,
                     status=status,
@@ -114,8 +124,8 @@ class HookPersistenceSink:
                 )
             )
 
-        if spec.mirror_transcript:
-            self._mirror_transcript(dispatch, activity, bounded_payload)
+        if spec.mirror_run_projection:
+            self._mirror_run_projection(dispatch, activity, bounded_payload)
 
     def _map_activity(self, dispatch: HookDispatch) -> _ActivityEnvelope:
         try:
@@ -132,7 +142,13 @@ class HookPersistenceSink:
                 details = row_details
             else:
                 details = {"_omitted_details_type": type(row_details).__name__}
-            for key in ("session_id", "turn_id"):
+            for key in (
+                "session_id",
+                "turn_id",
+                "tool_call_id",
+                "llm_call_id",
+                "llm_attempt_id",
+            ):
                 value = dispatch.data.get(key)
                 if isinstance(value, str) and value:
                     details[key] = value
@@ -149,7 +165,7 @@ class HookPersistenceSink:
                 # ``subject`` is model/user supplied and may be a sentence or
                 # pasted result rather than an opaque id. Keep per-run
                 # correlation without storing the raw value in either SQL or
-                # the active transcript.
+                # the active run projection.
                 entity_id = self._opaque_entity_id("result", entity_id)
             return _ActivityEnvelope(
                 occurred_at=float(row.ts),
@@ -185,17 +201,17 @@ class HookPersistenceSink:
         return f"{namespace}:{digest}"
 
     @staticmethod
-    def _mirror_transcript(
+    def _mirror_run_projection(
         dispatch: HookDispatch,
         activity: _ActivityEnvelope,
         payload: dict[str, Any],
     ) -> None:
-        from core.self_improving.loop.observe.run_transcript import current_run_transcript
+        from core.self_improving.loop.observe.run_timeline import current_run_timeline
 
-        transcript = current_run_transcript()
-        if transcript is None:
+        timeline = current_run_timeline()
+        if timeline is None:
             return
-        transcript.append(
+        timeline.append(
             event=dispatch.event.value,
             ts=activity.occurred_at,
             actor_type=activity.actor_type,

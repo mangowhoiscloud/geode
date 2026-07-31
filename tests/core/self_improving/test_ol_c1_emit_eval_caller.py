@@ -2,7 +2,7 @@
 
 Pins:
 - ``core/self_improving/train.py`` main() emits one ``eval_response_recorded``
-  event per audit cycle inside the active RunTranscript scope.
+  event per audit cycle inside the active RunTimeline scope.
 - Payload schema matches PR-M4.0 contract: ``prompt`` / ``response``
   / ``fitness_score`` / ``axis_scores`` / ``source`` / ``rollback_flag``.
 - ``source`` field == ``"autoresearch_audit"``.
@@ -17,18 +17,18 @@ import json
 from pathlib import Path
 
 import pytest
-from core.self_improving.loop.observe.run_transcript import (
-    RunTranscript,
-    run_transcript_scope,
+from core.self_improving.loop.observe.run_timeline import (
+    RunTimeline,
+    run_timeline_scope,
 )
 
 
-def _journal_with_path(tmp_path: Path) -> RunTranscript:
-    return RunTranscript(
+def _journal_with_path(tmp_path: Path) -> RunTimeline:
+    return RunTimeline(
         session_id="ol-c1-test",
         gen_tag="auto-test",
         component="autoresearch",
-        path=tmp_path / "transcript.jsonl",
+        path=tmp_path / "events.jsonl",
     )
 
 
@@ -55,7 +55,7 @@ def test_autoresearch_emit_pattern_chosen_pile(tmp_path: Path) -> None:
     from core.self_improving.loop.observe.eval_journaling import emit_eval_response_recorded
 
     journal = _journal_with_path(tmp_path)
-    with run_transcript_scope(journal):
+    with run_timeline_scope(journal):
         ok = emit_eval_response_recorded(
             prompt="autoresearch audit cycle on commit abc123 "
             "(seed_select='default', description='gen-1')",
@@ -81,7 +81,7 @@ def test_autoresearch_emit_pattern_rejected_pile(tmp_path: Path) -> None:
     from core.self_improving.loop.observe.eval_journaling import emit_eval_response_recorded
 
     journal = _journal_with_path(tmp_path)
-    with run_transcript_scope(journal):
+    with run_timeline_scope(journal):
         emit_eval_response_recorded(
             prompt="autoresearch audit cycle on commit def456 "
             "(seed_select='default', description='gen-2-bad')",
@@ -99,7 +99,7 @@ def test_autoresearch_emit_pattern_rejected_pile(tmp_path: Path) -> None:
 
 
 def test_autoresearch_emit_pattern_no_journal_scope_is_noop() -> None:
-    """No run_transcript_scope → emit returns False, no file written, no raise."""
+    """No run_timeline_scope → emit returns False, no file written, no raise."""
     from core.self_improving.loop.observe.eval_journaling import emit_eval_response_recorded
 
     ok = emit_eval_response_recorded(

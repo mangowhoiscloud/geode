@@ -1,9 +1,9 @@
-"""ADR-012 M4.0 — eval_response_recorded RunTranscript event invariants.
+"""ADR-012 M4.0 — eval_response_recorded RunTimeline event invariants.
 
 Pins:
 - ``emit_eval_response_recorded`` writes a single JSONL row to the active
-  RunTranscript with the canonical event name + payload schema.
-- Outside ``run_transcript_scope`` → no-op returning ``False``.
+  RunTimeline with the canonical event name + payload schema.
+- Outside ``run_timeline_scope`` → no-op returning ``False``.
 - ``rollback_flag`` defaults to ``False`` (chosen pile); explicit ``True``
   signals rejected (for M4.1 DPO pack labeling).
 - ``axis_scores`` optional — scalar ``fitness_score`` alone is valid.
@@ -21,15 +21,15 @@ from core.self_improving.loop.observe.eval_journaling import (
     EVENT_NAME,
     emit_eval_response_recorded,
 )
-from core.self_improving.loop.observe.run_transcript import (
-    RunTranscript,
-    run_transcript_scope,
+from core.self_improving.loop.observe.run_timeline import (
+    RunTimeline,
+    run_timeline_scope,
 )
 
 
 @pytest.fixture
 def journal_path(tmp_path: Path) -> Iterator[Path]:
-    yield tmp_path / "transcript.jsonl"
+    yield tmp_path / "events.jsonl"
 
 
 def _read_events(path: Path) -> list[dict]:
@@ -63,13 +63,13 @@ def test_emit_outside_scope_returns_false() -> None:
 
 
 def test_emit_writes_minimal_payload(journal_path: Path) -> None:
-    journal = RunTranscript(
+    journal = RunTimeline(
         session_id="test-session",
         gen_tag="auto-HEAD",
         component="test",
         path=journal_path,
     )
-    with run_transcript_scope(journal):
+    with run_timeline_scope(journal):
         result = emit_eval_response_recorded(
             prompt="user msg",
             response="agent reply",
@@ -94,8 +94,8 @@ def test_emit_writes_minimal_payload(journal_path: Path) -> None:
 
 
 def test_emit_writes_full_payload(journal_path: Path) -> None:
-    journal = RunTranscript(session_id="s1", gen_tag="auto", component="petri", path=journal_path)
-    with run_transcript_scope(journal):
+    journal = RunTimeline(session_id="s1", gen_tag="auto", component="petri", path=journal_path)
+    with run_timeline_scope(journal):
         emit_eval_response_recorded(
             prompt="prompt text",
             response="response text",
@@ -123,8 +123,8 @@ def test_emit_writes_full_payload(journal_path: Path) -> None:
 
 
 def test_rollback_flag_true_persisted(journal_path: Path) -> None:
-    journal = RunTranscript(session_id="s", gen_tag="g", component="c", path=journal_path)
-    with run_transcript_scope(journal):
+    journal = RunTimeline(session_id="s", gen_tag="g", component="c", path=journal_path)
+    with run_timeline_scope(journal):
         emit_eval_response_recorded(
             prompt="q",
             response="a",
@@ -137,8 +137,8 @@ def test_rollback_flag_true_persisted(journal_path: Path) -> None:
 
 def test_rollback_flag_default_is_false(journal_path: Path) -> None:
     """Default = False (chosen pile)."""
-    journal = RunTranscript(session_id="s", gen_tag="g", component="c", path=journal_path)
-    with run_transcript_scope(journal):
+    journal = RunTimeline(session_id="s", gen_tag="g", component="c", path=journal_path)
+    with run_timeline_scope(journal):
         emit_eval_response_recorded(prompt="q", response="a", fitness_score=0.5)
     events = _read_events(journal_path)
     assert events[0]["payload"]["rollback_flag"] is False
@@ -149,8 +149,8 @@ def test_rollback_flag_default_is_false(journal_path: Path) -> None:
 
 def test_axis_scores_omitted_when_none(journal_path: Path) -> None:
     """``axis_scores=None`` → payload key 자체가 안 나타남 (forward-compat)."""
-    journal = RunTranscript(session_id="s", gen_tag="g", component="c", path=journal_path)
-    with run_transcript_scope(journal):
+    journal = RunTimeline(session_id="s", gen_tag="g", component="c", path=journal_path)
+    with run_timeline_scope(journal):
         emit_eval_response_recorded(prompt="q", response="a", fitness_score=0.5)
     payload = _read_events(journal_path)[0]["payload"]
     assert "axis_scores" not in payload
@@ -158,8 +158,8 @@ def test_axis_scores_omitted_when_none(journal_path: Path) -> None:
 
 def test_axis_scores_empty_dict_omitted(journal_path: Path) -> None:
     """``axis_scores={}`` 도 omit (truthiness check)."""
-    journal = RunTranscript(session_id="s", gen_tag="g", component="c", path=journal_path)
-    with run_transcript_scope(journal):
+    journal = RunTimeline(session_id="s", gen_tag="g", component="c", path=journal_path)
+    with run_timeline_scope(journal):
         emit_eval_response_recorded(prompt="q", response="a", fitness_score=0.5, axis_scores={})
     payload = _read_events(journal_path)[0]["payload"]
     assert "axis_scores" not in payload
@@ -169,8 +169,8 @@ def test_axis_scores_empty_dict_omitted(journal_path: Path) -> None:
 
 
 def test_fitness_score_int_coerced_to_float(journal_path: Path) -> None:
-    journal = RunTranscript(session_id="s", gen_tag="g", component="c", path=journal_path)
-    with run_transcript_scope(journal):
+    journal = RunTimeline(session_id="s", gen_tag="g", component="c", path=journal_path)
+    with run_timeline_scope(journal):
         emit_eval_response_recorded(
             prompt="q",
             response="a",
@@ -182,8 +182,8 @@ def test_fitness_score_int_coerced_to_float(journal_path: Path) -> None:
 
 
 def test_axis_scores_values_coerced_to_float(journal_path: Path) -> None:
-    journal = RunTranscript(session_id="s", gen_tag="g", component="c", path=journal_path)
-    with run_transcript_scope(journal):
+    journal = RunTimeline(session_id="s", gen_tag="g", component="c", path=journal_path)
+    with run_timeline_scope(journal):
         emit_eval_response_recorded(
             prompt="q",
             response="a",
@@ -198,8 +198,8 @@ def test_axis_scores_values_coerced_to_float(journal_path: Path) -> None:
 
 
 def test_multiple_emits_append_separate_lines(journal_path: Path) -> None:
-    journal = RunTranscript(session_id="s", gen_tag="g", component="c", path=journal_path)
-    with run_transcript_scope(journal):
+    journal = RunTimeline(session_id="s", gen_tag="g", component="c", path=journal_path)
+    with run_timeline_scope(journal):
         for i in range(3):
             emit_eval_response_recorded(prompt=f"q{i}", response=f"a{i}", fitness_score=0.5)
     events = _read_events(journal_path)

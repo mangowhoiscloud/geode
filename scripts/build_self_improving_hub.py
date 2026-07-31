@@ -49,6 +49,7 @@ from statistics import NormalDist
 from typing import Any
 from urllib.parse import quote
 
+from core.observability.record_paths import read_event_stream
 from core.paths import (
     AUTORESEARCH_STATE_DIR,
     BASELINE_JSON_PATH,
@@ -1113,7 +1114,7 @@ def _render_pilot_heatmap(state: dict[str, Any]) -> str:
                 value = float(raw)
             except (TypeError, ValueError):
                 cells.append(
-                    f'<td class="score-na" aria-label="{html_escape(dim)} unparseable">—</td>'
+                    f'<td class="score-na" aria-label="{html_escape(dim)} unparsable">—</td>'
                 )
                 continue
             try:
@@ -1758,8 +1759,8 @@ def _emit_seedgen_run_subpages(
 ) -> None:
     """Emit the 4 hi-res sub-pages for a single run.
 
-    Reads ``sub_agents/<task_id>/{dialogue.jsonl,session.json,result.json}``,
-    ``transcript.jsonl``, ``per_phase_costs.json``, ``tournament.json``,
+    Reads ``sub_agents/<task_id>/{events.jsonl,session.json,result.json}``,
+    ``events.jsonl``, ``per_phase_costs.json``, ``tournament.json``,
     ``checkpoints/*.json`` from the run's bundle dir. Falls back to the
     fixture / state run dir resolved by walking up from ``out_dir``.
 
@@ -1901,7 +1902,7 @@ def _resolve_subagent_model(
     records the source-aligned provider ``openai-codex``). Keying the chip off
     the bare provider mislabels every cli-local run as PAYG.
 
-    Resolution: take model + provider from ``dialogue.jsonl``'s session_start
+    Resolution: take model + provider from ``events.jsonl``'s session start
     (the actual run record; session.json omits them for cli-managed agents),
     fall back to session.json, then override the source to ``claude-cli`` when
     ``claude_cli_session_id`` is present. The returned ``display_model`` is
@@ -1964,7 +1965,7 @@ def _load_subagents(bundle_dir: Path) -> list[dict[str, Any]]:
             if isinstance(meta, dict) and meta.get("phase")
             else _phase_from_task_id(task_dir.name)
         )
-        dialogue_events = _read_dialogue(task_dir / "dialogue.jsonl")
+        dialogue_events = _read_event_rows(task_dir)
         total_cost = 0.0
         duration_ms = 0.0
         total_tokens = 0
@@ -1989,7 +1990,7 @@ def _load_subagents(bundle_dir: Path) -> list[dict[str, Any]]:
         # chip must reflect the execution SOURCE (claude-cli = Claude Code,
         # openai-codex = Codex), NOT the model's billing provider (anthropic /
         # openai = PAYG). session.json omits model/provider for cli-managed
-        # sub-agents, so prefer dialogue.jsonl's session_start; the codex path
+        # sub-agents, so prefer events.jsonl's session start; the codex path
         # already records source-aligned provider "openai-codex", while the
         # claude-cli path records bare "anthropic" + a claude_cli_session_id.
         model, provider = _resolve_subagent_model(session, dialogue_events)
@@ -2016,24 +2017,9 @@ def _load_subagents(bundle_dir: Path) -> list[dict[str, Any]]:
     return rows
 
 
-def _read_dialogue(path: Path) -> list[dict[str, Any]]:
-    """Parse a ``dialogue.jsonl`` file into a list of event dicts."""
-    if not path.is_file():
-        return []
-    out: list[dict[str, Any]] = []
-    try:
-        for line in path.read_text(encoding="utf-8").splitlines():
-            if not line.strip():
-                continue
-            try:
-                evt = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if isinstance(evt, dict):
-                out.append(evt)
-    except OSError:
-        return []
-    return out
+def _read_event_rows(path: Path) -> list[dict[str, Any]]:
+    """Read a new-first run event stream or one explicit legacy file."""
+    return read_event_stream(path)
 
 
 _TASK_PREFIX_TO_PHASE: tuple[tuple[str, str], ...] = (
@@ -2346,9 +2332,9 @@ def _render_timeline_body(
             per_phase_costs = json.loads(pp_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             per_phase_costs = {}
-    transcript = _read_dialogue(bundle_dir / "transcript.jsonl")
+    timeline = _read_event_rows(bundle_dir)
     phase_events: dict[str, list[dict[str, Any]]] = {}
-    for evt in transcript:
+    for evt in timeline:
         payload = evt.get("payload") if isinstance(evt, dict) else None
         if isinstance(payload, dict):
             role = payload.get("role")
@@ -2417,7 +2403,7 @@ def _render_timeline_body(
         else ('<section class="page-sub"><p class="muted">No phase data published.</p></section>')
     )
     return f"""<p class="muted">9-phase timeline reading from
-  <code>transcript.jsonl</code> + <code>per_phase_costs.json</code>.
+  <code>events.jsonl</code> + <code>per_phase_costs.json</code>.
   Each phase &lt;section&gt; nests its sub-agent fan-out + filtered hook events.</p>
 {body}
 """
@@ -3216,8 +3202,8 @@ def _render_seedgen_subview_links(
         (
             f"{base}/agents/",
             "Agents",
-            "sub-agent dialogues",
-            "Per-task transcript (generator / critic / pilot / vote / evolver)",
+            "sub-agent timelines",
+            "Per-task events (generator / critic / pilot / vote / evolver)",
         ),
     ]
     items: list[str] = []

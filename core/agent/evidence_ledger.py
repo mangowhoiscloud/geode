@@ -5,9 +5,12 @@ from __future__ import annotations
 import hashlib
 import json
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, TypedDict
+
+EVIDENCE_ROW_SCHEMA_VERSION = 2
 
 
 class EvidenceRow(TypedDict):
@@ -15,6 +18,8 @@ class EvidenceRow(TypedDict):
     ts: float
     seq: int
     session_id: str
+    turn_id: str
+    call_id: str
     component: str
     level: str
     event: str
@@ -78,20 +83,45 @@ class EvidenceLedger:
     path: Path | None = None
     rows: list[EvidenceRow] = field(default_factory=list)
     component: str = "agentic_loop"
+    turn_id_provider: Callable[[], str] | None = None
     _seq: int = 0
 
     @classmethod
-    def for_session(cls, session_id: str) -> EvidenceLedger:
-        return cls(session_id=session_id, path=default_evidence_path(session_id))
+    def for_session(
+        cls,
+        session_id: str,
+        *,
+        turn_id_provider: Callable[[], str] | None = None,
+    ) -> EvidenceLedger:
+        return cls(
+            session_id=session_id,
+            path=default_evidence_path(session_id),
+            turn_id_provider=turn_id_provider,
+        )
 
-    def append(self, *, kind: str, summary: str, payload: dict[str, Any]) -> EvidenceRow:
+    def append(
+        self,
+        *,
+        kind: str,
+        summary: str,
+        payload: dict[str, Any],
+        turn_id: str | None = None,
+        call_id: str = "",
+    ) -> EvidenceRow:
         redacted = _redact(payload)
         self._seq += 1
+        resolved_turn_id = (
+            str(self.turn_id_provider() or "")
+            if turn_id is None and self.turn_id_provider is not None
+            else str(turn_id or "")
+        )
         row: EvidenceRow = {
-            "schema_version": 1,
+            "schema_version": EVIDENCE_ROW_SCHEMA_VERSION,
             "ts": time.time(),
             "seq": self._seq,
             "session_id": self.session_id,
+            "turn_id": resolved_turn_id,
+            "call_id": str(call_id or ""),
             "component": self.component,
             "level": "info",
             "event": kind,
@@ -112,14 +142,16 @@ class EvidenceLedger:
         *,
         capability_graph: dict[str, Any],
         preflight: dict[str, Any],
+        turn_id: str | None = None,
     ) -> EvidenceRow:
         return self.append(
             kind="task_preflight",
             summary="Provider capability graph matched against the user task.",
             payload={"capability_graph": capability_graph, "preflight": preflight},
+            turn_id=turn_id,
         )
 
-    def append_final(self, *, result: Any) -> EvidenceRow:
+    def append_final(self, *, result: Any, turn_id: str | None = None) -> EvidenceRow:
         tool_calls = getattr(result, "tool_calls", []) or []
         payload = {
             "termination_reason": getattr(result, "termination_reason", ""),
@@ -131,9 +163,15 @@ class EvidenceLedger:
             kind="final_result",
             summary=f"Agent finished with {payload['termination_reason'] or 'unknown'}.",
             payload=payload,
+            turn_id=turn_id,
         )
 
-    def append_evidence_check(self, *, required_evidence: list[str]) -> EvidenceRow:
+    def append_evidence_check(
+        self,
+        *,
+        required_evidence: list[str],
+        turn_id: str | None = None,
+    ) -> EvidenceRow:
         """Append a ``kind="evidence_check"`` row closing the preflight chain.
 
         Trajectory audit 2026-07-03 — ``task_preflight`` *declared*
@@ -169,4 +207,5 @@ class EvidenceLedger:
                 "missing": missing,
                 "recorded_kinds": sorted(recorded_kinds),
             },
+            turn_id=turn_id,
         )

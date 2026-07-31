@@ -10,14 +10,21 @@ from __future__ import annotations
 import asyncio
 import importlib
 import json
+import logging
 import os
 import sys
 import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from core.agent.loop.models import is_successful_task_termination
+
+from plugins.benchmark_harness.trajectory_artifacts import export_mcpmark_trajectory
+
 if TYPE_CHECKING:
     from core.hooks.middleware import ToolCallRequest
+
+log = logging.getLogger(__name__)
 
 
 def _jsonish(value: Any) -> str:
@@ -293,6 +300,7 @@ class GeodeMCPMarkAgent(BaseMCPAgent):
         self._reset_progress()
         self._refresh_service_config()
         model, provider, source = _route_from_model(self.litellm_input_model_name)
+        loop: Any | None = None
 
         try:
             mcp_server = await self._create_mcp_server()
@@ -312,11 +320,18 @@ class GeodeMCPMarkAgent(BaseMCPAgent):
                     timeout=int(self.timeout),
                 )
                 result = await loop.arun(instruction)
+                task_success = not bool(getattr(result, "error", None)) and (
+                    is_successful_task_termination(getattr(result, "termination_reason", ""))
+                )
+                if not task_success:
+                    await loop.amark_session_error()
+                else:
+                    await loop.amark_session_completed()
 
             token_usage = _usage_dict(result)
             execution_time = time.time() - start_time
             self.usage_tracker.update(
-                success=True,
+                success=task_success,
                 token_usage=token_usage,
                 turn_count=getattr(result, "rounds", 0),
                 execution_time=execution_time,
@@ -329,15 +344,45 @@ class GeodeMCPMarkAgent(BaseMCPAgent):
                         ensure_ascii=False,
                         indent=2,
                     )
+                try:
+                    trajectory_path = export_mcpmark_trajectory(
+                        loop=loop,
+                        instruction=instruction,
+                        result=result,
+                        tool_call_log_file=tool_call_log_file,
+                        model=model,
+                        provider=provider,
+                        source=source,
+                    )
+                    trajectory_status = "written"
+                    trajectory_error = None
+                except Exception as exc:
+                    log.warning("GEODE MCPMark trajectory sidecar export failed: %s", exc)
+                    trajectory_path = None
+                    trajectory_status = "failed"
+                    trajectory_error = str(exc)
+            else:
+                trajectory_path = None
+                trajectory_status = "not_requested"
+                trajectory_error = None
             return {
-                "success": True,
+                "success": task_success,
                 "output": getattr(result, "text", "") or "Task completed",
                 "token_usage": token_usage,
                 "turn_count": getattr(result, "rounds", 0),
                 "execution_time": execution_time,
                 "litellm_run_model_name": f"geode/{model}",
+                "geode_trajectory": str(trajectory_path) if trajectory_path else None,
+                "geode_trajectory_status": trajectory_status,
+                "geode_trajectory_error": trajectory_error,
+                "error": (str(getattr(result, "error", "") or "") if not task_success else None),
             }
         except Exception as exc:
+            if loop is not None:
+                try:
+                    await loop.amark_session_error()
+                except Exception:
+                    log.debug("MCPMark error lifecycle close failed", exc_info=True)
             execution_time = time.time() - start_time
             self.usage_tracker.update(
                 success=False,

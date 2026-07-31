@@ -1,0 +1,169 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/mangowhoiscloud/geode/main/core/observability/schemas/trajectory.schema.json",
+  "title": "GEODE evaluation trajectory v1",
+  "type": "object",
+  "required": [
+    "schema_id",
+    "schema_version",
+    "trajectory_id",
+    "captured_at",
+    "source",
+    "events",
+    "outcome",
+    "integrity",
+    "privacy",
+    "provenance"
+  ],
+  "properties": {
+    "schema_id": {"const": "geode.trajectory@1"},
+    "schema_version": {"const": 1},
+    "trajectory_id": {"type": "string", "minLength": 1},
+    "captured_at": {"type": "string", "format": "date-time"},
+    "published_at": {"type": "string", "format": "date-time"},
+    "observed_on": {"type": "string", "format": "date"},
+    "trajectory_class": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    },
+    "source": {
+      "type": "object",
+      "required": ["harness", "session"],
+      "properties": {
+        "harness": {"type": "string", "minLength": 1},
+        "run": {"type": "string"},
+        "session": {"type": "string", "minLength": 1},
+        "task": {"type": "string"},
+        "parents": {
+          "type": ["array", "null"],
+          "items": {"type": "string"}
+        }
+      },
+      "additionalProperties": true
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "event_id",
+          "ordinal",
+          "occurred_at",
+          "kind",
+          "actor",
+          "session_id",
+          "turn_id",
+          "call_id",
+          "payload"
+        ],
+        "properties": {
+          "event_id": {"type": "string", "minLength": 1},
+          "ordinal": {"type": "integer", "minimum": 1},
+          "occurred_at": {"type": "string", "format": "date-time"},
+          "kind": {"type": "string", "minLength": 1},
+          "actor": {"type": "string", "minLength": 1},
+          "session_id": {"type": "string"},
+          "turn_id": {"type": "string"},
+          "call_id": {"type": "string"},
+          "payload": {"type": "object"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "outcome": {"type": "object"},
+    "integrity": {
+      "type": "object",
+      "required": [
+        "record_count",
+        "scope_complete",
+        "replay_complete",
+        "complete",
+        "scope_incompleteness",
+        "replay_incompleteness",
+        "incompleteness",
+        "quality"
+      ],
+      "properties": {
+        "record_count": {"type": "integer", "minimum": 0},
+        "scope_complete": {"type": "boolean"},
+        "replay_complete": {"type": "boolean"},
+        "complete": {"type": "boolean"},
+        "scope_incompleteness": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "replay_incompleteness": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "incompleteness": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "quality": {
+          "type": "object",
+          "required": [
+            "event_id_unique",
+            "ordinal_contiguous",
+            "correlation",
+            "tool_pairing",
+            "payload_issue_events",
+            "replay_fidelity"
+          ],
+          "properties": {
+            "event_id_unique": {"const": true},
+            "ordinal_contiguous": {"const": true},
+            "correlation": {"type": "object"},
+            "tool_pairing": {"type": "object"},
+            "payload_issue_events": {"type": "integer", "minimum": 0},
+            "replay_fidelity": {"type": "string", "enum": ["full", "reduced"]}
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": true
+    },
+    "privacy": {"type": "object"},
+    "provenance": {"type": "object"},
+    "runtime_event_refs": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/externalReference"}
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/externalReference"}
+    },
+    "artifact_digests": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "sha256"],
+        "properties": {
+          "path": {"type": "string"},
+          "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "$defs": {
+    "externalReference": {
+      "type": "object",
+      "required": ["kind", "schema_id", "authority", "reference"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["runtime_event", "sil_eval", "crucible_evidence", "native_receipt", "legacy"]
+        },
+        "schema_id": {"type": "string", "minLength": 1},
+        "authority": {"type": "string", "minLength": 1},
+        "reference": {"type": "string", "minLength": 1},
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}

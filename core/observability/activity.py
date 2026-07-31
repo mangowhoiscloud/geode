@@ -144,7 +144,7 @@ class ActivityRowBase(BaseModel):
     Every mapped HookEvent produces a concrete subclass or a
     :class:`GenericActivityRow` fail-soft fallback. ``HookPersistenceSink``
     uses this envelope as its projection; the catalog excludes compatibility
-    duplicates before SQL or active-run transcript persistence.
+    duplicates before SQL or active run-event projection.
 
     Field semantics mirror paperclip's
     ``packages/db/src/schema/activity_log.ts:6`` ``activity_log`` table:

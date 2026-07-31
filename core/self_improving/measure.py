@@ -43,7 +43,8 @@ def _train() -> Any:
     return _t
 
 
-RUN_TRANSCRIPT_PATH_ENV = "GEODE_RUN_TRANSCRIPT_PATH"
+RUN_TIMELINE_PATH_ENV = "GEODE_RUN_TIMELINE_PATH"
+LEGACY_RUN_TRANSCRIPT_PATH_ENV = "GEODE_RUN_TRANSCRIPT_PATH"
 
 RUN_WORKER_ID_ENV = "GEODE_RUN_WORKER_ID"
 
@@ -56,20 +57,20 @@ def _emit_journal(
     level: str = "info",
     payload: dict[str, object] | None = None,
 ) -> None:
-    """Emit one RunTranscript event for this audit run.
+    """Emit one RunTimeline event for this audit run.
 
     P0b — autoresearch event coverage (docs/audits/2026-05-19-
     self-improving-loop-observability-gap.md §4). Centralises the
-    RunTranscript lazy-import + payload SoT contract (P0a §6: journal
+    RunTimeline lazy-import + payload SoT contract (P0a §6: journal
     events MUST NOT duplicate sessions.jsonl canonical fields). No-op
     when ``session_id`` / ``gen_tag`` are empty (run_audit called from
     tests without them) or when ``core.observability`` is unavailable
     in the import context.
 
-    S6 (async-first transcript isolation, 2026-06-03) — when this process is a
-    concurrent campaign worker, ``GEODE_RUN_TRANSCRIPT_PATH`` redirects the
-    RunTranscript to an ISOLATED per-worker jsonl (so N concurrent workers never
-    race-append the shared home-dir transcript) and ``GEODE_RUN_WORKER_ID``
+    S6 (async-first timeline isolation, 2026-06-03) — when this process is a
+    concurrent campaign worker, ``GEODE_RUN_TIMELINE_PATH`` redirects the
+    RunTimeline to an ISOLATED per-worker jsonl (so N concurrent workers never
+    race-append the shared home-dir projection) and ``GEODE_RUN_WORKER_ID``
     stamps ``worker_id`` into every event payload (so the campaign's post-gather
     merge is attributable). Both env vars are absent for the sync standalone
     ``geode audit`` path + the sequential GATE arm — the default home-dir path is
@@ -78,28 +79,30 @@ def _emit_journal(
     if not session_id or not gen_tag:
         return
     try:
-        from core.self_improving.loop.observe.run_transcript import RunTranscript
+        from core.self_improving.loop.observe.run_timeline import RunTimeline
     except ImportError:
         return
     worker_id = os.environ.get(RUN_WORKER_ID_ENV, "").strip()
     emit_payload = dict(payload or {})
     if worker_id:
         emit_payload["worker_id"] = worker_id
-    transcript_path: Path | None = None
-    raw_path = os.environ.get(RUN_TRANSCRIPT_PATH_ENV, "").strip()
+    timeline_path: Path | None = None
+    raw_path = os.environ.get(RUN_TIMELINE_PATH_ENV, "").strip()
+    if not raw_path:
+        raw_path = os.environ.get(LEGACY_RUN_TRANSCRIPT_PATH_ENV, "").strip()
     if raw_path:
         try:
-            transcript_path = Path(raw_path)
+            timeline_path = Path(raw_path)
         except (TypeError, ValueError):
             # Graceful boundary: a malformed env value must NOT crash the audit —
             # fall back to the default home-dir path (the worker simply loses its
             # isolation rather than failing the whole concurrent fan-out).
-            transcript_path = None
-    RunTranscript(
+            timeline_path = None
+    RunTimeline(
         session_id=session_id,
         gen_tag=gen_tag,
         component="autoresearch",
-        path=transcript_path,
+        path=timeline_path,
     ).append(event, level=level, payload=emit_payload)
 
 
@@ -533,7 +536,7 @@ def run_audit(
     falls back to the placeholder constant and the v2 schema records
     no provenance for synthesized data.
 
-    ``session_id`` / ``gen_tag`` are forwarded for RunTranscript emission
+    ``session_id`` / ``gen_tag`` are forwarded for RunTimeline emission
     (P0b — wrapper_override_dumped / subprocess_started / subprocess_finished
     / subprocess_timeout events). Both default to empty so unit tests that
     call ``run_audit(dry_run=...)`` directly stay unchanged — emission is

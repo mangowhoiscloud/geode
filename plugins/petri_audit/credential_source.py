@@ -172,7 +172,7 @@ def _emit_credential_event(
     level: str = "info",
     payload: dict[str, Any] | None = None,
 ) -> None:
-    """Emit a credential-resolver event into the active RunTranscript.
+    """Emit a credential-resolver event into the active RunTimeline.
 
     P1b — close the silent-fallback gap from the 2026-05-19 observability
     audit §5. Three resolver decisions were previously taken without any
@@ -191,9 +191,9 @@ def _emit_credential_event(
     Failure to emit must not break the resolver — exception swallowed.
     """
     try:
-        from core.self_improving.loop.observe.run_transcript import current_run_transcript
+        from core.self_improving.loop.observe.run_timeline import current_run_timeline
 
-        journal = current_run_transcript()
+        journal = current_run_timeline()
         if journal is None:
             return
         journal.append(event, level=level, payload=payload or {})

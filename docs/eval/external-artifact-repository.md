@@ -43,6 +43,19 @@ SQLite, JSONL mirrors, hidden reasoning, and credential files remain
 withheld. Local usernames and synthetic telecom personal fields are redacted
 in the public copies.
 
+Those historical releases use the dated
+`geode.trajectory@2026-07-29`/`@2026-07-31` envelope and stay immutable. New
+GEODE producers emit `geode.trajectory@1`; public staging writes a separate
+`geode.trajectory-release@1` manifest. The core read adapter accepts the dated
+shape and recomputes v1 ordering/pairing quality without rewriting the public
+source.
+
+The artifact repository's policy file must be updated in the first `@1`
+publication PR to recognize `events[].ordinal`; its current `events[].sequence`
+wording describes the immutable dated releases. Until that policy PR lands,
+the local stage is ready but a new `@1` directory is not considered remotely
+admitted.
+
 Still in the GEODE repository after the 2026-07-13 migration: the live
 `docs/audits/eval-logs/` manifest ledger (`core/audit/manifest.py` appends to
 it on every `geode audit --live`), the code-referenced
@@ -88,6 +101,54 @@ reports may be public when they contain no selected identity.
 6. Open and merge a PR in the artifact repository.
 7. Record its merge commit and immutable blob/tree links in the GEODE run
    ledger before publishing a score or improvement claim.
+
+For normalized trajectories, steps 2–5 use
+`core.observability.trajectory_release.stage_trajectory_release()`. Its local
+gate always requires schema validity, scope completeness, per-trajectory
+privacy review, zero configured secret-scan findings, and a scope-bound
+structured privacy review record. Replay completeness is required unless the
+release admission explicitly allows content-digested replay. Every
+`artifact_digests` reference must resolve to source bytes and match SHA-256
+before staging. The digest-bound manifest, append-only destination, and local
+read-back close the local half; the artifact-repository PR still performs an
+independently anchored remote read-back in step 7.
+
+The review record is public metadata, not a copy of private evidence:
+
+```json
+{
+  "reviewer": "release owner or review team",
+  "reviewed_at": "2026-07-31T12:00:00Z",
+  "method": "allowlist review plus secret and identity scan",
+  "scope": "the exact --scope value",
+  "attestation": "Only the declared normalized trajectories are approved."
+}
+```
+
+A concrete trajectory publication is:
+
+```bash
+geode session stage-trajectory-release trajectory.json \
+  --destination /tmp/geode-trajectory-releases \
+  --source sil \
+  --scope campaign-2026-07-31 \
+  --privacy-review privacy-review.json \
+  --source-artifact run.eval=/absolute/path/to/run.eval
+
+# Copy the new content-addressed directory only into a fresh
+# geode-eval-artifacts worktree/branch, open a PR, and merge it.
+
+geode session verify-trajectory-release <merged-release-dir> \
+  --expected-manifest-sha256 <digest-recorded-before-copy>
+```
+
+For SIL, `export-trajectory --sil-eval run.eval` creates the typed
+`inspect_ai.eval@native` evidence reference and source digest. This bridge is
+an explicit promotion operation, not an automatic campaign-finalization side
+effect. For Crucible, a tau2 native receipt is always a `native_receipt`;
+`crucible_evidence` is added only after frozen-contract identity preflight.
+Neither bridge delegates scoring or promotion authority to GEODE's release
+manifest.
 
 The publication is scripted deterministically by `scripts/eval/publish_crucible_artifacts.py` (`stage` copies one run's allowlisted subset and masks the local username; `mask` re-masks an existing tree idempotently). Both refuse sealed material by name and never rewrite an existing run directory.
 

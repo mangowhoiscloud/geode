@@ -396,28 +396,28 @@ def test_default_path_resolves_to_global_config_toml(
 ) -> None:
     """Without explicit path or env override, the loader resolves to
     ``core.paths.GLOBAL_CONFIG_TOML`` (via ``core.config.toml_edit``)."""
-    import core.config.toml_edit as te
+    import core.config.toml_edit as toml_edit_module
 
     monkeypatch.delenv("GEODE_CONFIG_TOML", raising=False)
     fake = tmp_path / "global.toml"
     _write_toml(fake, "[self_improving_loop]\nwarn_threshold = 0.33\n")
-    monkeypatch.setattr(te, "GLOBAL_CONFIG_TOML", fake)
+    monkeypatch.setattr(toml_edit_module, "GLOBAL_CONFIG_TOML", fake)
     cfg = load_self_improving_loop_config()
     assert cfg.warn_threshold == pytest.approx(0.33)
 
 
-# ── PR-P2 — defaults-applied RunTranscript notice ──
+# ── PR-P2 — defaults-applied RunTimeline notice ──
 
 
 def _make_journal(tmp_path: Path):
-    """Construct a RunTranscript pointing at a temp file."""
-    from core.self_improving.loop.observe.run_transcript import RunTranscript
+    """Construct a RunTimeline pointing at a temp file."""
+    from core.self_improving.loop.observe.run_timeline import RunTimeline
 
-    return RunTranscript(
+    return RunTimeline(
         session_id="p2-test",
         gen_tag="test",
         component="config-test",
-        path=tmp_path / "transcript.jsonl",
+        path=tmp_path / "events.jsonl",
     )
 
 
@@ -429,14 +429,14 @@ def _read_journal(journal_path: Path) -> list[dict]:
 
 
 def test_load_emits_file_missing_notice_into_session_journal(tmp_path: Path) -> None:
-    """When config file is absent and a RunTranscript scope is active,
+    """When config file is absent and a RunTimeline scope is active,
     the loader emits a ``self_improving_loop_config_defaults_applied``
     event with ``reason='file_missing'``."""
-    from core.self_improving.loop.observe.run_transcript import run_transcript_scope
+    from core.self_improving.loop.observe.run_timeline import run_timeline_scope
 
     journal = _make_journal(tmp_path)
     missing = tmp_path / "nope.toml"
-    with run_transcript_scope(journal):
+    with run_timeline_scope(journal):
         cfg = load_self_improving_loop_config(missing)
     assert cfg == SelfImprovingLoopConfig()
     rows = _read_journal(journal.path)
@@ -450,12 +450,12 @@ def test_load_emits_file_missing_notice_into_session_journal(tmp_path: Path) -> 
 def test_load_emits_section_missing_notice_into_session_journal(tmp_path: Path) -> None:
     """File exists but the ``[self_improving_loop]`` section is absent →
     notice with ``reason='section_missing'``."""
-    from core.self_improving.loop.observe.run_transcript import run_transcript_scope
+    from core.self_improving.loop.observe.run_timeline import run_timeline_scope
 
     journal = _make_journal(tmp_path)
     path = tmp_path / "config.toml"
     _write_toml(path, "[settings]\nfoo = 'bar'\n")
-    with run_transcript_scope(journal):
+    with run_timeline_scope(journal):
         cfg = load_self_improving_loop_config(path)
     assert cfg == SelfImprovingLoopConfig()
     rows = _read_journal(journal.path)
@@ -469,7 +469,7 @@ def test_load_emits_read_error_notice_as_warn(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """OSError on read → notice with ``reason='read_error'`` at level ``warn``."""
-    from core.self_improving.loop.observe.run_transcript import run_transcript_scope
+    from core.self_improving.loop.observe.run_timeline import run_timeline_scope
 
     journal = _make_journal(tmp_path)
     path = tmp_path / "config.toml"
@@ -484,7 +484,7 @@ def test_load_emits_read_error_notice_as_warn(
 
     monkeypatch.setattr(Path, "open", _boom)
 
-    with run_transcript_scope(journal):
+    with run_timeline_scope(journal):
         cfg = load_self_improving_loop_config(path)
     assert cfg == SelfImprovingLoopConfig()
     rows = _read_journal(journal.path)
@@ -493,7 +493,7 @@ def test_load_emits_read_error_notice_as_warn(
     assert rows[0]["level"] == "warn"
 
 
-def test_load_silent_when_no_run_transcript_scope(tmp_path: Path) -> None:
+def test_load_silent_when_no_run_timeline_scope(tmp_path: Path) -> None:
     """Outside an active scope the defaults-notice helper must be a
     no-op (no exception). The loader still returns the defaults."""
     cfg = load_self_improving_loop_config(tmp_path / "nope.toml")
@@ -503,7 +503,7 @@ def test_load_silent_when_no_run_transcript_scope(tmp_path: Path) -> None:
 def test_load_does_not_emit_notice_when_section_present(tmp_path: Path) -> None:
     """When the [self_improving_loop] section is populated, no
     defaults-applied event fires — the loader is using user values."""
-    from core.self_improving.loop.observe.run_transcript import run_transcript_scope
+    from core.self_improving.loop.observe.run_timeline import run_timeline_scope
 
     journal = _make_journal(tmp_path)
     path = tmp_path / "config.toml"
@@ -514,7 +514,7 @@ def test_load_does_not_emit_notice_when_section_present(tmp_path: Path) -> None:
 warn_threshold = 0.4
 """,
     )
-    with run_transcript_scope(journal):
+    with run_timeline_scope(journal):
         cfg = load_self_improving_loop_config(path)
     assert cfg.warn_threshold == pytest.approx(0.4)
     assert not journal.path.exists() or _read_journal(journal.path) == []

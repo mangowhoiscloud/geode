@@ -1,4 +1,5 @@
 import asyncio
+import json
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -12,6 +13,7 @@ from plugins.benchmark_harness.mcpmark_geode_agent import (
     _route_from_model,
     register_mcpmark_agent,
 )
+from plugins.benchmark_harness.trajectory_artifacts import export_mcpmark_trajectory
 
 
 def test_mcpmark_loop_validates_colliding_tool_with_mcp_schema() -> None:
@@ -162,6 +164,32 @@ def test_mcpmark_adapter_supports_public_github_fixture_opt_in() -> None:
     assert "GEODE_MCPMARK_GITHUB_REPO_VISIBILITY" in source
     assert '"PATCH"' in source
     assert 'json={"private": False}' in source
+
+
+def test_mcpmark_export_uses_shared_trajectory_schema(tmp_path) -> None:
+    from core.observability.session_timeline import SessionTimeline
+
+    timeline = SessionTimeline("s-mcpmark")
+    timeline.record_user_message("benchmark task")
+    timeline.record_assistant_message("done")
+    log_path = tmp_path / "tool-calls.json"
+    log_path.write_text("[]\n")
+
+    exported = export_mcpmark_trajectory(
+        loop=SimpleNamespace(_session_id="s-mcpmark"),
+        instruction="private benchmark task",
+        result=SimpleNamespace(rounds=1),
+        tool_call_log_file=str(log_path),
+        model="gpt-5.6",
+        provider="openai",
+        source="subscription",
+    )
+
+    trajectory = json.loads(exported.read_text())
+    assert trajectory["schema_id"] == "geode.trajectory@1"
+    assert trajectory["source"]["harness"] == "mcpmark"
+    assert trajectory["source"]["task"] != "private benchmark task"
+    assert trajectory["integrity"]["record_count"] == 2
 
 
 def test_public_github_fixture_patch_wraps_create_initial_state(monkeypatch) -> None:

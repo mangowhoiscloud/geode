@@ -104,7 +104,7 @@ export default function Page() {
             <ol>
               <li><strong>Fixed wall-budget</strong>으로 비교가능성 보존. 모든 실험이 5분 wall-clock. → GEODE의 StuckDetector 7200s + 30s wrap-up 여유.</li>
               <li><strong>Frozen scoreboard</strong> 분리. 평가 harness가 agent-mutable 영역 밖에 동결. → GEODE의 validator + CourtEval grader 분리.</li>
-              <li><strong>git monotone ratchet</strong>. branch HEAD가 절대 안 나빠짐. KEEP만 commit. → GEODE의 transcript-jsonl audit cycle.</li>
+              <li><strong>git monotone ratchet</strong>. branch HEAD가 절대 안 나빠짐. KEEP만 commit. → GEODE의 versioned event/trajectory audit cycle.</li>
               <li><strong>Token-economic loop</strong>. run.log + grep anchor + TSV append-only. → GEODE의 200-turn sliding window.</li>
               <li><strong>Simplicity criterion</strong>. &quot;removing code with equal-or-better metric = great outcome&quot;. → GEODE Runtime 1476→517 라인 분해 (v0.30), Registry 257 라인 제거 (v0.44).</li>
             </ol>
@@ -216,7 +216,7 @@ export default function Page() {
             <ol>
 	              <li><strong>Fixed wall-budget</strong> preserves comparability. Every experiment is five minutes of wall-clock. GEODE&apos;s StuckDetector at 7200s plus 30s wrap-up headroom is the generalized form.</li>
 	              <li><strong>Frozen scoreboard</strong>. The evaluation harness lives outside the agent-mutable region. GEODE&apos;s validator plus CourtEval grader separation is the same idea.</li>
-	              <li><strong>git monotone ratchet</strong>. Branch HEAD never gets worse. Only KEEP commits. GEODE&apos;s transcript-jsonl audit cycle is the variant.</li>
+	              <li><strong>git monotone ratchet</strong>. Branch HEAD never gets worse. Only KEEP commits. GEODE&apos;s versioned event/trajectory audit cycle is the variant.</li>
 	              <li><strong>Token-economic loop</strong>. run.log plus grep anchors plus append-only TSV. GEODE&apos;s 200-turn sliding window is the variant.</li>
 	              <li><strong>Simplicity criterion</strong>. &quot;Removing code with equal-or-better metric = great outcome.&quot; GEODE Runtime 1476 → 517 lines (v0.30) and Registry minus 257 lines (v0.44) follow the same rule.</li>
             </ol>

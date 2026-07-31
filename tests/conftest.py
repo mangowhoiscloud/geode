@@ -51,6 +51,8 @@ def _isolate_state_root(
     tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     import core.paths as cp
+    from core.memory import session_checkpoint, session_manager
+    from core.observability import transcript
 
     sandbox = tmp_path_factory.mktemp("state-isolation")
     monkeypatch.setattr(cp, "STATE_ROOT", sandbox)
@@ -62,6 +64,10 @@ def _isolate_state_root(
         "STATE_LATEST_POINTER_PATH",
         sandbox / "autoresearch" / "handoff" / "latest_pointer.json",
     )
+    session_dir = sandbox / "sessions"
+    monkeypatch.setattr(session_checkpoint, "DEFAULT_SESSION_DIR", session_dir)
+    monkeypatch.setattr(session_manager, "_DEFAULT_DB_PATH", session_dir / "sessions.db")
+    monkeypatch.setattr(transcript, "DEFAULT_TRANSCRIPT_DIR", sandbox / "legacy-transcripts")
 
 
 @pytest.fixture(autouse=True)

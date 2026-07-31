@@ -500,7 +500,8 @@ pyyaml = "yaml"
 # codespell — typo detection in identifiers/strings/comments. Run via pre-commit.
 [tool.codespell]
 skip = "*.lock,uv.lock,*.svg,*.json,docs/architecture/domain-free-core-audit.md,CHANGELOG.md,site/public/llms.txt,site/public/llms-full.txt,site/src/data/geode/sot.ts,site/src/data/geode/changelog.ts,.geode/*,.claude/*"
-ignore-words-list = "statics,ot,ans,nd,thi,ist,ines,recuse,cant,blockd,Anser,socio-economic,wit,crate"
+# tau2's public ToolCall wire model names its actor field ``requestor``.
+ignore-words-list = "statics,ot,ans,nd,thi,ist,ines,recuse,cant,blockd,Anser,socio-economic,wit,crate,requestor"
 check-filenames = ""
 check-hidden = ""
 

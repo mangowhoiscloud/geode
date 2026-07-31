@@ -2175,7 +2175,7 @@ def test_pr2_agent_detail_paginates_via_details(built_seedgen_pages: dict[str, s
 
 
 def test_pr2_timeline_shows_all_known_phases(built_seedgen_pages: dict[str, str]) -> None:
-    """`/timeline/` lists every phase present in transcript.jsonl + per_phase_costs.json."""
+    """Legacy fixture timeline remains readable with transcript.jsonl + costs."""
     html = built_seedgen_pages.get(f"{SEEDGEN_FIXTURE_RUN_ID}/timeline")
     assert html, "timeline sub-page missing"
     for phase in (

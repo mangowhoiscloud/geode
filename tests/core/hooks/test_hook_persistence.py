@@ -1,4 +1,4 @@
-"""Integration contract between HookSystem, SQLite, and run transcripts."""
+"""Integration contract between HookSystem, SQLite, and run projections."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from core.hooks import (
 )
 from core.observability.event_store import HookEventStore
 from core.observability.hook_persistence import HookPersistenceSink
-from core.self_improving.loop.observe.run_transcript import RunTranscript, run_transcript_scope
+from core.self_improving.loop.observe.run_timeline import RunTimeline, run_timeline_scope
 
 
 def _wired_hooks(tmp_path: Path) -> tuple[HookSystem, HookEventStore]:
@@ -32,25 +32,25 @@ def _wired_hooks(tmp_path: Path) -> tuple[HookSystem, HookEventStore]:
     return hooks, store
 
 
-def _transcript(tmp_path: Path) -> RunTranscript:
-    return RunTranscript(
+def _timeline(tmp_path: Path) -> RunTimeline:
+    return RunTimeline(
         session_id="run-1",
         gen_tag="gen1",
         component="test",
-        path=tmp_path / "transcript.jsonl",
+        path=tmp_path / "events.jsonl",
     )
 
 
-def _read_transcript(path: Path) -> list[dict]:
+def _read_timeline(path: Path) -> list[dict]:
     return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
 
 
-def test_one_dispatch_writes_one_sql_and_one_transcript_row(tmp_path: Path) -> None:
+def test_one_dispatch_writes_one_sql_and_one_timeline_row(tmp_path: Path) -> None:
     hooks, store = _wired_hooks(tmp_path)
     hooks.register(HookEvent.USER_INPUT_RECEIVED, lambda _e, _d: None, name="one")
     hooks.register(HookEvent.USER_INPUT_RECEIVED, lambda _e, _d: None, name="two")
 
-    with run_transcript_scope(_transcript(tmp_path)):
+    with run_timeline_scope(_timeline(tmp_path)):
         results = hooks.trigger_interceptor(
             HookEvent.USER_INPUT_RECEIVED,
             {"session_id": "s-1", "user_input": "private input"},
@@ -62,7 +62,7 @@ def test_one_dispatch_writes_one_sql_and_one_transcript_row(tmp_path: Path) -> N
     assert rows[0].handler_count == 2
     assert rows[0].payload["input_len"] == len("private input")
     assert "private input" not in str(rows[0].payload)
-    assert len(_read_transcript(tmp_path / "transcript.jsonl")) == 1
+    assert len(_read_timeline(tmp_path / "events.jsonl")) == 1
     hooks.close()
 
 
@@ -75,7 +75,7 @@ def test_compatibility_event_reaches_handlers_without_durable_duplicate(tmp_path
         name="compat_handler",
     )
 
-    with run_transcript_scope(_transcript(tmp_path)):
+    with run_timeline_scope(_timeline(tmp_path)):
         hooks.trigger_with_result(
             HookEvent.TOOL_RESULT_TRANSFORM,
             {"tool_name": "read_file", "result": {"content": "private"}},
@@ -83,7 +83,7 @@ def test_compatibility_event_reaches_handlers_without_durable_duplicate(tmp_path
 
     assert seen == [HookEvent.TOOL_RESULT_TRANSFORM.value]
     assert store.count() == 0
-    assert not (tmp_path / "transcript.jsonl").exists()
+    assert not (tmp_path / "events.jsonl").exists()
     hooks.close()
 
 
@@ -125,7 +125,7 @@ def test_handler_failure_is_counted_without_dropping_dispatch(tmp_path: Path) ->
     hooks.close()
 
 
-def test_public_extension_audit_uses_sqlite_and_active_transcript_only(
+def test_public_extension_audit_uses_sqlite_and_active_timeline_only(
     tmp_path: Path,
 ) -> None:
     hooks, store = _wired_hooks(tmp_path)
@@ -155,9 +155,9 @@ def test_public_extension_audit_uses_sqlite_and_active_transcript_only(
         "verify_attempt": 0,
         "_dispatch_duration_ms": row.payload["_dispatch_duration_ms"],
     }
-    assert not (tmp_path / "transcript.jsonl").exists()
+    assert not (tmp_path / "events.jsonl").exists()
 
-    with run_transcript_scope(_transcript(tmp_path)):
+    with run_timeline_scope(_timeline(tmp_path)):
         asyncio.run(
             public_hooks.invoke(
                 HookName.SESSION_END,
@@ -166,17 +166,17 @@ def test_public_extension_audit_uses_sqlite_and_active_transcript_only(
             )
         )
 
-    transcript_rows = _read_transcript(tmp_path / "transcript.jsonl")
-    assert len(transcript_rows) == 1
-    assert transcript_rows[0]["event"] == HookEvent.EXTENSION_INVOKED.value
-    assert transcript_rows[0]["payload"]["turn_id"] == "t-2"
+    timeline_rows = _read_timeline(tmp_path / "events.jsonl")
+    assert len(timeline_rows) == 1
+    assert timeline_rows[0]["event"] == HookEvent.EXTENSION_INVOKED.value
+    assert timeline_rows[0]["payload"]["turn_id"] == "t-2"
     hooks.close()
 
 
-def test_tool_correlation_survives_sqlite_and_transcript_projection(tmp_path: Path) -> None:
+def test_tool_correlation_survives_sqlite_and_timeline_projection(tmp_path: Path) -> None:
     hooks, store = _wired_hooks(tmp_path)
 
-    with run_transcript_scope(_transcript(tmp_path)):
+    with run_timeline_scope(_timeline(tmp_path)):
         hooks.trigger(
             HookEvent.TOOL_EXEC_ENDED,
             {
@@ -190,9 +190,9 @@ def test_tool_correlation_survives_sqlite_and_transcript_projection(tmp_path: Pa
 
     assert store.read()[0].payload["session_id"] == "s-tool"
     assert store.read()[0].payload["turn_id"] == "t-tool"
-    transcript_row = _read_transcript(tmp_path / "transcript.jsonl")[0]
-    assert transcript_row["payload"]["session_id"] == "s-tool"
-    assert transcript_row["payload"]["turn_id"] == "t-tool"
+    timeline_row = _read_timeline(tmp_path / "events.jsonl")[0]
+    assert timeline_row["payload"]["session_id"] == "s-tool"
+    assert timeline_row["payload"]["turn_id"] == "t-tool"
     hooks.close()
 
 

@@ -1,14 +1,15 @@
-"""SessionTranscript — JSONL event stream for session audit trail.
+"""Deprecated ``SessionTranscript`` JSONL compatibility writer.
 
-Tier 1 preservation: records every event in a session as an append-only
-JSONL file. Complementary to :class:`SessionMetrics` (Tier 2, cumulative
-aggregate roll-up) and Snapshot (Tier 3, pipeline state).
+New runtime code records canonical history through
+:class:`core.observability.session_timeline.SessionTimeline`. This module
+remains available for one compatibility window so older plugins can read and
+append their existing files; it is not a source of truth for new sessions.
 
 Captures: user messages, assistant responses, tool calls/results,
 vault saves, costs, errors, **lifecycle events** (audit_started /
 config_snapshot / per_dim_scores 등 — pre-PR-SESSION-METRICS 의
 ``SessionJournal`` 에서 흡수, 이후 PR-CLEANUP-7 에서
-:class:`~core.self_improving.loop.observe.run_transcript.RunTranscript` 로
+:class:`~core.self_improving.loop.observe.run_timeline.RunTimeline` 로
 이름·위치 정리) — everything needed to reconstruct "what exactly
 happened in this session."
 
@@ -24,6 +25,7 @@ import json
 import logging
 import threading
 import time
+import warnings
 from pathlib import Path
 from typing import Any
 
@@ -55,8 +57,8 @@ DEFAULT_TRANSCRIPT_DIR = _get_default_transcript_dir()
 # PR-TRANSCRIPT-FULL-BODY (2026-05-29) — the ``dialogue.jsonl`` turn body is now
 # captured in full (up to MAX_BODY_CHARS, a sanity ceiling far above any real
 # turn; the 5 MB MAX_FILE_BYTES guard + tail-truncate bound the *file*). Only the
-# preview lifted up into the pipeline-timeline RunTranscript stays short — which
-# is exactly the split ``_mirror_to_run_transcript`` always documented ("the full
+# preview lifted up into the pipeline-timeline RunTimeline stays short — which
+# is exactly the split ``_mirror_to_run_timeline`` always documented ("the full
 # body stays in dialogue.jsonl"). Previously one 500-char ``_truncate`` fed BOTH
 # the body and the preview, so the recorded turn was a fragment cut mid-object.
 MAX_BODY_CHARS = 100_000
@@ -113,6 +115,11 @@ class SessionTranscript:
         session_id: str,
         transcript_dir: Path | str | None = None,
     ) -> None:
+        warnings.warn(
+            "SessionTranscript is deprecated; use SessionTimeline",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._session_id = session_id
         # PR-Q (2026-05-24) — when an active run_dir is bound and the
         # caller didn't pass an explicit transcript_dir, route the
@@ -120,7 +127,7 @@ class SessionTranscript:
         # and override the filename to ``dialogue.jsonl`` (vs the
         # legacy ``<session_id>.jsonl`` under the cwd-slug global).
         # Explicit ``transcript_dir=`` overrides this (orchestrator
-        # paths like RunTranscript still control their own location).
+        # paths like RunTimeline still control their own location).
         self._dialogue_filename_override: str | None = None
         if transcript_dir is not None:
             self._dir = Path(transcript_dir)
@@ -206,7 +213,7 @@ class SessionTranscript:
     def record_user_message(self, text: str) -> None:
         # Full body to dialogue.jsonl; a short preview to the pipeline timeline.
         self._append({"event": "user_message", "text": _truncate(text, MAX_BODY_CHARS)})
-        self._mirror_to_run_transcript(
+        self._mirror_to_run_timeline(
             action="agent.user_message",
             entity_type="task",
             entity_id=self._session_id,
@@ -216,7 +223,7 @@ class SessionTranscript:
     def record_assistant_message(self, text: str) -> None:
         # Full body to dialogue.jsonl; a short preview to the pipeline timeline.
         self._append({"event": "assistant_message", "text": _truncate(text, MAX_BODY_CHARS)})
-        self._mirror_to_run_transcript(
+        self._mirror_to_run_timeline(
             action="agent.assistant_message",
             entity_type="task",
             entity_id=self._session_id,
@@ -233,7 +240,7 @@ class SessionTranscript:
             # instead of guessing from row order.
             row["call_id"] = call_id
         self._append(row)
-        self._mirror_to_run_transcript(
+        self._mirror_to_run_timeline(
             action="agent.tool_call",
             entity_type="task",
             entity_id=self._session_id,
@@ -253,14 +260,14 @@ class SessionTranscript:
         if call_id:
             row["call_id"] = call_id
         self._append(row)
-        self._mirror_to_run_transcript(
+        self._mirror_to_run_timeline(
             action="agent.tool_result",
             entity_type="task",
             entity_id=self._session_id,
             details={"tool": tool, "status": status, "summary": truncated_summary},
         )
 
-    def _mirror_to_run_transcript(
+    def _mirror_to_run_timeline(
         self,
         *,
         action: str,
@@ -268,7 +275,7 @@ class SessionTranscript:
         entity_id: str,
         details: dict[str, Any],
     ) -> None:
-        """Mirror this SessionTranscript event into the active RunTranscript
+        """Mirror this SessionTranscript event into the active RunTimeline
         as a paperclip-style activity_log row.
 
         PR-U (2026-05-24, F4 in docs/plans/2026-05-24-transcript-
@@ -294,20 +301,20 @@ class SessionTranscript:
         / AgenticLoop.session_id / SessionTranscript._session_id) into
         one value.
 
-        No-op when no active RunTranscript is bound — outside the
+        No-op when no active RunTimeline is bound — outside the
         seed-generation orchestrator (REPL / gateway / tests) the
         pipeline transcript SoT does not exist, so the mirror has
         nowhere to go.
         """
-        from core.self_improving.loop.observe.run_transcript import current_run_transcript
+        from core.self_improving.loop.observe.run_timeline import current_run_timeline
 
-        run_transcript = current_run_transcript()
-        if run_transcript is None:
+        run_timeline = current_run_timeline()
+        if run_timeline is None:
             return
         # ``event`` field uses the verb portion of the dotted action so
         # legacy ``.event`` readers see a meaningful tag.
         verb = action.split(".", 1)[1] if "." in action else action
-        run_transcript.append(
+        run_timeline.append(
             verb,
             actor_type="agent",
             actor_id=self._session_id,
@@ -392,7 +399,7 @@ class SessionTranscript:
     ) -> None:
         """Record a free-form lifecycle event — replaces the legacy
         ``SessionJournal.append(event, payload=...)`` path (renamed to
-        :meth:`~core.self_improving.loop.observe.run_transcript.RunTranscript.append`
+        :meth:`~core.self_improving.loop.observe.run_timeline.RunTimeline.append`
         in PR-CLEANUP-7).
 
         PR-SESSION-METRICS (2026-05-23) — folded ``SessionJournal`` into the
@@ -403,7 +410,7 @@ class SessionTranscript:
 
         ``file_path`` overrides the default ``<dir>/<session_id>.jsonl``
         layout — used by
-        :class:`~core.self_improving.loop.observe.run_transcript.RunTranscript`
+        :class:`~core.self_improving.loop.observe.run_timeline.RunTimeline`
         (the post-PR-CLEANUP-7 name for the per-run binding that was
         ``SessionJournal``) to write to
         ``<self-improving-loop-dir>/<session_id>/transcript.jsonl``
@@ -414,7 +421,7 @@ class SessionTranscript:
         the optional ``actor_type`` / ``actor_id`` / ``action`` /
         ``entity_type`` / ``entity_id`` / ``task_id`` fields land in the
         row when supplied (orchestrator's explicit
-        ``RunTranscript.append`` + SessionTranscript's mirror path
+        ``RunTimeline.append`` + SessionTranscript's mirror path
         both fill them). Omitted keys are simply absent from the row so
         legacy readers that only look at ``event`` / ``payload`` /
         ``session_id`` keep working.

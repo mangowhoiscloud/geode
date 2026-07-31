@@ -462,19 +462,19 @@ def test_subscription_only_banner_trip_safe_when_no_banner_installed():
 
 
 def _emit_test_journal(tmp_path):
-    """Build a RunTranscript under tmp_path. Caller activates with run_transcript_scope."""
-    from core.self_improving.loop.observe.run_transcript import RunTranscript
+    """Build a RunTimeline under tmp_path. Caller activates with run_timeline_scope."""
+    from core.self_improving.loop.observe.run_timeline import RunTimeline
 
     sip_home = tmp_path / "self-improving-loop"
 
     class _ScopedPaths:
         pass
 
-    journal = RunTranscript(
+    journal = RunTimeline(
         session_id="s-p1b",
         gen_tag="gen-p1b",
         component="autoresearch",
-        path=sip_home / "s-p1b" / "transcript.jsonl",
+        path=sip_home / "s-p1b" / "events.jsonl",
     )
     return journal, sip_home
 
@@ -484,10 +484,10 @@ def test_subscription_only_credential_error_emits_journal(tmp_path, monkeypatch)
     credential_subscription_abort event with provider + allowed payload."""
     import json
 
-    from core.self_improving.loop.observe.run_transcript import run_transcript_scope
+    from core.self_improving.loop.observe.run_timeline import run_timeline_scope
 
     journal, _ = _emit_test_journal(tmp_path)
-    with run_transcript_scope(journal), pytest.raises(cs.CredentialResolutionError):
+    with run_timeline_scope(journal), pytest.raises(cs.CredentialResolutionError):
         raise cs.CredentialResolutionError(
             "anthropic", ["api_key", "claude-cli"], subscription_only=True
         )
@@ -506,7 +506,7 @@ def test_self_improving_loop_fallback_policy_emits_journal_on_config_success(tmp
     source='config' so the operator sees which path the resolver took."""
     import json
 
-    from core.self_improving.loop.observe.run_transcript import run_transcript_scope
+    from core.self_improving.loop.observe.run_timeline import run_timeline_scope
 
     journal, _ = _emit_test_journal(tmp_path)
 
@@ -517,7 +517,7 @@ def test_self_improving_loop_fallback_policy_emits_journal_on_config_success(tmp
         "core.config.self_improving.load_self_improving_loop_config",
         lambda: SimpleNamespace(fallback_to_payg=False),
     )
-    with run_transcript_scope(journal):
+    with run_timeline_scope(journal):
         assert cs.self_improving_loop_fallback_policy() is False
     rows = [json.loads(line) for line in journal.path.read_text().splitlines()]
     events = [r for r in rows if r["event"] == "fallback_policy_resolved"]
@@ -532,7 +532,7 @@ def test_self_improving_loop_fallback_policy_emits_journal_on_load_error(tmp_pat
     silent fallback is auditable."""
     import json
 
-    from core.self_improving.loop.observe.run_transcript import run_transcript_scope
+    from core.self_improving.loop.observe.run_timeline import run_timeline_scope
 
     journal, _ = _emit_test_journal(tmp_path)
 
@@ -543,7 +543,7 @@ def test_self_improving_loop_fallback_policy_emits_journal_on_load_error(tmp_pat
         "core.config.self_improving.load_self_improving_loop_config",
         _raise,
     )
-    with run_transcript_scope(journal):
+    with run_timeline_scope(journal):
         assert cs.self_improving_loop_fallback_policy() is True
     rows = [json.loads(line) for line in journal.path.read_text().splitlines()]
     events = [r for r in rows if r["event"] == "fallback_policy_resolved"]
@@ -553,8 +553,8 @@ def test_self_improving_loop_fallback_policy_emits_journal_on_load_error(tmp_pat
 
 
 def test_credential_journal_emit_noop_outside_scope(monkeypatch):
-    """Outside a RunTranscript scope (single-shot CLI) the emit must
+    """Outside a RunTimeline scope (single-shot CLI) the emit must
     no-op cleanly so the resolver's contract is unchanged."""
-    # No run_transcript_scope active.
+    # No run_timeline_scope active.
     with pytest.raises(cs.CredentialResolutionError):
         raise cs.CredentialResolutionError("anthropic", ["api_key"], subscription_only=True)

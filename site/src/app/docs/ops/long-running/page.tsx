@@ -111,7 +111,7 @@ OpenAI/GLM  80%   클라이언트 LLM 기반 compaction
             <p>
               실행이 어디서 어떻게 끝났는지는{" "}
               <a href="/geode/docs/guides/debug-stuck-run">멈춘 실행 디버깅</a>의
-              transcript와 SQL event timeline 절차로 추적합니다.
+              session history와 SQL event timeline 절차로 추적합니다.
             </p>
 
             <h2>다음</h2>
@@ -218,8 +218,8 @@ All         200K  absolute ceiling even on larger windows
 > /cost          # session + monthly spend
 > /context       # the assembled context tiers`}</pre>
             <p>
-              To trace where and why a run ended, follow the transcript and run
-              log procedure in{" "}
+              To trace where and why a run ended, follow the session-history and
+              runtime-event procedure in{" "}
               <a href="/geode/docs/guides/debug-stuck-run">Debug a stuck run</a>.
             </p>
 

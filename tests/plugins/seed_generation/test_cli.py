@@ -374,7 +374,7 @@ def test_audit_seeds_generate_uses_config_defaults() -> None:
     assert captured["candidates"] == 8
 
 
-# ── PR-P2 — RunTranscript events for cost preview, preflight, cost divergence ──
+# ── PR-P2 — RunTimeline events for cost preview, preflight, cost divergence ──
 
 
 def _journal_rows(journal_path: Any) -> list[dict[str, Any]]:
@@ -388,27 +388,27 @@ def _journal_rows(journal_path: Any) -> list[dict[str, Any]]:
 
 
 def test_run_audit_seeds_emits_cost_preview_into_session_journal(tmp_path: Any) -> None:
-    """``run_audit_seeds`` opens a RunTranscript scope and emits
+    """``run_audit_seeds`` opens a RunTimeline scope and emits
     ``cost_preview`` with predicted-spend breakdown before any pipeline
     work begins. Verifies the outer-scope wiring introduced in PR-P2."""
     import json
 
-    journal_path = tmp_path / "transcript.jsonl"
+    journal_path = tmp_path / "events.jsonl"
     # PR-CLEANUP-7 (2026-05-23) — bind ``RealJournal`` BEFORE the patch
     # so it captures the canonical class object. The pre-PR test relied
     # on ``from core.observability import SessionJournal as RealJournal``
     # picking up the re-export (which was made at module init, before
     # any patch took effect). After the relocation the canonical surface
-    # IS the module being patched, so importing ``RunTranscript`` from
+    # IS the module being patched, so importing ``RunTimeline`` from
     # inside the patch context yields ``MockJournal`` and causes
     # ``side_effect = lambda: RealJournal(...)`` to recurse.
-    from core.self_improving.loop.observe.run_transcript import RunTranscript as RealJournal
+    from core.self_improving.loop.observe.run_timeline import RunTimeline as RealJournal
 
     with (
         patch("plugins.seed_generation.cli.pick_bindings", return_value=_good_picker()),
         patch("plugins.seed_generation.cli.run_pre_flight", return_value=PreFlightReport()),
         patch("plugins.seed_generation.cli._dispatch_pipeline"),
-        patch("core.self_improving.loop.observe.run_transcript.RunTranscript") as MockJournal,
+        patch("core.self_improving.loop.observe.run_timeline.RunTimeline") as MockJournal,
     ):
         MockJournal.side_effect = lambda **kwargs: RealJournal(
             session_id=kwargs["session_id"],
@@ -434,8 +434,8 @@ def test_run_audit_seeds_emits_cost_preview_into_session_journal(tmp_path: Any) 
 
 
 def test_run_audit_seeds_emits_preflight_passed_when_clean(tmp_path: Any) -> None:
-    journal_path = tmp_path / "transcript.jsonl"
-    from core.self_improving.loop.observe.run_transcript import RunTranscript as RealJournal
+    journal_path = tmp_path / "events.jsonl"
+    from core.self_improving.loop.observe.run_timeline import RunTimeline as RealJournal
 
     def _bind(**kwargs: Any) -> Any:
         return RealJournal(
@@ -450,7 +450,7 @@ def test_run_audit_seeds_emits_preflight_passed_when_clean(tmp_path: Any) -> Non
         patch("plugins.seed_generation.cli.pick_bindings", return_value=_good_picker()),
         patch("plugins.seed_generation.cli.run_pre_flight", return_value=PreFlightReport()),
         patch("plugins.seed_generation.cli._dispatch_pipeline"),
-        patch("core.self_improving.loop.observe.run_transcript.RunTranscript", side_effect=_bind),
+        patch("core.self_improving.loop.observe.run_timeline.RunTimeline", side_effect=_bind),
     ):
         run_audit_seeds(target_dim="broken_tool_use", yes=True, stdout=out, stderr=err)
 
@@ -465,7 +465,7 @@ def test_run_audit_seeds_emits_preflight_passed_when_clean(tmp_path: Any) -> Non
 def test_run_audit_seeds_emits_preflight_failed_with_issue_list(tmp_path: Any) -> None:
     """The dominant pre-PR observability gap — preflight error path now
     surfaces the structured issue list before exit code 1."""
-    journal_path = tmp_path / "transcript.jsonl"
+    journal_path = tmp_path / "events.jsonl"
     bad_report = PreFlightReport(
         issues=[
             PreFlightIssue(
@@ -483,7 +483,7 @@ def test_run_audit_seeds_emits_preflight_failed_with_issue_list(tmp_path: Any) -
         ]
     )
 
-    from core.self_improving.loop.observe.run_transcript import RunTranscript as RealJournal
+    from core.self_improving.loop.observe.run_timeline import RunTimeline as RealJournal
 
     def _bind(**kwargs: Any) -> Any:
         return RealJournal(
@@ -498,7 +498,7 @@ def test_run_audit_seeds_emits_preflight_failed_with_issue_list(tmp_path: Any) -
         patch("plugins.seed_generation.cli.pick_bindings", return_value=_good_picker()),
         patch("plugins.seed_generation.cli.run_pre_flight", return_value=bad_report),
         patch("plugins.seed_generation.cli._dispatch_pipeline") as mock_dispatch,
-        patch("core.self_improving.loop.observe.run_transcript.RunTranscript", side_effect=_bind),
+        patch("core.self_improving.loop.observe.run_timeline.RunTimeline", side_effect=_bind),
     ):
         code = run_audit_seeds(
             target_dim="broken_tool_use",
@@ -520,8 +520,8 @@ def test_run_audit_seeds_emits_preflight_failed_with_issue_list(tmp_path: Any) -
 
 
 def test_run_audit_seeds_emits_user_aborted_on_decline(tmp_path: Any) -> None:
-    journal_path = tmp_path / "transcript.jsonl"
-    from core.self_improving.loop.observe.run_transcript import RunTranscript as RealJournal
+    journal_path = tmp_path / "events.jsonl"
+    from core.self_improving.loop.observe.run_timeline import RunTimeline as RealJournal
 
     def _bind(**kwargs: Any) -> Any:
         return RealJournal(
@@ -536,7 +536,7 @@ def test_run_audit_seeds_emits_user_aborted_on_decline(tmp_path: Any) -> None:
         patch("plugins.seed_generation.cli.pick_bindings", return_value=_good_picker()),
         patch("plugins.seed_generation.cli.run_pre_flight", return_value=PreFlightReport()),
         patch("plugins.seed_generation.cli._dispatch_pipeline"),
-        patch("core.self_improving.loop.observe.run_transcript.RunTranscript", side_effect=_bind),
+        patch("core.self_improving.loop.observe.run_timeline.RunTimeline", side_effect=_bind),
     ):
         code = run_audit_seeds(
             target_dim="broken_tool_use",
@@ -555,10 +555,10 @@ def test_run_audit_seeds_emits_user_aborted_on_decline(tmp_path: Any) -> None:
 
 def test_emit_cost_divergence_info_when_within_threshold(tmp_path: Any) -> None:
     """Predicted vs actual within ±50 % stays at ``info`` level."""
-    from core.self_improving.loop.observe.run_transcript import RunTranscript
+    from core.self_improving.loop.observe.run_timeline import RunTimeline
     from plugins.seed_generation.cli import _emit_cost_divergence
 
-    journal = RunTranscript(
+    journal = RunTimeline(
         session_id="t", gen_tag="t", component="seed-generation", path=tmp_path / "j.jsonl"
     )
     _emit_cost_divergence(journal, predicted_usd=10.0, actual_usd=11.0)
@@ -574,10 +574,10 @@ def test_emit_cost_divergence_info_when_within_threshold(tmp_path: Any) -> None:
 
 def test_emit_cost_divergence_warn_when_overspend(tmp_path: Any) -> None:
     """Actual > 1.5 × predicted → ``warn`` level so a dashboard can highlight."""
-    from core.self_improving.loop.observe.run_transcript import RunTranscript
+    from core.self_improving.loop.observe.run_timeline import RunTimeline
     from plugins.seed_generation.cli import _emit_cost_divergence
 
-    journal = RunTranscript(
+    journal = RunTimeline(
         session_id="t", gen_tag="t", component="seed-generation", path=tmp_path / "j.jsonl"
     )
     _emit_cost_divergence(journal, predicted_usd=2.0, actual_usd=5.0)
@@ -589,10 +589,10 @@ def test_emit_cost_divergence_warn_when_overspend(tmp_path: Any) -> None:
 def test_emit_cost_divergence_ratio_none_when_predicted_zero(tmp_path: Any) -> None:
     """Subscription-only run with $0 predicted PAYG → ratio is ``None``,
     level stays ``info`` (we can't compute a meaningful overshoot %)."""
-    from core.self_improving.loop.observe.run_transcript import RunTranscript
+    from core.self_improving.loop.observe.run_timeline import RunTimeline
     from plugins.seed_generation.cli import _emit_cost_divergence
 
-    journal = RunTranscript(
+    journal = RunTimeline(
         session_id="t", gen_tag="t", component="seed-generation", path=tmp_path / "j.jsonl"
     )
     _emit_cost_divergence(journal, predicted_usd=0.0, actual_usd=0.42)

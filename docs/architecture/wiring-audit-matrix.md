@@ -54,7 +54,7 @@ database/WAL/SHM descriptors.
 | `TOOL_APPROVAL_DENIED` | `APPROVAL_TRANSITION` |
 
 These six signals remain public for third-party listeners but never create a
-second SQL row or transcript mirror.
+second SQL row or run-event projection.
 
 ## 4. SQL/JSONL boundary
 
@@ -62,7 +62,7 @@ second SQL row or transcript mirror.
 |---|---|---|
 | Hook lifecycle, failures, approvals, feedback | `sessions.db:hook_events` | indexed filtering, retention, dedup |
 | Agent cumulative state and lineage | `sessions.db` relational tables | mutable keyed state and joins |
-| Active autoresearch/seed run transcript | run-scoped JSONL | ordered replay artifact owned by the run |
+| Active autoresearch/seed run projection | run-scoped `events.jsonl` | bounded ordered artifact owned by the run |
 | Scheduler job attempts | bounded per-job JSONL (`JobRunLog`) | isolated append-only job history |
 | Monthly usage ledger | monthly JSONL | append-only billing export/accounting boundary |
 | Project journal and audit manifests | domain-owned JSONL | portable operator artifact / external format |

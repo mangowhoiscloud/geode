@@ -26,7 +26,19 @@
         "benchmark",
         "tool-projection"
       ],
-      "contentSha256": "3921da35f3d45931a55a55ff9b6b716ec5fbcb8b7d4e22c5f88acb631fc2a12a"
+      "contentSha256": "0224f4e1fc860d0d00b086e80f8f7cf4e0307f3ef5a50645d486d5ddfde1c9aa"
+    },
+    {
+      "id": "file:plugins/benchmark_harness/trajectory_artifacts.py",
+      "filePath": "plugins/benchmark_harness/trajectory_artifacts.py",
+      "name": "Benchmark trajectory artifact bridge",
+      "summary": "Projects benchmark-native receipts into schema-validated GEODE trajectories outside the Crucible candidate mutation surface.",
+      "tags": [
+        "artifact",
+        "benchmark",
+        "trajectory"
+      ],
+      "contentSha256": "19d4814e23fba8e847a8bc4b2e52831637e01ba4eb2c7e978a73d8185af7f821"
     },
     {
       "id": "file:plugins/benchmark_harness/tau2_turn_supervisor.py",
@@ -50,7 +62,7 @@
         "runtime",
         "while-tool-use"
       ],
-      "contentSha256": "432dbc97c150d3e120bbf93ae9e8647cd4d74e46e87ed739309cd05e0ff19f35"
+      "contentSha256": "18a33610d8d9d7d30c83db3bc109a01eca3fe37b24e335c64874c79a33e0672c"
     },
     {
       "id": "file:core/agent/tool_executor/processor.py",
@@ -62,7 +74,7 @@
         "tools",
         "parallel"
       ],
-      "contentSha256": "30040e016d96f0e1bb51bf0aa9167cc5a46a6eea95a497fb645b334638bdea21"
+      "contentSha256": "b4ce924b4f53c59d457f91536e75930bb66371b5015164d1f97584d2151b1537"
     },
     {
       "id": "file:plugins/crucible/tau2_live.py",
@@ -185,6 +197,11 @@
       "source": "file:plugins/benchmark_harness/tau2_geode_agent.py",
       "target": "file:plugins/benchmark_harness/tau2_turn_supervisor.py",
       "type": "delegates_to"
+    },
+    {
+      "source": "file:plugins/benchmark_harness/tau2_geode_agent.py",
+      "target": "file:plugins/benchmark_harness/trajectory_artifacts.py",
+      "type": "writes_through"
     },
     {
       "source": "file:plugins/benchmark_harness/tau2_geode_agent.py",

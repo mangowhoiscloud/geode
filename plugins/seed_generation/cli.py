@@ -426,7 +426,7 @@ def run_audit_seeds_resume(
 
     from core.observability.run_dir import run_dir_scope
     from core.paths import STATE_SEED_GENERATION_DIR
-    from core.self_improving.loop.observe.run_transcript import RunTranscript, run_transcript_scope
+    from core.self_improving.loop.observe.run_timeline import RunTimeline, run_timeline_scope
 
     from plugins.seed_generation.resume import (
         ResumeError,
@@ -451,13 +451,13 @@ def run_audit_seeds_resume(
         )
         return 0
 
-    journal = RunTranscript(
+    journal = RunTimeline(
         session_id=run_id,
         gen_tag=state.gen_tag,
         component="seed-generation",
-        path=run_dir / "transcript.jsonl",
+        path=run_dir / "events.jsonl",
     )
-    with run_dir_scope(run_dir), run_transcript_scope(journal):
+    with run_dir_scope(run_dir), run_timeline_scope(journal):
         picker_result = pick_bindings()
         journal.append(
             "resume_started",
@@ -595,7 +595,7 @@ def _load_priors_snapshot(*, err: IO[str]) -> Any:
     """Load ``latest_meta_review.json`` priors for the next run.
 
     Returns the :class:`MetaReviewSnapshot` (or ``None`` for bootstrap /
-    unparseable). Best-effort — never raises; the run proceeds without
+    unparsable). Best-effort — never raises; the run proceeds without
     priors when the symlink is missing or the payload has no signal.
 
     Lazy import keeps the cold start free of baseline_reader machinery
@@ -669,7 +669,7 @@ def run_audit_seeds(
     ``stderr`` to capture the rendered summary, and (via monkeypatch)
     swap out the picker / pipeline factory.
 
-    PR-P2 — the RunTranscript scope is opened here (was previously
+    PR-P2 — the RunTimeline scope is opened here (was previously
     inside ``_dispatch_pipeline``) so cost-preview, pre-flight, and
     user-abort events also land in the per-session journal. Pre-flight
     failures (the dominant pre-PR observability gap) now emit
@@ -692,36 +692,36 @@ def run_audit_seeds(
 
     from core.observability.run_dir import run_dir_scope
     from core.paths import STATE_SEED_GENERATION_DIR
-    from core.self_improving.loop.observe.run_transcript import RunTranscript, run_transcript_scope
+    from core.self_improving.loop.observe.run_timeline import RunTimeline, run_timeline_scope
 
     run_id = f"{gen_tag}-{resolved_dim}"
     # PR-Q (2026-05-24) — run-dir-as-anchor consolidation. The pipeline
-    # transcript lives inside the run directory (not the legacy
-    # ~/.geode/autoresearch/handoff/<run>/transcript.jsonl) so every
+    # timeline lives inside the run directory (not the legacy
+    # ~/.geode/autoresearch/handoff/<run>/events.jsonl) so every
     # artifact for one cycle — state.json, candidates/, survivors/,
-    # elo_log.tsv, sub_agents/, transcript.jsonl — is co-located under
+    # elo_log.tsv, sub_agents/, events.jsonl — is co-located under
     # state/seed_generation/<run_id>/ and ``tar czf run.tgz state/
     # seed_generation/<run_id>/`` recovers the entire cycle. The
     # the project hook-event database and monthly usage ledger still live
     # under ~/.geode/ because they aren't run-scoped.
     run_dir = STATE_SEED_GENERATION_DIR / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
-    journal = RunTranscript(
+    journal = RunTimeline(
         session_id=run_id,
         gen_tag=gen_tag,
         component="seed-generation",
-        path=run_dir / "transcript.jsonl",
+        path=run_dir / "events.jsonl",
     )
     # PR-Q.5 + PR-U (2026-05-24, Codex MCP review of #1584 caught this
     # gap) — wrap the orchestrator body in BOTH ``run_dir_scope`` and
-    # ``run_transcript_scope`` so downstream writers (IsolatedRunner's
+    # ``run_timeline_scope`` so downstream writers (IsolatedRunner's
     # ``GEODE_RUN_DIR`` env-forward, SessionTranscript's
-    # ``resolve_sub_agent_path`` lookup, RunTranscript mirror from the
+    # ``resolve_sub_agent_path`` lookup, RunTimeline mirror from the
     # worker subprocess) all see the binding. Pre-fix the cli only
-    # opened ``run_transcript_scope`` and the ContextVar binding for
+    # opened ``run_timeline_scope`` and the ContextVar binding for
     # run_dir was never set, so PR-Q's redirect path silently fell back
     # to legacy ``~/.geode/workers/`` + ``~/.geode/transcripts/`` globals.
-    with run_dir_scope(run_dir), run_transcript_scope(journal):
+    with run_dir_scope(run_dir), run_timeline_scope(journal):
         picker_result = pick_bindings()
         print_tos_notice(picker_result, file=err, quiet=quiet)
 
@@ -864,12 +864,12 @@ def _dispatch_pipeline(
     cost. The function is monkeypatched in tests to assert the gate
     flow before the heavy import.
 
-    PR-P2 — the RunTranscript scope is now opened by the caller
+    PR-P2 — the RunTimeline scope is now opened by the caller
     (``run_audit_seeds``) so cost-preview / pre-flight events emitted
     before this dispatch land in the same per-session journal.
     Pipeline lifecycle markers (``pipeline_started`` /
     ``pipeline_finished``) and the post-run ``cost_divergence`` event
-    are emitted via :func:`core.self_improving.loop.observe.run_transcript.current_run_transcript`.
+    are emitted via :func:`core.self_improving.loop.observe.run_timeline.current_run_timeline`.
     """
     # CSP-7 (2026-05-22) — per-run artefacts moved into the repo
     # under ``state/seed_generation/`` (env-overridable via
@@ -877,7 +877,7 @@ def _dispatch_pipeline(
     # ``~/.geode/seed-generation/`` (pre-CSP-7) — machine-specific, broke
     # cross-host reproducibility.
     from core.paths import STATE_SEED_GENERATION_DIR
-    from core.self_improving.loop.observe.run_transcript import current_run_transcript
+    from core.self_improving.loop.observe.run_timeline import current_run_timeline
 
     from plugins.seed_generation.orchestrator import (
         Pipeline,
@@ -913,7 +913,7 @@ def _dispatch_pipeline(
     out.write(f"seed-generation: run_dir={run_dir}\n")
     out.flush()
 
-    journal = current_run_transcript()
+    journal = current_run_timeline()
     if journal is not None:
         journal.append("pipeline_started", payload={"target_dim": target_dim})
 

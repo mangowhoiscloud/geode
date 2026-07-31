@@ -46,9 +46,9 @@ def test_i1_agentic_loop_honours_caller_supplied_session_id() -> None:
         quiet=True,
     )
     assert loop._session_id == "gen-gen1-001-bd2e3854"
-    assert loop._transcript is not None
+    assert loop._timeline is not None
     # SessionTranscript exposed the same identifier on .session_id (public)
-    assert loop._transcript.session_id == "gen-gen1-001-bd2e3854"
+    assert loop._timeline.session_id == "gen-gen1-001-bd2e3854"
 
 
 def test_i1_agentic_loop_falls_back_to_uuid_when_no_session_id() -> None:
@@ -123,24 +123,24 @@ def test_i3_pipeline_timeline_task_id_resolves_to_dialogue_path() -> None:
     ``activity_log.entityId`` FK joins to ``issue_comments.issueId``."""
     from core.observability.run_dir import run_dir_scope
     from core.observability.transcript import SessionTranscript
-    from core.self_improving.loop.observe.run_transcript import RunTranscript, run_transcript_scope
+    from core.self_improving.loop.observe.run_timeline import RunTimeline, run_timeline_scope
 
     task_id = "gen-gen1-001-bd2e3854"
     with tempfile.TemporaryDirectory() as tmp, run_dir_scope(tmp):
-        run_transcript = RunTranscript(
+        run_timeline = RunTimeline(
             session_id="gen1-X",
             gen_tag="gen1",
             component="seed-generation",
-            path=Path(tmp) / "transcript.jsonl",
+            path=Path(tmp) / "events.jsonl",
         )
-        with run_transcript_scope(run_transcript):
+        with run_timeline_scope(run_timeline):
             tx = SessionTranscript(task_id)
             tx.record_user_message("Generate ONE seed scenario...")
             tx.record_assistant_message("# Overlapping log windows ...")
 
         timeline_rows = [
             json.loads(line)
-            for line in (Path(tmp) / "transcript.jsonl").read_text().splitlines()
+            for line in (Path(tmp) / "events.jsonl").read_text().splitlines()
             if line.strip()
         ]
         agent_rows = [row for row in timeline_rows if row.get("actor_type") == "agent"]
@@ -168,7 +168,7 @@ def test_i3_pipeline_timeline_task_id_resolves_to_dialogue_path() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_i4_legacy_run_transcript_append_still_works() -> None:
+def test_i4_legacy_run_timeline_append_still_works() -> None:
     """Pre-PR-U callers (seed_generation/cli.py + 25 other callers)
     use ``journal.append("phase_started", payload={...})`` with no
     actor/action kwargs. After PR-U the same shape must keep working
@@ -208,12 +208,12 @@ def test_i4_legacy_run_transcript_append_still_works() -> None:
         assert rows[1]["action"] == "pipeline.preflight_passed"
 
 
-def test_i5_worker_subprocess_rebinds_run_transcript_from_env() -> None:
+def test_i5_worker_subprocess_rebinds_run_timeline_from_env() -> None:
     """Codex MCP review of #1584 caught that ContextVars don't cross
-    subprocess boundaries — the parent's ``run_transcript_scope`` is
+    subprocess boundaries — the parent's ``run_timeline_scope`` is
     invisible to worker subprocesses, so SessionTranscript mirrors
     would silently no-op in production. Worker.main() must re-create a
-    ``RunTranscript`` pointing at the same ``transcript.jsonl`` when
+    ``RunTimeline`` pointing at the same ``events.jsonl`` when
     ``GEODE_RUN_DIR`` env is set. This test asserts that bridge."""
     import subprocess
     import sys
@@ -227,15 +227,15 @@ def test_i5_worker_subprocess_rebinds_run_transcript_from_env() -> None:
         worker_script = (
             "import os, sys; "
             "from core.observability.run_dir import RUN_DIR_ENV, set_active_run_dir; "
-            "from core.self_improving.loop.observe.run_transcript import RunTranscript, set_current_run_transcript; "
+            "from core.self_improving.loop.observe.run_timeline import RunTimeline, set_current_run_timeline; "
             "from core.observability.transcript import SessionTranscript; "
             "from pathlib import Path; "
             "inherited = os.environ.get(RUN_DIR_ENV, ''); "
             "set_active_run_dir(inherited); "
             "rd = Path(inherited); "
-            "rt = RunTranscript(session_id=rd.name, gen_tag='', component='seed-generation', "
-            "                   path=rd / 'transcript.jsonl'); "
-            "set_current_run_transcript(rt); "
+            "rt = RunTimeline(session_id=rd.name, gen_tag='', component='seed-generation', "
+            "                 path=rd / 'events.jsonl'); "
+            "set_current_run_timeline(rt); "
             "tx = SessionTranscript('gen-task-001'); "
             "tx.record_user_message('hello from worker subprocess'); "
             "sys.exit(0)"
@@ -251,16 +251,14 @@ def test_i5_worker_subprocess_rebinds_run_transcript_from_env() -> None:
         )
         assert result.returncode == 0, f"worker subprocess failed: stderr={result.stderr!r}"
 
-        # The mirror MUST have appended to the same transcript.jsonl the
+        # The mirror MUST have appended to the same events.jsonl the
         # parent would write to. Pre-Codex-catch this assertion failed
         # silently because the mirror's ContextVar lookup returned None.
-        transcript_path = Path(tmp) / "transcript.jsonl"
-        assert transcript_path.exists(), (
-            "worker did not rebind RunTranscript — mirror is broken across process boundary"
+        timeline_path = Path(tmp) / "events.jsonl"
+        assert timeline_path.exists(), (
+            "worker did not rebind RunTimeline — mirror is broken across process boundary"
         )
-        rows = [
-            json.loads(line) for line in transcript_path.read_text().splitlines() if line.strip()
-        ]
+        rows = [json.loads(line) for line in timeline_path.read_text().splitlines() if line.strip()]
         agent_rows = [r for r in rows if r.get("actor_type") == "agent"]
         assert len(agent_rows) == 1
         assert agent_rows[0]["action"] == "agent.user_message"
@@ -278,29 +276,29 @@ def test_i6_seed_generation_cli_opens_run_dir_scope() -> None:
     ``IsolatedRunner._aexecute_subprocess`` saw ``get_active_run_dir()
     == None`` and never forwarded ``GEODE_RUN_DIR`` to the child. The
     fix wraps the orchestrator body in both ``run_dir_scope`` and
-    ``run_transcript_scope``. This test grep-pins that wrapping so the
+    ``run_timeline_scope``. This test grep-pins that wrapping so the
     binding doesn't silently drop in a future refactor."""
     cli_source = Path(__file__).resolve().parents[3] / "plugins" / "seed_generation" / "cli.py"
     source = cli_source.read_text(encoding="utf-8")
     # Both scopes must appear, and run_dir_scope must wrap the
-    # run_transcript_scope (same `with` line or earlier).
+    # run_timeline_scope (same `with` line or earlier).
     assert "from core.observability.run_dir import run_dir_scope" in source
-    assert "with run_dir_scope(run_dir), run_transcript_scope(journal):" in source, (
+    assert "with run_dir_scope(run_dir), run_timeline_scope(journal):" in source, (
         "cli.py must wrap the orchestrator body in both scopes — pre-Codex-catch "
-        "only run_transcript_scope was opened and PR-Q's redirect path silently "
+        "only run_timeline_scope was opened and PR-Q's redirect path silently "
         "fell back to legacy ~/.geode/ globals."
     )
 
 
-def test_i4_mirror_no_op_outside_run_transcript_scope() -> None:
-    """SessionTranscript outside a ``run_transcript_scope`` (REPL /
+def test_i4_mirror_no_op_outside_run_timeline_scope() -> None:
+    """SessionTranscript outside a ``run_timeline_scope`` (REPL /
     gateway / tests) must NOT raise and must write its own
     dialogue.jsonl normally. The mirror is a silent no-op."""
     from core.observability.transcript import SessionTranscript
 
     with tempfile.TemporaryDirectory() as tmp:
         tx = SessionTranscript("s-orphan01", transcript_dir=tmp)
-        # No active run_transcript — these must not raise.
+        # No active run_timeline — these must not raise.
         tx.record_user_message("standalone")
         tx.record_assistant_message("ok")
         dialogue_path = Path(tmp) / "s-orphan01.jsonl"

@@ -974,12 +974,12 @@ class TestWorkerHookBundle:
             run_id="wk-hooks-2",
             log_dir=tmp_path,
         )
-        hooks.trigger(HookEvent.SESSION_ENDED, {"session_id": "wk-hooks-2"})
+        hooks.trigger(HookEvent.TURN_COMPLETED, {"session_id": "wk-hooks-2"})
 
         from core.observability.event_store import HookEventStore
 
         reader = HookEventStore(tmp_path / "events.db")
         events = [row.event for row in reader.read()]
-        assert HookEvent.SESSION_ENDED.value in events
+        assert HookEvent.TURN_COMPLETED.value in events
         reader.close()
         hooks.close()

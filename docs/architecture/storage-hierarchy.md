@@ -20,7 +20,7 @@ flowchart TB
         config["config.toml\nglobal behavior defaults"]
         auth["auth.toml\nplans, profiles, OAuth metadata"]
         profile["identity/ + user_profile/\ncross-project user context"]
-        runtime["usage/, diagnostics/, logs/,\ntranscripts/, projects/<id>/,\nself-improving runtime"]
+        runtime["usage/, diagnostics/, logs/,\nprojects/<id>/, self-improving runtime"]
     end
 
     subgraph workspace["Workspace: <project>/.geode"]
@@ -86,7 +86,7 @@ GEODE is closer to Claude Code than Hermes/OpenClaw because:
 - A workspace can be cloned, archived, or moved — project-local state
   that follows the workspace is sometimes the correct mental model
   (e.g., a project-specific cron schedule, project-specific rules).
-- But many concerns (session transcripts, snapshots, result caches,
+- But many concerns (session records, snapshots, result caches,
   embedding caches) are user-private and should not pollute the
   workspace.
 
@@ -101,7 +101,10 @@ The split is therefore deliberate, not accidental.
 | Is it a project-only secret fallback? | yes | `./.env` (explicit scope only; never shadows global) |
 | Is it cross-project user identity (career, preferences, learned memory)? | yes | `~/.geode/identity/`, `~/.geode/user_profile/` |
 | Is it queryable project runtime state or an operational event? | yes | `~/.geode/projects/<encoded-cwd>/sessions/sessions.db` |
-| Is it an append-only cost series, diagnostic log, or portable run artifact? | yes | the owning JSONL/log directory under `~/.geode/` |
+| Is it a portable, bounded run projection? | yes | owning run directory `events.jsonl` |
+| Is it an immutable evaluation trajectory? | yes | owning artifact bundle `trajectory.json` |
+| Is it a reviewed public trajectory release? | yes | external `geode-eval-artifacts/trajectories/<content-id>/` |
+| Is it an append-only cost series or diagnostic log? | yes | owning JSONL/log directory under `~/.geode/` |
 | Is it project-bound but user-private (per-project session, snapshot, cache)? | yes | `~/.geode/projects/<encoded-cwd>/` (Claude Code parity) |
 | Is it project-bound + meant to be committed / team-shareable? | yes | `{workspace}/.geode/` (rules, skills, custom config) |
 | Is it project-bound + user-generated output? | yes | `{workspace}/.geode/reports/` |
@@ -141,6 +144,7 @@ git-reviewable evidence ledgers.
 ├── skills/                                # personal skills (user-tier)
 │
 ├── usage/<YYYY-MM>.jsonl                  # LLM cost time-series
+├── evidence/<session>.jsonl               # v2 judgment rows; session/turn/call joins
 ├── diagnostics/<YYYY-MM>.log              # fa4 cross-process append-only
 ├── approval_history.jsonl                 # legacy archive; runtime writer retired
 ├── logs/serve.log                         # serve daemon log
@@ -153,12 +157,11 @@ git-reviewable evidence ledgers.
 ├── projects/<encoded-cwd>/                # per-project user-private state
 │   ├── journal/{runs,errors}.jsonl        # execution journal
 │   ├── sessions/
-│   │   ├── sessions.db                    # sessions/messages/runtime/hook_events SoT
-│   │   └── ...                            # explicit dialogue artifacts
+│   │   └── sessions.db                    # checkpoints + session_events + hook_events SoT
 │   ├── snapshots/snap-*.json              # langgraph checkpoints
 │   └── result_cache/                      # tool result memoization
 │
-├── runs/{*.jsonl,_archive/}               # legacy operator archives, TTL relocation only
+├── runs/{*.jsonl,_archive/}               # retired global archives; no new session history
 ├── workers/<task>.{result.json,stderr.log} # delegate worker output
 ├── scheduler/                             # legacy global scheduler (predates project-local)
 ├── vault/{general,research}/              # accumulated agent outputs (TTL TODO)
@@ -174,6 +177,17 @@ git-reviewable evidence ledgers.
 ├── reports/                               # generated reports (user output)
 ├── scheduled_tasks.json + .lock           # project-scoped cron jobs
 └── scheduler_logs/                        # scheduler run history
+
+
+<owning run directory>/                     bounded portable/evaluation artifacts
+├── events.jsonl                           # geode.run-event@1 projection
+├── sub_agents/<session>/events.jsonl      # correlated sub-agent projection
+└── trajectory.json                        # geode.trajectory@1 immutable export
+
+
+<evaluation artifact release>/              public, append-only after review
+├── manifest.json                           # admission, privacy attestation, file/source digests
+└── *.json                                  # schema-valid geode.trajectory@1 files
 ```
 
 ## Migration policy
@@ -187,6 +201,7 @@ once-flag, dotfile marker `~/.geode/.layout-version`).
 | v0 → v1 | Path reconciliation — `serve.log`, `approve_history.json`, `mcp-registry-cache.json` to canonical locations | done |
 | v1 → v2 | Vestigial constant cleanup — `PROJECT_EMBEDDING_CACHE` has no writer; remove if confirmed unused after one release window | this PR (marker bump only) |
 | schema-only | Add `sessions.db:hook_events`; leave legacy run JSONL untouched | additive `CREATE IF NOT EXISTS` (no layout marker bump) |
+| schema-only | Add `sessions.db:session_events` + `session_event_imports`; retire new global transcript writes | additive, explicit digest-backed import |
 | v3 → v4 | TBD — vault TTL policy (`~/.geode/vault/{general,research}/` currently 1800+ flat files) | backlog |
 
 Pattern for adding a new migration (mirrors Hermes
@@ -204,6 +219,10 @@ Pattern for adding a new migration (mirrors Hermes
 
 - `core/paths.py` — current path constants
 - `core/wiring/layout_migrator.py` — migration runner (v0.95.x+)
+- `core/observability/session_timeline.py` — canonical session record and import
+- `core/observability/record_paths.py` — `events.jsonl` compatibility reader
+- `core/observability/trajectory.py` — validated evaluation export
+- `core/observability/trajectory_release.py` — public staging, scan, digest, read-back
 - `core/memory/project.py` — project memory cascade (project → global)
 - `core/cli/cmd_lifecycle.py` — `/clean` / `/uninstall` consumers (must
   honour the same tier rules)

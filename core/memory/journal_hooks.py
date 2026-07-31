@@ -96,16 +96,16 @@ def _journal_to_session(
     level: str,
     payload: dict[str, Any],
 ) -> None:
-    """Forward an event to the active RunTranscript if one is bound.
+    """Forward an event to the active RunTimeline if one is bound.
 
     No-op when no journal is bound to the ContextVar. Import is local
     so journal_hooks stays import-light when observability is unused.
     """
     try:
-        from core.self_improving.loop.observe.run_transcript import current_run_transcript
+        from core.self_improving.loop.observe.run_timeline import current_run_timeline
     except ImportError:
         return
-    rt = current_run_transcript()
+    rt = current_run_timeline()
     if rt is None:
         return
     rt.append(event, level=level, payload=payload)

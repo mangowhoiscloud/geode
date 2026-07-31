@@ -99,7 +99,7 @@ def test_tool_processor_records_only_markers_in_builtin_durable_sinks() -> None:
         executor=MagicMock(),
         op_logger=op_logger,
         error_recovery=MagicMock(),
-        transcript=transcript,
+        timeline=transcript,
     )
 
     processor._record_tool_activity(
@@ -185,7 +185,7 @@ def test_rewritten_personal_tool_identity_controls_durable_retention() -> None:
         executor=executor,
         op_logger=op_logger,
         error_recovery=MagicMock(),
-        transcript=transcript,
+        timeline=transcript,
     )
     block = type(
         "Block",

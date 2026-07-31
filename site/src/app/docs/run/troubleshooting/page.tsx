@@ -8,8 +8,8 @@ export default function Page() {
       slug="run/troubleshooting"
       title="Troubleshooting"
       titleKo="문제 해결"
-      summary="Common failure modes and where to look: process logs, SQLite events, and transcripts."
-      summaryKo="흔한 실패 모드와 살펴볼 곳입니다. process log, SQLite event, transcript를 봅니다."
+      summary="Common failure modes and where to look: process logs, SQLite history, and run projections."
+      summaryKo="흔한 실패 모드와 살펴볼 곳입니다. process log, SQLite history, run projection을 봅니다."
     >
       <Bi
         ko={
@@ -81,7 +81,7 @@ export default function Page() {
                 <tr>
                   <td>읽기 도구가 너무 자주 호출됨</td>
                   <td><code>read_document</code>, <code>grep_files</code>는 항상 로드되는 핵심 도구. tool cap에 숨은 것이 아님</td>
-                  <td>dialogue transcript의 tool call을 보고 질문에 파일 범위, 제외 경로, 원하는 깊이를 명시합니다.</td>
+                  <td><code>session_events</code>의 tool call을 보고 질문에 파일 범위, 제외 경로, 원하는 깊이를 명시합니다.</td>
                 </tr>
                 <tr>
                   <td>메신저 무반응</td>
@@ -100,7 +100,8 @@ export default function Page() {
                 <tr><td>serve 데몬 로그 (10MB × 5 로테이션)</td><td><code>~/.geode/logs/serve.log</code></td></tr>
                 <tr><td>geode-mcp, 워커, 캠페인 로그</td><td><code>~/.geode/logs/</code></td></tr>
                 <tr><td>세션별 lifecycle event</td><td><code>sessions.db:hook_events</code></td></tr>
-                <tr><td>세션 transcript (턴 단위 대화)</td><td><code>~/.geode/transcripts/&lt;project-slug&gt;/</code></td></tr>
+                <tr><td>세션 실행 이력</td><td><code>sessions.db:session_events</code></td></tr>
+                <tr><td>run portable projection</td><td><code>&lt;run-dir&gt;/events.jsonl</code></td></tr>
                 <tr><td>비용 ledger</td><td><code>~/.geode/usage/YYYY-MM.jsonl</code></td></tr>
               </tbody>
             </table>
@@ -112,7 +113,7 @@ export default function Page() {
 
             <h2>다음</h2>
             <ul>
-              <li><a href="/geode/docs/guides/debug-stuck-run">멈춘 실행 디버깅</a>. transcript와 SQL event timeline을 읽는 절차.</li>
+              <li><a href="/geode/docs/guides/debug-stuck-run">멈춘 실행 디버깅</a>. session record와 SQL event timeline을 읽는 절차.</li>
               <li><a href="/geode/docs/verification/observability">관측성</a>. 어떤 질문에 어떤 렌즈를 쓰는지.</li>
               <li><a href="/geode/docs/config/basics">설정 기초</a>. 레이어와 우선순위의 전체 그림.</li>
             </ul>
@@ -187,7 +188,7 @@ export default function Page() {
                 <tr>
                   <td>Read tools fire too often</td>
                   <td><code>read_document</code> and <code>grep_files</code> are always-loaded core tools; this is not the tool cap hiding them</td>
-                  <td>Inspect tool calls in the dialogue transcript, then constrain file scope, excluded paths, or desired depth in the prompt.</td>
+                  <td>Inspect tool calls in <code>session_events</code>, then constrain file scope, excluded paths, or desired depth in the prompt.</td>
                 </tr>
                 <tr>
                   <td>Messenger silence</td>
@@ -206,7 +207,8 @@ export default function Page() {
                 <tr><td>Serve daemon log (10MB times 5 rotation)</td><td><code>~/.geode/logs/serve.log</code></td></tr>
                 <tr><td>geode-mcp, worker, campaign logs</td><td><code>~/.geode/logs/</code></td></tr>
                 <tr><td>Per-session lifecycle events</td><td><code>sessions.db:hook_events</code></td></tr>
-                <tr><td>Session transcripts (per-turn dialogue)</td><td><code>~/.geode/transcripts/&lt;project-slug&gt;/</code></td></tr>
+                <tr><td>Session execution history</td><td><code>sessions.db:session_events</code></td></tr>
+                <tr><td>Portable run projection</td><td><code>&lt;run-dir&gt;/events.jsonl</code></td></tr>
                 <tr><td>Cost ledger</td><td><code>~/.geode/usage/YYYY-MM.jsonl</code></td></tr>
               </tbody>
             </table>
@@ -218,7 +220,7 @@ export default function Page() {
 
             <h2>Next</h2>
             <ul>
-              <li><a href="/geode/docs/guides/debug-stuck-run">Debug a stuck run</a>. Reading the transcript and SQL event timeline.</li>
+              <li><a href="/geode/docs/guides/debug-stuck-run">Debug a stuck run</a>. Reading session history and the SQL event timeline.</li>
               <li><a href="/geode/docs/verification/observability">Observability</a>. Which lens answers which question.</li>
               <li><a href="/geode/docs/config/basics">Configuration basics</a>. The full layer picture.</li>
             </ul>
