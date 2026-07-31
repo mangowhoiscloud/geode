@@ -81,6 +81,52 @@ OPENAI_API_KEY=dummy \\
   ],
 };
 
+const mcpmarkFilesystemEasyGpt56: BenchmarkMeasurement = {
+  id: "mcpmark-filesystem-easy-20260731-gpt56-high",
+  group: "mcpmark",
+  title: "filesystem/easy GPT-5.6 subscription rerun",
+  measuredAt: "2026-07-31 KST",
+  suite: "filesystem/easy",
+  status: "complete",
+  model: "gpt-5.6-sol",
+  provider: "openai-codex",
+  source: "subscription",
+  effort: "high",
+  route: "GEODE local MCPMark adapter",
+  harness: "eval-sys/mcpmark@cd45b7f, GEODE@edb74602b",
+  artifact:
+    "geode-eval-artifacts@9c00ecf/mcpmark/results-geode-agentworld/geode-gpt56-sol-high-edb74602b-20260731-mcpmark-filesystem-easy",
+  scoreLabel: "Accuracy",
+  scoreValue: "90.0% (9 / 10)",
+  secondary: [
+    "Total task execution time 799.435s / average 79.943s",
+    "54 GEODE turns total / 5.4 average",
+    "799,679 input / 10,976 output / 97,792 cache-read tokens",
+    "Recorded estimate $3.887611; not subscription billing",
+    "Failure: file_context/uppercase left file_01.txt incompletely uppercased",
+  ],
+  command: `cd artifacts/eval/harnesses/mcpmark
+GEODE_HOME=<isolated-runtime-home> \\
+PYTHONPATH=<geode-edb74602b-worktree> \\
+OPENAI_API_KEY=dummy \\
+.venv/bin/python -m plugins.benchmark_harness.run_mcpmark \\
+  --mcp filesystem \\
+  --task-suite easy \\
+  --models geode-gpt-5.6-sol \\
+  --agent geode \\
+  --reasoning-effort high \\
+  --k 1 \\
+  --timeout 1200 \\
+  --exp-name geode-gpt56-sol-high-edb74602b-20260731-mcpmark-filesystem-easy \\
+  --output-dir ./results-geode-edb74602b`,
+  notes: [
+    "This is directly comparable to filesystem/easy only, not to the MCPMark Verified standard aggregate.",
+    "The upstream total_tokens and total_reasoning_tokens summary fields were zero despite populated input/output fields; they are not used.",
+    "One response stream disconnected after the first task had already produced its files; that task passed every official integrity check and no 429 occurred.",
+    "Raw receipts and ten normalized tool trajectories are pinned to geode-eval-artifacts commit 9c00ecf.",
+  ],
+};
+
 const mcpmarkFilesystemEasyParallel: BenchmarkMeasurement = {
   id: "mcpmark-filesystem-easy-parallel-20260703-gpt55-xhigh",
   group: "mcpmark",
@@ -435,6 +481,103 @@ const tau2MockSmoke: BenchmarkMeasurement = {
   ],
 };
 
+const tau2MockGpt56: BenchmarkMeasurement = {
+  id: "tau2-mock-20260731-gpt56-high-geode-user",
+  group: "tau2",
+  title: "mock/create_task_1 GPT-5.6 subscription diagnostic",
+  measuredAt: "2026-07-31 KST",
+  suite: "mock / create_task_1",
+  status: "complete",
+  model: "gpt-5.6-sol",
+  provider: "openai",
+  source: "subscription",
+  effort: "agent high / user high",
+  route: "geode_agent + geode_user",
+  harness: "sierra-research/tau2-bench@1901a30, tau2==1.0.0, GEODE@edb74602b",
+  artifact:
+    "geode-eval-artifacts@9c00ecf/tau2/simulations/geode-gpt56-sol-high-edb74602b-geode-user-mock-smoke-20260731/results.json",
+  scoreLabel: "Reward / pass^1",
+  scoreValue: "0.0 / 0.000 (0 / 1)",
+  secondary: [
+    "Communication check 1.0 / DB check 0.0",
+    "create_task action check 0.0",
+    "Termination user_stop",
+    "Duration 14.58s",
+  ],
+  command: `python scripts/eval/tau2_geode_agent.py \\
+  --harness-dir artifacts/eval/harnesses/tau2-bench \\
+  --domain mock \\
+  --num-tasks 1 \\
+  --num-trials 1 \\
+  --max-concurrency 1 \\
+  --max-steps 8 \\
+  --timeout 900 \\
+  --model gpt-5.6-sol \\
+  --provider openai \\
+  --source subscription \\
+  --effort high \\
+  --user geode_user \\
+  --user-llm gpt-5.6-sol \\
+  --user-source subscription \\
+  --user-effort high \\
+  --save-to geode-gpt56-sol-high-edb74602b-geode-user-mock-smoke-20260731`,
+  notes: [
+    "The create_task tool executed, but the model supplied an unrequested optional description=\"\".",
+    "Tau2's exact action and DB comparators rejected the extra argument; this is retained as a behavioral failure.",
+    "This GEODE-owned user route is not comparable to the native tau2 user_simulator headline.",
+  ],
+};
+
+const tau2TelecomSmallGpt56: BenchmarkMeasurement = {
+  id: "tau2-telecom-small-20260731-gpt56-high-geode-user",
+  group: "tau2",
+  title: "Telecom small first-task GPT-5.6 subscription diagnostic",
+  measuredAt: "2026-07-31 KST",
+  suite:
+    "telecom / small / [mobile_data_issue]user_abroad_roaming_enabled_off[PERSONA:None]",
+  status: "complete",
+  model: "gpt-5.6-sol",
+  provider: "openai",
+  source: "subscription",
+  effort: "agent high / user high",
+  route: "geode_agent + geode_user",
+  harness: "sierra-research/tau2-bench@1901a30, tau2==1.0.0, GEODE@edb74602b",
+  artifact:
+    "geode-eval-artifacts@9c00ecf/tau2/simulations/geode-gpt56-sol-high-edb74602b-geode-user-telecom-small-01-20260731/results.json",
+  scoreLabel: "Reward / pass^1",
+  scoreValue: "0.0 / 0.000 (0 / 1)",
+  secondary: [
+    "Required user toggle_roaming action 0.0",
+    "Mobile-data and excellent-speed assertions 0.0",
+    "Termination user_stop after human transfer",
+    "Duration 51.91s",
+  ],
+  command: `python scripts/eval/tau2_geode_agent.py \\
+  --harness-dir artifacts/eval/harnesses/tau2-bench \\
+  --domain telecom \\
+  --task-split-name small \\
+  --task-ids '[mobile_data_issue]user_abroad_roaming_enabled_off[PERSONA:None]' \\
+  --num-tasks 1 \\
+  --num-trials 1 \\
+  --max-concurrency 1 \\
+  --max-steps 50 \\
+  --timeout 1800 \\
+  --model gpt-5.6-sol \\
+  --provider openai \\
+  --source subscription \\
+  --effort high \\
+  --user geode_user \\
+  --user-llm gpt-5.6-sol \\
+  --user-source subscription \\
+  --user-effort high \\
+  --save-to geode-gpt56-sol-high-edb74602b-geode-user-telecom-small-01-20260731`,
+  notes: [
+    "The agent correctly identified the customer, line, roaming state, and data usage.",
+    "It then declared device tools unavailable and transferred to a human instead of guiding the user-side roaming/device workflow.",
+    "No provider, quota, or adapter exception occurred; the failure is retained as behavior evidence.",
+  ],
+};
+
 const tau2NativeAirlineBase: BenchmarkMeasurement = {
   id: "tau2-airline-base-20260703-geode-099269-gpt52-high-payg",
   group: "tau2",
@@ -679,6 +822,7 @@ export const BENCHMARK_GROUPS: BenchmarkGroup[] = [
     ],
     measurements: [
       mcpmarkVerifiedAvailable,
+      mcpmarkFilesystemEasyGpt56,
       mcpmarkVerifiedGithub,
       mcpmarkVerifiedPostgres,
       mcpmarkVerifiedFilesystem,
@@ -731,6 +875,8 @@ export const BENCHMARK_GROUPS: BenchmarkGroup[] = [
     ],
     measurements: [
       tau2NativeAggregate,
+      tau2TelecomSmallGpt56,
+      tau2MockGpt56,
       tau2NativeTelecomBase,
       tau2NativeRetailBase,
       tau2NativeAirlineBase,
