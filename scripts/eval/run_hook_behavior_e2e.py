@@ -21,9 +21,7 @@ import hashlib
 import json
 import os
 import re
-import shutil
 import sqlite3
-import subprocess
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -52,18 +50,6 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _git_revision() -> str:
-    git = shutil.which("git")
-    if git is None:
-        raise RuntimeError("git executable not found")
-    return subprocess.run(  # noqa: S603 -- fixed trusted executable and arguments
-        [git, "rev-parse", "HEAD"],
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
-
-
 def _payload_digest(payload: Any) -> str:
     encoded = json.dumps(
         payload,
@@ -80,7 +66,13 @@ def _require(condition: bool, message: Any) -> None:
         raise RuntimeError(f"hook behavior E2E gate failed: {message!r}")
 
 
-async def _run(output_dir: Path, *, model: str, effort: str) -> dict[str, Any]:
+async def _run(
+    output_dir: Path,
+    *,
+    model: str,
+    effort: str,
+    geode_revision: str,
+) -> dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=False)
     runtime_home = output_dir / "geode-home"
     os.environ["GEODE_HOME"] = str(runtime_home)
@@ -634,7 +626,6 @@ async def _run(output_dir: Path, *, model: str, effort: str) -> dict[str, Any]:
     )
 
     published_at = _utc_now()
-    revision = _git_revision()
     trajectory = {
         "captured_at": captured_at,
         "events": events,
@@ -692,7 +683,7 @@ async def _run(output_dir: Path, *, model: str, effort: str) -> dict[str, Any]:
             "extraction_transform": (
                 "in-process hook/middleware receipts normalized to decision/tool events"
             ),
-            "geode_revision": revision,
+            "geode_revision": geode_revision,
             "middleware_counts": probe_middleware.counts,
             "model_route": {
                 "effort": effort,
@@ -819,7 +810,7 @@ async def _run(output_dir: Path, *, model: str, effort: str) -> dict[str, Any]:
     summary = {
         "artifact_inventory": generated_files,
         "captured_at": captured_at,
-        "geode_revision": revision,
+        "geode_revision": geode_revision,
         "hook_coverage": sorted(observed_hooks),
         "middleware_counts": probe_middleware.counts,
         "model_route": {
@@ -844,13 +835,20 @@ def main() -> int:
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--model", default="gpt-5.6-sol")
     parser.add_argument("--effort", default="high")
+    parser.add_argument("--geode-revision", required=True)
     args = parser.parse_args()
+    geode_revision = str(args.geode_revision)
+    _require(
+        re.fullmatch(r"[0-9a-f]{40}", geode_revision) is not None,
+        {"geode_revision": geode_revision},
+    )
     started = time.monotonic()
     result = asyncio.run(
         _run(
             args.output_dir.resolve(),
             model=str(args.model),
             effort=str(args.effort),
+            geode_revision=geode_revision,
         )
     )
     print(
