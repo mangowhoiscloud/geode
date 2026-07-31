@@ -28,7 +28,7 @@ from itertools import islice
 from pathlib import Path
 from typing import Any
 
-from core.observability.redaction import redact_secrets
+from core.observability.redaction import redact_and_bound_text, redact_secrets
 
 log = logging.getLogger(__name__)
 
@@ -1078,14 +1078,14 @@ def _bounded_value(value: Any, policy: SessionEventPolicy, *, depth: int) -> Any
     if isinstance(value, float):
         return value if math.isfinite(value) else str(value)
     if isinstance(value, str):
-        return _bounded_text(value, policy.max_string_chars)
+        return redact_and_bound_text(value, policy.max_string_chars)
     if isinstance(value, bytes | bytearray | memoryview):
         return {"_omitted_type": "bytes", "size": len(value)}
     if isinstance(value, Mapping):
         result: dict[str, Any] = {}
         items = list(islice(value.items(), policy.max_collection_items))
         for raw_key, item in items:
-            key = _bounded_text(raw_key, 128)
+            key = redact_and_bound_text(raw_key, 128)
             if key.lower() in _SENSITIVE_PAYLOAD_KEYS:
                 result[key] = "<REDACTED>"
             else:
@@ -1100,13 +1100,6 @@ def _bounded_value(value: Any, policy: SessionEventPolicy, *, depth: int) -> Any
             sequence_result.append({"_truncated_items": len(value) - policy.max_collection_items})
         return sequence_result
     return {"_omitted_type": type(value).__name__}
-
-
-def _bounded_text(value: Any, max_chars: int) -> str:
-    text = redact_secrets(str(value or ""))
-    if len(text) <= max_chars:
-        return text
-    return text[:max_chars] + f"…[truncated:{len(text) - max_chars}]"
 
 
 def _bounded_field(value: Any, max_chars: int) -> str:

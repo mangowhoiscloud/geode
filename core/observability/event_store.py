@@ -17,7 +17,7 @@ from typing import Any
 
 from core.hooks.catalog import EventRetentionClass
 from core.hooks.system import COLLAPSED_EVENT_VALUES, LEGACY_EVENT_VALUES
-from core.observability.redaction import redact_secrets
+from core.observability.redaction import redact_and_bound_text
 
 log = logging.getLogger(__name__)
 
@@ -304,28 +304,31 @@ class HookEventStore:
                     (
                         EVENT_SCHEMA_VERSION,
                         float(record.occurred_at),
-                        _bounded_text(record.session_key, 256),
-                        _bounded_text(record.run_id, 256),
-                        _bounded_text(record.session_id, 256),
-                        _bounded_text(record.turn_id, 256),
-                        _bounded_text(record.tool_call_id, 256),
-                        _bounded_text(record.llm_call_id, 256),
-                        _bounded_text(record.llm_attempt_id, 256),
-                        _bounded_text(record.event, 128),
-                        _bounded_text(record.dispatch_mode, 32),
-                        _bounded_text(record.status, 32),
+                        redact_and_bound_text(record.session_key, 256),
+                        redact_and_bound_text(record.run_id, 256),
+                        redact_and_bound_text(record.session_id, 256),
+                        redact_and_bound_text(record.turn_id, 256),
+                        redact_and_bound_text(record.tool_call_id, 256),
+                        redact_and_bound_text(record.llm_call_id, 256),
+                        redact_and_bound_text(record.llm_attempt_id, 256),
+                        redact_and_bound_text(record.event, 128),
+                        redact_and_bound_text(record.dispatch_mode, 32),
+                        redact_and_bound_text(record.status, 32),
                         record.retention_class.value,
                         max(0, int(record.handler_count)),
                         max(0, int(record.handler_error_count)),
                         int(record.blocked),
-                        _bounded_text(record.block_reason, self._retention.max_string_chars),
-                        _bounded_text(record.actor_type, 32),
-                        _bounded_text(record.actor_id, 256),
-                        _bounded_text(record.action, 128),
-                        _bounded_text(record.entity_type, 64),
-                        _bounded_text(record.entity_id, 256),
-                        _bounded_text(record.task_id, 256) if record.task_id else None,
-                        _bounded_text(record.level, 16),
+                        redact_and_bound_text(
+                            record.block_reason,
+                            self._retention.max_string_chars,
+                        ),
+                        redact_and_bound_text(record.actor_type, 32),
+                        redact_and_bound_text(record.actor_id, 256),
+                        redact_and_bound_text(record.action, 128),
+                        redact_and_bound_text(record.entity_type, 64),
+                        redact_and_bound_text(record.entity_id, 256),
+                        (redact_and_bound_text(record.task_id, 256) if record.task_id else None),
+                        redact_and_bound_text(record.level, 16),
                         payload_json,
                         payload_hash,
                     ),
@@ -509,13 +512,6 @@ class HookEventStore:
             raise RuntimeError("HookEventStore is closed")
 
 
-def _bounded_text(value: Any, max_chars: int) -> str:
-    text = redact_secrets(str(value or ""))
-    if len(text) <= max_chars:
-        return text
-    return text[:max_chars] + f"…[truncated:{len(text) - max_chars}]"
-
-
 def _bounded_payload_json(payload: dict[str, Any], policy: EventRetentionPolicy) -> str:
     bounded = bound_event_payload(payload, policy=policy)
     encoded = json.dumps(
@@ -562,7 +558,7 @@ def _bounded_value(value: Any, policy: EventRetentionPolicy, *, depth: int) -> A
     if isinstance(value, float):
         return value if math.isfinite(value) else str(value)
     if isinstance(value, str):
-        return _bounded_text(value, policy.max_string_chars)
+        return redact_and_bound_text(value, policy.max_string_chars)
     if isinstance(value, bytes | bytearray | memoryview):
         return {"_omitted_type": "bytes", "size": len(value)}
     if isinstance(value, Mapping):
@@ -570,7 +566,7 @@ def _bounded_value(value: Any, policy: EventRetentionPolicy, *, depth: int) -> A
         redacted_fields: list[str] = []
         items = list(islice(value.items(), policy.max_collection_items))
         for raw_key, item in items:
-            key = _bounded_text(raw_key, 128)
+            key = redact_and_bound_text(raw_key, 128)
             if key.lower() in _FORBIDDEN_PERSISTED_KEYS:
                 redacted_fields.append(key)
                 continue

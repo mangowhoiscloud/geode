@@ -307,6 +307,16 @@ the Python suite still exposes pre-existing scheduler threads attempting to
 write to pytest's closed capture stream. Neither produced a failed gate, and
 neither is counted as evidence for this storage contract.
 
+The duplicate-signature ratchet rises from 84 to 97 for this migration
+window. Eleven groups are the deliberately unchanged
+`SessionTranscript`/`SessionTimeline` compatibility method names; the other
+two are the conventional `append` and `read` storage protocol names. The
+first CI pass also exposed a genuinely duplicated redaction/bounding helper;
+that implementation was consolidated in `core.observability.redaction`
+before approving the remaining baseline. Removing the deprecated transcript
+surface in the next compatibility GAP removes the eleven temporary overlaps
+instead of inventing divergent method names merely to satisfy the heuristic.
+
 The subscription behavior E2E, artifact-repository policy/release PR, remote
 digest read-back, and post-release MCPMark/tau2 runs intentionally happen after
 the GEODE feature PR exists, so their immutable revision and artifact
