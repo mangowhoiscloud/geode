@@ -85,6 +85,27 @@ export default function Page() {
               고정해서만 게시합니다.
             </p>
 
+            <h2>2026-07-31 GPT-5.6 subscription run</h2>
+            <p>
+              GEODE <code>edb74602b</code>, <code>gpt-5.6-sol</code>, effort{" "}
+              <code>high</code>로 <code>filesystem/easy</code> 10건을 다시
+              측정했습니다. 공식 verifier 결과는 <strong>9/10 (90.0%)</strong>,
+              총 799.4초와 54 turns입니다. 유일한 실패는{" "}
+              <code>file_context/uppercase</code>가 다섯 파일을 만들고도{" "}
+              <code>file_01.txt</code>를 완전히 대문자로 바꾸지 못한 행동
+              실패입니다. schema 충돌이나 429 실패는 없었습니다.
+            </p>
+            <ul>
+              <li>
+                <RunLogLink path="mcpmark/results-geode-agentworld/geode-gpt56-sol-high-edb74602b-20260731-mcpmark-filesystem-easy" />:
+                마스킹된 verifier receipt와 ordered MCP execution logs.
+              </li>
+              <li>
+                <RunLogLink path="trajectories/mcpmark-geode-gpt56-edb74602b-filesystem-easy-20260731T034305Z-b86f5071cbe0" />:
+                task별 10개 content-addressed tool trajectory.
+              </li>
+            </ul>
+
             <h2>Headline: Verified available-services 트랙</h2>
             <p>
               2026-07-04 run, GEODE v0.99.269 계열, <code>eval-sys/mcpmark@cd45b7f</code>,{" "}
@@ -143,6 +164,28 @@ export default function Page() {
               pinned to the harness commit, service set, model route, and timeout
               settings.
             </p>
+
+            <h2>2026-07-31 GPT-5.6 Subscription Run</h2>
+            <p>
+              We reran the ten <code>filesystem/easy</code> tasks on GEODE{" "}
+              <code>edb74602b</code> with <code>gpt-5.6-sol</code> at effort{" "}
+              <code>high</code>. The official verifier scored{" "}
+              <strong>9/10 (90.0%)</strong> over 799.4 seconds and 54 turns. The
+              only failure was behavioral: <code>file_context/uppercase</code>{" "}
+              created all five files but did not fully uppercase{" "}
+              <code>file_01.txt</code>. No schema collision or 429 failure
+              occurred.
+            </p>
+            <ul>
+              <li>
+                <RunLogLink path="mcpmark/results-geode-agentworld/geode-gpt56-sol-high-edb74602b-20260731-mcpmark-filesystem-easy" />:
+                redacted verifier receipts and ordered MCP execution logs.
+              </li>
+              <li>
+                <RunLogLink path="trajectories/mcpmark-geode-gpt56-edb74602b-filesystem-easy-20260731T034305Z-b86f5071cbe0" />:
+                ten content-addressed per-task tool trajectories.
+              </li>
+            </ul>
 
             <h2>Headline: Verified Available-Services Track</h2>
             <p>
