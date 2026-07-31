@@ -279,6 +279,8 @@ async def _run(
         async def tool_execution(self, request: ToolCallRequest, next_call: Any) -> dict[str, Any]:
             self.counts["tool_execution"] += 1
             call_id = f"tool-call-{self.counts['tool_execution']}"
+            session_id = str(request.correlation.get("session_id") or "")
+            turn_id = str(request.correlation.get("turn_id") or "")
             record(
                 "assistant",
                 "tool_call",
@@ -286,7 +288,9 @@ async def _run(
                 {
                     "argument_sha256": _payload_digest(request.arguments),
                     "call_id": call_id,
+                    "session_id": session_id,
                     "tool": request.tool_name,
+                    "turn_id": turn_id,
                 },
             )
             result = await next_call(request)
@@ -297,8 +301,10 @@ async def _run(
                 {
                     "call_id": call_id,
                     "result_sha256": _payload_digest(result),
+                    "session_id": session_id,
                     "status": "error" if result.get("error") else "ok",
                     "tool": request.tool_name,
+                    "turn_id": turn_id,
                 },
             )
             record(
@@ -729,6 +735,13 @@ async def _run(
             "run": run_id,
             "session": session_key,
             "task": "validate GEODE public hooks and trusted middleware",
+        },
+    )
+    _require(
+        bool(trajectory["integrity"]["scope_complete"]),
+        {
+            "quality": trajectory["integrity"]["quality"],
+            "scope_incompleteness": trajectory["integrity"]["scope_incompleteness"],
         },
     )
 
