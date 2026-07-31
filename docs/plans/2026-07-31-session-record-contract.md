@@ -317,7 +317,21 @@ before approving the remaining baseline. Removing the deprecated transcript
 surface in the next compatibility GAP removes the eleven temporary overlaps
 instead of inventing divergent method names merely to satisfy the heuristic.
 
-The subscription behavior E2E, artifact-repository policy/release PR, remote
-digest read-back, and post-release MCPMark/tau2 runs intentionally happen after
-the GEODE feature PR exists, so their immutable revision and artifact
-identities can point to that reviewed change.
+The GPT subscription behavior E2E exercised all 13 public hooks and all four
+trusted middleware seams. It produced 22 SQLite extension rows, 22 run-JSONL
+extension rows, and a 27-event scope-complete public trajectory with one
+exactly paired tool call/result and no missing turn correlation. The first
+attempt that lacked turn correlation was rejected by the publication gate and
+was preserved only as private failure evidence.
+
+Artifact PR
+[`geode-eval-artifacts#8`](https://github.com/mangowhoiscloud/geode-eval-artifacts/pull/8)
+merged as
+[`b979268`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/b979268d7e64c99ca27b51c025a2cd25022cc1a5).
+An independent checkout of that exact remote commit passed anchored read-back
+with manifest SHA-256
+`d418e55ff8aa4cae22db9e6c59ac0ecbe060be78ffcc46c900da1e23a6f7b994`:
+27 events, one scope-complete trajectory, zero scope-incomplete trajectories,
+and zero findings in all configured secret-scan classes. Post-release
+MCPMark/tau2 runs remain sequenced after package deployment so their native
+receipts name the released GEODE revision.
