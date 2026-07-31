@@ -26,6 +26,14 @@ artifact-repository commit.
 | `docs/eval/crucible-power-admission-2026-07-13.md` (migrated 2026-07-13) | `crucible/gate-provenance/` |
 | normalized trajectory releases (`TRAJECTORIES.md` contract; first release 2026-07-28, MCP spec-response E2E) | `trajectories/<source>-<scope>-<published-utc>-<digest12>/` |
 
+The 2026-07-31 GEODE hook/middleware behavior release is pinned to artifact
+commit
+[`3e5b35f`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/3e5b35f4505a4a2dc76d595b24862e8e73e668ff).
+Its public allowlist contains only the normalized trajectory and manifest;
+runtime checkpoints, provider reasoning, SQLite/WAL, JSONL, usage, and
+diagnostic files remain withheld. Its manifest supersedes the first run
+without deleting or rewriting that append-only record.
+
 Still in the GEODE repository after the 2026-07-13 migration: the live
 `docs/audits/eval-logs/` manifest ledger (`core/audit/manifest.py` appends to
 it on every `geode audit --live`), the code-referenced

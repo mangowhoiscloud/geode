@@ -149,6 +149,7 @@ def test_public_extension_audit_uses_sqlite_and_active_transcript_only(
         "extension": "audit-probe",
         "status": "ok",
         "duration_ms": row.payload["duration_ms"],
+        "session_id": "s-1",
         "turn_id": "t-1",
         "session_generation": 0,
         "verify_attempt": 0,
@@ -169,6 +170,29 @@ def test_public_extension_audit_uses_sqlite_and_active_transcript_only(
     assert len(transcript_rows) == 1
     assert transcript_rows[0]["event"] == HookEvent.EXTENSION_INVOKED.value
     assert transcript_rows[0]["payload"]["turn_id"] == "t-2"
+    hooks.close()
+
+
+def test_tool_correlation_survives_sqlite_and_transcript_projection(tmp_path: Path) -> None:
+    hooks, store = _wired_hooks(tmp_path)
+
+    with run_transcript_scope(_transcript(tmp_path)):
+        hooks.trigger(
+            HookEvent.TOOL_EXEC_ENDED,
+            {
+                "session_id": "s-tool",
+                "turn_id": "t-tool",
+                "tool_name": "check",
+                "duration_ms": 1.0,
+                "has_error": False,
+            },
+        )
+
+    assert store.read()[0].payload["session_id"] == "s-tool"
+    assert store.read()[0].payload["turn_id"] == "t-tool"
+    transcript_row = _read_transcript(tmp_path / "transcript.jsonl")[0]
+    assert transcript_row["payload"]["session_id"] == "s-tool"
+    assert transcript_row["payload"]["turn_id"] == "t-tool"
     hooks.close()
 
 
