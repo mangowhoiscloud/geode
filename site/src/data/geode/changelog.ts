@@ -2,7 +2,7 @@
  * GEODE CHANGELOG, auto-synced from the GEODE repo via `npm run sync-stats`.
  * Do not edit manually. Edit CHANGELOG.md in the GEODE repo and re-run sync.
  *
- * Last sync: 2026-07-30
+ * Last sync: 2026-07-31
  *
  * Each entry's `body` is the raw markdown between two version headings.
  * The Changelog page renders the body with a minimal markdown renderer
@@ -20,6 +20,11 @@ export const CHANGELOG: ChangelogEntry[] = [
     "version": "Unreleased",
     "date": "",
     "body": ""
+  },
+  {
+    "version": "1.0.10",
+    "date": "2026-07-31",
+    "body": "> Benchmark-owned tool contracts now pass through GEODE's trusted execution\n> boundary without being replaced by same-named built-in schemas.\n\n### Fixed\n\n- Benchmark-owned dynamic tool schemas now take precedence over same-named\n  built-in schemas during execution validation, so MCPMark filesystem tools\n  accept their native `path` contract and τ² tools cannot be rejected by an\n  unrelated GEODE definition before reaching the benchmark environment."
   },
   {
     "version": "1.0.9",
@@ -2443,4 +2448,4 @@ export const CHANGELOG: ChangelogEntry[] = [
   }
 ];
 
-export const CHANGELOG_SYNCED_AT = "2026-07-30";
+export const CHANGELOG_SYNCED_AT = "2026-07-31";

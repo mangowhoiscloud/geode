@@ -34,6 +34,15 @@ runtime checkpoints, provider reasoning, SQLite/WAL, JSONL, usage, and
 diagnostic files remain withheld. Its manifest supersedes the first run
 without deleting or rewriting that append-only record.
 
+The 2026-07-31 GPT-5.6 benchmark publication is pinned to artifact commit
+[`9c00ecf`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/9c00ecf4a3b5a68ee65db9afe185b2271da46b49).
+It contains masked MCPMark and tau2 receipts plus twelve normalized
+dialogue/tool trajectories. Manifest directory digests are
+`b86f5071cbe0` (MCPMark) and `4ec1c13434d1` (tau2). Runtime homes, session
+SQLite, JSONL mirrors, hidden reasoning, and credential files remain
+withheld. Local usernames and synthetic telecom personal fields are redacted
+in the public copies.
+
 Still in the GEODE repository after the 2026-07-13 migration: the live
 `docs/audits/eval-logs/` manifest ledger (`core/audit/manifest.py` appends to
 it on every `geode audit --live`), the code-referenced

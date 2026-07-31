@@ -2,7 +2,7 @@
 
 > GEODE is a self-evolving autonomous execution agent: an inner agentic loop runs tasks (research, analysis, automation, scheduling) and an outer self-improving loop (Petri audit -> fitness gate) tunes the system that runs them.
 
-Version v1.0.9. Last sync 2026-07-30. Full content of every docs page, one file (llms-full.txt convention). Per-page index: /llms.txt.
+Version v1.0.10. Last sync 2026-07-31. Full content of every docs page, one file (llms-full.txt convention). Per-page index: /llms.txt.
 
 ## Overview . 개요
 
@@ -3039,6 +3039,14 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/benchmarks/tau2.md
 
 tau2-bench는 대화형 tool-use 벤치마크입니다. 에이전트가 시뮬레이션된 사용자와 대화하며 airline, retail, telecom 도메인의 DB 액션을 수행하고, verifier가 필수 액션 충족 여부로 reward를 매깁니다. GEODE는`plugins/benchmark_harness`의 공개 어댑터로 참가하며, 점수는 그 점수를 만든 harness revision, model route, effort에 고정해서만 게시합니다. 같은 조건의 재실행과만 비교할 수 있습니다.
 
+## 2026-07-31 subscription 진단
+
+GEODE `edb74602b`에서 agent와 simulated user를 모두 `gpt-5.6-sol` subscription / effort `high`로 실행했습니다. `mock/create_task_1`과 Telecom-small 첫 task는 각각 **0/1**이었습니다. 둘 다 정상 `USER_STOP`이며 provider, quota, adapter exception은 없었습니다.
+
+-   Mock: `create_task`는 실행됐지만 요청에 없던 optional `description=""`를 추가해 exact action/DB comparator가 실패했습니다.
+-   Telecom: 계정·회선·로밍·사용량 조회는 맞았지만 사용자 측 device workflow를 안내하지 않고 human transfer해 `toggle_roaming`과 환경 assertion을 놓쳤습니다.
+-   [`geode-eval-artifacts/trajectories/tau2-geode-gpt56-edb74602b-mock-telecom-small-20260731T034305Z-4ec1c13434d1`](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/main/trajectories/tau2-geode-gpt56-edb74602b-mock-telecom-small-20260731T034305Z-4ec1c13434d1): redaction과 call/result pairing을 검증한 두 dialogue/tool trajectory.
+
 ## Headline: native user-simulator 트랙
 
 2026-07-03/04 run, GEODE v0.99.269, `sierra-research/tau2-bench@1901a30` (`tau2==1.0.0`), agent `gpt-5.2` PAYG effort `high`, native `user_simulator` `gpt-4.1-2025-04-14` effort `medium`, `max_steps=200`.
@@ -3071,6 +3079,74 @@ tau2-bench는 대화형 tool-use 벤치마크입니다. 에이전트가 시뮬�
 -   This weighted aggregate is for internal Agent-World-style comparison only.
 -   The run spec differs from OpenAI's official GPT-5.2 Tau2 headline, which used an internal research setup and excludes Airline.
 -   The run spec differs from the earlier GEODE geode\_user smoke matrix.
+
+**Telecom small first-task GPT-5.6 subscription diagnostic** · 2026-07-31 KST · gpt-5.6-sol · subscription · agent high / user high
+
+<table><tbody><tr><td>Status</td><td><code>complete</code></td></tr><tr><td>Suite/domain</td><td><code>telecom / small / [mobile_data_issue]user_abroad_roaming_enabled_off[PERSONA:None]</code></td></tr><tr><td>Model</td><td><code>gpt-5.6-sol</code></td></tr><tr><td>Provider</td><td><code>openai</code></td></tr><tr><td>Source</td><td><code>subscription</code></td></tr><tr><td>Effort</td><td><code>agent high / user high</code></td></tr><tr><td>Route</td><td>geode_agent + geode_user</td></tr><tr><td>Harness</td><td><code>sierra-research/tau2-bench@1901a30, tau2==1.0.0, GEODE@edb74602b</code></td></tr><tr><td>Reward / pass^1</td><td><strong>0.0 / 0.000 (0 / 1)</strong></td></tr><tr><td>Artifact</td><td><code>geode-eval-artifacts@9c00ecf/tau2/simulations/geode-gpt56-sol-high-edb74602b-geode-user-telecom-small-01-20260731/results.json</code></td></tr></tbody></table>
+
+-   Required user toggle\_roaming action 0.0
+-   Mobile-data and excellent-speed assertions 0.0
+-   Termination user\_stop after human transfer
+-   Duration 51.91s
+
+```
+python scripts/eval/tau2_geode_agent.py \
+  --harness-dir artifacts/eval/harnesses/tau2-bench \
+  --domain telecom \
+  --task-split-name small \
+  --task-ids '[mobile_data_issue]user_abroad_roaming_enabled_off[PERSONA:None]' \
+  --num-tasks 1 \
+  --num-trials 1 \
+  --max-concurrency 1 \
+  --max-steps 50 \
+  --timeout 1800 \
+  --model gpt-5.6-sol \
+  --provider openai \
+  --source subscription \
+  --effort high \
+  --user geode_user \
+  --user-llm gpt-5.6-sol \
+  --user-source subscription \
+  --user-effort high \
+  --save-to geode-gpt56-sol-high-edb74602b-geode-user-telecom-small-01-20260731
+```
+
+-   The agent correctly identified the customer, line, roaming state, and data usage.
+-   It then declared device tools unavailable and transferred to a human instead of guiding the user-side roaming/device workflow.
+-   No provider, quota, or adapter exception occurred; the failure is retained as behavior evidence.
+
+**mock/create\_task\_1 GPT-5.6 subscription diagnostic** · 2026-07-31 KST · gpt-5.6-sol · subscription · agent high / user high
+
+<table><tbody><tr><td>Status</td><td><code>complete</code></td></tr><tr><td>Suite/domain</td><td><code>mock / create_task_1</code></td></tr><tr><td>Model</td><td><code>gpt-5.6-sol</code></td></tr><tr><td>Provider</td><td><code>openai</code></td></tr><tr><td>Source</td><td><code>subscription</code></td></tr><tr><td>Effort</td><td><code>agent high / user high</code></td></tr><tr><td>Route</td><td>geode_agent + geode_user</td></tr><tr><td>Harness</td><td><code>sierra-research/tau2-bench@1901a30, tau2==1.0.0, GEODE@edb74602b</code></td></tr><tr><td>Reward / pass^1</td><td><strong>0.0 / 0.000 (0 / 1)</strong></td></tr><tr><td>Artifact</td><td><code>geode-eval-artifacts@9c00ecf/tau2/simulations/geode-gpt56-sol-high-edb74602b-geode-user-mock-smoke-20260731/results.json</code></td></tr></tbody></table>
+
+-   Communication check 1.0 / DB check 0.0
+-   create\_task action check 0.0
+-   Termination user\_stop
+-   Duration 14.58s
+
+```
+python scripts/eval/tau2_geode_agent.py \
+  --harness-dir artifacts/eval/harnesses/tau2-bench \
+  --domain mock \
+  --num-tasks 1 \
+  --num-trials 1 \
+  --max-concurrency 1 \
+  --max-steps 8 \
+  --timeout 900 \
+  --model gpt-5.6-sol \
+  --provider openai \
+  --source subscription \
+  --effort high \
+  --user geode_user \
+  --user-llm gpt-5.6-sol \
+  --user-source subscription \
+  --user-effort high \
+  --save-to geode-gpt56-sol-high-edb74602b-geode-user-mock-smoke-20260731
+```
+
+-   The create\_task tool executed, but the model supplied an unrequested optional description="".
+-   Tau2's exact action and DB comparators rejected the extra argument; this is retained as a behavioral failure.
+-   This GEODE-owned user route is not comparable to the native tau2 user\_simulator headline.
 
 **telecom/base native user\_simulator** · 2026-07-04 03:45 KST · gpt-5.2 · payg · agent high / user medium
 
@@ -3232,7 +3308,7 @@ uv run python scripts/eval/tau2_geode_agent.py \
 
 ## Run 로그
 
-원본 simulation JSON(태스크별 reward, 액션 체크, 전체 대화 transcript)은 [geode-eval-artifacts](https://github.com/mangowhoiscloud/geode-eval-artifacts) 레포에 무수정 보존됩니다.
+원본 simulation JSON(태스크별 reward, 액션 체크, 전체 대화 transcript)은 [geode-eval-artifacts](https://github.com/mangowhoiscloud/geode-eval-artifacts) 레포에 로컬 경로와 합성 개인정보를 마스킹한 공개 copy로 보존됩니다.
 
 -   [`geode-eval-artifacts/tau2/simulations`](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/main/tau2/simulations): GEODE 소유 run의 simulation JSON. headline run은 `geode-gpt-5-2-high-native-user-*-base-20260703/results.json` 패턴입니다.
 
@@ -3246,6 +3322,13 @@ URL: https://mangowhoiscloud.github.io/geode/docs/benchmarks/mcpmark
 Markdown: https://mangowhoiscloud.github.io/geode/docs/benchmarks/mcpmark.md
 
 MCPMark는 실제 MCP 서버(filesystem, Postgres, GitHub, Notion, Playwright 등)를 대상으로 한 tool-use 벤치마크입니다. 태스크마다 독립 검증 스크립트가 결과 상태를 확인합니다. GEODE는 `plugins/benchmark_harness`의 `BaseMCPAgent` 어댑터로 참가하고 upstream `pipeline.py`는 패치하지 않습니다. 점수는 harness commit, 서비스 집합, model route, timeout에 고정해서만 게시합니다.
+
+## 2026-07-31 GPT-5.6 subscription run
+
+GEODE `edb74602b`, `gpt-5.6-sol`, effort `high`로 `filesystem/easy` 10건을 다시 측정했습니다. 공식 verifier 결과는 **9/10 (90.0%)**, 총 799.4초와 54 turns입니다. 유일한 실패는 `file_context/uppercase`가 다섯 파일을 만들고도 `file_01.txt`를 완전히 대문자로 바꾸지 못한 행동 실패입니다. schema 충돌이나 429 실패는 없었습니다.
+
+-   [`geode-eval-artifacts/mcpmark/results-geode-agentworld/geode-gpt56-sol-high-edb74602b-20260731-mcpmark-filesystem-easy`](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/main/mcpmark/results-geode-agentworld/geode-gpt56-sol-high-edb74602b-20260731-mcpmark-filesystem-easy): 마스킹된 verifier receipt와 ordered MCP execution logs.
+-   [`geode-eval-artifacts/trajectories/mcpmark-geode-gpt56-edb74602b-filesystem-easy-20260731T034305Z-b86f5071cbe0`](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/main/trajectories/mcpmark-geode-gpt56-edb74602b-filesystem-easy-20260731T034305Z-b86f5071cbe0): task별 10개 content-addressed tool trajectory.
 
 ## Headline: Verified available-services 트랙
 
@@ -3306,6 +3389,38 @@ GEODE_MCPMARK_GITHUB_REPO_VISIBILITY=public \
 -   The OpenAI model route was the GEODE Codex subscription route, not MCPMark's native LiteLLM OpenAI API route.
 -   GitHub fixture repositories were made public during execution so the Docker GitHub MCP server could use normal public-repo semantics; all transient repos were deleted by cleanup.
 -   The filesystem score counts papers/author\_folders as a failed no-result transport run after two attempts without meta output.
+
+**filesystem/easy GPT-5.6 subscription rerun** · 2026-07-31 KST · gpt-5.6-sol · subscription · high
+
+<table><tbody><tr><td>Status</td><td><code>complete</code></td></tr><tr><td>Suite/domain</td><td><code>filesystem/easy</code></td></tr><tr><td>Model</td><td><code>gpt-5.6-sol</code></td></tr><tr><td>Provider</td><td><code>openai-codex</code></td></tr><tr><td>Source</td><td><code>subscription</code></td></tr><tr><td>Effort</td><td><code>high</code></td></tr><tr><td>Route</td><td>GEODE local MCPMark adapter</td></tr><tr><td>Harness</td><td><code>eval-sys/mcpmark@cd45b7f, GEODE@edb74602b</code></td></tr><tr><td>Accuracy</td><td><strong>90.0% (9 / 10)</strong></td></tr><tr><td>Artifact</td><td><code>geode-eval-artifacts@9c00ecf/mcpmark/results-geode-agentworld/geode-gpt56-sol-high-edb74602b-20260731-mcpmark-filesystem-easy</code></td></tr></tbody></table>
+
+-   Total task execution time 799.435s / average 79.943s
+-   54 GEODE turns total / 5.4 average
+-   799,679 input / 10,976 output / 97,792 cache-read tokens
+-   Recorded estimate $3.887611; not subscription billing
+-   Failure: file\_context/uppercase left file\_01.txt incompletely uppercased
+
+```
+cd artifacts/eval/harnesses/mcpmark
+GEODE_HOME=<isolated-runtime-home> \
+PYTHONPATH=<geode-edb74602b-worktree> \
+OPENAI_API_KEY=dummy \
+.venv/bin/python -m plugins.benchmark_harness.run_mcpmark \
+  --mcp filesystem \
+  --task-suite easy \
+  --models geode-gpt-5.6-sol \
+  --agent geode \
+  --reasoning-effort high \
+  --k 1 \
+  --timeout 1200 \
+  --exp-name geode-gpt56-sol-high-edb74602b-20260731-mcpmark-filesystem-easy \
+  --output-dir ./results-geode-edb74602b
+```
+
+-   This is directly comparable to filesystem/easy only, not to the MCPMark Verified standard aggregate.
+-   The upstream total\_tokens and total\_reasoning\_tokens summary fields were zero despite populated input/output fields; they are not used.
+-   One response stream disconnected after the first task had already produced its files; that task passed every official integrity check and no 429 occurred.
+-   Raw receipts and ten normalized tool trajectories are pinned to geode-eval-artifacts commit 9c00ecf.
 
 **Verified github standard slice** · 2026-07-04 KST · gpt-5.5 · subscription · xhigh
 
@@ -5305,7 +5420,7 @@ Tier 2  latex2sympy2 + sympy.pretty  블록 전용. 분수·적분을 2D Unicode
 URL: https://mangowhoiscloud.github.io/geode/docs/reference/changelog
 Markdown: https://mangowhoiscloud.github.io/geode/docs/reference/changelog.md
 
-(body omitted from llms-full: 1479 KB — fetch the Markdown twin above for the complete page)
+(body omitted from llms-full: 1480 KB — fetch the Markdown twin above for the complete page)
 
 ---
 

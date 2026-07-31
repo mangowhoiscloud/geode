@@ -188,8 +188,9 @@ Adapter calibration notes:
 - r3 projected GEODE internal tool logs back to tau2 `ToolCall` messages.
 - r4 made mutating tools dry-run inside GEODE so tau2 orchestrator applies the
   official state mutation exactly once.
-- r5 stripped empty optional arguments before projection, matching tau2's
-  action comparator exactly.
+- r5 strips absent (`None`) arguments before projection. Explicit empty values
+  remain because some tau2 tools require them; the agent policy therefore
+  forbids inventing optional descriptions or metadata.
 
 Comparability:
 
@@ -264,6 +265,64 @@ uv run python scripts/eval/tau2_geode_agent.py \
   --save-to geode-gpt-5-5-xhigh-geode-user-gpt-5-2-payg-telecom-mobile-data-20260703-max200 \
   --log-level INFO
 ```
+
+## 2026-07-31 GPT-5.6 subscription diagnostics
+
+These are scored behavior diagnostics on GEODE
+`edb74602bb2e1e4d627cb6aa1f0b94072a57da62`, not native-user leaderboard
+rows. Both the agent and simulated user used `gpt-5.6-sol`, OpenAI
+subscription, effort `high`. Harness:
+`sierra-research/tau2-bench@1901a301961cbbe3fd11f3e84a2a376530c759e3`
+(`tau2==1.0.0`).
+
+| Scope | Reward / pass^1 | Duration | Termination | Failure |
+|---|---:|---:|---|---|
+| `mock/create_task_1` | 0.0 / 0.000 | 14.58s | `user_stop` | `create_task` executed with inferred optional `description=""`; exact action and DB checks failed |
+| Telecom `small`, first task | 0.0 / 0.000 | 51.91s | `user_stop` | customer/line diagnostics passed, then the agent transferred to a human instead of guiding the user-side roaming/device workflow |
+
+Neither run contained a provider, quota, or adapter exception. The mock
+trajectory proves that the dynamic `create_task` schema reached execution; its
+failure is the model's extra argument. The Telecom trajectory contains five
+correct assistant-side reads before the premature transfer, but no required
+user-side `toggle_roaming` action or environment assertion.
+
+The measured Telecom command must use the official split name rather than the
+`telecom_small` task-set alias:
+
+```bash
+python scripts/eval/tau2_geode_agent.py \
+  --harness-dir artifacts/eval/harnesses/tau2-bench \
+  --domain telecom \
+  --task-split-name small \
+  --task-ids '[mobile_data_issue]user_abroad_roaming_enabled_off[PERSONA:None]' \
+  --num-tasks 1 \
+  --num-trials 1 \
+  --max-concurrency 1 \
+  --max-steps 50 \
+  --timeout 1800 \
+  --model gpt-5.6-sol \
+  --provider openai \
+  --source subscription \
+  --effort high \
+  --user geode_user \
+  --user-llm gpt-5.6-sol \
+  --user-source subscription \
+  --user-effort high \
+  --save-to geode-gpt56-sol-high-edb74602b-geode-user-telecom-small-01-20260731
+```
+
+Artifacts are immutable at
+[`geode-eval-artifacts@9c00ecf`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/9c00ecf4a3b5a68ee65db9afe185b2271da46b49):
+
+- raw public copies:
+  [`tau2/simulations`](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/9c00ecf4a3b5a68ee65db9afe185b2271da46b49/tau2/simulations);
+- normalized paired dialogue/tool trajectories:
+  [`4ec1c13434d1`](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/9c00ecf4a3b5a68ee65db9afe185b2271da46b49/trajectories/tau2-geode-gpt56-edb74602b-mock-telecom-small-20260731T034305Z-4ec1c13434d1).
+
+The failed `--task-set-name telecom_small` preflight exposed a compatibility
+GAP: that upstream loader does not accept the generic `task_split_name`
+keyword used by GEODE's ordered-task preflight. It produced no scored run and
+is not included in the two results above.
 
 ## 참고
 

@@ -133,3 +133,45 @@ canonical public names end at `HookName`, `HookRegistry`,
 - A Codex read-only review found four release-gate defects in the first
   harness; all were fixed and the live run repeated. The follow-up review
   returned no actionable findings.
+
+## Post-release benchmark follow-up
+
+GEODE `edb74602b` fixed a same-name dynamic-tool validation defect discovered
+by the first MCPMark smoke: the model saw MCPMark's `write_file(path=...)`
+schema while `ToolExecutor` had reloaded GEODE's unrelated built-in
+`write_file(file_path=...)` schema. Benchmark-owned schemas now win for their
+registered names; built-in validation and approval behavior are unchanged.
+PR #2844 passed all CI and merged to `develop`.
+
+Measured on that exact tree with `gpt-5.6-sol`, subscription, effort `high`:
+
+| Benchmark | Result | Reading |
+|---|---:|---|
+| MCPMark filesystem/easy | **9/10** | one real uppercase-content failure; no schema or 429 contamination |
+| tau2 mock | **0/1** | inferred optional `description=""` broke exact action/DB matching |
+| tau2 Telecom small, first task | **0/1** | correct account diagnostics followed by premature human transfer |
+
+The full MCPMark run created ten isolated sessions. Runtime persistence was:
+
+| Store | Records |
+|---|---:|
+| evidence JSONL | 10 files / 60 rows |
+| run transcript JSONL | 10 files / 174 rows |
+| usage JSONL | 1 file / 54 rows |
+| session SQLite | 10 sessions / 108 messages |
+| session-transition JSONL | 10 rows |
+| `sessions.db:hook_events` | 0 rows |
+
+This does not contradict the hook release probe's 22-row SQLite/JSONL parity.
+The generic MCPMark adapter activated conversation, evidence, usage, and
+session persistence but did not install the hook-persistence bridge used by
+the owning-runtime E2E. Table creation is schema availability, not proof of
+event recording. Lifecycle authority remains in the session/compaction
+owners; telemetry sinks remain optional projections.
+
+The public-safe receipts and twelve normalized trajectories are immutable at
+artifact commit
+[`9c00ecf`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/9c00ecf4a3b5a68ee65db9afe185b2271da46b49).
+The MCPMark manifest digest is `b86f5071cbe0`; the tau2 manifest digest is
+`4ec1c13434d1`. Runtime homes, SQLite, JSONL, provider reasoning, and
+credentials were not published.

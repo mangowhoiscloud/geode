@@ -47,6 +47,18 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.10] - 2026-07-31
+
+> Benchmark-owned tool contracts now pass through GEODE's trusted execution
+> boundary without being replaced by same-named built-in schemas.
+
+### Fixed
+
+- Benchmark-owned dynamic tool schemas now take precedence over same-named
+  built-in schemas during execution validation, so MCPMark filesystem tools
+  accept their native `path` contract and τ² tools cannot be rejected by an
+  unrelated GEODE definition before reaching the benchmark environment.
+
 ## [1.0.9] - 2026-07-31
 
 > Public extension control is now a small, versioned hook ABI backed by

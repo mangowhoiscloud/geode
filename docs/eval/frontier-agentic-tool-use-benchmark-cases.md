@@ -520,6 +520,40 @@ Interpretation:
 - Token usage averages 26,678 tokens per task. The run is suitable as a
   smoke/regression baseline, but not as a cost-efficient CI gate.
 
+### Live GEODE MCPMark Filesystem Easy — GPT-5.6
+
+Run date: 2026-07-31. Revision:
+`edb74602bb2e1e4d627cb6aa1f0b94072a57da62`; harness:
+`eval-sys/mcpmark@cd45b7f`.
+
+| Field | Value |
+|---|---|
+| Suite | `MCPMark filesystem/easy` |
+| Model route | GEODE `gpt-5.6-sol`, provider `openai-codex`, source `subscription` |
+| Reasoning effort | `high` |
+| Passed | 9 / 10 |
+| Success rate | 90.0% |
+| Total / average task time | 799.435s / 79.943s |
+| Turns | 54 total / 5.4 average |
+| Usage | 799,679 input / 10,976 output / 97,792 cache-read |
+| Recorded estimate | $3.887611; not subscription billing |
+
+The sole failure was `file_context__uppercase`: all five output files existed,
+but `file_01.txt` was not completely uppercased. It is an official verifier
+failure, not a schema, quota, or adapter failure. A response stream disconnected
+once after `file_splitting` had produced its output; that task passed all
+official integrity checks. No 429 occurred.
+
+The upstream `summary.json` reports `total_tokens=0` and
+`total_reasoning_tokens=0` despite populated input/output usage. Those two
+aggregate fields are treated as an upstream accounting mismatch and are not
+used.
+
+Raw receipts and ten normalized tool trajectories are pinned at
+[`geode-eval-artifacts@9c00ecf`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/9c00ecf4a3b5a68ee65db9afe185b2271da46b49),
+including the content-addressed
+[`b86f5071cbe0` trajectory release](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/9c00ecf4a3b5a68ee65db9afe185b2271da46b49/trajectories/mcpmark-geode-gpt56-edb74602b-filesystem-easy-20260731T034305Z-b86f5071cbe0).
+
 ### Live GEODE MCPMark Verified Available Services
 
 Run date: 2026-07-04.
