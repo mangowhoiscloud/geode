@@ -1,6 +1,6 @@
 # External Evaluation Artifact Repository
 
-GEODE's canonical public raw-artifact store is
+GEODE's canonical public evaluation-artifact store is
 [`mangowhoiscloud/geode-eval-artifacts`](https://github.com/mangowhoiscloud/geode-eval-artifacts).
 The GEODE repository keeps code, interpretation, comparability boundaries, and
 digest pointers; the artifact repository keeps large verifier outputs and
@@ -10,6 +10,11 @@ This split is deliberate. `artifacts/` remains gitignored in GEODE, while the
 external repository is an append-only evidence store. A published result is
 durable only when its GEODE ledger names both the artifact path and the exact
 artifact-repository commit.
+
+“Artifact repository” here means a reviewed Git branch/PR and immutable commit,
+not JFrog Artifactory or an opaque object-store upload. The publication unit is
+an allowlisted directory, and GitHub read-back from the exact merge commit is
+part of the evidence.
 
 ## Path mapping
 
@@ -58,6 +63,39 @@ dialogue/tool trajectories. Manifest directory digests are
 SQLite, JSONL mirrors, hidden reasoning, and credential files remain
 withheld. Local usernames and synthetic telecom personal fields are redacted
 in the public copies.
+
+The post-release `v1.0.11` behavior regression is pinned to
+[`16a54f0`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/16a54f08450db771c02e30c73bdc3867f6282f83)
+from
+[`geode-eval-artifacts#9`](https://github.com/mangowhoiscloud/geode-eval-artifacts/pull/9).
+It preserves the native MCPMark 10/10 receipt and tau2 mock 0/1 plus
+Telecom-small 1/1 receipts, and publishes two stable trajectory releases:
+
+- [MCPMark release](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/16a54f08450db771c02e30c73bdc3867f6282f83/trajectories/mcpmark-geode-gpt56-v1.0.11-686ff372-filesystem-easy-20260731T105713Z-82fe94b01a25):
+  10 trajectories, 226 events, 78 exact tool pairs, manifest SHA-256
+  `82fe94b01a25e7e9f8c504d511f018129cb058ad532dbcbc315de9c6819db0fb`.
+- [Tau2 release](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/16a54f08450db771c02e30c73bdc3867f6282f83/trajectories/tau2-geode-gpt56-v1.0.11-686ff372-mock-telecom-small-20260731T105713Z-a71155f7006c):
+  2 trajectories, 142 events, 9 exact tool pairs, manifest SHA-256
+  `a71155f7006c8dd412af8d1471e7d2380e5f072cc8f0495924fa86f26d69a9a2`.
+
+Both releases are scope-complete and deliberately replay-incomplete because
+non-public message/tool bodies are represented by digests. Every trajectory
+matched its isolated canonical SQLite event set exactly. Secret, identity,
+credential, path, duplicate-ID, missing-correlation, and orphan-pair findings
+were all zero. An independent GitHub API read-back of the exact merge commit
+revalidated both releases rather than trusting the staging worktree.
+
+Raw native evidence and public disclosure bytes have separate identities.
+MCPMark's public receipt set contains 31 files / 554,366 bytes with path-set
+digest `3ffcdeebc39be91f5d957b66f1a5e48bd1408645f83120e84346bba7beef6417`.
+Tau2's contains 4 files / 114,004 bytes with path-set digest
+`a5d2a2f6b8dd719f22f050e16afe4ad8bf65345c35a65552e5467745b3eeda5f`.
+For the Telecom result specifically, the authoritative raw receipt digest is
+`eda3cdbdb9cd0c2f993db3f9fe2e813cdbc06fe9cf112e23ba60c7ea9d98a45b`;
+the public, synthetic-phone/email-redacted copy is separately hashed as
+`506f906cfa1d6e8e4320ba284be1aa0f7ec26ea2fc47b43e7b36f69e3643a9d4`.
+This preserves Crucible's native evidence authority without leaking reviewed
+fields or falsely claiming transformed bytes are identical.
 
 Those historical releases use the dated
 `geode.trajectory@2026-07-29`/`@2026-07-31` envelope and stay immutable. New
