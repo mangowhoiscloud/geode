@@ -33,7 +33,7 @@ Version v1.0.11. Last sync 2026-07-31. Docs links point to clean markdown twins 
 - [Memory tiers](https://mangowhoiscloud.github.io/geode/docs/runtime/memory/5-tier.md): From a raw session log to a single LLM-ready summary. Hierarchical override, budget-aware compression.
 - [Prompt assembly](https://mangowhoiscloud.github.io/geode/docs/runtime/llm/prompt-system.md): How the system prompt is layered and assembled before each call.
 - [Tools and toolsets](https://mangowhoiscloud.github.io/geode/docs/runtime/tools/protocol.md): The tool registry and deferred loading. A few tools load up front, the rest are fetched on demand.
-- [Hooks and observability](https://mangowhoiscloud.github.io/geode/docs/harness/hooks.md): Lifecycle events that handlers subscribe to. How observe, react, decide, and act stack on one event.
+- [Hooks and middleware](https://mangowhoiscloud.github.io/geode/docs/harness/hooks.md): The versioned public hook ABI, four trusted execution join points, and the separate internal runtime-event plane.
 - [LLM routing](https://mangowhoiscloud.github.io/geode/docs/runtime/llm/providers.md): Provider selection and model resolution. Fallback chains ship empty by default; fatal errors fast-fail instead of retrying.
 - [Tool calling](https://mangowhoiscloud.github.io/geode/docs/runtime/llm/tool-calling.md): How GEODE advertises tools, translates tool choice, executes calls, and replays results across provider adapters.
 - [Structured output](https://mangowhoiscloud.github.io/geode/docs/runtime/llm/structured-output.md): GEODE's JSON Schema contract, adapter wiring, strictness rules, and worker-side validation and retry boundary.
@@ -63,7 +63,7 @@ Version v1.0.11. Last sync 2026-07-31. Docs links point to clean markdown twins 
 - [Lifecycle](https://mangowhoiscloud.github.io/geode/docs/harness/lifecycle.md): Bootstrap, serve, shutdown. The injection order, and the cold-start lazy arc.
 - [Long-running safety](https://mangowhoiscloud.github.io/geode/docs/ops/long-running.md): Round, time, and cost guards plus the context overflow ladder. How a long run ends honestly.
 - [Cost monitoring](https://mangowhoiscloud.github.io/geode/docs/ops/cost.md): Session and monthly budgets. The usage ledger, geode history, and /cost.
-- [Observability](https://mangowhoiscloud.github.io/geode/docs/verification/observability.md): The lenses on a run. Hooks, run logs, transcripts, session metrics, and the logging switchboard.
+- [Observability](https://mangowhoiscloud.github.io/geode/docs/verification/observability.md): Canonical SQLite session history, bounded runtime telemetry, portable JSONL projections, and validated trajectories.
 - [Troubleshooting](https://mangowhoiscloud.github.io/geode/docs/run/troubleshooting.md): Common failure modes and where to look. Logs, hooks, runlog.
 
 ## Benchmarks
@@ -74,7 +74,8 @@ Version v1.0.11. Last sync 2026-07-31. Docs links point to clean markdown twins 
 ## Guides and How-to
 
 - [Write a tool](https://mangowhoiscloud.github.io/geode/docs/guides/custom-tool.md): Define a tool, register it, and gate it with a permission policy.
-- [Register a hook](https://mangowhoiscloud.github.io/geode/docs/guides/register-hook.md): Subscribe a handler to a lifecycle event and wire it in bootstrap.
+- [Register hooks and middleware](https://mangowhoiscloud.github.io/geode/docs/guides/register-hook.md): Choose the narrowest authority, register one shared instance, and verify timeout and failure behavior at the production boundary.
+- [Publish a trajectory](https://mangowhoiscloud.github.io/geode/docs/guides/publish-trajectory.md): Export canonical session history, review a public candidate, stage an immutable release, and verify remote read-back.
 - [Add an LLM adapter](https://mangowhoiscloud.github.io/geode/docs/guides/llm-adapter.md): Implement the adapter protocol, register it, and route models to it.
 - [Configure a binding](https://mangowhoiscloud.github.io/geode/docs/guides/binding.md): Route a messaging channel to a session lane with its own model and policy.
 - [Debug a stuck run](https://mangowhoiscloud.github.io/geode/docs/guides/debug-stuck-run.md): Read the transcript and runlog, find where a run stalled, and recover.

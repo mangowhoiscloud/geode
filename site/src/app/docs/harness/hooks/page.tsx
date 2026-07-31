@@ -3,21 +3,27 @@ import architectureBaseline from "@/data/geode/architecture-baseline.json";
 
 export const metadata = { title: "Hooks and middleware — GEODE Docs" };
 
-const publicHooks = [
-  "UserPromptSubmit",
-  "PreToolUse",
-  "PermissionRequest",
-  "PostToolUse",
-  "PreCompact",
-  "PostCompact",
-  "SessionStart",
-  "SessionEnd",
-  "SubagentStart",
-  "SubagentStop",
-  "PreVerify",
-  "PostVerify",
-  "Stop",
+const hookContracts = [
+  { name: "UserPromptSubmit", payload: "user_input", actions: "continue · rewrite · block" },
+  { name: "PreToolUse", payload: "tool_name, arguments", actions: "continue · rewrite · block · request_permission" },
+  { name: "PermissionRequest", payload: "tool_name, safety_level, detail", actions: "allow · deny · ask" },
+  { name: "PostToolUse", payload: "tool_name, arguments, result, has_error, executed", actions: "continue · add_context · block" },
+  { name: "PreCompact", payload: "model, provider, message_count, keep_recent, trigger, hard", actions: "continue · rewrite · defer" },
+  { name: "PostCompact", payload: "model, provider, original_message_count, new_message_count, keep_recent, trigger, persisted", actions: "continue" },
+  { name: "SessionStart", payload: "model, provider, resumed, status", actions: "continue" },
+  { name: "SessionEnd", payload: "reason, status", actions: "continue" },
+  { name: "SubagentStart", payload: "task_id, task_type, description, child_session_key, parent_session_key", actions: "continue" },
+  { name: "SubagentStop", payload: "task_id, task_type, success, status, duration_ms, error, child_session_key", actions: "continue" },
+  { name: "PreVerify", payload: "termination_reason, rounds, tool_call_count, candidate_summary", actions: "continue · strengthen" },
+  { name: "PostVerify", payload: "passed, mode, score, rubric_misses, termination_reason, rounds, tool_call_count, candidate_summary", actions: "accept · revise · escalate" },
+  { name: "Stop", payload: "PostVerify fields + policy_action, evidence_refs", actions: "finalize · continue" },
 ];
+
+const schemaExample = `from core.hooks import HookName, public_hook_schema
+
+schema = public_hook_schema(HookName.POST_VERIFY)
+print(schema["properties"]["payload"])
+print(schema["properties"]["decision"])`;
 
 export default function Page() {
   return (
@@ -53,13 +59,43 @@ export default function Page() {
               공개 목록은 의도적으로 작고 버전이 고정됩니다. 와일드카드 구독은
               없으며, 입력은 크기 제한·JSON 안전화·비밀값 제거를 거칩니다.
             </p>
-            <p>{publicHooks.map((name) => <code key={name}>{name} </code>)}</p>
+            <table>
+              <thead><tr><th>훅</th><th>필수 payload</th><th>허용 action</th></tr></thead>
+              <tbody>
+                {hookContracts.map((hook) => (
+                  <tr key={hook.name}>
+                    <td><code>{hook.name}</code></td>
+                    <td><code>{hook.payload}</code></td>
+                    <td>{hook.actions}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
             <p>
-              각 훅은 서로 다른 action 집합을 가집니다. 예를 들어{" "}
-              <code>PreToolUse</code>는 continue/rewrite/block/request_permission,
-              <code>PostVerify</code>는 accept/revise/escalate만 허용합니다. 실패한
-              내장 검증을 외부 훅이 pass로 뒤집을 수는 없습니다.
+              이 allowlist 밖의 action과 payload 필드는 거부됩니다. 실패한 내장 검증을
+              외부 훅이 pass로 뒤집을 수도 없습니다. <code>rewrite</code>는 비어 있지
+              않은 <code>updates</code>, <code>PostVerify.revise</code>와
+              <code>Stop.continue</code>는 비어 있지 않은 <code>instruction</code>이
+              필요합니다.
             </p>
+
+            <h2>공통 envelope와 제한</h2>
+            <table>
+              <thead><tr><th>항목</th><th>계약</th></tr></thead>
+              <tbody>
+                <tr><td>버전</td><td><code>geode.public-hook.v1</code></td></tr>
+                <tr><td>상관관계</td><td><code>session_id</code>, <code>turn_id</code>, <code>run_id</code>, session generation, verify attempt, tool/LLM call ID</td></tr>
+                <tr><td>payload 상한</td><td>문자열 4,096자, JSON 32 KiB, collection 64개, depth 8</td></tr>
+                <tr><td>decision 상한</td><td>reason 1,024자, instruction 4,096자, evidence reference 32개</td></tr>
+                <tr><td>기본 timeout</td><td>handler별 10초. sync handler는 event loop 밖에서 실행</td></tr>
+                <tr><td>오류</td><td>현재 handler 오류를 기록하고 다음 handler를 계속 실행</td></tr>
+              </tbody>
+            </table>
+            <p>
+              각 hook의 Draft 2020-12 JSON Schema는 런타임에서 직접 조회합니다.
+              문서 표와 직렬화 계약이 다르면 런타임 schema가 정본입니다.
+            </p>
+            <pre>{schemaExample}</pre>
 
             <h2>PostVerify와 외부 루프</h2>
             <p>
@@ -148,13 +184,44 @@ export default function Page() {
               are no wildcard subscriptions. Inputs are bounded, JSON-safe, and
               secret-redacted.
             </p>
-            <p>{publicHooks.map((name) => <code key={name}>{name} </code>)}</p>
+            <table>
+              <thead><tr><th>Hook</th><th>Required payload</th><th>Allowed actions</th></tr></thead>
+              <tbody>
+                {hookContracts.map((hook) => (
+                  <tr key={hook.name}>
+                    <td><code>{hook.name}</code></td>
+                    <td><code>{hook.payload}</code></td>
+                    <td>{hook.actions}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
             <p>
-              Each hook owns a distinct action set. For example,{" "}
-              <code>PreToolUse</code> permits continue/rewrite/block/request_permission,
-              while <code>PostVerify</code> permits accept/revise/escalate. An
-              external hook cannot turn a failed built-in verification into a pass.
+              Fields and actions outside this allowlist are rejected. An external
+              hook also cannot turn a failed built-in verification into a pass.
+              <code>rewrite</code> requires non-empty <code>updates</code>, while
+              <code>PostVerify.revise</code> and <code>Stop.continue</code> require a
+              non-empty <code>instruction</code>.
             </p>
+
+            <h2>Common envelope and bounds</h2>
+            <table>
+              <thead><tr><th>Item</th><th>Contract</th></tr></thead>
+              <tbody>
+                <tr><td>Version</td><td><code>geode.public-hook.v1</code></td></tr>
+                <tr><td>Correlation</td><td><code>session_id</code>, <code>turn_id</code>, <code>run_id</code>, session generation, verify attempt, and tool/LLM call IDs</td></tr>
+                <tr><td>Payload bounds</td><td>4,096 characters per string, 32 KiB JSON, 64 collection items, depth 8</td></tr>
+                <tr><td>Decision bounds</td><td>1,024-character reason, 4,096-character instruction, 32 evidence references</td></tr>
+                <tr><td>Default timeout</td><td>10 seconds per handler; synchronous handlers run off the event loop</td></tr>
+                <tr><td>Errors</td><td>Record the current handler error and continue with later handlers</td></tr>
+              </tbody>
+            </table>
+            <p>
+              Query each hook&apos;s Draft 2020-12 JSON Schema at runtime. If this
+              table and the serialization contract ever differ, the runtime schema
+              is authoritative.
+            </p>
+            <pre>{schemaExample}</pre>
 
             <h2>PostVerify for external loops</h2>
             <p>
