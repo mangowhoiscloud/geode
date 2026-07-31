@@ -32,32 +32,41 @@ export default function Page() {
               고정해서만 게시합니다. 같은 조건의 재실행과만 비교할 수 있습니다.
             </p>
 
-            <h2>2026-07-31 subscription 진단</h2>
+            <h2>2026-07-31 v1.0.11 release 진단</h2>
             <p>
-              GEODE <code>edb74602b</code>에서 agent와 simulated user를 모두{" "}
-              <code>gpt-5.6-sol</code> subscription / effort <code>high</code>로
-              실행했습니다. <code>mock/create_task_1</code>과 Telecom-small 첫
-              task는 각각 <strong>0/1</strong>이었습니다. 둘 다 정상{" "}
+              배포된 GEODE <code>v1.0.11</code> (<code>686ff372</code>)에서
+              agent와 simulated user를 모두 <code>gpt-5.6-sol</code>{" "}
+              subscription / effort <code>high</code>로 실행했습니다.{" "}
+              <code>mock/create_task_1</code>은 <strong>0/1</strong>,
+              Telecom-small 첫 task는 <strong>1/1</strong>입니다. 둘 다 정상{" "}
               <code>USER_STOP</code>이며 provider, quota, adapter exception은
               없었습니다.
             </p>
             <ul>
               <li>
-                Mock: <code>create_task</code>는 실행됐지만 요청에 없던 optional{" "}
+                Mock: 이전과 동일하게 <code>create_task</code>가 요청에 없던 optional{" "}
                 <code>description=&quot;&quot;</code>를 추가해 exact action/DB
                 comparator가 실패했습니다.
               </li>
               <li>
-                Telecom: 계정·회선·로밍·사용량 조회는 맞았지만 사용자 측 device
-                workflow를 안내하지 않고 human transfer해{" "}
-                <code>toggle_roaming</code>과 환경 assertion을 놓쳤습니다.
+                Telecom: 이전의 premature human transfer가 사라졌습니다.{" "}
+                <code>toggle_roaming</code>, DB match, mobile-data 상태,
+                excellent-speed assertion이 모두 1.0입니다.
               </li>
               <li>
-                <RunLogLink path="trajectories/tau2-geode-gpt56-edb74602b-mock-telecom-small-20260731T034305Z-4ec1c13434d1" />:
-                redaction과 call/result pairing을 검증한 두 dialogue/tool
-                trajectory.
+                <RunLogLink
+                  path="trajectories/tau2-geode-gpt56-v1.0.11-686ff372-mock-telecom-small-20260731T105713Z-a71155f7006c"
+                  revision="16a54f08450db771c02e30c73bdc3867f6282f83"
+                />:
+                142개 이벤트와 9개 exact tool pair를 담은 두{" "}
+                <code>geode.trajectory@1</code>.
               </li>
             </ul>
+            <p>
+              점수 정본은 여전히 tau2 <code>results.json</code>입니다. Crucible
+              snapshot은 두 run을 diagnostic / <code>promotion_authority=none</code>으로
+              유지하며, GEODE trajectory는 digest-joined replay sidecar입니다.
+            </p>
 
             <h2>Headline: native user-simulator 트랙</h2>
             <p>
@@ -114,33 +123,42 @@ export default function Page() {
               settings.
             </p>
 
-            <h2>2026-07-31 Subscription Diagnostics</h2>
+            <h2>2026-07-31 v1.0.11 Release Diagnostics</h2>
             <p>
-              On GEODE <code>edb74602b</code>, both the agent and simulated user
-              ran through <code>gpt-5.6-sol</code> subscription at effort{" "}
-              <code>high</code>. <code>mock/create_task_1</code> and the first
-              Telecom-small task each scored <strong>0/1</strong>. Both ended
-              normally with <code>USER_STOP</code>; neither hit a provider,
-              quota, or adapter exception.
+              With the released GEODE <code>v1.0.11</code> (<code>686ff372</code>),
+              both the agent and simulated user ran through{" "}
+              <code>gpt-5.6-sol</code> subscription at effort <code>high</code>.{" "}
+              <code>mock/create_task_1</code> scored <strong>0/1</strong>; the
+              first Telecom-small task scored <strong>1/1</strong>. Both ended
+              normally with <code>USER_STOP</code>, with no provider, quota, or
+              adapter exception.
             </p>
             <ul>
               <li>
-                Mock: <code>create_task</code> executed, but the model added the
-                unrequested optional <code>description=&quot;&quot;</code>, so the
-                exact action and DB comparators failed.
+                Mock: as before, <code>create_task</code> added the unrequested
+                optional <code>description=&quot;&quot;</code>, so the native exact
+                action and DB comparators failed.
               </li>
               <li>
-                Telecom: account, line, roaming, and usage lookup were correct,
-                but the agent transferred to a human instead of guiding the
-                user-side device workflow, missing <code>toggle_roaming</code>{" "}
-                and the environment assertions.
+                Telecom: the earlier premature human transfer is gone.{" "}
+                <code>toggle_roaming</code>, DB match, mobile-data status, and
+                excellent-speed assertions all scored 1.0.
               </li>
               <li>
-                <RunLogLink path="trajectories/tau2-geode-gpt56-edb74602b-mock-telecom-small-20260731T034305Z-4ec1c13434d1" />:
-                two redaction- and call/result-validated dialogue/tool
-                trajectories.
+                <RunLogLink
+                  path="trajectories/tau2-geode-gpt56-v1.0.11-686ff372-mock-telecom-small-20260731T105713Z-a71155f7006c"
+                  revision="16a54f08450db771c02e30c73bdc3867f6282f83"
+                />:
+                two <code>geode.trajectory@1</code> artifacts with 142 events and
+                nine exact tool pairs.
               </li>
             </ul>
+            <p>
+              Tau2 <code>results.json</code> remains the score authority. The
+              Crucible snapshots keep both runs diagnostic with{" "}
+              <code>promotion_authority=none</code>; the GEODE trajectory is a
+              digest-joined replay sidecar.
+            </p>
 
             <h2>Headline: Native User-Simulator Track</h2>
             <p>

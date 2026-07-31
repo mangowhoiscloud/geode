@@ -127,6 +127,51 @@ OPENAI_API_KEY=dummy \\
   ],
 };
 
+const mcpmarkFilesystemEasyGpt56V1011: BenchmarkMeasurement = {
+  id: "mcpmark-filesystem-easy-20260731-gpt56-high-v1011",
+  group: "mcpmark",
+  title: "filesystem/easy GPT-5.6 v1.0.11 release regression",
+  measuredAt: "2026-07-31 KST",
+  suite: "filesystem/easy",
+  status: "complete",
+  model: "gpt-5.6-sol",
+  provider: "openai",
+  source: "subscription",
+  effort: "high",
+  route: "GEODE AgenticLoop MCPMark adapter",
+  harness: "eval-sys/mcpmark@cd45b7f, GEODE v1.0.11@686ff372",
+  artifact:
+    "geode-eval-artifacts@16a54f08450db771c02e30c73bdc3867f6282f83/mcpmark/results-geode-agentworld/geode-gpt56-sol-high-v1011-686ff372-20260731-mcpmark-filesystem-easy",
+  scoreLabel: "Accuracy",
+  scoreValue: "100.0% (10 / 10)",
+  secondary: [
+    "Total task execution time 596.580s / average 59.658s",
+    "56 GEODE turns total / 5.6 average",
+    "700,719 input / 12,164 output / 206,848 cache-read tokens",
+    "Recorded estimate $2.937699; not subscription billing",
+    "226 canonical events / 78 exactly paired tool calls and results / 0 missing required turn IDs",
+  ],
+  command: `cd artifacts/eval/harnesses/mcpmark
+GEODE_HOME=<isolated-v1011-runtime-home> \\
+PYTHONPATH=<geode-v1.0.11-release-tree> \\
+.venv/bin/python -m plugins.benchmark_harness.run_mcpmark \\
+  --mcp filesystem \\
+  --task-suite easy \\
+  --models gpt-5.6-sol \\
+  --agent geode \\
+  --reasoning-effort high \\
+  --k 1 \\
+  --timeout 1200 \\
+  --exp-name geode-gpt56-sol-high-v1011-686ff372-20260731-mcpmark-filesystem-easy \\
+  --output-dir ./results-geode-v1011`,
+  notes: [
+    "The earlier file_context/uppercase failure now passes; all ten official filesystem/easy verifiers are green.",
+    "This remains directly comparable only to filesystem/easy, not to the MCPMark Verified standard aggregate.",
+    "The stable geode.trajectory@1 release is scope-complete but intentionally replay-incomplete because dialogue and tool bodies are digested.",
+    "Native receipts and stable trajectories are pinned to geode-eval-artifacts commit 16a54f0.",
+  ],
+};
+
 const mcpmarkFilesystemEasyParallel: BenchmarkMeasurement = {
   id: "mcpmark-filesystem-easy-parallel-20260703-gpt55-xhigh",
   group: "mcpmark",
@@ -578,6 +623,109 @@ const tau2TelecomSmallGpt56: BenchmarkMeasurement = {
   ],
 };
 
+const tau2MockGpt56V1011: BenchmarkMeasurement = {
+  id: "tau2-mock-20260731-gpt56-high-geode-user-v1011",
+  group: "tau2",
+  title: "mock/create_task_1 GPT-5.6 v1.0.11 diagnostic",
+  measuredAt: "2026-07-31 KST",
+  suite: "mock / create_task_1",
+  status: "complete",
+  model: "gpt-5.6-sol",
+  provider: "openai",
+  source: "subscription",
+  effort: "agent high / user high",
+  route: "geode_agent + geode_user",
+  harness: "sierra-research/tau2-bench@1901a30, tau2==1.0.0, GEODE v1.0.11@686ff372",
+  artifact:
+    "geode-eval-artifacts@16a54f08450db771c02e30c73bdc3867f6282f83/tau2/simulations/geode-gpt56-sol-high-v1011-686ff372-geode-user-mock-smoke-20260731/results.json",
+  scoreLabel: "Reward / pass^1",
+  scoreValue: "0.0 / 0.000 (0 / 1)",
+  secondary: [
+    "Communication check 1.0 / DB check 0.0",
+    "create_task action check 0.0",
+    "Termination user_stop",
+    "Duration 9.03s",
+    "25 canonical events / 1 exactly paired tool call and result",
+  ],
+  command: `python scripts/eval/tau2_geode_agent.py \\
+  --harness-dir artifacts/eval/harnesses/tau2-bench \\
+  --domain mock \\
+  --num-tasks 1 \\
+  --num-trials 1 \\
+  --max-concurrency 1 \\
+  --max-steps 8 \\
+  --timeout 900 \\
+  --model gpt-5.6-sol \\
+  --provider openai \\
+  --source subscription \\
+  --effort high \\
+  --time-budget-s 180 \\
+  --user geode_user \\
+  --user-llm gpt-5.6-sol \\
+  --user-source subscription \\
+  --user-effort high \\
+  --user-time-budget-s 120 \\
+  --save-to geode-gpt56-sol-high-v1011-686ff372-geode-user-mock-smoke-20260731`,
+  notes: [
+    "The failure reproduces the earlier behavior: create_task includes unrequested description=\"\" and the native exact comparator rejects it.",
+    "The run completed normally and is retained without retry or relabeling.",
+    "This diagnostic has promotion_authority=none and is not a native user_simulator leaderboard row.",
+  ],
+};
+
+const tau2TelecomSmallGpt56V1011: BenchmarkMeasurement = {
+  id: "tau2-telecom-small-20260731-gpt56-high-geode-user-v1011",
+  group: "tau2",
+  title: "Telecom small first-task GPT-5.6 v1.0.11 diagnostic",
+  measuredAt: "2026-07-31 KST",
+  suite:
+    "telecom / small / [mobile_data_issue]user_abroad_roaming_enabled_off[PERSONA:None]",
+  status: "complete",
+  model: "gpt-5.6-sol",
+  provider: "openai",
+  source: "subscription",
+  effort: "agent high / user high",
+  route: "geode_agent + geode_user",
+  harness: "sierra-research/tau2-bench@1901a30, tau2==1.0.0, GEODE v1.0.11@686ff372",
+  artifact:
+    "geode-eval-artifacts@16a54f08450db771c02e30c73bdc3867f6282f83/tau2/simulations/geode-gpt56-sol-high-v1011-686ff372-geode-user-telecom-small-01-20260731/results.json",
+  scoreLabel: "Reward / pass^1",
+  scoreValue: "1.0 / 1.000 (1 / 1)",
+  secondary: [
+    "DB check 1.0",
+    "toggle_roaming write action 1.0",
+    "Mobile-data and excellent-speed assertions 1.0",
+    "Termination user_stop",
+    "Duration 78.52s / 117 canonical events / 8 exact tool pairs",
+  ],
+  command: `python scripts/eval/tau2_geode_agent.py \\
+  --harness-dir artifacts/eval/harnesses/tau2-bench \\
+  --domain telecom \\
+  --task-split-name small \\
+  --task-ids '[mobile_data_issue]user_abroad_roaming_enabled_off[PERSONA:None]' \\
+  --num-tasks 1 \\
+  --num-trials 1 \\
+  --max-concurrency 1 \\
+  --max-steps 50 \\
+  --timeout 1800 \\
+  --model gpt-5.6-sol \\
+  --provider openai \\
+  --source subscription \\
+  --effort high \\
+  --time-budget-s 300 \\
+  --user geode_user \\
+  --user-llm gpt-5.6-sol \\
+  --user-source subscription \\
+  --user-effort high \\
+  --user-time-budget-s 180 \\
+  --save-to geode-gpt56-sol-high-v1011-686ff372-geode-user-telecom-small-01-20260731`,
+  notes: [
+    "The earlier premature human-transfer failure is closed for this fixed case.",
+    "Tau2 native DB/action/assertion checks remain the score authority; the GEODE trajectory is a digest-joined replay sidecar.",
+    "The Crucible v3 snapshot remains diagnostic with promotion_authority=none because no frozen experiment contract was supplied.",
+  ],
+};
+
 const tau2NativeAirlineBase: BenchmarkMeasurement = {
   id: "tau2-airline-base-20260703-geode-099269-gpt52-high-payg",
   group: "tau2",
@@ -822,6 +970,7 @@ export const BENCHMARK_GROUPS: BenchmarkGroup[] = [
     ],
     measurements: [
       mcpmarkVerifiedAvailable,
+      mcpmarkFilesystemEasyGpt56V1011,
       mcpmarkFilesystemEasyGpt56,
       mcpmarkVerifiedGithub,
       mcpmarkVerifiedPostgres,
@@ -875,6 +1024,8 @@ export const BENCHMARK_GROUPS: BenchmarkGroup[] = [
     ],
     measurements: [
       tau2NativeAggregate,
+      tau2TelecomSmallGpt56V1011,
+      tau2MockGpt56V1011,
       tau2TelecomSmallGpt56,
       tau2MockGpt56,
       tau2NativeTelecomBase,

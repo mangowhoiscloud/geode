@@ -5,7 +5,10 @@
 > [`extensibility-roadmap.md`](../architecture/extensibility-roadmap.md).
 
 Date: 2026-07-31  
-Implementation branch: `feature/codex-session-record-contract`  
+Implementation: released as GEODE `v1.0.11` at `686ff372` through
+[`#2850`](https://github.com/mangowhoiscloud/geode/pull/2850),
+[`#2851`](https://github.com/mangowhoiscloud/geode/pull/2851), and
+[`#2852`](https://github.com/mangowhoiscloud/geode/pull/2852)
 Diagram: [`session-record-contract.html`](../diagrams/session-record-contract.html)
 
 ## 1. Outcome
@@ -55,10 +58,10 @@ The comparison uses the locally updated source trees and exact heads:
 
 | Runtime | Grounded storage shape | Applied lesson |
 |---|---|---|
-| Hermes `36e41c09e` | `state.db` schema v23 owns sessions and messages; optional JSON snapshots are off by default; message rows retain active/compacted state; batch/RL trajectories stay separate | SQLite owns resumable conversation truth; offline artifacts do not become a second hot-path truth |
-| OpenClaw `90a22b4f5` | SQLite `transcript_events` and separate bounded `trajectory_runtime_events`; versioned `openclaw-trajectory` envelope; export produces a bundle; legacy JSONL is archive/import input | distinguish durable transcript, runtime telemetry, and exported trajectory; give every event a schema, sequence, lineage, and retention rule |
-| Codex `578c1b223` | rollout JSONL remains durable history; SQLite `thread_turns/items` is an ordinal and byte-cursor projection; diagnostic rollout-trace bundles preserve raw payload references and compaction checkpoints | carry session → turn → call identity, contiguous ordinals, partial-line recovery, and explicit compaction boundaries |
-| GEODE eval artifacts `9c00ecf4a3b5` | append-only public Git repository; historical dated trajectory envelopes; per-file byte/count/SHA-256 manifest; privacy/license review; remote read-back; runtime SQLite and general session dumps excluded | keep the producer schema stable, separate its release manifest, publish only allowlisted normalized views, and bind native evidence by digest |
+| Hermes `98105f31f46d` | `state.db` owns sessions and messages; optional JSON snapshots are off by default; message rows retain active/compacted state; batch/RL trajectories stay separate | SQLite owns resumable conversation truth; offline artifacts do not become a second hot-path truth |
+| OpenClaw `49b4841081c6` | SQLite `transcript_events` and separate bounded `trajectory_runtime_events`; versioned trajectory envelope; export produces a bundle; JSONL remains a serialization/archive boundary | distinguish durable transcript, runtime telemetry, and exported trajectory; give every event a schema, sequence, lineage, and retention rule |
+| Codex `f0c30e528a54` | rollout JSONL remains durable history; SQLite thread projections carry ordinal and byte-cursor state; diagnostic rollout-trace bundles preserve raw payload references and compaction checkpoints | carry session → turn → call identity, contiguous ordinals, partial-line recovery, and explicit compaction boundaries |
+| GEODE eval artifacts `16a54f08450d` | append-only public Git/PR repository; stable producer and release schemas; per-file byte/count/SHA-256 manifest; privacy/license review; remote read-back; runtime SQLite and general session dumps excluded | keep the producer schema stable, separate its release manifest, publish only allowlisted normalized views, and bind native evidence by digest |
 
 There is no universal “SQLite always wins” frontier rule. Codex deliberately
 keeps rollout JSONL canonical. Hermes and OpenClaw deliberately moved
@@ -66,13 +69,11 @@ interactive transcript truth into SQLite. GEODE is closer to Hermes in runtime
 identity and already fixed project `sessions.db` as the queryable state SOT, so
 this work keeps that decision and adopts Codex's correlation/replay rigor.
 
-The artifact repository's checked-in `TRAJECTORIES.md` still describes the
-historical dated envelope and `events[].sequence`. Before the first `@1`
-publication merges there, its policy must add the stable
-`geode.trajectory@1` + `events[].ordinal` producer contract while retaining the
-dated files as immutable legacy inputs. GEODE's in-memory adapter already
-implements that compatibility direction; an artifact-repository PR closes the
-policy half.
+The artifact repository's `TRAJECTORIES.md` now recognizes
+`geode.trajectory@1` + `events[].ordinal` and the separate
+`geode.trajectory-release@1` manifest. Historical dated envelopes and
+`events[].sequence` remain immutable legacy inputs and normalize only in
+memory.
 
 ## 4. Target event contract
 
@@ -204,8 +205,11 @@ SIL and Crucible keep their own promotion authority:
 - `crucible.evidence.v3`, the frozen experiment contract, native tau2 receipt,
   and executable verifier remain Crucible's SOT. The GEODE trajectory is a
   replay sidecar and cannot promote an invalid arm.
-- MCPMark and tau2 native receipts remain byte-identical and are joined through
-  `artifact_digests`; publication code stays outside Crucible's candidate
+- MCPMark and tau2 native receipts remain byte-identical in their authoritative
+  local run stores and are joined through `artifact_digests`. A separately
+  hashed public copy may redact local paths or synthetic personal fields; its
+  disclosure transform and digest are recorded rather than presented as the
+  raw native digest. Publication code stays outside Crucible's candidate
   mutation boundary.
 
 ## 5. Naming and migration map
@@ -299,8 +303,9 @@ uv build
 npm run build  # site/
 ```
 
-The wheel was installed into a fresh temporary environment. `geode version`
-reported `1.0.10`, and all four packaged Draft 2020-12 schemas loaded through
+The released wheel was installed into a fresh temporary environment from
+outside the source tree. `geode version` reported `1.0.11`, and all four
+packaged Draft 2020-12 schemas loaded through
 `importlib.resources`. The site generated all 236 static pages. The Next.js
 build still reports the pre-existing broad seed-directory tracing warnings;
 the Python suite still exposes pre-existing scheduler threads attempting to
@@ -332,6 +337,24 @@ An independent checkout of that exact remote commit passed anchored read-back
 with manifest SHA-256
 `d418e55ff8aa4cae22db9e6c59ac0ecbe060be78ffcc46c900da1e23a6f7b994`:
 27 events, one scope-complete trajectory, zero scope-incomplete trajectories,
-and zero findings in all configured secret-scan classes. Post-release
-MCPMark/tau2 runs remain sequenced after package deployment so their native
-receipts name the released GEODE revision.
+and zero findings in all configured secret-scan classes.
+
+Post-release behavior runs used the published `v1.0.11` package and GEODE
+revision `686ff372`. MCPMark `filesystem/easy` passed 10/10 in 596.580 seconds:
+its ten trajectories carry 226 events, 78 exact tool call/result pairs, zero
+missing required turn IDs, and exact event joins to the isolated SQLite stores.
+Tau2 retained the genuine `mock/create_task_1` failure (0/1 because the action
+included an unrequested `description=""`) and passed the first Telecom-small
+case (1/1); their two trajectories carry 142 events and nine exact tool pairs.
+
+Artifact PR
+[`geode-eval-artifacts#9`](https://github.com/mangowhoiscloud/geode-eval-artifacts/pull/9)
+merged as
+[`16a54f0`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/16a54f08450db771c02e30c73bdc3867f6282f83).
+The stable release manifest digests are
+`82fe94b01a25e7e9f8c504d511f018129cb058ad532dbcbc315de9c6819db0fb`
+for MCPMark and
+`a71155f7006c8dd412af8d1471e7d2380e5f072cc8f0495924fa86f26d69a9a2`
+for tau2. An independent GitHub read-back of the exact merge commit downloaded
+and revalidated both manifests, all trajectories, source digests, file counts,
+and privacy-scan results.

@@ -67,9 +67,17 @@ export function BenchmarkRunList({ group }: { group: BenchmarkGroup }) {
   );
 }
 
-export function RunLogLink({ path, label }: { path: string; label?: string }) {
+export function RunLogLink({
+  path,
+  label,
+  revision = "main",
+}: {
+  path: string;
+  label?: string;
+  revision?: string;
+}) {
   return (
-    <a href={`${EVAL_ARTIFACTS_REPO}/tree/main/${path}`}>
+    <a href={`${EVAL_ARTIFACTS_REPO}/tree/${revision}/${path}`}>
       <code>{label ?? `geode-eval-artifacts/${path}`}</code>
     </a>
   );
