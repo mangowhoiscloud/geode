@@ -189,9 +189,12 @@ Historical artifact-repository releases using dated identifiers such as
   and executable checks remain promotion authority. The GEODE trajectory is a
   replay sidecar with the raw artifact SHA-256 and Crucible snapshot/contract
   reference. It cannot convert an invalid arm into scored evidence.
-- **MCPMark / tau2**: native receipts stay byte-identical. The shared benchmark
-  bridge emits a normalized SQLite-backed trajectory beside them and keeps
-  publication machinery outside Crucible's bounded candidate surface.
+- **MCPMark / tau2**: authoritative native receipts stay byte-identical in the
+  private run store. The shared benchmark bridge emits a normalized
+  SQLite-backed trajectory beside them. A public receipt copy may apply a
+  reviewed path/identity redaction and therefore receives its own digest; the
+  manifest records both the raw source digest and public disclosure digest.
+  Publication machinery stays outside Crucible's bounded candidate surface.
 
 ## Migration and rollback
 
@@ -225,5 +228,8 @@ geode session prune-records --retention-days 180
 
 MCPMark, tau2-bench, and the hook behavior E2E export through the same
 trajectory builder and JSON-schema validator. Benchmark-native raw artifacts
-remain byte-identical inputs and are bound to normalized trajectories by
-SHA-256 rather than embedded or replaced.
+remain byte-identical authoritative inputs and are bound to normalized
+trajectories by SHA-256 rather than embedded or replaced. The `v1.0.11`
+benchmark publication at artifact commit `16a54f08450d` was downloaded from
+GitHub after merge and passed anchored manifest verification for 12
+trajectories, 368 events, and 87 exact tool call/result pairs.

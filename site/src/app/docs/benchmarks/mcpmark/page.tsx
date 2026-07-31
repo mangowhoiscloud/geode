@@ -85,24 +85,35 @@ export default function Page() {
               고정해서만 게시합니다.
             </p>
 
-            <h2>2026-07-31 GPT-5.6 subscription run</h2>
+            <h2>2026-07-31 v1.0.11 release regression</h2>
             <p>
-              GEODE <code>edb74602b</code>, <code>gpt-5.6-sol</code>, effort{" "}
-              <code>high</code>로 <code>filesystem/easy</code> 10건을 다시
-              측정했습니다. 공식 verifier 결과는 <strong>9/10 (90.0%)</strong>,
-              총 799.4초와 54 turns입니다. 유일한 실패는{" "}
-              <code>file_context/uppercase</code>가 다섯 파일을 만들고도{" "}
-              <code>file_01.txt</code>를 완전히 대문자로 바꾸지 못한 행동
-              실패입니다. schema 충돌이나 429 실패는 없었습니다.
+              배포된 GEODE <code>v1.0.11</code> (<code>686ff372</code>)과{" "}
+              <code>gpt-5.6-sol</code> subscription / effort <code>high</code>로{" "}
+              <code>filesystem/easy</code> 10건을 재측정했습니다. 공식 verifier는{" "}
+              <strong>10/10 (100.0%)</strong>, 총 596.6초와 56 turns입니다.
+              이전 <code>edb74602b</code> run의 유일한 실패였던{" "}
+              <code>file_context/uppercase</code>도 통과했습니다.
+            </p>
+            <p>
+              10개 stable trajectory의 226개 이벤트는 canonical SQLite 행과
+              ID·session·turn·call·kind까지 일치합니다. 78개 tool call/result가
+              모두 정확히 pairing됐고 필수 turn ID 누락은 0건입니다.
             </p>
             <ul>
               <li>
-                <RunLogLink path="mcpmark/results-geode-agentworld/geode-gpt56-sol-high-edb74602b-20260731-mcpmark-filesystem-easy" />:
+                <RunLogLink
+                  path="mcpmark/results-geode-agentworld/geode-gpt56-sol-high-v1011-686ff372-20260731-mcpmark-filesystem-easy"
+                  revision="16a54f08450db771c02e30c73bdc3867f6282f83"
+                />:
                 마스킹된 verifier receipt와 ordered MCP execution logs.
               </li>
               <li>
-                <RunLogLink path="trajectories/mcpmark-geode-gpt56-edb74602b-filesystem-easy-20260731T034305Z-b86f5071cbe0" />:
-                task별 10개 content-addressed tool trajectory.
+                <RunLogLink
+                  path="trajectories/mcpmark-geode-gpt56-v1.0.11-686ff372-filesystem-easy-20260731T105713Z-82fe94b01a25"
+                  revision="16a54f08450db771c02e30c73bdc3867f6282f83"
+                />:
+                privacy review와 source digest 검증을 통과한 10개{" "}
+                <code>geode.trajectory@1</code>.
               </li>
             </ul>
 
@@ -165,25 +176,35 @@ export default function Page() {
               settings.
             </p>
 
-            <h2>2026-07-31 GPT-5.6 Subscription Run</h2>
+            <h2>2026-07-31 v1.0.11 Release Regression</h2>
             <p>
-              We reran the ten <code>filesystem/easy</code> tasks on GEODE{" "}
-              <code>edb74602b</code> with <code>gpt-5.6-sol</code> at effort{" "}
-              <code>high</code>. The official verifier scored{" "}
-              <strong>9/10 (90.0%)</strong> over 799.4 seconds and 54 turns. The
-              only failure was behavioral: <code>file_context/uppercase</code>{" "}
-              created all five files but did not fully uppercase{" "}
-              <code>file_01.txt</code>. No schema collision or 429 failure
-              occurred.
+              We reran the ten <code>filesystem/easy</code> tasks with the
+              released GEODE <code>v1.0.11</code> (<code>686ff372</code>) and{" "}
+              <code>gpt-5.6-sol</code> subscription at effort <code>high</code>.
+              The official verifier scored <strong>10/10 (100.0%)</strong> over
+              596.6 seconds and 56 turns. The earlier{" "}
+              <code>file_context/uppercase</code> failure now passes.
+            </p>
+            <p>
+              All 226 events in the ten stable trajectories join their canonical
+              SQLite rows on ID, session, turn, call, and kind. All 78 tool
+              calls have exactly one result, with zero missing required turn IDs.
             </p>
             <ul>
               <li>
-                <RunLogLink path="mcpmark/results-geode-agentworld/geode-gpt56-sol-high-edb74602b-20260731-mcpmark-filesystem-easy" />:
+                <RunLogLink
+                  path="mcpmark/results-geode-agentworld/geode-gpt56-sol-high-v1011-686ff372-20260731-mcpmark-filesystem-easy"
+                  revision="16a54f08450db771c02e30c73bdc3867f6282f83"
+                />:
                 redacted verifier receipts and ordered MCP execution logs.
               </li>
               <li>
-                <RunLogLink path="trajectories/mcpmark-geode-gpt56-edb74602b-filesystem-easy-20260731T034305Z-b86f5071cbe0" />:
-                ten content-addressed per-task tool trajectories.
+                <RunLogLink
+                  path="trajectories/mcpmark-geode-gpt56-v1.0.11-686ff372-filesystem-easy-20260731T105713Z-82fe94b01a25"
+                  revision="16a54f08450db771c02e30c73bdc3867f6282f83"
+                />:
+                ten privacy-reviewed, source-digest-verified{" "}
+                <code>geode.trajectory@1</code> artifacts.
               </li>
             </ul>
 

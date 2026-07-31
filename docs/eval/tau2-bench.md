@@ -6,7 +6,7 @@ Multi-turn tool-agent-user 시뮬레이션 벤치. 에이전트와 LLM 시뮬 �
 
 - **Repo**: [sierra-research/tau2-bench](https://github.com/sierra-research/tau2-bench) — 1.1k★
 - **마지막 commit**: 2026-05-05 (live submissions PR, 매주 갱신)
-- **라이센스**: 확인 필요 (Apache-2.0 추정)
+- **라이센스**: MIT (`LICENSE`, grounded at harness revision `1901a30`)
 - **버전 히스토리**: v1 NeurIPS '24 → v² 2025 (telecom dual-control) → v0.2.0 2025-10-06 (web leaderboard) → v0.2.1 2025-11 (RL support). τ³(banking+voice)은 paper만, 코드 미공개
 - **Frontier 인용**: GPT-5.5 system card (**telecom 98.0%**), Anthropic 인용
 
@@ -323,6 +323,59 @@ The failed `--task-set-name telecom_small` preflight exposed a compatibility
 GAP: that upstream loader does not accept the generic `task_split_name`
 keyword used by GEODE's ordered-task preflight. It produced no scored run and
 is not included in the two results above.
+
+## 2026-07-31 v1.0.11 release regression
+
+These runs use the public `geode-agent==1.0.11` wheel at GEODE revision
+`686ff37257fc7dd655025049dccee7a10d6ef340`, not an editable checkout. A
+preflight rejected the harness environment's stale editable `1.0.9` install
+before measurement. Both the agent and simulated user used `gpt-5.6-sol`,
+OpenAI subscription, effort `high`, and tau2-bench
+`1901a301961cbbe3fd11f3e84a2a376530c759e3` (`tau2==1.0.0`).
+
+| Scope | Reward / pass^1 | Duration | Termination | Reading |
+|---|---:|---:|---|---|
+| `mock/create_task_1` | 0.0 / 0.000 | 9.03s | `user_stop` | Genuine repeat failure: `description=""` was not requested, so the native exact action and DB comparators rejected the write |
+| Telecom `small`, first task | 1.0 / 1.000 | 78.52s | `user_stop` | DB, `toggle_roaming`, mobile-data state, and excellent-speed assertions all passed |
+
+The stable trajectory join was checked against an isolated `sessions.db` for
+each run:
+
+| Scope | Events | Exact tool pairs | Missing IDs / orphan pairs |
+|---|---:|---:|---:|
+| mock | 25 | 1 | 0 / 0 |
+| Telecom | 117 | 8 | 0 / 0 |
+
+Tau2 `results.json` remains the scoring authority. The associated
+`crucible_tau2_trajectory_snapshot.v3` records are diagnostic with
+`promotion_authority=none` and `candidate_surface=unfrozen_git`; the
+`geode.trajectory@1` files are replay/correlation sidecars, not a way to
+promote an unfrozen arm.
+
+The authoritative raw native receipt SHA-256 values are:
+
+- mock:
+  `eb0e8eea5516b2cbb6b95385846bb8b6cbcdae42a4fb48e1fa447939d2d0e369`;
+- Telecom:
+  `eda3cdbdb9cd0c2f993db3f9fe2e813cdbc06fe9cf112e23ba60c7ea9d98a45b`.
+
+The public Telecom copy removes synthetic phone/email fields and therefore has
+the distinct digest
+`506f906cfa1d6e8e4320ba284be1aa0f7ec26ea2fc47b43e7b36f69e3643a9d4`.
+That transformation is explicit; it is not presented as the raw Crucible
+receipt.
+
+Artifacts are immutable at
+[`geode-eval-artifacts@16a54f0`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/16a54f08450db771c02e30c73bdc3867f6282f83):
+
+- [native receipt copies](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/16a54f08450db771c02e30c73bdc3867f6282f83/tau2/simulations);
+- [stable trajectory release](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/16a54f08450db771c02e30c73bdc3867f6282f83/trajectories/tau2-geode-gpt56-v1.0.11-686ff372-mock-telecom-small-20260731T105713Z-a71155f7006c);
+- [validation report](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/16a54f08450db771c02e30c73bdc3867f6282f83/reports/e2e-validation/2026-07-31-gpt56-v1011-benchmark.md).
+
+Manifest SHA-256
+`a71155f7006c8dd412af8d1471e7d2380e5f072cc8f0495924fa86f26d69a9a2`
+was independently revalidated after downloading the exact merge commit from
+GitHub.
 
 ## 참고
 
