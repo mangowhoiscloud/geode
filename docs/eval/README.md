@@ -14,6 +14,12 @@ pointers under `docs/eval/`; the artifact repository keeps the bytes behind
 those claims. See [External Evaluation Artifact Repository](external-artifact-repository.md)
 for path mappings, disclosure rules, and the publication manifest scaffold.
 
+The latest runtime-contract record is the immutable
+[2026-07-31 hook/middleware behavior trajectory](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/3e5b35f4505a4a2dc76d595b24862e8e73e668ff/trajectories/geode-agenticloop-hook-middleware-behavior-e2e-20260731T001640Z-1326e99cb447):
+13/13 public hooks, 4/4 trusted middleware join points, and matching 22-row
+SQLite/JSONL extension projections. It is a release-validation probe, not a
+scored benchmark.
+
 ## 채택 4종
 
 | 벤치 | Trust | 측정 | GEODE에서의 역할 | 문서 |

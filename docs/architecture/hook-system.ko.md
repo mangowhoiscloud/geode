@@ -172,6 +172,20 @@ RuntimeEventBus
 paused turn은 session을 끝내지 않는다. `PostCompact`도 compacted state
 영속화가 성공한 뒤에만 발화한다.
 
+### 라이브 행동 증거
+
+2026-07-31 subscription 기반 행동 E2E는 13개 공개 hook과 네 middleware
+join point를 각각의 실제 소유 runtime 경로로 모두 통과했다. LLM 호출 3회,
+exactly-once tool 호출 1회, 실제 compaction 영속화 1회를 수행했고,
+SQLite와 active JSONL projection 양쪽에 동일한 `EXTENSION_INVOKED` 22행을
+남겼다. tool start/end 행의 session/turn correlation도 두 저장소에서
+일치했다.
+
+검토를 마친 정규화 27-event decision/tool trajectory와 manifest는 불변
+[hook/middleware 행동 E2E 산출물](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/3e5b35f4505a4a2dc76d595b24862e8e73e668ff/trajectories/geode-agenticloop-hook-middleware-behavior-e2e-20260731T001640Z-1326e99cb447)에
+발행했다. raw prompt, checkpoint, provider reasoning, database/WAL, usage,
+diagnostic은 공개하지 않는 runtime 증거로 유지한다.
+
 ## 마이그레이션 맵
 
 | legacy/control 형태 | canonical owner | 호환 |
