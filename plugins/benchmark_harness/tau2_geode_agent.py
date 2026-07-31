@@ -224,7 +224,16 @@ def _build_loop(
         tool_registry.register(wrapped)
         handlers[wrapped.name] = wrapped.aexecute
 
-    executor = ToolExecutor(action_handlers=handlers, auto_approve=True, hitl_level=0)
+    executor = ToolExecutor(
+        action_handlers=handlers,
+        auto_approve=True,
+        hitl_level=0,
+        tool_input_schemas={
+            name: registered.parameters
+            for name in handlers
+            if (registered := tool_registry.get(name)) is not None
+        },
+    )
     allowed_tool_names = set(handlers)
     return AgenticLoop(
         ConversationContext(max_turns=200),

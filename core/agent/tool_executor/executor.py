@@ -129,6 +129,7 @@ class ToolExecutor:
         hooks: HookSystem | None = None,
         hook_registry: HookRegistry | None = None,
         middleware_registry: MiddlewareRegistry | None = None,
+        tool_input_schemas: dict[str, dict[str, Any]] | None = None,
         # (tool_name, detail, safety_level[, approval_id]) -> decision char.
         # 4-arg callbacks receive the ApprovalRecord id for reply matching;
         # legacy 3-arg callbacks are detected and called without it.
@@ -160,6 +161,7 @@ class ToolExecutor:
             middleware_registry = _MiddlewareRegistry(events=hooks)
         self._hook_registry = hook_registry
         self._middleware_registry = middleware_registry
+        self._tool_input_schemas = dict(tool_input_schemas or {})
         self._approval_callback = approval_callback
         self._interactive_approval = interactive_approval
 
@@ -586,20 +588,21 @@ class ToolExecutor:
         except Exception:
             return HookCorrelation()
 
-    @staticmethod
-    def _validate_tool_input(tool_name: str, tool_input: dict[str, Any]) -> str:
-        """Validate known tool inputs; dynamic MCP schemas stay server-owned."""
-        try:
-            from jsonschema import Draft202012Validator
+    def _validate_tool_input(self, tool_name: str, tool_input: dict[str, Any]) -> str:
+        """Validate against a caller-owned schema before the built-in fallback."""
+        from jsonschema import Draft202012Validator
 
-            from core.tools.base import load_tool_definition
+        schema = self._tool_input_schemas.get(tool_name)
+        if schema is None:
+            try:
+                from core.tools.base import load_tool_definition
 
-            schema = load_tool_definition(tool_name).get("input_schema", {})
-        except KeyError:
-            return ""
-        except Exception as exc:
-            log.warning("Tool schema lookup failed for %s: %s", tool_name, exc)
-            return ""
+                schema = load_tool_definition(tool_name).get("input_schema", {})
+            except KeyError:
+                return ""
+            except Exception as exc:
+                log.warning("Tool schema lookup failed for %s: %s", tool_name, exc)
+                return ""
         errors = sorted(
             Draft202012Validator(schema).iter_errors(tool_input),
             key=lambda error: tuple(str(part) for part in error.path),

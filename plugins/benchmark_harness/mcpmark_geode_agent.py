@@ -14,7 +14,10 @@ import os
 import sys
 import time
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from core.hooks.middleware import ToolCallRequest
 
 
 def _jsonish(value: Any) -> str:
@@ -73,6 +76,18 @@ class MCPMarkGeodeTool:
         return {"result": _jsonish(result)}
 
 
+@dataclass
+class _MCPMarkArgumentNormalizer:
+    schemas: dict[str, dict[str, Any]]
+
+    async def tool_request(self, request: ToolCallRequest) -> ToolCallRequest:
+        schema = self.schemas.get(request.tool_name)
+        if schema is None:
+            return request
+        arguments = _normalize_tool_arguments(schema, dict(request.arguments))
+        return request.with_arguments(arguments)
+
+
 def _build_loop(
     *,
     tools: list[MCPMarkGeodeTool],
@@ -86,6 +101,7 @@ def _build_loop(
     from core.agent.conversation import ConversationContext
     from core.agent.loop import AgenticLoop
     from core.agent.tool_executor import ToolExecutor
+    from core.hooks.middleware import MiddlewareRegistry
     from core.llm.adapters.registry import bootstrap_builtins
     from core.tools.registry import ToolRegistry
 
@@ -97,7 +113,19 @@ def _build_loop(
         registry.register(tool)
         handlers[tool.name] = tool.aexecute
 
-    executor = ToolExecutor(action_handlers=handlers, auto_approve=True, hitl_level=0)
+    schemas = {tool.name: tool.schema for tool in tools}
+    middleware = MiddlewareRegistry()
+    middleware.register_tool_request(
+        _MCPMarkArgumentNormalizer(schemas),
+        name="mcpmark-argument-normalizer",
+    )
+    executor = ToolExecutor(
+        action_handlers=handlers,
+        auto_approve=True,
+        hitl_level=0,
+        middleware_registry=middleware,
+        tool_input_schemas={tool.name: tool.parameters for tool in tools},
+    )
     return AgenticLoop(
         ConversationContext(max_turns=200),
         executor,

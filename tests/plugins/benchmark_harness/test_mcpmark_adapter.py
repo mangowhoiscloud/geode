@@ -1,14 +1,76 @@
+import asyncio
 import sys
 from pathlib import Path
 from types import SimpleNamespace
 
 from plugins.benchmark_harness.mcpmark_geode_agent import (
+    MCPMarkGeodeTool,
+    _build_loop,
     _github_repo_visibility,
     _normalize_tool_arguments,
     _patch_mcpmark_github_visibility,
     _route_from_model,
     register_mcpmark_agent,
 )
+
+
+def test_mcpmark_loop_validates_colliding_tool_with_mcp_schema() -> None:
+    class MCPServer:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, dict[str, object]]] = []
+
+        async def call_tool(self, name: str, arguments: dict[str, object]) -> str:
+            self.calls.append((name, arguments))
+            return "ok"
+
+    server = MCPServer()
+    tool = MCPMarkGeodeTool(
+        mcp_server=server,
+        schema={
+            "name": "write_file",
+            "description": "MCP filesystem writer",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string"},
+                    "content": {"type": "string"},
+                },
+                "required": ["path", "content"],
+            },
+        },
+    )
+    loop = _build_loop(
+        tools=[tool],
+        instruction="write the answer",
+        model="gpt-5.6-sol",
+        provider="openai",
+        source="subscription",
+        effort="high",
+        timeout=30,
+    )
+
+    result = asyncio.run(
+        loop.executor.aexecute(
+            "write_file",
+            {"path": "fixture/answer.txt", "content": "answer"},
+        )
+    )
+    compatibility_result = asyncio.run(
+        loop.executor.aexecute(
+            "write_file",
+            {"file_path": "fixture/compatibility.txt", "content": "compatibility"},
+        )
+    )
+
+    assert result == {"result": "ok"}
+    assert compatibility_result == {"result": "ok"}
+    assert server.calls == [
+        ("write_file", {"path": "fixture/answer.txt", "content": "answer"}),
+        (
+            "write_file",
+            {"path": "fixture/compatibility.txt", "content": "compatibility"},
+        ),
+    ]
 
 
 def test_route_from_geode_model_label() -> None:
