@@ -133,7 +133,7 @@ def check_session_budget(*, metrics: SessionMetrics | None = None) -> BudgetChec
 
 def budget_summary(*, metrics: SessionMetrics | None = None) -> dict[str, Any]:
     """Render a JSON-friendly summary of the active budget. Empty dict when
-    no budget is active. Used by handoff hooks + transcripts."""
+    no budget is active. Used by handoff hooks and session records."""
     target = metrics if metrics is not None else current_session_metrics()
     if target.time_budget_total_s <= 0.0:
         return {}

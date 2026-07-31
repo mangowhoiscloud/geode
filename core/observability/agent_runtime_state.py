@@ -237,7 +237,7 @@ def record_subagent_completed(
     Fires on ``HookEvent.SUBAGENT_COMPLETED`` at the sub-agent dispatch
     layer. Sets ``agent_kind="subagent"`` automatically (this code path
     only runs for sub-agents); ``component`` comes from the
-    ``RunTranscript.component`` SoT at dispatch time.
+    ``RunTimeline.component`` SoT at dispatch time.
     """
     conn = _get_conn()
     if conn is None or not agent_id:

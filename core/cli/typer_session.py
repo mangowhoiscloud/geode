@@ -1,4 +1,4 @@
-"""CLI subcommand: ``geode session`` — list and export persisted agent sessions.
+"""CLI subcommand: ``geode session`` — inspect and migrate session records.
 
 Source-of-truth decision
 ------------------------
@@ -16,6 +16,12 @@ deterministic — no cross-source merge or ordering questions.
 :class:`core.memory.session_manager.SessionManager`) and falls back to a
 directory scan over ``<sessions>/<id>/state.json`` when the index database
 is missing.
+
+``migrate-records`` is the explicit, lossless bridge from deprecated global
+JSONL transcripts into ``sessions.db:session_events``. ``export-trajectory``
+derives the versioned evaluation artifact from that canonical history.
+``stage-trajectory-release`` validates a reviewed allowlist into an immutable,
+digest-bound directory ready for an artifact-repository PR.
 
 Redaction: :func:`core.observability.redaction.redact_secrets` is applied to
 every exported text body (header fields included), *before* truncation so a
@@ -35,7 +41,7 @@ import json
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Annotated, Any
 
 import typer
 
@@ -44,7 +50,7 @@ if TYPE_CHECKING:
 
 session_app = typer.Typer(
     name="session",
-    help="List and export persisted agent sessions.",
+    help="List, export, and migrate persisted agent sessions.",
     no_args_is_help=True,
     add_completion=False,
 )
@@ -506,6 +512,326 @@ def session_export(
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(document, encoding="utf-8")
     typer.echo(str(out_path.resolve()))
+
+
+@session_app.command("migrate-records")
+def session_migrate_records(
+    sources: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--source",
+            help=(
+                "Legacy JSONL file or directory. Repeat for multiple sources; "
+                "defaults to the retired global transcript directory."
+            ),
+        ),
+    ] = None,
+    session_id: str = typer.Option(
+        "",
+        "--session-id",
+        help="Override the inferred session id (only valid with one source file).",
+    ),
+    sessions_dir: str = typer.Option(
+        "",
+        "--sessions-dir",
+        help="Override the sessions directory containing sessions.db.",
+    ),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Inspect inputs without writing SQLite."),
+) -> None:
+    """Import deprecated transcript JSONL into canonical SQLite history."""
+    from core.memory.atomic_write import iter_jsonl
+    from core.observability.session_timeline import SessionEventStore
+    from core.paths import GLOBAL_TRANSCRIPTS_DIR
+
+    requested = [Path(item).expanduser() for item in (sources or [str(GLOBAL_TRANSCRIPTS_DIR)])]
+    files: list[Path] = []
+    for source in requested:
+        if source.is_file():
+            files.append(source)
+        elif source.is_dir():
+            files.extend(sorted(source.rglob("*.jsonl")))
+        else:
+            typer.echo(f"Missing source: {source}")
+            raise typer.Exit(code=1)
+    files = list(dict.fromkeys(path.resolve() for path in files))
+    if session_id and len(files) != 1:
+        raise typer.BadParameter(
+            "--session-id requires exactly one resolved source file",
+            param_hint="--session-id",
+        )
+    if not files:
+        typer.echo("No legacy JSONL files found.")
+        return
+
+    if dry_run:
+        rows = sum(1 for path in files for _row in iter_jsonl(path))
+        typer.echo(f"Would inspect {len(files)} file(s), {rows} valid JSON object row(s).")
+        return
+
+    base = _resolve_base_dir(sessions_dir)
+    store = SessionEventStore(base / "sessions.db")
+    imported = 0
+    for path in files:
+        imported += store.import_legacy_jsonl(path, session_id=session_id or None)
+    typer.echo(
+        f"Recognized {imported} event(s) from {len(files)} file(s) in "
+        f"{store.db_path.resolve()}. Duplicate source digests were not reinserted; "
+        "sources were not modified."
+    )
+
+
+@session_app.command("export-trajectory")
+def session_export_trajectory(
+    session_id: str = typer.Argument(..., help="Canonical session id."),
+    out: str = typer.Option(
+        "",
+        "--out",
+        help="Output path (default: ./geode-trajectory-<session>.json).",
+    ),
+    sessions_dir: str = typer.Option(
+        "",
+        "--sessions-dir",
+        help="Override the sessions directory containing sessions.db.",
+    ),
+    sil_eval: Annotated[
+        list[Path] | None,
+        typer.Option(
+            "--sil-eval",
+            help="Inspect .eval evidence to bind by SHA-256 as SIL authority.",
+        ),
+    ] = None,
+    digest_content: bool = typer.Option(
+        False,
+        "--digest-content",
+        help="Replace non-allowlisted payload bodies with digests.",
+    ),
+) -> None:
+    """Build a validated ``geode.trajectory@1`` artifact from SQLite."""
+    from core.observability.trajectory import export_trajectory, trajectory_from_session
+
+    base = _resolve_base_dir(sessions_dir)
+    evidence_refs: list[dict[str, Any]] = []
+    artifact_digests: list[dict[str, str]] = []
+    for eval_path in sil_eval or ():
+        resolved = eval_path.expanduser()
+        if not resolved.is_file():
+            raise typer.BadParameter(f"SIL eval does not exist: {resolved}")
+        import hashlib
+
+        digest = hashlib.sha256(resolved.read_bytes()).hexdigest()
+        artifact_digests.append({"path": resolved.name, "sha256": digest})
+        evidence_refs.append(
+            {
+                "kind": "sil_eval",
+                "schema_id": "inspect_ai.eval@native",
+                "authority": "Inspect AI scored evaluation archive",
+                "reference": f"sha256:{digest}",
+                "path": resolved.name,
+                "sha256": digest,
+            }
+        )
+    trajectory = trajectory_from_session(
+        session_id,
+        db_path=base / "sessions.db",
+        artifact_digests=artifact_digests,
+        evidence_refs=evidence_refs,
+        content_policy="digest" if digest_content else "full",
+    )
+    if not trajectory["events"]:
+        typer.echo(f"No canonical session events found for {session_id!r}.")
+        raise typer.Exit(code=1)
+    output = Path(out).expanduser() if out else Path(f"geode-trajectory-{session_id}.json")
+    export_trajectory(output, trajectory)
+    typer.echo(str(output.resolve()))
+    integrity = trajectory["integrity"]
+    reasons = list(integrity["incompleteness"])
+    typer.echo(
+        "records={records} scope_complete={scope} replay_complete={replay} "
+        "reasons={reasons}".format(
+            records=integrity["record_count"],
+            scope=str(bool(integrity["scope_complete"])).lower(),
+            replay=str(bool(integrity["replay_complete"])).lower(),
+            reasons=json.dumps(reasons, ensure_ascii=False),
+        )
+    )
+
+
+@session_app.command("prune-records")
+def session_prune_records(
+    retention_days: int = typer.Option(
+        180,
+        "--retention-days",
+        min=0,
+        help="Delete only explicitly ended sessions older than this many days.",
+    ),
+    sessions_dir: str = typer.Option(
+        "",
+        "--sessions-dir",
+        help="Override the sessions directory containing sessions.db.",
+    ),
+) -> None:
+    """Prune old terminal history while preserving active/stale sessions."""
+    from core.observability.session_timeline import SessionEventStore
+
+    base = _resolve_base_dir(sessions_dir)
+    removed = SessionEventStore(base / "sessions.db").prune_terminal_sessions(
+        retention_days=retention_days
+    )
+    typer.echo(f"Pruned {removed} terminal session event row(s).")
+
+
+@session_app.command("stage-trajectory-release")
+def session_stage_trajectory_release(
+    trajectories: Annotated[
+        list[Path],
+        typer.Argument(help="One or more current or dated trajectory JSON files."),
+    ],
+    destination: Annotated[
+        Path,
+        typer.Option(
+            "--destination",
+            help="Local append-only staging root for the release directory.",
+        ),
+    ],
+    release_source: Annotated[
+        str,
+        typer.Option(
+            "--source",
+            help="Stable producer name, for example tau2-geode.",
+        ),
+    ],
+    release_scope: Annotated[
+        str,
+        typer.Option(
+            "--scope",
+            help="Task/model/run scope represented by this release.",
+        ),
+    ],
+    privacy_review: Annotated[
+        Path,
+        typer.Option(
+            "--privacy-review",
+            exists=True,
+            file_okay=True,
+            dir_okay=False,
+            readable=True,
+            help=(
+                "JSON review record with reviewer, reviewed_at, method, scope, "
+                "and public attestation."
+            ),
+        ),
+    ],
+    published_at: Annotated[
+        str,
+        typer.Option(
+            "--published-at",
+            help="Optional ISO-8601 UTC publication time.",
+        ),
+    ] = "",
+    supersedes: Annotated[
+        str,
+        typer.Option(
+            "--supersedes",
+            help="Optional prior immutable release identifier.",
+        ),
+    ] = "",
+    source_artifact: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--source-artifact",
+            help="Digest source mapping as REF=PATH; repeat for every artifact_digests row.",
+        ),
+    ] = None,
+    allow_replay_incomplete: bool = typer.Option(
+        False,
+        "--allow-replay-incomplete",
+        help="Publish reviewed scope-complete artifacts whose private bodies were digested.",
+    ),
+) -> None:
+    """Stage reviewed trajectories behind the public release quality gate."""
+    from core.observability.trajectory import normalize_trajectory_artifact
+    from core.observability.trajectory_release import stage_trajectory_release
+
+    payloads: dict[str, dict[str, Any]] = {}
+    source_artifacts: dict[str, Path] = {}
+    try:
+        review_payload = json.loads(privacy_review.expanduser().read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise typer.BadParameter(f"cannot read privacy review {privacy_review}: {exc}") from exc
+    if not isinstance(review_payload, dict):
+        raise typer.BadParameter("privacy review must be a JSON object")
+    for mapping in source_artifact or ():
+        reference, separator, raw_path = mapping.partition("=")
+        if not separator or not reference or not raw_path:
+            raise typer.BadParameter("--source-artifact must use REF=PATH")
+        if reference in source_artifacts:
+            raise typer.BadParameter(f"duplicate source artifact reference: {reference}")
+        source_path = Path(raw_path).expanduser()
+        if not source_path.is_file():
+            raise typer.BadParameter(f"source artifact does not exist: {source_path}")
+        source_artifacts[reference] = source_path
+    for path in trajectories:
+        source_path = path.expanduser()
+        try:
+            loaded = json.loads(source_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise typer.BadParameter(f"cannot read trajectory {source_path}: {exc}") from exc
+        if not isinstance(loaded, dict):
+            raise typer.BadParameter(f"trajectory must be a JSON object: {source_path}")
+        if source_path.name in payloads:
+            raise typer.BadParameter(
+                f"trajectory basenames must be unique within a release: {source_path.name}"
+            )
+        payloads[source_path.name] = normalize_trajectory_artifact(loaded)
+    try:
+        release = stage_trajectory_release(
+            destination.expanduser(),
+            release_source=release_source,
+            release_scope=release_scope,
+            trajectories=payloads,
+            published_at=published_at or None,
+            supersedes=supersedes or None,
+            privacy_review=review_payload,
+            source_artifacts=source_artifacts,
+            require_complete=not allow_replay_incomplete,
+        )
+    except (FileExistsError, ValueError) as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    typer.echo(str(release.resolve()))
+
+
+@session_app.command("verify-trajectory-release")
+def session_verify_trajectory_release(
+    release: Annotated[Path, typer.Argument(help="Staged release directory.")],
+    expected_manifest_sha256: Annotated[
+        str,
+        typer.Option(
+            "--expected-manifest-sha256",
+            help="Independently recorded manifest digest anchor.",
+        ),
+    ],
+) -> None:
+    """Recompute every trajectory, manifest aggregate, digest, and scan."""
+    from core.observability.trajectory_release import verify_trajectory_release
+
+    try:
+        manifest = verify_trajectory_release(
+            release.expanduser(),
+            expected_manifest_sha256=expected_manifest_sha256,
+        )
+    except (OSError, ValueError) as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    typer.echo(
+        json.dumps(
+            {
+                "release": str(release.expanduser().resolve()),
+                "quality": manifest["quality"],
+                "verified": True,
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+    )
 
 
 __all__ = ["session_app"]

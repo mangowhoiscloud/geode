@@ -204,6 +204,17 @@ class Vault:
 
         atomic_write_text(target_file, content)
         log.info("Vault: saved %s → %s", filename, target_file)
+        try:
+            from core.observability.session_timeline import current_session_timeline
+
+            timeline = current_session_timeline()
+            if timeline is not None:
+                timeline.record_vault_save(
+                    target_file.relative_to(self._dir).as_posix(),
+                    category,
+                )
+        except Exception:
+            log.debug("Vault timeline recording failed", exc_info=True)
 
         # Write meta.json for applications
         if metadata and category == "applications":

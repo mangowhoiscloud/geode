@@ -210,14 +210,14 @@ def test_arun_calls_dispatch_helper() -> None:
     assert "self._dispatch_llm_call(" in src
 
 
-def test_arun_returns_early_on_agentic_result() -> None:
+def test_arun_persists_early_agentic_result_without_verification() -> None:
     """``arun``'s call site must check isinstance(outcome,
     AgenticResult) and return verbatim. Pin the discriminator
     pattern so a refactor that drops the isinstance check doesn't
     accidentally treat AgenticResult as a response."""
     src = inspect.getsource(AgenticLoop.arun)
     assert "isinstance(_llm_outcome, AgenticResult)" in src
-    assert "return _llm_outcome" in src
+    assert "self._afinalize_and_return(" in src
 
 
 def test_arun_no_longer_inlines_billing_or_cancelled_handlers() -> None:

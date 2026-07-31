@@ -1028,10 +1028,10 @@ class WorkerOutcome:
     crashed / timed out / exited non-zero contributes NO dims and NO signal, and
     the aggregator logs it as a dropped worker (never silent truncation).
 
-    ``transcript_path`` (S6) is THIS worker's ISOLATED RunTranscript jsonl (the
-    one its ``train.py`` subprocess wrote to via ``GEODE_RUN_TRANSCRIPT_PATH`` so
+    ``timeline_path`` (S6) is THIS worker's ISOLATED RunTimeline jsonl (the
+    one its ``train.py`` subprocess wrote to via ``GEODE_RUN_TIMELINE_PATH`` so
     concurrent workers never race-append a shared file). The aggregator MERGES
-    these per-worker files into the one campaign transcript after the gather.
+    these per-worker files into the one campaign timeline after the gather.
     ``None`` for a worker that never got a path assigned (e.g. a seed failure
     before the env was built) or a resumed-from-checkpoint worker whose isolated
     tempdir is already gone — merge simply skips a missing/None file (graceful).
@@ -1043,7 +1043,12 @@ class WorkerOutcome:
     dim_means: dict[str, float]
     signal: CycleSignal | None
     reason: str
-    transcript_path: Path | None = None
+    timeline_path: Path | None = None
+
+    @property
+    def transcript_path(self) -> Path | None:
+        """Deprecated field alias retained for stored test/plugin consumers."""
+        return self.timeline_path
 
 
 # ---------------------------------------------------------------------------
@@ -1282,7 +1287,7 @@ def _build_worker_env(
     promote_policy_seed: int | None,
     audit_max_samples: int,
     audit_max_connections: int,
-    transcript_path: Path | None = None,
+    timeline_path: Path | None = None,
     worker_id: str | None = None,
 ) -> dict[str, str]:
     """Build a concurrent worker's subprocess env.
@@ -1297,13 +1302,13 @@ def _build_worker_env(
     venv-activation step ``scripts/floor_sampler.sh`` performs to avoid the
     ``ModuleNotFoundError: core`` a system-python child would hit.
 
-    S6 (transcript isolation): ``transcript_path`` redirects the worker's
-    RunTranscript to an ISOLATED per-worker jsonl (``GEODE_RUN_TRANSCRIPT_PATH``)
-    so concurrent workers never race-append the shared home-dir transcript, and
+    S6 (timeline isolation): ``timeline_path`` redirects the worker's
+    RunTimeline to an ISOLATED per-worker jsonl (``GEODE_RUN_TIMELINE_PATH``)
+    so concurrent workers never race-append the shared home-dir projection, and
     ``worker_id`` (``GEODE_RUN_WORKER_ID``) stamps every event payload so the
     post-gather merge is attributable. The home-dir ``GLOBAL_AUTORESEARCH_HANDOFF_DIR``
     is keyed off ``GEODE_HOME`` (``~/.geode``), NOT ``GEODE_STATE_ROOT``, so the
-    per-worker ``GEODE_STATE_ROOT`` alone does NOT isolate the transcript — this
+    per-worker ``GEODE_STATE_ROOT`` alone does NOT isolate the timeline — this
     explicit redirect is required.
     """
     env = build_campaign_env(
@@ -1313,8 +1318,8 @@ def _build_worker_env(
         audit_max_connections=audit_max_connections,
     )
     env["GEODE_STATE_ROOT"] = str(worker_root)
-    if transcript_path is not None:
-        env["GEODE_RUN_TRANSCRIPT_PATH"] = str(transcript_path)
+    if timeline_path is not None:
+        env["GEODE_RUN_TIMELINE_PATH"] = str(timeline_path)
     if worker_id is not None:
         env["GEODE_RUN_WORKER_ID"] = worker_id
     return env
@@ -1421,11 +1426,11 @@ async def _run_isolated_worker(
 
     ``group`` is the worker-id prefix (``"gen0"`` / ``"never"`` / ``"random"``);
     the worker's ``worker_id`` is ``f"{group}-w{index}"`` and its ISOLATED
-    RunTranscript jsonl is ``<worker_root>/transcript.jsonl`` (S6). The worker's
+    RunTimeline jsonl is ``<worker_root>/events.jsonl`` (S6). The worker's
     ``train.py`` writes ALL its journal events to that file (via
-    ``GEODE_RUN_TRANSCRIPT_PATH``), stamped with ``worker_id`` (via
+    ``GEODE_RUN_TIMELINE_PATH``), stamped with ``worker_id`` (via
     ``GEODE_RUN_WORKER_ID``), so concurrent workers never race-append a shared
-    transcript; the caller merges these files after the gather. The path rides on
+    projection; the caller merges these files after the gather. The path rides on
     the returned :class:`WorkerOutcome` so the merge finds it even for a worker
     that exited non-zero (it may still have emitted ``subprocess_started`` first).
 
@@ -1435,7 +1440,7 @@ async def _run_isolated_worker(
     """
     worker_root = workers_root / f"w{index}"
     worker_id = f"{group}-w{index}"
-    transcript_path = worker_root / "transcript.jsonl"
+    timeline_path = worker_root / "events.jsonl"
     # ONE broad guard around the WHOLE worker body (Codex MCP HIGH): a failure in
     # ``mkdir`` / ``_seed_isolated_state_root`` / ``_build_worker_env`` / the spawn /
     # ``parse_fitness_result_dims`` / ``read_latest_attribution`` must NOT abort the
@@ -1450,7 +1455,7 @@ async def _run_isolated_worker(
             promote_policy_seed=promote_policy_seed,
             audit_max_samples=audit_max_samples,
             audit_max_connections=audit_max_connections,
-            transcript_path=transcript_path,
+            timeline_path=timeline_path,
             worker_id=worker_id,
         )
         result = await runner_fn(env=env, dry_run=dry_run, per_audit_timeout=per_audit_timeout)
@@ -1463,7 +1468,7 @@ async def _run_isolated_worker(
                 dim_means={},
                 signal=None,
                 reason=f"train.py exited {returncode}",
-                transcript_path=transcript_path,
+                timeline_path=timeline_path,
             )
         measure_dims = parse_fitness_result_dims(getattr(result, "stdout", None)) or {}
         # Read THIS worker's signal from its OWN isolated mutations.jsonl (the worker
@@ -1484,7 +1489,7 @@ async def _run_isolated_worker(
                 dim_means={},
                 signal=None,
                 reason="zero exit but no usable measurement (no dims, no attribution)",
-                transcript_path=transcript_path,
+                timeline_path=timeline_path,
             )
         return WorkerOutcome(
             index=index,
@@ -1493,7 +1498,7 @@ async def _run_isolated_worker(
             dim_means=measure_dims,
             signal=signal,
             reason="ok",
-            transcript_path=transcript_path,
+            timeline_path=timeline_path,
         )
     except Exception as exc:
         return WorkerOutcome(
@@ -1503,12 +1508,12 @@ async def _run_isolated_worker(
             dim_means={},
             signal=None,
             reason=f"worker error ({type(exc).__name__}): {exc}",
-            transcript_path=transcript_path,
+            timeline_path=timeline_path,
         )
 
 
-def _transcript_sort_key(row: dict[str, Any]) -> tuple[float, int]:
-    """Sort key for a merged transcript row — ``(ts, seq)``.
+def _timeline_sort_key(row: dict[str, Any]) -> tuple[float, int]:
+    """Sort key for a merged timeline row — ``(ts, seq)``.
 
     Both casts are graceful (CLAUDE.md boundary rule): a row missing / carrying a
     malformed ``ts`` sorts to the front (``-inf``) rather than crashing the merge,
@@ -1525,18 +1530,18 @@ def _transcript_sort_key(row: dict[str, Any]) -> tuple[float, int]:
     return (ts if ts is not None else float("-inf"), seq)
 
 
-def merge_worker_transcripts(
-    worker_transcripts: Sequence[Path | None],
+def merge_worker_timelines(
+    worker_timelines: Sequence[Path | None],
     dest: Path,
 ) -> int:
-    """Merge the per-worker ISOLATED transcripts into one campaign transcript (S6).
+    """Merge isolated worker timelines into one campaign timeline (S6).
 
     The concurrent gen-0 / control-arm workers each wrote to their OWN
-    ``transcript.jsonl`` (``GEODE_RUN_TRANSCRIPT_PATH``) so their journal events
+    ``events.jsonl`` (``GEODE_RUN_TIMELINE_PATH``) so their journal events
     never race-corrupted a shared file (POSIX append is not atomic above
     ``PIPE_BUF``). This reads every worker's rows, sorts the UNION by ``(ts, seq)``
     so the operator gets one coherent ordered replay, and APPENDS them to ``dest``
-    (the campaign transcript). Each row already carries ``worker_id`` (stamped by
+    (the campaign timeline). Each row already carries ``worker_id`` (stamped by
     ``_emit_journal`` from ``GEODE_RUN_WORKER_ID``) so the merged view stays
     attributable per worker.
 
@@ -1551,17 +1556,51 @@ def merge_worker_transcripts(
     ``TemporaryDirectory`` context removes on exit.
     """
     rows: list[dict[str, Any]] = []
-    for path in worker_transcripts:
+    for path in worker_timelines:
         if path is not None:
             rows.extend(iter_jsonl(path))
     if not rows:
         return 0
-    rows.sort(key=_transcript_sort_key)
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    with dest.open("a", encoding="utf-8") as fh:
-        for row in rows:
-            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+    rows.sort(key=_timeline_sort_key)
+    from core.self_improving.loop.observe.run_timeline import RunTimeline
+
+    timeline = RunTimeline(
+        session_id=dest.parent.name or "campaign",
+        gen_tag="campaign",
+        component="self_improving_campaign",
+        path=dest,
+    )
+    for row in rows:
+        timeline.append(
+            str(row.get("kind") or row.get("event") or "worker.event"),
+            level=str(row.get("level") or "info"),
+            payload=(dict(row["payload"]) if isinstance(row.get("payload"), dict) else {}),
+            ts=_as_float(row.get("occurred_at", row.get("ts"))),
+            actor_type=str(row.get("actor_type") or "worker"),
+            actor_id=str(row.get("actor_id") or ""),
+            action=str(row.get("action") or ""),
+            entity_type=str(row.get("entity_type") or ""),
+            entity_id=str(row.get("entity_id") or ""),
+            task_id=str(row.get("task_id") or ""),
+            turn_id=str(row.get("turn_id") or ""),
+            call_id=str(row.get("call_id") or ""),
+        )
     return len(rows)
+
+
+def merge_worker_transcripts(
+    worker_transcripts: Sequence[Path | None],
+    dest: Path,
+) -> int:
+    """Deprecated compatibility alias for :func:`merge_worker_timelines`."""
+    import warnings
+
+    warnings.warn(
+        "merge_worker_transcripts is deprecated; use merge_worker_timelines",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return merge_worker_timelines(worker_transcripts, dest)
 
 
 async def run_gen0_baseline_async(
@@ -1576,7 +1615,7 @@ async def run_gen0_baseline_async(
     workers_root: Path | None = None,
     runner_fn: Any | None = None,
     checkpoint: RunCheckpoint | None = None,
-    campaign_transcript: Path | None = None,
+    campaign_timeline: Path | None = None,
 ) -> NoiseBand:
     """Async parallel sibling of :func:`run_gen0_baseline`.
 
@@ -1602,8 +1641,8 @@ async def run_gen0_baseline_async(
     disabled one with ``run_id=None``) keeps the pre-S4 behaviour: every replicate
     runs, the K-mean always (re)writes.
 
-    ``campaign_transcript`` (S6) is the destination the per-worker ISOLATED
-    transcripts are MERGED into after the gather (sorted by ``(ts, seq)``, each row
+    ``campaign_timeline`` (S6) is the destination the isolated worker
+    timelines are MERGED into after the gather (sorted by ``(ts, seq)``, each row
     already ``worker_id``-stamped). ``None`` SKIPS the merge entirely — the
     sequential / pre-S6 callers need no merge. The merge happens INSIDE the
     tempdir context, before the per-worker files are cleaned up.
@@ -1645,16 +1684,14 @@ async def run_gen0_baseline_async(
                     )
                 )
             )
-            # S6 — merge the per-worker isolated transcripts into the campaign
-            # transcript while the tempdir (the workers' isolated GEODE_STATE_ROOT
-            # tree, where each transcript.jsonl lives) is still alive.
-            if campaign_transcript is not None:
-                merged = merge_worker_transcripts(
-                    [o.transcript_path for o in fresh], campaign_transcript
-                )
+            # S6 — merge the isolated worker timelines into the campaign
+            # timeline while the tempdir (the workers' isolated GEODE_STATE_ROOT
+            # tree, where each events.jsonl lives) is still alive.
+            if campaign_timeline is not None:
+                merged = merge_worker_timelines([o.timeline_path for o in fresh], campaign_timeline)
                 progress.emit(
-                    f"gen-0 baseline (async): merged {merged} per-worker transcript event(s) "
-                    f"→ {campaign_transcript}"
+                    f"gen-0 baseline (async): merged {merged} per-worker timeline event(s) "
+                    f"→ {campaign_timeline}"
                 )
     fresh_ok = [o for o in fresh if o.ok]
     dropped = [o for o in fresh if not o.ok]
@@ -1814,7 +1851,7 @@ async def run_control_arms_async(
     workers_root: Path | None = None,
     runner_fn: Any | None = None,
     checkpoint: RunCheckpoint | None = None,
-    campaign_transcript: Path | None = None,
+    campaign_timeline: Path | None = None,
 ) -> dict[str, ControlArmFloor]:
     """Fan EVERY path-independent control arm's cycles out in ONE concurrent gather.
 
@@ -1847,11 +1884,11 @@ async def run_control_arms_async(
       resumed run re-runs only the missing cycles of each arm, never cross-attributed.
     * Reproducibility (#4): the random seed is :func:`_control_cycle_seed` —
       ``(arm_index, n, cycle)``-keyed, order-independent.
-    * Transcript isolation (#5): each arm's cycle workers live under their OWN
+    * Timeline isolation (#5): each arm's cycle workers live under their OWN
       subtree (``<roots_parent>/<arm>/w{cycle}``) so a ``never`` cycle and a
       ``random`` cycle with the SAME index never collide on a worker root /
-      transcript file. The per-worker transcripts are merged into the one campaign
-      transcript after the gather.
+      timeline file. The per-worker timelines are merged into the one campaign
+      timeline after the gather.
 
     Returns ``{arm: ControlArmFloor}`` for every arm in ``control_arms``.
     """
@@ -1924,16 +1961,16 @@ async def run_control_arms_async(
             # Partition the flat result back by arm (attribution invariant #1).
             for task_arm, outcome in zip(arm_of_task, outcomes, strict=True):
                 fresh_by_arm[task_arm].append(outcome)
-            # S6 — merge ALL arms' per-cycle isolated transcripts into the campaign
-            # transcript while the tempdir is still alive (one merge for the gather).
-            if campaign_transcript is not None:
-                merged = merge_worker_transcripts(
-                    [o.transcript_path for outcomes in fresh_by_arm.values() for o in outcomes],
-                    campaign_transcript,
+            # S6 — merge all arms' isolated per-cycle timelines into the campaign
+            # timeline while the tempdir is still alive (one merge for the gather).
+            if campaign_timeline is not None:
+                merged = merge_worker_timelines(
+                    [o.timeline_path for outcomes in fresh_by_arm.values() for o in outcomes],
+                    campaign_timeline,
                 )
                 progress.emit(
-                    f"control arms (async): merged {merged} per-cycle transcript "
-                    f"event(s) → {campaign_transcript}"
+                    f"control arms (async): merged {merged} per-cycle timeline "
+                    f"event(s) → {campaign_timeline}"
                 )
 
     return {
@@ -2330,9 +2367,7 @@ def run_campaign(
             if use_async
             else None
         )
-        campaign_transcript = (
-            (CAMPAIGN_RUNS_DIR / "campaign-transcript.jsonl") if use_async else None
-        )
+        campaign_timeline = (CAMPAIGN_RUNS_DIR / "campaign-events.jsonl") if use_async else None
 
         if use_async:
             progress.emit(
@@ -2354,7 +2389,7 @@ def run_campaign(
                     snapshot_dir=snapshot_dir,
                     per_audit_timeout=per_audit_timeout,
                     checkpoint=ckpt,
-                    campaign_transcript=campaign_transcript,
+                    campaign_timeline=campaign_timeline,
                 )
             )
         else:
@@ -2401,7 +2436,7 @@ def run_campaign(
                         snapshot_dir=snapshot_dir,
                         per_audit_timeout=per_audit_timeout,
                         checkpoint=ckpt,
-                        campaign_transcript=campaign_transcript,
+                        campaign_timeline=campaign_timeline,
                     )
                 )
                 for arm, _arm_index in control_arms:

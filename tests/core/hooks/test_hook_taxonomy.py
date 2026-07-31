@@ -398,12 +398,14 @@ def test_direct_trigger_validates_payload_contract(caplog):
     assert len(warnings) == 1  # same site -> deduped
 
 
-def test_activity_schema_version_bumped():
+def test_activity_and_hook_store_schema_versions_are_pinned():
     from core.observability.activity import ActivityRowBase
     from core.observability.event_store import EVENT_SCHEMA_VERSION
 
     assert ActivityRowBase.model_fields["schema_version"].default == 2
-    assert EVENT_SCHEMA_VERSION == 2
+    # Hook persistence gained indexed correlation columns independently of the
+    # activity-row payload contract.
+    assert EVENT_SCHEMA_VERSION == 3
 
 
 def test_single_approval_requested_per_gate():

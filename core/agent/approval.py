@@ -410,7 +410,11 @@ class ApprovalWorkflow:
         """Return ``y``/``n`` for a decisive public hook, else ask the user."""
         if self._hook_registry is None:
             return None
-        from core.agent.cognitive_state_ctx import get_session_id, get_turn_id
+        from core.agent.cognitive_state_ctx import (
+            get_session_id,
+            get_tool_call_id,
+            get_turn_id,
+        )
         from core.hooks.public import (
             HookAction,
             HookCorrelation,
@@ -431,6 +435,7 @@ class ApprovalWorkflow:
             correlation=HookCorrelation(
                 session_id=get_session_id(),
                 turn_id=get_turn_id(),
+                tool_call_id=get_tool_call_id(),
             ),
         )
         actions = {decision.action for decision in outcome.decisions}

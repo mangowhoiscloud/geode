@@ -8,6 +8,7 @@ Used by BashTool.to_tool_result() and MCP tool result post-processing.
 from __future__ import annotations
 
 import re
+from typing import Any
 
 # API key patterns ordered from most specific to most general.
 # More specific patterns (sk-ant-, sk-proj-) are checked first to avoid
@@ -36,3 +37,11 @@ def redact_secrets(text: str, *, placeholder: str = "[REDACTED]") -> str:
     for pattern in _SECRET_PATTERNS:
         text = pattern.sub(placeholder, text)
     return text
+
+
+def redact_and_bound_text(value: Any, max_chars: int) -> str:
+    """Redact one value, then append an explicit truncation marker if needed."""
+    text = redact_secrets(str(value or ""))
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars] + f"…[truncated:{len(text) - max_chars}]"

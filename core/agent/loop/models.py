@@ -69,6 +69,42 @@ class TerminationReason(StrEnum):
     UNKNOWN = "unknown"
 
 
+FAILURE_TERMINATION_REASONS: frozenset[str] = frozenset(
+    {
+        TerminationReason.MODEL_ACTION_REQUIRED,
+        TerminationReason.CONTEXT_EXHAUSTED,
+        TerminationReason.LLM_ERROR,
+        TerminationReason.BILLING_ERROR,
+        TerminationReason.COST_BUDGET_EXCEEDED,
+        TerminationReason.CONVERGENCE_DETECTED,
+        TerminationReason.EXTERNAL_VERIFICATION_REQUIRED,
+    }
+)
+"""Terminal reasons whose text is diagnostic or withheld, not task success."""
+
+
+def is_failure_termination(reason: TerminationReason | str | None) -> bool:
+    """Classify one terminal reason using the runtime-wide closed SOT."""
+    return str(reason or TerminationReason.UNKNOWN) in FAILURE_TERMINATION_REASONS
+
+
+SUCCESSFUL_TASK_TERMINATION_REASONS: frozenset[str] = frozenset(
+    {
+        TerminationReason.NATURAL,
+        TerminationReason.FORCED_TEXT,
+        TerminationReason.ACTIONABLE_PARTIAL,
+    }
+)
+"""Terminals that represent a deliverable task outcome to an outer loop."""
+
+
+def is_successful_task_termination(
+    reason: TerminationReason | str | None,
+) -> bool:
+    """Return whether an external evaluator may count the task as completed."""
+    return str(reason or TerminationReason.UNKNOWN) in SUCCESSFUL_TASK_TERMINATION_REASONS
+
+
 class _ContextExhaustedError(Exception):
     """Raised when context remains critical after pruning — unrecoverable."""
 

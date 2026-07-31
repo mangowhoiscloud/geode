@@ -54,8 +54,9 @@ def test_public_session_start_and_end_have_durable_cardinality() -> None:
     registry.register(HookName.SESSION_START, observe)
     registry.register(HookName.SESSION_END, observe)
 
-    def mark_completed(_session_id: str) -> None:
+    def mark_completed(_session_id: str) -> bool:
         checkpoint.status = "completed"
+        return True
 
     checkpoint.mark_completed = mark_completed
     checkpoint.current_status = lambda _session_id: checkpoint.status
@@ -84,6 +85,34 @@ def test_public_session_start_and_end_have_durable_cardinality() -> None:
         (HookName.SESSION_START, ""),
         (HookName.SESSION_END, "completed"),
     ]
+
+
+def test_deprecated_sync_close_emits_session_end_without_active_event_loop() -> None:
+    observed: list[HookName] = []
+    registry = HookRegistry()
+    registry.register(
+        HookName.SESSION_END,
+        lambda invocation: observed.append(invocation.name),
+    )
+    checkpoint = SimpleNamespace(
+        mark_completed=lambda _session_id: True,
+        current_status=lambda _session_id: "completed",
+    )
+    loop = SimpleNamespace(
+        _hook_registry=registry,
+        _checkpoint=checkpoint,
+        _session_id="s-sync",
+        _turn_id="t-sync",
+        _session_generation=1,
+        _public_session_ended=False,
+        _parent_session_key="",
+        _timeline=None,
+    )
+
+    with pytest.warns(DeprecationWarning, match="amark_session_completed"):
+        _lifecycle.mark_session_completed(loop)
+
+    assert observed == [HookName.SESSION_END]
 
 
 def test_permission_request_can_deny_without_prompting_human() -> None:

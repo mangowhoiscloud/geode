@@ -1,13 +1,16 @@
-"""One K3-shaped message list over the agent trajectories on this machine.
+"""Versioned GEODE trajectories plus legacy K3/Codex adapters.
 
-Reading a session used to mean opening ``transcripts/`` for the dialogue and
-``evidence/`` for the judgment rows and reconciling them by hand, because each
-writer keeps its own row shape — and a Codex session was a third format again.
-This module is the join: it replays either harness into the channel/tool-index
-message list that Kimi K3's chat template uses (arXiv:2607.24653 Appendix F),
-so a trajectory is one ordered object regardless of which agent produced it.
+``geode.trajectory@1`` is the public evaluation artifact contract. Canonical
+GEODE sessions and benchmark runs are built from
+``sessions.db:session_events``. The older
+K3-shaped projection and Codex rollout reader remain adapters: they do not own
+the persisted schema.
 
-Two harnesses are read today, and they fail in opposite directions, which is
+Legacy discovery still accepts GEODE transcript JSONL and Codex rollout JSONL.
+Those readers feed the retained K3 channel/tool-index adapter; new exports use
+the schema-backed trajectory builder.
+
+The two legacy readers fail in opposite directions, which is
 why the format has to carry both cases rather than assume the better one:
 
 * ``geode`` — ``~/.geode/transcripts/``. No thinking event exists, so ``think``
@@ -29,24 +32,940 @@ matching result repeats it, which is what makes a result attributable to its
 call when several are in flight. ``think`` is always present even when empty,
 because K3 keeps the channel so message structure stays constant across turns.
 
-Read-only. It does not write, migrate, or alter the on-disk stores.
+Export is atomic and validates the complete artifact before replacing the
+destination. Source SQLite rows and legacy files are never rewritten.
 """
 
 from __future__ import annotations
 
 import json
+import math
 import sqlite3
+from collections.abc import Mapping, Sequence
+from datetime import UTC, datetime
+from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
+from core.memory.atomic_write import atomic_write_json
 from core.paths import GEODE_HOME, GLOBAL_TRANSCRIPTS_DIR
 
-__all__ = ["discover", "load", "merge", "resolve"]
+TRAJECTORY_SCHEMA_ID = "geode.trajectory@1"
+TRAJECTORY_SCHEMA_VERSION = 1
+
+__all__ = [
+    "TRAJECTORY_SCHEMA_ID",
+    "TRAJECTORY_SCHEMA_VERSION",
+    "build_trajectory",
+    "discover",
+    "export_trajectory",
+    "load",
+    "merge",
+    "normalize_trajectory_artifact",
+    "resolve",
+    "to_k3",
+    "trajectory_from_session",
+    "trajectory_from_sessions",
+    "verify_trajectory_integrity",
+]
 
 _DIALOGUE_EVENTS = {"user_message", "assistant_message", "tool_call", "tool_result"}
+_TOOL_CALL_KINDS = {"tool.called", "tool_call"}
+_TOOL_RESULT_KINDS = {"tool.completed", "tool_result"}
+_TURN_SCOPED_KINDS = {
+    "message.user",
+    "message.assistant",
+    "user_message",
+    "assistant_message",
+    *_TOOL_CALL_KINDS,
+    *_TOOL_RESULT_KINDS,
+    "turn.completed",
+    "verification.continued",
+    "verification.evidence",
+    "verification.pending",
+}
 
 
 CODEX_SESSIONS_DIR = Path.home() / ".codex" / "sessions"
+
+
+def _iso_timestamp(value: Any) -> str:
+    if value is None:
+        return datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    if isinstance(value, str):
+        candidate = value.strip()
+        if candidate:
+            if candidate.endswith("Z"):
+                candidate = candidate[:-1] + "+00:00"
+            try:
+                parsed = datetime.fromisoformat(candidate)
+            except ValueError:
+                pass
+            else:
+                if parsed.tzinfo is None:
+                    parsed = parsed.replace(tzinfo=UTC)
+                return parsed.astimezone(UTC).isoformat().replace("+00:00", "Z")
+    try:
+        timestamp = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"invalid trajectory timestamp: {value!r}") from exc
+    if not math.isfinite(timestamp):
+        raise ValueError(f"invalid trajectory timestamp: {value!r}")
+    return datetime.fromtimestamp(timestamp, UTC).isoformat().replace("+00:00", "Z")
+
+
+def _trajectory_event(
+    raw: Mapping[str, Any],
+    *,
+    ordinal: int,
+    default_session_id: str,
+    fallback_occurred_at: str,
+) -> dict[str, Any]:
+    from core.observability.session_timeline import bound_session_payload
+
+    payload_raw = raw.get("payload")
+    payload = dict(payload_raw) if isinstance(payload_raw, Mapping) else {}
+    session_id = str(raw.get("session_id") or payload.get("session_id") or default_session_id)
+    turn_id = str(raw.get("turn_id") or payload.get("turn_id") or "")
+    call_id = str(raw.get("call_id") or payload.get("call_id") or "")
+    kind = str(raw.get("kind") or raw.get("event") or "event.unknown")
+    actor = str(raw.get("actor") or raw.get("role") or raw.get("actor_type") or "system")
+    occurred_at_raw = raw.get("occurred_at")
+    if occurred_at_raw is None:
+        occurred_at_raw = raw.get("timestamp")
+    if occurred_at_raw is None:
+        occurred_at_raw = raw.get("ts")
+    if occurred_at_raw is None:
+        occurred_at_raw = fallback_occurred_at
+    occurred_at = _iso_timestamp(occurred_at_raw)
+    event_id = str(raw.get("event_id") or "")
+    if not event_id:
+        canonical = json.dumps(
+            {
+                "actor": actor,
+                "call_id": call_id,
+                "kind": kind,
+                "occurred_at": occurred_at,
+                "ordinal": ordinal,
+                "payload": payload,
+                "session_id": session_id,
+                "turn_id": turn_id,
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+            default=str,
+        )
+        event_id = sha256(canonical.encode("utf-8")).hexdigest()[:32]
+    return {
+        "event_id": event_id,
+        "ordinal": ordinal,
+        "occurred_at": occurred_at,
+        "kind": kind,
+        "actor": actor,
+        "session_id": session_id,
+        "turn_id": turn_id,
+        "call_id": call_id,
+        "payload": bound_session_payload(payload),
+    }
+
+
+def build_trajectory(
+    *,
+    trajectory_id: str,
+    source: Mapping[str, Any],
+    events: Sequence[Mapping[str, Any]],
+    outcome: Mapping[str, Any],
+    provenance: Mapping[str, Any],
+    privacy: Mapping[str, Any],
+    captured_at: str | float | None = None,
+    published_at: str | float | None = None,
+    observed_on: str | None = None,
+    trajectory_class: Sequence[str] = (),
+    integrity: Mapping[str, Any] | None = None,
+    runtime_event_refs: Sequence[Mapping[str, Any]] = (),
+    evidence_refs: Sequence[Mapping[str, Any]] = (),
+    artifact_digests: Sequence[Mapping[str, Any]] = (),
+) -> dict[str, Any]:
+    """Build and validate one immutable public trajectory artifact."""
+    captured = _iso_timestamp(captured_at)
+    default_session_id = str(source.get("session") or "")
+    normalized = [
+        _trajectory_event(
+            row,
+            ordinal=index,
+            default_session_id=default_session_id,
+            fallback_occurred_at=captured,
+        )
+        for index, row in enumerate(events, start=1)
+    ]
+    quality = _trajectory_quality(normalized)
+    integrity_payload = dict(integrity or {})
+    integrity_payload["record_count"] = len(normalized)
+    legacy_complete = bool(integrity_payload.get("complete", True))
+    declared_scope_complete = bool(integrity_payload.get("scope_complete", legacy_complete))
+    declared_replay_complete = bool(integrity_payload.get("replay_complete", legacy_complete))
+    legacy_incompleteness = _string_list(integrity_payload.get("incompleteness"))
+    declared_scope_reasons = _string_list(
+        integrity_payload.get("scope_incompleteness", legacy_incompleteness)
+    )
+    declared_replay_reasons = _string_list(integrity_payload.get("replay_incompleteness"))
+    computed_scope_reasons = list(quality.pop("_scope_incompleteness"))
+    computed_replay_reasons = list(quality.pop("_replay_incompleteness"))
+    automatic_replay_reasons = _declared_replay_reduction_reasons(
+        privacy=privacy,
+        integrity=integrity_payload,
+    )
+    scope_reasons = list(dict.fromkeys([*declared_scope_reasons, *computed_scope_reasons]))
+    replay_reasons = list(
+        dict.fromkeys(
+            [
+                *declared_replay_reasons,
+                *computed_replay_reasons,
+                *automatic_replay_reasons,
+            ]
+        )
+    )
+    if not declared_scope_complete and not scope_reasons:
+        scope_reasons.append("producer declared trajectory scope incomplete")
+    if not declared_replay_complete and not replay_reasons:
+        replay_reasons.append("producer declared trajectory replay incomplete")
+    scope_complete = declared_scope_complete and not scope_reasons
+    replay_complete = scope_complete and declared_replay_complete and not replay_reasons
+    integrity_payload["scope_complete"] = scope_complete
+    integrity_payload["replay_complete"] = replay_complete
+    # ``complete`` remains a conservative compatibility alias. Publication
+    # gates interpret it as byte-replay completeness, never merely "all
+    # allowlisted rows were present".
+    integrity_payload["complete"] = replay_complete
+    integrity_payload["scope_incompleteness"] = scope_reasons
+    integrity_payload["replay_incompleteness"] = replay_reasons
+    integrity_payload["incompleteness"] = list(dict.fromkeys([*scope_reasons, *replay_reasons]))
+    integrity_payload["quality"] = quality
+    artifact: dict[str, Any] = {
+        "schema_id": TRAJECTORY_SCHEMA_ID,
+        "schema_version": TRAJECTORY_SCHEMA_VERSION,
+        "trajectory_id": trajectory_id,
+        "captured_at": captured,
+        "trajectory_class": list(dict.fromkeys(str(item) for item in trajectory_class)),
+        "source": dict(source),
+        "events": normalized,
+        "outcome": dict(outcome),
+        "integrity": integrity_payload,
+        "privacy": dict(privacy),
+        "provenance": dict(provenance),
+        "runtime_event_refs": [dict(item) for item in runtime_event_refs],
+        "evidence_refs": [dict(item) for item in evidence_refs],
+        "artifact_digests": [dict(item) for item in artifact_digests],
+    }
+    if published_at is not None:
+        artifact["published_at"] = _iso_timestamp(published_at)
+    if observed_on is not None:
+        artifact["observed_on"] = observed_on
+    from core.observability.record_schema import validate_record
+
+    validate_record(artifact)
+    verify_trajectory_integrity(artifact)
+    return artifact
+
+
+def _trajectory_quality(events: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """Compute replay and join quality from the normalized event stream."""
+    event_ids = [str(event.get("event_id") or "") for event in events]
+    if len(event_ids) != len(set(event_ids)):
+        raise ValueError("trajectory event_id values must be unique")
+    ordinals = [event.get("ordinal") for event in events]
+    expected_ordinals = list(range(1, len(events) + 1))
+    if ordinals != expected_ordinals:
+        raise ValueError("trajectory ordinals must be contiguous from one")
+
+    open_calls: dict[tuple[str, str, str], int] = {}
+    call_count = 0
+    result_count = 0
+    paired = 0
+    orphan_results = 0
+    tool_events = 0
+    missing_tool_call_ids = 0
+    turn_scoped_events = 0
+    missing_turn_ids = 0
+    payload_issue_events = 0
+    for event in events:
+        kind = str(event.get("kind") or "")
+        call_id = str(event.get("call_id") or "")
+        if kind in _TURN_SCOPED_KINDS:
+            turn_scoped_events += 1
+            if not event.get("turn_id"):
+                missing_turn_ids += 1
+        if kind in _TOOL_CALL_KINDS | _TOOL_RESULT_KINDS:
+            tool_events += 1
+            if kind in _TOOL_CALL_KINDS:
+                call_count += 1
+            else:
+                result_count += 1
+            if not call_id:
+                missing_tool_call_ids += 1
+            else:
+                key = (
+                    str(event.get("session_id") or ""),
+                    str(event.get("turn_id") or ""),
+                    call_id,
+                )
+                if kind in _TOOL_CALL_KINDS:
+                    open_calls[key] = open_calls.get(key, 0) + 1
+                elif open_calls.get(key, 0):
+                    paired += 1
+                    open_calls[key] -= 1
+                else:
+                    orphan_results += 1
+        if _payload_has_quality_issue(event.get("payload")):
+            payload_issue_events += 1
+
+    orphan_calls = sum(open_calls.values())
+    scope_incompleteness = []
+    replay_incompleteness = []
+    if not events:
+        scope_incompleteness.append("trajectory contains no events")
+    if missing_tool_call_ids:
+        scope_incompleteness.append(f"{missing_tool_call_ids} tool event(s) lack call_id")
+    if missing_turn_ids:
+        scope_incompleteness.append(f"{missing_turn_ids} turn-scoped event(s) lack turn_id")
+    if orphan_calls:
+        scope_incompleteness.append(f"{orphan_calls} tool call(s) lack a result")
+    if orphan_results:
+        scope_incompleteness.append(f"{orphan_results} tool result(s) lack a call")
+    if payload_issue_events:
+        replay_incompleteness.append(
+            f"{payload_issue_events} event payload(s) are truncated, corrupt, or omitted"
+        )
+
+    return {
+        "event_id_unique": True,
+        "ordinal_contiguous": True,
+        "correlation": {
+            "session_id_present": sum(bool(event.get("session_id")) for event in events),
+            "turn_id_present": sum(bool(event.get("turn_id")) for event in events),
+            "turn_id_required": turn_scoped_events,
+            "turn_id_missing": missing_turn_ids,
+            "tool_call_id_present": tool_events - missing_tool_call_ids,
+            "event_count": len(events),
+        },
+        "tool_pairing": {
+            "calls": call_count,
+            "results": result_count,
+            "paired": paired,
+            "orphan_calls": orphan_calls,
+            "orphan_results": orphan_results,
+            "missing_call_ids": missing_tool_call_ids,
+        },
+        "payload_issue_events": payload_issue_events,
+        "replay_fidelity": "full" if payload_issue_events == 0 else "reduced",
+        "_scope_incompleteness": scope_incompleteness,
+        "_replay_incompleteness": replay_incompleteness,
+    }
+
+
+def _string_list(value: Any) -> list[str]:
+    if not isinstance(value, Sequence) or isinstance(value, str | bytes | bytearray):
+        return []
+    return [str(item) for item in value if str(item)]
+
+
+def _declared_replay_reduction_reasons(
+    *,
+    privacy: Mapping[str, Any],
+    integrity: Mapping[str, Any],
+) -> list[str]:
+    """Turn explicit publication reductions into machine-enforced quality."""
+    reasons: list[str] = []
+    redactions = privacy.get("redactions")
+    if isinstance(redactions, Sequence) and not isinstance(redactions, str | bytes | bytearray):
+        for redaction in redactions:
+            if (
+                isinstance(redaction, Mapping)
+                and str(redaction.get("type") or "") == "content_reduction"
+            ):
+                reasons.append("privacy policy declares content reduction")
+                break
+    fidelity = str(integrity.get("fidelity") or "").strip()
+    fidelity_lower = fidelity.lower()
+    if fidelity and any(
+        marker in fidelity_lower
+        for marker in (
+            "unpublished",
+            "excluded",
+            "content reduction",
+            "digest instead",
+            "reduced",
+            "truncated",
+        )
+    ):
+        reasons.append(f"declared fidelity limits replay: {fidelity[:256]}")
+    return reasons
+
+
+def _payload_has_quality_issue(value: Any) -> bool:
+    if isinstance(value, Mapping):
+        if any(
+            key in value
+            for key in (
+                "_corrupt_payload",
+                "_content_omitted",
+                "_omitted_type",
+                "_personal_data_omitted",
+                "_timestamp_invalid",
+                "_timestamp_missing",
+                "_truncated",
+                "_truncated_items",
+            )
+        ):
+            return True
+        return any(_payload_has_quality_issue(item) for item in value.values())
+    if isinstance(value, Sequence) and not isinstance(value, str | bytes | bytearray):
+        return any(_payload_has_quality_issue(item) for item in value)
+    return isinstance(value, str) and (
+        "…[truncated:" in value or value in {"<REDACTED>", "[REDACTED]"}
+    )
+
+
+def verify_trajectory_integrity(trajectory: Mapping[str, Any]) -> dict[str, Any]:
+    """Recompute and verify integrity claims instead of trusting the producer."""
+    from core.observability.record_schema import validate_record
+
+    payload = dict(trajectory)
+    validate_record(payload, schema_id=TRAJECTORY_SCHEMA_ID)
+    events_raw = payload["events"]
+    events = [dict(event) for event in events_raw]
+    computed = _trajectory_quality(events)
+    computed_scope_reasons = list(computed.pop("_scope_incompleteness"))
+    computed_replay_reasons = list(computed.pop("_replay_incompleteness"))
+    integrity = payload["integrity"]
+    if integrity["record_count"] != len(events):
+        raise ValueError("trajectory integrity record_count does not match events")
+    if integrity["quality"] != computed:
+        raise ValueError("trajectory integrity quality does not match recomputed events")
+    scope_reasons = _string_list(integrity["scope_incompleteness"])
+    replay_reasons = _string_list(integrity["replay_incompleteness"])
+    if any(reason not in scope_reasons for reason in computed_scope_reasons):
+        raise ValueError("trajectory integrity omits computed scope incompleteness")
+    automatic_replay_reasons = _declared_replay_reduction_reasons(
+        privacy=payload["privacy"],
+        integrity=integrity,
+    )
+    if any(
+        reason not in replay_reasons
+        for reason in [*computed_replay_reasons, *automatic_replay_reasons]
+    ):
+        raise ValueError("trajectory integrity omits computed replay incompleteness")
+    expected_scope_complete = not scope_reasons
+    expected_replay_complete = expected_scope_complete and not replay_reasons
+    if bool(integrity["scope_complete"]) != expected_scope_complete:
+        raise ValueError("trajectory scope_complete contradicts scope incompleteness")
+    if bool(integrity["replay_complete"]) != expected_replay_complete:
+        raise ValueError("trajectory replay_complete contradicts replay incompleteness")
+    if bool(integrity["complete"]) != expected_replay_complete:
+        raise ValueError("trajectory complete alias contradicts replay completeness")
+    combined_reasons = list(dict.fromkeys([*scope_reasons, *replay_reasons]))
+    if _string_list(integrity["incompleteness"]) != combined_reasons:
+        raise ValueError("trajectory incompleteness union does not match scoped reasons")
+    digest_paths = [str(row["path"]) for row in payload.get("artifact_digests", [])]
+    if len(digest_paths) != len(set(digest_paths)):
+        raise ValueError("trajectory artifact digest paths must be unique")
+    for field in ("runtime_event_refs", "evidence_refs"):
+        references = [(str(row["kind"]), str(row["reference"])) for row in payload.get(field, [])]
+        if len(references) != len(set(references)):
+            raise ValueError(f"trajectory {field} identities must be unique")
+    return {
+        "record_count": len(events),
+        "evidence_ref_count": len(payload.get("evidence_refs", [])),
+        "runtime_event_ref_count": len(payload.get("runtime_event_refs", [])),
+        "source_digest_ref_count": len(digest_paths),
+        "complete": bool(integrity["complete"]),
+        "scope_complete": bool(integrity["scope_complete"]),
+        "replay_complete": bool(integrity["replay_complete"]),
+    }
+
+
+def trajectory_from_sessions(
+    session_ids: Sequence[str],
+    *,
+    trajectory_id: str,
+    source: Mapping[str, Any],
+    db_path: Path | str | None = None,
+    outcome: Mapping[str, Any] | None = None,
+    provenance: Mapping[str, Any] | None = None,
+    privacy: Mapping[str, Any] | None = None,
+    artifact_digests: Sequence[Mapping[str, Any]] = (),
+    runtime_event_refs: Sequence[Mapping[str, Any]] = (),
+    evidence_refs: Sequence[Mapping[str, Any]] = (),
+    content_policy: str = "full",
+    runtime_event_db_path: Path | str | None = None,
+    trajectory_class: Sequence[str] = ("dialogue", "tool", "lifecycle"),
+) -> dict[str, Any]:
+    """Build one validated trajectory from one or more canonical sessions."""
+    from core.observability.session_timeline import SessionEventStore
+
+    ordered_session_ids = list(dict.fromkeys(str(value) for value in session_ids if value))
+    store = SessionEventStore(db_path)
+    rows_by_session = {session_id: store.read(session_id) for session_id in ordered_session_ids}
+    rows = [row for session_id in ordered_session_ids for row in rows_by_session[session_id]]
+    rows.sort(key=lambda row: row.id)
+    if content_policy not in {"full", "digest"}:
+        raise ValueError("trajectory content_policy must be 'full' or 'digest'")
+    events = []
+    for row in rows:
+        event_payload: dict[str, Any] = {
+            **row.payload,
+            "model": row.model,
+            "provider": row.provider,
+            "status": row.status,
+            "source": row.source,
+            "session_generation": row.session_generation,
+            "parent_event_id": row.parent_event_id,
+            "source_payload_hash": row.payload_hash,
+        }
+        if content_policy == "digest":
+            event_payload = _digest_private_event_payload(row.kind, event_payload)
+        events.append(
+            {
+                "event_id": row.event_id,
+                "occurred_at": row.occurred_at,
+                "kind": row.kind,
+                "actor": row.role or "agent",
+                "session_id": row.session_id,
+                "turn_id": row.turn_id,
+                "call_id": row.call_id,
+                "payload": event_payload,
+            }
+        )
+    incompleteness = []
+    if not ordered_session_ids:
+        incompleteness.append("source carried no GEODE session identifiers")
+    for session_id, session_rows in rows_by_session.items():
+        if not session_rows:
+            incompleteness.append(f"session {session_id} has no canonical events")
+            continue
+        if session_rows[-1].kind != "session.ended":
+            incompleteness.append(f"session {session_id} has no terminal event")
+        terminal_payload = session_rows[-1].payload
+        if int(terminal_payload.get("record_failures", 0) or 0) > 0:
+            incompleteness.append(f"session {session_id} reports canonical write failures")
+    automatic_runtime_refs = _runtime_event_references(
+        Path(runtime_event_db_path) if runtime_event_db_path is not None else store.db_path,
+        ordered_session_ids,
+    )
+    automatic_evidence_refs = _verification_evidence_references(rows)
+    return build_trajectory(
+        trajectory_id=trajectory_id,
+        source=source,
+        events=events,
+        outcome=outcome or {"scored": False},
+        provenance=provenance or {"store": "sessions.db:session_events"},
+        privacy=privacy or {"review_state": "local"},
+        trajectory_class=trajectory_class,
+        integrity={
+            "scope_complete": bool(rows) and not incompleteness,
+            "replay_complete": bool(rows) and not incompleteness,
+            "scope_incompleteness": incompleteness,
+        },
+        artifact_digests=artifact_digests,
+        runtime_event_refs=_dedupe_external_references(
+            (*runtime_event_refs, *automatic_runtime_refs)
+        ),
+        evidence_refs=_dedupe_external_references((*evidence_refs, *automatic_evidence_refs)),
+    )
+
+
+def _dedupe_external_references(
+    references: Sequence[Mapping[str, Any]],
+) -> tuple[dict[str, Any], ...]:
+    unique: dict[tuple[str, str], dict[str, Any]] = {}
+    for reference in references:
+        row = dict(reference)
+        identity = (str(row.get("kind") or ""), str(row.get("reference") or ""))
+        unique.setdefault(identity, row)
+    return tuple(unique.values())
+
+
+def _verification_evidence_references(
+    rows: Sequence[Any],
+) -> tuple[dict[str, Any], ...]:
+    references: list[Mapping[str, Any]] = []
+    for row in rows:
+        if row.kind not in {
+            "verification.evidence",
+            "verification.pending",
+        }:
+            continue
+        raw = row.payload.get("references")
+        if not isinstance(raw, Sequence) or isinstance(raw, str | bytes | bytearray):
+            continue
+        references.extend(item for item in raw if isinstance(item, Mapping))
+    return _dedupe_external_references(references)
+
+
+def _runtime_event_references(
+    db_path: Path,
+    session_ids: Sequence[str],
+) -> tuple[dict[str, Any], ...]:
+    """Bind indexed hook-event cohorts without embedding the private store."""
+    if not db_path.is_file() or not session_ids:
+        return ()
+    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+    try:
+        columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(hook_events)").fetchall()}
+        required = {
+            "id",
+            "event",
+            "payload_hash",
+            "session_id",
+            "turn_id",
+            "tool_call_id",
+            "llm_call_id",
+            "llm_attempt_id",
+        }
+        if not required.issubset(columns):
+            return ()
+        references: list[dict[str, Any]] = []
+        for session_id in session_ids:
+            rows = conn.execute(
+                """\
+                SELECT id, event, payload_hash, turn_id, tool_call_id,
+                       llm_call_id, llm_attempt_id
+                FROM hook_events
+                WHERE session_id = ?
+                ORDER BY id
+                """,
+                (session_id,),
+            ).fetchall()
+            if not rows:
+                continue
+            canonical = json.dumps(
+                [dict(row) for row in rows],
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            ).encode("utf-8")
+            digest = sha256(canonical).hexdigest()
+            references.append(
+                {
+                    "kind": "runtime_event",
+                    "schema_id": "geode.hook-event@3",
+                    "authority": "GEODE local runtime hook event store",
+                    "reference": f"hook-events-sha256:{digest}",
+                    "session_id": session_id,
+                    "record_count": len(rows),
+                    "sha256": digest,
+                }
+            )
+        return tuple(references)
+    finally:
+        conn.close()
+
+
+def _digest_private_event_payload(
+    kind: str,
+    payload: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Allowlist structural fields and digest every other benchmark payload."""
+    protected = dict(payload)
+    structural = {
+        "model",
+        "provider",
+        "status",
+        "source",
+        "session_generation",
+        "parent_event_id",
+        "source_payload_hash",
+    }
+    safe_by_kind = {
+        "session.ended": {
+            "duration_s",
+            "total_cost_usd",
+            "rounds",
+            "prompt_tokens",
+            "completion_tokens",
+            "record_failures",
+            "projection_failed",
+        },
+        "turn.completed": {
+            "termination_reason",
+            "rounds",
+            "tool_call_count",
+            "failed",
+            "successful",
+        },
+        "tool.called": {"tool"},
+        "tool.completed": {"tool"},
+        "usage.recorded": {"input_tokens", "output_tokens", "cost_usd"},
+        "error.recorded": {"error_type"},
+        "verification.evidence": {
+            "references",
+            "root_turn_id",
+            "verify_attempt",
+            "policy_action",
+        },
+        "verification.pending": {
+            "candidate_sha256",
+            "candidate_bytes",
+            "root_turn_id",
+            "verify_attempt",
+            "references",
+        },
+    }
+    allowed = structural | safe_by_kind.get(kind, set())
+    omitted_payload = {field: protected.pop(field) for field in sorted(set(protected) - allowed)}
+    if omitted_payload:
+        raw = json.dumps(
+            omitted_payload,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+            default=str,
+        ).encode("utf-8")
+        protected["_omitted_payload_sha256"] = sha256(raw).hexdigest()
+        protected["_omitted_payload_bytes"] = len(raw)
+        protected["_content_omitted"] = sorted(omitted_payload)
+    return protected
+
+
+def trajectory_from_session(
+    session_id: str,
+    *,
+    db_path: Path | str | None = None,
+    outcome: Mapping[str, Any] | None = None,
+    provenance: Mapping[str, Any] | None = None,
+    privacy: Mapping[str, Any] | None = None,
+    artifact_digests: Sequence[Mapping[str, Any]] = (),
+    runtime_event_refs: Sequence[Mapping[str, Any]] = (),
+    evidence_refs: Sequence[Mapping[str, Any]] = (),
+    content_policy: str = "full",
+) -> dict[str, Any]:
+    """Build a validated trajectory directly from canonical SQLite history."""
+    return trajectory_from_sessions(
+        (session_id,),
+        trajectory_id=f"geode-session-{session_id}",
+        source={"harness": "geode", "run": session_id, "session": session_id, "parents": None},
+        db_path=db_path,
+        outcome=outcome,
+        provenance=provenance,
+        privacy=privacy,
+        artifact_digests=artifact_digests,
+        runtime_event_refs=runtime_event_refs,
+        evidence_refs=evidence_refs,
+        content_policy=content_policy,
+    )
+
+
+def export_trajectory(path: Path | str, trajectory: Mapping[str, Any]) -> Path:
+    """Validate then atomically write one trajectory JSON artifact."""
+    payload = dict(trajectory)
+    from core.observability.record_schema import validate_record
+
+    validate_record(payload, schema_id=TRAJECTORY_SCHEMA_ID)
+    verify_trajectory_integrity(payload)
+    destination = Path(path)
+    atomic_write_json(destination, payload, indent=2)
+    return destination
+
+
+def normalize_trajectory_artifact(trajectory: Mapping[str, Any]) -> dict[str, Any]:
+    """Read current or dated artifact-repository trajectories as ``@1``.
+
+    Published dated releases are immutable. This adapter migrates their
+    ``sequence``/``timestamp`` event names in memory and never rewrites the
+    original artifact.
+    """
+    schema_id = str(trajectory.get("schema_id") or "")
+    if schema_id == TRAJECTORY_SCHEMA_ID:
+        payload = dict(trajectory)
+        from core.observability.record_schema import validate_record
+
+        validate_record(payload, schema_id=TRAJECTORY_SCHEMA_ID)
+        return payload
+    if not schema_id.startswith("geode.trajectory@20"):
+        raise ValueError(f"unsupported trajectory schema: {schema_id!r}")
+    source_raw = trajectory.get("source")
+    source = dict(source_raw) if isinstance(source_raw, Mapping) else {}
+    trajectory_id = str(trajectory.get("trajectory_id") or "")
+    source["session"] = str(
+        source.get("session") or source.get("run") or trajectory_id or "legacy-publication"
+    )
+    raw_events = trajectory.get("events")
+    events = []
+    if isinstance(raw_events, Sequence) and not isinstance(raw_events, str | bytes):
+        for raw in raw_events:
+            if not isinstance(raw, Mapping):
+                continue
+            payload_raw = raw.get("payload")
+            payload = dict(payload_raw) if isinstance(payload_raw, Mapping) else {}
+            legacy_occurred_at = (
+                raw.get("occurred_at")
+                if raw.get("occurred_at") is not None
+                else (raw.get("timestamp") if raw.get("timestamp") is not None else raw.get("ts"))
+            )
+            if legacy_occurred_at is None:
+                payload["_timestamp_missing"] = True
+            else:
+                try:
+                    _iso_timestamp(legacy_occurred_at)
+                except ValueError:
+                    payload["_timestamp_invalid"] = True
+                    legacy_occurred_at = None
+            events.append(
+                {
+                    "event_id": raw.get("event_id"),
+                    "occurred_at": legacy_occurred_at,
+                    "kind": raw.get("kind"),
+                    "actor": raw.get("actor"),
+                    "session_id": raw.get("session_id", source["session"]),
+                    "turn_id": raw.get("turn_id", ""),
+                    "call_id": raw.get("call_id", payload.get("call_id", "")),
+                    "payload": payload,
+                }
+            )
+    provenance_raw = trajectory.get("provenance")
+    provenance = dict(provenance_raw) if isinstance(provenance_raw, Mapping) else {}
+    provenance["migrated_from_schema_id"] = schema_id
+    integrity_raw = trajectory.get("integrity")
+    legacy_integrity = dict(integrity_raw) if isinstance(integrity_raw, Mapping) else {}
+    privacy_raw = trajectory.get("privacy")
+    legacy_incompleteness_raw = legacy_integrity.get("incompleteness")
+    legacy_incompleteness = (
+        [str(item) for item in legacy_incompleteness_raw if str(item)]
+        if isinstance(legacy_incompleteness_raw, Sequence)
+        and not isinstance(legacy_incompleteness_raw, str | bytes)
+        else []
+    )
+    legacy_fidelity = str(legacy_integrity.get("fidelity") or "").strip()
+    legacy_privacy = privacy_raw if isinstance(privacy_raw, Mapping) else {}
+    legacy_redactions = legacy_privacy.get("redactions")
+    if "complete" not in legacy_integrity:
+        legacy_incompleteness.append("legacy publication does not declare replay completeness")
+    if legacy_fidelity:
+        legacy_incompleteness.append(f"legacy fidelity scope: {legacy_fidelity[:256]}")
+    if (
+        isinstance(legacy_redactions, Sequence)
+        and not isinstance(legacy_redactions, str | bytes)
+        and legacy_redactions
+    ):
+        legacy_incompleteness.append("legacy publication declares privacy redactions")
+    trajectory_class_raw = trajectory.get("trajectory_class")
+    trajectory_class = (
+        trajectory_class_raw
+        if isinstance(trajectory_class_raw, Sequence)
+        and not isinstance(trajectory_class_raw, str | bytes)
+        else ()
+    )
+    outcome_raw = trajectory.get("outcome")
+    artifact_digests_raw = trajectory.get("artifact_digests")
+    runtime_event_refs_raw = trajectory.get("runtime_event_refs")
+    evidence_refs_raw = trajectory.get("evidence_refs")
+    return build_trajectory(
+        trajectory_id=trajectory_id or f"migrated-{sha256(schema_id.encode()).hexdigest()[:16]}",
+        captured_at=trajectory.get("captured_at"),
+        published_at=trajectory.get("published_at"),
+        observed_on=(
+            str(trajectory["observed_on"]) if trajectory.get("observed_on") is not None else None
+        ),
+        trajectory_class=trajectory_class,
+        source=source,
+        events=events,
+        outcome=outcome_raw if isinstance(outcome_raw, Mapping) else {"scored": False},
+        provenance=provenance,
+        privacy=(privacy_raw if isinstance(privacy_raw, Mapping) else {"review_state": "unknown"}),
+        integrity={
+            "scope_complete": True,
+            "replay_complete": False,
+            "scope_incompleteness": [],
+            "replay_incompleteness": legacy_incompleteness,
+            "fidelity": legacy_fidelity,
+            "legacy_integrity": legacy_integrity,
+        },
+        artifact_digests=(
+            artifact_digests_raw
+            if isinstance(artifact_digests_raw, Sequence)
+            and not isinstance(artifact_digests_raw, str | bytes)
+            else ()
+        ),
+        runtime_event_refs=_normalize_legacy_references(
+            runtime_event_refs_raw,
+            default_kind="runtime_event",
+        ),
+        evidence_refs=_normalize_legacy_references(
+            evidence_refs_raw,
+            default_kind="legacy",
+        ),
+    )
+
+
+def _normalize_legacy_references(
+    raw_refs: Any,
+    *,
+    default_kind: str,
+) -> tuple[dict[str, Any], ...]:
+    """Upgrade dated free-form refs to the typed external-join contract."""
+    if not isinstance(raw_refs, Sequence) or isinstance(raw_refs, str | bytes):
+        return ()
+    normalized = []
+    for index, raw in enumerate(raw_refs, start=1):
+        if not isinstance(raw, Mapping):
+            continue
+        row = dict(raw)
+        canonical = json.dumps(
+            row,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+            default=str,
+        )
+        row.setdefault("kind", default_kind)
+        row.setdefault("schema_id", "legacy.external-reference")
+        row.setdefault("authority", "immutable legacy publication")
+        row.setdefault(
+            "reference",
+            str(
+                row.get("path")
+                or row.get("id")
+                or row.get("contract_id")
+                or f"legacy-{index}-{sha256(canonical.encode()).hexdigest()[:16]}"
+            ),
+        )
+        normalized.append(row)
+    return tuple(normalized)
+
+
+def to_k3(trajectory: Mapping[str, Any]) -> dict[str, Any]:
+    """Adapt a ``geode.trajectory@1`` artifact to the retained K3 shape."""
+    if trajectory.get("schema_id") != TRAJECTORY_SCHEMA_ID:
+        raise ValueError("to_k3 requires geode.trajectory@1")
+    from core.observability.record_paths import normalize_event_row
+
+    rows = []
+    for event in trajectory.get("events", []):
+        if not isinstance(event, dict):
+            continue
+        row = normalize_event_row(
+            {
+                "schema_id": "geode.session-event@1",
+                "occurred_at": event.get("occurred_at"),
+                "ordinal": event.get("ordinal"),
+                "kind": event.get("kind"),
+                "session_id": event.get("session_id"),
+                "turn_id": event.get("turn_id"),
+                "call_id": event.get("call_id"),
+                "payload": event.get("payload", {}),
+            }
+        )
+        rows.append(row)
+    messages = _messages(rows)
+    return {
+        "schema": "k3-shaped/1",
+        "source_schema": TRAJECTORY_SCHEMA_ID,
+        "trajectory_id": trajectory.get("trajectory_id", ""),
+        "pairing": _pairing(messages),
+        "messages": messages,
+    }
 
 
 def resolve(session: str | Path) -> Path:

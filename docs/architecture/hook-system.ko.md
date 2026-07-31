@@ -53,6 +53,10 @@ schema = public_hook_schema(HookName.POST_VERIFY)
 Schema로 최초 입력과 rewrite 후 입력을 모두 검증한다. raw provider request,
 인증 정보, personal tool argument, screenshot, base64, 무제한 tool output은
 공개 payload에 넣지 않는다.
+공개 handler의 기본 제한은 10초다. 동기 handler는 별도 worker thread에서
+실행해 blocking extension이 AgenticLoop event loop를 멈추지 못하게 하고,
+비동기 handler는 직접 취소한다. timeout된 동기 thread가 자체 작업을 나중에
+끝낼 수 있으므로 side effect가 있는 extension은 여전히 idempotent해야 한다.
 
 ### Verification과 외부 loop
 
@@ -74,8 +78,8 @@ hook은 built-in 실패를 성공으로 뒤집을 수 없다. revision 횟수는
 사용하면서도 GEODE verifier의 단조 권위를 보존한다. escalation은 telemetry
 표식이 아니라 delivery gate다. GEODE는 세션을
 `external_verification_required`로 pause하고 후보를
-`AgenticResult.pending_text`로 외부 소유자에게만 돌려주며 최종
-transcript/checkpoint 경로에는 쓰지 않는다. `Stop`은 더 좁다. verification
+`AgenticResult.pending_text`로 외부 소유자에게만 돌려주며 terminal
+`session.ended` record를 만들지 않는다. `Stop`은 더 좁다. verification
 policy를 통과한 뒤 최종 전달과 한 번의 bounded continuation만 결정한다.
 
 ## Trusted middleware
@@ -94,6 +98,10 @@ request middleware는 immutable snapshot을 N→N+1로 변형한다. execution
 middleware는 승인된 executor/provider 호출을 감싸는 async onion이다.
 `next_call`은 한 번만 호출할 수 있고, 호출하지 않으면 명시적
 short-circuit다. downstream exception과 cancellation의 identity는 보존한다.
+기본 제한은 request transform 10초, tool execution wrapper 300초, LLM
+execution wrapper 900초이며 명시적 0은 제한 해제다. `next_call`이 이미
+완료된 뒤 wrapper가 예외를 내면 GEODE는 완료 결과를 보존해 side effect나
+provider billing을 재실행하지 않는다.
 
 도구 경로:
 
@@ -156,11 +164,11 @@ event bus는 저장소를 모른다. production wiring이
 RuntimeEventBus
   -> HookPersistenceSink
        -> sessions.db:hook_events       canonical 운영 이력
-       -> active run transcript.jsonl   조건부 portable projection
+       -> active run events.jsonl       조건부 portable projection
 ```
 
-- SQLite가 canonical indexed history이며 transcript 존재에 의존하지 않는다.
-- JSONL은 active `RunTranscript`가 bind된 동안만 쓴다.
+- SQLite가 canonical indexed history이며 JSONL projection 존재에 의존하지 않는다.
+- JSONL은 active `RunTimeline`이 bind된 동안만 쓴다.
 - `EXTENSION_INVOKED`는 audit retention bucket을 쓴다.
 - compatibility duplicate는 legacy subscriber에는 전달하지만 두 번 저장하지 않는다.
 - raw prompt, personal data, tool body/result, cognitive snapshot, 인증 정보는
@@ -171,6 +179,10 @@ RuntimeEventBus
 `SessionEnd`는 completed/error terminal state가 durable해진 뒤에만 발화한다.
 paused turn은 session을 끝내지 않는다. `PostCompact`도 compacted state
 영속화가 성공한 뒤에만 발화한다.
+비동기 owner는 `amark_session_completed/error`로 닫는다. 동기 close
+method는 deprecated compatibility bridge다. active event loop가 없을 때는
+`SessionEnd`까지 발화하지만, 이미 실행 중인 loop 안에서는 경고하고 durable
+edge만 보존한다.
 
 ### 라이브 행동 증거
 

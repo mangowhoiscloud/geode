@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 from pathlib import Path
@@ -30,6 +31,10 @@ from plugins.benchmark_harness.tau2_turn_supervisor import (
     _Tau2TurnDeadlineError,
     _tool_mutates_state,
     _user_system_prompt,
+)
+from plugins.benchmark_harness.trajectory_artifacts import (
+    geode_trajectory_snapshot_path,
+    tau2_session_ids,
 )
 from plugins.crucible.contract import TaskUnit
 from plugins.crucible.verifiers.tau2 import tau2_task_unit
@@ -468,6 +473,26 @@ def test_tau2_trajectory_snapshot_paths_sanitize_run_id() -> None:
 
     assert trajectory == Path("snapshots/crucible-tau2-train-telecom-candidate.trajectory.json")
     assert snapshot == Path("snapshots/crucible-tau2-train-telecom-candidate.snapshot.json")
+    assert geode_trajectory_snapshot_path(
+        Path("snapshots"),
+        "crucible/tau2 train telecom candidate",
+    ) == Path("snapshots/crucible-tau2-train-telecom-candidate.geode-trajectory.json")
+
+
+def test_tau2_session_ids_preserve_first_seen_lineage() -> None:
+    results = {
+        "simulations": [
+            {
+                "messages": [
+                    {"raw_data": {"geode_session_id": "s-agent"}},
+                    {"raw_data": {"geode_session_id": "s-user"}},
+                    {"raw_data": {"geode_session_id": "s-agent"}},
+                ]
+            }
+        ]
+    }
+
+    assert tau2_session_ids(results) == ["s-agent", "s-user"]
 
 
 def test_tau2_trajectory_snapshot_writes_copy_and_metadata(tmp_path: Path) -> None:
@@ -489,6 +514,11 @@ def test_tau2_trajectory_snapshot_writes_copy_and_metadata(tmp_path: Path) -> No
     assert trajectory.read_text() == '{"simulations": []}\n'
     assert '"run_id": "crucible-tau2-train-telecom-candidate' in snapshot.read_text()
     assert '"candidate_surface": "git"' in snapshot.read_text()
+    normalized = geode_trajectory_snapshot_path(tmp_path / "snapshots", run_id)
+    normalized_payload = json.loads(normalized.read_text())
+    assert normalized_payload["schema_id"] == "geode.trajectory@1"
+    assert normalized_payload["integrity"]["complete"] is False
+    assert str(normalized) in snapshot.read_text()
 
 
 def test_tau2_contract_run_requires_durable_snapshot() -> None:

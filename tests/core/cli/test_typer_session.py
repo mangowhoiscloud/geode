@@ -8,6 +8,7 @@ invoked directly (no full ``core.cli`` bootstrap needed per test).
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -258,6 +259,146 @@ def test_export_redacts_api_keys(runner: CliRunner, tmp_path: Path) -> None:
     doc = out.read_text(encoding="utf-8")
     assert secret not in doc
     assert "[REDACTED]" in doc
+
+
+# ---------------------------------------------------------------------------
+# canonical record migration + trajectory export
+# ---------------------------------------------------------------------------
+
+
+def test_migrate_records_is_idempotent_and_preserves_source(
+    runner: CliRunner, tmp_path: Path
+) -> None:
+    source = tmp_path / "legacy.jsonl"
+    original = (
+        '{"event":"user_message","ts":1,"text":"hello"}\n'
+        '{"event":"assistant_message","ts":2,"text":"done"}\n'
+    )
+    source.write_text(original)
+    sessions = tmp_path / "sessions"
+
+    args = [
+        "migrate-records",
+        "--source",
+        str(source),
+        "--session-id",
+        "s-imported",
+        "--sessions-dir",
+        str(sessions),
+    ]
+    first = runner.invoke(session_app, args)
+    second = runner.invoke(session_app, args)
+
+    assert first.exit_code == second.exit_code == 0
+    assert source.read_text() == original
+    from core.observability.session_timeline import SessionEventStore
+
+    assert SessionEventStore(sessions / "sessions.db").count("s-imported") == 2
+
+
+def test_export_trajectory_uses_versioned_sqlite_contract(
+    runner: CliRunner, tmp_path: Path
+) -> None:
+    from core.observability.session_timeline import SessionTimeline
+
+    SessionTimeline("s-trajectory", db_path=tmp_path / "sessions.db").record_user_message("hello")
+    output = tmp_path / "trajectory.json"
+    result = runner.invoke(
+        session_app,
+        [
+            "export-trajectory",
+            "s-trajectory",
+            "--sessions-dir",
+            str(tmp_path),
+            "--out",
+            str(output),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(output.read_text())
+    assert payload["schema_id"] == "geode.trajectory@1"
+    assert payload["events"][0]["kind"] == "message.user"
+    assert payload["integrity"]["record_count"] == 1
+
+
+def test_stage_trajectory_release_runs_public_quality_gate(
+    runner: CliRunner, tmp_path: Path
+) -> None:
+    from core.observability.trajectory import build_trajectory, export_trajectory
+
+    trajectory_path = tmp_path / "trajectory.json"
+    privacy_review_path = tmp_path / "privacy-review.json"
+    privacy_review_path.write_text(
+        json.dumps(
+            {
+                "reviewer": "GEODE CLI test",
+                "reviewed_at": "2026-07-31T01:00:00Z",
+                "method": "fixture allowlist and secret scan",
+                "scope": "cli",
+                "attestation": "Only the normalized fixture trajectory is approved.",
+            }
+        )
+    )
+    export_trajectory(
+        trajectory_path,
+        build_trajectory(
+            trajectory_id="cli-release",
+            captured_at="2026-07-31T00:00:00Z",
+            source={"harness": "test", "session": "s-release"},
+            events=[
+                {
+                    "kind": "message.assistant",
+                    "actor": "assistant",
+                    "turn_id": "t-cli",
+                    "payload": {},
+                }
+            ],
+            outcome={"result": "pass"},
+            privacy={"review_state": "reviewed"},
+            provenance={"revision": "fixture"},
+        ),
+    )
+
+    result = runner.invoke(
+        session_app,
+        [
+            "stage-trajectory-release",
+            str(trajectory_path),
+            "--destination",
+            str(tmp_path / "releases"),
+            "--source",
+            "test",
+            "--scope",
+            "cli",
+            "--privacy-review",
+            str(privacy_review_path),
+            "--published-at",
+            "2026-07-31T01:02:03Z",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    release = Path(result.output.strip())
+    manifest = json.loads((release / "manifest.json").read_text())
+    assert manifest["schema_id"] == "geode.trajectory-release@1"
+    assert manifest["quality"]["integrity_recomputed"] is True
+    assert manifest["privacy_review"]["reviewer"] == "GEODE CLI test"
+
+    from hashlib import sha256
+
+    manifest_digest = sha256((release / "manifest.json").read_bytes()).hexdigest()
+    verified = runner.invoke(
+        session_app,
+        [
+            "verify-trajectory-release",
+            str(release),
+            "--expected-manifest-sha256",
+            manifest_digest,
+        ],
+    )
+    assert verified.exit_code == 0, verified.output
+    assert json.loads(verified.output)["verified"] is True
 
 
 # ---------------------------------------------------------------------------

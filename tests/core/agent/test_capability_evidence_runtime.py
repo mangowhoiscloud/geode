@@ -91,7 +91,11 @@ def test_task_preflight_keeps_locate_only_when_visual_grounding_supported() -> N
 
 
 def test_evidence_ledger_redacts_and_hashes_payload(tmp_path) -> None:
-    ledger = EvidenceLedger(session_id="s-test", path=tmp_path / "evidence.jsonl")
+    ledger = EvidenceLedger(
+        session_id="s-test",
+        path=tmp_path / "evidence.jsonl",
+        turn_id_provider=lambda: "turn-7",
+    )
 
     row = ledger.append(
         kind="tool_result",
@@ -102,6 +106,10 @@ def test_evidence_ledger_redacts_and_hashes_payload(tmp_path) -> None:
     assert row["payload"]["token"].startswith("<redacted:length=")
     assert row["payload"]["nested"]["text"].startswith("<redacted:length=")
     assert row["seq"] == 1
+    assert row["schema_version"] == 2
+    assert row["session_id"] == "s-test"
+    assert row["turn_id"] == "turn-7"
+    assert row["call_id"] == ""
     assert row["component"] == "agentic_loop"
     assert row["event"] == "tool_result"
     written = read_jsonl(ledger.path)
@@ -207,7 +215,7 @@ def test_finalize_appends_evidence_check_after_final_row(tmp_path) -> None:
         _evidence_ledger=ledger,
         _task_preflight=preflight,
         _build_reasoning_metrics=lambda result: SimpleNamespace(to_dict=lambda: {}),
-        _record_transcript_end=lambda result: None,
+        _record_timeline_end=lambda result, verify_payload=None: None,
         _save_checkpoint=lambda user_input, round_idx=0: None,
     )
     result = AgenticResult(text="정리했습니다", rounds=1)
@@ -241,7 +249,7 @@ def test_finalize_without_preflight_skips_evidence_check(tmp_path) -> None:
         _evidence_ledger=ledger,
         _task_preflight=None,
         _build_reasoning_metrics=lambda result: SimpleNamespace(to_dict=lambda: {}),
-        _record_transcript_end=lambda result: None,
+        _record_timeline_end=lambda result, verify_payload=None: None,
         _save_checkpoint=lambda user_input, round_idx=0: None,
     )
 

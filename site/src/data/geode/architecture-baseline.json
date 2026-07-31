@@ -20,7 +20,7 @@
     "max_statements": 223
   },
   "context_vars": {
-    "count": 28,
+    "count": 30,
     "items": [
       {
         "context_name": "geode_active_cognitive_state",
@@ -44,16 +44,23 @@
         "symbol": "_active_turn_id"
       },
       {
+        "context_name": "geode_active_tool_call_id",
+        "has_default": true,
+        "line": 38,
+        "path": "core/agent/cognitive_state_ctx.py",
+        "symbol": "_active_tool_call_id"
+      },
+      {
         "context_name": "geode_active_parent_session_key",
         "has_default": true,
-        "line": 53,
+        "line": 54,
         "path": "core/agent/cognitive_state_ctx.py",
         "symbol": "_active_parent_session_key"
       },
       {
         "context_name": "geode_active_parent_session_id",
         "has_default": true,
-        "line": 64,
+        "line": 65,
         "path": "core/agent/cognitive_state_ctx.py",
         "symbol": "_active_parent_session_id"
       },
@@ -163,6 +170,13 @@
         "symbol": "_current_metrics"
       },
       {
+        "context_name": "geode_session_timeline",
+        "has_default": true,
+        "line": 40,
+        "path": "core/observability/session_timeline.py",
+        "symbol": "_CURRENT_SESSION_TIMELINE"
+      },
+      {
         "context_name": "tool_offload_store",
         "has_default": true,
         "line": 26,
@@ -177,11 +191,11 @@
         "symbol": "_runtime_audit_active"
       },
       {
-        "context_name": "self_improving_loop_run_transcript",
+        "context_name": "self_improving_loop_run_timeline",
         "has_default": true,
-        "line": 58,
-        "path": "core/self_improving/loop/observe/run_transcript.py",
-        "symbol": "_current_run_transcript"
+        "line": 30,
+        "path": "core/self_improving/loop/observe/run_timeline.py",
+        "symbol": "_current_run_timeline"
       },
       {
         "context_name": "default_session_store",
@@ -223,8 +237,8 @@
   "coordinators": {
     "AgenticLoop": {
       "constructor_arg_count": 27,
-      "file_loc": 2902,
-      "method_count": 74,
+      "file_loc": 2971,
+      "method_count": 75,
       "path": "core/agent/loop/agent_loop.py"
     },
     "RuntimeCoreConfig": {
@@ -233,7 +247,7 @@
     },
     "SubAgentManager": {
       "constructor_arg_count": 16,
-      "file_loc": 1344,
+      "file_loc": 1370,
       "method_count": 17,
       "path": "core/agent/sub_agent.py"
     }
@@ -353,12 +367,12 @@
         "path": "core/self_improving/campaign.py"
       },
       {
-        "line": 2207,
+        "line": 2244,
         "module": "plugins.petri_audit.runner",
         "path": "core/self_improving/campaign.py"
       },
       {
-        "line": 2286,
+        "line": 2323,
         "module": "plugins.petri_audit.pool_validation",
         "path": "core/self_improving/campaign.py"
       },
@@ -513,16 +527,16 @@
   },
   "packages": {
     "core": {
-      "python_files": 426,
-      "python_loc": 134484
+      "python_files": 432,
+      "python_loc": 138799
     },
     "plugins": {
-      "python_files": 109,
-      "python_loc": 40302
+      "python_files": 110,
+      "python_loc": 40712
     },
     "tests": {
-      "python_files": 678,
-      "python_loc": 176239
+      "python_files": 682,
+      "python_loc": 177923
     }
   },
   "schema_version": 1,

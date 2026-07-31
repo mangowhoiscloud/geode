@@ -56,6 +56,11 @@ Inputs are JSON-safe, secret-redacted, depth/size bounded, and validated
 against the hook-specific JSON Schema before and after rewrites. Raw provider
 requests, authentication material, personal-tool arguments, screenshots,
 base64 data, and unrestricted tool output are not public-hook payloads.
+Public handlers have a 10-second default timeout. Synchronous handlers run in
+an isolated worker thread so blocking extension code cannot freeze the
+AgenticLoop event loop; async handlers remain directly cancellable. A timed-out
+sync thread may finish its own work later, so side-effecting extensions must
+still be idempotent.
 
 ### Verification and external loops
 
@@ -80,8 +85,8 @@ tool side effects. This makes `PostVerify` useful to evaluator, CI, or
 human-review loops while preserving GEODE's verifier as the monotone authority.
 Escalation is a delivery gate: GEODE parks the session with
 `external_verification_required`, returns the withheld candidate as
-`AgenticResult.pending_text` to the owning external loop, and does not write
-the candidate to the final transcript/checkpoint path.
+`AgenticResult.pending_text` to the owning external loop, and does not create
+a terminal `session.ended` record.
 `Stop` is intentionally narrower: it decides final delivery versus one bounded
 continuation after verification policy is satisfied.
 
@@ -101,6 +106,11 @@ Request middleware is an ordered N→N+1 transform over immutable snapshots.
 Execution middleware is an async onion around the approved executor or
 provider call. `next_call` is single-use; omitting it is an explicit
 short-circuit; downstream exceptions and cancellation keep their identity.
+Default limits are 10 seconds for request transforms, 300 seconds for tool
+execution wrappers, and 900 seconds for LLM execution wrappers; an explicit
+zero opts out. If a wrapper raises after `next_call` has completed, GEODE
+preserves the completed tool/provider result instead of replaying a side effect
+or rebilling a provider call.
 
 The tool path is:
 
@@ -163,11 +173,11 @@ The event bus is storage-agnostic. Production wiring registers one
 RuntimeEventBus
   -> HookPersistenceSink
        -> sessions.db:hook_events       canonical operational history
-       -> active run transcript.jsonl   conditional portable projection
+       -> active run events.jsonl       conditional portable projection
 ```
 
-- SQLite is the canonical indexed history and does not depend on a transcript.
-- JSONL is written only when an active `RunTranscript` is bound.
+- SQLite is the canonical indexed history and does not depend on a JSONL projection.
+- JSONL is written only when an active `RunTimeline` is bound.
 - `EXTENSION_INVOKED` uses the audit retention bucket.
 - Compatibility duplicates still reach legacy subscribers but are not written
   twice.
@@ -180,6 +190,10 @@ Lifecycle hooks follow commit boundaries: `SessionStart` fires only after the
 initial/resume checkpoint succeeds; `SessionEnd` fires only after a completed
 or error terminal state is durable. A paused turn does not end the session.
 `PostCompact` likewise fires only after compacted state persistence succeeds.
+Async owners close through `amark_session_completed/error`. The synchronous
+close methods are deprecated compatibility bridges: they emit `SessionEnd`
+when called without an active event loop, but warn and preserve only the
+durable edge inside an already-running loop.
 
 ### Live behavior evidence
 

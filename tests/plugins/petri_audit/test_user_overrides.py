@@ -429,20 +429,20 @@ def test_read_role_emits_journal_when_self_improving_loop_unavailable(
     import json
     import sys
 
-    from core.self_improving.loop.observe.run_transcript import RunTranscript, run_transcript_scope
+    from core.self_improving.loop.observe.run_timeline import RunTimeline, run_timeline_scope
 
-    journal = RunTranscript(
+    journal = RunTimeline(
         session_id="s-legacy",
         gen_tag="gen-legacy",
         component="autoresearch",
-        path=tmp_path / "transcript.jsonl",
+        path=tmp_path / "events.jsonl",
     )
 
     # Force the lazy import inside _read_role_from_self_improving_loop to fail
     # by inserting None into sys.modules — the `from … import …` then raises.
     monkeypatch.setitem(sys.modules, "core.config.self_improving", None)
 
-    with run_transcript_scope(journal):
+    with run_timeline_scope(journal):
         result = uo._read_role_from_self_improving_loop("auditor")
 
     assert result == {}
@@ -472,15 +472,15 @@ def test_read_role_no_emit_when_self_improving_loop_available(
     """
     import json
 
-    from core.self_improving.loop.observe.run_transcript import RunTranscript, run_transcript_scope
+    from core.self_improving.loop.observe.run_timeline import RunTimeline, run_timeline_scope
 
-    journal = RunTranscript(
+    journal = RunTimeline(
         session_id="s-newpath",
         gen_tag="gen-newpath",
         component="autoresearch",
-        path=tmp_path / "transcript.jsonl",
+        path=tmp_path / "events.jsonl",
     )
-    with run_transcript_scope(journal):
+    with run_timeline_scope(journal):
         result = uo._read_role_from_self_improving_loop("auditor")
     assert result == {}
     if journal.path.exists():

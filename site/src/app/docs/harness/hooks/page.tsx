@@ -69,8 +69,8 @@ export default function Page() {
               연속 시도로 제한됩니다. 최종 결과에는 모든 시도의 rounds, tool calls,
               usage가 합산된 뒤 증거와 체크포인트가 저장됩니다. escalate는 단순
               telemetry가 아니라 delivery gate입니다. 세션을 pause하고 후보를
-              외부 소유자에게만 pending_text로 반환하며 최종 transcript에는 쓰지
-              않습니다.
+              외부 소유자에게만 pending_text로 반환하며 terminal
+              <code>session.ended</code>를 만들지 않습니다.
             </p>
 
             <h2>신뢰 미들웨어 4개 결합점</h2>
@@ -100,7 +100,7 @@ export default function Page() {
               <thead><tr><th>저장소</th><th>동작</th></tr></thead>
               <tbody>
                 <tr><td>SQLite activity store</td><td>운영 이벤트의 정본. 공개 훅과 미들웨어 호출도 <code>extension.invoked</code> 행으로 저장</td></tr>
-                <tr><td>RunTranscript JSONL</td><td>활성 transcript가 있을 때만 같은 typed activity row를 미러링</td></tr>
+                <tr><td>RunTimeline <code>events.jsonl</code></td><td>활성 run projection이 있을 때만 같은 typed activity row를 미러링</td></tr>
               </tbody>
             </table>
             <p>
@@ -165,8 +165,8 @@ export default function Page() {
               and checkpoint persistence, rounds, tool calls, and usage from all
               attempts are aggregated. Escalation is a delivery gate, not
               telemetry: it pauses the session, exposes the withheld candidate
-              only to the owning loop as pending_text, and does not write it to
-              the final transcript.
+              only to the owning loop as pending_text, and does not create a
+              terminal <code>session.ended</code> record.
             </p>
 
             <h2>Four trusted middleware join points</h2>
@@ -196,7 +196,7 @@ export default function Page() {
               <thead><tr><th>Store</th><th>Behavior</th></tr></thead>
               <tbody>
                 <tr><td>SQLite activity store</td><td>Canonical operational record, including <code>extension.invoked</code> rows</td></tr>
-                <tr><td>RunTranscript JSONL</td><td>Mirrors the same typed row only while a transcript is active</td></tr>
+                <tr><td>RunTimeline <code>events.jsonl</code></td><td>Mirrors the same typed row only while a run projection is active</td></tr>
               </tbody>
             </table>
             <p>

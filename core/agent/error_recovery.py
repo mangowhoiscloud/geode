@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
@@ -164,6 +165,9 @@ class ErrorRecoveryStrategy:
         tool_name: str,
         tool_input: dict[str, Any],
         failure_count: int,
+        *,
+        context_factory: Callable[[str, int], Any] | None = None,
+        on_execution_started: Callable[[int, str, dict[str, Any]], None] | None = None,
     ) -> RecoveryResult:
         """Execute the recovery chain through the async tool executor path."""
         if not self.is_recoverable(tool_name):
@@ -181,11 +185,18 @@ class ErrorRecoveryStrategy:
         attempts: list[RecoveryAttempt] = []
         strategies = self._select_strategies(tool_name, failure_count)
 
-        for strategy in strategies:
+        for attempt_index, strategy in enumerate(strategies, start=1):
             if len(attempts) >= self._max_recovery_attempts:
                 break
 
-            attempt = await self._aexecute_strategy(strategy, tool_name, tool_input)
+            attempt = await self._aexecute_strategy(
+                strategy,
+                tool_name,
+                tool_input,
+                attempt_index=attempt_index,
+                context_factory=context_factory,
+                on_execution_started=on_execution_started,
+            )
             attempts.append(attempt)
 
             if attempt.success:
@@ -238,16 +249,41 @@ class ErrorRecoveryStrategy:
         strategy: RecoveryStrategy,
         tool_name: str,
         tool_input: dict[str, Any],
+        *,
+        attempt_index: int,
+        context_factory: Callable[[str, int], Any] | None,
+        on_execution_started: Callable[[int, str, dict[str, Any]], None] | None,
     ) -> RecoveryAttempt:
         """Execute a single recovery strategy through async tool dispatch."""
         start = time.monotonic()
 
         if strategy == RecoveryStrategy.RETRY:
-            return await self._atry_retry(tool_name, tool_input, start)
+            return await self._atry_retry(
+                tool_name,
+                tool_input,
+                start,
+                attempt_index=attempt_index,
+                context_factory=context_factory,
+                on_execution_started=on_execution_started,
+            )
         if strategy == RecoveryStrategy.ALTERNATIVE:
-            return await self._atry_alternative(tool_name, tool_input, start)
+            return await self._atry_alternative(
+                tool_name,
+                tool_input,
+                start,
+                attempt_index=attempt_index,
+                context_factory=context_factory,
+                on_execution_started=on_execution_started,
+            )
         if strategy == RecoveryStrategy.FALLBACK:
-            return await self._atry_fallback(tool_name, tool_input, start)
+            return await self._atry_fallback(
+                tool_name,
+                tool_input,
+                start,
+                attempt_index=attempt_index,
+                context_factory=context_factory,
+                on_execution_started=on_execution_started,
+            )
         return self._try_escalate(tool_name, tool_input, start)
 
     async def _atry_retry(
@@ -255,6 +291,10 @@ class ErrorRecoveryStrategy:
         tool_name: str,
         tool_input: dict[str, Any],
         start: float,
+        *,
+        attempt_index: int,
+        context_factory: Callable[[str, int], Any] | None,
+        on_execution_started: Callable[[int, str, dict[str, Any]], None] | None,
     ) -> RecoveryAttempt:
         """Retry the same tool once with an async delay."""
         delay = self._retry_base_delay
@@ -266,7 +306,13 @@ class ErrorRecoveryStrategy:
         if delay > 0:
             await asyncio.sleep(delay)
 
-        result = await self._executor.aexecute(tool_name, tool_input)
+        result = await self._execute_recovery_tool(
+            tool_name,
+            tool_input,
+            attempt_index=attempt_index,
+            context_factory=context_factory,
+            on_execution_started=on_execution_started,
+        )
         elapsed = (time.monotonic() - start) * 1000
         success = not (isinstance(result, dict) and result.get("error"))
 
@@ -283,6 +329,10 @@ class ErrorRecoveryStrategy:
         tool_name: str,
         tool_input: dict[str, Any],
         start: float,
+        *,
+        attempt_index: int,
+        context_factory: Callable[[str, int], Any] | None,
+        on_execution_started: Callable[[int, str, dict[str, Any]], None] | None,
     ) -> RecoveryAttempt:
         """Try a different tool from the same category via async dispatch."""
         alt_name = self._find_alternative(tool_name)
@@ -300,7 +350,13 @@ class ErrorRecoveryStrategy:
             alt_name,
             tool_name,
         )
-        result = await self._executor.aexecute(alt_name, tool_input)
+        result = await self._execute_recovery_tool(
+            alt_name,
+            tool_input,
+            attempt_index=attempt_index,
+            context_factory=context_factory,
+            on_execution_started=on_execution_started,
+        )
         elapsed = (time.monotonic() - start) * 1000
         success = not (isinstance(result, dict) and result.get("error"))
 
@@ -317,6 +373,10 @@ class ErrorRecoveryStrategy:
         tool_name: str,
         tool_input: dict[str, Any],
         start: float,
+        *,
+        attempt_index: int,
+        context_factory: Callable[[str, int], Any] | None,
+        on_execution_started: Callable[[int, str, dict[str, Any]], None] | None,
     ) -> RecoveryAttempt:
         """Try a cheaper tool from any category via async dispatch."""
         fallback_name = self._find_fallback(tool_name)
@@ -334,7 +394,13 @@ class ErrorRecoveryStrategy:
             fallback_name,
             tool_name,
         )
-        result = await self._executor.aexecute(fallback_name, tool_input)
+        result = await self._execute_recovery_tool(
+            fallback_name,
+            tool_input,
+            attempt_index=attempt_index,
+            context_factory=context_factory,
+            on_execution_started=on_execution_started,
+        )
         elapsed = (time.monotonic() - start) * 1000
         success = not (isinstance(result, dict) and result.get("error"))
 
@@ -344,6 +410,32 @@ class ErrorRecoveryStrategy:
             success=success,
             result=result,
             duration_ms=elapsed,
+        )
+
+    async def _execute_recovery_tool(
+        self,
+        tool_name: str,
+        tool_input: dict[str, Any],
+        *,
+        attempt_index: int,
+        context_factory: Callable[[str, int], Any] | None,
+        on_execution_started: Callable[[int, str, dict[str, Any]], None] | None,
+    ) -> dict[str, Any]:
+        context = context_factory(tool_name, attempt_index) if context_factory is not None else None
+
+        def started(effective_name: str, arguments: dict[str, Any]) -> None:
+            if on_execution_started is not None:
+                on_execution_started(
+                    attempt_index,
+                    effective_name,
+                    arguments,
+                )
+
+        return await self._executor.aexecute(
+            tool_name,
+            tool_input,
+            context=context,
+            on_execution_started=started,
         )
 
     def _try_escalate(

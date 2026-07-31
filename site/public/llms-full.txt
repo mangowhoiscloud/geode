@@ -2,7 +2,7 @@
 
 > GEODE is a self-evolving autonomous execution agent: an inner agentic loop runs tasks (research, analysis, automation, scheduling) and an outer self-improving loop (Petri audit -> fitness gate) tunes the system that runs them.
 
-Version v1.0.10. Last sync 2026-07-31. Full content of every docs page, one file (llms-full.txt convention). Per-page index: /llms.txt.
+Version v1.0.11. Last sync 2026-07-31. Full content of every docs page, one file (llms-full.txt convention). Per-page index: /llms.txt.
 
 ## Overview . 개요
 
@@ -1086,7 +1086,7 @@ GEODE의 확장 표면은 하나의 거대한 이벤트 목록이 아닙니다. 
 
 ## PostVerify와 외부 루프
 
-`PostVerify`는 이미 실행된 부수 효과를 재생하지 않고, 완성된 후보와 내장 검증 결과를 외부 평가기·CI 정책·오케스트레이터가 판정하게 합니다. revise는 구체적인 후속 지시가 있어야 하며 최대 2회 연속 시도로 제한됩니다. 최종 결과에는 모든 시도의 rounds, tool calls, usage가 합산된 뒤 증거와 체크포인트가 저장됩니다. escalate는 단순 telemetry가 아니라 delivery gate입니다. 세션을 pause하고 후보를 외부 소유자에게만 pending\_text로 반환하며 최종 transcript에는 쓰지 않습니다.
+`PostVerify`는 이미 실행된 부수 효과를 재생하지 않고, 완성된 후보와 내장 검증 결과를 외부 평가기·CI 정책·오케스트레이터가 판정하게 합니다. revise는 구체적인 후속 지시가 있어야 하며 최대 2회 연속 시도로 제한됩니다. 최종 결과에는 모든 시도의 rounds, tool calls, usage가 합산된 뒤 증거와 체크포인트가 저장됩니다. escalate는 단순 telemetry가 아니라 delivery gate입니다. 세션을 pause하고 후보를 외부 소유자에게만 pending\_text로 반환하며 terminal`session.ended`를 만들지 않습니다.
 
 ## 신뢰 미들웨어 4개 결합점
 
@@ -1106,7 +1106,7 @@ GEODE의 확장 표면은 하나의 거대한 이벤트 목록이 아닙니다. 
 | 저장소 | 동작 |
 | --- | --- |
 | SQLite activity store | 운영 이벤트의 정본. 공개 훅과 미들웨어 호출도 `extension.invoked` 행으로 저장 |
-| RunTranscript JSONL | 활성 transcript가 있을 때만 같은 typed activity row를 미러링 |
+| RunTimeline `events.jsonl` | 활성 run projection이 있을 때만 같은 typed activity row를 미러링 |
 
 확장 호출 행은 표면, 이름, 확장자, 상태, 지연, 상관 ID만 보존합니다. 원문 사용자 입력, 전체 요청·응답, 개인 데이터, 비밀값은 저장하지 않습니다.
 
@@ -2840,7 +2840,7 @@ OpenAI/GLM  80%   클라이언트 LLM 기반 compaction
 > /context       # 조립된 컨텍스트 계층 확인
 ```
 
-실행이 어디서 어떻게 끝났는지는 [멈춘 실행 디버깅](https://mangowhoiscloud.github.io/geode/docs/guides/debug-stuck-run.md)의 transcript와 SQL event timeline 절차로 추적합니다.
+실행이 어디서 어떻게 끝났는지는 [멈춘 실행 디버깅](https://mangowhoiscloud.github.io/geode/docs/guides/debug-stuck-run.md)의 session history와 SQL event timeline 절차로 추적합니다.
 
 ## 다음
 
@@ -2930,23 +2930,33 @@ jq -c 'select(.source == "petri_eval")' ~/.geode/usage/$(date +%Y-%m).jsonl
 URL: https://mangowhoiscloud.github.io/geode/docs/verification/observability
 Markdown: https://mangowhoiscloud.github.io/geode/docs/verification/observability.md
 
-GEODE의 관측성은 목적별 저장소를 사용합니다. query/filter/aggregate가 필요한 훅 이벤트는 SQLite, 순서대로 읽고 내보내는 실행 artifact는 JSONL, 프로세스 진단은 rotating log입니다. raw prompt와 tool 결과를 운영 event table에 복제하지 않습니다.
+GEODE의 관측성은 목적별 저장소를 사용합니다. query/filter/aggregate가 필요한 이력과 훅 이벤트는 SQLite, 순서대로 읽고 내보내는 실행 artifact는 versioned JSONL, 평가는 immutable trajectory, 프로세스 진단은 rotating log입니다. raw prompt와 tool 결과를 운영 event table에 복제하지 않습니다.
 
 ## 저장소 지도
 
 | 렌즈 | 저장소 | 용도 |
 | --- | --- | --- |
+| Resume checkpoint | `sessions.db:sessions/messages` | 다음 model request와 compaction 상태 |
+| Session record | `sessions.db:session_events` | 사용자·assistant·tool·sub-agent 실행 순서 |
 | Hook events | `sessions.db:hook_events` | 세션/이벤트/status/action 조회와 보존 정책 |
-| Run transcript | `transcript.jsonl` | 활성 autoresearch timeline과 tail |
-| Dialogue | `dialogue.jsonl` / session transcript | 사용자·assistant·tool 대화 artifact |
+| Run projection | `events.jsonl` | 활성 run timeline, tail, portable artifact |
+| Trajectory | `geode.trajectory@1` | 재생·비교·verifier 연결용 immutable export |
+| Public release | `geode.trajectory-release@1` | 검토된 trajectory와 SHA-256 manifest |
+| Evidence ledger | `~/.geode/evidence/<session>.jsonl` | session/turn/call로 연결된 claim·approval·verdict |
 | Session metrics | 메모리 + run summary | 토큰, 비용, latency percentile |
 | Usage ledger | `~/.geode/usage/YYYY-MM.jsonl` | LLM 호출별 비용 time series |
 | Scheduler job tail | `.geode/scheduler_logs/*.jsonl` | job별 portable bounded history |
 | Process logs | `~/.geode/logs/` | traceback과 외부 시스템 진단 |
 
+## Trajectory 품질과 외부 루프
+
+exporter는 event ID uniqueness, ordinal 연속성, session/turn/call correlation, tool call/result pairing, orphan, truncated/corrupt payload를 다시 계산해 `integrity.quality`에 기록합니다. public staging은 producer가 적은 count와 quality를 신뢰하지 않고 재검산하며 privacy review, secret scan, trajectory ID uniqueness, file digest, read-back을 모두 통과해야 합니다.
+
+SIL의 `events.jsonl` 실행 타임라인, mutation/attribution 원장, Inspect `.eval` assay와 Crucible의`crucible.evidence.v3`는 계속 각자의 정본입니다. trajectory는`evidence_refs`와 source artifact SHA-256으로 이를 연결하는 replay sidecar이며 verdict를 대체하거나 승격 권한을 갖지 않습니다. 과거`geode.trajectory@YYYY-MM-DD` 공개 파일은 수정하지 않고 메모리에서`@1`으로 정규화합니다.
+
 ## 한 trigger, 한 durable row
 
-`RuntimeEventBus`는 handler chain이 끝난 뒤`HookDispatch`를 sink에 한 번 보냅니다. 그래서 sync/async, emit 경로마다 writer를 반복하지 않습니다. legacy 실패나 승인 이벤트처럼 canonical 이벤트와 의미가 겹치는 신호는 외부 handler에는 전달하지만 SQL과 transcript에는 중복 기록하지 않습니다.
+`RuntimeEventBus`는 handler chain이 끝난 뒤`HookDispatch`를 sink에 한 번 보냅니다. 그래서 sync/async, emit 경로마다 writer를 반복하지 않습니다. legacy 실패나 승인 이벤트처럼 canonical 이벤트와 의미가 겹치는 신호는 외부 handler에는 전달하지만 SQL과 JSONL projection에는 중복 기록하지 않습니다.
 
 ## 이벤트 조회
 
@@ -2968,6 +2978,8 @@ row는 event, dispatch mode, status, handler error count, actor/action/entity, b
 -   high-volume 7일, standard 30일, audit 180일
 -   project database 전체 100,000행 상한
 -   append 중 incremental prune + 명시적 `prune_events()`
+-   `session_events`는 명시적으로 종료된 세션만 180일 후 prune
+-   `events.jsonl`은 16 MiB에서 명시적 truncation marker와 함께 compact
 -   runtime shutdown이 producer를 멈춘 뒤 hook sink와 SQLite connection을 닫음
 -   latency percentile sample과 model cardinality도 bounded
 
@@ -3007,7 +3019,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/run/troubleshooting.md
 | `context_exhausted`로 종료 | prune 후에도 컨텍스트 critical | `/compact` 또는 `/clear` 후 작업을 쪼갭니다. [장기 실행 안전](https://mangowhoiscloud.github.io/geode/docs/ops/long-running.md) 참고. |
 | MCP 도구가 안 보임 | MCP 서버 연결 실패 | `/mcp`로 서버 상태와 도구 목록을 확인합니다. `/status`에도 MCP 블록이 있습니다. |
 | `MCP_SERVER_FAILED` 로그가 반복됨 | serve 프로세스에서 MCP 명령(`npx`, `codex`, `uvx`)이나 필수 env를 못 찾음 | `~/.geode/logs/serve.log`에서 실패 서버 이름을 보고 PATH와 `.env`를 맞춥니다. 실패한 서버는 짧게 캐시되므로 수정 뒤에는 serve를 재시작합니다. |
-| 읽기 도구가 너무 자주 호출됨 | `read_document`, `grep_files`는 항상 로드되는 핵심 도구. tool cap에 숨은 것이 아님 | dialogue transcript의 tool call을 보고 질문에 파일 범위, 제외 경로, 원하는 깊이를 명시합니다. |
+| 읽기 도구가 너무 자주 호출됨 | `read_document`, `grep_files`는 항상 로드되는 핵심 도구. tool cap에 숨은 것이 아님 | `session_events`의 tool call을 보고 질문에 파일 범위, 제외 경로, 원하는 깊이를 명시합니다. |
 | 메신저 무반응 | 게이트웨이 또는 binding 문제 | `geode doctor slack`과 [메신저 연동](https://mangowhoiscloud.github.io/geode/docs/run/messaging.md)의 실패 표를 따릅니다. |
 
 ## 로그 위치
@@ -3017,14 +3029,15 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/run/troubleshooting.md
 | serve 데몬 로그 (10MB × 5 로테이션) | `~/.geode/logs/serve.log` |
 | geode-mcp, 워커, 캠페인 로그 | `~/.geode/logs/` |
 | 세션별 lifecycle event | `sessions.db:hook_events` |
-| 세션 transcript (턴 단위 대화) | `~/.geode/transcripts/<project-slug>/` |
+| 세션 실행 이력 | `sessions.db:session_events` |
+| run portable projection | `<run-dir>/events.jsonl` |
 | 비용 ledger | `~/.geode/usage/YYYY-MM.jsonl` |
 
 로그 채널 구성은 `core/observability/logging_config.py`의 `configure_logging(mode)`가 SoT입니다.
 
 ## 다음
 
--   [멈춘 실행 디버깅](https://mangowhoiscloud.github.io/geode/docs/guides/debug-stuck-run.md). transcript와 SQL event timeline을 읽는 절차.
+-   [멈춘 실행 디버깅](https://mangowhoiscloud.github.io/geode/docs/guides/debug-stuck-run.md). session record와 SQL event timeline을 읽는 절차.
 -   [관측성](https://mangowhoiscloud.github.io/geode/docs/verification/observability.md). 어떤 질문에 어떤 렌즈를 쓰는지.
 -   [설정 기초](https://mangowhoiscloud.github.io/geode/docs/config/basics.md). 레이어와 우선순위의 전체 그림.
 
@@ -3859,7 +3872,7 @@ events.subscribe(
 -   public hook은 해당 경계의 payload schema와 action 제한을 테스트합니다.
 -   tool middleware는 승인 전 변환과 승인 후 실행 순서를 함께 테스트합니다.
 -   LLM middleware는 모든 adapter call 경로와 retry마다 실행되는지 확인합니다.
--   관측 행은 transcript가 없어도 SQLite에 남고, transcript 활성 시에만 JSONL에도 남는지 확인합니다.
+-   관측 행은 run projection이 없어도 SQLite에 남고, `RunTimeline` 활성 시에만 `events.jsonl`에도 남는지 확인합니다.
 
 ## PostVerify 등록 시 주의
 
@@ -4036,7 +4049,7 @@ _참조:_ [Serve gateway](https://mangowhoiscloud.github.io/geode/docs/harness/s
 URL: https://mangowhoiscloud.github.io/geode/docs/guides/debug-stuck-run
 Markdown: https://mangowhoiscloud.github.io/geode/docs/guides/debug-stuck-run.md
 
-대화와 큰 실행 결과는 transcript JSONL에, 조회 가능한 lifecycle은 project-local `sessions.db`의 `hook_events`에 남습니다. 같은 시각의 `serve.log`까지 맞추면 “가드가 정상 종료했는지”와 “외부 호출에서 실제로 매달렸는지”를 구분할 수 있습니다.
+실행 순서는 project-local `sessions.db:session_events`, 조회 가능한 lifecycle은 `hook_events`, portable view는 run-bound `events.jsonl`에 남습니다. 같은 시각의`serve.log`까지 맞추면 “가드가 정상 종료했는지”와 “외부 호출에서 실제로 매달렸는지”를 구분할 수 있습니다.
 
 ## 1\. 최근 이벤트를 조회합니다
 
@@ -4063,13 +4076,13 @@ PY
 -   `status=blocked`는 공개 훅 또는 정책이 의도적으로 막은 실행입니다.
 -   `status=failed`는 canonical terminal row에 실패가 반영된 경우입니다.
 
-## 3\. transcript와 daemon log를 맞춥니다
+## 3\. session record와 daemon log를 맞춥니다
 
-run\_dir가 있는 실행은 `transcript.jsonl`과`dialogue.jsonl`을 확인합니다. 마지막 `tool_call`에 대응하는 `tool_result`가 없거나 동일 호출이 반복되면`~/.geode/logs/serve.log`에서 같은 timestamp의 traceback, timeout, credential 오류를 찾습니다.
+정본 실행 순서는 `sessions.db:session_events`, run\_dir가 있는 실행의 portable view는 `events.jsonl`에서 확인합니다. 마지막`tool.called`에 대응하는 `tool.completed`가 없거나 동일 호출이 반복되면`~/.geode/logs/serve.log`에서 같은 timestamp의 traceback, timeout, credential 오류를 찾습니다.
 
 ## 4\. 복구 후 확인합니다
 
-원인을 고치고 재실행한 뒤 새 timeline이 canonical end와`session_end`까지 이어지는지 확인합니다. 이벤트 table은 보존 등급과 전체 행수 상한으로 자동 prune되므로 장기 보존이 필요한 증거는 별도 run artifact로 내보냅니다.
+원인을 고치고 재실행한 뒤 새 timeline이 canonical`session.ended`까지 이어지는지 확인합니다. 이벤트 table은 보존 등급과 전체 행수 상한으로 자동 prune되므로 장기 보존이 필요한 증거는 별도 run artifact로 내보냅니다.
 
 ---
 
@@ -4904,7 +4917,7 @@ GEODE의 핵심 안전 메커니즘은 Karpathy의 autoresearch 패턴을 long-r
 
 1.  **Fixed wall-budget**으로 비교가능성 보존. 모든 실험이 5분 wall-clock. → GEODE의 StuckDetector 7200s + 30s wrap-up 여유.
 2.  **Frozen scoreboard** 분리. 평가 harness가 agent-mutable 영역 밖에 동결. → GEODE의 validator + CourtEval grader 분리.
-3.  **git monotone ratchet**. branch HEAD가 절대 안 나빠짐. KEEP만 commit. → GEODE의 transcript-jsonl audit cycle.
+3.  **git monotone ratchet**. branch HEAD가 절대 안 나빠짐. KEEP만 commit. → GEODE의 versioned event/trajectory audit cycle.
 4.  **Token-economic loop**. run.log + grep anchor + TSV append-only. → GEODE의 200-turn sliding window.
 5.  **Simplicity criterion**. "removing code with equal-or-better metric = great outcome". → GEODE Runtime 1476→517 라인 분해 (v0.30), Registry 257 라인 제거 (v0.44).
 
@@ -5031,10 +5044,10 @@ GEODE가 메타 하네스인 이유는 세 겹의 관계 때문입니다.
 | 메커니즘 | 묶는 발산 | 제어 지점 | 위치 |
 | --- | --- | --- | --- |
 | **RuntimeEventBus** | 내부 운영 이벤트의 중앙 계측 버스. 공개 제어 계약과 분리 | emit / emit\_async / subscribe\_prefix | `core/hooks/system.py` |
-| **Event persistence spec** | 이벤트별 보존 클래스와 SQL, transcript 지속 여부를 선언하는 카탈로그 | 4 retention classes (high-volume/standard/audit/transient) | `core/hooks/catalog.py` |
+| **Event persistence spec** | 이벤트별 보존 클래스와 SQL, run projection 지속 여부를 선언하는 카탈로그 | 4 retention classes (high-volume/standard/audit/transient) | `core/hooks/catalog.py` |
 | **HookEventStore** | row, age, payload 캡이 있는 SQLite 이벤트 보존 | 7/30/180d retention, max 100k rows, 8KB payload | `core/observability/event_store.py` |
-| **HookPersistenceSink** | 각 dispatch를 spec에 따라 SQL과 transcript로 라우팅 | persist\_sql / mirror\_transcript flags | `core/observability/hook_persistence.py` |
-| **SessionTranscript** | 세션 이벤트의 append-only JSONL 감사 추적 | transcript dir, per-event truncation | `core/observability/transcript.py` |
+| **HookPersistenceSink** | 각 dispatch를 spec에 따라 SQL과 run projection으로 라우팅 | persist\_sql / mirror\_run\_projection flags | `core/observability/hook_persistence.py` |
+| **SessionTimeline** | SQLite 정본 세션 이력과 조건부 events.jsonl projection | schema/version, session/turn/call correlation, terminal-only retention | `core/observability/session_timeline.py` |
 | **SessionMetrics** | 토큰, 캐시, thinking, 비용, 도구 호출, 시간 예산의 누적 ledger | ContextVar-scoped, estimated\_cost\_usd | `core/observability/session_metrics.py` |
 | **JobRunLog** | 스케줄 job별 실행 이력. 크기와 행 수로 자동 prune | get\_runs(limit), size/row prune | `core/observability/run_log.py` |
 | **UsageStore** | 일, 월 롤링 사용량 ledger. geode history의 데이터 소스 | ~/.geode/usage/\*.jsonl, eval-id dedup | `core/llm/usage_store.py` |
@@ -5420,7 +5433,7 @@ Tier 2  latex2sympy2 + sympy.pretty  블록 전용. 분수·적분을 2D Unicode
 URL: https://mangowhoiscloud.github.io/geode/docs/reference/changelog
 Markdown: https://mangowhoiscloud.github.io/geode/docs/reference/changelog.md
 
-(body omitted from llms-full: 1480 KB — fetch the Markdown twin above for the complete page)
+(body omitted from llms-full: 1482 KB — fetch the Markdown twin above for the complete page)
 
 ---
 
@@ -5497,7 +5510,7 @@ Runtime         core/tools/           도구 레지스트리 + deferred loading 
                 core/skills/          스킬 레지스트리
                 core/llm/prompts/     프롬프트 템플릿 + 해시 핀
                 core/audit/           감사 결과 추출 (dim_extractor)
-                core/observability/   SQLite events, transcripts, session metrics, OTLP
+                core/observability/   SQLite session/events, run projections, trajectories, OTLP
                 core/config/          Settings + 레이어 해석 (explain)
                 core/auth/            OAuth, 프로필, 쿨다운
 Model           core/llm/             라우터 + 어댑터 레지스트리
@@ -5580,12 +5593,12 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 
 | 측정값 | 현재 트리 |
 | --- | --- |
-| 프로덕션 Python 파일 | 535 |
-| 테스트 Python 파일 | 678 |
+| 프로덕션 Python 파일 | 542 |
+| 테스트 Python 파일 | 682 |
 | 도구 정의 / 실행 등록 / 유효 스키마 | 78 / 81 / 78 |
 | RuntimeEvent 멤버 | 57 |
 | 기본 LLM 어댑터 | 8 |
-| 모듈 수준 ContextVar | 28 |
+| 모듈 수준 ContextVar | 30 |
 | core → plugins import 지점 / 파일 | 31 / 14 |
 | import-linter 예외 edge | 24 |
 
@@ -5638,7 +5651,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 | 스킬 | `core/skills/` | `skills.py` (레지스트리), `agents.py` |
 | 프롬프트 | `core/llm/prompts/` | `router.md`, `commentary.md`, `decomposer.md`, 해시 핀은 `__init__.py` |
 | 감사 추출 | `core/audit/` | `dim_extractor.py`, `manifest.py`, `eval_to_jsonl.py`, `contracts.py` |
-| 관측성 | `core/observability/` | `event_store.py`, `hook_persistence.py`, `run_log.py` (스케줄러 전용), `session_metrics.py`, `logging_config.py`, `transcript.py` |
+| 관측성 | `core/observability/` | `session_timeline.py`, `event_store.py`, `hook_persistence.py`, `trajectory.py`, `session_metrics.py`, `logging_config.py` |
 | 설정 | `core/config/` | `_settings.py`, `explain.py`, `env_io.py`, `routing.toml` + `routing_manifest.py`, `self_improving.py` |
 | 인증 | `core/auth/` | `oauth_login.py`, `profiles.py`, `rotation.py`, `cooldown.py` |
 

@@ -47,6 +47,63 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.11] - 2026-07-31
+
+> Hooks, trusted middleware, durable session records, and reviewed
+> trajectories now form one versioned outer-loop contract without collapsing
+> SIL or Crucible's native evidence authority.
+
+### Added
+
+- `sessions.db:session_events` now stores versioned, append-only session
+  history with stable event/session-generation/turn/call correlation, bounded
+  redacted payloads, payload hashes, terminal-only 180-day retention, and
+  digest-backed idempotent import of legacy session JSONL.
+- Packaged Draft 2020-12 contracts define `geode.session-event@1`,
+  `geode.run-event@1`, `geode.trajectory@1`, and
+  `geode.trajectory-release@1`. The hook behavior E2E, MCPMark adapter, and
+  tau2-bench adapter now export through the same trajectory builder and
+  validator while retaining benchmark-native artifacts and binding them by
+  SHA-256. Trajectory integrity is recomputed from events; reviewed public
+  releases add scope/replay admission policy, turn-correlation gates,
+  structured privacy attestations, secret scans, source-byte verification,
+  unique identities, digest manifests, append-only staging, and anchored
+  read-back verification.
+- `geode session migrate-records`, `export-trajectory`, and `prune-records`
+  expose lossless migration, SQLite-backed trajectory export, and explicit
+  record maintenance. `stage-trajectory-release` applies the public quality
+  gate to a reviewed trajectory allowlist and produces an append-only local
+  release directory ready for an artifact-repository PR.
+
+### Changed
+
+- Session checkpoints (`sessions/messages`), behavioral history
+  (`session_events`), runtime telemetry (`hook_events`), portable run
+  projections (`events.jsonl`), immutable evaluation trajectories, and
+  evidence judgments now have separate declared owners. New runtime sessions
+  no longer create global transcript JSONL. EvidenceLedger v2 rows carry
+  session/turn/call correlation for external verifier joins.
+- Run projections use `RunTimeline` and schema-backed `events.jsonl`.
+  Cross-process writers coordinate ordinals and compaction; bounded files carry
+  an explicit `projection.truncated` row. Readers prefer the new filename and
+  accept `transcript.jsonl` / `dialogue.jsonl` during the compatibility window.
+
+### Deprecated
+
+- `SessionTranscript`, `RunTranscript`, the `run_transcript` module surface,
+  and legacy transcript filenames remain one-release read/import adapters.
+  New code uses `SessionTimeline`, `RunTimeline`, and `events.jsonl`.
+
+### Fixed
+
+- PostVerify continuation candidates and paused external verification no
+  longer emit a terminal `session.ended` record; only a true completed/error
+  terminal state closes the durable session lifetime.
+- Synchronous public hook handlers run off the event-loop thread so their
+  timeout remains enforceable. Deprecated synchronous session-close methods
+  emit `SessionEnd` when they own a sync event loop and direct async owners to
+  `amark_session_completed/error`.
+
 ## [1.0.10] - 2026-07-31
 
 > Benchmark-owned tool contracts now pass through GEODE's trusted execution

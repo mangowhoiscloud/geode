@@ -1,7 +1,7 @@
 """Compact observation and trajectory contracts for computer-use.
 
 This module intentionally stays data-shaped. The computer harness already owns
-desktop actions; transcripts already own durable history. These helpers only
+desktop actions; session records already own durable history. These helpers only
 standardise the small metadata rows needed to replay and evaluate GUI actions
 without copying screenshot base64 into logs.
 """

@@ -488,6 +488,8 @@ class AgenticLoop:
         self._verify_root_user_input = ""
         self._verify_attempt = 0
         self._verify_attempt_results: list[AgenticResult] = []
+        self._verification_evidence_refs: list[dict[str, Any]] = []
+        self._pending_verification: dict[str, Any] = {}
         self._verify_continuation_budget = 2
         self._session_generation = 1
         self._public_session_started = False
@@ -545,13 +547,14 @@ class AgenticLoop:
         self._op_logger = OperationLogger(quiet=self._quiet)
         self._error_recovery = ErrorRecoveryStrategy(tool_executor)
 
-        # Tier 1 transcript: append-only JSONL event stream
-        self._transcript: Any | None = None
+        # Immutable session history: canonical SQLite rows with an optional
+        # run-scoped JSONL projection.
+        self._timeline: Any | None = None
         self._session_id: str = ""
         try:
             import uuid as _uuid
 
-            from core.observability.transcript import SessionTranscript
+            from core.observability.session_timeline import SessionTimeline
 
             # caller-provided session_id wins (keeps the worker's artifacts
             # under one sub_agents/<task_id>/ dir); else ephemeral s-<uuid>
@@ -559,9 +562,9 @@ class AgenticLoop:
                 self._session_id = session_id
             else:
                 self._session_id = f"s-{_uuid.uuid4().hex[:12]}"
-            self._transcript = SessionTranscript(self._session_id)
+            self._timeline = SessionTimeline(self._session_id)
         except Exception:
-            log.warning("Transcript init failed", exc_info=True)
+            log.warning("Session timeline init failed", exc_info=True)
         try:
             from core.agent.capability_graph import build_capability_graph
             from core.agent.evidence_ledger import EvidenceLedger
@@ -576,7 +579,10 @@ class AgenticLoop:
                 },
                 computer_use_enabled=is_computer_use_enabled(),
             )
-            self._evidence_ledger: Any | None = EvidenceLedger.for_session(self._session_id)
+            self._evidence_ledger: Any | None = EvidenceLedger.for_session(
+                self._session_id,
+                turn_id_provider=lambda: self._turn_id,
+            )
             # PR-HITL-APPROVAL-FSM (2026-07-02) — hand the session ledger to
             # the executor so approval-FSM terminal states (granted/denied +
             # executed/skipped) land as evidence rows. getattr-guarded: tests
@@ -601,7 +607,7 @@ class AgenticLoop:
             error_recovery=self._error_recovery,
             hooks=hooks,
             mcp_manager=mcp_manager,
-            transcript=self._transcript,
+            timeline=self._timeline,
             model=self.model,
             provider=_ctx_provider,
             source=_ctx_source,
@@ -694,9 +700,13 @@ class AgenticLoop:
         resume surgery (session id + cognitive state + guard counters)."""
         return _lifecycle.restore_loop_state(self, state)
 
-    def _record_transcript_end(self, result: Any) -> None:
-        """Delegates to :func:`_lifecycle.record_transcript_end`."""
-        return _lifecycle.record_transcript_end(self, result)
+    def _record_timeline_end(
+        self,
+        result: Any,
+        verify_payload: dict[str, Any] | None = None,
+    ) -> None:
+        """Delegates to :func:`_lifecycle.record_timeline_end`."""
+        return _lifecycle.record_timeline_end(self, result, verify_payload)
 
     def _finalize_and_return(
         self,
@@ -892,7 +902,7 @@ class AgenticLoop:
     async def _emit_session_start_signals(self, user_input: str) -> AgenticResult | None:
         """Emit the turn-start signals. Owns the USER_INPUT_RECEIVED
         observation, cognitive-state goal init + ContextVar bind,
-        COGNITIVE_PERCEIVE emit, conversation-context append, transcript
+        COGNITIVE_PERCEIVE emit, conversation-context append, SessionTimeline
         ``record_session_start`` / ``record_user_message``, and the
         SESSION_STARTED hook.
 
@@ -941,10 +951,10 @@ class AgenticLoop:
         # Add user message to conversation context
         self.context.add_user_message(user_input)
 
-        # Transcript: session start + user message
-        if self._transcript is not None:
-            self._transcript.record_session_start(model=self.model, provider=self._provider)
-            self._transcript.record_user_message(user_input)
+        # Durable history: session generation + this turn's user message.
+        if self._timeline is not None:
+            self._timeline.record_session_start(model=self.model, provider=self._provider)
+            self._timeline.record_user_message(user_input)
 
         # fresh per-session adapter usage counter → SESSION_ENDED adapter_usage
         from core.llm.adapters.dispatch import begin_session_adapter_tracking
@@ -1150,6 +1160,14 @@ class AgenticLoop:
         self._op_logger.reset()
         self._pre_execution_retry_errors.clear()
         self._turn_id = f"t-{uuid.uuid4().hex[:12]}"
+        if self._timeline is not None:
+            self._timeline.bind_turn(
+                self._turn_id,
+                session_generation=int(getattr(self, "_session_generation", 1)),
+            )
+        from core.observability.session_timeline import set_current_session_timeline
+
+        set_current_session_timeline(self._timeline)
         if continuation is None:
             self._verify_root_turn_id = self._turn_id
             self._verify_root_user_input = ""
@@ -1181,14 +1199,38 @@ class AgenticLoop:
         if added > 0:
             log.info("MCP tools lazy-loaded: +%d tools (total %d)", added, len(self._tools))
 
-    async def _open_turn(self, user_input: str) -> AgenticResult | None:
+    async def _open_turn(
+        self,
+        user_input: str,
+        *,
+        verification_continuation: bool = False,
+    ) -> AgenticResult | None:
         """Publish legacy start signals, then the durable public boundary."""
+        if verification_continuation:
+            self.context.add_system_event("verification_continuation", user_input)
+            if self._timeline is not None:
+                self._timeline.record_verification_continuation(
+                    user_input,
+                    root_turn_id=self._verify_root_turn_id,
+                    verify_attempt=self._verify_attempt,
+                )
+            self._save_checkpoint(user_input, round_idx=0)
+            return None
         intercepted = await self._emit_session_start_signals(user_input)
         if intercepted is not None:
             return intercepted
         if self._save_checkpoint(user_input, round_idx=0):
             await _lifecycle.emit_public_session_start(self)
         return None
+
+    async def _finalize_blocked_turn(self, result: AgenticResult) -> AgenticResult:
+        """Persist a rejected prompt attempt without storing its prompt body."""
+        if self._timeline is not None:
+            self._timeline.record_session_start(
+                model=self.model,
+                provider=self._provider,
+            )
+        return await self._afinalize_and_return(result, "", 0)
 
     # ------------------------------------------------------------------
     # Guard chain — the loop's transition guards, in priority order
@@ -1711,9 +1753,9 @@ class AgenticLoop:
                         self._hooks.trigger(HookEvent.HANDOFF_TRIGGERED, payload)
                     except Exception:
                         log.warning("HANDOFF_TRIGGERED hook failed", exc_info=True)
-                if self._transcript is not None:
+                if self._timeline is not None:
                     try:
-                        self._transcript.record_lifecycle_event(
+                        self._timeline.record_lifecycle_event(
                             event="handoff_triggered",
                             component="agentic_loop",
                             level="warning",
@@ -1723,7 +1765,7 @@ class AgenticLoop:
                             entity_id=self._session_id,
                         )
                     except Exception:
-                        log.warning("Transcript handoff_triggered record failed", exc_info=True)
+                        log.warning("Timeline handoff_triggered record failed", exc_info=True)
                 # flip the sessions row to handoff_state=PENDING (read-write
                 # parity; no-op when no session row exists yet)
                 self._persist_handoff_request()
@@ -1967,7 +2009,7 @@ class AgenticLoop:
                     capability_graph=graph_summary(capability_graph),
                     preflight=self._task_preflight,
                 )
-            if self._transcript is not None:
+            if self._timeline is not None:
                 summary = graph_summary(capability_graph)
                 digest = hashlib.sha256(
                     json.dumps(summary, sort_keys=True, ensure_ascii=False, default=str).encode()
@@ -1983,7 +2025,7 @@ class AgenticLoop:
                 if digest != self._capability_graph_digest:
                     payload["capability_graph"] = summary
                     self._capability_graph_digest = digest
-                self._transcript.record_lifecycle_event(
+                self._timeline.record_lifecycle_event(
                     event="task_preflight",
                     component="agentic_loop",
                     level="info",
@@ -2006,7 +2048,7 @@ class AgenticLoop:
         """Run the agentic loop until LLM emits end_turn or max rounds."""
         user_input, blocked = await self._begin_turn(user_input, _verify_continuation)
         if blocked is not None:
-            return blocked
+            return await self._finalize_blocked_turn(blocked)
 
         # Wire conversation context so /model command guard can check size
         from core.cli.commands import set_conversation_context
@@ -2017,6 +2059,16 @@ class AgenticLoop:
         # gap), and re-snapshot after any server recycle (epoch drift): a
         # reconnected server may advertise a different tool set (ADR-014 R5).
         self._refresh_mcp_tools_at_turn_start()
+
+        # Open the durable turn before preflight/decomposition so every later
+        # diagnostic row and early billing failure has a preceding
+        # session.started + message.user anchor.
+        intercept_result = await self._open_turn(
+            user_input,
+            verification_continuation=_verify_continuation is not None,
+        )
+        if intercept_result is not None:
+            return intercept_result
 
         preflight_hint = self._prepare_task_preflight(user_input)
         # Retained on self so mid-arun prompt rebuilds re-apply it.
@@ -2030,15 +2082,15 @@ class AgenticLoop:
             await self._try_decompose(user_input)
         except BillingError as exc:
             self._emit_quota_panel(exc)
-            return self._terminal_result(
-                TerminationReason.BILLING_ERROR,
-                exc.user_message(),
-                rounds=0,
+            return await self._afinalize_and_return(
+                self._terminal_result(
+                    TerminationReason.BILLING_ERROR,
+                    exc.user_message(),
+                    rounds=0,
+                ),
+                user_input,
+                0,
             )
-
-        intercept_result = await self._open_turn(user_input)
-        if intercept_result is not None:
-            return intercept_result
 
         messages = self.context.get_messages()
 
@@ -2136,7 +2188,11 @@ class AgenticLoop:
                     system_prompt, messages, round_idx, _spinner
                 )
                 if isinstance(_llm_outcome, AgenticResult):
-                    return _llm_outcome
+                    return await self._afinalize_and_return(
+                        _llm_outcome,
+                        user_input,
+                        round_idx + 1,
+                    )
                 response = _llm_outcome
             except EmptyModelOutputError as exc:
                 partial = await self._afinalize_actionable_partial_on_empty(
@@ -2218,7 +2274,7 @@ class AgenticLoop:
                         return await self._afinalize_and_return(result, user_input, round_idx + 1)
 
                     # Non-retryable → immediate exit via the structured
-                    # builder (raw SDK JSON must not leak into the transcript).
+                    # builder (raw SDK JSON must not leak into session history).
                     if _et == "bad_request":
                         if not self._quiet:
                             from core.ui.agentic_ui import emit_llm_error
@@ -2674,9 +2730,14 @@ class AgenticLoop:
                 response_schema if response_schema is not None else self._response_schema
             ),
         )
+        import uuid as _uuid
+
+        llm_call_id = f"llm-{self._turn_id}-{round_idx + 1}-{_uuid.uuid4().hex[:8]}"
         correlation = {
             "session_id": self._session_id,
             "turn_id": self._turn_id,
+            "llm_call_id": llm_call_id,
+            "llm_attempt_id": "",
         }
         llm_request = await self._middleware_registry.llm_request(
             LlmCallRequest(
@@ -2690,12 +2751,19 @@ class AgenticLoop:
         effective_model = req.model
         adapter_name = getattr(call_adapter, "name", "<unknown>")
         effective_provider = getattr(call_adapter, "provider", self._provider)
+        llm_attempt_number = 0
 
         async def _complete_attempt(adapter: Any, request: Any) -> Any:
+            nonlocal llm_attempt_number
+            llm_attempt_number += 1
+            attempt_correlation = {
+                **correlation,
+                "llm_attempt_id": f"{llm_call_id}:attempt-{llm_attempt_number}",
+            }
             current = LlmCallRequest(
                 adapter=adapter,
                 request=request,
-                correlation=correlation,
+                correlation=attempt_correlation,
             )
 
             async def terminal(effective: LlmCallRequest) -> Any:
@@ -2712,8 +2780,7 @@ class AgenticLoop:
                     self._hooks,
                     HookEvent.LLM_CALL_STARTED,
                     {
-                        "session_id": self._session_id,
-                        "turn_id": self._turn_id,
+                        **attempt_correlation,
                         "model": active_request.model,
                         "provider": active_provider,
                         "adapter": active_name,
@@ -2726,8 +2793,7 @@ class AgenticLoop:
                         self._hooks,
                         HookEvent.LLM_CALL_ENDED,
                         {
-                            "session_id": self._session_id,
-                            "turn_id": self._turn_id,
+                            **attempt_correlation,
                             "model": active_request.model,
                             "provider": active_provider,
                             "adapter": active_name,
@@ -2764,8 +2830,7 @@ class AgenticLoop:
                     self._hooks,
                     HookEvent.LLM_CALL_ENDED,
                     {
-                        "session_id": self._session_id,
-                        "turn_id": self._turn_id,
+                        **attempt_correlation,
                         "model": active_request.model,
                         "provider": active_provider,
                         "adapter": active_name,
@@ -2794,6 +2859,10 @@ class AgenticLoop:
                     await self._hooks.trigger_async(
                         HookEvent.LLM_CALL_RETRIED,
                         {
+                            "session_id": self._session_id,
+                            "turn_id": self._turn_id,
+                            "llm_call_id": llm_call_id,
+                            "llm_attempt_id": f"{llm_call_id}:attempt-{attempt}",
                             "model": effective_model,
                             "provider": effective_provider,
                             "adapter": adapter_name,

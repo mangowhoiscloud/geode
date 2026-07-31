@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import threading
+import time
 from collections.abc import Awaitable, Callable
 from functools import wraps
 from typing import Any, cast
@@ -235,3 +237,37 @@ async def test_block_stops_lower_priority_handlers() -> None:
 
     assert outcome.blocked is True
     assert called == ["block"]
+
+
+@_async_test
+async def test_blocking_sync_handler_is_bounded_off_the_event_loop() -> None:
+    registry = HookRegistry()
+    handler_started = threading.Event()
+    release_handler = threading.Event()
+
+    def blocking(_invocation: Any) -> HookDecision:
+        handler_started.set()
+        release_handler.wait(timeout=1.0)
+        return HookDecision()
+
+    registry.register(
+        HookName.USER_PROMPT_SUBMIT,
+        blocking,
+        name="blocking",
+        timeout_s=0.02,
+    )
+
+    started = time.monotonic()
+    try:
+        outcome = await registry.invoke(
+            HookName.USER_PROMPT_SUBMIT,
+            payload={"user_input": "hello"},
+        )
+    finally:
+        release_handler.set()
+
+    assert handler_started.is_set()
+    assert time.monotonic() - started < 0.2
+    assert outcome.decisions == ()
+    assert len(outcome.handler_errors) == 1
+    assert "blocking" in outcome.handler_errors[0]

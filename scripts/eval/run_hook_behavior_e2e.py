@@ -86,6 +86,7 @@ async def _run(
     from core.hooks import (
         HookAction,
         HookDecision,
+        HookEvidenceReference,
         HookName,
         HookRegistry,
         LlmCallRequest,
@@ -98,9 +99,9 @@ async def _run(
     from core.observability.event_store import HookEventStore
     from core.observability.hook_persistence import HookPersistenceSink
     from core.orchestration.isolated_execution import IsolatedRunner
-    from core.self_improving.loop.observe.run_transcript import (
-        RunTranscript,
-        run_transcript_scope,
+    from core.self_improving.loop.observe.run_timeline import (
+        RunTimeline,
+        run_timeline_scope,
     )
     from core.tools.registry import ToolRegistry
 
@@ -108,7 +109,7 @@ async def _run(
     run_id = f"hook-middleware-e2e-{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}"
     session_key = f"{run_id}:suite"
     sqlite_path = output_dir / "sessions.db"
-    transcript_path = output_dir / "transcript.jsonl"
+    timeline_path = output_dir / "events.jsonl"
     events: list[dict[str, Any]] = []
 
     def record(actor: str, kind: str, scenario: str, payload: dict[str, Any]) -> None:
@@ -168,12 +169,26 @@ async def _run(
         if hook is HookName.PRE_VERIFY:
             return HookDecision(
                 action=HookAction.STRENGTHEN,
-                evidence_refs=("behavior-e2e:tool-receipt",),
+                evidence_refs=(
+                    HookEvidenceReference(
+                        kind="native_receipt",
+                        schema_id="geode.hook-behavior-receipt@1",
+                        authority="GEODE behavior E2E tool receipt",
+                        reference="behavior-e2e:tool-receipt",
+                    ),
+                ),
             )
         if hook is HookName.POST_VERIFY:
             return HookDecision(
                 action=HookAction.ACCEPT,
-                evidence_refs=("behavior-e2e:built-in-verifier",),
+                evidence_refs=(
+                    HookEvidenceReference(
+                        kind="native_receipt",
+                        schema_id="geode.hook-behavior-verifier@1",
+                        authority="GEODE behavior E2E verifier",
+                        reference="behavior-e2e:built-in-verifier",
+                    ),
+                ),
             )
         if hook is HookName.STOP:
             return HookDecision(action=HookAction.FINALIZE)
@@ -264,6 +279,8 @@ async def _run(
         async def tool_execution(self, request: ToolCallRequest, next_call: Any) -> dict[str, Any]:
             self.counts["tool_execution"] += 1
             call_id = f"tool-call-{self.counts['tool_execution']}"
+            session_id = str(request.correlation.get("session_id") or "")
+            turn_id = str(request.correlation.get("turn_id") or "")
             record(
                 "assistant",
                 "tool_call",
@@ -271,7 +288,9 @@ async def _run(
                 {
                     "argument_sha256": _payload_digest(request.arguments),
                     "call_id": call_id,
+                    "session_id": session_id,
                     "tool": request.tool_name,
+                    "turn_id": turn_id,
                 },
             )
             result = await next_call(request)
@@ -282,8 +301,10 @@ async def _run(
                 {
                     "call_id": call_id,
                     "result_sha256": _payload_digest(result),
+                    "session_id": session_id,
                     "status": "error" if result.get("error") else "ok",
                     "tool": request.tool_name,
+                    "turn_id": turn_id,
                 },
             )
             record(
@@ -384,14 +405,14 @@ async def _run(
         session_id=f"{run_id}-live",
     )
 
-    transcript = RunTranscript(
+    timeline = RunTimeline(
         session_id=run_id,
         gen_tag="hook-middleware-e2e",
         component="agentic_loop",
-        path=transcript_path,
+        path=timeline_path,
     )
 
-    with run_transcript_scope(transcript):
+    with run_timeline_scope(timeline):
         set_session_id(f"{run_id}-compact")
         set_turn_id("compact-turn")
         compact_messages = [
@@ -494,13 +515,13 @@ async def _run(
         connection.close()
     sqlite_extensions = [json.loads(row[0]) for row in extension_rows]
     sqlite_tools = [(event, json.loads(payload)) for event, payload in tool_rows]
-    transcript_rows = [
+    timeline_rows = [
         json.loads(line)
-        for line in transcript_path.read_text(encoding="utf-8").splitlines()
+        for line in timeline_path.read_text(encoding="utf-8").splitlines()
         if line.strip()
     ]
-    transcript_extensions = [
-        row for row in transcript_rows if row.get("event") == RuntimeEvent.EXTENSION_INVOKED.value
+    timeline_extensions = [
+        row for row in timeline_rows if row.get("event") == RuntimeEvent.EXTENSION_INVOKED.value
     ]
 
     observed_hooks = {
@@ -596,10 +617,10 @@ async def _run(
         },
     )
     _require(
-        len(transcript_extensions) == expected_extension_rows,
+        len(timeline_extensions) == expected_extension_rows,
         {
-            "expected_transcript_extension_rows": expected_extension_rows,
-            "observed": len(transcript_extensions),
+            "expected_timeline_extension_rows": expected_extension_rows,
+            "observed": len(timeline_extensions),
         },
     )
 
@@ -626,22 +647,33 @@ async def _run(
     )
 
     published_at = _utc_now()
-    trajectory = {
-        "captured_at": captured_at,
-        "events": events,
-        "integrity": {
+    from core.observability.trajectory import build_trajectory
+    from core.observability.trajectory_release import stage_trajectory_release
+
+    trajectory = build_trajectory(
+        trajectory_id=f"geode-agenticloop-{run_id}",
+        captured_at=captured_at,
+        published_at=published_at,
+        observed_on=datetime.now(UTC).strftime("%Y-%m-%d"),
+        trajectory_class=("decision", "tool"),
+        events=events,
+        integrity={
             "canonicalization": (
                 "UTF-8, LF, json.dumps(ensure_ascii=False, sort_keys=True, indent=2)"
             ),
+            "scope_complete": True,
+            "replay_complete": False,
             "fidelity": (
                 "decision/tool trajectory; raw prompts, model reasoning, tool bodies, "
                 "checkpoints, SQLite, and JSONL remain unpublished"
             ),
+            "incompleteness": [],
+            "replay_incompleteness": [
+                "payload digests intentionally replace private prompt and result bodies"
+            ],
             "pairing_rule": "tool_result.call_id equals the preceding tool_call.call_id",
-            "record_count": len(events),
         },
-        "observed_on": datetime.now(UTC).strftime("%Y-%m-%d"),
-        "outcome": {
+        outcome={
             "hook_coverage": {
                 "covered": len(observed_hooks),
                 "expected": len(expected_hooks),
@@ -657,14 +689,14 @@ async def _run(
             "sqlite_extension_rows": len(sqlite_extensions),
             "terminal_state": str(live_result.termination_reason),
             "tool_calls": len(probe_tool.calls),
-            "transcript_extension_rows": len(transcript_extensions),
+            "timeline_extension_rows": len(timeline_extensions),
             "unscored_reason": "release validation probe, not a benchmark task",
             "verifier": (
                 "explicit release gates over exact hook/middleware multiplicity, exactly-once "
                 "tool execution, SQLite/JSONL parity, correlation, and persisted compaction"
             ),
         },
-        "privacy": {
+        privacy={
             "license": "GEODE-owned run; no third-party dataset content",
             "redactions": [
                 {
@@ -678,7 +710,7 @@ async def _run(
             ],
             "review_state": "reviewed",
         },
-        "provenance": {
+        provenance={
             "adapters": {"llm": "codex-oauth (source=subscription)"},
             "extraction_transform": (
                 "in-process hook/middleware receipts normalized to decision/tool events"
@@ -694,96 +726,46 @@ async def _run(
             "storage_checks": {
                 "compaction_artifacts": persisted_compactions,
                 "sqlite_extension_rows": len(sqlite_extensions),
-                "transcript_extension_rows": len(transcript_extensions),
+                "timeline_extension_rows": len(timeline_extensions),
             },
         },
-        "published_at": published_at,
-        "schema_id": "geode.trajectory@2026-07-31",
-        "source": {
+        source={
             "harness": "scripts/eval/run_hook_behavior_e2e.py",
             "parents": None,
             "run": run_id,
             "session": session_key,
-            "task": "validate GEODE v1.0.9 public hooks and trusted middleware",
+            "task": "validate GEODE public hooks and trusted middleware",
         },
-        "trajectory_class": ["decision", "tool"],
-        "trajectory_id": f"geode-agenticloop-{run_id}",
-    }
+    )
+    _require(
+        bool(trajectory["integrity"]["scope_complete"]),
+        {
+            "quality": trajectory["integrity"]["quality"],
+            "scope_incompleteness": trajectory["integrity"]["scope_incompleteness"],
+        },
+    )
 
-    publication_staging = output_dir / "publication-staging"
-    trajectory_path = publication_staging / "trajectory.json"
-    _write_json(trajectory_path, trajectory)
-    manifest = {
-        "files": [
-            {
-                "bytes": trajectory_path.stat().st_size,
-                "path": "trajectory.json",
-                "records": len(events),
-                "sha256": _sha256(trajectory_path),
-            }
-        ],
-        "published_at": published_at,
-        "release_scope": "hook-middleware-behavior-e2e",
-        "release_source": "geode-agenticloop",
-        "schema_id": "geode.trajectory@2026-07-31",
-        "supersedes": (
-            "geode-agenticloop-hook-middleware-behavior-e2e-20260730T235004Z-0434a17a1b0c"
-        ),
-    }
-    manifest_path = publication_staging / "manifest.json"
-    _write_json(manifest_path, manifest)
-    release_id = (
-        "geode-agenticloop-hook-middleware-behavior-e2e-"
-        f"{published_at.replace(':', '').replace('-', '')}-"
-        f"{_sha256(manifest_path)[:12]}"
+    publication_dir = stage_trajectory_release(
+        output_dir / "publication",
+        release_source="geode-agenticloop",
+        release_scope="hook-middleware-behavior-e2e",
+        trajectories={"trajectory.json": trajectory},
+        published_at=published_at,
+        require_complete=False,
+        privacy_review={
+            "reviewer": "GEODE hook behavior E2E release operator",
+            "reviewed_at": published_at,
+            "method": "allowlist review plus automated secret and identity scan",
+            "scope": "hook-middleware-behavior-e2e",
+            "attestation": (
+                "Only the normalized decision/tool trajectory and content-bound "
+                "manifest are approved for public release."
+            ),
+        },
+        supersedes=("geode-agenticloop-hook-middleware-behavior-e2e-20260730T235004Z-0434a17a1b0c"),
     )
-    publication_dir = output_dir / "publication" / release_id
-
-    secret_patterns = {
-        "absolute_home": re.compile(r"/Users/(?!REDACTED(?:/|$)|x(?:/|$))[^/\s]+"),
-        "email": re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.I),
-        "github_token": re.compile(r"\bgh[opsu]_[A-Za-z0-9_]{20,}\b"),
-        "openai_key": re.compile(r"\bsk-[A-Za-z0-9_-]{20,}\b"),
-        "bearer": re.compile(r"\bBearer\s+[A-Za-z0-9._~+/=-]{12,}\b", re.I),
-    }
-    secret_positive_samples = {
-        "absolute_home": "/Users/example/project",
-        "email": "owner@example.com",
-        "github_token": "ghp_0123456789abcdefghijklmnop",
-        "openai_key": "sk-0123456789abcdefghijklmnop",
-        "bearer": "Bearer abcdefghijklmnopqrstuvwxyz",
-    }
-    _require(
-        all(
-            pattern.search(secret_positive_samples[name])
-            for name, pattern in secret_patterns.items()
-        ),
-        "secret scanner failed its known-positive self-check",
-    )
-    staged_files = sorted(
-        path.relative_to(publication_staging).as_posix()
-        for path in publication_staging.rglob("*")
-        if path.is_file()
-    )
-    _require(
-        staged_files == ["manifest.json", "trajectory.json"],
-        {"publication_allowlist": staged_files},
-    )
-    scan_texts = [
-        path.read_text(encoding="utf-8", errors="replace")
-        for path in publication_staging.rglob("*")
-        if path.is_file() and path.suffix in {".json", ".jsonl", ".md", ".toml", ".txt"}
-    ]
-    scan_blob = "\n".join(scan_texts)
-    secret_findings = {
-        name: sorted(set(pattern.findall(scan_blob))) for name, pattern in secret_patterns.items()
-    }
-    _require(
-        not any(secret_findings.values()),
-        {"publication_secret_findings": secret_findings},
-    )
-    publication_dir.parent.mkdir(parents=True, exist_ok=True)
-    publication_staging.rename(publication_dir)
+    manifest = json.loads((publication_dir / "manifest.json").read_text(encoding="utf-8"))
+    secret_scan = dict(manifest["quality"]["secret_scan"])
 
     generated_files = []
     for path in sorted(output_dir.rglob("*")):
@@ -798,7 +780,7 @@ async def _run(
                     if publication_dir in path.parents
                     else (
                         "local-evidence"
-                        if path in {sqlite_path, transcript_path}
+                        if path in {sqlite_path, timeline_path}
                         else "withheld-runtime"
                     )
                 ),
@@ -822,9 +804,9 @@ async def _run(
         "publication_directory": publication_dir.relative_to(output_dir).as_posix(),
         "result": "pass",
         "run_id": run_id,
-        "secret_scan": {name: len(values) for name, values in secret_findings.items()},
+        "secret_scan": secret_scan,
         "sqlite_extension_rows": len(sqlite_extensions),
-        "transcript_extension_rows": len(transcript_extensions),
+        "timeline_extension_rows": len(timeline_extensions),
     }
     _write_json(output_dir / "result.json", summary)
     return summary

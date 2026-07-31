@@ -1,12 +1,11 @@
-"""SessionManager — SQLite-backed session index for fast query/filter/sort.
+"""SessionManager — project-local SQLite session state.
 
-GAP 3: Replaces file-based session scanning with a proper database index.
-Uses SQLite WAL mode for concurrent read access from REPL + sub-agents.
+Uses SQLite WAL mode for concurrent access from REPL + sub-agents.
 
-The session metadata lives in the ``sessions`` table; Phase 1a (Hermes
-absorption) introduces a ``messages`` table that mirrors the JSON message
-log produced by :class:`SessionCheckpoint`. Until Phase 1b flips the SoT,
-the JSON files remain authoritative — DB rows are an idempotent mirror.
+``sessions`` and ``messages`` own the mutable resume checkpoint.
+``session_events`` owns immutable execution history, while ``hook_events``
+owns bounded runtime activity. JSON files under the session directory are
+recovery caches or portable projections, never a second hot-path truth.
 """
 
 from __future__ import annotations
@@ -203,7 +202,7 @@ CREATE INDEX IF NOT EXISTS idx_context_artifacts_kind
 # * ``component`` — GEODE subsystem: ``seed-generation`` /
 #   ``self-improving-loop`` / ``petri-audit`` / ``autoresearch`` /
 #   ``agentic_loop`` / ``serve`` / ``scheduler``. Answers "what is this
-#   loop doing" — reuses ``RunTranscript.component`` SoT (no separate
+#   loop doing" — reuses ``RunTimeline.component`` SoT (no separate
 #   enum).
 #
 # ``last_run_id`` is a soft FK into ``run_lineage`` for seed-generation
@@ -622,6 +621,12 @@ class SessionManager:
         from core.observability.event_store import ensure_event_schema
 
         ensure_event_schema(self._conn)
+        # Immutable session history is a sibling plane, not another message
+        # checkpoint. The schema helper is additive and is also owned by the
+        # short-connection SessionEventStore.
+        from core.observability.session_timeline import ensure_session_event_schema
+
+        ensure_session_event_schema(self._conn)
         # Phase 1c (Hermes absorption, 2026-05-22) — FTS5 indices.
         # unicode61 is always created. trigram is probed at runtime and
         # skipped on SQLite builds that don't ship it; ``self._has_trigram``

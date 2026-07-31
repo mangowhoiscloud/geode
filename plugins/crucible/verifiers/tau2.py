@@ -26,6 +26,7 @@ class Tau2AssayAdapter:
     schema: str = "crucible.tau2-assay.v1"
     required_evaluator_paths: tuple[str, ...] = (
         "plugins/benchmark_harness/tau2_geode_agent.py",
+        "plugins/benchmark_harness/trajectory_artifacts.py",
         "plugins/crucible",
     )
     termination_classes: tuple[tuple[str, Literal["semantic", "infra"]], ...] = (

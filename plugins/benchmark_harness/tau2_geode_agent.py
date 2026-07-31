@@ -10,11 +10,9 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import hashlib
 import json
 import os
 import re
-import shutil
 import site
 import sys
 import time
@@ -37,6 +35,17 @@ from plugins.benchmark_harness.tau2_turn_supervisor import (
     _usage_dict,
     _user_system_prompt,
 )
+from plugins.benchmark_harness.trajectory_artifacts import (
+    close_benchmark_session as _close_tau_session,
+)
+from plugins.benchmark_harness.trajectory_artifacts import (
+    geode_session_trace,
+    geode_trajectory_snapshot_path,
+    write_tau2_trajectory_snapshot,
+)
+from plugins.benchmark_harness.trajectory_artifacts import (
+    tau2_trajectory_snapshot_paths as _trajectory_snapshot_paths,
+)
 from plugins.crucible.contract import (
     ContractError,
     ExperimentContract,
@@ -53,6 +62,20 @@ DEFAULT_HARNESS_DIR = REPO_ROOT / "artifacts" / "eval" / "harnesses" / "tau2-ben
 DEFAULT_TRAJECTORY_SNAPSHOT_DIR = (
     REPO_ROOT / "artifacts" / "eval" / "runs" / "crucible" / "trajectory-snapshots"
 )
+_ACTIVE_TAU_LOOPS: dict[str, Any] = {}
+
+
+def _register_tau_loop(loop: Any) -> None:
+    session_id = str(getattr(loop, "_session_id", "") or f"loop-{id(loop)}")
+    _ACTIVE_TAU_LOOPS[session_id] = loop
+
+
+def _close_all_tau_sessions(*, success: bool) -> None:
+    """Close participants even when tau2, not GEODE, owns the stop edge."""
+    loops = list(_ACTIVE_TAU_LOOPS.values())
+    _ACTIVE_TAU_LOOPS.clear()
+    for loop in loops:
+        _close_tau_session(loop, success=success)
 
 
 def _tau2_data_root(harness_dir: Path) -> Path:
@@ -301,6 +324,7 @@ def register_geode_tau2_participants(
                 else None
             )
             state = GeodeTau2State(loop=loop, deadline_at=deadline_at)
+            _register_tau_loop(loop)
             if message_history:
                 state.messages_seen = len(message_history)
             return state
@@ -313,9 +337,11 @@ def register_geode_tau2_participants(
             try:
                 result = _run_geode_turn(state, prompt)
             except _Tau2TurnDeadlineError:
+                _close_tau_session(state.loop, success=False)
                 assistant = AssistantMessage.text(
                     "The configured tau2 simulation deadline elapsed.",
                     raw_data={
+                        **geode_session_trace(state.loop),
                         "geode_termination_reason": "external_deadline",
                         "geode_tool_call_count": 0,
                         "geode_progress_supervisor": "tau2_deadline",
@@ -336,10 +362,12 @@ def register_geode_tau2_participants(
                     role="assistant agent",
                 )
             if terminal_token is not None:
+                _close_tau_session(state.loop, success=True)
                 assistant = AssistantMessage.text(
                     terminal_token,
                     usage=_usage_dict(result),
                     raw_data={
+                        **geode_session_trace(state.loop),
                         "geode_rounds": getattr(result, "rounds", 0),
                         "geode_termination_reason": getattr(result, "termination_reason", ""),
                         "geode_tool_call_count": 0,
@@ -355,6 +383,7 @@ def register_geode_tau2_participants(
                     tool_calls=tool_calls,
                     usage=_usage_dict(result),
                     raw_data={
+                        **geode_session_trace(state.loop),
                         "geode_rounds": getattr(result, "rounds", 0),
                         "geode_termination_reason": getattr(result, "termination_reason", ""),
                         "geode_tool_call_count": len(tool_calls),
@@ -368,6 +397,7 @@ def register_geode_tau2_participants(
                 _result_text(result),
                 usage=_usage_dict(result),
                 raw_data={
+                    **geode_session_trace(state.loop),
                     "geode_rounds": getattr(result, "rounds", 0),
                     "geode_termination_reason": getattr(result, "termination_reason", ""),
                     "geode_tool_call_count": len(getattr(result, "tool_calls", []) or []),
@@ -421,6 +451,7 @@ def register_geode_tau2_participants(
                 else None
             )
             state = GeodeTau2State(loop=loop, deadline_at=deadline_at)
+            _register_tau_loop(loop)
             if message_history:
                 state.messages_seen = len(message_history)
             return state
@@ -433,9 +464,11 @@ def register_geode_tau2_participants(
             try:
                 result = _run_geode_turn(state, prompt)
             except _Tau2TurnDeadlineError:
+                _close_tau_session(state.loop, success=False)
                 user_message = UserMessage.text(
                     "The configured tau2 simulation deadline elapsed.",
                     raw_data={
+                        **geode_session_trace(state.loop),
                         "geode_role": "user_simulator",
                         "geode_termination_reason": "external_deadline",
                         "geode_tool_call_count": 0,
@@ -457,10 +490,12 @@ def register_geode_tau2_participants(
                     role="simulated user",
                 )
             if terminal_token is not None:
+                _close_tau_session(state.loop, success=True)
                 user_message = UserMessage.text(
                     terminal_token,
                     usage=_usage_dict(result),
                     raw_data={
+                        **geode_session_trace(state.loop),
                         "geode_role": "user_simulator",
                         "geode_rounds": getattr(result, "rounds", 0),
                         "geode_termination_reason": getattr(result, "termination_reason", ""),
@@ -477,6 +512,7 @@ def register_geode_tau2_participants(
                     tool_calls=tool_calls,
                     usage=_usage_dict(result),
                     raw_data={
+                        **geode_session_trace(state.loop),
                         "geode_role": "user_simulator",
                         "geode_rounds": getattr(result, "rounds", 0),
                         "geode_termination_reason": getattr(result, "termination_reason", ""),
@@ -491,6 +527,7 @@ def register_geode_tau2_participants(
                 _result_text(result),
                 usage=_usage_dict(result),
                 raw_data={
+                    **geode_session_trace(state.loop),
                     "geode_role": "user_simulator",
                     "geode_rounds": getattr(result, "rounds", 0),
                     "geode_termination_reason": getattr(result, "termination_reason", ""),
@@ -519,11 +556,6 @@ def _slug(value: str) -> str:
     return value or "unnamed"
 
 
-def _trajectory_snapshot_paths(snapshot_dir: Path, run_id: str) -> tuple[Path, Path]:
-    slug = _slug(run_id)
-    return snapshot_dir / f"{slug}.trajectory.json", snapshot_dir / f"{slug}.snapshot.json"
-
-
 def _write_trajectory_snapshot(
     *,
     harness_dir: Path,
@@ -535,31 +567,22 @@ def _write_trajectory_snapshot(
     if not results_path.exists():
         print(f"trajectory snapshot skipped: results not found at {results_path}", file=sys.stderr)
         return None
-    trajectory_path, snapshot_path = _trajectory_snapshot_paths(snapshot_dir, run_id)
-    snapshot_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(results_path, trajectory_path)
-    raw_artifact_sha256 = hashlib.sha256(trajectory_path.read_bytes()).hexdigest()
-    snapshot = {
-        "schema": "crucible_tau2_trajectory_snapshot.v3",
-        "filename_convention": {
-            "run_id": (
-                "crucible-tau2-<stage>-<domain>-<arm>-"
-                "<agent_route>-<user_route>-n<tasks>k<trials>-<yyyymmdd>-<seq>"
-            ),
-            "trajectory": "<run-id>.trajectory.json",
-            "snapshot": "<run-id>.snapshot.json",
-        },
-        "run_id": run_id,
-        "raw_results": str(results_path),
-        "trajectory_snapshot": str(trajectory_path),
-        "raw_artifact_sha256": raw_artifact_sha256,
-        "snapshot_metadata": str(snapshot_path),
-        **metadata,
-    }
-    snapshot_tmp = snapshot_path.with_name(f".{snapshot_path.name}.tmp-{os.getpid()}")
-    snapshot_tmp.write_text(json.dumps(snapshot, indent=2, ensure_ascii=False) + "\n")
-    os.replace(snapshot_tmp, snapshot_path)
+    trajectory_path, snapshot_path = write_tau2_trajectory_snapshot(
+        results_path=results_path,
+        snapshot_dir=snapshot_dir,
+        run_id=run_id,
+        metadata=metadata,
+    )
+    normalized_path = geode_trajectory_snapshot_path(snapshot_dir, run_id)
+    snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
     print(f"trajectory snapshot wrote {trajectory_path}")
+    if snapshot.get("geode_trajectory_status") == "written":
+        print(f"normalized GEODE trajectory wrote {normalized_path}")
+    else:
+        print(
+            f"normalized GEODE trajectory failed: {snapshot.get('geode_trajectory_error')}",
+            file=sys.stderr,
+        )
     print(f"trajectory metadata wrote {snapshot_path}")
     return trajectory_path, snapshot_path
 
@@ -583,8 +606,13 @@ def _validate_contract_output_paths(
     if run_id in {".", ".."} or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", run_id) is None:
         raise ContractError("contract --save-to must be a simple, path-free run ID")
     trajectory_path, snapshot_path = _trajectory_snapshot_paths(snapshot_dir, run_id)
+    normalized_path = geode_trajectory_snapshot_path(snapshot_dir, run_id)
     raw_run_dir = _tau2_data_root(harness_dir) / "simulations" / run_id
-    collisions = [path for path in (raw_run_dir, trajectory_path, snapshot_path) if path.exists()]
+    collisions = [
+        path
+        for path in (raw_run_dir, trajectory_path, normalized_path, snapshot_path)
+        if path.exists()
+    ]
     if collisions:
         raise ContractError(
             "contract run output must be fresh; refusing existing path(s): "
@@ -1067,6 +1095,7 @@ def main() -> int:
     except BaseException as exc:
         run_error = exc
     finally:
+        _close_all_tau_sessions(success=run_error is None)
         if previous_fail_empty_text is None:
             os.environ.pop("GEODE_CODEX_OAUTH_FAIL_EMPTY_TEXT", None)
         else:
