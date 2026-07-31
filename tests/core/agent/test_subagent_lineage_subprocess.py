@@ -251,7 +251,7 @@ def test_session_start_signals_bind_parent_session_id() -> None:
     loop_obj._session_id = "s-child-uuid"
     loop_obj._parent_session_key = "subject:foo:bar"
     loop_obj._parent_session_id = "s-parent-uuid-bound"
-    loop_obj._transcript = None
+    loop_obj._timeline = None
     loop_obj._hooks = None
     loop_obj.model = "claude-opus-4-7"
     loop_obj._provider = "anthropic"

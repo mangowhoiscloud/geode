@@ -210,7 +210,7 @@ def read_latest_pointer() -> dict[str, object] | None:
 
     - The pointer file does not exist (bootstrap — no prior run on
       this machine + STATE_ROOT pair).
-    - The JSON is unparseable.
+    - The JSON is unparsable.
     - The payload is not a dict.
 
     Returning a dict (not a class) keeps the surface dependency-free
@@ -308,7 +308,7 @@ GLOBAL_DIAGNOSTICS_DIR = GEODE_HOME / "diagnostics"
 GLOBAL_AUDIT_AGREEMENT_DIR = GEODE_HOME / "audit" / "agreement"
 # P1a + P1c (2026-05-19) — self-improving-loop wiring sprint. Shared cross-loop
 # namespace: ``sessions.jsonl`` (P1a, run-level index, one row per
-# autoresearch/seed-generation run) + ``<session_id>/transcript.jsonl``
+# autoresearch/seed-generation run) + ``<session_id>/events.jsonl``
 # (P1c, event stream within a single run). See
 # ``docs/plans/2026-05-19-self-improving-loop-wiring-sprint.md``.
 # LEGACY home dir ``~/.geode/autoresearch/handoff/`` — the pre-split policy

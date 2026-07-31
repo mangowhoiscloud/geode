@@ -58,7 +58,7 @@ class ToolCallProcessor:
         error_recovery: ErrorRecoveryStrategy,
         hooks: HookSystem | None = None,
         mcp_manager: Any | None = None,
-        transcript: Any | None = None,
+        timeline: Any | None = None,
         model: str = "",
         provider: str = "",
         source: str = "",
@@ -69,7 +69,7 @@ class ToolCallProcessor:
         self._error_recovery = error_recovery
         self._hooks = hooks
         self._mcp_manager = mcp_manager
-        self._transcript = transcript
+        self._timeline = timeline
         self._model = model
         # PR-TOOL-EXEC-CONTEXT (2026-05-28) — loop's LLM-identity carried
         # forward into every tool dispatch as a ``ToolContext`` so LLM-
@@ -125,8 +125,9 @@ class ToolCallProcessor:
         tool_use_id: str = "",
         *,
         contains_personal_data: bool = False,
+        record_call: bool = True,
     ) -> None:
-        """Log result, record transcript events, and append to tool_log."""
+        """Log result, record session events, and append to tool_log."""
         personal = contains_personal_data or tool_name in PERSONAL_DATA_TOOLS
         durable_input = personal_data_omitted(tool_name) if personal else tool_input
         durable_result = personal_data_omitted(tool_name) if personal else result
@@ -146,18 +147,25 @@ class ToolCallProcessor:
                 )
                 self._op_logger.log_tool_result(tool_name, display_result, visible=visible)
 
-        # Transcript: tool_call + tool_result events
-        if self._transcript is not None:
-            self._transcript.record_tool_call(tool_name, durable_input, call_id=tool_use_id)
+        # Immutable session history: tool call + result share the provider call id.
+        if self._timeline is not None:
+            if record_call:
+                self._timeline.record_tool_call(tool_name, durable_input, call_id=tool_use_id)
             status = "error" if isinstance(result, dict) and result.get("error") else "ok"
             summary = "personal account data omitted" if personal else ""
             if isinstance(result, dict) and not personal:
                 summary = str(result.get("summary", result.get("error", "")))
-            self._transcript.record_tool_result(tool_name, status, summary, call_id=tool_use_id)
+            self._timeline.record_tool_result(
+                tool_name,
+                status,
+                summary,
+                call_id=tool_use_id,
+                result=durable_result,
+            )
             if tool_name in {"computer", "computer_use"} and isinstance(result, dict):
                 payload = self._computer_gui_payload(tool_input, result, tool_use_id)
                 if payload:
-                    self._transcript.record_lifecycle_event(
+                    self._timeline.record_lifecycle_event(
                         event="gui_step",
                         component="computer_use",
                         level="info" if status == "ok" else "warning",
@@ -191,7 +199,7 @@ class ToolCallProcessor:
         result: dict[str, Any],
         tool_use_id: str,
     ) -> dict[str, Any]:
-        """Return transcript-safe GUI metadata; never include screenshot base64."""
+        """Return record-safe GUI metadata; never include screenshot base64."""
         payload: dict[str, Any] = {
             "schema_version": 1,
             "tool_use_id": tool_use_id,
@@ -338,11 +346,17 @@ class ToolCallProcessor:
         fail_count = self._consecutive_failures.get(tool_name, 0)
         visible = self._op_logger.log_tool_call(tool_name, tool_input)
         tool_ctx: Any | None = None
+        execution_started = False
 
         last_recoverable = self._last_error_recoverable.get(tool_name, True)
         if fail_count >= self.MAX_CONSECUTIVE_FAILURES and last_recoverable:
             try:
-                result = await self._attempt_recovery(tool_name, tool_input, fail_count)
+                result = await self._attempt_recovery(
+                    tool_name,
+                    tool_input,
+                    fail_count,
+                    tool_use_id=block.id,
+                )
             except Exception as exc:
                 log.exception("Tool recovery raised for %s", tool_name)
                 result = {
@@ -363,17 +377,39 @@ class ToolCallProcessor:
             # using instead of independently re-resolving via
             # ``infer_source``. Tools that do not consume the context absorb
             # the ``_tool_context`` kwarg through their ``**kwargs`` splat.
+            from core.agent.cognitive_state_ctx import get_session_id
             from core.tools.base import ToolContext
 
             tool_ctx = ToolContext(
+                session_id=get_session_id(),
+                tool_call_id=str(block.id),
                 provider=self._provider,
                 source=self._source,
                 model=self._model,
                 adapter_name=self._adapter_name,
                 batch_cost_approved=batch_cost_approved,
             )
+
+            def record_execution_start(
+                effective_name: str,
+                durable_arguments: dict[str, Any],
+            ) -> None:
+                nonlocal execution_started
+                execution_started = True
+                if self._timeline is not None:
+                    self._timeline.record_tool_call(
+                        effective_name,
+                        durable_arguments,
+                        call_id=block.id,
+                    )
+
             try:
-                result = await self._executor.aexecute(tool_name, tool_input, context=tool_ctx)
+                result = await self._executor.aexecute(
+                    tool_name,
+                    tool_input,
+                    context=tool_ctx,
+                    on_execution_started=record_execution_start,
+                )
             except Exception as exc:
                 log.exception("Tool execution raised for %s", tool_name)
                 result = {
@@ -381,7 +417,6 @@ class ToolCallProcessor:
                     "error_type": type(exc).__name__,
                     "recoverable": False,
                 }
-
         effective_tool_name = (
             tool_ctx.effective_tool_name
             if tool_ctx is not None and tool_ctx.effective_tool_name
@@ -426,6 +461,7 @@ class ToolCallProcessor:
             visible,
             block.id,
             contains_personal_data=contains_personal_data,
+            record_call=not execution_started,
         )
         return await self._serialize_tool_result(
             result,
@@ -569,6 +605,8 @@ class ToolCallProcessor:
         tool_name: str,
         tool_input: dict[str, Any],
         fail_count: int,
+        *,
+        tool_use_id: str,
     ) -> dict[str, Any]:
         """Attempt adaptive error recovery for a repeatedly failing tool.
 
@@ -581,10 +619,76 @@ class ToolCallProcessor:
                 "tool_name": tool_name,
                 "fail_count": fail_count,
                 "source": "tool_call_processor",
+                "tool_call_id": tool_use_id,
             },
         )
 
-        recovery_result = await self._error_recovery.arecover(tool_name, tool_input, fail_count)
+        from core.agent.cognitive_state_ctx import get_session_id
+        from core.tools.base import ToolContext
+
+        started_attempts: dict[int, tuple[str, dict[str, Any]]] = {}
+
+        def context_factory(_attempt_tool: str, attempt_index: int) -> ToolContext:
+            return ToolContext(
+                session_id=get_session_id(),
+                tool_call_id=f"{tool_use_id}:recovery:{attempt_index}",
+                provider=self._provider,
+                source=self._source,
+                model=self._model,
+                adapter_name=self._adapter_name,
+            )
+
+        def record_execution_start(
+            attempt_index: int,
+            effective_name: str,
+            durable_arguments: dict[str, Any],
+        ) -> None:
+            started_attempts[attempt_index] = (
+                effective_name,
+                dict(durable_arguments),
+            )
+            if self._timeline is not None:
+                self._timeline.record_tool_call(
+                    effective_name,
+                    durable_arguments,
+                    call_id=f"{tool_use_id}:recovery:{attempt_index}",
+                )
+
+        recovery_result = await self._error_recovery.arecover(
+            tool_name,
+            tool_input,
+            fail_count,
+            context_factory=context_factory,
+            on_execution_started=record_execution_start,
+        )
+        attempt_rows = [
+            {
+                "strategy": attempt.strategy.value,
+                "tool_name": attempt.tool_name,
+                "success": attempt.success,
+                "duration_ms": round(attempt.duration_ms, 3),
+                "result": attempt.result,
+            }
+            for attempt in recovery_result.attempts
+        ]
+        if self._timeline is not None:
+            for index, attempt in enumerate(recovery_result.attempts, start=1):
+                call_id = f"{tool_use_id}:recovery:{index}"
+                started = started_attempts.get(index)
+                effective_name = started[0] if started is not None else attempt.tool_name
+                if started is None:
+                    self._timeline.record_tool_call(
+                        effective_name,
+                        tool_input,
+                        call_id=call_id,
+                    )
+                self._timeline.record_tool_result(
+                    effective_name,
+                    "ok" if attempt.success else "error",
+                    f"recovery:{attempt.strategy.value}",
+                    call_id=call_id,
+                    result=attempt.result,
+                )
 
         if recovery_result.recovered:
             self._consecutive_failures[tool_name] = 0
@@ -602,6 +706,7 @@ class ToolCallProcessor:
             result = dict(recovery_result.final_result)
             result["recovery_summary"] = recovery_result.to_summary()
             result["recovery_attempted"] = True
+            result["recovery_attempts"] = attempt_rows
             return result
 
         await self._fire_hook(
@@ -616,6 +721,7 @@ class ToolCallProcessor:
         result = dict(recovery_result.final_result)
         result["recovery_summary"] = recovery_result.to_summary()
         result["recovery_attempted"] = True
+        result["recovery_attempts"] = attempt_rows
         result["skipped"] = True
         return result
 

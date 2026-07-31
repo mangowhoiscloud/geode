@@ -15,9 +15,15 @@ from core.observability.trajectory import (
     _rows,
     _self_check,
     _unmodelled,
+    build_trajectory,
     discover,
     load,
+    normalize_trajectory_artifact,
     resolve,
+    to_k3,
+    trajectory_from_session,
+    trajectory_from_sessions,
+    verify_trajectory_integrity,
 )
 
 
@@ -245,3 +251,288 @@ def test_load_reads_a_geode_file_end_to_end(tmp_path):
     assert out["meta"]["runs"] == 1
     assert [m["role"] for m in out["messages"]] == ["user", "assistant", "tool", "assistant"]
     assert out["pairing"]["results"] == 1
+
+
+def test_versioned_trajectory_builder_validates_and_adapts_to_k3():
+    trajectory = build_trajectory(
+        trajectory_id="traj-1",
+        captured_at="2026-07-31T00:00:00Z",
+        source={"harness": "test", "session": "s-1", "run": "r-1", "parents": None},
+        events=[
+            {"kind": "message.user", "actor": "user", "payload": {"content": "go"}},
+            {
+                "kind": "tool.called",
+                "actor": "assistant",
+                "call_id": "c-1",
+                "payload": {"tool": "read", "arguments": {"path": "README.md"}},
+            },
+            {
+                "kind": "tool.completed",
+                "actor": "tool",
+                "call_id": "c-1",
+                "payload": {"tool": "read", "summary": "ok"},
+            },
+            {
+                "kind": "message.assistant",
+                "actor": "assistant",
+                "payload": {"content": "done"},
+            },
+        ],
+        outcome={"result": "pass"},
+        provenance={"store": "test"},
+        privacy={"review_state": "local"},
+        trajectory_class=("dialogue", "tool"),
+    )
+
+    assert trajectory["schema_id"] == "geode.trajectory@1"
+    assert [event["ordinal"] for event in trajectory["events"]] == [1, 2, 3, 4]
+    assert trajectory["integrity"]["record_count"] == 4
+    assert trajectory["integrity"]["quality"]["tool_pairing"] == {
+        "calls": 1,
+        "results": 1,
+        "paired": 1,
+        "orphan_calls": 0,
+        "orphan_results": 0,
+        "missing_call_ids": 0,
+    }
+    k3 = to_k3(trajectory)
+    assert k3["source_schema"] == "geode.trajectory@1"
+    assert k3["pairing"]["mode"] == "call_id"
+    assert [message["role"] for message in k3["messages"]] == [
+        "user",
+        "assistant",
+        "tool",
+        "assistant",
+    ]
+
+
+def test_trajectory_builds_from_canonical_sqlite_history(tmp_path):
+    from core.observability.session_timeline import SessionTimeline
+
+    db = tmp_path / "sessions.db"
+    timeline = SessionTimeline("s-sql", db_path=db)
+    timeline.bind_turn("t-1")
+    timeline.record_session_start()
+    timeline.record_user_message("hello")
+    timeline.record_assistant_message("done")
+    timeline.record_session_end()
+
+    trajectory = trajectory_from_session("s-sql", db_path=db)
+    assert trajectory["source"]["session"] == "s-sql"
+    assert [event["turn_id"] for event in trajectory["events"]] == ["t-1"] * 4
+    assert trajectory["integrity"]["complete"] is True
+
+
+def test_trajectory_marks_orphaned_tool_event_incomplete():
+    trajectory = build_trajectory(
+        trajectory_id="traj-orphan",
+        captured_at="2026-07-31T00:00:00Z",
+        source={"harness": "test", "session": "s-1"},
+        events=[
+            {
+                "event_id": "call-without-result",
+                "kind": "tool.called",
+                "actor": "assistant",
+                "call_id": "c-1",
+                "payload": {"tool": "read"},
+            }
+        ],
+        outcome={},
+        provenance={},
+        privacy={},
+    )
+
+    assert trajectory["integrity"]["complete"] is False
+    assert trajectory["integrity"]["quality"]["tool_pairing"]["orphan_calls"] == 1
+
+
+def test_turn_scoped_event_without_turn_id_is_scope_incomplete():
+    trajectory = build_trajectory(
+        trajectory_id="traj-missing-turn",
+        captured_at="2026-07-31T00:00:00Z",
+        source={"harness": "test", "session": "s-1"},
+        events=[
+            {
+                "kind": "message.user",
+                "actor": "user",
+                "payload": {"content": "hello"},
+            }
+        ],
+        outcome={},
+        provenance={},
+        privacy={},
+    )
+
+    correlation = trajectory["integrity"]["quality"]["correlation"]
+    assert correlation["turn_id_required"] == 1
+    assert correlation["turn_id_missing"] == 1
+    assert trajectory["integrity"]["scope_complete"] is False
+
+
+def test_trajectory_rejects_duplicate_event_ids():
+    with pytest.raises(ValueError, match="event_id values must be unique"):
+        build_trajectory(
+            trajectory_id="traj-duplicate",
+            captured_at="2026-07-31T00:00:00Z",
+            source={"harness": "test", "session": "s-1"},
+            events=[
+                {"event_id": "same", "kind": "a", "actor": "agent", "payload": {}},
+                {"event_id": "same", "kind": "b", "actor": "agent", "payload": {}},
+            ],
+            outcome={},
+            provenance={},
+            privacy={},
+        )
+
+
+def test_trajectory_integrity_rejects_false_producer_claims():
+    trajectory = build_trajectory(
+        trajectory_id="traj-integrity",
+        captured_at="2026-07-31T00:00:00Z",
+        source={"harness": "test", "session": "s-1"},
+        events=[{"kind": "message.user", "actor": "user", "payload": {}}],
+        outcome={},
+        provenance={},
+        privacy={},
+    )
+    trajectory["integrity"]["quality"]["payload_issue_events"] = 7
+
+    with pytest.raises(ValueError, match="quality does not match"):
+        verify_trajectory_integrity(trajectory)
+
+
+def test_dated_publication_trajectory_normalizes_without_rewrite():
+    legacy = {
+        "schema_id": "geode.trajectory@2026-07-31",
+        "trajectory_id": "published-tau2",
+        "captured_at": "2026-07-31T12:00:00",
+        "published_at": "2026-07-31T03:00:00Z",
+        "observed_on": "2026-07-31",
+        "trajectory_class": ["dialogue", "tool"],
+        "source": {"harness": "tau2", "run": "run-1", "session": None},
+        "events": [
+            {
+                "sequence": 1,
+                "timestamp": "2026-07-31T12:00:01",
+                "actor": "assistant",
+                "kind": "tool_call",
+                "payload": {"call_id": "c-1", "tool": "read"},
+            },
+            {
+                "sequence": 2,
+                "timestamp": "2026-07-31T12:00:02",
+                "actor": "environment",
+                "kind": "tool_result",
+                "payload": {"call_id": "c-1", "result": "ok"},
+            },
+        ],
+        "outcome": {"result": "pass"},
+        "integrity": {"record_count": 2},
+        "privacy": {"review_state": "reviewed"},
+        "provenance": {"adapter": "legacy"},
+    }
+
+    normalized = normalize_trajectory_artifact(legacy)
+
+    assert legacy["schema_id"] == "geode.trajectory@2026-07-31"
+    assert normalized["schema_id"] == "geode.trajectory@1"
+    assert normalized["source"]["session"] == "run-1"
+    assert normalized["integrity"]["quality"]["tool_pairing"]["paired"] == 1
+    assert normalized["provenance"]["migrated_from_schema_id"] == legacy["schema_id"]
+
+
+def test_dated_publication_preserves_ts_and_defaults_to_incomplete_replay():
+    legacy = {
+        "schema_id": "geode.trajectory@2026-07-31",
+        "trajectory_id": "published-hook",
+        "captured_at": "2026-07-30T23:49:51Z",
+        "source": {"harness": "hook-e2e", "run": "run-1", "session": None},
+        "events": [
+            {
+                "sequence": 1,
+                "ts": "2026-07-30T23:49:52Z",
+                "actor": "extension",
+                "kind": "public_hook",
+                "payload": {},
+            }
+        ],
+        "integrity": {
+            "record_count": 1,
+            "fidelity": "raw prompts and tool bodies remain unpublished",
+        },
+        "privacy": {
+            "review_state": "reviewed",
+            "redactions": [{"type": "content_reduction"}],
+        },
+    }
+
+    first = normalize_trajectory_artifact(legacy)
+    second = normalize_trajectory_artifact(legacy)
+
+    assert first["events"][0]["occurred_at"] == "2026-07-30T23:49:52Z"
+    assert first["events"][0]["event_id"] == second["events"][0]["event_id"]
+    assert first["integrity"]["complete"] is False
+    assert any("replay completeness" in reason for reason in first["integrity"]["incompleteness"])
+
+
+def test_tool_pairing_is_ordered_and_scoped_by_session_and_turn():
+    trajectory = build_trajectory(
+        trajectory_id="traj-scoped-pairing",
+        captured_at="2026-07-31T00:00:00Z",
+        source={"harness": "test", "session": "s-1"},
+        events=[
+            {
+                "kind": "tool.completed",
+                "session_id": "s-1",
+                "turn_id": "t-1",
+                "call_id": "same",
+                "payload": {},
+            },
+            {
+                "kind": "tool.called",
+                "session_id": "s-2",
+                "turn_id": "t-2",
+                "call_id": "same",
+                "payload": {},
+            },
+        ],
+        outcome={},
+        provenance={},
+        privacy={},
+    )
+
+    pairing = trajectory["integrity"]["quality"]["tool_pairing"]
+    assert pairing["paired"] == 0
+    assert pairing["orphan_calls"] == 1
+    assert pairing["orphan_results"] == 1
+    assert trajectory["integrity"]["complete"] is False
+
+
+def test_trajectory_aggregates_sessions_in_database_order(tmp_path):
+    from core.observability.session_timeline import SessionTimeline
+
+    db = tmp_path / "sessions.db"
+    first = SessionTimeline("s-first", db_path=db)
+    second = SessionTimeline("s-second", db_path=db)
+    first.record_user_message("one")
+    second.record_user_message("two")
+    first.record_assistant_message("three")
+
+    trajectory = trajectory_from_sessions(
+        ("s-second", "s-first", "s-second"),
+        trajectory_id="benchmark-run",
+        source={
+            "harness": "test",
+            "run": "run-1",
+            "session": "run-1",
+            "parents": ["s-second", "s-first"],
+        },
+        db_path=db,
+    )
+
+    assert [event["payload"]["content"] for event in trajectory["events"]] == [
+        "one",
+        "two",
+        "three",
+    ]
+    assert trajectory["integrity"]["record_count"] == 3

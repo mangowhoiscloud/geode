@@ -16,14 +16,21 @@ spawns child sub-agents (depth=1 enforced, matching Claude Code).
 from __future__ import annotations
 
 import contextlib
+import inspect
 import json
 import logging
 import os
 import sys
 import time
+from collections.abc import Awaitable
 from dataclasses import asdict, dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from core.agent.loop.models import (
+    FAILURE_TERMINATION_REASONS,
+    is_failure_termination,
+    is_successful_task_termination,
+)
 from core.async_runtime import run_process_coroutine
 from core.paths import GLOBAL_WORKERS_DIR
 
@@ -37,6 +44,24 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 WORKER_DIR = GLOBAL_WORKERS_DIR  # P2 — was `Path.home() / ".geode" / "workers"`
+
+
+async def _await_close(outcome: Awaitable[Any]) -> None:
+    await outcome
+
+
+def _close_worker_session(loop: Any, *, success: bool) -> None:
+    """Prefer async public lifecycle, retaining simple test/legacy doubles."""
+    suffix = "completed" if success else "error"
+    async_close = getattr(loop, f"amark_session_{suffix}", None)
+    if callable(async_close):
+        outcome = async_close()
+        if inspect.isawaitable(outcome):
+            run_process_coroutine(_await_close(outcome))
+            return
+    sync_close = getattr(loop, f"mark_session_{suffix}", None)
+    if callable(sync_close):
+        sync_close()
 
 
 @dataclass
@@ -533,12 +558,12 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
         allowed_tool_names=allowed_tool_names,
         source=request.source,
         # PR-Q.5 (2026-05-24, single-anchor invariant I1 in
-        # docs/plans/2026-05-24-transcript-standardization-and-claude-resume.md):
+        # docs/plans/2026-05-24-timeline-standardization-and-claude-resume.md):
         # the sub-agent's task_id becomes the AgenticLoop's session_id so
-        # the worker's SessionTranscript (dialogue.jsonl) lands in the
+        # the worker's SessionTimeline projection (events.jsonl) lands in the
         # SAME ``<run_dir>/sub_agents/<task_id>/`` directory as
         # result.json + stderr.log. Without this the AgenticLoop generates
-        # a fresh ``s-<uuid>`` and dialogue.jsonl falls into a sibling
+        # a fresh ``s-<uuid>`` and events.jsonl falls into a sibling
         # directory that the operator cannot reach from the timeline's
         # ``details.task_id`` reference.
         session_id=request.task_id,
@@ -584,7 +609,14 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
         prompt += f"\n\nParameters: {json.dumps(request.args, ensure_ascii=False)}"
 
     # 8. Run
-    agentic_result = run_process_coroutine(loop.arun(prompt))
+    def _run_worker_turn(turn_prompt: str) -> Any:
+        try:
+            return run_process_coroutine(loop.arun(turn_prompt))
+        except BaseException:
+            _close_worker_session(loop, success=False)
+            raise
+
+    agentic_result = _run_worker_turn(prompt)
 
     # PR-WORKER-SCHEMA-AWARE-RETRY (2026-05-26) — when the caller declared
     # a ``response_schema`` (PR-JSON-WIRE wired per-role schemas through
@@ -628,7 +660,7 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
             elapsed_before_retry,
             request.timeout_s,
         )
-        agentic_result = run_process_coroutine(loop.arun(feedback_prompt))
+        agentic_result = _run_worker_turn(feedback_prompt)
     elif request.response_schema is not None and _needs_schema_retry(
         agentic_result, request.response_schema
     ):
@@ -644,6 +676,12 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
         )
 
     elapsed_ms = (time.time() - started) * 1000
+    if getattr(agentic_result, "error", None) or not is_successful_task_termination(
+        getattr(agentic_result, "termination_reason", "")
+    ):
+        _close_worker_session(loop, success=False)
+    else:
+        _close_worker_session(loop, success=True)
     success, summary, text = _resolve_worker_outcome(agentic_result)
 
     # PR-SEEDGEN-TOKENS (2026-05-30) — surface the sub-agent's per-arun
@@ -703,17 +741,9 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
 #   block diagnostic that the parent expects to surface),
 #   ``user_clarification_needed`` (text IS the follow-up question),
 #   ``user_cancelled`` (operator-requested halt — text is "Interrupted.").
-_FAILURE_TERMINATION_REASONS: frozenset[str] = frozenset(
-    {
-        "model_action_required",
-        "context_exhausted",
-        "llm_error",
-        "billing_error",
-        "cost_budget_exceeded",
-        "convergence_detected",
-        "external_verification_required",
-    }
-)
+# Backward-compatible import surface for worker-focused tests and downstream
+# operators. The authoritative classifier lives with the closed terminal enum.
+_FAILURE_TERMINATION_REASONS = FAILURE_TERMINATION_REASONS
 
 # PR-WORKER-SCHEMA-AWARE-RETRY (2026-05-26) — termination reasons whose
 # text is intentional non-JSON and MUST NOT be re-issued to the loop
@@ -788,7 +818,7 @@ def _needs_schema_retry(
         return False
     if agentic_result.error:
         return True
-    if agentic_result.termination_reason in _FAILURE_TERMINATION_REASONS:
+    if is_failure_termination(agentic_result.termination_reason):
         return True
 
     text = (agentic_result.text or "").strip()
@@ -925,7 +955,7 @@ def _resolve_worker_outcome(
     termination_reason = agentic_result.termination_reason if agentic_result else "unknown"
     error = agentic_result.error if agentic_result else None
 
-    success = bool(text) and not error and termination_reason not in _FAILURE_TERMINATION_REASONS
+    success = bool(text) and not error and not is_failure_termination(termination_reason)
 
     # PR-GENERATOR-PLAN-LEAK-FIX (2026-05-26) — defence-in-depth: even
     # when the loop reports a clean termination with non-empty text, a
@@ -990,12 +1020,12 @@ def main() -> None:
 
     # PR-Q (2026-05-24) — re-bind the parent's active run_dir into this
     # subprocess's ContextVar so observability writers
-    # (``_save_result_backup``, ``SessionTranscript``) land their output
+    # (``_save_result_backup``, ``SessionTimeline``) land their output
     # under ``<run_dir>/sub_agents/<task_id>/`` instead of the legacy
     # global pools. The parent forwarded the binding via the
     # :data:`RUN_DIR_ENV` env var (see ``IsolatedRunner._aexecute_subprocess``).
-    # Empty / unset env = no orchestrator-bound run_dir = legacy
-    # behaviour (writers use ``~/.geode/workers/`` + ``~/.geode/transcripts/``).
+    # Empty / unset env means no orchestrator-bound run directory; canonical
+    # session history still uses the project SQLite database.
     from core.observability.run_dir import RUN_DIR_ENV, set_active_run_dir
 
     inherited_run_dir = os.environ.get(RUN_DIR_ENV, "")
@@ -1003,36 +1033,35 @@ def main() -> None:
         set_active_run_dir(inherited_run_dir)
         # PR-U (2026-05-24, Codex MCP catch of #1584) — ContextVars do
         # NOT cross subprocess boundaries. The parent's
-        # ``run_transcript_scope(journal)`` binding is invisible here, so
-        # ``SessionTranscript._mirror_to_run_transcript`` would silently
-        # no-op for every worker-side agent event. Re-create a thin
-        # ``RunTranscript`` instance that points at the SAME
-        # ``<run_dir>/transcript.jsonl`` the parent's RunTranscript
+        # ``run_timeline_scope(journal)`` binding is invisible here, so
+        # the run-event projection would silently no-op for every worker-side
+        # runtime event. Re-create a thin
+        # ``RunTimeline`` instance that points at the SAME
+        # ``<run_dir>/events.jsonl`` the parent's RunTimeline
         # writes to, and bind it to this subprocess's ContextVar so the
-        # mirror path actually appends. JSONL row size (≤ 800 bytes) is
-        # well under PIPE_BUF (4 KiB on macOS/Linux), so cross-process
-        # append-to-same-file is line-atomic. ``session_id`` /
+        # projection actually appends. ``RunTimeline`` coordinates cross-process
+        # ordinals and compaction with its sidecar lock. ``session_id`` /
         # ``gen_tag`` / ``component`` on this child-side instance are
         # cosmetic — the actual row classification comes from the
-        # mirror's explicit ``actor_type="agent"`` / ``action=...``
+        # sink's explicit ``actor_type="agent"`` / ``action=...``
         # kwargs which override the orchestrator defaults.
         from pathlib import Path
 
-        from core.self_improving.loop.observe.run_transcript import (
-            RunTranscript,
-            set_current_run_transcript,
+        from core.self_improving.loop.observe.run_timeline import (
+            RunTimeline,
+            set_current_run_timeline,
         )
 
         run_dir_path = Path(inherited_run_dir)
-        worker_run_transcript = RunTranscript(
+        worker_run_timeline = RunTimeline(
             session_id=run_dir_path.name,
             gen_tag="",
             component="seed-generation",
-            path=run_dir_path / "transcript.jsonl",
+            path=run_dir_path / "events.jsonl",
         )
         # No need to capture the reset token — subprocess process exits
         # at the bottom of main(); the OS reclaims the ContextVar.
-        set_current_run_transcript(worker_run_transcript)
+        set_current_run_timeline(worker_run_timeline)
 
     result: WorkerResult | None = None
     try:

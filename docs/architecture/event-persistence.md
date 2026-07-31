@@ -1,109 +1,229 @@
 # Event persistence contract
 
-This document is the storage and lifecycle contract for `HookSystem` events.
-It separates the runtime event bus from its durable sinks and makes the
-SQLite/JSONL boundary explicit.
+This is the current storage contract for session history, runtime telemetry,
+portable run projections, evaluation trajectories, and their public releases.
+The six planes share correlation keys, but they do not share ownership.
 
 ## Invariants
 
-1. A hook dispatch invokes each registered handler at most once and produces
-   at most one durable operational event row.
-2. Operational event persistence never stores the raw hook payload. It stores
-   the typed, redacted, bounded activity projection only.
-3. SQLite is the source of truth for queryable runtime events. JSONL is kept
-   only where line-oriented portability, `tail -F`, or a git-reviewable domain
-   ledger is the primary requirement.
-4. Every runtime-owned sink and handler resource has deterministic teardown.
-5. Compatibility events may still reach third-party handlers, but they are not
-   duplicated into durable storage when a canonical event already represents
-   the same transition.
-6. Persistence failure is visible and non-fatal to the agentic loop.
+1. `sessions.db:messages` owns resumable model context.
+2. `sessions.db:session_events` owns append-only agent execution history.
+3. `sessions.db:hook_events` owns bounded lifecycle, hook, middleware, and
+   policy telemetry.
+4. `events.jsonl` is a bounded, portable projection. It is never the only copy
+   of resumable dialogue.
+5. `geode.trajectory@1` is an immutable derived evaluation artifact, not a hot
+   runtime store.
+6. `geode.trajectory-release@1` binds a reviewed public allowlist to immutable
+   file digests; it never contains the runtime database or projection store.
+7. `EvidenceLedger` owns claims and verifier judgments. A verdict is linked to
+   execution by session/turn/call keys; it is not inserted into dialogue.
+8. Persistence failure is visible and non-fatal to the agentic loop. A failed
+   projection cannot roll back a canonical SQLite insert.
 
-## Destination matrix
+## Storage planes
 
-| Data | Destination | Retention | Reason |
+| Plane | Destination | Mutability / retention | Purpose |
 |---|---|---|---|
-| Hook lifecycle/telemetry events | `sessions.db:hook_events` | bounded by age and row count | query/filter/aggregate across sessions |
-| Session, message, runtime, cognitive state | existing `sessions.db` tables | subsystem policy | mutable/queryable application state |
-| Active run activity timeline | per-run `transcript.jsonl` | run artifact lifetime | ordered human inspection and `tail -F` |
-| Agent/sub-agent dialogue | per-session `dialogue.jsonl` | session artifact lifetime | explicit local conversation artifact |
-| Self-improving mutation/results/baseline ledgers | tracked or run-scoped JSONL | domain policy | append-only experiment provenance and git review |
-| Project journal | project-scoped JSONL materialized view | bounded by project policy | portable project history |
-| Scheduler job log | bounded per-job JSONL | size/line cap | job-owned tail/export; no cross-job query requirement |
-| Legacy `~/.geode/runs/*.jsonl` | operator archive | existing layout TTL archive policy | writer and specialized reader retired; no SQL import or deletion |
+| Resume checkpoint | `sessions.db:sessions/messages` | mutable, session policy | reconstruct the next model request |
+| Session record | `sessions.db:session_events` | append-only; terminal sessions eligible after 180 days | reconstruct user, assistant, tool, sub-agent, usage, and terminal ordering |
+| Runtime activity | `sessions.db:hook_events` | append-only; 7/30/180-day retention buckets plus row cap | query hooks, middleware, lifecycle, policy, and failures |
+| Run projection | run/sub-agent `events.jsonl` | bounded to 16 MiB with an explicit `projection.truncated` row | `tail`, copy, artifact review, and offline exchange |
+| Evaluation trajectory | immutable `trajectory.json` | artifact policy | replay, compare, verify, and score behavior |
+| Public evaluation release | `geode-eval-artifacts/trajectories/<release-id>/` | immutable and append-only | privacy-reviewed trajectory allowlist plus digest manifest |
+| LLM usage series | `~/.geode/usage/YYYY-MM.jsonl` | monthly ledger policy | per-call token and cost accounting |
+| Judgment evidence | `~/.geode/evidence/<session>.jsonl` | append-only v2 rows | session/turn/call-correlated claims, citations, approvals, and verifier judgments |
+| Domain ledgers | project/run JSONL | owning domain policy | autoresearch decisions, scheduler tails, and git-reviewable evidence |
 
-Approval summaries are represented by canonical `APPROVAL_TRANSITION` rows in
-`hook_events`; the legacy `approval_history.jsonl` writer/reader is retired.
-Existing files remain operator archives. Cognitive snapshots remain in
-`cognitive_events`; the generic hook row contains only the bounded activity
-projection and therefore does not duplicate the snapshot body.
+Legacy `transcript.jsonl` and `dialogue.jsonl` are compatibility inputs only.
+New readers prefer `events.jsonl`; recognized old rows can be imported with
+`geode session migrate-records`. Import records the source SHA-256, is
+idempotent, and never edits or deletes the source.
 
-## SQL event envelope
+## Correlation and schemas
 
-`hook_events` uses schema version 1 and stores:
+Four packaged Draft 2020-12 schemas define portable records and releases:
 
-- occurrence timestamp, runtime `session_key`, and `run_id`;
-- event name, dispatch mode, status, retention class, and handler counts;
-- activity classification (`actor`, `action`, `entity`, task, level);
-- a canonical JSON object containing typed activity details;
-- a SHA-256 hash of that persisted JSON object.
+- `geode.session-event@1`
+- `geode.run-event@1`
+- `geode.trajectory@1`
+- `geode.trajectory-release@1`
 
-The table does not store handler return values, full tool inputs/results,
-prompts, raw user input, cognitive snapshots, approval raw input, screenshots,
-or base64 data.
+Canonical session rows carry stable `event_id`, database order, timestamp,
+`session_id`, `session_generation`, `turn_id`, optional `call_id`, a closed
+event kind, bounded payload, and payload hash. Tool call/result pairs reuse the
+same `call_id`. A corrupt payload is returned as an explicit marker instead of
+hiding the rest of the session.
 
-## Bounds and redaction
+Every trajectory recomputes data-quality facts rather than trusting producer
+claims: event-ID uniqueness, contiguous ordinals, session/turn/call correlation
+coverage, tool call/result pairing, orphan counts, and truncated/corrupt/omitted
+payload counts. These live under `integrity.quality`. Missing call/turn
+correlation or orphaned tools force `scope_complete=false`; lossy payload
+markers force `replay_complete=false`. `complete` remains the conservative
+replay-completeness compatibility alias, and both failure classes carry
+explicit reasons.
 
-Before either SQLite or the activity transcript receives a hook event, the
-activity registry projects the payload into its declared details model. A
-second generic bound applies defense in depth:
+The closed session history vocabulary is:
 
-- secret-pattern redaction on every persisted string;
-- bounded string length, collection cardinality, nesting depth, and total JSON
-  bytes;
-- explicit truncation markers instead of silent clipping.
+```text
+session.started      session.ended
+turn.completed
+verification.continued verification.evidence verification.pending
+message.user         message.assistant
+tool.called          tool.completed
+subagent.started     subagent.stopped
+artifact.saved       usage.recorded
+error.recorded       gui.step
+preflight.recorded   handoff.triggered
+legacy.imported
+```
 
-High-volume events have a shorter age window than standard events. Audit-class
-events have a longer window. A global row cap remains the final disk bound.
-Pruning runs incrementally from the writer and is also exposed as an explicit
-maintenance operation.
+`legacy.imported` preserves an unrecognized old row without claiming a new
+runtime meaning.
 
-## Dispatch and teardown
+## Telemetry and lifecycle boundary
 
-`HookSystem` owns handler/sink registrations, but it does not import an
-observability backend. Bootstrap registers one persistence sink. The sink runs
-once after dispatch, so it can record handler failure or interceptor blocking
-without duplicating logic across sync/async trigger variants.
+Lifecycle is a commit boundary; telemetry is an observation of that boundary.
 
-`HookSystem.close()` is idempotent. It clears subscriptions, runs registered
-cleanup callbacks, and closes sinks. `HookEventStore` itself retains no SQLite
-descriptor: schema setup and every append/read/prune operation close their
-connection before returning. Runtime shutdown still closes the store to reject
-future operations after background producers have stopped. Owner-aware cleanup
-callbacks use a weak HookSystem reference so teardown registration does not
-create a self-cycle.
+- public `SessionStart` fires only after the initial or resumed checkpoint is
+  durable;
+- public `SessionEnd` and `session.ended` occur only at a true completed/error
+  terminal state;
+- a PostVerify candidate or paused turn is a checkpoint, not session
+  termination;
+- `PostCompact` fires only after compacted state persistence succeeds;
+- `hook_events` may describe extension invocation, blocking, handler error, or
+  latency, while `session_events` records only the durable behavioral fact.
 
-Sync handlers cannot be forcibly stopped by Python threads. Therefore a
-non-zero per-handler timeout is supported only for awaitable handlers. A sync
-handler under a timeout contract is skipped with an explicit failed
-`HookResult`; GEODE does not create abandoned worker threads.
+The runtime bus is storage-agnostic:
+
+```text
+RuntimeEventBus
+  └── HookPersistenceSink
+        ├── sessions.db:hook_events      canonical operational telemetry
+        └── active events.jsonl          conditional portable projection
+
+AgenticLoop / ToolExecutor
+  └── SessionTimeline
+        ├── sessions.db:session_events   canonical execution history
+        └── run/sub-agent events.jsonl   conditional portable projection
+```
+
+A hook dispatch produces at most one durable operational row. Compatibility
+signals may still reach legacy subscribers, but the sink suppresses a duplicate
+when a canonical event already owns the same transition.
+
+## Bounds, privacy, and failure semantics
+
+Both SQLite activity payloads and JSONL projections apply secret-pattern
+redaction, string/collection/depth limits, and a total JSON-byte bound. Runtime
+activity excludes raw prompts, complete tool bodies/results, screenshots,
+base64 data, cognitive snapshots, and authentication material.
+
+`SessionEventStore` and `HookEventStore` use short SQLite connections, WAL,
+`busy_timeout`, additive schema creation, and explicit transactions.
+Cross-process `RunTimeline` writers coordinate ordinal assignment and
+compaction with a sidecar lock. A truncated projection begins with a valid
+`projection.truncated` record rather than a broken partial object.
+
+Canonical write and projection health are reported separately:
+
+- canonical session write failure increments `record_failures`;
+- JSONL failure sets `projection_failed` / `write_failed`;
+- telemetry sink failure warns once per event class;
+- none of these failures fabricates a successful row.
+
+## Retention
+
+- `hook_events`: high-volume 7 days, standard 30 days, audit 180 days, plus a
+  database row cap.
+- `session_events`: 180 days only after an explicit terminal
+  `session.ended`. A stale active session is never inferred terminal and never
+  pruned by this policy.
+- `events.jsonl`: 16 MiB projection cap with explicit truncation metadata.
+- trajectories and evidence: artifact/repository policy; immutable once
+  published.
+
+Use `geode session prune-records --retention-days 180` for explicit session
+record maintenance.
+
+## Evaluation artifact repository
+
+`geode-eval-artifacts` is the durable public evidence store, not the runtime
+database. `stage_trajectory_release()` accepts only schema-valid
+`geode.trajectory@1` objects, always requires scope-complete and
+privacy-reviewed artifacts, and requires replay completeness unless the
+release admission record explicitly permits content-digested replay. It scans
+for credential/path/identity patterns, verifies every referenced native
+artifact against supplied source bytes, writes a
+`geode.trajectory-release@1` manifest, and binds every file plus a structured
+privacy review (`reviewer`, timestamp, method, scope, public attestation) by
+SHA-256. The content-derived release ID is append-only and every staged byte is
+read back before success.
+
+The release contains normalized trajectories and the manifest only. It does
+not contain `sessions.db`, WAL files, `events.jsonl`, checkpoints, hidden
+reasoning, provider diagnostics, or general session stores. A remote
+artifact-repository read-back and digest comparison remains required after its
+PR merges; the local manifest records that obligation explicitly.
+
+Historical artifact-repository releases using dated identifiers such as
+`geode.trajectory@2026-07-31` remain immutable. The runtime accepts them through
+`normalize_trajectory_artifact()`, which maps `sequence/timestamp` to
+`ordinal/occurred_at` in memory and recomputes the v1 quality summary.
+
+### External-loop compatibility
+
+- **SIL**: `RunTimeline/events.jsonl` owns portable run lifecycle,
+  mutation/attribution files remain domain ledgers, and Inspect `.eval` remains
+  the scored Petri assay container. `RunTimeline` keeps legacy `event/seq/ts`
+  aliases for existing readers. A published trajectory links these sources
+  through `evidence_refs` and digests instead of replacing the promotion ledger
+  or repackaging judge output as agent dialogue.
+  `geode session export-trajectory --sil-eval <archive.eval>` creates the
+  typed, digest-checked join today. This is intentionally an explicit
+  promotion step, not automatic SIL run-finalization wiring; SIL remains free
+  to finish or discard a campaign before admitting an evaluation artifact.
+- **Crucible**: `crucible.evidence.v3`, the native tau2 result, frozen contract,
+  and executable checks remain promotion authority. The GEODE trajectory is a
+  replay sidecar with the raw artifact SHA-256 and Crucible snapshot/contract
+  reference. It cannot convert an invalid arm into scored evidence.
+- **MCPMark / tau2**: native receipts stay byte-identical. The shared benchmark
+  bridge emits a normalized SQLite-backed trajectory beside them and keeps
+  publication machinery outside Crucible's bounded candidate surface.
 
 ## Migration and rollback
 
-- New runtime events go only to SQLite plus an active per-run transcript.
-- Existing run-log JSONL remains ordinary line-delimited JSON. It is not
-  imported into SQL or deleted; the existing layout migrator may relocate old
-  files into its TTL archive. The disconnected specialized `RunLog` API was
-  removed.
-- SQLite schema creation is additive and idempotent through the same
-  `SessionManager` bootstrap used by the other `sessions.db` tables.
-- Rolling back code leaves an extra table that older releases ignore. No
-  existing table or JSONL schema is rewritten.
-- A future explicit data migration may import recognized legacy hook rows and
-  archive their source files, but it must remain lossless and idempotent.
+| Previous surface | Current surface | Compatibility |
+|---|---|---|
+| `SessionTranscript` | `SessionTimeline` | deprecated constructor remains for one release |
+| `RunTranscript` | `RunTimeline` | deprecated alias shares the same ContextVar |
+| global session JSONL | `sessions.db:session_events` | explicit digest-backed import; source unchanged |
+| run `transcript.jsonl` | `events.jsonl` | new-first reader fallback |
+| sub-agent `dialogue.jsonl` | `events.jsonl` | new-first reader fallback |
+| hand-built evaluation JSON | `geode.trajectory@1` | K3 remains an output adapter |
+| dated public trajectory | `geode.trajectory@1` | read-only in-memory normalizer |
+| hand-built release manifest | `geode.trajectory-release@1` | shared stage/verify publisher |
 
-## Non-goals
+The database migration is additive. Rolling back code leaves extra tables that
+older releases ignore. It does not drop or rewrite `sessions`, `messages`,
+`hook_events`, or legacy JSONL.
 
-This refactor does not move git-tracked autoresearch ledgers, dialogue bodies,
-or scheduler job history into SQLite. Those formats have different portability
-and ownership requirements and need independent reader/writer migrations.
+## Query and export
+
+```bash
+geode session export-trajectory <session-id> --out trajectory.json
+geode session stage-trajectory-release trajectory.json \
+  --destination releases --source geode --scope reviewed-run \
+  --privacy-review privacy-review.json
+geode session verify-trajectory-release <release-dir> \
+  --expected-manifest-sha256 <independent-sha256>
+geode session migrate-records --source old/transcript.jsonl
+geode session prune-records --retention-days 180
+```
+
+MCPMark, tau2-bench, and the hook behavior E2E export through the same
+trajectory builder and JSON-schema validator. Benchmark-native raw artifacts
+remain byte-identical inputs and are bound to normalized trajectories by
+SHA-256 rather than embedded or replaced.

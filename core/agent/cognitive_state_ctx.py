@@ -23,7 +23,7 @@ Both live in this module so the bilateral wiring stays grep-visible.
 
 from __future__ import annotations
 
-from contextvars import ContextVar
+from contextvars import ContextVar, Token
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -35,6 +35,7 @@ _active_state: ContextVar[CognitiveState | None] = ContextVar(
 )
 _active_session_id: ContextVar[str] = ContextVar("geode_active_session_id", default="")
 _active_turn_id: ContextVar[str] = ContextVar("geode_active_turn_id", default="")
+_active_tool_call_id: ContextVar[str] = ContextVar("geode_active_tool_call_id", default="")
 # PR-F (2026-05-21) — sub-agent lineage. When the active loop is a
 # child spawned via the OpenClaw spawn pattern, this carries the
 # parent loop's ``_parent_session_key`` (the OpenClaw routing key,
@@ -101,6 +102,21 @@ def set_turn_id(turn_id: str) -> None:
     _active_turn_id.set(turn_id)
 
 
+def get_tool_call_id() -> str:
+    """Return the provider tool-use id for the current physical dispatch."""
+    return _active_tool_call_id.get()
+
+
+def set_tool_call_id(tool_call_id: str) -> Token[str]:
+    """Bind a tool-use id in the current asyncio task."""
+    return _active_tool_call_id.set(tool_call_id)
+
+
+def reset_tool_call_id(token: Token[str]) -> None:
+    """Restore the prior tool-use id after one physical dispatch."""
+    _active_tool_call_id.reset(token)
+
+
 def get_parent_session_key() -> str:
     """PR-F (2026-05-21) — return the active loop's parent
     ``_parent_session_key`` (OpenClaw routing-key format like
@@ -140,10 +156,13 @@ __all__ = [
     "get_parent_session_id",
     "get_parent_session_key",
     "get_session_id",
+    "get_tool_call_id",
     "get_turn_id",
+    "reset_tool_call_id",
     "set_cognitive_state",
     "set_parent_session_id",
     "set_parent_session_key",
     "set_session_id",
+    "set_tool_call_id",
     "set_turn_id",
 ]

@@ -16,11 +16,11 @@ from core.hooks.system import HookEvent, HookSystem
 from core.observability.event_store import HookEventStore
 from core.observability.hook_persistence import HookPersistenceSink
 from core.observability.run_dir import run_dir_scope
-from core.self_improving.loop.observe.run_transcript import RunTranscript, run_transcript_scope
+from core.self_improving.loop.observe.run_timeline import RunTimeline, run_timeline_scope
 
 
-def _read_rows(transcript_path: Path) -> list[dict]:
-    return [json.loads(line) for line in transcript_path.read_text().splitlines() if line.strip()]
+def _read_rows(timeline_path: Path) -> list[dict]:
+    return [json.loads(line) for line in timeline_path.read_text().splitlines() if line.strip()]
 
 
 @contextmanager
@@ -42,22 +42,22 @@ def _persistent_hooks(root: Path) -> Iterator[HookSystem]:
 
 def test_m1_trigger_appends_one_activity_row() -> None:
     """``HookSystem.trigger(event, data)`` inside an active
-    ``run_transcript_scope`` appends exactly one row to
-    ``transcript.jsonl`` with the typed classification quintuple
+    ``run_timeline_scope`` appends exactly one row to
+    ``events.jsonl`` with the typed classification quintuple
     (paperclip activity_log parity)."""
     with tempfile.TemporaryDirectory() as tmp, run_dir_scope(tmp):
-        journal = RunTranscript(
+        journal = RunTimeline(
             session_id="gen1-X",
             gen_tag="gen1",
             component="seed-generation",
-            path=Path(tmp) / "transcript.jsonl",
+            path=Path(tmp) / "events.jsonl",
         )
-        with run_transcript_scope(journal), _persistent_hooks(Path(tmp)) as hs:
+        with run_timeline_scope(journal), _persistent_hooks(Path(tmp)) as hs:
             hs.trigger(
                 HookEvent.SUBAGENT_STARTED,
                 {"task_id": "gen-gen1-001", "task_type": "seed_generator"},
             )
-        rows = _read_rows(Path(tmp) / "transcript.jsonl")
+        rows = _read_rows(Path(tmp) / "events.jsonl")
         assert len(rows) == 1
         row = rows[0]
         assert row["action"] == "subagent.started"
@@ -70,13 +70,13 @@ def test_m1_typed_lifecycle_event_carries_typed_details() -> None:
     """Group C ``LifecycleFailedRow`` carries the typed details
     (``error_type`` + ``message``) plus ``level=error``."""
     with tempfile.TemporaryDirectory() as tmp, run_dir_scope(tmp):
-        journal = RunTranscript(
+        journal = RunTimeline(
             session_id="gen1-X",
             gen_tag="gen1",
             component="seed-generation",
-            path=Path(tmp) / "transcript.jsonl",
+            path=Path(tmp) / "events.jsonl",
         )
-        with run_transcript_scope(journal), _persistent_hooks(Path(tmp)) as hs:
+        with run_timeline_scope(journal), _persistent_hooks(Path(tmp)) as hs:
             hs.trigger(
                 HookEvent.TOOL_RECOVERY_FAILED,
                 {
@@ -85,7 +85,7 @@ def test_m1_typed_lifecycle_event_carries_typed_details() -> None:
                     "message": "429 Too Many Requests",
                 },
             )
-        rows = _read_rows(Path(tmp) / "transcript.jsonl")
+        rows = _read_rows(Path(tmp) / "events.jsonl")
         assert len(rows) == 1
         row = rows[0]
         assert row["action"] == "tool.recovery.failed"
@@ -99,15 +99,15 @@ def test_m1_non_lifecycle_event_falls_through_to_generic() -> None:
     row (PR-OBS-CONTRACT typed all 43 formerly-generic events). The
     payload is the validated details schema, not a free-form dict."""
     with tempfile.TemporaryDirectory() as tmp, run_dir_scope(tmp):
-        journal = RunTranscript(
+        journal = RunTimeline(
             session_id="gen1-X",
             gen_tag="gen1",
             component="seed-generation",
-            path=Path(tmp) / "transcript.jsonl",
+            path=Path(tmp) / "events.jsonl",
         )
-        with run_transcript_scope(journal), _persistent_hooks(Path(tmp)) as hs:
+        with run_timeline_scope(journal), _persistent_hooks(Path(tmp)) as hs:
             hs.trigger(HookEvent.MEMORY_SAVED, {"key": "recipe-pho", "persistent": True})
-        rows = _read_rows(Path(tmp) / "transcript.jsonl")
+        rows = _read_rows(Path(tmp) / "events.jsonl")
         assert len(rows) == 1
         row = rows[0]
         assert row["action"] == "memory.saved"
@@ -125,16 +125,16 @@ def test_m1b_builder_failure_falls_through_to_distinguishable_generic() -> None:
     a ``_fallback_reason`` so operators can tell a forced-generic row from
     an intentionally-typed one (silent-fallback anti-pattern guard)."""
     with tempfile.TemporaryDirectory() as tmp, run_dir_scope(tmp):
-        journal = RunTranscript(
+        journal = RunTimeline(
             session_id="gen1-Y",
             gen_tag="gen1",
             component="seed-generation",
-            path=Path(tmp) / "transcript.jsonl",
+            path=Path(tmp) / "events.jsonl",
         )
-        with run_transcript_scope(journal), _persistent_hooks(Path(tmp)) as hs:
+        with run_timeline_scope(journal), _persistent_hooks(Path(tmp)) as hs:
             # MUTATION_APPLIED requires ``mutation_id`` — omit it.
             hs.trigger(HookEvent.MUTATION_APPLIED, {"target_kind": "prompt"})
-        rows = _read_rows(Path(tmp) / "transcript.jsonl")
+        rows = _read_rows(Path(tmp) / "events.jsonl")
         assert len(rows) == 1
         row = rows[0]
         assert row["action"] == "mutation.applied"
@@ -143,16 +143,16 @@ def test_m1b_builder_failure_falls_through_to_distinguishable_generic() -> None:
         )
 
 
-def test_m2_mirror_no_op_outside_run_transcript_scope() -> None:
-    """Without an active ``RunTranscript`` (REPL / gateway / tests)
+def test_m2_mirror_no_op_outside_run_timeline_scope() -> None:
+    """Without an active ``RunTimeline`` (REPL / gateway / tests)
     the mirror is a silent no-op — the trigger must NOT raise and
     no file should be created."""
     with tempfile.TemporaryDirectory() as tmp:
         with _persistent_hooks(Path(tmp)) as hs:
-            # No run_transcript_scope active.
+            # No run_timeline_scope active.
             hs.trigger(HookEvent.SUBAGENT_STARTED, {"task_id": "ghost"})
-        # No transcript file expected in tmp (which was never bound).
-        assert not (Path(tmp) / "transcript.jsonl").exists()
+        # No timeline file expected in tmp (which was never bound).
+        assert not (Path(tmp) / "events.jsonl").exists()
 
 
 def test_m3_malformed_payload_still_produces_a_row() -> None:
@@ -162,16 +162,16 @@ def test_m3_malformed_payload_still_produces_a_row() -> None:
     The "always emit" contract mirrors paperclip's swallow-and-warn
     pattern in ``activity-log.ts:65``."""
     with tempfile.TemporaryDirectory() as tmp, run_dir_scope(tmp):
-        journal = RunTranscript(
+        journal = RunTimeline(
             session_id="gen1-X",
             gen_tag="gen1",
             component="seed-generation",
-            path=Path(tmp) / "transcript.jsonl",
+            path=Path(tmp) / "events.jsonl",
         )
-        with run_transcript_scope(journal), _persistent_hooks(Path(tmp)) as hs:
+        with run_timeline_scope(journal), _persistent_hooks(Path(tmp)) as hs:
             # Empty payload — registry builder fills defaults.
             hs.trigger(HookEvent.TOOL_RECOVERY_FAILED, {})
-        rows = _read_rows(Path(tmp) / "transcript.jsonl")
+        rows = _read_rows(Path(tmp) / "events.jsonl")
         assert len(rows) == 1
         row = rows[0]
         assert row["action"] == "tool.recovery.failed"
@@ -189,13 +189,13 @@ def test_m3_malformed_value_still_produces_a_row() -> None:
     contract: malformed *values* must also fall through to
     ``GenericActivityRow`` so the timeline stays complete."""
     with tempfile.TemporaryDirectory() as tmp, run_dir_scope(tmp):
-        journal = RunTranscript(
+        journal = RunTimeline(
             session_id="gen1-X",
             gen_tag="gen1",
             component="seed-generation",
-            path=Path(tmp) / "transcript.jsonl",
+            path=Path(tmp) / "events.jsonl",
         )
-        with run_transcript_scope(journal), _persistent_hooks(Path(tmp)) as hs:
+        with run_timeline_scope(journal), _persistent_hooks(Path(tmp)) as hs:
             # ``duration_ms="bad"`` triggers ValueError inside the
             # _lifecycle_completed builder. Pre-Codex-catch the row
             # would have been dropped entirely.
@@ -203,7 +203,7 @@ def test_m3_malformed_value_still_produces_a_row() -> None:
                 HookEvent.LLM_CALL_ENDED,
                 {"session_id": "s1", "call_id": "c1", "duration_ms": "bad"},
             )
-        rows = _read_rows(Path(tmp) / "transcript.jsonl")
+        rows = _read_rows(Path(tmp) / "events.jsonl")
         assert len(rows) == 1
         row = rows[0]
         # The row landed via GenericActivityRow fall-through (the builder
@@ -219,20 +219,20 @@ def test_m1_async_mirror_appends_one_row() -> None:
     import asyncio
 
     with tempfile.TemporaryDirectory() as tmp, run_dir_scope(tmp):
-        journal = RunTranscript(
+        journal = RunTimeline(
             session_id="gen1-X",
             gen_tag="gen1",
             component="seed-generation",
-            path=Path(tmp) / "transcript.jsonl",
+            path=Path(tmp) / "events.jsonl",
         )
-        with run_transcript_scope(journal), _persistent_hooks(Path(tmp)) as hs:
+        with run_timeline_scope(journal), _persistent_hooks(Path(tmp)) as hs:
             asyncio.run(
                 hs.trigger_async(
                     HookEvent.SUBAGENT_STARTED,
                     {"task_id": "gen-async-001", "task_type": "seed_generator"},
                 )
             )
-        rows = _read_rows(Path(tmp) / "transcript.jsonl")
+        rows = _read_rows(Path(tmp) / "events.jsonl")
         assert len(rows) == 1
         assert rows[0]["action"] == "subagent.started"
         assert rows[0]["task_id"] == "gen-async-001"
@@ -243,13 +243,13 @@ def test_m1_hook_handler_failure_does_not_break_mirror() -> None:
     must still run — we're capturing observability, not gating on
     handler success."""
     with tempfile.TemporaryDirectory() as tmp, run_dir_scope(tmp):
-        journal = RunTranscript(
+        journal = RunTimeline(
             session_id="gen1-X",
             gen_tag="gen1",
             component="seed-generation",
-            path=Path(tmp) / "transcript.jsonl",
+            path=Path(tmp) / "events.jsonl",
         )
-        with run_transcript_scope(journal), _persistent_hooks(Path(tmp)) as hs:
+        with run_timeline_scope(journal), _persistent_hooks(Path(tmp)) as hs:
 
             def _broken_handler(event: HookEvent, data: dict) -> None:
                 raise RuntimeError("simulated handler bug")
@@ -257,6 +257,6 @@ def test_m1_hook_handler_failure_does_not_break_mirror() -> None:
             hs.register(HookEvent.SUBAGENT_STARTED, _broken_handler, name="broken")
             hs.trigger(HookEvent.SUBAGENT_STARTED, {"task_id": "gen-gen1-001"})
         # Handler raised but the mirror still wrote one row.
-        rows = _read_rows(Path(tmp) / "transcript.jsonl")
+        rows = _read_rows(Path(tmp) / "events.jsonl")
         assert len(rows) == 1
         assert rows[0]["action"] == "subagent.started"

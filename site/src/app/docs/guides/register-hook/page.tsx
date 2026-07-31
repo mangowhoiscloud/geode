@@ -103,7 +103,7 @@ events.subscribe(
               <li>public hook은 해당 경계의 payload schema와 action 제한을 테스트합니다.</li>
               <li>tool middleware는 승인 전 변환과 승인 후 실행 순서를 함께 테스트합니다.</li>
               <li>LLM middleware는 모든 adapter call 경로와 retry마다 실행되는지 확인합니다.</li>
-              <li>관측 행은 transcript가 없어도 SQLite에 남고, transcript 활성 시에만 JSONL에도 남는지 확인합니다.</li>
+              <li>관측 행은 run projection이 없어도 SQLite에 남고, <code>RunTimeline</code> 활성 시에만 <code>events.jsonl</code>에도 남는지 확인합니다.</li>
             </ul>
 
             <h2>PostVerify 등록 시 주의</h2>
@@ -215,7 +215,7 @@ events.subscribe(
               <li>Test the hook-specific payload schema and action allowlist.</li>
               <li>Test tool transforms before approval and execution wrappers after it.</li>
               <li>Verify LLM middleware covers every adapter path and each retry attempt.</li>
-              <li>Verify SQLite persistence without a transcript and conditional JSONL mirroring with one.</li>
+              <li>Verify SQLite persistence without a run projection and conditional <code>events.jsonl</code> mirroring with <code>RunTimeline</code>.</li>
             </ul>
 
             <h2>PostVerify cautions</h2>

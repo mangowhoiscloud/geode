@@ -43,7 +43,7 @@ from core.self_improving.ledger import (
     _write_baseline,
 )
 from core.self_improving.measure import (
-    RUN_TRANSCRIPT_PATH_ENV,
+    RUN_TIMELINE_PATH_ENV,
     RUN_WORKER_ID_ENV,
     _build_audit_command,
     _emit_journal,
@@ -1962,7 +1962,7 @@ def test_append_session_index_swallows_oserror(
 # P0b — autoresearch journal event coverage
 # ---------------------------------------------------------------------------
 #
-# These tests guard the RunTranscript emission contract documented in
+# These tests guard the RunTimeline emission contract documented in
 # docs/audits/2026-05-19-self-improving-loop-observability-gap.md §4 (event
 # coverage) and §6 (SoT dedup: journal payloads must not duplicate
 # sessions.jsonl canonical fields). Regression here means a future writer
@@ -1980,7 +1980,7 @@ _SESSIONS_JSONL_CANONICAL_FIELDS = frozenset(
 
 
 def _journal_path(tmp_path: Path, session_id: str) -> Path:
-    return tmp_path / "autoresearch" / "handoff" / session_id / "transcript.jsonl"
+    return tmp_path / "autoresearch" / "handoff" / session_id / "events.jsonl"
 
 
 def _redirect_journal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -2046,7 +2046,7 @@ def test_emit_journal_noops_on_empty_session_id(
     _emit_journal("", "gen-x", "audit_started", payload={"dry_run": True})
     # No journal file should be created.
     assert not (tmp_path / "autoresearch" / "handoff").exists() or not any(
-        (tmp_path / "autoresearch" / "handoff").rglob("transcript.jsonl")
+        (tmp_path / "autoresearch" / "handoff").rglob("events.jsonl")
     )
 
 
@@ -2058,7 +2058,7 @@ def test_emit_journal_noops_on_empty_gen_tag(
     _redirect_journal(tmp_path, monkeypatch)
     _emit_journal("s-x", "", "audit_started", payload={"dry_run": True})
     assert not (tmp_path / "autoresearch" / "handoff").exists() or not any(
-        (tmp_path / "autoresearch" / "handoff").rglob("transcript.jsonl")
+        (tmp_path / "autoresearch" / "handoff").rglob("events.jsonl")
     )
 
 
@@ -2066,12 +2066,12 @@ def test_emit_journal_redirects_to_isolated_path_env(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """S6 — ``GEODE_RUN_TRANSCRIPT_PATH`` redirects the worker's RunTranscript to
+    """S6 — ``GEODE_RUN_TIMELINE_PATH`` redirects the worker's RunTimeline to
     its OWN isolated jsonl (NOT the shared home-dir transcript), so concurrent
     campaign workers never race-append the same file."""
     _redirect_journal(tmp_path, monkeypatch)
-    isolated = tmp_path / "w1" / "transcript.jsonl"
-    monkeypatch.setenv(RUN_TRANSCRIPT_PATH_ENV, str(isolated))
+    isolated = tmp_path / "w1" / "events.jsonl"
+    monkeypatch.setenv(RUN_TIMELINE_PATH_ENV, str(isolated))
     _emit_journal("s-iso", "gen-iso", "subprocess_started", payload={"argv_len": 3})
     # The event landed in the isolated path, NOT the shared home-dir transcript.
     assert isolated.is_file()
@@ -2107,7 +2107,7 @@ def test_emit_journal_no_worker_id_key_when_env_absent(
     transcript exactly as before."""
     _redirect_journal(tmp_path, monkeypatch)
     monkeypatch.delenv(RUN_WORKER_ID_ENV, raising=False)
-    monkeypatch.delenv(RUN_TRANSCRIPT_PATH_ENV, raising=False)
+    monkeypatch.delenv(RUN_TIMELINE_PATH_ENV, raising=False)
     _emit_journal("s-plain", "gen-plain", "audit_started", payload={"dry_run": True})
     record = json.loads(_journal_path(tmp_path, "s-plain").read_text().splitlines()[0])
     assert "worker_id" not in record["payload"]
@@ -2118,11 +2118,11 @@ def test_emit_journal_malformed_transcript_path_falls_back_to_home(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """S6 graceful boundary — an empty/blank ``GEODE_RUN_TRANSCRIPT_PATH`` must NOT
+    """S6 graceful boundary — an empty/blank ``GEODE_RUN_TIMELINE_PATH`` must NOT
     crash the audit; the event falls back to the home-dir transcript (the worker
     loses isolation rather than the whole fan-out failing)."""
     _redirect_journal(tmp_path, monkeypatch)
-    monkeypatch.setenv(RUN_TRANSCRIPT_PATH_ENV, "   ")
+    monkeypatch.setenv(RUN_TIMELINE_PATH_ENV, "   ")
     _emit_journal("s-blank", "gen-blank", "audit_started", payload={"dry_run": True})
     # Blank path is treated as absent → home-dir transcript written, no crash.
     assert _journal_path(tmp_path, "s-blank").is_file()
@@ -2172,7 +2172,7 @@ def _drive_main_dry_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tupl
     # Find the single run dir under sip_home (session_id resolved at runtime).
     run_dirs = [p for p in sip_home.iterdir() if p.is_dir()]
     assert len(run_dirs) == 1, f"expected one run dir under {sip_home}, got {run_dirs}"
-    journal_path = run_dirs[0] / "transcript.jsonl"
+    journal_path = run_dirs[0] / "events.jsonl"
     sessions_path = sip_home / "sessions.jsonl"
     return exit_code, journal_path, sessions_path
 

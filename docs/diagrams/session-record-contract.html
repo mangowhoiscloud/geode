@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GEODE session record contract</title>
+  <style>
+    :root {
+      --bg: #f7f8fa;
+      --surface: #ffffff;
+      --ink: #172033;
+      --muted: #667085;
+      --line: #98a2b3;
+      --accent: #2563eb;
+      --accent-soft: #dbeafe;
+      --derived: #f2f4f7;
+      --legacy: #fff7ed;
+      --legacy-line: #c2410c;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main { max-width: 1248px; margin: 0 auto; padding: 40px 32px 48px; }
+    h1 { margin: 0; font-size: 28px; letter-spacing: -0.03em; }
+    p { margin: 8px 0 24px; color: var(--muted); font-size: 14px; }
+    .frame {
+      background: var(--surface);
+      border: 1px solid #d0d5dd;
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 12px 32px rgba(16, 24, 40, 0.06);
+    }
+    svg { width: 100%; height: auto; display: block; }
+    .node { fill: var(--surface); stroke: #98a2b3; stroke-width: 1.5; }
+    .canonical { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 2; }
+    .derived { fill: var(--derived); stroke: #667085; stroke-width: 1.5; }
+    .legacy { fill: var(--legacy); stroke: var(--legacy-line); stroke-width: 1.5; stroke-dasharray: 6 5; }
+    .arrow { fill: none; stroke: var(--line); stroke-width: 1.8; marker-end: url(#arrow); }
+    .arrow-accent { fill: none; stroke: var(--accent); stroke-width: 2.2; marker-end: url(#arrow-accent); }
+    .label { font-size: 15px; font-weight: 650; fill: var(--ink); text-anchor: middle; }
+    .small { font-size: 12px; font-weight: 450; fill: var(--muted); text-anchor: middle; }
+    .edge-label { font-size: 11px; fill: var(--muted); text-anchor: middle; }
+    .legend { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 16px; color: var(--muted); font-size: 12px; }
+    .key { display: inline-flex; align-items: center; gap: 7px; }
+    .swatch { width: 18px; height: 12px; border-radius: 3px; border: 1.5px solid #98a2b3; background: white; }
+    .swatch.canonical { background: var(--accent-soft); border-color: var(--accent); }
+    .swatch.derived { background: var(--derived); border-color: #667085; }
+    .swatch.legacy { background: var(--legacy); border-color: var(--legacy-line); border-style: dashed; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>GEODE session record contract</h1>
+  <p>Mutable resume state, immutable execution history, runtime telemetry, and evaluation artifacts have distinct owners.</p>
+  <section class="frame">
+    <svg viewBox="0 0 1160 620" role="img" aria-labelledby="title desc">
+      <title id="title">GEODE session persistence and trajectory flow</title>
+      <desc id="desc">AgenticLoop writes mutable checkpoint messages and immutable session events to sessions.db. Hooks write runtime events. Optional JSONL and trajectories are projections. Scope-complete, privacy-attested trajectories cross an immutable release-manifest gate before the evaluation artifact repository. GEODE, SIL, and Crucible evidence remain linked authorities. Legacy transcripts are read-only migration inputs.</desc>
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#98a2b3"></path>
+        </marker>
+        <marker id="arrow-accent" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#2563eb"></path>
+        </marker>
+      </defs>
+
+      <!-- edges first so nodes remain visually dominant -->
+      <path class="arrow-accent" d="M 224 150 C 300 150, 312 108, 388 108"></path>
+      <path class="arrow-accent" d="M 224 150 C 300 150, 312 226, 388 226"></path>
+      <path class="arrow" d="M 224 150 C 294 150, 316 344, 388 344"></path>
+      <path class="arrow" d="M 584 108 C 665 108, 675 140, 752 140"></path>
+      <path class="arrow" d="M 584 226 C 650 226, 680 180, 752 180"></path>
+      <path class="arrow" d="M 584 344 C 655 344, 682 220, 752 220"></path>
+      <path class="arrow-accent" d="M 948 180 C 972 180, 980 180, 1000 180"></path>
+      <path class="arrow" d="M 584 250 C 654 270, 688 416, 752 424"></path>
+      <path class="arrow" d="M 584 344 C 662 354, 690 446, 752 452"></path>
+      <path class="arrow-accent" d="M 224 486 C 300 486, 316 226, 388 226"></path>
+      <path class="arrow" d="M 584 502 C 672 502, 702 264, 752 228"></path>
+
+      <text class="edge-label" x="302" y="122">checkpoint</text>
+      <text class="edge-label" x="310" y="206">append</text>
+      <text class="edge-label" x="320" y="330">runtime activity</text>
+      <text class="edge-label" x="670" y="112">replay</text>
+      <text class="edge-label" x="974" y="112">quality gate</text>
+      <text class="edge-label" x="674" y="338">optional projection</text>
+      <text class="edge-label" x="304" y="422">idempotent import</text>
+      <text class="edge-label" x="690" y="486">evidence refs</text>
+
+      <rect class="node" x="28" y="104" width="196" height="92" rx="12"></rect>
+      <text class="label" x="126" y="142">AgenticLoop</text>
+      <text class="small" x="126" y="166">session → turn → call</text>
+
+      <rect class="node" x="388" y="64" width="196" height="88" rx="12"></rect>
+      <text class="label" x="486" y="100">Session checkpoint</text>
+      <text class="small" x="486" y="124">sessions / messages · mutable</text>
+
+      <rect class="canonical" x="388" y="182" width="196" height="88" rx="12"></rect>
+      <text class="label" x="486" y="218">Session record</text>
+      <text class="small" x="486" y="242">session_events · append-only</text>
+
+      <rect class="node" x="388" y="300" width="196" height="88" rx="12"></rect>
+      <text class="label" x="486" y="336">Runtime activity</text>
+      <text class="small" x="486" y="360">hook_events · bounded</text>
+
+      <rect class="derived" x="752" y="116" width="196" height="144" rx="12"></rect>
+      <text class="label" x="850" y="154">Trajectory projector</text>
+      <text class="small" x="850" y="180">geode.trajectory@1</text>
+      <text class="small" x="850" y="204">dialogue + tools + runtime</text>
+      <text class="small" x="850" y="228">evidence refs + digests</text>
+
+      <rect class="canonical" x="1000" y="116" width="148" height="136" rx="12"></rect>
+      <text class="label" x="1074" y="158">Artifact release</text>
+      <text class="small" x="1074" y="182">trajectory-release@1</text>
+      <text class="small" x="1074" y="203">manifest + SHA-256</text>
+      <text class="small" x="1074" y="222">scope + privacy gate</text>
+      <text class="small" x="1074" y="241">append-only repository</text>
+
+      <rect class="derived" x="752" y="396" width="196" height="92" rx="12"></rect>
+      <text class="label" x="850" y="432">events.jsonl</text>
+      <text class="small" x="850" y="456">tail / copy / review / export</text>
+
+      <rect class="legacy" x="28" y="440" width="196" height="92" rx="12"></rect>
+      <text class="label" x="126" y="478">Legacy transcripts</text>
+      <text class="small" x="126" y="502">explicit import · source unchanged</text>
+
+      <rect class="node" x="388" y="448" width="196" height="108" rx="12"></rect>
+      <text class="label" x="486" y="480">Evidence authorities</text>
+      <text class="small" x="486" y="506">GEODE EvidenceLedger v2</text>
+      <text class="small" x="486" y="526">SIL .eval · Crucible evidence.v3</text>
+    </svg>
+    <div class="legend">
+      <span class="key"><span class="swatch canonical"></span>canonical or published contract</span>
+      <span class="key"><span class="swatch"></span>runtime state plane</span>
+      <span class="key"><span class="swatch derived"></span>rebuildable projection</span>
+      <span class="key"><span class="swatch legacy"></span>deprecated read-only input</span>
+    </div>
+  </section>
+</main>
+</body>
+</html>

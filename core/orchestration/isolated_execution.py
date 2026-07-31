@@ -504,11 +504,10 @@ class IsolatedRunner:
             )
             # PR-Q (2026-05-24) — forward the parent's active run_dir
             # binding to the subprocess so its observability writers
-            # (``_save_result_backup``, ``SessionTranscript``) land
+            # (``_save_result_backup``, ``SessionTimeline``) land
             # output under ``<run_dir>/sub_agents/<task_id>/`` instead
-            # of the legacy ``~/.geode/workers/`` + ``~/.geode/transcripts/``
-            # global pools. Empty when no orchestrator opened a
-            # ``run_dir_scope`` — child falls back to legacy paths.
+            # of global pools. Empty when no orchestrator opened a
+            # ``run_dir_scope`` — session history still lands in SQLite.
             from core.observability.run_dir import RUN_DIR_ENV, get_active_run_dir
 
             active_run_dir = get_active_run_dir()
@@ -749,7 +748,7 @@ class IsolatedRunner:
         PR-Q (2026-05-24) — when an active run_dir is bound, the stderr
         log lands under ``<run_dir>/sub_agents/<session_id>/stderr.log``
         so it's co-located with the sub-agent's ``result.json`` +
-        ``dialogue.jsonl`` for that cycle. Otherwise falls back to the
+        ``events.jsonl`` for that cycle. Otherwise falls back to the
         legacy global ``~/.geode/workers/<session_id>.stderr.log`` pool.
         """
         from core.observability.run_dir import resolve_sub_agent_path

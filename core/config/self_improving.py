@@ -769,20 +769,20 @@ class SelfImprovingLoopConfig(BaseModel):
 
 
 def _emit_defaults_notice(reason: str, path: Path) -> None:
-    """Notify the active RunTranscript that the loader fell back to defaults.
+    """Notify the active RunTimeline that the loader fell back to defaults.
 
     P2 — closes the "config loader default sub silent" gap from the
     2026-05-19 observability audit §4. ``reason`` is one of
     ``file_missing`` / ``read_error`` / ``section_missing`` so the
     operator can tell which fallback fired without re-reading the file.
-    The emit is a no-op outside an :func:`run_transcript_scope` so
+    The emit is a no-op outside an :func:`run_timeline_scope` so
     callers that load the config without an active audit run (REPL
     bootstrap, petri user-overrides) stay unaffected.
     """
     try:
-        from core.self_improving.loop.observe.run_transcript import current_run_transcript
+        from core.self_improving.loop.observe.run_timeline import current_run_timeline
 
-        journal = current_run_transcript()
+        journal = current_run_timeline()
         if journal is None:
             return
         journal.append(

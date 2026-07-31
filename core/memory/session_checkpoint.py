@@ -110,6 +110,7 @@ class SessionState:
     # retry counter, diversity tracker, convergence detector) — written by
     # ``_lifecycle.collect_guard_state``, restored by ``restore_loop_state``.
     loop_guards: dict[str, Any] = field(default_factory=dict)
+    pending_verification: dict[str, Any] = field(default_factory=dict)
 
 
 class SessionCheckpoint:
@@ -161,6 +162,7 @@ class SessionCheckpoint:
             "user_input": state.user_input,
             "cognitive_state": state.cognitive_state,
             "loop_guards": state.loop_guards,
+            "pending_verification": state.pending_verification,
         }
         state_file = session_path / "state.json"
 
@@ -308,6 +310,11 @@ class SessionCheckpoint:
                 user_input=data.get("user_input", ""),
                 loop_guards=(
                     data["loop_guards"] if isinstance(data.get("loop_guards"), dict) else {}
+                ),
+                pending_verification=(
+                    data["pending_verification"]
+                    if isinstance(data.get("pending_verification"), dict)
+                    else {}
                 ),
             )
         except (json.JSONDecodeError, KeyError, OSError) as e:
@@ -493,19 +500,21 @@ class SessionCheckpoint:
                 )
         return True
 
-    def mark_completed(self, session_id: str) -> None:
+    def mark_completed(self, session_id: str) -> bool:
         """Mark a session as completed (no longer resumable)."""
-        if self.transition(session_id, SessionStatus.COMPLETED):
+        transitioned = self.transition(session_id, SessionStatus.COMPLETED)
+        if transitioned:
             # Clear active pointer if it points to this session
             self._clear_active_if_matches(session_id)
+        return transitioned
 
-    def mark_paused(self, session_id: str) -> None:
+    def mark_paused(self, session_id: str) -> bool:
         """Mark a session as paused — parked awaiting operator input."""
-        self.transition(session_id, SessionStatus.PAUSED)
+        return self.transition(session_id, SessionStatus.PAUSED)
 
-    def mark_error(self, session_id: str) -> None:
+    def mark_error(self, session_id: str) -> bool:
         """Mark a session as errored (one-shot run died; not resumable)."""
-        self.transition(session_id, SessionStatus.ERROR)
+        return self.transition(session_id, SessionStatus.ERROR)
 
     def list_resumable(self) -> list[SessionState]:
         """List sessions that can be resumed (status=active or paused)."""

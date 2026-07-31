@@ -30,6 +30,10 @@ from core.observability.redaction import redact_secrets
 
 log = logging.getLogger(__name__)
 
+REQUEST_MIDDLEWARE_DEFAULT_TIMEOUT_S = 10.0
+TOOL_EXECUTION_MIDDLEWARE_DEFAULT_TIMEOUT_S = 300.0
+LLM_EXECUTION_MIDDLEWARE_DEFAULT_TIMEOUT_S = 900.0
+
 
 class DuplicateMiddlewareError(ValueError):
     """Raised when a middleware name collides at one join point."""
@@ -122,14 +126,14 @@ class MiddlewareRegistry:
         *,
         name: str | None = None,
         priority: int = 100,
-        timeout_s: float = 0,
+        timeout_s: float | None = None,
     ) -> None:
         self._register(
             self._tool_request,
             middleware,
             name=name,
             priority=priority,
-            timeout_s=timeout_s,
+            timeout_s=(REQUEST_MIDDLEWARE_DEFAULT_TIMEOUT_S if timeout_s is None else timeout_s),
             capabilities=frozenset(),
         )
 
@@ -139,14 +143,16 @@ class MiddlewareRegistry:
         *,
         name: str | None = None,
         priority: int = 100,
-        timeout_s: float = 0,
+        timeout_s: float | None = None,
     ) -> None:
         self._register(
             self._tool_execution,
             middleware,
             name=name,
             priority=priority,
-            timeout_s=timeout_s,
+            timeout_s=(
+                TOOL_EXECUTION_MIDDLEWARE_DEFAULT_TIMEOUT_S if timeout_s is None else timeout_s
+            ),
             capabilities=frozenset(),
         )
 
@@ -156,7 +162,7 @@ class MiddlewareRegistry:
         *,
         name: str | None = None,
         priority: int = 100,
-        timeout_s: float = 0,
+        timeout_s: float | None = None,
         allow_cache_invalidation: bool = False,
     ) -> None:
         self._register(
@@ -164,7 +170,7 @@ class MiddlewareRegistry:
             middleware,
             name=name,
             priority=priority,
-            timeout_s=timeout_s,
+            timeout_s=(REQUEST_MIDDLEWARE_DEFAULT_TIMEOUT_S if timeout_s is None else timeout_s),
             capabilities=(
                 frozenset({"llm_cache_invalidation"}) if allow_cache_invalidation else frozenset()
             ),
@@ -176,14 +182,16 @@ class MiddlewareRegistry:
         *,
         name: str | None = None,
         priority: int = 100,
-        timeout_s: float = 0,
+        timeout_s: float | None = None,
     ) -> None:
         self._register(
             self._llm_execution,
             middleware,
             name=name,
             priority=priority,
-            timeout_s=timeout_s,
+            timeout_s=(
+                LLM_EXECUTION_MIDDLEWARE_DEFAULT_TIMEOUT_S if timeout_s is None else timeout_s
+            ),
             capabilities=frozenset(),
         )
 
@@ -427,10 +435,11 @@ class MiddlewareRegistry:
         downstream: ToolNextCall,
     ) -> dict[str, Any]:
         used = False
+        downstream_result: dict[str, Any] | None = None
         before = _request_hash(request)
 
         async def next_once(current: ToolCallRequest) -> dict[str, Any]:
-            nonlocal used
+            nonlocal downstream_result, used
             if used:
                 raise NextCallAlreadyUsedError(
                     f"{registration.name} called tool next_call more than once"
@@ -446,7 +455,8 @@ class MiddlewareRegistry:
                     f"{registration.name} changed the request at tool_execution; "
                     "use tool_request for transforms"
                 )
-            return await downstream(current)
+            downstream_result = await downstream(current)
+            return downstream_result
 
         started = time.monotonic()
         try:
@@ -476,6 +486,18 @@ class MiddlewareRegistry:
                 effective_hash=before,
                 correlation=request.correlation,
             )
+            if (
+                used
+                and downstream_result is not None
+                and not isinstance(exc, NextCallAlreadyUsedError)
+            ):
+                log.warning(
+                    "Tool execution middleware %s failed after next_call; "
+                    "preserving the completed downstream result to prevent replay",
+                    registration.name,
+                    exc_info=True,
+                )
+                return downstream_result
             raise
         await self._record(
             surface="tool_execution",
@@ -496,10 +518,11 @@ class MiddlewareRegistry:
         downstream: LlmNextCall,
     ) -> AdapterCallResult:
         used = False
+        downstream_result: AdapterCallResult | None = None
         before = _request_hash(request)
 
         async def next_once(current: LlmCallRequest) -> AdapterCallResult:
-            nonlocal used
+            nonlocal downstream_result, used
             if used:
                 raise NextCallAlreadyUsedError(
                     f"{registration.name} called LLM next_call more than once"
@@ -515,7 +538,8 @@ class MiddlewareRegistry:
                     f"{registration.name} changed the request at llm_execution; "
                     "use llm_request for transforms"
                 )
-            return await downstream(current)
+            downstream_result = await downstream(current)
+            return downstream_result
 
         started = time.monotonic()
         try:
@@ -546,6 +570,18 @@ class MiddlewareRegistry:
                 effective_hash=before,
                 correlation=request.correlation,
             )
+            if (
+                used
+                and downstream_result is not None
+                and not isinstance(exc, NextCallAlreadyUsedError)
+            ):
+                log.warning(
+                    "LLM execution middleware %s failed after next_call; "
+                    "preserving the completed provider result to prevent rebilling",
+                    registration.name,
+                    exc_info=True,
+                )
+                return downstream_result
             raise
         await self._record(
             surface="llm_execution",
@@ -612,6 +648,9 @@ class MiddlewareRegistry:
                     "session_id": str(correlation.get("session_id", "")),
                     "turn_id": str(correlation.get("turn_id", "")),
                     "run_id": str(correlation.get("run_id", "")),
+                    "tool_call_id": str(correlation.get("tool_call_id", "")),
+                    "llm_call_id": str(correlation.get("llm_call_id", "")),
+                    "llm_attempt_id": str(correlation.get("llm_attempt_id", "")),
                 },
             )
         except Exception:

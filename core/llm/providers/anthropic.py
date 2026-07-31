@@ -194,7 +194,7 @@ def _extract_anthropic_quota(headers: object) -> tuple[int, int] | None:
     """Parse ``(used, limit)`` from ``anthropic-ratelimit-tokens-*`` headers.
 
     Returns ``None`` when the headers are absent (PAYG path) or
-    unparseable (defensive — never raise from the response hook). Both
+    unparsable (defensive — never raise from the response hook). Both
     values are int tokens for the **current rate-limit window** (per-day
     on subscription OAuth; per-minute on PAYG); the banner renders them
     as a usage ratio.
@@ -221,7 +221,7 @@ def _feed_banner_from_anthropic_response(response: object) -> None:
     No-op when no banner is installed (CLI front-end didn't start one) or
     when the response carries no rate-limit headers. Defensive: any
     exception here is swallowed because observability MUST NOT break the
-    response path it observes (parity with RunTranscript.append).
+    response path it observes (parity with RunTimeline.append).
     """
     try:
         headers = getattr(response, "headers", None)
@@ -267,14 +267,14 @@ def _on_retry_journal_emit(
     retry itself was previously silent — operators saw the final outcome
     but not the retry count or the triggering error.
 
-    Discovered via the ContextVar set in ``run_transcript_scope``; no-op
+    Discovered via the ContextVar set in ``run_timeline_scope``; no-op
     when not in scope (single REPL invocation outside an autoresearch /
     seed-generation run) so the helper is safe to wire unconditionally.
     """
     try:
-        from core.self_improving.loop.observe.run_transcript import current_run_transcript
+        from core.self_improving.loop.observe.run_timeline import current_run_timeline
 
-        journal = current_run_transcript()
+        journal = current_run_timeline()
         if journal is None:
             return
         # Treat overload / rate-limit / 5xx as warning level; connection

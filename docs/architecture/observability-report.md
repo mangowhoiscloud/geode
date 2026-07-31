@@ -11,6 +11,42 @@
 
 ---
 
+## Current record contract (2026-07-31)
+
+The current runtime no longer uses `SessionTranscript` as an execution-history
+owner. Its storage planes are:
+
+| Record | Owner | Stored in | Role |
+|---|---|---|---|
+| model-visible checkpoint | `SessionCheckpoint` / `SessionManager` | `sessions.db:sessions/messages` | resume and compaction state |
+| behavioral history | `SessionTimeline` | `sessions.db:session_events` | ordered message/tool/sub-agent/usage history |
+| runtime telemetry | `RuntimeEventBus` + persistence sink | `sessions.db:hook_events` | hook/middleware/lifecycle diagnosis |
+| portable projection | `RunTimeline` | `events.jsonl` | bounded tail/copy/review artifact |
+| evaluation artifact | trajectory builder | `geode.trajectory@1` JSON | replay, comparison, verifier binding |
+| public release | trajectory release gate | `geode-eval-artifacts/trajectories/<release-id>/` | scope-complete reviewed allowlist + manifest |
+| judgment evidence | `EvidenceLedger` | v2 evidence JSONL | session/turn/call-correlated claims, citations, and verifier results |
+
+`SessionTranscript` and `RunTranscript` are one-release compatibility names.
+`transcript.jsonl` and `dialogue.jsonl` remain read/import inputs; new writers
+use SQLite and `events.jsonl`. MCPMark, tau2-bench, and hook behavior E2E all
+produce normalized trajectories through the same packaged schema validator.
+
+The planes deliberately overlap in correlation, not in authority:
+
+- `messages` may be compacted because it is a mutable checkpoint;
+- `session_events` preserves the executed ordering;
+- `hook_events` records extension and policy behavior without copying prompt or
+  tool bodies;
+- `events.jsonl` may be bounded and rebuilt;
+- a published trajectory binds source artifacts by SHA-256, carries a
+  structured privacy review, and is immutable. SQLite/WAL, JSONL projections,
+  checkpoints, and hidden reasoning never enter that release directory.
+
+The tables and counts below remain the April audit snapshot and should not be
+used as current implementation inventory.
+
+---
+
 ## System Inventory (17 systems)
 
 | # | System | File | Storage | Hook Events |

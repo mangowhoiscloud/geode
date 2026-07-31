@@ -14,11 +14,26 @@ and provides propagate_to_thread() for daemon thread ContextVar injection.
 from __future__ import annotations
 
 import contextvars
+import inspect
 import logging
 from dataclasses import dataclass, field
 from typing import Any
 
 log = logging.getLogger(__name__)
+
+
+async def _close_oneshot_session(loop: Any, *, success: bool) -> None:
+    """Close one-shot owners without requiring rich AgenticLoop test doubles."""
+    suffix = "completed" if success else "error"
+    async_close = getattr(loop, f"amark_session_{suffix}", None)
+    if callable(async_close):
+        outcome = async_close()
+        if inspect.isawaitable(outcome):
+            await outcome
+        return
+    sync_close = getattr(loop, f"mark_session_{suffix}", None)
+    if callable(sync_close):
+        sync_close()
 
 
 @dataclass
@@ -288,7 +303,20 @@ async def arun_agentic_oneshot(
         time_budget_s=time_budget_s,
         max_rounds=0,
     )
-    return await loop.arun(prompt)
+    try:
+        result = await loop.arun(prompt)
+    except BaseException:
+        await _close_oneshot_session(loop, success=False)
+        raise
+    from core.agent.loop.models import is_successful_task_termination
+
+    if getattr(result, "error", None) or not is_successful_task_termination(
+        getattr(result, "termination_reason", "")
+    ):
+        await _close_oneshot_session(loop, success=False)
+    else:
+        await _close_oneshot_session(loop, success=True)
+    return result
 
 
 def run_agentic_oneshot(

@@ -1,7 +1,7 @@
 """``run_dir`` — single SoT for the "active per-cycle output directory"
 the seed-generation / petri-audit orchestrators run inside.
 
-Pre-PR-Q every observability writer (RunTranscript / SessionTranscript /
+Pre-PR-Q every observability writer (RunTimeline / legacy SessionTranscript /
 WorkerResult / IsolatedRunner stderr) had its own hardcoded global
 ``~/.geode/<bucket>/`` destination. One seed-generation cycle's artifacts
 landed across 5 prefixes with 3 different identifiers (run_id /
@@ -10,9 +10,9 @@ manual identifier reconciliation (see GAP audit in the PR-Q body).
 
 This module exposes ONE ContextVar so every writer asks the same
 question — "is there an active run_dir for this thread?" — and routes
-its output inside it when set. When the var is empty the writer falls
-back to its legacy global path so callers outside the seed-generation
-orchestrator (gateway, REPL, ad-hoc CLI, tests) are unaffected.
+portable output inside it when set. When the var is empty,
+``SessionTimeline`` writes only canonical SQLite history; run-specific
+writers apply their own documented fallback.
 
 Cross-process propagation (parent → worker subprocess) is handled by
 :data:`RUN_DIR_ENV`: the orchestrator's ContextVar value is forwarded
@@ -64,7 +64,7 @@ def set_active_run_dir(run_dir: Path | str | None) -> contextvars.Token[Path | N
     """Bind ``run_dir`` as the active per-cycle output directory for
     the current ContextVar scope. Returns the reset token so callers
     can restore the prior binding (mirrors
-    :func:`set_current_run_transcript` shape).
+    :func:`set_current_run_timeline` shape).
     """
     resolved: Path | None = Path(run_dir) if run_dir else None
     return _active_run_dir.set(resolved)
@@ -105,7 +105,7 @@ def resolve_sub_agent_path(task_id: str, filename: str) -> Path | None:
 
     * WorkerResult backup:        ``resolve_sub_agent_path(task_id, "result.json")``
     * IsolatedRunner stderr dump: ``resolve_sub_agent_path(session_id, "stderr.log")``
-    * Per-sub-agent dialogue:     ``resolve_sub_agent_path(session_id, "dialogue.jsonl")``
+    * Per-sub-agent timeline:     ``resolve_sub_agent_path(session_id, "events.jsonl")``
     """
     run_dir = get_active_run_dir()
     if run_dir is None:

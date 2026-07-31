@@ -133,6 +133,53 @@ def test_executor_exception_becomes_failed_terminal_result() -> None:
     assert "boom" in result["content"]
 
 
+def test_session_tool_start_is_durable_before_handler_execution() -> None:
+    order: list[str] = []
+
+    class Timeline:
+        def record_tool_call(
+            self,
+            _name: str,
+            _arguments: dict,
+            *,
+            call_id: str,
+        ) -> None:
+            assert call_id == "tool-1"
+            order.append("tool.called")
+
+        def record_tool_result(
+            self,
+            _name: str,
+            _status: str,
+            _summary: str,
+            *,
+            call_id: str,
+            result: object,
+        ) -> None:
+            assert call_id == "tool-1"
+            assert result == {"ok": True}
+            order.append("tool.completed")
+
+    async def handler(**_kwargs: object) -> dict[str, bool]:
+        assert order == ["tool.called"]
+        order.append("handler")
+        return {"ok": True}
+
+    executor = ToolExecutor(action_handlers={"read_file": handler})
+    op_logger = MagicMock()
+    op_logger.log_tool_call.return_value = True
+    processor = ToolCallProcessor(
+        executor=executor,
+        op_logger=op_logger,
+        error_recovery=MagicMock(),
+        timeline=Timeline(),
+    )
+
+    asyncio.run(processor._execute_single(_block()))
+
+    assert order == ["tool.called", "handler", "tool.completed"]
+
+
 def test_personal_failure_is_omitted_from_hooks_logs_and_event_store(tmp_path, caplog) -> None:
     from core.memory.episodic import EpisodicStore, get_episodic_store, set_episodic_store
     from core.tools.personal_data import PERSONAL_DATA_ERROR_OMITTED

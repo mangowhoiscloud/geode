@@ -9,10 +9,9 @@ Adapted from hermes-agent's `sessions` table handoff_state pattern
    crosses T-10min (see :mod:`core.agent.budget`). Operator decision
    recorded in memory: ``project_budget_handoff_decision`` (2026-05-23).
 
-2. **Artifact reuse** — hermes replays the entire `messages` table
-   transcript via a synthetic turn. GEODE re-uses :class:`SessionTranscript`
-   + :class:`SessionMetrics` (Tier 1 + Tier 2 already present after
-   PR-SESSION-METRICS #1531). No new artifact format introduced.
+2. **Artifact reuse** — hermes replays the entire `messages` table via a
+   synthetic turn. GEODE reuses the canonical session checkpoint/history plus
+   :class:`SessionMetrics`; handoff does not invent another artifact format.
 
 3. **No platform routing** — hermes routes the handoff to a target
    chat platform (Slack / etc.). In this PR scope, the platform field

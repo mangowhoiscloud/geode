@@ -51,6 +51,7 @@ from typing import TYPE_CHECKING, Any
 
 from core.hooks import HookEvent, HookSystem
 from core.memory.atomic_write import iter_jsonl
+from core.observability.record_paths import resolve_event_stream_path
 
 from plugins.seed_generation.agents.base import BaseSeedAgent, SeedAgentResult
 
@@ -184,7 +185,7 @@ def _emit_orchestrator_event(
     level: str = "info",
     payload: dict[str, Any] | None = None,
 ) -> None:
-    """Emit a seed-generation event into the active RunTranscript.
+    """Emit a seed-generation event into the active RunTimeline.
 
     P1c — closes the "per-stage transition silent" gap from the
     2026-05-19 observability audit §4. Discovered via the ContextVar
@@ -196,9 +197,9 @@ def _emit_orchestrator_event(
     swallowed so the pipeline contract is unchanged.
     """
     try:
-        from core.self_improving.loop.observe.run_transcript import current_run_transcript
+        from core.self_improving.loop.observe.run_timeline import current_run_timeline
 
-        journal = current_run_transcript()
+        journal = current_run_timeline()
         if journal is None:
             return
         journal.append(event, level=level, payload=payload or {})
@@ -1152,7 +1153,7 @@ class Pipeline:
             )
 
     def _persist_per_phase_costs(self) -> None:
-        """Aggregate sub-agent ``dialogue.jsonl`` session_end events by phase.
+        """Aggregate sub-agent ``events.jsonl`` session-end events by phase.
 
         PR-SEEDS-HIRES (2026-05-26) — per-phase cost breakdown so the
         hub can render a cost grid alongside the phase timeline. Walks
@@ -1160,7 +1161,7 @@ class Pipeline:
         session.json's ``metadata.phase`` (or falls back to inferring
         from task_id prefix when metadata is absent), then sums
         ``session_end.total_cost`` / ``duration_s`` per phase from the
-        sibling ``dialogue.jsonl``.
+        sibling event stream (legacy filenames are accepted).
 
         Output shape (each phase row optional):
         ``{<phase>: {cost_usd, prompt_tokens, completion_tokens, duration_ms, agent_count}}``.
@@ -1187,9 +1188,14 @@ class Pipeline:
                     },
                 )
                 agg["agent_count"] = int(agg["agent_count"]) + 1
-                dialogue = task_dir / "dialogue.jsonl"
-                for evt in iter_jsonl(dialogue):
-                    if evt.get("event") != "session_end":
+                event_path = resolve_event_stream_path(task_dir)
+                if event_path is None:
+                    continue
+                for evt in iter_jsonl(event_path):
+                    payload = evt.get("payload")
+                    if isinstance(payload, dict):
+                        evt = {**payload, **evt}
+                    if evt.get("event") != "session_end" and evt.get("kind") != "session.ended":
                         continue
                     with contextlib.suppress(TypeError, ValueError):
                         agg["cost_usd"] = float(agg["cost_usd"]) + float(

@@ -106,7 +106,6 @@ _RUN_FILES_TO_SYNC = (
     "state.json",
     "survivors.json",
     "meta_review.json",
-    "transcript.jsonl",
     "progress.json",
     "tournament.json",
     "per_phase_costs.json",
@@ -173,6 +172,7 @@ def sync_run_to_bundle(run_dir: Path | str) -> Path | None:
         except OSError as exc:
             log.warning("bundle_sync: copy %s → %s failed: %s", src, dst, exc)
             continue
+    _sync_event_stream(src_dir, bundle_dir)
 
     # PR-HUB-VIS-CYCLE1 (2026-05-28) — copy ALL three MD subdirs so the
     # hub catalog can render every draft (not just survivors). Cycle 1
@@ -272,8 +272,21 @@ def _incremental_sync_md_subdirs(src_dir: Path, bundle_dir: Path) -> None:
                 continue
 
 
+def _sync_event_stream(src_dir: Path, dst_dir: Path) -> None:
+    """Copy the selected new-first stream under the canonical filename."""
+    from core.observability.record_paths import EVENTS_FILENAME, resolve_event_stream_path
+
+    src = resolve_event_stream_path(src_dir)
+    if src is None:
+        return
+    try:
+        shutil.copy2(src, dst_dir / EVENTS_FILENAME)
+    except OSError as exc:
+        log.warning("bundle_sync: event stream copy failed: %s", exc)
+
+
 def _sync_subagents(src_dir: Path, bundle_dir: Path) -> None:
-    """Copy every ``sub_agents/<task_id>/{dialogue.jsonl,result.json,session.json}``.
+    """Copy every sub-agent event stream, result, and session record.
 
     No-cap verbatim copy per operator directive (2026-05-26 hub upgrade) —
     resolution wins. Worst case ~1.5 MB per run uncompacted (15 generator
@@ -300,7 +313,8 @@ def _sync_subagents(src_dir: Path, bundle_dir: Path) -> None:
         except OSError as exc:
             log.warning("bundle_sync: cannot create %s: %s", dst_task_dir, exc)
             continue
-        for fname in ("dialogue.jsonl", "result.json", "session.json"):
+        _sync_event_stream(task_dir, dst_task_dir)
+        for fname in ("result.json", "session.json"):
             src = task_dir / fname
             if not src.is_file():
                 continue
@@ -346,7 +360,7 @@ def sync_run_incremental(run_dir: Path | str) -> Path | None:
     switch independent of ``GEODE_SEED_BUNDLE_SYNC_DISABLED`` which
     governs the final post-run sync).
 
-    Re-uses the same containment guard + dir resolution as
+    Reuses the same containment guard + dir resolution as
     :func:`sync_run_to_bundle` to guarantee writes stay under
     ``docs/self-improving/petri-bundle/seeds/<run_id>/``.
 
@@ -381,6 +395,7 @@ def sync_run_incremental(run_dir: Path | str) -> Path | None:
             shutil.copy2(src, dst)
         except OSError:
             continue
+    _sync_event_stream(src_dir, bundle_dir)
 
     # Sub-agent dirs — incremental glob
     _incremental_sync_subagents(src_dir / "sub_agents", bundle_dir / "sub_agents")
@@ -407,7 +422,8 @@ def _incremental_sync_subagents(src_subagents: Path, dst_subagents: Path) -> Non
             dst_task_dir.mkdir(parents=True, exist_ok=True)
         except OSError:
             continue
-        for fname in ("dialogue.jsonl", "result.json", "session.json"):
+        _sync_event_stream(task_dir, dst_task_dir)
+        for fname in ("result.json", "session.json"):
             src = task_dir / fname
             if not src.is_file():
                 continue
@@ -479,7 +495,7 @@ def iter_synced_runs(bundle_seeds_dir: Path | None = None) -> list[dict[str, Any
         try:
             data = json.loads(state_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
-            log.warning("iter_synced_runs: skipping unparseable %s: %s", state_path, exc)
+            log.warning("iter_synced_runs: skipping unparsable %s: %s", state_path, exc)
             continue
         if not isinstance(data, dict):
             continue

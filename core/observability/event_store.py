@@ -17,7 +17,7 @@ from typing import Any
 
 from core.hooks.catalog import EventRetentionClass
 from core.hooks.system import COLLAPSED_EVENT_VALUES, LEGACY_EVENT_VALUES
-from core.observability.redaction import redact_secrets
+from core.observability.redaction import redact_and_bound_text
 
 log = logging.getLogger(__name__)
 
@@ -42,7 +42,7 @@ def _event_filter_variants(event_filter: str) -> list[str]:
 
 # v2 (PR-HOOK-TAXONOMY, 2026-07-14): event vocabulary — tense-aligned
 # values, collapsed D2/D3 families; readers use the alias/collapsed maps.
-EVENT_SCHEMA_VERSION = 2
+EVENT_SCHEMA_VERSION = 3
 
 _CREATE_HOOK_EVENTS_TABLE_SQL = """\
 CREATE TABLE IF NOT EXISTS hook_events (
@@ -51,6 +51,11 @@ CREATE TABLE IF NOT EXISTS hook_events (
     occurred_at         REAL NOT NULL,
     session_key         TEXT NOT NULL,
     run_id              TEXT NOT NULL,
+    session_id          TEXT NOT NULL DEFAULT '',
+    turn_id             TEXT NOT NULL DEFAULT '',
+    tool_call_id        TEXT NOT NULL DEFAULT '',
+    llm_call_id         TEXT NOT NULL DEFAULT '',
+    llm_attempt_id      TEXT NOT NULL DEFAULT '',
     event               TEXT NOT NULL,
     dispatch_mode       TEXT NOT NULL,
     status              TEXT NOT NULL,
@@ -75,6 +80,12 @@ _HOOK_EVENT_INDEXES = (
     "CREATE INDEX IF NOT EXISTS idx_hook_events_session ON hook_events "
     "(session_key, occurred_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_hook_events_run ON hook_events (run_id, occurred_at)",
+    "CREATE INDEX IF NOT EXISTS idx_hook_events_correlation ON hook_events "
+    "(session_id, turn_id, occurred_at)",
+    "CREATE INDEX IF NOT EXISTS idx_hook_events_tool_call ON hook_events "
+    "(tool_call_id, occurred_at) WHERE tool_call_id != ''",
+    "CREATE INDEX IF NOT EXISTS idx_hook_events_llm_call ON hook_events "
+    "(llm_call_id, llm_attempt_id, occurred_at) WHERE llm_call_id != ''",
     "CREATE INDEX IF NOT EXISTS idx_hook_events_event ON hook_events (event, occurred_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_hook_events_action ON hook_events (action, occurred_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_hook_events_retention ON hook_events "
@@ -125,6 +136,16 @@ _FORBIDDEN_PERSISTED_KEYS = frozenset(
 def ensure_event_schema(conn: sqlite3.Connection) -> None:
     """Create the additive event table and indexes on ``conn``."""
     conn.execute(_CREATE_HOOK_EVENTS_TABLE_SQL)
+    existing = {str(row[1]) for row in conn.execute("PRAGMA table_info(hook_events)").fetchall()}
+    for column in (
+        "session_id",
+        "turn_id",
+        "tool_call_id",
+        "llm_call_id",
+        "llm_attempt_id",
+    ):
+        if column not in existing:
+            conn.execute(f"ALTER TABLE hook_events ADD COLUMN {column} TEXT NOT NULL DEFAULT ''")
     for statement in _HOOK_EVENT_INDEXES:
         conn.execute(statement)
 
@@ -174,6 +195,11 @@ class HookEventWrite:
     task_id: str | None
     level: str
     payload: dict[str, Any] = field(default_factory=dict)
+    session_id: str = ""
+    turn_id: str = ""
+    tool_call_id: str = ""
+    llm_call_id: str = ""
+    llm_attempt_id: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -183,6 +209,11 @@ class PersistedHookEvent:
     occurred_at: float
     session_key: str
     run_id: str
+    session_id: str
+    turn_id: str
+    tool_call_id: str
+    llm_call_id: str
+    llm_attempt_id: str
     event: str
     dispatch_mode: str
     status: str
@@ -258,33 +289,46 @@ class HookEventStore:
                 cursor = conn.execute(
                     """\
                     INSERT INTO hook_events (
-                        schema_version, occurred_at, session_key, run_id, event,
+                        schema_version, occurred_at, session_key, run_id,
+                        session_id, turn_id, tool_call_id, llm_call_id,
+                        llm_attempt_id, event,
                         dispatch_mode, status, retention_class, handler_count,
                         handler_error_count, blocked, block_reason, actor_type,
                         actor_id, action, entity_type, entity_id, task_id, level,
                         payload_json, payload_hash
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (
+                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                        ?, ?, ?, ?, ?, ?, ?, ?
+                    )
                     """,
                     (
                         EVENT_SCHEMA_VERSION,
                         float(record.occurred_at),
-                        _bounded_text(record.session_key, 256),
-                        _bounded_text(record.run_id, 256),
-                        _bounded_text(record.event, 128),
-                        _bounded_text(record.dispatch_mode, 32),
-                        _bounded_text(record.status, 32),
+                        redact_and_bound_text(record.session_key, 256),
+                        redact_and_bound_text(record.run_id, 256),
+                        redact_and_bound_text(record.session_id, 256),
+                        redact_and_bound_text(record.turn_id, 256),
+                        redact_and_bound_text(record.tool_call_id, 256),
+                        redact_and_bound_text(record.llm_call_id, 256),
+                        redact_and_bound_text(record.llm_attempt_id, 256),
+                        redact_and_bound_text(record.event, 128),
+                        redact_and_bound_text(record.dispatch_mode, 32),
+                        redact_and_bound_text(record.status, 32),
                         record.retention_class.value,
                         max(0, int(record.handler_count)),
                         max(0, int(record.handler_error_count)),
                         int(record.blocked),
-                        _bounded_text(record.block_reason, self._retention.max_string_chars),
-                        _bounded_text(record.actor_type, 32),
-                        _bounded_text(record.actor_id, 256),
-                        _bounded_text(record.action, 128),
-                        _bounded_text(record.entity_type, 64),
-                        _bounded_text(record.entity_id, 256),
-                        _bounded_text(record.task_id, 256) if record.task_id else None,
-                        _bounded_text(record.level, 16),
+                        redact_and_bound_text(
+                            record.block_reason,
+                            self._retention.max_string_chars,
+                        ),
+                        redact_and_bound_text(record.actor_type, 32),
+                        redact_and_bound_text(record.actor_id, 256),
+                        redact_and_bound_text(record.action, 128),
+                        redact_and_bound_text(record.entity_type, 64),
+                        redact_and_bound_text(record.entity_id, 256),
+                        (redact_and_bound_text(record.task_id, 256) if record.task_id else None),
+                        redact_and_bound_text(record.level, 16),
                         payload_json,
                         payload_hash,
                     ),
@@ -308,6 +352,10 @@ class HookEventStore:
         offset: int = 0,
         session_key: str | None = None,
         run_id: str | None = None,
+        session_id: str | None = None,
+        turn_id: str | None = None,
+        tool_call_id: str | None = None,
+        llm_call_id: str | None = None,
         event_filter: str | None = None,
         family_filter: str | None = None,
         status_filter: str | None = None,
@@ -332,6 +380,10 @@ class HookEventStore:
         for column, value in (
             ("session_key", session_key),
             ("run_id", run_id),
+            ("session_id", session_id),
+            ("turn_id", turn_id),
+            ("tool_call_id", tool_call_id),
+            ("llm_call_id", llm_call_id),
             ("status", status_filter),
         ):
             if value is not None:
@@ -460,13 +512,6 @@ class HookEventStore:
             raise RuntimeError("HookEventStore is closed")
 
 
-def _bounded_text(value: Any, max_chars: int) -> str:
-    text = redact_secrets(str(value or ""))
-    if len(text) <= max_chars:
-        return text
-    return text[:max_chars] + f"…[truncated:{len(text) - max_chars}]"
-
-
 def _bounded_payload_json(payload: dict[str, Any], policy: EventRetentionPolicy) -> str:
     bounded = bound_event_payload(payload, policy=policy)
     encoded = json.dumps(
@@ -513,7 +558,7 @@ def _bounded_value(value: Any, policy: EventRetentionPolicy, *, depth: int) -> A
     if isinstance(value, float):
         return value if math.isfinite(value) else str(value)
     if isinstance(value, str):
-        return _bounded_text(value, policy.max_string_chars)
+        return redact_and_bound_text(value, policy.max_string_chars)
     if isinstance(value, bytes | bytearray | memoryview):
         return {"_omitted_type": "bytes", "size": len(value)}
     if isinstance(value, Mapping):
@@ -521,7 +566,7 @@ def _bounded_value(value: Any, policy: EventRetentionPolicy, *, depth: int) -> A
         redacted_fields: list[str] = []
         items = list(islice(value.items(), policy.max_collection_items))
         for raw_key, item in items:
-            key = _bounded_text(raw_key, 128)
+            key = redact_and_bound_text(raw_key, 128)
             if key.lower() in _FORBIDDEN_PERSISTED_KEYS:
                 redacted_fields.append(key)
                 continue
@@ -553,6 +598,11 @@ def _row_to_event(row: sqlite3.Row) -> PersistedHookEvent:
         occurred_at=float(row["occurred_at"]),
         session_key=str(row["session_key"]),
         run_id=str(row["run_id"]),
+        session_id=str(row["session_id"]),
+        turn_id=str(row["turn_id"]),
+        tool_call_id=str(row["tool_call_id"]),
+        llm_call_id=str(row["llm_call_id"]),
+        llm_attempt_id=str(row["llm_attempt_id"]),
         event=str(row["event"]),
         dispatch_mode=str(row["dispatch_mode"]),
         status=str(row["status"]),

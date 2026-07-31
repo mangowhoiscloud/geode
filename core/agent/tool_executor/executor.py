@@ -41,6 +41,7 @@ from core.tools.personal_data import (
 log = logging.getLogger(__name__)
 
 ToolHandler = Callable[..., dict[str, Any] | Awaitable[dict[str, Any]] | Any]
+ToolExecutionStartedCallback = Callable[[str, dict[str, Any]], None]
 
 # Execution bindings that bypass the ordinary handler map.  Architecture
 # inventory imports this set so the model-visible schema and executable surface
@@ -220,6 +221,7 @@ class ToolExecutor:
         tool_input: dict[str, Any],
         *,
         context: ToolContext | None = None,
+        on_execution_started: ToolExecutionStartedCallback | None = None,
     ) -> dict[str, Any]:
         """Execute a tool call through the async runtime path.
 
@@ -227,13 +229,38 @@ class ToolExecutor:
         isolated behind ``asyncio.to_thread`` so the agent loop no longer wraps
         the entire executor in a thread.
         """
+        from core.agent.cognitive_state_ctx import (
+            reset_tool_call_id,
+            set_tool_call_id,
+        )
+
+        token = set_tool_call_id(context.tool_call_id if context is not None else "")
+        try:
+            return await self._aexecute_bound(
+                tool_name,
+                tool_input,
+                context=context,
+                on_execution_started=on_execution_started,
+            )
+        finally:
+            reset_tool_call_id(token)
+
+    async def _aexecute_bound(
+        self,
+        tool_name: str,
+        tool_input: dict[str, Any],
+        *,
+        context: ToolContext | None,
+        on_execution_started: ToolExecutionStartedCallback | None,
+    ) -> dict[str, Any]:
+        """Execute inside the physical tool-call correlation scope."""
         contains_personal_data = tool_name in PERSONAL_DATA_TOOLS
         batch_cost_approved = bool(context and context.batch_cost_approved)
         if context is not None:
             context.contains_personal_data = (
                 context.contains_personal_data or contains_personal_data
             )
-        correlation = self._tool_correlation()
+        correlation = self._tool_correlation(context)
         request = await self._middleware_registry.tool_request(
             ToolCallRequest(
                 tool_name=tool_name,
@@ -243,6 +270,7 @@ class ToolExecutor:
                     "session_id": correlation.session_id,
                     "turn_id": correlation.turn_id,
                     "run_id": correlation.run_id,
+                    "tool_call_id": correlation.tool_call_id,
                 },
             )
         )
@@ -348,6 +376,7 @@ class ToolExecutor:
                 correlation=request.correlation,
             ),
             force_permission=force_permission,
+            on_execution_started=on_execution_started,
         )
 
     async def _aexecute_effective(
@@ -355,6 +384,7 @@ class ToolExecutor:
         request: ToolCallRequest,
         *,
         force_permission: bool = False,
+        on_execution_started: ToolExecutionStartedCallback | None = None,
     ) -> dict[str, Any]:
         """Gate one effective request, then wrap only its accepted dispatch."""
         tool_name = request.tool_name
@@ -445,6 +475,11 @@ class ToolExecutor:
             from core.hooks.dispatch import fire_hook_async
             from core.hooks.system import RuntimeEvent
 
+            if on_execution_started is not None:
+                try:
+                    on_execution_started(tool_name, event_tool_input)
+                except Exception:
+                    log.debug("Tool execution-start recorder failed", exc_info=True)
             await fire_hook_async(
                 self._hooks,
                 RuntimeEvent.TOOL_EXEC_STARTED,
@@ -545,7 +580,7 @@ class ToolExecutor:
                 "has_error": has_error,
                 "executed": terminal_started,
             },
-            correlation=self._tool_correlation(),
+            correlation=self._tool_correlation(context),
         )
         for decision in post_use.decisions:
             if decision.action is HookAction.ADD_CONTEXT and decision.instruction:
@@ -577,13 +612,16 @@ class ToolExecutor:
         context.contains_personal_data = contains_personal_data
 
     @staticmethod
-    def _tool_correlation() -> HookCorrelation:
+    def _tool_correlation(context: ToolContext | None = None) -> HookCorrelation:
         try:
             from core.agent.cognitive_state_ctx import get_session_id, get_turn_id
 
             return HookCorrelation(
                 session_id=get_session_id(),
                 turn_id=get_turn_id(),
+                tool_call_id=str(
+                    getattr(context, "tool_call_id", "") if context is not None else ""
+                ),
             )
         except Exception:
             return HookCorrelation()

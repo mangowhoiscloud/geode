@@ -580,6 +580,49 @@ def test_post_verify_revision_returns_bounded_follow_up(
     assert correlation.verify_attempt == 0
 
 
+def test_verify_continuation_does_not_emit_or_persist_session_end(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from core.agent.loop import _lifecycle
+    from core.hooks import RuntimeEvent
+
+    emitted: list[RuntimeEvent] = []
+
+    class Hooks:
+        async def emit_async(self, event: RuntimeEvent, _payload: object) -> None:
+            emitted.append(event)
+
+    recorded: list[str] = []
+    timeline = SimpleNamespace(
+        record_assistant_message=lambda text: recorded.append(text),
+        record_session_end=lambda **_kwargs: pytest.fail("continuation ended the session"),
+    )
+    loop = SimpleNamespace(
+        _timeline=timeline,
+        _save_checkpoint=lambda *_args, **_kwargs: None,
+        _hooks=Hooks(),
+    )
+    monkeypatch.setattr(
+        _lifecycle,
+        "_final_hook_payloads",
+        lambda *_args, **_kwargs: ({"terminal": True}, {"turn": True}, {"reasoning": True}),
+    )
+
+    asyncio.run(
+        _lifecycle._close_verify_attempt(
+            loop,
+            _make_result(text="candidate"),
+            "request",
+            1,
+            {"passed": True},
+        )
+    )
+
+    assert recorded == ["candidate"]
+    assert RuntimeEvent.SESSION_ENDED not in emitted
+    assert emitted == [RuntimeEvent.TURN_COMPLETED, RuntimeEvent.REASONING_METRICS]
+
+
 def test_post_verify_timeout_preserves_the_builtin_result(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

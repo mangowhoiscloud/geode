@@ -28,7 +28,7 @@ class EventRetentionClass(StrEnum):
 class EventPersistenceSpec:
     retention: EventRetentionClass = EventRetentionClass.STANDARD
     persist_sql: bool = True
-    mirror_transcript: bool = True
+    mirror_run_projection: bool = True
     canonical_event: HookEvent | None = None
 
 
@@ -75,6 +75,10 @@ _AUDIT_EVENTS = frozenset(
 # same transition with more context, so persisting both would double-count.
 _COMPATIBILITY_EVENTS: dict[HookEvent, HookEvent] = {
     HookEvent.LLM_CALL_FAILED: HookEvent.LLM_CALL_ENDED,
+    # Historical name: emitted at each arun/turn completion for agent-runtime
+    # subscribers. The durable session lifetime lives in session_events and
+    # the public SessionEnd hook; TURN_COMPLETED is the sole telemetry row.
+    HookEvent.SESSION_ENDED: HookEvent.TURN_COMPLETED,
     HookEvent.TOOL_EXEC_FAILED: HookEvent.TOOL_EXEC_ENDED,
     HookEvent.TOOL_RESULT_TRANSFORM: HookEvent.TOOL_EXEC_ENDED,
     HookEvent.TOOL_APPROVAL_REQUESTED: HookEvent.APPROVAL_TRANSITION,
@@ -216,7 +220,7 @@ def event_persistence_spec(event: HookEvent) -> EventPersistenceSpec:
         return EventPersistenceSpec(
             retention=EventRetentionClass.TRANSIENT,
             persist_sql=False,
-            mirror_transcript=False,
+            mirror_run_projection=False,
             canonical_event=canonical,
         )
     if event in _HIGH_VOLUME_EVENTS:

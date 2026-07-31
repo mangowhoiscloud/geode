@@ -40,6 +40,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from core.observability.record_paths import read_event_stream
+
 log = logging.getLogger(__name__)
 
 LISTING_FILENAME = "listing.json"
@@ -82,7 +84,7 @@ def _resolve_harness_source(model: str, provider: str, cli: bool) -> str:
 
 def _run_harness_models(run_dir: Path) -> list[str]:
     """Distinct source-prefixed models the run's sub-agents ACTUALLY used,
-    read from ``sub_agents/*/dialogue.jsonl`` (session_start model+provider) +
+    read from ``sub_agents/*/events.jsonl`` (legacy filenames accepted) +
     ``session.json`` (claude_cli_session_id), preserving first-seen order.
 
     A seed-gen run is multi-model (e.g. a Claude drafter/evolver + gpt-5.5
@@ -100,23 +102,13 @@ def _run_harness_models(run_dir: Path) -> list[str]:
             continue
         model = ""
         provider = ""
-        dialogue = agent_dir / "dialogue.jsonl"
-        if dialogue.is_file():
-            try:
-                dialogue_lines = dialogue.read_text(encoding="utf-8").splitlines()
-            except OSError:
-                dialogue_lines = []
-            for line in dialogue_lines:
-                try:
-                    event = json.loads(line)
-                except (json.JSONDecodeError, ValueError):
-                    continue
-                if isinstance(event, dict) and event.get("event") == "session_start":
-                    model = str(event.get("model") or "")
-                    provider = str(event.get("provider") or "")
-                    break
+        for event in read_event_stream(agent_dir):
+            if event.get("event") == "session_start":
+                model = str(event.get("model") or "")
+                provider = str(event.get("provider") or "")
+                break
         # session.json carries claude_cli_session_id and, for non-cli agents,
-        # the model/provider that dialogue.jsonl omits — read it before the
+        # the model/provider that a compact event row may omit — read it before the
         # empty-model skip so we mirror the hub's _subagent_harness fallback
         # (build_self_improving_hub.py) and the two resolvers can't drift.
         session: dict[str, Any] = {}
@@ -149,7 +141,7 @@ def _build_row(run_dir: Path) -> dict[str, Any] | None:
     try:
         state = json.loads(state_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        log.warning("build_seeds_listing: skip unparseable %s: %s", state_path, exc)
+        log.warning("build_seeds_listing: skip unparsable %s: %s", state_path, exc)
         return None
     if not isinstance(state, dict):
         return None

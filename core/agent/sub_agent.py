@@ -1042,18 +1042,18 @@ class SubAgentManager:
             "task_type": task.task_type,
             "description": task.description,
         }
-        # PR-COMM-3b (2026-05-24) — surface the active RunTranscript's
+        # PR-COMM-3b (2026-05-24) — surface the active RunTimeline's
         # ``component`` so the SQLite agent_runtime_state writer (registered
         # below in this PR) can persist "what subsystem this sub-agent was
         # serving" (seed-generation / petri-audit / agentic_loop / ...).
-        # Falls back to "agentic_loop" when there's no active transcript
+        # Falls back to "agentic_loop" when there is no active run timeline.
         # (REPL / ad-hoc spawn outside an orchestrator scope).
         try:
-            from core.self_improving.loop.observe.run_transcript import current_run_transcript
+            from core.self_improving.loop.observe.run_timeline import current_run_timeline
 
-            run_transcript = current_run_transcript()
+            run_timeline = current_run_timeline()
             data["component"] = (
-                run_transcript.component if run_transcript is not None else "agentic_loop"
+                run_timeline.component if run_timeline is not None else "agentic_loop"
             )
         except Exception:
             data["component"] = "agentic_loop"
@@ -1089,6 +1089,16 @@ class SubAgentManager:
         record: SubagentRunRecord,
     ) -> None:
         """Project a start only after child identity and isolation are fixed."""
+        from core.observability.session_timeline import current_session_timeline
+
+        timeline = current_session_timeline()
+        if timeline is not None:
+            timeline.record_subagent_start(
+                task.task_id,
+                task.task_type,
+                child_session_key=record.child_session_key,
+                run_id=record.run_id,
+            )
         if self._hook_registry is None:
             return
         await self._hook_registry.invoke(
@@ -1113,10 +1123,26 @@ class SubAgentManager:
         result: SubResult,
     ) -> None:
         """Project the single terminal result for both success and failure."""
-        if self._hook_registry is None:
-            return
         with self._records_lock:
             record = self._run_records.get(task.task_id)
+        from core.observability.session_timeline import current_session_timeline
+
+        timeline = current_session_timeline()
+        if timeline is not None:
+            summary = (
+                str(result.output.get("summary", ""))
+                if isinstance(result.output, dict)
+                else str(result.output or "")
+            )
+            timeline.record_subagent_complete(
+                task.task_id,
+                "completed" if result.success else "failed",
+                summary[:500],
+                child_session_key=record.child_session_key if record else "",
+                run_id=record.run_id if record else "",
+            )
+        if self._hook_registry is None:
+            return
         await self._hook_registry.invoke(
             HookName.SUBAGENT_STOP,
             payload={
