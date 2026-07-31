@@ -756,7 +756,7 @@ async def _run(output_dir: Path, *, model: str, effort: str) -> dict[str, Any]:
         "bearer": re.compile(r"\bBearer\s+[A-Za-z0-9._~+/=-]{12,}\b", re.I),
     }
     secret_positive_samples = {
-        "absolute_home": "/Users/private-user/project",
+        "absolute_home": "/Users/example/project",
         "email": "owner@example.com",
         "github_token": "ghp_0123456789abcdefghijklmnop",
         "openai_key": "sk-0123456789abcdefghijklmnop",
