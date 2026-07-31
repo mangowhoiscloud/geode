@@ -181,6 +181,21 @@ initial/resume checkpoint succeeds; `SessionEnd` fires only after a completed
 or error terminal state is durable. A paused turn does not end the session.
 `PostCompact` likewise fires only after compacted state persistence succeeds.
 
+### Live behavior evidence
+
+The 2026-07-31 subscription-backed behavior E2E exercised all 13 public hooks
+and all four middleware join points through their owning runtime paths. The
+probe made three LLM calls and one exactly-once tool call, persisted one real
+compaction, and produced 22 matching `EXTENSION_INVOKED` rows in both SQLite
+and the active JSONL projection. Tool start/end rows retained the same
+session/turn correlation in both stores.
+
+The reviewed, normalized 27-event decision/tool trajectory and its manifest
+are published at the immutable
+[hook/middleware behavior E2E artifact](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/3e5b35f4505a4a2dc76d595b24862e8e73e668ff/trajectories/geode-agenticloop-hook-middleware-behavior-e2e-20260731T001640Z-1326e99cb447).
+Raw prompts, checkpoints, provider reasoning, databases, WAL files, usage
+records, and diagnostics remain withheld runtime evidence.
+
 ## Migration map
 
 | Legacy/control shape | Canonical owner | Compatibility |

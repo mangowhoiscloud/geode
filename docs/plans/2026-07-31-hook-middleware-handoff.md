@@ -105,16 +105,31 @@ canonical public names end at `HookName`, `HookRegistry`,
 
 ## Closure evidence
 
-- Full non-live suite: 10,345 passed, 23 skipped, 1 deselected.
+- The final isolated behavior E2E used `gpt-5.6-sol` through
+  `codex-oauth` subscription billing with no pay-as-you-go fallback.
+- Owning runtime paths covered all 13 public hooks and all four middleware
+  join points: the real `AgenticLoop`, client compaction, and
+  `SubAgentManager`.
+- The run made three LLM calls, executed one tool exactly once, persisted one
+  compaction, and wrote 22 matching extension records to SQLite and the active
+  JSONL projection.
+- The E2E exposed a storage projection defect: typed activity mapping dropped
+  opaque `session_id`/`turn_id` correlation before both sinks. The shared
+  projection now preserves those identifiers, with a SQLite/JSONL regression
+  test.
+- Audit-extra full non-live suite: 10,347 passed, 23 skipped, 1 deselected.
 - Official docs: 645 links, 236 static pages, 73 Markdown twins.
-- Two isolated live runs used `gpt-5.6-sol` through `codex-oauth` subscription
-  billing with no pay-as-you-go fallback.
-- The live tool path observed
-  `UserPromptSubmit -> SessionStart -> PreToolUse -> PostToolUse -> PreVerify
-  -> PostVerify -> Stop -> SessionEnd` and all four middleware join points.
-- The first run wrote 18 matching extension records to SQLite and the active
-  JSONL projection. It exposed missing tool-event correlation; the shared
-  executor boundary now retains the request session/turn IDs, and the second
-  live run completed with zero activity-registry identifier warnings.
-- A transient provider overload was recovered by the existing subscription
-  adapter retry.
+- Package build: wheel 607 files, sdist 609 files; metadata, package-content,
+  clean-wheel install, and `GEODE v1.0.9` smoke passed.
+- The reviewed public artifact contains a 27-event normalized decision/tool
+  trajectory and manifest only. Raw prompts, checkpoints, provider reasoning,
+  databases/WAL, JSONL, usage, and diagnostics remain withheld.
+- Immutable artifact:
+  [`geode-agenticloop-hook-middleware-behavior-e2e-20260731T001640Z-1326e99cb447`](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/3e5b35f4505a4a2dc76d595b24862e8e73e668ff/trajectories/geode-agenticloop-hook-middleware-behavior-e2e-20260731T001640Z-1326e99cb447).
+- SHA-256: manifest
+  `1326e99cb447b916046733a89e135cb08ca9e3d6581fb3e417bc5a151dd3d719`;
+  trajectory
+  `b34ec7b07d73c47b105a6c3b651618b426e1ee02d72ed7ab4ccd982310719850`.
+- A Codex read-only review found four release-gate defects in the first
+  harness; all were fixed and the live run repeated. The follow-up review
+  returned no actionable findings.

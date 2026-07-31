@@ -86,6 +86,12 @@ functional change.
 
 ### Fixed
 
+- Runtime `session_id` and `turn_id` correlation now survives the shared typed
+  activity projection into both canonical SQLite and active JSONL hook-event
+  storage. The subscription-backed behavior E2E covers all 13 public hooks and
+  four middleware join points; its reviewed decision/tool trajectory is
+  published separately from withheld runtime checkpoints and provider
+  reasoning.
 - Trusted/public tool rewrites now propagate the effective tool name,
   arguments, and cumulative personal-data classification into approval,
   transcript, tool-log, and offload policy. Batch cost approval is scoped only
