@@ -47,6 +47,11 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.10] - 2026-07-31
+
+> Benchmark-owned tool contracts now pass through GEODE's trusted execution
+> boundary without being replaced by same-named built-in schemas.
+
 ### Fixed
 
 - Benchmark-owned dynamic tool schemas now take precedence over same-named
