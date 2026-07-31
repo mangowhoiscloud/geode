@@ -75,6 +75,22 @@ middleware_registry.register_llm_execution(
               메서드가 있습니다. execution에서 다른 요청을{" "}
               <code>next_call</code>에 넘기거나 두 번 호출하면 fail-loud합니다.
             </p>
+            <table>
+              <thead><tr><th>결합점</th><th>기본 timeout</th><th>실패 계약</th></tr></thead>
+              <tbody>
+                <tr><td><code>tool_request</code></td><td>10초</td><td>변환 실패 시 executor에 진입하지 않음</td></tr>
+                <tr><td><code>llm_request</code></td><td>10초</td><td>변환 실패 시 provider에 진입하지 않음</td></tr>
+                <tr><td><code>tool_execution</code></td><td>300초</td><td><code>next_call</code> 전 실패는 전파; 실행 완료 뒤 wrapper 실패는 완료 결과 보존</td></tr>
+                <tr><td><code>llm_execution</code></td><td>900초</td><td><code>next_call</code> 전 실패는 전파; provider 완료 뒤 wrapper 실패는 결과를 보존해 재과금 방지</td></tr>
+              </tbody>
+            </table>
+            <p>
+              실행 미들웨어의 실패를 보고 같은 tool/provider 호출을 임의로 재시도하지
+              마세요. downstream 호출이 끝난 뒤 발생한 wrapper 오류는 런타임이 완료
+              결과를 보존합니다. <code>llm_request</code>가 cache-sensitive prefix를
+              바꾸려면 등록 시 <code>allow_cache_invalidation=True</code>와 요청 metadata의
+              <code>cache_invalidation_reason</code>이 둘 다 필요합니다.
+            </p>
 
             <h2>3. 내부 런타임 이벤트 구독</h2>
             <p>
@@ -184,6 +200,23 @@ middleware_registry.register_llm_execution(
               <code>tool_execution</code>, <code>llm_request</code>, and{" "}
               <code>llm_execution</code>. Passing a changed request at execution
               time or calling <code>next_call</code> twice fails loudly.
+            </p>
+            <table>
+              <thead><tr><th>Join point</th><th>Default timeout</th><th>Failure contract</th></tr></thead>
+              <tbody>
+                <tr><td><code>tool_request</code></td><td>10 seconds</td><td>A transform failure prevents executor entry</td></tr>
+                <tr><td><code>llm_request</code></td><td>10 seconds</td><td>A transform failure prevents provider entry</td></tr>
+                <tr><td><code>tool_execution</code></td><td>300 seconds</td><td>Failures before <code>next_call</code> propagate; wrapper failures after execution preserve the completed result</td></tr>
+                <tr><td><code>llm_execution</code></td><td>900 seconds</td><td>Failures before <code>next_call</code> propagate; wrapper failures after provider completion preserve the result to prevent rebilling</td></tr>
+              </tbody>
+            </table>
+            <p>
+              Do not blindly retry a tool or provider call after an execution
+              middleware error. The runtime preserves a completed downstream result
+              when the wrapper fails afterward. Changing a cache-sensitive prefix in
+              <code>llm_request</code> requires both
+              <code>allow_cache_invalidation=True</code> at registration and a
+              <code>cache_invalidation_reason</code> in request metadata.
             </p>
 
             <h2>3. Subscribe to an internal runtime event</h2>

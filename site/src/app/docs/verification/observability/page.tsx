@@ -11,6 +11,17 @@ try:
 finally:
     store.close()`;
 
+const recordCommands = `# Inspect first; this does not write SQLite.
+geode session migrate-records --source old/transcript.jsonl --dry-run
+
+# Import is digest-idempotent and leaves the source unchanged.
+geode session migrate-records --source old/transcript.jsonl
+
+# Export before pruning canonical history.
+geode session list
+geode session export-trajectory <session-id> --out trajectory.json
+geode session prune-records --retention-days 180`;
+
 export default function Page() {
   return (
     <DocsShell
@@ -47,6 +58,29 @@ export default function Page() {
                 <tr><td>Process logs</td><td><code>~/.geode/logs/</code></td><td>traceback과 외부 시스템 진단</td></tr>
               </tbody>
             </table>
+            <p>
+              직렬화 정본은 packaged Draft 2020-12 schema인{" "}
+              <a href="https://github.com/mangowhoiscloud/geode/blob/main/core/observability/schemas/session-event.schema.json"><code>geode.session-event@1</code></a>,{" "}
+              <a href="https://github.com/mangowhoiscloud/geode/blob/main/core/observability/schemas/run-event.schema.json"><code>geode.run-event@1</code></a>,{" "}
+              <a href="https://github.com/mangowhoiscloud/geode/blob/main/core/observability/schemas/trajectory.schema.json"><code>geode.trajectory@1</code></a>입니다.
+            </p>
+
+            <h2>Session record 운영과 migration</h2>
+            <pre>{recordCommands}</pre>
+            <ul>
+              <li><code>migrate-records</code>는 파일·디렉터리를 받고 source SHA-256으로 같은 입력의 중복 삽입을 막으며 원본을 수정하지 않습니다.</li>
+              <li><code>export-trajectory</code>는 SQLite 정본에서 검증된 <code>geode.trajectory@1</code>을 만들고 event가 없으면 실패합니다.</li>
+              <li><code>prune-records</code>는 보존 기간보다 오래된 명시적 terminal session만 삭제하고 active/stale session은 남깁니다.</li>
+              <li>삭제한 canonical row는 run projection에서 복구한다고 가정하지 마세요. 보존할 실행은 prune 전에 export합니다.</li>
+            </ul>
+            <p>
+              <code>SessionTranscript</code>/<code>RunTranscript</code>와
+              <code>transcript.jsonl</code>/<code>dialogue.jsonl</code> reader는
+              v1.0.11에서 compatibility adapter로만 남아 있습니다. 새 연동은
+              <code>SessionTimeline</code>, <code>RunTimeline</code>,
+              <code>events.jsonl</code>을 사용합니다. 제거는 이 릴리스 범위가
+              아니며 이후 CHANGELOG에서 별도로 공지해야 합니다.
+            </p>
 
             <h2>Trajectory 품질과 외부 루프</h2>
             <p>
@@ -57,6 +91,14 @@ export default function Page() {
               secret scan, trajectory ID uniqueness, file digest, read-back을 모두 통과해야
               합니다.
             </p>
+            <table>
+              <thead><tr><th>표시</th><th>의미</th><th>공개 admission</th></tr></thead>
+              <tbody>
+                <tr><td><code>scope_complete</code></td><td>event 순서, correlation, tool pair가 실행 범위를 온전히 표현</td><td>항상 <code>true</code></td></tr>
+                <tr><td><code>replay_complete</code></td><td>공개 payload만으로 완전 재생 가능</td><td>기본 <code>true</code>; 검토된 private body digest만 명시적 완화</td></tr>
+                <tr><td><code>complete</code></td><td>이전 reader용 보수적 alias</td><td><code>replay_complete</code>와 동일</td></tr>
+              </tbody>
+            </table>
             <p>
               SIL의 <code>events.jsonl</code> 실행 타임라인, mutation/attribution 원장,
               Inspect <code>.eval</code> assay와 Crucible의
@@ -65,6 +107,20 @@ export default function Page() {
               sidecar이며 verdict를 대체하거나 승격 권한을 갖지 않습니다. 과거
               <code>geode.trajectory@YYYY-MM-DD</code> 공개 파일은 수정하지 않고 메모리에서
               <code>@1</code>으로 정규화합니다.
+            </p>
+            <table>
+              <thead><tr><th>외부 정본</th><th>trajectory reference</th><th>GEODE 권한</th></tr></thead>
+              <tbody>
+                <tr><td>SIL Inspect <code>.eval</code></td><td><code>kind=sil_eval</code>, <code>schema_id=inspect_ai.eval@native</code>, source SHA-256</td><td>scored archive를 digest로 연결; judge 결과를 대체하지 않음</td></tr>
+                <tr><td>tau2 <code>results.json</code></td><td><code>kind=native_receipt</code>, <code>schema_id=tau2.results@native</code></td><td>native score receipt를 그대로 정본으로 유지</td></tr>
+                <tr><td>Crucible frozen contract</td><td>identity preflight가 끝난 경우에만 <code>kind=crucible_evidence</code></td><td>verdict나 promotion authority를 얻지 않음</td></tr>
+              </tbody>
+            </table>
+            <p>
+              로컬 export를 privacy-reviewed public candidate로 승격하고 append-only
+              artifact PR로 게시하는 절차는{" "}
+              <a href="/geode/docs/guides/publish-trajectory">trajectory 게시 가이드</a>를
+              따릅니다.
             </p>
 
             <h2>한 trigger, 한 durable row</h2>
@@ -131,6 +187,29 @@ export default function Page() {
                 <tr><td>Process logs</td><td><code>~/.geode/logs/</code></td><td>tracebacks and external-system diagnostics</td></tr>
               </tbody>
             </table>
+            <p>
+              The serialization authorities are the packaged Draft 2020-12 schemas{" "}
+              <a href="https://github.com/mangowhoiscloud/geode/blob/main/core/observability/schemas/session-event.schema.json"><code>geode.session-event@1</code></a>,{" "}
+              <a href="https://github.com/mangowhoiscloud/geode/blob/main/core/observability/schemas/run-event.schema.json"><code>geode.run-event@1</code></a>, and{" "}
+              <a href="https://github.com/mangowhoiscloud/geode/blob/main/core/observability/schemas/trajectory.schema.json"><code>geode.trajectory@1</code></a>.
+            </p>
+
+            <h2>Operate and migrate session records</h2>
+            <pre>{recordCommands}</pre>
+            <ul>
+              <li><code>migrate-records</code> accepts files or directories, deduplicates the same input by source SHA-256, and never modifies the source.</li>
+              <li><code>export-trajectory</code> builds a validated <code>geode.trajectory@1</code> from canonical SQLite rows and fails when no events exist.</li>
+              <li><code>prune-records</code> deletes only explicitly terminal sessions older than the retention window; active and stale sessions remain.</li>
+              <li>Do not assume a run projection can restore pruned canonical rows. Export runs you need to retain before pruning.</li>
+            </ul>
+            <p>
+              <code>SessionTranscript</code>/<code>RunTranscript</code> and the
+              <code>transcript.jsonl</code>/<code>dialogue.jsonl</code> readers remain
+              only as compatibility adapters in v1.0.11. New integrations use
+              <code>SessionTimeline</code>, <code>RunTimeline</code>, and
+              <code>events.jsonl</code>. Removal is outside this release and must be
+              announced separately in a later CHANGELOG.
+            </p>
 
             <h2>Trajectory quality and external loops</h2>
             <p>
@@ -141,6 +220,14 @@ export default function Page() {
               producer&apos;s counts or quality claims: privacy review, secret scans,
               unique trajectory IDs, file digests, and read-back must all pass.
             </p>
+            <table>
+              <thead><tr><th>Flag</th><th>Meaning</th><th>Public admission</th></tr></thead>
+              <tbody>
+                <tr><td><code>scope_complete</code></td><td>Event order, correlation, and tool pairs cover the represented execution scope</td><td>Always <code>true</code></td></tr>
+                <tr><td><code>replay_complete</code></td><td>The public payload can replay the run fully</td><td><code>true</code> by default; only reviewed private-body digests permit an explicit waiver</td></tr>
+                <tr><td><code>complete</code></td><td>Conservative compatibility alias for older readers</td><td>Equals <code>replay_complete</code></td></tr>
+              </tbody>
+            </table>
             <p>
               SIL run timelines, mutation/attribution ledgers, Inspect
               <code>.eval</code> assays, and Crucible
@@ -150,6 +237,20 @@ export default function Page() {
               replaces a verdict nor gains promotion authority. Historical
               <code>geode.trajectory@YYYY-MM-DD</code> publications remain immutable
               and normalize to <code>@1</code> in memory.
+            </p>
+            <table>
+              <thead><tr><th>External authority</th><th>Trajectory reference</th><th>GEODE authority</th></tr></thead>
+              <tbody>
+                <tr><td>SIL Inspect <code>.eval</code></td><td><code>kind=sil_eval</code>, <code>schema_id=inspect_ai.eval@native</code>, source SHA-256</td><td>Digest-join the scored archive; never replace its judgment</td></tr>
+                <tr><td>tau2 <code>results.json</code></td><td><code>kind=native_receipt</code>, <code>schema_id=tau2.results@native</code></td><td>Keep the native score receipt authoritative</td></tr>
+                <tr><td>Crucible frozen contract</td><td><code>kind=crucible_evidence</code> only after identity preflight</td><td>Gain neither verdict nor promotion authority</td></tr>
+              </tbody>
+            </table>
+            <p>
+              Follow the{" "}
+              <a href="/geode/docs/guides/publish-trajectory">trajectory publication guide</a>{" "}
+              to promote a local export into a privacy-reviewed public candidate
+              and publish it through an append-only artifact PR.
             </p>
 
             <h2>One trigger, one durable row</h2>
