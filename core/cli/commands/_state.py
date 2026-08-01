@@ -82,12 +82,6 @@ def get_model_profiles() -> list[ModelProfile]:
         ModelProfile("claude-opus-4-6", "anthropic", "Opus 4.6", "$$$"),
         ModelProfile(ANTHROPIC_SECONDARY, "anthropic", "Sonnet 4.6", "$$"),
         ModelProfile(ANTHROPIC_BUDGET, "anthropic", "Haiku 4.5", "$"),
-        # v0.53.2 — gpt-5.5 is OAuth-only (Codex backend per
-        # developers.openai.com/codex/models). _resolve_provider returns
-        # "openai-codex" for it via _CODEX_ONLY_MODELS; ModelProfile.provider
-        # must match so the /model picker label is honest about which
-        # auth-mode the user's pick will actually consume.
-        ModelProfile(OPENAI_PRIMARY, "openai-codex", "GPT-5.5", "$$"),
         # GPT-5.6 family (GA 2026-07-09) — DUAL-LANE: Platform API GA
         # (developers.openai.com/api/docs/models) and Codex slugs
         # (openai/codex models-manager/models.json, ctx7 2026-07-13), so
@@ -99,9 +93,13 @@ def get_model_profiles() -> list[ModelProfile]:
         ModelProfile("gpt-5.6-sol", "openai", "GPT-5.6 Sol", "$$"),
         ModelProfile("gpt-5.6-terra", "openai", "GPT-5.6 Terra", "$$"),
         ModelProfile("gpt-5.6-luna", "openai", "GPT-5.6 Luna", "$"),
+        # gpt-5.5 is subscription-only (Codex backend). Keep its canonical
+        # provider distinct from the dual-lane rows around it.
+        ModelProfile(OPENAI_PRIMARY, "openai-codex", "GPT-5.5", "$$"),
+        # GPT-5.4 and Mini are also dual-lane: infer_source selects the
+        # subscription or PAYG backend from active auth at call time.
         ModelProfile("gpt-5.4", "openai", "GPT-5.4", "$$"),
         ModelProfile("gpt-5.4-mini", "openai", "GPT-5.4 Mini", "$"),
-        ModelProfile("gpt-5.3-codex", "openai-codex", "GPT-5.3 Codex", "$$"),
         # GLM — the live default (GLM_PRIMARY, glm-5.2 as shipped) leads so a
         # routing.toml reload is reflected mid-session (H11-tail), labelled via
         # the id→label map; the rest follow with the default skipped so an

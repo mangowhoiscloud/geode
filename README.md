@@ -205,7 +205,7 @@ geode                                 # done. GEODE finds the token automaticall
 **Quotas** (OpenAI-published, per 5-hour window): roughly 15–80 messages on Plus, up to 1,600 on Pro 20x. Edu and Enterprise have no fixed cap; usage scales with your workspace credits. Your admin needs to flip "Allow members to use Codex Local" before sign-in works on those tiers.
 
 **Tier notes**:
-- **gpt-5.5 is subscription-only.** API-key users (Path B) top out at gpt-5.4. If you want 5.5, you need ChatGPT.
+- **gpt-5.5 is subscription-only.** GPT-5.6 Sol/Terra/Luna and GPT-5.4 are dual-lane: GEODE uses ChatGPT OAuth when a subscription profile is active and the Platform API when an API-key profile is selected. If you want 5.5, you need ChatGPT.
 - **ChatGPT Team is not currently supported** by Codex CLI. Team users should use Path B.
 - **Free / Go** appear on OpenAI's pricing page but aren't listed in the CLI README. Treat them as best-effort; if it works, great, but no promises.
 

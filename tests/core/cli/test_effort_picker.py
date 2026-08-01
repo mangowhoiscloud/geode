@@ -8,10 +8,8 @@ cycle/default helpers are tested directly.
 Pinned 2026-04-28 against:
   - Anthropic effort enum: docs.anthropic.com / platform.claude.com
     (low/medium/high/max/xhigh; xhigh is Opus 4.7+ — 4.7 / 4.8)
-  - OpenAI Responses effort enum: openai-python `shared/reasoning_effort.py`
-    (none/minimal/low/medium/high/xhigh)
-  - Codex enum: codex-rs `protocol/src/openai_models.rs:43-51`
-    (None/Minimal/Low/Medium/High/XHigh)
+  - OpenAI Responses effort enum: the explicit per-model registry in
+    `core.llm.adapters._openai_common` (the picker and wire share one contract)
   - GLM thinking enum: docs.z.ai/guides/capabilities/thinking-mode
     (binary enabled/disabled)
 """
@@ -63,11 +61,20 @@ class TestAnthropicEnum:
 class TestOpenAIResponsesEnum:
     def test_gpt_5_5_full_enum(self) -> None:
         levels = supported_efforts("gpt-5.5", "openai-codex")
-        assert levels == ("none", "minimal", "low", "medium", "high", "xhigh")
+        assert levels == ("none", "low", "medium", "high", "xhigh")
 
     def test_gpt_5_4_payg(self) -> None:
         levels = supported_efforts("gpt-5.4", "openai")
-        assert levels == ("none", "minimal", "low", "medium", "high", "xhigh")
+        assert levels == ("none", "low", "medium", "high", "xhigh")
+
+    def test_gpt_5_4_subscription_uses_the_same_model_contract(self) -> None:
+        assert supported_efforts("gpt-5.4", "openai-codex") == (
+            "none",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+        )
 
     def test_gpt_5_3_codex(self) -> None:
         levels = supported_efforts("gpt-5.3-codex", "openai-codex")

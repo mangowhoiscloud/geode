@@ -139,7 +139,7 @@ geode                                 # 끝. GEODE 가 토큰을 자동으로 �
 **할당량** (OpenAI 공시 기준, 5시간 윈도): Plus 는 약 15–80 메시지, Pro 20x 는 최대 1,600 메시지. Edu / Enterprise 는 고정 한도 없이 워크스페이스 크레딧으로 정산됩니다. 이 두 플랜은 워크스페이스 관리자가 "Allow members to use Codex Local" 을 켜야 사인인이 작동합니다.
 
 **참고할 점**:
-- **gpt-5.5 는 구독 전용입니다.** API 키 (Path B) 는 gpt-5.4 까지만 가능. 5.5 가 필요하면 ChatGPT 구독이 필요합니다.
+- **gpt-5.5 는 구독 전용입니다.** GPT-5.6 Sol/Terra/Luna와 GPT-5.4는 듀얼 레인입니다. 구독 프로필이 활성화되면 ChatGPT OAuth, API 키 프로필을 선택하면 Platform API를 사용합니다. 5.5가 필요하면 ChatGPT 구독이 필요합니다.
 - **ChatGPT Team 은 현재 Codex CLI 미지원**. Team 사용자는 Path B 로 가세요.
 - **Free / Go** 는 OpenAI 가격 페이지엔 있지만 CLI README 엔 없습니다. 동작하면 다행, 보장은 안 합니다.
 

@@ -1011,8 +1011,21 @@ def _login_use(rest: str) -> None:
     model_hints = {
         "glm-coding": ["glm-5.2", "glm-5.1", "glm-5", "glm-5-turbo", "glm-4.7-flash"],
         "glm": ["glm-5.2", "glm-5.1", "glm-5", "glm-5-turbo"],
-        "openai": ["gpt-5.4", "gpt-5.4-mini"],
-        "openai-codex": ["gpt-5.3-codex", "gpt-5.4-mini"],
+        "openai": [
+            "gpt-5.6-sol",
+            "gpt-5.6-terra",
+            "gpt-5.6-luna",
+            "gpt-5.4",
+            "gpt-5.4-mini",
+        ],
+        "openai-codex": [
+            "gpt-5.6-sol",
+            "gpt-5.6-terra",
+            "gpt-5.6-luna",
+            "gpt-5.5",
+            "gpt-5.4",
+            "gpt-5.4-mini",
+        ],
         "anthropic": ["claude-opus-4-8", "claude-opus-4-7", "claude-sonnet-4-6"],
     }
     for model in model_hints.get(plan.provider, []):

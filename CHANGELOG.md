@@ -47,6 +47,10 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- Aligned the OpenAI model picker and `/login use` routing hints with the current Codex surface: GPT-5.6 Sol/Terra/Luna lead the list, GPT-5.4 remains available through both subscription and PAYG routes, deprecated GPT-5.3 Codex is hidden from new selection, and picker reasoning-effort values now reuse the adapter's per-model contract.
+
 ## [1.0.11] - 2026-07-31
 
 > Hooks, trusted middleware, durable session records, and reviewed
