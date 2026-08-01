@@ -232,16 +232,16 @@ def test_picker_migrates_legacy_openai_minimal_in_arrow_direction(
     assert result.effort == expected
 
 
-def test_configured_openai_primary_enter_is_a_noop(
+def test_active_off_catalog_openai_model_enter_is_a_noop(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A non-curated active default must not fall through to the first row."""
+    """A persisted role model must not fall through to the first picker row."""
     import core.config
     from core.cli import effort_picker
     from core.cli.commands._state import get_model_profiles
 
-    with patch.object(core.config, "OPENAI_PRIMARY", "gpt-5.2"):
-        rows = get_model_profiles()
+    with patch.object(core.config, "OPENAI_PRIMARY", "gpt-5.6-sol"):
+        rows = get_model_profiles(configured_model_ids=("gpt-5.2",))
     profiles = [(row.id, row.provider, row.label, row.cost, True, None) for row in rows]
 
     monkeypatch.setattr(effort_picker, "_read_key", lambda: effort_picker._KEY_ENTER)
@@ -257,6 +257,19 @@ def test_configured_openai_primary_enter_is_a_noop(
     assert result.cancelled is False
     assert result.model_id == "gpt-5.2"
     assert result.effort == "high"
+
+
+def test_configured_rows_are_deduplicated_across_default_and_roles() -> None:
+    import core.config
+    from core.cli.commands._state import get_model_profiles
+
+    with patch.object(core.config, "OPENAI_PRIMARY", "gpt-5.2"):
+        rows = get_model_profiles(configured_model_ids=("gpt-5.2", "gpt-5.1", "gpt-5.1", ""))
+
+    ids = [row.id for row in rows]
+    assert ids.count("gpt-5.2") == 1
+    assert ids.count("gpt-5.1") == 1
+    assert next(row for row in rows if row.id == "gpt-5.1").provider == "openai"
 
 
 class TestRenderVersionHeader:

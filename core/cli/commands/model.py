@@ -20,7 +20,6 @@ from core.cli.commands._state import (
     AgentRole,
     ModelProfile,
     forced_login_method_for,
-    get_model_index,
     get_model_profiles,
     model_available,
     role_by_name,
@@ -319,6 +318,8 @@ def _interactive_model_picker() -> None:
     from core.config import settings
 
     _ensure_profiles_hydrated()
+    role_initial_models = {r.name: _current_model_for_role(r) for r in AGENT_ROLES}
+    model_profiles = get_model_profiles(configured_model_ids=role_initial_models.values())
     profiles = [
         (
             p.id,
@@ -328,10 +329,9 @@ def _interactive_model_picker() -> None:
             model_available(p.id),
             forced_login_method_for(p.provider),
         )
-        for p in get_model_profiles()
+        for p in model_profiles
     ]
     role_tabs = [(r.name, r.label, r.description) for r in AGENT_ROLES]
-    role_initial_models = {r.name: _current_model_for_role(r) for r in AGENT_ROLES}
     role_has_effort = {r.name: r.has_effort for r in AGENT_ROLES}
     current_effort = getattr(settings, "agentic_effort", "high")
     result = pick_model_and_effort(
@@ -357,10 +357,10 @@ def _interactive_model_picker() -> None:
         _pkg.console.print()
         return
 
-    _apply_picker_result(result)
+    _apply_picker_result(result, model_profiles)
 
 
-def _apply_picker_result(result: Any) -> None:
+def _apply_picker_result(result: Any, model_profiles: list[ModelProfile] | None = None) -> None:
     """Apply a non-cancelled picker result: staged per-role picks first
     (Space, PR-PICKER-SPACE-STAGE 2026-06-12), then the final Enter pick.
 
@@ -368,7 +368,10 @@ def _apply_picker_result(result: Any) -> None:
     (``_apply_model`` with the matching role) so the operator can set
     Primary + Reflection + Mutator in ONE picker session.
     """
-    model_profiles = get_model_profiles()
+    if model_profiles is None:
+        selected_ids = [result.model_id]
+        selected_ids.extend(mid for _role, mid in getattr(result, "staged", ()) or ())
+        model_profiles = get_model_profiles(configured_model_ids=selected_ids)
     for staged_role, staged_mid in getattr(result, "staged", ()) or ():
         staged_profile = next((p for p in model_profiles if p.id == staged_mid), None)
         if staged_profile is None:
@@ -392,6 +395,8 @@ def _interactive_model_picker_for_role(role_def: AgentRole) -> None:
     from core.config import settings
 
     _ensure_profiles_hydrated()
+    role_initial_models = {r.name: _current_model_for_role(r) for r in AGENT_ROLES}
+    model_profiles = get_model_profiles(configured_model_ids=role_initial_models.values())
     profiles = [
         (
             p.id,
@@ -401,10 +406,9 @@ def _interactive_model_picker_for_role(role_def: AgentRole) -> None:
             model_available(p.id),
             forced_login_method_for(p.provider),
         )
-        for p in get_model_profiles()
+        for p in model_profiles
     ]
     role_tabs = [(r.name, r.label, r.description) for r in AGENT_ROLES]
-    role_initial_models = {r.name: _current_model_for_role(r) for r in AGENT_ROLES}
     role_has_effort = {r.name: r.has_effort for r in AGENT_ROLES}
     current_for_focus = role_initial_models.get(role_def.name) or settings.model
     current_effort = getattr(settings, "agentic_effort", "high")
@@ -421,7 +425,7 @@ def _interactive_model_picker_for_role(role_def: AgentRole) -> None:
         _pkg.console.print("  [muted]Cancelled[/muted]")
         _pkg.console.print()
         return
-    _apply_picker_result(result)
+    _apply_picker_result(result, model_profiles)
 
 
 def cmd_model(args: str) -> None:
@@ -493,7 +497,8 @@ def cmd_model(args: str) -> None:
             # marks all of them in one render — matches the
             # multi-tab picker's "Primary / Reflection" semantics.
             role_currents = {r.name: _current_model_for_role(r) for r in AGENT_ROLES}
-            for i, p in enumerate(get_model_profiles(), 1):
+            model_profiles = get_model_profiles(configured_model_ids=role_currents.values())
+            for i, p in enumerate(model_profiles, 1):
                 role_marks = " ".join(
                     f"{r.label[0]}←" for r in AGENT_ROLES if role_currents[r.name] == p.id
                 )
@@ -522,7 +527,8 @@ def cmd_model(args: str) -> None:
     # Resolve by number or name
     selected: ModelProfile | None = None
 
-    model_profiles = get_model_profiles()
+    role_currents = {r.name: _current_model_for_role(r) for r in AGENT_ROLES}
+    model_profiles = get_model_profiles(configured_model_ids=role_currents.values())
     if arg.isdigit():
         idx = int(arg) - 1
         if 0 <= idx < len(model_profiles):
@@ -534,7 +540,7 @@ def cmd_model(args: str) -> None:
             _pkg.console.print()
             return
     else:
-        selected = get_model_index().get(arg)
+        selected = {profile.id: profile for profile in model_profiles}.get(arg)
         if not selected:
             arg_norm = arg.lower().replace("-", "").replace(" ", "").replace("_", "")
             for p in model_profiles:

@@ -10,6 +10,7 @@ preserved byte-identical from the legacy module.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any as _Any
@@ -69,14 +70,13 @@ _OPENAI_PICKER_MODELS: tuple[ModelProfile, ...] = (
     # One-release management compatibility for persisted installations.
     ModelProfile("gpt-5.3-codex", "openai-codex", "GPT-5.3 Codex (Legacy)", "$$"),
 )
-_CURATED_OPENAI_MODEL_IDS = frozenset(profile.id for profile in _OPENAI_PICKER_MODELS)
 
 
 def _glm_label(model_id: str) -> str:
     return _GLM_LABELS.get(model_id, model_id)
 
 
-def get_model_profiles() -> list[ModelProfile]:
+def get_model_profiles(*, configured_model_ids: Iterable[str] = ()) -> list[ModelProfile]:
     """The /model picker model list, built fresh per call (H11-tail).
 
     Pre-PR this was a boot-frozen module-level list, so the routing-constant
@@ -84,6 +84,12 @@ def get_model_profiles() -> list[ModelProfile]:
     ``GLM_PRIMARY``) ignored a mid-session ``routing.toml`` reload until
     restart. A function-local import re-reads the live ``core.config`` values
     each call; the hardcoded entries are version-pinned literals.
+
+    ``configured_model_ids`` carries the active per-role selections. Any
+    persisted model outside the curated catalog is retained as one deduplicated
+    management row, so opening the picker and pressing Enter cannot silently
+    replace an existing selection. ``OPENAI_PRIMARY`` receives the same
+    treatment because it is an operator-owned routing default.
     """
     from core.config import (
         ANTHROPIC_BUDGET,
@@ -93,7 +99,7 @@ def get_model_profiles() -> list[ModelProfile]:
         _resolve_provider,
     )
 
-    return [
+    anthropic_profiles = [
         # Fable 5 — Anthropic's most capable widely released model ($10/$50,
         # 1M ctx, adaptive-only thinking, refusal stop_reason). GA 2026-06-09.
         # ref: https://platform.claude.com/docs/en/about-claude/models/overview
@@ -103,24 +109,13 @@ def get_model_profiles() -> list[ModelProfile]:
         ModelProfile("claude-opus-4-6", "anthropic", "Opus 4.6", "$$$"),
         ModelProfile(ANTHROPIC_SECONDARY, "anthropic", "Sonnet 4.6", "$$"),
         ModelProfile(ANTHROPIC_BUDGET, "anthropic", "Haiku 4.5", "$"),
+    ]
+    openai_profiles = [
         # Version-pinned current surface. Dual-lane rows use provider=openai;
         # infer_source selects OAuth subscription versus PAYG at call time.
         *_OPENAI_PICKER_MODELS,
-        # An explicit operator default outside the curated surface remains a
-        # management row. Without it, opening /model while that model is active
-        # cannot anchor the cursor and Enter silently selects the first row.
-        *(
-            [
-                ModelProfile(
-                    OPENAI_PRIMARY,
-                    _resolve_provider(OPENAI_PRIMARY),
-                    f"{OPENAI_PRIMARY} (Configured)",
-                    "$$",
-                )
-            ]
-            if OPENAI_PRIMARY not in _CURATED_OPENAI_MODEL_IDS
-            else []
-        ),
+    ]
+    glm_profiles = [
         # GLM — the live default (GLM_PRIMARY, glm-5.2 as shipped) leads so a
         # routing.toml reload is reflected mid-session (H11-tail), labelled via
         # the id→label map; the rest follow with the default skipped so an
@@ -129,10 +124,48 @@ def get_model_profiles() -> list[ModelProfile]:
         *[ModelProfile(mid, "glm", lbl, "$") for mid, lbl in _GLM_MODELS if mid != GLM_PRIMARY],
     ]
 
+    existing_ids = {
+        profile.id for profile in (*anthropic_profiles, *openai_profiles, *glm_profiles)
+    }
+    configured_profiles: list[ModelProfile] = []
+    for raw_model_id in (OPENAI_PRIMARY, *configured_model_ids):
+        model_id = raw_model_id.strip()
+        if not model_id or model_id in existing_ids:
+            continue
+        existing_ids.add(model_id)
+        configured_profiles.append(
+            ModelProfile(
+                model_id,
+                _resolve_provider(model_id),
+                f"{model_id} (Configured)",
+                "$$",
+            )
+        )
 
-def get_model_index() -> dict[str, ModelProfile]:
+    # Keep configured rows beside their provider family. The final catch-all
+    # retains future/custom provider ids without inventing another registry.
+    configured_anthropic = [p for p in configured_profiles if p.provider == "anthropic"]
+    configured_openai = [p for p in configured_profiles if p.provider in {"openai", "openai-codex"}]
+    configured_glm = [p for p in configured_profiles if p.provider == "glm"]
+    configured_other = [
+        p
+        for p in configured_profiles
+        if p.provider not in {"anthropic", "openai", "openai-codex", "glm"}
+    ]
+    return [
+        *anthropic_profiles,
+        *configured_anthropic,
+        *openai_profiles,
+        *configured_openai,
+        *glm_profiles,
+        *configured_glm,
+        *configured_other,
+    ]
+
+
+def get_model_index(*, configured_model_ids: Iterable[str] = ()) -> dict[str, ModelProfile]:
     """``{id: ModelProfile}`` over the live picker list (H11-tail)."""
-    return {m.id: m for m in get_model_profiles()}
+    return {m.id: m for m in get_model_profiles(configured_model_ids=configured_model_ids)}
 
 
 # ---------------------------------------------------------------------------
