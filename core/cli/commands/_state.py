@@ -64,12 +64,12 @@ def get_model_profiles() -> list[ModelProfile]:
     """The /model picker model list, built fresh per call (H11-tail).
 
     Pre-PR this was a boot-frozen module-level list, so the routing-constant
-    entries (``ANTHROPIC_SECONDARY`` / ``ANTHROPIC_BUDGET`` / ``OPENAI_PRIMARY``
-    / ``GLM_PRIMARY``) ignored a mid-session ``routing.toml`` reload until
+    entries (``ANTHROPIC_SECONDARY`` / ``ANTHROPIC_BUDGET`` /
+    ``GLM_PRIMARY``) ignored a mid-session ``routing.toml`` reload until
     restart. A function-local import re-reads the live ``core.config`` values
     each call; the hardcoded entries are version-pinned literals.
     """
-    from core.config import ANTHROPIC_BUDGET, ANTHROPIC_SECONDARY, GLM_PRIMARY, OPENAI_PRIMARY
+    from core.config import ANTHROPIC_BUDGET, ANTHROPIC_SECONDARY, GLM_PRIMARY
 
     return [
         # Fable 5 — Anthropic's most capable widely released model ($10/$50,
@@ -94,7 +94,7 @@ def get_model_profiles() -> list[ModelProfile]:
         ModelProfile("gpt-5.6-luna", "openai", "GPT-5.6 Luna", "$"),
         # gpt-5.5 is subscription-only (Codex backend). Keep its canonical
         # provider distinct from the dual-lane rows around it.
-        ModelProfile(OPENAI_PRIMARY, "openai-codex", "GPT-5.5", "$$"),
+        ModelProfile("gpt-5.5", "openai-codex", "GPT-5.5", "$$"),
         # GPT-5.4 and Mini are also dual-lane: infer_source selects the
         # subscription or PAYG backend from active auth at call time.
         ModelProfile("gpt-5.4", "openai", "GPT-5.4", "$$"),

@@ -60,3 +60,20 @@ def test_model_picker_index_reads_live() -> None:
 
     with patch.object(core.config, "GLM_PRIMARY", "glm-picker-live"):
         assert "glm-picker-live" in get_model_index()
+
+
+def test_openai_default_override_does_not_duplicate_fixed_picker_rows() -> None:
+    """Routing defaults select runtime defaults, not picker row identities."""
+    from core.cli.commands._state import get_model_profiles
+
+    with patch.object(core.config, "OPENAI_PRIMARY", "gpt-5.6-sol"):
+        profiles = get_model_profiles()
+
+    matches = [profile for profile in profiles if profile.id == "gpt-5.6-sol"]
+    assert matches == [
+        next(
+            profile
+            for profile in profiles
+            if profile.provider == "openai" and profile.label == "GPT-5.6 Sol"
+        )
+    ]
