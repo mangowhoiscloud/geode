@@ -16,6 +16,8 @@ Pinned 2026-04-28 against:
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import pytest
 from core.cli.effort_picker import (
     cycle_effort,
@@ -228,6 +230,33 @@ def test_picker_migrates_legacy_openai_minimal_in_arrow_direction(
     )
 
     assert result.effort == expected
+
+
+def test_configured_openai_primary_enter_is_a_noop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A non-curated active default must not fall through to the first row."""
+    import core.config
+    from core.cli import effort_picker
+    from core.cli.commands._state import get_model_profiles
+
+    with patch.object(core.config, "OPENAI_PRIMARY", "gpt-5.2"):
+        rows = get_model_profiles()
+    profiles = [(row.id, row.provider, row.label, row.cost, True, None) for row in rows]
+
+    monkeypatch.setattr(effort_picker, "_read_key", lambda: effort_picker._KEY_ENTER)
+    monkeypatch.setattr(effort_picker, "_render", lambda *args, **kwargs: 0)
+    monkeypatch.setattr(effort_picker, "_clear_lines", lambda lines: None)
+
+    result = effort_picker.pick_model_and_effort(
+        profiles,
+        current_model="gpt-5.2",
+        current_effort="high",
+    )
+
+    assert result.cancelled is False
+    assert result.model_id == "gpt-5.2"
+    assert result.effort == "high"
 
 
 class TestRenderVersionHeader:

@@ -49,7 +49,7 @@ functional change.
 
 ### Changed
 
-- Aligned the OpenAI model picker and `/login use` routing hints with the current Codex surface: GPT-5.6 Sol/Terra/Luna lead the list, GPT-5.4 remains available through both subscription and PAYG routes, deprecated GPT-5.3 Codex stays as a legacy management row for persisted installations, and picker reasoning-effort values now reuse the adapter's per-model contract while preserving a persisted legacy `minimal` value on a no-op confirmation.
+- Aligned the OpenAI model picker and `/login use` routing hints with the current Codex surface: GPT-5.6 Sol/Terra/Luna lead the list, GPT-5.4 remains available through both subscription and PAYG routes, deprecated GPT-5.3 Codex stays as a legacy management row for persisted installations, operator-configured OpenAI defaults outside the curated surface remain manageable without duplicating canonical rows, and picker reasoning-effort values now reuse the adapter's per-model contract while preserving a persisted legacy `minimal` value on a no-op confirmation.
 - Recorded a GPT-5.4 subscription-route Tau2 regression cycle against the pinned
   upstream harness. The mock exact-action diagnostic remains 0/1 while the
   Telecom-small roaming workflow passes 1/1; two reviewed trajectories carry

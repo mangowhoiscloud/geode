@@ -35,6 +35,12 @@ catalog marks that generation deprecated, so it is not part of the active six
 models above. Spark is omitted because it is a Pro-only research preview, not a
 stable general surface.
 
+If `[model.defaults].openai` names a supported model outside these seven rows,
+the picker adds one tail `Configured` management row. It is omitted when the
+value already belongs to the curated surface. This preserves the explicit
+operator default and cursor anchor without fragmenting or duplicating the
+current catalog.
+
 ```mermaid
 flowchart LR
     P["/model: model + effort"] --> R["provider=openai"]
@@ -57,6 +63,7 @@ flowchart LR
 | Login pinning | `/login use` omitted 5.6 and GPT-5.4 subscription hints | route every visible compatible model | command contract test |
 | Default override collision | GPT-5.5 picker identity followed mutable `OPENAI_PRIMARY` | pin the subscription-only row to `gpt-5.5`; keep routing defaults out of picker identity | reload regression test |
 | Legacy effort migration | persisted OpenAI `minimal` could be rewritten on no-op Enter or move opposite the first arrow input | preserve no-op Enter; migrate ← to `none` and → to `low` | interactive picker regression tests |
+| Configured default | a fully fixed catalog could hide an active non-curated `OPENAI_PRIMARY` and make Enter select the first row | add one conditional `Configured` row, deduplicated against the curated catalog | live-constant + picker no-op tests |
 | Operator docs | GPT-5.4 described as PAYG-only | document its dual-lane source selection | README + public docs |
 
 The existing routing manifest, adapter specs, pricing catalog, and context
