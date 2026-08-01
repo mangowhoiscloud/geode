@@ -1,6 +1,7 @@
 # OpenAI model surface alignment and GPT-5.4 Tau2 cycle
 
-Status: implementation in progress. Date: 2026-08-01.
+Status: implementation and live evidence complete; merge and deployment pending.
+Date: 2026-08-01.
 
 ## Objective
 
@@ -94,3 +95,31 @@ the harness or provider route itself is invalid.
 - The artifact PR and GEODE PRs merge with green CI.
 - The deployed Tau2 page names model, source, effort, scope, result, immutable
   artifact revision, and comparability boundary.
+
+## Measured result
+
+The live cycle used GEODE revision
+`afaab52ba2fc0ee8b0ffcdf251371e65be6f0933`,
+`sierra-research/tau2-bench@1901a301961cbbe3fd11f3e84a2a376530c759e3`
+(`tau2==1.0.0`), and `gpt-5.4` through the OpenAI subscription route at
+effort `high` for both the agent and GEODE user.
+
+| Scope | Reward / pass | Events | Exact tool pairs | Route error |
+|---|---:|---:|---:|---:|
+| `mock/create_task_1` | 0.0 / 0.000 | 31 | 2 | 0 |
+| Telecom `small`, first task | 1.0 / 1.000 | 127 | 8 | 0 |
+
+The mock failure is behavioral: `create_task` included the unrequested optional
+`description=""`, so Tau2's exact action and DB comparators rejected it. The
+Telecom task passed its DB, `toggle_roaming`, mobile-data, and speed assertions.
+Neither run had a provider, adapter, quota, agent, or simulated-user exception.
+
+The reviewed public evidence merged through
+[`geode-eval-artifacts#10`](https://github.com/mangowhoiscloud/geode-eval-artifacts/pull/10)
+at commit
+[`f588ce9`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/f588ce9fd23b9123732b45c4dbe202136691d3fe).
+Its manifest SHA-256 is
+`2dc79cb569f03e5f44ce008b32fd8af86f8388ab04341ee8f91c74fdffb6aa6b`.
+Remote read-back revalidated the manifest and both public native copies.
+These are two diagnostic rows, not a native-user leaderboard aggregate; the
+snapshots retain `promotion_authority=none`.

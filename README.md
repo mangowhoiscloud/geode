@@ -74,6 +74,15 @@ coverage under compound tasks**: Retail failures often miss DB/write side
 effects, while Telecom failures cluster around MMS/APN/app-permission/roaming
 combinations where one necessary user or agent action is omitted.
 
+The latest subscription-route regression (2026-08-02) used `gpt-5.4` at
+effort `high` for both GEODE agent and GEODE user. The exact
+`mock/create_task_1` diagnostic remained **0/1** because the model supplied an
+unrequested optional `description=""`; the first Telecom-small roaming task
+passed **1/1** with every required DB, user-action, mobile-status, and speed
+check. These two diagnostic rows are not the native-user headline. Their 158
+canonical events and ten exact tool pairs are pinned to
+[`geode-eval-artifacts@f588ce9`](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/f588ce9fd23b9123732b45c4dbe202136691d3fe/trajectories/tau2-geode-gpt54-afaab52b-mock-telecom-small-20260801T173245Z-2dc79cb569f0).
+
 ## Benchmark snapshot: MCPMark Verified available-services track
 
 The 2026-07-04 MCPMark run used **GEODE v0.99.269-era code** on branch
