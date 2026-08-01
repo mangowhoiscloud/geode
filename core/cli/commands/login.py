@@ -1025,6 +1025,7 @@ def _login_use(rest: str) -> None:
             "gpt-5.5",
             "gpt-5.4",
             "gpt-5.4-mini",
+            "gpt-5.3-codex",
         ],
         "anthropic": ["claude-opus-4-8", "claude-opus-4-7", "claude-sonnet-4-6"],
     }

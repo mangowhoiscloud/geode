@@ -25,11 +25,14 @@ Primary references:
 | 4 | `gpt-5.5` | `openai-codex` | subscription only | none–xhigh |
 | 5 | `gpt-5.4` | `openai` | subscription + PAYG | none–xhigh |
 | 6 | `gpt-5.4-mini` | `openai` | subscription + PAYG | none–xhigh |
+| 7 | `gpt-5.3-codex` | `openai-codex` | subscription, legacy | none–xhigh |
 
-`gpt-5.3-codex` remains accepted by the adapter and routing compatibility
-layer, but is removed from new selection because the current Codex catalog
-marks that generation deprecated. Spark is omitted because it is a Pro-only
-research preview, not a stable general surface.
+`gpt-5.3-codex` remains at the tail as an explicit legacy row because existing
+`GEODE_MODEL` and `config.toml` values still need model management and
+`/login use` plan pinning during the compatibility window. The current Codex
+catalog marks that generation deprecated, so it is not part of the active six
+models above. Spark is omitted because it is a Pro-only research preview, not a
+stable general surface.
 
 ```mermaid
 flowchart LR
@@ -48,7 +51,7 @@ flowchart LR
 | GAP | Before | Resolution | Evidence |
 |---|---|---|---|
 | Visible ordering | GPT-5.5 preceded the 5.6 tiers | Current Sol/Terra/Luna-first order | picker contract test |
-| Deprecated row | `gpt-5.3-codex` was selectable | Hide from picker, retain compatibility | picker contract test |
+| Deprecated row | `gpt-5.3-codex` was mixed with active models | retain a labelled tail row and login pinning for persisted installs | picker/login contract tests |
 | Effort drift | picker independently allowed `minimal` for GPT-5.4/5.5 | reuse `OpenAIModelSpec.reasoning_effort_values` | exact effort tests |
 | Login pinning | `/login use` omitted 5.6 and GPT-5.4 subscription hints | route every visible compatible model | command contract test |
 | Operator docs | GPT-5.4 described as PAYG-only | document its dual-lane source selection | README + public docs |

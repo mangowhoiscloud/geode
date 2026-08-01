@@ -99,8 +99,9 @@ def test_model_picker_openai_surface_is_current_and_ordered() -> None:
         "gpt-5.5",
         "gpt-5.4",
         "gpt-5.4-mini",
+        "gpt-5.3-codex",
     ]
-    assert "gpt-5.3-codex" not in visible
+    assert visible.index("gpt-5.3-codex") == len(visible) - 1
 
 
 def test_effort_picker_offers_max() -> None:

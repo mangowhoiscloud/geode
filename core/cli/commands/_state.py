@@ -40,9 +40,8 @@ class ModelProfile:
 # based on the user's active /login state.
 #
 # Label = canonical provider ID + cost ($) tier.
-# `gpt-5.5` default routes to `openai-codex` per equivalence-class
-# scan when ChatGPT subscription OAuth is registered (v0.52.4 routing policy);
-# otherwise to `openai` PAYG. Both paths visible via /login dashboard.
+# `gpt-5.5` routes to `openai-codex`; dual-lane OpenAI rows keep provider
+# `openai` and let the credential source select subscription versus PAYG.
 
 # GLM picker rows: id → display label. The live default (GLM_PRIMARY) leads the
 # GLM block and the rest follow, with the default skipped from the tail so an
@@ -100,6 +99,10 @@ def get_model_profiles() -> list[ModelProfile]:
         # subscription or PAYG backend from active auth at call time.
         ModelProfile("gpt-5.4", "openai", "GPT-5.4", "$$"),
         ModelProfile("gpt-5.4-mini", "openai", "GPT-5.4 Mini", "$"),
+        # One-release management compatibility for persisted installations.
+        # Keep this after the current surface so it is visibly deprecated but
+        # remains selectable and can still receive /login routing updates.
+        ModelProfile("gpt-5.3-codex", "openai-codex", "GPT-5.3 Codex (Legacy)", "$$"),
         # GLM — the live default (GLM_PRIMARY, glm-5.2 as shipped) leads so a
         # routing.toml reload is reflected mid-session (H11-tail), labelled via
         # the id→label map; the rest follow with the default skipped so an
