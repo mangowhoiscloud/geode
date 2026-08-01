@@ -119,6 +119,12 @@ def cycle_effort(current: str, levels: tuple[str, ...], direction: int) -> str:
     try:
         idx = levels.index(current)
     except ValueError:
+        # Migration bridge for OpenAI configs persisted before ``minimal``
+        # left the current-model contract. It sat between ``none`` and ``low``;
+        # preserve that ordering so the first explicit arrow input never moves
+        # opposite to the requested direction.
+        if current == "minimal" and "none" in levels and "low" in levels:
+            return "low" if direction > 0 else "none"
         return levels[len(levels) // 2]
     return levels[(idx + direction) % len(levels)]
 

@@ -142,6 +142,11 @@ class TestCycleEffort:
         assert result in levels  # snapped to something valid
         assert result == levels[len(levels) // 2]  # middle
 
+    def test_legacy_openai_minimal_migrates_in_arrow_direction(self) -> None:
+        levels = ("none", "low", "medium", "high", "xhigh")
+        assert cycle_effort("minimal", levels, -1) == "none"
+        assert cycle_effort("minimal", levels, +1) == "low"
+
 
 class TestPerProviderEnumIntegrity:
     """Cross-provider sanity — the enum table covers every model in
@@ -192,6 +197,37 @@ def test_picker_preserves_legacy_openai_minimal_on_noop_enter(
     assert result.cancelled is False
     assert result.model_id == "gpt-5.4"
     assert result.effort == "minimal"
+
+
+@pytest.mark.parametrize(
+    ("arrow", "expected"),
+    [
+        ("_KEY_LEFT", "none"),
+        ("_KEY_RIGHT", "low"),
+    ],
+)
+def test_picker_migrates_legacy_openai_minimal_in_arrow_direction(
+    monkeypatch: pytest.MonkeyPatch,
+    arrow: str,
+    expected: str,
+) -> None:
+    from core.cli import effort_picker
+
+    profiles: list[tuple[str, str, str, str, bool, str | None]] = [
+        ("gpt-5.4", "openai", "GPT-5.4", "$$", True, None),
+    ]
+    keys = iter([getattr(effort_picker, arrow), effort_picker._KEY_ENTER])
+    monkeypatch.setattr(effort_picker, "_read_key", lambda: next(keys))
+    monkeypatch.setattr(effort_picker, "_render", lambda *args, **kwargs: 0)
+    monkeypatch.setattr(effort_picker, "_clear_lines", lambda lines: None)
+
+    result = effort_picker.pick_model_and_effort(
+        profiles,
+        current_model="gpt-5.4",
+        current_effort="minimal",
+    )
+
+    assert result.effort == expected
 
 
 class TestRenderVersionHeader:
