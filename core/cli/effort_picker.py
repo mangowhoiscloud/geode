@@ -516,7 +516,13 @@ def pick_model_and_effort(
         if not levels:
             effort_per_model[mid] = None
             continue
-        if mid == current_model and current_effort in levels:
+        # ``minimal`` was accepted and persisted by older OpenAI picker
+        # contracts. Keep it on the currently selected row so reopening the
+        # picker and pressing Enter remains a no-op during migration. It stays
+        # out of ``levels``: the first explicit arrow-key adjustment moves to
+        # the current model's supported contract.
+        preserve_legacy_minimal = prov in ("openai", "openai-codex") and current_effort == "minimal"
+        if mid == current_model and (current_effort in levels or preserve_legacy_minimal):
             effort_per_model[mid] = current_effort
         else:
             effort_per_model[mid] = default_effort(mid, prov)

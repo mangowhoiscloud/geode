@@ -16,6 +16,7 @@ Pinned 2026-04-28 against:
 
 from __future__ import annotations
 
+import pytest
 from core.cli.effort_picker import (
     cycle_effort,
     default_effort,
@@ -167,6 +168,30 @@ class TestPerProviderEnumIntegrity:
             else:
                 # Default must be in the enum
                 assert d in levels, f"{p.id} ({p.provider}): default={d} not in {levels}"
+
+
+def test_picker_preserves_legacy_openai_minimal_on_noop_enter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Opening and confirming a persisted legacy value must not rewrite it."""
+    from core.cli import effort_picker
+
+    profiles: list[tuple[str, str, str, str, bool, str | None]] = [
+        ("gpt-5.4", "openai", "GPT-5.4", "$$", True, None),
+    ]
+    monkeypatch.setattr(effort_picker, "_read_key", lambda: effort_picker._KEY_ENTER)
+    monkeypatch.setattr(effort_picker, "_render", lambda *args, **kwargs: 0)
+    monkeypatch.setattr(effort_picker, "_clear_lines", lambda lines: None)
+
+    result = effort_picker.pick_model_and_effort(
+        profiles,
+        current_model="gpt-5.4",
+        current_effort="minimal",
+    )
+
+    assert result.cancelled is False
+    assert result.model_id == "gpt-5.4"
+    assert result.effort == "minimal"
 
 
 class TestRenderVersionHeader:

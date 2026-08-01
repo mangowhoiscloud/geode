@@ -55,6 +55,7 @@ flowchart LR
 | Effort drift | picker independently allowed `minimal` for GPT-5.4/5.5 | reuse `OpenAIModelSpec.reasoning_effort_values` | exact effort tests |
 | Login pinning | `/login use` omitted 5.6 and GPT-5.4 subscription hints | route every visible compatible model | command contract test |
 | Default override collision | GPT-5.5 picker identity followed mutable `OPENAI_PRIMARY` | pin the subscription-only row to `gpt-5.5`; keep routing defaults out of picker identity | reload regression test |
+| Legacy effort no-op | persisted OpenAI `minimal` could be rewritten to `medium` by reopening and confirming | preserve it only on the current row; explicit arrow input migrates to the supported contract | interactive picker regression test |
 | Operator docs | GPT-5.4 described as PAYG-only | document its dual-lane source selection | README + public docs |
 
 The existing routing manifest, adapter specs, pricing catalog, and context
