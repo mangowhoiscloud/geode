@@ -47,6 +47,13 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+
+- Serialized and bounded-retried first-use `session_events` schema bootstrap so
+  concurrent agent loops and processes cannot lose their durable timeline while
+  the shared project database enters WAL mode. The component ownership row is
+  now created atomically.
+
 ### Changed
 
 - Aligned the OpenAI model picker and `/login use` routing hints with the current Codex surface: GPT-5.6 Sol/Terra/Luna lead the list, GPT-5.4 remains available through both subscription and PAYG routes, deprecated GPT-5.3 Codex stays as a legacy management row for persisted installations, operator defaults and active role selections outside the curated surface remain manageable through deduplicated `Configured` rows, and picker reasoning-effort values now reuse the adapter's per-model contract while preserving a persisted legacy `minimal` value on a no-op confirmation.
