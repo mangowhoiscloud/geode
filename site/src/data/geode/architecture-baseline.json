@@ -172,7 +172,7 @@
       {
         "context_name": "geode_session_timeline",
         "has_default": true,
-        "line": 40,
+        "line": 41,
         "path": "core/observability/session_timeline.py",
         "symbol": "_CURRENT_SESSION_TIMELINE"
       },
@@ -528,7 +528,7 @@
   "packages": {
     "core": {
       "python_files": 432,
-      "python_loc": 138871
+      "python_loc": 138904
     },
     "plugins": {
       "python_files": 110,
@@ -536,7 +536,7 @@
     },
     "tests": {
       "python_files": 682,
-      "python_loc": 178203
+      "python_loc": 178249
     }
   },
   "schema_version": 1,
