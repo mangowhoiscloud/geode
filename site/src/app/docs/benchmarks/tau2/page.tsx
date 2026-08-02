@@ -32,6 +32,43 @@ export default function Page() {
               고정해서만 게시합니다. 같은 조건의 재실행과만 비교할 수 있습니다.
             </p>
 
+            <h2>2026-08-02 GPT-5.4 subscription cycle</h2>
+            <p>
+              GEODE <code>afaab52b</code>에서 agent와 <code>geode_user</code>를
+              모두 <code>gpt-5.4</code> subscription / effort <code>high</code>로
+              실행했습니다. <code>mock/create_task_1</code>은 <strong>0/1</strong>,
+              Telecom-small 첫 task는 <strong>1/1</strong>이며, 두 run 모두 route,
+              provider, adapter, quota exception 없이 정상 <code>USER_STOP</code>으로
+              끝났습니다.
+            </p>
+            <ul>
+              <li>
+                Mock: <code>create_task</code>에 요청하지 않은 optional{" "}
+                <code>description=&quot;&quot;</code>가 포함돼 exact action/DB 비교가
+                실패했습니다.
+              </li>
+              <li>
+                Telecom: DB, <code>toggle_roaming</code>, mobile-data 상태,
+                excellent-speed assertion이 모두 통과했습니다.
+              </li>
+              <li>
+                <RunLogLink
+                  path="trajectories/tau2-geode-gpt54-afaab52b-mock-telecom-small-20260801T173245Z-2dc79cb569f0"
+                  revision="f588ce9fd23b9123732b45c4dbe202136691d3fe"
+                />:
+                두 trajectory, 158개 canonical event, 10개 exact tool pair,
+                missing ID/orphan pair 0건.
+              </li>
+            </ul>
+            <p>
+              Tau2 <code>results.json</code>이 점수 정본입니다. 이 고정 2개 task는
+              native <code>user_simulator</code> headline이 아니며 trajectory는
+              correlation/replay sidecar입니다. 원본 snapshot의 runner-default{" "}
+              <code>stage=train</code> 표기는 그대로 보존했지만{" "}
+              <code>promotion_authority=none</code>이고 학습·승격 권한을 뜻하지
+              않습니다.
+            </p>
+
             <h2>2026-07-31 v1.0.11 release 진단</h2>
             <p>
               배포된 GEODE <code>v1.0.11</code> (<code>686ff372</code>)에서
@@ -121,6 +158,44 @@ export default function Page() {
               published number is pinned to the harness revision, model route, and
               effort that produced it. Compare only against reruns with the same
               settings.
+            </p>
+
+            <h2>2026-08-02 GPT-5.4 Subscription Cycle</h2>
+            <p>
+              At GEODE <code>afaab52b</code>, both the agent and{" "}
+              <code>geode_user</code> ran through the <code>gpt-5.4</code>{" "}
+              subscription route at effort <code>high</code>.{" "}
+              <code>mock/create_task_1</code> scored <strong>0/1</strong>; the first
+              Telecom-small task scored <strong>1/1</strong>. Both ended normally
+              with <code>USER_STOP</code> and no route, provider, adapter, or quota
+              exception.
+            </p>
+            <ul>
+              <li>
+                Mock: <code>create_task</code> included the unrequested optional{" "}
+                <code>description=&quot;&quot;</code>, so the exact action and DB
+                comparators failed.
+              </li>
+              <li>
+                Telecom: the DB, <code>toggle_roaming</code>, mobile-data, and
+                excellent-speed checks all passed.
+              </li>
+              <li>
+                <RunLogLink
+                  path="trajectories/tau2-geode-gpt54-afaab52b-mock-telecom-small-20260801T173245Z-2dc79cb569f0"
+                  revision="f588ce9fd23b9123732b45c4dbe202136691d3fe"
+                />:
+                two trajectories, 158 canonical events, ten exact tool pairs,
+                and zero missing IDs or orphaned pairs.
+              </li>
+            </ul>
+            <p>
+              Tau2 <code>results.json</code> is the score authority. These two
+              fixed tasks are not a native <code>user_simulator</code> headline;
+              the trajectories are correlation/replay sidecars. The immutable
+              snapshots preserve the runner-default <code>stage=train</code>
+              label, but <code>promotion_authority=none</code> grants no training
+              or promotion authority.
             </p>
 
             <h2>2026-07-31 v1.0.11 Release Diagnostics</h2>

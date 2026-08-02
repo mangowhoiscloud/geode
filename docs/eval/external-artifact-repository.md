@@ -16,6 +16,24 @@ not JFrog Artifactory or an opaque object-store upload. The publication unit is
 an allowlisted directory, and GitHub read-back from the exact merge commit is
 part of the evidence.
 
+The 2026-08-02 GPT-5.4 Tau2 regression publication is pinned to artifact
+commit
+[`f588ce9`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/f588ce9fd23b9123732b45c4dbe202136691d3fe)
+from
+[`geode-eval-artifacts#10`](https://github.com/mangowhoiscloud/geode-eval-artifacts/pull/10).
+Its two `geode.trajectory@1` files contain 158 canonical events and ten exact
+tool pairs with no missing IDs or orphaned calls. The immutable
+[`manifest.json`](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/f588ce9fd23b9123732b45c4dbe202136691d3fe/trajectories/tau2-geode-gpt54-afaab52b-mock-telecom-small-20260801T173245Z-2dc79cb569f0/manifest.json)
+has SHA-256
+`2dc79cb569f03e5f44ce008b32fd8af86f8388ab04341ee8f91c74fdffb6aa6b`.
+The four public native files have path-set digest
+`117a1f7f6e88bcdc792c0c17a58c5aff96c7df1ffa0e2aa216bbd565871b9a39`;
+the Telecom result is an explicitly redacted public copy rather than the raw
+Crucible receipt. Remote read-back at the exact merge commit revalidated the
+manifest, mock bytes, and redacted Telecom bytes. The release remains
+diagnostic with `promotion_authority=none` and does not alter Tau2's native
+`results.json` score authority.
+
 ## Path mapping
 
 | Local GEODE path | External path |

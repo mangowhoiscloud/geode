@@ -555,6 +555,69 @@ def test_apply_picker_result_applies_staged_then_final(monkeypatch) -> None:
     ]
 
 
+def test_interactive_picker_includes_active_off_catalog_role_models(monkeypatch) -> None:
+    """Every role anchor must have a management row before the picker opens."""
+    from core.cli import effort_picker
+    from core.cli.commands import model as model_cmd
+
+    active = {
+        "primary": "gpt-5.2",
+        "reflection": "gpt-5.1",
+        "mutator": "",
+    }
+    captured_ids: list[str] = []
+
+    def fake_picker(profiles, current_model, current_effort, **kwargs):
+        del current_effort, kwargs
+        captured_ids.extend(profile[0] for profile in profiles)
+        return effort_picker.PickerResult(
+            model_id=current_model,
+            effort="high",
+            cancelled=True,
+        )
+
+    monkeypatch.setattr(model_cmd, "_ensure_profiles_hydrated", lambda: None)
+    monkeypatch.setattr(
+        model_cmd,
+        "_current_model_for_role",
+        lambda role: active[role.name],
+    )
+    monkeypatch.setattr(model_cmd, "model_available", lambda model_id: True)
+    monkeypatch.setattr(model_cmd, "forced_login_method_for", lambda provider: None)
+    monkeypatch.setattr(effort_picker, "pick_model_and_effort", fake_picker)
+
+    model_cmd._interactive_model_picker()
+
+    assert captured_ids.count("gpt-5.2") == 1
+    assert captured_ids.count("gpt-5.1") == 1
+
+
+def test_apply_picker_result_resolves_off_catalog_selected_row(monkeypatch) -> None:
+    """Applying a dynamic management row must use the same snapshot contract."""
+    from core.cli.commands import model as model_cmd
+    from core.cli.effort_picker import PickerResult
+
+    applied: list[tuple[str, str, str]] = []
+    monkeypatch.setattr(
+        model_cmd,
+        "_apply_model",
+        lambda profile, effort=None, role="primary": applied.append(
+            (profile.id, profile.provider, role)
+        ),
+    )
+
+    model_cmd._apply_picker_result(
+        PickerResult(
+            model_id="gpt-5.2",
+            effort="high",
+            cancelled=False,
+            role="reflection",
+        )
+    )
+
+    assert applied == [("gpt-5.2", "openai", "reflection")]
+
+
 # ---------------------------------------------------------------------------
 # PR-PICKER-NO-WRAP + PR-PICKER-ROLE-SCOPE (2026-06-12)
 # ---------------------------------------------------------------------------

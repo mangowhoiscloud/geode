@@ -82,12 +82,13 @@ class TestCrossProviderFallbackSafety:
 class TestModelProfileLabels:
     def test_gpt_5_4_mini_is_not_labelled_codex(self) -> None:
         # Pre-0.50 the UI showed "Codex (Plus)" for gpt-5.4-mini even though
-        # it routes to plain "openai". Users were billed PAYG while believing
-        # they were on the Plus subscription.
+        # its canonical provider family is "openai". Credential source, not
+        # this label, selects the subscription or PAYG backend for dual-lane
+        # models.
         for profile in get_model_profiles():
             if profile.id == "gpt-5.4-mini":
                 assert "Codex" not in profile.provider, (
-                    "gpt-5.4-mini routes to PAYG OpenAI, must not advertise Codex"
+                    "gpt-5.4-mini is dual-lane and must keep the openai family label"
                 )
                 return
         raise AssertionError("gpt-5.4-mini missing from the model picker list")

@@ -377,6 +377,56 @@ Manifest SHA-256
 was independently revalidated after downloading the exact merge commit from
 GitHub.
 
+## 2026-08-02 GPT-5.4 subscription cycle
+
+This cycle exercises the newly exposed GPT-5.4 subscription route at GEODE
+revision `afaab52ba2fc0ee8b0ffcdf251371e65be6f0933`. Both the agent and
+`geode_user` used `gpt-5.4`, OpenAI subscription, effort `high`. The harness is
+`sierra-research/tau2-bench@1901a301961cbbe3fd11f3e84a2a376530c759e3`
+(`tau2==1.0.0`).
+
+| Scope | Reward / pass^1 | Duration | Termination | Reading |
+|---|---:|---:|---|---|
+| `mock/create_task_1` | 0.0 / 0.000 | 25.33s | `user_stop` | `create_task` included unrequested `description=""`; exact action and DB checks rejected the extra argument |
+| Telecom `small`, first task | 1.0 / 1.000 | 119.83s | `user_stop` | DB, `toggle_roaming`, mobile-data state, and excellent-speed checks all passed |
+
+Neither run contained a route, provider, adapter, quota, agent, or
+simulated-user exception. The SQLite-backed trajectory join also closed
+without missing correlation IDs or orphaned calls:
+
+| Scope | Events | Exact tool pairs | Missing IDs / orphan pairs |
+|---|---:|---:|---:|
+| mock | 31 | 2 | 0 / 0 |
+| Telecom | 127 | 8 | 0 / 0 |
+
+Tau2 `results.json` remains the score authority. These two rows are a fixed
+GEODE-user route regression, not a native `user_simulator` aggregate and not a
+frontier leaderboard claim. The Crucible snapshots retain
+`candidate_surface=unfrozen_git` and `promotion_authority=none`. Their source
+stage is the runner's historical default `train`; that label is preserved in
+the immutable receipt and grants no training or promotion authority. Future
+benchmark commands should pass `--trajectory-stage benchmark` explicitly.
+
+The authoritative local native receipt SHA-256 values are:
+
+- mock: `f576aa91e5631f2fd85e33a8a4867becda91af45f12befa81eefe86f03742615`;
+- Telecom: `75264b7c86d44f958061ee7f1939153ed9d135e4355eca9b54c0380cb152309a`.
+
+The public Telecom copy redacts synthetic phone and email fields, so its
+digest is
+`d2d8e1ca9296e7f044a2be5062f1c14c8427107bf5a66c74929a2d878538297f`.
+Artifacts are immutable at
+[`geode-eval-artifacts@f588ce9`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/f588ce9fd23b9123732b45c4dbe202136691d3fe):
+
+- [native receipt copies](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/f588ce9fd23b9123732b45c4dbe202136691d3fe/tau2/simulations);
+- [stable trajectory release](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/f588ce9fd23b9123732b45c4dbe202136691d3fe/trajectories/tau2-geode-gpt54-afaab52b-mock-telecom-small-20260801T173245Z-2dc79cb569f0);
+- [validation report](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/f588ce9fd23b9123732b45c4dbe202136691d3fe/reports/e2e-validation/2026-08-02-gpt54-tau2-benchmark.md).
+
+Manifest SHA-256
+`2dc79cb569f03e5f44ce008b32fd8af86f8388ab04341ee8f91c74fdffb6aa6b`
+and both public native copies were independently revalidated through GitHub
+read-back at the exact merge commit.
+
 ## 참고
 
 - [τ-bench paper (NeurIPS '24)](https://arxiv.org/pdf/2406.12045)

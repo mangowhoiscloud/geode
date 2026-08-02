@@ -8,16 +8,17 @@ cycle/default helpers are tested directly.
 Pinned 2026-04-28 against:
   - Anthropic effort enum: docs.anthropic.com / platform.claude.com
     (low/medium/high/max/xhigh; xhigh is Opus 4.7+ — 4.7 / 4.8)
-  - OpenAI Responses effort enum: openai-python `shared/reasoning_effort.py`
-    (none/minimal/low/medium/high/xhigh)
-  - Codex enum: codex-rs `protocol/src/openai_models.rs:43-51`
-    (None/Minimal/Low/Medium/High/XHigh)
+  - OpenAI Responses effort enum: the explicit per-model registry in
+    `core.llm.adapters._openai_common` (the picker and wire share one contract)
   - GLM thinking enum: docs.z.ai/guides/capabilities/thinking-mode
     (binary enabled/disabled)
 """
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
+import pytest
 from core.cli.effort_picker import (
     cycle_effort,
     default_effort,
@@ -63,11 +64,20 @@ class TestAnthropicEnum:
 class TestOpenAIResponsesEnum:
     def test_gpt_5_5_full_enum(self) -> None:
         levels = supported_efforts("gpt-5.5", "openai-codex")
-        assert levels == ("none", "minimal", "low", "medium", "high", "xhigh")
+        assert levels == ("none", "low", "medium", "high", "xhigh")
 
     def test_gpt_5_4_payg(self) -> None:
         levels = supported_efforts("gpt-5.4", "openai")
-        assert levels == ("none", "minimal", "low", "medium", "high", "xhigh")
+        assert levels == ("none", "low", "medium", "high", "xhigh")
+
+    def test_gpt_5_4_subscription_uses_the_same_model_contract(self) -> None:
+        assert supported_efforts("gpt-5.4", "openai-codex") == (
+            "none",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+        )
 
     def test_gpt_5_3_codex(self) -> None:
         levels = supported_efforts("gpt-5.3-codex", "openai-codex")
@@ -134,6 +144,11 @@ class TestCycleEffort:
         assert result in levels  # snapped to something valid
         assert result == levels[len(levels) // 2]  # middle
 
+    def test_legacy_openai_minimal_migrates_in_arrow_direction(self) -> None:
+        levels = ("none", "low", "medium", "high", "xhigh")
+        assert cycle_effort("minimal", levels, -1) == "none"
+        assert cycle_effort("minimal", levels, +1) == "low"
+
 
 class TestPerProviderEnumIntegrity:
     """Cross-provider sanity — the enum table covers every model in
@@ -160,6 +175,101 @@ class TestPerProviderEnumIntegrity:
             else:
                 # Default must be in the enum
                 assert d in levels, f"{p.id} ({p.provider}): default={d} not in {levels}"
+
+
+def test_picker_preserves_legacy_openai_minimal_on_noop_enter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Opening and confirming a persisted legacy value must not rewrite it."""
+    from core.cli import effort_picker
+
+    profiles: list[tuple[str, str, str, str, bool, str | None]] = [
+        ("gpt-5.4", "openai", "GPT-5.4", "$$", True, None),
+    ]
+    monkeypatch.setattr(effort_picker, "_read_key", lambda: effort_picker._KEY_ENTER)
+    monkeypatch.setattr(effort_picker, "_render", lambda *args, **kwargs: 0)
+    monkeypatch.setattr(effort_picker, "_clear_lines", lambda lines: None)
+
+    result = effort_picker.pick_model_and_effort(
+        profiles,
+        current_model="gpt-5.4",
+        current_effort="minimal",
+    )
+
+    assert result.cancelled is False
+    assert result.model_id == "gpt-5.4"
+    assert result.effort == "minimal"
+
+
+@pytest.mark.parametrize(
+    ("arrow", "expected"),
+    [
+        ("_KEY_LEFT", "none"),
+        ("_KEY_RIGHT", "low"),
+    ],
+)
+def test_picker_migrates_legacy_openai_minimal_in_arrow_direction(
+    monkeypatch: pytest.MonkeyPatch,
+    arrow: str,
+    expected: str,
+) -> None:
+    from core.cli import effort_picker
+
+    profiles: list[tuple[str, str, str, str, bool, str | None]] = [
+        ("gpt-5.4", "openai", "GPT-5.4", "$$", True, None),
+    ]
+    keys = iter([getattr(effort_picker, arrow), effort_picker._KEY_ENTER])
+    monkeypatch.setattr(effort_picker, "_read_key", lambda: next(keys))
+    monkeypatch.setattr(effort_picker, "_render", lambda *args, **kwargs: 0)
+    monkeypatch.setattr(effort_picker, "_clear_lines", lambda lines: None)
+
+    result = effort_picker.pick_model_and_effort(
+        profiles,
+        current_model="gpt-5.4",
+        current_effort="minimal",
+    )
+
+    assert result.effort == expected
+
+
+def test_active_off_catalog_openai_model_enter_is_a_noop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A persisted role model must not fall through to the first picker row."""
+    import core.config
+    from core.cli import effort_picker
+    from core.cli.commands._state import get_model_profiles
+
+    with patch.object(core.config, "OPENAI_PRIMARY", "gpt-5.6-sol"):
+        rows = get_model_profiles(configured_model_ids=("gpt-5.2",))
+    profiles = [(row.id, row.provider, row.label, row.cost, True, None) for row in rows]
+
+    monkeypatch.setattr(effort_picker, "_read_key", lambda: effort_picker._KEY_ENTER)
+    monkeypatch.setattr(effort_picker, "_render", lambda *args, **kwargs: 0)
+    monkeypatch.setattr(effort_picker, "_clear_lines", lambda lines: None)
+
+    result = effort_picker.pick_model_and_effort(
+        profiles,
+        current_model="gpt-5.2",
+        current_effort="high",
+    )
+
+    assert result.cancelled is False
+    assert result.model_id == "gpt-5.2"
+    assert result.effort == "high"
+
+
+def test_configured_rows_are_deduplicated_across_default_and_roles() -> None:
+    import core.config
+    from core.cli.commands._state import get_model_profiles
+
+    with patch.object(core.config, "OPENAI_PRIMARY", "gpt-5.2"):
+        rows = get_model_profiles(configured_model_ids=("gpt-5.2", "gpt-5.1", "gpt-5.1", ""))
+
+    ids = [row.id for row in rows]
+    assert ids.count("gpt-5.2") == 1
+    assert ids.count("gpt-5.1") == 1
+    assert next(row for row in rows if row.id == "gpt-5.1").provider == "openai"
 
 
 class TestRenderVersionHeader:

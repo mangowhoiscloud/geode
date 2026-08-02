@@ -81,7 +81,7 @@
       {
         "context_name": "conversation_ctx",
         "has_default": true,
-        "line": 222,
+        "line": 274,
         "path": "core/cli/commands/_state.py",
         "symbol": "_conversation_ctx"
       },
@@ -528,7 +528,7 @@
   "packages": {
     "core": {
       "python_files": 432,
-      "python_loc": 138799
+      "python_loc": 138871
     },
     "plugins": {
       "python_files": 110,
@@ -536,7 +536,7 @@
     },
     "tests": {
       "python_files": 682,
-      "python_loc": 177923
+      "python_loc": 178203
     }
   },
   "schema_version": 1,

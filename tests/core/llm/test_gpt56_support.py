@@ -84,6 +84,26 @@ def test_model_picker_offers_gpt56_family() -> None:
     assert "gpt-5.6" not in profiles  # sol alias — redundant picker row
 
 
+def test_model_picker_openai_surface_is_current_and_ordered() -> None:
+    from core.cli.commands._state import get_model_profiles
+
+    visible = [
+        profile.id
+        for profile in get_model_profiles()
+        if profile.provider in {"openai", "openai-codex"}
+    ]
+    assert visible == [
+        "gpt-5.6-sol",
+        "gpt-5.6-terra",
+        "gpt-5.6-luna",
+        "gpt-5.5",
+        "gpt-5.4",
+        "gpt-5.4-mini",
+        "gpt-5.3-codex",
+    ]
+    assert visible.index("gpt-5.3-codex") == len(visible) - 1
+
+
 def test_effort_picker_offers_max() -> None:
     from core.cli.effort_picker import default_effort, supported_efforts
 
