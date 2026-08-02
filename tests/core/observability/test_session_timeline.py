@@ -5,7 +5,8 @@ from __future__ import annotations
 import json
 import sqlite3
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from multiprocessing import get_context
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -20,6 +21,17 @@ from core.observability.session_timeline import (
     SessionEventWrite,
     SessionTimeline,
 )
+
+
+def _initialize_store_in_process(args: tuple[str, int]) -> str:
+    db_path, index = args
+    store = SessionEventStore(db_path)
+    return store.append(
+        SessionEventWrite(
+            session_id=f"s-process-first-use-{index}",
+            kind=SessionEventKind.SESSION_STARTED,
+        )
+    ).event_id
 
 
 def test_timeline_persists_versioned_turn_and_call_correlation(tmp_path: Path) -> None:
@@ -244,6 +256,40 @@ def test_concurrent_writers_get_unique_ids_and_database_order(tmp_path: Path) ->
     assert len(rows) == 40
     assert len(set(event_ids)) == 40
     assert [row.id for row in rows] == sorted(row.id for row in rows)
+
+
+def test_concurrent_first_use_serializes_schema_bootstrap(tmp_path: Path) -> None:
+    db = tmp_path / "sessions.db"
+
+    def initialize(index: int) -> str:
+        store = SessionEventStore(db)
+        return store.append(
+            SessionEventWrite(
+                session_id=f"s-first-use-{index}",
+                kind=SessionEventKind.SESSION_STARTED,
+            )
+        ).event_id
+
+    with ThreadPoolExecutor(max_workers=16) as pool:
+        event_ids = list(pool.map(initialize, range(32)))
+
+    assert len(set(event_ids)) == 32
+    with sqlite3.connect(db) as conn:
+        [row] = conn.execute(
+            "SELECT version FROM storage_schema WHERE component = 'session_events'"
+        ).fetchall()
+    assert row[0] == SESSION_EVENT_SCHEMA_VERSION
+
+
+def test_cross_process_first_use_retries_sqlite_bootstrap_lock(tmp_path: Path) -> None:
+    db = tmp_path / "sessions.db"
+    inputs = [(str(db), index) for index in range(8)]
+
+    with ProcessPoolExecutor(max_workers=4, mp_context=get_context("spawn")) as pool:
+        event_ids = list(pool.map(_initialize_store_in_process, inputs))
+
+    assert len(set(event_ids)) == 8
+    assert SessionEventStore(db).count("s-process-first-use-0") == 1
 
 
 def test_projection_is_optional_versioned_and_explicitly_bounded(tmp_path: Path) -> None:

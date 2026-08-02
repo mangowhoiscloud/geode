@@ -17,6 +17,7 @@ import json
 import logging
 import math
 import sqlite3
+import threading
 import time
 import uuid
 from collections.abc import Mapping, Sequence
@@ -41,6 +42,13 @@ _CURRENT_SESSION_TIMELINE: ContextVar[SessionTimeline | None] = ContextVar(
     "geode_session_timeline",
     default=None,
 )
+
+# A fresh project can construct several AgenticLoops at once (for example a
+# benchmark batch).  SQLite serializes later writes, but two first-use schema
+# bootstraps can still race while switching the same database into WAL mode.
+_SESSION_EVENT_SCHEMA_INIT_LOCK = threading.Lock()
+_SESSION_EVENT_SCHEMA_INIT_ATTEMPTS = 8
+_SESSION_EVENT_SCHEMA_RETRY_BASE_S = 0.025
 
 _SENSITIVE_PAYLOAD_KEYS = frozenset(
     {
@@ -136,21 +144,25 @@ def ensure_session_event_schema(conn: sqlite3.Connection) -> None:
     conn.execute(_CREATE_LEGACY_IMPORTS_SQL)
     for statement in _SESSION_EVENT_INDEXES:
         conn.execute(statement)
+    conn.execute(
+        """\
+        INSERT OR IGNORE INTO storage_schema (component, version, updated_at)
+        VALUES (?, ?, ?)
+        """,
+        (SESSION_EVENT_COMPONENT, SESSION_EVENT_SCHEMA_VERSION, time.time()),
+    )
     row = conn.execute(
         "SELECT version FROM storage_schema WHERE component = ?",
         (SESSION_EVENT_COMPONENT,),
     ).fetchone()
+    if row is None:
+        raise RuntimeError("sessions.db session-event schema ownership row is missing")
     if row is not None and int(row[0]) > SESSION_EVENT_SCHEMA_VERSION:
         raise RuntimeError(
             "sessions.db session-event schema is newer than this GEODE build: "
             f"{row[0]} > {SESSION_EVENT_SCHEMA_VERSION}"
         )
-    if row is None:
-        conn.execute(
-            "INSERT INTO storage_schema (component, version, updated_at) VALUES (?, ?, ?)",
-            (SESSION_EVENT_COMPONENT, SESSION_EVENT_SCHEMA_VERSION, time.time()),
-        )
-    elif int(row[0]) < SESSION_EVENT_SCHEMA_VERSION:
+    if int(row[0]) < SESSION_EVENT_SCHEMA_VERSION:
         conn.execute(
             "UPDATE storage_schema SET version = ?, updated_at = ? WHERE component = ?",
             (SESSION_EVENT_SCHEMA_VERSION, time.time(), SESSION_EVENT_COMPONENT),
@@ -254,13 +266,34 @@ class SessionEventStore:
         self._db_path = resolved
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
         self._policy = policy or SessionEventPolicy()
-        conn = self._connect()
-        try:
-            conn.execute("PRAGMA journal_mode=WAL")
-            ensure_session_event_schema(conn)
-            conn.commit()
-        finally:
-            conn.close()
+        with _SESSION_EVENT_SCHEMA_INIT_LOCK:
+            self._initialize_schema()
+
+    def _initialize_schema(self) -> None:
+        for attempt in range(_SESSION_EVENT_SCHEMA_INIT_ATTEMPTS):
+            conn = self._connect()
+            try:
+                mode = conn.execute("PRAGMA journal_mode").fetchone()
+                if mode is None or str(mode[0]).lower() != "wal":
+                    conn.execute("PRAGMA journal_mode=WAL")
+                ensure_session_event_schema(conn)
+                conn.commit()
+                return
+            except sqlite3.OperationalError as exc:
+                conn.rollback()
+                if (
+                    "locked" not in str(exc).lower()
+                    or attempt == _SESSION_EVENT_SCHEMA_INIT_ATTEMPTS - 1
+                ):
+                    raise
+            finally:
+                conn.close()
+            time.sleep(
+                min(
+                    _SESSION_EVENT_SCHEMA_RETRY_BASE_S * (2**attempt),
+                    0.25,
+                )
+            )
 
     @property
     def db_path(self) -> Path:
