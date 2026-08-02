@@ -19,7 +19,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": ""
+    "body": "### Changed\n\n- Aligned the OpenAI model picker and `/login use` routing hints with the current Codex surface: GPT-5.6 Sol/Terra/Luna lead the list, GPT-5.4 remains available through both subscription and PAYG routes, deprecated GPT-5.3 Codex stays as a legacy management row for persisted installations, operator defaults and active role selections outside the curated surface remain manageable through deduplicated `Configured` rows, and picker reasoning-effort values now reuse the adapter's per-model contract while preserving a persisted legacy `minimal` value on a no-op confirmation.\n- Recorded a GPT-5.4 subscription-route Tau2 regression cycle against the pinned\n  upstream harness. The mock exact-action diagnostic remains 0/1 while the\n  Telecom-small roaming workflow passes 1/1; two reviewed trajectories carry\n  158 canonical events and ten exact tool pairs in the immutable external\n  artifact repository without claiming native-user headline comparability or\n  promotion authority.\n\n### Infrastructure\n\n- Updated the static documentation site to Next.js and `eslint-config-next`\n  16.2.12 and refreshed patched `brace-expansion` lock entries. The deployed\n  GitHub Pages export uses unoptimized images and has zero advisories when\n  optional native image tooling is omitted; the full install still reports\n  upstream optional `sharp<0.35.0`, which the latest supported Next.js release\n  continues to constrain to `^0.34.5`."
   },
   {
     "version": "1.0.11",
