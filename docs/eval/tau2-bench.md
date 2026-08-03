@@ -377,6 +377,159 @@ Manifest SHA-256
 was independently revalidated after downloading the exact merge commit from
 GitHub.
 
+## 2026-08-02 GPT-5.4 subscription cycle
+
+This cycle exercises the newly exposed GPT-5.4 subscription route at GEODE
+revision `afaab52ba2fc0ee8b0ffcdf251371e65be6f0933`. Both the agent and
+`geode_user` used `gpt-5.4`, OpenAI subscription, effort `high`. The harness is
+`sierra-research/tau2-bench@1901a301961cbbe3fd11f3e84a2a376530c759e3`
+(`tau2==1.0.0`).
+
+| Scope | Reward / pass^1 | Duration | Termination | Reading |
+|---|---:|---:|---|---|
+| `mock/create_task_1` | 0.0 / 0.000 | 25.33s | `user_stop` | `create_task` included unrequested `description=""`; exact action and DB checks rejected the extra argument |
+| Telecom `small`, first task | 1.0 / 1.000 | 119.83s | `user_stop` | DB, `toggle_roaming`, mobile-data state, and excellent-speed checks all passed |
+
+Neither run contained a route, provider, adapter, quota, agent, or
+simulated-user exception. The SQLite-backed trajectory join also closed
+without missing correlation IDs or orphaned calls:
+
+| Scope | Events | Exact tool pairs | Missing IDs / orphan pairs |
+|---|---:|---:|---:|
+| mock | 31 | 2 | 0 / 0 |
+| Telecom | 127 | 8 | 0 / 0 |
+
+Tau2 `results.json` remains the score authority. These two rows are a fixed
+GEODE-user route regression, not a native `user_simulator` aggregate and not a
+frontier leaderboard claim. The Crucible snapshots retain
+`candidate_surface=unfrozen_git` and `promotion_authority=none`. Their source
+stage is the runner's historical default `train`; that label is preserved in
+the immutable receipt and grants no training or promotion authority. Future
+benchmark commands should pass `--trajectory-stage benchmark` explicitly.
+
+The authoritative local native receipt SHA-256 values are:
+
+- mock: `f576aa91e5631f2fd85e33a8a4867becda91af45f12befa81eefe86f03742615`;
+- Telecom: `75264b7c86d44f958061ee7f1939153ed9d135e4355eca9b54c0380cb152309a`.
+
+The public Telecom copy redacts synthetic phone and email fields, so its
+digest is
+`d2d8e1ca9296e7f044a2be5062f1c14c8427107bf5a66c74929a2d878538297f`.
+Artifacts are immutable at
+[`geode-eval-artifacts@f588ce9`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/f588ce9fd23b9123732b45c4dbe202136691d3fe):
+
+- [native receipt copies](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/f588ce9fd23b9123732b45c4dbe202136691d3fe/tau2/simulations);
+- [stable trajectory release](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/f588ce9fd23b9123732b45c4dbe202136691d3fe/trajectories/tau2-geode-gpt54-afaab52b-mock-telecom-small-20260801T173245Z-2dc79cb569f0);
+- [validation report](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/f588ce9fd23b9123732b45c4dbe202136691d3fe/reports/e2e-validation/2026-08-02-gpt54-tau2-benchmark.md).
+
+Manifest SHA-256
+`2dc79cb569f03e5f44ce008b32fd8af86f8388ab04341ee8f91c74fdffb6aa6b`
+and both public native copies were independently revalidated through GitHub
+read-back at the exact merge commit.
+
+## 2026-08-03 GPT-5.4 subscription base full cycle
+
+The full cycle runs all 278 base tasks at GEODE revision
+`22789ee28e87ba03580beec3db6e919f5cef5178`. Both participants use
+`gpt-5.4`, provider `openai`, source `subscription`, effort `high`.
+The harness remains
+`sierra-research/tau2-bench@1901a301961cbbe3fd11f3e84a2a376530c759e3`
+(`tau2==1.0.0`).
+
+| Domain | Tasks | Passes | Reward | Termination |
+|---|---:|---:|---:|---|
+| Airline | 50 | 42 | **0.8400** | user stop 50 |
+| Retail | 114 | 79 | **0.6930** | user stop 96, too-many-errors 18 |
+| Telecom | 114 | 79 | **0.6930** | user stop 98, max-steps 14, too-many-errors 2 |
+| **Weighted** | **278** | **200** | **0.7194** | — |
+
+This is the complete GEODE-user diagnostic surface, not the native Tau2
+`user_simulator` track. It does not replace the native-user headline matrix
+and has `promotion_authority=none`.
+
+The measured contract is one trial, concurrency 2, `max_steps=200`,
+`max_errors=1`, per-simulation timeout 3600s, agent/user wall budgets
+600s/180s, seed 300, and `trajectory_stage=benchmark`. Airline used no task
+retry; Retail and Telecom allowed one transport-only retry. No behavior-score
+failure was retried.
+
+### Behavior and verifier reading
+
+| Domain | Read | Write | Generic | Environment | DB |
+|---|---:|---:|---:|---:|---:|
+| Airline | 85/91 | 33/49 | 1/2 | — | 43/50 |
+| Retail | 265/307 | 114/141 | 4/14 | — | 80/96 |
+| Telecom | — | 308/377 | 20/20 | 155/181 | 22/98 |
+
+Telecom separates into service 28/29, mobile-data 30/36, and MMS 21/49.
+The hard persona scores 21/36, versus Easy 29/38 and no-persona 29/40.
+Latency also has a material long tail: mean 351.65s, p50 261.84s, p95
+957.65s, max 995.78s. Fourteen runs reach `MAX_STEPS`.
+
+Seven Telecom trajectories contain a GEODE no-progress supervisor stop; six
+fail and one passes. Some failed runs emit `USER_STOP` after only 2/11 or
+6/10 required actions. Conversely, complex 8–9 action runs can pass when the
+full action set closes. This is measured evidence for keeping `Stop` as a
+protocol/lifecycle hook while exposing `PostVerify` to an outer loop:
+`PostVerify` can turn missing action, environment, or DB evidence into
+`revise` or `escalate` instead of equating a normal stop with success.
+
+### SQLite, trajectory, and retry scope
+
+| Domain | Parent sessions | SQLite events | Normalized events | Messages | Exact tool pairs |
+|---|---:|---:|---:|---:|---:|
+| Airline | 100 | 4,924 | 4,924 | 1,474 | 369 |
+| Retail | 228 | 10,718 | 10,718 | 3,299 | 827 |
+| Telecom | 228 | 36,343 | 36,343 | 4,375 | 2,768 |
+| **Total** | **556** | **51,985** | **51,985** | **9,148** | **3,964** |
+
+Every event ID is unique, ordinals are contiguous, and no tool call/result is
+orphaned. The released trajectories are `scope_complete=true` for the 278
+final task attempts and `replay_complete=false`: 41,520 event bodies are
+bounded, redacted, or represented by source hashes.
+
+Telecom observed seven task-level provider transport retries and one
+adapter-internal streamed-read retry. The task retries created exactly 14 extra
+SQLite sessions (agent + user per attempt). The final trajectory parents select
+the 228 final Telecom sessions and do not include the discarded transport
+attempts. SQLite therefore remains the complete local execution authority,
+while the public trajectory is the final-attempt portable view. Future work
+should promote retry-attempt lineage into a structured run record instead of
+reconstructing it from the time-bounded SQLite scope.
+
+The Tau2 participant builder intentionally creates an isolated
+`AgenticLoop` without a `HookSystem`; these sessions therefore contain zero
+`hook_events` and no project-local JSONL. This cycle validates runtime
+lifecycle and model behavior trajectories, not public-hook dispatch. The
+separate 13-hook / four-middleware behavior E2E remains the hook authority.
+
+```mermaid
+flowchart LR
+    T["Tau2 task + native verifier"] --> R["results.json<br/>score authority"]
+    A["GEODE AgenticLoop"] --> S["sessions.db<br/>sessions + messages + session_events"]
+    X["7 task retries<br/>14 extra sessions"] --> S
+    S --> G["geode.trajectory@1<br/>final-attempt projection"]
+    X -. "not release parents" .-> G
+    R --> P["privacy + digest admission"]
+    G --> P
+    P --> E["geode-eval-artifacts<br/>immutable release"]
+    E --> O["PostVerify / SIL / Crucible<br/>outer-loop consumers"]
+```
+
+Artifacts are immutable at
+[`geode-eval-artifacts@86dcbba`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/86dcbba3d15f1979b71a501780bf66fea4b450b5):
+
+- [native receipt copies](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/86dcbba3d15f1979b71a501780bf66fea4b450b5/tau2/simulations);
+- [stable trajectory release](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/86dcbba3d15f1979b71a501780bf66fea4b450b5/trajectories/tau2-geode-gpt54-22789ee2-geode-user-airline-retail-telecom-base-full-20260803T091257Z-13162f7bcff9);
+- [human report](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/86dcbba3d15f1979b71a501780bf66fea4b450b5/reports/e2e-validation/2026-08-03-gpt54-tau2-full-cycle.md);
+- [machine report](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/86dcbba3d15f1979b71a501780bf66fea4b450b5/reports/e2e-validation/2026-08-03-gpt54-tau2-full-cycle.json).
+
+Manifest SHA-256
+`13162f7bcff9ade1194f41af06549f0b0f239847f59630d5223386e2ca6362b3`
+was independently revalidated before merge; GitHub API read-back confirmed the
+manifest, reports, and all three public native receipt paths at the exact merge
+commit.
+
 ## 참고
 
 - [τ-bench paper (NeurIPS '24)](https://arxiv.org/pdf/2406.12045)

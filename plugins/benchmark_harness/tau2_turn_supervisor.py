@@ -152,9 +152,6 @@ def _tau2_tool_calls(result: Any, *, requestor: str) -> list[Any]:
     for idx, entry in enumerate(entries):
         if not isinstance(entry, dict):
             continue
-        result_payload = entry.get("result")
-        if isinstance(result_payload, dict) and result_payload.get("error"):
-            continue
         tool_name = str(entry.get("tool", "") or "")
         tool_input = entry.get("input")
         if not tool_name or not isinstance(tool_input, dict):

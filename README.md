@@ -29,7 +29,7 @@
   <a href="README.ko.md">한국어</a>
 </p>
 
-# GEODE v1.0.11: A Self-improving Autonomous Execution Agent
+# GEODE v1.0.12: A Self-improving Autonomous Execution Agent
 
 A general-purpose autonomous agent that also rewrites the scaffolding it runs on. You ask in plain language; GEODE plans, calls tools, and reports, for one prompt or a long-running session. Underneath, an outer loop keeps tuning the system that runs your tasks.
 
@@ -73,6 +73,15 @@ The current weak spot is not gross tool availability. It is **required action
 coverage under compound tasks**: Retail failures often miss DB/write side
 effects, while Telecom failures cluster around MMS/APN/app-permission/roaming
 combinations where one necessary user or agent action is omitted.
+
+The latest subscription-route regression (2026-08-02) used `gpt-5.4` at
+effort `high` for both GEODE agent and GEODE user. The exact
+`mock/create_task_1` diagnostic remained **0/1** because the model supplied an
+unrequested optional `description=""`; the first Telecom-small roaming task
+passed **1/1** with every required DB, user-action, mobile-status, and speed
+check. These two diagnostic rows are not the native-user headline. Their 158
+canonical events and ten exact tool pairs are pinned to
+[`geode-eval-artifacts@f588ce9`](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/f588ce9fd23b9123732b45c4dbe202136691d3fe/trajectories/tau2-geode-gpt54-afaab52b-mock-telecom-small-20260801T173245Z-2dc79cb569f0).
 
 ## Benchmark snapshot: MCPMark Verified available-services track
 
@@ -205,7 +214,7 @@ geode                                 # done. GEODE finds the token automaticall
 **Quotas** (OpenAI-published, per 5-hour window): roughly 15–80 messages on Plus, up to 1,600 on Pro 20x. Edu and Enterprise have no fixed cap; usage scales with your workspace credits. Your admin needs to flip "Allow members to use Codex Local" before sign-in works on those tiers.
 
 **Tier notes**:
-- **gpt-5.5 is subscription-only.** API-key users (Path B) top out at gpt-5.4. If you want 5.5, you need ChatGPT.
+- **gpt-5.5 is subscription-only.** GPT-5.6 Sol/Terra/Luna and GPT-5.4 are dual-lane: GEODE uses ChatGPT OAuth when a subscription profile is active and the Platform API when an API-key profile is selected. If you want 5.5, you need ChatGPT.
 - **ChatGPT Team is not currently supported** by Codex CLI. Team users should use Path B.
 - **Free / Go** appear on OpenAI's pricing page but aren't listed in the CLI README. Treat them as best-effort; if it works, great, but no promises.
 

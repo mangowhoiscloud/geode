@@ -76,7 +76,8 @@ export default function Page() {
             <p>
               <code>SessionTranscript</code>/<code>RunTranscript</code>와
               <code>transcript.jsonl</code>/<code>dialogue.jsonl</code> reader는
-              v1.0.11에서 compatibility adapter로만 남아 있습니다. 새 연동은
+              v1.0.11에서 deprecated되었고 v1.0.12 grace release에는 compatibility
+              adapter로만 남아 있습니다. 새 연동은
               <code>SessionTimeline</code>, <code>RunTimeline</code>,
               <code>events.jsonl</code>을 사용합니다. 제거는 이 릴리스 범위가
               아니며 이후 CHANGELOG에서 별도로 공지해야 합니다.
@@ -204,8 +205,9 @@ export default function Page() {
             </ul>
             <p>
               <code>SessionTranscript</code>/<code>RunTranscript</code> and the
-              <code>transcript.jsonl</code>/<code>dialogue.jsonl</code> readers remain
-              only as compatibility adapters in v1.0.11. New integrations use
+              <code>transcript.jsonl</code>/<code>dialogue.jsonl</code> readers were
+              deprecated in v1.0.11 and remain only as compatibility adapters for
+              the v1.0.12 grace release. New integrations use
               <code>SessionTimeline</code>, <code>RunTimeline</code>, and
               <code>events.jsonl</code>. Removal is outside this release and must be
               announced separately in a later CHANGELOG.

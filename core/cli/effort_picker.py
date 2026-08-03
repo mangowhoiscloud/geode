@@ -26,6 +26,7 @@ import re
 import sys
 from dataclasses import dataclass
 
+from core.llm.adapters._openai_common import get_openai_model_spec
 from core.llm.model_capabilities import (
     ANTHROPIC_ADAPTIVE_MODELS,
     ANTHROPIC_XHIGH_MODELS,
@@ -36,13 +37,6 @@ from core.llm.model_capabilities import (
 # ---------------------------------------------------------------------------
 
 _ANTHROPIC_ADAPTIVE_EFFORTS = ("low", "medium", "high", "max", "xhigh")
-_OPENAI_REASONING_EFFORTS = ("none", "minimal", "low", "medium", "high", "xhigh")
-# GPT-5.6 levels are exactly "none, low, medium, high, xhigh, max"
-# (developers.openai.com/api/docs/models, 2026-07-13) — no "minimal",
-# plus the new "max" above xhigh. Mirrors the adapter spec's
-# reasoning_effort_values for the gpt-5.6 entries in _openai_common.py
-# so the picker never persists a value the wire would clamp.
-_OPENAI_REASONING_EFFORTS_56 = ("none", "low", "medium", "high", "xhigh", "max")
 _GLM_HYBRID_EFFORTS = ("disabled", "enabled")
 
 # PR-DRIFT-ANCHORS (2026-06-10) — the capability sets live in the single
@@ -51,8 +45,6 @@ _GLM_HYBRID_EFFORTS = ("disabled", "enabled")
 # exactly the knobs the adapter request-shaping accepts, by construction.
 _ANTHROPIC_ADAPTIVE_MODELS = ANTHROPIC_ADAPTIVE_MODELS
 _ANTHROPIC_XHIGH_MODELS = ANTHROPIC_XHIGH_MODELS
-
-_OPENAI_RESPONSES_MODELS_PREFIX = ("gpt-5",)
 
 _GLM_HYBRID_MODELS = frozenset(
     {"glm-4.6", "glm-4.6v", "glm-4.5", "glm-4.5v", "glm-4.5-air", "glm-4.5-flash"}
@@ -88,11 +80,7 @@ def supported_efforts(model: str, provider: str) -> tuple[str, ...]:
             return _ANTHROPIC_ADAPTIVE_EFFORTS[:-1]
         return ()
     if provider in ("openai", "openai-codex"):
-        if model.startswith("gpt-5.6"):
-            return _OPENAI_REASONING_EFFORTS_56
-        if any(model.startswith(p) for p in _OPENAI_RESPONSES_MODELS_PREFIX):
-            return _OPENAI_REASONING_EFFORTS
-        return ()
+        return get_openai_model_spec(model).reasoning_effort_values or ()
     if provider == "glm":
         if model in _GLM_HYBRID_MODELS:
             return _GLM_HYBRID_EFFORTS
@@ -131,6 +119,12 @@ def cycle_effort(current: str, levels: tuple[str, ...], direction: int) -> str:
     try:
         idx = levels.index(current)
     except ValueError:
+        # Migration bridge for OpenAI configs persisted before ``minimal``
+        # left the current-model contract. It sat between ``none`` and ``low``;
+        # preserve that ordering so the first explicit arrow input never moves
+        # opposite to the requested direction.
+        if current == "minimal" and "none" in levels and "low" in levels:
+            return "low" if direction > 0 else "none"
         return levels[len(levels) // 2]
     return levels[(idx + direction) % len(levels)]
 
@@ -152,9 +146,9 @@ _MODEL_DESCRIPTIONS: dict[str, str] = {
     "gpt-5.6-terra": "GPT-5.6 Terra · balanced intelligence/cost · API + subscription",
     "gpt-5.6-luna": "GPT-5.6 Luna · efficient high-volume tier · API + subscription",
     "gpt-5.5": "GPT-5.5 via ChatGPT subscription · subscription-routed",
-    "gpt-5.4": "GPT-5.4 · PAYG balanced reasoning",
-    "gpt-5.4-mini": "GPT-5.4 Mini · cheap + fast",
-    "gpt-5.3-codex": "GPT-5.3 Codex · code-tuned, reasoning-aware",
+    "gpt-5.4": "GPT-5.4 · balanced reasoning · API + subscription",
+    "gpt-5.4-mini": "GPT-5.4 Mini · cheap + fast · API + subscription",
+    "gpt-5.3-codex": "GPT-5.3 Codex · deprecated compatibility row",
     # GLM
     "glm-5.2": "GLM-5.2 · flagship reasoning · 1M-capable, automatic caching",
     "glm-5.1": "GLM-5.1 · always-on reasoning",
@@ -528,7 +522,13 @@ def pick_model_and_effort(
         if not levels:
             effort_per_model[mid] = None
             continue
-        if mid == current_model and current_effort in levels:
+        # ``minimal`` was accepted and persisted by older OpenAI picker
+        # contracts. Keep it on the currently selected row so reopening the
+        # picker and pressing Enter remains a no-op during migration. It stays
+        # out of ``levels``: the first explicit arrow-key adjustment moves to
+        # the current model's supported contract.
+        preserve_legacy_minimal = prov in ("openai", "openai-codex") and current_effort == "minimal"
+        if mid == current_model and (current_effort in levels or preserve_legacy_minimal):
             effort_per_model[mid] = current_effort
         else:
             effort_per_model[mid] = default_effort(mid, prov)

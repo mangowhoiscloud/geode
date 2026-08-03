@@ -23,7 +23,8 @@ Contracts pinned here:
 
 from __future__ import annotations
 
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 import pytest
 from core.auth.profiles import AuthProfile, CredentialType, ProfileStore
@@ -151,6 +152,60 @@ def test_cmd_login_use_profile_missing_arg(capsys: pytest.CaptureFixture[str]) -
     _login_use_profile("")
     out = capsys.readouterr().out
     assert "Usage:" in out
+
+
+@pytest.mark.parametrize(
+    ("provider", "expected_models"),
+    [
+        (
+            "openai",
+            [
+                "gpt-5.6-sol",
+                "gpt-5.6-terra",
+                "gpt-5.6-luna",
+                "gpt-5.4",
+                "gpt-5.4-mini",
+            ],
+        ),
+        (
+            "openai-codex",
+            [
+                "gpt-5.6-sol",
+                "gpt-5.6-terra",
+                "gpt-5.6-luna",
+                "gpt-5.5",
+                "gpt-5.4",
+                "gpt-5.4-mini",
+                "gpt-5.3-codex",
+            ],
+        ),
+    ],
+)
+def test_cmd_login_use_routes_current_openai_surface(
+    provider: str,
+    expected_models: list[str],
+) -> None:
+    from core.cli.commands.login import _login_use
+
+    registry = MagicMock()
+    registry.get.return_value = SimpleNamespace(
+        id=f"{provider}-plan",
+        provider=provider,
+        display_name=provider,
+    )
+    registry.get_routing.return_value = []
+
+    with (
+        patch(
+            "core.llm.strategies.plan_registry.get_plan_registry",
+            return_value=registry,
+        ),
+        patch("core.cli.commands._persist_auth_state"),
+    ):
+        _login_use(f"{provider}-plan")
+
+    assert [call.args[0] for call in registry.set_routing.call_args_list] == expected_models
+    assert all(call.args[1] == [f"{provider}-plan"] for call in registry.set_routing.call_args_list)
 
 
 # ---------------------------------------------------------------------------

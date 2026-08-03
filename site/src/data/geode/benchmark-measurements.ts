@@ -526,6 +526,173 @@ const tau2MockSmoke: BenchmarkMeasurement = {
   ],
 };
 
+const tau2MockGpt54: BenchmarkMeasurement = {
+  id: "tau2-mock-20260802-gpt54-high-geode-user",
+  group: "tau2",
+  title: "mock/create_task_1 GPT-5.4 subscription diagnostic",
+  measuredAt: "2026-08-02 KST",
+  suite: "mock / create_task_1",
+  status: "complete",
+  model: "gpt-5.4",
+  provider: "openai",
+  source: "subscription",
+  effort: "agent high / user high",
+  route: "geode_agent + geode_user",
+  harness: "sierra-research/tau2-bench@1901a30, tau2==1.0.0, GEODE@afaab52b",
+  artifact:
+    "geode-eval-artifacts@f588ce9fd23b9123732b45c4dbe202136691d3fe/tau2/simulations/geode-gpt54-high-afaab52b-geode-user-mock-smoke-20260802/results.json",
+  scoreLabel: "Reward / pass^1",
+  scoreValue: "0.0 / 0.000 (0 / 1)",
+  secondary: [
+    "Communication check 1.0 / DB check 0.0",
+    "create_task action check 0.0",
+    "Termination user_stop",
+    "Duration 25.33s",
+    "31 canonical events / 2 exact tool pairs",
+  ],
+  command: `python scripts/eval/tau2_geode_agent.py \\
+  --harness-dir artifacts/eval/harnesses/tau2-bench \\
+  --domain mock \\
+  --task-ids create_task_1 \\
+  --num-tasks 1 \\
+  --num-trials 1 \\
+  --max-concurrency 1 \\
+  --max-steps 8 \\
+  --timeout 900 \\
+  --model gpt-5.4 \\
+  --provider openai \\
+  --source subscription \\
+  --effort high \\
+  --time-budget-s 180 \\
+  --user geode_user \\
+  --user-llm gpt-5.4 \\
+  --user-provider openai \\
+  --user-source subscription \\
+  --user-effort high \\
+  --user-time-budget-s 120 \\
+  --save-to geode-gpt54-high-afaab52b-geode-user-mock-smoke-20260802`,
+  notes: [
+    "The model supplied unrequested description=\"\"; Tau2's exact action and DB comparators rejected it.",
+    "No route, provider, adapter, quota, agent, or simulated-user exception occurred.",
+    "This fixed GEODE-user diagnostic is not a native user_simulator headline row.",
+    "The immutable source snapshot retains the runner-default train stage with promotion_authority=none; future benchmark commands should set --trajectory-stage benchmark explicitly.",
+  ],
+};
+
+const tau2TelecomSmallGpt54: BenchmarkMeasurement = {
+  id: "tau2-telecom-small-20260802-gpt54-high-geode-user",
+  group: "tau2",
+  title: "Telecom small first-task GPT-5.4 subscription diagnostic",
+  measuredAt: "2026-08-02 KST",
+  suite:
+    "telecom / small / [mobile_data_issue]user_abroad_roaming_enabled_off[PERSONA:None]",
+  status: "complete",
+  model: "gpt-5.4",
+  provider: "openai",
+  source: "subscription",
+  effort: "agent high / user high",
+  route: "geode_agent + geode_user",
+  harness: "sierra-research/tau2-bench@1901a30, tau2==1.0.0, GEODE@afaab52b",
+  artifact:
+    "geode-eval-artifacts@f588ce9fd23b9123732b45c4dbe202136691d3fe/tau2/simulations/geode-gpt54-high-afaab52b-geode-user-telecom-small-01-20260802/results.json",
+  scoreLabel: "Reward / pass^1",
+  scoreValue: "1.0 / 1.000 (1 / 1)",
+  secondary: [
+    "DB check 1.0",
+    "toggle_roaming write action 1.0",
+    "Mobile-data and excellent-speed assertions 1.0",
+    "Termination user_stop",
+    "Duration 119.83s / 127 canonical events / 8 exact tool pairs",
+  ],
+  command: `python scripts/eval/tau2_geode_agent.py \\
+  --harness-dir artifacts/eval/harnesses/tau2-bench \\
+  --domain telecom \\
+  --task-split-name small \\
+  --task-ids '[mobile_data_issue]user_abroad_roaming_enabled_off[PERSONA:None]' \\
+  --num-tasks 1 \\
+  --num-trials 1 \\
+  --max-concurrency 1 \\
+  --max-steps 50 \\
+  --timeout 1800 \\
+  --model gpt-5.4 \\
+  --provider openai \\
+  --source subscription \\
+  --effort high \\
+  --time-budget-s 300 \\
+  --user geode_user \\
+  --user-llm gpt-5.4 \\
+  --user-provider openai \\
+  --user-source subscription \\
+  --user-effort high \\
+  --user-time-budget-s 180 \\
+  --save-to geode-gpt54-high-afaab52b-geode-user-telecom-small-01-20260802`,
+  notes: [
+    "The DB, toggle_roaming, mobile-data, and excellent-speed checks all passed.",
+    "No route, provider, adapter, quota, agent, or simulated-user exception occurred.",
+    "Tau2 results.json is the score authority; the 127-event trajectory is a digest-joined correlation and replay sidecar.",
+    "The immutable source snapshot retains the runner-default train stage with promotion_authority=none; future benchmark commands should set --trajectory-stage benchmark explicitly.",
+  ],
+};
+
+const tau2BaseFullGpt54: BenchmarkMeasurement = {
+  id: "tau2-base-full-20260803-gpt54-high-geode-user",
+  group: "tau2",
+  title: "Airline + Retail + Telecom base full-cycle GPT-5.4 diagnostic",
+  measuredAt: "2026-08-03 KST",
+  suite: "airline + retail + telecom / base / 278 tasks",
+  status: "complete",
+  model: "gpt-5.4",
+  provider: "openai",
+  source: "subscription",
+  effort: "agent high / user high",
+  route: "geode_agent + geode_user",
+  harness:
+    "sierra-research/tau2-bench@1901a30, tau2==1.0.0, GEODE@22789ee2",
+  artifact:
+    "geode-eval-artifacts@86dcbba3d15f1979b71a501780bf66fea4b450b5/reports/e2e-validation/2026-08-03-gpt54-tau2-full-cycle.json",
+  scoreLabel: "Weighted reward / pass^1",
+  scoreValue: "0.7194 / 0.719 (200 / 278)",
+  secondary: [
+    "Airline 0.8400 (42 / 50)",
+    "Retail 0.6930 (79 / 114)",
+    "Telecom 0.6930 (79 / 114)",
+    "51,985 canonical events / 3,964 exact tool pairs / zero orphans",
+    "Telecom p95 957.65s / 14 max-step terminations / MMS 21 of 49",
+  ],
+  command: `# Run once per domain with num-tasks 50 (airline) or 114 (retail/telecom).
+python scripts/eval/tau2_geode_agent.py \\
+  --harness-dir artifacts/eval/harnesses/tau2-bench \\
+  --domain <airline|retail|telecom> \\
+  --task-split-name base \\
+  --num-tasks <50|114> \\
+  --num-trials 1 \\
+  --max-concurrency 2 \\
+  --max-steps 200 \\
+  --max-errors 1 \\
+  --max-retries <0|1> \\
+  --timeout 3600 \\
+  --model gpt-5.4 \\
+  --provider openai \\
+  --source subscription \\
+  --effort high \\
+  --time-budget-s 600 \\
+  --user geode_user \\
+  --user-llm gpt-5.4 \\
+  --user-provider openai \\
+  --user-source subscription \\
+  --user-effort high \\
+  --user-time-budget-s 180 \\
+  --trajectory-stage benchmark \\
+  --save-to <domain-specific-run-id>`,
+  notes: [
+    "This GEODE-user full cycle is not comparable to the native tau2 user_simulator headline matrix.",
+    "Tau2 results.json is score authority; the trajectory release is a privacy-reviewed diagnostic and external-loop sidecar.",
+    "Seven Telecom transport retries created 14 extra SQLite sessions outside the final trajectory parents; no behavior-score failure was retried.",
+    "The released trajectories are scope-complete for final task attempts and replay-incomplete for bounded bodies and retry-attempt lineage.",
+    "The isolated Tau2 AgenticLoop records no public hook_events; the separate hook behavior E2E remains hook authority.",
+  ],
+};
+
 const tau2MockGpt56: BenchmarkMeasurement = {
   id: "tau2-mock-20260731-gpt56-high-geode-user",
   group: "tau2",
@@ -1023,6 +1190,9 @@ export const BENCHMARK_GROUPS: BenchmarkGroup[] = [
       },
     ],
     measurements: [
+      tau2BaseFullGpt54,
+      tau2TelecomSmallGpt54,
+      tau2MockGpt54,
       tau2NativeAggregate,
       tau2TelecomSmallGpt56V1011,
       tau2MockGpt56V1011,

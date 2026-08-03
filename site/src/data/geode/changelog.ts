@@ -2,7 +2,7 @@
  * GEODE CHANGELOG, auto-synced from the GEODE repo via `npm run sync-stats`.
  * Do not edit manually. Edit CHANGELOG.md in the GEODE repo and re-run sync.
  *
- * Last sync: 2026-07-31
+ * Last sync: 2026-08-03
  *
  * Each entry's `body` is the raw markdown between two version headings.
  * The Changelog page renders the body with a minimal markdown renderer
@@ -20,6 +20,11 @@ export const CHANGELOG: ChangelogEntry[] = [
     "version": "Unreleased",
     "date": "",
     "body": ""
+  },
+  {
+    "version": "1.0.12",
+    "date": "2026-08-03",
+    "body": "> GPT-5.4 subscription routing, concurrent session durability, and failed-tool\n> evidence are validated by a reviewed 278-task Tau2 full cycle whose native\n> receipts and canonical trajectory are published immutably.\n\n### Fixed\n\n- Serialized and bounded-retried first-use `session_events` schema bootstrap so\n  concurrent agent loops and processes cannot lose their durable timeline while\n  the shared project database enters WAL mode. The component ownership row is\n  now created atomically.\n- Preserved failed GEODE tool calls when projecting Tau2 turns so invalid model\n  arguments become official Tau2 `ToolMessage(error=True)` evidence governed by\n  `max_errors`, instead of being misclassified as an empty-route infrastructure\n  failure.\n\n### Changed\n\n- Aligned the OpenAI model picker and `/login use` routing hints with the current Codex surface: GPT-5.6 Sol/Terra/Luna lead the list, GPT-5.4 remains available through both subscription and PAYG routes, deprecated GPT-5.3 Codex stays as a legacy management row for persisted installations, operator defaults and active role selections outside the curated surface remain manageable through deduplicated `Configured` rows, and picker reasoning-effort values now reuse the adapter's per-model contract while preserving a persisted legacy `minimal` value on a no-op confirmation.\n- Recorded a GPT-5.4 subscription-route Tau2 regression and three-domain base\n  full cycle against the pinned upstream harness. The full diagnostic scores\n  Airline 42/50, Retail 79/114, and Telecom 79/114 (200/278 weighted), with\n  51,985 reviewed canonical events and 3,964 exact tool pairs in the immutable\n  external artifact repository. The GEODE-user route remains separate from\n  the native-user headline and carries no promotion authority; retry-only\n  sessions and replay incompleteness are explicitly disclosed.\n\n### Infrastructure\n\n- Made the CI test-count ratchet fail closed on collection or summary-parse\n  errors and raised its measured floor from the stale 2,900-test threshold to\n  10,451 non-live tests.\n- Updated the static documentation site to Next.js and `eslint-config-next`\n  16.2.12 and refreshed patched `brace-expansion` lock entries. The deployed\n  GitHub Pages export uses unoptimized images and has zero advisories when\n  optional native image tooling is omitted; the full install still reports\n  upstream optional `sharp<0.35.0`, which the latest supported Next.js release\n  continues to constrain to `^0.34.5`."
   },
   {
     "version": "1.0.11",
@@ -2453,4 +2458,4 @@ export const CHANGELOG: ChangelogEntry[] = [
   }
 ];
 
-export const CHANGELOG_SYNCED_AT = "2026-07-31";
+export const CHANGELOG_SYNCED_AT = "2026-08-03";

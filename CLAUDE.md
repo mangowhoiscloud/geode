@@ -8,12 +8,12 @@
 
 A general-purpose autonomous execution agent. The core runtime is an **AgenticLoop** (`while tool_use`) — sub-agents, plans, and batches are all instances of the same loop. Autonomously performs research, analysis, automation, and scheduling.
 
-- **Version**: 1.0.11
+- **Version**: 1.0.12
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Points**: `geode` (`core.cli:app`, Typer) / `geode-mcp` (`core.mcp_server:main`)
 - **Modules**: 432 core + 110 plugins = 542
-- **Tests**: 10434 (+1 live)
+- **Tests**: 10451 (+1 live)
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
 ## Quick Start

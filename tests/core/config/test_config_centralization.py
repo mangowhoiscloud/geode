@@ -60,22 +60,23 @@ def test_effort_validator_accepts_full_picker_union() -> None:
     """The validator MUST accept every value the picker can persist to
     ``[agentic] effort`` — else selecting e.g. gpt-5.5 + ``none`` (OpenAI) or a
     GLM model + ``enabled`` writes a config that bricks the next ``Settings()``
-    load. Drift invariant: ``AGENTIC_EFFORTS`` == the picker's provider union."""
+    load. The validator may retain a non-exposed legacy value so an existing
+    config remains loadable during migration."""
     from core.cli.effort_picker import (
         _ANTHROPIC_ADAPTIVE_EFFORTS,
         _GLM_HYBRID_EFFORTS,
-        _OPENAI_REASONING_EFFORTS,
     )
     from core.config._settings import AGENTIC_EFFORTS
+    from core.llm.adapters._openai_common import _OPENAI_MODELS
 
-    picker_union = (
-        set(_ANTHROPIC_ADAPTIVE_EFFORTS) | set(_OPENAI_REASONING_EFFORTS) | set(_GLM_HYBRID_EFFORTS)
-    )
-    assert set(AGENTIC_EFFORTS) == picker_union, (
-        "agentic_effort validator drifted from the picker — every persistable "
-        f"effort must be accepted. validator={sorted(AGENTIC_EFFORTS)} "
-        f"picker={sorted(picker_union)}"
-    )
+    openai_efforts = {
+        effort
+        for spec in _OPENAI_MODELS.values()
+        for effort in (spec.reasoning_effort_values or ())
+    }
+    picker_union = set(_ANTHROPIC_ADAPTIVE_EFFORTS) | openai_efforts | set(_GLM_HYBRID_EFFORTS)
+    assert picker_union <= set(AGENTIC_EFFORTS)
+    assert set(AGENTIC_EFFORTS) - picker_union == {"minimal"}
     for effort in picker_union:
         assert Settings(agentic_effort=effort).agentic_effort == effort
 

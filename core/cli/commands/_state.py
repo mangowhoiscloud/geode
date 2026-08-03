@@ -10,6 +10,7 @@ preserved byte-identical from the legacy module.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any as _Any
@@ -40,9 +41,8 @@ class ModelProfile:
 # based on the user's active /login state.
 #
 # Label = canonical provider ID + cost ($) tier.
-# `gpt-5.5` default routes to `openai-codex` per equivalence-class
-# scan when ChatGPT subscription OAuth is registered (v0.52.4 routing policy);
-# otherwise to `openai` PAYG. Both paths visible via /login dashboard.
+# `gpt-5.5` routes to `openai-codex`; dual-lane OpenAI rows keep provider
+# `openai` and let the credential source select subscription versus PAYG.
 
 # GLM picker rows: id → display label. The live default (GLM_PRIMARY) leads the
 # GLM block and the rest follow, with the default skipped from the tail so an
@@ -56,23 +56,50 @@ _GLM_MODELS: tuple[tuple[str, str], ...] = (
 )
 _GLM_LABELS: dict[str, str] = dict(_GLM_MODELS)
 
+_OPENAI_PICKER_MODELS: tuple[ModelProfile, ...] = (
+    # GPT-5.6 is dual-lane. The bare gpt-5.6 Platform alias stays off the
+    # picker because it aliases Sol on the API and is absent from Codex.
+    ModelProfile("gpt-5.6-sol", "openai", "GPT-5.6 Sol", "$$"),
+    ModelProfile("gpt-5.6-terra", "openai", "GPT-5.6 Terra", "$$"),
+    ModelProfile("gpt-5.6-luna", "openai", "GPT-5.6 Luna", "$"),
+    # GPT-5.5 is subscription-only.
+    ModelProfile("gpt-5.5", "openai-codex", "GPT-5.5", "$$"),
+    # GPT-5.4 and Mini are dual-lane.
+    ModelProfile("gpt-5.4", "openai", "GPT-5.4", "$$"),
+    ModelProfile("gpt-5.4-mini", "openai", "GPT-5.4 Mini", "$"),
+    # One-release management compatibility for persisted installations.
+    ModelProfile("gpt-5.3-codex", "openai-codex", "GPT-5.3 Codex (Legacy)", "$$"),
+)
+
 
 def _glm_label(model_id: str) -> str:
     return _GLM_LABELS.get(model_id, model_id)
 
 
-def get_model_profiles() -> list[ModelProfile]:
+def get_model_profiles(*, configured_model_ids: Iterable[str] = ()) -> list[ModelProfile]:
     """The /model picker model list, built fresh per call (H11-tail).
 
     Pre-PR this was a boot-frozen module-level list, so the routing-constant
-    entries (``ANTHROPIC_SECONDARY`` / ``ANTHROPIC_BUDGET`` / ``OPENAI_PRIMARY``
-    / ``GLM_PRIMARY``) ignored a mid-session ``routing.toml`` reload until
+    entries (``ANTHROPIC_SECONDARY`` / ``ANTHROPIC_BUDGET`` /
+    ``GLM_PRIMARY``) ignored a mid-session ``routing.toml`` reload until
     restart. A function-local import re-reads the live ``core.config`` values
     each call; the hardcoded entries are version-pinned literals.
-    """
-    from core.config import ANTHROPIC_BUDGET, ANTHROPIC_SECONDARY, GLM_PRIMARY, OPENAI_PRIMARY
 
-    return [
+    ``configured_model_ids`` carries the active per-role selections. Any
+    persisted model outside the curated catalog is retained as one deduplicated
+    management row, so opening the picker and pressing Enter cannot silently
+    replace an existing selection. ``OPENAI_PRIMARY`` receives the same
+    treatment because it is an operator-owned routing default.
+    """
+    from core.config import (
+        ANTHROPIC_BUDGET,
+        ANTHROPIC_SECONDARY,
+        GLM_PRIMARY,
+        OPENAI_PRIMARY,
+        _resolve_provider,
+    )
+
+    anthropic_profiles = [
         # Fable 5 — Anthropic's most capable widely released model ($10/$50,
         # 1M ctx, adaptive-only thinking, refusal stop_reason). GA 2026-06-09.
         # ref: https://platform.claude.com/docs/en/about-claude/models/overview
@@ -82,26 +109,13 @@ def get_model_profiles() -> list[ModelProfile]:
         ModelProfile("claude-opus-4-6", "anthropic", "Opus 4.6", "$$$"),
         ModelProfile(ANTHROPIC_SECONDARY, "anthropic", "Sonnet 4.6", "$$"),
         ModelProfile(ANTHROPIC_BUDGET, "anthropic", "Haiku 4.5", "$"),
-        # v0.53.2 — gpt-5.5 is OAuth-only (Codex backend per
-        # developers.openai.com/codex/models). _resolve_provider returns
-        # "openai-codex" for it via _CODEX_ONLY_MODELS; ModelProfile.provider
-        # must match so the /model picker label is honest about which
-        # auth-mode the user's pick will actually consume.
-        ModelProfile(OPENAI_PRIMARY, "openai-codex", "GPT-5.5", "$$"),
-        # GPT-5.6 family (GA 2026-07-09) — DUAL-LANE: Platform API GA
-        # (developers.openai.com/api/docs/models) and Codex slugs
-        # (openai/codex models-manager/models.json, ctx7 2026-07-13), so
-        # they stay off codex_only_models, resolve_provider returns the
-        # "openai" family via the gpt- prefix, and infer_source (login
-        # state: oauth ↔ api_key) picks the backend per call. The bare
-        # "gpt-5.6" Platform alias stays off the picker — it aliases sol
-        # on the API and is absent from the Codex models.json.
-        ModelProfile("gpt-5.6-sol", "openai", "GPT-5.6 Sol", "$$"),
-        ModelProfile("gpt-5.6-terra", "openai", "GPT-5.6 Terra", "$$"),
-        ModelProfile("gpt-5.6-luna", "openai", "GPT-5.6 Luna", "$"),
-        ModelProfile("gpt-5.4", "openai", "GPT-5.4", "$$"),
-        ModelProfile("gpt-5.4-mini", "openai", "GPT-5.4 Mini", "$"),
-        ModelProfile("gpt-5.3-codex", "openai-codex", "GPT-5.3 Codex", "$$"),
+    ]
+    openai_profiles = [
+        # Version-pinned current surface. Dual-lane rows use provider=openai;
+        # infer_source selects OAuth subscription versus PAYG at call time.
+        *_OPENAI_PICKER_MODELS,
+    ]
+    glm_profiles = [
         # GLM — the live default (GLM_PRIMARY, glm-5.2 as shipped) leads so a
         # routing.toml reload is reflected mid-session (H11-tail), labelled via
         # the id→label map; the rest follow with the default skipped so an
@@ -110,10 +124,48 @@ def get_model_profiles() -> list[ModelProfile]:
         *[ModelProfile(mid, "glm", lbl, "$") for mid, lbl in _GLM_MODELS if mid != GLM_PRIMARY],
     ]
 
+    existing_ids = {
+        profile.id for profile in (*anthropic_profiles, *openai_profiles, *glm_profiles)
+    }
+    configured_profiles: list[ModelProfile] = []
+    for raw_model_id in (OPENAI_PRIMARY, *configured_model_ids):
+        model_id = raw_model_id.strip()
+        if not model_id or model_id in existing_ids:
+            continue
+        existing_ids.add(model_id)
+        configured_profiles.append(
+            ModelProfile(
+                model_id,
+                _resolve_provider(model_id),
+                f"{model_id} (Configured)",
+                "$$",
+            )
+        )
 
-def get_model_index() -> dict[str, ModelProfile]:
+    # Keep configured rows beside their provider family. The final catch-all
+    # retains future/custom provider ids without inventing another registry.
+    configured_anthropic = [p for p in configured_profiles if p.provider == "anthropic"]
+    configured_openai = [p for p in configured_profiles if p.provider in {"openai", "openai-codex"}]
+    configured_glm = [p for p in configured_profiles if p.provider == "glm"]
+    configured_other = [
+        p
+        for p in configured_profiles
+        if p.provider not in {"anthropic", "openai", "openai-codex", "glm"}
+    ]
+    return [
+        *anthropic_profiles,
+        *configured_anthropic,
+        *openai_profiles,
+        *configured_openai,
+        *glm_profiles,
+        *configured_glm,
+        *configured_other,
+    ]
+
+
+def get_model_index(*, configured_model_ids: Iterable[str] = ()) -> dict[str, ModelProfile]:
     """``{id: ModelProfile}`` over the live picker list (H11-tail)."""
-    return {m.id: m for m in get_model_profiles()}
+    return {m.id: m for m in get_model_profiles(configured_model_ids=configured_model_ids)}
 
 
 # ---------------------------------------------------------------------------

@@ -47,6 +47,46 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.12] - 2026-08-03
+
+> GPT-5.4 subscription routing, concurrent session durability, and failed-tool
+> evidence are validated by a reviewed 278-task Tau2 full cycle whose native
+> receipts and canonical trajectory are published immutably.
+
+### Fixed
+
+- Serialized and bounded-retried first-use `session_events` schema bootstrap so
+  concurrent agent loops and processes cannot lose their durable timeline while
+  the shared project database enters WAL mode. The component ownership row is
+  now created atomically.
+- Preserved failed GEODE tool calls when projecting Tau2 turns so invalid model
+  arguments become official Tau2 `ToolMessage(error=True)` evidence governed by
+  `max_errors`, instead of being misclassified as an empty-route infrastructure
+  failure.
+
+### Changed
+
+- Aligned the OpenAI model picker and `/login use` routing hints with the current Codex surface: GPT-5.6 Sol/Terra/Luna lead the list, GPT-5.4 remains available through both subscription and PAYG routes, deprecated GPT-5.3 Codex stays as a legacy management row for persisted installations, operator defaults and active role selections outside the curated surface remain manageable through deduplicated `Configured` rows, and picker reasoning-effort values now reuse the adapter's per-model contract while preserving a persisted legacy `minimal` value on a no-op confirmation.
+- Recorded a GPT-5.4 subscription-route Tau2 regression and three-domain base
+  full cycle against the pinned upstream harness. The full diagnostic scores
+  Airline 42/50, Retail 79/114, and Telecom 79/114 (200/278 weighted), with
+  51,985 reviewed canonical events and 3,964 exact tool pairs in the immutable
+  external artifact repository. The GEODE-user route remains separate from
+  the native-user headline and carries no promotion authority; retry-only
+  sessions and replay incompleteness are explicitly disclosed.
+
+### Infrastructure
+
+- Made the CI test-count ratchet fail closed on collection or summary-parse
+  errors and raised its measured floor from the stale 2,900-test threshold to
+  10,451 non-live tests.
+- Updated the static documentation site to Next.js and `eslint-config-next`
+  16.2.12 and refreshed patched `brace-expansion` lock entries. The deployed
+  GitHub Pages export uses unoptimized images and has zero advisories when
+  optional native image tooling is omitted; the full install still reports
+  upstream optional `sharp<0.35.0`, which the latest supported Next.js release
+  continues to constrain to `^0.34.5`.
+
 ## [1.0.11] - 2026-07-31
 
 > Hooks, trusted middleware, durable session records, and reviewed
