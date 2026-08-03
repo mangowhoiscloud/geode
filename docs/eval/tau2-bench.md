@@ -530,6 +530,41 @@ was independently revalidated before merge; GitHub API read-back confirmed the
 manifest, reports, and all three public native receipt paths at the exact merge
 commit.
 
+## 2026-08-03 v1.0.12 GPT-5.4 post-release smoke
+
+After the public `v1.0.12` distribution was independently verified, the fixed
+mock and Telecom-small diagnostic tasks ran against release commit
+`f99cea63dd39eb3f49fb00ac36e2e2804518c100` with GPT-5.4 subscription /
+effort `high` for both `geode_agent` and `geode_user`.
+
+| Scope | Result | Duration | Termination | Measured behavior |
+|---|---:|---:|---|---|
+| `mock/create_task_1` | **0/1** | 13.75s | `USER_STOP` | Communication 1.0; DB and required action 0.0 |
+| Telecom-small roaming task | **0/1** | 236.73s | `MAX_STEPS` | 50 steps and 14 paired tool calls; native component scoring skipped after premature termination |
+
+The Telecom trace repeats customer, line, network, usage, restriction, and VPN
+diagnostics. This is model behavior, not a missing event or transport defect:
+all 16 calls across both runs have exactly one result. No authentication,
+quota, provider-adapter, or harness exception occurred, and neither failure was
+retried.
+
+This pair is a post-release route smoke, not a second full cycle. It neither
+invalidates nor replaces the 278-task **200/278** diagnostic above. It instead
+shows why an external loop needs `PostVerify`: a normal protocol stop and a
+scope-complete trajectory can still fail an executable task verifier.
+
+Artifacts are immutable at
+[`geode-eval-artifacts@04ff1c4`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/04ff1c4a1fee0cd1a3d837ad3a5f5239f1fd9acd):
+
+- [native result copies](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/04ff1c4a1fee0cd1a3d837ad3a5f5239f1fd9acd/tau2/simulations);
+- [stable two-task trajectory release](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/04ff1c4a1fee0cd1a3d837ad3a5f5239f1fd9acd/trajectories/tau2-geode-gpt54-v1.0.12-f99cea63-geode-user-mock-telecom-small-20260803T104819Z-fd524ce7a3cb);
+- [post-release report](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/04ff1c4a1fee0cd1a3d837ad3a5f5239f1fd9acd/reports/e2e-validation/2026-08-03-gpt54-v1012-post-release-benchmark.md).
+
+The release contains 234 canonical events, 16 exact tool pairs, zero orphans,
+and two scope-complete/replay-incomplete trajectories. Manifest SHA-256
+`fd524ce7a3cb1f1088f0e7a1531130d6302fb9f43d57a734303071bf6fd72288`
+was recomputed from the remote bytes after the artifact PR merged.
+
 ## 참고
 
 - [τ-bench paper (NeurIPS '24)](https://arxiv.org/pdf/2406.12045)
