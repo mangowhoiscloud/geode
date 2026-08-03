@@ -47,6 +47,12 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.12] - 2026-08-03
+
+> GPT-5.4 subscription routing, concurrent session durability, and failed-tool
+> evidence are validated by a reviewed 278-task Tau2 full cycle whose native
+> receipts and canonical trajectory are published immutably.
+
 ### Fixed
 
 - Serialized and bounded-retried first-use `session_events` schema bootstrap so
@@ -71,6 +77,9 @@ functional change.
 
 ### Infrastructure
 
+- Made the CI test-count ratchet fail closed on collection or summary-parse
+  errors and raised its measured floor from the stale 2,900-test threshold to
+  10,451 non-live tests.
 - Updated the static documentation site to Next.js and `eslint-config-next`
   16.2.12 and refreshed patched `brace-expansion` lock entries. The deployed
   GitHub Pages export uses unoptimized images and has zero advisories when

@@ -220,10 +220,20 @@ jobs:
       - name: Ratchet — minimum test count
         if: needs.changes.outputs.code == 'true'
         run: |
-          count=$(uv run pytest --co -q 2>/dev/null | tail -1 | grep -oE '[0-9]+' | head -1)
-          echo "Test count: $count"
-          if [ "$count" -lt 2900 ]; then
-            echo "::error::Test count $count < 2900 (ratchet). Do not delete tests without justification."
+          collection_output=$(uv run pytest --collect-only)
+          summary="${collection_output##*$'\n'}"
+          echo "$summary"
+          if [[ "$summary" =~ ^([0-9]+)/[0-9]+\ tests\ collected ]]; then
+            count="${BASH_REMATCH[1]}"
+          elif [[ "$summary" =~ ^([0-9]+)\ tests\ collected ]]; then
+            count="${BASH_REMATCH[1]}"
+          else
+            echo "::error::Could not parse pytest collection summary."
+            exit 1
+          fi
+          echo "Selected non-live test count: $count"
+          if [ "$count" -lt 10451 ]; then
+            echo "::error::Test count $count < 10451 (ratchet). Do not delete tests without justification."
             exit 1
           fi
 
