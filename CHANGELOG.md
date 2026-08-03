@@ -61,12 +61,13 @@ functional change.
 ### Changed
 
 - Aligned the OpenAI model picker and `/login use` routing hints with the current Codex surface: GPT-5.6 Sol/Terra/Luna lead the list, GPT-5.4 remains available through both subscription and PAYG routes, deprecated GPT-5.3 Codex stays as a legacy management row for persisted installations, operator defaults and active role selections outside the curated surface remain manageable through deduplicated `Configured` rows, and picker reasoning-effort values now reuse the adapter's per-model contract while preserving a persisted legacy `minimal` value on a no-op confirmation.
-- Recorded a GPT-5.4 subscription-route Tau2 regression cycle against the pinned
-  upstream harness. The mock exact-action diagnostic remains 0/1 while the
-  Telecom-small roaming workflow passes 1/1; two reviewed trajectories carry
-  158 canonical events and ten exact tool pairs in the immutable external
-  artifact repository without claiming native-user headline comparability or
-  promotion authority.
+- Recorded a GPT-5.4 subscription-route Tau2 regression and three-domain base
+  full cycle against the pinned upstream harness. The full diagnostic scores
+  Airline 42/50, Retail 79/114, and Telecom 79/114 (200/278 weighted), with
+  51,985 reviewed canonical events and 3,964 exact tool pairs in the immutable
+  external artifact repository. The GEODE-user route remains separate from
+  the native-user headline and carries no promotion authority; retry-only
+  sessions and replay incompleteness are explicitly disclosed.
 
 ### Infrastructure
 

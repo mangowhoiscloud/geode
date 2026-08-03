@@ -3125,6 +3125,17 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/benchmarks/tau2.md
 
 tau2-bench는 대화형 tool-use 벤치마크입니다. 에이전트가 시뮬레이션된 사용자와 대화하며 airline, retail, telecom 도메인의 DB 액션을 수행하고, verifier가 필수 액션 충족 여부로 reward를 매깁니다. GEODE는`plugins/benchmark_harness`의 공개 어댑터로 참가하며, 점수는 그 점수를 만든 harness revision, model route, effort에 고정해서만 게시합니다. 같은 조건의 재실행과만 비교할 수 있습니다.
 
+## 2026-08-03 GPT-5.4 subscription base full cycle
+
+GEODE `22789ee2`에서 Airline, Retail, Telecom base 278개 task를 모두 실행했습니다. agent와 `geode_user`는 모두 `gpt-5.4` subscription / effort `high`이며, 결과는 **200/278 = 0.7194**입니다.
+
+-   Airline **42/50**, Retail **79/114**, Telecom **79/114**.
+-   Telecom은 service 28/29, mobile-data 30/36, MMS 21/49입니다. 14개 task가 `MAX_STEPS`에 도달했고 p95는 957.65초입니다.
+-   556개 final parent session을 SQLite 51,985 event와 exact join했고, 3,964개 tool call/result pair에 orphan은 없습니다.
+-   [`geode-eval-artifacts/trajectories/tau2-geode-gpt54-22789ee2-geode-user-airline-retail-telecom-base-full-20260803T091257Z-13162f7bcff9`](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/86dcbba3d15f1979b71a501780bf66fea4b450b5/trajectories/tau2-geode-gpt54-22789ee2-geode-user-airline-retail-telecom-base-full-20260803T091257Z-13162f7bcff9): privacy-reviewed 3-domain `geode.trajectory@1` release.
+
+이 행은 native `user_simulator` headline이 아닙니다. Tau2 `results.json`이 점수 정본이고 trajectory는 외부 루프용 진단 sidecar입니다. 7회 transport retry가 만든 14개 추가 SQLite session은 final trajectory parent 밖에 있으며, 공개 release는 이 lineage와 bounded payload 때문에 `replay_complete=false`입니다. 또한 Tau2 격리 loop는 `HookSystem` 없이 구성되어 public `hook_events`가 0입니다. hook dispatch의 정본은 별도 13-hook / 4-middleware E2E입니다.
+
 ## 2026-08-02 GPT-5.4 subscription cycle
 
 GEODE `afaab52b`에서 agent와 `geode_user`를 모두 `gpt-5.4` subscription / effort `high`로 실행했습니다. `mock/create_task_1`은 **0/1**, Telecom-small 첫 task는 **1/1**이며, 두 run 모두 route, provider, adapter, quota exception 없이 정상 `USER_STOP`으로 끝났습니다.
@@ -3158,6 +3169,50 @@ Tau2 `results.json`이 점수 정본입니다. 이 고정 2개 task는 native `u
 ## Run 기록
 
 모든 run은 측정 시각, model, provider, source, effort, route, harness revision, artifact 경로를 같은 규격으로 기록합니다.
+
+**Airline + Retail + Telecom base full-cycle GPT-5.4 diagnostic** · 2026-08-03 KST · gpt-5.4 · subscription · agent high / user high
+
+<table><tbody><tr><td>Status</td><td><code>complete</code></td></tr><tr><td>Suite/domain</td><td><code>airline + retail + telecom / base / 278 tasks</code></td></tr><tr><td>Model</td><td><code>gpt-5.4</code></td></tr><tr><td>Provider</td><td><code>openai</code></td></tr><tr><td>Source</td><td><code>subscription</code></td></tr><tr><td>Effort</td><td><code>agent high / user high</code></td></tr><tr><td>Route</td><td>geode_agent + geode_user</td></tr><tr><td>Harness</td><td><code>sierra-research/tau2-bench@1901a30, tau2==1.0.0, GEODE@22789ee2</code></td></tr><tr><td>Weighted reward / pass^1</td><td><strong>0.7194 / 0.719 (200 / 278)</strong></td></tr><tr><td>Artifact</td><td><code>geode-eval-artifacts@86dcbba3d15f1979b71a501780bf66fea4b450b5/reports/e2e-validation/2026-08-03-gpt54-tau2-full-cycle.json</code></td></tr></tbody></table>
+
+-   Airline 0.8400 (42 / 50)
+-   Retail 0.6930 (79 / 114)
+-   Telecom 0.6930 (79 / 114)
+-   51,985 canonical events / 3,964 exact tool pairs / zero orphans
+-   Telecom p95 957.65s / 14 max-step terminations / MMS 21 of 49
+
+```
+# Run once per domain with num-tasks 50 (airline) or 114 (retail/telecom).
+python scripts/eval/tau2_geode_agent.py \
+  --harness-dir artifacts/eval/harnesses/tau2-bench \
+  --domain <airline|retail|telecom> \
+  --task-split-name base \
+  --num-tasks <50|114> \
+  --num-trials 1 \
+  --max-concurrency 2 \
+  --max-steps 200 \
+  --max-errors 1 \
+  --max-retries <0|1> \
+  --timeout 3600 \
+  --model gpt-5.4 \
+  --provider openai \
+  --source subscription \
+  --effort high \
+  --time-budget-s 600 \
+  --user geode_user \
+  --user-llm gpt-5.4 \
+  --user-provider openai \
+  --user-source subscription \
+  --user-effort high \
+  --user-time-budget-s 180 \
+  --trajectory-stage benchmark \
+  --save-to <domain-specific-run-id>
+```
+
+-   This GEODE-user full cycle is not comparable to the native tau2 user\_simulator headline matrix.
+-   Tau2 results.json is score authority; the trajectory release is a privacy-reviewed diagnostic and external-loop sidecar.
+-   Seven Telecom transport retries created 14 extra SQLite sessions outside the final trajectory parents; no behavior-score failure was retried.
+-   The released trajectories are scope-complete for final task attempts and replay-incomplete for bounded bodies and retry-attempt lineage.
+-   The isolated Tau2 AgenticLoop records no public hook\_events; the separate hook behavior E2E remains hook authority.
 
 **Telecom small first-task GPT-5.4 subscription diagnostic** · 2026-08-02 KST · gpt-5.4 · subscription · agent high / user high
 
