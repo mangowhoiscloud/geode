@@ -3136,6 +3136,16 @@ GEODE `22789ee2`에서 Airline, Retail, Telecom base 278개 task를 모두 실�
 
 이 행은 native `user_simulator` headline이 아닙니다. Tau2 `results.json`이 점수 정본이고 trajectory는 외부 루프용 진단 sidecar입니다. 7회 transport retry가 만든 14개 추가 SQLite session은 final trajectory parent 밖에 있으며, 공개 release는 이 lineage와 bounded payload 때문에 `replay_complete=false`입니다. 또한 Tau2 격리 loop는 `HookSystem` 없이 구성되어 public `hook_events`가 0입니다. hook dispatch의 정본은 별도 13-hook / 4-middleware E2E입니다.
 
+## 2026-08-03 v1.0.12 post-release smoke
+
+공개 배포된 GEODE `v1.0.12` (`f99cea63`)에서 같은 GPT-5.4 subscription / effort `high` route로 mock과 Telecom-small 고정 task를 다시 실행했습니다. 결과는 각각 **0/1**이며, 실패를 retry하거나 삭제하지 않았습니다.
+
+-   Mock은 13.75초 뒤 `USER_STOP`했습니다. communication은 1.0이지만 DB와 required action은 0.0입니다.
+-   Telecom은 236.73초와 50 steps 뒤 `MAX_STEPS`에 도달했습니다. 반복 진단을 포함한 14개 tool call/result가 모두 pairing됐지만 native component scoring 전에 종료됐습니다.
+-   [`geode-eval-artifacts/trajectories/tau2-geode-gpt54-v1.0.12-f99cea63-geode-user-mock-telecom-small-20260803T104819Z-fd524ce7a3cb`](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/04ff1c4a1fee0cd1a3d837ad3a5f5239f1fd9acd/trajectories/tau2-geode-gpt54-v1.0.12-f99cea63-geode-user-mock-telecom-small-20260803T104819Z-fd524ce7a3cb): 234개 event, 16개 exact tool pair, manifest SHA-256 `fd524ce7a3cb…2288`.
+
+이 두 건은 배포 경로 회귀 smoke이며 278-task full cycle의 재실행이나 대체 결과가 아닙니다. route/인증/provider adapter 오류는 없었고, 실패는 외부 루프가 `Stop`과 trajectory 완결성을 task success로 오인하지 않게 하는 `PostVerify` 입력 증거입니다.
+
 ## 2026-08-02 GPT-5.4 subscription cycle
 
 GEODE `afaab52b`에서 agent와 `geode_user`를 모두 `gpt-5.4` subscription / effort `high`로 실행했습니다. `mock/create_task_1`은 **0/1**, Telecom-small 첫 task는 **1/1**이며, 두 run 모두 route, provider, adapter, quota exception 없이 정상 `USER_STOP`으로 끝났습니다.
@@ -3213,6 +3223,40 @@ python scripts/eval/tau2_geode_agent.py \
 -   Seven Telecom transport retries created 14 extra SQLite sessions outside the final trajectory parents; no behavior-score failure was retried.
 -   The released trajectories are scope-complete for final task attempts and replay-incomplete for bounded bodies and retry-attempt lineage.
 -   The isolated Tau2 AgenticLoop records no public hook\_events; the separate hook behavior E2E remains hook authority.
+
+**Telecom small first-task GPT-5.4 v1.0.12 post-release diagnostic** · 2026-08-03 KST · gpt-5.4 · subscription · agent high / user high
+
+<table><tbody><tr><td>Status</td><td><code>complete</code></td></tr><tr><td>Suite/domain</td><td><code>telecom / small / [mobile_data_issue]user_abroad_roaming_enabled_off[PERSONA:None]</code></td></tr><tr><td>Model</td><td><code>gpt-5.4</code></td></tr><tr><td>Provider</td><td><code>openai</code></td></tr><tr><td>Source</td><td><code>subscription</code></td></tr><tr><td>Effort</td><td><code>agent high / user high</code></td></tr><tr><td>Route</td><td>geode_agent + geode_user</td></tr><tr><td>Harness</td><td><code>sierra-research/tau2-bench@1901a30, tau2==1.0.0, GEODE v1.0.12@f99cea63</code></td></tr><tr><td>Reward / pass^1</td><td><strong>0.0 / 0.000 (0 / 1)</strong></td></tr><tr><td>Artifact</td><td><code>geode-eval-artifacts@04ff1c4a1fee0cd1a3d837ad3a5f5239f1fd9acd/tau2/simulations/geode-gpt54-high-v1.0.12-f99cea63-geode-user-telecom-small-01-20260803/results.json</code></td></tr></tbody></table>
+
+-   Termination max\_steps before native component scoring
+-   Duration 236.73s
+-   203 canonical events / 14 exact tool pairs
+-   Repeated customer, line, network, usage, restriction, and VPN diagnostics
+
+```
+python scripts/eval/tau2_geode_agent.py   --harness-dir artifacts/eval/harnesses/tau2-bench   --domain telecom   --task-split-name small   --task-ids '[mobile_data_issue]user_abroad_roaming_enabled_off[PERSONA:None]'   --num-tasks 1   --num-trials 1   --max-concurrency 1   --max-steps 50   --timeout 1800   --model gpt-5.4   --provider openai   --source subscription   --effort high   --time-budget-s 300   --user geode_user   --user-llm gpt-5.4   --user-provider openai   --user-source subscription   --user-effort high   --user-time-budget-s 180   --trajectory-stage benchmark   --save-to geode-gpt54-high-v1.0.12-f99cea63-geode-user-telecom-small-01-20260803
+```
+
+-   The run reached 50 steps before native DB/action scoring; repeated diagnostics are preserved as behavior evidence.
+-   All fourteen tool calls have exactly one result, with no route, authentication, quota, or adapter failure.
+-   This two-task release smoke does not invalidate or replace the 200/278 full-cycle diagnostic.
+
+**mock/create\_task\_1 GPT-5.4 v1.0.12 post-release diagnostic** · 2026-08-03 KST · gpt-5.4 · subscription · agent high / user high
+
+<table><tbody><tr><td>Status</td><td><code>complete</code></td></tr><tr><td>Suite/domain</td><td><code>mock / create_task_1</code></td></tr><tr><td>Model</td><td><code>gpt-5.4</code></td></tr><tr><td>Provider</td><td><code>openai</code></td></tr><tr><td>Source</td><td><code>subscription</code></td></tr><tr><td>Effort</td><td><code>agent high / user high</code></td></tr><tr><td>Route</td><td>geode_agent + geode_user</td></tr><tr><td>Harness</td><td><code>sierra-research/tau2-bench@1901a30, tau2==1.0.0, GEODE v1.0.12@f99cea63</code></td></tr><tr><td>Reward / pass^1</td><td><strong>0.0 / 0.000 (0 / 1)</strong></td></tr><tr><td>Artifact</td><td><code>geode-eval-artifacts@04ff1c4a1fee0cd1a3d837ad3a5f5239f1fd9acd/tau2/simulations/geode-gpt54-high-v1.0.12-f99cea63-geode-user-mock-smoke-20260803/results.json</code></td></tr></tbody></table>
+
+-   Communication check 1.0 / DB check 0.0
+-   create\_task action check 0.0
+-   Termination user\_stop
+-   Duration 13.75s / 31 canonical events / 2 exact tool pairs
+
+```
+python scripts/eval/tau2_geode_agent.py   --harness-dir artifacts/eval/harnesses/tau2-bench   --domain mock   --task-ids create_task_1   --num-tasks 1   --num-trials 1   --max-concurrency 1   --max-steps 8   --timeout 900   --model gpt-5.4   --provider openai   --source subscription   --effort high   --time-budget-s 180   --user geode_user   --user-llm gpt-5.4   --user-provider openai   --user-source subscription   --user-effort high   --user-time-budget-s 120   --trajectory-stage benchmark   --save-to geode-gpt54-high-v1.0.12-f99cea63-geode-user-mock-smoke-20260803
+```
+
+-   The simulated user stopped before a verifier-compatible state change; DB and action checks are zero while communication is one.
+-   The run has no authentication, quota, provider-adapter, or harness exception and is retained without retry.
+-   This release smoke is not a rerun or replacement of the 278-task full cycle and is not a native user\_simulator leaderboard row.
 
 **Telecom small first-task GPT-5.4 subscription diagnostic** · 2026-08-02 KST · gpt-5.4 · subscription · agent high / user high
 
@@ -3629,6 +3673,15 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/benchmarks/mcpmark.md
 
 MCPMark는 실제 MCP 서버(filesystem, Postgres, GitHub, Notion, Playwright 등)를 대상으로 한 tool-use 벤치마크입니다. 태스크마다 독립 검증 스크립트가 결과 상태를 확인합니다. GEODE는 `plugins/benchmark_harness`의 `BaseMCPAgent` 어댑터로 참가하고 upstream `pipeline.py`는 패치하지 않습니다. 점수는 harness commit, 서비스 집합, model route, timeout에 고정해서만 게시합니다.
 
+## 2026-08-03 v1.0.12 post-release regression
+
+공개 배포된 GEODE `v1.0.12` (`f99cea63`)과 `gpt-5.4` subscription / effort `high`로 `filesystem/easy` 10건을 실행했습니다. 공식 verifier는 **9/10 (90.0%)**, 총 802.2초와 53 turns입니다. 실패한 `file_context/uppercase`는 다섯 파일을 모두 만들었지만 `file_01.txt`를 완전히 대문자로 바꾸지 못했습니다.
+
+인증·quota·provider adapter·MCP transport 오류는 없었습니다. 10개 trajectory는 182개 canonical event와 56개 exact tool pair를 보존하며 `scope_complete=true`, `replay_complete=false`입니다. v1.0.11의 GPT-5.6 10/10과 비교할 때 모델까지 바뀌었으므로 release 회귀로 단정하지 않습니다.
+
+-   [`geode-eval-artifacts/mcpmark/results-geode-agentworld/geode-gpt54-high-v1.0.12-f99cea63-20260803-mcpmark-filesystem-easy`](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/04ff1c4a1fee0cd1a3d837ad3a5f5239f1fd9acd/mcpmark/results-geode-agentworld/geode-gpt54-high-v1.0.12-f99cea63-20260803-mcpmark-filesystem-easy): verifier receipt, redacted execution logs, raw/public digest ledger.
+-   [`geode-eval-artifacts/trajectories/mcpmark-geode-gpt54-v1.0.12-f99cea63-filesystem-easy-20260803T104819Z-9636b39c16fb`](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/04ff1c4a1fee0cd1a3d837ad3a5f5239f1fd9acd/trajectories/mcpmark-geode-gpt54-v1.0.12-f99cea63-filesystem-easy-20260803T104819Z-9636b39c16fb): manifest SHA-256 `9636b39c16fb…d267`로 원격 read-back된 stable release.
+
 ## 2026-07-31 v1.0.11 release regression
 
 배포된 GEODE `v1.0.11` (`686ff372`)과 `gpt-5.6-sol` subscription / effort `high`로 `filesystem/easy` 10건을 재측정했습니다. 공식 verifier는 **10/10 (100.0%)**, 총 596.6초와 56 turns입니다. 이전 `edb74602b` run의 유일한 실패였던 `file_context/uppercase`도 통과했습니다.
@@ -3697,6 +3750,26 @@ GEODE_MCPMARK_GITHUB_REPO_VISIBILITY=public \
 -   The OpenAI model route was the GEODE Codex subscription route, not MCPMark's native LiteLLM OpenAI API route.
 -   GitHub fixture repositories were made public during execution so the Docker GitHub MCP server could use normal public-repo semantics; all transient repos were deleted by cleanup.
 -   The filesystem score counts papers/author\_folders as a failed no-result transport run after two attempts without meta output.
+
+**filesystem/easy GPT-5.4 v1.0.12 post-release regression** · 2026-08-03 KST · gpt-5.4 · subscription · high
+
+<table><tbody><tr><td>Status</td><td><code>complete</code></td></tr><tr><td>Suite/domain</td><td><code>filesystem/easy</code></td></tr><tr><td>Model</td><td><code>gpt-5.4</code></td></tr><tr><td>Provider</td><td><code>openai</code></td></tr><tr><td>Source</td><td><code>subscription</code></td></tr><tr><td>Effort</td><td><code>high</code></td></tr><tr><td>Route</td><td>GEODE AgenticLoop MCPMark adapter</td></tr><tr><td>Harness</td><td><code>eval-sys/mcpmark@cd45b7f, GEODE v1.0.12@f99cea63</code></td></tr><tr><td>Accuracy</td><td><strong>90.0% (9 / 10)</strong></td></tr><tr><td>Artifact</td><td><code>geode-eval-artifacts@04ff1c4a1fee0cd1a3d837ad3a5f5239f1fd9acd/mcpmark/results-geode-agentworld/geode-gpt54-high-v1.0.12-f99cea63-20260803-mcpmark-filesystem-easy</code></td></tr></tbody></table>
+
+-   Total task execution time 802.182s / average 80.218s
+-   53 GEODE turns total / 5.3 average
+-   302,984 input / 30,238 output tokens
+-   182 canonical events / 56 exactly paired tool calls and results
+-   Failure: file\_context/uppercase left file\_01.txt incompletely uppercased
+
+```
+cd artifacts/eval/harnesses/mcpmark
+PYTHONPATH=<geode-v1.0.12-release-tree> .venv/bin/python -m plugins.benchmark_harness.run_mcpmark   --mcp filesystem   --task-suite easy   --models geode-gpt-5.4   --agent geode   --reasoning-effort high   --k 1   --timeout 1200   --exp-name geode-gpt54-high-v1.0.12-f99cea63-20260803-mcpmark-filesystem-easy   --output-dir ./results-geode-v1012
+```
+
+-   The official verifier found all five output files, but file\_01.txt was not fully uppercased; the failure is retained without retry.
+-   No authentication, quota, provider-adapter, MCP transport, or harness exception occurred.
+-   The v1.0.11 GPT-5.6 10/10 comparison is model-confounded and cannot be attributed to the runtime release alone.
+-   All ten trajectories are scope-complete and intentionally replay-incomplete; manifest and native receipts are pinned to artifact commit 04ff1c4.
 
 **filesystem/easy GPT-5.6 v1.0.11 release regression** · 2026-07-31 KST · gpt-5.6-sol · subscription · high
 

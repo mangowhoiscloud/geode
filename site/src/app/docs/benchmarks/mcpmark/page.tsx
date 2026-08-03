@@ -85,6 +85,41 @@ export default function Page() {
               고정해서만 게시합니다.
             </p>
 
+            <h2>2026-08-03 v1.0.12 post-release regression</h2>
+            <p>
+              공개 배포된 GEODE <code>v1.0.12</code> (<code>f99cea63</code>)과{" "}
+              <code>gpt-5.4</code> subscription / effort <code>high</code>로{" "}
+              <code>filesystem/easy</code> 10건을 실행했습니다. 공식 verifier는{" "}
+              <strong>9/10 (90.0%)</strong>, 총 802.2초와 53 turns입니다.
+              실패한 <code>file_context/uppercase</code>는 다섯 파일을 모두
+              만들었지만 <code>file_01.txt</code>를 완전히 대문자로 바꾸지
+              못했습니다.
+            </p>
+            <p>
+              인증·quota·provider adapter·MCP transport 오류는 없었습니다. 10개
+              trajectory는 182개 canonical event와 56개 exact tool pair를
+              보존하며 <code>scope_complete=true</code>,{" "}
+              <code>replay_complete=false</code>입니다. v1.0.11의 GPT-5.6 10/10과
+              비교할 때 모델까지 바뀌었으므로 release 회귀로 단정하지 않습니다.
+            </p>
+            <ul>
+              <li>
+                <RunLogLink
+                  path="mcpmark/results-geode-agentworld/geode-gpt54-high-v1.0.12-f99cea63-20260803-mcpmark-filesystem-easy"
+                  revision="04ff1c4a1fee0cd1a3d837ad3a5f5239f1fd9acd"
+                />:
+                verifier receipt, redacted execution logs, raw/public digest ledger.
+              </li>
+              <li>
+                <RunLogLink
+                  path="trajectories/mcpmark-geode-gpt54-v1.0.12-f99cea63-filesystem-easy-20260803T104819Z-9636b39c16fb"
+                  revision="04ff1c4a1fee0cd1a3d837ad3a5f5239f1fd9acd"
+                />:
+                manifest SHA-256 <code>9636b39c16fb…d267</code>로 원격
+                read-back된 stable release.
+              </li>
+            </ul>
+
             <h2>2026-07-31 v1.0.11 release regression</h2>
             <p>
               배포된 GEODE <code>v1.0.11</code> (<code>686ff372</code>)과{" "}
@@ -175,6 +210,44 @@ export default function Page() {
               pinned to the harness commit, service set, model route, and timeout
               settings.
             </p>
+
+            <h2>2026-08-03 v1.0.12 Post-Release Regression</h2>
+            <p>
+              We ran the ten <code>filesystem/easy</code> tasks against the
+              public GEODE <code>v1.0.12</code> release (<code>f99cea63</code>)
+              with <code>gpt-5.4</code> subscription at effort <code>high</code>.
+              The official verifier scored <strong>9/10 (90.0%)</strong> over
+              802.2 seconds and 53 turns. The failed{" "}
+              <code>file_context/uppercase</code> task created all five files but
+              did not fully uppercase <code>file_01.txt</code>.
+            </p>
+            <p>
+              There was no authentication, quota, provider-adapter, or MCP
+              transport failure. The ten trajectories retain 182 canonical
+              events and 56 exact tool pairs with{" "}
+              <code>scope_complete=true</code> and{" "}
+              <code>replay_complete=false</code>. The v1.0.11 GPT-5.6 score was
+              10/10, but the model changed too, so this is not attributed to the
+              release alone.
+            </p>
+            <ul>
+              <li>
+                <RunLogLink
+                  path="mcpmark/results-geode-agentworld/geode-gpt54-high-v1.0.12-f99cea63-20260803-mcpmark-filesystem-easy"
+                  revision="04ff1c4a1fee0cd1a3d837ad3a5f5239f1fd9acd"
+                />:
+                verifier receipts, redacted execution logs, and raw/public
+                digest ledger.
+              </li>
+              <li>
+                <RunLogLink
+                  path="trajectories/mcpmark-geode-gpt54-v1.0.12-f99cea63-filesystem-easy-20260803T104819Z-9636b39c16fb"
+                  revision="04ff1c4a1fee0cd1a3d837ad3a5f5239f1fd9acd"
+                />:
+                stable release remotely read back at manifest SHA-256{" "}
+                <code>9636b39c16fb…d267</code>.
+              </li>
+            </ul>
 
             <h2>2026-07-31 v1.0.11 Release Regression</h2>
             <p>

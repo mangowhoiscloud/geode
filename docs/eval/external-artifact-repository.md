@@ -16,6 +16,36 @@ not JFrog Artifactory or an opaque object-store upload. The publication unit is
 an allowlisted directory, and GitHub read-back from the exact merge commit is
 part of the evidence.
 
+The 2026-08-03 GEODE v1.0.12 GPT-5.4 post-release publication is pinned to
+artifact commit
+[`04ff1c4`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/04ff1c4a1fee0cd1a3d837ad3a5f5239f1fd9acd)
+from
+[`geode-eval-artifacts#12`](https://github.com/mangowhoiscloud/geode-eval-artifacts/pull/12).
+MCPMark filesystem/easy scored **9/10**; the Tau2 mock and fixed
+Telecom-small tasks scored **0/1** and **0/1**, ending with `USER_STOP` and
+`MAX_STEPS`. All failures are retained as behavior evidence. They do not
+replace the earlier Tau2 **200/278** full cycle, and the MCPMark comparison to
+v1.0.11 is model-confounded by GPT-5.6 → GPT-5.4.
+
+The [MCPMark
+manifest](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/04ff1c4a1fee0cd1a3d837ad3a5f5239f1fd9acd/trajectories/mcpmark-geode-gpt54-v1.0.12-f99cea63-filesystem-easy-20260803T104819Z-9636b39c16fb/manifest.json)
+has SHA-256
+`9636b39c16fb494b5c7e97b8052451e521055ef08e17fddeb5a129b9e367d267`;
+the [Tau2
+manifest](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/04ff1c4a1fee0cd1a3d837ad3a5f5239f1fd9acd/trajectories/tau2-geode-gpt54-v1.0.12-f99cea63-geode-user-mock-telecom-small-20260803T104819Z-fd524ce7a3cb/manifest.json)
+has SHA-256
+`fd524ce7a3cb1f1088f0e7a1531130d6302fb9f43d57a734303071bf6fd72288`.
+Together they preserve 12 scope-complete, replay-incomplete trajectories, 416
+canonical events, and 72 exact tool pairs. GitHub API read-back from the exact
+merge commit revalidated both manifest bytes, the MCPMark 9/10 summary, and
+the Tau2 `MAX_STEPS` receipt.
+
+Native/public publication ledgers separately bind all 35 restricted-source
+and public-copy byte counts and hashes. The public copies mask local home
+paths plus Tau2 synthetic phone/email values. An independent scan parsed 42
+JSON documents and found zero non-redacted home paths, email/phone values, or
+credential patterns in the staged release.
+
 The 2026-08-03 GPT-5.4 Tau2 base full-cycle publication is pinned to artifact
 commit
 [`86dcbba`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/86dcbba3d15f1979b71a501780bf66fea4b450b5)

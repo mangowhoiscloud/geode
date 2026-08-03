@@ -31,6 +31,14 @@ with 51,985 canonical events and 3,964 exact tool pairs. This is a
 `geode_agent + geode_user` diagnostic, not the native Tau2 user-simulator
 headline; `promotion_authority=none`.
 
+The latest released-package regression is pinned to artifact commit
+[`04ff1c4`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/04ff1c4a1fee0cd1a3d837ad3a5f5239f1fd9acd):
+GEODE `v1.0.12@f99cea63` with GPT-5.4 subscription / effort `high` scored
+MCPMark filesystem/easy **9/10**, Tau2 mock **0/1**, and Tau2 Telecom-small
+**0/1**. The twelve scope-complete/replay-incomplete trajectories preserve 416
+events and 72 exact tool pairs. These release smokes retain their failures and
+do not replace the 278-task Tau2 full-cycle authority.
+
 ## 채택 4종
 
 | 벤치 | Trust | 측정 | GEODE에서의 역할 | 문서 |
@@ -61,8 +69,8 @@ Telecom small run 이후로 둔다.
 
 | 순위 | 벤치 | 첫 목표 | 완료 기준 |
 |---:|---|---|---|
-| 1 | MCPMark Verified | 완료: available standard 64/74; v1.0.11 filesystem/easy 재측정 10/10 | GEODE adapter로 filesystem/postgres/github verifier-backed result 생성, MCPMark Verified와 `filesystem/easy`를 분리 기록 |
-| 2 | τ²-bench | 완료: GPT-5.4 `geode_agent + geode_user` base full cycle 200/278; v1.0.11 smoke도 별도 보존 | 세 domain result와 51,985-event trajectory release를 보존하고, native-user headline과 분리해 public page에 명시 |
+| 1 | MCPMark Verified | 완료: available standard 64/74; v1.0.12 GPT-5.4 filesystem/easy release smoke 9/10 | GEODE adapter로 filesystem/postgres/github verifier-backed result 생성, MCPMark Verified와 `filesystem/easy`를 분리 기록 |
+| 2 | τ²-bench | 완료: GPT-5.4 `geode_agent + geode_user` base full cycle 200/278; v1.0.12 failure smokes도 별도 보존 | 세 domain result와 51,985-event trajectory release를 보존하고, native-user headline과 분리해 public page에 명시 |
 | 3 | BFCL V4 | Agentic subset first | native/prompt function-calling route와 aggregation을 고정한 뒤 result/score artifact 보존 |
 | 4 | HAL Reliability | tau-bench airline single-rerun smoke | τ² adapter 재사용 여부와 rerun consistency schema 확인 |
 | 5 | Terminal-Bench 2.0 | 1-task Docker/tmux smoke | post-run test artifact와 shell transcript 보존 |
@@ -143,6 +151,7 @@ Verified 다음에 τ²-bench를 둔다.
 
 | 일자 | 변경 |
 |---|---|
+| 2026-08-03 | 배포된 GEODE `v1.0.12@f99cea63` / GPT-5.4 subscription `high` post-release 검증: MCPMark filesystem/easy 9/10, Tau2 mock 0/1, Telecom-small 0/1. 실패를 재시도 없이 보존하고 416 events / 72 exact tool pairs, 두 stable manifests, 비식별 native receipts를 artifact commit `04ff1c4`에 게시한 뒤 원격 read-back 검증 |
 | 2026-08-03 | GEODE `22789ee2` / GPT-5.4 subscription `high`로 Tau2 base 278-task full cycle 완료: Airline 42/50, Retail 79/114, Telecom 79/114, aggregate 200/278. SQLite와 exact-join한 51,985 events / 3,964 tool pairs, 비식별 native receipts, retry-lineage 제한을 artifact commit `86dcbba`에 게시하고 원격 read-back 검증 |
 | 2026-07-31 | 배포된 GEODE `v1.0.11@686ff372` 재측정: MCPMark filesystem/easy 10/10, tau2 mock 0/1, Telecom-small 1-task 1/1. SQLite와 exact-join한 368 events / 87 tool pairs, stable manifests와 비식별 native receipts를 artifact commit `16a54f0`에 게시하고 원격 read-back 검증 |
 | 2026-07-31 | GEODE `edb74602b` / GPT-5.6 subscription `high` 측정: MCPMark filesystem/easy 9/10, tau2 mock 0/1, Telecom-small 1-task 0/1. Raw receipts와 12개 정규화 trajectory를 artifact commit `9c00ecf`에 게시 |
