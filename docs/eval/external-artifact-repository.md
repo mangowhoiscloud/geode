@@ -16,6 +16,29 @@ not JFrog Artifactory or an opaque object-store upload. The publication unit is
 an allowlisted directory, and GitHub read-back from the exact merge commit is
 part of the evidence.
 
+The 2026-08-03 GPT-5.4 Tau2 base full-cycle publication is pinned to artifact
+commit
+[`86dcbba`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/86dcbba3d15f1979b71a501780bf66fea4b450b5)
+from
+[`geode-eval-artifacts#11`](https://github.com/mangowhoiscloud/geode-eval-artifacts/pull/11).
+Its three `geode.trajectory@1` files exact-join 556 final parent sessions to
+51,985 canonical events and 3,964 tool call/result pairs with zero orphans.
+The immutable
+[`manifest.json`](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/86dcbba3d15f1979b71a501780bf66fea4b450b5/trajectories/tau2-geode-gpt54-22789ee2-geode-user-airline-retail-telecom-base-full-20260803T091257Z-13162f7bcff9/manifest.json)
+has SHA-256
+`13162f7bcff9ade1194f41af06549f0b0f239847f59630d5223386e2ca6362b3`.
+The public native receipts redact synthetic phone/email values and local
+absolute paths; restricted raw and public SHA values remain distinct in the
+run record.
+
+Seven provider transport retries created 14 additional SQLite sessions outside
+the final trajectory parent set. The release is scope-complete for the 278
+final task attempts but explicitly replay-incomplete for retry lineage and
+bounded event bodies. The benchmark isolation contains no public
+`hook_events`; the separate hook E2E remains authoritative for extension
+dispatch. GitHub API read-back confirmed the manifest, reports, and all three
+native result paths at the exact merge commit.
+
 The 2026-08-02 GPT-5.4 Tau2 regression publication is pinned to artifact
 commit
 [`f588ce9`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/f588ce9fd23b9123732b45c4dbe202136691d3fe)

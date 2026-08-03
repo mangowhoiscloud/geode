@@ -32,6 +32,46 @@ export default function Page() {
               고정해서만 게시합니다. 같은 조건의 재실행과만 비교할 수 있습니다.
             </p>
 
+            <h2>2026-08-03 GPT-5.4 subscription base full cycle</h2>
+            <p>
+              GEODE <code>22789ee2</code>에서 Airline, Retail, Telecom base
+              278개 task를 모두 실행했습니다. agent와 <code>geode_user</code>는
+              모두 <code>gpt-5.4</code> subscription / effort{" "}
+              <code>high</code>이며, 결과는 <strong>200/278 = 0.7194</strong>
+              입니다.
+            </p>
+            <ul>
+              <li>
+                Airline <strong>42/50</strong>, Retail <strong>79/114</strong>,
+                Telecom <strong>79/114</strong>.
+              </li>
+              <li>
+                Telecom은 service 28/29, mobile-data 30/36, MMS 21/49입니다.
+                14개 task가 <code>MAX_STEPS</code>에 도달했고 p95는 957.65초입니다.
+              </li>
+              <li>
+                556개 final parent session을 SQLite 51,985 event와 exact join했고,
+                3,964개 tool call/result pair에 orphan은 없습니다.
+              </li>
+              <li>
+                <RunLogLink
+                  path="trajectories/tau2-geode-gpt54-22789ee2-geode-user-airline-retail-telecom-base-full-20260803T091257Z-13162f7bcff9"
+                  revision="86dcbba3d15f1979b71a501780bf66fea4b450b5"
+                />:
+                privacy-reviewed 3-domain <code>geode.trajectory@1</code> release.
+              </li>
+            </ul>
+            <p>
+              이 행은 native <code>user_simulator</code> headline이 아닙니다. Tau2{" "}
+              <code>results.json</code>이 점수 정본이고 trajectory는 외부 루프용
+              진단 sidecar입니다. 7회 transport retry가 만든 14개 추가 SQLite
+              session은 final trajectory parent 밖에 있으며, 공개 release는 이
+              lineage와 bounded payload 때문에 <code>replay_complete=false</code>
+              입니다. 또한 Tau2 격리 loop는 <code>HookSystem</code> 없이 구성되어
+              public <code>hook_events</code>가 0입니다. hook dispatch의 정본은
+              별도 13-hook / 4-middleware E2E입니다.
+            </p>
+
             <h2>2026-08-02 GPT-5.4 subscription cycle</h2>
             <p>
               GEODE <code>afaab52b</code>에서 agent와 <code>geode_user</code>를
@@ -158,6 +198,50 @@ export default function Page() {
               published number is pinned to the harness revision, model route, and
               effort that produced it. Compare only against reruns with the same
               settings.
+            </p>
+
+            <h2>2026-08-03 GPT-5.4 Subscription Base Full Cycle</h2>
+            <p>
+              At GEODE <code>22789ee2</code>, the complete Airline, Retail, and
+              Telecom base scope ran through <code>gpt-5.4</code> subscription
+              at effort <code>high</code> for both the agent and{" "}
+              <code>geode_user</code>. The aggregate is{" "}
+              <strong>200/278 = 0.7194</strong>.
+            </p>
+            <ul>
+              <li>
+                Airline <strong>42/50</strong>, Retail <strong>79/114</strong>,
+                and Telecom <strong>79/114</strong>.
+              </li>
+              <li>
+                Telecom splits into service 28/29, mobile data 30/36, and MMS
+                21/49. Fourteen tasks reached <code>MAX_STEPS</code>, with a
+                957.65-second p95.
+              </li>
+              <li>
+                The SQLite exact join covers 556 final parent sessions and
+                51,985 events; all 3,964 tool call/result pairs are complete,
+                with zero orphans.
+              </li>
+              <li>
+                <RunLogLink
+                  path="trajectories/tau2-geode-gpt54-22789ee2-geode-user-airline-retail-telecom-base-full-20260803T091257Z-13162f7bcff9"
+                  revision="86dcbba3d15f1979b71a501780bf66fea4b450b5"
+                />:
+                the privacy-reviewed three-domain{" "}
+                <code>geode.trajectory@1</code> release.
+              </li>
+            </ul>
+            <p>
+              This row is not the native <code>user_simulator</code> headline.
+              Tau2 <code>results.json</code> remains score authority; the
+              trajectory is an external-loop diagnostic sidecar. Seven
+              transport retries created 14 additional SQLite sessions outside
+              the final trajectory parents, so the public release explicitly
+              remains <code>replay_complete=false</code>. The isolated Tau2
+              loop also runs without a <code>HookSystem</code> and records zero
+              public <code>hook_events</code>; the separate 13-hook /
+              four-middleware E2E remains hook-dispatch authority.
             </p>
 
             <h2>2026-08-02 GPT-5.4 Subscription Cycle</h2>

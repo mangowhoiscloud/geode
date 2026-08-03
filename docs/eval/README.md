@@ -2,7 +2,7 @@
 
 > Action/tool-execution 4종 벤치마크. GEODE의 quality ratchet(P4)에 통합 예정.
 > 각 문서는 **사례 + 필요 인프라 + 4-Phase 진행 시나리오**를 담음.
-> 마지막 갱신: 2026-07-31
+> 마지막 갱신: 2026-08-03
 
 ## Raw artifact repository
 
@@ -21,15 +21,15 @@ SQLite/JSONL extension projections. It is a release-validation probe, not a
 scored benchmark.
 
 The latest scored behavior record is pinned to artifact commit
-[`16a54f0`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/16a54f08450db771c02e30c73bdc3867f6282f83):
-MCPMark filesystem/easy **10/10**, tau2 mock **0/1**, and one Telecom-small
-task **1/1** on released GEODE `v1.0.11` (`686ff372`) with
-`gpt-5.6-sol` subscription / effort
-`high`. The
-[run report](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/16a54f08450db771c02e30c73bdc3867f6282f83/reports/e2e-validation/2026-07-31-gpt56-v1011-benchmark.md)
-links privacy-reviewed native receipt copies and twelve stable trajectories.
-The retained mock failure is behavioral evidence, not a provider or adapter
-failure.
+[`86dcbba`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/86dcbba3d15f1979b71a501780bf66fea4b450b5):
+the GPT-5.4 subscription Tau2 base full cycle scores Airline **42/50**,
+Retail **79/114**, and Telecom **79/114**, for **200/278 = 0.7194** at GEODE
+`22789ee2`. Its
+[run report](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/86dcbba3d15f1979b71a501780bf66fea4b450b5/reports/e2e-validation/2026-08-03-gpt54-tau2-full-cycle.md)
+links privacy-reviewed native copies and one three-domain trajectory release
+with 51,985 canonical events and 3,964 exact tool pairs. This is a
+`geode_agent + geode_user` diagnostic, not the native Tau2 user-simulator
+headline; `promotion_authority=none`.
 
 ## 채택 4종
 
@@ -62,7 +62,7 @@ Telecom small run 이후로 둔다.
 | 순위 | 벤치 | 첫 목표 | 완료 기준 |
 |---:|---|---|---|
 | 1 | MCPMark Verified | 완료: available standard 64/74; v1.0.11 filesystem/easy 재측정 10/10 | GEODE adapter로 filesystem/postgres/github verifier-backed result 생성, MCPMark Verified와 `filesystem/easy`를 분리 기록 |
-| 2 | τ²-bench | 완료: v1.0.11 `mock` 0/1 + Telecom small 1-task 1/1, `geode_agent` + `geode_user` subscription | tau2 result directory와 domain split을 보존하고, user route / trial 수를 public page에 명시 |
+| 2 | τ²-bench | 완료: GPT-5.4 `geode_agent + geode_user` base full cycle 200/278; v1.0.11 smoke도 별도 보존 | 세 domain result와 51,985-event trajectory release를 보존하고, native-user headline과 분리해 public page에 명시 |
 | 3 | BFCL V4 | Agentic subset first | native/prompt function-calling route와 aggregation을 고정한 뒤 result/score artifact 보존 |
 | 4 | HAL Reliability | tau-bench airline single-rerun smoke | τ² adapter 재사용 여부와 rerun consistency schema 확인 |
 | 5 | Terminal-Bench 2.0 | 1-task Docker/tmux smoke | post-run test artifact와 shell transcript 보존 |
@@ -143,6 +143,7 @@ Verified 다음에 τ²-bench를 둔다.
 
 | 일자 | 변경 |
 |---|---|
+| 2026-08-03 | GEODE `22789ee2` / GPT-5.4 subscription `high`로 Tau2 base 278-task full cycle 완료: Airline 42/50, Retail 79/114, Telecom 79/114, aggregate 200/278. SQLite와 exact-join한 51,985 events / 3,964 tool pairs, 비식별 native receipts, retry-lineage 제한을 artifact commit `86dcbba`에 게시하고 원격 read-back 검증 |
 | 2026-07-31 | 배포된 GEODE `v1.0.11@686ff372` 재측정: MCPMark filesystem/easy 10/10, tau2 mock 0/1, Telecom-small 1-task 1/1. SQLite와 exact-join한 368 events / 87 tool pairs, stable manifests와 비식별 native receipts를 artifact commit `16a54f0`에 게시하고 원격 read-back 검증 |
 | 2026-07-31 | GEODE `edb74602b` / GPT-5.6 subscription `high` 측정: MCPMark filesystem/easy 9/10, tau2 mock 0/1, Telecom-small 1-task 0/1. Raw receipts와 12개 정규화 trajectory를 artifact commit `9c00ecf`에 게시 |
 | 2026-07-10 | MCPMark blocked 사례 해소: notion 세션 만료 원인 확정·재발급 후 easy smoke 1/1, github `GITHUB_EVAL_ORG` 영속화(State Duplication Error 6건 원인 제거), postgres 컨테이너 복구, `--agent geode` 커밋 런처 추가, playwright 실행 준비 확인. 잔여 blocked=`playwright_webarena`(WebArena 이미지 ~100GB, 로컬 디스크 초과). Agent-World 비교 런북 추가 |

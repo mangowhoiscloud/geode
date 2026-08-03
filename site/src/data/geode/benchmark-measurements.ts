@@ -634,6 +634,65 @@ const tau2TelecomSmallGpt54: BenchmarkMeasurement = {
   ],
 };
 
+const tau2BaseFullGpt54: BenchmarkMeasurement = {
+  id: "tau2-base-full-20260803-gpt54-high-geode-user",
+  group: "tau2",
+  title: "Airline + Retail + Telecom base full-cycle GPT-5.4 diagnostic",
+  measuredAt: "2026-08-03 KST",
+  suite: "airline + retail + telecom / base / 278 tasks",
+  status: "complete",
+  model: "gpt-5.4",
+  provider: "openai",
+  source: "subscription",
+  effort: "agent high / user high",
+  route: "geode_agent + geode_user",
+  harness:
+    "sierra-research/tau2-bench@1901a30, tau2==1.0.0, GEODE@22789ee2",
+  artifact:
+    "geode-eval-artifacts@86dcbba3d15f1979b71a501780bf66fea4b450b5/reports/e2e-validation/2026-08-03-gpt54-tau2-full-cycle.json",
+  scoreLabel: "Weighted reward / pass^1",
+  scoreValue: "0.7194 / 0.719 (200 / 278)",
+  secondary: [
+    "Airline 0.8400 (42 / 50)",
+    "Retail 0.6930 (79 / 114)",
+    "Telecom 0.6930 (79 / 114)",
+    "51,985 canonical events / 3,964 exact tool pairs / zero orphans",
+    "Telecom p95 957.65s / 14 max-step terminations / MMS 21 of 49",
+  ],
+  command: `# Run once per domain with num-tasks 50 (airline) or 114 (retail/telecom).
+python scripts/eval/tau2_geode_agent.py \\
+  --harness-dir artifacts/eval/harnesses/tau2-bench \\
+  --domain <airline|retail|telecom> \\
+  --task-split-name base \\
+  --num-tasks <50|114> \\
+  --num-trials 1 \\
+  --max-concurrency 2 \\
+  --max-steps 200 \\
+  --max-errors 1 \\
+  --max-retries <0|1> \\
+  --timeout 3600 \\
+  --model gpt-5.4 \\
+  --provider openai \\
+  --source subscription \\
+  --effort high \\
+  --time-budget-s 600 \\
+  --user geode_user \\
+  --user-llm gpt-5.4 \\
+  --user-provider openai \\
+  --user-source subscription \\
+  --user-effort high \\
+  --user-time-budget-s 180 \\
+  --trajectory-stage benchmark \\
+  --save-to <domain-specific-run-id>`,
+  notes: [
+    "This GEODE-user full cycle is not comparable to the native tau2 user_simulator headline matrix.",
+    "Tau2 results.json is score authority; the trajectory release is a privacy-reviewed diagnostic and external-loop sidecar.",
+    "Seven Telecom transport retries created 14 extra SQLite sessions outside the final trajectory parents; no behavior-score failure was retried.",
+    "The released trajectories are scope-complete for final task attempts and replay-incomplete for bounded bodies and retry-attempt lineage.",
+    "The isolated Tau2 AgenticLoop records no public hook_events; the separate hook behavior E2E remains hook authority.",
+  ],
+};
+
 const tau2MockGpt56: BenchmarkMeasurement = {
   id: "tau2-mock-20260731-gpt56-high-geode-user",
   group: "tau2",
@@ -1131,6 +1190,7 @@ export const BENCHMARK_GROUPS: BenchmarkGroup[] = [
       },
     ],
     measurements: [
+      tau2BaseFullGpt54,
       tau2TelecomSmallGpt54,
       tau2MockGpt54,
       tau2NativeAggregate,
