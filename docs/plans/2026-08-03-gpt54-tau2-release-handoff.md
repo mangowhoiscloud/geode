@@ -20,8 +20,10 @@ The implementation and evidence are split across reviewable merge vehicles:
 | concurrent `session_events` bootstrap | [GEODE #2858](https://github.com/mangowhoiscloud/geode/pull/2858) |
 | failed Tau2 tool-call projection | [GEODE #2859](https://github.com/mangowhoiscloud/geode/pull/2859) |
 | full-cycle official documentation | [GEODE #2860](https://github.com/mangowhoiscloud/geode/pull/2860) |
+| v1.0.12 promotion to `main` | [GEODE #2863](https://github.com/mangowhoiscloud/geode/pull/2863), merge `f99cea63dd39eb3f49fb00ac36e2e2804518c100` |
 | immutable full-cycle evidence | [`geode-eval-artifacts@86dcbba`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/86dcbba3d15f1979b71a501780bf66fea4b450b5) |
 | stable trajectory manifest | [`manifest.json`](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/86dcbba3d15f1979b71a501780bf66fea4b450b5/trajectories/tau2-geode-gpt54-22789ee2-geode-user-airline-retail-telecom-base-full-20260803T091257Z-13162f7bcff9/manifest.json) |
+| v1.0.12 post-release behavior evidence | [`geode-eval-artifacts#12`](https://github.com/mangowhoiscloud/geode-eval-artifacts/pull/12), merge [`04ff1c4`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/04ff1c4a1fee0cd1a3d837ad3a5f5239f1fd9acd) |
 | public distribution | GitHub release and PyPI package `geode-agent==1.0.12` |
 
 The manifest SHA-256 is
@@ -29,6 +31,34 @@ The manifest SHA-256 is
 The artifact repository was read back at the exact commit after merge; the
 manifest, machine report, human report, and all three public native receipts
 matched the reviewed publication.
+
+### 1.1 Post-release closure
+
+The annotated `v1.0.12` tag, GitHub release assets, PyPI files, checksum
+ledger, clean `uvx --no-cache --from geode-agent==1.0.12 geode version`, and
+public distribution verifier all resolve to `f99cea63`. The release workflow
+completed successfully; the package is not merely PR-complete.
+
+The exact released tree then ran GPT-5.4 subscription / effort `high` through
+MCPMark filesystem/easy and two Tau2 diagnostics:
+
+| Scope | Result | Behavior evidence |
+|---|---:|---|
+| MCPMark filesystem/easy | **9/10** | `file_context/uppercase` created all files but did not fully uppercase `file_01.txt` |
+| Tau2 mock | **0/1** | `USER_STOP`; communication 1.0, DB/action 0.0 |
+| Tau2 Telecom-small | **0/1** | `MAX_STEPS`; 14 paired calls repeated diagnostics before verifier scoring |
+
+No failure was retried or relabeled. The two stable release manifests retain
+416 events and 72 exact tool pairs across 12 scope-complete,
+replay-incomplete trajectories. Their independently anchored hashes are
+`9636b39c16fb494b5c7e97b8052451e521055ef08e17fddeb5a129b9e367d267`
+(MCPMark) and
+`fd524ce7a3cb1f1088f0e7a1531130d6302fb9f43d57a734303071bf6fd72288`
+(Tau2); both were recomputed from GitHub bytes at artifact commit `04ff1c4`.
+
+These release smokes do not replace the 278-task full cycle. MCPMark's
+v1.0.11-to-v1.0.12 comparison is model-confounded, and the two Tau2 tasks are
+diagnostic samples rather than a new aggregate.
 
 ## 2. Final runtime surfaces
 
@@ -194,6 +224,16 @@ and evidence reference instead of being copied into `sessions.db` as verdicts.
    pytest-summary parser. The repository's GitHub workflow is fixed in this
    release and the current direct gates pass; update the separately installed
    local mirror before treating `geode-ci --fast` as authoritative again.
+8. **Tau2 does not yet consume `PostVerify`.** The public hook and middleware
+   E2E proves the contract, while the benchmark intentionally constructs an
+   isolated loop without a hook registry. The retained `USER_STOP` and
+   `MAX_STEPS` failures demonstrate the integration value, but a future
+   adapter change must explicitly wire verifier output into `PostVerify`
+   before claiming an executable outer-loop revise/escalate cycle.
+9. **The release smoke is not a causal regression study.** MCPMark changes
+   both release and model, and each Tau2 row has k=1. Use a frozen model,
+   harness, task set, and repeated trial contract before promoting these
+   deltas into a release gate.
 
 ## 6. Release and recovery checklist
 

@@ -72,6 +72,39 @@ export default function Page() {
               별도 13-hook / 4-middleware E2E입니다.
             </p>
 
+            <h2>2026-08-03 v1.0.12 post-release smoke</h2>
+            <p>
+              공개 배포된 GEODE <code>v1.0.12</code> (<code>f99cea63</code>)에서
+              같은 GPT-5.4 subscription / effort <code>high</code> route로 mock과
+              Telecom-small 고정 task를 다시 실행했습니다. 결과는 각각{" "}
+              <strong>0/1</strong>이며, 실패를 retry하거나 삭제하지 않았습니다.
+            </p>
+            <ul>
+              <li>
+                Mock은 13.75초 뒤 <code>USER_STOP</code>했습니다. communication은
+                1.0이지만 DB와 required action은 0.0입니다.
+              </li>
+              <li>
+                Telecom은 236.73초와 50 steps 뒤 <code>MAX_STEPS</code>에
+                도달했습니다. 반복 진단을 포함한 14개 tool call/result가 모두
+                pairing됐지만 native component scoring 전에 종료됐습니다.
+              </li>
+              <li>
+                <RunLogLink
+                  path="trajectories/tau2-geode-gpt54-v1.0.12-f99cea63-geode-user-mock-telecom-small-20260803T104819Z-fd524ce7a3cb"
+                  revision="04ff1c4a1fee0cd1a3d837ad3a5f5239f1fd9acd"
+                />:
+                234개 event, 16개 exact tool pair, manifest SHA-256{" "}
+                <code>fd524ce7a3cb…2288</code>.
+              </li>
+            </ul>
+            <p>
+              이 두 건은 배포 경로 회귀 smoke이며 278-task full cycle의 재실행이나
+              대체 결과가 아닙니다. route/인증/provider adapter 오류는 없었고,
+              실패는 외부 루프가 <code>Stop</code>과 trajectory 완결성을 task
+              success로 오인하지 않게 하는 <code>PostVerify</code> 입력 증거입니다.
+            </p>
+
             <h2>2026-08-02 GPT-5.4 subscription cycle</h2>
             <p>
               GEODE <code>afaab52b</code>에서 agent와 <code>geode_user</code>를
@@ -242,6 +275,42 @@ export default function Page() {
               loop also runs without a <code>HookSystem</code> and records zero
               public <code>hook_events</code>; the separate 13-hook /
               four-middleware E2E remains hook-dispatch authority.
+            </p>
+
+            <h2>2026-08-03 v1.0.12 Post-Release Smoke</h2>
+            <p>
+              We reran the fixed mock and Telecom-small tasks against the
+              public GEODE <code>v1.0.12</code> release (<code>f99cea63</code>)
+              through the same GPT-5.4 subscription route at effort{" "}
+              <code>high</code>. Both scored <strong>0/1</strong>; neither failure
+              was retried or removed.
+            </p>
+            <ul>
+              <li>
+                Mock ended with <code>USER_STOP</code> after 13.75 seconds.
+                Communication scored 1.0, while the DB and required action
+                scored 0.0.
+              </li>
+              <li>
+                Telecom reached <code>MAX_STEPS</code> after 236.73 seconds and
+                50 steps. All 14 repeated diagnostic tool calls have one result,
+                but the run ended before native component scoring.
+              </li>
+              <li>
+                <RunLogLink
+                  path="trajectories/tau2-geode-gpt54-v1.0.12-f99cea63-geode-user-mock-telecom-small-20260803T104819Z-fd524ce7a3cb"
+                  revision="04ff1c4a1fee0cd1a3d837ad3a5f5239f1fd9acd"
+                />:
+                234 events, 16 exact tool pairs, manifest SHA-256{" "}
+                <code>fd524ce7a3cb…2288</code>.
+              </li>
+            </ul>
+            <p>
+              These are post-release route smokes, not a rerun or replacement
+              of the 278-task full cycle. There was no route, authentication, or
+              provider-adapter failure. The retained failures are direct
+              <code>PostVerify</code> evidence that a normal stop or complete
+              trajectory is not the same as task success.
             </p>
 
             <h2>2026-08-02 GPT-5.4 Subscription Cycle</h2>

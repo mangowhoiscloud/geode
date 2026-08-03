@@ -172,6 +172,50 @@ PYTHONPATH=<geode-v1.0.11-release-tree> \\
   ],
 };
 
+const mcpmarkFilesystemEasyGpt54V1012: BenchmarkMeasurement = {
+  id: "mcpmark-filesystem-easy-20260803-gpt54-high-v1012",
+  group: "mcpmark",
+  title: "filesystem/easy GPT-5.4 v1.0.12 post-release regression",
+  measuredAt: "2026-08-03 KST",
+  suite: "filesystem/easy",
+  status: "complete",
+  model: "gpt-5.4",
+  provider: "openai",
+  source: "subscription",
+  effort: "high",
+  route: "GEODE AgenticLoop MCPMark adapter",
+  harness: "eval-sys/mcpmark@cd45b7f, GEODE v1.0.12@f99cea63",
+  artifact:
+    "geode-eval-artifacts@04ff1c4a1fee0cd1a3d837ad3a5f5239f1fd9acd/mcpmark/results-geode-agentworld/geode-gpt54-high-v1.0.12-f99cea63-20260803-mcpmark-filesystem-easy",
+  scoreLabel: "Accuracy",
+  scoreValue: "90.0% (9 / 10)",
+  secondary: [
+    "Total task execution time 802.182s / average 80.218s",
+    "53 GEODE turns total / 5.3 average",
+    "302,984 input / 30,238 output tokens",
+    "182 canonical events / 56 exactly paired tool calls and results",
+    "Failure: file_context/uppercase left file_01.txt incompletely uppercased",
+  ],
+  command: `cd artifacts/eval/harnesses/mcpmark
+PYTHONPATH=<geode-v1.0.12-release-tree> \
+.venv/bin/python -m plugins.benchmark_harness.run_mcpmark \
+  --mcp filesystem \
+  --task-suite easy \
+  --models geode-gpt-5.4 \
+  --agent geode \
+  --reasoning-effort high \
+  --k 1 \
+  --timeout 1200 \
+  --exp-name geode-gpt54-high-v1.0.12-f99cea63-20260803-mcpmark-filesystem-easy \
+  --output-dir ./results-geode-v1012`,
+  notes: [
+    "The official verifier found all five output files, but file_01.txt was not fully uppercased; the failure is retained without retry.",
+    "No authentication, quota, provider-adapter, MCP transport, or harness exception occurred.",
+    "The v1.0.11 GPT-5.6 10/10 comparison is model-confounded and cannot be attributed to the runtime release alone.",
+    "All ten trajectories are scope-complete and intentionally replay-incomplete; manifest and native receipts are pinned to artifact commit 04ff1c4.",
+  ],
+};
+
 const mcpmarkFilesystemEasyParallel: BenchmarkMeasurement = {
   id: "mcpmark-filesystem-easy-parallel-20260703-gpt55-xhigh",
   group: "mcpmark",
@@ -693,6 +737,114 @@ python scripts/eval/tau2_geode_agent.py \\
   ],
 };
 
+const tau2MockGpt54V1012: BenchmarkMeasurement = {
+  id: "tau2-mock-20260803-gpt54-high-geode-user-v1012",
+  group: "tau2",
+  title: "mock/create_task_1 GPT-5.4 v1.0.12 post-release diagnostic",
+  measuredAt: "2026-08-03 KST",
+  suite: "mock / create_task_1",
+  status: "complete",
+  model: "gpt-5.4",
+  provider: "openai",
+  source: "subscription",
+  effort: "agent high / user high",
+  route: "geode_agent + geode_user",
+  harness:
+    "sierra-research/tau2-bench@1901a30, tau2==1.0.0, GEODE v1.0.12@f99cea63",
+  artifact:
+    "geode-eval-artifacts@04ff1c4a1fee0cd1a3d837ad3a5f5239f1fd9acd/tau2/simulations/geode-gpt54-high-v1.0.12-f99cea63-geode-user-mock-smoke-20260803/results.json",
+  scoreLabel: "Reward / pass^1",
+  scoreValue: "0.0 / 0.000 (0 / 1)",
+  secondary: [
+    "Communication check 1.0 / DB check 0.0",
+    "create_task action check 0.0",
+    "Termination user_stop",
+    "Duration 13.75s / 31 canonical events / 2 exact tool pairs",
+  ],
+  command: `python scripts/eval/tau2_geode_agent.py \
+  --harness-dir artifacts/eval/harnesses/tau2-bench \
+  --domain mock \
+  --task-ids create_task_1 \
+  --num-tasks 1 \
+  --num-trials 1 \
+  --max-concurrency 1 \
+  --max-steps 8 \
+  --timeout 900 \
+  --model gpt-5.4 \
+  --provider openai \
+  --source subscription \
+  --effort high \
+  --time-budget-s 180 \
+  --user geode_user \
+  --user-llm gpt-5.4 \
+  --user-provider openai \
+  --user-source subscription \
+  --user-effort high \
+  --user-time-budget-s 120 \
+  --trajectory-stage benchmark \
+  --save-to geode-gpt54-high-v1.0.12-f99cea63-geode-user-mock-smoke-20260803`,
+  notes: [
+    "The simulated user stopped before a verifier-compatible state change; DB and action checks are zero while communication is one.",
+    "The run has no authentication, quota, provider-adapter, or harness exception and is retained without retry.",
+    "This release smoke is not a rerun or replacement of the 278-task full cycle and is not a native user_simulator leaderboard row.",
+  ],
+};
+
+const tau2TelecomSmallGpt54V1012: BenchmarkMeasurement = {
+  id: "tau2-telecom-small-20260803-gpt54-high-geode-user-v1012",
+  group: "tau2",
+  title: "Telecom small first-task GPT-5.4 v1.0.12 post-release diagnostic",
+  measuredAt: "2026-08-03 KST",
+  suite:
+    "telecom / small / [mobile_data_issue]user_abroad_roaming_enabled_off[PERSONA:None]",
+  status: "complete",
+  model: "gpt-5.4",
+  provider: "openai",
+  source: "subscription",
+  effort: "agent high / user high",
+  route: "geode_agent + geode_user",
+  harness:
+    "sierra-research/tau2-bench@1901a30, tau2==1.0.0, GEODE v1.0.12@f99cea63",
+  artifact:
+    "geode-eval-artifacts@04ff1c4a1fee0cd1a3d837ad3a5f5239f1fd9acd/tau2/simulations/geode-gpt54-high-v1.0.12-f99cea63-geode-user-telecom-small-01-20260803/results.json",
+  scoreLabel: "Reward / pass^1",
+  scoreValue: "0.0 / 0.000 (0 / 1)",
+  secondary: [
+    "Termination max_steps before native component scoring",
+    "Duration 236.73s",
+    "203 canonical events / 14 exact tool pairs",
+    "Repeated customer, line, network, usage, restriction, and VPN diagnostics",
+  ],
+  command: `python scripts/eval/tau2_geode_agent.py \
+  --harness-dir artifacts/eval/harnesses/tau2-bench \
+  --domain telecom \
+  --task-split-name small \
+  --task-ids '[mobile_data_issue]user_abroad_roaming_enabled_off[PERSONA:None]' \
+  --num-tasks 1 \
+  --num-trials 1 \
+  --max-concurrency 1 \
+  --max-steps 50 \
+  --timeout 1800 \
+  --model gpt-5.4 \
+  --provider openai \
+  --source subscription \
+  --effort high \
+  --time-budget-s 300 \
+  --user geode_user \
+  --user-llm gpt-5.4 \
+  --user-provider openai \
+  --user-source subscription \
+  --user-effort high \
+  --user-time-budget-s 180 \
+  --trajectory-stage benchmark \
+  --save-to geode-gpt54-high-v1.0.12-f99cea63-geode-user-telecom-small-01-20260803`,
+  notes: [
+    "The run reached 50 steps before native DB/action scoring; repeated diagnostics are preserved as behavior evidence.",
+    "All fourteen tool calls have exactly one result, with no route, authentication, quota, or adapter failure.",
+    "This two-task release smoke does not invalidate or replace the 200/278 full-cycle diagnostic.",
+  ],
+};
+
 const tau2MockGpt56: BenchmarkMeasurement = {
   id: "tau2-mock-20260731-gpt56-high-geode-user",
   group: "tau2",
@@ -1137,6 +1289,7 @@ export const BENCHMARK_GROUPS: BenchmarkGroup[] = [
     ],
     measurements: [
       mcpmarkVerifiedAvailable,
+      mcpmarkFilesystemEasyGpt54V1012,
       mcpmarkFilesystemEasyGpt56V1011,
       mcpmarkFilesystemEasyGpt56,
       mcpmarkVerifiedGithub,
@@ -1191,6 +1344,8 @@ export const BENCHMARK_GROUPS: BenchmarkGroup[] = [
     ],
     measurements: [
       tau2BaseFullGpt54,
+      tau2TelecomSmallGpt54V1012,
+      tau2MockGpt54V1012,
       tau2TelecomSmallGpt54,
       tau2MockGpt54,
       tau2NativeAggregate,
