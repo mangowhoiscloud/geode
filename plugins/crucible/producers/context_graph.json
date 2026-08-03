@@ -51,7 +51,7 @@
         "external-loop",
         "tool-projection"
       ],
-      "contentSha256": "8266ae29e8adaaad7c9649074b00e6a8a480a6197b2339f64f8a71f4007cd05d"
+      "contentSha256": "245d8f2ef53660e37cffcbfee125531503dc9375477feb0944a1f18d1e2dbc57"
     },
     {
       "id": "file:core/agent/loop/agent_loop.py",

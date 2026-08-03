@@ -266,6 +266,38 @@ def test_tau2_tool_projection_is_scoped_to_each_agentic_run(
     assert [call.id for call in second_calls] == ["call_2"]
 
 
+def test_tau2_tool_projection_preserves_failed_execution_for_official_accounting(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_tau2 = ModuleType("tau2")
+    fake_data_model = ModuleType("tau2.data_model")
+    fake_message = ModuleType("tau2.data_model.message")
+    fake_message.ToolCall = SimpleNamespace
+    monkeypatch.setitem(sys.modules, "tau2", fake_tau2)
+    monkeypatch.setitem(sys.modules, "tau2.data_model", fake_data_model)
+    monkeypatch.setitem(sys.modules, "tau2.data_model.message", fake_message)
+    result = SimpleNamespace(
+        tool_calls=[
+            {
+                "tool_use_id": "call_bad_reservation",
+                "tool": "get_reservation_details",
+                "input": {"reservation_id": "UNKNOWN"},
+                "result": {
+                    "error": "Reservation UNKNOWN not found",
+                    "error_type": "ValueError",
+                },
+            }
+        ]
+    )
+
+    calls = _tau2_tool_calls(result, requestor="assistant")
+
+    assert len(calls) == 1
+    assert calls[0].id == "call_bad_reservation"
+    assert calls[0].name == "get_reservation_details"
+    assert calls[0].arguments == {"reservation_id": "UNKNOWN"}
+
+
 def test_tau2_progress_supervisor_maps_only_generic_repeated_success() -> None:
     assert (
         _tau2_terminal_token(SimpleNamespace(termination_reason="repeated_success_no_progress"))

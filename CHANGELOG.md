@@ -53,6 +53,10 @@ functional change.
   concurrent agent loops and processes cannot lose their durable timeline while
   the shared project database enters WAL mode. The component ownership row is
   now created atomically.
+- Preserved failed GEODE tool calls when projecting Tau2 turns so invalid model
+  arguments become official Tau2 `ToolMessage(error=True)` evidence governed by
+  `max_errors`, instead of being misclassified as an empty-route infrastructure
+  failure.
 
 ### Changed
 
