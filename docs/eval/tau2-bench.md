@@ -655,6 +655,12 @@ the corrected runtime yields external proposals before those guards, and
 snapshot admission now rejects the captured scope-incomplete trajectory. A
 clean rerun is required before publishing a replacement headline.
 
+The privacy-reviewed diagnostic evidence is pinned to
+[`geode-eval-artifacts@40be847`](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/40be847f7c12004b1e70673808fa95bfd8646b59/reports/e2e-validation/2026-08-04-gpt54-runtime-faithful-tau2-diagnostic.md).
+Its 12-file manifest SHA-256 is
+`40206ed181f69bd15bc4dd4b986ec99b921ba1afd9b15b14c2d9b64a637af317`.
+This is invalidation evidence, not a stable score release.
+
 ## 참고
 
 - [τ-bench paper (NeurIPS '24)](https://arxiv.org/pdf/2406.12045)

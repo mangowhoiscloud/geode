@@ -3134,6 +3134,8 @@ native `results.json`은 계속 점수 정본입니다. 그 digest와 reward, ta
 
 2026-08-04 full-cycle 시도는 278개 task를 모두 스케줄했지만, subscription quota 소진으로 Airline 2개, Retail 16개, Telecom 81개 등 99개 행이 infrastructure contamination 상태가 됐습니다. 이 행들은 0점이 아니라 미실행 작업이므로 이 시도에는 aggregate score 권한이 없습니다. quota 소진 전 Telecom call 6개에서는 external-yield 순서 결함도 발견했습니다. 현재 runtime은 post-tool convergence guard보다 먼저 proposal을 반환하고, admission은 당시의 scope-incomplete trajectory를 거부합니다. 새 headline은 깨끗한 재실행 이후에만 게시합니다.
 
+개인정보 검토를 통과한 진단 보고서와 세 도메인 companion은 [`geode-eval-artifacts@40be847`](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/40be847f7c12004b1e70673808fa95bfd8646b59/reports/e2e-validation/2026-08-04-gpt54-runtime-faithful-tau2-diagnostic.md)에 고정했습니다. 12개 파일 manifest SHA-256은 `40206ed1…317`이며, 이 묶음은 점수가 아닌 invalidation evidence입니다.
+
 ## 2026-08-03 GPT-5.4 subscription base full cycle
 
 GEODE `22789ee2`에서 Airline, Retail, Telecom base 278개 task를 모두 실행했습니다. agent와 `geode_user`는 모두 `gpt-5.4` subscription / effort `high`이며, 결과는 **200/278 = 0.7194**입니다.
