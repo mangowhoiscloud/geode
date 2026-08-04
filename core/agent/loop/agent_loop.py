@@ -2456,6 +2456,18 @@ class AgenticLoop:
 
             tool_results = await self._run_cognitive_act_observe_cycle(response, round_idx)
 
+            # External half-duplex orchestrators must receive every proposed
+            # call before convergence guards can replace it with terminal text.
+            # The authoritative result arrives on the next participant turn.
+            if self._yield_after_tool_round:
+                messages.append(self._tool_round_assistant_message(response))
+                messages.append({"role": "user", "content": tool_results})
+                return await self._afinalize_tool_round_yield(
+                    messages=messages,
+                    user_input=user_input,
+                    round_idx=round_idx,
+                )
+
             # backpressure on consecutive tool failures + convergence detection
             self._update_tool_error_tracking(tool_results)
 
@@ -2536,12 +2548,6 @@ class AgenticLoop:
             # accumulate serialized messages for the next round
             messages.append(self._tool_round_assistant_message(response))
             messages.append({"role": "user", "content": tool_results})
-            if self._yield_after_tool_round:
-                return await self._afinalize_tool_round_yield(
-                    messages=messages,
-                    user_input=user_input,
-                    round_idx=round_idx,
-                )
             round_idx += 1
 
         # Loop exited via guard — determine reason

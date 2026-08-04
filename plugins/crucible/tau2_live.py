@@ -27,15 +27,6 @@ from .artifacts import load_json_object, write_exclusive_json
 from .contract import ContractError, ExperimentContract, load_contract, validate_test_parent
 from .evidence import EvidenceEnvelope, ResourceUsage, expected_pairs
 from .promotion import SCREENING_FAILURE, PromotionReachability, promotion_reachability
-from .row_cache import (
-    cached_context,
-    cached_rows,
-    harvest_arm_rows,
-    merge_results,
-    missing_task_ids,
-    selected_expected_rows,
-    synthesized_snapshot,
-)
 from .runtime_receipt import (
     MeasurementSource,
     SharedRuntimeDeadline,
@@ -388,28 +379,6 @@ def _git(checkout: Path, *args: str) -> str:
     return result.stdout.strip()
 
 
-def _harvest_partial(
-    cache_root: Path | None,
-    contract: ExperimentContract,
-    revision_sha: str,
-    harness_root: Path,
-    run_id: str,
-) -> None:
-    """Best-effort salvage of finalized simulations from an interrupted run."""
-    if cache_root is None:
-        return
-    source_raw = harness_root / "data" / "simulations" / run_id / "results.json"
-    if not source_raw.is_file():
-        return
-    try:
-        partial = load_json_object(
-            source_raw, f"tau2 partial {run_id}", max_bytes=512 * 1024 * 1024
-        )
-        harvest_arm_rows(cache_root, contract, revision_sha=revision_sha, raw_results=partial)
-    except (ContractError, OSError):
-        return
-
-
 def _terminate_process_group(process: subprocess.Popen[bytes]) -> int:
     """Stop one tau2 process tree and wait until no paid child is orphaned."""
 
@@ -552,7 +521,6 @@ def _run_arm(
             "TMPDIR": str(temp_root),
         }
     )
-    revision_sha = contract.baseline_sha if arm == "baseline" else contract.candidate_sha
     cache_root_value = os.environ.get("CRUCIBLE_ROW_CACHE_ROOT")
     if cache_root_value and contract.stage != "train":
         # Row reuse would freeze a past noise realisation into a sealed
@@ -570,127 +538,83 @@ def _run_arm(
             encoding="utf-8",
         )
         cache_root_value = None
-    cache_root = Path(cache_root_value).resolve() if cache_root_value else None
-    salvaged: dict[tuple[str, int], Mapping[str, Any]] = {}
-    salvage_context: Mapping[str, Any] | None = None
-    if cache_root is not None:
-        salvaged = selected_expected_rows(
-            contract,
-            cached_rows(cache_root, contract, revision_sha=revision_sha),
+    elif cache_root_value:
+        # cached-row.v1 preserves native simulations but not the runtime
+        # profile or attempt manifest required by Tau2 snapshot v4. Reusing
+        # those rows would manufacture an execution contract after the fact.
+        # Keep the cache on disk for migration, but run fresh until a future
+        # cache schema digest-binds both companions per row.
+        (state_root / "row-cache-disabled.json").write_text(
+            json.dumps(
+                {
+                    "schema": "crucible.row-cache-disabled.v1",
+                    "reason": "cached-row.v1 lacks snapshot-v4 runtime companions",
+                    "stage": contract.stage,
+                }
+            ),
+            encoding="utf-8",
         )
-        salvage_context = cached_context(cache_root, contract, revision_sha=revision_sha)
-    unfinished_ids = (
-        missing_task_ids(contract, salvaged)
-        if salvage_context is not None
-        else list(contract.task_ids)
-    )
+        cache_root_value = None
     raw_path = output_dir / f"{arm}.raw.json"
     elapsed = 0.0
     runner_returncode = 0
     marginal_usage = ResourceUsage(0.0, 0, 0, 0.0)
-    if salvage_context is not None and not unfinished_ids:
-        measurement_source: MeasurementSource = "full_cache"
-        # Every expected row is identity-proven in the cache: rebuild the
-        # results file without spending a single conversation.
-        raw = merge_results(salvage_context, salvaged)
-        write_exclusive_json(raw_path, raw)
-        snapshot = snapshot_dir / f"{run_id}.snapshot.json"
+    measurement_source: MeasurementSource = "fresh"
+    command = tau2_command(
+        contract,
+        arm=arm,
+        checkout=checkout,
+        harness_root=harness_root,
+        contract_path=contract_path,
+        snapshot_dir=snapshot_dir,
+        run_id=run_id,
+        parent_contract_path=parent_contract_path,
+    )
+    source_raw = harness_root / "data" / "simulations" / run_id / "results.json"
+    started = time.monotonic()
+    try:
+        completed, infrastructure_abort = _run_tau2_command(
+            command,
+            cwd=checkout,
+            env=environment,
+            timeout=timeout if absolute_deadline is None else None,
+            deadline_seconds=absolute_deadline,
+            results_path=source_raw,
+        )
+    except subprocess.TimeoutExpired as exc:
+        if on_timeout is not None:
+            on_timeout()
+        raise TimeoutError(f"tau2 {arm} arm timed out") from exc
+    elapsed = time.monotonic() - started
+    runner_returncode = completed.returncode
+    snapshot = snapshot_dir / f"{run_id}.snapshot.json"
+    if not source_raw.is_file() or (not infrastructure_abort and not snapshot.is_file()):
+        if completed.returncode:
+            raise Tau2InfrastructureError(
+                f"tau2 {arm} arm exited with status {completed.returncode}"
+            )
+        raise Tau2InfrastructureError(
+            f"tau2 {arm} arm did not produce finalized raw and snapshot files"
+        )
+    fresh = load_json_object(source_raw, f"tau2 {arm} raw", max_bytes=512 * 1024 * 1024)
+    fresh_usage = tau2_resource_usage_floor(fresh)
+    marginal_usage = ResourceUsage(
+        wall_seconds=max(elapsed, fresh_usage.wall_seconds),
+        calls=fresh_usage.calls,
+        tokens=fresh_usage.tokens,
+        cost_usd=fresh_usage.cost_usd,
+    )
+    shutil.copyfile(source_raw, raw_path)
+    if infrastructure_abort:
+        snapshot = snapshot_dir / f"{run_id}.aborted.snapshot.json"
         write_exclusive_json(
             snapshot,
-            synthesized_snapshot(
-                contract, arm=arm, raw_sha256=_file_sha256(raw_path, f"{arm} rebuilt raw")
+            _infrastructure_abort_snapshot(
+                contract,
+                arm=arm,
+                raw_sha256=_file_sha256(raw_path, f"{arm} aborted raw"),
             ),
         )
-    else:
-        measurement_source = (
-            "partial_cache" if salvage_context is not None and salvaged else "fresh"
-        )
-        command = tau2_command(
-            contract,
-            arm=arm,
-            checkout=checkout,
-            harness_root=harness_root,
-            contract_path=contract_path,
-            snapshot_dir=snapshot_dir,
-            run_id=run_id,
-            parent_contract_path=parent_contract_path,
-            task_ids_override=(
-                unfinished_ids
-                if salvage_context is not None and len(unfinished_ids) < len(contract.task_ids)
-                else None
-            ),
-        )
-        source_raw = harness_root / "data" / "simulations" / run_id / "results.json"
-        started = time.monotonic()
-        try:
-            completed, infrastructure_abort = _run_tau2_command(
-                command,
-                cwd=checkout,
-                env=environment,
-                timeout=timeout if absolute_deadline is None else None,
-                deadline_seconds=absolute_deadline,
-                results_path=source_raw,
-            )
-        except subprocess.TimeoutExpired as exc:
-            if on_timeout is not None:
-                on_timeout()
-            _harvest_partial(cache_root, contract, revision_sha, harness_root, run_id)
-            raise TimeoutError(f"tau2 {arm} arm timed out") from exc
-        except BaseException:
-            _harvest_partial(cache_root, contract, revision_sha, harness_root, run_id)
-            raise
-        elapsed = time.monotonic() - started
-        runner_returncode = completed.returncode
-        snapshot = snapshot_dir / f"{run_id}.snapshot.json"
-        if not source_raw.is_file() or (not infrastructure_abort and not snapshot.is_file()):
-            # tau2 finalizes each simulation into results.json incrementally;
-            # an interrupted arm still donates its completed rows (r23: 18
-            # finished executions were discarded for want of this line).
-            _harvest_partial(cache_root, contract, revision_sha, harness_root, run_id)
-            if completed.returncode:
-                raise Tau2InfrastructureError(
-                    f"tau2 {arm} arm exited with status {completed.returncode}"
-                )
-            raise Tau2InfrastructureError(
-                f"tau2 {arm} arm did not produce finalized raw and snapshot files"
-            )
-        fresh = load_json_object(source_raw, f"tau2 {arm} raw", max_bytes=512 * 1024 * 1024)
-        fresh_usage = tau2_resource_usage_floor(fresh)
-        marginal_usage = ResourceUsage(
-            wall_seconds=max(elapsed, fresh_usage.wall_seconds),
-            calls=fresh_usage.calls,
-            tokens=fresh_usage.tokens,
-            cost_usd=fresh_usage.cost_usd,
-        )
-        if salvage_context is not None and salvaged:
-            fresh_rows = _index_simulations(fresh, f"tau2 {arm} partial-cache raw")
-            # A task with one missing trial must be re-run as a whole because
-            # tau2 accepts task IDs rather than individual pairs.  Preserve
-            # any identity-proven original trial instead of silently replacing
-            # it with the repeated realization.
-            raw = merge_results(salvage_context, {**fresh_rows, **salvaged})
-            write_exclusive_json(raw_path, raw)
-            snapshot = snapshot_dir / f"{run_id}.merged.snapshot.json"
-            write_exclusive_json(
-                snapshot,
-                synthesized_snapshot(
-                    contract, arm=arm, raw_sha256=_file_sha256(raw_path, f"{arm} rebuilt raw")
-                ),
-            )
-        else:
-            shutil.copyfile(source_raw, raw_path)
-        if infrastructure_abort:
-            snapshot = snapshot_dir / f"{run_id}.aborted.snapshot.json"
-            write_exclusive_json(
-                snapshot,
-                _infrastructure_abort_snapshot(
-                    contract,
-                    arm=arm,
-                    raw_sha256=_file_sha256(raw_path, f"{arm} aborted raw"),
-                ),
-            )
-        if cache_root is not None:
-            harvest_arm_rows(cache_root, contract, revision_sha=revision_sha, raw_results=fresh)
     raw = load_json_object(raw_path, f"tau2 {arm} raw", max_bytes=512 * 1024 * 1024)
     observed_usage = tau2_resource_usage_floor(raw)
     arm_usage = ResourceUsage(

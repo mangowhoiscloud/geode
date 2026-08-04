@@ -32,6 +32,51 @@ export default function Page() {
               고정해서만 게시합니다. 같은 조건의 재실행과만 비교할 수 있습니다.
             </p>
 
+            <h2>2026-08-04 runtime-faithful 실행 계약</h2>
+            <p>
+              현재 어댑터는 process-owned <code>RuntimeEventBus</code>, 13개 공개
+              hook registry, 4개 trusted middleware join point를 Tau2의 모든
+              <code>ToolExecutor</code>와 <code>AgenticLoop</code>에 공유합니다. Tau2가
+              실제 환경 tool을 실행하며, GEODE의 projection ACK는
+              <code>deferred</code>로 남습니다. 이후 native <code>ToolMessage.id</code>가
+              원래 call ID의 유일한 completion/error를 닫습니다. 환경 단계에서 즉시
+              종료된 경우에는 native receipt의 마지막 ToolMessage를 결합합니다.
+            </p>
+            <p>
+              native <code>results.json</code>은 계속 점수 정본입니다. 그 digest와
+              reward, task/trial, native/runtime termination은
+              <code>verification.evidence</code>로 SessionEnd 전에 기록됩니다. 새
+              <code>snapshot v4</code>는 runtime revision, assembled prompt/tool schema
+              digest, 실제로 exercise된 surface를 담은 runtime profile과 모든
+              retry/session/final selection을 담은 attempt manifest를 함께 검증합니다.
+              또한 normalized trajectory의 digest 결합을 독립적으로 확인하고
+              <code>scope_complete=true</code>를 다시 계산하므로 orphan tool call이
+              있는 실행은 승격할 수 없습니다.
+              <code>tau2-native-user</code>와 <code>geode-dual-runtime</code> profile은 합산하지
+              않습니다. 진단 auto-resume의 이전 process 행은
+              <code>resumed_native_unattested</code>로 표시합니다.
+            </p>
+            <p>
+              2026-08-04 full-cycle 시도는 278개 task를 모두 스케줄했지만,
+              subscription quota 소진으로 Airline 2개, Retail 16개, Telecom
+              81개 등 99개 행이 infrastructure contamination 상태가 됐습니다.
+              이 행들은 0점이 아니라 미실행 작업이므로 이 시도에는 aggregate
+              score 권한이 없습니다. quota 소진 전 Telecom call 6개에서는
+              external-yield 순서 결함도 발견했습니다. 현재 runtime은 post-tool
+              convergence guard보다 먼저 proposal을 반환하고, admission은 당시의
+              scope-incomplete trajectory를 거부합니다. 새 headline은 깨끗한
+              재실행 이후에만 게시합니다.
+            </p>
+            <p>
+              개인정보 검토를 통과한 진단 보고서와 세 도메인 companion은{" "}
+              <a href="https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/40be847f7c12004b1e70673808fa95bfd8646b59/reports/e2e-validation/2026-08-04-gpt54-runtime-faithful-tau2-diagnostic.md">
+                <code>geode-eval-artifacts@40be847</code>
+              </a>
+              에 고정했습니다. 12개 파일 manifest SHA-256은{" "}
+              <code>40206ed1…317</code>이며, 이 묶음은 점수가 아닌 invalidation
+              evidence입니다.
+            </p>
+
             <h2>2026-08-03 GPT-5.4 subscription base full cycle</h2>
             <p>
               GEODE <code>22789ee2</code>에서 Airline, Retail, Telecom base
@@ -231,6 +276,52 @@ export default function Page() {
               published number is pinned to the harness revision, model route, and
               effort that produced it. Compare only against reruns with the same
               settings.
+            </p>
+
+            <h2>2026-08-04 Runtime-Faithful Execution Contract</h2>
+            <p>
+              The current adapter shares one process-owned{" "}
+              <code>RuntimeEventBus</code>, all 13 public hook registrations, and
+              all four trusted middleware join points across every Tau2{" "}
+              <code>ToolExecutor</code> and <code>AgenticLoop</code>. Tau2 remains
+              the only environment-tool executor. GEODE&apos;s projection ACK stays{" "}
+              <code>deferred</code>, and the native <code>ToolMessage.id</code>
+              later closes the original call ID with its sole completion or error,
+              including a terminal-step result recovered from the native receipt.
+            </p>
+            <p>
+              Native <code>results.json</code> remains score authority. Its digest,
+              reward, task/trial, and native/runtime termination are recorded as{" "}
+              <code>verification.evidence</code> before SessionEnd. New{" "}
+              <code>snapshot v4</code> admission also verifies a runtime profile
+              containing revision, assembled prompt/tool-schema digests and actually
+              exercised surfaces, plus an attempt manifest covering every retry,
+              participant session, and final selection. It independently verifies
+              the normalized trajectory&apos;s digest bindings and recomputes{" "}
+              <code>scope_complete=true</code>, so an orphaned tool call cannot be
+              promoted. <code>tau2-native-user</code> and{" "}
+              <code>geode-dual-runtime</code> profiles are never pooled. A diagnostic
+              auto-resume labels prior-process rows as <code>resumed_native_unattested</code>.
+            </p>
+            <p>
+              The 2026-08-04 full-cycle attempt reached all 278 scheduled tasks,
+              but subscription quota exhaustion contaminated 99 rows: 2 Airline,
+              16 Retail, and 81 Telecom. They are missing work, not zero rewards,
+              so this attempt has no aggregate score authority. Six pre-quota
+              Telecom calls also exposed an external-yield ordering defect; the
+              runtime now returns those proposals before post-tool convergence
+              guards, and admission rejects the captured scope-incomplete
+              trajectory. A clean rerun is required before a new headline is
+              published.
+            </p>
+            <p>
+              The privacy-reviewed diagnostic report and three-domain companions
+              are pinned to{" "}
+              <a href="https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/40be847f7c12004b1e70673808fa95bfd8646b59/reports/e2e-validation/2026-08-04-gpt54-runtime-faithful-tau2-diagnostic.md">
+                <code>geode-eval-artifacts@40be847</code>
+              </a>
+              . The 12-file manifest SHA-256 is <code>40206ed1…317</code>; this
+              bundle is invalidation evidence, not a score release.
             </p>
 
             <h2>2026-08-03 GPT-5.4 Subscription Base Full Cycle</h2>

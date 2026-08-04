@@ -10,10 +10,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
+from plugins.benchmark_harness.tau2_runtime_contract import (
+    GEODE_DUAL_RUNTIME_PROFILE,
+    TAU2_NATIVE_USER_PROFILE,
+)
 from plugins.crucible.contract import ContractError, ExperimentContract, TaskUnit
 from plugins.crucible.evidence import EVIDENCE_SCHEMA, EvidenceEnvelope, ResourceUsage
 
-_SNAPSHOT_SCHEMA = "crucible_tau2_trajectory_snapshot.v3"
+_SNAPSHOT_SCHEMA = "crucible_tau2_trajectory_snapshot.v4"
 # Public alias: the row cache synthesizes snapshots the verifier must accept,
 # so both sides must share one schema constant rather than drifting literals.
 SNAPSHOT_SCHEMA = _SNAPSHOT_SCHEMA
@@ -26,6 +30,7 @@ class Tau2AssayAdapter:
     schema: str = "crucible.tau2-assay.v1"
     required_evaluator_paths: tuple[str, ...] = (
         "plugins/benchmark_harness/tau2_geode_agent.py",
+        "plugins/benchmark_harness/tau2_runtime_contract.py",
         "plugins/benchmark_harness/trajectory_artifacts.py",
         "plugins/crucible",
     )
@@ -395,6 +400,8 @@ def _verify_snapshot(
     arm: Literal["baseline", "candidate"],
     raw_sha256: str,
     snapshot: Mapping[str, Any],
+    snapshot_path: Path | None = None,
+    raw: Mapping[str, Any] | None = None,
 ) -> tuple[Literal["complete", "invalid"], str | None]:
     if snapshot.get("schema") != _SNAPSHOT_SCHEMA:
         raise ContractError(f"snapshot.schema must be {_SNAPSHOT_SCHEMA!r}")
@@ -427,7 +434,259 @@ def _verify_snapshot(
         return "invalid", failure
     if failure is not None:
         raise ContractError("complete snapshot cannot carry failure_class")
+    if snapshot_path is None or raw is None:
+        raise ContractError("complete snapshot verification requires companion artifact context")
+    expected_profile = (
+        GEODE_DUAL_RUNTIME_PROFILE
+        if _mapping(contract.assay_config.get("user"), "assay_config.user").get("implementation")
+        in {"geode_user", "crucible_user"}
+        else TAU2_NATIVE_USER_PROFILE
+    )
+    if snapshot.get("runtime_profile") != expected_profile:
+        raise ContractError("snapshot runtime_profile does not match the user implementation")
+    runtime_profile = _verify_companion(
+        snapshot,
+        snapshot_path=snapshot_path,
+        field="runtime_profile_artifact",
+        schema="geode.tau2-runtime-profile.v1",
+    )
+    if runtime_profile.get("runtime_revision") != expected_revision:
+        raise ContractError("runtime profile revision does not match the selected arm")
+    if runtime_profile.get("runtime_profile") != expected_profile:
+        raise ContractError("runtime profile mode does not match the snapshot")
+    native_receipt = _mapping(
+        _mapping(runtime_profile.get("persistence"), "runtime_profile.persistence").get(
+            "native_receipt"
+        ),
+        "runtime_profile.persistence.native_receipt",
+    )
+    if native_receipt.get("sha256") != raw_sha256:
+        raise ContractError("runtime profile native receipt digest does not match results")
+    attempt_manifest = _verify_companion(
+        snapshot,
+        snapshot_path=snapshot_path,
+        field="attempt_manifest_artifact",
+        schema="geode.tau2-attempt-manifest.v1",
+    )
+    _verify_attempt_manifest(attempt_manifest, raw)
+    _verify_geode_trajectory(
+        snapshot,
+        snapshot_path=snapshot_path,
+        raw_sha256=raw_sha256,
+    )
     return "complete", None
+
+
+def _verify_companion(
+    snapshot: Mapping[str, Any],
+    *,
+    snapshot_path: Path,
+    field: str,
+    schema: str,
+) -> Mapping[str, Any]:
+    reference = _mapping(snapshot.get(field), f"snapshot.{field}")
+    filename = reference.get("path")
+    digest = reference.get("sha256")
+    if not isinstance(filename, str) or not filename:
+        raise ContractError(f"snapshot.{field}.path is required")
+    relative = Path(filename)
+    if relative.is_absolute() or len(relative.parts) != 1 or relative.name != filename:
+        raise ContractError(f"snapshot.{field}.path must be a sibling filename")
+    if not isinstance(digest, str) or len(digest) != 64:
+        raise ContractError(f"snapshot.{field}.sha256 is required")
+    path = snapshot_path.parent / relative
+    try:
+        payload = path.read_bytes()
+    except OSError as exc:
+        raise ContractError(f"cannot read snapshot companion {filename!r}: {exc}") from exc
+    if hashlib.sha256(payload).hexdigest() != digest:
+        raise ContractError(f"snapshot.{field}.sha256 does not match companion bytes")
+    try:
+        parsed = json.loads(payload)
+    except json.JSONDecodeError as exc:
+        raise ContractError(f"cannot parse snapshot companion {filename!r}: {exc}") from exc
+    row = _mapping(parsed, f"snapshot companion {filename}")
+    if row.get("schema") != schema:
+        raise ContractError(f"snapshot companion {filename!r} must use schema {schema!r}")
+    if row.get("run_id") != snapshot.get("run_id"):
+        raise ContractError(f"snapshot companion {filename!r} run_id does not match")
+    return row
+
+
+def _verify_geode_trajectory(
+    snapshot: Mapping[str, Any],
+    *,
+    snapshot_path: Path,
+    raw_sha256: str,
+) -> None:
+    """Require the portable trajectory sidecar to be hash-bound and complete."""
+    from core.observability.trajectory import verify_trajectory_integrity
+
+    run_id = str(snapshot.get("run_id") or "")
+    expected_name = f"{run_id}.geode-trajectory.json"
+    declared = snapshot.get("geode_trajectory")
+    if not isinstance(declared, str) or Path(declared).name != expected_name:
+        raise ContractError("snapshot geode_trajectory must name the run's sibling sidecar")
+    digest = snapshot.get("geode_trajectory_sha256")
+    if not isinstance(digest, str) or len(digest) != 64:
+        raise ContractError("snapshot geode_trajectory_sha256 is required")
+    path = snapshot_path.parent / expected_name
+    try:
+        payload = path.read_bytes()
+    except OSError as exc:
+        raise ContractError(f"cannot read GEODE trajectory companion: {exc}") from exc
+    if hashlib.sha256(payload).hexdigest() != digest:
+        raise ContractError("snapshot geode_trajectory_sha256 does not match companion bytes")
+    try:
+        trajectory = _mapping(json.loads(payload), "GEODE trajectory companion")
+        integrity = verify_trajectory_integrity(trajectory)
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise ContractError(f"invalid GEODE trajectory companion: {exc}") from exc
+    if trajectory.get("schema_id") != "geode.trajectory@1":
+        raise ContractError("GEODE trajectory companion must use geode.trajectory@1")
+    source = _mapping(trajectory.get("source"), "GEODE trajectory source")
+    if source.get("run") != run_id:
+        raise ContractError("GEODE trajectory run does not match snapshot")
+    if source.get("runtime_profile_sha256") != _mapping(
+        snapshot.get("runtime_profile_artifact"), "snapshot.runtime_profile_artifact"
+    ).get("sha256"):
+        raise ContractError("GEODE trajectory runtime profile digest does not match snapshot")
+    if source.get("attempt_manifest_sha256") != _mapping(
+        snapshot.get("attempt_manifest_artifact"), "snapshot.attempt_manifest_artifact"
+    ).get("sha256"):
+        raise ContractError("GEODE trajectory attempt manifest digest does not match snapshot")
+    if raw_sha256 not in {
+        str(_mapping(row, "GEODE trajectory artifact digest").get("sha256") or "")
+        for row in trajectory.get("artifact_digests", [])
+    }:
+        raise ContractError("GEODE trajectory does not bind the native receipt digest")
+    if integrity.get("scope_complete") is not True:
+        raise ContractError("GEODE trajectory is not scope complete")
+
+
+def _verify_attempt_manifest(
+    manifest: Mapping[str, Any],
+    raw: Mapping[str, Any],
+) -> None:
+    attempts = manifest.get("attempts")
+    final_results = manifest.get("final_results")
+    simulations = raw.get("simulations")
+    if not isinstance(attempts, list) or not isinstance(final_results, list):
+        raise ContractError("tau2 attempt manifest requires attempts and final_results lists")
+    if not isinstance(simulations, list):
+        raise ContractError("tau2 results simulations must be a list")
+    attempt_ids: set[str] = set()
+    selected_ids: set[str] = set()
+    selected_groups: set[tuple[str, int]] = set()
+    attempts_by_id: dict[str, Mapping[str, Any]] = {}
+    previous_by_run: dict[tuple[str, int], tuple[str, int, int]] = {}
+    for index, value in enumerate(attempts):
+        attempt = _mapping(value, f"attempt_manifest.attempts[{index}]")
+        attempt_id = str(attempt.get("attempt_id") or "")
+        if not attempt_id or attempt_id in attempt_ids:
+            raise ContractError("tau2 attempt manifest attempt ids must be unique")
+        attempt_ids.add(attempt_id)
+        attempts_by_id[attempt_id] = attempt
+        task_id = str(attempt.get("task_id") or "")
+        trial = _integer(attempt.get("trial"), "attempt_manifest attempt trial")
+        ordinal = _integer(attempt.get("attempt"), "attempt_manifest attempt ordinal")
+        seed = _integer(attempt.get("seed"), "attempt_manifest attempt seed")
+        if not task_id or trial < 0 or ordinal < 1:
+            raise ContractError("tau2 attempt requires task_id and non-negative trial/ordinal")
+        group = (task_id, trial)
+        previous = previous_by_run.get(group)
+        retry_of = attempt.get("retry_of")
+        if previous is None:
+            if ordinal != 1 or retry_of is not None:
+                raise ContractError("first tau2 attempt must have ordinal 1 and no retry_of")
+        else:
+            previous_id, previous_ordinal, previous_seed = previous
+            if ordinal != previous_ordinal + 1 or retry_of != previous_id:
+                raise ContractError("tau2 retry lineage must be consecutive within task/trial")
+            if seed != previous_seed:
+                raise ContractError("tau2 retry seed must remain stable within task/trial")
+        previous_by_run[group] = (attempt_id, ordinal, seed)
+        if attempt.get("status") not in {"complete", "error"}:
+            raise ContractError("final tau2 attempt status must be complete or error")
+        if not isinstance(attempt.get("selected_final"), bool):
+            raise ContractError("tau2 attempt selected_final must be boolean")
+        if attempt.get("selected_final") is True:
+            if attempt.get("status") != "complete" or not attempt.get("simulation_id"):
+                raise ContractError("selected tau2 attempt must be complete with simulation_id")
+            if group in selected_groups:
+                raise ContractError("tau2 task/trial may have only one selected attempt")
+            selected_groups.add(group)
+            selected_ids.add(attempt_id)
+    simulations_by_key = {
+        (
+            str(_mapping(value, "tau2 simulation").get("task_id") or ""),
+            _integer(_mapping(value, "tau2 simulation").get("trial"), "tau2 trial"),
+            str(_mapping(value, "tau2 simulation").get("id") or ""),
+        ): _mapping(value, "tau2 simulation")
+        for value in simulations
+    }
+    observed = set(simulations_by_key)
+    declared: set[tuple[str, int, str]] = set()
+    referenced_selected_ids: set[str] = set()
+    for index, value in enumerate(final_results):
+        result = _mapping(value, f"attempt_manifest.final_results[{index}]")
+        key = (
+            str(result.get("task_id") or ""),
+            _integer(result.get("trial"), "attempt_manifest final trial"),
+            str(result.get("simulation_id") or ""),
+        )
+        if key in declared:
+            raise ContractError("tau2 attempt manifest final results must be unique")
+        declared.add(key)
+        selected = result.get("selected_attempt_id")
+        if selected is not None and selected not in selected_ids:
+            raise ContractError("final tau2 selection references a non-selected attempt")
+        native_sessions = _native_session_ids(simulations_by_key.get(key, {}))
+        if selected is None:
+            if result.get("selection_status") != "no_successful_attempt":
+                raise ContractError("unselected tau2 result requires no_successful_attempt status")
+            if native_sessions:
+                raise ContractError("unselected tau2 result cannot reference GEODE sessions")
+            continue
+        if result.get("selection_status") != "selected":
+            raise ContractError("selected tau2 result requires selected status")
+        referenced_selected_ids.add(str(selected))
+        selected_attempt = attempts_by_id[str(selected)]
+        if (
+            str(selected_attempt.get("task_id") or ""),
+            _integer(selected_attempt.get("trial"), "selected tau2 attempt trial"),
+            str(selected_attempt.get("simulation_id") or ""),
+        ) != key:
+            raise ContractError("selected tau2 attempt identity does not match final result")
+        session_rows = selected_attempt.get("sessions")
+        if not isinstance(session_rows, list):
+            raise ContractError("selected tau2 attempt requires a sessions list")
+        declared_sessions = {
+            str(_mapping(row, "attempt session").get("session_id") or "") for row in session_rows
+        }
+        declared_sessions.discard("")
+        if declared_sessions != native_sessions:
+            raise ContractError("selected tau2 attempt sessions do not match native messages")
+    if declared != observed:
+        raise ContractError("tau2 attempt manifest final results do not match native results")
+    if referenced_selected_ids != selected_ids:
+        raise ContractError("selected tau2 attempts must be referenced exactly once")
+
+
+def _native_session_ids(simulation: Mapping[str, Any]) -> set[str]:
+    messages = simulation.get("messages")
+    if not isinstance(messages, list):
+        return set()
+    session_ids: set[str] = set()
+    for value in messages:
+        message = value if isinstance(value, Mapping) else {}
+        raw_data = message.get("raw_data")
+        if not isinstance(raw_data, Mapping):
+            continue
+        session_id = str(raw_data.get("geode_session_id") or "")
+        if session_id:
+            session_ids.add(session_id)
+    return session_ids
 
 
 def _verify_tau2_info(contract: ExperimentContract, raw: Mapping[str, Any]) -> None:
@@ -630,6 +889,8 @@ def normalize_tau2_results(
         arm=arm,
         raw_sha256=raw_sha256,
         snapshot=snapshot,
+        snapshot_path=snapshot_path,
+        raw=raw,
     )
     _verify_tau2_info(contract, raw)
     _verify_tau2_tasks(contract, raw)

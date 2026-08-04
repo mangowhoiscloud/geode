@@ -149,19 +149,26 @@ class ToolCallProcessor:
 
         # Immutable session history: tool call + result share the provider call id.
         if self._timeline is not None:
+            status = "error" if isinstance(result, dict) and result.get("error") else "ok"
             if record_call:
                 self._timeline.record_tool_call(tool_name, durable_input, call_id=tool_use_id)
-            status = "error" if isinstance(result, dict) and result.get("error") else "ok"
-            summary = "personal account data omitted" if personal else ""
-            if isinstance(result, dict) and not personal:
-                summary = str(result.get("summary", result.get("error", "")))
-            self._timeline.record_tool_result(
-                tool_name,
-                status,
-                summary,
-                call_id=tool_use_id,
-                result=durable_result,
+            external_execution = (
+                result.get("external_execution") if isinstance(result, dict) else None
             )
+            # A benchmark transport ACK is a proposal, not the
+            # authoritative tool outcome. Its external ToolMessage will close
+            # this call later with the same provider call id.
+            if external_execution != "deferred":
+                summary = "personal account data omitted" if personal else ""
+                if isinstance(result, dict) and not personal:
+                    summary = str(result.get("summary", result.get("error", "")))
+                self._timeline.record_tool_result(
+                    tool_name,
+                    status,
+                    summary,
+                    call_id=tool_use_id,
+                    result=durable_result,
+                )
             if tool_name in {"computer", "computer_use"} and isinstance(result, dict):
                 payload = self._computer_gui_payload(tool_input, result, tool_use_id)
                 if payload:

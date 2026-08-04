@@ -47,6 +47,42 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.13] - 2026-08-05
+
+> Runtime-faithful Tau2 execution now exercises GEODE's public hooks and
+> trusted middleware while preserving Tau2's native environment and score
+> authority. Incomplete trajectories fail closed and remain diagnostic
+> evidence rather than becoming benchmark scores.
+
+### Added
+
+- Added a benchmark-safe Tau2 runtime profile and retry-attempt manifest. New
+  snapshot v4 records digest-bind the runtime revision, model routes, assembled
+  prompt/tool-schema identities, exercised hook and middleware surfaces, every
+  participant session, retry ancestry, and final native simulation selection.
+
+### Changed
+
+- Tau2 participants now share one process-owned runtime event bus, public hook
+  registry, and four-surface middleware registry. Native `results.json`
+  reward/termination evidence is joined to session timelines before SessionEnd,
+  while `tau2-native-user` and `geode-dual-runtime` measurements remain distinct profiles.
+- Crucible now observably disables legacy `cached-row.v1` reuse for Tau2
+  snapshot v4 runs because that cache predates the runtime-profile and attempt
+  companions; runs execute fresh rather than synthesize provenance.
+
+### Fixed
+
+- Tau2 tool projection ACKs no longer masquerade as completed environment
+  actions. The adapter defers all environment execution to Tau2 and records the
+  official result or error only when its original call ID returns; orphaned or
+  still-pending calls fail closed. Terminal-step results are reconciled from
+  the native receipt, diagnostic auto-resume rows remain explicitly
+  unattested, and exhausted post-run failures cannot remain marked complete.
+- External half-duplex tool proposals now reach their orchestrator before
+  convergence guards can terminate the turn, and Crucible rejects snapshots
+  whose hash-bound GEODE trajectory is missing, corrupt, or scope-incomplete.
+
 ## [1.0.12] - 2026-08-03
 
 > GPT-5.4 subscription routing, concurrent session durability, and failed-tool

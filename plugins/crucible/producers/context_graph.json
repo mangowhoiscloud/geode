@@ -20,13 +20,25 @@
       "id": "file:plugins/benchmark_harness/tau2_geode_agent.py",
       "filePath": "plugins/benchmark_harness/tau2_geode_agent.py",
       "name": "Tau2 GEODE adapter",
-      "summary": "Builds GEODE participants, delegates half-duplex turn control, and persists per-turn pre-execution retry identity.",
+      "summary": "Builds GEODE participants on one process-owned hook and middleware runtime, delegates half-duplex turn control, and binds native results before session closure.",
       "tags": [
         "adapter",
         "benchmark",
         "tool-projection"
       ],
-      "contentSha256": "0224f4e1fc860d0d00b086e80f8f7cf4e0307f3ef5a50645d486d5ddfde1c9aa"
+      "contentSha256": "48877b347be309c64bca82f5c1001ad1915dfdebec306fc234ff94a045350d09"
+    },
+    {
+      "id": "file:plugins/benchmark_harness/tau2_runtime_contract.py",
+      "filePath": "plugins/benchmark_harness/tau2_runtime_contract.py",
+      "name": "Tau2 runtime contract",
+      "summary": "Owns shared hooks and middleware, captures the effective runtime profile, records retry lineage, and joins exact native Tau2 verdicts before session closure.",
+      "tags": [
+        "attempt-manifest",
+        "benchmark",
+        "runtime-profile"
+      ],
+      "contentSha256": "71249c94717ab22709ae94bcce5f41ede56c891373f98efe36d2e71bffcd89c1"
     },
     {
       "id": "file:plugins/benchmark_harness/trajectory_artifacts.py",
@@ -38,20 +50,20 @@
         "benchmark",
         "trajectory"
       ],
-      "contentSha256": "19d4814e23fba8e847a8bc4b2e52831637e01ba4eb2c7e978a73d8185af7f821"
+      "contentSha256": "103a272dcfef4ee7b858a7bb86635ef32846a5a6bb6abe293e180f5ea686f1cc"
     },
     {
       "id": "file:plugins/benchmark_harness/tau2_turn_supervisor.py",
       "filePath": "plugins/benchmark_harness/tau2_turn_supervisor.py",
       "name": "Tau2 turn supervisor",
-      "summary": "Owns the half-duplex deadline, stop mapping, and retry-telemetry projection while AgenticLoop yields after each completed tool batch.",
+      "summary": "Owns the half-duplex deadline, stop mapping, and exact ToolCall.id to ToolMessage.id result join while AgenticLoop yields after deferred external tool batches.",
       "tags": [
         "benchmark",
         "deadline",
         "external-loop",
         "tool-projection"
       ],
-      "contentSha256": "245d8f2ef53660e37cffcbfee125531503dc9375477feb0944a1f18d1e2dbc57"
+      "contentSha256": "0badf7ed4f176dc6adec79fdc976fb92b90235ff429708436e3671bc6980e370"
     },
     {
       "id": "file:core/agent/loop/agent_loop.py",
@@ -62,43 +74,31 @@
         "runtime",
         "while-tool-use"
       ],
-      "contentSha256": "18a33610d8d9d7d30c83db3bc109a01eca3fe37b24e335c64874c79a33e0672c"
+      "contentSha256": "0c9f9bef6ccaf18a9249438ec4d7e18c1e8a39d75a033f0ca8ff5fce35c6cdff"
     },
     {
       "id": "file:core/agent/tool_executor/processor.py",
       "filePath": "core/agent/tool_executor/processor.py",
       "name": "Tool call processor",
-      "summary": "Executes one model response's tool calls and preserves input order while batching eligible calls.",
+      "summary": "Executes one model response's tool calls, preserves input order, and leaves deferred external acknowledgements open until their native result is joined.",
       "tags": [
         "runtime",
         "tools",
         "parallel"
       ],
-      "contentSha256": "b4ce924b4f53c59d457f91536e75930bb66371b5015164d1f97584d2151b1537"
+      "contentSha256": "2f8d6cbcdfffc7406dfe854dad0b6ef3c0f3b24264b5402371be040581ca2302"
     },
     {
       "id": "file:plugins/crucible/tau2_live.py",
       "filePath": "plugins/crucible/tau2_live.py",
       "name": "Paired tau2 evaluator",
-      "summary": "Derives frozen runner arguments, gives baseline and candidate one supervisor-anchored shared deadline, and emits receipts bound to exact arm artifacts and cache provenance. Screens unreachable train arms at zero candidate cost, projects structural failure codes, reuses identity-proven cached rows across relaunches, and stops the paid process group after finalized infrastructure contamination.",
+      "summary": "Derives frozen runner arguments, gives baseline and candidate one supervisor-anchored shared deadline, and emits receipts bound to exact arm artifacts. Screens unreachable train arms at zero candidate cost, disables legacy row reuse that lacks snapshot-v4 companions, projects structural failure codes, and stops the paid process group after finalized infrastructure contamination.",
       "tags": [
         "crucible",
         "evaluator",
         "paired"
       ],
-      "contentSha256": "4deee0c2a96fc3c208a4010a18c752beac0d6397288a149d037832ba459283ce"
-    },
-    {
-      "id": "file:plugins/crucible/row_cache.py",
-      "filePath": "plugins/crucible/row_cache.py",
-      "name": "Hash-bound row cache",
-      "summary": "Reuses only infrastructure-clean semantic tau2 rows whose full measurement identity and row/context payload hashes verify; placeholders and source-attested retry rows remain missing work.",
-      "tags": [
-        "cache",
-        "crucible",
-        "recovery"
-      ],
-      "contentSha256": "d82eb18f8c24eb7a694653ef09b63d84b299ebf3981a4e4012e84be42943beaa"
+      "contentSha256": "95f4d70b091cfbbb7614aa35db44ef194fa36d7c0d07cd5998153582e8223885"
     },
     {
       "id": "file:plugins/crucible/runtime_receipt.py",
@@ -195,6 +195,11 @@
     },
     {
       "source": "file:plugins/benchmark_harness/tau2_geode_agent.py",
+      "target": "file:plugins/benchmark_harness/tau2_runtime_contract.py",
+      "type": "depends_on"
+    },
+    {
+      "source": "file:plugins/benchmark_harness/tau2_geode_agent.py",
       "target": "file:plugins/benchmark_harness/tau2_turn_supervisor.py",
       "type": "delegates_to"
     },
@@ -217,11 +222,6 @@
       "source": "file:plugins/crucible/tau2_live.py",
       "target": "file:plugins/benchmark_harness/tau2_geode_agent.py",
       "type": "calls"
-    },
-    {
-      "source": "file:plugins/crucible/tau2_live.py",
-      "target": "file:plugins/crucible/row_cache.py",
-      "type": "depends_on"
     },
     {
       "source": "file:plugins/crucible/tau2_live.py",
