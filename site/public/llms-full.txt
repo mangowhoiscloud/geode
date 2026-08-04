@@ -3130,7 +3130,9 @@ tau2-bench는 대화형 tool-use 벤치마크입니다. 에이전트가 시뮬�
 
 현재 어댑터는 process-owned `RuntimeEventBus`, 13개 공개 hook registry, 4개 trusted middleware join point를 Tau2의 모든`ToolExecutor`와 `AgenticLoop`에 공유합니다. Tau2가 실제 환경 tool을 실행하며, GEODE의 projection ACK는`deferred`로 남습니다. 이후 native `ToolMessage.id`가 원래 call ID의 유일한 completion/error를 닫습니다. 환경 단계에서 즉시 종료된 경우에는 native receipt의 마지막 ToolMessage를 결합합니다.
 
-native `results.json`은 계속 점수 정본입니다. 그 digest와 reward, task/trial, native/runtime termination은`verification.evidence`로 SessionEnd 전에 기록됩니다. 새`snapshot v4`는 runtime revision, assembled prompt/tool schema digest, 실제로 exercise된 surface를 담은 runtime profile과 모든 retry/session/final selection을 담은 attempt manifest를 함께 검증합니다.`tau2-native-user`와 `geode-dual-runtime` profile은 합산하지 않습니다. 진단 auto-resume의 이전 process 행은`resumed_native_unattested`로 표시합니다.
+native `results.json`은 계속 점수 정본입니다. 그 digest와 reward, task/trial, native/runtime termination은`verification.evidence`로 SessionEnd 전에 기록됩니다. 새`snapshot v4`는 runtime revision, assembled prompt/tool schema digest, 실제로 exercise된 surface를 담은 runtime profile과 모든 retry/session/final selection을 담은 attempt manifest를 함께 검증합니다. 또한 normalized trajectory의 digest 결합을 독립적으로 확인하고`scope_complete=true`를 다시 계산하므로 orphan tool call이 있는 실행은 승격할 수 없습니다.`tau2-native-user`와 `geode-dual-runtime` profile은 합산하지 않습니다. 진단 auto-resume의 이전 process 행은`resumed_native_unattested`로 표시합니다.
+
+2026-08-04 full-cycle 시도는 278개 task를 모두 스케줄했지만, subscription quota 소진으로 Airline 2개, Retail 16개, Telecom 81개 등 99개 행이 infrastructure contamination 상태가 됐습니다. 이 행들은 0점이 아니라 미실행 작업이므로 이 시도에는 aggregate score 권한이 없습니다. quota 소진 전 Telecom call 6개에서는 external-yield 순서 결함도 발견했습니다. 현재 runtime은 post-tool convergence guard보다 먼저 proposal을 반환하고, admission은 당시의 scope-incomplete trajectory를 거부합니다. 새 headline은 깨끗한 재실행 이후에만 게시합니다.
 
 ## 2026-08-03 GPT-5.4 subscription base full cycle
 
