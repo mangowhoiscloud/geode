@@ -3023,6 +3023,7 @@ SIL의 `events.jsonl` 실행 타임라인, mutation/attribution 원장, Inspect 
 | --- | --- | --- |
 | SIL Inspect `.eval` | `kind=sil_eval`, `schema_id=inspect_ai.eval@native`, source SHA-256 | scored archive를 digest로 연결; judge 결과를 대체하지 않음 |
 | tau2 `results.json` | `kind=native_receipt`, `schema_id=tau2.results@native` | native score receipt를 그대로 정본으로 유지 |
+| tau2 runtime profile / attempt manifest | `snapshot v4`의 sibling path + SHA-256, trajectory `artifact_digests` | 실행 표면과 retry 선택을 증명하며 native reward를 대체하지 않음 |
 | Crucible frozen contract | identity preflight가 끝난 경우에만 `kind=crucible_evidence` | verdict나 promotion authority를 얻지 않음 |
 
 로컬 export를 privacy-reviewed public candidate로 승격하고 append-only artifact PR로 게시하는 절차는 [trajectory 게시 가이드](https://mangowhoiscloud.github.io/geode/docs/guides/publish-trajectory.md)를 따릅니다.
@@ -3124,6 +3125,12 @@ URL: https://mangowhoiscloud.github.io/geode/docs/benchmarks/tau2
 Markdown: https://mangowhoiscloud.github.io/geode/docs/benchmarks/tau2.md
 
 tau2-bench는 대화형 tool-use 벤치마크입니다. 에이전트가 시뮬레이션된 사용자와 대화하며 airline, retail, telecom 도메인의 DB 액션을 수행하고, verifier가 필수 액션 충족 여부로 reward를 매깁니다. GEODE는`plugins/benchmark_harness`의 공개 어댑터로 참가하며, 점수는 그 점수를 만든 harness revision, model route, effort에 고정해서만 게시합니다. 같은 조건의 재실행과만 비교할 수 있습니다.
+
+## 2026-08-04 runtime-faithful 실행 계약
+
+현재 어댑터는 process-owned `RuntimeEventBus`, 13개 공개 hook registry, 4개 trusted middleware join point를 Tau2의 모든`ToolExecutor`와 `AgenticLoop`에 공유합니다. Tau2가 실제 환경 tool을 실행하며, GEODE의 projection ACK는`deferred`로 남습니다. 이후 native `ToolMessage.id`가 원래 call ID의 유일한 completion/error를 닫습니다. 환경 단계에서 즉시 종료된 경우에는 native receipt의 마지막 ToolMessage를 결합합니다.
+
+native `results.json`은 계속 점수 정본입니다. 그 digest와 reward, task/trial, native/runtime termination은`verification.evidence`로 SessionEnd 전에 기록됩니다. 새`snapshot v4`는 runtime revision, assembled prompt/tool schema digest, 실제로 exercise된 surface를 담은 runtime profile과 모든 retry/session/final selection을 담은 attempt manifest를 함께 검증합니다.`tau2-native-user`와 `geode-dual-runtime` profile은 합산하지 않습니다. 진단 auto-resume의 이전 process 행은`resumed_native_unattested`로 표시합니다.
 
 ## 2026-08-03 GPT-5.4 subscription base full cycle
 
@@ -5949,7 +5956,7 @@ Tier 2  latex2sympy2 + sympy.pretty  블록 전용. 분수·적분을 2D Unicode
 URL: https://mangowhoiscloud.github.io/geode/docs/reference/changelog
 Markdown: https://mangowhoiscloud.github.io/geode/docs/reference/changelog.md
 
-(body omitted from llms-full: 1485 KB — fetch the Markdown twin above for the complete page)
+(body omitted from llms-full: 1486 KB — fetch the Markdown twin above for the complete page)
 
 ---
 
@@ -6109,7 +6116,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 
 | 측정값 | 현재 트리 |
 | --- | --- |
-| 프로덕션 Python 파일 | 542 |
+| 프로덕션 Python 파일 | 543 |
 | 테스트 Python 파일 | 682 |
 | 도구 정의 / 실행 등록 / 유효 스키마 | 78 / 81 / 78 |
 | RuntimeEvent 멤버 | 57 |

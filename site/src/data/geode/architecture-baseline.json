@@ -528,15 +528,15 @@
   "packages": {
     "core": {
       "python_files": 432,
-      "python_loc": 138904
+      "python_loc": 138911
     },
     "plugins": {
-      "python_files": 110,
-      "python_loc": 40709
+      "python_files": 111,
+      "python_loc": 41820
     },
     "tests": {
       "python_files": 682,
-      "python_loc": 178281
+      "python_loc": 178949
     }
   },
   "schema_version": 1,

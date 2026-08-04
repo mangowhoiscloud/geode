@@ -3,6 +3,8 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
+import pytest
+from plugins.crucible.contract import ContractError
 from plugins.crucible.row_cache import (
     cached_context,
     cached_rows,
@@ -282,7 +284,7 @@ def test_merge_rebuilds_full_results_in_stable_order(tmp_path: Path) -> None:
     )
 
 
-def test_synthesized_snapshot_matches_the_verifier_contract_fields() -> None:
+def test_legacy_cached_row_snapshot_is_not_admitted_without_v4_companions() -> None:
     from tests.plugins.crucible.test_tau2_live import _contract
 
     contract = _contract()
@@ -290,10 +292,10 @@ def test_synthesized_snapshot_matches_the_verifier_contract_fields() -> None:
     snapshot = synthesized_snapshot(contract, arm="candidate", raw_sha256=raw_sha)
     from plugins.crucible.verifiers.tau2 import _verify_snapshot
 
-    status, failure_class = _verify_snapshot(
-        contract,
-        arm="candidate",
-        raw_sha256=raw_sha,
-        snapshot=snapshot,
-    )
-    assert status == "complete" and failure_class is None
+    with pytest.raises(ContractError, match="companion artifact context"):
+        _verify_snapshot(
+            contract,
+            arm="candidate",
+            raw_sha256=raw_sha,
+            snapshot=snapshot,
+        )

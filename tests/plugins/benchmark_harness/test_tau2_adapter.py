@@ -1,3 +1,5 @@
+import asyncio
+import contextlib
 import json
 import os
 import sys
@@ -6,7 +8,9 @@ from types import ModuleType, SimpleNamespace
 
 import pytest
 from plugins.benchmark_harness.tau2_geode_agent import (
+    Tau2GeodeTool,
     _assert_tau2_route_ready,
+    _build_loop,
     _codex_empty_text_dumps,
     _pin_tau2_data_root,
     _raise_on_new_codex_empty_text_dumps,
@@ -21,10 +25,16 @@ from plugins.benchmark_harness.tau2_geode_agent import (
     _validate_tau2_task_order,
     _write_trajectory_snapshot,
 )
+from plugins.benchmark_harness.tau2_runtime_contract import (
+    Tau2AttemptTracker,
+    Tau2RuntimeContract,
+)
 from plugins.benchmark_harness.tau2_turn_supervisor import (
     GeodeTau2State,
     _agent_system_prompt,
     _message_to_prompt,
+    _record_tau2_tool_results,
+    _remember_tau2_tool_calls,
     _run_geode_turn,
     _tau2_terminal_token,
     _tau2_tool_calls,
@@ -50,6 +60,386 @@ def test_tau2_agent_prompt_blocks_inferred_optional_tool_args() -> None:
     assert "Policy body" in prompt
 
 
+def test_tau2_loop_reuses_one_process_owned_hook_and_middleware_registry(
+    tmp_path: Path,
+) -> None:
+    from core.llm.adapters.registry import bootstrap_builtins
+
+    bootstrap_builtins()
+    runtime = Tau2RuntimeContract(
+        run_id="shared-runtime",
+        repo_root=Path.cwd(),
+        agent_route={},
+        user_route={},
+        runtime_profile="tau2-native-user",
+        event_db_path=tmp_path / "events.db",
+    )
+    try:
+        loop = _build_loop(
+            tools=[],
+            system_prompt="Agent: runtime contract test",
+            model="gpt-5.5",
+            provider="openai",
+            source="subscription",
+            effort="high",
+            time_budget_s=1.0,
+            max_tokens=32,
+            max_rounds=0,
+            runtime_contract=runtime,
+        )
+
+        assert loop._hook_registry is runtime.hook_registry
+        assert loop._middleware_registry is runtime.middleware_registry
+        assert loop.executor.hook_registry is runtime.hook_registry
+        assert loop.executor.middleware_registry is runtime.middleware_registry
+    finally:
+        runtime.close()
+
+
+def test_tau2_attempt_tracker_preserves_retry_lineage_and_final_selection() -> None:
+    tracker = Tau2AttemptTracker("retry-run")
+    calls = 0
+
+    def run_fn() -> SimpleNamespace:
+        nonlocal calls
+        calls += 1
+        tracker.register_session(
+            participant_role="assistant",
+            session_id=f"session-{calls}",
+        )
+        if calls == 1:
+            raise RuntimeError("first attempt failed")
+        return SimpleNamespace(id="simulation-final")
+
+    def retry_once(fn, _task, _trial, _seed, **_kwargs):
+        with contextlib.suppress(RuntimeError):
+            fn()
+        return fn()
+
+    result = tracker.wrap(retry_once)(
+        run_fn,
+        SimpleNamespace(id="task-1"),
+        0,
+        300,
+    )
+    manifest = tracker.manifest()
+
+    assert result.id == "simulation-final"
+    assert [row["status"] for row in manifest["attempts"]] == ["error", "complete"]
+    assert manifest["attempts"][1]["retry_of"] == manifest["attempts"][0]["attempt_id"]
+    assert manifest["attempts"][1]["selected_final"] is True
+    assert manifest["final_results"] == [
+        {
+            "task_id": "task-1",
+            "trial": 0,
+            "simulation_id": "simulation-final",
+            "selected_attempt_id": manifest["attempts"][1]["attempt_id"],
+            "selection_status": "selected",
+        }
+    ]
+
+
+def test_tau2_attempt_tracker_selects_only_after_upstream_accepts_result() -> None:
+    tracker = Tau2AttemptTracker("post-run-retry")
+    calls = 0
+
+    def run_fn() -> SimpleNamespace:
+        nonlocal calls
+        calls += 1
+        tracker.register_session(
+            participant_role="assistant",
+            session_id=f"post-run-session-{calls}",
+        )
+        return SimpleNamespace(id=f"simulation-{calls}")
+
+    def retry_after_checkpoint_failure(fn, _task, _trial, _seed, **_kwargs):
+        fn()
+        return fn()
+
+    tracker.wrap(retry_after_checkpoint_failure)(
+        run_fn,
+        SimpleNamespace(id="task-1"),
+        0,
+        300,
+    )
+    attempts = tracker.manifest()["attempts"]
+
+    assert attempts[0]["status"] == "error"
+    assert attempts[0]["selected_final"] is False
+    assert attempts[0]["retry_reason"] == "upstream post-run failure before selection"
+    assert attempts[1]["retry_of"] == attempts[0]["attempt_id"]
+    assert attempts[1]["selected_final"] is True
+
+
+def test_tau2_attempt_tracker_downgrades_final_post_run_failure() -> None:
+    tracker = Tau2AttemptTracker("final-post-run-failure")
+
+    def run_fn() -> SimpleNamespace:
+        tracker.register_session(participant_role="assistant", session_id="session-1")
+        return SimpleNamespace(id="simulation-real")
+
+    def exhausted_after_checkpoint_failure(fn, _task, _trial, _seed, **_kwargs):
+        fn()
+        return SimpleNamespace(id="simulation-infrastructure-placeholder")
+
+    tracker.wrap(exhausted_after_checkpoint_failure)(
+        run_fn,
+        SimpleNamespace(id="task-1"),
+        0,
+        300,
+    )
+    manifest = tracker.manifest()
+
+    assert manifest["attempts"][0]["status"] == "error"
+    assert manifest["attempts"][0]["retry_reason"] == ("upstream post-run failure before selection")
+    assert manifest["final_results"][0]["selection_status"] == "no_successful_attempt"
+
+
+def test_tau2_native_verdict_is_recorded_before_session_close(tmp_path: Path) -> None:
+    from core.hooks import LlmCallRequest
+    from core.llm.adapters.base import AdapterCallRequest, ToolSpec
+
+    evidence: list[dict[str, object]] = []
+
+    class Timeline:
+        db_path = tmp_path / "sessions.db"
+
+        def record_verification_evidence(
+            self,
+            references: list[dict[str, object]],
+            *,
+            root_turn_id: str,
+            verify_attempt: int,
+            policy_action: str,
+        ) -> None:
+            evidence.append(
+                {
+                    "references": references,
+                    "root_turn_id": root_turn_id,
+                    "verify_attempt": verify_attempt,
+                    "policy_action": policy_action,
+                }
+            )
+
+    runtime = Tau2RuntimeContract(
+        run_id="native-verdict-run",
+        repo_root=Path.cwd(),
+        agent_route={},
+        user_route={},
+        runtime_profile="tau2-native-user",
+        event_db_path=tmp_path / "events.db",
+    )
+    loop = SimpleNamespace(
+        _session_id="session-agent",
+        _timeline=Timeline(),
+        _turn_id="turn-final",
+        _tau2_pending_tool_calls={},
+    )
+
+    def execute() -> SimpleNamespace:
+        runtime.register_loop(loop, participant_role="assistant")
+        return SimpleNamespace(id="simulation-1")
+
+    def no_retry(fn, _task, _trial, _seed, **_kwargs):
+        return fn()
+
+    runtime.attempts.wrap(no_retry)(
+        execute,
+        SimpleNamespace(id="task-1"),
+        0,
+        300,
+    )
+    results = tmp_path / "results.json"
+    results.write_text(
+        json.dumps(
+            {
+                "simulations": [
+                    {
+                        "id": "simulation-1",
+                        "task_id": "task-1",
+                        "trial": 0,
+                        "termination_reason": "user_stop",
+                        "reward_info": {"reward": 0.0},
+                        "messages": [
+                            {
+                                "raw_data": {
+                                    "geode_session_id": "session-agent",
+                                    "geode_termination_reason": "completed",
+                                }
+                            }
+                        ],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    try:
+        runtime.bind_native_results(results, classify_termination=lambda _reason: "semantic")
+        asyncio.run(
+            runtime.capture.llm_request(
+                LlmCallRequest(
+                    adapter=SimpleNamespace(),
+                    request=AdapterCallRequest(
+                        model="gpt-5.4",
+                        messages=(),
+                        system_prompt=(
+                            "Agent: test\n__GEODE_PROMPT_CACHE_BOUNDARY__\n"
+                            "<dynamic_context><policy>bounded</policy></dynamic_context>"
+                        ),
+                        tools=(
+                            ToolSpec(
+                                name="lookup_account",
+                                description="lookup",
+                                input_schema={"type": "object"},
+                            ),
+                        ),
+                    ),
+                    correlation={"session_id": "session-agent"},
+                )
+            )
+        )
+        profile_path, manifest_path = runtime.write_companions(tmp_path / "snapshots")
+
+        reference = evidence[0]["references"][0]
+        assert reference["reward"] == 0.0
+        assert reference["validity"] == "semantic"
+        assert reference["native_termination_reason"] == "user_stop"
+        assert reference["runtime_termination_reason"] == "completed"
+        assert evidence[0]["policy_action"] == "observe_native_verdict"
+        profile = json.loads(profile_path.read_text())
+        request = profile["assembled_requests"][0]
+        assert request["assembled_prompt_sha256"]
+        assert request["prompt_block_inventory"]["cache_boundary_present"] is True
+        assert {row["name"] for row in request["prompt_block_inventory"]["xml_tags"]} == {
+            "dynamic_context",
+            "policy",
+        }
+        assert request["tool_schema_sha256"]
+        assert request["tool_allowlist"] == ["lookup_account"]
+        assert all(row["status"] != "passed" for row in profile["surfaces"]["public_hooks"])
+        assert json.loads(manifest_path.read_text())["final_results"][0]["selected_attempt_id"]
+    finally:
+        runtime.close()
+
+
+def test_tau2_native_verdict_reconciles_terminal_tool_result(tmp_path: Path) -> None:
+    recorded: list[dict[str, object]] = []
+
+    class Timeline:
+        db_path = tmp_path / "sessions.db"
+
+        def record_tool_result(self, *args: object, **kwargs: object) -> None:
+            recorded.append({"args": args, "kwargs": kwargs})
+
+        def record_verification_evidence(self, *_args: object, **_kwargs: object) -> None:
+            pass
+
+    runtime = Tau2RuntimeContract(
+        run_id="terminal-tool-run",
+        repo_root=Path.cwd(),
+        agent_route={},
+        user_route={},
+        runtime_profile="tau2-native-user",
+        event_db_path=tmp_path / "events.db",
+    )
+    loop = SimpleNamespace(
+        _session_id="session-agent",
+        _timeline=Timeline(),
+        _turn_id="turn-final",
+        _tau2_pending_tool_calls={"call-final": "lookup_account"},
+    )
+
+    def execute() -> SimpleNamespace:
+        runtime.register_loop(loop, participant_role="assistant")
+        return SimpleNamespace(id="simulation-1")
+
+    runtime.attempts.wrap(lambda fn, *_args, **_kwargs: fn())(
+        execute,
+        SimpleNamespace(id="task-1"),
+        0,
+        300,
+    )
+    results = tmp_path / "terminal-results.json"
+    results.write_text(
+        json.dumps(
+            {
+                "simulations": [
+                    {
+                        "id": "simulation-1",
+                        "task_id": "task-1",
+                        "trial": 0,
+                        "termination_reason": "too_many_errors",
+                        "messages": [
+                            {"raw_data": {"geode_session_id": "session-agent"}},
+                            {
+                                "role": "tool",
+                                "id": "call-final",
+                                "requestor": "assistant",
+                                "content": "failed",
+                                "error": True,
+                            },
+                        ],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    try:
+        runtime.bind_native_results(results, classify_termination=lambda _reason: "semantic")
+    finally:
+        runtime.close()
+
+    assert loop._tau2_pending_tool_calls == {}
+    assert recorded[0]["kwargs"]["call_id"] == "call-final"
+    assert recorded[0]["args"][:2] == ("lookup_account", "error")
+
+
+def test_tau2_auto_resume_marks_prior_native_rows_unattested(tmp_path: Path) -> None:
+    runtime = Tau2RuntimeContract(
+        run_id="resume-run",
+        repo_root=Path.cwd(),
+        agent_route={},
+        user_route={},
+        runtime_profile="tau2-native-user",
+        event_db_path=tmp_path / "events.db",
+        allow_resumed_native=True,
+    )
+    results = tmp_path / "resumed-results.json"
+    results.write_text(
+        json.dumps(
+            {
+                "simulations": [
+                    {
+                        "id": "simulation-old",
+                        "task_id": "task-old",
+                        "trial": 0,
+                        "termination_reason": "user_stop",
+                        "messages": [{"raw_data": {"geode_session_id": "prior-process-session"}}],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    try:
+        runtime.bind_native_results(results, classify_termination=lambda _reason: "semantic")
+        manifest = runtime.attempts.manifest()
+    finally:
+        runtime.close()
+
+    assert manifest["resumed_results"] == [
+        {
+            "task_id": "task-old",
+            "trial": 0,
+            "simulation_id": "simulation-old",
+            "session_ids": ["prior-process-session"],
+            "selection_status": "resumed_native_unattested",
+        }
+    ]
+
+
 def test_tau2_message_prompt_normalizes_enum_like_roles() -> None:
     message = SimpleNamespace(
         role=SimpleNamespace(value="tool"),
@@ -58,9 +448,15 @@ def test_tau2_message_prompt_normalizes_enum_like_roles() -> None:
         tool_calls=None,
     )
 
-    assert _message_to_prompt(message, recipient="assistant") == (
-        "Tool result to assistant from tau2 orchestrator:\ntool output"
-    )
+    rendered = _message_to_prompt(message, recipient="assistant")
+
+    assert rendered.startswith("Tool result to assistant from tau2 orchestrator:\n")
+    assert json.loads(rendered.split("\n", 1)[1]) == {
+        "id": "",
+        "requestor": "",
+        "content": "tool output",
+        "error": False,
+    }
 
 
 def test_tau2_explicit_task_pack_runs_every_task_by_default() -> None:
@@ -200,6 +596,19 @@ def test_tau2_tool_mutability_uses_upstream_marker_and_fails_safe() -> None:
     assert _tool_mutates_state(SimpleNamespace(name="get_unknown")) is True
 
 
+def test_tau2_tool_wrapper_returns_a_deferred_ack_without_local_execution() -> None:
+    class NativeTool:
+        name = "lookup_account"
+
+        def __call__(self, **_kwargs: object) -> object:
+            raise AssertionError("tau2 must remain the only environment executor")
+
+    result = asyncio.run(Tau2GeodeTool(NativeTool(), mutates_state=False).aexecute(id="A"))
+
+    assert result["external_execution"] == "deferred"
+    assert result["projected_to_tau2"] is True
+
+
 @pytest.mark.parametrize("tool_name", ["modify_user_address", "future_required_empty"])
 def test_tau2_tool_calls_preserves_explicit_empty_arguments(
     monkeypatch: pytest.MonkeyPatch,
@@ -264,6 +673,80 @@ def test_tau2_tool_projection_is_scoped_to_each_agentic_run(
 
     assert [call.id for call in first_calls] == ["call_1"]
     assert [call.id for call in second_calls] == ["call_2"]
+
+
+def test_tau2_external_result_closes_the_original_provider_call_id() -> None:
+    recorded: list[dict[str, object]] = []
+
+    class Timeline:
+        def record_tool_result(
+            self,
+            tool: str,
+            status: str,
+            summary: str,
+            *,
+            call_id: str,
+            result: object,
+        ) -> None:
+            recorded.append(
+                {
+                    "tool": tool,
+                    "status": status,
+                    "summary": summary,
+                    "call_id": call_id,
+                    "result": result,
+                }
+            )
+
+    state = GeodeTau2State(loop=SimpleNamespace(_timeline=Timeline()))
+    _remember_tau2_tool_calls(
+        state,
+        [SimpleNamespace(id="call_exact", name="update_address")],
+    )
+
+    _record_tau2_tool_results(
+        state,
+        SimpleNamespace(
+            role="tool",
+            id="call_exact",
+            requestor="assistant",
+            content='{"ok": true}',
+            error=False,
+            tool_messages=None,
+        ),
+    )
+
+    assert recorded == [
+        {
+            "tool": "update_address",
+            "status": "ok",
+            "summary": "tau2 orchestrator result",
+            "call_id": "call_exact",
+            "result": {
+                "content": '{"ok": true}',
+                "error": False,
+                "source": "tau2_orchestrator",
+            },
+        }
+    ]
+    assert state.pending_tool_calls == {}
+
+
+def test_tau2_external_result_rejects_an_orphan_call_id() -> None:
+    state = GeodeTau2State(loop=SimpleNamespace(_timeline=SimpleNamespace()))
+
+    with pytest.raises(RuntimeError, match="orphan tau2 tool result id"):
+        _record_tau2_tool_results(
+            state,
+            SimpleNamespace(
+                role="tool",
+                id="unknown",
+                requestor="assistant",
+                content="not joined",
+                error=False,
+                tool_messages=None,
+            ),
+        )
 
 
 def test_tau2_tool_projection_preserves_failed_execution_for_official_accounting(

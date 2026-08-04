@@ -32,6 +32,28 @@ export default function Page() {
               고정해서만 게시합니다. 같은 조건의 재실행과만 비교할 수 있습니다.
             </p>
 
+            <h2>2026-08-04 runtime-faithful 실행 계약</h2>
+            <p>
+              현재 어댑터는 process-owned <code>RuntimeEventBus</code>, 13개 공개
+              hook registry, 4개 trusted middleware join point를 Tau2의 모든
+              <code>ToolExecutor</code>와 <code>AgenticLoop</code>에 공유합니다. Tau2가
+              실제 환경 tool을 실행하며, GEODE의 projection ACK는
+              <code>deferred</code>로 남습니다. 이후 native <code>ToolMessage.id</code>가
+              원래 call ID의 유일한 completion/error를 닫습니다. 환경 단계에서 즉시
+              종료된 경우에는 native receipt의 마지막 ToolMessage를 결합합니다.
+            </p>
+            <p>
+              native <code>results.json</code>은 계속 점수 정본입니다. 그 digest와
+              reward, task/trial, native/runtime termination은
+              <code>verification.evidence</code>로 SessionEnd 전에 기록됩니다. 새
+              <code>snapshot v4</code>는 runtime revision, assembled prompt/tool schema
+              digest, 실제로 exercise된 surface를 담은 runtime profile과 모든
+              retry/session/final selection을 담은 attempt manifest를 함께 검증합니다.
+              <code>tau2-native-user</code>와 <code>geode-dual-runtime</code> profile은 합산하지
+              않습니다. 진단 auto-resume의 이전 process 행은
+              <code>resumed_native_unattested</code>로 표시합니다.
+            </p>
+
             <h2>2026-08-03 GPT-5.4 subscription base full cycle</h2>
             <p>
               GEODE <code>22789ee2</code>에서 Airline, Retail, Telecom base
@@ -231,6 +253,29 @@ export default function Page() {
               published number is pinned to the harness revision, model route, and
               effort that produced it. Compare only against reruns with the same
               settings.
+            </p>
+
+            <h2>2026-08-04 Runtime-Faithful Execution Contract</h2>
+            <p>
+              The current adapter shares one process-owned{" "}
+              <code>RuntimeEventBus</code>, all 13 public hook registrations, and
+              all four trusted middleware join points across every Tau2{" "}
+              <code>ToolExecutor</code> and <code>AgenticLoop</code>. Tau2 remains
+              the only environment-tool executor. GEODE&apos;s projection ACK stays{" "}
+              <code>deferred</code>, and the native <code>ToolMessage.id</code>
+              later closes the original call ID with its sole completion or error,
+              including a terminal-step result recovered from the native receipt.
+            </p>
+            <p>
+              Native <code>results.json</code> remains score authority. Its digest,
+              reward, task/trial, and native/runtime termination are recorded as{" "}
+              <code>verification.evidence</code> before SessionEnd. New{" "}
+              <code>snapshot v4</code> admission also verifies a runtime profile
+              containing revision, assembled prompt/tool-schema digests and actually
+              exercised surfaces, plus an attempt manifest covering every retry,
+              participant session, and final selection. <code>tau2-native-user</code> and{" "}
+              <code>geode-dual-runtime</code> profiles are never pooled. A diagnostic
+              auto-resume labels prior-process rows as <code>resumed_native_unattested</code>.
             </p>
 
             <h2>2026-08-03 GPT-5.4 Subscription Base Full Cycle</h2>

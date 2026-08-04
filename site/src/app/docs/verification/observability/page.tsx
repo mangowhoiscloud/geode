@@ -114,6 +114,7 @@ export default function Page() {
               <tbody>
                 <tr><td>SIL Inspect <code>.eval</code></td><td><code>kind=sil_eval</code>, <code>schema_id=inspect_ai.eval@native</code>, source SHA-256</td><td>scored archive를 digest로 연결; judge 결과를 대체하지 않음</td></tr>
                 <tr><td>tau2 <code>results.json</code></td><td><code>kind=native_receipt</code>, <code>schema_id=tau2.results@native</code></td><td>native score receipt를 그대로 정본으로 유지</td></tr>
+                <tr><td>tau2 runtime profile / attempt manifest</td><td><code>snapshot v4</code>의 sibling path + SHA-256, trajectory <code>artifact_digests</code></td><td>실행 표면과 retry 선택을 증명하며 native reward를 대체하지 않음</td></tr>
                 <tr><td>Crucible frozen contract</td><td>identity preflight가 끝난 경우에만 <code>kind=crucible_evidence</code></td><td>verdict나 promotion authority를 얻지 않음</td></tr>
               </tbody>
             </table>
@@ -245,6 +246,7 @@ export default function Page() {
               <tbody>
                 <tr><td>SIL Inspect <code>.eval</code></td><td><code>kind=sil_eval</code>, <code>schema_id=inspect_ai.eval@native</code>, source SHA-256</td><td>Digest-join the scored archive; never replace its judgment</td></tr>
                 <tr><td>tau2 <code>results.json</code></td><td><code>kind=native_receipt</code>, <code>schema_id=tau2.results@native</code></td><td>Keep the native score receipt authoritative</td></tr>
+                <tr><td>tau2 runtime profile / attempt manifest</td><td>Sibling path + SHA-256 in <code>snapshot v4</code>, plus trajectory <code>artifact_digests</code></td><td>Prove execution surfaces and retry selection without replacing native reward</td></tr>
                 <tr><td>Crucible frozen contract</td><td><code>kind=crucible_evidence</code> only after identity preflight</td><td>Gain neither verdict nor promotion authority</td></tr>
               </tbody>
             </table>

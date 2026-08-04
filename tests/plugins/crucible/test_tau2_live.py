@@ -252,7 +252,7 @@ def test_timeout_receipt_is_persisted_before_outer_checkout_cleanup(
     assert receipt["observation"]["status"] == "right_censored"
 
 
-def test_timeout_receipt_is_written_before_partial_cache_salvage(
+def test_timeout_receipt_is_written_before_arm_returns(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -269,11 +269,6 @@ def test_timeout_receipt_is_written_before_partial_cache_salvage(
             subprocess.TimeoutExpired(cmd=["tau2-fixture"], timeout=1.0)
         ),
     )
-
-    def harvest(*args: object, **kwargs: object) -> None:
-        assert receipt_path.is_file(), "right-censored receipt must precede cache salvage"
-
-    monkeypatch.setattr("plugins.crucible.tau2_live._harvest_partial", harvest)
 
     with pytest.raises(TimeoutError, match="arm timed out"):
         _run_arm_with_deadline(
@@ -443,7 +438,10 @@ def test_unreachable_candidate_is_a_zero_call_screening_reject(tmp_path: Path) -
     assert raw["schema"] == "crucible.screened-arm.v1"
     assert raw["reason"] == SCREENING_FAILURE
     assert candidate.usage == ResourceUsage(0.0, 0, 0, 0.0)
-    assert marginal_usage == ResourceUsage(0.0, 0, 0, 0.0)
+    assert marginal_usage.calls == 0
+    assert marginal_usage.tokens == 0
+    assert marginal_usage.cost_usd == 0.0
+    assert marginal_usage.wall_seconds >= 0.0
     assert verdict.verdict == "REJECT"
     assert verdict.reasons == (SCREENING_FAILURE,)
     assert verdict.pair_count == 0
@@ -795,7 +793,7 @@ def test_run_arm_rejects_nonzero_exit_with_complete_evidence(
         )
 
 
-def test_run_arm_partial_cache_reruns_missing_task_and_keeps_original_trial(
+def test_run_arm_disables_legacy_partial_cache_without_v4_companions(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -891,28 +889,23 @@ def test_run_arm_partial_cache_reruns_missing_task_and_keeps_original_trial(
 
     command = commands[0]
     task_slice = command[command.index("--task-ids") + 1 : command.index("--num-tasks")]
-    assert task_slice == ["task-1"]
-    assert measurement_source == "partial_cache"
+    assert task_slice == list(contract.task_ids)
+    assert measurement_source == "fresh"
     merged = json.loads(merged_path.read_text(encoding="utf-8"))
     rewards = {
         (row["task_id"], row["trial"]): row["reward_info"]["reward"]
         for row in merged["simulations"]
     }
-    assert rewards == {
-        ("task-1", 0): 1.0,
-        ("task-1", 1): 1.0,
-        ("task-2", 0): 1.0,
-        ("task-2", 1): 1.0,
-    }
-    merged_snapshot = output / "snapshots" / f"{run_id}.merged.snapshot.json"
-    assert json.loads(merged_snapshot.read_text())["row_cache"]["synthesized"] is True
+    assert rewards == {("task-1", 0): 0.0, ("task-1", 1): 1.0}
+    marker = json.loads((output / "state" / "baseline" / "row-cache-disabled.json").read_text())
+    assert marker["reason"] == "cached-row.v1 lacks snapshot-v4 runtime companions"
     assert marginal_usage.calls == 0
     assert marginal_usage.tokens == 0
     assert marginal_usage.cost_usd == 0.0
     assert marginal_usage.wall_seconds >= 0.0
 
 
-def test_run_arm_full_cache_spends_zero_marginal_usage(
+def test_run_arm_disables_legacy_full_cache_and_executes_fresh(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -944,6 +937,10 @@ def test_run_arm_full_cache_spends_zero_marginal_usage(
         revision_sha=contract.baseline_sha,
         raw_results=raw,
     )
+    run_id = "full-cache-run"
+    source_raw = harness / "data" / "simulations" / run_id / "results.json"
+    source_raw.parent.mkdir(parents=True)
+    source_raw.write_text(json.dumps(raw), encoding="utf-8")
     evidence = _arm_evidence(
         contract,
         arm="baseline",
@@ -951,13 +948,19 @@ def test_run_arm_full_cache_spends_zero_marginal_usage(
         raw_hash="a" * 64,
     )
     monkeypatch.setenv("CRUCIBLE_ROW_CACHE_ROOT", str(cache))
-    monkeypatch.setattr(
-        "plugins.crucible.tau2_live._run_tau2_command",
-        lambda *args, **kwargs: pytest.fail("a full-cache arm must not launch tau2"),
-    )
+    commands: list[list[str]] = []
+
+    def run(command: list[str], **kwargs: object) -> tuple[subprocess.CompletedProcess[str], bool]:
+        commands.append(command)
+        snapshot_dir = Path(command[command.index("--trajectory-snapshot-dir") + 1])
+        snapshot_dir.mkdir(parents=True, exist_ok=True)
+        (snapshot_dir / f"{run_id}.snapshot.json").write_text("{}\n", encoding="utf-8")
+        return subprocess.CompletedProcess(args=command, returncode=0), False
+
+    monkeypatch.setattr("plugins.crucible.tau2_live._run_tau2_command", run)
     monkeypatch.setattr(
         "plugins.crucible.tau2_live.tau2_resource_usage_floor",
-        lambda _raw: ResourceUsage(900.0, 152, 1_238_603, 1.24225),
+        lambda _raw: ResourceUsage(0.0, 0, 0, 0.0),
     )
     monkeypatch.setattr("plugins.crucible.tau2_live.tau2_trace_checks", lambda _raw: {})
     monkeypatch.setattr(
@@ -972,12 +975,18 @@ def test_run_arm_full_cache_spends_zero_marginal_usage(
         harness_root=harness,
         contract_path=tmp_path / "contract.json",
         output_dir=output,
-        run_id="full-cache-run",
+        run_id=run_id,
         timeout=10.0,
     )
 
-    assert marginal_usage == ResourceUsage(0.0, 0, 0, 0.0)
-    assert measurement_source == "full_cache"
+    assert marginal_usage.calls == 0
+    assert marginal_usage.tokens == 0
+    assert marginal_usage.cost_usd == 0.0
+    assert marginal_usage.wall_seconds >= 0.0
+    assert measurement_source == "fresh"
+    assert len(commands) == 1
+    marker = json.loads((output / "state" / "baseline" / "row-cache-disabled.json").read_text())
+    assert marker["reason"] == "cached-row.v1 lacks snapshot-v4 runtime companions"
 
 
 def test_run_arm_ignores_row_cache_outside_train_stage(
