@@ -469,6 +469,11 @@ def _verify_snapshot(
         schema="geode.tau2-attempt-manifest.v1",
     )
     _verify_attempt_manifest(attempt_manifest, raw)
+    _verify_geode_trajectory(
+        snapshot,
+        snapshot_path=snapshot_path,
+        raw_sha256=raw_sha256,
+    )
     return "complete", None
 
 
@@ -506,6 +511,57 @@ def _verify_companion(
     if row.get("run_id") != snapshot.get("run_id"):
         raise ContractError(f"snapshot companion {filename!r} run_id does not match")
     return row
+
+
+def _verify_geode_trajectory(
+    snapshot: Mapping[str, Any],
+    *,
+    snapshot_path: Path,
+    raw_sha256: str,
+) -> None:
+    """Require the portable trajectory sidecar to be hash-bound and complete."""
+    from core.observability.trajectory import verify_trajectory_integrity
+
+    run_id = str(snapshot.get("run_id") or "")
+    expected_name = f"{run_id}.geode-trajectory.json"
+    declared = snapshot.get("geode_trajectory")
+    if not isinstance(declared, str) or Path(declared).name != expected_name:
+        raise ContractError("snapshot geode_trajectory must name the run's sibling sidecar")
+    digest = snapshot.get("geode_trajectory_sha256")
+    if not isinstance(digest, str) or len(digest) != 64:
+        raise ContractError("snapshot geode_trajectory_sha256 is required")
+    path = snapshot_path.parent / expected_name
+    try:
+        payload = path.read_bytes()
+    except OSError as exc:
+        raise ContractError(f"cannot read GEODE trajectory companion: {exc}") from exc
+    if hashlib.sha256(payload).hexdigest() != digest:
+        raise ContractError("snapshot geode_trajectory_sha256 does not match companion bytes")
+    try:
+        trajectory = _mapping(json.loads(payload), "GEODE trajectory companion")
+        integrity = verify_trajectory_integrity(trajectory)
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise ContractError(f"invalid GEODE trajectory companion: {exc}") from exc
+    if trajectory.get("schema_id") != "geode.trajectory@1":
+        raise ContractError("GEODE trajectory companion must use geode.trajectory@1")
+    source = _mapping(trajectory.get("source"), "GEODE trajectory source")
+    if source.get("run") != run_id:
+        raise ContractError("GEODE trajectory run does not match snapshot")
+    if source.get("runtime_profile_sha256") != _mapping(
+        snapshot.get("runtime_profile_artifact"), "snapshot.runtime_profile_artifact"
+    ).get("sha256"):
+        raise ContractError("GEODE trajectory runtime profile digest does not match snapshot")
+    if source.get("attempt_manifest_sha256") != _mapping(
+        snapshot.get("attempt_manifest_artifact"), "snapshot.attempt_manifest_artifact"
+    ).get("sha256"):
+        raise ContractError("GEODE trajectory attempt manifest digest does not match snapshot")
+    if raw_sha256 not in {
+        str(_mapping(row, "GEODE trajectory artifact digest").get("sha256") or "")
+        for row in trajectory.get("artifact_digests", [])
+    }:
+        raise ContractError("GEODE trajectory does not bind the native receipt digest")
+    if integrity.get("scope_complete") is not True:
+        raise ContractError("GEODE trajectory is not scope complete")
 
 
 def _verify_attempt_manifest(

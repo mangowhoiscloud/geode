@@ -440,6 +440,43 @@ def test_tau2_auto_resume_marks_prior_native_rows_unattested(tmp_path: Path) -> 
     ]
 
 
+def test_tau2_runtime_contract_flags_infrastructure_receipt(tmp_path: Path) -> None:
+    runtime = Tau2RuntimeContract(
+        run_id="infrastructure-run",
+        repo_root=Path.cwd(),
+        agent_route={},
+        user_route={},
+        runtime_profile="tau2-native-user",
+        event_db_path=tmp_path / "events.db",
+        allow_resumed_native=True,
+    )
+    results = tmp_path / "infrastructure-results.json"
+    results.write_text(
+        json.dumps(
+            {
+                "simulations": [
+                    {
+                        "id": "simulation-infra",
+                        "task_id": "task-infra",
+                        "trial": 0,
+                        "termination_reason": "infrastructure_error",
+                        "messages": [],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    try:
+        runtime.bind_native_results(
+            results,
+            classify_termination=lambda _reason: "infra",
+        )
+        assert runtime.infrastructure_contaminated is True
+    finally:
+        runtime.close()
+
+
 def test_tau2_message_prompt_normalizes_enum_like_roles() -> None:
     message = SimpleNamespace(
         role=SimpleNamespace(value="tool"),

@@ -453,6 +453,7 @@ class Tau2RuntimeContract:
         self._roles: dict[str, str] = {}
         self._native_receipt: dict[str, Any] | None = None
         self._bound_sessions: set[str] = set()
+        self.infrastructure_contaminated = False
 
     def register_loop(self, loop: Any, *, participant_role: str) -> None:
         session_id = str(getattr(loop, "_session_id", "") or f"loop-{id(loop)}")
@@ -522,6 +523,8 @@ class Tau2RuntimeContract:
             termination = str(simulation.get("termination_reason") or "")
             termination_class = classify_termination(termination)
             validity = "infrastructure" if termination_class == "infra" else "semantic"
+            if validity == "infrastructure":
+                self.infrastructure_contaminated = True
             reward_info = simulation.get("reward_info")
             reward_row = reward_info if isinstance(reward_info, Mapping) else {}
             reward = reward_row.get("reward")

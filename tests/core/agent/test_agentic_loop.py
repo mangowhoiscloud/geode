@@ -712,10 +712,12 @@ class TestAgenticLoop:
         with (
             patch.object(loop, "_call_llm", return_value=tool_response) as call_llm,
             patch.object(loop, "_track_usage"),
+            patch.object(loop, "_guard_repeated_success") as repeated_success,
         ):
             result = asyncio.run(loop.arun("run one externally orchestrated tool round"))
 
         call_llm.assert_called_once()
+        repeated_success.assert_not_called()
         assert result.text == ""
         assert result.error is None
         assert result.rounds == 1

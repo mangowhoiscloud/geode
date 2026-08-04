@@ -587,6 +587,9 @@ its `ToolMessage.id` closes the original call with the native result/error.
 Unknown result IDs and sessions with pending calls fail closed. When Tau2
 terminates directly after an environment step, the binder joins the final
 native ToolMessage from the receipt before testing for pending calls.
+An external half-duplex proposal also returns to Tau2 immediately after the
+tool round, before GEODE's post-tool convergence guards can mistake the deferred
+ACK for completed local work.
 
 After Tau2 finalizes `results.json`, GEODE hashes the receipt and records typed
 `verification.evidence` on every selected participant session before
@@ -605,9 +608,12 @@ two sibling companions:
 
 The verifier rejects companion path traversal, byte/schema/run-ID drift,
 runtime-revision or native-receipt mismatch, broken retry ancestry, and final
-selection coverage that differs from native simulations. `tau2-native-user` and
-`geode-dual-runtime` are separate serialized profiles and cannot be combined into one
-headline or used as each other's baseline.
+selection coverage that differs from native simulations. It independently
+hashes and validates the sibling normalized trajectory, checks its receipt and
+companion bindings, and recomputes `scope_complete=true`; a declared but orphaned
+tool call therefore cannot enter promotion. `tau2-native-user` and
+`geode-dual-runtime` are separate serialized profiles and cannot be combined
+into one headline or used as each other's baseline.
 
 The legacy `crucible.cached-row.v1` cache stores native simulation rows but not
 these two companions. Snapshot v4 runs therefore disable it with an explicit
@@ -639,6 +645,15 @@ The executable design and migration ledger are in
 [`docs/plans/2026-08-04-runtime-faithful-tau2.md`](../plans/2026-08-04-runtime-faithful-tau2.md).
 Live measurements must proceed mock → one task per domain → paired failure pack;
 the 278-task cycle is justified only after the v4 contract itself is reviewable.
+
+The 2026-08-04 full-cycle attempt at GEODE `f08e7d6f` reached the complete
+278-task schedule, but subscription quota exhaustion contaminated 99 rows (2
+Airline, 16 Retail, 81 Telecom). Those rows are missing work, not zero rewards,
+so the attempt has no aggregate score authority. It also exposed six pre-quota
+Telecom calls that remained unpaired under the original convergence ordering;
+the corrected runtime yields external proposals before those guards, and
+snapshot admission now rejects the captured scope-incomplete trajectory. A
+clean rerun is required before publishing a replacement headline.
 
 ## 참고
 

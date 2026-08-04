@@ -49,9 +49,23 @@ export default function Page() {
               <code>snapshot v4</code>는 runtime revision, assembled prompt/tool schema
               digest, 실제로 exercise된 surface를 담은 runtime profile과 모든
               retry/session/final selection을 담은 attempt manifest를 함께 검증합니다.
+              또한 normalized trajectory의 digest 결합을 독립적으로 확인하고
+              <code>scope_complete=true</code>를 다시 계산하므로 orphan tool call이
+              있는 실행은 승격할 수 없습니다.
               <code>tau2-native-user</code>와 <code>geode-dual-runtime</code> profile은 합산하지
               않습니다. 진단 auto-resume의 이전 process 행은
               <code>resumed_native_unattested</code>로 표시합니다.
+            </p>
+            <p>
+              2026-08-04 full-cycle 시도는 278개 task를 모두 스케줄했지만,
+              subscription quota 소진으로 Airline 2개, Retail 16개, Telecom
+              81개 등 99개 행이 infrastructure contamination 상태가 됐습니다.
+              이 행들은 0점이 아니라 미실행 작업이므로 이 시도에는 aggregate
+              score 권한이 없습니다. quota 소진 전 Telecom call 6개에서는
+              external-yield 순서 결함도 발견했습니다. 현재 runtime은 post-tool
+              convergence guard보다 먼저 proposal을 반환하고, admission은 당시의
+              scope-incomplete trajectory를 거부합니다. 새 headline은 깨끗한
+              재실행 이후에만 게시합니다.
             </p>
 
             <h2>2026-08-03 GPT-5.4 subscription base full cycle</h2>
@@ -273,9 +287,23 @@ export default function Page() {
               <code>snapshot v4</code> admission also verifies a runtime profile
               containing revision, assembled prompt/tool-schema digests and actually
               exercised surfaces, plus an attempt manifest covering every retry,
-              participant session, and final selection. <code>tau2-native-user</code> and{" "}
+              participant session, and final selection. It independently verifies
+              the normalized trajectory&apos;s digest bindings and recomputes{" "}
+              <code>scope_complete=true</code>, so an orphaned tool call cannot be
+              promoted. <code>tau2-native-user</code> and{" "}
               <code>geode-dual-runtime</code> profiles are never pooled. A diagnostic
               auto-resume labels prior-process rows as <code>resumed_native_unattested</code>.
+            </p>
+            <p>
+              The 2026-08-04 full-cycle attempt reached all 278 scheduled tasks,
+              but subscription quota exhaustion contaminated 99 rows: 2 Airline,
+              16 Retail, and 81 Telecom. They are missing work, not zero rewards,
+              so this attempt has no aggregate score authority. Six pre-quota
+              Telecom calls also exposed an external-yield ordering defect; the
+              runtime now returns those proposals before post-tool convergence
+              guards, and admission rejects the captured scope-incomplete
+              trajectory. A clean rerun is required before a new headline is
+              published.
             </p>
 
             <h2>2026-08-03 GPT-5.4 Subscription Base Full Cycle</h2>

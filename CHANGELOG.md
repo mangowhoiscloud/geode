@@ -72,6 +72,9 @@ functional change.
   still-pending calls fail closed. Terminal-step results are reconciled from
   the native receipt, diagnostic auto-resume rows remain explicitly
   unattested, and exhausted post-run failures cannot remain marked complete.
+- External half-duplex tool proposals now reach their orchestrator before
+  convergence guards can terminate the turn, and Crucible rejects snapshots
+  whose hash-bound GEODE trajectory is missing, corrupt, or scope-incomplete.
 
 ## [1.0.12] - 2026-08-03
 
