@@ -47,6 +47,13 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.13] - 2026-08-05
+
+> Runtime-faithful Tau2 execution now exercises GEODE's public hooks and
+> trusted middleware while preserving Tau2's native environment and score
+> authority. Incomplete trajectories fail closed and remain diagnostic
+> evidence rather than becoming benchmark scores.
+
 ### Added
 
 - Added a benchmark-safe Tau2 runtime profile and retry-attempt manifest. New
