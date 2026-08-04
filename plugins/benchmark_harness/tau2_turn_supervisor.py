@@ -25,6 +25,13 @@ class GeodeTau2State:
     loop: Any
     messages_seen: int = 0
     deadline_at: float | None = None
+    pending_tool_calls: dict[str, str] | None = None
+
+    def __post_init__(self) -> None:
+        if self.pending_tool_calls is None:
+            self.pending_tool_calls = {}
+        # The run contract audits this shared map before closing the session.
+        self.loop._tau2_pending_tool_calls = self.pending_tool_calls
 
 
 class _Tau2TurnDeadlineError(RuntimeError):
@@ -51,7 +58,13 @@ def _message_to_prompt(message: Any, *, recipient: str) -> str:
     content = str(getattr(message, "content", "") or "").strip()
     if content:
         if role == "tool":
-            return f"Tool result to {recipient} from tau2 orchestrator:\n{content}"
+            single_payload = {
+                "id": getattr(message, "id", ""),
+                "requestor": getattr(message, "requestor", ""),
+                "content": content,
+                "error": getattr(message, "error", False),
+            }
+            return f"Tool result to {recipient} from tau2 orchestrator:\n{_jsonish(single_payload)}"
         return f"Message to {recipient} from {role}:\n{content}"
     tool_calls = getattr(message, "tool_calls", None)
     if tool_calls:
@@ -166,6 +179,95 @@ def _tau2_tool_calls(result: Any, *, requestor: str) -> list[Any]:
             )
         )
     return calls
+
+
+def _remember_tau2_tool_calls(state: GeodeTau2State, calls: list[Any]) -> None:
+    """Retain the exact provider call IDs until tau2 returns their outcomes."""
+    pending = state.pending_tool_calls
+    if pending is None:
+        raise RuntimeError("tau2 pending tool-call state is unavailable")
+    for call in calls:
+        call_id = str(getattr(call, "id", "") or "")
+        tool_name = str(getattr(call, "name", "") or "")
+        if not call_id or not tool_name:
+            raise RuntimeError("tau2 projection requires non-empty tool call id and name")
+        if call_id in pending:
+            raise RuntimeError(f"duplicate pending tau2 tool call id: {call_id}")
+        pending[call_id] = tool_name
+
+
+def _message_field(message: Any, name: str, default: Any = None) -> Any:
+    return (
+        message.get(name, default)
+        if isinstance(message, Mapping)
+        else getattr(message, name, default)
+    )
+
+
+def _tool_messages(message: Any) -> list[Any]:
+    nested = _message_field(message, "tool_messages")
+    if isinstance(nested, list):
+        return nested
+    raw_role = _message_field(message, "role", "")
+    role = str(getattr(raw_role, "value", raw_role) or "").lower()
+    return [message] if role.rsplit(".", 1)[-1] == "tool" else []
+
+
+def _record_tau2_tool_result(
+    state: GeodeTau2State,
+    tool_message: Any,
+    *,
+    allow_missing: bool = False,
+) -> bool:
+    pending = state.pending_tool_calls
+    if pending is None:
+        raise RuntimeError("tau2 pending tool-call state is unavailable")
+    call_id = str(_message_field(tool_message, "id", "") or "")
+    tool_name = pending.pop(call_id, None)
+    if tool_name is None:
+        if allow_missing:
+            return False
+        raise RuntimeError(f"orphan tau2 tool result id: {call_id or '[empty]'}")
+    timeline = getattr(state.loop, "_timeline", None)
+    if timeline is None:
+        raise RuntimeError("GEODE tau2 loop has no session timeline")
+    has_error = bool(_message_field(tool_message, "error", False))
+    content = str(_message_field(tool_message, "content", "") or "")
+    timeline.record_tool_result(
+        tool_name,
+        "error" if has_error else "ok",
+        "tau2 orchestrator result",
+        call_id=call_id,
+        result={
+            "content": content,
+            "error": has_error,
+            "source": "tau2_orchestrator",
+        },
+    )
+    return True
+
+
+def _record_tau2_tool_results(state: GeodeTau2State, message: Any) -> None:
+    """Join official tau2 ToolMessage outcomes to their original GEODE calls."""
+    for tool_message in _tool_messages(message):
+        _record_tau2_tool_result(state, tool_message)
+
+
+def _reconcile_tau2_terminal_results(
+    state: GeodeTau2State,
+    messages: Any,
+    *,
+    requestor: str,
+) -> None:
+    """Close native tool outcomes that terminate before the participant is called again."""
+    if not isinstance(messages, list):
+        return
+    for message in messages:
+        for tool_message in _tool_messages(message):
+            owner = str(_message_field(tool_message, "requestor", "") or "")
+            if owner and owner != requestor:
+                continue
+            _record_tau2_tool_result(state, tool_message, allow_missing=True)
 
 
 def _tau2_terminal_token(result: Any) -> str | None:

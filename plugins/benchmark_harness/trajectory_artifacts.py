@@ -84,6 +84,7 @@ def write_tau2_trajectory_snapshot(
     snapshot_dir: Path,
     run_id: str,
     metadata: Mapping[str, Any],
+    companion_artifacts: Mapping[str, Mapping[str, str]] | None = None,
 ) -> tuple[Path, Path]:
     """Atomically publish a tau2 receipt, GEODE view, and commit marker.
 
@@ -109,6 +110,7 @@ def write_tau2_trajectory_snapshot(
                 run_id=run_id,
                 raw_artifact_sha256=raw_artifact_sha256,
                 metadata=metadata,
+                companion_artifacts=companion_artifacts,
             )
             normalized_status = "written"
             normalized_error = None
@@ -118,13 +120,15 @@ def write_tau2_trajectory_snapshot(
             normalized_error = str(exc)
             normalized_sha256 = None
         snapshot = {
-            "schema": "crucible_tau2_trajectory_snapshot.v3",
+            "schema": "crucible_tau2_trajectory_snapshot.v4",
             "filename_convention": {
                 "run_id": (
                     "crucible-tau2-<stage>-<domain>-<arm>-"
                     "<agent_route>-<user_route>-n<tasks>k<trials>-<yyyymmdd>-<seq>"
                 ),
                 "trajectory": "<run-id>.trajectory.json",
+                "runtime_profile": "<run-id>.runtime-profile.json",
+                "attempt_manifest": "<run-id>.attempt-manifest.json",
                 "snapshot": "<run-id>.snapshot.json",
             },
             "run_id": run_id,
@@ -136,6 +140,12 @@ def write_tau2_trajectory_snapshot(
             "geode_trajectory_status": normalized_status,
             "geode_trajectory_error": normalized_error,
             "snapshot_metadata": str(snapshot_path),
+            "runtime_profile_artifact": dict(
+                (companion_artifacts or {}).get("runtime_profile", {})
+            ),
+            "attempt_manifest_artifact": dict(
+                (companion_artifacts or {}).get("attempt_manifest", {})
+            ),
             **metadata,
         }
         staged_snapshot.write_text(
@@ -159,6 +169,7 @@ def export_tau2_trajectory(
     run_id: str,
     raw_artifact_sha256: str,
     metadata: Mapping[str, Any],
+    companion_artifacts: Mapping[str, Mapping[str, str]] | None = None,
 ) -> Path:
     """Project a tau2 receipt through GEODE's shared trajectory validator."""
     from core.observability.trajectory import export_trajectory, trajectory_from_sessions
@@ -183,7 +194,7 @@ def export_tau2_trajectory(
         evidence_refs.append(
             {
                 "kind": "crucible_evidence",
-                "schema_id": "crucible_tau2_trajectory_snapshot.v3",
+                "schema_id": "crucible_tau2_trajectory_snapshot.v4",
                 "reference": contract_id,
                 "contract_id": contract_id,
                 "arm": metadata.get("arm"),
@@ -199,6 +210,12 @@ def export_tau2_trajectory(
             "run": run_id,
             "session": run_id,
             "parents": session_ids,
+            "runtime_profile_sha256": (companion_artifacts or {})
+            .get("runtime_profile", {})
+            .get("sha256"),
+            "attempt_manifest_sha256": (companion_artifacts or {})
+            .get("attempt_manifest", {})
+            .get("sha256"),
         },
         outcome={
             "execution_status": metadata.get("execution_status"),
@@ -219,10 +236,12 @@ def export_tau2_trajectory(
             "payloads": "redacted and bounded by SessionEventStore",
         },
         artifact_digests=[
-            {
-                "path": results_path.name,
-                "sha256": raw_artifact_sha256,
-            }
+            {"path": results_path.name, "sha256": raw_artifact_sha256},
+            *[
+                dict(reference)
+                for reference in (companion_artifacts or {}).values()
+                if reference.get("path") and reference.get("sha256")
+            ],
         ],
         evidence_refs=evidence_refs,
         content_policy="digest",

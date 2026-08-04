@@ -565,6 +565,81 @@ and two scope-complete/replay-incomplete trajectories. Manifest SHA-256
 `fd524ce7a3cb1f1088f0e7a1531130d6302fb9f43d57a734303071bf6fd72288`
 was recomputed from the remote bytes after the artifact PR merged.
 
+## 2026-08-04 runtime-faithful adapter contract
+
+The current adapter replaces the two limitations measured in the 2026-08-03
+artifacts: an isolated loop with no hook composition, and retry lineage inferred
+after the run. Those older artifacts remain immutable and their claims stay
+revision-scoped; they are not retroactively upgraded.
+
+One process-owned benchmark-safe runtime now supplies the same
+`RuntimeEventBus`, `HookRegistry`, and `MiddlewareRegistry` instances to every
+Tau2 `ToolExecutor` and `AgenticLoop`. All four trusted join points are wired.
+All 13 public hooks are registered, but conditional hooks are not manufactured:
+an unvisited hook is `not_exercised`, not `passed`. Plugin/MCP discovery,
+scheduler, gateway, and auto-learning remain explicitly disabled so benchmark
+trials cannot acquire production cross-session state.
+
+Tool projection now preserves the official environment boundary. A GEODE
+wrapper returns `external_execution=deferred`; this ACK creates `tool.called`
+but not `tool.completed`. The pinned Tau2 orchestrator executes the call, and
+its `ToolMessage.id` closes the original call with the native result/error.
+Unknown result IDs and sessions with pending calls fail closed. When Tau2
+terminates directly after an environment step, the binder joins the final
+native ToolMessage from the receipt before testing for pending calls.
+
+After Tau2 finalizes `results.json`, GEODE hashes the receipt and records typed
+`verification.evidence` on every selected participant session before
+`SessionEnd`. The evidence keeps reward/components, native and runtime
+termination, semantic/infrastructure validity, participant role, task/trial,
+attempt ID, and `promotion_authority=none`. A normal `USER_STOP` with reward 0
+therefore remains runtime-complete and task-failed at the same time.
+
+Every new snapshot uses `crucible_tau2_trajectory_snapshot.v4` and digest-binds
+two sibling companions:
+
+| Companion | Contents |
+|---|---|
+| `<run>.runtime-profile.json` | revision; route/profile; assembled prompt hash/block inventory; tool schema digest/allowlist; exercised hook/middleware/event surfaces; SQLite/native receipt references |
+| `<run>.attempt-manifest.json` | every task/trial attempt; retry predecessor/reason; participant session IDs; native simulation ID; selected final result |
+
+The verifier rejects companion path traversal, byte/schema/run-ID drift,
+runtime-revision or native-receipt mismatch, broken retry ancestry, and final
+selection coverage that differs from native simulations. `tau2-native-user` and
+`geode-dual-runtime` are separate serialized profiles and cannot be combined into one
+headline or used as each other's baseline.
+
+The legacy `crucible.cached-row.v1` cache stores native simulation rows but not
+these two companions. Snapshot v4 runs therefore disable it with an explicit
+state marker and execute fresh. Existing cache bytes are retained for a future
+schema migration; GEODE does not synthesize a runtime profile from them.
+
+Frozen contract runs do not permit auto-resume. A diagnostic resume can retain
+completed native rows from an earlier process, but labels them
+`resumed_native_unattested`; it does not claim that the current process
+observed their hook, middleware, prompt, or retry surfaces.
+
+```mermaid
+flowchart LR
+    A["GEODE proposal<br/>tool.called"] --> D["deferred ACK<br/>no completion"]
+    D --> T["Tau2 environment<br/>native execution"]
+    T --> O["ToolMessage result/error<br/>same call_id"]
+    O --> S["sessions.db<br/>canonical tool.completed"]
+    T --> R["results.json<br/>score authority"]
+    R --> V["verification.evidence<br/>before SessionEnd"]
+    V --> S
+    S --> G["geode.trajectory@1"]
+    P["runtime profile"] --> C["snapshot v4 admission"]
+    M["attempt manifest"] --> C
+    R --> C
+    G --> C
+```
+
+The executable design and migration ledger are in
+[`docs/plans/2026-08-04-runtime-faithful-tau2.md`](../plans/2026-08-04-runtime-faithful-tau2.md).
+Live measurements must proceed mock → one task per domain → paired failure pack;
+the 278-task cycle is justified only after the v4 contract itself is reviewable.
+
 ## 참고
 
 - [τ-bench paper (NeurIPS '24)](https://arxiv.org/pdf/2406.12045)

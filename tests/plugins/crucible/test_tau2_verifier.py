@@ -13,6 +13,7 @@ from plugins.crucible.evidence import ResourceUsage
 from plugins.crucible.verifiers.tau2 import (
     TAU2_ADAPTER,
     _canonical_task_sha256,
+    _verify_attempt_manifest,
     normalize_tau2_results,
     tau2_has_infrastructure_contamination,
     tau2_resource_usage_floor,
@@ -307,9 +308,65 @@ def _write_artifacts(
     results = tmp_path / "results.json"
     results.write_text(json.dumps(raw), encoding="utf-8")
     raw_sha = hashlib.sha256(results.read_bytes()).hexdigest()
+    run_id = "tau2-verifier-test"
+    runtime_profile = tmp_path / "runtime-profile.json"
+    runtime_profile_payload = {
+        "schema": "geode.tau2-runtime-profile.v1",
+        "run_id": run_id,
+        "runtime_revision": contract.candidate_sha,
+        "runtime_profile": "tau2-native-user",
+        "persistence": {
+            "native_receipt": {"path": str(results), "sha256": raw_sha},
+        },
+    }
+    runtime_profile.write_text(json.dumps(runtime_profile_payload), encoding="utf-8")
+    attempts = []
+    final_results = []
+    simulations = raw.get("simulations")
+    assert isinstance(simulations, list)
+    for index, value in enumerate(simulations, start=1):
+        assert isinstance(value, dict)
+        attempt_id = f"attempt-{index}"
+        attempts.append(
+            {
+                "attempt_id": attempt_id,
+                "task_id": value["task_id"],
+                "trial": value["trial"],
+                "attempt": 1,
+                "seed": 300,
+                "retry_of": None,
+                "status": "complete",
+                "retry_reason": None,
+                "selected_final": True,
+                "simulation_id": value["id"],
+                "sessions": [],
+            }
+        )
+        final_results.append(
+            {
+                "task_id": value["task_id"],
+                "trial": value["trial"],
+                "simulation_id": value["id"],
+                "selected_attempt_id": attempt_id,
+                "selection_status": "selected",
+            }
+        )
+    attempt_manifest = tmp_path / "attempt-manifest.json"
+    attempt_manifest.write_text(
+        json.dumps(
+            {
+                "schema": "geode.tau2-attempt-manifest.v1",
+                "run_id": run_id,
+                "attempts": attempts,
+                "final_results": final_results,
+            }
+        ),
+        encoding="utf-8",
+    )
     snapshot = tmp_path / "snapshot.json"
     payload: dict[str, object] = {
-        "schema": "crucible_tau2_trajectory_snapshot.v3",
+        "schema": "crucible_tau2_trajectory_snapshot.v4",
+        "run_id": run_id,
         "experiment_contract_id": contract.contract_id,
         "baseline_sha": contract.baseline_sha,
         "candidate_sha": contract.candidate_sha,
@@ -320,6 +377,15 @@ def _write_artifacts(
         "assay_config": contract.assay_config,
         "arm": "candidate",
         "raw_artifact_sha256": raw_sha,
+        "runtime_profile": "tau2-native-user",
+        "runtime_profile_artifact": {
+            "path": runtime_profile.name,
+            "sha256": hashlib.sha256(runtime_profile.read_bytes()).hexdigest(),
+        },
+        "attempt_manifest_artifact": {
+            "path": attempt_manifest.name,
+            "sha256": hashlib.sha256(attempt_manifest.read_bytes()).hexdigest(),
+        },
         "execution_status": status,
         "failure_class": None,
     }
@@ -522,6 +588,79 @@ def test_tau2_adapter_rejects_raw_tampering_and_missing_checks(tmp_path: Path) -
             usage=_usage(),
             checks_by_pair={("1", 0): {"safety": True}},
         )
+
+
+def test_tau2_adapter_rejects_runtime_profile_digest_tampering(tmp_path: Path) -> None:
+    contract = _contract()
+    results, snapshot = _write_artifacts(tmp_path, contract, raw=_raw_results())
+    snapshot_payload = json.loads(snapshot.read_text())
+    profile_ref = snapshot_payload["runtime_profile_artifact"]
+    profile_path = snapshot.parent / profile_ref["path"]
+    profile_path.write_text('{"tampered": true}', encoding="utf-8")
+
+    with pytest.raises(ContractError, match=r"runtime_profile_artifact\.sha256"):
+        normalize_tau2_results(
+            contract,
+            arm="candidate",
+            results_path=results,
+            snapshot_path=snapshot,
+            usage=_usage(),
+            checks_by_pair=_checks(),
+        )
+
+
+def test_tau2_attempt_manifest_rejects_broken_retry_lineage() -> None:
+    raw = {
+        "simulations": [
+            {
+                "id": "simulation-final",
+                "task_id": "task-1",
+                "trial": 0,
+                "messages": [{"raw_data": {"geode_session_id": "session-final"}}],
+            }
+        ]
+    }
+    attempts = [
+        {
+            "attempt_id": "attempt-1",
+            "task_id": "task-1",
+            "trial": 0,
+            "attempt": 1,
+            "seed": 300,
+            "retry_of": None,
+            "status": "error",
+            "selected_final": False,
+            "simulation_id": None,
+            "sessions": [{"session_id": "session-retried"}],
+        },
+        {
+            "attempt_id": "attempt-2",
+            "task_id": "task-1",
+            "trial": 0,
+            "attempt": 2,
+            "seed": 300,
+            "retry_of": "not-the-previous-attempt",
+            "status": "complete",
+            "selected_final": True,
+            "simulation_id": "simulation-final",
+            "sessions": [{"session_id": "session-final"}],
+        },
+    ]
+    manifest = {
+        "attempts": attempts,
+        "final_results": [
+            {
+                "task_id": "task-1",
+                "trial": 0,
+                "simulation_id": "simulation-final",
+                "selected_attempt_id": "attempt-2",
+                "selection_status": "selected",
+            }
+        ],
+    }
+
+    with pytest.raises(ContractError, match="retry lineage"):
+        _verify_attempt_manifest(manifest, raw)
 
 
 def test_tau2_adapter_requires_frozen_task_order_and_content(tmp_path: Path) -> None:

@@ -19,7 +19,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": ""
+    "body": "### Added\n\n- Added a benchmark-safe Tau2 runtime profile and retry-attempt manifest. New\n  snapshot v4 records digest-bind the runtime revision, model routes, assembled\n  prompt/tool-schema identities, exercised hook and middleware surfaces, every\n  participant session, retry ancestry, and final native simulation selection.\n\n### Changed\n\n- Tau2 participants now share one process-owned runtime event bus, public hook\n  registry, and four-surface middleware registry. Native `results.json`\n  reward/termination evidence is joined to session timelines before SessionEnd,\n  while `tau2-native-user` and `geode-dual-runtime` measurements remain distinct profiles.\n- Crucible now observably disables legacy `cached-row.v1` reuse for Tau2\n  snapshot v4 runs because that cache predates the runtime-profile and attempt\n  companions; runs execute fresh rather than synthesize provenance.\n\n### Fixed\n\n- Tau2 tool projection ACKs no longer masquerade as completed environment\n  actions. The adapter defers all environment execution to Tau2 and records the\n  official result or error only when its original call ID returns; orphaned or\n  still-pending calls fail closed. Terminal-step results are reconciled from\n  the native receipt, diagnostic auto-resume rows remain explicitly\n  unattested, and exhausted post-run failures cannot remain marked complete."
   },
   {
     "version": "1.0.12",
