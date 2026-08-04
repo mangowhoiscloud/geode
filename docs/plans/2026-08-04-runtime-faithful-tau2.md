@@ -2,9 +2,10 @@
 
 Date: 2026-08-04
 Source feedback: `lg-ai/presentation/wiki/geode-runtime-faithful-tau2-handoff-2026-08-04.md`
-Status: implemented; staged live verification complete; full-cycle attempt
-infrastructure-invalid after subscription quota exhaustion; admission hardening
-in progress
+Status: implemented and merged in `baf170d70`; staged live verification
+complete; full-cycle attempt infrastructure-invalid after subscription quota
+exhaustion; diagnostic evidence published at `geode-eval-artifacts@40be847`;
+clean rerun pending subscription capacity
 
 ## 1. Outcome
 
@@ -246,6 +247,13 @@ snapshot state and makes Crucible recompute normalized-trajectory integrity;
 the captured Airline and Retail artifacts admit, while the scope-incomplete
 Telecom artifact is rejected. A clean 278-task rerun remains required after
 subscription capacity returns.
+
+The privacy-reviewed diagnostic report is immutable at
+[`geode-eval-artifacts@40be847`](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/40be847f7c12004b1e70673808fa95bfd8646b59/reports/e2e-validation/2026-08-04-gpt54-runtime-faithful-tau2-diagnostic.md),
+with the three-domain companions under
+[`runtime-faithful-20260804`](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/40be847f7c12004b1e70673808fa95bfd8646b59/crucible/runs/trajectory-snapshots/runtime-faithful-20260804).
+The remote manifest SHA-256 is
+`40206ed181f69bd15bc4dd4b986ec99b921ba1afd9b15b14c2d9b64a637af317`.
 
 ## 10. Deliberate non-goals and remaining boundary
 

@@ -67,6 +67,15 @@ export default function Page() {
               scope-incomplete trajectory를 거부합니다. 새 headline은 깨끗한
               재실행 이후에만 게시합니다.
             </p>
+            <p>
+              개인정보 검토를 통과한 진단 보고서와 세 도메인 companion은{" "}
+              <a href="https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/40be847f7c12004b1e70673808fa95bfd8646b59/reports/e2e-validation/2026-08-04-gpt54-runtime-faithful-tau2-diagnostic.md">
+                <code>geode-eval-artifacts@40be847</code>
+              </a>
+              에 고정했습니다. 12개 파일 manifest SHA-256은{" "}
+              <code>40206ed1…317</code>이며, 이 묶음은 점수가 아닌 invalidation
+              evidence입니다.
+            </p>
 
             <h2>2026-08-03 GPT-5.4 subscription base full cycle</h2>
             <p>
@@ -304,6 +313,15 @@ export default function Page() {
               guards, and admission rejects the captured scope-incomplete
               trajectory. A clean rerun is required before a new headline is
               published.
+            </p>
+            <p>
+              The privacy-reviewed diagnostic report and three-domain companions
+              are pinned to{" "}
+              <a href="https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/40be847f7c12004b1e70673808fa95bfd8646b59/reports/e2e-validation/2026-08-04-gpt54-runtime-faithful-tau2-diagnostic.md">
+                <code>geode-eval-artifacts@40be847</code>
+              </a>
+              . The 12-file manifest SHA-256 is <code>40206ed1…317</code>; this
+              bundle is invalidation evidence, not a score release.
             </p>
 
             <h2>2026-08-03 GPT-5.4 Subscription Base Full Cycle</h2>
