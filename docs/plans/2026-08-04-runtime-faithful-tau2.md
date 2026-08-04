@@ -2,7 +2,9 @@
 
 Date: 2026-08-04
 Source feedback: `lg-ai/presentation/wiki/geode-runtime-faithful-tau2-handoff-2026-08-04.md`
-Status: implemented; non-live verification complete; live rollout pending
+Status: implemented; staged live verification complete; full-cycle attempt
+infrastructure-invalid after subscription quota exhaustion; admission hardening
+in progress
 
 ## 1. Outcome
 
@@ -162,7 +164,9 @@ runtime profile. They cannot satisfy snapshot-v4 promotion admission.
 The v4 verifier rejects missing companion references, sibling-path traversal,
 companion digest changes, schema/run-ID drift, runtime revision drift, native
 receipt digest drift, broken retry ancestry, and a final selection that does
-not exactly cover native simulations.
+not exactly cover native simulations. It also verifies the hash-bound normalized
+trajectory itself: schema and run identity, raw-receipt/profile/attempt digest
+bindings, and recomputed `scope_complete=true` are admission requirements.
 
 `crucible.cached-row.v1` predates both companions. Crucible therefore leaves
 existing cache shards intact but refuses them observably with
@@ -180,6 +184,7 @@ source runtime profile and attempt fragment for every cached simulation.
 | Exact result/error join; orphan rejection | supervisor join tests | verified |
 | `USER_STOP + reward=0` split | before-close native evidence test | verified |
 | Receipt/companion digest admission | v4 verifier tamper tests | verified |
+| Normalized trajectory scope admission | recomputed integrity + incomplete-scope rejection | verified |
 | Retry lineage and final selection | retry wrapper manifest test | verified |
 | Disabled is not passed | typed runtime profile states | verified |
 | Native/dual profile separation | snapshot/verifier profile check | verified |
@@ -208,11 +213,9 @@ diagnostic auto-resume provenance, and the final exhausted post-run attempt
 state. All three were fixed and covered by the focused post-review suite.
 
 The full suite still emits pre-existing scheduler teardown logging noise and
-deprecation warnings; neither changed the zero exit status. Live evidence is
-not claimed by this ledger until the staged rollout below produces admitted
-snapshot-v4 artifacts.
+deprecation warnings; neither changed the zero exit status.
 
-Live order after the implementation PR is reviewable:
+The staged live order completed through the paired known-failure case:
 
 ```text
 mock × 1
@@ -223,7 +226,26 @@ mock × 1
 
 The live report must publish the snapshot v4 commit marker and both companion
 manifests with the native receipt and normalized trajectory. A run lacking any
-required digest is infrastructure-invalid and cannot enter promotion.
+required digest, containing infrastructure-contaminated rows, or carrying a
+scope-incomplete normalized trajectory is infrastructure-invalid and cannot
+enter promotion.
+
+The subsequent three-domain full-cycle attempt scheduled all 278 base tasks at
+revision `f08e7d6f5c785f76881ea2f9dfc2983ced8556d8`. The subscription quota was
+exhausted during the run, leaving 48/50 Airline, 98/114 Retail, and 33/114
+Telecom reward-bearing rows; the remaining 99 rows are infrastructure errors,
+not task failures. Consequently this attempt has no aggregate score authority
+and does not replace the earlier admitted 200/278 diagnostic.
+
+The live attempt exposed a second defect before quota exhaustion: six Telecom
+tool calls were recorded as `tool.called` but suppressed by a post-tool
+convergence guard before Tau2 received the proposals. The follow-up moves the
+external half-duplex yield immediately after the cognitive/tool round, before
+those guards. It also makes infrastructure contamination an incomplete
+snapshot state and makes Crucible recompute normalized-trajectory integrity;
+the captured Airline and Retail artifacts admit, while the scope-incomplete
+Telecom artifact is rejected. A clean 278-task rerun remains required after
+subscription capacity returns.
 
 ## 10. Deliberate non-goals and remaining boundary
 

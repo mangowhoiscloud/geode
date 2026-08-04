@@ -26,7 +26,7 @@
         "benchmark",
         "tool-projection"
       ],
-      "contentSha256": "7c5b7ffd0a39680cf74764091ef1e7ea1049124330e637391ac70f84bf3f7f45"
+      "contentSha256": "48877b347be309c64bca82f5c1001ad1915dfdebec306fc234ff94a045350d09"
     },
     {
       "id": "file:plugins/benchmark_harness/tau2_runtime_contract.py",
@@ -38,7 +38,7 @@
         "benchmark",
         "runtime-profile"
       ],
-      "contentSha256": "7035bb822d7558776ba67716c4e5edb45987059e90de10505f0f2a229f4542b5"
+      "contentSha256": "71249c94717ab22709ae94bcce5f41ede56c891373f98efe36d2e71bffcd89c1"
     },
     {
       "id": "file:plugins/benchmark_harness/trajectory_artifacts.py",
@@ -74,7 +74,7 @@
         "runtime",
         "while-tool-use"
       ],
-      "contentSha256": "18a33610d8d9d7d30c83db3bc109a01eca3fe37b24e335c64874c79a33e0672c"
+      "contentSha256": "0c9f9bef6ccaf18a9249438ec4d7e18c1e8a39d75a033f0ca8ff5fce35c6cdff"
     },
     {
       "id": "file:core/agent/tool_executor/processor.py",

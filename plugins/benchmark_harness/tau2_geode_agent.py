@@ -1135,16 +1135,16 @@ def main() -> int:
         _restore_tau2_data_root(previous_tau2_data_dir)
     final_error = run_error
     failure_class: str | None = "run_error" if run_error is not None else None
+    if runtime_contract.infrastructure_contaminated and failure_class is None:
+        failure_class = "infrastructure_contamination"
     if not args.allow_empty_geode_turn:
         try:
             _raise_on_new_codex_empty_text_dumps(before_empty_text_dumps)
         except RuntimeError as exc:
             if final_error is None:
                 final_error = exc
+            if failure_class is None:
                 failure_class = "route_contamination"
-            else:
-                failure_class = "run_error_and_route_contamination"
-
     companion_artifacts = (
         runtime_contract.companion_artifacts(args.trajectory_snapshot_dir.resolve())
         if not args.no_trajectory_snapshot and args.save_to and final_error is None
@@ -1181,7 +1181,7 @@ def main() -> int:
                 "seed": args.seed,
                 "assay_config": assay_config,
                 "runtime_profile": runtime_contract.runtime_profile,
-                "execution_status": "complete" if final_error is None else "invalid",
+                "execution_status": "invalid" if failure_class else "complete",
                 "failure_class": failure_class,
                 "argv": sys.argv,
                 **contract_metadata,

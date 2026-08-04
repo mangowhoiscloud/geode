@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 
 import pytest
+from core.observability.trajectory import build_trajectory
 from plugins.crucible.cli import main as crucible_main
 from plugins.crucible.contract import (
     ContractError,
@@ -363,6 +364,42 @@ def _write_artifacts(
         ),
         encoding="utf-8",
     )
+    runtime_profile_sha = hashlib.sha256(runtime_profile.read_bytes()).hexdigest()
+    attempt_manifest_sha = hashlib.sha256(attempt_manifest.read_bytes()).hexdigest()
+    trajectory = tmp_path / f"{run_id}.geode-trajectory.json"
+    trajectory.write_text(
+        json.dumps(
+            build_trajectory(
+                trajectory_id=f"tau2-{run_id}",
+                captured_at="2026-08-04T00:00:00Z",
+                source={
+                    "harness": "tau2-bench",
+                    "run": run_id,
+                    "session": run_id,
+                    "runtime_profile_sha256": runtime_profile_sha,
+                    "attempt_manifest_sha256": attempt_manifest_sha,
+                },
+                events=[
+                    {
+                        "kind": "message.assistant",
+                        "actor": "assistant",
+                        "turn_id": "t-verifier",
+                        "payload": {"content": "done"},
+                    }
+                ],
+                outcome={"execution_status": "complete"},
+                provenance={"store": "fixture"},
+                privacy={"review_state": "local"},
+                artifact_digests=[
+                    {"path": results.name, "sha256": raw_sha},
+                    {"path": runtime_profile.name, "sha256": runtime_profile_sha},
+                    {"path": attempt_manifest.name, "sha256": attempt_manifest_sha},
+                ],
+                trajectory_class=("benchmark", "dialogue"),
+            )
+        ),
+        encoding="utf-8",
+    )
     snapshot = tmp_path / "snapshot.json"
     payload: dict[str, object] = {
         "schema": "crucible_tau2_trajectory_snapshot.v4",
@@ -380,12 +417,14 @@ def _write_artifacts(
         "runtime_profile": "tau2-native-user",
         "runtime_profile_artifact": {
             "path": runtime_profile.name,
-            "sha256": hashlib.sha256(runtime_profile.read_bytes()).hexdigest(),
+            "sha256": runtime_profile_sha,
         },
         "attempt_manifest_artifact": {
             "path": attempt_manifest.name,
-            "sha256": hashlib.sha256(attempt_manifest.read_bytes()).hexdigest(),
+            "sha256": attempt_manifest_sha,
         },
+        "geode_trajectory": str(trajectory),
+        "geode_trajectory_sha256": hashlib.sha256(trajectory.read_bytes()).hexdigest(),
         "execution_status": status,
         "failure_class": None,
     }
@@ -393,6 +432,54 @@ def _write_artifacts(
         payload["failure_class"] = "run_error"
     snapshot.write_text(json.dumps(payload), encoding="utf-8")
     return results, snapshot
+
+
+def test_tau2_adapter_rejects_scope_incomplete_geode_trajectory(tmp_path: Path) -> None:
+    contract = _contract()
+    results, snapshot = _write_artifacts(tmp_path, contract, raw=_raw_results())
+    snapshot_payload = json.loads(snapshot.read_text(encoding="utf-8"))
+    trajectory_path = Path(snapshot_payload["geode_trajectory"])
+    incomplete = build_trajectory(
+        trajectory_id="tau2-incomplete",
+        captured_at="2026-08-04T00:00:00Z",
+        source={
+            "harness": "tau2-bench",
+            "run": snapshot_payload["run_id"],
+            "session": snapshot_payload["run_id"],
+            "runtime_profile_sha256": snapshot_payload["runtime_profile_artifact"]["sha256"],
+            "attempt_manifest_sha256": snapshot_payload["attempt_manifest_artifact"]["sha256"],
+        },
+        events=[
+            {
+                "kind": "tool.called",
+                "actor": "assistant",
+                "turn_id": "t-orphan",
+                "call_id": "c-orphan",
+                "payload": {"tool": "update"},
+            }
+        ],
+        outcome={"execution_status": "complete"},
+        provenance={"store": "fixture"},
+        privacy={"review_state": "local"},
+        artifact_digests=[
+            {"path": results.name, "sha256": snapshot_payload["raw_artifact_sha256"]}
+        ],
+    )
+    trajectory_path.write_text(json.dumps(incomplete), encoding="utf-8")
+    snapshot_payload["geode_trajectory_sha256"] = hashlib.sha256(
+        trajectory_path.read_bytes()
+    ).hexdigest()
+    snapshot.write_text(json.dumps(snapshot_payload), encoding="utf-8")
+
+    with pytest.raises(ContractError, match="not scope complete"):
+        normalize_tau2_results(
+            contract,
+            arm="candidate",
+            results_path=results,
+            snapshot_path=snapshot,
+            usage=_usage(),
+            checks_by_pair=_checks(),
+        )
 
 
 def _usage() -> ResourceUsage:
