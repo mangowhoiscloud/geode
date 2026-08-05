@@ -17,7 +17,7 @@
     "max_branches": 51,
     "max_complexity": 52,
     "max_returns": 18,
-    "max_statements": 223
+    "max_statements": 212
   },
   "context_vars": {
     "count": 30,
@@ -527,16 +527,16 @@
   },
   "packages": {
     "core": {
-      "python_files": 432,
-      "python_loc": 138917
+      "python_files": 431,
+      "python_loc": 138771
     },
     "plugins": {
       "python_files": 111,
       "python_loc": 41879
     },
     "tests": {
-      "python_files": 682,
-      "python_loc": 179075
+      "python_files": 680,
+      "python_loc": 178690
     }
   },
   "schema_version": 1,

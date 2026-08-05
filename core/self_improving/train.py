@@ -351,7 +351,7 @@ def load_wrapper_prompt_sections() -> dict[str, str]:
        autoresearch loop, the daily ``geode`` invocation, and the
        audit subprocess together: they all read the same JSON dict.
     2. :data:`_WRAPPER_PROMPT_SECTIONS_FALLBACK` — bootstrap default
-       (clean checkout / no promote yet / unparseable SoT).
+       (clean checkout / no promote yet / unparsable SoT).
 
     Schema validation is strict: every key + value must be a string.
     Schema failure logs a WARNING and falls back to the hardcoded
@@ -746,7 +746,7 @@ def main() -> int:
     # cross-validation gate were structurally dead code. Now the
     # collector runs after measure.run_audit, threads its result into
     # fitness_spec.compute_fitness / ledger._write_baseline / gate._should_promote / journal /
-    # results.jsonl / OL-C1 emit. The collector's A1 graceful-skip
+    # results.jsonl / canonical audit_finished marker. The collector's A1 graceful-skip
     # ensures Docker / VM / vision absence skips affected benches into
     # ``missing_benches`` rather than failing the audit.
     bench_provenance = (
@@ -1525,75 +1525,26 @@ def main() -> int:
         payload={"dry_run": args.dry_run},
     )
 
-    # OL-C1 (2026-05-22) — Activate the M4.0 ``eval_response_recorded``
-    # stream that PR-M4.0 deferred to caller wiring. autoresearch's
-    # audit cycle is the closest meaningful (prompt, response) tuple at
-    # this layer: prompt = "audit cycle on <commit> for <seed_select>",
-    # response = "verdict=<v> fitness=<f> dim_means=<...>". The pair
-    # was designed to feed the M4.1 DPO pack writer (chain deleted PR-CLEANUP-D3A 2026-06-10;
-    # different commits produce different prompts → mostly unpaired
-    # initially, but once mutator iterates on the same baseline twice
-    # the chosen vs rejected pairing surfaces).
-    #
-    # rollback_flag heuristic: fitness == 0.0 (critical regression /
-    # strict-reject gate) OR verdict in {"reject", "regression"} → True.
-    # Otherwise False (the audit "passed"). M4.1 's chosen pile = audits
-    # whose mutation deserves keeping; rejected pile = audits that
-    # should be rolled back.
-    #
-    # Per-Petri-turn emit (finer granularity) lands in OL-C1.2 follow-up
-    # once we have a stable API to walk the .eval log per scenario.
-    try:
-        from core.self_improving.loop.observe.eval_journaling import emit_eval_response_recorded
-
-        prompt_label = (
-            f"autoresearch audit cycle on commit {commit} "
-            f"(seed_select={os.environ.get('SEED_SELECT', '<default>')!r}, "
-            f"description={description!r})"
-        )
-        # PR-SIL-5THEME C2 (2026-05-23) — bench_means 측정 출처를 baseline
-        # (frozen 이전 generation) → bench_means_current (이번 audit 결과)
-        # 로 교체. 이전엔 OL-C1 emit 의 axis_score 가 "이번 mutation 이
-        # bench 에서 어떻게 했는지" 가 아니라 "직전 generation 의 frozen
-        # 점수" 였다 — M4.1 DPO pile 의 chosen/rejected pairing 이 stale
-        # signal 받음.
-        response_label = (
-            f"verdict={verdict} fitness={fitness:.4f} "
-            f"promoted={promoted_line} "
-            f"dim_means_count={len(dim_means)} "
-            f"bench_means_count={len(bench_means_current) if bench_means_current else 0}"
-        )
-        rollback = fitness == 0.0 or verdict.lower() in {"reject", "regression"}
-        axis_scores: dict[str, float] = {}
-        if dim_means:
-            axis_scores["dim_means_aggregate"] = sum(dim_means.values()) / len(dim_means)
-        if bench_means_current:
-            axis_scores["bench_means_aggregate"] = sum(bench_means_current.values()) / len(
-                bench_means_current
-            )
-        emit_eval_response_recorded(
-            prompt=prompt_label,
-            response=response_label,
-            fitness_score=float(fitness),
-            axis_scores=axis_scores or None,
-            source="autoresearch_audit",
-            rollback_flag=rollback,
-        )
-    except Exception:  # pragma: no cover — defensive
-        # Eval-stream emit must never break the audit cycle itself.
-        log.debug("OL-C1 eval emit failed", exc_info=True)
-
     # OL-C2 (2026-05-22) — Activate the M3 ``few_shot_pool`` writer that
     # PR-M3 (#1426/#1428) deferred. Only PROMOTED audits contribute to
     # the pool (rejected piles stay out of the in-context exemplars
-    # channel). Audit-level ``(prompt, response)`` is a *meta-level*
-    # exemplar — same caveat as OL-C1: agent-loop-turn-level + Petri-
-    # per-turn callers land as OL-C2.2 follow-up after we have a clean
-    # API to extract per-turn pairs.
+    # channel). Audit-level ``(prompt, response)`` is a meta-level
+    # in-context exemplar, not a model-training preference pair.
     try:
         if not args.dry_run and "true" in promoted_line.lower():
             from core.llm.few_shot_pool import append_exemplar
 
+            prompt_label = (
+                f"autoresearch audit cycle on commit {commit} "
+                f"(seed_select={os.environ.get('SEED_SELECT', '<default>')!r}, "
+                f"description={description!r})"
+            )
+            response_label = (
+                f"verdict={verdict} fitness={fitness:.4f} "
+                f"promoted={promoted_line} "
+                f"dim_means_count={len(dim_means)} "
+                f"bench_means_count={len(bench_means_current) if bench_means_current else 0}"
+            )
             # PR-MARGIN-FITNESS-SCALE E1 (2026-05-30) — fitness_delta on the
             # canonical 0-1 scale: ``fitness_after - fitness_before`` where
             # ``fitness_before`` is the baseline's 0-1 ``fitness_spec.compute_fitness`` value

@@ -47,6 +47,17 @@ functional change.
 
 ## [Unreleased]
 
+### Removed
+
+- **Retired the orphaned `eval_response_recorded` DPO precursor.** The deleted
+  M4.x pair builder had no reader for these unary autoresearch audit summaries,
+  whose synthetic prompts and rollback-derived labels were not valid
+  preference pairs. Promoted audits continue to feed the existing in-context
+  few-shot pool, and historical RunTimeline JSONL remains readable without
+  migration. The removal lowers the global `PLR0915` ceiling from 223 to 212;
+  the pre-existing 217-statement serve composer is now an explicit,
+  roadmap-owned exception instead of hidden below the old ceiling.
+
 ## [1.0.13] - 2026-08-05
 
 > Runtime-faithful Tau2 execution now exercises GEODE's public hooks and
