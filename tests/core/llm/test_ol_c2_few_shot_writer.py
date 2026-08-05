@@ -178,7 +178,7 @@ def test_append_preserves_unicode(pool_path: Path) -> None:
 
 
 def test_train_py_imports_append_exemplar() -> None:
-    """``core/self_improving/train.py`` must contain the import + call after OL-C1."""
+    """The promoted-audit path keeps its canonical few-shot writer."""
     train_py = Path("core/self_improving/train.py").read_text(encoding="utf-8")
     assert "from core.llm.few_shot_pool import append_exemplar" in train_py
     assert "append_exemplar(" in train_py
@@ -199,14 +199,14 @@ def test_train_py_writer_wrapped_in_try_except() -> None:
     train_py = Path("core/self_improving/train.py").read_text(encoding="utf-8")
     pos = train_py.find("append_exemplar(")
     assert pos > 0
-    preceding = train_py[max(0, pos - 1500) : pos]
+    preceding = train_py[train_py.find("# OL-C2") : pos]
     assert "try:" in preceding, "append_exemplar must be wrapped in try/except"
 
 
-def test_train_py_writer_after_ol_c1_emit() -> None:
-    """OL-C2 writer must come AFTER OL-C1 emit (same scope, post-promote)."""
+def test_train_py_writer_follows_canonical_audit_event() -> None:
+    """The exemplar writer follows the canonical audit marker only."""
     train_py = Path("core/self_improving/train.py").read_text(encoding="utf-8")
-    emit_pos = train_py.find("emit_eval_response_recorded(")
+    audit_pos = train_py.find('"audit_finished"')
     append_pos = train_py.find("append_exemplar(")
-    assert emit_pos > 0 and append_pos > 0
-    assert append_pos > emit_pos
+    assert "emit_eval_response_recorded" not in train_py
+    assert audit_pos > 0 and append_pos > audit_pos

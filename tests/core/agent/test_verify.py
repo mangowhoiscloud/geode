@@ -400,18 +400,25 @@ def test_effective_mode_off_passthrough(monkeypatch: pytest.MonkeyPatch) -> None
     assert vr.effective_mode is VerifyMode.OFF
 
 
-def test_lifecycle_finalize_sync_records_verify(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Codex MCP LOW #5 — sync ``finalize_and_return`` path drives
-    ``_run_turn_verify`` → ``record_verify`` even when ``loop._hooks`` is
-    None (Codex HIGH #1 invariant). Asserts SessionMetrics state after."""
-    from types import SimpleNamespace
-
-    from core.agent.loop._lifecycle import _run_turn_verify
+def test_lifecycle_finalize_records_verify(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The production finalization path records the built-in verdict."""
+    from core.agent.loop import _lifecycle
 
     result = _make_result(text="", tool_calls=[])  # rule-based: empty_turn
-    loop = SimpleNamespace(_hooks=None)
-    with session_metrics_scope(session_id="t-sync-finalize"):
-        payload = _run_turn_verify(loop, result)
+    loop = SimpleNamespace(
+        _hook_registry=HookRegistry(),
+        _session_id="",
+        _turn_id="t-1",
+        _verify_root_turn_id="t-1",
+        _verify_attempt=0,
+        _verify_continuation_budget=2,
+        _session_generation=1,
+        _evidence_ledger=None,
+    )
+    with session_metrics_scope(session_id="t-finalize"):
+        payload, _follow_up, _escalated, _correlation = asyncio.run(
+            _lifecycle._run_public_finalization_async(loop, result)
+        )
         assert payload is not None
         assert payload["passed"] is False
         assert "empty_turn" in payload["rubric_misses"]
@@ -420,18 +427,26 @@ def test_lifecycle_finalize_sync_records_verify(monkeypatch: pytest.MonkeyPatch)
         assert m.last_verify_reflection_hint.startswith("<reflection>")
 
 
-def test_lifecycle_run_turn_verify_off_mode_skips(monkeypatch: pytest.MonkeyPatch) -> None:
-    """``_run_turn_verify`` returns None when mode is OFF so the caller
-    can skip the hook fire."""
-    from types import SimpleNamespace
-
-    from core.agent.loop._lifecycle import _run_turn_verify
+def test_lifecycle_off_mode_skips_verify_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+    """OFF mode omits the internal verify payload and metrics row."""
+    from core.agent.loop import _lifecycle
 
     monkeypatch.setenv("GEODE_VERIFY_MODE", "off")
-    loop = SimpleNamespace(_hooks=None)
+    loop = SimpleNamespace(
+        _hook_registry=HookRegistry(),
+        _session_id="",
+        _turn_id="t-1",
+        _verify_root_turn_id="t-1",
+        _verify_attempt=0,
+        _verify_continuation_budget=2,
+        _session_generation=1,
+        _evidence_ledger=None,
+    )
     with session_metrics_scope(session_id="t-off"):
         result = _make_result(text="", tool_calls=[])
-        payload = _run_turn_verify(loop, result)
+        payload, _follow_up, _escalated, _correlation = asyncio.run(
+            _lifecycle._run_public_finalization_async(loop, result)
+        )
         assert payload is None
         assert current_session_metrics().verify_fail_count == 0
 
@@ -441,12 +456,8 @@ def test_finalizers_run_verify_before_lifecycle_hooks() -> None:
     lifecycle hooks are emitted."""
     from core.agent.loop import _lifecycle
 
-    sync_src = inspect.getsource(_lifecycle.finalize_and_return)
     async_src = inspect.getsource(_lifecycle.finalize_and_return_async)
 
-    assert sync_src.index("verify_payload = _run_turn_verify(") < sync_src.index(
-        "_persist_final_result("
-    )
     assert async_src.index("await _run_public_finalization_async(") < async_src.index(
         "_persist_final_result("
     )
@@ -999,12 +1010,8 @@ def test_db_persistence_legacy_migration_adds_verify_cols(tmp_path) -> None:
 
 
 def test_lifecycle_persists_to_db(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """End-to-end: ``_run_turn_verify`` calls ``_persist_verify_state``
-    which writes to the SessionManager's sessions row. Verify the row
-    reflects the verify outcome after one turn."""
-    from types import SimpleNamespace
-
-    from core.agent.loop._lifecycle import _run_turn_verify
+    """The production finalization path persists verify state to SQLite."""
+    from core.agent.loop import _lifecycle
     from core.memory.session_manager import SessionManager, SessionMeta
 
     # Redirect the default sessions DB into tmp_path so we don't touch
@@ -1022,10 +1029,21 @@ def test_lifecycle_persists_to_db(tmp_path, monkeypatch: pytest.MonkeyPatch) -> 
             status="active",
         )
     )
-    loop = SimpleNamespace(_hooks=None, _session_id="t-lc-persist")
+    loop = SimpleNamespace(
+        _hook_registry=HookRegistry(),
+        _session_id="t-lc-persist",
+        _turn_id="t-1",
+        _verify_root_turn_id="t-1",
+        _verify_attempt=0,
+        _verify_continuation_budget=2,
+        _session_generation=1,
+        _evidence_ledger=None,
+    )
     result = _make_result(text="", tool_calls=[])  # rule-based: empty_turn fail
     with session_metrics_scope(session_id="t-lc-persist"):
-        payload = _run_turn_verify(loop, result)
+        payload, _follow_up, _escalated, _correlation = asyncio.run(
+            _lifecycle._run_public_finalization_async(loop, result)
+        )
         assert payload is not None
         assert payload["passed"] is False
         assert payload["should_retry"] is True

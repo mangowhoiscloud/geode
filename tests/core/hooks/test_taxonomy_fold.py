@@ -71,9 +71,7 @@ def test_no_family_is_a_singleton():
     ],
 )
 def test_pre_fold_actions_still_resolve(action, family):
-    """2,179 rows already on disk carry pre-fold first segments; the alias map
-    is what keeps them readable, the same way LEGACY_EVENT_VALUES keeps v1
-    event names readable."""
+    """The alias map keeps pre-fold rows readable, like LEGACY_EVENT_VALUES."""
     assert action_family(action) == family
 
 

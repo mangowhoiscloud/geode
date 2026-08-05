@@ -282,21 +282,21 @@ machine-readable artifact is
 
 | Measure | Current tree |
 |---|---:|
-| Production Python files (`core/` + `plugins/`) | 543 |
-| Test Python files | 682 |
-| `core/` Python LOC | 138,917 |
+| Production Python files (`core/` + `plugins/`) | 542 |
+| Test Python files | 680 |
+| `core/` Python LOC | 138,647 |
 | `plugins/` Python LOC | 41,879 |
-| Test Python LOC | 179,075 |
+| Test Python LOC | 178,706 |
 | Tool definitions / executable registrations / valid schemas | 78 / 81 / 78 (definition-only 0; execution-only 3; invalid schema 0) |
 | `RuntimeEvent` members | 57 |
 | Built-in LLM adapters | 8 |
 | Module-level `ContextVar` declarations under `core/` | 30 |
 | `core` → `plugins` import sites | 31 across 14 files |
 | Import-linter contracts / ignored edges | 4 / 24 |
-| `AgenticLoop` file LOC / methods / constructor args | 2,977 / 75 / 27 |
+| `AgenticLoop` file LOC / methods / constructor args | 2,968 / 74 / 27 |
 | `SubAgentManager` file LOC / methods / constructor args | 1,370 / 17 / 16 |
 | `RuntimeCoreConfig` fields | 19 |
-| Global Ruff ratchets | complexity 52; args 23; branches 51; returns 18; statements 223 |
+| Global Ruff ratchets | complexity 52; args 23; branches 51; returns 18; statements 212 |
 <!-- generated:architecture-baseline:end -->
 
 `uv run lint-imports` passes all four configured contracts. That is useful

@@ -47,6 +47,31 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.14] - 2026-08-05
+
+> Cleanup release: retire the orphaned unary DPO precursor and the unreachable
+> synchronous AgenticLoop finalizer while preserving historical timelines,
+> public verification APIs, hook order, and SQLite action-family queries.
+
+### Removed
+
+- **Removed the unreachable synchronous AgenticLoop finalizer chain.** The
+  runtime has one async entrypoint and all terminal branches already converge
+  on the public-hook-aware async finalizer. Its sync-only delegator, verify
+  wrappers, and persistence duplicate had no production callers; the public
+  sync `verify_turn()` library API remains available.
+- **Retired the orphaned `eval_response_recorded` DPO precursor.** The deleted
+  M4.x pair builder had no reader for these unary autoresearch audit summaries,
+  whose synthetic prompts and rollback-derived labels were not valid
+  preference pairs. Promoted audits continue to feed the existing in-context
+  few-shot pool, and historical RunTimeline JSONL remains readable without
+  migration. The removal lowers the global `PLR0915` ceiling from 223 to 212;
+  the pre-existing 217-statement serve composer is now an explicit,
+  roadmap-owned exception instead of hidden below the old ceiling. The two
+  deleted producer-only files contributed 25 collected cases; the selected-test
+  ratchet moves from 10,451 to the measured 10,441 after consuming its prior
+  15-case safety margin.
+
 ## [1.0.13] - 2026-08-05
 
 > Runtime-faithful Tau2 execution now exercises GEODE's public hooks and

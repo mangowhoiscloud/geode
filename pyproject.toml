@@ -1,6 +1,6 @@
 [project]
 name = "geode-agent"
-version = "1.0.13"
+version = "1.0.14"
 description = "GEODE — 범용 자율 실행 에이전트"
 license = "Apache-2.0"
 readme = "README.md"
@@ -384,7 +384,7 @@ ignore = [
 "core/ui/geodi_art.py" = ["E501"]
 # Generated inline-image data: one long base64 PNG string literal.
 
-# Exact ceiling witnesses and the one symbol override are owned by
+# Exact ceiling witnesses and symbol overrides are owned by
 # docs/architecture/exception-debt.toml. CI probes Ruff one point below each
 # value, rejects unregistered symbols, and requires this value to fall whenever
 # the measured maximum falls.
@@ -395,7 +395,7 @@ max-complexity = 52
 max-args = 23
 max-branches = 51
 max-returns = 18
-max-statements = 223
+max-statements = 212
 
 # TID251 — banned imports with educational error messages (LangGraph pattern).
 # Symbol-level guardrail complementary to import-linter (which is module-level

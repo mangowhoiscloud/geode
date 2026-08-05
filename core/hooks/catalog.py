@@ -182,8 +182,7 @@ ACTION_FAMILIES: frozenset[str] = frozenset(
 def action_family(action: str) -> str:
     """Return the canonical family for an ``action`` string.
 
-    Accepts both the folded form and any pre-fold value still on disk, so the
-    2,179 rows already in ``hook_events`` keep resolving.
+    Accepts both the folded form and pre-fold values still on disk.
     """
     head = action.split(".", 1)[0]
     return ACTION_FAMILY_ALIASES.get(head, head)
