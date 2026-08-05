@@ -708,15 +708,6 @@ class AgenticLoop:
         """Delegates to :func:`_lifecycle.record_timeline_end`."""
         return _lifecycle.record_timeline_end(self, result, verify_payload)
 
-    def _finalize_and_return(
-        self,
-        result: AgenticResult,
-        user_input: str,
-        round_idx: int,
-    ) -> AgenticResult:
-        """Delegates to :func:`_lifecycle.finalize_and_return`."""
-        return _lifecycle.finalize_and_return(self, result, user_input, round_idx)
-
     async def _afinalize_and_return(
         self,
         result: AgenticResult,

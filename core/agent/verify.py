@@ -460,11 +460,9 @@ async def _verify_llm_judge_async(
 def _verify_llm_judge(result: AgenticResult, *, loop: Any | None = None) -> VerifyResult:
     """Sync LLM-self-judge mode — opt-in, one extra LLM call per turn.
 
-    PR-CL-A6 (2026-05-23) — sync wrapper for callers that aren't inside an
-    asyncio event loop (CLI smoke tests, pure-sync verify dispatch). The
-    production path (``_run_turn_verify_async`` from
-    ``finalize_and_return_async``) awaits :func:`_verify_llm_judge_async`
-    directly.
+    PR-CL-A6 (2026-05-23) — sync wrapper for library callers that aren't
+    inside an asyncio event loop. The production finalizer awaits
+    :func:`_verify_llm_judge_async` through :func:`verify_turn_async`.
 
     PR-GATEWAY-BRIDGE-FRONTIER (2026-06-12) — the previous "sync caller
     inside a running loop" branch bridged via ThreadPoolExecutor +
@@ -522,9 +520,8 @@ def _llm_judge_fallback(result: AgenticResult) -> VerifyResult:
 
 async def verify_turn_async(result: AgenticResult, *, loop: Any | None = None) -> VerifyResult:
     """Async dispatcher — preferred for callers running inside an event
-    loop (e.g. ``finalize_and_return_async``). Avoids the cross-loop
-    thread-pool hop that the sync wrapper has to use for in-loop
-    invocation (Codex MCP HIGH #2 fix, 2026-05-23).
+    loop (e.g. the AgenticLoop finalizer). Avoids calling the sync API from
+    inside the runtime event loop (Codex MCP HIGH #2 fix, 2026-05-23).
     """
     mode = get_verify_mode()
     if mode is VerifyMode.OFF:
