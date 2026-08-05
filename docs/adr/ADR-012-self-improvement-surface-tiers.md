@@ -4,6 +4,15 @@
 
 Proposed (2026-05-21)
 
+> 2026-08-05 status correction: the M4.x DPO pack/publisher chain was removed
+> in PR-CLEANUP-D3A because it had no production consumer. The remaining
+> `eval_response_recorded` producer was also retired after a consumer census
+> found that it emitted unpaired audit summaries rather than model exchanges.
+> This ADR preserves the historical proposal; any future learning-data work is
+> governed by
+> [`../plans/2026-08-05-agentic-learning-data-horizon.md`](../plans/2026-08-05-agentic-learning-data-horizon.md)
+> and the canonical extensibility roadmap.
+
 ## Context
 
 GEODE 는 weight-invariant evolutionary agent 군 (AlphaEvolve / Voyager / Reflexion / Promptbreeder 와 동위) 에 위치한다. 모델 가중치를 수정하는 대신, 모델 외부의 **에이전트 wrapper 정책** 5축을 mutator LLM 으로 진화시키고, autoresearch 의 fitness gate 가 Petri 17-dim 평가로 monotonic ratchet 을 제공한다 (`core/self_improving/train.py`).

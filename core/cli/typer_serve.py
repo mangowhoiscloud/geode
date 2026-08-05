@@ -74,7 +74,7 @@ async def _restore_gateway_loop(loop: Any, state: Any) -> None:
         await loop.update_model_async(state.model)
 
 
-def serve(
+def serve(  # noqa: PLR0915
     poll_interval: float = typer.Option(
         3.0, "--poll", "-p", help="Gateway poll interval (seconds)"
     ),

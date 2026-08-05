@@ -290,12 +290,25 @@ rule = "PLR0915"
 mode = "ceiling"
 path = "core/self_improving/train.py"
 symbol = "main"
-observed = 223
+observed = 212
 owner = "core.self_improving"
 reason = "The self-improving launcher still combines parsing, composition, execution, and reporting."
 created = "2026-05-06"
 target = "BND-006"
-expires_when = "Product-boundary extraction reduces main below 223 statements and the ceiling is lowered."
+expires_when = "Product-boundary extraction reduces main below 212 statements and the ceiling is lowered."
+
+[[ruff_debt]]
+id = "RUFF-010"
+rule = "PLR0915"
+mode = "override"
+path = "core/cli/typer_serve.py"
+symbol = "serve"
+observed = 217
+owner = "core.cli"
+reason = "The serve command still composes gateway, scheduler, IPC, and shutdown lifecycles inline."
+created = "2026-08-05"
+target = "DI-003"
+expires_when = "Serve composition is split to at most the 212-statement global ceiling."
 
 [[ruff_debt]]
 id = "RUFF-007"
