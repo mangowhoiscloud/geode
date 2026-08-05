@@ -2,7 +2,7 @@
  * GEODE CHANGELOG, auto-synced from the GEODE repo via `npm run sync-stats`.
  * Do not edit manually. Edit CHANGELOG.md in the GEODE repo and re-run sync.
  *
- * Last sync: 2026-08-04
+ * Last sync: 2026-08-05
  *
  * Each entry's `body` is the raw markdown between two version headings.
  * The Changelog page renders the body with a minimal markdown renderer
@@ -19,7 +19,12 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": "### Removed\n\n- **Removed the unreachable synchronous AgenticLoop finalizer chain.** The\n  runtime has one async entrypoint and all terminal branches already converge\n  on the public-hook-aware async finalizer. Its sync-only delegator, verify\n  wrappers, and persistence duplicate had no production callers; the public\n  sync `verify_turn()` library API remains available.\n- **Retired the orphaned `eval_response_recorded` DPO precursor.** The deleted\n  M4.x pair builder had no reader for these unary autoresearch audit summaries,\n  whose synthetic prompts and rollback-derived labels were not valid\n  preference pairs. Promoted audits continue to feed the existing in-context\n  few-shot pool, and historical RunTimeline JSONL remains readable without\n  migration. The removal lowers the global `PLR0915` ceiling from 223 to 212;\n  the pre-existing 217-statement serve composer is now an explicit,\n  roadmap-owned exception instead of hidden below the old ceiling. The two\n  deleted producer-only files contributed 25 collected cases; the selected-test\n  ratchet moves from 10,451 to the measured 10,441 after consuming its prior\n  15-case safety margin."
+    "body": ""
+  },
+  {
+    "version": "1.0.14",
+    "date": "2026-08-05",
+    "body": "> Cleanup release: retire the orphaned unary DPO precursor and the unreachable\n> synchronous AgenticLoop finalizer while preserving historical timelines,\n> public verification APIs, hook order, and SQLite action-family queries.\n\n### Removed\n\n- **Removed the unreachable synchronous AgenticLoop finalizer chain.** The\n  runtime has one async entrypoint and all terminal branches already converge\n  on the public-hook-aware async finalizer. Its sync-only delegator, verify\n  wrappers, and persistence duplicate had no production callers; the public\n  sync `verify_turn()` library API remains available.\n- **Retired the orphaned `eval_response_recorded` DPO precursor.** The deleted\n  M4.x pair builder had no reader for these unary autoresearch audit summaries,\n  whose synthetic prompts and rollback-derived labels were not valid\n  preference pairs. Promoted audits continue to feed the existing in-context\n  few-shot pool, and historical RunTimeline JSONL remains readable without\n  migration. The removal lowers the global `PLR0915` ceiling from 223 to 212;\n  the pre-existing 217-statement serve composer is now an explicit,\n  roadmap-owned exception instead of hidden below the old ceiling. The two\n  deleted producer-only files contributed 25 collected cases; the selected-test\n  ratchet moves from 10,451 to the measured 10,441 after consuming its prior\n  15-case safety margin."
   },
   {
     "version": "1.0.13",
@@ -2463,4 +2468,4 @@ export const CHANGELOG: ChangelogEntry[] = [
   }
 ];
 
-export const CHANGELOG_SYNCED_AT = "2026-08-04";
+export const CHANGELOG_SYNCED_AT = "2026-08-05";

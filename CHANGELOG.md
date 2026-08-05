@@ -47,6 +47,12 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.14] - 2026-08-05
+
+> Cleanup release: retire the orphaned unary DPO precursor and the unreachable
+> synchronous AgenticLoop finalizer while preserving historical timelines,
+> public verification APIs, hook order, and SQLite action-family queries.
+
 ### Removed
 
 - **Removed the unreachable synchronous AgenticLoop finalizer chain.** The
