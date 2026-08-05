@@ -56,7 +56,10 @@ functional change.
   few-shot pool, and historical RunTimeline JSONL remains readable without
   migration. The removal lowers the global `PLR0915` ceiling from 223 to 212;
   the pre-existing 217-statement serve composer is now an explicit,
-  roadmap-owned exception instead of hidden below the old ceiling.
+  roadmap-owned exception instead of hidden below the old ceiling. The two
+  deleted producer-only files contributed 25 collected cases; the selected-test
+  ratchet moves from 10,451 to the measured 10,441 after consuming its prior
+  15-case safety margin.
 
 ## [1.0.13] - 2026-08-05
 
