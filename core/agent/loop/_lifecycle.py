@@ -530,13 +530,7 @@ def _final_hook_payloads(
 def _finalize_verify_outcome(
     loop: AgenticLoop, result: AgenticResult, vr: Any
 ) -> dict[str, Any] | None:
-    """Shared SessionMetrics record + DB persist + payload-build path.
-
-    Called by both the sync and async ``_run_turn_verify*`` wrappers so
-    the bookkeeping stays identical regardless of how the verify outcome
-    was produced. ``None`` mirrors the "skip the hook" semantics for
-    OFF mode.
-    """
+    """Record one verdict in metrics and SQLite, then build its payload."""
     from core.agent.verify import VerifyMode
     from core.observability.session_metrics import current_session_metrics
 
@@ -558,41 +552,6 @@ def _finalize_verify_outcome(
     payload["termination_reason"] = getattr(result, "termination_reason", "") or ""
     payload["tool_call_count"] = len(getattr(result, "tool_calls", []) or [])
     return payload
-
-
-def _run_turn_verify(loop: AgenticLoop, result: AgenticResult) -> dict[str, Any] | None:
-    """PR-CL-A3 (2026-05-23) — sync per-turn verify dispatch.
-
-    Sync variant used by ``finalize_and_return`` (legacy sync path) and
-    test fixtures. The async finalizer uses :func:`_run_turn_verify_async`
-    so the LLM-judge call can ``await`` cleanly (Codex MCP HIGH #2 fix,
-    PR-CL-A6).
-    """
-    try:
-        from core.agent.verify import verify_turn
-
-        vr = verify_turn(result, loop=loop)
-        return _finalize_verify_outcome(loop, result, vr)
-    except Exception:
-        log.warning("turn verify dispatch crashed; skipping", exc_info=True)
-        return None
-
-
-async def _run_turn_verify_async(loop: AgenticLoop, result: AgenticResult) -> dict[str, Any] | None:
-    """Async per-turn verify dispatch (PR-CL-A6 — Codex MCP HIGH #2 fix).
-
-    Used by ``finalize_and_return_async`` so an LLM-judge mode call can
-    await ``loop._call_llm`` under the same event loop without the
-    cross-loop thread-pool hop the sync wrapper has to use.
-    """
-    try:
-        from core.agent.verify import verify_turn_async
-
-        vr = await verify_turn_async(result, loop=loop)
-        return _finalize_verify_outcome(loop, result, vr)
-    except Exception:
-        log.warning("turn verify (async) dispatch crashed; skipping", exc_info=True)
-        return None
 
 
 def _finalization_correlation(loop: AgenticLoop) -> HookCorrelation:
@@ -891,29 +850,6 @@ def _skips_public_finalization(result: AgenticResult) -> bool:
     return not is_successful_task_termination(result.termination_reason)
 
 
-def _finalize_without_public_verify(
-    loop: AgenticLoop,
-    result: AgenticResult,
-    user_input: str,
-    round_idx: int,
-) -> AgenticResult:
-    """Persist an infrastructure/cancel terminal without invoking policy hooks."""
-    _prepare_final_result(loop, result, user_input, round_idx, persist=False)
-    _merge_verify_attempts(loop, result)
-    _persist_final_result(loop, result, user_input, round_idx)
-    if loop._hooks:
-        session_ended, turn_completed, reasoning_metrics = _final_hook_payloads(
-            loop, result, user_input
-        )
-        # SESSION_ENDED remains a compatibility runtime event for existing
-        # telemetry subscribers. It is not the public SessionEnd hook and does
-        # not close the durable session.
-        loop._hooks.emit(RuntimeEvent.SESSION_ENDED, session_ended)
-        loop._hooks.emit(RuntimeEvent.TURN_COMPLETED, turn_completed)
-        loop._hooks.emit(RuntimeEvent.REASONING_METRICS, reasoning_metrics)
-    return result
-
-
 async def _finalize_without_public_verify_async(
     loop: AgenticLoop,
     result: AgenticResult,
@@ -931,53 +867,6 @@ async def _finalize_without_public_verify_async(
         await loop._hooks.emit_async(RuntimeEvent.SESSION_ENDED, session_ended)
         await loop._hooks.emit_async(RuntimeEvent.TURN_COMPLETED, turn_completed)
         await loop._hooks.emit_async(RuntimeEvent.REASONING_METRICS, reasoning_metrics)
-    return result
-
-
-def finalize_and_return(
-    loop: AgenticLoop,
-    result: AgenticResult,
-    user_input: str,
-    round_idx: int,
-) -> AgenticResult:
-    """Log result, record session end, save checkpoint, and return (DRY)."""
-    if _skips_public_finalization(result):
-        return _finalize_without_public_verify(loop, result, user_input, round_idx)
-    _prepare_final_result(loop, result, user_input, round_idx, persist=False)
-    # Verify/reflection belongs to the task-completion boundary. Run it
-    # before SESSION_ENDED/TURN_COMPLETED hooks so lifecycle consumers can
-    # read the final self-evaluation from the same terminal payload.
-    verify_payload = _run_turn_verify(loop, result)
-    _persist_final_result(
-        loop,
-        result,
-        user_input,
-        round_idx,
-        verify_payload=verify_payload,
-    )
-    if loop._hooks:
-        session_ended, turn_completed, reasoning_metrics = _final_hook_payloads(
-            loop, result, user_input, verify_payload=verify_payload
-        )
-        loop._hooks.emit(
-            RuntimeEvent.SESSION_ENDED,
-            session_ended,
-        )
-        loop._hooks.emit(
-            RuntimeEvent.TURN_COMPLETED,
-            turn_completed,
-        )
-        loop._hooks.emit(
-            RuntimeEvent.REASONING_METRICS,
-            reasoning_metrics,
-        )
-    if verify_payload is not None and loop._hooks:
-        event = (
-            RuntimeEvent.TURN_VERIFY_PASSED
-            if verify_payload.get("passed")
-            else RuntimeEvent.TURN_VERIFY_FAILED
-        )
-        loop._hooks.emit(event, verify_payload)
     return result
 
 

@@ -371,8 +371,8 @@ class HookEventStore:
 
         ``family_filter`` selects a whole action family (``core.hooks.catalog``
         ``ACTION_FAMILIES``). Rows written before the 27→13 fold carry the old
-        first segment, so the match is resolved through ``action_family`` rather
-        than by SQL prefix — a ``LIKE 'llm.%'`` would miss every
+        first segment, so the SQL filter expands the same alias policy used by
+        ``action_family`` — a ``LIKE 'llm.%'`` alone would miss every
         ``adapter.``/``prompt.``/``model.``/``reasoning.`` row already on disk.
         """
         clauses: list[str] = []

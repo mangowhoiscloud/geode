@@ -49,6 +49,11 @@ functional change.
 
 ### Removed
 
+- **Removed the unreachable synchronous AgenticLoop finalizer chain.** The
+  runtime has one async entrypoint and all terminal branches already converge
+  on the public-hook-aware async finalizer. Its sync-only delegator, verify
+  wrappers, and persistence duplicate had no production callers; the public
+  sync `verify_turn()` library API remains available.
 - **Retired the orphaned `eval_response_recorded` DPO precursor.** The deleted
   M4.x pair builder had no reader for these unary autoresearch audit summaries,
   whose synthetic prompts and rollback-derived labels were not valid
