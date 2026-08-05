@@ -45,6 +45,12 @@ Use `docs/workflow.md` as the canonical workflow summary and
 scaffold. It is shared with Claude Code and supersedes the older issue-first
 workflow.
 
+For test-time compute, best-of-N, verifier-aware scheduling, inference-program
+search, or GEODE/Eco²/SIL/Crucible comparisons, use
+`.claude/skills/stanford-test-time-compute/`. Read its lecture analysis before
+mapping the concepts to current code, and keep candidate width, repair depth,
+measurement replication, and promotion authority separate.
+
 ## Module map
 
 Read the module you are about to change. If a section says "read this first",

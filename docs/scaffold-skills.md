@@ -7,6 +7,7 @@ Skills used by Scaffold during GEODE development (`.claude/skills/`). Separate f
 | Skill | Triggers | Content |
 |-------|----------|---------|
 | `geode-workflow` | workflow, scaffold, feature work, provider/model changes, GUI/computer-use, observability, verification | Evidence-first execution scaffold with progressive-disclosure references |
+| `stanford-test-time-compute` | test-time compute, inference-time scaling, best-of-N, parallel width, sequential repair, measurement replication, verifier/evaluator, promotion authority, Archon | Stanford CS329A Part 2 grounding with GEODE/Eco²/SIL/Crucible decision-plane and authority boundaries |
 | `prompt-writing` | prompt, system prompt, model-facing text, identity, You are, Fable | GEODE prompt-writing standard: metadata/behavioral clauses, no direct identity assertions |
 | `geode-distribution` | homebrew, brew, formula, tap, uvx, 배포 | Coordinated GitHub Release + PyPI + Homebrew stable promotion |
 | `geode-gitflow` | branch, git, pr, merge, commit | Gitflow strategy, PR templates, CI fix loops |
