@@ -64,7 +64,7 @@ def stage_trajectory_release(
         privacy_review,
         release_scope=normalized_scope,
     )
-    destination = Path(destination_root)
+    destination = Path(destination_root).resolve()
     destination.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=".trajectory-release-", dir=destination) as raw_tmp:
         staging = Path(raw_tmp)

@@ -76,6 +76,9 @@ functional change.
   reflection count.** LLM request/execution calls must remain paired and occur
   at least twice; valid adaptive reflection calls no longer fail a fixed
   three-call assertion.
+- **Trajectory staging accepts canonical filesystem aliases.** The public
+  release root is resolved before containment checks, so macOS `/tmp` and
+  other symlinked destinations no longer fail as false path escapes.
 
 ### Removed
 
