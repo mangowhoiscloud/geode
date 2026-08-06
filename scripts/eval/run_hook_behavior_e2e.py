@@ -547,14 +547,12 @@ async def _run(
     expected_hook_counts = {
         hook.value: 2 if hook is HookName.PRE_TOOL_USE else 1 for hook in HookName
     }
-    expected_middleware_counts = {
-        "tool_request": 1,
-        "tool_execution": 1,
-        "llm_request": 3,
-        "llm_execution": 3,
-    }
-    expected_extension_rows = sum(expected_hook_counts.values()) + sum(
-        expected_middleware_counts.values()
+    expected_tool_middleware_counts = {"tool_request": 1, "tool_execution": 1}
+    llm_calls = probe_middleware.counts["llm_request"]
+    expected_extension_rows = (
+        sum(expected_hook_counts.values())
+        + sum(expected_tool_middleware_counts.values())
+        + (2 * llm_calls)
     )
 
     _require(
@@ -570,9 +568,15 @@ async def _run(
         {"missing_middleware": sorted(expected_middleware - observed_middleware)},
     )
     _require(
-        probe_middleware.counts == expected_middleware_counts,
+        all(
+            probe_middleware.counts[surface] == count
+            for surface, count in expected_tool_middleware_counts.items()
+        )
+        and llm_calls >= 2
+        and probe_middleware.counts["llm_execution"] == llm_calls,
         {
-            "expected_middleware_counts": expected_middleware_counts,
+            "expected_tool_middleware_counts": expected_tool_middleware_counts,
+            "llm_contract": "at least two paired request/execution calls",
             "observed": probe_middleware.counts,
         },
     )

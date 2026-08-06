@@ -72,6 +72,10 @@ functional change.
   start exactly one continuation generation, public `SubagentStop` fires only
   after durable terminal state, and inaccessible process metadata no longer
   causes a live child to be declared interrupted.
+- **Hook behavior E2E follows the middleware contract, not a model-specific
+  reflection count.** LLM request/execution calls must remain paired and occur
+  at least twice; valid adaptive reflection calls no longer fail a fixed
+  three-call assertion.
 
 ### Removed
 
