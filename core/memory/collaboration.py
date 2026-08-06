@@ -16,10 +16,18 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+import psutil
+
 from core.observability.redaction import redact_and_bound_text
 from core.observability.session_timeline import bound_session_payload
 
-_OWNER_ID = f"{os.getpid()}:{time.time_ns()}"
+
+def _process_owner_id(pid: int) -> str:
+    """Bind an owner to both PID and OS-recorded process birth time."""
+    return f"{pid}:{psutil.Process(pid).create_time():.6f}"
+
+
+_OWNER_ID = _process_owner_id(os.getpid())
 _ACTIVE_STATUSES = frozenset({"pending", "running"})
 _TERMINAL_STATUSES = frozenset({"completed", "failed", "timeout", "interrupted"})
 _MESSAGE_KINDS = frozenset({"message", "completion"})
@@ -60,17 +68,25 @@ CREATE TABLE IF NOT EXISTS collaboration_mailbox (
 
 
 def _owner_process_alive(owner_id: str) -> bool:
-    """Return whether a local owner PID still exists."""
+    """Return whether the exact local owner process still exists."""
+    if owner_id == _OWNER_ID:
+        return True
     try:
-        pid = int(owner_id.partition(":")[0])
+        pid_text, separator, created_text = owner_id.partition(":")
+        if not separator:
+            return False
+        pid = int(pid_text)
         if pid <= 0:
             return False
-        os.kill(pid, 0)
-    except (ProcessLookupError, ValueError):
+        expected = float(created_text)
+        actual = psutil.Process(pid).create_time()
+    except psutil.AccessDenied:
         return False
-    except PermissionError:
-        return True
-    return True
+    except (psutil.NoSuchProcess, psutil.ZombieProcess, ValueError):
+        return False
+    if expected > 10_000_000_000:  # Legacy pid:time_ns owner token.
+        return actual <= expected / 1_000_000_000
+    return abs(actual - expected) < 0.000001
 
 
 @dataclass(frozen=True, slots=True)
@@ -315,26 +331,46 @@ class CollaborationStore:
         recipient_session_id: str,
         *,
         limit: int = 50,
+        message_generation: int | None = None,
     ) -> list[CollaborationMessage]:
         """Claim unread items in id order with transactional at-most-once delivery."""
         if not recipient_session_id:
             return []
         with self._transaction() as conn:
             self._recover_stale_locked(conn, recipient_session_id)
-            rows = conn.execute(
+            unread = conn.execute(
                 """SELECT id, sender_session_id, recipient_session_id, kind,
                           payload_json, created_at
                    FROM collaboration_mailbox
                    WHERE recipient_session_id = ? AND consumed_at IS NULL
-                   ORDER BY id ASC LIMIT ?""",
-                (recipient_session_id, max(1, min(limit, 200))),
+                   ORDER BY id ASC""",
+                (recipient_session_id,),
             ).fetchall()
-            if rows:
-                consumed_at = time.time()
+            rows: list[sqlite3.Row] = []
+            stale_ids: list[int] = []
+            bounded_limit = max(1, min(limit, 200))
+            for row in unread:
+                if str(row["kind"]) == "message" and message_generation is not None:
+                    try:
+                        payload = json.loads(str(row["payload_json"]))
+                    except json.JSONDecodeError:
+                        payload = None
+                    generation = payload.get("generation") if isinstance(payload, dict) else None
+                    if not isinstance(generation, int) or generation < message_generation:
+                        stale_ids.append(int(row["id"]))
+                        continue
+                    if generation > message_generation:
+                        continue
+                if len(rows) < bounded_limit:
+                    rows.append(row)
+            consumed_at = time.time()
+            consumed_ids = stale_ids + [int(row["id"]) for row in rows]
+            if consumed_ids:
                 conn.executemany(
                     "UPDATE collaboration_mailbox SET consumed_at = ? WHERE id = ?",
-                    [(consumed_at, int(row["id"])) for row in rows],
+                    [(consumed_at, item_id) for item_id in consumed_ids],
                 )
+            if rows:
                 self._prune_locked(conn, consumed_at)
         messages: list[CollaborationMessage] = []
         for row in rows:

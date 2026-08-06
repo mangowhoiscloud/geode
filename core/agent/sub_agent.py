@@ -832,6 +832,7 @@ class SubAgentManager:
                 name=f"subagent:{task.task_id}:g{run.generation}",
             )
             with _background_controls_lock:
+                _background_interrupting.discard(task.task_id)
                 _background_controls[task.task_id] = (background, self._runner, done)
             background.add_done_callback(partial(self._background_done, run=run, done=done))
             runs.append(run)
@@ -919,8 +920,10 @@ class SubAgentManager:
                 )
         done.set()
         with _background_controls_lock:
-            _background_controls.pop(run.task_id, None)
-            _background_interrupting.discard(run.task_id)
+            current = _background_controls.get(run.task_id)
+            if current is not None and current[0] is completed:
+                _background_controls.pop(run.task_id, None)
+                _background_interrupting.discard(run.task_id)
 
     def list_collaboration_runs(self, parent_session_id: str) -> list[CollaborationRun]:
         return self._collaboration.list_runs(parent_session_id)

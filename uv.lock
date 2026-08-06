@@ -1355,6 +1355,7 @@ dependencies = [
     { name = "openai" },
     { name = "openai-agents" },
     { name = "prompt-toolkit" },
+    { name = "psutil" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "pylatexenc" },
@@ -1414,6 +1415,7 @@ dev = [
     { name = "ruff" },
     { name = "twine" },
     { name = "types-jsonschema" },
+    { name = "types-psutil" },
     { name = "types-pyyaml" },
     { name = "yamllint" },
     { name = "zipfile-zstd" },
@@ -1452,6 +1454,7 @@ requires-dist = [
     { name = "opentelemetry-instrumentation-anthropic", marker = "extra == 'obs'", specifier = ">=0.39.0" },
     { name = "pillow", marker = "extra == 'desktop'", specifier = ">=10.0.0" },
     { name = "prompt-toolkit", specifier = ">=3.0.52" },
+    { name = "psutil", specifier = ">=7.2.0" },
     { name = "pyautogui", marker = "extra == 'desktop'", specifier = ">=0.9.54" },
     { name = "pydantic", specifier = ">=2.10.0" },
     { name = "pydantic-settings", specifier = ">=2.7.0" },
@@ -1485,6 +1488,7 @@ dev = [
     { name = "ruff", specifier = ">=0.15.2" },
     { name = "twine", specifier = ">=6.0.0" },
     { name = "types-jsonschema", specifier = ">=4.26.0.20260518" },
+    { name = "types-psutil", specifier = ">=7.0.0" },
     { name = "types-pyyaml", specifier = ">=6.0.12.20250915" },
     { name = "yamllint", specifier = ">=1.38.0" },
     { name = "zipfile-zstd", specifier = ">=0.0.4" },
@@ -6307,6 +6311,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/dd/46/73b6a5d61a61015c4248030a8cb07e5bdddb4041430fae9e585a68692578/types_jsonschema-4.26.0.20260518.tar.gz", hash = "sha256:e1dd53dc97a64f5eccdd6fa9839666e09bb500a8ebba2db6fdaf1789faea81a6", size = 16638, upload-time = "2026-05-18T06:06:44.106Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/07/d5/134f8a147dcecda10db7f60cfc6af0578a25a5c53c87b3907a64385e0184/types_jsonschema-4.26.0.20260518-py3-none-any.whl", hash = "sha256:30b30a518c7fe335df85c919fcbcc631b69c03d4a4b5b632fa916bea03065307", size = 16072, upload-time = "2026-05-18T06:06:43.264Z" },
+]
+
+[[package]]
+name = "types-psutil"
+version = "7.2.2.20260518"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/cb/f1/6901857281d4e8d792492e1495eef6f4f01318a3b6a066486d81000a4511/types_psutil-7.2.2.20260518.tar.gz", hash = "sha256:9f825f631463a5b4d26f19f63aebc9ec25f01140d655026f3ad8a67841f9b331", size = 26660, upload-time = "2026-05-18T06:05:09.389Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/cd/eb/f726339668879819599c74c2e1f0cab760912a4159046942bdae2ad37bd6/types_psutil-7.2.2.20260518-py3-none-any.whl", hash = "sha256:6a3d697665754a60d7b5a41d5a2cff12b53f5e0676d77810cd28ba5e14cb4049", size = 32820, upload-time = "2026-05-18T06:05:08.321Z" },
 ]
 
 [[package]]

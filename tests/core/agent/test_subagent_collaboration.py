@@ -107,6 +107,9 @@ def test_interrupt_and_resume_generation(tmp_path) -> None:
         assert interrupted is not None and interrupted.status == "interrupted"
         assert [event["status"] for event in stopped] == ["interrupted"]
 
+        from core.agent import sub_agent
+
+        sub_agent._background_interrupting.add("child-2")
         runner.started = asyncio.Event()
         runner.release = asyncio.Event()
         runner.cancelled = False
@@ -204,12 +207,43 @@ def test_agent_loop_boundary_drains_durable_mailbox(tmp_path, monkeypatch) -> No
     loop = SimpleNamespace(
         _parent_session_key="",
         _session_id="child-5",
+        _session_generation=1,
         context=ConversationContext(),
     )
     provider_messages: list[dict[str, Any]] = []
     assert check_announced_results(loop, provider_messages) == 1
     assert "Parent follow-up" in provider_messages[0]["content"]
     assert check_announced_results(loop, provider_messages) == 0
+
+
+def test_agent_loop_boundary_discards_mail_from_prior_generation(tmp_path, monkeypatch) -> None:
+    from core import paths
+
+    monkeypatch.setattr(paths, "resolve_sessions_dir", lambda: tmp_path)
+    store = CollaborationStore(tmp_path / "sessions.db")
+    for index in range(51):
+        store.append_message(
+            sender_session_id="parent-1",
+            recipient_session_id="child-5",
+            kind="message",
+            payload={"message": f"old {index}", "generation": 1},
+        )
+    store.append_message(
+        sender_session_id="parent-1",
+        recipient_session_id="child-5",
+        kind="message",
+        payload={"message": "generation 2", "generation": 2},
+    )
+    loop = SimpleNamespace(
+        _parent_session_key="",
+        _session_id="child-5",
+        _session_generation=2,
+        context=ConversationContext(),
+    )
+    provider_messages: list[dict[str, Any]] = []
+
+    assert check_announced_results(loop, provider_messages) == 1
+    assert "generation 2" in provider_messages[0]["content"]
 
 
 def test_tool_surface_dispatches_and_controls_background_child(tmp_path) -> None:
@@ -238,6 +272,13 @@ def test_tool_surface_dispatches_and_controls_background_child(tmp_path) -> None
         )
         assert sent["turn_triggered"] is False
         assert store.drain_mailbox(task_id)[0].payload["message"] == "focus on tests"
+        followed = await executor.aexecute(
+            "manage_subagents",
+            {"action": "follow_up", "task_id": task_id, "message": "also inspect types"},
+            context=context,
+        )
+        assert followed["resumed"] is False
+        assert followed["turn_triggered"] is False
         runner.release.set()
         await manager.wait_for_task("parent-tool", task_id, timeout_s=1)
 

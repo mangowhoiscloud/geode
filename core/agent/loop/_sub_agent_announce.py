@@ -55,12 +55,17 @@ def check_announced_results(loop: AgenticLoop, messages: list[dict[str, Any]]) -
     try:
         from core.memory.collaboration import CollaborationStore
 
-        mailbox = CollaborationStore().drain_mailbox(loop._session_id)
+        mailbox = CollaborationStore().drain_mailbox(
+            loop._session_id,
+            message_generation=loop._session_generation,
+        )
     except Exception:
         log.warning("Collaboration mailbox drain failed", exc_info=True)
         mailbox = []
     for item in mailbox:
         if item.kind == "message":
+            if item.payload.get("generation") != loop._session_generation:
+                continue
             event = "subagent_message"
             content = (
                 f"Parent follow-up: {item.payload.get('message', '')} "

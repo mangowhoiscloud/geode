@@ -54,7 +54,9 @@ functional change.
   surface provides parent-scoped list, bounded wait, interrupt, message,
   follow-up, and checkpoint resume. Mutable run/mailbox state shares
   `sessions.db`; each child keeps its existing independent messages, session
-  events, hooks, and trajectory as the replay source.
+  events, hooks, and trajectory as the replay source. Mailbox delivery is
+  generation-scoped, and stale-owner recovery compares both PID and process
+  birth time so PID reuse cannot leave a run permanently active.
 
 ## [1.0.14] - 2026-08-05
 

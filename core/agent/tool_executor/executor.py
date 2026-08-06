@@ -1229,7 +1229,7 @@ class ToolExecutor:
                     message,
                     default_model=default_model,
                 )
-                return {"task": run.to_dict(), "turn_triggered": True, "resumed": resumed}
+                return {"task": run.to_dict(), "turn_triggered": resumed, "resumed": resumed}
             if action == "resume":
                 run = await self._sub_agent_manager.aresume(
                     parent_session_id,

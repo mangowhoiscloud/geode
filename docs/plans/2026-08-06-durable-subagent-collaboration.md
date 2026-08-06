@@ -121,13 +121,16 @@ flowchart TB
 monotone `generation`. `collaboration_mailbox` stores bounded JSON payloads
 with sender, recipient, kind, order, and `consumed_at`. Transactional drain is
 at-most-once. Secrets and oversized values are removed by the existing session
-payload policy before insertion.
+payload policy before insertion. A resumed child consumes only mailbox messages
+for its current generation; unread messages from an interrupted generation are
+discarded at the loop boundary.
 
 The run row intentionally does not duplicate prompts, transcripts, tool calls,
 hidden reasoning, evidence, or trajectory. Those remain in the child session.
-A process-owner token lets a later process turn `pending/running` rows whose
-local owner PID has exited into `interrupted` exactly once and enqueue an
-observable completion without stealing work from a still-live owner.
+A process-owner token containing PID and OS-recorded process birth time lets a
+later process turn orphaned `pending/running` rows into `interrupted` exactly
+once and enqueue an observable completion without mistaking a reused PID for
+the original live owner.
 
 ## 6. Public surface and migration map
 

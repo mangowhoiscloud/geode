@@ -132,9 +132,11 @@ base64 data, cognitive snapshots, and authentication material.
 Collaboration mailbox payloads reuse the session payload bounds and secret
 redaction. Run rows retain only bounded terminal summaries and errors; child
 prompts, tool calls, hidden reasoning, and complete results remain in the child
-checkpoint and append-only session record. A different process recovers an
-active row only when its local owner PID no longer exists; it never adopts or
-automatically restarts the in-flight work.
+checkpoint and append-only session record. Mailbox messages are scoped to the
+child generation, so an interrupted generation cannot leak stale guidance into
+a resume. A different process compares the owner's PID and process birth time
+before recovering an orphaned active row; it never adopts or automatically
+restarts the in-flight work.
 
 `SessionEventStore` and `HookEventStore` use short SQLite connections, WAL,
 `busy_timeout`, additive schema creation, and explicit transactions.
