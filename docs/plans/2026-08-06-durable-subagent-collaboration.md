@@ -181,3 +181,27 @@ Subagents are denied both `delegate_task` and `manage_subagents`.
 
 These require separate evidence. R6.5 only makes the current depth-one runtime
 controllable, resumable, and honest about its persisted state.
+
+## 10. E2E characterization: idempotency and delegation depth
+
+The deterministic public-surface scenario in
+`tests/core/agent/test_subagent_collaboration.py` executes the production
+`WorkerRequest -> _run_agentic -> AgenticLoop -> ToolExecutor ->
+SessionCheckpoint` lifecycle in-process with scripted LLM responses. It uses
+`delegate_task(background=true)` and `manage_subagents` rather than calling the
+store directly. OS subprocess transport and a paid model call are intentionally
+outside this contract test.
+
+| Probe | Observed result | Decision |
+|---|---|---|
+| parent `research -> verify` stages | the parent inserted the completed research summary into the verifier's actual worker prompt; both children completed | parent-orchestrated depth one is sufficient for this measured dependency shape |
+| child attempts `delegate_task` | the real worker deny rail rejected the research and verifier attempts; both denial results remained in their checkpoints | the child boundary is effective; nested delegation remains deferred |
+| completed mutation, then explicit resume | the same generated tool call produced two commits under one stable task id | cross-generation side-effect deduplication is absent |
+| checkpoint continuity | generation 2's actual LLM request contained generation 1's tool call and committed result | the duplicate is not checkpoint loss; a model can reissue a visible completed action |
+
+The runtime therefore does not add nested children or automatic crash restart.
+The test directly characterizes explicit resume; it does not simulate an OS
+crash. The result nevertheless makes automatic restart unsafe to add until a
+side-effecting tool has a caller-supplied operation key and a durable receipt
+lookup that returns the prior committed result instead of executing again.
+Read-only tools do not need this contract.
