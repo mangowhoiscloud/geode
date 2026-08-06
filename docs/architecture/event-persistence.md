@@ -28,7 +28,7 @@ The planes share correlation keys, but they do not share ownership.
 | Plane | Destination | Mutability / retention | Purpose |
 |---|---|---|---|
 | Resume checkpoint | `sessions.db:sessions/messages` | mutable, session policy | reconstruct the next model request |
-| Collaboration control | `sessions.db:collaboration_runs/collaboration_mailbox` | mutable latest-state rows plus bounded at-most-once delivery | list/wait/interrupt/message/follow-up/resume without duplicating child history |
+| Collaboration control | `sessions.db:collaboration_runs/collaboration_mailbox` | mutable latest-state rows plus bounded persist-before-ack delivery | explicit spawn/list/wait/interrupt/message/follow-up without duplicating child history |
 | Session record | `sessions.db:session_events` | append-only; terminal sessions eligible after 180 days | reconstruct user, assistant, tool, sub-agent, usage, and terminal ordering |
 | Runtime activity | `sessions.db:hook_events` | append-only; 7/30/180-day retention buckets plus row cap | query hooks, middleware, lifecycle, policy, and failures |
 | Run projection | run/sub-agent `events.jsonl` | bounded to 16 MiB with an explicit `projection.truncated` row | `tail`, copy, artifact review, and offline exchange |
@@ -96,6 +96,8 @@ Lifecycle is a commit boundary; telemetry is an observation of that boundary.
 - a PostVerify candidate or paused turn is a checkpoint, not session
   termination;
 - `PostCompact` fires only after compacted state persistence succeeds;
+- public `SubagentStart` fires after the durable run becomes running, and
+  `SubagentStop` fires after its terminal state and completion mail are committed;
 - `hook_events` may describe extension invocation, blocking, handler error, or
   latency, while `session_events` records only the durable behavioral fact.
 
@@ -132,11 +134,14 @@ base64 data, cognitive snapshots, and authentication material.
 Collaboration mailbox payloads reuse the session payload bounds and secret
 redaction. Run rows retain only bounded terminal summaries and errors; child
 prompts, tool calls, hidden reasoning, and complete results remain in the child
-checkpoint and append-only session record. Mailbox messages are scoped to the
-child generation, so an interrupted generation cannot leak stale guidance into
-a resume. A different process compares the owner's PID and process birth time
-before recovering an orphaned active row; it never adopts or automatically
-restarts the in-flight work.
+checkpoint and append-only session record. Mailbox input is addressed to the
+stable child id rather than a volatile generation. The loop peeks rows, saves a
+stable `mailbox_id` marker in the checkpoint, and acknowledges only after that
+save; restored markers suppress duplicates after a save/ack crash window. A
+different process compares the owner's PID and process birth time before
+recovering an orphaned active row; inaccessible process metadata is treated as
+unknown/live, and the runtime never adopts or automatically restarts in-flight
+work.
 
 `SessionEventStore` and `HookEventStore` use short SQLite connections, WAL,
 `busy_timeout`, additive schema creation, and explicit transactions.
@@ -229,7 +234,9 @@ Historical artifact-repository releases using dated identifiers such as
 | hand-built evaluation JSON | `geode.trajectory@1` | K3 remains an output adapter |
 | dated public trajectory | `geode.trajectory@1` | read-only in-memory normalizer |
 | hand-built release manifest | `geode.trajectory-release@1` | shared stage/verify publisher |
-| volatile sub-agent announce | `collaboration_mailbox` | legacy in-process queue remains for compatibility; background delegation uses SQLite delivery |
+| volatile sub-agent announce | `collaboration_mailbox` | in-process queue removed; durable child completion uses SQLite only |
+| `delegate_task(background=true)` | `spawn_agent` | foreground `delegate_task` remains blocking |
+| `manage_subagents(action=...)` | typed collaboration tools | list/wait/interrupt/message/follow-up each has one schema and effect |
 
 The database migration is additive. Rolling back code leaves extra tables that
 older releases ignore. It does not drop or rewrite `sessions`, `messages`,

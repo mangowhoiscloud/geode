@@ -284,18 +284,18 @@ machine-readable artifact is
 | Measure | Current tree |
 |---|---:|
 | Production Python files (`core/` + `plugins/`) | 543 |
-| Test Python files | 682 |
-| `core/` Python LOC | 139,615 |
-| `plugins/` Python LOC | 41,879 |
-| Test Python LOC | 179,435 |
-| Tool definitions / executable registrations / valid schemas | 79 / 82 / 79 (definition-only 0; execution-only 3; invalid schema 0) |
+| Test Python files | 681 |
+| `core/` Python LOC | 139,404 |
+| `plugins/` Python LOC | 41,869 |
+| Test Python LOC | 178,902 |
+| Tool definitions / executable registrations / valid schemas | 84 / 87 / 84 (definition-only 0; execution-only 3; invalid schema 0) |
 | `RuntimeEvent` members | 57 |
 | Built-in LLM adapters | 8 |
 | Module-level `ContextVar` declarations under `core/` | 30 |
 | `core` → `plugins` import sites | 31 across 14 files |
 | Import-linter contracts / ignored edges | 4 / 24 |
-| `AgenticLoop` file LOC / methods / constructor args | 2,968 / 74 / 27 |
-| `SubAgentManager` file LOC / methods / constructor args | 1,644 / 27 / 17 |
+| `AgenticLoop` file LOC / methods / constructor args | 2,983 / 74 / 27 |
+| `SubAgentManager` file LOC / methods / constructor args | 1,436 / 24 / 15 |
 | `RuntimeCoreConfig` fields | 19 |
 | Global Ruff ratchets | complexity 52; args 23; branches 51; returns 18; statements 212 |
 <!-- generated:architecture-baseline:end -->
@@ -555,9 +555,9 @@ and closure evidence are appended in §10.
 | STORE-003 | `MISFIT` | Self-improving datasets span tracked `core/self_improving/state`, runtime `~/.geode/self-improving`, actively written `~/.geode/autoresearch/handoff`, and isolated `GEODE_STATE_ROOT/autoresearch` roots without one dataset-level ownership manifest | A feature-owned manifest declares every dataset's lifecycle, schema/version, root, writer/readers, concurrency, retention/redaction, migration, rollback, and rebuild contract; tracked SoT leaves `core` with hash/history parity, while runtime/override/worker roots remain compatible or migrate additively with one writer | R8.2 | REL-002, STORE-001 | `OPEN` |
 | HOOK-001 | `MISFIT` | The 56-member internal `HookEvent` enum is exported at the package root, one registry mixes observer, result-transform, and control-interceptor authority without a stable public allowlist, and verification is emitted only inside terminal finalization | Exactly 13 versioned `HookName` contracts expose the Codex 11-event lifecycle plus `PreVerify`/`PostVerify`; typed authority, redaction, correlation, unknown-name rejection, and compatibility tests prevent internal RuntimeEvent growth from expanding the ABI, while one monotone bounded `PreVerify` → verifier → `PostVerify` → `Stop` state machine supports executable external continuation without erasing built-in failure or replaying side effects | R6.4 | — | `DONE` |
 | HOOK-002 | `PARTIAL` | Tool request interception is mixed with `TOOL_EXEC_STARTED`; no typed sequential tool/LLM request transform or async `next_call` chain wraps the accepted executor and provider call across every runtime path | `tool_request`, `tool_execution`, `llm_request`, and `llm_execution` are four typed join points with N→N+1 request composition, original/effective trace, single-use async `next_call`, exception identity, policy-before-execution ordering, and all-path parity tests | R6.4 | HOOK-001 | `DONE` |
-| COLLAB-001 | `MISFIT` | `delegate_task` tells callers that long-running work should not block, but awaits the complete fan-out and returns no stable handle for later control | Opt-in background delegation returns before completion and supports parent-scoped list, bounded wait, and interrupt while preserving the existing depth, session-cap, and Lane limits | R6.5 | HOOK-001 | `IN_PROGRESS` |
-| COLLAB-002 | `MISFIT` | Subagent completion announcements live only in a five-minute process-memory queue, so parent inactivity or daemon restart can discard collaboration delivery | A bounded, redacted mailbox in the existing session database preserves ordered parent/child messages and completion delivery with transactional at-most-once consumption | R6.5 | COLLAB-001, STORE-002 | `IN_PROGRESS` |
-| COLLAB-003 | `PARTIAL` | Child checkpoints and session history are durable, but every isolated worker invocation creates a fresh conversation and never restores the child checkpoint | Follow-up and resume reopen the same child session as a new generation, restore its checkpoint, accept queued mailbox input at a loop boundary, and preserve one independent rollout without replaying successful side effects | R6.5 | COLLAB-001, COLLAB-002 | `IN_PROGRESS` |
+| COLLAB-001 | `MISFIT` | `delegate_task` tells callers that long-running work should not block, but awaits the complete fan-out and returns no stable handle for later control | Explicit spawn/list/wait/interrupt tools return before completion and remain parent-scoped while preserving the existing depth, session-cap, and Lane limits | R6.5 | HOOK-001 | `IN_PROGRESS` |
+| COLLAB-002 | `MISFIT` | Subagent completion announcements live only in a five-minute process-memory queue, so parent inactivity or daemon restart can discard collaboration delivery | A bounded, redacted mailbox in the existing session database preserves ordered parent/child messages and completion delivery with persist-before-ack admission | R6.5 | COLLAB-001, STORE-002 | `IN_PROGRESS` |
+| COLLAB-003 | `PARTIAL` | Child checkpoints and session history are durable, but every isolated worker invocation creates a fresh conversation and never restores the child checkpoint | Follow-up reopens the same child session as a new generation, restores its checkpoint, accepts stable queued input at a loop boundary, and preserves one independent rollout without runtime replay of successful calls | R6.5 | COLLAB-001, COLLAB-002 | `IN_PROGRESS` |
 
 ## 6. Dependency and merge sequence
 
@@ -1327,32 +1327,34 @@ Acceptance:
 
 GAPs: COLLAB-001, COLLAB-002, COLLAB-003.
 
-This package extends the existing `delegate_task` surface rather than creating
-a general-purpose thread subsystem. Background delegation returns a stable
-child handle; one parent-scoped control surface provides list, bounded wait,
-interrupt, message, follow-up, and resume operations. Children remain depth
-one, retain the current session cap and global Lane limit, and cannot control
-siblings or create descendants.
+This package separates foreground `delegate_task` from durable collaboration
+without creating a general-purpose thread subsystem. `spawn_agent` returns a
+stable child handle; explicit list, bounded-wait, interrupt, message, and
+follow-up tools each own one schema and effect. Children remain depth one,
+retain the session cap and global Lane limit, and cannot control siblings or
+create descendants.
 
 Mutable run status and bounded mailbox delivery use additive tables in the
 existing `sessions.db`. They are control projections, not replay history. The
 child's checkpoint, messages, hook/runtime events, and projected trajectory
 remain its independent rollout. A resumed child increments a generation and
-restores that same checkpoint; it never replays a previously successful tool
-side effect. A daemon restart may mark an uncertain in-flight process
+restores that same checkpoint; the runtime does not replay a successful call,
+but a model may issue it again, so this is not an exactly-once side-effect
+contract. A daemon restart may mark an uncertain in-flight process
 interrupted, but does not automatically restart it.
 
 Acceptance:
 
-- foreground `delegate_task` behavior remains compatible, while background
-  mode returns before child completion and exposes one stable child handle;
+- foreground `delegate_task` behavior remains compatible, while `spawn_agent`
+  returns before child completion and exposes one stable child handle;
 - list, bounded wait, and interrupt are scoped to the owning parent, preserve
   terminal status, and emit exactly one terminal transition per generation;
 - messages and completion notices are bounded, redacted, ordered, durable
-  across parent inactivity and daemon restart, and consumed at most once;
+  across parent inactivity and daemon restart, and acknowledged only after
+  checkpoint admission;
 - a running child consumes mailbox input only at an agent-loop boundary;
   follow-up/resume on a terminal or interrupted child restores the same child
-  checkpoint as a new generation without replaying completed side effects;
+  checkpoint as a new generation without runtime replay of completed calls;
 - depth, per-session task cap, Lane concurrency, approval/policy, hooks,
   checkpoint, session-event, and trajectory contracts remain executable in
   foreground, background, interrupted, resumed, failed, and timed-out tests;

@@ -124,7 +124,7 @@ class LiteratureReview(BaseSeedAgent):
             max_papers,
             self._queries_per_run(),
         )
-        results = await self._manager.adelegate([task], announce=False)
+        results = await self._manager.adelegate([task])
         if not results:
             return SeedAgentResult(
                 role=self.role,

@@ -31,6 +31,7 @@ from core.agent.loop.models import (
     is_failure_termination,
     is_successful_task_termination,
 )
+from core.agent.safety import SUBAGENT_CONTROL_TOOLS
 from core.async_runtime import run_process_coroutine
 from core.paths import GLOBAL_WORKERS_DIR
 
@@ -285,7 +286,7 @@ def filter_handlers(
       the agent's capability to zero tools (S2-fix, 2026-05-18).
     """
     denied = set(denied_tools)
-    denied.update({"delegate_task", "manage_subagents"})
+    denied.update(SUBAGENT_CONTROL_TOOLS)
     allowed: set[str] | None = None
     if toolkit and toolkit_registry is not None:
         # Tier 1 — named toolkit takes precedence. The registry already
@@ -493,12 +494,12 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
         auto_approve=True,  # Sub-agents skip HITL prompts
         # PR-SUBAGENT-ROLES (2026-07-02) — enforce the parent's denied set
         # on the EXISTING executor rail, not only via handler filtering.
-        # ``run_bash`` / ``delegate_task`` are special-cased in
+        # ``run_bash`` and collaboration tools are special-cased in
         # ``ToolExecutor.aexecute`` BEFORE handler lookup, so removing them
         # from the handler dict is theater (same finding as the headless
         # denylist, PR-EXEC-HARDENING). This is what makes a role
         # allowlist (e.g. repo_researcher without run_bash) actually hold.
-        denied_tools=frozenset(request.denied_tools) | {"delegate_task", "manage_subagents"},
+        denied_tools=frozenset(request.denied_tools) | SUBAGENT_CONTROL_TOOLS,
         interactive_approval=False,
     )
 

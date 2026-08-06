@@ -155,20 +155,19 @@ def parse_structured_output(
 class SeedAgentResult:
     """Standardized result of one phase-agent invocation.
 
-    Why not reuse ``core.agent.sub_agent.SubAgentResult``? S2-fix
+    Why not reuse ``core.agent.sub_agent.SubResult``? S2-fix
     (2026-05-18) explicit rationale — both dataclasses share ~80% of
     fields (status / duration / token counts / error category), but
     their *aggregation semantics* differ:
 
-    - ``SubAgentResult`` is per-TASK (one spawn → one result), with
-      ``task_id`` + ``announced`` flag for the parent loop's announce
-      queue. It is N-many per phase when Generator/Ranker fan out.
+    - ``SubResult`` is per-TASK (one spawn → one result), with a stable
+      ``task_id``. It is N-many per phase when Generator/Ranker fan out.
     - ``SeedAgentResult`` is per-ROLE (one phase → one result),
       consumed by the orchestrator's state merge. Carries ``output``
       dict whose keys (``candidates``, ``reflections``, ``elo_ratings``,
       …) map directly onto ``PipelineState`` fields.
 
-    Wrapping SubAgentResult would force every role to construct a
+    Wrapping SubResult would force every role to construct a
     fake ``task_id`` and force the orchestrator to know about
     sub-task-vs-phase polymorphism. Keeping them sibling types lets
     each evolve in its own domain. Roles that spawn sub-agents

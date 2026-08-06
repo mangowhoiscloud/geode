@@ -30,7 +30,6 @@ def _process_owner_id(pid: int) -> str:
 _OWNER_ID = _process_owner_id(os.getpid())
 _ACTIVE_STATUSES = frozenset({"pending", "running"})
 _TERMINAL_STATUSES = frozenset({"completed", "failed", "timeout", "interrupted"})
-_MESSAGE_KINDS = frozenset({"message", "completion"})
 _RETENTION_SECONDS = 7 * 24 * 60 * 60
 _MAX_TERMINAL_RUNS = 200
 _MAX_UNREAD_PER_RECIPIENT = 1_000
@@ -81,7 +80,8 @@ def _owner_process_alive(owner_id: str) -> bool:
         expected = float(created_text)
         actual = psutil.Process(pid).create_time()
     except psutil.AccessDenied:
-        return False
+        # Unknown is not dead.  Interrupting a live child loses its result.
+        return True
     except (psutil.NoSuchProcess, psutil.ZombieProcess, ValueError):
         return False
     if expected > 10_000_000_000:  # Legacy pid:time_ns owner token.
@@ -160,6 +160,7 @@ class CollaborationStore:
         model: str = "",
         source: str = "",
         resume: bool = False,
+        max_total_subagents: int | None = None,
     ) -> CollaborationRun:
         """Create generation one, or reopen a terminal run as N+1."""
         if not task_id or not parent_session_id:
@@ -198,6 +199,14 @@ class CollaborationStore:
             else:
                 if existing is not None:
                     raise ValueError(f"Duplicate child task_id: {task_id}")
+                if max_total_subagents is not None:
+                    total = conn.execute(
+                        """SELECT COUNT(*) AS total FROM collaboration_runs
+                           WHERE parent_session_id = ?""",
+                        (parent_session_id,),
+                    ).fetchone()
+                    if total is not None and int(total["total"]) >= max_total_subagents:
+                        raise ValueError(f"Session sub-agent limit reached ({max_total_subagents})")
                 conn.execute(
                     """INSERT INTO collaboration_runs
                            (task_id, parent_session_id, task_type, role, model, source,
@@ -304,74 +313,52 @@ class CollaborationStore:
             ).fetchall()
         return [self._run_from_row(row) for row in rows]
 
-    def append_message(
+    def append_message_if_active(
         self,
         *,
-        sender_session_id: str,
-        recipient_session_id: str,
-        kind: str,
-        payload: dict[str, Any],
-    ) -> int:
-        if kind not in _MESSAGE_KINDS:
-            raise ValueError(f"Invalid collaboration message kind: {kind}")
-        if not sender_session_id or not recipient_session_id:
-            raise ValueError("sender and recipient session ids are required")
+        parent_session_id: str,
+        task_id: str,
+        message: str,
+        trigger_turn: bool = False,
+    ) -> int | None:
+        """Enqueue parent input only while the child is active, in one transaction."""
         with self._transaction() as conn:
+            active = conn.execute(
+                """SELECT 1 FROM collaboration_runs
+                   WHERE parent_session_id = ? AND task_id = ?
+                     AND status IN ('pending', 'running')""",
+                (parent_session_id, task_id),
+            ).fetchone()
+            if active is None:
+                return None
             return self._insert_message(
                 conn,
-                sender_session_id=sender_session_id,
-                recipient_session_id=recipient_session_id,
-                kind=kind,
-                payload=payload,
+                sender_session_id=parent_session_id,
+                recipient_session_id=task_id,
+                kind="message",
+                payload={"message": message, "trigger_turn": trigger_turn},
                 created_at=time.time(),
             )
 
-    def drain_mailbox(
+    def read_mailbox(
         self,
         recipient_session_id: str,
         *,
         limit: int = 50,
-        message_generation: int | None = None,
     ) -> list[CollaborationMessage]:
-        """Claim unread items in id order with transactional at-most-once delivery."""
+        """Read unread items without acknowledging them."""
         if not recipient_session_id:
             return []
         with self._transaction() as conn:
             self._recover_stale_locked(conn, recipient_session_id)
-            unread = conn.execute(
+            rows = conn.execute(
                 """SELECT id, sender_session_id, recipient_session_id, kind,
                           payload_json, created_at
                    FROM collaboration_mailbox
                    WHERE recipient_session_id = ? AND consumed_at IS NULL
-                   ORDER BY id ASC""",
-                (recipient_session_id,),
+                   ORDER BY id ASC LIMIT ?""",
+                (recipient_session_id, max(1, min(limit, 200))),
             ).fetchall()
-            rows: list[sqlite3.Row] = []
-            stale_ids: list[int] = []
-            bounded_limit = max(1, min(limit, 200))
-            for row in unread:
-                if str(row["kind"]) == "message" and message_generation is not None:
-                    try:
-                        payload = json.loads(str(row["payload_json"]))
-                    except json.JSONDecodeError:
-                        payload = None
-                    generation = payload.get("generation") if isinstance(payload, dict) else None
-                    if not isinstance(generation, int) or generation < message_generation:
-                        stale_ids.append(int(row["id"]))
-                        continue
-                    if generation > message_generation:
-                        continue
-                if len(rows) < bounded_limit:
-                    rows.append(row)
-            consumed_at = time.time()
-            consumed_ids = stale_ids + [int(row["id"]) for row in rows]
-            if consumed_ids:
-                conn.executemany(
-                    "UPDATE collaboration_mailbox SET consumed_at = ? WHERE id = ?",
-                    [(consumed_at, item_id) for item_id in consumed_ids],
-                )
-            if rows:
-                self._prune_locked(conn, consumed_at)
         messages: list[CollaborationMessage] = []
         for row in rows:
             try:
@@ -389,6 +376,27 @@ class CollaborationStore:
                 )
             )
         return messages
+
+    def ack_mailbox(self, recipient_session_id: str, message_ids: list[int]) -> int:
+        """Acknowledge only messages already persisted by this recipient."""
+        ids = sorted({item_id for item_id in message_ids if item_id > 0})
+        if not recipient_session_id or not ids:
+            return 0
+        with self._transaction() as conn:
+            cursor = conn.executemany(
+                """UPDATE collaboration_mailbox SET consumed_at = ?
+                   WHERE id = ? AND recipient_session_id = ? AND consumed_at IS NULL""",
+                [(time.time(), item_id, recipient_session_id) for item_id in ids],
+            )
+            self._prune_locked(conn, time.time())
+        return cursor.rowcount
+
+    def has_pending_trigger(self, recipient_session_id: str) -> bool:
+        """Return whether an unread follow-up requests a new child turn."""
+        return any(
+            item.kind == "message" and item.payload.get("trigger_turn") is True
+            for item in self.read_mailbox(recipient_session_id, limit=200)
+        )
 
     def recover_stale(self, parent_session_id: str) -> int:
         """Turn prior-process active rows into observable interrupted terminals."""

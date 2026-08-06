@@ -34,18 +34,16 @@ class _StubManager:
         force_unparseable: bool = False,
     ) -> None:
         self.received_tasks: list[SubTask] = []
-        self.received_announce: bool | None = None
         self._output = output if output is not None else _good_meta()
         self._success = success
         self._force_unparseable = force_unparseable
 
-    async def adelegate(self, tasks, *, announce: bool = True) -> list:
+    async def adelegate(self, tasks) -> list:
         """Async sibling for Phase-C tests."""
-        return self.delegate(tasks, announce=announce)
+        return self.delegate(tasks)
 
-    def delegate(self, tasks: list[SubTask], *, announce: bool = True) -> list[SubResult]:
+    def delegate(self, tasks: list[SubTask]) -> list[SubResult]:
         self.received_tasks = list(tasks)
-        self.received_announce = announce
         if not tasks:
             return []
         t = tasks[0]
@@ -159,13 +157,6 @@ def test_meta_reviewer_accepts_text_json_fallback() -> None:
     manager = _StubManager(output={"text": json.dumps(_good_meta())})
     result = asyncio.run(MetaReviewer(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert result.success
-
-
-def test_meta_reviewer_announce_false() -> None:
-    state = _state_with_full_pipeline_data(5)
-    manager = _StubManager()
-    asyncio.run(MetaReviewer(manager=manager).aexecute(state))  # type: ignore[arg-type]
-    assert manager.received_announce is False
 
 
 def test_meta_reviewer_snapshot_includes_counts() -> None:

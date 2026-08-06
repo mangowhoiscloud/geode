@@ -6,12 +6,13 @@ GAPs: COLLAB-001, COLLAB-002, COLLAB-003
 
 ## 1. Decision
 
-GEODE will keep its current depth-one, isolated `SubAgentManager` runtime and
-add only the missing collaboration controls:
+GEODE keeps its depth-one, isolated `SubAgentManager` runtime and separates
+foreground delegation from durable collaboration:
 
-- `delegate_task(background=true)` returns stable task handles immediately;
-- `manage_subagents` provides parent-scoped `list`, `wait`, `interrupt`,
-  `send_message`, `follow_up`, and `resume` actions;
+- `delegate_task` remains the blocking fan-out / best-of-N operation;
+- `spawn_agent` returns one stable child handle immediately;
+- `list_agents`, `wait_agent`, `interrupt_agent`, `send_message`, and
+  `followup_task` expose one explicit contract per lifecycle operation;
 - mutable run status and mailbox delivery use additive tables in the existing
   project-local `sessions.db`;
 - the child checkpoint, messages, runtime/session events, and trajectory remain
@@ -26,8 +27,8 @@ The audit used current primary source, not prose summaries.
 
 | System | Audited revision | What is mature | Boundary retained in GEODE |
 |---|---|---|---|
-| Hermes Agent | `01a1037d1e6d7b6eb96a786ef282c3aea4818194` | Top-level delegation is background-first; completion re-enters only at a legal conversation boundary; `async_delegations` persists routing, terminal delivery, claims, and bounded retention; a plugin-safe lifecycle API exposes immutable handles and explicit cancellation states | Preserve Hermes's background completion and legal-boundary delivery, but keep background opt-in for compatibility and do not copy its gateway-specific wake/claim machinery |
-| Codex | `aac9f842473ac6a05d417dd76ce8b89bdb3b707d` | Child threads own independent rollouts; V2 separates `send_message` from turn-triggering `followup_task`; `wait_agent`, `interrupt_agent`, status, completion mailbox, and bounded rollout materialization form a coherent lifecycle | Absorb message/follow-up distinction, wait/interrupt, and same-child continuation without importing the full `ThreadManager`, residency cache, or multi-level agent tree |
+| Hermes Agent | `01a1037d1e6d7b6eb96a786ef282c3aea4818194` | Top-level delegation is background-first; completion re-enters only at a legal conversation boundary; `async_delegations` persists routing, terminal delivery, claims, and bounded retention; a plugin-safe lifecycle API exposes immutable handles and explicit cancellation states | Preserve Hermes's background completion and legal-boundary delivery, while keeping foreground `delegate_task` compatible and avoiding its gateway-specific wake/claim machinery |
+| Codex | `7a0e974e08c798d1e8d59d407aeb6e24db1313af` | Child threads own independent rollouts; V2 separates `send_message` from turn-triggering `followup_task`; `wait_agent`, `interrupt_agent`, status, completion mailbox, and bounded rollout materialization form a coherent lifecycle. Its durable user-input queue removes a row only after admission is persisted | Absorb explicit tool names, message/follow-up distinction, wait/interrupt, same-child continuation, and persist-before-ack without importing the full `ThreadManager`, residency cache, or multi-level agent tree |
 | OpenClaw | `c37ba84f662aca1b2d384846ee59654e88ddfc50` | SQLite `subagent_runs` makes routing, retries, cleanup, delivery, and terminal state durable | Reuse the durability lesson only; its broad multi-channel run schema is not needed for GEODE's depth-one local worker contract |
 
 Relevant Codex V2 source paths are
@@ -38,7 +39,7 @@ Relevant Codex V2 source paths are
 Relevant Hermes source paths are `tools/delegate_tool.py`,
 `tools/async_delegation.py`, and `agent/subagent_lifecycle.py`.
 
-## 3. Current GEODE audit
+## 3. Pre-change GEODE audit
 
 | Capability | Current code | Finding |
 |---|---|---|
@@ -51,10 +52,11 @@ Relevant Hermes source paths are `tools/delegate_tool.py`,
 | independent trajectory | child `session_id=task_id`, worker hooks, `SessionTimeline` | EXISTS: child messages and append-only events already survive independently |
 | mailbox | none | ABSENT |
 
-One adjacent defect is in scope: `core.agent.loop._sub_agent_announce` imports
-`core.agent.sub_agent` eagerly, which creates an import cycle when
-`core.agent.sub_agent` is imported directly. Moving that import to the single
-call site fixes the root cause and is required for the mailbox drain.
+Three adjacent defects are in scope: mailbox rows were acknowledged before the
+child checkpoint was saved, a follow-up could race the terminal transition and
+be stranded, and the per-manager spawn counter reset when a session rebuilt its
+manager during durable collaboration. The implementation fixes those shared
+boundaries rather than adding caller-specific retries.
 
 ## 4. Target lifecycle
 
@@ -67,27 +69,28 @@ sequenceDiagram
     participant C as Child AgenticLoop
     participant H as Child session history
 
-    P->>T: delegate_task(background=true)
+    P->>T: spawn_agent(task)
     T->>M: spawn(task, parent_session_id)
     M->>D: run = pending, generation = 1
     M-->>T: stable task_id
     T-->>P: dispatched handles
     M->>C: isolated WorkerRequest
     C->>H: checkpoint + messages + session events
-    P->>T: manage_subagents(send_message/follow_up)
+    P->>T: send_message / followup_task
     T->>D: append bounded mailbox item
-    D-->>C: drain at next loop boundary
-    C->>H: continue independent rollout
+    D-->>C: peek at next loop boundary
+    C->>H: inject + save checkpoint
+    C->>D: ack mailbox ids
     C-->>M: terminal result
     M->>D: terminal projection + completion mailbox
-    D-->>P: drain at next loop boundary
+    D-->>P: peek, checkpoint, then acknowledge
 ```
 
 Resume is a new generation of the same child session:
 
 ```mermaid
 flowchart LR
-    A["generation N terminal or interrupted"] --> B["manage_subagents follow_up/resume"]
+    A["generation N terminal or interrupted"] --> B["followup_task"]
     B --> C["SessionCheckpoint.load + reopen"]
     C --> D["restore conversation, guards, cognitive state"]
     D --> E["generation N+1 SessionStart"]
@@ -119,11 +122,13 @@ flowchart TB
 
 `collaboration_runs` stores one latest-state row per stable `task_id` and a
 monotone `generation`. `collaboration_mailbox` stores bounded JSON payloads
-with sender, recipient, kind, order, and `consumed_at`. Transactional drain is
-at-most-once. Secrets and oversized values are removed by the existing session
-payload policy before insertion. A resumed child consumes only mailbox messages
-for its current generation; unread messages from an interrupted generation are
-discarded at the loop boundary.
+with sender, recipient, kind, order, and `consumed_at`. Delivery is
+persist-before-ack: the loop peeks rows, injects a stable `mailbox_id` marker,
+saves the child checkpoint, and only then acknowledges those ids. A crash
+before save leaves the row unread; a crash after save is deduplicated by the
+marker. Parent messages are stable child input, not generation-scoped data, so
+a terminal-boundary race cannot discard them. Secrets and oversized values are
+removed by the existing session payload policy before insertion.
 
 The run row intentionally does not duplicate prompts, transcripts, tool calls,
 hidden reasoning, evidence, or trajectory. Those remain in the child session.
@@ -134,33 +139,40 @@ the original live owner.
 
 ## 6. Public surface and migration map
 
-| Existing surface | Additive target | Compatibility |
+| Previous surface | Final surface | Migration |
 |---|---|---|
-| `delegate_task(...)` | `delegate_task(..., background=false)` | existing synchronous response is unchanged |
-| none | `delegate_task(..., background=true)` | returns `{status, tasks:[{task_id,status,generation}]}` before completion; `best_of` remains foreground-only |
-| in-memory run records | `manage_subagents(action=list/wait/interrupt/...)` | task ownership is scoped to `ToolContext.session_id`; unknown/foreign task IDs fail closed |
-| volatile announce queue | durable completion mailbox | legacy queue remains for existing non-tool callers during this change |
+| `delegate_task(...)` | `delegate_task(...)` | foreground fan-out and best-of-N response stay unchanged |
+| `delegate_task(..., background=true)` | `spawn_agent(...)` | one durable handle is returned as `task`; background flag is removed |
+| `manage_subagents(action=list)` | `list_agents()` | parent ownership remains scoped to `ToolContext.session_id` |
+| `manage_subagents(action=wait)` | `wait_agent(task_id, timeout_seconds)` | wait timeout never cancels the child |
+| `manage_subagents(action=interrupt)` | `interrupt_agent(task_id)` | live local worker cancellation only |
+| `manage_subagents(action=send_message)` | `send_message(task_id, message)` | queues context without forcing a turn |
+| `manage_subagents(action=follow_up/resume)` | `followup_task(task_id, message)` | running child receives input; terminal child resumes generation N+1 |
+| volatile announce queue | durable completion mailbox | legacy queue and duplicate `SubAgentResult` are deleted |
 | fresh worker only | `WorkerRequest.resume=true` | false remains the default; true requires an existing checkpoint |
 
-`manage_subagents` is one action-oriented tool rather than six new tool names.
-This keeps the model surface compact while retaining explicit action values.
-Subagents are denied both `delegate_task` and `manage_subagents`.
+The extra tool names are deliberate: each has one schema and one effect, matching
+Codex's public contract and removing an action enum whose validation depended on
+cross-field prose. Subagents are denied `delegate_task` and every collaboration
+tool from one shared deny-set.
 
 ## 7. Implementation slices
 
-1. Add the two SQLite tables and bounded store operations.
-2. Add background spawn/control to `SubAgentManager`, reusing
-   `adelegate`, `IsolatedRunner.cancel`, existing hooks, caps, and roles.
-3. Extend `ToolExecutor` and `definitions.json` with the two compact public
-   entry points.
-4. Restore checkpoints in a worker only when `WorkerRequest.resume` is true;
-   drain durable mailbox items at the existing per-round boundary.
-5. Update the orchestration and persistence documentation, CHANGELOG, and
-   generated architecture inventory.
+1. Add the two SQLite tables and bounded store operations. **Done.**
+2. Reuse `adelegate`, `IsolatedRunner.cancel`, hooks, caps, and roles for
+   durable child control. **Done.**
+3. Replace the overloaded public controls with explicit collaboration tools.
+   **Done.**
+4. Restore worker checkpoints on continuation and use persist-before-ack at the
+   existing per-round boundary. **Done.**
+5. Delete the volatile announce queue, duplicate result contract, unused
+   TaskGraph overlay, and inert manager dependencies. **Done.**
+6. Update public documentation, generated inventory, and verification evidence.
+   **In progress.**
 
 ## 8. Verification gates
 
-- store schema, redaction, ownership, order, at-most-once drain, and stale-owner recovery;
+- store schema, redaction, ownership, order, persist-before-ack, and stale-owner recovery;
 - foreground parity and immediate background return;
 - list/wait timeout without cancellation, interrupt terminality, and foreign-parent rejection;
 - live-child message delivery and terminal-child follow-up/resume generation;
@@ -188,7 +200,7 @@ The deterministic public-surface scenario in
 `tests/core/agent/test_subagent_collaboration.py` executes the production
 `WorkerRequest -> _run_agentic -> AgenticLoop -> ToolExecutor ->
 SessionCheckpoint` lifecycle in-process with scripted LLM responses. It uses
-`delegate_task(background=true)` and `manage_subagents` rather than calling the
+`spawn_agent` and the explicit collaboration tools rather than calling the
 store directly. OS subprocess transport and a paid model call are intentionally
 outside this contract test.
 

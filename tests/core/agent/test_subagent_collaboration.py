@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 from core.agent.conversation import ConversationContext
-from core.agent.loop._sub_agent_announce import check_announced_results
+from core.agent.loop._collaboration_mailbox import admit_collaboration_messages
 from core.agent.loop.agent_loop import AgenticLoop
 from core.agent.sub_agent import SubAgentManager, SubTask
 from core.agent.tool_executor import ToolExecutor
@@ -98,16 +98,101 @@ def test_background_child_mailbox_wait_and_completion(tmp_path) -> None:
         waiting = await manager.wait_for_task("parent-1", "child-1", timeout_s=0)
         assert waiting is not None and waiting.status == "running"
         manager.send_task_message("parent-1", "child-1", "check the tests")
-        assert store.drain_mailbox("child-1")[0].payload["message"] == "check the tests"
+        assert store.read_mailbox("child-1")[0].payload["message"] == "check the tests"
 
         runner.release.set()
         completed = await manager.wait_for_task("parent-1", "child-1", timeout_s=1)
         assert completed is not None
         assert completed.status == "completed"
         assert completed.summary == "finished"
-        assert store.drain_mailbox("parent-1")[0].payload["status"] == "completed"
+        assert store.read_mailbox("parent-1")[0].payload["status"] == "completed"
         with pytest.raises(ValueError, match="not running"):
             manager.send_task_message("parent-1", "child-1", "too late")
+
+    asyncio.run(scenario())
+
+
+def test_background_cap_survives_manager_recreation(tmp_path) -> None:
+    async def scenario() -> None:
+        runner = _ControlledRunner()
+        store = CollaborationStore(tmp_path / "sessions.db")
+        first = SubAgentManager(
+            runner,
+            action_handlers={},
+            collaboration_store=store,
+            max_total_subagents=1,
+        )
+        await first.aspawn(
+            [SubTask("child-1", "inspect", "analyze")],
+            parent_session_id="parent-1",
+        )
+        await runner.started.wait()
+
+        recreated = SubAgentManager(
+            runner,
+            action_handlers={},
+            collaboration_store=store,
+            max_total_subagents=1,
+        )
+        with pytest.raises(ValueError, match="Session sub-agent limit reached"):
+            await recreated.aspawn(
+                [SubTask("child-2", "inspect", "analyze")],
+                parent_session_id="parent-1",
+            )
+        runner.release.set()
+        await first.wait_for_task("parent-1", "child-1", timeout_s=1)
+
+    asyncio.run(scenario())
+
+
+def test_followup_at_terminal_boundary_starts_exactly_one_new_generation(tmp_path) -> None:
+    async def scenario() -> None:
+        store = CollaborationStore(tmp_path / "sessions.db")
+
+        class BoundaryRunner(IsolatedRunner):
+            def __init__(self) -> None:
+                self.calls = 0
+                self.started = asyncio.Event()
+                self.release = asyncio.Event()
+
+            async def arun(self, request: WorkerRequest, **_kwargs: Any) -> IsolationResult:
+                self.calls += 1
+                if self.calls == 1:
+                    self.started.set()
+                    await self.release.wait()
+                else:
+                    mailbox = store.read_mailbox(request.task_id)
+                    assert [item.payload["message"] for item in mailbox] == ["check the boundary"]
+                    store.ack_mailbox(request.task_id, [item.id for item in mailbox])
+                return IsolationResult(
+                    session_id=request.task_id,
+                    success=True,
+                    output=json.dumps({"summary": f"generation {self.calls}"}),
+                )
+
+        runner = BoundaryRunner()
+        manager = SubAgentManager(runner, action_handlers={}, collaboration_store=store)
+        await manager.aspawn(
+            [SubTask("child-race", "inspect", "analyze")],
+            parent_session_id="parent-1",
+        )
+        await runner.started.wait()
+        queued, resumed = await manager.afollow_up(
+            "parent-1",
+            "child-race",
+            "check the boundary",
+        )
+        assert queued.generation == 1 and resumed is False
+        runner.release.set()
+
+        for _ in range(100):
+            terminal = store.get_run("parent-1", "child-race")
+            if terminal is not None and terminal.generation == 2 and terminal.status == "completed":
+                break
+            await asyncio.sleep(0.01)
+        else:
+            pytest.fail("follow-up generation did not complete")
+        assert runner.calls == 2
 
     asyncio.run(scenario())
 
@@ -116,9 +201,17 @@ def test_interrupt_and_resume_generation(tmp_path) -> None:
     async def scenario() -> None:
         runner = _ControlledRunner()
         store = CollaborationStore(tmp_path / "sessions.db")
-        stopped: list[dict[str, Any]] = []
+        stopped: list[tuple[dict[str, Any], str]] = []
         registry = HookRegistry()
-        registry.register(HookName.SUBAGENT_STOP, lambda event: stopped.append(dict(event.payload)))
+        registry.register(
+            HookName.SUBAGENT_STOP,
+            lambda event: stopped.append(
+                (
+                    dict(event.payload),
+                    store.get_run("parent-1", str(event.payload["task_id"])).status,
+                )
+            ),
+        )
         manager = SubAgentManager(
             runner,
             action_handlers={},
@@ -133,7 +226,9 @@ def test_interrupt_and_resume_generation(tmp_path) -> None:
         assert manager.interrupt_task("parent-1", "child-2")
         interrupted = await manager.wait_for_task("parent-1", "child-2", timeout_s=1)
         assert interrupted is not None and interrupted.status == "interrupted"
-        assert [event["status"] for event in stopped] == ["interrupted"]
+        assert [(event["status"], durable) for event, durable in stopped] == [
+            ("interrupted", "interrupted")
+        ]
 
         from core.agent import sub_agent
 
@@ -151,7 +246,10 @@ def test_interrupt_and_resume_generation(tmp_path) -> None:
         runner.release.set()
         terminal = await manager.wait_for_task("parent-1", "child-2", timeout_s=1)
         assert terminal is not None and terminal.status == "completed"
-        assert [event["status"] for event in stopped] == ["interrupted", "completed"]
+        assert [(event["status"], durable) for event, durable in stopped] == [
+            ("interrupted", "interrupted"),
+            ("completed", "completed"),
+        ]
 
     asyncio.run(scenario())
 
@@ -221,16 +319,18 @@ def test_worker_resume_loads_existing_child_messages(tmp_path, monkeypatch) -> N
     assert checkpoint.session_dir == tmp_path
 
 
-def test_agent_loop_boundary_drains_durable_mailbox(tmp_path, monkeypatch) -> None:
+def test_agent_loop_boundary_admits_without_ack_when_checkpoint_is_absent(
+    tmp_path, monkeypatch
+) -> None:
     from core import paths
 
     monkeypatch.setattr(paths, "resolve_sessions_dir", lambda: tmp_path)
     store = CollaborationStore(tmp_path / "sessions.db")
-    store.append_message(
-        sender_session_id="parent-1",
-        recipient_session_id="child-5",
-        kind="message",
-        payload={"message": "use the failing assertion", "generation": 1},
+    store.begin_run(task_id="child-5", parent_session_id="parent-1", task_type="analyze")
+    store.append_message_if_active(
+        parent_session_id="parent-1",
+        task_id="child-5",
+        message="use the failing assertion",
     )
     loop = SimpleNamespace(
         _parent_session_key="",
@@ -239,39 +339,39 @@ def test_agent_loop_boundary_drains_durable_mailbox(tmp_path, monkeypatch) -> No
         context=ConversationContext(),
     )
     provider_messages: list[dict[str, Any]] = []
-    assert check_announced_results(loop, provider_messages) == 1
+    assert admit_collaboration_messages(loop, provider_messages) == 1
     assert "Parent follow-up" in provider_messages[0]["content"]
-    assert check_announced_results(loop, provider_messages) == 0
+    assert admit_collaboration_messages(loop, provider_messages) == 0
+    assert len(store.read_mailbox("child-5")) == 1
 
 
-def test_agent_loop_boundary_discards_mail_from_prior_generation(tmp_path, monkeypatch) -> None:
+def test_agent_loop_boundary_persists_before_acknowledgement(tmp_path, monkeypatch) -> None:
     from core import paths
 
     monkeypatch.setattr(paths, "resolve_sessions_dir", lambda: tmp_path)
     store = CollaborationStore(tmp_path / "sessions.db")
-    for index in range(51):
-        store.append_message(
-            sender_session_id="parent-1",
-            recipient_session_id="child-5",
-            kind="message",
-            payload={"message": f"old {index}", "generation": 1},
-        )
-    store.append_message(
-        sender_session_id="parent-1",
-        recipient_session_id="child-5",
-        kind="message",
-        payload={"message": "generation 2", "generation": 2},
+    store.begin_run(task_id="child-5", parent_session_id="parent-1", task_type="analyze")
+    item_id = store.append_message_if_active(
+        parent_session_id="parent-1",
+        task_id="child-5",
+        message="survive checkpoint failure",
     )
+    assert item_id is not None
+    saves = [False, True]
     loop = SimpleNamespace(
-        _parent_session_key="",
         _session_id="child-5",
-        _session_generation=2,
+        _checkpoint=object(),
         context=ConversationContext(),
+        _sync_messages_to_context=lambda _messages: None,
+        _save_checkpoint=lambda _input, _round: saves.pop(0),
     )
     provider_messages: list[dict[str, Any]] = []
 
-    assert check_announced_results(loop, provider_messages) == 1
-    assert "generation 2" in provider_messages[0]["content"]
+    assert admit_collaboration_messages(loop, provider_messages) == 1
+    assert store.read_mailbox("child-5")[0].id == item_id
+    assert admit_collaboration_messages(loop, provider_messages) == 0
+    assert store.read_mailbox("child-5") == []
+    assert provider_messages[0]["content"].count(f"mailbox_id={item_id}") == 1
 
 
 def test_tool_surface_dispatches_and_controls_background_child(tmp_path) -> None:
@@ -282,31 +382,24 @@ def test_tool_surface_dispatches_and_controls_background_child(tmp_path) -> None
         executor = ToolExecutor(sub_agent_manager=manager, auto_approve=True, hitl_level=0)
         context = ToolContext(session_id="parent-tool", model="gpt-test")
         dispatched = await executor.aexecute(
-            "delegate_task",
-            {"task_description": "inspect", "background": True},
+            "spawn_agent",
+            {"task_description": "inspect"},
             context=context,
         )
         assert dispatched["status"] == "dispatched"
-        assert "owner_id" not in dispatched["tasks"][0]
-        task_id = dispatched["tasks"][0]["task_id"]
+        assert "owner_id" not in dispatched["task"]
+        task_id = dispatched["task"]["task_id"]
         await runner.started.wait()
 
-        listed = await executor.aexecute("manage_subagents", {"action": "list"}, context=context)
+        listed = await executor.aexecute("list_agents", {}, context=context)
         assert listed["tasks"][0]["task_id"] == task_id
         sent = await executor.aexecute(
-            "manage_subagents",
-            {"action": "send_message", "task_id": task_id, "message": "focus on tests"},
+            "send_message",
+            {"task_id": task_id, "message": "focus on tests"},
             context=context,
         )
         assert sent["turn_triggered"] is False
-        assert store.drain_mailbox(task_id)[0].payload["message"] == "focus on tests"
-        followed = await executor.aexecute(
-            "manage_subagents",
-            {"action": "follow_up", "task_id": task_id, "message": "also inspect types"},
-            context=context,
-        )
-        assert followed["resumed"] is False
-        assert followed["turn_triggered"] is False
+        assert store.read_mailbox(task_id)[0].payload["message"] == "focus on tests"
         runner.release.set()
         await manager.wait_for_task("parent-tool", task_id, timeout_s=1)
 
@@ -412,38 +505,36 @@ def test_collaboration_e2e_characterizes_depth_and_resume_side_effects(
         )
 
         research = await executor.aexecute(
-            "delegate_task",
+            "spawn_agent",
             {
                 "task_description": "run research stage",
                 "task_type": "search",
-                "background": True,
             },
             context=context,
         )
-        research_id = research["tasks"][0]["task_id"]
+        research_id = research["task"]["task_id"]
         research_wait = await executor.aexecute(
-            "manage_subagents",
-            {"action": "wait", "task_id": research_id, "timeout_seconds": 5},
+            "wait_agent",
+            {"task_id": research_id, "timeout_seconds": 5},
             context=context,
         )
         assert research_wait["task"]["status"] == "completed"
         assert research_wait["task"]["summary"] == "research artifact"
 
         verify = await executor.aexecute(
-            "delegate_task",
+            "spawn_agent",
             {
                 "task_description": (
                     f"verify dependency from parent: {research_wait['task']['summary']}"
                 ),
                 "task_type": "compare",
-                "background": True,
             },
             context=context,
         )
-        verify_id = verify["tasks"][0]["task_id"]
+        verify_id = verify["task"]["task_id"]
         verify_wait = await executor.aexecute(
-            "manage_subagents",
-            {"action": "wait", "task_id": verify_id, "timeout_seconds": 5},
+            "wait_agent",
+            {"task_id": verify_id, "timeout_seconds": 5},
             context=context,
         )
         assert verify_wait["task"]["status"] == "completed"
@@ -452,26 +543,24 @@ def test_collaboration_e2e_characterizes_depth_and_resume_side_effects(
         assert "research artifact" in verify_round_zero_messages[0]
 
         mutation = await executor.aexecute(
-            "delegate_task",
+            "spawn_agent",
             {
                 "task_description": "commit one externally visible effect",
                 "task_type": "analyze",
-                "background": True,
             },
             context=context,
         )
-        mutation_id = mutation["tasks"][0]["task_id"]
+        mutation_id = mutation["task"]["task_id"]
         completed = await executor.aexecute(
-            "manage_subagents",
-            {"action": "wait", "task_id": mutation_id, "timeout_seconds": 5},
+            "wait_agent",
+            {"task_id": mutation_id, "timeout_seconds": 5},
             context=context,
         )
         assert completed["task"]["status"] == "completed"
 
         resumed_run = await executor.aexecute(
-            "manage_subagents",
+            "followup_task",
             {
-                "action": "resume",
                 "task_id": mutation_id,
                 "message": "repeat the mutation turn from its saved checkpoint",
             },
@@ -480,8 +569,8 @@ def test_collaboration_e2e_characterizes_depth_and_resume_side_effects(
         assert resumed_run["resumed"] is True
         assert resumed_run["task"]["generation"] == 2
         resumed = await executor.aexecute(
-            "manage_subagents",
-            {"action": "wait", "task_id": mutation_id, "timeout_seconds": 5},
+            "wait_agent",
+            {"task_id": mutation_id, "timeout_seconds": 5},
             context=context,
         )
         assert resumed["task"]["status"] == "completed"
@@ -491,8 +580,8 @@ def test_collaboration_e2e_characterizes_depth_and_resume_side_effects(
         research_state = checkpoint.load(research_id)
         verify_state = checkpoint.load(verify_id)
         listed = await executor.aexecute(
-            "manage_subagents",
-            {"action": "list"},
+            "list_agents",
+            {},
             context=context,
         )
         assert research_state is not None and verify_state is not None

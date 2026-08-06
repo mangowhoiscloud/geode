@@ -167,7 +167,7 @@ class Evolver(BaseSeedAgent):
             len(tasks),
             _EVOLVER_AGENT_NAME,
         )
-        results = await self._manager.adelegate(tasks, announce=False)
+        results = await self._manager.adelegate(tasks)
 
         # PR-SEEDGEN-TOKENS (2026-05-30) — sum sub-agent LLM usage (0 for
         # subscription calls) into this phase's result.

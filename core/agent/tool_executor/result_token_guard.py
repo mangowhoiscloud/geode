@@ -43,7 +43,7 @@ def _guard_tool_result(
     estimated_tokens = len(serialized) // TOKEN_ESTIMATE_CHARS_PER_TOKEN
     if estimated_tokens <= max_tokens:
         return result
-    # Preserve summary if present (SubAgentResult always has one)
+    # Preserve a summary when the tool result provides one.
     if "summary" in result:
         guarded: dict[str, Any] = {
             "summary": result["summary"],

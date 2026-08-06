@@ -49,14 +49,35 @@ functional change.
 
 ### Added
 
-- **Durable depth-one sub-agent collaboration.** `delegate_task` can return
-  background task handles immediately, while the compact `manage_subagents`
-  surface provides parent-scoped list, bounded wait, interrupt, message,
-  follow-up, and checkpoint resume. Mutable run/mailbox state shares
-  `sessions.db`; each child keeps its existing independent messages, session
-  events, hooks, and trajectory as the replay source. Mailbox delivery is
-  generation-scoped, and stale-owner recovery compares both PID and process
-  birth time so PID reuse cannot leave a run permanently active.
+- **Durable depth-one sub-agent collaboration.** `spawn_agent` returns one
+  stable child handle immediately; `list_agents`, `wait_agent`,
+  `interrupt_agent`, `send_message`, and `followup_task` provide explicit
+  parent-scoped control. Mutable run/mailbox state shares `sessions.db`; each
+  child keeps independent messages, session events, hooks, and trajectory as
+  its replay source.
+
+### Changed
+
+- **Foreground and durable delegation now have separate contracts.** The
+  `delegate_task` background flag and the `manage_subagents` action enum are
+  replaced by the explicit collaboration tools above. The depth-one limit and
+  durable-child cap apply across manager recreation; continuation reuses the
+  same child checkpoint without consuming a second child slot.
+
+### Fixed
+
+- **Child mailbox delivery is persist-before-ack.** A stable mailbox id is
+  saved into the child checkpoint before SQLite marks the row consumed, so a
+  crash cannot silently lose parent input. Follow-ups racing child completion
+  start exactly one continuation generation, public `SubagentStop` fires only
+  after durable terminal state, and inaccessible process metadata no longer
+  causes a live child to be declared interrupted.
+
+### Removed
+
+- **Removed obsolete sub-agent overlays.** The process-local announce queue,
+  duplicate `SubAgentResult`/error taxonomy, test-only run-record API, unused
+  per-batch TaskGraph overlay, and inert MCP/skill manager references are gone.
 
 ## [1.0.14] - 2026-08-05
 

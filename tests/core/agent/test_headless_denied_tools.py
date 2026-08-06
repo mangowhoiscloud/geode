@@ -12,11 +12,16 @@ from unittest.mock import MagicMock, patch
 
 
 def test_headless_denied_tools_contents() -> None:
-    from core.agent.safety import COMPUTER_USE_TOOLS, HEADLESS_DENIED_TOOLS, SENSITIVE_TOOLS
+    from core.agent.safety import (
+        COLLABORATION_TOOLS,
+        COMPUTER_USE_TOOLS,
+        HEADLESS_DENIED_TOOLS,
+        SENSITIVE_TOOLS,
+    )
 
     assert "run_bash" in HEADLESS_DENIED_TOOLS
     assert "delegate_task" in HEADLESS_DENIED_TOOLS
-    assert "manage_subagents" in HEADLESS_DENIED_TOOLS
+    assert COLLABORATION_TOOLS < HEADLESS_DENIED_TOOLS
     assert "computer" in HEADLESS_DENIED_TOOLS
     assert "computer_use" in HEADLESS_DENIED_TOOLS
     assert {"computer", "computer_use"} == COMPUTER_USE_TOOLS

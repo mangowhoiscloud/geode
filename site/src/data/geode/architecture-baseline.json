@@ -237,7 +237,7 @@
   "coordinators": {
     "AgenticLoop": {
       "constructor_arg_count": 27,
-      "file_loc": 2968,
+      "file_loc": 2983,
       "method_count": 74,
       "path": "core/agent/loop/agent_loop.py"
     },
@@ -246,9 +246,9 @@
       "path": "core/runtime.py"
     },
     "SubAgentManager": {
-      "constructor_arg_count": 17,
-      "file_loc": 1644,
-      "method_count": 27,
+      "constructor_arg_count": 15,
+      "file_loc": 1436,
+      "method_count": 24,
       "path": "core/agent/sub_agent.py"
     }
   },
@@ -528,15 +528,15 @@
   "packages": {
     "core": {
       "python_files": 432,
-      "python_loc": 139615
+      "python_loc": 139404
     },
     "plugins": {
       "python_files": 111,
-      "python_loc": 41879
+      "python_loc": 41869
     },
     "tests": {
-      "python_files": 682,
-      "python_loc": 179435
+      "python_files": 681,
+      "python_loc": 178902
     }
   },
   "schema_version": 1,
@@ -560,7 +560,7 @@
       ],
       "unknown_always_loaded_names": []
     },
-    "definition_count": 79,
+    "definition_count": 84,
     "definition_names": [
       "accept_result",
       "approve_plan",
@@ -580,6 +580,7 @@
       "eval_dspy_optimize",
       "eval_inspect_viz",
       "export_json",
+      "followup_task",
       "freeze_paper_snapshot",
       "general_web_search",
       "generate_data",
@@ -599,13 +600,14 @@
       "google_tasks_write",
       "grep_files",
       "install_mcp_server",
+      "interrupt_agent",
+      "list_agents",
       "list_plans",
       "llms_txt_index",
       "manage_auth",
       "manage_context",
       "manage_login",
       "manage_rule",
-      "manage_subagents",
       "memory_save",
       "memory_search",
       "modify_plan",
@@ -625,10 +627,12 @@
       "run_bash",
       "schedule_job",
       "seed_debate_turn",
+      "send_message",
       "send_notification",
       "session_search",
       "set_api_key",
       "show_help",
+      "spawn_agent",
       "switch_model",
       "task_create",
       "task_get",
@@ -639,6 +643,7 @@
       "ui_probe",
       "update_plan",
       "use_skill",
+      "wait_agent",
       "web_fetch",
       "write_file"
     ],
@@ -651,7 +656,7 @@
       "doctor_slack",
       "recall_tool_result"
     ],
-    "execution_registration_count": 82,
+    "execution_registration_count": 87,
     "execution_registration_names": [
       "accept_result",
       "approve_plan",
@@ -673,6 +678,7 @@
       "eval_dspy_optimize",
       "eval_inspect_viz",
       "export_json",
+      "followup_task",
       "freeze_paper_snapshot",
       "general_web_search",
       "generate_data",
@@ -692,13 +698,14 @@
       "google_tasks_write",
       "grep_files",
       "install_mcp_server",
+      "interrupt_agent",
+      "list_agents",
       "list_plans",
       "llms_txt_index",
       "manage_auth",
       "manage_context",
       "manage_login",
       "manage_rule",
-      "manage_subagents",
       "memory_save",
       "memory_search",
       "modify_plan",
@@ -719,10 +726,12 @@
       "run_bash",
       "schedule_job",
       "seed_debate_turn",
+      "send_message",
       "send_notification",
       "session_search",
       "set_api_key",
       "show_help",
+      "spawn_agent",
       "switch_model",
       "task_create",
       "task_get",
@@ -733,6 +742,7 @@
       "ui_probe",
       "update_plan",
       "use_skill",
+      "wait_agent",
       "web_fetch",
       "write_file"
     ],
@@ -899,7 +909,7 @@
       "web_fetch": "delegated",
       "write_file": "delegated"
     },
-    "schema_count": 79,
+    "schema_count": 84,
     "schema_errors": [],
     "schema_names": [
       "accept_result",
@@ -920,6 +930,7 @@
       "eval_dspy_optimize",
       "eval_inspect_viz",
       "export_json",
+      "followup_task",
       "freeze_paper_snapshot",
       "general_web_search",
       "generate_data",
@@ -939,13 +950,14 @@
       "google_tasks_write",
       "grep_files",
       "install_mcp_server",
+      "interrupt_agent",
+      "list_agents",
       "list_plans",
       "llms_txt_index",
       "manage_auth",
       "manage_context",
       "manage_login",
       "manage_rule",
-      "manage_subagents",
       "memory_save",
       "memory_search",
       "modify_plan",
@@ -965,10 +977,12 @@
       "run_bash",
       "schedule_job",
       "seed_debate_turn",
+      "send_message",
       "send_notification",
       "session_search",
       "set_api_key",
       "show_help",
+      "spawn_agent",
       "switch_model",
       "task_create",
       "task_get",
@@ -979,14 +993,20 @@
       "ui_probe",
       "update_plan",
       "use_skill",
+      "wait_agent",
       "web_fetch",
       "write_file"
     ],
     "schema_without_definition": [],
     "special_execution_bindings": [
       "delegate_task",
-      "manage_subagents",
-      "run_bash"
+      "followup_task",
+      "interrupt_agent",
+      "list_agents",
+      "run_bash",
+      "send_message",
+      "spawn_agent",
+      "wait_agent"
     ]
   }
 }

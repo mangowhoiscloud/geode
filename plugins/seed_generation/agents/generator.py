@@ -142,10 +142,7 @@ class Generator(BaseSeedAgent):
             _GENERATOR_AGENT_NAME,
         )
 
-        # announce=False — orchestrator already announces the parent
-        # phase, individual candidate spawns are sub-events not parent
-        # events.
-        results = await self._manager.adelegate(tasks, announce=False)
+        results = await self._manager.adelegate(tasks)
 
         # PR-SEEDGEN-TOKENS (2026-05-30) — fold every sub-agent's LLM
         # usage into this phase's result (0 for subscription calls).

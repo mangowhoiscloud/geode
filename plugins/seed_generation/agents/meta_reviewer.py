@@ -80,9 +80,8 @@ _REQUIRED_META_FIELDS = (
 class MetaReviewer(BaseSeedAgent):
     """Single-shot aggregate analyzer.
 
-    Dispatches ONE sub-agent (via SubAgentManager.delegate with a
-    single-item list to keep the supervisor's announce-queue / lane
-    plumbing uniform with the per-candidate phases).
+    Dispatches one sub-agent through the same lane plumbing as the
+    per-candidate phases.
     """
 
     def __init__(
@@ -119,7 +118,7 @@ class MetaReviewer(BaseSeedAgent):
             "seed-generation meta_reviewer dispatching aggregate review to %r",
             _META_REVIEWER_AGENT_NAME,
         )
-        results = await self._manager.adelegate([task], announce=False)
+        results = await self._manager.adelegate([task])
         if not results:
             return SeedAgentResult(
                 role=self.role,
