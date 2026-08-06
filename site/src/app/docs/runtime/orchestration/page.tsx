@@ -8,8 +8,8 @@ export default function Page() {
       slug="runtime/orchestration"
       title="Sub-agent orchestration"
       titleKo="서브에이전트 오케스트레이션"
-      summary="Spawning sub-agents as isolated worker processes in parallel lanes. The parent gets back a summary; write access is governed by toolkit composition."
-      summaryKo="서브에이전트를 격리된 워커 프로세스로 병렬 레인에서 띄웁니다. 부모는 요약만 받고, 쓰기 권한은 툴킷 구성으로 통제합니다."
+      summary="Spawning isolated sub-agents in parallel lanes, with optional durable background control and independent child rollouts."
+      summaryKo="격리된 서브에이전트를 병렬 레인에서 실행하고, 선택적으로 내구성 있는 백그라운드 제어와 독립 자식 롤아웃을 사용합니다."
     >
       <Bi
         ko={
@@ -25,6 +25,33 @@ export default function Page() {
               <code>SUBAGENT_COMPLETED</code> / <code>SUBAGENT_FAILED</code> 훅이
               발화하고, 부모 세션 키가 있으면 Spawn+Announce로 진행 상황을
               알립니다.
+            </p>
+
+            <h2>백그라운드 협업</h2>
+            <p>
+              기존 호출은 그대로 완료까지 기다립니다. 장기 작업은{" "}
+              <code>delegate_task(background=true)</code>로 즉시 안정적인{" "}
+              <code>task_id</code>를 받고 부모 작업을 계속할 수 있습니다.{" "}
+              <code>manage_subagents</code>는 <code>list</code>, <code>wait</code>,{" "}
+              <code>interrupt</code>, <code>send_message</code>,{" "}
+              <code>follow_up</code>, <code>resume</code>을 제공합니다. 대기 시간이
+              끝나도 자식은 취소되지 않습니다.
+            </p>
+            <table>
+              <thead><tr><th>동작</th><th>의미</th></tr></thead>
+              <tbody>
+                <tr><td><code>send_message</code></td><td>새 세대를 시작하지 않고 실행 중인 자식에게 컨텍스트를 큐잉</td></tr>
+                <tr><td><code>follow_up</code></td><td>실행 중이면 다음 루프 경계에 전달하고, 종료 상태면 같은 자식 세션을 재개</td></tr>
+                <tr><td><code>resume</code></td><td>저장된 체크포인트에서 같은 자식 세션의 다음 세대를 시작</td></tr>
+              </tbody>
+            </table>
+            <p>
+              최신 상태와 메일박스 전달은 프로젝트 <code>sessions.db</code>의{" "}
+              <code>collaboration_runs</code>와 <code>collaboration_mailbox</code>에
+              저장합니다. 이 둘은 두 번째 transcript가 아니라 제어 투영입니다.
+              자식의 대화, 도구 호출, 훅, trajectory는 <code>messages</code>와
+              append-only <code>session_events</code>에 독립 롤아웃으로 남습니다.
+              재개는 새 사용자 턴을 추가하며 완료된 부작용을 재실행하지 않습니다.
             </p>
 
             <h2>한도</h2>
@@ -137,9 +164,14 @@ export default function Page() {
                   <td><code>GEODE_SUBAGENT_TIMEOUT_S</code>를 올립니다 (상한 3600)</td>
                 </tr>
                 <tr>
-                  <td>서브에이전트의 메모와 기록이 부모에 안 보임</td>
-                  <td>요약만 병합하는 격리 규칙</td>
-                  <td>남겨야 할 내용은 서브에이전트의 최종 요약에 포함시킵니다</td>
+                  <td>실행 중인 자식에게 보낸 메시지가 즉시 반영되지 않음</td>
+                  <td>메일박스는 안전한 루프 경계에서 소비됨</td>
+                  <td><code>wait</code>로 상태를 확인하고, 필요하면 <code>follow_up</code>으로 다음 세대를 시작합니다</td>
+                </tr>
+                <tr>
+                  <td>자식 실행 중 소유 런타임이 종료됨</td>
+                  <td>실행 중 프로세스는 다른 런타임이 인계하지 않음</td>
+                  <td>상태가 <code>interrupted</code>로 복구되면 부작용을 확인한 뒤 명시적으로 <code>resume</code>합니다</td>
                 </tr>
               </tbody>
             </table>
@@ -166,6 +198,34 @@ export default function Page() {
               <code>SUBAGENT_COMPLETED</code> / <code>SUBAGENT_FAILED</code>{" "}
               hooks, and with a parent session key set, progress is announced
               back (Spawn+Announce).
+            </p>
+
+            <h2>Background collaboration</h2>
+            <p>
+              Existing calls still wait for completion. For long work,{" "}
+              <code>delegate_task(background=true)</code> returns a stable{" "}
+              <code>task_id</code> immediately so the parent can continue.{" "}
+              <code>manage_subagents</code> exposes <code>list</code>,{" "}
+              <code>wait</code>, <code>interrupt</code>, <code>send_message</code>,{" "}
+              <code>follow_up</code>, and <code>resume</code>. A bounded wait
+              never cancels the child when its timeout expires.
+            </p>
+            <table>
+              <thead><tr><th>Action</th><th>Meaning</th></tr></thead>
+              <tbody>
+                <tr><td><code>send_message</code></td><td>Queue context for a running child without starting a generation</td></tr>
+                <tr><td><code>follow_up</code></td><td>Deliver at the next loop boundary when running, or resume the same child session when terminal</td></tr>
+                <tr><td><code>resume</code></td><td>Start the next generation of the same child session from its saved checkpoint</td></tr>
+              </tbody>
+            </table>
+            <p>
+              Latest status and mailbox delivery live in the project{" "}
+              <code>sessions.db</code> tables <code>collaboration_runs</code> and{" "}
+              <code>collaboration_mailbox</code>. They are control projections,
+              not a second transcript. The child&apos;s dialogue, tool calls, hooks,
+              and trajectory remain an independent rollout in <code>messages</code>{" "}
+              and append-only <code>session_events</code>. Resume appends a new
+              user turn; it does not replay a completed side effect.
             </p>
 
             <h2>Limits</h2>
@@ -280,9 +340,14 @@ export default function Page() {
                   <td>Raise <code>GEODE_SUBAGENT_TIMEOUT_S</code> (ceiling 3600)</td>
                 </tr>
                 <tr>
-                  <td>Sub-agent notes never appear in the parent</td>
-                  <td>The summary-only merge rule</td>
-                  <td>Put anything that must survive into the sub-agent&apos;s final summary</td>
+                  <td>A message sent to a running child is not reflected immediately</td>
+                  <td>The mailbox is consumed only at a safe loop boundary</td>
+                  <td>Use <code>wait</code> to inspect status, then <code>follow_up</code> for a new generation if needed</td>
+                </tr>
+                <tr>
+                  <td>The owning runtime exits while a child is active</td>
+                  <td>Another runtime does not adopt the in-flight process</td>
+                  <td>After status recovers to <code>interrupted</code>, inspect side effects before an explicit <code>resume</code></td>
                 </tr>
               </tbody>
             </table>

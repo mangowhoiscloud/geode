@@ -118,6 +118,7 @@ HEADLESS_DENIED_TOOLS: frozenset[str] = frozenset(
     {
         "run_bash",
         "delegate_task",
+        "manage_subagents",
         *COMPUTER_USE_TOOLS,
         *SENSITIVE_TOOLS,
     }

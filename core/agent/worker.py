@@ -141,6 +141,9 @@ class WorkerRequest:
     # single-result-line stdout contract. Only the interactive ``delegate_task``
     # turn path (``ToolExecutor._aexecute_delegate``) sets this True.
     emit_activity: bool = False
+    # Reopen and restore the checkpoint owned by ``task_id`` before adding the
+    # new description as a follow-up turn. False preserves fresh-worker behavior.
+    resume: bool = False
     # PR-Q (2026-05-24) chose to carry the orchestrator's active run_dir
     # across the parent → worker boundary via the ``GEODE_RUN_DIR``
     # environment variable (see
@@ -188,6 +191,7 @@ class WorkerRequest:
             source=data.get("source", ""),
             response_schema=data.get("response_schema"),
             emit_activity=data.get("emit_activity", False),
+            resume=data.get("resume", False),
         )
 
 
@@ -275,13 +279,13 @@ def filter_handlers(
 
     Invariants regardless of which branch applied:
 
-    - ``delegate_task`` is always denied (depth=1 enforcement).
+    - ``delegate_task`` and parent lifecycle control are always denied.
     - Whitelist entries that don't match any handler emit a WARNING so
       typos in frontmatter (e.g. ``foo_typo``) don't silently degrade
       the agent's capability to zero tools (S2-fix, 2026-05-18).
     """
     denied = set(denied_tools)
-    denied.add("delegate_task")
+    denied.update({"delegate_task", "manage_subagents"})
     allowed: set[str] | None = None
     if toolkit and toolkit_registry is not None:
         # Tier 1 — named toolkit takes precedence. The registry already
@@ -399,6 +403,20 @@ def _make_activity_sink(task_id: str) -> Any:
     return _sink
 
 
+def _load_worker_resume(request: WorkerRequest, conversation: Any) -> tuple[Any, Any]:
+    """Load an explicitly requested child checkpoint into its fresh context."""
+    if not request.resume:
+        return None, None
+    from core.memory.session_checkpoint import SessionCheckpoint
+
+    checkpoint = SessionCheckpoint()
+    state = checkpoint.load(request.task_id)
+    if state is None:
+        raise RuntimeError(f"No checkpoint exists for child task {request.task_id}")
+    conversation.messages.extend(state.messages)
+    return state, checkpoint
+
+
 def _run_agentic(request: WorkerRequest) -> WorkerResult:
     """Bootstrap minimal GEODE runtime and run AgenticLoop."""
     started = time.time()
@@ -480,7 +498,7 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
         # from the handler dict is theater (same finding as the headless
         # denylist, PR-EXEC-HARDENING). This is what makes a role
         # allowlist (e.g. repo_researcher without run_bash) actually hold.
-        denied_tools=frozenset(request.denied_tools) | {"delegate_task"},
+        denied_tools=frozenset(request.denied_tools) | {"delegate_task", "manage_subagents"},
         interactive_approval=False,
     )
 
@@ -488,6 +506,7 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
     from core.agent.conversation import ConversationContext
 
     conversation = ConversationContext(max_turns=200)
+    resume_state, resume_checkpoint = _load_worker_resume(request, conversation)
 
     # 5. Build AgenticLoop
     from core.agent.loop import AgenticLoop
@@ -505,8 +524,13 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
     # both explicitly (sub_agent.py ``_build_worker_request``).
     from core.config import _resolve_provider, settings
 
-    effective_model = request.model or settings.model
-    effective_provider = request.provider or _resolve_provider(effective_model)
+    resumed_model = str(resume_state.model) if resume_state is not None else ""
+    effective_model = resumed_model or request.model or settings.model
+    effective_provider = (
+        str(resume_state.provider)
+        if resume_state is not None and resume_state.provider
+        else request.provider
+    ) or _resolve_provider(effective_model)
 
     # 5.5 Minimal hook bundle (trajectory audit 2026-07-03) — pre-fix the
     # loop below was built with ``hooks=None``, so the subprocess
@@ -602,6 +626,9 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
         # verbatim ``DecompositionResult`` JSON.
         enable_goal_decomposition=False,
     )
+    if resume_state is not None and resume_checkpoint is not None:
+        resume_checkpoint.reopen(resume_state.session_id)
+        loop.restore_from_checkpoint(resume_state)
 
     # 7. Build prompt
     prompt = request.description

@@ -47,6 +47,15 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **Durable depth-one sub-agent collaboration.** `delegate_task` can return
+  background task handles immediately, while the compact `manage_subagents`
+  surface provides parent-scoped list, bounded wait, interrupt, message,
+  follow-up, and checkpoint resume. Mutable run/mailbox state shares
+  `sessions.db`; each child keeps its existing independent messages, session
+  events, hooks, and trajectory as the replay source.
+
 ## [1.0.14] - 2026-08-05
 
 > Cleanup release: retire the orphaned unary DPO precursor and the unreachable

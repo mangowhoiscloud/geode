@@ -13,6 +13,7 @@ Orchestration integration:
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 import json
 import logging
@@ -22,6 +23,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -34,6 +36,7 @@ from core.hooks import (
     RuntimeEvent,
     RuntimeEventBus,
 )
+from core.memory.collaboration import CollaborationRun, CollaborationStore
 from core.orchestration.isolated_execution import (
     IsolatedRunner,
     IsolationConfig,
@@ -186,6 +189,13 @@ _announce_lock = threading.Lock()
 _announce_timestamps: dict[str, float] = {}
 _ANNOUNCE_TTL_S = 300.0  # 5 min TTL for orphan results
 
+# Process-local execution controls. Durable truth remains in sessions.db; this
+# registry only lets a later turn in the same runtime wait for or interrupt the
+# live asyncio task without inventing a thread manager.
+_background_controls: dict[str, tuple[asyncio.Task[None], IsolatedRunner, threading.Event]] = {}
+_background_interrupting: set[str] = set()
+_background_controls_lock = threading.Lock()
+
 
 def _cleanup_stale_announces() -> None:
     """Remove announce queue entries older than TTL."""
@@ -244,6 +254,7 @@ SUBAGENT_DENIED_TOOLS: set[str] = {
     "profile_update",  # user profile changes — parent only
     *PERSONAL_DATA_TOOLS,  # personal Workspace data — parent approval only
     "delegate_task",  # recursive delegation — explicit depth control preferred
+    "manage_subagents",  # parent-only lifecycle and mailbox authority
 }
 
 
@@ -463,6 +474,7 @@ class SubAgentManager:
         time_budget_s: float = 0.0,
         # Sandbox: additional working directories for sub-agent scope
         working_dirs: list[str] | None = None,
+        collaboration_store: CollaborationStore | None = None,
     ) -> None:
         self._runner = runner
         self._task_handler = task_handler
@@ -502,6 +514,7 @@ class SubAgentManager:
         self._working_dirs = working_dirs or []
         # Announce mechanism (OpenClaw Spawn+Announce pattern)
         self._announce_enabled = bool(parent_session_key)
+        self._collaboration = collaboration_store or CollaborationStore()
 
     async def adelegate(
         self,
@@ -511,6 +524,7 @@ class SubAgentManager:
         on_activity: Callable[[dict[str, Any]], None] | None = None,
         announce: bool = True,
         default_model: str = "",
+        resume: bool = False,
     ) -> list[SubResult]:
         """Async sibling of :meth:`delegate` — ``asyncio.gather`` based fan-out.
 
@@ -652,6 +666,7 @@ class SubAgentManager:
                     task,
                     default_model=default_model,
                     emit_activity=on_activity is not None,
+                    resume=resume,
                 )
             else:
                 # _execute_subtask is bound method; arun expects callable
@@ -778,6 +793,251 @@ class SubAgentManager:
         with self._records_lock:
             return dict(self._run_records)
 
+    async def aspawn(
+        self,
+        tasks: list[SubTask],
+        *,
+        parent_session_id: str,
+        on_progress: Callable[[SubResult], None] | None = None,
+        on_activity: Callable[[dict[str, Any]], None] | None = None,
+        default_model: str = "",
+        resume: bool = False,
+    ) -> list[CollaborationRun]:
+        """Schedule depth-one tasks and return their durable handles immediately."""
+        if not parent_session_id:
+            raise ValueError("Background delegation requires a parent session id")
+        if self._action_handlers is None:
+            raise ValueError("Background collaboration requires agentic subprocess workers")
+        runs: list[CollaborationRun] = []
+        for task in tasks:
+            run = self._collaboration.begin_run(
+                task_id=task.task_id,
+                parent_session_id=parent_session_id,
+                task_type=task.task_type,
+                role=task.role,
+                model=task.model or default_model,
+                source=task.source,
+                resume=resume,
+            )
+            done = threading.Event()
+            background = asyncio.create_task(
+                self._run_background(
+                    task,
+                    run,
+                    on_progress=on_progress,
+                    on_activity=on_activity,
+                    default_model=default_model,
+                    resume=resume,
+                ),
+                name=f"subagent:{task.task_id}:g{run.generation}",
+            )
+            with _background_controls_lock:
+                _background_controls[task.task_id] = (background, self._runner, done)
+            background.add_done_callback(partial(self._background_done, run=run, done=done))
+            runs.append(run)
+        return runs
+
+    async def _run_background(
+        self,
+        task: SubTask,
+        run: CollaborationRun,
+        *,
+        on_progress: Callable[[SubResult], None] | None,
+        on_activity: Callable[[dict[str, Any]], None] | None,
+        default_model: str,
+        resume: bool,
+    ) -> None:
+        if not self._collaboration.mark_running(run.parent_session_id, run.task_id, run.generation):
+            return
+        status = "failed"
+        summary = ""
+        error = ""
+        try:
+            results = await self.adelegate(
+                [task],
+                on_progress=on_progress,
+                on_activity=on_activity,
+                announce=False,
+                default_model=default_model,
+                resume=resume,
+            )
+            result = results[0] if results else None
+            with _background_controls_lock:
+                interrupted = task.task_id in _background_interrupting
+            if interrupted:
+                status = "interrupted"
+                error = "Interrupted by parent"
+            elif result is None:
+                error = "Sub-agent produced no result"
+            elif result.success:
+                status = "completed"
+                summary = self._result_summary(result)
+            else:
+                error = result.error or "Sub-agent failed"
+                status = "timeout" if "timeout" in error.lower() else "failed"
+        except asyncio.CancelledError:
+            status = "interrupted"
+            error = "Interrupted by parent"
+        except Exception as exc:
+            log.exception("Background sub-agent %s failed", task.task_id)
+            error = f"{type(exc).__name__}: {exc}"
+        finally:
+            self._collaboration.finish_run(
+                parent_session_id=run.parent_session_id,
+                task_id=run.task_id,
+                generation=run.generation,
+                status=status,
+                summary=summary,
+                error=error,
+            )
+
+    def _background_done(
+        self,
+        completed: asyncio.Task[None],
+        run: CollaborationRun,
+        done: threading.Event,
+    ) -> None:
+        """Close the rare cancel-before-coroutine-start edge and wake waiters."""
+        if completed.cancelled():
+            self._collaboration.finish_run(
+                parent_session_id=run.parent_session_id,
+                task_id=run.task_id,
+                generation=run.generation,
+                status="interrupted",
+                error="Interrupted by parent",
+            )
+        else:
+            error = completed.exception()
+            if error is not None:
+                log.error("Background sub-agent %s crashed: %s", run.task_id, error)
+                self._collaboration.finish_run(
+                    parent_session_id=run.parent_session_id,
+                    task_id=run.task_id,
+                    generation=run.generation,
+                    status="failed",
+                    error=f"{type(error).__name__}: {error}",
+                )
+        done.set()
+        with _background_controls_lock:
+            _background_controls.pop(run.task_id, None)
+            _background_interrupting.discard(run.task_id)
+
+    def list_collaboration_runs(self, parent_session_id: str) -> list[CollaborationRun]:
+        return self._collaboration.list_runs(parent_session_id)
+
+    async def wait_for_task(
+        self,
+        parent_session_id: str,
+        task_id: str,
+        *,
+        timeout_s: float,
+    ) -> CollaborationRun | None:
+        run = self._collaboration.get_run(parent_session_id, task_id)
+        if run is None or run.status not in {"pending", "running"}:
+            return run
+        with _background_controls_lock:
+            control = _background_controls.get(task_id)
+        if control is not None:
+            await asyncio.to_thread(control[2].wait, max(0.0, min(timeout_s, 3600.0)))
+            return self._collaboration.get_run(parent_session_id, task_id)
+        deadline = time.monotonic() + max(0.0, min(timeout_s, 3600.0))
+        while run.status in {"pending", "running"} and time.monotonic() < deadline:
+            await asyncio.sleep(max(0.0, min(0.1, deadline - time.monotonic())))
+            refreshed = self._collaboration.get_run(parent_session_id, task_id)
+            if refreshed is None:
+                return None
+            run = refreshed
+        return run
+
+    def interrupt_task(self, parent_session_id: str, task_id: str) -> bool:
+        run = self._collaboration.get_run(parent_session_id, task_id)
+        if run is None or run.status not in {"pending", "running"}:
+            return False
+        with _background_controls_lock:
+            control = _background_controls.get(task_id)
+            if control is None:
+                return False
+            _background_interrupting.add(task_id)
+        task, runner, _done = control
+        if not runner.cancel(task_id) and not task.done():
+            task.get_loop().call_soon_threadsafe(task.cancel)
+        return True
+
+    def send_task_message(
+        self,
+        parent_session_id: str,
+        task_id: str,
+        message: str,
+    ) -> CollaborationRun:
+        run = self._collaboration.get_run(parent_session_id, task_id)
+        if run is None:
+            raise ValueError("Unknown child task for this parent session")
+        if run.status not in {"pending", "running"}:
+            raise ValueError("Child task is not running; use follow_up or resume")
+        self._collaboration.append_message(
+            sender_session_id=parent_session_id,
+            recipient_session_id=task_id,
+            kind="message",
+            payload={"message": message, "generation": run.generation},
+        )
+        return run
+
+    async def afollow_up(
+        self,
+        parent_session_id: str,
+        task_id: str,
+        message: str,
+        *,
+        default_model: str = "",
+    ) -> tuple[CollaborationRun, bool]:
+        run = self._collaboration.get_run(parent_session_id, task_id)
+        if run is None:
+            raise ValueError("Unknown child task for this parent session")
+        if run.status in {"pending", "running"}:
+            return self.send_task_message(parent_session_id, task_id, message), False
+        resumed = await self.aresume(
+            parent_session_id,
+            task_id,
+            prompt=message,
+            default_model=default_model,
+        )
+        return resumed, True
+
+    async def aresume(
+        self,
+        parent_session_id: str,
+        task_id: str,
+        *,
+        prompt: str = "Continue from the saved checkpoint.",
+        default_model: str = "",
+    ) -> CollaborationRun:
+        run = self._collaboration.get_run(parent_session_id, task_id)
+        if run is None:
+            raise ValueError("Unknown child task for this parent session")
+        if run.status in {"pending", "running"}:
+            raise ValueError("Child task is already running")
+        resumed = await self.aspawn(
+            [
+                SubTask(
+                    task_id=run.task_id,
+                    description=prompt,
+                    task_type=run.task_type,
+                    role=run.role,
+                    model=run.model,
+                    source=run.source,
+                )
+            ],
+            parent_session_id=parent_session_id,
+            default_model=default_model or run.model,
+            resume=True,
+        )
+        return resumed[0]
+
+    @staticmethod
+    def _result_summary(result: SubResult) -> str:
+        summary = result.output.get("summary", "") if result.output else ""
+        return str(summary or result.output or "completed")
+
     def _announce_result(self, parent_session_key: str, child_result: SubAgentResult) -> None:
         """Announce a completed sub-agent result to the parent session.
 
@@ -803,7 +1063,12 @@ class SubAgentManager:
         )
 
     def _build_worker_request(
-        self, task: SubTask, *, default_model: str = "", emit_activity: bool = False
+        self,
+        task: SubTask,
+        *,
+        default_model: str = "",
+        emit_activity: bool = False,
+        resume: bool = False,
     ) -> WorkerRequest:
         """Build a WorkerRequest for subprocess execution (Phase 2).
 
@@ -965,6 +1230,7 @@ class SubAgentManager:
             # Fleet view Stage 1.5 — ask the worker to stream live per-tool
             # activity when the caller wired an activity callback.
             emit_activity=emit_activity,
+            resume=resume,
         )
 
     def _resolve_agent(self, task: SubTask) -> dict[str, Any] | None:
@@ -1125,6 +1391,11 @@ class SubAgentManager:
         """Project the single terminal result for both success and failure."""
         with self._records_lock:
             record = self._run_records.get(task.task_id)
+        with _background_controls_lock:
+            interrupted = task.task_id in _background_interrupting
+        terminal_status = (
+            "interrupted" if interrupted else ("completed" if result.success else "failed")
+        )
         from core.observability.session_timeline import current_session_timeline
 
         timeline = current_session_timeline()
@@ -1136,7 +1407,7 @@ class SubAgentManager:
             )
             timeline.record_subagent_complete(
                 task.task_id,
-                "completed" if result.success else "failed",
+                terminal_status,
                 summary[:500],
                 child_session_key=record.child_session_key if record else "",
                 run_id=record.run_id if record else "",
@@ -1148,10 +1419,10 @@ class SubAgentManager:
             payload={
                 "task_id": task.task_id,
                 "task_type": task.task_type,
-                "success": result.success,
-                "status": "completed" if result.success else "failed",
+                "success": result.success and not interrupted,
+                "status": terminal_status,
                 "duration_ms": result.duration_ms,
-                "error": result.error or "",
+                "error": "Interrupted by parent" if interrupted else (result.error or ""),
                 "child_session_key": record.child_session_key if record else "",
             },
             correlation=HookCorrelation(

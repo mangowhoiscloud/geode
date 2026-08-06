@@ -193,6 +193,7 @@ class TestM2SchedulerPolicyChain:
 
         assert "run_bash" in HEADLESS_DENIED_TOOLS
         assert "delegate_task" in HEADLESS_DENIED_TOOLS
+        assert "manage_subagents" in HEADLESS_DENIED_TOOLS
         assert "computer" in HEADLESS_DENIED_TOOLS
 
     def test_scheduler_mode_filters_dangerous(self) -> None:

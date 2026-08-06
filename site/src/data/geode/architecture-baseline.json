@@ -246,9 +246,9 @@
       "path": "core/runtime.py"
     },
     "SubAgentManager": {
-      "constructor_arg_count": 16,
-      "file_loc": 1370,
-      "method_count": 17,
+      "constructor_arg_count": 17,
+      "file_loc": 1641,
+      "method_count": 27,
       "path": "core/agent/sub_agent.py"
     }
   },
@@ -527,16 +527,16 @@
   },
   "packages": {
     "core": {
-      "python_files": 431,
-      "python_loc": 138647
+      "python_files": 432,
+      "python_loc": 139571
     },
     "plugins": {
       "python_files": 111,
       "python_loc": 41879
     },
     "tests": {
-      "python_files": 680,
-      "python_loc": 178706
+      "python_files": 682,
+      "python_loc": 179097
     }
   },
   "schema_version": 1,
@@ -560,7 +560,7 @@
       ],
       "unknown_always_loaded_names": []
     },
-    "definition_count": 78,
+    "definition_count": 79,
     "definition_names": [
       "accept_result",
       "approve_plan",
@@ -605,6 +605,7 @@
       "manage_context",
       "manage_login",
       "manage_rule",
+      "manage_subagents",
       "memory_save",
       "memory_search",
       "modify_plan",
@@ -650,7 +651,7 @@
       "doctor_slack",
       "recall_tool_result"
     ],
-    "execution_registration_count": 81,
+    "execution_registration_count": 82,
     "execution_registration_names": [
       "accept_result",
       "approve_plan",
@@ -697,6 +698,7 @@
       "manage_context",
       "manage_login",
       "manage_rule",
+      "manage_subagents",
       "memory_save",
       "memory_search",
       "modify_plan",
@@ -897,7 +899,7 @@
       "web_fetch": "delegated",
       "write_file": "delegated"
     },
-    "schema_count": 78,
+    "schema_count": 79,
     "schema_errors": [],
     "schema_names": [
       "accept_result",
@@ -943,6 +945,7 @@
       "manage_context",
       "manage_login",
       "manage_rule",
+      "manage_subagents",
       "memory_save",
       "memory_search",
       "modify_plan",
@@ -982,6 +985,7 @@
     "schema_without_definition": [],
     "special_execution_bindings": [
       "delegate_task",
+      "manage_subagents",
       "run_bash"
     ]
   }

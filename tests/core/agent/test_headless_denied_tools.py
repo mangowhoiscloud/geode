@@ -16,6 +16,7 @@ def test_headless_denied_tools_contents() -> None:
 
     assert "run_bash" in HEADLESS_DENIED_TOOLS
     assert "delegate_task" in HEADLESS_DENIED_TOOLS
+    assert "manage_subagents" in HEADLESS_DENIED_TOOLS
     assert "computer" in HEADLESS_DENIED_TOOLS
     assert "computer_use" in HEADLESS_DENIED_TOOLS
     assert {"computer", "computer_use"} == COMPUTER_USE_TOOLS

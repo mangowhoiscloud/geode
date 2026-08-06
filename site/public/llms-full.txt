@@ -1447,6 +1447,18 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/runtime/orchestration.md
 
 부모 에이전트가 `delegate_task`를 호출하면 `core/agent/sub_agent.py`의 `SubAgentManager`가 격리된 서브에이전트를 띄웁니다. 실행은 `core/orchestration/isolated_execution.py`의 `IsolatedRunner`가 맡고, 작업 간 의존성은 TaskGraph (`core/orchestration/task_system.py`)가 추적합니다. 스폰과 종료마다 `SUBAGENT_STARTED` / `SUBAGENT_COMPLETED` / `SUBAGENT_FAILED` 훅이 발화하고, 부모 세션 키가 있으면 Spawn+Announce로 진행 상황을 알립니다.
 
+## 백그라운드 협업
+
+기존 호출은 그대로 완료까지 기다립니다. 장기 작업은 `delegate_task(background=true)`로 즉시 안정적인 `task_id`를 받고 부모 작업을 계속할 수 있습니다. `manage_subagents`는 `list`, `wait`, `interrupt`, `send_message`, `follow_up`, `resume`을 제공합니다. 대기 시간이 끝나도 자식은 취소되지 않습니다.
+
+| 동작 | 의미 |
+| --- | --- |
+| `send_message` | 새 세대를 시작하지 않고 실행 중인 자식에게 컨텍스트를 큐잉 |
+| `follow_up` | 실행 중이면 다음 루프 경계에 전달하고, 종료 상태면 같은 자식 세션을 재개 |
+| `resume` | 저장된 체크포인트에서 같은 자식 세션의 다음 세대를 시작 |
+
+최신 상태와 메일박스 전달은 프로젝트 `sessions.db`의 `collaboration_runs`와 `collaboration_mailbox`에 저장합니다. 이 둘은 두 번째 transcript가 아니라 제어 투영입니다. 자식의 대화, 도구 호출, 훅, trajectory는 `messages`와 append-only `session_events`에 독립 롤아웃으로 남습니다. 재개는 새 사용자 턴을 추가하며 완료된 부작용을 재실행하지 않습니다.
+
 ## 한도
 
 | 노브 | 기본값 | 비고 |
@@ -1490,7 +1502,8 @@ SessionLane은 세션 키 256개까지 유지하고 유휴 키를 정리합니�
 | --- | --- | --- |
 | 서브에이전트가 또 위임하려다 실패 | `max_depth=1` 가드 | 의도된 동작입니다. 위임 구조를 부모에서 평탄화합니다 |
 | 10분쯤에서 timeout 상태로 종료 | 기본 `timeout_s=600` | `GEODE_SUBAGENT_TIMEOUT_S`를 올립니다 (상한 3600) |
-| 서브에이전트의 메모와 기록이 부모에 안 보임 | 요약만 병합하는 격리 규칙 | 남겨야 할 내용은 서브에이전트의 최종 요약에 포함시킵니다 |
+| 실행 중인 자식에게 보낸 메시지가 즉시 반영되지 않음 | 메일박스는 안전한 루프 경계에서 소비됨 | `wait`로 상태를 확인하고, 필요하면 `follow_up`으로 다음 세대를 시작합니다 |
+| 자식 실행 중 소유 런타임이 종료됨 | 실행 중 프로세스는 다른 런타임이 인계하지 않음 | 상태가 `interrupted`로 복구되면 부작용을 확인한 뒤 명시적으로 `resume`합니다 |
 
 ## 다음
 
@@ -6120,9 +6133,9 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 
 | 측정값 | 현재 트리 |
 | --- | --- |
-| 프로덕션 Python 파일 | 542 |
-| 테스트 Python 파일 | 680 |
-| 도구 정의 / 실행 등록 / 유효 스키마 | 78 / 81 / 78 |
+| 프로덕션 Python 파일 | 543 |
+| 테스트 Python 파일 | 682 |
+| 도구 정의 / 실행 등록 / 유효 스키마 | 79 / 82 / 79 |
 | RuntimeEvent 멤버 | 57 |
 | 기본 LLM 어댑터 | 8 |
 | 모듈 수준 ContextVar | 30 |

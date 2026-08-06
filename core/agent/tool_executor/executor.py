@@ -47,9 +47,10 @@ ToolExecutionStartedCallback = Callable[[str, dict[str, Any]], None]
 # inventory imports this set so the model-visible schema and executable surface
 # can be compared without duplicating these names in an audit script.
 DELEGATE_TASK_TOOL_NAME = "delegate_task"
+MANAGE_SUBAGENTS_TOOL_NAME = "manage_subagents"
 RUN_BASH_TOOL_NAME = "run_bash"
 SPECIAL_EXECUTION_BINDINGS: frozenset[str] = frozenset(
-    {DELEGATE_TASK_TOOL_NAME, RUN_BASH_TOOL_NAME}
+    {DELEGATE_TASK_TOOL_NAME, MANAGE_SUBAGENTS_TOOL_NAME, RUN_BASH_TOOL_NAME}
 )
 
 # ---------------------------------------------------------------------------
@@ -677,6 +678,9 @@ class ToolExecutor:
             # which can lag a mid-session ``/model`` switch.
             return await self._aexecute_delegate(tool_input, context)
 
+        if tool_name == MANAGE_SUBAGENTS_TOOL_NAME:
+            return await self._aexecute_manage_subagents(tool_input, context)
+
         if tool_name == RUN_BASH_TOOL_NAME:
             # Validation + approval already cleared in the gate; this is the
             # subprocess execution, dispatched uniformly like any handler.
@@ -987,13 +991,18 @@ class ToolExecutor:
         else:
             best_of = 1  # batch mode: ignored (schema documents this)
 
+        background = tool_input.get("background", False) is True
+        if background and best_of > 1:
+            return {"error": "background delegation cannot be combined with best_of"}
+
         # Batch items may carry their own ``role``; the top-level ``role``
         # is the default for items that don't declare one.
         default_role = tool_input.get("role", "")
-        ts = int(time.time())
+        import uuid
+
         sub_tasks = [
             SubTask(
-                task_id=f"delegate_{ts}_{i}",
+                task_id=f"delegate_{uuid.uuid4().hex[:12]}_{i}",
                 description=t.get("task_description", ""),
                 task_type=t.get("task_type", "analyze"),
                 args=t.get("args", {}),
@@ -1092,6 +1101,26 @@ class ToolExecutor:
 
         # announce=False: delegate_task returns full results via tool_result,
         # so skip announce queue to avoid double context injection.
+        if background:
+            from core.agent.cognitive_state_ctx import get_session_id
+
+            parent_session_id = str(getattr(context, "session_id", "") or get_session_id())
+            if not parent_session_id:
+                return {"error": "Background delegation requires an active parent session"}
+            runs = await self._sub_agent_manager.aspawn(
+                sub_tasks,
+                parent_session_id=parent_session_id,
+                on_progress=_on_progress,
+                on_activity=_on_activity,
+                default_model=default_model,
+            )
+            return {
+                "status": "dispatched",
+                "mode": "background",
+                "tasks": [run.to_dict() for run in runs],
+                "total": len(runs),
+            }
+
         results = await self._sub_agent_manager.adelegate(
             sub_tasks,
             on_progress=_on_progress,
@@ -1145,6 +1174,73 @@ class ToolExecutor:
                 context=context,
             )
         return payload
+
+    async def _aexecute_manage_subagents(
+        self,
+        tool_input: dict[str, Any],
+        context: ToolContext | None = None,
+    ) -> dict[str, Any]:
+        """Parent-scoped control surface for durable background children."""
+        if not self._sub_agent_manager:
+            return {"error": "SubAgentManager not configured"}
+        from core.agent.cognitive_state_ctx import get_session_id
+
+        parent_session_id = str(getattr(context, "session_id", "") or get_session_id())
+        if not parent_session_id:
+            return {"error": "No active parent session"}
+        action = str(tool_input.get("action", ""))
+        task_id = str(tool_input.get("task_id", ""))
+        message = str(tool_input.get("message", ""))
+        default_model = str(getattr(context, "model", "") or "")
+        try:
+            if action == "list":
+                runs = self._sub_agent_manager.list_collaboration_runs(parent_session_id)
+                return {"tasks": [run.to_dict() for run in runs], "total": len(runs)}
+            if not task_id:
+                return {"error": f"task_id is required for action={action}"}
+            if action == "wait":
+                raw_timeout = tool_input.get("timeout_seconds", 0.0)
+                timeout_s = (
+                    float(raw_timeout)
+                    if isinstance(raw_timeout, int | float) and not isinstance(raw_timeout, bool)
+                    else 0.0
+                )
+                run = await self._sub_agent_manager.wait_for_task(
+                    parent_session_id,
+                    task_id,
+                    timeout_s=max(0.0, min(timeout_s, 3600.0)),
+                )
+                timed_out = bool(run and run.status in {"pending", "running"})
+                return {"task": run.to_dict() if run else None, "timed_out": timed_out}
+            if action == "interrupt":
+                accepted = self._sub_agent_manager.interrupt_task(parent_session_id, task_id)
+                return {"task_id": task_id, "accepted": accepted}
+            if action == "send_message":
+                if not message:
+                    return {"error": "message is required for action=send_message"}
+                run = self._sub_agent_manager.send_task_message(parent_session_id, task_id, message)
+                return {"task": run.to_dict(), "turn_triggered": False}
+            if action == "follow_up":
+                if not message:
+                    return {"error": "message is required for action=follow_up"}
+                run, resumed = await self._sub_agent_manager.afollow_up(
+                    parent_session_id,
+                    task_id,
+                    message,
+                    default_model=default_model,
+                )
+                return {"task": run.to_dict(), "turn_triggered": True, "resumed": resumed}
+            if action == "resume":
+                run = await self._sub_agent_manager.aresume(
+                    parent_session_id,
+                    task_id,
+                    prompt=message or "Continue from the saved checkpoint.",
+                    default_model=default_model,
+                )
+                return {"task": run.to_dict(), "resumed": True}
+            return {"error": f"Unknown manage_subagents action: {action}"}
+        except ValueError as exc:
+            return {"error": str(exc)}
 
     async def _select_best_candidate(
         self,
