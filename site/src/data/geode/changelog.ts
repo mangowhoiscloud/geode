@@ -19,7 +19,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": ""
+    "body": "### Added\n\n- **Durable depth-one sub-agent collaboration.** `delegate_task` can return\n  background task handles immediately, while the compact `manage_subagents`\n  surface provides parent-scoped list, bounded wait, interrupt, message,\n  follow-up, and checkpoint resume. Mutable run/mailbox state shares\n  `sessions.db`; each child keeps its existing independent messages, session\n  events, hooks, and trajectory as the replay source. Mailbox delivery is\n  generation-scoped, and stale-owner recovery compares both PID and process\n  birth time so PID reuse cannot leave a run permanently active."
   },
   {
     "version": "1.0.14",
