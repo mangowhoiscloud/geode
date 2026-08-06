@@ -168,7 +168,7 @@ tool from one shared deny-set.
 5. Delete the volatile announce queue, duplicate result contract, unused
    TaskGraph overlay, and inert manager dependencies. **Done.**
 6. Update public documentation, generated inventory, and verification evidence.
-   **In progress.**
+   **Done.**
 
 ## 8. Verification gates
 
@@ -217,3 +217,34 @@ crash. The result nevertheless makes automatic restart unsafe to add until a
 side-effecting tool has a caller-supplied operation key and a durable receipt
 lookup that returns the prior committed result instead of executing again.
 Read-only tools do not need this contract.
+
+## 11. Closure evidence
+
+| Gate | Result |
+|---|---|
+| targeted collaboration, hook, and memory tests | 51 passed |
+| public trajectory release regression | 15 passed, including a symlink-root containment case found by live publication on macOS |
+| full non-live suite | passed after updating the intentional Crucible source attestation for `agent_loop.py` |
+| static gates | ruff lint/format, mypy (543 files), four import contracts, dependency drift, architecture baseline (84 tools / 57 `RuntimeEvent` members), and `geode version` all passed |
+| public site | lint completed with 45 pre-existing warnings; static build generated 237 pages; 74 Markdown twins exported |
+| GPT-5.4 collaboration E2E | `spawn_agent → send_message → wait_agent → followup_task → wait_agent → list_agents` passed through a real isolated worker on the subscription route; one stable child advanced from generation 1 to 2, both generations completed, five checkpoint messages survived, and the child mailbox ended empty |
+| GPT-5.4 hook/middleware E2E | 13/13 public hooks and 4/4 middleware surfaces passed in 24.641 seconds; one tool call executed once, LLM request/execution stayed paired at 4/4, and SQLite/JSONL each retained 24 extension rows |
+| public evidence | [eval-artifacts PR #14](https://github.com/mangowhoiscloud/geode-eval-artifacts/pull/14) carries only the two reviewed normalized trajectories and manifests; secret scans are zero and raw databases, checkpoints, prompts, tool bodies, and encrypted reasoning remain withheld |
+| independent review | two read-only Codex MCP review attempts reached the 300-second transport timeout without a verdict; this is recorded as unavailable, not as approval |
+
+The collaboration artifact is
+`geode-agenticloop-durable-subagent-collaboration-e2e-20260806T110257Z-fd7d71b2fbde`
+(14 events; manifest SHA-256
+`fd7d71b2fbde77d0ffcd0eb8ca7c4d40302e3dd1d8eaf791a71d904d7b8935b3`).
+The hook artifact is
+`geode-agenticloop-hook-middleware-behavior-e2e-20260806T110501Z-a0feaf423373`
+(29 events; manifest SHA-256
+`a0feaf4233736b5b5273aa8af03893825c5fa24b511f00e3b308bd144669cde4`),
+and correctly supersedes the stable-contract release from 2026-07-31.
+
+Two failed attempts remain diagnostic rather than positive evidence. The first
+hook run exposed the invalid fixed assumption that every model performs exactly
+three LLM middleware calls; the gate now requires paired calls and a minimum of
+two. The first collaboration probe injected a non-default test database that
+the production child process does not share; the production-default-store rerun
+above passed and is the only collaboration run published.
