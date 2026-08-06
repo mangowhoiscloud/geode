@@ -85,6 +85,10 @@ functional change.
 - **Removed obsolete sub-agent overlays.** The process-local announce queue,
   duplicate `SubAgentResult`/error taxonomy, test-only run-record API, unused
   per-batch TaskGraph overlay, and inert MCP/skill manager references are gone.
+  Its 31 queue/injection-specific cases and adjacent duplicate stubs were
+  replaced by smaller durable-store, public-tool, checkpoint, race, and E2E
+  coverage; the selected non-live test ratchet moves from 10,441 to the
+  measured 10,424 rather than preserving tests for deleted behavior.
 
 ## [1.0.14] - 2026-08-05
 
