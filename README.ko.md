@@ -7,7 +7,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/while(tool__use)-agentic%20loop-E0699F?style=flat-square" alt="while(tool_use)">
-  <img src="https://img.shields.io/badge/self--improving-non--parametric-E0699F?style=flat-square" alt="Self-improving (non-parametric)">
+  <img src="https://img.shields.io/badge/scaffold%20optimization-experimental-E0699F?style=flat-square" alt="Experimental scaffold optimization">
   <a href="https://github.com/mangowhoiscloud/geode/actions"><img src="https://img.shields.io/github/actions/workflow/status/mangowhoiscloud/geode/ci.yml?style=flat-square&label=ci&logo=github&logoColor=white" alt="CI"></a>
 </p>
 
@@ -29,9 +29,17 @@
   <a href="README.md">English</a>
 </p>
 
-# GEODE v1.0.14 — A Self-improving Autonomous Execution Agent
+# GEODE v1.0.15 — Autonomous Agent Runtime + Evaluation Substrate
 
-자기 자신이 올라탄 scaffold 를 스스로 고쳐쓰는 범용 자율 에이전트. 자연어로 물으면 GEODE 가 계획을 세우고, 도구를 호출해, 결과를 보고합니다. 짧은 프롬프트도, 장시간 세션도 동일하게. 그 아래에서는 outer loop 가 작업을 수행하는 시스템 자체를 계속 다듬습니다.
+자율적인 도구 작업을 수행하는 범용 에이전트 런타임입니다. 자연어로
+요청하면 GEODE가 계획을 세우고 도구를 호출한 뒤 결과를 보고합니다. 짧은
+프롬프트와 장시간 세션 모두 같은 런타임 계약을 사용합니다. 실험적 outer
+loop는 scaffold 후보를 변이시키고 증거 기반 안전성 게이트로 admission하지만,
+공개 기록은 아직 지속적인 자기개선을 입증하지 않습니다.
+
+> **실험 상태:** SIL(Self-Improving Loop)과 Crucible은 안정된 제품 기능이
+> 아니라 검증 중인 실험입니다. 프로토콜, 승격 게이트, 스키마, 결과는
+> 검증이 진행되면서 달라질 수 있습니다.
 
 > **ChatGPT Plus, Pro, Business, Edu, Enterprise 결제 중이신가요?** 그 구독을 GEODE 가 그대로 씁니다. API 키 필요 없습니다. [구독 setup ↓](#path-a--chatgpt-구독-openai-사용자에게-권장)
 >
@@ -39,11 +47,22 @@
 
 ---
 
-## Self-improving loop
+## 실험적 scaffold 최적화 loop
 
-GEODE 는 **non-parametric** 갈래의 자기진화 에이전트입니다. 모델 가중치가 아니라 자신의 scaffold (시스템 프롬프트, 도구 정책, 작업 분해, reflection, 스킬, 에이전트 계약, 도구 설명) 를 변이시켜 개선합니다. fitness 는 capability 벤치마크가 아니라 적대적 **안전성** audit 입니다. Petri 급, 다차원이며, critical 안전 차원에는 하드 floor 가 걸려 있어 그 차원을 후퇴시키는 변경은 거부됩니다. **선택** seed 는 함께 진화합니다 — co-scientist 파이프라인이 에이전트와 나란히 적대적 seed 를 키웁니다 — 따라서 이들은 고정된 자가 아니라 움직이는 선택 압력을 가합니다. 세대 간 fitness 는 절대 변이하지 않는 별도의 **버전 고정 held-out 벤치** 위에서 측정합니다. 실제 개선의 증거로 인정되는 것은 그 held-out 곡선뿐입니다.
+GEODE에는 실험적인 **non-parametric scaffold 최적화 loop**가 있습니다.
+모델 가중치는 건드리지 않고 시스템 프롬프트, 도구 정책, 작업 분해,
+reflection, 스킬, 에이전트 계약, 도구 설명의 후보를 변이시킵니다. fitness는
+capability 벤치마크가 아니라 적대적 **안전성** audit이며, critical 안전
+차원에는 hard floor가 적용됩니다. 현재 공개 증거가 입증하는 것은 반복적인
+core 승격이나 단조 성능 향상이 아니라 rejection·invalidation 게이트의
+규율입니다.
 
-선택은 정직한 **(1+1) 챔피언 체인**입니다. 변이하고, audit 하고, 실제 이득이 있을 때만 promote 하고, 아니면 revert 합니다. 두 개의 loop 가 함께 돕니다. inner agentic loop 는 작업을 수행하고, outer loop 는 작업을 수행하는 시스템을 다듬습니다. 이 loop 계보 (Promptbreeder, STOP, ADAS, DGM, GEPA) 는 이미 잘 정립돼 있습니다. GEODE 는 그것을 capability 에서 safety 로, 가중치에서 scaffold 로, co-evolved 적대적 seed 위로 다시 겨냥합니다. 새 primitive 가 아니라, 비어 있던 칸을 채우는 재조합입니다.
+선택 계약은 **(1+1) 챔피언 체인**입니다. 변이하고 audit한 뒤 실제 이득이
+있을 때만 승격을 허용하고, 아니면 revert합니다. inner agentic loop는 작업을
+수행하고 outer loop는 scaffold 후보를 평가합니다. 이 계보(Promptbreeder,
+STOP, ADAS, DGM, GEPA)는 이미 잘 정립돼 있습니다. GEODE는 이를 capability에서
+safety로, 가중치에서 scaffold로 다시 겨냥합니다. 새로운 primitive가 아니라
+알려진 메커니즘의 재조합입니다.
 
 - **[closed loop →](https://mangowhoiscloud.github.io/geode/docs/capabilities/autoresearch)** — autoresearch, 변이 / audit / promote / revert 전 과정
 - **[Two loops →](https://mangowhoiscloud.github.io/geode/docs/concepts/two-loops)** — inner 와 outer 의 멘탈 모델
@@ -424,7 +443,7 @@ geode update --latest # uv 도구: minor/major 업데이트를 명시적으로 �
 | 기능 | 설명 |
 |------|------|
 | **`while(tool_use)` 루프** | 모든 자율 행동의 단일 원시 동작. 서브에이전트, 플랜, 배치 모두 같은 루프의 인스턴스 |
-| **Self-improving outer loop** | GEODE 자신의 scaffold 를 변이시키고, 각 변경을 적대적 안전성 루브릭으로 audit 한 뒤, 실제 이득이 있을 때만 promote 합니다. [closed loop](https://mangowhoiscloud.github.io/geode/docs/capabilities/autoresearch) 참고 |
+| **실험적 scaffold 최적화 loop** | scaffold 후보를 변이시키고 적대적 안전성 루브릭으로 audit한 뒤, 실제 이득이 있을 때만 승격을 허용합니다. 공개 기록은 현재 지속적 개선보다 게이트 규율을 입증합니다. [closed loop](https://mangowhoiscloud.github.io/geode/docs/capabilities/autoresearch) 참고 |
 | **Agentic tools + MCP 카탈로그** | 웹 검색, 파일 작업, 스케줄링, 메모리, Slack/Discord, [사용자 소유 Google OAuth](https://mangowhoiscloud.github.io/geode/docs/run/google-workspace)를 통한 Gmail·Calendar·Drive·Docs·Sheets·Tasks·Contacts, 그리고 Anthropic 발행 MCP 레지스트리 (`~/.geode/mcp/registry-cache.json` 에 캐시). 첫 사용 시 자동 설치 |
 | **3-프로바이더 페일오버** | Anthropic + OpenAI + ZhipuAI. ChatGPT / Claude 구독 OAuth 자동 감지; 사용량 과금 API 키도 사용 가능; 페일오버는 동일 프로바이더 내에서만 (예상치 못한 vendor 횡단 과금 없음, v0.53.0 거버넌스) |
 | **5-tier 메모리** | SOUL (0) → User Profile (0.5) → Organization (1) → Project (2) → Session (3). 영속화, 데몬 재시작 후에도 유지 |
@@ -518,14 +537,18 @@ frontier 하네스 (Claude Code, Codex CLI, OpenClaw) 옆에서 GEODE 가 어디
 | Skill 시스템 | ✅ Deferred tools + SKILL.md manifest | ✅ SKILL.md + progressive disclosure (`.agents/skills/`) | ✅ 스킬 필터 + archive 업로드 | ✅ 런타임 `SkillRegistry`, bundled/global/project 스코프 |
 | **교체 가능한 파이프라인 DAG** | ❌ | ❌ | ⚠️ flows (channel-setup / doctor / provider — DAG 추상화 아님) | ⚠️ 외부 패키지 책임. GEODE core 는 더 이상 파이프라인 포트를 제공하지 않음 |
 | 트레이스 / 리플레이 / Run Log | ✅ `tengu_*` 텔레메트리 + `/insights` HTML | ⚠️ `/status` + `/debug-config` 만 | ✅ ACP 세션 lineage + Task Registry | ✅ 자체 RunLog + Petri eval 통합 |
-| Self-improving 안전성 loop | ❌ | ❌ | ❌ | ✅✅ outer loop: scaffold 변이 + 적대적 안전성 audit + (1+1) promote/revert |
+| 안전성 게이트 기반 scaffold 최적화 | ❌ | ❌ | ❌ | ⚠️ 실험적 outer loop: scaffold 변이 + 적대적 안전성 audit + (1+1) promote/revert 계약, 공개 core 승격 0건 |
 | 크로스 프로바이더 리뷰 | ❌ | ❌ | ❌ | ⚠️ self-improving 루프의 멀티-voter 크로스 프로바이더 랭킹 패널 (≥2 providers, `plugins/seed_generation/agents/ranker.py`); 일치도 캘리브레이션은 WIP |
 
 </details>
 
 ---
 
-IDE 내부 또는 클라우드 동기화로 짧은 코딩 세션을 돌릴 땐 **Claude Code** / **Codex**. 다수의 메시징 표면에 걸친 멀티 채널 chat 에이전트 fleet 을 운영할 땐 **OpenClaw**. 다중 tier 메모리 + 다중 계층 검증 + 스케줄링 + 데몬 기반 도구 실행으로 몇 시간 / 며칠 작업을 이어가고, 그 에이전트가 안전성 floor 아래에서 자신의 scaffold 를 계속 개선하길 원할 땐 **GEODE**.
+IDE 내부 또는 클라우드 동기화로 짧은 코딩 세션을 돌릴 땐 **Claude Code** /
+**Codex**. 다수의 메시징 표면에 걸친 멀티 채널 chat 에이전트 fleet을 운영할
+땐 **OpenClaw**. 다중 tier 메모리, 다중 계층 검증, 스케줄링, 데몬 기반 도구
+실행으로 몇 시간 또는 며칠 작업을 이어가거나, 증거 기반 안전성 floor 아래에서
+scaffold 후보를 실험하려면 **GEODE**.
 
 > 출처 — Claude Code (역공학 레퍼런스). Codex CLI 릴리즈 노트 + [developers.openai.com/codex/config-reference](https://developers.openai.com/codex/config-reference) + [github.com/openai/codex](https://github.com/openai/codex). OpenClaw (TypeScript). GEODE — `CHANGELOG.md` 와 [self-improving 허브](https://mangowhoiscloud.github.io/geode/self-improving/).
 
@@ -588,7 +611,10 @@ Tier 3    Session         메모리 — 대화, 도구 결과, 플랜
 <details>
 <summary><strong>개발 워크플로 (Scaffold)</strong></summary>
 
-CANNOT (가드레일) 이 CAN (자유) 보다 먼저. 7-step 워크플로 + 품질 게이트. CI 래칫 (pytest, mypy, ruff, import-order, test-count) 을 통과해야 머지. 테스트 카운트는 단조 증가만 허용.
+CANNOT (가드레일)이 CAN (자유)보다 먼저. 7-step 워크플로 + 품질 게이트.
+CI 래칫(pytest, mypy, ruff, import-order, test-count)을 통과해야 머지합니다.
+실측 테스트 카운트 floor를 낮추려면 삭제 근거와 ratchet 갱신이 함께 있어야
+합니다.
 
 | Gate | 명령 | 목표 |
 |------|------|------|

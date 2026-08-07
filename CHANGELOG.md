@@ -74,6 +74,26 @@ functional change.
   short-circuit/single-use `next_call`, and sub-agent timeout behavior without
   spending additional model tokens.
 
+- **Release-facing documentation now fails closed on stale public contracts.**
+  The official docs gate requires both READMEs to carry the canonical runtime
+  and evaluation-substrate identity and requires `SECURITY.md` to mark the
+  package's current major/minor series as supported.
+
+## [1.0.15] - 2026-08-07
+
+> PostVerify control release: deterministic default decisions now feed the
+> bounded revise/replan path, while decision provenance remains replayable in
+> the semantic session timeline.
+
+### Changed
+
+- **PostVerify now controls delivery by default.** With no external handler,
+  passing candidates are accepted, retryable failures enter the existing
+  bounded revise/replan path, and non-retryable failures pause for external
+  verification. Revision instructions now use the dynamic system context
+  instead of user-role history, and candidate-digest-bound handler decisions
+  persist in the semantic session timeline for trajectory reconstruction.
+
 ## [1.0.14] - 2026-08-05
 
 > Cleanup release: retire the orphaned unary DPO precursor and the unreachable
@@ -1847,7 +1867,6 @@ functional change.
   `ScrollReveal`).
 
 ---
-=======
 ## [0.99.290] - 2026-07-10
 
 ### Added

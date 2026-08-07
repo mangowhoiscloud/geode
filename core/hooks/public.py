@@ -458,6 +458,7 @@ class HookOutcome:
     invocation: HookInvocation
     decisions: tuple[HookDecision, ...] = ()
     handler_errors: tuple[str, ...] = ()
+    decision_sources: tuple[str, ...] = ()
 
     @property
     def blocked(self) -> bool:
@@ -552,6 +553,7 @@ class HookRegistry:
             handlers = tuple(self._handlers.get(resolved, ()))
 
         decisions: list[HookDecision] = []
+        decision_sources: list[str] = []
         errors: list[str] = []
         for handler in handlers:
             started = time.monotonic()
@@ -580,6 +582,7 @@ class HookRegistry:
                     self._validate_payload(resolved, updated_invocation.payload)
                     invocation = updated_invocation
                 decisions.append(decision)
+                decision_sources.append(handler.name)
                 reason = decision.reason
                 if decision.action in {HookAction.BLOCK, HookAction.DENY}:
                     outcome = decision.action.value
@@ -597,7 +600,12 @@ class HookRegistry:
                     duration_ms=(time.monotonic() - started) * 1_000,
                     correlation=invocation.correlation,
                 )
-        return HookOutcome(invocation, tuple(decisions), tuple(errors))
+        return HookOutcome(
+            invocation=invocation,
+            decisions=tuple(decisions),
+            handler_errors=tuple(errors),
+            decision_sources=tuple(decision_sources),
+        )
 
     @staticmethod
     async def _call(handler: _RegisteredHook, invocation: HookInvocation) -> HookDecision | None:

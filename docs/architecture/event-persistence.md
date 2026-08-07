@@ -69,7 +69,8 @@ The closed session history vocabulary is:
 ```text
 session.started      session.ended
 turn.completed
-verification.continued verification.evidence verification.pending
+verification.decided verification.continued
+verification.evidence verification.pending
 message.user         message.assistant
 tool.called          tool.completed
 subagent.started     subagent.stopped

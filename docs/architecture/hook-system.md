@@ -83,6 +83,13 @@ A hook cannot turn a built-in failure into a pass. Revision has a fixed
 continuation budget and starts a follow-up turn without replaying completed
 tool side effects. This makes `PostVerify` useful to evaluator, CI, or
 human-review loops while preserving GEODE's verifier as the monotone authority.
+When no external `PostVerify` handler returns a decision, the runtime applies
+the same monotone default: pass → accept, retryable failure → revise, and
+non-retryable failure → escalate. The revision instruction is injected once in
+the dynamic system context; it is never represented as a user message or sent
+through task decomposition. `verification.decided` binds the final policy and
+each attributed handler decision to the candidate SHA-256 digest, root turn,
+and verify attempt without copying candidate text.
 Escalation is a delivery gate: GEODE parks the session with
 `external_verification_required`, returns the withheld candidate as
 `AgenticResult.pending_text` to the owning external loop, and does not create
