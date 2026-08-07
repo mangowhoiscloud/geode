@@ -147,14 +147,6 @@ class AgentRegistry:
 
 
 # ---------------------------------------------------------------------------
-# YAML frontmatter parser (delegated to shared module)
-# ---------------------------------------------------------------------------
-
-# Re-export for backward compatibility
-_parse_yaml_frontmatter = parse_yaml_frontmatter
-
-
-# ---------------------------------------------------------------------------
 # Loader
 # ---------------------------------------------------------------------------
 
@@ -222,12 +214,7 @@ class SubagentLoader:
 
     @property
     def agents_dir(self) -> Path:
-        """Primary directory (first entry of :attr:`agents_dirs`).
-
-        Backward-compat accessor for callers that predate multi-source
-        discovery. Always returns the first dir in scan order — which
-        is ``.claude/agents`` under the default config.
-        """
+        """Primary directory retained for single-directory callers."""
         return self._agents_dirs[0]
 
     @property
@@ -267,7 +254,7 @@ class SubagentLoader:
             raise FileNotFoundError(f"Agent file not found: {path}")
 
         text = path.read_text(encoding="utf-8")
-        metadata, body = _parse_yaml_frontmatter(text)
+        metadata, body = parse_yaml_frontmatter(text)
 
         name = metadata.get("name")
         if not name:

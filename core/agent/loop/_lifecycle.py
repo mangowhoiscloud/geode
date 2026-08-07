@@ -12,6 +12,7 @@ import asyncio
 import logging
 import warnings
 from dataclasses import replace
+from hashlib import sha256
 from typing import TYPE_CHECKING, Any
 
 from core.hooks import (
@@ -633,20 +634,39 @@ async def _run_public_finalization_async(
         )
     )
     actions = {decision.action for decision in post.decisions}
+    fallback_action = ""
+    fallback_instruction = ""
     invalid_accept = not vr.passed and HookAction.ACCEPT in actions
     escalated = HookAction.ESCALATE in actions or invalid_accept
     follow_up = ""
-    policy_action = "escalate" if escalated else ("accept" if vr.passed else "built_in_fail")
-    if HookAction.REVISE in actions and not escalated:
-        policy_action = "revise"
-        follow_up = next(
-            (
-                decision.instruction
-                for decision in post.decisions
-                if decision.action is HookAction.REVISE and decision.instruction
-            ),
-            "",
-        )
+    if not post.decisions:
+        if vr.passed:
+            fallback_action = policy_action = "accept"
+        elif vr.should_retry:
+            fallback_action = policy_action = "revise"
+            miss_summary = ", ".join(vr.rubric_misses[:8]) or "unspecified"
+            follow_up = (
+                "Verification: retry required.\n"
+                f"Rubric misses: {miss_summary}.\n"
+                "Required action: repair the candidate, re-check relevant evidence, "
+                "and return a corrected result."
+            )
+            fallback_instruction = follow_up
+        else:
+            fallback_action = policy_action = "escalate"
+            escalated = True
+    else:
+        policy_action = "escalate" if escalated else ("accept" if vr.passed else "built_in_fail")
+        if HookAction.REVISE in actions and not escalated:
+            policy_action = "revise"
+            follow_up = next(
+                (
+                    decision.instruction
+                    for decision in post.decisions
+                    if decision.action is HookAction.REVISE and decision.instruction
+                ),
+                "",
+            )
 
     stop = await loop._hook_registry.invoke(
         HookName.STOP,
@@ -691,6 +711,46 @@ async def _run_public_finalization_async(
         escalated = True
         policy_action = "escalate_budget_exhausted"
 
+    decision_records: list[dict[str, Any]] = []
+    if fallback_action:
+        instruction_bytes = fallback_instruction.encode("utf-8")
+        decision_records.append(
+            {
+                "surface": HookName.POST_VERIFY.value,
+                "handler": "runtime_default",
+                "action": fallback_action,
+                "reason": "empty_post_verify_decision_set",
+                "instruction_sha256": (
+                    sha256(instruction_bytes).hexdigest() if instruction_bytes else ""
+                ),
+                "instruction_bytes": len(instruction_bytes),
+                "evidence_refs": [],
+            }
+        )
+    for surface, outcome in (
+        (HookName.POST_VERIFY.value, post),
+        (HookName.STOP.value, stop),
+    ):
+        for source, decision in zip(
+            outcome.decision_sources,
+            outcome.decisions,
+            strict=True,
+        ):
+            instruction_bytes = decision.instruction.encode("utf-8")
+            decision_records.append(
+                {
+                    "surface": surface,
+                    "handler": source,
+                    "action": decision.action.value,
+                    "reason": decision.reason,
+                    "instruction_sha256": (
+                        sha256(instruction_bytes).hexdigest() if instruction_bytes else ""
+                    ),
+                    "instruction_bytes": len(instruction_bytes),
+                    "evidence_refs": [ref.as_dict() for ref in decision.evidence_refs],
+                }
+            )
+
     ledger = getattr(loop, "_evidence_ledger", None)
     if ledger is not None and (post.decisions or stop.decisions or evidence_refs):
         try:
@@ -710,6 +770,18 @@ async def _run_public_finalization_async(
         except Exception:
             log.debug("Verification policy evidence row failed", exc_info=True)
     timeline = getattr(loop, "_timeline", None)
+    if timeline is not None:
+        try:
+            timeline.record_verification_decision(
+                candidate=result.text or "",
+                root_turn_id=correlation.turn_id,
+                verify_attempt=correlation.verify_attempt,
+                built_in_passed=vr.passed,
+                policy_action=policy_action,
+                decisions=decision_records,
+            )
+        except Exception:
+            log.debug("Verification decision timeline row failed", exc_info=True)
     if timeline is not None and evidence_refs:
         try:
             timeline.record_verification_evidence(
@@ -775,7 +847,8 @@ async def _close_verify_attempt(
                 and is_successful_task_termination(getattr(result, "termination_reason", "")),
                 verify=verify_payload,
             )
-    loop._save_checkpoint(user_input, round_idx=round_idx)
+    root_input = getattr(loop, "_verify_root_user_input", "") or user_input
+    loop._save_checkpoint(root_input, round_idx=round_idx)
     if loop._hooks:
         _session_ended, turn_completed, reasoning_metrics = _final_hook_payloads(
             loop,

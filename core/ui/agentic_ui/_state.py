@@ -21,7 +21,7 @@ from core.time_format import format_elapsed
 from core.ui.context_local import ContextLocal
 
 # Task/thread-local IPC writer for structured tool events.
-# When set (by CLIPoller._run_prompt_streaming), OperationLogger sends
+# When set (by CLIPoller._run_prompt_streaming_async), OperationLogger sends
 # tool_start/tool_end events instead of console.print — enabling the
 # thin client to render per-tool spinners with in-place ✓ updates.
 _ipc_writer_local = ContextLocal("geode_ipc_writer_local")

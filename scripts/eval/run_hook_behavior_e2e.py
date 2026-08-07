@@ -22,7 +22,9 @@ import json
 import os
 import re
 import sqlite3
+import threading
 import time
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -66,6 +68,197 @@ def _require(condition: bool, message: Any) -> None:
         raise RuntimeError(f"hook behavior E2E gate failed: {message!r}")
 
 
+def _middleware_counts_are_valid(counts: dict[str, int]) -> bool:
+    return (
+        counts.get("tool_request") == 1
+        and counts.get("tool_execution") == 1
+        and counts.get("llm_request", 0) >= 2
+        and counts.get("llm_request") == counts.get("llm_execution")
+    )
+
+
+async def _run_action_matrix() -> dict[str, dict[str, Any]]:
+    """Pin failure and idempotency behavior without spending model tokens."""
+    from core.agent.sub_agent import SubAgentManager, SubTask
+    from core.agent.tool_executor import ToolExecutor
+    from core.hooks import (
+        HookAction,
+        HookDecision,
+        HookName,
+        HookRegistry,
+        MiddlewareRegistry,
+        NextCallAlreadyUsedError,
+        ToolCallRequest,
+    )
+    from core.hooks.middleware import ToolNextCall
+    from core.orchestration.isolated_execution import IsolatedRunner
+    from core.tools.base import ToolContext
+
+    outcomes: dict[str, dict[str, Any]] = {}
+    calls: dict[str, int] = {}
+
+    def counting_handler(
+        scenario: str,
+        *,
+        fail: bool = False,
+    ) -> Callable[..., dict[str, Any]]:
+        calls[scenario] = 0
+
+        def handler(**_kwargs: Any) -> dict[str, Any]:
+            calls[scenario] += 1
+            if fail:
+                raise ValueError("matrix handler failure")
+            return {"ok": True}
+
+        return handler
+
+    blocked_hooks = HookRegistry()
+    blocked_hooks.register(
+        HookName.PRE_TOOL_USE,
+        lambda _invocation: HookDecision(action=HookAction.BLOCK, reason="matrix block"),
+    )
+    blocked = await ToolExecutor(
+        action_handlers={"check": counting_handler("pre_tool_block")},
+        hook_registry=blocked_hooks,
+    ).aexecute("check", {})
+    _require(blocked.get("blocked_by_hook") is True and calls["pre_tool_block"] == 0, blocked)
+    outcomes["pre_tool_block"] = {
+        "side_effect_calls": calls["pre_tool_block"],
+        "status": "pass",
+    }
+
+    denied_hooks = HookRegistry()
+    denied_hooks.register(
+        HookName.PRE_TOOL_USE,
+        lambda _invocation: HookDecision(action=HookAction.REQUEST_PERMISSION),
+    )
+    denied_hooks.register(
+        HookName.PERMISSION_REQUEST,
+        lambda _invocation: HookDecision(action=HookAction.DENY),
+    )
+    denied = await ToolExecutor(
+        action_handlers={"check": counting_handler("permission_deny")},
+        hook_registry=denied_hooks,
+        interactive_approval=False,
+    ).aexecute("check", {})
+    _require(denied.get("denied") is True and calls["permission_deny"] == 0, denied)
+    outcomes["permission_deny"] = {
+        "side_effect_calls": calls["permission_deny"],
+        "status": "pass",
+    }
+
+    cancellation = asyncio.Event()
+    cancellation.set()
+    cancelled = await ToolExecutor(
+        action_handlers={"check": counting_handler("cancel_before_start")}
+    ).aexecute("check", {}, context=ToolContext(cancellation=cancellation))
+    _require(
+        cancelled.get("cancelled") is True and calls["cancel_before_start"] == 0,
+        cancelled,
+    )
+    outcomes["cancel_before_start"] = {
+        "side_effect_calls": calls["cancel_before_start"],
+        "status": "pass",
+    }
+
+    failed = await ToolExecutor(
+        action_handlers={"check": counting_handler("handler_error", fail=True)}
+    ).aexecute("check", {})
+    _require(bool(failed.get("error")) and calls["handler_error"] == 1, failed)
+    outcomes["handler_error"] = {
+        "side_effect_calls": calls["handler_error"],
+        "status": "pass",
+    }
+
+    class ShortCircuit:
+        async def tool_execution(self, _request: Any, _next_call: Any) -> dict[str, Any]:
+            return {"short_circuit": True}
+
+    short_calls = 0
+
+    async def short_terminal(_request: ToolCallRequest) -> dict[str, Any]:
+        nonlocal short_calls
+        short_calls += 1
+        return {"ok": True}
+
+    short_registry = MiddlewareRegistry()
+    short_registry.register_tool_execution(ShortCircuit(), name="matrix-short")
+    short = await short_registry.tool_execution(ToolCallRequest(tool_name="check"), short_terminal)
+    _require(short == {"short_circuit": True} and short_calls == 0, short)
+    outcomes["middleware_short_circuit"] = {
+        "side_effect_calls": short_calls,
+        "status": "pass",
+    }
+
+    class DoubleNext:
+        async def tool_execution(
+            self,
+            request: ToolCallRequest,
+            next_call: ToolNextCall,
+        ) -> dict[str, Any]:
+            await next_call(request)
+            return await next_call(request)
+
+    double_calls = 0
+
+    async def double_terminal(_request: ToolCallRequest) -> dict[str, Any]:
+        nonlocal double_calls
+        double_calls += 1
+        return {"ok": True}
+
+    double_registry = MiddlewareRegistry()
+    double_registry.register_tool_execution(DoubleNext(), name="matrix-double")
+    try:
+        await double_registry.tool_execution(ToolCallRequest(tool_name="check"), double_terminal)
+    except NextCallAlreadyUsedError:
+        pass
+    else:
+        raise RuntimeError("hook behavior E2E gate failed: double next_call was accepted")
+    _require(double_calls == 1, {"double_next_side_effect_calls": double_calls})
+    outcomes["middleware_double_next"] = {
+        "side_effect_calls": double_calls,
+        "status": "pass",
+    }
+
+    release_timeout = threading.Event()
+    timeout_completed = threading.Event()
+    calls["subagent_timeout"] = 0
+
+    def slow_subagent(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        calls["subagent_timeout"] += 1
+        try:
+            release_timeout.wait(1)
+            return {"summary": "released after timeout"}
+        finally:
+            timeout_completed.set()
+
+    timeout_manager = SubAgentManager(
+        IsolatedRunner(),
+        task_handler=slow_subagent,
+        timeout_s=0.02,
+    )
+    timeout_results = await timeout_manager.adelegate(
+        [SubTask("matrix-timeout", "Exercise timeout", "analysis")]
+    )
+    release_timeout.set()
+    thread_finished = await asyncio.to_thread(timeout_completed.wait, 1)
+    _require(
+        len(timeout_results) == 1
+        and not timeout_results[0].success
+        and "Timeout" in str(timeout_results[0].error)
+        and calls["subagent_timeout"] == 1
+        and thread_finished,
+        {"subagent_timeout": [dataclasses.asdict(result) for result in timeout_results]},
+    )
+    outcomes["subagent_timeout"] = {
+        "side_effect_calls": calls["subagent_timeout"],
+        "status": "pass",
+        "thread_finished": thread_finished,
+    }
+
+    return outcomes
+
+
 async def _run(
     output_dir: Path,
     *,
@@ -105,6 +298,7 @@ async def _run(
     )
     from core.tools.registry import ToolRegistry
 
+    behavior_matrix = await _run_action_matrix()
     captured_at = _utc_now()
     run_id = f"hook-middleware-e2e-{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}"
     session_key = f"{run_id}:suite"
@@ -547,12 +741,8 @@ async def _run(
     expected_hook_counts = {
         hook.value: 2 if hook is HookName.PRE_TOOL_USE else 1 for hook in HookName
     }
-    expected_tool_middleware_counts = {"tool_request": 1, "tool_execution": 1}
-    llm_calls = probe_middleware.counts["llm_request"]
-    expected_extension_rows = (
-        sum(expected_hook_counts.values())
-        + sum(expected_tool_middleware_counts.values())
-        + (2 * llm_calls)
+    expected_extension_rows = sum(expected_hook_counts.values()) + sum(
+        probe_middleware.counts.values()
     )
 
     _require(
@@ -568,17 +758,8 @@ async def _run(
         {"missing_middleware": sorted(expected_middleware - observed_middleware)},
     )
     _require(
-        all(
-            probe_middleware.counts[surface] == count
-            for surface, count in expected_tool_middleware_counts.items()
-        )
-        and llm_calls >= 2
-        and probe_middleware.counts["llm_execution"] == llm_calls,
-        {
-            "expected_tool_middleware_counts": expected_tool_middleware_counts,
-            "llm_contract": "at least two paired request/execution calls",
-            "observed": probe_middleware.counts,
-        },
+        _middleware_counts_are_valid(probe_middleware.counts),
+        {"invalid_middleware_counts": probe_middleware.counts},
     )
     _require(
         probe_tool.calls == ["public-hook-rewrite"],
@@ -678,6 +859,7 @@ async def _run(
             "pairing_rule": "tool_result.call_id equals the preceding tool_call.call_id",
         },
         outcome={
+            "behavior_matrix": behavior_matrix,
             "hook_coverage": {
                 "covered": len(observed_hooks),
                 "expected": len(expected_hooks),
@@ -696,8 +878,9 @@ async def _run(
             "timeline_extension_rows": len(timeline_extensions),
             "unscored_reason": "release validation probe, not a benchmark task",
             "verifier": (
-                "explicit release gates over exact hook/middleware multiplicity, exactly-once "
-                "tool execution, SQLite/JSONL parity, correlation, and persisted compaction"
+                "explicit release gates over exact hook multiplicity, one tool request/execution, "
+                "paired LLM request/execution, SQLite/JSONL parity, correlation, and persisted "
+                "compaction"
             ),
         },
         privacy={
@@ -732,6 +915,7 @@ async def _run(
                 "sqlite_extension_rows": len(sqlite_extensions),
                 "timeline_extension_rows": len(timeline_extensions),
             },
+            "behavior_matrix": behavior_matrix,
         },
         source={
             "harness": "scripts/eval/run_hook_behavior_e2e.py",
@@ -797,6 +981,7 @@ async def _run(
         "artifact_inventory": generated_files,
         "captured_at": captured_at,
         "geode_revision": geode_revision,
+        "behavior_matrix": behavior_matrix,
         "hook_coverage": sorted(observed_hooks),
         "middleware_counts": probe_middleware.counts,
         "model_route": {

@@ -69,9 +69,8 @@ __all__ = [
 ]
 
 
-# PR-CRED-SOURCE-CENTRALIZE (2026-05-29) — ``Source`` is now a backward-compat
-# re-export of the canonical :class:`core.config.credential_source.CredentialSource`
-# enum (single SoT). Previously this module, ``MutatorConfig.source``,
+# PR-CRED-SOURCE-CENTRALIZE (2026-05-29) made CredentialSource the single SoT.
+# Previously this module, ``MutatorConfig.source``,
 # ``plugins.seed_generation.auth_coverage.Source`` and
 # ``settings.{provider}_credential_source`` each spelled the source set
 # differently (``api_key`` in some, not others; ``auto`` in some, not others) —
@@ -86,7 +85,7 @@ __all__ = [
 # ``source = "api_key"`` to opt in. The earlier type-level exclusion only caused
 # the fragmentation above and blocked that explicit opt-in.
 Source = CredentialSource
-"""Backward-compat alias of :class:`CredentialSource` (the canonical enum)."""
+"""Public compatibility alias; model fields use :class:`CredentialSource` directly."""
 
 
 class SelfImprovingLoopBindings(BaseModel):
@@ -118,7 +117,7 @@ class SelfImprovingLoopBindings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     model: str
-    source: Source
+    source: CredentialSource
     num_turns: int = 0
     max_papers: int = 0
     queries_per_run: int = 3
@@ -184,7 +183,7 @@ class PetriRoleConfig(BaseModel):
     # 가 PAYG 까지 fallback 할 수 있어서 silent leak risk — 명시
     # ``claude-cli`` (Claude Code Max OAuth) 이 default 면 leak 0. operator
     # 가 explicit 으로 ``auto`` 또는 ``openai-codex`` 명시 시 그대로 적용.
-    source: Source = CredentialSource.CLAUDE_CLI
+    source: CredentialSource = CredentialSource.CLAUDE_CLI
 
 
 class AutoresearchConfig(BaseModel):
@@ -325,7 +324,7 @@ class AutoresearchConfig(BaseModel):
     # 으로 ``api_key`` 는 ``Source`` literal 에서 제거. ``auto`` 는 manifest
     # cascade 가 PAYG 까지 silent fallback 가능 → ``claude-cli`` (Claude
     # Code Max OAuth) 가 새 default.
-    source: Source = CredentialSource.CLAUDE_CLI
+    source: CredentialSource = CredentialSource.CLAUDE_CLI
     """Credential source for the audit subprocess. PR-SIL-5THEME C6 후 PAYG
     (``api_key``) 는 Source literal 에서 제거. ``claude-cli`` = Claude Code
     Max OAuth (default), ``openai-codex`` = ChatGPT subscription OAuth, ``auto`` =
@@ -576,7 +575,7 @@ class SelfImprovingLoopConfig(BaseModel):
     default) aborts with an actionable error. Codex CLI's
     ``forced_login_method`` pattern."""
 
-    openai_source: Source | None = None
+    openai_source: CredentialSource | None = None
     """Single entry point for the OpenAI credential lane of the **autoresearch
     audit subprocess, target, and mutator** roles.
 
@@ -716,7 +715,7 @@ class SelfImprovingLoopConfig(BaseModel):
         lane = self.openai_source
         ar = self.autoresearch
 
-        def _apply(current: Source, explicit: bool, path: str) -> Source:
+        def _apply(current: CredentialSource, explicit: bool, path: str) -> CredentialSource:
             # Authoritative: openai_source supersedes an explicit per-role pin, but
             # WARNS (not raises) so the resolved lane is deterministic even on the
             # ``read_role_override`` path that swallows ValidationError for graceful
@@ -749,7 +748,9 @@ class SelfImprovingLoopConfig(BaseModel):
 
     @field_validator("openai_source")
     @classmethod
-    def _openai_source_is_openai_lane(cls, value: Source | None) -> Source | None:
+    def _openai_source_is_openai_lane(
+        cls, value: CredentialSource | None
+    ) -> CredentialSource | None:
         """Restrict the knob to the two OpenAI credential lanes.
 
         ``openai_source`` is an OpenAI-lane selector, not a general source default —

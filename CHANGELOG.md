@@ -79,6 +79,15 @@ functional change.
 - **Trajectory staging accepts canonical filesystem aliases.** The public
   release root is resolved before containment checks, so macOS `/tmp` and
   other symlinked destinations no longer fail as false path escapes.
+- **Denied pending IPC approval immediately on disconnect.** Reader EOF and
+  daemon shutdown now wake the endpoint's pending approval as a fail-closed
+  denial instead of waiting for the 120-second user-response timeout.
+- **Made `core.agent.sub_agent` safe to import first.** `WorkerRequest` now
+  loads only when the subprocess request path runs, breaking the cold-import
+  cycle through `worker`, `loop.__init__`, and `AgenticLoop`.
+- **Preserved isolated-runner failure identity.** Unexpected runner exceptions
+  now reach `SubResult.error` with their type and message instead of being
+  mislabeled as a timeout.
 
 ### Removed
 
@@ -87,8 +96,44 @@ functional change.
   per-batch TaskGraph overlay, and inert MCP/skill manager references are gone.
   Its 31 queue/injection-specific cases and adjacent duplicate stubs were
   replaced by smaller durable-store, public-tool, checkpoint, race, and E2E
-  coverage; the selected non-live test ratchet moves from 10,441 to the
-  measured 10,424 rather than preserving tests for deleted behavior.
+  coverage; after reconciling newer `develop` coverage, the selected non-live
+  test ratchet is the measured 10,433 rather than preserving tests for deleted
+  behavior.
+- **Retired dead runtime migration residue.** The CLI daemon now has one
+  asyncio IPC path instead of retaining its unreachable socket/thread
+  predecessor and raw-socket approval implementation. Caller-free no-op hooks,
+  private delegates, stale legacy-import exemptions, and private parser aliases
+  were removed. Public compatibility imports remain thin bridges to their
+  canonical APIs. Removing two tests that exercised only the deleted raw-socket
+  timeout/disconnect path moves the selected-test ratchet from 10,441 to the
+  measured 10,439; endpoint-level disconnect denial remains covered.
+
+### Infrastructure
+
+- **Expanded hook behavior release evidence.** The existing live hook E2E now
+  also gates block, deny, pre-start cancellation, handler failure, middleware
+  short-circuit/single-use `next_call`, and sub-agent timeout behavior without
+  spending additional model tokens.
+
+- **Release-facing documentation now fails closed on stale public contracts.**
+  The official docs gate requires both READMEs to carry the canonical runtime
+  and evaluation-substrate identity and requires `SECURITY.md` to mark the
+  package's current major/minor series as supported.
+
+## [1.0.15] - 2026-08-07
+
+> PostVerify control release: deterministic default decisions now feed the
+> bounded revise/replan path, while decision provenance remains replayable in
+> the semantic session timeline.
+
+### Changed
+
+- **PostVerify now controls delivery by default.** With no external handler,
+  passing candidates are accepted, retryable failures enter the existing
+  bounded revise/replan path, and non-retryable failures pause for external
+  verification. Revision instructions now use the dynamic system context
+  instead of user-role history, and candidate-digest-bound handler decisions
+  persist in the semantic session timeline for trajectory reconstruction.
 
 ## [1.0.14] - 2026-08-05
 
@@ -1863,7 +1908,6 @@ functional change.
   `ScrollReveal`).
 
 ---
-=======
 ## [0.99.290] - 2026-07-10
 
 ### Added

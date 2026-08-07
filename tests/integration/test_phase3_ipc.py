@@ -209,9 +209,8 @@ class TestCLIPoller:
             async def drain_pending_sends(self) -> None:
                 return None
 
-            def sendall(self, payload: bytes) -> None:
-                for line in payload.decode("utf-8").splitlines():
-                    self.messages.append(json.loads(line))
+            def send_json_threadsafe(self, message: dict[str, Any]) -> None:
+                self.messages.append(message)
 
         def make_result(text: str) -> MagicMock:
             result = MagicMock()

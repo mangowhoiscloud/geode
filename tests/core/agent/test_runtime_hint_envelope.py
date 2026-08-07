@@ -7,7 +7,10 @@ closed envelope, and the mid-run rebuild dropped the preflight hint.
 
 from __future__ import annotations
 
-from core.agent.loop._context import inject_runtime_hints
+from core.agent.loop._context import (
+    inject_runtime_hints,
+    render_verification_continuation_hint,
+)
 
 
 def test_hints_inserted_inside_envelope() -> None:
@@ -27,6 +30,15 @@ def test_no_envelope_appends_plainly() -> None:
 def test_empty_and_non_str_hints_are_dropped() -> None:
     prompt = "S\n\n<dynamic_context>\n\nd\n\n</dynamic_context>"
     assert inject_runtime_hints(prompt, "", None) == prompt
+
+
+def test_verification_continuation_is_a_bounded_system_hint() -> None:
+    hint = render_verification_continuation_hint("Repair <unsafe> & retry.")
+    assert hint == (
+        "<verification_continuation>\n"
+        "Repair &lt;unsafe&gt; &amp; retry.\n"
+        "</verification_continuation>"
+    )
 
 
 def test_reflection_str_payload_parsed() -> None:

@@ -237,7 +237,7 @@
   "coordinators": {
     "AgenticLoop": {
       "constructor_arg_count": 27,
-      "file_loc": 2983,
+      "file_loc": 2999,
       "method_count": 74,
       "path": "core/agent/loop/agent_loop.py"
     },
@@ -247,7 +247,7 @@
     },
     "SubAgentManager": {
       "constructor_arg_count": 15,
-      "file_loc": 1436,
+      "file_loc": 1441,
       "method_count": 24,
       "path": "core/agent/sub_agent.py"
     }
@@ -352,7 +352,7 @@
         "path": "core/llm/adapters/provider_inference.py"
       },
       {
-        "line": 315,
+        "line": 293,
         "module": "plugins.petri_audit.claude_cli_provider",
         "path": "core/llm/errors.py"
       },
@@ -528,15 +528,15 @@
   "packages": {
     "core": {
       "python_files": 432,
-      "python_loc": 139404
+      "python_loc": 139119
     },
     "plugins": {
       "python_files": 111,
-      "python_loc": 41869
+      "python_loc": 41831
     },
     "tests": {
-      "python_files": 681,
-      "python_loc": 178919
+      "python_files": 682,
+      "python_loc": 179179
     }
   },
   "schema_version": 1,

@@ -75,7 +75,13 @@ revision, 외부 판단 escalation을 선택한다.
 hook은 built-in 실패를 성공으로 뒤집을 수 없다. revision 횟수는 고정되어
 있고 이미 끝난 tool side effect를 재생하지 않은 채 follow-up turn을 시작한다.
 따라서 evaluator, CI, human-review 같은 외부 loop가 `PostVerify`를 안전하게
-사용하면서도 GEODE verifier의 단조 권위를 보존한다. escalation은 telemetry
+사용하면서도 GEODE verifier의 단조 권위를 보존한다. 외부 `PostVerify`
+handler가 결정을 반환하지 않으면 runtime은 같은 단조 기본 정책을 적용한다.
+pass는 accept, 재시도 가능한 실패는 revise, 재시도 불가능한 실패는
+escalate한다. revision 지시는 dynamic system context에 한 번만 들어가며 user
+message나 task decomposition으로 전달되지 않는다. `verification.decided`는
+후보 본문을 복제하지 않고 최종 정책과 handler별 결정을 후보 SHA-256 digest,
+root turn, verify attempt에 결합한다. escalation은 telemetry
 표식이 아니라 delivery gate다. GEODE는 세션을
 `external_verification_required`로 pause하고 후보를
 `AgenticResult.pending_text`로 외부 소유자에게만 돌려주며 terminal

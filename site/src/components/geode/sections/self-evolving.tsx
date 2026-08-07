@@ -3,9 +3,9 @@
 import { useLocale, t } from "../locale-context";
 
 /**
- * SelfEvolvingSection. The differentiator.
+ * SelfEvolvingSection. Experimental scaffold optimization.
  *
- * GEODE improves by mutating the scaffolding around itself (system prompt,
+ * GEODE evaluates mutations to the scaffolding around itself (system prompt,
  * tool policy, decomposition, reflection, skills), never the model weights.
  * The change is non-parametric: the weights are frozen and only the harness
  * around them moves. Each candidate change is measured by an adversarial
@@ -34,13 +34,13 @@ export function SelfEvolvingSection() {
           </span>
         </div>
         <h2 className="mt-4 font-display tracking-tight text-[var(--ink)] text-[clamp(1.85rem,3.8vw,2.6rem)] leading-[1.12] font-semibold">
-          {t(locale, "self-evolving, 비-파라메트릭", "Self-evolving, non-parametric")}
+          {t(locale, "실험적 스캐폴드 최적화", "Experimental scaffold optimization")}
         </h2>
         <p className="mt-4 text-[var(--ink-2)] leading-[1.75] text-[16px]">
           {t(
             locale,
-            "GEODE는 자기 자신을 둘러싼 스캐폴딩을 바꾸면서 개선됩니다. 모델 가중치는 절대 건드리지 않습니다.",
-            "GEODE improves by mutating the scaffolding around itself, never the model weights."
+            "GEODE는 모델 가중치가 아닌 스캐폴드 후보를 변이하고 평가합니다. 공개 기록은 아직 지속적인 개선을 입증하지 않습니다.",
+            "GEODE mutates and evaluates scaffold candidates, never model weights. The public record does not yet establish sustained improvement."
           )}
         </p>
 

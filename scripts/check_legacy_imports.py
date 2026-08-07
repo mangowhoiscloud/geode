@@ -3,8 +3,6 @@
 
 Checks only files changed since base-ref (default: origin/develop).
 Exits non-zero if any legacy import is found in changed files.
-Bridge proxy files themselves are excluded from checking.
-
 Usage:
     python scripts/check_legacy_imports.py
     python scripts/check_legacy_imports.py --base-ref origin/main
@@ -60,41 +58,6 @@ LEGACY_PATTERNS: list[tuple[str, str]] = [
     (r"from core\.infrastructure\.ports\.calendar_port\b", "core.mcp.calendar_port"),
 ]
 
-# Bridge proxy files are exempt (they ARE the re-export layer).
-# v0.52 — ui/ + auth/ 는 이제 top-level 정식 위치이므로 exempt 불필요.
-EXEMPT_FILES = {
-    "core/nodes/__init__.py",
-    "core/fixtures/__init__.py",
-    "core/extensibility/__init__.py",
-    "core/extensibility/_frontmatter.py",
-    "core/extensibility/agents.py",
-    "core/extensibility/plugins.py",
-    "core/extensibility/reports.py",
-    "core/extensibility/skills.py",
-    "core/cli/agentic_loop.py",
-    "core/cli/sub_agent.py",
-    "core/cli/conversation.py",
-    "core/cli/error_recovery.py",
-    "core/cli/tool_executor.py",
-    "core/cli/system_prompt.py",
-    "core/infrastructure/adapters/mcp/__init__.py",
-    "core/infrastructure/adapters/mcp/apple_calendar_adapter.py",
-    "core/infrastructure/adapters/mcp/base.py",
-    "core/infrastructure/adapters/mcp/brave_adapter.py",
-    "core/infrastructure/adapters/mcp/catalog.py",
-    "core/infrastructure/adapters/mcp/composite_calendar.py",
-    "core/infrastructure/adapters/mcp/composite_notification.py",
-    "core/infrastructure/adapters/mcp/discord_adapter.py",
-    "core/infrastructure/adapters/mcp/google_calendar_adapter.py",
-    "core/infrastructure/adapters/mcp/manager.py",
-    "core/infrastructure/adapters/mcp/registry.py",
-    "core/infrastructure/adapters/mcp/slack_adapter.py",
-    "core/infrastructure/adapters/mcp/stdio_client.py",
-    "core/infrastructure/adapters/mcp/telegram_adapter.py",
-    "core/infrastructure/ports/notification_port.py",
-    "core/infrastructure/ports/calendar_port.py",
-}
-
 
 def main() -> int:
     base = "origin/develop"
@@ -109,9 +72,7 @@ def main() -> int:
         )
     except GitExecutableNotFoundError:
         raise SystemExit("git executable not found") from None
-    changed = [
-        f for f in result.stdout.strip().split("\n") if f.endswith(".py") and f not in EXEMPT_FILES
-    ]
+    changed = [f for f in result.stdout.strip().split("\n") if f.endswith(".py")]
 
     violations: list[str] = []
     for filepath in changed:

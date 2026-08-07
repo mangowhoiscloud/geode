@@ -17,7 +17,6 @@ from typing import TYPE_CHECKING, Any
 
 from core.agent.cognitive_state_ctx import get_session_id, get_turn_id
 from core.agent.safety import SUBAGENT_CONTROL_TOOLS
-from core.agent.worker import WorkerRequest
 from core.hooks import (
     HookCorrelation,
     HookName,
@@ -35,6 +34,7 @@ from core.tools.base import load_tool_definition
 from core.tools.personal_data import PERSONAL_DATA_TOOLS
 
 if TYPE_CHECKING:
+    from core.agent.worker import WorkerRequest
     from core.skills.agents import AgentRegistry
 
 log = logging.getLogger(__name__)
@@ -554,9 +554,13 @@ class SubAgentManager:
                 else:
                     # Thread mode — legacy callable + SubTask arg.
                     isolation = await self._runner.arun(fn_or_request, args=(task,), config=config)
-            except Exception as exc:  # pragma: no cover — defensive
+            except Exception as exc:
                 log.warning("adelegate: arun raised for %s — %s", task.task_id, exc)
-                isolation = None
+                isolation = IsolationResult(
+                    session_id=task.task_id,
+                    success=False,
+                    error=f"{type(exc).__name__}: {exc}",
+                )
             sub_result = self._to_sub_result(task, isolation)
             if sub_result.success:
                 await self._emit_hook(
@@ -1077,6 +1081,7 @@ class SubAgentManager:
         # kwarg (or empty when the manager was built at gateway
         # startup without a parent context).
         from core.agent.cognitive_state_ctx import get_session_id
+        from core.agent.worker import WorkerRequest
 
         parent_uuid = get_session_id()
 

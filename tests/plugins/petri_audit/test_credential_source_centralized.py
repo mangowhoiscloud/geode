@@ -32,8 +32,6 @@ def test_canonical_membership_is_stable() -> None:
 
 
 def test_self_improving_loop_source_alias_is_canonical() -> None:
-    """``self_improving_loop.Source`` is a re-export of the canonical enum,
-    not a second Literal."""
     from core.config.self_improving import Source
 
     assert Source is CredentialSource

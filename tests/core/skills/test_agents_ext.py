@@ -6,11 +6,11 @@ from pathlib import Path
 
 import pytest
 from core.config import ANTHROPIC_SECONDARY
+from core.skills._frontmatter import parse_yaml_frontmatter
 from core.skills.agents import (
     AgentDefinition,
     AgentRegistry,
     SubagentLoader,
-    _parse_yaml_frontmatter,
 )
 
 
@@ -95,7 +95,7 @@ class TestAgentRegistry:
 class TestYamlFrontmatter:
     def test_parse_valid_frontmatter(self):
         text = "---\nname: test\nrole: Tester\ntools: [a, b]\n---\nBody text here."
-        meta, body = _parse_yaml_frontmatter(text)
+        meta, body = parse_yaml_frontmatter(text)
         assert meta["name"] == "test"
         assert meta["role"] == "Tester"
         assert meta["tools"] == ["a", "b"]
@@ -103,13 +103,13 @@ class TestYamlFrontmatter:
 
     def test_no_frontmatter(self):
         text = "Just plain markdown content."
-        meta, body = _parse_yaml_frontmatter(text)
+        meta, body = parse_yaml_frontmatter(text)
         assert meta == {}
         assert body == text
 
     def test_quoted_values(self):
         text = "---\nname: \"my_agent\"\nrole: 'Specialist'\n---\nPrompt."
-        meta, body = _parse_yaml_frontmatter(text)
+        meta, body = parse_yaml_frontmatter(text)
         assert meta["name"] == "my_agent"
         assert meta["role"] == "Specialist"
 
@@ -164,10 +164,8 @@ class TestSubagentLoader:
         assert len(agents) == 2
         assert len(registry) == 2
 
-    def test_default_agents_dir(self):
+    def test_default_agents_dirs(self):
         loader = SubagentLoader()
-        # CSP-9 — primary dir is still .claude/agents (operator override
-        # precedence). Plugin-shipped agent dirs follow.
         assert loader.agents_dir == Path(".claude/agents")
         assert loader.agents_dirs[0] == Path(".claude/agents")
 

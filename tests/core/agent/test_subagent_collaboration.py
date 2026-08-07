@@ -83,6 +83,19 @@ def test_background_collaboration_rejects_uncancellable_thread_workers(tmp_path)
         )
 
 
+def test_delegate_normalizes_runner_exception() -> None:
+    class RaisingRunner(IsolatedRunner):
+        async def arun(self, *_args: Any, **_kwargs: Any) -> IsolationResult:
+            raise RuntimeError("runner failed")
+
+    manager = SubAgentManager(RaisingRunner(), action_handlers={})
+    results = asyncio.run(manager.adelegate([SubTask("child-fail", "inspect", "analyze")]))
+
+    assert len(results) == 1
+    assert results[0].success is False
+    assert results[0].error == "RuntimeError: runner failed"
+
+
 def test_background_child_mailbox_wait_and_completion(tmp_path) -> None:
     async def scenario() -> None:
         runner = _ControlledRunner()

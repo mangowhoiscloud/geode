@@ -39,22 +39,17 @@ LEGACY_AUTH_STORE_PATH = Path.home() / ".geode" / "auth.json"
 def auth_store_path() -> Path:
     """Resolve the *current* auth store path (``~/.geode/auth.toml``).
 
-    v0.50.2 made auth.toml the SOT. Pre-v0.52.2 ``AUTH_STORE_PATH`` was an
-    alias for the legacy ``auth.json`` constant, so the OAuth success
-    message and other UX surfaces displayed a stale path even though the
-    actual write landed in ``auth.toml``. Resolving via ``auth_toml_path()``
-    keeps the display string honest and respects the ``GEODE_AUTH_TOML``
-    env override used by tests.
+    Resolving via ``auth_toml_path()`` keeps display strings aligned with the
+    actual store and respects the ``GEODE_AUTH_TOML`` test override.
     """
     from core.auth.auth_toml import auth_toml_path
 
     return auth_toml_path()
 
 
-# Backwards-compat alias — old callers imported the constant name.
-# Now resolves to the live auth.toml path so any consumer that *displays*
-# this value matches the actual SOT.
+# Public compatibility import. Runtime reads resolve through auth_store_path().
 AUTH_STORE_PATH = auth_store_path()
+
 
 # Plan ID we use for any OAuth token GEODE itself issued (vs. external
 # managed CLIs like ~/.codex/auth.json which keep their own SOT).
