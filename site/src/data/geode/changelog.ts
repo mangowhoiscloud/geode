@@ -19,7 +19,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": ""
+    "body": "### Changed\n\n- **PostVerify now controls delivery by default.** With no external handler,\n  passing candidates are accepted, retryable failures enter the existing\n  bounded revise/replan path, and non-retryable failures pause for external\n  verification. Revision instructions now use the dynamic system context\n  instead of user-role history, and candidate-digest-bound handler decisions\n  persist in the semantic session timeline for trajectory reconstruction."
   },
   {
     "version": "1.0.14",
