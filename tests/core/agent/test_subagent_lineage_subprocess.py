@@ -35,7 +35,7 @@ def test_sub_agent_can_be_imported_first_in_a_clean_interpreter() -> None:
         [
             sys.executable,
             "-c",
-            "from core.agent.sub_agent import SubAgentManager, SubAgentResult",
+            "from core.agent.sub_agent import SubAgentManager, SubResult",
         ],
         capture_output=True,
         text=True,
