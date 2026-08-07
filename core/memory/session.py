@@ -97,24 +97,6 @@ class InMemorySessionStore:
         self._evict_expired()
         return list(self._store.keys())
 
-    def save_checkpoint(self, session_id: str, checkpoint_data: dict[str, Any]) -> None:
-        """Save a checkpoint snapshot for a session."""
-        key = f"__checkpoint__:{session_id}"
-        self._store[key] = SessionEntry(data=checkpoint_data)
-        self._persist(key)
-
-    def load_checkpoint(self, session_id: str) -> dict[str, Any] | None:
-        """Load the most recent checkpoint for a session. Returns None if missing/expired."""
-        key = f"__checkpoint__:{session_id}"
-        entry = self._store.get(key)
-        if entry is None:
-            return None
-        if time.time() - entry.created_at > self._ttl:
-            del self._store[key]
-            self._remove_from_disk(key)
-            return None
-        return entry.data
-
     def _evict_expired(self) -> None:
         """Remove all expired entries."""
         now = time.time()

@@ -14,5 +14,3 @@ class TestSessionStorePort:
         assert hasattr(SessionStorePort, "set")
         assert hasattr(SessionStorePort, "delete")
         assert hasattr(SessionStorePort, "exists")
-        assert hasattr(SessionStorePort, "save_checkpoint")
-        assert hasattr(SessionStorePort, "load_checkpoint")

@@ -411,33 +411,6 @@ def build_hooks(
 
     _register_plugin("journal_hook", _reg_journal)
 
-    # C3: Auto-memory on turn complete (OpenClaw command:new pattern)
-    def _reg_turn_memory() -> None:
-        from core.tools import memory_tools
-
-        def _on_turn_complete(event: HookEvent, data: dict[str, Any]) -> None:
-            pm = memory_tools._project_memory_ctx.get()
-            if pm is None:
-                return
-            text = data.get("text", "")
-            user_input = data.get("user_input", "")
-            tools = data.get("tool_calls", [])
-            if not text or len(text) < 20:
-                return  # too short to be useful
-            # Build concise insight from turn
-            tool_str = ", ".join(t for t in tools[:5] if t) or "none"
-            insight = f"[turn] {user_input[:80]} → tools=[{tool_str}]"
-            pm.add_insight(insight)
-
-        hooks.register(
-            HookEvent.TURN_COMPLETED,
-            _on_turn_complete,
-            name="turn_auto_memory",
-            priority=85,
-        )
-
-    _register_plugin("turn_memory_hook", _reg_turn_memory)
-
     # C3b: Auto-learn user patterns on turn complete (Tier 0.5 cross-session memory)
     def _reg_auto_learn() -> None:
         from core.hooks.auto_learn import make_auto_learn_handler

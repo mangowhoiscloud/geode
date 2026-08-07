@@ -74,16 +74,6 @@ class TestSessionFilePersistence:
         store.delete("s1")
         assert store.get("s1") is None
 
-    def test_checkpoint_persisted(self, tmp_path: Path):
-        """Checkpoints are also file-backed."""
-        store1 = InMemorySessionStore(ttl=3600, storage_dir=tmp_path)
-        store1.save_checkpoint("sess-1", {"step": 3})
-
-        store2 = InMemorySessionStore(ttl=3600, storage_dir=tmp_path)
-        cp = store2.load_checkpoint("sess-1")
-        assert cp is not None
-        assert cp["step"] == 3
-
 
 # ---------------------------------------------------------------------------
 # 2. Multi-subject LRU result cache

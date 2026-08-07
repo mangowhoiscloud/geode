@@ -296,7 +296,9 @@ surface (`core/agent/tool_policy.py`).
 2. `ContextAssembler.assemble() -> dict` plus `GeodeRuntime.assemble_context()`:
    dead model-input API. Reuse only required wired reads in the typed snapshot
    builder; delete unconditional journal/vault/dream injection.
-3. `ProjectJournal` learned/cost/error APIs: no production callers.
+3. `ProjectJournal` learned-write/cost/error APIs: no production callers. The
+   historical learned reader remains referenced by the explicit assembler
+   facade and retires with that facade, not in the first cleanup.
 4. ProjectJournal subagent hooks and `runs.jsonl`: duplicate subagent lifecycle
    after parity with `session_events` is proven.
 5. `InMemorySessionStore.save_checkpoint/load_checkpoint` and the matching
@@ -787,7 +789,7 @@ and promotion decisions.
 | heuristic/LLM direct `learned.md` writes | `context_artifacts(memory_candidate)` | exact explicit intent may use fast admission; inference never writes active memory |
 | candidate decision state | `context_artifacts(memory_admission_decision)` + accepted-file provenance | immutable row, semantic event, and target digest must agree; no new JSONL ledger |
 | ProjectJournal `runs.jsonl` | deletion by default | prove start/stop/failure/status parity, preserve historical file; add an independently retained materialized view only for a measured external consumer |
-| ProjectJournal learned/cost/error APIs | none | remove code; never delete historical user files automatically |
+| ProjectJournal learned-write/cost/error APIs | none | remove caller-free writers/aggregate code; keep the historical learned reader until the explicit assembler facade retires; never delete historical user files automatically |
 | `SessionStorePort` checkpoint methods | `SessionCheckpoint` | remove dead protocol/class methods and tests |
 | independent checkpoint/metadata writes | SQLite `session_checkpoints` + messages in one transaction | typed schema, generation, state/message hashes, crash-injection tests |
 | `messages.json` writer | SQLite messages | global backfill, per-session count/hash parity, stop writer; legacy file is one-time migration input, then cleanup |
@@ -822,7 +824,8 @@ run and byte-reclamation report.
 - fix `_build_user_context()` to use the wired profile;
 - delete `turn_auto_memory`;
 - remove dead `SessionStorePort` checkpoint methods;
-- remove dead ProjectJournal learned/cost/error methods;
+- remove dead ProjectJournal learned-write/cost/error methods while retaining
+  the historical learned reader used by the explicit assembler facade;
 - correct documentation that claims every LLM call uses `ContextAssembler`;
 - keep the current live prompt path unchanged beyond the profile bug so the
   next shadow comparison has a stable baseline.

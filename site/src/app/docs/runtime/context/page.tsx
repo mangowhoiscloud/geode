@@ -8,25 +8,28 @@ export default function Page() {
       slug="runtime/context"
       title="Context assembly"
       titleKo="컨텍스트 조립"
-      summary="Every LLM call's context is built here. Memory tiers plus prompt layers, under a token budget."
-      summaryKo="모든 LLM 호출의 컨텍스트가 여기서 만들어집니다. 메모리 계층과 프롬프트 레이어를 토큰 예산 안에서 합칩니다."
+      summary="The live system-prompt path and the explicit five-tier context facade, under a token budget."
+      summaryKo="실제 시스템 프롬프트 경로와 명시적 5계층 context facade를 토큰 예산과 함께 설명합니다."
     >
       <Bi
         ko={
           <>
             <p>
-              LLM 호출 하나에 들어가는 컨텍스트는 세 재료로 만들어집니다. 메모리
-              계층의 요약, 레이어로 조립된 시스템 프롬프트, 그리고 대화
-              히스토리입니다. 이 페이지는 세 재료가 토큰 예산 안에서 어떻게
-              합쳐지고, 예산을 넘으면 무엇이 양보하는지 정리합니다.
+              기본 AgenticLoop의 모델 컨텍스트는 레이어로 조립된 시스템
+              프롬프트와 대화 히스토리로 만들어집니다. 이와 별도로
+              GeodeRuntime은 명시적 소비자를 위한 5계층 context facade를
+              제공합니다. 이 페이지는 두 경계를 구분하고, 토큰 예산을 넘으면
+              무엇이 양보하는지 정리합니다.
             </p>
 
-            <h2>재료 1: 메모리 계층</h2>
+            <h2>명시적 facade: 메모리 계층</h2>
             <p>
               <code>core/memory/context.py</code>의 <code>ContextAssembler</code>가
-              5계층 메모리를 병합하고, LLM에 넣을 <code>_llm_summary</code>를
-              만듭니다. 병합은 Identity, User Profile, Organization, Project,
-              Session 순서로 흐르고, 더 구체적인 계층이 앞 계층을 덮습니다.
+              5계층 메모리를 병합해 <code>_llm_summary</code>가 포함된 dict를
+              만듭니다. 이 경로는 <code>GeodeRuntime.assemble_context()</code>를
+              호출할 때만 실행되며 기본 AgenticLoop prompt에는 자동 연결되지
+              않습니다. 병합은 Identity, User Profile, Organization, Project,
+              Session 순서로 흐릅니다.
             </p>
             <table>
               <thead>
@@ -47,7 +50,7 @@ export default function Page() {
               다룹니다.
             </p>
 
-            <h2>재료 2: 시스템 프롬프트 레이어</h2>
+            <h2>실제 모델 경로: 시스템 프롬프트 레이어</h2>
             <p>
               <code>core/agent/system_prompt.py</code>의{" "}
               <code>build_system_prompt(model)</code>이 캐시 가능한 정적
@@ -215,19 +218,22 @@ export default function Page() {
         en={
           <>
             <p>
-              The context for one LLM call is built from three ingredients: a
-              summary of the memory tiers, a layered system prompt, and the
-              conversation history. This page covers how the three combine under
-              a token budget, and what yields when the budget is exceeded.
+              The default AgenticLoop model context combines a layered system
+              prompt with conversation history. Separately, GeodeRuntime exposes
+              a five-tier context facade to explicit callers. This page keeps
+              those boundaries distinct and explains what yields when the token
+              budget is exceeded.
             </p>
 
-            <h2>Ingredient 1: memory tiers</h2>
+            <h2>Explicit facade: memory tiers</h2>
             <p>
               <code>ContextAssembler</code> in <code>core/memory/context.py</code>{" "}
-              merges the five memory tiers and builds the <code>_llm_summary</code>{" "}
-              that prompt consumers read. Merge order is Identity, User
-              Profile, Organization, Project, then Session; more specific
-              tiers override earlier ones.
+              merges the five memory tiers and builds a dict containing
+              <code>_llm_summary</code>. This path runs only through
+              <code>GeodeRuntime.assemble_context()</code>; it is not
+              automatically connected to the default AgenticLoop prompt. Merge
+              order is Identity, User Profile, Organization, Project, then
+              Session.
             </p>
             <table>
               <thead>
@@ -248,7 +254,7 @@ export default function Page() {
               <a href="/geode/docs/runtime/memory/5-tier">Memory tiers</a>.
             </p>
 
-            <h2>Ingredient 2: system prompt layers</h2>
+            <h2>Live model path: system prompt layers</h2>
             <p>
               <code>build_system_prompt(model)</code> in{" "}
               <code>core/agent/system_prompt.py</code> assembles a cacheable

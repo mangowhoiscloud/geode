@@ -535,9 +535,11 @@ def _build_user_context() -> str:
     GEODE's identity comes from GEODE.md (G1 layer).
     """
     try:
-        from core.memory.user_profile import FileBasedUserProfile
+        from core.tools.profile_tools import get_user_profile
 
-        profile = FileBasedUserProfile()
+        profile = get_user_profile()
+        if profile is None:
+            return ""
         parts: list[str] = []
 
         # Profile summary (role, expertise, lang, skills)

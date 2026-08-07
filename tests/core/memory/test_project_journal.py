@@ -45,46 +45,17 @@ class TestProjectJournal:
         assert runs[0].summary == "Project Atlas S/81.3"
         assert runs[1].summary == "AI trends"
 
-    def test_record_cost(self, tmp_path):
-        journal = ProjectJournal(tmp_path / "journal")
-        journal.record_cost("claude-opus-4-6", 1200, 350, 0.015)
-        journal.record_cost("gpt-5.4", 800, 200, 0.005)
+    def test_reads_historical_learned_patterns_without_rewriting(self, tmp_path):
+        journal_dir = tmp_path / "journal"
+        journal_dir.mkdir()
+        learned_path = journal_dir / "learned.md"
+        original = b"- [domain] historical pattern (2026-08-01)\n"
+        learned_path.write_bytes(original)
 
-        summary = journal.get_project_cost_summary()
-        assert summary["total_calls"] == 2
-        assert summary["total_cost"] > 0
-        assert "claude-opus-4-6" in summary["by_model"]
+        patterns = ProjectJournal(journal_dir).get_learned_patterns()
 
-    def test_add_learned_dedup(self, tmp_path):
-        journal = ProjectJournal(tmp_path / "journal")
-        journal.add_learned("pattern A", "domain")
-        journal.add_learned("pattern A", "domain")  # duplicate
-
-        patterns = journal.get_learned_patterns()
-        # Should have only 1 (dedup)
-        matching = [p for p in patterns if "pattern A" in p]
-        assert len(matching) == 1
-
-    def test_add_learned_rotation(self, tmp_path):
-        journal = ProjectJournal(tmp_path / "journal")
-        for i in range(120):
-            journal.add_learned(f"pattern {i}", "test")
-
-        patterns = journal.get_learned_patterns()
-        assert len(patterns) <= 100
-        # Most recent should be preserved
-        assert any("pattern 119" in p for p in patterns)
-
-    def test_record_error(self, tmp_path):
-        journal = ProjectJournal(tmp_path / "journal")
-        journal.record_error("s1", "timeout", "API call timed out")
-
-        errors_file = tmp_path / "journal" / "errors.jsonl"
-        assert errors_file.exists()
-        line = errors_file.read_text().strip()
-        d = json.loads(line)
-        assert d["type"] == "timeout"
-        assert "timed out" in d["msg"]
+        assert patterns == ["- [domain] historical pattern (2026-08-01)"]
+        assert learned_path.read_bytes() == original
 
     def test_get_context_summary(self, tmp_path):
         journal = ProjectJournal(tmp_path / "journal")

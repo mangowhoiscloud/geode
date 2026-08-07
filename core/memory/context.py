@@ -1,10 +1,12 @@
-"""Context Assembler — 5-tier memory merge for pipeline context.
+"""Context Assembler — explicit 5-tier memory merge facade.
 
 Assembles context from Identity (Tier 0, SOUL.md) → User Profile
 (Tier 0.5) → Organization (Tier 1) → Project (Tier 2) → Session
 (Tier 3), where lower tiers override higher tiers.
 
-Architecture-v6 §3 Layer 2: Context Assembly.
+`GeodeRuntime.assemble_context()` exposes this facade to explicit callers. The
+default AgenticLoop system prompt is assembled separately in
+`core.agent.system_prompt`.
 """
 
 from __future__ import annotations
@@ -30,7 +32,7 @@ DEFAULT_RUN_HISTORY_MAX_ENTRIES = 3
 
 
 class ContextAssembler:
-    """Assemble pipeline context from 5-tier memory hierarchy.
+    """Assemble explicit context from the 5-tier memory hierarchy.
 
     Merge order: Identity (Tier 0, SOUL.md) → User Profile (Tier 0.5)
     → Organization (Tier 1) → Project (Tier 2) → Session (Tier 3).
