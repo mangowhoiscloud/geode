@@ -47,6 +47,11 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.16] - 2026-08-07
+
+> Runtime authority release: durable depth-one collaboration, one canonical
+> memory/profile contract, and immutable Luna/max behavior evidence.
+
 ### Added
 
 - **Durable depth-one sub-agent collaboration.** `spawn_agent` returns one
