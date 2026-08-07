@@ -9,6 +9,7 @@ thin one-line delegators.
 from __future__ import annotations
 
 import logging
+from html import escape
 from typing import TYPE_CHECKING, Any
 
 from core.agent.system_prompt import build_system_prompt as _build_system_prompt
@@ -144,3 +145,11 @@ def inject_runtime_hints(system_prompt: str, *hints: str | None) -> str:
     if idx >= 0 and not system_prompt[idx + len(closing) :].strip():
         return system_prompt[:idx] + payload + "\n\n" + system_prompt[idx:]
     return system_prompt + "\n\n" + payload
+
+
+def render_verification_continuation_hint(instruction: str) -> str:
+    """Render trusted revision control inside the dynamic system envelope."""
+    text = instruction.strip()
+    if not text:
+        return ""
+    return f"<verification_continuation>\n{escape(text, quote=False)}\n</verification_continuation>"
