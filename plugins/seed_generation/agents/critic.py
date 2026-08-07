@@ -141,8 +141,7 @@ class Critic(BaseSeedAgent):
             _CRITIC_AGENT_NAME,
         )
 
-        # announce=False — orchestrator already announces the parent phase.
-        results = await self._manager.adelegate(tasks, announce=False)
+        results = await self._manager.adelegate(tasks)
 
         # PR-SEEDGEN-TOKENS (2026-05-30) — sum sub-agent LLM usage (0 for
         # subscription calls) into this phase's result.

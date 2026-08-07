@@ -78,23 +78,9 @@ class GeodeBootstrap:
 
         # User profile (Tier 0.5)
         try:
-            from pathlib import Path
+            from core.wiring.bootstrap import ensure_user_profile
 
-            from core.config import settings
-            from core.memory.user_profile import FileBasedUserProfile
-            from core.paths import PROJECT_USER_PROFILE_DIR
-            from core.tools.profile_tools import set_user_profile
-
-            global_dir = Path(settings.user_profile_dir) if settings.user_profile_dir else None
-            if global_dir is None:
-                log.debug("Using default global profile dir: ~/.geode/user_profile")
-            project_dir = PROJECT_USER_PROFILE_DIR
-            set_user_profile(
-                FileBasedUserProfile(
-                    global_dir=global_dir,
-                    project_dir=project_dir if project_dir.parent.exists() else None,
-                )
-            )
+            ensure_user_profile()
         except Exception:
             log.debug("User profile propagation skipped", exc_info=True)
 
@@ -174,22 +160,9 @@ def setup_contextvars(*, load_env: bool = False) -> None:
 
     # 2.5. User Profile (Tier 0.5) — wire into profile tools via ContextVar
     try:
-        from pathlib import Path
+        from core.wiring.bootstrap import ensure_user_profile
 
-        from core.config import settings
-        from core.memory.user_profile import FileBasedUserProfile
-        from core.paths import PROJECT_USER_PROFILE_DIR
-        from core.tools.profile_tools import set_user_profile
-
-        global_dir = Path(settings.user_profile_dir) if settings.user_profile_dir else None
-        if global_dir is None:
-            log.debug("Using default global profile dir: ~/.geode/user_profile")
-        project_dir = PROJECT_USER_PROFILE_DIR
-        user_profile = FileBasedUserProfile(
-            global_dir=global_dir,
-            project_dir=project_dir if project_dir.parent.exists() else None,
-        )
-        set_user_profile(user_profile)
+        ensure_user_profile()
     except Exception:
         log.debug("User profile context skipped", exc_info=True)
 
@@ -266,6 +239,7 @@ async def arun_agentic_oneshot(
     from core.config import _resolve_provider
     from core.config import settings as _stk_settings
     from core.llm.adapters.registry import bootstrap_builtins
+    from core.wiring.bootstrap import ensure_user_profile
 
     # geode-mcp (and any caller that never went through GeodeRuntime.create)
     # has an EMPTY adapter registry — the first live run_agent over MCP
@@ -273,6 +247,7 @@ async def arun_agentic_oneshot(
     # Same pattern as core/agent/worker.py:858. Idempotent: already-
     # registered adapters are skipped.
     bootstrap_builtins()
+    ensure_user_profile()
 
     conversation = ConversationContext()
     handlers = _build_tool_handlers_for_fork()
@@ -285,9 +260,10 @@ async def arun_agentic_oneshot(
     if denied:
         log.info("Headless run_agent fork: denied tools filtered — %s", denied)
     handlers = {k: v for k, v in handlers.items() if k not in HEADLESS_DENIED_TOOLS}
-    # denied_tools is the REAL enforcement — run_bash / delegate_task are
-    # special-cased ahead of handler lookup, so the filter above alone cannot
-    # stop them (handler-filter is defense-in-depth for handler-dispatched tools).
+    # denied_tools is the REAL enforcement — run_bash and collaboration tools
+    # are special-cased ahead of handler lookup, so the filter
+    # above alone cannot stop them (handler-filter is defense-in-depth for
+    # handler-dispatched tools).
     executor = ToolExecutor(
         action_handlers=handlers,
         hitl_level=0,

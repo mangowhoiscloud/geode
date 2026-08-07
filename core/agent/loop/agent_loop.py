@@ -45,16 +45,13 @@ from core.ui.agentic_ui import OperationLogger
 from core.ui.status import TextSpinner
 
 from . import (
+    _collaboration_mailbox,
     _context,
     _lifecycle,
     _model_switching,
     _planner_dispatch,
     _response,
-    _sub_agent_announce,
 )
-
-# Re-exported for backward-compat module-attribute access
-# (some tests/utilities reach into ``core.agent.loop.MAX_TOOL_RESULT_TOKENS``)
 from ._tool_factory import (
     AGENTIC_TOOLS,
     MAX_TOOL_RESULT_TOKENS,
@@ -2147,8 +2144,12 @@ class AgenticLoop:
                 verification_hint=verification_hint,
             )
 
-            # Poll for sub-agent announced results (OpenClaw Spawn+Announce)
-            self._check_announced_results(messages)
+            # Admit durable child messages before their mailbox acknowledgement.
+            self._admit_collaboration_messages(
+                messages,
+                user_input=user_input,
+                round_idx=round_idx,
+            )
 
             # Pre-call context check — proactive compress/prune (prevents 400)
             try:
@@ -2639,12 +2640,23 @@ class AgenticLoop:
         return await _planner_dispatch.try_decompose(self, user_input)
 
     # ------------------------------------------------------------------
-    # Sub-agent announce queue — delegate to ``_sub_agent_announce``
+    # Durable child mailbox — delegate to ``_collaboration_mailbox``
     # ------------------------------------------------------------------
 
-    def _check_announced_results(self, messages: list[dict[str, Any]]) -> int:
-        """Delegates to :func:`_sub_agent_announce.check_announced_results`."""
-        return _sub_agent_announce.check_announced_results(self, messages)
+    def _admit_collaboration_messages(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        user_input: str = "",
+        round_idx: int = 0,
+    ) -> int:
+        """Delegates to :func:`_collaboration_mailbox.admit_collaboration_messages`."""
+        return _collaboration_mailbox.admit_collaboration_messages(
+            self,
+            messages,
+            user_input=user_input,
+            round_idx=round_idx,
+        )
 
     # ------------------------------------------------------------------
     # LLM call (stays in this file — tightly coupled to ``arun`` body)

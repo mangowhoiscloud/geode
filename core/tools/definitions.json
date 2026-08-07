@@ -546,7 +546,7 @@
   },
   {
     "name": "delegate_task",
-    "description": "Delegates a task to a sub-agent for parallel execution. Use when: (1) analyzing multiple subjects simultaneously, (2) running independent subtasks in parallel, (3) long-running tasks that shouldn't block the main conversation. Each sub-agent gets its own context and tool access. For sequential single tasks, execute directly instead.",
+    "description": "Delegates one or more tasks to sub-agents and waits for their completion. Use for independent parallel work or best-of-N candidate sampling. Use spawn_agent for a long-running child that the parent will control later.",
     "category": "planning",
     "cost_tier": "cheap",
     "input_schema": {
@@ -624,6 +624,151 @@
         }
       },
       "required": []
+    }
+  },
+  {
+    "name": "spawn_agent",
+    "description": "Starts one durable depth-one child and returns its stable task handle immediately. The child keeps its own checkpoint and can be inspected or controlled with the collaboration tools.",
+    "category": "planning",
+    "cost_tier": "cheap",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "task_description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "task_type": {
+          "type": "string",
+          "enum": [
+            "analyze",
+            "search",
+            "compare"
+          ]
+        },
+        "args": {
+          "type": "object"
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "repo_researcher",
+            "patcher",
+            "verifier",
+            "reviewer"
+          ]
+        }
+      },
+      "required": [
+        "task_description"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "list_agents",
+    "description": "Lists durable child tasks owned by the current parent session.",
+    "category": "planning",
+    "cost_tier": "free",
+    "input_schema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "wait_agent",
+    "description": "Waits for one child for a bounded interval without cancelling it.",
+    "category": "planning",
+    "cost_tier": "free",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "task_id": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "timeout_seconds": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 3600,
+          "description": "Bounded wait duration. A timeout never cancels the child."
+        }
+      },
+      "required": [
+        "task_id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "interrupt_agent",
+    "description": "Requests interruption of one live child owned by the current parent session.",
+    "category": "planning",
+    "cost_tier": "free",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "task_id": {
+          "type": "string",
+          "maxLength": 128
+        }
+      },
+      "required": [
+        "task_id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "send_message",
+    "description": "Queues context for a currently running child without starting another turn.",
+    "category": "planning",
+    "cost_tier": "free",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "task_id": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 16000
+        }
+      },
+      "required": [
+        "task_id",
+        "message"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "followup_task",
+    "description": "Delivers a follow-up to a running child, or resumes a terminal child from its checkpoint.",
+    "category": "planning",
+    "cost_tier": "free",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "task_id": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 16000
+        }
+      },
+      "required": [
+        "task_id",
+        "message"
+      ],
+      "additionalProperties": false
     }
   },
   {

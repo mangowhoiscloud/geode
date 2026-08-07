@@ -8,23 +8,52 @@ export default function Page() {
       slug="runtime/orchestration"
       title="Sub-agent orchestration"
       titleKo="서브에이전트 오케스트레이션"
-      summary="Spawning sub-agents as isolated worker processes in parallel lanes. The parent gets back a summary; write access is governed by toolkit composition."
-      summaryKo="서브에이전트를 격리된 워커 프로세스로 병렬 레인에서 띄웁니다. 부모는 요약만 받고, 쓰기 권한은 툴킷 구성으로 통제합니다."
+      summary="Foreground fan-out and durable depth-one child collaboration with independent rollouts."
+      summaryKo="포그라운드 fan-out과 독립 롤아웃을 가진 내구성 있는 depth-one 자식 협업입니다."
     >
       <Bi
         ko={
           <>
             <p>
-              부모 에이전트가 <code>delegate_task</code>를 호출하면{" "}
+              부모 에이전트가 <code>delegate_task</code> 또는{" "}
+              <code>spawn_agent</code>를 호출하면{" "}
               <code>core/agent/sub_agent.py</code>의{" "}
               <code>SubAgentManager</code>가 격리된 서브에이전트를 띄웁니다.
               실행은 <code>core/orchestration/isolated_execution.py</code>의{" "}
-              <code>IsolatedRunner</code>가 맡고, 작업 간 의존성은 TaskGraph
-              (<code>core/orchestration/task_system.py</code>)가 추적합니다.
+              <code>IsolatedRunner</code>가 맡습니다. 독립 작업은 실제로 병렬
+              실행되며 서브에이전트 경로에 별도 TaskGraph는 없습니다.
               스폰과 종료마다 <code>SUBAGENT_STARTED</code> /{" "}
               <code>SUBAGENT_COMPLETED</code> / <code>SUBAGENT_FAILED</code> 훅이
-              발화하고, 부모 세션 키가 있으면 Spawn+Announce로 진행 상황을
-              알립니다.
+              발화합니다. 장기 자식의 완료는 SQLite mailbox를 통해 안전한
+              부모 루프 경계에 전달됩니다.
+            </p>
+
+            <h2>백그라운드 협업</h2>
+            <p>
+              <code>delegate_task</code>는 완료까지 기다리는 fan-out/best-of-N
+              도구입니다. 장기 작업은 <code>spawn_agent</code>로 안정적인{" "}
+              <code>task_id</code>를 받고 부모 작업을 계속합니다. 제어 도구는
+              각각 <code>list_agents</code>, <code>wait_agent</code>,{" "}
+              <code>interrupt_agent</code>, <code>send_message</code>,{" "}
+              <code>followup_task</code>입니다. 대기 시간이 끝나도 자식은
+              취소되지 않습니다.
+            </p>
+            <table>
+              <thead><tr><th>동작</th><th>의미</th></tr></thead>
+              <tbody>
+                <tr><td><code>send_message</code></td><td>새 세대를 시작하지 않고 실행 중인 자식에게 컨텍스트를 큐잉</td></tr>
+                <tr><td><code>followup_task</code></td><td>실행 중이면 다음 루프 경계에 전달하고, 종료 상태면 같은 자식 세션을 재개</td></tr>
+              </tbody>
+            </table>
+            <p>
+              최신 상태와 메일박스 전달은 프로젝트 <code>sessions.db</code>의{" "}
+              <code>collaboration_runs</code>와 <code>collaboration_mailbox</code>에
+              저장합니다. 이 둘은 두 번째 transcript가 아니라 제어 투영입니다.
+              자식의 대화, 도구 호출, 훅, trajectory는 <code>messages</code>와
+              append-only <code>session_events</code>에 독립 롤아웃으로 남습니다.
+              mailbox는 자식 checkpoint 저장 뒤 승인됩니다. 재개는 완료된 도구
+              호출을 런타임이 자동 재생하지 않지만 모델이 같은 부작용을 다시
+              요청할 수 있으므로 exactly-once 계약은 아닙니다.
             </p>
 
             <h2>한도</h2>
@@ -41,7 +70,7 @@ export default function Page() {
                 <tr>
                   <td><code>max_total_subagents</code></td>
                   <td>15</td>
-                  <td>세션당 상한 (<code>core/config/_settings.py</code>)</td>
+                  <td>부모 세션당 고유 자식 상한; manager 재생성·resume에도 유지</td>
                 </tr>
                 <tr>
                   <td><code>timeout_s</code></td>
@@ -114,10 +143,10 @@ export default function Page() {
 
             <h2>결과와 오류 분류</h2>
             <p>
-              <code>SubAgentResult.status</code>는 ok / error / timeout /
-              partial 중 하나입니다. 사용량 롤업(prompt_tokens,
-              completion_tokens, usd_spent)이 결과에 실리며, 구독이나 CLI
-              레인으로 라우팅된 호출은 0으로 기록됩니다.
+              완료 봉투는 <code>SubResult</code> 하나입니다. <code>success</code>,{" "}
+              <code>output</code>, <code>error</code>, duration과 사용량 롤업
+              (prompt_tokens, completion_tokens, usd_spent)을 담습니다. 구독이나
+              CLI 레인에서 사용량을 제공하지 않으면 0으로 기록됩니다.
             </p>
 
             <h2>실패 모드</h2>
@@ -137,9 +166,14 @@ export default function Page() {
                   <td><code>GEODE_SUBAGENT_TIMEOUT_S</code>를 올립니다 (상한 3600)</td>
                 </tr>
                 <tr>
-                  <td>서브에이전트의 메모와 기록이 부모에 안 보임</td>
-                  <td>요약만 병합하는 격리 규칙</td>
-                  <td>남겨야 할 내용은 서브에이전트의 최종 요약에 포함시킵니다</td>
+                  <td>실행 중인 자식에게 보낸 메시지가 즉시 반영되지 않음</td>
+                  <td>메일박스는 안전한 루프 경계에서 소비됨</td>
+                  <td><code>wait_agent</code>로 상태를 확인하고, 필요하면 <code>followup_task</code>로 다음 세대를 시작합니다</td>
+                </tr>
+                <tr>
+                  <td>자식 실행 중 소유 런타임이 종료됨</td>
+                  <td>실행 중 프로세스는 다른 런타임이 인계하지 않음</td>
+                  <td>상태가 <code>interrupted</code>로 복구되면 부작용을 확인한 뒤 명시적으로 <code>followup_task</code>를 호출합니다</td>
                 </tr>
               </tbody>
             </table>
@@ -155,17 +189,46 @@ export default function Page() {
         en={
           <>
             <p>
-              When the parent agent calls <code>delegate_task</code>,{" "}
+              When the parent calls <code>delegate_task</code> or{" "}
+              <code>spawn_agent</code>,{" "}
               <code>SubAgentManager</code> in{" "}
               <code>core/agent/sub_agent.py</code> spawns an isolated sub-agent.
               Execution runs through <code>IsolatedRunner</code>{" "}
-              (<code>core/orchestration/isolated_execution.py</code>), and
-              dependencies between tasks are tracked by the TaskGraph
-              (<code>core/orchestration/task_system.py</code>). Every spawn and
+              (<code>core/orchestration/isolated_execution.py</code>). Independent
+              work runs concurrently; the sub-agent path has no separate
+              TaskGraph overlay. Every spawn and
               exit fires <code>SUBAGENT_STARTED</code> /{" "}
               <code>SUBAGENT_COMPLETED</code> / <code>SUBAGENT_FAILED</code>{" "}
-              hooks, and with a parent session key set, progress is announced
-              back (Spawn+Announce).
+              hooks. Durable child completion returns through the SQLite mailbox
+              at a safe parent-loop boundary.
+            </p>
+
+            <h2>Background collaboration</h2>
+            <p>
+              <code>delegate_task</code> waits for foreground fan-out or best-of-N.
+              For long work, <code>spawn_agent</code> returns a stable task id
+              immediately. The control tools are <code>list_agents</code>,{" "}
+              <code>wait_agent</code>, <code>interrupt_agent</code>,{" "}
+              <code>send_message</code>, and <code>followup_task</code>. A bounded
+              wait never cancels the child.
+            </p>
+            <table>
+              <thead><tr><th>Action</th><th>Meaning</th></tr></thead>
+              <tbody>
+                <tr><td><code>send_message</code></td><td>Queue context for a running child without starting a generation</td></tr>
+                <tr><td><code>followup_task</code></td><td>Deliver at the next loop boundary when running, or resume the same child session when terminal</td></tr>
+              </tbody>
+            </table>
+            <p>
+              Latest status and mailbox delivery live in the project{" "}
+              <code>sessions.db</code> tables <code>collaboration_runs</code> and{" "}
+              <code>collaboration_mailbox</code>. They are control projections,
+              not a second transcript. The child&apos;s dialogue, tool calls, hooks,
+              and trajectory remain an independent rollout in <code>messages</code>{" "}
+              and append-only <code>session_events</code>. Mail is acknowledged
+              only after the child checkpoint saves it. Resume does not replay a
+              tool call automatically, but the model can issue the same side
+              effect again; this is not an exactly-once contract.
             </p>
 
             <h2>Limits</h2>
@@ -182,7 +245,7 @@ export default function Page() {
                 <tr>
                   <td><code>max_total_subagents</code></td>
                   <td>15</td>
-                  <td>Per-session cap (<code>core/config/_settings.py</code>)</td>
+                  <td>Distinct durable-child cap per parent survives manager recreation; resume reuses the child slot</td>
                 </tr>
                 <tr>
                   <td><code>timeout_s</code></td>
@@ -257,10 +320,10 @@ export default function Page() {
 
             <h2>Results and error taxonomy</h2>
             <p>
-              <code>SubAgentResult.status</code> is one of ok / error / timeout /
-              partial. Usage rollups (prompt_tokens, completion_tokens,
-              usd_spent) ride along on the result; calls routed through
-              subscription or CLI lanes record 0.
+              The completion envelope is <code>SubResult</code>: success, output,
+              error, duration, and usage rollups (prompt_tokens,
+              completion_tokens, usd_spent). Subscription or CLI lanes record 0
+              when they do not expose usage.
             </p>
 
             <h2>Failure modes</h2>
@@ -280,9 +343,14 @@ export default function Page() {
                   <td>Raise <code>GEODE_SUBAGENT_TIMEOUT_S</code> (ceiling 3600)</td>
                 </tr>
                 <tr>
-                  <td>Sub-agent notes never appear in the parent</td>
-                  <td>The summary-only merge rule</td>
-                  <td>Put anything that must survive into the sub-agent&apos;s final summary</td>
+                  <td>A message sent to a running child is not reflected immediately</td>
+                  <td>The mailbox is consumed only at a safe loop boundary</td>
+                  <td>Use <code>wait_agent</code> to inspect status, then <code>followup_task</code> for a new generation if needed</td>
+                </tr>
+                <tr>
+                  <td>The owning runtime exits while a child is active</td>
+                  <td>Another runtime does not adopt the in-flight process</td>
+                  <td>After status recovers to <code>interrupted</code>, inspect side effects before an explicit <code>followup_task</code></td>
                 </tr>
               </tbody>
             </table>

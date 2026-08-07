@@ -256,4 +256,5 @@ class TestHookRegistration:
 
         all_hooks = hooks.list_hooks()
         assert "turn_auto_learn" in all_hooks.get("turn_completed", [])
+        assert "turn_auto_memory" not in all_hooks.get("turn_completed", [])
         hooks.close()

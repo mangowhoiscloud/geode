@@ -232,8 +232,9 @@ jobs:
             exit 1
           fi
           echo "Selected non-live test count: $count"
-          if [ "$count" -lt 10441 ]; then
-            echo "::error::Test count $count < 10441 (ratchet). Do not delete tests without justification."
+          # MEM-001 removes four tests for deleted duplicate checkpoint/journal APIs.
+          if [ "$count" -lt 10429 ]; then
+            echo "::error::Test count $count < 10429 (ratchet). Do not delete tests without justification."
             exit 1
           fi
 

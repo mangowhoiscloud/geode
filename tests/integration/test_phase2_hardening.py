@@ -189,10 +189,11 @@ class TestM2SchedulerPolicyChain:
     """Verify DANGEROUS tools are filtered in headless modes."""
 
     def test_headless_denied_tools_defined(self) -> None:
-        from core.agent.safety import HEADLESS_DENIED_TOOLS
+        from core.agent.safety import COLLABORATION_TOOLS, HEADLESS_DENIED_TOOLS
 
         assert "run_bash" in HEADLESS_DENIED_TOOLS
         assert "delegate_task" in HEADLESS_DENIED_TOOLS
+        assert COLLABORATION_TOOLS < HEADLESS_DENIED_TOOLS
         assert "computer" in HEADLESS_DENIED_TOOLS
 
     def test_scheduler_mode_filters_dangerous(self) -> None:

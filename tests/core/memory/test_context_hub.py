@@ -90,44 +90,38 @@ class TestUserContextSystemPrompt:
 
     def test_build_user_context_with_data(self, tmp_path: Path) -> None:
         from core.agent.system_prompt import _build_user_context
+        from core.memory.user_profile import FileBasedUserProfile
 
-        profile_dir = tmp_path / ".geode" / "user_profile"
-        profile_dir.mkdir(parents=True)
-        (profile_dir / "career.toml").write_text(
+        global_dir = tmp_path / "global"
+        project_dir = tmp_path / "project"
+        global_dir.mkdir()
+        project_dir.mkdir()
+        (global_dir / "career.toml").write_text(
             '[identity]\ntitle = "ML Engineer"\nexperience = "3y"\n'
             'skills = ["Python"]\n\n[goals]\nseeking = "startup"\n',
             encoding="utf-8",
         )
-        (profile_dir / "profile.md").write_text(
+        (global_dir / "profile.md").write_text(
             '---\nrole: "AI Engineer"\nexpertise: "ML, LLM"\n---\n',
             encoding="utf-8",
         )
+        (project_dir / "profile.md").write_text(
+            '---\nrole: "Project Operator"\n---\n',
+            encoding="utf-8",
+        )
+        profile = FileBasedUserProfile(global_dir=global_dir, project_dir=project_dir)
 
-        # P2 (v0.95.x) — patch the module-level constant directly. Patching
-        # `Path.home` no longer works because the constant was captured at
-        # `core.paths` import time.
-        with patch(
-            "core.memory.user_profile.GLOBAL_USER_PROFILE_DIR",
-            profile_dir,
-        ):
+        with patch("core.tools.profile_tools.get_user_profile", return_value=profile):
             result = _build_user_context()
 
-        # G1 (2026-05-12) — context blocks now wrap in XML tags
-        # instead of the prior "## User Context" markdown heading.
         assert "<user_context>" in result
+        assert "Project Operator" in result
         assert "ML Engineer" in result
 
-    def test_build_user_context_no_data(self, tmp_path: Path) -> None:
+    def test_build_user_context_without_wired_profile(self) -> None:
         from core.agent.system_prompt import _build_user_context
 
-        # P2 (v0.95.x) — `FileBasedUserProfile` now resolves its global dir
-        # from the module-level `GLOBAL_USER_PROFILE_DIR` constant imported
-        # from `core.paths`. Patch that symbol (not `Path.home`) so the
-        # profile reads from tmp_path instead of the live user-home.
-        with patch(
-            "core.memory.user_profile.GLOBAL_USER_PROFILE_DIR",
-            tmp_path / "user_profile",
-        ):
+        with patch("core.tools.profile_tools.get_user_profile", return_value=None):
             result = _build_user_context()
         assert result == ""
 

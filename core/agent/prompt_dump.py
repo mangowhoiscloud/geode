@@ -66,9 +66,12 @@ def assemble_full_prompt(model: str, surface: str) -> str:
     """Reproduce the loop's final system prompt for *model* on *surface*."""
     import os
 
+    from core.wiring.bootstrap import ensure_user_profile
+
     previous_surface = os.environ.get("GEODE_SURFACE_TYPE")
     os.environ["GEODE_SURFACE_TYPE"] = surface
     try:
+        ensure_user_profile()
         base = build_system_prompt(model=model)
     finally:
         if previous_surface is None:

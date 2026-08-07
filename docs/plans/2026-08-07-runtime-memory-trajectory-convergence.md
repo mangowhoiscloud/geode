@@ -1,8 +1,9 @@
 # Runtime memory · session record · trajectory convergence
 
-> Date: 2026-08-07  
-> Status: code-grounded research and implementation plan; no runtime behavior changed  
-> GEODE baseline: `origin/develop@bd9d8ccfea63dfc35b3fd1e1da30cbe7f2e89aae`  
+> Date: 2026-08-07
+> Status: MEM-001 authority-cleanup slice implemented and release-validated;
+> later convergence phases remain planned
+> GEODE baseline: `origin/develop@bd9d8ccfea63dfc35b3fd1e1da30cbe7f2e89aae`
 > Comparison baselines: Codex `main@0bdce9f424eb9b39d7b3a8811742d10b6fbf8d54`,
 > Hermes `main@eb8421ba9864cd58b0cf246cdffc6d45f6949372`
 
@@ -14,6 +15,26 @@ design evidence, not a competing delivery ledger. Implementation must first
 register any untracked architecture GAP through
 [`extensibility-roadmap.md`](../architecture/extensibility-roadmap.md) and
 follow that ledger's claim protocol.
+
+### Delivery checkpoint
+
+The MEM-001 slice implements only the measured deletion-first boundary:
+
+- the default prompt path now reuses the wired global plus project profile;
+- the implicit `turn_auto_memory` project-memory writer is removed;
+- caller-free duplicate checkpoint and project-journal write APIs are removed;
+- historical learned files remain readable without migration or rewrite;
+- the public context documentation now distinguishes the default prompt path
+  from the explicit `GeodeRuntime.assemble_context()` facade.
+
+The full snapshot, admission, transactional-checkpoint, and reward-projection
+phases below are not implied by this slice. Implementation PR
+[`#2903`](https://github.com/mangowhoiscloud/geode/pull/2903) passed the full
+non-live suite locally. Its live `gpt-5.6-luna` / subscription / effort `max`
+run covered all 13 public hooks and four trusted middleware seams, with 22
+SQLite rows matching 22 JSONL rows. The privacy-reviewed 27-event trajectory
+is pinned to
+[`geode-eval-artifacts@4903c31`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/4903c31abf983b7be076fd1e35775190fd6f4718).
 
 ## 1. Decision
 
@@ -296,7 +317,9 @@ surface (`core/agent/tool_policy.py`).
 2. `ContextAssembler.assemble() -> dict` plus `GeodeRuntime.assemble_context()`:
    dead model-input API. Reuse only required wired reads in the typed snapshot
    builder; delete unconditional journal/vault/dream injection.
-3. `ProjectJournal` learned/cost/error APIs: no production callers.
+3. `ProjectJournal` learned-write/cost/error APIs: no production callers. The
+   historical learned reader remains referenced by the explicit assembler
+   facade and retires with that facade, not in the first cleanup.
 4. ProjectJournal subagent hooks and `runs.jsonl`: duplicate subagent lifecycle
    after parity with `session_events` is proven.
 5. `InMemorySessionStore.save_checkpoint/load_checkpoint` and the matching
@@ -787,7 +810,7 @@ and promotion decisions.
 | heuristic/LLM direct `learned.md` writes | `context_artifacts(memory_candidate)` | exact explicit intent may use fast admission; inference never writes active memory |
 | candidate decision state | `context_artifacts(memory_admission_decision)` + accepted-file provenance | immutable row, semantic event, and target digest must agree; no new JSONL ledger |
 | ProjectJournal `runs.jsonl` | deletion by default | prove start/stop/failure/status parity, preserve historical file; add an independently retained materialized view only for a measured external consumer |
-| ProjectJournal learned/cost/error APIs | none | remove code; never delete historical user files automatically |
+| ProjectJournal learned-write/cost/error APIs | none | remove caller-free writers/aggregate code; keep the historical learned reader until the explicit assembler facade retires; never delete historical user files automatically |
 | `SessionStorePort` checkpoint methods | `SessionCheckpoint` | remove dead protocol/class methods and tests |
 | independent checkpoint/metadata writes | SQLite `session_checkpoints` + messages in one transaction | typed schema, generation, state/message hashes, crash-injection tests |
 | `messages.json` writer | SQLite messages | global backfill, per-session count/hash parity, stop writer; legacy file is one-time migration input, then cleanup |
@@ -822,7 +845,8 @@ run and byte-reclamation report.
 - fix `_build_user_context()` to use the wired profile;
 - delete `turn_auto_memory`;
 - remove dead `SessionStorePort` checkpoint methods;
-- remove dead ProjectJournal learned/cost/error methods;
+- remove dead ProjectJournal learned-write/cost/error methods while retaining
+  the historical learned reader used by the explicit assembler facade;
 - correct documentation that claims every LLM call uses `ContextAssembler`;
 - keep the current live prompt path unchanged beyond the profile bug so the
   next shadow comparison has a stable baseline.

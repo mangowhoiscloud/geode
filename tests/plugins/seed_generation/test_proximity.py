@@ -35,14 +35,12 @@ class _StubManager:
     def __init__(self, output: dict[str, Any], *, success: bool = True) -> None:
         self._output = output
         self._success = success
-        self.delegated: list[Any] = []
 
-    async def adelegate(self, tasks, *, announce: bool = True) -> list:
+    async def adelegate(self, tasks) -> list:
         """Async sibling for Phase-C tests."""
-        return self.delegate(tasks, announce=announce)
+        return self.delegate(tasks)
 
-    def delegate(self, tasks: list[Any], *, announce: bool = False) -> list[Any]:
-        self.delegated.append((tasks, announce))
+    def delegate(self, tasks: list[Any]) -> list[Any]:
         return [
             _StubSubResult(task_id=tasks[0].task_id, output=self._output, success=self._success)
         ]

@@ -131,7 +131,7 @@ class Supervisor(BaseSeedAgent):
             "seed-generation supervisor dispatching strategy synthesis to %r",
             _SUPERVISOR_AGENT_NAME,
         )
-        results = await self._manager.adelegate([task], announce=False)
+        results = await self._manager.adelegate([task])
         if not results:
             return SeedAgentResult(
                 role=self.role,

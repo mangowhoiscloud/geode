@@ -110,6 +110,11 @@ WRITE_TOOLS: frozenset[str] = frozenset(
 # execution route.
 COMPUTER_USE_TOOLS: frozenset[str] = frozenset({"computer", "computer_use"})
 
+COLLABORATION_TOOLS: frozenset[str] = frozenset(
+    {"spawn_agent", "list_agents", "wait_agent", "interrupt_agent", "send_message", "followup_task"}
+)
+SUBAGENT_CONTROL_TOOLS: frozenset[str] = frozenset({"delegate_task", *COLLABORATION_TOOLS})
+
 # Tools denied on headless (no-human-to-approve) sessions: scheduler, daemon,
 # and the MCP run_agent fork. A messaging DAEMON may subtract only
 # ``COMPUTER_USE_TOOLS`` behind the explicit gateway opt-in; scheduler,
@@ -117,7 +122,7 @@ COMPUTER_USE_TOOLS: frozenset[str] = frozenset({"computer", "computer_use"})
 HEADLESS_DENIED_TOOLS: frozenset[str] = frozenset(
     {
         "run_bash",
-        "delegate_task",
+        *SUBAGENT_CONTROL_TOOLS,
         *COMPUTER_USE_TOOLS,
         *SENSITIVE_TOOLS,
     }

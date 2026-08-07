@@ -65,7 +65,7 @@ import os
 import shutil
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 # PR-CLEANUP-D2 — shared CLI-provider serialisation (single SoT;
 # re-exported so existing call sites and tests stay stable).
@@ -104,7 +104,7 @@ CODEX_CLI_TIMEOUT_ENV = "GEODE_CODEX_CLI_TIMEOUT_S"
 class CodexCliInvocationError(RuntimeError):
     """Raised when the ``codex`` binary cannot be located, the
     subprocess exits non-zero, or the JSONL event stream is
-    unparseable. Mirrors :class:`ClaudeCliInvocationError` shape so
+    unparsable. Mirrors :class:`ClaudeCliInvocationError` shape so
     callers can ``except`` on either with the same handler logic."""
 
 
@@ -402,10 +402,6 @@ async def _run_codex_subprocess(
 # ---------------------------------------------------------------------------
 # Provider registration
 # ---------------------------------------------------------------------------
-
-
-if TYPE_CHECKING:  # pragma: no cover
-    pass
 
 
 def register() -> None:

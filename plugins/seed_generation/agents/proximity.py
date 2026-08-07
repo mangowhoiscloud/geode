@@ -128,7 +128,7 @@ class Proximity(BaseSeedAgent):
             len(state.candidates),
             _PROXIMITY_AGENT_NAME,
         )
-        results = await self._manager.adelegate([task], announce=False)
+        results = await self._manager.adelegate([task])
         if not results:
             return SeedAgentResult(
                 role=self.role,

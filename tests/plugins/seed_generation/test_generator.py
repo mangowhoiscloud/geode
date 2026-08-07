@@ -16,17 +16,15 @@ class _StubManager:
 
     def __init__(self, force_failures: int = 0, fail_all: bool = False) -> None:
         self.received_tasks: list[SubTask] = []
-        self.received_announce: bool | None = None
         self._force_failures = force_failures
         self._fail_all = fail_all
 
-    async def adelegate(self, tasks, *, announce: bool = True) -> list:
+    async def adelegate(self, tasks) -> list:
         """Async sibling for Phase-C tests."""
-        return self.delegate(tasks, announce=announce)
+        return self.delegate(tasks)
 
-    def delegate(self, tasks: list[SubTask], *, announce: bool = True) -> list[SubResult]:
+    def delegate(self, tasks: list[SubTask]) -> list[SubResult]:
         self.received_tasks = list(tasks)
-        self.received_announce = announce
         results: list[SubResult] = []
         for i, t in enumerate(tasks):
             failed = self._fail_all or i < self._force_failures
@@ -104,14 +102,6 @@ def test_generator_returns_error_when_all_fail(tmp_path: Path) -> None:
     assert not result.success
     assert result.error_category == "generation_failed"
     assert "all 3 candidate sub-agents failed" in (result.error_message or "")
-
-
-def test_generator_announce_false(tmp_path: Path) -> None:
-    """Each candidate spawn must NOT push to the parent's announce queue."""
-    state = _make_state(tmp_path, n=2)
-    manager = _StubManager()
-    asyncio.run(Generator(manager=manager).aexecute(state))  # type: ignore[arg-type]
-    assert manager.received_announce is False
 
 
 def test_generator_validates_run_dir(tmp_path: Path) -> None:

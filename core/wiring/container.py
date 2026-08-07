@@ -19,7 +19,7 @@ log = logging.getLogger(__name__)
 
 
 def __getattr__(name: str) -> Any:
-    """PEP 562 lazy ``settings`` alias for legacy patch sites."""
+    """Keep the public lazy ``settings`` import without eager config loading."""
     if name == "settings":
         from core.config import settings as _settings
 

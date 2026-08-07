@@ -102,6 +102,21 @@ diagnostic with `promotion_authority=none` and does not alter Tau2's native
 | `docs/eval/crucible-power-admission-2026-07-13.md` (migrated 2026-07-13) | `crucible/gate-provenance/` |
 | normalized trajectory releases (`TRAJECTORIES.md` contract; first release 2026-07-28, MCP spec-response E2E) | `trajectories/<source>-<scope>-<published-utc>-<digest12>/` |
 
+The 2026-08-07 runtime-memory authority cleanup validation is pinned to
+artifact commit
+[`4903c31`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/4903c31abf983b7be076fd1e35775190fd6f4718)
+from
+[`geode-eval-artifacts#15`](https://github.com/mangowhoiscloud/geode-eval-artifacts/pull/15).
+The live `gpt-5.6-luna` subscription run at effort `max` exercised all 13
+public hooks and the four trusted middleware seams. Its SQLite and JSONL
+projections each contain the same 22 extension rows. The immutable
+[`manifest.json`](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/4903c31abf983b7be076fd1e35775190fd6f4718/trajectories/geode-agenticloop-hook-middleware-behavior-e2e-20260807T112014Z-aba8839af72c/manifest.json)
+has SHA-256
+`aba8839af72cd4d96e7e22979affac98e04cbe027fff41e3b67732e75720103d`.
+Remote read-back revalidated its 27-event scope-complete trajectory and zero
+secret-scan findings. Raw SQLite/WAL, JSONL, checkpoints, messages, usage,
+diagnostics, prompts, and provider reasoning remain withheld.
+
 The 2026-07-31 GEODE hook/middleware behavior release is pinned to artifact
 commit
 [`3e5b35f`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/3e5b35f4505a4a2dc76d595b24862e8e73e668ff).

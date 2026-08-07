@@ -11,10 +11,7 @@ This module owns the inference-time tool list:
 
 - ``_BASE_TOOLS`` / ``AGENTIC_TOOLS`` — baseline list loaded from
   ``core/tools/base.py``'s centralised JSON.
-- ``MAX_TOOL_RESULT_TOKENS`` / ``TOOL_LAZY_LOAD_THRESHOLD`` —
-  module-level constants that legacy callers still read by attribute
-  access on ``core.agent.loop`` (re-exported via the package
-  ``__init__``).
+- ``TOOL_LAZY_LOAD_THRESHOLD`` — threshold for adapter-side defer loading.
 - ``get_agentic_tools(registry, *, mcp_tools)`` — merges base +
   ``ToolRegistry`` extras + MCP definitions, dedups by ``name``,
   then applies the ADR-013 T1 description-override policy followed
@@ -74,11 +71,10 @@ AGENTIC_TOOLS: list[dict[str, Any]] = _surface_tools()
 
 # ---------------------------------------------------------------------------
 # Token guard — optional tool result truncation (P2-A)
-# Default: unlimited (0). Frontier consensus: compression > hard cap.
-# Server-side clear_tool_uses handles context accumulation.
-# Set GEODE_MAX_TOOL_RESULT_TOKENS to a positive value to re-enable.
+# Canonical runtime value lives in settings; the constant remains as a public
+# compatibility import.
 # ---------------------------------------------------------------------------
-MAX_TOOL_RESULT_TOKENS = 0  # backward-compat alias; canonical: settings.max_tool_result_tokens
+MAX_TOOL_RESULT_TOKENS = 0
 TOOL_LAZY_LOAD_THRESHOLD = 50  # Above this count, skip MCP lazy loading
 
 

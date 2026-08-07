@@ -17,6 +17,8 @@ recorded ``parent_session_key=""`` and had no notion of
 from __future__ import annotations
 
 import inspect
+import subprocess
+import sys
 from typing import Any
 
 from core.agent.cognitive_state_ctx import (
@@ -26,6 +28,21 @@ from core.agent.cognitive_state_ctx import (
 )
 from core.agent.worker import WorkerRequest
 from core.memory.episodic import Episode
+
+
+def test_sub_agent_can_be_imported_first_in_a_clean_interpreter() -> None:
+    result = subprocess.run(  # noqa: S603 - fixed interpreter and import probe
+        [
+            sys.executable,
+            "-c",
+            "from core.agent.sub_agent import SubAgentManager, SubResult",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
 
 # ---------------------------------------------------------------------------
 # New ContextVar — get/set parity

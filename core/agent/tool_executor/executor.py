@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from core.tools.base import ToolContext
 
 from core.agent.safety import (
+    COLLABORATION_TOOLS,
     DANGEROUS_TOOLS,
     EXPENSIVE_TOOLS,
     SENSITIVE_TOOLS,
@@ -47,9 +48,11 @@ ToolExecutionStartedCallback = Callable[[str, dict[str, Any]], None]
 # inventory imports this set so the model-visible schema and executable surface
 # can be compared without duplicating these names in an audit script.
 DELEGATE_TASK_TOOL_NAME = "delegate_task"
+SPAWN_AGENT_TOOL_NAME = "spawn_agent"
+COLLABORATION_TOOL_NAMES = COLLABORATION_TOOLS - {SPAWN_AGENT_TOOL_NAME}
 RUN_BASH_TOOL_NAME = "run_bash"
 SPECIAL_EXECUTION_BINDINGS: frozenset[str] = frozenset(
-    {DELEGATE_TASK_TOOL_NAME, RUN_BASH_TOOL_NAME}
+    {DELEGATE_TASK_TOOL_NAME, SPAWN_AGENT_TOOL_NAME, RUN_BASH_TOOL_NAME, *COLLABORATION_TOOL_NAMES}
 )
 
 # ---------------------------------------------------------------------------
@@ -197,10 +200,6 @@ class ToolExecutor:
         silently when none is attached.
         """
         self._approval.attach_evidence_ledger(ledger)
-
-    def _track_decision(self, tool_name: str, decision: str) -> None:
-        """Delegates to ApprovalWorkflow."""
-        self._approval.track_decision(tool_name, decision)
 
     # Proxy properties for backward compat (tests access these directly)
     @property
@@ -677,6 +676,12 @@ class ToolExecutor:
             # which can lag a mid-session ``/model`` switch.
             return await self._aexecute_delegate(tool_input, context)
 
+        if tool_name == SPAWN_AGENT_TOOL_NAME:
+            return await self._aexecute_spawn_agent(tool_input, context)
+
+        if tool_name in COLLABORATION_TOOL_NAMES:
+            return await self._aexecute_collaboration(tool_name, tool_input, context)
+
         if tool_name == RUN_BASH_TOOL_NAME:
             # Validation + approval already cleared in the gate; this is the
             # subprocess execution, dispatched uniformly like any handler.
@@ -836,11 +841,6 @@ class ToolExecutor:
             "denied": True,
         }, False
 
-    async def _apply_safety_gates_async(
-        self, tool_name: str, tool_input: dict[str, Any]
-    ) -> tuple[dict[str, Any] | None, bool]:
-        return await self._approval.apply_safety_gates_async(tool_name, tool_input)
-
     async def _call_handler_async(
         self,
         handler: ToolHandler,
@@ -990,10 +990,11 @@ class ToolExecutor:
         # Batch items may carry their own ``role``; the top-level ``role``
         # is the default for items that don't declare one.
         default_role = tool_input.get("role", "")
-        ts = int(time.time())
+        import uuid
+
         sub_tasks = [
             SubTask(
-                task_id=f"delegate_{ts}_{i}",
+                task_id=f"delegate_{uuid.uuid4().hex[:12]}_{i}",
                 description=t.get("task_description", ""),
                 task_type=t.get("task_type", "analyze"),
                 args=t.get("args", {}),
@@ -1090,13 +1091,10 @@ class ToolExecutor:
                 task_elapsed,
             )
 
-        # announce=False: delegate_task returns full results via tool_result,
-        # so skip announce queue to avoid double context injection.
         results = await self._sub_agent_manager.adelegate(
             sub_tasks,
             on_progress=_on_progress,
             on_activity=_on_activity,
-            announce=False,
             default_model=default_model,
         )
 
@@ -1145,6 +1143,93 @@ class ToolExecutor:
                 context=context,
             )
         return payload
+
+    async def _aexecute_spawn_agent(
+        self,
+        tool_input: dict[str, Any],
+        context: ToolContext | None = None,
+    ) -> dict[str, Any]:
+        """Start one durable child without overloading foreground delegation."""
+        if not self._sub_agent_manager:
+            return {"error": "SubAgentManager not configured"}
+        from uuid import uuid4
+
+        from core.agent.cognitive_state_ctx import get_session_id
+        from core.agent.sub_agent import SubTask
+
+        parent_session_id = str(getattr(context, "session_id", "") or get_session_id())
+        if not parent_session_id:
+            return {"error": "No active parent session"}
+        task = SubTask(
+            task_id=f"agent_{uuid4().hex[:12]}",
+            description=str(tool_input.get("task_description", "")),
+            task_type=str(tool_input.get("task_type", "analyze")),
+            args=dict(tool_input.get("args", {})),
+            role=str(tool_input.get("role", "")),
+            source=str(getattr(context, "source", "") or ""),
+        )
+        try:
+            runs = await self._sub_agent_manager.aspawn(
+                [task],
+                parent_session_id=parent_session_id,
+                default_model=str(getattr(context, "model", "") or ""),
+            )
+        except ValueError as exc:
+            return {"error": str(exc)}
+        return {"status": "dispatched", "task": runs[0].to_dict()}
+
+    async def _aexecute_collaboration(
+        self,
+        tool_name: str,
+        tool_input: dict[str, Any],
+        context: ToolContext | None = None,
+    ) -> dict[str, Any]:
+        """Execute one explicit parent-scoped collaboration operation."""
+        if not self._sub_agent_manager:
+            return {"error": "SubAgentManager not configured"}
+        from core.agent.cognitive_state_ctx import get_session_id
+
+        parent_session_id = str(getattr(context, "session_id", "") or get_session_id())
+        if not parent_session_id:
+            return {"error": "No active parent session"}
+        task_id = str(tool_input.get("task_id", ""))
+        message = str(tool_input.get("message", ""))
+        default_model = str(getattr(context, "model", "") or "")
+        try:
+            if tool_name == "list_agents":
+                runs = self._sub_agent_manager.list_collaboration_runs(parent_session_id)
+                return {"tasks": [run.to_dict() for run in runs], "total": len(runs)}
+            if tool_name == "wait_agent":
+                raw_timeout = tool_input.get("timeout_seconds", 0.0)
+                timeout_s = (
+                    float(raw_timeout)
+                    if isinstance(raw_timeout, int | float) and not isinstance(raw_timeout, bool)
+                    else 0.0
+                )
+                run = await self._sub_agent_manager.wait_for_task(
+                    parent_session_id,
+                    task_id,
+                    timeout_s=max(0.0, min(timeout_s, 3600.0)),
+                )
+                timed_out = bool(run and run.status in {"pending", "running"})
+                return {"task": run.to_dict() if run else None, "timed_out": timed_out}
+            if tool_name == "interrupt_agent":
+                accepted = self._sub_agent_manager.interrupt_task(parent_session_id, task_id)
+                return {"task_id": task_id, "accepted": accepted}
+            if tool_name == "send_message":
+                run = self._sub_agent_manager.send_task_message(parent_session_id, task_id, message)
+                return {"task": run.to_dict(), "turn_triggered": False}
+            if tool_name == "followup_task":
+                run, resumed = await self._sub_agent_manager.afollow_up(
+                    parent_session_id,
+                    task_id,
+                    message,
+                    default_model=default_model,
+                )
+                return {"task": run.to_dict(), "turn_triggered": resumed, "resumed": resumed}
+            return {"error": f"Unknown collaboration tool: {tool_name}"}
+        except ValueError as exc:
+            return {"error": str(exc)}
 
     async def _select_best_candidate(
         self,

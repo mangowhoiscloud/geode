@@ -140,7 +140,7 @@ def extract_result_summary(result: Any, *, max_chars: int = 400) -> str:
     Priority: ``summary`` field > ``text`` field > JSON preview.
     """
     if isinstance(result, dict):
-        # Prefer explicit summary field (SubAgentResult always has one)
+        # Prefer an explicit summary field when the tool returns one.
         if "summary" in result:
             s = str(result["summary"])
             return s[:max_chars] if len(s) > max_chars else s

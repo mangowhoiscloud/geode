@@ -47,6 +47,93 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.16] - 2026-08-07
+
+> Runtime authority release: durable depth-one collaboration, one canonical
+> memory/profile contract, and immutable Luna/max behavior evidence.
+
+### Added
+
+- **Durable depth-one sub-agent collaboration.** `spawn_agent` returns one
+  stable child handle immediately; `list_agents`, `wait_agent`,
+  `interrupt_agent`, `send_message`, and `followup_task` provide explicit
+  parent-scoped control. Mutable run/mailbox state shares `sessions.db`; each
+  child keeps independent messages, session events, hooks, and trajectory as
+  its replay source.
+
+### Changed
+
+- **Foreground and durable delegation now have separate contracts.** The
+  `delegate_task` background flag and the `manage_subagents` action enum are
+  replaced by the explicit collaboration tools above. The depth-one limit and
+  durable-child cap apply across manager recreation; continuation reuses the
+  same child checkpoint without consuming a second child slot.
+
+### Fixed
+
+- **System-prompt user context now uses the wired profile.** User and learning
+  blocks share the configured global/project profile scope instead of one path
+  silently constructing a default global-only profile. CLI, MCP one-shot, and
+  prompt-dump entry points now bind that same profile before prompt assembly.
+- **Child mailbox delivery is persist-before-ack.** A stable mailbox id is
+  saved into the child checkpoint before SQLite marks the row consumed, so a
+  crash cannot silently lose parent input. Follow-ups racing child completion
+  start exactly one continuation generation, public `SubagentStop` fires only
+  after durable terminal state, and inaccessible process metadata no longer
+  causes a live child to be declared interrupted.
+- **Hook behavior E2E follows the middleware contract, not a model-specific
+  reflection count.** LLM request/execution calls must remain paired and occur
+  at least twice; valid adaptive reflection calls no longer fail a fixed
+  three-call assertion.
+- **Trajectory staging accepts canonical filesystem aliases.** The public
+  release root is resolved before containment checks, so macOS `/tmp` and
+  other symlinked destinations no longer fail as false path escapes.
+- **Denied pending IPC approval immediately on disconnect.** Reader EOF and
+  daemon shutdown now wake the endpoint's pending approval as a fail-closed
+  denial instead of waiting for the 120-second user-response timeout.
+- **Made `core.agent.sub_agent` safe to import first.** `WorkerRequest` now
+  loads only when the subprocess request path runs, breaking the cold-import
+  cycle through `worker`, `loop.__init__`, and `AgenticLoop`.
+- **Preserved isolated-runner failure identity.** Unexpected runner exceptions
+  now reach `SubResult.error` with their type and message instead of being
+  mislabeled as a timeout.
+
+### Removed
+
+- **Removed duplicate memory and checkpoint authorities.** Turn completion no
+  longer promotes a lossy input/tool trace into active project memory. Unused
+  `SessionStorePort` checkpoint methods and ProjectJournal cost, error,
+  learned-write, and cost-aggregate APIs are gone; canonical resume/session
+  records remain unchanged and historical user files are not modified.
+- **Removed obsolete sub-agent overlays.** The process-local announce queue,
+  duplicate `SubAgentResult`/error taxonomy, test-only run-record API, unused
+  per-batch TaskGraph overlay, and inert MCP/skill manager references are gone.
+  Its 31 queue/injection-specific cases and adjacent duplicate stubs were
+  replaced by smaller durable-store, public-tool, checkpoint, race, and E2E
+  coverage; after reconciling newer `develop` coverage, the selected non-live
+  test ratchet is the measured 10,433 rather than preserving tests for deleted
+  behavior.
+- **Retired dead runtime migration residue.** The CLI daemon now has one
+  asyncio IPC path instead of retaining its unreachable socket/thread
+  predecessor and raw-socket approval implementation. Caller-free no-op hooks,
+  private delegates, stale legacy-import exemptions, and private parser aliases
+  were removed. Public compatibility imports remain thin bridges to their
+  canonical APIs. Removing two tests that exercised only the deleted raw-socket
+  timeout/disconnect path moves the selected-test ratchet from 10,441 to the
+  measured 10,439; endpoint-level disconnect denial remains covered.
+
+### Infrastructure
+
+- **Expanded hook behavior release evidence.** The existing live hook E2E now
+  also gates block, deny, pre-start cancellation, handler failure, middleware
+  short-circuit/single-use `next_call`, and sub-agent timeout behavior without
+  spending additional model tokens.
+
+- **Release-facing documentation now fails closed on stale public contracts.**
+  The official docs gate requires both READMEs to carry the canonical runtime
+  and evaluation-substrate identity and requires `SECURITY.md` to mark the
+  package's current major/minor series as supported.
+
 ## [1.0.15] - 2026-08-07
 
 > PostVerify control release: deterministic default decisions now feed the
@@ -1835,7 +1922,6 @@ functional change.
   `ScrollReveal`).
 
 ---
-=======
 ## [0.99.290] - 2026-07-10
 
 ### Added

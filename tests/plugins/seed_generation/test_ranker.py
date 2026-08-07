@@ -68,11 +68,11 @@ class _AlwaysAWinsManager:
     def __init__(self) -> None:
         self.received_tasks: list[SubTask] = []
 
-    async def adelegate(self, tasks, *, announce: bool = True) -> list:
+    async def adelegate(self, tasks) -> list:
         """Async sibling for Phase-C tests."""
-        return self.delegate(tasks, announce=announce)
+        return self.delegate(tasks)
 
-    def delegate(self, tasks: list[SubTask], *, announce: bool = True) -> list[SubResult]:
+    def delegate(self, tasks: list[SubTask]) -> list[SubResult]:
         self.received_tasks.extend(tasks)
         return [
             SubResult(
@@ -89,11 +89,11 @@ class _AlwaysAWinsManager:
 class _SplitVotesManager:
     """First voter A, second B, third tie → 3-way split → tie outcome."""
 
-    async def adelegate(self, tasks, *, announce: bool = True) -> list:
+    async def adelegate(self, tasks) -> list:
         """Async sibling for Phase-C tests."""
-        return self.delegate(tasks, announce=announce)
+        return self.delegate(tasks)
 
-    def delegate(self, tasks: list[SubTask], *, announce: bool = True) -> list[SubResult]:
+    def delegate(self, tasks: list[SubTask]) -> list[SubResult]:
         winners = ["A", "B", "tie"]
         return [
             SubResult(
@@ -110,11 +110,11 @@ class _SplitVotesManager:
 class _OneFailureManager:
     """1 voter fails per match — 2 votes survive → quorum still met."""
 
-    async def adelegate(self, tasks, *, announce: bool = True) -> list:
+    async def adelegate(self, tasks) -> list:
         """Async sibling for Phase-C tests."""
-        return self.delegate(tasks, announce=announce)
+        return self.delegate(tasks)
 
-    def delegate(self, tasks: list[SubTask], *, announce: bool = True) -> list[SubResult]:
+    def delegate(self, tasks: list[SubTask]) -> list[SubResult]:
         results: list[SubResult] = []
         for i, t in enumerate(tasks):
             if i % 3 == 0:
@@ -143,11 +143,11 @@ class _OneFailureManager:
 class _MostFailManager:
     """2 of 3 voters fail per match → quorum lost → match skipped."""
 
-    async def adelegate(self, tasks, *, announce: bool = True) -> list:
+    async def adelegate(self, tasks) -> list:
         """Async sibling for Phase-C tests."""
-        return self.delegate(tasks, announce=announce)
+        return self.delegate(tasks)
 
-    def delegate(self, tasks: list[SubTask], *, announce: bool = True) -> list[SubResult]:
+    def delegate(self, tasks: list[SubTask]) -> list[SubResult]:
         results: list[SubResult] = []
         for i, t in enumerate(tasks):
             if i % 3 < 2:
@@ -183,7 +183,7 @@ class _DelayedAlwaysAWinsManager:
         self.started_match_ids: list[str] = []
         self.finished_match_ids: list[str] = []
 
-    async def adelegate(self, tasks, *, announce: bool = True) -> list:
+    async def adelegate(self, tasks) -> list:
         self.received_tasks.extend(tasks)
         match_id = str(tasks[0].args["match_id"]) if tasks else "unknown"
         self.started_match_ids.append(match_id)
@@ -461,11 +461,11 @@ def test_ranker_skips_match_on_quorum_loss() -> None:
 
 def test_ranker_drops_invalid_winner_label() -> None:
     class _BadWinnerManager:
-        async def adelegate(self, tasks, *, announce: bool = True) -> list:
+        async def adelegate(self, tasks) -> list:
             """Async sibling for Phase-C tests."""
-            return self.delegate(tasks, announce=announce)
+            return self.delegate(tasks)
 
-        def delegate(self, tasks: list[SubTask], *, announce: bool = True) -> list[SubResult]:
+        def delegate(self, tasks: list[SubTask]) -> list[SubResult]:
             return [
                 SubResult(
                     task_id=t.task_id,
@@ -492,11 +492,11 @@ def test_ranker_drops_invalid_winner_label() -> None:
 
 def test_ranker_accepts_text_json_fallback() -> None:
     class _TextJsonManager:
-        async def adelegate(self, tasks, *, announce: bool = True) -> list:
+        async def adelegate(self, tasks) -> list:
             """Async sibling for Phase-C tests."""
-            return self.delegate(tasks, announce=announce)
+            return self.delegate(tasks)
 
-        def delegate(self, tasks: list[SubTask], *, announce: bool = True) -> list[SubResult]:
+        def delegate(self, tasks: list[SubTask]) -> list[SubResult]:
             return [
                 SubResult(
                     task_id=t.task_id,
@@ -518,48 +518,15 @@ def test_ranker_accepts_text_json_fallback() -> None:
     assert result.success
 
 
-def test_ranker_announce_false_propagates() -> None:
-    class _CapturingManager:
-        def __init__(self) -> None:
-            self.received_announce: bool | None = None
-
-        async def adelegate(self, tasks, *, announce: bool = True) -> list:
-            """Async sibling for Phase-C tests."""
-            return self.delegate(tasks, announce=announce)
-
-        def delegate(self, tasks: list[SubTask], *, announce: bool = True) -> list[SubResult]:
-            self.received_announce = announce
-            return [
-                SubResult(
-                    task_id=t.task_id,
-                    description=t.description,
-                    success=True,
-                    output=_good_vote(t.args["match_id"]),
-                    duration_ms=10.0,
-                )
-                for t in tasks
-            ]
-
-    state = _state_with_candidates(3)
-    manager = _CapturingManager()
-    ranker = Ranker(
-        manager=manager,  # type: ignore[arg-type]
-        voters=_voters(),
-        rng=random.Random(0),
-    )
-    asyncio.run(ranker.aexecute(state))
-    assert manager.received_announce is False
-
-
 def test_ranker_match_id_pinned_in_parse() -> None:
     """Even if LLM echoes a wrong match_id, the task's match_id wins."""
 
     class _WrongMatchIdManager:
-        async def adelegate(self, tasks, *, announce: bool = True) -> list:
+        async def adelegate(self, tasks) -> list:
             """Async sibling for Phase-C tests."""
-            return self.delegate(tasks, announce=announce)
+            return self.delegate(tasks)
 
-        def delegate(self, tasks: list[SubTask], *, announce: bool = True) -> list[SubResult]:
+        def delegate(self, tasks: list[SubTask]) -> list[SubResult]:
             return [
                 SubResult(
                     task_id=t.task_id,

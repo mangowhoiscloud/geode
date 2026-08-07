@@ -2,7 +2,18 @@
 
 > [English](orchestration-decision.md) | **한국어**
 
-> **결론**: LangGraph StateGraph 자체가 오케스트레이션 레이어. 별도 레이어 불필요.
+> **상태: 대체된 역사적 결정.** 이 문서는 초기 LangGraph 분석 파이프라인
+> 토폴로지를 보존합니다. 현재 런타임 아키텍처가 아닙니다. 현행 실행 SOT는
+> [`extensibility-roadmap.md`](extensibility-roadmap.md)이고, 기여자 탐색은
+> [`AGENTS.md`](../../AGENTS.md)에서 시작합니다.
+
+현재 런타임 커널은 가시적인 `while(tool_use)` 제어 흐름을 가진
+`AgenticLoop`입니다. 구조화 그래프는 필요한 곳에서 제한된 워크플로 메커니즘으로
+남지만, GEODE의 런타임 정체성을 정의하거나 루프를 대체하지 않습니다.
+
+## 역사적 결정(보존)
+
+> **당시 결론**: LangGraph StateGraph 자체가 오케스트레이션 레이어. 별도 레이어 불필요.
 
 ## 조사 대상
 

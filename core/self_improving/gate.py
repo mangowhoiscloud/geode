@@ -16,13 +16,9 @@ import os
 import time
 from math import isfinite
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from core.self_improving import fitness as fitness_spec
-
-if TYPE_CHECKING:
-    pass
-
 
 log = logging.getLogger(__name__)
 
@@ -315,7 +311,7 @@ def _apply_rollback_condition_gate(
       This pass adds only the *per-dim* guards the scalar cannot express,
       e.g. ``"critical dim regresses by more than 0.5"`` or
       ``"any dim regresses by more than 1.0"``.
-    - No-op when not promoting, when the predicate is empty/unparseable
+    - No-op when not promoting, when the predicate is empty/unparsable
       (``evaluate_rollback_condition`` returns ``False`` on free-text), or
       when there is no baseline to compare against — so legacy / manual
       runs are unaffected.

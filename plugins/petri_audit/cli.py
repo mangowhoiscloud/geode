@@ -25,7 +25,6 @@ itself, P1-G's ``to_inspect_model`` router, the audit runner).
 from __future__ import annotations
 
 import sys
-from typing import Any
 
 from plugins.petri_audit.credential_source import (
     CredentialResolutionError,
@@ -397,14 +396,3 @@ def _env_vars_for_provider(provider: str) -> list[str]:
 
 # Keep this compatibility symbol importable for existing slash-dispatch wiring.
 _ = (resolve_credential_source,)
-
-
-def _smoke() -> dict[str, Any]:  # pragma: no cover — manual REPL aid
-    """Manual smoke helper — emits the picker's status payload as a dict."""
-    out: dict[str, Any] = {}
-    for role in _enabled_roles():
-        try:
-            out[role] = get_binding(role)
-        except Exception as e:
-            out[role] = {"error": f"{type(e).__name__}: {e}"}
-    return out

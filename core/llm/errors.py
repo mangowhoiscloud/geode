@@ -223,28 +223,6 @@ class StreamInterruptedError(Exception):
 
 
 # ---------------------------------------------------------------------------
-# OpenAI SDK error types — used by GLM and OpenAI providers.
-# Lazy-loaded to avoid hard dependency when openai is not installed.
-# ---------------------------------------------------------------------------
-def _get_openai_error_types() -> tuple[type, ...]:
-    """Return OpenAI SDK exception classes (empty tuple if not installed)."""
-    try:
-        import openai
-
-        return (
-            openai.AuthenticationError,
-            openai.RateLimitError,
-            openai.APITimeoutError,
-            openai.APIConnectionError,
-            openai.BadRequestError,
-            openai.InternalServerError,
-            openai.APIStatusError,
-        )
-    except ImportError:
-        return ()
-
-
-# ---------------------------------------------------------------------------
 # Error classification for UX — severity + actionable hints
 # ---------------------------------------------------------------------------
 

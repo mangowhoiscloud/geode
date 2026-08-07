@@ -2,7 +2,7 @@
 
 > **English** | [한국어](context-lifecycle.ko.md)
 
-The `.geode/` directory is the project-local persistent store for the agent. It survives across sessions and provides the context hierarchy that shapes every LLM call.
+The `.geode/` directory is the project-local persistent store for the agent. It survives across sessions and provides sources used by runtime context. Not every source is injected into every model call.
 
 ## Directory Layout
 
@@ -39,7 +39,7 @@ The `.geode/` directory is the project-local persistent store for the agent. It 
 
 ## Context Hierarchy
 
-The `ContextAssembler` merges 5 tiers into a single context dict injected into every LLM call. Lower tiers override higher tiers for the same key.
+`ContextAssembler` merges five tiers for callers that explicitly invoke `GeodeRuntime.assemble_context()`. Lower tiers override higher tiers for the same key. The default `AgenticLoop` does not call this facade: `core/agent/system_prompt.py` builds the live model-visible prompt from its declared sources, while conversation history is supplied separately.
 
 ```
 Tier 0   SOUL           GEODE.md — agent identity, mission, constraints
@@ -52,7 +52,8 @@ Tier 3   Session        In-memory — current conversation, tool results, plans
 ### Assembly Flow
 
 ```
-ContextAssembler.assemble(session_id, ip_name)
+GeodeRuntime.assemble_context()  # explicit facade
+└── ContextAssembler.assemble(session_id, ip_name)
 │
 ├── T0  load GEODE.md (identity)
 ├── T0.5 load user_profile (preferences)
@@ -68,7 +69,7 @@ ContextAssembler.assemble(session_id, ip_name)
 
 ### Budget Allocation (280-char compression)
 
-When context exceeds the budget, `ContextAssembler.compress()` allocates proportionally:
+When the explicit facade exceeds its budget, `ContextAssembler.compress()` allocates proportionally:
 
 | Tier | Budget | Strategy |
 |------|--------|----------|
@@ -103,13 +104,13 @@ When context exceeds the budget, `ContextAssembler.compress()` allocates proport
 ## Context in the 4-Layer Stack
 
 ```
-Agent Layer    reads context via AgenticLoop system prompt
+Agent Layer    build_system_prompt reads declared sources + conversation history
                  │
-Harness Layer  ContextAssembler merges 5 tiers
+Facade Layer   GeodeRuntime.assemble_context() -> ContextAssembler (explicit only)
                  │
-Runtime Layer  Memory modules provide raw data per tier
+Runtime Layer  Memory modules provide raw data to both paths
                  │
-Model Layer    receives final assembled context as system prompt prefix
+Model Layer    receives the live system prompt, not the facade dict automatically
 ```
 
-The agent never reads `.geode/` files directly. All access goes through `ContextAssembler` which enforces tier priority, budget allocation, and freshness checks.
+Runtime readers access `.geode/` through their owning memory or prompt modules. `ContextAssembler` enforces tier priority, budget allocation, and freshness only for its explicit facade; it is not a universal model-call gateway.

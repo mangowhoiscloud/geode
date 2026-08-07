@@ -12,10 +12,16 @@ from unittest.mock import MagicMock, patch
 
 
 def test_headless_denied_tools_contents() -> None:
-    from core.agent.safety import COMPUTER_USE_TOOLS, HEADLESS_DENIED_TOOLS, SENSITIVE_TOOLS
+    from core.agent.safety import (
+        COLLABORATION_TOOLS,
+        COMPUTER_USE_TOOLS,
+        HEADLESS_DENIED_TOOLS,
+        SENSITIVE_TOOLS,
+    )
 
     assert "run_bash" in HEADLESS_DENIED_TOOLS
     assert "delegate_task" in HEADLESS_DENIED_TOOLS
+    assert COLLABORATION_TOOLS < HEADLESS_DENIED_TOOLS
     assert "computer" in HEADLESS_DENIED_TOOLS
     assert "computer_use" in HEADLESS_DENIED_TOOLS
     assert {"computer", "computer_use"} == COMPUTER_USE_TOOLS
@@ -56,9 +62,11 @@ def test_run_agent_fork_excludes_denied_tools() -> None:
         patch("core.agent.tool_executor.ToolExecutor", side_effect=_capture_executor),
         patch("core.agent.loop.AgenticLoop", _FakeLoop),
         patch("core.llm.adapters.registry.bootstrap_builtins"),
+        patch("core.wiring.bootstrap.ensure_user_profile") as ensure_user_profile,
     ):
         asyncio.run(bootstrap.arun_agentic_oneshot("hi"))
 
+    ensure_user_profile.assert_called_once_with()
     handlers = captured["handlers"]
     assert isinstance(handlers, dict)
     assert "run_bash" not in handlers

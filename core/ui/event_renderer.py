@@ -772,9 +772,6 @@ class EventRenderer:
         self._out.write(f"  {DIM}{GLYPH_SWITCH} Model: {frm} {GLYPH_ARROW} {to}{suffix}{RESET}\n")
         self._out.flush()
 
-    def _handle_checkpoint_saved(self, event: dict[str, Any]) -> None:
-        pass  # silent — no user-visible output needed
-
     # -- OAuth device-code events (v0.51.1 IPC parity) ------------------------
 
     def _handle_oauth_login_started(self, event: dict[str, Any]) -> None:
@@ -1298,9 +1295,6 @@ class EventRenderer:
             f"  {FAINT}{GLYPH_THOUGHT} Thought for {format_elapsed(elapsed)} \u00b7 "
             f"{len(region.items)} items{suffix}{RESET}\n"
         )
-
-    def _thinking_visual_rows(self, lines: list[str]) -> int:
-        return self._visual_rows(lines)
 
     def _visual_rows(self, lines: list[str]) -> int:
         width = max(MIN_RENDER_WIDTH, shutil.get_terminal_size(fallback=FALLBACK_TERMINAL).columns)

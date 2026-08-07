@@ -40,18 +40,16 @@ class _StubManager:
         force_unparseable: bool = False,
     ) -> None:
         self.received_tasks: list[SubTask] = []
-        self.received_announce: bool | None = None
         self._evolves = evolve_outputs or {}
         self._force_failures = force_failures
         self._force_unparseable = force_unparseable
 
-    async def adelegate(self, tasks, *, announce: bool = True) -> list:
+    async def adelegate(self, tasks) -> list:
         """Async sibling for Phase-C tests."""
-        return self.delegate(tasks, announce=announce)
+        return self.delegate(tasks)
 
-    def delegate(self, tasks: list[SubTask], *, announce: bool = True) -> list[SubResult]:
+    def delegate(self, tasks: list[SubTask]) -> list[SubResult]:
         self.received_tasks = list(tasks)
-        self.received_announce = announce
         results: list[SubResult] = []
         for i, t in enumerate(tasks):
             parent_id = t.args["parent_id"]
@@ -84,12 +82,12 @@ class _StubManager:
 
 
 class _ReverseOrderManager(_StubManager):
-    async def adelegate(self, tasks, *, announce: bool = True) -> list:
+    async def adelegate(self, tasks) -> list:
         """Async sibling for Phase-C tests."""
-        return self.delegate(tasks, announce=announce)
+        return self.delegate(tasks)
 
-    def delegate(self, tasks: list[SubTask], *, announce: bool = True) -> list[SubResult]:
-        results = super().delegate(tasks, announce=announce)
+    def delegate(self, tasks: list[SubTask]) -> list[SubResult]:
+        results = super().delegate(tasks)
         return list(reversed(results))
 
 
@@ -267,13 +265,6 @@ def test_evolver_pins_parent_id_from_task() -> None:
     assert result.success
     rows = result.output["evolved_candidates"]
     assert rows[0]["parent_id"] == "c-00"
-
-
-def test_evolver_announce_false() -> None:
-    state = _state_with_survivors(2)
-    manager = _StubManager()
-    asyncio.run(Evolver(manager=manager).aexecute(state))  # type: ignore[arg-type]
-    assert manager.received_announce is False
 
 
 def test_evolver_description_includes_pilot_means() -> None:

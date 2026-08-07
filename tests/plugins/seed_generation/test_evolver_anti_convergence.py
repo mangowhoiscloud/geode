@@ -176,11 +176,11 @@ class TestEvolverExecuteAdmissionFlow:
         }
 
         class _StubManager:
-            async def adelegate(self, tasks, *, announce: bool = True) -> list:
+            async def adelegate(self, tasks) -> list:
                 """Async sibling for Phase-C tests."""
-                return self.delegate(tasks, announce=announce)
+                return self.delegate(tasks)
 
-            def delegate(self, tasks: list[Any], *, announce: bool = False) -> list[Any]:
+            def delegate(self, tasks: list[Any]) -> list[Any]:
                 return [_StubResult(t.task_id, outputs[t.task_id]) for t in tasks]
 
         state = PipelineState(run_id="r", target_dim="d", gen_tag="g")

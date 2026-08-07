@@ -550,15 +550,6 @@ class FullscreenThinCli:
             lines.append(f"{prefix}{detail}")
         self._append("\n".join(lines))
 
-    def _replace_recent_transcript_line(self, old: str, new: str) -> bool:
-        with self._lock:
-            for index in range(len(self.state.transcript) - 1, -1, -1):
-                if self.state.transcript[index] == old:
-                    self.state.transcript[index] = new
-                    self._invalidate()
-                    return True
-        return False
-
     def _set_status(self, status: str, activity: str = "") -> None:
         with self._lock:
             self.state.status = status
