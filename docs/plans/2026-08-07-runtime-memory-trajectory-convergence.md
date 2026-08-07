@@ -35,6 +35,14 @@ run covered all 13 public hooks and four trusted middleware seams, with 22
 SQLite rows matching 22 JSONL rows. The privacy-reviewed 27-event trajectory
 is pinned to
 [`geode-eval-artifacts@4903c31`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/4903c31abf983b7be076fd1e35775190fd6f4718).
+The slice reached `main` through
+[`#2906`](https://github.com/mangowhoiscloud/geode/pull/2906) at
+`c28d06910f8044beb96eadea241fcc31b88fc936`, shipped as
+[`v1.0.16`](https://github.com/mangowhoiscloud/geode/releases/tag/v1.0.16),
+closed `MEM-001` through
+[`#2907`](https://github.com/mangowhoiscloud/geode/pull/2907), and synchronized
+the closure back to `develop` through
+[`#2908`](https://github.com/mangowhoiscloud/geode/pull/2908).
 
 ## 1. Decision
 
@@ -687,25 +695,18 @@ stored reflection hint; a failed built-in result trips the existing
 otherwise passing result follows the explicit policy instruction without
 claiming that verification failed.
 
-Three implementation gaps remain:
+The three measured hook-control gaps were closed by
+[`#2892`](https://github.com/mangowhoiscloud/geode/pull/2892) and released in
+`v1.0.15`:
 
-1. **No production PostVerify policy is registered.** The registry has zero
-   non-test `PostVerify` handlers. With no decision, a retryable built-in
-   failure is currently deliverable; its replan signal is dormant until a
-   later unrelated run.
-2. **Trusted control is represented as user content.** The continuation is
-   inserted into provider history as
-   `[system:verification_continuation] ...` with role `user`. It must instead
-   enter the existing dynamic system-hint path while the original root request
-   remains the task input for preflight/decomposition and the semantic
-   timeline keeps the correlated continuation event.
-3. **Policy attribution is flattened.** Runtime hook telemetry preserves
-   extension status, duration, reason, and evidence correlation, but the
-   durable semantic record does not retain each PostVerify handler/action or a
-   stable candidate target. This is insufficient for process reward and
-   external-loop audit.
+1. **Production fallback.** An empty decision set now maps pass to `accept`, a
+   retryable failure to `revise`, and a non-retryable failure to `escalate`.
+2. **Typed continuation context.** Revision enters the bounded dynamic system
+   hint while the original root request remains the task input.
+3. **Policy attribution.** `verification.decided` retains the candidate digest
+   and bounded per-handler action, reason, and evidence references.
 
-The minimum repair reuses the existing registry, finalization state machine,
+The delivered repair reuses the existing registry, finalization state machine,
 runtime-hint injection, session timeline, and attempt budget:
 
 | Gap | Minimal behavior | Deliberate non-goal |
@@ -750,7 +751,7 @@ There are three distinct failure modes:
 3. **early aggregation**: only a winner, scalar, count, or summary survives,
    erasing alternative branches and process attribution.
 
-### 7.1 Confirmed flattened or dangling signals
+### 7.1 Confirmed flattened, dangling, or recently closed signals
 
 | Signal | Current failure | Minimum repair |
 |---|---|---|
@@ -758,7 +759,7 @@ There are three distinct failure modes:
 | LLM latency | loop emits `latency_ms`; lifecycle activity builder reads `duration_ms` | align the typed event contract once |
 | middleware mutation | original/effective request hashes are emitted, but typed durable details omit them | persist bounded hashes and middleware IDs |
 | cognitive reflection | rich `CognitiveState` changes do not survive the generic typed activity projection | persist before/after state digest and changed fields, not hidden reasoning |
-| verification | PostVerify has no production fallback policy; continuation is encoded as user content; handler decisions are aggregated | add deterministic fallback, dynamic system hint, and candidate-digest-bound per-handler decisions; assign transition ID only in trajectory projection |
+| verification | hot-path gap closed in #2892: deterministic fallback, dynamic system hint, and candidate-digest-bound per-handler decisions are durable | assign a transition ID only in trajectory v2 projection; do not add another runtime writer |
 | hook retention | trajectory stores a cohort digest/count while `hook_events` later expires | snapshot required normalized facts into immutable trajectory v2 |
 | large tool evidence | payload over 256 KiB becomes a hash/truncation marker with no content locator | add content-addressed artifact reference before bounding |
 | benchmark reward | Tau2 breakdown stays inside native evidence refs | normalize each component as a RewardAtom without replacing the receipt |
