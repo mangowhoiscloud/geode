@@ -219,6 +219,7 @@ dev = [
     "deptry>=0.25.0",
     "import-linter>=2.0",
     "mypy>=1.19.1",
+    "pip-audit>=2.10.1",
     "pre-commit>=4.5.1",
     # Render-lint stack — version-matched with .pre-commit-config.yaml and
     # .github/workflows/pages.yml so local + CI surfaces match.

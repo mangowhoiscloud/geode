@@ -2,7 +2,7 @@
 the per-cycle directory.
 
 Verifies the consolidation contract: when an orchestrator binds a
-run_dir, the four writers (RunTranscript / SessionTranscript /
+run_dir, the four writers (RunTimeline / SessionTimeline /
 WorkerResult / IsolatedRunner stderr) all land their output under
 ``<run_dir>/`` instead of the legacy ``~/.geode/<bucket>/`` global pools.
 
@@ -47,40 +47,38 @@ def test_resolve_sub_agent_path_inside_scope() -> None:
         assert result_path.parent.is_dir()
 
 
-def test_session_transcript_redirects_into_run_dir() -> None:
-    """SessionTranscript routes ``<session_id>.jsonl`` (legacy) →
-    ``sub_agents/<session_id>/dialogue.jsonl`` (run_dir-anchored) when
-    a run_dir is active and the caller passes no explicit
-    ``transcript_dir`` override."""
+def test_session_timeline_projects_into_run_dir() -> None:
+    """SessionTimeline projects portable events beside child outputs."""
     from core.observability.run_dir import run_dir_scope
-    from core.observability.transcript import SessionTranscript
+    from core.observability.session_timeline import SessionTimeline
 
     with tempfile.TemporaryDirectory() as tmp, run_dir_scope(tmp):
-        tx = SessionTranscript("s-redir01")
-        expected_file = Path(tmp) / "sub_agents" / "s-redir01" / "dialogue.jsonl"
-        assert tx.file_path == expected_file
-        tx.record_session_start(model="claude-opus-4-7")
+        tx = SessionTimeline("s-redir01", db_path=Path(tmp) / "sessions.db")
+        expected_file = Path(tmp) / "sub_agents" / "s-redir01" / "events.jsonl"
+        assert tx.projection_path == expected_file
+        tx.record_session_start(model="gpt-5.6")
         assert expected_file.exists()
         event_row = json.loads(expected_file.read_text().splitlines()[0])
-        assert event_row["event"] == "session_start"
+        assert event_row["kind"] == "session.started"
 
 
-def test_session_transcript_explicit_dir_overrides_run_dir() -> None:
-    """Caller-supplied ``transcript_dir`` wins over the active run_dir
-    so RunTranscript (which explicitly passes its own ``path.parent``)
-    isn't accidentally redirected into ``sub_agents/``."""
+def test_session_timeline_explicit_projection_overrides_run_dir() -> None:
+    """Caller-supplied projection path wins over the active run_dir."""
     from core.observability.run_dir import run_dir_scope
-    from core.observability.transcript import SessionTranscript
+    from core.observability.session_timeline import SessionTimeline
 
     with (
         tempfile.TemporaryDirectory() as run_dir_tmp,
         tempfile.TemporaryDirectory() as explicit_dir_tmp,
         run_dir_scope(run_dir_tmp),
     ):
-        tx = SessionTranscript("s-explicit01", transcript_dir=explicit_dir_tmp)
-        # Goes to explicit dir, NOT run_dir/sub_agents/
-        assert tx.file_path == Path(explicit_dir_tmp) / "s-explicit01.jsonl"
-        assert "sub_agents" not in str(tx.file_path)
+        projection_path = Path(explicit_dir_tmp) / "events.jsonl"
+        tx = SessionTimeline(
+            "s-explicit01",
+            db_path=Path(run_dir_tmp) / "sessions.db",
+            projection_path=projection_path,
+        )
+        assert tx.projection_path == projection_path
 
 
 def test_save_result_backup_redirects_into_run_dir() -> None:

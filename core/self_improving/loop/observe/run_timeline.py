@@ -12,7 +12,6 @@ import json
 import logging
 import math
 import time
-import warnings
 from collections.abc import Iterator
 from contextlib import contextmanager
 from hashlib import sha256
@@ -167,18 +166,6 @@ class RunTimeline:
             log.warning("Run timeline projection failed for %s: %s", self.path, exc)
 
 
-class RunTranscript(RunTimeline):
-    """Deprecated compatibility name for :class:`RunTimeline`."""
-
-    def __init__(self, **kwargs: Any) -> None:
-        warnings.warn(
-            "RunTranscript is deprecated; use RunTimeline",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        super().__init__(**kwargs)
-
-
 def current_run_timeline() -> RunTimeline | None:
     return _current_run_timeline.get()
 
@@ -196,24 +183,6 @@ def run_timeline_scope(timeline: RunTimeline) -> Iterator[RunTimeline]:
         yield timeline
     finally:
         _current_run_timeline.reset(token)
-
-
-# Compatibility functions preserve one ContextVar identity. Old and new names
-# never create split runtime state.
-def current_run_transcript() -> RunTimeline | None:
-    return current_run_timeline()
-
-
-def set_current_run_transcript(
-    timeline: RunTimeline | None,
-) -> contextvars.Token[RunTimeline | None]:
-    return set_current_run_timeline(timeline)
-
-
-@contextmanager
-def run_transcript_scope(timeline: RunTimeline) -> Iterator[RunTimeline]:
-    with run_timeline_scope(timeline) as active:
-        yield active
 
 
 def _last_sequence(path: Path) -> int:
@@ -301,12 +270,8 @@ __all__ = [
     "RUN_EVENT_SCHEMA_ID",
     "RUN_EVENT_SCHEMA_VERSION",
     "RunTimeline",
-    "RunTranscript",
     "compact_run_timeline",
     "current_run_timeline",
-    "current_run_transcript",
     "run_timeline_scope",
-    "run_transcript_scope",
     "set_current_run_timeline",
-    "set_current_run_transcript",
 ]

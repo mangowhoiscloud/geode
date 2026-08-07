@@ -101,7 +101,7 @@ class TestSessionEndedPayloadEnrichment:
         session_ended, _turn, _metrics = _final_hook_payloads(loop, _ok_result(), "hi")
         assert session_ended["claude_cli_session_id"] == "cli-abc-123"
 
-    def test_component_falls_back_when_no_run_transcript(self) -> None:
+    def test_component_falls_back_when_no_run_timeline(self) -> None:
         """REPL / ad-hoc spawn without an active RunTimeline must
         produce a safe default rather than raising."""
         loop = _fake_loop()

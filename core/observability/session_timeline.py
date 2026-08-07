@@ -7,8 +7,8 @@ separate from:
 * ``hook_events`` — bounded runtime and policy telemetry;
 * run-scoped ``events.jsonl`` — an optional portable projection.
 
-The deprecated :class:`core.observability.transcript.SessionTranscript` remains
-as a compatibility reader/writer for one release. New runtime code writes here.
+Legacy transcript files remain importable through the trajectory migration
+reader, but the runtime has a single writer: this class.
 """
 
 from __future__ import annotations

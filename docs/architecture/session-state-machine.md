@@ -146,5 +146,5 @@ substrate that redesign can consume.
   DOES own: context-exhaustion → COMPLETED, ask park → PAUSED.
 - The `messages.json` fallback read remains until the Phase 1b migration
   completes.
-- The interactive REPL relies on clean-exit `mark_session_completed`; a
+- The interactive REPL awaits clean-exit `amark_session_completed`; a
   killed REPL leaves ACTIVE (resumable — intended).

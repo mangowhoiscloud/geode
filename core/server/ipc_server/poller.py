@@ -642,15 +642,9 @@ class CLIPoller:
             # Clean client exit — the REPL surface's ACTIVE -> COMPLETED
             # edge (docs/architecture/session-state-machine.md § owners).
             try:
-                _mark_done_async = getattr(loop, "amark_session_completed", None)
-                if callable(_mark_done_async):
-                    await _mark_done_async()
-                else:
-                    _mark_done = getattr(loop, "mark_session_completed", None)
-                    if callable(_mark_done):
-                        _mark_done()
+                await loop.amark_session_completed()
             except Exception:
-                log.debug("mark_session_completed on exit failed", exc_info=True)
+                log.debug("amark_session_completed on exit failed", exc_info=True)
             return None
 
         if msg_type == "approval_response":

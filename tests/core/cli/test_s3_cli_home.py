@@ -29,7 +29,6 @@ def test_seeds_and_hub_subcommands_registered() -> None:
 
 def test_promoted_wrappers_pass_args_verbatim(monkeypatch) -> None:
     """The wrappers forward ctx.args to the script main and exit with its code."""
-    import click
     import pytest
     import scripts.assemble_seed_pool as assemble_mod
     import typer
@@ -42,9 +41,10 @@ def test_promoted_wrappers_pass_args_verbatim(monkeypatch) -> None:
         return 0
 
     monkeypatch.setattr(assemble_mod, "main", _fake_main)
-    ctx = typer.Context(click.Command("assemble"))
-    ctx.args = ["--per-run", "5", "--force"]
-    with pytest.raises(click.exceptions.Exit) as excinfo:
+    from types import SimpleNamespace
+
+    ctx = SimpleNamespace(args=["--per-run", "5", "--force"])
+    with pytest.raises(typer.Exit) as excinfo:
         seeds_assemble(ctx)
     assert excinfo.value.exit_code == 0
     assert captured["argv"] == ["--per-run", "5", "--force"]

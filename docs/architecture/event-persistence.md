@@ -227,8 +227,8 @@ Historical artifact-repository releases using dated identifiers such as
 
 | Previous surface | Current surface | Compatibility |
 |---|---|---|
-| `SessionTranscript` | `SessionTimeline` | deprecated constructor remains for one release |
-| `RunTranscript` | `RunTimeline` | deprecated alias shares the same ContextVar |
+| `SessionTranscript` | `SessionTimeline` | writer removed after v1.0.12 grace; legacy files remain importable |
+| `RunTranscript` | `RunTimeline` | alias removed after v1.0.12 grace |
 | global session JSONL | `sessions.db:session_events` | explicit digest-backed import; source unchanged |
 | run `transcript.jsonl` | `events.jsonl` | new-first reader fallback |
 | sub-agent `dialogue.jsonl` | `events.jsonl` | new-first reader fallback |

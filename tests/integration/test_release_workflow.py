@@ -21,20 +21,19 @@ def _workflow() -> dict[str, object]:
     return loaded
 
 
-def test_release_actions_are_pinned_to_immutable_commits() -> None:
-    workflow = _workflow()
-    jobs = workflow["jobs"]
-    assert isinstance(jobs, dict)
-
-    uses: list[str] = []
-    for job in jobs.values():
-        assert isinstance(job, dict)
-        for step in job.get("steps", []):
-            if isinstance(step, dict) and isinstance(step.get("uses"), str):
-                uses.append(step["uses"])
+def test_all_workflow_actions_are_pinned_to_immutable_commits() -> None:
+    uses: list[tuple[Path, str]] = []
+    for path in sorted(WORKFLOW_PATH.parent.glob("*.yml")):
+        for value in re.findall(r"^\s*(?:-\s+)?uses:\s*([^\s#]+)", path.read_text(), re.MULTILINE):
+            if not value.startswith("./"):
+                uses.append((path, value))
 
     assert uses
-    assert all(re.fullmatch(r"[^@]+@[0-9a-f]{40}", value) for value in uses)
+    assert not [
+        f"{path.name}: {value}"
+        for path, value in uses
+        if re.fullmatch(r"[^@]+@[0-9a-f]{40}", value) is None
+    ]
 
 
 def test_release_run_blocks_parse_as_bash() -> None:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -227,7 +228,7 @@ class TestCheckpointSaveFromAgenticLoop:
         assert state.cognitive_state["last_action"] == "tools: read"
 
     def test_mark_session_completed(self, session_dir: Path) -> None:
-        """mark_session_completed marks checkpoint as completed."""
+        """amark_session_completed marks checkpoint as completed."""
         from core.agent.loop import AgenticLoop
 
         ctx = ConversationContext()
@@ -238,7 +239,7 @@ class TestCheckpointSaveFromAgenticLoop:
         # Save first
         loop._save_checkpoint("test", round_idx=1)
         # Then mark completed
-        loop.mark_session_completed()
+        asyncio.run(loop.amark_session_completed())
 
         # Verify status is completed
         cp = SessionCheckpoint(session_dir=session_dir)

@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from core.cli.commands.lifecycle import (
     _clean_stale_artifacts,
+    _cleanup_legacy_transcripts,
     _find_serve_pid,
     _format_size,
     _is_socket_orphan,
@@ -93,6 +94,27 @@ class TestScanFile:
         assert usage.exists
         assert usage.file_count == 1
         assert usage.total_bytes == 11
+
+
+def test_cleanup_legacy_transcripts_is_recursive(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    old = tmp_path / "project" / "old.jsonl"
+    recent = tmp_path / "project" / "recent.jsonl"
+    old.parent.mkdir()
+    old.write_text("{}\n")
+    recent.write_text("{}\n")
+    old.touch()
+    recent.touch()
+    import os
+    import time
+
+    os.utime(old, (time.time() - 3 * 86400, time.time() - 3 * 86400))
+    monkeypatch.setattr("core.cli.commands.lifecycle.GLOBAL_TRANSCRIPTS_DIR", tmp_path)
+
+    assert _cleanup_legacy_transcripts(1) == 1
+    assert not old.exists()
+    assert recent.exists()
 
 
 class TestIsSocketOrphan:
