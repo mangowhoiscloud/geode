@@ -1010,13 +1010,14 @@ class AgenticLoop:
         self,
         system_prompt: str,
         reflection_hint: str | None = None,
+        verification_hint: str | None = None,
     ) -> str:
         """Sync model drift + rebuild the system prompt.
 
         Rebuilds when the model drifted (``settings.model`` changed) or
         ``_prompt_dirty`` is set (direct ``update_model_async``). On
-        rebuild, re-applies the preflight / reflection / plan hints inside
-        the dynamic envelope so a mid-arun drift doesn't drop them (the
+        rebuild, re-applies the preflight / reflection / verification / plan
+        hints inside the dynamic envelope so a mid-arun drift doesn't drop them (the
         preflight hint was silently lost here before 2026-07-29). Returns
         the (possibly-rebuilt) prompt; clears ``_prompt_dirty``.
         """
@@ -1031,6 +1032,7 @@ class AgenticLoop:
                 self._build_system_prompt(),
                 getattr(self, "_preflight_hint", ""),
                 reflection_hint,
+                verification_hint,
                 plan_hint if isinstance(plan_hint, str) else "",
             )
             self._prompt_dirty = False
@@ -1198,14 +1200,14 @@ class AgenticLoop:
     ) -> AgenticResult | None:
         """Publish legacy start signals, then the durable public boundary."""
         if verification_continuation:
-            self.context.add_system_event("verification_continuation", user_input)
             if self._timeline is not None:
                 self._timeline.record_verification_continuation(
                     user_input,
                     root_turn_id=self._verify_root_turn_id,
                     verify_attempt=self._verify_attempt,
                 )
-            self._save_checkpoint(user_input, round_idx=0)
+            root_input = self._verify_root_user_input or user_input
+            self._save_checkpoint(root_input, round_idx=0)
             return None
         intercepted = await self._emit_session_start_signals(user_input)
         if intercepted is not None:
@@ -2061,7 +2063,16 @@ class AgenticLoop:
         if intercept_result is not None:
             return intercept_result
 
-        preflight_hint = self._prepare_task_preflight(user_input)
+        verification_continuation = _verify_continuation is not None
+        task_input = (
+            self._verify_root_user_input or user_input if verification_continuation else user_input
+        )
+        verification_hint = (
+            _context.render_verification_continuation_hint(user_input)
+            if verification_continuation
+            else ""
+        )
+        preflight_hint = self._prepare_task_preflight(task_input)
         # Retained on self so mid-arun prompt rebuilds re-apply it.
         self._preflight_hint = preflight_hint
 
@@ -2070,7 +2081,10 @@ class AgenticLoop:
         # rendered via ``_consume_plan_hint`` — the hint return was removed
         # as dead plumbing, it had been None-only since the Plan migration).
         try:
-            await self._try_decompose(user_input)
+            await self._try_decompose(
+                user_input,
+                enabled=not verification_continuation,
+            )
         except BillingError as exc:
             self._emit_quota_panel(exc)
             return await self._afinalize_and_return(
@@ -2095,6 +2109,7 @@ class AgenticLoop:
             self._build_system_prompt(),
             preflight_hint,
             reflection_hint,
+            verification_hint,
             self._consume_plan_hint(),
         )
 
@@ -2127,7 +2142,9 @@ class AgenticLoop:
             await self._maybe_replan_async(round_idx)
 
             system_prompt = await self._sync_model_and_rebuild_prompt(
-                system_prompt, reflection_hint=reflection_hint
+                system_prompt,
+                reflection_hint=reflection_hint,
+                verification_hint=verification_hint,
             )
 
             # Poll for sub-agent announced results (OpenClaw Spawn+Announce)
@@ -2611,12 +2628,14 @@ class AgenticLoop:
     # Goal decomposition — delegate to ``_planner_dispatch``
     # ------------------------------------------------------------------
 
-    async def _try_decompose(self, user_input: str) -> str | None:
+    async def _try_decompose(self, user_input: str, *, enabled: bool = True) -> str | None:
         """Delegates to :func:`_planner_dispatch.try_decompose`.
 
         Async because the planner path awaits ``loop._call_llm`` — single
         async LLM dispatch, no thread-pool hop.
         """
+        if not enabled:
+            return None
         return await _planner_dispatch.try_decompose(self, user_input)
 
     # ------------------------------------------------------------------

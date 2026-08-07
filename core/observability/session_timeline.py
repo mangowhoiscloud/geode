@@ -69,6 +69,7 @@ class SessionEventKind(StrEnum):
     SESSION_STARTED = "session.started"
     SESSION_ENDED = "session.ended"
     TURN_COMPLETED = "turn.completed"
+    VERIFICATION_DECIDED = "verification.decided"
     VERIFICATION_CONTINUED = "verification.continued"
     VERIFICATION_EVIDENCE = "verification.evidence"
     VERIFICATION_PENDING = "verification.pending"
@@ -816,6 +817,33 @@ class SessionTimeline:
                 "root_turn_id": root_turn_id,
                 "verify_attempt": max(0, int(verify_attempt)),
                 "source": "post_verify_or_stop",
+            },
+        )
+
+    def record_verification_decision(
+        self,
+        *,
+        candidate: str,
+        root_turn_id: str,
+        verify_attempt: int,
+        built_in_passed: bool,
+        policy_action: str,
+        decisions: Sequence[Mapping[str, Any]],
+    ) -> None:
+        """Persist bounded delivery-control decisions against one candidate."""
+        candidate_bytes = candidate.encode("utf-8")
+        self._record(
+            SessionEventKind.VERIFICATION_DECIDED,
+            role="policy",
+            status=policy_action,
+            payload={
+                "candidate_sha256": sha256(candidate_bytes).hexdigest(),
+                "candidate_bytes": len(candidate_bytes),
+                "root_turn_id": root_turn_id,
+                "verify_attempt": max(0, int(verify_attempt)),
+                "built_in_passed": bool(built_in_passed),
+                "policy_action": policy_action,
+                "decisions": [dict(decision) for decision in decisions],
             },
         )
 

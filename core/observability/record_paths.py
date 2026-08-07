@@ -19,6 +19,7 @@ EVENT_STREAM_FILENAMES = (EVENTS_FILENAME, *LEGACY_EVENT_FILENAMES)
 _SESSION_KIND_TO_LEGACY = {
     "session.started": "session_start",
     "session.ended": "session_end",
+    "verification.decided": "verification_decided",
     "verification.continued": "verification_continued",
     "verification.evidence": "verification_evidence",
     "verification.pending": "verification_pending",

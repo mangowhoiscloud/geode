@@ -111,6 +111,8 @@ def test_arun_calls_session_start_helper() -> None:
     assert "intercept_result = await self._open_turn(" in src
     assert "verification_continuation=_verify_continuation is not None" in src
     assert "await self._emit_session_start_signals(user_input)" in open_src
+    assert 'context.add_system_event("verification_continuation"' not in open_src
+    assert "enabled=not verification_continuation" in src
 
 
 def test_arun_surfaces_intercept_result_verbatim() -> None:
