@@ -386,7 +386,7 @@ class GeodeRuntime:
         return self.project_memory.get_context_for_subject(self.subject_id)
 
     def assemble_context(self) -> dict[str, Any]:
-        """Assemble full 3-tier context (Org -> Project -> Session)."""
+        """Assemble the explicit memory-context facade for callers that request it."""
         if self.context_assembler:
             ctx = self.context_assembler.assemble(self.session_key, self.subject_id)
             self.context_assembler.mark_assembled(ctx.get("_assembled_at"))

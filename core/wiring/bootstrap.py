@@ -34,6 +34,23 @@ log = logging.getLogger(__name__)
 CONFIG_WATCHER_DEBOUNCE_MS = 300.0  # Avoid thrashing on rapid file changes
 
 
+def ensure_user_profile() -> FileBasedUserProfile:
+    """Return the context-bound configured profile, creating it once if absent."""
+    from core.config import settings
+    from core.memory.user_profile import FileBasedUserProfile
+    from core.paths import PROJECT_USER_PROFILE_DIR
+    from core.tools.profile_tools import get_user_profile, set_user_profile
+
+    profile = get_user_profile()
+    if profile is None:
+        profile = FileBasedUserProfile(
+            global_dir=Path(settings.user_profile_dir) if settings.user_profile_dir else None,
+            project_dir=PROJECT_USER_PROFILE_DIR,
+        )
+        set_user_profile(profile)
+    return profile
+
+
 def _build_hook_event_store(log_dir: Path | str | None) -> HookEventStore:
     """Build the canonical event store, preserving explicit test isolation."""
     from core.observability.event_store import HookEventStore
@@ -411,33 +428,6 @@ def build_hooks(
 
     _register_plugin("journal_hook", _reg_journal)
 
-    # C3: Auto-memory on turn complete (OpenClaw command:new pattern)
-    def _reg_turn_memory() -> None:
-        from core.tools import memory_tools
-
-        def _on_turn_complete(event: HookEvent, data: dict[str, Any]) -> None:
-            pm = memory_tools._project_memory_ctx.get()
-            if pm is None:
-                return
-            text = data.get("text", "")
-            user_input = data.get("user_input", "")
-            tools = data.get("tool_calls", [])
-            if not text or len(text) < 20:
-                return  # too short to be useful
-            # Build concise insight from turn
-            tool_str = ", ".join(t for t in tools[:5] if t) or "none"
-            insight = f"[turn] {user_input[:80]} → tools=[{tool_str}]"
-            pm.add_insight(insight)
-
-        hooks.register(
-            HookEvent.TURN_COMPLETED,
-            _on_turn_complete,
-            name="turn_auto_memory",
-            priority=85,
-        )
-
-    _register_plugin("turn_memory_hook", _reg_turn_memory)
-
     # C3b: Auto-learn user patterns on turn complete (Tier 0.5 cross-session memory)
     def _reg_auto_learn() -> None:
         from core.hooks.auto_learn import make_auto_learn_handler
@@ -742,7 +732,6 @@ def build_memory(
     from core.memory.context import ContextAssembler
     from core.memory.organization import MonoLakeOrganizationMemory
     from core.memory.project import ProjectMemory
-    from core.memory.user_profile import FileBasedUserProfile
     from core.paths import ensure_directories
 
     ensure_directories()
@@ -754,14 +743,7 @@ def build_memory(
     organization_memory = MonoLakeOrganizationMemory(fixture_dir=fixture_dir)
 
     # Tier 0.5: User Profile
-    from core.paths import PROJECT_USER_PROFILE_DIR
-
-    global_profile_dir = Path(settings.user_profile_dir) if settings.user_profile_dir else None
-    project_profile_dir = PROJECT_USER_PROFILE_DIR
-    user_profile = FileBasedUserProfile(
-        global_dir=global_profile_dir,
-        project_dir=project_profile_dir,
-    )
+    user_profile = ensure_user_profile()
 
     # C2: Project Journal — append-only execution history
     from core.memory.project_journal import ProjectJournal
@@ -822,11 +804,6 @@ def build_memory(
     set_tool_hooks(hooks)
     if isinstance(hooks, HookSystem):
         hooks.add_owner_cleanup("shared_tool_hooks", clear_tool_hooks)
-
-    # Wire user profile into profile tools via contextvars
-    from core.tools.profile_tools import set_user_profile
-
-    set_user_profile(user_profile)
 
     return project_memory, organization_memory, context_assembler, user_profile
 

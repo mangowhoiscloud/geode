@@ -8,17 +8,18 @@ export default function Page() {
       slug="runtime/memory/5-tier"
       title="Memory tiers"
       titleKo="메모리 계층"
-      summary="From a raw session log to a single LLM-ready summary. Hierarchical override, budget-aware compression."
-      summaryKo="raw 세션 로그에서 LLM에 바로 넣을 수 있는 요약까지. 계층 override와 예산 인식 압축을 다룹니다."
+      summary="The explicit five-tier context facade: hierarchical override and budget-aware compression."
+      summaryKo="명시적 5계층 context facade의 계층 override와 예산 인식 압축을 다룹니다."
     >
       <Bi
         ko={
           <>
             <p>
               GEODE의 기억은 다섯 계층으로 나뉩니다. 위로 갈수록 안정적이고
-              아래로 갈수록 구체적입니다. 매 호출 전에{" "}
+              아래로 갈수록 구체적입니다. 명시적으로 호출할 때{" "}
               <code>core/memory/context.py</code>의 <code>ContextAssembler</code>가
-              다섯 계층을 병합해 LLM에 넣을 단일 요약을 만듭니다.
+              다섯 계층을 병합해 요약 dict를 만듭니다. 기본 AgenticLoop의
+              모델 호출은 이 facade를 자동으로 거치지 않습니다.
             </p>
 
             <h2>다섯 계층</h2>
@@ -160,7 +161,7 @@ export default function Page() {
 
             <h2>다음</h2>
             <ul>
-              <li><a href="/geode/docs/runtime/context">컨텍스트 조립</a>. 이 요약이 실제 호출에 합쳐지는 곳.</li>
+              <li><a href="/geode/docs/runtime/context">컨텍스트 조립</a>. 실제 prompt 경로와 명시적 facade의 경계.</li>
               <li><a href="/geode/docs/runtime/research">리서치와 탐색</a>. <code>/recall</code>과 검색 표면들.</li>
             </ul>
           </>
@@ -169,9 +170,10 @@ export default function Page() {
           <>
             <p>
               GEODE&apos;s memory splits into five tiers: more stable toward the
-              top, more specific toward the bottom. Before each call,{" "}
+              top, more specific toward the bottom. When called explicitly,{" "}
               <code>ContextAssembler</code> in <code>core/memory/context.py</code>{" "}
-              merges the five tiers into the single summary the LLM receives.
+              merges the five tiers into a summary dict. The default AgenticLoop
+              model call does not automatically traverse this facade.
             </p>
 
             <h2>The five tiers</h2>
@@ -317,7 +319,7 @@ export default function Page() {
 
             <h2>Next</h2>
             <ul>
-              <li><a href="/geode/docs/runtime/context">Context assembly</a>. Where this summary joins the actual call.</li>
+              <li><a href="/geode/docs/runtime/context">Context assembly</a>. The boundary between the live prompt path and this explicit facade.</li>
               <li><a href="/geode/docs/runtime/research">Research and search</a>. <code>/recall</code> and the search surfaces.</li>
             </ul>
           </>

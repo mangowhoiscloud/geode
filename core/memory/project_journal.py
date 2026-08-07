@@ -1,18 +1,14 @@
-"""Project Journal — append-only execution record for the .geode/journal/ directory.
+"""Project Journal — append-only run record for the .geode/journal/ directory.
 
 Context Layer C2: "What have we done so far?"
 
-All writes are append-only (immutable log). The journal answers:
-- What analyses/tasks were run in this project?
-- What patterns did the agent learn?
-- How much did it cost?
-- What errors occurred?
+The journal answers what analyses and tasks ran in this project. Session
+timelines own call costs and errors; active memory owns accepted learning.
 
 Files:
   .geode/journal/runs.jsonl     — execution history (1 line per run)
-  .geode/journal/costs.jsonl    — per-call LLM cost records
-  .geode/journal/learned.md     — project-level learned patterns
-  .geode/journal/errors.jsonl   — error records
+
+Historical costs.jsonl, learned.md, and errors.jsonl files are left untouched.
 """
 
 from __future__ import annotations
@@ -22,11 +18,9 @@ import logging
 import threading
 import time
 from dataclasses import dataclass, field
-from datetime import date
 from pathlib import Path
 from typing import Any
 
-from core.memory.atomic_write import iter_jsonl
 from core.time_format import format_age
 
 log = logging.getLogger(__name__)
@@ -42,9 +36,6 @@ def _get_default_journal_dir() -> Path:
 
         _DEFAULT_JOURNAL_DIR = resolve_journal_dir()
     return _DEFAULT_JOURNAL_DIR
-
-
-MAX_LEARNED_PATTERNS = 100
 
 
 @dataclass(slots=True)
@@ -98,8 +89,6 @@ class ProjectJournal:
 
         journal = ProjectJournal()
         journal.record_run("s1", "analysis", "Repository audit complete", cost_usd=0.15)
-        journal.record_cost("claude-opus-4-6", 1200, 350, 0.015)
-        journal.add_learned("Detailed research subjects tend to score S tier", "domain")
         recent = journal.get_recent_runs(5)
     """
 
@@ -155,81 +144,8 @@ class ProjectJournal:
                 continue
         return records
 
-    # ------------------------------------------------------------------
-    # C2.2: Costs (project-level LLM cost)
-    # ------------------------------------------------------------------
-
-    def record_cost(
-        self,
-        model: str,
-        input_tokens: int,
-        output_tokens: int,
-        cost_usd: float,
-        *,
-        session_id: str = "",
-    ) -> None:
-        """Append a cost record to costs.jsonl."""
-        d = {
-            "ts": time.time(),
-            "model": model,
-            "in": input_tokens,
-            "out": output_tokens,
-            "cost": round(cost_usd, 6),
-        }
-        if session_id:
-            d["sid"] = session_id
-        self._append_jsonl("costs.jsonl", json.dumps(d, separators=(",", ":")))
-
-    def get_project_cost_summary(self) -> dict[str, Any]:
-        """Aggregate project-level costs from costs.jsonl."""
-        total_cost = 0.0
-        total_calls = 0
-        by_model: dict[str, float] = {}
-        for d in iter_jsonl(self._dir / "costs.jsonl"):
-            cost = d.get("cost", 0.0)
-            model = d.get("model", "unknown")
-            total_cost += cost
-            total_calls += 1
-            by_model[model] = by_model.get(model, 0.0) + cost
-        return {
-            "total_cost": round(total_cost, 4),
-            "total_calls": total_calls,
-            "by_model": by_model,
-        }
-
-    # ------------------------------------------------------------------
-    # C2.3: Learned patterns (project-level)
-    # ------------------------------------------------------------------
-
-    def add_learned(self, pattern: str, category: str = "general") -> None:
-        """Append a learned pattern to learned.md (dedup + rotation)."""
-        learned_path = self._dir / "learned.md"
-        self._dir.mkdir(parents=True, exist_ok=True)
-
-        existing_lines: list[str] = []
-        if learned_path.exists():
-            existing_lines = learned_path.read_text(encoding="utf-8").splitlines()
-
-        # Dedup: skip if pattern already present
-        for line in existing_lines:
-            if pattern in line:
-                return
-
-        # Format: "- [category] pattern (YYYY-MM-DD)"
-        today = date.today().isoformat()
-        entry = f"- [{category}] {pattern} ({today})"
-
-        with self._lock:
-            existing_lines.append(entry)
-            # Rotation: keep most recent MAX entries
-            if len(existing_lines) > MAX_LEARNED_PATTERNS:
-                existing_lines = existing_lines[-MAX_LEARNED_PATTERNS:]
-            from core.memory.atomic_write import atomic_write_text
-
-            atomic_write_text(learned_path, "\n".join(existing_lines) + "\n")
-
     def get_learned_patterns(self) -> list[str]:
-        """Read all learned patterns."""
+        """Read historical learned patterns for the explicit context facade."""
         learned_path = self._dir / "learned.md"
         if not learned_path.exists():
             return []
@@ -238,30 +154,7 @@ class ProjectJournal:
         ]
 
     # ------------------------------------------------------------------
-    # C2.4: Errors
-    # ------------------------------------------------------------------
-
-    def record_error(
-        self,
-        session_id: str,
-        error_type: str,
-        message: str,
-        *,
-        metadata: dict[str, Any] | None = None,
-    ) -> None:
-        """Append an error record to errors.jsonl."""
-        d: dict[str, Any] = {
-            "ts": time.time(),
-            "sid": session_id,
-            "type": error_type,
-            "msg": message[:500],
-        }
-        if metadata:
-            d["meta"] = metadata
-        self._append_jsonl("errors.jsonl", json.dumps(d, separators=(",", ":")))
-
-    # ------------------------------------------------------------------
-    # C2.5: Context summary (for LLM injection)
+    # C2.2: Context summary (for explicit context assembly)
     # ------------------------------------------------------------------
 
     def get_context_summary(self, max_runs: int = 3) -> str:

@@ -2,7 +2,7 @@
 
 > [English](context-lifecycle.md) | **한국어**
 
-`.geode/` 디렉토리는 에이전트의 프로젝트-로컬 영속 저장소입니다. 세션 간에 유지되며, 모든 LLM 호출을 형성하는 context 계층 구조를 제공합니다.
+`.geode/` 디렉토리는 에이전트의 프로젝트-로컬 영속 저장소입니다. 세션 간에 유지되며 런타임 context가 사용하는 소스를 제공합니다. 모든 소스가 매 모델 호출에 주입되는 것은 아닙니다.
 
 ## 디렉토리 구조
 
@@ -39,7 +39,7 @@
 
 ## Context 계층 구조
 
-`ContextAssembler`는 5개 티어를 하나의 context dict로 병합하여 모든 LLM 호출에 주입합니다. 동일 키에 대해 낮은 티어가 높은 티어를 오버라이드합니다.
+`ContextAssembler`는 `GeodeRuntime.assemble_context()`를 명시적으로 호출한 소비자를 위해 5개 티어를 하나의 context dict로 병합합니다. 동일 키에 대해 낮은 티어가 높은 티어를 오버라이드합니다. 기본 `AgenticLoop`는 이 facade를 호출하지 않습니다. 실제 모델-visible prompt는 `core/agent/system_prompt.py`가 선언된 소스에서 만들고, 대화 이력은 별도로 공급합니다.
 
 ```
 Tier 0   SOUL           GEODE.md — 에이전트 아이덴티티, 미션, 제약 조건
@@ -52,7 +52,8 @@ Tier 3   Session        인메모리 — 현재 대화, 도구 결과, 계획
 ### 조립 플로우
 
 ```
-ContextAssembler.assemble(session_id, ip_name)
+GeodeRuntime.assemble_context()  # 명시적 facade
+└── ContextAssembler.assemble(session_id, ip_name)
 │
 ├── T0  GEODE.md 로드 (아이덴티티)
 ├── T0.5 user_profile 로드 (선호 설정)
@@ -68,7 +69,7 @@ ContextAssembler.assemble(session_id, ip_name)
 
 ### 예산 할당 (280자 압축)
 
-Context가 예산을 초과하면, `ContextAssembler.compress()`가 비례 할당합니다:
+명시적 facade의 context가 예산을 초과하면, `ContextAssembler.compress()`가 비례 할당합니다:
 
 | 티어 | 예산 | 전략 |
 |------|------|------|
@@ -103,13 +104,13 @@ Context가 예산을 초과하면, `ContextAssembler.compress()`가 비례 할�
 ## 4-Layer Stack에서의 Context
 
 ```
-Agent Layer    AgenticLoop system prompt를 통해 context 읽기
+Agent Layer    build_system_prompt가 선언된 소스 + 대화 이력 읽기
                  │
-Harness Layer  ContextAssembler가 5개 티어 병합
+Facade Layer   GeodeRuntime.assemble_context() -> ContextAssembler (명시 호출만)
                  │
-Runtime Layer  Memory 모듈이 티어별 원시 데이터 제공
+Runtime Layer  Memory 모듈이 두 경로에 원시 데이터 제공
                  │
-Model Layer    최종 조립된 context를 system prompt prefix로 수신
+Model Layer    facade dict가 아니라 live system prompt를 수신
 ```
 
-에이전트는 `.geode/` 파일을 직접 읽지 않습니다. 모든 접근은 `ContextAssembler`를 통하며, 티어 우선순위, 예산 할당, 최신성 검사를 강제합니다.
+런타임 reader는 소유 memory 또는 prompt 모듈을 통해 `.geode/`에 접근합니다. `ContextAssembler`의 티어 우선순위, 예산 할당, 최신성 검사는 명시적 facade에만 적용되며 모든 모델 호출의 gateway가 아닙니다.

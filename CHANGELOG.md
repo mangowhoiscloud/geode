@@ -66,6 +66,10 @@ functional change.
 
 ### Fixed
 
+- **System-prompt user context now uses the wired profile.** User and learning
+  blocks share the configured global/project profile scope instead of one path
+  silently constructing a default global-only profile. CLI, MCP one-shot, and
+  prompt-dump entry points now bind that same profile before prompt assembly.
 - **Child mailbox delivery is persist-before-ack.** A stable mailbox id is
   saved into the child checkpoint before SQLite marks the row consumed, so a
   crash cannot silently lose parent input. Follow-ups racing child completion
@@ -91,6 +95,11 @@ functional change.
 
 ### Removed
 
+- **Removed duplicate memory and checkpoint authorities.** Turn completion no
+  longer promotes a lossy input/tool trace into active project memory. Unused
+  `SessionStorePort` checkpoint methods and ProjectJournal cost, error,
+  learned-write, and cost-aggregate APIs are gone; canonical resume/session
+  records remain unchanged and historical user files are not modified.
 - **Removed obsolete sub-agent overlays.** The process-local announce queue,
   duplicate `SubAgentResult`/error taxonomy, test-only run-record API, unused
   per-batch TaskGraph overlay, and inert MCP/skill manager references are gone.
