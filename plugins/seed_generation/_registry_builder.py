@@ -61,8 +61,6 @@ def build_subagent_manager() -> Any:
     hooks = None
     lane = None
     tool_handlers: dict[str, Any] = {}
-    mcp_manager = None
-    skill_registry = None
     agent_registry = _try_build_agent_registry()
     # ``get_lane_queue`` is not a public surface in this worktree's wiring;
     # the SubAgentManager constructs its own IsolatedRunner with the bare
@@ -80,8 +78,6 @@ def build_subagent_manager() -> Any:
     return SubAgentManager(
         IsolatedRunner(hooks=hooks, lane=lane),
         action_handlers=tool_handlers,
-        mcp_manager=mcp_manager,
-        skill_registry=skill_registry,
         agent_registry=agent_registry,
         hooks=hooks,
         max_depth=settings.max_subagent_depth,

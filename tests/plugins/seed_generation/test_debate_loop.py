@@ -467,7 +467,7 @@ def test_generator_num_turns_three_reads_sidecars_into_output(tmp_path: Path) ->
     # manager's adelegate to write sidecars based on the actual task ids.
     real_adelegate = manager.adelegate
 
-    async def _patched_adelegate(tasks, announce: bool = True):  # type: ignore[no-untyped-def]
+    async def _patched_adelegate(tasks):  # type: ignore[no-untyped-def]
         for task in tasks:
             candidate_id = task.args["candidate_id"]
             sidecar = candidates_dir / f"{candidate_id}.debate.jsonl"
@@ -477,7 +477,7 @@ def test_generator_num_turns_three_reads_sidecars_into_output(tmp_path: Path) ->
                 '{"turn": 3, "speaker": "A", "content": "z"}\n',
                 encoding="utf-8",
             )
-        return await real_adelegate(tasks, announce=announce)
+        return await real_adelegate(tasks)
 
     manager.adelegate = _patched_adelegate  # type: ignore[method-assign]
 

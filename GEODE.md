@@ -46,7 +46,7 @@ All free-text input goes straight to the AgenticLoop; you select tools autonomou
 - **WRITE** — state-changing tools (`memory_save`, `profile_update`, `edit_file`, `set_api_key`, …); pass through the approval gate.
 - **DANGEROUS** — system access (`run_bash`, `computer` desktop control); the strictest tier at the approval gate.
 
-Headless modes (DAEMON / SCHEDULER) have no user to approve, so `run_bash`, `delegate_task`, and `computer` are denied outright (`HEADLESS_DENIED_TOOLS`, `core/agent/safety.py`).
+Headless modes (DAEMON / SCHEDULER) have no user to approve, so `run_bash`, `computer`, and all delegation/collaboration tools are denied outright (`HEADLESS_DENIED_TOOLS`, `core/agent/safety.py`).
 
 ### How you act — by example
 
@@ -67,13 +67,13 @@ RUNTIME:  ToolRegistry, MCP Registry, Skills, Memory(5-Tier), Reports
 MODEL:    ClaudeAdapter, OpenAIAdapter, GLMAdapter (3-provider routing)
 ```
 
-**Thin-only runtime.** `geode` (thin CLI) talks to one `geode serve` daemon over a Unix socket; the daemon holds the single `GeodeRuntime` and auto-starts if absent. Sessions serialize per key (`SessionLane`, max 256) and run in parallel across keys; idle cleanup at 300s. Entry modes carry their own session policy: CLIPoller → IPC (hitl=2 — full HITL relayed to the thin CLI; no headless deny filter), Gateway → DAEMON (hitl=0, headless — `run_bash`/`delegate_task` denied), Scheduler → SCHEDULER (hitl=0, 300s cap, headless — `run_bash`/`delegate_task` denied). Gateway pollers run in daemon threads that do not inherit ContextVars — each handler calls `boot.propagate_to_thread()` to re-inject readiness / memory / profile context.
+**Thin-only runtime.** `geode` (thin CLI) talks to one `geode serve` daemon over a Unix socket; the daemon holds the single `GeodeRuntime` and auto-starts if absent. Sessions serialize per key (`SessionLane`, max 256) and run in parallel across keys; idle cleanup at 300s. Entry modes carry their own session policy: CLIPoller → IPC (hitl=2 — full HITL relayed to the thin CLI; no headless deny filter), Gateway → DAEMON (hitl=0, headless — `run_bash` and collaboration tools denied), Scheduler → SCHEDULER (hitl=0, 300s cap, same deny policy). Gateway pollers run in daemon threads that do not inherit ContextVars — each handler calls `boot.propagate_to_thread()` to re-inject readiness / memory / profile context.
 
-**Sub-agents** run as isolated worker processes in parallel: `SubAgentManager` → `TaskGraph` (DAG) → `IsolatedRunner`, gated by `Lane("global", max=50 — core/wiring/container.py DEFAULT_GLOBAL_CONCURRENCY)`.
+**Sub-agents** run as isolated worker processes in parallel: `SubAgentManager` → `IsolatedRunner`, gated by `Lane("global", max=50 — core/wiring/container.py DEFAULT_GLOBAL_CONCURRENCY)`. `delegate_task` waits for foreground fan-out/best-of-N; `spawn_agent` plus the explicit collaboration tools owns durable child control.
 
 **Isolation boundary (honest contract, 2026-06-11 Codex audit):**
 - Process + artifact level: outputs land under `<run_dir>/sub_agents/<task_id>/`; the parent receives only the returned summary (`core/orchestration/isolated_execution.py`).
-- A worker receives the native tool handlers resolved from its declared toolkit (`core/agent/worker.py`). The parent's MCP connections and skill registry are NOT serialized to the worker; `SubAgentManager` holds them for in-process use only.
+- A worker receives the native tool handlers resolved from its declared toolkit (`core/agent/worker.py`). The parent's MCP connections and skill registry are not serialized to the worker or retained by `SubAgentManager`.
 - Memory-write isolation is by toolkit composition, not a task_id buffer: the read-only `_default` toolkit cannot write; a toolkit that includes `memory_save` (e.g. `general_purpose`) writes shared `ProjectMemory` directly. Grant write-free toolkits to prevent concurrent shared-memory writes.
 
 > Full wiring detail (per-constant defaults, thread propagation, the layer→module mapping) lives under `docs/architecture/`.

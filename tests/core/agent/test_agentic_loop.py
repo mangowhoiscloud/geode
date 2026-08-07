@@ -2006,29 +2006,3 @@ class TestSubAgentSessionIsolation:
         main_is_sub, main_key = get_subagent_context()
         assert main_is_sub is False
         assert main_key == ""
-
-    def test_subagent_run_records(self) -> None:
-        """Verify run records are created and updated for delegated tasks."""
-        from core.agent.sub_agent import SubAgentManager, SubTask
-
-        def handler(task_type: str, args: dict[str, Any]) -> dict[str, Any]:
-            return {"result": "done"}
-
-        runner = IsolatedRunner()
-        manager = SubAgentManager(runner, handler, timeout_s=10)
-        tasks = [
-            SubTask("t1", "Task 1", "analyze", {"subject_id": "Project Atlas"}),
-            SubTask("t2", "Task 2", "search", {"subject_id": "Project Orion"}),
-        ]
-        asyncio.run(manager.adelegate(tasks))
-
-        records = manager.get_run_records()
-        assert len(records) == 2
-        assert "t1" in records
-        assert "t2" in records
-
-        for _tid, rec in records.items():
-            assert rec.child_session_key != ""
-            assert "subagent" in rec.child_session_key
-            assert rec.outcome in ("ok", "error")
-            assert rec.completed_at > 0

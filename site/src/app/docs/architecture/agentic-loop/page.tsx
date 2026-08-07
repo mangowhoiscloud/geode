@@ -30,7 +30,7 @@ export default function Page() {
               시스템 프롬프트와 컨텍스트 위임은 <code>_context.py</code>, 결과
               모델과 컨텍스트 고갈 처리는 <code>models.py</code>, 모델 전환은{" "}
               <code>_model_switching.py</code>, 서브에이전트 알림은{" "}
-              <code>_sub_agent_announce.py</code>입니다. 예전 단일 파일{" "}
+              <code>_collaboration_mailbox.py</code>입니다. 예전 단일 파일{" "}
               <code>core/agent/loop.py</code>는 더 이상 존재하지 않습니다.
             </p>
 
@@ -179,8 +179,8 @@ export default function Page() {
               system-prompt and context delegation in <code>_context.py</code>,
               the result model and context-exhaustion handling in{" "}
               <code>models.py</code>, model switching in{" "}
-              <code>_model_switching.py</code>, sub-agent announcements in{" "}
-              <code>_sub_agent_announce.py</code>. The old monolithic{" "}
+              <code>_model_switching.py</code>, durable child mailbox admission in{" "}
+              <code>_collaboration_mailbox.py</code>. The old monolithic{" "}
               <code>core/agent/loop.py</code> no longer exists.
             </p>
 

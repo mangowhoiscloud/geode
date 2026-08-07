@@ -227,11 +227,6 @@ def mark_session_completed(loop: AgenticLoop) -> None:
     )
     if _run_async_terminal_from_sync(loop, reason="completed"):
         return
-    # Clean up announce queue to prevent orphan accumulation
-    if loop._parent_session_key:
-        from core.agent.sub_agent import cleanup_announce_queue
-
-        cleanup_announce_queue(loop._parent_session_key)
     if _mark_session_status(loop, reason="completed"):
         _record_terminal_timeline(loop, status="completed")
 
@@ -279,10 +274,6 @@ def _run_async_terminal_from_sync(loop: AgenticLoop, *, reason: str) -> bool:
 
 async def mark_session_completed_async(loop: AgenticLoop) -> None:
     """Durably complete the session, then publish its public terminal edge."""
-    if loop._parent_session_key:
-        from core.agent.sub_agent import cleanup_announce_queue
-
-        cleanup_announce_queue(loop._parent_session_key)
     if _mark_session_status(loop, reason="completed"):
         _record_terminal_timeline(loop, status="completed")
         await _emit_public_session_end(loop, reason="completed")

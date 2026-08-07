@@ -72,7 +72,7 @@ def _middleware_counts_are_valid(counts: dict[str, int]) -> bool:
     return (
         counts.get("tool_request") == 1
         and counts.get("tool_execution") == 1
-        and counts.get("llm_request", 0) >= 3
+        and counts.get("llm_request", 0) >= 2
         and counts.get("llm_request") == counts.get("llm_execution")
     )
 
@@ -950,7 +950,7 @@ async def _run(
                 "manifest are approved for public release."
             ),
         },
-        supersedes=("geode-agenticloop-hook-middleware-behavior-e2e-20260730T235004Z-0434a17a1b0c"),
+        supersedes=("geode-agenticloop-hook-middleware-behavior-e2e-20260731T091808Z-d418e55ff8aa"),
     )
     manifest = json.loads((publication_dir / "manifest.json").read_text(encoding="utf-8"))
     secret_scan = dict(manifest["quality"]["secret_scan"])

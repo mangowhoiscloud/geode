@@ -1,8 +1,8 @@
 # Runtime memory · session record · trajectory convergence
 
-> Date: 2026-08-07  
-> Status: code-grounded research and implementation plan; no runtime behavior changed  
-> GEODE baseline: `origin/develop@bd9d8ccfea63dfc35b3fd1e1da30cbe7f2e89aae`  
+> Date: 2026-08-07
+> Status: code-grounded research and implementation plan; no runtime behavior changed
+> GEODE baseline: `origin/develop@bd9d8ccfea63dfc35b3fd1e1da30cbe7f2e89aae`
 > Comparison baselines: Codex `main@0bdce9f424eb9b39d7b3a8811742d10b6fbf8d54`,
 > Hermes `main@eb8421ba9864cd58b0cf246cdffc6d45f6949372`
 

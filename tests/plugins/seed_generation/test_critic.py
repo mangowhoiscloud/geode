@@ -45,18 +45,16 @@ class _StubManager:
         force_unparseable: bool = False,
     ) -> None:
         self.received_tasks: list[SubTask] = []
-        self.received_announce: bool | None = None
         self._critiques = critique_outputs or {}
         self._force_failures = force_failures
         self._force_unparseable = force_unparseable
 
-    async def adelegate(self, tasks, *, announce: bool = True) -> list:
+    async def adelegate(self, tasks) -> list:
         """Async sibling for Phase-C tests."""
-        return self.delegate(tasks, announce=announce)
+        return self.delegate(tasks)
 
-    def delegate(self, tasks: list[SubTask], *, announce: bool = True) -> list[SubResult]:
+    def delegate(self, tasks: list[SubTask]) -> list[SubResult]:
         self.received_tasks = list(tasks)
-        self.received_announce = announce
         results: list[SubResult] = []
         for i, t in enumerate(tasks):
             candidate_id = t.args["candidate_id"]
@@ -92,12 +90,12 @@ class _StubManager:
 class _ReverseOrderManager(_StubManager):
     """Returns SubResults in REVERSE submission order (worst-case latency)."""
 
-    async def adelegate(self, tasks, *, announce: bool = True) -> list:
+    async def adelegate(self, tasks) -> list:
         """Async sibling for Phase-C tests."""
-        return self.delegate(tasks, announce=announce)
+        return self.delegate(tasks)
 
-    def delegate(self, tasks: list[SubTask], *, announce: bool = True) -> list[SubResult]:
-        results = super().delegate(tasks, announce=announce)
+    def delegate(self, tasks: list[SubTask]) -> list[SubResult]:
+        results = super().delegate(tasks)
         return list(reversed(results))
 
 
@@ -210,11 +208,11 @@ def test_critic_accepts_text_json_fallback() -> None:
     # construct a manager that wraps the JSON-as-text inside output["text"].
 
     class _TextJsonManager:
-        async def adelegate(self, tasks, *, announce: bool = True) -> list:
+        async def adelegate(self, tasks) -> list:
             """Async sibling for Phase-C tests."""
-            return self.delegate(tasks, announce=announce)
+            return self.delegate(tasks)
 
-        def delegate(self, tasks: list[SubTask], *, announce: bool = True) -> list[SubResult]:
+        def delegate(self, tasks: list[SubTask]) -> list[SubResult]:
             return [
                 SubResult(
                     task_id=tasks[0].task_id,
@@ -239,25 +237,17 @@ def test_critic_validates_empty_candidates() -> None:
     assert result.error_category == "validation"
 
 
-def test_critic_announce_false() -> None:
-    state = _make_state()
-    _seed_candidates(state, 2)
-    manager = _StubManager()
-    asyncio.run(Critic(manager=manager).aexecute(state))  # type: ignore[arg-type]
-    assert manager.received_announce is False
-
-
 def test_critic_drops_non_dict_outputs() -> None:
     """_parse_critique returns None for list/None/scalar output shapes."""
     state = _make_state()
     _seed_candidates(state, 3)
 
     class _NonDictManager:
-        async def adelegate(self, tasks, *, announce: bool = True) -> list:
+        async def adelegate(self, tasks) -> list:
             """Async sibling for Phase-C tests."""
-            return self.delegate(tasks, announce=announce)
+            return self.delegate(tasks)
 
-        def delegate(self, tasks: list[SubTask], *, announce: bool = True) -> list[SubResult]:
+        def delegate(self, tasks: list[SubTask]) -> list[SubResult]:
             shapes: list[Any] = [None, ["not", "a", "dict"], 42]
             return [
                 SubResult(
@@ -310,10 +300,10 @@ class _TokenManager:
     def __init__(self, *, include_usage: bool = True) -> None:
         self._include_usage = include_usage
 
-    async def adelegate(self, tasks, *, announce: bool = True) -> list:
-        return self.delegate(tasks, announce=announce)
+    async def adelegate(self, tasks) -> list:
+        return self.delegate(tasks)
 
-    def delegate(self, tasks: list[SubTask], *, announce: bool = True) -> list[SubResult]:
+    def delegate(self, tasks: list[SubTask]) -> list[SubResult]:
         results: list[SubResult] = []
         for t in tasks:
             candidate_id = t.args["candidate_id"]

@@ -271,6 +271,7 @@ _PAYLOAD_SCHEMAS: dict[HookName, dict[str, Any]] = {
             "description": _STRING,
             "child_session_key": _STRING,
             "parent_session_key": _STRING,
+            "generation": _INTEGER,
         },
         "required": [
             "task_id",
@@ -289,6 +290,7 @@ _PAYLOAD_SCHEMAS: dict[HookName, dict[str, Any]] = {
             "duration_ms": _NUMBER,
             "error": _STRING,
             "child_session_key": _STRING,
+            "generation": _INTEGER,
         },
         "required": [
             "task_id",

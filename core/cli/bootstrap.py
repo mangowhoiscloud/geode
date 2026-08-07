@@ -285,9 +285,10 @@ async def arun_agentic_oneshot(
     if denied:
         log.info("Headless run_agent fork: denied tools filtered — %s", denied)
     handlers = {k: v for k, v in handlers.items() if k not in HEADLESS_DENIED_TOOLS}
-    # denied_tools is the REAL enforcement — run_bash / delegate_task are
-    # special-cased ahead of handler lookup, so the filter above alone cannot
-    # stop them (handler-filter is defense-in-depth for handler-dispatched tools).
+    # denied_tools is the REAL enforcement — run_bash and collaboration tools
+    # are special-cased ahead of handler lookup, so the filter
+    # above alone cannot stop them (handler-filter is defense-in-depth for
+    # handler-dispatched tools).
     executor = ToolExecutor(
         action_handlers=handlers,
         hitl_level=0,

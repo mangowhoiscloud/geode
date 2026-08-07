@@ -646,7 +646,7 @@ class Ranker(BaseSeedAgent):
             pilot_means=pilot_means or {},
             candidate_bodies=candidate_bodies or {},
         )
-        results = await self._manager.adelegate(tasks, announce=False)
+        results = await self._manager.adelegate(tasks)
         tasks_by_id: dict[str, Any] = {t.task_id: t for t in tasks}
 
         # PR-SEEDGEN-TOKENS (2026-05-30) — sum every voter sub-agent's LLM

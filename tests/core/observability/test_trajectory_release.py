@@ -156,6 +156,23 @@ def test_release_readback_accepts_relative_release_path(tmp_path, monkeypatch):
     assert manifest["quality"]["scope_complete_trajectories"] == 1
 
 
+def test_stage_release_accepts_symlinked_destination_root(tmp_path):
+    real = tmp_path / "real"
+    real.mkdir()
+    alias = tmp_path / "alias"
+    alias.symlink_to(real, target_is_directory=True)
+
+    release = stage_trajectory_release(
+        alias / "releases",
+        release_source="test",
+        release_scope="symlink-root",
+        trajectories={"trajectory.json": _trajectory()},
+        privacy_review=_privacy_review("symlink-root"),
+    )
+
+    assert release.is_relative_to(real.resolve())
+
+
 def test_release_readback_recomputes_manifest_quality(tmp_path):
     release = stage_trajectory_release(
         tmp_path,

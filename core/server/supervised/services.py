@@ -298,8 +298,6 @@ class SharedServices:
         return SubAgentManager(
             IsolatedRunner(hooks=self.hook_system, lane=global_lane),
             action_handlers=self.tool_handlers,
-            mcp_manager=self.mcp_manager,
-            skill_registry=self.skill_registry,
             agent_registry=agent_registry,
             hooks=self.hook_system,
             hook_registry=self.hook_registry,

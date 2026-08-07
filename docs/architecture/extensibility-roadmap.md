@@ -283,19 +283,19 @@ machine-readable artifact is
 
 | Measure | Current tree |
 |---|---:|
-| Production Python files (`core/` + `plugins/`) | 542 |
-| Test Python files | 681 |
-| `core/` Python LOC | 138,358 |
-| `plugins/` Python LOC | 41,841 |
-| Test Python LOC | 178,953 |
-| Tool definitions / executable registrations / valid schemas | 78 / 81 / 78 (definition-only 0; execution-only 3; invalid schema 0) |
+| Production Python files (`core/` + `plugins/`) | 543 |
+| Test Python files | 682 |
+| `core/` Python LOC | 139,119 |
+| `plugins/` Python LOC | 41,831 |
+| Test Python LOC | 179,179 |
+| Tool definitions / executable registrations / valid schemas | 84 / 87 / 84 (definition-only 0; execution-only 3; invalid schema 0) |
 | `RuntimeEvent` members | 57 |
 | Built-in LLM adapters | 8 |
 | Module-level `ContextVar` declarations under `core/` | 30 |
 | `core` → `plugins` import sites | 31 across 14 files |
 | Import-linter contracts / ignored edges | 4 / 24 |
-| `AgenticLoop` file LOC / methods / constructor args | 2,984 / 74 / 27 |
-| `SubAgentManager` file LOC / methods / constructor args | 1,371 / 17 / 16 |
+| `AgenticLoop` file LOC / methods / constructor args | 2,999 / 74 / 27 |
+| `SubAgentManager` file LOC / methods / constructor args | 1,441 / 24 / 15 |
 | `RuntimeCoreConfig` fields | 19 |
 | Global Ruff ratchets | complexity 52; args 23; branches 51; returns 18; statements 212 |
 <!-- generated:architecture-baseline:end -->
@@ -1335,32 +1335,34 @@ Acceptance:
 
 GAPs: COLLAB-001, COLLAB-002, COLLAB-003.
 
-This package extends the existing `delegate_task` surface rather than creating
-a general-purpose thread subsystem. Background delegation returns a stable
-child handle; one parent-scoped control surface provides list, bounded wait,
-interrupt, message, follow-up, and resume operations. Children remain depth
-one, retain the current session cap and global Lane limit, and cannot control
-siblings or create descendants.
+This package separates foreground `delegate_task` from durable collaboration
+without creating a general-purpose thread subsystem. `spawn_agent` returns a
+stable child handle; explicit list, bounded-wait, interrupt, message, and
+follow-up tools each own one schema and effect. Children remain depth one,
+retain the session cap and global Lane limit, and cannot control siblings or
+create descendants.
 
 Mutable run status and bounded mailbox delivery use additive tables in the
 existing `sessions.db`. They are control projections, not replay history. The
 child's checkpoint, messages, hook/runtime events, and projected trajectory
 remain its independent rollout. A resumed child increments a generation and
-restores that same checkpoint; it never replays a previously successful tool
-side effect. A daemon restart may mark an uncertain in-flight process
+restores that same checkpoint; the runtime does not replay a successful call,
+but a model may issue it again, so this is not an exactly-once side-effect
+contract. A daemon restart may mark an uncertain in-flight process
 interrupted, but does not automatically restart it.
 
 Acceptance:
 
-- foreground `delegate_task` behavior remains compatible, while background
-  mode returns before child completion and exposes one stable child handle;
+- foreground `delegate_task` behavior remains compatible, while `spawn_agent`
+  returns before child completion and exposes one stable child handle;
 - list, bounded wait, and interrupt are scoped to the owning parent, preserve
   terminal status, and emit exactly one terminal transition per generation;
 - messages and completion notices are bounded, redacted, ordered, durable
-  across parent inactivity and daemon restart, and consumed at most once;
+  across parent inactivity and daemon restart, and acknowledged only after
+  checkpoint admission;
 - a running child consumes mailbox input only at an agent-loop boundary;
   follow-up/resume on a terminal or interrupted child restores the same child
-  checkpoint as a new generation without replaying completed side effects;
+  checkpoint as a new generation without runtime replay of completed calls;
 - depth, per-session task cap, Lane concurrency, approval/policy, hooks,
   checkpoint, session-event, and trajectory contracts remain executable in
   foreground, background, interrupted, resumed, failed, and timed-out tests;

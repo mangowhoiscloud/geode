@@ -3,15 +3,14 @@
 Smoke 7 (v0.99.53, post-PR-JSON-CODEBLOCK-STRIP) surfaced both
 proximity and critic still failing because the LLM wrapped its
 otherwise-valid JSON in a ```json``` markdown fence. The pre-fix
-`SubAgentManager._to_sub_result` / `_to_agent_result` called
+`SubAgentManager._to_sub_result` called
 `json.loads(isolation.output)` directly, which raises JSONDecodeError
 on the fence and falls back to `{"raw": <wrapped-text>}` —
 downstream parsers (proximity uses a non-`text`-key consumer) can't
 recover from that shape.
 
-The fix applies `_strip_json_codeblock()` *before* `json.loads()` at
-both convert sites, so a fenced JSON body parses to a proper dict
-and propagates as `SubResult.output` / `SubAgentResult.data`.
+The fix applies `_strip_json_codeblock()` *before* `json.loads()`, so a fenced
+JSON body parses to a proper dict and propagates as `SubResult.output`.
 """
 
 from __future__ import annotations
@@ -108,39 +107,3 @@ def test_to_sub_result_bare_fence_no_lang_tag() -> None:
     result = manager._to_sub_result(task, isolation)
 
     assert result.output == {"x": 42}
-
-
-def test_to_agent_result_unwraps_json_codeblock_fence() -> None:
-    """Parallel fix at `_to_agent_result` — same regex applied so the
-    SubAgentResult.data carries the parsed dict instead of the
-    `{"raw": ...}` fallback."""
-    manager = _make_manager()
-    task = _make_task()
-    isolation = _make_isolation('```json\n{"summary": "done", "tier": "gold"}\n```')
-
-    agent_result = manager._to_agent_result(task, isolation)
-
-    assert agent_result.status == "ok"
-    assert agent_result.data == {"summary": "done", "tier": "gold"}
-    assert agent_result.summary == "done"
-
-
-def test_to_agent_result_plain_json_still_works() -> None:
-    manager = _make_manager()
-    task = _make_task()
-    isolation = _make_isolation('{"summary": "ok", "x": 1}')
-
-    agent_result = manager._to_agent_result(task, isolation)
-
-    assert agent_result.data == {"summary": "ok", "x": 1}
-    assert agent_result.summary == "ok"
-
-
-def test_to_agent_result_non_json_text_falls_back_to_raw() -> None:
-    manager = _make_manager()
-    task = _make_task()
-    isolation = _make_isolation("free-form natural language response")
-
-    agent_result = manager._to_agent_result(task, isolation)
-
-    assert agent_result.data == {"raw": "free-form natural language response"}

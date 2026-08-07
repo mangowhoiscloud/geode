@@ -232,8 +232,8 @@ jobs:
             exit 1
           fi
           echo "Selected non-live test count: $count"
-          if [ "$count" -lt 10439 ]; then
-            echo "::error::Test count $count < 10439 (ratchet). Do not delete tests without justification."
+          if [ "$count" -lt 10433 ]; then
+            echo "::error::Test count $count < 10433 (ratchet). Do not delete tests without justification."
             exit 1
           fi
 
