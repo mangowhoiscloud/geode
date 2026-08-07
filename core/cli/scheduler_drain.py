@@ -143,15 +143,7 @@ async def drain_scheduler_queue(
                                         if callable(_mark_paused):
                                             _mark_paused()
                                 else:
-                                    _mark_done_async = getattr(
-                                        _loop, "amark_session_completed", None
-                                    )
-                                    if callable(_mark_done_async):
-                                        await _mark_done_async()
-                                    else:
-                                        _mark_done = getattr(_loop, "mark_session_completed", None)
-                                        if callable(_mark_done):
-                                            _mark_done()
+                                    await _loop.amark_session_completed()
                             except Exception:
                                 log.warning(
                                     "Pending-ask publish failed for job %s",
@@ -162,22 +154,10 @@ async def drain_scheduler_queue(
                                 _cb(r, job_id=_jid)
                         except TimeoutError:
                             log.warning("Scheduler job %s timed out after 300s", _jid)
-                            _mark_err_async = getattr(_loop, "amark_session_error", None)
-                            if callable(_mark_err_async):
-                                await _mark_err_async()
-                            else:
-                                _mark_err = getattr(_loop, "mark_session_error", None)
-                                if callable(_mark_err):
-                                    _mark_err()
+                            await _loop.amark_session_error()
                         except Exception:
                             log.warning("Scheduler job %s execution failed", _jid, exc_info=True)
-                            _mark_err_async = getattr(_loop, "amark_session_error", None)
-                            if callable(_mark_err_async):
-                                await _mark_err_async()
-                            else:
-                                _mark_err = getattr(_loop, "mark_session_error", None)
-                                if callable(_mark_err):
-                                    _mark_err()
+                            await _loop.amark_session_error()
                         finally:
                             _glob.manual_release(_key)
                             _sess.manual_release(_key)

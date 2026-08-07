@@ -197,10 +197,8 @@ Lifecycle hooks follow commit boundaries: `SessionStart` fires only after the
 initial/resume checkpoint succeeds; `SessionEnd` fires only after a completed
 or error terminal state is durable. A paused turn does not end the session.
 `PostCompact` likewise fires only after compacted state persistence succeeds.
-Async owners close through `amark_session_completed/error`. The synchronous
-close methods are deprecated compatibility bridges: they emit `SessionEnd`
-when called without an active event loop, but warn and preserve only the
-durable edge inside an already-running loop.
+Owners close through `amark_session_completed/error`, keeping durable state
+and the public `SessionEnd` edge inside one awaited boundary.
 
 ### Live behavior evidence
 

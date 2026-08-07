@@ -185,10 +185,8 @@ RuntimeEventBus
 `SessionEnd`는 completed/error terminal state가 durable해진 뒤에만 발화한다.
 paused turn은 session을 끝내지 않는다. `PostCompact`도 compacted state
 영속화가 성공한 뒤에만 발화한다.
-비동기 owner는 `amark_session_completed/error`로 닫는다. 동기 close
-method는 deprecated compatibility bridge다. active event loop가 없을 때는
-`SessionEnd`까지 발화하지만, 이미 실행 중인 loop 안에서는 경고하고 durable
-edge만 보존한다.
+owner는 `amark_session_completed/error`로 닫아 durable state와 public
+`SessionEnd` edge를 하나의 await 경계에서 처리한다.
 
 ### 라이브 행동 증거
 

@@ -26,9 +26,9 @@ owner. Its storage planes are:
 | public release | trajectory release gate | `geode-eval-artifacts/trajectories/<release-id>/` | scope-complete reviewed allowlist + manifest |
 | judgment evidence | `EvidenceLedger` | v2 evidence JSONL | session/turn/call-correlated claims, citations, and verifier results |
 
-`SessionTranscript` and `RunTranscript` are one-release compatibility names.
-`transcript.jsonl` and `dialogue.jsonl` remain read/import inputs; new writers
-use SQLite and `events.jsonl`. MCPMark, tau2-bench, and hook behavior E2E all
+`SessionTranscript` and `RunTranscript` were removed after their grace release.
+`transcript.jsonl` and `dialogue.jsonl` remain read/import inputs; writers use
+SQLite and `events.jsonl`. MCPMark, tau2-bench, and hook behavior E2E all
 produce normalized trajectories through the same packaged schema validator.
 
 The planes deliberately overlap in correlation, not in authority:

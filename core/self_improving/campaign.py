@@ -1588,21 +1588,6 @@ def merge_worker_timelines(
     return len(rows)
 
 
-def merge_worker_transcripts(
-    worker_transcripts: Sequence[Path | None],
-    dest: Path,
-) -> int:
-    """Deprecated compatibility alias for :func:`merge_worker_timelines`."""
-    import warnings
-
-    warnings.warn(
-        "merge_worker_transcripts is deprecated; use merge_worker_timelines",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    return merge_worker_timelines(worker_transcripts, dest)
-
-
 async def run_gen0_baseline_async(
     *,
     k: int,

@@ -715,7 +715,7 @@ def run_audit_seeds(
     # PR-Q.5 + PR-U (2026-05-24, Codex MCP review of #1584 caught this
     # gap) — wrap the orchestrator body in BOTH ``run_dir_scope`` and
     # ``run_timeline_scope`` so downstream writers (IsolatedRunner's
-    # ``GEODE_RUN_DIR`` env-forward, SessionTranscript's
+    # ``GEODE_RUN_DIR`` env-forward, SessionTimeline's
     # ``resolve_sub_agent_path`` lookup, RunTimeline mirror from the
     # worker subprocess) all see the binding. Pre-fix the cli only
     # opened ``run_timeline_scope`` and the ContextVar binding for

@@ -8,9 +8,7 @@ thin one-line delegators.
 
 from __future__ import annotations
 
-import asyncio
 import logging
-import warnings
 from dataclasses import replace
 from hashlib import sha256
 from typing import TYPE_CHECKING, Any
@@ -212,64 +210,11 @@ def _record_terminal_timeline(loop: AgenticLoop, *, status: str) -> None:
         log.debug("Session timeline terminal recording failed", exc_info=True)
 
 
-def mark_session_completed(loop: AgenticLoop) -> None:
-    """Compatibility bridge for synchronous session owners.
-
-    New async integrations must call ``amark_session_completed``. When no
-    event loop is active, this bridge still emits the public SessionEnd edge;
-    inside an active loop it preserves the durable transition and warns
-    rather than scheduling an unowned background task.
-    """
-    warnings.warn(
-        "mark_session_completed() is deprecated; await amark_session_completed()",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    if _run_async_terminal_from_sync(loop, reason="completed"):
-        return
-    if _mark_session_status(loop, reason="completed"):
-        _record_terminal_timeline(loop, status="completed")
-
-
 def mark_session_paused(loop: AgenticLoop) -> None:
     """Mark the current session as paused — a one-shot surface parked it
     awaiting operator input (pending ask); the checkpoint stays resumable.
     """
     _mark_session_status(loop, reason="paused")
-
-
-def mark_session_error(loop: AgenticLoop) -> None:
-    """Compatibility bridge for synchronous errored session owners."""
-    warnings.warn(
-        "mark_session_error() is deprecated; await amark_session_error()",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    if _run_async_terminal_from_sync(loop, reason="error"):
-        return
-    if _mark_session_status(loop, reason="error"):
-        _record_terminal_timeline(loop, status="error")
-
-
-def _run_async_terminal_from_sync(loop: AgenticLoop, *, reason: str) -> bool:
-    """Own the async public edge only when this call can close its event loop."""
-    if not hasattr(loop, "_hook_registry"):
-        return False
-    try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        terminal = (
-            mark_session_completed_async if reason == "completed" else mark_session_error_async
-        )
-        asyncio.run(terminal(loop))
-        return True
-    warnings.warn(
-        "synchronous session close ran inside an active event loop; "
-        "the durable transition was recorded but SessionEnd requires the async API",
-        RuntimeWarning,
-        stacklevel=3,
-    )
-    return False
 
 
 async def mark_session_completed_async(loop: AgenticLoop) -> None:

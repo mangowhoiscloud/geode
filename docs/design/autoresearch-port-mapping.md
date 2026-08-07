@@ -352,7 +352,7 @@ Each exports:
 | | (… + 11 more files …) | `` | `` | `` | `` | `` |
 | **Results table** | `autoresearch/state/results.tsv` | 12-col TSV (session_id, gen_tag, commit, fitness, critical_min, critical_mean, auxiliary_mean, stability_score, info_mean, dim_count_engaged, verdict, description) | SoT for operator review (operator appends) | Per audit (emitted as `results_tsv:` on stdout) | NO | YES |
 | **Results raw** | `autoresearch/state/results.jsonl` | Full 20-dim + 4-axis + provenance | SoT for seed-gen meta-reviewer | Per audit (emitted as `results_jsonl:` on stdout) | NO | YES |
-| **Audit log** | `~/.geode/self-improving-loop/<ts>-<id>/journal.jsonl` | RunTranscript event schema (wrapper_override_dumped, subprocess_started, subprocess_finished, baseline_decision, audit_failed, config_snapshot) | Observability (operator & auto-review) | Per audit (P0b emitted during run_audit) | NO | YES |
+| **Audit log** | `~/.geode/autoresearch/handoff/<run-id>/events.jsonl` | `geode.run-event@1` via `RunTimeline` (wrapper_override_dumped, subprocess_started, subprocess_finished, baseline_decision, audit_failed, config_snapshot) | Observability (operator & auto-review) | Per audit (P0b emitted during run_audit) | NO | YES |
 | **Petri archive** | `~/.geode/petri/logs/latest.eval` | EvalLog (inspect_ai result) | Ground truth for per-dim evidence (linked from baseline.json:raw.eval_archive) | Per audit (Petri subprocess writes) | NO | YES |
 
 **SoT hierarchy**:

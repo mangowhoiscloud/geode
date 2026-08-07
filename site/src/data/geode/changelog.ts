@@ -19,7 +19,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": ""
+    "body": "### Fixed\n\n- **Legacy transcript cleanup survives writer retirement.** `geode clean --all`\n  removes expired JSONL imports recursively without importing the retired\n  transcript writer.\n\n### Removed\n\n- **Removed expired transcript compatibility writers.** `SessionTranscript`,\n  `RunTranscript`, their re-export module, ContextVar aliases, and the unused\n  `merge_worker_transcripts` alias are gone after the v1.0.12 grace release.\n  Existing `transcript.jsonl` and `dialogue.jsonl` files remain supported as\n  explicit migration inputs; canonical writes continue through\n  `SessionTimeline`, `RunTimeline`, SQLite, and `events.jsonl`.\n- **Removed deprecated synchronous session-close bridges.** Session owners now\n  await `amark_session_completed/error`, so checkpoint transitions and public\n  `SessionEnd` delivery cannot split across event-loop ownership boundaries.\n\n### Infrastructure\n\n- **Closed dependency and CI supply-chain debt.** Runtime and site lockfiles\n  now resolve without known advisories, CI audits both lock surfaces, and all\n  third-party GitHub Actions are pinned to reviewed commit SHAs on their\n  current Node 24 releases."
   },
   {
     "version": "1.0.16",

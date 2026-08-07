@@ -1,7 +1,7 @@
 """``run_dir`` — single SoT for the "active per-cycle output directory"
 the seed-generation / petri-audit orchestrators run inside.
 
-Pre-PR-Q every observability writer (RunTimeline / legacy SessionTranscript /
+Pre-PR-Q every observability writer (RunTimeline / session history /
 WorkerResult / IsolatedRunner stderr) had its own hardcoded global
 ``~/.geode/<bucket>/`` destination. One seed-generation cycle's artifacts
 landed across 5 prefixes with 3 different identifiers (run_id /
@@ -73,7 +73,7 @@ def set_active_run_dir(run_dir: Path | str | None) -> contextvars.Token[Path | N
 def get_active_run_dir() -> Path | None:
     """Return the active run directory, or ``None`` when no orchestrator
     has bound one. Writers use this to decide whether to redirect their
-    output into the per-cycle directory vs the legacy global pool."""
+    output into the per-cycle directory vs its documented fallback."""
     return _active_run_dir.get()
 
 
