@@ -45,16 +45,8 @@ def _render_readiness_compact(report: ReadinessReport) -> None:
     console.print()
 
 
-def _suppress_noisy_warnings() -> None:
-    """Suppress known noisy warnings. Delegates to terminal module."""
-    from core.cli.terminal import suppress_noisy_warnings
-
-    suppress_noisy_warnings()
-
-
 def _welcome_screen() -> None:
     """Show Claude Code-style welcome screen with readiness check."""
-    _suppress_noisy_warnings()
     _render_welcome_brand()
 
     # Auto-generate .env from .env.example (placeholder → empty)

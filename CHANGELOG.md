@@ -47,7 +47,32 @@ functional change.
 
 ## [Unreleased]
 
+### Removed
+
+- **Retired dead runtime migration residue.** The CLI daemon now has one
+  asyncio IPC path instead of retaining its unreachable socket/thread
+  predecessor and raw-socket approval implementation. Caller-free no-op hooks,
+  private delegates, stale legacy-import exemptions, and private parser aliases
+  were removed. Public compatibility imports remain thin bridges to their
+  canonical APIs. Removing two tests that exercised only the deleted raw-socket
+  timeout/disconnect path moves the selected-test ratchet from 10,441 to the
+  measured 10,439; endpoint-level disconnect denial remains covered.
+
+### Fixed
+
+- **Denied pending IPC approval immediately on disconnect.** Reader EOF and
+  daemon shutdown now wake the endpoint's pending approval as a fail-closed
+  denial instead of waiting for the 120-second user-response timeout.
+- **Made `core.agent.sub_agent` safe to import first.** `WorkerRequest` now
+  loads only when the subprocess request path runs, breaking the cold-import
+  cycle through `worker`, `loop.__init__`, and `AgenticLoop`.
+
 ### Infrastructure
+
+- **Expanded hook behavior release evidence.** The existing live hook E2E now
+  also gates block, deny, pre-start cancellation, handler failure, middleware
+  short-circuit/single-use `next_call`, and sub-agent timeout behavior without
+  spending additional model tokens.
 
 - **Release-facing documentation now fails closed on stale public contracts.**
   The official docs gate requires both READMEs to carry the canonical runtime

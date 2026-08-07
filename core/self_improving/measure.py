@@ -19,14 +19,10 @@ import shutil
 import subprocess
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
-
-from core.self_improving import fitness as fitness_spec
-
-if TYPE_CHECKING:
-    pass
+from typing import Any
 
 from core.paths import LATEST_PETRI_EVAL
+from core.self_improving import fitness as fitness_spec
 
 log = logging.getLogger(__name__)
 

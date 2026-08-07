@@ -16,8 +16,6 @@ This invariant pins:
   1. The lock is held during the entire HITL prompt + mutation sequence.
   2. The lock is RE-checked inside the locked section so the second caller
      sees the first caller's ``always`` promotion and short-circuits.
-  3. The poller-side socket recv loop has a finite timeout so a real
-     user-stuck case fails closed (denial) instead of hanging the daemon.
 """
 
 from __future__ import annotations
@@ -26,10 +24,8 @@ import inspect
 import threading
 import time
 from typing import Any
-from unittest.mock import MagicMock
 
 import core.agent.approval as _approval_mod
-import core.server.ipc_server.poller as _poller_mod
 
 # ---------------------------------------------------------------------------
 # Contract 1 — apply_safety_gates uses _approval_lock
@@ -129,37 +125,3 @@ def test_second_parallel_write_short_circuits_after_always() -> None:
         "second parallel call must observe always-set promotion and approve"
     )
     assert "write" in gate._always_approved_categories
-
-
-# ---------------------------------------------------------------------------
-# Contract 3 — daemon socket timeout fails CLOSED, not silently hangs
-# ---------------------------------------------------------------------------
-
-
-def test_request_approval_uses_finite_timeout() -> None:
-    """Source-level: poller's request_approval must set a finite settimeout
-    on the client socket so a stuck thin client doesn't pin a daemon thread
-    forever. Pre-v0.52.1 this was already 120s — this test pins it to
-    prevent a future refactor from removing the timeout.
-    """
-    src = inspect.getsource(_poller_mod._StreamingWriter.request_approval)
-    assert "settimeout" in src, (
-        "poller.request_approval must set a socket timeout — otherwise a "
-        "stuck thin client (e.g. user walked away) hangs the daemon thread."
-    )
-    # The timeout returns "n" (denial) on timeout — fail closed for HITL.
-    assert 'return "n"' in src, (
-        "TimeoutError path must return 'n' (deny) — never default-allow on hang"
-    )
-
-
-def test_request_approval_returns_decision_on_socket_close() -> None:
-    """End-to-end: simulate a thin client that disconnects mid-prompt.
-    The daemon must return "n" (denial), not raise, not block forever.
-    """
-    fake_sock = MagicMock()
-    # recv returns empty bytes → connection closed
-    fake_sock.recv.return_value = b""
-    writer = _poller_mod._StreamingWriter(fake_sock)
-    decision = writer.request_approval("manage_login", "subcommand=use", "write")
-    assert decision == "n", "closed connection during HITL must default to denial (fail-closed)"

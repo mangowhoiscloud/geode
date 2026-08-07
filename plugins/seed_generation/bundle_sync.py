@@ -454,24 +454,6 @@ def _incremental_sync_checkpoints(src_ck: Path, dst_ck: Path) -> None:
             continue
 
 
-def _read_survivor_ids(state_json: Path) -> list[str]:
-    """Extract the survivor candidate_ids from state.json.
-
-    Returns an empty list when state.json is unreadable / missing the
-    ``survivors`` key (defensive — the caller still publishes
-    state.json itself; only the per-candidate body copy depends on this).
-    """
-    try:
-        data = json.loads(state_json.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        log.warning("bundle_sync: state.json unreadable %s: %s", state_json, exc)
-        return []
-    survivors = data.get("survivors") if isinstance(data, dict) else None
-    if not isinstance(survivors, list):
-        return []
-    return [str(s) for s in survivors if isinstance(s, str)]
-
-
 def iter_synced_runs(bundle_seeds_dir: Path | None = None) -> list[dict[str, Any]]:
     """Enumerate published seed runs for the bundle build step.
 

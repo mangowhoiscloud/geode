@@ -198,10 +198,6 @@ class ToolExecutor:
         """
         self._approval.attach_evidence_ledger(ledger)
 
-    def _track_decision(self, tool_name: str, decision: str) -> None:
-        """Delegates to ApprovalWorkflow."""
-        self._approval.track_decision(tool_name, decision)
-
     # Proxy properties for backward compat (tests access these directly)
     @property
     def _always_approved_categories(self) -> set[str]:
@@ -835,11 +831,6 @@ class ToolExecutor:
             ),
             "denied": True,
         }, False
-
-    async def _apply_safety_gates_async(
-        self, tool_name: str, tool_input: dict[str, Any]
-    ) -> tuple[dict[str, Any] | None, bool]:
-        return await self._approval.apply_safety_gates_async(tool_name, tool_input)
 
     async def _call_handler_async(
         self,

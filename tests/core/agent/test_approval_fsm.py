@@ -601,6 +601,58 @@ class TestIPCApprovalRoundTrip:
 
         assert asyncio.run(scenario()) == "n"
 
+    def test_disconnect_wakes_pending_approval_with_deny(self) -> None:
+        """EOF must fail closed immediately instead of waiting 120 seconds."""
+        from core.server.ipc_server.poller import CLIPoller, _AsyncClientEndpoint
+
+        received: dict[str, str] = {}
+
+        async def scenario() -> None:
+            reader = asyncio.StreamReader()
+            writer = _FakeStreamWriter()
+            endpoint = _AsyncClientEndpoint(asyncio.get_running_loop(), writer)  # type: ignore[arg-type]
+
+            class _FakeServices:
+                lane_queue = None
+
+                def create_session(self, *args: Any, **kwargs: Any) -> tuple[Any, Any]:
+                    callback = kwargs["approval_callback"]
+
+                    async def arun(text: str) -> Any:
+                        received["decision"] = await asyncio.to_thread(
+                            callback, "memory_save", "content", "write", "disconnect-id"
+                        )
+                        return SimpleNamespace(
+                            text="done",
+                            rounds=1,
+                            tool_calls=[],
+                            termination_reason="complete",
+                            summary="",
+                        )
+
+                    return SimpleNamespace(), SimpleNamespace(
+                        _quiet=True, _op_logger=None, arun=arun
+                    )
+
+            poller = CLIPoller.__new__(CLIPoller)
+            poller._services = _FakeServices()  # type: ignore[attr-defined]
+            poller._stop_event = threading.Event()  # type: ignore[attr-defined]
+            poller._propagate_contextvars = lambda: None  # type: ignore[attr-defined]
+
+            with patch("core.server.ipc_server.fast_chat.should_use_fast_chat", return_value=False):
+                handler = asyncio.create_task(poller._handle_client_async(reader, endpoint))
+                reader.feed_data(b'{"type":"prompt","text":"save"}\n')
+                deadline = time.monotonic() + 2.0
+                while not writer.sent("approval_request"):
+                    if time.monotonic() > deadline:
+                        raise AssertionError("approval_request never sent")
+                    await asyncio.sleep(0.01)
+                reader.feed_eof()
+                await asyncio.wait_for(handler, timeout=2.0)
+
+        asyncio.run(scenario())
+        assert received["decision"] == "n"
+
     def test_legacy_reply_without_id_accepted(self) -> None:
         from core.server.ipc_server.poller import _AsyncClientEndpoint
 

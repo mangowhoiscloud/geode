@@ -28,7 +28,6 @@ import json
 import logging
 import os
 import queue
-import socket
 import threading
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -43,26 +42,6 @@ if TYPE_CHECKING:
 from core.paths import CLI_SOCKET_PATH  # noqa: E402 — placed after TYPE_CHECKING block
 
 DEFAULT_SOCKET_PATH = CLI_SOCKET_PATH  # P2 — was `Path.home() / ".geode" / "cli.sock"`
-
-# Thread-local terminal capability advertised by the connected thin CLI.
-# v0.84.0 — populated when the daemon receives a ``client_capability``
-# message. Read by ``_run_prompt_streaming`` to construct the per-thread
-# Rich Console with the client's actual TTY-ness and width, so ANSI /
-# spinner output is suppressed when the thin CLI's stdout is not a TTY.
-_client_capability_local = threading.local()
-
-
-def _get_client_capability() -> tuple[bool, int]:
-    """Return ``(is_tty, width)`` for the current handler thread.
-
-    Defaults to ``(True, 120)`` for backward compatibility with thin
-    clients that don't send a ``client_capability`` message.
-    """
-    is_tty = bool(getattr(_client_capability_local, "is_tty", True))
-    width = int(getattr(_client_capability_local, "width", 120))
-    if width <= 0:
-        width = 120
-    return is_tty, width
 
 
 def _session_greeting(session_id: str) -> dict[str, Any]:
@@ -231,6 +210,8 @@ class _AsyncClientEndpoint:
         return "n"
 
     def close_threadsafe(self) -> None:
+        self.feed_approval_response("n")
+
         async def _close() -> None:
             self._writer.close()
             with contextlib.suppress(OSError):
@@ -242,7 +223,7 @@ class _AsyncClientEndpoint:
 
 
 class _StreamingWriter:
-    """File-like object that relays console writes to a client socket.
+    """File-like object that relays console writes to an async client endpoint.
 
     Each ``write()`` call sends ``{"type": "stream", "data": "..."}`` over
     the socket, so the thin client can render agentic UI (tool calls,
@@ -254,7 +235,7 @@ class _StreamingWriter:
     - autoresearch P6 L1 capture (capture all stdout)
     """
 
-    def __init__(self, client: socket.socket | _AsyncClientEndpoint) -> None:
+    def __init__(self, client: _AsyncClientEndpoint) -> None:
         self._client = client
 
     def write(self, text: str) -> int:
@@ -268,14 +249,7 @@ class _StreamingWriter:
         self._send_json({"type": event_type, **data})
 
     def _send_json(self, obj: dict[str, Any]) -> None:
-        if isinstance(self._client, _AsyncClientEndpoint):
-            self._client.send_json_threadsafe(obj)
-            return
-        try:
-            payload = json.dumps(obj, ensure_ascii=False) + "\n"
-            self._client.sendall(payload.encode("utf-8"))
-        except (BrokenPipeError, ConnectionResetError, OSError):
-            pass
+        self._client.send_json_threadsafe(obj)
 
     def request_approval(
         self,
@@ -288,78 +262,7 @@ class _StreamingWriter:
 
         Returns 'y', 'n', or 'a' (always).
         """
-        if isinstance(self._client, _AsyncClientEndpoint):
-            return self._client.request_approval(tool_name, detail, safety_level, approval_id)
-
-        self._send_json(
-            {
-                "type": "approval_request",
-                "tool_name": tool_name,
-                "detail": detail,
-                "safety_level": safety_level,
-                "approval_id": approval_id,
-            }
-        )
-        log.debug("HITL: sent approval_request tool=%s level=%s", tool_name, safety_level)
-        import time as _time
-
-        _t0 = _time.monotonic()
-        # Block until thin client sends approval_response
-        try:
-            self._client.settimeout(120.0)  # 2 min for user decision
-            buf = b""
-            while True:
-                chunk = self._client.recv(4096)
-                if not chunk:
-                    log.warning(
-                        "HITL: connection closed tool=%s elapsed=%.1fs",
-                        tool_name,
-                        _time.monotonic() - _t0,
-                    )
-                    return "n"
-                buf += chunk
-                while b"\n" in buf:
-                    line, buf = buf.split(b"\n", 1)
-                    msg = json.loads(line.decode("utf-8"))
-                    if msg.get("type") == "approval_response":
-                        reply_id = str(msg.get("approval_id", ""))
-                        if approval_id and reply_id and reply_id != approval_id:
-                            log.warning(
-                                "HITL: discarding stale approval reply id=%s (want id=%s)",
-                                reply_id,
-                                approval_id,
-                            )
-                            continue
-                        decision = str(msg.get("decision", "n"))
-                        log.info(
-                            "HITL: approval_response tool=%s decision=%s elapsed=%.1fs",
-                            tool_name,
-                            decision,
-                            _time.monotonic() - _t0,
-                        )
-                        return decision
-                    else:
-                        log.debug(
-                            "HITL: ignoring non-approval msg type=%s",
-                            msg.get("type"),
-                        )
-        except TimeoutError:
-            log.warning(
-                "HITL: approval TIMEOUT tool=%s elapsed=%.1fs",
-                tool_name,
-                _time.monotonic() - _t0,
-            )
-            return "n"
-        except (OSError, json.JSONDecodeError) as exc:
-            log.warning(
-                "HITL: approval error tool=%s elapsed=%.1fs exc=%s",
-                tool_name,
-                _time.monotonic() - _t0,
-                exc,
-            )
-            return "n"
-        finally:
-            self._client.settimeout(None)
+        return self._client.request_approval(tool_name, detail, safety_level, approval_id)
 
     def flush(self) -> None:
         pass
@@ -375,9 +278,8 @@ class CLIPoller:
     """Unix domain socket server for CLI thin-client IPC.
 
     Unlike BasePoller subclasses (which poll external APIs), CLIPoller
-    *listens* for a local CLI client connection. It does not inherit
-    BasePoller because the lifecycle is fundamentally different:
-    accept-loop vs poll-loop.
+    *listens* for local CLI connections through an asyncio Unix server. It does
+    not inherit BasePoller because the lifecycle is event-driven, not polling.
     """
 
     def __init__(
@@ -389,14 +291,13 @@ class CLIPoller:
     ) -> None:
         self._services = services
         self._socket_path = socket_path or DEFAULT_SOCKET_PATH
-        self._server: socket.socket | None = None
         self._async_server: asyncio.AbstractServer | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._stop_event = threading.Event()
         self._ready_event = threading.Event()
         self._startup_error: BaseException | None = None
         self._thread: threading.Thread | None = None
-        self._active_clients: set[socket.socket | _AsyncClientEndpoint] = set()
+        self._active_clients: set[_AsyncClientEndpoint] = set()
         self._clients_lock = threading.Lock()
         self._scheduler_service = scheduler_service
 
@@ -435,18 +336,12 @@ class CLIPoller:
     def stop_accepting(self) -> None:
         """Stop accepting new connections but let active handlers finish.
 
-        Closes the server socket and sets the stop event so the accept loop
-        exits. Active client handler threads continue running until their
-        current request completes.
+        Closes the server socket and lets active handlers finish their current
+        request.
         """
         self._stop_event.set()
         self._close_async_server()
-        if self._server:
-            with contextlib.suppress(OSError):
-                self._server.close()
-            self._server = None
         if self._thread and not self._active_clients:
-            self._stop_async_loop()
             self._thread.join(timeout=5.0)
             self._thread = None
         log.info("CLI channel stopped accepting new connections")
@@ -457,16 +352,8 @@ class CLIPoller:
         self._close_async_server()
         with self._clients_lock:
             for client in list(self._active_clients):
-                if isinstance(client, _AsyncClientEndpoint):
-                    client.close_threadsafe()
-                else:
-                    with contextlib.suppress(OSError):
-                        client.close()
+                client.close_threadsafe()
             self._active_clients.clear()
-        if self._server:
-            with contextlib.suppress(OSError):
-                self._server.close()
-        self._stop_async_loop()
         if self._thread:
             self._thread.join(timeout=5.0)
             self._thread = None
@@ -520,11 +407,6 @@ class CLIPoller:
         with contextlib.suppress(Exception):
             future.result(timeout=5.0)
 
-    def _stop_async_loop(self) -> None:
-        # The Runner-owned loop exits when _stop_event is set; keep this
-        # method for lifecycle call sites that only need to wake/observe stop.
-        return
-
     async def _handle_async_client(
         self,
         reader: asyncio.StreamReader,
@@ -554,8 +436,6 @@ class CLIPoller:
             writer.close()
             with contextlib.suppress(OSError):
                 await writer.wait_closed()
-            if self._stop_event.is_set() and active == 0:
-                self._stop_async_loop()
             log.info("CLI client session ended (%d active)", active)
 
     async def _handle_client_async(
@@ -651,6 +531,7 @@ class CLIPoller:
                 # a silent exit would block msg_queue.get() forever.
                 log.warning("IPC reader pump died unexpectedly", exc_info=True)
             finally:
+                endpoint.feed_approval_response("n")
                 _enqueue(None)
 
         pump_task = asyncio.get_running_loop().create_task(_pump_reader())
@@ -778,187 +659,6 @@ class CLIPoller:
 
         return {"type": "error", "message": f"Unknown message type: {msg_type}"}
 
-    def _accept_loop(self) -> None:
-        """Accept loop — spawns a handler thread per client."""
-        while not self._stop_event.is_set():
-            try:
-                assert self._server is not None
-                client, _ = self._server.accept()
-                with self._clients_lock:
-                    self._active_clients.add(client)
-                log.info("CLI client connected (%d active)", len(self._active_clients))
-                t = threading.Thread(
-                    target=self._client_thread,
-                    args=(client,),
-                    name=f"geode-cli-{os.urandom(2).hex()}",
-                    daemon=True,
-                )
-                t.start()
-            except TimeoutError:
-                continue
-            except OSError:
-                if not self._stop_event.is_set():
-                    log.warning("CLI accept error", exc_info=True)
-                break
-
-    def _client_thread(self, client: socket.socket) -> None:
-        """Run _handle_client and clean up on exit."""
-        try:
-            self._handle_client(client)
-        finally:
-            with self._clients_lock:
-                self._active_clients.discard(client)
-            import contextlib
-
-            with contextlib.suppress(OSError):
-                client.close()
-            log.info("CLI client session ended (%d active)", len(self._active_clients))
-
-    def _handle_client(self, client: socket.socket) -> None:
-        """Handle a connected CLI client session.
-
-        Creates an IPC-mode session (DANGEROUS blocked, WRITE allowed)
-        gated by SessionLane + Global Lane via acquire_all_async().
-        """
-        from core.agent.conversation import ConversationContext
-        from core.server.supervised.services import SessionMode
-
-        # ContextVars do NOT propagate to threads — set them explicitly
-        self._propagate_contextvars()
-
-        # Thread-local session meter — each IPC session tracks its own
-        # model, elapsed time, and token counts independently.
-        from core.ui.agentic_ui import init_session_meter
-
-        init_session_meter()
-
-        client.settimeout(None)  # blocking reads
-        buf = b""
-        conversation = ConversationContext()
-        session_id = f"cli-{os.urandom(4).hex()}"
-
-        # Build IPC approval relay: WRITE/DANGEROUS tools prompt thin CLI
-        _writer = _StreamingWriter(client)
-
-        def _ipc_approval(
-            tool_name: str, detail: str, safety_level: str, approval_id: str = ""
-        ) -> str:
-            return _writer.request_approval(tool_name, detail, safety_level, approval_id)
-
-        # Create an IPC session backed by serve's SharedServices
-        _executor, loop = self._services.create_session(
-            SessionMode.IPC,
-            conversation=conversation,
-            propagate_context=True,
-            approval_callback=_ipc_approval,
-        )
-
-        # Send session ID to client
-        self._send(client, _session_greeting(session_id))
-
-        while not self._stop_event.is_set():
-            try:
-                chunk = client.recv(65536)
-                if not chunk:
-                    log.info("CLI client disconnected")
-                    break
-                buf += chunk
-
-                while b"\n" in buf:
-                    line, buf = buf.split(b"\n", 1)
-                    msg = json.loads(line.decode("utf-8"))
-                    msg["_client"] = client  # pass socket for streaming
-                    response = self._process_message(msg, loop, conversation, session_id)
-                    if response is None:
-                        # Exit signal
-                        self._send(client, {"type": "exit_ack"})
-                        return
-                    self._send(client, response)
-            except (ConnectionResetError, BrokenPipeError):
-                log.info("CLI client connection lost")
-                break
-            except json.JSONDecodeError:
-                self._send(client, {"type": "error", "message": "Invalid JSON"})
-            except Exception:
-                log.warning("CLI handler error", exc_info=True)
-                self._send(
-                    client,
-                    {"type": "error", "message": "Internal error"},
-                )
-
-    def _process_message(
-        self,
-        msg: dict[str, Any],
-        loop: Any,
-        conversation: Any,
-        session_id: str,
-    ) -> dict[str, Any] | None:
-        """Process a single client message. Returns response dict or None for exit."""
-        msg_type = msg.get("type", "")
-
-        if msg_type == "exit":
-            # Clean client exit — the REPL surface's ACTIVE -> COMPLETED
-            # edge (docs/architecture/session-state-machine.md § owners).
-            try:
-                _mark_done_async = getattr(loop, "amark_session_completed", None)
-                if callable(_mark_done_async):
-                    from core.async_runtime import run_process_coroutine
-
-                    run_process_coroutine(_mark_done_async())
-                else:
-                    _mark_done = getattr(loop, "mark_session_completed", None)
-                    if callable(_mark_done):
-                        _mark_done()
-            except Exception:
-                log.debug("mark_session_completed on exit failed", exc_info=True)
-            return None
-
-        if msg_type == "prompt":
-            text = msg.get("text", "").strip()
-            if not text:
-                return {"type": "error", "message": "Empty prompt"}
-
-            try:
-                return self._run_prompt_streaming(
-                    text,
-                    loop,
-                    session_id,
-                    msg.get("_client"),
-                )
-            except Exception as exc:
-                log.warning("CLI prompt execution error", exc_info=True)
-                return {"type": "error", "message": str(exc)}
-
-        if msg_type == "command":
-            return self._handle_command_on_server(msg, loop)
-
-        if msg_type == "resume":
-            return self._handle_resume(msg, loop, conversation)
-
-        # v0.84.0 — thin CLI advertises terminal capability so the daemon
-        # can suppress ANSI / spinner output when stdout is not a TTY.
-        if msg_type == "client_capability":
-            is_tty = bool(msg.get("is_tty", True))
-            width_raw = msg.get("width", 120)
-            try:
-                width = int(width_raw)
-            except (TypeError, ValueError):
-                width = 120
-            if width <= 0:
-                width = 120
-            _client_capability_local.is_tty = is_tty
-            _client_capability_local.width = width
-            _adopt_skip_permissions(msg)
-            log.debug("client_capability: is_tty=%s width=%d", is_tty, width)
-            return {"type": "ack"}
-
-        # Stale approval_response from a timed-out request — silently drop
-        if msg_type == "approval_response":
-            log.debug("Dropping stale approval_response: %s", msg.get("decision"))
-            return {"type": "ack"}
-
-        return {"type": "error", "message": f"Unknown message type: {msg_type}"}
-
     async def _run_prompt_streaming_async(
         self,
         text: str,
@@ -1070,16 +770,6 @@ class CLIPoller:
             "adapter_provider": result.adapter_provider,
             "adapter_source": result.adapter_source,
         }
-
-    def _run_prompt_streaming(
-        self,
-        text: str,
-        loop: Any,
-        session_id: str,
-        client: socket.socket | _AsyncClientEndpoint | None,
-    ) -> dict[str, Any]:
-        """Legacy sync IPC prompt path removed; async server uses _run_prompt_streaming_async."""
-        raise RuntimeError("sync IPC prompt path removed; use _run_prompt_streaming_async")
 
     def _build_prompt_result(self, loop: Any, result: Any) -> dict[str, Any]:
         """Build final IPC result payload from an AgenticResult-like object."""
@@ -1327,15 +1017,3 @@ class CLIPoller:
                 self._services._propagate_contextvars()
         except Exception:
             log.debug("ContextVar propagation skipped", exc_info=True)
-
-    @staticmethod
-    def _send(client: socket.socket | _AsyncClientEndpoint, data: dict[str, Any]) -> None:
-        """Send a JSON message to the client (line-delimited)."""
-        if isinstance(client, _AsyncClientEndpoint):
-            client.send_json_threadsafe(data)
-            return
-        try:
-            payload = json.dumps(sanitize_jsonable(data), ensure_ascii=False) + "\n"
-            client.sendall(payload.encode("utf-8"))
-        except (BrokenPipeError, ConnectionResetError, OSError):
-            log.debug("CLI send failed — client disconnected")

@@ -79,7 +79,7 @@ import re
 import shutil
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 # PR-CLEANUP-D2 — shared CLI-provider serialisation (single SoT;
 # re-exported so existing call sites and tests stay stable).
@@ -131,7 +131,7 @@ spot the failure mode without scraping stderr."""
 
 class ClaudeCliInvocationError(RuntimeError):
     """Raised when the ``claude`` binary cannot be located, the
-    subprocess exits non-zero, or stream-json output is unparseable.
+    subprocess exits non-zero, or stream-json output is unparsable.
 
     Carries enough operator context (returncode + stderr clip) to
     diagnose without re-running the audit. inspect_ai's harness
@@ -1009,10 +1009,6 @@ async def _run_claude_subprocess(
 # ---------------------------------------------------------------------------
 # Provider registration
 # ---------------------------------------------------------------------------
-
-
-if TYPE_CHECKING:  # pragma: no cover — import-only for type hints
-    pass
 
 
 def register() -> None:

@@ -65,7 +65,6 @@ from core.cli.typer_serve import _build_runtime_for_serve as _build_runtime_for_
 from core.cli.typer_serve import serve
 from core.cli.welcome import _render_readiness_compact as _render_readiness_compact
 from core.cli.welcome import _render_welcome_brand as _render_welcome_brand
-from core.cli.welcome import _suppress_noisy_warnings as _suppress_noisy_warnings
 from core.cli.welcome import _welcome_screen as _welcome_screen
 from core.hooks import HookEvent, HookSystem
 from core.hooks.dispatch import fire_hook

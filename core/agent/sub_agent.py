@@ -26,7 +26,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 from core.agent.cognitive_state_ctx import get_session_id, get_turn_id
-from core.agent.worker import WorkerRequest
 from core.hooks import (
     HookCorrelation,
     HookName,
@@ -44,6 +43,7 @@ from core.tools.base import load_tool_definition
 from core.tools.personal_data import PERSONAL_DATA_TOOLS
 
 if TYPE_CHECKING:
+    from core.agent.worker import WorkerRequest
     from core.skills.agents import AgentRegistry
 
 log = logging.getLogger(__name__)
@@ -935,6 +935,7 @@ class SubAgentManager:
         # kwarg (or empty when the manager was built at gateway
         # startup without a parent context).
         from core.agent.cognitive_state_ctx import get_session_id
+        from core.agent.worker import WorkerRequest
 
         parent_uuid = get_session_id()
 

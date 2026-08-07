@@ -52,9 +52,6 @@ from . import (
     _response,
     _sub_agent_announce,
 )
-
-# Re-exported for backward-compat module-attribute access
-# (some tests/utilities reach into ``core.agent.loop.MAX_TOOL_RESULT_TOKENS``)
 from ._tool_factory import (
     AGENTIC_TOOLS,
     MAX_TOOL_RESULT_TOKENS,

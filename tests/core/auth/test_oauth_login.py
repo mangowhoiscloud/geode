@@ -128,7 +128,7 @@ class TestAuthStatus:
         assert openai_rows[0]["status"] == "active"
 
     def test_status_empty(self, tmp_path: Path, monkeypatch):
-        monkeypatch.setattr("core.auth.oauth_login.AUTH_STORE_PATH", tmp_path / "empty.json")
+        _isolate(tmp_path, monkeypatch)
 
         with patch("core.auth.codex_cli_oauth.read_codex_cli_credentials", return_value=None):
             statuses = get_auth_status()
@@ -146,7 +146,7 @@ class TestCmdLogin:
     def test_login_status(self, tmp_path: Path, monkeypatch):
         from core.cli.commands import cmd_login
 
-        monkeypatch.setattr("core.auth.oauth_login.AUTH_STORE_PATH", tmp_path / "a.json")
+        _isolate(tmp_path, monkeypatch)
         cmd_login("status")  # Should not raise
 
     def test_login_unknown_provider(self):
