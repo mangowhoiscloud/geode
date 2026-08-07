@@ -558,6 +558,7 @@ and closure evidence are appended in §10.
 | COLLAB-001 | `MISFIT` | `delegate_task` tells callers that long-running work should not block, but awaits the complete fan-out and returns no stable handle for later control | Opt-in background delegation returns before completion and supports parent-scoped list, bounded wait, and interrupt while preserving the existing depth, session-cap, and Lane limits | R6.5 | HOOK-001 | `IN_PROGRESS` |
 | COLLAB-002 | `MISFIT` | Subagent completion announcements live only in a five-minute process-memory queue, so parent inactivity or daemon restart can discard collaboration delivery | A bounded, redacted mailbox in the existing session database preserves ordered parent/child messages and completion delivery with transactional at-most-once consumption | R6.5 | COLLAB-001, STORE-002 | `IN_PROGRESS` |
 | COLLAB-003 | `PARTIAL` | Child checkpoints and session history are durable, but every isolated worker invocation creates a fresh conversation and never restores the child checkpoint | Follow-up and resume reopen the same child session as a new generation, restore its checkpoint, accept queued mailbox input at a loop boundary, and preserve one independent rollout without replaying successful side effects | R6.5 | COLLAB-001, COLLAB-002 | `IN_PROGRESS` |
+| HOOK-003 | `PARTIAL` | All 13 public hooks are wired, but no production `PostVerify` policy is registered; an empty decision set can deliver a retryable verifier failure, continuation authority is encoded as a user-role pseudo-system message, and durable verification records aggregate handler decisions without a stable candidate target | A deterministic fallback maps pass/retryable failure/non-retryable failure to accept/revise/escalate; revision enters the bounded dynamic system context, reaches the existing verify-fail replan path, and records candidate-digest-bound per-handler decisions without replaying completed side effects or adding a new hook plane | R6.6 | HOOK-001, STORE-002 | `OPEN` |
 
 ## 6. Dependency and merge sequence
 
@@ -596,6 +597,13 @@ and storage contracts. It makes the existing depth-one subagent runtime
 durable and controllable without introducing a general thread manager, a
 planner, or a second transcript, and it does not claim the broader R3.4
 `SubAgentManager` responsibility split.
+
+R6.6 closes the measured delivery-control gap left after R6.4 without changing
+the 13-name public ABI. It reuses the existing finalization state machine,
+dynamic system context, verify-fail replan gate, bounded continuation budget,
+and semantic session timeline. It does not add a policy framework, a prompt
+template, a transition writer on the hot path, or a required-handler trust
+model without a measured external consumer.
 
 ### 6.1 v1.0.1 boundary-release train
 
@@ -1360,6 +1368,49 @@ Acceptance:
   control state from the independent append-only child rollout, and document
   the deliberate absence of nesting, a residency cache, and automatic crash
   restart.
+
+#### R6.6 PostVerify delivery control
+
+GAP: HOOK-003.
+
+The public hook ABI and finalization ordering delivered by R6.4 remain fixed.
+This package makes the already-wired `PostVerify` seam effective when no
+external policy is installed and makes its decisions reconstructable without
+inventing another extension surface.
+
+The built-in fallback is monotone: a passing verifier result is accepted, a
+retryable failure requests one bounded revision, and a non-retryable failure
+enters the existing external-verification checkpoint. An external decision may
+strengthen those outcomes but may not turn a built-in failure into a pass.
+`Stop` remains the last delivery checkpoint and the existing two-attempt budget
+remains the loop bound.
+
+Revision authority is a one-shot dynamic system hint. It is never appended to
+provider history with role `user`, while the semantic timeline still records
+the correlated root turn, attempt, source, and instruction. Verification
+decisions retain bounded handler attribution, action, reason, evidence refs,
+and the candidate SHA-256 digest. Trajectory projection may later map that
+digest to a transition ID; the runtime does not emit a dangling future ID.
+
+Acceptance:
+
+- production census still exposes exactly 13 public hooks and adds no public
+  hook or middleware kind;
+- with no `PostVerify` handler, pass delivers once, retryable failure revises,
+  and non-retryable failure enters pending external verification;
+- invalid failure-plus-accept escalates, external revise/Stop continuation
+  preserves priority, and the third continuation fails closed at the existing
+  budget without replaying a completed tool side effect;
+- revision text is absent from user-role provider history and present once in
+  the bounded dynamic system context used by the next provider request;
+- a retryable failure consumes the existing reflection signal and reaches the
+  `verify_fail` replan path before the next provider call;
+- the semantic session timeline preserves one bounded decision record per
+  handler plus the fallback source, rooted by session, root turn, attempt, and
+  candidate digest; raw candidate content is not duplicated;
+- current PostVerify timeout/error observability remains compatible and
+  optional handler failure remains fail-open; a required-handler policy is
+  deferred until a measured SIL/Crucible consumer needs mixed authority.
 
 ### R7 — Closure, hardening, and release
 
