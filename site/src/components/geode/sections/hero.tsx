@@ -34,8 +34,8 @@ export function HeroSection() {
         <p className="mt-4 font-display text-[clamp(1.35rem,2.7vw,1.75rem)] text-[var(--ink-1)] leading-snug">
           {t(
             locale,
-            "스스로를 고쳐 쓰는 자율 에이전트 하네스.",
-            "A self-rewriting agent harness for autonomous execution."
+            "자율 실행과 평가 증거를 위한 에이전트 런타임.",
+            "An agent runtime and evaluation substrate for autonomous execution."
           )}
         </p>
 
@@ -43,8 +43,8 @@ export function HeroSection() {
           <p>
             {t(
               locale,
-              "GEODE는 비-파라메트릭 계열의 자기 진화 에이전트입니다. 모델 가중치는 절대 건드리지 않습니다. 대신 자기 자신을 둘러싼 스캐폴드, 즉 시스템 프롬프트와 도구 정책, 작업 분해와 반성 루프, 스킬 카탈로그를 직접 바꿔 나아집니다.",
-              "GEODE is a self-evolving agent on the non-parametric branch. It never updates model weights. Instead it improves by mutating the scaffolding around itself: its system prompt, tool policy, task decomposition, reflection loop, and skill catalog."
+              "GEODE는 장시간 도구 작업을 수행하고 실행 기록을 평가 가능한 증거로 남기는 에이전트 런타임입니다. 실험적 외부 루프는 모델 가중치가 아니라 스캐폴드 후보를 변이시키지만, 공개 기록은 아직 지속적인 자기개선보다 거부와 무효화 게이트의 규율을 입증합니다.",
+              "GEODE is an agent runtime for long-running tool work and evaluation-ready execution evidence. An experimental outer loop mutates scaffold candidates, never model weights; its public record currently demonstrates rejection and invalidation discipline, not sustained self-improvement."
             )}
           </p>
           <p className="mt-3 text-[var(--ink-2)]">

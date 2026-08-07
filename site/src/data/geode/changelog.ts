@@ -19,7 +19,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": ""
+    "body": "### Infrastructure\n\n- **Release-facing documentation now fails closed on stale public contracts.**\n  The official docs gate requires both READMEs to carry the canonical runtime\n  and evaluation-substrate identity and requires `SECURITY.md` to mark the\n  package's current major/minor series as supported."
   },
   {
     "version": "1.0.14",

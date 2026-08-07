@@ -47,6 +47,13 @@ functional change.
 
 ## [Unreleased]
 
+### Infrastructure
+
+- **Release-facing documentation now fails closed on stale public contracts.**
+  The official docs gate requires both READMEs to carry the canonical runtime
+  and evaluation-substrate identity and requires `SECURITY.md` to mark the
+  package's current major/minor series as supported.
+
 ## [1.0.14] - 2026-08-05
 
 > Cleanup release: retire the orphaned unary DPO precursor and the unreachable

@@ -2,7 +2,19 @@
 
 > **English** | [한국어](orchestration-decision.ko.md)
 
-> **Conclusion**: LangGraph StateGraph itself is the orchestration layer. No separate layer needed.
+> **Status: superseded historical decision.** This page records the early
+> LangGraph analysis-pipeline topology. It is not the current runtime
+> architecture. The current execution SOT is
+> [`extensibility-roadmap.md`](extensibility-roadmap.md); contributor navigation
+> starts at [`AGENTS.md`](../../AGENTS.md).
+
+The current runtime kernel is `AgenticLoop` with visible `while(tool_use)`
+control flow. Structured graphs remain bounded workflow mechanisms where they
+are useful; they do not define GEODE's runtime identity or replace the loop.
+
+## Historical decision (preserved)
+
+> **Conclusion at the time**: LangGraph StateGraph itself is the orchestration layer. No separate layer needed.
 
 ## Systems Investigated
 

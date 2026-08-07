@@ -27,6 +27,7 @@ GENERATED_DOCS = (
     "site/public/llms.txt",
     "site/public/llms-full.txt",
 )
+PUBLIC_IDENTITY = "Autonomous Agent Runtime + Evaluation Substrate"
 
 
 @dataclass(frozen=True)
@@ -106,6 +107,20 @@ def check_release_surfaces() -> None:
         text = (REPO_ROOT / rel_path).read_text(encoding="utf-8")
         if expected_heading not in text:
             raise SystemExit(f"{rel_path} is not aligned to GEODE v{version}")
+        if PUBLIC_IDENTITY not in text:
+            raise SystemExit(f"{rel_path} is missing the canonical public identity")
+
+    version_parts = version.split(".")
+    if len(version_parts) < 2 or not all(part.isdigit() for part in version_parts[:2]):
+        raise SystemExit(f"cannot derive supported release series from {version!r}")
+    supported_series = f"{version_parts[0]}.{version_parts[1]}.x"
+    security = (REPO_ROOT / "SECURITY.md").read_text(encoding="utf-8")
+    supported_row = re.compile(
+        rf"^\|\s*{re.escape(supported_series)}\s*\|\s*:white_check_mark:\s*\|\s*$",
+        re.M,
+    )
+    if not supported_row.search(security):
+        raise SystemExit(f"SECURITY.md does not mark {supported_series} as supported")
 
     changelog = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     pattern = re.compile(

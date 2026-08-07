@@ -105,3 +105,31 @@ def test_run_docs_gate_uses_repo_env(
 
 def test_check_release_surfaces_accepts_current_release() -> None:
     check_official_docs.check_release_surfaces()
+
+
+def test_check_release_surfaces_rejects_stale_security_policy(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(check_official_docs, "REPO_ROOT", tmp_path)
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "geode-agent"\nversion = "1.2.3"\n',
+        encoding="utf-8",
+    )
+    for rel_path in ("README.md", "README.ko.md"):
+        (tmp_path / rel_path).write_text(
+            "# GEODE v1.2.3: Autonomous Agent Runtime + Evaluation Substrate\n",
+            encoding="utf-8",
+        )
+    (tmp_path / "SECURITY.md").write_text(
+        "| Version | Supported |\n| --- | --- |\n| 0.48.x | :white_check_mark: |\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "CHANGELOG.md").write_text(
+        "## [1.2.3] - 2026-08-07\n\nRelease notes.\n\n"
+        "## [1.2.2] - 2026-08-06\n\nEarlier release.\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(SystemExit, match=r"SECURITY\.md does not mark 1\.2\.x"):
+        check_official_docs.check_release_surfaces()

@@ -182,9 +182,9 @@ function writeLlmsFull(pages, bodies, version) {
   lines.push("# GEODE");
   lines.push("");
   lines.push(
-    "> GEODE is a self-evolving autonomous execution agent: an inner agentic loop runs tasks" +
-      " (research, analysis, automation, scheduling) and an outer self-improving loop" +
-      " (Petri audit -> fitness gate) tunes the system that runs them.",
+    "> GEODE is an autonomous agent runtime and evaluation substrate: an inner agentic loop" +
+      " runs tasks (research, analysis, automation, scheduling), while an experimental" +
+      " safety-gated outer loop mutates and evaluates scaffold candidates.",
   );
   lines.push("");
   lines.push(

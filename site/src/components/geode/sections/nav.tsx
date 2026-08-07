@@ -8,7 +8,7 @@ type NavItem = { id: string; label: string };
 const defaultNavItems: NavItem[] = [
   { id: "hero", label: "Overview" },
   { id: "two-loops", label: "Two loops" },
-  { id: "self-evolving", label: "Self-evolving" },
+  { id: "self-evolving", label: "Scaffold lab" },
   { id: "audit", label: "Audit" },
   { id: "capabilities", label: "Capabilities" },
   { id: "lineage", label: "Lineage" },
