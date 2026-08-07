@@ -29,7 +29,7 @@
   <a href="README.md">English</a>
 </p>
 
-# GEODE v1.0.15 — Autonomous Agent Runtime + Evaluation Substrate
+# GEODE v1.0.16 — Autonomous Agent Runtime + Evaluation Substrate
 
 자율적인 도구 작업을 수행하는 범용 에이전트 런타임입니다. 자연어로
 요청하면 GEODE가 계획을 세우고 도구를 호출한 뒤 결과를 보고합니다. 짧은
