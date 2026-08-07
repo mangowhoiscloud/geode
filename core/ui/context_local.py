@@ -63,11 +63,6 @@ class ContextLocal:
     def _write(self, data: dict[str, Any]) -> None:
         self._ctx.set(data)
 
-    def _clear_key(self, key: str) -> None:
-        data = self._copy_current()
-        data.pop(key, None)
-        self._write(data)
-
 
 class _ContextLocalDict(MutableMapping[str, Any]):
     """Minimal mapping proxy for legacy ``local.__dict__`` call sites."""

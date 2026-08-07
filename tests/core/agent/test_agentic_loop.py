@@ -514,7 +514,6 @@ class TestAgenticLoop:
         from core.cli.commands.skills import cmd_skill_invoke
         from core.cli.scheduler_drain import drain_scheduler_queue
         from core.cli.typer_serve import serve
-        from core.server.ipc_server.poller import CLIPoller
 
         forbidden = {
             "run_agentic_oneshot": (
@@ -528,10 +527,6 @@ class TestAgenticLoop:
             "serve": (inspect.getsource(serve), ["result = loop.run("]),
             "cmd_skill_invoke": (inspect.getsource(cmd_skill_invoke), ["_loop.run("]),
             "_run_agentic": (inspect.getsource(_run_agentic), ["loop.run("]),
-            "_run_prompt_streaming": (
-                inspect.getsource(CLIPoller._run_prompt_streaming),
-                ["loop.run("],
-            ),
         }
 
         for name, (source, patterns) in forbidden.items():

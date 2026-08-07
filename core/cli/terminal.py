@@ -42,17 +42,6 @@ def make_sigint_handler() -> Any:
     return _sigint_handler
 
 
-def suppress_noisy_warnings() -> None:
-    """Startup hook to silence known-noisy dependency warnings.
-
-    Currently a no-op: the only entries were LangGraph / langchain_core
-    warnings (msgpack deserialization, checkpoint serde loggers, the Pydantic
-    V1 deprecation), all removed when the vestigial LangGraph dependency was
-    purged (the in-tree analysis graph was removed in v0.99.149). Kept as the
-    single place to re-add a filter if a future dependency gets noisy.
-    """
-
-
 def drain_stdin() -> None:
     """Drain leftover bytes from stdin after a paste.
 

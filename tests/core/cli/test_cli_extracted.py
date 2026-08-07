@@ -8,12 +8,6 @@ from unittest.mock import MagicMock, patch
 class TestTerminal:
     """Test terminal utility functions."""
 
-    def test_suppress_noisy_warnings(self) -> None:
-        from core.cli.terminal import suppress_noisy_warnings
-
-        # Should not raise
-        suppress_noisy_warnings()
-
     def test_drain_stdin_non_tty(self) -> None:
         from core.cli.terminal import drain_stdin
 

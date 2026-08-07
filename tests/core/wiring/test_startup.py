@@ -404,7 +404,6 @@ def test_welcome_does_not_repeat_wizard_after_dry_run_opt_in():
 
     report = ReadinessReport(force_dry_run=True)
     with (
-        patch("core.cli.welcome._suppress_noisy_warnings"),
         patch("core.cli.welcome._render_welcome_brand"),
         patch("core.cli.welcome.auto_generate_env"),
         patch("core.wiring.startup._has_any_llm_key", return_value=False),
@@ -428,7 +427,6 @@ def test_welcome_clears_dry_run_opt_in_when_oauth_is_detected():
 
     report = ReadinessReport()
     with (
-        patch("core.cli.welcome._suppress_noisy_warnings"),
         patch("core.cli.welcome._render_welcome_brand"),
         patch("core.cli.welcome.auto_generate_env"),
         patch("core.wiring.startup._has_any_llm_key", return_value=False),
@@ -451,7 +449,6 @@ def test_welcome_clears_dry_run_opt_in_when_api_key_is_detected():
 
     report = ReadinessReport()
     with (
-        patch("core.cli.welcome._suppress_noisy_warnings"),
         patch("core.cli.welcome._render_welcome_brand"),
         patch("core.cli.welcome.auto_generate_env"),
         patch("core.wiring.startup._has_any_llm_key", return_value=True),

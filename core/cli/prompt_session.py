@@ -2,9 +2,8 @@
 
 Extracted from ``core/cli/__init__.py`` (Tier 3 God Object split). Hosts
 prompt_toolkit setup, signal/select-loop guards, and multi-line input
-helpers. The ``terminal`` module already owns the lower-level terminal
-primitives (``restore_terminal``, ``drain_stdin``, ``suppress_noisy_warnings``);
-the helpers here are CLI-loop facing wrappers.
+helpers. The ``terminal`` module owns the lower-level ``restore_terminal`` and
+``drain_stdin`` primitives; the helpers here are CLI-loop facing wrappers.
 """
 
 from __future__ import annotations
