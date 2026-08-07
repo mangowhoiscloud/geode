@@ -495,6 +495,7 @@ as testable phases without replacing the loop with an opaque framework.
 | D-015 Facade retirement is removal-only | Retiring `core.self_improving` removes only forwarding imports and legacy source/module launchers after the publication gate; canonical product code, configuration, durable state, and unrelated APIs do not move in the same transaction |
 | D-016 State follows declared ownership | A feature-owned dataset manifest declares lifecycle, schema, path, writer, and migration policy; the code move does not relocate data, tracked SoT moves in R8.2 before facade retirement, and runtime cutovers remain additive, idempotent, and single-writer |
 | D-017 Collaboration control is not a second transcript | Mutable child-run state and bounded mailboxes live in the existing session database; child checkpoints, messages, and append-only session events remain the independent rollout history and sole replay source |
+| D-018 Execution history is not active memory | Session and trajectory facts stay in their canonical records; only explicit memory writes or admitted learning may change model-visible memory, and cleanup removes duplicate authorities without deleting historical user files |
 
 ## 5. Master GAP ledger
 
@@ -558,6 +559,7 @@ and closure evidence are appended in §10.
 | COLLAB-002 | `MISFIT` | Subagent completion announcements live only in a five-minute process-memory queue, so parent inactivity or daemon restart can discard collaboration delivery | A bounded, redacted mailbox in the existing session database preserves ordered parent/child messages and completion delivery with transactional at-most-once consumption | R6.5 | COLLAB-001, STORE-002 | `IN_DEVELOP` |
 | COLLAB-003 | `PARTIAL` | Child checkpoints and session history are durable, but every isolated worker invocation creates a fresh conversation and never restores the child checkpoint | Follow-up and resume reopen the same child session as a new generation, restore its checkpoint, accept queued mailbox input at a loop boundary, and preserve one independent rollout without replaying successful side effects | R6.5 | COLLAB-001, COLLAB-002 | `IN_DEVELOP` |
 | HOOK-003 | `PARTIAL` | All 13 public hooks are wired, but no production `PostVerify` policy is registered; an empty decision set can deliver a retryable verifier failure, continuation authority is encoded as a user-role pseudo-system message, and durable verification records aggregate handler decisions without a stable candidate target | A deterministic fallback maps pass/retryable failure/non-retryable failure to accept/revise/escalate; revision enters the bounded dynamic system context, reaches the existing verify-fail replan path, and records candidate-digest-bound per-handler decisions without replaying completed side effects or adding a new hook plane | R6.6 | HOOK-001, STORE-002 | `DONE` |
+| MEM-001 | `MISFIT` | One live system-prompt branch creates a default user profile outside the wired project scope, `TURN_COMPLETED` promotes a low-information turn/tool trace into active project memory, and caller-free session-checkpoint plus journal write/aggregate APIs imply competing authorities | The wired profile is the sole prompt profile source; automatic turn traces remain in canonical session records; dead `SessionStorePort` checkpoint and `ProjectJournal` write/aggregate APIs are removed while historical files remain untouched; executable tests and docs identify the live read/write authority without adding a store or framework | R6.7 | HOOK-001, STORE-002 | `OPEN` |
 
 ## 6. Dependency and merge sequence
 
@@ -603,6 +605,13 @@ dynamic system context, verify-fail replan gate, bounded continuation budget,
 and semantic session timeline. It does not add a policy framework, a prompt
 template, a transition writer on the hot path, or a required-handler trust
 model without a measured external consumer.
+
+R6.7 is a residual memory-authority cleanup over the delivered hook and
+storage contracts. It routes the two live prompt profile blocks through one
+wired instance, stops promoting a duplicate turn trace into active memory, and
+removes only APIs with a measured zero production-caller census. It does not
+introduce a context-snapshot framework, admission engine, new database, or
+checkpoint schema; those require separate measured GAPs.
 
 ### 6.1 v1.0.1 boundary-release train
 
@@ -1412,6 +1421,36 @@ Acceptance:
 - current PostVerify timeout/error observability remains compatible and
   optional handler failure remains fail-open; a required-handler policy is
   deferred until a measured SIL/Crucible consumer needs mixed authority.
+
+#### R6.7 Runtime memory authority cleanup
+
+GAP: MEM-001.
+
+This package removes three measured residual authority conflicts without
+changing the delivered session, trajectory, hook, or storage schemas. Existing
+user files are compatibility inputs, not cleanup targets.
+
+Acceptance:
+
+- user and learning prompt blocks read the same wired `FileBasedUserProfile`,
+  including its project overlay, and `system_prompt.py` constructs no default
+  profile;
+- `TURN_COMPLETED` no longer registers `turn_auto_memory`; explicit project
+  memory tools continue to work and canonical session/tool events remain
+  unchanged;
+- caller-free `SessionStorePort` checkpoint methods and their in-memory
+  implementation are removed; the independent `SessionCheckpoint` resume path
+  remains intact;
+- caller-free `ProjectJournal` cost, error, learned-write, and cost-aggregate
+  methods are removed, while its currently referenced learned reader and all
+  historical `costs.jsonl`, `errors.jsonl`, and `learned.md` files are left
+  untouched;
+- runtime documentation distinguishes the live system-prompt path from the
+  opt-in `GeodeRuntime.assemble_context()` facade and makes no claim that every
+  model request traverses `ContextAssembler`;
+- targeted memory, prompt, wiring, session, hook, and context tests pass with
+  the architecture, legacy, slop, format, type, import, and non-live test
+  gates.
 
 ### R7 — Closure, hardening, and release
 
