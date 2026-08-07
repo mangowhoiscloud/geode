@@ -62,9 +62,11 @@ def test_run_agent_fork_excludes_denied_tools() -> None:
         patch("core.agent.tool_executor.ToolExecutor", side_effect=_capture_executor),
         patch("core.agent.loop.AgenticLoop", _FakeLoop),
         patch("core.llm.adapters.registry.bootstrap_builtins"),
+        patch("core.wiring.bootstrap.ensure_user_profile") as ensure_user_profile,
     ):
         asyncio.run(bootstrap.arun_agentic_oneshot("hi"))
 
+    ensure_user_profile.assert_called_once_with()
     handlers = captured["handlers"]
     assert isinstance(handlers, dict)
     assert "run_bash" not in handlers

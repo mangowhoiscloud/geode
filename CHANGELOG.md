@@ -68,7 +68,8 @@ functional change.
 
 - **System-prompt user context now uses the wired profile.** User and learning
   blocks share the configured global/project profile scope instead of one path
-  silently constructing a default global-only profile.
+  silently constructing a default global-only profile. CLI, MCP one-shot, and
+  prompt-dump entry points now bind that same profile before prompt assembly.
 - **Child mailbox delivery is persist-before-ack.** A stable mailbox id is
   saved into the child checkpoint before SQLite marks the row consumed, so a
   crash cannot silently lose parent input. Follow-ups racing child completion
