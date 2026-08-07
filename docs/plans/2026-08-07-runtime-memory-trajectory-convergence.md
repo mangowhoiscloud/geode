@@ -1,7 +1,8 @@
 # Runtime memory · session record · trajectory convergence
 
 > Date: 2026-08-07
-> Status: code-grounded research and implementation plan; no runtime behavior changed
+> Status: MEM-001 authority-cleanup slice implemented and release-validated;
+> later convergence phases remain planned
 > GEODE baseline: `origin/develop@bd9d8ccfea63dfc35b3fd1e1da30cbe7f2e89aae`
 > Comparison baselines: Codex `main@0bdce9f424eb9b39d7b3a8811742d10b6fbf8d54`,
 > Hermes `main@eb8421ba9864cd58b0cf246cdffc6d45f6949372`
@@ -14,6 +15,26 @@ design evidence, not a competing delivery ledger. Implementation must first
 register any untracked architecture GAP through
 [`extensibility-roadmap.md`](../architecture/extensibility-roadmap.md) and
 follow that ledger's claim protocol.
+
+### Delivery checkpoint
+
+The MEM-001 slice implements only the measured deletion-first boundary:
+
+- the default prompt path now reuses the wired global plus project profile;
+- the implicit `turn_auto_memory` project-memory writer is removed;
+- caller-free duplicate checkpoint and project-journal write APIs are removed;
+- historical learned files remain readable without migration or rewrite;
+- the public context documentation now distinguishes the default prompt path
+  from the explicit `GeodeRuntime.assemble_context()` facade.
+
+The full snapshot, admission, transactional-checkpoint, and reward-projection
+phases below are not implied by this slice. Implementation PR
+[`#2903`](https://github.com/mangowhoiscloud/geode/pull/2903) passed the full
+non-live suite locally. Its live `gpt-5.6-luna` / subscription / effort `max`
+run covered all 13 public hooks and four trusted middleware seams, with 22
+SQLite rows matching 22 JSONL rows. The privacy-reviewed 27-event trajectory
+is pinned to
+[`geode-eval-artifacts@4903c31`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/4903c31abf983b7be076fd1e35775190fd6f4718).
 
 ## 1. Decision
 
