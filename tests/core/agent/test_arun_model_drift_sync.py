@@ -35,6 +35,7 @@ def test_helper_method_exists() -> None:
     # 2026-07-29: decomposition_hint plumbing deleted (None-only since the
     # Plan migration); reflection_hint remains.
     assert "reflection_hint" in sig.parameters
+    assert "verification_hint" in sig.parameters
     # Returns str — caller rebinds the local.
     assert "str" in str(sig.return_annotation)
 
@@ -77,9 +78,14 @@ class _StubLoop:
         return self._rebuilt_prompt
 
 
-def _call_helper(stub: _StubLoop, system_prompt: str, hint: str | None) -> str:
+def _call_helper(
+    stub: _StubLoop,
+    system_prompt: str,
+    hint: str | None,
+    verification_hint: str | None = None,
+) -> str:
     bound = AgenticLoop._sync_model_and_rebuild_prompt.__get__(stub, _StubLoop)
-    return asyncio.run(bound(system_prompt, hint))
+    return asyncio.run(bound(system_prompt, hint, verification_hint))
 
 
 def test_no_drift_no_dirty_returns_input_unchanged() -> None:
@@ -159,6 +165,17 @@ def test_reflection_hint_none_not_applied() -> None:
     result = _call_helper(stub, "ORIGINAL", None)
     assert result == "REBUILT_PROMPT"
     assert "None" not in result
+
+
+def test_verification_hint_survives_prompt_rebuild() -> None:
+    stub = _StubLoop(sync_returns_drifted=True)
+    result = _call_helper(
+        stub,
+        "ORIGINAL",
+        None,
+        "<verification_continuation>retry</verification_continuation>",
+    )
+    assert result.endswith("<verification_continuation>retry</verification_continuation>")
 
 
 def test_reflection_hint_ignored_when_not_rebuilding() -> None:

@@ -108,6 +108,13 @@ export default function Page() {
               외부 소유자에게만 pending_text로 반환하며 terminal
               <code>session.ended</code>를 만들지 않습니다.
             </p>
+            <p>
+              외부 handler 결정이 없으면 pass는 accept, 재시도 가능한 실패는
+              revise, 그 밖의 실패는 escalate하는 기본 정책이 동작합니다. revision
+              지시는 user message가 아니라 dynamic system context에 한 번 주입되고,
+              <code>verification.decided</code>는 후보 본문 대신 SHA-256 digest와
+              handler별 결정을 session timeline에 남깁니다.
+            </p>
 
             <h2>신뢰 미들웨어 4개 결합점</h2>
             <table>
@@ -234,6 +241,14 @@ export default function Page() {
               telemetry: it pauses the session, exposes the withheld candidate
               only to the owning loop as pending_text, and does not create a
               terminal <code>session.ended</code> record.
+            </p>
+            <p>
+              Without an external handler decision, the default policy accepts a
+              pass, revises a retryable failure, and escalates any other failure.
+              Revision control enters the dynamic system context once rather than
+              user history, while <code>verification.decided</code> stores the
+              candidate SHA-256 digest and attributed handler decisions in the
+              session timeline.
             </p>
 
             <h2>Four trusted middleware join points</h2>

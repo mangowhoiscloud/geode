@@ -47,6 +47,21 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.15] - 2026-08-07
+
+> PostVerify control release: deterministic default decisions now feed the
+> bounded revise/replan path, while decision provenance remains replayable in
+> the semantic session timeline.
+
+### Changed
+
+- **PostVerify now controls delivery by default.** With no external handler,
+  passing candidates are accepted, retryable failures enter the existing
+  bounded revise/replan path, and non-retryable failures pause for external
+  verification. Revision instructions now use the dynamic system context
+  instead of user-role history, and candidate-digest-bound handler decisions
+  persist in the semantic session timeline for trajectory reconstruction.
+
 ## [1.0.14] - 2026-08-05
 
 > Cleanup release: retire the orphaned unary DPO precursor and the unreachable

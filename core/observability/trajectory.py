@@ -80,6 +80,7 @@ _TURN_SCOPED_KINDS = {
     *_TOOL_CALL_KINDS,
     *_TOOL_RESULT_KINDS,
     "turn.completed",
+    "verification.decided",
     "verification.continued",
     "verification.evidence",
     "verification.pending",

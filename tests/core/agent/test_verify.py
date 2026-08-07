@@ -18,6 +18,7 @@ import asyncio
 import inspect
 import os
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
 from core.agent.loop.models import AgenticResult
@@ -416,12 +417,14 @@ def test_lifecycle_finalize_records_verify(monkeypatch: pytest.MonkeyPatch) -> N
         _evidence_ledger=None,
     )
     with session_metrics_scope(session_id="t-finalize"):
-        payload, _follow_up, _escalated, _correlation = asyncio.run(
+        payload, follow_up, escalated, _correlation = asyncio.run(
             _lifecycle._run_public_finalization_async(loop, result)
         )
         assert payload is not None
         assert payload["passed"] is False
         assert "empty_turn" in payload["rubric_misses"]
+        assert "empty_turn" in follow_up
+        assert escalated is False
         m = current_session_metrics()
         assert m.verify_fail_count == 1
         assert m.last_verify_reflection_hint.startswith("<reflection>")
@@ -506,6 +509,43 @@ def test_post_verify_failure_cannot_be_accepted(
     assert follow_up == ""
 
 
+def test_empty_post_verify_policy_escalates_non_retryable_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from core.agent.loop import _lifecycle
+
+    loop = SimpleNamespace(
+        _hook_registry=HookRegistry(),
+        _session_id="",
+        _turn_id="t-1",
+        _verify_root_turn_id="t-1",
+        _verify_attempt=0,
+        _verify_continuation_budget=2,
+        _session_generation=1,
+        _evidence_ledger=None,
+    )
+
+    async def hard_failure(*args: object, **kwargs: object) -> VerifyResult:
+        return VerifyResult(
+            passed=False,
+            mode=VerifyMode.RULE_BASED,
+            rubric_misses=("operator_action_required",),
+            should_retry=False,
+        )
+
+    monkeypatch.setattr("core.agent.verify.verify_turn_async", hard_failure)
+    with session_metrics_scope(session_id="post-hard-fail"):
+        _payload, follow_up, escalated, _correlation = asyncio.run(
+            _lifecycle._run_public_finalization_async(
+                loop,
+                _make_result(text="candidate"),
+            )
+        )
+
+    assert follow_up == ""
+    assert escalated is True
+
+
 def test_post_verify_escalation_withholds_candidate_before_persistence(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -561,7 +601,9 @@ def test_post_verify_revision_returns_bounded_follow_up(
             action=HookAction.REVISE,
             instruction="Run the missing validation, then answer again.",
         ),
+        name="reviewer",
     )
+    recorded_decisions: list[dict[str, object]] = []
     loop = SimpleNamespace(
         _hook_registry=registry,
         _session_id="",
@@ -571,6 +613,9 @@ def test_post_verify_revision_returns_bounded_follow_up(
         _verify_continuation_budget=2,
         _session_generation=1,
         _evidence_ledger=None,
+        _timeline=SimpleNamespace(
+            record_verification_decision=lambda **kwargs: recorded_decisions.append(kwargs)
+        ),
     )
 
     async def passed_verify(*args: object, **kwargs: object) -> VerifyResult:
@@ -589,6 +634,10 @@ def test_post_verify_revision_returns_bounded_follow_up(
     assert follow_up == "Run the missing validation, then answer again."
     assert correlation.turn_id == "t-1"
     assert correlation.verify_attempt == 0
+    assert recorded_decisions[0]["policy_action"] == "revise"
+    decisions = recorded_decisions[0]["decisions"]
+    assert isinstance(decisions, list)
+    assert decisions[0]["handler"] == "reviewer"
 
 
 def test_verify_continuation_does_not_emit_or_persist_session_end(
@@ -632,6 +681,40 @@ def test_verify_continuation_does_not_emit_or_persist_session_end(
     assert recorded == ["candidate"]
     assert RuntimeEvent.SESSION_ENDED not in emitted
     assert emitted == [RuntimeEvent.TURN_COMPLETED, RuntimeEvent.REASONING_METRICS]
+
+
+def test_verify_continuation_stays_out_of_user_history_and_checkpoint() -> None:
+    from core.agent.loop.agent_loop import AgenticLoop
+
+    context = SimpleNamespace(
+        add_system_event=lambda *_args: pytest.fail("policy entered user history")
+    )
+    recorded: list[str] = []
+    checkpoint_inputs: list[str] = []
+    loop = SimpleNamespace(
+        context=context,
+        _timeline=SimpleNamespace(
+            record_verification_continuation=lambda instruction, **_kwargs: recorded.append(
+                instruction
+            )
+        ),
+        _verify_root_turn_id="root-turn",
+        _verify_root_user_input="original task",
+        _verify_attempt=1,
+        _save_checkpoint=lambda user_input, **_kwargs: checkpoint_inputs.append(user_input),
+    )
+
+    result = asyncio.run(
+        AgenticLoop._open_turn(
+            cast(AgenticLoop, loop),
+            "repair instruction",
+            verification_continuation=True,
+        )
+    )
+
+    assert result is None
+    assert recorded == ["repair instruction"]
+    assert checkpoint_inputs == ["original task"]
 
 
 def test_post_verify_timeout_preserves_the_builtin_result(

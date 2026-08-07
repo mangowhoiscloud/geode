@@ -226,6 +226,7 @@ normal review and CI; implementations start only after the claim merges.
 | Closure package | GAP IDs | Owner/session | Implementation branch | Claim evidence | Claimed at (UTC) |
 |---|---|---|---|---|---|
 | R1.1 | BND-001 | `session=codex-2026-07-18 task=architecture-package-classification` | `feature/architecture-package-classification` | R1.1 readiness reconciled by [#2776](https://github.com/mangowhoiscloud/geode/pull/2776); claim PR [#2790](https://github.com/mangowhoiscloud/geode/pull/2790); current `develop` re-audit confirms delivered GOV-002 and the measurable §7 classification/migration-map contract | 2026-07-18T09:15:41Z |
+| R6.5 | COLLAB-001, COLLAB-002, COLLAB-003 | `session=codex-2026-08-06 task=durable-subagent-collaboration` | `feature/durable-subagent-collaboration` | R6.5 readiness reconciled by [#2884](https://github.com/mangowhoiscloud/geode/pull/2884); current `develop` re-audit confirms the existing process isolation, checkpoint, session database, and delivered hook/storage contracts satisfy the measurable §7 implementation prerequisites | 2026-08-06T02:39:43Z |
 
 ## 1. Program objective
 
@@ -284,16 +285,16 @@ machine-readable artifact is
 |---|---:|
 | Production Python files (`core/` + `plugins/`) | 542 |
 | Test Python files | 680 |
-| `core/` Python LOC | 138,647 |
+| `core/` Python LOC | 138,786 |
 | `plugins/` Python LOC | 41,879 |
-| Test Python LOC | 178,706 |
+| Test Python LOC | 178,877 |
 | Tool definitions / executable registrations / valid schemas | 78 / 81 / 78 (definition-only 0; execution-only 3; invalid schema 0) |
 | `RuntimeEvent` members | 57 |
 | Built-in LLM adapters | 8 |
 | Module-level `ContextVar` declarations under `core/` | 30 |
 | `core` → `plugins` import sites | 31 across 14 files |
 | Import-linter contracts / ignored edges | 4 / 24 |
-| `AgenticLoop` file LOC / methods / constructor args | 2,968 / 74 / 27 |
+| `AgenticLoop` file LOC / methods / constructor args | 2,987 / 74 / 27 |
 | `SubAgentManager` file LOC / methods / constructor args | 1,370 / 17 / 16 |
 | `RuntimeCoreConfig` fields | 19 |
 | Global Ruff ratchets | complexity 52; args 23; branches 51; returns 18; statements 212 |
@@ -494,6 +495,7 @@ as testable phases without replacing the loop with an opaque framework.
 | D-014 Compatibility windows start at publication | The v1.0.1 facade and preserved state roots remain publicly available for a final qualifying interval of at least 30 consecutive days measured from confirmed GitHub Release and PyPI publication; every release inside that interval retains them |
 | D-015 Facade retirement is removal-only | Retiring `core.self_improving` removes only forwarding imports and legacy source/module launchers after the publication gate; canonical product code, configuration, durable state, and unrelated APIs do not move in the same transaction |
 | D-016 State follows declared ownership | A feature-owned dataset manifest declares lifecycle, schema, path, writer, and migration policy; the code move does not relocate data, tracked SoT moves in R8.2 before facade retirement, and runtime cutovers remain additive, idempotent, and single-writer |
+| D-017 Collaboration control is not a second transcript | Mutable child-run state and bounded mailboxes live in the existing session database; child checkpoints, messages, and append-only session events remain the independent rollout history and sole replay source |
 
 ## 5. Master GAP ledger
 
@@ -553,6 +555,10 @@ and closure evidence are appended in §10.
 | STORE-003 | `MISFIT` | Self-improving datasets span tracked `core/self_improving/state`, runtime `~/.geode/self-improving`, actively written `~/.geode/autoresearch/handoff`, and isolated `GEODE_STATE_ROOT/autoresearch` roots without one dataset-level ownership manifest | A feature-owned manifest declares every dataset's lifecycle, schema/version, root, writer/readers, concurrency, retention/redaction, migration, rollback, and rebuild contract; tracked SoT leaves `core` with hash/history parity, while runtime/override/worker roots remain compatible or migrate additively with one writer | R8.2 | REL-002, STORE-001 | `OPEN` |
 | HOOK-001 | `MISFIT` | The 56-member internal `HookEvent` enum is exported at the package root, one registry mixes observer, result-transform, and control-interceptor authority without a stable public allowlist, and verification is emitted only inside terminal finalization | Exactly 13 versioned `HookName` contracts expose the Codex 11-event lifecycle plus `PreVerify`/`PostVerify`; typed authority, redaction, correlation, unknown-name rejection, and compatibility tests prevent internal RuntimeEvent growth from expanding the ABI, while one monotone bounded `PreVerify` → verifier → `PostVerify` → `Stop` state machine supports executable external continuation without erasing built-in failure or replaying side effects | R6.4 | — | `DONE` |
 | HOOK-002 | `PARTIAL` | Tool request interception is mixed with `TOOL_EXEC_STARTED`; no typed sequential tool/LLM request transform or async `next_call` chain wraps the accepted executor and provider call across every runtime path | `tool_request`, `tool_execution`, `llm_request`, and `llm_execution` are four typed join points with N→N+1 request composition, original/effective trace, single-use async `next_call`, exception identity, policy-before-execution ordering, and all-path parity tests | R6.4 | HOOK-001 | `DONE` |
+| COLLAB-001 | `MISFIT` | `delegate_task` tells callers that long-running work should not block, but awaits the complete fan-out and returns no stable handle for later control | Opt-in background delegation returns before completion and supports parent-scoped list, bounded wait, and interrupt while preserving the existing depth, session-cap, and Lane limits | R6.5 | HOOK-001 | `IN_PROGRESS` |
+| COLLAB-002 | `MISFIT` | Subagent completion announcements live only in a five-minute process-memory queue, so parent inactivity or daemon restart can discard collaboration delivery | A bounded, redacted mailbox in the existing session database preserves ordered parent/child messages and completion delivery with transactional at-most-once consumption | R6.5 | COLLAB-001, STORE-002 | `IN_PROGRESS` |
+| COLLAB-003 | `PARTIAL` | Child checkpoints and session history are durable, but every isolated worker invocation creates a fresh conversation and never restores the child checkpoint | Follow-up and resume reopen the same child session as a new generation, restore its checkpoint, accept queued mailbox input at a loop boundary, and preserve one independent rollout without replaying successful side effects | R6.5 | COLLAB-001, COLLAB-002 | `IN_PROGRESS` |
+| HOOK-003 | `PARTIAL` | All 13 public hooks are wired, but no production `PostVerify` policy is registered; an empty decision set can deliver a retryable verifier failure, continuation authority is encoded as a user-role pseudo-system message, and durable verification records aggregate handler decisions without a stable candidate target | A deterministic fallback maps pass/retryable failure/non-retryable failure to accept/revise/escalate; revision enters the bounded dynamic system context, reaches the existing verify-fail replan path, and records candidate-digest-bound per-handler decisions without replaying completed side effects or adding a new hook plane | R6.6 | HOOK-001, STORE-002 | `IN_DEVELOP` |
 
 ## 6. Dependency and merge sequence
 
@@ -585,6 +591,19 @@ narrow compatibility-preserving package over the current measured call sites
 and sinks. It owns convergence of those call sites into its four middleware
 join points, but does not claim or bypass the broader owner replacements
 elsewhere in R2-R6.
+
+R6.5 is a narrow collaboration-control package over the delivered public-hook
+and storage contracts. It makes the existing depth-one subagent runtime
+durable and controllable without introducing a general thread manager, a
+planner, or a second transcript, and it does not claim the broader R3.4
+`SubAgentManager` responsibility split.
+
+R6.6 closes the measured delivery-control gap left after R6.4 without changing
+the 13-name public ABI. It reuses the existing finalization state machine,
+dynamic system context, verify-fail replan gate, bounded continuation budget,
+and semantic session timeline. It does not add a policy framework, a prompt
+template, a transition writer on the hot path, or a required-handler trust
+model without a measured external consumer.
 
 ### 6.1 v1.0.1 boundary-release train
 
@@ -1312,6 +1331,87 @@ Acceptance:
   replay, timeout fallback, external evidence correlation, and final
   persistence/delivery ordering.
 
+#### R6.5 Durable child collaboration control
+
+GAPs: COLLAB-001, COLLAB-002, COLLAB-003.
+
+This package extends the existing `delegate_task` surface rather than creating
+a general-purpose thread subsystem. Background delegation returns a stable
+child handle; one parent-scoped control surface provides list, bounded wait,
+interrupt, message, follow-up, and resume operations. Children remain depth
+one, retain the current session cap and global Lane limit, and cannot control
+siblings or create descendants.
+
+Mutable run status and bounded mailbox delivery use additive tables in the
+existing `sessions.db`. They are control projections, not replay history. The
+child's checkpoint, messages, hook/runtime events, and projected trajectory
+remain its independent rollout. A resumed child increments a generation and
+restores that same checkpoint; it never replays a previously successful tool
+side effect. A daemon restart may mark an uncertain in-flight process
+interrupted, but does not automatically restart it.
+
+Acceptance:
+
+- foreground `delegate_task` behavior remains compatible, while background
+  mode returns before child completion and exposes one stable child handle;
+- list, bounded wait, and interrupt are scoped to the owning parent, preserve
+  terminal status, and emit exactly one terminal transition per generation;
+- messages and completion notices are bounded, redacted, ordered, durable
+  across parent inactivity and daemon restart, and consumed at most once;
+- a running child consumes mailbox input only at an agent-loop boundary;
+  follow-up/resume on a terminal or interrupted child restores the same child
+  checkpoint as a new generation without replaying completed side effects;
+- depth, per-session task cap, Lane concurrency, approval/policy, hooks,
+  checkpoint, session-event, and trajectory contracts remain executable in
+  foreground, background, interrupted, resumed, failed, and timed-out tests;
+- architecture and migration documentation distinguish mutable collaboration
+  control state from the independent append-only child rollout, and document
+  the deliberate absence of nesting, a residency cache, and automatic crash
+  restart.
+
+#### R6.6 PostVerify delivery control
+
+GAP: HOOK-003.
+
+The public hook ABI and finalization ordering delivered by R6.4 remain fixed.
+This package makes the already-wired `PostVerify` seam effective when no
+external policy is installed and makes its decisions reconstructable without
+inventing another extension surface.
+
+The built-in fallback is monotone: a passing verifier result is accepted, a
+retryable failure requests one bounded revision, and a non-retryable failure
+enters the existing external-verification checkpoint. An external decision may
+strengthen those outcomes but may not turn a built-in failure into a pass.
+`Stop` remains the last delivery checkpoint and the existing two-attempt budget
+remains the loop bound.
+
+Revision authority is a one-shot dynamic system hint. It is never appended to
+provider history with role `user`, while the semantic timeline still records
+the correlated root turn, attempt, source, and instruction. Verification
+decisions retain bounded handler attribution, action, reason, evidence refs,
+and the candidate SHA-256 digest. Trajectory projection may later map that
+digest to a transition ID; the runtime does not emit a dangling future ID.
+
+Acceptance:
+
+- production census still exposes exactly 13 public hooks and adds no public
+  hook or middleware kind;
+- with no `PostVerify` handler, pass delivers once, retryable failure revises,
+  and non-retryable failure enters pending external verification;
+- invalid failure-plus-accept escalates, external revise/Stop continuation
+  preserves priority, and the third continuation fails closed at the existing
+  budget without replaying a completed tool side effect;
+- revision text is absent from user-role provider history and present once in
+  the bounded dynamic system context used by the next provider request;
+- a retryable failure consumes the existing reflection signal and reaches the
+  `verify_fail` replan path before the next provider call;
+- the semantic session timeline preserves one bounded decision record per
+  handler plus the fallback source, rooted by session, root turn, attempt, and
+  candidate digest; raw candidate content is not duplicated;
+- current PostVerify timeout/error observability remains compatible and
+  optional handler failure remains fail-open; a required-handler policy is
+  deferred until a measured SIL/Crucible consumer needs mixed authority.
+
 ### R7 — Closure, hardening, and release
 
 #### R7.1 Architecture CI
@@ -1614,6 +1714,7 @@ pre-release delivery evidence survives after the claim row is gone.
 | R0.3 | GOV-004 | [#2788](https://github.com/mangowhoiscloud/geode/pull/2788) | `15a9d674be790303f2034c89c7631d5c93978aee` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (CI Gate, 10,178 standard tests, type check, lint/format, security, Pages build, macOS/Ubuntu install smoke, and committed-diff review all passed) |
 | R6.4 | HOOK-001, HOOK-002 | [#2836](https://github.com/mangowhoiscloud/geode/pull/2836) | `95a474789645d4f3af5487f082cedf3eb60e66a4` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (CI Gate, 10,345 non-live tests, type check, lint/format, security, Pages build, macOS/Ubuntu install smoke, two GPT subscription E2E passes, and the committed consumer handoff all passed) |
 | R6.2 | STORE-001, STORE-002 | [#2850](https://github.com/mangowhoiscloud/geode/pull/2850) | `dc8b9175525db50ff23d8460e4c89316b16767cf` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, full non-live tests, lint/format, type check, security, Pages build, macOS/Ubuntu install smoke, GPT subscription hook/middleware E2E, privacy-gated trajectory publication, independent remote read-back, and committed cross-review all passed) |
+| R6.6 | HOOK-003 | [#2892](https://github.com/mangowhoiscloud/geode/pull/2892) | `308fd12f2779a1abb73d08ef619be98368fec129` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, 10,424 non-live tests, lint/format, type check, security, Pages build, macOS/Ubuntu install smoke, generated-doc parity, and candidate-digest-bound decision persistence all passed) |
 
 ### 10.2 Main closure evidence
 

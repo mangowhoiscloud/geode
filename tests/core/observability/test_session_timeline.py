@@ -79,6 +79,39 @@ def test_session_start_is_once_per_generation(tmp_path: Path) -> None:
     assert [row.turn_id for row in rows] == ["t-1", "t-3"]
 
 
+def test_verification_decision_targets_candidate_without_copying_it(tmp_path: Path) -> None:
+    timeline = SessionTimeline("s-verify", db_path=tmp_path / "sessions.db")
+    timeline.bind_turn("attempt-turn")
+    timeline.record_verification_decision(
+        candidate="private candidate",
+        root_turn_id="root-turn",
+        verify_attempt=1,
+        built_in_passed=False,
+        policy_action="revise",
+        decisions=[
+            {
+                "surface": "PostVerify",
+                "handler": "runtime_default",
+                "action": "revise",
+                "reason": "empty_post_verify_decision_set",
+                "instruction_sha256": "abc",
+                "instruction_bytes": 3,
+                "evidence_refs": [],
+            }
+        ],
+    )
+
+    [row] = SessionEventStore(timeline.db_path).read(
+        "s-verify", kinds=[SessionEventKind.VERIFICATION_DECIDED]
+    )
+    assert row.kind == "verification.decided"
+    assert row.payload["root_turn_id"] == "root-turn"
+    assert row.payload["verify_attempt"] == 1
+    assert row.payload["policy_action"] == "revise"
+    assert row.payload["candidate_bytes"] == len(b"private candidate")
+    assert "private candidate" not in json.dumps(row.payload)
+
+
 def test_read_combines_turn_kind_cursor_and_limit_filters(tmp_path: Path) -> None:
     store = SessionEventStore(tmp_path / "sessions.db")
     for turn_id, kind in (

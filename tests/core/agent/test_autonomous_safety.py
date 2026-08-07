@@ -152,7 +152,7 @@ class TestCostBudgetAutoStop:
         loop = AgenticLoop(context, executor, cost_budget=0.0)
         assert loop._cost_budget == 0.0
 
-        response = _make_text_response("Hello")
+        response = _make_text_response("Hello world")
         with (
             patch.object(loop, "_call_llm", return_value=response),
             patch.object(loop, "_track_usage"),
@@ -222,7 +222,7 @@ class TestCostBudgetAutoStop:
         mock_tracker = MagicMock()
         mock_tracker.accumulator.total_cost_usd = 0.50
 
-        response = _make_text_response("Hello")
+        response = _make_text_response("Hello world")
 
         with (
             patch.object(loop, "_call_llm", return_value=response),
