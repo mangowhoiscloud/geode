@@ -34,12 +34,6 @@ class _FakeLoop:
     def mark_session_paused(self) -> None:
         self.status_marks.append("paused")
 
-    def mark_session_completed(self) -> None:
-        self.status_marks.append("completed")
-
-    def mark_session_error(self) -> None:
-        self.status_marks.append("error")
-
     async def amark_session_paused(self) -> None:
         self.status_marks.append("paused")
 

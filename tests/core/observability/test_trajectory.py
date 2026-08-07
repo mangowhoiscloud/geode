@@ -50,7 +50,7 @@ def test_result_without_a_call_still_lands():
 
 
 def test_seq_restart_across_runs_does_not_interleave(tmp_path):
-    """``seq`` restarts at 1 per SessionTranscript instance, so 189 of 14,970
+    """Legacy ``seq`` restarted at 1 per writer instance, so 189 of 14,970
     real files carry decreasing seq. Ordering by seq alone spliced those runs
     into one conversation and dropped the earlier ones."""
     path = tmp_path / "s-multi.jsonl"

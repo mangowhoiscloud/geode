@@ -668,17 +668,9 @@ class AgenticLoop:
         """Delegates to :func:`_lifecycle.save_checkpoint`."""
         return _lifecycle.save_checkpoint(self, user_input, round_idx)
 
-    def mark_session_completed(self) -> None:
-        """Delegates to :func:`_lifecycle.mark_session_completed`."""
-        return _lifecycle.mark_session_completed(self)
-
     def mark_session_paused(self) -> None:
         """Delegates to :func:`_lifecycle.mark_session_paused`."""
         return _lifecycle.mark_session_paused(self)
-
-    def mark_session_error(self) -> None:
-        """Delegates to :func:`_lifecycle.mark_session_error`."""
-        return _lifecycle.mark_session_error(self)
 
     async def amark_session_completed(self) -> None:
         """Durably complete and emit the public SessionEnd boundary."""

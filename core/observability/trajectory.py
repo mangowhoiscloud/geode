@@ -1023,7 +1023,7 @@ def _rows(path: Path) -> list[dict[str, Any]]:
             out.append(json.loads(line))
         except json.JSONDecodeError:
             continue  # a truncated tail row must not sink the whole replay
-    # ``seq`` restarts at 1 for every SessionTranscript instance, so a session id
+    # ``seq`` restarted at 1 for every retired transcript-writer instance, so a session id
     # reused across runs produces repeating and decreasing seq within one file
     # (189 of 14,970 decrease, 357 repeat). Ordering by seq alone interleaves
     # those runs; ``ts`` separates them and the stable sort keeps append order

@@ -137,5 +137,5 @@ WARNING 로그를 남긴다. 이 이벤트들의 hook system 통합은 hook syst
   (다음 메시지 여부를 게이트웨이가 알 수 없음). 게이트웨이가 소유하는
   터미널 엣지: 컨텍스트 소진 → COMPLETED, ask 파킹 → PAUSED.
 - Phase 1b 이행 완료 전까지 `messages.json` 폴백 읽기가 남는다.
-- 인터랙티브 REPL은 클린 종료의 `mark_session_completed`에 의존한다;
+- 인터랙티브 REPL은 클린 종료의 `amark_session_completed`를 await한다;
   강제 종료된 REPL은 ACTIVE로 남는다(재개 가능 — 의도된 동작).

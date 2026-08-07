@@ -12,7 +12,6 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-import click
 import typer
 from core.cli import app
 from typer.testing import CliRunner
@@ -23,7 +22,6 @@ def test_campaign_command_is_registered() -> None:
     # (``app.registered_commands`` stores name=None for ``app.command()`` with
     # no explicit name; the name is derived at build time from the function).
     click_app = typer.main.get_command(app)
-    assert isinstance(click_app, click.Group)
     assert "campaign" in click_app.commands
 
 
@@ -35,7 +33,6 @@ def test_campaign_help_lists_core_flags() -> None:
     # The help is generated FROM these params, so introspecting them tests the
     # same intent deterministically.
     click_app = typer.main.get_command(app)
-    assert isinstance(click_app, click.Group)
     campaign_cmd = click_app.commands["campaign"]
     opt_names = {opt for param in campaign_cmd.params for opt in param.opts}
     for flag in ("--n", "--k", "--arms", "--dry-run"):

@@ -152,14 +152,14 @@ def test_export_html_escapes_content_and_labels_roles(runner: CliRunner, tmp_pat
     assert "sess-html" in doc
 
 
-def test_export_default_out_name_html(runner: CliRunner, tmp_path: Path) -> None:
+def test_export_default_out_name_html(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     _save_session(tmp_path, "sess-default")
-    with runner.isolated_filesystem(temp_dir=tmp_path) as cwd:
-        result = runner.invoke(
-            session_app, ["export", "sess-default", "--sessions-dir", str(tmp_path)]
-        )
-        assert result.exit_code == 0, result.output
-        assert (Path(cwd) / "geode-session-sess-default.html").exists()
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(session_app, ["export", "sess-default", "--sessions-dir", str(tmp_path)])
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / "geode-session-sess-default.html").exists()
 
 
 # ---------------------------------------------------------------------------

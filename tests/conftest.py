@@ -13,18 +13,15 @@ from dotenv import load_dotenv
 
 load_dotenv()  # Must run before test module imports
 
-# Redirect SessionCheckpoint + SessionTranscript to temp dirs during tests
-# to prevent production data contamination (.geode/session/, .geode/journal/)
+# Redirect SessionCheckpoint to a temp directory during tests to prevent
+# production data contamination.
 _test_session_dir = os.path.join(tempfile.gettempdir(), "geode_test_sessions")
-_test_transcript_dir = os.path.join(tempfile.gettempdir(), "geode_test_transcripts")
 
 from pathlib import Path  # noqa: E402
 
 import core.memory.session_checkpoint as _cp_mod  # noqa: E402
-import core.observability.transcript as _tx_mod  # noqa: E402
 
 _cp_mod.DEFAULT_SESSION_DIR = Path(_test_session_dir)
-_tx_mod.DEFAULT_TRANSCRIPT_DIR = Path(_test_transcript_dir)
 
 
 # v0.50.0 — auth-plans singletons (ProfileStore, ProfileRotator, PlanRegistry)
@@ -52,7 +49,6 @@ def _isolate_state_root(
 ) -> None:
     import core.paths as cp
     from core.memory import session_checkpoint, session_manager
-    from core.observability import transcript
 
     sandbox = tmp_path_factory.mktemp("state-isolation")
     monkeypatch.setattr(cp, "STATE_ROOT", sandbox)
@@ -67,7 +63,6 @@ def _isolate_state_root(
     session_dir = sandbox / "sessions"
     monkeypatch.setattr(session_checkpoint, "DEFAULT_SESSION_DIR", session_dir)
     monkeypatch.setattr(session_manager, "_DEFAULT_DB_PATH", session_dir / "sessions.db")
-    monkeypatch.setattr(transcript, "DEFAULT_TRANSCRIPT_DIR", sandbox / "legacy-transcripts")
 
 
 @pytest.fixture(autouse=True)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import sqlite3
 import time
@@ -11,7 +12,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from core.agent.loop._lifecycle import mark_session_error, record_timeline_end
+from core.agent.loop._lifecycle import mark_session_error_async, record_timeline_end
+from core.hooks import HookRegistry
 from core.observability.session_timeline import (
     SESSION_EVENT_SCHEMA_ID,
     SESSION_EVENT_SCHEMA_VERSION,
@@ -569,8 +571,10 @@ def test_error_transition_closes_durable_session_with_error_status() -> None:
         _checkpoint=Checkpoint(),
         _session_id="s-error",
         _timeline=TimelineRecorder(),
+        _hook_registry=HookRegistry(),
+        _public_session_ended=False,
     )
 
-    mark_session_error(loop)
+    asyncio.run(mark_session_error_async(loop))
 
     assert captured["status"] == "error"

@@ -47,6 +47,31 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Legacy transcript cleanup survives writer retirement.** `geode clean --all`
+  removes expired JSONL imports recursively without importing the retired
+  transcript writer.
+
+### Removed
+
+- **Removed expired transcript compatibility writers.** `SessionTranscript`,
+  `RunTranscript`, their re-export module, ContextVar aliases, and the unused
+  `merge_worker_transcripts` alias are gone after the v1.0.12 grace release.
+  Existing `transcript.jsonl` and `dialogue.jsonl` files remain supported as
+  explicit migration inputs; canonical writes continue through
+  `SessionTimeline`, `RunTimeline`, SQLite, and `events.jsonl`.
+- **Removed deprecated synchronous session-close bridges.** Session owners now
+  await `amark_session_completed/error`, so checkpoint transitions and public
+  `SessionEnd` delivery cannot split across event-loop ownership boundaries.
+
+### Infrastructure
+
+- **Closed dependency and CI supply-chain debt.** Runtime and site lockfiles
+  now resolve without known advisories, CI audits both lock surfaces, and all
+  third-party GitHub Actions are pinned to reviewed commit SHAs on their
+  current Node 24 releases.
+
 ## [1.0.16] - 2026-08-07
 
 > Runtime authority release: durable depth-one collaboration, one canonical

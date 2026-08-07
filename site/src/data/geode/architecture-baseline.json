@@ -193,7 +193,7 @@
       {
         "context_name": "self_improving_loop_run_timeline",
         "has_default": true,
-        "line": 30,
+        "line": 29,
         "path": "core/self_improving/loop/observe/run_timeline.py",
         "symbol": "_current_run_timeline"
       },
@@ -237,8 +237,8 @@
   "coordinators": {
     "AgenticLoop": {
       "constructor_arg_count": 27,
-      "file_loc": 2999,
-      "method_count": 74,
+      "file_loc": 2991,
+      "method_count": 72,
       "path": "core/agent/loop/agent_loop.py"
     },
     "RuntimeCoreConfig": {
@@ -367,12 +367,12 @@
         "path": "core/self_improving/campaign.py"
       },
       {
-        "line": 2244,
+        "line": 2229,
         "module": "plugins.petri_audit.runner",
         "path": "core/self_improving/campaign.py"
       },
       {
-        "line": 2323,
+        "line": 2308,
         "module": "plugins.petri_audit.pool_validation",
         "path": "core/self_improving/campaign.py"
       },
@@ -527,16 +527,16 @@
   },
   "packages": {
     "core": {
-      "python_files": 432,
-      "python_loc": 138949
+      "python_files": 430,
+      "python_loc": 138175
     },
     "plugins": {
       "python_files": 111,
       "python_loc": 41831
     },
     "tests": {
-      "python_files": 682,
-      "python_loc": 179154
+      "python_files": 679,
+      "python_loc": 178318
     }
   },
   "schema_version": 1,

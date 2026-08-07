@@ -72,7 +72,6 @@ def test_async_exit_uses_public_session_end_owner() -> None:
     poller = _bare_poller()
     loop = MagicMock()
     loop.amark_session_completed = AsyncMock()
-    loop.mark_session_completed = MagicMock()
 
     result = asyncio.run(
         poller._process_message_async(
@@ -85,4 +84,3 @@ def test_async_exit_uses_public_session_end_owner() -> None:
 
     assert result is None
     loop.amark_session_completed.assert_awaited_once()
-    loop.mark_session_completed.assert_not_called()

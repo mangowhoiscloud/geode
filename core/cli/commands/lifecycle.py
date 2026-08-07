@@ -106,6 +106,22 @@ def _scan_file(path: Path) -> DirUsage:
         return DirUsage(path=path)
 
 
+def _cleanup_legacy_transcripts(max_age_days: int) -> int:
+    """Remove retired JSONL transcripts after their migration window."""
+    if not GLOBAL_TRANSCRIPTS_DIR.exists():
+        return 0
+    cutoff = time.time() - max(0, max_age_days) * 86400
+    removed = 0
+    for path in GLOBAL_TRANSCRIPTS_DIR.rglob("*.jsonl"):
+        try:
+            if path.stat().st_mtime < cutoff:
+                path.unlink()
+                removed += 1
+        except OSError:
+            continue
+    return removed
+
+
 def _find_serve_pid() -> int | None:
     """Find the PID of the running geode serve process via pgrep."""
     try:
@@ -613,14 +629,9 @@ def do_clean(
 
     # Run existing cleanup utilities for --all mode
     if all_data and include_global:
-        try:
-            from core.observability.transcript import cleanup_old_transcripts
-
-            removed = cleanup_old_transcripts(max_age_days=older_than)
-            if removed:
-                console.print(f"  [muted]Cleaned {removed} old transcript(s).[/muted]")
-        except ImportError:
-            pass
+        removed = _cleanup_legacy_transcripts(older_than)
+        if removed:
+            console.print(f"  [muted]Cleaned {removed} old transcript(s).[/muted]")
 
     console.print(f"  [success]Freed {_format_size(freed)}.[/success]")
 
