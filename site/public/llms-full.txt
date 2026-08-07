@@ -2,7 +2,7 @@
 
 > GEODE is an autonomous agent runtime and evaluation substrate: an inner agentic loop runs tasks (research, analysis, automation, scheduling), while an experimental safety-gated outer loop mutates and evaluates scaffold candidates.
 
-Version v1.0.14. Last sync 2026-08-05. Full content of every docs page, one file (llms-full.txt convention). Per-page index: /llms.txt.
+Version v1.0.15. Last sync 2026-08-07. Full content of every docs page, one file (llms-full.txt convention). Per-page index: /llms.txt.
 
 ## Overview . 개요
 
@@ -1122,6 +1122,8 @@ print(schema["properties"]["decision"])
 ## PostVerify와 외부 루프
 
 `PostVerify`는 이미 실행된 부수 효과를 재생하지 않고, 완성된 후보와 내장 검증 결과를 외부 평가기·CI 정책·오케스트레이터가 판정하게 합니다. revise는 구체적인 후속 지시가 있어야 하며 최대 2회 연속 시도로 제한됩니다. 최종 결과에는 모든 시도의 rounds, tool calls, usage가 합산된 뒤 증거와 체크포인트가 저장됩니다. escalate는 단순 telemetry가 아니라 delivery gate입니다. 세션을 pause하고 후보를 외부 소유자에게만 pending\_text로 반환하며 terminal`session.ended`를 만들지 않습니다.
+
+외부 handler 결정이 없으면 pass는 accept, 재시도 가능한 실패는 revise, 그 밖의 실패는 escalate하는 기본 정책이 동작합니다. revision 지시는 user message가 아니라 dynamic system context에 한 번 주입되고,`verification.decided`는 후보 본문 대신 SHA-256 digest와 handler별 결정을 session timeline에 남깁니다.
 
 ## 신뢰 미들웨어 4개 결합점
 
@@ -5960,7 +5962,7 @@ Tier 2  latex2sympy2 + sympy.pretty  블록 전용. 분수·적분을 2D Unicode
 URL: https://mangowhoiscloud.github.io/geode/docs/reference/changelog
 Markdown: https://mangowhoiscloud.github.io/geode/docs/reference/changelog.md
 
-(body omitted from llms-full: 1488 KB — fetch the Markdown twin above for the complete page)
+(body omitted from llms-full: 1489 KB — fetch the Markdown twin above for the complete page)
 
 ---
 

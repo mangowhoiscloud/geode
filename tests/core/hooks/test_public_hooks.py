@@ -55,6 +55,30 @@ def test_unknown_hook_name_is_rejected() -> None:
         registry.register(cast(HookName, "LLMCallStart"), lambda _invocation: None)
 
 
+@_async_test
+async def test_outcome_attributes_each_decision_to_its_handler() -> None:
+    registry = HookRegistry()
+    registry.register(
+        HookName.USER_PROMPT_SUBMIT,
+        lambda _invocation: HookDecision(action=HookAction.CONTINUE),
+        name="first",
+        priority=10,
+    )
+    registry.register(
+        HookName.USER_PROMPT_SUBMIT,
+        lambda _invocation: HookDecision(action=HookAction.CONTINUE),
+        name="second",
+        priority=20,
+    )
+
+    outcome = await registry.invoke(
+        HookName.USER_PROMPT_SUBMIT,
+        payload={"user_input": "hello"},
+    )
+
+    assert outcome.decision_sources == ("first", "second")
+
+
 def test_all_public_hook_schemas_are_generated_and_json_round_trip() -> None:
     schemas = {hook.value: public_hook_schema(hook) for hook in HookName}
 
