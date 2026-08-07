@@ -47,6 +47,13 @@ functional change.
 
 ## [Unreleased]
 
+### Infrastructure
+
+- **Release-facing documentation now fails closed on stale public contracts.**
+  The official docs gate requires both READMEs to carry the canonical runtime
+  and evaluation-substrate identity and requires `SECURITY.md` to mark the
+  package's current major/minor series as supported.
+
 ## [1.0.15] - 2026-08-07
 
 > PostVerify control release: deterministic default decisions now feed the
@@ -1835,7 +1842,6 @@ functional change.
   `ScrollReveal`).
 
 ---
-=======
 ## [0.99.290] - 2026-07-10
 
 ### Added

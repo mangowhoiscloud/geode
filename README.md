@@ -7,7 +7,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/while(tool__use)-agentic%20loop-E0699F?style=flat-square" alt="while(tool_use)">
-  <img src="https://img.shields.io/badge/self--improving-non--parametric-E0699F?style=flat-square" alt="Self-improving (non-parametric)">
+  <img src="https://img.shields.io/badge/scaffold%20optimization-experimental-E0699F?style=flat-square" alt="Experimental scaffold optimization">
   <a href="https://github.com/mangowhoiscloud/geode/actions"><img src="https://img.shields.io/github/actions/workflow/status/mangowhoiscloud/geode/ci.yml?style=flat-square&label=ci&logo=github&logoColor=white" alt="CI"></a>
 </p>
 
@@ -29,9 +29,13 @@
   <a href="README.ko.md">한국어</a>
 </p>
 
-# GEODE v1.0.15: A Self-improving Autonomous Execution Agent
+# GEODE v1.0.15: Autonomous Agent Runtime + Evaluation Substrate
 
-A general-purpose autonomous agent that also rewrites the scaffolding it runs on. You ask in plain language; GEODE plans, calls tools, and reports, for one prompt or a long-running session. Underneath, an outer loop keeps tuning the system that runs your tasks.
+A general-purpose runtime for autonomous tool work. You ask in plain language;
+GEODE plans, calls tools, and reports, for one prompt or a long-running session.
+An experimental outer loop mutates scaffold candidates and admits them only
+through evidence-bound safety gates; the public record does not yet establish
+sustained self-improvement.
 
 > **Experimental status:** SIL (Self-Improving Loop) and Crucible are active
 > experiments, not stable production features. Their protocols, promotion
@@ -114,11 +118,23 @@ set, GEODE adapter, model route, and timeout settings.
 
 ---
 
-## The self-improving loop
+## Experimental scaffold-optimization loop
 
-GEODE is a self-evolving agent on the **non-parametric branch**: it improves by mutating its own scaffolding (system prompt, tool policy, task decomposition, reflection, skills, agent contracts, tool descriptions), never the model weights. Fitness is an adversarial **safety** audit, not a capability benchmark: Petri-grade, multi-dimensional, with a hard floor on critical safety dimensions, so any change that regresses one is rejected. The **selection** seeds co-evolve, a co-scientist pipeline grows adversarial seeds alongside the agent, so they apply moving selection pressure, not a stable ruler. Cross-generation fitness is measured on a separate **version-frozen held-out bench** that never mutates; only that held-out curve counts as evidence of real improvement.
+GEODE includes an experimental **non-parametric scaffold-optimization loop**.
+It mutates candidates across the system prompt, tool policy, task decomposition,
+reflection, skills, agent contracts, and tool descriptions; it never updates
+model weights. Fitness is an adversarial **safety** audit, not a capability
+benchmark: Petri-grade, multi-dimensional, with a hard floor on critical safety
+dimensions, so any change that regresses one is rejected. The public evidence
+currently demonstrates rejection and invalidation discipline, not repeated
+core promotion or monotonic improvement.
 
-Selection is an honest **(1+1) champion chain**: mutate, audit, promote on a real gain, otherwise revert. Two loops run together. An inner agentic loop runs a task; an outer loop tunes the system that runs tasks. The loop lineage (Promptbreeder, STOP, ADAS, DGM, GEPA) is well established. GEODE re-aims it from capability to safety, from weights to scaffolding, on co-evolved adversarial seeds. A recombination occupying an empty cell, not a new primitive.
+The selection contract is a **(1+1) champion chain**: mutate, audit, permit
+promotion on a real gain, otherwise revert. Two loops run together. An inner
+agentic loop runs a task; an outer loop evaluates scaffold candidates. The loop
+lineage (Promptbreeder, STOP, ADAS, DGM, GEPA) is well established. GEODE
+re-aims it from capability to safety and from weights to scaffolding. It is a
+recombination of known mechanisms, not a new primitive.
 
 - **[The closed loop →](https://mangowhoiscloud.github.io/geode/docs/capabilities/autoresearch)**: autoresearch, mutate / audit / promote / revert end to end
 - **[Two loops →](https://mangowhoiscloud.github.io/geode/docs/concepts/two-loops)**: the inner-vs-outer mental model
@@ -501,7 +517,7 @@ geode update --latest # uv tool: explicitly allow minor/major upgrades
 | Feature | What it does |
 |---------|-------------|
 | **`while(tool_use)` loop** | The single primitive every behavior is built on. Sub-agents, plans, batches are all instances of the same loop |
-| **Self-improving outer loop** | Mutates GEODE's own scaffolding, audits each change against an adversarial safety rubric, and promotes only on a real gain. See [the closed loop](https://mangowhoiscloud.github.io/geode/docs/capabilities/autoresearch) |
+| **Experimental scaffold-optimization loop** | Mutates scaffold candidates, audits each change against an adversarial safety rubric, and permits promotion only on a real gain. The public record currently shows gate discipline, not sustained improvement. See [the closed loop](https://mangowhoiscloud.github.io/geode/docs/capabilities/autoresearch) |
 | **Agentic tools + MCP catalog** | Web search, file ops, scheduling, memory, Slack/Discord, and native Gmail, Calendar, Drive, Docs, Sheets, Tasks, and Contacts through [user-owned Google OAuth](https://mangowhoiscloud.github.io/geode/docs/run/google-workspace), plus the Anthropic-published MCP registry (cached at `~/.geode/mcp/registry-cache.json`). Auto-installed on first use |
 | **3-provider failover** | Anthropic + OpenAI + ZhipuAI. ChatGPT subscription OAuth is auto-detected through Codex CLI; Anthropic/OpenAI/ZhipuAI pay-as-you-go API keys also work. Failover is in-provider only (no surprise cross-vendor charges, v0.53.0 governance) |
 | **5-tier memory** | SOUL (0) → User Profile (0.5) → Organization (1) → Project (2) → Session (3). Persistent, survives daemon restarts |
@@ -595,14 +611,19 @@ A qualitative read on where GEODE sits next to the frontier harnesses (Claude Co
 | Skill system | ✅ Deferred tools + SKILL.md manifest | ✅ SKILL.md + progressive disclosure (`.agents/skills/`) | ✅ skill filter + archive upload | ✅ runtime `SkillRegistry` across bundled/global/project scopes |
 | **Swappable pipeline DAG** | ❌ | ❌ | ⚠️ flows (channel-setup / doctor / provider, not a DAG abstraction) | ⚠️ external package responsibility; GEODE core no longer ships a pipeline port |
 | Trace / replay / Run Log | ✅ `tengu_*` telemetry + `/insights` HTML | ⚠️ `/status` + `/debug-config` only | ✅ ACP session lineage + Task Registry | ✅ Native RunLog + Petri eval integration |
-| Self-improving safety loop | ❌ | ❌ | ❌ | ✅✅ outer loop: scaffold mutation + adversarial safety audit + (1+1) promote/revert |
+| Safety-gated scaffold optimization | ❌ | ❌ | ❌ | ⚠️ experimental outer loop: scaffold mutation + adversarial safety audit + (1+1) promote/revert contract; zero public core promotions |
 | Cross-provider review | ❌ | ❌ | ❌ | ⚠️ multi-voter cross-provider ranking panel (≥2 providers, `plugins/seed_generation/agents/ranker.py`) in the self-improving loop; agreement calibration is WIP |
 
 </details>
 
 ---
 
-Use **Claude Code** or **Codex** for short coding sessions inside an IDE or via cloud sync. Use **OpenClaw** to run a multi-channel chat agent fleet across many messaging surfaces. Use **GEODE** when an agent must work over hours or days with multi-tier memory, multi-layer verification, scheduling, and daemon-backed tool execution, and when you want that agent to keep improving its own scaffolding under a safety floor.
+Use **Claude Code** or **Codex** for short coding sessions inside an IDE or via
+cloud sync. Use **OpenClaw** to run a multi-channel chat agent fleet across many
+messaging surfaces. Use **GEODE** when an agent must work over hours or days
+with multi-tier memory, multi-layer verification, scheduling, and daemon-backed
+tool execution, or when you want to experiment with scaffold candidates under
+an evidence-bound safety floor.
 
 > Sources, Claude Code (reverse-engineered reference). Codex CLI release notes + [developers.openai.com/codex/config-reference](https://developers.openai.com/codex/config-reference) + [github.com/openai/codex](https://github.com/openai/codex). OpenClaw (TypeScript). GEODE, `CHANGELOG.md` and the [self-improving hub](https://mangowhoiscloud.github.io/geode/self-improving/).
 
@@ -665,7 +686,10 @@ Tier 3    Session         In-memory, conversation, tool results, plans
 <details>
 <summary><strong>Development workflow (Scaffold)</strong></summary>
 
-CANNOT (guardrails) before CAN (freedom). A 7-step workflow plus quality gates. The CI ratchet (pytest, mypy, ruff, import-order, test-count) must pass before any merge. Test count is monotonically increasing only.
+CANNOT (guardrails) before CAN (freedom). A 7-step workflow plus quality gates.
+The CI ratchet (pytest, mypy, ruff, import-order, test-count) must pass before
+any merge. The measured test-count floor cannot decrease without an explicit
+deletion rationale and updated ratchet.
 
 | Gate | Command | Target |
 |------|---------|--------|
