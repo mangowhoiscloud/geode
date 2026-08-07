@@ -2,7 +2,7 @@
  * GEODE CHANGELOG, auto-synced from the GEODE repo via `npm run sync-stats`.
  * Do not edit manually. Edit CHANGELOG.md in the GEODE repo and re-run sync.
  *
- * Last sync: 2026-08-05
+ * Last sync: 2026-08-07
  *
  * Each entry's `body` is the raw markdown between two version headings.
  * The Changelog page renders the body with a minimal markdown renderer
@@ -19,7 +19,12 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": "### Changed\n\n- **PostVerify now controls delivery by default.** With no external handler,\n  passing candidates are accepted, retryable failures enter the existing\n  bounded revise/replan path, and non-retryable failures pause for external\n  verification. Revision instructions now use the dynamic system context\n  instead of user-role history, and candidate-digest-bound handler decisions\n  persist in the semantic session timeline for trajectory reconstruction."
+    "body": ""
+  },
+  {
+    "version": "1.0.15",
+    "date": "2026-08-07",
+    "body": "> PostVerify control release: deterministic default decisions now feed the\n> bounded revise/replan path, while decision provenance remains replayable in\n> the semantic session timeline.\n\n### Changed\n\n- **PostVerify now controls delivery by default.** With no external handler,\n  passing candidates are accepted, retryable failures enter the existing\n  bounded revise/replan path, and non-retryable failures pause for external\n  verification. Revision instructions now use the dynamic system context\n  instead of user-role history, and candidate-digest-bound handler decisions\n  persist in the semantic session timeline for trajectory reconstruction."
   },
   {
     "version": "1.0.14",
@@ -2468,4 +2473,4 @@ export const CHANGELOG: ChangelogEntry[] = [
   }
 ];
 
-export const CHANGELOG_SYNCED_AT = "2026-08-05";
+export const CHANGELOG_SYNCED_AT = "2026-08-07";

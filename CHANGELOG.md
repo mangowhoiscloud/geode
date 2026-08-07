@@ -47,6 +47,12 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.15] - 2026-08-07
+
+> PostVerify control release: deterministic default decisions now feed the
+> bounded revise/replan path, while decision provenance remains replayable in
+> the semantic session timeline.
+
 ### Changed
 
 - **PostVerify now controls delivery by default.** With no external handler,
