@@ -49,12 +49,23 @@ functional change.
 
 ### Fixed
 
+- **Result feedback now carries physical execution identity without claiming
+  verified human preference.** `rate_result`, `accept_result`, and
+  `reject_result` attach the active session, turn, and tool-call identifiers to
+  their bounded telemetry rows. Tool descriptions and event documentation now
+  identify the signal as model-reported feedback; the existing persistence
+  boundary continues to remove raw subjects, comments, and reasons.
 - **Legacy transcript cleanup survives writer retirement.** `geode clean --all`
   removes expired JSONL imports recursively without importing the retired
   transcript writer.
 
 ### Removed
 
+- **Removed unwired pseudo-reward mutation fields.** The mutator no longer asks
+  for or stores `principle` and `causal_hypothesis` strings that had no runtime,
+  attribution, gate, or training consumer. Historical `mutations.jsonl` rows
+  remain readable through the existing forward-compatible row schema; the
+  deterministic anchor-dimension fitness multiplier remains unchanged.
 - **Removed expired transcript compatibility writers.** `SessionTranscript`,
   `RunTranscript`, their re-export module, ContextVar aliases, and the unused
   `merge_worker_transcripts` alias are gone after the v1.0.12 grace release.

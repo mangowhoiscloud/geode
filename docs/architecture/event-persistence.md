@@ -58,6 +58,14 @@ event kind, bounded payload, and payload hash. Tool call/result pairs reuse the
 same `call_id`. A corrupt payload is returned as an explicit marker instead of
 hiding the rest of the session.
 
+`rate_result`, `accept_result`, and `reject_result` emit operational
+`result_feedback` telemetry with the active session, turn, and physical tool
+call identifiers. The model invokes these tools, so the row records reported
+feedback rather than proving direct human authorship. Raw subject, comment, and
+reason values are removed at the shared persistence boundary. A future
+preference dataset must establish its own human-authority and candidate-target
+contract instead of treating this telemetry row as a chosen/rejected label.
+
 Every trajectory recomputes data-quality facts rather than trusting producer
 claims: event-ID uniqueness, contiguous ordinals, session/turn/call correlation
 coverage, tool call/result pairing, orphan counts, and truncated/corrupt/omitted

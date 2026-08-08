@@ -53,8 +53,9 @@ class RuntimeEvent(Enum):
     # ``paths`` for creations).
     MEMORY_SAVED = "memory_saved"
     RULE_CHANGED = "rule_changed"
-    # Human result feedback (rate/accept/reject_result tool handlers). The
-    # canonical SQLite sink persists operator verdicts for indexed history.
+    # Model-reported result feedback (rate/accept/reject_result tool handlers).
+    # The canonical SQLite sink persists the correlated verdict for indexed
+    # history; this event alone does not prove direct human authorship.
     RESULT_FEEDBACK = "result_feedback"
 
     # Prompt Assembly (ADR-007) + Drift Detection (Karpathy P4)

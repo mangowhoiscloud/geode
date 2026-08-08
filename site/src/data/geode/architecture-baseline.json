@@ -377,12 +377,12 @@
         "path": "core/self_improving/campaign.py"
       },
       {
-        "line": 385,
+        "line": 347,
         "module": "plugins.seed_generation.baseline_reader",
         "path": "core/self_improving/loop/mutate/runner.py"
       },
       {
-        "line": 608,
+        "line": 538,
         "module": "plugins.seed_generation.baseline_reader",
         "path": "core/self_improving/loop/mutate/runner.py"
       },
@@ -528,15 +528,15 @@
   "packages": {
     "core": {
       "python_files": 430,
-      "python_loc": 138175
+      "python_loc": 138101
     },
     "plugins": {
       "python_files": 111,
       "python_loc": 41831
     },
     "tests": {
-      "python_files": 679,
-      "python_loc": 178461
+      "python_files": 678,
+      "python_loc": 178146
     }
   },
   "schema_version": 1,

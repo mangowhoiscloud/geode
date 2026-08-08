@@ -346,9 +346,7 @@ class TestW4PydanticSchemaFreeze:
         self,
         tmp_path: Path,
     ) -> None:
-        """W4 backward compat — legacy mutations.jsonl rows may carry
-        keys this PR doesn't model (e.g. a future field). ``extra="allow"``
-        keeps validation green so historical rows stay readable."""
+        """Legacy mutations.jsonl rows retain retired metadata as extras."""
         future_field_row = {
             "ts": 1716638400.0,
             "kind": "applied",
@@ -358,10 +356,15 @@ class TestW4PydanticSchemaFreeze:
             "previous_value": "",
             "new_value": "x",
             "rationale": "",
-            "future_feature_flag": "experimental",  # unknown
+            "principle": "historical generated criterion",
+            "causal_hypothesis": "historical unwired hypothesis",
         }
         record = ApplyRecord.model_validate(future_field_row)
         assert record.mutation_id == "mut-legacy"
+        assert record.model_extra == {
+            "principle": "historical generated criterion",
+            "causal_hypothesis": "historical unwired hypothesis",
+        }
 
     def test_append_attribution_log_validates_payload(
         self,
