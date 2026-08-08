@@ -255,10 +255,14 @@ class GeodeRuntime:
             organization_memory=memory["organization_memory"],
             context_assembler=memory["context_assembler"],
         )
-        instance = cls(core_config, scheduling_config, memory_config)
-        instance.run_id = run_id
-        instance.task_graph = memory["task_graph"]
-        return instance
+        try:
+            instance = cls(core_config, scheduling_config, memory_config)
+            instance.run_id = run_id
+            instance.task_graph = memory["task_graph"]
+            return instance
+        except BaseException:
+            cls._stop_staged_scheduling(scheduling)
+            raise
 
     @staticmethod
     def _build_core(
@@ -359,7 +363,11 @@ class GeodeRuntime:
 
         scheduling = scheduling_wiring.build_scheduling(hooks=hooks)
 
-        task_graph = bootstrap.build_task_graph()
+        try:
+            task_graph = bootstrap.build_task_graph()
+        except BaseException:
+            GeodeRuntime._stop_staged_scheduling(scheduling)
+            raise
 
         memory = {
             "project_memory": project_memory,
@@ -368,6 +376,22 @@ class GeodeRuntime:
             "task_graph": task_graph,
         }
         return memory, scheduling
+
+    @staticmethod
+    def _stop_staged_scheduling(scheduling: dict[str, Any]) -> None:
+        """Roll back scheduler threads when staged runtime assembly fails."""
+        scheduler_service = scheduling.get("scheduler_service")
+        if scheduler_service is not None:
+            try:
+                scheduler_service.stop()
+            except Exception:
+                log.warning("Staged scheduler rollback failed", exc_info=True)
+        trigger_manager = scheduling.get("trigger_manager")
+        if trigger_manager is not None:
+            try:
+                trigger_manager.stop_scheduler()
+            except Exception:
+                log.warning("Staged trigger rollback failed", exc_info=True)
 
     # ------------------------------------------------------------------
     # Instance methods

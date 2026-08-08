@@ -139,16 +139,15 @@ class TestBootstrapGeode:
             boot = bootstrap_geode(load_env=False)
             assert boot is not None
 
-    def test_load_env_true_calls_dotenv(self) -> None:
-        """When load_env=True, dotenv loading is attempted."""
+    def test_load_env_true_calls_daemon_env_loader(self) -> None:
+        """When load_env=True, daemon env loading is attempted without real IO."""
         with (
             patch("core.cli.bootstrap.log"),
-            patch("dotenv.load_dotenv") as _mock_dotenv,
+            patch("core.cli.bootstrap.load_daemon_env") as load_daemon_env,
         ):
             boot = bootstrap_geode(load_env=True)
             assert boot is not None
-            # load_dotenv may or may not be called depending on file existence
-            # but the code path should not crash
+            load_daemon_env.assert_called_once_with()
 
 
 class TestBootstrapIdempotent:

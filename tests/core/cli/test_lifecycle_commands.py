@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import signal
+import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -177,6 +178,20 @@ class TestStop:
 
 
 class TestStartServe:
+    def test_default_timeout_allows_twenty_second_boot(self, tmp_path: Path) -> None:
+        executable = str(tmp_path / "bin" / "geode")
+        with (
+            patch("core.cli.commands.lifecycle.subprocess.Popen") as popen,
+            patch("core.cli.ipc_client.is_serve_running", return_value=True),
+            patch(
+                "core.cli.commands.lifecycle.time.monotonic",
+                side_effect=[0.0, 20.0],
+            ),
+        ):
+            assert _start_serve_background(executable=executable)
+
+        popen.assert_called_once()
+
     def test_waits_for_socket_readiness(self, tmp_path: Path) -> None:
         executable = str(tmp_path / "bin" / "geode")
         with (
@@ -192,6 +207,38 @@ class TestStartServe:
         popen.assert_called_once()
         assert popen.call_args.args[0] == [executable, "serve"]
         assert running.call_count == 2
+
+    def test_timeout_escalates_and_reaps_process(self, tmp_path: Path) -> None:
+        executable = str(tmp_path / "bin" / "geode")
+        with (
+            patch("core.cli.commands.lifecycle.subprocess.Popen") as popen,
+            patch("core.cli.ipc_client.is_serve_running", return_value=False),
+            patch("core.cli.commands.lifecycle.time.monotonic", return_value=0.0),
+        ):
+            process = popen.return_value
+            process.wait.side_effect = [subprocess.TimeoutExpired(executable, 5.0), 0]
+            assert not _start_serve_background(executable=executable, timeout=0.0)
+
+        process.terminate.assert_called_once()
+        process.kill.assert_called_once()
+        assert process.wait.call_count == 2
+
+    def test_timeout_reports_unreaped_process(
+        self,
+        tmp_path: Path,
+        capfd: pytest.CaptureFixture[str],
+    ) -> None:
+        executable = str(tmp_path / "bin" / "geode")
+        with (
+            patch("core.cli.commands.lifecycle.subprocess.Popen") as popen,
+            patch("core.cli.ipc_client.is_serve_running", return_value=False),
+            patch("core.cli.commands.lifecycle.time.monotonic", return_value=0.0),
+        ):
+            process = popen.return_value
+            process.wait.side_effect = subprocess.TimeoutExpired(executable, 5.0)
+            assert not _start_serve_background(executable=executable, timeout=0.0)
+
+        assert "could not be reaped" in capfd.readouterr().out
 
 
 class TestCleanStaleArtifacts:

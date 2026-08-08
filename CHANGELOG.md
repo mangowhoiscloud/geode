@@ -47,6 +47,20 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Made lifecycle restarts and runtime tests honor their real ownership
+  boundaries.** Detached `geode serve` restarts now allow the documented
+  30-second readiness window instead of terminating healthy MCP-heavy boots at
+  ten seconds; timed-out child termination escalates from terminate to kill,
+  and an unreaped child is reported explicitly. Runtime construction rolls
+  back scheduler threads on staged
+  failures; wiring tests use isolated scheduler stores and close every returned
+  runtime, preventing operator jobs and threads from leaking into later tests
+  after pytest capture has closed. Non-live tests also discard inherited
+  provider credentials, and the credentialed web-search E2E is now explicitly
+  marked `live`, preventing accidental billable calls during local CI.
+
 ## [1.0.17] - 2026-08-08
 
 > Runtime hygiene release: execution-correlated feedback, retired compatibility

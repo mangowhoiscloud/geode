@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from core.runtime import GeodeRuntime
 from core.wiring.container import (
     build_default_policies as _build_default_policies,
@@ -11,6 +12,8 @@ from core.wiring.container import (
 from core.wiring.container import (
     build_default_registry as _build_default_registry,
 )
+
+pytestmark = pytest.mark.usefixtures("managed_geode_runtimes")
 
 ALL_TOOL_NAMES = {
     # Analysis (1)
