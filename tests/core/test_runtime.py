@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
+import pytest
 from core.hooks import HookEvent, HookSystem
 from core.hooks.catalog import event_persistence_spec
 from core.memory.session import InMemorySessionStore
@@ -25,12 +27,17 @@ from core.wiring.container import (
     build_default_registry as _build_default_registry,
 )
 
+pytestmark = pytest.mark.usefixtures("managed_geode_runtimes")
+
 
 class TestGeodeRuntimeCreate:
     def test_create_basic(self, tmp_path: Path):
         runtime = GeodeRuntime.create("demo", log_dir=tmp_path)
         assert runtime.subject_id == "demo"
         assert runtime.session_key == "subject:demo:analysis"
+        assert runtime.scheduler_service._store_path == (
+            tmp_path / "scheduler" / "scheduled_tasks.json"
+        )
         assert isinstance(runtime.hooks, HookSystem)
         assert isinstance(runtime.session_store, InMemorySessionStore)
         assert isinstance(runtime.policy_chain, PolicyChain)
@@ -40,6 +47,33 @@ class TestGeodeRuntimeCreate:
     def test_create_custom_phase(self, tmp_path: Path):
         runtime = GeodeRuntime.create("Demo Subject", phase="scoring", log_dir=tmp_path)
         assert runtime.session_key == "subject:demo_subject:scoring"
+
+    def test_staged_scheduling_is_stopped_when_task_graph_creation_fails(self) -> None:
+        bootstrap = MagicMock()
+        bootstrap.build_memory.return_value = (MagicMock(), MagicMock(), MagicMock(), None)
+        bootstrap.build_task_graph.side_effect = RuntimeError("task graph failed")
+        scheduler_service = MagicMock()
+        trigger_manager = MagicMock()
+        scheduling = {
+            "scheduler_service": scheduler_service,
+            "trigger_manager": trigger_manager,
+        }
+
+        with (
+            patch("core.wiring.scheduling.build_scheduling", return_value=scheduling),
+            pytest.raises(RuntimeError, match="task graph failed"),
+        ):
+            GeodeRuntime._build_memory_and_scheduling(
+                bootstrap,
+                MagicMock(),
+                MagicMock(),
+                MagicMock(),
+                session_key="subject:demo:analysis",
+                subject_id="demo",
+            )
+
+        scheduler_service.stop.assert_called_once()
+        trigger_manager.stop_scheduler.assert_called_once()
 
 
 class TestRuntimeHookEvents:

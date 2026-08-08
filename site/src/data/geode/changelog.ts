@@ -19,7 +19,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": ""
+    "body": "### Fixed\n\n- **Made lifecycle restarts and runtime tests honor their real ownership\n  boundaries.** Detached `geode serve` restarts now allow the documented\n  30-second readiness window instead of terminating healthy MCP-heavy boots at\n  ten seconds; timed-out child termination escalates from terminate to kill,\n  and an unreaped child is reported explicitly. Runtime construction rolls\n  back scheduler threads on staged\n  failures; wiring tests use isolated scheduler stores and close every returned\n  runtime, preventing operator jobs and threads from leaking into later tests\n  after pytest capture has closed. Non-live tests also discard inherited\n  provider credentials, and the credentialed web-search E2E is now explicitly\n  marked `live`, preventing accidental billable calls during local CI."
   },
   {
     "version": "1.0.17",
