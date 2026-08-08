@@ -47,6 +47,11 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.17] - 2026-08-08
+
+> Runtime hygiene release: execution-correlated feedback, retired compatibility
+> surfaces, and fail-closed repository and supply-chain maintenance.
+
 ### Fixed
 
 - **Result feedback now carries physical execution identity without claiming
