@@ -67,6 +67,12 @@ functional change.
 
 ### Infrastructure
 
+- **Made feature-worktree release fail closed after squash merges.** The new
+  `scripts/check_repo_hygiene.py free-merged-worktree` command verifies PR
+  merge state, final-tree equality, local ancestry, remote-head stability,
+  checkout cleanliness, and owner metadata before removing the remote branch,
+  worktree, and local branch. AGENTS, CLAUDE, and both GitFlow scaffolds now
+  route through that one command.
 - **Closed dependency and CI supply-chain debt.** Runtime and site lockfiles
   now resolve without known advisories, CI audits both lock surfaces, and all
   third-party GitHub Actions are pinned to reviewed commit SHAs on their

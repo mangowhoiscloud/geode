@@ -270,21 +270,12 @@ is what closes the rest. Install both.
 **Every work unit** starts by opening a worktree. No exceptions.
 
 ```bash
-# 0. Sync verification gate (CANNOT rule — never skip)
+# Fetch the canonical integration head; do not move a checkout held by another
+# worktree or reuse a dirty main checkout.
 git fetch origin
+git worktree add .claude/worktrees/<task-name> \
+  -b feature/<branch-name> origin/develop
 
-LOCAL_MAIN=$(git rev-parse main)
-REMOTE_MAIN=$(git rev-parse origin/main)
-[ "$LOCAL_MAIN" != "$REMOTE_MAIN" ] && echo "STOP: local main ≠ origin/main" && git checkout main && git pull origin main
-
-LOCAL_DEV=$(git rev-parse develop)
-REMOTE_DEV=$(git rev-parse origin/develop)
-[ "$LOCAL_DEV" != "$REMOTE_DEV" ] && echo "STOP: local develop ≠ origin/develop" && git checkout develop && git pull origin develop
-
-# 1. Create worktree = allocate workspace (based on develop)
-git worktree add .claude/worktrees/<task-name> -b feature/<branch-name> develop
-
-# 2. Move to work directory
 cd .claude/worktrees/<task-name>
 
 # → Steps 2~11 all performed within this worktree
@@ -423,8 +414,9 @@ gh pr create --base develop --assignee mangowhoiscloud \
 # 2. ★★ CI Ratchet: Wait for checks to pass (MUST — never skip)
 gh pr checks <PR#> --watch --repo mangowhoiscloud/geode
 
-# 3. Merge only after all pass
-gh pr merge <PR#> --merge --repo mangowhoiscloud/geode
+# 3. Merge only after all pass; the guarded free command below verifies and
+#    finishes remote/worktree/local cleanup.
+gh pr merge <PR#> --squash --delete-branch --repo mangowhoiscloud/geode
 
 # ── develop → main ──
 
@@ -698,40 +690,19 @@ gh pr checks <PR#> --watch --repo mangowhoiscloud/geode
 
 ## Step 12: Worktree Close (free)
 
-**After merge completion**, worktree must be closed. No exceptions.
+**After feature merge completion**, worktree must be closed. Run the canonical
+guarded cleanup from outside the target worktree:
 
 ```bash
-# 1. Return to main repo
 cd ~/workspace/geode
-
-# 2. Update develop/main to latest
-git checkout develop && git pull origin develop
-
-# 3. Remove worktree = release workspace
-git worktree remove .claude/worktrees/<task-name>
-
-# 4. Branch cleanup (local + remote)
-git branch -d feature/<branch-name>
-git push origin --delete feature/<branch-name>
-
-# 5. Leak check
-git worktree list   # No unclosed worktrees should remain
+uv run python scripts/check_repo_hygiene.py free-merged-worktree \
+  --pr <feature-pr> \
+  --worktree .claude/worktrees/<task-name>
 ```
 
----
-
-## Local Merge (exception when PR creation impossible)
-
-Only use local merge when PR creation is impossible (e.g., GitHub "No commits between" error):
-
-```bash
-git stash
-git checkout develop && git merge feature/<name> --no-edit && git push origin develop
-git checkout main && git merge develop --no-edit && git push origin main
-git checkout feature/<name> && git stash pop
-```
-
----
+The command performs the leak check and prune. A refusal is a blocking signal;
+inspect the reported dirty, owner, ancestry, or tree mismatch instead of using
+manual `--force` cleanup.
 
 ## Worktree Allocation (Workflow Step 0)
 
@@ -742,14 +713,17 @@ Record on the Progress Board, then allocate the worktree.
 
 # 2) Allocate Worktree
 git fetch origin
-# Verify main/develop sync (pull if out of sync)
-git worktree add .claude/worktrees/<task-name> -b feature/<branch-name> develop
+git worktree add .claude/worktrees/<task-name> \
+  -b feature/<branch-name> origin/develop
 # Note: the target path IS the worktree checkout root; `.owner` is gitignored
 # (see /.owner in .gitignore) so the convention does not pollute feature branches.
 echo "session=$(date -Iseconds) task_id=<task-name>" > .claude/worktrees/<task-name>/.owner
 ```
 
-On completion (after the PR merges) tear down all three stale artifacts — remote branch, worktree, local branch — per [Post-Merge Cleanup](#post-merge-cleanup-mandatory-after-every-merge) below.
+On completion (after the PR merges) tear down all three stale artifacts —
+remote branch, worktree, local branch — per [Post-Merge Cleanup](#post-merge-cleanup-mandatory-after-every-merge)
+below. A PR reporting "No commits between" is a content/branch-selection issue,
+not permission to push protected branches directly.
 
 ## PR Body Template (MANDATORY)
 
@@ -790,48 +764,25 @@ develop → main PRs may use abbreviated form (Summary + Verification only).
 
 ## Post-Merge Cleanup (MANDATORY after every merge)
 
-A merged PR leaves three stale artifacts behind: the remote branch, the local
-worktree, and the local branch. Tear all three down — in this order, because
-the order is load-bearing:
+A squash-merged feature PR leaves three stale artifacts behind: the remote
+branch, worktree, and local branch. `git branch -d` cannot recognize a squash
+merge and is therefore not the cleanup gate. Run the repository command from
+outside the target worktree:
 
 ```bash
-# 1) Merge + delete the REMOTE branch in one option (never chain && git push --delete).
-#    feature → develop = --squash (one commit/feature); develop → main = --merge.
-gh pr merge <PR#> --squash --delete-branch       # feature→develop; cf. [[feedback_merge_then_delete]]
-
-# 2) Remove the WORKTREE first — `git branch -d` REFUSES to delete a branch a
-#    worktree still holds, so worktree-remove must precede branch-delete.
-git worktree remove .claude/worktrees/<task-name>   # add --force only if the tree has untracked build junk (.venv)
-
-# 3) Delete the LOCAL branch + prune the now-dangling remote-tracking ref
-git branch -d feature/<branch-name>              # -d (not -D): refuses if somehow unmerged
-git fetch origin --prune
+cd ~/workspace/geode
+uv run python scripts/check_repo_hygiene.py free-merged-worktree \
+  --pr <feature-pr> \
+  --worktree .claude/worktrees/<task-name>
 ```
 
-> `gh pr merge --delete-branch` deletes the *remote* branch but leaves the
-> *local* branch + worktree — and it cannot delete the local branch while a
-> worktree still occupies it (you'll see `cannot delete branch '…' used by
-> worktree at …`). Always worktree-remove, then branch-delete.
-
-**Periodic bulk prune** (when merged branches have accumulated across sessions):
-delete every branch merged into `develop`, EXCLUDING `develop` / `main` /
-`release/*` and any branch a worktree still holds (those may belong to another
-live session — never delete another session's `.owner`-protected worktree or its
-branch). `git branch -d` / `--merged` make this safe — they refuse anything
-unmerged.
-
-```bash
-held=$(git worktree list --porcelain | awk '/^branch /{gsub("refs/heads/","",$2); print $2}')
-# local: merged into develop, not worktree-held, not develop/main
-git branch --merged develop --format='%(refname:short)' | grep -vE '^(develop|main)$' \
-  | while read b; do echo "$held" | grep -qxF "$b" || git branch -d "$b"; done
-# remote: same filter (+ skip release/*), batch the push --delete
-git branch -r --merged origin/develop --format='%(refname:short)' | sed 's#^origin/##' \
-  | grep -vE '^(develop|main|HEAD)$' | grep -vE '^release/' \
-  | while read b; do echo "$held" | grep -qxF "$b" || echo "$b"; done \
-  | xargs -n 40 git push origin --delete
-git fetch origin --prune
-```
+The command fails before mutation unless the PR is `MERGED`, its final head
+tree equals the merge tree, the checked-out local branch is an ancestor of
+that final head, the remote has not advanced, the checkout is clean, and
+`.owner.task_id` matches the worktree directory. Only after those proofs does
+it remove remote branch → worktree → squash-only local branch and prune. A
+refusal must be investigated; never delete another session's owner-protected
+worktree manually.
 
 ## Rebuild & Restart (Workflow Step 7)
 

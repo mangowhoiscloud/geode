@@ -172,7 +172,7 @@ Anything not in CANNOT is freely permitted. Specifically:
 
 #### 0. Board + Worktree Alloc
 
-Record on Progress Board, then allocate the worktree. Commands: `geode-gitflow` skill § "Worktree Allocation". On completion, tear down all three stale artifacts (remote branch, worktree, local branch) per that skill's § "Post-Merge Cleanup".
+Record on Progress Board, then allocate the worktree. Commands: `geode-gitflow` skill § "Worktree Allocation". On completion, run the squash-aware `scripts/check_repo_hygiene.py free-merged-worktree` command from outside the target checkout; the `geode-gitflow` skill § "Post-Merge Cleanup" owns the exact invocation.
 
 #### 1. GAP Audit
 
@@ -283,7 +283,7 @@ See `geode-gitflow` skill. **Flow**: `feature → develop` **squash-merged** (on
 
 **PR Body Template (MANDATORY):** see `geode-gitflow` skill § "PR Body Template". Minimum required sections: **Summary**, **Why**, **Changes**, **Verification**. Cascading updates (new tool → `definitions.json` + handlers + E2E; LLM adapter → `core/llm/router/` + `core/llm/providers/` + E2E) are listed there too.
 
-**Post-Merge Cleanup is MANDATORY after every merge** — a merged PR leaves the remote branch, the worktree, and the local branch behind, and the teardown order is load-bearing. Commands and the periodic bulk prune: `geode-gitflow` skill § "Post-Merge Cleanup".
+**Post-Merge Cleanup is MANDATORY after every feature merge** — run `uv run python scripts/check_repo_hygiene.py free-merged-worktree --pr <N> --worktree <path>` from outside the target checkout. The command fails closed unless the PR is merged, its final head tree equals the merge tree, the local branch is contained in that head, the remote has not advanced, the checkout is clean, and `.owner` matches the worktree. It then removes remote branch → worktree → squash-only local branch. See `geode-gitflow` skill § "Post-Merge Cleanup".
 
 #### 7. Rebuild & Restart
 
