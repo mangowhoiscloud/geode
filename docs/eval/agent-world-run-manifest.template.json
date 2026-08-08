@@ -1,0 +1,131 @@
+{
+  "schema": "geode.agent-world-comparison-profile.v1",
+  "comparison_id": "<suite>-<profile>-<model>-<route>-<reasoning>-<yyyymmddThhmmssZ>",
+  "run_id": "<comparison-id>-<control-or-treatment>-<runtime>",
+  "claim_class": "<paper-reference|paired-runtime|suite-headline|smoke>",
+  "reference": {
+    "agent_world_arxiv": "2604.18292v1",
+    "surface": "Table 1",
+    "score_authority": "published-paper",
+    "retrieved_at": "<YYYY-MM-DD>"
+  },
+  "geode": {
+    "commit": "<full-sha>",
+    "branch": "<branch>",
+    "dirty": false
+  },
+  "suite": {
+    "name": "<mcpmark|bfcl-v4|tau2-bench>",
+    "profile": "<versioned-profile-id>",
+    "harness_repository": "<url>",
+    "harness_commit": "<full-sha>",
+    "package_version": "<version-or-null>",
+    "task_suite": "<suite-or-split>",
+    "ordered_task_ids": ["<task-id-in-execution-order>"],
+    "ordered_task_ids_artifact": "<artifact-relative-path-or-na>",
+    "task_ids_sha256": "<sha256-of-canonical-ordered-task-ids>",
+    "task_pack_sha256": "<sha256>",
+    "container_images": {}
+  },
+  "arm": {
+    "role": "<control|treatment>",
+    "runtime": "<thin-upstream|geode-agentic-loop|named-adapter>",
+    "runtime_commit": "<full-sha-or-null>",
+    "adapter": "<adapter-id>",
+    "prompt_sha256": "<sha256>",
+    "policy_sha256": "<sha256>"
+  },
+  "tool_surface": {
+    "execution_path": "<exact-provider-native|mcp|suite-python|geode-function-path>",
+    "schema_artifact": "<artifact-relative-path>",
+    "schema_sha256": "<sha256>",
+    "server_versions": {}
+  },
+  "model": {
+    "label": "<exact-model-label>",
+    "provider": "<provider>",
+    "route": "<subscription|api|local>",
+    "reasoning": "<exact-setting>"
+  },
+  "decoding": {
+    "agent_world_target": {
+      "temperature": 1.0,
+      "top_p": 1.0
+    },
+    "effective": {
+      "temperature": "<number-or-null>",
+      "top_p": "<number-or-null>",
+      "source": "<explicit-request|provider-confirmed|unavailable>"
+    },
+    "deviation": "<none-or-explanation>"
+  },
+  "limits": {
+    "simulation_timeout_seconds": "<positive-number-or-null>",
+    "max_steps": "<positive-integer-or-null>",
+    "max_errors": "<nonnegative-integer-or-null>",
+    "max_retries": "<nonnegative-integer>",
+    "max_concurrency": "<positive-integer>",
+    "agent": {
+      "time_budget_seconds": "<positive-number-or-null>",
+      "max_tokens": "<positive-integer-or-null>",
+      "max_rounds": "<nonnegative-integer-or-null>",
+      "zero_rounds_semantics": "<unlimited-or-na>"
+    },
+    "user": {
+      "time_budget_seconds": "<positive-number-or-null>",
+      "max_tokens": "<positive-integer-or-null>",
+      "max_rounds": "<nonnegative-integer-or-null>",
+      "zero_rounds_semantics": "<unlimited-or-na>"
+    }
+  },
+  "environment": {
+    "initial_state_sha256": "<sha256>",
+    "reset_strategy": "<strategy>",
+    "reset_receipt": "<artifact-relative-path>",
+    "account_isolation": "<strategy-or-na>"
+  },
+  "user_simulator": {
+    "required": "<boolean-true-for-tau2>",
+    "implementation": "<native|geode_user|na>",
+    "model": "<exact-model-or-na>",
+    "provider": "<provider-or-na>",
+    "route": "<route-or-na>",
+    "reasoning": "<setting-or-na>",
+    "prompt_sha256": "<sha256-or-na>"
+  },
+  "sampling": {
+    "repetitions": "<positive-integer>",
+    "statistic": "<mean_accuracy@8|suite-native|diagnostic>",
+    "seed_schedule": ["<seed-per-repetition-in-order>"],
+    "paired_task_trials": "<boolean>"
+  },
+  "retry": {
+    "retryable_classes": [],
+    "preserve_seed": true,
+    "preserve_attempt_lineage": true,
+    "selection_rule": "<preregistered-rule>"
+  },
+  "scoring": {
+    "authority": "native-harness",
+    "aggregate": "<official-suite-aggregate>",
+    "uncertainty": {
+      "coverage": "<number-between-zero-and-one-or-null>",
+      "estimator": "<exact-estimator-or-none>",
+      "sampling_unit": "<repetition|task-trial|paired-task-trial|na>",
+      "paired_method": "<exact-method-or-na>",
+      "resamples": "<positive-integer-or-null>",
+      "seed": "<integer-or-null>"
+    },
+    "infrastructure_invalid_excluded": true,
+    "cross_suite_promotion_aggregate": false
+  },
+  "evidence": {
+    "native_results": "<artifact-relative-path>",
+    "trajectory_bundle": "<artifact-relative-path>",
+    "verifier_receipts": "<artifact-relative-path>",
+    "attempt_manifest": "<artifact-relative-path>",
+    "redaction_report": "<artifact-relative-path>",
+    "publication_manifest": "<artifact-relative-path>"
+  },
+  "promotion_authority": "<none|paired-runtime|suite-native>"
+}

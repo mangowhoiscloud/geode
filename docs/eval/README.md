@@ -55,9 +55,12 @@ do not replace the 278-task Tau2 full-cycle authority.
 | GUI Trajectory Eval | observation coverage, classified failures, coordinate sanity, final screenshot availability | `computer`/`computer_use` trajectory rows를 모델 prose와 분리해 사후 평가 |
 | Capability/Evidence Preflight | provider/source/tool support, required evidence classes | 작업 시작 전 route mismatch를 드러내고 evidence ledger에 남김 |
 | Frontier agentic tool-use benchmark cases | MCPMark/BFCL V4/tau2 공개 사례와 GEODE 측정 계약 | GPT-5.5 subscription 결과를 공개 baseline과 섞기 전 비교 가능성 분리 |
+| Agent-World comparison contract | Agent-World v1 공개 열 + `mean_accuracy@8` + matched runtime control | paper reference와 GEODE scaffold 인과 비교를 분리 |
 | Benchmark Publishing Cycle | live benchmark run -> internal ledger -> official docs -> PR -> Pages deploy | 실측과 공식문서 배포를 하나의 반복 가능한 사이클로 고정 |
 
 참고: [frontier-agentic-tool-use-benchmark-cases.md](frontier-agentic-tool-use-benchmark-cases.md)
+Agent-World 비교 정본: [agent-world-comparison-contract.md](agent-world-comparison-contract.md),
+[agent-world-run-manifest.template.json](agent-world-run-manifest.template.json)
 운영 스캐폴드: [benchmark-publishing-cycle.md](benchmark-publishing-cycle.md),
 [benchmark-run-record.template.md](benchmark-run-record.template.md)
 

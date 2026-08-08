@@ -51,6 +51,12 @@ search, or GEODE/Eco²/SIL/Crucible comparisons, use
 mapping the concepts to current code, and keep candidate width, repair depth,
 measurement replication, and promotion authority separate.
 
+For Agent-World comparisons, three-suite MCP-Mark/BFCL V4/tau2 profiles,
+paired thin-runtime controls, or `mean_accuracy@8` publication, use
+`.claude/skills/agent-world-benchmark/` and treat
+`docs/eval/agent-world-comparison-contract.md` as the canonical comparison
+contract. Never label the paper's undisclosed in-house wrapper as `no loop`.
+
 ## Module map
 
 Read the module you are about to change. If a section says "read this first",

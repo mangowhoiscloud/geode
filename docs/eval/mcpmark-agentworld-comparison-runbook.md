@@ -5,12 +5,17 @@ Agent-World Table 1 (arXiv `2604.18292v1`)의 MCP-Mark subdomain(File / Github /
 Play / Post)과 비교 가능한 상태를 만든다. 2026-07-04 실측에서 blocked였던 사례를
 다시 실행 가능하게 만드는 환경 조치를 이 문서에 고정한다.
 
+이 문서는 당시 MCPMark 환경 복구 기록이다. 현재 비교 가능성·반복·명명·증거
+계약의 정본은 [`agent-world-comparison-contract.md`](agent-world-comparison-contract.md)다.
+Agent-World의 in-house wrapper와 정확한 harness/task spec은 공개되지 않았으므로,
+아래 실행은 버전 라벨을 붙인 directional comparator이지 exact reproduction이 아니다.
+
 ## Agent-World 측 프로토콜 (논문 명시 사실만)
 
 | 항목 | Agent-World | GEODE 측 대응 |
 |---|---|---|
 | 서비스 | MCP-Mark 5종: File, Github, Notion, Play, Post | 동일 5종 (upstream `eval-sys/mcpmark@cd45b7f`, Verified/standard 127 tasks) |
-| 반복 | 8회 반복 평균 (avg@8) | `--k`로 동일 구성 가능. 1차 unblock 검증은 `k=1`, 헤드라인 비교는 `k` 명시 후 별도 라벨 |
+| 반복 | 8회 반복 평균 (`mean_accuracy@8`) | `--k`로 동일 구성 가능. 1차 unblock 검증은 `k=1`, 헤드라인 비교는 8개 완결 반복 후 별도 라벨 |
 | 디코딩 | temperature=1.0, top_p=1.0 | subscription/Codex 루트는 디코딩 파라미터 노출 없음. **directional 비교**로 라벨 |
 | 하네스 | in-house framework, "aligned to official scores" | official `pipeline.py` + GEODE `BaseMCPAgent` adapter |
 | 모델 | GPT-5.2 High 등 (GPT-5.5 없음) | `gpt-5.5`, provider `openai-codex`, source `subscription`, effort `xhigh` |

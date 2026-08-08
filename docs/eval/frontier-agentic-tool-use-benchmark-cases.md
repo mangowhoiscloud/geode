@@ -9,6 +9,11 @@ harness smoke was run to validate setup and verification. Live GEODE runs were
 also completed for one MCPMark filesystem easy smoke task and the 10-task
 MCPMark filesystem easy suite with `gpt-5.5` / `xhigh`.
 
+The canonical comparison and replication rules now live in
+[`agent-world-comparison-contract.md`](agent-world-comparison-contract.md).
+This dated source ledger supplies cases and values; it does not establish
+exact reproduction of Agent-World's undisclosed in-house evaluation wrapper.
+
 Target benchmark cluster:
 
 - MCPMark / MCPMark Verified

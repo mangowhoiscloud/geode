@@ -733,10 +733,10 @@ function PerceiveBanner() {
 
 /**
  * Tau2 numbers over a measurement slip that separates what is being
- * measured (the agentic harness: GEODE's loop wrapped around a vanilla
- * model) from the ruler (the tau2-bench eval harness), closing on the
- * control and verdict. Values from benchmark-measurements.ts and the
- * externally preserved tau2 run artifacts.
+ * measured (the agentic harness: GEODE's loop wrapped around a model) from
+ * the ruler (the tau2-bench eval harness), closing on the external paper
+ * reference and comparability verdict. Values from benchmark-measurements.ts
+ * and the externally preserved tau2 run artifacts.
  */
 function MeasureBanner() {
   const tau2 = BENCHMARK_GROUPS.find((group) => group.id === "tau2");
@@ -747,8 +747,8 @@ function MeasureBanner() {
     { key: "bench", value: "tau2 @ 1901a30 · 2026-07-03", section: "eval harness · the ruler" },
     { key: "user-sim", value: "gpt-4.1 · pass^1 k=1" },
     { key: "airline", value: "trend-reference" },
-    { key: "control", value: "gpt-5.2 vanilla · no loop · 0.802", section: "agent-world reference" },
-    { key: "verdict", value: "same band · ±8pt limit", verdict: true },
+    { key: "reference", value: "gpt-5.2 · wrapper undisclosed · 0.802", section: "agent-world paper" },
+    { key: "verdict", value: "directional · not scaffold control", verdict: true },
   ];
   return (
     <div className="flex h-full w-full flex-col items-center justify-center gap-3.5 px-6">
@@ -988,8 +988,8 @@ const features: {
     index: "#9 measure",
     headKo: "정직하게 잽니다",
     headEn: "KEEPS HONEST SCORE",
-    ko: "재는 것은 GEODE 루프를 씌운 gpt-5.2, 재는 자는 tau2-bench. 비교군은 루프 없는 같은 모델(Agent-World 바닐라)이고, pass^1 검출 한계 안에서 같은 밴드입니다.",
-    en: "Measured: gpt-5.2 wrapped in the GEODE loop. Ruler: tau2-bench. The control is the same model without the loop (Agent-World vanilla); within the pass^1 detection limit the bands match.",
+    ko: "재는 것은 GEODE 루프를 씌운 gpt-5.2, 재는 자는 tau2-bench입니다. Agent-World의 같은 모델 행은 in-house wrapper가 공개되지 않은 방향성 기준이며, GEODE 루프 효과를 재는 대조군은 아닙니다.",
+    en: "Measured: gpt-5.2 wrapped in the GEODE loop. Ruler: tau2-bench. Agent-World's same-model row is a directional reference with an undisclosed in-house wrapper, not a control for the GEODE loop effect.",
     banner: <MeasureBanner />,
   },
 ];
