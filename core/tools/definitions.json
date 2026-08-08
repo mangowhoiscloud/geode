@@ -1317,7 +1317,7 @@
   },
   {
     "name": "rate_result",
-    "description": "Record the operator's 1-5 rating of a result produced this session (shown + logged as lightweight feedback). subject and rating (1-5) are required. Siblings: accept_result / reject_result for a binary verdict.",
+    "description": "Record a 1-5 rating reported in this session (shown + logged as lightweight feedback). This is model-reported feedback, not verified human-preference data. subject and rating (1-5) are required. Siblings: accept_result / reject_result for a binary verdict.",
     "category": "analysis",
     "cost_tier": "free",
     "input_schema": {
@@ -1344,7 +1344,7 @@
   },
   {
     "name": "accept_result",
-    "description": "Record the operator's acceptance of a result produced this session (shown + logged). Pass the subject. Siblings: reject_result to flag it for redo, rate_result for a 1-5 score.",
+    "description": "Record acceptance reported for a result in this session (shown + logged). This is model-reported feedback, not verified human-preference data. Pass the subject. Siblings: reject_result to flag it for redo, rate_result for a 1-5 score.",
     "category": "analysis",
     "cost_tier": "free",
     "input_schema": {
@@ -1362,7 +1362,7 @@
   },
   {
     "name": "reject_result",
-    "description": "Record the operator's rejection of a result produced this session, with an optional reason (shown + logged). Pass the subject. Siblings: accept_result to approve, rate_result for a 1-5 score.",
+    "description": "Record rejection reported for a result in this session, with an optional reason (shown + logged). This is model-reported feedback, not verified human-preference data. Pass the subject. Siblings: accept_result to approve, rate_result for a 1-5 score.",
     "category": "analysis",
     "cost_tier": "free",
     "input_schema": {

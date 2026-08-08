@@ -1,25 +1,17 @@
-"""P3-revised (2026-05-25) — Anchor confidence multiplier.
+"""Anchor-dimension fitness multiplier.
 
 Plan: ``docs/plans/2026-05-25-p3-anchor-calibration-crm-spct.md``.
 
-사용자 결정 D2 (2026-05-25): anchor 3 (admirable / disappointing /
-needs_attention) → self-improving loop baseline 의 input. PSM 패턴 거부
-후 RL-derived (AutoGLM ORM confidence band).
+The three configured anchor dimensions (admirable / disappointing /
+needs_attention) are normalized and applied to the self-improving fitness.
 
 본 모듈 = compute_fitness 의 multiplier helper. judge anchor 의 1-10
 scale score 를 [0, 1] 로 normalize 한 뒤 [0.7, 1.0] range 의 multiplier
 산출. caller (core/self_improving/train.py compute_fitness — P3.1 후속 wiring)
 가 ``base_fitness × multiplier`` 적용.
 
-Frontier:
-- AutoGLM (Zhipu+Tsinghua 2024-11) — ORM outcome confidence band
-- SPCT (DeepSeek-GRM 2026-Q1) — self-generated principle 이 anchor 의
-  calibration 단계와 정합
-- Meta-Rewarding (Meta 2024-07 arXiv 2407.19594) — meta-judge drift 방지
-  (anchor 가 trade-off 한 dim 의 confidence sink)
-
-GEODE 의 mutator API frozen 와 정합 — multiplier 는 inference-time selection
-신호, weight 학습 없음.
+This is a deterministic selection heuristic, not a learned reward model,
+process-reward label, or weight-training signal.
 """
 
 from __future__ import annotations

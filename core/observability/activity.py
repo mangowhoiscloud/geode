@@ -484,9 +484,13 @@ class MemoryPromotionProposedDetails(BaseModel):
 
 
 class ResultFeedbackDetails(BaseModel):
-    """RESULT_FEEDBACK — operator verdict on a result (rate/accept/reject_result
-    tool handlers). ``verdict`` is one of ``rated`` / ``accepted`` / ``rejected``;
-    ``rating`` + ``comment`` accompany a rating, ``reason`` a rejection."""
+    """RESULT_FEEDBACK — verdict reported through a model-invoked result tool.
+
+    ``verdict`` is one of ``rated`` / ``accepted`` / ``rejected``;
+    ``rating`` + ``comment`` accompany a rating, ``reason`` a rejection. The
+    row's agent actor and tool-call correlation do not establish that a human
+    directly authored the verdict.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 

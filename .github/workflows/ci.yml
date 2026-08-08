@@ -232,11 +232,12 @@ jobs:
             exit 1
           fi
           echo "Selected non-live test count: $count"
-          # OBS cleanup removes a net 50 tests owned only by the retired
-          # SessionTranscript/RunTranscript and sync-close compatibility APIs;
-          # canonical SessionTimeline/RunTimeline coverage remains.
-          if [ "$count" -lt 10379 ]; then
-            echo "::error::Test count $count < 10379 (ratchet). Do not delete tests without justification."
+          # Reward-feedback cleanup removes a net 19 tests owned only by the
+          # unwired principle/causal_hypothesis outputs. Behavioral coverage
+          # remains for anchor fitness, persistence privacy/correlation, and
+          # historical-row replay.
+          if [ "$count" -lt 10360 ]; then
+            echo "::error::Test count $count < 10360 (ratchet). Do not delete tests without justification."
             exit 1
           fi
 
