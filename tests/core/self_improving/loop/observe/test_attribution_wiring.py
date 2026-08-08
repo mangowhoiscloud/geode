@@ -365,6 +365,9 @@ class TestW4PydanticSchemaFreeze:
             "principle": "historical generated criterion",
             "causal_hypothesis": "historical unwired hypothesis",
         }
+        dumped = record.model_dump()
+        assert dumped["principle"] == future_field_row["principle"]
+        assert dumped["causal_hypothesis"] == future_field_row["causal_hypothesis"]
 
     def test_append_attribution_log_validates_payload(
         self,
