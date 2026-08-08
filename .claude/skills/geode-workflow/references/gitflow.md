@@ -101,13 +101,17 @@ For audit-driven work, include a GAP Audit table.
 
 ## Cleanup
 
-After merge:
+After a feature PR merges, run the guarded free command from outside the target
+worktree:
 
 ```bash
-gh pr merge <feature-pr> --squash --delete-branch
-git worktree remove .claude/worktrees/<task-name>
-git branch -d feature/<branch-name>
-git fetch origin --prune
+uv run python scripts/check_repo_hygiene.py free-merged-worktree \
+  --pr <feature-pr> \
+  --worktree .claude/worktrees/<task-name>
 ```
 
-Do not force-delete branches or worktrees held by other sessions.
+The command handles the squash-merge ancestry mismatch safely: it compares the
+PR final-head tree with the merge tree, checks the local branch is contained in
+that head, refuses an advanced remote or dirty checkout, validates `.owner`,
+then removes remote branch → worktree → local branch and prunes. Do not run it
+for another session's owner or hand-force-delete a refused target.
