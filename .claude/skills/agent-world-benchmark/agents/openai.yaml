@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agent-World Benchmark"
+  short_description: "Align GEODE runs with Agent-World's public benchmark profile"
+  default_prompt: "Use $agent-world-benchmark to design or audit an Agent-World-aligned GEODE benchmark run."
