@@ -1,9 +1,9 @@
-"""HITL (Human-in-the-Loop) tool handlers: rate/accept/reject_result.
+"""Result-feedback tool handlers: rate/accept/reject_result.
 
-The feedback handlers persist the operator's verdict by firing
+The feedback handlers persist a model-reported verdict by firing
 ``HookEvent.RESULT_FEEDBACK``, which the canonical SQLite event sink
-persists for indexed history. Pre-PR-PRE10-ROUND2 the verdict was written to a
-closure-local dict that nothing ever read.
+persists for indexed history. The event is correlated to the physical tool
+call, but it is not proof that a human directly authored the verdict.
 """
 
 from __future__ import annotations
@@ -20,6 +20,23 @@ from core.ui.console import console
 log = logging.getLogger(__name__)
 
 
+def _feedback_correlation(kwargs: dict[str, Any]) -> dict[str, str]:
+    """Return non-empty session/turn/call keys for the active tool dispatch."""
+    from core.agent.cognitive_state_ctx import (
+        get_session_id,
+        get_tool_call_id,
+        get_turn_id,
+    )
+
+    context = kwargs.get("_tool_context")
+    values = {
+        "session_id": str(getattr(context, "session_id", "") or get_session_id()),
+        "turn_id": get_turn_id(),
+        "tool_call_id": str(getattr(context, "tool_call_id", "") or get_tool_call_id()),
+    }
+    return {key: value for key, value in values.items() if value}
+
+
 def _build_hitl_handlers() -> UniqueEntries[str, Any]:
     """Build HITL feedback tool handlers."""
 
@@ -33,7 +50,13 @@ def _build_hitl_handlers() -> UniqueEntries[str, Any]:
         comment = kwargs.get("comment", "")
         fire_tool_hook(
             HookEvent.RESULT_FEEDBACK,
-            {"subject": subject, "verdict": "rated", "rating": rating, "comment": comment},
+            {
+                "subject": subject,
+                "verdict": "rated",
+                "rating": rating,
+                "comment": comment,
+                **_feedback_correlation(kwargs),
+            },
         )
         console.print(f"  [success]✓ Rating saved for {subject}: {rating}/5[/success]")
         log.info("HITL rating recorded: subject_chars=%d rating=%d", len(str(subject)), rating)
@@ -48,7 +71,10 @@ def _build_hitl_handlers() -> UniqueEntries[str, Any]:
         subject = kwargs.get("subject") or kwargs.get("subject_id") or ""
         if not subject:
             return _clarify("accept_result", ["subject"], "어떤 결과를 수락할까요?")
-        fire_tool_hook(HookEvent.RESULT_FEEDBACK, {"subject": subject, "verdict": "accepted"})
+        fire_tool_hook(
+            HookEvent.RESULT_FEEDBACK,
+            {"subject": subject, "verdict": "accepted", **_feedback_correlation(kwargs)},
+        )
         console.print(f"  [success]✓ Result accepted: {subject}[/success]")
         log.info("HITL acceptance recorded: subject_chars=%d", len(str(subject)))
         return {
@@ -64,7 +90,12 @@ def _build_hitl_handlers() -> UniqueEntries[str, Any]:
         reason = kwargs.get("reason", "")
         fire_tool_hook(
             HookEvent.RESULT_FEEDBACK,
-            {"subject": subject, "verdict": "rejected", "reason": reason},
+            {
+                "subject": subject,
+                "verdict": "rejected",
+                "reason": reason,
+                **_feedback_correlation(kwargs),
+            },
         )
         console.print(f"  [warning]✗ Result rejected: {subject}[/warning]")
         log.info(

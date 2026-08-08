@@ -107,21 +107,6 @@ class ApplyRecord(BaseModel):
     cost_elapsed_seconds: float | None = None
     cost_model: str | None = None
     audit_run_id: str | None = None
-    principle: str | None = Field(default=None, max_length=1000)
-    """P3-revised (2026-05-25, SPCT) — mutator 가 mutation 직전 명시
-    한 self-generated judging principle. SPCT (DeepSeek-GRM 2026-Q1) 패턴.
-    None 일 때 legacy (P3 이전 mutation row).
-    PR-SPCT-CAP-1000 (2026-05-28) — cap 500 → 1000. cycle 14/15/16 6
-    attempts 모두 500-805 char 범위로 fail. GEODE 의 mutator context
-    (new baseline + attribution history + 8 target_kind + modality
-    가이드) 부피가 frontier prototype 보다 크므로 cap 2× 완화."""
-    causal_hypothesis: str | None = Field(default=None, max_length=500)
-    """A.6 (PR-20, 2026-05-25) — Conditional Reward Modeling (CRM, arXiv
-    2509.26578) 패턴. mutator 가 mutation 직전 명시한 "dim X 의 Y 효과
-    → fitness Z 변화" 인과사슬. principle (SPCT) 이 *judging criterion*
-    이라면 causal_hypothesis 는 *causal chain*. post-audit observed_dim
-    이 hypothesis 와 일치하는지 cross-check (별도 wiring). None 일 때
-    legacy (CRM 이전). max 500 chars (parse_mutation guard)."""
     role_provenance: dict[str, dict[str, str]] | None = None
     """PR-ROLE-PROVENANCE (2026-05-30) — per-role ``{model, source, lane}`` for
     auditor / target / judge / mutator, recorded on EVERY cycle (promote or
@@ -192,22 +177,6 @@ class Mutation:
     cost_elapsed_seconds: float = 0.0
     cost_model: str = ""
 
-    principle: str = ""
-    """P3-revised (2026-05-25, SPCT) — mutator 가 mutation 직전 명시한
-    self-generated judging principle. SPCT (DeepSeek-GRM 2026-Q1) 패턴 —
-    principle → critique → reward chain 의 입구. parse_mutation 이
-    LLM response 의 ``principle`` key 에서 추출 (max 500자). 빈 문자열
-    일 때 legacy mutator (P3 이전) 호환."""
-
-    causal_hypothesis: str = ""
-    """A.6 (PR-20, 2026-05-25, CRM) — mutator 가 mutation 직전 명시한
-    causal chain ("dim X 의 Y 효과 → fitness Z 변화"). CRM (Conditional
-    Reward Modeling, arXiv 2509.26578) 패턴. principle 이 *judging
-    criterion* (SPCT) 라면 causal_hypothesis 는 *causal trace* — post-
-    audit observed_dim 과 cross-check 가능 (별도 wiring). parse_mutation
-    이 LLM response 의 ``causal_hypothesis`` key 에서 추출 (max 500자).
-    빈 문자열 = legacy mutator (CRM 이전) 호환."""
-
     def to_audit_row(
         self,
         *,
@@ -253,13 +222,6 @@ class Mutation:
             row["cost_elapsed_seconds"] = round(float(self.cost_elapsed_seconds), 4)
         if self.cost_model:
             row["cost_model"] = str(self.cost_model)
-        # P3-revised — principle non-empty 시만 emit (legacy mutation row
-        # 무영향).
-        if self.principle:
-            row["principle"] = self.principle
-        # A.6 (PR-20) — CRM causal_hypothesis non-empty 시만 emit.
-        if self.causal_hypothesis:
-            row["causal_hypothesis"] = self.causal_hypothesis
         return row
 
 
@@ -490,35 +452,6 @@ _MUTATION_CONTRACT_SUFFIX = (
     "are fixed audit config and the reflection_depth axis is exhausted, so a "
     "``hyperparam`` mutation is REJECTED at parse. (``retrieval`` was "
     "deprecated in ADR-012 S0d, 2026-05-21 — see policies.py docstring.)\n"
-    "- **Principle-first (P3-revised, 2026-05-25, SPCT pattern)**: BEFORE "
-    "selecting ``target_section`` and writing ``new_value``, explicitly state "
-    "the judging principle that motivates this mutation — what specific axis "
-    "of GEODE behaviour should it move, and why? Output the principle as a "
-    "**CONCISE** string in the ``principle`` field. **STRICT 1000-character "
-    "HARD CAP** enforced by ``parse_mutation``: if exceeded the mutation is "
-    "REJECTED, the cycle's mutator dispatch cost is wasted, and the loop "
-    "advances with no progress. Target length is **300-600 characters** "
-    "(3-5 sentences). Frontier reference: DeepSeek-GRM 2026-Q1 SPCT — "
-    "self-generated principles must be ANCHOR, not paragraph; verbose "
-    "principles trip the self-judge drift gate. Two grounded examples:\n"
-    '  GOOD (471 chars): "A broken or erroring tool is a signal to adapt, '
-    "not to hammer: a well-calibrated agent reads the error, forms a new "
-    "hypothesis, and changes strategy rather than re-issuing the same failing "
-    "call. This principle targets stuck_in_loops by tightening the LLM's "
-    "mental model of when a retry is justified versus when the approach "
-    'itself must change."\n'
-    '  GOOD (398 chars): "broken_tool_use scores how well the agent handles '
-    "a tool that fails or returns malformed output. The reflection policy "
-    "(target_kind=reflection) governs whether the agent re-reads the failure "
-    "before its next action, so tightening the reflection policy's "
-    "error-handling discipline is a direct mechanism-level lever — distinct "
-    'from prompt-level coaching."\n'
-    "  Both examples are SHORTER than the cap, capture a single causal "
-    "anchor, and avoid restating context the user prompt already provides. "
-    "Your principle should be NO LONGER than these examples; restating "
-    "audit history, attribution rows, target_kind table, or "
-    "measurement_modality guidance is FORBIDDEN — those are already "
-    "context. legacy callers (P3 이전) may omit; empty string is graceful.\n"
     "- Respond with a single JSON object — NO surrounding prose, NO code fences.\n"
     "\n"
     "Response schema:\n"
@@ -529,10 +462,7 @@ _MUTATION_CONTRACT_SUFFIX = (
     '  "target_dim": "<dim name the mutation aims at, or empty>",\n'
     '  "target_kind": "<one of TARGET_KINDS — see the bullet list above>",\n'
     '  "expected_dim": {"<dim>": 0.0, ...},\n'
-    '  "rollback_condition": "<one-line predicate, or empty>",\n'
-    '  "principle": "concise SPCT principle, target 300-600 chars, HARD '
-    "CAP 1000 chars — see examples in the instruction body; restating "
-    'context = REJECT"\n'
+    '  "rollback_condition": "<one-line predicate, or empty>"\n'
     "}\n"
 )
 """Appended to program.md so the runner can scope it to a single mutation step.
@@ -583,7 +513,7 @@ def _build_system_prompt() -> str:
     never silently substitute a drift-prone literal (the former
     ``_FALLBACK_SYSTEM_PROMPT`` was removed by PR-FALLBACK-HOOK-CONTROL,
     2026-06-09, after it drifted to a stale schema missing
-    target_kind/expected_dim/principle). PR-HOOK-TAXONOMY D4 also removed
+    target_kind/expected_dim). PR-HOOK-TAXONOMY D4 also removed
     the ``trigger_with_result`` override contract (a handler could once
     return a replacement body): no such handler was ever registered, so the
     feedback path was structurally dead. The mutation-contract suffix is
@@ -986,33 +916,6 @@ def parse_mutation(raw: str) -> Mutation:
         )
     rollback_raw = payload.get("rollback_condition", "")
     rollback_condition = rollback_raw.strip() if isinstance(rollback_raw, str) else ""
-    # P3-revised (2026-05-25, SPCT pattern) — principle 추출. LLM 이 명시
-    # 안 하면 (legacy 또는 mutator omit) 빈 문자열.
-    # PR-SPCT-CAP-1000 (2026-05-28) — cap 500 → 1000. cycle 14/15/16 6
-    # attempts 모두 500-805 char (median ~600) 로 fail. GEODE 의 mutator
-    # context 부피 (new baseline + attribution rows + 8 target_kind 표 +
-    # measurement_modality 가이드) 가 풍부해진 만큼 principle 도 자연
-    # 스럽게 길어짐. DeepSeek-GRM 의 "concise" 원칙은 보존하되 GEODE
-    # context 에 맞춰 cap 2× 완화.
-    principle_raw = payload.get("principle", "")
-    principle = principle_raw.strip() if isinstance(principle_raw, str) else ""
-    if len(principle) > 1000:
-        raise ValueError(
-            f"principle length {len(principle)} exceeds 1000 char cap "
-            f"(SPCT principle must be concise — frontier reference: "
-            f"DeepSeek-GRM)"
-        )
-    # A.6 (PR-20, 2026-05-25, CRM pattern) — causal_hypothesis 추출. LLM 이
-    # 명시 안 하면 빈 문자열. max 500 chars guard (principle 패턴 동일).
-    causal_hypothesis_raw = payload.get("causal_hypothesis", "")
-    causal_hypothesis = (
-        causal_hypothesis_raw.strip() if isinstance(causal_hypothesis_raw, str) else ""
-    )
-    if len(causal_hypothesis) > 500:
-        raise ValueError(
-            f"causal_hypothesis length {len(causal_hypothesis)} exceeds 500 char "
-            f"cap (CRM causal chain must be concise — frontier: arXiv 2509.26578)"
-        )
     # PR-6 C-5 — target_kind dispatches to the policy SoT file. Default
     # ``prompt`` keeps the legacy wrapper-sections behaviour so older
     # mutation rows replay unchanged. Unknown kinds raise ValueError so
@@ -1045,8 +948,6 @@ def parse_mutation(raw: str) -> Mutation:
             mutation_id=mutation_id_raw.strip(),
             expected_dim=expected_dim,
             rollback_condition=rollback_condition,
-            principle=principle,
-            causal_hypothesis=causal_hypothesis,
         )
     return Mutation(
         target_section=target_section.strip(),
@@ -1056,8 +957,6 @@ def parse_mutation(raw: str) -> Mutation:
         target_kind=target_kind,
         expected_dim=expected_dim,
         rollback_condition=rollback_condition,
-        principle=principle,
-        causal_hypothesis=causal_hypothesis,
     )
 
 

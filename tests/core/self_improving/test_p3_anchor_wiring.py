@@ -2,7 +2,7 @@
 
 Scope: ``compute_fitness`` 의 anchor_means + anchor_confidence_mode 인자가
 실제 fitness scalar 에 multiplier 를 적용하는지. helper 자체의 normalization
-math 는 ``tests/core/self_improving/loop/test_p3_anchor_spct.py`` 가 cover —
+math 는 ``tests/core/self_improving/loop/test_anchor_confidence.py`` 가 cover —
 본 파일은 train.py compute_fitness 의 wiring 만 검증.
 
 Wiring contract:

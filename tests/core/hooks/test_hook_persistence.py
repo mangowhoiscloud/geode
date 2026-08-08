@@ -207,10 +207,16 @@ def test_result_feedback_uses_opaque_subject_identifier(tmp_path: Path) -> None:
             "verdict": "rejected",
             "reason": "contains private details",
             "comment": "also private",
+            "session_id": "session-1",
+            "turn_id": "turn-1",
+            "tool_call_id": "tool-call-1",
         },
     )
 
     row = store.read()[0]
+    assert row.session_id == "session-1"
+    assert row.turn_id == "turn-1"
+    assert row.tool_call_id == "tool-call-1"
     assert row.entity_id.startswith("result:")
     assert subject not in row.entity_id
     assert subject not in str(row.payload)
