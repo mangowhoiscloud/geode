@@ -286,9 +286,12 @@ mirrors that scaffold.
 7. **PR prep**: summarize Summary / Why / Changes / Verification. Use
    `feature -> develop` squash merge when merging; use `develop -> main`
    merge after syncing `main -> develop`.
-8. **Post-merge cleanup**: after a PR merges, delete in order: remote branch
-   via merge option, worktree, then local branch. Never force-delete unmerged
-   or worktree-held branches.
+8. **Post-merge cleanup**: after a feature PR merges, run
+   `uv run python scripts/check_repo_hygiene.py free-merged-worktree --pr <N> --worktree <path>`
+   from outside the target worktree. It verifies the merged PR tree, branch
+   ancestry, remote head, clean checkout, and `.owner` before deleting the
+   remote branch, worktree, and squash-only local branch in that order.
+   Never hand-force-delete an unverified or another session's worktree.
 
 ### Quality Gates
 

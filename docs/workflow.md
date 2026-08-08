@@ -83,7 +83,11 @@ feature/<name> -> develop -> main
 - Feature PRs merge into `develop` with squash merge.
 - Before `develop -> main`, sync `main -> develop` if main has drift.
 - `develop -> main` is a pass-through merge after gates are satisfied.
-- Post-merge cleanup removes remote branch, worktree, local branch, then prunes.
+- Post-merge cleanup runs
+  `scripts/check_repo_hygiene.py free-merged-worktree` from outside the target
+  checkout. It verifies the merged PR's final tree, branch ancestry, remote
+  head, clean state, and owner before removing remote branch, worktree, local
+  squash branch, then pruning.
 
 ## Minimum Verification
 
