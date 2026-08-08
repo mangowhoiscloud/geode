@@ -9,9 +9,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from dotenv import load_dotenv
-
-load_dotenv(str(Path.home() / ".geode" / ".env"), override=False)
 
 
 def _run_executor(executor: Any, tool_name: str, tool_input: dict[str, Any]) -> dict[str, Any]:
@@ -24,7 +21,7 @@ class TestServeToolExecution:
     def test_bootstrap_handlers_count(self) -> None:
         from core.cli.bootstrap import bootstrap_geode
 
-        boot = bootstrap_geode(load_env=True)
+        boot = bootstrap_geode()
         assert len(boot.tool_handlers) >= 44
         assert "calculate" in boot.tool_handlers
         assert "web_fetch" in boot.tool_handlers
@@ -36,7 +33,7 @@ class TestServeToolExecution:
     def test_web_fetch_http(self) -> None:
         from core.cli.bootstrap import bootstrap_geode
 
-        boot = bootstrap_geode(load_env=True)
+        boot = bootstrap_geode()
         # PR-LOOP-POLLUTION-FIX (2026-06-12) — delegated handlers are async now.
         result = asyncio.run(
             boot.tool_handlers["web_fetch"](url="http://example.com", max_chars=200)
@@ -47,18 +44,21 @@ class TestServeToolExecution:
     def test_web_fetch_https_ssl_fallback(self) -> None:
         from core.cli.bootstrap import bootstrap_geode
 
-        boot = bootstrap_geode(load_env=True)
+        boot = bootstrap_geode()
         result = asyncio.run(
             boot.tool_handlers["web_fetch"](url="https://example.com", max_chars=200)
         )
         # Should succeed via SSL fallback
         assert "result" in result
 
-    @pytest.mark.skipif(
-        not os.environ.get("ANTHROPIC_API_KEY"),
-        reason="Requires ANTHROPIC_API_KEY",
-    )
+    @pytest.mark.live
     def test_general_web_search(self) -> None:
+        from dotenv import load_dotenv
+
+        load_dotenv(str(Path.home() / ".geode" / ".env"), override=False)
+        if not os.environ.get("ANTHROPIC_API_KEY"):
+            pytest.skip("Requires ANTHROPIC_API_KEY")
+
         from core.cli.bootstrap import bootstrap_geode
 
         boot = bootstrap_geode(load_env=True)
@@ -69,7 +69,7 @@ class TestServeToolExecution:
         from core.agent.tool_executor import ToolExecutor
         from core.cli.bootstrap import bootstrap_geode
 
-        boot = bootstrap_geode(load_env=True)
+        boot = bootstrap_geode()
         executor = ToolExecutor(
             action_handlers=boot.tool_handlers,
             mcp_manager=boot.mcp_manager,
@@ -84,7 +84,7 @@ class TestServeToolExecution:
         from core.agent.tool_executor import ToolExecutor
         from core.cli.bootstrap import bootstrap_geode
 
-        boot = bootstrap_geode(load_env=True)
+        boot = bootstrap_geode()
         executor = ToolExecutor(
             action_handlers=boot.tool_handlers,
             mcp_manager=boot.mcp_manager,
@@ -99,7 +99,7 @@ class TestServeToolExecution:
         from core.agent.tool_executor import ToolExecutor
         from core.cli.bootstrap import bootstrap_geode
 
-        boot = bootstrap_geode(load_env=True)
+        boot = bootstrap_geode()
         executor = ToolExecutor(
             action_handlers=boot.tool_handlers,
             mcp_manager=boot.mcp_manager,
@@ -115,7 +115,7 @@ class TestServeToolExecution:
         from core.agent.tool_executor import ToolExecutor
         from core.cli.bootstrap import bootstrap_geode
 
-        boot = bootstrap_geode(load_env=True)
+        boot = bootstrap_geode()
         executor = ToolExecutor(
             action_handlers=boot.tool_handlers,
             mcp_manager=boot.mcp_manager,
@@ -144,7 +144,7 @@ class TestServeToolExecution:
         from core.cli.bootstrap import bootstrap_geode
         from core.tools.base import load_all_tool_definitions
 
-        boot = bootstrap_geode(load_env=True)
+        boot = bootstrap_geode()
         handlers = set(boot.tool_handlers)
         exposed = {tool["name"] for tool in load_all_tool_definitions()}
         missing = sorted(exposed - handlers - SPECIAL_EXECUTION_BINDINGS)
@@ -155,7 +155,7 @@ class TestServeToolExecution:
         from core.cli.bootstrap import bootstrap_geode
         from core.cli.tool_handlers import _build_tool_handlers
 
-        boot = bootstrap_geode(load_env=True)
+        boot = bootstrap_geode()
         result = {}
 
         def daemon_work():
@@ -183,7 +183,7 @@ class TestServeToolExecution:
         from core.cli.bootstrap import bootstrap_geode
         from core.cli.tool_handlers import _build_tool_handlers
 
-        boot = bootstrap_geode(load_env=True)
+        boot = bootstrap_geode()
         result = {}
 
         def daemon_work():

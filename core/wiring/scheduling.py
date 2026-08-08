@@ -11,6 +11,7 @@ remains is the live scheduler stack.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from typing import Any
 
@@ -32,72 +33,81 @@ def build_scheduling(*, hooks: HookSystem) -> dict[str, Any]:
         scheduler_interval_s=settings.trigger_scheduler_interval_s,
         hooks=hooks,
     )
-    trigger_manager.start_scheduler()
-
-    # Advanced scheduler service (3-type: AT/EVERY/CRON + active hours)
-    from core.scheduler import create_scheduler
-
-    scheduler_service = create_scheduler(
-        trigger_manager=trigger_manager,
-        hooks=hooks,
-        enable_jitter=settings.scheduler_jitter_enabled,
-        max_jitter_ms=settings.scheduler_max_jitter_ms,
-    )
-    scheduler_service.load()
-
-    # Predefined automations are package-specific templates.
-    # They require a wired callback to be useful. Without callback/action,
-    # they fire as empty jobs consuming resources.
-    # Registration is skipped — users can enable predefined templates
-    # via /schedule enable <template_id> when an external package provides
-    # the callback wiring.
-
-    # PR-MEMORY-LIFECYCLE (2026-07-03) — first-party read-only engineering
-    # report jobs (callback path: pure-python collectors, budget_usd=0.0,
-    # no tool loop). Registered DISABLED by default; operators opt in via
-    # /schedule enable <job_id> or run once via /schedule run <job_id>.
+    scheduler_service: Any | None = None
     try:
-        from core.scheduler.engineering_reports import register_engineering_report_jobs
+        trigger_manager.start_scheduler()
 
-        register_engineering_report_jobs(scheduler_service)
-    except Exception:
-        log.exception("engineering report job wiring failed; scheduler continues without them")
+        # Advanced scheduler service (3-type: AT/EVERY/CRON + active hours)
+        from core.scheduler import create_scheduler
 
-    if settings.scheduler_auto_start:
-        scheduler_service.start(
-            interval_s=settings.scheduler_interval_s,
-        )
-
-    # OL-A1 (2026-05-22) — self-improving-loop auto-trigger. Opt-in:
-    # only fires when [self_improving_loop.scheduler] enabled=true in
-    # ~/.geode/config.toml. Default off → register_auto_trigger no-ops.
-    try:
-        from core.config.self_improving import load_self_improving_loop_config
-        from core.self_improving.loop.auto_trigger import register_auto_trigger
-
-        sil_cfg = load_self_improving_loop_config()
-        register_auto_trigger(
-            trigger_manager,
-            enabled=sil_cfg.scheduler.enabled,
-            cron=sil_cfg.scheduler.cron,
-            min_interval_minutes=sil_cfg.scheduler.min_interval_minutes,
-            # PR-MAX-GEN (2026-05-26) — production wiring for the
-            # generation cap. ``0`` (config default) preserves legacy
-            # unbounded behaviour. Operators set a non-zero cap in
-            # ~/.geode/config.toml under [self_improving_loop.scheduler]
-            # max_generation = N.
-            max_generation=sil_cfg.scheduler.max_generation,
+        scheduler_service = create_scheduler(
+            trigger_manager=trigger_manager,
             hooks=hooks,
+            enable_jitter=settings.scheduler_jitter_enabled,
+            max_jitter_ms=settings.scheduler_max_jitter_ms,
         )
-    except Exception:
-        log.exception("auto_trigger wiring failed; scheduler continues without it")
+        scheduler_service.load()
 
-    _register_trigger_logger(hooks)
+        # Predefined automations are package-specific templates.
+        # They require a wired callback to be useful. Without callback/action,
+        # they fire as empty jobs consuming resources.
+        # Registration is skipped — users can enable predefined templates
+        # via /schedule enable <template_id> when an external package provides
+        # the callback wiring.
 
-    return {
-        "trigger_manager": trigger_manager,
-        "scheduler_service": scheduler_service,
-    }
+        # PR-MEMORY-LIFECYCLE (2026-07-03) — first-party read-only engineering
+        # report jobs (callback path: pure-python collectors, budget_usd=0.0,
+        # no tool loop). Registered DISABLED by default; operators opt in via
+        # /schedule enable <job_id> or run once via /schedule run <job_id>.
+        try:
+            from core.scheduler.engineering_reports import register_engineering_report_jobs
+
+            register_engineering_report_jobs(scheduler_service)
+        except Exception:
+            log.exception("engineering report job wiring failed; scheduler continues without them")
+
+        if settings.scheduler_auto_start:
+            scheduler_service.start(
+                interval_s=settings.scheduler_interval_s,
+            )
+
+        # OL-A1 (2026-05-22) — self-improving-loop auto-trigger. Opt-in:
+        # only fires when [self_improving_loop.scheduler] enabled=true in
+        # ~/.geode/config.toml. Default off → register_auto_trigger no-ops.
+        try:
+            from core.config.self_improving import load_self_improving_loop_config
+            from core.self_improving.loop.auto_trigger import register_auto_trigger
+
+            sil_cfg = load_self_improving_loop_config()
+            register_auto_trigger(
+                trigger_manager,
+                enabled=sil_cfg.scheduler.enabled,
+                cron=sil_cfg.scheduler.cron,
+                min_interval_minutes=sil_cfg.scheduler.min_interval_minutes,
+                # PR-MAX-GEN (2026-05-26) — production wiring for the
+                # generation cap. ``0`` (config default) preserves legacy
+                # unbounded behaviour. Operators set a non-zero cap in
+                # ~/.geode/config.toml under [self_improving_loop.scheduler]
+                # max_generation = N.
+                max_generation=sil_cfg.scheduler.max_generation,
+                hooks=hooks,
+            )
+        except Exception:
+            log.exception("auto_trigger wiring failed; scheduler continues without it")
+
+        _register_trigger_logger(hooks)
+
+        return {
+            "trigger_manager": trigger_manager,
+            "scheduler_service": scheduler_service,
+        }
+    except BaseException:
+        if scheduler_service is not None:
+            with contextlib.suppress(Exception):
+                scheduler_service.stop()
+        with contextlib.suppress(Exception):
+            trigger_manager.stop_scheduler()
+        raise
 
 
 def _register_trigger_logger(hooks: HookSystem) -> None:

@@ -42,6 +42,9 @@ from core.paths import (
 )
 from core.ui.console import console
 
+SERVE_STARTUP_TIMEOUT_S = 30.0
+SERVE_TERMINATION_TIMEOUT_S = 5.0
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -707,7 +710,7 @@ def _start_serve_background(
     *,
     dry_run: bool = False,
     executable: str = "geode",
-    timeout: float = 10.0,
+    timeout: float = SERVE_STARTUP_TIMEOUT_S,
 ) -> bool:
     """Start ``geode serve`` detached and verify socket readiness."""
     if dry_run:
@@ -736,6 +739,17 @@ def _start_serve_background(
 
     with contextlib.suppress(OSError):
         process.terminate()
+    try:
+        process.wait(timeout=SERVE_TERMINATION_TIMEOUT_S)
+    except subprocess.TimeoutExpired:
+        with contextlib.suppress(OSError):
+            process.kill()
+        try:
+            process.wait(timeout=SERVE_TERMINATION_TIMEOUT_S)
+        except subprocess.TimeoutExpired:
+            console.print(
+                "  [error]Timed-out serve process could not be reaped after kill.[/error]"
+            )
     console.print("  [warning]Updated, but restarted serve did not become ready.[/warning]")
     return False
 
