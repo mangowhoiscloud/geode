@@ -89,6 +89,9 @@ _TURN_SCOPED_KINDS = {
     "plan.replanned",
     "plan.abandoned",
     "plan.completed",
+    "goal.created",
+    "goal.updated",
+    "goal.continued",
 }
 
 

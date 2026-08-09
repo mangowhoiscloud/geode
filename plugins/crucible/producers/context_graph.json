@@ -69,12 +69,24 @@
       "id": "file:core/agent/loop/agent_loop.py",
       "filePath": "core/agent/loop/agent_loop.py",
       "name": "AgenticLoop",
-      "summary": "Runs model and tool rounds until termination, with default-off external boundaries and current-run pre-execution retry identity for evaluator attestation.",
+      "summary": "Owns the public persisted-goal wrapper and physical model/tool rounds, with default-off external boundaries and current-run pre-execution retry identity for evaluator attestation.",
       "tags": [
         "runtime",
         "while-tool-use"
       ],
-      "contentSha256": "625d1650f61fb04a13867e200fe20532e4d743a3383e2d4803eaeba769f0e63b"
+      "contentSha256": "08443dd948356b60b7f07881157e4847d8be7974c87d6284356d5313ea75954a"
+    },
+    {
+      "id": "file:core/agent/loop/_goal.py",
+      "filePath": "core/agent/loop/_goal.py",
+      "name": "Persisted Goal controller",
+      "summary": "Keeps ordinary turns on a no-goal fast path and opens successful continuation turns only for an explicitly active persisted Goal.",
+      "tags": [
+        "goal",
+        "runtime",
+        "turn-control"
+      ],
+      "contentSha256": "2de91b7050a5ccb90cee7cdbf16fe9ca072ec7b4c263815cb81f3199290b1744"
     },
     {
       "id": "file:core/agent/tool_executor/processor.py",
@@ -212,6 +224,11 @@
       "source": "file:plugins/benchmark_harness/tau2_geode_agent.py",
       "target": "file:core/agent/loop/agent_loop.py",
       "type": "depends_on"
+    },
+    {
+      "source": "file:core/agent/loop/agent_loop.py",
+      "target": "file:core/agent/loop/_goal.py",
+      "type": "delegates_to"
     },
     {
       "source": "file:plugins/benchmark_harness/tau2_geode_agent.py",

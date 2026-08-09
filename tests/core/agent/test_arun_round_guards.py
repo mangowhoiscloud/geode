@@ -141,7 +141,7 @@ def test_arun_calls_check_round_guards() -> None:
     """``arun``'s while-loop body must call the helper exactly
     once. Anti-residue guard — the inline ``Guard 1`` / ``Guard 2``
     blocks must NOT remain in ``arun``."""
-    src = inspect.getsource(AgenticLoop.arun)
+    src = inspect.getsource(AgenticLoop._arun_once)
     # Helper is invoked
     assert "guard_reason = self._check_round_guards(round_idx)" in src
     # Inline guards removed
@@ -156,7 +156,7 @@ def test_arun_preserves_non_none_guard_response() -> None:
     exact guard reason must be preserved so session-budget handoff/expiry is
     not mislabeled as max_rounds.
     """
-    src = inspect.getsource(AgenticLoop.arun)
+    src = inspect.getsource(AgenticLoop._arun_once)
     assert "guard_reason = self._check_round_guards(round_idx)" in src
     assert "if guard_reason is not None:" in src
     assert "self._guard_exit_result(" in src

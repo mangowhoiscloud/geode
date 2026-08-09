@@ -896,7 +896,7 @@ async def finalize_and_return_async(
     if follow_up:
         await _close_verify_attempt(loop, result, user_input, round_idx, verify_payload)
         loop._verify_attempt_results.append(result)
-        continued = await loop.arun(
+        continued = await loop._arun_once(
             follow_up,
             _verify_continuation=replace(
                 correlation,

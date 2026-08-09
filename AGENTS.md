@@ -28,9 +28,9 @@ owns only the package version and sync date.
 The generated architecture inventory lives at
 `site/src/data/geode/architecture-baseline.json`. Refresh it with
 `uv run python scripts/architecture_baseline.py --update`; CI uses `--check`.
-The current snapshot records 541 production Python files,
-679 test Python files,
-84 tool definitions, and
+The current snapshot records 545 production Python files,
+682 test Python files,
+87 tool definitions, and
 57 `RuntimeEvent` members.
 <!-- generated:architecture-baseline:end -->
 
@@ -142,10 +142,17 @@ MCP server adapters plus 25K result guard.
 
 - `context.py:32` — `ContextAssembler`. Five tiers: Identity / Profile / Org /
   Project / Session.
+- `goals.py` — explicit multi-turn Goal projection in `sessions.db`. This is a
+  persistence/termination envelope, not `CognitiveState.goal`, advisory Plan,
+  TaskGraph, or an automatic Plan-and-Execute engine.
 - `vault/` — agent-produced artifact storage.
 
 Read this first when changing memory tiers, context budgets, or the 200K
 absolute token guard.
+
+For evidence-first research, the public runtime skill is
+`.geode/skills/deep-researcher/SKILL.md`. Ordinary research stays bounded;
+only an explicitly requested persistent objective may call `create_goal`.
 
 ### `core/hooks/`
 

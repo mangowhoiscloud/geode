@@ -53,6 +53,7 @@ from core.cli.tool_handlers.delegated import (
     _make_delegate_handler,
 )
 from core.cli.tool_handlers.execution import _build_execution_handlers
+from core.cli.tool_handlers.goal import _build_goal_handlers
 from core.cli.tool_handlers.hitl import _build_hitl_handlers
 from core.cli.tool_handlers.mcp import _build_mcp_handler
 from core.cli.tool_handlers.memory import _build_memory_handlers
@@ -82,6 +83,7 @@ __all__ = [
     "_build_data_handlers",
     "_build_delegated_handlers",
     "_build_execution_handlers",
+    "_build_goal_handlers",
     "_build_hitl_handlers",
     "_build_math_handlers",
     "_build_mcp_handler",
@@ -187,6 +189,7 @@ def _build_tool_handler_catalog(
     registrar = _HandlerRegistrar()
     registrar.add("memory", _build_memory_handlers())
     registrar.add("plan", _build_plan_handlers(force_dry))
+    registrar.add("goal", _build_goal_handlers())
     registrar.add("hitl", _build_hitl_handlers())
     registrar.add("system", _build_system_handlers(readiness, force_dry, mcp_manager))
     registrar.add("execution", _build_execution_handlers())

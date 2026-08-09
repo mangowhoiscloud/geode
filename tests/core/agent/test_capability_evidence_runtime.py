@@ -143,7 +143,7 @@ def test_gui_trajectory_eval_scores_recoverable_trace() -> None:
 
 
 def test_agentic_loop_wires_preflight_and_capability_refresh() -> None:
-    arun_src = inspect.getsource(agent_loop.AgenticLoop.arun)
+    arun_src = inspect.getsource(agent_loop.AgenticLoop._arun_once)
     helper_src = inspect.getsource(agent_loop.AgenticLoop._prepare_task_preflight)
     refresh_src = inspect.getsource(_response.refresh_tools)
 

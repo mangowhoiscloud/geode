@@ -47,6 +47,24 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **Added explicit persisted Goals and steerable deep research.** The
+  `create_goal`, `get_goal`, and `update_goal` tools persist one explicitly
+  requested multi-turn objective in `sessions.db`, account token/time usage,
+  stop subsequent continuation turns after optional token budgets are reached,
+  and continue successful turns until the goal completes, blocks, or reaches
+  budget. Goal transitions join canonical
+  session history and its JSONL projection without duplicating raw objectives.
+  The bundled deep-research skill can now choose between bounded
+  `delegate_task` batches and durable depth-one children with mailbox, wait,
+  follow-up, and interrupt control; ordinary research never creates a Goal
+  implicitly.
+- **Stopped treating schema-invalid sub-agent role output as success.** A child
+  process that exits normally but fails its role output model now returns a
+  failed `SubResult`, so batch `succeeded` counts and terminal lifecycle status
+  cannot claim success while carrying `validated=false`.
+
 ## [1.0.18] - 2026-08-10
 
 > Truthful advisory planning and Part 5 deep research, lifecycle boundary

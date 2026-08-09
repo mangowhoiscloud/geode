@@ -5777,6 +5777,20 @@ GEODE의 탐색은 네 갈래입니다. 외부 문서 사이트, 일반 웹, 자
 
 `update_plan`은 관측된 진행을 표시하는 advisory checklist일 뿐 실행기가 아닙니다. 런타임이 `<plan>`을 제공하면 스킬은 별도 체크리스트를 만들지 않고 그 단계 문구를 그대로 사용합니다. 결과를 파일이나 memory에 자동 저장하지도 않습니다.
 
+짧은 독립 축은 `delegate_task` batch로 한 번에 회수합니다. 실행 중 재지시나 대기가 필요한 축만 `spawn_agent`로 열고, mailbox·wait·follow-up·interrupt 제어를 사용합니다. 두 경로 모두 depth 1이며 재귀 research tree를 만들지 않습니다.
+
+자식 프로세스가 정상 종료해도 built-in role의 출력 schema 검증이 실패하면 `SubResult.success=false`입니다. batch 성공 수와 SubagentStop 상태는 실패로 수렴하지만, 검증 오류와 raw excerpt는 부모가 unresolved gap으로 종합할 수 있게 보존합니다.
+
+## 지속 Goal과의 결합
+
+사용자가 여러 turn에 걸친 지속 목표를 명시한 경우에만`create_goal`을 사용합니다. Goal은 자동 DAG가 아니라 objective·token budget·누적 사용량·상태를`sessions.db`에 보존하는 제어 봉투입니다. 성공한 turn 뒤 상태가 active이면 다음 turn을 열고, complete·blocked·budget-limited 또는 오류에서 멈춥니다. 일반 리서치 요청은 Goal로 자동 승격하지 않습니다.
+
+continuation은 system prompt나 인간 transcript가 아니라 현재 요청에만 붙는 contextual-user 입력입니다. 같은 text-only 응답이 반복되거나 한 public call에서 안전 상한에 닿으면 자동 진행만 멈추고 Goal은 active로 보존합니다. token budget도 provider 호출을 중간 취소하는 hard cap이 아니라 완료된 turn을 정산해 다음 continuation을 막는 경계이므로 마지막 turn만큼 초과할 수 있고, 초과분은 사용량에 그대로 기록됩니다.
+
+Goal 상태 전이는 canonical session event와 선택적 JSONL projection에 함께 남지만 objective 원문은 반복 저장하지 않고 digest만 기록합니다. 프로세스가 종료된 뒤 스스로 깨어나는 background scheduler는 없으며, 다음 입력이 먼저 사용자 steering을 처리합니다.
+
+Goal continuation과 실패 보존은[GPT-5.6-Luna/max 행동 trajectory](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/abad7de44a23cd0756fe1edb5b61a86ed715cc8f/trajectories/geode-agenticloop-goal-deep-research-gpt56-luna-max-2026-08-10-20260809T191233Z-a19174d30764)로 검증했습니다. 공개본은 38 events와 4/4 tool pair를 보존하고 private body는 digest로 치환합니다.
+
 ## 웹 탐색과 위임 규칙
 
 일반 웹 탐색은 `general_web_search`와`web_fetch`가 담당합니다. GEODE의 instruction-level 정책은 한 턴에 이 도구들을 3회 이상 직접 호출하지 않고,`delegate_task`로 서브에이전트에 위임합니다(GEODE.md RUNTIME CANNOT). 이는 하드 런타임 차단이 아니라 검색 결과가 부모 컨텍스트를 폭발시키는 것을 막는 행동 계약입니다. 서브에이전트는`web_research` 툴킷 (`core/tools/toolkits.toml`)으로 격리된 컨텍스트에서 조사를 끝낸 뒤 요약만 돌려줍니다.
@@ -5979,7 +5993,7 @@ Tier 2  latex2sympy2 + sympy.pretty  블록 전용. 분수·적분을 2D Unicode
 URL: https://mangowhoiscloud.github.io/geode/docs/reference/changelog
 Markdown: https://mangowhoiscloud.github.io/geode/docs/reference/changelog.md
 
-(body omitted from llms-full: 1499 KB — fetch the Markdown twin above for the complete page)
+(body omitted from llms-full: 1500 KB — fetch the Markdown twin above for the complete page)
 
 ---
 
@@ -6139,9 +6153,9 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 
 | 측정값 | 현재 트리 |
 | --- | --- |
-| 프로덕션 Python 파일 | 541 |
-| 테스트 Python 파일 | 679 |
-| 도구 정의 / 실행 등록 / 유효 스키마 | 84 / 87 / 84 |
+| 프로덕션 Python 파일 | 545 |
+| 테스트 Python 파일 | 682 |
+| 도구 정의 / 실행 등록 / 유효 스키마 | 87 / 90 / 87 |
 | RuntimeEvent 멤버 | 57 |
 | 기본 LLM 어댑터 | 8 |
 | 모듈 수준 ContextVar | 30 |

@@ -211,14 +211,14 @@ def test_reflection_hint_ignored_when_not_rebuilding() -> None:
 def test_arun_calls_sync_and_rebuild_helper() -> None:
     """``arun``'s while-loop must call the helper and rebind
     ``system_prompt`` from its return value."""
-    src = inspect.getsource(AgenticLoop.arun)
+    src = inspect.getsource(AgenticLoop._arun_once)
     assert "system_prompt = await self._sync_model_and_rebuild_prompt(" in src
 
 
 def test_arun_no_longer_inlines_drift_sync() -> None:
     """Anti-residue guard — the pre-refactor inline block must NOT
     remain in ``arun`` (would double-call sync + double-build prompt)."""
-    src = inspect.getsource(AgenticLoop.arun)
+    src = inspect.getsource(AgenticLoop._arun_once)
     # The exact pre-refactor lines that should be gone:
     assert "if await self._sync_model_from_settings_async() or self._prompt_dirty:" not in src
     # The inline "self._prompt_dirty = False" line is now ONLY inside

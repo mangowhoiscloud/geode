@@ -1,7 +1,7 @@
 # Stanford Part 5 정렬 — advisory plan과 deep research
 
 작성: 2026-08-10
-상태: PR #2925 구현 SOT
+상태: v1.0.18 baseline + Goal/DeepResearch 후속 구현 SOT
 개념·방법론 기준: Stanford CS329A Part 5, *Planning and Multi-Step Reasoning*
 코드 기준: Codex `main@646f7c0a91b8e327d263335da68ae8ef212895ce`
 
@@ -12,7 +12,7 @@ GEODE를 자동 Plan-and-Execute나 LATS 엔진으로 표현하지 않는다. �
 
 ```mermaid
 flowchart LR
-    G["Goal"] --> P["Advisory Plan"]
+    G["Explicit persisted Goal"] --> P["Advisory Plan"]
     P --> L["AgenticLoop"]
     L --> A["Action"]
     A --> O["Observation"]
@@ -26,6 +26,12 @@ flowchart LR
 `PlanStep.tool_name`과 `tool_args`는 실행 명령이 아니다. 모델에게 현재
 단계를 보여주는 advisory metadata이고, 실제 action은 AgenticLoop가
 선택·실행한다. `update_plan`은 관측된 완료만 기록한다.
+
+여기서 Goal도 plan executor가 아니다. Codex의 Goal과 같이 명시적
+objective를 여러 turn에 걸쳐 보존하고 사용량을 계량하며, 성공한 turn이
+끝나도 목표가 active이면 다음 turn을 여는 **turn persistence envelope**다.
+GEODE의 기존 `CognitiveState.goal`은 첫 입력을 기억하는 관측 필드이므로
+이 계약과 동일시하지 않는다.
 
 ## 2. 근거의 층위
 
@@ -46,6 +52,8 @@ flowchart LR
 - Codex checklist: `${HOME}/workspace/codex/codex-rs/protocol/src/plan_tool.rs`
 - Codex delegation policy: `${HOME}/workspace/codex/codex-rs/core/src/tools/handlers/multi_agents_spec.rs`
 - Codex rollout edges: `${HOME}/workspace/codex/codex-rs/rollout-trace/src/reducer/tool/agents.rs`
+- Codex Goal contract: `${HOME}/workspace/codex/codex-rs/ext/goal/src/spec.rs`
+- Codex Goal idle continuation: `${HOME}/workspace/codex/codex-rs/ext/goal/src/extension.rs`
 
 ## 3. Part 5 적용 경계
 
@@ -77,8 +85,12 @@ trajectory에 남겨 추후 step-wise reward와 preference projection의 입력�
 
 ```mermaid
 flowchart TB
-    Q["Research question + gap"] --> C["update_plan checklist"]
-    C --> D{"Independent axes?"}
+    Q["Research question + gap"] --> G{"Persistent goal explicitly requested?"}
+    G -->|"yes"| PG["create_goal"]
+    G -->|"no"| C["Bounded current turn"]
+    PG --> C2["update_plan checklist"]
+    C --> C2
+    C2 --> D{"Independent axes?"}
     D -->|"yes"| B["delegate_task batch"]
     D -->|"no"| P["Parent critical path"]
     B --> E["All SubResults incl. failures"]
@@ -92,7 +104,55 @@ Codex의 강점은 별도 deep-research 클래스가 아니라 조합이다. GEO
 동일하게 기존 checklist, bounded child collaboration, parent synthesis,
 typed trajectory를 재사용한다.
 
-## 5. GAP과 조치
+짧은 독립 축은 동기식 `delegate_task` batch로 회수한다. 실행 중 steering,
+mailbox, wait, follow-up이 필요한 축만 durable `spawn_agent`를 사용한다.
+둘 다 depth 1이며, 재귀 research tree는 만들지 않는다.
+
+## 5. Goal 제어·저장 계약
+
+```mermaid
+flowchart LR
+    U["User explicitly requests Goal"] --> C["create_goal"]
+    C --> DB["sessions.db / thread_goals (mutable)"]
+    C --> T["session_events + optional JSONL (append-only)"]
+    DB --> L["AgenticLoop turn"]
+    L --> A["Account tokens + elapsed time"]
+    A --> D{"Goal status"}
+    D -->|"active + successful turn"| N["Contextual-user continuation"]
+    N --> L
+    D -->|"complete / blocked / budget-limited / error"| S["Stop"]
+```
+
+- `create_goal`, `get_goal`, `update_goal`은 Codex와 같은 모델 표면이다.
+- 모델은 `complete|blocked`만 확정할 수 있다. budget-limit은 runtime이
+  계산한다.
+- `blocked|budget_limited|complete`는 이번 계약의 정지 상태다. 사용자가
+  다시 명시적으로 `create_goal`을 요청하면 새 goal ID와 예산으로 재시작한다.
+- objective 원문은 mutable goal row에만 둔다. trajectory event에는
+  `goal_id`, 상태, 사용량, objective digest만 남겨 중복·노출을 줄인다.
+- 자동 continuation은 성공 terminal 뒤에만 발생한다. 취소·인프라 오류·
+  외부 검증 대기는 계속하지 않고 active 상태를 보존한다.
+- continuation 지시는 system prompt나 가짜 인간 transcript가 아니라 Codex와
+  같은 request-local contextual-user 입력이다. 동일한 text-only 응답이 반복되거나
+  한 번의 public call에서 32회에 도달하면 자동 진행만 멈추고 Goal은 active로 둔다.
+- token budget은 hard per-call cap이 아니라 완료된 turn의 input+output 사용량을
+  정산해 **다음 continuation을 막는 경계**다. 따라서 마지막 turn만큼 초과할 수
+  있으며 `tokens_used`에는 초과분도 숨기지 않고 기록한다.
+- 프로세스가 살아 있지 않은 동안 스스로 깨어나는 daemon scheduler는
+  없다. 다음 inbound turn은 먼저 사용자 steering을 처리한 뒤 active goal을
+  이어간다.
+
+DeepResearch의 자식 성공은 프로세스 종료만으로 판정하지 않는다. built-in
+role의 출력 schema가 `validated=false`이면 `SubResult.success=false`이며 batch
+요약의 `succeeded`와 SubagentStop 상태도 실패로 수렴한다. 실패 payload와 raw
+excerpt는 부모가 gap으로 종합할 수 있도록 그대로 보존한다.
+
+이 마지막 차이는 의도적이다. Codex는 app ThreadManager가 idle thread를
+재기동하지만, GEODE에서 같은 동작을 숨은 daemon으로 복제하면 재시작 후
+예상하지 못한 subscription 비용과 부작용이 생긴다. 실제 unattended wake-up
+수요와 별도 승인·usage-limit 표면이 생길 때 scheduler에 연결한다.
+
+## 6. GAP과 조치
 
 | GAP | 심각도 | 조치 | 완료 조건 |
 |---|---:|---|---|
@@ -101,18 +161,42 @@ typed trajectory를 재사용한다.
 | plan edge가 session trajectory에서 뭉개짐 | P1 | typed plan lifecycle events 추가 | SQLite 정본과 run의 optional JSONL projection에 동일 적재 |
 | deep-research skill의 `web_search` 오배선 | P1 | canonical tools와 parent/child 계약으로 교체 | skill tool resolution 통과 |
 | 출처 수를 사실성으로 오인 | P1 | entailment·authority·freshness·conflict audit | 결과가 fact/inference/gap 구분 |
+| `CognitiveState.goal`을 지속 Goal로 오인 | P0 | 별도 `thread_goals` projection과 명시적 tools | multi-turn 상태·예산·종료가 SQLite에 유지 |
+| 일반 research가 무기한 Goal로 승격 | P0 | explicit-create-only 정책 | ordinary deep research는 bounded turn 유지 |
+| durable collaboration 도구가 deep-research skill에서 미노출 | P1 | spawn/mailbox/wait/follow-up을 선택 노출 | 장기 child를 실행 중 steering 가능 |
+| role schema 실패가 `SubResult.success=true`로 집계 | P0 | parse-site에서 semantic failure로 승격 | batch summary와 terminal hook이 실패를 보고 |
+| Codex식 restart wake-up·pause/resume·usage-limit 부재 | P2 | 이번 범위에서 보류 | 외부 권한·비용 정책과 caller 수요가 측정될 때 추가 |
+| Goal token budget의 turn-granular 초과 | P2 | 사용량과 초과분을 그대로 기록하고 다음 turn 차단 | provider 취소·예약 API가 안정화되면 hard cap 검토 |
 
 계획 본문은 `plan.created`와 `plan.replanned`에만 저장한다. 진행 이벤트는
 delta step ID만 남겨 중복을 피한다. 공개 eval-artifact의 digest 투영은
 계획 본문을 SHA-256으로 치환하고 plan ID·revision·진행 상태만 공개한다.
 
-## 6. 비목표
+## 7. 비목표
 
 - `TaskGraph`와 advisory `Plan` 통합
 - 자동 DAG executor
 - LATS/MCTS, branch state cloning, 신규 reward model
 - 연구 결과의 자동 memory/file 저장
+- 숨은 background goal daemon과 일반 요청의 자동 Goal 승격
 
 이 항목들은 현재 요청을 해결하지 않거나 부작용 계약 없이 위험하다.
 향후 실제 branch search 수요와 replay 가능한 sandbox가 측정될 때 별도
 프로그램으로 연다.
+
+## 8. 행동 검증과 공개 증거
+
+| 실행 | 결과 | 발견·조치 |
+|---|---|---|
+| Goal E2E #3, Luna/max | 실패 | system hint만으로는 모델이 `awaiting continuation`을 반복했다. 7 turn 뒤 50,000 budget을 54,047로 초과해 멈췄다. |
+| Goal E2E #4, Luna/max | 통과 | contextual-user steering으로 변경 후 2 turn에서 create→continue→complete, 18,546 tokens. |
+| DeepResearch E2E #1, Luna/max | 부분 실패 | invalid role output이 `success=true`, batch `2/2`로 집계되는 거짓 성공을 발견했다. |
+| DeepResearch E2E #2, Luna/max | 통과 | 동일 2축 batch가 `1/2`; validated success와 schema failure를 분리하고 부모가 gap을 보존했다. 일반 research의 Goal row는 0건이었다. |
+
+최종 비-live 회귀는 `10,366 passed, 22 skipped, 2 deselected`다. 공개
+trajectory는 원문을 digest로 치환한 2개 파일, 38 events, 4/4 paired tool
+calls이며 scope 2/2, secret/identity scan 0건이다. eval-artifact
+[#16](https://github.com/mangowhoiscloud/geode-eval-artifacts/pull/16)은
+[`abad7de`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/abad7de44a23cd0756fe1edb5b61a86ed715cc8f)에 병합했고, manifest SHA-256
+`a19174d30764118475ec713ba63dc5eb230997259e210beb1ba367040ae493c5`를
+원격 병합본에서 다시 검증했다.

@@ -32,6 +32,9 @@ TOOL_SEARCH_ALWAYS_LOADED: frozenset[str] = frozenset(
         "llms_txt_index",
         "check_status",
         "use_skill",
+        "create_goal",
+        "get_goal",
+        "update_goal",
     }
 )
 """Immediately-loaded core set — high-frequency tools the loop should
