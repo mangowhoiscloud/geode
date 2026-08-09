@@ -47,6 +47,11 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.19] - 2026-08-10
+
+> Durable explicit Goals, serve-owned continuation, and truthful sub-agent
+> outcomes for long-running work.
+
 ### Added
 
 - **Hosted active Goals in `geode serve`.** The daemon now discovers an
