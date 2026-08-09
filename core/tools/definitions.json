@@ -773,7 +773,7 @@
   },
   {
     "name": "update_plan",
-    "description": "Show or update the current turn's progress checklist. Use for complex, multi-step work to keep the user informed while continuing execution. This is NOT an approval gate and does not persist an execution plan; after calling it, keep working unless the user explicitly asked to stop for review. It is also separate from the runtime's internal auto-generated Plan (decomposition/replan): this checklist is display-only and never feeds the loop. Keep 3-7 concise steps, exactly one in_progress step while work remains, and update statuses as steps complete. Sibling: create_plan is only for an explicit review checkpoint that should wait for approve_plan.",
+    "description": "Show or update the current turn's progress checklist. Use for complex, multi-step work to keep the user informed while continuing execution. This is NOT an approval gate and never executes a step. When an internal <plan> is present, submit its exact full checklist or remaining suffix after observing completion, using descriptions or displayed 'id: description' texts; the completed prefix advances that advisory plan and the next round sees the new current step. A different checklist remains display-only. Keep steps concise, exactly one in_progress step while work remains, and update statuses as steps complete. Sibling: create_plan is only for an explicit review checkpoint that should wait for approve_plan.",
     "category": "planning",
     "cost_tier": "free",
     "input_schema": {

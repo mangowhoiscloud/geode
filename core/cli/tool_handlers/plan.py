@@ -57,6 +57,58 @@ def _build_plan_handlers(force_dry: bool) -> UniqueEntries[str, Any]:
         if not cleaned:
             return _clarify("update_plan", ["plan"], "비어 있지 않은 진행 항목이 필요합니다.")
 
+        rank = {"completed": 0, "in_progress": 1, "pending": 2}
+        status_ranks = [rank[item["status"]] for item in cleaned]
+        has_linear_progress = (
+            counts["in_progress"] <= 1
+            and (counts["pending"] + counts["in_progress"] == 0 or counts["in_progress"] == 1)
+            and status_ranks == sorted(status_ranks)
+        )
+
+        runtime_plan_synced = False
+        runtime_plan_advanced = False
+        runtime_plan_current: int | None = None
+        try:
+            from core.agent.plan import Plan
+            from core.observability.session_metrics import current_session_metrics
+
+            metrics = current_session_metrics()
+            active_plan = metrics.active_plan
+            if isinstance(active_plan, Plan):
+                remaining = active_plan.remaining_steps()
+                submitted = [item["step"] for item in cleaned]
+                remaining_texts = (
+                    [step.description for step in remaining],
+                    [f"{step.id}: {step.description}" for step in remaining],
+                )
+                full_texts = (
+                    [step.description for step in active_plan.steps],
+                    [f"{step.id}: {step.description}" for step in active_plan.steps],
+                )
+                completed_prefix = next(
+                    (index for index, item in enumerate(cleaned) if item["status"] != "completed"),
+                    len(cleaned),
+                )
+                advance_count: int | None = None
+                if has_linear_progress and submitted in remaining_texts:
+                    advance_count = completed_prefix
+                elif (
+                    has_linear_progress
+                    and not active_plan.abandoned
+                    and submitted in full_texts
+                    and completed_prefix >= active_plan.current
+                ):
+                    advance_count = completed_prefix - active_plan.current
+                if advance_count is not None:
+                    updated = active_plan.complete_and_advance(advance_count)
+                    runtime_plan_advanced = updated.current != active_plan.current
+                    if runtime_plan_advanced:
+                        metrics.set_active_plan(updated, reset_attempts=True)
+                    runtime_plan_current = updated.current
+                    runtime_plan_synced = True
+        except Exception:
+            log.debug("Runtime advisory plan progress sync skipped", exc_info=True)
+
         from core.ui.agentic_ui import render_progress_plan
 
         render_progress_plan(cleaned, explanation=explanation)
@@ -73,6 +125,9 @@ def _build_plan_handlers(force_dry: bool) -> UniqueEntries[str, Any]:
             "action": "update_plan",
             "plan": cleaned,
             "counts": counts,
+            "runtime_plan_synced": runtime_plan_synced,
+            "runtime_plan_advanced": runtime_plan_advanced,
+            "runtime_plan_current": runtime_plan_current,
             "hint": "Progress plan updated. Continue with the task; no approval is required.",
         }
 

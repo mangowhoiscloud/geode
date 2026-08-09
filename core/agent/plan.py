@@ -121,7 +121,7 @@ DEFAULT_REPLAN_MAX_ATTEMPTS: int = 3
 
 @dataclass(frozen=True, slots=True)
 class PlanStep:
-    """One executable step in a :class:`Plan`.
+    """One advisory step in a :class:`Plan`.
 
     Frozen so the step is safe to share across threads and serialize to
     JSON without races. Steps are consumed strictly in ``current``-index
@@ -150,7 +150,7 @@ class PlanStep:
 
 @dataclass(frozen=True, slots=True)
 class Plan:
-    """Explicit execution plan for the current AgenticLoop session.
+    """Explicit advisory plan for the current AgenticLoop session.
 
     Frozen — mutations always produce a *new* ``Plan`` (functional style).
     ``current`` is a 0-based index into ``steps``; ``completed`` and
@@ -186,15 +186,35 @@ class Plan:
     def remaining_steps(self) -> tuple[PlanStep, ...]:
         return tuple(self.steps[self.current :])
 
+    def complete_and_advance(self, count: int) -> Plan:
+        """Complete ``count`` remaining steps and advance the advisory cursor.
+
+        This is progress bookkeeping only: callers must have already observed
+        the work completing.  It never dispatches ``tool_name`` or interprets
+        ``tool_args``.
+        """
+        remaining = len(self.steps) - self.current
+        if count < 0 or count > remaining:
+            raise ValueError(f"count must be between 0 and {remaining}, got {count}")
+        if count == 0:
+            return self
+        next_current = self.current + count
+        return Plan(
+            steps=self.steps,
+            current=next_current,
+            completed=tuple(sorted({*self.completed, *range(self.current, next_current)})),
+            abandoned=self.abandoned,
+            reasoning=self.reasoning,
+            revision=self.revision,
+        )
+
     def abandon_and_advance(self) -> Plan:
         """Mark the current step ``abandoned`` and move to the next one.
 
         Used after exceeding ``GEODE_REPLAN_MAX_ATTEMPTS`` retries on the
-        same step. There is no success-advance counterpart by design:
-        step completion is expressed by replan (plan replacement) or by
-        the plan simply being consumed to the end, never by a
-        ``completed`` marker (the unwired ``advance(completed=True)``
-        path was removed together with the v0.13 DAG remnants).
+        same step. Successful progress uses :meth:`complete_and_advance`
+        only after the acting model reports an observed completion through
+        ``update_plan``; neither path executes a step.
         """
         if self.current >= len(self.steps):
             return self
@@ -281,6 +301,12 @@ def render_plan_for_prompt(plan: Plan) -> str:
         marker = "→" if idx == plan.current else "·"
         step = plan.steps[idx]
         lines.append(f"  {marker} {step.id}: {step.description}")
+    lines.append(
+        "Progress contract: after observing completion, call update_plan with "
+        "the exact plan steps and statuses; a full checklist or the remaining "
+        "suffix is valid, using descriptions or displayed 'id: description' "
+        "text. This updates advisory progress only; it never executes a step."
+    )
     if plan.abandoned:
         ab = ", ".join(plan.steps[i].id for i in plan.abandoned if 0 <= i < len(plan.steps))
         lines.append(f"Abandoned (retry budget exhausted): {ab}")
@@ -395,12 +421,12 @@ def should_replan(
     # durable telemetry, but it must not retrigger on every tool round.
     if round_idx == 0 and verify_failed and verify_should_retry:
         return "verify_fail"
-    # Cadence trigger — fires only when a plan already exists (no
-    # synthesis from thin air; planning happens at decomposition).
+    # Cadence/low-confidence triggers only revise unfinished plans (no
+    # synthesis from thin air and no resurrection after observed completion).
     # Codex MCP MEDIUM #5 (PR-CL-A1, 2026-05-23): the no-plan guard
     # used to live below the cadence check, so cadence fired even
     # without a plan to revise.
-    if plan is None:
+    if plan is None or plan.done:
         return None
     # Low-confidence trigger — same no-plan guard as cadence: a belief
     # drop revises an existing plan, it does not synthesize one.

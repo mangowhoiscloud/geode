@@ -464,6 +464,7 @@ class AgenticLoop:
         # set by update_model_async on model change; the run-loop rebuilds
         # system_prompt before the next LLM call.
         self._prompt_dirty: bool = False
+        self._last_plan_hint: str = ""
         self._tool_registry = tool_registry
         self._mcp_manager = mcp_manager
         self._skill_registry = skill_registry
@@ -1003,20 +1004,25 @@ class AgenticLoop:
     ) -> str:
         """Sync model drift + rebuild the system prompt.
 
-        Rebuilds when the model drifted (``settings.model`` changed) or
-        ``_prompt_dirty`` is set (direct ``update_model_async``). On
-        rebuild, re-applies the preflight / reflection / verification / plan
-        hints inside the dynamic envelope so a mid-arun drift doesn't drop them (the
-        preflight hint was silently lost here before 2026-07-29). Returns
-        the (possibly-rebuilt) prompt; clears ``_prompt_dirty``.
+        Rebuilds when the model drifted (``settings.model`` changed),
+        ``_prompt_dirty`` is set (direct ``update_model_async``), or advisory
+        plan progress changed. On rebuild, re-applies the preflight /
+        reflection / verification / plan hints inside the dynamic envelope so
+        a mid-arun change does not drop them. Returns the (possibly-rebuilt)
+        prompt; clears ``_prompt_dirty``.
         """
         drift_detected = await self._sync_model_from_settings_async()
         prompt_dirty = self._prompt_dirty
-        if drift_detected or prompt_dirty:
+        _plan_consume = getattr(self, "_consume_plan_hint", None)
+        raw_plan_hint = _plan_consume() if callable(_plan_consume) else ""
+        plan_hint = raw_plan_hint if isinstance(raw_plan_hint, str) else ""
+        last_plan_hint = getattr(self, "_last_plan_hint", "")
+        if not isinstance(last_plan_hint, str):
+            last_plan_hint = plan_hint
+        plan_changed = plan_hint != last_plan_hint
+        if drift_detected or prompt_dirty or plan_changed:
             from core.agent.loop._context import inject_runtime_hints
 
-            _plan_consume = getattr(self, "_consume_plan_hint", None)
-            plan_hint = _plan_consume() if callable(_plan_consume) else ""
             system_prompt = inject_runtime_hints(
                 self._build_system_prompt(),
                 getattr(self, "_preflight_hint", ""),
@@ -1025,12 +1031,17 @@ class AgenticLoop:
                 plan_hint if isinstance(plan_hint, str) else "",
             )
             self._prompt_dirty = False
+            self._last_plan_hint = plan_hint
             # Fire PROMPT_ASSEMBLED on each per-round rebuild (no-op if no hooks)
             hooks = getattr(self, "_hooks", None)
             if hooks:
                 from core.hooks import HookEvent
 
-                reason = "model_drift" if drift_detected else "prompt_dirty"
+                reason = (
+                    "model_drift"
+                    if drift_detected
+                    else ("prompt_dirty" if prompt_dirty else "plan_progress")
+                )
                 await hooks.trigger_async(
                     HookEvent.PROMPT_ASSEMBLED,
                     {
@@ -2102,12 +2113,14 @@ class AgenticLoop:
         from core.agent.loop._context import inject_runtime_hints
 
         reflection_hint = self._consume_reflection_hint()
+        plan_hint = self._consume_plan_hint()
+        self._last_plan_hint = plan_hint
         system_prompt = inject_runtime_hints(
             self._build_system_prompt(),
             preflight_hint,
             reflection_hint,
             verification_hint,
-            self._consume_plan_hint(),
+            plan_hint,
         )
 
         # Prune old messages to stay within context budget (Karpathy P6)

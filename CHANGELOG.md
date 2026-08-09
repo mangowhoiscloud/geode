@@ -56,6 +56,12 @@ functional change.
   uses a strict structured-output contract. A retryable verification failure
   now replans once at the repair turn boundary, with the failed candidate and
   repair instruction, instead of reusing the same failure on every tool round.
+  The existing `update_plan` checklist now advances an active advisory Plan
+  only when its full or remaining step texts match exactly, so observed
+  completion is reflected in the next round without turning PlanStep metadata
+  into an executor. Completed plans stay closed to cadence/low-confidence
+  replans, concurrent checklist updates preserve call order, and mismatched or
+  standalone checklists remain display-only.
 
 - **Made lifecycle restarts and runtime tests honor their real ownership
   boundaries.** Detached `geode serve` restarts now allow the documented

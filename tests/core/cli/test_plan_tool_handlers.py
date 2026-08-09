@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 import pytest
@@ -74,6 +75,123 @@ def test_update_plan_rejects_unknown_status(plan_handlers: dict[str, Any]) -> No
     )
 
     assert "Invalid plan status" in result["error"]
+
+
+def test_update_plan_keeps_non_linear_checklist_display_only(
+    plan_handlers: dict[str, Any],
+) -> None:
+    result = plan_handlers["update_plan"](
+        plan=[
+            {"step": "Inspect", "status": "pending"},
+            {"step": "Patch", "status": "pending"},
+        ],
+    )
+
+    assert result["status"] == "ok"
+    assert result["runtime_plan_synced"] is False
+
+
+def test_update_plan_advances_matching_runtime_advisory_plan(
+    plan_handlers: dict[str, Any],
+) -> None:
+    from core.agent.plan import Plan, PlanStep
+    from core.observability.session_metrics import (
+        current_session_metrics,
+        session_metrics_scope,
+    )
+
+    plan = Plan(
+        steps=(
+            PlanStep(id="s1", description="Inspect plan wiring"),
+            PlanStep(id="s2", description="Patch shared boundary"),
+            PlanStep(id="s3", description="Run focused tests"),
+        )
+    )
+    with session_metrics_scope(session_id="progress-sync"):
+        metrics = current_session_metrics()
+        metrics.set_active_plan(plan)
+        metrics.record_step_attempt()
+
+        result = plan_handlers["update_plan"](
+            plan=[
+                {"step": "Inspect plan wiring", "status": "completed"},
+                {"step": "Patch shared boundary", "status": "in_progress"},
+                {"step": "Run focused tests", "status": "pending"},
+            ],
+        )
+
+        assert result["runtime_plan_synced"] is True
+        assert result["runtime_plan_advanced"] is True
+        assert result["runtime_plan_current"] == 1
+        assert metrics.active_plan.current == 1
+        assert metrics.active_plan.completed == (0,)
+        assert metrics.replan_attempts_on_current_step == 0
+
+        completed = plan_handlers["update_plan"](
+            plan=[
+                {"step": "Inspect plan wiring", "status": "completed"},
+                {"step": "Patch shared boundary", "status": "completed"},
+                {"step": "Run focused tests", "status": "completed"},
+            ],
+        )
+        assert completed["runtime_plan_synced"] is True
+        assert completed["runtime_plan_advanced"] is True
+        assert metrics.active_plan.done is True
+        assert metrics.active_plan.completed == (0, 1, 2)
+
+
+def test_update_plan_keeps_different_checklist_display_only(
+    plan_handlers: dict[str, Any],
+) -> None:
+    from core.agent.plan import Plan, PlanStep
+    from core.observability.session_metrics import (
+        current_session_metrics,
+        session_metrics_scope,
+    )
+
+    plan = Plan(steps=(PlanStep(id="s1", description="Internal step"),))
+    with session_metrics_scope(session_id="progress-mismatch"):
+        metrics = current_session_metrics()
+        metrics.set_active_plan(plan)
+
+        result = plan_handlers["update_plan"](
+            plan=[{"step": "Visible-only step", "status": "in_progress"}],
+        )
+
+        assert result["runtime_plan_synced"] is False
+        assert result["runtime_plan_advanced"] is False
+        assert metrics.active_plan is plan
+
+
+def test_update_plan_runtime_sync_survives_tool_executor_thread_bridge(
+    plan_handlers: dict[str, Any],
+) -> None:
+    from core.agent.plan import Plan, PlanStep
+    from core.agent.tool_executor import ToolExecutor
+    from core.observability.session_metrics import (
+        current_session_metrics,
+        session_metrics_scope,
+    )
+
+    plan = Plan(steps=(PlanStep(id="s1", description="Observe completion"),))
+    executor = ToolExecutor(
+        action_handlers={"update_plan": plan_handlers["update_plan"]},
+        auto_approve=True,
+    )
+    with session_metrics_scope(session_id="progress-thread-bridge"):
+        metrics = current_session_metrics()
+        metrics.set_active_plan(plan)
+
+        result = asyncio.run(
+            executor.aexecute(
+                "update_plan",
+                {"plan": [{"step": "s1: Observe completion", "status": "completed"}]},
+            )
+        )
+
+        assert result["runtime_plan_synced"] is True
+        assert metrics.active_plan.done is True
+        assert metrics.active_plan.completed == (0,)
 
 
 def test_create_list_approve_and_latest_fallback(plan_handlers: dict[str, Any]) -> None:

@@ -133,6 +133,26 @@ def test_plan_abandon_and_advance_when_done_is_noop() -> None:
     assert plan.abandon_and_advance() is plan
 
 
+def test_plan_complete_and_advance_records_observed_progress() -> None:
+    plan = _make_plan("s1", "s2", "s3")
+
+    advanced = plan.complete_and_advance(2)
+
+    assert advanced.current == 2
+    assert advanced.completed == (0, 1)
+    assert advanced.abandoned == ()
+    assert advanced.revision == plan.revision
+    assert plan.current == 0
+    assert plan.completed == ()
+
+
+def test_plan_complete_and_advance_rejects_unobserved_range() -> None:
+    plan = _make_plan("s1")
+
+    with pytest.raises(ValueError, match="between 0 and 1"):
+        plan.complete_and_advance(2)
+
+
 def test_remaining_steps() -> None:
     plan = _make_plan("s1", "s2", "s3", current=1)
     remaining = plan.remaining_steps()
@@ -263,6 +283,33 @@ def test_should_replan_no_op_round_zero() -> None:
             verify_should_retry=False,
         )
         is None
+    )
+
+
+def test_should_replan_completed_plan_only_on_concrete_verify_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GEODE_REPLAN_INTERVAL", "5")
+    done = _make_plan("s1").complete_and_advance(1)
+
+    assert (
+        should_replan(
+            round_idx=5,
+            plan=done,
+            verify_failed=False,
+            verify_should_retry=False,
+            low_confidence=True,
+        )
+        is None
+    )
+    assert (
+        should_replan(
+            round_idx=0,
+            plan=done,
+            verify_failed=True,
+            verify_should_retry=True,
+        )
+        == "verify_fail"
     )
 
 
@@ -577,6 +624,9 @@ def test_session_row_exposes_plan_telemetry() -> None:
         assert row["last_replan_trigger"] == "verify_fail"
         assert row["active_plan_revision"] == 0
         assert row["active_plan_step_count"] == 3
+        assert row["active_plan_current"] == 0
+        assert row["active_plan_completed_count"] == 0
+        assert row["active_plan_done"] is False
 
 
 # -- verify integration (step_expected_mismatch) -----------------------
