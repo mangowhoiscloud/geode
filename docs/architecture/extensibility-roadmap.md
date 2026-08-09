@@ -560,6 +560,7 @@ and closure evidence are appended in §10.
 | COLLAB-003 | `PARTIAL` | Child checkpoints and session history are durable, but every isolated worker invocation creates a fresh conversation and never restores the child checkpoint | Follow-up and resume reopen the same child session as a new generation, restore its checkpoint, accept queued mailbox input at a loop boundary, and preserve one independent rollout without replaying successful side effects | R6.5 | COLLAB-001, COLLAB-002 | `IN_DEVELOP` |
 | HOOK-003 | `PARTIAL` | All 13 public hooks are wired, but no production `PostVerify` policy is registered; an empty decision set can deliver a retryable verifier failure, continuation authority is encoded as a user-role pseudo-system message, and durable verification records aggregate handler decisions without a stable candidate target | A deterministic fallback maps pass/retryable failure/non-retryable failure to accept/revise/escalate; revision enters the bounded dynamic system context, reaches the existing verify-fail replan path, and records candidate-digest-bound per-handler decisions without replaying completed side effects or adding a new hook plane | R6.6 | HOOK-001, STORE-002 | `DONE` |
 | MEM-001 | `MISFIT` | One live system-prompt branch creates a default user profile outside the wired project scope, `TURN_COMPLETED` promotes a low-information turn/tool trace into active project memory, and caller-free session-checkpoint plus journal write/aggregate APIs imply competing authorities | The wired profile is the sole prompt profile source; automatic turn traces remain in canonical session records; dead `SessionStorePort` checkpoint and `ProjectJournal` write/aggregate APIs are removed while historical files remain untouched; executable tests and docs identify the live read/write authority without adding a store or framework | R6.7 | HOOK-001, STORE-002 | `DONE` |
+| GOAL-001 | `PARTIAL` | Explicit Goal state, contextual continuation, accounting, and trajectory events persist, but automatic continuation is owned only by one `AgenticLoop.arun()` call; no process owner discovers an active Goal after return or daemon restart, restores its checkpoint, or prevents duplicate idle launches | The existing serve process owns a bounded idle Goal continuation host that restores the same checkpoint as a new session generation, admits at most one continuation per session, uses the internal contextual-Goal path rather than a synthetic user turn, preserves Lane, PostVerify/replan, accounting, and trajectory contracts, and does not hot-loop an unchanged active Goal | R6.8 | HOOK-003, STORE-002 | `OPEN` |
 
 ## 6. Dependency and merge sequence
 
@@ -612,6 +613,13 @@ wired instance, stops promoting a duplicate turn trace into active memory, and
 removes only APIs with a measured zero production-caller census. It does not
 introduce a context-snapshot framework, admission engine, new database, or
 checkpoint schema; those require separate measured GAPs.
+
+R6.8 gives explicit Goals a process-level continuation owner without reopening
+R6.5's deliberately bounded child-collaboration contract or introducing the
+future R3 phase/service extraction. The serve daemon reuses the existing
+checkpoint, Lane, Goal projection, and session-event writers. It does not add a
+general thread manager, execute `PlanStep` objects, clone environment state, or
+claim LATS/SPRINT/SWiRL training behavior.
 
 ### 6.1 v1.0.1 boundary-release train
 
@@ -1451,6 +1459,41 @@ Acceptance:
 - targeted memory, prompt, wiring, session, hook, and context tests pass with
   the architecture, legacy, slop, format, type, import, and non-live test
   gates.
+
+#### R6.8 Hosted Goal continuation
+
+GAP: GOAL-001.
+
+An explicit active Goal already supplies the long-horizon objective, budget,
+and mutable control projection. This package adds only the missing execution
+owner: while `geode serve` is alive and ordinary foreground work is idle, it
+may restore the Goal's checkpoint and start the same internal continuation used
+inside `AgenticLoop.arun()`.
+
+The search object remains one sequential Goal trajectory. Stanford Part 5's
+LATS action-tree search, SPRINT parallel candidate plans, and SWiRL training
+pipeline remain non-goals because GEODE does not clone state, rank alternative
+paths, or update a policy in this runtime path.
+
+Acceptance:
+
+- daemon start and later idle ticks discover active Goals from the existing
+  project `sessions.db`; inactive, budget-limited, blocked, or complete Goals
+  never launch;
+- continuation restores the same `SessionCheckpoint` as a new session
+  generation, preserves its model and conversation, and enters the request as
+  bounded internal Goal context rather than `message.user`;
+- one process admits at most one continuation for a session, launches no Goal
+  while foreground Lane work is active, and does not retry the same unchanged
+  active state indefinitely;
+- the existing Goal token/time accounting, PostVerify revision, verify-fail
+  replan, hook/middleware, session-event, trajectory, and checkpoint writers
+  remain on the live path without a second transcript or result store;
+- daemon restart recovery, duplicate-admission, no-progress, terminal Goal,
+  missing/corrupt checkpoint, and foreground compatibility tests pass;
+- documentation states that hosted continuation requires `geode serve`, does
+  not promise exactly-once external side effects, and is not an automatic
+  Plan-and-Execute or trajectory-search engine.
 
 ### R7 — Closure, hardening, and release
 
