@@ -55,13 +55,52 @@ async def run(
             _verify_continuation=verify_continuation,
         )
 
+    goal_before = loop._goal_store.get(loop._session_id) if loop._goal_store else None
+    return await _run_turns(
+        loop,
+        user_input,
+        goal_before=goal_before,
+        continuation_goal=None,
+        continuation_trigger="active_goal",
+    )
+
+
+async def continue_active(
+    loop: AgenticLoop,
+    *,
+    trigger: str,
+) -> AgenticResult | None:
+    """Continue the active Goal without manufacturing a user turn."""
+    goal = loop._goal_store.get(loop._session_id) if loop._goal_store else None
+    if goal is None or goal.status is not GoalStatus.ACTIVE:
+        return None
+    return await _run_turns(
+        loop,
+        goal.objective,
+        goal_before=goal,
+        continuation_goal=goal,
+        continuation_trigger=trigger,
+    )
+
+
+async def _run_turns(
+    loop: AgenticLoop,
+    user_input: str,
+    *,
+    goal_before: Any | None,
+    continuation_goal: Any | None,
+    continuation_trigger: str,
+) -> AgenticResult:
+    """Run physical turns until the current Goal reaches a safe boundary."""
     results: list[AgenticResult] = []
     prior_idle_text = ""
-    goal_before = loop._goal_store.get(loop._session_id) if loop._goal_store else None
-    continuation_goal: Any | None = None
     while True:
         started = time.monotonic()
-        result = await loop._arun_once(user_input, _goal_continuation=continuation_goal)
+        result = await loop._arun_once(
+            user_input,
+            _goal_continuation=continuation_goal,
+            _goal_continuation_trigger=continuation_trigger,
+        )
         results.append(result)
         goal_after = loop._goal_store.get(loop._session_id) if loop._goal_store else None
         activated = goal_after is not None and (

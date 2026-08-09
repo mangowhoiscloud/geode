@@ -49,6 +49,16 @@ functional change.
 
 ### Added
 
+- **Hosted active Goals in `geode serve`.** The daemon now discovers an
+  explicit active Goal after return or restart, restores its ACTIVE checkpoint
+  as a new session generation, and re-enters the existing contextual Goal turn
+  under the same SessionLane key. Returned attempts are deduplicated per
+  observed Goal state while transient failures retry at the host tick; each
+  admission receives fresh session metrics, preserves gateway history limits,
+  and joins the daemon's bounded shutdown drain. IPC resume now reloads inside
+  the same machine Lane. Paused/terminal/missing/corrupt checkpoints stay
+  blocked, and the normal PostVerify, replan, accounting, evidence, and
+  trajectory path remains intact without a PlanStep executor or second store.
 - **Added explicit persisted Goals and steerable deep research.** The
   `create_goal`, `get_goal`, and `update_goal` tools persist one explicitly
   requested multi-turn objective in `sessions.db`, account token/time usage,

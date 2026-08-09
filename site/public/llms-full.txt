@@ -5787,7 +5787,9 @@ GEODE의 탐색은 네 갈래입니다. 외부 문서 사이트, 일반 웹, 자
 
 continuation은 system prompt나 인간 transcript가 아니라 현재 요청에만 붙는 contextual-user 입력입니다. 같은 text-only 응답이 반복되거나 한 public call에서 안전 상한에 닿으면 자동 진행만 멈추고 Goal은 active로 보존합니다. token budget도 provider 호출을 중간 취소하는 hard cap이 아니라 완료된 turn을 정산해 다음 continuation을 막는 경계이므로 마지막 turn만큼 초과할 수 있고, 초과분은 사용량에 그대로 기록됩니다.
 
-Goal 상태 전이는 canonical session event와 선택적 JSONL projection에 함께 남지만 objective 원문은 반복 저장하지 않고 digest만 기록합니다. 프로세스가 종료된 뒤 스스로 깨어나는 background scheduler는 없으며, 다음 입력이 먼저 사용자 steering을 처리합니다.
+Goal 상태 전이는 canonical session event와 선택적 JSONL projection에 함께 남지만 objective 원문은 반복 저장하지 않고 digest만 기록합니다. `geode serve`가 실행 중이고 foreground Lane이 비어 있으면 active Goal의 동일 checkpoint를 새 generation으로 복원해 내부 continuation을 시작합니다. PAUSED·terminal·missing/corrupt checkpoint는 실행하지 않고, 정상 반환된 같은 Goal projection은 상태가 바뀌기 전까지 다시 admission하지 않습니다. 실행 예외는 1초 host tick에서 재시도하며 각 admission은 독립된 session metrics를 사용합니다.
+
+hosted continuation도 기존 AgenticLoop를 통과하므로 tool loop, PostVerify revision, verify-fail replan, usage·evidence·trajectory writer가 그대로 적용됩니다. 이는 OS-level scheduler나 자동 Plan-and-Execute가 아니며, 여러 serve process 사이의 exactly-once 외부 부작용도 보장하지 않습니다. 결과는 별도 inbox로 복제하지 않고 동일 checkpoint와 session record에 남으며, 다음 gateway turn이 durable history를 이어받습니다. IPC resume는 같은 machine Lane 안에서 checkpoint를 다시 읽고, daemon 종료는 진행 중인 hosted turn에 30초 drain을 제공합니다.
 
 Goal continuation과 실패 보존은[GPT-5.6-Luna/max 행동 trajectory](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/abad7de44a23cd0756fe1edb5b61a86ed715cc8f/trajectories/geode-agenticloop-goal-deep-research-gpt56-luna-max-2026-08-10-20260809T191233Z-a19174d30764)로 검증했습니다. 공개본은 38 events와 4/4 tool pair를 보존하고 private body는 digest로 치환합니다.
 
@@ -6153,8 +6155,8 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 
 | 측정값 | 현재 트리 |
 | --- | --- |
-| 프로덕션 Python 파일 | 545 |
-| 테스트 Python 파일 | 682 |
+| 프로덕션 Python 파일 | 546 |
+| 테스트 Python 파일 | 683 |
 | 도구 정의 / 실행 등록 / 유효 스키마 | 87 / 90 / 87 |
 | RuntimeEvent 멤버 | 57 |
 | 기본 LLM 어댑터 | 8 |

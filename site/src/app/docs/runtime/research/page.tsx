@@ -90,9 +90,23 @@ export default function Page() {
             </p>
             <p>
               Goal 상태 전이는 canonical session event와 선택적 JSONL projection에
-              함께 남지만 objective 원문은 반복 저장하지 않고 digest만 기록합니다.
-              프로세스가 종료된 뒤 스스로 깨어나는 background scheduler는 없으며,
-              다음 입력이 먼저 사용자 steering을 처리합니다.
+              함께 남지만 objective 원문은 반복 저장하지 않고 digest만 기록합니다.{" "}
+              <code>geode serve</code>가 실행 중이고 foreground Lane이 비어 있으면
+              active Goal의 동일 checkpoint를 새 generation으로 복원해 내부
+              continuation을 시작합니다. PAUSED·terminal·missing/corrupt checkpoint는
+              실행하지 않고, 정상 반환된 같은 Goal projection은 상태가 바뀌기
+              전까지 다시 admission하지 않습니다. 실행 예외는 1초 host tick에서
+              재시도하며 각 admission은 독립된 session metrics를 사용합니다.
+            </p>
+            <p>
+              hosted continuation도 기존 AgenticLoop를 통과하므로 tool loop,
+              PostVerify revision, verify-fail replan, usage·evidence·trajectory writer가
+              그대로 적용됩니다. 이는 OS-level scheduler나 자동 Plan-and-Execute가
+              아니며, 여러 serve process 사이의 exactly-once 외부 부작용도 보장하지
+              않습니다. 결과는 별도 inbox로 복제하지 않고 동일 checkpoint와 session
+              record에 남으며, 다음 gateway turn이 durable history를 이어받습니다.
+              IPC resume는 같은 machine Lane 안에서 checkpoint를 다시 읽고, daemon
+              종료는 진행 중인 hosted turn에 30초 drain을 제공합니다.
             </p>
             <p>
               Goal continuation과 실패 보존은
@@ -252,8 +266,24 @@ export default function Page() {
             <p>
               Goal transitions join canonical session events and the optional JSONL
               projection, but repeat only an objective digest rather than the raw
-              text. No hidden background scheduler wakes a process after exit; the
-              next inbound message is handled as user steering first.
+              text. While <code>geode serve</code> is running and foreground lanes
+              are idle, it can restore the active Goal&apos;s checkpoint as a new
+              generation and start an internal continuation. Paused, terminal,
+              missing, or corrupt checkpoints do not launch, and the same Goal
+              projection is not admitted again after a returned attempt until its
+              state changes. Raised attempts retry on the one-second host tick, and
+              every admission receives an isolated session-metrics scope.
+            </p>
+            <p>
+              Hosted continuation still traverses the existing AgenticLoop, including
+              the tool loop, PostVerify revision, verify-fail replan, usage, evidence,
+              and trajectory writers. It is neither an OS-level scheduler nor an
+              automatic Plan-and-Execute engine, and it does not promise exactly-once
+              external side effects across multiple serve processes. Results stay in
+              the same checkpoint and session record instead of a second inbox; the
+              next gateway turn resumes that durable history. IPC resume reloads
+              inside the same machine Lane, and daemon shutdown gives an active
+              hosted turn a bounded 30-second drain.
             </p>
             <p>
               Goal continuation and child-failure preservation are backed by a

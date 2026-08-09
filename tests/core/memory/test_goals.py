@@ -54,3 +54,13 @@ def test_goal_store_enforces_one_unfinished_goal_and_budget(tmp_path: Path) -> N
     replacement = store.create("s-1", "Explicitly restarted", token_budget=20)
     assert replacement.goal_id != goal.goal_id
     assert replacement.status is GoalStatus.ACTIVE
+
+
+def test_goal_store_lists_only_active_goals_oldest_first(tmp_path: Path) -> None:
+    store = GoalStore(tmp_path / "sessions.db")
+    first = store.create("s-1", "First")
+    second = store.create("s-2", "Second")
+    store.create("s-3", "Finished")
+    store.update_terminal("s-3", GoalStatus.COMPLETE)
+
+    assert store.list_active() == [first, second]
