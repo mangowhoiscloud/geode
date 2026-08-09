@@ -3,7 +3,7 @@ name: deep-researcher
 visibility: public
 triggers: research, 리서치, 조사해, 알아봐, 찾아봐, 트렌드, 동향
 description: Evidence-first multi-step research with bounded parallel collection, contradiction checks, and cited synthesis.
-tools: update_plan, delegate_task, general_web_search, web_fetch, llms_txt_index
+tools: update_plan, create_goal, get_goal, update_goal, delegate_task, spawn_agent, list_agents, wait_agent, send_message, followup_task, interrupt_agent, general_web_search, web_fetch, llms_txt_index
 risk: safe
 ---
 
@@ -26,13 +26,22 @@ Use `update_plan` for a compact advisory checklist. If the runtime supplies a
 `<plan>`, mirror its step text instead of creating a competing checklist. The
 tool records progress after observed work; it does not execute steps.
 
+Use `create_goal` only when the user explicitly requests a persistent,
+multi-turn research goal. Ordinary deep-research requests remain bounded in
+the current turn. Never infer a token budget. While an explicit goal is active,
+use `get_goal` to inspect its budget and `update_goal` only for evidence-proven
+completion or a blocker that has repeated for three consecutive goal turns.
+
 ## Workflow
 
 1. Split the question into dependency-aware research axes. Parallelize only
    axes that can be answered independently.
-2. Send one bounded `delegate_task` batch with `task_type="search"` for those
-   independent axes. Keep prerequisite work, source inspection, and synthesis
-   in the parent. Do not use `best_of` for different questions.
+2. Send one bounded `delegate_task` batch with `task_type="search"` for short,
+   independent axes. Use `spawn_agent` only when a child must remain steerable
+   across waits or follow-ups; then control it with `list_agents`, `wait_agent`,
+   `send_message`, `followup_task`, or `interrupt_agent`. Keep prerequisite
+   work, source inspection, and synthesis in the parent. Do not use `best_of`
+   for different questions.
 3. While children run, inspect the critical-path sources locally. Use
    `llms_txt_index` first for documentation sites, `general_web_search` for
    discovery, and `web_fetch` for the primary text.
@@ -53,6 +62,7 @@ tool records progress after observed work; it does not execute steps.
 
 - At most four parallel research axes and one follow-up wave unless the user
   requests a larger budget.
+- Durable children remain depth one; do not simulate recursive research trees.
 - Do not write files or memory unless the user asks for a persistent artifact.
 - Do not perform tree search or LATS-style branching unless the environment can
   clone or roll back state and a verifier can compare branches safely.

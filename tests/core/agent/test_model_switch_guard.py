@@ -413,7 +413,7 @@ class TestConversationContextWired:
 
         from core.agent.loop import AgenticLoop
 
-        source = inspect.getsource(AgenticLoop.arun)
+        source = inspect.getsource(AgenticLoop._arun_once)
         assert "set_conversation_context" in source
 
 

@@ -316,7 +316,7 @@ def test_agentic_loop_arun_binds_contextvars() -> None:
     satisfies the contract; check both."""
     from core.agent.loop.agent_loop import AgenticLoop
 
-    arun_src = inspect.getsource(AgenticLoop.arun)
+    arun_src = inspect.getsource(AgenticLoop._arun_once)
     open_src = inspect.getsource(AgenticLoop._open_turn)
     helper_src = inspect.getsource(AgenticLoop._emit_session_start_signals)
     # arun must AT LEAST call the phase that calls the helper owning the bind.

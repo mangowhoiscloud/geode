@@ -106,7 +106,7 @@ def test_arun_calls_session_start_helper() -> None:
     while-loop. Without this the extraction is dead code and
     behaviour silently reverts to pre-refactor (inline block missing).
     Mirrors the DONT-table "stub disguise" lens."""
-    src = inspect.getsource(AgenticLoop.arun)
+    src = inspect.getsource(AgenticLoop._arun_once)
     open_src = inspect.getsource(AgenticLoop._open_turn)
     assert "intercept_result = await self._open_turn(" in src
     assert "verification_continuation=_verify_continuation is not None" in src
@@ -120,7 +120,7 @@ def test_arun_surfaces_intercept_result_verbatim() -> None:
     must return it directly — not wrap it, not log + drop it. Pin
     the early-exit pattern so a future refactor doesn't accidentally
     swallow the blocked result."""
-    src = inspect.getsource(AgenticLoop.arun)
+    src = inspect.getsource(AgenticLoop._arun_once)
     open_src = inspect.getsource(AgenticLoop._open_turn)
     assert "intercepted = await self._emit_session_start_signals(user_input)" in open_src
     assert "if intercepted is not None:\n            return intercepted" in open_src
@@ -133,7 +133,7 @@ def test_arun_no_longer_inlines_session_start_block() -> None:
     """Anti-residue guard — the extracted lines must NOT remain in
     ``arun``'s body (would double-fire hooks + double-record
     transcript)."""
-    src = inspect.getsource(AgenticLoop.arun)
+    src = inspect.getsource(AgenticLoop._arun_once)
     # USER_INPUT_RECEIVED hook should now live ONLY in the helper.
     assert "HookEvent.USER_INPUT_RECEIVED" not in src
     # SESSION_STARTED moved too.

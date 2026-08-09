@@ -16,6 +16,23 @@ not JFrog Artifactory or an opaque object-store upload. The publication unit is
 an allowlisted directory, and GitHub read-back from the exact merge commit is
 part of the evidence.
 
+The 2026-08-10 Goal and deep-research behavior release is pinned to artifact
+commit
+[`abad7de`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/abad7de44a23cd0756fe1edb5b61a86ed715cc8f)
+from
+[`geode-eval-artifacts#16`](https://github.com/mangowhoiscloud/geode-eval-artifacts/pull/16).
+Two `gpt-5.6-luna` subscription runs at effort `max` preserve Goal
+create/continue/complete control edges and one bounded two-axis research batch
+with one validated child and one schema-invalid child. The release contains 38
+canonical events and four exact tool pairs; both trajectories are
+scope-complete and deliberately replay-incomplete because prompt, result,
+child-identity, and local-path bodies are digested. The immutable
+[`manifest.json`](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/abad7de44a23cd0756fe1edb5b61a86ed715cc8f/trajectories/geode-agenticloop-goal-deep-research-gpt56-luna-max-2026-08-10-20260809T191233Z-a19174d30764/manifest.json)
+has SHA-256
+`a19174d30764118475ec713ba63dc5eb230997259e210beb1ba367040ae493c5`.
+Read-back from the fetched merge commit revalidated the manifest, 2/2 scope,
+4/4 pairing, and zero secret/identity findings.
+
 The 2026-08-03 GEODE v1.0.12 GPT-5.4 post-release publication is pinned to
 artifact commit
 [`04ff1c4`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/04ff1c4a1fee0cd1a3d837ad3a5f5239f1fd9acd)

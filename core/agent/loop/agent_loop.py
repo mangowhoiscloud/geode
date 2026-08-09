@@ -47,6 +47,7 @@ from core.ui.status import TextSpinner
 from . import (
     _collaboration_mailbox,
     _context,
+    _goal,
     _lifecycle,
     _model_switching,
     _planner_dispatch,
@@ -549,6 +550,7 @@ class AgenticLoop:
         # run-scoped JSONL projection.
         self._timeline: Any | None = None
         self._session_id: str = ""
+        self._goal_store: Any | None = None
         try:
             import uuid as _uuid
 
@@ -561,6 +563,9 @@ class AgenticLoop:
             else:
                 self._session_id = f"s-{_uuid.uuid4().hex[:12]}"
             self._timeline = SessionTimeline(self._session_id)
+            from core.memory.goals import GoalStore
+
+            self._goal_store = GoalStore(self._timeline.db_path)
         except Exception:
             log.warning("Session timeline init failed", exc_info=True)
         try:
@@ -1145,6 +1150,8 @@ class AgenticLoop:
         self,
         user_input: str,
         continuation: HookCorrelation | None,
+        *,
+        internal_continuation: bool = False,
     ) -> tuple[str, AgenticResult | None]:
         """Reset per-turn state and cross the public input boundary."""
         import uuid
@@ -1176,6 +1183,9 @@ class AgenticLoop:
         set_turn_id(self._turn_id)
         if continuation is not None:
             return user_input, None
+        if internal_continuation:
+            self._verify_root_user_input = user_input
+            return user_input, None
         effective, blocked = await self._apply_user_prompt_hook(user_input)
         self._verify_root_user_input = effective
         return effective, blocked
@@ -1197,6 +1207,7 @@ class AgenticLoop:
         user_input: str,
         *,
         verification_continuation: bool = False,
+        goal_continuation: Any | None = None,
     ) -> AgenticResult | None:
         """Publish legacy start signals, then the durable public boundary."""
         if verification_continuation:
@@ -1208,6 +1219,18 @@ class AgenticLoop:
                 )
             root_input = self._verify_root_user_input or user_input
             self._save_checkpoint(root_input, round_idx=0)
+            return None
+        if goal_continuation is not None:
+            if self._timeline is not None:
+                from core.observability.session_timeline import SessionEventKind
+
+                self._timeline.record_goal_state(
+                    SessionEventKind.GOAL_CONTINUED,
+                    goal_continuation,
+                    trigger="active_goal",
+                )
+            objective = str(getattr(goal_continuation, "objective", user_input))
+            self._save_checkpoint(objective, round_idx=0)
             return None
         intercepted = await self._emit_session_start_signals(user_input)
         if intercepted is not None:
@@ -2068,8 +2091,26 @@ class AgenticLoop:
         *,
         _verify_continuation: HookCorrelation | None = None,
     ) -> AgenticResult:
-        """Run the agentic loop until LLM emits end_turn or max rounds."""
-        user_input, blocked = await self._begin_turn(user_input, _verify_continuation)
+        """Run one user turn plus any explicitly activated goal continuations."""
+        return await _goal.run(
+            self,
+            user_input,
+            verify_continuation=_verify_continuation,
+        )
+
+    async def _arun_once(
+        self,
+        user_input: str,
+        *,
+        _verify_continuation: HookCorrelation | None = None,
+        _goal_continuation: Any | None = None,
+    ) -> AgenticResult:
+        """Run one physical agent turn until the model emits a terminal."""
+        user_input, blocked = await self._begin_turn(
+            user_input,
+            _verify_continuation,
+            internal_continuation=_goal_continuation is not None,
+        )
         if blocked is not None:
             return await self._finalize_blocked_turn(blocked)
 
@@ -2089,6 +2130,7 @@ class AgenticLoop:
         intercept_result = await self._open_turn(
             user_input,
             verification_continuation=_verify_continuation is not None,
+            goal_continuation=_goal_continuation,
         )
         if intercept_result is not None:
             return intercept_result
@@ -2102,6 +2144,11 @@ class AgenticLoop:
             if verification_continuation
             else ""
         )
+        goal_hint = (
+            _context.render_goal_continuation_hint(_goal_continuation)
+            if _goal_continuation is not None
+            else ""
+        )
         preflight_hint = self._prepare_task_preflight(task_input)
         # Retained on self so mid-arun prompt rebuilds re-apply it.
         self._preflight_hint = preflight_hint
@@ -2113,7 +2160,7 @@ class AgenticLoop:
         try:
             await self._try_decompose(
                 user_input,
-                enabled=not verification_continuation,
+                enabled=not verification_continuation and _goal_continuation is None,
             )
         except BillingError as exc:
             self._emit_quota_panel(exc)
@@ -2128,6 +2175,10 @@ class AgenticLoop:
             )
 
         messages = self.context.get_messages()
+        # Codex Goal uses a hidden contextual-user fragment for idle-turn
+        # steering. Keep this request-local so the continuation is visible to
+        # the model without masquerading as a persisted human message.
+        messages.extend(_context.goal_continuation_messages(goal_hint))
 
         # Unified runtime-hint grammar: every per-turn injection is an XML
         # block INSIDE <dynamic_context> — preflight, prior-turn reflection

@@ -182,9 +182,10 @@ class AgenticResult:
     """Result of an agentic loop execution.
 
     ``usage`` (Defect A F-A1 / 2026-05-11) carries the aggregated
-    ``LLMUsage`` for *this* arun invocation only — captured via a
+    ``LLMUsage`` for this public ``arun`` invocation — captured via a
     ``TokenTracker.snapshot()`` taken at the start of ``arun`` and a
-    ``delta_since(snap)`` at finalize time. It is ``None`` when the
+    ``delta_since(snap)`` at physical-turn finalization and merged across any
+    persisted-goal continuations. It is ``None`` when the
     loop terminated before any LLM call (e.g. context-exhausted
     fallback). Used by the petri ``GeodeModelAPI`` adapter to surface
     target-side tokens into ``inspect_ai`` ``role_usage`` — without

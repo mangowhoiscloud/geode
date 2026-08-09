@@ -15,10 +15,10 @@ those claims. See [External Evaluation Artifact Repository](external-artifact-re
 for path mappings, disclosure rules, and the publication manifest scaffold.
 
 The latest runtime-contract record is the immutable
-[2026-07-31 stable hook/middleware behavior trajectory](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/b979268d7e64c99ca27b51c025a2cd25022cc1a5/trajectories/geode-agenticloop-hook-middleware-behavior-e2e-20260731T091808Z-d418e55ff8aa):
-13/13 public hooks, 4/4 trusted middleware join points, and matching 22-row
-SQLite/JSONL extension projections. It is a release-validation probe, not a
-scored benchmark.
+[2026-08-10 Goal/deep-research behavior release](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/abad7de44a23cd0756fe1edb5b61a86ed715cc8f/trajectories/geode-agenticloop-goal-deep-research-gpt56-luna-max-2026-08-10-20260809T191233Z-a19174d30764):
+two GPT-5.6-Luna/max trajectories, 38 canonical events, 4/4 tool pairs, Goal
+create→continue→complete, and one bounded research batch retaining one typed
+child failure. It is a release-validation probe, not a scored benchmark.
 
 The latest scored behavior record is pinned to artifact commit
 [`86dcbba`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/86dcbba3d15f1979b71a501780bf66fea4b450b5):

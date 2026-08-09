@@ -57,6 +57,50 @@ export default function Page() {
               스킬은 별도 체크리스트를 만들지 않고 그 단계 문구를 그대로 사용합니다.
               결과를 파일이나 memory에 자동 저장하지도 않습니다.
             </p>
+            <p>
+              짧은 독립 축은 <code>delegate_task</code> batch로 한 번에 회수합니다.
+              실행 중 재지시나 대기가 필요한 축만 <code>spawn_agent</code>로 열고,
+              mailbox·wait·follow-up·interrupt 제어를 사용합니다. 두 경로 모두
+              depth 1이며 재귀 research tree를 만들지 않습니다.
+            </p>
+            <p>
+              자식 프로세스가 정상 종료해도 built-in role의 출력 schema 검증이
+              실패하면 <code>SubResult.success=false</code>입니다. batch 성공 수와
+              SubagentStop 상태는 실패로 수렴하지만, 검증 오류와 raw excerpt는
+              부모가 unresolved gap으로 종합할 수 있게 보존합니다.
+            </p>
+
+            <h2>지속 Goal과의 결합</h2>
+            <p>
+              사용자가 여러 turn에 걸친 지속 목표를 명시한 경우에만
+              <code>create_goal</code>을 사용합니다. Goal은 자동 DAG가 아니라
+              objective·token budget·누적 사용량·상태를
+              <code>sessions.db</code>에 보존하는 제어 봉투입니다. 성공한 turn 뒤
+              상태가 active이면 다음 turn을 열고, complete·blocked·budget-limited
+              또는 오류에서 멈춥니다. 일반 리서치 요청은 Goal로 자동 승격하지
+              않습니다.
+            </p>
+            <p>
+              continuation은 system prompt나 인간 transcript가 아니라 현재 요청에만
+              붙는 contextual-user 입력입니다. 같은 text-only 응답이 반복되거나 한
+              public call에서 안전 상한에 닿으면 자동 진행만 멈추고 Goal은 active로
+              보존합니다. token budget도 provider 호출을 중간 취소하는 hard cap이
+              아니라 완료된 turn을 정산해 다음 continuation을 막는 경계이므로 마지막
+              turn만큼 초과할 수 있고, 초과분은 사용량에 그대로 기록됩니다.
+            </p>
+            <p>
+              Goal 상태 전이는 canonical session event와 선택적 JSONL projection에
+              함께 남지만 objective 원문은 반복 저장하지 않고 digest만 기록합니다.
+              프로세스가 종료된 뒤 스스로 깨어나는 background scheduler는 없으며,
+              다음 입력이 먼저 사용자 steering을 처리합니다.
+            </p>
+            <p>
+              Goal continuation과 실패 보존은
+              <a href="https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/abad7de44a23cd0756fe1edb5b61a86ed715cc8f/trajectories/geode-agenticloop-goal-deep-research-gpt56-luna-max-2026-08-10-20260809T191233Z-a19174d30764">
+                GPT-5.6-Luna/max 행동 trajectory
+              </a>로 검증했습니다. 공개본은 38 events와 4/4 tool pair를 보존하고
+              private body는 digest로 치환합니다.
+            </p>
 
             <h2>웹 탐색과 위임 규칙</h2>
             <p>
@@ -172,6 +216,51 @@ export default function Page() {
               not an executor. When the runtime supplies a <code>&lt;plan&gt;</code>, the
               skill mirrors those steps instead of creating a second checklist. It
               also does not save the result to files or memory automatically.
+            </p>
+            <p>
+              Short independent axes return through one <code>delegate_task</code>
+              batch. Only work that needs steering or waiting uses
+              <code>spawn_agent</code> with mailbox, wait, follow-up, and interrupt
+              control. Both paths stay at depth one; neither constructs a recursive
+              research tree.
+            </p>
+            <p>
+              A normally exited child is still a failed <code>SubResult</code> when
+              its built-in role output fails schema validation. Batch success counts
+              and SubagentStop agree on that failure, while the validation error and
+              raw excerpt remain available to the parent as an unresolved gap.
+            </p>
+
+            <h2>Combining research with a persisted Goal</h2>
+            <p>
+              The skill uses <code>create_goal</code> only when the user explicitly
+              asks for a persistent multi-turn objective. A Goal is not an automatic
+              DAG: it is a control envelope that stores the objective, optional token
+              budget, accumulated usage, and status in <code>sessions.db</code>. An
+              active Goal opens another turn after a successful terminal and stops on
+              completion, blocking, budget limit, or error. Ordinary research is never
+              promoted to a Goal implicitly.
+            </p>
+            <p>
+              Continuation steering is a request-local contextual-user input, not a
+              system-prompt clause or a fake human transcript. Repeated identical
+              text-only output or the per-call safety ceiling stops only automatic
+              progress and leaves the Goal active. The token budget is also a
+              completed-turn accounting boundary, not a provider hard cap: the last
+              turn can overshoot, and the full overage remains visible in usage.
+            </p>
+            <p>
+              Goal transitions join canonical session events and the optional JSONL
+              projection, but repeat only an objective digest rather than the raw
+              text. No hidden background scheduler wakes a process after exit; the
+              next inbound message is handled as user steering first.
+            </p>
+            <p>
+              Goal continuation and child-failure preservation are backed by a
+              <a href="https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/abad7de44a23cd0756fe1edb5b61a86ed715cc8f/trajectories/geode-agenticloop-goal-deep-research-gpt56-luna-max-2026-08-10-20260809T191233Z-a19174d30764">
+                GPT-5.6-Luna/max behavior trajectory release
+              </a>. Its public view retains 38 events and 4/4 tool pairs while
+              replacing private bodies with digests.
             </p>
 
             <h2>Web exploration and the delegation rule</h2>

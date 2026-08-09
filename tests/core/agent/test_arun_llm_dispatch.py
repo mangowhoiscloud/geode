@@ -206,7 +206,7 @@ def test_context_exhausted_error_propagates() -> None:
 
 
 def test_arun_calls_dispatch_helper() -> None:
-    src = inspect.getsource(AgenticLoop.arun)
+    src = inspect.getsource(AgenticLoop._arun_once)
     assert "self._dispatch_llm_call(" in src
 
 
@@ -215,7 +215,7 @@ def test_arun_persists_early_agentic_result_without_verification() -> None:
     AgenticResult) and return verbatim. Pin the discriminator
     pattern so a refactor that drops the isinstance check doesn't
     accidentally treat AgenticResult as a response."""
-    src = inspect.getsource(AgenticLoop.arun)
+    src = inspect.getsource(AgenticLoop._arun_once)
     assert "isinstance(_llm_outcome, AgenticResult)" in src
     assert "self._afinalize_and_return(" in src
 
@@ -226,7 +226,7 @@ def test_arun_no_longer_inlines_billing_or_cancelled_handlers() -> None:
     start (around the ``_try_decompose`` call); that one is intentional
     and lives outside the while-loop body. Pin the count instead of
     grepping "not in"."""
-    src = inspect.getsource(AgenticLoop.arun)
+    src = inspect.getsource(AgenticLoop._arun_once)
     # Exactly ONE BillingError handler remains (the _try_decompose
     # one); the per-round LLM-call handler is gone.
     assert src.count("except BillingError as exc:") == 1
@@ -244,7 +244,7 @@ def test_arun_no_longer_inlines_billing_or_cancelled_handlers() -> None:
 def test_arun_still_handles_context_exhausted_inline() -> None:
     """Cross-phase regression — _ContextExhaustedError handler must
     STILL be in arun (NOT moved to the helper). Pin via grep."""
-    src = inspect.getsource(AgenticLoop.arun)
+    src = inspect.getsource(AgenticLoop._arun_once)
     assert "except _ContextExhaustedError" in src
 
 

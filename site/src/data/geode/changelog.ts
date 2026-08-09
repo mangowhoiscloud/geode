@@ -19,7 +19,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": ""
+    "body": "### Added\n\n- **Added explicit persisted Goals and steerable deep research.** The\n  `create_goal`, `get_goal`, and `update_goal` tools persist one explicitly\n  requested multi-turn objective in `sessions.db`, account token/time usage,\n  stop subsequent continuation turns after optional token budgets are reached,\n  and continue successful turns until the goal completes, blocks, or reaches\n  budget. Goal transitions join canonical\n  session history and its JSONL projection without duplicating raw objectives.\n  The bundled deep-research skill can now choose between bounded\n  `delegate_task` batches and durable depth-one children with mailbox, wait,\n  follow-up, and interrupt control; ordinary research never creates a Goal\n  implicitly.\n- **Stopped treating schema-invalid sub-agent role output as success.** A child\n  process that exits normally but fails its role output model now returns a\n  failed `SubResult`, so batch `succeeded` counts and terminal lifecycle status\n  cannot claim success while carrying `validated=false`."
   },
   {
     "version": "1.0.18",
