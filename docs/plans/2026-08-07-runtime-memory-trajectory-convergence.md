@@ -16,7 +16,7 @@ register any untracked architecture GAP through
 [`extensibility-roadmap.md`](../architecture/extensibility-roadmap.md) and
 follow that ledger's claim protocol.
 
-### Delivery checkpoint
+## Delivery checkpoint
 
 The MEM-001 slice implements only the measured deletion-first boundary:
 
@@ -788,7 +788,8 @@ A `RewardView` is a versioned offline configuration over atoms. Hard
 permission, safety, verifier, and promotion contracts remain vetoes; they are
 not converted into a compensable scalar. This supports:
 
-- hill-climbing: compare artifact-bound candidate runs under the same contract;
+- external scaffold hill-climbing: compare artifact-bound candidate runs under
+  the same contract; the runtime `AgenticLoop` itself has no incumbent update;
 - DPO: export controlled chosen/rejected trajectory pairs;
 - GRPO: export same-initial-state sampling groups and relative rewards;
 - process reward modeling: target atoms to `transition_id` rather than only the

@@ -47,11 +47,17 @@ as evidence of past intent, not as current consumers.
 |---|---|---:|---|
 | [DPO paper](https://arxiv.org/abs/2305.18290) | Direct preference objective, reference-policy relationship | A | Single-response experiments do not define a complete long-horizon agent data contract |
 | [DeepSeekMath](https://arxiv.org/abs/2402.03300) | GRPO origin and group-relative PPO variant | A | Mathematics-focused rollout setting |
+| [Stanford CS329A Part 4](https://cs329a.stanford.edu/) | ReAct, RLEF, and Constitutional AI as three different feedback/update surfaces | A | Lecture framing is secondary to the cited papers for algorithm details |
+| [RLEF](https://proceedings.mlr.press/v267/gehring25a.html) | Public execution feedback, private-test reward, and PPO update contract | A | Short, single-program CodeContests tasks; training system and checkpoints are not public |
+| [DeepSeek-R1](https://arxiv.org/abs/2501.12948) | Rule-verifiable reasoning reward and the boundary against neural reward models | A | Long-horizon tool environments are not the primary setting |
+| [DAPO](https://arxiv.org/abs/2503.14476) | Dynamic sampling and optimization stability for outcome-reward RL | A | Token-level loss is not process-level reward |
 | [Hugging Face TRL DPO](https://github.com/huggingface/trl/blob/main/docs/source/dpo_trainer.md) | Current tool-calling preference dataset shape | A | Trainer-specific materialization format, not a universal storage standard |
 | [NVIDIA NeMo RL DPO](https://docs.nvidia.com/nemo/rl/nightly/guides/dpo.html) | Independent implementation evidence for ranked and binary preference inputs | A | Trainer-specific configuration and preprocessing |
 | [GLM-5](https://arxiv.org/abs/2602.15763) | Asynchronous agent-RL and train/inference alignment | A | Training infrastructure disclosure is not a requirement for inference-only runtimes |
 | [Kimi K2.5](https://arxiv.org/abs/2602.02276) | PARL orchestrator/subagent credit boundary | A | System report; not an interchangeable DPO recipe |
 | [Kimi K3 report](https://github.com/MoonshotAI/Kimi-K3/blob/main/k3_tech_report.pdf) | Multi-effort RL, partial rollout, persistent sandbox state | A | Frontier training infrastructure exceeds GEODE's present role |
+| [Agent-World](https://arxiv.org/abs/2604.18292) | Executable environment and verifier co-evolution | A | The outer benchmark must stay fixed while the training arena evolves |
+| [Qwen-UI-Agent](https://arxiv.org/abs/2607.28227) | Separate local action feedback and delayed terminal environment reward | A | Very recent self-report without independent replication |
 
 The reviewed sources do not require an inference harness to own a trainer.
 They instead make exact context, action, observation, environment, verifier,
@@ -71,6 +77,45 @@ and policy/compute identity material to training quality.
 5. A successful final outcome does not identify which subagent step deserved
    credit. K2.5 therefore trains the orchestrator while treating frozen
    subagent outputs as observations.
+
+### 2.3 Feedback is not one object
+
+The Part 4 lineage fixes four terms that must remain separate:
+
+| Surface | Signal | Consumer | Update target |
+|---|---|---|---|
+| ReAct | tool or environment observation | next inference turn | context only |
+| RLEF public tests | execution diagnostics | next code-generation turn | context during rollout |
+| RLEF private tests | terminal task reward | PPO trainer | policy weights and value model |
+| Constitutional critique | critique and revision | SFT data construction | response policy |
+| Constitutional preference | pairwise AI/human preference | preference model and RL | preference model and policy weights |
+| GEODE Verify/PostVerify | verdict and bounded repair instruction | runtime finalization | next attempt or delivery state |
+| SIL/Crucible | artifact-bound comparison verdict | external search controller | behavior SoT or private search ref |
+
+RLEF's task reward is not a generic binary `0/1` field. It uses `+1` when all
+tests pass, `-1` when any test fails at termination, and `-0.2` for an
+intermediate response without valid code, plus a reference-policy KL penalty
+with `beta=0.05`. Public test output is an observation; private tests are the
+privileged reward oracle. The policy is token-level, the value estimate and
+advantage are turn-level, and the optimizer is PPO. Calling this runtime retry,
+process reward, GSPO, or hill climbing would collapse different operators.
+
+The current Chinese frontier reports reinforce the same boundary:
+
+- DeepSeek-R1 prefers rule-verifiable accuracy and format rewards for
+  verifiable reasoning because neural reward models create a reward-hacking
+  surface.
+- DAPO changes sampling and policy-loss stability around outcome reward; its
+  token-level loss does not create step labels.
+- GLM-5 preserves token IDs, policy version, sandbox failure attribution, and
+  train/inference alignment before applying asynchronous agent RL.
+- Kimi K2.5 updates the orchestrator and treats frozen child trajectories as
+  observations instead of inventing child credit from the parent outcome.
+- Kimi K3 and Qwen-UI-Agent ground delayed reward in final environment state,
+  while public diagnostics or local action checks support repair.
+
+These are requirements on evidence identity and ownership. They do not require
+GEODE to add a trainer.
 
 ## 3. Current GEODE evidence
 
@@ -132,6 +177,29 @@ The production `AgenticLoop` tool surface is not derived solely from
 `PolicyChain`; it is also shaped by `_tool_factory`, `allowed_tool_names`,
 headless denial, approval, and `ToolExecutor`. A universal `Policy` class would
 hide this difference rather than fix it.
+
+### 3.4 Hill-climbing census
+
+`AgenticLoop` is not hill climbing. It performs observation-conditioned tool
+execution and, after a terminal candidate, runs
+`PreVerify -> verifier -> PostVerify -> Stop`. A retryable failure starts a
+bounded continuation and may trigger replanning on the next `arun`, but the
+runtime keeps no scored incumbent, compares no local challenger, and updates
+no model weights.
+
+Two external surfaces are in the hill-climbing family:
+
+| Surface | Exact current operator | Mutable target | Classification |
+|---|---|---|---|
+| SIL | one mutation, compare with prior baseline, keep or revert | one behavior SoT section | elitist `(1+1)-ES` local search |
+| Crucible train | candidate child of current head, paired gate, KEEP-only ref advance | loop-local private search ref | gated single-lineage local search |
+
+Crucible `REJECT` and `INVALID` leave the search head unchanged, and every
+`PromotionVerdict` has `promotion_authority="none"`. It is therefore a bounded
+scaffold search protocol, not policy-gradient RL or product release. RLEF,
+DeepSeek-R1, DAPO, GLM-5, and Kimi training update model weights and should not
+be grouped with these frozen-model search loops merely because all optimize a
+score.
 
 ## 4. Dead-code finding and immediate action
 
@@ -246,6 +314,37 @@ create a learning-only snapshot hierarchy.
 Strengthen typed provenance and verifier/evidence correlation without changing
 native receipt authority. Reward stays a component vector plus hard gates;
 scalarization is a versioned derived decision.
+
+The first admitted view has four non-compensable groups:
+
+```text
+outcome    = native task completion and final-state checks
+process    = action validity, tool/result pairing, verify misses, repair effect
+cost       = tokens, latency, tool calls, critical-path depth
+constraints= permission, safety, privacy, evaluator validity, infrastructure health
+```
+
+Each value remains a typed `RewardAtom` with a target episode or transition,
+source/version, evidence digest, and validity status. Constraint failures are
+vetoes, not negative numbers that a high task score can outweigh. Domain-owned
+views may derive a versioned scalar or pairwise order offline, but the runtime
+does not own a universal reward table.
+
+The smallest validating experiment uses existing Tau2 and Crucible artifacts:
+
+1. select same-contract baseline/candidate pairs plus semantic, infrastructure,
+   and false-terminal failures;
+2. project the four groups without another live model call;
+3. verify that infrastructure rows are quarantined, native success remains the
+   terminal authority, and safety/identity failures cannot be compensated;
+4. measure ranking stability under weight perturbation and agreement with the
+   native verdict;
+5. publish only the derived manifest and receipt digests, never duplicate the
+   native receipt bytes.
+
+This experiment tests whether the evidence contract can support later search
+or training. It does not claim that the derived score is a learned reward
+model.
 
 ### Stage D — preference projection
 
