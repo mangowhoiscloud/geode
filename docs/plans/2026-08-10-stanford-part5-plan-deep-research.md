@@ -3,7 +3,7 @@
 작성: 2026-08-10
 상태: v1.0.18 baseline + Goal/DeepResearch 후속 구현 SOT
 개념·방법론 기준: Stanford CS329A Part 5, *Planning and Multi-Step Reasoning*
-코드 기준: Codex `main@646f7c0a91b8e327d263335da68ae8ef212895ce`
+코드 기준: Codex `main@50ef7395faee1d0e2d01730f9636aa06091c7be3`
 
 ## 1. 판정
 
@@ -45,6 +45,7 @@ GEODE의 기존 `CognitiveState.goal`은 첫 입력을 기억하는 관측 필�
 참조:
 
 - Stanford 강의 스캐폴드: `${HOME}/workspace/lg-ai/.agents/skills/apply-self-improving-agent-systems/references/lecture-05-planning-multistep.md`
+- [Stanford Part 5 원본](https://www.youtube.com/watch?v=Ml_fp9XkB8Y&list=PLangBM27OtEA&index=5)
 - 원본 자막: `${HOME}/workspace/lg-ai/presentation/source/video/Ml_fp9XkB8Y/Ml_fp9XkB8Y.en-j3PyPqV-e1s.vtt`
 - [LATS](https://arxiv.org/abs/2310.04406)
 - [SPRINT](https://arxiv.org/abs/2506.05745)
@@ -111,16 +112,23 @@ mailbox, wait, follow-up이 필요한 축만 durable `spawn_agent`를 사용한�
 ## 5. Goal 제어·저장 계약
 
 ```mermaid
-flowchart LR
+flowchart TB
     U["User explicitly requests Goal"] --> C["create_goal"]
     C --> DB["sessions.db / thread_goals (mutable)"]
     C --> T["session_events + optional JSONL (append-only)"]
-    DB --> L["AgenticLoop turn"]
+    DB --> I["Same-call continuation"]
+    DB --> H["geode serve idle host"]
+    H --> Q{"Foreground lanes idle?"}
+    Q -->|"yes"| CP["Restore same checkpoint / generation + 1"]
+    Q -->|"no"| W["Wait for next serve tick"]
+    I --> L["AgenticLoop turn"]
+    CP --> N["Request-local contextual Goal"]
+    N --> L
     L --> A["Account tokens + elapsed time"]
     A --> D{"Goal status"}
-    D -->|"active + successful turn"| N["Contextual-user continuation"]
-    N --> L
+    D -->|"active + successful turn"| I
     D -->|"complete / blocked / budget-limited / error"| S["Stop"]
+    L --> T
 ```
 
 - `create_goal`, `get_goal`, `update_goal`은 Codex와 같은 모델 표면이다.
@@ -138,19 +146,41 @@ flowchart LR
 - token budget은 hard per-call cap이 아니라 완료된 turn의 input+output 사용량을
   정산해 **다음 continuation을 막는 경계**다. 따라서 마지막 turn만큼 초과할 수
   있으며 `tokens_used`에는 초과분도 숨기지 않고 기록한다.
-- 프로세스가 살아 있지 않은 동안 스스로 깨어나는 daemon scheduler는
-  없다. 다음 inbound turn은 먼저 사용자 steering을 처리한 뒤 active goal을
-  이어간다.
+- `geode serve`가 실행 중이고 foreground Lane이 비어 있으면 가장 오래 기다린
+  active Goal 하나를 찾는다. ACTIVE checkpoint만 같은 `session_id`와 새
+  `session_generation`으로 복원하며, PAUSED·terminal·missing/corrupt checkpoint는
+  실행하지 않는다.
+- 한 프로세스는 정상 반환된 같은 Goal projection을 한 번만 admission한다. Goal
+  상태나 accounting이 바뀌기 전에는 반복하지 않되, setup/실행 예외는 host의
+  1초 tick보다 빠르지 않게 재시도한다. daemon 재시작 시에는 persisted Goal과
+  checkpoint에서 다시 발견할 수 있다.
+- hosted continuation도 별도 executor가 아니다. 동일한 `_arun_once()`로 들어가
+  기존 tool loop, PostVerify revision, verify-fail replan, usage/evidence/session
+  event writer를 그대로 통과한다. admission마다 `SessionMetrics`를 새 scope로
+  격리해 다른 Goal의 budget·plan·verify 상태를 물려받지 않는다.
+- IPC와 gateway foreground도 checkpoint `session_id`를 Lane key로 사용한다.
+  IPC resume는 target을 고른 뒤 같은 Lane 안에서 checkpoint를 다시 읽으므로,
+  같은 machine의 사용자 turn과 hosted continuation은 직렬화된다. `--continue`
+  후보가 Lane 대기 중 terminal이 되면 재개하지 않고, 명시적 resume-by-id만
+  기존의 의도된 reopen edge를 유지한다.
+- SIGTERM 뒤에는 새 admission을 멈추고 진행 중인 hosted turn을 기존 30초
+  session drain 한도 안에서 기다린다. 한도를 넘으면 task를 취소하고 Lane을
+  해제하며, exactly-once side effect는 여전히 약속하지 않는다.
+- unattended 결과는 별도 inbox에 복제하거나 임의 채널로 push하지 않는다. 같은
+  checkpoint와 session record에 남고, 다음 gateway turn은 timestamp로 최신
+  history를 고르되 동률이면 durable checkpoint를 우선해 그 결과를 이어받는다.
 
 DeepResearch의 자식 성공은 프로세스 종료만으로 판정하지 않는다. built-in
 role의 출력 schema가 `validated=false`이면 `SubResult.success=false`이며 batch
 요약의 `succeeded`와 SubagentStop 상태도 실패로 수렴한다. 실패 payload와 raw
 excerpt는 부모가 gap으로 종합할 수 있도록 그대로 보존한다.
 
-이 마지막 차이는 의도적이다. Codex는 app ThreadManager가 idle thread를
-재기동하지만, GEODE에서 같은 동작을 숨은 daemon으로 복제하면 재시작 후
-예상하지 못한 subscription 비용과 부작용이 생긴다. 실제 unattended wake-up
-수요와 별도 승인·usage-limit 표면이 생길 때 scheduler에 연결한다.
+Codex는 app-level Goal extension이 thread start/resume/idle/stop 이벤트에
+기여하고 `ThreadManager.try_start_turn_if_idle()`로 같은 thread를 다시 연다.
+GEODE는 일반 ThreadManager를 만들지 않는다. 이미 실행 중인 `geode serve`의
+tick과 `SessionCheckpoint`, `LaneQueue`만 조합하며, explicit active Goal이
+authorization이다. OS가 종료된 daemon을 깨우지 않고, cross-process lease나
+외부 side effect의 exactly-once도 약속하지 않는다.
 
 ## 6. GAP과 조치
 
@@ -165,7 +195,8 @@ excerpt는 부모가 gap으로 종합할 수 있도록 그대로 보존한다.
 | 일반 research가 무기한 Goal로 승격 | P0 | explicit-create-only 정책 | ordinary deep research는 bounded turn 유지 |
 | durable collaboration 도구가 deep-research skill에서 미노출 | P1 | spawn/mailbox/wait/follow-up을 선택 노출 | 장기 child를 실행 중 steering 가능 |
 | role schema 실패가 `SubResult.success=true`로 집계 | P0 | parse-site에서 semantic failure로 승격 | batch summary와 terminal hook이 실패를 보고 |
-| Codex식 restart wake-up·pause/resume·usage-limit 부재 | P2 | 이번 범위에서 보류 | 외부 권한·비용 정책과 caller 수요가 측정될 때 추가 |
+| active Goal이 daemon restart 뒤 실행 소유자를 잃음 | P0 | GOAL-001 / R6.8 serve-owned idle continuation | checkpoint restore·single-process dedup·foreground Lane E2E |
+| Codex식 Goal pause/resume·usage-limit 표면 부재 | P2 | 이번 범위에서 보류 | 운영 수요와 별도 권한 정책이 측정될 때 추가 |
 | Goal token budget의 turn-granular 초과 | P2 | 사용량과 초과분을 그대로 기록하고 다음 turn 차단 | provider 취소·예약 API가 안정화되면 hard cap 검토 |
 
 계획 본문은 `plan.created`와 `plan.replanned`에만 저장한다. 진행 이벤트는
@@ -178,7 +209,7 @@ delta step ID만 남겨 중복을 피한다. 공개 eval-artifact의 digest 투�
 - 자동 DAG executor
 - LATS/MCTS, branch state cloning, 신규 reward model
 - 연구 결과의 자동 memory/file 저장
-- 숨은 background goal daemon과 일반 요청의 자동 Goal 승격
+- OS-level background wake-up, cross-process Goal lease, 일반 요청의 자동 Goal 승격
 
 이 항목들은 현재 요청을 해결하지 않거나 부작용 계약 없이 위험하다.
 향후 실제 branch search 수요와 replay 가능한 sandbox가 측정될 때 별도
@@ -192,8 +223,10 @@ delta step ID만 남겨 중복을 피한다. 공개 eval-artifact의 digest 투�
 | Goal E2E #4, Luna/max | 통과 | contextual-user steering으로 변경 후 2 turn에서 create→continue→complete, 18,546 tokens. |
 | DeepResearch E2E #1, Luna/max | 부분 실패 | invalid role output이 `success=true`, batch `2/2`로 집계되는 거짓 성공을 발견했다. |
 | DeepResearch E2E #2, Luna/max | 통과 | 동일 2축 batch가 `1/2`; validated success와 schema failure를 분리하고 부모가 gap을 보존했다. 일반 research의 Goal row는 0건이었다. |
+| Hosted Goal restart E2E, deterministic | 통과 | persisted Goal/checkpoint를 새 host가 복원하고 `serve_idle` 내부 turn으로 재진입; 동일 projection 재입장, foreground Lane 충돌, missing/corrupt/terminal checkpoint를 차단했다. |
+| GPT-5.6-sol 독립 검토(high→medium) | 7건 수정 | session metrics 격리, Lane 내부 resume reload, bounded shutdown drain, transient retry, gateway history limit, false-completion log를 보강했다. 후속 검토가 `--continue` 후보의 Lane 대기 중 terminal 전이 race를 추가로 찾아 재개 거부 guard로 닫았다. 명시적 `gpt-5.6` MCP는 구독 모델명 제한, MCP max/high는 300초 timeout이어서 로컬 subscription CLI로 검토했다. |
 
-최종 비-live 회귀는 `10,366 passed, 22 skipped, 2 deselected`다. 공개
+최종 비-live 회귀는 `10,377 passed, 22 skipped, 2 deselected`다. 공개
 trajectory는 원문을 digest로 치환한 2개 파일, 38 events, 4/4 paired tool
 calls이며 scope 2/2, secret/identity scan 0건이다. eval-artifact
 [#16](https://github.com/mangowhoiscloud/geode-eval-artifacts/pull/16)은

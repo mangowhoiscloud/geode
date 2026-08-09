@@ -12,15 +12,17 @@ The planes share correlation keys, but they do not share ownership.
    policy telemetry.
 4. `sessions.db:collaboration_runs/collaboration_mailbox` owns mutable child
    control and delivery state. It is not a transcript or replay source.
-5. `events.jsonl` is a bounded, portable projection. It is never the only copy
+5. `sessions.db:thread_goals` owns mutable long-horizon Goal control and
+   accounting. Goal transitions remain append-only session events.
+6. `events.jsonl` is a bounded, portable projection. It is never the only copy
    of resumable dialogue.
-6. `geode.trajectory@1` is an immutable derived evaluation artifact, not a hot
+7. `geode.trajectory@1` is an immutable derived evaluation artifact, not a hot
    runtime store.
-7. `geode.trajectory-release@1` binds a reviewed public allowlist to immutable
+8. `geode.trajectory-release@1` binds a reviewed public allowlist to immutable
    file digests; it never contains the runtime database or projection store.
-8. `EvidenceLedger` owns claims and verifier judgments. A verdict is linked to
+9. `EvidenceLedger` owns claims and verifier judgments. A verdict is linked to
    execution by session/turn/call keys; it is not inserted into dialogue.
-9. Persistence failure is visible and non-fatal to the agentic loop. A failed
+10. Persistence failure is visible and non-fatal to the agentic loop. A failed
    projection cannot roll back a canonical SQLite insert.
 
 ## Storage planes
@@ -28,6 +30,7 @@ The planes share correlation keys, but they do not share ownership.
 | Plane | Destination | Mutability / retention | Purpose |
 |---|---|---|---|
 | Resume checkpoint | `sessions.db:sessions/messages` | mutable, session policy | reconstruct the next model request |
+| Goal control | `sessions.db:thread_goals` | one mutable row per session | explicit objective status, token/time accounting, and idle-continuation admission |
 | Collaboration control | `sessions.db:collaboration_runs/collaboration_mailbox` | mutable latest-state rows plus bounded persist-before-ack delivery | explicit spawn/list/wait/interrupt/message/follow-up without duplicating child history |
 | Session record | `sessions.db:session_events` | append-only; terminal sessions eligible after 180 days | reconstruct user, assistant, tool, sub-agent, usage, and terminal ordering |
 | Runtime activity | `sessions.db:hook_events` | append-only; 7/30/180-day retention buckets plus row cap | query hooks, middleware, lifecycle, policy, and failures |
@@ -82,6 +85,9 @@ session.started      session.ended
 turn.completed
 verification.decided verification.continued
 verification.evidence verification.pending
+plan.created         plan.progressed
+plan.replanned       plan.abandoned plan.completed
+goal.created         goal.updated goal.continued
 message.user         message.assistant
 tool.called          tool.completed
 subagent.started     subagent.stopped
@@ -100,6 +106,9 @@ Lifecycle is a commit boundary; telemetry is an observation of that boundary.
 
 - public `SessionStart` fires only after the initial or resumed checkpoint is
   durable;
+- a serve-hosted Goal restore starts a new session generation, records
+  `goal.continued(trigger=serve_idle)`, and uses request-local context rather
+  than a synthetic `message.user`;
 - public `SessionEnd` and `session.ended` occur only at a true completed/error
   terminal state;
 - a PostVerify candidate or paused turn is a checkpoint, not session
@@ -127,6 +136,12 @@ SubAgentManager / AgenticLoop round boundary
   └── CollaborationStore
         ├── sessions.db:collaboration_runs      latest mutable control state
         └── sessions.db:collaboration_mailbox   bounded delivery, consumed_at
+
+geode serve / AgenticLoop
+  └── GoalContinuationHost + GoalStore
+        ├── sessions.db:thread_goals     mutable admission/accounting projection
+        ├── SessionCheckpoint            same-machine resume state
+        └── SessionTimeline              ordinary goal/tool/verify/replan events
 ```
 
 A hook dispatch produces at most one durable operational row. Compatibility
@@ -151,6 +166,11 @@ different process compares the owner's PID and process birth time before
 recovering an orphaned active row; inaccessible process metadata is treated as
 unknown/live, and the runtime never adopts or automatically restarts in-flight
 work.
+
+Goal objectives remain only in the mutable `thread_goals` row. Append-only
+events carry the Goal id, status, usage, and objective digest. The serve host
+admits one continuation per observed projection in one process; it adds no
+result store, transcript, or cross-process exactly-once claim.
 
 `SessionEventStore` and `HookEventStore` use short SQLite connections, WAL,
 `busy_timeout`, additive schema creation, and explicit transactions.

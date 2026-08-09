@@ -1184,6 +1184,15 @@ class AgenticLoop:
         if continuation is not None:
             return user_input, None
         if internal_continuation:
+            from core.agent.cognitive_state_ctx import (
+                set_cognitive_state,
+                set_parent_session_id,
+                set_parent_session_key,
+            )
+
+            set_cognitive_state(self.cognitive_state)
+            set_parent_session_key(self._parent_session_key)
+            set_parent_session_id(self._parent_session_id)
             self._verify_root_user_input = user_input
             return user_input, None
         effective, blocked = await self._apply_user_prompt_hook(user_input)
@@ -1208,6 +1217,7 @@ class AgenticLoop:
         *,
         verification_continuation: bool = False,
         goal_continuation: Any | None = None,
+        goal_continuation_trigger: str = "active_goal",
     ) -> AgenticResult | None:
         """Publish legacy start signals, then the durable public boundary."""
         if verification_continuation:
@@ -1221,16 +1231,40 @@ class AgenticLoop:
             self._save_checkpoint(root_input, round_idx=0)
             return None
         if goal_continuation is not None:
+            resumed_start = (
+                int(getattr(self, "_session_generation", 1)) > 1
+                and not self._public_session_started
+            )
             if self._timeline is not None:
                 from core.observability.session_timeline import SessionEventKind
 
+                if resumed_start:
+                    self._timeline.record_session_start(
+                        model=self.model,
+                        provider=self._provider,
+                    )
                 self._timeline.record_goal_state(
                     SessionEventKind.GOAL_CONTINUED,
                     goal_continuation,
-                    trigger="active_goal",
+                    trigger=goal_continuation_trigger,
                 )
+            if resumed_start:
+                from core.llm.adapters.dispatch import begin_session_adapter_tracking
+
+                begin_session_adapter_tracking()
+                if self._hooks:
+                    await self._hooks.trigger_async(
+                        HookEvent.SESSION_STARTED,
+                        {
+                            "model": self.model,
+                            "provider": self._provider,
+                            "session_id": self._session_id,
+                            "resumed": True,
+                        },
+                    )
             objective = str(getattr(goal_continuation, "objective", user_input))
-            self._save_checkpoint(objective, round_idx=0)
+            if self._save_checkpoint(objective, round_idx=0) and resumed_start:
+                await _lifecycle.emit_public_session_start(self)
             return None
         intercepted = await self._emit_session_start_signals(user_input)
         if intercepted is not None:
@@ -2098,12 +2132,21 @@ class AgenticLoop:
             verify_continuation=_verify_continuation,
         )
 
+    async def acontinue_goal(
+        self,
+        *,
+        trigger: str = "serve_idle",
+    ) -> AgenticResult | None:
+        """Continue this session's active Goal through the normal turn loop."""
+        return await _goal.continue_active(self, trigger=trigger)
+
     async def _arun_once(
         self,
         user_input: str,
         *,
         _verify_continuation: HookCorrelation | None = None,
         _goal_continuation: Any | None = None,
+        _goal_continuation_trigger: str = "active_goal",
     ) -> AgenticResult:
         """Run one physical agent turn until the model emits a terminal."""
         user_input, blocked = await self._begin_turn(
@@ -2131,6 +2174,7 @@ class AgenticLoop:
             user_input,
             verification_continuation=_verify_continuation is not None,
             goal_continuation=_goal_continuation,
+            goal_continuation_trigger=_goal_continuation_trigger,
         )
         if intercept_result is not None:
             return intercept_result

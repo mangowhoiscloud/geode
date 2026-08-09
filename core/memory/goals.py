@@ -96,6 +96,14 @@ class GoalStore:
             ).fetchone()
         return self._from_row(row) if row is not None else None
 
+    def list_active(self) -> list[ThreadGoal]:
+        """Return active Goals oldest-first for fair idle admission."""
+        with short_sqlite_connection(self._db_path, ensure_goal_schema) as conn:
+            rows = conn.execute(
+                "SELECT * FROM thread_goals WHERE status = 'active' ORDER BY updated_at ASC"
+            ).fetchall()
+        return [self._from_row(row) for row in rows]
+
     def create(
         self,
         session_id: str,

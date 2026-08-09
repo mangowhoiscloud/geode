@@ -12,7 +12,10 @@ from collections.abc import Awaitable, Callable
 from inspect import isawaitable
 from typing import Any
 
-from core.memory.session_key import build_gateway_session_key
+from core.memory.session_key import (
+    build_gateway_checkpoint_session_id,
+    build_gateway_session_key,
+)
 from core.messaging.models import ChannelBinding, InboundMessage
 from core.server.supervised.poller_base import BasePoller
 
@@ -215,7 +218,7 @@ class ChannelManager:
             # Route through SessionLane → Gateway Lane → Global Lane
             if self._lane_queue is not None:
                 async with self._lane_queue.acquire_all_async(
-                    session_key,
+                    build_gateway_checkpoint_session_id(session_key),
                     ["session", "gateway", "global"],
                 ):
                     response = await self._call_processor(content, metadata)
