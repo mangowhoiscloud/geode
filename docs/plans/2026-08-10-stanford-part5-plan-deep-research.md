@@ -38,14 +38,14 @@ flowchart LR
 
 참조:
 
-- Stanford 강의 스캐폴드: `/Users/mango/workspace/lg-ai/.agents/skills/apply-self-improving-agent-systems/references/lecture-05-planning-multistep.md`
-- 원본 자막: `/Users/mango/workspace/lg-ai/presentation/source/video/Ml_fp9XkB8Y/Ml_fp9XkB8Y.en-j3PyPqV-e1s.vtt`
+- Stanford 강의 스캐폴드: `${HOME}/workspace/lg-ai/.agents/skills/apply-self-improving-agent-systems/references/lecture-05-planning-multistep.md`
+- 원본 자막: `${HOME}/workspace/lg-ai/presentation/source/video/Ml_fp9XkB8Y/Ml_fp9XkB8Y.en-j3PyPqV-e1s.vtt`
 - [LATS](https://arxiv.org/abs/2310.04406)
 - [SPRINT](https://arxiv.org/abs/2506.05745)
 - [SWiRL](https://arxiv.org/abs/2504.04736)
-- Codex checklist: `/Users/mango/workspace/codex/codex-rs/protocol/src/plan_tool.rs`
-- Codex delegation policy: `/Users/mango/workspace/codex/codex-rs/core/src/tools/handlers/multi_agents_spec.rs`
-- Codex rollout edges: `/Users/mango/workspace/codex/codex-rs/rollout-trace/src/reducer/tool/agents.rs`
+- Codex checklist: `${HOME}/workspace/codex/codex-rs/protocol/src/plan_tool.rs`
+- Codex delegation policy: `${HOME}/workspace/codex/codex-rs/core/src/tools/handlers/multi_agents_spec.rs`
+- Codex rollout edges: `${HOME}/workspace/codex/codex-rs/rollout-trace/src/reducer/tool/agents.rs`
 
 ## 3. Part 5 적용 경계
 
