@@ -8,12 +8,12 @@
 
 A general-purpose autonomous execution agent. The core runtime is an **AgenticLoop** (`while tool_use`) — sub-agents, plans, and batches are all instances of the same loop. Autonomously performs research, analysis, automation, and scheduling.
 
-- **Version**: 1.0.17
+- **Version**: 1.0.18
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Points**: `geode` (`core.cli:app`, Typer) / `geode-mcp` (`core.mcp_server:main`)
 - **Modules**: 430 core + 111 plugins = 541
-- **Tests**: 10360 (+1 live)
+- **Tests**: 10380 (+2 live)
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
 ## Quick Start
@@ -40,6 +40,7 @@ uv run geode "schedule daily standup reminder at 9am"
 | Agent Identity | `GEODE.md` | Identity, Voice & Conduct, runtime architecture, LLM models |
 | Operational Workflow | `docs/workflow.md` + `.claude/skills/geode-workflow/` | Evidence-first execution scaffold shared by Claude Code, Codex, and contributors |
 | Test-Time Compute Grounding | `.claude/skills/stanford-test-time-compute/` | Stanford CS329A Part 2 evidence and GEODE/Eco²/SIL/Crucible application boundaries |
+| Agent-World Benchmark | `docs/eval/agent-world-comparison-contract.md` + `.claude/skills/agent-world-benchmark/` | Three-suite comparison profile, paired runtime control, replication, and artifact contract |
 | Architecture/Extensibility Program | `docs/architecture/extensibility-roadmap.md` | Single execution SOT for GAP IDs, merge order, status, acceptance, and closure evidence |
 | Hook System | `docs/architecture/hook-system.md` | HookSystem 56 events |
 | Scaffold | `CLAUDE.md` | Development workflow, quality gates, CANNOT/CAN (this file) |

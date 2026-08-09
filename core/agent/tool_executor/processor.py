@@ -498,6 +498,10 @@ class ToolCallProcessor:
         TIER 4: DANGEROUS tools — individual approval, sequential
         Unclassified (STANDARD) tools default to TIER 0 (parallel-safe).
         """
+        # Multiple checklist mutations in one response must retain call order;
+        # ToolExecutor still treats update_plan as approval-free.
+        if tool_name == "update_plan":
+            return 3
         if tool_name in DANGEROUS_TOOLS:
             return 4
         if tool_name in SENSITIVE_TOOLS:

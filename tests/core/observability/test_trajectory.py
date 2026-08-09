@@ -323,6 +323,26 @@ def test_trajectory_builds_from_canonical_sqlite_history(tmp_path):
     assert trajectory["integrity"]["complete"] is True
 
 
+def test_digest_trajectory_preserves_plan_control_fields(tmp_path):
+    from core.agent.plan import Plan, PlanStep
+    from core.observability.session_timeline import SessionEventKind, SessionTimeline
+
+    db = tmp_path / "sessions.db"
+    timeline = SessionTimeline("s-plan", db_path=db)
+    timeline.bind_turn("t-plan")
+    plan = Plan(steps=(PlanStep(id="inspect", description="Inspect evidence"),))
+    timeline.record_plan_state(SessionEventKind.PLAN_CREATED, plan, trigger="decomposition")
+    timeline.record_session_end()
+
+    trajectory = trajectory_from_session("s-plan", db_path=db, content_policy="digest")
+    plan_event = next(event for event in trajectory["events"] if event["kind"] == "plan.created")
+    assert plan_event["payload"]["plan_id"] == plan.plan_id
+    assert plan_event["payload"]["current_step_id"] == "inspect"
+    assert "steps" not in plan_event["payload"]
+    assert plan_event["payload"]["_content_omitted"] == ["steps"]
+    assert len(plan_event["payload"]["_omitted_payload_sha256"]) == 64
+
+
 def test_trajectory_marks_orphaned_tool_event_incomplete():
     trajectory = build_trajectory(
         trajectory_id="traj-orphan",

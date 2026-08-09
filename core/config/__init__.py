@@ -101,7 +101,6 @@ _TOML_TO_SETTINGS: dict[str, str] = {
     "subagent.max_tokens": "subagent_max_tokens",
     "subagent.max_tool_result_tokens": "max_tool_result_tokens",
     "observation.mask_keep_rounds": "observation_mask_keep_rounds",
-    "plan.auto_execute": "plan_auto_execute",
     "tool_offload.threshold": "tool_offload_threshold",
     "tool_offload.ttl_hours": "tool_offload_ttl_hours",
     "scheduler.interval_s": "scheduler_interval_s",

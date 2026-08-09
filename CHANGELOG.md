@@ -47,7 +47,43 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.18] - 2026-08-10
+
+> Truthful advisory planning and Part 5 deep research, lifecycle boundary
+> hardening, and a reproducible Agent-World comparison contract.
+
+### Added
+
+- **Aligned deep research with Stanford CS329A Part 5 and Codex runtime
+  composition.** The bundled `deep-researcher` now frames a research question
+  and gap, parallelizes only independent axes through the existing
+  `delegate_task` batch surface, keeps critical-path source inspection and
+  synthesis in the parent, and audits citation entailment, freshness,
+  authority, contradictions, and failed searches. Advisory plans now carry a
+  stable ID across progress and replan revisions, with typed plan lifecycle
+  edges in canonical session history and its JSONL projection.
+
 ### Fixed
+
+- **Removed simulated plan execution from review checkpoints.** `create_plan`
+  and `approve_plan` now record review and authority only; they never mark
+  unexecuted steps complete. The unused `plan_auto_execute` setting and the
+  `PlanMode` execution methods are gone, leaving `AgenticLoop` as the sole
+  action owner and `update_plan` as observed-progress bookkeeping.
+
+- **Restored live plan/replan response wiring.** `AgenticResponse` now exposes
+  its normalized text blocks to auxiliary planner and judge callers, so valid
+  subscription JSON is no longer discarded after adapter translation.
+  Auxiliary planner and judge calls no longer inherit action tools, and replan
+  uses a strict structured-output contract. A retryable verification failure
+  now replans once at the repair turn boundary, with the failed candidate and
+  repair instruction, instead of reusing the same failure on every tool round.
+  The existing `update_plan` checklist now advances an active advisory Plan
+  only when its full or remaining step texts match exactly, so observed
+  completion is reflected in the next round without turning PlanStep metadata
+  into an executor. Completed plans stay closed to cadence/low-confidence
+  replans, concurrent checklist updates preserve call order, and mismatched or
+  standalone checklists remain display-only.
 
 - **Made lifecycle restarts and runtime tests honor their real ownership
   boundaries.** Detached `geode serve` restarts now allow the documented

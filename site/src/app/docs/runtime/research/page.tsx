@@ -42,14 +42,31 @@ export default function Page() {
               방식입니다.
             </p>
 
+            <h2>딥리서치: 독립 축 병렬 수집</h2>
+            <p>
+              프로젝트의 <code>deep-researcher</code> 스킬은 질문·research gap·
+              검증할 claim을 먼저 정하고, 서로 독립인 조사 축만 한 번의
+              <code>delegate_task</code> batch로 보냅니다. 부모는 선행조건,
+              원문 확인, 모순 판정과 최종 종합을 계속 소유합니다. 자식 실패도
+              결과에서 제거하지 않으며, 출처 수 대신 citation entailment,
+              최신성, 권위와 상충 근거를 검사합니다.
+            </p>
+            <p>
+              <code>update_plan</code>은 관측된 진행을 표시하는 advisory checklist일
+              뿐 실행기가 아닙니다. 런타임이 <code>&lt;plan&gt;</code>을 제공하면
+              스킬은 별도 체크리스트를 만들지 않고 그 단계 문구를 그대로 사용합니다.
+              결과를 파일이나 memory에 자동 저장하지도 않습니다.
+            </p>
+
             <h2>웹 탐색과 위임 규칙</h2>
             <p>
               일반 웹 탐색은 <code>general_web_search</code>와
-              <code>read_web_page</code>가 담당합니다. 단, 런타임 가드레일이
-              하나 있습니다. 한 턴에 이 도구들을 3회 이상 직접 호출하지 않고,
+              <code>web_fetch</code>가 담당합니다. GEODE의 instruction-level 정책은
+              한 턴에 이 도구들을 3회 이상 직접 호출하지 않고,
               <code>delegate_task</code>로 서브에이전트에 위임합니다(GEODE.md
-              RUNTIME CANNOT). 검색 결과가 부모 컨텍스트를 폭발시키는 것을 막고,
-              서브에이전트는 <code>web_research</code> 툴킷
+              RUNTIME CANNOT). 이는 하드 런타임 차단이 아니라 검색 결과가 부모
+              컨텍스트를 폭발시키는 것을 막는 행동 계약입니다. 서브에이전트는
+              <code>web_research</code> 툴킷
               (<code>core/tools/toolkits.toml</code>)으로 격리된 컨텍스트에서
               조사를 끝낸 뒤 요약만 돌려줍니다.
             </p>
@@ -140,14 +157,32 @@ export default function Page() {
               This is the pattern frontier harnesses converged on.
             </p>
 
+            <h2>Deep research: parallel collection over independent axes</h2>
+            <p>
+              The project&apos;s <code>deep-researcher</code> skill first states the
+              question, research gap, and claims to test. It sends only independent
+              axes in one <code>delegate_task</code> batch. The parent retains
+              prerequisites, primary-source inspection, contradiction decisions,
+              and final synthesis. Child failures stay visible, and evidence is
+              checked for citation entailment, freshness, authority, and conflicts
+              instead of source count alone.
+            </p>
+            <p>
+              <code>update_plan</code> is an advisory checklist for observed progress,
+              not an executor. When the runtime supplies a <code>&lt;plan&gt;</code>, the
+              skill mirrors those steps instead of creating a second checklist. It
+              also does not save the result to files or memory automatically.
+            </p>
+
             <h2>Web exploration and the delegation rule</h2>
             <p>
               General web exploration runs through
-              <code>general_web_search</code> and <code>read_web_page</code>,
-              with one runtime guardrail: never call them three or more times
+              <code>general_web_search</code> and <code>web_fetch</code>.
+              GEODE&apos;s instruction-level policy says not to call them three or more times
               directly in a single turn. Delegate to a sub-agent via
               <code>delegate_task</code> instead (GEODE.md RUNTIME CANNOT).
-              That keeps search results from exploding the parent context; the
+              This is a behavioral contract, not a hard runtime rejection. It keeps
+              search results from exploding the parent context; the
               sub-agent runs with the <code>web_research</code> toolkit
               (<code>core/tools/toolkits.toml</code>) in an isolated context and
               returns only a summary.

@@ -191,7 +191,7 @@ class SessionMetrics:
     last_verify_reflection_hint: str = ""
     last_verify_should_retry: bool = False  # PR-CL-A3 — machine-readable replan signal
 
-    # K. Active execution plan (PR-CL-A1, 2026-05-23) — the explicit
+    # K. Active advisory plan (PR-CL-A1, 2026-05-23) — the explicit
     #    :class:`core.agent.plan.Plan` the loop is following. ``Any`` keeps
     #    SessionMetrics import-light (no forward reference to core.agent).
     #    Read at the start of every ``arun`` so the system prompt can
@@ -358,7 +358,7 @@ class SessionMetrics:
         self.last_verify_reflection_hint = str(value)
 
     def set_active_plan(self, plan: Any, *, reset_attempts: bool = False) -> None:
-        """PR-CL-A1 — install or replace the active execution plan.
+        """PR-CL-A1 — install or replace the active advisory plan.
 
         ``reset_attempts`` defaults to False so the per-step retry
         counter SURVIVES a successful replan call (the new plan may
@@ -457,11 +457,25 @@ class SessionMetrics:
             "last_verify_should_retry": self.last_verify_should_retry,
             "replan_count": self.replan_count,
             "last_replan_trigger": self.last_replan_trigger,
+            "active_plan_id": (
+                str(getattr(self.active_plan, "plan_id", "")) if self.active_plan else ""
+            ),
             "active_plan_revision": (
                 getattr(self.active_plan, "revision", 0) if self.active_plan else 0
             ),
             "active_plan_step_count": (
                 len(getattr(self.active_plan, "steps", ())) if self.active_plan is not None else 0
+            ),
+            "active_plan_current": (
+                int(getattr(self.active_plan, "current", 0)) if self.active_plan is not None else 0
+            ),
+            "active_plan_completed_count": (
+                len(getattr(self.active_plan, "completed", ()))
+                if self.active_plan is not None
+                else 0
+            ),
+            "active_plan_done": bool(
+                getattr(self.active_plan, "done", False) if self.active_plan is not None else False
             ),
         }
 

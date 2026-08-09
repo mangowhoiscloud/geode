@@ -422,6 +422,10 @@ class TestToolExecutor:
         assert "set_api_key" in WRITE_TOOLS
         assert "manage_auth" in WRITE_TOOLS
 
+    def test_update_plan_is_serialized_without_becoming_a_write_gate(self) -> None:
+        assert ToolCallProcessor._classify_tier("update_plan") == 3
+        assert "update_plan" not in WRITE_TOOLS
+
     def test_write_tools_require_confirmation(self) -> None:
         """Write tools require user confirmation when not auto-approved."""
         handler = MagicMock(return_value={"status": "ok"})

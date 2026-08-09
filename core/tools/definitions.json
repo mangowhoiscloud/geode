@@ -773,7 +773,7 @@
   },
   {
     "name": "update_plan",
-    "description": "Show or update the current turn's progress checklist. Use for complex, multi-step work to keep the user informed while continuing execution. This is NOT an approval gate and does not persist an execution plan; after calling it, keep working unless the user explicitly asked to stop for review. It is also separate from the runtime's internal auto-generated Plan (decomposition/replan): this checklist is display-only and never feeds the loop. Keep 3-7 concise steps, exactly one in_progress step while work remains, and update statuses as steps complete. Sibling: create_plan is only for an explicit review checkpoint that should wait for approve_plan.",
+    "description": "Show or update the current turn's progress checklist. Use for complex, multi-step work to keep the user informed while continuing execution. This is NOT an approval gate and never executes a step. When an internal <plan> is present, submit its exact full checklist or remaining suffix after observing completion, using descriptions or displayed 'id: description' texts; the completed prefix advances that advisory plan and the next round sees the new current step. A different checklist remains display-only. Keep steps concise, exactly one in_progress step while work remains, and update statuses as steps complete. Sibling: create_plan is only for an explicit review checkpoint that should wait for approve_plan.",
     "category": "planning",
     "cost_tier": "free",
     "input_schema": {
@@ -819,7 +819,7 @@
   },
   {
     "name": "create_plan",
-    "description": "Create a disk-persistent review checkpoint that waits for approve_plan before execution. Use only when the user explicitly asks to review/approve a plan first, or when you need an intentional stop before an unusually risky/expensive workflow. For ordinary multi-step work, use update_plan and continue executing; do not turn routine planning into a permission prompt.",
+    "description": "Create a disk-persistent review checkpoint that waits for approve_plan before proceeding. It never executes checklist steps. Use only when the user explicitly asks to review/approve a plan first, or when you need an intentional stop before an unusually risky/expensive workflow. For ordinary multi-step work, use update_plan and continue through the agent loop; do not turn routine planning into a permission prompt.",
     "category": "planning",
     "cost_tier": "cheap",
     "input_schema": {
@@ -855,7 +855,7 @@
   },
   {
     "name": "approve_plan",
-    "description": "Approve and run a review checkpoint created by create_plan. Use only after the user explicitly accepts that checkpoint; pass the plan_id from the create_plan result. Siblings: modify_plan to adjust it first, reject_plan to discard it. Do not use for update_plan checklists.",
+    "description": "Record approval of a review checkpoint created by create_plan. This grants authority to proceed but does not execute checklist steps; the agent loop still owns actions and update_plan records observed progress. Use only after the user explicitly accepts that checkpoint and pass its plan_id. Siblings: modify_plan to adjust it first, reject_plan to discard it.",
     "category": "planning",
     "cost_tier": "cheap",
     "input_schema": {
@@ -1255,7 +1255,7 @@
   },
   {
     "name": "reject_plan",
-    "description": "Discard a review checkpoint created by create_plan when the user doesn't want it. Pass plan_id (reason optional). Siblings: approve_plan to run it, modify_plan to adjust it. Do not use for update_plan checklists.",
+    "description": "Discard a review checkpoint created by create_plan when the user doesn't want it. Pass plan_id (reason optional). Siblings: approve_plan to authorize proceeding, modify_plan to adjust it. Do not use for update_plan checklists.",
     "category": "planning",
     "cost_tier": "free",
     "input_schema": {
