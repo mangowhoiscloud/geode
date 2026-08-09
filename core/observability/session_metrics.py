@@ -457,6 +457,9 @@ class SessionMetrics:
             "last_verify_should_retry": self.last_verify_should_retry,
             "replan_count": self.replan_count,
             "last_replan_trigger": self.last_replan_trigger,
+            "active_plan_id": (
+                str(getattr(self.active_plan, "plan_id", "")) if self.active_plan else ""
+            ),
             "active_plan_revision": (
                 getattr(self.active_plan, "revision", 0) if self.active_plan else 0
             ),

@@ -34,6 +34,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import uuid
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -158,6 +159,7 @@ class Plan:
     """
 
     steps: tuple[PlanStep, ...]
+    plan_id: str = field(default_factory=lambda: f"plan_{uuid.uuid4().hex}")
     current: int = 0
     completed: tuple[int, ...] = ()
     abandoned: tuple[int, ...] = ()
@@ -166,6 +168,7 @@ class Plan:
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "plan_id": self.plan_id,
             "steps": [s.to_dict() for s in self.steps],
             "current": self.current,
             "completed": list(self.completed),
@@ -201,6 +204,7 @@ class Plan:
         next_current = self.current + count
         return Plan(
             steps=self.steps,
+            plan_id=self.plan_id,
             current=next_current,
             completed=tuple(sorted({*self.completed, *range(self.current, next_current)})),
             abandoned=self.abandoned,
@@ -220,6 +224,7 @@ class Plan:
             return self
         return Plan(
             steps=self.steps,
+            plan_id=self.plan_id,
             current=self.current + 1,
             completed=self.completed,
             abandoned=tuple(sorted({*self.abandoned, self.current})),
@@ -605,6 +610,7 @@ async def replan_async(
         prior_revision = plan.revision if plan is not None else 0
         return Plan(
             steps=tuple(steps),
+            plan_id=plan.plan_id if plan is not None else f"plan_{uuid.uuid4().hex}",
             current=0,
             reasoning=reasoning,
             revision=prior_revision + 1,

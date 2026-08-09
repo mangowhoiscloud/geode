@@ -138,6 +138,7 @@ def test_plan_complete_and_advance_records_observed_progress() -> None:
 
     advanced = plan.complete_and_advance(2)
 
+    assert advanced.plan_id == plan.plan_id
     assert advanced.current == 2
     assert advanced.completed == (0, 1)
     assert advanced.abandoned == ()
@@ -501,6 +502,7 @@ def test_replan_async_inherits_loop_model(monkeypatch: pytest.MonkeyPatch) -> No
         replan_async(loop, plan=plan, turn_result=SimpleNamespace(text=""), trigger="verify_fail")
     )
     assert new_plan is not None
+    assert new_plan.plan_id == plan.plan_id
     assert new_plan.revision == 1  # prior revision was 0
     assert len(new_plan.steps) == 1
     assert new_plan.steps[0].id == "s1"
@@ -622,6 +624,7 @@ def test_session_row_exposes_plan_telemetry() -> None:
         row = m.to_session_row()
         assert row["replan_count"] == 1
         assert row["last_replan_trigger"] == "verify_fail"
+        assert row["active_plan_id"] == plan.plan_id
         assert row["active_plan_revision"] == 0
         assert row["active_plan_step_count"] == 3
         assert row["active_plan_current"] == 0

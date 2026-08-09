@@ -73,6 +73,11 @@ class SessionEventKind(StrEnum):
     VERIFICATION_CONTINUED = "verification.continued"
     VERIFICATION_EVIDENCE = "verification.evidence"
     VERIFICATION_PENDING = "verification.pending"
+    PLAN_CREATED = "plan.created"
+    PLAN_PROGRESSED = "plan.progressed"
+    PLAN_REPLANNED = "plan.replanned"
+    PLAN_ABANDONED = "plan.abandoned"
+    PLAN_COMPLETED = "plan.completed"
     USER_MESSAGE = "message.user"
     ASSISTANT_MESSAGE = "message.assistant"
     TOOL_CALLED = "tool.called"
@@ -888,6 +893,64 @@ class SessionTimeline:
                 "verify_attempt": max(0, int(verify_attempt)),
                 "references": [dict(reference) for reference in references],
             },
+        )
+
+    def record_plan_state(
+        self,
+        kind: SessionEventKind,
+        plan: Any,
+        *,
+        trigger: str = "",
+        changed_step_ids: Sequence[str] = (),
+    ) -> None:
+        """Persist a typed advisory-plan edge without planner rationale."""
+        allowed = {
+            SessionEventKind.PLAN_CREATED,
+            SessionEventKind.PLAN_PROGRESSED,
+            SessionEventKind.PLAN_REPLANNED,
+            SessionEventKind.PLAN_ABANDONED,
+            SessionEventKind.PLAN_COMPLETED,
+        }
+        if kind not in allowed:
+            raise ValueError(f"unsupported plan event kind: {kind.value}")
+        steps = tuple(getattr(plan, "steps", ()))
+        current = int(getattr(plan, "current", 0))
+        completed = tuple(getattr(plan, "completed", ()))
+        abandoned = tuple(getattr(plan, "abandoned", ()))
+        current_step = steps[current] if 0 <= current < len(steps) else None
+        payload: dict[str, Any] = {
+            "plan_id": str(getattr(plan, "plan_id", "")),
+            "revision": int(getattr(plan, "revision", 0)),
+            "current_step_id": str(getattr(current_step, "id", "")),
+            "step_count": len(steps),
+            "completed_step_ids": [
+                str(getattr(steps[index], "id", ""))
+                for index in completed
+                if 0 <= index < len(steps)
+            ],
+            "abandoned_step_ids": [
+                str(getattr(steps[index], "id", ""))
+                for index in abandoned
+                if 0 <= index < len(steps)
+            ],
+            "changed_step_ids": [str(step_id) for step_id in changed_step_ids],
+            "trigger": trigger,
+        }
+        if kind in {SessionEventKind.PLAN_CREATED, SessionEventKind.PLAN_REPLANNED}:
+            payload["steps"] = [
+                {
+                    "id": str(getattr(step, "id", "")),
+                    "description": str(getattr(step, "description", "")),
+                    "expected_outcome": str(getattr(step, "expected_outcome", "")),
+                    "tool_name": str(getattr(step, "tool_name", "")),
+                }
+                for step in steps
+            ]
+        self._record(
+            kind,
+            role="policy",
+            status=kind.value.removeprefix("plan."),
+            payload=payload,
         )
 
     def record_tool_call(

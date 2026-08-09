@@ -54,6 +54,14 @@ async def try_decompose(loop: AgenticLoop, user_input: str) -> str | None:
         # ``reset_attempts=True`` because this is the initial install —
         # no prior step attempts to preserve.
         current_session_metrics().set_active_plan(plan, reset_attempts=True)
+        if loop._timeline is not None:
+            from core.observability.session_timeline import SessionEventKind
+
+            loop._timeline.record_plan_state(
+                SessionEventKind.PLAN_CREATED,
+                plan,
+                trigger="goal_decomposition",
+            )
 
         # Emit structured events for thin client. ``emit_goal_decomposition``
         # is the legacy summary; ``emit_plan_step`` (PR-CL-A1) emits the

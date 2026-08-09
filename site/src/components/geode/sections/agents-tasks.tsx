@@ -74,8 +74,8 @@ export function AgentsTasksSection() {
           </h2>
           <p className="text-sm sm:text-base text-[#A0B4D4] max-w-xl mb-8 leading-relaxed">
             {t(locale,
-              "병렬 에이전트 위임(SubAgent), 의존성 기반 작업 DAG(TaskGraph), 실행 전 계획 승인(PlanMode). 세 시스템이 연동하여 복잡한 작업을 분할·병렬·검증합니다.",
-              "Parallel agent delegation (SubAgent), dependency-based task DAG (TaskGraph), pre-execution plan approval (PlanMode). Three systems coordinate to decompose, parallelize, and verify complex tasks."
+              "병렬 에이전트 위임(SubAgent), 의존성 기반 작업 추적(TaskGraph), 명시적 계획 검토 체크포인트(PlanMode). 실제 실행은 AgenticLoop가 단독 소유합니다.",
+              "Parallel agent delegation (SubAgent), dependency-based task tracking (TaskGraph), and explicit plan review checkpoints (PlanMode). The AgenticLoop remains the sole execution owner."
             )}
           </p>
         </ScrollReveal>
@@ -86,7 +86,7 @@ export function AgentsTasksSection() {
             {([
               { id: "subagent" as Tab, label: "SubAgent", sub: t(locale, "병렬 위임", "Parallel delegation"), color: "#4ECDC4" },
               { id: "taskgraph" as Tab, label: "TaskGraph", sub: t(locale, "DAG 추적", "DAG tracking"), color: "#818CF8" },
-              { id: "planmode" as Tab, label: "PlanMode", sub: t(locale, "계획 → 실행", "Plan → Execute"), color: "#F5C542" },
+              { id: "planmode" as Tab, label: "PlanMode", sub: t(locale, "계획 검토", "Plan review"), color: "#F5C542" },
             ]).map((t) => (
               <button
                 key={t.id}
@@ -219,7 +219,7 @@ export function AgentsTasksSection() {
               <div>
                 <div className="flex items-center gap-2 mb-4">
                   <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[#818CF8]/10 text-[#818CF8]/80 border border-[#818CF8]/15">TASKGRAPH</span>
-                  <span className="text-sm font-semibold text-white/80">{t(locale, "TaskGraph. 일반 실행 계획", "TaskGraph. Generic Execution Plan")}</span>
+                  <span className="text-sm font-semibold text-white/80">{t(locale, "TaskGraph. 의존성 상태", "TaskGraph. Dependency State")}</span>
                 </div>
                 <DagRenderer
                   nodes={[
@@ -242,8 +242,8 @@ export function AgentsTasksSection() {
                 />
                 <p className="text-sm text-[#A0B4D4] leading-relaxed mt-2">
                   {t(locale,
-                    "TaskGraphHookBridge가 NODE_ENTER/EXIT/ERROR를 수신하여 Task 상태를 자동 갱신합니다. 실패 시 하류 Task를 자동 SKIP.",
-                    "TaskGraphHookBridge receives NODE_ENTER/EXIT/ERROR to auto-update task states. On failure, downstream tasks are auto-SKIPped."
+                    "TaskGraph는 ready batch를 계산하고 명시적으로 요청된 실패 전파에서 하류 Task를 SKIP합니다. AgenticLoop와 자동 배선된 실행 DAG는 아닙니다.",
+                    "TaskGraph computes ready batches and skips downstream tasks only when failure propagation is explicitly invoked. It is not an execution DAG automatically wired to AgenticLoop."
                   )}
                 </p>
               </div>
@@ -252,7 +252,7 @@ export function AgentsTasksSection() {
               <div>
                 <div className="flex items-center gap-2 mb-4">
                   <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[#4ECDC4]/10 text-[#4ECDC4]/80 border border-[#4ECDC4]/15">AGENTIC</span>
-                  <span className="text-sm font-semibold text-white/80">TaskGraph. Agentic Loop Task System</span>
+                  <span className="text-sm font-semibold text-white/80">TaskGraph. User Task Tracking</span>
                 </div>
                 <div className="overflow-x-auto -mx-4 px-4 pb-2">
                   <svg viewBox="0 0 700 180" className="w-full min-w-[540px]" style={{ maxHeight: 210 }}>
@@ -264,10 +264,10 @@ export function AgentsTasksSection() {
                     {/* Arrow */}
                     <line x1={130} y1={85} x2={180} y2={85} stroke="white" strokeOpacity={0.22} strokeWidth={1} />
 
-                    {/* GoalDecomposer */}
+                    {/* task_create */}
                     <rect x={180} y={55} width={130} height={60} rx={10} fill="#0C1220" stroke="#818CF8" strokeWidth={1} strokeOpacity={0.4} />
-                    <text x={245} y={78} textAnchor="middle" fill="#818CF8" fontSize={10} fontFamily="ui-monospace, monospace" fontWeight={700}>GoalDecomposer</text>
-                    <text x={245} y={95} textAnchor="middle" fill="#818CF8" fillOpacity={0.35} fontSize={8} fontFamily="ui-monospace, monospace">분해 → sub-goals</text>
+                    <text x={245} y={78} textAnchor="middle" fill="#818CF8" fontSize={10} fontFamily="ui-monospace, monospace" fontWeight={700}>task_create</text>
+                    <text x={245} y={95} textAnchor="middle" fill="#818CF8" fillOpacity={0.35} fontSize={8} fontFamily="ui-monospace, monospace">명시적 등록</text>
 
                     {/* Fan-out to tasks */}
                     {[35, 85, 135].map((y, i) => (
@@ -283,10 +283,10 @@ export function AgentsTasksSection() {
                       </g>
                     ))}
 
-                    {/* CLI /tasks */}
+                    {/* task_list */}
                     <rect x={530} y={55} width={80} height={60} rx={10} fill="#0C1220" stroke="#F5C542" strokeWidth={0.7} strokeOpacity={0.2} />
-                    <text x={570} y={78} textAnchor="middle" fill="#F5C542" fontSize={10} fontFamily="ui-monospace, monospace" fontWeight={600}>/tasks</text>
-                    <text x={570} y={95} textAnchor="middle" fill="#F5C542" fillOpacity={0.45} fontSize={8} fontFamily="ui-monospace, monospace">CLI 조회</text>
+                    <text x={570} y={78} textAnchor="middle" fill="#F5C542" fontSize={10} fontFamily="ui-monospace, monospace" fontWeight={600}>task_list</text>
+                    <text x={570} y={95} textAnchor="middle" fill="#F5C542" fillOpacity={0.45} fontSize={8} fontFamily="ui-monospace, monospace">상태 조회</text>
 
                     {/* Connection */}
                     {[35, 85, 135].map((y, i) => (
@@ -305,8 +305,8 @@ export function AgentsTasksSection() {
                 </div>
                 <p className="text-sm text-[#A0B4D4] leading-relaxed mt-2">
                   {t(locale,
-                    "GoalDecomposer가 복합 요청을 sub-goal로 분해하고, 세션별 ContextVar에 독립 TaskGraph를 생성합니다. CLI /tasks로 실시간 상태를 조회할 수 있습니다.",
-                    "GoalDecomposer breaks complex requests into sub-goals and creates an independent TaskGraph in per-session ContextVar. Real-time status is queryable via CLI /tasks."
+                    "task_create·task_update·task_list가 세션별 TaskGraph를 관리합니다. Goal decomposition은 별도의 advisory Plan을 만들며 이 TaskGraph를 자동 생성하거나 실행하지 않습니다.",
+                    "task_create, task_update, and task_list manage the per-session TaskGraph. Goal decomposition creates a separate advisory Plan; it neither creates nor executes this TaskGraph automatically."
                   )}
                 </p>
               </div>
@@ -327,10 +327,10 @@ export function AgentsTasksSection() {
               {/* PlanMode lifecycle SVG */}
               <div className="overflow-x-auto -mx-4 px-4 pb-2 mb-6">
                 <svg viewBox="0 0 760 200" className="w-full min-w-[560px]" style={{ maxHeight: 230 }}>
-                  {/* Planner (route selection) */}
+                  {/* Review-checkpoint creation */}
                   <rect x={20} y={60} width={100} height={60} rx={10} fill="#0C1220" stroke="#60A5FA" strokeWidth={1} strokeOpacity={0.4} />
-                  <text x={70} y={83} textAnchor="middle" fill="#60A5FA" fontSize={11} fontFamily="ui-monospace, monospace" fontWeight={700}>Planner</text>
-                  <text x={70} y={100} textAnchor="middle" fill="#60A5FA" fillOpacity={0.35} fontSize={8} fontFamily="ui-monospace, monospace">route 선택</text>
+                  <text x={70} y={83} textAnchor="middle" fill="#60A5FA" fontSize={11} fontFamily="ui-monospace, monospace" fontWeight={700}>create_plan</text>
+                  <text x={70} y={100} textAnchor="middle" fill="#60A5FA" fillOpacity={0.35} fontSize={8} fontFamily="ui-monospace, monospace">review gate</text>
 
                   <line x1={120} y1={90} x2={160} y2={90} stroke="white" strokeOpacity={0.22} strokeWidth={1} />
 
@@ -339,14 +339,14 @@ export function AgentsTasksSection() {
                     { label: "DRAFT", x: 190, color: "#5A6A8A" },
                     { label: "PRESENT", x: 290, color: "#818CF8" },
                     { label: "APPROVE", x: 390, color: "#F5C542" },
-                    { label: "EXECUTE", x: 490, color: "#4ECDC4" },
-                    { label: "COMPLETE", x: 590, color: "#34D399" },
+                    { label: "AGENT LOOP", x: 490, color: "#4ECDC4" },
+                    { label: "OBSERVED", x: 590, color: "#34D399" },
                   ].map((s, i) => (
                     <g key={s.label}>
                       <rect x={s.x - 40} y={65} width={80} height={50} rx={8} fill="#0A0F1A" stroke={s.color} strokeWidth={0.8} strokeOpacity={0.35} />
                       <text x={s.x} y={85} textAnchor="middle" fill={s.color} fontSize={9} fontFamily="ui-monospace, monospace" fontWeight={700}>{s.label}</text>
                       <text x={s.x} y={100} textAnchor="middle" fill={s.color} fillOpacity={0.45} fontSize={8} fontFamily="ui-monospace, monospace">
-                        {["생성", "리뷰", "HITL 승인", "실행 중", "완료"][i]}
+                        {["생성", "리뷰", "권한 기록", "실제 행동", "진척 기록"][i]}
                       </text>
                       {i < 4 && (
                         <line x1={s.x + 40} y1={90} x2={[290, 390, 490, 590][i] - 40} y2={90} stroke="white" strokeOpacity={0.22} strokeWidth={1} />
@@ -356,16 +356,16 @@ export function AgentsTasksSection() {
 
                   {/* REJECTED fork */}
                   <path d="M390,115 L390,150 L190,150 L190,115" fill="none" stroke="#E87080" strokeOpacity={0.28} strokeWidth={1} strokeDasharray="4 4" />
-                  <text x={290} y={163} textAnchor="middle" fill="#E87080" fillOpacity={0.35} fontSize={8} fontFamily="ui-monospace, monospace">REJECTED → DRAFT로 복귀</text>
+                  <text x={290} y={163} textAnchor="middle" fill="#E87080" fillOpacity={0.35} fontSize={8} fontFamily="ui-monospace, monospace">REJECTED · 실행 없음</text>
 
                   {/* Templates */}
                   <rect x={640} y={30} width={100} height={42} rx={8} fill="#0C1220" stroke="#F5C542" strokeWidth={0.6} strokeOpacity={0.2} />
                   <text x={690} y={48} textAnchor="middle" fill="#F5C542" fontSize={9} fontFamily="ui-monospace, monospace" fontWeight={600}>full_pipeline</text>
-                  <text x={690} y={62} textAnchor="middle" fill="#5A6A8A" fontSize={8} fontFamily="ui-monospace, monospace">10 steps · $1.50</text>
+                  <text x={690} y={62} textAnchor="middle" fill="#5A6A8A" fontSize={8} fontFamily="ui-monospace, monospace">5 steps · $0.50</text>
 
                   <rect x={640} y={80} width={100} height={42} rx={8} fill="#0C1220" stroke="#818CF8" strokeWidth={0.6} strokeOpacity={0.2} />
                   <text x={690} y={98} textAnchor="middle" fill="#818CF8" fontSize={9} fontFamily="ui-monospace, monospace" fontWeight={600}>prospect</text>
-                  <text x={690} y={112} textAnchor="middle" fill="#5A6A8A" fontSize={8} fontFamily="ui-monospace, monospace">6 steps · $0.80</text>
+                  <text x={690} y={112} textAnchor="middle" fill="#5A6A8A" fontSize={8} fontFamily="ui-monospace, monospace">3 steps · $0.25</text>
 
                   {/* Connection to templates */}
                   <line x1={630} y1={90} x2={640} y2={51} stroke="#F5C542" strokeOpacity={0.22} strokeWidth={1} />
@@ -373,15 +373,15 @@ export function AgentsTasksSection() {
 
                   {/* Top label */}
                   <text x={400} y={25} textAnchor="middle" fill="white" fillOpacity={0.28} fontSize={9} fontFamily="ui-monospace, monospace" letterSpacing="0.1em">
-                    PLANNER → DRAFT → PRESENT → APPROVE(HITL) → EXECUTE → COMPLETE
+                    REVIEW CHECKPOINT ┃ APPROVAL ≠ EXECUTION ┃ AGENTIC LOOP
                   </text>
                 </svg>
               </div>
 
               <p className="text-sm text-[#A0B4D4] leading-relaxed">
                 {t(locale,
-                  "Planner가 요청을 6개 Route(FULL_PIPELINE, PROSPECT, PARTIAL_RERUN 등)로 분류하고, PlanMode가 DRAFT → PRESENTED → APPROVED(HITL) → EXECUTING → COMPLETED 생애주기를 관리합니다. REJECTED되면 DRAFT로 복귀합니다.",
-                  "Planner classifies requests into 6 routes (FULL_PIPELINE, PROSPECT, PARTIAL_RERUN, etc.) and PlanMode manages the lifecycle: DRAFT → PRESENTED → APPROVED (HITL) → EXECUTING → COMPLETED. On REJECTED, reverts to DRAFT."
+                  "PlanMode는 DRAFT → PRESENTED → APPROVED 또는 REJECTED의 검토 상태만 관리합니다. 승인은 실행 완료가 아닙니다. 실제 도구 행동은 AgenticLoop가 수행하고, update_plan이 관측된 진척만 기록합니다.",
+                  "PlanMode manages review state only: DRAFT → PRESENTED → APPROVED or REJECTED. Approval is not execution. AgenticLoop performs tool actions, and update_plan records only observed progress."
                 )}
               </p>
             </div>

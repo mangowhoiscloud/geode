@@ -1,7 +1,6 @@
 import pytest
 from core.orchestration.plan_mode import (
     AnalysisPlan,
-    PlanExecutionMode,
     PlanMode,
     PlanStatus,
     PlanStep,
@@ -44,19 +43,11 @@ def test_plan_mode_lifecycle_and_summary() -> None:
 
     summary = mode.present_plan(plan)
     mode.approve_plan(plan)
-    result = mode.execute_plan(plan)
 
     assert summary["subject_id"] == "subject-1"
     assert summary["step_count"] == 5
-    assert result["status"] == PlanStatus.COMPLETED.value
-    assert result["step_results"] == {
-        "scope": "completed",
-        "context": "completed",
-        "analysis": "completed",
-        "verification": "completed",
-        "synthesis": "completed",
-    }
-    assert mode.stats.to_dict() == {"created": 1, "approved": 1, "rejected": 0, "executed": 1}
+    assert plan.status == PlanStatus.APPROVED
+    assert mode.stats.to_dict() == {"created": 1, "approved": 1, "rejected": 0}
 
 
 def test_modify_reject_and_template_errors() -> None:
@@ -79,23 +70,11 @@ def test_modify_reject_and_template_errors() -> None:
         mode.modify_plan(plan, template="missing")
 
 
-def test_auto_execute_retries_and_records_partial_success() -> None:
+def test_plan_mode_has_no_execution_surface() -> None:
     mode = PlanMode()
-    plan = mode.create_plan("subject-1", template="prospect")
-    attempts: dict[str, int] = {}
 
-    def executor(step: PlanStep) -> None:
-        attempts[step.step_id] = attempts.get(step.step_id, 0) + 1
-        if step.step_id == "analysis":
-            raise RuntimeError("boom")
-
-    result = mode.auto_execute_plan(plan, step_executor=executor, max_retries=1)
-
-    assert result["execution_mode"] == PlanExecutionMode.AUTO.value
-    assert result["completed_steps"] == 2
-    assert result["failed_steps"] == ["analysis"]
-    assert attempts["analysis"] == 2
-    assert plan.metadata["partial_success"] is True
+    assert not hasattr(mode, "execute_plan")
+    assert not hasattr(mode, "auto_execute_plan")
 
 
 def test_plan_lookup_and_filters() -> None:

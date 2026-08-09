@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -35,7 +36,6 @@ class InMemoryPlanStore:
 def plan_handlers(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     store = InMemoryPlanStore()
     monkeypatch.setattr(tool_handlers, "_PLAN_STORE", store)
-    monkeypatch.setattr("core.config.settings.plan_auto_execute", False)
     return _build_plan_handlers(force_dry=True)
 
 
@@ -123,6 +123,9 @@ def test_update_plan_advances_matching_runtime_advisory_plan(
         assert result["runtime_plan_synced"] is True
         assert result["runtime_plan_advanced"] is True
         assert result["runtime_plan_current"] == 1
+        assert result["runtime_plan_id"] == plan.plan_id
+        assert result["runtime_plan_revision"] == 0
+        assert result["runtime_plan_done"] is False
         assert metrics.active_plan.current == 1
         assert metrics.active_plan.completed == (0,)
         assert metrics.replan_attempts_on_current_step == 0
@@ -138,6 +141,41 @@ def test_update_plan_advances_matching_runtime_advisory_plan(
         assert completed["runtime_plan_advanced"] is True
         assert metrics.active_plan.done is True
         assert metrics.active_plan.completed == (0, 1, 2)
+        assert completed["runtime_plan_done"] is True
+
+
+def test_update_plan_records_observed_progress_edge(
+    plan_handlers: dict[str, Any],
+    tmp_path: Path,
+) -> None:
+    from core.agent.plan import Plan, PlanStep
+    from core.observability.session_metrics import (
+        current_session_metrics,
+        session_metrics_scope,
+    )
+    from core.observability.session_timeline import (
+        SessionEventStore,
+        SessionTimeline,
+        set_current_session_timeline,
+    )
+
+    plan = Plan(steps=(PlanStep(id="s1", description="Inspect evidence"),))
+    timeline = SessionTimeline("progress-edge", db_path=tmp_path / "sessions.db")
+    set_current_session_timeline(timeline)
+    try:
+        with session_metrics_scope(session_id="progress-edge"):
+            current_session_metrics().set_active_plan(plan)
+            result = plan_handlers["update_plan"](
+                plan=[{"step": "Inspect evidence", "status": "completed"}],
+            )
+    finally:
+        set_current_session_timeline(None)
+
+    assert result["runtime_plan_done"] is True
+    [event] = SessionEventStore(timeline.db_path).read("progress-edge")
+    assert event.kind == "plan.completed"
+    assert event.payload["plan_id"] == plan.plan_id
+    assert event.payload["changed_step_ids"] == ["s1"]
 
 
 def test_update_plan_keeps_different_checklist_display_only(
@@ -207,7 +245,9 @@ def test_create_list_approve_and_latest_fallback(plan_handlers: dict[str, Any]) 
 
     approved = plan_handlers["approve_plan"]()
     assert approved["status"] == "ok"
-    assert approved["executed"] is True
+    assert approved["approved"] is True
+    assert approved["executed"] is False
+    assert approved["checkpoint_status"] == "approved"
     assert approved["plan_id"] == created["plan_id"]
 
 
@@ -232,45 +272,17 @@ def test_reject_modify_and_missing_plan_paths(plan_handlers: dict[str, Any]) -> 
     }
 
 
-def test_create_plan_auto_execute_path(monkeypatch: pytest.MonkeyPatch) -> None:
-    store = InMemoryPlanStore()
-    monkeypatch.setattr(tool_handlers, "_PLAN_STORE", store)
-    monkeypatch.setattr("core.config.settings.plan_auto_execute", True)
-    handlers = _build_plan_handlers(force_dry=True)
-
-    result = handlers["create_plan"](goal="auto run")
-
-    assert result["status"] == "ok"
-    assert result["auto_executed"] is True
-    assert result["execution_result"]["completed_steps"] == 1
-
-
-def test_dangerously_skip_permissions_auto_executes_plan(
+def test_dangerously_skip_permissions_does_not_fabricate_plan_execution(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """--dangerously-skip-permissions bypasses the plan-approval stop even when
-    ``plan_auto_execute`` is off (plan → action directly)."""
     store = InMemoryPlanStore()
     monkeypatch.setattr(tool_handlers, "_PLAN_STORE", store)
-    monkeypatch.setattr("core.config.settings.plan_auto_execute", False)
     monkeypatch.setattr("core.config.settings.dangerously_skip_permissions", True)
     handlers = _build_plan_handlers(force_dry=True)
 
-    result = handlers["create_plan"](goal="skip and run")
+    result = handlers["create_plan"](goal="review before proceeding")
 
-    assert result["auto_executed"] is True
-    assert result["execution_mode"] == "auto"
-
-
-def test_no_skip_keeps_plan_manual(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Explicit review checkpoints still stop when auto-execute is disabled."""
-    store = InMemoryPlanStore()
-    monkeypatch.setattr(tool_handlers, "_PLAN_STORE", store)
-    monkeypatch.setattr("core.config.settings.plan_auto_execute", False)
-    monkeypatch.setattr("core.config.settings.dangerously_skip_permissions", False)
-    handlers = _build_plan_handlers(force_dry=True)
-
-    result = handlers["create_plan"](goal="wait for approval")
-
-    assert result["execution_mode"] == "manual"
+    assert result["checkpoint_status"] == "presented"
+    assert result["approved"] is False
+    assert result["executed"] is False
     assert "auto_executed" not in result

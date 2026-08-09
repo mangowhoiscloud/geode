@@ -47,7 +47,24 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **Aligned deep research with Stanford CS329A Part 5 and Codex runtime
+  composition.** The bundled `deep-researcher` now frames a research question
+  and gap, parallelizes only independent axes through the existing
+  `delegate_task` batch surface, keeps critical-path source inspection and
+  synthesis in the parent, and audits citation entailment, freshness,
+  authority, contradictions, and failed searches. Advisory plans now carry a
+  stable ID across progress and replan revisions, with typed plan lifecycle
+  edges in canonical session history and its JSONL projection.
+
 ### Fixed
+
+- **Removed simulated plan execution from review checkpoints.** `create_plan`
+  and `approve_plan` now record review and authority only; they never mark
+  unexecuted steps complete. The unused `plan_auto_execute` setting and the
+  `PlanMode` execution methods are gone, leaving `AgenticLoop` as the sole
+  action owner and `update_plan` as observed-progress bookkeeping.
 
 - **Restored live plan/replan response wiring.** `AgenticResponse` now exposes
   its normalized text blocks to auxiliary planner and judge callers, so valid

@@ -1573,9 +1573,22 @@ class AgenticLoop:
                 metrics.record_step_attempt()
                 cap = _replan_max_attempts()
                 if metrics.replan_attempts_on_current_step > cap:
+                    abandoned_step = metrics.active_plan.current_step()
                     advanced = metrics.active_plan.abandon_and_advance()
                     # new step → reset the per-step counter
                     metrics.set_active_plan(advanced, reset_attempts=True)
+                    timeline = getattr(self, "_timeline", None)
+                    if timeline is not None:
+                        from core.observability.session_timeline import SessionEventKind
+
+                        timeline.record_plan_state(
+                            SessionEventKind.PLAN_ABANDONED,
+                            advanced,
+                            trigger="retry_budget_exhausted",
+                            changed_step_ids=(abandoned_step.id,)
+                            if abandoned_step is not None
+                            else (),
+                        )
                     self._prompt_dirty = True
                     log.info(
                         "Replan abandon: step exceeded %d attempts; advancing plan",
@@ -1608,6 +1621,15 @@ class AgenticLoop:
                 return
             metrics.record_replan(trigger)
             metrics.set_active_plan(new_plan)
+            timeline = getattr(self, "_timeline", None)
+            if timeline is not None:
+                from core.observability.session_timeline import SessionEventKind
+
+                timeline.record_plan_state(
+                    SessionEventKind.PLAN_REPLANNED,
+                    new_plan,
+                    trigger=trigger,
+                )
             # next LLM call must see the new plan
             self._prompt_dirty = True
             # UI replan banner

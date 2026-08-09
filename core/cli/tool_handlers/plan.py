@@ -68,9 +68,16 @@ def _build_plan_handlers(force_dry: bool) -> UniqueEntries[str, Any]:
         runtime_plan_synced = False
         runtime_plan_advanced = False
         runtime_plan_current: int | None = None
+        runtime_plan_id = ""
+        runtime_plan_revision: int | None = None
+        runtime_plan_done = False
         try:
             from core.agent.plan import Plan
             from core.observability.session_metrics import current_session_metrics
+            from core.observability.session_timeline import (
+                SessionEventKind,
+                current_session_timeline,
+            )
 
             metrics = current_session_metrics()
             active_plan = metrics.active_plan
@@ -104,7 +111,24 @@ def _build_plan_handlers(force_dry: bool) -> UniqueEntries[str, Any]:
                     runtime_plan_advanced = updated.current != active_plan.current
                     if runtime_plan_advanced:
                         metrics.set_active_plan(updated, reset_attempts=True)
+                        timeline = current_session_timeline()
+                        if timeline is not None:
+                            changed = tuple(
+                                step.id
+                                for step in active_plan.steps[active_plan.current : updated.current]
+                            )
+                            timeline.record_plan_state(
+                                SessionEventKind.PLAN_COMPLETED
+                                if updated.done
+                                else SessionEventKind.PLAN_PROGRESSED,
+                                updated,
+                                trigger="update_plan",
+                                changed_step_ids=changed,
+                            )
                     runtime_plan_current = updated.current
+                    runtime_plan_id = updated.plan_id
+                    runtime_plan_revision = updated.revision
+                    runtime_plan_done = updated.done
                     runtime_plan_synced = True
         except Exception:
             log.debug("Runtime advisory plan progress sync skipped", exc_info=True)
@@ -128,6 +152,9 @@ def _build_plan_handlers(force_dry: bool) -> UniqueEntries[str, Any]:
             "runtime_plan_synced": runtime_plan_synced,
             "runtime_plan_advanced": runtime_plan_advanced,
             "runtime_plan_current": runtime_plan_current,
+            "runtime_plan_id": runtime_plan_id,
+            "runtime_plan_revision": runtime_plan_revision,
+            "runtime_plan_done": runtime_plan_done,
             "hint": "Progress plan updated. Continue with the task; no approval is required.",
         }
 
@@ -148,15 +175,6 @@ def _build_plan_handlers(force_dry: bool) -> UniqueEntries[str, Any]:
         return plan
 
     def handle_create_plan(**kwargs: Any) -> dict[str, Any]:
-        # --dangerously-skip-permissions treats the plan-approval stop as just
-        # another HITL gate: skip it and run the plan immediately (plan → action).
-        # Per-session (ContextVar), same source the approval gates read.
-        from core.agent.safety import current_skip_permissions
-        from core.config import settings
-        from core.orchestration.plan_mode import PlanExecutionMode, PlanMode
-
-        auto_execute = settings.plan_auto_execute or current_skip_permissions()
-
         goal = kwargs.get("goal", "")
         subject = kwargs.get("subject") or kwargs.get("subject_id", "")
         custom_steps = kwargs.get("steps", [])
@@ -165,7 +183,7 @@ def _build_plan_handlers(force_dry: bool) -> UniqueEntries[str, Any]:
         if goal or subject:
             import uuid
 
-            from core.orchestration.plan_mode import AnalysisPlan, PlanStep
+            from core.orchestration.plan_mode import AnalysisPlan, PlanMode, PlanStep
 
             template = "agentic"
             plan_id = f"plan_{uuid.uuid4().hex[:8]}"
@@ -190,7 +208,7 @@ def _build_plan_handlers(force_dry: bool) -> UniqueEntries[str, Any]:
                     )
                 ]
             plan = AnalysisPlan(plan_id=plan_id, subject_id=plan_title, steps=steps)
-            planner = PlanMode()
+            PlanMode().present_plan(plan)
             plan_summary = {"goal": goal or plan_title, "steps": len(steps)}
         else:
             return _clarify("create_plan", ["goal"], "어떤 작업의 계획을 세울까요?")
@@ -207,10 +225,7 @@ def _build_plan_handlers(force_dry: bool) -> UniqueEntries[str, Any]:
             f"  [muted]예상: {plan.total_estimated_time_s:.0f}s · "
             f"{plan.step_count} 단계 · plan_id={plan.plan_id}[/muted]"
         )
-        if not auto_execute:
-            console.print(
-                "  [dim]→ 승인 checkpoint: approve_plan · modify_plan · reject_plan[/dim]"
-            )
+        console.print("  [dim]→ 승인 checkpoint: approve_plan · modify_plan · reject_plan[/dim]")
         console.print()
         log.info(
             "Plan '%s' created for '%s' (%d steps)",
@@ -219,50 +234,11 @@ def _build_plan_handlers(force_dry: bool) -> UniqueEntries[str, Any]:
             plan.step_count,
         )
 
-        # AUTO mode: approve and execute immediately without user intervention
-        if auto_execute:
-            store.put(plan)
-            log.info(
-                "PlanStore write (AUTO): plan_id=%s len=%d",
-                plan.plan_id,
-                len(store),
-            )
-            console.print(f"  [bold cyan]▸ Auto-executing plan {plan.plan_id}[/bold cyan]")
-            exec_result = planner.auto_execute_plan(plan)
-            store.put(plan)
-
-            completed = exec_result.get("completed_steps", 0)
-            total = exec_result.get("total_steps", 0)
-            failed = exec_result.get("failed_steps", [])
-
-            if failed:
-                console.print(
-                    f"  [warning]Partial success: {completed}/{total} steps "
-                    f"(failed: {', '.join(failed)})[/warning]"
-                )
-            else:
-                console.print(f"  [success]✓ All {total} steps completed[/success]")
-            console.print()
-
-            return {
-                "status": "ok",
-                "action": "plan",
-                "plan_id": plan.plan_id,
-                "subject": plan.subject_id,
-                "template": template,
-                "step_count": plan.step_count,
-                "steps": [s.description for s in plan.steps],
-                "summary": plan_summary,
-                "execution_mode": PlanExecutionMode.AUTO.value,
-                "auto_executed": True,
-                "execution_result": exec_result,
-                "hint": "Plan auto-executed.",
-            }
-
-        # MANUAL mode: persist plan and wait for user approval
+        # Persist the review checkpoint. Approval records authority only; the
+        # AgenticLoop remains the sole owner of tool execution.
         store.put(plan)
         log.info(
-            "PlanStore write (MANUAL): plan_id=%s len=%d",
+            "PlanStore write: plan_id=%s len=%d",
             plan.plan_id,
             len(store),
         )
@@ -275,7 +251,9 @@ def _build_plan_handlers(force_dry: bool) -> UniqueEntries[str, Any]:
             "step_count": plan.step_count,
             "steps": [s.description for s in plan.steps],
             "summary": plan_summary,
-            "execution_mode": PlanExecutionMode.MANUAL.value,
+            "checkpoint_status": plan.status.value,
+            "approved": False,
+            "executed": False,
             "hint": (
                 "Review checkpoint created. Use approve_plan, reject_plan, "
                 "or modify_plan only if the user explicitly wants this gate."
@@ -295,7 +273,6 @@ def _build_plan_handlers(force_dry: bool) -> UniqueEntries[str, Any]:
 
         planner = PlanMode()
         planner.approve_plan(plan)
-        result = planner.execute_plan(plan)
         store.put(plan)
 
         subject = plan.subject_id
@@ -306,9 +283,13 @@ def _build_plan_handlers(force_dry: bool) -> UniqueEntries[str, Any]:
             "status": "ok",
             "action": "approve_plan",
             "plan_id": plan.plan_id,
-            "executed": True,
-            "result": str(result)[:500],
-            "hint": f"Plan approved for {subject}.",
+            "checkpoint_status": plan.status.value,
+            "approved": True,
+            "executed": False,
+            "hint": (
+                f"Plan approved for {subject}. Approval does not execute steps; "
+                "continue through the agent loop and report observed progress with update_plan."
+            ),
         }
 
     def handle_reject_plan(**kwargs: Any) -> dict[str, Any]:
