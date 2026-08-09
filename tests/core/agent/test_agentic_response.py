@@ -34,6 +34,16 @@ class TestAgenticResponse:
         assert b.name == "search"
         assert b.input == {"q": "test"}
 
+    def test_text_joins_text_blocks_and_ignores_tools(self):
+        r = AgenticResponse(
+            content=[
+                TextBlock(text="first"),
+                ToolUseBlock(id="tu_1", name="search"),
+                TextBlock(text="second"),
+            ]
+        )
+        assert r.text == "first\nsecond"
+
 
 class TestNormalizeAnthropic:
     def _make_response(

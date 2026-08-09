@@ -464,6 +464,7 @@ class AgenticLoop:
         # set by update_model_async on model change; the run-loop rebuilds
         # system_prompt before the next LLM call.
         self._prompt_dirty: bool = False
+        self._last_plan_hint: str = ""
         self._tool_registry = tool_registry
         self._mcp_manager = mcp_manager
         self._skill_registry = skill_registry
@@ -1003,20 +1004,25 @@ class AgenticLoop:
     ) -> str:
         """Sync model drift + rebuild the system prompt.
 
-        Rebuilds when the model drifted (``settings.model`` changed) or
-        ``_prompt_dirty`` is set (direct ``update_model_async``). On
-        rebuild, re-applies the preflight / reflection / verification / plan
-        hints inside the dynamic envelope so a mid-arun drift doesn't drop them (the
-        preflight hint was silently lost here before 2026-07-29). Returns
-        the (possibly-rebuilt) prompt; clears ``_prompt_dirty``.
+        Rebuilds when the model drifted (``settings.model`` changed),
+        ``_prompt_dirty`` is set (direct ``update_model_async``), or advisory
+        plan progress changed. On rebuild, re-applies the preflight /
+        reflection / verification / plan hints inside the dynamic envelope so
+        a mid-arun change does not drop them. Returns the (possibly-rebuilt)
+        prompt; clears ``_prompt_dirty``.
         """
         drift_detected = await self._sync_model_from_settings_async()
         prompt_dirty = self._prompt_dirty
-        if drift_detected or prompt_dirty:
+        _plan_consume = getattr(self, "_consume_plan_hint", None)
+        raw_plan_hint = _plan_consume() if callable(_plan_consume) else ""
+        plan_hint = raw_plan_hint if isinstance(raw_plan_hint, str) else ""
+        last_plan_hint = getattr(self, "_last_plan_hint", "")
+        if not isinstance(last_plan_hint, str):
+            last_plan_hint = plan_hint
+        plan_changed = plan_hint != last_plan_hint
+        if drift_detected or prompt_dirty or plan_changed:
             from core.agent.loop._context import inject_runtime_hints
 
-            _plan_consume = getattr(self, "_consume_plan_hint", None)
-            plan_hint = _plan_consume() if callable(_plan_consume) else ""
             system_prompt = inject_runtime_hints(
                 self._build_system_prompt(),
                 getattr(self, "_preflight_hint", ""),
@@ -1025,12 +1031,17 @@ class AgenticLoop:
                 plan_hint if isinstance(plan_hint, str) else "",
             )
             self._prompt_dirty = False
+            self._last_plan_hint = plan_hint
             # Fire PROMPT_ASSEMBLED on each per-round rebuild (no-op if no hooks)
             hooks = getattr(self, "_hooks", None)
             if hooks:
                 from core.hooks import HookEvent
 
-                reason = "model_drift" if drift_detected else "prompt_dirty"
+                reason = (
+                    "model_drift"
+                    if drift_detected
+                    else ("prompt_dirty" if prompt_dirty else "plan_progress")
+                )
                 await hooks.trigger_async(
                     HookEvent.PROMPT_ASSEMBLED,
                     {
@@ -1506,7 +1517,7 @@ class AgenticLoop:
                 except Exception:
                     log.debug("Handoff SessionManager close failed", exc_info=True)
 
-    async def _maybe_replan_async(self, round_idx: int) -> None:
+    async def _maybe_replan_async(self, round_idx: int, *, failure_context: str = "") -> None:
         """Per-round Dynamic Replan trigger.
 
         Asks :func:`core.agent.plan.should_replan`; on a trigger calls
@@ -1562,24 +1573,45 @@ class AgenticLoop:
                 metrics.record_step_attempt()
                 cap = _replan_max_attempts()
                 if metrics.replan_attempts_on_current_step > cap:
+                    abandoned_step = metrics.active_plan.current_step()
                     advanced = metrics.active_plan.abandon_and_advance()
                     # new step → reset the per-step counter
                     metrics.set_active_plan(advanced, reset_attempts=True)
+                    timeline = getattr(self, "_timeline", None)
+                    if timeline is not None:
+                        from core.observability.session_timeline import SessionEventKind
+
+                        timeline.record_plan_state(
+                            SessionEventKind.PLAN_ABANDONED,
+                            advanced,
+                            trigger="retry_budget_exhausted",
+                            changed_step_ids=(abandoned_step.id,)
+                            if abandoned_step is not None
+                            else (),
+                        )
                     self._prompt_dirty = True
                     log.info(
                         "Replan abandon: step exceeded %d attempts; advancing plan",
                         cap,
                     )
                     return
-            # synthetic turn_result — replan_async only reads ``.text``
+            # Replan against the failed candidate and verifier instruction;
+            # the per-turn tool log was reset before a verify continuation.
             from types import SimpleNamespace
 
-            recent_text = ""
-            try:
-                recent_text = self._tool_processor.tool_log[-1].get("result", "")
-            except Exception:
-                log.debug("recent tool_log read for replanner failed", exc_info=True)
-                recent_text = ""
+            recent_parts: list[str] = []
+            if trigger == "verify_fail":
+                attempts = getattr(self, "_verify_attempt_results", ())
+                if attempts:
+                    recent_parts.append(str(getattr(attempts[-1], "text", "") or ""))
+                if failure_context:
+                    recent_parts.append(failure_context)
+            if not recent_parts:
+                try:
+                    recent_parts.append(str(self._tool_processor.tool_log[-1].get("result", "")))
+                except Exception:
+                    log.debug("recent tool_log read for replanner failed", exc_info=True)
+            recent_text = "\n\n".join(part for part in recent_parts if part)
             stub_result = SimpleNamespace(text=str(recent_text))
             new_plan = await replan_async(
                 self, plan=metrics.active_plan, turn_result=stub_result, trigger=trigger
@@ -1589,6 +1621,15 @@ class AgenticLoop:
                 return
             metrics.record_replan(trigger)
             metrics.set_active_plan(new_plan)
+            timeline = getattr(self, "_timeline", None)
+            if timeline is not None:
+                from core.observability.session_timeline import SessionEventKind
+
+                timeline.record_plan_state(
+                    SessionEventKind.PLAN_REPLANNED,
+                    new_plan,
+                    trigger=trigger,
+                )
             # next LLM call must see the new plan
             self._prompt_dirty = True
             # UI replan banner
@@ -2094,12 +2135,14 @@ class AgenticLoop:
         from core.agent.loop._context import inject_runtime_hints
 
         reflection_hint = self._consume_reflection_hint()
+        plan_hint = self._consume_plan_hint()
+        self._last_plan_hint = plan_hint
         system_prompt = inject_runtime_hints(
             self._build_system_prompt(),
             preflight_hint,
             reflection_hint,
             verification_hint,
-            self._consume_plan_hint(),
+            plan_hint,
         )
 
         # Prune old messages to stay within context budget (Karpathy P6)
@@ -2128,7 +2171,10 @@ class AgenticLoop:
 
             # Dynamic Replan trigger (verify-FAIL / cadence); the rebuild
             # below picks up the new plan via _consume_plan_hint.
-            await self._maybe_replan_async(round_idx)
+            await self._maybe_replan_async(
+                round_idx,
+                failure_context=user_input if verification_continuation else "",
+            )
 
             system_prompt = await self._sync_model_and_rebuild_prompt(
                 system_prompt,
@@ -2662,6 +2708,7 @@ class AgenticLoop:
         round_idx: int = 0,
         model: str | None = None,
         response_schema: dict[str, Any] | None = None,
+        allow_tools: bool = True,
     ) -> AgenticResponse | None:
         """Multi-provider LLM call via :class:`LLMAdapter` (P1 Gateway pattern).
 
@@ -2670,9 +2717,9 @@ class AgenticLoop:
         ``AgenticResponse`` or None on failure. Raises ``UserCancelledError``
         on Ctrl+C (caught by ``arun()``). Optional ``model`` overrides the
         request model for one call without mutating ``self.model``. Optional
-        ``response_schema`` overrides the loop-level schema for this call only,
-        so auxiliary planner / judge calls can use structured outputs without
-        changing the main agent turn.
+        ``response_schema`` overrides the loop-level schema for this call only.
+        ``allow_tools=False`` keeps auxiliary planner / judge calls on their
+        structured text contract instead of inheriting the action tool surface.
 
         Invariants:
           * the context-overflow check mutates the SHARED messages list in
@@ -2693,16 +2740,18 @@ class AgenticLoop:
         messages = append_system_reminder(messages, model=effective_model, round_idx=round_idx)
 
         # WRAP_UP: force text-only when approaching limits
-        force_text = False
+        wrap_up = False
         if self.max_rounds > 0:
             remaining = self.max_rounds - round_idx
-            force_text = remaining <= self.WRAP_UP_HEADROOM
-        if not force_text and self._time_budget_s > 0:
+            wrap_up = remaining <= self.WRAP_UP_HEADROOM
+        if not wrap_up and self._time_budget_s > 0:
             import time as _time
 
             remaining_time = self._time_budget_s - (_time.monotonic() - self._loop_start_time)
-            force_text = remaining_time <= self._WRAP_UP_TIME_HEADROOM_S
-        tool_choice: dict[str, str] = {"type": "none"} if force_text else {"type": "auto"}
+            wrap_up = remaining_time <= self._WRAP_UP_TIME_HEADROOM_S
+        tool_choice: dict[str, str] = (
+            {"type": "none"} if wrap_up or not allow_tools else {"type": "auto"}
+        )
 
         # Adaptive compute — context-proportional caps; the only adaptive
         # case left is wrap-up (overthinking exits the loop instead).
@@ -2714,7 +2763,7 @@ class AgenticLoop:
         adaptive_max_tokens = self.max_tokens
         adaptive_thinking = self._thinking_budget
         adaptive_effort = self._effort
-        if force_text:
+        if wrap_up:
             # wrap-up: minimal budget (0.5% of window, floor 4096)
             adaptive_max_tokens = max(4096, min(self.max_tokens, ctx_window // 200))
             adaptive_thinking = 0
@@ -2738,7 +2787,7 @@ class AgenticLoop:
             model=effective_model,
             system=system,
             messages=messages,
-            tools=self._tools,
+            tools=self._tools if allow_tools else [],
             tool_choice=tool_choice,
             max_tokens=adaptive_max_tokens,
             temperature=loop_temperature,

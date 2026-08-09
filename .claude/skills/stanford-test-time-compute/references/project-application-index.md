@@ -1,8 +1,8 @@
 # Project application index
 
-Read `lecture-analysis.md` first. Then load only the row needed for the current
-request. These files are 2026-08-05 presentation snapshots; current GEODE code,
-tests, schemas, and release documents take precedence.
+Read the matching Part 2 or Part 5 lecture reference first. Then load only the
+row needed for the current request. Historical presentation snapshots never
+override current GEODE code, tests, schemas, and release documents.
 
 | Need | Reference | Current GEODE grounding |
 |---|---|---|
@@ -12,6 +12,7 @@ tests, schemas, and release documents take precedence.
 | Frozen-model scaffold levers and bounded search | route through `presentation-index-snapshot.md` only when historical framing is needed | `core/self_improving/loop/mutate/`, `plugins/crucible/contract.py` |
 | Policy stack and trajectory provenance | no additional snapshot required | `core/agent/`, `core/observability/trajectory.py`, `core/agent/evidence_ledger.py` |
 | Runtime verification and public hooks | no presentation snapshot required | `core/agent/verify.py`, `core/agent/loop/_lifecycle.py`, `core/hooks/public.py`, `docs/architecture/hook-system.md` |
+| Planning, multi-step execution, and deep research | `lecture-05-planning-multistep.md` | `core/agent/plan.py`, `core/agent/loop/agent_loop.py`, `core/agent/sub_agent.py`, `.geode/skills/deep-researcher/SKILL.md` |
 | Tau2 executable evidence | no presentation snapshot required | `plugins/benchmark_harness/`, `docs/eval/tau2-bench.md`, `docs/plans/2026-08-04-runtime-faithful-tau2.md` |
 
 When a snapshot names an old version or revision, preserve it as historical

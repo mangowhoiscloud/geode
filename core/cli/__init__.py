@@ -502,7 +502,7 @@ def main(
     dangerously_skip_permissions: bool = typer.Option(
         False,
         "--dangerously-skip-permissions",
-        help="Bypass ALL HITL approval gates + the plan-approval stop (autonomous). Use with care.",
+        help="Bypass tool HITL approval gates (autonomous). Use with care.",
     ),
 ) -> None:
     """GEODE — Autonomous Research Harness."""

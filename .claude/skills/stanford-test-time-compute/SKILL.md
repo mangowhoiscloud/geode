@@ -1,6 +1,6 @@
 ---
 name: stanford-test-time-compute
-description: Ground GEODE design and evaluation work in Stanford CS329A Test-Time Compute Scaling Part 2. Use for test-time or inference-time compute, best-of-N, parallel candidate width, sequential repair depth, measurement replication, verifier/evaluator versus promotion authority, verifier-aware scheduling, Archon or inference-program search, and GEODE/Eco²/SIL/Crucible comparisons.
+description: Ground GEODE design and evaluation work in Stanford CS329A Parts 2 and 5. Use for test-time compute, planning, multi-step reasoning, deep research, LATS, independent subplans, best-of-N, repair depth, measurement replication, verifier authority, and GEODE/Eco²/SIL/Crucible comparisons.
 ---
 
 # Stanford Test-Time Compute Grounding
@@ -10,9 +10,11 @@ separate while applying test-time compute concepts to GEODE.
 
 ## Workflow
 
-1. Read `references/lecture-analysis.md` completely before making a claim or
-   design decision. The full read is deliberate: this user-designated SOT owns
-   both the 63-minute lecture analysis and its project-mapping caveats.
+1. Select the lecture reference by decision plane and read it completely:
+   `references/lecture-analysis.md` for Part 2 test-time compute, or
+   `references/lecture-05-planning-multistep.md` for Part 5 planning,
+   multi-step reasoning, and deep research. Read both when the request crosses
+   those boundaries.
 2. Classify the request using the decision planes below.
 3. Read only the matching project references from
    `references/project-application-index.md`.
@@ -31,6 +33,8 @@ separate while applying test-time compute concepts to GEODE.
 | Inference-program search | Which bounded operator composition should run? | online self-modification or product promotion |
 | Measurement replication | How uncertain is one policy's measured result? | best-of-N candidate selection |
 | Promotion authority | Which evidence may change named state or release state? | verifier score or candidate ranking |
+| Multi-step planning | Which steps depend on each other, and which are independent? | prose checklist or automatic execution |
+| Trajectory search | Can alternative action paths be cloned, rolled back, and scored? | retries in one shared mutable environment |
 
 ## Claim discipline
 
@@ -55,6 +59,10 @@ separate while applying test-time compute concepts to GEODE.
   controlled budget intervention first.
 - Keep completed state-changing trajectories out of answer fusion. Consider
   fusion only before side effects, over plan or text candidates.
+- Parallelize only independent subplans. Keep critical-path actions and final
+  synthesis under the parent.
+- Do not claim LATS/tree search without cloneable state, branch isolation, and
+  a path evaluator.
 
 ## Output contract
 

@@ -4855,7 +4855,6 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/config/reference.md
 | 필드 | 기본값 | 용도 |
 | --- | --- | --- |
 | `hitl_level` | 2 | 2면 모두 확인, 1이면 쓰기만 확인, 0이면 자율. |
-| `plan_auto_execute` | false | 플랜 자동 실행. |
 | `cost_limit_usd` | 0.0 | 비용 상한. 0이면 무제한, 80%에서 경고. |
 | `computer_use_enabled` | true | 데스크탑 자동화 도구. |
 
@@ -5772,9 +5771,15 @@ GEODE의 탐색은 네 갈래입니다. 외부 문서 사이트, 일반 웹, 자
 
 이 휴리스틱은 코드 분기가 아니라 instruction 레벨로 구현되어 있습니다. 시스템 프롬프트(`core/llm/prompts/router.md`의 "Documentation-site research (llms.txt-first)" 절)와`web_fetch` 도구 설명(`core/tools/definitions.json`) 두 표면이 같은 지시를 싣습니다. frontier 하네스들이 수렴한 방식입니다.
 
+## 딥리서치: 독립 축 병렬 수집
+
+프로젝트의 `deep-researcher` 스킬은 질문·research gap· 검증할 claim을 먼저 정하고, 서로 독립인 조사 축만 한 번의`delegate_task` batch로 보냅니다. 부모는 선행조건, 원문 확인, 모순 판정과 최종 종합을 계속 소유합니다. 자식 실패도 결과에서 제거하지 않으며, 출처 수 대신 citation entailment, 최신성, 권위와 상충 근거를 검사합니다.
+
+`update_plan`은 관측된 진행을 표시하는 advisory checklist일 뿐 실행기가 아닙니다. 런타임이 `<plan>`을 제공하면 스킬은 별도 체크리스트를 만들지 않고 그 단계 문구를 그대로 사용합니다. 결과를 파일이나 memory에 자동 저장하지도 않습니다.
+
 ## 웹 탐색과 위임 규칙
 
-일반 웹 탐색은 `general_web_search`와`read_web_page`가 담당합니다. 단, 런타임 가드레일이 하나 있습니다. 한 턴에 이 도구들을 3회 이상 직접 호출하지 않고,`delegate_task`로 서브에이전트에 위임합니다(GEODE.md RUNTIME CANNOT). 검색 결과가 부모 컨텍스트를 폭발시키는 것을 막고, 서브에이전트는 `web_research` 툴킷 (`core/tools/toolkits.toml`)으로 격리된 컨텍스트에서 조사를 끝낸 뒤 요약만 돌려줍니다.
+일반 웹 탐색은 `general_web_search`와`web_fetch`가 담당합니다. GEODE의 instruction-level 정책은 한 턴에 이 도구들을 3회 이상 직접 호출하지 않고,`delegate_task`로 서브에이전트에 위임합니다(GEODE.md RUNTIME CANNOT). 이는 하드 런타임 차단이 아니라 검색 결과가 부모 컨텍스트를 폭발시키는 것을 막는 행동 계약입니다. 서브에이전트는`web_research` 툴킷 (`core/tools/toolkits.toml`)으로 격리된 컨텍스트에서 조사를 끝낸 뒤 요약만 돌려줍니다.
 
 ## 로컬 탐색: 기억과 세션
 
@@ -5974,7 +5979,7 @@ Tier 2  latex2sympy2 + sympy.pretty  블록 전용. 분수·적분을 2D Unicode
 URL: https://mangowhoiscloud.github.io/geode/docs/reference/changelog
 Markdown: https://mangowhoiscloud.github.io/geode/docs/reference/changelog.md
 
-(body omitted from llms-full: 1497 KB — fetch the Markdown twin above for the complete page)
+(body omitted from llms-full: 1499 KB — fetch the Markdown twin above for the complete page)
 
 ---
 
