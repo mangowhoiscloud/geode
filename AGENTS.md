@@ -29,7 +29,7 @@ The generated architecture inventory lives at
 `site/src/data/geode/architecture-baseline.json`. Refresh it with
 `uv run python scripts/architecture_baseline.py --update`; CI uses `--check`.
 The current snapshot records 541 production Python files,
-679 test Python files,
+680 test Python files,
 84 tool definitions, and
 57 `RuntimeEvent` members.
 <!-- generated:architecture-baseline:end -->
@@ -44,6 +44,11 @@ Use `docs/workflow.md` as the canonical workflow summary and
 `.claude/skills/geode-workflow/` as the progressive-disclosure execution
 scaffold. It is shared with Claude Code and supersedes the older issue-first
 workflow.
+
+For benchmark execution, evaluation artifact audits, research-question
+framing, attempt lineage, or trajectory publication, start at the generated
+`docs/eval/index.json` and use `.agents/skills/geode-eval/`. Claude Code sees
+the same tracked skill through the relative `.claude/skills/geode-eval` alias.
 
 For test-time compute, best-of-N, verifier-aware scheduling, inference-program
 search, or GEODE/Eco²/SIL/Crucible comparisons, use

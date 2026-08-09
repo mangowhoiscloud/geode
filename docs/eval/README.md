@@ -1,8 +1,68 @@
-# GEODE Eval Roadmap
+---
+eval_id: evaluation-index
+eval_family: evaluation-routing
+eval_kind: index
+eval_status: canonical
+eval_authority: routing
+eval_summary: Machine and human entrypoint for GEODE evaluation contracts, benchmark ledgers, evidence, and publication.
+eval_triggers:
+  - evaluation
+  - benchmark
+  - trajectory
+  - artifact
+  - research question
+eval_contracts:
+  - docs/eval/eval-analysis.template.json
+  - docs/eval/eval-attempt.template.json
+  - docs/eval/eval-run-spec.template.json
+  - docs/eval/schemas/analysis.schema.json
+  - docs/eval/schemas/attempt.schema.json
+  - docs/eval/schemas/run-spec.schema.json
+eval_latest_valid_release: https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/4903c31abf/trajectories/geode-agenticloop-hook-middleware-behavior-e2e-20260807T112014Z-aba8839af72c
+---
+
+# GEODE Evaluation Index and Roadmap
 
 > Action/tool-execution 4종 벤치마크. GEODE의 quality ratchet(P4)에 통합 예정.
 > 각 문서는 **사례 + 필요 인프라 + 4-Phase 진행 시나리오**를 담음.
-> 마지막 갱신: 2026-08-03
+> 마지막 갱신: 2026-08-09
+
+## LLM entry contract
+
+평가 작업은 전체 디렉터리를 grep하는 대신 생성 색인
+[`index.json`](index.json)에서 시작한다. 사람은 이 README를 읽고, Codex와
+Claude Code는 동일한 정본인 [`.agents/skills/geode-eval/SKILL.md`](../../.agents/skills/geode-eval/SKILL.md)를
+통해 필요한 문서만 점진적으로 연다.
+
+```mermaid
+flowchart LR
+    Q["Research question · gap · hypothesis"] --> S["Frozen run-spec.json"]
+    S --> A["Append-only attempts.jsonl"]
+    A --> E["Native result · trajectory · verifier receipt"]
+    E --> N["Digest-bound analysis.json"]
+    N --> R["Immutable trajectory release · artifact manifest"]
+```
+
+이 계층은 기존 저장소를 대체하지 않는다. native harness 결과는 점수
+정본, session/trajectory는 행동 증거, verifier receipt/state diff는 판정
+증거, release manifest는 공개 무결성 정본이다. 새 sidecar는 그 앞뒤의
+연구 의도와 시도 계보를 연결할 뿐 raw evidence를 복제하지 않는다.
+
+새 실행은 모델 호출 전에
+[`eval-run-spec.template.json`](eval-run-spec.template.json)을 복사해 질문,
+GAP, 가설, 1차 지표, 판정·무효화 규칙, 재현 조건을 동결한다. 각 실행은
+[`eval-attempt.template.json`](eval-attempt.template.json) 형태의 한 줄을
+`attempts.jsonl`에 append하고, 분석은
+[`eval-analysis.template.json`](eval-analysis.template.json)으로 frozen spec과
+attempts의 SHA-256을 결속한다. 검증 명령은
+[`benchmark-publishing-cycle.md`](benchmark-publishing-cycle.md)에 있다.
+`exact` 시각은 알려진 timezone offset을 가져야 하며 `-00:00`은 허용하지
+않는다. 선택된 시도에 invalid/aborted가 포함되면 1차 지표는
+`not-measurable`과 null count로 남고 승격·기각 근거가 될 수 없다.
+측정 가능한 1차 지표는 digest-bound native JSON의 value·numerator·denominator를
+JSON Pointer로 직접 역참조하고, 분모는 run spec에 동결한 값과도 일치해야 한다.
+2차 지표는 증거 digest를 반드시 유지하되, 텍스트·CSV 등 비 JSON 증거라면
+`source_locator`를 null로 둘 수 있다.
 
 ## Raw artifact repository
 
@@ -15,10 +75,10 @@ those claims. See [External Evaluation Artifact Repository](external-artifact-re
 for path mappings, disclosure rules, and the publication manifest scaffold.
 
 The latest runtime-contract record is the immutable
-[2026-07-31 stable hook/middleware behavior trajectory](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/b979268d7e64c99ca27b51c025a2cd25022cc1a5/trajectories/geode-agenticloop-hook-middleware-behavior-e2e-20260731T091808Z-d418e55ff8aa):
-13/13 public hooks, 4/4 trusted middleware join points, and matching 22-row
-SQLite/JSONL extension projections. It is a release-validation probe, not a
-scored benchmark.
+[2026-08-07 Luna/max hook/middleware behavior trajectory](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/4903c31abf/trajectories/geode-agenticloop-hook-middleware-behavior-e2e-20260807T112014Z-aba8839af72c):
+one scope-complete, replay-incomplete stable trajectory with 27 normalized
+events. It supersedes the 2026-07-31 probe and is release-validation evidence,
+not a scored benchmark.
 
 The latest scored behavior record is pinned to artifact commit
 [`86dcbba`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/86dcbba3d15f1979b71a501780bf66fea4b450b5):

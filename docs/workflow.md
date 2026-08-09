@@ -56,6 +56,7 @@ does not claim the package or authorize expanding the implementation diff.
 | Ordinary code-work checklist | `.claude/skills/geode-workflow/references/phase-checklist.md` |
 | Provider/model/API capability claims | `.claude/skills/geode-workflow/references/provider-grounding.md` |
 | Schema/log/event/state/trajectory consistency | `.claude/skills/geode-workflow/references/observability-contract.md` |
+| Evaluation question, run spec, attempt lineage, analysis, and publication | `.agents/skills/geode-eval/SKILL.md` + `docs/eval/index.json` |
 | Test, lint, type, prompt, and full-suite gates | `.claude/skills/geode-workflow/references/verification-gates.md` |
 | Branch, PR, merge, and cleanup operations | `.claude/skills/geode-workflow/references/gitflow.md` |
 

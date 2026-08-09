@@ -47,6 +47,20 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **Made evaluation intent and retry lineage machine-discoverable.** A tracked
+  cross-host `geode-eval` skill and generated eval catalog now route agents to
+  the relevant benchmark authority without loading the full docs tree. Frozen
+  run-spec, append-only attempt, and digest-bound analysis schemas preserve the
+  research question, reproduction envelope, retry ancestry, decision rule,
+  and evidence references around existing native results and trajectory
+  releases. CI rejects stale catalog metadata and pins validator regressions
+  for unresolved templates, malformed attempt graphs, evidence-byte drift,
+  unbound or non-resolving metric pointers, source/count drift, registration
+  chronology, non-portable or private paths, authority-free decisions, and
+  over-broad promotion claims.
+
 ### Fixed
 
 - **Made lifecycle restarts and runtime tests honor their real ownership

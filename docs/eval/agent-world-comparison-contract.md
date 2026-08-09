@@ -1,3 +1,22 @@
+---
+eval_id: agent-world-comparison
+eval_family: agent-world-comparison
+eval_kind: contract
+eval_status: canonical
+eval_authority: comparison-contract
+eval_summary: Canonical Agent-World v1 comparison profile for directional paper references and paired GEODE runtime controls.
+eval_triggers:
+  - Agent-World
+  - mean_accuracy@8
+  - paired runtime
+  - MCP-Mark
+  - BFCL V4
+  - tau2
+eval_contracts:
+  - docs/eval/agent-world-run-manifest.template.json
+  - docs/eval/schemas/run-spec.schema.json
+---
+
 # Agent-World Comparison Contract
 
 Status: canonical GEODE comparison specification, 2026-08-08.

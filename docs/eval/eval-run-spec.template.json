@@ -1,0 +1,84 @@
+{
+  "schema_id": "geode.eval-run-spec@1",
+  "schema_version": 1,
+  "run_id": "<stable-run-id>",
+  "created_at": "<YYYY-MM-DDTHH:MM:SSZ>",
+  "preregistration": {
+    "mode": "prospective",
+    "status": "frozen",
+    "frozen_at": "<YYYY-MM-DDTHH:MM:SSZ>",
+    "live_test_approved": false,
+    "operator": "<name-or-role>"
+  },
+  "study": {
+    "research_question": "<the precise question this run can answer>",
+    "research_gap": "<the missing evidence that makes this run necessary>",
+    "hypothesis": "<a measurable prediction stated before execution>",
+    "primary_metric": {
+      "name": "<metric-name>",
+      "unit": "<unit>",
+      "direction": "maximize",
+      "aggregation": "<exact numerator, denominator, and aggregation rule>",
+      "denominator": 1
+    },
+    "decision_rule": "<the threshold and comparison that determine the decision>",
+    "invalidation_rule": "<conditions that make an attempt infrastructure-invalid or the run inconclusive>",
+    "analysis_plan": "<how selected attempts, uncertainty, subgroups, and failure classes will be analyzed>"
+  },
+  "reproduction": {
+    "geode": {
+      "revision": "<40-character-geode-commit>",
+      "branch": "<branch>",
+      "dirty": false
+    },
+    "harness": {
+      "name": "<harness-name>",
+      "source": "<repository-or-package>",
+      "revision": "<commit-or-version>"
+    },
+    "model": {
+      "provider": "<provider>",
+      "label": "<exact-model-label>",
+      "route": "subscription",
+      "reasoning": "<exact-setting>"
+    },
+    "environment": {
+      "platform": "<operating-system-and-version>",
+      "architecture": "<cpu-architecture>",
+      "reset_strategy": "<state-reset-procedure>",
+      "initial_state_ref": "<receipt-or-content-digest>"
+    },
+    "execution": {
+      "command_redacted": "<reproducible-command-without-secrets>",
+      "ordered_workload_ids": ["<workload-id>"],
+      "workload_ids_sha256": "<sha256-of-canonical-json-array>",
+      "repetitions": 1,
+      "seed_schedule": ["<seed>"],
+      "max_concurrency": 1,
+      "timeout_seconds": 1,
+      "budget": {
+        "kind": "wall-time",
+        "limit": 1,
+        "unit": "seconds"
+      }
+    },
+    "comparison": {
+      "claim_class": "smoke",
+      "comparator": null,
+      "comparability": "not-comparable",
+      "promotion_authority": "none"
+    }
+  },
+  "artifacts": {
+    "native_results": null,
+    "trajectory": null,
+    "verifier_receipts": null,
+    "attempts": "<run-directory>/attempts.jsonl",
+    "analysis": "<run-directory>/analysis.json",
+    "publication_manifest": null
+  },
+  "privacy": {
+    "classification": "internal",
+    "redaction_boundary": "<what may be retained locally and what must be removed before publication>"
+  }
+}

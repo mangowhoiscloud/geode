@@ -1,18 +1,51 @@
+---
+eval_id: benchmark-run-record
+eval_family: benchmark-run-record
+eval_kind: template
+eval_status: canonical
+eval_authority: human-run-report
+eval_summary: Human-readable benchmark report template derived from frozen run, attempt, analysis, and evidence sidecars.
+eval_triggers:
+  - benchmark report
+  - run record
+  - result publication
+eval_contracts:
+  - docs/eval/schemas/analysis.schema.json
+  - docs/eval/schemas/attempt.schema.json
+  - docs/eval/schemas/run-spec.schema.json
+---
+
 # Benchmark Run Record Template
 
 Copy this file into the relevant eval ledger or run note, then replace every
-placeholder before publication.
+placeholder before publication. This is a presentation projection, not a new
+source of truth: cite the validated `run-spec.json`, `attempts.jsonl`, and
+`analysis.json` plus native evidence.
+
+## Research Contract
+
+| Field | Value |
+|---|---|
+| Research question | `<precise question>` |
+| Research gap | `<missing evidence>` |
+| Hypothesis | `<measurable prediction>` |
+| Primary metric | `<name, unit, direction, frozen denominator, aggregation>` |
+| Decision rule | `<pre-registered threshold>` |
+| Invalidation rule | `<infrastructure-invalid or inconclusive conditions>` |
+| Analysis plan | `<selected attempts, uncertainty, subgroups, failure classes>` |
 
 ## Identity
 
 | Field | Value |
 |---|---|
 | Run ID | `<benchmark>-<suite>-<model>-<reasoning>-<yyyymmdd>` |
+| Registration mode | `<prospective / retrospective>` |
 | Date | `<YYYY-MM-DD>` |
 | Operator | `<name or role>` |
 | GEODE commit | `<sha>` |
 | GEODE branch | `<branch>` |
 | Dirty worktree? | `<clean / explain local changes>` |
+| Frozen run spec | `<path + sha256>` |
 
 ## Benchmark
 
@@ -45,13 +78,16 @@ placeholder before publication.
 
 ## Artifacts
 
-| Artifact | Path |
+| Artifact | Relative path or manifest + SHA-256 |
 |---|---|
 | Raw result directory | `<artifacts/eval/...>` |
 | Verifier output | `<path>` |
 | Transcript | `<path>` |
 | Summary JSON/CSV | `<path>` |
 | Logs | `<path>` |
+| Attempts JSONL | `<path + sha256>` |
+| Analysis | `<path + sha256>` |
+| Primary metric source | `<digest-bound native JSON path + value/numerator/denominator JSON Pointers>` |
 
 ## Result
 
@@ -93,9 +129,16 @@ placeholder before publication.
 - `<What it does not mean.>`
 - `<Whether this is a smoke baseline, verified score, or full benchmark.>`
 
+## Attempt Lineage
+
+| Attempt | Parent | Validity | Outcome | Timing | Change | Expected | Observed | Failure class | Evidence digest | Selected |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `<attempt-id>` | `<parent-or-root>` | `<valid/invalid/aborted>` | `<passed/failed/mixed/unknown>` | `<exact/source-naive/unknown>` | `<surface + description>` | `<prediction>` | `<result>` | `<class-or-na>` | `<relative path + sha256>` | `<yes/no>` |
+
 ## Publication Checklist
 
 - [ ] Internal ledger updated under `docs/eval/`.
+- [ ] `run-spec.json`, `attempts.jsonl`, and `analysis.json` pass the eval contract validator.
 - [ ] Public docs page added or updated under `site/src/app/docs/benchmarks/`.
 - [ ] Sitemap entry added in `site/src/lib/geode-docs/sitemap.ts`.
 - [ ] Local usernames, keys, tokens, and account identifiers scrubbed.

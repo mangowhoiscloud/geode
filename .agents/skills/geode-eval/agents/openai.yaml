@@ -1,0 +1,4 @@
+interface:
+  display_name: "GEODE Evaluation"
+  short_description: "Freeze, validate, and publish GEODE evaluation evidence"
+  default_prompt: "Use $geode-eval to scope this evaluation, freeze its research contract, preserve attempt lineage, and identify the correct publication path."
