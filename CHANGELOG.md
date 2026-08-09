@@ -47,6 +47,11 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.18] - 2026-08-10
+
+> Truthful advisory planning and Part 5 deep research, lifecycle boundary
+> hardening, and a reproducible Agent-World comparison contract.
+
 ### Added
 
 - **Aligned deep research with Stanford CS329A Part 5 and Codex runtime
