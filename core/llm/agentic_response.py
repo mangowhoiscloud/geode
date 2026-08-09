@@ -119,6 +119,13 @@ class AgenticResponse:
     # adapters and for Codex responses with no phase set.
     assistant_phase: str = ""
 
+    @property
+    def text(self) -> str:
+        """Return the normalized text blocks as one string."""
+        return "\n".join(
+            block.text for block in self.content if isinstance(block, TextBlock)
+        ).strip()
+
 
 def inject_reasoning_replay(
     oai_messages: list[dict[str, Any]],

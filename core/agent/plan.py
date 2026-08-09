@@ -59,6 +59,7 @@ __all__ = [
     "parse_replan_response",
     "render_plan_for_prompt",
     "replan_async",
+    "replan_response_schema",
     "should_replan",
 ]
 
@@ -220,7 +221,7 @@ def build_plan_from_decomposition(decomp_result: Any) -> Plan | None:
     """Convert a :class:`core.orchestration.goal_decomposer.DecompositionResult`
     (with ``.goals`` list + ``.reasoning``) into an explicit :class:`Plan`.
 
-    Returns ``None`` when the decomposition is empty or unparseable so the
+    Returns ``None`` when the decomposition is empty or unparsable so the
     caller can short-circuit. ``getattr`` is used liberally so the helper
     survives mocked / partial inputs in tests.
     """
@@ -390,10 +391,9 @@ def should_replan(
     """
     if not _replan_enabled():
         return None
-    # Verify FAIL trigger — wins over cadence so we replan as soon as
-    # the agent has a hint to act on, rather than waiting for the next
-    # cadence boundary.
-    if verify_failed and verify_should_retry:
+    # Verify FAIL is an edge at the repair arun boundary. The verdict remains
+    # durable telemetry, but it must not retrigger on every tool round.
+    if round_idx == 0 and verify_failed and verify_should_retry:
         return "verify_fail"
     # Cadence trigger — fires only when a plan already exists (no
     # synthesis from thin air; planning happens at decomposition).
@@ -436,10 +436,44 @@ address the failure the previous turn surfaced.
 """
 
 
+def replan_response_schema() -> dict[str, Any]:
+    """Return the structured-output schema for plan revision."""
+    return {
+        "title": "ReplanResult",
+        "type": "object",
+        "properties": {
+            "steps": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 8,
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "id": {"type": "string"},
+                        "description": {"type": "string"},
+                        "expected_outcome": {"type": "string"},
+                        "tool_name": {"type": "string"},
+                    },
+                    "required": [
+                        "id",
+                        "description",
+                        "expected_outcome",
+                        "tool_name",
+                    ],
+                    "additionalProperties": False,
+                },
+            },
+            "reasoning": {"type": "string"},
+        },
+        "required": ["steps", "reasoning"],
+        "additionalProperties": False,
+    }
+
+
 def parse_replan_response(raw: str) -> tuple[list[PlanStep], str] | None:
     """Parse the planner LLM's JSON response into ``(steps, reasoning)``.
 
-    Returns ``None`` when the payload is unparseable so the caller can
+    Returns ``None`` when the payload is unparsable so the caller can
     keep the prior plan instead of fabricating one. Tolerates code fences
     around the JSON (some models wrap with ```json``).
     """
@@ -522,6 +556,8 @@ async def replan_async(
                 _REPLAN_SYSTEM_PROMPT,
                 [{"role": "user", "content": user_prompt}],
                 model=loop.model,
+                response_schema=replan_response_schema(),
+                allow_tools=False,
             ),
             timeout=timeout_s,
         )
@@ -724,6 +760,7 @@ async def decompose_async(
                 [{"role": "user", "content": user_prompt}],
                 model=loop.model,
                 response_schema=decomposition_response_schema(),
+                allow_tools=False,
             ),
             timeout=_DECOMPOSE_CALL_TIMEOUT_S,
         )

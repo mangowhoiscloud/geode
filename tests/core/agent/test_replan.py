@@ -217,14 +217,23 @@ def test_should_replan_off_when_disabled(monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 def test_should_replan_verify_fail_priority() -> None:
-    """Verify FAIL wins over cadence."""
+    """Verify FAIL fires once at the repair arun's first round."""
     trigger = should_replan(
-        round_idx=2,  # not cadence boundary
+        round_idx=0,
         plan=_make_plan("s1"),
         verify_failed=True,
         verify_should_retry=True,
     )
     assert trigger == "verify_fail"
+    assert (
+        should_replan(
+            round_idx=1,
+            plan=_make_plan("s1"),
+            verify_failed=True,
+            verify_should_retry=True,
+        )
+        is None
+    )
 
 
 def test_should_replan_cadence_at_interval(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -283,7 +292,7 @@ def test_should_replan_low_confidence_with_plan() -> None:
 
 def test_should_replan_verify_fail_beats_low_confidence() -> None:
     trigger = should_replan(
-        round_idx=2,
+        round_idx=0,
         plan=_make_plan("s1"),
         verify_failed=True,
         verify_should_retry=True,
@@ -421,12 +430,19 @@ def test_replan_async_inherits_loop_model(monkeypatch: pytest.MonkeyPatch) -> No
     """``replan_async`` calls ``loop._call_llm`` with the active loop model."""
     fake_settings = SimpleNamespace(model="claude-haiku-4-5")
     monkeypatch.setattr("core.config.settings", fake_settings)
-    captured: dict[str, str] = {}
+    captured: dict[str, Any] = {}
 
     async def _fake_call_llm(
-        _system: str, _msgs: list, *, model: str | None = None
+        _system: str,
+        _msgs: list,
+        *,
+        model: str | None = None,
+        response_schema: dict[str, Any] | None = None,
+        allow_tools: bool = True,
     ) -> SimpleNamespace:
         captured["model"] = model or ""
+        captured["response_schema"] = response_schema
+        captured["allow_tools"] = allow_tools
         return SimpleNamespace(
             text='{"steps": [{"id": "s1", "description": "new step"}], "reasoning": "r"}',
             usage=SimpleNamespace(input_tokens=10, output_tokens=20),
@@ -442,6 +458,12 @@ def test_replan_async_inherits_loop_model(monkeypatch: pytest.MonkeyPatch) -> No
     assert len(new_plan.steps) == 1
     assert new_plan.steps[0].id == "s1"
     assert captured["model"] == "claude-sonnet-4-6"
+    assert captured["allow_tools"] is False
+    assert captured["response_schema"]["title"] == "ReplanResult"
+    assert captured["response_schema"]["additionalProperties"] is False
+    step_schema = captured["response_schema"]["properties"]["steps"]["items"]
+    assert set(step_schema["required"]) == set(step_schema["properties"])
+    assert step_schema["additionalProperties"] is False
 
 
 def test_replan_async_records_usage(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -452,7 +474,7 @@ def test_replan_async_records_usage(monkeypatch: pytest.MonkeyPatch) -> None:
     recorded: list[Any] = []
 
     async def _fake_call_llm(
-        _system: str, _msgs: list, *, model: str | None = None
+        _system: str, _msgs: list, *, model: str | None = None, **_kwargs: Any
     ) -> SimpleNamespace:
         return SimpleNamespace(text='{"steps": [{"id": "s1", "description": "x"}]}')
 
@@ -469,11 +491,13 @@ def test_replan_async_records_usage(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_replan_async_returns_none_on_bad_response(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Unparseable JSON → None so caller keeps prior plan."""
+    """Unparsable JSON → None so caller keeps prior plan."""
     fake_settings = SimpleNamespace(model="m")
     monkeypatch.setattr("core.config.settings", fake_settings)
 
-    async def _bad(_system: str, _msgs: list, *, model: str | None = None) -> SimpleNamespace:
+    async def _bad(
+        _system: str, _msgs: list, *, model: str | None = None, **_kwargs: Any
+    ) -> SimpleNamespace:
         return SimpleNamespace(text="not even close to JSON")
 
     loop = SimpleNamespace(_call_llm=_bad, model="m")
@@ -486,7 +510,9 @@ def test_replan_async_returns_none_on_bad_response(
 def test_replan_async_returns_none_on_exception() -> None:
     """LLM call raises → None, no leak."""
 
-    async def _boom(_system: str, _msgs: list, *, model: str | None = None) -> SimpleNamespace:
+    async def _boom(
+        _system: str, _msgs: list, *, model: str | None = None, **_kwargs: Any
+    ) -> SimpleNamespace:
         raise RuntimeError("network down")
 
     loop = SimpleNamespace(_call_llm=_boom, model="m")
@@ -825,9 +851,12 @@ def test_maybe_replan_async_verify_fail_triggers(
     new_plan_step = PlanStep(id="new1", description="revised")
     new_plan = Plan(steps=(new_plan_step,), revision=99)
 
+    captured: dict[str, str] = {}
+
     async def _fake_replan_async(
         loop: Any, *, plan: Any, turn_result: Any, trigger: str, **_kw: Any
     ) -> Plan:
+        captured["turn_result"] = turn_result.text
         return new_plan
 
     import core.agent.plan as _plan_mod
@@ -843,14 +872,16 @@ def test_maybe_replan_async_verify_fail_triggers(
 
         stub = SimpleNamespace(
             _tool_processor=SimpleNamespace(tool_log=[]),
+            _verify_attempt_results=[SimpleNamespace(text="failed candidate")],
             _prompt_dirty=False,
         )
         bound = AgenticLoop._maybe_replan_async.__get__(stub, SimpleNamespace)
-        asyncio.run(bound(2))
+        asyncio.run(bound(0, failure_context="missing receipt"))
         assert stub._prompt_dirty is True
         assert m.active_plan is new_plan
         assert m.replan_count == 1
         assert m.last_replan_trigger == "verify_fail"
+        assert captured["turn_result"] == "failed candidate\n\nmissing receipt"
 
 
 def test_maybe_replan_async_cadence_triggers(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -930,7 +961,7 @@ def test_maybe_replan_async_abandons_after_max_attempts(
         for _ in range(3):
             m.last_verify_passed = False
             m.last_verify_should_retry = True
-            asyncio.run(bound(1))
+            asyncio.run(bound(0))
         # Planner should have been called exactly twice (attempts 1, 2);
         # attempt 3 abandoned without a planner call.
         assert len(planner_calls) == 2

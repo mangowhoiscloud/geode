@@ -1506,7 +1506,7 @@ class AgenticLoop:
                 except Exception:
                     log.debug("Handoff SessionManager close failed", exc_info=True)
 
-    async def _maybe_replan_async(self, round_idx: int) -> None:
+    async def _maybe_replan_async(self, round_idx: int, *, failure_context: str = "") -> None:
         """Per-round Dynamic Replan trigger.
 
         Asks :func:`core.agent.plan.should_replan`; on a trigger calls
@@ -1571,15 +1571,23 @@ class AgenticLoop:
                         cap,
                     )
                     return
-            # synthetic turn_result — replan_async only reads ``.text``
+            # Replan against the failed candidate and verifier instruction;
+            # the per-turn tool log was reset before a verify continuation.
             from types import SimpleNamespace
 
-            recent_text = ""
-            try:
-                recent_text = self._tool_processor.tool_log[-1].get("result", "")
-            except Exception:
-                log.debug("recent tool_log read for replanner failed", exc_info=True)
-                recent_text = ""
+            recent_parts: list[str] = []
+            if trigger == "verify_fail":
+                attempts = getattr(self, "_verify_attempt_results", ())
+                if attempts:
+                    recent_parts.append(str(getattr(attempts[-1], "text", "") or ""))
+                if failure_context:
+                    recent_parts.append(failure_context)
+            if not recent_parts:
+                try:
+                    recent_parts.append(str(self._tool_processor.tool_log[-1].get("result", "")))
+                except Exception:
+                    log.debug("recent tool_log read for replanner failed", exc_info=True)
+            recent_text = "\n\n".join(part for part in recent_parts if part)
             stub_result = SimpleNamespace(text=str(recent_text))
             new_plan = await replan_async(
                 self, plan=metrics.active_plan, turn_result=stub_result, trigger=trigger
@@ -2128,7 +2136,10 @@ class AgenticLoop:
 
             # Dynamic Replan trigger (verify-FAIL / cadence); the rebuild
             # below picks up the new plan via _consume_plan_hint.
-            await self._maybe_replan_async(round_idx)
+            await self._maybe_replan_async(
+                round_idx,
+                failure_context=user_input if verification_continuation else "",
+            )
 
             system_prompt = await self._sync_model_and_rebuild_prompt(
                 system_prompt,
@@ -2662,6 +2673,7 @@ class AgenticLoop:
         round_idx: int = 0,
         model: str | None = None,
         response_schema: dict[str, Any] | None = None,
+        allow_tools: bool = True,
     ) -> AgenticResponse | None:
         """Multi-provider LLM call via :class:`LLMAdapter` (P1 Gateway pattern).
 
@@ -2670,9 +2682,9 @@ class AgenticLoop:
         ``AgenticResponse`` or None on failure. Raises ``UserCancelledError``
         on Ctrl+C (caught by ``arun()``). Optional ``model`` overrides the
         request model for one call without mutating ``self.model``. Optional
-        ``response_schema`` overrides the loop-level schema for this call only,
-        so auxiliary planner / judge calls can use structured outputs without
-        changing the main agent turn.
+        ``response_schema`` overrides the loop-level schema for this call only.
+        ``allow_tools=False`` keeps auxiliary planner / judge calls on their
+        structured text contract instead of inheriting the action tool surface.
 
         Invariants:
           * the context-overflow check mutates the SHARED messages list in
@@ -2693,16 +2705,18 @@ class AgenticLoop:
         messages = append_system_reminder(messages, model=effective_model, round_idx=round_idx)
 
         # WRAP_UP: force text-only when approaching limits
-        force_text = False
+        wrap_up = False
         if self.max_rounds > 0:
             remaining = self.max_rounds - round_idx
-            force_text = remaining <= self.WRAP_UP_HEADROOM
-        if not force_text and self._time_budget_s > 0:
+            wrap_up = remaining <= self.WRAP_UP_HEADROOM
+        if not wrap_up and self._time_budget_s > 0:
             import time as _time
 
             remaining_time = self._time_budget_s - (_time.monotonic() - self._loop_start_time)
-            force_text = remaining_time <= self._WRAP_UP_TIME_HEADROOM_S
-        tool_choice: dict[str, str] = {"type": "none"} if force_text else {"type": "auto"}
+            wrap_up = remaining_time <= self._WRAP_UP_TIME_HEADROOM_S
+        tool_choice: dict[str, str] = (
+            {"type": "none"} if wrap_up or not allow_tools else {"type": "auto"}
+        )
 
         # Adaptive compute — context-proportional caps; the only adaptive
         # case left is wrap-up (overthinking exits the loop instead).
@@ -2714,7 +2728,7 @@ class AgenticLoop:
         adaptive_max_tokens = self.max_tokens
         adaptive_thinking = self._thinking_budget
         adaptive_effort = self._effort
-        if force_text:
+        if wrap_up:
             # wrap-up: minimal budget (0.5% of window, floor 4096)
             adaptive_max_tokens = max(4096, min(self.max_tokens, ctx_window // 200))
             adaptive_thinking = 0
@@ -2738,7 +2752,7 @@ class AgenticLoop:
             model=effective_model,
             system=system,
             messages=messages,
-            tools=self._tools,
+            tools=self._tools if allow_tools else [],
             tool_choice=tool_choice,
             max_tokens=adaptive_max_tokens,
             temperature=loop_temperature,

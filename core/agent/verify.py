@@ -433,6 +433,7 @@ async def _verify_llm_judge_async(
                 _LLM_JUDGE_SYSTEM_PROMPT,
                 [{"role": "user", "content": prompt}],
                 model=judge_model,
+                allow_tools=False,
             ),
             timeout=_JUDGE_CALL_TIMEOUT_S,
         )

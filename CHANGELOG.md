@@ -49,6 +49,14 @@ functional change.
 
 ### Fixed
 
+- **Restored live plan/replan response wiring.** `AgenticResponse` now exposes
+  its normalized text blocks to auxiliary planner and judge callers, so valid
+  subscription JSON is no longer discarded after adapter translation.
+  Auxiliary planner and judge calls no longer inherit action tools, and replan
+  uses a strict structured-output contract. A retryable verification failure
+  now replans once at the repair turn boundary, with the failed candidate and
+  repair instruction, instead of reusing the same failure on every tool round.
+
 - **Made lifecycle restarts and runtime tests honor their real ownership
   boundaries.** Detached `geode serve` restarts now allow the documented
   30-second readiness window instead of terminating healthy MCP-heavy boots at
