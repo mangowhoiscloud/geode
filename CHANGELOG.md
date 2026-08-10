@@ -47,6 +47,10 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.20] - 2026-08-10
+
+> Permission-gated Goal budgets and packaged Tier-0 runtime identity.
+
 ### Fixed
 
 - **Hardened explicit Goal budgets and packaged identity.** A model-supplied
