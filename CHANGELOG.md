@@ -47,6 +47,17 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Hardened explicit Goal budgets and packaged identity.** A model-supplied
+  numeric `create_goal.token_budget` now crosses the existing
+  `PermissionRequest` boundary before persistence, while the OpenAI-compatible
+  schema represents the unbounded default as required `null` instead of a
+  best-effort optional integer. This prevents an unsolicited minimum value
+  from immediately budget-limiting a Goal. Distribution artifacts now include
+  the Tier-0 `GEODE.md` identity used by source checkouts instead of silently
+  running installed wheels with an empty soul.
+
 ## [1.0.19] - 2026-08-10
 
 > Durable explicit Goals, serve-owned continuation, and truthful sub-agent

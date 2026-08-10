@@ -306,6 +306,82 @@ def test_headless_hook_permission_request_fails_closed_without_console() -> None
     handler.assert_not_called()
 
 
+def test_goal_token_budget_fails_closed_without_explicit_permission() -> None:
+    handler = MagicMock(return_value={"ok": True})
+    executor = ToolExecutor(
+        action_handlers={"create_goal": handler},
+        interactive_approval=False,
+    )
+
+    result = asyncio.run(
+        executor.aexecute(
+            "create_goal",
+            {"objective": "Finish the task", "token_budget": 1},
+        )
+    )
+
+    assert result == {
+        "error": (
+            "token_budget requires explicit PermissionRequest approval; "
+            "retry create_goal without token_budget when no budget was requested"
+        ),
+        "denied": True,
+        "recoverable": True,
+    }
+    handler.assert_not_called()
+
+
+def test_null_goal_token_budget_needs_no_permission() -> None:
+    handler = MagicMock(return_value={"ok": True})
+    executor = ToolExecutor(
+        action_handlers={"create_goal": handler},
+        interactive_approval=False,
+    )
+
+    result = asyncio.run(
+        executor.aexecute(
+            "create_goal",
+            {"objective": "Finish the task", "token_budget": None},
+        )
+    )
+
+    assert result == {"ok": True}
+    handler.assert_called_once_with(objective="Finish the task", token_budget=None)
+
+
+def test_goal_token_budget_permission_hook_can_authorize() -> None:
+    observed: list[tuple[str, str]] = []
+    registry = HookRegistry()
+
+    def allow(invocation: Any) -> HookDecision:
+        observed.append(
+            (
+                str(invocation.payload["safety_level"]),
+                str(invocation.payload["detail"]),
+            )
+        )
+        return HookDecision(action=HookAction.ALLOW)
+
+    registry.register(HookName.PERMISSION_REQUEST, allow)
+    handler = MagicMock(return_value={"ok": True})
+    executor = ToolExecutor(
+        action_handlers={"create_goal": handler},
+        hook_registry=registry,
+        interactive_approval=False,
+    )
+
+    result = asyncio.run(
+        executor.aexecute(
+            "create_goal",
+            {"objective": "Finish the task", "token_budget": 200_000},
+        )
+    )
+
+    assert result == {"ok": True}
+    assert observed == [("goal_budget", "token_budget=200000")]
+    handler.assert_called_once_with(objective="Finish the task", token_budget=200_000)
+
+
 def test_headless_rewritten_mcp_permission_fails_closed_without_console() -> None:
     class RewriteToMcp:
         async def tool_request(self, request: Any) -> Any:

@@ -406,19 +406,32 @@ class ToolExecutor:
                 "error": f"Tool '{tool_name}' is not available in this session.",
                 "denied": True,
             }
+        budget_permission = (
+            tool_name == "create_goal" and tool_input.get("token_budget") is not None
+        )
+        force_permission = force_permission or budget_permission
         if force_permission:
+            detail = (
+                f"token_budget={tool_input['token_budget']}" if budget_permission else tool_name
+            )
             permission = await self._approval.prompt_with_always_async(
-                "Allow?",
-                tool_name,
-                safety_level="hook_requested",
+                "Allow token-limited Goal?" if budget_permission else "Allow?",
+                detail,
+                safety_level="goal_budget" if budget_permission else "hook_requested",
                 tool_name=tool_name,
                 allow_always=False,
                 allow_human_prompt=self._interactive_approval,
             )
             if permission != "y":
                 return {
-                    "error": f"Permission denied for '{tool_name}'",
+                    "error": (
+                        "token_budget requires explicit PermissionRequest approval; "
+                        "retry create_goal without token_budget when no budget was requested"
+                        if budget_permission
+                        else f"Permission denied for '{tool_name}'"
+                    ),
                     "denied": True,
+                    "recoverable": budget_permission,
                 }
 
         # Fleet view Stage 1.5 — the single per-tool dispatch boundary. A no-op

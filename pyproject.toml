@@ -188,6 +188,7 @@ packages = ["core", "plugins"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "scripts/macos" = "scripts/macos"
+"GEODE.md" = "core/GEODE.md"
 
 [tool.hatch.build.targets.sdist]
 include = [
@@ -197,6 +198,7 @@ include = [
     "/CHANGELOG.md",
     "/LICENSE",
     "/NOTICE",
+    "/GEODE.md",
     "/core",
     "/plugins",
     "/scripts/macos",

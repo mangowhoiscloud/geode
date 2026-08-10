@@ -786,13 +786,17 @@
           "description": "The concrete end state to persist across turns."
         },
         "token_budget": {
-          "type": "integer",
+          "type": [
+            "integer",
+            "null"
+          ],
           "minimum": 1,
-          "description": "Optional positive completed-turn token budget; omit unless explicitly requested. The last turn can overshoot before subsequent continuation is stopped."
+          "description": "Positive completed-turn token budget only when explicitly requested; otherwise null. The last turn can overshoot before subsequent continuation is stopped."
         }
       },
       "required": [
-        "objective"
+        "objective",
+        "token_budget"
       ],
       "additionalProperties": false
     }

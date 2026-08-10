@@ -18,6 +18,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 REQUIRED_WHEEL_PATHS = {
+    "core/GEODE.md",
     "core/tools/definitions.json",
     "core/tools/mcp_tools.json",
     "core/config/routing.toml",
@@ -33,6 +34,7 @@ REQUIRED_WHEEL_PATHS = {
 }
 
 REQUIRED_SDIST_PATHS = {
+    "GEODE.md",
     "pyproject.toml",
     "README.md",
     "README.ko.md",
