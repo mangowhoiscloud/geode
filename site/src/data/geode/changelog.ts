@@ -2,7 +2,7 @@
  * GEODE CHANGELOG, auto-synced from the GEODE repo via `npm run sync-stats`.
  * Do not edit manually. Edit CHANGELOG.md in the GEODE repo and re-run sync.
  *
- * Last sync: 2026-08-09
+ * Last sync: 2026-08-10
  *
  * Each entry's `body` is the raw markdown between two version headings.
  * The Changelog page renders the body with a minimal markdown renderer
@@ -20,6 +20,11 @@ export const CHANGELOG: ChangelogEntry[] = [
     "version": "Unreleased",
     "date": "",
     "body": ""
+  },
+  {
+    "version": "1.0.20",
+    "date": "2026-08-10",
+    "body": "> Permission-gated Goal budgets and packaged Tier-0 runtime identity.\n\n### Fixed\n\n- **Hardened explicit Goal budgets and packaged identity.** A model-supplied\n  numeric `create_goal.token_budget` now crosses the existing\n  `PermissionRequest` boundary before persistence, while the OpenAI-compatible\n  schema represents the unbounded default as required `null` instead of a\n  best-effort optional integer. This prevents an unsolicited minimum value\n  from immediately budget-limiting a Goal. Distribution artifacts now include\n  the Tier-0 `GEODE.md` identity used by source checkouts instead of silently\n  running installed wheels with an empty soul."
   },
   {
     "version": "1.0.19",
@@ -2493,4 +2498,4 @@ export const CHANGELOG: ChangelogEntry[] = [
   }
 ];
 
-export const CHANGELOG_SYNCED_AT = "2026-08-09";
+export const CHANGELOG_SYNCED_AT = "2026-08-10";
