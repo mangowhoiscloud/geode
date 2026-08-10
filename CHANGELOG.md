@@ -47,6 +47,39 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.19] - 2026-08-10
+
+> Durable explicit Goals, serve-owned continuation, and truthful sub-agent
+> outcomes for long-running work.
+
+### Added
+
+- **Hosted active Goals in `geode serve`.** The daemon now discovers an
+  explicit active Goal after return or restart, restores its ACTIVE checkpoint
+  as a new session generation, and re-enters the existing contextual Goal turn
+  under the same SessionLane key. Returned attempts are deduplicated per
+  observed Goal state while transient failures retry at the host tick; each
+  admission receives fresh session metrics, preserves gateway history limits,
+  and joins the daemon's bounded shutdown drain. IPC resume now reloads inside
+  the same machine Lane. Paused/terminal/missing/corrupt checkpoints stay
+  blocked, and the normal PostVerify, replan, accounting, evidence, and
+  trajectory path remains intact without a PlanStep executor or second store.
+- **Added explicit persisted Goals and steerable deep research.** The
+  `create_goal`, `get_goal`, and `update_goal` tools persist one explicitly
+  requested multi-turn objective in `sessions.db`, account token/time usage,
+  stop subsequent continuation turns after optional token budgets are reached,
+  and continue successful turns until the goal completes, blocks, or reaches
+  budget. Goal transitions join canonical
+  session history and its JSONL projection without duplicating raw objectives.
+  The bundled deep-research skill can now choose between bounded
+  `delegate_task` batches and durable depth-one children with mailbox, wait,
+  follow-up, and interrupt control; ordinary research never creates a Goal
+  implicitly.
+- **Stopped treating schema-invalid sub-agent role output as success.** A child
+  process that exits normally but fails its role output model now returns a
+  failed `SubResult`, so batch `succeeded` counts and terminal lifecycle status
+  cannot claim success while carrying `validated=false`.
+
 ## [1.0.18] - 2026-08-10
 
 > Truthful advisory planning and Part 5 deep research, lifecycle boundary

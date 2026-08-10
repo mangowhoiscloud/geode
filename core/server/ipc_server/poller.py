@@ -588,7 +588,6 @@ class CLIPoller:
                 return await self._run_prompt_streaming_async(
                     text,
                     loop,
-                    session_id,
                     msg.get("_client"),
                 )
             except Exception as exc:
@@ -599,7 +598,7 @@ class CLIPoller:
             return await asyncio.to_thread(self._handle_command_on_server, msg, loop)
 
         if msg_type == "resume":
-            return await asyncio.to_thread(self._handle_resume, msg, loop, conversation)
+            return await self._handle_resume_async(msg, loop, conversation)
 
         if msg_type == "client_capability":
             endpoint = msg.get("_client")
@@ -657,7 +656,6 @@ class CLIPoller:
         self,
         text: str,
         loop: Any,
-        session_id: str,
         client: _AsyncClientEndpoint | None,
     ) -> dict[str, Any]:
         """Run an IPC prompt on the async daemon path.
@@ -691,7 +689,10 @@ class CLIPoller:
         try:
             lane_queue = self._services.lane_queue
             if lane_queue is not None:
-                async with lane_queue.acquire_all_async(f"cli:{session_id}", ["session", "global"]):
+                async with lane_queue.acquire_all_async(
+                    loop._session_id,
+                    ["session", "global"],
+                ):
                     result = await loop.arun(text)
             else:
                 result = await loop.arun(text)
@@ -947,6 +948,12 @@ class CLIPoller:
             if state is None:
                 return {"type": "resume_error", "message": "No resumable session found"}
 
+            # ``--continue`` chooses the newest candidate before waiting for
+            # its Lane.  Reloading happens under that Lane, so refuse a
+            # candidate that became terminal while admission was queued.
+            if msg.get("_require_resumable") and state.status not in ("active", "paused"):
+                return {"type": "resume_error", "message": "No resumable session found"}
+
             # Resume-by-id of a terminal (completed/error) instance takes
             # the explicit reopen edge of the session automaton — the
             # per-turn save() would otherwise warn about an implicit reopen.
@@ -988,6 +995,31 @@ class CLIPoller:
         except Exception as exc:
             log.warning("Session resume failed", exc_info=True)
             return {"type": "resume_error", "message": str(exc)}
+
+    async def _handle_resume_async(
+        self,
+        msg: dict[str, Any],
+        loop: Any,
+        conversation: Any,
+    ) -> dict[str, Any]:
+        """Resolve the target, then reload and restore it under its machine Lane."""
+        resolved = dict(msg)
+        if msg.get("continue"):
+            from core.memory.session_checkpoint import SessionCheckpoint
+
+            sessions = await asyncio.to_thread(SessionCheckpoint().list_resumable)
+            if not sessions:
+                return {"type": "resume_error", "message": "No resumable session found"}
+            resolved.pop("continue", None)
+            resolved["session_id"] = sessions[0].session_id
+            resolved["_require_resumable"] = True
+
+        session_id = str(resolved.get("session_id") or "")
+        lane_queue = self._services.lane_queue
+        if not session_id or lane_queue is None:
+            return await asyncio.to_thread(self._handle_resume, resolved, loop, conversation)
+        async with lane_queue.acquire_all_async(session_id, ["session", "global"]):
+            return await asyncio.to_thread(self._handle_resume, resolved, loop, conversation)
 
     def _propagate_contextvars(self) -> None:
         """Set ContextVars needed by slash command handlers in this thread.

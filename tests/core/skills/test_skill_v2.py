@@ -88,7 +88,16 @@ class TestSkillDefinitionV2:
 
         assert skill.tools == [
             "update_plan",
+            "create_goal",
+            "get_goal",
+            "update_goal",
             "delegate_task",
+            "spawn_agent",
+            "list_agents",
+            "wait_agent",
+            "send_message",
+            "followup_task",
+            "interrupt_agent",
             "general_web_search",
             "web_fetch",
             "llms_txt_index",
@@ -96,6 +105,8 @@ class TestSkillDefinitionV2:
         assert "independent" in skill.body
         assert "contradiction" in skill.body
         assert "instead of creating a competing checklist" in skill.body
+        assert "only when the user explicitly requests" in skill.body
+        assert "remain depth one" in skill.body
         assert "memory_save" not in skill.body
 
 

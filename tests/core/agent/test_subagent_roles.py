@@ -266,10 +266,11 @@ class TestParseSiteValidation:
         mgr = _manager()
         isolation = IsolationResult(session_id="s1", success=True, output="total garbage {not json")
         result = mgr._to_sub_result(_role_task("repo_researcher"), isolation)
-        # No exception reached us; the degraded result is observable.
-        assert result.success is True
+        # No exception reached us; contract failure is explicit and observable.
+        assert result.success is False
         assert result.output["validated"] is False
         assert result.output["raw"].startswith("total garbage")
+        assert "JSONDecodeError" in (result.error or "")
 
     def test_unknown_role_keeps_legacy_parse(self) -> None:
         mgr = _manager()

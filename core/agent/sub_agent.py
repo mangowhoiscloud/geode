@@ -1395,11 +1395,13 @@ class SubAgentManager:
             if role_def is not None:
                 validated_output = validate_role_output(role_def, raw_text)
                 if validated_output is not None:
+                    validated = validated_output.get("validated") is True
                     return SubResult(
                         task_id=task.task_id,
                         description=task.description,
-                        success=True,
+                        success=validated,
                         output=validated_output,
+                        error=None if validated else str(validated_output.get("error", "")),
                         duration_ms=isolation.duration_ms,
                         prompt_tokens=isolation.prompt_tokens,
                         completion_tokens=isolation.completion_tokens,

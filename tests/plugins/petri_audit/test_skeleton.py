@@ -209,7 +209,7 @@ def test_geode_target_runner_invokes_token_tracker_record() -> None:
     assert "await loop.arun(" in runner_src
 
     # Link 2: AgenticLoop.arun → await self._track_usage_async(response)
-    arun_src = inspect.getsource(loop_mod.AgenticLoop.arun)
+    arun_src = inspect.getsource(loop_mod.AgenticLoop._arun_once)
     assert "await self._track_usage_async(response)" in arun_src, (
         "AgenticLoop.arun must await self._track_usage_async(response) on a "
         "successful LLM response. Without it the petri audit's target "

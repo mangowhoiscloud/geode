@@ -225,7 +225,6 @@ normal review and CI; implementations start only after the claim merges.
 
 | Closure package | GAP IDs | Owner/session | Implementation branch | Claim evidence | Claimed at (UTC) |
 |---|---|---|---|---|---|
-| _none yet_ | — | — | — | — | — |
 
 ## 1. Program objective
 
@@ -282,19 +281,19 @@ machine-readable artifact is
 
 | Measure | Current tree |
 |---|---:|
-| Production Python files (`core/` + `plugins/`) | 541 |
-| Test Python files | 679 |
-| `core/` Python LOC | 138,244 |
+| Production Python files (`core/` + `plugins/`) | 546 |
+| Test Python files | 683 |
+| `core/` Python LOC | 139,121 |
 | `plugins/` Python LOC | 41,831 |
-| Test Python LOC | 178,673 |
-| Tool definitions / executable registrations / valid schemas | 84 / 87 / 84 (definition-only 0; execution-only 3; invalid schema 0) |
+| Test Python LOC | 179,382 |
+| Tool definitions / executable registrations / valid schemas | 87 / 90 / 87 (definition-only 0; execution-only 3; invalid schema 0) |
 | `RuntimeEvent` members | 57 |
 | Built-in LLM adapters | 8 |
 | Module-level `ContextVar` declarations under `core/` | 30 |
 | `core` → `plugins` import sites | 31 across 14 files |
 | Import-linter contracts / ignored edges | 4 / 24 |
-| `AgenticLoop` file LOC / methods / constructor args | 3,040 / 72 / 27 |
-| `SubAgentManager` file LOC / methods / constructor args | 1,441 / 24 / 15 |
+| `AgenticLoop` file LOC / methods / constructor args | 3,135 / 74 / 27 |
+| `SubAgentManager` file LOC / methods / constructor args | 1,443 / 24 / 15 |
 | `RuntimeCoreConfig` fields | 19 |
 | Global Ruff ratchets | complexity 52; args 23; branches 51; returns 18; statements 212 |
 <!-- generated:architecture-baseline:end -->
@@ -560,6 +559,7 @@ and closure evidence are appended in §10.
 | COLLAB-003 | `PARTIAL` | Child checkpoints and session history are durable, but every isolated worker invocation creates a fresh conversation and never restores the child checkpoint | Follow-up and resume reopen the same child session as a new generation, restore its checkpoint, accept queued mailbox input at a loop boundary, and preserve one independent rollout without replaying successful side effects | R6.5 | COLLAB-001, COLLAB-002 | `IN_DEVELOP` |
 | HOOK-003 | `PARTIAL` | All 13 public hooks are wired, but no production `PostVerify` policy is registered; an empty decision set can deliver a retryable verifier failure, continuation authority is encoded as a user-role pseudo-system message, and durable verification records aggregate handler decisions without a stable candidate target | A deterministic fallback maps pass/retryable failure/non-retryable failure to accept/revise/escalate; revision enters the bounded dynamic system context, reaches the existing verify-fail replan path, and records candidate-digest-bound per-handler decisions without replaying completed side effects or adding a new hook plane | R6.6 | HOOK-001, STORE-002 | `DONE` |
 | MEM-001 | `MISFIT` | One live system-prompt branch creates a default user profile outside the wired project scope, `TURN_COMPLETED` promotes a low-information turn/tool trace into active project memory, and caller-free session-checkpoint plus journal write/aggregate APIs imply competing authorities | The wired profile is the sole prompt profile source; automatic turn traces remain in canonical session records; dead `SessionStorePort` checkpoint and `ProjectJournal` write/aggregate APIs are removed while historical files remain untouched; executable tests and docs identify the live read/write authority without adding a store or framework | R6.7 | HOOK-001, STORE-002 | `DONE` |
+| GOAL-001 | `PARTIAL` | Explicit Goal state, contextual continuation, accounting, and trajectory events persist, but automatic continuation is owned only by one `AgenticLoop.arun()` call; no process owner discovers an active Goal after return or daemon restart, restores its checkpoint, or prevents duplicate idle launches | The existing serve process owns a bounded idle Goal continuation host that restores the same checkpoint as a new session generation, admits at most one continuation per session, uses the internal contextual-Goal path rather than a synthetic user turn, preserves Lane, PostVerify/replan, accounting, and trajectory contracts, and does not hot-loop an unchanged active Goal | R6.8 | HOOK-003, STORE-002 | `IN_DEVELOP` |
 
 ## 6. Dependency and merge sequence
 
@@ -612,6 +612,13 @@ wired instance, stops promoting a duplicate turn trace into active memory, and
 removes only APIs with a measured zero production-caller census. It does not
 introduce a context-snapshot framework, admission engine, new database, or
 checkpoint schema; those require separate measured GAPs.
+
+R6.8 gives explicit Goals a process-level continuation owner without reopening
+R6.5's deliberately bounded child-collaboration contract or introducing the
+future R3 phase/service extraction. The serve daemon reuses the existing
+checkpoint, Lane, Goal projection, and session-event writers. It does not add a
+general thread manager, execute `PlanStep` objects, clone environment state, or
+claim LATS/SPRINT/SWiRL training behavior.
 
 ### 6.1 v1.0.1 boundary-release train
 
@@ -1452,6 +1459,41 @@ Acceptance:
   the architecture, legacy, slop, format, type, import, and non-live test
   gates.
 
+#### R6.8 Hosted Goal continuation
+
+GAP: GOAL-001.
+
+An explicit active Goal already supplies the long-horizon objective, budget,
+and mutable control projection. This package adds only the missing execution
+owner: while `geode serve` is alive and ordinary foreground work is idle, it
+may restore the Goal's checkpoint and start the same internal continuation used
+inside `AgenticLoop.arun()`.
+
+The search object remains one sequential Goal trajectory. Stanford Part 5's
+LATS action-tree search, SPRINT parallel candidate plans, and SWiRL training
+pipeline remain non-goals because GEODE does not clone state, rank alternative
+paths, or update a policy in this runtime path.
+
+Acceptance:
+
+- daemon start and later idle ticks discover active Goals from the existing
+  project `sessions.db`; inactive, budget-limited, blocked, or complete Goals
+  never launch;
+- continuation restores the same `SessionCheckpoint` as a new session
+  generation, preserves its model and conversation, and enters the request as
+  bounded internal Goal context rather than `message.user`;
+- one process admits at most one continuation for a session, launches no Goal
+  while foreground Lane work is active, and does not retry the same unchanged
+  active state indefinitely;
+- the existing Goal token/time accounting, PostVerify revision, verify-fail
+  replan, hook/middleware, session-event, trajectory, and checkpoint writers
+  remain on the live path without a second transcript or result store;
+- daemon restart recovery, duplicate-admission, no-progress, terminal Goal,
+  missing/corrupt checkpoint, and foreground compatibility tests pass;
+- documentation states that hosted continuation requires `geode serve`, does
+  not promise exactly-once external side effects, and is not an automatic
+  Plan-and-Execute or trajectory-search engine.
+
 ### R7 — Closure, hardening, and release
 
 #### R7.1 Architecture CI
@@ -1757,6 +1799,7 @@ pre-release delivery evidence survives after the claim row is gone.
 | R6.6 | HOOK-003 | [#2892](https://github.com/mangowhoiscloud/geode/pull/2892) | `308fd12f2779a1abb73d08ef619be98368fec129` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, 10,424 non-live tests, lint/format, type check, security, Pages build, macOS/Ubuntu install smoke, generated-doc parity, and candidate-digest-bound decision persistence all passed) |
 | R6.5 | COLLAB-001, COLLAB-002, COLLAB-003 | [#2886](https://github.com/mangowhoiscloud/geode/pull/2886) | `4bf93d6415504495e54628ee5efaa88c9b828b3e` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, 10,433 non-live tests, lint/format, type check, security, Pages build, macOS/Ubuntu install smoke, durable mailbox/checkpoint/follow-up tests, and existing GPT subscription collaboration and hook E2E evidence all passed) |
 | R6.7 | MEM-001 | [#2903](https://github.com/mangowhoiscloud/geode/pull/2903) | `a7a59b69f18589bec82eb515b482355924ac9467` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, 10,407 non-live tests, lint/format, type check, security, Pages build, macOS/Ubuntu install smoke, independent GPT-5.6-Luna max review with its sole P2 fixed, 13-of-13 public-hook subscription E2E, and immutable eval-artifact [#15](https://github.com/mangowhoiscloud/geode-eval-artifacts/pull/15) with manifest `aba8839af72cd4d96e7e22979affac98e04cbe027fff41e3b67732e75720103d` all passed) |
+| R6.8 | GOAL-001 | [#2931](https://github.com/mangowhoiscloud/geode/pull/2931) | `543994952dddd068695d5717e02263322aaafd38` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, 10,377 non-live tests, lint/format, type check, security, Pages build, macOS/Ubuntu install smoke, deterministic hosted-restart/Lane/terminal-race coverage, GPT-5.6-sol committed-diff review with all seven findings resolved, and immutable eval-artifact [#16](https://github.com/mangowhoiscloud/geode-eval-artifacts/pull/16) all passed) |
 
 ### 10.2 Main closure evidence
 

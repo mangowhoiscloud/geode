@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import asyncio
 import time
+from contextlib import asynccontextmanager
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 from core.messaging.binding import ChannelManager, get_gateway, set_gateway
@@ -504,6 +506,43 @@ class TestLaneQueueIntegration:
         )
         response = asyncio.run(manager.aroute_message(msg))
         assert response == "processed: test"
+
+    def test_route_serializes_on_checkpoint_machine_id(self):
+        """Foreground gateway work and hosted Goal resume share one key."""
+        from core.memory.session_key import (
+            build_gateway_checkpoint_session_id,
+            build_gateway_session_key,
+        )
+
+        entered: list[tuple[str, list[str]]] = []
+
+        class CaptureQueue:
+            @asynccontextmanager
+            async def acquire_all_async(self, key: str, lanes: list[str]) -> Any:
+                entered.append((key, lanes))
+                yield
+
+        manager = ChannelManager(lane_queue=CaptureQueue())
+        manager.set_async_processor(lambda _content, _metadata: "ok")
+        manager.add_binding(ChannelBinding(channel="slack", channel_id="C1"))
+        msg = InboundMessage(
+            channel="slack",
+            channel_id="C1",
+            sender_id="U1",
+            sender_name="Alice",
+            content="test",
+            timestamp=time.time(),
+            thread_id="171.1",
+        )
+
+        assert asyncio.run(manager.aroute_message(msg)) == "ok"
+        session_key = build_gateway_session_key("slack", "C1", "U1", "171.1")
+        assert entered == [
+            (
+                build_gateway_checkpoint_session_id(session_key),
+                ["session", "gateway", "global"],
+            )
+        ]
 
     def test_route_without_lane_queue(self):
         """Messages should still work without lane queue."""

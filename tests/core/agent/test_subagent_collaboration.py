@@ -35,7 +35,7 @@ class _ControlledRunner(IsolatedRunner):
         return IsolationResult(
             session_id="child",
             success=True,
-            output=json.dumps({"summary": "finished"}),
+            output=json.dumps({"summary": "finished", "findings": []}),
         )
 
     def cancel(self, _session_id: str) -> bool:

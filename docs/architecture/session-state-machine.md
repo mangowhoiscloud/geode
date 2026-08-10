@@ -17,6 +17,7 @@ into it:
 |---|---|
 | `AgenticLoop._session_id` | The live loop's binding to its instance; set at construction or by `restore_from_checkpoint` |
 | Gateway `session_key` (channel/thread) | Maps deterministically to a stable instance id (`s-gw-<sha256[:12]>`, v0.99.329) — a messaging thread IS one machine instance across turns |
+| IPC/gateway SessionLane key | The same checkpoint `session_id`; foreground turns and hosted Goal continuation serialize on one machine key |
 | `claude_cli_session_id` | Adapter-side resume token, stored ON the instance (SQLite `agent_runtime_state`), never an instance key |
 | Transcript / evidence ledger | Write-only sinks keyed by the same `session_id` |
 | Scheduler lane key (`sched:<job>`) | Concurrency control only; each fired job builds a fresh instance |
@@ -28,6 +29,13 @@ empty after a daemon restart, serve restores message history from that durable
 checkpoint through the CLI resume substrate. Only ACTIVE and PAUSED machines
 are eligible for implicit thread continuation; COMPLETED and ERROR require a
 new addressed turn and the explicit reopen edge.
+
+An explicit active Goal adds a process-level continuation owner without adding
+another session machine. While `geode serve` is running, its idle host may
+restore an ACTIVE checkpoint under the same `session_id` as a new generation
+and enter the existing internal Goal turn. PAUSED checkpoints remain parked for
+operator or external-verifier input; COMPLETED, ERROR, missing, and corrupt
+checkpoints never launch.
 
 ## State space
 
@@ -77,6 +85,7 @@ edge, and the warning plus its pinned test keep the edge visible.
 | Edge | Owner |
 |---|---|
 | absent → ACTIVE, ACTIVE → ACTIVE | `_lifecycle.save_checkpoint` (per turn, every surface) |
+| ACTIVE → ACTIVE, new generation | `geode serve` hosted Goal continuation after idle Lane admission and checkpoint restore |
 | ACTIVE → PAUSED | scheduler drain (pending-ask/external-verification park); gateway ask continuation (re-ask) |
 | ACTIVE → COMPLETED | REPL clean exit; scheduler drain one-shot finish; gateway ask continuation finish; gateway context-exhaustion |
 | ACTIVE → ERROR | scheduler drain timeout / unhandled exception |
@@ -133,13 +142,35 @@ log a WARNING. Hook-system integration of these events is deliberately
 deferred to the hook-system redesign cycle — the ledger is the stable
 substrate that redesign can consume.
 
+Hosted Goal restore records `session.started` for the new generation, then
+`goal.continued(trigger=serve_idle)`. The continuation objective is request-local
+context, not `message.user`. Public `SessionStart` fires only after the restored
+checkpoint is saved; subsequent tool, verification, replan, usage, and turn
+events use the ordinary AgenticLoop writers. The host does not invent a second
+delivery store or push to an unresolvable channel; the next gateway turn reads
+the newest timestamped history, with the durable checkpoint as the tie-breaker,
+and therefore sees the hosted result without discarding a newer foreground L2
+write.
+
+Each hosted admission binds a fresh `SessionMetrics` scope, so an earlier
+Goal's wall budget, advisory Plan, or verifier state cannot leak into the next
+Goal. Gateway restores retain the configured gateway history limit. Returned
+attempts are deduplicated until Goal accounting changes; a raised setup or
+execution exception is retried only on the next one-second host tick. IPC
+resume selects a target and then reloads it under that target's SessionLane,
+preventing a stale pre-admission snapshot from overwriting hosted progress;
+`--continue` also refuses that candidate if it became terminal while waiting
+for admission, whereas explicit resume-by-id keeps the deliberate reopen edge.
+Shutdown stops new admissions and gives the active hosted task the same
+30-second bounded drain before cancellation.
+
 ## Known gaps
 
-- Two writers with UNRELATED concurrency keys (an IPC client and the
-  gateway, or two IPC clients resuming the same id) can still interleave
-  full `save()` histories under one instance — status read-check-write is
-  now flock-serialized, but conversation-level last-writer-wins remains
-  until lane keys unify on the checkpoint id (follow-up).
+- SessionLane serialization is process-local. Two independently started
+  `geode serve` processes still have no cross-process Goal lease, so the
+  runtime does not promise exactly-once external side effects. Deploy one
+  serve owner per project until measured multi-process demand justifies a
+  durable lease.
 
 - Gateway multi-turn instances stay ACTIVE between turns by design (the
   gateway cannot know whether another message follows). Terminal edges it

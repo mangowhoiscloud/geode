@@ -18,6 +18,7 @@ from typing import Any
 
 import psutil
 
+from core.memory.sqlite_store import short_sqlite_connection
 from core.observability.redaction import redact_and_bound_text
 from core.observability.session_timeline import bound_session_payload
 
@@ -523,23 +524,12 @@ class CollaborationStore:
 
     @contextmanager
     def _connection(self) -> Iterator[sqlite3.Connection]:
-        conn = sqlite3.connect(str(self._db_path), timeout=10.0)
-        conn.row_factory = sqlite3.Row
-        try:
-            conn.execute("PRAGMA journal_mode=WAL")
-            ensure_collaboration_schema(conn)
-            conn.commit()
+        with short_sqlite_connection(self._db_path, ensure_collaboration_schema) as conn:
             yield conn
-        finally:
-            conn.close()
 
     @contextmanager
     def _transaction(self) -> Iterator[sqlite3.Connection]:
-        with self._connection() as conn:
-            conn.execute("BEGIN IMMEDIATE")
-            try:
-                yield conn
-                conn.commit()
-            except Exception:
-                conn.rollback()
-                raise
+        with short_sqlite_connection(
+            self._db_path, ensure_collaboration_schema, immediate=True
+        ) as conn:
+            yield conn

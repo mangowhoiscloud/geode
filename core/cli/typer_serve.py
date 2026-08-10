@@ -9,7 +9,9 @@ import edge clean.
 
 from __future__ import annotations
 
+import asyncio
 import logging
+from collections.abc import Callable
 from typing import Any
 
 import typer
@@ -19,6 +21,49 @@ from core.ui.console import console
 from core.wiring.startup import check_readiness
 
 log = logging.getLogger(__name__)
+_DRAIN_TIMEOUT_S = 30
+
+
+async def _host_goal_continuations(
+    services: Any,
+    checkpoint: Any,
+    *,
+    session_mode: Any,
+    time_budget_s: float,
+    gateway_system_suffix: str,
+    gateway_max_turns: int,
+    should_stop: Callable[[], bool],
+) -> None:
+    """Continue eligible Goals while the serve process owns the event loop."""
+    from core.orchestration.goal_continuation import GoalContinuationHost
+
+    host = GoalContinuationHost(
+        services,
+        checkpoint,
+        session_mode=session_mode,
+        time_budget_s=time_budget_s,
+        gateway_system_suffix=gateway_system_suffix,
+        gateway_max_turns=gateway_max_turns,
+    )
+    while not should_stop():
+        try:
+            continued_session = await host.continue_next_if_idle()
+            if continued_session:
+                log.info("goal:%s idle continuation attempt returned", continued_session)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            log.warning("Hosted Goal continuation failed", exc_info=True)
+        if not should_stop():
+            await asyncio.sleep(1.0)
+
+
+async def _drain_goal_continuation(task: asyncio.Task[None]) -> None:
+    """Give the active hosted turn the same bounded shutdown grace as sessions."""
+    try:
+        await asyncio.wait_for(task, timeout=_DRAIN_TIMEOUT_S)
+    except TimeoutError:
+        log.warning("Hosted Goal continuation drain timed out after %ds", _DRAIN_TIMEOUT_S)
 
 
 def _gateway_checkpoint_session_id(session_key: str) -> str:
@@ -29,10 +74,9 @@ def _gateway_checkpoint_session_id(session_key: str) -> str:
     cognitive state persist per thread and per-turn checkpoints stop
     accumulating (docs/architecture/session-state-machine.md).
     """
-    import hashlib
+    from core.memory.session_key import build_gateway_checkpoint_session_id
 
-    digest = hashlib.sha256(session_key.encode("utf-8")).hexdigest()[:12]
-    return f"s-gw-{digest}"
+    return build_gateway_checkpoint_session_id(session_key)
 
 
 def _gateway_checkpoint_is_resumable(state: Any) -> bool:
@@ -44,12 +88,28 @@ def _gateway_resume_messages(
     stored_session: dict[str, Any] | None,
     checkpoint_state: Any,
 ) -> list[dict[str, Any]]:
-    """Load conversation history from L2, then the durable CLI checkpoint."""
-    if stored_session and isinstance(stored_session.get("messages"), list):
-        return list(stored_session["messages"])
-    messages = getattr(checkpoint_state, "messages", None)
-    if _gateway_checkpoint_is_resumable(checkpoint_state) and isinstance(messages, list):
-        return list(messages)
+    """Load the newest valid history, with durable checkpoint as tie-breaker."""
+    raw_checkpoint = getattr(checkpoint_state, "messages", None)
+    checkpoint_messages: list[dict[str, Any]] | None = (
+        list(raw_checkpoint)
+        if _gateway_checkpoint_is_resumable(checkpoint_state) and isinstance(raw_checkpoint, list)
+        else None
+    )
+    raw_stored = stored_session.get("messages") if stored_session else None
+    stored_messages: list[dict[str, Any]] | None = (
+        list(raw_stored) if isinstance(raw_stored, list) else None
+    )
+    if (
+        stored_session is not None
+        and stored_messages is not None
+        and float(stored_session.get("updated_at", 0) or 0)
+        > float(getattr(checkpoint_state, "updated_at", 0) or 0)
+    ):
+        return stored_messages
+    if checkpoint_messages is not None:
+        return checkpoint_messages
+    if stored_messages is not None:
+        return stored_messages
     return []
 
 
@@ -80,7 +140,6 @@ def serve(  # noqa: PLR0915
     ),
 ) -> None:
     """Run the GEODE daemon for CLI IPC and optional external channels."""
-    import asyncio
     import signal
     import time as _time
 
@@ -324,6 +383,7 @@ def serve(  # noqa: PLR0915
                             "messages": ctx.messages,
                             "thread_id": metadata.get("thread_id", ""),
                             "channel": metadata.get("channel", ""),
+                            "updated_at": _time.time(),
                         },
                     )
 
@@ -438,7 +498,21 @@ def serve(  # noqa: PLR0915
 
         # Expose this loop to thread-side bridges (webhook handler).
         nonlocal _main_loop
-        _main_loop = asyncio.get_running_loop()
+        _main_loop, _goal_task = (
+            asyncio.get_running_loop(),
+            asyncio.create_task(
+                _host_goal_continuations(
+                    _gw_services,
+                    _gw_checkpoint,
+                    session_mode=SessionMode.DAEMON,
+                    time_budget_s=_gw_time_budget,
+                    gateway_system_suffix=_GATEWAY_SUFFIX,
+                    gateway_max_turns=_gw_max_turns,
+                    should_stop=lambda: stop,
+                ),
+                name="geode-goal-continuation",
+            ),
+        )
 
         while not stop:
             await _drain_scheduler_queue(
@@ -454,6 +528,7 @@ def serve(  # noqa: PLR0915
             if _serve_session_lane:
                 _serve_session_lane.cleanup_idle()
             await asyncio.sleep(1.0)
+        await _drain_goal_continuation(_goal_task)
 
     try:
         asyncio.run(_serve_loop())
@@ -481,7 +556,6 @@ def serve(  # noqa: PLR0915
         gateway.stop()
 
         # --- Phase 2: drain active sessions ---
-        _drain_timeout_s = 30  # max seconds to wait for active sessions
         _drain_poll_s = 0.5
         _active = 0
         if _serve_session_lane:
@@ -490,9 +564,9 @@ def serve(  # noqa: PLR0915
             console.print()
             console.print(
                 f"  [dim]Draining {_active} active session(s) "
-                f"(timeout {_drain_timeout_s}s)...[/dim]"
+                f"(timeout {_DRAIN_TIMEOUT_S}s)...[/dim]"
             )
-            _deadline = _time.monotonic() + _drain_timeout_s
+            _deadline = _time.monotonic() + _DRAIN_TIMEOUT_S
             while _time.monotonic() < _deadline:
                 _active = _serve_session_lane.active_count if _serve_session_lane else 0
                 if _active == 0:
@@ -507,7 +581,7 @@ def serve(  # noqa: PLR0915
                 log.warning(
                     "Drain timeout: %d sessions still active after %ds",
                     _remaining,
-                    _drain_timeout_s,
+                    _DRAIN_TIMEOUT_S,
                 )
             else:
                 console.print("  [dim]All sessions drained.[/dim]")

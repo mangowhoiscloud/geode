@@ -237,8 +237,8 @@
   "coordinators": {
     "AgenticLoop": {
       "constructor_arg_count": 27,
-      "file_loc": 3040,
-      "method_count": 72,
+      "file_loc": 3135,
+      "method_count": 74,
       "path": "core/agent/loop/agent_loop.py"
     },
     "RuntimeCoreConfig": {
@@ -247,7 +247,7 @@
     },
     "SubAgentManager": {
       "constructor_arg_count": 15,
-      "file_loc": 1441,
+      "file_loc": 1443,
       "method_count": 24,
       "path": "core/agent/sub_agent.py"
     }
@@ -527,26 +527,28 @@
   },
   "packages": {
     "core": {
-      "python_files": 430,
-      "python_loc": 138244
+      "python_files": 435,
+      "python_loc": 139121
     },
     "plugins": {
       "python_files": 111,
       "python_loc": 41831
     },
     "tests": {
-      "python_files": 679,
-      "python_loc": 178673
+      "python_files": 683,
+      "python_loc": 179382
     }
   },
   "schema_version": 1,
   "tools": {
     "deferred_loading": {
-      "always_loaded_count": 13,
+      "always_loaded_count": 16,
       "always_loaded_names": [
         "calculate",
         "check_status",
+        "create_goal",
         "general_web_search",
+        "get_goal",
         "glob_files",
         "grep_files",
         "llms_txt_index",
@@ -555,12 +557,13 @@
         "note_read",
         "note_save",
         "read_document",
+        "update_goal",
         "use_skill",
         "web_fetch"
       ],
       "unknown_always_loaded_names": []
     },
-    "definition_count": 84,
+    "definition_count": 87,
     "definition_names": [
       "accept_result",
       "approve_plan",
@@ -573,6 +576,7 @@
       "calendar_sync_scheduler",
       "check_status",
       "computer_use",
+      "create_goal",
       "create_plan",
       "delegate_task",
       "document_ingest",
@@ -586,6 +590,7 @@
       "generate_data",
       "generate_report",
       "geode_seed_pool_search",
+      "get_goal",
       "glob_files",
       "gmail_search",
       "gmail_send",
@@ -641,6 +646,7 @@
       "task_update",
       "trigger_event",
       "ui_probe",
+      "update_goal",
       "update_plan",
       "use_skill",
       "wait_agent",
@@ -656,7 +662,7 @@
       "doctor_slack",
       "recall_tool_result"
     ],
-    "execution_registration_count": 87,
+    "execution_registration_count": 90,
     "execution_registration_names": [
       "accept_result",
       "approve_plan",
@@ -670,6 +676,7 @@
       "check_status",
       "computer",
       "computer_use",
+      "create_goal",
       "create_plan",
       "delegate_task",
       "doctor_slack",
@@ -684,6 +691,7 @@
       "generate_data",
       "generate_report",
       "geode_seed_pool_search",
+      "get_goal",
       "glob_files",
       "gmail_search",
       "gmail_send",
@@ -740,13 +748,14 @@
       "task_update",
       "trigger_event",
       "ui_probe",
+      "update_goal",
       "update_plan",
       "use_skill",
       "wait_agent",
       "web_fetch",
       "write_file"
     ],
-    "handler_registration_count": 79,
+    "handler_registration_count": 82,
     "handler_registration_names": [
       "accept_result",
       "approve_plan",
@@ -760,6 +769,7 @@
       "check_status",
       "computer",
       "computer_use",
+      "create_goal",
       "create_plan",
       "doctor_slack",
       "document_ingest",
@@ -772,6 +782,7 @@
       "generate_data",
       "generate_report",
       "geode_seed_pool_search",
+      "get_goal",
       "glob_files",
       "gmail_search",
       "gmail_send",
@@ -823,6 +834,7 @@
       "task_update",
       "trigger_event",
       "ui_probe",
+      "update_goal",
       "update_plan",
       "use_skill",
       "web_fetch",
@@ -841,6 +853,7 @@
       "check_status": "system",
       "computer": "computer-use",
       "computer_use": "computer-use",
+      "create_goal": "goal",
       "create_plan": "plan",
       "doctor_slack": "system",
       "document_ingest": "delegated",
@@ -853,6 +866,7 @@
       "generate_data": "data",
       "generate_report": "output",
       "geode_seed_pool_search": "delegated",
+      "get_goal": "goal",
       "glob_files": "delegated",
       "gmail_search": "delegated",
       "gmail_send": "delegated",
@@ -904,12 +918,13 @@
       "task_update": "task",
       "trigger_event": "execution",
       "ui_probe": "delegated",
+      "update_goal": "goal",
       "update_plan": "plan",
       "use_skill": "skill",
       "web_fetch": "delegated",
       "write_file": "delegated"
     },
-    "schema_count": 84,
+    "schema_count": 87,
     "schema_errors": [],
     "schema_names": [
       "accept_result",
@@ -923,6 +938,7 @@
       "calendar_sync_scheduler",
       "check_status",
       "computer_use",
+      "create_goal",
       "create_plan",
       "delegate_task",
       "document_ingest",
@@ -936,6 +952,7 @@
       "generate_data",
       "generate_report",
       "geode_seed_pool_search",
+      "get_goal",
       "glob_files",
       "gmail_search",
       "gmail_send",
@@ -991,6 +1008,7 @@
       "task_update",
       "trigger_event",
       "ui_probe",
+      "update_goal",
       "update_plan",
       "use_skill",
       "wait_agent",

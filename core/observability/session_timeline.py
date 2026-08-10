@@ -78,6 +78,9 @@ class SessionEventKind(StrEnum):
     PLAN_REPLANNED = "plan.replanned"
     PLAN_ABANDONED = "plan.abandoned"
     PLAN_COMPLETED = "plan.completed"
+    GOAL_CREATED = "goal.created"
+    GOAL_UPDATED = "goal.updated"
+    GOAL_CONTINUED = "goal.continued"
     USER_MESSAGE = "message.user"
     ASSISTANT_MESSAGE = "message.assistant"
     TOOL_CALLED = "tool.called"
@@ -951,6 +954,36 @@ class SessionTimeline:
             role="policy",
             status=kind.value.removeprefix("plan."),
             payload=payload,
+        )
+
+    def record_goal_state(
+        self,
+        kind: SessionEventKind,
+        goal: Any,
+        *,
+        trigger: str,
+    ) -> None:
+        """Persist a goal control edge without duplicating its objective."""
+        if kind not in {
+            SessionEventKind.GOAL_CREATED,
+            SessionEventKind.GOAL_UPDATED,
+            SessionEventKind.GOAL_CONTINUED,
+        }:
+            raise ValueError(f"unsupported goal event kind: {kind.value}")
+        objective = str(getattr(goal, "objective", ""))
+        self._record(
+            kind,
+            role="policy",
+            status=str(getattr(goal, "status", "")),
+            payload={
+                "goal_id": str(getattr(goal, "goal_id", "")),
+                "objective_sha256": sha256(objective.encode("utf-8")).hexdigest(),
+                "token_budget": getattr(goal, "token_budget", None),
+                "tokens_used": int(getattr(goal, "tokens_used", 0)),
+                "remaining_tokens": getattr(goal, "remaining_tokens", None),
+                "time_used_seconds": round(float(getattr(goal, "time_used_seconds", 0.0)), 3),
+                "trigger": trigger,
+            },
         )
 
     def record_tool_call(
