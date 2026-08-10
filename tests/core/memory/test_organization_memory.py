@@ -48,9 +48,8 @@ class TestSoulMd:
     def test_get_soul_default(self):
         org = MonoLakeOrganizationMemory()
         soul = org.get_soul()
-        # GEODE.md may not exist in CI — only assert if non-empty
-        if soul:
-            assert "GEODE" in soul or "Mission" in soul or "Identity" in soul
+        assert soul
+        assert "GEODE" in soul or "Mission" in soul or "Identity" in soul
 
     def test_get_soul_cached(self):
         org = MonoLakeOrganizationMemory()

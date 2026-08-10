@@ -19,7 +19,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": ""
+    "body": "### Fixed\n\n- **Hardened explicit Goal budgets and packaged identity.** A model-supplied\n  numeric `create_goal.token_budget` now crosses the existing\n  `PermissionRequest` boundary before persistence, while the OpenAI-compatible\n  schema represents the unbounded default as required `null` instead of a\n  best-effort optional integer. This prevents an unsolicited minimum value\n  from immediately budget-limiting a Goal. Distribution artifacts now include\n  the Tier-0 `GEODE.md` identity used by source checkouts instead of silently\n  running installed wheels with an empty soul."
   },
   {
     "version": "1.0.19",
