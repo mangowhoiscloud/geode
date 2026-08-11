@@ -47,6 +47,10 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.21] - 2026-08-11
+
+> Reproducible GPT-5.6 effort diagnostics and matched Petri Dish scaffold evidence.
+
 ### Infrastructure
 
 - **Matched Petri Dish scaffold comparison.** Added a pinned Codex CLI / Hermes
