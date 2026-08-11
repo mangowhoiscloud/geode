@@ -19,7 +19,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": ""
+    "body": "### Fixed\n\n- **Isolated Claude CLI subscription authentication.** Petri audit subprocesses\n  no longer inherit a parent `ANTHROPIC_API_KEY`, so Claude CLI auditor and\n  judge roles consistently use the operator's Claude subscription login."
   },
   {
     "version": "1.0.20",
