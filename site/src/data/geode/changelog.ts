@@ -19,7 +19,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": ""
+    "body": "### Infrastructure\n\n- **Core Metadata 2.5 release validation.** Raised the Twine floor to 7.0 so\n  stable releases validate current Hatchling-built wheels instead of failing\n  after the full release test suite."
   },
   {
     "version": "1.0.21",
