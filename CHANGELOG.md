@@ -47,6 +47,12 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Isolated Claude CLI subscription authentication.** Petri audit subprocesses
+  no longer inherit a parent `ANTHROPIC_API_KEY`, so Claude CLI auditor and
+  judge roles consistently use the operator's Claude subscription login.
+
 ## [1.0.20] - 2026-08-10
 
 > Permission-gated Goal budgets and packaged Tier-0 runtime identity.

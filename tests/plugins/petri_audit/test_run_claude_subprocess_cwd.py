@@ -12,6 +12,8 @@ import asyncio
 from typing import Any
 from unittest.mock import patch
 
+import pytest
+
 
 def _build_fake_proc(stdout: bytes = b"", stderr: bytes = b"", rc: int = 0) -> Any:
     """Minimal asyncio.subprocess.Process stub used by both tests."""
@@ -78,3 +80,29 @@ def test_run_subprocess_omits_cwd_default_inherits() -> None:
     # ``cwd`` key is in captured kwargs with value None.
     assert "cwd" in captured
     assert captured["cwd"] is None
+
+
+def test_run_subprocess_does_not_inherit_api_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from plugins.petri_audit.claude_cli_provider import _run_claude_subprocess
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "payg-parent-key")
+    monkeypatch.setenv("GEODE_SUBPROCESS_SENTINEL", "kept")
+    captured: dict[str, Any] = {}
+
+    async def _fake_create(*args: Any, **kwargs: Any) -> Any:
+        captured.update(kwargs)
+        return _build_fake_proc()
+
+    with patch("asyncio.create_subprocess_exec", _fake_create):
+        asyncio.run(
+            _run_claude_subprocess(
+                ["/fake/claude", "--print"],
+                stdin_text="",
+                timeout_s=10.0,
+            )
+        )
+
+    assert "ANTHROPIC_API_KEY" not in captured["env"]
+    assert captured["env"]["GEODE_SUBPROCESS_SENTINEL"] == "kept"
