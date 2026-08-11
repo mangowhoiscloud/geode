@@ -569,6 +569,10 @@ module = [
     # `uv sync --extra audit` is run; default sync skips them.
     "inspect_ai.*",
     "inspect_petri.*",
+    # Matched scaffold comparison runner; injected only by its documented
+    # ``uv run --with`` command, not installed in the default environment.
+    "inspect_swe.*",
+    "petri_dish.*",
     # PR-SIL-5THEME C2 — S6b bench federation dependencies, same opt-in.
     "inspect_evals.*",
     "inspect_harbor.*",
@@ -614,6 +618,13 @@ ignore_missing_imports = true
 # scoped to this opt-in runner instead of disabling checks for scripts/eval.
 module = ["scripts.eval.tau2_geode_agent"]
 disallow_subclassing_any = false
+
+[[tool.mypy.overrides]]
+# Petri Dish's Inspect SWE base class and decorators are available only in the
+# comparison runner's isolated ``uv run --with`` environment.
+module = ["scripts.eval.petri_dish_scaffold_compare"]
+disallow_subclassing_any = false
+disallow_untyped_decorators = false
 
 [[tool.mypy.overrides]]
 # Public benchmark adapters subclass base classes supplied by opt-in external

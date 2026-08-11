@@ -47,6 +47,13 @@ functional change.
 
 ## [Unreleased]
 
+### Infrastructure
+
+- **Matched Petri Dish scaffold comparison.** Added a pinned Codex CLI / Hermes
+  ACP comparison task with a shared sandbox, model, seed, turn ceiling, and
+  judge rubric, plus an Inspect archive sanitizer that removes private
+  reasoning and host-home paths while preserving scores for public evidence.
+
 ### Fixed
 
 - **Codex overload classification.** Generic SSE `APIError` overload responses

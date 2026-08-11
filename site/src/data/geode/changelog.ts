@@ -19,7 +19,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": "### Fixed\n\n- **Codex overload classification.** Generic SSE `APIError` overload responses\n  are now recorded as provider-server failures instead of unknown errors, so\n  retry hooks and operator diagnostics retain the real failure category.\n- **Isolated Claude CLI subscription authentication.** Petri audit subprocesses\n  no longer inherit a parent `ANTHROPIC_API_KEY`, so Claude CLI auditor and\n  judge roles consistently use the operator's Claude subscription login."
+    "body": "### Infrastructure\n\n- **Matched Petri Dish scaffold comparison.** Added a pinned Codex CLI / Hermes\n  ACP comparison task with a shared sandbox, model, seed, turn ceiling, and\n  judge rubric, plus an Inspect archive sanitizer that removes private\n  reasoning and host-home paths while preserving scores for public evidence.\n\n### Fixed\n\n- **Codex overload classification.** Generic SSE `APIError` overload responses\n  are now recorded as provider-server failures instead of unknown errors, so\n  retry hooks and operator diagnostics retain the real failure category.\n- **Isolated Claude CLI subscription authentication.** Petri audit subprocesses\n  no longer inherit a parent `ANTHROPIC_API_KEY`, so Claude CLI auditor and\n  judge roles consistently use the operator's Claude subscription login."
   },
   {
     "version": "1.0.20",
