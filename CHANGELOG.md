@@ -47,12 +47,6 @@ functional change.
 
 ## [Unreleased]
 
-### Infrastructure
-
-- **Core Metadata 2.5 release validation.** Raised the Twine floor to 7.0 so
-  stable releases validate current Hatchling-built wheels instead of failing
-  after the full release test suite.
-
 ## [1.0.21] - 2026-08-11
 
 > Reproducible GPT-5.6 effort diagnostics and matched Petri Dish scaffold evidence.
@@ -66,6 +60,9 @@ functional change.
 - **Release/type-check parity.** CI now type-checks with the audit extra used
   by stable releases, and the Petri scaffold utilities satisfy those installed
   Inspect/Petri type contracts instead of failing only during promotion.
+- **Core Metadata 2.5 release validation.** Raised the Twine floor to 7.0 so
+  stable releases validate current Hatchling-built wheels instead of failing
+  after the full release test suite.
 
 ### Fixed
 
