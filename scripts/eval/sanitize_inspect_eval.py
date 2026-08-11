@@ -49,6 +49,8 @@ def main() -> None:
     write_eval_log(public, args.destination)
 
     readback = read_eval_log(args.destination)
+    if not source.samples or not readback.samples:
+        raise ValueError("Inspect archive must contain at least one sample")
     assert readback.status == source.status
     assert readback.samples[0].scores == source.samples[0].scores
     print(json.dumps(stats, sort_keys=True))

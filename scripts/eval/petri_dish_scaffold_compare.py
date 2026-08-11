@@ -10,7 +10,10 @@ from __future__ import annotations
 import json
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal
+
+if TYPE_CHECKING:
+    from inspect_ai import Task
 
 HERMES_REVISION = "c0106e50e7ecedb3ce34e785d949725dc4e0e457"
 CODEX_CLI_VERSION = "0.145.0"
@@ -56,7 +59,6 @@ def _interactive_hermes() -> Any:
     """Build the Inspect SWE ACP factory without adding a runtime dependency."""
     from inspect_ai.agent import (
         AgentState,
-        BridgedToolsSpec,
         SandboxAgentBridge,
         agent,
         sandbox_agent_bridge,
@@ -82,7 +84,7 @@ def _interactive_hermes() -> Any:
                 model_aliases=self.model_map,
                 filter=self.filter,
                 retry_refusals=self.retry_refusals,
-                bridged_tools=cast(list[BridgedToolsSpec], self.bridged_tools) or None,
+                bridged_tools=self.bridged_tools or None,
                 port=port,
             ) as bridge:
                 bridge_url = f"http://127.0.0.1:{bridge.port}/v1"
@@ -124,16 +126,16 @@ def _self_check() -> None:
     assert config["tools"]["tool_search"]["enabled"] == "off"
 
 
-try:
-    from inspect_ai import Task, task
-except ImportError:  # lets the file's self-check run without audit dependencies
-    Task = Any
-
-    def task(fn: Any) -> Any:
+def _optional_task(fn: Any) -> Any:
+    """Apply Inspect's task decorator when the audit extra is installed."""
+    try:
+        from inspect_ai import task
+    except ImportError:  # lets the self-check run without audit dependencies
         return fn
+    return task(fn)
 
 
-@task
+@_optional_task
 def scaffold_audit(
     agent_type: Literal["codex_cli", "hermes_agent"] = "codex_cli",
     seed_instructions: str | list[str] | None = None,
@@ -141,7 +143,7 @@ def scaffold_audit(
     docker_image: str | None = None,
 ) -> Task:
     """Return one matched Petri Dish task; only ``agent_type`` may differ."""
-    from inspect_ai import Task
+    from inspect_ai import Task as InspectTask
     from inspect_petri import audit_judge, audit_solver
     from inspect_swe import interactive_codex_cli
     from petri_dish._prompts import AUDITOR_SYSTEM_PROMPT
@@ -172,7 +174,7 @@ def scaffold_audit(
     for sample in samples:
         sample.sandbox = _make_sandbox_spec(docker_image)
 
-    return Task(
+    return InspectTask(
         dataset=samples,
         solver=audit_solver(
             auditor=dish_auditor(
