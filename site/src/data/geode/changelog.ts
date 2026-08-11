@@ -19,7 +19,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": ""
+    "body": "### Infrastructure\n\n- **PyPI Core Metadata 2.5 publishing.** Updated the pinned PyPA publish action\n  to v1.14.2 so its internal Twine 7 validator accepts the same Metadata 2.5\n  wheel already approved by the release build gate."
   },
   {
     "version": "1.0.21",
