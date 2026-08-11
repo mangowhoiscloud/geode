@@ -151,9 +151,9 @@ const EXECUTE_ROWS: Row[] = [
   },
   {
     name: "TimeBudget",
-    ko: "세션 wall-clock 예산. 만료 전 임계에서 handoff를 먼저 발화",
-    en: "Session wall-clock budget; fires a handoff at the threshold before hard expiry",
-    control: "budget_seconds, handoff threshold, HANDOFF_TRIGGERED hook",
+    ko: "명시적으로 활성화하는 세션 wall-clock 예산. 양수 잔여시간의 임계에서만 handoff를 발화",
+    en: "Opt-in session wall-clock budget; fires handoff only inside the positive remaining-time window",
+    control: "GEODE_SESSION_TIME_BUDGET_S, handoff threshold, HANDOFF_TRIGGERED hook",
     path: "core/agent/budget.py",
   },
   {
@@ -831,8 +831,8 @@ export default function Page() {
               </li>
             </ul>
             <p>
-              The default round cap is 0 (unlimited), so the effective bounds
-              are the time and cost budgets. The named termination paths are
+              The default round cap is 0 (unlimited). Configured run/session
+              time budgets and the cost budget provide explicit bounds. The named termination paths are
               the sixteen below plus normal completion (a text response with no
               tool calls).
             </p>

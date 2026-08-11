@@ -1,23 +1,12 @@
-"""Wall-clock budget for AgenticLoop — Karpathy P3 (Budget control).
+"""Optional wall-clock budget for one AgenticLoop session.
 
-Replaces the prior turn-count hard cap with a time-based cap (default 2h)
-that fires an automatic hand-off procedure at T-10min remaining. Aligns
-with 4 frontier patterns simultaneously:
+The loop activates this legacy session-wide cap only when an operator sets
+``GEODE_SESSION_TIME_BUDGET_S``. Normal interactive and durable sessions are
+unbounded; per-run limits remain the responsibility of ``time_budget_s``.
 
-- **Claude Code** (`agent-loop.ts:checkBudgetExhausted`) — wall-clock
-  + token budget enforced per turn boundary.
-- **Codex CLI** (`--budget-seconds`) — single wall-clock knob.
-- **OpenClaw** (Lane TTL) — per-lane time cap inside the gateway.
-- **Hermes Agent** (`hermes_state.py` sessions handoff_state) — DB-backed
-  state machine that hand-off-watchers consume. We mirror this state
-  machine in ``core/agent/handoff.py``.
-
-Budget tracking lives in :class:`SessionMetrics` (Tier 2 aggregator) so
-the budget travels with the ContextVar — every helper that already
-reads ``current_session_metrics()`` automatically sees the budget. The
-budget tracker here is the *operator interface*: it constructs the
-2h-default, exposes a clear ``start()`` / ``check()`` shape, and emits
-the ``HANDOFF_TRIGGERED`` hook on the boundary.
+Budget tracking lives in the loop's :class:`SessionMetrics`. The helper keeps
+the threshold transition one-shot and classifies expiry and handoff as
+mutually exclusive states.
 
 I/O failures NEVER raise — observability mustn't break the run it observes.
 """
@@ -25,6 +14,7 @@ I/O failures NEVER raise — observability mustn't break the run it observes.
 from __future__ import annotations
 
 import logging
+import math
 from dataclasses import dataclass
 from typing import Any
 
@@ -44,14 +34,11 @@ __all__ = [
     "start_session_budget",
 ]
 
-# 2 hours = 7200s. Operator-decided default (memory:
-# ``project_budget_handoff_decision`` 2026-05-23). Override via
-# ``GEODE_TIME_BUDGET_S`` env knob or per-call argument.
+# Backward-compatible default for explicit helper callers. AgenticLoop does
+# not activate it unless ``GEODE_SESSION_TIME_BUDGET_S`` is set.
 DEFAULT_TIME_BUDGET_S: float = 7200.0
 
-# T-10min headroom for the handoff window. Empirically matches the
-# Claude Code wrap-up reservation (text-only completion needs ~5-10 min
-# under worst-case rate limits + tool retries).
+# Ten minutes of headroom when the optional session cap is active.
 DEFAULT_HANDOFF_THRESHOLD_S: float = 600.0
 
 
@@ -105,6 +92,10 @@ def start_session_budget(
             else DEFAULT_HANDOFF_THRESHOLD_S
         ),
     )
+    if not math.isfinite(cfg.total_seconds) or cfg.total_seconds <= 0.0:
+        raise ValueError("total_seconds must be a finite positive number")
+    if not math.isfinite(cfg.handoff_threshold_seconds) or cfg.handoff_threshold_seconds < 0.0:
+        raise ValueError("handoff_threshold_seconds must be a finite non-negative number")
     target = metrics if metrics is not None else current_session_metrics()
     target.start_time_budget(cfg.total_seconds, threshold_seconds=cfg.handoff_threshold_seconds)
     return cfg
@@ -121,9 +112,7 @@ def check_session_budget(*, metrics: SessionMetrics | None = None) -> BudgetChec
     target = metrics if metrics is not None else current_session_metrics()
     remaining = target.time_budget_remaining_s()
     expired = target.time_budget_total_s > 0.0 and remaining <= 0.0
-    # is_handoff_due() flips the latched flag on first True — call it before
-    # reading remaining so the latch is set atomically with the report.
-    handoff_due = target.is_handoff_due()
+    handoff_due = not expired and target.is_handoff_due()
     return BudgetCheck(
         expired=expired,
         handoff_due=handoff_due,

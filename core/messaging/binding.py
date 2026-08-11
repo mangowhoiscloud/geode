@@ -60,11 +60,8 @@ class ChannelManager:
         self._bot_user_id = bot_user_id  # Slack bot user ID for mention matching
         # Gateway-level defaults (overridden by config.toml [gateway])
         self.gateway_time_budget_s: float = 120.0  # default 2 min per message
-        # PR-CL-BUDGET (2026-05-23) — turn hard-cap removed; the session-wide
-        # 2-hour wall-clock budget (``core.agent.budget``) plus the per-binding
-        # ``gateway_time_budget_s`` are the new safety nets. ``0`` propagates
-        # to ``AgenticLoop.max_rounds=0`` = unlimited rounds. Operator decision
-        # in ``project_budget_handoff_decision`` (2026-05-23).
+        # ``0`` propagates to ``AgenticLoop.max_rounds=0`` = unlimited rounds;
+        # the per-binding ``gateway_time_budget_s`` remains the active-run cap.
         self.gateway_max_turns: int = 0
 
     def register_poller(self, poller: BasePoller) -> None:
@@ -313,7 +310,7 @@ class ChannelManager:
 
             [gateway]
             max_rounds = 30
-            max_turns = 0  # 0 = unlimited (session-wide 2h wall-clock cap)
+            max_turns = 0  # 0 = unlimited; each message keeps its run budget
 
             [[gateway.bindings.rules]]
             channel = "slack"

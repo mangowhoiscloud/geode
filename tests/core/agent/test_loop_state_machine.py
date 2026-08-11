@@ -171,6 +171,8 @@ def test_restore_loop_state_is_the_single_surgery():
     assert dst.cognitive_state is not None
     assert dst._consecutive_text_only_rounds == 1
     assert dst._budget_warned is True
+    assert dst._session_metrics.session_id == "s-resume-1"
+    assert dst._session_metrics.time_budget_total_s == 0.0
 
 
 def test_checkpoint_persists_loop_guards(tmp_path):

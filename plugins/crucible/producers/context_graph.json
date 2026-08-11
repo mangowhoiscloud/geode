@@ -74,7 +74,7 @@
         "runtime",
         "while-tool-use"
       ],
-      "contentSha256": "346653da7d4899f848ec3958d0b62d2512c21885ac9d30ed2ae1c8e0116a4032"
+      "contentSha256": "0a65923c212bba99bcfdd0d8fc9e0fc6615203de7372ee0427026547fcc79329"
     },
     {
       "id": "file:core/agent/loop/_goal.py",
