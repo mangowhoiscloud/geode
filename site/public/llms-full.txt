@@ -5995,7 +5995,7 @@ Tier 2  latex2sympy2 + sympy.pretty  블록 전용. 분수·적분을 2D Unicode
 URL: https://mangowhoiscloud.github.io/geode/docs/reference/changelog
 Markdown: https://mangowhoiscloud.github.io/geode/docs/reference/changelog.md
 
-(body omitted from llms-full: 1501 KB — fetch the Markdown twin above for the complete page)
+(body omitted from llms-full: 1502 KB — fetch the Markdown twin above for the complete page)
 
 ---
 
@@ -6156,7 +6156,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 | 측정값 | 현재 트리 |
 | --- | --- |
 | 프로덕션 Python 파일 | 546 |
-| 테스트 Python 파일 | 683 |
+| 테스트 Python 파일 | 684 |
 | 도구 정의 / 실행 등록 / 유효 스키마 | 87 / 90 / 87 |
 | RuntimeEvent 멤버 | 57 |
 | 기본 LLM 어댑터 | 8 |
