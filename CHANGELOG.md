@@ -49,6 +49,9 @@ functional change.
 
 ### Fixed
 
+- **Codex overload classification.** Generic SSE `APIError` overload responses
+  are now recorded as provider-server failures instead of unknown errors, so
+  retry hooks and operator diagnostics retain the real failure category.
 - **Isolated Claude CLI subscription authentication.** Petri audit subprocesses
   no longer inherit a parent `ANTHROPIC_API_KEY`, so Claude CLI auditor and
   judge roles consistently use the operator's Claude subscription login.

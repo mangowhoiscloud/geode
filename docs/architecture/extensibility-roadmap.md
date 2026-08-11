@@ -282,10 +282,10 @@ machine-readable artifact is
 | Measure | Current tree |
 |---|---:|
 | Production Python files (`core/` + `plugins/`) | 546 |
-| Test Python files | 683 |
-| `core/` Python LOC | 139,137 |
+| Test Python files | 684 |
+| `core/` Python LOC | 139,141 |
 | `plugins/` Python LOC | 41,834 |
-| Test Python LOC | 179,485 |
+| Test Python LOC | 179,553 |
 | Tool definitions / executable registrations / valid schemas | 87 / 90 / 87 (definition-only 0; execution-only 3; invalid schema 0) |
 | `RuntimeEvent` members | 57 |
 | Built-in LLM adapters | 8 |
