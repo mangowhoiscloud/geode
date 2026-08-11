@@ -47,6 +47,12 @@ functional change.
 
 ## [Unreleased]
 
+### Infrastructure
+
+- **PyPI Core Metadata 2.5 publishing.** Updated the pinned PyPA publish action
+  to v1.14.2 so its internal Twine 7 validator accepts the same Metadata 2.5
+  wheel already approved by the release build gate.
+
 ## [1.0.21] - 2026-08-11
 
 > Reproducible GPT-5.6 effort diagnostics and matched Petri Dish scaffold evidence.
