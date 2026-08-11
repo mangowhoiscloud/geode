@@ -47,12 +47,6 @@ functional change.
 
 ## [Unreleased]
 
-### Infrastructure
-
-- **Release/type-check parity.** CI now type-checks with the audit extra used
-  by stable releases, and the Petri scaffold utilities satisfy those installed
-  Inspect/Petri type contracts instead of failing only during promotion.
-
 ## [1.0.21] - 2026-08-11
 
 > Reproducible GPT-5.6 effort diagnostics and matched Petri Dish scaffold evidence.
@@ -63,6 +57,9 @@ functional change.
   ACP comparison task with a shared sandbox, model, seed, turn ceiling, and
   judge rubric, plus an Inspect archive sanitizer that removes private
   reasoning and host-home paths while preserving scores for public evidence.
+- **Release/type-check parity.** CI now type-checks with the audit extra used
+  by stable releases, and the Petri scaffold utilities satisfy those installed
+  Inspect/Petri type contracts instead of failing only during promotion.
 
 ### Fixed
 
