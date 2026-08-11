@@ -19,7 +19,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": ""
+    "body": "### Fixed\n\n- **Separated durable session lifetime from optional wall-clock guards.**\n  Interactive and resumable sessions no longer inherit an implicit two-hour\n  expiry; `GEODE_SESSION_TIME_BUDGET_S` now explicitly opts into the legacy\n  session cap. Expiry and handoff are mutually exclusive, expired sessions\n  stop before planner/model/tool work, and ordinary gateway/IPC loops bind\n  independent session metrics so one session cannot expire another."
   },
   {
     "version": "1.0.20",
