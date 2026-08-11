@@ -978,6 +978,8 @@ async def _run_claude_subprocess(
     — used by inspect_ai audit lane + one-shot diagnostic callers
     that don't go through the sub-agent worker.
     """
+    env = dict(os.environ)
+    env.pop("ANTHROPIC_API_KEY", None)
     try:
         proc = await asyncio.create_subprocess_exec(
             *argv,
@@ -985,6 +987,7 @@ async def _run_claude_subprocess(
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=cwd,
+            env=env,
         )
     except (FileNotFoundError, OSError) as exc:
         raise ClaudeCliInvocationError(f"failed to spawn `claude`: {exc!r}") from exc

@@ -47,6 +47,26 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.21] - 2026-08-11
+
+> Reproducible GPT-5.6 effort diagnostics and matched Petri Dish scaffold evidence.
+
+### Infrastructure
+
+- **Matched Petri Dish scaffold comparison.** Added a pinned Codex CLI / Hermes
+  ACP comparison task with a shared sandbox, model, seed, turn ceiling, and
+  judge rubric, plus an Inspect archive sanitizer that removes private
+  reasoning and host-home paths while preserving scores for public evidence.
+
+### Fixed
+
+- **Codex overload classification.** Generic SSE `APIError` overload responses
+  are now recorded as provider-server failures instead of unknown errors, so
+  retry hooks and operator diagnostics retain the real failure category.
+- **Isolated Claude CLI subscription authentication.** Petri audit subprocesses
+  no longer inherit a parent `ANTHROPIC_API_KEY`, so Claude CLI auditor and
+  judge roles consistently use the operator's Claude subscription login.
+
 ## [1.0.20] - 2026-08-10
 
 > Permission-gated Goal budgets and packaged Tier-0 runtime identity.

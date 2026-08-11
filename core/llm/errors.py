@@ -579,6 +579,10 @@ def _classify_openai_error(exc: Exception) -> tuple[str, str, str] | None:
         if _looks_like_context_overflow(exc):
             return _ERROR_CLASSIFICATION["context_overflow"]
         return _ERROR_CLASSIFICATION["bad_request"]
+    # The Codex SSE backend can emit overload as a generic APIError rather
+    # than an HTTP-backed InternalServerError (live effort sweep 2026-08-11).
+    if isinstance(exc, openai.APIError) and "overloaded" in str(exc).lower():
+        return _ERROR_CLASSIFICATION["server"]
     return None
 
 
