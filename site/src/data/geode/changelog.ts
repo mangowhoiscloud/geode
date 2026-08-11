@@ -19,12 +19,12 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": "### Infrastructure\n\n- **Core Metadata 2.5 release validation.** Raised the Twine floor to 7.0 so\n  stable releases validate current Hatchling-built wheels instead of failing\n  after the full release test suite."
+    "body": ""
   },
   {
     "version": "1.0.21",
     "date": "2026-08-11",
-    "body": "> Reproducible GPT-5.6 effort diagnostics and matched Petri Dish scaffold evidence.\n\n### Infrastructure\n\n- **Matched Petri Dish scaffold comparison.** Added a pinned Codex CLI / Hermes\n  ACP comparison task with a shared sandbox, model, seed, turn ceiling, and\n  judge rubric, plus an Inspect archive sanitizer that removes private\n  reasoning and host-home paths while preserving scores for public evidence.\n- **Release/type-check parity.** CI now type-checks with the audit extra used\n  by stable releases, and the Petri scaffold utilities satisfy those installed\n  Inspect/Petri type contracts instead of failing only during promotion.\n\n### Fixed\n\n- **Codex overload classification.** Generic SSE `APIError` overload responses\n  are now recorded as provider-server failures instead of unknown errors, so\n  retry hooks and operator diagnostics retain the real failure category.\n- **Isolated Claude CLI subscription authentication.** Petri audit subprocesses\n  no longer inherit a parent `ANTHROPIC_API_KEY`, so Claude CLI auditor and\n  judge roles consistently use the operator's Claude subscription login."
+    "body": "> Reproducible GPT-5.6 effort diagnostics and matched Petri Dish scaffold evidence.\n\n### Infrastructure\n\n- **Matched Petri Dish scaffold comparison.** Added a pinned Codex CLI / Hermes\n  ACP comparison task with a shared sandbox, model, seed, turn ceiling, and\n  judge rubric, plus an Inspect archive sanitizer that removes private\n  reasoning and host-home paths while preserving scores for public evidence.\n- **Release/type-check parity.** CI now type-checks with the audit extra used\n  by stable releases, and the Petri scaffold utilities satisfy those installed\n  Inspect/Petri type contracts instead of failing only during promotion.\n- **Core Metadata 2.5 release validation.** Raised the Twine floor to 7.0 so\n  stable releases validate current Hatchling-built wheels instead of failing\n  after the full release test suite.\n\n### Fixed\n\n- **Codex overload classification.** Generic SSE `APIError` overload responses\n  are now recorded as provider-server failures instead of unknown errors, so\n  retry hooks and operator diagnostics retain the real failure category.\n- **Isolated Claude CLI subscription authentication.** Petri audit subprocesses\n  no longer inherit a parent `ANTHROPIC_API_KEY`, so Claude CLI auditor and\n  judge roles consistently use the operator's Claude subscription login."
   },
   {
     "version": "1.0.20",
