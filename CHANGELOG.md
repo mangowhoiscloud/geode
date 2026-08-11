@@ -47,6 +47,12 @@ functional change.
 
 ## [Unreleased]
 
+### Infrastructure
+
+- **Release/type-check parity.** CI now type-checks with the audit extra used
+  by stable releases, and the Petri scaffold utilities satisfy those installed
+  Inspect/Petri type contracts instead of failing only during promotion.
+
 ## [1.0.21] - 2026-08-11
 
 > Reproducible GPT-5.6 effort diagnostics and matched Petri Dish scaffold evidence.

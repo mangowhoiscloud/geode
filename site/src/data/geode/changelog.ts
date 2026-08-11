@@ -19,7 +19,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": ""
+    "body": "### Infrastructure\n\n- **Release/type-check parity.** CI now type-checks with the audit extra used\n  by stable releases, and the Petri scaffold utilities satisfy those installed\n  Inspect/Petri type contracts instead of failing only during promotion."
   },
   {
     "version": "1.0.21",
