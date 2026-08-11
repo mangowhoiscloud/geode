@@ -2,7 +2,7 @@
 
 > Action/tool-execution 4종 벤치마크. GEODE의 quality ratchet(P4)에 통합 예정.
 > 각 문서는 **사례 + 필요 인프라 + 4-Phase 진행 시나리오**를 담음.
-> 마지막 갱신: 2026-08-03
+> 마지막 갱신: 2026-08-11
 
 ## Raw artifact repository
 
@@ -13,6 +13,12 @@ repository. GEODE keeps interpretation, comparison boundaries, and digest
 pointers under `docs/eval/`; the artifact repository keeps the bytes behind
 those claims. See [External Evaluation Artifact Repository](external-artifact-repository.md)
 for path mappings, disclosure rules, and the publication manifest scaffold.
+
+The latest route-contract diagnostic is the immutable
+[2026-08-11 GPT-5.6 effort-surface record](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/7a788211c2194f7118b40b63e19f071b6e7091fb/reports/e2e-validation/2026-08-11-gpt56-luna-terra-sol-effort-surface.md):
+all 18 Luna/Terra/Sol × six-effort combinations passed on the OpenAI
+subscription route. Its six retained transient overloads are transport
+evidence, not a quality comparison; `promotion_authority=none`.
 
 The latest runtime-contract record is the immutable
 [2026-08-10 Goal/deep-research behavior release](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/abad7de44a23cd0756fe1edb5b61a86ed715cc8f/trajectories/geode-agenticloop-goal-deep-research-gpt56-luna-max-2026-08-10-20260809T191233Z-a19174d30764):
