@@ -5,6 +5,7 @@
 > [`../architecture/extensibility-roadmap.md`](../architecture/extensibility-roadmap.md).
 
 Date: 2026-08-05
+Last grounded: 2026-08-12 against `origin/develop@70f8e926e`
 
 ## 1. Decision
 
@@ -47,8 +48,8 @@ as evidence of past intent, not as current consumers.
 |---|---|---:|---|
 | [DPO paper](https://arxiv.org/abs/2305.18290) | Direct preference objective, reference-policy relationship | A | Single-response experiments do not define a complete long-horizon agent data contract |
 | [DeepSeekMath](https://arxiv.org/abs/2402.03300) | GRPO origin and group-relative PPO variant | A | Mathematics-focused rollout setting |
-| [Stanford CS329A Part 4](https://cs329a.stanford.edu/) | ReAct, RLEF, and Constitutional AI as three different feedback/update surfaces | A | Lecture framing is secondary to the cited papers for algorithm details |
-| [RLEF](https://proceedings.mlr.press/v267/gehring25a.html) | Public execution feedback, private-test reward, and PPO update contract | A | Short, single-program CodeContests tasks; training system and checkpoints are not public |
+| [Stanford CS329A Part 4](https://www.youtube.com/watch?v=Lxh9RF5S-K0) | ReAct, RLEF, and Constitutional AI as three different feedback/update surfaces | A | Lecture framing is secondary to the cited papers for algorithm details |
+| [RLEF](https://proceedings.mlr.press/v267/gehring25a.html) | Public execution feedback, private-test reward, and PPO update contract | A | Short CodeContests setting; not a long-horizon agent contract |
 | [DeepSeek-R1](https://arxiv.org/abs/2501.12948) | Rule-verifiable reasoning reward and the boundary against neural reward models | A | Long-horizon tool environments are not the primary setting |
 | [DAPO](https://arxiv.org/abs/2503.14476) | Dynamic sampling and optimization stability for outcome-reward RL | A | Token-level loss is not process-level reward |
 | [Hugging Face TRL DPO](https://github.com/huggingface/trl/blob/main/docs/source/dpo_trainer.md) | Current tool-calling preference dataset shape | A | Trainer-specific materialization format, not a universal storage standard |
@@ -80,7 +81,8 @@ and policy/compute identity material to training quality.
 
 ### 2.3 Feedback is not one object
 
-The Part 4 lineage fixes four terms that must remain separate:
+The Part 4 lineage separates feedback surfaces by signal, consumer, and update
+target:
 
 | Surface | Signal | Consumer | Update target |
 |---|---|---|---|
@@ -88,7 +90,7 @@ The Part 4 lineage fixes four terms that must remain separate:
 | RLEF public tests | execution diagnostics | next code-generation turn | context during rollout |
 | RLEF private tests | terminal task reward | PPO trainer | policy weights and value model |
 | Constitutional critique | critique and revision | SFT data construction | response policy |
-| Constitutional preference | pairwise AI/human preference | preference model and RL | preference model and policy weights |
+| Constitutional preference | pairwise AI preference | preference model and RL | preference model and policy weights |
 | GEODE Verify/PostVerify | verdict and bounded repair instruction | runtime finalization | next attempt or delivery state |
 | SIL/Crucible | artifact-bound comparison verdict | external search controller | behavior SoT or private search ref |
 
@@ -102,9 +104,9 @@ process reward, GSPO, or hill climbing would collapse different operators.
 
 The current Chinese frontier reports reinforce the same boundary:
 
-- DeepSeek-R1 prefers rule-verifiable accuracy and format rewards for
-  verifiable reasoning because neural reward models create a reward-hacking
-  surface.
+- DeepSeek-R1-Zero uses rule-verifiable accuracy and format rewards for
+  verifiable reasoning tasks; the report abstains from neural reward models on
+  those tasks because of reward-hacking risk.
 - DAPO changes sampling and policy-loss stability around outcome reward; its
   token-level loss does not create step labels.
 - GLM-5 preserves token IDs, policy version, sandbox failure attribution, and
@@ -315,7 +317,8 @@ Strengthen typed provenance and verifier/evidence correlation without changing
 native receipt authority. Reward stays a component vector plus hard gates;
 scalarization is a versioned derived decision.
 
-The first admitted view has four non-compensable groups:
+The first admitted view preserves four groups separately; constraints are
+non-compensable:
 
 ```text
 outcome    = native task completion and final-state checks
@@ -324,11 +327,11 @@ cost       = tokens, latency, tool calls, critical-path depth
 constraints= permission, safety, privacy, evaluator validity, infrastructure health
 ```
 
-Each value remains a typed `RewardAtom` with a target episode or transition,
-source/version, evidence digest, and validity status. Constraint failures are
-vetoes, not negative numbers that a high task score can outweigh. Domain-owned
-views may derive a versioned scalar or pairwise order offline, but the runtime
-does not own a universal reward table.
+Stage C would project each value as a typed `RewardAtom` with a target episode
+or transition, source/version, evidence digest, and validity status. Constraint
+failures are vetoes, not negative numbers that a high task score can outweigh.
+Domain-owned views may derive a versioned scalar or pairwise order offline, but
+the runtime does not own a universal reward table.
 
 The smallest validating experiment uses existing Tau2 and Crucible artifacts:
 
