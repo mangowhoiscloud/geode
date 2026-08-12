@@ -10,10 +10,13 @@
 | Execution base | `549875803fbb94ac8fd4339a12bbfcc880112265` |
 | Branch | `codex/tau2-gpt54-official-alignment` |
 | Worktree state | Dirty by design; the adapter implementation under test was not yet committed |
+| Implementation commit | `85967a498451f493055cb94738410378d6eddbe9` |
+| Artifact commit | `9095f7f8b07bd93b41748ef89a32fc2540288d3e` |
 
-The eventual feature commit must be recorded before external artifact
-publication. The raw run remains diagnostic until that commit and the artifact
-repository commit are both pinned.
+The execution used the stated dirty feature worktree; commit `85967a498` pins
+the tested adapter content after the run. The reviewed public projection was
+merged separately at the artifact commit above. This provenance keeps the run
+diagnostic rather than pretending it executed from a clean release tag.
 
 ## Frozen comparison surface
 
@@ -103,6 +106,16 @@ These paths are ignored evidence, not public URLs. Raw JSONL, tool bodies,
 temporary fixture paths, and stderr must not be copied wholesale to the public
 artifact repository.
 
+Reviewed public releases:
+
+- [GEODE trajectory release](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/9095f7f8b07bd93b41748ef89a32fc2540288d3e/trajectories/mcpmark-geode-gpt54-high-geode-codex-paired-filesystem-easy-20260812T060733Z-3ea7869be85a)
+  — manifest SHA-256 `3ea7869be85a2a058c204f7768c40e25b63cb5fcf2f10ae090aa01b701d33d53`
+- [Codex trajectory release](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/9095f7f8b07bd93b41748ef89a32fc2540288d3e/trajectories/mcpmark-codex-gpt54-high-geode-codex-paired-filesystem-easy-20260812T060733Z-871a6c2ae92c)
+  — manifest SHA-256 `871a6c2ae92cc77c7d195cc1aa669b4afa017bfaadb76bedd1f727c5b96b2ff7`
+
+Both manifests were fetched again from artifact-repository `main` after merge
+and verified byte-for-byte against these independently retained anchors.
+
 ## Interpretation and next gate
 
 - Direct claim allowed: on the same ten easy tasks, model, effort, state,
@@ -127,6 +140,7 @@ mypy passed for touched benchmark modules
 post-fix Codex subscription-environment gate passed 1/1 with ChatGPT login
 ```
 
-External artifact promotion remains pending. It requires a committed GEODE
-implementation, reviewed replay-incomplete trajectory releases for each arm,
-an append-only `geode-eval-artifacts` PR, and exact remote digest read-back.
+External artifact promotion completed through
+[`geode-eval-artifacts#20`](https://github.com/mangowhoiscloud/geode-eval-artifacts/pull/20).
+Only the two reviewed replay-incomplete trajectory releases and their run
+report were published; native logs remain local.

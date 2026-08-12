@@ -1,6 +1,6 @@
 # MCPMark filesystem/easy: GEODE × Codex paired comparison
 
-Date: 2026-08-12. Status: diagnostic complete.
+Date: 2026-08-12. Status: diagnostic and artifact publication complete.
 
 ## Decision
 
@@ -97,6 +97,11 @@ deliberately replay-incomplete because private prompt, reasoning, and tool bodie
 are represented by digests. The artifact audit caught and corrected two
 publication-contract defects before promotion: digested Codex bodies now count
 as reduced replay fidelity, and per-task native receipt references are unique.
+
+The reviewed releases were merged through
+[`geode-eval-artifacts#20`](https://github.com/mangowhoiscloud/geode-eval-artifacts/pull/20)
+at `9095f7f8b07bd93b41748ef89a32fc2540288d3e`. Remote `main` read-back matched
+the independently retained manifest anchors for both arms.
 
 ## Reproduction
 
