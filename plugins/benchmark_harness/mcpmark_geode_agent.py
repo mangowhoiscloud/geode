@@ -1,4 +1,4 @@
-"""GEODE adapter for MCPMark.
+"""GEODE and Codex CLI adapters for MCPMark.
 
 This module is public-safe and can be imported from an upstream MCPMark checkout.
 It intentionally depends on MCPMark only at runtime so GEODE can ship the adapter
@@ -13,18 +13,108 @@ import json
 import logging
 import os
 import sys
+import tempfile
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from core.agent.loop.models import is_successful_task_termination
 
-from plugins.benchmark_harness.trajectory_artifacts import export_mcpmark_trajectory
+from plugins.benchmark_harness.trajectory_artifacts import (
+    export_codex_mcpmark_trajectory,
+    export_mcpmark_trajectory,
+)
 
 if TYPE_CHECKING:
     from core.hooks.middleware import ToolCallRequest
 
 log = logging.getLogger(__name__)
+
+_CODEX_DISABLED_FEATURES = (
+    "apps",
+    "browser_use",
+    "computer_use",
+    "goals",
+    "image_generation",
+    "multi_agent",
+    "shell_tool",
+    "skill_search",
+    "unified_exec",
+    "workspace_dependencies",
+)
+
+
+def _codex_mcp_config(command: str, args: list[str], timeout: int) -> str:
+    """Build the inline TOML accepted by ``codex exec -c``."""
+    return (
+        "{command="
+        f"{json.dumps(command)},args={json.dumps(args)},"
+        f"startup_timeout_sec=120,tool_timeout_sec={timeout},"
+        'required=true,default_tools_approval_mode="approve"'
+        "}"
+    )
+
+
+def _summarize_codex_exec(stdout: str) -> dict[str, Any]:
+    """Reduce the stable ``codex exec --json`` stream for MCPMark reporting."""
+    summary: dict[str, Any] = {
+        "thread_id": "",
+        "output": "",
+        "turn_count": 0,
+        "mcp_tool_calls": 0,
+        "token_usage": {
+            "input_tokens": 0,
+            "cached_input_tokens": 0,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 0,
+            "reasoning_tokens": 0,
+            "total_tokens": 0,
+        },
+        "error": "",
+    }
+    for line in stdout.splitlines():
+        if not line.strip():
+            continue
+        event = json.loads(line)
+        event_type = event.get("type")
+        if event_type == "thread.started":
+            summary["thread_id"] = str(event.get("thread_id") or "")
+        elif event_type == "item.completed":
+            item = event.get("item") or {}
+            if item.get("type") == "agent_message":
+                summary["output"] = str(item.get("text") or "")
+            elif item.get("type") == "mcp_tool_call":
+                summary["mcp_tool_calls"] += 1
+        elif event_type == "turn.completed":
+            summary["turn_count"] += 1
+            usage = event.get("usage") or {}
+            tokens = summary["token_usage"]
+            for source, target in (
+                ("input_tokens", "input_tokens"),
+                ("cached_input_tokens", "cached_input_tokens"),
+                ("cache_write_input_tokens", "cache_write_input_tokens"),
+                ("output_tokens", "output_tokens"),
+                ("reasoning_output_tokens", "reasoning_tokens"),
+            ):
+                tokens[target] += int(usage.get(source) or 0)
+            tokens["total_tokens"] = tokens["input_tokens"] + tokens["output_tokens"]
+        elif event_type == "turn.failed":
+            summary["error"] = str((event.get("error") or {}).get("message") or "turn failed")
+        elif event_type == "error":
+            summary["error"] = str(event.get("message") or "codex exec failed")
+    return summary
+
+
+def _codex_model(label: str) -> str:
+    return label.removeprefix("codex-").removeprefix("openai/")
+
+
+def _codex_subscription_environment() -> dict[str, str]:
+    env = os.environ.copy()
+    for name in ("CODEX_ACCESS_TOKEN", "CODEX_API_KEY", "OPENAI_API_KEY", "OPENAI_BASE_URL"):
+        env.pop(name, None)
+    return env
 
 
 def _jsonish(value: Any) -> str:
@@ -401,6 +491,143 @@ class GeodeMCPMarkAgent(BaseMCPAgent):
             }
 
 
+class CodexMCPMarkAgent(BaseMCPAgent):
+    """Filesystem MCPMark adapter backed by ``codex exec`` subscription auth."""
+
+    async def execute(
+        self, instruction: str, tool_call_log_file: str | None = None
+    ) -> dict[str, Any]:
+        start_time = time.time()
+        self._reset_progress()
+        self._refresh_service_config()
+        model = _codex_model(self.litellm_input_model_name)
+        if self.mcp_service != "filesystem":
+            raise ValueError("Codex MCPMark comparison currently supports filesystem only")
+
+        server = self._create_stdio_server()
+        params = server.params
+        mcp_config = _codex_mcp_config(params.command, list(params.args), int(self.timeout))
+        effort = str(self.reasoning_effort or "default")
+        prompt = (
+            "Mode: MCPMark benchmark.\n"
+            "Action surface: mcpmark MCP tools only.\n"
+            "Forbidden: shell commands, direct filesystem APIs, patches, web tools, "
+            "and delegation.\n"
+            "Completion: mutate the MCP-backed fixture exactly as requested, then "
+            "report briefly.\n\n"
+            f"Task:\n{instruction}"
+        )
+
+        with tempfile.TemporaryDirectory(prefix="geode-mcpmark-codex-") as runner_dir:
+            command = [
+                "codex",
+                "exec",
+                "--json",
+                "--ephemeral",
+                "--ignore-user-config",
+                "--ignore-rules",
+                "--strict-config",
+                "--skip-git-repo-check",
+                "--sandbox",
+                "read-only",
+                "--cd",
+                runner_dir,
+                "--model",
+                model,
+                "-c",
+                f"model_reasoning_effort={json.dumps(effort)}",
+                "-c",
+                'approval_policy="never"',
+                "-c",
+                "skills.include_instructions=false",
+                "-c",
+                "skills.bundled.enabled=false",
+                "-c",
+                "include_apps_instructions=false",
+                "-c",
+                "include_collaboration_mode_instructions=false",
+                "-c",
+                "tools.web_search=false",
+                "-c",
+                f"mcp_servers.mcpmark={mcp_config}",
+            ]
+            for feature in _CODEX_DISABLED_FEATURES:
+                command.extend(("--disable", feature))
+            command.append("-")
+            process = await asyncio.create_subprocess_exec(
+                *command,
+                env=_codex_subscription_environment(),
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            try:
+                stdout_bytes, stderr_bytes = await asyncio.wait_for(
+                    process.communicate(prompt.encode("utf-8")), timeout=float(self.timeout)
+                )
+            except TimeoutError as exc:
+                process.kill()
+                await process.communicate()
+                raise TimeoutError(
+                    f"codex exec exceeded MCPMark timeout ({self.timeout}s)"
+                ) from exc
+
+        stdout = stdout_bytes.decode("utf-8", errors="replace")
+        stderr = stderr_bytes.decode("utf-8", errors="replace")
+        if tool_call_log_file:
+            log_path = Path(tool_call_log_file)
+            log_path.write_text(stdout, encoding="utf-8")
+            if stderr:
+                log_path.with_suffix(".stderr.log").write_text(stderr, encoding="utf-8")
+
+        summary = _summarize_codex_exec(stdout)
+        execution_time = time.time() - start_time
+        error = summary["error"]
+        if process.returncode and not error:
+            error = stderr.strip() or f"codex exec exited {process.returncode}"
+        task_success = process.returncode == 0 and not error and summary["turn_count"] > 0
+        if tool_call_log_file:
+            try:
+                trajectory_path = export_codex_mcpmark_trajectory(
+                    exec_log_path=Path(tool_call_log_file),
+                    instruction=instruction,
+                    model=model,
+                    effort=effort,
+                )
+                trajectory_status = "written"
+                trajectory_error = None
+            except Exception as exc:
+                log.warning("Codex MCPMark trajectory sidecar export failed: %s", exc)
+                trajectory_path = None
+                trajectory_status = "failed"
+                trajectory_error = str(exc)
+        else:
+            trajectory_path = None
+            trajectory_status = "not_requested"
+            trajectory_error = None
+        self.usage_tracker.update(
+            success=task_success,
+            token_usage=summary["token_usage"],
+            turn_count=summary["turn_count"],
+            execution_time=execution_time,
+        )
+        return {
+            "success": task_success,
+            "output": summary["output"] or "Task completed",
+            "token_usage": summary["token_usage"],
+            "turn_count": summary["turn_count"],
+            "execution_time": execution_time,
+            "litellm_run_model_name": f"codex/{model}",
+            "codex_thread_id": summary["thread_id"],
+            "mcp_tool_calls": summary["mcp_tool_calls"],
+            "geode_trajectory": str(trajectory_path) if trajectory_path else None,
+            "geode_trajectory_status": trajectory_status,
+            "geode_trajectory_error": trajectory_error,
+            "error": error or None,
+        }
+
+
 def register_mcpmark_agent(registry: dict[str, Any]) -> None:
     _patch_mcpmark_github_visibility()
     registry["geode"] = GeodeMCPMarkAgent
+    registry["codex"] = CodexMCPMarkAgent

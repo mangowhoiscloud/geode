@@ -4,11 +4,47 @@
 
 Multi-turn tool-agent-user 시뮬레이션 벤치. 에이전트와 LLM 시뮬 유저가 공유 world state를 tool로 변경하며 대화. **pass^k의 발상지**.
 
-- **Repo**: [sierra-research/tau2-bench](https://github.com/sierra-research/tau2-bench) — 1.1k★
-- **마지막 commit**: 2026-05-05 (live submissions PR, 매주 갱신)
-- **라이센스**: MIT (`LICENSE`, grounded at harness revision `1901a30`)
-- **버전 히스토리**: v1 NeurIPS '24 → v² 2025 (telecom dual-control) → v0.2.0 2025-10-06 (web leaderboard) → v0.2.1 2025-11 (RL support). τ³(banking+voice)은 paper만, 코드 미공개
+- **Repo**: [sierra-research/tau2-bench](https://github.com/sierra-research/tau2-bench)
+- **현재 측정 핀**: `668d3bcd135c02aa3438f987ef45735b7c163ee3`, `tau2==1.0.1` (2026-08-12 확인)
+- **라이센스**: MIT (`LICENSE`)
+- **현재 공개 surface**: airline / retail / telecom / telecom-workflow / banking-knowledge와 text / voice runner. 과거 `1901a30`, `tau2==1.0.0` 기록은 해당 실행의 역사적 핀으로만 유지한다.
 - **Frontier 인용**: GPT-5.5 system card (**telecom 98.0%**), Anthropic 인용
+
+## 2026-08-12 OpenAI/Codex 기준 정렬
+
+공개 Codex 저장소 `dad1db87bb5ad4b92af6b0f58502d12453681f81`에는
+Tau2 runner, task manifest, prompt 또는 실행 설정이 없다. OpenAI가 공개한
+것은 GPT-5.4의 **research-environment model evaluation**이다. 따라서 아래
+수치는 Codex CLI 재현 설정이 아니라 `paper-reference` 비교군이다.
+
+| 공개 행 | 도메인 | effort | 점수 | 공개되지 않은 항목 |
+|---|---|---|---:|---|
+| OpenAI GPT-5.4 headline | Telecom | `xhigh` | 98.9% | harness/task revision, prompt, user simulator, trials, seed, limits, retry, timeout, concurrency |
+| OpenAI GPT-5.4 no-reasoning | Telecom | `none` | 64.3% | 위와 동일 |
+
+[OpenAI 발표](https://openai.com/index/introducing-gpt-5-4/)는 기본 평가를
+`xhigh`로 실행했다고 밝히고, 별도 no-reasoning 표에 `none` 결과를 싣는다.
+또한 production ChatGPT와 출력이 다를 수 있는 연구 환경임을 명시한다.
+
+재현 가능한 최신 GPT-5.4 공식 제출은 Sierra의 **다른 레인**이다.
+`tau2==1.0.1`, banking-knowledge 97개 전체, GPT-5.4 `xhigh`, native
+`user_simulator=gpt-5.2` / effort `low`, 4 trials, seed 300, AllTools,
+standard scaffold이며 pass^1은 39.43%다. Telecom/Codex 결과가 아니므로
+OpenAI 98.9%와 합치거나 대체하지 않는다. 원본은
+[Sierra submission](https://github.com/sierra-research/tau2-bench/blob/main/web/leaderboard/public/submissions/gpt-5-4_sierra_2026-03-25/submission.json)과
+[submission guide](https://github.com/sierra-research/tau2-bench/blob/main/docs/leaderboard-submission.md)에 있다.
+
+GEODE 측정 계약과 실행 게이트는
+[`2026-08-12-gpt54-tau2-openai-reference-alignment.md`](../plans/2026-08-12-gpt54-tau2-openai-reference-alignment.md)에 고정한다.
+핵심 판정은 다음과 같다.
+
+- OpenAI 행과 GEODE 결과의 비교는 `paper-reference`, directional only다.
+- PAYG 없는 subscription 측정은 evaluator-owned `crucible_user`를 쓰며,
+  Sierra의 native GPT-5.2 user와는 별도 profile이다.
+- `none`과 `xhigh` GEODE arm은 user, task order, limits, seed를 동일하게
+  고정해 effort 효과만 측정한다.
+- 2026-08-03의 200/278 결과는 이전 harness와 `geode_user`를 쓴
+  longitudinal diagnostic이므로 새 결과와 직접 증감 비교하지 않는다.
 
 ## 사례
 

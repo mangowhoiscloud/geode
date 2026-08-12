@@ -47,6 +47,15 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **Paired MCPMark Codex comparison.** Added a filesystem-only Codex CLI arm
+  that shares MCPMark's pinned task setup and official verifier with GEODE,
+  while isolating user configuration and preserving both native exec JSONL and
+  schema-validated trajectory sidecars for direct harness diagnostics on
+  ChatGPT subscription models. The setup manifest now installs GEODE into the
+  MCPMark venv so live runs cannot fail on missing runtime dependencies.
+
 ### Infrastructure
 
 - **PyPI Core Metadata 2.5 publishing.** Updated the pinned PyPA publish action

@@ -50,7 +50,7 @@
         "benchmark",
         "trajectory"
       ],
-      "contentSha256": "103a272dcfef4ee7b858a7bb86635ef32846a5a6bb6abe293e180f5ea686f1cc"
+      "contentSha256": "6121e6f07e1e55ed0646e63ce6e21b3ecc17cae229cdbd86b112cf2891f40cf5"
     },
     {
       "id": "file:plugins/benchmark_harness/tau2_turn_supervisor.py",
