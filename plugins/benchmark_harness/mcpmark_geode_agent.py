@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from core.agent.loop.models import is_successful_task_termination
+from core.agent.loop.models import TerminationReason, is_successful_task_termination
 
 from plugins.benchmark_harness.trajectory_artifacts import (
     export_codex_mcpmark_trajectory,
@@ -419,7 +419,29 @@ class GeodeMCPMarkAgent(BaseMCPAgent):
                     effort=str(self.reasoning_effort or "default"),
                     timeout=int(self.timeout),
                 )
-                result = await loop.arun(instruction)
+                previous_fail_empty_text = os.environ.get("GEODE_CODEX_OAUTH_FAIL_EMPTY_TEXT")
+                os.environ["GEODE_CODEX_OAUTH_FAIL_EMPTY_TEXT"] = "1"
+                wall = asyncio.timeout(float(self.timeout))
+                try:
+                    async with wall:
+                        result = await loop.arun(instruction)
+                except TimeoutError:
+                    if not wall.expired():
+                        raise
+                    rounds = int(getattr(loop.cognitive_state, "round_count", 0) or 0)
+                    result = loop._terminal_result(
+                        TerminationReason.TIME_BUDGET_EXPIRED,
+                        f"GEODE exceeded MCPMark timeout ({self.timeout}s)",
+                        rounds=rounds,
+                        error=True,
+                        tool_calls=list(loop._tool_processor.tool_log),
+                    )
+                    result = await loop._afinalize_and_return(result, instruction, rounds)
+                finally:
+                    if previous_fail_empty_text is None:
+                        os.environ.pop("GEODE_CODEX_OAUTH_FAIL_EMPTY_TEXT", None)
+                    else:
+                        os.environ["GEODE_CODEX_OAUTH_FAIL_EMPTY_TEXT"] = previous_fail_empty_text
                 task_success = not bool(getattr(result, "error", None)) and (
                     is_successful_task_termination(getattr(result, "termination_reason", ""))
                 )
@@ -477,7 +499,7 @@ class GeodeMCPMarkAgent(BaseMCPAgent):
                 "geode_trajectory_error": trajectory_error,
                 "error": (str(getattr(result, "error", "") or "") if not task_success else None),
             }
-        except Exception as exc:
+        except Exception:
             if loop is not None:
                 try:
                     await loop.amark_session_error()
@@ -490,15 +512,7 @@ class GeodeMCPMarkAgent(BaseMCPAgent):
                 turn_count=0,
                 execution_time=execution_time,
             )
-            return {
-                "success": False,
-                "output": [],
-                "token_usage": {},
-                "turn_count": 0,
-                "execution_time": execution_time,
-                "error": f"GEODE MCPMark execution failed: {exc}",
-                "litellm_run_model_name": f"geode/{model}",
-            }
+            raise
 
 
 class CodexMCPMarkAgent(BaseMCPAgent):
@@ -575,12 +589,11 @@ class CodexMCPMarkAgent(BaseMCPAgent):
                 stdout_bytes, stderr_bytes = await asyncio.wait_for(
                     process.communicate(prompt.encode("utf-8")), timeout=float(self.timeout)
                 )
-            except TimeoutError as exc:
+                timeout_error = ""
+            except TimeoutError:
                 process.kill()
-                await process.communicate()
-                raise TimeoutError(
-                    f"codex exec exceeded MCPMark timeout ({self.timeout}s)"
-                ) from exc
+                stdout_bytes, stderr_bytes = await process.communicate()
+                timeout_error = f"codex exec exceeded MCPMark timeout ({self.timeout}s)"
 
         stdout = stdout_bytes.decode("utf-8", errors="replace")
         stderr = stderr_bytes.decode("utf-8", errors="replace")
@@ -592,7 +605,7 @@ class CodexMCPMarkAgent(BaseMCPAgent):
 
         summary = _summarize_codex_exec(stdout)
         execution_time = time.time() - start_time
-        error = summary["error"]
+        error = timeout_error or summary["error"]
         if process.returncode and not error:
             error = stderr.strip() or f"codex exec exited {process.returncode}"
         task_success = process.returncode == 0 and not error and summary["turn_count"] > 0

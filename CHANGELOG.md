@@ -69,6 +69,11 @@ functional change.
 
 ### Fixed
 
+- **MCPMark now separates infrastructure failures from verifier scores.** The
+  GEODE arm enforces the same outer wall timeout as the Codex arm, retries
+  reasoning-only empty subscription responses through the existing loop, and
+  propagates escaped runtime errors to the harness instead of verifying partial
+  state as a semantic task failure.
 - **Convergence detection counts failed observation rounds, not calls.** A
   parallel tool batch now contributes one input-aware error fingerprint, and a
   successful or mixed round resets the streak. This prevents one failed batch

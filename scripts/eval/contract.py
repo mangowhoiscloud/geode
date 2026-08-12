@@ -574,10 +574,12 @@ def validate_analysis(path: Path, *, run_spec_path: Path, attempts_path: Path) -
         expected_denominator = primary_spec["denominator"]
         if float(primary["denominator"]) != float(expected_denominator):
             raise ValueError(f"{path}: primary metric denominator does not match frozen spec")
-        if normalized_unit in {"ratio", "percent", "percentage", "%"} and not 0 <= float(
-            primary["numerator"]
-        ) <= float(primary["denominator"]):
-            raise ValueError(f"{path}: primary metric numerator is outside its denominator")
+        if normalized_unit in {"ratio", "percent", "percentage", "%"}:
+            numerator = float(primary["numerator"])
+            denominator = float(primary["denominator"])
+            lower_bound = -denominator if primary_spec["direction"] == "target" else 0
+            if not lower_bound <= numerator <= denominator:
+                raise ValueError(f"{path}: primary metric numerator is outside its denominator")
         if normalized_unit in {"percent", "percentage", "%"}:
             expected_value *= 100
         if not math.isclose(float(primary["value"]), expected_value, rel_tol=1e-4, abs_tol=5e-7):

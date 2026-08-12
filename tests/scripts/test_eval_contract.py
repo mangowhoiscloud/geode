@@ -697,6 +697,44 @@ def test_primary_metric_denominator_matches_frozen_spec(tmp_path: Path) -> None:
         )
 
 
+def test_target_metric_allows_signed_delta_but_maximize_does_not(tmp_path: Path) -> None:
+    run_spec_path = tmp_path / "run-spec.json"
+    attempts_path = tmp_path / "attempts.jsonl"
+    analysis_path = tmp_path / "analysis.json"
+    native_path = tmp_path / "native.json"
+    run_spec = _run_spec()
+    primary_spec = run_spec["study"]["primary_metric"]
+    assert isinstance(primary_spec, dict)
+    primary_spec["direction"] = "target"
+    _write_json(run_spec_path, run_spec)
+    attempt = _attempt(tmp_path)
+    native = {"score": {"value": -1.0, "numerator": -1, "denominator": 1}}
+    _write_json(native_path, native)
+    attempt["evidence_refs"][0]["sha256"] = contract._sha256(native_path)
+    attempts_path.write_text(json.dumps(attempt) + "\n", encoding="utf-8")
+    analysis = _analysis(run_spec_path, attempts_path, attempt)
+    primary = analysis["metrics"][0]
+    primary.update(native["score"])
+    _write_json(analysis_path, analysis)
+
+    contract.validate_analysis(
+        analysis_path,
+        run_spec_path=run_spec_path,
+        attempts_path=attempts_path,
+    )
+
+    primary_spec["direction"] = "maximize"
+    _write_json(run_spec_path, run_spec)
+    analysis["run_spec_sha256"] = contract._sha256(run_spec_path)
+    _write_json(analysis_path, analysis)
+    with pytest.raises(ValueError, match="numerator is outside its denominator"):
+        contract.validate_analysis(
+            analysis_path,
+            run_spec_path=run_spec_path,
+            attempts_path=attempts_path,
+        )
+
+
 @pytest.mark.parametrize("field", ["value", "numerator", "denominator"])
 def test_primary_metric_rejects_boolean_native_values(tmp_path: Path, field: str) -> None:
     run_spec_path = tmp_path / "run-spec.json"

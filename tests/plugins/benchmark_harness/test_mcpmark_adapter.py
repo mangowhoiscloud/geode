@@ -1,11 +1,15 @@
 import asyncio
 import json
+import os
 import sys
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 from plugins.benchmark_harness.mcpmark_geode_agent import (
     _CODEX_DISABLED_FEATURES,
+    CodexMCPMarkAgent,
+    GeodeMCPMarkAgent,
     MCPMarkGeodeTool,
     _build_loop,
     _codex_mcp_config,
@@ -82,6 +86,147 @@ def test_mcpmark_loop_validates_colliding_tool_with_mcp_schema() -> None:
             {"path": "fixture/compatibility.txt", "content": "compatibility"},
         ),
     ]
+
+
+def _geode_agent_for_execute(monkeypatch, loop):
+    class MCPServer:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def list_tools(self):
+            return []
+
+    agent = object.__new__(GeodeMCPMarkAgent)
+    agent.litellm_input_model_name = "geode-gpt-5.4"
+    agent.reasoning_effort = "high"
+    agent.timeout = 0.01
+    agent.usage_tracker = SimpleNamespace(update=lambda **_kwargs: None)
+    agent._reset_progress = lambda: None
+    agent._refresh_service_config = lambda: None
+
+    async def create_server():
+        return MCPServer()
+
+    agent._create_mcp_server = create_server
+    monkeypatch.setattr(
+        "plugins.benchmark_harness.mcpmark_geode_agent._build_loop",
+        lambda **_kwargs: loop,
+    )
+    return agent
+
+
+def test_geode_mcpmark_timeout_is_a_performance_outcome(monkeypatch) -> None:
+    class Loop:
+        marked_error = False
+        cognitive_state = SimpleNamespace(round_count=3)
+        _tool_processor = SimpleNamespace(tool_log=[])
+
+        async def arun(self, _instruction):
+            assert os.environ["GEODE_CODEX_OAUTH_FAIL_EMPTY_TEXT"] == "1"
+            await asyncio.Event().wait()
+
+        def _terminal_result(self, reason, text, *, rounds, error, tool_calls):
+            return SimpleNamespace(
+                text=text,
+                rounds=rounds,
+                error=str(reason) if error else None,
+                termination_reason=reason,
+                tool_calls=tool_calls,
+                usage=None,
+            )
+
+        async def _afinalize_and_return(self, result, _instruction, _rounds):
+            return result
+
+        async def amark_session_error(self):
+            self.marked_error = True
+
+    loop = Loop()
+    agent = _geode_agent_for_execute(monkeypatch, loop)
+    monkeypatch.setenv("GEODE_CODEX_OAUTH_FAIL_EMPTY_TEXT", "prior")
+
+    result = asyncio.run(agent.execute("task"))
+
+    assert result["success"] is False
+    assert result["error"] == "time_budget_expired"
+    assert result["turn_count"] == 3
+    assert loop.marked_error is True
+    assert os.environ["GEODE_CODEX_OAUTH_FAIL_EMPTY_TEXT"] == "prior"
+
+
+def test_geode_mcpmark_propagates_runtime_errors(monkeypatch) -> None:
+    class Loop:
+        marked_error = False
+
+        async def arun(self, _instruction):
+            raise RuntimeError("provider transport failed")
+
+        async def amark_session_error(self):
+            self.marked_error = True
+
+    loop = Loop()
+    agent = _geode_agent_for_execute(monkeypatch, loop)
+
+    with pytest.raises(RuntimeError, match="provider transport failed"):
+        asyncio.run(agent.execute("task"))
+
+    assert loop.marked_error is True
+
+
+def test_geode_mcpmark_does_not_misclassify_inner_timeout(monkeypatch) -> None:
+    class Loop:
+        async def arun(self, _instruction):
+            raise TimeoutError("provider read timed out")
+
+        async def amark_session_error(self):
+            return None
+
+    agent = _geode_agent_for_execute(monkeypatch, Loop())
+
+    with pytest.raises(TimeoutError, match="provider read timed out"):
+        asyncio.run(agent.execute("task"))
+
+
+def test_codex_mcpmark_timeout_is_a_performance_outcome(monkeypatch) -> None:
+    class Process:
+        returncode = 0
+        killed = False
+
+        async def communicate(self, _input=None):
+            if not self.killed:
+                await asyncio.Event().wait()
+            return b"", b""
+
+        def kill(self):
+            self.killed = True
+            self.returncode = -9
+
+    process = Process()
+
+    async def create_process(*_args, **_kwargs):
+        return process
+
+    agent = object.__new__(CodexMCPMarkAgent)
+    agent.litellm_input_model_name = "codex-gpt-5.4"
+    agent.reasoning_effort = "high"
+    agent.timeout = 0.01
+    agent.mcp_service = "filesystem"
+    agent.usage_tracker = SimpleNamespace(update=lambda **_kwargs: None)
+    agent._reset_progress = lambda: None
+    agent._refresh_service_config = lambda: None
+    agent._create_stdio_server = lambda: SimpleNamespace(
+        params=SimpleNamespace(command="npx", args=["server"])
+    )
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", create_process)
+
+    result = asyncio.run(agent.execute("task"))
+
+    assert result["success"] is False
+    assert result["error"] == "codex exec exceeded MCPMark timeout (0.01s)"
+    assert process.killed is True
 
 
 def test_mcpmark_tool_returns_call_tool_result_as_data() -> None:
