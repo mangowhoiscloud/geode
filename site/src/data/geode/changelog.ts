@@ -19,7 +19,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": "### Infrastructure\n\n- **PyPI Core Metadata 2.5 publishing.** Updated the pinned PyPA publish action\n  to v1.14.2 so its internal Twine 7 validator accepts the same Metadata 2.5\n  wheel already approved by the release build gate."
+    "body": "### Added\n\n- **Paired MCPMark Codex comparison.** Added a filesystem-only Codex CLI arm\n  that shares MCPMark's pinned task setup and official verifier with GEODE,\n  while isolating user configuration and preserving both native exec JSONL and\n  schema-validated trajectory sidecars for direct harness diagnostics on\n  ChatGPT subscription models. The setup manifest now installs GEODE into the\n  MCPMark venv so live runs cannot fail on missing runtime dependencies.\n\n### Infrastructure\n\n- **PyPI Core Metadata 2.5 publishing.** Updated the pinned PyPA publish action\n  to v1.14.2 so its internal Twine 7 validator accepts the same Metadata 2.5\n  wheel already approved by the release build gate."
   },
   {
     "version": "1.0.21",
