@@ -77,6 +77,43 @@ of its 55 MCP calls were `list_directory`, producing 763,210 input tokens and a
 GEODE's slowest task was instead `file_splitting` at 267.5 seconds. The nearly
 identical total time is therefore not evidence of identical scheduling quality.
 
+## Post-run token diagnosis
+
+The token totals above remain the native counters from the executed run. A
+follow-up code audit found two GEODE-side amplification mechanisms; this report
+does not retroactively rewrite the measurements or assign a precise causal
+share without a matched rerun.
+
+1. MCPMark returned the complete MCP `CallToolResult` as a JSON string inside a
+   second `result` envelope. The common tool boundary then serialized that
+   string again. Because MCP may repeat the same structured value in both
+   `content` and `structuredContent` for compatibility, the model received
+   duplicate data plus JSON escaping. The repaired boundary keeps the raw MCP
+   envelope in the session timeline/tool log, but chooses
+   `structuredContent` (falling back to `content`) for the model. A
+   representative duplicate payload fell from 76,604 to 38,258 serialized
+   characters, a 50.06% reduction.
+2. AgenticLoop appended a synthetic per-round reminder after the growing
+   history. It was absent from the stored conversation but still changed the
+   next request shape and weakened exact-prefix reuse. Current date and runtime
+   rules already have a system-prompt path, so the duplicate reminder layer was
+   deleted. A regression test now compares consecutive real
+   `AdapterCallRequest.messages` and requires the earlier request to remain an
+   exact prefix.
+
+The audit also found that GEODE discarded provider-reported reasoning and
+cache-write counts when translating adapter usage. The runtime now maps those
+values into the existing `thinking_tokens` and `cache_creation_tokens` fields,
+and the per-call lifecycle hook carries the same breakdown. Both OpenAI and
+Anthropic define reasoning as a subset of inclusive `output_tokens`, so the
+local estimator records it for analysis without billing it a second time. This
+improves the next artifact's accounting but cannot recover the omitted
+breakdown from this completed run. Verify was not identified as the serializer
+or cache-prefix defect, so no verifier stage was removed or weakened.
+
+Primary contracts: [OpenAI Responses usage](https://platform.openai.com/docs/api-reference/responses/object#responses/object-usage)
+and [Anthropic extended-thinking usage](https://platform.claude.com/docs/en/build-with-claude/extended-thinking#pricing).
+
 ## Trajectory and protocol audit
 
 | Quality | GEODE | Codex CLI |
@@ -122,6 +159,9 @@ and verified byte-for-byte against these independently retained anchors.
   verifier, and trial, GEODE and Codex had identical pass/fail outcomes.
 - Claim not allowed: GEODE equals Codex generally, or either score is a current
   MCPMark Verified leaderboard result.
+- The historical token row is a pre-repair diagnostic, not the expected cost
+  of the repaired runtime. A same-task GPT-5.4 rerun is required before making
+  an efficiency claim.
 - The sample has no discordant pass/fail pair and only one trial. Repetition is
   not justified for a score delta that is currently zero.
 - The next useful cross-harness lane is Terminal-Bench 2.1 only after GEODE has

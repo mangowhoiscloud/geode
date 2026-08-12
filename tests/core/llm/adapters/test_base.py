@@ -58,6 +58,8 @@ def test_usage_summary_defaults_zero() -> None:
     assert u.input_tokens == 0
     assert u.output_tokens == 0
     assert u.cached_input_tokens == 0
+    assert u.reasoning_tokens == 0
+    assert u.cache_write_tokens == 0
 
 
 def test_environment_report_ok_path() -> None:

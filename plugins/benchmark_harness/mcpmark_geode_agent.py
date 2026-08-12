@@ -117,15 +117,6 @@ def _codex_subscription_environment() -> dict[str, str]:
     return env
 
 
-def _jsonish(value: Any) -> str:
-    if isinstance(value, str):
-        return value
-    try:
-        return json.dumps(value, ensure_ascii=False, default=str)
-    except TypeError:
-        return str(value)
-
-
 def _normalize_tool_arguments(schema: dict[str, Any], kwargs: dict[str, Any]) -> dict[str, Any]:
     parameters = schema.get("inputSchema")
     properties = parameters.get("properties", {}) if isinstance(parameters, dict) else {}
@@ -170,7 +161,20 @@ class MCPMarkGeodeTool:
         kwargs.pop("_tool_context", None)
         kwargs = _normalize_tool_arguments(self.schema, kwargs)
         result = await asyncio.wait_for(self.mcp_server.call_tool(self.name, kwargs), timeout=120)
-        return {"result": _jsonish(result)}
+        if isinstance(result, dict):
+            return result
+        model_dump = getattr(result, "model_dump", None)
+        if callable(model_dump):
+            dumped = model_dump(by_alias=True, exclude_none=True)
+            if isinstance(dumped, dict):
+                return dumped
+        return {
+            "result": (
+                result
+                if result is None or isinstance(result, (list, str, int, float, bool))
+                else str(result)
+            )
+        }
 
 
 @dataclass

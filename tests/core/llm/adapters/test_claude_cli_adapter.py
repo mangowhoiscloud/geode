@@ -169,7 +169,7 @@ def test_adapter_captures_usage_from_result_event() -> None:
                     "input_tokens": 1200,
                     "output_tokens": 340,
                     "cache_read_input_tokens": 900,
-                    "cache_creation_input_tokens": 0,
+                    "cache_creation_input_tokens": 75,
                 },
             },
         ]
@@ -192,6 +192,7 @@ def test_adapter_captures_usage_from_result_event() -> None:
     assert result.usage.input_tokens == 1200
     assert result.usage.output_tokens == 340
     assert result.usage.cached_input_tokens == 900
+    assert result.usage.cache_write_tokens == 75
 
 
 def test_adapter_usage_zero_without_result_usage() -> None:

@@ -11,10 +11,8 @@
 #   [context_windows]              model → int (tokens)
 #
 # Derive formulas applied by the loader (provider-specific):
-#   anthropic: cache_write = input × 1.25, cache_read = input × 0.1,
-#              thinking = output
-#   openai:    cache_read = cached_per_mtok (explicit),
-#              thinking = output if reasoning, else 0
+#   anthropic: cache_write = input × 1.25, cache_read = input × 0.1
+#   openai:    cache_read = cached_per_mtok (explicit)
 
 # ── Anthropic (verified 2026-04-23) ───────────────────────────────────────
 # Source: https://platform.claude.com/docs/en/docs/about-claude/pricing
@@ -144,13 +142,11 @@ cached_per_mtok = 0.175
 [pricing.openai."o3"]
 input_per_mtok = 2.00
 output_per_mtok = 8.00
-reasoning = true
 
 [pricing.openai."o4-mini"]
 input_per_mtok = 1.10
 output_per_mtok = 4.40
 cached_per_mtok = 0.275
-reasoning = true
 
 # ── ZhipuAI GLM (verified 2026-04-26 against docs.z.ai/guides/overview/pricing)
 # v0.52.4 — refreshed pricing; pre-fix glm-5.1 / glm-5 were stale.
@@ -158,7 +154,7 @@ reasoning = true
 # env aliases to it (see docs.z.ai/devpack/overview).
 #
 # GLM uses the openai derive formula (cache_read = explicit cached, no
-# reasoning multiplier) by manifest convention.
+# special reasoning multiplier) by manifest convention.
 
 # GLM cached-input rates now applied: PR-CACHE-COST-ACCOUNTING wired
 # ``translate_chat_response`` to surface ``prompt_tokens_details.cached_tokens``

@@ -167,12 +167,20 @@ def test_response_translation_drops_empty_text() -> None:
 
 
 def test_response_translation_carries_cache_tokens() -> None:
-    """``cached_input_tokens`` from the adapter usage maps to ``cache_read_tokens``."""
+    """Adapter usage maps onto the loop's existing detailed usage fields."""
     result = AdapterCallResult(
         text="ok",
-        usage=UsageSummary(input_tokens=100, output_tokens=20, cached_input_tokens=80),
+        usage=UsageSummary(
+            input_tokens=100,
+            output_tokens=20,
+            cached_input_tokens=80,
+            reasoning_tokens=12,
+            cache_write_tokens=5,
+        ),
         stop_reason="end_turn",
     )
     resp = agentic_response_from_adapter_result(result)
     assert resp.usage.cache_read_tokens == 80
+    assert resp.usage.thinking_tokens == 12
+    assert resp.usage.cache_creation_tokens == 5
     assert resp.usage.input_tokens == 100

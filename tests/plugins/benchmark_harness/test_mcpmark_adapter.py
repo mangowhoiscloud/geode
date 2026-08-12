@@ -83,6 +83,32 @@ def test_mcpmark_loop_validates_colliding_tool_with_mcp_schema() -> None:
     ]
 
 
+def test_mcpmark_tool_returns_call_tool_result_as_data() -> None:
+    class CallToolResult:
+        def model_dump(self, *, by_alias: bool, exclude_none: bool) -> dict[str, object]:
+            assert by_alias is True
+            assert exclude_none is True
+            return {
+                "content": [{"type": "text", "text": '{"answer": 42}'}],
+                "structuredContent": {"answer": 42},
+                "isError": False,
+            }
+
+    class MCPServer:
+        async def call_tool(self, _name: str, _arguments: dict[str, object]) -> CallToolResult:
+            return CallToolResult()
+
+    tool = MCPMarkGeodeTool(
+        mcp_server=MCPServer(),
+        schema={"name": "read", "inputSchema": {"type": "object"}},
+    )
+
+    result = asyncio.run(tool.aexecute())
+
+    assert result["structuredContent"] == {"answer": 42}
+    assert isinstance(result["content"], list)
+
+
 def test_route_from_geode_model_label() -> None:
     assert _route_from_model("geode-gpt-5.5") == ("gpt-5.5", "openai", "subscription")
     assert _route_from_model("geode-claude-sonnet-4-6") == (

@@ -842,7 +842,9 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/runtime/context.md
 
 ## 대형 도구 결과: 오프로드
 
-도구 결과가 5000 토큰 임계값을 넘으면 `core/orchestration/tool_offload.py`의 `ToolResultOffloadStore`가 결과를 디스크 (`.geode/tool-offload/` 아래 세션 디렉터리)로 내리고, 컨텍스트에는 요약과 `ref_id`만 남깁니다. 모델은 필요할 때 `recall_tool_result(ref_id)` 경로로 원본을 다시 가져옵니다. 오프로드 시 `TOOL_RESULT_OFFLOADED` 훅이 발화합니다.
+모델에 전달할 도구 결과가 기본 15,000 토큰 임계값을 넘으면 `core/orchestration/tool_offload.py`의 `ToolResultOffloadStore`가 결과를 디스크 (`.geode/tool-offload/` 아래 세션 디렉터리)로 내리고, 컨텍스트에는 요약과 `ref_id`만 남깁니다. 모델은 필요할 때 `recall_tool_result(ref_id)` 경로로 원본을 다시 가져옵니다. 오프로드 시 `TOOL_RESULT_OFFLOADED` 훅이 발화합니다.
+
+MCP의 `CallToolResult`는 호환성을 위해 같은 값을 `content`와 `structuredContent`에 함께 담을 수 있습니다. 원본은 session timeline과 tool log에 receipt로 그대로 남기고, 모델 경계에서는 structured 값을 우선해 한 표현만 고른 뒤 오프로드와 25,000-token hard guard를 적용합니다. 따라서 증거는 보존하면서 중복 JSON을 컨텍스트에 다시 넣지 않습니다.
 
 ## 장기 컨텍스트 아티팩트: dreaming
 
@@ -850,17 +852,17 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/runtime/context.md
 
 주입은 경계가 있습니다. `ContextAssembler`의 `_inject_long_context_artifacts`가 최신 `compaction_summary`/`dream` 아티팩트 최대 3개를 각 500자로 잘라 `_long_context_summary`로 넣습니다. `session_search` 도구는 `include_artifacts=true`(선택적 `artifact_kinds` 필터)로 FTS5 메시지 검색과 함께 이 합성 아티팩트도 뒤집니다.
 
-## 캐시를 깨지 않는 주입
+## 캐시를 깨지 않는 이력
 
-현재 날짜와 라운드 번호 같은 턴별 정보는 `core/agent/system_injection.py`의 `append_system_reminder`가 요청별 복사본의 **마지막** 메시지로 덧붙입니다. 공유 히스토리는 변형되지 않으므로 메시지 prefix가 라운드 간 바이트 단위로 안정적이고, Anthropic과 OpenAI의 prefix 캐싱이 적중합니다.
+날짜와 runtime rule은 `system_prompt.py`의 동적 시스템 영역에 한 번 조립됩니다. 라운드별 reminder message는 만들지 않으며, 대화 이력에는 실제 user, assistant, tool turn만 append합니다. 그래서 다음 요청이 이전 요청의 메시지열을 정확한 prefix로 보존하고 Anthropic·OpenAI 캐시가 재사용할 수 있습니다.
 
 ## 실패 모드
 
 | 증상 | 원인 | 해법 |
 | --- | --- | --- |
 | 긴 세션에서 `context_exhausted` 종료 | 압축 후에도 히스토리가 임계 상태 | 새 세션을 열거나 `/compact`로 미리 압축합니다 |
-| 도구 결과가 요약으로만 보임 | 5000 토큰 임계값을 넘어 오프로드됨 | 정상 동작입니다. `recall_tool_result(ref_id)`로 원본을 조회합니다 |
-| 캐시 적중률이 갑자기 하락 | 히스토리 앞부분을 변형하는 커스텀 주입 | 주입은 append 방식만 사용합니다 (`append_system_reminder` 패턴) |
+| 도구 결과가 요약으로만 보임 | 15,000 토큰 임계값을 넘어 오프로드됨 | 정상 동작입니다. `recall_tool_result(ref_id)`로 원본을 조회합니다 |
+| 캐시 적중률이 갑자기 하락 | 히스토리 앞부분을 변형하는 커스텀 주입 | 턴별 메타데이터는 시스템 동적 영역에 두고, 대화에는 실제 turn만 append합니다 |
 
 ## 다음
 
@@ -1038,7 +1040,9 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/runtime/tools/protocol.md
 
 ## 대형 결과: 오프로드와 recall
 
-도구 결과가 5000 토큰 임계값을 넘으면 `core/orchestration/tool_offload.py`의 `ToolResultOffloadStore`가 본문을 세션별 디렉터리 (`.geode/tool-offload/` 아래)에 내려쓰고, 컨텍스트에는 요약과 `ref_id`만 남깁니다. 모델이 원본이 필요하면 `recall_tool_result(ref_id)`로 다시 가져옵니다. 오프로드마다 `TOOL_RESULT_OFFLOADED` 훅이 발화합니다.
+모델에 전달할 도구 결과가 기본 15,000 토큰 임계값을 넘으면 `core/orchestration/tool_offload.py`의 `ToolResultOffloadStore`가 본문을 세션별 디렉터리 (`.geode/tool-offload/` 아래)에 내려쓰고, 컨텍스트에는 요약과 `ref_id`만 남깁니다. 모델이 원본이 필요하면 `recall_tool_result(ref_id)`로 다시 가져옵니다. 오프로드마다 `TOOL_RESULT_OFFLOADED` 훅이 발화합니다.
+
+MCP 결과는 evidence용 원본과 model-facing 표현을 분리합니다. timeline과 tool log에는 전체 `CallToolResult`를 남기고, 모델에는 `structuredContent`를 우선한 단일 표현만 보냅니다. 호환성용 `content` 복제본을 다시 직렬화하지 않으며, 오프로드 뒤 25,000-token hard guard가 최종 상한을 보장합니다.
 
 ## 접근 제어
 
@@ -1051,7 +1055,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/runtime/tools/protocol.md
 | 모델이 분명히 있는 도구를 못 찾음 | deferred loading으로 스키마가 아직 적재되지 않음 | 정상 경로입니다. 모델이 `tool_search`로 찾으면 로드됩니다 |
 | `read_document`나 `grep_files`가 반복 호출됨 | 핵심 읽기 도구는 항상 적재됨. tool cap에 숨은 것이 아니라 모델의 탐색 판단일 가능성이 큼 | dialogue transcript에서 직전 `grep_files` 호출과 읽은 경로를 보고, 필요한 경우 질문에 파일 범위나 금지 경로를 명시합니다 |
 | 서브에이전트가 도구 없이 동작 | frontmatter의 toolkit 이름 오타 | 스폰 로그의 경고를 확인하고 `toolkits.toml`의 이름과 맞춥니다 |
-| 도구 결과가 잘려 보임 | 5000 토큰 초과로 오프로드됨 | `recall_tool_result(ref_id)`로 원본을 조회합니다 |
+| 도구 결과가 잘려 보임 | 15,000 토큰 초과로 오프로드됨 | `recall_tool_result(ref_id)`로 원본을 조회합니다 |
 
 ## 다음
 
@@ -5163,14 +5167,14 @@ Anthropic은 요청당 cache\_control breakpoint를 4개까지 허용합니다. 
 
 비용 산식은 단가표 기준으로 cache write가 input의 1.25배, cache read가 input의 0.1배입니다 (`core/llm/pricing_loader.py`).
 
-## system reminder는 append 전용
+## 대화 이력은 실제 turn만 append
 
-멀티턴 강화용 `<system-reminder>` 블록 (`core/agent/system_injection.py`)에는 캐시 계약이 걸려 있습니다. 이전 설계는 reminder를 `messages[0]`에 넣고 라운드마다 다시 썼습니다. 메시지는 시스템 블록 뒤에 렌더되므로 이력 prefix 전체가 매 라운드 다시 키잉되고, 롤링 breakpoint는 한 번도 적중하지 못했습니다. 현재 계약은 두 가지입니다.
+AgenticLoop는 라운드 번호나 날짜를 합성 user message로 만들지 않습니다. 날짜와 runtime rule은 이미 `core/agent/system_prompt.py`의 동적 시스템 영역에 있고, 한 실행 안에서 대화 이력에는 실제 user, assistant, tool turn만 뒤에 붙습니다. 따라서 다음 요청의 메시지열은 이전 요청의 메시지열을 정확한 prefix로 보존합니다.
 
--   `append_system_reminder`는 새 리스트를 반환합니다. 호출자의 이력 리스트는 그대로이므로 reminder가 저장된 대화 컨텍스트에 stale한 중간 prefix 바이트로 남지 않습니다.
--   라운드 인덱스와 날짜 같은 턴별 변량은 마지막 안정 이력 블록 뒤에 붙습니다. 매 라운드 캐시에서 빠지는 것은 reminder 자신뿐입니다.
+-   턴마다 바뀌는 시스템 정보는 메시지 이력에 중복 주입하지 않습니다.
+-   컨텍스트 정리는 공유 이력을 직접 갱신하고, 그 뒤 adapter request를 조립합니다.
 
-가드 테스트는`tests/core/agent/test_system_injection.py`의 TestCacheContract입니다.
+이 계약은 연속 `AgenticLoop._call_llm` 요청의 실제 `AdapterCallRequest.messages` prefix를 비교하는 회귀 테스트로 고정합니다.
 
 ## 실패 모드
 
@@ -5366,7 +5370,7 @@ GEODE는 종합입니다. 아래 표의 각 행은 적어도 하나의 frontier 
 | 경계 마커 | `PROMPT_CACHE_BOUNDARY` = `<dynamic_context>` (`core/agent/system_prompt.py`) | 없음 | `<!-- OPENCLAW_CACHE_BOUNDARY -->` | `SYSTEM_PROMPT_DYNAMIC_BOUNDARY` |
 | 메시지 히스토리 캐시 | 예. 최근 user 메시지 rolling breakpoint (`apply_messages_cache_control`, `core/llm/providers/anthropic.py`) | 예. 직전 3 | 예. 직전 user 메시지 | 예. 직전 user 블록 |
 
-캐시 안정성의 나머지 반쪽은 시스템 리마인더 위치입니다. GEODE는 리마인더를 요청별 사본의 마지막 메시지로 append합니다 (`core/agent/system_injection.py`). 공유 히스토리를 건드리지 않아 prefix가 라운드 간 바이트 단위로 안정됩니다.
+캐시 안정성의 나머지 반쪽은 합성 reminder를 대화에 넣지 않는 것입니다. 날짜와 runtime rule은 `system_prompt.py`의 동적 시스템 영역에 있고, 메시지 이력에는 실제 turn만 append되어 연속 요청의 prefix가 안정적으로 유지됩니다.
 
 ## 비동기 런타임 규율
 
@@ -5495,9 +5499,9 @@ GEODE가 메타 하네스인 이유는 세 겹의 관계 때문입니다.
 | **Message prune policy** | first-user, bridge, 최근 N개만 유지해 히스토리를 예산 안에 고정 | activation at 30 msgs, keep-recent 5/8, floor 3 | `core/orchestration/context_budget.py` |
 | **Deferred tool loading** | 도구가 임계 초과면 스키마를 검색 도구 뒤로 지연시켜 컨텍스트 범람 차단 | TOOL\_DEFER\_THRESHOLD=16, always-loaded set | `core/llm/tool_defer.py` |
 | **Cache breakpoint policy** | trailing cache\_control breakpoint 수를 제한해 캐시 적중과 호출 오버헤드를 교환 | cache-policy.json messages\_breakpoints, 0..3 | `core/llm/cache_policy.py` |
-| **System-reminder injection** | 말미 고정 주입이 prefix-stable이라 프롬프트 캐시 키를 깨지 않음 | cache contract pinned by tests | `core/agent/system_injection.py` |
+| **Append-only conversation history** | 합성 reminder 없이 실제 turn만 append해 프롬프트 cache prefix를 보존 | consecutive AdapterCallRequest prefix test | `core/agent/loop/agent_loop.py` |
 | **System prompt modes** | persona 주입과 audit strip으로 모델이 수렴할 identity를 제어 | GEODE\_PERSONA=off, GEODE\_AUDIT\_UNRESTRICTED=1 | `core/agent/system_prompt.py` |
-| **ToolResultOffloadStore** | 대형 tool result를 디스크로 이관하고 컨텍스트에는 ref만 남김 | threshold 5000 tokens, TOOL\_RESULT\_OFFLOADED hook | `core/orchestration/tool_offload.py` |
+| **ToolResultOffloadStore** | 대형 tool result를 디스크로 이관하고 컨텍스트에는 ref만 남김 | threshold 15000 tokens, TOOL\_RESULT\_OFFLOADED hook | `core/orchestration/tool_offload.py` |
 | **Result token guard** | tool result 단건에 모델 파생 토큰 상한을 적용해 절단 | max\_tool\_result\_tokens setting | `core/agent/tool_executor/result_token_guard.py` |
 | **compact\_conversation** | server-side compaction이 없는 프로바이더용 4단계 클라이언트 압축 | keep\_recent arg, Anthropic no-op (server-side) | `core/orchestration/compaction.py` |
 | **SessionManager** | 메시지 상태를 checkpoint로 저장, 복원해 긴 실행을 유한 지점에서 재개 | geode\_checkpoints.db, cleanup 72h | `core/memory/session_manager.py` |
@@ -5995,7 +5999,7 @@ Tier 2  latex2sympy2 + sympy.pretty  블록 전용. 분수·적분을 2D Unicode
 URL: https://mangowhoiscloud.github.io/geode/docs/reference/changelog
 Markdown: https://mangowhoiscloud.github.io/geode/docs/reference/changelog.md
 
-(body omitted from llms-full: 1503 KB — fetch the Markdown twin above for the complete page)
+(body omitted from llms-full: 1504 KB — fetch the Markdown twin above for the complete page)
 
 ---
 
@@ -6155,8 +6159,8 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 
 | 측정값 | 현재 트리 |
 | --- | --- |
-| 프로덕션 Python 파일 | 546 |
-| 테스트 Python 파일 | 684 |
+| 프로덕션 Python 파일 | 545 |
+| 테스트 Python 파일 | 683 |
 | 도구 정의 / 실행 등록 / 유효 스키마 | 87 / 90 / 87 |
 | RuntimeEvent 멤버 | 57 |
 | 기본 LLM 어댑터 | 8 |
@@ -6187,7 +6191,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 | --- | --- | --- |
 | agentic 루프 | `core/agent/loop/` | `agent_loop.py` (AgenticLoop), `models.py`, `_context.py` |
 | 서브에이전트 | `core/agent/` | `sub_agent.py`, `worker.py`, `task_isolation.py` |
-| 시스템 프롬프트 | `core/agent/` | `system_prompt.py`, `system_injection.py` |
+| 시스템 프롬프트 | `core/agent/` | `system_prompt.py` |
 | 가드 | `core/agent/` | `safety.py`, `budget.py`, `approval.py`, `context_manager.py` |
 
 ## Harness

@@ -56,6 +56,21 @@ functional change.
   ChatGPT subscription models. The setup manifest now installs GEODE into the
   MCPMark venv so live runs cannot fail on missing runtime dependencies.
 
+### Fixed
+
+- **Bounded model-facing tool results.** MCP `CallToolResult` receipts remain
+  intact in session evidence, while model context now selects structured
+  content once instead of nesting duplicate JSON. Large projected results are
+  offloaded before the hard token guard, and escaped truncation output cannot
+  exceed its configured bound.
+- **Stable multi-round prefixes and complete usage details.** Removed the
+  synthetic per-round reminder message because date and runtime rules already
+  live in the system prompt, preserving exact conversation prefixes between
+  calls. OpenAI reasoning/cache-write and Anthropic/Claude cache-creation usage
+  now flow into the existing runtime counters instead of being discarded.
+  Reasoning remains an observable subset of provider-reported output tokens
+  and is no longer charged a second time by the local cost estimator.
+
 ### Infrastructure
 
 - **PyPI Core Metadata 2.5 publishing.** Updated the pinned PyPA publish action
