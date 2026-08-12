@@ -1,3 +1,25 @@
+---
+eval_id: external-artifact-repository
+eval_family: evaluation-artifact-storage
+eval_kind: contract
+eval_status: canonical
+eval_authority: evidence-storage
+eval_summary: Canonical append-only publication and disclosure contract for large GEODE evaluation artifacts.
+eval_triggers:
+  - eval-artifact
+  - artifact repository
+  - privacy review
+  - trajectory release
+  - publication manifest
+eval_contracts:
+  - core/observability/schemas/trajectory-release.schema.json
+  - core/observability/schemas/trajectory.schema.json
+  - docs/eval/artifact-publish-manifest.template.json
+  - docs/eval/schemas/analysis.schema.json
+  - docs/eval/schemas/attempt.schema.json
+  - docs/eval/schemas/run-spec.schema.json
+---
+
 # External Evaluation Artifact Repository
 
 GEODE's canonical public evaluation-artifact store is
@@ -149,6 +171,14 @@ diagnostic with `promotion_authority=none` and does not alter Tau2's native
 | `docs/eval/crucible-power-admission-2026-07-13.md` (migrated 2026-07-13) | `crucible/gate-provenance/` |
 | normalized trajectory releases (`TRAJECTORIES.md` contract; first release 2026-07-28, MCP spec-response E2E) | `trajectories/<source>-<scope>-<published-utc>-<digest12>/` |
 
+Validated `run-spec.json`, `attempts.jsonl`, and `analysis.json` sidecars stay
+beside their benchmark-specific native run rather than entering a second
+global mirror. Their relative path + SHA-256 references point to native
+results, trajectories, and verifier receipts in that run directory; they do
+not copy those payloads. Directory evidence points to its manifest. A
+historical run may gain new immutable sidecar files directly beside its native
+result, but existing raw files and published manifests remain byte-identical.
+
 The 2026-08-07 runtime-memory authority cleanup validation is pinned to
 artifact commit
 [`4903c31`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/4903c31abf983b7be076fd1e35775190fd6f4718)
@@ -263,7 +293,7 @@ Every candidate file is classified before copying:
 
 | Class | Rule |
 |---|---|
-| `public` | Verifier output, completed-run transcript, config, receipt, or opaque aggregate that has passed secret and identity review |
+| `public` | Verifier output, completed-run transcript, reviewed eval sidecar, config, receipt, or opaque aggregate that has passed secret and identity review |
 | `withheld-sealed` | Unopened sealed pack, selected-row manifest, task/family/content identities, selection salt or preregistration that makes the hidden rows derivable |
 | `private-secret` | Tokens, auth headers, cookies, environment files, DB URIs, provider credentials; never publish |
 | `reproducible-cache` | Package caches, scratch checkouts, evaluator homes; omit and record the pinned sources instead |
@@ -278,14 +308,16 @@ reports may be public when they contain no selected identity.
 1. Preserve the source run under GEODE's ignored `artifacts/` tree.
 2. Copy `artifact-publish-manifest.template.json` beside the run record and
    replace every placeholder.
-3. Verify each source byte count and SHA-256. Mark withheld entries explicitly;
+3. Validate any eval sidecars and bind `analysis.json` to the exact frozen spec
+   and attempts digests.
+4. Verify each source byte count and SHA-256. Mark withheld entries explicitly;
    never omit them silently from the disclosure accounting.
-4. Scan public entries for credentials, local usernames, auth headers, and
+5. Scan public entries for credentials, local usernames, auth headers, and
    environment files.
-5. Copy only `public` entries into a fresh branch/worktree of
+6. Copy only `public` entries into a fresh branch/worktree of
    `geode-eval-artifacts`; do not rewrite an existing run directory.
-6. Open and merge a PR in the artifact repository.
-7. Record its merge commit and immutable blob/tree links in the GEODE run
+7. Open and merge a PR in the artifact repository.
+8. Record its merge commit and immutable blob/tree links in the GEODE run
    ledger before publishing a score or improvement claim.
 
 For normalized trajectories, steps 2–5 use

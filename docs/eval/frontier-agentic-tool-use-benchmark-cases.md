@@ -1,3 +1,19 @@
+---
+eval_id: frontier-agentic-tool-use-cases
+eval_family: frontier-agentic-tool-use-cases
+eval_kind: ledger
+eval_status: reference
+eval_authority: dated-evidence-ledger
+eval_summary: Dated evidence ledger for public MCPMark, BFCL V4, and tau2 tool-use cases and GEODE comparisons.
+eval_triggers:
+  - frontier tool use
+  - MCPMark cases
+  - BFCL cases
+  - tau2 cases
+eval_contracts:
+  - docs/eval/agent-world-comparison-contract.md
+---
+
 # Frontier Agentic Tool-Use Benchmark Cases
 
 Date: 2026-07-02; updated 2026-07-03

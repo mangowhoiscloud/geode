@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/mangowhoiscloud/geode/main/docs/eval/schemas/catalog.schema.json",
+  "title": "GEODE evaluation catalog v1",
+  "type": "object",
+  "required": [
+    "schema_id",
+    "schema_version",
+    "entrypoint",
+    "skill",
+    "contracts",
+    "document_count",
+    "documents"
+  ],
+  "properties": {
+    "schema_id": {"const": "geode.eval-catalog@1"},
+    "schema_version": {"const": 1},
+    "entrypoint": {"const": "docs/eval/README.md"},
+    "skill": {"const": ".agents/skills/geode-eval/SKILL.md"},
+    "contracts": {
+      "type": "object",
+      "required": ["run_spec", "attempt", "analysis", "trajectory", "trajectory_release"],
+      "properties": {
+        "run_spec": {"const": "docs/eval/schemas/run-spec.schema.json"},
+        "attempt": {"const": "docs/eval/schemas/attempt.schema.json"},
+        "analysis": {"const": "docs/eval/schemas/analysis.schema.json"},
+        "trajectory": {"const": "core/observability/schemas/trajectory.schema.json"},
+        "trajectory_release": {
+          "const": "core/observability/schemas/trajectory-release.schema.json"
+        }
+      },
+      "additionalProperties": false
+    },
+    "document_count": {"type": "integer", "minimum": 1},
+    "documents": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "family",
+          "title",
+          "kind",
+          "status",
+          "authority",
+          "path",
+          "summary",
+          "sha256",
+          "triggers",
+          "contracts"
+        ],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+          "family": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+          "title": {"type": "string", "minLength": 1, "maxLength": 160},
+          "kind": {
+            "enum": ["index", "contract", "workflow", "template", "ledger", "benchmark"]
+          },
+          "status": {"enum": ["canonical", "reference", "historical", "draft", "retired"]},
+          "authority": {"type": "string", "minLength": 1, "maxLength": 80},
+          "path": {"type": "string", "pattern": "^docs/eval/[^/]+\\.md$"},
+          "summary": {"type": "string", "minLength": 10, "maxLength": 320},
+          "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+          "triggers": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {"type": "string", "minLength": 1, "maxLength": 80}
+          },
+          "contracts": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^(?:docs/eval|core/observability)/[^.].+"
+            }
+          },
+          "latest_valid_release": {"type": "string", "format": "uri"}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

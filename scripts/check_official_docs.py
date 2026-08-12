@@ -54,6 +54,11 @@ def build_docs_commands(*, skip_build: bool = False) -> list[DocsCommand]:
             REPO_ROOT,
         ),
         DocsCommand(
+            "check generated evaluation catalog",
+            (sys.executable, "scripts/eval/contract.py", "catalog", "--check"),
+            REPO_ROOT,
+        ),
+        DocsCommand(
             "sync site SOT, changelog, and llms index",
             (npm, "run", "sync-stats"),
             SITE_DIR,

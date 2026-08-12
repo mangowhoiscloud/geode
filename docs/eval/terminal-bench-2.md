@@ -1,3 +1,18 @@
+---
+eval_id: terminal-bench-2
+eval_family: terminal-bench-2
+eval_kind: benchmark
+eval_status: canonical
+eval_authority: suite-profile
+eval_summary: GEODE adoption profile and execution plan for verifier-backed Terminal-Bench 2.0 tasks.
+eval_triggers:
+  - Terminal-Bench 2
+  - shell benchmark
+  - container verifier
+eval_contracts:
+  - docs/eval/schemas/run-spec.schema.json
+---
+
 # Terminal-Bench 2.0 (Stanford + Laude Institute)
 
 ## 개요

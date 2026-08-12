@@ -1,0 +1,32 @@
+{
+  "schema_id": "geode.eval-attempt@1",
+  "schema_version": 1,
+  "run_id": "<stable-run-id>",
+  "attempt_id": "<unique-attempt-id>",
+  "parent_attempt_id": null,
+  "sequence": 0,
+  "timing": {
+    "status": "exact",
+    "started_at": "<YYYY-MM-DDTHH:MM:SSZ>",
+    "finished_at": "<YYYY-MM-DDTHH:MM:SSZ>",
+    "source_ref": null
+  },
+  "validity": "valid",
+  "outcome": "passed",
+  "change": {
+    "surface": "baseline",
+    "description": "<what differs from the parent attempt>"
+  },
+  "expected_effect": "<prediction for this specific attempt>",
+  "observed_result": "<bounded outcome summary; raw evidence stays behind references>",
+  "failure_class": null,
+  "error_ref": null,
+  "evidence_refs": [
+    {
+      "kind": "native-result",
+      "path": "<relative-native-result-or-manifest-path>",
+      "sha256": "<sha256-of-evidence-bytes>"
+    }
+  ],
+  "selected_for_analysis": true
+}

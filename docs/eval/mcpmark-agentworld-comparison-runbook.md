@@ -1,3 +1,18 @@
+---
+eval_id: mcpmark-agent-world-runbook
+eval_family: mcpmark-agent-world-environment
+eval_kind: ledger
+eval_status: historical
+eval_authority: historical-environment-record
+eval_summary: Historical MCPMark environment recovery and comparison runbook; current comparability authority lives in the Agent-World contract.
+eval_triggers:
+  - MCPMark environment
+  - MCPMark credentials
+  - Agent-World MCPMark
+eval_contracts:
+  - docs/eval/agent-world-comparison-contract.md
+---
+
 # MCPMark × Agent-World Comparison Runbook
 
 Date: 2026-07-10. Scope: GEODE + GPT-5.5 subscription(Codex) route로 MCPMark를 측정해

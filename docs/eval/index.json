@@ -1,0 +1,279 @@
+{
+  "schema_id": "geode.eval-catalog@1",
+  "schema_version": 1,
+  "entrypoint": "docs/eval/README.md",
+  "skill": ".agents/skills/geode-eval/SKILL.md",
+  "contracts": {
+    "run_spec": "docs/eval/schemas/run-spec.schema.json",
+    "attempt": "docs/eval/schemas/attempt.schema.json",
+    "analysis": "docs/eval/schemas/analysis.schema.json",
+    "trajectory": "core/observability/schemas/trajectory.schema.json",
+    "trajectory_release": "core/observability/schemas/trajectory-release.schema.json"
+  },
+  "document_count": 12,
+  "documents": [
+    {
+      "id": "agent-world-comparison",
+      "family": "agent-world-comparison",
+      "title": "Agent-World Comparison Contract",
+      "kind": "contract",
+      "status": "canonical",
+      "authority": "comparison-contract",
+      "path": "docs/eval/agent-world-comparison-contract.md",
+      "summary": "Canonical Agent-World v1 comparison profile for directional paper references and paired GEODE runtime controls.",
+      "sha256": "e0f39f38b553b2ce7c2c430f769ed02f15e5c29d53692c195d4ef6be3456f877",
+      "triggers": [
+        "Agent-World",
+        "BFCL V4",
+        "MCP-Mark",
+        "mean_accuracy@8",
+        "paired runtime",
+        "tau2"
+      ],
+      "contracts": [
+        "docs/eval/agent-world-run-manifest.template.json",
+        "docs/eval/schemas/run-spec.schema.json"
+      ]
+    },
+    {
+      "id": "benchmark-publishing-cycle",
+      "family": "benchmark-publishing",
+      "title": "Benchmark Publishing Cycle",
+      "kind": "workflow",
+      "status": "canonical",
+      "authority": "process",
+      "path": "docs/eval/benchmark-publishing-cycle.md",
+      "summary": "End-to-end workflow from preregistered benchmark scope through evidence preservation, publication, and deployment.",
+      "sha256": "f5950283be3e85772f9a438adb170cd94a4c126c80d13dad1e7c3bc4da4b15a4",
+      "triggers": [
+        "attempts JSONL",
+        "benchmark run",
+        "eval artifact",
+        "publish evaluation",
+        "run spec"
+      ],
+      "contracts": [
+        "docs/eval/artifact-publish-manifest.template.json",
+        "docs/eval/eval-analysis.template.json",
+        "docs/eval/eval-attempt.template.json",
+        "docs/eval/eval-run-spec.template.json",
+        "docs/eval/schemas/analysis.schema.json",
+        "docs/eval/schemas/attempt.schema.json",
+        "docs/eval/schemas/run-spec.schema.json"
+      ]
+    },
+    {
+      "id": "benchmark-run-record",
+      "family": "benchmark-run-record",
+      "title": "Benchmark Run Record Template",
+      "kind": "template",
+      "status": "canonical",
+      "authority": "human-run-report",
+      "path": "docs/eval/benchmark-run-record.template.md",
+      "summary": "Human-readable benchmark report template derived from frozen run, attempt, analysis, and evidence sidecars.",
+      "sha256": "2e7622d411b1eeb19033c08270dfefe8c068a5845f24869c7c2ea517bcfcd937",
+      "triggers": [
+        "benchmark report",
+        "result publication",
+        "run record"
+      ],
+      "contracts": [
+        "docs/eval/schemas/analysis.schema.json",
+        "docs/eval/schemas/attempt.schema.json",
+        "docs/eval/schemas/run-spec.schema.json"
+      ]
+    },
+    {
+      "id": "evaluation-index",
+      "family": "evaluation-routing",
+      "title": "GEODE Evaluation Index and Roadmap",
+      "kind": "index",
+      "status": "canonical",
+      "authority": "routing",
+      "path": "docs/eval/README.md",
+      "summary": "Machine and human entrypoint for GEODE evaluation contracts, benchmark ledgers, evidence, and publication.",
+      "sha256": "51279e84196afc1e5988db88e2299f1a299a9bdb13364003f2d2816d2078f34f",
+      "triggers": [
+        "artifact",
+        "benchmark",
+        "evaluation",
+        "research question",
+        "trajectory"
+      ],
+      "contracts": [
+        "docs/eval/eval-analysis.template.json",
+        "docs/eval/eval-attempt.template.json",
+        "docs/eval/eval-run-spec.template.json",
+        "docs/eval/schemas/analysis.schema.json",
+        "docs/eval/schemas/attempt.schema.json",
+        "docs/eval/schemas/run-spec.schema.json"
+      ],
+      "latest_valid_release": "https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/2c2d1f0621f64ff7ceeff8c05d8ebd3449501aaf/trajectories/mcpmark-geode-gpt54-high-token-efficiency-rerun-filesystem-easy-20260812T090254Z-35db8b275a36"
+    },
+    {
+      "id": "external-artifact-repository",
+      "family": "evaluation-artifact-storage",
+      "title": "External Evaluation Artifact Repository",
+      "kind": "contract",
+      "status": "canonical",
+      "authority": "evidence-storage",
+      "path": "docs/eval/external-artifact-repository.md",
+      "summary": "Canonical append-only publication and disclosure contract for large GEODE evaluation artifacts.",
+      "sha256": "86c8f39d630ba40b4de80a731c1bf20f8e63e6a7fd250212de225ef7c655f4c3",
+      "triggers": [
+        "artifact repository",
+        "eval-artifact",
+        "privacy review",
+        "publication manifest",
+        "trajectory release"
+      ],
+      "contracts": [
+        "core/observability/schemas/trajectory-release.schema.json",
+        "core/observability/schemas/trajectory.schema.json",
+        "docs/eval/artifact-publish-manifest.template.json",
+        "docs/eval/schemas/analysis.schema.json",
+        "docs/eval/schemas/attempt.schema.json",
+        "docs/eval/schemas/run-spec.schema.json"
+      ]
+    },
+    {
+      "id": "frontier-agentic-tool-use-cases",
+      "family": "frontier-agentic-tool-use-cases",
+      "title": "Frontier Agentic Tool-Use Benchmark Cases",
+      "kind": "ledger",
+      "status": "reference",
+      "authority": "dated-evidence-ledger",
+      "path": "docs/eval/frontier-agentic-tool-use-benchmark-cases.md",
+      "summary": "Dated evidence ledger for public MCPMark, BFCL V4, and tau2 tool-use cases and GEODE comparisons.",
+      "sha256": "dc81b6dc2a57b79d6d34c8dafc21b0ea523db88df0e419c69f85497cb9ec6a40",
+      "triggers": [
+        "BFCL cases",
+        "MCPMark cases",
+        "frontier tool use",
+        "tau2 cases"
+      ],
+      "contracts": [
+        "docs/eval/agent-world-comparison-contract.md"
+      ]
+    },
+    {
+      "id": "hal-reliability",
+      "family": "hal-reliability",
+      "title": "HAL Reliability (Princeton, ICLR 2026)",
+      "kind": "benchmark",
+      "status": "canonical",
+      "authority": "external-benchmark-profile",
+      "path": "docs/eval/hal-reliability.md",
+      "summary": "GEODE adoption profile for HAL consistency, robustness, safety, predictability, and self-awareness measurements.",
+      "sha256": "11a8678140b3388fe97905b0514d27ccfd2d5c71ce5731e25c2d42252ee3e8e1",
+      "triggers": [
+        "HAL Reliability",
+        "benchmark rerun",
+        "consistency",
+        "robustness"
+      ],
+      "contracts": [
+        "docs/eval/schemas/run-spec.schema.json"
+      ]
+    },
+    {
+      "id": "mcpmark-agent-world-runbook",
+      "family": "mcpmark-agent-world-environment",
+      "title": "MCPMark × Agent-World Comparison Runbook",
+      "kind": "ledger",
+      "status": "historical",
+      "authority": "historical-environment-record",
+      "path": "docs/eval/mcpmark-agentworld-comparison-runbook.md",
+      "summary": "Historical MCPMark environment recovery and comparison runbook; current comparability authority lives in the Agent-World contract.",
+      "sha256": "5cf41492e6c78537f7735a21fb2726ccbafc302e6a546d123c167b0446452df6",
+      "triggers": [
+        "Agent-World MCPMark",
+        "MCPMark credentials",
+        "MCPMark environment"
+      ],
+      "contracts": [
+        "docs/eval/agent-world-comparison-contract.md"
+      ]
+    },
+    {
+      "id": "mcpmark-geode-codex-gpt54-paired-20260812",
+      "family": "mcpmark",
+      "title": "GPT-5.4 GEODE × Codex MCPMark filesystem/easy paired diagnostic",
+      "kind": "ledger",
+      "status": "historical",
+      "authority": "paired-runtime-diagnostic",
+      "path": "docs/eval/2026-08-12-mcpmark-geode-codex-gpt54-paired.md",
+      "summary": "Matched GPT-5.4 GEODE and Codex filesystem/easy diagnostic plus the post-repair GEODE token-efficiency rerun.",
+      "sha256": "43b7c1193c919f893c7b7a30d162f3dfd76db58b3fb22c9167763787fa33f97e",
+      "triggers": [
+        "GEODE Codex comparison",
+        "GPT-5.4 token efficiency",
+        "MCPMark paired comparison",
+        "prompt prefix"
+      ],
+      "contracts": [
+        "core/observability/schemas/trajectory-release.schema.json",
+        "core/observability/schemas/trajectory.schema.json"
+      ],
+      "latest_valid_release": "https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/2c2d1f0621f64ff7ceeff8c05d8ebd3449501aaf/trajectories/mcpmark-geode-gpt54-high-token-efficiency-rerun-filesystem-easy-20260812T090254Z-35db8b275a36"
+    },
+    {
+      "id": "tau2-bench",
+      "family": "tau2-bench",
+      "title": "τ²-bench (Sierra)",
+      "kind": "benchmark",
+      "status": "canonical",
+      "authority": "suite-profile",
+      "path": "docs/eval/tau2-bench.md",
+      "summary": "GEODE evaluation profile, evidence ledger, and rollout plan for the tau2 conversational tool-use benchmark.",
+      "sha256": "1bc03893fa7f4553b9056c0f2288186b28a18b66450f73ebc7978a64a5b7a2ae",
+      "triggers": [
+        "conversational tool use",
+        "tau-bench",
+        "tau2",
+        "user simulator"
+      ],
+      "contracts": [
+        "docs/eval/schemas/run-spec.schema.json"
+      ]
+    },
+    {
+      "id": "terminal-bench-2",
+      "family": "terminal-bench-2",
+      "title": "Terminal-Bench 2.0 (Stanford + Laude Institute)",
+      "kind": "benchmark",
+      "status": "canonical",
+      "authority": "suite-profile",
+      "path": "docs/eval/terminal-bench-2.md",
+      "summary": "GEODE adoption profile and execution plan for verifier-backed Terminal-Bench 2.0 tasks.",
+      "sha256": "e158c18fb0b68f47572b86cc9db8d88e18c446971b281a57023fe5f8654fd9bc",
+      "triggers": [
+        "Terminal-Bench 2",
+        "container verifier",
+        "shell benchmark"
+      ],
+      "contracts": [
+        "docs/eval/schemas/run-spec.schema.json"
+      ]
+    },
+    {
+      "id": "toolathlon",
+      "family": "toolathlon",
+      "title": "Toolathlon (HKUST, ICLR 2026)",
+      "kind": "benchmark",
+      "status": "canonical",
+      "authority": "suite-profile",
+      "path": "docs/eval/toolathlon.md",
+      "summary": "GEODE adoption profile for Toolathlon long-horizon, multi-application MCP tool-use evaluation.",
+      "sha256": "4caf9097a88db0b9b9b21fcc57370deb508a064a7c037e2ea660feada74becde",
+      "triggers": [
+        "MCP benchmark",
+        "Toolathlon",
+        "long-horizon tools"
+      ],
+      "contracts": [
+        "docs/eval/schemas/run-spec.schema.json"
+      ]
+    }
+  ]
+}

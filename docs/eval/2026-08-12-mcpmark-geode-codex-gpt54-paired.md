@@ -1,3 +1,21 @@
+---
+eval_id: mcpmark-geode-codex-gpt54-paired-20260812
+eval_family: mcpmark
+eval_kind: ledger
+eval_status: historical
+eval_authority: paired-runtime-diagnostic
+eval_summary: Matched GPT-5.4 GEODE and Codex filesystem/easy diagnostic plus the post-repair GEODE token-efficiency rerun.
+eval_triggers:
+  - MCPMark paired comparison
+  - GPT-5.4 token efficiency
+  - GEODE Codex comparison
+  - prompt prefix
+eval_contracts:
+  - core/observability/schemas/trajectory.schema.json
+  - core/observability/schemas/trajectory-release.schema.json
+eval_latest_valid_release: https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/2c2d1f0621f64ff7ceeff8c05d8ebd3449501aaf/trajectories/mcpmark-geode-gpt54-high-token-efficiency-rerun-filesystem-easy-20260812T090254Z-35db8b275a36
+---
+
 # GPT-5.4 GEODE × Codex MCPMark filesystem/easy paired diagnostic
 
 ## Identity

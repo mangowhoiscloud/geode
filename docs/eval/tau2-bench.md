@@ -1,3 +1,19 @@
+---
+eval_id: tau2-bench
+eval_family: tau2-bench
+eval_kind: benchmark
+eval_status: canonical
+eval_authority: suite-profile
+eval_summary: GEODE evaluation profile, evidence ledger, and rollout plan for the tau2 conversational tool-use benchmark.
+eval_triggers:
+  - tau2
+  - tau-bench
+  - user simulator
+  - conversational tool use
+eval_contracts:
+  - docs/eval/schemas/run-spec.schema.json
+---
+
 # τ²-bench (Sierra)
 
 ## 개요
