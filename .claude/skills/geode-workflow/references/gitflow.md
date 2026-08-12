@@ -59,6 +59,19 @@ immediately before merge.
 - `develop -> main` is a pass-through merge after gates are satisfied.
 - No direct push to `main` or `develop`.
 
+When the feature branch is checked out in a linked worktree, never run
+`gh pr merge ... --delete-branch` there. GitHub CLI may switch that checkout
+to the base branch and fast-forward it while deleting the local branch. Merge
+without local checkout side effects instead:
+
+```bash
+gh api --method PUT repos/mangowhoiscloud/geode/pulls/<feature-pr>/merge \
+  -f merge_method=squash
+```
+
+Leave the remote branch and linked checkout in place until the guarded cleanup
+below runs from outside the target worktree.
+
 ## Architecture Ledger
 
 For architecture/extensibility work, the user-authorized exception applies only

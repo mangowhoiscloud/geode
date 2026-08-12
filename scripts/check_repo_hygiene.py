@@ -393,10 +393,16 @@ def free_merged_worktree(*, root: Path, target: Path, pr_number: int, dry_run: b
         fetched_head_oid = _git(root, "rev-parse", temporary_ref).stdout.strip()
         if fetched_head_oid != expected_head_oid:
             raise CleanupError("GitHub PR head changed while cleanup was being verified")
-        head_tree = _git(root, "rev-parse", f"{temporary_ref}^{{tree}}").stdout.strip()
+        replayed_tree = _git(
+            root,
+            "merge-tree",
+            "--write-tree",
+            f"{merge_oid}^1",
+            temporary_ref,
+        ).stdout.strip()
         merge_tree = _git(root, "rev-parse", f"{merge_oid}^{{tree}}").stdout.strip()
-        if head_tree != merge_tree:
-            raise CleanupError("merged PR tree differs from its final feature head")
+        if replayed_tree != merge_tree:
+            raise CleanupError("squash merge tree differs from replaying its final PR head")
 
         local_oid = _git(root, "rev-parse", branch).stdout.strip()
         ancestry = _git(

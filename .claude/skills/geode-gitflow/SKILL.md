@@ -366,7 +366,7 @@ Code changes complete
 
 ### Absolute Rule
 
-**Before running `gh pr merge`, you must check CI status with `gh pr checks`.**
+**Before running any merge command, you must check CI status with `gh pr checks`.**
 Merge prohibited if CI is still running or has failed.
 
 ### Merge Ratchet Loop
@@ -414,9 +414,10 @@ gh pr create --base develop --assignee mangowhoiscloud \
 # 2. ★★ CI Ratchet: Wait for checks to pass (MUST — never skip)
 gh pr checks <PR#> --watch --repo mangowhoiscloud/geode
 
-# 3. Merge only after all pass; the guarded free command below verifies and
-#    finishes remote/worktree/local cleanup.
-gh pr merge <PR#> --squash --delete-branch --repo mangowhoiscloud/geode
+# 3. Merge remotely only after all pass. Do not let gh delete the branch here;
+#    the guarded free command below owns remote/worktree/local cleanup.
+gh api --method PUT repos/mangowhoiscloud/geode/pulls/<PR#>/merge \
+  -f merge_method=squash
 
 # ── develop → main ──
 
@@ -768,6 +769,12 @@ A squash-merged feature PR leaves three stale artifacts behind: the remote
 branch, worktree, and local branch. `git branch -d` cannot recognize a squash
 merge and is therefore not the cleanup gate. Run the repository command from
 outside the target worktree:
+
+Never run `gh pr merge ... --delete-branch` from a linked worktree. GitHub CLI
+may switch that checkout to the PR base branch and fast-forward it as part of
+local branch cleanup, violating the one-branch-per-worktree contract. Use the
+remote-only API merge above, leave the linked checkout untouched, then free it
+from the repository root:
 
 ```bash
 cd ~/workspace/geode
