@@ -69,6 +69,14 @@ functional change.
 
 ### Fixed
 
+- **Convergence detection counts failed observation rounds, not calls.** A
+  parallel tool batch now contributes one input-aware error fingerprint, and a
+  successful or mixed round resets the streak. This prevents one failed batch
+  or long common error prefixes from stopping the agent before it can repair.
+- **MCPMark filesystem failures remain verifier outcomes.** A revision-pinned
+  compatibility patch guards four missing-output directory scans, so three
+  standard tasks return an ordinary failure instead of an exception-shaped
+  verifier receipt.
 - **Squash-merged worktree cleanup now tolerates base advancement.** The
   cleanup guard reconstructs the merge of the final PR head onto the squash
   commit's first parent instead of requiring the two complete trees to match.

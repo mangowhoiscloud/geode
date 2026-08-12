@@ -12,6 +12,7 @@ swap). Convergence now breaks immediately and the loop surfaces a
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from typing import Any
@@ -64,10 +65,11 @@ class ConvergenceDetector:
 
         Processes a batch of tool results from the current round.
         Resets the consecutive counter on any success, increments on all-error rounds.
-        Appends normalized error keys to recent_errors for convergence detection.
+        Appends one normalized batch key per all-error round for convergence detection.
         """
         has_success = False
         has_error = False
+        errors: list[dict[str, Any]] = []
         log_by_id = {
             str(entry.get("tool_use_id")): entry for entry in tool_log if entry.get("tool_use_id")
         }
@@ -82,13 +84,15 @@ class ConvergenceDetector:
 
             if isinstance(parsed, dict) and parsed.get("error"):
                 has_error = True
-                error_str = str(parsed.get("error", ""))[:50]
+                error_str = str(parsed.get("error", ""))
                 tool_name = self._tool_name(log_entry)
-                error_key = f"{tool_name}:{error_str}"
-                self.recent_errors.append(error_key)
-                # Keep last 6 entries max
-                if len(self.recent_errors) > 6:
-                    self.recent_errors = self.recent_errors[-6:]
+                errors.append(
+                    {
+                        "tool": tool_name,
+                        "input": log_entry.get("input", {}) if log_entry else {},
+                        "error": error_str,
+                    }
+                )
                 self._reset_success_streak()
             else:
                 has_success = True
@@ -96,8 +100,15 @@ class ConvergenceDetector:
 
         if has_success:
             self.total_consecutive_tool_errors = 0
+            self.recent_errors.clear()
         elif has_error:
             self.total_consecutive_tool_errors += 1
+            canonical = self._stable_json(sorted(self._stable_json(item) for item in errors))
+            digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:12]
+            tools = ",".join(sorted({str(item["tool"]) for item in errors}))
+            summary = str(errors[0]["error"])[:50]
+            self.recent_errors.append(f"{tools}:{summary}#{digest}")
+            self.recent_errors = self.recent_errors[-6:]
 
     def check_convergence_break(self) -> bool:
         """Return True when 3 consecutive identical tool errors are observed.
@@ -105,7 +116,7 @@ class ConvergenceDetector:
         The caller (AgenticLoop) breaks the loop and surfaces a user-facing
         diagnostic; we no longer try to auto-swap models on stuck loops.
         """
-        if len(self.recent_errors) < 3:
+        if self.total_consecutive_tool_errors < 3 or len(self.recent_errors) < 3:
             return False
         last_3 = self.recent_errors[-3:]
         if last_3[0] == last_3[1] == last_3[2]:
