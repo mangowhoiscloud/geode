@@ -58,6 +58,12 @@ functional change.
 
 ### Fixed
 
+- **Separated durable session lifetime from optional wall-clock guards.**
+  Interactive and resumable sessions no longer inherit an implicit two-hour
+  expiry; `GEODE_SESSION_TIME_BUDGET_S` now explicitly opts into the legacy
+  session cap. Expiry and handoff are mutually exclusive, expired sessions
+  stop before planner/model/tool work, and ordinary gateway/IPC loops bind
+  independent session metrics so one session cannot expire another.
 - **Bounded model-facing tool results.** MCP `CallToolResult` receipts remain
   intact in session evidence, while model context now selects structured
   content once instead of nesting duplicate JSON. Large projected results are

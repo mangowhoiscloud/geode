@@ -154,11 +154,10 @@ class SessionMetrics:
     missing_benches_total: int = 0
     cross_validation_conflict_count: int = 0
 
-    # I. Wall-clock budget + handoff (PR-CL-BUDGET, 2026-05-23) — 2-hour
-    #    time cap with T-10min auto-handoff trigger replacing the prior
-    #    turn-count cap. ``time_budget_start_s`` is monotonic clock; 0.0
-    #    means budget tracking inactive. ``handoff_threshold_s`` carves
-    #    out the warning headroom (default 600s = 10 min). Once
+    # I. Optional wall-clock budget + handoff (PR-CL-BUDGET, 2026-05-23).
+    #    ``time_budget_start_s`` is monotonic clock; 0.0 means budget
+    #    tracking inactive. ``handoff_threshold_s`` carves out warning
+    #    headroom (default 600s = 10 min). Once
     #    ``handoff_triggered_at`` is set, ``is_handoff_due`` returns False
     #    (one-shot trigger so AgenticLoop doesn't fire HANDOFF_TRIGGERED
     #    every subsequent round).
@@ -308,7 +307,7 @@ class SessionMetrics:
             if self.handoff_triggered_at > 0.0:
                 return False  # Lost the race to another caller.
             remaining = self.time_budget_remaining_s()
-            if remaining <= self.handoff_threshold_s:
+            if 0.0 < remaining <= self.handoff_threshold_s:
                 self.handoff_triggered_at = time.monotonic()
                 return True
             return False

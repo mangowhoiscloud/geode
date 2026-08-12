@@ -5488,7 +5488,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/reference/external-refere
 
 GEODE의 핵심 안전 메커니즘은 Karpathy의 autoresearch 패턴을 long-running agent context로 일반화한 것입니다.[왜 ratchet 규율인가](https://mangowhoiscloud.github.io/geode/docs/explanation/ratchet.md) 페이지에서 직접 인용합니다.
 
-1.  **Fixed wall-budget**으로 비교가능성 보존. 모든 실험이 5분 wall-clock. → GEODE의 StuckDetector 7200s + 30s wrap-up 여유.
+1.  **Fixed wall-budget**으로 비교가능성 보존. 모든 실험이 5분 wall-clock. → GEODE의 평가·감사 실행도 명시적인 실행 예산을 사용하며, 재개 가능한 대화 세션은 기본적으로 만료시키지 않습니다.
 2.  **Frozen scoreboard** 분리. 평가 harness가 agent-mutable 영역 밖에 동결. → GEODE의 validator + CourtEval grader 분리.
 3.  **git monotone ratchet**. branch HEAD가 절대 안 나빠짐. KEEP만 commit. → GEODE의 versioned event/trajectory audit cycle.
 4.  **Token-economic loop**. run.log + grep anchor + TSV append-only. → GEODE의 200-turn sliding window.
@@ -5577,7 +5577,7 @@ GEODE가 메타 하네스인 이유는 세 겹의 관계 때문입니다.
 | **Reflection node** | 도구 라운드마다 record\_reflection 구조화 호출 1회로 CognitiveState의 가설과 confidence를 갱신 | cognitive\_reflection\_enabled, max\_tokens 512 | `core/agent/loop/_reflection.py` |
 | **CognitiveState + store** | hypotheses, confidence, subgoals 믿음 상태를 SQLite에 지속화. 세션 재개의 DB-first 소스 | snapshot + append-only event stream | `core/memory/cognitive_state_store.py` |
 | **ConvergenceDetector** | 동일 도구 에러 3연속 또는 무진전 성공 반복에서 루프를 종료 | REPEATED\_SUCCESS\_THRESHOLD=5 | `core/agent/convergence.py` |
-| **TimeBudget** | 세션 wall-clock 예산. 만료 전 임계에서 handoff를 먼저 발화 | budget\_seconds, handoff threshold, HANDOFF\_TRIGGERED hook | `core/agent/budget.py` |
+| **TimeBudget** | 명시적으로 활성화하는 세션 wall-clock 예산. 양수 잔여시간의 임계에서만 handoff를 발화 | GEODE\_SESSION\_TIME\_BUDGET\_S, handoff threshold, HANDOFF\_TRIGGERED hook | `core/agent/budget.py` |
 | **Cost budget guard** | 세션 USD 상한. 80%에서 경고, 초과 시 루프 정지 | cost.limit\_usd config, COST\_LIMIT\_EXCEEDED hook | `core/agent/loop/agent_loop.py` |
 | **Lane / LaneQueue** | 세마포어로 세션 간 동시 실행을 제한 | max concurrent 50, max sessions 256 | `core/orchestration/lane_queue.py` |
 | **Audit lane** | Petri 감사 서브프로세스를 직렬화해 cron과 수동 감사의 충돌, 이중 지출 차단 | max\_concurrent 1, 15-min timeout | `core/orchestration/audit_lane.py` |
@@ -6028,7 +6028,7 @@ Tier 2  latex2sympy2 + sympy.pretty  블록 전용. 분수·적분을 2D Unicode
 URL: https://mangowhoiscloud.github.io/geode/docs/reference/changelog
 Markdown: https://mangowhoiscloud.github.io/geode/docs/reference/changelog.md
 
-(body omitted from llms-full: 1504 KB — fetch the Markdown twin above for the complete page)
+(body omitted from llms-full: 1505 KB — fetch the Markdown twin above for the complete page)
 
 ---
 
