@@ -85,6 +85,36 @@ export default function Page() {
               고정해서만 게시합니다.
             </p>
 
+            <h2>2026-08-12 matched token-efficiency rerun</h2>
+            <p>
+              같은 GPT-5.4 subscription / effort <code>high</code>, 같은 pinned{" "}
+              <code>filesystem/easy</code> 10건을 수정 전후로 대조했습니다. 점수는{" "}
+              <strong>9/10 (90.0%)</strong>로 유지됐고, 입력 토큰은 447,376에서
+              314,219로 <strong>29.8%</strong>, 출력 토큰은 25,157에서 20,385로{" "}
+              <strong>19.0%</strong> 줄었습니다.
+            </p>
+            <p>
+              10건 중 8건의 입력 토큰이 감소했고 round 수가 같은 4건도 12.5%
+              감소했습니다. 188개 canonical event와 54/54 exact tool pair에는
+              orphan이 없습니다. 단, 한 번의 matched trial이므로 MCPMark Verified
+              점수·신뢰구간·구독 과금 절감으로 일반화하지 않습니다.
+            </p>
+            <ul>
+              <li>
+                <RunLogLink
+                  path="trajectories/mcpmark-geode-gpt54-high-token-efficiency-rerun-filesystem-easy-20260812T090254Z-35db8b275a36"
+                  revision="2c2d1f0621f64ff7ceeff8c05d8ebd3449501aaf"
+                />:
+                원격 read-back과 privacy 검증을 통과한 10개 stable trajectory.
+              </li>
+              <li>
+                <a href="https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/2c2d1f0621f64ff7ceeff8c05d8ebd3449501aaf/reports/e2e-validation/2026-08-12-mcpmark-geode-gpt54-token-efficiency-rerun.md">
+                  matched rerun report
+                </a>
+                : task별 변화와 promotion 경계를 포함한 판정 근거.
+              </li>
+            </ul>
+
             <h2>2026-08-03 v1.0.12 post-release regression</h2>
             <p>
               공개 배포된 GEODE <code>v1.0.12</code> (<code>f99cea63</code>)과{" "}
@@ -210,6 +240,39 @@ export default function Page() {
               pinned to the harness commit, service set, model route, and timeout
               settings.
             </p>
+
+            <h2>2026-08-12 Matched Token-Efficiency Rerun</h2>
+            <p>
+              We compared the repaired runtime on the same pinned ten{" "}
+              <code>filesystem/easy</code> tasks with GPT-5.4 subscription at{" "}
+              effort <code>high</code>. Accuracy held at{" "}
+              <strong>9/10 (90.0%)</strong>, while input tokens fell from
+              447,376 to 314,219 (<strong>29.8%</strong>) and output tokens from
+              25,157 to 20,385 (<strong>19.0%</strong>).
+            </p>
+            <p>
+              Eight of ten tasks used fewer input tokens, including a 12.5%
+              reduction across the four tasks with identical round counts. The
+              188 canonical events retain 54/54 exact tool pairs with zero
+              orphans. This is one matched trial, not MCPMark Verified, a
+              confidence interval, or a subscription billing claim.
+            </p>
+            <ul>
+              <li>
+                <RunLogLink
+                  path="trajectories/mcpmark-geode-gpt54-high-token-efficiency-rerun-filesystem-easy-20260812T090254Z-35db8b275a36"
+                  revision="2c2d1f0621f64ff7ceeff8c05d8ebd3449501aaf"
+                />:
+                ten privacy-reviewed stable trajectories verified by remote
+                read-back.
+              </li>
+              <li>
+                <a href="https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/2c2d1f0621f64ff7ceeff8c05d8ebd3449501aaf/reports/e2e-validation/2026-08-12-mcpmark-geode-gpt54-token-efficiency-rerun.md">
+                  matched rerun report
+                </a>
+                : task-level deltas and the bounded promotion decision.
+              </li>
+            </ul>
 
             <h2>2026-08-03 v1.0.12 Post-Release Regression</h2>
             <p>

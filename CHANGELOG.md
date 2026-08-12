@@ -69,7 +69,9 @@ functional change.
   calls. OpenAI reasoning/cache-write and Anthropic/Claude cache-creation usage
   now flow into the existing runtime counters instead of being discarded.
   Reasoning remains an observable subset of provider-reported output tokens
-  and is no longer charged a second time by the local cost estimator.
+  and is no longer charged a second time by the local cost estimator. The
+  MCPMark adapter also translates those native counters into the harness's
+  `total_tokens` and `reasoning_tokens` summary keys.
 
 ### Infrastructure
 

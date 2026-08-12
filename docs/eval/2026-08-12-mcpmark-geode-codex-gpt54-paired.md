@@ -77,12 +77,70 @@ of its 55 MCP calls were `list_directory`, producing 763,210 input tokens and a
 GEODE's slowest task was instead `file_splitting` at 267.5 seconds. The nearly
 identical total time is therefore not evidence of identical scheduling quality.
 
+## Post-repair matched GEODE rerun
+
+The repaired runtime was rerun on the same pinned ten tasks with GPT-5.4
+subscription, `high` effort, `k=1`, and the same 1,200-second task timeout. The
+execution used clean feature commit `149024e6e`; run ID
+`geode-gpt54-high-token-efficiency-20260812-rerun` identifies the ignored native
+result directory.
+
+| Metric | Pre-repair GEODE | Post-repair GEODE | Change |
+|---|---:|---:|---:|
+| Passed | 9 / 10 | 9 / 10 | no regression |
+| Input tokens | 447,376 | 314,219 | −29.8% |
+| Cached input tokens | 195,584 | 160,768 | −17.8% |
+| Cached share of input | 43.7% | 51.2% | +7.4 pp |
+| Output tokens | 25,157 | 20,385 | −19.0% |
+| Reasoning tokens exposed separately | unavailable | 14,174 | newly observable |
+| Agent time | 747.2s | 678.0s | −9.3% |
+| Rounds | 53 | 52 | −1 |
+| MCP calls | 50 | 54 | +4 |
+| Canonical events | 180 | 188 | +8 |
+| Exact tool pairs | 50 / 50 | 54 / 54 | zero orphans in both |
+
+The same `file_context/uppercase` exact-string check remained the only failure;
+there were no authentication, quota, MCP transport, adapter, trajectory-export,
+or harness exceptions. All ten rerun sidecars are scope-complete, with 54 calls
+paired to 54 results, zero orphan calls/results, and zero missing required turn
+IDs.
+
+The aggregate reduction is not explained only by a shorter sampled trajectory:
+eight of ten tasks used fewer input tokens, the median paired task change was
+−14.4%, and the four tasks with exactly the same round count fell from 120,946
+to 105,876 input tokens (−12.5%). Conversely, two tasks increased, including
+`student_database/duplicate_name`; a single stochastic trial cannot provide a
+confidence interval or assign a precise causal share to result projection versus
+prefix stabilization. The admissible claim is therefore narrower: the repair
+passed the pre-registered no-score-regression gate and materially reduced input
+and output tokens in this matched diagnostic, so it was retained rather than
+reverted.
+
+The rerun exposed one reporting-only compatibility gap after execution. Native
+task receipts correctly retained `thinking_tokens`, but MCPMark's aggregate
+reader expects `reasoning_tokens` and `total_tokens`, leaving those two fields at
+zero in the original `summary.json`. GEODE now translates the native values at
+the adapter boundary without altering the raw run. A separate post-fix live
+smoke passed `legal_document/file_reorganize` and recorded 20,833 total tokens
+and 694 reasoning tokens in both task and aggregate receipts.
+
+The reviewed rerun release is immutable at artifact commit
+[`2c2d1f0`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/2c2d1f0621f64ff7ceeff8c05d8ebd3449501aaf):
+
+- [trajectory release](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/2c2d1f0621f64ff7ceeff8c05d8ebd3449501aaf/trajectories/mcpmark-geode-gpt54-high-token-efficiency-rerun-filesystem-easy-20260812T090254Z-35db8b275a36)
+- [rerun report](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/2c2d1f0621f64ff7ceeff8c05d8ebd3449501aaf/reports/e2e-validation/2026-08-12-mcpmark-geode-gpt54-token-efficiency-rerun.md)
+- manifest SHA-256
+  `35db8b275a36bca0afef608e3b402d6e5bf0f4ed0f10aa15baccec5083f7468b`
+
+GitHub read-back from that exact merge commit reproduced the independently
+retained manifest digest and report metrics.
+
 ## Post-run token diagnosis
 
 The token totals above remain the native counters from the executed run. A
 follow-up code audit found two GEODE-side amplification mechanisms; this report
-does not retroactively rewrite the measurements or assign a precise causal
-share without a matched rerun.
+does not retroactively rewrite the baseline measurements or assign a precise
+causal share from the one matched rerun.
 
 1. MCPMark returned the complete MCP `CallToolResult` as a JSON string inside a
    second `result` envelope. The common tool boundary then serialized that
@@ -106,10 +164,10 @@ cache-write counts when translating adapter usage. The runtime now maps those
 values into the existing `thinking_tokens` and `cache_creation_tokens` fields,
 and the per-call lifecycle hook carries the same breakdown. Both OpenAI and
 Anthropic define reasoning as a subset of inclusive `output_tokens`, so the
-local estimator records it for analysis without billing it a second time. This
-improves the next artifact's accounting but cannot recover the omitted
-breakdown from this completed run. Verify was not identified as the serializer
-or cache-prefix defect, so no verifier stage was removed or weakened.
+local estimator records it for analysis without billing it a second time. The
+pre-repair run's omitted breakdown cannot be recovered; the post-repair rerun
+records it natively. Verify was not identified as the serializer or cache-prefix
+defect, so no verifier stage was removed or weakened.
 
 Primary contracts: [OpenAI Responses usage](https://platform.openai.com/docs/api-reference/responses/object#responses/object-usage)
 and [Anthropic extended-thinking usage](https://platform.claude.com/docs/en/build-with-claude/extended-thinking#pricing).
@@ -159,9 +217,9 @@ and verified byte-for-byte against these independently retained anchors.
   verifier, and trial, GEODE and Codex had identical pass/fail outcomes.
 - Claim not allowed: GEODE equals Codex generally, or either score is a current
   MCPMark Verified leaderboard result.
-- The historical token row is a pre-repair diagnostic, not the expected cost
-  of the repaired runtime. A same-task GPT-5.4 rerun is required before making
-  an efficiency claim.
+- The historical token row remains a pre-repair diagnostic. The matched rerun
+  supports the bounded efficiency claim above, not a general MCPMark or billing
+  claim.
 - The sample has no discordant pass/fail pair and only one trial. Repetition is
   not justified for a score delta that is currently zero.
 - The next useful cross-harness lane is Terminal-Bench 2.1 only after GEODE has
@@ -171,16 +229,23 @@ and verified byte-for-byte against these independently retained anchors.
 ## Verification executed
 
 ```text
-15 MCPMark adapter unit tests passed
+17 MCPMark adapter unit tests passed
 ruff check and format check passed for touched adapter/trajectory tests
 mypy passed for touched benchmark modules
-10,411 non-live tests passed in the full repository gate
+10,380 non-live tests passed; 22 skipped and 2 deselected in the full repository gate
 20/20 trajectory schemas and integrity envelopes recomputed successfully
 10/10 sidecars per arm; zero orphan tool pairs; zero Codex protocol violations
 post-fix Codex subscription-environment gate passed 1/1 with ChatGPT login
+post-repair GPT-5.4 matched rerun passed 9/10 with zero infrastructure defects
+post-fix usage-summary live smoke passed 1/1 with non-zero total/reasoning tokens
 ```
 
 External artifact promotion completed through
 [`geode-eval-artifacts#20`](https://github.com/mangowhoiscloud/geode-eval-artifacts/pull/20).
 Only the two reviewed replay-incomplete trajectory releases and their run
 report were published; native logs remain local.
+
+The matched GEODE rerun was promoted separately through
+[`geode-eval-artifacts#21`](https://github.com/mangowhoiscloud/geode-eval-artifacts/pull/21)
+at immutable commit `2c2d1f0621f64ff7ceeff8c05d8ebd3449501aaf`; its native logs also remain
+local.

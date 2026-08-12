@@ -16,6 +16,7 @@ from plugins.benchmark_harness.mcpmark_geode_agent import (
     _patch_mcpmark_github_visibility,
     _route_from_model,
     _summarize_codex_exec,
+    _usage_dict,
     register_mcpmark_agent,
 )
 from plugins.benchmark_harness.trajectory_artifacts import (
@@ -117,6 +118,26 @@ def test_route_from_geode_model_label() -> None:
         "subscription",
     )
     assert _route_from_model("geode-glm-4-6") == ("glm-4-6", "zhipuai", "api_key")
+
+
+def test_usage_dict_translates_geode_usage_for_mcpmark_summary() -> None:
+    result = SimpleNamespace(
+        usage=SimpleNamespace(
+            to_dict=lambda: {
+                "input_tokens": 100,
+                "output_tokens": 20,
+                "thinking_tokens": 8,
+                "cache_read_tokens": 40,
+            }
+        )
+    )
+
+    usage = _usage_dict(result)
+
+    assert usage["total_tokens"] == 120
+    assert usage["reasoning_tokens"] == 8
+    assert usage["thinking_tokens"] == 8
+    assert usage["cache_read_tokens"] == 40
 
 
 def test_register_mcpmark_agent() -> None:

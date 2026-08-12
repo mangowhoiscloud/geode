@@ -3702,6 +3702,15 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/benchmarks/mcpmark.md
 
 MCPMark는 실제 MCP 서버(filesystem, Postgres, GitHub, Notion, Playwright 등)를 대상으로 한 tool-use 벤치마크입니다. 태스크마다 독립 검증 스크립트가 결과 상태를 확인합니다. GEODE는 `plugins/benchmark_harness`의 `BaseMCPAgent` 어댑터로 참가하고 upstream `pipeline.py`는 패치하지 않습니다. 점수는 harness commit, 서비스 집합, model route, timeout에 고정해서만 게시합니다.
 
+## 2026-08-12 matched token-efficiency rerun
+
+같은 GPT-5.4 subscription / effort `high`, 같은 pinned `filesystem/easy` 10건을 수정 전후로 대조했습니다. 점수는 **9/10 (90.0%)**로 유지됐고, 입력 토큰은 447,376에서 314,219로 **29.8%**, 출력 토큰은 25,157에서 20,385로 **19.0%** 줄었습니다.
+
+10건 중 8건의 입력 토큰이 감소했고 round 수가 같은 4건도 12.5% 감소했습니다. 188개 canonical event와 54/54 exact tool pair에는 orphan이 없습니다. 단, 한 번의 matched trial이므로 MCPMark Verified 점수·신뢰구간·구독 과금 절감으로 일반화하지 않습니다.
+
+-   [`geode-eval-artifacts/trajectories/mcpmark-geode-gpt54-high-token-efficiency-rerun-filesystem-easy-20260812T090254Z-35db8b275a36`](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/2c2d1f0621f64ff7ceeff8c05d8ebd3449501aaf/trajectories/mcpmark-geode-gpt54-high-token-efficiency-rerun-filesystem-easy-20260812T090254Z-35db8b275a36): 원격 read-back과 privacy 검증을 통과한 10개 stable trajectory.
+-   [matched rerun report](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/2c2d1f0621f64ff7ceeff8c05d8ebd3449501aaf/reports/e2e-validation/2026-08-12-mcpmark-geode-gpt54-token-efficiency-rerun.md): task별 변화와 promotion 경계를 포함한 판정 근거.
+
 ## 2026-08-03 v1.0.12 post-release regression
 
 공개 배포된 GEODE `v1.0.12` (`f99cea63`)과 `gpt-5.4` subscription / effort `high`로 `filesystem/easy` 10건을 실행했습니다. 공식 verifier는 **9/10 (90.0%)**, 총 802.2초와 53 turns입니다. 실패한 `file_context/uppercase`는 다섯 파일을 모두 만들었지만 `file_01.txt`를 완전히 대문자로 바꾸지 못했습니다.
@@ -3779,6 +3788,26 @@ GEODE_MCPMARK_GITHUB_REPO_VISIBILITY=public \
 -   The OpenAI model route was the GEODE Codex subscription route, not MCPMark's native LiteLLM OpenAI API route.
 -   GitHub fixture repositories were made public during execution so the Docker GitHub MCP server could use normal public-repo semantics; all transient repos were deleted by cleanup.
 -   The filesystem score counts papers/author\_folders as a failed no-result transport run after two attempts without meta output.
+
+**filesystem/easy GPT-5.4 token-efficiency rerun** · 2026-08-12 KST · gpt-5.4 · subscription · high
+
+<table><tbody><tr><td>Status</td><td><code>complete</code></td></tr><tr><td>Suite/domain</td><td><code>filesystem/easy</code></td></tr><tr><td>Model</td><td><code>gpt-5.4</code></td></tr><tr><td>Provider</td><td><code>openai</code></td></tr><tr><td>Source</td><td><code>subscription</code></td></tr><tr><td>Effort</td><td><code>high</code></td></tr><tr><td>Route</td><td>GEODE AgenticLoop MCPMark adapter</td></tr><tr><td>Harness</td><td><code>eval-sys/mcpmark@cd45b7f, GEODE feature@149024e6e</code></td></tr><tr><td>Accuracy</td><td><strong>90.0% (9 / 10)</strong></td></tr><tr><td>Artifact</td><td><code>geode-eval-artifacts@2c2d1f0621f64ff7ceeff8c05d8ebd3449501aaf/trajectories/mcpmark-geode-gpt54-high-token-efficiency-rerun-filesystem-easy-20260812T090254Z-35db8b275a36</code></td></tr></tbody></table>
+
+-   Matched input tokens 447,376 → 314,219 (-29.8%)
+-   Matched output tokens 25,157 → 20,385 (-19.0%)
+-   Native reasoning tokens 14,174, included within output tokens
+-   188 canonical events / 54 exactly paired tool calls and results
+-   Failure unchanged: file\_context/uppercase exact-string mismatch
+
+```
+cd artifacts/eval/harnesses/mcpmark
+PYTHONPATH=<geode-feature-tree> .venv/bin/python -m plugins.benchmark_harness.run_mcpmark   --mcp filesystem   --task-suite easy   --models geode-gpt-5.4   --agent geode   --reasoning-effort high   --k 1   --timeout 1200   --exp-name geode-gpt54-high-token-efficiency-20260812-rerun   --output-dir ./results-token-efficiency
+```
+
+-   The score matched the pre-repair GEODE baseline at 9/10 while input and output tokens fell materially.
+-   Eight of ten tasks used fewer input tokens; the four tasks with identical round counts fell 12.5%.
+-   This is one matched diagnostic trial, not MCPMark Verified, a confidence interval, or a subscription billing claim.
+-   All ten public trajectories are scope-complete and intentionally replay-incomplete; the immutable release was read back from artifact main.
 
 **filesystem/easy GPT-5.4 v1.0.12 post-release regression** · 2026-08-03 KST · gpt-5.4 · subscription · high
 

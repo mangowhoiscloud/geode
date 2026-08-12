@@ -266,6 +266,12 @@ def _usage_dict(result: Any) -> dict[str, Any]:
     if callable(to_dict):
         raw = to_dict()
         if isinstance(raw, dict):
+            raw.setdefault(
+                "total_tokens",
+                int(raw.get("input_tokens") or 0) + int(raw.get("output_tokens") or 0),
+            )
+            if thinking_tokens := int(raw.get("thinking_tokens") or 0):
+                raw.setdefault("reasoning_tokens", thinking_tokens)
             return raw
     return {}
 
