@@ -691,6 +691,10 @@ def test_verify_continuation_stays_out_of_user_history_and_checkpoint() -> None:
     )
     recorded: list[str] = []
     checkpoint_inputs: list[str] = []
+
+    async def admit_session_budget(_user_input: str) -> None:
+        return None
+
     loop = SimpleNamespace(
         context=context,
         _timeline=SimpleNamespace(
@@ -702,6 +706,7 @@ def test_verify_continuation_stays_out_of_user_history_and_checkpoint() -> None:
         _verify_root_user_input="original task",
         _verify_attempt=1,
         _save_checkpoint=lambda user_input, **_kwargs: checkpoint_inputs.append(user_input),
+        _admit_session_budget=admit_session_budget,
     )
 
     result = asyncio.run(

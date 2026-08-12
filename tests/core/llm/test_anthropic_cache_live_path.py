@@ -8,14 +8,9 @@ The whole cache apparatus previously lived only inside the never-registered
 from __future__ import annotations
 
 import pytest
-from core.agent.system_injection import _REMINDER_TAG
 from core.agent.system_prompt import PROMPT_CACHE_BOUNDARY
 from core.llm.adapters._anthropic_common import build_create_kwargs, build_stream_kwargs
 from core.llm.adapters.base import AdapterCallRequest, Message
-from core.llm.providers.anthropic import (
-    _SYSTEM_REMINDER_OPEN,
-    _select_breakpoint_targets,
-)
 
 
 def _req(
@@ -67,26 +62,6 @@ def test_messages_get_breakpoints_on_live_path() -> None:
         if any(isinstance(b, dict) and "cache_control" in b for b in m.get("content", []))
     ]
     assert marked, "live path must attach message breakpoints"
-
-
-def test_reminder_tag_constant_drift() -> None:
-    # dual-SoT pin: providers-side literal must equal the system_injection tag
-    assert f"<{_REMINDER_TAG}>" == _SYSTEM_REMINDER_OPEN
-
-
-def test_volatile_reminder_excluded_from_breakpoints() -> None:
-    messages = [
-        {"role": "user", "content": [{"type": "text", "text": "real turn"}]},
-        {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": f"<{_REMINDER_TAG}>\nCurrent round: 3\n</{_REMINDER_TAG}>"}
-            ],
-        },
-    ]
-    targets = _select_breakpoint_targets(messages, 3)
-    assert 1 not in targets, "byte-volatile reminder must never hold a breakpoint slot"
-    assert 0 in targets
 
 
 def test_context_management_injected_for_supported_model() -> None:

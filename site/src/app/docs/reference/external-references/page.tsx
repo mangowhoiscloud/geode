@@ -102,7 +102,7 @@ export default function Page() {
               <a href="/geode/docs/explanation/ratchet">왜 ratchet 규율인가</a> 페이지에서 직접 인용합니다.
             </p>
             <ol>
-              <li><strong>Fixed wall-budget</strong>으로 비교가능성 보존. 모든 실험이 5분 wall-clock. → GEODE의 StuckDetector 7200s + 30s wrap-up 여유.</li>
+              <li><strong>Fixed wall-budget</strong>으로 비교가능성 보존. 모든 실험이 5분 wall-clock. → GEODE의 평가·감사 실행도 명시적인 실행 예산을 사용하며, 재개 가능한 대화 세션은 기본적으로 만료시키지 않습니다.</li>
               <li><strong>Frozen scoreboard</strong> 분리. 평가 harness가 agent-mutable 영역 밖에 동결. → GEODE의 validator + CourtEval grader 분리.</li>
               <li><strong>git monotone ratchet</strong>. branch HEAD가 절대 안 나빠짐. KEEP만 commit. → GEODE의 versioned event/trajectory audit cycle.</li>
               <li><strong>Token-economic loop</strong>. run.log + grep anchor + TSV append-only. → GEODE의 200-turn sliding window.</li>
@@ -214,7 +214,7 @@ export default function Page() {
               context. <a href="/geode/docs/explanation/ratchet">Why Ratchet Discipline</a> cites these directly.
             </p>
             <ol>
-	              <li><strong>Fixed wall-budget</strong> preserves comparability. Every experiment is five minutes of wall-clock. GEODE&apos;s StuckDetector at 7200s plus 30s wrap-up headroom is the generalized form.</li>
+	              <li><strong>Fixed wall-budget</strong> preserves comparability. Every experiment is five minutes of wall-clock. GEODE likewise gives evaluation and audit runs explicit execution budgets while leaving resumable conversation sessions unexpired by default.</li>
 	              <li><strong>Frozen scoreboard</strong>. The evaluation harness lives outside the agent-mutable region. GEODE&apos;s validator plus CourtEval grader separation is the same idea.</li>
 	              <li><strong>git monotone ratchet</strong>. Branch HEAD never gets worse. Only KEEP commits. GEODE&apos;s versioned event/trajectory audit cycle is the variant.</li>
 	              <li><strong>Token-economic loop</strong>. run.log plus grep anchors plus append-only TSV. GEODE&apos;s 200-turn sliding window is the variant.</li>

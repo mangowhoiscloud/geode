@@ -56,11 +56,11 @@ const CONTEXT_ROWS: Row[] = [
     path: "core/llm/cache_policy.py",
   },
   {
-    name: "System-reminder injection",
-    ko: "말미 고정 주입이 prefix-stable이라 프롬프트 캐시 키를 깨지 않음",
-    en: "Tail-anchored reminder injection is prefix-stable, so it never re-keys the prompt cache",
-    control: "cache contract pinned by tests",
-    path: "core/agent/system_injection.py",
+    name: "Append-only conversation history",
+    ko: "합성 reminder 없이 실제 turn만 append해 프롬프트 cache prefix를 보존",
+    en: "Appends only real turns, preserving the prompt-cache prefix without synthetic reminders",
+    control: "consecutive AdapterCallRequest prefix test",
+    path: "core/agent/loop/agent_loop.py",
   },
   {
     name: "System prompt modes",
@@ -73,7 +73,7 @@ const CONTEXT_ROWS: Row[] = [
     name: "ToolResultOffloadStore",
     ko: "대형 tool result를 디스크로 이관하고 컨텍스트에는 ref만 남김",
     en: "Moves oversized tool results to disk, leaving only a reference in context",
-    control: "threshold 5000 tokens, TOOL_RESULT_OFFLOADED hook",
+    control: "threshold 15000 tokens, TOOL_RESULT_OFFLOADED hook",
     path: "core/orchestration/tool_offload.py",
   },
   {
@@ -151,9 +151,9 @@ const EXECUTE_ROWS: Row[] = [
   },
   {
     name: "TimeBudget",
-    ko: "세션 wall-clock 예산. 만료 전 임계에서 handoff를 먼저 발화",
-    en: "Session wall-clock budget; fires a handoff at the threshold before hard expiry",
-    control: "budget_seconds, handoff threshold, HANDOFF_TRIGGERED hook",
+    ko: "명시적으로 활성화하는 세션 wall-clock 예산. 양수 잔여시간의 임계에서만 handoff를 발화",
+    en: "Opt-in session wall-clock budget; fires handoff only inside the positive remaining-time window",
+    control: "GEODE_SESSION_TIME_BUDGET_S, handoff threshold, HANDOFF_TRIGGERED hook",
     path: "core/agent/budget.py",
   },
   {
@@ -831,8 +831,8 @@ export default function Page() {
               </li>
             </ul>
             <p>
-              The default round cap is 0 (unlimited), so the effective bounds
-              are the time and cost budgets. The named termination paths are
+              The default round cap is 0 (unlimited). Configured run/session
+              time budgets and the cost budget provide explicit bounds. The named termination paths are
               the sixteen below plus normal completion (a text response with no
               tool calls).
             </p>

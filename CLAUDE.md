@@ -39,6 +39,7 @@ uv run geode "schedule daily standup reminder at 9am"
 |----------|------|---------|
 | Agent Identity | `GEODE.md` | Identity, Voice & Conduct, runtime architecture, LLM models |
 | Operational Workflow | `docs/workflow.md` + `.claude/skills/geode-workflow/` | Evidence-first execution scaffold shared by Claude Code, Codex, and contributors |
+| Evaluation Workflow | `docs/eval/index.json` + `.agents/skills/geode-eval/` | Generated eval routing, frozen research/reproduction contract, append-only attempt lineage, analysis, and artifact publication |
 | Test-Time Compute Grounding | `.claude/skills/stanford-test-time-compute/` | Stanford CS329A Part 2 evidence and GEODE/Eco²/SIL/Crucible application boundaries |
 | Agent-World Benchmark | `docs/eval/agent-world-comparison-contract.md` + `.claude/skills/agent-world-benchmark/` | Three-suite comparison profile, paired runtime control, replication, and artifact contract |
 | Architecture/Extensibility Program | `docs/architecture/extensibility-roadmap.md` | Single execution SOT for GAP IDs, merge order, status, acceptance, and closure evidence |
@@ -312,7 +313,8 @@ Update project tracking from main. Backlog → In Progress → Done.
 
 ## Custom Skills (Scaffold)
 
-Scaffold-side skills live in `.claude/skills/`; Claude Code lists them with their
-triggers automatically every session. Full catalog for human readers:
+Cross-host scaffold skills are authored under `.agents/skills/` and may expose
+a relative `.claude/skills/` alias so Claude Code and Codex read identical
+bytes. Existing Claude-only skills remain under `.claude/skills/`. Full catalog for human readers:
 [docs/scaffold-skills.md](docs/scaffold-skills.md). Separate from the GEODE
 runtime's `core/skills/` SkillRegistry.

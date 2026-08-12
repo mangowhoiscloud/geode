@@ -47,6 +47,49 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **Made evaluation intent and retry lineage machine-discoverable.** A tracked
+  cross-host `geode-eval` skill and generated eval catalog now route agents to
+  the relevant benchmark authority without loading the full docs tree. Frozen
+  run-spec, append-only attempt, and digest-bound analysis schemas preserve the
+  research question, reproduction envelope, retry ancestry, decision rule,
+  and evidence references around existing native results and trajectory
+  releases. CI rejects stale catalog metadata and pins validator regressions
+  for unresolved templates, malformed attempt graphs, evidence-byte drift,
+  unbound or non-resolving metric pointers, source/count drift, registration
+  chronology, non-portable or private paths, authority-free decisions, and
+  over-broad promotion claims.
+- **Paired MCPMark Codex comparison.** Added a filesystem-only Codex CLI arm
+  that shares MCPMark's pinned task setup and official verifier with GEODE,
+  while isolating user configuration and preserving both native exec JSONL and
+  schema-validated trajectory sidecars for direct harness diagnostics on
+  ChatGPT subscription models. The setup manifest now installs GEODE into the
+  MCPMark venv so live runs cannot fail on missing runtime dependencies.
+
+### Fixed
+
+- **Separated durable session lifetime from optional wall-clock guards.**
+  Interactive and resumable sessions no longer inherit an implicit two-hour
+  expiry; `GEODE_SESSION_TIME_BUDGET_S` now explicitly opts into the legacy
+  session cap. Expiry and handoff are mutually exclusive, expired sessions
+  stop before planner/model/tool work, and ordinary gateway/IPC loops bind
+  independent session metrics so one session cannot expire another.
+- **Bounded model-facing tool results.** MCP `CallToolResult` receipts remain
+  intact in session evidence, while model context now selects structured
+  content once instead of nesting duplicate JSON. Large projected results are
+  offloaded before the hard token guard, and escaped truncation output cannot
+  exceed its configured bound.
+- **Stable multi-round prefixes and complete usage details.** Removed the
+  synthetic per-round reminder message because date and runtime rules already
+  live in the system prompt, preserving exact conversation prefixes between
+  calls. OpenAI reasoning/cache-write and Anthropic/Claude cache-creation usage
+  now flow into the existing runtime counters instead of being discarded.
+  Reasoning remains an observable subset of provider-reported output tokens
+  and is no longer charged a second time by the local cost estimator. The
+  MCPMark adapter also translates those native counters into the harness's
+  `total_tokens` and `reasoning_tokens` summary keys.
+
 ### Infrastructure
 
 - **PyPI Core Metadata 2.5 publishing.** Updated the pinned PyPA publish action

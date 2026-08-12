@@ -19,7 +19,6 @@ from typing import Any
 
 from core.llm.adapters.base import (
     TextCompletionResult,
-    UsageSummary,
     WebSearchResult,
 )
 
@@ -116,14 +115,11 @@ async def anthropic_complete_text(
     for block in getattr(response, "content", []) or []:
         if hasattr(block, "text"):
             text_parts.append(block.text)
-    usage = getattr(response, "usage", None)
+    from core.llm.adapters._anthropic_common import translate_response
+
     return TextCompletionResult(
         text="".join(text_parts),
-        usage=UsageSummary(
-            input_tokens=getattr(usage, "input_tokens", 0) if usage else 0,
-            output_tokens=getattr(usage, "output_tokens", 0) if usage else 0,
-            cached_input_tokens=getattr(usage, "cache_read_input_tokens", 0) if usage else 0,
-        ),
+        usage=translate_response(response).usage,
     )
 
 
@@ -205,13 +201,11 @@ async def openai_responses_complete_text(
                     sub_text = getattr(sub, "text", "")
                     if sub_text:
                         text_parts.append(sub_text)
-    usage = getattr(response, "usage", None)
+    from core.llm.adapters._openai_common import translate_codex_response
+
     return TextCompletionResult(
         text="".join(text_parts),
-        usage=UsageSummary(
-            input_tokens=getattr(usage, "input_tokens", 0) if usage else 0,
-            output_tokens=getattr(usage, "output_tokens", 0) if usage else 0,
-        ),
+        usage=translate_codex_response(response).usage,
     )
 
 
@@ -247,13 +241,11 @@ async def openai_chat_complete_text(
     )
     choice = response.choices[0] if response.choices else None
     text = (choice.message.content or "") if choice else ""
-    usage = getattr(response, "usage", None)
+    from core.llm.adapters._openai_common import translate_chat_response
+
     return TextCompletionResult(
         text=text,
-        usage=UsageSummary(
-            input_tokens=getattr(usage, "prompt_tokens", 0) if usage else 0,
-            output_tokens=getattr(usage, "completion_tokens", 0) if usage else 0,
-        ),
+        usage=translate_chat_response(response).usage,
     )
 
 

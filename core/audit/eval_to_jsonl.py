@@ -57,7 +57,7 @@ def _basename(model_id: str) -> str:
 def _parse_eval_ts(created: Any) -> float | None:
     """Parse ``eval.created`` ISO8601 string → unix epoch float.
 
-    Returns ``None`` when the string is missing or unparseable so the
+    Returns ``None`` when the string is missing or unparsable so the
     caller falls back to ``time.time()`` rather than stamping the row
     with epoch 0.
     """
@@ -236,7 +236,6 @@ def extract_to_usage_store(
                 out_tok,
                 cache_creation_tokens=cache_w,
                 cache_read_tokens=cache_r,
-                thinking_tokens=think,
             )
         target_store.record(
             basename,

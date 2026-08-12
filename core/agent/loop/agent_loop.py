@@ -18,6 +18,7 @@ import hashlib
 import json
 import logging
 import os
+import time
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
@@ -568,6 +569,18 @@ class AgenticLoop:
             self._goal_store = GoalStore(self._timeline.db_path)
         except Exception:
             log.warning("Session timeline init failed", exc_info=True)
+        from core.observability.session_metrics import SessionMetrics, current_session_metrics
+
+        ambient_metrics = current_session_metrics()
+        self._session_metrics = (
+            ambient_metrics
+            if ambient_metrics.session_id == self._session_id or ambient_metrics.gen_tag
+            else SessionMetrics(
+                session_id=self._session_id,
+                component="agentic_loop",
+                started_at=time.time(),
+            )
+        )
         try:
             from core.agent.capability_graph import build_capability_graph
             from core.agent.evidence_ledger import EvidenceLedger
@@ -1156,6 +1169,10 @@ class AgenticLoop:
         """Reset per-turn state and cross the public input boundary."""
         import uuid
 
+        from core.observability.session_metrics import set_current_session_metrics
+
+        set_current_session_metrics(self._session_metrics)
+
         self._tool_processor.reset()
         self._op_logger.reset()
         self._pre_execution_retry_errors.clear()
@@ -1229,7 +1246,7 @@ class AgenticLoop:
                 )
             root_input = self._verify_root_user_input or user_input
             self._save_checkpoint(root_input, round_idx=0)
-            return None
+            return await self._admit_session_budget(user_input)
         if goal_continuation is not None:
             resumed_start = (
                 int(getattr(self, "_session_generation", 1)) > 1
@@ -1265,13 +1282,13 @@ class AgenticLoop:
             objective = str(getattr(goal_continuation, "objective", user_input))
             if self._save_checkpoint(objective, round_idx=0) and resumed_start:
                 await _lifecycle.emit_public_session_start(self)
-            return None
+            return await self._admit_session_budget(user_input)
         intercepted = await self._emit_session_start_signals(user_input)
         if intercepted is not None:
             return intercepted
         if self._save_checkpoint(user_input, round_idx=0):
             await _lifecycle.emit_public_session_start(self)
-        return None
+        return await self._admit_session_budget(user_input)
 
     async def _finalize_blocked_turn(self, result: AgenticResult) -> AgenticResult:
         """Persist a rejected prompt attempt without storing its prompt body."""
@@ -1281,6 +1298,19 @@ class AgenticLoop:
                 provider=self._provider,
             )
         return await self._afinalize_and_return(result, "", 0)
+
+    async def _admit_session_budget(self, user_input: str) -> AgenticResult | None:
+        """Stop an expired opt-in session before planner, model, or tool work."""
+        self._maybe_start_session_budget()
+        guard = self._check_session_budget_and_maybe_handoff()
+        if guard is None:
+            return None
+        reason, text = self._guard_exit_result(guard, rounds=0)
+        return await self._afinalize_and_return(
+            self._terminal_result(reason, text, rounds=0),
+            user_input,
+            0,
+        )
 
     # ------------------------------------------------------------------
     # Guard chain — the loop's transition guards, in priority order
@@ -1505,9 +1535,7 @@ class AgenticLoop:
             remaining = None
             total = None
             try:
-                from core.observability.session_metrics import current_session_metrics
-
-                metrics = current_session_metrics()
+                metrics = self._session_metrics
                 remaining = metrics.time_budget_remaining_s()
                 total = metrics.time_budget_total_s
             except Exception:
@@ -1768,35 +1796,36 @@ class AgenticLoop:
 
         Idempotent — no-op when a prior loop in the same SessionMetrics
         scope already started it (clock keeps running across nested loops).
-        ``GEODE_SESSION_TIME_BUDGET_S`` overrides the default (0 disables).
+        The cap is opt-in via ``GEODE_SESSION_TIME_BUDGET_S``; unset, invalid,
+        and non-positive values leave durable sessions unbounded.
         Failures NEVER raise.
         """
+        import math
         import os
 
         try:
             from core.agent.budget import (
                 DEFAULT_HANDOFF_THRESHOLD_S,
-                DEFAULT_TIME_BUDGET_S,
                 start_session_budget,
             )
-            from core.observability.session_metrics import current_session_metrics
 
-            metrics = current_session_metrics()
+            metrics = self._session_metrics
             if metrics.time_budget_total_s > 0.0:
                 return  # Already started in this session.
             raw = os.environ.get("GEODE_SESSION_TIME_BUDGET_S")
-            if raw is not None:
-                try:
-                    total = float(raw)
-                except ValueError:
-                    total = DEFAULT_TIME_BUDGET_S
-            else:
-                total = DEFAULT_TIME_BUDGET_S
-            if total <= 0.0:
+            if raw is None:
+                return
+            try:
+                total = float(raw)
+            except ValueError:
+                log.warning("Ignoring invalid GEODE_SESSION_TIME_BUDGET_S=%r", raw)
+                return
+            if not math.isfinite(total) or total <= 0.0:
+                log.warning("Ignoring non-positive or non-finite session time budget: %r", raw)
                 return  # Explicitly disabled.
             start_session_budget(
                 total_seconds=total,
-                handoff_threshold_seconds=DEFAULT_HANDOFF_THRESHOLD_S,
+                handoff_threshold_seconds=min(DEFAULT_HANDOFF_THRESHOLD_S, total / 2.0),
                 metrics=metrics,
             )
         except Exception:
@@ -1816,11 +1845,12 @@ class AgenticLoop:
 
         try:
             from core.agent.budget import budget_summary, check_session_budget
-            from core.observability.session_metrics import current_session_metrics
 
-            check = check_session_budget()
+            metrics = self._session_metrics
+            check = check_session_budget(metrics=metrics)
+            if check.expired:
+                return "session_time_budget_expired"
             if check.handoff_due:
-                metrics = current_session_metrics()
                 payload: dict[str, Any] = {
                     "session_id": self._session_id,
                     "platform": "",  # adapter binding can override
@@ -1850,8 +1880,6 @@ class AgenticLoop:
                 # parity; no-op when no session row exists yet)
                 self._persist_handoff_request()
                 return "session_time_budget_handoff"
-            if check.expired:
-                return "session_time_budget_expired"
         except Exception:
             log.warning("Session budget check failed", exc_info=True)
         return None
@@ -2246,9 +2274,6 @@ class AgenticLoop:
         import time as _time
 
         self._loop_start_time = _time.monotonic()
-        # session-wide budget (separate from per-loop _time_budget_s; either
-        # may fire first)
-        self._maybe_start_session_budget()
         # tracker snapshot at entry → finalize computes a per-arun usage
         # delta without double-counting sibling loops on the shared tracker
         from core.llm.token_tracker import get_tracker as _get_tracker
@@ -2816,23 +2841,12 @@ class AgenticLoop:
         ``allow_tools=False`` keeps auxiliary planner / judge calls on their
         structured text contract instead of inheriting the action tool surface.
 
-        Invariants:
-          * the context-overflow check mutates the SHARED messages list in
-            place (must precede the per-request reminder copy, or the
-            in-place prune evaporates and re-triggers every round);
-          * the system reminder is appended LAST on a per-request COPY —
-            the history prefix must stay byte-stable across rounds or the
-            rolling message cache breakpoints never hit.
+        The context-overflow check mutates the shared messages list in place,
+        so it must run before the adapter request is assembled.
         """
         effective_model = model or self.model
-        # shared list — in-place prune must persist (precede the reminder copy)
+        # Shared list — in-place pruning must persist into later rounds.
         await self._check_context_overflow(system, messages)
-
-        # reminder appended LAST on a per-request copy — byte-stable history
-        # prefix is load-bearing for prompt-cache breakpoints
-        from core.agent.system_injection import append_system_reminder
-
-        messages = append_system_reminder(messages, model=effective_model, round_idx=round_idx)
 
         # WRAP_UP: force text-only when approaching limits
         wrap_up = False
@@ -2971,6 +2985,8 @@ class AgenticLoop:
                 input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
                 output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
                 cached_input_tokens = int(getattr(usage, "cached_input_tokens", 0) or 0)
+                reasoning_tokens = int(getattr(usage, "reasoning_tokens", 0) or 0)
+                cache_write_tokens = int(getattr(usage, "cache_write_tokens", 0) or 0)
                 try:
                     from core.llm.token_tracker import calculate_cost
 
@@ -2979,6 +2995,7 @@ class AgenticLoop:
                             active_request.model,
                             input_tokens,
                             output_tokens,
+                            cache_creation_tokens=cache_write_tokens,
                             cache_read_tokens=cached_input_tokens,
                         )
                     )
@@ -3004,6 +3021,8 @@ class AgenticLoop:
                             "input_tokens": input_tokens,
                             "output_tokens": output_tokens,
                             "cached_input_tokens": cached_input_tokens,
+                            "reasoning_tokens": reasoning_tokens,
+                            "cache_write_tokens": cache_write_tokens,
                         },
                         "cost_usd": cost_usd,
                     },

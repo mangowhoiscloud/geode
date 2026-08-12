@@ -1,11 +1,12 @@
 # Custom Skills (Scaffold)
 
-Skills used by Scaffold during GEODE development (`.claude/skills/`). Separate from GEODE runtime's `core/skills/` SkillRegistry.
+Skills used by Scaffold during GEODE development (`.agents/skills/` and `.claude/skills/`). Separate from GEODE runtime's `core/skills/` SkillRegistry.
 
-> `.claude/skills/` is gitignored (scaffold-local); the rows below are the repo-tracked set that ships with a clone. Additional local-only skills (e.g. `model-onboarding`, `codex-mcp-verify`, `smoke-green-loop`) may exist per machine and are intentionally not listed.
+> Cross-host skills use `.agents/skills/` as their tracked source and may expose a relative `.claude/skills/` alias. `.claude/skills/` otherwise remains scaffold-local except for explicitly tracked project skills. Additional machine-local skills are intentionally not listed.
 
 | Skill | Triggers | Content |
 |-------|----------|---------|
+| `geode-eval` | evaluation, benchmark, run spec, research question, attempt lineage, trajectory, artifact, MCPMark, tau2, Agent-World | Cross-host evaluation workflow with generated routing, frozen research/reproduction contract, append-only retries, digest-bound analysis, and immutable publication |
 | `geode-workflow` | workflow, scaffold, feature work, provider/model changes, GUI/computer-use, observability, verification | Evidence-first execution scaffold with progressive-disclosure references |
 | `stanford-test-time-compute` | test-time compute, inference-time scaling, best-of-N, parallel width, sequential repair, measurement replication, verifier/evaluator, promotion authority, Archon | Stanford CS329A Part 2 grounding with GEODE/Eco²/SIL/Crucible decision-plane and authority boundaries |
 | `agent-world-benchmark` | Agent-World, AgentWorld, MCP-Mark, BFCL V4, tau2 comparator, paired runtime, mean_accuracy@8 | Agent-World v1 directional reference plus matched thin-runtime control, replication, comparability, and artifact workflow |

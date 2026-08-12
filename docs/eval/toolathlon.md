@@ -1,3 +1,18 @@
+---
+eval_id: toolathlon
+eval_family: toolathlon
+eval_kind: benchmark
+eval_status: canonical
+eval_authority: suite-profile
+eval_summary: GEODE adoption profile for Toolathlon long-horizon, multi-application MCP tool-use evaluation.
+eval_triggers:
+  - Toolathlon
+  - long-horizon tools
+  - MCP benchmark
+eval_contracts:
+  - docs/eval/schemas/run-spec.schema.json
+---
+
 # Toolathlon (HKUST, ICLR 2026)
 
 ## 개요

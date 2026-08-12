@@ -192,10 +192,10 @@ export default function Page() {
               </tbody>
             </table>
             <p>
-              캐시 안정성의 나머지 반쪽은 시스템 리마인더 위치입니다. GEODE는
-              리마인더를 요청별 사본의 마지막 메시지로 append합니다
-              (<code>core/agent/system_injection.py</code>). 공유 히스토리를
-              건드리지 않아 prefix가 라운드 간 바이트 단위로 안정됩니다.
+              캐시 안정성의 나머지 반쪽은 합성 reminder를 대화에 넣지 않는
+              것입니다. 날짜와 runtime rule은 <code>system_prompt.py</code>의
+              동적 시스템 영역에 있고, 메시지 이력에는 실제 turn만 append되어
+              연속 요청의 prefix가 안정적으로 유지됩니다.
             </p>
 
             <h2>비동기 런타임 규율</h2>
@@ -476,10 +476,10 @@ export default function Page() {
               </tbody>
             </table>
             <p>
-              The other half of cache stability is reminder placement: GEODE
-              appends the system reminder as the last message on a per-request
-              copy (<code>core/agent/system_injection.py</code>), so the shared
-              history prefix stays byte-stable across rounds.
+              The other half of cache stability is omitting synthetic reminder
+              messages. Date and runtime rules live in the dynamic system
+              region in <code>system_prompt.py</code>, while message history
+              appends only real turns and remains an exact prefix across calls.
             </p>
 
             <h2>Async runtime discipline</h2>

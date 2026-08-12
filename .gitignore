@@ -131,9 +131,12 @@ geode_checkpoints.db-wal
 .geode/memory/_proposals/
 
 # Scaffold harness — local-only except tracked project workflow skills.
+# New cross-host skills are authored under .agents/skills; relative aliases
+# under .claude/skills keep Claude Code on the same source without duplication.
 .claude/commands/
 .claude/hooks/
 .claude/skills/*
+!.claude/skills/geode-eval
 !.claude/skills/geode-workflow/
 !.claude/skills/geode-workflow/**
 !.claude/skills/geode-distribution/

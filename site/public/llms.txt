@@ -10,6 +10,7 @@ Version v1.0.21. Last sync 2026-08-11. Docs links point to clean markdown twins 
 - [Portfolio](https://mangowhoiscloud.github.io/geode/portfolio): capability overview with demos
 - [About](https://mangowhoiscloud.github.io/geode/about): project background
 - [Source](https://github.com/mangowhoiscloud/geode): GitHub repository
+- [Evaluation catalog](https://raw.githubusercontent.com/mangowhoiscloud/geode/main/docs/eval/index.json): machine-readable routing for benchmark contracts, evidence, and publication
 
 ## Overview
 

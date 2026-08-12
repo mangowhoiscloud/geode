@@ -37,6 +37,7 @@ const GEODE_REPO = detectGeodeRepo();
 // (python-side anchor: core/paths.py GEODE_PAGES_BASE_URL).
 const PAGES_BASE_URL = "https://mangowhoiscloud.github.io/geode";
 const REPO_URL = "https://github.com/mangowhoiscloud/geode";
+const REPO_RAW_URL = "https://raw.githubusercontent.com/mangowhoiscloud/geode/main";
 const SOT_FILE = resolve(SITE_ROOT, "src/data/geode/sot.ts");
 const CHANGELOG_FILE = resolve(SITE_ROOT, "src/data/geode/changelog.ts");
 const ARCHITECTURE_BASELINE_FILE = resolve(
@@ -237,6 +238,9 @@ function writeLlmsTxt(pages, version, today) {
   lines.push(`- [Portfolio](${base}/portfolio): capability overview with demos`);
   lines.push(`- [About](${base}/about): project background`);
   lines.push(`- [Source](${REPO_URL}): GitHub repository`);
+  lines.push(
+    `- [Evaluation catalog](${REPO_RAW_URL}/docs/eval/index.json): machine-readable routing for benchmark contracts, evidence, and publication`,
+  );
 
   let currentSection = null;
   for (const p of pages) {

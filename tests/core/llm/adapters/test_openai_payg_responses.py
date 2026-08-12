@@ -91,11 +91,14 @@ def test_usage_carries_cached_input_tokens() -> None:
         usage=SimpleNamespace(
             input_tokens=100,
             output_tokens=10,
-            input_tokens_details=SimpleNamespace(cached_tokens=64),
+            input_tokens_details=SimpleNamespace(cached_tokens=64, cache_write_tokens=7),
+            output_tokens_details=SimpleNamespace(reasoning_tokens=8),
         ),
     )
     result = translate_codex_response(fake_response)
     assert result.usage.cached_input_tokens == 64
+    assert result.usage.cache_write_tokens == 7
+    assert result.usage.reasoning_tokens == 8
 
 
 def test_stop_sequences_drop_is_observable(caplog) -> None:

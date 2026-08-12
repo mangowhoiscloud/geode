@@ -306,9 +306,187 @@ def export_mcpmark_trajectory(
     return export_trajectory(trajectory_path, trajectory)
 
 
+def export_codex_mcpmark_trajectory(
+    *,
+    exec_log_path: Path,
+    instruction: str,
+    model: str,
+    effort: str,
+) -> Path:
+    """Project ``codex exec --json`` onto the shared immutable trajectory schema."""
+    from core.observability.trajectory import build_trajectory, export_trajectory
+
+    rows = [json.loads(line) for line in exec_log_path.read_text(encoding="utf-8").splitlines()]
+    thread_id = next(
+        (str(row.get("thread_id") or "") for row in rows if row.get("type") == "thread.started"),
+        "",
+    )
+    turn_id = "turn-1"
+    events: list[dict[str, Any]] = []
+
+    def digest(value: Any) -> dict[str, Any]:
+        encoded = json.dumps(
+            value, ensure_ascii=False, separators=(",", ":"), sort_keys=True, default=str
+        ).encode("utf-8")
+        return {
+            "_omitted_payload_sha256": hashlib.sha256(encoded).hexdigest(),
+            "_omitted_payload_bytes": len(encoded),
+            "_content_omitted": ["native_value"],
+        }
+
+    events.append(
+        {
+            "kind": "user_message",
+            "actor": "user",
+            "turn_id": turn_id,
+            "payload": {"content": digest(instruction)},
+        }
+    )
+    protocol_violations = 0
+    turn_completed = False
+    failure = ""
+    for row in rows:
+        event_type = row.get("type")
+        if event_type == "item.completed":
+            item = row.get("item") or {}
+            item_type = str(item.get("type") or "")
+            call_id = str(item.get("id") or "")
+            if item_type == "mcp_tool_call":
+                tool = str(item.get("tool") or "")
+                events.extend(
+                    (
+                        {
+                            "kind": "tool_call",
+                            "actor": "assistant",
+                            "turn_id": turn_id,
+                            "call_id": call_id,
+                            "payload": {
+                                "server": item.get("server"),
+                                "tool": tool,
+                                "arguments": digest(item.get("arguments")),
+                            },
+                        },
+                        {
+                            "kind": "tool_result",
+                            "actor": "tool",
+                            "turn_id": turn_id,
+                            "call_id": call_id,
+                            "payload": {
+                                "tool": tool,
+                                "status": item.get("status"),
+                                "result": digest(item.get("result")),
+                                "error": digest(item.get("error")),
+                            },
+                        },
+                    )
+                )
+            elif item_type == "agent_message":
+                events.append(
+                    {
+                        "kind": "assistant_message",
+                        "actor": "assistant",
+                        "turn_id": turn_id,
+                        "payload": {"content": digest(item.get("text"))},
+                    }
+                )
+            elif item_type == "reasoning":
+                events.append(
+                    {
+                        "kind": "reasoning.summary",
+                        "actor": "assistant",
+                        "turn_id": turn_id,
+                        "payload": {"content": digest(item.get("text"))},
+                    }
+                )
+            elif item_type in {"command_execution", "file_change", "collab_tool_call"}:
+                protocol_violations += 1
+                events.append(
+                    {
+                        "kind": "benchmark.protocol_violation",
+                        "actor": "assistant",
+                        "turn_id": turn_id,
+                        "call_id": call_id,
+                        "payload": {"item_type": item_type, "item": digest(item)},
+                    }
+                )
+        elif event_type == "turn.completed":
+            turn_completed = True
+            events.append(
+                {
+                    "kind": "turn.completed",
+                    "actor": "system",
+                    "turn_id": turn_id,
+                    "payload": {"usage": row.get("usage") or {}},
+                }
+            )
+        elif event_type in {"turn.failed", "error"}:
+            error = row.get("error") if event_type == "turn.failed" else row
+            failure = str((error or {}).get("message") or event_type)
+            events.append(
+                {
+                    "kind": "turn.failed",
+                    "actor": "system",
+                    "turn_id": turn_id,
+                    "payload": {"error": digest(error)},
+                }
+            )
+
+    raw_sha256 = hashlib.sha256(exec_log_path.read_bytes()).hexdigest()
+    trajectory = build_trajectory(
+        trajectory_id=f"mcpmark-codex-{thread_id or raw_sha256[:16]}",
+        source={
+            "harness": "mcpmark",
+            "run": thread_id or raw_sha256[:16],
+            "session": thread_id or "ephemeral-codex-exec",
+            "task": hashlib.sha256(instruction.encode("utf-8")).hexdigest(),
+            "parents": [],
+        },
+        events=events,
+        outcome={
+            "success": turn_completed and not failure and protocol_violations == 0,
+            "failure": failure,
+            "protocol_violations": protocol_violations,
+        },
+        provenance={
+            "adapter": "plugins.benchmark_harness.trajectory_artifacts",
+            "model": model,
+            "provider": "codex-cli",
+            "source": "subscription",
+            "effort": effort,
+            "native_schema": "codex exec JSONL",
+        },
+        privacy={
+            "review_state": "local",
+            "native_results_embedded": False,
+            "payloads": "prompt, reasoning, tool bodies, and responses replaced by SHA-256 digests",
+        },
+        integrity={
+            "scope_complete": True,
+            "replay_complete": False,
+            "replay_incompleteness": [
+                "codex exec JSONL omits per-event timestamps and internal model-call boundaries"
+            ],
+        },
+        evidence_refs=[
+            {
+                "kind": "native_receipt",
+                "schema_id": "codex.exec.jsonl@native",
+                "reference": raw_sha256,
+                "authority": "Codex exec JSONL event stream",
+            }
+        ],
+        artifact_digests=_existing_digests((exec_log_path,)),
+        trajectory_class=("benchmark", "dialogue", "tool"),
+    )
+    return export_trajectory(exec_log_path.with_name("execution.trajectory.json"), trajectory)
+
+
 def _existing_digests(paths: Sequence[Path]) -> list[dict[str, str]]:
     return [
-        {"path": path.name, "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+        {
+            "path": f"{path.parent.name}/{path.name}",
+            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        }
         for path in paths
         if path.is_file()
     ]
@@ -322,6 +500,7 @@ def _slug(value: str) -> str:
 
 __all__ = [
     "close_benchmark_session",
+    "export_codex_mcpmark_trajectory",
     "export_mcpmark_trajectory",
     "export_tau2_trajectory",
     "geode_session_trace",

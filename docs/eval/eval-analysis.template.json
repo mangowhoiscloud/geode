@@ -1,0 +1,38 @@
+{
+  "schema_id": "geode.eval-analysis@1",
+  "schema_version": 1,
+  "run_id": "<stable-run-id>",
+  "analyzed_at": "<YYYY-MM-DDTHH:MM:SSZ>",
+  "run_spec_sha256": "<sha256-of-frozen-run-spec>",
+  "attempts_sha256": "<sha256-of-append-only-attempts-jsonl>",
+  "selected_attempt_ids": ["<attempt-id>"],
+  "answer": "<answer the preregistered research question without expanding the claim>",
+  "metrics": [
+    {
+      "name": "<primary-metric>",
+      "value": 0,
+      "numerator": 0,
+      "denominator": 1,
+      "unit": "ratio",
+      "source_ref": "<relative-native-result-json-path>",
+      "source_locator": {
+        "value": "/<json-pointer-to-value>",
+        "numerator": "/<json-pointer-to-numerator>",
+        "denominator": "/<json-pointer-to-denominator>"
+      }
+    }
+  ],
+  "decision": {
+    "outcome": "inconclusive",
+    "hypothesis_status": "mixed",
+    "rationale": "<apply the frozen decision and invalidation rules>"
+  },
+  "limitations": ["<known limitation>"],
+  "evidence_refs": [
+    {
+      "kind": "native-result",
+      "path": "<relative-native-result-or-manifest-path>",
+      "sha256": "<sha256-of-evidence-bytes>"
+    }
+  ]
+}

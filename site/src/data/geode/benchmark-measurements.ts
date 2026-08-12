@@ -216,6 +216,50 @@ PYTHONPATH=<geode-v1.0.12-release-tree> \
   ],
 };
 
+const mcpmarkFilesystemEasyGpt54TokenEfficiency: BenchmarkMeasurement = {
+  id: "mcpmark-filesystem-easy-20260812-gpt54-high-token-efficiency",
+  group: "mcpmark",
+  title: "filesystem/easy GPT-5.4 token-efficiency rerun",
+  measuredAt: "2026-08-12 KST",
+  suite: "filesystem/easy",
+  status: "complete",
+  model: "gpt-5.4",
+  provider: "openai",
+  source: "subscription",
+  effort: "high",
+  route: "GEODE AgenticLoop MCPMark adapter",
+  harness: "eval-sys/mcpmark@cd45b7f, GEODE feature@149024e6e",
+  artifact:
+    "geode-eval-artifacts@2c2d1f0621f64ff7ceeff8c05d8ebd3449501aaf/trajectories/mcpmark-geode-gpt54-high-token-efficiency-rerun-filesystem-easy-20260812T090254Z-35db8b275a36",
+  scoreLabel: "Accuracy",
+  scoreValue: "90.0% (9 / 10)",
+  secondary: [
+    "Matched input tokens 447,376 → 314,219 (-29.8%)",
+    "Matched output tokens 25,157 → 20,385 (-19.0%)",
+    "Native reasoning tokens 14,174, included within output tokens",
+    "188 canonical events / 54 exactly paired tool calls and results",
+    "Failure unchanged: file_context/uppercase exact-string mismatch",
+  ],
+  command: `cd artifacts/eval/harnesses/mcpmark
+PYTHONPATH=<geode-feature-tree> \
+.venv/bin/python -m plugins.benchmark_harness.run_mcpmark \
+  --mcp filesystem \
+  --task-suite easy \
+  --models geode-gpt-5.4 \
+  --agent geode \
+  --reasoning-effort high \
+  --k 1 \
+  --timeout 1200 \
+  --exp-name geode-gpt54-high-token-efficiency-20260812-rerun \
+  --output-dir ./results-token-efficiency`,
+  notes: [
+    "The score matched the pre-repair GEODE baseline at 9/10 while input and output tokens fell materially.",
+    "Eight of ten tasks used fewer input tokens; the four tasks with identical round counts fell 12.5%.",
+    "This is one matched diagnostic trial, not MCPMark Verified, a confidence interval, or a subscription billing claim.",
+    "All ten public trajectories are scope-complete and intentionally replay-incomplete; the immutable release was read back from artifact main.",
+  ],
+};
+
 const mcpmarkFilesystemEasyParallel: BenchmarkMeasurement = {
   id: "mcpmark-filesystem-easy-parallel-20260703-gpt55-xhigh",
   group: "mcpmark",
@@ -1289,6 +1333,7 @@ export const BENCHMARK_GROUPS: BenchmarkGroup[] = [
     ],
     measurements: [
       mcpmarkVerifiedAvailable,
+      mcpmarkFilesystemEasyGpt54TokenEfficiency,
       mcpmarkFilesystemEasyGpt54V1012,
       mcpmarkFilesystemEasyGpt56V1011,
       mcpmarkFilesystemEasyGpt56,

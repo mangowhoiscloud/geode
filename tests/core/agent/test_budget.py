@@ -67,6 +67,12 @@ def test_start_session_budget_defaults_to_2h() -> None:
         assert cfg.handoff_threshold_seconds == DEFAULT_HANDOFF_THRESHOLD_S
 
 
+@pytest.mark.parametrize("value", [0.0, -1.0, float("nan"), float("inf")])
+def test_start_session_budget_rejects_invalid_totals(value: float) -> None:
+    with pytest.raises(ValueError, match="finite positive"):
+        start_session_budget(total_seconds=value, metrics=SessionMetrics())
+
+
 def test_check_session_budget_within_window() -> None:
     """Fresh budget — remaining ≈ total, no expiry, no handoff."""
     with session_metrics_scope(session_id="t-budget-fresh"):
@@ -115,13 +121,18 @@ def test_handoff_not_due_before_threshold() -> None:
 
 
 def test_expired_when_past_total() -> None:
-    """Negative remaining → ``expired=True`` (hard stop)."""
+    """Negative remaining is expired, never a handoff transition."""
     with session_metrics_scope(session_id="t-budget-expired"):
-        start_session_budget(total_seconds=0.001, handoff_threshold_seconds=0.0)
+        start_session_budget(total_seconds=0.001, handoff_threshold_seconds=600.0)
         time.sleep(0.01)
         result = check_session_budget()
         assert result.expired is True
+        assert result.handoff_due is False
         assert result.remaining_seconds <= 0.0
+
+        from core.observability.session_metrics import current_session_metrics
+
+        assert current_session_metrics().handoff_triggered_at == 0.0
 
 
 def test_budget_summary_active() -> None:

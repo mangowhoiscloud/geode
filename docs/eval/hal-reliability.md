@@ -1,3 +1,19 @@
+---
+eval_id: hal-reliability
+eval_family: hal-reliability
+eval_kind: benchmark
+eval_status: canonical
+eval_authority: external-benchmark-profile
+eval_summary: GEODE adoption profile for HAL consistency, robustness, safety, predictability, and self-awareness measurements.
+eval_triggers:
+  - HAL Reliability
+  - consistency
+  - robustness
+  - benchmark rerun
+eval_contracts:
+  - docs/eval/schemas/run-spec.schema.json
+---
+
 # HAL Reliability (Princeton, ICLR 2026)
 
 ## 개요

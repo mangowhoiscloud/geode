@@ -58,6 +58,7 @@ run "architecture baseline"  uv run python scripts/architecture_baseline.py --ch
 run "architecture roadmap"   uv run python scripts/check_architecture_roadmap.py \
   --check --base-ref origin/develop --target-branch develop --event-mode pull_request
 run "llms.txt drift"         uv run python scripts/check_llms_version.py
+run "eval catalog"           uv run python scripts/eval/contract.py catalog --check
 run "petri bundle"           uv run python scripts/validate_petri_bundle.py
 run "hero viz layout"        uv run python scripts/visualizations/verify_hero_layout.py --static-check
 run "docs canon"             uv run python scripts/check_docs_canon.py
