@@ -176,6 +176,17 @@ class TestClassifyOpenAiSdkErrorsUnchanged:
         error_type, _severity, _hint = classify_llm_error(exc)
         assert error_type == "context_overflow"
 
+    def test_codex_sse_generic_overload_error(self) -> None:
+        import openai
+
+        exc = openai.APIError(
+            "Our servers are currently overloaded. Please try again later.",
+            request=httpx.Request("POST", "https://chatgpt.com/backend-api/codex/responses"),
+            body=None,
+        )
+        error_type, _severity, _hint = classify_llm_error(exc)
+        assert error_type == "server"
+
 
 @pytest.mark.parametrize(
     "message",

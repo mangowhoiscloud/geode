@@ -88,13 +88,21 @@ export default function Page() {
 
             <h2>대형 결과: 오프로드와 recall</h2>
             <p>
-              도구 결과가 5000 토큰 임계값을 넘으면{" "}
+              모델에 전달할 도구 결과가 기본 15,000 토큰 임계값을 넘으면{" "}
               <code>core/orchestration/tool_offload.py</code>의{" "}
               <code>ToolResultOffloadStore</code>가 본문을 세션별 디렉터리
               (<code>.geode/tool-offload/</code> 아래)에 내려쓰고, 컨텍스트에는
               요약과 <code>ref_id</code>만 남깁니다. 모델이 원본이 필요하면{" "}
               <code>recall_tool_result(ref_id)</code>로 다시 가져옵니다. 오프로드마다{" "}
               <code>TOOL_RESULT_OFFLOADED</code> 훅이 발화합니다.
+            </p>
+            <p>
+              MCP 결과는 evidence용 원본과 model-facing 표현을 분리합니다.
+              timeline과 tool log에는 전체 <code>CallToolResult</code>를 남기고,
+              모델에는 <code>structuredContent</code>를 우선한 단일 표현만
+              보냅니다. 호환성용 <code>content</code> 복제본을 다시 직렬화하지
+              않으며, 오프로드 뒤 25,000-token hard guard가 최종 상한을
+              보장합니다.
             </p>
 
             <h2>접근 제어</h2>
@@ -133,7 +141,7 @@ export default function Page() {
                 </tr>
                 <tr>
                   <td>도구 결과가 잘려 보임</td>
-                  <td>5000 토큰 초과로 오프로드됨</td>
+                  <td>15,000 토큰 초과로 오프로드됨</td>
                   <td><code>recall_tool_result(ref_id)</code>로 원본을 조회합니다</td>
                 </tr>
               </tbody>
@@ -225,13 +233,22 @@ export default function Page() {
 
             <h2>Large results: offload and recall</h2>
             <p>
-              When a tool result exceeds the 5000-token threshold,{" "}
+              When the model-facing tool result exceeds the default
+              15,000-token threshold,{" "}
               <code>ToolResultOffloadStore</code> in{" "}
               <code>core/orchestration/tool_offload.py</code> persists the body
               to a per-session directory under <code>.geode/tool-offload/</code>{" "}
               and leaves a summary plus a <code>ref_id</code> in context. The
               model re-fetches the original with <code>recall_tool_result(ref_id)</code>.
               Each offload fires the <code>TOOL_RESULT_OFFLOADED</code> hook.
+            </p>
+            <p>
+              MCP separates the evidence receipt from the model-facing view.
+              The full <code>CallToolResult</code> remains in the timeline and
+              tool log, while the model receives one representation that
+              prefers <code>structuredContent</code>. GEODE does not serialize
+              the compatibility <code>content</code> copy again, and a
+              25,000-token hard guard bounds the final value after offload.
             </p>
 
             <h2>Access control</h2>
@@ -270,7 +287,7 @@ export default function Page() {
                 </tr>
                 <tr>
                   <td>A tool result looks truncated</td>
-                  <td>It crossed 5000 tokens and was offloaded</td>
+                  <td>It crossed 15,000 tokens and was offloaded</td>
                   <td>Fetch the original with <code>recall_tool_result(ref_id)</code></td>
                 </tr>
               </tbody>

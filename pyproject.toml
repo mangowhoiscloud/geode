@@ -1,6 +1,6 @@
 [project]
 name = "geode-agent"
-version = "1.0.20"
+version = "1.0.21"
 description = "GEODE — 범용 자율 실행 에이전트"
 license = "Apache-2.0"
 readme = "README.md"
@@ -231,7 +231,7 @@ dev = [
     "pytest-cov>=6.0.0",
     "pytest-xdist>=3.6.0",
     "ruff>=0.15.2",
-    "twine>=6.0.0",
+    "twine>=7.0.0",
     "types-jsonschema>=4.26.0.20260518",
     "types-psutil>=7.0.0",
     "types-pyyaml>=6.0.12.20250915",
@@ -569,6 +569,10 @@ module = [
     # `uv sync --extra audit` is run; default sync skips them.
     "inspect_ai.*",
     "inspect_petri.*",
+    # Matched scaffold comparison runner; injected only by its documented
+    # ``uv run --with`` command, not installed in the default environment.
+    "inspect_swe.*",
+    "petri_dish.*",
     # PR-SIL-5THEME C2 — S6b bench federation dependencies, same opt-in.
     "inspect_evals.*",
     "inspect_harbor.*",
@@ -614,6 +618,13 @@ ignore_missing_imports = true
 # scoped to this opt-in runner instead of disabling checks for scripts/eval.
 module = ["scripts.eval.tau2_geode_agent"]
 disallow_subclassing_any = false
+
+[[tool.mypy.overrides]]
+# Petri Dish's Inspect SWE base class and decorators are available only in the
+# comparison runner's isolated ``uv run --with`` environment.
+module = ["scripts.eval.petri_dish_scaffold_compare"]
+disallow_subclassing_any = false
+disallow_untyped_decorators = false
 
 [[tool.mypy.overrides]]
 # Public benchmark adapters subclass base classes supplied by opt-in external

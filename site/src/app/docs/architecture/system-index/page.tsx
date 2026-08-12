@@ -134,7 +134,7 @@ export default function Page() {
               <tbody>
                 <tr><td>agentic 루프</td><td><code>core/agent/loop/</code></td><td><code>agent_loop.py</code> (AgenticLoop), <code>models.py</code>, <code>_context.py</code></td></tr>
                 <tr><td>서브에이전트</td><td><code>core/agent/</code></td><td><code>sub_agent.py</code>, <code>worker.py</code>, <code>task_isolation.py</code></td></tr>
-                <tr><td>시스템 프롬프트</td><td><code>core/agent/</code></td><td><code>system_prompt.py</code>, <code>system_injection.py</code></td></tr>
+                <tr><td>시스템 프롬프트</td><td><code>core/agent/</code></td><td><code>system_prompt.py</code></td></tr>
                 <tr><td>가드</td><td><code>core/agent/</code></td><td><code>safety.py</code>, <code>budget.py</code>, <code>approval.py</code>, <code>context_manager.py</code></td></tr>
               </tbody>
             </table>
@@ -229,7 +229,7 @@ export default function Page() {
               <tbody>
                 <tr><td>Agentic loop</td><td><code>core/agent/loop/</code></td><td><code>agent_loop.py</code> (AgenticLoop), <code>models.py</code>, <code>_context.py</code></td></tr>
                 <tr><td>Sub-agents</td><td><code>core/agent/</code></td><td><code>sub_agent.py</code>, <code>worker.py</code>, <code>task_isolation.py</code></td></tr>
-                <tr><td>System prompt</td><td><code>core/agent/</code></td><td><code>system_prompt.py</code>, <code>system_injection.py</code></td></tr>
+                <tr><td>System prompt</td><td><code>core/agent/</code></td><td><code>system_prompt.py</code></td></tr>
                 <tr><td>Guards</td><td><code>core/agent/</code></td><td><code>safety.py</code>, <code>budget.py</code>, <code>approval.py</code>, <code>context_manager.py</code></td></tr>
               </tbody>
             </table>

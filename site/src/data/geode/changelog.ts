@@ -2,7 +2,7 @@
  * GEODE CHANGELOG, auto-synced from the GEODE repo via `npm run sync-stats`.
  * Do not edit manually. Edit CHANGELOG.md in the GEODE repo and re-run sync.
  *
- * Last sync: 2026-08-10
+ * Last sync: 2026-08-11
  *
  * Each entry's `body` is the raw markdown between two version headings.
  * The Changelog page renders the body with a minimal markdown renderer
@@ -19,7 +19,12 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": "### Fixed\n\n- **Separated durable session lifetime from optional wall-clock guards.**\n  Interactive and resumable sessions no longer inherit an implicit two-hour\n  expiry; `GEODE_SESSION_TIME_BUDGET_S` now explicitly opts into the legacy\n  session cap. Expiry and handoff are mutually exclusive, expired sessions\n  stop before planner/model/tool work, and ordinary gateway/IPC loops bind\n  independent session metrics so one session cannot expire another."
+    "body": "### Added\n\n- **Paired MCPMark Codex comparison.** Added a filesystem-only Codex CLI arm\n  that shares MCPMark's pinned task setup and official verifier with GEODE,\n  while isolating user configuration and preserving both native exec JSONL and\n  schema-validated trajectory sidecars for direct harness diagnostics on\n  ChatGPT subscription models. The setup manifest now installs GEODE into the\n  MCPMark venv so live runs cannot fail on missing runtime dependencies.\n\n### Fixed\n\n- **Separated durable session lifetime from optional wall-clock guards.**\n  Interactive and resumable sessions no longer inherit an implicit two-hour\n  expiry; `GEODE_SESSION_TIME_BUDGET_S` now explicitly opts into the legacy\n  session cap. Expiry and handoff are mutually exclusive, expired sessions\n  stop before planner/model/tool work, and ordinary gateway/IPC loops bind\n  independent session metrics so one session cannot expire another.\n- **Bounded model-facing tool results.** MCP `CallToolResult` receipts remain\n  intact in session evidence, while model context now selects structured\n  content once instead of nesting duplicate JSON. Large projected results are\n  offloaded before the hard token guard, and escaped truncation output cannot\n  exceed its configured bound.\n- **Stable multi-round prefixes and complete usage details.** Removed the\n  synthetic per-round reminder message because date and runtime rules already\n  live in the system prompt, preserving exact conversation prefixes between\n  calls. OpenAI reasoning/cache-write and Anthropic/Claude cache-creation usage\n  now flow into the existing runtime counters instead of being discarded.\n  Reasoning remains an observable subset of provider-reported output tokens\n  and is no longer charged a second time by the local cost estimator. The\n  MCPMark adapter also translates those native counters into the harness's\n  `total_tokens` and `reasoning_tokens` summary keys.\n\n### Infrastructure\n\n- **PyPI Core Metadata 2.5 publishing.** Updated the pinned PyPA publish action\n  to v1.14.2 so its internal Twine 7 validator accepts the same Metadata 2.5\n  wheel already approved by the release build gate."
+  },
+  {
+    "version": "1.0.21",
+    "date": "2026-08-11",
+    "body": "> Reproducible GPT-5.6 effort diagnostics and matched Petri Dish scaffold evidence.\n\n### Infrastructure\n\n- **Matched Petri Dish scaffold comparison.** Added a pinned Codex CLI / Hermes\n  ACP comparison task with a shared sandbox, model, seed, turn ceiling, and\n  judge rubric, plus an Inspect archive sanitizer that removes private\n  reasoning and host-home paths while preserving scores for public evidence.\n- **Release/type-check parity.** CI now type-checks with the audit extra used\n  by stable releases, and the Petri scaffold utilities satisfy those installed\n  Inspect/Petri type contracts instead of failing only during promotion.\n- **Core Metadata 2.5 release validation.** Raised the Twine floor to 7.0 so\n  stable releases validate current Hatchling-built wheels instead of failing\n  after the full release test suite.\n\n### Fixed\n\n- **Codex overload classification.** Generic SSE `APIError` overload responses\n  are now recorded as provider-server failures instead of unknown errors, so\n  retry hooks and operator diagnostics retain the real failure category.\n- **Isolated Claude CLI subscription authentication.** Petri audit subprocesses\n  no longer inherit a parent `ANTHROPIC_API_KEY`, so Claude CLI auditor and\n  judge roles consistently use the operator's Claude subscription login."
   },
   {
     "version": "1.0.20",
@@ -2498,4 +2503,4 @@ export const CHANGELOG: ChangelogEntry[] = [
   }
 ];
 
-export const CHANGELOG_SYNCED_AT = "2026-08-10";
+export const CHANGELOG_SYNCED_AT = "2026-08-11";

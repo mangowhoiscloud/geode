@@ -154,6 +154,8 @@ def agentic_response_from_adapter_result(result: AdapterCallResult) -> AgenticRe
     usage = ResponseUsage(
         input_tokens=result.usage.input_tokens,
         output_tokens=result.usage.output_tokens,
+        thinking_tokens=result.usage.reasoning_tokens,
+        cache_creation_tokens=result.usage.cache_write_tokens,
         cache_read_tokens=result.usage.cached_input_tokens,
     )
     # A2 (v0.99.44) — Codex encrypted reasoning replay + reasoning summaries

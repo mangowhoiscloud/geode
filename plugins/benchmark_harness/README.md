@@ -6,8 +6,9 @@ benchmark repositories remain ignored local checkouts under
 
 It covers:
 
-- `mcpmark`: upstream `eval-sys/mcpmark` pinned by commit, with a GEODE
-  `BaseMCPAgent` adapter in `mcpmark_geode_agent.py`.
+- `mcpmark`: upstream `eval-sys/mcpmark` pinned by commit, with GEODE and
+  filesystem-only Codex CLI `BaseMCPAgent` adapters in
+  `mcpmark_geode_agent.py`.
 - `tau2-bench`: upstream `sierra-research/tau2-bench` pinned by commit, with
   the GEODE participant adapter in `tau2_geode_agent.py`.
 
@@ -29,7 +30,7 @@ python -m plugins.benchmark_harness.cli healthcheck tau2-bench
 instead of executing them. This keeps the public plugin side-effect free; live
 benchmark sessions can run the emitted commands explicitly.
 
-For MCPMark, register the GEODE agent inside an upstream checkout before
+For MCPMark, register both comparison agents inside an upstream checkout before
 running `pipeline.py`:
 
 ```python
@@ -38,3 +39,8 @@ from src.agents import AGENT_REGISTRY
 
 register_mcpmark_agent(AGENT_REGISTRY)
 ```
+
+Use `--agent geode --models geode-gpt-5.4` for GEODE or
+`--agent codex --models codex-gpt-5.4` for the isolated Codex CLI arm. The Codex
+adapter currently accepts only `--mcp filesystem`; other services remain out of
+scope until this paired diagnostic shows a real need.

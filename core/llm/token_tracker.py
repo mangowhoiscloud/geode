@@ -262,7 +262,6 @@ class TokenTracker:
             output_tokens,
             cache_creation_tokens=cache_creation_tokens,
             cache_read_tokens=cache_read_tokens,
-            thinking_tokens=thinking_tokens,
         )
         usage = LLMUsage(
             model=model,
@@ -293,7 +292,6 @@ class TokenTracker:
         *,
         cache_creation_tokens: int = 0,
         cache_read_tokens: int = 0,
-        thinking_tokens: int = 0,
     ) -> float:
         """Calculate cost in USD for a single LLM call."""
         price = self._pricing.get(model)
@@ -320,8 +318,6 @@ class TokenTracker:
             cost += cache_creation_tokens * price.cache_write
         if cache_read_tokens:
             cost += cache_read_tokens * price.cache_read
-        if thinking_tokens and price.thinking:
-            cost += thinking_tokens * price.thinking
         return cost
 
     def reset(self) -> None:

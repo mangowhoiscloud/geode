@@ -47,6 +47,15 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **Paired MCPMark Codex comparison.** Added a filesystem-only Codex CLI arm
+  that shares MCPMark's pinned task setup and official verifier with GEODE,
+  while isolating user configuration and preserving both native exec JSONL and
+  schema-validated trajectory sidecars for direct harness diagnostics on
+  ChatGPT subscription models. The setup manifest now installs GEODE into the
+  MCPMark venv so live runs cannot fail on missing runtime dependencies.
+
 ### Fixed
 
 - **Separated durable session lifetime from optional wall-clock guards.**
@@ -55,6 +64,52 @@ functional change.
   session cap. Expiry and handoff are mutually exclusive, expired sessions
   stop before planner/model/tool work, and ordinary gateway/IPC loops bind
   independent session metrics so one session cannot expire another.
+- **Bounded model-facing tool results.** MCP `CallToolResult` receipts remain
+  intact in session evidence, while model context now selects structured
+  content once instead of nesting duplicate JSON. Large projected results are
+  offloaded before the hard token guard, and escaped truncation output cannot
+  exceed its configured bound.
+- **Stable multi-round prefixes and complete usage details.** Removed the
+  synthetic per-round reminder message because date and runtime rules already
+  live in the system prompt, preserving exact conversation prefixes between
+  calls. OpenAI reasoning/cache-write and Anthropic/Claude cache-creation usage
+  now flow into the existing runtime counters instead of being discarded.
+  Reasoning remains an observable subset of provider-reported output tokens
+  and is no longer charged a second time by the local cost estimator. The
+  MCPMark adapter also translates those native counters into the harness's
+  `total_tokens` and `reasoning_tokens` summary keys.
+
+### Infrastructure
+
+- **PyPI Core Metadata 2.5 publishing.** Updated the pinned PyPA publish action
+  to v1.14.2 so its internal Twine 7 validator accepts the same Metadata 2.5
+  wheel already approved by the release build gate.
+
+## [1.0.21] - 2026-08-11
+
+> Reproducible GPT-5.6 effort diagnostics and matched Petri Dish scaffold evidence.
+
+### Infrastructure
+
+- **Matched Petri Dish scaffold comparison.** Added a pinned Codex CLI / Hermes
+  ACP comparison task with a shared sandbox, model, seed, turn ceiling, and
+  judge rubric, plus an Inspect archive sanitizer that removes private
+  reasoning and host-home paths while preserving scores for public evidence.
+- **Release/type-check parity.** CI now type-checks with the audit extra used
+  by stable releases, and the Petri scaffold utilities satisfy those installed
+  Inspect/Petri type contracts instead of failing only during promotion.
+- **Core Metadata 2.5 release validation.** Raised the Twine floor to 7.0 so
+  stable releases validate current Hatchling-built wheels instead of failing
+  after the full release test suite.
+
+### Fixed
+
+- **Codex overload classification.** Generic SSE `APIError` overload responses
+  are now recorded as provider-server failures instead of unknown errors, so
+  retry hooks and operator diagnostics retain the real failure category.
+- **Isolated Claude CLI subscription authentication.** Petri audit subprocesses
+  no longer inherit a parent `ANTHROPIC_API_KEY`, so Claude CLI auditor and
+  judge roles consistently use the operator's Claude subscription login.
 
 ## [1.0.20] - 2026-08-10
 

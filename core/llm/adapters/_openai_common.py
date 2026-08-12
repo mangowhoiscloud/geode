@@ -1052,15 +1052,22 @@ def translate_chat_response(response: Any) -> AdapterCallResult:
     # from the billable input (cache_inclusive_input). Previously dropped, so
     # GLM cached tokens were billed at the full input rate.
     cached_tokens = 0
+    reasoning_tokens = 0
+    cache_write_tokens = 0
     if usage is not None:
         prompt_details = getattr(usage, "prompt_tokens_details", None)
         cached_tokens = int(getattr(prompt_details, "cached_tokens", 0) or 0)
+        cache_write_tokens = int(getattr(prompt_details, "cache_write_tokens", 0) or 0)
+        completion_details = getattr(usage, "completion_tokens_details", None)
+        reasoning_tokens = int(getattr(completion_details, "reasoning_tokens", 0) or 0)
     return AdapterCallResult(
         text=text,
         usage=UsageSummary(
             input_tokens=getattr(usage, "prompt_tokens", 0) if usage else 0,
             output_tokens=getattr(usage, "completion_tokens", 0) if usage else 0,
             cached_input_tokens=cached_tokens,
+            reasoning_tokens=reasoning_tokens,
+            cache_write_tokens=cache_write_tokens,
         ),
         stop_reason=getattr(choice, "finish_reason", "stop") if choice else "stop",
         tool_uses=tuple(tool_uses),
@@ -1233,15 +1240,22 @@ def translate_codex_response(
     # codex path had always dropped it). Same path the legacy normalizer
     # reads in ``core/llm/agentic_response.py``.
     cached_tokens = 0
+    reasoning_tokens = 0
+    cache_write_tokens = 0
     if usage is not None:
         input_details = getattr(usage, "input_tokens_details", None)
         cached_tokens = int(getattr(input_details, "cached_tokens", 0) or 0)
+        cache_write_tokens = int(getattr(input_details, "cache_write_tokens", 0) or 0)
+        output_details = getattr(usage, "output_tokens_details", None)
+        reasoning_tokens = int(getattr(output_details, "reasoning_tokens", 0) or 0)
     return AdapterCallResult(
         text=text,
         usage=UsageSummary(
             input_tokens=getattr(usage, "input_tokens", 0) if usage else 0,
             output_tokens=getattr(usage, "output_tokens", 0) if usage else 0,
             cached_input_tokens=cached_tokens,
+            reasoning_tokens=reasoning_tokens,
+            cache_write_tokens=cache_write_tokens,
         ),
         stop_reason=getattr(response, "status", "completed") or "completed",
         tool_uses=tuple(tool_uses),

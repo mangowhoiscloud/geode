@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 from core.orchestration.context_monitor import (
     ABSOLUTE_TOKEN_CEILING,
     WARNING_THRESHOLD,
@@ -424,3 +426,23 @@ class TestGuardToolResultModelAware:
         assert guarded["summary"] == "key info"
         assert guarded["task_id"] == "t1"
         assert guarded["_truncated"] is True
+
+    def test_truncated_json_never_exceeds_limit(self):
+        from core.agent.tool_executor import _guard_tool_result
+
+        result = {"content": '"\\\n' * 10_000}
+        guarded = _guard_tool_result(result, max_tokens=32)
+
+        assert guarded["_truncated"] is True
+        assert len(json.dumps(guarded, ensure_ascii=False)) <= 32 * 4
+        assert len(json.dumps(guarded, ensure_ascii=False)) < len(
+            json.dumps(result, ensure_ascii=False)
+        )
+
+    def test_oversized_summary_is_bounded(self):
+        from core.agent.tool_executor import _guard_tool_result
+
+        guarded = _guard_tool_result({"summary": "x" * 10_000}, max_tokens=32)
+
+        assert guarded["_truncated"] is True
+        assert len(json.dumps(guarded, ensure_ascii=False)) <= 32 * 4

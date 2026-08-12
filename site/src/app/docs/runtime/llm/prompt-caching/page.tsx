@@ -8,8 +8,8 @@ export default function Page() {
       slug="runtime/llm/prompt-caching"
       title="Prompt caching"
       titleKo="프롬프트 캐싱"
-      summary="The static/dynamic boundary, rolling message breakpoints, and the append-only system reminder that keeps the prefix cacheable."
-      summaryKo="static/dynamic 경계, 롤링 메시지 breakpoint, 그리고 prefix를 캐시 가능하게 유지하는 append 전용 system reminder를 다룹니다."
+      summary="The static/dynamic boundary, rolling message breakpoints, and the append-only conversation contract that keeps the prefix cacheable."
+      summaryKo="static/dynamic 경계, 롤링 메시지 breakpoint, 그리고 prefix를 캐시 가능하게 유지하는 append 전용 대화 계약을 다룹니다."
     >
       <Bi
         ko={
@@ -58,32 +58,29 @@ export default function Page() {
               (<code>core/llm/pricing_loader.py</code>).
             </p>
 
-            <h2>system reminder는 append 전용</h2>
+            <h2>대화 이력은 실제 turn만 append</h2>
             <p>
-              멀티턴 강화용 <code>&lt;system-reminder&gt;</code> 블록
-              (<code>core/agent/system_injection.py</code>)에는 캐시 계약이
-              걸려 있습니다. 이전 설계는 reminder를 <code>messages[0]</code>에
-              넣고 라운드마다 다시 썼습니다. 메시지는 시스템 블록 뒤에
-              렌더되므로 이력 prefix 전체가 매 라운드 다시 키잉되고, 롤링
-              breakpoint는 한 번도 적중하지 못했습니다. 현재 계약은
-              두 가지입니다.
+              AgenticLoop는 라운드 번호나 날짜를 합성 user message로 만들지
+              않습니다. 날짜와 runtime rule은 이미{" "}
+              <code>core/agent/system_prompt.py</code>의 동적 시스템 영역에 있고,
+              한 실행 안에서 대화 이력에는 실제 user, assistant, tool turn만
+              뒤에 붙습니다. 따라서 다음 요청의 메시지열은 이전 요청의
+              메시지열을 정확한 prefix로 보존합니다.
             </p>
             <ul>
               <li>
-                <code>append_system_reminder</code>는 새 리스트를 반환합니다.
-                호출자의 이력 리스트는 그대로이므로 reminder가 저장된
-                대화 컨텍스트에 stale한 중간 prefix 바이트로 남지 않습니다.
+                턴마다 바뀌는 시스템 정보는 메시지 이력에 중복 주입하지
+                않습니다.
               </li>
               <li>
-                라운드 인덱스와 날짜 같은 턴별 변량은 마지막 안정 이력 블록
-                뒤에 붙습니다. 매 라운드 캐시에서 빠지는 것은 reminder
-                자신뿐입니다.
+                컨텍스트 정리는 공유 이력을 직접 갱신하고, 그 뒤 adapter
+                request를 조립합니다.
               </li>
             </ul>
             <p>
-              가드 테스트는
-              <code>tests/core/agent/test_system_injection.py</code>의
-              TestCacheContract입니다.
+              이 계약은 연속 <code>AgenticLoop._call_llm</code> 요청의 실제{" "}
+              <code>AdapterCallRequest.messages</code> prefix를 비교하는 회귀
+              테스트로 고정합니다.
             </p>
 
             <h2>실패 모드</h2>
@@ -167,32 +164,30 @@ export default function Page() {
               (<code>core/llm/pricing_loader.py</code>).
             </p>
 
-            <h2>The system reminder is append-only</h2>
+            <h2>Conversation history appends only real turns</h2>
             <p>
-              The multi-turn <code>&lt;system-reminder&gt;</code> block
-              (<code>core/agent/system_injection.py</code>) carries an
-              explicit cache contract. The previous design inserted the
-              reminder at <code>messages[0]</code> and rewrote it per round;
-              since messages render after the system blocks, that re-keyed
-              the entire history prefix every round and the rolling
-              breakpoints could never hit. The current contract:
+              AgenticLoop no longer synthesizes a user message for the round
+              number or current date. Date and runtime rules already live in
+              the dynamic system region in
+              <code>core/agent/system_prompt.py</code>. Within one run, only
+              real user, assistant, and tool turns are appended, so the next
+              request preserves the previous message sequence as an exact
+              prefix.
             </p>
             <ul>
               <li>
-                <code>append_system_reminder</code> returns a new list. The
-                caller&apos;s history list is never modified, so the reminder
-                cannot persist into the stored conversation context as stale
-                mid-prefix bytes.
+                Per-turn system metadata is not duplicated into message
+                history.
               </li>
               <li>
-                Per-round variance (round index, date) lands after the last
-                stable history block. Only the reminder itself is uncached
-                each round.
+                Context recovery updates the shared history before the
+                adapter request is assembled.
               </li>
             </ul>
             <p>
-              The guard is TestCacheContract in
-              <code>tests/core/agent/test_system_injection.py</code>.
+              A regression test pins this contract by comparing the actual
+              <code>AdapterCallRequest.messages</code> produced by consecutive
+              <code>AgenticLoop._call_llm</code> calls.
             </p>
 
             <h2>Failure modes</h2>
