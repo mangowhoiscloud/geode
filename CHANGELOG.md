@@ -69,6 +69,11 @@ functional change.
 
 ### Fixed
 
+- **Squash-merged worktree cleanup now tolerates base advancement.** The
+  cleanup guard reconstructs the merge of the final PR head onto the squash
+  commit's first parent instead of requiring the two complete trees to match.
+  Independent base changes no longer block valid cleanup, while a PR branch
+  that advances after merge is still rejected.
 - **Separated durable session lifetime from optional wall-clock guards.**
   Interactive and resumable sessions no longer inherit an implicit two-hour
   expiry; `GEODE_SESSION_TIME_BUDGET_S` now explicitly opts into the legacy
