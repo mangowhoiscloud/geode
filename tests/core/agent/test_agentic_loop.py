@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import json
 import logging
 import threading
 from dataclasses import replace
@@ -276,6 +277,56 @@ class TestToolExecutor:
         assert results[0]["tool_use_id"] == "toolu_async"
         assert '"status": "ok"' in results[0]["content"]
 
+    def test_mcp_result_prefers_structured_content_and_logs_raw(self) -> None:
+        raw_result = {
+            "content": [{"type": "text", "text": '{"tree": ["duplicate"]}'}],
+            "structuredContent": {"tree": ["canonical"]},
+            "isError": False,
+        }
+        executor = MagicMock(spec=ToolExecutor)
+        executor.aexecute = AsyncMock(return_value=raw_result)
+        op_logger = MagicMock()
+        op_logger.log_tool_call.return_value = True
+        timeline = MagicMock()
+        processor = ToolCallProcessor(
+            executor=executor,
+            op_logger=op_logger,
+            error_recovery=MagicMock(),
+            timeline=timeline,
+        )
+        block = SimpleNamespace(type="tool_use", name="mcp_tool", input={}, id="call-1")
+
+        results = asyncio.run(processor.process(SimpleNamespace(content=[block])))
+
+        assert results[0]["content"] == '{"tree": ["canonical"]}'
+        assert processor.tool_log[0]["result"] == raw_result
+        assert timeline.record_tool_result.call_args.kwargs["result"] == raw_result
+
+    def test_mcp_error_marks_timeline_and_failure_counter(self) -> None:
+        raw_result = {
+            "content": [{"type": "text", "text": "permission denied"}],
+            "isError": True,
+        }
+        executor = MagicMock(spec=ToolExecutor)
+        executor.aexecute = AsyncMock(return_value=raw_result)
+        op_logger = MagicMock()
+        op_logger.log_tool_call.return_value = True
+        timeline = MagicMock()
+        processor = ToolCallProcessor(
+            executor=executor,
+            op_logger=op_logger,
+            error_recovery=MagicMock(),
+            timeline=timeline,
+        )
+        block = SimpleNamespace(type="tool_use", name="mcp_tool", input={}, id="call-1")
+
+        results = asyncio.run(processor.process(SimpleNamespace(content=[block])))
+
+        assert '"error"' in results[0]["content"]
+        assert op_logger.log_tool_result.call_args.args[1].get("error")
+        assert timeline.record_tool_result.call_args.args[1] == "error"
+        assert processor._consecutive_failures["mcp_tool"] == 1
+
     def test_batch_cost_grant_does_not_approve_rewritten_mcp_tool(self) -> None:
         class RewriteExpensiveToMcp:
             async def tool_request(self, request):
@@ -391,22 +442,48 @@ class TestToolExecutor:
             hooks=hooks,
         )
         prev = get_offload_store()
+        store = ToolResultOffloadStore(
+            session_id="offload-test",
+            threshold=1,
+            base_dir=tmp_path / "offload",
+        )
+        payload = {"data": "x" * 110_000}
         try:
-            set_offload_store(
-                ToolResultOffloadStore(
-                    session_id="offload-test",
-                    threshold=1,
-                    base_dir=tmp_path / "offload",
-                )
-            )
-            result = asyncio.run(
-                processor._serialize_tool_result({"data": "x" * 1000}, "toolu_offload")
-            )
+            set_offload_store(store)
+            result = asyncio.run(processor._serialize_tool_result(payload, "toolu_offload"))
         finally:
             set_offload_store(prev)
 
         assert result["tool_use_id"] == "toolu_offload"
+        assert store.recall("toolu_offload") == payload
         assert hook_calls and hook_calls[0]["ref_id"] == "toolu_offload"
+
+    def test_offload_threshold_uses_ceiling_token_estimate(self, tmp_path: Any) -> None:
+        from core.orchestration.tool_offload import (
+            ToolResultOffloadStore,
+            get_offload_store,
+            set_offload_store,
+        )
+
+        processor = ToolCallProcessor(
+            executor=MagicMock(spec=ToolExecutor),
+            op_logger=MagicMock(),
+            error_recovery=MagicMock(),
+        )
+        previous = get_offload_store()
+        store = ToolResultOffloadStore(
+            session_id="offload-boundary",
+            threshold=1,
+            base_dir=tmp_path / "offload",
+        )
+        try:
+            set_offload_store(store)
+            result = asyncio.run(processor._serialize_tool_result("xxx", "toolu_boundary"))
+        finally:
+            set_offload_store(previous)
+
+        assert store.recall("toolu_boundary") == "xxx"
+        assert json.loads(result["content"])["_offloaded"] is True
 
     def test_safe_tools_classification(self) -> None:
         assert "memory_search" in SAFE_TOOLS

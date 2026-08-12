@@ -137,7 +137,7 @@
       {
         "context_name": "token_tracker",
         "has_default": true,
-        "line": 459,
+        "line": 455,
         "path": "core/llm/token_tracker.py",
         "symbol": "_tracker_ctx"
       },
@@ -237,7 +237,7 @@
   "coordinators": {
     "AgenticLoop": {
       "constructor_arg_count": 27,
-      "file_loc": 3135,
+      "file_loc": 3129,
       "method_count": 74,
       "path": "core/agent/loop/agent_loop.py"
     },
@@ -327,22 +327,22 @@
         "path": "core/llm/adapters/claude_cli.py"
       },
       {
-        "line": 290,
+        "line": 291,
         "module": "plugins.petri_audit.adapters.claude_cli_backend",
         "path": "core/llm/adapters/claude_cli.py"
       },
       {
-        "line": 293,
+        "line": 294,
         "module": "plugins.petri_audit.claude_cli_provider",
         "path": "core/llm/adapters/claude_cli.py"
       },
       {
-        "line": 353,
+        "line": 354,
         "module": "plugins.petri_audit.adapters.claude_cli_backend",
         "path": "core/llm/adapters/claude_cli.py"
       },
       {
-        "line": 372,
+        "line": 373,
         "module": "plugins.petri_audit.adapters.claude_cli_backend",
         "path": "core/llm/adapters/claude_cli.py"
       },
@@ -527,16 +527,16 @@
   },
   "packages": {
     "core": {
-      "python_files": 435,
-      "python_loc": 139141
+      "python_files": 434,
+      "python_loc": 138996
     },
     "plugins": {
       "python_files": 111,
-      "python_loc": 42240
+      "python_loc": 42250
     },
     "tests": {
-      "python_files": 684,
-      "python_loc": 179689
+      "python_files": 683,
+      "python_loc": 179727
     }
   },
   "schema_version": 1,

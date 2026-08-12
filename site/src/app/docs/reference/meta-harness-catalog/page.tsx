@@ -56,11 +56,11 @@ const CONTEXT_ROWS: Row[] = [
     path: "core/llm/cache_policy.py",
   },
   {
-    name: "System-reminder injection",
-    ko: "말미 고정 주입이 prefix-stable이라 프롬프트 캐시 키를 깨지 않음",
-    en: "Tail-anchored reminder injection is prefix-stable, so it never re-keys the prompt cache",
-    control: "cache contract pinned by tests",
-    path: "core/agent/system_injection.py",
+    name: "Append-only conversation history",
+    ko: "합성 reminder 없이 실제 turn만 append해 프롬프트 cache prefix를 보존",
+    en: "Appends only real turns, preserving the prompt-cache prefix without synthetic reminders",
+    control: "consecutive AdapterCallRequest prefix test",
+    path: "core/agent/loop/agent_loop.py",
   },
   {
     name: "System prompt modes",
@@ -73,7 +73,7 @@ const CONTEXT_ROWS: Row[] = [
     name: "ToolResultOffloadStore",
     ko: "대형 tool result를 디스크로 이관하고 컨텍스트에는 ref만 남김",
     en: "Moves oversized tool results to disk, leaving only a reference in context",
-    control: "threshold 5000 tokens, TOOL_RESULT_OFFLOADED hook",
+    control: "threshold 15000 tokens, TOOL_RESULT_OFFLOADED hook",
     path: "core/orchestration/tool_offload.py",
   },
   {

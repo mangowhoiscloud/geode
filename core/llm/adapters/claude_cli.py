@@ -265,6 +265,7 @@ class ClaudeCliAdapter:
                 input_tokens=usage_tokens["input_tokens"],
                 output_tokens=usage_tokens["output_tokens"],
                 cached_input_tokens=usage_tokens["cache_read_input_tokens"],
+                cache_write_tokens=usage_tokens["cache_creation_input_tokens"],
             ),
             stop_reason=stop_reason,
             session_id=emitted_session_id,

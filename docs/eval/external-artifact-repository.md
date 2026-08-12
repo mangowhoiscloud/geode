@@ -16,6 +16,22 @@ not JFrog Artifactory or an opaque object-store upload. The publication unit is
 an allowlisted directory, and GitHub read-back from the exact merge commit is
 part of the evidence.
 
+The 2026-08-12 GPT-5.4 token-efficiency rerun is pinned to artifact commit
+[`2c2d1f0`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/2c2d1f0621f64ff7ceeff8c05d8ebd3449501aaf)
+from
+[`geode-eval-artifacts#21`](https://github.com/mangowhoiscloud/geode-eval-artifacts/pull/21).
+On the same pinned MCPMark `filesystem/easy` ten-task surface, the repaired
+GEODE runtime retained **9/10** while input tokens fell from 447,376 to 314,219
+(**−29.8%**) and output tokens from 25,157 to 20,385 (**−19.0%**). The release
+preserves 188 canonical events, 54/54 exact tool pairs, zero orphans, and ten
+scope-complete/replay-incomplete trajectories. The immutable
+[`manifest.json`](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/2c2d1f0621f64ff7ceeff8c05d8ebd3449501aaf/trajectories/mcpmark-geode-gpt54-high-token-efficiency-rerun-filesystem-easy-20260812T090254Z-35db8b275a36/manifest.json)
+has SHA-256
+`35db8b275a36bca0afef608e3b402d6e5bf0f4ed0f10aa15baccec5083f7468b`.
+Read-back from the exact merge commit reproduced the manifest and report
+metrics. This is a single matched diagnostic, not MCPMark Verified or a
+confidence interval.
+
 The 2026-08-11 GPT-5.6 effort-surface measurement is pinned to artifact commit
 [`7a78821`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/7a788211c2194f7118b40b63e19f071b6e7091fb)
 from

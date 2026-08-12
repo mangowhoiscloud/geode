@@ -382,36 +382,8 @@ def build_system_prompt(model: str = "") -> str:
 
 
 def format_current_date() -> str:
-    """Return the current date as ``YYYY-MM-DD (Weekday)`` string.
-
-    Shared helper used by both the system prompt and system injection
-    to avoid duplicate ``datetime.now()`` formatting.
-    """
+    """Return the current date as ``YYYY-MM-DD (Weekday)`` string."""
     return datetime.now().strftime("%Y-%m-%d (%A)")
-
-
-def get_active_rule_names(limit: int = 5) -> list[str]:
-    """Return active analysis rule names from ProjectMemory.
-
-    Shared helper used by both the system prompt (G4 detailed view)
-    and system injection (lightweight summary).  Returns empty list
-    on any failure (graceful degradation).
-    """
-    try:
-        from core.memory.project import ProjectMemory
-
-        mem = ProjectMemory()
-        if not mem.exists():
-            return []
-
-        rules = mem.list_rules()
-        if not rules:
-            return []
-
-        return [r["name"] for r in rules[:limit]]
-    except Exception:
-        log.debug("Failed to get active rule names", exc_info=True)
-        return []
 
 
 def _build_date_context() -> str:
@@ -726,18 +698,11 @@ def _build_learning_context() -> str:
 
 
 def _build_project_memory_context() -> str:
-    """G4: Build runtime project memory (insights + rules) from ProjectMemory.
-
-    G4 needs full rule details (name + paths), so it calls
-    ``mem.list_rules()`` directly rather than ``get_active_rule_names()``.
-    """
+    """G4: Build runtime project memory (insights + rules) from ProjectMemory."""
     try:
         from core.memory.project import ProjectMemory
 
         mem = ProjectMemory()
-        if not mem.exists():
-            return ""
-
         parts: list[str] = []
 
         # Recent insights (last 5 lines from PROJECT.md's recent insights section)

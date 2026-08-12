@@ -16,6 +16,7 @@ from plugins.benchmark_harness.mcpmark_geode_agent import (
     _patch_mcpmark_github_visibility,
     _route_from_model,
     _summarize_codex_exec,
+    _usage_dict,
     register_mcpmark_agent,
 )
 from plugins.benchmark_harness.trajectory_artifacts import (
@@ -83,6 +84,32 @@ def test_mcpmark_loop_validates_colliding_tool_with_mcp_schema() -> None:
     ]
 
 
+def test_mcpmark_tool_returns_call_tool_result_as_data() -> None:
+    class CallToolResult:
+        def model_dump(self, *, by_alias: bool, exclude_none: bool) -> dict[str, object]:
+            assert by_alias is True
+            assert exclude_none is True
+            return {
+                "content": [{"type": "text", "text": '{"answer": 42}'}],
+                "structuredContent": {"answer": 42},
+                "isError": False,
+            }
+
+    class MCPServer:
+        async def call_tool(self, _name: str, _arguments: dict[str, object]) -> CallToolResult:
+            return CallToolResult()
+
+    tool = MCPMarkGeodeTool(
+        mcp_server=MCPServer(),
+        schema={"name": "read", "inputSchema": {"type": "object"}},
+    )
+
+    result = asyncio.run(tool.aexecute())
+
+    assert result["structuredContent"] == {"answer": 42}
+    assert isinstance(result["content"], list)
+
+
 def test_route_from_geode_model_label() -> None:
     assert _route_from_model("geode-gpt-5.5") == ("gpt-5.5", "openai", "subscription")
     assert _route_from_model("geode-claude-sonnet-4-6") == (
@@ -91,6 +118,26 @@ def test_route_from_geode_model_label() -> None:
         "subscription",
     )
     assert _route_from_model("geode-glm-4-6") == ("glm-4-6", "zhipuai", "api_key")
+
+
+def test_usage_dict_translates_geode_usage_for_mcpmark_summary() -> None:
+    result = SimpleNamespace(
+        usage=SimpleNamespace(
+            to_dict=lambda: {
+                "input_tokens": 100,
+                "output_tokens": 20,
+                "thinking_tokens": 8,
+                "cache_read_tokens": 40,
+            }
+        )
+    )
+
+    usage = _usage_dict(result)
+
+    assert usage["total_tokens"] == 120
+    assert usage["reasoning_tokens"] == 8
+    assert usage["thinking_tokens"] == 8
+    assert usage["cache_read_tokens"] == 40
 
 
 def test_register_mcpmark_agent() -> None:

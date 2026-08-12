@@ -198,12 +198,15 @@ class UsageSummary:
 
     Mirrors paperclip ``UsageSummary`` (``types.ts:30-34``). ``cached_input``
     tracks prompt-cache hits separately so cost estimation can apply the
-    discounted rate (Anthropic) without losing the gross-input figure.
+    discounted rate (Anthropic) without losing the gross-input figure;
+    reasoning and cache-write counts retain provider detail through the loop.
     """
 
     input_tokens: int = 0
     output_tokens: int = 0
     cached_input_tokens: int = 0
+    reasoning_tokens: int = 0
+    cache_write_tokens: int = 0
 
 
 @dataclass(frozen=True)

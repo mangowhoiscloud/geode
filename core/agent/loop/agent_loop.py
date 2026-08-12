@@ -2816,23 +2816,12 @@ class AgenticLoop:
         ``allow_tools=False`` keeps auxiliary planner / judge calls on their
         structured text contract instead of inheriting the action tool surface.
 
-        Invariants:
-          * the context-overflow check mutates the SHARED messages list in
-            place (must precede the per-request reminder copy, or the
-            in-place prune evaporates and re-triggers every round);
-          * the system reminder is appended LAST on a per-request COPY —
-            the history prefix must stay byte-stable across rounds or the
-            rolling message cache breakpoints never hit.
+        The context-overflow check mutates the shared messages list in place,
+        so it must run before the adapter request is assembled.
         """
         effective_model = model or self.model
-        # shared list — in-place prune must persist (precede the reminder copy)
+        # Shared list — in-place pruning must persist into later rounds.
         await self._check_context_overflow(system, messages)
-
-        # reminder appended LAST on a per-request copy — byte-stable history
-        # prefix is load-bearing for prompt-cache breakpoints
-        from core.agent.system_injection import append_system_reminder
-
-        messages = append_system_reminder(messages, model=effective_model, round_idx=round_idx)
 
         # WRAP_UP: force text-only when approaching limits
         wrap_up = False
@@ -2971,6 +2960,8 @@ class AgenticLoop:
                 input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
                 output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
                 cached_input_tokens = int(getattr(usage, "cached_input_tokens", 0) or 0)
+                reasoning_tokens = int(getattr(usage, "reasoning_tokens", 0) or 0)
+                cache_write_tokens = int(getattr(usage, "cache_write_tokens", 0) or 0)
                 try:
                     from core.llm.token_tracker import calculate_cost
 
@@ -2979,6 +2970,7 @@ class AgenticLoop:
                             active_request.model,
                             input_tokens,
                             output_tokens,
+                            cache_creation_tokens=cache_write_tokens,
                             cache_read_tokens=cached_input_tokens,
                         )
                     )
@@ -3004,6 +2996,8 @@ class AgenticLoop:
                             "input_tokens": input_tokens,
                             "output_tokens": output_tokens,
                             "cached_input_tokens": cached_input_tokens,
+                            "reasoning_tokens": reasoning_tokens,
+                            "cache_write_tokens": cache_write_tokens,
                         },
                         "cost_usd": cost_usd,
                     },
