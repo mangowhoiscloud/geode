@@ -193,8 +193,7 @@ class RuntimeEvent(Enum):
     # ``"current/max"`` (e.g. ``"100/100"``).
     SELF_IMPROVING_AUTO_TRIGGER = "self_improving_auto_trigger"
 
-    # Wall-clock budget hand-off (PR-CL-BUDGET, 2026-05-23). Replaces the
-    # prior turn hard-cap with a 2h time-cap + automatic T-10min hand-off.
+    # Optional wall-clock budget hand-off (PR-CL-BUDGET, 2026-05-23).
     # Payload schema (all variants):
     #   {"session_id": str, "platform": str, "remaining_s": float,
     #    "budget_total_s": float, "ts": float}

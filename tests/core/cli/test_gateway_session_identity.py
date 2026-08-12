@@ -11,7 +11,10 @@ import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 
+import core.cli.typer_serve as serve_module
+import pytest
 from core.cli.typer_serve import (
+    _drain_goal_continuation,
     _gateway_checkpoint_is_resumable,
     _gateway_checkpoint_session_id,
     _gateway_resume_messages,
@@ -19,6 +22,17 @@ from core.cli.typer_serve import (
     _gateway_session_is_terminal,
     _restore_gateway_loop,
 )
+
+
+def test_hosted_goal_shutdown_drain_is_bounded(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(serve_module, "_DRAIN_TIMEOUT_S", 0.01)
+
+    async def scenario() -> None:
+        task = asyncio.create_task(asyncio.sleep(60))
+        await _drain_goal_continuation(task)
+        assert task.cancelled()
+
+    asyncio.run(scenario())
 
 
 def test_derivation_is_stable():
@@ -48,17 +62,28 @@ def test_only_active_or_paused_gateway_checkpoint_is_resumable():
     assert not _gateway_checkpoint_is_resumable(SimpleNamespace(status="error"))
 
 
-def test_gateway_history_falls_back_to_resumable_checkpoint():
+def test_gateway_history_prefers_resumable_checkpoint_over_stale_l2():
     checkpoint = SimpleNamespace(
         status="active",
+        updated_at=10.0,
         messages=[{"role": "user", "content": "persisted"}],
     )
 
     assert _gateway_resume_messages(None, checkpoint) == checkpoint.messages
+    assert (
+        _gateway_resume_messages(
+            {"messages": [{"role": "user", "content": "stale cache"}]},
+            checkpoint,
+        )
+        == checkpoint.messages
+    )
     assert _gateway_resume_messages(
-        {"messages": [{"role": "user", "content": "fresh"}]},
+        {
+            "messages": [{"role": "user", "content": "newer cache"}],
+            "updated_at": 11.0,
+        },
         checkpoint,
-    ) == [{"role": "user", "content": "fresh"}]
+    ) == [{"role": "user", "content": "newer cache"}]
     assert (
         _gateway_resume_messages(
             None,

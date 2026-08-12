@@ -50,7 +50,7 @@
         "benchmark",
         "trajectory"
       ],
-      "contentSha256": "103a272dcfef4ee7b858a7bb86635ef32846a5a6bb6abe293e180f5ea686f1cc"
+      "contentSha256": "6121e6f07e1e55ed0646e63ce6e21b3ecc17cae229cdbd86b112cf2891f40cf5"
     },
     {
       "id": "file:plugins/benchmark_harness/tau2_turn_supervisor.py",
@@ -69,12 +69,24 @@
       "id": "file:core/agent/loop/agent_loop.py",
       "filePath": "core/agent/loop/agent_loop.py",
       "name": "AgenticLoop",
-      "summary": "Runs model and tool rounds until termination, with default-off external boundaries and current-run pre-execution retry identity for evaluator attestation.",
+      "summary": "Owns the public persisted-goal wrapper and physical model/tool rounds, with default-off external boundaries and current-run pre-execution retry identity for evaluator attestation.",
       "tags": [
         "runtime",
         "while-tool-use"
       ],
-      "contentSha256": "3b5d3a63f8ecf8c64db34f76e807edf8cd8ad1a2e231db82fbfd31f18ea0044d"
+      "contentSha256": "08911283459ec581b2618957cead1b0d85eeb81f42d7366c92dbcf9986474b12"
+    },
+    {
+      "id": "file:core/agent/loop/_goal.py",
+      "filePath": "core/agent/loop/_goal.py",
+      "name": "Persisted Goal controller",
+      "summary": "Keeps ordinary turns on a no-goal fast path and opens successful continuation turns only for an explicitly active persisted Goal.",
+      "tags": [
+        "goal",
+        "runtime",
+        "turn-control"
+      ],
+      "contentSha256": "eae5b1b909212e3dbaf5f9df44e897f1b474c6c7889bb985e7811d9c926d965a"
     },
     {
       "id": "file:core/agent/tool_executor/processor.py",
@@ -86,7 +98,7 @@
         "tools",
         "parallel"
       ],
-      "contentSha256": "2f8d6cbcdfffc7406dfe854dad0b6ef3c0f3b24264b5402371be040581ca2302"
+      "contentSha256": "ff030f10c87d035483177f39cd874502263c18f257763a593b2f4d2a25f6f0f0"
     },
     {
       "id": "file:plugins/crucible/tau2_live.py",
@@ -212,6 +224,11 @@
       "source": "file:plugins/benchmark_harness/tau2_geode_agent.py",
       "target": "file:core/agent/loop/agent_loop.py",
       "type": "depends_on"
+    },
+    {
+      "source": "file:core/agent/loop/agent_loop.py",
+      "target": "file:core/agent/loop/_goal.py",
+      "type": "delegates_to"
     },
     {
       "source": "file:plugins/benchmark_harness/tau2_geode_agent.py",

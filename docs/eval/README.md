@@ -18,14 +18,14 @@ eval_contracts:
   - docs/eval/schemas/analysis.schema.json
   - docs/eval/schemas/attempt.schema.json
   - docs/eval/schemas/run-spec.schema.json
-eval_latest_valid_release: https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/4903c31abf/trajectories/geode-agenticloop-hook-middleware-behavior-e2e-20260807T112014Z-aba8839af72c
+eval_latest_valid_release: https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/2c2d1f0621f64ff7ceeff8c05d8ebd3449501aaf/trajectories/mcpmark-geode-gpt54-high-token-efficiency-rerun-filesystem-easy-20260812T090254Z-35db8b275a36
 ---
 
 # GEODE Evaluation Index and Roadmap
 
 > Action/tool-execution 4종 벤치마크. GEODE의 quality ratchet(P4)에 통합 예정.
 > 각 문서는 **사례 + 필요 인프라 + 4-Phase 진행 시나리오**를 담음.
-> 마지막 갱신: 2026-08-09
+> 마지막 갱신: 2026-08-12
 
 ## LLM entry contract
 
@@ -74,11 +74,24 @@ pointers under `docs/eval/`; the artifact repository keeps the bytes behind
 those claims. See [External Evaluation Artifact Repository](external-artifact-repository.md)
 for path mappings, disclosure rules, and the publication manifest scaffold.
 
+The latest matched runtime diagnostic is pinned to artifact commit
+[`2c2d1f0`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/2c2d1f0621f64ff7ceeff8c05d8ebd3449501aaf):
+GPT-5.4 subscription / effort `high` retained MCPMark filesystem/easy **9/10**
+while input tokens fell **29.8%** and output tokens **19.0%** against the
+pre-repair GEODE arm. The single trial proves the promotion gate only; it is
+not MCPMark Verified, a confidence interval, or a subscription billing claim.
+
+The latest route-contract diagnostic is the immutable
+[2026-08-11 GPT-5.6 effort-surface record](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/7a788211c2194f7118b40b63e19f071b6e7091fb/reports/e2e-validation/2026-08-11-gpt56-luna-terra-sol-effort-surface.md):
+all 18 Luna/Terra/Sol × six-effort combinations passed on the OpenAI
+subscription route. Its six retained transient overloads are transport
+evidence, not a quality comparison; `promotion_authority=none`.
+
 The latest runtime-contract record is the immutable
-[2026-08-07 Luna/max hook/middleware behavior trajectory](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/4903c31abf/trajectories/geode-agenticloop-hook-middleware-behavior-e2e-20260807T112014Z-aba8839af72c):
-one scope-complete, replay-incomplete stable trajectory with 27 normalized
-events. It supersedes the 2026-07-31 probe and is release-validation evidence,
-not a scored benchmark.
+[2026-08-10 Goal/deep-research behavior release](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/abad7de44a23cd0756fe1edb5b61a86ed715cc8f/trajectories/geode-agenticloop-goal-deep-research-gpt56-luna-max-2026-08-10-20260809T191233Z-a19174d30764):
+two GPT-5.6-Luna/max trajectories, 38 canonical events, 4/4 tool pairs, Goal
+create→continue→complete, and one bounded research batch retaining one typed
+child failure. It is a release-validation probe, not a scored benchmark.
 
 The latest scored behavior record is pinned to artifact commit
 [`86dcbba`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/86dcbba3d15f1979b71a501780bf66fea4b450b5):
@@ -214,6 +227,7 @@ Verified 다음에 τ²-bench를 둔다.
 
 | 일자 | 변경 |
 |---|---|
+| 2026-08-12 | GPT-5.4 subscription `high` matched MCPMark filesystem/easy 재실행: 9/10 유지, 입력 447,376→314,219(−29.8%), 출력 25,157→20,385(−19.0%), 188 events / 54 exact tool pairs. 검토된 trajectory release와 보고서를 artifact commit `2c2d1f0`에 게시하고 원격 read-back 검증 |
 | 2026-08-03 | 배포된 GEODE `v1.0.12@f99cea63` / GPT-5.4 subscription `high` post-release 검증: MCPMark filesystem/easy 9/10, Tau2 mock 0/1, Telecom-small 0/1. 실패를 재시도 없이 보존하고 416 events / 72 exact tool pairs, 두 stable manifests, 비식별 native receipts를 artifact commit `04ff1c4`에 게시한 뒤 원격 read-back 검증 |
 | 2026-08-03 | GEODE `22789ee2` / GPT-5.4 subscription `high`로 Tau2 base 278-task full cycle 완료: Airline 42/50, Retail 79/114, Telecom 79/114, aggregate 200/278. SQLite와 exact-join한 51,985 events / 3,964 tool pairs, 비식별 native receipts, retry-lineage 제한을 artifact commit `86dcbba`에 게시하고 원격 read-back 검증 |
 | 2026-07-31 | 배포된 GEODE `v1.0.11@686ff372` 재측정: MCPMark filesystem/easy 10/10, tau2 mock 0/1, Telecom-small 1-task 1/1. SQLite와 exact-join한 368 events / 87 tool pairs, stable manifests와 비식별 native receipts를 artifact commit `16a54f0`에 게시하고 원격 read-back 검증 |

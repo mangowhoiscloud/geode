@@ -222,7 +222,6 @@ export default function Page() {
               </thead>
               <tbody>
                 <tr><td><code>hitl_level</code></td><td>2</td><td>2면 모두 확인, 1이면 쓰기만 확인, 0이면 자율.</td></tr>
-                <tr><td><code>plan_auto_execute</code></td><td>false</td><td>플랜 자동 실행.</td></tr>
                 <tr><td><code>cost_limit_usd</code></td><td>0.0</td><td>비용 상한. 0이면 무제한, 80%에서 경고.</td></tr>
                 <tr><td><code>computer_use_enabled</code></td><td>true</td><td>데스크탑 자동화 도구.</td></tr>
               </tbody>
@@ -586,7 +585,6 @@ export default function Page() {
               </thead>
               <tbody>
                 <tr><td><code>hitl_level</code></td><td>2</td><td>2 = ask everything, 1 = write-only, 0 = autonomous.</td></tr>
-                <tr><td><code>plan_auto_execute</code></td><td>false</td><td>Auto-execute plans.</td></tr>
                 <tr><td><code>cost_limit_usd</code></td><td>0.0</td><td>Cost cap. 0 means no limit; warns at 80%.</td></tr>
                 <tr><td><code>computer_use_enabled</code></td><td>true</td><td>Desktop automation tool.</td></tr>
               </tbody>

@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import json
 import logging
 import threading
+import time
 from dataclasses import replace
 from types import SimpleNamespace
 from typing import Any
@@ -276,6 +278,56 @@ class TestToolExecutor:
         assert results[0]["tool_use_id"] == "toolu_async"
         assert '"status": "ok"' in results[0]["content"]
 
+    def test_mcp_result_prefers_structured_content_and_logs_raw(self) -> None:
+        raw_result = {
+            "content": [{"type": "text", "text": '{"tree": ["duplicate"]}'}],
+            "structuredContent": {"tree": ["canonical"]},
+            "isError": False,
+        }
+        executor = MagicMock(spec=ToolExecutor)
+        executor.aexecute = AsyncMock(return_value=raw_result)
+        op_logger = MagicMock()
+        op_logger.log_tool_call.return_value = True
+        timeline = MagicMock()
+        processor = ToolCallProcessor(
+            executor=executor,
+            op_logger=op_logger,
+            error_recovery=MagicMock(),
+            timeline=timeline,
+        )
+        block = SimpleNamespace(type="tool_use", name="mcp_tool", input={}, id="call-1")
+
+        results = asyncio.run(processor.process(SimpleNamespace(content=[block])))
+
+        assert results[0]["content"] == '{"tree": ["canonical"]}'
+        assert processor.tool_log[0]["result"] == raw_result
+        assert timeline.record_tool_result.call_args.kwargs["result"] == raw_result
+
+    def test_mcp_error_marks_timeline_and_failure_counter(self) -> None:
+        raw_result = {
+            "content": [{"type": "text", "text": "permission denied"}],
+            "isError": True,
+        }
+        executor = MagicMock(spec=ToolExecutor)
+        executor.aexecute = AsyncMock(return_value=raw_result)
+        op_logger = MagicMock()
+        op_logger.log_tool_call.return_value = True
+        timeline = MagicMock()
+        processor = ToolCallProcessor(
+            executor=executor,
+            op_logger=op_logger,
+            error_recovery=MagicMock(),
+            timeline=timeline,
+        )
+        block = SimpleNamespace(type="tool_use", name="mcp_tool", input={}, id="call-1")
+
+        results = asyncio.run(processor.process(SimpleNamespace(content=[block])))
+
+        assert '"error"' in results[0]["content"]
+        assert op_logger.log_tool_result.call_args.args[1].get("error")
+        assert timeline.record_tool_result.call_args.args[1] == "error"
+        assert processor._consecutive_failures["mcp_tool"] == 1
+
     def test_batch_cost_grant_does_not_approve_rewritten_mcp_tool(self) -> None:
         class RewriteExpensiveToMcp:
             async def tool_request(self, request):
@@ -391,22 +443,48 @@ class TestToolExecutor:
             hooks=hooks,
         )
         prev = get_offload_store()
+        store = ToolResultOffloadStore(
+            session_id="offload-test",
+            threshold=1,
+            base_dir=tmp_path / "offload",
+        )
+        payload = {"data": "x" * 110_000}
         try:
-            set_offload_store(
-                ToolResultOffloadStore(
-                    session_id="offload-test",
-                    threshold=1,
-                    base_dir=tmp_path / "offload",
-                )
-            )
-            result = asyncio.run(
-                processor._serialize_tool_result({"data": "x" * 1000}, "toolu_offload")
-            )
+            set_offload_store(store)
+            result = asyncio.run(processor._serialize_tool_result(payload, "toolu_offload"))
         finally:
             set_offload_store(prev)
 
         assert result["tool_use_id"] == "toolu_offload"
+        assert store.recall("toolu_offload") == payload
         assert hook_calls and hook_calls[0]["ref_id"] == "toolu_offload"
+
+    def test_offload_threshold_uses_ceiling_token_estimate(self, tmp_path: Any) -> None:
+        from core.orchestration.tool_offload import (
+            ToolResultOffloadStore,
+            get_offload_store,
+            set_offload_store,
+        )
+
+        processor = ToolCallProcessor(
+            executor=MagicMock(spec=ToolExecutor),
+            op_logger=MagicMock(),
+            error_recovery=MagicMock(),
+        )
+        previous = get_offload_store()
+        store = ToolResultOffloadStore(
+            session_id="offload-boundary",
+            threshold=1,
+            base_dir=tmp_path / "offload",
+        )
+        try:
+            set_offload_store(store)
+            result = asyncio.run(processor._serialize_tool_result("xxx", "toolu_boundary"))
+        finally:
+            set_offload_store(previous)
+
+        assert store.recall("toolu_boundary") == "xxx"
+        assert json.loads(result["content"])["_offloaded"] is True
 
     def test_safe_tools_classification(self) -> None:
         assert "memory_search" in SAFE_TOOLS
@@ -421,6 +499,10 @@ class TestToolExecutor:
         assert "note_save" in WRITE_TOOLS
         assert "set_api_key" in WRITE_TOOLS
         assert "manage_auth" in WRITE_TOOLS
+
+    def test_update_plan_is_serialized_without_becoming_a_write_gate(self) -> None:
+        assert ToolCallProcessor._classify_tier("update_plan") == 3
+        assert "update_plan" not in WRITE_TOOLS
 
     def test_write_tools_require_confirmation(self) -> None:
         """Write tools require user confirmation when not auto-approved."""
@@ -680,6 +762,105 @@ class TestAgenticLoop:
         assert result.tool_calls[0]["tool"] == "list_subjects"
         assert result.error is None
         assert result.termination_reason == "natural"
+
+    def test_stale_session_budget_cannot_poison_next_action(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Action E2E: expired A stops before planning; B still uses its tool."""
+        monkeypatch.delenv("GEODE_SESSION_TIME_BUDGET_S", raising=False)
+        handler = MagicMock(return_value={"status": "ok"})
+        executor = ToolExecutor(action_handlers={"list_subjects": handler})
+        loop_a = AgenticLoop(
+            ConversationContext(),
+            executor,
+            session_id="session-a",
+            enable_goal_decomposition=False,
+            quiet=True,
+        )
+        warm_response = MagicMock(stop_reason="end_turn", usage=MagicMock(output_tokens=50))
+        warm_response.content = [
+            SimpleNamespace(type="text", text="Session A completed its warm-up turn successfully.")
+        ]
+        tool_response = MagicMock(stop_reason="tool_use", usage=MagicMock(output_tokens=50))
+        tool_response.content = [
+            SimpleNamespace(
+                type="tool_use",
+                name="list_subjects",
+                input={},
+                id="toolu_budget_e2e",
+            )
+        ]
+        text_response = MagicMock(stop_reason="end_turn", usage=MagicMock(output_tokens=50))
+        text_response.content = [SimpleNamespace(type="text", text="done")]
+
+        async def run_same_task() -> tuple[AgenticResult, AgenticResult, AsyncMock, AsyncMock, Any]:
+            with (
+                patch.object(loop_a, "_call_llm", return_value=warm_response),
+                patch.object(loop_a, "_track_usage"),
+                patch.object(loop_a, "_maybe_reflect", new=AsyncMock()),
+            ):
+                warm = await loop_a.arun("warm session A")
+            assert warm.termination_reason == "natural"
+
+            loop_a._session_metrics.start_time_budget(7200.0, threshold_seconds=600.0)
+            loop_a._session_metrics.time_budget_start_s = time.monotonic() - 86951.0
+            with (
+                patch.object(loop_a, "_call_llm", new=AsyncMock()) as call_llm,
+                patch.object(loop_a, "_try_decompose", new=AsyncMock()) as decompose,
+                patch.object(loop_a, "_persist_handoff_request") as persist_handoff,
+            ):
+                result_a = await loop_a.arun("expired work")
+
+            loop_b = AgenticLoop(
+                ConversationContext(),
+                executor,
+                session_id="session-b",
+                enable_goal_decomposition=False,
+                quiet=True,
+            )
+            assert loop_b._session_metrics is not loop_a._session_metrics
+            with (
+                patch.object(loop_b, "_call_llm", side_effect=[tool_response, text_response]),
+                patch.object(loop_b, "_track_usage"),
+                patch.object(loop_b, "_maybe_reflect", new=AsyncMock()),
+            ):
+                result_b = await loop_b.arun("use the tool")
+            return result_b, result_a, call_llm, decompose, persist_handoff
+
+        result_b, result_a, call_llm, decompose, persist_handoff = asyncio.run(run_same_task())
+
+        assert result_b.termination_reason == "natural"
+        handler.assert_called_once()
+        assert result_a.termination_reason == "session_time_budget_expired"
+        assert "over the 7200s budget" in result_a.text
+        call_llm.assert_not_awaited()
+        decompose.assert_not_awaited()
+        persist_handoff.assert_not_called()
+        assert loop_a._session_metrics.handoff_triggered_at == 0.0
+
+    def test_session_budget_requires_explicit_valid_env(
+        self,
+        context: ConversationContext,
+        executor: ToolExecutor,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        loop = AgenticLoop(context, executor, quiet=True)
+
+        monkeypatch.delenv("GEODE_SESSION_TIME_BUDGET_S", raising=False)
+        loop._maybe_start_session_budget()
+        assert loop._session_metrics.time_budget_total_s == 0.0
+
+        for invalid in ("not-a-number", "nan", "inf", "-inf"):
+            monkeypatch.setenv("GEODE_SESSION_TIME_BUDGET_S", invalid)
+            loop._maybe_start_session_budget()
+            assert loop._session_metrics.time_budget_total_s == 0.0
+
+        monkeypatch.setenv("GEODE_SESSION_TIME_BUDGET_S", "120")
+        loop._maybe_start_session_budget()
+        assert loop._session_metrics.time_budget_total_s == 120.0
+        assert loop._session_metrics.handoff_threshold_s == 60.0
+        assert loop._check_session_budget_and_maybe_handoff() is None
 
     def test_external_orchestrator_yields_after_one_tool_round_without_round_cap(
         self,

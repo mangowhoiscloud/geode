@@ -18,6 +18,7 @@ import hashlib
 import json
 import logging
 import os
+import time
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
@@ -47,6 +48,7 @@ from core.ui.status import TextSpinner
 from . import (
     _collaboration_mailbox,
     _context,
+    _goal,
     _lifecycle,
     _model_switching,
     _planner_dispatch,
@@ -464,6 +466,7 @@ class AgenticLoop:
         # set by update_model_async on model change; the run-loop rebuilds
         # system_prompt before the next LLM call.
         self._prompt_dirty: bool = False
+        self._last_plan_hint: str = ""
         self._tool_registry = tool_registry
         self._mcp_manager = mcp_manager
         self._skill_registry = skill_registry
@@ -548,6 +551,7 @@ class AgenticLoop:
         # run-scoped JSONL projection.
         self._timeline: Any | None = None
         self._session_id: str = ""
+        self._goal_store: Any | None = None
         try:
             import uuid as _uuid
 
@@ -560,8 +564,23 @@ class AgenticLoop:
             else:
                 self._session_id = f"s-{_uuid.uuid4().hex[:12]}"
             self._timeline = SessionTimeline(self._session_id)
+            from core.memory.goals import GoalStore
+
+            self._goal_store = GoalStore(self._timeline.db_path)
         except Exception:
             log.warning("Session timeline init failed", exc_info=True)
+        from core.observability.session_metrics import SessionMetrics, current_session_metrics
+
+        ambient_metrics = current_session_metrics()
+        self._session_metrics = (
+            ambient_metrics
+            if ambient_metrics.session_id == self._session_id or ambient_metrics.gen_tag
+            else SessionMetrics(
+                session_id=self._session_id,
+                component="agentic_loop",
+                started_at=time.time(),
+            )
+        )
         try:
             from core.agent.capability_graph import build_capability_graph
             from core.agent.evidence_ledger import EvidenceLedger
@@ -1003,20 +1022,25 @@ class AgenticLoop:
     ) -> str:
         """Sync model drift + rebuild the system prompt.
 
-        Rebuilds when the model drifted (``settings.model`` changed) or
-        ``_prompt_dirty`` is set (direct ``update_model_async``). On
-        rebuild, re-applies the preflight / reflection / verification / plan
-        hints inside the dynamic envelope so a mid-arun drift doesn't drop them (the
-        preflight hint was silently lost here before 2026-07-29). Returns
-        the (possibly-rebuilt) prompt; clears ``_prompt_dirty``.
+        Rebuilds when the model drifted (``settings.model`` changed),
+        ``_prompt_dirty`` is set (direct ``update_model_async``), or advisory
+        plan progress changed. On rebuild, re-applies the preflight /
+        reflection / verification / plan hints inside the dynamic envelope so
+        a mid-arun change does not drop them. Returns the (possibly-rebuilt)
+        prompt; clears ``_prompt_dirty``.
         """
         drift_detected = await self._sync_model_from_settings_async()
         prompt_dirty = self._prompt_dirty
-        if drift_detected or prompt_dirty:
+        _plan_consume = getattr(self, "_consume_plan_hint", None)
+        raw_plan_hint = _plan_consume() if callable(_plan_consume) else ""
+        plan_hint = raw_plan_hint if isinstance(raw_plan_hint, str) else ""
+        last_plan_hint = getattr(self, "_last_plan_hint", "")
+        if not isinstance(last_plan_hint, str):
+            last_plan_hint = plan_hint
+        plan_changed = plan_hint != last_plan_hint
+        if drift_detected or prompt_dirty or plan_changed:
             from core.agent.loop._context import inject_runtime_hints
 
-            _plan_consume = getattr(self, "_consume_plan_hint", None)
-            plan_hint = _plan_consume() if callable(_plan_consume) else ""
             system_prompt = inject_runtime_hints(
                 self._build_system_prompt(),
                 getattr(self, "_preflight_hint", ""),
@@ -1025,12 +1049,17 @@ class AgenticLoop:
                 plan_hint if isinstance(plan_hint, str) else "",
             )
             self._prompt_dirty = False
+            self._last_plan_hint = plan_hint
             # Fire PROMPT_ASSEMBLED on each per-round rebuild (no-op if no hooks)
             hooks = getattr(self, "_hooks", None)
             if hooks:
                 from core.hooks import HookEvent
 
-                reason = "model_drift" if drift_detected else "prompt_dirty"
+                reason = (
+                    "model_drift"
+                    if drift_detected
+                    else ("prompt_dirty" if prompt_dirty else "plan_progress")
+                )
                 await hooks.trigger_async(
                     HookEvent.PROMPT_ASSEMBLED,
                     {
@@ -1134,9 +1163,15 @@ class AgenticLoop:
         self,
         user_input: str,
         continuation: HookCorrelation | None,
+        *,
+        internal_continuation: bool = False,
     ) -> tuple[str, AgenticResult | None]:
         """Reset per-turn state and cross the public input boundary."""
         import uuid
+
+        from core.observability.session_metrics import set_current_session_metrics
+
+        set_current_session_metrics(self._session_metrics)
 
         self._tool_processor.reset()
         self._op_logger.reset()
@@ -1165,6 +1200,18 @@ class AgenticLoop:
         set_turn_id(self._turn_id)
         if continuation is not None:
             return user_input, None
+        if internal_continuation:
+            from core.agent.cognitive_state_ctx import (
+                set_cognitive_state,
+                set_parent_session_id,
+                set_parent_session_key,
+            )
+
+            set_cognitive_state(self.cognitive_state)
+            set_parent_session_key(self._parent_session_key)
+            set_parent_session_id(self._parent_session_id)
+            self._verify_root_user_input = user_input
+            return user_input, None
         effective, blocked = await self._apply_user_prompt_hook(user_input)
         self._verify_root_user_input = effective
         return effective, blocked
@@ -1186,6 +1233,8 @@ class AgenticLoop:
         user_input: str,
         *,
         verification_continuation: bool = False,
+        goal_continuation: Any | None = None,
+        goal_continuation_trigger: str = "active_goal",
     ) -> AgenticResult | None:
         """Publish legacy start signals, then the durable public boundary."""
         if verification_continuation:
@@ -1197,13 +1246,49 @@ class AgenticLoop:
                 )
             root_input = self._verify_root_user_input or user_input
             self._save_checkpoint(root_input, round_idx=0)
-            return None
+            return await self._admit_session_budget(user_input)
+        if goal_continuation is not None:
+            resumed_start = (
+                int(getattr(self, "_session_generation", 1)) > 1
+                and not self._public_session_started
+            )
+            if self._timeline is not None:
+                from core.observability.session_timeline import SessionEventKind
+
+                if resumed_start:
+                    self._timeline.record_session_start(
+                        model=self.model,
+                        provider=self._provider,
+                    )
+                self._timeline.record_goal_state(
+                    SessionEventKind.GOAL_CONTINUED,
+                    goal_continuation,
+                    trigger=goal_continuation_trigger,
+                )
+            if resumed_start:
+                from core.llm.adapters.dispatch import begin_session_adapter_tracking
+
+                begin_session_adapter_tracking()
+                if self._hooks:
+                    await self._hooks.trigger_async(
+                        HookEvent.SESSION_STARTED,
+                        {
+                            "model": self.model,
+                            "provider": self._provider,
+                            "session_id": self._session_id,
+                            "resumed": True,
+                        },
+                    )
+            objective = str(getattr(goal_continuation, "objective", user_input))
+            if self._save_checkpoint(objective, round_idx=0) and resumed_start:
+                await _lifecycle.emit_public_session_start(self)
+            return await self._admit_session_budget(user_input)
         intercepted = await self._emit_session_start_signals(user_input)
         if intercepted is not None:
             return intercepted
         if self._save_checkpoint(user_input, round_idx=0):
             await _lifecycle.emit_public_session_start(self)
-        return None
+        return await self._admit_session_budget(user_input)
 
     async def _finalize_blocked_turn(self, result: AgenticResult) -> AgenticResult:
         """Persist a rejected prompt attempt without storing its prompt body."""
@@ -1213,6 +1298,19 @@ class AgenticLoop:
                 provider=self._provider,
             )
         return await self._afinalize_and_return(result, "", 0)
+
+    async def _admit_session_budget(self, user_input: str) -> AgenticResult | None:
+        """Stop an expired opt-in session before planner, model, or tool work."""
+        self._maybe_start_session_budget()
+        guard = self._check_session_budget_and_maybe_handoff()
+        if guard is None:
+            return None
+        reason, text = self._guard_exit_result(guard, rounds=0)
+        return await self._afinalize_and_return(
+            self._terminal_result(reason, text, rounds=0),
+            user_input,
+            0,
+        )
 
     # ------------------------------------------------------------------
     # Guard chain — the loop's transition guards, in priority order
@@ -1437,9 +1535,7 @@ class AgenticLoop:
             remaining = None
             total = None
             try:
-                from core.observability.session_metrics import current_session_metrics
-
-                metrics = current_session_metrics()
+                metrics = self._session_metrics
                 remaining = metrics.time_budget_remaining_s()
                 total = metrics.time_budget_total_s
             except Exception:
@@ -1506,7 +1602,7 @@ class AgenticLoop:
                 except Exception:
                     log.debug("Handoff SessionManager close failed", exc_info=True)
 
-    async def _maybe_replan_async(self, round_idx: int) -> None:
+    async def _maybe_replan_async(self, round_idx: int, *, failure_context: str = "") -> None:
         """Per-round Dynamic Replan trigger.
 
         Asks :func:`core.agent.plan.should_replan`; on a trigger calls
@@ -1562,24 +1658,45 @@ class AgenticLoop:
                 metrics.record_step_attempt()
                 cap = _replan_max_attempts()
                 if metrics.replan_attempts_on_current_step > cap:
+                    abandoned_step = metrics.active_plan.current_step()
                     advanced = metrics.active_plan.abandon_and_advance()
                     # new step → reset the per-step counter
                     metrics.set_active_plan(advanced, reset_attempts=True)
+                    timeline = getattr(self, "_timeline", None)
+                    if timeline is not None:
+                        from core.observability.session_timeline import SessionEventKind
+
+                        timeline.record_plan_state(
+                            SessionEventKind.PLAN_ABANDONED,
+                            advanced,
+                            trigger="retry_budget_exhausted",
+                            changed_step_ids=(abandoned_step.id,)
+                            if abandoned_step is not None
+                            else (),
+                        )
                     self._prompt_dirty = True
                     log.info(
                         "Replan abandon: step exceeded %d attempts; advancing plan",
                         cap,
                     )
                     return
-            # synthetic turn_result — replan_async only reads ``.text``
+            # Replan against the failed candidate and verifier instruction;
+            # the per-turn tool log was reset before a verify continuation.
             from types import SimpleNamespace
 
-            recent_text = ""
-            try:
-                recent_text = self._tool_processor.tool_log[-1].get("result", "")
-            except Exception:
-                log.debug("recent tool_log read for replanner failed", exc_info=True)
-                recent_text = ""
+            recent_parts: list[str] = []
+            if trigger == "verify_fail":
+                attempts = getattr(self, "_verify_attempt_results", ())
+                if attempts:
+                    recent_parts.append(str(getattr(attempts[-1], "text", "") or ""))
+                if failure_context:
+                    recent_parts.append(failure_context)
+            if not recent_parts:
+                try:
+                    recent_parts.append(str(self._tool_processor.tool_log[-1].get("result", "")))
+                except Exception:
+                    log.debug("recent tool_log read for replanner failed", exc_info=True)
+            recent_text = "\n\n".join(part for part in recent_parts if part)
             stub_result = SimpleNamespace(text=str(recent_text))
             new_plan = await replan_async(
                 self, plan=metrics.active_plan, turn_result=stub_result, trigger=trigger
@@ -1589,6 +1706,15 @@ class AgenticLoop:
                 return
             metrics.record_replan(trigger)
             metrics.set_active_plan(new_plan)
+            timeline = getattr(self, "_timeline", None)
+            if timeline is not None:
+                from core.observability.session_timeline import SessionEventKind
+
+                timeline.record_plan_state(
+                    SessionEventKind.PLAN_REPLANNED,
+                    new_plan,
+                    trigger=trigger,
+                )
             # next LLM call must see the new plan
             self._prompt_dirty = True
             # UI replan banner
@@ -1670,35 +1796,36 @@ class AgenticLoop:
 
         Idempotent — no-op when a prior loop in the same SessionMetrics
         scope already started it (clock keeps running across nested loops).
-        ``GEODE_SESSION_TIME_BUDGET_S`` overrides the default (0 disables).
+        The cap is opt-in via ``GEODE_SESSION_TIME_BUDGET_S``; unset, invalid,
+        and non-positive values leave durable sessions unbounded.
         Failures NEVER raise.
         """
+        import math
         import os
 
         try:
             from core.agent.budget import (
                 DEFAULT_HANDOFF_THRESHOLD_S,
-                DEFAULT_TIME_BUDGET_S,
                 start_session_budget,
             )
-            from core.observability.session_metrics import current_session_metrics
 
-            metrics = current_session_metrics()
+            metrics = self._session_metrics
             if metrics.time_budget_total_s > 0.0:
                 return  # Already started in this session.
             raw = os.environ.get("GEODE_SESSION_TIME_BUDGET_S")
-            if raw is not None:
-                try:
-                    total = float(raw)
-                except ValueError:
-                    total = DEFAULT_TIME_BUDGET_S
-            else:
-                total = DEFAULT_TIME_BUDGET_S
-            if total <= 0.0:
+            if raw is None:
+                return
+            try:
+                total = float(raw)
+            except ValueError:
+                log.warning("Ignoring invalid GEODE_SESSION_TIME_BUDGET_S=%r", raw)
+                return
+            if not math.isfinite(total) or total <= 0.0:
+                log.warning("Ignoring non-positive or non-finite session time budget: %r", raw)
                 return  # Explicitly disabled.
             start_session_budget(
                 total_seconds=total,
-                handoff_threshold_seconds=DEFAULT_HANDOFF_THRESHOLD_S,
+                handoff_threshold_seconds=min(DEFAULT_HANDOFF_THRESHOLD_S, total / 2.0),
                 metrics=metrics,
             )
         except Exception:
@@ -1718,11 +1845,12 @@ class AgenticLoop:
 
         try:
             from core.agent.budget import budget_summary, check_session_budget
-            from core.observability.session_metrics import current_session_metrics
 
-            check = check_session_budget()
+            metrics = self._session_metrics
+            check = check_session_budget(metrics=metrics)
+            if check.expired:
+                return "session_time_budget_expired"
             if check.handoff_due:
-                metrics = current_session_metrics()
                 payload: dict[str, Any] = {
                     "session_id": self._session_id,
                     "platform": "",  # adapter binding can override
@@ -1752,8 +1880,6 @@ class AgenticLoop:
                 # parity; no-op when no session row exists yet)
                 self._persist_handoff_request()
                 return "session_time_budget_handoff"
-            if check.expired:
-                return "session_time_budget_expired"
         except Exception:
             log.warning("Session budget check failed", exc_info=True)
         return None
@@ -2027,8 +2153,35 @@ class AgenticLoop:
         *,
         _verify_continuation: HookCorrelation | None = None,
     ) -> AgenticResult:
-        """Run the agentic loop until LLM emits end_turn or max rounds."""
-        user_input, blocked = await self._begin_turn(user_input, _verify_continuation)
+        """Run one user turn plus any explicitly activated goal continuations."""
+        return await _goal.run(
+            self,
+            user_input,
+            verify_continuation=_verify_continuation,
+        )
+
+    async def acontinue_goal(
+        self,
+        *,
+        trigger: str = "serve_idle",
+    ) -> AgenticResult | None:
+        """Continue this session's active Goal through the normal turn loop."""
+        return await _goal.continue_active(self, trigger=trigger)
+
+    async def _arun_once(
+        self,
+        user_input: str,
+        *,
+        _verify_continuation: HookCorrelation | None = None,
+        _goal_continuation: Any | None = None,
+        _goal_continuation_trigger: str = "active_goal",
+    ) -> AgenticResult:
+        """Run one physical agent turn until the model emits a terminal."""
+        user_input, blocked = await self._begin_turn(
+            user_input,
+            _verify_continuation,
+            internal_continuation=_goal_continuation is not None,
+        )
         if blocked is not None:
             return await self._finalize_blocked_turn(blocked)
 
@@ -2048,6 +2201,8 @@ class AgenticLoop:
         intercept_result = await self._open_turn(
             user_input,
             verification_continuation=_verify_continuation is not None,
+            goal_continuation=_goal_continuation,
+            goal_continuation_trigger=_goal_continuation_trigger,
         )
         if intercept_result is not None:
             return intercept_result
@@ -2061,6 +2216,11 @@ class AgenticLoop:
             if verification_continuation
             else ""
         )
+        goal_hint = (
+            _context.render_goal_continuation_hint(_goal_continuation)
+            if _goal_continuation is not None
+            else ""
+        )
         preflight_hint = self._prepare_task_preflight(task_input)
         # Retained on self so mid-arun prompt rebuilds re-apply it.
         self._preflight_hint = preflight_hint
@@ -2072,7 +2232,7 @@ class AgenticLoop:
         try:
             await self._try_decompose(
                 user_input,
-                enabled=not verification_continuation,
+                enabled=not verification_continuation and _goal_continuation is None,
             )
         except BillingError as exc:
             self._emit_quota_panel(exc)
@@ -2087,6 +2247,10 @@ class AgenticLoop:
             )
 
         messages = self.context.get_messages()
+        # Codex Goal uses a hidden contextual-user fragment for idle-turn
+        # steering. Keep this request-local so the continuation is visible to
+        # the model without masquerading as a persisted human message.
+        messages.extend(_context.goal_continuation_messages(goal_hint))
 
         # Unified runtime-hint grammar: every per-turn injection is an XML
         # block INSIDE <dynamic_context> — preflight, prior-turn reflection
@@ -2094,12 +2258,14 @@ class AgenticLoop:
         from core.agent.loop._context import inject_runtime_hints
 
         reflection_hint = self._consume_reflection_hint()
+        plan_hint = self._consume_plan_hint()
+        self._last_plan_hint = plan_hint
         system_prompt = inject_runtime_hints(
             self._build_system_prompt(),
             preflight_hint,
             reflection_hint,
             verification_hint,
-            self._consume_plan_hint(),
+            plan_hint,
         )
 
         # Prune old messages to stay within context budget (Karpathy P6)
@@ -2108,9 +2274,6 @@ class AgenticLoop:
         import time as _time
 
         self._loop_start_time = _time.monotonic()
-        # session-wide budget (separate from per-loop _time_budget_s; either
-        # may fire first)
-        self._maybe_start_session_budget()
         # tracker snapshot at entry → finalize computes a per-arun usage
         # delta without double-counting sibling loops on the shared tracker
         from core.llm.token_tracker import get_tracker as _get_tracker
@@ -2128,7 +2291,10 @@ class AgenticLoop:
 
             # Dynamic Replan trigger (verify-FAIL / cadence); the rebuild
             # below picks up the new plan via _consume_plan_hint.
-            await self._maybe_replan_async(round_idx)
+            await self._maybe_replan_async(
+                round_idx,
+                failure_context=user_input if verification_continuation else "",
+            )
 
             system_prompt = await self._sync_model_and_rebuild_prompt(
                 system_prompt,
@@ -2662,6 +2828,7 @@ class AgenticLoop:
         round_idx: int = 0,
         model: str | None = None,
         response_schema: dict[str, Any] | None = None,
+        allow_tools: bool = True,
     ) -> AgenticResponse | None:
         """Multi-provider LLM call via :class:`LLMAdapter` (P1 Gateway pattern).
 
@@ -2670,39 +2837,30 @@ class AgenticLoop:
         ``AgenticResponse`` or None on failure. Raises ``UserCancelledError``
         on Ctrl+C (caught by ``arun()``). Optional ``model`` overrides the
         request model for one call without mutating ``self.model``. Optional
-        ``response_schema`` overrides the loop-level schema for this call only,
-        so auxiliary planner / judge calls can use structured outputs without
-        changing the main agent turn.
+        ``response_schema`` overrides the loop-level schema for this call only.
+        ``allow_tools=False`` keeps auxiliary planner / judge calls on their
+        structured text contract instead of inheriting the action tool surface.
 
-        Invariants:
-          * the context-overflow check mutates the SHARED messages list in
-            place (must precede the per-request reminder copy, or the
-            in-place prune evaporates and re-triggers every round);
-          * the system reminder is appended LAST on a per-request COPY —
-            the history prefix must stay byte-stable across rounds or the
-            rolling message cache breakpoints never hit.
+        The context-overflow check mutates the shared messages list in place,
+        so it must run before the adapter request is assembled.
         """
         effective_model = model or self.model
-        # shared list — in-place prune must persist (precede the reminder copy)
+        # Shared list — in-place pruning must persist into later rounds.
         await self._check_context_overflow(system, messages)
 
-        # reminder appended LAST on a per-request copy — byte-stable history
-        # prefix is load-bearing for prompt-cache breakpoints
-        from core.agent.system_injection import append_system_reminder
-
-        messages = append_system_reminder(messages, model=effective_model, round_idx=round_idx)
-
         # WRAP_UP: force text-only when approaching limits
-        force_text = False
+        wrap_up = False
         if self.max_rounds > 0:
             remaining = self.max_rounds - round_idx
-            force_text = remaining <= self.WRAP_UP_HEADROOM
-        if not force_text and self._time_budget_s > 0:
+            wrap_up = remaining <= self.WRAP_UP_HEADROOM
+        if not wrap_up and self._time_budget_s > 0:
             import time as _time
 
             remaining_time = self._time_budget_s - (_time.monotonic() - self._loop_start_time)
-            force_text = remaining_time <= self._WRAP_UP_TIME_HEADROOM_S
-        tool_choice: dict[str, str] = {"type": "none"} if force_text else {"type": "auto"}
+            wrap_up = remaining_time <= self._WRAP_UP_TIME_HEADROOM_S
+        tool_choice: dict[str, str] = (
+            {"type": "none"} if wrap_up or not allow_tools else {"type": "auto"}
+        )
 
         # Adaptive compute — context-proportional caps; the only adaptive
         # case left is wrap-up (overthinking exits the loop instead).
@@ -2714,7 +2872,7 @@ class AgenticLoop:
         adaptive_max_tokens = self.max_tokens
         adaptive_thinking = self._thinking_budget
         adaptive_effort = self._effort
-        if force_text:
+        if wrap_up:
             # wrap-up: minimal budget (0.5% of window, floor 4096)
             adaptive_max_tokens = max(4096, min(self.max_tokens, ctx_window // 200))
             adaptive_thinking = 0
@@ -2738,7 +2896,7 @@ class AgenticLoop:
             model=effective_model,
             system=system,
             messages=messages,
-            tools=self._tools,
+            tools=self._tools if allow_tools else [],
             tool_choice=tool_choice,
             max_tokens=adaptive_max_tokens,
             temperature=loop_temperature,
@@ -2827,6 +2985,8 @@ class AgenticLoop:
                 input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
                 output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
                 cached_input_tokens = int(getattr(usage, "cached_input_tokens", 0) or 0)
+                reasoning_tokens = int(getattr(usage, "reasoning_tokens", 0) or 0)
+                cache_write_tokens = int(getattr(usage, "cache_write_tokens", 0) or 0)
                 try:
                     from core.llm.token_tracker import calculate_cost
 
@@ -2835,6 +2995,7 @@ class AgenticLoop:
                             active_request.model,
                             input_tokens,
                             output_tokens,
+                            cache_creation_tokens=cache_write_tokens,
                             cache_read_tokens=cached_input_tokens,
                         )
                     )
@@ -2860,6 +3021,8 @@ class AgenticLoop:
                             "input_tokens": input_tokens,
                             "output_tokens": output_tokens,
                             "cached_input_tokens": cached_input_tokens,
+                            "reasoning_tokens": reasoning_tokens,
+                            "cache_write_tokens": cache_write_tokens,
                         },
                         "cost_usd": cost_usd,
                     },

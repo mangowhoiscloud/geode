@@ -66,6 +66,42 @@ def test_timeline_persists_versioned_turn_and_call_correlation(tmp_path: Path) -
     assert rows[0].schema_version == SESSION_EVENT_SCHEMA_VERSION
 
 
+def test_timeline_persists_advisory_plan_lineage(tmp_path: Path) -> None:
+    from core.agent.plan import Plan, PlanStep
+
+    timeline = SessionTimeline("s-plan", db_path=tmp_path / "sessions.db")
+    plan = Plan(
+        steps=(
+            PlanStep(id="inspect", description="Inspect evidence"),
+            PlanStep(id="synthesize", description="Synthesize answer"),
+        )
+    )
+    progressed = plan.complete_and_advance(1)
+
+    timeline.record_plan_state(
+        SessionEventKind.PLAN_CREATED,
+        plan,
+        trigger="goal_decomposition",
+    )
+    timeline.record_plan_state(
+        SessionEventKind.PLAN_PROGRESSED,
+        progressed,
+        trigger="update_plan",
+        changed_step_ids=("inspect",),
+    )
+
+    rows = SessionEventStore(timeline.db_path).read("s-plan")
+    assert [row.kind for row in rows] == ["plan.created", "plan.progressed"]
+    assert {row.payload["plan_id"] for row in rows} == {plan.plan_id}
+    assert rows[1].payload["completed_step_ids"] == ["inspect"]
+    assert rows[1].payload["changed_step_ids"] == ["inspect"]
+    assert "steps" not in rows[1].payload
+    assert "reasoning" not in rows[1].payload
+    from core.observability.record_schema import validate_record
+
+    validate_record(rows[1].as_dict())
+
+
 def test_session_start_is_once_per_generation(tmp_path: Path) -> None:
     timeline = SessionTimeline("s-1", db_path=tmp_path / "sessions.db")
     timeline.bind_turn("t-1")

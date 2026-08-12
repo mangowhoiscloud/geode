@@ -96,10 +96,19 @@ def restore_loop_state(loop: AgenticLoop, state: Any) -> None:
     state, and guard counters in one place, so no path can forget a field.
     Model restore stays with the caller (sync vs async contexts differ).
     """
+    import time
+
     from core.agent.cognitive_state import CognitiveState
+    from core.observability.session_metrics import SessionMetrics
 
     timeline = getattr(loop, "_timeline", None)
     loop._session_id = state.session_id
+    if getattr(getattr(loop, "_session_metrics", None), "session_id", "") != state.session_id:
+        loop._session_metrics = SessionMetrics(
+            session_id=state.session_id,
+            component="agentic_loop",
+            started_at=time.time(),
+        )
     loop._session_generation = (
         timeline.next_generation(state.session_id)
         if timeline is not None
@@ -896,7 +905,7 @@ async def finalize_and_return_async(
     if follow_up:
         await _close_verify_attempt(loop, result, user_input, round_idx, verify_payload)
         loop._verify_attempt_results.append(result)
-        continued = await loop.arun(
+        continued = await loop._arun_once(
             follow_up,
             _verify_continuation=replace(
                 correlation,

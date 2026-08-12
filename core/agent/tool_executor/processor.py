@@ -29,9 +29,20 @@ from core.tools.personal_data import (
 )
 
 from .executor import ToolExecutor
-from .result_token_guard import _compute_model_tool_limit, _guard_tool_result
+from .result_token_guard import (
+    _compute_model_tool_limit,
+    _guard_tool_result,
+    _project_mcp_result,
+)
 
 log = logging.getLogger(__name__)
+
+
+def _tool_result_failed(result: Any) -> bool:
+    """Return whether a native or MCP result represents a failed call."""
+    return isinstance(result, dict) and bool(
+        result.get("error") or result.get("isError") or result.get("is_error")
+    )
 
 
 class ToolCallProcessor:
@@ -138,18 +149,18 @@ class ToolCallProcessor:
             if not skip_log:
                 display_result = (
                     {"error": "personal account operation failed; details were not retained"}
-                    if personal and result.get("error")
+                    if personal and _tool_result_failed(result)
                     else (
                         {"summary": "personal account data returned (not retained)"}
                         if personal
-                        else durable_result
+                        else _project_mcp_result(durable_result)
                     )
                 )
                 self._op_logger.log_tool_result(tool_name, display_result, visible=visible)
 
         # Immutable session history: tool call + result share the provider call id.
         if self._timeline is not None:
-            status = "error" if isinstance(result, dict) and result.get("error") else "ok"
+            status = "error" if _tool_result_failed(result) else "ok"
             if record_call:
                 self._timeline.record_tool_call(tool_name, durable_input, call_id=tool_use_id)
             external_execution = (
@@ -266,26 +277,28 @@ class ToolCallProcessor:
         *,
         contains_personal_data: bool = False,
     ) -> dict[str, Any]:
-        """Apply token guard, offload large results, and serialize for LLM."""
+        """Project, offload, guard, and serialize a result for model context."""
         # Computer-use screenshots return as an image block (see above) —
         # before the token guard / offload that would otherwise corrupt them.
         if tool_name == "computer" and isinstance(result, dict) and result.get("screenshot"):
             return self._serialize_computer_result(result, block_id)
 
-        # Token guard: truncate oversized results to prevent context explosion
-        # For small-context models (e.g. GLM-5), apply model-aware limit
-        if isinstance(result, dict):
-            model_limit = _compute_model_tool_limit(self._model) if self._model else 0
-            result = _guard_tool_result(result, max_tokens=model_limit or None)
+        # MCP may repeat structuredContent as content for compatibility. Keep
+        # the raw result in the durable log above, but choose one model view.
+        model_result = _project_mcp_result(result) if isinstance(result, dict) else result
 
-        # Serialize result as JSON for LLM (not Python repr)
+        # Estimate the full useful model view before any lossy guard so an
+        # available offload store can retain it for recall.
         try:
-            serialized = json.dumps(result, ensure_ascii=False, default=str)
+            serialized = json.dumps(model_result, ensure_ascii=False, default=str)
         except (TypeError, ValueError):
-            serialized = str(result)
+            serialized = str(model_result)
 
-        # P0: Offload large results to filesystem, inject compact summary
-        estimated_tokens = len(serialized) // 4
+        from core.orchestration.context_budget import TOKEN_ESTIMATE_CHARS_PER_TOKEN
+
+        estimated_tokens = (
+            len(serialized) + TOKEN_ESTIMATE_CHARS_PER_TOKEN - 1
+        ) // TOKEN_ESTIMATE_CHARS_PER_TOKEN
         from core.orchestration.tool_offload import get_offload_store
 
         offload_store = get_offload_store()
@@ -298,18 +311,15 @@ class ToolCallProcessor:
         ):
             from core.orchestration.tool_offload import extract_result_summary
 
-            ref_id = offload_store.offload(block_id, result)
-            summary = extract_result_summary(result, max_chars=400)
-            content = json.dumps(
-                {
-                    "_offloaded": True,
-                    "_ref_id": ref_id,
-                    "_original_tokens": estimated_tokens,
-                    "summary": summary,
-                    "hint": "Use recall_tool_result(ref_id) to retrieve the full output.",
-                },
-                ensure_ascii=False,
-            )
+            ref_id = offload_store.offload(block_id, model_result)
+            summary = extract_result_summary(model_result, max_chars=400)
+            model_result = {
+                "_offloaded": True,
+                "_ref_id": ref_id,
+                "_original_tokens": estimated_tokens,
+                "summary": summary,
+                "hint": "Use recall_tool_result(ref_id) to retrieve the full output.",
+            }
             # Fire hook for observability
             if self._hooks:
                 from core.hooks import HookEvent
@@ -322,8 +332,15 @@ class ToolCallProcessor:
                         "block_id": block_id,
                     },
                 )
-        else:
-            content = serialized
+
+        if isinstance(model_result, dict):
+            model_limit = _compute_model_tool_limit(self._model) if self._model else 0
+            model_result = _guard_tool_result(model_result, max_tokens=model_limit or None)
+
+        try:
+            content = json.dumps(model_result, ensure_ascii=False, default=str)
+        except (TypeError, ValueError):
+            content = str(model_result)
 
         return {
             "type": "tool_result",
@@ -453,7 +470,7 @@ class ToolCallProcessor:
                 }
 
         # Track consecutive failures + recoverability breadcrumb
-        if isinstance(result, dict) and result.get("error"):
+        if _tool_result_failed(result):
             if not result.get("recovery_attempted"):
                 self._consecutive_failures[effective_tool_name] = fail_count + 1
                 self._last_error_recoverable[effective_tool_name] = result.get("recoverable", True)
@@ -498,6 +515,10 @@ class ToolCallProcessor:
         TIER 4: DANGEROUS tools — individual approval, sequential
         Unclassified (STANDARD) tools default to TIER 0 (parallel-safe).
         """
+        # Multiple checklist mutations in one response must retain call order;
+        # ToolExecutor still treats update_plan as approval-free.
+        if tool_name == "update_plan":
+            return 3
         if tool_name in DANGEROUS_TOOLS:
             return 4
         if tool_name in SENSITIVE_TOOLS:

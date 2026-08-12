@@ -12,7 +12,10 @@ from collections.abc import Awaitable, Callable
 from inspect import isawaitable
 from typing import Any
 
-from core.memory.session_key import build_gateway_session_key
+from core.memory.session_key import (
+    build_gateway_checkpoint_session_id,
+    build_gateway_session_key,
+)
 from core.messaging.models import ChannelBinding, InboundMessage
 from core.server.supervised.poller_base import BasePoller
 
@@ -57,11 +60,8 @@ class ChannelManager:
         self._bot_user_id = bot_user_id  # Slack bot user ID for mention matching
         # Gateway-level defaults (overridden by config.toml [gateway])
         self.gateway_time_budget_s: float = 120.0  # default 2 min per message
-        # PR-CL-BUDGET (2026-05-23) — turn hard-cap removed; the session-wide
-        # 2-hour wall-clock budget (``core.agent.budget``) plus the per-binding
-        # ``gateway_time_budget_s`` are the new safety nets. ``0`` propagates
-        # to ``AgenticLoop.max_rounds=0`` = unlimited rounds. Operator decision
-        # in ``project_budget_handoff_decision`` (2026-05-23).
+        # ``0`` propagates to ``AgenticLoop.max_rounds=0`` = unlimited rounds;
+        # the per-binding ``gateway_time_budget_s`` remains the active-run cap.
         self.gateway_max_turns: int = 0
 
     def register_poller(self, poller: BasePoller) -> None:
@@ -215,7 +215,7 @@ class ChannelManager:
             # Route through SessionLane → Gateway Lane → Global Lane
             if self._lane_queue is not None:
                 async with self._lane_queue.acquire_all_async(
-                    session_key,
+                    build_gateway_checkpoint_session_id(session_key),
                     ["session", "gateway", "global"],
                 ):
                     response = await self._call_processor(content, metadata)
@@ -310,7 +310,7 @@ class ChannelManager:
 
             [gateway]
             max_rounds = 30
-            max_turns = 0  # 0 = unlimited (session-wide 2h wall-clock cap)
+            max_turns = 0  # 0 = unlimited; each message keeps its run budget
 
             [[gateway.bindings.rules]]
             channel = "slack"

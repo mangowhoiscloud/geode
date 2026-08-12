@@ -632,6 +632,11 @@ class SessionManager:
         from core.memory.collaboration import ensure_collaboration_schema
 
         ensure_collaboration_schema(self._conn)
+        # Explicit multi-turn goals are mutable session control state. Their
+        # append-only transitions remain in the sibling session_events plane.
+        from core.memory.goals import ensure_goal_schema
+
+        ensure_goal_schema(self._conn)
         # Phase 1c (Hermes absorption, 2026-05-22) — FTS5 indices.
         # unicode61 is always created. trigram is probed at runtime and
         # skipped on SQLite builds that don't ship it; ``self._has_trigram``

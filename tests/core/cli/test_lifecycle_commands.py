@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from core.cli.commands.lifecycle import (
+    SERVE_STARTUP_TIMEOUT_S,
     _clean_stale_artifacts,
     _cleanup_legacy_transcripts,
     _find_serve_pid,
@@ -179,14 +180,11 @@ class TestStop:
 
 class TestStartServe:
     def test_default_timeout_allows_twenty_second_boot(self, tmp_path: Path) -> None:
+        assert SERVE_STARTUP_TIMEOUT_S >= 20.0
         executable = str(tmp_path / "bin" / "geode")
         with (
             patch("core.cli.commands.lifecycle.subprocess.Popen") as popen,
             patch("core.cli.ipc_client.is_serve_running", return_value=True),
-            patch(
-                "core.cli.commands.lifecycle.time.monotonic",
-                side_effect=[0.0, 20.0],
-            ),
         ):
             assert _start_serve_background(executable=executable)
 

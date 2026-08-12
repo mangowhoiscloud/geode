@@ -8,12 +8,11 @@ dormant — no production call site reads from this module.
 Schema (matches the TOML, provider-prefixed):
 
 - ``[pricing.anthropic.<model>]`` — ``input_per_mtok`` + ``output_per_mtok``.
-  Loader applies the Anthropic derive: ``cache_write = input × 1.25``,
-  ``cache_read = input × 0.1``, ``thinking = output``.
+  Loader applies the Anthropic derive: ``cache_write = input × 1.25`` and
+  ``cache_read = input × 0.1``.
 - ``[pricing.openai.<model>]`` — same two keys plus optional
-  ``cached_per_mtok`` and ``reasoning`` (bool). Loader applies:
-  ``cache_read = cached_per_mtok`` (explicit), ``thinking = output if
-  reasoning else 0.0``. GLM models live under ``[pricing.openai.*]``
+  ``cached_per_mtok``. Loader applies ``cache_read = cached_per_mtok``.
+  GLM models live under ``[pricing.openai.*]``
   by manifest convention (OpenAI-compatible API, openai derive formula).
 - ``[context_windows]`` — model id → int (tokens).
 
@@ -58,7 +57,6 @@ class ModelPrice:
     output: float
     cache_write: float = 0.0
     cache_read: float = 0.0
-    thinking: float = 0.0
     # Whether the provider's reported ``input_tokens`` INCLUDES the cached
     # tokens (OpenAI / GLM: ``prompt_tokens`` is the total, ``cached_tokens`` a
     # subset) or is DISJOINT from them (Anthropic: ``input_tokens`` is the
@@ -69,8 +67,7 @@ class ModelPrice:
 
 
 def _derive_anthropic(input_mtok: float, output_mtok: float) -> ModelPrice:
-    """Anthropic derive: cache_write = input × 1.25, cache_read = input × 0.1,
-    thinking = output (Extended Thinking billed as output)."""
+    """Anthropic derive: cache_write = input × 1.25, cache_read = input × 0.1."""
     inp = input_mtok / 1_000_000
     out = output_mtok / 1_000_000
     return ModelPrice(
@@ -78,7 +75,6 @@ def _derive_anthropic(input_mtok: float, output_mtok: float) -> ModelPrice:
         output=out,
         cache_write=inp * 1.25,
         cache_read=inp * 0.1,
-        thinking=out,
     )
 
 
@@ -86,17 +82,13 @@ def _derive_openai(
     input_mtok: float,
     output_mtok: float,
     cached_mtok: float = 0.0,
-    reasoning: bool = False,
 ) -> ModelPrice:
-    """OpenAI derive: explicit cache_read price, thinking = output for
-    reasoning models (o3 / o4-mini billed at output rate for reasoning
-    tokens)."""
+    """OpenAI derive: explicit cache-read price."""
     out = output_mtok / 1_000_000
     return ModelPrice(
         input=input_mtok / 1_000_000,
         output=out,
         cache_read=cached_mtok / 1_000_000 if cached_mtok else 0.0,
-        thinking=out if reasoning else 0.0,
         # OpenAI / GLM report ``prompt_tokens`` inclusive of cached tokens.
         cache_inclusive_input=True,
     )
@@ -131,7 +123,6 @@ def _parse_provider(provider: str, entries: dict[str, Any]) -> dict[str, ModelPr
                 input_mtok,
                 output_mtok,
                 cached_mtok=float(fields.get("cached_per_mtok", 0.0)),
-                reasoning=bool(fields.get("reasoning", False)),
             )
         else:
             raise ValueError(

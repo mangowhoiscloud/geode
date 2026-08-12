@@ -16,7 +16,6 @@ from __future__ import annotations
 import re
 
 import pytest
-from core.agent.system_injection import append_system_reminder
 from core.agent.system_prompt import (
     _audit_mode_active,
     _persona_on,
@@ -98,6 +97,26 @@ def test_current_date_kept_for_anthropic_recency_guard(monkeypatch: pytest.Monke
     out = build_system_prompt(model="claude-opus-4-8")
 
     assert "<current_date>" in out
+
+
+def test_runtime_rules_do_not_require_project_memory_file(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Modular rules remain in the stable system path without PROJECT.md."""
+    from core.agent import system_prompt
+    from core.memory import project
+
+    class RulesOnlyMemory:
+        def load_memory(self) -> str:
+            return ""
+
+        def list_rules(self) -> list[dict[str, object]]:
+            return [{"name": "research", "paths": ["docs/**"]}]
+
+    monkeypatch.setattr(project, "ProjectMemory", RulesOnlyMemory)
+    out = system_prompt._build_project_memory_context()
+    assert "<runtime_rules>" in out
+    assert "research (paths: docs/**)" in out
 
 
 def test_g3_audit_mode_supersedes_persona(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -196,14 +215,6 @@ def test_wrapper_fallback_role_is_generic_not_geode_persona() -> None:
     role = _WRAPPER_PROMPT_SECTIONS_FALLBACK["role"]
     assert "You are GEODE" not in role
     assert "autonomous execution agent" in role
-
-
-def test_system_reminder_uses_xml_tags() -> None:
-    messages = [{"role": "user", "content": "hello"}]
-    out = append_system_reminder(messages, round_idx=1)
-    assert out[-1]["content"].startswith("<system-reminder>")
-    assert out[-1]["content"].endswith("</system-reminder>")
-    assert "[system-reminder]" not in out[-1]["content"]
 
 
 def test_math_formatting_instruction_reaches_agentic_system_prompt(

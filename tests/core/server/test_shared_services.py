@@ -256,6 +256,30 @@ class TestSharedServicesCreateSession:
         _, loop = services.create_session(SessionMode.REPL, conversation=ctx)
         assert loop.context is ctx
 
+    def test_sessions_own_independent_metrics(self, services: SharedServices) -> None:
+        from core.observability.session_metrics import set_current_session_metrics
+
+        set_current_session_metrics(None)
+        _, loop_a = services.create_session(SessionMode.IPC, session_id="session-a")
+        _, loop_b = services.create_session(SessionMode.IPC, session_id="session-b")
+
+        assert loop_a._session_metrics is not loop_b._session_metrics
+        assert loop_a._session_metrics.session_id == "session-a"
+        assert loop_b._session_metrics.session_id == "session-b"
+
+    def test_autoresearch_scope_intentionally_aggregates_metrics(
+        self,
+        services: SharedServices,
+    ) -> None:
+        from core.observability.session_metrics import session_metrics_scope
+
+        with session_metrics_scope(session_id="campaign", gen_tag="generation-1") as campaign:
+            _, loop_a = services.create_session(SessionMode.IPC, session_id="session-a")
+            _, loop_b = services.create_session(SessionMode.IPC, session_id="session-b")
+
+        assert loop_a._session_metrics is campaign
+        assert loop_b._session_metrics is campaign
+
     def test_fresh_conversation_when_none(self, services: SharedServices) -> None:
         _, loop = services.create_session(SessionMode.SCHEDULER)
         assert loop.context is not None

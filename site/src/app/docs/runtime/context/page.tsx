@@ -140,13 +140,21 @@ export default function Page() {
 
             <h2>대형 도구 결과: 오프로드</h2>
             <p>
-              도구 결과가 5000 토큰 임계값을 넘으면{" "}
+              모델에 전달할 도구 결과가 기본 15,000 토큰 임계값을 넘으면{" "}
               <code>core/orchestration/tool_offload.py</code>의{" "}
               <code>ToolResultOffloadStore</code>가 결과를 디스크
               (<code>.geode/tool-offload/</code> 아래 세션 디렉터리)로 내리고,
               컨텍스트에는 요약과 <code>ref_id</code>만 남깁니다. 모델은 필요할
               때 <code>recall_tool_result(ref_id)</code> 경로로 원본을 다시 가져옵니다. 오프로드
               시 <code>TOOL_RESULT_OFFLOADED</code> 훅이 발화합니다.
+            </p>
+            <p>
+              MCP의 <code>CallToolResult</code>는 호환성을 위해 같은 값을{" "}
+              <code>content</code>와 <code>structuredContent</code>에 함께 담을 수
+              있습니다. 원본은 session timeline과 tool log에 receipt로 그대로
+              남기고, 모델 경계에서는 structured 값을 우선해 한 표현만 고른 뒤
+              오프로드와 25,000-token hard guard를 적용합니다. 따라서 증거는
+              보존하면서 중복 JSON을 컨텍스트에 다시 넣지 않습니다.
             </p>
 
             <h2>장기 컨텍스트 아티팩트: dreaming</h2>
@@ -173,14 +181,13 @@ export default function Page() {
               이 합성 아티팩트도 뒤집니다.
             </p>
 
-            <h2>캐시를 깨지 않는 주입</h2>
+            <h2>캐시를 깨지 않는 이력</h2>
             <p>
-              현재 날짜와 라운드 번호 같은 턴별 정보는{" "}
-              <code>core/agent/system_injection.py</code>의{" "}
-              <code>append_system_reminder</code>가 요청별 복사본의{" "}
-              <strong>마지막</strong> 메시지로 덧붙입니다. 공유 히스토리는
-              변형되지 않으므로 메시지 prefix가 라운드 간 바이트 단위로
-              안정적이고, Anthropic과 OpenAI의 prefix 캐싱이 적중합니다.
+              날짜와 runtime rule은 <code>system_prompt.py</code>의 동적
+              시스템 영역에 한 번 조립됩니다. 라운드별 reminder message는
+              만들지 않으며, 대화 이력에는 실제 user, assistant, tool turn만
+              append합니다. 그래서 다음 요청이 이전 요청의 메시지열을 정확한
+              prefix로 보존하고 Anthropic·OpenAI 캐시가 재사용할 수 있습니다.
             </p>
 
             <h2>실패 모드</h2>
@@ -196,13 +203,13 @@ export default function Page() {
                 </tr>
                 <tr>
                   <td>도구 결과가 요약으로만 보임</td>
-                  <td>5000 토큰 임계값을 넘어 오프로드됨</td>
+                  <td>15,000 토큰 임계값을 넘어 오프로드됨</td>
                   <td>정상 동작입니다. <code>recall_tool_result(ref_id)</code>로 원본을 조회합니다</td>
                 </tr>
                 <tr>
                   <td>캐시 적중률이 갑자기 하락</td>
                   <td>히스토리 앞부분을 변형하는 커스텀 주입</td>
-                  <td>주입은 append 방식만 사용합니다 (<code>append_system_reminder</code> 패턴)</td>
+                  <td>턴별 메타데이터는 시스템 동적 영역에 두고, 대화에는 실제 turn만 append합니다</td>
                 </tr>
               </tbody>
             </table>
@@ -348,7 +355,8 @@ export default function Page() {
 
             <h2>Large tool results: offload</h2>
             <p>
-              When a tool result exceeds the 5000-token threshold,{" "}
+              When the model-facing tool result exceeds the default
+              15,000-token threshold,{" "}
               <code>ToolResultOffloadStore</code> in{" "}
               <code>core/orchestration/tool_offload.py</code> persists it to disk
               (a per-session directory under <code>.geode/tool-offload/</code>)
@@ -356,6 +364,15 @@ export default function Page() {
               The model re-fetches the original with{" "}
               <code>recall_tool_result(ref_id)</code> when needed. Each offload fires the{" "}
               <code>TOOL_RESULT_OFFLOADED</code> hook.
+            </p>
+            <p>
+              MCP <code>CallToolResult</code> may repeat one value in both
+              <code>content</code> and <code>structuredContent</code> for
+              compatibility. The raw envelope stays intact in the session
+              timeline and tool log as a receipt. At the model boundary GEODE
+              prefers the structured value, selects one representation, then
+              applies offload and the 25,000-token hard guard. Evidence is
+              preserved without replaying duplicate JSON into context.
             </p>
 
             <h2>Long-context artifacts: dreaming</h2>
@@ -386,14 +403,14 @@ export default function Page() {
               artifacts alongside the FTS5 message hits.
             </p>
 
-            <h2>Injection that does not break caching</h2>
+            <h2>History that does not break caching</h2>
             <p>
-              Per-turn information such as the current date and round number is
-              appended by <code>append_system_reminder</code>{" "}
-              (<code>core/agent/system_injection.py</code>) as the{" "}
-              <strong>last</strong> message of a per-request copy. The shared
-              history is never mutated, so the message prefix stays byte-stable
-              across rounds and Anthropic and OpenAI prefix caching can hit.
+              Date and runtime rules are assembled once in the dynamic system
+              region in <code>system_prompt.py</code>. There is no per-round
+              reminder message; only real user, assistant, and tool turns are
+              appended. The next request therefore preserves the previous
+              message sequence as an exact prefix for Anthropic and OpenAI
+              caching.
             </p>
 
             <h2>Failure modes</h2>
@@ -409,13 +426,13 @@ export default function Page() {
                 </tr>
                 <tr>
                   <td>A tool result shows up only as a summary</td>
-                  <td>It crossed the 5000-token threshold and was offloaded</td>
+                  <td>It crossed the 15,000-token threshold and was offloaded</td>
                   <td>Working as intended; fetch the original with <code>recall_tool_result(ref_id)</code></td>
                 </tr>
                 <tr>
                   <td>Cache hit rate suddenly drops</td>
                   <td>A custom injection mutates the front of the history</td>
-                  <td>Only inject by appending (the <code>append_system_reminder</code> pattern)</td>
+                  <td>Keep per-turn metadata in the dynamic system region and append only real conversation turns</td>
                 </tr>
               </tbody>
             </table>

@@ -5,15 +5,24 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from plugins.benchmark_harness.mcpmark_geode_agent import (
+    _CODEX_DISABLED_FEATURES,
     MCPMarkGeodeTool,
     _build_loop,
+    _codex_mcp_config,
+    _codex_model,
+    _codex_subscription_environment,
     _github_repo_visibility,
     _normalize_tool_arguments,
     _patch_mcpmark_github_visibility,
     _route_from_model,
+    _summarize_codex_exec,
+    _usage_dict,
     register_mcpmark_agent,
 )
-from plugins.benchmark_harness.trajectory_artifacts import export_mcpmark_trajectory
+from plugins.benchmark_harness.trajectory_artifacts import (
+    export_codex_mcpmark_trajectory,
+    export_mcpmark_trajectory,
+)
 
 
 def test_mcpmark_loop_validates_colliding_tool_with_mcp_schema() -> None:
@@ -75,6 +84,32 @@ def test_mcpmark_loop_validates_colliding_tool_with_mcp_schema() -> None:
     ]
 
 
+def test_mcpmark_tool_returns_call_tool_result_as_data() -> None:
+    class CallToolResult:
+        def model_dump(self, *, by_alias: bool, exclude_none: bool) -> dict[str, object]:
+            assert by_alias is True
+            assert exclude_none is True
+            return {
+                "content": [{"type": "text", "text": '{"answer": 42}'}],
+                "structuredContent": {"answer": 42},
+                "isError": False,
+            }
+
+    class MCPServer:
+        async def call_tool(self, _name: str, _arguments: dict[str, object]) -> CallToolResult:
+            return CallToolResult()
+
+    tool = MCPMarkGeodeTool(
+        mcp_server=MCPServer(),
+        schema={"name": "read", "inputSchema": {"type": "object"}},
+    )
+
+    result = asyncio.run(tool.aexecute())
+
+    assert result["structuredContent"] == {"answer": 42}
+    assert isinstance(result["content"], list)
+
+
 def test_route_from_geode_model_label() -> None:
     assert _route_from_model("geode-gpt-5.5") == ("gpt-5.5", "openai", "subscription")
     assert _route_from_model("geode-claude-sonnet-4-6") == (
@@ -85,10 +120,160 @@ def test_route_from_geode_model_label() -> None:
     assert _route_from_model("geode-glm-4-6") == ("glm-4-6", "zhipuai", "api_key")
 
 
+def test_usage_dict_translates_geode_usage_for_mcpmark_summary() -> None:
+    result = SimpleNamespace(
+        usage=SimpleNamespace(
+            to_dict=lambda: {
+                "input_tokens": 100,
+                "output_tokens": 20,
+                "thinking_tokens": 8,
+                "cache_read_tokens": 40,
+            }
+        )
+    )
+
+    usage = _usage_dict(result)
+
+    assert usage["total_tokens"] == 120
+    assert usage["reasoning_tokens"] == 8
+    assert usage["thinking_tokens"] == 8
+    assert usage["cache_read_tokens"] == 40
+
+
 def test_register_mcpmark_agent() -> None:
     registry: dict[str, object] = {}
     register_mcpmark_agent(registry)
-    assert "geode" in registry
+    assert set(registry) == {"codex", "geode"}
+
+
+def test_codex_mcpmark_command_contract() -> None:
+    config = _codex_mcp_config("npx", ["-y", "server", "fixture"], 300)
+
+    assert config == (
+        '{command="npx",args=["-y", "server", "fixture"],'
+        "startup_timeout_sec=120,tool_timeout_sec=300,required=true,"
+        'default_tools_approval_mode="approve"}'
+    )
+    assert _codex_model("codex-gpt-5.4") == "gpt-5.4"
+    assert _codex_model("openai/gpt-5.4") == "gpt-5.4"
+    assert {"apps", "multi_agent", "shell_tool", "unified_exec"} <= set(_CODEX_DISABLED_FEATURES)
+
+
+def test_codex_subscription_environment_drops_api_overrides(monkeypatch) -> None:
+    monkeypatch.setenv("CODEX_ACCESS_TOKEN", "access-token")
+    monkeypatch.setenv("CODEX_API_KEY", "api-key")
+    monkeypatch.setenv("OPENAI_API_KEY", "upstream-placeholder")
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://example.invalid")
+    monkeypatch.setenv("CODEX_HOME", "/kept/login-home")
+
+    env = _codex_subscription_environment()
+
+    assert "CODEX_ACCESS_TOKEN" not in env
+    assert "CODEX_API_KEY" not in env
+    assert "OPENAI_API_KEY" not in env
+    assert "OPENAI_BASE_URL" not in env
+    assert env["CODEX_HOME"] == "/kept/login-home"
+
+
+def test_summarize_codex_exec_keeps_usage_tools_and_failure() -> None:
+    events = [
+        {"type": "thread.started", "thread_id": "thread-1"},
+        {
+            "type": "item.completed",
+            "item": {
+                "id": "item-1",
+                "type": "mcp_tool_call",
+                "server": "mcpmark",
+                "tool": "write_file",
+                "status": "completed",
+            },
+        },
+        {
+            "type": "item.completed",
+            "item": {"id": "item-2", "type": "agent_message", "text": "done"},
+        },
+        {
+            "type": "turn.completed",
+            "usage": {
+                "input_tokens": 100,
+                "cached_input_tokens": 40,
+                "cache_write_input_tokens": 5,
+                "output_tokens": 20,
+                "reasoning_output_tokens": 8,
+            },
+        },
+    ]
+    summary = _summarize_codex_exec("\n".join(json.dumps(event) for event in events))
+
+    assert summary == {
+        "thread_id": "thread-1",
+        "output": "done",
+        "turn_count": 1,
+        "mcp_tool_calls": 1,
+        "token_usage": {
+            "input_tokens": 100,
+            "cached_input_tokens": 40,
+            "cache_write_input_tokens": 5,
+            "output_tokens": 20,
+            "reasoning_tokens": 8,
+            "total_tokens": 120,
+        },
+        "error": "",
+    }
+
+    failed = _summarize_codex_exec(
+        json.dumps({"type": "turn.failed", "error": {"message": "quota"}})
+    )
+    assert failed["error"] == "quota"
+
+
+def test_codex_mcpmark_export_uses_shared_trajectory_schema(tmp_path) -> None:
+    log_path = tmp_path / "execution.log"
+    rows = [
+        {"type": "thread.started", "thread_id": "thread-1"},
+        {
+            "type": "item.completed",
+            "item": {
+                "id": "call-1",
+                "type": "mcp_tool_call",
+                "server": "mcpmark",
+                "tool": "write_file",
+                "arguments": {"path": "private/file.txt", "content": "private"},
+                "result": {"content": [{"type": "text", "text": "wrote private/file.txt"}]},
+                "error": None,
+                "status": "completed",
+            },
+        },
+        {
+            "type": "item.completed",
+            "item": {"id": "message-1", "type": "agent_message", "text": "private done"},
+        },
+        {
+            "type": "turn.completed",
+            "usage": {"input_tokens": 10, "output_tokens": 2},
+        },
+    ]
+    log_path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+
+    exported = export_codex_mcpmark_trajectory(
+        exec_log_path=log_path,
+        instruction="private benchmark task",
+        model="gpt-5.4",
+        effort="high",
+    )
+    artifact = json.loads(exported.read_text(encoding="utf-8"))
+
+    assert artifact["schema_id"] == "geode.trajectory@1"
+    assert artifact["source"]["session"] == "thread-1"
+    assert artifact["integrity"]["quality"]["tool_pairing"]["paired"] == 1
+    assert artifact["integrity"]["quality"]["replay_fidelity"] == "reduced"
+    assert artifact["integrity"]["quality"]["payload_issue_events"] == 4
+    assert artifact["outcome"]["protocol_violations"] == 0
+    assert artifact["artifact_digests"][0]["path"] == f"{tmp_path.name}/execution.log"
+    serialized = json.dumps(artifact)
+    assert "private benchmark task" not in serialized
+    assert "private/file.txt" not in serialized
+    assert "private done" not in serialized
 
 
 def test_github_repo_visibility_defaults_private(monkeypatch) -> None:

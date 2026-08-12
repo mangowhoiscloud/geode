@@ -15,8 +15,11 @@ from typing import Any
 
 log = logging.getLogger(__name__)
 
-# GEODE.md lives at project root (Karpathy P7: program.md = agent identity)
-DEFAULT_SOUL_PATH = Path(__file__).parent.parent.parent / "GEODE.md"
+# Source checkouts keep GEODE.md at the project root. Wheels install the same
+# file as package data under ``core/`` so the Tier-0 identity survives install.
+_SOURCE_SOUL_PATH = Path(__file__).parent.parent.parent / "GEODE.md"
+_PACKAGED_SOUL_PATH = Path(__file__).parent.parent / "GEODE.md"
+DEFAULT_SOUL_PATH = _SOURCE_SOUL_PATH if _SOURCE_SOUL_PATH.is_file() else _PACKAGED_SOUL_PATH
 
 
 class MonoLakeOrganizationMemory:

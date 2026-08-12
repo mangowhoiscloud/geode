@@ -164,6 +164,7 @@ class TestCLIPoller:
         mock_loop.arun = AsyncMock(return_value=mock_result)
         mock_loop.run = MagicMock(side_effect=AssertionError("sync loop.run path used"))
         mock_loop.model = "test-model"
+        mock_loop._session_id = "s-machine"
         mock_loop._quiet = True
         mock_loop._op_logger = MagicMock(_quiet=True)
 
@@ -183,7 +184,6 @@ class TestCLIPoller:
             poller._run_prompt_streaming_async(
                 "hello",
                 mock_loop,
-                "cli-test",
                 None,
             )
         )
@@ -192,7 +192,74 @@ class TestCLIPoller:
         assert result["text"] == "async ok"
         mock_loop.arun.assert_awaited_once_with("hello")
         mock_loop.run.assert_not_called()
-        assert entered == [("cli:cli-test", ["session", "global"])]
+        assert entered == [("s-machine", ["session", "global"])]
+
+    def test_async_resume_reloads_inside_machine_lane(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from core.orchestration.lane_queue import LaneQueue, SessionLane
+        from core.server.ipc_server.poller import CLIPoller
+
+        lanes = LaneQueue()
+        lanes.set_session_lane(SessionLane(max_sessions=4))
+        lanes.add_lane("global", max_concurrent=2)
+        services = MagicMock(lane_queue=lanes)
+        poller = CLIPoller(services, socket_path=_test_sock())
+        restored: list[str] = []
+
+        def restore(msg: dict[str, Any], _loop: Any, _conversation: Any) -> dict[str, Any]:
+            restored.append(str(msg["session_id"]))
+            return {"type": "resumed", "session_id": msg["session_id"]}
+
+        monkeypatch.setattr(poller, "_handle_resume", restore)
+
+        async def scenario() -> dict[str, Any]:
+            async with lanes.acquire_all_async("s-machine", ["session", "global"]):
+                pending = asyncio.create_task(
+                    poller._handle_resume_async(
+                        {"session_id": "s-machine"},
+                        MagicMock(),
+                        MagicMock(),
+                    )
+                )
+                await asyncio.sleep(0.01)
+                assert not pending.done()
+            return await pending
+
+        assert asyncio.run(scenario())["type"] == "resumed"
+        assert restored == ["s-machine"]
+
+    def test_continue_refuses_candidate_that_finished_while_waiting(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from core.memory import session_checkpoint as checkpoint_module
+        from core.orchestration.lane_queue import LaneQueue, SessionLane
+        from core.server.ipc_server.poller import CLIPoller
+
+        selected = MagicMock(session_id="s-machine", status="active")
+        finished = MagicMock(session_id="s-machine", status="completed")
+        checkpoint = MagicMock()
+        checkpoint.list_resumable.return_value = [selected]
+        checkpoint.load.return_value = finished
+        monkeypatch.setattr(checkpoint_module, "SessionCheckpoint", lambda: checkpoint)
+
+        lanes = LaneQueue()
+        lanes.set_session_lane(SessionLane(max_sessions=4))
+        lanes.add_lane("global", max_concurrent=2)
+        poller = CLIPoller(MagicMock(lane_queue=lanes), socket_path=_test_sock())
+
+        result = asyncio.run(
+            poller._handle_resume_async(
+                {"continue": True},
+                MagicMock(),
+                MagicMock(),
+            )
+        )
+
+        assert result == {"type": "resume_error", "message": "No resumable session found"}
+        checkpoint.reopen.assert_not_called()
 
     def test_async_prompt_runner_isolates_ui_state_per_task(self) -> None:
         """Concurrent async IPC prompts should keep console and writer bindings isolated."""
@@ -249,7 +316,6 @@ class TestCLIPoller:
             return await poller._run_prompt_streaming_async(
                 f"prompt-{name}",
                 loop,
-                f"session-{name}",
                 client,  # type: ignore[arg-type]
             )
 

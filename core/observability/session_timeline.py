@@ -73,6 +73,14 @@ class SessionEventKind(StrEnum):
     VERIFICATION_CONTINUED = "verification.continued"
     VERIFICATION_EVIDENCE = "verification.evidence"
     VERIFICATION_PENDING = "verification.pending"
+    PLAN_CREATED = "plan.created"
+    PLAN_PROGRESSED = "plan.progressed"
+    PLAN_REPLANNED = "plan.replanned"
+    PLAN_ABANDONED = "plan.abandoned"
+    PLAN_COMPLETED = "plan.completed"
+    GOAL_CREATED = "goal.created"
+    GOAL_UPDATED = "goal.updated"
+    GOAL_CONTINUED = "goal.continued"
     USER_MESSAGE = "message.user"
     ASSISTANT_MESSAGE = "message.assistant"
     TOOL_CALLED = "tool.called"
@@ -887,6 +895,94 @@ class SessionTimeline:
                 "root_turn_id": root_turn_id,
                 "verify_attempt": max(0, int(verify_attempt)),
                 "references": [dict(reference) for reference in references],
+            },
+        )
+
+    def record_plan_state(
+        self,
+        kind: SessionEventKind,
+        plan: Any,
+        *,
+        trigger: str = "",
+        changed_step_ids: Sequence[str] = (),
+    ) -> None:
+        """Persist a typed advisory-plan edge without planner rationale."""
+        allowed = {
+            SessionEventKind.PLAN_CREATED,
+            SessionEventKind.PLAN_PROGRESSED,
+            SessionEventKind.PLAN_REPLANNED,
+            SessionEventKind.PLAN_ABANDONED,
+            SessionEventKind.PLAN_COMPLETED,
+        }
+        if kind not in allowed:
+            raise ValueError(f"unsupported plan event kind: {kind.value}")
+        steps = tuple(getattr(plan, "steps", ()))
+        current = int(getattr(plan, "current", 0))
+        completed = tuple(getattr(plan, "completed", ()))
+        abandoned = tuple(getattr(plan, "abandoned", ()))
+        current_step = steps[current] if 0 <= current < len(steps) else None
+        payload: dict[str, Any] = {
+            "plan_id": str(getattr(plan, "plan_id", "")),
+            "revision": int(getattr(plan, "revision", 0)),
+            "current_step_id": str(getattr(current_step, "id", "")),
+            "step_count": len(steps),
+            "completed_step_ids": [
+                str(getattr(steps[index], "id", ""))
+                for index in completed
+                if 0 <= index < len(steps)
+            ],
+            "abandoned_step_ids": [
+                str(getattr(steps[index], "id", ""))
+                for index in abandoned
+                if 0 <= index < len(steps)
+            ],
+            "changed_step_ids": [str(step_id) for step_id in changed_step_ids],
+            "trigger": trigger,
+        }
+        if kind in {SessionEventKind.PLAN_CREATED, SessionEventKind.PLAN_REPLANNED}:
+            payload["steps"] = [
+                {
+                    "id": str(getattr(step, "id", "")),
+                    "description": str(getattr(step, "description", "")),
+                    "expected_outcome": str(getattr(step, "expected_outcome", "")),
+                    "tool_name": str(getattr(step, "tool_name", "")),
+                }
+                for step in steps
+            ]
+        self._record(
+            kind,
+            role="policy",
+            status=kind.value.removeprefix("plan."),
+            payload=payload,
+        )
+
+    def record_goal_state(
+        self,
+        kind: SessionEventKind,
+        goal: Any,
+        *,
+        trigger: str,
+    ) -> None:
+        """Persist a goal control edge without duplicating its objective."""
+        if kind not in {
+            SessionEventKind.GOAL_CREATED,
+            SessionEventKind.GOAL_UPDATED,
+            SessionEventKind.GOAL_CONTINUED,
+        }:
+            raise ValueError(f"unsupported goal event kind: {kind.value}")
+        objective = str(getattr(goal, "objective", ""))
+        self._record(
+            kind,
+            role="policy",
+            status=str(getattr(goal, "status", "")),
+            payload={
+                "goal_id": str(getattr(goal, "goal_id", "")),
+                "objective_sha256": sha256(objective.encode("utf-8")).hexdigest(),
+                "token_budget": getattr(goal, "token_budget", None),
+                "tokens_used": int(getattr(goal, "tokens_used", 0)),
+                "remaining_tokens": getattr(goal, "remaining_tokens", None),
+                "time_used_seconds": round(float(getattr(goal, "time_used_seconds", 0.0)), 3),
+                "trigger": trigger,
             },
         )
 

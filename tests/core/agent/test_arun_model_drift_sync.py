@@ -66,6 +66,8 @@ class _StubLoop:
         self._sync_returns_drifted = sync_returns_drifted
         self._prompt_dirty = prompt_dirty
         self._rebuilt_prompt = rebuilt_prompt
+        self._last_plan_hint = ""
+        self._plan_hint = ""
         self.build_calls = 0
         self.sync_calls = 0
 
@@ -76,6 +78,9 @@ class _StubLoop:
     def _build_system_prompt(self) -> str:
         self.build_calls += 1
         return self._rebuilt_prompt
+
+    def _consume_plan_hint(self) -> str:
+        return self._plan_hint
 
 
 def _call_helper(
@@ -114,6 +119,18 @@ def test_prompt_dirty_triggers_rebuild_even_without_drift() -> None:
     result = _call_helper(stub, "ORIGINAL", None)
     assert result == "REBUILT_PROMPT"
     assert stub.build_calls == 1
+
+
+def test_advisory_plan_progress_rebuilds_prompt_without_model_drift() -> None:
+    stub = _StubLoop(sync_returns_drifted=False, prompt_dirty=False)
+    stub._last_plan_hint = "<plan>old current step</plan>"
+    stub._plan_hint = "<plan>new current step</plan>"
+
+    result = _call_helper(stub, "ORIGINAL", None)
+
+    assert stub.build_calls == 1
+    assert "new current step" in result
+    assert stub._last_plan_hint == stub._plan_hint
 
 
 def test_both_drift_and_dirty_still_rebuild_exactly_once() -> None:
@@ -194,14 +211,14 @@ def test_reflection_hint_ignored_when_not_rebuilding() -> None:
 def test_arun_calls_sync_and_rebuild_helper() -> None:
     """``arun``'s while-loop must call the helper and rebind
     ``system_prompt`` from its return value."""
-    src = inspect.getsource(AgenticLoop.arun)
+    src = inspect.getsource(AgenticLoop._arun_once)
     assert "system_prompt = await self._sync_model_and_rebuild_prompt(" in src
 
 
 def test_arun_no_longer_inlines_drift_sync() -> None:
     """Anti-residue guard — the pre-refactor inline block must NOT
     remain in ``arun`` (would double-call sync + double-build prompt)."""
-    src = inspect.getsource(AgenticLoop.arun)
+    src = inspect.getsource(AgenticLoop._arun_once)
     # The exact pre-refactor lines that should be gone:
     assert "if await self._sync_model_from_settings_async() or self._prompt_dirty:" not in src
     # The inline "self._prompt_dirty = False" line is now ONLY inside

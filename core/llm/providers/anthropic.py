@@ -364,27 +364,6 @@ def _content_block_count(content: Any) -> int:
     return 1 if content else 0
 
 
-# Opening tag of the per-request system reminder. SoT for the tag name is
-# ``core.agent.system_injection._REMINDER_TAG``; the literal is duplicated
-# here to keep this low-level module free of core.agent imports — pinned by
-# ``test_reminder_tag_constant_drift`` (dual-SoT anchor + drift invariant).
-_SYSTEM_REMINDER_OPEN = "<system-reminder>"
-
-
-def _is_volatile_reminder(content: Any) -> bool:
-    """Per-round system reminder — byte-different every round (``Current
-    round: N``), so a breakpoint on it can never be read back; marking it
-    structurally wastes 1 of the 3 message slots."""
-    if isinstance(content, str):
-        return content.lstrip().startswith(_SYSTEM_REMINDER_OPEN)
-    if isinstance(content, list):
-        for block in content:
-            if isinstance(block, dict) and block.get("type") == "text":
-                text = block.get("text") or ""
-                return text.lstrip().startswith(_SYSTEM_REMINDER_OPEN)
-    return False
-
-
 def _is_markable(content: Any) -> bool:
     """Whether :func:`apply_messages_cache_control` would actually attach a
     breakpoint to this message (mirrors its empty-text guards).
@@ -428,12 +407,7 @@ def _select_breakpoint_targets(
     if not non_system or n_breakpoints <= 0:
         return []
 
-    markable = [
-        i
-        for i in non_system
-        if _is_markable(messages[i].get("content"))
-        and not _is_volatile_reminder(messages[i].get("content"))
-    ]
+    markable = [i for i in non_system if _is_markable(messages[i].get("content"))]
     if not markable:
         return []
 

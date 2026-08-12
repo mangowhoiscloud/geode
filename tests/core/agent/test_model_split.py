@@ -153,6 +153,56 @@ def test_call_llm_signature_accepts_model_override() -> None:
     assert param.kind == inspect.Parameter.KEYWORD_ONLY
 
 
+def test_call_llm_disables_action_tools_for_auxiliary_calls() -> None:
+    """Planner and judge calls can request text-only execution without
+    inheriting the main agent's tool surface."""
+    import asyncio
+
+    from core.agent.conversation import ConversationContext
+    from core.agent.loop.agent_loop import AgenticLoop
+    from core.agent.tool_executor import ToolExecutor
+    from core.llm.adapters.base import AdapterCallResult, UsageSummary
+    from core.llm.adapters.registry import bootstrap_builtins
+
+    captured: dict[str, Any] = {}
+
+    class CaptureAdapter:
+        name = "capture"
+        provider = "openai"
+
+        async def acomplete(self, request: Any) -> AdapterCallResult:
+            captured["request"] = request
+            return AdapterCallResult(
+                text='{"ok": true}',
+                usage=UsageSummary(),
+                stop_reason="completed",
+            )
+
+    bootstrap_builtins()
+    loop = AgenticLoop(
+        ConversationContext(),
+        ToolExecutor(),
+        model="gpt-5.6-luna",
+        provider="openai",
+        source="codex-oauth",
+        quiet=True,
+        disable_settings_drift=True,
+    )
+    loop._new_adapter = CaptureAdapter()
+
+    asyncio.run(
+        loop._call_llm(
+            "Auxiliary call",
+            [{"role": "user", "content": "Return JSON."}],
+            allow_tools=False,
+        )
+    )
+
+    request = captured["request"]
+    assert not request.tools
+    assert request.tool_choice == {"type": "none"}
+
+
 # -- Goal decomposition inherits loop model ---------------------------
 
 
@@ -217,13 +267,18 @@ def test_verify_llm_judge_calls_loop_call_llm(monkeypatch: pytest.MonkeyPatch) -
     fake_settings = SimpleNamespace(judge_model="claude-haiku-4-5-20251001")
     monkeypatch.setattr("core.config.settings", fake_settings)
 
-    captured: dict[str, str] = {}
+    captured: dict[str, Any] = {}
 
     async def _fake_call_llm(
-        system: str, messages: list, *, model: str | None = None
+        system: str,
+        messages: list,
+        *,
+        model: str | None = None,
+        allow_tools: bool = True,
     ) -> SimpleNamespace:
         captured["model"] = model or ""
         captured["system"] = system
+        captured["allow_tools"] = allow_tools
         return SimpleNamespace(text='{"passed": true, "score": 0.92, "reason": "ok"}')
 
     loop = SimpleNamespace(_call_llm=_fake_call_llm, model="claude-opus-4-7")
@@ -234,6 +289,7 @@ def test_verify_llm_judge_calls_loop_call_llm(monkeypatch: pytest.MonkeyPatch) -
     assert vr.passed is True
     assert vr.score == pytest.approx(0.92)
     assert captured["model"] == "claude-haiku-4-5-20251001"
+    assert captured["allow_tools"] is False
     assert "verifier" in captured["system"].lower()
 
 
@@ -246,7 +302,7 @@ def test_verify_llm_judge_judge_fail_records_misses(
     monkeypatch.setattr("core.config.settings", fake_settings)
 
     async def _fake_call_llm(
-        system: str, messages: list, *, model: str | None = None
+        system: str, messages: list, *, model: str | None = None, **_kwargs: object
     ) -> SimpleNamespace:
         return SimpleNamespace(
             text='{"passed": false, "score": 0.1, "reason": "tool error masked the goal"}'
@@ -312,7 +368,7 @@ def test_parse_judge_payload_code_fence_wrapped() -> None:
 
 
 def test_parse_judge_payload_bad_json_treats_as_pass() -> None:
-    """Unparseable → neutral pass with score=0.5 + ``judge_unparseable`` reason."""
+    """Unparsable → neutral pass with score=0.5 + ``judge_unparseable`` reason."""
     passed, score, reason = _parse_judge_payload("not even close to JSON")
     assert passed is True  # neutral
     assert score == pytest.approx(0.5)
@@ -360,7 +416,7 @@ def test_verify_turn_routes_llm_judge_through_loop(
     monkeypatch.setenv("GEODE_VERIFY_MODE", "llm_judge")
 
     async def _fake_call_llm(
-        _system: str, _msgs: list, *, model: str | None = None
+        _system: str, _msgs: list, *, model: str | None = None, **_kwargs: object
     ) -> SimpleNamespace:
         return SimpleNamespace(text='{"passed": true, "score": 1.0}')
 
@@ -397,7 +453,7 @@ def test_verify_turn_async_routes_through_judge(
     captured: dict[str, str] = {}
 
     async def _fake_call_llm(
-        _system: str, _msgs: list, *, model: str | None = None
+        _system: str, _msgs: list, *, model: str | None = None, **_kwargs: object
     ) -> SimpleNamespace:
         captured["model"] = model or ""
         return SimpleNamespace(text='{"passed": true, "score": 0.85, "reason": "ok"}')
@@ -530,7 +586,7 @@ def test_judge_usage_recorded(monkeypatch: pytest.MonkeyPatch) -> None:
     recorded_responses: list[Any] = []
 
     async def _fake_call_llm(
-        _system: str, _msgs: list, *, model: str | None = None
+        _system: str, _msgs: list, *, model: str | None = None, **_kwargs: object
     ) -> SimpleNamespace:
         return SimpleNamespace(
             text='{"passed": true, "score": 0.9, "reason": "ok"}',
@@ -563,7 +619,7 @@ def test_judge_usage_track_failure_does_not_break_judge(
     monkeypatch.setattr("core.config.settings", fake_settings)
 
     async def _fake_call_llm(
-        _system: str, _msgs: list, *, model: str | None = None
+        _system: str, _msgs: list, *, model: str | None = None, **_kwargs: object
     ) -> SimpleNamespace:
         return SimpleNamespace(text='{"passed": true, "score": 1.0}')
 

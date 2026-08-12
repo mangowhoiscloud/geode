@@ -38,6 +38,53 @@ not JFrog Artifactory or an opaque object-store upload. The publication unit is
 an allowlisted directory, and GitHub read-back from the exact merge commit is
 part of the evidence.
 
+The 2026-08-12 GPT-5.4 token-efficiency rerun is pinned to artifact commit
+[`2c2d1f0`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/2c2d1f0621f64ff7ceeff8c05d8ebd3449501aaf)
+from
+[`geode-eval-artifacts#21`](https://github.com/mangowhoiscloud/geode-eval-artifacts/pull/21).
+On the same pinned MCPMark `filesystem/easy` ten-task surface, the repaired
+GEODE runtime retained **9/10** while input tokens fell from 447,376 to 314,219
+(**−29.8%**) and output tokens from 25,157 to 20,385 (**−19.0%**). The release
+preserves 188 canonical events, 54/54 exact tool pairs, zero orphans, and ten
+scope-complete/replay-incomplete trajectories. The immutable
+[`manifest.json`](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/2c2d1f0621f64ff7ceeff8c05d8ebd3449501aaf/trajectories/mcpmark-geode-gpt54-high-token-efficiency-rerun-filesystem-easy-20260812T090254Z-35db8b275a36/manifest.json)
+has SHA-256
+`35db8b275a36bca0afef608e3b402d6e5bf0f4ed0f10aa15baccec5083f7468b`.
+Read-back from the exact merge commit reproduced the manifest and report
+metrics. This is a single matched diagnostic, not MCPMark Verified or a
+confidence interval.
+
+The 2026-08-11 GPT-5.6 effort-surface measurement is pinned to artifact commit
+[`7a78821`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/7a788211c2194f7118b40b63e19f071b6e7091fb)
+from
+[`geode-eval-artifacts#18`](https://github.com/mangowhoiscloud/geode-eval-artifacts/pull/18).
+All 18 Luna/Terra/Sol × `none|low|medium|high|xhigh|max` combinations preserved
+the requested Responses wire value and exact `EFFORT_OK` contract through the
+OpenAI subscription route. The append-only
+[`JSONL`](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/7a788211c2194f7118b40b63e19f071b6e7091fb/reports/e2e-validation/2026-08-11-gpt56-luna-terra-sol-effort-surface.jsonl)
+retains 24 provider attempts, including six transient overloads, and has
+SHA-256
+`7abcfb5d7e6899363f1c975a94ac16a622189d53fb59e40b4fc8f7e5b2ec9de9`.
+Remote read-back reproduced that digest. This proves route and backend
+acceptance only; it has no quality or promotion authority.
+
+The 2026-08-10 Goal and deep-research behavior release is pinned to artifact
+commit
+[`abad7de`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/abad7de44a23cd0756fe1edb5b61a86ed715cc8f)
+from
+[`geode-eval-artifacts#16`](https://github.com/mangowhoiscloud/geode-eval-artifacts/pull/16).
+Two `gpt-5.6-luna` subscription runs at effort `max` preserve Goal
+create/continue/complete control edges and one bounded two-axis research batch
+with one validated child and one schema-invalid child. The release contains 38
+canonical events and four exact tool pairs; both trajectories are
+scope-complete and deliberately replay-incomplete because prompt, result,
+child-identity, and local-path bodies are digested. The immutable
+[`manifest.json`](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/abad7de44a23cd0756fe1edb5b61a86ed715cc8f/trajectories/geode-agenticloop-goal-deep-research-gpt56-luna-max-2026-08-10-20260809T191233Z-a19174d30764/manifest.json)
+has SHA-256
+`a19174d30764118475ec713ba63dc5eb230997259e210beb1ba367040ae493c5`.
+Read-back from the fetched merge commit revalidated the manifest, 2/2 scope,
+4/4 pairing, and zero secret/identity findings.
+
 The 2026-08-03 GEODE v1.0.12 GPT-5.4 post-release publication is pinned to
 artifact commit
 [`04ff1c4`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/04ff1c4a1fee0cd1a3d837ad3a5f5239f1fd9acd)

@@ -68,6 +68,15 @@ class TestDisjointProviderUnchanged:
         assert cost == 280.0
 
 
+def test_reasoning_breakdown_is_observed_without_double_billing() -> None:
+    tracker = _tracker(ModelPrice(input=1.0, output=2.0))
+
+    usage = tracker.record("m", 0, 100, thinking_tokens=80)
+
+    assert usage.thinking_tokens == 80
+    assert usage.cost_usd == 200.0
+
+
 class TestPricingLoaderFlag:
     """The derive sets the flag: openai/glm True, anthropic False."""
 
@@ -102,12 +111,15 @@ class TestGlmCachedSurfaced:
             usage=SimpleNamespace(
                 prompt_tokens=1000,
                 completion_tokens=20,
-                prompt_tokens_details=SimpleNamespace(cached_tokens=700),
+                prompt_tokens_details=SimpleNamespace(cached_tokens=700, cache_write_tokens=30),
+                completion_tokens_details=SimpleNamespace(reasoning_tokens=4),
             ),
         )
         result = translate_chat_response(response)
         assert result.usage.input_tokens == 1000
         assert result.usage.cached_input_tokens == 700
+        assert result.usage.cache_write_tokens == 30
+        assert result.usage.reasoning_tokens == 4
 
     def test_translate_chat_response_no_cache_details(self):
         from types import SimpleNamespace
@@ -125,3 +137,25 @@ class TestGlmCachedSurfaced:
         )
         result = translate_chat_response(response)
         assert result.usage.cached_input_tokens == 0
+
+
+def test_anthropic_usage_carries_cache_write_and_thinking_tokens() -> None:
+    from types import SimpleNamespace
+
+    from core.llm.adapters._anthropic_common import translate_response
+
+    response = SimpleNamespace(
+        content=[SimpleNamespace(type="text", text="ok")],
+        stop_reason="end_turn",
+        usage=SimpleNamespace(
+            input_tokens=100,
+            output_tokens=20,
+            cache_read_input_tokens=60,
+            cache_creation_input_tokens=15,
+            output_tokens_details=SimpleNamespace(thinking_tokens=3),
+        ),
+    )
+    result = translate_response(response)
+    assert result.usage.cached_input_tokens == 60
+    assert result.usage.cache_write_tokens == 15
+    assert result.usage.reasoning_tokens == 3

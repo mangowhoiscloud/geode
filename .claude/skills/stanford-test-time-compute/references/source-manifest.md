@@ -1,4 +1,4 @@
-# Stanford CS329A Part 2 source manifest
+# Stanford CS329A Parts 2 and 5 source manifest
 
 The tracked skill contains analysis and selected project snapshots. It does not
 duplicate the 37 MB lecture video, the full automatic-caption file, or extracted
@@ -8,6 +8,7 @@ GEODE source distribution while retaining a reproducible source boundary.
 ## Public source
 
 - Lecture: [Stanford CS329A Self-Improving AI Agents · Part 2](https://www.youtube.com/watch?v=-Ggc37xLj_Y)
+- Lecture: [Stanford CS329A Self-Improving AI Agents · Part 5](https://www.youtube.com/watch?v=Ml_fp9XkB8Y)
 - Course: [Stanford CS329A](https://cs329a.stanford.edu/)
 
 ## Optional local evidence workspace
@@ -28,6 +29,9 @@ Resolve `${HOME}` at runtime; do not hardcode a user name.
 | Contact sheet 04 | `${HOME}/workspace/lg-ai/presentation/source/video/-Ggc37xLj_Y/contact-sheets/sheet-04.jpg` | `26963d63e31fd255ca8d4497ef20c12c4972d100101b50b1aa4b12c513e0d660` |
 | Contact sheet 05 | `${HOME}/workspace/lg-ai/presentation/source/video/-Ggc37xLj_Y/contact-sheets/sheet-05.jpg` | `649cabe8b2daeb03b7e4b41198ee911c71f8c01efd03863d7a546e8b331bde45` |
 | Contact sheet 06 | `${HOME}/workspace/lg-ai/presentation/source/video/-Ggc37xLj_Y/contact-sheets/sheet-06.jpg` | `68e0e48a108b90728dcb61370df47a7807d7421ad55a9f7d24c6bcf96b4afd8d` |
+| Part 5 planning analysis | `${HOME}/workspace/lg-ai/.agents/skills/apply-self-improving-agent-systems/references/lecture-05-planning-multistep.md` | `e21b66011151cda05b9d518500d6b3c53accaad706497b861c1d3ad86975fdb5` |
+| Part 5 automatic captions | `${HOME}/workspace/lg-ai/presentation/source/video/Ml_fp9XkB8Y/Ml_fp9XkB8Y.en-j3PyPqV-e1s.vtt` | `ab560b8d2484ceeba5107346ee498f6952916ee3df14b722d6657ceb36b30c6d` |
+| Part 5 video metadata | `${HOME}/workspace/lg-ai/presentation/source/video/Ml_fp9XkB8Y/Ml_fp9XkB8Y.info.json` | `2d4ce2db0b8a0ecbc996673eab892bcfa91f1a7149c57700aa732b5dc57bfe5d` |
 
 The tracked `lecture-analysis.md` normalizes only its five local evidence paths
 to `${HOME}`. The source-analysis hash above identifies the original file.

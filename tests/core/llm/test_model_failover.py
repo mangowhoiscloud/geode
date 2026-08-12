@@ -559,6 +559,73 @@ class TestAgenticLoopFailover:
         assert result.stop_reason == "end_turn"
         stub.acomplete.assert_called_once()
 
+    def test_consecutive_adapter_requests_keep_the_previous_request_as_prefix(self) -> None:
+        """A new round appends history without rewriting the prior request."""
+        from core.llm.adapters.base import AdapterCallResult, UsageSummary
+
+        loop = self._make_loop()
+        stub = self._install_acomplete_stub(
+            loop,
+            AdapterCallResult(text="working", usage=UsageSummary(), stop_reason="end_turn"),
+        )
+        history = [{"role": "user", "content": "inspect the repository"}]
+
+        asyncio.run(loop._call_llm("stable system", history, round_idx=0))
+        history.append({"role": "assistant", "content": "working"})
+        asyncio.run(loop._call_llm("stable system", history, round_idx=1))
+
+        first = stub.acomplete.call_args_list[0].args[0]
+        second = stub.acomplete.call_args_list[1].args[0]
+        assert second.system_prompt == first.system_prompt
+        assert tuple(second.messages[: len(first.messages)]) == tuple(first.messages)
+
+    def test_llm_call_ended_carries_complete_usage(self) -> None:
+        from core.hooks import HookEvent, HookSystem
+        from core.llm.adapters.base import AdapterCallResult, UsageSummary
+        from core.llm.token_tracker import calculate_cost
+
+        observed: list[dict[str, Any]] = []
+        hooks = HookSystem()
+        hooks.register(
+            HookEvent.LLM_CALL_ENDED,
+            lambda _event, data: observed.append(dict(data)),
+            name="usage-recorder",
+        )
+        loop = self._make_loop()
+        loop._hooks = hooks
+        self._install_acomplete_stub(
+            loop,
+            AdapterCallResult(
+                text="done",
+                usage=UsageSummary(
+                    input_tokens=100,
+                    output_tokens=20,
+                    cached_input_tokens=40,
+                    cache_write_tokens=10,
+                    reasoning_tokens=8,
+                ),
+                stop_reason="end_turn",
+            ),
+        )
+
+        asyncio.run(loop._call_llm("system", [{"role": "user", "content": "go"}]))
+
+        ended = observed[-1]
+        assert ended["usage"] == {
+            "input_tokens": 100,
+            "output_tokens": 20,
+            "cached_input_tokens": 40,
+            "reasoning_tokens": 8,
+            "cache_write_tokens": 10,
+        }
+        assert ended["cost_usd"] == calculate_cost(
+            loop.model,
+            100,
+            20,
+            cache_creation_tokens=10,
+            cache_read_tokens=40,
+        )
+
     def test_call_llm_returns_none_on_chain_exhaustion(self) -> None:
         """When ``acomplete`` raises, ``_call_llm`` returns None with an
         error message."""

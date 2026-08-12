@@ -6,6 +6,7 @@ hierarchical string for checkpoint filtering and session isolation.
 
 from __future__ import annotations
 
+import hashlib
 import re
 
 ROUTER = "router"
@@ -55,3 +56,9 @@ def build_gateway_session_key(
     if thread_id:
         key += f":{_normalize_name(thread_id)}"
     return key
+
+
+def build_gateway_checkpoint_session_id(session_key: str) -> str:
+    """Derive the stable runtime machine id used by checkpoint and Lane."""
+    digest = hashlib.sha256(session_key.encode("utf-8")).hexdigest()[:12]
+    return f"s-gw-{digest}"

@@ -84,6 +84,14 @@ _TURN_SCOPED_KINDS = {
     "verification.continued",
     "verification.evidence",
     "verification.pending",
+    "plan.created",
+    "plan.progressed",
+    "plan.replanned",
+    "plan.abandoned",
+    "plan.completed",
+    "goal.created",
+    "goal.updated",
+    "goal.continued",
 }
 
 
@@ -714,7 +722,19 @@ def _digest_private_event_payload(
             "references",
         },
     }
-    allowed = structural | safe_by_kind.get(kind, set())
+    plan_fields = {
+        "plan_id",
+        "revision",
+        "current_step_id",
+        "step_count",
+        "completed_step_ids",
+        "abandoned_step_ids",
+        "changed_step_ids",
+        "trigger",
+    }
+    allowed = structural | (
+        plan_fields if kind.startswith("plan.") else safe_by_kind.get(kind, set())
+    )
     omitted_payload = {field: protected.pop(field) for field in sorted(set(protected) - allowed)}
     if omitted_payload:
         raw = json.dumps(

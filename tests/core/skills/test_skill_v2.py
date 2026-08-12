@@ -80,6 +80,35 @@ class TestSkillDefinitionV2:
         researcher = next(s for s in skills if s.name == "researcher")
         assert "Do research" in researcher.body  # loaded immediately
 
+    def test_bundled_deep_research_uses_runtime_orchestration_tools(self) -> None:
+        repo_root = Path(__file__).parents[3]
+        skill = SkillLoader(lazy=False).load_file(
+            repo_root / ".geode/skills/deep-researcher/SKILL.md"
+        )
+
+        assert skill.tools == [
+            "update_plan",
+            "create_goal",
+            "get_goal",
+            "update_goal",
+            "delegate_task",
+            "spawn_agent",
+            "list_agents",
+            "wait_agent",
+            "send_message",
+            "followup_task",
+            "interrupt_agent",
+            "general_web_search",
+            "web_fetch",
+            "llms_txt_index",
+        ]
+        assert "independent" in skill.body
+        assert "contradiction" in skill.body
+        assert "instead of creating a competing checklist" in skill.body
+        assert "only when the user explicitly requests" in skill.body
+        assert "remain depth one" in skill.body
+        assert "memory_save" not in skill.body
+
 
 class TestProgressiveDisclosure:
     """Test 3-tier loading behavior."""

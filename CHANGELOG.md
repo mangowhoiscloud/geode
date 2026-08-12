@@ -60,8 +60,153 @@ functional change.
   unbound or non-resolving metric pointers, source/count drift, registration
   chronology, non-portable or private paths, authority-free decisions, and
   over-broad promotion claims.
+- **Paired MCPMark Codex comparison.** Added a filesystem-only Codex CLI arm
+  that shares MCPMark's pinned task setup and official verifier with GEODE,
+  while isolating user configuration and preserving both native exec JSONL and
+  schema-validated trajectory sidecars for direct harness diagnostics on
+  ChatGPT subscription models. The setup manifest now installs GEODE into the
+  MCPMark venv so live runs cannot fail on missing runtime dependencies.
 
 ### Fixed
+
+- **Separated durable session lifetime from optional wall-clock guards.**
+  Interactive and resumable sessions no longer inherit an implicit two-hour
+  expiry; `GEODE_SESSION_TIME_BUDGET_S` now explicitly opts into the legacy
+  session cap. Expiry and handoff are mutually exclusive, expired sessions
+  stop before planner/model/tool work, and ordinary gateway/IPC loops bind
+  independent session metrics so one session cannot expire another.
+- **Bounded model-facing tool results.** MCP `CallToolResult` receipts remain
+  intact in session evidence, while model context now selects structured
+  content once instead of nesting duplicate JSON. Large projected results are
+  offloaded before the hard token guard, and escaped truncation output cannot
+  exceed its configured bound.
+- **Stable multi-round prefixes and complete usage details.** Removed the
+  synthetic per-round reminder message because date and runtime rules already
+  live in the system prompt, preserving exact conversation prefixes between
+  calls. OpenAI reasoning/cache-write and Anthropic/Claude cache-creation usage
+  now flow into the existing runtime counters instead of being discarded.
+  Reasoning remains an observable subset of provider-reported output tokens
+  and is no longer charged a second time by the local cost estimator. The
+  MCPMark adapter also translates those native counters into the harness's
+  `total_tokens` and `reasoning_tokens` summary keys.
+
+### Infrastructure
+
+- **PyPI Core Metadata 2.5 publishing.** Updated the pinned PyPA publish action
+  to v1.14.2 so its internal Twine 7 validator accepts the same Metadata 2.5
+  wheel already approved by the release build gate.
+
+## [1.0.21] - 2026-08-11
+
+> Reproducible GPT-5.6 effort diagnostics and matched Petri Dish scaffold evidence.
+
+### Infrastructure
+
+- **Matched Petri Dish scaffold comparison.** Added a pinned Codex CLI / Hermes
+  ACP comparison task with a shared sandbox, model, seed, turn ceiling, and
+  judge rubric, plus an Inspect archive sanitizer that removes private
+  reasoning and host-home paths while preserving scores for public evidence.
+- **Release/type-check parity.** CI now type-checks with the audit extra used
+  by stable releases, and the Petri scaffold utilities satisfy those installed
+  Inspect/Petri type contracts instead of failing only during promotion.
+- **Core Metadata 2.5 release validation.** Raised the Twine floor to 7.0 so
+  stable releases validate current Hatchling-built wheels instead of failing
+  after the full release test suite.
+
+### Fixed
+
+- **Codex overload classification.** Generic SSE `APIError` overload responses
+  are now recorded as provider-server failures instead of unknown errors, so
+  retry hooks and operator diagnostics retain the real failure category.
+- **Isolated Claude CLI subscription authentication.** Petri audit subprocesses
+  no longer inherit a parent `ANTHROPIC_API_KEY`, so Claude CLI auditor and
+  judge roles consistently use the operator's Claude subscription login.
+
+## [1.0.20] - 2026-08-10
+
+> Permission-gated Goal budgets and packaged Tier-0 runtime identity.
+
+### Fixed
+
+- **Hardened explicit Goal budgets and packaged identity.** A model-supplied
+  numeric `create_goal.token_budget` now crosses the existing
+  `PermissionRequest` boundary before persistence, while the OpenAI-compatible
+  schema represents the unbounded default as required `null` instead of a
+  best-effort optional integer. This prevents an unsolicited minimum value
+  from immediately budget-limiting a Goal. Distribution artifacts now include
+  the Tier-0 `GEODE.md` identity used by source checkouts instead of silently
+  running installed wheels with an empty soul.
+
+## [1.0.19] - 2026-08-10
+
+> Durable explicit Goals, serve-owned continuation, and truthful sub-agent
+> outcomes for long-running work.
+
+### Added
+
+- **Hosted active Goals in `geode serve`.** The daemon now discovers an
+  explicit active Goal after return or restart, restores its ACTIVE checkpoint
+  as a new session generation, and re-enters the existing contextual Goal turn
+  under the same SessionLane key. Returned attempts are deduplicated per
+  observed Goal state while transient failures retry at the host tick; each
+  admission receives fresh session metrics, preserves gateway history limits,
+  and joins the daemon's bounded shutdown drain. IPC resume now reloads inside
+  the same machine Lane. Paused/terminal/missing/corrupt checkpoints stay
+  blocked, and the normal PostVerify, replan, accounting, evidence, and
+  trajectory path remains intact without a PlanStep executor or second store.
+- **Added explicit persisted Goals and steerable deep research.** The
+  `create_goal`, `get_goal`, and `update_goal` tools persist one explicitly
+  requested multi-turn objective in `sessions.db`, account token/time usage,
+  stop subsequent continuation turns after optional token budgets are reached,
+  and continue successful turns until the goal completes, blocks, or reaches
+  budget. Goal transitions join canonical
+  session history and its JSONL projection without duplicating raw objectives.
+  The bundled deep-research skill can now choose between bounded
+  `delegate_task` batches and durable depth-one children with mailbox, wait,
+  follow-up, and interrupt control; ordinary research never creates a Goal
+  implicitly.
+- **Stopped treating schema-invalid sub-agent role output as success.** A child
+  process that exits normally but fails its role output model now returns a
+  failed `SubResult`, so batch `succeeded` counts and terminal lifecycle status
+  cannot claim success while carrying `validated=false`.
+
+## [1.0.18] - 2026-08-10
+
+> Truthful advisory planning and Part 5 deep research, lifecycle boundary
+> hardening, and a reproducible Agent-World comparison contract.
+
+### Added
+
+- **Aligned deep research with Stanford CS329A Part 5 and Codex runtime
+  composition.** The bundled `deep-researcher` now frames a research question
+  and gap, parallelizes only independent axes through the existing
+  `delegate_task` batch surface, keeps critical-path source inspection and
+  synthesis in the parent, and audits citation entailment, freshness,
+  authority, contradictions, and failed searches. Advisory plans now carry a
+  stable ID across progress and replan revisions, with typed plan lifecycle
+  edges in canonical session history and its JSONL projection.
+
+### Fixed
+
+- **Removed simulated plan execution from review checkpoints.** `create_plan`
+  and `approve_plan` now record review and authority only; they never mark
+  unexecuted steps complete. The unused `plan_auto_execute` setting and the
+  `PlanMode` execution methods are gone, leaving `AgenticLoop` as the sole
+  action owner and `update_plan` as observed-progress bookkeeping.
+
+- **Restored live plan/replan response wiring.** `AgenticResponse` now exposes
+  its normalized text blocks to auxiliary planner and judge callers, so valid
+  subscription JSON is no longer discarded after adapter translation.
+  Auxiliary planner and judge calls no longer inherit action tools, and replan
+  uses a strict structured-output contract. A retryable verification failure
+  now replans once at the repair turn boundary, with the failed candidate and
+  repair instruction, instead of reusing the same failure on every tool round.
+  The existing `update_plan` checklist now advances an active advisory Plan
+  only when its full or remaining step texts match exactly, so observed
+  completion is reflected in the next round without turning PlanStep metadata
+  into an executor. Completed plans stay closed to cadence/low-confidence
+  replans, concurrent checklist updates preserve call order, and mismatched or
+  standalone checklists remain display-only.
 
 - **Made lifecycle restarts and runtime tests honor their real ownership
   boundaries.** Detached `geode serve` restarts now allow the documented

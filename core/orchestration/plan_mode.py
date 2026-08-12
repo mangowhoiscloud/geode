@@ -1,32 +1,20 @@
-"""Plan Mode — plan-before-execute for complex analysis requests.
+"""Review checkpoints for complex analysis requests.
 
-Layer 4 orchestration component that creates an execution plan,
-presents it for user approval, and executes steps in dependency order.
-
-For complex multi-subject requests, PlanMode:
-1. Creates a plan with ordered steps and estimated time/cost
-2. Presents the plan for user review
-3. Executes approved steps via the TaskSystem
-
-AUTO mode (opt-in):
-- ``GEODE_PLAN_AUTO_EXECUTE=true`` enables autonomous execution
-- Plan is created, approved, and executed without user approval
-- HITL gates (DANGEROUS, WRITE) remain active even in AUTO mode
+``PlanMode`` creates, presents, modifies, approves, or rejects a proposed
+checklist.  It deliberately does not execute checklist steps.  Runtime action
+belongs to :class:`core.agent.loop.agent_loop.AgenticLoop`; ordinary progress
+uses the advisory :class:`core.agent.plan.Plan` and ``update_plan`` surface.
 """
 
 from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
 log = logging.getLogger(__name__)
-
-# Type alias for step executor callback used by auto_execute_plan
-_StepExecutor = Callable[["PlanStep"], None]
 
 
 class PlanStatus(Enum):
@@ -39,17 +27,6 @@ class PlanStatus(Enum):
     COMPLETED = "completed"
     REJECTED = "rejected"
     FAILED = "failed"
-
-
-class PlanExecutionMode(Enum):
-    """How a plan should be executed after creation.
-
-    MANUAL: User must explicitly call approve_plan (default, existing behavior).
-    AUTO:   Plan is auto-approved and executed immediately after creation.
-    """
-
-    MANUAL = "manual"
-    AUTO = "auto"
 
 
 @dataclass(frozen=True)
@@ -202,14 +179,13 @@ _PLAN_TEMPLATES: dict[str, Any] = {
 
 
 class PlanMode:
-    """Plan-before-execute orchestrator.
+    """Explicit review-checkpoint manager.
 
     Usage:
         plan_mode = PlanMode()
         plan = plan_mode.create_plan("subject", template="full_pipeline")
         summary = plan_mode.present_plan(plan)
         plan_mode.approve_plan(plan)
-        results = plan_mode.execute_plan(plan)
     """
 
     def __init__(self) -> None:
@@ -291,7 +267,7 @@ class PlanMode:
         return summary
 
     def approve_plan(self, plan: AnalysisPlan) -> None:
-        """Mark a plan as approved for execution."""
+        """Record approval of a proposed checklist."""
         if plan.status not in (PlanStatus.DRAFT, PlanStatus.PRESENTED):
             raise ValueError(
                 f"Cannot approve plan in status '{plan.status.value}'. "
@@ -357,154 +333,6 @@ class PlanMode:
         self._stats.rejected += 1
         log.info("Plan '%s' rejected: %s", plan.plan_id, reason or "(no reason)")
 
-    def execute_plan(self, plan: AnalysisPlan) -> dict[str, Any]:
-        """Execute an approved plan (simulation for demo).
-
-        In production, this delegates to TaskSystem for real execution.
-        For demo purposes, returns a simulated execution summary.
-
-        Raises:
-            ValueError: If plan is not approved.
-        """
-        if plan.status != PlanStatus.APPROVED:
-            raise ValueError(
-                f"Cannot execute plan in status '{plan.status.value}'. Plan must be APPROVED first."
-            )
-
-        plan.status = PlanStatus.EXECUTING
-        start_time = time.time()
-
-        # Simulate execution by computing batch structure
-        batches = plan.execution_order()
-        step_results: dict[str, str] = {}
-        for batch_idx, batch in enumerate(batches):
-            for step in batch:
-                step_results[step.step_id] = "completed"
-                log.debug(
-                    "Plan '%s' batch %d: step '%s' completed (simulated)",
-                    plan.plan_id,
-                    batch_idx,
-                    step.step_id,
-                )
-
-        elapsed = time.time() - start_time
-        plan.status = PlanStatus.COMPLETED
-        self._stats.executed += 1
-
-        result = {
-            "plan_id": plan.plan_id,
-            "status": plan.status.value,
-            "step_results": step_results,
-            "batches_executed": len(batches),
-            "elapsed_s": elapsed,
-        }
-        log.info("Plan '%s' execution completed (%.3fs)", plan.plan_id, elapsed)
-        return result
-
-    def auto_execute_plan(
-        self,
-        plan: AnalysisPlan,
-        *,
-        step_executor: _StepExecutor | None = None,
-        max_retries: int = 1,
-    ) -> dict[str, Any]:
-        """Approve and execute a plan in one shot (AUTO mode).
-
-        Skips the manual approval step: transitions DRAFT/PRESENTED -> APPROVED
-        -> EXECUTING -> COMPLETED automatically.
-
-        Each step is executed sequentially via ``step_executor``.  On failure,
-        the step is retried up to ``max_retries`` times.  After exhausting
-        retries the step is marked as ``failed`` and execution continues
-        (partial success).
-
-        Args:
-            plan: The plan to execute.
-            step_executor: Optional callable that runs a single PlanStep.
-                           If None, steps are simulated as completed.
-            max_retries: Number of retry attempts per step on failure.
-
-        Returns:
-            Execution summary dict with per-step results and overall status.
-        """
-        # Auto-approve
-        if plan.status in (PlanStatus.DRAFT, PlanStatus.PRESENTED):
-            self.approve_plan(plan)
-
-        plan.status = PlanStatus.EXECUTING
-        start_time = time.time()
-
-        batches = plan.execution_order()
-        step_results: dict[str, str] = {}
-        failed_steps: list[str] = []
-
-        for batch_idx, batch in enumerate(batches):
-            for step in batch:
-                success = False
-                for attempt in range(1 + max_retries):
-                    try:
-                        if step_executor is not None:
-                            step_executor(step)
-                        step_results[step.step_id] = "completed"
-                        success = True
-                        log.debug(
-                            "Plan '%s' batch %d: step '%s' completed (attempt %d)",
-                            plan.plan_id,
-                            batch_idx,
-                            step.step_id,
-                            attempt + 1,
-                        )
-                        break
-                    except Exception:
-                        log.warning(
-                            "Plan '%s' step '%s' failed (attempt %d/%d)",
-                            plan.plan_id,
-                            step.step_id,
-                            attempt + 1,
-                            1 + max_retries,
-                            exc_info=True,
-                        )
-
-                if not success:
-                    step_results[step.step_id] = "failed"
-                    failed_steps.append(step.step_id)
-                    log.error(
-                        "Plan '%s' step '%s' failed after %d attempts, continuing",
-                        plan.plan_id,
-                        step.step_id,
-                        1 + max_retries,
-                    )
-
-        elapsed = time.time() - start_time
-
-        if failed_steps:
-            plan.status = PlanStatus.COMPLETED
-            plan.metadata["partial_success"] = True
-            plan.metadata["failed_steps"] = failed_steps
-        else:
-            plan.status = PlanStatus.COMPLETED
-        self._stats.executed += 1
-
-        result: dict[str, Any] = {
-            "plan_id": plan.plan_id,
-            "status": plan.status.value,
-            "execution_mode": PlanExecutionMode.AUTO.value,
-            "step_results": step_results,
-            "batches_executed": len(batches),
-            "total_steps": len(plan.steps),
-            "completed_steps": sum(1 for v in step_results.values() if v == "completed"),
-            "failed_steps": failed_steps,
-            "elapsed_s": elapsed,
-        }
-        log.info(
-            "Plan '%s' auto-execution completed (%.3fs, %d/%d steps succeeded)",
-            plan.plan_id,
-            elapsed,
-            result["completed_steps"],
-            result["total_steps"],
-        )
-        return result
-
     def get_plan(self, plan_id: str) -> AnalysisPlan | None:
         """Retrieve a plan by ID."""
         return self._plans.get(plan_id)
@@ -529,12 +357,10 @@ class _PlanModeStats:
         self.created: int = 0
         self.approved: int = 0
         self.rejected: int = 0
-        self.executed: int = 0
 
     def to_dict(self) -> dict[str, int]:
         return {
             "created": self.created,
             "approved": self.approved,
             "rejected": self.rejected,
-            "executed": self.executed,
         }
