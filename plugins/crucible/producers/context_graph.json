@@ -50,7 +50,7 @@
         "benchmark",
         "trajectory"
       ],
-      "contentSha256": "6121e6f07e1e55ed0646e63ce6e21b3ecc17cae229cdbd86b112cf2891f40cf5"
+      "contentSha256": "6279fa5ea2ef797b269cd50aee7c32b2d25a00ec444e70c85cb0cbd91b24d341"
     },
     {
       "id": "file:plugins/benchmark_harness/tau2_turn_supervisor.py",
@@ -98,7 +98,7 @@
         "tools",
         "parallel"
       ],
-      "contentSha256": "ff030f10c87d035483177f39cd874502263c18f257763a593b2f4d2a25f6f0f0"
+      "contentSha256": "d4f889172e09b7002b8e07b68267f77ea770898e4fe18234aa7ada757538c92a"
     },
     {
       "id": "file:plugins/crucible/tau2_live.py",

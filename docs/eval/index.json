@@ -10,7 +10,7 @@
     "trajectory": "core/observability/schemas/trajectory.schema.json",
     "trajectory_release": "core/observability/schemas/trajectory-release.schema.json"
   },
-  "document_count": 12,
+  "document_count": 13,
   "documents": [
     {
       "id": "agent-world-comparison",
@@ -92,7 +92,7 @@
       "authority": "routing",
       "path": "docs/eval/README.md",
       "summary": "Machine and human entrypoint for GEODE evaluation contracts, benchmark ledgers, evidence, and publication.",
-      "sha256": "51279e84196afc1e5988db88e2299f1a299a9bdb13364003f2d2816d2078f34f",
+      "sha256": "eda764c3458f17e739a288baceb20f3ae3b48210bc2b90caea82f267fd680348",
       "triggers": [
         "artifact",
         "benchmark",
@@ -108,7 +108,7 @@
         "docs/eval/schemas/attempt.schema.json",
         "docs/eval/schemas/run-spec.schema.json"
       ],
-      "latest_valid_release": "https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/2c2d1f0621f64ff7ceeff8c05d8ebd3449501aaf/trajectories/mcpmark-geode-gpt54-high-token-efficiency-rerun-filesystem-easy-20260812T090254Z-35db8b275a36"
+      "latest_valid_release": "https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/e5d442f25c9fb4861e28744dbe924a36325c746b/trajectories/mcpmark-geode-gpt54-high-mcpmark-filesystem-standard-gpt54-high-geode-codex--818b13fe1039-20260812T231820Z-ed26f124b9c7"
     },
     {
       "id": "external-artifact-repository",
@@ -194,6 +194,32 @@
       "contracts": [
         "docs/eval/agent-world-comparison-contract.md"
       ]
+    },
+    {
+      "id": "mcpmark-geode-codex-gpt54-filesystem-standard-20260813",
+      "family": "mcpmark",
+      "title": "GPT-5.4 GEODE × Codex MCPMark filesystem/standard corrected observation",
+      "kind": "ledger",
+      "status": "historical",
+      "authority": "retrospective-descriptive-diagnostic",
+      "path": "docs/eval/2026-08-13-mcpmark-geode-codex-gpt54-filesystem-standard.md",
+      "summary": "Completed GPT-5.4/high native outcomes for 30 paired MCPMark tasks; the prospective hypothesis is invalidated by a post-run timeout-boundary correction.",
+      "sha256": "64b4fc242e587507fec97b38b182b2433a3b23273630e63e3d01139b5dbc1a06",
+      "triggers": [
+        "GEODE Codex comparison",
+        "GPT-5.4 benchmark",
+        "MCPMark filesystem standard",
+        "tool-result truncation",
+        "trajectory comparison"
+      ],
+      "contracts": [
+        "core/observability/schemas/trajectory-release.schema.json",
+        "core/observability/schemas/trajectory.schema.json",
+        "docs/eval/schemas/analysis.schema.json",
+        "docs/eval/schemas/attempt.schema.json",
+        "docs/eval/schemas/run-spec.schema.json"
+      ],
+      "latest_valid_release": "https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/e5d442f25c9fb4861e28744dbe924a36325c746b/trajectories/mcpmark-geode-gpt54-high-mcpmark-filesystem-standard-gpt54-high-geode-codex--818b13fe1039-20260812T231820Z-ed26f124b9c7"
     },
     {
       "id": "mcpmark-geode-codex-gpt54-paired-20260812",

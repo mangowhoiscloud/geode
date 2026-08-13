@@ -8,6 +8,7 @@ without vendoring the benchmark repository.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import importlib
 import json
 import logging
@@ -19,7 +20,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from core.agent.loop.models import is_successful_task_termination
+from core.agent.loop.models import TerminationReason, is_successful_task_termination
 
 from plugins.benchmark_harness.trajectory_artifacts import (
     export_codex_mcpmark_trajectory,
@@ -56,7 +57,9 @@ def _codex_mcp_config(command: str, args: list[str], timeout: int) -> str:
     )
 
 
-def _summarize_codex_exec(stdout: str) -> dict[str, Any]:
+def _summarize_codex_exec(
+    stdout: str, *, allow_incomplete_final_record: bool = False
+) -> dict[str, Any]:
     """Reduce the stable ``codex exec --json`` stream for MCPMark reporting."""
     summary: dict[str, Any] = {
         "thread_id": "",
@@ -73,10 +76,14 @@ def _summarize_codex_exec(stdout: str) -> dict[str, Any]:
         },
         "error": "",
     }
-    for line in stdout.splitlines():
-        if not line.strip():
-            continue
-        event = json.loads(line)
+    lines = [line for line in stdout.splitlines() if line.strip()]
+    for index, line in enumerate(lines):
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            if allow_incomplete_final_record and index == len(lines) - 1:
+                break
+            raise
         event_type = event.get("type")
         if event_type == "thread.started":
             summary["thread_id"] = str(event.get("thread_id") or "")
@@ -338,6 +345,30 @@ def _patch_mcpmark_github_visibility() -> None:
     manager_cls._geode_public_visibility_patched = True
 
 
+def _patch_mcpmark_cleanup_on_error() -> None:
+    """Attempt fixture cleanup before MCPMark propagates an execution error."""
+    module = importlib.import_module("src.evaluator")
+    evaluator_cls = module.MCPEvaluator
+    if getattr(evaluator_cls, "_geode_cleanup_on_error_patched", False):
+        return
+
+    original_run_single_task = evaluator_cls._run_single_task
+
+    def run_single_task_with_cleanup(self: Any, task: Any) -> Any:
+        try:
+            return original_run_single_task(self, task)
+        except BaseException:
+            try:
+                if self.state_manager.clean_up(task) is False:
+                    log.error("MCPMark cleanup reported failure after an execution error")
+            except Exception:
+                log.exception("MCPMark cleanup failed after an execution error")
+            raise
+
+    evaluator_cls._run_single_task = run_single_task_with_cleanup
+    evaluator_cls._geode_cleanup_on_error_patched = True
+
+
 BaseMCPAgent: Any
 try:
     BaseMCPAgent = importlib.import_module("src.agents.base_agent").BaseMCPAgent
@@ -419,7 +450,29 @@ class GeodeMCPMarkAgent(BaseMCPAgent):
                     effort=str(self.reasoning_effort or "default"),
                     timeout=int(self.timeout),
                 )
-                result = await loop.arun(instruction)
+                previous_fail_empty_text = os.environ.get("GEODE_CODEX_OAUTH_FAIL_EMPTY_TEXT")
+                os.environ["GEODE_CODEX_OAUTH_FAIL_EMPTY_TEXT"] = "1"
+                wall = asyncio.timeout(float(self.timeout))
+                try:
+                    async with wall:
+                        result = await loop.arun(instruction)
+                except TimeoutError:
+                    if not wall.expired():
+                        raise
+                    rounds = int(getattr(loop.cognitive_state, "round_count", 0) or 0)
+                    result = loop._terminal_result(
+                        TerminationReason.TIME_BUDGET_EXPIRED,
+                        f"GEODE exceeded MCPMark timeout ({self.timeout}s)",
+                        rounds=rounds,
+                        error=True,
+                        tool_calls=list(loop._tool_processor.tool_log),
+                    )
+                    result = await loop._afinalize_and_return(result, instruction, rounds)
+                finally:
+                    if previous_fail_empty_text is None:
+                        os.environ.pop("GEODE_CODEX_OAUTH_FAIL_EMPTY_TEXT", None)
+                    else:
+                        os.environ["GEODE_CODEX_OAUTH_FAIL_EMPTY_TEXT"] = previous_fail_empty_text
                 task_success = not bool(getattr(result, "error", None)) and (
                     is_successful_task_termination(getattr(result, "termination_reason", ""))
                 )
@@ -477,7 +530,7 @@ class GeodeMCPMarkAgent(BaseMCPAgent):
                 "geode_trajectory_error": trajectory_error,
                 "error": (str(getattr(result, "error", "") or "") if not task_success else None),
             }
-        except Exception as exc:
+        except Exception:
             if loop is not None:
                 try:
                     await loop.amark_session_error()
@@ -490,15 +543,7 @@ class GeodeMCPMarkAgent(BaseMCPAgent):
                 turn_count=0,
                 execution_time=execution_time,
             )
-            return {
-                "success": False,
-                "output": [],
-                "token_usage": {},
-                "turn_count": 0,
-                "execution_time": execution_time,
-                "error": f"GEODE MCPMark execution failed: {exc}",
-                "litellm_run_model_name": f"geode/{model}",
-            }
+            raise
 
 
 class CodexMCPMarkAgent(BaseMCPAgent):
@@ -564,23 +609,44 @@ class CodexMCPMarkAgent(BaseMCPAgent):
             for feature in _CODEX_DISABLED_FEATURES:
                 command.extend(("--disable", feature))
             command.append("-")
-            process = await asyncio.create_subprocess_exec(
-                *command,
-                env=_codex_subscription_environment(),
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            try:
-                stdout_bytes, stderr_bytes = await asyncio.wait_for(
-                    process.communicate(prompt.encode("utf-8")), timeout=float(self.timeout)
+            stdout_capture_path = Path(runner_dir) / "codex.stdout.jsonl"
+            stderr_capture_path = Path(runner_dir) / "codex.stderr.log"
+            escaped_error: BaseException | None = None
+            with (
+                stdout_capture_path.open("wb") as stdout_capture,
+                stderr_capture_path.open("wb") as stderr_capture,
+            ):
+                process = await asyncio.create_subprocess_exec(
+                    *command,
+                    env=_codex_subscription_environment(),
+                    stdin=asyncio.subprocess.PIPE,
+                    stdout=stdout_capture,
+                    stderr=stderr_capture,
                 )
-            except TimeoutError as exc:
-                process.kill()
-                await process.communicate()
-                raise TimeoutError(
-                    f"codex exec exceeded MCPMark timeout ({self.timeout}s)"
-                ) from exc
+                wall = asyncio.timeout(float(self.timeout))
+                try:
+                    async with wall:
+                        await process.communicate(prompt.encode("utf-8"))
+                except BaseException as exc:
+                    with contextlib.suppress(ProcessLookupError):
+                        process.kill()
+                    if process.stdin is not None:
+                        process.stdin.close()
+                    with contextlib.suppress(TimeoutError):
+                        await asyncio.wait_for(
+                            process.wait(),
+                            timeout=min(max(float(self.timeout), 0.1), 5.0),
+                        )
+                    if isinstance(exc, TimeoutError) and wall.expired():
+                        timeout_error = f"codex exec exceeded MCPMark timeout ({self.timeout}s)"
+                    else:
+                        timeout_error = ""
+                        escaped_error = exc
+                else:
+                    timeout_error = ""
+
+            stdout_bytes = stdout_capture_path.read_bytes()
+            stderr_bytes = stderr_capture_path.read_bytes()
 
         stdout = stdout_bytes.decode("utf-8", errors="replace")
         stderr = stderr_bytes.decode("utf-8", errors="replace")
@@ -589,10 +655,15 @@ class CodexMCPMarkAgent(BaseMCPAgent):
             log_path.write_text(stdout, encoding="utf-8")
             if stderr:
                 log_path.with_suffix(".stderr.log").write_text(stderr, encoding="utf-8")
+        if escaped_error is not None:
+            raise escaped_error
 
-        summary = _summarize_codex_exec(stdout)
+        summary = _summarize_codex_exec(
+            stdout,
+            allow_incomplete_final_record=bool(timeout_error),
+        )
         execution_time = time.time() - start_time
-        error = summary["error"]
+        error = timeout_error or summary["error"]
         if process.returncode and not error:
             error = stderr.strip() or f"codex exec exited {process.returncode}"
         task_success = process.returncode == 0 and not error and summary["turn_count"] > 0
@@ -603,6 +674,7 @@ class CodexMCPMarkAgent(BaseMCPAgent):
                     instruction=instruction,
                     model=model,
                     effort=effort,
+                    timeout_error=timeout_error,
                 )
                 trajectory_status = "written"
                 trajectory_error = None
@@ -639,5 +711,7 @@ class CodexMCPMarkAgent(BaseMCPAgent):
 
 def register_mcpmark_agent(registry: dict[str, Any]) -> None:
     _patch_mcpmark_github_visibility()
+    if BaseMCPAgent is not object:
+        _patch_mcpmark_cleanup_on_error()
     registry["geode"] = GeodeMCPMarkAgent
     registry["codex"] = CodexMCPMarkAgent

@@ -260,6 +260,50 @@ PYTHONPATH=<geode-feature-tree> \
   ],
 };
 
+const mcpmarkFilesystemStandardGpt54Paired: BenchmarkMeasurement = {
+  id: "mcpmark-filesystem-standard-20260813-gpt54-high-paired",
+  group: "mcpmark",
+  title: "filesystem/standard GPT-5.4 GEODE × Codex corrected observation",
+  measuredAt: "2026-08-13 KST",
+  suite: "filesystem/standard",
+  status: "complete",
+  model: "gpt-5.4",
+  provider: "openai / codex-cli",
+  source: "subscription",
+  effort: "high",
+  route: "GEODE AgenticLoop and isolated Codex CLI paired by task",
+  harness:
+    "eval-sys/mcpmark@cd45b7f, GEODE@a8f45f3c9, Codex@dad1db87",
+  artifact:
+    "geode-eval-artifacts@e5d442f25c9fb4861e28744dbe924a36325c746b/mcpmark/results-paired/mcpmark-filesystem-standard-gpt54-high-geode-codex-k1-boundary-aligned-20260813",
+  scoreLabel: "Retrospective descriptive verifier outcomes",
+  scoreValue: "GEODE 70.0% (21 / 30) · Codex 66.7% (20 / 30)",
+  secondary: [
+    "Observed delta +1 / 30 (+3.33 pp); prospective hypothesis invalidated",
+    "GEODE 1,646 events / 703 exact tool pairs; Codex 1,735 / 727",
+    "GEODE fresh input 4,204,759 vs Codex 1,444,927; no token-efficiency claim",
+    "Both releases scope-complete, replay-incomplete, zero orphan tool events",
+  ],
+  command: `# Illustrative one-task invocation only; exact runner is withheld.
+python -m plugins.benchmark_harness.run_mcpmark \
+  --mcp filesystem \
+  --task-suite standard \
+  --tasks <one-frozen-task-id> \
+  --models <geode-gpt-5.4|codex-gpt-5.4> \
+  --agent <geode|codex> \
+  --reasoning-effort high \
+  --k 1 \
+  --timeout 1200`,
+  notes: [
+    "All 30 pairs share the pinned task tree, fixture reset, model label, effort, and verifier.",
+    "The frozen equal-hard-deadline claim was invalidated: GEODE timed loop.arun, while Codex timed process communication including internal MCP startup.",
+    "Prompt, action budget, retry, compaction, and cache accounting are also not identical; outcomes are retrospective descriptions only.",
+    "The public bundle is not independently executable because the exact runner remains digest-bound but withheld.",
+    "This is one filesystem service slice, not the full 127-task MCPMark Verified leaderboard.",
+    "Raw messages, logs, metadata, and provider diagnostics remain private; only digest-reduced trajectories and validated sidecars are public.",
+  ],
+};
+
 const mcpmarkFilesystemEasyParallel: BenchmarkMeasurement = {
   id: "mcpmark-filesystem-easy-parallel-20260703-gpt55-xhigh",
   group: "mcpmark",
@@ -1333,6 +1377,7 @@ export const BENCHMARK_GROUPS: BenchmarkGroup[] = [
     ],
     measurements: [
       mcpmarkVerifiedAvailable,
+      mcpmarkFilesystemStandardGpt54Paired,
       mcpmarkFilesystemEasyGpt54TokenEfficiency,
       mcpmarkFilesystemEasyGpt54V1012,
       mcpmarkFilesystemEasyGpt56V1011,

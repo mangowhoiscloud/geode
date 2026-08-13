@@ -69,6 +69,26 @@ functional change.
 
 ### Fixed
 
+- **Model-specific tool-result caps now respect the configured global ceiling.**
+  Small-context models use the lower limit, while a non-positive global limit
+  remains an explicit opt-out.
+- **MCPMark now separates infrastructure failures from verifier scores.** The
+  GEODE arm bounds model/tool execution with the configured task timeout, retries
+  reasoning-only empty subscription responses through the existing loop, and
+  propagates escaped runtime errors to the harness instead of verifying partial
+  state as a semantic task failure. The registered evaluator attempts fixture
+  cleanup before re-raising those errors. MCP startup and result finalization
+  remain outside that execution timer and are reported as a comparison
+  limitation. A killed Codex process may leave one partial final JSONL record;
+  timeout reporting now preserves earlier complete records instead of turning
+  that expected tail into a parser exception, and bounds post-kill reaping.
+- **Convergence detection counts failed observation rounds, not calls.** A
+  parallel tool batch now contributes one input-aware error fingerprint, and a
+  successful or mixed round resets the streak. This prevents one failed batch
+  or long common error prefixes from stopping the agent before it can repair.
+- **Signed evaluation deltas stay scoped to target metrics.** Paired target
+  metrics may use a negative numerator, while maximize/minimize metrics retain
+  the existing non-negative contract for ratio and non-ratio units.
 - **Squash-merged worktree cleanup now tolerates base advancement.** The
   cleanup guard reconstructs the merge of the final PR head onto the squash
   commit's first parent instead of requiring the two complete trees to match.
