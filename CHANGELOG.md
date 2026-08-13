@@ -78,6 +78,14 @@ functional change.
 
 ### Fixed
 
+- **MCPMark verifier patch application is now syntax-safe.** The pinned
+  compatibility patch uses ordinary context-bearing hunks at the intended
+  directory scans, checkout validation rejects syntax-invalid verifier
+  postimages, and a no-model regression applies the patch to the exact upstream
+  Git blobs before checking syntax and postimage digests.
+- **MCPMark paired runs now bind the live filesystem tool schema.** A no-model
+  probe freezes the canonical `list_tools` digest before output creation, and
+  every Gate0B arm must attest the same digest in its deadline receipt.
 - **Model-specific tool-result caps now respect the configured global ceiling.**
   Small-context models use the lower limit, while a non-positive global limit
   remains an explicit opt-out.

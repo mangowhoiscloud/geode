@@ -13,31 +13,38 @@ uncaught FileNotFoundError or NotADirectoryError. Successful behavior is
 unchanged.
 
 diff --git a/tasks/filesystem/standard/desktop/project_management/verify.py b/tasks/filesystem/standard/desktop/project_management/verify.py
-index 1f28a6a..9e03079 100644
+index 1f28a6a..6304199 100644
 --- a/tasks/filesystem/standard/desktop/project_management/verify.py
 +++ b/tasks/filesystem/standard/desktop/project_management/verify.py
-@@ -195,0 +196,3 @@ def verify_progress_tracking_empty(test_dir: Path) -> bool:
-+    if not progress_dir.is_dir():
+@@ -194,2 +194,5 @@ def verify_progress_tracking_empty(test_dir: Path) -> bool:
+     organized_dir = test_dir / "organized_projects"
++    if not (organized_dir / "learning" / "progress_tracking").is_dir():
 +        print("❌ progress_tracking directory not found or is not a directory")
 +        return False
-@@ -236,0 +240,4 @@ def verify_file_counts(test_dir: Path) -> bool:
-+        if not full_path.is_dir():
+     progress_dir = organized_dir / "learning" / "progress_tracking"
+@@ -235,2 +238,5 @@ def verify_file_counts(test_dir: Path) -> bool:
+     for dir_path, expected_count in expected_counts.items():
++        if not (organized_dir / dir_path).is_dir():
 +            incorrect_counts.append(f"{dir_path}: missing or not a directory")
 +            continue
-+
+         full_path = organized_dir / dir_path
 diff --git a/tasks/filesystem/standard/file_context/duplicates_searching/verify.py b/tasks/filesystem/standard/file_context/duplicates_searching/verify.py
-index c7a26ad..fa8065c 100644
+index c7a26ad..6360c29 100644
 --- a/tasks/filesystem/standard/file_context/duplicates_searching/verify.py
 +++ b/tasks/filesystem/standard/file_context/duplicates_searching/verify.py
-@@ -164,0 +165,3 @@ def verify_total_file_count(test_dir: Path) -> bool:
-+    if not duplicates_dir.is_dir():
+@@ -163,2 +163,5 @@ def verify_total_file_count(test_dir: Path) -> bool:
+     """Verify that the duplicates directory contains exactly 14 files."""
++    if not (test_dir / "duplicates").is_dir():
 +        print("❌ duplicates directory not found or is not a directory")
 +        return False
+     duplicates_dir = test_dir / "duplicates"
 diff --git a/tasks/filesystem/standard/file_context/file_splitting/verify.py b/tasks/filesystem/standard/file_context/file_splitting/verify.py
-index 5f72271..003e5b1 100644
+index 5f72271..4ef98ba 100644
 --- a/tasks/filesystem/standard/file_context/file_splitting/verify.py
 +++ b/tasks/filesystem/standard/file_context/file_splitting/verify.py
-@@ -112,0 +113,3 @@ def verify_no_extra_files(test_dir: Path) -> bool:
-+    if not split_dir.is_dir():
+@@ -111,2 +111,5 @@ def verify_no_extra_files(test_dir: Path) -> bool:
+     """Verify that no extra files exist in the split directory."""
++    if not (test_dir / "split").is_dir():
 +        print("❌ split directory not found or is not a directory")
 +        return False
+     split_dir = test_dir / "split"

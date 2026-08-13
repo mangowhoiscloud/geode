@@ -25,6 +25,7 @@ from core.observability.trajectory import verify_trajectory_integrity
 from scripts.eval.contract import validate_run_spec
 
 from plugins.benchmark_harness.manifest import REPO_ROOT, get_harness
+from plugins.benchmark_harness.mcpmark_geode_agent import _tool_schema_sha256
 
 EXPECTED_FS30_SHA256 = "50483308573ce407abaf0700885d56c6df0453557669dddce9edcece83710433"
 EXPECTED_FIXTURE_SHA256 = "c8cfb2815f63ded54a7d79ffed2e0719190bb2dc1e571112a6012f97f95e9f17"
@@ -41,16 +42,16 @@ TOOL_CAP_SHA256 = "b0953abbe11808bd25a03ef97355380ae2a58f0086025cd2557f1cacf32f3
 TOOL_CAP_ARMS = (("guard-25000", 25_000), ("unlimited-0", 0))
 TOOL_CAP_REPETITIONS = 3
 TOOL_CAP_TIMEOUT_SECONDS = 1_200
-PATCH_SHA256 = "04a34e664f590c36bc85765581318c0887000f6ca79213efd97705795ca4dac4"
+PATCH_SHA256 = "3f41f13a8edf7b40f411bf0a76412c28fc9629338d9e5051d5633dc064c563e6"
 PATCHED_VERIFIERS = {
     "tasks/filesystem/standard/desktop/project_management/verify.py": (
-        "8159f860c370a48510a126b41d692baf9e76e78314742cb59e1b17f433ddae6b"
+        "2442b53734cd0c62cf3f370ef1c226c163cb3a2a7d14d0279b1f7e8f74c784a8"
     ),
     "tasks/filesystem/standard/file_context/duplicates_searching/verify.py": (
-        "4ed5f9f1b35badd15f8a19c1efe5696c3a6a339ce9009348715d7bfdedb74e85"
+        "05e7f56800f6c0ad3d50665ca044392e3b88d5f845092c5032f982625803f5bf"
     ),
     "tasks/filesystem/standard/file_context/file_splitting/verify.py": (
-        "598e0856a8c0d313ae3219ae50193d363c85f609d6b0a4bc3fb31d781a8715f1"
+        "cc91a73608a1b415bcce28e96648e11e8e8305c2bddeea2545027805c6a9aa94"
     ),
 }
 _SAFE_MODEL = re.compile(r"^[A-Za-z0-9._-]+$")
@@ -115,6 +116,7 @@ def _run_process(
     env: dict[str, str],
     stdout: Any = subprocess.PIPE,
     stderr: Any = subprocess.PIPE,
+    timeout: float | None = None,
 ) -> subprocess.CompletedProcess[Any]:
     return subprocess.run(  # noqa: S603 - fixed argv, never a shell
         command,
@@ -122,6 +124,7 @@ def _run_process(
         env=env,
         stdout=stdout,
         stderr=stderr,
+        timeout=timeout,
         check=False,
     )
 
@@ -166,6 +169,46 @@ def _python_preflight(python: Path, mcpmark_root: Path) -> dict[str, Any]:
         ],
         "filesystem_mcp_executable": "npx",
     }
+
+
+def _probe_filesystem_tool_schema(python: Path, mcpmark_root: Path) -> str:
+    """Start the pinned filesystem MCP server and digest its raw tool schemas."""
+    script = """import asyncio,json,sys
+from src.agents.mcp import MCPStdioServer
+async def main():
+    server=MCPStdioServer(command="npx",args=["-y","@modelcontextprotocol/server-filesystem@2025.12.18",sys.argv[1]])
+    async with server:
+        print(json.dumps(await server.list_tools(),ensure_ascii=False))
+asyncio.run(main())
+"""
+    env = os.environ.copy()
+    env["PYTHONPATH"] = os.pathsep.join(
+        value for value in (str(REPO_ROOT), env.get("PYTHONPATH", "")) if value
+    )
+    try:
+        result = _run_process(
+            (str(python), "-c", script, str(mcpmark_root / "test_environments")),
+            cwd=mcpmark_root,
+            env=env,
+            timeout=60,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise PairRunError("filesystem MCP tool-schema probe timed out") from exc
+    except OSError as exc:
+        raise PairRunError("filesystem MCP tool-schema probe could not start") from exc
+    if result.returncode:
+        raise PairRunError("filesystem MCP tool-schema probe failed")
+    try:
+        schemas = json.loads(result.stdout)
+    except (json.JSONDecodeError, TypeError) as exc:
+        raise PairRunError("filesystem MCP tool-schema probe returned invalid JSON") from exc
+    if (
+        not isinstance(schemas, list)
+        or not schemas
+        or not all(isinstance(schema, dict) for schema in schemas)
+    ):
+        raise PairRunError("filesystem MCP tool-schema probe returned no typed schemas")
+    return _tool_schema_sha256(schemas)
 
 
 def _discover_workload(root: Path) -> tuple[str, ...]:
@@ -235,8 +278,13 @@ def _validate_checkout(root: Path) -> None:
     if visible_paths != set(PATCHED_VERIFIERS):
         raise PairRunError("MCPMark checkout contains visible changes outside the verifier patch")
     for relative, expected in PATCHED_VERIFIERS.items():
-        if _sha256(root / relative) != expected:
+        verifier = root / relative
+        if _sha256(verifier) != expected:
             raise PairRunError(f"patched verifier digest mismatch: {relative}")
+        try:
+            compile(verifier.read_bytes(), relative, "exec")
+        except SyntaxError as exc:
+            raise PairRunError(f"patched verifier is not valid Python: {relative}") from exc
 
 
 def _validate_spec(
@@ -390,6 +438,7 @@ def _deadline_receipt(
     arm: str,
     timeout: int,
     expected_tool_cap: int | None = None,
+    expected_tool_schema_sha256: str | None = None,
 ) -> dict[str, Any]:
     try:
         receipt = json.loads(path.read_text(encoding="utf-8"))
@@ -459,11 +508,14 @@ def _deadline_receipt(
         raise PairRunError("deadline receipt marks cleanup infrastructure-invalid")
     if receipt.get("evidence_status") != "written":
         raise PairRunError("deadline receipt marks native evidence incomplete")
-    if expected_tool_cap is not None and receipt.get("runtime_config") != {
-        "max_tool_result_tokens": expected_tool_cap,
-        "offload_store_bound": False,
-    }:
-        raise PairRunError("deadline receipt runtime configuration mismatch")
+    if expected_tool_cap is not None:
+        runtime_config = receipt.get("runtime_config")
+        if not isinstance(runtime_config, dict) or runtime_config != {
+            "max_tool_result_tokens": expected_tool_cap,
+            "offload_store_bound": False,
+            "tool_schema_sha256": expected_tool_schema_sha256,
+        }:
+            raise PairRunError("deadline receipt runtime configuration mismatch")
     return receipt
 
 
@@ -496,6 +548,7 @@ def _native_receipt(
     effort: str,
     timeout: int,
     expected_tool_cap: int | None = None,
+    expected_tool_schema_sha256: str | None = None,
 ) -> dict[str, Any]:
     meta_path = _one(native_dir, "meta.json")
     summary_path = _one(native_dir, "summary.json")
@@ -566,6 +619,7 @@ def _native_receipt(
         arm=arm,
         timeout=timeout,
         expected_tool_cap=expected_tool_cap,
+        expected_tool_schema_sha256=expected_tool_schema_sha256,
     )
     try:
         trajectory_integrity = verify_trajectory_integrity(trajectory)
@@ -701,6 +755,7 @@ def _run_tasks(
     model_label: str,
     effort: str,
     timeout: int,
+    tool_schema_sha256: str,
     profile: str = PAIR_PROFILE,
 ) -> None:
     events_path = output_dir / "runner-events.jsonl"
@@ -781,6 +836,7 @@ def _run_tasks(
                     effort=effort,
                     timeout=timeout,
                     expected_tool_cap=cap,
+                    expected_tool_schema_sha256=tool_schema_sha256,
                 )
                 current_task_sha256 = str(receipt.pop("task_sha256"))
                 prior_task_sha256 = task_hashes.setdefault(task, current_task_sha256)
@@ -884,6 +940,7 @@ def run_pair(
     execution = reproduction["execution"]
     model = reproduction["model"]
     python_preflight = _python_preflight(python, mcpmark_root)
+    tool_schema_sha256 = _probe_filesystem_tool_schema(python, mcpmark_root)
     run_spec_bytes = run_spec_path.read_bytes()
     if hashlib.sha256(run_spec_bytes).hexdigest() != run_spec_sha256:
         raise PairRunError("run spec changed during paired-run preflight")
@@ -909,6 +966,7 @@ def run_pair(
         "timeout_seconds": int(execution["timeout_seconds"]),
         "max_concurrency": 1,
         "python_preflight": python_preflight,
+        "tool_schema_sha256": tool_schema_sha256,
     }
     if profile == TOOL_CAP_PROFILE:
         plan.update(
@@ -946,6 +1004,7 @@ def run_pair(
         model_label=model["label"],
         effort=model["reasoning"],
         timeout=int(execution["timeout_seconds"]),
+        tool_schema_sha256=tool_schema_sha256,
         profile=profile,
     )
 
