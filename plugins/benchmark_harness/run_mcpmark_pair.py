@@ -12,6 +12,7 @@ import json
 import math
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -29,7 +30,11 @@ from plugins.benchmark_harness.mcpmark_geode_agent import _tool_schema_sha256
 
 EXPECTED_FS30_SHA256 = "50483308573ce407abaf0700885d56c6df0453557669dddce9edcece83710433"
 EXPECTED_FIXTURE_SHA256 = "c8cfb2815f63ded54a7d79ffed2e0719190bb2dc1e571112a6012f97f95e9f17"
+EXPECTED_FIXTURE_SEMANTIC_SHA256 = (
+    "273477d554250f4f076e69651e29689ed71095ec1b3fe3e054094be82f574fbf"
+)
 PAIR_PROFILE = "filesystem30-geode-codex"
+PAIR_SMOKE_PROFILE = "filesystem1-geode-codex-smoke"
 TOOL_CAP_PROFILE = "max-tool-result-tokens"
 TOOL_CAP_IDS = (
     "legal_document/dispute_review",
@@ -42,6 +47,15 @@ TOOL_CAP_SHA256 = "b0953abbe11808bd25a03ef97355380ae2a58f0086025cd2557f1cacf32f3
 TOOL_CAP_ARMS = (("guard-25000", 25_000), ("unlimited-0", 0))
 TOOL_CAP_REPETITIONS = 3
 TOOL_CAP_TIMEOUT_SECONDS = 1_200
+PAIR_TIMEOUT_SECONDS = 1_200
+PAIR_MAX_TOOL_RESULT_TOKENS = 25_000
+CODEX_CLI_VERSION = "codex-cli 0.145.0"
+CODEX_CLI_SOURCE_REVISION = "dad1db87bb5ad4b92af6b0f58502d12453681f81"
+CODEX_CLI_EXECUTABLE_SHA256 = "1da3f4e0e96028b8a771814293c3033dafd1971f943f6c7e79b0897fe705f590"
+CODEX_COMPARATOR = (
+    f"{CODEX_CLI_VERSION}; openai/codex@{CODEX_CLI_SOURCE_REVISION}; "
+    f"executable-sha256:{CODEX_CLI_EXECUTABLE_SHA256}"
+)
 PATCH_SHA256 = "3f41f13a8edf7b40f411bf0a76412c28fc9629338d9e5051d5633dc064c563e6"
 PATCHED_VERIFIERS = {
     "tasks/filesystem/standard/desktop/project_management/verify.py": (
@@ -171,6 +185,38 @@ def _python_preflight(python: Path, mcpmark_root: Path) -> dict[str, Any]:
     }
 
 
+def _codex_cli_preflight(mcpmark_root: Path) -> tuple[dict[str, str], Path]:
+    executable = shutil.which("codex")
+    if executable is None:
+        raise PairRunError("Codex CLI is not available on PATH")
+    resolved = Path(executable).resolve()
+    if not resolved.is_file() or not os.access(resolved, os.X_OK):
+        raise PairRunError("Codex CLI PATH target is not an executable file")
+    try:
+        result = _run_process((executable, "--version"), cwd=mcpmark_root, env=os.environ.copy())
+    except OSError as exc:
+        raise PairRunError("Codex CLI version preflight could not start") from exc
+    version = (
+        result.stdout.decode("utf-8", errors="strict")
+        if isinstance(result.stdout, bytes)
+        else str(result.stdout)
+    ).strip()
+    if result.returncode or version != CODEX_CLI_VERSION:
+        raise PairRunError(f"Codex CLI must be exactly {CODEX_CLI_VERSION}")
+    executable_sha256 = _sha256(resolved)
+    if executable_sha256 != CODEX_CLI_EXECUTABLE_SHA256:
+        raise PairRunError("Codex CLI executable digest does not match the frozen comparator")
+    return (
+        {
+            "command": "codex",
+            "version": version,
+            "source_revision": CODEX_CLI_SOURCE_REVISION,
+            "executable_sha256": executable_sha256,
+        },
+        resolved,
+    )
+
+
 def _probe_filesystem_tool_schema(python: Path, mcpmark_root: Path) -> str:
     """Start the pinned filesystem MCP server and digest its raw tool schemas."""
     script = """import asyncio,json,sys
@@ -233,21 +279,41 @@ def _tree_row(path: Path, *, category: str) -> dict[str, Any]:
     if not path.is_dir():
         raise PairRunError(f"fixture category is missing: {category}")
     digest = hashlib.sha256()
+    semantic_digest = hashlib.sha256()
     count = 0
+    directory_count = 1
     byte_count = 0
+    # Directory mtimes are copy-order artifacts; FS30 scores file mtimes and
+    # directory structure, so the semantic receipt binds only the latter.
+    semantic_digest.update(f"directory\0.\0{path.stat().st_mode & 0o7777:o}\n".encode())
+    for directory in sorted(candidate for candidate in path.rglob("*") if candidate.is_dir()):
+        relative = directory.relative_to(path).as_posix()
+        mode = directory.stat().st_mode & 0o7777
+        semantic_digest.update(f"directory\0{relative}\0{mode:o}\n".encode())
+        directory_count += 1
     for item in sorted(candidate for candidate in path.rglob("*") if candidate.is_file()):
         raw = item.read_bytes()
         relative = item.relative_to(path).as_posix()
+        item_sha256 = hashlib.sha256(raw).hexdigest()
+        item_stat = item.stat()
         digest.update(relative.encode("utf-8"))
         digest.update(b"\0")
-        digest.update(hashlib.sha256(raw).digest())
+        digest.update(bytes.fromhex(item_sha256))
+        semantic_digest.update(
+            (
+                f"file\0{relative}\0{len(raw)}\0{item_stat.st_mtime_ns}\0"
+                f"{item_stat.st_mode & 0o7777:o}\0{item_sha256}\n"
+            ).encode()
+        )
         count += 1
         byte_count += len(raw)
     return {
         "category": category,
+        "directory_count": directory_count,
         "file_count": count,
         "bytes": byte_count,
         "sha256": digest.hexdigest(),
+        "semantic_sha256": semantic_digest.hexdigest(),
     }
 
 
@@ -257,11 +323,39 @@ def _fixture_receipt(root: Path, ids: tuple[str, ...]) -> dict[str, Any]:
         _tree_row(root / "test_environments" / category, category=category)
         for category in categories
     ]
-    encoded = json.dumps(rows, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode()
+    content_rows = [
+        {key: row[key] for key in ("category", "file_count", "bytes", "sha256")} for row in rows
+    ]
+    encoded = json.dumps(
+        content_rows, ensure_ascii=False, separators=(",", ":"), sort_keys=True
+    ).encode()
     aggregate = hashlib.sha256(encoded).hexdigest()
     if aggregate != EXPECTED_FIXTURE_SHA256:
         raise PairRunError("MCPMark Filesystem-30 source fixture digest mismatch")
-    return {"categories": rows, "aggregate_sha256": aggregate}
+    semantic_rows = [
+        {
+            key: row[key]
+            for key in (
+                "category",
+                "directory_count",
+                "file_count",
+                "bytes",
+                "semantic_sha256",
+            )
+        }
+        for row in rows
+    ]
+    semantic_encoded = json.dumps(
+        semantic_rows, ensure_ascii=False, separators=(",", ":"), sort_keys=True
+    ).encode()
+    semantic_aggregate = hashlib.sha256(semantic_encoded).hexdigest()
+    if semantic_aggregate != EXPECTED_FIXTURE_SEMANTIC_SHA256:
+        raise PairRunError("MCPMark Filesystem-30 semantic fixture digest mismatch")
+    return {
+        "categories": rows,
+        "aggregate_sha256": aggregate,
+        "semantic_aggregate_sha256": semantic_aggregate,
+    }
 
 
 def _validate_checkout(root: Path) -> None:
@@ -291,7 +385,7 @@ def _validate_spec(
     spec_path: Path,
     *,
     ids: tuple[str, ...],
-    fixture_sha256: str,
+    fixture_semantic_sha256: str,
     repetitions: int = 1,
 ) -> dict[str, Any]:
     spec = validate_run_spec(spec_path)
@@ -300,7 +394,7 @@ def _validate_spec(
     model = reproduction["model"]
     harness = get_harness("mcpmark")
     expected_harness = f"{harness.commit}+patch-sha256:{PATCH_SHA256}"
-    expected_state = f"fixture-tree-sha256:{fixture_sha256}"
+    expected_state = f"fixture-semantic-sha256:{fixture_semantic_sha256}"
     if spec["preregistration"]["live_test_approved"] is not True:
         raise PairRunError("run spec does not approve live model calls")
     if tuple(execution["ordered_workload_ids"]) != ids:
@@ -314,7 +408,7 @@ def _validate_spec(
     if reproduction["harness"]["revision"] != expected_harness:
         raise PairRunError("run spec harness revision does not bind the verifier patch")
     if reproduction["environment"]["initial_state_ref"] != expected_state:
-        raise PairRunError("run spec initial_state_ref does not match the fixture tree")
+        raise PairRunError("run spec initial_state_ref does not match the semantic fixture tree")
     if model["provider"].lower() != "openai" or model["route"] != "subscription":
         raise PairRunError("paired runner requires the OpenAI subscription route")
     if not _SAFE_MODEL.fullmatch(model["label"]):
@@ -335,12 +429,12 @@ def _validate_spec(
 def _validate_tool_cap_spec(
     spec_path: Path,
     *,
-    fixture_sha256: str,
+    fixture_semantic_sha256: str,
 ) -> dict[str, Any]:
     spec = _validate_spec(
         spec_path,
         ids=TOOL_CAP_IDS,
-        fixture_sha256=fixture_sha256,
+        fixture_semantic_sha256=fixture_semantic_sha256,
         repetitions=TOOL_CAP_REPETITIONS,
     )
     reproduction = spec["reproduction"]
@@ -409,6 +503,131 @@ def _validate_tool_cap_spec(
         "infrastructure-invalid attempts and do not replace or score them."
     ):
         raise PairRunError("tool-result cap profile requires the frozen analysis plan")
+    return spec
+
+
+def _pair_primary_metric(*, denominator: int, smoke: bool = False) -> dict[str, Any]:
+    if smoke:
+        return {
+            "name": "accepted paired-task coverage",
+            "unit": "ratio",
+            "direction": "maximize",
+            "aggregation": "accepted paired tasks / 1",
+            "denominator": 1,
+        }
+    return {
+        "name": "GEODE minus Codex verifier-pass-rate delta",
+        "unit": "ratio",
+        "direction": "target",
+        "aggregation": f"(sum(geode passes) - sum(codex passes)) / {denominator}",
+        "denominator": denominator,
+    }
+
+
+def _pair_study_contract(*, denominator: int, smoke: bool) -> dict[str, Any]:
+    invalidation_rule = (
+        "Invalidate the run if any arm changes the frozen deadline, model, route, tool schema, "
+        "task, semantic fixture, verifier, reset identity, or the GEODE 25K tool-result cap; "
+        "fails fixture cleanup; lacks native result, verifier, deadline, or trajectory evidence; "
+        "or exits on an unrecovered provider quota or transport error."
+    )
+    if smoke:
+        return {
+            "research_question": (
+                "Can one frozen MCPMark Filesystem task complete through both GEODE and Codex "
+                "with matching semantic fixture, reset, verifier, tool schema, trajectory, and "
+                "common-deadline evidence?"
+            ),
+            "research_gap": (
+                "The corrective Filesystem-30 run needs a no-resume paired canary under the exact "
+                "public runner before spending quota on 60 arms."
+            ),
+            "hypothesis": (
+                "Both arms produce complete identity, reset, verifier, deadline, and trajectory "
+                "receipts without infrastructure contamination."
+            ),
+            "primary_metric": _pair_primary_metric(denominator=denominator, smoke=True),
+            "decision_rule": ("clean if the accepted paired-task coverage is 1; blocked otherwise"),
+            "invalidation_rule": invalidation_rule,
+            "analysis_plan": (
+                "Select the paired smoke only when both fresh arms are infrastructure-valid; "
+                "report receipt completeness and native verifier outcomes without making a "
+                "performance claim."
+            ),
+        }
+    return {
+        "research_question": (
+            "On the same 30 MCPMark Filesystem tasks, semantic fixture state, verifier, GPT-5.4/"
+            "high subscription route, and common timed action surface, how do GEODE and Codex "
+            "differ in verifier accuracy?"
+        ),
+        "research_gap": (
+            "The prior 30-task observation used different timeout start boundaries and its "
+            "fixture receipt did not bind score-bearing file mtimes or empty directories."
+        ),
+        "hypothesis": (
+            "Across the frozen 30-task workload, GEODE verifier accuracy is no more than 10 "
+            "percentage points below Codex verifier accuracy."
+        ),
+        "primary_metric": _pair_primary_metric(denominator=denominator),
+        "decision_rule": (
+            "supported if the GEODE-minus-Codex verifier-pass-rate delta is at least -0.10; "
+            "not-supported if lower"
+        ),
+        "invalidation_rule": invalidation_rule,
+        "analysis_plan": (
+            "Select all 60 fresh arms only when all 30 pairs are infrastructure-valid; compute "
+            "(GEODE passes - Codex passes) / 30; report arm accuracy, paired wins, losses, ties, "
+            "cache-excluded input, output, reasoning, wall time, MCP calls and errors, repeated "
+            "reads, and termination classes; preserve invalid attempts and do not replace or "
+            "score them."
+        ),
+    }
+
+
+def _validate_pair_spec(
+    spec_path: Path,
+    *,
+    ids: tuple[str, ...],
+    fixture_semantic_sha256: str,
+    smoke: bool,
+) -> dict[str, Any]:
+    spec = _validate_spec(
+        spec_path,
+        ids=ids,
+        fixture_semantic_sha256=fixture_semantic_sha256,
+    )
+    reproduction = spec["reproduction"]
+    execution = reproduction["execution"]
+    model = reproduction["model"]
+    comparison = reproduction["comparison"]
+    study = spec["study"]
+    if spec["preregistration"]["mode"] != "prospective":
+        raise PairRunError("GEODE/Codex pair requires prospective preregistration")
+    if (model["label"], model["reasoning"], int(execution["timeout_seconds"])) != (
+        "gpt-5.4",
+        "high",
+        PAIR_TIMEOUT_SECONDS,
+    ):
+        raise PairRunError("GEODE/Codex pair requires GPT-5.4/high and timeout=1200")
+    if execution["seed_schedule"] != ["upstream-run-1"] or execution["budget"] != {
+        "kind": "wall-time",
+        "limit": PAIR_TIMEOUT_SECONDS,
+        "unit": "seconds",
+    }:
+        raise PairRunError("GEODE/Codex pair requires the frozen run label and wall-time budget")
+    expected_comparison = {
+        "claim_class": "smoke" if smoke else "diagnostic",
+        "comparator": CODEX_COMPARATOR,
+        "comparability": "direct",
+        "promotion_authority": "none",
+    }
+    if comparison != expected_comparison:
+        raise PairRunError("GEODE/Codex pair has a mismatched comparison contract")
+    expected_study = _pair_study_contract(denominator=len(ids), smoke=smoke)
+    for field, expected in expected_study.items():
+        if study[field] != expected:
+            raise PairRunError(f"GEODE/Codex pair requires the frozen {field.replace('_', ' ')}")
     return spec
 
 
@@ -508,14 +727,18 @@ def _deadline_receipt(
         raise PairRunError("deadline receipt marks cleanup infrastructure-invalid")
     if receipt.get("evidence_status") != "written":
         raise PairRunError("deadline receipt marks native evidence incomplete")
-    if expected_tool_cap is not None:
-        runtime_config = receipt.get("runtime_config")
-        if not isinstance(runtime_config, dict) or runtime_config != {
-            "max_tool_result_tokens": expected_tool_cap,
-            "offload_store_bound": False,
-            "tool_schema_sha256": expected_tool_schema_sha256,
-        }:
-            raise PairRunError("deadline receipt runtime configuration mismatch")
+    runtime_config = receipt.get("runtime_config")
+    if expected_tool_schema_sha256 is not None and (
+        not isinstance(runtime_config, dict)
+        or runtime_config.get("tool_schema_sha256") != expected_tool_schema_sha256
+    ):
+        raise PairRunError("deadline receipt tool schema mismatch")
+    if expected_tool_cap is not None and (
+        not isinstance(runtime_config, dict)
+        or runtime_config.get("max_tool_result_tokens") != expected_tool_cap
+        or runtime_config.get("offload_store_bound") is not False
+    ):
+        raise PairRunError("deadline receipt runtime configuration mismatch")
     return receipt
 
 
@@ -676,6 +899,7 @@ def _invoke_arm(
     timeout: int,
     run_id: str,
     max_tool_result_tokens: int | None = None,
+    codex_executable: Path | None = None,
 ) -> tuple[int, Path, Path]:
     if native_dir.exists():
         raise PairRunError("native task output directory already exists")
@@ -713,6 +937,8 @@ def _invoke_arm(
     env["MCPMARK_ROOT"] = str(mcpmark_root)
     if max_tool_result_tokens is not None:
         env["GEODE_MAX_TOOL_RESULT_TOKENS"] = str(max_tool_result_tokens)
+    if codex_executable is not None:
+        env["GEODE_MCPMARK_CODEX_BIN"] = str(codex_executable)
     env.setdefault("OPENAI_API_KEY", "dummy")
     env["PYTHONPATH"] = os.pathsep.join(
         value for value in (str(REPO_ROOT), env.get("PYTHONPATH", "")) if value
@@ -744,7 +970,15 @@ def _execution_schedule(
             for position, (label, cap) in enumerate(_tool_cap_arm_order(index, repetition))
         )
     return tuple(
-        (1, index, task, arm, arm, None, position == 0)
+        (
+            1,
+            index,
+            task,
+            arm,
+            arm,
+            PAIR_MAX_TOOL_RESULT_TOKENS if arm == "geode" else None,
+            position == 0,
+        )
         for index, task in enumerate(ids, start=1)
         for position, arm in enumerate(_arm_order(index))
     )
@@ -763,6 +997,7 @@ def _run_tasks(
     timeout: int,
     tool_schema_sha256: str,
     profile: str = PAIR_PROFILE,
+    codex_executable: Path | None = None,
 ) -> None:
     events_path = output_dir / "runner-events.jsonl"
     fixture_rows = {row["category"]: row for row in fixture["categories"]}
@@ -831,6 +1066,7 @@ def _run_tasks(
                     timeout=timeout,
                     run_id=run_id,
                     max_tool_result_tokens=cap,
+                    codex_executable=codex_executable if native_agent == "codex" else None,
                 )
                 if returncode:
                     raise PairRunError(f"native MCPMark subprocess exited {returncode}")
@@ -841,8 +1077,12 @@ def _run_tasks(
                     model=f"{native_agent}-{model_label}",
                     effort=effort,
                     timeout=timeout,
-                    expected_tool_cap=cap,
-                    expected_tool_schema_sha256=tool_schema_sha256,
+                    expected_tool_cap=(
+                        cap if profile == TOOL_CAP_PROFILE or native_agent == "geode" else None
+                    ),
+                    expected_tool_schema_sha256=(
+                        tool_schema_sha256 if native_agent == "geode" else None
+                    ),
                 )
                 current_task_sha256 = str(receipt.pop("task_sha256"))
                 prior_task_sha256 = task_hashes.setdefault(task, current_task_sha256)
@@ -850,6 +1090,14 @@ def _run_tasks(
                     raise PairRunError("paired arms used different task instruction hashes")
                 if _has_backups(mcpmark_root):
                     raise PairRunError("native MCPMark left a fixture backup behind")
+                if (
+                    _tree_row(
+                        mcpmark_root / "test_environments" / category,
+                        category=category,
+                    )
+                    != fixture_rows[category]
+                ):
+                    raise PairRunError("source fixture changed during a paired arm")
                 arm_result = arm_results.setdefault(arm_label, {"attempts": 0, "passes": 0})
                 arm_result["attempts"] += 1
                 arm_result["passes"] += int(receipt["verifier_pass"])
@@ -908,6 +1156,24 @@ def _run_tasks(
             "numerator": numerator,
             "denominator": denominator,
         }
+    elif profile in {PAIR_PROFILE, PAIR_SMOKE_PROFILE}:
+        denominator = len(ids)
+        if set(arm_results) != {"geode", "codex"} or any(
+            row["attempts"] != denominator for row in arm_results.values()
+        ):
+            raise PairRunError("GEODE/Codex pair result has an incomplete arm denominator")
+        smoke = profile == PAIR_SMOKE_PROFILE
+        numerator = (
+            denominator
+            if smoke
+            else arm_results["geode"]["passes"] - arm_results["codex"]["passes"]
+        )
+        result["primary_metric"] = {
+            "name": _pair_primary_metric(denominator=denominator, smoke=smoke)["name"],
+            "value": numerator / denominator,
+            "numerator": numerator,
+            "denominator": denominator,
+        }
     _write_exclusive_json(output_dir / "runner-result.json", result)
 
 
@@ -918,6 +1184,7 @@ def run_pair(
     output_dir: Path,
     python: Path,
     profile: str = PAIR_PROFILE,
+    task: str | None = None,
 ) -> None:
     if output_dir.exists():
         raise PairRunError("output directory must not exist; retries use a fresh attempt root")
@@ -926,19 +1193,34 @@ def run_pair(
     full_ids = _discover_workload(mcpmark_root)
     fixture = _fixture_receipt(mcpmark_root, full_ids)
     if profile == PAIR_PROFILE:
+        if task is not None:
+            raise PairRunError("the Filesystem-30 profile does not accept --task")
         ids = full_ids
-        spec = _validate_spec(
+        spec = _validate_pair_spec(
             run_spec_path,
             ids=ids,
-            fixture_sha256=fixture["aggregate_sha256"],
+            fixture_semantic_sha256=fixture["semantic_aggregate_sha256"],
+            smoke=False,
+        )
+    elif profile == PAIR_SMOKE_PROFILE:
+        if task is None or task not in full_ids:
+            raise PairRunError("the paired smoke profile requires one Filesystem-30 --task")
+        ids = (task,)
+        spec = _validate_pair_spec(
+            run_spec_path,
+            ids=ids,
+            fixture_semantic_sha256=fixture["semantic_aggregate_sha256"],
+            smoke=True,
         )
     elif profile == TOOL_CAP_PROFILE:
+        if task is not None:
+            raise PairRunError("the tool-result cap profile does not accept --task")
         if any(task not in full_ids for task in TOOL_CAP_IDS):
             raise PairRunError("tool-result cap profile task is absent from Filesystem-30")
         ids = TOOL_CAP_IDS
         spec = _validate_tool_cap_spec(
             run_spec_path,
-            fixture_sha256=fixture["aggregate_sha256"],
+            fixture_semantic_sha256=fixture["semantic_aggregate_sha256"],
         )
     else:
         raise PairRunError(f"unsupported MCPMark paired-runner profile: {profile}")
@@ -946,6 +1228,13 @@ def run_pair(
     execution = reproduction["execution"]
     model = reproduction["model"]
     python_preflight = _python_preflight(python, mcpmark_root)
+    codex_preflight = (
+        _codex_cli_preflight(mcpmark_root)
+        if profile in {PAIR_PROFILE, PAIR_SMOKE_PROFILE}
+        else None
+    )
+    codex_cli = codex_preflight[0] if codex_preflight is not None else None
+    codex_executable = codex_preflight[1] if codex_preflight is not None else None
     tool_schema_sha256 = _probe_filesystem_tool_schema(python, mcpmark_root)
     run_spec_bytes = run_spec_path.read_bytes()
     if hashlib.sha256(run_spec_bytes).hexdigest() != run_spec_sha256:
@@ -974,6 +1263,8 @@ def run_pair(
         "python_preflight": python_preflight,
         "tool_schema_sha256": tool_schema_sha256,
     }
+    if codex_cli is not None:
+        plan["codex_cli"] = codex_cli
     if profile == TOOL_CAP_PROFILE:
         plan.update(
             {
@@ -997,6 +1288,15 @@ def run_pair(
             {
                 "repetitions": 1,
                 "arm_order": "odd:geode,codex;even:codex,geode",
+                "arms": [
+                    {
+                        "label": "geode",
+                        "environment": {
+                            "GEODE_MAX_TOOL_RESULT_TOKENS": str(PAIR_MAX_TOOL_RESULT_TOKENS)
+                        },
+                    },
+                    {"label": "codex", "environment": {}},
+                ],
             }
         )
     _write_exclusive_json(output_dir / "runner-plan.json", plan)
@@ -1012,12 +1312,18 @@ def run_pair(
         timeout=int(execution["timeout_seconds"]),
         tool_schema_sha256=tool_schema_sha256,
         profile=profile,
+        codex_executable=codex_executable,
     )
 
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--profile", choices=(PAIR_PROFILE, TOOL_CAP_PROFILE), default=PAIR_PROFILE)
+    parser.add_argument(
+        "--profile",
+        choices=(PAIR_PROFILE, PAIR_SMOKE_PROFILE, TOOL_CAP_PROFILE),
+        default=PAIR_PROFILE,
+    )
+    parser.add_argument("--task")
     parser.add_argument("--run-spec", type=Path, required=True)
     parser.add_argument("--mcpmark-root", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
@@ -1034,6 +1340,7 @@ def main() -> None:
             output_dir=args.output_dir.resolve(),
             python=args.python.absolute(),
             profile=args.profile,
+            task=args.task,
         )
     except PairRunError as exc:
         print(f"MCPMark paired run stopped: {exc}", file=sys.stderr)

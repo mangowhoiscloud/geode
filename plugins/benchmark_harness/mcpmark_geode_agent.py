@@ -786,7 +786,7 @@ class CodexMCPMarkAgent(BaseMCPAgent):
 
         with tempfile.TemporaryDirectory(prefix="geode-mcpmark-codex-") as runner_dir:
             command = [
-                "codex",
+                os.getenv("GEODE_MCPMARK_CODEX_BIN", "codex"),
                 "exec",
                 "--json",
                 "--ephemeral",

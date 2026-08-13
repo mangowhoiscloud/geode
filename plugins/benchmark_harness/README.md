@@ -70,9 +70,30 @@ printed setup commands first; the commands prepare both isolated environments.
 ```
 
 The spec's `initial_state_ref` must be
-`fixture-tree-sha256:c8cfb2815f63ded54a7d79ffed2e0719190bb2dc1e571112a6012f97f95e9f17`.
-A mismatch stops before any model call; a retry uses a new attempt root rather
-than resuming native output.
+`fixture-semantic-sha256:273477d554250f4f076e69651e29689ed71095ec1b3fe3e054094be82f574fbf`.
+It binds file bytes, mtimes, modes, and empty directories. A mismatch stops
+before any model call; a retry uses a new attempt root rather than resuming
+native output.
+
+Gate 0C starts with one paired task under the same runner and evidence
+contract:
+
+```bash
+<geode-checkout>/.venv/bin/python -m plugins.benchmark_harness.run_mcpmark_pair \
+  --profile filesystem1-geode-codex-smoke --task <filesystem-standard-task> \
+  --run-spec <smoke-run-spec.json> --mcpmark-root <pinned-mcpmark> \
+  --output-dir <fresh-smoke-attempt-root> \
+  --python <geode-checkout>/.venv/bin/python
+```
+
+The smoke result records accepted paired-task coverage. The full
+`filesystem30-geode-codex` result records the signed GEODE-minus-Codex
+verifier-pass-rate delta directly in `runner-result.json`; no second score
+receipt is needed. Pair specs bind comparator identity to `codex-cli 0.145.0`
+and `openai/codex@dad1db87bb5ad4b92af6b0f58502d12453681f81`; the runner plan
+also records the executable digest without publishing a machine-local path.
+The GEODE arm is fixed at `GEODE_MAX_TOOL_RESULT_TOKENS=25000`; its native
+deadline receipt must match that cap and the preflighted filesystem tool schema.
 
 Gate 0B reuses the same runner for the frozen five-task, two-cap, three-repeat
 diagnostic (30 independent GEODE processes):

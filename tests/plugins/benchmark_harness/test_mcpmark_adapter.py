@@ -510,6 +510,30 @@ def test_codex_mcpmark_timeout_preserves_prefix_and_trajectory(monkeypatch, tmp_
         _summarize_codex_exec('{"type":"turn.')
 
 
+def test_codex_mcpmark_uses_the_preflight_resolved_binary(monkeypatch, tmp_path) -> None:
+    class Process:
+        returncode = 0
+        stdin = None
+
+        async def communicate(self, _input=None):
+            return None
+
+    captured: list[str] = []
+
+    async def create_process(*args, **_kwargs):
+        captured.extend(str(arg) for arg in args)
+        return Process()
+
+    executable = tmp_path / "frozen-codex"
+    monkeypatch.setenv("GEODE_MCPMARK_CODEX_BIN", str(executable))
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", create_process)
+    agent = _codex_agent_for_execute(timeout=30)
+
+    asyncio.run(agent.execute("task"))
+
+    assert captured[0] == str(executable)
+
+
 def test_codex_mcpmark_deadline_includes_process_spawn(monkeypatch, tmp_path) -> None:
     async def create_process(*_args, **_kwargs):
         await asyncio.Event().wait()
