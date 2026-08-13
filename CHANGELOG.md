@@ -137,6 +137,9 @@ functional change.
 
 ### Infrastructure
 
+- **Patched the site build's transitive `nanoid` dependency.** The locked
+  version now includes the upstream zero-length generator fix, so the Pages
+  dependency audit passes without changing the site runtime contract.
 - **PyPI Core Metadata 2.5 publishing.** Updated the pinned PyPA publish action
   to v1.14.2 so its internal Twine 7 validator accepts the same Metadata 2.5
   wheel already approved by the release build gate.
