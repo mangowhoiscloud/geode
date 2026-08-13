@@ -19,6 +19,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from core.agent.tool_executor.processor import ToolCallProcessor
+from core.agent.tool_executor.result_token_guard import _guard_tool_result, _project_mcp_result
 from core.observability.trajectory import verify_trajectory_integrity
 from scripts.eval.contract import validate_run_spec
 
@@ -26,6 +28,19 @@ from plugins.benchmark_harness.manifest import REPO_ROOT, get_harness
 
 EXPECTED_FS30_SHA256 = "50483308573ce407abaf0700885d56c6df0453557669dddce9edcece83710433"
 EXPECTED_FIXTURE_SHA256 = "c8cfb2815f63ded54a7d79ffed2e0719190bb2dc1e571112a6012f97f95e9f17"
+PAIR_PROFILE = "filesystem30-geode-codex"
+TOOL_CAP_PROFILE = "max-tool-result-tokens"
+TOOL_CAP_IDS = (
+    "legal_document/dispute_review",
+    "legal_document/individual_comments",
+    "legal_document/solution_tracing",
+    "papers/author_folders",
+    "papers/organize_legacy_papers",
+)
+TOOL_CAP_SHA256 = "b0953abbe11808bd25a03ef97355380ae2a58f0086025cd2557f1cacf32f3a00"
+TOOL_CAP_ARMS = (("guard-25000", 25_000), ("unlimited-0", 0))
+TOOL_CAP_REPETITIONS = 3
+TOOL_CAP_TIMEOUT_SECONDS = 1_200
 PATCH_SHA256 = "04a34e664f590c36bc85765581318c0887000f6ca79213efd97705795ca4dac4"
 PATCHED_VERIFIERS = {
     "tasks/filesystem/standard/desktop/project_management/verify.py": (
@@ -61,11 +76,16 @@ def _utc_now() -> str:
 
 def _write_exclusive_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("x", encoding="utf-8") as handle:
-        json.dump(payload, handle, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
-        handle.write("\n")
-        handle.flush()
-        os.fsync(handle.fileno())
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.{time.time_ns()}.tmp")
+    try:
+        with temporary.open("x", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.link(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def _append_event(path: Path, payload: dict[str, Any]) -> None:
@@ -86,6 +106,66 @@ def _git(root: Path, *args: str) -> str:
     if result.returncode:
         raise PairRunError(f"git {' '.join(args)} failed")
     return result.stdout.rstrip("\n")
+
+
+def _run_process(
+    command: tuple[str, ...],
+    *,
+    cwd: Path,
+    env: dict[str, str],
+    stdout: Any = subprocess.PIPE,
+    stderr: Any = subprocess.PIPE,
+) -> subprocess.CompletedProcess[Any]:
+    return subprocess.run(  # noqa: S603 - fixed argv, never a shell
+        command,
+        cwd=cwd,
+        env=env,
+        stdout=stdout,
+        stderr=stderr,
+        check=False,
+    )
+
+
+def _python_preflight(python: Path, mcpmark_root: Path) -> dict[str, Any]:
+    """Reject a conflicted runtime before any benchmark model call."""
+    env = os.environ.copy()
+    env["MCPMARK_ROOT"] = str(mcpmark_root)
+    env["PYTHONPATH"] = os.pathsep.join(
+        value for value in (str(REPO_ROOT), env.get("PYTHONPATH", "")) if value
+    )
+    checks = (
+        ((str(python), "-m", "pip", "check"), "dependency integrity"),
+        (
+            (
+                str(python),
+                "-c",
+                "import pipeline; import src.evaluator; "
+                "import plugins.benchmark_harness.mcpmark_geode_agent; "
+                "from src.factory import MCPServiceFactory as F; "
+                "F.create_task_manager('filesystem', task_suite='standard'); "
+                "F.create_state_manager('filesystem')",
+            ),
+            "MCPMark source imports",
+        ),
+        (("npx", "--version"), "filesystem MCP executable"),
+    )
+    for command, label in checks:
+        try:
+            result = _run_process(command, cwd=mcpmark_root, env=env)
+        except OSError as exc:
+            raise PairRunError(f"Python preflight could not start: {label}") from exc
+        if result.returncode:
+            raise PairRunError(f"Python preflight failed: {label}")
+    return {
+        "dependency_check": "pass",
+        "imports": [
+            "pipeline",
+            "src.evaluator",
+            "plugins.benchmark_harness.mcpmark_geode_agent",
+            "filesystem/standard managers",
+        ],
+        "filesystem_mcp_executable": "npx",
+    }
 
 
 def _discover_workload(root: Path) -> tuple[str, ...]:
@@ -164,6 +244,7 @@ def _validate_spec(
     *,
     ids: tuple[str, ...],
     fixture_sha256: str,
+    repetitions: int = 1,
 ) -> dict[str, Any]:
     spec = validate_run_spec(spec_path)
     reproduction = spec["reproduction"]
@@ -175,9 +256,13 @@ def _validate_spec(
     if spec["preregistration"]["live_test_approved"] is not True:
         raise PairRunError("run spec does not approve live model calls")
     if tuple(execution["ordered_workload_ids"]) != ids:
-        raise PairRunError("run spec workload order differs from pinned Filesystem-30")
-    if execution["repetitions"] != 1 or execution["max_concurrency"] != 1:
-        raise PairRunError("paired runner requires repetitions=1 and max_concurrency=1")
+        raise PairRunError("run spec workload order differs from the selected profile")
+    if execution["workload_ids_sha256"] != _workload_hash(ids):
+        raise PairRunError("run spec workload digest differs from the selected profile")
+    if execution["repetitions"] != repetitions or execution["max_concurrency"] != 1:
+        raise PairRunError(
+            f"paired runner requires repetitions={repetitions} and max_concurrency=1"
+        )
     if reproduction["harness"]["revision"] != expected_harness:
         raise PairRunError("run spec harness revision does not bind the verifier patch")
     if reproduction["environment"]["initial_state_ref"] != expected_state:
@@ -199,8 +284,92 @@ def _validate_spec(
     return spec
 
 
+def _validate_tool_cap_spec(
+    spec_path: Path,
+    *,
+    fixture_sha256: str,
+) -> dict[str, Any]:
+    spec = _validate_spec(
+        spec_path,
+        ids=TOOL_CAP_IDS,
+        fixture_sha256=fixture_sha256,
+        repetitions=TOOL_CAP_REPETITIONS,
+    )
+    reproduction = spec["reproduction"]
+    execution = reproduction["execution"]
+    model = reproduction["model"]
+    comparison = reproduction["comparison"]
+    study = spec["study"]
+    if spec["preregistration"]["mode"] != "prospective":
+        raise PairRunError("tool-result cap profile requires prospective preregistration")
+    if _workload_hash(TOOL_CAP_IDS) != TOOL_CAP_SHA256:
+        raise PairRunError("tool-result cap workload identity mismatch")
+    if (
+        model["label"],
+        model["reasoning"],
+        int(execution["timeout_seconds"]),
+    ) != ("gpt-5.4", "high", TOOL_CAP_TIMEOUT_SECONDS):
+        raise PairRunError("tool-result cap profile requires GPT-5.4/high and timeout=1200")
+    if execution["seed_schedule"] != [
+        "upstream-run-1",
+        "upstream-run-2",
+        "upstream-run-3",
+    ]:
+        raise PairRunError("tool-result cap profile requires the frozen repetition labels")
+    if execution["budget"] != {
+        "kind": "wall-time",
+        "limit": TOOL_CAP_TIMEOUT_SECONDS,
+        "unit": "seconds",
+    }:
+        raise PairRunError("tool-result cap profile requires the frozen wall-time budget")
+    if comparison["claim_class"] != "diagnostic" or comparison["promotion_authority"] != "none":
+        raise PairRunError("tool-result cap profile is diagnostic-only")
+    if study["research_question"] != (
+        "Does removing the 25K tool-result guard on the same large-result MCP tasks "
+        "increase verifier accuracy and change rereads, fresh input tokens, and wall time?"
+    ):
+        raise PairRunError("tool-result cap profile requires the frozen research question")
+    if study["hypothesis"] != (
+        "Across 15 task-repetitions per arm, unlimited-0 produces more verifier passes "
+        "than guard-25000."
+    ):
+        raise PairRunError("tool-result cap profile requires the frozen hypothesis")
+    if study["primary_metric"] != {
+        "name": "verifier-pass-rate arm delta",
+        "unit": "ratio",
+        "direction": "target",
+        "aggregation": "(sum(unlimited-0 passes) - sum(guard-25000 passes)) / 15",
+        "denominator": 15,
+    }:
+        raise PairRunError("tool-result cap profile requires the frozen primary metric")
+    if study["decision_rule"] != (
+        "supported if unlimited-0 passes exceed guard-25000 passes; "
+        "mixed if equal; not-supported if lower"
+    ):
+        raise PairRunError("tool-result cap profile requires the frozen decision rule")
+    if study["invalidation_rule"] != (
+        "Invalidate the run if any attempt changes the frozen deadline or identity contract, "
+        "cannot bind the arm cap or reconstruct truncation, fails fixture cleanup or reset, "
+        "lacks native result, verifier, or trajectory evidence, or exits on an unrecovered "
+        "provider quota or transport error."
+    ):
+        raise PairRunError("tool-result cap profile requires the frozen invalidation rule")
+    if study["analysis_plan"] != (
+        "Select all 30 fresh attempts; compute the signed verifier-pass-rate arm delta as "
+        "(unlimited-0 passes - guard-25000 passes) / 15; report secondary token, wall-time, "
+        "MCP call/error, reread, and truncation metrics for explanation only; preserve "
+        "infrastructure-invalid attempts and do not replace or score them."
+    ):
+        raise PairRunError("tool-result cap profile requires the frozen analysis plan")
+    return spec
+
+
 def _arm_order(task_index: int) -> tuple[str, str]:
     return ("geode", "codex") if task_index % 2 else ("codex", "geode")
+
+
+def _tool_cap_arm_order(task_index: int, repetition: int) -> tuple[tuple[str, int], ...]:
+    return TOOL_CAP_ARMS if (task_index + repetition) % 2 == 0 else TOOL_CAP_ARMS[::-1]
 
 
 def _has_backups(root: Path) -> bool:
@@ -220,6 +389,7 @@ def _deadline_receipt(
     *,
     arm: str,
     timeout: int,
+    expected_tool_cap: int | None = None,
 ) -> dict[str, Any]:
     try:
         receipt = json.loads(path.read_text(encoding="utf-8"))
@@ -289,7 +459,32 @@ def _deadline_receipt(
         raise PairRunError("deadline receipt marks cleanup infrastructure-invalid")
     if receipt.get("evidence_status") != "written":
         raise PairRunError("deadline receipt marks native evidence incomplete")
+    if expected_tool_cap is not None and receipt.get("runtime_config") != {
+        "max_tool_result_tokens": expected_tool_cap,
+        "offload_store_bound": False,
+    }:
+        raise PairRunError("deadline receipt runtime configuration mismatch")
     return receipt
+
+
+def _truncation_count(path: Path, *, max_tokens: int) -> int:
+    try:
+        rows = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        raise PairRunError("native execution log is unreadable") from exc
+    if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
+        raise PairRunError("native execution log must contain tool-call objects")
+    if len(rows) >= ToolCallProcessor.MAX_TOOL_LOG_ENTRIES:
+        raise PairRunError("native execution log reached the tool-log retention cap")
+    count = 0
+    for row in rows:
+        result = row.get("result")
+        if not isinstance(result, dict):
+            raise PairRunError("native execution log contains an unknown tool-result shape")
+        projected = _project_mcp_result(result)
+        guarded = _guard_tool_result(projected, max_tokens=max_tokens)
+        count += int(guarded is not projected)
+    return count
 
 
 def _native_receipt(
@@ -300,6 +495,7 @@ def _native_receipt(
     model: str,
     effort: str,
     timeout: int,
+    expected_tool_cap: int | None = None,
 ) -> dict[str, Any]:
     meta_path = _one(native_dir, "meta.json")
     summary_path = _one(native_dir, "summary.json")
@@ -336,9 +532,16 @@ def _native_receipt(
     if agent_error not in (None, "") and agent_error not in allowed_agent_errors:
         raise PairRunError("native agent error lacks a score-bearing failure class")
     model_config = summary.get("model_config")
+    successful_tasks = summary.get("successful_tasks")
+    failed_tasks = summary.get("failed_tasks")
     if (
         summary.get("total_tasks") != 1
-        or int(summary.get("successful_tasks", -1)) + int(summary.get("failed_tasks", -1)) != 1
+        or not isinstance(successful_tasks, int)
+        or isinstance(successful_tasks, bool)
+        or successful_tasks != int(result["success"])
+        or not isinstance(failed_tasks, int)
+        or isinstance(failed_tasks, bool)
+        or failed_tasks != int(not result["success"])
         or not isinstance(model_config, dict)
         or model_config.get("model_name") != model
         or model_config.get("agent_name") != arm
@@ -358,7 +561,12 @@ def _native_receipt(
         or not re.fullmatch(r"[a-f0-9]{64}", task_sha256)
     ):
         raise PairRunError("native trajectory provenance or task identity mismatch")
-    deadline = _deadline_receipt(deadline_path, arm=arm, timeout=timeout)
+    deadline = _deadline_receipt(
+        deadline_path,
+        arm=arm,
+        timeout=timeout,
+        expected_tool_cap=expected_tool_cap,
+    )
     try:
         trajectory_integrity = verify_trajectory_integrity(trajectory)
     except (KeyError, TypeError, ValueError) as exc:
@@ -374,7 +582,7 @@ def _native_receipt(
         messages_path,
         execution_log_path,
     )
-    return {
+    receipt = {
         "verifier_pass": result["success"],
         "agent_error_present": bool(agent_error),
         "task_sha256": task_sha256,
@@ -387,6 +595,12 @@ def _native_receipt(
             for path in files
         ],
     }
+    if expected_tool_cap is not None:
+        receipt["tool_result_truncation_count"] = _truncation_count(
+            execution_log_path,
+            max_tokens=expected_tool_cap,
+        )
+    return receipt
 
 
 def _invoke_arm(
@@ -401,6 +615,7 @@ def _invoke_arm(
     effort: str,
     timeout: int,
     run_id: str,
+    max_tool_result_tokens: int | None = None,
 ) -> tuple[int, Path, Path]:
     if native_dir.exists():
         raise PairRunError("native task output directory already exists")
@@ -436,24 +651,43 @@ def _invoke_arm(
     )
     env = os.environ.copy()
     env["MCPMARK_ROOT"] = str(mcpmark_root)
+    if max_tool_result_tokens is not None:
+        env["GEODE_MAX_TOOL_RESULT_TOKENS"] = str(max_tool_result_tokens)
     env.setdefault("OPENAI_API_KEY", "dummy")
     env["PYTHONPATH"] = os.pathsep.join(
         value for value in (str(REPO_ROOT), env.get("PYTHONPATH", "")) if value
     )
     with stdout_path.open("xb") as stdout, stderr_path.open("xb") as stderr:
-        result = subprocess.run(  # noqa: S603 - frozen argv, never a shell
+        result = _run_process(
             command,
             cwd=mcpmark_root,
             env=env,
             stdout=stdout,
             stderr=stderr,
-            check=False,
         )
         stdout.flush()
         stderr.flush()
         os.fsync(stdout.fileno())
         os.fsync(stderr.fileno())
     return result.returncode, stdout_path, stderr_path
+
+
+def _execution_schedule(
+    profile: str,
+    ids: tuple[str, ...],
+) -> tuple[tuple[int, int, str, str, str, int | None, bool], ...]:
+    if profile == TOOL_CAP_PROFILE:
+        return tuple(
+            (repetition, index, task, label, "geode", cap, position == 0)
+            for repetition in range(1, TOOL_CAP_REPETITIONS + 1)
+            for index, task in enumerate(ids, start=1)
+            for position, (label, cap) in enumerate(_tool_cap_arm_order(index, repetition))
+        )
+    return tuple(
+        (1, index, task, arm, arm, None, position == 0)
+        for index, task in enumerate(ids, start=1)
+        for position, arm in enumerate(_arm_order(index))
+    )
 
 
 def _run_tasks(
@@ -467,6 +701,7 @@ def _run_tasks(
     model_label: str,
     effort: str,
     timeout: int,
+    profile: str = PAIR_PROFILE,
 ) -> None:
     events_path = output_dir / "runner-events.jsonl"
     fixture_rows = {row["category"]: row for row in fixture["categories"]}
@@ -474,6 +709,8 @@ def _run_tasks(
         raise PairRunError("MCPMark backup directory is not empty before the paired run")
     sequence = 0
     task_hashes: dict[str, str] = {}
+    schedule = _execution_schedule(profile, ids)
+    arm_results: dict[str, dict[str, int]] = {}
 
     def emit(event: str, **payload: Any) -> None:
         nonlocal sequence
@@ -483,93 +720,133 @@ def _run_tasks(
         )
         sequence += 1
 
-    emit("run_started", task_count=len(ids), arm_count=2)
+    emit(
+        "run_started",
+        profile=profile,
+        task_count=len(ids),
+        arm_count=2,
+        repetitions=TOOL_CAP_REPETITIONS if profile == TOOL_CAP_PROFILE else 1,
+    )
     try:
-        for index, task in enumerate(ids, start=1):
+        for repetition, index, task, arm_label, native_agent, cap, arm_first in schedule:
             category = task.split("/", 1)[0]
-            expected_fixture = fixture_rows[category]
-            for arm in _arm_order(index):
-                if (
-                    _tree_row(
-                        mcpmark_root / "test_environments" / category,
-                        category=category,
-                    )
-                    != expected_fixture
-                ):
-                    raise PairRunError("source fixture changed between paired arms")
-                arm_key = f"{index:02d}-{task.replace('/', '__')}--{arm}"
-                native_dir = output_dir / "native-results" / arm_key
-                log_dir = output_dir / "runner-logs" / arm_key
-                started = time.monotonic_ns()
-                emit(
-                    "arm_started",
-                    task_index=index,
-                    task=task,
-                    arm=arm,
-                    arm_first=arm == _arm_order(index)[0],
-                    native_output=f"native-results/{arm_key}",
+            if (
+                _tree_row(
+                    mcpmark_root / "test_environments" / category,
+                    category=category,
                 )
-                try:
-                    returncode, stdout_path, stderr_path = _invoke_arm(
-                        python=python,
-                        mcpmark_root=mcpmark_root,
-                        native_dir=native_dir,
-                        log_dir=log_dir,
-                        task=task,
-                        arm=arm,
-                        model_label=model_label,
-                        effort=effort,
-                        timeout=timeout,
-                        run_id=run_id,
-                    )
-                    if returncode:
-                        raise PairRunError(f"native MCPMark subprocess exited {returncode}")
-                    receipt = _native_receipt(
-                        native_dir,
-                        task=task,
-                        arm=arm,
-                        model=f"{arm}-{model_label}",
-                        effort=effort,
-                        timeout=timeout,
-                    )
-                    current_task_sha256 = str(receipt.pop("task_sha256"))
-                    prior_task_sha256 = task_hashes.setdefault(task, current_task_sha256)
-                    if current_task_sha256 != prior_task_sha256:
-                        raise PairRunError("paired arms used different task instruction hashes")
-                    if _has_backups(mcpmark_root):
-                        raise PairRunError("native MCPMark left a fixture backup behind")
-                    emit(
-                        "arm_finished",
-                        task_index=index,
-                        task=task,
-                        arm=arm,
-                        duration_ns=time.monotonic_ns() - started,
-                        stdout={
-                            "path": stdout_path.relative_to(output_dir).as_posix(),
-                            "sha256": _sha256(stdout_path),
-                        },
-                        stderr={
-                            "path": stderr_path.relative_to(output_dir).as_posix(),
-                            "sha256": _sha256(stderr_path),
-                        },
-                        native=receipt,
-                    )
-                except BaseException as exc:
-                    emit(
-                        "run_stopped",
-                        task_index=index,
-                        task=task,
-                        arm=arm,
-                        failure_class="infrastructure",
-                        exception_type=type(exc).__name__,
-                        exception_sha256=hashlib.sha256(str(exc).encode()).hexdigest(),
-                    )
-                    raise
+                != fixture_rows[category]
+            ):
+                raise PairRunError("source fixture changed between paired arms")
+            prefix = f"r{repetition}-" if profile == TOOL_CAP_PROFILE else ""
+            arm_key = f"{prefix}{index:02d}-{task.replace('/', '__')}--{arm_label}"
+            native_dir = output_dir / "native-results" / arm_key
+            log_dir = output_dir / "runner-logs" / arm_key
+            started = time.monotonic_ns()
+            common = {
+                "repetition": repetition,
+                "task_index": index,
+                "task": task,
+                "arm": arm_label,
+                "native_agent": native_agent,
+                "max_tool_result_tokens": cap,
+            }
+            emit(
+                "arm_started",
+                **common,
+                arm_first=arm_first,
+                native_output=f"native-results/{arm_key}",
+            )
+            try:
+                returncode, stdout_path, stderr_path = _invoke_arm(
+                    python=python,
+                    mcpmark_root=mcpmark_root,
+                    native_dir=native_dir,
+                    log_dir=log_dir,
+                    task=task,
+                    arm=native_agent,
+                    model_label=model_label,
+                    effort=effort,
+                    timeout=timeout,
+                    run_id=run_id,
+                    max_tool_result_tokens=cap,
+                )
+                if returncode:
+                    raise PairRunError(f"native MCPMark subprocess exited {returncode}")
+                receipt = _native_receipt(
+                    native_dir,
+                    task=task,
+                    arm=native_agent,
+                    model=f"{native_agent}-{model_label}",
+                    effort=effort,
+                    timeout=timeout,
+                    expected_tool_cap=cap,
+                )
+                current_task_sha256 = str(receipt.pop("task_sha256"))
+                prior_task_sha256 = task_hashes.setdefault(task, current_task_sha256)
+                if current_task_sha256 != prior_task_sha256:
+                    raise PairRunError("paired arms used different task instruction hashes")
+                if _has_backups(mcpmark_root):
+                    raise PairRunError("native MCPMark left a fixture backup behind")
+                arm_result = arm_results.setdefault(arm_label, {"attempts": 0, "passes": 0})
+                arm_result["attempts"] += 1
+                arm_result["passes"] += int(receipt["verifier_pass"])
+                emit(
+                    "arm_finished",
+                    **common,
+                    duration_ns=time.monotonic_ns() - started,
+                    stdout={
+                        "path": stdout_path.relative_to(output_dir).as_posix(),
+                        "sha256": _sha256(stdout_path),
+                    },
+                    stderr={
+                        "path": stderr_path.relative_to(output_dir).as_posix(),
+                        "sha256": _sha256(stderr_path),
+                    },
+                    native=receipt,
+                )
+            except BaseException as exc:
+                emit(
+                    "run_stopped",
+                    **common,
+                    failure_class="infrastructure",
+                    exception_type=type(exc).__name__,
+                    exception_sha256=hashlib.sha256(str(exc).encode()).hexdigest(),
+                )
+                raise
     except PairRunError:
         raise
     except BaseException as exc:
         raise PairRunError("paired MCPMark runner interrupted") from exc
-    emit("run_completed", completed_tasks=len(ids), completed_arms=len(ids) * 2)
+    emit(
+        "run_completed",
+        completed_tasks=len(schedule) // 2,
+        completed_arms=len(schedule),
+    )
+    result: dict[str, Any] = {
+        "schema_id": "geode.mcpmark-paired-runner-result@1",
+        "run_id": run_id,
+        "profile": profile,
+        "arms": arm_results,
+        "source_events": {
+            "path": events_path.name,
+            "sha256": _sha256(events_path),
+        },
+    }
+    if profile == TOOL_CAP_PROFILE:
+        denominator = len(ids) * TOOL_CAP_REPETITIONS
+        if set(arm_results) != {"guard-25000", "unlimited-0"} or any(
+            row["attempts"] != denominator for row in arm_results.values()
+        ):
+            raise PairRunError("tool-result cap result has an incomplete arm denominator")
+        numerator = arm_results["unlimited-0"]["passes"] - arm_results["guard-25000"]["passes"]
+        result["primary_metric"] = {
+            "name": "verifier-pass-rate arm delta",
+            "value": numerator / denominator,
+            "numerator": numerator,
+            "denominator": denominator,
+        }
+    _write_exclusive_json(output_dir / "runner-result.json", result)
 
 
 def run_pair(
@@ -578,21 +855,35 @@ def run_pair(
     mcpmark_root: Path,
     output_dir: Path,
     python: Path,
+    profile: str = PAIR_PROFILE,
 ) -> None:
     if output_dir.exists():
         raise PairRunError("output directory must not exist; retries use a fresh attempt root")
     run_spec_sha256 = _sha256(run_spec_path)
     _validate_checkout(mcpmark_root)
-    ids = _discover_workload(mcpmark_root)
-    fixture = _fixture_receipt(mcpmark_root, ids)
-    spec = _validate_spec(
-        run_spec_path,
-        ids=ids,
-        fixture_sha256=fixture["aggregate_sha256"],
-    )
+    full_ids = _discover_workload(mcpmark_root)
+    fixture = _fixture_receipt(mcpmark_root, full_ids)
+    if profile == PAIR_PROFILE:
+        ids = full_ids
+        spec = _validate_spec(
+            run_spec_path,
+            ids=ids,
+            fixture_sha256=fixture["aggregate_sha256"],
+        )
+    elif profile == TOOL_CAP_PROFILE:
+        if any(task not in full_ids for task in TOOL_CAP_IDS):
+            raise PairRunError("tool-result cap profile task is absent from Filesystem-30")
+        ids = TOOL_CAP_IDS
+        spec = _validate_tool_cap_spec(
+            run_spec_path,
+            fixture_sha256=fixture["aggregate_sha256"],
+        )
+    else:
+        raise PairRunError(f"unsupported MCPMark paired-runner profile: {profile}")
     reproduction = spec["reproduction"]
     execution = reproduction["execution"]
     model = reproduction["model"]
+    python_preflight = _python_preflight(python, mcpmark_root)
     run_spec_bytes = run_spec_path.read_bytes()
     if hashlib.sha256(run_spec_bytes).hexdigest() != run_spec_sha256:
         raise PairRunError("run spec changed during paired-run preflight")
@@ -601,26 +892,50 @@ def run_pair(
         handle.write(run_spec_bytes)
         handle.flush()
         os.fsync(handle.fileno())
-    _write_exclusive_json(
-        output_dir / "runner-plan.json",
-        {
-            "schema_id": "geode.mcpmark-paired-runner-plan@1",
-            "run_id": spec["run_id"],
-            "created_at": _utc_now(),
-            "run_spec_sha256": run_spec_sha256,
-            "geode_revision": reproduction["geode"]["revision"],
-            "harness_revision": reproduction["harness"]["revision"],
-            "workload_ids": ids,
-            "workload_ids_sha256": EXPECTED_FS30_SHA256,
-            "fixture": fixture,
-            "model": model["label"],
-            "route": model["route"],
-            "reasoning_effort": model["reasoning"],
-            "timeout_seconds": int(execution["timeout_seconds"]),
-            "arm_order": "odd:geode,codex;even:codex,geode",
-            "max_concurrency": 1,
-        },
-    )
+    plan: dict[str, Any] = {
+        "schema_id": "geode.mcpmark-paired-runner-plan@1",
+        "profile": profile,
+        "run_id": spec["run_id"],
+        "created_at": _utc_now(),
+        "run_spec_sha256": run_spec_sha256,
+        "geode_revision": reproduction["geode"]["revision"],
+        "harness_revision": reproduction["harness"]["revision"],
+        "workload_ids": ids,
+        "workload_ids_sha256": _workload_hash(ids),
+        "fixture": fixture,
+        "model": model["label"],
+        "route": model["route"],
+        "reasoning_effort": model["reasoning"],
+        "timeout_seconds": int(execution["timeout_seconds"]),
+        "max_concurrency": 1,
+        "python_preflight": python_preflight,
+    }
+    if profile == TOOL_CAP_PROFILE:
+        plan.update(
+            {
+                "repetitions": TOOL_CAP_REPETITIONS,
+                "arms": [
+                    {
+                        "label": label,
+                        "native_agent": "geode",
+                        "environment": {"GEODE_MAX_TOOL_RESULT_TOKENS": str(cap)},
+                    }
+                    for label, cap in TOOL_CAP_ARMS
+                ],
+                "arm_order": (
+                    "repetition-major; A first when (task_index + repetition) is even; "
+                    "A=guard-25000, B=unlimited-0"
+                ),
+            }
+        )
+    else:
+        plan.update(
+            {
+                "repetitions": 1,
+                "arm_order": "odd:geode,codex;even:codex,geode",
+            }
+        )
+    _write_exclusive_json(output_dir / "runner-plan.json", plan)
     _run_tasks(
         output_dir=output_dir,
         mcpmark_root=mcpmark_root,
@@ -631,11 +946,13 @@ def run_pair(
         model_label=model["label"],
         effort=model["reasoning"],
         timeout=int(execution["timeout_seconds"]),
+        profile=profile,
     )
 
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--profile", choices=(PAIR_PROFILE, TOOL_CAP_PROFILE), default=PAIR_PROFILE)
     parser.add_argument("--run-spec", type=Path, required=True)
     parser.add_argument("--mcpmark-root", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
@@ -650,7 +967,8 @@ def main() -> None:
             run_spec_path=args.run_spec.resolve(),
             mcpmark_root=args.mcpmark_root.resolve(),
             output_dir=args.output_dir.resolve(),
-            python=args.python.resolve(),
+            python=args.python.absolute(),
+            profile=args.profile,
         )
     except PairRunError as exc:
         print(f"MCPMark paired run stopped: {exc}", file=sys.stderr)

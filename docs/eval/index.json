@@ -252,7 +252,7 @@
       "authority": "execution-status",
       "path": "docs/eval/2026-08-13-sequential-agent-benchmark-plan.md",
       "summary": "Sequential execution SOT for the corrective MCPMark pair, tau2 base domains, MCPMark Verified, and Terminal-Bench 2.1.",
-      "sha256": "98aa23458ba33d42c508638c2301f2f9a0037164bcbd9a096a5675dd70016dd0",
+      "sha256": "5a5fac8d6996aa0845fb2b8648524244f30c1cef82408e17d48f5bb465d4d889",
       "triggers": [
         "MCPMark Verified",
         "MCPMark corrective pair",
