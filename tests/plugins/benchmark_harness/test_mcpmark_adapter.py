@@ -17,6 +17,7 @@ from plugins.benchmark_harness.mcpmark_geode_agent import (
     _codex_subscription_environment,
     _github_repo_visibility,
     _normalize_tool_arguments,
+    _patch_mcpmark_cleanup_on_error,
     _patch_mcpmark_github_visibility,
     _route_from_model,
     _summarize_codex_exec,
@@ -198,7 +199,7 @@ def test_codex_mcpmark_timeout_is_a_performance_outcome(monkeypatch) -> None:
         async def communicate(self, _input=None):
             if not self.killed:
                 await asyncio.Event().wait()
-            return b"", b""
+            return b'{"type":"thread.started","thread_id":"partial"}\n{"type":"turn.', b""
 
         def kill(self):
             self.killed = True
@@ -226,7 +227,11 @@ def test_codex_mcpmark_timeout_is_a_performance_outcome(monkeypatch) -> None:
 
     assert result["success"] is False
     assert result["error"] == "codex exec exceeded MCPMark timeout (0.01s)"
+    assert result["codex_thread_id"] == "partial"
     assert process.killed is True
+
+    with pytest.raises(json.JSONDecodeError):
+        _summarize_codex_exec('{"type":"turn.')
 
 
 def test_mcpmark_tool_returns_call_tool_result_as_data() -> None:
@@ -546,3 +551,23 @@ def test_public_github_fixture_patch_wraps_create_initial_state(monkeypatch) -> 
     assert manager.requests == [
         ("PATCH", "https://api.github.com/repos/owner/repo", {"private": False})
     ]
+
+
+def test_mcpmark_runtime_error_attempts_fixture_cleanup_before_propagating(monkeypatch) -> None:
+    cleaned: list[object] = []
+
+    class Evaluator:
+        state_manager = SimpleNamespace(clean_up=lambda task: cleaned.append(task) or True)
+
+        def _run_single_task(self, _task):
+            raise RuntimeError("provider transport failed")
+
+    monkeypatch.setitem(sys.modules, "src.evaluator", SimpleNamespace(MCPEvaluator=Evaluator))
+    _patch_mcpmark_cleanup_on_error()
+    _patch_mcpmark_cleanup_on_error()
+    task = object()
+
+    with pytest.raises(RuntimeError, match="provider transport failed"):
+        Evaluator()._run_single_task(task)
+
+    assert cleaned == [task]

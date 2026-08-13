@@ -727,7 +727,59 @@ def test_target_metric_allows_signed_delta_but_maximize_does_not(tmp_path: Path)
     _write_json(run_spec_path, run_spec)
     analysis["run_spec_sha256"] = contract._sha256(run_spec_path)
     _write_json(analysis_path, analysis)
-    with pytest.raises(ValueError, match="numerator is outside its denominator"):
+    with pytest.raises(ValueError, match="numerator cannot be negative"):
+        contract.validate_analysis(
+            analysis_path,
+            run_spec_path=run_spec_path,
+            attempts_path=attempts_path,
+        )
+
+    primary_spec["unit"] = "score-per-task"
+    primary["unit"] = "score-per-task"
+    _write_json(run_spec_path, run_spec)
+    analysis["run_spec_sha256"] = contract._sha256(run_spec_path)
+    _write_json(analysis_path, analysis)
+    with pytest.raises(ValueError, match="numerator cannot be negative"):
+        contract.validate_analysis(
+            analysis_path,
+            run_spec_path=run_spec_path,
+            attempts_path=attempts_path,
+        )
+
+
+def test_secondary_metric_rejects_negative_numerator(tmp_path: Path) -> None:
+    run_spec_path = tmp_path / "run-spec.json"
+    attempts_path = tmp_path / "attempts.jsonl"
+    analysis_path = tmp_path / "analysis.json"
+    native_path = tmp_path / "native.json"
+    _write_json(run_spec_path, _run_spec())
+    attempt = _attempt(tmp_path)
+    native = {
+        "score": {"value": 1.0, "numerator": 1, "denominator": 1},
+        "secondary": {"value": -2.0, "numerator": -2, "denominator": 1},
+    }
+    _write_json(native_path, native)
+    attempt["evidence_refs"][0]["sha256"] = contract._sha256(native_path)
+    attempts_path.write_text(json.dumps(attempt) + "\n", encoding="utf-8")
+    analysis = _analysis(run_spec_path, attempts_path, attempt)
+    analysis["metrics"].append(
+        {
+            "name": "secondary_score",
+            "value": -2.0,
+            "numerator": -2,
+            "denominator": 1,
+            "unit": "score",
+            "source_ref": "native.json",
+            "source_locator": {
+                "value": "/secondary/value",
+                "numerator": "/secondary/numerator",
+                "denominator": "/secondary/denominator",
+            },
+        }
+    )
+    _write_json(analysis_path, analysis)
+
+    with pytest.raises(ValueError, match="secondary metric numerator cannot be negative"):
         contract.validate_analysis(
             analysis_path,
             run_spec_path=run_spec_path,

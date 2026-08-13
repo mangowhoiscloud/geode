@@ -372,11 +372,11 @@ class TestAdaptivePrune:
 
 
 class TestComputeModelToolLimit:
-    def test_large_model_unlimited(self):
+    def test_large_model_uses_global_limit(self):
         from core.agent.tool_executor import _compute_model_tool_limit
 
-        # 1M context → unlimited (server-side handles it)
-        assert _compute_model_tool_limit("claude-opus-4-6") == 0
+        # Large tiers do not add a tighter model-specific cap.
+        assert _compute_model_tool_limit("claude-opus-4-6") is None
 
     def test_glm5_uses_small_tier_cap(self):
         from core.agent.tool_executor import _compute_model_tool_limit

@@ -547,6 +547,9 @@ def validate_analysis(path: Path, *, run_spec_path: Path, attempts_path: Path) -
         raise ValueError(f"{path}: analysis is missing primary metric {primary_metric!r}")
     for metric in analysis["metrics"]:
         is_primary = str(metric["name"]) == primary_metric
+        numerator = metric["numerator"]
+        if not is_primary and isinstance(numerator, (int, float)) and numerator < 0:
+            raise ValueError(f"{path}: secondary metric numerator cannot be negative")
         _validate_metric_source(
             path,
             metric,
@@ -574,9 +577,11 @@ def validate_analysis(path: Path, *, run_spec_path: Path, attempts_path: Path) -
         expected_denominator = primary_spec["denominator"]
         if float(primary["denominator"]) != float(expected_denominator):
             raise ValueError(f"{path}: primary metric denominator does not match frozen spec")
+        numerator = float(primary["numerator"])
+        denominator = float(primary["denominator"])
+        if primary_spec["direction"] != "target" and numerator < 0:
+            raise ValueError(f"{path}: primary metric numerator cannot be negative")
         if normalized_unit in {"ratio", "percent", "percentage", "%"}:
-            numerator = float(primary["numerator"])
-            denominator = float(primary["denominator"])
             lower_bound = -denominator if primary_spec["direction"] == "target" else 0
             if not lower_bound <= numerator <= denominator:
                 raise ValueError(f"{path}: primary metric numerator is outside its denominator")

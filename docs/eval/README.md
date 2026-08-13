@@ -18,7 +18,7 @@ eval_contracts:
   - docs/eval/schemas/analysis.schema.json
   - docs/eval/schemas/attempt.schema.json
   - docs/eval/schemas/run-spec.schema.json
-eval_latest_valid_release: https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/2c2d1f0621f64ff7ceeff8c05d8ebd3449501aaf/trajectories/mcpmark-geode-gpt54-high-token-efficiency-rerun-filesystem-easy-20260812T090254Z-35db8b275a36
+eval_latest_valid_release: https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/e5d442f25c9fb4861e28744dbe924a36325c746b/trajectories/mcpmark-geode-gpt54-high-mcpmark-filesystem-standard-gpt54-high-geode-codex--818b13fe1039-20260812T231820Z-ed26f124b9c7
 ---
 
 # GEODE Evaluation Index and Roadmap
@@ -74,12 +74,18 @@ pointers under `docs/eval/`; the artifact repository keeps the bytes behind
 those claims. See [External Evaluation Artifact Repository](external-artifact-repository.md)
 for path mappings, disclosure rules, and the publication manifest scaffold.
 
-The latest matched runtime diagnostic is pinned to artifact commit
-[`2c2d1f0`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/2c2d1f0621f64ff7ceeff8c05d8ebd3449501aaf):
-GPT-5.4 subscription / effort `high` retained MCPMark filesystem/easy **9/10**
-while input tokens fell **29.8%** and output tokens **19.0%** against the
-pre-repair GEODE arm. The single trial proves the promotion gate only; it is
-not MCPMark Verified, a confidence interval, or a subscription billing claim.
+The latest corrected runtime observation is pinned to artifact commit
+[`e5d442f`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/e5d442f25c9fb4861e28744dbe924a36325c746b):
+on all 30 pinned MCPMark `filesystem/standard` tasks with GPT-5.4 subscription /
+effort `high`, GEODE scored **21/30** and Codex CLI **20/30**. Its 60 reviewed
+trajectories contain 3,381 events and 1,430 exact tool pairs with zero orphans.
+Post-run source audit invalidated the original prospective hypothesis because
+the adapter timeout boundaries were not equal: GEODE timed `loop.arun`, while
+Codex timed its process communication window. The outcomes remain retrospective
+descriptions only, not a causal, efficiency, promotion, or full 127-task
+Verified claim. The exact runner is withheld, so the public bundle is not
+independently executable. See the
+[run record](2026-08-13-mcpmark-geode-codex-gpt54-filesystem-standard.md).
 
 The latest route-contract diagnostic is the immutable
 [2026-08-11 GPT-5.6 effort-surface record](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/7a788211c2194f7118b40b63e19f071b6e7091fb/reports/e2e-validation/2026-08-11-gpt56-luna-terra-sol-effort-surface.md):
@@ -145,7 +151,7 @@ Telecom small run 이후로 둔다.
 
 | 순위 | 벤치 | 첫 목표 | 완료 기준 |
 |---:|---|---|---|
-| 1 | MCPMark Verified | 완료: available standard 64/74; v1.0.12 GPT-5.4 filesystem/easy release smoke 9/10 | GEODE adapter로 filesystem/postgres/github verifier-backed result 생성, MCPMark Verified와 `filesystem/easy`를 분리 기록 |
+| 1 | MCPMark Verified | 완료: available standard 64/74; GPT-5.4/high GEODE × Codex filesystem/standard descriptive observation 21/30 vs 20/30, prospective timeout claim invalidated | 동일 timeout boundary와 공개 runner를 갖춘 새 pair를 사전등록하고, single-service observation과 127-task leaderboard를 분리 기록 |
 | 2 | τ²-bench | 완료: GPT-5.4 `geode_agent + geode_user` base full cycle 200/278; v1.0.12 failure smokes도 별도 보존 | 세 domain result와 51,985-event trajectory release를 보존하고, native-user headline과 분리해 public page에 명시 |
 | 3 | BFCL V4 | Agentic subset first | native/prompt function-calling route와 aggregation을 고정한 뒤 result/score artifact 보존 |
 | 4 | HAL Reliability | tau-bench airline single-rerun smoke | τ² adapter 재사용 여부와 rerun consistency schema 확인 |
@@ -227,6 +233,7 @@ Verified 다음에 τ²-bench를 둔다.
 
 | 일자 | 변경 |
 |---|---|
+| 2026-08-13 | GPT-5.4/high MCPMark filesystem/standard native outcome 21/30 vs 20/30과 3,381 events / 1,430 exact pairs를 보존. 사후 source audit에서 equal-hard-deadline preregistration 위반을 찾아 prospective hypothesis를 invalidated로 정정하고, append-only correction을 artifact commit `e5d442f`에서 원격 재검증. 점수는 retrospective description만 허용 |
 | 2026-08-12 | GPT-5.4 subscription `high` matched MCPMark filesystem/easy 재실행: 9/10 유지, 입력 447,376→314,219(−29.8%), 출력 25,157→20,385(−19.0%), 188 events / 54 exact tool pairs. 검토된 trajectory release와 보고서를 artifact commit `2c2d1f0`에 게시하고 원격 read-back 검증 |
 | 2026-08-03 | 배포된 GEODE `v1.0.12@f99cea63` / GPT-5.4 subscription `high` post-release 검증: MCPMark filesystem/easy 9/10, Tau2 mock 0/1, Telecom-small 0/1. 실패를 재시도 없이 보존하고 416 events / 72 exact tool pairs, 두 stable manifests, 비식별 native receipts를 artifact commit `04ff1c4`에 게시한 뒤 원격 read-back 검증 |
 | 2026-08-03 | GEODE `22789ee2` / GPT-5.4 subscription `high`로 Tau2 base 278-task full cycle 완료: Airline 42/50, Retail 79/114, Telecom 79/114, aggregate 200/278. SQLite와 exact-join한 51,985 events / 3,964 tool pairs, 비식별 native receipts, retry-lineage 제한을 artifact commit `86dcbba`에 게시하고 원격 read-back 검증 |

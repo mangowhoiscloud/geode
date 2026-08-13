@@ -98,7 +98,7 @@
         "tools",
         "parallel"
       ],
-      "contentSha256": "ff030f10c87d035483177f39cd874502263c18f257763a593b2f4d2a25f6f0f0"
+      "contentSha256": "d4f889172e09b7002b8e07b68267f77ea770898e4fe18234aa7ada757538c92a"
     },
     {
       "id": "file:plugins/crucible/tau2_live.py",

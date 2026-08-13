@@ -24,7 +24,7 @@ function ServiceCoverageKo() {
         </tr>
       </thead>
       <tbody>
-        <tr><td><code>filesystem</code></td><td>10</td><td>30</td><td>standard run 완료</td><td>25 / 30 게시</td></tr>
+        <tr><td><code>filesystem</code></td><td>10</td><td>30</td><td>standard run 완료</td><td>historical 25 / 30; paired GPT-5.4 21 / 30</td></tr>
         <tr><td><code>postgres</code></td><td>10</td><td>21</td><td>standard run 완료</td><td>20 / 21, <code>postgres-mcp==0.3.0</code></td></tr>
         <tr><td><code>github</code></td><td>10</td><td>23</td><td>standard run 완료</td><td>19 / 23, Docker GitHub MCP server. State Duplication Error 6건의 원인(<code>GITHUB_EVAL_ORG</code> 미영속)은 2026-07-10 제거</td></tr>
         <tr><td><code>notion</code></td><td>10</td><td>28</td><td>실측 가능 (easy smoke 1/1, 2026-07-10)</td><td>07-04 스톨 원인은 브라우저 세션 만료로 확정, 재발급 절차 확립. standard 28건 미측정</td></tr>
@@ -50,7 +50,7 @@ function ServiceCoverageEn() {
         </tr>
       </thead>
       <tbody>
-        <tr><td><code>filesystem</code></td><td>10</td><td>30</td><td>standard run complete</td><td>25 / 30 published</td></tr>
+        <tr><td><code>filesystem</code></td><td>10</td><td>30</td><td>standard run complete</td><td>historical 25 / 30; paired GPT-5.4 21 / 30</td></tr>
         <tr><td><code>postgres</code></td><td>10</td><td>21</td><td>standard run complete</td><td>20 / 21, <code>postgres-mcp==0.3.0</code></td></tr>
         <tr><td><code>github</code></td><td>10</td><td>23</td><td>standard run complete</td><td>19 / 23, Docker GitHub MCP server. Root cause of 6 State Duplication Errors (unset <code>GITHUB_EVAL_ORG</code>) removed on 2026-07-10</td></tr>
         <tr><td><code>notion</code></td><td>10</td><td>28</td><td>Runnable (easy smoke 1/1, 2026-07-10)</td><td>The 07-04 stall traced to an expired browser session; re-login procedure established. Standard 28 tasks not yet measured</td></tr>
@@ -84,6 +84,50 @@ export default function Page() {
               않습니다. 점수는 harness commit, 서비스 집합, model route, timeout에
               고정해서만 게시합니다.
             </p>
+
+            <h2>2026-08-13 GPT-5.4 filesystem/standard 정정 관측</h2>
+            <p>
+              고정된 30개 <code>filesystem/standard</code> task를 GPT-5.4
+              subscription / effort <code>high</code>로 task별 paired 실행했습니다.
+              GEODE는 <strong>21/30 (70.0%)</strong>, Codex CLI는{" "}
+              <strong>20/30 (66.7%)</strong>로 GEODE가 1건 앞섰습니다. 60개
+              trajectory에 3,381 events가 보존됐고, 1,430 tool call/result가
+              정확히 pairing됐으며 orphan은 없습니다.
+            </p>
+            <p>
+              사후 source audit에서 원래 사전등록한 equal-hard-deadline 전제가
+              성립하지 않았음이 확인됐습니다. GEODE는 MCP setup 뒤의
+              <code>loop.arun</code>만, Codex는 내부 MCP startup을 포함하는 process
+              communication을 timed surface로 사용했습니다. 따라서 prospective
+              hypothesis는 invalidated이며, 점수는 retrospective description으로만
+              남습니다. Native input 총합은 GEODE가 작았지만 cache 제외 입력은
+              4.20M 대 1.44M으로 더 컸으므로 token-efficiency도 주장하지 않습니다.
+              공개 bundle에는 정확한 runner가 없으므로 독립 실행 가능한 재현
+              패키지도 아닙니다.
+            </p>
+            <ul>
+              <li>
+                <RunLogLink
+                  path="mcpmark/results-paired/mcpmark-filesystem-standard-gpt54-high-geode-codex-k1-boundary-aligned-20260813"
+                  revision="e5d442f25c9fb4861e28744dbe924a36325c746b"
+                />:
+                원본 spec·receipt와 이를 supersede하는 정정 analysis·receipt.
+              </li>
+              <li>
+                <RunLogLink
+                  path="trajectories/mcpmark-geode-gpt54-high-mcpmark-filesystem-standard-gpt54-high-geode-codex--818b13fe1039-20260812T231820Z-ed26f124b9c7"
+                  revision="e5d442f25c9fb4861e28744dbe924a36325c746b"
+                />:
+                privacy-reviewed GEODE 30-task trajectory release.
+              </li>
+              <li>
+                <RunLogLink
+                  path="trajectories/mcpmark-codex-gpt54-high-mcpmark-filesystem-standard-gpt54-high-geode-codex--f749317fe281-20260812T231820Z-828560273a4e"
+                  revision="e5d442f25c9fb4861e28744dbe924a36325c746b"
+                />:
+                privacy-reviewed Codex 30-task trajectory release.
+              </li>
+            </ul>
 
             <h2>2026-08-12 matched token-efficiency rerun</h2>
             <p>
@@ -240,6 +284,51 @@ export default function Page() {
               pinned to the harness commit, service set, model route, and timeout
               settings.
             </p>
+
+            <h2>2026-08-13 GPT-5.4 Filesystem/Standard Corrected Observation</h2>
+            <p>
+              We ran the same 30 pinned <code>filesystem/standard</code> tasks
+              through GPT-5.4 subscription at effort <code>high</code>, paired by
+              task. GEODE scored <strong>21/30 (70.0%)</strong> and Codex CLI{" "}
+              <strong>20/30 (66.7%)</strong>. Across 60 trajectories, all 3,381
+              events are preserved, and all 1,430 tool calls/results retain exact
+              pairing with zero orphans.
+            </p>
+            <p>
+              A post-run source audit found that the preregistered equal-hard-
+              deadline premise did not hold. GEODE timed <code>loop.arun</code>
+              after MCP setup, while Codex timed process communication including
+              its internal MCP startup. The prospective hypothesis is therefore
+              invalidated, and the scores remain retrospective descriptions only.
+              GEODE reports a lower native-input total, but its cache-excluded
+              input is 4.20M versus 1.44M, so the run does not support a token-
+              efficiency claim. The exact runner is withheld, so the public
+              bundle is not independently executable.
+            </p>
+            <ul>
+              <li>
+                <RunLogLink
+                  path="mcpmark/results-paired/mcpmark-filesystem-standard-gpt54-high-geode-codex-k1-boundary-aligned-20260813"
+                  revision="e5d442f25c9fb4861e28744dbe924a36325c746b"
+                />:
+                original spec and receipts plus the superseding analysis and
+                correction receipt.
+              </li>
+              <li>
+                <RunLogLink
+                  path="trajectories/mcpmark-geode-gpt54-high-mcpmark-filesystem-standard-gpt54-high-geode-codex--818b13fe1039-20260812T231820Z-ed26f124b9c7"
+                  revision="e5d442f25c9fb4861e28744dbe924a36325c746b"
+                />:
+                privacy-reviewed GEODE 30-task trajectory release.
+              </li>
+              <li>
+                <RunLogLink
+                  path="trajectories/mcpmark-codex-gpt54-high-mcpmark-filesystem-standard-gpt54-high-geode-codex--f749317fe281-20260812T231820Z-828560273a4e"
+                  revision="e5d442f25c9fb4861e28744dbe924a36325c746b"
+                />:
+                privacy-reviewed Codex 30-task trajectory release.
+              </li>
+            </ul>
 
             <h2>2026-08-12 Matched Token-Efficiency Rerun</h2>
             <p>

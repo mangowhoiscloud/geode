@@ -56,7 +56,9 @@ def _codex_mcp_config(command: str, args: list[str], timeout: int) -> str:
     )
 
 
-def _summarize_codex_exec(stdout: str) -> dict[str, Any]:
+def _summarize_codex_exec(
+    stdout: str, *, allow_incomplete_final_record: bool = False
+) -> dict[str, Any]:
     """Reduce the stable ``codex exec --json`` stream for MCPMark reporting."""
     summary: dict[str, Any] = {
         "thread_id": "",
@@ -73,10 +75,14 @@ def _summarize_codex_exec(stdout: str) -> dict[str, Any]:
         },
         "error": "",
     }
-    for line in stdout.splitlines():
-        if not line.strip():
-            continue
-        event = json.loads(line)
+    lines = [line for line in stdout.splitlines() if line.strip()]
+    for index, line in enumerate(lines):
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            if allow_incomplete_final_record and index == len(lines) - 1:
+                break
+            raise
         event_type = event.get("type")
         if event_type == "thread.started":
             summary["thread_id"] = str(event.get("thread_id") or "")
@@ -336,6 +342,30 @@ def _patch_mcpmark_github_visibility() -> None:
 
     manager_cls._create_initial_state = create_initial_state_public
     manager_cls._geode_public_visibility_patched = True
+
+
+def _patch_mcpmark_cleanup_on_error() -> None:
+    """Attempt fixture cleanup before MCPMark propagates an execution error."""
+    module = importlib.import_module("src.evaluator")
+    evaluator_cls = module.MCPEvaluator
+    if getattr(evaluator_cls, "_geode_cleanup_on_error_patched", False):
+        return
+
+    original_run_single_task = evaluator_cls._run_single_task
+
+    def run_single_task_with_cleanup(self: Any, task: Any) -> Any:
+        try:
+            return original_run_single_task(self, task)
+        except BaseException:
+            try:
+                if self.state_manager.clean_up(task) is False:
+                    log.error("MCPMark cleanup reported failure after an execution error")
+            except Exception:
+                log.exception("MCPMark cleanup failed after an execution error")
+            raise
+
+    evaluator_cls._run_single_task = run_single_task_with_cleanup
+    evaluator_cls._geode_cleanup_on_error_patched = True
 
 
 BaseMCPAgent: Any
@@ -603,7 +633,10 @@ class CodexMCPMarkAgent(BaseMCPAgent):
             if stderr:
                 log_path.with_suffix(".stderr.log").write_text(stderr, encoding="utf-8")
 
-        summary = _summarize_codex_exec(stdout)
+        summary = _summarize_codex_exec(
+            stdout,
+            allow_incomplete_final_record=bool(timeout_error),
+        )
         execution_time = time.time() - start_time
         error = timeout_error or summary["error"]
         if process.returncode and not error:
@@ -652,5 +685,7 @@ class CodexMCPMarkAgent(BaseMCPAgent):
 
 def register_mcpmark_agent(registry: dict[str, Any]) -> None:
     _patch_mcpmark_github_visibility()
+    if BaseMCPAgent is not object:
+        _patch_mcpmark_cleanup_on_error()
     registry["geode"] = GeodeMCPMarkAgent
     registry["codex"] = CodexMCPMarkAgent

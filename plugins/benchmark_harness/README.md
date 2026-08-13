@@ -40,6 +40,9 @@ from src.agents import AGENT_REGISTRY
 register_mcpmark_agent(AGENT_REGISTRY)
 ```
 
+Registration also wraps the pinned evaluator's error path so fixture cleanup is
+attempted before an escaped execution error aborts the run.
+
 Use `--agent geode --models geode-gpt-5.4` for GEODE or
 `--agent codex --models codex-gpt-5.4` for the isolated Codex CLI arm. The Codex
 adapter currently accepts only `--mcp filesystem`; other services remain out of
