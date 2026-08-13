@@ -1,13 +1,109 @@
 from __future__ import annotations
 
+import ast
+import base64
+import hashlib
 import json
 import os
+import subprocess
 import sys
+import zlib
 from pathlib import Path
 
 import pytest
 from core.observability.trajectory import build_trajectory
 from plugins.benchmark_harness import run_mcpmark_pair as pair
+
+_MCPMARK_VERIFIER_PREIMAGES = {
+    "tasks/filesystem/standard/desktop/project_management/verify.py": (
+        "1f28a6a7a8b435a2ebfbef85f5b132e2fccf484f",
+        (
+            "c-qZc&2Aev5Wedv808STmF1*C8$f^y7_nRgh|$0{0u*VmpjMQ$_5PLIb*maa_E4bhsmB(5w?081p+j={yOdU2<&azgEr;I>hw}}G"
+            "96x?^QZsroPx2Fz-=T6-t&9BmU^pBO-V&NDlNeV?ks}t<q^!`gpy-^i+o~whXXp(rz9VskE^&@mBqMo+ZZNx@qKhOY=!z6{h4bVm"
+            "fgm6UNmdrLLTtkZOIl>8#ML@Y=BWAp27W4;f(-@>vP3IVMHOLHv`8o@E9ho)gpR)yveN;Ae}McIsZg~hhzlYuh=h)dSFdN+-(26!"
+            "E~A^-^-XmC>I(6--eEf7MsWzCfEGoCPC@Ymh7(%k6VN>x2Idcs#H?hA"
+            "a+sngOLO=?iW5fATb$NpMrlEVD5y~*90%4Ucn)q$7^39+"
+            "8rHCA)KF5@G#3jVX<bLsJ9m7OHc{hgvWQB#C(O7jB0naqVk70msX!7woEJr^eJJ*O18&69mu*bTvl3JL&&YxZ_)zIWCurElk#lSp"
+            "I`b!u!AHiQB~5bJihut46+LO=J+TbqXv?C`mGdkIUf`6G4%LZpTp!iaSTwIIzI7ZC8*@61Q0RaD+_f;N#|?=aS`#M@%%-!7)-ec?"
+            "Ui*&IR7W3T^<3d4gh>Mq-*E-cg&9nIr#&<zKbBw%rvn>~gP%{b)L?EAS>Osskde|2OB|t;V45fSD)j9HP*;>N7F86-x7(yZqNr(1"
+            "99&S%3eXq&23fTtw8DvCc~BxQ(iGMMIkIund*iGuVGQ(YU&$e!h2cxYvnNV&*QF+Mmvx#-nNx4OPV{sw+^|8<36Rh?XoAa<<cpEQ"
+            "GO<q57F?TH+u)YNdxiLbMjoM#8UiQ=+W<aimx8pHQUW{xuDZi%vOrc;Ptm;%@z95`XEs?3Q8n{WObM=FEG{S?OgA0um8WmCgwvBn"
+            "Ngi3j-kZg51Qrrl2!k<MaR;VU1=>QVgP3jMG_(AGbI8qq+e|j@<x+9Q@hxAtS%OvdViQ4J5H=|{Hl?y+K~nFVlMTEvp!yw2qZp@g"
+            "onqKLZye$U%!NJmzLzQ9q`;0S6NQhMwvD-Z0fxH#Q;svjsT*9cMPc}<DD3<AL<6-*tY&qPSSZu9Yrw+%^6Ux`%!xQynq{xWGBMnn"
+            "W)5~&BzLeZW_N~SPI&Yt*~{y<T?}*M?+}hTNc*zPJq!ap)824NrcS&_or@C?v^nqtA-5@%8S$Dd>Xi7yFr`i*P$BOXbm5OOQdT6J"
+            "6B@BP%P<hk6X0h1-<J3eQg%fmI5t-;dm1h$Rgx2`5Dz7#c21a)?H&2pIB5bDmgSgxFeMFicieX{QU_bMFwE4YRxeg6sAEb}arQ!V"
+            "-7bnBf+u0StUHLH8f6<fbpgtMm{KypO6`$d)T9MoWVoDU3y*mq5U(S+qbD)*M$Hy!>a_$EY2AUV+1dH!%=@T=pAvp)_eQm)s{%ra"
+            "4<1TL*DqmKy4&!vF;cC-4@^<UH-;a~&236{M1BWFookH4Q)i?XSDl#%imE(hv%}c%wdx?&x+~klTz$n8XRLFj3$WLP3{ZH5Grqa{"
+            "@boC?Oc#EE8q<|&j=Oms-;yfg#ps8iSHSQv$J$Q&*m&j!SDS3k_`!tRsjVY=JD8W%EQuY)Sq}!i_$H8$nY|y=ENutz%);4=Wvyos"
+            "mt)c`0dC0wGy6mE!crFIgTJ_sjSXE}4~w;y0CZ3qdo!U+)6M|vdLQxM=pvGp)utB-S{T;LO~Q}>JSfh!f_;j>_N$|DtmeBC0yLiJ"
+            "N4ACuT!^T6Sko<u*1T|N>~aKK7j?Qob0YmQ7O&fJk@J+rqvPFjA~+%l!-J=#^L?+t>DUzgekRT7juO5d<^^03<o|R*T1b#f#8N**"
+            "`@=Oam<|K#+pQB9r=xcgf_x&E)Vp!wDTYe`|G%H+Q1gVN^y-`JSkzuk6A>OUEWKxV5FD?qKwV=d`eseEqP*rW9H?j*d3fi<JWB{$"
+            "Vd{N%lVpm%7)z1I=nLl^ZJ+MR6ulVBxi8Fxe`jAr%|J@&i*2`&y_zsn^mHs>o;K&lNTh(H&Q8k|Js)cup6@KsI(jlw^vqt*vyLN9"
+            "pgmY@$(w*M+ZJf!jJ@4;pP|G=p6WA)*}WP(7^s2M1|3ckl8@dktqg8DHR?nWhl%0!d*gJwsBv%~oqATg#f|TaP|Ihk5zxJh^)N;&"
+            "$Po9o#s{w-<ZB3@eXo?1%o2?#y7y=Iu72!(=^AcmD4=IsHp(D6)$T&BxP+fFL#e;PSk}3$Xq~@WkVz!;R}!{?|Ni~QZ%8ID&cy%s"
+            "Hyo46#CG>%fLSIvajj$(DJ7-s&yo1-RO+MQ*D7X}6%3v0bUKr%d)(ts9FE2oxIwyB=YjzX^vRvcO`g0^#qs59ZK46$(XMmAc;eJZ"
+            "=a65~neI+^HzgdX*D94>s+6OFuS{!tzjsv!c;@8CHu}tMWA}U(a#UT4^!d`HPp#yom37B^-GALpQ+4u<sv>8iTpV}YAAAtO2OTt$"
+            "2!1r~EHWKHG5w`v{y0!_G{Wy~UR~9>=r3&{78a?RF(A&VOd#qw;W7~~&5b5V8pz8el8o)t_-%fCe2nfj$OD4kRtjtiKMPscOWrNk"
+            "vCvDIkHMo5+eo&E>?HMVK183Q;py;`&!6h+jDczwmXLK#CTq3?aP6E0NjED~;<Vu(S!>ey@%LXu;&U7YRp8n6wI$6qj91vzsIia0"
+            "%7XQ70P5oG)$0({v!lTP))@(xM-e(bMZ+lKr$H1ACAd5q{sT8W>*@"
+        ),
+    ),
+    "tasks/filesystem/standard/file_context/duplicates_searching/verify.py": (
+        "c7a26ad9ce2fe5fb92079bcfd8755afdc5051ede",
+        (
+            "c-qZb+iu%N5PjEIOy~zott?x<N2m*=u^kwQlfrgW6pleq($Zd(B9+~xW7Y6u9}2X6>SK%kTfd;6(Aiy*yUU9#HR(mLVN=|hGnX^7"
+            "!{y48^^~*qA&u8bd<)Z=xJlxzmgjk`H-yoUjsiiG82E_MsemwHa7-fthv_tu_XvkWBFIQB3gR)mX4gSXztd6|0smI%YSGCwVFLJ!"
+            "w?dXoU>b;<hz=q9{!6^f*Cagu?<U}KQL8m3AzTyTBb@NZlp$WiX6+8FeXc|YEx-=~y&wX_4FS0jiiMyck5676oquzFadhfm9GzeI"
+            "hbLzseZCD?PueI|C;*lu0uIoQ9^R%biF=6M_G;w4j*_Aw#3)h-Yjfm>1(Xwb6GSOFVk}{`S|Ed&kXT4-XfVVGQx1&0OVNjM2E&L*"
+            "S*#px7g!w~ol"
+            "y{t(g^e6hnOB;My{>?lYt&685J!qSP`t}xeS~h?x<ix5`vV1Q4$NZ#>9oqj8pHaz?D-H8-y;bvf*k60uG^BXc?WQ"
+            "vNsv;w8I`F!MNS&^lr%Am|mkRZS5hs8xdsLk@}+;#eo=oQ$}Oa4!u8q`w>()K`Ns0wKn>`Fy~<a_v9f9n`OnTBqlmux02j5e_YVm"
+            "(8?!wlndU@$!0}wm?TjVK2;wxq+6glXLMQ2)4GZ{x_C&k90b<EGdJ~On_I46FEg=Ij*SY<s#&~hnIhGMNg9u<aXAhmP9DRg>dzvW"
+            "+Bz7fLb6z@3XC0(qUTzF{l3W)t>3MR3ziboD9GIu*OIYGuz$^xbXtTA6LO{nW$N<f#%0YYEd#@V<2|HfRu<Ukf@sF6$?FPyk*|^Z"
+            "f|$Q249TuqVp+;I`@RUq3cQeL&>tvlf1}?MccPnJY|0C0(=jSS1EXB238trv?Rx{b^ehEl7d%Uach#*RZsv$vHsbbzh?^GTmW#OE"
+            "gt(O>?%9a@3nFe=h<h&LeiPz$hS=Y*5c~ZF5w{JZR!|^n6?KR^Iiela{-ROcu@K#;_8X(Rn<MVnh`S3S?plaDF5+$z;$DupZzDck"
+            "5OL2!+;<V5YD6XQP*c`vOy8w?uY0Vd^-^UT*Ug&WBxy9p3Y-Kq2K-4Fy{1^45G8utDe5|_(o18x=9wFyja~QhX?9tX>TkMEy4>B="
+            "#8NU>^_!IT*PkS}WW3b&6hu*}wQ<~$ZwU+ui9zWDku>gNe{cJ0?7=AaNRKv~!3sRTA){}N8x5_RL%@j4Ws?s|+k|qC<ARPOnsKQa"
+            "CZ}2j?Z?4{bTfshtkJ|C6=dS<zfy;klNzL`(&3Im#dw0qrAV$9vW`Ty5f_3r`+oj$T<Zl>9M8t>TxrMI+nuHL)77b7QVB9TR=+3X"
+            "z~!iYSZ14lwqRcCp_}G_ta|KL;p>`Ts&<_IVS0wNr@3#`HmWl3-6m!tGl!)%!)o<dgtXXZm1%`%3v%qA;g=KKx=#G@c(qI(AE8v7"
+            "RC+Rv{anjZ?23~L;g{yvhxAtsCc|qr&Hu77&ZBC^uSMEnonP}=TPIOZ-osMDxS)z?XiF1^>y$4=<yTAd<Pi>MGZ_+BkZVT8Y$@8>"
+            "hXhclkWYKkCV{_LaX}~ulhXzI{eKxD41<HwjTKTQre~tc-1^Z<0a+GhrzX4upW%a-!&?bQ<J9H5HFKNun*6LrCO)K$X9>xupx~{2"
+            "0Pm|V)iieS%Z;n*c92Uo6q#KR$HoLSN{8~^1na>ZJq+|AjYPERUt0o>_u3xi_d&y9S8i~p<@Aa|4#_Fce+EmSR;JGc<I7C$i)d@+"
+            "$V)EUoWz^o05AK4tABAibhD+YvOu2Hx1~HaM$L&_;nCcbWrlZZJA8A}7B|7s_2j^!!{agH4M9?=9@8)+Om@GlN!ZMWTfSuc%I*Gn"
+            "rM0TIO|h%4)j!Eqy4EB8UnC-kbTUSmaq)4EJ0&(Ye~w)-7>Q^G{cUaJ2b_Rn5lRE+42jStccUm(C&7)TQNc+R>Y(Hr%!nQ8GF3&L"
+            "86^8RQzxE^M)LeqE^l|P=GfNw=vf*VOPJ-O)<uwyvW;g@1bMCj)qP4D(ce}#F<B{w!?`85s*=_2#8ef+3af#spQ65I38pJfCqwM0"
+            "*?WgZ4|<lj_cag?U3jLf!P^zH79F%gReFbY<iU=C+-CB!Z1Oxrr}%XFspn5~Vs$D<xLf;8TbRZpXU;DQ<e>H)nB6-5{QZ}oKo_d4"
+            "g(ctA^?E(enVSwth=ZJK9v5V)Pq6K;ef6~@brI>dXCoJpJkn?P-38vjbh>rQvfg|u53Op{*k@#pg0J-RpO!vTv$GMeIV5m|as0Nt"
+            "!IZtuI*3s*|Dn*)mUs7)yt^AMm9e}&2we9aBUf(cnV8cs&eB*7F%9{|Teur@`5NOuQ#PMo<eF^k&EO<Sp~PIxfoie8jn~%J;J#4u"
+            "0C??n$`hxhx!8+JlZ<0wsf1TBvvN;hgr||Pi{fqU!KdIIc%STS6z^+|s_N@3Yyzrs>_+5NPGVQiD49$nB2O5y1`*AkSl$(t`STB|"
+            "$efVjUi<9)+*-|NTuyPKomooI$J+O8HL8xEoxH45)$g=g=&`SY@B46Y0G{tliu=B&mFuST7ou}Ow*"
+        ),
+    ),
+    "tasks/filesystem/standard/file_context/file_splitting/verify.py": (
+        "5f72271a6a4038ddf450c6c27b2e89214d4e253e",
+        (
+            "c-qxi&2A$_5Wf2<Dzk_6u!$3cxI{8ilsG6-7SK9c3GGIsj@@IocHA>`w?nMRM-E89i6e-2;|X{Ks;lRx+cVz8a6tHC&!p<BzptvR"
+            "^WxxmrPcABkjGr!L$NlCTz=MzqNw+lE0KyRGa{Fur%DtC(p<r%$T&=jOc*2N9B!EYK=M7YEOKQ)uXQg~`4S3d7MZw%^8GjXSjptN"
+            "*PHPa=G-KPYm>}`;!~5Wbw7rqFG%*Z2lzqcFS!A;;9v!z76h_!d38OWd^@=rzfNw(lbht?>J8XH?wJ}`rz`{+P<d`(goX$BXQ6UA"
+            "K->MOLqCd1OQaxCrB-(C*pFgDb9l?L6(1{=t4<Us%`CYz)*Hd@Fl|DE;@_<>hFNJwakEmA0`AwgVwatJTY+_=ZLXUPCHz5Xqx)6f"
+            "PDz>4c9-W_oi?i98Z*aS`Uu9$pM$BhR9nF;RnTw@5xsXJeqL(vLFrE1B&bkAVs8KZ{U^An&AlXzm!zELD_JGLOTs0~H2;Vtq3zcW"
+            "OBKFz2kutJX4?X=Cg>+^R)D|#;3)3%&2zd`zELY4l!|3pS*{ejM7vV$RVhS(;YnF60&x++_rfe-nk(xLNVeqrmySOasLW^1ITU`E"
+            "I+^5AoSu9-+YHQuiKxj12#G|ObKV~w!f+Vh62ekwjZNPG+&1V|&Azw3S?$nTQ#1RR*x7*kjpxU;ZY@~Wzn1S{TFa*aD+(@W{R%7&"
+            "=oE-<vnVARy>=ol^{4O{sBHG(&)M@U`2?$QVz7)nNHD6oS?Ikf<$JMU_Z$clrVFMR7D=H$EBOzmf$vnqhfW5C3?P<_po@U}Go}7v"
+            ")H)=`G?&Is;E_io#n}u`od?s816e<oibwd^FEQdqnm<fAo`z%kvd1IC+J=UGPSGg=)~sdLW99w^>BW6Y?WWZWIA8GT2g_kw%_`wc"
+            "m4&PbZr#;*uKA(FF&vCw*iCmj%zZf9aRhnl9Ia5EOZ~Lwev51lX$$w=$?c}0;ZvPZmLfq*e6EC9@6`yXjq42N9;Z^+m*k&4By%O^"
+            "LNe$5KHX3$Qk!mxWlYUE{h{G^S=Kj5ipFReUav*v8ol9jV6esMCm6b$ok0S&3A&S<O=7pFO|R_2I`LizWp@9c)1ot`SEHbY|JAI>"
+            "mxb+R-xVAVogN>ITIA|nug?A6sg!3qcPrMCndu_rj^}F?AO8Hh5~+uQ9a-BR#G7vIz=;5%E4FyA<GM3IiVI^5BEyp6u*%j?%qp4V"
+            "`ezh#tHWM{O6EYS!P<Zg(y_+>`z7%4`Agu25HR>^A94BvYERn#tcJI+<4C8C-O?|$`@2=@mpG+6b&3!xfIiytwc@d-vSXroxudPU"
+            "_NvL7?WYE3FQ$AIR;P`<ix^8LWVO9w*<RzLBTIG5PFHeje}q?8SJSSmvhUenfBgD0I1<^((Q!*33<go`&xs433dutkwBd!zwEsGx"
+            "*LK0H)6|dL1*y5=jcGlP4nKZxjSoEtyC*o9OUfldGzgv7sQ_S1CpQIq?G}ngyS+9Cs^?{oUsbzAquE+B0!6I9V;K3|XoU@5s@w*r"
+            "{YujLxFh2>+=6M118C%EQyq_1Cb3;s8?#h_E&jMFwR_^dJUTjp#~Ne<`0O#hyl8pI^|ac$YXu&*&Yepdk&5e8W_)VCml3>zXcT?&"
+            "`APlHl?JMP-e8kaNp;O%gZ#y*yeu;A<}=-%vh_jhpuk4><wxRskQ*GkXOoF1t=HOKC{4d~iDNLGCtnBD<=NGB7t}EB^)R%AvYaF^"
+            "!W}0`Y}+SE<iOnw_#04aCK~"
+        ),
+    ),
+}
+_TOOL_SCHEMA_SHA256 = "c" * 64
 
 
 def _fixture(category: str = "desktop") -> dict[str, object]:
@@ -121,6 +217,7 @@ def _write_native(
         deadline["runtime_config"] = {
             "max_tool_result_tokens": max_tool_result_tokens,
             "offload_store_bound": False,
+            "tool_schema_sha256": _TOOL_SCHEMA_SHA256,
         }
     (task_dir / "execution.deadline.json").write_text(
         json.dumps(deadline),
@@ -153,6 +250,60 @@ def test_filesystem_30_order_and_hash_are_frozen() -> None:
         "mcpmark-cd45b7f-filesystem-standard-verifier-missing-output.patch"
     )
     assert pair._sha256(patch) == pair.PATCH_SHA256
+
+
+def test_verifier_patch_applies_to_exact_preimages_and_compiles(tmp_path: Path) -> None:
+    expected_functions = {
+        "tasks/filesystem/standard/desktop/project_management/verify.py": (
+            "verify_progress_tracking_empty",
+            "verify_file_counts",
+        ),
+        "tasks/filesystem/standard/file_context/duplicates_searching/verify.py": (
+            "verify_total_file_count",
+        ),
+        "tasks/filesystem/standard/file_context/file_splitting/verify.py": (
+            "verify_no_extra_files",
+        ),
+    }
+    for relative, (expected_blob, encoded) in _MCPMARK_VERIFIER_PREIMAGES.items():
+        raw = zlib.decompress(base64.b85decode(encoded))
+        blob = hashlib.sha1(
+            b"blob " + str(len(raw)).encode() + b"\0" + raw,
+            usedforsecurity=False,
+        ).hexdigest()
+        assert blob == expected_blob
+        target = tmp_path / relative
+        target.parent.mkdir(parents=True)
+        target.write_bytes(raw)
+
+    patch = Path(pair.__file__).with_name("patches") / (
+        "mcpmark-cd45b7f-filesystem-standard-verifier-missing-output.patch"
+    )
+    checked = subprocess.run(  # noqa: S603 - fixed git argv over temp fixtures
+        ("git", "apply", "--check", str(patch)),
+        cwd=tmp_path,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert checked.returncode == 0, checked.stderr
+    subprocess.run(  # noqa: S603 - fixed git argv over temp fixtures
+        ("git", "apply", str(patch)),
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+
+    for relative, expected_sha256 in pair.PATCHED_VERIFIERS.items():
+        target = tmp_path / relative
+        source = target.read_text(encoding="utf-8")
+        tree = ast.parse(source, filename=relative)
+        functions = {node.name: node for node in tree.body if isinstance(node, ast.FunctionDef)}
+        for name in expected_functions[relative]:
+            body = ast.get_source_segment(source, functions[name])
+            assert body is not None
+            assert body.index(".is_dir()") < body.index(".iterdir()")
+        assert pair._sha256(target) == expected_sha256
 
 
 def test_tool_cap_spec_freezes_model_budget_and_diagnostic_authority(
@@ -338,6 +489,38 @@ def test_python_preflight_rejects_a_dependency_conflict(
         pair._python_preflight(Path("/repo/.venv/bin/python"), tmp_path)
 
 
+def test_filesystem_tool_schema_probe_hashes_sorted_raw_schemas(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    schemas = [
+        {"name": "write", "inputSchema": {"type": "object"}},
+        {"inputSchema": {"type": "object"}, "name": "read"},
+    ]
+    monkeypatch.setattr(
+        pair,
+        "_run_process",
+        lambda *_args, **_kwargs: pair.subprocess.CompletedProcess(
+            (), 0, stdout=json.dumps(schemas).encode(), stderr=b""
+        ),
+    )
+
+    assert pair._probe_filesystem_tool_schema(Path("python"), tmp_path) == (
+        pair._tool_schema_sha256(schemas[::-1])
+    )
+
+
+def test_filesystem_tool_schema_probe_has_a_hard_timeout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def timeout(*_args, **_kwargs):
+        raise subprocess.TimeoutExpired("schema-probe", 60)
+
+    monkeypatch.setattr(pair, "_run_process", timeout)
+
+    with pytest.raises(pair.PairRunError, match="tool-schema probe timed out"):
+        pair._probe_filesystem_tool_schema(Path("python"), tmp_path)
+
+
 def test_invoke_arm_sets_the_tool_cap_only_in_the_child_environment(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -415,6 +598,7 @@ def test_pair_runner_is_serial_counterbalanced_and_uses_fresh_outputs(
         model_label="gpt-5.4",
         effort="high",
         timeout=1200,
+        tool_schema_sha256=_TOOL_SCHEMA_SHA256,
     )
 
     assert calls == [
@@ -490,6 +674,7 @@ def test_tool_cap_result_records_a_signed_digest_bound_delta(
         model_label="gpt-5.4",
         effort="high",
         timeout=1200,
+        tool_schema_sha256=_TOOL_SCHEMA_SHA256,
         profile=pair.TOOL_CAP_PROFILE,
     )
 
@@ -537,6 +722,7 @@ def test_pair_runner_stops_before_the_next_arm_on_infrastructure_failure(
             model_label="gpt-5.4",
             effort="high",
             timeout=1200,
+            tool_schema_sha256=_TOOL_SCHEMA_SHA256,
         )
 
     assert calls == 1
@@ -564,6 +750,7 @@ def test_pair_runner_refuses_preexisting_fixture_backup(
             model_label="gpt-5.4",
             effort="high",
             timeout=1200,
+            tool_schema_sha256=_TOOL_SCHEMA_SHA256,
         )
 
 
@@ -616,6 +803,32 @@ def test_tool_cap_receipt_rejects_a_different_effective_config(tmp_path: Path) -
             effort="high",
             timeout=1200,
             expected_tool_cap=25_000,
+            expected_tool_schema_sha256=_TOOL_SCHEMA_SHA256,
+        )
+
+
+def test_tool_cap_receipt_rejects_tool_schema_drift(tmp_path: Path) -> None:
+    native = tmp_path / "native"
+    _write_native(
+        native,
+        task="legal_document/dispute_review",
+        arm="geode",
+        model="geode-gpt-5.4",
+        effort="high",
+        timeout=1200,
+        max_tool_result_tokens=25_000,
+    )
+
+    with pytest.raises(pair.PairRunError, match="runtime configuration mismatch"):
+        pair._native_receipt(
+            native,
+            task="legal_document/dispute_review",
+            arm="geode",
+            model="geode-gpt-5.4",
+            effort="high",
+            timeout=1200,
+            expected_tool_cap=25_000,
+            expected_tool_schema_sha256="d" * 64,
         )
 
 
@@ -728,6 +941,7 @@ def test_pair_runner_freezes_the_validated_run_spec(
     )
     monkeypatch.setattr(pair, "_run_tasks", lambda **_kwargs: None)
     monkeypatch.setattr(pair, "_python_preflight", lambda *_args: {"dependency_check": "pass"})
+    monkeypatch.setattr(pair, "_probe_filesystem_tool_schema", lambda *_args: _TOOL_SCHEMA_SHA256)
 
     pair.run_pair(
         run_spec_path=spec_path,
@@ -737,6 +951,8 @@ def test_pair_runner_freezes_the_validated_run_spec(
     )
 
     assert (output / "run-spec.json").read_bytes() == spec_path.read_bytes()
+    plan = json.loads((output / "runner-plan.json").read_text(encoding="utf-8"))
+    assert plan["tool_schema_sha256"] == _TOOL_SCHEMA_SHA256
 
 
 def test_pair_runner_preflights_before_creating_output_or_running_tasks(

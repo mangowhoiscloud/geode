@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hashlib
 import importlib
 import json
 import logging
@@ -55,6 +56,16 @@ class MCPMarkInfrastructureError(RuntimeError):
     """Fail-loud signal for an attempt whose cleanup/evidence boundary failed."""
 
     failure_class = "infrastructure_invalid"
+
+
+def _tool_schema_sha256(tool_schemas: list[dict[str, Any]]) -> str:
+    """Digest the order-independent raw MCP ``list_tools`` response."""
+    schemas = sorted(
+        json.dumps(schema, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        for schema in tool_schemas
+    )
+    encoded = ("[" + ",".join(schemas) + "]").encode()
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def _kill_process_tree(process: Any) -> None:
@@ -546,7 +557,7 @@ class GeodeMCPMarkAgent(BaseMCPAgent):
         from core.config import settings
         from core.orchestration.tool_offload import get_offload_store
 
-        runtime_config = {
+        runtime_config: dict[str, Any] = {
             "max_tool_result_tokens": settings.max_tool_result_tokens,
             "offload_store_bound": get_offload_store() is not None,
         }
@@ -564,6 +575,7 @@ class GeodeMCPMarkAgent(BaseMCPAgent):
                 mcp_server = await self._create_mcp_server()
                 await mcp_server.__aenter__()
                 tool_schemas = await mcp_server.list_tools()
+                runtime_config["tool_schema_sha256"] = _tool_schema_sha256(tool_schemas)
                 tools = [
                     MCPMarkGeodeTool(mcp_server=mcp_server, schema=schema)
                     for schema in tool_schemas

@@ -222,6 +222,51 @@ def test_geode_mcpmark_deadline_includes_mcp_startup(monkeypatch, tmp_path) -> N
     assert trajectory["integrity"]["scope_complete"] is False
 
 
+def test_geode_mcpmark_receipt_binds_the_raw_tool_schema(monkeypatch, tmp_path) -> None:
+    from plugins.benchmark_harness.mcpmark_geode_agent import _tool_schema_sha256
+
+    schemas = [{"name": "read", "inputSchema": {"type": "object"}}]
+
+    class MCPServer:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def list_tools(self):
+            return schemas
+
+    class Loop:
+        cognitive_state = SimpleNamespace(round_count=1)
+        _tool_processor = SimpleNamespace(tool_log=[])
+
+        async def arun(self, _instruction):
+            await asyncio.Event().wait()
+
+        def _terminal_result(self, reason, text, *, rounds, error, tool_calls):
+            return SimpleNamespace(
+                text=text,
+                rounds=rounds,
+                error=str(reason),
+                termination_reason=reason,
+                tool_calls=tool_calls,
+                usage=None,
+            )
+
+        async def amark_session_error(self):
+            return None
+
+    monkeypatch.setattr("core.orchestration.tool_offload.get_offload_store", lambda: None)
+    agent = _geode_agent_for_execute(monkeypatch, Loop(), mcp_server=MCPServer())
+    log_path = tmp_path / "geode-tool-calls.json"
+
+    asyncio.run(agent.execute("task", str(log_path)))
+
+    receipt = json.loads((tmp_path / "execution.deadline.json").read_text())
+    assert receipt["runtime_config"]["tool_schema_sha256"] == _tool_schema_sha256(schemas)
+
+
 def test_geode_mcpmark_finalization_grace_is_infrastructure_invalid(monkeypatch) -> None:
     class MCPServer:
         exited = False
