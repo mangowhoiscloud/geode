@@ -111,12 +111,15 @@ def _fixture(category: str = "desktop") -> dict[str, object]:
         "categories": [
             {
                 "category": category,
+                "directory_count": 1,
                 "file_count": 1,
                 "bytes": 1,
                 "sha256": "a" * 64,
+                "semantic_sha256": "c" * 64,
             }
         ],
         "aggregate_sha256": "b" * 64,
+        "semantic_aggregate_sha256": "d" * 64,
     }
 
 
@@ -253,10 +256,42 @@ def test_filesystem_30_order_and_hash_are_frozen() -> None:
         for index, task in enumerate(pair.TOOL_CAP_IDS, start=1)
         for _label, cap in pair._tool_cap_arm_order(index, repetition)
     ]
+    pair_schedule = pair._execution_schedule(pair.PAIR_PROFILE, ("desktop/first",))
+    assert [(row[4], row[5]) for row in pair_schedule] == [
+        ("geode", pair.PAIR_MAX_TOOL_RESULT_TOKENS),
+        ("codex", None),
+    ]
     patch = Path(pair.__file__).with_name("patches") / (
         "mcpmark-cd45b7f-filesystem-standard-verifier-missing-output.patch"
     )
     assert pair._sha256(patch) == pair.PATCH_SHA256
+
+
+def test_fixture_semantic_digest_covers_mtime_and_empty_directories(tmp_path: Path) -> None:
+    fixture = tmp_path / "fixture"
+    fixture.mkdir()
+    source = fixture / "source.txt"
+    source.write_text("same bytes", encoding="utf-8")
+    os.utime(source, ns=(1_700_000_000_000_000_000,) * 2)
+    original = pair._tree_row(fixture, category="fixture")
+    assert original["directory_count"] == 1
+
+    original_mode = fixture.stat().st_mode & 0o7777
+    os.chmod(fixture, 0o700 if original_mode != 0o700 else 0o755)
+    changed_root_mode = pair._tree_row(fixture, category="fixture")
+    assert changed_root_mode["sha256"] == original["sha256"]
+    assert changed_root_mode["semantic_sha256"] != original["semantic_sha256"]
+    os.chmod(fixture, original_mode)
+
+    os.utime(source, ns=(1_700_000_001_000_000_000,) * 2)
+    changed_mtime = pair._tree_row(fixture, category="fixture")
+    assert changed_mtime["sha256"] == original["sha256"]
+    assert changed_mtime["semantic_sha256"] != original["semantic_sha256"]
+
+    (fixture / "empty").mkdir()
+    changed_structure = pair._tree_row(fixture, category="fixture")
+    assert changed_structure["directory_count"] == 2
+    assert changed_structure["semantic_sha256"] != changed_mtime["semantic_sha256"]
 
 
 def test_verifier_patch_applies_to_exact_preimages_and_compiles(tmp_path: Path) -> None:
@@ -366,7 +401,7 @@ def test_tool_cap_spec_freezes_model_budget_and_diagnostic_authority(
     assert (
         pair._validate_tool_cap_spec(
             tmp_path / "run-spec.json",
-            fixture_sha256="a" * 64,
+            fixture_semantic_sha256="a" * 64,
         )
         is spec
     )
@@ -375,7 +410,7 @@ def test_tool_cap_spec_freezes_model_budget_and_diagnostic_authority(
     with pytest.raises(pair.PairRunError, match=r"GPT-5\.4/high"):
         pair._validate_tool_cap_spec(
             tmp_path / "run-spec.json",
-            fixture_sha256="a" * 64,
+            fixture_semantic_sha256="a" * 64,
         )
 
     spec["reproduction"]["model"]["reasoning"] = "high"
@@ -385,7 +420,7 @@ def test_tool_cap_spec_freezes_model_budget_and_diagnostic_authority(
         with pytest.raises(pair.PairRunError, match="frozen primary metric"):
             pair._validate_tool_cap_spec(
                 tmp_path / "run-spec.json",
-                fixture_sha256="a" * 64,
+                fixture_semantic_sha256="a" * 64,
             )
         spec["study"]["primary_metric"][field] = original
 
@@ -393,7 +428,7 @@ def test_tool_cap_spec_freezes_model_budget_and_diagnostic_authority(
     with pytest.raises(pair.PairRunError, match="frozen decision rule"):
         pair._validate_tool_cap_spec(
             tmp_path / "run-spec.json",
-            fixture_sha256="a" * 64,
+            fixture_semantic_sha256="a" * 64,
         )
 
     spec["study"]["decision_rule"] = (
@@ -414,9 +449,129 @@ def test_tool_cap_spec_freezes_model_budget_and_diagnostic_authority(
         with pytest.raises(pair.PairRunError, match=message):
             pair._validate_tool_cap_spec(
                 tmp_path / "run-spec.json",
-                fixture_sha256="a" * 64,
+                fixture_semantic_sha256="a" * 64,
             )
         target[field] = original
+
+
+def test_pair_spec_freezes_model_budget_metric_and_authority(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ids = ("desktop/first", "desktop/second")
+    spec = {
+        "preregistration": {"mode": "prospective"},
+        "study": pair._pair_study_contract(denominator=len(ids), smoke=False),
+        "reproduction": {
+            "execution": {
+                "timeout_seconds": 1200,
+                "seed_schedule": ["upstream-run-1"],
+                "budget": {"kind": "wall-time", "limit": 1200, "unit": "seconds"},
+            },
+            "model": {"label": "gpt-5.4", "reasoning": "high"},
+            "comparison": {
+                "claim_class": "diagnostic",
+                "comparator": pair.CODEX_COMPARATOR,
+                "comparability": "direct",
+                "promotion_authority": "none",
+            },
+        },
+    }
+    monkeypatch.setattr(pair, "_validate_spec", lambda *_args, **_kwargs: spec)
+
+    assert (
+        pair._validate_pair_spec(
+            tmp_path / "run-spec.json",
+            ids=ids,
+            fixture_semantic_sha256="a" * 64,
+            smoke=False,
+        )
+        is spec
+    )
+
+    spec["reproduction"]["comparison"]["promotion_authority"] = "paired-runtime"
+    with pytest.raises(pair.PairRunError, match="comparison contract"):
+        pair._validate_pair_spec(
+            tmp_path / "run-spec.json",
+            ids=ids,
+            fixture_semantic_sha256="a" * 64,
+            smoke=False,
+        )
+
+    spec["reproduction"]["comparison"]["promotion_authority"] = "none"
+    spec["study"]["analysis_plan"] = "changed after preregistration"
+    with pytest.raises(pair.PairRunError, match="frozen analysis plan"):
+        pair._validate_pair_spec(
+            tmp_path / "run-spec.json",
+            ids=ids,
+            fixture_semantic_sha256="a" * 64,
+            smoke=False,
+        )
+
+
+def test_pair_smoke_contract_uses_receipt_coverage() -> None:
+    contract = pair._pair_study_contract(denominator=1, smoke=True)
+    assert contract["primary_metric"] == {
+        "name": "accepted paired-task coverage",
+        "unit": "ratio",
+        "direction": "maximize",
+        "aggregation": "accepted paired tasks / 1",
+        "denominator": 1,
+    }
+
+
+def test_pair_full_contract_preserves_the_canonical_ten_point_threshold() -> None:
+    contract = pair._pair_study_contract(denominator=30, smoke=False)
+    assert contract["hypothesis"] == (
+        "Across the frozen 30-task workload, GEODE verifier accuracy is no more than 10 "
+        "percentage points below Codex verifier accuracy."
+    )
+    assert contract["decision_rule"] == (
+        "supported if the GEODE-minus-Codex verifier-pass-rate delta is at least -0.10; "
+        "not-supported if lower"
+    )
+    assert contract["primary_metric"] == {
+        "name": "GEODE minus Codex verifier-pass-rate delta",
+        "unit": "ratio",
+        "direction": "target",
+        "aggregation": "(sum(geode passes) - sum(codex passes)) / 30",
+        "denominator": 30,
+    }
+
+
+def test_codex_cli_preflight_binds_version_source_and_binary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    executable = tmp_path / "codex"
+    executable.write_bytes(b"frozen codex binary")
+    executable.chmod(0o755)
+    monkeypatch.setattr(pair.shutil, "which", lambda _name: str(executable))
+    monkeypatch.setattr(pair, "CODEX_CLI_EXECUTABLE_SHA256", pair._sha256(executable))
+    monkeypatch.setattr(
+        pair,
+        "_run_process",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess(
+            args=[], returncode=0, stdout=pair.CODEX_CLI_VERSION + "\n", stderr=""
+        ),
+    )
+
+    receipt, resolved = pair._codex_cli_preflight(tmp_path)
+    assert receipt == {
+        "command": "codex",
+        "version": pair.CODEX_CLI_VERSION,
+        "source_revision": pair.CODEX_CLI_SOURCE_REVISION,
+        "executable_sha256": pair._sha256(executable),
+    }
+    assert resolved == executable
+
+    monkeypatch.setattr(
+        pair,
+        "_run_process",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="codex-cli 0.146.0\n", stderr=""
+        ),
+    )
+    with pytest.raises(pair.PairRunError, match="must be exactly"):
+        pair._codex_cli_preflight(tmp_path)
 
 
 def test_spec_rejects_a_digest_outside_the_selected_profile(
@@ -434,7 +589,7 @@ def test_spec_rejects_a_digest_outside_the_selected_profile(
                 "timeout_seconds": 1200,
             },
             "harness": {"revision": f"harness+patch-sha256:{pair.PATCH_SHA256}"},
-            "environment": {"initial_state_ref": "fixture-tree-sha256:" + "a" * 64},
+            "environment": {"initial_state_ref": "fixture-semantic-sha256:" + "a" * 64},
             "model": {
                 "provider": "openai",
                 "route": "subscription",
@@ -457,7 +612,7 @@ def test_spec_rejects_a_digest_outside_the_selected_profile(
     )
 
     with pytest.raises(pair.PairRunError, match="workload digest"):
-        pair._validate_spec(tmp_path / "run-spec.json", ids=ids, fixture_sha256="a" * 64)
+        pair._validate_spec(tmp_path / "run-spec.json", ids=ids, fixture_semantic_sha256="a" * 64)
 
 
 def test_python_preflight_checks_clean_dependencies_and_source_imports(
@@ -557,6 +712,34 @@ def test_invoke_arm_sets_the_tool_cap_only_in_the_child_environment(
     assert os.environ.get("GEODE_MAX_TOOL_RESULT_TOKENS") == parent_value
 
 
+def test_invoke_arm_passes_the_frozen_codex_binary_only_to_codex(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured: dict[str, str] = {}
+    executable = tmp_path / "codex"
+
+    def run(command, **kwargs):
+        captured.update(kwargs["env"])
+        return pair.subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(pair.subprocess, "run", run)
+    pair._invoke_arm(
+        python=Path("python"),
+        mcpmark_root=tmp_path,
+        native_dir=tmp_path / "native",
+        log_dir=tmp_path / "logs",
+        task="desktop/task",
+        arm="codex",
+        model_label="gpt-5.4",
+        effort="high",
+        timeout=1200,
+        run_id="pair-test",
+        codex_executable=executable,
+    )
+
+    assert captured["GEODE_MCPMARK_CODEX_BIN"] == str(executable)
+
+
 def test_pair_runner_is_serial_counterbalanced_and_uses_fresh_outputs(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -590,6 +773,7 @@ def test_pair_runner_is_serial_counterbalanced_and_uses_fresh_outputs(
             model=f"{arm}-gpt-5.4",
             effort="high",
             timeout=1200,
+            max_tool_result_tokens=(kwargs["max_tool_result_tokens"] if arm == "geode" else None),
         )
         calls.append((task, arm))
         return 0, stdout, stderr
@@ -629,6 +813,69 @@ def test_pair_runner_is_serial_counterbalanced_and_uses_fresh_outputs(
         "geode": {"attempts": 2, "passes": 2},
     }
     assert result["source_events"]["sha256"] == pair._sha256(output / "runner-events.jsonl")
+    assert result["primary_metric"] == {
+        "name": "GEODE minus Codex verifier-pass-rate delta",
+        "value": 0.0,
+        "numerator": 0,
+        "denominator": 2,
+    }
+
+
+def test_pair_smoke_result_records_coverage_despite_different_verifier_scores(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output = tmp_path / "out"
+    output.mkdir()
+    root = tmp_path / "mcpmark"
+    (root / "test_environments/desktop").mkdir(parents=True)
+    monkeypatch.setattr(pair, "_tree_row", lambda *_args, **_kwargs: _fixture()["categories"][0])
+
+    def invoke(**kwargs: object) -> tuple[int, Path, Path]:
+        native_dir = kwargs["native_dir"]
+        log_dir = kwargs["log_dir"]
+        assert isinstance(native_dir, Path) and isinstance(log_dir, Path)
+        native_dir.mkdir(parents=True)
+        log_dir.mkdir(parents=True)
+        stdout = log_dir / "stdout.log"
+        stderr = log_dir / "stderr.log"
+        stdout.write_text("", encoding="utf-8")
+        stderr.write_text("", encoding="utf-8")
+        return 0, stdout, stderr
+
+    monkeypatch.setattr(pair, "_invoke_arm", invoke)
+    monkeypatch.setattr(
+        pair,
+        "_native_receipt",
+        lambda _path, **kwargs: {
+            "task_sha256": "a" * 64,
+            "verifier_pass": kwargs["arm"] == "geode",
+        },
+    )
+    pair._run_tasks(
+        output_dir=output,
+        mcpmark_root=root,
+        python=Path("python"),
+        ids=("desktop/task",),
+        fixture=_fixture(),
+        run_id="smoke-test",
+        model_label="gpt-5.4",
+        effort="high",
+        timeout=1200,
+        tool_schema_sha256=_TOOL_SCHEMA_SHA256,
+        profile=pair.PAIR_SMOKE_PROFILE,
+    )
+
+    result = json.loads((output / "runner-result.json").read_text(encoding="utf-8"))
+    assert result["arms"] == {
+        "codex": {"attempts": 1, "passes": 0},
+        "geode": {"attempts": 1, "passes": 1},
+    }
+    assert result["primary_metric"] == {
+        "name": "accepted paired-task coverage",
+        "value": 1.0,
+        "numerator": 1,
+        "denominator": 1,
+    }
 
 
 @pytest.mark.parametrize(
@@ -736,6 +983,52 @@ def test_pair_runner_stops_before_the_next_arm_on_infrastructure_failure(
     rows = [json.loads(line) for line in (output / "runner-events.jsonl").read_text().splitlines()]
     assert rows[-1]["event"] == "run_stopped"
     assert rows[-1]["failure_class"] == "infrastructure"
+
+
+def test_pair_runner_rejects_fixture_drift_after_the_last_arm(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output = tmp_path / "out"
+    output.mkdir()
+    root = tmp_path / "mcpmark"
+    (root / "test_environments/desktop").mkdir(parents=True)
+    baseline = _fixture()["categories"][0]
+    changed = {**baseline, "semantic_sha256": "e" * 64}
+    rows = iter((baseline, changed))
+    monkeypatch.setattr(pair, "_tree_row", lambda *_args, **_kwargs: next(rows))
+
+    def invoke(**kwargs: object) -> tuple[int, Path, Path]:
+        log_dir = kwargs["log_dir"]
+        assert isinstance(log_dir, Path)
+        log_dir.mkdir(parents=True)
+        stdout = log_dir / "stdout.log"
+        stderr = log_dir / "stderr.log"
+        stdout.write_text("", encoding="utf-8")
+        stderr.write_text("", encoding="utf-8")
+        return 0, stdout, stderr
+
+    monkeypatch.setattr(pair, "_invoke_arm", invoke)
+    monkeypatch.setattr(
+        pair,
+        "_native_receipt",
+        lambda *_args, **_kwargs: {"task_sha256": "a" * 64, "verifier_pass": True},
+    )
+
+    with pytest.raises(pair.PairRunError, match="changed during a paired arm"):
+        pair._run_tasks(
+            output_dir=output,
+            mcpmark_root=root,
+            python=Path("python"),
+            ids=("desktop/first",),
+            fixture=_fixture(),
+            run_id="paired-test",
+            model_label="gpt-5.4",
+            effort="high",
+            timeout=1200,
+            tool_schema_sha256=_TOOL_SCHEMA_SHA256,
+        )
+
+    assert not (output / "runner-result.json").exists()
 
 
 def test_pair_runner_refuses_preexisting_fixture_backup(
@@ -866,7 +1159,7 @@ def test_tool_cap_receipt_rejects_tool_schema_drift(tmp_path: Path) -> None:
         max_tool_result_tokens=25_000,
     )
 
-    with pytest.raises(pair.PairRunError, match="runtime configuration mismatch"):
+    with pytest.raises(pair.PairRunError, match="tool schema mismatch"):
         pair._native_receipt(
             native,
             task="legal_document/dispute_review",
@@ -975,7 +1268,7 @@ def test_pair_runner_freezes_the_validated_run_spec(
     monkeypatch.setattr(pair, "_fixture_receipt", lambda *_args: _fixture())
     monkeypatch.setattr(
         pair,
-        "_validate_spec",
+        "_validate_pair_spec",
         lambda *_args, **_kwargs: {
             "run_id": "paired-test",
             "reproduction": {
@@ -988,6 +1281,16 @@ def test_pair_runner_freezes_the_validated_run_spec(
     )
     monkeypatch.setattr(pair, "_run_tasks", lambda **_kwargs: None)
     monkeypatch.setattr(pair, "_python_preflight", lambda *_args: {"dependency_check": "pass"})
+    codex_cli = {
+        "version": pair.CODEX_CLI_VERSION,
+        "source_revision": pair.CODEX_CLI_SOURCE_REVISION,
+        "executable_sha256": "e" * 64,
+    }
+    monkeypatch.setattr(
+        pair,
+        "_codex_cli_preflight",
+        lambda *_args: (codex_cli, tmp_path / "codex"),
+    )
     monkeypatch.setattr(pair, "_probe_filesystem_tool_schema", lambda *_args: _TOOL_SCHEMA_SHA256)
 
     pair.run_pair(
@@ -995,11 +1298,16 @@ def test_pair_runner_freezes_the_validated_run_spec(
         mcpmark_root=tmp_path / "mcpmark",
         output_dir=output,
         python=Path("python"),
+        profile=pair.PAIR_SMOKE_PROFILE,
+        task="desktop/first",
     )
 
     assert (output / "run-spec.json").read_bytes() == spec_path.read_bytes()
     plan = json.loads((output / "runner-plan.json").read_text(encoding="utf-8"))
     assert plan["tool_schema_sha256"] == _TOOL_SCHEMA_SHA256
+    assert plan["profile"] == pair.PAIR_SMOKE_PROFILE
+    assert plan["workload_ids"] == ["desktop/first"]
+    assert plan["codex_cli"] == codex_cli
 
 
 def test_pair_runner_preflights_before_creating_output_or_running_tasks(
@@ -1013,7 +1321,7 @@ def test_pair_runner_preflights_before_creating_output_or_running_tasks(
     monkeypatch.setattr(pair, "_fixture_receipt", lambda *_args: _fixture())
     monkeypatch.setattr(
         pair,
-        "_validate_spec",
+        "_validate_pair_spec",
         lambda *_args, **_kwargs: {
             "reproduction": {
                 "execution": {"timeout_seconds": 1200},

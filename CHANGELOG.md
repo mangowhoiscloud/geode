@@ -78,6 +78,10 @@ functional change.
 
 ### Fixed
 
+- **MCPMark Filesystem-30 now binds score and semantic fixture state.** The
+  paired runner records its signed GEODE-minus-Codex verifier delta in the
+  native result, rejects fixture drift in file mtimes, modes, or empty
+  directories, and exposes a one-task paired smoke before the full run.
 - **MCPMark paired runs retain GEODE deadline failures as verifier outcomes.**
   The runner now recognizes GEODE's canonical `time_budget_expired` terminal
   only when the deadline receipt proves the arm was right-censored.
