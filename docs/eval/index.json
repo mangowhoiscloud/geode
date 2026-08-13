@@ -10,7 +10,7 @@
     "trajectory": "core/observability/schemas/trajectory.schema.json",
     "trajectory_release": "core/observability/schemas/trajectory-release.schema.json"
   },
-  "document_count": 14,
+  "document_count": 15,
   "documents": [
     {
       "id": "agent-world-comparison",
@@ -92,7 +92,7 @@
       "authority": "routing",
       "path": "docs/eval/README.md",
       "summary": "Machine and human entrypoint for GEODE evaluation contracts, benchmark ledgers, evidence, and publication.",
-      "sha256": "1e2a1b8dd3416b22571a7173919e3a40eb98b3aa49c6beed9fdef6211ac1f2ee",
+      "sha256": "38dbcd3f9fe47ecb7aa8f06bd0106401148903f39fa404c645947bd4ad5c5368",
       "triggers": [
         "artifact",
         "benchmark",
@@ -108,7 +108,7 @@
         "docs/eval/schemas/attempt.schema.json",
         "docs/eval/schemas/run-spec.schema.json"
       ],
-      "latest_valid_release": "https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/e5d442f25c9fb4861e28744dbe924a36325c746b/trajectories/mcpmark-geode-gpt54-high-mcpmark-filesystem-standard-gpt54-high-geode-codex--818b13fe1039-20260812T231820Z-ed26f124b9c7"
+      "latest_valid_release": "https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/17133f0c8e893b6d765fcef69712ba0867bd573a/trajectories/mcpmark-gate0b-gpt54-high-mcpmark-gate0b-tool-cap-gpt54-high-20260813t142345z-bcf57b5eee65-20260813T173103Z-bf8ad9ea9717"
     },
     {
       "id": "external-artifact-repository",
@@ -196,6 +196,31 @@
       ]
     },
     {
+      "id": "mcpmark-gate0b-tool-cap-gpt54-high-20260814",
+      "family": "mcpmark",
+      "title": "GPT-5.4 MCPMark Gate 0B — 25K tool-result guard ablation",
+      "kind": "ledger",
+      "status": "historical",
+      "authority": "paired-runtime-diagnostic",
+      "path": "docs/eval/2026-08-14-mcpmark-gate0b-tool-cap-gpt54-high.md",
+      "summary": "Prospective five-task k=3 ablation of GEODE's 25K MCP tool-result guard with GPT-5.4/high; unlimited-0 passed 10/15 versus guard-25000 7/15, for a diagnostic-only +0.20 delta.",
+      "sha256": "2864926ddf2614237e351bf9395d124e12fb753b505c7228d05ac512c1405ead",
+      "triggers": [
+        "GPT-5.4 benchmark",
+        "MCPMark Gate 0B",
+        "max tool result tokens",
+        "paired runtime diagnostic",
+        "tool-result guard"
+      ],
+      "contracts": [
+        "core/observability/schemas/trajectory-release.schema.json",
+        "core/observability/schemas/trajectory.schema.json",
+        "docs/eval/schemas/analysis.schema.json",
+        "docs/eval/schemas/attempt.schema.json",
+        "docs/eval/schemas/run-spec.schema.json"
+      ]
+    },
+    {
       "id": "mcpmark-geode-codex-gpt54-filesystem-standard-20260813",
       "family": "mcpmark",
       "title": "GPT-5.4 GEODE × Codex MCPMark filesystem/standard corrected observation",
@@ -252,7 +277,7 @@
       "authority": "execution-status",
       "path": "docs/eval/2026-08-13-sequential-agent-benchmark-plan.md",
       "summary": "Sequential execution SOT for the corrective MCPMark pair, tau2 base domains, MCPMark Verified, and Terminal-Bench 2.1.",
-      "sha256": "5a5fac8d6996aa0845fb2b8648524244f30c1cef82408e17d48f5bb465d4d889",
+      "sha256": "23dd3dcba3ae07406d94c252735b70fb9b151a644652e84c8236d8b225e01e7f",
       "triggers": [
         "MCPMark Verified",
         "MCPMark corrective pair",

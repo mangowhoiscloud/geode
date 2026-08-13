@@ -3799,6 +3799,27 @@ GEODE_MCPMARK_GITHUB_REPO_VISIBILITY=public \
 -   GitHub fixture repositories were made public during execution so the Docker GitHub MCP server could use normal public-repo semantics; all transient repos were deleted by cleanup.
 -   The filesystem score counts papers/author\_folders as a failed no-result transport run after two attempts without meta output.
 
+**filesystem/standard Gate 0B tool-result-cap diagnostic** · 2026-08-13–14 KST · gpt-5.4 · subscription · high
+
+<table><tbody><tr><td>Status</td><td><code>complete</code></td></tr><tr><td>Suite/domain</td><td><code>filesystem/standard targeted 5 tasks × 3 repetitions</code></td></tr><tr><td>Model</td><td><code>gpt-5.4</code></td></tr><tr><td>Provider</td><td><code>openai</code></td></tr><tr><td>Source</td><td><code>subscription</code></td></tr><tr><td>Effort</td><td><code>high</code></td></tr><tr><td>Route</td><td>GEODE AgenticLoop paired 25K and unlimited tool-result-cap arms</td></tr><tr><td>Harness</td><td><code>eval-sys/mcpmark@cd45b7f, GEODE@02f71fae</code></td></tr><tr><td>Diagnostic-only verifier pass rate</td><td><strong>25K 46.7% (7 / 15) · unlimited 66.7% (10 / 15) · Δ +20.0 pp</strong></td></tr><tr><td>Artifact</td><td><code>geode-eval-artifacts@17133f0c8e893b6d765fcef69712ba0867bd573a/mcpmark/results-paired/mcpmark-gate0b-tool-cap-gpt54-high-20260813t142345z</code></td></tr></tbody></table>
+
+-   Observed fresh input: 25K 3,782,288 vs unlimited 2,202,725; exact token coverage is 13 / 15 attempts per arm
+-   All-attempt action wall: 25K 6,076.699s vs unlimited 4,910.217s; runner envelopes 6,119.096s vs 4,951.086s
+-   All-attempt MCP calls/errors: 25K 443 / 75 vs unlimited 255 / 27
+-   Repeated read references: 25K 211 vs unlimited 63; tool-result truncations 15 vs 0
+-   Two score-bearing deadline expirations per arm emitted no native token usage
+
+```
+# Requires the pinned MCPMark checkout and verifier patch, frozen run spec,
+# isolated runtime home, and working GPT-5.4 subscription authentication.
+.venv/bin/python -m plugins.benchmark_harness.run_mcpmark_pair   --profile max-tool-result-tokens   --run-spec <frozen-run-spec.json>   --mcpmark-root artifacts/eval/harnesses/mcpmark   --output-dir <fresh-output-dir>   --python .venv/bin/python
+```
+
+-   The prospective hypothesis was supported, but promotion\_authority remains none.
+-   This five-task, three-repetition subset is diagnostic and is not an MCPMark suite headline.
+-   Token totals exclude the four timeout arms with empty native usage; wall time and MCP-call totals cover all 15 attempts per arm.
+-   The prior infrastructure-invalid run contributes no denominator, and scope-incomplete timeout trajectories remain withheld.
+
 **filesystem/standard GPT-5.4 GEODE × Codex corrected observation** · 2026-08-13 KST · gpt-5.4 · subscription · high
 
 <table><tbody><tr><td>Status</td><td><code>complete</code></td></tr><tr><td>Suite/domain</td><td><code>filesystem/standard</code></td></tr><tr><td>Model</td><td><code>gpt-5.4</code></td></tr><tr><td>Provider</td><td><code>openai / codex-cli</code></td></tr><tr><td>Source</td><td><code>subscription</code></td></tr><tr><td>Effort</td><td><code>high</code></td></tr><tr><td>Route</td><td>GEODE AgenticLoop and isolated Codex CLI paired by task</td></tr><tr><td>Harness</td><td><code>eval-sys/mcpmark@cd45b7f, GEODE@a8f45f3c9, Codex@dad1db87</code></td></tr><tr><td>Retrospective descriptive verifier outcomes</td><td><strong>GEODE 70.0% (21 / 30) · Codex 66.7% (20 / 30)</strong></td></tr><tr><td>Artifact</td><td><code>geode-eval-artifacts@e5d442f25c9fb4861e28744dbe924a36325c746b/mcpmark/results-paired/mcpmark-filesystem-standard-gpt54-high-geode-codex-k1-boundary-aligned-20260813</code></td></tr></tbody></table>
@@ -6060,7 +6081,7 @@ Tier 2  latex2sympy2 + sympy.pretty  블록 전용. 분수·적분을 2D Unicode
 URL: https://mangowhoiscloud.github.io/geode/docs/reference/changelog
 Markdown: https://mangowhoiscloud.github.io/geode/docs/reference/changelog.md
 
-(body omitted from llms-full: 1508 KB — fetch the Markdown twin above for the complete page)
+(body omitted from llms-full: 1509 KB — fetch the Markdown twin above for the complete page)
 
 ---
 

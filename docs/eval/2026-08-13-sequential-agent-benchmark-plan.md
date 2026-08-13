@@ -21,8 +21,9 @@ eval_contracts:
 # Sequential agent benchmark execution plan
 
 작성일: 2026-08-13
-기준 코드: GEODE `origin/main@dcfea18a88978bd1cbc374be5b8e60b3c982a371`
-상태: **Lane 0A main 반영 완료. Lane 0B runner local 검증 중. Live model call 전.**
+최종 갱신: 2026-08-14
+기준 코드: GEODE `origin/main@02f71fae260f050a5ab02af943cfd2244441da7f`
+상태: **Lane 0B complete · artifact published. Lane 0C next.**
 
 ## 1. 권한과 범위
 
@@ -48,6 +49,7 @@ eval_contracts:
 
 | 근거 | 현재 판정 | 다음에 닫을 GAP |
 |---|---|---|
+| [GPT-5.4 MCPMark Gate 0B tool-cap ablation](2026-08-14-mcpmark-gate0b-tool-cap-gpt54-high.md) | Prospective k=3 direct diagnostic: `guard-25000` 7/15, `unlimited-0` 10/15, signed delta +0.20 supported. Four matched score-bearing timeouts; token totals exact on 13/15 per arm only | Product-default change is not authorized; proceed to common-deadline FS30 k=1 |
 | [GPT-5.4 MCPMark FS30 observation](2026-08-13-mcpmark-geode-codex-gpt54-filesystem-standard.md) | GEODE 21/30, Codex 20/30. Timeout 시작 경계가 달라 retrospective description만 허용 | 동일 timed surface와 공개 runner |
 | GPT-5.4 Tau2 base 3-domain | `geode_agent + geode_user` 200/278 | native GPT-5.2-low user와 4 trials는 별도 official-profile 측정 |
 | MCPMark Verified | GEODE는 여러 service 경로가 있으나 Codex pair는 filesystem만 검증 | service canary, credential/reset, Codex service contract |
@@ -84,9 +86,9 @@ flowchart TD
 
 | Lane | 상태 | 다음 행동 | Exit gate |
 |---|---|---|---|
-| 0A Common deadline | **RELEASED-MAIN** | Gate 0B가 동일 receipt/deadline 계약을 재사용 | setup/action 경계 동일, timeout·cancel·cleanup tests PASS |
-| 0B Targeted ablation | **RUNNER-IMPLEMENTED · NO-LIVE-RUN** | CI/main 반영 후 prospective run spec을 실제 revision에 동결하고 30회 실행 | 30/30 valid attempts, artifact/trajectory complete |
-| 0C MCPMark FS30 | PENDING | GPT-5.4/high one-task smoke 후 30-task k=1 | 60 native receipts, exact task/reset/verifier joins, infra 0 |
+| 0A Common deadline | **COMPLETE · MAIN** | None; contract is the basis for 0B/0C | setup/action boundary, timeout·cancel·cleanup tests and no-model preflight PASS |
+| 0B Targeted ablation | **COMPLETE · PUBLISHED** | Preserve 7/15 vs 10/15 as diagnostic-only; no cap-default change | 30/30 valid arms, primary +3/15 = +0.20 supported, six releases/26 admitted trajectories, four timeout trajectories withheld |
+| 0C MCPMark FS30 | **NEXT** | GPT-5.4/high one-task smoke, then fresh 30-task k=1 | 60 native receipts, exact task/reset/verifier joins, infrastructure errors 0 |
 | 1 Tau2 base | BLOCKED-LIVE | 278 IDs/pin/user/budget no-model preflight | PAYG 승인 뒤 smoke→full-1→4 trials |
 | 2 MCPMark Verified | PENDING | service별 no-model canary | FS30 pair와 full127 headline 분리 |
 | 3 Terminal-Bench 2.1 | PENDING | 2.1 profile 정렬·oracle smoke | adapter/evidence path clean 후 89 tasks |
@@ -194,6 +196,24 @@ Arm order까지 포함한 exact matrix는 다음과 같다. 각 셀은 독립 pr
 이번 run에서 구현하거나 prompt로 흉내 내지 않고, 독립 intervention 계약과
 제품 변경 필요성이 생길 때만 후속 실험으로 연다.
 
+Gate 0B는 2026-08-14 완료됐다. 같은 다섯 task를 arm별 k=3로 실행한 결과
+`guard-25000`은 7/15, `unlimited-0`은 10/15였고 frozen primary delta는
+`(10-7)/15 = +0.20`이므로 diagnostic hypothesis는 supported다. Paired bucket은
+`both-pass=7`, `both-fail=5`, `unlimited-only=3`, `guard-only=0`이다.
+
+Secondary full-arm behavior도 unlimited 쪽이 짧았다: action wall
+6,076.699→4,910.217초, MCP calls 443→255, errors 75→27, repeated reads
+211→63, truncations 15→0. 다만 `author_folders` repetition 2·3의 양 arm에서
+발생한 네 1,200초 score-bearing timeout은 native token usage를 완성하지 못했다.
+따라서 token 합계는 arm별 exact 13/15에만 적용하며, 제품 기본 cap 변경이나
+MCPMark headline 승격 권한은 없다.
+
+선택된 current attempt는 valid/mixed이며 30/30 arms를 완료했다. 앞선 별도 run
+ID의 attempt-000은 timeout outcome classification 결함으로 sequence 14에서
+중단된 infrastructure-invalid lineage이고 current denominator 기여는 0이다.
+공개 artifact: `mangowhoiscloud/geode-eval-artifacts@17133f0c8e893b6d765fcef69712ba0867bd573a`의
+`mcpmark/results-paired/mcpmark-gate0b-tool-cap-gpt54-high-20260813t142345z/`.
+
 ### 5.5 Gate 0C — corrective FS30
 
 1. 한 frozen task를 양 arm에서 실행해 identity/reset/verifier/trajectory를 확인한다.
@@ -290,6 +310,7 @@ Invalid/aborted attempt가 선택되면 primary metric은 `not-measurable`이다
 
 | Date | Change |
 |---|---|
+| 2026-08-14 | Gate 0B prospective k=3 완료·게시: `guard-25000` 7/15 대 `unlimited-0` 10/15, primary +3/15=+0.20 supported diagnostic-only. Four matched score-bearing timeouts, exact token coverage 13/15 per arm, prior invalid attempt denominator 0, six reviewed releases/26 admitted trajectories 보존. Lane 0C를 NEXT로 승격 |
 | 2026-08-13 | Gate 0B runner implementation: 기존 serial runner에 5-task×2-cap×3-repeat profile, effective cap/offload receipt, direct `CallToolResult` truncation reconstruction, dependency/import preflight를 연결. Live run과 score/artifact는 아직 없음 |
 | 2026-08-13 | Gate 0A main release: PR #2973 구현을 PR #2975로 main에 승격 |
 | 2026-08-13 | Gate 0A local exit: 독립 안전 검토의 partial MCP enter, Codex descendant cleanup, late-return expiry, GEODE right-censor trajectory 4개 P1을 모두 수정. Adapter/runner 42 tests, 전체 CI mirror 10,471 passed/22 skipped, coverage 81.17%, Ruff/mypy/import/baseline/site gate 통과 |
