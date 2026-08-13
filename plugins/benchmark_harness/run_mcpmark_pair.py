@@ -577,13 +577,7 @@ def _native_receipt(
         raise PairRunError("native verifier raised instead of returning a semantic outcome")
     if "Traceback (most recent call last):" in str(result.get("verification_error") or ""):
         raise PairRunError("native verifier emitted an exception traceback")
-    allowed_agent_errors = {
-        f"GEODE exceeded MCPMark action deadline ({timeout}s)",
-        f"codex exec exceeded MCPMark action deadline ({timeout}s)",
-    }
     agent_error = result.get("error_message")
-    if agent_error not in (None, "") and agent_error not in allowed_agent_errors:
-        raise PairRunError("native agent error lacks a score-bearing failure class")
     model_config = summary.get("model_config")
     successful_tasks = summary.get("successful_tasks")
     failed_tasks = summary.get("failed_tasks")
@@ -621,6 +615,18 @@ def _native_receipt(
         expected_tool_cap=expected_tool_cap,
         expected_tool_schema_sha256=expected_tool_schema_sha256,
     )
+    timeout_errors = {
+        "geode": {
+            "time_budget_expired",
+            f"GEODE exceeded MCPMark action deadline ({timeout}s)",
+        },
+        "codex": {f"codex exec exceeded MCPMark action deadline ({timeout}s)"},
+    }
+    if (
+        deadline["expired"]
+        and (not isinstance(agent_error, str) or agent_error not in timeout_errors.get(arm, set()))
+    ) or (not deadline["expired"] and agent_error not in (None, "")):
+        raise PairRunError("native agent error lacks a score-bearing failure class")
     try:
         trajectory_integrity = verify_trajectory_integrity(trajectory)
     except (KeyError, TypeError, ValueError) as exc:
