@@ -1,5 +1,9 @@
 # 리더보드 정렬형 agent benchmark 실행 계획
 
+> **Historical design evidence.** 현재 실행 순서·게이트·상태는
+> [`2026-08-13-sequential-agent-benchmark-plan.md`](../eval/2026-08-13-sequential-agent-benchmark-plan.md)가
+> 소유한다. 이 문서는 당시의 모델·리더보드 정렬 근거로 보존한다.
+
 작성일: 2026-08-12  
 기준 코드: GEODE `origin/develop@249cd16c2`  
 상태: 실행 전 계약 확정. 유료·구독 호출은 아직 시작하지 않음.

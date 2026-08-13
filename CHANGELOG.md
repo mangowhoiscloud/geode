@@ -64,8 +64,11 @@ functional change.
   that shares MCPMark's pinned task setup and official verifier with GEODE,
   while isolating user configuration and preserving both native exec JSONL and
   schema-validated trajectory sidecars for direct harness diagnostics on
-  ChatGPT subscription models. The setup manifest now installs GEODE into the
-  MCPMark venv so live runs cannot fail on missing runtime dependencies.
+  ChatGPT subscription models. A fail-closed serial runner now freezes the
+  Filesystem-30 workload, fixture, verifier patch, arm order, and per-arm
+  deadline receipts before accepting a paired result. The setup manifest now
+  installs GEODE into the MCPMark venv so live runs cannot fail on missing
+  runtime dependencies.
 
 ### Fixed
 
@@ -73,15 +76,15 @@ functional change.
   Small-context models use the lower limit, while a non-positive global limit
   remains an explicit opt-out.
 - **MCPMark now separates infrastructure failures from verifier scores.** The
-  GEODE arm bounds model/tool execution with the configured task timeout, retries
-  reasoning-only empty subscription responses through the existing loop, and
-  propagates escaped runtime errors to the harness instead of verifying partial
-  state as a semantic task failure. The registered evaluator attempts fixture
-  cleanup before re-raising those errors. MCP startup and result finalization
-  remain outside that execution timer and are reported as a comparison
-  limitation. A killed Codex process may leave one partial final JSONL record;
-  timeout reporting now preserves earlier complete records instead of turning
-  that expected tail into a parser exception, and bounds post-kill reaping.
+  GEODE and Codex arms now share one absolute deadline from adapter entry through
+  native runtime return, including MCP startup or process spawn. Cleanup uses a
+  separate bounded grace and emits an immutable deadline receipt; cleanup or
+  evidence failure invalidates the attempt instead of becoming a verifier zero.
+  The GEODE arm retries reasoning-only empty subscription responses through the
+  existing loop and propagates escaped runtime errors to the harness. A killed
+  Codex process may leave one partial final JSONL record; timeout reporting
+  preserves earlier complete records instead of turning that expected tail into
+  a parser exception.
 - **Convergence detection counts failed observation rounds, not calls.** A
   parallel tool batch now contributes one input-aware error fingerprint, and a
   successful or mixed round resets the streak. This prevents one failed batch
