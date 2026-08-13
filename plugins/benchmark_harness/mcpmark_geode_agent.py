@@ -106,9 +106,10 @@ def _write_deadline_receipt(
     cleanup_error: MCPMarkInfrastructureError | None,
     evidence_status: str,
     started_at: float,
+    runtime_config: dict[str, Any] | None = None,
 ) -> Path:
     """Atomically publish one immutable deadline receipt beside the native log."""
-    receipt = {
+    receipt: dict[str, Any] = {
         "schema_id": "geode.mcpmark.execution_deadline@1",
         "arm": arm,
         "timeout_owner": "adapter",
@@ -134,6 +135,8 @@ def _write_deadline_receipt(
         "started_at_unix_seconds": started_at,
         "finished_at_unix_seconds": time.time(),
     }
+    if runtime_config is not None:
+        receipt["runtime_config"] = runtime_config
     target = Path(tool_call_log_file).with_name("execution.deadline.json")
     temporary = target.with_name(f".{target.name}.{os.getpid()}.{time.time_ns()}.tmp")
     try:
@@ -540,6 +543,13 @@ class GeodeMCPMarkAgent(BaseMCPAgent):
         self._reset_progress()
         self._refresh_service_config()
         model, provider, source = _route_from_model(self.litellm_input_model_name)
+        from core.config import settings
+        from core.orchestration.tool_offload import get_offload_store
+
+        runtime_config = {
+            "max_tool_result_tokens": settings.max_tool_result_tokens,
+            "offload_store_bound": get_offload_store() is not None,
+        }
         loop: Any | None = None
         mcp_server: Any | None = None
         result: Any | None = None
@@ -706,6 +716,7 @@ class GeodeMCPMarkAgent(BaseMCPAgent):
                         else trajectory_status
                     ),
                     started_at=start_time,
+                    runtime_config=runtime_config,
                 )
             except MCPMarkInfrastructureError as exc:
                 evidence_error = exc

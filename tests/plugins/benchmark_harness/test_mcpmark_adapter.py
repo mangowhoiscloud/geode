@@ -182,6 +182,11 @@ def test_geode_mcpmark_timeout_is_a_performance_outcome(monkeypatch) -> None:
 
 
 def test_geode_mcpmark_deadline_includes_mcp_startup(monkeypatch, tmp_path) -> None:
+    from core.config import settings
+
+    monkeypatch.setattr(settings, "max_tool_result_tokens", 12_345)
+    monkeypatch.setattr("core.orchestration.tool_offload.get_offload_store", lambda: None)
+
     class MCPServer:
         exited = False
 
@@ -209,6 +214,10 @@ def test_geode_mcpmark_deadline_includes_mcp_startup(monkeypatch, tmp_path) -> N
     assert receipt["action_status"] == "right_censored"
     assert receipt["cleanup_status"] == "complete"
     assert receipt["evidence_status"] == "written"
+    assert receipt["runtime_config"] == {
+        "max_tool_result_tokens": 12_345,
+        "offload_store_bound": False,
+    }
     trajectory = json.loads(Path(result["geode_trajectory"]).read_text())
     assert trajectory["integrity"]["scope_complete"] is False
 

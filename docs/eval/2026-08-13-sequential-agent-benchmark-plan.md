@@ -21,8 +21,8 @@ eval_contracts:
 # Sequential agent benchmark execution plan
 
 작성일: 2026-08-13
-기준 코드: GEODE `origin/main@72c65f5084db39a618c17d2ae3ff5811537334cb`
-상태: **Lane 0A local gate 통과·PR 준비 중. Live model call 전.**
+기준 코드: GEODE `origin/main@dcfea18a88978bd1cbc374be5b8e60b3c982a371`
+상태: **Lane 0A main 반영 완료. Lane 0B runner local 검증 중. Live model call 전.**
 
 ## 1. 권한과 범위
 
@@ -84,8 +84,8 @@ flowchart TD
 
 | Lane | 상태 | 다음 행동 | Exit gate |
 |---|---|---|---|
-| 0A Common deadline | **LOCAL-VERIFIED · PR-PENDING** | PR CI 통과 후 `develop`→`main` 승격 | setup/action 경계 동일, timeout·cancel·cleanup tests PASS |
-| 0B Targeted ablation | **SPEC-FROZEN · WAITING-0A** | 기존 설정으로 가능한 5-task `25K` 대 `unlimited(0)`만 k=3 실행 | 30/30 valid attempts, artifact/trajectory complete |
+| 0A Common deadline | **RELEASED-MAIN** | Gate 0B가 동일 receipt/deadline 계약을 재사용 | setup/action 경계 동일, timeout·cancel·cleanup tests PASS |
+| 0B Targeted ablation | **RUNNER-IMPLEMENTED · NO-LIVE-RUN** | CI/main 반영 후 prospective run spec을 실제 revision에 동결하고 30회 실행 | 30/30 valid attempts, artifact/trajectory complete |
 | 0C MCPMark FS30 | PENDING | GPT-5.4/high one-task smoke 후 30-task k=1 | 60 native receipts, exact task/reset/verifier joins, infra 0 |
 | 1 Tau2 base | BLOCKED-LIVE | 278 IDs/pin/user/budget no-model preflight | PAYG 승인 뒤 smoke→full-1→4 trials |
 | 2 MCPMark Verified | PENDING | service별 no-model canary | FS30 pair와 full127 headline 분리 |
@@ -154,18 +154,20 @@ Stage-3 verifier는 공통 action deadline 밖에 있으며 별도 receipt로 �
 
 | Axis | Frozen value |
 |---|---|
-| Question | 같은 대형 MCP result task에서 25K guard를 제거하면 verifier accuracy와 재독·fresh input·wall이 어떻게 변하는가? |
-| Hypothesis | `unlimited(0)`의 15개 task-repetition verifier pass가 `25K`보다 많다. |
+| Question | `Does removing the 25K tool-result guard on the same large-result MCP tasks increase verifier accuracy and change rereads, fresh input tokens, and wall time?` |
+| Hypothesis | `Across 15 task-repetitions per arm, unlimited-0 produces more verifier passes than guard-25000.` |
 | Tasks, ordered | `legal_document/dispute_review`, `legal_document/individual_comments`, `legal_document/solution_tracing`, `papers/author_folders`, `papers/organize_legacy_papers` |
 | Workload SHA-256 | compact ordered JSON `b0953abbe11808bd25a03ef97355380ae2a58f0086025cd2557f1cacf32f3a00` |
 | Arm A | GEODE GPT-5.4/high/subscription; `GEODE_MAX_TOOL_RESULT_TOKENS=25000` |
 | Arm B | 같은 route; `GEODE_MAX_TOOL_RESULT_TOKENS=0` |
 | Replication | task별 arm당 3개의 fresh attempt, labels `upstream-run-1..3`: `5 tasks × 2 arms × k=3 = 30` |
 | Order | repetition별 task 순서는 고정하고, task index와 repetition parity로 선행 arm을 교대한다. Arm 간 fixture·session·process를 재사용하지 않는다. |
-| Constants | Gate 0A의 1,200초 action deadline, harness/task tree/verifier patch, instruction, schema, reset, model, effort를 동일하게 고정한다. MCPMark adapter에는 offload store가 없음을 receipt에 기록한다. |
-| Primary | task-repetition verifier pass의 arm delta, 분모 15 per arm |
+| Constants | Gate 0A의 1,200초 action deadline, `budget={"kind":"wall-time","limit":1200,"unit":"seconds"}`, harness/task tree/verifier patch, instruction, schema, reset, model, effort를 동일하게 고정한다. MCPMark adapter에는 offload store가 없음을 receipt에 기록한다. |
+| Primary | `verifier-pass-rate arm delta`, unit `ratio`, direction `target`, aggregation `(sum(unlimited-0 passes) - sum(guard-25000 passes)) / 15`, denominator `15` |
 | Secondary | cache-excluded input, output/reasoning, wall, MCP calls/errors, repeated read references, truncation count |
-| Decision | Arm B pass가 Arm A보다 많으면 hypothesis를 `supported`, 같으면 `mixed`, 적으면 `unsupported`로 기록한다. Secondary metric은 원인 설명만 하며 판정을 뒤집지 않는다. |
+| Decision | `supported if unlimited-0 passes exceed guard-25000 passes; mixed if equal; not-supported if lower` |
+| Invalidation | `Invalidate the run if any attempt changes the frozen deadline or identity contract, cannot bind the arm cap or reconstruct truncation, fails fixture cleanup or reset, lacks native result, verifier, or trajectory evidence, or exits on an unrecovered provider quota or transport error.` |
+| Analysis | `Select all 30 fresh attempts; compute the signed verifier-pass-rate arm delta as (unlimited-0 passes - guard-25000 passes) / 15; report secondary token, wall-time, MCP call/error, reread, and truncation metrics for explanation only; preserve infrastructure-invalid attempts and do not replace or score them.` |
 | Authority | diagnostic only; `promotion_authority=none` |
 
 Arm order까지 포함한 exact matrix는 다음과 같다. 각 셀은 독립 process 두 개이며
@@ -250,6 +252,7 @@ network, timeout, attempts가 같기 전에는 direct comparison이 아니다.
 각 score-bearing run은 model call 전에 `run-spec.json`을 동결하고 다음을 남긴다.
 
 - append-only `attempts.jsonl`
+- digest-bound native `runner-result.json`
 - native harness result와 verifier/state receipt
 - normalized trajectory release와 manifest
 - workload, reset, tool-schema, runner digests
@@ -287,6 +290,8 @@ Invalid/aborted attempt가 선택되면 primary metric은 `not-measurable`이다
 
 | Date | Change |
 |---|---|
+| 2026-08-13 | Gate 0B runner implementation: 기존 serial runner에 5-task×2-cap×3-repeat profile, effective cap/offload receipt, direct `CallToolResult` truncation reconstruction, dependency/import preflight를 연결. Live run과 score/artifact는 아직 없음 |
+| 2026-08-13 | Gate 0A main release: PR #2973 구현을 PR #2975로 main에 승격 |
 | 2026-08-13 | Gate 0A local exit: 독립 안전 검토의 partial MCP enter, Codex descendant cleanup, late-return expiry, GEODE right-censor trajectory 4개 P1을 모두 수정. Adapter/runner 42 tests, 전체 CI mirror 10,471 passed/22 skipped, coverage 81.17%, Ruff/mypy/import/baseline/site gate 통과 |
 | 2026-08-13 | Gate 0A local implementation: 공통 absolute deadline, bounded cleanup, immutable receipt, 공개 FS30 serial runner와 regression tests 추가. 병합·no-model preflight 전에는 live call 금지 |
 | 2026-08-13 | Gate 0B code-surface audit: 현재 실행 가능한 arm을 `25K` 대 `unlimited(0)` 30회로 동결하고, offload/chunk/re-read 제안은 비존재 intervention으로 보류 |
