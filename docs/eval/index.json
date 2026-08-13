@@ -10,7 +10,7 @@
     "trajectory": "core/observability/schemas/trajectory.schema.json",
     "trajectory_release": "core/observability/schemas/trajectory-release.schema.json"
   },
-  "document_count": 13,
+  "document_count": 14,
   "documents": [
     {
       "id": "agent-world-comparison",
@@ -92,7 +92,7 @@
       "authority": "routing",
       "path": "docs/eval/README.md",
       "summary": "Machine and human entrypoint for GEODE evaluation contracts, benchmark ledgers, evidence, and publication.",
-      "sha256": "eda764c3458f17e739a288baceb20f3ae3b48210bc2b90caea82f267fd680348",
+      "sha256": "1e2a1b8dd3416b22571a7173919e3a40eb98b3aa49c6beed9fdef6211ac1f2ee",
       "triggers": [
         "artifact",
         "benchmark",
@@ -242,6 +242,30 @@
         "core/observability/schemas/trajectory.schema.json"
       ],
       "latest_valid_release": "https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/2c2d1f0621f64ff7ceeff8c05d8ebd3449501aaf/trajectories/mcpmark-geode-gpt54-high-token-efficiency-rerun-filesystem-easy-20260812T090254Z-35db8b275a36"
+    },
+    {
+      "id": "sequential-agent-benchmark-plan-20260813",
+      "family": "sequential-agent-benchmark-execution",
+      "title": "Sequential agent benchmark execution plan",
+      "kind": "workflow",
+      "status": "canonical",
+      "authority": "execution-status",
+      "path": "docs/eval/2026-08-13-sequential-agent-benchmark-plan.md",
+      "summary": "Sequential execution SOT for the corrective MCPMark pair, tau2 base domains, MCPMark Verified, and Terminal-Bench 2.1.",
+      "sha256": "98aa23458ba33d42c508638c2301f2f9a0037164bcbd9a096a5675dd70016dd0",
+      "triggers": [
+        "MCPMark Verified",
+        "MCPMark corrective pair",
+        "Terminal-Bench 2.1",
+        "benchmark queue",
+        "tau2 three-domain"
+      ],
+      "contracts": [
+        "docs/eval/agent-world-comparison-contract.md",
+        "docs/eval/schemas/analysis.schema.json",
+        "docs/eval/schemas/attempt.schema.json",
+        "docs/eval/schemas/run-spec.schema.json"
+      ]
     },
     {
       "id": "tau2-bench",

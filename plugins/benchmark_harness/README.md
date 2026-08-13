@@ -47,3 +47,17 @@ Use `--agent geode --models geode-gpt-5.4` for GEODE or
 `--agent codex --models codex-gpt-5.4` for the isolated Codex CLI arm. The Codex
 adapter currently accepts only `--mcp filesystem`; other services remain out of
 scope until this paired diagnostic shows a real need.
+
+For the fail-closed Filesystem-30 pair, freeze and validate a run spec first,
+then point the public serial runner at a **new** output path:
+
+```bash
+python -m plugins.benchmark_harness.run_mcpmark_pair \
+  --run-spec <run-spec.json> --mcpmark-root <pinned-mcpmark> \
+  --output-dir <fresh-attempt-root> --python <mcpmark-python>
+```
+
+The spec's `initial_state_ref` must be
+`fixture-tree-sha256:c8cfb2815f63ded54a7d79ffed2e0719190bb2dc1e571112a6012f97f95e9f17`.
+A mismatch stops before any model call; a retry uses a new attempt root rather
+than resuming native output.

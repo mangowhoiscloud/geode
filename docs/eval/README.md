@@ -145,18 +145,11 @@ Agent-World 비교 정본: [agent-world-comparison-contract.md](agent-world-comp
 
 ## 다음 측정 큐
 
-현재 남은 agentic tool-use benchmark는 아래 순서로 진행한다. 사용자가
-`tau2-bench`를 2순위로 올리도록 지정했으므로, BFCL V4는 tau2 smoke와
-Telecom small run 이후로 둔다.
-
-| 순위 | 벤치 | 첫 목표 | 완료 기준 |
-|---:|---|---|---|
-| 1 | MCPMark Verified | 완료: available standard 64/74; GPT-5.4/high GEODE × Codex filesystem/standard descriptive observation 21/30 vs 20/30, prospective timeout claim invalidated | 동일 timeout boundary와 공개 runner를 갖춘 새 pair를 사전등록하고, single-service observation과 127-task leaderboard를 분리 기록 |
-| 2 | τ²-bench | 완료: GPT-5.4 `geode_agent + geode_user` base full cycle 200/278; v1.0.12 failure smokes도 별도 보존 | 세 domain result와 51,985-event trajectory release를 보존하고, native-user headline과 분리해 public page에 명시 |
-| 3 | BFCL V4 | Agentic subset first | native/prompt function-calling route와 aggregation을 고정한 뒤 result/score artifact 보존 |
-| 4 | HAL Reliability | tau-bench airline single-rerun smoke | τ² adapter 재사용 여부와 rerun consistency schema 확인 |
-| 5 | Terminal-Bench 2.0 | 1-task Docker/tmux smoke | post-run test artifact와 shell transcript 보존 |
-| 6 | Toolathlon | credential-free or lowest-credential smoke | MCP app surface, turn cap, and credential caveats 기록 |
+현재 순서·게이트·실행 상태는
+[`2026-08-13-sequential-agent-benchmark-plan.md`](2026-08-13-sequential-agent-benchmark-plan.md)가
+소유한다. 다음 score-bearing 단계는 **공통 deadline 증명 → targeted ablation →
+MCPMark FS30 corrective pair → Tau2 base 3-domain**이다. MCPMark Verified와
+Terminal-Bench 2.1은 앞선 lane이 clean할 때만 진행한다.
 
 ## Public benchmark serving contract
 
