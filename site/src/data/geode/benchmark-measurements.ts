@@ -282,6 +282,7 @@ const mcpmarkFilesystemStandardGpt54Paired: BenchmarkMeasurement = {
     "Observed delta +1 / 30 (+3.33 pp); prospective hypothesis invalidated",
     "GEODE 1,646 events / 703 exact tool pairs; Codex 1,735 / 727",
     "GEODE fresh input 4,204,759 vs Codex 1,444,927; no token-efficiency claim",
+    "Task wall: GEODE 7,842.4s vs Codex 6,970.2s (+12.5%); no causal efficiency claim",
     "Both releases scope-complete, replay-incomplete, zero orphan tool events",
   ],
   command: `# Illustrative one-task invocation only; exact runner is withheld.
