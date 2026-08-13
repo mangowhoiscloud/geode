@@ -8,6 +8,7 @@ without vendoring the benchmark repository.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import importlib
 import json
 import logging
@@ -608,22 +609,44 @@ class CodexMCPMarkAgent(BaseMCPAgent):
             for feature in _CODEX_DISABLED_FEATURES:
                 command.extend(("--disable", feature))
             command.append("-")
-            process = await asyncio.create_subprocess_exec(
-                *command,
-                env=_codex_subscription_environment(),
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            try:
-                stdout_bytes, stderr_bytes = await asyncio.wait_for(
-                    process.communicate(prompt.encode("utf-8")), timeout=float(self.timeout)
+            stdout_capture_path = Path(runner_dir) / "codex.stdout.jsonl"
+            stderr_capture_path = Path(runner_dir) / "codex.stderr.log"
+            escaped_error: BaseException | None = None
+            with (
+                stdout_capture_path.open("wb") as stdout_capture,
+                stderr_capture_path.open("wb") as stderr_capture,
+            ):
+                process = await asyncio.create_subprocess_exec(
+                    *command,
+                    env=_codex_subscription_environment(),
+                    stdin=asyncio.subprocess.PIPE,
+                    stdout=stdout_capture,
+                    stderr=stderr_capture,
                 )
-                timeout_error = ""
-            except TimeoutError:
-                process.kill()
-                stdout_bytes, stderr_bytes = await process.communicate()
-                timeout_error = f"codex exec exceeded MCPMark timeout ({self.timeout}s)"
+                wall = asyncio.timeout(float(self.timeout))
+                try:
+                    async with wall:
+                        await process.communicate(prompt.encode("utf-8"))
+                except BaseException as exc:
+                    with contextlib.suppress(ProcessLookupError):
+                        process.kill()
+                    if process.stdin is not None:
+                        process.stdin.close()
+                    with contextlib.suppress(TimeoutError):
+                        await asyncio.wait_for(
+                            process.wait(),
+                            timeout=min(max(float(self.timeout), 0.1), 5.0),
+                        )
+                    if isinstance(exc, TimeoutError) and wall.expired():
+                        timeout_error = f"codex exec exceeded MCPMark timeout ({self.timeout}s)"
+                    else:
+                        timeout_error = ""
+                        escaped_error = exc
+                else:
+                    timeout_error = ""
+
+            stdout_bytes = stdout_capture_path.read_bytes()
+            stderr_bytes = stderr_capture_path.read_bytes()
 
         stdout = stdout_bytes.decode("utf-8", errors="replace")
         stderr = stderr_bytes.decode("utf-8", errors="replace")
@@ -632,6 +655,8 @@ class CodexMCPMarkAgent(BaseMCPAgent):
             log_path.write_text(stdout, encoding="utf-8")
             if stderr:
                 log_path.with_suffix(".stderr.log").write_text(stderr, encoding="utf-8")
+        if escaped_error is not None:
+            raise escaped_error
 
         summary = _summarize_codex_exec(
             stdout,
@@ -649,6 +674,7 @@ class CodexMCPMarkAgent(BaseMCPAgent):
                     instruction=instruction,
                     model=model,
                     effort=effort,
+                    timeout_error=timeout_error,
                 )
                 trajectory_status = "written"
                 trajectory_error = None

@@ -69,6 +69,9 @@ functional change.
 
 ### Fixed
 
+- **Model-specific tool-result caps now respect the configured global ceiling.**
+  Small-context models use the lower limit, while a non-positive global limit
+  remains an explicit opt-out.
 - **MCPMark now separates infrastructure failures from verifier scores.** The
   GEODE arm bounds model/tool execution with the configured task timeout, retries
   reasoning-only empty subscription responses through the existing loop, and
@@ -78,7 +81,7 @@ functional change.
   remain outside that execution timer and are reported as a comparison
   limitation. A killed Codex process may leave one partial final JSONL record;
   timeout reporting now preserves earlier complete records instead of turning
-  that expected tail into a parser exception.
+  that expected tail into a parser exception, and bounds post-kill reaping.
 - **Convergence detection counts failed observation rounds, not calls.** A
   parallel tool batch now contributes one input-aware error fingerprint, and a
   successful or mixed round resets the streak. This prevents one failed batch

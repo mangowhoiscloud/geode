@@ -42,14 +42,19 @@ def _compute_model_tool_limit(model: str) -> int | None:
     """Return a tighter model-specific cap, or defer to the global cap.
 
     Large and standard tiers use the configured global result limit. Small
-    tiers cap each result at the policy-derived share of the context window.
+    tiers use the lower of that limit and their context-derived share. A
+    non-positive global limit remains an explicit opt-out.
     """
+    from core.config import settings as _settings
     from core.orchestration.context_budget import resolve_context_budget_policy
 
     policy = resolve_context_budget_policy(model)
     if policy.tier.name != "small":
         return None
-    return policy.per_tool_result_limit_tokens
+    global_limit = _settings.max_tool_result_tokens
+    if global_limit <= 0:
+        return 0
+    return min(global_limit, policy.per_tool_result_limit_tokens)
 
 
 def _guard_tool_result(

@@ -191,15 +191,21 @@ def test_geode_mcpmark_does_not_misclassify_inner_timeout(monkeypatch) -> None:
         asyncio.run(agent.execute("task"))
 
 
-def test_codex_mcpmark_timeout_is_a_performance_outcome(monkeypatch) -> None:
+def test_codex_mcpmark_timeout_preserves_prefix_and_trajectory(monkeypatch, tmp_path) -> None:
     class Process:
         returncode = 0
         killed = False
+        stdin = None
 
         async def communicate(self, _input=None):
-            if not self.killed:
-                await asyncio.Event().wait()
-            return b'{"type":"thread.started","thread_id":"partial"}\n{"type":"turn.', b""
+            self.stdout_capture.write(
+                b'{"type":"thread.started","thread_id":"partial"}\n{"type":"turn.'
+            )
+            self.stdout_capture.flush()
+            await asyncio.Event().wait()
+
+        async def wait(self):
+            await asyncio.Event().wait()
 
         def kill(self):
             self.killed = True
@@ -207,7 +213,8 @@ def test_codex_mcpmark_timeout_is_a_performance_outcome(monkeypatch) -> None:
 
     process = Process()
 
-    async def create_process(*_args, **_kwargs):
+    async def create_process(*_args, **kwargs):
+        process.stdout_capture = kwargs["stdout"]
         return process
 
     agent = object.__new__(CodexMCPMarkAgent)
@@ -222,16 +229,85 @@ def test_codex_mcpmark_timeout_is_a_performance_outcome(monkeypatch) -> None:
         params=SimpleNamespace(command="npx", args=["server"])
     )
     monkeypatch.setattr(asyncio, "create_subprocess_exec", create_process)
+    log_path = tmp_path / "codex-exec.jsonl"
 
-    result = asyncio.run(agent.execute("task"))
+    result = asyncio.run(asyncio.wait_for(agent.execute("task", str(log_path)), timeout=0.5))
 
     assert result["success"] is False
     assert result["error"] == "codex exec exceeded MCPMark timeout (0.01s)"
     assert result["codex_thread_id"] == "partial"
+    assert result["geode_trajectory_status"] == "written"
     assert process.killed is True
+    assert log_path.read_text(encoding="utf-8").endswith('{"type":"turn.')
+    trajectory = json.loads(Path(result["geode_trajectory"]).read_text(encoding="utf-8"))
+    assert trajectory["source"]["session"] == "partial"
+    assert trajectory["outcome"]["success"] is False
+    assert trajectory["outcome"]["failure"] == result["error"]
 
     with pytest.raises(json.JSONDecodeError):
         _summarize_codex_exec('{"type":"turn.')
+
+
+def test_codex_mcpmark_cancellation_kills_reaps_and_preserves_logs(monkeypatch, tmp_path) -> None:
+    class Process:
+        returncode = None
+        killed = False
+        waited = False
+        stdin = None
+        started = asyncio.Event()
+
+        async def communicate(self, _input=None):
+            self.stdout_capture.write(b'{"type":"thread.started","thread_id":"cancelled"}\n')
+            self.stdout_capture.flush()
+            self.stderr_capture.write(b"cancelled stderr\n")
+            self.stderr_capture.flush()
+            self.started.set()
+            await asyncio.Event().wait()
+
+        async def wait(self):
+            self.waited = True
+            return self.returncode
+
+        def kill(self):
+            self.killed = True
+            self.returncode = -9
+
+    process = Process()
+
+    async def create_process(*_args, **kwargs):
+        process.stdout_capture = kwargs["stdout"]
+        process.stderr_capture = kwargs["stderr"]
+        return process
+
+    agent = object.__new__(CodexMCPMarkAgent)
+    agent.litellm_input_model_name = "codex-gpt-5.4"
+    agent.reasoning_effort = "high"
+    agent.timeout = 30
+    agent.mcp_service = "filesystem"
+    agent.usage_tracker = SimpleNamespace(update=lambda **_kwargs: None)
+    agent._reset_progress = lambda: None
+    agent._refresh_service_config = lambda: None
+    agent._create_stdio_server = lambda: SimpleNamespace(
+        params=SimpleNamespace(command="npx", args=["server"])
+    )
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", create_process)
+    log_path = tmp_path / "cancelled.jsonl"
+
+    async def cancel() -> None:
+        task = asyncio.create_task(agent.execute("task", str(log_path)))
+        await process.started.wait()
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(task, timeout=0.5)
+
+    asyncio.run(cancel())
+
+    assert process.killed is True
+    assert process.waited is True
+    assert log_path.read_text(encoding="utf-8") == (
+        '{"type":"thread.started","thread_id":"cancelled"}\n'
+    )
+    assert log_path.with_suffix(".stderr.log").read_text(encoding="utf-8") == ("cancelled stderr\n")
 
 
 def test_mcpmark_tool_returns_call_tool_result_as_data() -> None:
@@ -424,6 +500,64 @@ def test_codex_mcpmark_export_uses_shared_trajectory_schema(tmp_path) -> None:
     assert "private benchmark task" not in serialized
     assert "private/file.txt" not in serialized
     assert "private done" not in serialized
+
+
+def test_codex_mcpmark_export_only_tolerates_timeout_tail(tmp_path) -> None:
+    log_path = tmp_path / "execution.log"
+    log_path.write_text(
+        '{"type":"thread.started","thread_id":"thread-1"}\n{"type":"turn.',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(json.JSONDecodeError):
+        export_codex_mcpmark_trajectory(
+            exec_log_path=log_path,
+            instruction="task",
+            model="gpt-5.4",
+            effort="high",
+        )
+
+    exported = export_codex_mcpmark_trajectory(
+        exec_log_path=log_path,
+        instruction="task",
+        model="gpt-5.4",
+        effort="high",
+        timeout_error="codex exec exceeded MCPMark timeout (1s)",
+    )
+
+    artifact = json.loads(exported.read_text(encoding="utf-8"))
+    assert artifact["source"]["session"] == "thread-1"
+    assert artifact["outcome"]["success"] is False
+    assert artifact["outcome"]["failure"] == "codex exec exceeded MCPMark timeout (1s)"
+    assert artifact["integrity"]["scope_complete"] is False
+    assert artifact["integrity"]["scope_incompleteness"] == [
+        "Codex exec timed out before complete native execution scope was established",
+        "incomplete final Codex exec JSONL record omitted after timeout",
+    ]
+
+    log_path.write_text(
+        "\n".join(
+            (
+                '{"type":"thread.started","thread_id":"thread-1"}',
+                '{"type":"error","message":"native failure"}',
+            )
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    complete = export_codex_mcpmark_trajectory(
+        exec_log_path=log_path,
+        instruction="task",
+        model="gpt-5.4",
+        effort="high",
+        timeout_error="codex exec exceeded MCPMark timeout (1s)",
+    )
+    complete_artifact = json.loads(complete.read_text(encoding="utf-8"))
+    assert complete_artifact["integrity"]["scope_complete"] is False
+    assert complete_artifact["integrity"]["scope_incompleteness"] == [
+        "Codex exec timed out before complete native execution scope was established"
+    ]
+    assert complete_artifact["outcome"]["failure"] == "codex exec exceeded MCPMark timeout (1s)"
 
 
 def test_github_repo_visibility_defaults_private(monkeypatch) -> None:

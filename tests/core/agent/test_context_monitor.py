@@ -394,6 +394,17 @@ class TestComputeModelToolLimit:
 
         assert _compute_model_tool_limit("unknown-xyz") > 0
 
+    def test_small_model_respects_global_limit_and_opt_out(self, monkeypatch):
+        from core.agent.tool_executor import _compute_model_tool_limit
+        from core.config import settings
+
+        monkeypatch.setattr(settings, "max_tool_result_tokens", 100)
+        assert _compute_model_tool_limit("unknown-xyz") == 100
+
+        for unlimited in (0, -1):
+            monkeypatch.setattr(settings, "max_tool_result_tokens", unlimited)
+            assert _compute_model_tool_limit("unknown-xyz") == 0
+
 
 # ---------------------------------------------------------------------------
 # _guard_tool_result with model limits

@@ -312,11 +312,24 @@ def export_codex_mcpmark_trajectory(
     instruction: str,
     model: str,
     effort: str,
+    timeout_error: str = "",
 ) -> Path:
     """Project ``codex exec --json`` onto the shared immutable trajectory schema."""
     from core.observability.trajectory import build_trajectory, export_trajectory
 
-    rows = [json.loads(line) for line in exec_log_path.read_text(encoding="utf-8").splitlines()]
+    lines = [
+        line for line in exec_log_path.read_text(encoding="utf-8").splitlines() if line.strip()
+    ]
+    rows: list[dict[str, Any]] = []
+    incomplete_final_record_skipped = False
+    for index, line in enumerate(lines):
+        try:
+            rows.append(json.loads(line))
+        except json.JSONDecodeError:
+            if timeout_error and index == len(lines) - 1:
+                incomplete_final_record_skipped = True
+                break
+            raise
     thread_id = next(
         (str(row.get("thread_id") or "") for row in rows if row.get("type") == "thread.started"),
         "",
@@ -344,7 +357,7 @@ def export_codex_mcpmark_trajectory(
     )
     protocol_violations = 0
     turn_completed = False
-    failure = ""
+    native_failure = ""
     for row in rows:
         event_type = row.get("type")
         if event_type == "item.completed":
@@ -421,7 +434,7 @@ def export_codex_mcpmark_trajectory(
             )
         elif event_type in {"turn.failed", "error"}:
             error = row.get("error") if event_type == "turn.failed" else row
-            failure = str((error or {}).get("message") or event_type)
+            native_failure = str((error or {}).get("message") or event_type)
             events.append(
                 {
                     "kind": "turn.failed",
@@ -431,6 +444,16 @@ def export_codex_mcpmark_trajectory(
                 }
             )
 
+    failure = timeout_error or native_failure
+    scope_incompleteness = (
+        ["Codex exec timed out before complete native execution scope was established"]
+        if timeout_error
+        else []
+    )
+    if incomplete_final_record_skipped:
+        scope_incompleteness.append(
+            "incomplete final Codex exec JSONL record omitted after timeout"
+        )
     raw_sha256 = hashlib.sha256(exec_log_path.read_bytes()).hexdigest()
     trajectory = build_trajectory(
         trajectory_id=f"mcpmark-codex-{thread_id or raw_sha256[:16]}",
@@ -461,7 +484,8 @@ def export_codex_mcpmark_trajectory(
             "payloads": "prompt, reasoning, tool bodies, and responses replaced by SHA-256 digests",
         },
         integrity={
-            "scope_complete": True,
+            "scope_complete": not scope_incompleteness,
+            "scope_incompleteness": scope_incompleteness,
             "replay_complete": False,
             "replay_incompleteness": [
                 "codex exec JSONL omits per-event timestamps and internal model-call boundaries"
