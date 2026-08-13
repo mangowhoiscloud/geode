@@ -130,6 +130,7 @@ def _write_native(
     timeout: int,
     timed_surface: str = "adapter_execute_entry_through_native_runtime_return",
     max_tool_result_tokens: int | None = None,
+    timed_out: bool = False,
 ) -> None:
     task_dir = native_dir / "run" / "model__filesystem" / "run-1" / "desktop__task"
     task_dir.mkdir(parents=True)
@@ -142,9 +143,9 @@ def _write_native(
                 "mcp": "filesystem",
                 "timeout": timeout,
                 "execution_result": {
-                    "success": True,
-                    "error_message": None,
-                    "verification_output": "PASS",
+                    "success": not timed_out,
+                    "error_message": "time_budget_expired" if timed_out else None,
+                    "verification_output": "FAIL" if timed_out else "PASS",
                 },
             }
         ),
@@ -154,8 +155,8 @@ def _write_native(
         json.dumps(
             {
                 "total_tasks": 1,
-                "successful_tasks": 1,
-                "failed_tasks": 0,
+                "successful_tasks": int(not timed_out),
+                "failed_tasks": int(timed_out),
                 "model_config": {"model_name": model, "agent_name": arm},
             }
         ),
@@ -184,13 +185,19 @@ def _write_native(
                 "payload": {"content": "done"},
             },
         ],
-        outcome={"success": True},
+        outcome={"success": not timed_out},
         provenance={
             "model": model.removeprefix(f"{arm}-"),
             "source": "subscription",
             "effort": effort,
         },
         privacy={"review_state": "local"},
+        integrity={
+            "scope_complete": not timed_out,
+            "scope_incompleteness": (
+                ["MCPMark action deadline right-censored the turn"] if timed_out else []
+            ),
+        },
     )
     (task_dir / "execution.trajectory.json").write_text(json.dumps(trajectory), encoding="utf-8")
     deadline = {
@@ -202,10 +209,10 @@ def _write_native(
         "limit_seconds": float(timeout),
         "action_started_monotonic": 100.0,
         "action_deadline_monotonic": 100.0 + timeout,
-        "action_finished_monotonic": 101.0,
-        "action_elapsed_seconds": 1.0,
-        "expired": False,
-        "action_status": "complete",
+        "action_finished_monotonic": 100.0 + timeout if timed_out else 101.0,
+        "action_elapsed_seconds": float(timeout) if timed_out else 1.0,
+        "expired": timed_out,
+        "action_status": "right_censored" if timed_out else "complete",
         "cleanup_grace_seconds": 5.0,
         "cleanup_elapsed_seconds": 0.1,
         "cleanup_status": "complete",
@@ -780,6 +787,46 @@ def test_pair_runner_rejects_an_exception_shaped_verifier_receipt(tmp_path: Path
             effort="high",
             timeout=1200,
         )
+
+
+def test_native_receipt_accepts_the_geode_timeout_failure_class(tmp_path: Path) -> None:
+    native = tmp_path / "native"
+    _write_native(
+        native,
+        task="papers/author_folders",
+        arm="geode",
+        model="geode-gpt-5.4",
+        effort="high",
+        timeout=1200,
+        timed_out=True,
+    )
+
+    receipt = pair._native_receipt(
+        native,
+        task="papers/author_folders",
+        arm="geode",
+        model="geode-gpt-5.4",
+        effort="high",
+        timeout=1200,
+    )
+
+    assert receipt["verifier_pass"] is False
+    assert receipt["agent_error_present"] is True
+
+    meta_path = next(native.rglob("meta.json"))
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    for invalid_error in (False, "codex exec exceeded MCPMark action deadline (1200s)"):
+        meta["execution_result"]["error_message"] = invalid_error
+        meta_path.write_text(json.dumps(meta), encoding="utf-8")
+        with pytest.raises(pair.PairRunError, match="score-bearing failure class"):
+            pair._native_receipt(
+                native,
+                task="papers/author_folders",
+                arm="geode",
+                model="geode-gpt-5.4",
+                effort="high",
+                timeout=1200,
+            )
 
 
 def test_tool_cap_receipt_rejects_a_different_effective_config(tmp_path: Path) -> None:

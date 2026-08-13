@@ -78,6 +78,9 @@ functional change.
 
 ### Fixed
 
+- **MCPMark paired runs retain GEODE deadline failures as verifier outcomes.**
+  The runner now recognizes GEODE's canonical `time_budget_expired` terminal
+  only when the deadline receipt proves the arm was right-censored.
 - **MCPMark verifier patch application is now syntax-safe.** The pinned
   compatibility patch uses ordinary context-bearing hunks at the intended
   directory scans, checkout validation rejects syntax-invalid verifier
