@@ -697,7 +697,10 @@ def test_primary_metric_denominator_matches_frozen_spec(tmp_path: Path) -> None:
         )
 
 
-def test_target_metric_allows_signed_delta_but_maximize_does_not(tmp_path: Path) -> None:
+@pytest.mark.parametrize("numerator", (-1, 0, 1))
+def test_target_metric_allows_signed_delta_but_maximize_does_not(
+    tmp_path: Path, numerator: int
+) -> None:
     run_spec_path = tmp_path / "run-spec.json"
     attempts_path = tmp_path / "attempts.jsonl"
     analysis_path = tmp_path / "analysis.json"
@@ -708,13 +711,24 @@ def test_target_metric_allows_signed_delta_but_maximize_does_not(tmp_path: Path)
     primary_spec["direction"] = "target"
     _write_json(run_spec_path, run_spec)
     attempt = _attempt(tmp_path)
-    native = {"score": {"value": -1.0, "numerator": -1, "denominator": 1}}
+    native = {
+        "primary_metric": {
+            "value": float(numerator),
+            "numerator": numerator,
+            "denominator": 1,
+        }
+    }
     _write_json(native_path, native)
     attempt["evidence_refs"][0]["sha256"] = contract._sha256(native_path)
     attempts_path.write_text(json.dumps(attempt) + "\n", encoding="utf-8")
     analysis = _analysis(run_spec_path, attempts_path, attempt)
     primary = analysis["metrics"][0]
-    primary.update(native["score"])
+    primary.update(native["primary_metric"])
+    primary["source_locator"] = {
+        "value": "/primary_metric/value",
+        "numerator": "/primary_metric/numerator",
+        "denominator": "/primary_metric/denominator",
+    }
     _write_json(analysis_path, analysis)
 
     contract.validate_analysis(
@@ -722,6 +736,9 @@ def test_target_metric_allows_signed_delta_but_maximize_does_not(tmp_path: Path)
         run_spec_path=run_spec_path,
         attempts_path=attempts_path,
     )
+
+    if numerator >= 0:
+        return
 
     primary_spec["direction"] = "maximize"
     _write_json(run_spec_path, run_spec)

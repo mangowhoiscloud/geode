@@ -66,9 +66,15 @@ functional change.
   schema-validated trajectory sidecars for direct harness diagnostics on
   ChatGPT subscription models. A fail-closed serial runner now freezes the
   Filesystem-30 workload, fixture, verifier patch, arm order, and per-arm
-  deadline receipts before accepting a paired result. The setup manifest now
-  installs GEODE into the MCPMark venv so live runs cannot fail on missing
-  runtime dependencies.
+  deadline receipts before accepting a paired result. A frozen Gate 0B profile
+  now runs the five-task `25K` versus unlimited tool-result-cap diagnostic as
+  30 fresh serial processes, binds the effective runtime configuration, and
+  reconstructs truncation from direct MCP results. Its immutable runner result
+  binds accepted native receipts and exposes the signed pass-rate delta to the
+  analysis contract. The setup manifest keeps
+  conflicting MCPMark package metadata out of GEODE's dependency-clean
+  environment, and the runner checks dependency integrity and source imports
+  before any model call.
 
 ### Fixed
 

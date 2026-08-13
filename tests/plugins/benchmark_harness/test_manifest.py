@@ -16,6 +16,16 @@ def test_manifest_uses_ignored_artifact_checkout_paths() -> None:
     assert spec.repo == "https://github.com/eval-sys/mcpmark.git"
 
 
+def test_mcpmark_install_keeps_dependency_metadata_out_of_the_harness_checkout() -> None:
+    assert get_harness("mcpmark").install == (
+        "python3.12 -m venv .venv",
+        ".venv/bin/python -m pip install --upgrade pip",
+        ".venv/bin/pip install -e .",
+        "uv sync --project ../../../.. --extra audit",
+    )
+    assert ".venv/bin/pip install -e ../../../.." not in get_harness("mcpmark").install
+
+
 def test_dotenv_status_is_redacted(tmp_path: Path) -> None:
     env_file = tmp_path / ".mcp_env"
     env_file.write_text("TOKEN=secret\nEMPTY=\n# COMMENT=yes\n", encoding="utf-8")
