@@ -48,7 +48,7 @@
         "properties": {
           "name": {"type": "string", "minLength": 1, "maxLength": 128},
           "value": {"type": ["number", "string"]},
-          "numerator": {"type": ["number", "null"], "minimum": 0},
+          "numerator": {"type": ["number", "null"]},
           "denominator": {"type": ["number", "null"], "exclusiveMinimum": 0},
           "unit": {"type": "string", "minLength": 1, "maxLength": 64},
           "source_ref": {"type": "string", "minLength": 1, "maxLength": 512},

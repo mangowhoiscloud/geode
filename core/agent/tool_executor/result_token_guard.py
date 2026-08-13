@@ -38,18 +38,23 @@ def _project_mcp_result(result: dict[str, Any]) -> dict[str, Any]:
     return projected
 
 
-def _compute_model_tool_limit(model: str) -> int:
-    """Compute per-tool-result token limit based on model context window.
+def _compute_model_tool_limit(model: str) -> int | None:
+    """Return a tighter model-specific cap, or defer to the global cap.
 
-    Large-window tiers rely on server-side handling.  Small-window tiers cap
-    each tool result at the policy-derived share of the context window.
+    Large and standard tiers use the configured global result limit. Small
+    tiers use the lower of that limit and their context-derived share. A
+    non-positive global limit remains an explicit opt-out.
     """
+    from core.config import settings as _settings
     from core.orchestration.context_budget import resolve_context_budget_policy
 
     policy = resolve_context_budget_policy(model)
     if policy.tier.name != "small":
+        return None
+    global_limit = _settings.max_tool_result_tokens
+    if global_limit <= 0:
         return 0
-    return policy.per_tool_result_limit_tokens
+    return min(global_limit, policy.per_tool_result_limit_tokens)
 
 
 def _guard_tool_result(
@@ -58,7 +63,8 @@ def _guard_tool_result(
 ) -> dict[str, Any]:
     """Truncate oversized tool results while preserving summary.
 
-    When *max_tokens* is 0 (default), no truncation is performed.
+    ``None`` uses the configured global limit; values at or below zero disable
+    truncation explicitly.
     """
     from core.config import settings as _settings
 

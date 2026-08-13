@@ -151,12 +151,14 @@ class TestConvergenceDetection:
         surface a ``model_action_required`` diagnostic.
         """
         loop = _make_loop()
+        loop._convergence.total_consecutive_tool_errors = 3
         loop._convergence.recent_errors = ["tool_a:timeout", "tool_a:timeout", "tool_a:timeout"]
         assert loop._check_convergence_break() is True
 
     def test_check_convergence_5_identical_still_breaks(self) -> None:
         """5+ identical errors still break (idempotent past the threshold)."""
         loop = _make_loop()
+        loop._convergence.total_consecutive_tool_errors = 5
         loop._convergence.recent_errors = ["tool_a:timeout"] * 5
         assert loop._check_convergence_break() is True
 
@@ -229,6 +231,7 @@ class TestConvergenceDetection:
         call_count = 0
 
         # Pre-populate with 3 identical errors (one more triggers break)
+        loop._convergence.total_consecutive_tool_errors = 3
         loop._convergence.recent_errors = [
             "test_tool:always fails",
             "test_tool:always fails",

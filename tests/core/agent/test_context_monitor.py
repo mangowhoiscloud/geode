@@ -372,11 +372,11 @@ class TestAdaptivePrune:
 
 
 class TestComputeModelToolLimit:
-    def test_large_model_unlimited(self):
+    def test_large_model_uses_global_limit(self):
         from core.agent.tool_executor import _compute_model_tool_limit
 
-        # 1M context → unlimited (server-side handles it)
-        assert _compute_model_tool_limit("claude-opus-4-6") == 0
+        # Large tiers do not add a tighter model-specific cap.
+        assert _compute_model_tool_limit("claude-opus-4-6") is None
 
     def test_glm5_uses_small_tier_cap(self):
         from core.agent.tool_executor import _compute_model_tool_limit
@@ -393,6 +393,17 @@ class TestComputeModelToolLimit:
         from core.agent.tool_executor import _compute_model_tool_limit
 
         assert _compute_model_tool_limit("unknown-xyz") > 0
+
+    def test_small_model_respects_global_limit_and_opt_out(self, monkeypatch):
+        from core.agent.tool_executor import _compute_model_tool_limit
+        from core.config import settings
+
+        monkeypatch.setattr(settings, "max_tool_result_tokens", 100)
+        assert _compute_model_tool_limit("unknown-xyz") == 100
+
+        for unlimited in (0, -1):
+            monkeypatch.setattr(settings, "max_tool_result_tokens", unlimited)
+            assert _compute_model_tool_limit("unknown-xyz") == 0
 
 
 # ---------------------------------------------------------------------------

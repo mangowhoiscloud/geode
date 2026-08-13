@@ -1,0 +1,43 @@
+From: GEODE evaluation maintainers
+Subject: [PATCH] Make missing filesystem outputs ordinary verifier failures
+
+MCPMark-Upstream-Revision: cd45b7f57923b9b3985467f5139927575f83141c
+Preimage-Git-Blob: tasks/filesystem/standard/desktop/project_management/verify.py 1f28a6a7a8b435a2ebfbef85f5b132e2fccf484f
+Preimage-Git-Blob: tasks/filesystem/standard/file_context/duplicates_searching/verify.py c7a26ad9ce2fe5fb92079bcfd8755afdc5051ede
+Preimage-Git-Blob: tasks/filesystem/standard/file_context/file_splitting/verify.py 5f72271a6a4038ddf450c6c27b2e89214d4e253e
+
+The filesystem/standard verifier runs every check even after a directory
+existence check fails. Guard the four dependent directory scans so a missing
+or wrong-type agent output returns the existing semantic FAIL instead of an
+uncaught FileNotFoundError or NotADirectoryError. Successful behavior is
+unchanged.
+
+diff --git a/tasks/filesystem/standard/desktop/project_management/verify.py b/tasks/filesystem/standard/desktop/project_management/verify.py
+index 1f28a6a..9e03079 100644
+--- a/tasks/filesystem/standard/desktop/project_management/verify.py
++++ b/tasks/filesystem/standard/desktop/project_management/verify.py
+@@ -195,0 +196,3 @@ def verify_progress_tracking_empty(test_dir: Path) -> bool:
++    if not progress_dir.is_dir():
++        print("❌ progress_tracking directory not found or is not a directory")
++        return False
+@@ -236,0 +240,4 @@ def verify_file_counts(test_dir: Path) -> bool:
++        if not full_path.is_dir():
++            incorrect_counts.append(f"{dir_path}: missing or not a directory")
++            continue
++
+diff --git a/tasks/filesystem/standard/file_context/duplicates_searching/verify.py b/tasks/filesystem/standard/file_context/duplicates_searching/verify.py
+index c7a26ad..fa8065c 100644
+--- a/tasks/filesystem/standard/file_context/duplicates_searching/verify.py
++++ b/tasks/filesystem/standard/file_context/duplicates_searching/verify.py
+@@ -164,0 +165,3 @@ def verify_total_file_count(test_dir: Path) -> bool:
++    if not duplicates_dir.is_dir():
++        print("❌ duplicates directory not found or is not a directory")
++        return False
+diff --git a/tasks/filesystem/standard/file_context/file_splitting/verify.py b/tasks/filesystem/standard/file_context/file_splitting/verify.py
+index 5f72271..003e5b1 100644
+--- a/tasks/filesystem/standard/file_context/file_splitting/verify.py
++++ b/tasks/filesystem/standard/file_context/file_splitting/verify.py
+@@ -112,0 +113,3 @@ def verify_no_extra_files(test_dir: Path) -> bool:
++    if not split_dir.is_dir():
++        print("❌ split directory not found or is not a directory")
++        return False

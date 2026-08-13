@@ -265,6 +265,7 @@ class TestConvergenceBreak:
     ) -> None:
         """3 identical errors → break immediately (no auto-escalation)."""
         loop = AgenticLoop(context, executor)
+        loop._convergence.total_consecutive_tool_errors = 3
         loop._convergence.recent_errors = [
             "web_search:timeout",
             "web_search:timeout",

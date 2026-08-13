@@ -334,8 +334,8 @@ class ToolCallProcessor:
                 )
 
         if isinstance(model_result, dict):
-            model_limit = _compute_model_tool_limit(self._model) if self._model else 0
-            model_result = _guard_tool_result(model_result, max_tokens=model_limit or None)
+            model_limit = _compute_model_tool_limit(self._model) if self._model else None
+            model_result = _guard_tool_result(model_result, max_tokens=model_limit)
 
         try:
             content = json.dumps(model_result, ensure_ascii=False, default=str)

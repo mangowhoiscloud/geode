@@ -139,6 +139,68 @@ class TestConvergenceDetector:
             det.update_tool_error_tracking(results, [])
         assert len(det.recent_errors) <= 6
 
+    def test_parallel_error_batch_counts_as_one_round(self) -> None:
+        det = ConvergenceDetector()
+        results = [
+            {"tool_use_id": f"t{i}", "content": json.dumps({"error": "same failure"})}
+            for i in range(6)
+        ]
+        tool_log = [
+            {"tool_use_id": f"t{i}", "tool": "create_directory", "input": {"path": str(i)}}
+            for i in range(6)
+        ]
+
+        det.update_tool_error_tracking(results, tool_log)
+
+        assert det.total_consecutive_tool_errors == 1
+        assert len(det.recent_errors) == 1
+        assert det.check_convergence_break() is False
+
+    def test_long_errors_with_the_same_prefix_have_distinct_fingerprints(self) -> None:
+        det = ConvergenceDetector()
+        prefix = "Parent directory does not exist: /shared/long/path/"
+
+        for suffix in ("experiments", "learning", "personal"):
+            det.update_tool_error_tracking(
+                [{"tool_use_id": suffix, "content": json.dumps({"error": prefix + suffix})}],
+                [
+                    {
+                        "tool_use_id": suffix,
+                        "tool": "create_directory",
+                        "input": {"path": suffix},
+                    }
+                ],
+            )
+
+        assert len(set(det.recent_errors)) == 3
+        assert det.check_convergence_break() is False
+
+    def test_three_identical_all_error_rounds_converge(self) -> None:
+        det = ConvergenceDetector()
+        results = [{"tool_use_id": "t1", "content": json.dumps({"error": "fail"})}]
+        tool_log = [{"tool_use_id": "t1", "tool": "test", "input": {"x": 1}}]
+
+        for _ in range(3):
+            det.update_tool_error_tracking(results, tool_log)
+
+        assert det.check_convergence_break() is True
+
+    def test_success_breaks_error_round_streak(self) -> None:
+        det = ConvergenceDetector()
+        error = [{"tool_use_id": "t1", "content": json.dumps({"error": "fail"})}]
+        tool_log = [{"tool_use_id": "t1", "tool": "test", "input": {}}]
+        det.update_tool_error_tracking(error, tool_log)
+        det.update_tool_error_tracking(error, tool_log)
+
+        det.update_tool_error_tracking(
+            [{"tool_use_id": "ok", "content": json.dumps({"status": "ok"})}], []
+        )
+        det.update_tool_error_tracking(error, tool_log)
+
+        assert det.total_consecutive_tool_errors == 1
+        assert len(det.recent_errors) == 1
+        assert det.check_convergence_break() is False
+
     # -- check_convergence_break --
 
     def test_no_convergence_few_errors(self) -> None:
@@ -155,6 +217,7 @@ class TestConvergenceDetector:
         right away and the AgenticLoop surfaces a diagnostic.
         """
         det = ConvergenceDetector()
+        det.total_consecutive_tool_errors = 3
         det.recent_errors = ["a:timeout", "a:timeout", "a:timeout"]
         assert det.check_convergence_break() is True
 
