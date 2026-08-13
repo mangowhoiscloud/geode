@@ -305,6 +305,46 @@ python -m plugins.benchmark_harness.run_mcpmark \
   ],
 };
 
+const mcpmarkGate0BToolCapGpt54: BenchmarkMeasurement = {
+  id: "mcpmark-gate0b-tool-cap-20260814-gpt54-high",
+  group: "mcpmark",
+  title: "filesystem/standard Gate 0B tool-result-cap diagnostic",
+  measuredAt: "2026-08-13–14 KST",
+  suite: "filesystem/standard targeted 5 tasks × 3 repetitions",
+  status: "complete",
+  model: "gpt-5.4",
+  provider: "openai",
+  source: "subscription",
+  effort: "high",
+  route: "GEODE AgenticLoop paired 25K and unlimited tool-result-cap arms",
+  harness: "eval-sys/mcpmark@cd45b7f, GEODE@02f71fae",
+  artifact:
+    "geode-eval-artifacts@17133f0c8e893b6d765fcef69712ba0867bd573a/mcpmark/results-paired/mcpmark-gate0b-tool-cap-gpt54-high-20260813t142345z",
+  scoreLabel: "Diagnostic-only verifier pass rate",
+  scoreValue: "25K 46.7% (7 / 15) · unlimited 66.7% (10 / 15) · Δ +20.0 pp",
+  secondary: [
+    "Observed fresh input: 25K 3,782,288 vs unlimited 2,202,725; exact token coverage is 13 / 15 attempts per arm",
+    "All-attempt action wall: 25K 6,076.699s vs unlimited 4,910.217s; runner envelopes 6,119.096s vs 4,951.086s",
+    "All-attempt MCP calls/errors: 25K 443 / 75 vs unlimited 255 / 27",
+    "Repeated read references: 25K 211 vs unlimited 63; tool-result truncations 15 vs 0",
+    "Two score-bearing deadline expirations per arm emitted no native token usage",
+  ],
+  command: `# Requires the pinned MCPMark checkout and verifier patch, frozen run spec,
+# isolated runtime home, and working GPT-5.4 subscription authentication.
+.venv/bin/python -m plugins.benchmark_harness.run_mcpmark_pair \
+  --profile max-tool-result-tokens \
+  --run-spec <frozen-run-spec.json> \
+  --mcpmark-root artifacts/eval/harnesses/mcpmark \
+  --output-dir <fresh-output-dir> \
+  --python .venv/bin/python`,
+  notes: [
+    "The prospective hypothesis was supported, but promotion_authority remains none.",
+    "This five-task, three-repetition subset is diagnostic and is not an MCPMark suite headline.",
+    "Token totals exclude the four timeout arms with empty native usage; wall time and MCP-call totals cover all 15 attempts per arm.",
+    "The prior infrastructure-invalid run contributes no denominator, and scope-incomplete timeout trajectories remain withheld.",
+  ],
+};
+
 const mcpmarkFilesystemEasyParallel: BenchmarkMeasurement = {
   id: "mcpmark-filesystem-easy-parallel-20260703-gpt55-xhigh",
   group: "mcpmark",
@@ -1378,6 +1418,7 @@ export const BENCHMARK_GROUPS: BenchmarkGroup[] = [
     ],
     measurements: [
       mcpmarkVerifiedAvailable,
+      mcpmarkGate0BToolCapGpt54,
       mcpmarkFilesystemStandardGpt54Paired,
       mcpmarkFilesystemEasyGpt54TokenEfficiency,
       mcpmarkFilesystemEasyGpt54V1012,

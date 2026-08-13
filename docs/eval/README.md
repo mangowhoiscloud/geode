@@ -18,14 +18,14 @@ eval_contracts:
   - docs/eval/schemas/analysis.schema.json
   - docs/eval/schemas/attempt.schema.json
   - docs/eval/schemas/run-spec.schema.json
-eval_latest_valid_release: https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/e5d442f25c9fb4861e28744dbe924a36325c746b/trajectories/mcpmark-geode-gpt54-high-mcpmark-filesystem-standard-gpt54-high-geode-codex--818b13fe1039-20260812T231820Z-ed26f124b9c7
+eval_latest_valid_release: https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/17133f0c8e893b6d765fcef69712ba0867bd573a/trajectories/mcpmark-gate0b-gpt54-high-mcpmark-gate0b-tool-cap-gpt54-high-20260813t142345z-bcf57b5eee65-20260813T173103Z-bf8ad9ea9717
 ---
 
 # GEODE Evaluation Index and Roadmap
 
 > Action/tool-execution 4종 벤치마크. GEODE의 quality ratchet(P4)에 통합 예정.
 > 각 문서는 **사례 + 필요 인프라 + 4-Phase 진행 시나리오**를 담음.
-> 마지막 갱신: 2026-08-12
+> 마지막 갱신: 2026-08-14
 
 ## LLM entry contract
 
@@ -73,6 +73,14 @@ repository. GEODE keeps interpretation, comparison boundaries, and digest
 pointers under `docs/eval/`; the artifact repository keeps the bytes behind
 those claims. See [External Evaluation Artifact Repository](external-artifact-repository.md)
 for path mappings, disclosure rules, and the publication manifest scaffold.
+
+The latest prospective runtime diagnostic is pinned to artifact commit
+[`17133f0`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/17133f0c8e893b6d765fcef69712ba0867bd573a):
+on five large-result MCPMark tasks at k=3, GPT-5.4/high scored
+`guard-25000` **7/15** and `unlimited-0` **10/15**, so the frozen signed delta
+was **+3/15 = +0.20**. This is a direct matched diagnostic with
+`promotion_authority=none`, not an MCPMark suite headline or a product-default
+change. See the [run record](2026-08-14-mcpmark-gate0b-tool-cap-gpt54-high.md).
 
 The latest corrected runtime observation is pinned to artifact commit
 [`e5d442f`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/e5d442f25c9fb4861e28744dbe924a36325c746b):
@@ -226,6 +234,7 @@ Verified 다음에 τ²-bench를 둔다.
 
 | 일자 | 변경 |
 |---|---|
+| 2026-08-14 | GPT-5.4/high MCPMark Gate 0B k=3 direct diagnostic 게시: `guard-25000` 7/15, `unlimited-0` 10/15, frozen delta +3/15=+0.20 supported. 30/30 valid arms와 six reviewed releases/26 admitted trajectories를 artifact commit `17133f0`에서 원격 재검증; 제품 기본값 변경 권한은 없음 |
 | 2026-08-13 | GPT-5.4/high MCPMark filesystem/standard native outcome 21/30 vs 20/30과 3,381 events / 1,430 exact pairs를 보존. 사후 source audit에서 equal-hard-deadline preregistration 위반을 찾아 prospective hypothesis를 invalidated로 정정하고, append-only correction을 artifact commit `e5d442f`에서 원격 재검증. 점수는 retrospective description만 허용 |
 | 2026-08-12 | GPT-5.4 subscription `high` matched MCPMark filesystem/easy 재실행: 9/10 유지, 입력 447,376→314,219(−29.8%), 출력 25,157→20,385(−19.0%), 188 events / 54 exact tool pairs. 검토된 trajectory release와 보고서를 artifact commit `2c2d1f0`에 게시하고 원격 read-back 검증 |
 | 2026-08-03 | 배포된 GEODE `v1.0.12@f99cea63` / GPT-5.4 subscription `high` post-release 검증: MCPMark filesystem/easy 9/10, Tau2 mock 0/1, Telecom-small 0/1. 실패를 재시도 없이 보존하고 416 events / 72 exact tool pairs, 두 stable manifests, 비식별 native receipts를 artifact commit `04ff1c4`에 게시한 뒤 원격 read-back 검증 |
