@@ -259,6 +259,8 @@ def export_mcpmark_trajectory(
     model: str,
     provider: str,
     source: str,
+    effort: str,
+    action_timed_out: bool = False,
 ) -> Path:
     """Export one MCPMark turn while retaining the native verifier receipt."""
     from core.agent.loop.models import is_successful_task_termination
@@ -291,6 +293,7 @@ def export_mcpmark_trajectory(
             "model": model,
             "provider": provider,
             "source": source,
+            "effort": effort,
             "store": "sessions.db:session_events",
         },
         privacy={
@@ -303,6 +306,19 @@ def export_mcpmark_trajectory(
         content_policy="digest",
         trajectory_class=("benchmark", "dialogue", "tool", "lifecycle"),
     )
+    if action_timed_out:
+        integrity = trajectory["integrity"]
+        reason = "MCPMark action deadline right-censored the GEODE turn"
+        scope_reasons = list(integrity["scope_incompleteness"])
+        if reason not in scope_reasons:
+            scope_reasons.append(reason)
+        integrity["scope_complete"] = False
+        integrity["replay_complete"] = False
+        integrity["complete"] = False
+        integrity["scope_incompleteness"] = scope_reasons
+        integrity["incompleteness"] = list(
+            dict.fromkeys([*scope_reasons, *integrity["replay_incompleteness"]])
+        )
     return export_trajectory(trajectory_path, trajectory)
 
 

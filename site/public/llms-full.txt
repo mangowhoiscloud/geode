@@ -6220,8 +6220,8 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 
 | 측정값 | 현재 트리 |
 | --- | --- |
-| 프로덕션 Python 파일 | 545 |
-| 테스트 Python 파일 | 684 |
+| 프로덕션 Python 파일 | 546 |
+| 테스트 Python 파일 | 685 |
 | 도구 정의 / 실행 등록 / 유효 스키마 | 87 / 90 / 87 |
 | RuntimeEvent 멤버 | 57 |
 | 기본 LLM 어댑터 | 8 |

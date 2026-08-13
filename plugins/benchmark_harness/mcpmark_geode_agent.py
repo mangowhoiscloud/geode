@@ -13,11 +13,14 @@ import importlib
 import json
 import logging
 import os
+import signal
 import sys
 import tempfile
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
 from core.agent.loop.models import TerminationReason, is_successful_task_termination
@@ -44,6 +47,109 @@ _CODEX_DISABLED_FEATURES = (
     "unified_exec",
     "workspace_dependencies",
 )
+
+_MCPMARK_CLEANUP_GRACE_SECONDS = 5.0
+
+
+class MCPMarkInfrastructureError(RuntimeError):
+    """Fail-loud signal for an attempt whose cleanup/evidence boundary failed."""
+
+    failure_class = "infrastructure_invalid"
+
+
+def _kill_process_tree(process: Any) -> None:
+    """Kill one isolated Codex process group, falling back off POSIX."""
+    process_pid = getattr(process, "pid", None)
+    if os.name == "posix" and isinstance(process_pid, int):
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(process_pid, signal.SIGKILL)
+        return
+    with contextlib.suppress(ProcessLookupError):
+        process.kill()
+
+
+async def _run_bounded_cleanup(label: str, *operations: Callable[[], Awaitable[Any]]) -> None:
+    """Run ordered cleanup operations under one grace budget."""
+    if not operations:
+        return
+    first_error: Exception | None = None
+    try:
+        async with asyncio.timeout(_MCPMARK_CLEANUP_GRACE_SECONDS):
+            for operation in operations:
+                try:
+                    await operation()
+                except Exception as exc:
+                    if first_error is None:
+                        first_error = exc
+    except TimeoutError as exc:
+        raise MCPMarkInfrastructureError(
+            f"{label} cleanup exceeded {_MCPMARK_CLEANUP_GRACE_SECONDS}s; "
+            "attempt is infrastructure-invalid"
+        ) from exc
+    if first_error is not None:
+        raise MCPMarkInfrastructureError(
+            f"{label} cleanup failed; attempt is infrastructure-invalid"
+        ) from first_error
+
+
+def _write_deadline_receipt(
+    tool_call_log_file: str,
+    *,
+    arm: str,
+    limit_seconds: float,
+    action_started: float,
+    action_deadline: float,
+    action_finished: float,
+    action_timed_out: bool,
+    escaped_error: BaseException | None,
+    cleanup_elapsed: float,
+    cleanup_error: MCPMarkInfrastructureError | None,
+    evidence_status: str,
+    started_at: float,
+) -> Path:
+    """Atomically publish one immutable deadline receipt beside the native log."""
+    receipt = {
+        "schema_id": "geode.mcpmark.execution_deadline@1",
+        "arm": arm,
+        "timeout_owner": "adapter",
+        "timed_surface": "adapter_execute_entry_through_native_runtime_return",
+        "clock": "monotonic",
+        "limit_seconds": limit_seconds,
+        "action_started_monotonic": action_started,
+        "action_deadline_monotonic": action_deadline,
+        "action_finished_monotonic": action_finished,
+        "action_elapsed_seconds": action_finished - action_started,
+        "expired": action_timed_out,
+        "action_status": (
+            "right_censored"
+            if action_timed_out
+            else "aborted"
+            if escaped_error is not None
+            else "complete"
+        ),
+        "cleanup_grace_seconds": _MCPMARK_CLEANUP_GRACE_SECONDS,
+        "cleanup_elapsed_seconds": cleanup_elapsed,
+        "cleanup_status": "infrastructure_invalid" if cleanup_error else "complete",
+        "evidence_status": evidence_status,
+        "started_at_unix_seconds": started_at,
+        "finished_at_unix_seconds": time.time(),
+    }
+    target = Path(tool_call_log_file).with_name("execution.deadline.json")
+    temporary = target.with_name(f".{target.name}.{os.getpid()}.{time.time_ns()}.tmp")
+    try:
+        with temporary.open("x", encoding="utf-8") as handle:
+            json.dump(receipt, handle, ensure_ascii=False, indent=2, sort_keys=True)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.link(temporary, target)
+    except OSError as exc:
+        raise MCPMarkInfrastructureError(
+            "MCPMark deadline receipt publish failed; attempt is infrastructure-invalid"
+        ) from exc
+    finally:
+        temporary.unlink(missing_ok=True)
+    return target
 
 
 def _codex_mcp_config(command: str, args: list[str], timeout: int) -> str:
@@ -204,7 +310,7 @@ def _build_loop(
     provider: str,
     source: str,
     effort: str,
-    timeout: int,
+    timeout: float,
 ) -> Any:
     from core.agent.conversation import ConversationContext
     from core.agent.loop import AgenticLoop
@@ -428,19 +534,31 @@ class GeodeMCPMarkAgent(BaseMCPAgent):
         self, instruction: str, tool_call_log_file: str | None = None
     ) -> dict[str, Any]:
         start_time = time.time()
+        event_loop = asyncio.get_running_loop()
+        action_started = event_loop.time()
+        action_deadline = action_started + float(self.timeout)
         self._reset_progress()
         self._refresh_service_config()
         model, provider, source = _route_from_model(self.litellm_input_model_name)
         loop: Any | None = None
+        mcp_server: Any | None = None
+        result: Any | None = None
+        escaped_error: BaseException | None = None
+        action_timed_out = False
+        previous_fail_empty_text: str | None = None
+        fail_empty_text_set = False
+        wall = asyncio.timeout_at(action_deadline)
 
         try:
-            mcp_server = await self._create_mcp_server()
-            async with mcp_server:
+            async with wall:
+                mcp_server = await self._create_mcp_server()
+                await mcp_server.__aenter__()
                 tool_schemas = await mcp_server.list_tools()
                 tools = [
                     MCPMarkGeodeTool(mcp_server=mcp_server, schema=schema)
                     for schema in tool_schemas
                 ]
+                remaining = max(action_deadline - event_loop.time(), 0.001)
                 loop = _build_loop(
                     tools=tools,
                     instruction=instruction,
@@ -448,64 +566,105 @@ class GeodeMCPMarkAgent(BaseMCPAgent):
                     provider=provider,
                     source=source,
                     effort=str(self.reasoning_effort or "default"),
-                    timeout=int(self.timeout),
+                    timeout=remaining,
                 )
                 previous_fail_empty_text = os.environ.get("GEODE_CODEX_OAUTH_FAIL_EMPTY_TEXT")
                 os.environ["GEODE_CODEX_OAUTH_FAIL_EMPTY_TEXT"] = "1"
-                wall = asyncio.timeout(float(self.timeout))
-                try:
-                    async with wall:
-                        result = await loop.arun(instruction)
-                except TimeoutError:
-                    if not wall.expired():
-                        raise
-                    rounds = int(getattr(loop.cognitive_state, "round_count", 0) or 0)
-                    result = loop._terminal_result(
-                        TerminationReason.TIME_BUDGET_EXPIRED,
-                        f"GEODE exceeded MCPMark timeout ({self.timeout}s)",
-                        rounds=rounds,
-                        error=True,
-                        tool_calls=list(loop._tool_processor.tool_log),
-                    )
-                    result = await loop._afinalize_and_return(result, instruction, rounds)
-                finally:
-                    if previous_fail_empty_text is None:
-                        os.environ.pop("GEODE_CODEX_OAUTH_FAIL_EMPTY_TEXT", None)
-                    else:
-                        os.environ["GEODE_CODEX_OAUTH_FAIL_EMPTY_TEXT"] = previous_fail_empty_text
-                task_success = not bool(getattr(result, "error", None)) and (
-                    is_successful_task_termination(getattr(result, "termination_reason", ""))
-                )
-                if not task_success:
-                    await loop.amark_session_error()
+                fail_empty_text_set = True
+                result = await loop.arun(instruction)
+        except BaseException as exc:
+            if isinstance(exc, TimeoutError) and wall.expired():
+                action_timed_out = True
+            else:
+                escaped_error = exc
+        finally:
+            if fail_empty_text_set:
+                if previous_fail_empty_text is None:
+                    os.environ.pop("GEODE_CODEX_OAUTH_FAIL_EMPTY_TEXT", None)
                 else:
-                    await loop.amark_session_completed()
+                    os.environ["GEODE_CODEX_OAUTH_FAIL_EMPTY_TEXT"] = previous_fail_empty_text
+        action_finished = event_loop.time()
+        if escaped_error is None and action_finished >= action_deadline:
+            action_timed_out = True
 
-            token_usage = _usage_dict(result)
-            execution_time = time.time() - start_time
-            self.usage_tracker.update(
-                success=task_success,
-                token_usage=token_usage,
-                turn_count=getattr(result, "rounds", 0),
-                execution_time=execution_time,
-            )
-            if tool_call_log_file:
-                with open(tool_call_log_file, "w", encoding="utf-8") as handle:
-                    json.dump(
-                        getattr(result, "tool_calls", []) or [],
-                        handle,
-                        ensure_ascii=False,
-                        indent=2,
-                    )
+        if action_timed_out:
+            if loop is not None:
+                cognitive_state = getattr(loop, "cognitive_state", None)
+                rounds = int(getattr(cognitive_state, "round_count", 0) or 0)
+                tool_processor = getattr(loop, "_tool_processor", None)
+                tool_calls = list(getattr(tool_processor, "tool_log", []) or [])
+                result = loop._terminal_result(
+                    TerminationReason.TIME_BUDGET_EXPIRED,
+                    f"GEODE exceeded MCPMark action deadline ({self.timeout}s)",
+                    rounds=rounds,
+                    error=True,
+                    tool_calls=tool_calls,
+                )
+            else:
+                result = SimpleNamespace(
+                    text=f"GEODE exceeded MCPMark action deadline ({self.timeout}s)",
+                    rounds=0,
+                    error=str(TerminationReason.TIME_BUDGET_EXPIRED),
+                    termination_reason=TerminationReason.TIME_BUDGET_EXPIRED,
+                    tool_calls=[],
+                    usage=None,
+                )
+
+        task_success = (
+            result is not None
+            and not bool(getattr(result, "error", None))
+            and (is_successful_task_termination(getattr(result, "termination_reason", "")))
+        )
+        cleanup_started = event_loop.time()
+        cleanup_operations: list[Callable[[], Awaitable[Any]]] = []
+        if mcp_server is not None:
+            server_to_close = mcp_server
+
+            async def close_mcp_server() -> None:
+                await server_to_close.__aexit__(None, None, None)
+
+            cleanup_operations.append(close_mcp_server)
+        if loop is not None:
+            if task_success and escaped_error is None:
+                cleanup_operations.append(loop.amark_session_completed)
+            else:
+                cleanup_operations.append(loop.amark_session_error)
+
+        cleanup_error: MCPMarkInfrastructureError | None = None
+        try:
+            await _run_bounded_cleanup("GEODE MCPMark", *cleanup_operations)
+        except MCPMarkInfrastructureError as exc:
+            cleanup_error = exc
+        cleanup_elapsed = event_loop.time() - cleanup_started
+
+        token_usage = _usage_dict(result) if result is not None else {}
+        execution_time = time.time() - start_time
+        self.usage_tracker.update(
+            success=task_success,
+            token_usage=token_usage,
+            turn_count=getattr(result, "rounds", 0),
+            execution_time=execution_time,
+        )
+        if tool_call_log_file:
+            with open(tool_call_log_file, "w", encoding="utf-8") as handle:
+                json.dump(
+                    getattr(result, "tool_calls", []) or [],
+                    handle,
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            if result is not None:
                 try:
                     trajectory_path = export_mcpmark_trajectory(
-                        loop=loop,
+                        loop=loop or SimpleNamespace(_session_id=""),
                         instruction=instruction,
                         result=result,
                         tool_call_log_file=tool_call_log_file,
                         model=model,
                         provider=provider,
                         source=source,
+                        effort=str(self.reasoning_effort or "default"),
+                        action_timed_out=action_timed_out,
                     )
                     trajectory_status = "written"
                     trajectory_error = None
@@ -516,34 +675,60 @@ class GeodeMCPMarkAgent(BaseMCPAgent):
                     trajectory_error = str(exc)
             else:
                 trajectory_path = None
-                trajectory_status = "not_requested"
-                trajectory_error = None
-            return {
-                "success": task_success,
-                "output": getattr(result, "text", "") or "Task completed",
-                "token_usage": token_usage,
-                "turn_count": getattr(result, "rounds", 0),
-                "execution_time": execution_time,
-                "litellm_run_model_name": f"geode/{model}",
-                "geode_trajectory": str(trajectory_path) if trajectory_path else None,
-                "geode_trajectory_status": trajectory_status,
-                "geode_trajectory_error": trajectory_error,
-                "error": (str(getattr(result, "error", "") or "") if not task_success else None),
-            }
-        except Exception:
-            if loop is not None:
-                try:
-                    await loop.amark_session_error()
-                except Exception:
-                    log.debug("MCPMark error lifecycle close failed", exc_info=True)
-            execution_time = time.time() - start_time
-            self.usage_tracker.update(
-                success=False,
-                token_usage={},
-                turn_count=0,
-                execution_time=execution_time,
+                trajectory_status = "failed"
+                trajectory_error = "GEODE action produced no terminal result"
+        else:
+            trajectory_path = None
+            trajectory_status = "not_requested"
+            trajectory_error = None
+
+        evidence_error: MCPMarkInfrastructureError | None = None
+        if trajectory_status == "failed":
+            evidence_error = MCPMarkInfrastructureError(
+                "GEODE MCPMark trajectory finalization failed; attempt is infrastructure-invalid"
             )
-            raise
+        if tool_call_log_file:
+            try:
+                _write_deadline_receipt(
+                    tool_call_log_file,
+                    arm="geode",
+                    limit_seconds=float(self.timeout),
+                    action_started=action_started,
+                    action_deadline=action_deadline,
+                    action_finished=action_finished,
+                    action_timed_out=action_timed_out,
+                    escaped_error=escaped_error,
+                    cleanup_elapsed=cleanup_elapsed,
+                    cleanup_error=cleanup_error,
+                    evidence_status=(
+                        "infrastructure_invalid"
+                        if evidence_error is not None
+                        else trajectory_status
+                    ),
+                    started_at=start_time,
+                )
+            except MCPMarkInfrastructureError as exc:
+                evidence_error = exc
+        infrastructure_error = cleanup_error or evidence_error
+        if infrastructure_error is not None:
+            if escaped_error is not None:
+                raise infrastructure_error from escaped_error
+            raise infrastructure_error
+        if escaped_error is not None:
+            raise escaped_error
+
+        return {
+            "success": task_success,
+            "output": getattr(result, "text", "") or "Task completed",
+            "token_usage": token_usage,
+            "turn_count": getattr(result, "rounds", 0),
+            "execution_time": execution_time,
+            "litellm_run_model_name": f"geode/{model}",
+            "geode_trajectory": str(trajectory_path) if trajectory_path else None,
+            "geode_trajectory_status": trajectory_status,
+            "geode_trajectory_error": trajectory_error,
+            "error": (str(getattr(result, "error", "") or "") if not task_success else None),
+        }
 
 
 class CodexMCPMarkAgent(BaseMCPAgent):
@@ -553,6 +738,9 @@ class CodexMCPMarkAgent(BaseMCPAgent):
         self, instruction: str, tool_call_log_file: str | None = None
     ) -> dict[str, Any]:
         start_time = time.time()
+        event_loop = asyncio.get_running_loop()
+        action_started = event_loop.time()
+        action_deadline = action_started + float(self.timeout)
         self._reset_progress()
         self._refresh_service_config()
         model = _codex_model(self.litellm_input_model_name)
@@ -612,38 +800,51 @@ class CodexMCPMarkAgent(BaseMCPAgent):
             stdout_capture_path = Path(runner_dir) / "codex.stdout.jsonl"
             stderr_capture_path = Path(runner_dir) / "codex.stderr.log"
             escaped_error: BaseException | None = None
+            process: Any | None = None
+            action_timed_out = False
+            wall = asyncio.timeout_at(action_deadline)
             with (
                 stdout_capture_path.open("wb") as stdout_capture,
                 stderr_capture_path.open("wb") as stderr_capture,
             ):
-                process = await asyncio.create_subprocess_exec(
-                    *command,
-                    env=_codex_subscription_environment(),
-                    stdin=asyncio.subprocess.PIPE,
-                    stdout=stdout_capture,
-                    stderr=stderr_capture,
-                )
-                wall = asyncio.timeout(float(self.timeout))
                 try:
                     async with wall:
+                        process = await asyncio.create_subprocess_exec(
+                            *command,
+                            env=_codex_subscription_environment(),
+                            stdin=asyncio.subprocess.PIPE,
+                            stdout=stdout_capture,
+                            stderr=stderr_capture,
+                            start_new_session=os.name == "posix",
+                        )
                         await process.communicate(prompt.encode("utf-8"))
                 except BaseException as exc:
-                    with contextlib.suppress(ProcessLookupError):
-                        process.kill()
-                    if process.stdin is not None:
-                        process.stdin.close()
-                    with contextlib.suppress(TimeoutError):
-                        await asyncio.wait_for(
-                            process.wait(),
-                            timeout=min(max(float(self.timeout), 0.1), 5.0),
-                        )
                     if isinstance(exc, TimeoutError) and wall.expired():
-                        timeout_error = f"codex exec exceeded MCPMark timeout ({self.timeout}s)"
+                        action_timed_out = True
+                        timeout_error = (
+                            f"codex exec exceeded MCPMark action deadline ({self.timeout}s)"
+                        )
                     else:
                         timeout_error = ""
                         escaped_error = exc
                 else:
                     timeout_error = ""
+
+                action_finished = event_loop.time()
+                if escaped_error is None and action_finished >= action_deadline:
+                    action_timed_out = True
+                    timeout_error = f"codex exec exceeded MCPMark action deadline ({self.timeout}s)"
+                cleanup_started = event_loop.time()
+                cleanup_error: MCPMarkInfrastructureError | None = None
+                if process is not None and (action_timed_out or escaped_error is not None):
+                    _kill_process_tree(process)
+                    if process.stdin is not None:
+                        process.stdin.close()
+                    try:
+                        await _run_bounded_cleanup("Codex MCPMark process reap", process.wait)
+                    except MCPMarkInfrastructureError as exc:
+                        cleanup_error = exc
+                cleanup_elapsed = event_loop.time() - cleanup_started
 
             stdout_bytes = stdout_capture_path.read_bytes()
             stderr_bytes = stderr_capture_path.read_bytes()
@@ -655,19 +856,17 @@ class CodexMCPMarkAgent(BaseMCPAgent):
             log_path.write_text(stdout, encoding="utf-8")
             if stderr:
                 log_path.with_suffix(".stderr.log").write_text(stderr, encoding="utf-8")
-        if escaped_error is not None:
-            raise escaped_error
-
-        summary = _summarize_codex_exec(
-            stdout,
-            allow_incomplete_final_record=bool(timeout_error),
-        )
-        execution_time = time.time() - start_time
-        error = timeout_error or summary["error"]
-        if process.returncode and not error:
-            error = stderr.strip() or f"codex exec exited {process.returncode}"
-        task_success = process.returncode == 0 and not error and summary["turn_count"] > 0
-        if tool_call_log_file:
+        summary: dict[str, Any] | None = None
+        trajectory_path: Path | None = None
+        trajectory_status = "not_requested"
+        trajectory_error: str | None = None
+        evidence_error: MCPMarkInfrastructureError | None = None
+        if escaped_error is None:
+            summary = _summarize_codex_exec(
+                stdout,
+                allow_incomplete_final_record=bool(timeout_error),
+            )
+        if tool_call_log_file and escaped_error is None:
             try:
                 trajectory_path = export_codex_mcpmark_trajectory(
                     exec_log_path=Path(tool_call_log_file),
@@ -683,10 +882,48 @@ class CodexMCPMarkAgent(BaseMCPAgent):
                 trajectory_path = None
                 trajectory_status = "failed"
                 trajectory_error = str(exc)
-        else:
-            trajectory_path = None
-            trajectory_status = "not_requested"
-            trajectory_error = None
+                evidence_error = MCPMarkInfrastructureError(
+                    "Codex MCPMark trajectory finalization failed; "
+                    "attempt is infrastructure-invalid"
+                )
+        receipt_error: MCPMarkInfrastructureError | None = None
+        if tool_call_log_file:
+            try:
+                _write_deadline_receipt(
+                    tool_call_log_file,
+                    arm="codex",
+                    limit_seconds=float(self.timeout),
+                    action_started=action_started,
+                    action_deadline=action_deadline,
+                    action_finished=action_finished,
+                    action_timed_out=action_timed_out,
+                    escaped_error=escaped_error,
+                    cleanup_elapsed=cleanup_elapsed,
+                    cleanup_error=cleanup_error,
+                    evidence_status=(
+                        "infrastructure_invalid"
+                        if evidence_error is not None
+                        else trajectory_status
+                    ),
+                    started_at=start_time,
+                )
+            except MCPMarkInfrastructureError as exc:
+                receipt_error = exc
+        infrastructure_error = receipt_error or cleanup_error or evidence_error
+        if infrastructure_error is not None:
+            if escaped_error is not None:
+                raise infrastructure_error from escaped_error
+            raise infrastructure_error
+        if escaped_error is not None:
+            raise escaped_error
+
+        assert summary is not None
+        execution_time = time.time() - start_time
+        error = timeout_error or summary["error"]
+        returncode = getattr(process, "returncode", None)
+        if returncode and not error:
+            error = stderr.strip() or f"codex exec exited {returncode}"
+        task_success = returncode == 0 and not error and summary["turn_count"] > 0
         self.usage_tracker.update(
             success=task_success,
             token_usage=summary["token_usage"],
