@@ -185,6 +185,7 @@ def test_geode_mcpmark_deadline_includes_mcp_startup(monkeypatch, tmp_path) -> N
     from core.config import settings
 
     monkeypatch.setattr(settings, "max_tool_result_tokens", 12_345)
+    monkeypatch.setattr("core.orchestration.tool_offload.get_offload_store", lambda: None)
 
     class MCPServer:
         exited = False
