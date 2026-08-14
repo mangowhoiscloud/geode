@@ -33,6 +33,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from core.agent.system_prompt import build_system_prompt
+from core.config.policy_source import PolicySourceBundle
 from core.paths import GLOBAL_DIAGNOSTICS_DIR
 
 SKILL_EMPTY_MARKER = '<available_skills status="empty" />'
@@ -62,7 +63,12 @@ class PromptDumpRow:
     path: Path
 
 
-def assemble_full_prompt(model: str, surface: str) -> str:
+def assemble_full_prompt(
+    model: str,
+    surface: str,
+    *,
+    policy_sources: PolicySourceBundle | None = None,
+) -> str:
     """Reproduce the loop's final system prompt for *model* on *surface*."""
     import os
 
@@ -72,7 +78,7 @@ def assemble_full_prompt(model: str, surface: str) -> str:
     os.environ["GEODE_SURFACE_TYPE"] = surface
     try:
         ensure_user_profile()
-        base = build_system_prompt(model=model)
+        base = build_system_prompt(model=model, policy_sources=policy_sources)
     finally:
         if previous_surface is None:
             os.environ.pop("GEODE_SURFACE_TYPE", None)
@@ -131,6 +137,7 @@ def dump_matrix(
     *,
     out_dir: Path | None = None,
     measure: bool = False,
+    policy_sources: PolicySourceBundle | None = None,
 ) -> list[PromptDumpRow]:
     """Dump every (model, surface) cell to disk and return summary rows."""
     timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
@@ -140,7 +147,11 @@ def dump_matrix(
     rows: list[PromptDumpRow] = []
     for model in models:
         for surface in surfaces:
-            prompt = assemble_full_prompt(model, surface)
+            prompt = assemble_full_prompt(
+                model,
+                surface,
+                policy_sources=policy_sources,
+            )
             tags, duplicates = analyze_prompt(prompt)
             measured = measure_tokens_anthropic(prompt) if measure else None
             est_tokens = measured if measured is not None else len(prompt) // 4

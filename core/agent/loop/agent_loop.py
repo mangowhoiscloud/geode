@@ -28,6 +28,7 @@ from core.agent.tool_executor import (
     ToolCallProcessor,
     ToolExecutor,
 )
+from core.config.policy_source import EMPTY_POLICY_SOURCES, PolicySourceBundle
 from core.hooks import (
     HookAction,
     HookCorrelation,
@@ -81,6 +82,7 @@ REPLAN_LOW_CONFIDENCE = 0.4  # confidence < → edge-triggered replan
 if TYPE_CHECKING:
     from core.agent.capability_graph import CapabilityGraph
     from core.agent.task_preflight import TaskPreflight
+    from core.observability.run_event import RunEventSinkProvider
     from core.tools.registry import ToolRegistry
 
 log = logging.getLogger(__name__)
@@ -389,6 +391,8 @@ class AgenticLoop:
         response_schema: dict[str, Any] | None = None,
         allow_actionable_partial_on_empty: bool = False,
         yield_after_tool_round: bool = False,
+        activity_sink_provider: RunEventSinkProvider | None = None,
+        policy_sources: PolicySourceBundle | None = None,
     ) -> None:
         self.context = context
         self.executor = tool_executor
@@ -408,6 +412,8 @@ class AgenticLoop:
         # default AgenticLoop contract remains while(tool_use); opted-in callers
         # yield only after one completed tool batch has been recorded.
         self._yield_after_tool_round = yield_after_tool_round
+        self._activity_sink_provider = activity_sink_provider
+        self._policy_sources = policy_sources or EMPTY_POLICY_SOURCES
         self.max_rounds = max_rounds
         self.max_tokens = max_tokens
         self._thinking_budget = thinking_budget
@@ -519,6 +525,7 @@ class AgenticLoop:
             force_include=allowed_tool_names,
             provider=self._provider,
             source=self._source,
+            policy_sources=self._policy_sources,
         )
         if allowed_tool_names is not None:
             self._tools = [t for t in self._tools if t.get("name") in allowed_tool_names]
@@ -895,6 +902,7 @@ class AgenticLoop:
             max_tokens=settings.cognitive_reflection_max_tokens,
             provider=reflection_provider,
             source=reflection_source,
+            policy_sources=self._policy_sources,
             **reflection_kwargs,
         )
 

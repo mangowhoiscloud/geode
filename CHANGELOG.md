@@ -80,6 +80,16 @@ functional change.
   environment, and the runner checks dependency integrity and source imports
   before any model call.
 
+### Architecture
+
+- **Separated neutral runtime seams from the bundled self-improving product.**
+  Kernel policy readers now consume immutable source selections, Anthropic
+  prompt contributions use the existing composed middleware boundary, and
+  generic lifecycle/hook writers receive an optional bounded activity sink.
+  The product retains its policy files, prompt recipes, `RunTimeline` writer,
+  storage paths, and ContextVar; a direct-import contract prevents the closed
+  kernel from reaching back into that product surface.
+
 ### Fixed
 
 - **MCPMark Filesystem-30 now binds score and semantic fixture state.** The

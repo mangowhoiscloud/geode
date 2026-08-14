@@ -32,6 +32,7 @@ from core.agent.verify import (
     _verify_llm_judge,
     verify_turn,
 )
+from core.config.policy_source import EMPTY_POLICY_SOURCES
 
 
 @pytest.fixture(autouse=True)
@@ -224,7 +225,12 @@ def test_decompose_async_inherits_loop_model(monkeypatch: pytest.MonkeyPatch) ->
         # (we only care which model was requested for the call).
         return None
 
-    loop = SimpleNamespace(_call_llm=_fake_call_llm, _tools=[], model="claude-haiku-4-5")
+    loop = SimpleNamespace(
+        _call_llm=_fake_call_llm,
+        _tools=[],
+        _policy_sources=EMPTY_POLICY_SOURCES,
+        model="claude-haiku-4-5",
+    )
 
     from core.agent.plan import decompose_async
 
@@ -249,7 +255,12 @@ def test_decompose_async_ignores_removed_plan_model(
         captured["model"] = model or ""
         return None
 
-    loop = SimpleNamespace(_call_llm=_fake_call_llm, _tools=[], model="claude-opus-4-7")
+    loop = SimpleNamespace(
+        _call_llm=_fake_call_llm,
+        _tools=[],
+        _policy_sources=EMPTY_POLICY_SOURCES,
+        model="claude-opus-4-7",
+    )
 
     from core.agent.plan import decompose_async
 

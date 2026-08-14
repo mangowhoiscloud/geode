@@ -2,7 +2,7 @@
 
 S0a 검증된 5-element 패턴 (SoT + path + reader + entry + env) 의 T1 적용:
 - SoT: tool-descriptions.json
-- Path: AUTORESEARCH_TOOL_DESCRIPTIONS_PATH
+- Path: product policy-source bundle
 - Reader: core/agent/tool_descriptions_policy.py
 - Entry: core/agent/loop/_tool_factory.py:get_agentic_tools
 - Env: GEODE_TOOL_DESCRIPTIONS_OVERRIDE
@@ -16,25 +16,28 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from core.agent import tool_descriptions_policy
 from core.agent.tool_descriptions_policy import (
     _load_tool_descriptions_override,
     apply_tool_descriptions_policy,
 )
+from core.config.policy_source import PolicySourcePaths
 
 
 @pytest.fixture
 def isolated_sot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
     """Isolate all 3 SoT layers to tmp_path."""
     sot = tmp_path / "tool-descriptions.json"
-    operator_local = tmp_path / "operator-local-tool-descriptions.json"
-    monkeypatch.setattr(tool_descriptions_policy, "_TOOL_DESCRIPTIONS_SOT_PATH", sot)
-    monkeypatch.setattr(
-        tool_descriptions_policy, "_OPERATOR_LOCAL_TOOL_DESCRIPTIONS_PATH", operator_local
-    )
     monkeypatch.delenv("GEODE_TOOL_DESCRIPTIONS_OVERRIDE", raising=False)
     monkeypatch.delenv("GEODE_TOOL_DESCRIPTIONS_STRICT", raising=False)
     yield sot
+
+
+def _sources(sot: Path) -> PolicySourcePaths:
+    return PolicySourcePaths(
+        "GEODE_TOOL_DESCRIPTIONS_OVERRIDE",
+        operator_local=sot.parent / "operator-local-tool-descriptions.json",
+        packaged_default=sot,
+    )
 
 
 def _write(sot: Path, payload: dict[str, Any]) -> None:
@@ -45,30 +48,30 @@ def _write(sot: Path, payload: dict[str, Any]) -> None:
 
 
 def test_load_returns_none_when_sot_missing(isolated_sot: Path) -> None:
-    assert _load_tool_descriptions_override() is None
+    assert _load_tool_descriptions_override(sources=_sources(isolated_sot)) is None
 
 
 def test_load_returns_none_when_unreadable(isolated_sot: Path) -> None:
     isolated_sot.write_text("bad json {", encoding="utf-8")
-    assert _load_tool_descriptions_override() is None
+    assert _load_tool_descriptions_override(sources=_sources(isolated_sot)) is None
 
 
 def test_load_returns_none_when_type_violation(isolated_sot: Path) -> None:
     _write(isolated_sot, {"bash": {"description": ["not", "str"]}})
-    assert _load_tool_descriptions_override() is None
+    assert _load_tool_descriptions_override(sources=_sources(isolated_sot)) is None
 
 
 def test_load_valid_payload(isolated_sot: Path) -> None:
     payload = {"bash": {"description": "overridden", "hints": ["hint1", "hint2"]}}
     _write(isolated_sot, payload)
-    result = _load_tool_descriptions_override()
+    result = _load_tool_descriptions_override(sources=_sources(isolated_sot))
     assert result == payload
 
 
 def test_load_unknown_field_in_entry_ignored(isolated_sot: Path) -> None:
     """Forward-compat — entry 내 알려지지 않은 field 는 무시."""
     _write(isolated_sot, {"bash": {"description": "x", "unknown_field": "ignored"}})
-    result = _load_tool_descriptions_override()
+    result = _load_tool_descriptions_override(sources=_sources(isolated_sot))
     assert result == {"bash": {"description": "x"}}
 
 
@@ -77,7 +80,7 @@ def test_strict_load_raises_on_missing(tmp_path: Path, monkeypatch: pytest.Monke
     monkeypatch.setenv("GEODE_TOOL_DESCRIPTIONS_OVERRIDE", str(tmp_path / "nope.json"))
     monkeypatch.setenv("GEODE_TOOL_DESCRIPTIONS_STRICT", "1")
     with pytest.raises(RuntimeError, match="GEODE_TOOL_DESCRIPTIONS_OVERRIDE"):
-        _load_tool_descriptions_override()
+        _load_tool_descriptions_override(sources=_sources(tmp_path / "tool-descriptions.json"))
 
 
 def test_strict_load_raises_on_hints_type(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -86,7 +89,7 @@ def test_strict_load_raises_on_hints_type(tmp_path: Path, monkeypatch: pytest.Mo
     monkeypatch.setenv("GEODE_TOOL_DESCRIPTIONS_OVERRIDE", str(bad))
     monkeypatch.setenv("GEODE_TOOL_DESCRIPTIONS_STRICT", "1")
     with pytest.raises(RuntimeError, match="hints"):
-        _load_tool_descriptions_override()
+        _load_tool_descriptions_override(sources=_sources(tmp_path / "tool-descriptions.json"))
 
 
 def test_env_var_without_strict_flag_is_graceful_on_missing(
@@ -95,7 +98,10 @@ def test_env_var_without_strict_flag_is_graceful_on_missing(
     """PR-BACKFILL-SOT (2026-05-21) — env var alone treats env path graceful."""
     monkeypatch.setenv("GEODE_TOOL_DESCRIPTIONS_OVERRIDE", str(tmp_path / "nope.json"))
     monkeypatch.delenv("GEODE_TOOL_DESCRIPTIONS_STRICT", raising=False)
-    assert _load_tool_descriptions_override() is None
+    assert (
+        _load_tool_descriptions_override(sources=_sources(tmp_path / "tool-descriptions.json"))
+        is None
+    )
 
 
 def test_operator_local_layer_takes_priority_over_in_repo(isolated_sot: Path) -> None:
@@ -103,7 +109,9 @@ def test_operator_local_layer_takes_priority_over_in_repo(isolated_sot: Path) ->
     operator_local = isolated_sot.parent / "operator-local-tool-descriptions.json"
     operator_local.write_text(json.dumps({"bash": {"description": "from-ops"}}), encoding="utf-8")
     _write(isolated_sot, {"bash": {"description": "from-repo"}})
-    assert _load_tool_descriptions_override() == {"bash": {"description": "from-ops"}}
+    assert _load_tool_descriptions_override(sources=_sources(isolated_sot)) == {
+        "bash": {"description": "from-ops"}
+    }
 
 
 # Apply -----------------------------------------------------------------------
@@ -181,8 +189,8 @@ def test_helpers_applies_descriptions_before_tool_policy() -> None:
     forbidden/priority 가 갱신된 description 기반으로 판단 가능."""
     repo_root = Path(__file__).resolve().parents[3]
     src = (repo_root / "core/agent/loop/_tool_factory.py").read_text(encoding="utf-8")
-    desc_pos = src.find("apply_tool_descriptions_policy(tools,")
-    policy_pos = src.find("apply_tool_policy(tools,")
+    desc_pos = src.find("tools = apply_tool_descriptions_policy(")
+    policy_pos = src.find("policed = apply_tool_policy(")
     assert desc_pos > 0 and policy_pos > 0
     assert desc_pos < policy_pos
 
@@ -190,10 +198,12 @@ def test_helpers_applies_descriptions_before_tool_policy() -> None:
 # Path constant ---------------------------------------------------------------
 
 
-def test_path_constant_in_core_paths() -> None:
-    from core.paths import AUTORESEARCH_TOOL_DESCRIPTIONS_PATH
+def test_product_bundle_owns_tool_descriptions_source() -> None:
+    from core.self_improving.policy_sources import build_policy_source_bundle
 
-    assert AUTORESEARCH_TOOL_DESCRIPTIONS_PATH.name == "tool-descriptions.json"
+    source = build_policy_source_bundle()["tool_descriptions"]
+    assert source.packaged_default is not None
+    assert source.packaged_default.name == "tool-descriptions.json"
 
 
 # Env wiring in train.py ------------------------------------------------------
@@ -209,18 +219,9 @@ def test_train_py_sets_descriptions_override_env() -> None:
 # ALIVE marker ----------------------------------------------------------------
 
 
-def test_tool_descriptions_json_referenced_in_inference_path() -> None:
-    repo_root = Path(__file__).resolve().parents[3]
-    hits: list[str] = []
-    for path in (repo_root / "core" / "agent").rglob("*.py"):
-        if "test_" in path.name:
-            continue
-        try:
-            content = path.read_text(encoding="utf-8")
-        except OSError:
-            continue
-        if "tool-descriptions.json" in content:
-            hits.append(str(path.relative_to(repo_root)))
-    assert any("tool_descriptions_policy.py" in h for h in hits), (
-        f"tool-descriptions.json 이 core/agent/tool_descriptions_policy.py 에서 발견되어야 함. hits={hits}"
-    )
+def test_tool_descriptions_reader_uses_explicit_source() -> None:
+    source = (
+        Path(__file__).resolve().parents[3] / "core/agent/tool_descriptions_policy.py"
+    ).read_text(encoding="utf-8")
+    assert "sources: PolicySourcePaths | None" in source
+    assert "load_policy_source(" in source

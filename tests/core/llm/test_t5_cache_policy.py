@@ -2,36 +2,47 @@
 
 5-element 패턴:
 - SoT: cache-policy.json
-- Path: AUTORESEARCH_CACHE_POLICY_PATH + OPERATOR_LOCAL_CACHE_POLICY_PATH
+- Sources: explicit override + operator-local + packaged candidates
 - Reader: core/llm/cache_policy.py
-- Entry: core/llm/adapters/_anthropic_common.py `_system_and_messages` (2026-07-29 repoint)
+- Entry: product request middleware → Anthropic ``provider_options``
 - Env: GEODE_CACHE_POLICY_OVERRIDE + GEODE_CACHE_POLICY_STRICT
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import Iterator
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from core.llm import cache_policy
+from core.config.policy_source import PolicySourcePaths
+from core.hooks import LlmCallRequest, MiddlewareRegistry
+from core.llm.adapters._anthropic_common import build_create_kwargs, build_stream_kwargs
+from core.llm.adapters.base import AdapterCallRequest, Message
 from core.llm.cache_policy import (
     _load_cache_policy_override,
     apply_cache_policy_breakpoints,
 )
+from core.self_improving.loop.inject.in_context_wiring import register_in_context_middleware
 
 
 @pytest.fixture
 def isolated_sot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
     sot = tmp_path / "cache-policy.json"
-    operator_local = tmp_path / "operator-local-cache-policy.json"
-    monkeypatch.setattr(cache_policy, "_CACHE_POLICY_SOT_PATH", sot)
-    monkeypatch.setattr(cache_policy, "_OPERATOR_LOCAL_CACHE_POLICY_PATH", operator_local)
     monkeypatch.delenv("GEODE_CACHE_POLICY_OVERRIDE", raising=False)
     monkeypatch.delenv("GEODE_CACHE_POLICY_STRICT", raising=False)
     yield sot
+
+
+def _sources(sot: Path) -> PolicySourcePaths:
+    return PolicySourcePaths(
+        "GEODE_CACHE_POLICY_OVERRIDE",
+        sot.parent / "operator-local-cache-policy.json",
+        sot,
+    )
 
 
 def _write(sot: Path, payload: dict[str, Any]) -> None:
@@ -42,50 +53,54 @@ def _write(sot: Path, payload: dict[str, Any]) -> None:
 
 
 def test_load_returns_none_when_sot_missing(isolated_sot: Path) -> None:
-    assert _load_cache_policy_override() is None
+    assert _load_cache_policy_override(sources=_sources(isolated_sot)) is None
 
 
 def test_load_returns_none_when_unreadable(isolated_sot: Path) -> None:
     isolated_sot.write_text("bad json {", encoding="utf-8")
-    assert _load_cache_policy_override() is None
+    assert _load_cache_policy_override(sources=_sources(isolated_sot)) is None
 
 
 def test_load_returns_none_when_value_not_int(isolated_sot: Path) -> None:
     _write(isolated_sot, {"messages_breakpoints": "three"})
-    assert _load_cache_policy_override() is None
+    assert _load_cache_policy_override(sources=_sources(isolated_sot)) is None
 
 
 def test_load_rejects_bool_as_int(isolated_sot: Path) -> None:
     """Python bool is int subclass — _validate_schema rejects bool explicitly."""
     _write(isolated_sot, {"messages_breakpoints": True})
-    assert _load_cache_policy_override() is None
+    assert _load_cache_policy_override(sources=_sources(isolated_sot)) is None
 
 
 def test_load_valid_payload_each_value(isolated_sot: Path) -> None:
     for n in (0, 1, 2, 3):
         _write(isolated_sot, {"messages_breakpoints": n})
-        assert _load_cache_policy_override() == {"messages_breakpoints": n}
+        assert _load_cache_policy_override(sources=_sources(isolated_sot)) == {
+            "messages_breakpoints": n
+        }
 
 
 def test_load_out_of_range_value_dropped(isolated_sot: Path) -> None:
     """Out-of-range (4, -1) → per-axis graceful drop (returns empty dict)."""
     _write(isolated_sot, {"messages_breakpoints": 4})
-    assert _load_cache_policy_override() == {}
+    assert _load_cache_policy_override(sources=_sources(isolated_sot)) == {}
     _write(isolated_sot, {"messages_breakpoints": -1})
-    assert _load_cache_policy_override() == {}
+    assert _load_cache_policy_override(sources=_sources(isolated_sot)) == {}
 
 
 def test_load_unknown_field_dropped(isolated_sot: Path) -> None:
     """Forward-compat — unknown field 자동 drop."""
     _write(isolated_sot, {"messages_breakpoints": 2, "future_field": "x"})
-    assert _load_cache_policy_override() == {"messages_breakpoints": 2}
+    assert _load_cache_policy_override(sources=_sources(isolated_sot)) == {
+        "messages_breakpoints": 2
+    }
 
 
 def test_strict_env_var_raises_on_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GEODE_CACHE_POLICY_OVERRIDE", str(tmp_path / "nope.json"))
     monkeypatch.setenv("GEODE_CACHE_POLICY_STRICT", "1")
     with pytest.raises(RuntimeError, match="GEODE_CACHE_POLICY_OVERRIDE"):
-        _load_cache_policy_override()
+        _load_cache_policy_override(sources=_sources(tmp_path / "cache-policy.json"))
 
 
 def test_env_var_without_strict_is_graceful(
@@ -93,14 +108,16 @@ def test_env_var_without_strict_is_graceful(
 ) -> None:
     monkeypatch.setenv("GEODE_CACHE_POLICY_OVERRIDE", str(tmp_path / "nope.json"))
     monkeypatch.delenv("GEODE_CACHE_POLICY_STRICT", raising=False)
-    assert _load_cache_policy_override() is None
+    assert _load_cache_policy_override(sources=_sources(tmp_path / "cache-policy.json")) is None
 
 
 def test_operator_local_layer_priority(isolated_sot: Path) -> None:
     operator_local = isolated_sot.parent / "operator-local-cache-policy.json"
     operator_local.write_text(json.dumps({"messages_breakpoints": 1}), encoding="utf-8")
     _write(isolated_sot, {"messages_breakpoints": 3})
-    assert _load_cache_policy_override() == {"messages_breakpoints": 1}
+    assert _load_cache_policy_override(sources=_sources(isolated_sot)) == {
+        "messages_breakpoints": 1
+    }
 
 
 # Apply -----------------------------------------------------------------------
@@ -131,37 +148,57 @@ def test_apply_with_different_defaults() -> None:
 # Wiring ----------------------------------------------------------------------
 
 
-def test_anthropic_provider_imports_reader_and_apply() -> None:
-    repo_root = Path(__file__).resolve().parents[3]
-    src = (repo_root / "core/llm/adapters/_anthropic_common.py").read_text(encoding="utf-8")
-    assert "_load_cache_policy_override" in src
-    assert "apply_cache_policy_breakpoints" in src
+def test_active_policy_reaches_create_and_stream_wire(isolated_sot: Path) -> None:
+    _write(isolated_sot, {"messages_breakpoints": 1})
+    registry = MiddlewareRegistry()
+    register_in_context_middleware(
+        registry,
+        policy_sources={"cache_policy": _sources(isolated_sot)},
+    )
+    request = AdapterCallRequest(
+        model="claude-sonnet-5",
+        system_prompt="system",
+        messages=(
+            Message(role="user", content="first"),
+            Message(role="assistant", content="answer"),
+            Message(role="user", content="latest"),
+        ),
+    )
+    transformed = asyncio.run(
+        registry.llm_request(
+            LlmCallRequest(
+                adapter=SimpleNamespace(name="anthropic-payg"),
+                request=request,
+            )
+        )
+    ).request
 
-
-def test_anthropic_provider_uses_apply_before_cache_control() -> None:
-    """`n_breakpoints = apply_cache_policy_breakpoints(...)` must precede
-    the actual `apply_messages_cache_control(...)` call where the override
-    flows into ``n_breakpoints=`` kwarg."""
-    repo_root = Path(__file__).resolve().parents[3]
-    src = (repo_root / "core/llm/adapters/_anthropic_common.py").read_text(encoding="utf-8")
-    apply_idx = src.find("apply_cache_policy_breakpoints(")
-    # Find apply_messages_cache_control that uses our n_breakpoints variable.
-    call_idx = src.find("n_breakpoints=n_breakpoints")
-    assert apply_idx > 0, "apply_cache_policy_breakpoints must be invoked"
-    assert call_idx > 0, "apply_messages_cache_control must use n_breakpoints kwarg"
-    assert apply_idx < call_idx, "apply_cache_policy_breakpoints must precede its consumer"
+    create = build_create_kwargs(transformed)
+    stream = build_stream_kwargs(transformed)
+    assert create["messages"] == stream["messages"]
+    assert transformed.provider_options["cache_message_breakpoints"] == 1
+    marked = [
+        block
+        for message in create["messages"]
+        for block in (message["content"] if isinstance(message["content"], list) else [])
+        if block.get("cache_control") == {"type": "ephemeral"}
+    ]
+    assert len(marked) == 1
 
 
 # Path constants --------------------------------------------------------------
 
 
-def test_path_constants_present() -> None:
-    from core.paths import AUTORESEARCH_CACHE_POLICY_PATH, OPERATOR_LOCAL_CACHE_POLICY_PATH
+def test_product_source_candidates_present() -> None:
+    from core.self_improving.policy_sources import build_policy_source_bundle
 
-    assert AUTORESEARCH_CACHE_POLICY_PATH.name == "cache-policy.json"
-    assert OPERATOR_LOCAL_CACHE_POLICY_PATH.name == "cache-policy.json"
-    assert "policies" in str(AUTORESEARCH_CACHE_POLICY_PATH)
-    assert "autoresearch/handoff" in str(OPERATOR_LOCAL_CACHE_POLICY_PATH)
+    sources = build_policy_source_bundle()["cache_policy"]
+    assert sources.packaged_default is not None
+    assert sources.operator_local is not None
+    assert sources.packaged_default.name == "cache-policy.json"
+    assert sources.operator_local.name == "cache-policy.json"
+    assert "policies" in str(sources.packaged_default)
+    assert "autoresearch/handoff" in str(sources.operator_local)
 
 
 # Env wiring in train.py ------------------------------------------------------
@@ -180,16 +217,6 @@ def test_train_py_sets_cache_policy_env_pair() -> None:
 
 def test_cache_policy_json_referenced_in_inference_path() -> None:
     repo_root = Path(__file__).resolve().parents[3]
-    hits: list[str] = []
-    for path in (repo_root / "core").rglob("*.py"):
-        if "test_" in path.name:
-            continue
-        try:
-            content = path.read_text(encoding="utf-8")
-        except OSError:
-            continue
-        if "cache-policy.json" in content:
-            hits.append(str(path.relative_to(repo_root)))
-    assert any("cache_policy.py" in h for h in hits), (
-        f"cache-policy.json must appear in core/llm/cache_policy.py. hits={hits}"
-    )
+    composition = (repo_root / "core/self_improving/policy_sources.py").read_text(encoding="utf-8")
+    assert '"cache_policy"' in composition
+    assert "AUTORESEARCH_CACHE_POLICY_PATH" in composition

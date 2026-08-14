@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from hashlib import sha256
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from core.hooks.catalog import event_persistence_spec
 from core.hooks.system import HookDispatch, HookEvent
@@ -17,6 +17,9 @@ from core.observability.event_store import (
 )
 
 log = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from core.observability.run_event import RunEventSinkProvider
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,11 +50,13 @@ class HookPersistenceSink:
         session_key: str,
         run_id: str,
         payload_policy: EventRetentionPolicy | None = None,
+        activity_sink_provider: RunEventSinkProvider | None = None,
     ) -> None:
         self.store = store
         self.session_key = session_key
         self.run_id = run_id
         self._payload_policy = payload_policy or EventRetentionPolicy()
+        self._activity_sink_provider = activity_sink_provider
 
     def __call__(self, dispatch: HookDispatch) -> None:
         spec = event_persistence_spec(dispatch.event)
@@ -200,15 +205,13 @@ class HookPersistenceSink:
         digest = sha256(f"{self.run_id}\0{value}".encode()).hexdigest()[:24]
         return f"{namespace}:{digest}"
 
-    @staticmethod
     def _mirror_run_projection(
+        self,
         dispatch: HookDispatch,
         activity: _ActivityEnvelope,
         payload: dict[str, Any],
     ) -> None:
-        from core.self_improving.loop.observe.run_timeline import current_run_timeline
-
-        timeline = current_run_timeline()
+        timeline = self._activity_sink_provider() if self._activity_sink_provider else None
         if timeline is None:
             return
         timeline.append(

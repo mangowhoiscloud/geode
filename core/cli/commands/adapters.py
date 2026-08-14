@@ -41,8 +41,9 @@ app = typer.Typer(
 def adapters_list() -> None:
     """List all registered adapters with billing_type + environment status."""
     from core.llm.adapters import bootstrap_builtins, list_adapters
+    from core.wiring.bootstrap import build_product_policy_sources
 
-    bootstrap_builtins()
+    bootstrap_builtins(policy_sources=build_product_policy_sources())
     adapters = list_adapters()
     if not adapters:
         typer.echo("No LLM adapters registered.")
@@ -67,8 +68,9 @@ def adapters_list() -> None:
 def adapters_detect_model(name: str) -> None:
     """Report the currently configured model + provenance for ``name``."""
     from core.llm.adapters import AdapterNotFoundError, bootstrap_builtins, get_adapter
+    from core.wiring.bootstrap import build_product_policy_sources
 
-    bootstrap_builtins()
+    bootstrap_builtins(policy_sources=build_product_policy_sources())
     try:
         adapter = get_adapter(name)
     except AdapterNotFoundError as exc:
@@ -91,7 +93,7 @@ _SINCE_UNITS: dict[str, int] = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604
 def _parse_since(spec: str) -> int:
     """Parse ``1h`` / ``30m`` / ``2d`` style window into seconds.
 
-    Raises ``typer.BadParameter`` on unparseable input — explicit failure
+    Raises ``typer.BadParameter`` on unparsable input — explicit failure
     beats silently defaulting to "all of history" which could surface
     weeks-old data with no warning.
     """

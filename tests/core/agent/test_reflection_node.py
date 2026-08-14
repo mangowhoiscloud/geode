@@ -19,6 +19,7 @@ import pytest
 from core.agent.cognitive_state import CognitiveState
 from core.agent.loop import _reflection
 from core.agent.loop._reflection import REFLECTION_TOOL_NAME
+from core.config.policy_source import EMPTY_POLICY_SOURCES, PolicySourceBundle
 
 # ---------------------------------------------------------------------------
 # Pure-function invariants (no LLM)
@@ -300,12 +301,14 @@ def test_maybe_reflect_inherits_loop_model_provider_source(
         max_tokens: int,
         provider: str | None = None,
         source: str | None = None,
+        policy_sources: PolicySourceBundle | None = None,
     ) -> None:
         captured.update(
             model=model,
             max_tokens=max_tokens,
             provider=provider,
             source=source,
+            policy_sources=policy_sources,
         )
 
     monkeypatch.setattr(_reflection, "reflect_async", _fake_reflect_async)
@@ -328,6 +331,7 @@ def test_maybe_reflect_inherits_loop_model_provider_source(
             _provider = "openai-codex"
             _source = "api_key"
             _new_adapter = _Adapter()
+            _policy_sources = EMPTY_POLICY_SOURCES
 
         bound = AgenticLoop._maybe_reflect.__get__(_StubSelf(), _StubSelf)
         asyncio.run(bound([]))
@@ -337,6 +341,7 @@ def test_maybe_reflect_inherits_loop_model_provider_source(
         object.__setattr__(settings, "cognitive_reflection_enabled", old_enabled)
         object.__setattr__(settings, "cognitive_reflection_interval", old_interval)
 
+    assert captured.pop("policy_sources") is EMPTY_POLICY_SOURCES
     assert captured == {
         "model": "gpt-5.5",
         "max_tokens": 321,
@@ -363,8 +368,14 @@ def test_maybe_reflect_configured_model_stays_explicit(
         max_tokens: int,
         provider: str | None = None,
         source: str | None = None,
+        policy_sources: PolicySourceBundle | None = None,
     ) -> None:
-        captured.update(model=model, provider=provider, source=source)
+        captured.update(
+            model=model,
+            provider=provider,
+            source=source,
+            policy_sources=policy_sources,
+        )
 
     monkeypatch.setattr(_reflection, "reflect_async", _fake_reflect_async)
     old_model = getattr(settings, "cognitive_reflection_model", "")
@@ -381,6 +392,7 @@ def test_maybe_reflect_configured_model_stays_explicit(
             _provider = "openai-codex"
             _source = "subscription"
             _new_adapter = object()
+            _policy_sources = EMPTY_POLICY_SOURCES
 
         bound = AgenticLoop._maybe_reflect.__get__(_StubSelf(), _StubSelf)
         asyncio.run(bound([]))
@@ -389,6 +401,7 @@ def test_maybe_reflect_configured_model_stays_explicit(
         object.__setattr__(settings, "cognitive_reflection_enabled", old_enabled)
         object.__setattr__(settings, "cognitive_reflection_interval", old_interval)
 
+    assert captured.pop("policy_sources") is EMPTY_POLICY_SOURCES
     assert captured == {
         "model": "claude-haiku-4-5-20251001",
         "provider": None,

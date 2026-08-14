@@ -296,7 +296,7 @@ def test_orchestrator_prepends_memory_block(
 
     monkeypatch.setattr(
         "core.self_improving.loop.inject.in_context_slots._load_in_context_slots_override",
-        lambda: {
+        lambda **_kwargs: {
             SLOT_MEMORY_RECALL: InContextSlot(
                 name=SLOT_MEMORY_RECALL,
                 max_entries=3,
@@ -336,7 +336,7 @@ def test_orchestrator_no_op_when_recall_dir_missing(
     )
     monkeypatch.setattr(
         "core.self_improving.loop.inject.in_context_slots._load_in_context_slots_override",
-        lambda: {
+        lambda **_kwargs: {
             SLOT_MEMORY_RECALL: InContextSlot(
                 name=SLOT_MEMORY_RECALL,
                 max_entries=3,

@@ -11,7 +11,8 @@ PR-CLEANUP-7 (2026-05-23): the per-self-improving-loop-run lifecycle
 writer (``SessionJournal`` re-exported from here, since renamed to
 :class:`~core.self_improving.loop.observe.run_timeline.RunTimeline`)
 moved into :mod:`core.self_improving.loop.observe.run_timeline`; this
-package is back to OTel + per-session metrics only.
+package retains only its neutral run-event contracts and compaction helper;
+the product still owns the writer, path, and active binding.
 
 See ``docs/plans/eval-petri-p3b-2-execution.md`` § Future tooling —
 Observability.

@@ -31,11 +31,16 @@ from core.agent.style_guide_policy import (
     _load_style_guide_override,
     apply_style_guide_policy,
 )
+from core.config.policy_source import (
+    PolicySourceBundle,
+    PolicySourcePaths,
+    select_policy_source,
+)
 from core.llm.model_guidance import render_model_guidance
 from core.llm.platform_hints import render_platform_hint
 from core.llm.prompt_assembler import with_math_output_formatting
 from core.llm.prompts import AGENTIC_SUFFIX, ROUTER_SYSTEM
-from core.paths import AUTORESEARCH_WRAPPER_SECTIONS_PATH, get_project_root
+from core.paths import get_project_root
 
 log = logging.getLogger(__name__)
 
@@ -47,7 +52,6 @@ _MAX_SECTION_LINES = 20
 _MAX_IDENTITY_LINES = 40
 
 _SYSTEM_PROMPT_TEMPLATE = ROUTER_SYSTEM
-_WRAPPER_OVERRIDE_ENV = "GEODE_WRAPPER_OVERRIDE"
 WRAPPER_OVERRIDE_HOOK_READY = True
 
 # Prompt caching boundary marker. The Anthropic adapter splits the prompt at
@@ -57,45 +61,28 @@ WRAPPER_OVERRIDE_HOOK_READY = True
 PROMPT_CACHE_BOUNDARY = "<dynamic_context>"
 
 
-_WRAPPER_SECTIONS_SOT_PATH = AUTORESEARCH_WRAPPER_SECTIONS_PATH
-"""G5a — cross-process SoT path shared with :mod:`core.self_improving.train`.
+def _load_wrapper_override(*, sources: PolicySourcePaths | None = None) -> str | None:
+    """Load the composition-selected wrapper, or use the generic prefix.
 
-Aliased from :data:`core.paths.AUTORESEARCH_WRAPPER_SECTIONS_PATH` so the
-``.geode`` literal lives in exactly one place (path-literal guard
-contract); the module-local alias is kept so tests can monkeypatch
-``core.agent.system_prompt._WRAPPER_SECTIONS_SOT_PATH`` without
-mutating the shared constant.
-"""
-
-
-def _load_wrapper_override() -> str | None:
-    """Return the active wrapper override, or ``None`` when no override is set.
-
-    Resolution order (G5a, 2026-05-20):
-
-    1. ``GEODE_WRAPPER_OVERRIDE`` env var — audit subprocess hook.
-       When set, the file MUST exist and parse; schema / load failures
-       are fatal so real-mode autoresearch cannot silently spend
-       quota on the default wrapper.
-    2. ``~/.geode/autoresearch/handoff/wrapper-sections.json`` — daily-run
-       SoT written by the G5b self-improving-loop runner. When the env
-       var is unset and this file exists, daily ``geode`` invocations
-       automatically pick up the evolved wrapper without any manual
-       env management. Schema failures here log a WARNING and fall
-       through to ``None`` (graceful degrade to ``_generic_static_prefix``)
-       so a corrupted SoT can't brick GEODE.
-    3. ``None`` — use ``_generic_static_prefix`` (router default).
+    Explicit overrides are authoritative and may be strict. Other supplied
+    candidates degrade gracefully when absent or invalid.
     """
-    override_path = os.environ.get(_WRAPPER_OVERRIDE_ENV)
-    if override_path:
-        return _strict_load(Path(override_path))
-    # G5a env-less fallback — daily-run SoT lookup.
-    if _WRAPPER_SECTIONS_SOT_PATH.is_file():
-        return _graceful_load(_WRAPPER_SECTIONS_SOT_PATH)
-    return None
+    if sources is None:
+        return None
+    selection = select_policy_source(sources)
+    if selection is None:
+        return None
+    if selection.strict:
+        return _strict_load(selection.path, override_env=sources.override_env)
+    return _graceful_load(selection.path)
 
 
-def _emit_scaffold_diag(wrapper_override: str | None, *, audit_mode: bool) -> None:
+def _emit_scaffold_diag(
+    wrapper_override: str | None,
+    *,
+    audit_mode: bool,
+    sources: PolicySourcePaths | None,
+) -> None:
     """Emit a diagnostic recording whether the mutated scaffold reached the prompt.
 
     PR-AUDIT-SCAFFOLD-WIRE (2026-05-31) — the Petri audit target is GEODE
@@ -115,11 +102,14 @@ def _emit_scaffold_diag(wrapper_override: str | None, *, audit_mode: bool) -> No
         from core.audit.diagnostics import diag
 
         present = wrapper_override is not None
-        env_set = bool(os.environ.get(_WRAPPER_OVERRIDE_ENV))
+        env_set = bool(
+            sources and (sources.explicit_override or os.environ.get(sources.override_env))
+        )
+        packaged = sources.packaged_default if sources is not None else None
         source = (
             "env"
             if env_set
-            else ("sot_file" if _WRAPPER_SECTIONS_SOT_PATH.is_file() else "generic_prefix")
+            else ("sot_file" if packaged is not None and packaged.is_file() else "generic_prefix")
         )
         diag(
             "system_prompt.scaffold",
@@ -131,22 +121,20 @@ def _emit_scaffold_diag(wrapper_override: str | None, *, audit_mode: bool) -> No
         log.debug("scaffold diag emission failed", exc_info=True)
 
 
-def _strict_load(path: Path) -> str:
+def _strict_load(path: Path, *, override_env: str) -> str:
     """Audit-subprocess path: schema failures raise RuntimeError."""
     if not path.is_file():
-        raise RuntimeError(f"{_WRAPPER_OVERRIDE_ENV}={path} file not found")
+        raise RuntimeError(f"{override_env}={path} file not found")
     try:
         raw = path.read_text(encoding="utf-8")
         data = json.loads(raw)
     except (OSError, json.JSONDecodeError) as exc:
-        raise RuntimeError(f"{_WRAPPER_OVERRIDE_ENV}={path} load failed: {exc}") from exc
+        raise RuntimeError(f"{override_env}={path} load failed: {exc}") from exc
     if not isinstance(data, dict) or not data:
-        raise RuntimeError(f"{_WRAPPER_OVERRIDE_ENV}={path} must be a non-empty dict[str, str]")
+        raise RuntimeError(f"{override_env}={path} must be a non-empty dict[str, str]")
     for key, value in data.items():
         if not isinstance(key, str) or not isinstance(value, str):
-            raise RuntimeError(
-                f"{_WRAPPER_OVERRIDE_ENV}={path} has non-string key/value at {key!r}"
-            )
+            raise RuntimeError(f"{override_env}={path} has non-string key/value at {key!r}")
     return "\n\n".join(data.values())
 
 
@@ -238,7 +226,11 @@ def _should_include_current_date(model: str = "") -> bool:
     return provider not in {"openai", "openai-codex"}
 
 
-def build_system_prompt(model: str = "") -> str:
+def build_system_prompt(
+    model: str = "",
+    *,
+    policy_sources: PolicySourceBundle | None = None,
+) -> str:
     """Build the AgenticLoop system prompt.
 
     Layer composition (XML-tag-delimited per the 2026-05-12 prompt audit):
@@ -272,7 +264,9 @@ def build_system_prompt(model: str = "") -> str:
     The baseline is intentionally domain-neutral. Specialized pipelines live
     outside the core runtime.
     """
-    wrapper_override = _load_wrapper_override()
+    sources = policy_sources or {}
+    wrapper_sources = sources.get("wrapper_sections")
+    wrapper_override = _load_wrapper_override(sources=wrapper_sources)
 
     if _audit_mode_active():
         # G3 — minimal prompt for alignment audits.
@@ -297,7 +291,7 @@ def build_system_prompt(model: str = "") -> str:
         if _should_include_current_date(model):
             parts.append(_build_date_context())
         dynamic = PROMPT_CACHE_BOUNDARY + "\n\n" + "\n\n".join(parts)
-        _emit_scaffold_diag(wrapper_override, audit_mode=True)
+        _emit_scaffold_diag(wrapper_override, audit_mode=True, sources=wrapper_sources)
         # PR-PROMPT-P2A — AGENTIC_SUFFIX is authored-static (cache zone) and
         # the dynamic envelope must CLOSE (B1: it had shipped unterminated
         # on every call since the 2026-05-12 XML conversion).
@@ -309,11 +303,17 @@ def build_system_prompt(model: str = "") -> str:
     # policy 가 부재면 static 그대로 (no behavior change). 정책이 있으면
     # <response_style> 블록 append — static 영역 이므로 cache-eligible
     # (정책 변경 시에만 cache miss).
-    static = apply_style_guide_policy(static, _load_style_guide_override())
+    static = apply_style_guide_policy(
+        static,
+        _load_style_guide_override(sources=sources.get("style_guide")),
+    )
 
     # ADR-013 T6 (2026-05-21) — heuristic indicators append to static.
     # Promptbreeder-식 phrase library — agent 가 task-triage 시 매칭.
-    static = apply_heuristics_policy(static, _load_heuristics_override())
+    static = apply_heuristics_policy(
+        static,
+        _load_heuristics_override(sources=sources.get("heuristics")),
+    )
 
     # G10: Agent identity (default ON; opt out via GEODE_PERSONA=off for a
     # thin wrapper around the base model).
@@ -362,7 +362,7 @@ def build_system_prompt(model: str = "") -> str:
 
     dynamic = "\n\n".join(dynamic_parts)
 
-    _emit_scaffold_diag(wrapper_override, audit_mode=False)
+    _emit_scaffold_diag(wrapper_override, audit_mode=False, sources=wrapper_sources)
     # PR-PROMPT-P2A — composition: [authored static incl. AGENTIC_SUFFIX,
     # markdown, cache-stable] // <dynamic_context> [injected per-turn XML
     # envelopes] </dynamic_context>. Moving the suffix out of the loop-level

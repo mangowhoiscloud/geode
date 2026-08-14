@@ -2,7 +2,7 @@
 
 5-element 패턴 (S0a-checked):
 - SoT: skill-catalog.json
-- Path: AUTORESEARCH_SKILL_CATALOG_PATH + OPERATOR_LOCAL_SKILL_CATALOG_PATH
+- Sources: explicit override + operator-local + packaged candidates
 - Reader: core/skills/skill_catalog_policy.py
 - Entry: core/agent/loop/_context.py:_build_system_prompt
 - Env: GEODE_SKILL_CATALOG_OVERRIDE (+ _STRICT=1 opt-in)
@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from core.skills import skill_catalog_policy
+from core.config.policy_source import PolicySourcePaths
 from core.skills.skill_catalog_policy import (
     _load_skill_catalog_override,
     apply_skill_catalog_policy,
@@ -27,12 +27,17 @@ from core.skills.skills import SkillDefinition, SkillRegistry
 @pytest.fixture
 def isolated_sot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
     sot = tmp_path / "skill-catalog.json"
-    operator_local = tmp_path / "operator-local-skill-catalog.json"
-    monkeypatch.setattr(skill_catalog_policy, "_SKILL_CATALOG_SOT_PATH", sot)
-    monkeypatch.setattr(skill_catalog_policy, "_OPERATOR_LOCAL_SKILL_CATALOG_PATH", operator_local)
     monkeypatch.delenv("GEODE_SKILL_CATALOG_OVERRIDE", raising=False)
     monkeypatch.delenv("GEODE_SKILL_CATALOG_STRICT", raising=False)
     yield sot
+
+
+def _sources(sot: Path) -> PolicySourcePaths:
+    return PolicySourcePaths(
+        "GEODE_SKILL_CATALOG_OVERRIDE",
+        sot.parent / "operator-local-skill-catalog.json",
+        sot,
+    )
 
 
 def _write(sot: Path, payload: dict[str, Any]) -> None:
@@ -50,40 +55,42 @@ def _make_registry(*skills: tuple[str, str, bool]) -> SkillRegistry:
 
 
 def test_load_returns_none_when_sot_missing(isolated_sot: Path) -> None:
-    assert _load_skill_catalog_override() is None
+    assert _load_skill_catalog_override(sources=_sources(isolated_sot)) is None
 
 
 def test_load_returns_none_when_unreadable(isolated_sot: Path) -> None:
     isolated_sot.write_text("bad json {", encoding="utf-8")
-    assert _load_skill_catalog_override() is None
+    assert _load_skill_catalog_override(sources=_sources(isolated_sot)) is None
 
 
 def test_load_returns_none_when_description_not_str(isolated_sot: Path) -> None:
     _write(isolated_sot, {"sk": {"description": ["list", "not", "str"]}})
-    assert _load_skill_catalog_override() is None
+    assert _load_skill_catalog_override(sources=_sources(isolated_sot)) is None
 
 
 def test_load_returns_none_when_user_invocable_not_bool(isolated_sot: Path) -> None:
     _write(isolated_sot, {"sk": {"user_invocable": "true"}})
-    assert _load_skill_catalog_override() is None
+    assert _load_skill_catalog_override(sources=_sources(isolated_sot)) is None
 
 
 def test_load_valid_payload(isolated_sot: Path) -> None:
     payload = {"sk": {"description": "x", "user_invocable": False}}
     _write(isolated_sot, payload)
-    assert _load_skill_catalog_override() == payload
+    assert _load_skill_catalog_override(sources=_sources(isolated_sot)) == payload
 
 
 def test_load_unknown_field_ignored(isolated_sot: Path) -> None:
     _write(isolated_sot, {"sk": {"description": "x", "extra": "ignored"}})
-    assert _load_skill_catalog_override() == {"sk": {"description": "x"}}
+    assert _load_skill_catalog_override(sources=_sources(isolated_sot)) == {
+        "sk": {"description": "x"}
+    }
 
 
 def test_strict_env_var_raises_on_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GEODE_SKILL_CATALOG_OVERRIDE", str(tmp_path / "nope.json"))
     monkeypatch.setenv("GEODE_SKILL_CATALOG_STRICT", "1")
     with pytest.raises(RuntimeError, match="GEODE_SKILL_CATALOG_OVERRIDE"):
-        _load_skill_catalog_override()
+        _load_skill_catalog_override(sources=_sources(tmp_path / "skill-catalog.json"))
 
 
 def test_env_var_without_strict_is_graceful(
@@ -91,14 +98,16 @@ def test_env_var_without_strict_is_graceful(
 ) -> None:
     monkeypatch.setenv("GEODE_SKILL_CATALOG_OVERRIDE", str(tmp_path / "nope.json"))
     monkeypatch.delenv("GEODE_SKILL_CATALOG_STRICT", raising=False)
-    assert _load_skill_catalog_override() is None
+    assert _load_skill_catalog_override(sources=_sources(tmp_path / "skill-catalog.json")) is None
 
 
 def test_operator_local_layer_priority(isolated_sot: Path) -> None:
     operator_local = isolated_sot.parent / "operator-local-skill-catalog.json"
     operator_local.write_text(json.dumps({"sk": {"description": "from-ops"}}), encoding="utf-8")
     _write(isolated_sot, {"sk": {"description": "from-repo"}})
-    assert _load_skill_catalog_override() == {"sk": {"description": "from-ops"}}
+    assert _load_skill_catalog_override(sources=_sources(isolated_sot)) == {
+        "sk": {"description": "from-ops"}
+    }
 
 
 # Apply -----------------------------------------------------------------------
@@ -198,13 +207,16 @@ def test_context_module_calls_apply_instead_of_get_context_block_direct() -> Non
 # Path constants --------------------------------------------------------------
 
 
-def test_path_constants_present() -> None:
-    from core.paths import AUTORESEARCH_SKILL_CATALOG_PATH, OPERATOR_LOCAL_SKILL_CATALOG_PATH
+def test_product_source_candidates_present() -> None:
+    from core.self_improving.policy_sources import build_policy_source_bundle
 
-    assert AUTORESEARCH_SKILL_CATALOG_PATH.name == "skill-catalog.json"
-    assert OPERATOR_LOCAL_SKILL_CATALOG_PATH.name == "skill-catalog.json"
-    assert "policies" in str(AUTORESEARCH_SKILL_CATALOG_PATH)
-    assert "autoresearch/handoff" in str(OPERATOR_LOCAL_SKILL_CATALOG_PATH)
+    sources = build_policy_source_bundle()["skill_catalog"]
+    assert sources.packaged_default is not None
+    assert sources.operator_local is not None
+    assert sources.packaged_default.name == "skill-catalog.json"
+    assert sources.operator_local.name == "skill-catalog.json"
+    assert "policies" in str(sources.packaged_default)
+    assert "autoresearch/handoff" in str(sources.operator_local)
 
 
 # Env wiring in train.py ------------------------------------------------------
@@ -222,18 +234,8 @@ def test_train_py_sets_skill_catalog_env() -> None:
 
 
 def test_skill_catalog_json_referenced_in_inference_path() -> None:
-    """grep `skill-catalog.json` lands in `core/skills/skill_catalog_policy.py`."""
+    """grep `skill-catalog.json` lands in product policy composition."""
     repo_root = Path(__file__).resolve().parents[3]
-    hits: list[str] = []
-    for path in (repo_root / "core").rglob("*.py"):
-        if "test_" in path.name:
-            continue
-        try:
-            content = path.read_text(encoding="utf-8")
-        except OSError:
-            continue
-        if "skill-catalog.json" in content:
-            hits.append(str(path.relative_to(repo_root)))
-    assert any("skill_catalog_policy.py" in h for h in hits), (
-        f"skill-catalog.json must appear in core/skills/skill_catalog_policy.py. hits={hits}"
-    )
+    composition = (repo_root / "core/self_improving/policy_sources.py").read_text(encoding="utf-8")
+    assert '"skill_catalog"' in composition
+    assert "AUTORESEARCH_SKILL_CATALOG_PATH" in composition

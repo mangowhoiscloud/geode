@@ -16,25 +16,28 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-from core.agent import decomposition_policy
 from core.agent.decomposition_policy import (
     _load_decomposition_policy_override,
     apply_decomposition_policy,
 )
+from core.config.policy_source import PolicySourcePaths
 
 
 @pytest.fixture
 def isolated_sot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
     """Isolate all 3 SoT layers to tmp_path."""
     sot = tmp_path / "decomposition.json"
-    operator_local = tmp_path / "operator-local-decomposition.json"
-    monkeypatch.setattr(decomposition_policy, "_DECOMPOSITION_POLICY_SOT_PATH", sot)
-    monkeypatch.setattr(
-        decomposition_policy, "_OPERATOR_LOCAL_DECOMPOSITION_POLICY_PATH", operator_local
-    )
     monkeypatch.delenv("GEODE_DECOMPOSITION_POLICY_OVERRIDE", raising=False)
     monkeypatch.delenv("GEODE_DECOMPOSITION_POLICY_STRICT", raising=False)
     yield sot
+
+
+def _sources(sot: Path) -> PolicySourcePaths:
+    return PolicySourcePaths(
+        "GEODE_DECOMPOSITION_POLICY_OVERRIDE",
+        operator_local=sot.parent / "operator-local-decomposition.json",
+        packaged_default=sot,
+    )
 
 
 def _write(sot: Path, payload: dict[str, str]) -> None:
@@ -45,22 +48,22 @@ def _write(sot: Path, payload: dict[str, str]) -> None:
 
 
 def test_load_returns_none_when_sot_missing(isolated_sot: Path) -> None:
-    assert _load_decomposition_policy_override() is None
+    assert _load_decomposition_policy_override(sources=_sources(isolated_sot)) is None
 
 
 def test_load_returns_none_when_sot_unreadable(isolated_sot: Path) -> None:
     isolated_sot.write_text("bad json {", encoding="utf-8")
-    assert _load_decomposition_policy_override() is None
+    assert _load_decomposition_policy_override(sources=_sources(isolated_sot)) is None
 
 
 def test_load_returns_none_when_sot_type_violation(isolated_sot: Path) -> None:
     isolated_sot.write_text(json.dumps({"system_prompt": ["not", "str"]}), encoding="utf-8")
-    assert _load_decomposition_policy_override() is None
+    assert _load_decomposition_policy_override(sources=_sources(isolated_sot)) is None
 
 
 def test_load_valid_payload(isolated_sot: Path) -> None:
     _write(isolated_sot, {"system_prompt": "new", "prefix": "p", "suffix": "s"})
-    assert _load_decomposition_policy_override() == {
+    assert _load_decomposition_policy_override(sources=_sources(isolated_sot)) == {
         "system_prompt": "new",
         "prefix": "p",
         "suffix": "s",
@@ -69,12 +72,12 @@ def test_load_valid_payload(isolated_sot: Path) -> None:
 
 def test_load_unknown_fields_ignored(isolated_sot: Path) -> None:
     _write(isolated_sot, {"prefix": "p", "unknown": "x"})
-    assert _load_decomposition_policy_override() == {"prefix": "p"}
+    assert _load_decomposition_policy_override(sources=_sources(isolated_sot)) == {"prefix": "p"}
 
 
 def test_load_empty_string_dropped(isolated_sot: Path) -> None:
     _write(isolated_sot, {"system_prompt": "", "prefix": "p"})
-    assert _load_decomposition_policy_override() == {"prefix": "p"}
+    assert _load_decomposition_policy_override(sources=_sources(isolated_sot)) == {"prefix": "p"}
 
 
 def test_strict_load_raises_on_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -82,7 +85,7 @@ def test_strict_load_raises_on_missing(tmp_path: Path, monkeypatch: pytest.Monke
     monkeypatch.setenv("GEODE_DECOMPOSITION_POLICY_OVERRIDE", str(tmp_path / "nope.json"))
     monkeypatch.setenv("GEODE_DECOMPOSITION_POLICY_STRICT", "1")
     with pytest.raises(RuntimeError, match="GEODE_DECOMPOSITION_POLICY_OVERRIDE"):
-        _load_decomposition_policy_override()
+        _load_decomposition_policy_override(sources=_sources(tmp_path / "decomposition.json"))
 
 
 def test_strict_load_raises_on_type(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -91,7 +94,7 @@ def test_strict_load_raises_on_type(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     monkeypatch.setenv("GEODE_DECOMPOSITION_POLICY_OVERRIDE", str(bad))
     monkeypatch.setenv("GEODE_DECOMPOSITION_POLICY_STRICT", "1")
     with pytest.raises(RuntimeError, match="prefix"):
-        _load_decomposition_policy_override()
+        _load_decomposition_policy_override(sources=_sources(tmp_path / "decomposition.json"))
 
 
 def test_env_var_without_strict_flag_is_graceful_on_missing(
@@ -100,7 +103,10 @@ def test_env_var_without_strict_flag_is_graceful_on_missing(
     """PR-BACKFILL-SOT (2026-05-21) — env var alone treats env path graceful."""
     monkeypatch.setenv("GEODE_DECOMPOSITION_POLICY_OVERRIDE", str(tmp_path / "nope.json"))
     monkeypatch.delenv("GEODE_DECOMPOSITION_POLICY_STRICT", raising=False)
-    assert _load_decomposition_policy_override() is None
+    assert (
+        _load_decomposition_policy_override(sources=_sources(tmp_path / "decomposition.json"))
+        is None
+    )
 
 
 def test_operator_local_layer_takes_priority_over_in_repo(isolated_sot: Path) -> None:
@@ -108,7 +114,9 @@ def test_operator_local_layer_takes_priority_over_in_repo(isolated_sot: Path) ->
     operator_local = isolated_sot.parent / "operator-local-decomposition.json"
     operator_local.write_text(json.dumps({"prefix": "from-ops"}), encoding="utf-8")
     _write(isolated_sot, {"prefix": "from-repo"})
-    assert _load_decomposition_policy_override() == {"prefix": "from-ops"}
+    assert _load_decomposition_policy_override(sources=_sources(isolated_sot)) == {
+        "prefix": "from-ops"
+    }
 
 
 # Apply -----------------------------------------------------------------------
@@ -194,25 +202,16 @@ def test_producer_reader_round_trip(isolated_sot: Path, monkeypatch: pytest.Monk
         "decomposition",
         {"system_prompt": "evolved", "suffix": "extra rules"},
     )
-    result = _load_decomposition_policy_override()
+    result = _load_decomposition_policy_override(sources=_sources(isolated_sot))
     assert result == {"system_prompt": "evolved", "suffix": "extra rules"}
 
 
 # ALIVE marker ----------------------------------------------------------------
 
 
-def test_decomposition_json_is_now_referenced_in_inference_path() -> None:
-    repo_root = Path(__file__).resolve().parents[3]
-    hits: list[str] = []
-    for path in (repo_root / "core").rglob("*.py"):
-        if "test_" in path.name or "self_improving" in str(path):
-            continue
-        try:
-            content = path.read_text(encoding="utf-8")
-        except OSError:
-            continue
-        if "decomposition.json" in content:
-            hits.append(str(path.relative_to(repo_root)))
-    assert any("decomposition_policy.py" in h for h in hits), (
-        f"decomposition.json 이 core/agent/decomposition_policy.py 에서 발견되어야 함. hits={hits}"
-    )
+def test_product_bundle_owns_decomposition_source() -> None:
+    from core.self_improving.policy_sources import build_policy_source_bundle
+
+    source = build_policy_source_bundle()["decomposition"]
+    assert source.packaged_default is not None
+    assert source.packaged_default.name == "decomposition.json"

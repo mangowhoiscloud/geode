@@ -7,15 +7,20 @@ Registered by GeodeRuntime at startup.
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from core.hooks import HookEvent
 
 log = logging.getLogger(__name__)
 
+if TYPE_CHECKING:
+    from core.observability.run_event import RunEventSinkProvider
+
 
 def make_journal_handlers(
     journal: Any,
+    *,
+    activity_sink_provider: RunEventSinkProvider | None = None,
 ) -> list[tuple[str, Any]]:
     """Create hook handlers that auto-record to ProjectJournal.
 
@@ -35,6 +40,7 @@ def make_journal_handlers(
             "subagent_completed",
             "info",
             {"task_id": task_id, "summary": summary[:200] if summary else None},
+            activity_sink_provider,
         )
         if not summary:
             return
@@ -63,6 +69,7 @@ def make_journal_handlers(
                 "task_id": data.get("task_id", ""),
                 "task_type": data.get("task_type", ""),
             },
+            activity_sink_provider,
         )
 
     def _on_subagent_failed(event: HookEvent, data: dict[str, Any]) -> None:
@@ -75,6 +82,7 @@ def make_journal_handlers(
             "subagent_failed",
             "error",
             {"task_id": task_id, "error": error[:300] if error else None},
+            activity_sink_provider,
         )
         session_id = data.get("session_id", "")
         journal.record_run(
@@ -95,17 +103,14 @@ def _journal_to_session(
     event: str,
     level: str,
     payload: dict[str, Any],
+    activity_sink_provider: RunEventSinkProvider | None,
 ) -> None:
     """Forward an event to the active RunTimeline if one is bound.
 
     No-op when no journal is bound to the ContextVar. Import is local
     so journal_hooks stays import-light when observability is unused.
     """
-    try:
-        from core.self_improving.loop.observe.run_timeline import current_run_timeline
-    except ImportError:
-        return
-    rt = current_run_timeline()
+    rt = activity_sink_provider() if activity_sink_provider else None
     if rt is None:
         return
     rt.append(event, level=level, payload=payload)

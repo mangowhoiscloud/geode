@@ -115,6 +115,7 @@ class SharedServices:
     hook_system: Any = None  # HookSystem — never None after init
     hook_registry: Any = None  # process-owned public HookRegistry
     middleware_registry: Any = None  # process-owned trusted MiddlewareRegistry
+    policy_sources: Any = None  # immutable product policy candidates
     _owns_hook_system: bool = False
     lane_queue: Any = None  # Unified LaneQueue — single concurrency gate
     tool_handlers: dict[str, Any] = field(default_factory=dict)
@@ -136,12 +137,21 @@ class SharedServices:
 
     def __post_init__(self) -> None:
         """Ensure directly-constructed services still own one registry pair."""
-        from core.hooks import HookRegistry, MiddlewareRegistry
+        from core.hooks import HookRegistry
+        from core.wiring.bootstrap import build_product_policy_sources
+
+        if self.policy_sources is None:
+            self.policy_sources = build_product_policy_sources()
 
         if self.hook_registry is None:
             self.hook_registry = HookRegistry(events=self.hook_system)
         if self.middleware_registry is None:
-            self.middleware_registry = MiddlewareRegistry(events=self.hook_system)
+            from core.wiring.bootstrap import build_middleware_registry
+
+            self.middleware_registry = build_middleware_registry(
+                events=self.hook_system,
+                policy_sources=self.policy_sources,
+            )
 
     def close(self) -> None:
         """Release resources created by :func:`build_shared_services`."""
@@ -251,6 +261,8 @@ class SharedServices:
         # honor Hermes-style boundary read end-to-end (sub-agents already
         # do via ``sub_agent.py:533``'s direct ``settings.agentic_effort``
         # read).
+        from core.wiring.bootstrap import current_product_activity_sink
+
         loop = AgenticLoop(
             conversation,
             executor,
@@ -269,6 +281,8 @@ class SharedServices:
             # stable derived id so a thread's turns share ONE checkpoint
             # chain; empty keeps the loop's fresh ``s-<uuid>``.
             session_id=session_id,
+            activity_sink_provider=current_product_activity_sink,
+            policy_sources=self.policy_sources,
         )
         # Set per-thread ContextVar so tool handlers see the correct loop
         from core.cli.session_state import set_current_loop
@@ -291,6 +305,7 @@ class SharedServices:
         from core.agent.sub_agent import SubAgentManager
         from core.config import settings
         from core.orchestration.isolated_execution import IsolatedRunner
+        from core.wiring.bootstrap import current_product_activity_sink
 
         global_lane = self.lane_queue.get_lane("global") if self.lane_queue else None
         agent_registry = self._build_agent_registry()
@@ -303,6 +318,8 @@ class SharedServices:
             hook_registry=self.hook_registry,
             max_depth=settings.max_subagent_depth,
             max_total_subagents=settings.max_total_subagents,
+            activity_sink_provider=current_product_activity_sink,
+            policy_sources=self.policy_sources,
         )
 
     def _build_agent_registry(self) -> Any:
@@ -423,12 +440,20 @@ def build_shared_services(
             log_dir=None,
         )
 
-    from core.hooks import HookRegistry, MiddlewareRegistry
+    from core.hooks import HookRegistry
 
     if hook_registry is None:
         hook_registry = HookRegistry(events=hook_system)
+    from core.wiring.bootstrap import build_product_policy_sources
+
+    policy_sources = build_product_policy_sources()
     if middleware_registry is None:
-        middleware_registry = MiddlewareRegistry(events=hook_system)
+        from core.wiring.bootstrap import build_middleware_registry
+
+        middleware_registry = build_middleware_registry(
+            events=hook_system,
+            policy_sources=policy_sources,
+        )
 
     # P0: Tool result offloading
     from core.wiring.bootstrap import build_tool_offload
@@ -468,6 +493,7 @@ def build_shared_services(
         hook_system=hook_system,
         hook_registry=hook_registry,
         middleware_registry=middleware_registry,
+        policy_sources=policy_sources,
         _owns_hook_system=owns_hook_system,
         lane_queue=lane_queue,
         tool_handlers=tool_handlers,

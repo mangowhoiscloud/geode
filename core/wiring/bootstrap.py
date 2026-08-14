@@ -14,18 +14,97 @@ if TYPE_CHECKING:
     # annotations (``from __future__ import annotations``).  Each class
     # is imported lazily inside its build_* function below; this block
     # exists solely so mypy / IDEs can resolve the annotations.
+    from core.config.policy_source import PolicySourceBundle
+    from core.hooks import MiddlewareRegistry, RuntimeEventBus
     from core.memory.context import ContextAssembler
     from core.memory.organization import MonoLakeOrganizationMemory
     from core.memory.port import SessionStorePort
     from core.memory.project import ProjectMemory
     from core.memory.user_profile import FileBasedUserProfile
     from core.observability.event_store import HookEventStore
+    from core.observability.run_event import RunEventSink
     from core.orchestration.hot_reload import ConfigWatcher
     from core.orchestration.task_system import TaskGraph
 
 from core.hooks import HookEvent, HookSystem
 
 log = logging.getLogger(__name__)
+
+
+def build_product_policy_sources() -> PolicySourceBundle:
+    """Build the optional product policy bundle; empty is the kernel default."""
+    from core.config.policy_source import EMPTY_POLICY_SOURCES
+
+    try:
+        from core.self_improving.policy_sources import build_policy_source_bundle
+    except ModuleNotFoundError as exc:
+        if exc.name == "core.self_improving":
+            return EMPTY_POLICY_SOURCES
+        raise
+    return build_policy_source_bundle()
+
+
+def _missing_optional_product(exc: ModuleNotFoundError) -> bool:
+    return exc.name == "core.self_improving"
+
+
+def current_product_activity_sink() -> RunEventSink | None:
+    """Return the optional product projection without leaking it into kernel code."""
+    try:
+        from core.self_improving.loop.observe.run_timeline import current_run_timeline
+    except ModuleNotFoundError as exc:
+        if not _missing_optional_product(exc):
+            raise
+        return None
+    return current_run_timeline()
+
+
+def bind_product_worker_activity(run_dir: Path) -> None:
+    """Rebind the existing product projection inside a worker subprocess."""
+    try:
+        from core.self_improving.loop.observe.run_timeline import (
+            RunTimeline,
+            set_current_run_timeline,
+        )
+    except ModuleNotFoundError as exc:
+        if not _missing_optional_product(exc):
+            raise
+        return
+
+    set_current_run_timeline(
+        RunTimeline(
+            session_id=run_dir.name,
+            gen_tag="",
+            component="seed-generation",
+            path=run_dir / "events.jsonl",
+        )
+    )
+
+
+def build_middleware_registry(
+    *,
+    events: RuntimeEventBus | None = None,
+    policy_sources: PolicySourceBundle | None = None,
+) -> MiddlewareRegistry:
+    """Build one product-composed request middleware registry."""
+    from core.hooks import MiddlewareRegistry
+
+    registry = MiddlewareRegistry(events=events)
+    try:
+        from core.self_improving.loop.inject.in_context_wiring import (
+            register_in_context_middleware,
+        )
+    except ModuleNotFoundError as exc:
+        if not _missing_optional_product(exc):
+            raise
+        return registry
+    register_in_context_middleware(
+        registry,
+        policy_sources=(
+            build_product_policy_sources() if policy_sources is None else policy_sources
+        ),
+    )
+    return registry
 
 
 # ---------------------------------------------------------------------------
@@ -176,6 +255,7 @@ def build_worker_hooks(
             event_store,
             session_key=session_key,
             run_id=run_id,
+            activity_sink_provider=current_product_activity_sink,
         ),
         name="hook_persistence",
     )
@@ -248,6 +328,7 @@ def build_hooks(
             event_store,
             session_key=session_key,
             run_id=run_id,
+            activity_sink_provider=current_product_activity_sink,
         ),
         name="hook_persistence",
     )
@@ -416,7 +497,10 @@ def build_hooks(
         from core.memory.project_journal import get_project_journal
 
         journal = get_project_journal()
-        for handler_name, handler_fn in make_journal_handlers(journal):
+        for handler_name, handler_fn in make_journal_handlers(
+            journal,
+            activity_sink_provider=current_product_activity_sink,
+        ):
             target_events = {
                 "journal_subagent": [HookEvent.SUBAGENT_COMPLETED],
                 # P1c — close defect #18 (STARTED + FAILED had no consumer).

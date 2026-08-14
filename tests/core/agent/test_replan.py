@@ -22,7 +22,7 @@ Coverage:
 from __future__ import annotations
 
 import asyncio
-from types import SimpleNamespace
+from types import MappingProxyType, SimpleNamespace
 from typing import Any
 
 import pytest
@@ -38,6 +38,7 @@ from core.agent.plan import (
     should_replan,
 )
 from core.agent.verify import verify_turn
+from core.config.policy_source import EMPTY_POLICY_SOURCES, PolicySourcePaths
 from core.observability.session_metrics import (
     current_session_metrics,
     session_metrics_scope,
@@ -791,7 +792,12 @@ def test_decompose_async_skips_simple_request(monkeypatch: pytest.MonkeyPatch) -
         called["hit"] = True
         return None
 
-    loop = SimpleNamespace(_call_llm=_fake_call_llm, _tools=[], model="m")
+    loop = SimpleNamespace(
+        _call_llm=_fake_call_llm,
+        _tools=[],
+        _policy_sources=EMPTY_POLICY_SOURCES,
+        model="m",
+    )
     result = asyncio.run(decompose_async(loop, "/help"))
     assert result is None
     assert called["hit"] is False
@@ -809,13 +815,18 @@ def test_decompose_async_skips_no_compound(monkeypatch: pytest.MonkeyPatch) -> N
         called["hit"] = True
         return None
 
-    loop = SimpleNamespace(_call_llm=_fake_call_llm, _tools=[], model="m")
+    loop = SimpleNamespace(
+        _call_llm=_fake_call_llm,
+        _tools=[],
+        _policy_sources=EMPTY_POLICY_SOURCES,
+        model="m",
+    )
     result = asyncio.run(decompose_async(loop, "what is the weather forecast today"))
     assert result is None
     assert called["hit"] is False
 
 
-def test_decompose_async_passes_response_schema() -> None:
+def test_decompose_async_passes_response_schema(monkeypatch: pytest.MonkeyPatch) -> None:
     """Planner uses runtime structured-output schema, not only prompt prose."""
     import asyncio
     import json
@@ -823,6 +834,15 @@ def test_decompose_async_passes_response_schema() -> None:
     from core.agent.plan import decompose_async
 
     seen: dict[str, Any] = {}
+    decomposition_source = PolicySourcePaths("GEODE_TEST_DECOMPOSITION_OVERRIDE")
+
+    def _fake_decomposition_policy(*, sources: PolicySourcePaths | None = None) -> None:
+        seen["policy_sources"] = sources
+
+    monkeypatch.setattr(
+        "core.agent.decomposition_policy._load_decomposition_policy_override",
+        _fake_decomposition_policy,
+    )
 
     async def _fake_call_llm(*_args: Any, **kwargs: Any) -> Any:
         seen.update(kwargs)
@@ -849,10 +869,16 @@ def test_decompose_async_passes_response_schema() -> None:
             )
         )
 
-    loop = SimpleNamespace(_call_llm=_fake_call_llm, _tools=[], model="m")
+    loop = SimpleNamespace(
+        _call_llm=_fake_call_llm,
+        _tools=[],
+        _policy_sources=MappingProxyType({"decomposition": decomposition_source}),
+        model="m",
+    )
     result = asyncio.run(decompose_async(loop, "search release notes and summarize them"))
 
     assert result is not None
+    assert seen["policy_sources"] is decomposition_source
     assert seen["response_schema"]["title"] == "DecompositionResult"
     assert "goals" in seen["response_schema"]["properties"]
 

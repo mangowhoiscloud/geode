@@ -108,6 +108,22 @@ class TestSessionEndedPayloadEnrichment:
         session_ended, _turn, _metrics = _final_hook_payloads(loop, _ok_result(), "hi")
         assert session_ended["component"] == "agentic_loop"
 
+    def test_component_comes_from_injected_activity_sink(self) -> None:
+        loop = _fake_loop()
+        loop._activity_sink_provider = lambda: SimpleNamespace(component="seed-generation")
+        session_ended, _turn, _metrics = _final_hook_payloads(loop, _ok_result(), "hi")
+        assert session_ended["component"] == "seed-generation"
+
+    def test_broken_activity_sink_is_observability_only(self) -> None:
+        loop = _fake_loop()
+
+        def _broken_sink() -> Any:
+            raise RuntimeError("sink unavailable")
+
+        loop._activity_sink_provider = _broken_sink
+        session_ended, _turn, _metrics = _final_hook_payloads(loop, _ok_result(), "hi")
+        assert session_ended["component"] == "agentic_loop"
+
     def test_bare_loop_without_new_adapter_field_does_not_crash(self) -> None:
         """Some test scaffolds construct a loop stub without
         ``_new_adapter``; the payload builder must tolerate that and

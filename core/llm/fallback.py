@@ -191,7 +191,11 @@ def _notify_failure(provider: str, exc: Exception) -> None:
         log.debug("Profile notify_failure failed for %s", provider, exc_info=True)
 
 
-def _resolve_plan_for_billing_error(model: str) -> dict[str, str]:
+def _resolve_plan_for_billing_error(
+    model: str,
+    *,
+    routing_sources: Any | None = None,
+) -> dict[str, str]:
     """Resolve Plan metadata for a model so BillingError carries context.
 
     v0.53.0 — used to render plan-aware quota-exhausted panels. Returns
@@ -201,7 +205,7 @@ def _resolve_plan_for_billing_error(model: str) -> dict[str, str]:
     try:
         from core.llm.strategies.plan_registry import resolve_routing
 
-        target = resolve_routing(model)
+        target = resolve_routing(model, sources=routing_sources)
         if target is None:
             return {}
         plan = target.plan
@@ -230,6 +234,7 @@ async def retry_with_backoff_generic_async(
     provider_label: str = "LLM",
     on_retry: Any | None = None,
     stream_progress: StreamProgress | None = None,
+    routing_sources: Any | None = None,
 ) -> Any:
     """Async retry with exponential backoff + model fallback.
 
@@ -298,7 +303,10 @@ async def retry_with_backoff_generic_async(
                         current_model,
                         msg,
                     )
-                    plan_meta = _resolve_plan_for_billing_error(current_model)
+                    plan_meta = _resolve_plan_for_billing_error(
+                        current_model,
+                        routing_sources=routing_sources,
+                    )
                     raise BillingError(
                         msg or billing_message,
                         provider=plan_meta.get("provider", ""),

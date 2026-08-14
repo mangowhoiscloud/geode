@@ -30,14 +30,9 @@ dedicated fitness lever.
 
 빈 정책 / 누락 / out-of-range 값 → no-op (default 3 유지).
 
-**Resolution order** (PR-BACKFILL-SOT 2026-05-21 shared chain):
-
-1. ``GEODE_CACHE_POLICY_OVERRIDE`` env var — explicit override.
-   - With ``GEODE_CACHE_POLICY_STRICT=1`` (audit subprocess): strict.
-   - Without strict flag (operator daily): graceful (no fall-through).
-2. ``~/.geode/autoresearch/handoff/cache-policy.json`` — operator-local, graceful.
-3. ``core/self_improving/state/policies/cache-policy.json`` — in-repo, graceful.
-4. ``None`` — no-op.
+Candidate paths are supplied by product composition. Selection is explicit
+override → operator-local → packaged default → no-op; an explicit override is
+authoritative and may request strict loading.
 
 **Frontier**: Anthropic prompt caching docs — ``cache_control`` count is
 the canonical knob the user tunes; Anthropic recommends putting it on
@@ -51,18 +46,9 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from core.agent.policy_sot import load_policy_sot
-from core.paths import AUTORESEARCH_CACHE_POLICY_PATH, OPERATOR_LOCAL_CACHE_POLICY_PATH
+from core.config.policy_source import PolicySourcePaths, load_policy_source
 
 log = logging.getLogger(__name__)
-
-_CACHE_POLICY_OVERRIDE_ENV = "GEODE_CACHE_POLICY_OVERRIDE"
-
-_CACHE_POLICY_SOT_PATH = AUTORESEARCH_CACHE_POLICY_PATH
-"""Cross-process in-repo SoT path (T5, 2026-05-21). Module-local alias."""
-
-_OPERATOR_LOCAL_CACHE_POLICY_PATH = OPERATOR_LOCAL_CACHE_POLICY_PATH
-"""Operator-local SoT path. Module-local alias for monkey-patch."""
 
 _FIELD_MESSAGES_BREAKPOINTS = "messages_breakpoints"
 
@@ -72,17 +58,16 @@ _MAX_BREAKPOINTS = 3
 _MIN_BREAKPOINTS = 0
 
 
-def _load_cache_policy_override() -> dict[str, int] | None:
+def _load_cache_policy_override(
+    *,
+    sources: PolicySourcePaths | None = None,
+) -> dict[str, int] | None:
     """Return the active cache-policy dict, or ``None`` if no SoT applies.
 
-    Uses the shared :func:`load_policy_sot` loader (PR-LOWRISK-SLOP — this
-    module + provider_routing were the two policy loaders the v0.99.196
-    7-to-1 dedup missed, still hand-rolling the strict/graceful read).
-    Behaviour preserved: same RuntimeError shapes + log wording (via ``label``)."""
-    return load_policy_sot(
-        env_var=_CACHE_POLICY_OVERRIDE_ENV,
-        operator_local=_OPERATOR_LOCAL_CACHE_POLICY_PATH,
-        in_repo=_CACHE_POLICY_SOT_PATH,
+    Uses the shared neutral loader while this module retains schema validation
+    and coercion."""
+    return load_policy_source(
+        sources=sources,
         label="cache-policy",
         validate_strict=_validate_schema,
         validate_graceful=_validate_schema,

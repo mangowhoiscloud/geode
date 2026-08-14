@@ -781,7 +781,8 @@ async def decompose_async(
         # point* used to live in ``GoalDecomposer._llm_decompose``; now
         # it lives here. Policy reader is unchanged, only the host moved.
         system_prompt = apply_decomposition_policy(
-            system_prompt, _load_decomposition_policy_override()
+            system_prompt,
+            _load_decomposition_policy_override(sources=loop._policy_sources.get("decomposition")),
         )
         tool_summary = _build_tool_summary(tools or [])
         user_prompt = f"## Available Tools\n\n{tool_summary}\n\n## User Request\n\n{user_input}"

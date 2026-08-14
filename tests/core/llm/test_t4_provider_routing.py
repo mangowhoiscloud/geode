@@ -2,7 +2,7 @@
 
 5-element 패턴:
 - SoT: provider-routing.json (in-repo + operator-local)
-- Path: AUTORESEARCH_PROVIDER_ROUTING_PATH + OPERATOR_LOCAL_PROVIDER_ROUTING_PATH
+- Sources: explicit override + operator-local + packaged candidates
 - Reader: core/llm/strategies/provider_routing_policy.py
 - Entry: core/llm/strategies/plan_registry.py:resolve_routing (explicit-chain branch)
 - Env: GEODE_PROVIDER_ROUTING_OVERRIDE + GEODE_PROVIDER_ROUTING_STRICT
@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from core.llm.strategies import provider_routing_policy
+from core.config.policy_source import PolicySourcePaths
 from core.llm.strategies.provider_routing_policy import (
     _load_provider_routing_override,
     apply_provider_routing_policy,
@@ -26,16 +26,17 @@ from core.llm.strategies.provider_routing_policy import (
 @pytest.fixture
 def isolated_sot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
     sot = tmp_path / "provider-routing.json"
-    operator_local = tmp_path / "operator-local-provider-routing.json"
-    monkeypatch.setattr(provider_routing_policy, "_PROVIDER_ROUTING_SOT_PATH", sot)
-    monkeypatch.setattr(
-        provider_routing_policy,
-        "_OPERATOR_LOCAL_PROVIDER_ROUTING_PATH",
-        operator_local,
-    )
     monkeypatch.delenv("GEODE_PROVIDER_ROUTING_OVERRIDE", raising=False)
     monkeypatch.delenv("GEODE_PROVIDER_ROUTING_STRICT", raising=False)
     yield sot
+
+
+def _sources(sot: Path) -> PolicySourcePaths:
+    return PolicySourcePaths(
+        "GEODE_PROVIDER_ROUTING_OVERRIDE",
+        sot.parent / "operator-local-provider-routing.json",
+        sot,
+    )
 
 
 def _write(sot: Path, payload: dict[str, Any]) -> None:
@@ -46,22 +47,22 @@ def _write(sot: Path, payload: dict[str, Any]) -> None:
 
 
 def test_load_returns_none_when_sot_missing(isolated_sot: Path) -> None:
-    assert _load_provider_routing_override() is None
+    assert _load_provider_routing_override(sources=_sources(isolated_sot)) is None
 
 
 def test_load_returns_none_when_unreadable(isolated_sot: Path) -> None:
     isolated_sot.write_text("bad json {", encoding="utf-8")
-    assert _load_provider_routing_override() is None
+    assert _load_provider_routing_override(sources=_sources(isolated_sot)) is None
 
 
 def test_load_returns_none_when_chain_not_list(isolated_sot: Path) -> None:
     _write(isolated_sot, {"gpt-5": "plan-x"})
-    assert _load_provider_routing_override() is None
+    assert _load_provider_routing_override(sources=_sources(isolated_sot)) is None
 
 
 def test_load_returns_none_when_chain_contains_non_str(isolated_sot: Path) -> None:
     _write(isolated_sot, {"gpt-5": ["plan-x", 42]})
-    assert _load_provider_routing_override() is None
+    assert _load_provider_routing_override(sources=_sources(isolated_sot)) is None
 
 
 def test_load_valid_payload(isolated_sot: Path) -> None:
@@ -70,25 +71,27 @@ def test_load_valid_payload(isolated_sot: Path) -> None:
         "gpt-5": ["plan-openai-tier4"],
     }
     _write(isolated_sot, payload)
-    assert _load_provider_routing_override() == payload
+    assert _load_provider_routing_override(sources=_sources(isolated_sot)) == payload
 
 
 def test_load_drops_empty_chain(isolated_sot: Path) -> None:
     """Empty chain → drop the model entry (no policy effect)."""
     _write(isolated_sot, {"gpt-5": [], "claude": ["plan-a"]})
-    assert _load_provider_routing_override() == {"claude": ["plan-a"]}
+    assert _load_provider_routing_override(sources=_sources(isolated_sot)) == {"claude": ["plan-a"]}
 
 
 def test_load_drops_empty_string_entries(isolated_sot: Path) -> None:
     _write(isolated_sot, {"gpt-5": ["plan-a", "", "plan-b"]})
-    assert _load_provider_routing_override() == {"gpt-5": ["plan-a", "plan-b"]}
+    assert _load_provider_routing_override(sources=_sources(isolated_sot)) == {
+        "gpt-5": ["plan-a", "plan-b"]
+    }
 
 
 def test_strict_env_var_raises_on_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GEODE_PROVIDER_ROUTING_OVERRIDE", str(tmp_path / "nope.json"))
     monkeypatch.setenv("GEODE_PROVIDER_ROUTING_STRICT", "1")
     with pytest.raises(RuntimeError, match="GEODE_PROVIDER_ROUTING_OVERRIDE"):
-        _load_provider_routing_override()
+        _load_provider_routing_override(sources=_sources(tmp_path / "provider-routing.json"))
 
 
 def test_env_var_without_strict_is_graceful(
@@ -96,14 +99,19 @@ def test_env_var_without_strict_is_graceful(
 ) -> None:
     monkeypatch.setenv("GEODE_PROVIDER_ROUTING_OVERRIDE", str(tmp_path / "nope.json"))
     monkeypatch.delenv("GEODE_PROVIDER_ROUTING_STRICT", raising=False)
-    assert _load_provider_routing_override() is None
+    assert (
+        _load_provider_routing_override(sources=_sources(tmp_path / "provider-routing.json"))
+        is None
+    )
 
 
 def test_operator_local_layer_priority(isolated_sot: Path) -> None:
     operator_local = isolated_sot.parent / "operator-local-provider-routing.json"
     operator_local.write_text(json.dumps({"gpt-5": ["from-ops"]}), encoding="utf-8")
     _write(isolated_sot, {"gpt-5": ["from-repo"]})
-    assert _load_provider_routing_override() == {"gpt-5": ["from-ops"]}
+    assert _load_provider_routing_override(sources=_sources(isolated_sot)) == {
+        "gpt-5": ["from-ops"]
+    }
 
 
 # Apply -----------------------------------------------------------------------
@@ -182,13 +190,16 @@ def test_plan_registry_uses_apply_before_iterating_chain() -> None:
 # Path constants --------------------------------------------------------------
 
 
-def test_path_constants_present() -> None:
-    from core.paths import AUTORESEARCH_PROVIDER_ROUTING_PATH, OPERATOR_LOCAL_PROVIDER_ROUTING_PATH
+def test_product_source_candidates_present() -> None:
+    from core.self_improving.policy_sources import build_policy_source_bundle
 
-    assert AUTORESEARCH_PROVIDER_ROUTING_PATH.name == "provider-routing.json"
-    assert OPERATOR_LOCAL_PROVIDER_ROUTING_PATH.name == "provider-routing.json"
-    assert "policies" in str(AUTORESEARCH_PROVIDER_ROUTING_PATH)
-    assert "autoresearch/handoff" in str(OPERATOR_LOCAL_PROVIDER_ROUTING_PATH)
+    sources = build_policy_source_bundle()["provider_routing"]
+    assert sources.packaged_default is not None
+    assert sources.operator_local is not None
+    assert sources.packaged_default.name == "provider-routing.json"
+    assert sources.operator_local.name == "provider-routing.json"
+    assert "policies" in str(sources.packaged_default)
+    assert "autoresearch/handoff" in str(sources.operator_local)
 
 
 # Env wiring in train.py ------------------------------------------------------
@@ -207,16 +218,6 @@ def test_train_py_sets_provider_routing_env_pair() -> None:
 
 def test_provider_routing_json_referenced_in_inference_path() -> None:
     repo_root = Path(__file__).resolve().parents[3]
-    hits: list[str] = []
-    for path in (repo_root / "core").rglob("*.py"):
-        if "test_" in path.name:
-            continue
-        try:
-            content = path.read_text(encoding="utf-8")
-        except OSError:
-            continue
-        if "provider-routing.json" in content:
-            hits.append(str(path.relative_to(repo_root)))
-    assert any("provider_routing_policy.py" in h for h in hits), (
-        f"provider-routing.json must appear in core/llm/strategies/provider_routing_policy.py. hits={hits}"
-    )
+    composition = (repo_root / "core/self_improving/policy_sources.py").read_text(encoding="utf-8")
+    assert '"provider_routing"' in composition
+    assert "AUTORESEARCH_PROVIDER_ROUTING_PATH" in composition

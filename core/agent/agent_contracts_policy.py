@@ -23,14 +23,9 @@ Mutator overrides per-agent ``role`` / ``system_prompt`` / ``tools`` on
 
 Unknown agent name / 부적합 schema → graceful drop (forward-compat).
 
-**Resolution order** (PR-BACKFILL-SOT 2026-05-21 shared chain):
-
-1. ``GEODE_AGENT_CONTRACTS_OVERRIDE`` env var — explicit override.
-   - With ``GEODE_AGENT_CONTRACTS_STRICT=1``: strict.
-   - Without strict flag: graceful (no fall-through).
-2. ``~/.geode/autoresearch/handoff/agent-contracts.json`` — operator-local.
-3. ``core/self_improving/state/policies/agent-contracts.json`` — in-repo.
-4. ``None`` — no-op.
+Candidate paths are supplied by product composition. Selection is explicit
+override → operator-local → packaged default → no-op; an explicit override is
+authoritative and may request strict loading.
 
 **Frontier**: Claude Code 의 ``.claude/agents/*.md`` agent definitions
 이 사용자 hand-edit 만 받지만 — mutator 가 자동 진화시키는 것이 M2 의
@@ -44,22 +39,9 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from core.agent.policy_sot import load_policy_sot
-from core.paths import (
-    AUTORESEARCH_AGENT_CONTRACTS_PATH,
-    OPERATOR_LOCAL_AGENT_CONTRACTS_PATH,
-)
+from core.config.policy_source import PolicySourcePaths, load_policy_source
 
 log = logging.getLogger(__name__)
-
-_AGENT_CONTRACTS_OVERRIDE_ENV = "GEODE_AGENT_CONTRACTS_OVERRIDE"
-
-_AGENT_CONTRACTS_SOT_PATH = AUTORESEARCH_AGENT_CONTRACTS_PATH
-"""Cross-process in-repo SoT path (M2, 2026-05-21). Module-local alias."""
-
-_OPERATOR_LOCAL_AGENT_CONTRACTS_PATH = OPERATOR_LOCAL_AGENT_CONTRACTS_PATH
-"""Operator-local SoT path. Module-local alias for monkey-patch."""
-
 
 # Mutable field set — ``model`` is intentionally absent (Tier 2 guardrail).
 _FIELD_ROLE = "role"
@@ -68,12 +50,13 @@ _FIELD_TOOLS = "tools"
 _MUTABLE_FIELDS = frozenset({_FIELD_ROLE, _FIELD_SYSTEM_PROMPT, _FIELD_TOOLS})
 
 
-def _load_agent_contracts_override() -> dict[str, dict[str, Any]] | None:
+def _load_agent_contracts_override(
+    *,
+    sources: PolicySourcePaths | None = None,
+) -> dict[str, dict[str, Any]] | None:
     """Return the active agent-contracts dict, or ``None`` if no SoT applies."""
-    return load_policy_sot(
-        env_var=_AGENT_CONTRACTS_OVERRIDE_ENV,
-        operator_local=_OPERATOR_LOCAL_AGENT_CONTRACTS_PATH,
-        in_repo=_AGENT_CONTRACTS_SOT_PATH,
+    return load_policy_source(
+        sources=sources,
         label="agent-contracts",
         validate_strict=_validate_schema,
         validate_graceful=_validate_schema,

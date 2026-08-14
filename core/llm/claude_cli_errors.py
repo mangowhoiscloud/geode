@@ -31,8 +31,8 @@ Scope
 =====
 
 This PR is **classifier + scheduler data**, not the retry-loop
-itself. Callers (the mutator runner, the inspect_ai bridge, the
-Anthropic provider's ``_on_retry_journal_emit`` hook) decide how to
+itself. Callers (the mutator runner, the inspect_ai bridge, and the
+Anthropic provider's injected retry-activity hook) decide how to
 weave the schedule into their own retry path; a single retry helper
 would conflate too many concerns (sync vs async, jittered vs not,
 journal-integrated vs not).
@@ -325,7 +325,7 @@ def extract_reset_clock_time(
     """Parse "resets at 3:00pm (Pacific)" → next ``datetime`` matching.
 
     Returns ``None`` when no reset clue is present, the clock text
-    is unparseable, or the timezone hint is missing / unrecognised
+    is unparsable, or the timezone hint is missing / unrecognised
     (we never guess the operator's local TZ — that could quietly
     drift the retry by 5-12 hours, hiding the failure or hammering
     the bucket early).

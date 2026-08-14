@@ -18,25 +18,28 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from core.agent import agent_contracts_policy
 from core.agent.agent_contracts_policy import (
     _load_agent_contracts_override,
     apply_agent_contracts_policy,
 )
+from core.config.policy_source import PolicySourcePaths
 from core.self_improving.loop.mutate import policies as pol
 
 
 @pytest.fixture
 def isolated_sot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
     sot = tmp_path / "agent-contracts.json"
-    operator_local = tmp_path / "operator-local-agent-contracts.json"
-    monkeypatch.setattr(agent_contracts_policy, "_AGENT_CONTRACTS_SOT_PATH", sot)
-    monkeypatch.setattr(
-        agent_contracts_policy, "_OPERATOR_LOCAL_AGENT_CONTRACTS_PATH", operator_local
-    )
     monkeypatch.delenv("GEODE_AGENT_CONTRACTS_OVERRIDE", raising=False)
     monkeypatch.delenv("GEODE_AGENT_CONTRACTS_STRICT", raising=False)
     yield sot
+
+
+def _sources(sot: Path) -> PolicySourcePaths:
+    return PolicySourcePaths(
+        "GEODE_AGENT_CONTRACTS_OVERRIDE",
+        operator_local=sot.parent / "operator-local-agent-contracts.json",
+        packaged_default=sot,
+    )
 
 
 def _write(sot: Path, payload: dict[str, Any]) -> None:
@@ -68,9 +71,12 @@ def test_target_kinds_count_is_7_behaviour_kinds() -> None:
 
 
 def test_policy_path_agent_contract_maps_to_in_repo() -> None:
-    from core.paths import AUTORESEARCH_AGENT_CONTRACTS_PATH
+    from core.self_improving.policy_sources import build_policy_source_bundle
 
-    assert pol.policy_path("agent_contract") == AUTORESEARCH_AGENT_CONTRACTS_PATH
+    assert (
+        pol.policy_path("agent_contract")
+        == build_policy_source_bundle()["agent_contracts"].packaged_default
+    )
 
 
 def test_agent_contract_is_a_target_kind() -> None:
@@ -81,27 +87,27 @@ def test_agent_contract_is_a_target_kind() -> None:
 
 
 def test_load_returns_none_when_sot_missing(isolated_sot: Path) -> None:
-    assert _load_agent_contracts_override() is None
+    assert _load_agent_contracts_override(sources=_sources(isolated_sot)) is None
 
 
 def test_load_returns_none_when_unreadable(isolated_sot: Path) -> None:
     isolated_sot.write_text("bad json {", encoding="utf-8")
-    assert _load_agent_contracts_override() is None
+    assert _load_agent_contracts_override(sources=_sources(isolated_sot)) is None
 
 
 def test_load_rejects_role_not_str(isolated_sot: Path) -> None:
     _write(isolated_sot, {"agent": {"role": 42}})
-    assert _load_agent_contracts_override() is None
+    assert _load_agent_contracts_override(sources=_sources(isolated_sot)) is None
 
 
 def test_load_rejects_tools_not_list(isolated_sot: Path) -> None:
     _write(isolated_sot, {"agent": {"tools": "web_search"}})
-    assert _load_agent_contracts_override() is None
+    assert _load_agent_contracts_override(sources=_sources(isolated_sot)) is None
 
 
 def test_load_rejects_tools_with_non_str_entry(isolated_sot: Path) -> None:
     _write(isolated_sot, {"agent": {"tools": ["web_search", 42]}})
-    assert _load_agent_contracts_override() is None
+    assert _load_agent_contracts_override(sources=_sources(isolated_sot)) is None
 
 
 def test_load_valid_payload(isolated_sot: Path) -> None:
@@ -114,7 +120,7 @@ def test_load_valid_payload(isolated_sot: Path) -> None:
         "data_analyst": {"system_prompt": "Evolved analyst."},
     }
     _write(isolated_sot, payload)
-    assert _load_agent_contracts_override() == payload
+    assert _load_agent_contracts_override(sources=_sources(isolated_sot)) == payload
 
 
 def test_load_drops_model_field(isolated_sot: Path) -> None:
@@ -123,7 +129,7 @@ def test_load_drops_model_field(isolated_sot: Path) -> None:
         isolated_sot,
         {"research_assistant": {"system_prompt": "x", "model": "evil-model"}},
     )
-    result = _load_agent_contracts_override()
+    result = _load_agent_contracts_override(sources=_sources(isolated_sot))
     assert result == {"research_assistant": {"system_prompt": "x"}}
     assert "model" not in result["research_assistant"]
 
@@ -133,7 +139,7 @@ def test_load_unknown_field_dropped(isolated_sot: Path) -> None:
         isolated_sot,
         {"research_assistant": {"system_prompt": "x", "future_field": "y"}},
     )
-    result = _load_agent_contracts_override()
+    result = _load_agent_contracts_override(sources=_sources(isolated_sot))
     assert result == {"research_assistant": {"system_prompt": "x"}}
 
 
@@ -141,13 +147,15 @@ def test_strict_env_var_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setenv("GEODE_AGENT_CONTRACTS_OVERRIDE", str(tmp_path / "nope.json"))
     monkeypatch.setenv("GEODE_AGENT_CONTRACTS_STRICT", "1")
     with pytest.raises(RuntimeError, match="GEODE_AGENT_CONTRACTS_OVERRIDE"):
-        _load_agent_contracts_override()
+        _load_agent_contracts_override(sources=_sources(tmp_path / "agent-contracts.json"))
 
 
 def test_env_var_without_strict_graceful(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GEODE_AGENT_CONTRACTS_OVERRIDE", str(tmp_path / "nope.json"))
     monkeypatch.delenv("GEODE_AGENT_CONTRACTS_STRICT", raising=False)
-    assert _load_agent_contracts_override() is None
+    assert (
+        _load_agent_contracts_override(sources=_sources(tmp_path / "agent-contracts.json")) is None
+    )
 
 
 # Apply ---------------------------------------------------------------------

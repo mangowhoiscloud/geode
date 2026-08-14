@@ -96,11 +96,11 @@ def test_train_py_strict_count_at_least_12_kinds() -> None:
 
 
 def test_sot_resolution_strict_derivation_pattern() -> None:
-    """sot_resolution 의 derivation 이 ``<X>_OVERRIDE → <X>_STRICT`` 패턴
+    """중립 source selector 가 ``<X>_OVERRIDE → <X>_STRICT`` 패턴을
     유지 — train.py 의 env naming 과 일치."""
-    from core.self_improving.loop.mutate import sot_resolution
+    from core.config import policy_source
 
-    source = inspect.getsource(sot_resolution)
+    source = inspect.getsource(policy_source)
     assert "_OVERRIDE_SUFFIX" in source
     assert "_STRICT_SUFFIX" in source
     assert "removesuffix(_OVERRIDE_SUFFIX) + _STRICT_SUFFIX" in source

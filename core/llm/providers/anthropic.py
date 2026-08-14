@@ -25,6 +25,9 @@ from core.llm.model_capabilities import (
 if TYPE_CHECKING:
     import httpx
 
+    from core.config.policy_source import PolicySourcePaths
+    from core.observability.run_event import RunEventSinkProvider
+
     # v0.88.0 — declare the lazy module-level tuples so mypy / IDEs see a
     # concrete type for ``except RETRYABLE_ERRORS:`` etc.  Runtime values
     # come from ``__getattr__`` below.  Use ``Exception`` (not
@@ -249,7 +252,8 @@ async def _async_response_hook(response: object) -> None:
     _feed_banner_from_anthropic_response(response)
 
 
-def _on_retry_journal_emit(
+def _emit_retry_activity(
+    activity_sink_provider: RunEventSinkProvider,
     *,
     model: str,
     attempt: int,
@@ -258,27 +262,11 @@ def _on_retry_journal_emit(
     elapsed_s: float,
     error_type: str,
 ) -> None:
-    """``on_retry`` callback — emit ``llm_retry`` event to the active journal.
-
-    P1a — closes the silent-retry gap from the 2026-05-19 observability
-    audit §4 row "529 Overloaded retry 정책 미정". The 529 → InternalServerError
-    classification is already correct (Anthropic SDK maps ``status_code >= 500``
-    to ``InternalServerError`` which is in ``RETRYABLE_ERRORS``), but the
-    retry itself was previously silent — operators saw the final outcome
-    but not the retry count or the triggering error.
-
-    Discovered via the ContextVar set in ``run_timeline_scope``; no-op
-    when not in scope (single REPL invocation outside an autoresearch /
-    seed-generation run) so the helper is safe to wire unconditionally.
-    """
+    """Emit one retry marker through the explicitly injected activity sink."""
     try:
-        from core.self_improving.loop.observe.run_timeline import current_run_timeline
-
-        journal = current_run_timeline()
+        journal = activity_sink_provider()
         if journal is None:
             return
-        # Treat overload / rate-limit / 5xx as warning level; connection
-        # blips stay info because they're routine in long-running runs.
         level = (
             "warn"
             if error_type in {"InternalServerError", "RateLimitError", "OverloadedError"}
@@ -297,8 +285,8 @@ def _on_retry_journal_emit(
                 "error_type": error_type,
             },
         )
-    except Exception:  # pragma: no cover - defensive
-        log.debug("anthropic llm_retry journal emit failed", exc_info=True)
+    except Exception:  # pragma: no cover - observability must not break retries
+        log.debug("anthropic llm_retry activity emit failed", exc_info=True)
 
 
 # v0.88.0 — RETRYABLE_ERRORS / NON_RETRYABLE_ERRORS resolve through the
@@ -519,6 +507,8 @@ async def retry_with_backoff_async(
     *,
     model: str,
     max_retries: int | None = None,
+    activity_sink_provider: RunEventSinkProvider | None = None,
+    routing_sources: PolicySourcePaths | None = None,
 ) -> Any:
     """Execute async fn with retry + exponential backoff + model fallback."""
     import anthropic
@@ -550,7 +540,12 @@ async def retry_with_backoff_async(
         ),
         max_retries=_max_retries,
         provider_label="LLM",
-        on_retry=_on_retry_journal_emit,
+        on_retry=(
+            (lambda **kwargs: _emit_retry_activity(activity_sink_provider, **kwargs))
+            if activity_sink_provider
+            else None
+        ),
+        routing_sources=routing_sources,
     )
 
 

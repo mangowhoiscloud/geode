@@ -181,6 +181,13 @@ def _build_loop(
         },
     )
     allowed_tool_names = set(handlers)
+    from core.wiring.bootstrap import (
+        build_product_policy_sources,
+        current_product_activity_sink,
+    )
+
+    policy_sources = build_product_policy_sources()
+
     return AgenticLoop(
         ConversationContext(max_turns=200),
         executor,
@@ -199,6 +206,8 @@ def _build_loop(
         allow_actionable_partial_on_empty=allow_actionable_partial_on_empty,
         yield_after_tool_round=True,
         hooks=runtime_contract.hooks,
+        activity_sink_provider=current_product_activity_sink,
+        policy_sources=policy_sources,
     )
 
 
@@ -223,12 +232,13 @@ def register_geode_tau2_participants(
     fail_on_empty_geode_turn: bool = True,
 ) -> None:
     from core.llm.adapters.registry import bootstrap_builtins
+    from core.wiring.bootstrap import build_product_policy_sources
     from tau2.agent.base_agent import HalfDuplexAgent
     from tau2.data_model.message import AssistantMessage, UserMessage
     from tau2.registry import registry
     from tau2.user.user_simulator_base import HalfDuplexUser
 
-    bootstrap_builtins()
+    bootstrap_builtins(policy_sources=build_product_policy_sources())
 
     class GeodeTau2Agent(HalfDuplexAgent[GeodeTau2State]):
         def get_init_state(self, message_history: list[Any] | None = None) -> GeodeTau2State:

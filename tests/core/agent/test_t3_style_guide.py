@@ -2,7 +2,7 @@
 
 5-element 패턴:
 - SoT: style-guide.json (in-repo + operator-local)
-- Path: AUTORESEARCH_STYLE_GUIDE_PATH + OPERATOR_LOCAL_STYLE_GUIDE_PATH
+- Sources: explicit override + operator-local + packaged candidates
 - Reader: core/agent/style_guide_policy.py
 - Entry: core/agent/system_prompt.py:build_system_prompt
 - Env: GEODE_STYLE_GUIDE_OVERRIDE + GEODE_STYLE_GUIDE_STRICT
@@ -16,22 +16,27 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from core.agent import style_guide_policy
 from core.agent.style_guide_policy import (
     _load_style_guide_override,
     apply_style_guide_policy,
 )
+from core.config.policy_source import PolicySourcePaths
 
 
 @pytest.fixture
 def isolated_sot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
     sot = tmp_path / "style-guide.json"
-    operator_local = tmp_path / "operator-local-style-guide.json"
-    monkeypatch.setattr(style_guide_policy, "_STYLE_GUIDE_SOT_PATH", sot)
-    monkeypatch.setattr(style_guide_policy, "_OPERATOR_LOCAL_STYLE_GUIDE_PATH", operator_local)
     monkeypatch.delenv("GEODE_STYLE_GUIDE_OVERRIDE", raising=False)
     monkeypatch.delenv("GEODE_STYLE_GUIDE_STRICT", raising=False)
     yield sot
+
+
+def _sources(sot: Path) -> PolicySourcePaths:
+    return PolicySourcePaths(
+        "GEODE_STYLE_GUIDE_OVERRIDE",
+        sot.parent / "operator-local-style-guide.json",
+        sot,
+    )
 
 
 def _write(sot: Path, payload: dict[str, Any]) -> None:
@@ -42,17 +47,17 @@ def _write(sot: Path, payload: dict[str, Any]) -> None:
 
 
 def test_load_returns_none_when_sot_missing(isolated_sot: Path) -> None:
-    assert _load_style_guide_override() is None
+    assert _load_style_guide_override(sources=_sources(isolated_sot)) is None
 
 
 def test_load_returns_none_when_unreadable(isolated_sot: Path) -> None:
     isolated_sot.write_text("bad json {", encoding="utf-8")
-    assert _load_style_guide_override() is None
+    assert _load_style_guide_override(sources=_sources(isolated_sot)) is None
 
 
 def test_load_returns_none_when_value_not_str(isolated_sot: Path) -> None:
     _write(isolated_sot, {"tone": 42})
-    assert _load_style_guide_override() is None
+    assert _load_style_guide_override(sources=_sources(isolated_sot)) is None
 
 
 def test_load_valid_payload_all_fields(isolated_sot: Path) -> None:
@@ -63,13 +68,13 @@ def test_load_valid_payload_all_fields(isolated_sot: Path) -> None:
         "code_style": "show-first",
     }
     _write(isolated_sot, payload)
-    assert _load_style_guide_override() == payload
+    assert _load_style_guide_override(sources=_sources(isolated_sot)) == payload
 
 
 def test_load_partial_payload(isolated_sot: Path) -> None:
     """Field 일부만 set → 그 field 만 반환."""
     _write(isolated_sot, {"tone": "concise"})
-    assert _load_style_guide_override() == {"tone": "concise"}
+    assert _load_style_guide_override(sources=_sources(isolated_sot)) == {"tone": "concise"}
 
 
 def test_load_unknown_enum_value_dropped_with_warning(
@@ -77,21 +82,21 @@ def test_load_unknown_enum_value_dropped_with_warning(
 ) -> None:
     """Unknown enum value → axis drop (graceful), 다른 valid axis 는 유지."""
     _write(isolated_sot, {"tone": "savage", "verbosity_level": "low"})
-    result = _load_style_guide_override()
+    result = _load_style_guide_override(sources=_sources(isolated_sot))
     assert result == {"verbosity_level": "low"}
 
 
 def test_load_unknown_field_dropped(isolated_sot: Path) -> None:
     """Forward-compat — `_coerce` 가 알려진 enum field 만 유지."""
     _write(isolated_sot, {"tone": "concise", "future_field": "x"})
-    assert _load_style_guide_override() == {"tone": "concise"}
+    assert _load_style_guide_override(sources=_sources(isolated_sot)) == {"tone": "concise"}
 
 
 def test_strict_env_var_raises_on_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GEODE_STYLE_GUIDE_OVERRIDE", str(tmp_path / "nope.json"))
     monkeypatch.setenv("GEODE_STYLE_GUIDE_STRICT", "1")
     with pytest.raises(RuntimeError, match="GEODE_STYLE_GUIDE_OVERRIDE"):
-        _load_style_guide_override()
+        _load_style_guide_override(sources=_sources(tmp_path / "style-guide.json"))
 
 
 def test_env_var_without_strict_is_graceful(
@@ -99,14 +104,14 @@ def test_env_var_without_strict_is_graceful(
 ) -> None:
     monkeypatch.setenv("GEODE_STYLE_GUIDE_OVERRIDE", str(tmp_path / "nope.json"))
     monkeypatch.delenv("GEODE_STYLE_GUIDE_STRICT", raising=False)
-    assert _load_style_guide_override() is None
+    assert _load_style_guide_override(sources=_sources(tmp_path / "style-guide.json")) is None
 
 
 def test_operator_local_layer_priority(isolated_sot: Path) -> None:
     operator_local = isolated_sot.parent / "operator-local-style-guide.json"
     operator_local.write_text(json.dumps({"tone": "verbose"}), encoding="utf-8")
     _write(isolated_sot, {"tone": "concise"})
-    assert _load_style_guide_override() == {"tone": "verbose"}
+    assert _load_style_guide_override(sources=_sources(isolated_sot)) == {"tone": "verbose"}
 
 
 # Apply -----------------------------------------------------------------------
@@ -201,13 +206,16 @@ def test_system_prompt_wires_apply_into_static() -> None:
 # Path constants --------------------------------------------------------------
 
 
-def test_path_constants_present() -> None:
-    from core.paths import AUTORESEARCH_STYLE_GUIDE_PATH, OPERATOR_LOCAL_STYLE_GUIDE_PATH
+def test_product_source_candidates_present() -> None:
+    from core.self_improving.policy_sources import build_policy_source_bundle
 
-    assert AUTORESEARCH_STYLE_GUIDE_PATH.name == "style-guide.json"
-    assert OPERATOR_LOCAL_STYLE_GUIDE_PATH.name == "style-guide.json"
-    assert "policies" in str(AUTORESEARCH_STYLE_GUIDE_PATH)
-    assert "autoresearch/handoff" in str(OPERATOR_LOCAL_STYLE_GUIDE_PATH)
+    sources = build_policy_source_bundle()["style_guide"]
+    assert sources.packaged_default is not None
+    assert sources.operator_local is not None
+    assert sources.packaged_default.name == "style-guide.json"
+    assert sources.operator_local.name == "style-guide.json"
+    assert "policies" in str(sources.packaged_default)
+    assert "autoresearch/handoff" in str(sources.operator_local)
 
 
 # Env wiring in train.py ------------------------------------------------------
@@ -226,16 +234,6 @@ def test_train_py_sets_style_guide_env_pair() -> None:
 
 def test_style_guide_json_referenced_in_inference_path() -> None:
     repo_root = Path(__file__).resolve().parents[3]
-    hits: list[str] = []
-    for path in (repo_root / "core").rglob("*.py"):
-        if "test_" in path.name:
-            continue
-        try:
-            content = path.read_text(encoding="utf-8")
-        except OSError:
-            continue
-        if "style-guide.json" in content:
-            hits.append(str(path.relative_to(repo_root)))
-    assert any("style_guide_policy.py" in h for h in hits), (
-        f"style-guide.json must appear in core/agent/style_guide_policy.py. hits={hits}"
-    )
+    composition = (repo_root / "core/self_improving/policy_sources.py").read_text(encoding="utf-8")
+    assert '"style_guide"' in composition
+    assert "AUTORESEARCH_STYLE_GUIDE_PATH" in composition

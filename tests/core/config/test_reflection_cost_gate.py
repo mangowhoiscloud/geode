@@ -16,6 +16,7 @@ from typing import Any
 
 import pytest
 from core.agent.cognitive_state import CognitiveState
+from core.config.policy_source import EMPTY_POLICY_SOURCES, PolicySourceBundle
 
 # ---------------------------------------------------------------------------
 # Settings field + TOML map
@@ -58,6 +59,7 @@ class _Recorder:
 
     def __init__(self) -> None:
         self.calls: list[int] = []  # round_count at each call
+        self.policy_sources: list[PolicySourceBundle | None] = []
 
     async def fake_reflect_async(
         self,
@@ -68,8 +70,10 @@ class _Recorder:
         max_tokens: int,
         provider: str | None = None,
         source: str | None = None,
+        policy_sources: PolicySourceBundle | None = None,
     ) -> None:
         self.calls.append(state.round_count)
+        self.policy_sources.append(policy_sources)
 
 
 @pytest.fixture
@@ -111,6 +115,7 @@ def _maybe_reflect_runner(
         _provider = "anthropic"
         _source = "api_key"
         _new_adapter = object()
+        _policy_sources = EMPTY_POLICY_SOURCES
 
     bound = AgenticLoop._maybe_reflect.__get__(_StubSelf(), _StubSelf)
     asyncio.run(bound([]))
@@ -126,6 +131,7 @@ def test_interval_one_runs_every_round(
         state.round_count = r
         _maybe_reflect_runner(state, monkeypatch, _stub_reflect_async, interval=1)
     assert _stub_reflect_async.calls == [1, 2, 3, 4, 5]
+    assert all(sources is EMPTY_POLICY_SOURCES for sources in _stub_reflect_async.policy_sources)
 
 
 def test_interval_three_runs_rounds_one_four_seven(

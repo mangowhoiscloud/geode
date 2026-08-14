@@ -9,16 +9,33 @@ Pins:
   ``(user, assistant)`` pairs at head of messages.
 - Per-slot graceful: a reader / apply failure on one slot doesn't
   break the LLM call.
-- anthropic.py + openai.py agentic_call paths both invoke the
-  orchestrator (smoke check via import + grep-style source assertion).
+- Product composition installs one request middleware for Anthropic PAYG/OAuth.
+- The kernel Anthropic request builder has no product import or direct call.
+- Claude CLI and non-Anthropic adapters are outside this contribution.
 """
 
 from __future__ import annotations
 
+import asyncio
+import builtins
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from core.self_improving.loop.inject.in_context_wiring import apply_in_context_slots
+from core.agent.system_prompt import PROMPT_CACHE_BOUNDARY
+from core.config.policy_source import EMPTY_POLICY_SOURCES, PolicySourceBundle, PolicySourcePaths
+from core.hooks import DuplicateMiddlewareError, LlmCallRequest, MiddlewareRegistry
+from core.llm.adapters._anthropic_common import build_create_kwargs, build_stream_kwargs
+from core.llm.adapters.base import AdapterCallRequest, Message
+from core.self_improving.loop.inject.in_context_wiring import (
+    apply_in_context_slots,
+    register_in_context_middleware,
+)
+from core.wiring.bootstrap import (
+    bind_product_worker_activity,
+    build_middleware_registry,
+    current_product_activity_sink,
+)
 
 # No-op fast path ------------------------------------------------------------
 
@@ -27,7 +44,7 @@ def test_no_sot_configured_returns_identity(monkeypatch: pytest.MonkeyPatch) -> 
     """No SoT → identical objects returned (zero allocation)."""
     monkeypatch.setattr(
         "core.self_improving.loop.inject.in_context_slots._load_in_context_slots_override",
-        lambda: None,
+        lambda **_kwargs: None,
     )
     msgs = [{"role": "user", "content": "hi"}]
     new_msgs, new_sys = apply_in_context_slots(msgs, system="SYS")
@@ -39,7 +56,7 @@ def test_empty_dict_slots_returns_identity(monkeypatch: pytest.MonkeyPatch) -> N
     """Empty dict from the reader → identity (truthiness check)."""
     monkeypatch.setattr(
         "core.self_improving.loop.inject.in_context_slots._load_in_context_slots_override",
-        lambda: {},
+        lambda **_kwargs: {},
     )
     msgs = [{"role": "user", "content": "hi"}]
     new_msgs, _ = apply_in_context_slots(msgs)
@@ -51,7 +68,7 @@ def test_load_failure_returns_identity_and_swallows(
 ) -> None:
     """Reader exception → identity, no propagation (defensive)."""
 
-    def _boom() -> dict[str, Any]:
+    def _boom(**_kwargs: Any) -> dict[str, Any]:
         raise RuntimeError("synthetic")
 
     monkeypatch.setattr(
@@ -74,7 +91,7 @@ def test_exemplars_slot_prepends_few_shot_pool(monkeypatch: pytest.MonkeyPatch) 
 
     monkeypatch.setattr(
         "core.self_improving.loop.inject.in_context_slots._load_in_context_slots_override",
-        lambda: {
+        lambda **_kwargs: {
             SLOT_EXEMPLARS: InContextSlot(
                 name=SLOT_EXEMPLARS,
                 max_entries=2,
@@ -85,7 +102,7 @@ def test_exemplars_slot_prepends_few_shot_pool(monkeypatch: pytest.MonkeyPatch) 
     )
     monkeypatch.setattr(
         "core.llm.few_shot_pool._load_few_shot_pool_override",
-        lambda: [
+        lambda **_kwargs: [
             FewShotExemplar(
                 user_msg="ex1_user",
                 assistant_msg="ex1_assistant",
@@ -117,7 +134,7 @@ def test_exemplars_slot_empty_pool_no_op(monkeypatch: pytest.MonkeyPatch) -> Non
 
     monkeypatch.setattr(
         "core.self_improving.loop.inject.in_context_slots._load_in_context_slots_override",
-        lambda: {
+        lambda **_kwargs: {
             SLOT_EXEMPLARS: InContextSlot(
                 name=SLOT_EXEMPLARS,
                 max_entries=3,
@@ -128,7 +145,7 @@ def test_exemplars_slot_empty_pool_no_op(monkeypatch: pytest.MonkeyPatch) -> Non
     )
     monkeypatch.setattr(
         "core.llm.few_shot_pool._load_few_shot_pool_override",
-        lambda: None,
+        lambda **_kwargs: None,
     )
     msgs = [{"role": "user", "content": "hi"}]
     new_msgs, _ = apply_in_context_slots(msgs)
@@ -143,7 +160,7 @@ def test_exemplars_slot_pool_failure_logged_not_raised(
 
     monkeypatch.setattr(
         "core.self_improving.loop.inject.in_context_slots._load_in_context_slots_override",
-        lambda: {
+        lambda **_kwargs: {
             SLOT_EXEMPLARS: InContextSlot(
                 name=SLOT_EXEMPLARS,
                 max_entries=2,
@@ -153,7 +170,7 @@ def test_exemplars_slot_pool_failure_logged_not_raised(
         },
     )
 
-    def _pool_boom() -> Any:
+    def _pool_boom(**_kwargs: Any) -> Any:
         raise RuntimeError("synthetic pool failure")
 
     monkeypatch.setattr("core.llm.few_shot_pool._load_few_shot_pool_override", _pool_boom)
@@ -172,7 +189,7 @@ def test_system_passthrough_when_no_slot_targets_it(monkeypatch: pytest.MonkeyPa
 
     monkeypatch.setattr(
         "core.self_improving.loop.inject.in_context_slots._load_in_context_slots_override",
-        lambda: {
+        lambda **_kwargs: {
             SLOT_EXEMPLARS: InContextSlot(
                 name=SLOT_EXEMPLARS,
                 max_entries=1,
@@ -183,47 +200,251 @@ def test_system_passthrough_when_no_slot_targets_it(monkeypatch: pytest.MonkeyPa
     )
     monkeypatch.setattr(
         "core.llm.few_shot_pool._load_few_shot_pool_override",
-        lambda: [FewShotExemplar(user_msg="u", assistant_msg="a", fitness_delta=0.5, source="t")],
+        lambda **_kwargs: [
+            FewShotExemplar(user_msg="u", assistant_msg="a", fitness_delta=0.5, source="t")
+        ],
     )
     _, new_sys = apply_in_context_slots([], system="ORIG_SYSTEM")
     assert new_sys == "ORIG_SYSTEM"
 
 
-# Provider wiring smoke ------------------------------------------------------
+# Neutral request-middleware wiring -----------------------------------------
 
 
-def test_anthropic_live_path_imports_orchestrator() -> None:
-    """LIVE Anthropic 빌더(`_system_and_messages`) 안에서
-    ``apply_in_context_slots`` wiring 이 일어남 — PR-M4.4 claim 을
-    grep-provable 하게 pin (2026-07-29: dead adapter에서 repoint).
-    """
-    import inspect
-
-    from core.llm.adapters import _anthropic_common as _anth
-
-    src = inspect.getsource(_anth._system_and_messages)
-    assert (
-        "from core.self_improving.loop.inject.in_context_wiring import apply_in_context_slots"
-        in src
+def _apply_registered(
+    registry: MiddlewareRegistry,
+    *,
+    adapter_name: str,
+    request: AdapterCallRequest,
+) -> LlmCallRequest:
+    adapter: Any = SimpleNamespace(name=adapter_name)
+    return asyncio.run(
+        registry.llm_request(
+            LlmCallRequest(
+                adapter=adapter,
+                request=request,
+            )
+        )
     )
-    assert "apply_in_context_slots(messages, system=" in src
 
 
-# PR-LEGACY-PROVIDER-REMOVAL (2026-05-28) — the
-# ``test_openai_agentic_call_imports_orchestrator`` companion to
-# ``test_anthropic_agentic_call_imports_orchestrator`` was removed
-# alongside ``OpenAIAgenticAdapter``. The OpenAI / Codex / GLM PAYG +
-# subscription paths now route through ``core/llm/adapters/*`` instead.
-# Wiring ``apply_in_context_slots`` into those adapters is tracked as
-# follow-up scope (the orchestrator currently only fires for the
-# production Anthropic adapter request builders).
+class _CaptureRequest:
+    def __init__(self) -> None:
+        self.system_prompt = ""
+
+    async def llm_request(self, request: LlmCallRequest) -> LlmCallRequest:
+        self.system_prompt = request.request.system_prompt
+        return request
 
 
-def test_orchestrator_module_public_api() -> None:
-    """Only ``apply_in_context_slots`` is exported (single entry point)."""
+@pytest.mark.parametrize("adapter_name", ["anthropic-payg", "anthropic-oauth"])
+def test_anthropic_api_middleware_preserves_wire_shape_and_dynamic_cache_prefix(
+    monkeypatch: pytest.MonkeyPatch,
+    adapter_name: str,
+) -> None:
+    """Both API lanes get the old contribution immediately before adaptation."""
     import core.self_improving.loop.inject.in_context_wiring as wiring
 
-    assert wiring.__all__ == ["apply_in_context_slots"]
+    calls: list[tuple[list[dict[str, Any]], str]] = []
+
+    def _inject(
+        messages: list[dict[str, Any]],
+        *,
+        system: str,
+        **_kwargs: Any,
+    ) -> tuple[list[dict[str, Any]], str]:
+        calls.append((messages, system))
+        exemplars = [
+            {"role": "user", "content": "example question"},
+            {"role": "assistant", "content": "example answer"},
+        ]
+        return exemplars + messages, "<memory-recall>memo</memory-recall>\n" + system
+
+    monkeypatch.setattr(wiring, "apply_in_context_slots", _inject)
+
+    registry = build_middleware_registry()
+    capture = _CaptureRequest()
+    registry.register_llm_request(capture, name="pre-injection-capture")
+
+    static = "STATIC RULES\n\n"
+    dynamic = "\n\n<dynamic_context>\nvolatile\n</dynamic_context>"
+    system = static + PROMPT_CACHE_BOUNDARY + dynamic
+    request = AdapterCallRequest(
+        model="claude-sonnet-5",
+        messages=(
+            Message(
+                role="assistant",
+                content="prior",
+                codex_reasoning_items=({"id": "reasoning"},),
+                phase="commentary",
+            ),
+            Message(role="tool", content="tool output", tool_use_id="tool-1"),
+        ),
+        system_prompt=system,
+        metadata={"trace": "kept"},
+    )
+
+    transformed = _apply_registered(
+        registry,
+        adapter_name=adapter_name,
+        request=request,
+    ).request
+
+    assert capture.system_prompt == system
+    assert len(calls) == 1
+    assert calls[0][1].endswith("volatile\n")
+    assert "</dynamic_context>" not in calls[0][1]
+    before_boundary, after_boundary = transformed.system_prompt.split(
+        PROMPT_CACHE_BOUNDARY,
+        1,
+    )
+    assert before_boundary == static
+    assert after_boundary.endswith("</dynamic_context>")
+    assert "<memory-recall>memo</memory-recall>" in after_boundary
+
+    assert [message.content for message in transformed.messages[:2]] == [
+        "example question",
+        "example answer",
+    ]
+    assert transformed.messages[2].codex_reasoning_items == ({"id": "reasoning"},)
+    assert transformed.messages[2].phase == "commentary"
+    assert transformed.messages[3].tool_use_id == "tool-1"
+    create_kwargs = build_create_kwargs(transformed)
+    stream_kwargs = build_stream_kwargs(transformed)
+    assert create_kwargs["system"] == stream_kwargs["system"]
+    assert create_kwargs["messages"] == stream_kwargs["messages"]
+    tool_result = create_kwargs["messages"][-1]["content"][0]
+    assert tool_result["type"] == "tool_result"
+    assert tool_result["tool_use_id"] == "tool-1"
+    assert tool_result["content"] == "tool output"
+    assert transformed.metadata == {
+        "trace": "kept",
+        "cache_invalidation_reason": "self-improving in-context contribution",
+    }
+
+
+@pytest.mark.parametrize("adapter_name", ["claude-cli", "openai-payg"])
+def test_non_anthropic_api_adapters_are_not_modified(
+    monkeypatch: pytest.MonkeyPatch,
+    adapter_name: str,
+) -> None:
+    import core.self_improving.loop.inject.in_context_wiring as wiring
+
+    def _unexpected(*_args: Any, **_kwargs: Any) -> Any:
+        raise AssertionError("in-context contribution must not run")
+
+    monkeypatch.setattr(wiring, "apply_in_context_slots", _unexpected)
+    registry = build_middleware_registry()
+    request = AdapterCallRequest(
+        model="model",
+        messages=(Message(role="user", content="hello"),),
+        system_prompt="system",
+    )
+
+    transformed = _apply_registered(
+        registry,
+        adapter_name=adapter_name,
+        request=request,
+    ).request
+
+    assert transformed == request
+
+
+def test_registration_is_once_only_and_fail_loud() -> None:
+    registry = MiddlewareRegistry()
+    register_in_context_middleware(registry)
+
+    with pytest.raises(DuplicateMiddlewareError, match="self_improving_in_context"):
+        register_in_context_middleware(registry)
+
+
+@pytest.mark.parametrize(
+    "policy_sources",
+    [
+        EMPTY_POLICY_SOURCES,
+        {"cache_policy": PolicySourcePaths("GEODE_TEST_CACHE_POLICY_OVERRIDE")},
+    ],
+)
+def test_missing_slot_policy_keeps_anthropic_request_unchanged(
+    monkeypatch: pytest.MonkeyPatch,
+    policy_sources: PolicySourceBundle,
+) -> None:
+    import core.self_improving.loop.inject.in_context_wiring as wiring
+
+    def _unexpected(*_args: Any, **_kwargs: Any) -> Any:
+        raise AssertionError("explicit empty policy must not load product slots")
+
+    monkeypatch.setattr(wiring, "apply_in_context_slots", _unexpected)
+    registry = build_middleware_registry(policy_sources=policy_sources)
+    request = AdapterCallRequest(
+        model="claude-sonnet-5",
+        messages=(Message(role="user", content="hello"),),
+        system_prompt="system",
+    )
+
+    transformed = _apply_registered(
+        registry,
+        adapter_name="anthropic-payg",
+        request=request,
+    ).request
+
+    assert transformed == request
+
+
+def test_neutral_bootstrap_tolerates_absent_product(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Any,
+) -> None:
+    real_import = builtins.__import__
+
+    def _without_product(name: str, *args: Any, **kwargs: Any) -> Any:
+        if name.startswith("core.self_improving"):
+            raise ModuleNotFoundError(
+                "No module named 'core.self_improving'",
+                name="core.self_improving",
+            )
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", _without_product)
+    assert isinstance(build_middleware_registry(), MiddlewareRegistry)
+    assert current_product_activity_sink() is None
+    bind_product_worker_activity(tmp_path)
+
+
+def test_neutral_bootstrap_does_not_hide_broken_product_dependency(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    real_import = builtins.__import__
+
+    def _broken_product(name: str, *args: Any, **kwargs: Any) -> Any:
+        if name.startswith("core.self_improving"):
+            raise ModuleNotFoundError(
+                "No module named 'missing_product_dependency'",
+                name="missing_product_dependency",
+            )
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", _broken_product)
+    with pytest.raises(ModuleNotFoundError, match="missing_product_dependency"):
+        build_middleware_registry()
+
+
+def test_neutral_bootstrap_does_not_hide_partial_product_install(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    real_import = builtins.__import__
+
+    def _partial_product(name: str, *args: Any, **kwargs: Any) -> Any:
+        if name.startswith("core.self_improving"):
+            raise ModuleNotFoundError(
+                "No module named 'core.self_improving.policy_sources'",
+                name="core.self_improving.policy_sources",
+            )
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", _partial_product)
+    with pytest.raises(ModuleNotFoundError, match="policy_sources"):
+        build_middleware_registry()
 
 
 # Stub slots behave as no-ops ----------------------------------------------
@@ -254,7 +475,7 @@ def test_stub_slots_do_not_break_when_configured(monkeypatch: pytest.MonkeyPatch
 
     monkeypatch.setattr(
         "core.self_improving.loop.inject.in_context_slots._load_in_context_slots_override",
-        lambda: {
+        lambda **_kwargs: {
             SLOT_MEMORY_RECALL: InContextSlot(
                 name=SLOT_MEMORY_RECALL,
                 max_entries=5,

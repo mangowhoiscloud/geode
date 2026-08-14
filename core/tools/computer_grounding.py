@@ -140,8 +140,11 @@ async def glm_locate(
     the parsing + conversion are unit-tested with a mocked client.
     """
     from core.llm.providers.glm import _get_async_glm_client
+    from core.wiring.bootstrap import build_product_policy_sources
 
-    client = _get_async_glm_client()
+    client = _get_async_glm_client(
+        routing_sources=build_product_policy_sources().get("provider_routing")
+    )
     resp = await client.chat.completions.create(
         model=model,
         messages=[

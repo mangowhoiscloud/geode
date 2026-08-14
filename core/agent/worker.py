@@ -33,6 +33,7 @@ from core.agent.loop.models import (
 )
 from core.agent.safety import SUBAGENT_CONTROL_TOOLS
 from core.async_runtime import run_process_coroutine
+from core.config.policy_source import EncodedPolicySourceBundle
 from core.paths import GLOBAL_WORKERS_DIR
 
 if TYPE_CHECKING:
@@ -124,6 +125,7 @@ class WorkerRequest:
     # (PR-MAINPATH-67 deleted the legacy ``resolve_agentic_adapter``
     # fallback route — all dispatch now goes through Path-B).
     source: str = ""
+    policy_sources: EncodedPolicySourceBundle | None = None
     # PR-JSON-WIRE (2026-05-25) — per-task JSON Schema for
     # structured-output forcing on the spawned LLM call. Threads
     # through ``AgenticLoop.response_schema`` →
@@ -190,6 +192,7 @@ class WorkerRequest:
             parent_session_key=data.get("parent_session_key", ""),
             parent_session_id=data.get("parent_session_id", ""),
             source=data.get("source", ""),
+            policy_sources=data.get("policy_sources"),
             response_schema=data.get("response_schema"),
             emit_activity=data.get("emit_activity", False),
             resume=data.get("resume", False),
@@ -421,6 +424,17 @@ def _load_worker_resume(request: WorkerRequest, conversation: Any) -> tuple[Any,
 def _run_agentic(request: WorkerRequest) -> WorkerResult:
     """Bootstrap minimal GEODE runtime and run AgenticLoop."""
     started = time.time()
+    from core.config.policy_source import decode_policy_sources
+    from core.wiring.bootstrap import build_product_policy_sources
+
+    policy_sources = (
+        decode_policy_sources(request.policy_sources)
+        if request.policy_sources is not None
+        else build_product_policy_sources()
+    )
+    from core.llm.adapters.registry import bootstrap_builtins
+
+    bootstrap_builtins(policy_sources=policy_sources)
 
     # Fleet view Stage 1.5 — when the parent opted in (interactive delegate_task
     # turn path), install a process-local activity sink so the child's tool
@@ -488,6 +502,7 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
 
     # 3. Build ToolExecutor (auto_approve=True for sub-agents)
     from core.agent.tool_executor import ToolExecutor
+    from core.wiring.bootstrap import build_middleware_registry
 
     executor = ToolExecutor(
         action_handlers=handlers,
@@ -501,6 +516,7 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
         # allowlist (e.g. repo_researcher without run_bash) actually hold.
         denied_tools=frozenset(request.denied_tools) | SUBAGENT_CONTROL_TOOLS,
         interactive_approval=False,
+        middleware_registry=build_middleware_registry(policy_sources=policy_sources),
     )
 
     # 4. Build ConversationContext
@@ -544,9 +560,11 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
     # Best-effort: a hook bootstrap failure must never take down the
     # sub-agent itself.
     worker_hooks = None
+    activity_sink_provider = None
     try:
-        from core.wiring.bootstrap import build_worker_hooks
+        from core.wiring.bootstrap import build_worker_hooks, current_product_activity_sink
 
+        activity_sink_provider = current_product_activity_sink
         worker_hooks = build_worker_hooks(
             session_key=request.task_id or "worker",
             run_id=request.task_id or "worker",
@@ -565,6 +583,8 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
         model=effective_model,
         provider=effective_provider,
         hooks=worker_hooks,
+        activity_sink_provider=activity_sink_provider,
+        policy_sources=policy_sources,
         # v0.55.0 R5 — propagate reasoning depth + time budget into the
         # sub-agent's loop. Pre-fix every sub-agent ran at the
         # AgenticLoop defaults (effort="high", thinking_budget=0,
@@ -1034,18 +1054,6 @@ def main() -> None:
 
     configure_logging("worker", level=logging.WARNING)
 
-    # Post-MAINPATH-1 (#1572) the AgenticLoop's main body resolves the LLM
-    # call site through Path-B ``core.llm.adapters.registry.resolve_for``.
-    # The worker subprocess does not go through
-    # ``core.runtime.GeodeRuntime._build_core`` (the parent's wiring
-    # bootstrap), so without an explicit ``bootstrap_builtins()`` here
-    # the worker's registry is empty and every sub-agent call crashes
-    # with ``AdapterNotFoundError: Known pairs: []``. Idempotent — safe
-    # to call even when the registry is already populated.
-    from core.llm.adapters.registry import bootstrap_builtins
-
-    bootstrap_builtins()
-
     # PR-Q (2026-05-24) — re-bind the parent's active run_dir into this
     # subprocess's ContextVar so observability writers
     # (``_save_result_backup``, ``SessionTimeline``) land their output
@@ -1075,21 +1083,10 @@ def main() -> None:
         # kwargs which override the orchestrator defaults.
         from pathlib import Path
 
-        from core.self_improving.loop.observe.run_timeline import (
-            RunTimeline,
-            set_current_run_timeline,
-        )
+        from core.wiring.bootstrap import bind_product_worker_activity
 
-        run_dir_path = Path(inherited_run_dir)
-        worker_run_timeline = RunTimeline(
-            session_id=run_dir_path.name,
-            gen_tag="",
-            component="seed-generation",
-            path=run_dir_path / "events.jsonl",
-        )
-        # No need to capture the reset token — subprocess process exits
-        # at the bottom of main(); the OS reclaims the ContextVar.
-        set_current_run_timeline(worker_run_timeline)
+        # No reset token is needed: the subprocess exits at the bottom of main.
+        bind_product_worker_activity(Path(inherited_run_dir))
 
     result: WorkerResult | None = None
     try:
