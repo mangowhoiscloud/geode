@@ -18,7 +18,7 @@ eval_contracts:
   - docs/eval/schemas/analysis.schema.json
   - docs/eval/schemas/attempt.schema.json
   - docs/eval/schemas/run-spec.schema.json
-eval_latest_valid_release: https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/17133f0c8e893b6d765fcef69712ba0867bd573a/trajectories/mcpmark-gate0b-gpt54-high-mcpmark-gate0b-tool-cap-gpt54-high-20260813t142345z-bcf57b5eee65-20260813T173103Z-bf8ad9ea9717
+eval_latest_valid_release: https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/1160fecfe4447f0a3f4cf30a414f29c61776d012/trajectories/mcpmark-gate0c-gpt54-high-mcpmark-gate0c-filesystem30-gpt54-high-20260813t190922z-geode-20260813T230525Z-9d6773caad04
 ---
 
 # GEODE Evaluation Index and Roadmap
@@ -74,7 +74,20 @@ pointers under `docs/eval/`; the artifact repository keeps the bytes behind
 those claims. See [External Evaluation Artifact Repository](external-artifact-repository.md)
 for path mappings, disclosure rules, and the publication manifest scaffold.
 
-The latest prospective runtime diagnostic is pinned to artifact commit
+The latest prospective paired-runtime diagnostic is pinned to artifact commit
+[`1160fec`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/1160fecfe4447f0a3f4cf30a414f29c61776d012):
+on all 30 pinned MCPMark `filesystem/standard` tasks with GPT-5.4 subscription,
+effort `high`, and a common adapter-owned action deadline, GEODE scored
+**23/30** and Codex CLI **21/30**, for a signed delta of
+**+2/30 = +6.67 percentage points**. The paired buckets were 17 both-pass,
+3 both-fail, 6 GEODE-only, and 4 Codex-only. One GEODE timeout remained a
+score-bearing FAIL; exact token coverage is 29/30 for GEODE and 30/30 for
+Codex. This is one direct `k=1` diagnostic with `promotion_authority=none`,
+not a stability, efficiency, API-key leaderboard, or full 127-task Verified
+claim. See the
+[run record](2026-08-14-mcpmark-gate0c-filesystem30-gpt54-high.md).
+
+The preceding targeted runtime diagnostic is pinned to artifact commit
 [`17133f0`](https://github.com/mangowhoiscloud/geode-eval-artifacts/commit/17133f0c8e893b6d765fcef69712ba0867bd573a):
 on five large-result MCPMark tasks at k=3, GPT-5.4/high scored
 `guard-25000` **7/15** and `unlimited-0` **10/15**, so the frozen signed delta
@@ -155,9 +168,11 @@ Agent-World 비교 정본: [agent-world-comparison-contract.md](agent-world-comp
 
 현재 순서·게이트·실행 상태는
 [`2026-08-13-sequential-agent-benchmark-plan.md`](2026-08-13-sequential-agent-benchmark-plan.md)가
-소유한다. 다음 score-bearing 단계는 **공통 deadline 증명 → targeted ablation →
-MCPMark FS30 corrective pair → Tau2 base 3-domain**이다. MCPMark Verified와
-Terminal-Bench 2.1은 앞선 lane이 clean할 때만 진행한다.
+소유한다. Gate 0C FS30 `k=1`은 완료됐고 다음 score-bearing 단계는 별도 fresh
+root의 **FS30 `k=3` stability**다. 현재 `WHAM=80%`에서는 live launch를
+차단한다. Tau2의 278-ID/pin/user/budget no-model preflight는 진행할 수 있지만
+Tau2 live call은 Gate 0C stability와 별도 PAYG 승인을 기다린다. MCPMark
+Verified와 Terminal-Bench 2.1은 앞선 lane이 clean할 때만 진행한다.
 
 ## Public benchmark serving contract
 
@@ -234,6 +249,7 @@ Verified 다음에 τ²-bench를 둔다.
 
 | 일자 | 변경 |
 |---|---|
+| 2026-08-14 | GPT-5.4/high MCPMark Gate 0C common-deadline FS30 k=1 게시: GEODE 23/30, Codex 21/30, frozen delta +2/30=+6.67%p supported diagnostic-only. 60/60 valid arms, paired buckets 17/3/6/4, one GEODE score-bearing timeout, exact token coverage 29/30 vs 30/30, 59 admitted trajectories/one withheld를 artifact commit `1160fec`에서 원격 재검증. `promotion_authority=none`; fresh k=3 live는 WHAM=80%에서 차단 |
 | 2026-08-14 | GPT-5.4/high MCPMark Gate 0B k=3 direct diagnostic 게시: `guard-25000` 7/15, `unlimited-0` 10/15, frozen delta +3/15=+0.20 supported. 30/30 valid arms와 six reviewed releases/26 admitted trajectories를 artifact commit `17133f0`에서 원격 재검증; 제품 기본값 변경 권한은 없음 |
 | 2026-08-13 | GPT-5.4/high MCPMark filesystem/standard native outcome 21/30 vs 20/30과 3,381 events / 1,430 exact pairs를 보존. 사후 source audit에서 equal-hard-deadline preregistration 위반을 찾아 prospective hypothesis를 invalidated로 정정하고, append-only correction을 artifact commit `e5d442f`에서 원격 재검증. 점수는 retrospective description만 허용 |
 | 2026-08-12 | GPT-5.4 subscription `high` matched MCPMark filesystem/easy 재실행: 9/10 유지, 입력 447,376→314,219(−29.8%), 출력 25,157→20,385(−19.0%), 188 events / 54 exact tool pairs. 검토된 trajectory release와 보고서를 artifact commit `2c2d1f0`에 게시하고 원격 read-back 검증 |

@@ -22,8 +22,8 @@ eval_contracts:
 
 작성일: 2026-08-13
 최종 갱신: 2026-08-14
-기준 코드: GEODE `origin/main@02f71fae260f050a5ab02af943cfd2244441da7f`
-상태: **Lane 0B complete · artifact published. Lane 0C next.**
+기준 코드: GEODE `origin/main@f4b3760488a80dad1186d54458f63bbb08768719`
+상태: **Lane 0C k=1 complete · artifact published. k=3 live blocked by WHAM=80%; Tau2 no-model preflight may proceed.**
 
 ## 1. 권한과 범위
 
@@ -49,6 +49,7 @@ eval_contracts:
 
 | 근거 | 현재 판정 | 다음에 닫을 GAP |
 |---|---|---|
+| [GPT-5.4 MCPMark Gate 0C corrective FS30](2026-08-14-mcpmark-gate0c-filesystem30-gpt54-high.md) | Prospective common-deadline k=1 direct pair: GEODE 23/30, Codex 21/30, signed delta +2/30 = +6.67%p supported. One GEODE score-bearing timeout; token coverage 29/30 vs 30/30 | Fresh k=3 stability is still required; live launch blocked while WHAM=80%; no promotion authority |
 | [GPT-5.4 MCPMark Gate 0B tool-cap ablation](2026-08-14-mcpmark-gate0b-tool-cap-gpt54-high.md) | Prospective k=3 direct diagnostic: `guard-25000` 7/15, `unlimited-0` 10/15, signed delta +0.20 supported. Four matched score-bearing timeouts; token totals exact on 13/15 per arm only | Product-default change is not authorized; proceed to common-deadline FS30 k=1 |
 | [GPT-5.4 MCPMark FS30 observation](2026-08-13-mcpmark-geode-codex-gpt54-filesystem-standard.md) | GEODE 21/30, Codex 20/30. Timeout 시작 경계가 달라 retrospective description만 허용 | 동일 timed surface와 공개 runner |
 | GPT-5.4 Tau2 base 3-domain | `geode_agent + geode_user` 200/278 | native GPT-5.2-low user와 4 trials는 별도 official-profile 측정 |
@@ -88,8 +89,8 @@ flowchart TD
 |---|---|---|---|
 | 0A Common deadline | **COMPLETE · MAIN** | None; contract is the basis for 0B/0C | setup/action boundary, timeout·cancel·cleanup tests and no-model preflight PASS |
 | 0B Targeted ablation | **COMPLETE · PUBLISHED** | Preserve 7/15 vs 10/15 as diagnostic-only; no cap-default change | 30/30 valid arms, primary +3/15 = +0.20 supported, six releases/26 admitted trajectories, four timeout trajectories withheld |
-| 0C MCPMark FS30 | **NEXT** | GPT-5.4/high one-task smoke, then fresh 30-task k=1 | 60 native receipts, exact task/reset/verifier joins, infrastructure errors 0 |
-| 1 Tau2 base | BLOCKED-LIVE | 278 IDs/pin/user/budget no-model preflight | PAYG 승인 뒤 smoke→full-1→4 trials |
+| 0C MCPMark FS30 | **K=1 COMPLETE · PUBLISHED · K=3 LIVE-BLOCKED (WHAM=80%)** | Preserve k=1 as diagnostic-only; launch fresh k=3 only after five-hour quota headroom is safe | k=1: 60/60 valid arms, exact task/reset/verifier joins, primary +2/30; k=3 remains separate |
+| 1 Tau2 base | **NO-MODEL PREFLIGHT READY · LIVE BLOCKED** | 278 IDs/pin/user/budget no-model preflight may proceed; no model calls yet | Gate 0C stability and PAYG approval before smoke→full-1→4 trials |
 | 2 MCPMark Verified | PENDING | service별 no-model canary | FS30 pair와 full127 headline 분리 |
 | 3 Terminal-Bench 2.1 | PENDING | 2.1 profile 정렬·oracle smoke | adapter/evidence path clean 후 89 tasks |
 
@@ -222,6 +223,32 @@ ID의 attempt-000은 timeout outcome classification 결함으로 sequence 14에�
 4. `k=1`이 clean이고 quota가 안전하면 같은 계약으로 `k=3` stability lane을
    실행한다. 이미 끝난 k=1을 k=3의 일부로 사후 편입하지 않는다.
 
+Gate 0C `k=1`은 2026-08-14 완료됐다. 공통 adapter-owned 1,200초 action
+deadline과 score-bearing semantic fixture를 결속한 30-task pair에서 GEODE는
+23/30, Codex는 21/30이었고 frozen primary delta는
+`(23-21)/30 = +0.066667 = +6.67%p`이므로 diagnostic hypothesis는 supported다.
+Paired bucket은 `both-pass=17`, `both-fail=3`, `GEODE-only=6`, `Codex-only=4`다.
+
+선택된 `attempt-001-complete`는 valid/mixed이며 60/60 arms를 완료했다. GEODE
+`papers/author_folders` 한 건은 common owner가 증명한 score-bearing timeout이고,
+cleanup·verifier가 완결돼 infrastructure-invalid가 아니다. 그 row의 native token
+usage는 null이므로 exact token coverage는 GEODE 29/30, Codex 30/30이다.
+
+Native execution log는 GEODE 644 calls/51 errors, Codex 678/17을 기록했다.
+Normalized trajectory는 GEODE internal recovery 한 건을 별도 projection해
+645 attempts이며 Codex는 678이다. Read/repeated-read references는 GEODE
+798/81, Codex 838/213이다. 이 secondary behavior와 unmatched token coverage는
+효율·인과·제품 정책 권한을 만들지 않는다.
+
+59개 scope-complete trajectory를 공개하고 GEODE timeout trajectory 한 개는
+withheld했다. Artifact:
+`mangowhoiscloud/geode-eval-artifacts@1160fecfe4447f0a3f4cf30a414f29c61776d012/mcpmark/results-paired/mcpmark-gate0c-filesystem30-gpt54-high-20260813t190922z/`.
+`promotion_authority=none`이며 fresh `k=3` stability가 남아 있다.
+
+현재 machine `WHAM=80%`에서는 `k=3` live launch를 시작하지 않는다. Tau2의
+278-ID/pin/user/budget no-model preflight는 병행할 수 있지만, Tau2 score-bearing
+model call은 Gate 0C stability와 별도 PAYG 승인을 기다린다.
+
 ## 6. Lane 1 — tau2 base three-domain
 
 공식 base workload는 Airline 50 + Retail 114 + Telecom 114 = **278 tasks per
@@ -310,6 +337,7 @@ Invalid/aborted attempt가 선택되면 primary metric은 `not-measurable`이다
 
 | Date | Change |
 |---|---|
+| 2026-08-14 | Gate 0C prospective common-deadline FS30 k=1 완료·게시: GEODE 23/30 대 Codex 21/30, primary +2/30=+6.67%p supported diagnostic-only. 60/60 valid arms, paired buckets 17/3/6/4, one GEODE score-bearing timeout, exact token coverage 29/30 vs 30/30, 59 admitted trajectories/one withheld 보존. `promotion_authority=none`; fresh k=3 live는 WHAM=80%에서 차단하고 Tau2 no-model preflight만 허용 |
 | 2026-08-14 | Gate 0B prospective k=3 완료·게시: `guard-25000` 7/15 대 `unlimited-0` 10/15, primary +3/15=+0.20 supported diagnostic-only. Four matched score-bearing timeouts, exact token coverage 13/15 per arm, prior invalid attempt denominator 0, six reviewed releases/26 admitted trajectories 보존. Lane 0C를 NEXT로 승격 |
 | 2026-08-13 | Gate 0B runner implementation: 기존 serial runner에 5-task×2-cap×3-repeat profile, effective cap/offload receipt, direct `CallToolResult` truncation reconstruction, dependency/import preflight를 연결. Live run과 score/artifact는 아직 없음 |
 | 2026-08-13 | Gate 0A main release: PR #2973 구현을 PR #2975로 main에 승격 |

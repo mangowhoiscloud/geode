@@ -3799,6 +3799,30 @@ GEODE_MCPMARK_GITHUB_REPO_VISIBILITY=public \
 -   GitHub fixture repositories were made public during execution so the Docker GitHub MCP server could use normal public-repo semantics; all transient repos were deleted by cleanup.
 -   The filesystem score counts papers/author\_folders as a failed no-result transport run after two attempts without meta output.
 
+**filesystem/standard Gate 0C common-deadline diagnostic** · 2026-08-14 KST · gpt-5.4 · subscription · high
+
+<table><tbody><tr><td>Status</td><td><code>complete</code></td></tr><tr><td>Suite/domain</td><td><code>filesystem/standard 30-task paired k=1</code></td></tr><tr><td>Model</td><td><code>gpt-5.4</code></td></tr><tr><td>Provider</td><td><code>openai / codex-cli</code></td></tr><tr><td>Source</td><td><code>subscription</code></td></tr><tr><td>Effort</td><td><code>high</code></td></tr><tr><td>Route</td><td>GEODE AgenticLoop and isolated Codex CLI paired by task</td></tr><tr><td>Harness</td><td><code>eval-sys/mcpmark@cd45b7f, GEODE@f4b37604, Codex CLI 0.145.0@dad1db87</code></td></tr><tr><td>Diagnostic-only verifier pass rate</td><td><strong>GEODE 76.7% (23 / 30) · Codex 70.0% (21 / 30) · Δ +6.67 pp</strong></td></tr><tr><td>Artifact</td><td><code>geode-eval-artifacts@1160fecfe4447f0a3f4cf30a414f29c61776d012/mcpmark/results-paired/mcpmark-gate0c-filesystem30-gpt54-high-20260813t190922z</code></td></tr></tbody></table>
+
+-   Paired outcomes: 17 both-pass / 3 both-fail / 6 GEODE-only / 4 Codex-only
+-   Exact token coverage: GEODE 29 / 30 attempts; Codex 30 / 30
+-   All-arm action wall: GEODE 8,463.252s vs Codex 5,484.322s; runner envelopes 8,536.382s vs 5,548.725s
+-   Native execution-log calls/errors: GEODE 644 / 51 vs Codex 678 / 17
+-   Normalized trajectory attempts: GEODE 645 including one recovery projection vs Codex 678
+-   Read/repeated-read references: GEODE 798 / 81 vs Codex 838 / 213
+-   One GEODE score-bearing deadline expiration; its token usage is null and its scope-incomplete trajectory is withheld
+
+```
+# Requires the pinned MCPMark checkout and verifier patch, frozen run spec,
+# isolated runtime home, and working GPT-5.4 subscription authentication.
+.venv/bin/python -m plugins.benchmark_harness.run_mcpmark_pair   --profile filesystem30-geode-codex   --run-spec <frozen-run-spec.json>   --mcpmark-root artifacts/eval/harnesses/mcpmark   --output-dir <fresh-output-dir>   --python .venv/bin/python
+```
+
+-   The prospective -10 percentage-point threshold was supported, but promotion\_authority remains none.
+-   This is one direct paired repetition, not k=3 stability, a full MCPMark Verified headline, or an API-key leaderboard claim.
+-   The common action deadline excludes fixture setup and the post-action verifier; runtime scaffolds and tool-result policies remain different.
+-   Token totals have unmatched coverage and do not support a billing or token-efficiency claim.
+-   Fifty-nine scope-complete trajectories are admitted; the one GEODE timeout trajectory remains withheld.
+
 **filesystem/standard Gate 0B tool-result-cap diagnostic** · 2026-08-13–14 KST · gpt-5.4 · subscription · high
 
 <table><tbody><tr><td>Status</td><td><code>complete</code></td></tr><tr><td>Suite/domain</td><td><code>filesystem/standard targeted 5 tasks × 3 repetitions</code></td></tr><tr><td>Model</td><td><code>gpt-5.4</code></td></tr><tr><td>Provider</td><td><code>openai</code></td></tr><tr><td>Source</td><td><code>subscription</code></td></tr><tr><td>Effort</td><td><code>high</code></td></tr><tr><td>Route</td><td>GEODE AgenticLoop paired 25K and unlimited tool-result-cap arms</td></tr><tr><td>Harness</td><td><code>eval-sys/mcpmark@cd45b7f, GEODE@02f71fae</code></td></tr><tr><td>Diagnostic-only verifier pass rate</td><td><strong>25K 46.7% (7 / 15) · unlimited 66.7% (10 / 15) · Δ +20.0 pp</strong></td></tr><tr><td>Artifact</td><td><code>geode-eval-artifacts@17133f0c8e893b6d765fcef69712ba0867bd573a/mcpmark/results-paired/mcpmark-gate0b-tool-cap-gpt54-high-20260813t142345z</code></td></tr></tbody></table>
