@@ -21,10 +21,27 @@ eval_contracts:
 Multi-turn tool-agent-user 시뮬레이션 벤치. 에이전트와 LLM 시뮬 유저가 공유 world state를 tool로 변경하며 대화. **pass^k의 발상지**.
 
 - **Repo**: [sierra-research/tau2-bench](https://github.com/sierra-research/tau2-bench)
-- **현재 측정 핀**: `668d3bcd135c02aa3438f987ef45735b7c163ee3`, `tau2==1.0.1` (2026-08-12 확인)
+- **현재 측정 핀**: `79975ac5741e23fbb1d2ac44262d62398a6d87bd`, `tau2==1.0.1` (2026-08-14 Lane 1A published freeze)
 - **라이센스**: MIT (`LICENSE`)
 - **현재 공개 surface**: airline / retail / telecom / telecom-workflow / banking-knowledge와 text / voice runner. 과거 `1901a30`, `tau2==1.0.0` 기록은 해당 실행의 역사적 핀으로만 유지한다.
 - **Frontier 인용**: GPT-5.5 system card (**telecom 98.0%**), Anthropic 인용
+
+## 2026-08-14 Lane 1A no-model freeze
+
+Lane 1A is **COMPLETE / PUBLISHED**, not a measured result. The
+[no-model receipt](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/dbfd948bf822a6b87da1fd8fe6ea28b12f1585e0/reports/e2e-validation/2026-08-14-tau2-lane1a-no-model-preflight.json)
+at artifact merge `dbfd948bf822a6b87da1fd8fe6ea28b12f1585e0` binds GEODE main `2f58eaaa65f4f92f62fdd518e3b23c596f5b8477`
+to `tau2==1.0.1` upstream `79975ac5741e23fbb1d2ac44262d62398a6d87bd`, 278
+ordered base IDs, GPT-5.4/high subscription `geode_agent`, and the native
+GPT-5.2/low PAYG `user_simulator`. Receipt file SHA-256:
+`8b9ac5436d06913a46c9d0621098c2eff79b4d61d0dea30be0ba88ec933bf195`; payload
+SHA-256: `7b0018de9b5e6ea1ba66bd117d0182beb9520ba5c98adc15525de3a6ce6551d5`.
+It records zero account/model calls and no score; auth, quota, and route
+readiness remain untested, and `promotion_authority=none`. Exact-commit remote
+read-back matched all 463,637 bytes and file SHA-256 after artifact PR #26
+merged.
+Gate 1B remains blocked on Gate 0C `k=3` stability, PAYG approval, and quota
+headroom.
 
 ## 2026-08-12 OpenAI/Codex 기준 정렬
 

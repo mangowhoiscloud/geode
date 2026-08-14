@@ -22,8 +22,8 @@ eval_contracts:
 
 작성일: 2026-08-13
 최종 갱신: 2026-08-14
-기준 코드: GEODE `origin/main@f4b3760488a80dad1186d54458f63bbb08768719`
-상태: **Lane 0C k=1 complete · artifact published. k=3 live blocked by WHAM=80%; Tau2 no-model preflight may proceed.**
+기준 코드: GEODE `origin/main@2f58eaaa65f4f92f62fdd518e3b23c596f5b8477`
+상태: **Lane 0C k=1 complete · artifact published. k=3 live blocked by WHAM=80%; Tau2 Lane 1A complete · published, Lane 1B live blocked.**
 
 ## 1. 권한과 범위
 
@@ -90,7 +90,7 @@ flowchart TD
 | 0A Common deadline | **COMPLETE · MAIN** | None; contract is the basis for 0B/0C | setup/action boundary, timeout·cancel·cleanup tests and no-model preflight PASS |
 | 0B Targeted ablation | **COMPLETE · PUBLISHED** | Preserve 7/15 vs 10/15 as diagnostic-only; no cap-default change | 30/30 valid arms, primary +3/15 = +0.20 supported, six releases/26 admitted trajectories, four timeout trajectories withheld |
 | 0C MCPMark FS30 | **K=1 COMPLETE · PUBLISHED · K=3 LIVE-BLOCKED (WHAM=80%)** | Preserve k=1 as diagnostic-only; launch fresh k=3 only after five-hour quota headroom is safe | k=1: 60/60 valid arms, exact task/reset/verifier joins, primary +2/30; k=3 remains separate |
-| 1 Tau2 base | **NO-MODEL PREFLIGHT READY · LIVE BLOCKED** | 278 IDs/pin/user/budget no-model preflight may proceed; no model calls yet | Gate 0C stability and PAYG approval before smoke→full-1→4 trials |
+| 1 Tau2 base | **1A COMPLETE · PUBLISHED; 1B LIVE-BLOCKED** | Preserve the verified no-model freeze; no model calls | Gate 0C k=3 stability plus PAYG approval and quota headroom before smoke→full-1→4 trials |
 | 2 MCPMark Verified | PENDING | service별 no-model canary | FS30 pair와 full127 headline 분리 |
 | 3 Terminal-Bench 2.1 | PENDING | 2.1 profile 정렬·oracle smoke | adapter/evidence path clean 후 89 tasks |
 
@@ -262,6 +262,21 @@ trial**이다. 공식 submission profile은 같은 agent/user arguments와 4 tri
 | 1C | 278-task full-1 | infra defect, missing receipt, quota boundary |
 | 1D | 4 trials total | trial merge without exact per-trial lineage |
 
+Lane 1A no-model preflight is **COMPLETE / PUBLISHED**. The
+[public receipt](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/dbfd948bf822a6b87da1fd8fe6ea28b12f1585e0/reports/e2e-validation/2026-08-14-tau2-lane1a-no-model-preflight.json)
+at artifact merge `dbfd948bf822a6b87da1fd8fe6ea28b12f1585e0` has file SHA-256
+`8b9ac5436d06913a46c9d0621098c2eff79b4d61d0dea30be0ba88ec933bf195` and payload
+SHA-256 `7b0018de9b5e6ea1ba66bd117d0182beb9520ba5c98adc15525de3a6ce6551d5`; it binds
+GEODE main `2f58eaaa65f4f92f62fdd518e3b23c596f5b8477` to
+`tau2==1.0.1` upstream `79975ac5741e23fbb1d2ac44262d62398a6d87bd`, the ordered
+278-ID freeze, native `gpt-5.2`-low PAYG user profile, and GPT-5.4/high
+subscription agent profile. It records zero account/model calls, no score, and
+untested auth/quota/route readiness; `promotion_authority=none`. Artifact PR #26
+was remotely read back at the exact merge commit with byte-for-byte matching
+size and SHA-256.
+Gate 1B remains blocked on Gate 0C `k=3` stability, PAYG approval, and quota
+headroom.
+
 Native headline에는 upstream GPT-5.2-low user simulator가 필요해 PAYG 승인을
 별도 확인한다. 승인이 없으면 1A에서 멈춘다. Subscription `geode_user` run을
 native headline으로 재명명하지 않는다.
@@ -337,6 +352,7 @@ Invalid/aborted attempt가 선택되면 primary metric은 `not-measurable`이다
 
 | Date | Change |
 |---|---|
+| 2026-08-14 | Tau2 Lane 1A no-model freeze 완료·게시: GEODE main `2f58eaaa` / Tau2 `79975ac` / 278 ordered IDs, native GPT-5.2-low PAYG user and GPT-5.4/high subscription agent profiles bound with zero model calls and no score. Exact receipt bytes were remotely verified at artifact merge `dbfd948b`; Gate 1B remains blocked on Gate 0C k=3, PAYG approval, and quota headroom |
 | 2026-08-14 | Gate 0C prospective common-deadline FS30 k=1 완료·게시: GEODE 23/30 대 Codex 21/30, primary +2/30=+6.67%p supported diagnostic-only. 60/60 valid arms, paired buckets 17/3/6/4, one GEODE score-bearing timeout, exact token coverage 29/30 vs 30/30, 59 admitted trajectories/one withheld 보존. `promotion_authority=none`; fresh k=3 live는 WHAM=80%에서 차단하고 Tau2 no-model preflight만 허용 |
 | 2026-08-14 | Gate 0B prospective k=3 완료·게시: `guard-25000` 7/15 대 `unlimited-0` 10/15, primary +3/15=+0.20 supported diagnostic-only. Four matched score-bearing timeouts, exact token coverage 13/15 per arm, prior invalid attempt denominator 0, six reviewed releases/26 admitted trajectories 보존. Lane 0C를 NEXT로 승격 |
 | 2026-08-13 | Gate 0B runner implementation: 기존 serial runner에 5-task×2-cap×3-repeat profile, effective cap/offload receipt, direct `CallToolResult` truncation reconstruction, dependency/import preflight를 연결. Live run과 score/artifact는 아직 없음 |
