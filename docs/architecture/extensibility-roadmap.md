@@ -225,6 +225,7 @@ normal review and CI; implementations start only after the claim merges.
 
 | Closure package | GAP IDs | Owner/session | Implementation branch | Claim evidence | Claimed at (UTC) |
 |---|---|---|---|---|---|
+| R1.4 | BND-005 | `session=codex-2026-08-15 task=r1-4-neutral-self-improving-seams` | `feature/r1-4-neutral-self-improving-seams` | R1.1 delivery and R1.4 readiness reconciled by [#3002](https://github.com/mangowhoiscloud/geode/pull/3002); current `develop` re-audit confirms BND-001 is delivered and the bounded §7 neutral-seam contract remains measurable | 2026-08-14T18:30:03Z |
 
 ## 1. Program objective
 
@@ -546,7 +547,7 @@ and closure evidence are appended in §10.
 | VER-002 | `ABSENT` | No contract suite measures how many central edits each extension type requires | Six extension scenarios in §8 pass without forbidden edits | R7.2 | CAP-006, LLM-002, BND-004 | `OPEN` |
 | VER-003 | `PARTIAL` | Public/internal metric prose drifts from executable counts | `sync-stats` or one shared generator updates site, AGENTS facts, and roadmap baseline; check mode is green | R0.2 | GOV-001 | `DONE` |
 | VER-004 | `PARTIAL` | Cold-start and runtime metrics exist, but refactors lack one architecture regression baseline | Startup, first-turn, tool-plan build, memory, and event-write budgets are pinned and non-regressing | R7.3 | CAP-005, LOOP-003, DI-004, LLM-004, PROTO-002, STORE-002 | `OPEN` |
-| BND-005 | `MISFIT` | Generic agent/provider/observability consumers import self-improving transcript, SoT-resolution, and prompt-injection helpers | Neutral policy snapshot/source, context-contribution, run identity, and activity-sink contracts replace every classified-kernel import of a self-improving helper without changing runtime behavior | R1.4 | BND-001 | `READY` |
+| BND-005 | `MISFIT` | Generic agent/provider/observability consumers import self-improving transcript, SoT-resolution, and prompt-injection helpers | Neutral policy snapshot/source, context-contribution, run identity, and activity-sink contracts replace every classified-kernel import of a self-improving helper without changing runtime behavior | R1.4 | BND-001 | `IN_PROGRESS` |
 | BND-006 | `MISFIT` | `core/self_improving` contains 39 Python files and 16,159 LOC of opt-in campaign, Petri/seed orchestration, mutation, gate, CLI/MCP, scheduler, and state policy | One cohesive first-party bundled feature owns the control plane outside the kernel; outer composition wires it, classified kernel modules import it zero times outside the exact forwarding-facade allowlist, a retirement GAP is registered before implementation, and v1.0 commands/imports/config/state behavior pass compatibility and installed-wheel tests | R1.5 | BND-002, BND-005 | `OPEN` |
 | REL-001 | `MISFIT` | PyPI and GitHub Releases still publish v1.0.0, while repository metadata and the changelog declare an untagged, unpublished v1.1.0; the operator selected v1.0.1 as the next public release | Wheel, sdist, CLI, daemon, site SOT, changelog, tag, GitHub release, and PyPI all report v1.0.1 with artifact-hash parity and no rewritten v1.0.0 evidence | R1.6 | BND-003, BND-006, GOV-004 | `OPEN` |
 | REL-002 | `ABSENT` | No registered gate prevents the v1.0.1 compatibility facade or preserved state roots from being retired immediately after a local tag, draft release, or registry publication | Official GitHub Release and PyPI evidence proves compatible public artifacts continuously exposed the facade and preserved roots for a final qualifying interval of at least 30 consecutive days, starting no earlier than v1.0.1, and every release inside that interval retained them | R8.0 | REL-001 | `OPEN` |
@@ -1973,16 +1974,16 @@ Commit-pinned primary source references used by the 2026-07-17 audit:
 R1.1 is delivered on `develop` by
 [#3001](https://github.com/mangowhoiscloud/geode/pull/3001) /
 `1e62473d5a391a750068fbb8de20e303c168ce60`; its active claim is released and
-its durable feature/merge evidence is recorded in §10.1. The current dependency
-and exit-criteria re-audit makes both R1.4 (`BND-005`) and R1.2 (`BND-002`)
-`READY`.
+its durable feature/merge evidence is recorded in §10.1. The preceding
+dependency and exit-criteria re-audit made both R1.4 (`BND-005`) and R1.2
+(`BND-002`) ready; this transaction claims R1.4 and leaves R1.2 unclaimed.
 
-The next serialized ledger transaction claims the earliest ready package in
-the §6.1 train, R1.4 (`BND-005`), before allocating its implementation
-worktree. R1.2 (`BND-002`) remains ready but unclaimed until R1.4 is claimed or
-delivered. R1.5 (`BND-006`) then waits for both the neutral seams in R1.4 and
-the reverse-dependency removal in R1.2; the registered BND-007 retirement
-package satisfies its planning prerequisite without authorizing removal.
+After this claim merges, allocate `feature/r1-4-neutral-self-improving-seams`
+from the updated `origin/develop` tip. R1.2 (`BND-002`) remains ready and
+unclaimed; it becomes the next claim-eligible package after this claim merges.
+R1.5 (`BND-006`) then waits for both the neutral seams in R1.4 and the
+reverse-dependency removal in R1.2; the registered BND-007 retirement package
+satisfies its planning prerequisite without authorizing removal.
 R1.6 (`REL-001`) remains `OPEN` until R0.3, R1.3, and R1.5 are delivered; it
 then owns the v1.0.1 release checkpoint and does not authorize facade removal.
 R8.0 (`REL-002`) remains `OPEN` until REL-001 reaches `DONE`; its 30-day clock
