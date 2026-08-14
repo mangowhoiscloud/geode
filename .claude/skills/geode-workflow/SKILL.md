@@ -43,6 +43,7 @@ Read only the reference needed for the current task:
 | Phase-by-phase checklist for ordinary code work | `references/phase-checklist.md` |
 | Provider/model/API capability claims | `references/provider-grounding.md` |
 | Schema/log/event/state/trajectory consistency | `references/observability-contract.md` |
+| Same-task Codex–GEODE production and comparison | `references/codex-geode-paired-coding.md` |
 | Test, lint, type, prompt, and full-suite reporting gates | `references/verification-gates.md` |
 | Branch, PR, merge, and cleanup operations | `references/gitflow.md` |
 

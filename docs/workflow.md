@@ -56,6 +56,7 @@ does not claim the package or authorize expanding the implementation diff.
 | Ordinary code-work checklist | `.claude/skills/geode-workflow/references/phase-checklist.md` |
 | Provider/model/API capability claims | `.claude/skills/geode-workflow/references/provider-grounding.md` |
 | Schema/log/event/state/trajectory consistency | `.claude/skills/geode-workflow/references/observability-contract.md` |
+| Same-task Codex–GEODE production and comparison | `.claude/skills/geode-workflow/references/codex-geode-paired-coding.md` |
 | Evaluation question, run spec, attempt lineage, analysis, and publication | `.agents/skills/geode-eval/SKILL.md` + `docs/eval/index.json` |
 | Test, lint, type, prompt, and full-suite gates | `.claude/skills/geode-workflow/references/verification-gates.md` |
 | Branch, PR, merge, and cleanup operations | `.claude/skills/geode-workflow/references/gitflow.md` |
@@ -114,3 +115,13 @@ run an independent second-opinion review of the committed diff through the
 Codex MCP server (read-only sandbox, numbered findings with HIGH/MED/LOW
 severity). Fix or explicitly accept every finding, then re-verify the fixes.
 Historical yield is ~1.6 real catches per PR that local gates missed.
+
+## Paired Coding Assistance
+
+When a task explicitly calls for independent Codex and GEODE implementations,
+use the [paired coding reference](../.claude/skills/geode-workflow/references/codex-geode-paired-coding.md).
+It freezes one base, brief, affected scope, and acceptance command set across
+two isolated worktrees, then separates production from operator-owned
+verification and human selection. Normal work remains one producer plus an
+independent read-only review; paired production grants no automatic merge or
+promotion authority.

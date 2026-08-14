@@ -35,6 +35,7 @@ def test_geode_workflow_skill_uses_progressive_disclosure() -> None:
         "references/phase-checklist.md",
         "references/provider-grounding.md",
         "references/observability-contract.md",
+        "references/codex-geode-paired-coding.md",
         "references/verification-gates.md",
         "references/gitflow.md",
     ]
@@ -45,6 +46,35 @@ def test_geode_workflow_skill_uses_progressive_disclosure() -> None:
     for reference in required_references:
         assert reference in skill
         assert (ROOT / ".claude/skills/geode-workflow" / reference).exists()
+
+
+def test_paired_coding_reference_preserves_runtime_and_verification_boundaries() -> None:
+    reference_path = ".claude/skills/geode-workflow/references/codex-geode-paired-coding.md"
+    reference = _read(reference_path)
+    workflow = _read("docs/workflow.md")
+
+    for required in (
+        "## Production Workflow",
+        "## Verification Workflow",
+        "base_sha",
+        "brief_sha256",
+        "allowed_paths",
+        "protected_paths",
+        "acceptance_commands",
+        "geode-mcp run_agent",
+        "CodexOAuthAdapter",
+        "inside GEODE's AgenticLoop",
+        "CodexCliAdapter",
+        "launches native `codex exec`",
+        "`codex` and `codex-reply`",
+        "must not auto-merge or auto-promote",
+    ):
+        assert required in reference
+
+    for stale_tool in ("mcp__codex__exec", "mcp__codex__review", "mcp__codex__apply"):
+        assert stale_tool not in reference
+
+    assert reference_path in workflow
 
 
 def test_agent_entrypoints_reference_canonical_workflow() -> None:
