@@ -25,9 +25,10 @@ export default function Page() {
 
             <h2>서브시스템 지도</h2>
             <p>
-              프로덕션 코드는 두 패키지입니다. <code>core/</code>는 범용 자율
-              에이전트 런타임이고, <code>plugins/</code>는 1차 보조
-              플러그인(petri_audit, seed_generation)입니다. <code>core/</code>의
+              현재 프로덕션 소스는 두 패키지입니다. <code>core/</code>는 범용
+              자율 에이전트 런타임이고, <code>plugins/</code>는 함께 배포되는
+              1차 제품 기능의 기존 네임스페이스입니다. 독립 설치되는 외부
+              플러그인 계약은 아닙니다. <code>core/</code>의
               서브시스템은 5계층 스택에 정렬됩니다.
             </p>
             <pre>{`Self-Improving  core/self_improving/  train.py + measure/fitness/gate/ledger + loop/{mutate,observe,inject}
@@ -149,11 +150,12 @@ margin 게이트  (gate.py)
 
             <h2>Subsystem map</h2>
             <p>
-              Production code splits into two packages: <code>core/</code> is
-              the general-purpose autonomous agent runtime, and{" "}
-              <code>plugins/</code> holds the first-party plugins (petri_audit,
-              seed_generation). The subsystems inside <code>core/</code> line up
-              with the five-layer stack.
+              Production source currently spans two packages: <code>core/</code>{" "}
+              is the general-purpose autonomous agent runtime, while{" "}
+              <code>plugins/</code> is the legacy namespace for bundled
+              first-party product features. It is not an independently
+              installed third-party plugin contract. The subsystems inside{" "}
+              <code>core/</code> line up with the five-layer stack.
             </p>
             <pre>{`Self-Improving  core/self_improving/  train.py + measure/fitness/gate/ledger + loop/{mutate,observe,inject}
 Agent           core/agent/           AgenticLoop (while tool_use), sub_agent, system_prompt

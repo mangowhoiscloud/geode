@@ -29,8 +29,6 @@ uv run geode
 uv run geode "summarize the latest AI research trends"
 uv run geode "compare React vs Vue for a new project"
 uv run geode "schedule daily standup reminder at 9am"
-
-# Domain analysis plugins are distributed separately from GEODE core.
 ```
 
 ## SOT (Source of Truth)
@@ -43,6 +41,7 @@ uv run geode "schedule daily standup reminder at 9am"
 | Test-Time Compute Grounding | `.claude/skills/stanford-test-time-compute/` | Stanford CS329A Part 2 evidence and GEODE/Eco²/SIL/Crucible application boundaries |
 | Agent-World Benchmark | `docs/eval/agent-world-comparison-contract.md` + `.claude/skills/agent-world-benchmark/` | Three-suite comparison profile, paired runtime control, replication, and artifact contract |
 | Architecture/Extensibility Program | `docs/architecture/extensibility-roadmap.md` | Single execution SOT for GAP IDs, merge order, status, acceptance, and closure evidence |
+| Package Classification | `docs/architecture/package-classification.md` | Closed kernel, product shell, bundled feature, and external extension boundaries |
 | Hook System | `docs/architecture/hook-system.md` | HookSystem 56 events |
 | Scaffold | `CLAUDE.md` | Development workflow, quality gates, CANNOT/CAN (this file) |
 
@@ -50,7 +49,7 @@ uv run geode "schedule daily standup reminder at 9am"
 
 Production code splits into two top-level Python packages:
 - `core/` — general-purpose autonomous agent runtime. 5-layer stack (layer diagram → `GEODE.md` → Architecture).
-- `plugins/` — first-party auxiliary plugins.
+- `plugins/` — legacy namespace for bundled product features; it is not a third-party extension ABI.
 
 Check module count: `find core/ -name "*.py" | wc -l` for core, `find plugins/ -name "*.py" | wc -l` for plugins.
 Key entry points: `core/agent/loop/`(AgenticLoop), `core/runtime.py`(bootstrap).
@@ -70,8 +69,8 @@ uv run mypy core/ plugins/
 
 ### Expected Test Results
 
-Core tests pass without bundled analysis fixtures. External packages own their
-own fixture/E2E gates.
+Core tests pass without bundled analysis fixtures. Bundled features own their
+feature-specific fixture and E2E gates.
 
 ## Implementation Workflow
 

@@ -6163,7 +6163,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/develop/architecture.md
 
 ## 서브시스템 지도
 
-프로덕션 코드는 두 패키지입니다. `core/`는 범용 자율 에이전트 런타임이고, `plugins/`는 1차 보조 플러그인(petri\_audit, seed\_generation)입니다. `core/`의 서브시스템은 5계층 스택에 정렬됩니다.
+현재 프로덕션 소스는 두 패키지입니다. `core/`는 범용 자율 에이전트 런타임이고, `plugins/`는 함께 배포되는 1차 제품 기능의 기존 네임스페이스입니다. 독립 설치되는 외부 플러그인 계약은 아닙니다. `core/`의 서브시스템은 5계층 스택에 정렬됩니다.
 
 ```
 Self-Improving  core/self_improving/  train.py + measure/fitness/gate/ledger + loop/{mutate,observe,inject}
