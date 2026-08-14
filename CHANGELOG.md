@@ -49,6 +49,10 @@ functional change.
 
 ### Added
 
+- **Tau2 Lane 1A no-model preflight receipt.** A fail-closed runner path now
+  freezes the pinned upstream base workload, actual loader order, task content,
+  native user prompts, seeds, limits, scorer sources, and per-task agent/user DB
+  reset isolation before any participant generation, model, or account call.
 - **Made evaluation intent and retry lineage machine-discoverable.** A tracked
   cross-host `geode-eval` skill and generated eval catalog now route agents to
   the relevant benchmark authority without loading the full docs tree. Frozen

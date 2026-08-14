@@ -1,14 +1,16 @@
 import asyncio
 import contextlib
+import hashlib
 import json
 import os
+import site
 import sys
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 
 import pytest
 from plugins.benchmark_harness.tau2_geode_agent import (
-    Tau2GeodeTool,
+    REPO_ROOT,
     _assert_tau2_route_ready,
     _build_loop,
     _codex_empty_text_dumps,
@@ -25,10 +27,20 @@ from plugins.benchmark_harness.tau2_geode_agent import (
     _validate_tau2_task_order,
     _write_trajectory_snapshot,
 )
+from plugins.benchmark_harness.tau2_lane1a_preflight import (
+    _attest_tau2_resets,
+    _model_visible_tau2_tool_schemas,
+    _tau2_import_origins,
+    _tau2_native_user_prompt_hashes,
+    _tau2_producer_identity,
+    _tau2_runtime_identity,
+    _write_tau2_lane1a_preflight_receipt,
+)
 from plugins.benchmark_harness.tau2_runtime_contract import (
     Tau2AttemptTracker,
     Tau2RuntimeContract,
 )
+from plugins.benchmark_harness.tau2_tool_bridge import Tau2GeodeTool
 from plugins.benchmark_harness.tau2_turn_supervisor import (
     GeodeTau2State,
     _agent_system_prompt,
@@ -46,7 +58,7 @@ from plugins.benchmark_harness.trajectory_artifacts import (
     geode_trajectory_snapshot_path,
     tau2_session_ids,
 )
-from plugins.crucible.contract import TaskUnit
+from plugins.crucible.contract import ContractError, TaskUnit
 from plugins.crucible.verifiers.tau2 import tau2_task_unit
 
 
@@ -616,6 +628,163 @@ def test_tau2_data_root_ignores_ambient_override(
     assert os.environ["TAU2_DATA_DIR"] == str(expected)
     _restore_tau2_data_root(previous)
     assert os.environ["TAU2_DATA_DIR"] == str(tmp_path / "ambient")
+
+
+def test_tau2_preflight_attests_agent_and_user_db_reset_isolation() -> None:
+    class FakeDB:
+        def __init__(self, value: str) -> None:
+            self.rows = {"record": {"value": value}}
+
+        def get_hash(self) -> str:
+            return hashlib.sha256(json.dumps(self.rows, sort_keys=True).encode("utf-8")).hexdigest()
+
+    class FakeEnvironment:
+        def __init__(self) -> None:
+            self.tools = SimpleNamespace(db=FakeDB("agent-source"))
+            self.user_tools = SimpleNamespace(db=FakeDB("user-source"))
+
+        def get_db_hash(self) -> str:
+            return self.tools.db.get_hash()
+
+        def get_user_db_hash(self) -> str:
+            return self.user_tools.db.get_hash()
+
+        def set_state(
+            self,
+            initialization_data: object,
+            initialization_actions: object,
+            message_history: object,
+        ) -> None:
+            assert initialization_actions is None
+            assert message_history == []
+            self.tools.db.rows["task"] = initialization_data.agent_data
+            self.user_tools.db.rows["task"] = initialization_data.user_data
+
+    task = SimpleNamespace(
+        id="task-1",
+        initial_state=SimpleNamespace(
+            initialization_data=SimpleNamespace(agent_data="agent-1", user_data="user-1"),
+            initialization_actions=None,
+            message_history=None,
+        ),
+    )
+
+    receipt = _attest_tau2_resets("telecom", [task], FakeEnvironment)
+
+    row = receipt["task_initial_states"][0]
+    assert receipt["fresh_environment_count"] == 4
+    assert row["guard_after_probe"] == row["initialized"] == row["rebuilt"]
+    assert row["mutated_probe"]["agent_db_sha256"] != row["initialized"]["agent_db_sha256"]
+    assert row["mutated_probe"]["user_db_sha256"] != row["initialized"]["user_db_sha256"]
+
+
+def test_tau2_preflight_hashes_actual_native_user_prompt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_build = ModuleType("tau2.runner.build")
+    fake_build.build_user = lambda _name, _env, task, **_kwargs: SimpleNamespace(
+        system_prompt=f"tools-guideline::{task.id}",
+        global_simulation_guidelines="tools-guideline",
+        tools=[SimpleNamespace(openai_schema={"type": "function", "name": "fake_tool"})],
+    )
+    monkeypatch.setitem(sys.modules, "tau2.runner.build", fake_build)
+    tasks = [SimpleNamespace(id="task-1"), SimpleNamespace(id="task-2")]
+
+    receipt = _tau2_native_user_prompt_hashes(tasks, object)
+
+    assert receipt["authority"] == "build_user(...).system_prompt"
+    assert (
+        receipt["task_system_prompts"][0]["system_prompt_sha256"]
+        == hashlib.sha256(b"tools-guideline::task-1").hexdigest()
+    )
+    assert receipt["task_user_tool_schemas_sha256"]
+
+
+def test_tau2_preflight_rejects_tau2_import_outside_pinned_checkout(
+    tmp_path: Path,
+) -> None:
+    harness_dir = tmp_path / "tau2-bench"
+    pinned_module = SimpleNamespace(
+        __name__="tau2.runner.build",
+        __file__=str(harness_dir / "src" / "tau2" / "runner" / "build.py"),
+    )
+    stale_module = SimpleNamespace(
+        __name__="tau2.metrics.agent_metrics",
+        __file__=str(tmp_path / "site-packages" / "tau2" / "metrics" / "agent_metrics.py"),
+    )
+
+    assert _tau2_import_origins(harness_dir, (pinned_module,)) == {
+        "tau2.runner.build": "src/tau2/runner/build.py"
+    }
+    with pytest.raises(ContractError, match="not imported from the pinned checkout"):
+        _tau2_import_origins(harness_dir, (stale_module,))
+
+
+def test_tau2_preflight_rejects_mismatched_frozen_runtime_package(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    harness_dir = tmp_path / "tau2-bench"
+    site_root = Path(site.getsitepackages([str(harness_dir / ".venv")])[0])
+    dist_info = site_root / "tau2-1.0.0.dist-info"
+    dist_info.mkdir(parents=True)
+    (dist_info / "METADATA").write_text(
+        "Metadata-Version: 2.1\nName: tau2\nVersion: 1.0.0\n",
+        encoding="utf-8",
+    )
+    (harness_dir / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
+    (harness_dir / "uv.lock").write_text("version = 1\n", encoding="utf-8")
+    monkeypatch.setattr(
+        "plugins.benchmark_harness.tau2_lane1a_preflight.TAU2_LANE1A_RUNTIME_DISTRIBUTIONS",
+        {},
+    )
+
+    with pytest.raises(
+        ContractError,
+        match=r"frozen runtime requires 1\.0\.1, got 1\.0\.0",
+    ):
+        _tau2_runtime_identity(harness_dir)
+
+
+def test_tau2_preflight_hashes_post_policy_codex_tool_surface(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "core.agent.loop._tool_factory.get_agentic_tools",
+        lambda *_args, **_kwargs: [
+            {"name": "second", "description": "overridden", "input_schema": {"type": "object"}},
+            {"name": "first", "description": "original", "input_schema": {"type": "object"}},
+        ],
+    )
+    raw_tools = [
+        SimpleNamespace(name="first", short_desc="first", long_desc="", openai_schema=None),
+        SimpleNamespace(name="second", short_desc="second", long_desc="", openai_schema=None),
+    ]
+
+    schemas = _model_visible_tau2_tool_schemas(raw_tools)
+
+    assert [schema["name"] for schema in schemas] == ["second", "first"]
+    assert schemas[0] == {
+        "type": "function",
+        "name": "second",
+        "description": "overridden",
+        "parameters": {"type": "object"},
+    }
+
+
+def test_tau2_preflight_rejects_dirty_producer_and_repo_output(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "plugins.benchmark_harness.tau2_lane1a_preflight._git_output",
+        lambda _root, *args: " M source.py" if args == ("status", "--porcelain") else "head",
+    )
+    with pytest.raises(ContractError, match="clean GEODE producer"):
+        _tau2_producer_identity()
+
+    with pytest.raises(ContractError, match="outside both source checkouts"):
+        _write_tau2_lane1a_preflight_receipt(tmp_path, REPO_ROOT / "receipt.json")
 
 
 def test_tau2_tool_mutability_uses_upstream_marker_and_fails_safe() -> None:

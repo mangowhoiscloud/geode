@@ -16,7 +16,6 @@ import site
 import sys
 import time
 from collections.abc import Mapping
-from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -27,6 +26,7 @@ from plugins.benchmark_harness.tau2_runtime_contract import (
     runtime_contract_from_args,
     snapshot_contract_metadata,
 )
+from plugins.benchmark_harness.tau2_tool_bridge import _tau2_tool_registry
 from plugins.benchmark_harness.tau2_turn_supervisor import (
     GeodeTau2State,
     _agent_system_prompt,
@@ -38,7 +38,6 @@ from plugins.benchmark_harness.tau2_turn_supervisor import (
     _tau2_terminal_token,
     _tau2_tool_calls,
     _Tau2TurnDeadlineError,
-    _tool_mutates_state,
     _usage_dict,
     _user_system_prompt,
 )
@@ -148,68 +147,6 @@ def _assert_tau2_route_ready(
     )
 
 
-def _tool_description(tool: Any) -> str:
-    schema = getattr(tool, "openai_schema", None)
-    if isinstance(schema, dict):
-        fn = schema.get("function")
-        if isinstance(fn, dict):
-            desc = fn.get("description")
-            if isinstance(desc, str) and desc.strip():
-                return desc.strip()
-    short = str(getattr(tool, "short_desc", "") or "").strip()
-    long = str(getattr(tool, "long_desc", "") or "").strip()
-    return "\n\n".join(part for part in (short, long) if part) or str(tool.name)
-
-
-def _tool_parameters(tool: Any) -> dict[str, Any]:
-    schema = getattr(tool, "openai_schema", None)
-    if isinstance(schema, dict):
-        fn = schema.get("function")
-        if isinstance(fn, dict):
-            params = fn.get("parameters")
-            if isinstance(params, dict):
-                return params
-    params_model = getattr(tool, "params", None)
-    model_json_schema = getattr(params_model, "model_json_schema", None)
-    if callable(model_json_schema):
-        maybe_schema = model_json_schema()
-        if isinstance(maybe_schema, dict):
-            return maybe_schema
-    return {"type": "object", "properties": {}, "additionalProperties": False}
-
-
-@dataclass
-class Tau2GeodeTool:
-    """GEODE tool wrapper around a tau2 environment tool."""
-
-    tau2_tool: Any
-    mutates_state: bool = True
-
-    @property
-    def name(self) -> str:
-        return str(self.tau2_tool.name)
-
-    @property
-    def description(self) -> str:
-        return _tool_description(self.tau2_tool)
-
-    @property
-    def parameters(self) -> dict[str, Any]:
-        return _tool_parameters(self.tau2_tool)
-
-    async def aexecute(self, **kwargs: Any) -> dict[str, Any]:
-        kwargs.pop("_tool_context", None)
-        return {
-            "result": (
-                f"Recorded {self.name} for tau2 orchestrator execution. "
-                "The official tau2 environment will execute this tool call."
-            ),
-            "projected_to_tau2": True,
-            "external_execution": "deferred",
-            "mutates_state": self.mutates_state,
-        }
-
-
 def _build_loop(
     *,
     tools: list[Any] | None,
@@ -227,14 +164,8 @@ def _build_loop(
     from core.agent.conversation import ConversationContext
     from core.agent.loop import AgenticLoop
     from core.agent.tool_executor import ToolExecutor
-    from core.tools.registry import ToolRegistry
 
-    tool_registry = ToolRegistry()
-    handlers: dict[str, Any] = {}
-    for tau2_tool in tools or []:
-        wrapped = Tau2GeodeTool(tau2_tool, mutates_state=_tool_mutates_state(tau2_tool))
-        tool_registry.register(wrapped)
-        handlers[wrapped.name] = wrapped.aexecute
+    tool_registry, handlers = _tau2_tool_registry(tools)
 
     executor = ToolExecutor(
         action_handlers=handlers,
@@ -939,11 +870,45 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument("--retrieval-config-kwargs", default="{}")
+    parser.add_argument(
+        "--preflight-receipt",
+        type=Path,
+        default=None,
+        help=(
+            "Write the fixed Tau2 Lane 1A base/reset receipt and exit without "
+            "constructing GEODE participants or making model/account calls."
+        ),
+    )
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
+    if args.preflight_receipt is not None:
+        from plugins.benchmark_harness.tau2_lane1a_preflight import (
+            _write_tau2_lane1a_preflight_receipt,
+        )
+
+        expected_tau2_data_dir, previous_tau2_data_dir = _pin_tau2_data_root(args.harness_dir)
+        previous_litellm_cost_map = os.environ.get("LITELLM_LOCAL_MODEL_COST_MAP")
+        os.environ["LITELLM_LOCAL_MODEL_COST_MAP"] = "true"
+        _prepend_tau2_src(args.harness_dir.resolve())
+        try:
+            _assert_tau2_data_root(expected_tau2_data_dir)
+            _write_tau2_lane1a_preflight_receipt(
+                args.harness_dir.resolve(),
+                args.preflight_receipt.resolve(),
+            )
+        except (ContractError, OSError, ValueError) as exc:
+            raise SystemExit(f"Tau2 Lane 1A preflight failed: {exc}") from exc
+        finally:
+            _restore_tau2_data_root(previous_tau2_data_dir)
+            if previous_litellm_cost_map is None:
+                os.environ.pop("LITELLM_LOCAL_MODEL_COST_MAP", None)
+            else:
+                os.environ["LITELLM_LOCAL_MODEL_COST_MAP"] = previous_litellm_cost_map
+        print(f"Tau2 Lane 1A preflight receipt wrote {args.preflight_receipt.resolve()}")
+        return 0
     try:
         num_tasks = _resolve_num_tasks(args.task_ids, args.num_tasks)
     except ValueError as exc:

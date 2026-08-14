@@ -531,12 +531,12 @@
       "python_loc": 139029
     },
     "plugins": {
-      "python_files": 112,
-      "python_loc": 43975
+      "python_files": 114,
+      "python_loc": 44824
     },
     "tests": {
       "python_files": 685,
-      "python_loc": 183155
+      "python_loc": 183331
     }
   },
   "schema_version": 1,
