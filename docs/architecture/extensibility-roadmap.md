@@ -560,6 +560,7 @@ and closure evidence are appended in §10.
 | HOOK-003 | `PARTIAL` | All 13 public hooks are wired, but no production `PostVerify` policy is registered; an empty decision set can deliver a retryable verifier failure, continuation authority is encoded as a user-role pseudo-system message, and durable verification records aggregate handler decisions without a stable candidate target | A deterministic fallback maps pass/retryable failure/non-retryable failure to accept/revise/escalate; revision enters the bounded dynamic system context, reaches the existing verify-fail replan path, and records candidate-digest-bound per-handler decisions without replaying completed side effects or adding a new hook plane | R6.6 | HOOK-001, STORE-002 | `DONE` |
 | MEM-001 | `MISFIT` | One live system-prompt branch creates a default user profile outside the wired project scope, `TURN_COMPLETED` promotes a low-information turn/tool trace into active project memory, and caller-free session-checkpoint plus journal write/aggregate APIs imply competing authorities | The wired profile is the sole prompt profile source; automatic turn traces remain in canonical session records; dead `SessionStorePort` checkpoint and `ProjectJournal` write/aggregate APIs are removed while historical files remain untouched; executable tests and docs identify the live read/write authority without adding a store or framework | R6.7 | HOOK-001, STORE-002 | `DONE` |
 | GOAL-001 | `PARTIAL` | Explicit Goal state, contextual continuation, accounting, and trajectory events persist, but automatic continuation is owned only by one `AgenticLoop.arun()` call; no process owner discovers an active Goal after return or daemon restart, restores its checkpoint, or prevents duplicate idle launches | The existing serve process owns a bounded idle Goal continuation host that restores the same checkpoint as a new session generation, admits at most one continuation per session, uses the internal contextual-Goal path rather than a synthetic user turn, preserves Lane, PostVerify/replan, accounting, and trajectory contracts, and does not hot-loop an unchanged active Goal | R6.8 | HOOK-003, STORE-002 | `DONE` |
+| CODE-001 | `PARTIAL` | Coding work spans session/checkpoint/timeline, task preflight/TaskGraph, Goal, collaboration, worktree workflow, file/bash tools, and reviewer/verification paths, but no canonical contract maps their current writers, recovery authority, or residual coding-runtime boundaries | One reviewed coding-runtime authority contract maps every proposed record and operation to an existing or residual owner, fixes recovery/history/projection and drift/rollback invariants, and proves that no duplicate runtime store, task ledger, policy plane, or implementation API was introduced | R9.1 | STORE-002, HOOK-003, MEM-001, COLLAB-003, GOAL-001 | `OPEN` |
 
 ## 6. Dependency and merge sequence
 
@@ -1689,6 +1690,43 @@ Acceptance:
   `GEODE_HOME`/`GEODE_STATE_ROOT` overrides remain compatible;
 - no active runtime or operator root is deleted without another registered,
   versioned retirement GAP after its fallback window.
+
+### R9 — Coding-agent runtime authority
+
+R9 starts from the source-pinned
+[Codex runtime evolution research](../research/2026-08-15-codex-runtime-evolution-geode-modernization.md),
+but turns none of its prospective runtime modules into implementation scope.
+Its first package freezes authority and overlap boundaries before any residual
+coding-runtime package can be registered.
+
+#### R9.1 Coding-agent runtime authority contract
+
+GAP: CODE-001.
+
+This package adds no second Goal, session, collaboration, approval, timeline,
+task, or promotion source of truth. It authorizes no runtime implementation.
+
+Acceptance:
+
+- a source-and-test census identifies the current writer, readers, lifecycle,
+  persistence, and recovery owner for coding task, session/turn, workspace,
+  process, mutation/diff, review, instructions/context, and cross-domain task
+  lookup;
+- one authority matrix names durability, recovery, migration, compatibility,
+  redaction, failure, and rollback rules while preserving messages/checkpoints
+  as recovery authority, `SessionTimeline` as append-only history, and Goal,
+  scheduler, collaboration, and evaluation/promotion as their domain sources
+  of truth unless a later registered migration says otherwise;
+- every overlap with LOOP, PROTO, CAP, TRUST, HOOK, STORE, COLLAB, GOAL, and
+  memory contracts receives a `reuse`, `extend after dependency`, or
+  `separate measured GAP` disposition; no generic thread manager, universal
+  task ledger, second transcript, policy framework, or review hook is added;
+- every deferred candidate names its registration trigger: a current consumer
+  or failure, exact affected source path, measurable exit, and independently
+  mergeable boundary;
+- crash, race, partial-mutation, drift, redaction, and rollback failure modes
+  map to observable acceptance tests, and the roadmap validator plus document
+  link checks pass without any runtime-code change.
 
 ## 8. Change-surface acceptance scenarios
 
