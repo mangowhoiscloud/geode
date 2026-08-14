@@ -26,7 +26,30 @@
         "benchmark",
         "tool-projection"
       ],
-      "contentSha256": "48877b347be309c64bca82f5c1001ad1915dfdebec306fc234ff94a045350d09"
+      "contentSha256": "f050adc4cbf57f7f1cca239c38208e47874f1f3f7bef4fa11847b2f37ef7ef8f"
+    },
+    {
+      "id": "file:plugins/benchmark_harness/tau2_lane1a_preflight.py",
+      "filePath": "plugins/benchmark_harness/tau2_lane1a_preflight.py",
+      "name": "Tau2 Lane 1A preflight",
+      "summary": "Builds the fail-closed no-model receipt binding pinned upstream data, clean sources, effective schemas, runtime identity, and frozen score authority.",
+      "tags": [
+        "benchmark",
+        "preflight",
+        "source-attestation"
+      ],
+      "contentSha256": "3c3ff5811da07ceae02b0f0a2f8b128cc92c079e54a4cff1b677be7dc14b2658"
+    },
+    {
+      "id": "file:plugins/benchmark_harness/tau2_tool_bridge.py",
+      "filePath": "plugins/benchmark_harness/tau2_tool_bridge.py",
+      "name": "Tau2 tool bridge",
+      "summary": "Projects upstream native tools into exact GEODE schemas and dispatches their calls without model access.",
+      "tags": [
+        "benchmark",
+        "tool-projection"
+      ],
+      "contentSha256": "a5aaef794ad72c8a8933994a3cdbcb2b2bd2fff951a1584d6a4b813ceeec186f"
     },
     {
       "id": "file:plugins/benchmark_harness/tau2_runtime_contract.py",
@@ -204,6 +227,21 @@
       "source": "file:plugins/benchmark_harness/tau2_geode_agent.py",
       "target": "file:plugins/benchmark_harness/tau2_agent_policy.md",
       "type": "reads_from"
+    },
+    {
+      "source": "file:plugins/benchmark_harness/tau2_geode_agent.py",
+      "target": "file:plugins/benchmark_harness/tau2_lane1a_preflight.py",
+      "type": "delegates_to"
+    },
+    {
+      "source": "file:plugins/benchmark_harness/tau2_geode_agent.py",
+      "target": "file:plugins/benchmark_harness/tau2_tool_bridge.py",
+      "type": "depends_on"
+    },
+    {
+      "source": "file:plugins/benchmark_harness/tau2_lane1a_preflight.py",
+      "target": "file:plugins/benchmark_harness/tau2_tool_bridge.py",
+      "type": "depends_on"
     },
     {
       "source": "file:plugins/benchmark_harness/tau2_geode_agent.py",
