@@ -92,7 +92,7 @@
       "authority": "routing",
       "path": "docs/eval/README.md",
       "summary": "Machine and human entrypoint for GEODE evaluation contracts, benchmark ledgers, evidence, and publication.",
-      "sha256": "b743e9d9612e2eb96764e2b46afe099c5bbbbfe90ca711a9a57295b7e492b911",
+      "sha256": "ed6090d48731ff76b6193c510bf2336725761b6085d33e6655bfda9c6fc0a897",
       "triggers": [
         "artifact",
         "benchmark",
@@ -303,7 +303,7 @@
       "authority": "execution-status",
       "path": "docs/eval/2026-08-13-sequential-agent-benchmark-plan.md",
       "summary": "Sequential execution SOT for the corrective MCPMark pair, tau2 base domains, MCPMark Verified, and Terminal-Bench 2.1.",
-      "sha256": "b33254b56d0e12cecfa51c18f57f136193541483cd502199d6eeb8d3b3c8b44b",
+      "sha256": "55109463844b25327f757cd5f47e0c3f199a65329dd8bb9870ebc5943dd5667c",
       "triggers": [
         "MCPMark Verified",
         "MCPMark corrective pair",
@@ -327,7 +327,7 @@
       "authority": "suite-profile",
       "path": "docs/eval/tau2-bench.md",
       "summary": "GEODE evaluation profile, evidence ledger, and rollout plan for the tau2 conversational tool-use benchmark.",
-      "sha256": "1bc03893fa7f4553b9056c0f2288186b28a18b66450f73ebc7978a64a5b7a2ae",
+      "sha256": "57d563618e6133e6276fa993dd9077a2366abde97ca2c74b87a740a288f65543",
       "triggers": [
         "conversational tool use",
         "tau-bench",

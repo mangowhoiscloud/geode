@@ -170,8 +170,11 @@ Agent-World 비교 정본: [agent-world-comparison-contract.md](agent-world-comp
 [`2026-08-13-sequential-agent-benchmark-plan.md`](2026-08-13-sequential-agent-benchmark-plan.md)가
 소유한다. Gate 0C FS30 `k=1`은 완료됐고 다음 score-bearing 단계는 별도 fresh
 root의 **FS30 `k=3` stability**다. 현재 `WHAM=80%`에서는 live launch를
-차단한다. Tau2의 278-ID/pin/user/budget no-model preflight는 진행할 수 있지만
-Tau2 live call은 Gate 0C stability와 별도 PAYG 승인을 기다린다. MCPMark
+차단한다. Tau2 Lane 1A의 278-ID/pin/user/budget no-model freeze는
+[artifact merge `dbfd948b`](tau2-bench.md#2026-08-14-lane-1a-no-model-freeze)에
+게시해 완료했다. 모델·계정 호출과 score는 0이고 `promotion_authority=none`이다.
+Tau2 live call은 Gate 0C `k=3`
+stability, 별도 PAYG 승인, quota headroom을 기다린다. MCPMark
 Verified와 Terminal-Bench 2.1은 앞선 lane이 clean할 때만 진행한다.
 
 ## Public benchmark serving contract
@@ -249,6 +252,7 @@ Verified 다음에 τ²-bench를 둔다.
 
 | 일자 | 변경 |
 |---|---|
+| 2026-08-14 | Tau2 Lane 1A 278-ID/pin/user/budget no-model freeze 완료·게시. 모델/계정 호출과 score는 0이며 exact receipt bytes를 artifact merge `dbfd948b`에서 원격 재검증; Gate 1B는 Gate 0C k=3, PAYG 승인, quota headroom 대기 |
 | 2026-08-14 | GPT-5.4/high MCPMark Gate 0C common-deadline FS30 k=1 게시: GEODE 23/30, Codex 21/30, frozen delta +2/30=+6.67%p supported diagnostic-only. 60/60 valid arms, paired buckets 17/3/6/4, one GEODE score-bearing timeout, exact token coverage 29/30 vs 30/30, 59 admitted trajectories/one withheld를 artifact commit `1160fec`에서 원격 재검증. `promotion_authority=none`; fresh k=3 live는 WHAM=80%에서 차단 |
 | 2026-08-14 | GPT-5.4/high MCPMark Gate 0B k=3 direct diagnostic 게시: `guard-25000` 7/15, `unlimited-0` 10/15, frozen delta +3/15=+0.20 supported. 30/30 valid arms와 six reviewed releases/26 admitted trajectories를 artifact commit `17133f0`에서 원격 재검증; 제품 기본값 변경 권한은 없음 |
 | 2026-08-13 | GPT-5.4/high MCPMark filesystem/standard native outcome 21/30 vs 20/30과 3,381 events / 1,430 exact pairs를 보존. 사후 source audit에서 equal-hard-deadline preregistration 위반을 찾아 prospective hypothesis를 invalidated로 정정하고, append-only correction을 artifact commit `e5d442f`에서 원격 재검증. 점수는 retrospective description만 허용 |
