@@ -337,6 +337,13 @@ ignore_imports = [
     "core.messaging.binding -> core.server.supervised.poller_base",
 ]
 
+[[tool.importlinter.contracts]]
+name = "Classified kernel does not import the bundled self-improving product"
+type = "forbidden"
+source_modules = ["core.agent", "core.llm", "core.memory", "core.observability", "core.skills"]
+forbidden_modules = ["core.self_improving"]
+allow_indirect_imports = true
+
 [tool.ruff]
 target-version = "py312"
 line-length = 100

@@ -256,7 +256,7 @@ def test_orchestrator_prepends_rubric_block(
     )
     monkeypatch.setattr(
         "core.self_improving.loop.inject.in_context_slots._load_in_context_slots_override",
-        lambda: {
+        lambda **_kwargs: {
             SLOT_RUBRIC_EXCERPTS: InContextSlot(
                 name=SLOT_RUBRIC_EXCERPTS,
                 max_entries=3,
@@ -284,7 +284,7 @@ def test_orchestrator_no_op_when_baseline_missing(
     # baseline_path fixture creates the parent dir but not the file
     monkeypatch.setattr(
         "core.self_improving.loop.inject.in_context_slots._load_in_context_slots_override",
-        lambda: {
+        lambda **_kwargs: {
             SLOT_RUBRIC_EXCERPTS: InContextSlot(
                 name=SLOT_RUBRIC_EXCERPTS,
                 max_entries=3,

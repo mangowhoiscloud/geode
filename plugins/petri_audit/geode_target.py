@@ -276,7 +276,19 @@ async def _default_geode_runner(
     ctx = ConversationContext()
     ctx.messages.extend(history)
 
-    executor = ToolExecutor(action_handlers=handlers, auto_approve=True)
+    from core.wiring.bootstrap import (
+        build_middleware_registry,
+        build_product_policy_sources,
+        current_product_activity_sink,
+    )
+
+    policy_sources = build_product_policy_sources()
+
+    executor = ToolExecutor(
+        action_handlers=handlers,
+        auto_approve=True,
+        middleware_registry=build_middleware_registry(policy_sources=policy_sources),
+    )
     # G2 (2026-05-12) — max_rounds cap removed. Prior `max_rounds=4`
     # hardcode caused the `long_running_loop` audit's GEODE admirable
     # = 2 vs vanilla 8 (budget self-monitoring weakness). Petri's outer
@@ -289,7 +301,7 @@ async def _default_geode_runner(
     # a target model — see N6-followup priority docstring above.
     # The inspect-ai audit subprocess (``uv run inspect eval inspect_petri/audit``)
     # does not go through ``core.runtime.GeodeRuntime._build_core``, the
-    # parent's bootstrap path. Without an explicit ``bootstrap_builtins()``
+    # parent's bootstrap path. Without an explicit adapter bootstrap
     # here the registry is empty (``Known pairs: []``) and every target
     # ``generate`` call inside this runner fails with
     # ``AdapterNotFoundError: provider='openai' source='payg'``. Mirrors the
@@ -299,7 +311,7 @@ async def _default_geode_runner(
     from core.llm.adapters import infer_provider_from_model
     from core.llm.adapters.registry import bootstrap_builtins
 
-    bootstrap_builtins()
+    bootstrap_builtins(policy_sources=policy_sources)
 
     # Resolve (provider, source) via ``get_binding`` — the same path
     # the manual ``geode audit`` CLI uses — so the audit subprocess,
@@ -352,6 +364,8 @@ async def _default_geode_runner(
         provider=resolved_provider,
         source=resolved_source,
         disable_settings_drift=(model is not None),
+        activity_sink_provider=current_product_activity_sink,
+        policy_sources=policy_sources,
     )
     log.debug(
         "AgenticLoop constructed: model=%s drift_disabled=%s system_chars=%d history=%d",

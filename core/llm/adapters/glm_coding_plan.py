@@ -23,6 +23,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import Any
 
+from core.config.policy_source import PolicySourcePaths
 from core.llm.adapters._openai_common import (
     build_async_openai_client,
     build_messages,
@@ -70,6 +71,7 @@ class GlmCodingPlanAdapter:
     # 400 / 1113 errors if support diverges.
     supports_web_search: bool = True
     supports_text_completion: bool = True
+    routing_sources: PolicySourcePaths | None = field(default=None, repr=False)
     _last_error: Exception | None = field(default=None, init=False, repr=False)
     # PR-LOOP-POLLUTION-FIX (2026-06-12) — one client per owning event loop
     # (see core/llm/loop_affinity.py).
@@ -78,7 +80,7 @@ class GlmCodingPlanAdapter:
     )
 
     def _get_client(self) -> Any:
-        api_key, base_url = _resolve_coding_plan_endpoint()
+        api_key, base_url = _resolve_coding_plan_endpoint(self.routing_sources)
         if not api_key:
             raise RuntimeError(
                 "GlmCodingPlanAdapter: no GLM Coding Plan profile registered. "
@@ -184,7 +186,7 @@ class GlmCodingPlanAdapter:
                 yield StreamEvent(kind="stop", payload={"stop_reason": finish_reason})
 
     def test_environment(self) -> EnvironmentReport:
-        api_key, base_url = _resolve_coding_plan_endpoint()
+        api_key, base_url = _resolve_coding_plan_endpoint(self.routing_sources)
         if not api_key:
             return EnvironmentReport(
                 ok=False,
@@ -228,7 +230,7 @@ class GlmCodingPlanAdapter:
         return None
 
     def detect_credential(self) -> CredentialDetection | None:
-        api_key, base_url = _resolve_coding_plan_endpoint()
+        api_key, base_url = _resolve_coding_plan_endpoint(self.routing_sources)
         if not api_key:
             return None
         from core.config import GLM_PRIMARY
@@ -240,7 +242,9 @@ class GlmCodingPlanAdapter:
         )
 
 
-def _resolve_coding_plan_endpoint() -> tuple[str, str]:
+def _resolve_coding_plan_endpoint(
+    routing_sources: PolicySourcePaths | None = None,
+) -> tuple[str, str]:
     """Return ``(api_key, base_url)`` for the registered Coding Plan, else
     ``("", "")``.
 
@@ -254,7 +258,7 @@ def _resolve_coding_plan_endpoint() -> tuple[str, str]:
         from core.llm.strategies.plan_registry import resolve_routing
 
         # Probe the live GLM default (glm-5.2 now), not a hardcoded glm-5.1.
-        target = resolve_routing(GLM_PRIMARY)
+        target = resolve_routing(GLM_PRIMARY, sources=routing_sources)
         if target is not None and target.profile.key:
             return target.profile.key, target.base_url
     except Exception:

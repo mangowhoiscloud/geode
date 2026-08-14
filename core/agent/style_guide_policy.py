@@ -22,16 +22,9 @@ Petri behaviour dims.
 빈 정책 / 누락 field → 해당 axis 는 default 동작. Unknown enum value →
 WARNING + 해당 axis drop (forward-compat 위해 다른 axes 는 유지).
 
-**Resolution order** (PR-BACKFILL-SOT 2026-05-21 shared chain):
-
-1. ``GEODE_STYLE_GUIDE_OVERRIDE`` env var — explicit override.
-
-   - With ``GEODE_STYLE_GUIDE_STRICT=1`` (audit subprocess): strict.
-   - Without strict flag (operator daily): graceful (no fall-through).
-
-2. ``~/.geode/autoresearch/handoff/style-guide.json`` — operator-local, graceful.
-3. ``core/self_improving/state/policies/style-guide.json`` — in-repo, graceful.
-4. ``None`` — no-op.
+Candidate paths are supplied by product composition. Selection is explicit
+override → operator-local → packaged default → no-op; an explicit override is
+authoritative and may request strict loading.
 
 **Frontier**: OpenAI / Anthropic system prompt guides converge on
 **enum-based response constraints** (style, format, length) over
@@ -44,19 +37,9 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from core.agent.policy_sot import load_policy_sot
-from core.paths import AUTORESEARCH_STYLE_GUIDE_PATH, OPERATOR_LOCAL_STYLE_GUIDE_PATH
+from core.config.policy_source import PolicySourcePaths, load_policy_source
 
 log = logging.getLogger(__name__)
-
-_STYLE_GUIDE_OVERRIDE_ENV = "GEODE_STYLE_GUIDE_OVERRIDE"
-
-_STYLE_GUIDE_SOT_PATH = AUTORESEARCH_STYLE_GUIDE_PATH
-"""Cross-process in-repo SoT path (T3, 2026-05-21). Module-local alias."""
-
-_OPERATOR_LOCAL_STYLE_GUIDE_PATH = OPERATOR_LOCAL_STYLE_GUIDE_PATH
-"""Operator-local SoT path. Module-local alias for monkey-patch."""
-
 
 # Enum field → allowed values + human-readable directive on selection.
 _TONE = "tone"
@@ -94,12 +77,13 @@ _DIRECTIVES: dict[str, dict[str, str]] = {
 }
 
 
-def _load_style_guide_override() -> dict[str, str] | None:
+def _load_style_guide_override(
+    *,
+    sources: PolicySourcePaths | None = None,
+) -> dict[str, str] | None:
     """Return the active style guide dict, or ``None`` if no SoT applies."""
-    return load_policy_sot(
-        env_var=_STYLE_GUIDE_OVERRIDE_ENV,
-        operator_local=_OPERATOR_LOCAL_STYLE_GUIDE_PATH,
-        in_repo=_STYLE_GUIDE_SOT_PATH,
+    return load_policy_source(
+        sources=sources,
         label="style-guide",
         validate_strict=_validate_schema,
         validate_graceful=_validate_schema,

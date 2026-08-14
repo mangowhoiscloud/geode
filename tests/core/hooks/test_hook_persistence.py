@@ -15,7 +15,11 @@ from core.hooks import (
 )
 from core.observability.event_store import HookEventStore
 from core.observability.hook_persistence import HookPersistenceSink
-from core.self_improving.loop.observe.run_timeline import RunTimeline, run_timeline_scope
+from core.self_improving.loop.observe.run_timeline import (
+    RunTimeline,
+    current_run_timeline,
+    run_timeline_scope,
+)
 
 
 def _wired_hooks(tmp_path: Path) -> tuple[HookSystem, HookEventStore]:
@@ -26,6 +30,7 @@ def _wired_hooks(tmp_path: Path) -> tuple[HookSystem, HookEventStore]:
             store,
             session_key="subject:test:analysis",
             run_id="run-1",
+            activity_sink_provider=current_run_timeline,
         ),
         name="hook_persistence",
     )

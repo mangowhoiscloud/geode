@@ -108,6 +108,7 @@ if TYPE_CHECKING:
 # S-5 (2026-06-11) — measurement gear extracted to sibling modules; train.py
 # is restored to the autoresearch-원형: mutation surface + tunables + the
 # fixed-budget loop. These imports are exactly what the loop below calls.
+from core.paths import AUTORESEARCH_FEW_SHOT_POOL_PATH
 from core.self_improving import fitness as fitness_spec
 from core.self_improving import gate, ledger, measure
 from core.self_improving.bench_means import BenchProvenance, collect_bench_means_from_inspect_ai
@@ -1570,6 +1571,7 @@ def main() -> int:
                 assistant_msg=response_label,
                 fitness_delta=float(fitness_delta),
                 source="autoresearch_audit_promote",
+                pool_path=AUTORESEARCH_FEW_SHOT_POOL_PATH,
             )
     except Exception:  # pragma: no cover — defensive
         log.debug("OL-C2 few-shot pool append failed", exc_info=True)

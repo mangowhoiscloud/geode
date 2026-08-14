@@ -68,7 +68,7 @@ def build_glm_reasoning_extra_body(model: str) -> dict[str, Any] | None:
 _async_glm_clients = LoopAffineClientCache("glm-provider")
 
 
-def _resolve_glm_endpoint() -> tuple[str, str]:
+def _resolve_glm_endpoint(*, routing_sources: Any | None = None) -> tuple[str, str]:
     """Pick (api_key, base_url) for GLM, preferring a Plan-bound profile.
 
     When the user registered a `glm-coding-*` Plan via /login, that Plan's
@@ -83,7 +83,7 @@ def _resolve_glm_endpoint() -> tuple[str, str]:
 
         # Probe the live GLM default's routing (glm-5.2 now) so a Plan route
         # pinned to the current default is honoured — was hardcoded glm-5.1.
-        target = resolve_routing(GLM_PRIMARY)
+        target = resolve_routing(GLM_PRIMARY, sources=routing_sources)
         if target is not None and target.profile.key:
             return target.profile.key, target.base_url
     except Exception:
@@ -91,7 +91,7 @@ def _resolve_glm_endpoint() -> tuple[str, str]:
     return settings.zai_api_key, GLM_BASE_URL
 
 
-def _get_async_glm_client() -> Any:
+def _get_async_glm_client(*, routing_sources: Any | None = None) -> Any:
     """Return the async GLM client bound to the CURRENT event loop
     (OpenAI-compatible). See core/llm/loop_affinity.py for the per-loop
     cache rationale."""
@@ -99,7 +99,7 @@ def _get_async_glm_client() -> Any:
     def _build() -> Any:
         import openai
 
-        api_key, base_url = _resolve_glm_endpoint()
+        api_key, base_url = _resolve_glm_endpoint(routing_sources=routing_sources)
         return openai.AsyncOpenAI(
             api_key=api_key,
             base_url=base_url,

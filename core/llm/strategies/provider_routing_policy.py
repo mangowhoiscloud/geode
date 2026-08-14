@@ -22,14 +22,9 @@ aggregate, so this remains a cost knob with no dedicated fitness lever.
 chain 그대로 사용). Unknown plan_id 는 정책에 있어도 `resolve_routing`
 이 등록된 plan 만 시도하므로 silently ignored.
 
-**Resolution order** (PR-BACKFILL-SOT 2026-05-21 shared chain):
-
-1. ``GEODE_PROVIDER_ROUTING_OVERRIDE`` env var — explicit override.
-   - With ``GEODE_PROVIDER_ROUTING_STRICT=1`` (audit subprocess): strict.
-   - Without strict flag (operator daily): graceful (no fall-through).
-2. ``~/.geode/autoresearch/handoff/provider-routing.json`` — operator-local, graceful.
-3. ``core/self_improving/state/policies/provider-routing.json`` — in-repo, graceful.
-4. ``None`` — no-op.
+Candidate paths are supplied by product composition. Selection is explicit
+override → operator-local → packaged default → no-op; an explicit override is
+authoritative and may request strict loading.
 
 **Frontier**: OpenRouter's explicit per-model plan ordering — same model,
 different providers, different prices. Anthropic / OpenAI both surface
@@ -42,29 +37,19 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from core.agent.policy_sot import load_policy_sot
-from core.paths import AUTORESEARCH_PROVIDER_ROUTING_PATH, OPERATOR_LOCAL_PROVIDER_ROUTING_PATH
-
-_PROVIDER_ROUTING_OVERRIDE_ENV = "GEODE_PROVIDER_ROUTING_OVERRIDE"
-
-_PROVIDER_ROUTING_SOT_PATH = AUTORESEARCH_PROVIDER_ROUTING_PATH
-"""Cross-process in-repo SoT path (T4, 2026-05-21). Module-local alias."""
-
-_OPERATOR_LOCAL_PROVIDER_ROUTING_PATH = OPERATOR_LOCAL_PROVIDER_ROUTING_PATH
-"""Operator-local SoT path. Module-local alias for monkey-patch."""
+from core.config.policy_source import PolicySourcePaths, load_policy_source
 
 
-def _load_provider_routing_override() -> dict[str, list[str]] | None:
+def _load_provider_routing_override(
+    *,
+    sources: PolicySourcePaths | None = None,
+) -> dict[str, list[str]] | None:
     """Return the active provider-routing dict, or ``None`` if no SoT applies.
 
-    Uses the shared :func:`load_policy_sot` loader (PR-LOWRISK-SLOP — this
-    module + cache_policy were the two policy loaders the v0.99.196 7-to-1
-    dedup missed). Behaviour preserved: same RuntimeError shapes + log
-    wording (via ``label``)."""
-    return load_policy_sot(
-        env_var=_PROVIDER_ROUTING_OVERRIDE_ENV,
-        operator_local=_OPERATOR_LOCAL_PROVIDER_ROUTING_PATH,
-        in_repo=_PROVIDER_ROUTING_SOT_PATH,
+    Uses the shared neutral loader while this module retains schema validation
+    and coercion."""
+    return load_policy_source(
+        sources=sources,
         label="provider-routing",
         validate_strict=_validate_schema,
         validate_graceful=_validate_schema,

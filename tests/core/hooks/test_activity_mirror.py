@@ -16,7 +16,11 @@ from core.hooks.system import HookEvent, HookSystem
 from core.observability.event_store import HookEventStore
 from core.observability.hook_persistence import HookPersistenceSink
 from core.observability.run_dir import run_dir_scope
-from core.self_improving.loop.observe.run_timeline import RunTimeline, run_timeline_scope
+from core.self_improving.loop.observe.run_timeline import (
+    RunTimeline,
+    current_run_timeline,
+    run_timeline_scope,
+)
 
 
 def _read_rows(timeline_path: Path) -> list[dict]:
@@ -31,6 +35,7 @@ def _persistent_hooks(root: Path) -> Iterator[HookSystem]:
             HookEventStore(root / "events.db"),
             session_key="test-session",
             run_id="test-run",
+            activity_sink_provider=current_run_timeline,
         ),
         name="hook_persistence",
     )

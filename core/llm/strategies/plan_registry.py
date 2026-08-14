@@ -18,6 +18,7 @@ from core.llm.strategies.plans import Plan, PlanUsage, default_plan_for_payg
 if TYPE_CHECKING:
     from core.auth.profiles import ProfileStore
     from core.auth.rotation import ProfileRotator
+    from core.config.policy_source import PolicySourcePaths
 
 
 @dataclass
@@ -119,7 +120,11 @@ def reset_plan_registry() -> None:
 # ---------------------------------------------------------------------------
 
 
-def resolve_routing(model: str) -> RoutingTarget | None:
+def resolve_routing(
+    model: str,
+    *,
+    sources: PolicySourcePaths | None = None,
+) -> RoutingTarget | None:
     """Resolve which Plan + AuthProfile should serve a given model.
 
     Resolution order:
@@ -162,7 +167,9 @@ def resolve_routing(model: str) -> RoutingTarget | None:
     )
 
     routed_plan_ids = apply_provider_routing_policy(
-        model, registry.get_routing(model), _load_provider_routing_override()
+        model,
+        registry.get_routing(model),
+        _load_provider_routing_override(sources=sources),
     )
     explicit_chain: list[Plan] = []
     for plan_id in routed_plan_ids:

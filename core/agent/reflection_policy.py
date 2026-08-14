@@ -1,13 +1,7 @@
 """Reflection policy SoT reader — ADR-012 S0b, dead slot 살리기.
 
-5축 mutation 의 ``reflection`` slot 은 PR-6 시점부터 SoT 파일
-(`autoresearch/reflection.json`) 만 정의되고 인퍼런스 reader 가 부재였다.
-``core/agent/loop/_reflection.py`` 의 ``_REFLECTION_TOOL`` schema 와
-``_SYSTEM_PROMPT`` 가 module-level constant 로 hardcoded — `reflection.json`
-미연결 (PR-AUDIT-5SLOT 2026-05-21 진단).
-
-이 모듈은 S0a (`tool_policy.py`) 의 패턴을 그대로 차용해 ``reflection.json``
-의 정책을 reflection LLM 호출 직전에 적용한다.
+Applies an optional reflection policy immediately before the reflection LLM
+call while preserving the typed reflection payload.
 
 **SoT schema** (두 field 모두 optional):
 
@@ -22,17 +16,9 @@
 는 mutate 대상이 아님 — record_reflection 의 typed payload contract 는
 유지 (`hypotheses` / `confidence` / `next_action_hint`).
 
-**Resolution order** (PR-BACKFILL-SOT 2026-05-21, shared
-:mod:`core.self_improving.loop.mutate.sot_resolution`):
-
-1. ``GEODE_REFLECTION_POLICY_OVERRIDE`` env var — explicit override.
-
-   - With ``GEODE_REFLECTION_POLICY_STRICT=1`` (audit subprocess): strict.
-   - Without strict flag (operator daily): graceful (no fall-through).
-
-2. ``~/.geode/autoresearch/handoff/reflection.json`` — operator-local, graceful.
-3. ``core/self_improving/state/policies/reflection.json`` — in-repo, graceful.
-4. ``None`` — no-op.
+Candidate paths are supplied by product composition. Selection is explicit
+override → operator-local → packaged default → no-op; an explicit override is
+authoritative and may request strict loading.
 
 **Read-Write parity** (S0a Codex MCP lesson): ``write_policy()`` 가
 ``dict[str, str]`` 만 직렬화하므로 reader 는 string payload 그대로 수용.
@@ -47,36 +33,25 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from core.agent.policy_sot import load_policy_sot
-from core.paths import AUTORESEARCH_REFLECTION_POLICY_PATH, OPERATOR_LOCAL_REFLECTION_POLICY_PATH
+from core.config.policy_source import PolicySourcePaths, load_policy_source
 
 log = logging.getLogger(__name__)
-
-_REFLECTION_POLICY_OVERRIDE_ENV = "GEODE_REFLECTION_POLICY_OVERRIDE"
-
-_REFLECTION_POLICY_SOT_PATH = AUTORESEARCH_REFLECTION_POLICY_PATH
-"""Cross-process in-repo SoT path (S0b, 2026-05-21). module-local alias 로
-테스트가 monkeypatch 가능 (path-literal guard contract)."""
-
-_OPERATOR_LOCAL_REFLECTION_POLICY_PATH = OPERATOR_LOCAL_REFLECTION_POLICY_PATH
-"""Operator-local SoT path (PR-BACKFILL-SOT, 2026-05-21). Module-local
-alias kept for monkeypatch in tests."""
-
 
 _FIELD_DESCRIPTION = "description"
 _FIELD_SYSTEM_PROMPT = "system_prompt"
 _ALL_FIELDS = frozenset({_FIELD_DESCRIPTION, _FIELD_SYSTEM_PROMPT})
 
 
-def _load_reflection_policy_override() -> dict[str, str] | None:
+def _load_reflection_policy_override(
+    *,
+    sources: PolicySourcePaths | None = None,
+) -> dict[str, str] | None:
     """Return active reflection policy, or ``None`` when no SoT applies.
 
     Resolution order — see module docstring (3-layer chain).
     """
-    return load_policy_sot(
-        env_var=_REFLECTION_POLICY_OVERRIDE_ENV,
-        operator_local=_OPERATOR_LOCAL_REFLECTION_POLICY_PATH,
-        in_repo=_REFLECTION_POLICY_SOT_PATH,
+    return load_policy_source(
+        sources=sources,
         label="reflection policy",
         validate_strict=_validate_schema,
         validate_graceful=_validate_schema,

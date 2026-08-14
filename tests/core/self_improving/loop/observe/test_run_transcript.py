@@ -214,7 +214,12 @@ def test_hook_handlers_route_subagent_events_to_journal(tmp_path: Path) -> None:
     from core.memory.journal_hooks import make_journal_handlers
 
     project_journal = MagicMock()
-    handlers = dict(make_journal_handlers(project_journal))
+    handlers = dict(
+        make_journal_handlers(
+            project_journal,
+            activity_sink_provider=current_run_timeline,
+        )
+    )
     # P1c — three new handlers expected.
     for name in (
         "journal_subagent",

@@ -1,10 +1,6 @@
 """Tool policy SoT reader — ADR-012 S0a, dead slot 살리기.
 
-5축 mutation 의 ``tool_policy`` slot 은 PR-6 시점부터 SoT 파일
-(`autoresearch/tool-policy.json`) 만 정의되고 인퍼런스 reader 가 부재였다
-(PR-AUDIT-5SLOT 2026-05-21 진단). 이 모듈은 ``wrapper-sections.json``
-reader 의 패턴을 그대로 차용해 ``tool-policy.json`` 의 정책을 도구 후보
-필터링 단계에서 적용한다.
+Applies an optional tool policy while the agent builds its candidate tool set.
 
 **SoT schema** (모든 필드 optional):
 
@@ -19,21 +15,9 @@ reader 의 패턴을 그대로 차용해 ``tool-policy.json`` 의 정책을 도�
 빈 정책 / 누락 / 부적합 schema → no-op (현재 행동 유지). 정책이 ALIVE
 신호를 내려면 셋 중 하나라도 비어 있지 않아야 한다.
 
-**Resolution order** (PR-BACKFILL-SOT 2026-05-21, shared
-:mod:`core.self_improving.loop.mutate.sot_resolution`):
-
-1. ``GEODE_TOOL_POLICY_OVERRIDE`` env var — explicit override.
-
-   - With ``GEODE_TOOL_POLICY_STRICT=1`` (audit subprocess): strict load,
-     RuntimeError on missing/unparseable (fail-fast for mutation audit).
-   - Without strict flag (operator daily): graceful load, returns ``None``
-     on issue (no fall-through to lower layers; env is authoritative).
-
-2. ``~/.geode/autoresearch/handoff/tool-policy.json`` — operator-local SoT,
-   graceful load (per-machine override outside the in-repo ratchet).
-3. ``core/self_improving/state/policies/tool-policy.json`` — in-repo,
-   ratchet-tracked, graceful load (default policy site).
-4. ``None`` — no-op (도구 목록 그대로).
+Candidate paths are supplied by product composition. Selection is explicit
+override → operator-local → packaged default → no-op; an explicit override is
+authoritative and may request strict loading.
 """
 
 from __future__ import annotations
@@ -42,21 +26,9 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from core.agent.policy_sot import load_policy_sot
-from core.paths import AUTORESEARCH_TOOL_POLICY_PATH, OPERATOR_LOCAL_TOOL_POLICY_PATH
+from core.config.policy_source import PolicySourcePaths, load_policy_source
 
 log = logging.getLogger(__name__)
-
-_TOOL_POLICY_OVERRIDE_ENV = "GEODE_TOOL_POLICY_OVERRIDE"
-
-_TOOL_POLICY_SOT_PATH = AUTORESEARCH_TOOL_POLICY_PATH
-"""Cross-process in-repo SoT path shared with :mod:`core.self_improving.train`
-(S0a, 2026-05-21). Module-local alias kept for monkeypatch in tests."""
-
-_OPERATOR_LOCAL_TOOL_POLICY_PATH = OPERATOR_LOCAL_TOOL_POLICY_PATH
-"""Operator-local SoT path (PR-BACKFILL-SOT, 2026-05-21). Module-local
-alias kept for monkeypatch in tests."""
-
 
 # Schema field 이름들 — 외부 정책 파일과 1:1 mapping.
 _FIELD_ALLOWED = "allowed_tools"
@@ -65,15 +37,16 @@ _FIELD_PRIORITY = "priority_order"
 _ALL_FIELDS = frozenset({_FIELD_ALLOWED, _FIELD_FORBIDDEN, _FIELD_PRIORITY})
 
 
-def _load_tool_policy_override() -> dict[str, list[str]] | None:
+def _load_tool_policy_override(
+    *,
+    sources: PolicySourcePaths | None = None,
+) -> dict[str, list[str]] | None:
     """Return the active tool policy dict, or ``None`` when no SoT applies.
 
     Resolution order — see module docstring (3-layer chain).
     """
-    return load_policy_sot(
-        env_var=_TOOL_POLICY_OVERRIDE_ENV,
-        operator_local=_OPERATOR_LOCAL_TOOL_POLICY_PATH,
-        in_repo=_TOOL_POLICY_SOT_PATH,
+    return load_policy_source(
+        sources=sources,
         label="tool policy",
         validate_strict=lambda data, path: _validate_schema(data, path, strict=True),
         validate_graceful=lambda data, path: _validate_schema(data, path, strict=False),
@@ -85,12 +58,9 @@ def _validate_schema(data: Any, path: Path, *, strict: bool) -> None:
     """``data`` 가 ``dict`` 모양인지 + 알려진 field 가 ``list[str]`` 또는
     ``str`` (comma/newline-separated) 인지 확인.
 
-    Read-write parity (Codex MCP catch, 2026-05-21) — ``write_policy()``
-    (`core/self_improving/loop/mutate/policies.py:194`) 는 SoT 파일을
-    ``dict[str, str]`` 로만 직렬화한다 (mutation 의 ``new_value`` 가
-    string). 따라서 reader 는 ``list[str]`` 뿐 아니라 **mutation 으로
-    쓰인 string payload 도 수용** 해야 한다 — comma 또는 newline 으로
-    split 해서 list 로 정규화. Unknown field 는 무시 (forward-compatible)."""
+    Product writers may serialize ``dict[str, str]`` rather than lists.
+    Therefore the reader also accepts comma/newline-separated strings and
+    normalizes them to lists. Unknown fields remain forward-compatible."""
     if not isinstance(data, dict):
         raise RuntimeError(f"tool policy at {path} must be a dict")
     for key in _ALL_FIELDS:

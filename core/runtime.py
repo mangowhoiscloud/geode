@@ -281,7 +281,11 @@ class GeodeRuntime:
             log_dir=log_dir,
         )
         hook_registry = HookRegistry(events=hooks)
-        middleware_registry = MiddlewareRegistry(events=hooks)
+        policy_sources = bootstrap.build_product_policy_sources()
+        middleware_registry = bootstrap.build_middleware_registry(
+            events=hooks,
+            policy_sources=policy_sources,
+        )
         session_store = bootstrap.build_session_store(session_ttl=session_ttl)
         policy_chain = infra.build_default_policies()
         tool_registry = infra.build_default_registry()
@@ -293,7 +297,7 @@ class GeodeRuntime:
         # surrounded it had no production consumer.
         from core.llm.adapters.registry import bootstrap_builtins
 
-        bootstrap_builtins()
+        bootstrap_builtins(policy_sources=policy_sources)
         config_watcher = bootstrap.build_config_watcher(hooks=hooks)
         lane_queue = infra.build_default_lanes()
         return {

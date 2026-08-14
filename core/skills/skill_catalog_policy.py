@@ -27,17 +27,9 @@ agents evolve their own task taxonomy via the same JSON-only loop).
 유지). Unknown skill name 은 정책에 있어도 무시 — base registry 가
 authoritative.
 
-**Resolution order** (PR-BACKFILL-SOT 2026-05-21 shared chain):
-
-1. ``GEODE_SKILL_CATALOG_OVERRIDE`` env var — explicit override.
-
-   - With ``GEODE_SKILL_CATALOG_STRICT=1`` (audit subprocess): strict.
-   - Without strict flag (operator daily): graceful (no fall-through).
-
-2. ``~/.geode/autoresearch/handoff/skill-catalog.json`` — operator-local,
-   graceful.
-3. ``core/self_improving/state/policies/skill-catalog.json`` — in-repo, graceful.
-4. ``None`` — no-op.
+Candidate paths are supplied by product composition. Selection is explicit
+override → operator-local → packaged default → no-op; an explicit override is
+authoritative and may request strict loading.
 
 **Frontier**: Voyager (Wang et al., 2023) curriculum loop — agent
 maintains its own skill library + descriptions, both updated by the loop.
@@ -54,53 +46,51 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from core.config import CONTEXT_BLOCK_MAX_CHARS
-from core.paths import AUTORESEARCH_SKILL_CATALOG_PATH, OPERATOR_LOCAL_SKILL_CATALOG_PATH
-from core.self_improving.loop.mutate.sot_resolution import resolve_sot
+from core.config.policy_source import (
+    PolicySourcePaths,
+    select_policy_source,
+)
 
 if TYPE_CHECKING:
     from core.skills.skills import SkillRegistry
 
 log = logging.getLogger(__name__)
 
-_SKILL_CATALOG_OVERRIDE_ENV = "GEODE_SKILL_CATALOG_OVERRIDE"
-
-_SKILL_CATALOG_SOT_PATH = AUTORESEARCH_SKILL_CATALOG_PATH
-"""Cross-process in-repo SoT path (T2, 2026-05-21). Module-local alias
-for monkey-patch in tests."""
-
-_OPERATOR_LOCAL_SKILL_CATALOG_PATH = OPERATOR_LOCAL_SKILL_CATALOG_PATH
-"""Operator-local SoT path. Module-local alias for monkey-patch."""
-
 _FIELD_DESCRIPTION = "description"
 _FIELD_USER_INVOCABLE = "user_invocable"
 _ALL_FIELDS = frozenset({_FIELD_DESCRIPTION, _FIELD_USER_INVOCABLE})
 
 
-def _load_skill_catalog_override() -> dict[str, dict[str, Any]] | None:
+def _load_skill_catalog_override(
+    *,
+    sources: PolicySourcePaths | None = None,
+) -> dict[str, dict[str, Any]] | None:
     """Return active skill-catalog override, or ``None`` if no SoT.
 
     Resolution order — see module docstring (3-layer chain).
     """
-    selection = resolve_sot(
-        env_var=_SKILL_CATALOG_OVERRIDE_ENV,
-        operator_local=_OPERATOR_LOCAL_SKILL_CATALOG_PATH,
-        in_repo=_SKILL_CATALOG_SOT_PATH,
-    )
+    if sources is None:
+        return None
+    selection = select_policy_source(sources)
     if selection is None:
         return None
     if selection.strict:
-        return _strict_load(selection.path)
+        return _strict_load_catalog(selection.path, override_env=sources.override_env)
     return _graceful_load(selection.path)
 
 
-def _strict_load(path: Path) -> dict[str, dict[str, Any]]:
+def _strict_load_catalog(
+    path: Path,
+    *,
+    override_env: str,
+) -> dict[str, dict[str, Any]]:
     if not path.is_file():
-        raise RuntimeError(f"{_SKILL_CATALOG_OVERRIDE_ENV}={path} file not found")
+        raise RuntimeError(f"{override_env}={path} file not found")
     try:
         raw = path.read_text(encoding="utf-8")
         data = json.loads(raw)
     except (OSError, json.JSONDecodeError) as exc:
-        raise RuntimeError(f"{_SKILL_CATALOG_OVERRIDE_ENV}={path} load failed: {exc}") from exc
+        raise RuntimeError(f"{override_env}={path} load failed: {exc}") from exc
     _validate_schema(data, path)
     return _coerce(data)
 

@@ -22,6 +22,7 @@ before the adapter is selected.
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
 from core.llm.adapters.base import (
     CONCRETE_SOURCES,
@@ -31,6 +32,9 @@ from core.llm.adapters.base import (
 )
 
 log = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from core.config.policy_source import PolicySourceBundle
 
 
 _REGISTRY: dict[str, LLMAdapter] = {}
@@ -208,7 +212,10 @@ def invalidate_provider_clients(provider: str | None = None) -> int:
     return dropped
 
 
-def bootstrap_builtins() -> None:
+def bootstrap_builtins(
+    *,
+    policy_sources: PolicySourceBundle | None = None,
+) -> None:
     """Register the 8 built-in adapters.
 
     Called from ``core/runtime.py`` during process bootstrap. Idempotent —
@@ -238,6 +245,8 @@ def bootstrap_builtins() -> None:
         GlmCodingPlanAdapter,
     ):
         instance = adapter_cls()
+        if isinstance(instance, GlmCodingPlanAdapter):
+            instance.routing_sources = (policy_sources or {}).get("provider_routing")
         if instance.name in _REGISTRY:
             log.debug("bootstrap_builtins: %s already registered, skipping", instance.name)
             continue

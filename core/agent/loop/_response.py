@@ -43,6 +43,7 @@ def refresh_tools(loop: AgenticLoop) -> int:
         force_include=allowed,
         provider=getattr(loop, "_provider", ""),
         source=getattr(loop, "_source", ""),
+        policy_sources=loop._policy_sources,
     )
     if allowed is not None:
         loop._tools = [t for t in loop._tools if t.get("name") in allowed]

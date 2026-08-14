@@ -401,16 +401,13 @@ def _final_hook_payloads(
     """
     agent_kind = "subagent" if getattr(loop, "_parent_session_id", "") else "repl"
     component = "agentic_loop"
+    provider = getattr(loop, "_activity_sink_provider", None)
     try:
-        from core.self_improving.loop.observe.run_timeline import current_run_timeline
-
-        run_timeline = current_run_timeline()
-        if run_timeline is not None:
-            component = run_timeline.component
+        sink = provider() if provider else None
     except Exception:
-        # RunTimeline module is optional in tests / REPL — falls back to the
-        # default already assigned above.
-        component = "agentic_loop"
+        sink = None
+    if sink is not None:
+        component = sink.component
     adapter_type = ""
     new_adapter = getattr(loop, "_new_adapter", None)
     if new_adapter is not None:

@@ -44,6 +44,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 from core.agent.sub_agent import SubAgentManager, SubTask
+from core.config.policy_source import EMPTY_POLICY_SOURCES
 from plugins.seed_generation.agents.ranker import Ranker
 from plugins.seed_generation.picker import VoterBinding
 from plugins.seed_generation.tournament import MatchPlan
@@ -83,6 +84,7 @@ def test_build_worker_request_uses_task_effort_when_set() -> None:
     mgr._parent_session_key = ""  # type: ignore[attr-defined]
     mgr._timeout_s = 60  # type: ignore[attr-defined]
     mgr._time_budget_s = 0.0  # type: ignore[attr-defined]
+    mgr._policy_sources = EMPTY_POLICY_SOURCES  # type: ignore[attr-defined]
     task = SubTask(
         task_id="vote-m000-openai.subscription",
         description="vote",
@@ -110,6 +112,7 @@ def test_build_worker_request_falls_back_when_effort_empty() -> None:
     mgr._parent_session_key = ""  # type: ignore[attr-defined]
     mgr._timeout_s = 60  # type: ignore[attr-defined]
     mgr._time_budget_s = 0.0  # type: ignore[attr-defined]
+    mgr._policy_sources = EMPTY_POLICY_SOURCES  # type: ignore[attr-defined]
     task = SubTask(task_id="t1", description="x", task_type="analyze")
     req = mgr._build_worker_request(task)
     # Legacy path: ``difficulty`` defaults to "medium" via the

@@ -393,8 +393,10 @@ def model_available(model_id: str) -> bool:
     """
     try:
         from core.llm.strategies.plan_registry import resolve_routing
+        from core.wiring.bootstrap import build_product_policy_sources
 
-        return resolve_routing(model_id) is not None
+        sources = build_product_policy_sources().get("provider_routing")
+        return resolve_routing(model_id, sources=sources) is not None
     except Exception:
         return False
 

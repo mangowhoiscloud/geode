@@ -333,42 +333,24 @@ def _cache_shaped_system(system: str) -> str | list[dict[str, Any]]:
 
 
 def _system_and_messages(req: AdapterCallRequest) -> tuple[Any, list[dict[str, Any]]]:
-    """Shared system/messages shaping: S5 slots -> cache split -> breakpoints.
-
-    ADR-012 M4.4 ``apply_in_context_slots`` is re-wired here (it was
-    stranded inside the dead ClaudeAgenticAdapter, silently disconnecting
-    the in-context mutation surface). No-op fast path when no SoT is
-    configured; per-slot graceful on reader failure.
-    """
-    from core.agent.system_prompt import PROMPT_CACHE_BOUNDARY
-    from core.llm.cache_policy import (
-        _load_cache_policy_override,
-        apply_cache_policy_breakpoints,
-    )
+    """Shared system/messages shaping after composed request middleware."""
     from core.llm.providers.anthropic import (
         MAX_MESSAGE_CACHE_BREAKPOINTS,
         apply_messages_cache_control,
     )
-    from core.self_improving.loop.inject.in_context_wiring import apply_in_context_slots
 
     messages = build_messages(req)
     system = req.system_prompt
-    if system and PROMPT_CACHE_BOUNDARY in system:
-        # S5 slot content is per-call volatile — inject it into the DYNAMIC
-        # half (inside the envelope, before the closing tag) so it can never
-        # invalidate the 1h static prefix cache (Codex review 2026-07-29).
-        static_part, dynamic_part = system.split(PROMPT_CACHE_BOUNDARY, 1)
-        closing = "</dynamic_context>"
-        core, sep, tail = dynamic_part.rpartition(closing)
-        inner, suffix = (core, sep + tail) if sep and not tail.strip() else (dynamic_part, "")
-        messages, inner = apply_in_context_slots(messages, system=inner)
-        system = static_part + PROMPT_CACHE_BOUNDARY + inner + suffix
-    else:
-        messages, system = apply_in_context_slots(messages, system=system)
     # ADR-013 T5 — cache-breakpoint policy SoT governs the message budget
     # (was likewise stranded in the dead adapter).
-    n_breakpoints = apply_cache_policy_breakpoints(
-        MAX_MESSAGE_CACHE_BREAKPOINTS, _load_cache_policy_override()
+    raw_breakpoints = req.provider_options.get(
+        "cache_message_breakpoints",
+        MAX_MESSAGE_CACHE_BREAKPOINTS,
+    )
+    n_breakpoints = (
+        raw_breakpoints
+        if isinstance(raw_breakpoints, int) and not isinstance(raw_breakpoints, bool)
+        else MAX_MESSAGE_CACHE_BREAKPOINTS
     )
     return _cache_shaped_system(system), apply_messages_cache_control(
         messages, n_breakpoints=n_breakpoints

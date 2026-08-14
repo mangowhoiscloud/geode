@@ -18,17 +18,12 @@ Field 정의:
 - ``user_msg`` (str, required) — user role message 의 content.
 - ``assistant_msg`` (str, required) — assistant role의 successful response.
 - ``fitness_delta`` (float, optional, default 0.0) — baseline 대비 향상폭
-  (postive=개선). top-K rank 의 ordering key.
+  (positive=개선). top-K rank 의 ordering key.
 - ``source`` (str, optional) — 추적용 메타.
 
-**Resolution order** (PR-BACKFILL-SOT 2026-05-21 shared chain):
-
-1. ``GEODE_FEW_SHOT_POOL_OVERRIDE`` env var — explicit override.
-   - With ``GEODE_FEW_SHOT_POOL_STRICT=1`` (audit subprocess): strict.
-   - Without strict flag: graceful (no fall-through).
-2. ``~/.geode/autoresearch/handoff/few-shot-pool.jsonl`` — operator-local.
-3. ``core/self_improving/state/policies/few-shot-pool.jsonl`` — in-repo.
-4. ``None`` — no-op.
+Candidate paths are supplied by product composition. Selection is explicit
+override → operator-local → packaged default → no-op; an explicit override is
+authoritative and may request strict loading.
 
 **Frontier**: Anthropic prompt caching docs — 동일 prefix 의 multi-turn
 exemplar 가 cache 적중률 높음. T5 의 cache_policy 와 자연스럽게 호환
@@ -43,21 +38,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from core.paths import (
-    AUTORESEARCH_FEW_SHOT_POOL_PATH,
-    OPERATOR_LOCAL_FEW_SHOT_POOL_PATH,
+from core.config.policy_source import (
+    PolicySourcePaths,
+    select_policy_source,
 )
-from core.self_improving.loop.mutate.sot_resolution import resolve_sot
 
 log = logging.getLogger(__name__)
-
-_FEW_SHOT_POOL_OVERRIDE_ENV = "GEODE_FEW_SHOT_POOL_OVERRIDE"
-
-_FEW_SHOT_POOL_SOT_PATH = AUTORESEARCH_FEW_SHOT_POOL_PATH
-"""Cross-process in-repo SoT path (M3, 2026-05-21). Module-local alias."""
-
-_OPERATOR_LOCAL_FEW_SHOT_POOL_PATH = OPERATOR_LOCAL_FEW_SHOT_POOL_PATH
-"""Operator-local SoT path. Module-local alias for monkey-patch."""
 
 
 @dataclass(frozen=True)
@@ -70,28 +56,33 @@ class FewShotExemplar:
     source: str = ""
 
 
-def _load_few_shot_pool_override() -> list[FewShotExemplar] | None:
+def _load_few_shot_pool_override(
+    *,
+    sources: PolicySourcePaths | None = None,
+) -> list[FewShotExemplar] | None:
     """Return the active exemplar list (rank-by fitness_delta desc), or
     ``None`` if no SoT applies."""
-    selection = resolve_sot(
-        env_var=_FEW_SHOT_POOL_OVERRIDE_ENV,
-        operator_local=_OPERATOR_LOCAL_FEW_SHOT_POOL_PATH,
-        in_repo=_FEW_SHOT_POOL_SOT_PATH,
-    )
+    if sources is None:
+        return None
+    selection = select_policy_source(sources)
     if selection is None:
         return None
     if selection.strict:
-        return _strict_load(selection.path)
+        return _strict_load_pool(selection.path, override_env=sources.override_env)
     return _graceful_load(selection.path)
 
 
-def _strict_load(path: Path) -> list[FewShotExemplar]:
+def _strict_load_pool(
+    path: Path,
+    *,
+    override_env: str,
+) -> list[FewShotExemplar]:
     if not path.is_file():
-        raise RuntimeError(f"{_FEW_SHOT_POOL_OVERRIDE_ENV}={path} file not found")
+        raise RuntimeError(f"{override_env}={path} file not found")
     try:
         raw = path.read_text(encoding="utf-8")
     except OSError as exc:
-        raise RuntimeError(f"{_FEW_SHOT_POOL_OVERRIDE_ENV}={path} load failed: {exc}") from exc
+        raise RuntimeError(f"{override_env}={path} load failed: {exc}") from exc
     return _parse_jsonl(raw, path, strict=True)
 
 
@@ -189,7 +180,7 @@ def append_exemplar(
     assistant_msg: str,
     fitness_delta: float = 0.0,
     source: str = "",
-    pool_path: Path | None = None,
+    pool_path: Path,
     max_size: int = MAX_EXEMPLAR_POOL_SIZE,
 ) -> bool:
     """Append a ``(user, assistant)`` pair to the few-shot pool. Idempotent.
@@ -204,10 +195,8 @@ def append_exemplar(
         assistant_msg: The verbatim assistant response.
         fitness_delta: Promote-vs-baseline fitness delta (or any ranking
             signal). ``apply_few_shot_pool`` sorts by this desc.
-        source: Provenance tag (``"autoresearch_audit_promote"`` /
-            ``"petri_per_turn"`` / ``"live_session"``).
-        pool_path: Optional override of the SoT path
-            (:data:`AUTORESEARCH_FEW_SHOT_POOL_PATH`). Tests pass ``tmp_path``.
+        source: Opaque provenance tag supplied by the product writer.
+        pool_path: SoT path supplied by product composition.
         max_size: Cap; older entries (top of file) are evicted FIFO when
             the new pool would exceed this.
 
@@ -216,7 +205,7 @@ def append_exemplar(
         ``False`` if (a) the signature already exists (idempotent no-op),
         or (b) the read / write failed silently (logged at WARNING).
     """
-    target = pool_path or _FEW_SHOT_POOL_SOT_PATH
+    target = pool_path
     new_sig = _exemplar_signature(user_msg, assistant_msg)
     existing_lines: list[str] = []
     if target.is_file():
