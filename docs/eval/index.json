@@ -10,7 +10,7 @@
     "trajectory": "core/observability/schemas/trajectory.schema.json",
     "trajectory_release": "core/observability/schemas/trajectory-release.schema.json"
   },
-  "document_count": 15,
+  "document_count": 16,
   "documents": [
     {
       "id": "agent-world-comparison",
@@ -92,7 +92,7 @@
       "authority": "routing",
       "path": "docs/eval/README.md",
       "summary": "Machine and human entrypoint for GEODE evaluation contracts, benchmark ledgers, evidence, and publication.",
-      "sha256": "38dbcd3f9fe47ecb7aa8f06bd0106401148903f39fa404c645947bd4ad5c5368",
+      "sha256": "b743e9d9612e2eb96764e2b46afe099c5bbbbfe90ca711a9a57295b7e492b911",
       "triggers": [
         "artifact",
         "benchmark",
@@ -108,7 +108,7 @@
         "docs/eval/schemas/attempt.schema.json",
         "docs/eval/schemas/run-spec.schema.json"
       ],
-      "latest_valid_release": "https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/17133f0c8e893b6d765fcef69712ba0867bd573a/trajectories/mcpmark-gate0b-gpt54-high-mcpmark-gate0b-tool-cap-gpt54-high-20260813t142345z-bcf57b5eee65-20260813T173103Z-bf8ad9ea9717"
+      "latest_valid_release": "https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/1160fecfe4447f0a3f4cf30a414f29c61776d012/trajectories/mcpmark-gate0c-gpt54-high-mcpmark-gate0c-filesystem30-gpt54-high-20260813t190922z-geode-20260813T230525Z-9d6773caad04"
     },
     {
       "id": "external-artifact-repository",
@@ -221,6 +221,32 @@
       ]
     },
     {
+      "id": "mcpmark-gate0c-filesystem30-gpt54-high-20260814",
+      "family": "mcpmark",
+      "title": "GPT-5.4 MCPMark Gate 0C — corrective FS30 paired diagnostic",
+      "kind": "ledger",
+      "status": "historical",
+      "authority": "paired-runtime-diagnostic",
+      "path": "docs/eval/2026-08-14-mcpmark-gate0c-filesystem30-gpt54-high.md",
+      "summary": "Prospective common-deadline k=1 comparison of GEODE and Codex on 30 MCPMark filesystem/standard tasks with GPT-5.4/high; GEODE passed 23/30 versus Codex 21/30, a diagnostic-only +2/30 = +6.67 percentage-point delta.",
+      "sha256": "856fbab0af3c73a12fd1dece1b4151f25bed0ff1ffc2a0c069ba7d65c7bf5c57",
+      "triggers": [
+        "GEODE Codex comparison",
+        "GPT-5.4 benchmark",
+        "MCPMark Gate 0C",
+        "common action deadline",
+        "paired runtime diagnostic"
+      ],
+      "contracts": [
+        "core/observability/schemas/trajectory-release.schema.json",
+        "core/observability/schemas/trajectory.schema.json",
+        "docs/eval/schemas/analysis.schema.json",
+        "docs/eval/schemas/attempt.schema.json",
+        "docs/eval/schemas/run-spec.schema.json"
+      ],
+      "latest_valid_release": "https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/1160fecfe4447f0a3f4cf30a414f29c61776d012/trajectories/mcpmark-gate0c-gpt54-high-mcpmark-gate0c-filesystem30-gpt54-high-20260813t190922z-geode-20260813T230525Z-9d6773caad04"
+    },
+    {
       "id": "mcpmark-geode-codex-gpt54-filesystem-standard-20260813",
       "family": "mcpmark",
       "title": "GPT-5.4 GEODE × Codex MCPMark filesystem/standard corrected observation",
@@ -277,7 +303,7 @@
       "authority": "execution-status",
       "path": "docs/eval/2026-08-13-sequential-agent-benchmark-plan.md",
       "summary": "Sequential execution SOT for the corrective MCPMark pair, tau2 base domains, MCPMark Verified, and Terminal-Bench 2.1.",
-      "sha256": "23dd3dcba3ae07406d94c252735b70fb9b151a644652e84c8236d8b225e01e7f",
+      "sha256": "b33254b56d0e12cecfa51c18f57f136193541483cd502199d6eeb8d3b3c8b44b",
       "triggers": [
         "MCPMark Verified",
         "MCPMark corrective pair",

@@ -345,6 +345,51 @@ const mcpmarkGate0BToolCapGpt54: BenchmarkMeasurement = {
   ],
 };
 
+const mcpmarkGate0CFilesystem30Gpt54: BenchmarkMeasurement = {
+  id: "mcpmark-gate0c-filesystem30-20260814-gpt54-high",
+  group: "mcpmark",
+  title: "filesystem/standard Gate 0C common-deadline diagnostic",
+  measuredAt: "2026-08-14 KST",
+  suite: "filesystem/standard 30-task paired k=1",
+  status: "complete",
+  model: "gpt-5.4",
+  provider: "openai / codex-cli",
+  source: "subscription",
+  effort: "high",
+  route: "GEODE AgenticLoop and isolated Codex CLI paired by task",
+  harness:
+    "eval-sys/mcpmark@cd45b7f, GEODE@f4b37604, Codex CLI 0.145.0@dad1db87",
+  artifact:
+    "geode-eval-artifacts@1160fecfe4447f0a3f4cf30a414f29c61776d012/mcpmark/results-paired/mcpmark-gate0c-filesystem30-gpt54-high-20260813t190922z",
+  scoreLabel: "Diagnostic-only verifier pass rate",
+  scoreValue:
+    "GEODE 76.7% (23 / 30) · Codex 70.0% (21 / 30) · Δ +6.67 pp",
+  secondary: [
+    "Paired outcomes: 17 both-pass / 3 both-fail / 6 GEODE-only / 4 Codex-only",
+    "Exact token coverage: GEODE 29 / 30 attempts; Codex 30 / 30",
+    "All-arm action wall: GEODE 8,463.252s vs Codex 5,484.322s; runner envelopes 8,536.382s vs 5,548.725s",
+    "Native execution-log calls/errors: GEODE 644 / 51 vs Codex 678 / 17",
+    "Normalized trajectory attempts: GEODE 645 including one recovery projection vs Codex 678",
+    "Read/repeated-read references: GEODE 798 / 81 vs Codex 838 / 213",
+    "One GEODE score-bearing deadline expiration; its token usage is null and its scope-incomplete trajectory is withheld",
+  ],
+  command: `# Requires the pinned MCPMark checkout and verifier patch, frozen run spec,
+# isolated runtime home, and working GPT-5.4 subscription authentication.
+.venv/bin/python -m plugins.benchmark_harness.run_mcpmark_pair \
+  --profile filesystem30-geode-codex \
+  --run-spec <frozen-run-spec.json> \
+  --mcpmark-root artifacts/eval/harnesses/mcpmark \
+  --output-dir <fresh-output-dir> \
+  --python .venv/bin/python`,
+  notes: [
+    "The prospective -10 percentage-point threshold was supported, but promotion_authority remains none.",
+    "This is one direct paired repetition, not k=3 stability, a full MCPMark Verified headline, or an API-key leaderboard claim.",
+    "The common action deadline excludes fixture setup and the post-action verifier; runtime scaffolds and tool-result policies remain different.",
+    "Token totals have unmatched coverage and do not support a billing or token-efficiency claim.",
+    "Fifty-nine scope-complete trajectories are admitted; the one GEODE timeout trajectory remains withheld.",
+  ],
+};
+
 const mcpmarkFilesystemEasyParallel: BenchmarkMeasurement = {
   id: "mcpmark-filesystem-easy-parallel-20260703-gpt55-xhigh",
   group: "mcpmark",
@@ -1418,6 +1463,7 @@ export const BENCHMARK_GROUPS: BenchmarkGroup[] = [
     ],
     measurements: [
       mcpmarkVerifiedAvailable,
+      mcpmarkGate0CFilesystem30Gpt54,
       mcpmarkGate0BToolCapGpt54,
       mcpmarkFilesystemStandardGpt54Paired,
       mcpmarkFilesystemEasyGpt54TokenEfficiency,
