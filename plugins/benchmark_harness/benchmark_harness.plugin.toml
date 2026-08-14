@@ -39,11 +39,11 @@ optional_env = [
 
 [benchmark_harness.harness.tau2-bench]
 repo = "https://github.com/sierra-research/tau2-bench.git"
-commit = "1901a301961cbbe3fd11f3e84a2a376530c759e3"
+commit = "79975ac5741e23fbb1d2ac44262d62398a6d87bd"
 local_dir = "tau2-bench"
 python = "python3.12"
-install = ["uv sync"]
-healthcheck = ["uv run tau2 check-data"]
+install = ["uv sync --frozen"]
+healthcheck = ["LITELLM_LOCAL_MODEL_COST_MAP=true .venv/bin/tau2 check-data"]
 public_adapter = "plugins.benchmark_harness.tau2_geode_agent"
 required_env = []
 optional_env = ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "ZHIPUAI_API_KEY"]
