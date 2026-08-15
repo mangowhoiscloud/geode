@@ -108,7 +108,8 @@ class SlackPoller(BasePoller):
         event = payload.get("event")
         if not isinstance(event, dict):
             return
-        if event.get("type") not in {"message", "app_mention"}:
+        event_type = event.get("type")
+        if event_type not in {"message", "app_mention"}:
             return
 
         channel_id = str(event.get("channel", ""))
@@ -118,16 +119,26 @@ class SlackPoller(BasePoller):
         self._evict_stale_dedup()
         timestamp = str(event.get("ts") or event.get("event_ts") or "")
         event_id = str(payload.get("event_id", ""))
-        if event.get("type") == "app_mention":
-            # The event type itself is authoritative mention evidence. Keep
-            # routing correct even when the optional auth.test bot-ID lookup
-            # failed during bootstrap; ChannelManager strips this marker
-            # before sending content to the model.
-            event = {**event, "text": f"@geode {event.get('text', '')}"}
+        mention_user_id = ""
+        if event_type == "app_mention":
+            mention_user_id = next(
+                (
+                    str(auth.get("user_id", ""))
+                    for auth in payload.get("authorizations") or []
+                    if isinstance(auth, dict) and auth.get("user_id")
+                ),
+                "",
+            )
         # Slack may deliver one mention as both ``message`` and
         # ``app_mention`` with different event IDs but the same message ts.
         dedup_key = f"{channel_id}:{timestamp}" if timestamp else event_id
-        await self._process_message(channel_id, event, dedup_key=dedup_key)
+        await self._process_message(
+            channel_id,
+            event,
+            dedup_key=dedup_key,
+            mention_override=event_type == "app_mention",
+            mention_user_id=mention_user_id,
+        )
 
     def _is_bound_channel(self, channel_id: str) -> bool:
         return any(binding["channel_id"] == channel_id for binding in self._get_channel_bindings())
@@ -209,6 +220,8 @@ class SlackPoller(BasePoller):
         message: dict[str, Any],
         *,
         dedup_key: str,
+        mention_override: bool = False,
+        mention_user_id: str = "",
     ) -> bool:
         """Route one Slack message. ``False`` asks polling to retry it later."""
         timestamp = str(message.get("ts") or message.get("event_ts") or "")
@@ -225,6 +238,12 @@ class SlackPoller(BasePoller):
         content = str(message.get("text", "")).strip()
         if not content:
             return True
+        if mention_override and mention_user_id:
+            # Socket Mode's authorization identity is authoritative when
+            # auth.test could not resolve our bot ID. Other mentions survive.
+            content = content.replace(f"<@{mention_user_id}>", "", 1).strip()
+        # Without an authorization identity, route by the authoritative event
+        # type but retain every mention; guessing could remove another user.
 
         try:
             parsed_timestamp = float(timestamp)
@@ -246,7 +265,7 @@ class SlackPoller(BasePoller):
             timestamp=parsed_timestamp,
             thread_id=thread_id,
         )
-        is_mention = self._manager._is_mentioned(inbound)
+        is_mention = mention_override or self._manager._is_mentioned(inbound)
         is_thread_reply = bool(raw_thread_id and raw_thread_id != timestamp)
         engaged = is_thread_reply and self._is_engaged_thread(channel_id, thread_id)
         if engaged and self._manager.session_is_terminal(inbound):
@@ -287,7 +306,7 @@ class SlackPoller(BasePoller):
         try:
             response = await self._manager.aroute_message(
                 inbound,
-                mention_override=is_thread_continuation,
+                mention_override=mention_override or is_thread_continuation,
             )
             log.info("Processor returned: %s", (response or "")[:80])
             if is_addressed:

@@ -84,6 +84,24 @@ def _gateway_checkpoint_is_resumable(state: Any) -> bool:
     return str(getattr(state, "status", "")) in {"active", "paused"}
 
 
+def _gateway_session_overrides(
+    metadata: dict[str, Any], default_time_budget: float, origin: Any | None = None
+) -> dict[str, Any]:
+    """Translate a binding policy, never widening a resumed ask's origin."""
+    allowed = set(metadata["allowed_tools"]) if metadata.get("allowed_tools") is not None else None
+    origin_allowed = getattr(origin, "allowed_tools", None)
+    if origin_allowed is not None:
+        allowed = set(origin_allowed) if allowed is None else allowed & set(origin_allowed)
+    time_budget = float(metadata.get("time_budget_s", default_time_budget))
+    origin_budget = getattr(origin, "time_budget_s", None)
+    if origin_budget is not None:
+        time_budget = min(time_budget, float(origin_budget))
+    return {
+        "time_budget_override": time_budget,
+        "allowed_tool_names": allowed,
+    }
+
+
 def _gateway_resume_messages(
     stored_session: dict[str, Any] | None,
     checkpoint_state: Any,
@@ -264,7 +282,9 @@ def serve(  # noqa: PLR0915
     _serve_session_lane = _gw_services.lane_queue.session_lane
     _serve_global_lane = _gw_services.lane_queue.get_lane("global")
 
-    async def _arun_ask_continuation(state: Any, answer: str) -> str:
+    async def _arun_ask_continuation(
+        state: Any, answer: str, origin: Any, metadata: dict[str, Any]
+    ) -> str:
         """Resume a checkpointed session with the operator's ask answer."""
         _ask_ctx = ConversationContext(max_turns=_gw_max_turns)
         _ask_ctx.messages = list(state.messages)
@@ -272,7 +292,7 @@ def serve(  # noqa: PLR0915
             SessionMode.DAEMON,
             conversation=_ask_ctx,
             system_suffix=_GATEWAY_SUFFIX,
-            time_budget_override=_gw_time_budget,
+            **_gateway_session_overrides(metadata, _gw_time_budget, origin),
             propagate_context=True,
         )
         # Checkpoint continuity — the single shared resume surgery (same
@@ -291,6 +311,12 @@ def serve(  # noqa: PLR0915
                     _res.text,
                     session_id=state.session_id,
                     source=f"ask-continuation:{state.session_id}",
+                    allowed_tools=(
+                        sorted(_ask_loop._allowed_tool_names)
+                        if _ask_loop._allowed_tool_names is not None
+                        else None
+                    ),
+                    time_budget_s=_ask_loop._time_budget_s,
                 )
                 await _ask_loop.amark_session_paused()
             else:
@@ -316,7 +342,9 @@ def serve(  # noqa: PLR0915
         _ask_response = await ahandle_ask_reply(
             content,
             answered_by=(f"{metadata.get('channel', '')}:{metadata.get('sender_id', '')}"),
-            run_continuation=_arun_ask_continuation,
+            run_continuation=lambda state, answer, origin: _arun_ask_continuation(
+                state, answer, origin, metadata
+            ),
         )
         if _ask_response is not None:
             return _ask_response
@@ -343,7 +371,7 @@ def serve(  # noqa: PLR0915
             SessionMode.DAEMON,
             conversation=ctx,
             system_suffix=_GATEWAY_SUFFIX,
-            time_budget_override=_gw_time_budget,
+            **_gateway_session_overrides(metadata, _gw_time_budget),
             propagate_context=True,
             session_id=_gw_session_id,
         )

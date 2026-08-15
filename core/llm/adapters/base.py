@@ -166,6 +166,10 @@ class AdapterCallRequest:
     stop_sequences: tuple[str, ...] = ()
     metadata: dict[str, Any] = field(default_factory=dict)
     provider_options: dict[str, Any] = field(default_factory=dict)
+    # ``None`` preserves the provider's configured hosted-tool surface. An
+    # explicit set constrains both registry tools (filtered by AgenticLoop)
+    # and tools injected later by provider adapters.
+    allowed_tool_names: frozenset[str] | None = None
     # PR-V (2026-05-24, spec doc §3 — paperclip `--resume <sessionId>`
     # parity). When non-empty the adapter passes ``--resume <session_id>``
     # to claude-cli so the backend reuses the cached system prompt +

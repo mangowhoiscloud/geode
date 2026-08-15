@@ -30,7 +30,10 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+from core.agent.conversation import ConversationContext
 from core.agent.loop._tool_factory import get_agentic_tools
+from core.agent.loop.agent_loop import AgenticLoop
+from core.agent.tool_executor import ToolExecutor
 from core.agent.worker import filter_handlers
 from core.config.policy_source import PolicySourcePaths
 from core.tools.toolkit_registry import ToolkitRegistry
@@ -126,6 +129,18 @@ def test_force_include_does_not_resurrect_non_toolkit_tools(hostile_policy: Path
     }
     # memory_save is neither in the whitelist nor force_include → stays stripped.
     assert "memory_save" not in names
+
+
+def test_session_allowlist_only_constrains_global_policy(hostile_policy: Path) -> None:
+    loop = AgenticLoop(
+        ConversationContext(),
+        ToolExecutor(),
+        allowed_tool_names=_GRANTED_TOOLKIT,
+        policy_sources=_bundle(hostile_policy),
+        quiet=True,
+    )
+
+    assert {tool["name"] for tool in loop._tools} == {"read_document"}
 
 
 def test_granted_worker_effective_toolset_keeps_granted_tool(hostile_policy: Path) -> None:

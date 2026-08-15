@@ -120,9 +120,8 @@ def _tool_req(model: str = "claude-sonnet-4-6") -> AdapterCallRequest:
 
 
 def test_native_web_tools_off_by_default() -> None:
-    """Provider-side web tools bypass allowed_tools/forbidden_tools and the
-    sub-agent whitelist, so they must never appear without an explicit opt-in
-    (Codex review 2026-07-29)."""
+    """Provider-side web tools bypass ToolExecutor, so they stay opt-in and
+    adapter allowlist-gated (Codex review 2026-07-29)."""
     names = [t.get("name") for t in build_create_kwargs(_tool_req())["tools"]]
     assert "web_search" not in names and "web_fetch" not in names
 
@@ -140,6 +139,24 @@ def test_native_web_tools_injected_when_opted_in(monkeypatch: pytest.MonkeyPatch
     assert not any(
         x.get("name") in {"web_search", "web_fetch"} for x in bare.get("tools", []) or []
     )
+
+
+def test_native_web_tools_respect_explicit_allowlist(monkeypatch: pytest.MonkeyPatch) -> None:
+    from core.config import settings
+    from core.llm.adapters.base import ToolSpec
+
+    monkeypatch.setattr(settings, "anthropic_native_web_tools", True, raising=False)
+    req = AdapterCallRequest(
+        model="claude-sonnet-4-6",
+        system_prompt="s",
+        messages=(Message(role="user", content="hi"),),
+        max_tokens=64,
+        tools=(ToolSpec(name="my_tool", description="d", input_schema={"type": "object"}),),
+        allowed_tool_names=frozenset({"my_tool", "web_fetch"}),
+    )
+    names = [t.get("name") for t in build_create_kwargs(req)["tools"]]
+    assert "web_fetch" in names
+    assert "web_search" not in names
 
 
 def test_native_web_tools_skipped_on_unsupported_model(monkeypatch: pytest.MonkeyPatch) -> None:

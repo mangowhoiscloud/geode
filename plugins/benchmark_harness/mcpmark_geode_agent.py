@@ -371,6 +371,7 @@ def _build_loop(
         time_budget_s=float(timeout),
         tool_registry=registry,
         allowed_tool_names=set(handlers),
+        force_include_allowed_tools=True,
         system_prompt_override=(
             "Agent: GEODE running inside MCPMark. Complete the benchmark task "
             "using only the provided MCP tools. Do not invent tool results. "

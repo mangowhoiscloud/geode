@@ -691,7 +691,9 @@ def openai_computer_tool_param() -> dict[str, Any]:
     return {"type": "computer"}
 
 
-def _maybe_inject_openai_computer_use(kwargs: dict[str, Any], *, model: str, backend: str) -> None:
+def _maybe_inject_openai_computer_use(
+    kwargs: dict[str, Any], *, req: AdapterCallRequest, backend: str
+) -> None:
     """Inject the OpenAI GA computer-use tool on the LIVE Responses path.
 
     Mirrors ``_anthropic_common._maybe_inject_computer_use`` (Phase A) for the
@@ -723,14 +725,16 @@ def _maybe_inject_openai_computer_use(kwargs: dict[str, Any], *, model: str, bac
     """
     from core.llm.providers.anthropic import is_computer_use_enabled
 
-    if not is_computer_use_enabled():
+    if not is_computer_use_enabled() or (
+        req.allowed_tool_names is not None and "computer" not in req.allowed_tool_names
+    ):
         return
     if backend == "codex":
         # ChatGPT-subscription Codex backend proven-rejects {type:"computer"}
         # with 400 ``Unsupported tool type: computer`` (2026-06-17 live E2E).
         # ctx7 GA docs are Platform-only. Never inject on this backend.
         return
-    base = re.sub(r"-\d{8}$", "", model)  # strip a dated id suffix, if any
+    base = re.sub(r"-\d{8}$", "", req.model)  # strip a dated id suffix, if any
     if base not in _OPENAI_COMPUTER_USE_GA_MODELS:
         # Non-GA OpenAI model — the GA ``{type: "computer"}`` tool would be
         # rejected, and the preview shape is out of scope. Never inject.
@@ -1586,7 +1590,7 @@ def build_responses_kwargs(
     # ``{type: "computer"}`` tool reaches the model even when ``req.tools`` is
     # empty (it creates the list). Gated on the opt-in + a GA-capable model +
     # the platform backend (the codex subscription backend proven-rejects it).
-    _maybe_inject_openai_computer_use(kwargs, model=req.model, backend=backend)
+    _maybe_inject_openai_computer_use(kwargs, req=req, backend=backend)
     if spec.reasoning_effort_values is not None:
         # Reasoning-model branch — encrypted reasoning passthrough +
         # reasoning effort. Temperature is dropped per spec.

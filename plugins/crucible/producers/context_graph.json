@@ -26,7 +26,7 @@
         "benchmark",
         "tool-projection"
       ],
-      "contentSha256": "3393de0c6ca8242f22596edccc58d641e2dc0965960c84273496130f00dc26a7"
+      "contentSha256": "ef89c44fc0bcd7a449f3d0d7e1feb6ba8ca5043887cf341386d11c133e053d11"
     },
     {
       "id": "file:plugins/benchmark_harness/tau2_lane1a_preflight.py",
@@ -97,7 +97,7 @@
         "runtime",
         "while-tool-use"
       ],
-      "contentSha256": "2d683c4ab6533b7ce33901fb523404158f3498b8e1137a70e5d9db85ddb7cce8"
+      "contentSha256": "b06ba06ad3a0aaa1a557b0ede3a556c5fdffacd8980b10f7340a7e2734a8229e"
     },
     {
       "id": "file:core/agent/loop/_goal.py",

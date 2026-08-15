@@ -200,6 +200,7 @@ def _build_loop(
         time_budget_s=time_budget_s,
         tool_registry=tool_registry,
         allowed_tool_names=allowed_tool_names,
+        force_include_allowed_tools=True,
         system_prompt_override=system_prompt,
         quiet=True,
         enable_goal_decomposition=False,

@@ -30,6 +30,7 @@ def test_build_request_translates_user_message() -> None:
         temperature=0.0,
         thinking_budget=0,
         effort="medium",
+        allowed_tool_names=frozenset({"search"}),
     )
     assert req.model == "claude-haiku-4-5"
     assert req.system_prompt == "Mode: helpful assistance."
@@ -37,6 +38,7 @@ def test_build_request_translates_user_message() -> None:
     assert req.messages[0].role == "user"
     assert req.messages[0].content == "hi"
     assert req.tool_choice == "auto"
+    assert req.allowed_tool_names == frozenset({"search"})
 
 
 def test_build_request_carries_tool_use_id_for_tool_messages() -> None:

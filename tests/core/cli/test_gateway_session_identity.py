@@ -20,6 +20,7 @@ from core.cli.typer_serve import (
     _gateway_resume_messages,
     _gateway_session_can_resume,
     _gateway_session_is_terminal,
+    _gateway_session_overrides,
     _restore_gateway_loop,
 )
 
@@ -60,6 +61,21 @@ def test_only_active_or_paused_gateway_checkpoint_is_resumable():
     assert _gateway_checkpoint_is_resumable(SimpleNamespace(status="paused"))
     assert not _gateway_checkpoint_is_resumable(SimpleNamespace(status="completed"))
     assert not _gateway_checkpoint_is_resumable(SimpleNamespace(status="error"))
+
+
+def test_ask_resume_policy_can_only_narrow_origin() -> None:
+    origin = SimpleNamespace(allowed_tools=["read_file", "memory_search"], time_budget_s=30.0)
+
+    overrides = _gateway_session_overrides(
+        {"allowed_tools": ("read_file", "write_file"), "time_budget_s": 90.0},
+        120.0,
+        origin,
+    )
+
+    assert overrides == {
+        "allowed_tool_names": {"read_file"},
+        "time_budget_override": 30.0,
+    }
 
 
 def test_gateway_history_prefers_resumable_checkpoint_over_stale_l2():

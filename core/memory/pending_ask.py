@@ -87,6 +87,8 @@ class PendingAsk:
     answered_by: str = ""
     notified_channel: str = ""
     notified_recipient: str = ""
+    allowed_tools: list[str] | None = None
+    time_budget_s: float | None = None
 
     def is_stale(self, *, now: float | None = None) -> bool:
         """True when the pending TTL has elapsed."""
@@ -127,7 +129,15 @@ class PendingAskStore:
             finally:
                 fcntl.flock(lock_file, fcntl.LOCK_UN)
 
-    def create(self, question: str, *, session_id: str, source: str) -> PendingAsk:
+    def create(
+        self,
+        question: str,
+        *,
+        session_id: str,
+        source: str,
+        allowed_tools: list[str] | None = None,
+        time_budget_s: float | None = None,
+    ) -> PendingAsk:
         """Persist a new pending ask (8-hex id, collision-checked)."""
         self._dir.mkdir(parents=True, exist_ok=True)
         self.purge_stale()
@@ -140,6 +150,8 @@ class PendingAskStore:
             question=question,
             session_id=session_id,
             source=source,
+            allowed_tools=allowed_tools,
+            time_budget_s=time_budget_s,
         )
         atomic_write_json(self._path(ask_id), ask.to_dict(), indent=2)
         return ask
@@ -280,6 +292,8 @@ async def apublish_clarification_ask(
     *,
     session_id: str,
     source: str,
+    allowed_tools: list[str] | None = None,
+    time_budget_s: float | None = None,
     store: PendingAskStore | None = None,
 ) -> PendingAsk | None:
     """Persist a pending ask and best-effort notify the operator.
@@ -290,7 +304,13 @@ async def apublish_clarification_ask(
     """
     try:
         store = store or PendingAskStore()
-        ask = store.create(question, session_id=session_id, source=source)
+        ask = store.create(
+            question,
+            session_id=session_id,
+            source=source,
+            allowed_tools=allowed_tools,
+            time_budget_s=time_budget_s,
+        )
     except Exception:
         log.warning("Pending-ask persistence failed (source=%s)", source, exc_info=True)
         return None
@@ -337,7 +357,7 @@ async def ahandle_ask_reply(
     content: str,
     *,
     answered_by: str,
-    run_continuation: Callable[[SessionState, str], Awaitable[str]],
+    run_continuation: Callable[[SessionState, str, PendingAsk], Awaitable[str]],
     store: PendingAskStore | None = None,
     checkpoint: SessionCheckpoint | None = None,
 ) -> str | None:
@@ -385,7 +405,7 @@ async def ahandle_ask_reply(
             f"({resolved.session_id}) is gone — no continuation was run."
         )
     try:
-        text = await run_continuation(state, answer)
+        text = await run_continuation(state, answer, resolved)
     except Exception as exc:
         log.warning("Ask %s continuation failed", resolved.ask_id, exc_info=True)
         return f"Answer recorded for ask {resolved.ask_id}, but the continuation failed: {exc}"

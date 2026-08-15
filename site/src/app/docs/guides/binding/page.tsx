@@ -8,8 +8,8 @@ export default function Page() {
       slug="guides/binding"
       title="Configure a binding"
       titleKo="바인딩 설정"
-      summary="Route a messaging channel to a session lane with its own model and policy."
-      summaryKo="메신저 채널을 자체 모델과 정책을 가진 세션 레인으로 라우팅하는 방법입니다."
+      summary="Route a messaging channel to a session lane with enforced execution policy."
+      summaryKo="메신저 채널을 실행 정책이 강제되는 세션 레인으로 라우팅하는 방법입니다."
     >
       <Bi
         ko={
@@ -51,6 +51,9 @@ time_budget_s = 90`}</pre>
               <code>allowed_tools</code>는 그 채널에서 허용할 도구를 제한하며(빈
               리스트는 전체 허용),{" "}
               <code>time_budget_s</code>는 메시지당 wall-clock 예산을 지정합니다.
+              <code>auto_respond=false</code>는 처리를 계속하고 세션은 저장하되
+              채널로 최종 텍스트를 보내지 않습니다. 헤드리스 denylist는 바인딩
+              allowlist보다 항상 우선합니다.
               규칙에 없으면 gateway 레벨 기본값으로 떨어집니다. 이 필드들은{" "}
               <code>ChannelBinding</code>(
               <code>core/messaging/models.py</code>)의 dataclass
@@ -66,8 +69,13 @@ time_budget_s = 90`}</pre>
               메시지는 같은 키로 묶여 컨텍스트가 격리됩니다. 실행은 SessionLane →
               gateway Lane → global Lane 순서로 레인 큐를 거치므로, 같은 세션의
               메시지는 직렬화되고 동시성은 워크로드별 상한으로 제어됩니다.{" "}
-              <code>allowed_tools</code>가 설정돼 있으면 그 힌트가 콘텐츠 앞에
-              붙어 AgenticLoop로 전달됩니다.
+              <code>allowed_tools</code>는 사용자 콘텐츠에 문자열로 삽입되지
+              않습니다. 구조화된 메타데이터로 세션 조립에 전달되어
+              AgenticLoop의 모델 가시 도구와 ToolExecutor의 실제 실행을 함께
+              제한합니다. provider adapter가 뒤늦게 추가하는 hosted tool도 같은
+              allowlist를 확인하므로 Anthropic, OpenAI, GLM 경로가 같은 계약을
+              따릅니다. 중단된 ask를 다른 binding에서 재개하면 두 allowlist의
+              교집합과 더 짧은 시간 예산만 사용합니다.
             </p>
 
             <h2>3. 리로드합니다</h2>
@@ -101,6 +109,7 @@ for b in m.list_bindings():
             <p>
               로드된 바인딩 수와 각 규칙의 <code>channel</code> /{" "}
               <code>channel_id</code> / <code>auto_respond</code> /{" "}
+              <code>allowed_tools</code> /{" "}
               <code>time_budget_s</code>가 출력되면 라우팅이 그 채널을 인식할 수
               있습니다. 실제 메시지 라우팅과 poller 운영은 serve gateway 페이지를
               참고하세요.
@@ -152,7 +161,10 @@ time_budget_s = 90`}</pre>
               <code>allowed_tools</code> restricts which tools are permitted in that
               channel (an empty list means all tools), and{" "}
               <code>time_budget_s</code> sets the per-message wall-clock budget,
-              falling back to the gateway-level default when omitted. These fields
+              falling back to the gateway-level default when omitted. Setting{" "}
+              <code>auto_respond=false</code> still processes and persists the turn but
+              suppresses the final outbound channel message. The headless denylist
+              always outranks the binding allowlist. These fields
               map one-to-one to the dataclass fields on{" "}
               <code>ChannelBinding</code> in{" "}
               <code>core/messaging/models.py</code>.
@@ -168,8 +180,13 @@ time_budget_s = 90`}</pre>
               context stays isolated. Execution passes through the lane queue in the
               order SessionLane to gateway Lane to global Lane, so messages in the
               same session serialize while concurrency is bounded per workload. When{" "}
-              <code>allowed_tools</code> is set, that hint is prepended to the
-              content before it reaches the AgenticLoop.
+              <code>allowed_tools</code> is not injected into user content. It travels as
+              structured session metadata and constrains both the AgenticLoop&apos;s
+              model-visible tools and ToolExecutor&apos;s actual execution. Provider-hosted
+              tools injected later also consult the same allowlist, so Anthropic,
+              OpenAI, and GLM routes share one contract. When an interrupted ask is
+              resumed from another binding, it uses only the allowlist intersection
+              and the shorter time budget.
             </p>
 
             <h2>3. Reload</h2>
@@ -200,6 +217,7 @@ for b in m.list_bindings():
             <p>
               When the loaded count and each rule&apos;s <code>channel</code> /{" "}
               <code>channel_id</code> / <code>auto_respond</code> /{" "}
+              <code>allowed_tools</code> /{" "}
               <code>time_budget_s</code> print, routing can recognize that channel.
               For live message routing and poller operations, see the serve gateway
               page.
