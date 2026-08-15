@@ -92,6 +92,11 @@ functional change.
 
 ### Fixed
 
+- **Slack Socket Mode reconnects and replay dedup are now bounded.** Scheduled
+  connection refreshes still reconnect immediately, while abnormal disconnect
+  reasons use exponential backoff. Unacknowledgeable Events API envelopes are
+  rejected, and a size-bounded one-hour dedup window covers delayed Slack
+  replays beyond five minutes.
 - **MCPMark Filesystem-30 now binds score and semantic fixture state.** The
   paired runner records its signed GEODE-minus-Codex verifier delta in the
   native result, rejects fixture drift in file mtimes, modes, or empty

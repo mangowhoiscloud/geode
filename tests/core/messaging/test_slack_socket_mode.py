@@ -121,7 +121,7 @@ def test_events_api_frame_is_admitted_then_acked() -> None:
 
     async def scenario() -> None:
         queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=1)
-        reconnect = await SlackSocketModeClient._handle_frame(
+        disconnect_reason, healthy = await SlackSocketModeClient._handle_frame(
             socket,
             json.dumps(
                 {
@@ -132,7 +132,8 @@ def test_events_api_frame_is_admitted_then_acked() -> None:
             ),
             queue,
         )
-        assert reconnect is False
+        assert disconnect_reason is None
+        assert healthy is True
         assert socket.sent == ['{"envelope_id":"env-1"}']
         assert queue.get_nowait() == {"event": {"type": "app_mention"}}
 
@@ -146,7 +147,7 @@ def test_full_admission_queue_leaves_envelope_unacked() -> None:
     async def scenario() -> None:
         queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=1)
         queue.put_nowait({"event": {"type": "app_mention"}})
-        reconnect = await SlackSocketModeClient._handle_frame(
+        disconnect_reason, healthy = await SlackSocketModeClient._handle_frame(
             socket,
             json.dumps(
                 {
@@ -157,7 +158,8 @@ def test_full_admission_queue_leaves_envelope_unacked() -> None:
             ),
             queue,
         )
-        assert reconnect is False
+        assert disconnect_reason is None
+        assert healthy is True
         assert socket.sent == []
         assert queue.qsize() == 1
 
@@ -169,12 +171,13 @@ def test_unsupported_envelope_is_acknowledged_without_dispatch() -> None:
 
     async def scenario() -> None:
         queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=1)
-        reconnect = await SlackSocketModeClient._handle_frame(
+        disconnect_reason, healthy = await SlackSocketModeClient._handle_frame(
             socket,
             '{"type":"slash_commands","envelope_id":"env-2","payload":{}}',
             queue,
         )
-        assert reconnect is False
+        assert disconnect_reason is None
+        assert healthy is True
         assert queue.empty()
 
     asyncio.run(scenario())
@@ -184,7 +187,7 @@ def test_unsupported_envelope_is_acknowledged_without_dispatch() -> None:
 def test_disconnect_requests_fresh_connection() -> None:
     socket = _FakeSocket()
 
-    async def scenario() -> bool:
+    async def scenario() -> tuple[str | None, bool]:
         queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=1)
         return await SlackSocketModeClient._handle_frame(
             socket,
@@ -192,7 +195,25 @@ def test_disconnect_requests_fresh_connection() -> None:
             queue,
         )
 
-    assert asyncio.run(scenario()) is True
+    assert asyncio.run(scenario()) == ("refresh_requested", False)
+    assert not socket.sent
+
+
+def test_events_api_without_envelope_id_is_not_dispatched() -> None:
+    socket = _FakeSocket()
+
+    async def scenario() -> None:
+        queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=1)
+        disconnect_reason, healthy = await SlackSocketModeClient._handle_frame(
+            socket,
+            '{"type":"events_api","payload":{"event":{"type":"app_mention"}}}',
+            queue,
+        )
+        assert disconnect_reason is None
+        assert healthy is False
+        assert queue.empty()
+
+    asyncio.run(scenario())
     assert not socket.sent
 
 
@@ -202,8 +223,9 @@ def test_malformed_frames_are_ignored(raw: str | bytes) -> None:
 
     async def scenario() -> None:
         queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=1)
-        reconnect = await SlackSocketModeClient._handle_frame(socket, raw, queue)
-        assert reconnect is False
+        disconnect_reason, healthy = await SlackSocketModeClient._handle_frame(socket, raw, queue)
+        assert disconnect_reason is None
+        assert healthy is False
         assert queue.empty()
 
     asyncio.run(scenario())
@@ -369,8 +391,18 @@ def test_drain_timeout_reports_in_flight_events(
     assert any("0 queued + 1 in-flight" in record.getMessage() for record in caplog.records)
 
 
-def test_run_backs_off_across_connections_that_never_receive_a_frame(
+@pytest.mark.parametrize(
+    ("failure_frame", "expected_waits"),
+    [
+        (None, [1.0, 2.0]),
+        ('{"type":"disconnect","reason":"too_many_websockets"}', [1.0, 2.0]),
+        ('{"type":"disconnect","reason":"refresh_requested"}', []),
+    ],
+)
+def test_run_classifies_reconnect_backoff(
     monkeypatch: pytest.MonkeyPatch,
+    failure_frame: str | None,
+    expected_waits: list[float],
 ) -> None:
     import websockets
 
@@ -382,11 +414,17 @@ def test_run_backs_off_across_connections_that_never_receive_a_frame(
         def __init__(self, *, succeeds: bool) -> None:
             super().__init__()
             self.succeeds = succeeds
+            self.sent_hello = False
 
         async def recv(self) -> str:
             nonlocal stopped
             if not self.succeeds:
-                raise ConnectionError("handshake died before Slack hello")
+                if failure_frame is None:
+                    raise ConnectionError("handshake died before Slack hello")
+                if not self.sent_hello:
+                    self.sent_hello = True
+                    return '{"type":"hello"}'
+                return failure_frame
             stopped = True
             return '{"type":"hello"}'
 
@@ -421,4 +459,4 @@ def test_run_backs_off_across_connections_that_never_receive_a_frame(
     client = SlackSocketModeClient(app_token="xapp-test")
     asyncio.run(client.run(on_event, lambda: stopped))
     assert attempts == 3
-    assert waits == [1.0, 2.0]
+    assert waits == expected_waits

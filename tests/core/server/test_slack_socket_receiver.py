@@ -343,6 +343,55 @@ def test_message_and_app_mention_for_same_timestamp_are_deduplicated(
     assert transport.posts == [("CBOUND", "once", "172.5")]
 
 
+def test_reconnect_redelivery_dedup_is_long_lived_and_bounded(
+    poller_factory: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    poller, manager, transport = poller_factory()
+    now = 0.0
+    calls = 0
+
+    monkeypatch.setattr(
+        "core.server.supervised.slack_poller.time.monotonic",
+        lambda: now,
+    )
+
+    async def processor(content: str, metadata: dict[str, Any]) -> str:
+        nonlocal calls
+        calls += 1
+        return "once"
+
+    manager.set_async_processor(processor)
+    payload = {
+        "event_id": "Ev-reconnect",
+        "event": {
+            "type": "app_mention",
+            "channel": "CBOUND",
+            "user": "U1",
+            "text": "<@UGEODE> hello again",
+            "ts": "172.55",
+        },
+    }
+
+    asyncio.run(poller._handle_socket_event(payload))
+    now = 6 * 60
+    asyncio.run(poller._handle_socket_event(payload))
+
+    assert calls == 1
+    assert transport.posts == [("CBOUND", "once", "172.55")]
+
+    poller.DEDUP_MAX = 1
+    now = 7 * 60
+    next_payload = {
+        **payload,
+        "event_id": "Ev-next",
+        "event": {**payload["event"], "ts": "172.56"},
+    }
+    asyncio.run(poller._handle_socket_event(next_payload))
+    assert calls == 2
+    assert set(poller._seen_events) == {"CBOUND:172.56"}
+
+
 def test_app_mention_routes_when_bootstrap_bot_id_lookup_failed(poller_factory: Any) -> None:
     poller, manager, transport = poller_factory(bot_user_id="")
     processed: list[str] = []

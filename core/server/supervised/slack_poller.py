@@ -31,7 +31,10 @@ if TYPE_CHECKING:
 class SlackPoller(BasePoller):
     """Receive Slack messages through Socket Mode or the legacy poll fallback."""
 
-    DEDUP_TTL_S = 300
+    # Socket Mode redelivery can arrive more than five minutes after a
+    # reconnect. Keep a one-hour window, bounded independently from the TTL.
+    DEDUP_TTL_S = 60 * 60
+    DEDUP_MAX = 5000
     # Socket Mode connect (open_timeout=15s), close (5s), or the bounded
     # event drain (20s) may be in flight when stop() is called; the join
     # must outlast the longest of them.
@@ -304,6 +307,9 @@ class SlackPoller(BasePoller):
             self._inflight_events.discard(dedup_key)
 
         self._seen_events[dedup_key] = (time.monotonic(), upgradable)
+        if len(self._seen_events) > self.DEDUP_MAX:
+            oldest = min(self._seen_events, key=lambda key: self._seen_events[key][0])
+            del self._seen_events[oldest]
         return True
 
     def _binding_requires_mention(self, channel_id: str) -> bool:
