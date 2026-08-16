@@ -9,6 +9,7 @@
   <img src="https://img.shields.io/badge/while(tool__use)-agentic%20loop-E0699F?style=flat-square" alt="while(tool_use)">
   <img src="https://img.shields.io/badge/scaffold%20optimization-experimental-E0699F?style=flat-square" alt="Experimental scaffold optimization">
   <a href="https://github.com/mangowhoiscloud/geode/actions"><img src="https://img.shields.io/github/actions/workflow/status/mangowhoiscloud/geode/ci.yml?style=flat-square&label=ci&logo=github&logoColor=white" alt="CI"></a>
+  <a href="https://github.com/mangowhoiscloud/geode/releases/latest"><img src="https://img.shields.io/github/v/release/mangowhoiscloud/geode?style=flat-square&label=release" alt="Latest release"></a>
 </p>
 
 <p align="center">
@@ -404,6 +405,14 @@ Remote desktop control stays disabled in Gateway sessions unless the operator
 explicitly sets `[gateway] allow_computer_use = true`; see the
 [computer-use guide](docs/setup.md#optional-computer-use-from-a-bound-channel)
 before enabling it for a restricted binding.
+
+The [live Slack E2E receipt](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/41e15ca262d5953d1c88f4767777331875c57c9f/reports/e2e-validation/2026-08-17-slack-gateway-live-e2e.json)
+shows ordinary conversation and a browser-DOM UI task completing through Socket
+Mode. Strict pixel `computer_use` captured the desktop but stopped when the
+active OpenAI subscription source had no compatible visual grounding; it did
+not guess coordinates or silently switch providers. The primary answers used
+the subscription route, while post-turn processing also made an auxiliary GLM
+PAYG call, so the complete lifecycle is not advertised as subscription-only.
 
 ### Optional: Self-improving loop config (`~/.geode/config.toml`)
 

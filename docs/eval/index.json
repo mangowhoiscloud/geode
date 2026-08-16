@@ -10,7 +10,7 @@
     "trajectory": "core/observability/schemas/trajectory.schema.json",
     "trajectory_release": "core/observability/schemas/trajectory-release.schema.json"
   },
-  "document_count": 16,
+  "document_count": 17,
   "documents": [
     {
       "id": "agent-world-comparison",
@@ -317,6 +317,28 @@
         "docs/eval/schemas/attempt.schema.json",
         "docs/eval/schemas/run-spec.schema.json"
       ]
+    },
+    {
+      "id": "slack-gateway-live-e2e-20260817",
+      "family": "slack-gateway-live-e2e",
+      "title": "Slack gateway live conversation and computer-use diagnostic",
+      "kind": "ledger",
+      "status": "historical",
+      "authority": "routing-and-behavior-diagnostic",
+      "path": "docs/eval/2026-08-17-slack-gateway-live-e2e.md",
+      "summary": "Three live Slack Socket Mode cases covering ordinary conversation, fail-closed computer_use, and a provider-safe browser DOM fallback.",
+      "sha256": "81838ecbf9f1c088bab2bc58ad83423c0de3f3c26a30cdebfdae0058e0f0730c",
+      "triggers": [
+        "Slack Socket Mode",
+        "Slack gateway E2E",
+        "browser UI",
+        "computer use",
+        "subscription route"
+      ],
+      "contracts": [
+        "docs/eval/external-artifact-repository.md"
+      ],
+      "latest_valid_release": "https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/41e15ca262d5953d1c88f4767777331875c57c9f/reports/e2e-validation/2026-08-17-slack-gateway-live-e2e.json"
     },
     {
       "id": "tau2-bench",

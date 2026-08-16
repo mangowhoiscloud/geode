@@ -19,9 +19,12 @@ export default function Page() {
               스크롤을 지시하는 기능입니다. GEODE의 구현은{" "}
               <code>core/tools/computer_use.py</code>의{" "}
               <code>ComputerUseHarness</code> 하나이며 host backend는 pyautogui
-              또는 macOS helper입니다.
-              매 동작 후 base64 JPEG 스크린샷을 돌려주어 모델이 결과를
-              관찰합니다.
+              또는 macOS helper입니다. Provider-native computer surface는
+              스크린샷을 해당 provider wire로 돌려주지만, normal function tool인{" "}
+              <code>computer_use</code>는 base64를 생략하고 compact observation만
+              반환합니다. Function-tool 경로의 시각적 좌표 선택은 활성
+              provider/source에 호환되는 grounding이 있을 때만 <code>locate</code>로
+              수행합니다.
             </p>
 
             <h2>동작 방식</h2>
@@ -32,7 +35,8 @@ export default function Page() {
                                               ComputerUseHarness._execute_sync
                                                           │ pyautogui / macOS helper
                                                           ▼
-LLM ←──────── { result, action, screenshot(base64 JPEG) } ◄┘`}</pre>
+native computer ←── screenshot(provider wire) ──────────┤
+computer_use ←────── compact observation(base64 omitted) ◄┘`}</pre>
             <p>
               디스패치 테이블은 프로바이더 중립입니다. Anthropic 어휘
               (<code>left_click</code>, <code>triple_click</code>,{" "}
@@ -105,7 +109,11 @@ driver = "helper"
               프로바이더가 native computer surface를 지원하면 그 경로를 쓰고,
               ChatGPT subscription처럼 native surface를 받지 않는 backend에는
               같은 하네스를 normal function tool <code>computer_use</code>로
-              노출합니다.
+              노출합니다. 이 경로는 다른 provider로 몰래 fallback하지 않습니다.
+              OpenAI subscription source에 visual grounding을 별도로 구성하지
+              않았다면 <code>capture</code>는 가능하지만 <code>locate</code>는
+              dependency error로 중단되며, browser DOM·playwriter·{" "}
+              <code>ui_probe</code> 같은 source-safe 구조 경로를 선택해야 합니다.
             </p>
 
             <h2>안전</h2>
@@ -128,11 +136,19 @@ driver = "helper"
               </thead>
               <tbody>
                 <tr><td>도구 목록에 <code>computer</code>가 없음</td><td>설정이 꺼졌거나 선택한 driver가 준비되지 않음</td><td><code>computer_use_enabled</code>와 pyautogui/helper 설치 상태를 확인합니다.</td></tr>
+                <tr><td><code>computer_use locate</code>가 dependency error</td><td>활성 provider/source에 source-safe visual grounding이 없음</td><td>좌표를 추측하지 말고 <code>ui_probe</code>, browser DOM, playwriter 또는 검증된 keyboard navigation을 사용합니다.</td></tr>
                 <tr><td><code>move</code>가 Accessibility 오류</td><td>OS가 입력 이벤트를 거부했거나 helper 권한이 없음</td><td>활성 driver/helper에 Accessibility 권한을 주고 <code>geode doctor</code>를 다시 실행합니다.</td></tr>
                 <tr><td>동작이 오류로 반환</td><td>지원하지 않는 action 이름</td><td>오류 응답의 <code>supported_actions</code> 목록을 확인합니다.</td></tr>
                 <tr><td>클릭 위치가 어긋남</td><td>타깃 공간과 화면 해상도 불일치</td><td>스케일링은 자동입니다. 멀티 디스플레이 구성에서는 활성 디스플레이 기준임을 감안합니다.</td></tr>
               </tbody>
             </table>
+            <p>
+              이 경계는 2026-08-17 Slack Socket Mode 실환경 검증에서 재현됐다.
+              Strict <code>computer_use</code> 캡처는 성공하고 locate는 안전하게
+              중단됐으며, 별도 browser DOM case는 <code>Example Domain</code>을
+              확인했다. 공개 <a href="https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/41e15ca262d5953d1c88f4767777331875c57c9f/reports/e2e-validation/2026-08-17-slack-gateway-live-e2e.json">영수증</a>은
+              두 경로를 구분한다.
+            </p>
 
             <h2>다음</h2>
             <ul>
@@ -148,9 +164,12 @@ driver = "helper"
               direct clicks, typing, and scrolling. GEODE&apos;s implementation
               is a single <code>ComputerUseHarness</code> in{" "}
               <code>core/tools/computer_use.py</code>, backed on the host by
-              pyautogui or the macOS helper.
-              Every action returns a base64 JPEG screenshot so the model
-              observes the result.
+              pyautogui or the macOS helper. Provider-native computer surfaces
+              return screenshots on their provider wire. The normal function
+              tool <code>computer_use</code> instead omits base64 and returns a
+              compact observation. Visual target selection on that path uses{" "}
+              <code>locate</code> only when compatible grounding exists for the
+              active provider/source.
             </p>
 
             <h2>How it runs</h2>
@@ -161,7 +180,8 @@ driver = "helper"
                                               ComputerUseHarness._execute_sync
                                                           │ pyautogui / macOS helper
                                                           ▼
-LLM ←──────── { result, action, screenshot(base64 JPEG) } ◄┘`}</pre>
+native computer ←── screenshot(provider wire) ──────────┤
+computer_use ←────── compact observation(base64 omitted) ◄┘`}</pre>
             <p>
               The dispatch table is provider-neutral: it accepts the Anthropic
               vocabulary (<code>left_click</code>, <code>triple_click</code>,{" "}
@@ -240,7 +260,12 @@ driver = "helper"
               Providers use their native computer surface when supported.
               Backends that do not accept it, including the ChatGPT subscription
               route, receive the same harness as the normal{" "}
-              <code>computer_use</code> function tool.
+              <code>computer_use</code> function tool. That path never silently
+              falls across providers. Without separately configured visual
+              grounding for the OpenAI subscription source, <code>capture</code>
+              works but <code>locate</code> returns a dependency error; choose a
+              source-safe structural path such as browser DOM, playwriter, or{" "}
+              <code>ui_probe</code> instead.
             </p>
 
             <h2>Safety</h2>
@@ -264,11 +289,19 @@ driver = "helper"
               </thead>
               <tbody>
                 <tr><td><code>computer</code> missing from the tool list</td><td>The setting is off or the selected driver is unavailable</td><td>Check <code>computer_use_enabled</code> and the pyautogui/helper installation.</td></tr>
+                <tr><td><code>computer_use locate</code> returns a dependency error</td><td>No source-safe visual grounding exists for the active provider/source</td><td>Do not guess coordinates. Use <code>ui_probe</code>, browser DOM, playwriter, or verified keyboard navigation.</td></tr>
                 <tr><td><code>move</code> returns an Accessibility error</td><td>The OS rejected the event or the helper lacks permission</td><td>Grant Accessibility to the active driver/helper and rerun <code>geode doctor</code>.</td></tr>
                 <tr><td>An action returns an error</td><td>Unsupported action name</td><td>Check the <code>supported_actions</code> list in the error response.</td></tr>
                 <tr><td>Clicks land off-target</td><td>Target-space vs screen-resolution mismatch</td><td>Scaling is automatic; on multi-display setups it works against the active display.</td></tr>
               </tbody>
             </table>
+            <p>
+              The 2026-08-17 Slack Socket Mode live run reproduced this
+              boundary: strict <code>computer_use</code> captured the desktop and
+              stopped safely at locate, while a separate browser-DOM case
+              verified <code>Example Domain</code>. The public <a href="https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/41e15ca262d5953d1c88f4767777331875c57c9f/reports/e2e-validation/2026-08-17-slack-gateway-live-e2e.json">receipt</a> keeps
+              the two paths distinct.
+            </p>
 
             <h2>Next</h2>
             <ul>
