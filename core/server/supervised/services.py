@@ -165,6 +165,7 @@ class SharedServices:
         conversation: Any | None = None,
         system_suffix: str = "",
         time_budget_override: float | None = None,
+        allowed_tool_names: set[str] | None = None,
         verbose: bool = False,
         propagate_context: bool = False,
         session_id: str = "",
@@ -249,6 +250,9 @@ class SharedServices:
             middleware_registry=self.middleware_registry,
             approval_callback=approval_cb,
             denied_tools=headless_denied,
+            allowed_tools=(
+                frozenset(allowed_tool_names) if allowed_tool_names is not None else None
+            ),
             interactive_approval=mode in {SessionMode.REPL, SessionMode.IPC},
         )
 
@@ -277,6 +281,7 @@ class SharedServices:
             hooks=self.hook_system,
             system_suffix=system_suffix,
             quiet=quiet,
+            allowed_tool_names=allowed_tool_names,
             # Caller-provided machine-instance id — gateway threads pass a
             # stable derived id so a thread's turns share ONE checkpoint
             # chain; empty keeps the loop's fresh ``s-<uuid>``.

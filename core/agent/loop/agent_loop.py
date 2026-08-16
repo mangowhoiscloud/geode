@@ -386,6 +386,7 @@ class AgenticLoop:
         quiet: bool = False,
         disable_settings_drift: bool = False,
         allowed_tool_names: set[str] | None = None,
+        force_include_allowed_tools: bool = False,
         source: str = "",
         session_id: str = "",
         response_schema: dict[str, Any] | None = None,
@@ -513,8 +514,9 @@ class AgenticLoop:
         # the full surface must not leak past the whitelist (None = no
         # filter). Stored on self so refresh_tools re-applies it on rebuild.
         self._allowed_tool_names = allowed_tool_names
-        # merge native + MCP tools; allowlist as force_include so the global
-        # tool_policy can't strip a tool the sub-agent's toolkit granted
+        # Sub-agent/toolkit and benchmark grants may explicitly outrank the
+        # mutable global tool policy. Ordinary session allowlists only narrow.
+        self._force_include_allowed_tools = force_include_allowed_tools
         mcp_tool_list = mcp_manager.get_all_tools() if mcp_manager is not None else None
         # Epoch snapshot pairs with the arun refresh gate: a server recycle
         # bumps the manager epoch and invalidates this tool snapshot.
@@ -522,7 +524,7 @@ class AgenticLoop:
         self._tools = get_agentic_tools(
             tool_registry,
             mcp_tools=mcp_tool_list,
-            force_include=allowed_tool_names,
+            force_include=allowed_tool_names if force_include_allowed_tools else None,
             provider=self._provider,
             source=self._source,
             policy_sources=self._policy_sources,
@@ -2899,6 +2901,9 @@ class AgenticLoop:
         # prior session_id → adapter ``--resume <id>`` (claude-cli reuses the
         # cached prefix); empty on first turn (behaviour unchanged)
         prior_session_id = _load_prior_session_id(self._session_id)
+        session_allowed_tools = (
+            frozenset(self._allowed_tool_names) if self._allowed_tool_names is not None else None
+        )
 
         req = build_adapter_request(
             model=effective_model,
@@ -2910,6 +2915,7 @@ class AgenticLoop:
             temperature=loop_temperature,
             thinking_budget=adaptive_thinking,
             effort=adaptive_effort,
+            allowed_tool_names=session_allowed_tools,
             resume_session_id=prior_session_id,
             # per-loop schema → claude-cli --json-schema / codex --output-schema
             response_schema=(
@@ -2934,6 +2940,17 @@ class AgenticLoop:
         )
         call_adapter = llm_request.adapter
         req = llm_request.request
+        if session_allowed_tools is not None:
+            from dataclasses import replace
+
+            effective_allowed = session_allowed_tools
+            if req.allowed_tool_names is not None:
+                effective_allowed &= req.allowed_tool_names
+            req = replace(
+                req,
+                allowed_tool_names=effective_allowed,
+                tools=tuple(tool for tool in req.tools if tool.name in effective_allowed),
+            )
         effective_model = req.model
         adapter_name = getattr(call_adapter, "name", "<unknown>")
         effective_provider = getattr(call_adapter, "provider", self._provider)

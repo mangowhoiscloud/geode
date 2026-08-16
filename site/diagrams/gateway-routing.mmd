@@ -1,12 +1,22 @@
-%% gateway-routing — messenger receivers through binding and lanes to the loop.
+%% gateway-routing — messenger receivers through binding policy and runtime rails.
 %% SoT for site/public/diagrams/gateway-routing.svg (npm run render-diagrams).
 %% Grounded in site/src/app/docs/harness/serve-gateway/page.tsx
 %% (core/messaging/binding.py, core/orchestration/lane_queue.py).
-flowchart TD
-  SLACK["Slack Socket Mode"] --> CM
-  DISCORD["Discord poller"] --> CM
-  TELEGRAM["Telegram poller"] --> CM
-  CM{"binding match?<br/>ChannelManager"}
-  CM -->|no| DROP["ignored"]
-  CM -->|yes| LANE["LaneQueue<br/>SessionLane, then global lane<br/>same session serial, sessions parallel"]
-  LANE --> LOOP["AgenticLoop (DAEMON mode)<br/>run_bash / delegate_task denied"]
+flowchart TB
+  SLACK["Slack Socket Mode"]
+  DISCORD["Discord poller"]
+  TELEGRAM["Telegram poller"]
+  SLACK --> MATCH
+  DISCORD --> MATCH
+  TELEGRAM --> MATCH
+  MATCH{"Exact binding<br/>and mention gate?"}
+  MATCH -->|no| DROP["Ignore"]
+  MATCH -->|yes| POLICY["Binding policy<br/>tool allowlist · time budget · auto-response"]
+  POLICY --> LANE["LaneQueue<br/>session → gateway → global"]
+  LANE --> SESSION["SharedServices<br/>DAEMON session"]
+  SESSION --> VISIBLE["AgenticLoop<br/>provider-neutral visible tools"]
+  VISIBLE -->|tool call| EXEC["ToolExecutor<br/>allowlist + headless denylist"]
+  EXEC -->|tool result| VISIBLE
+  VISIBLE -->|final text| RESPOND{"auto_respond?"}
+  RESPOND -->|yes| SEND["Post to channel thread"]
+  RESPOND -->|no| SUPPRESS["Persist session<br/>suppress outbound text"]

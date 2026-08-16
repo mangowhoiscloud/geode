@@ -123,11 +123,18 @@ env = "host"
 driver = "helper"
 
 [gateway]
-allow_computer_use = true`}</pre>
+allow_computer_use = true
+
+[[gateway.bindings.rules]]
+channel = "slack"
+channel_id = "C0ABCDEF1"
+allowed_tools = ["computer", "read_file"]`}</pre>
             <p>
               이 옵션은 Slack뿐 아니라 같은 DAEMON 실행 경계를 쓰는 모든
-              gateway binding에 적용됩니다. binding을 통과한 모든 발신자가
-              desktop action을 요청할 수 있으므로 제한된 채널에서만 사용하세요.
+              gateway binding에 적용됩니다. 비어 있지 않은{" "}
+              <code>allowed_tools</code>에서는 <code>computer</code>를 명시해야
+              provider가 도구를 모델에 노출하고 executor가 실행합니다. 빈 목록은
+              전체 허용이므로 제한된 채널에서만 사용하세요.
               <code>run_bash</code>, <code>delegate_task</code>,
               personal-workspace 도구, scheduler, MCP <code>run_agent</code> 차단은
               유지됩니다.
@@ -291,11 +298,18 @@ env = "host"
 driver = "helper"
 
 [gateway]
-allow_computer_use = true`}</pre>
+allow_computer_use = true
+
+[[gateway.bindings.rules]]
+channel = "slack"
+channel_id = "C0ABCDEF1"
+allowed_tools = ["computer", "read_file"]`}</pre>
             <p>
               The option applies to every gateway binding that shares the
-              DAEMON execution boundary, not only Slack. Every sender admitted
-              by a binding can request desktop actions once enabled, so use it
+              DAEMON execution boundary, not only Slack. When{" "}
+              <code>allowed_tools</code> is non-empty, it must name{" "}
+              <code>computer</code> before the provider exposes the tool and the
+              executor dispatches it. An empty list allows all tools, so use this
               only with restricted channels. <code>run_bash</code>,{" "}
               <code>delegate_task</code>, personal-workspace tools, scheduler,
               and MCP <code>run_agent</code> remain denied.

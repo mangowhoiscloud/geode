@@ -2488,9 +2488,9 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/harness/serve-gateway.md
 
 ## 동작 구조
 
-![Gateway routing: Slack Socket Mode and Discord or Telegram pollers feed the ChannelManager binding match; unmatched messages are ignored, matched ones pass the LaneQueue into AgenticLoop in DAEMON mode](https://mangowhoiscloud.github.io/geode/diagrams/gateway-routing.svg)
+![Gateway routing: transport adapters pass exact binding and mention gates, binding policy supplies tool and budget constraints, LaneQueue serializes the session, AgenticLoop and ToolExecutor enforce the tool surface, and auto-response controls outbound delivery](https://mangowhoiscloud.github.io/geode/diagrams/gateway-routing.svg)
 
-binding에 일치한 메시지만 레인을 거쳐 루프에 닿습니다. 불일치는 무시됩니다.
+바인딩 정책은 모델에 보이는 도구와 실제 실행을 함께 제한하고, 응답 전송 여부만 마지막에 결정합니다.
 
 | 구성 요소 | 역할 | 코드 |
 | --- | --- | --- |
@@ -2621,9 +2621,14 @@ driver = "helper"
 
 [gateway]
 allow_computer_use = true
+
+[[gateway.bindings.rules]]
+channel = "slack"
+channel_id = "C0ABCDEF1"
+allowed_tools = ["computer", "read_file"]
 ```
 
-이 옵션은 Slack뿐 아니라 같은 DAEMON 실행 경계를 쓰는 모든 gateway binding에 적용됩니다. binding을 통과한 모든 발신자가 desktop action을 요청할 수 있으므로 제한된 채널에서만 사용하세요.`run_bash`, `delegate_task`, personal-workspace 도구, scheduler, MCP `run_agent` 차단은 유지됩니다.
+이 옵션은 Slack뿐 아니라 같은 DAEMON 실행 경계를 쓰는 모든 gateway binding에 적용됩니다. 비어 있지 않은 `allowed_tools`에서는 `computer`를 명시해야 provider가 도구를 모델에 노출하고 executor가 실행합니다. 빈 목록은 전체 허용이므로 제한된 채널에서만 사용하세요.`run_bash`, `delegate_task`, personal-workspace 도구, scheduler, MCP `run_agent` 차단은 유지됩니다.
 
 ## 실패 모드
 
@@ -4660,11 +4665,11 @@ allowed_tools = ["memory_search", "web_fetch"]
 time_budget_s = 90
 ```
 
-각 규칙은 자체 정책 손잡이를 가집니다. `require_mention`은 GEODE가 멘션됐을 때만 응답하게 하고, `allowed_tools`는 그 채널에서 허용할 도구를 제한하며(빈 리스트는 전체 허용), `time_budget_s`는 메시지당 wall-clock 예산을 지정합니다. 규칙에 없으면 gateway 레벨 기본값으로 떨어집니다. 이 필드들은 `ChannelBinding`(`core/messaging/models.py`)의 dataclass 필드와 일대일로 대응합니다.
+각 규칙은 자체 정책 손잡이를 가집니다. `require_mention`은 GEODE가 멘션됐을 때만 응답하게 하고, `allowed_tools`는 그 채널에서 허용할 도구를 제한하며(빈 리스트는 전체 허용), `time_budget_s`는 메시지당 wall-clock 예산을 지정합니다.`auto_respond=false`는 처리를 계속하고 세션은 저장하되 채널로 최종 텍스트를 보내지 않습니다. 헤드리스 denylist는 바인딩 allowlist보다 항상 우선합니다. 규칙에 없으면 gateway 레벨 기본값으로 떨어집니다. 이 필드들은 `ChannelBinding`(`core/messaging/models.py`)의 dataclass 필드와 일대일로 대응합니다.
 
 ## 2\. 세션 레인으로 라우팅됩니다
 
-메시지가 바인딩에 매칭되면 `ChannelManager.aroute_message`가 `build_gateway_session_key(channel, channel_id, sender_id, thread_id)`로 thread 단위 세션 키를 만듭니다. 같은 스레드의 메시지는 같은 키로 묶여 컨텍스트가 격리됩니다. 실행은 SessionLane → gateway Lane → global Lane 순서로 레인 큐를 거치므로, 같은 세션의 메시지는 직렬화되고 동시성은 워크로드별 상한으로 제어됩니다. `allowed_tools`가 설정돼 있으면 그 힌트가 콘텐츠 앞에 붙어 AgenticLoop로 전달됩니다.
+메시지가 바인딩에 매칭되면 `ChannelManager.aroute_message`가 `build_gateway_session_key(channel, channel_id, sender_id, thread_id)`로 thread 단위 세션 키를 만듭니다. 같은 스레드의 메시지는 같은 키로 묶여 컨텍스트가 격리됩니다. 실행은 SessionLane → gateway Lane → global Lane 순서로 레인 큐를 거치므로, 같은 세션의 메시지는 직렬화되고 동시성은 워크로드별 상한으로 제어됩니다. `allowed_tools`는 사용자 콘텐츠에 문자열로 삽입되지 않습니다. 구조화된 메타데이터로 세션 조립에 전달되어 AgenticLoop의 모델 가시 도구와 ToolExecutor의 실제 실행을 함께 제한합니다. provider adapter가 뒤늦게 추가하는 hosted tool도 같은 allowlist를 확인하므로 Anthropic, OpenAI, GLM 경로가 같은 계약을 따릅니다. 중단된 ask를 다른 binding에서 재개하면 두 allowlist의 교집합과 더 짧은 시간 예산만 사용합니다.
 
 ## 3\. 리로드합니다
 
@@ -4689,7 +4694,7 @@ for b in m.list_bindings():
 "
 ```
 
-로드된 바인딩 수와 각 규칙의 `channel` / `channel_id` / `auto_respond` / `time_budget_s`가 출력되면 라우팅이 그 채널을 인식할 수 있습니다. 실제 메시지 라우팅과 poller 운영은 serve gateway 페이지를 참고하세요.
+로드된 바인딩 수와 각 규칙의 `channel` / `channel_id` / `auto_respond` / `allowed_tools` / `time_budget_s`가 출력되면 라우팅이 그 채널을 인식할 수 있습니다. 실제 메시지 라우팅과 poller 운영은 serve gateway 페이지를 참고하세요.
 
 _참조:_ [Serve gateway](https://mangowhoiscloud.github.io/geode/docs/harness/serve-gateway.md), [Messaging](https://mangowhoiscloud.github.io/geode/docs/run/messaging.md).
 
@@ -6105,7 +6110,7 @@ Tier 2  latex2sympy2 + sympy.pretty  블록 전용. 분수·적분을 2D Unicode
 URL: https://mangowhoiscloud.github.io/geode/docs/reference/changelog
 Markdown: https://mangowhoiscloud.github.io/geode/docs/reference/changelog.md
 
-(body omitted from llms-full: 1510 KB — fetch the Markdown twin above for the complete page)
+(body omitted from llms-full: 1511 KB — fetch the Markdown twin above for the complete page)
 
 ---
 

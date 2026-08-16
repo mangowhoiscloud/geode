@@ -601,6 +601,7 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
         parent_session_id=request.parent_session_id,
         quiet=True,  # Suppress spinner — parent handles UI
         allowed_tool_names=allowed_tool_names,
+        force_include_allowed_tools=True,
         source=request.source,
         # PR-Q.5 (2026-05-24, single-anchor invariant I1 in
         # docs/plans/2026-05-24-timeline-standardization-and-claude-resume.md):

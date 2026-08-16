@@ -25,9 +25,9 @@ export default function Page() {
             <figure>
               <img
                 src="/geode/diagrams/gateway-routing.svg"
-                alt="Gateway routing: Slack Socket Mode and Discord or Telegram pollers feed the ChannelManager binding match; unmatched messages are ignored, matched ones pass the LaneQueue into AgenticLoop in DAEMON mode"
+                alt="Gateway routing: transport adapters pass exact binding and mention gates, binding policy supplies tool and budget constraints, LaneQueue serializes the session, AgenticLoop and ToolExecutor enforce the tool surface, and auto-response controls outbound delivery"
               />
-              <figcaption>binding에 일치한 메시지만 레인을 거쳐 루프에 닿습니다. 불일치는 무시됩니다.</figcaption>
+              <figcaption>바인딩 정책은 모델에 보이는 도구와 실제 실행을 함께 제한하고, 응답 전송 여부만 마지막에 결정합니다.</figcaption>
             </figure>
             <table>
               <thead>
@@ -159,9 +159,9 @@ require_mention = true`}</pre>
             <figure>
               <img
                 src="/geode/diagrams/gateway-routing.svg"
-                alt="Gateway routing: Slack Socket Mode and Discord or Telegram pollers feed the ChannelManager binding match; unmatched messages are ignored, matched ones pass the LaneQueue into AgenticLoop in DAEMON mode"
+                alt="Gateway routing: transport adapters pass exact binding and mention gates, binding policy supplies tool and budget constraints, LaneQueue serializes the session, AgenticLoop and ToolExecutor enforce the tool surface, and auto-response controls outbound delivery"
               />
-              <figcaption>Only a message that matches a binding passes the lanes into the loop; the rest are ignored.</figcaption>
+              <figcaption>Binding policy constrains both visible and executable tools; outbound delivery is decided only after processing.</figcaption>
             </figure>
             <table>
               <thead>

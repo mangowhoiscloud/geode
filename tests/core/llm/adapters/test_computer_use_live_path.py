@@ -25,11 +25,16 @@ from core.tools.computer_use import TARGET_HEIGHT, TARGET_WIDTH
 _ENABLED = "core.llm.providers.anthropic.is_computer_use_enabled"
 
 
-def _req(tools: tuple[ToolSpec, ...] = (), model: str = "claude-opus-4-8") -> AdapterCallRequest:
+def _req(
+    tools: tuple[ToolSpec, ...] = (),
+    model: str = "claude-opus-4-8",
+    allowed_tool_names: frozenset[str] | None = None,
+) -> AdapterCallRequest:
     return AdapterCallRequest(
         model=model,
         messages=(Message(role="user", content="hi"),),
         tools=tools,
+        allowed_tool_names=allowed_tool_names,
     )
 
 
@@ -92,12 +97,17 @@ class TestLivePathInjection:
             kwargs = common.build_create_kwargs(_req(tools=()))
         assert [t.get("name") for t in kwargs["tools"]] == ["computer"]
 
+    def test_explicit_allowlist_blocks_computer(self) -> None:
+        with patch(_ENABLED, return_value=True):
+            kwargs = common.build_create_kwargs(_req(allowed_tool_names=frozenset({"read_file"})))
+        assert not any(t.get("name") == "computer" for t in kwargs.get("tools", []))
+
     def test_no_double_inject_if_already_present(self) -> None:
         kwargs: dict = {
             "tools": [common.anthropic_computer_tool_param(TARGET_WIDTH, TARGET_HEIGHT)]
         }
         with patch(_ENABLED, return_value=True):
-            common._maybe_inject_computer_use(kwargs)
+            common._maybe_inject_computer_use(kwargs, _req())
         # not doubled, and the beta header is still ensured for the native tool.
         assert sum(1 for t in kwargs["tools"] if t.get("type") == "computer_20251124") == 1
         assert "computer-use-2025-11-24" in kwargs["extra_headers"]["anthropic-beta"]
@@ -109,14 +119,14 @@ class TestLivePathInjection:
             "tools": [{"name": "computer", "description": "custom", "input_schema": {}}]
         }
         with patch(_ENABLED, return_value=True):
-            common._maybe_inject_computer_use(kwargs)
+            common._maybe_inject_computer_use(kwargs, _req())
         assert any(t.get("type") == "computer_20251124" for t in kwargs["tools"])
         assert "computer-use-2025-11-24" in kwargs["extra_headers"]["anthropic-beta"]
 
     def test_beta_header_merges_not_clobbers(self) -> None:
         kwargs: dict = {"extra_headers": {"anthropic-beta": "context-management-2025-06-27"}}
         with patch(_ENABLED, return_value=True):
-            common._maybe_inject_computer_use(kwargs)
+            common._maybe_inject_computer_use(kwargs, _req())
         beta = kwargs["extra_headers"]["anthropic-beta"]
         assert "context-management-2025-06-27" in beta
         assert "computer-use-2025-11-24" in beta

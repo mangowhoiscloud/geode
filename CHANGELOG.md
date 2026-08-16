@@ -92,6 +92,13 @@ functional change.
 
 ### Fixed
 
+- **Gateway binding policy is now enforced at runtime.** Per-channel tool
+  allowlists constrain both model-visible schemas and ToolExecutor dispatch,
+  per-binding time budgets reach the DAEMON session, and `auto_respond=false`
+  suppresses only outbound text after processing. Ask continuations intersect
+  the origin and replying binding policies instead of widening either. Slack `app_mention` events
+  now use their authoritative event type instead of a synthetic `@geode`
+  marker, while unrelated user mentions remain intact.
 - **Slack Socket Mode reconnects and replay dedup are now bounded.** Scheduled
   connection refreshes still reconnect immediately, while abnormal disconnect
   reasons use exponential backoff. Unacknowledgeable Events API envelopes are

@@ -263,7 +263,7 @@ def _fake_state(session_id: str = "s-42") -> SimpleNamespace:
 
 
 def test_ahandle_non_reply_returns_none(tmp_path):
-    async def _boom(_state, _answer):  # pragma: no cover — must not run
+    async def _boom(_state, _answer, _ask):  # pragma: no cover — must not run
         raise AssertionError("continuation must not run")
 
     result = asyncio.run(
@@ -278,7 +278,7 @@ def test_ahandle_non_reply_returns_none(tmp_path):
 
 
 def test_ahandle_unknown_id_explicit_slash_errors(tmp_path):
-    async def _boom(_state, _answer):  # pragma: no cover
+    async def _boom(_state, _answer, _ask):  # pragma: no cover
         raise AssertionError
 
     result = asyncio.run(
@@ -295,7 +295,7 @@ def test_ahandle_unknown_id_explicit_slash_errors(tmp_path):
 def test_ahandle_bare_ask_with_unknown_id_falls_through(tmp_path):
     """Ordinary chat like 'ask cafe about deployment' is not swallowed."""
 
-    async def _boom(_state, _answer):  # pragma: no cover
+    async def _boom(_state, _answer, _ask):  # pragma: no cover
         raise AssertionError
 
     result = asyncio.run(
@@ -311,12 +311,20 @@ def test_ahandle_bare_ask_with_unknown_id_falls_through(tmp_path):
 
 def test_ahandle_happy_path_runs_continuation(tmp_path):
     store = _make_store(tmp_path)
-    ask = store.create("Which repo?", session_id="s-42", source="scheduled:j")
+    ask = store.create(
+        "Which repo?",
+        session_id="s-42",
+        source="scheduled:j",
+        allowed_tools=["read_file"],
+        time_budget_s=45.0,
+    )
     seen: dict[str, Any] = {}
 
-    async def _cont(state, answer):
+    async def _cont(state, answer, origin):
         seen["session_id"] = state.session_id
         seen["answer"] = answer
+        seen["allowed_tools"] = origin.allowed_tools
+        seen["time_budget_s"] = origin.time_budget_s
         return "continued fine"
 
     result = asyncio.run(
@@ -329,7 +337,12 @@ def test_ahandle_happy_path_runs_continuation(tmp_path):
         )
     )
     assert result == "continued fine"
-    assert seen == {"session_id": "s-42", "answer": "use geode"}
+    assert seen == {
+        "session_id": "s-42",
+        "answer": "use geode",
+        "allowed_tools": ["read_file"],
+        "time_budget_s": 45.0,
+    }
     assert store.get(ask.ask_id).status == "answered"
 
 
@@ -338,7 +351,7 @@ def test_ahandle_second_reply_gets_first_reply_wins(tmp_path):
     ask = store.create("Q", session_id="s-42", source="scheduled:j")
     checkpoint = _FakeCheckpoint({"s-42": _fake_state()})
 
-    async def _cont(_state, _answer):
+    async def _cont(_state, _answer, _ask):
         return "ok"
 
     asyncio.run(
@@ -368,7 +381,7 @@ def test_ahandle_missing_checkpoint_records_answer(tmp_path):
     store = _make_store(tmp_path)
     ask = store.create("Q", session_id="s-gone", source="scheduled:j")
 
-    async def _boom(_state, _answer):  # pragma: no cover
+    async def _boom(_state, _answer, _ask):  # pragma: no cover
         raise AssertionError
 
     result = asyncio.run(
@@ -388,7 +401,7 @@ def test_ahandle_continuation_failure_is_honest(tmp_path):
     store = _make_store(tmp_path)
     ask = store.create("Q", session_id="s-42", source="scheduled:j")
 
-    async def _cont(_state, _answer):
+    async def _cont(_state, _answer, _ask):
         raise RuntimeError("loop exploded")
 
     result = asyncio.run(

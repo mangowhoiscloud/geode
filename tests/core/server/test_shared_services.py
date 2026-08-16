@@ -238,6 +238,16 @@ class TestSharedServicesCreateSession:
         _, loop = services.create_session(SessionMode.DAEMON, time_budget_override=120.0)
         assert loop._time_budget_s == 120.0
 
+    def test_allowed_tools_reach_model_and_executor_rails(self, services: SharedServices) -> None:
+        executor, loop = services.create_session(
+            SessionMode.REPL,
+            allowed_tool_names={"calculate"},
+        )
+
+        assert loop._allowed_tool_names == {"calculate"}
+        assert {tool["name"] for tool in loop._tools} == {"calculate"}
+        assert executor._allowed_tools == frozenset({"calculate"})
+
     def test_system_suffix_passed(self, services: SharedServices) -> None:
         _, loop = services.create_session(SessionMode.DAEMON, system_suffix="gateway instructions")
         assert "gateway instructions" in loop._system_suffix

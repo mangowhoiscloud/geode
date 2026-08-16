@@ -98,3 +98,25 @@ def test_executor_denied_tools_refuses_run_bash_at_top() -> None:
     )
     assert result.get("denied") is True
     assert "not available" in result.get("error", "")
+
+
+def test_executor_allowlist_covers_handlers_and_special_tools() -> None:
+    """A binding allowlist is an execution rail, not a model prompt hint."""
+    from core.agent.tool_executor.executor import ToolExecutor
+
+    allowed = MagicMock(return_value={"result": "ok"})
+    blocked = MagicMock(return_value={"result": "unexpected"})
+    executor = ToolExecutor(
+        action_handlers={"allowed": allowed, "blocked": blocked},
+        auto_approve=True,
+        allowed_tools=frozenset({"allowed"}),
+    )
+
+    assert asyncio.run(executor.aexecute("allowed", {})) == {"result": "ok"}
+    denied = asyncio.run(executor.aexecute("blocked", {}))
+    special_denied = asyncio.run(executor.aexecute("run_bash", {"command": "echo nope"}))
+
+    assert denied["denied"] is True
+    assert special_denied["denied"] is True
+    allowed.assert_called_once_with()
+    blocked.assert_not_called()

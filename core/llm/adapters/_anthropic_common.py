@@ -164,7 +164,7 @@ def anthropic_computer_tool_param(
     }
 
 
-def _maybe_inject_computer_use(kwargs: dict[str, Any]) -> None:
+def _maybe_inject_computer_use(kwargs: dict[str, Any], req: AdapterCallRequest) -> None:
     """Inject the computer-use tool + beta header on the LIVE adapter path.
 
     Computer-use was wired only into the now-deleted legacy
@@ -177,7 +177,9 @@ def _maybe_inject_computer_use(kwargs: dict[str, Any]) -> None:
     """
     from core.llm.providers.anthropic import is_computer_use_enabled
 
-    if not is_computer_use_enabled():
+    if not is_computer_use_enabled() or (
+        req.allowed_tool_names is not None and "computer" not in req.allowed_tool_names
+    ):
         return
     tool_type, beta = _computer_use_spec(kwargs.get("model", ""))
     tools = list(kwargs.get("tools") or [])
@@ -263,11 +265,9 @@ def _inject_native_web_tools(kwargs: dict[str, Any], req: AdapterCallRequest) ->
     Three gates, all required (Codex review 2026-07-29):
 
     1. **Opt-in** (``settings.anthropic_native_web_tools``, default False).
-       The server runs these itself, so they are invisible to
-       ``allowed_tools`` / ``forbidden_tools`` and the sub-agent whitelist —
-       a narrowed surface would otherwise regain provider-side web access.
-       GEODE's own ``general_web_search`` / ``web_fetch`` handlers stay the
-       policy-checked default path.
+       The server runs these itself, so an explicit request allowlist is
+       checked here before provider translation. GEODE's own
+       ``general_web_search`` / ``web_fetch`` handlers stay the default path.
     2. **Model support** — ``ANTHROPIC_WEB_SEARCH_20260209_MODELS``; the
        dated ``web_*_20260209`` tags 400 on unlisted models (e.g. the
        budget-lane haiku).
@@ -291,6 +291,8 @@ def _inject_native_web_tools(kwargs: dict[str, Any], req: AdapterCallRequest) ->
     # the defer threshold (they are never deferrable — the server owns them).
     existing = {t.get("name") for t in tools if isinstance(t, dict)}
     for native in _ANTHROPIC_NATIVE_TOOLS:
+        if req.allowed_tool_names is not None and native["name"] not in req.allowed_tool_names:
+            continue
         if native["name"] not in existing:
             tools.append(dict(native))
 
@@ -396,7 +398,7 @@ def build_create_kwargs(req: AdapterCallRequest) -> dict[str, Any]:
             kwargs["tool_choice"] = tc
     if req.stop_sequences:
         kwargs["stop_sequences"] = list(req.stop_sequences)
-    _maybe_inject_computer_use(kwargs)
+    _maybe_inject_computer_use(kwargs, req)
     _inject_native_web_tools(kwargs, req)
     _maybe_inject_context_management(kwargs)
     return kwargs
@@ -462,7 +464,7 @@ def build_stream_kwargs(req: AdapterCallRequest) -> dict[str, Any]:
         kwargs["tools"] = _shape_tools(req, tc)
         if tc is not None:
             kwargs["tool_choice"] = tc
-    _maybe_inject_computer_use(kwargs)
+    _maybe_inject_computer_use(kwargs, req)
     _inject_native_web_tools(kwargs, req)
     _maybe_inject_context_management(kwargs)
     return kwargs
