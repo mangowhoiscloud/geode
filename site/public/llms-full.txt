@@ -2536,6 +2536,10 @@ channel_id = "C0ABCDEF1"     # 필수. 비어 있으면 규칙이 건너뜀
 require_mention = true
 ```
 
+## 실환경 검증
+
+2026-08-17의 [PR #3007](https://github.com/mangowhoiscloud/geode/pull/3007) head를 Slack Socket Mode에서 직접 실행했다. 일상 대화는 도구 없이 답했고, browser DOM 경로는 실제 `example.com` 탭과 제목을 확인했다. Strict pixel `computer_use`는 캡처에는 성공했지만 OpenAI subscription source에 호환 visual grounding이 없어 좌표를 추측하지 않고 중단했다. 공개 [E2E 영수증](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/41e15ca262d5953d1c88f4767777331875c57c9f/reports/e2e-validation/2026-08-17-slack-gateway-live-e2e.json)은 세 결과와 raw evidence digest를 보존한다. Primary 답변은 Codex OAuth subscription이었지만 post-turn GLM PAYG 호출도 관측돼 전체 lifecycle은 subscription-only가 아니다.
+
 ## 실패 모드
 
 | 증상 | 원인 | 해법 |
@@ -6008,7 +6012,7 @@ status dict 반환 (절대 raise하지 않음) + 히스토리 append
 URL: https://mangowhoiscloud.github.io/geode/docs/runtime/computer-use
 Markdown: https://mangowhoiscloud.github.io/geode/docs/runtime/computer-use.md
 
-컴퓨터 사용은 모델이 스크린샷으로 화면을 보고 클릭, 타이핑, 스크롤을 지시하는 기능입니다. GEODE의 구현은 `core/tools/computer_use.py`의 `ComputerUseHarness` 하나이며 host backend는 pyautogui 또는 macOS helper입니다. 매 동작 후 base64 JPEG 스크린샷을 돌려주어 모델이 결과를 관찰합니다.
+컴퓨터 사용은 모델이 스크린샷으로 화면을 보고 클릭, 타이핑, 스크롤을 지시하는 기능입니다. GEODE의 구현은 `core/tools/computer_use.py`의 `ComputerUseHarness` 하나이며 host backend는 pyautogui 또는 macOS helper입니다. Provider-native computer surface는 스크린샷을 해당 provider wire로 돌려주지만, normal function tool인 `computer_use`는 base64를 생략하고 compact observation만 반환합니다. Function-tool 경로의 시각적 좌표 선택은 활성 provider/source에 호환되는 grounding이 있을 때만 `locate`로 수행합니다.
 
 ## 동작 방식
 
@@ -6020,7 +6024,8 @@ LLM ── tool_use("computer", action, 좌표/텍스트) ──→ handle_compu
                                               ComputerUseHarness._execute_sync
                                                           │ pyautogui / macOS helper
                                                           ▼
-LLM ←──────── { result, action, screenshot(base64 JPEG) } ◄┘
+native computer ←── screenshot(provider wire) ──────────┤
+computer_use ←────── compact observation(base64 omitted) ◄┘
 ```
 
 디스패치 테이블은 프로바이더 중립입니다. Anthropic 어휘 (`left_click`, `triple_click`, `cursor_position`)와 OpenAI 어휘 (`keypress`)를 같은 핸들러로 받습니다. 지원 동작은 `screenshot`, `click`, `double_click`, `type`, `key`, `scroll`, `move`, `drag`, `wait`와 클릭 변형들입니다. 모르는 action은 지원 목록과 함께 오류로 돌아갑니다.
@@ -6048,7 +6053,7 @@ driver = "helper"
 # helper_path = "/absolute/path/to/geode-computer-helper"
 ```
 
-프로바이더가 native computer surface를 지원하면 그 경로를 쓰고, ChatGPT subscription처럼 native surface를 받지 않는 backend에는 같은 하네스를 normal function tool `computer_use`로 노출합니다.
+프로바이더가 native computer surface를 지원하면 그 경로를 쓰고, ChatGPT subscription처럼 native surface를 받지 않는 backend에는 같은 하네스를 normal function tool `computer_use`로 노출합니다. 이 경로는 다른 provider로 몰래 fallback하지 않습니다. OpenAI subscription source에 visual grounding을 별도로 구성하지 않았다면 `capture`는 가능하지만 `locate`는 dependency error로 중단되며, browser DOM·playwriter· `ui_probe` 같은 source-safe 구조 경로를 선택해야 합니다.
 
 ## 안전
 
@@ -6059,9 +6064,12 @@ driver = "helper"
 | 증상 | 원인 | 해법 |
 | --- | --- | --- |
 | 도구 목록에 `computer`가 없음 | 설정이 꺼졌거나 선택한 driver가 준비되지 않음 | `computer_use_enabled`와 pyautogui/helper 설치 상태를 확인합니다. |
+| `computer_use locate`가 dependency error | 활성 provider/source에 source-safe visual grounding이 없음 | 좌표를 추측하지 말고 `ui_probe`, browser DOM, playwriter 또는 검증된 keyboard navigation을 사용합니다. |
 | `move`가 Accessibility 오류 | OS가 입력 이벤트를 거부했거나 helper 권한이 없음 | 활성 driver/helper에 Accessibility 권한을 주고 `geode doctor`를 다시 실행합니다. |
 | 동작이 오류로 반환 | 지원하지 않는 action 이름 | 오류 응답의 `supported_actions` 목록을 확인합니다. |
 | 클릭 위치가 어긋남 | 타깃 공간과 화면 해상도 불일치 | 스케일링은 자동입니다. 멀티 디스플레이 구성에서는 활성 디스플레이 기준임을 감안합니다. |
+
+이 경계는 2026-08-17 Slack Socket Mode 실환경 검증에서 재현됐다. Strict `computer_use` 캡처는 성공하고 locate는 안전하게 중단됐으며, 별도 browser DOM case는 `Example Domain`을 확인했다. 공개 [영수증](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/41e15ca262d5953d1c88f4767777331875c57c9f/reports/e2e-validation/2026-08-17-slack-gateway-live-e2e.json)은 두 경로를 구분한다.
 
 ## 다음
 
