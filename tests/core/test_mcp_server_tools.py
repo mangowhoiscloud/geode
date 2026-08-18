@@ -163,7 +163,7 @@ def test_run_agentic_oneshot_bootstraps_adapters() -> None:
     from core.cli.bootstrap import arun_agentic_oneshot
 
     source = inspect.getsource(arun_agentic_oneshot)
-    assert "bootstrap_builtins()" in source
+    assert "bootstrap_builtins(policy_sources=policy_sources)" in source
 
 
 def test_run_agent_tool_is_async_and_awaits_async_core() -> None:

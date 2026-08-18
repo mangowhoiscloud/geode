@@ -37,12 +37,14 @@ def refresh_tools(loop: AgenticLoop) -> int:
     # strip) to a sub-agent that had a narrow toolkit. ``force_include``
     # keeps toolkit-granted tools authoritative over the global tool_policy.
     allowed = getattr(loop, "_allowed_tool_names", None)
+    force_include = allowed if getattr(loop, "_force_include_allowed_tools", False) else None
     loop._tools = get_agentic_tools(
         loop._tool_registry,
         mcp_tools=mcp_tool_list,
-        force_include=allowed,
+        force_include=force_include,
         provider=getattr(loop, "_provider", ""),
         source=getattr(loop, "_source", ""),
+        policy_sources=loop._policy_sources,
     )
     if allowed is not None:
         loop._tools = [t for t in loop._tools if t.get("name") in allowed]

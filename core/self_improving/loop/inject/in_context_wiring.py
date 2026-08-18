@@ -1,9 +1,9 @@
 """In-context slot wiring orchestrator — ADR-012 M4.4.
 
 Connects the S5 in-context slot schema (`core/self_improving/loop/inject/in_context_slots.py`)
-to the actual LLM inference path. For every active LLM call, this
-orchestrator consults the 4-slot SoT and applies the configured
-transforms to the outgoing ``messages`` + ``system`` text before they
+to the Anthropic API inference path. Product composition registers this
+orchestrator as request middleware for the PAYG and OAuth adapters; it applies
+configured transforms to outgoing ``messages`` + ``system`` text before they
 reach the provider.
 
 **5 slots → wiring status**:
@@ -51,17 +51,168 @@ self-improving loop can optimize each independently.
 from __future__ import annotations
 
 import logging
-from typing import Any
+from dataclasses import replace
+from typing import TYPE_CHECKING, Any
+
+from core.config.policy_source import EMPTY_POLICY_SOURCES, PolicySourceBundle
+from core.hooks.middleware import LlmCallRequest
+from core.llm.adapters.base import Message
+
+if TYPE_CHECKING:
+    from core.hooks.middleware import MiddlewareRegistry
 
 log = logging.getLogger(__name__)
 
-__all__ = ["apply_in_context_slots"]
+_ANTHROPIC_API_ADAPTERS = frozenset({"anthropic-payg", "anthropic-oauth"})
+_MIDDLEWARE_NAME = "self_improving_in_context"
+
+__all__ = ["apply_in_context_slots", "register_in_context_middleware"]
+
+
+def _load_cache_breakpoint_policy(
+    policy_sources: PolicySourceBundle,
+) -> int | None:
+    from core.llm.cache_policy import (
+        _load_cache_policy_override,
+        apply_cache_policy_breakpoints,
+    )
+    from core.llm.providers.anthropic import MAX_MESSAGE_CACHE_BREAKPOINTS
+
+    policy = _load_cache_policy_override(sources=policy_sources.get("cache_policy"))
+    if policy is None:
+        return None
+    return apply_cache_policy_breakpoints(MAX_MESSAGE_CACHE_BREAKPOINTS, policy)
+
+
+class _InContextRequestMiddleware:
+    """Apply product-owned prompt contributions at the LLM request boundary."""
+
+    def __init__(self, policy_sources: PolicySourceBundle | None = None) -> None:
+        self._policy_sources = policy_sources or EMPTY_POLICY_SOURCES
+
+    async def llm_request(self, request: LlmCallRequest) -> LlmCallRequest:
+        if not self._policy_sources:
+            return request
+        if getattr(request.adapter, "name", "") not in _ANTHROPIC_API_ADAPTERS:
+            return request
+
+        adapter_request = request.request
+        transformed_system = adapter_request.system_prompt
+        effective_messages = tuple(adapter_request.messages)
+        if "in_context_slots" in self._policy_sources:
+            slot_messages = [
+                {"role": message.role, "content": message.content}
+                for message in adapter_request.messages
+            ]
+            transformed_messages, transformed_system = _apply_to_dynamic_context(
+                slot_messages,
+                transformed_system,
+                policy_sources=self._policy_sources,
+            )
+            effective_messages = _restore_adapter_messages(
+                transformed_messages,
+                slot_messages,
+                effective_messages,
+            )
+        provider_options = dict(adapter_request.provider_options)
+        cache_policy = _load_cache_breakpoint_policy(self._policy_sources)
+        if cache_policy is not None:
+            provider_options["cache_message_breakpoints"] = cache_policy
+        if (
+            transformed_system == adapter_request.system_prompt
+            and effective_messages == tuple(adapter_request.messages)
+            and provider_options == adapter_request.provider_options
+        ):
+            return request
+
+        metadata = dict(adapter_request.metadata)
+        metadata["cache_invalidation_reason"] = "self-improving in-context contribution"
+        return request.with_request(
+            replace(
+                adapter_request,
+                messages=effective_messages,
+                system_prompt=transformed_system,
+                metadata=metadata,
+                provider_options=provider_options,
+            )
+        )
+
+
+def register_in_context_middleware(
+    registry: MiddlewareRegistry,
+    *,
+    policy_sources: PolicySourceBundle | None = None,
+) -> None:
+    """Register the product contribution once on one owner-created registry."""
+    registry.register_llm_request(
+        _InContextRequestMiddleware(policy_sources),
+        name=_MIDDLEWARE_NAME,
+        priority=1000,
+        timeout_s=0,
+        allow_cache_invalidation=True,
+    )
+
+
+def _apply_to_dynamic_context(
+    messages: list[dict[str, Any]],
+    system: str,
+    *,
+    policy_sources: PolicySourceBundle,
+) -> tuple[list[dict[str, Any]], str]:
+    """Preserve the Anthropic static cache prefix while applying contributions."""
+    from core.agent.system_prompt import PROMPT_CACHE_BOUNDARY
+
+    if not system or PROMPT_CACHE_BOUNDARY not in system:
+        return apply_in_context_slots(
+            messages,
+            system=system,
+            policy_sources=policy_sources,
+        )
+
+    static_part, dynamic_part = system.split(PROMPT_CACHE_BOUNDARY, 1)
+    closing = "</dynamic_context>"
+    core, separator, tail = dynamic_part.rpartition(closing)
+    inner, suffix = (
+        (core, separator + tail) if separator and not tail.strip() else (dynamic_part, "")
+    )
+    transformed_messages, transformed_inner = apply_in_context_slots(
+        messages,
+        system=inner,
+        policy_sources=policy_sources,
+    )
+    return (
+        transformed_messages,
+        static_part + PROMPT_CACHE_BOUNDARY + transformed_inner + suffix,
+    )
+
+
+def _restore_adapter_messages(
+    transformed: list[dict[str, Any]],
+    original_slots: list[dict[str, Any]],
+    original_messages: tuple[Message, ...],
+) -> tuple[Message, ...]:
+    """Keep original message metadata while materialising exemplar prefixes."""
+    prefix_length = len(transformed) - len(original_slots)
+    if prefix_length >= 0 and transformed[prefix_length:] == original_slots:
+        prefix = tuple(_message_from_slot(item) for item in transformed[:prefix_length])
+        return prefix + original_messages
+    return tuple(_message_from_slot(item) for item in transformed)
+
+
+def _message_from_slot(item: dict[str, Any]) -> Message:
+    role = item.get("role", "user")
+    content = item.get("content", "")
+    return Message(
+        role=role if isinstance(role, str) else "user",
+        content=content if isinstance(content, str | list) else str(content),
+    )
 
 
 def apply_in_context_slots(
     messages: list[dict[str, Any]],
     *,
     system: str = "",
+    policy_sources: PolicySourceBundle | None = None,
 ) -> tuple[list[dict[str, Any]], str]:
     """Apply the 4-slot in-context wiring to ``messages`` + ``system``.
 
@@ -91,7 +242,8 @@ def apply_in_context_slots(
             _load_in_context_slots_override,
         )
 
-        slots = _load_in_context_slots_override()
+        active_sources = policy_sources or EMPTY_POLICY_SOURCES
+        slots = _load_in_context_slots_override(sources=active_sources.get("in_context_slots"))
     except Exception:  # pragma: no cover — defensive
         log.debug("in_context_slots load failed; skipping wiring", exc_info=True)
         return messages, system
@@ -111,7 +263,7 @@ def apply_in_context_slots(
                 apply_few_shot_pool,
             )
 
-            pool = _load_few_shot_pool_override()
+            pool = _load_few_shot_pool_override(sources=active_sources.get("few_shot_pool"))
             if pool:
                 new_messages = apply_few_shot_pool(
                     new_messages, pool, max_entries=exemplars_cfg.max_entries

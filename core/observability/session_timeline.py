@@ -1173,16 +1173,15 @@ class SessionTimeline:
 
             append_jsonl(path, _session_event_projection(event))
             if path.stat().st_size > self._store.policy.max_projection_bytes:
-                from core.self_improving.loop.observe.run_timeline import (
-                    compact_run_timeline,
-                )
+                from core.observability.run_event import RunIdentity, compact_run_events
 
-                compact_run_timeline(
+                compact_run_events(
                     path,
                     self._store.policy.max_projection_bytes,
-                    session_id=event.session_id,
-                    gen_tag="",
-                    component="agentic_loop",
+                    identity=RunIdentity(
+                        session_id=event.session_id,
+                        component="agentic_loop",
+                    ),
                     ordinal=event.id,
                 )
         except (OSError, UnicodeError) as exc:
@@ -1417,7 +1416,7 @@ def _legacy_row_to_event(
 
 def _session_event_projection(event: PersistedSessionEvent) -> dict[str, Any]:
     """Project canonical SQLite history into one ``geode.run-event@1`` row."""
-    from core.self_improving.loop.observe.run_timeline import (
+    from core.observability.run_event import (
         RUN_EVENT_SCHEMA_ID,
         RUN_EVENT_SCHEMA_VERSION,
     )

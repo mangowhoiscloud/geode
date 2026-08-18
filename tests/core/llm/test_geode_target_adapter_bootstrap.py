@@ -39,13 +39,7 @@ def test_default_geode_runner_calls_bootstrap_builtins() -> None:
         Path(__file__).resolve().parents[3] / "plugins" / "petri_audit" / "geode_target.py"
     )
     source = target_module.read_text(encoding="utf-8")
-    assert "bootstrap_builtins" in source, (
-        "geode_target.py no longer references bootstrap_builtins(); the "
-        "audit subprocess will revert to AdapterNotFoundError on the next "
-        "live audit. Re-add the call before AgenticLoop construction in "
-        "_default_geode_runner — see worker.py:817 for the pattern."
-    )
-    assert "bootstrap_builtins()" in source, (
+    assert "bootstrap_builtins(policy_sources=policy_sources)" in source, (
         "bootstrap_builtins must be CALLED (not merely imported) inside "
         "_default_geode_runner. The audit subprocess's wiring container "
         "is the parent's, not this one's — registry stays empty without "

@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 from core.agent.system_prompt import WRAPPER_OVERRIDE_HOOK_READY, build_system_prompt
+from core.config.policy_source import PolicySourcePaths
 
 
 @pytest.fixture(autouse=True)
@@ -22,12 +23,22 @@ def _write_override(tmp_path: Path, payload: object) -> Path:
     return path
 
 
+def _wrapper_sources(packaged_default: Path | None = None) -> dict[str, PolicySourcePaths]:
+    return {
+        "wrapper_sections": PolicySourcePaths(
+            "GEODE_WRAPPER_OVERRIDE",
+            packaged_default=packaged_default,
+            override_is_strict=True,
+        )
+    }
+
+
 def test_wrapper_override_hook_ready_sentinel() -> None:
     assert WRAPPER_OVERRIDE_HOOK_READY is True
 
 
 def test_unset_wrapper_override_keeps_default_wrapper() -> None:
-    prompt = build_system_prompt()
+    prompt = build_system_prompt(policy_sources=_wrapper_sources())
 
     assert "GEODE handles autonomous execution" in prompt
     assert "AUTORESEARCH_MUTATED_WRAPPER" not in prompt
@@ -46,7 +57,7 @@ def test_valid_wrapper_override_replaces_default_wrapper(
     )
     monkeypatch.setenv("GEODE_WRAPPER_OVERRIDE", str(override_path))
 
-    prompt = build_system_prompt()
+    prompt = build_system_prompt(policy_sources=_wrapper_sources())
 
     assert "GEODE handles autonomous execution" not in prompt
     assert "AUTORESEARCH_MUTATED_WRAPPER" in prompt
@@ -62,7 +73,7 @@ def test_valid_wrapper_override_reaches_unrestricted_audit_prompt(
     monkeypatch.setenv("GEODE_WRAPPER_OVERRIDE", str(override_path))
     monkeypatch.setenv("GEODE_AUDIT_UNRESTRICTED", "1")
 
-    prompt = build_system_prompt()
+    prompt = build_system_prompt(policy_sources=_wrapper_sources())
 
     assert "AUDIT_MODE_MUTATED_WRAPPER" in prompt
     assert "GEODE handles autonomous execution" not in prompt
@@ -75,7 +86,7 @@ def test_missing_wrapper_override_file_fails_closed(
     monkeypatch.setenv("GEODE_WRAPPER_OVERRIDE", str(tmp_path / "missing.json"))
 
     with pytest.raises(RuntimeError, match="file not found"):
-        build_system_prompt()
+        build_system_prompt(policy_sources=_wrapper_sources())
 
 
 def test_invalid_wrapper_override_schema_fails_closed(
@@ -85,7 +96,7 @@ def test_invalid_wrapper_override_schema_fails_closed(
     monkeypatch.setenv("GEODE_WRAPPER_OVERRIDE", str(override_path))
 
     with pytest.raises(RuntimeError, match=r"non-empty dict\[str, str\]"):
-        build_system_prompt()
+        build_system_prompt(policy_sources=_wrapper_sources())
 
 
 # ---------------------------------------------------------------------------
@@ -96,8 +107,7 @@ def test_invalid_wrapper_override_schema_fails_closed(
 def test_sot_fallback_default_when_no_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """No SoT file + no env → default wrapper (router-style baseline)."""
     sot_path = tmp_path / "wrapper-sections.json"  # never created
-    monkeypatch.setattr("core.agent.system_prompt._WRAPPER_SECTIONS_SOT_PATH", sot_path)
-    prompt = build_system_prompt()
+    prompt = build_system_prompt(policy_sources=_wrapper_sources(sot_path))
     assert "GEODE handles autonomous execution" in prompt
 
 
@@ -110,8 +120,7 @@ def test_sot_fallback_loaded_when_file_present(
         json.dumps({"role": "G5A_SOT_LOADED_WRAPPER", "extra": "second section"}),
         encoding="utf-8",
     )
-    monkeypatch.setattr("core.agent.system_prompt._WRAPPER_SECTIONS_SOT_PATH", sot_path)
-    prompt = build_system_prompt()
+    prompt = build_system_prompt(policy_sources=_wrapper_sources(sot_path))
     assert "G5A_SOT_LOADED_WRAPPER" in prompt
     assert "second section" in prompt
     assert "GEODE handles autonomous execution" not in prompt
@@ -121,10 +130,9 @@ def test_env_override_wins_over_sot(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     """GEODE_WRAPPER_OVERRIDE env beats the SoT fallback."""
     sot_path = tmp_path / "wrapper-sections.json"
     sot_path.write_text(json.dumps({"role": "G5A_SOT_LOADED_WRAPPER"}), encoding="utf-8")
-    monkeypatch.setattr("core.agent.system_prompt._WRAPPER_SECTIONS_SOT_PATH", sot_path)
     override_path = _write_override(tmp_path, {"role": "ENV_OVERRIDE_WINS"})
     monkeypatch.setenv("GEODE_WRAPPER_OVERRIDE", str(override_path))
-    prompt = build_system_prompt()
+    prompt = build_system_prompt(policy_sources=_wrapper_sources(sot_path))
     assert "ENV_OVERRIDE_WINS" in prompt
     assert "G5A_SOT_LOADED_WRAPPER" not in prompt
 
@@ -135,8 +143,7 @@ def test_sot_fallback_unparseable_uses_default(
     """Corrupted SoT → graceful degrade to default, no RuntimeError."""
     sot_path = tmp_path / "wrapper-sections.json"
     sot_path.write_text("{ not valid json", encoding="utf-8")
-    monkeypatch.setattr("core.agent.system_prompt._WRAPPER_SECTIONS_SOT_PATH", sot_path)
-    prompt = build_system_prompt()
+    prompt = build_system_prompt(policy_sources=_wrapper_sources(sot_path))
     assert "GEODE handles autonomous execution" in prompt
     assert "G5A_SOT" not in prompt
 
@@ -147,8 +154,7 @@ def test_sot_fallback_empty_dict_uses_default(
     """Empty dict SoT → graceful degrade."""
     sot_path = tmp_path / "wrapper-sections.json"
     sot_path.write_text(json.dumps({}), encoding="utf-8")
-    monkeypatch.setattr("core.agent.system_prompt._WRAPPER_SECTIONS_SOT_PATH", sot_path)
-    prompt = build_system_prompt()
+    prompt = build_system_prompt(policy_sources=_wrapper_sources(sot_path))
     assert "GEODE handles autonomous execution" in prompt
 
 
@@ -158,20 +164,16 @@ def test_sot_fallback_non_string_values_uses_default(
     """Non-string value in SoT → graceful degrade."""
     sot_path = tmp_path / "wrapper-sections.json"
     sot_path.write_text(json.dumps({"role": 42}), encoding="utf-8")
-    monkeypatch.setattr("core.agent.system_prompt._WRAPPER_SECTIONS_SOT_PATH", sot_path)
-    prompt = build_system_prompt()
+    prompt = build_system_prompt(policy_sources=_wrapper_sources(sot_path))
     assert "GEODE handles autonomous execution" in prompt
 
 
 def test_sot_path_parity_with_autoresearch() -> None:
-    """G5a — core.self_improving.train.WRAPPER_SECTIONS_SOT_PATH ===
-    core.agent.system_prompt._WRAPPER_SECTIONS_SOT_PATH.
-
-    The two SoT path constants are deliberately *duplicated* (not
-    imported) to keep the import-linter "Agent stays pure" contract
-    intact, so the parity must be pinned by a test instead.
-    """
-    from core.agent import system_prompt
+    """The product bundle supplies the same wrapper path its writer owns."""
     from core.self_improving import train as auto_train
+    from core.self_improving.policy_sources import build_policy_source_bundle
 
-    assert auto_train.WRAPPER_SECTIONS_SOT_PATH == system_prompt._WRAPPER_SECTIONS_SOT_PATH
+    assert (
+        build_policy_source_bundle()["wrapper_sections"].packaged_default
+        == auto_train.WRAPPER_SECTIONS_SOT_PATH
+    )

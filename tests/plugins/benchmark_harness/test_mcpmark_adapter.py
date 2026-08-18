@@ -965,8 +965,7 @@ def test_mcpmark_adapter_bootstraps_llm_adapters() -> None:
         / "mcpmark_geode_agent.py"
     ).read_text(encoding="utf-8")
 
-    assert "bootstrap_builtins" in source
-    assert "bootstrap_builtins()" in source
+    assert "bootstrap_builtins(policy_sources=policy_sources)" in source
 
 
 def test_mcpmark_adapter_keeps_service_specific_server_overrides() -> None:

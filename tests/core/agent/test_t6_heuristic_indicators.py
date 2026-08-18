@@ -2,7 +2,7 @@
 
 5-element 패턴:
 - SoT: heuristics.json
-- Path: AUTORESEARCH_HEURISTICS_PATH + OPERATOR_LOCAL_HEURISTICS_PATH
+- Sources: explicit override + operator-local + packaged candidates
 - Reader: core/agent/heuristics_policy.py
 - Entry: core/agent/system_prompt.py:build_system_prompt
 - Env: GEODE_HEURISTICS_OVERRIDE + GEODE_HEURISTICS_STRICT
@@ -16,22 +16,27 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from core.agent import heuristics_policy
 from core.agent.heuristics_policy import (
     _load_heuristics_override,
     apply_heuristics_policy,
 )
+from core.config.policy_source import PolicySourcePaths
 
 
 @pytest.fixture
 def isolated_sot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
     sot = tmp_path / "heuristics.json"
-    operator_local = tmp_path / "operator-local-heuristics.json"
-    monkeypatch.setattr(heuristics_policy, "_HEURISTICS_SOT_PATH", sot)
-    monkeypatch.setattr(heuristics_policy, "_OPERATOR_LOCAL_HEURISTICS_PATH", operator_local)
     monkeypatch.delenv("GEODE_HEURISTICS_OVERRIDE", raising=False)
     monkeypatch.delenv("GEODE_HEURISTICS_STRICT", raising=False)
     yield sot
+
+
+def _sources(sot: Path) -> PolicySourcePaths:
+    return PolicySourcePaths(
+        "GEODE_HEURISTICS_OVERRIDE",
+        sot.parent / "operator-local-heuristics.json",
+        sot,
+    )
 
 
 def _write(sot: Path, payload: dict[str, Any]) -> None:
@@ -42,22 +47,22 @@ def _write(sot: Path, payload: dict[str, Any]) -> None:
 
 
 def test_load_returns_none_when_sot_missing(isolated_sot: Path) -> None:
-    assert _load_heuristics_override() is None
+    assert _load_heuristics_override(sources=_sources(isolated_sot)) is None
 
 
 def test_load_returns_none_when_unreadable(isolated_sot: Path) -> None:
     isolated_sot.write_text("bad json {", encoding="utf-8")
-    assert _load_heuristics_override() is None
+    assert _load_heuristics_override(sources=_sources(isolated_sot)) is None
 
 
 def test_load_returns_none_when_value_not_list(isolated_sot: Path) -> None:
     _write(isolated_sot, {"complexity_indicators": "single string"})
-    assert _load_heuristics_override() is None
+    assert _load_heuristics_override(sources=_sources(isolated_sot)) is None
 
 
 def test_load_returns_none_when_value_contains_non_str(isolated_sot: Path) -> None:
     _write(isolated_sot, {"complexity_indicators": ["x", 42]})
-    assert _load_heuristics_override() is None
+    assert _load_heuristics_override(sources=_sources(isolated_sot)) is None
 
 
 def test_load_valid_payload_all_groups(isolated_sot: Path) -> None:
@@ -67,12 +72,14 @@ def test_load_valid_payload_all_groups(isolated_sot: Path) -> None:
         "time_pressure_indicators": ["asap", "urgent"],
     }
     _write(isolated_sot, payload)
-    assert _load_heuristics_override() == payload
+    assert _load_heuristics_override(sources=_sources(isolated_sot)) == payload
 
 
 def test_load_partial_groups(isolated_sot: Path) -> None:
     _write(isolated_sot, {"complexity_indicators": ["x"]})
-    assert _load_heuristics_override() == {"complexity_indicators": ["x"]}
+    assert _load_heuristics_override(sources=_sources(isolated_sot)) == {
+        "complexity_indicators": ["x"]
+    }
 
 
 def test_load_dedupes_phrases_preserving_order(isolated_sot: Path) -> None:
@@ -80,17 +87,23 @@ def test_load_dedupes_phrases_preserving_order(isolated_sot: Path) -> None:
         isolated_sot,
         {"complexity_indicators": ["a", "b", "a", "c", "b"]},
     )
-    assert _load_heuristics_override() == {"complexity_indicators": ["a", "b", "c"]}
+    assert _load_heuristics_override(sources=_sources(isolated_sot)) == {
+        "complexity_indicators": ["a", "b", "c"]
+    }
 
 
 def test_load_drops_empty_strings(isolated_sot: Path) -> None:
     _write(isolated_sot, {"complexity_indicators": ["a", "", "b"]})
-    assert _load_heuristics_override() == {"complexity_indicators": ["a", "b"]}
+    assert _load_heuristics_override(sources=_sources(isolated_sot)) == {
+        "complexity_indicators": ["a", "b"]
+    }
 
 
 def test_load_drops_empty_group(isolated_sot: Path) -> None:
     _write(isolated_sot, {"complexity_indicators": [], "high_risk_indicators": ["x"]})
-    assert _load_heuristics_override() == {"high_risk_indicators": ["x"]}
+    assert _load_heuristics_override(sources=_sources(isolated_sot)) == {
+        "high_risk_indicators": ["x"]
+    }
 
 
 def test_load_unknown_group_dropped(isolated_sot: Path) -> None:
@@ -99,14 +112,16 @@ def test_load_unknown_group_dropped(isolated_sot: Path) -> None:
         isolated_sot,
         {"complexity_indicators": ["x"], "unknown_indicators": ["y"]},
     )
-    assert _load_heuristics_override() == {"complexity_indicators": ["x"]}
+    assert _load_heuristics_override(sources=_sources(isolated_sot)) == {
+        "complexity_indicators": ["x"]
+    }
 
 
 def test_strict_env_var_raises_on_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GEODE_HEURISTICS_OVERRIDE", str(tmp_path / "nope.json"))
     monkeypatch.setenv("GEODE_HEURISTICS_STRICT", "1")
     with pytest.raises(RuntimeError, match="GEODE_HEURISTICS_OVERRIDE"):
-        _load_heuristics_override()
+        _load_heuristics_override(sources=_sources(tmp_path / "heuristics.json"))
 
 
 def test_env_var_without_strict_is_graceful(
@@ -114,14 +129,16 @@ def test_env_var_without_strict_is_graceful(
 ) -> None:
     monkeypatch.setenv("GEODE_HEURISTICS_OVERRIDE", str(tmp_path / "nope.json"))
     monkeypatch.delenv("GEODE_HEURISTICS_STRICT", raising=False)
-    assert _load_heuristics_override() is None
+    assert _load_heuristics_override(sources=_sources(tmp_path / "heuristics.json")) is None
 
 
 def test_operator_local_layer_priority(isolated_sot: Path) -> None:
     operator_local = isolated_sot.parent / "operator-local-heuristics.json"
     operator_local.write_text(json.dumps({"complexity_indicators": ["from-ops"]}), encoding="utf-8")
     _write(isolated_sot, {"complexity_indicators": ["from-repo"]})
-    assert _load_heuristics_override() == {"complexity_indicators": ["from-ops"]}
+    assert _load_heuristics_override(sources=_sources(isolated_sot)) == {
+        "complexity_indicators": ["from-ops"]
+    }
 
 
 # Apply -----------------------------------------------------------------------
@@ -196,8 +213,8 @@ def test_system_prompt_wires_apply_into_static() -> None:
     must appear AFTER the T3 style-guide apply, both in the static path."""
     repo_root = Path(__file__).resolve().parents[3]
     src = (repo_root / "core/agent/system_prompt.py").read_text(encoding="utf-8")
-    style_idx = src.find("apply_style_guide_policy(static,")
-    heur_idx = src.find("apply_heuristics_policy(static,")
+    style_idx = src.find("static = apply_style_guide_policy(")
+    heur_idx = src.find("static = apply_heuristics_policy(")
     assert style_idx > 0
     assert heur_idx > 0
     # Heuristics applied AFTER style-guide (so its block renders below).
@@ -207,13 +224,16 @@ def test_system_prompt_wires_apply_into_static() -> None:
 # Path constants --------------------------------------------------------------
 
 
-def test_path_constants_present() -> None:
-    from core.paths import AUTORESEARCH_HEURISTICS_PATH, OPERATOR_LOCAL_HEURISTICS_PATH
+def test_product_source_candidates_present() -> None:
+    from core.self_improving.policy_sources import build_policy_source_bundle
 
-    assert AUTORESEARCH_HEURISTICS_PATH.name == "heuristics.json"
-    assert OPERATOR_LOCAL_HEURISTICS_PATH.name == "heuristics.json"
-    assert "policies" in str(AUTORESEARCH_HEURISTICS_PATH)
-    assert "autoresearch/handoff" in str(OPERATOR_LOCAL_HEURISTICS_PATH)
+    sources = build_policy_source_bundle()["heuristics"]
+    assert sources.packaged_default is not None
+    assert sources.operator_local is not None
+    assert sources.packaged_default.name == "heuristics.json"
+    assert sources.operator_local.name == "heuristics.json"
+    assert "policies" in str(sources.packaged_default)
+    assert "autoresearch/handoff" in str(sources.operator_local)
 
 
 # Env wiring in train.py ------------------------------------------------------
@@ -232,16 +252,6 @@ def test_train_py_sets_heuristics_env_pair() -> None:
 
 def test_heuristics_json_referenced_in_inference_path() -> None:
     repo_root = Path(__file__).resolve().parents[3]
-    hits: list[str] = []
-    for path in (repo_root / "core").rglob("*.py"):
-        if "test_" in path.name:
-            continue
-        try:
-            content = path.read_text(encoding="utf-8")
-        except OSError:
-            continue
-        if "heuristics.json" in content:
-            hits.append(str(path.relative_to(repo_root)))
-    assert any("heuristics_policy.py" in h for h in hits), (
-        f"heuristics.json must appear in core/agent/heuristics_policy.py. hits={hits}"
-    )
+    composition = (repo_root / "core/self_improving/policy_sources.py").read_text(encoding="utf-8")
+    assert '"heuristics"' in composition
+    assert "AUTORESEARCH_HEURISTICS_PATH" in composition

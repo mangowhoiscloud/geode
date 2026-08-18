@@ -32,6 +32,7 @@ from core.agent.verify import (
     _verify_llm_judge,
     verify_turn,
 )
+from core.config.policy_source import EMPTY_POLICY_SOURCES
 
 
 @pytest.fixture(autouse=True)
@@ -157,11 +158,13 @@ def test_call_llm_disables_action_tools_for_auxiliary_calls() -> None:
     """Planner and judge calls can request text-only execution without
     inheriting the main agent's tool surface."""
     import asyncio
+    from dataclasses import replace
 
     from core.agent.conversation import ConversationContext
     from core.agent.loop.agent_loop import AgenticLoop
     from core.agent.tool_executor import ToolExecutor
-    from core.llm.adapters.base import AdapterCallResult, UsageSummary
+    from core.hooks import LlmCallRequest, MiddlewareRegistry
+    from core.llm.adapters.base import AdapterCallResult, ToolSpec, UsageSummary
     from core.llm.adapters.registry import bootstrap_builtins
 
     captured: dict[str, Any] = {}
@@ -178,15 +181,30 @@ def test_call_llm_disables_action_tools_for_auxiliary_calls() -> None:
                 stop_reason="completed",
             )
 
+    class WideningMiddleware:
+        async def llm_request(self, request: LlmCallRequest) -> LlmCallRequest:
+            widened = replace(
+                request.request,
+                allowed_tool_names=None,
+                tools=(ToolSpec(name="blocked", description="", input_schema={}),),
+                metadata={"cache_invalidation_reason": "test widening"},
+            )
+            return request.with_request(widened)
+
     bootstrap_builtins()
+    middleware = MiddlewareRegistry()
+    middleware.register_llm_request(
+        WideningMiddleware(), name="widening-test", allow_cache_invalidation=True
+    )
     loop = AgenticLoop(
         ConversationContext(),
-        ToolExecutor(),
+        ToolExecutor(middleware_registry=middleware),
         model="gpt-5.6-luna",
         provider="openai",
         source="codex-oauth",
         quiet=True,
         disable_settings_drift=True,
+        allowed_tool_names={"read_file"},
     )
     loop._new_adapter = CaptureAdapter()
 
@@ -201,6 +219,7 @@ def test_call_llm_disables_action_tools_for_auxiliary_calls() -> None:
     request = captured["request"]
     assert not request.tools
     assert request.tool_choice == {"type": "none"}
+    assert request.allowed_tool_names == frozenset({"read_file"})
 
 
 # -- Goal decomposition inherits loop model ---------------------------
@@ -224,7 +243,12 @@ def test_decompose_async_inherits_loop_model(monkeypatch: pytest.MonkeyPatch) ->
         # (we only care which model was requested for the call).
         return None
 
-    loop = SimpleNamespace(_call_llm=_fake_call_llm, _tools=[], model="claude-haiku-4-5")
+    loop = SimpleNamespace(
+        _call_llm=_fake_call_llm,
+        _tools=[],
+        _policy_sources=EMPTY_POLICY_SOURCES,
+        model="claude-haiku-4-5",
+    )
 
     from core.agent.plan import decompose_async
 
@@ -249,7 +273,12 @@ def test_decompose_async_ignores_removed_plan_model(
         captured["model"] = model or ""
         return None
 
-    loop = SimpleNamespace(_call_llm=_fake_call_llm, _tools=[], model="claude-opus-4-7")
+    loop = SimpleNamespace(
+        _call_llm=_fake_call_llm,
+        _tools=[],
+        _policy_sources=EMPTY_POLICY_SOURCES,
+        model="claude-opus-4-7",
+    )
 
     from core.agent.plan import decompose_async
 

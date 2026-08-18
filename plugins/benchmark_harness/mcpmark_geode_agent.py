@@ -329,11 +329,16 @@ def _build_loop(
     from core.agent.conversation import ConversationContext
     from core.agent.loop import AgenticLoop
     from core.agent.tool_executor import ToolExecutor
-    from core.hooks.middleware import MiddlewareRegistry
     from core.llm.adapters.registry import bootstrap_builtins
     from core.tools.registry import ToolRegistry
+    from core.wiring.bootstrap import (
+        build_middleware_registry,
+        build_product_policy_sources,
+        current_product_activity_sink,
+    )
 
-    bootstrap_builtins()
+    policy_sources = build_product_policy_sources()
+    bootstrap_builtins(policy_sources=policy_sources)
 
     registry = ToolRegistry()
     handlers: dict[str, Any] = {}
@@ -342,7 +347,7 @@ def _build_loop(
         handlers[tool.name] = tool.aexecute
 
     schemas = {tool.name: tool.schema for tool in tools}
-    middleware = MiddlewareRegistry()
+    middleware = build_middleware_registry(policy_sources=policy_sources)
     middleware.register_tool_request(
         _MCPMarkArgumentNormalizer(schemas),
         name="mcpmark-argument-normalizer",
@@ -366,6 +371,7 @@ def _build_loop(
         time_budget_s=float(timeout),
         tool_registry=registry,
         allowed_tool_names=set(handlers),
+        force_include_allowed_tools=True,
         system_prompt_override=(
             "Agent: GEODE running inside MCPMark. Complete the benchmark task "
             "using only the provided MCP tools. Do not invent tool results. "
@@ -373,6 +379,8 @@ def _build_loop(
         ),
         quiet=True,
         enable_goal_decomposition=False,
+        activity_sink_provider=current_product_activity_sink,
+        policy_sources=policy_sources,
     )
 
 

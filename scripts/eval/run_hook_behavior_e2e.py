@@ -77,7 +77,7 @@ def _middleware_counts_are_valid(counts: dict[str, int]) -> bool:
     )
 
 
-async def _run_action_matrix() -> dict[str, dict[str, Any]]:
+async def _run_action_matrix(policy_sources: Any) -> dict[str, dict[str, Any]]:
     """Pin failure and idempotency behavior without spending model tokens."""
     from core.agent.sub_agent import SubAgentManager, SubTask
     from core.agent.tool_executor import ToolExecutor
@@ -236,6 +236,7 @@ async def _run_action_matrix() -> dict[str, dict[str, Any]]:
         IsolatedRunner(),
         task_handler=slow_subagent,
         timeout_s=0.02,
+        policy_sources=policy_sources,
     )
     timeout_results = await timeout_manager.adelegate(
         [SubTask("matrix-timeout", "Exercise timeout", "analysis")]
@@ -296,9 +297,12 @@ async def _run(
         RunTimeline,
         run_timeline_scope,
     )
+    from core.self_improving.policy_sources import build_policy_source_bundle
     from core.tools.registry import ToolRegistry
+    from core.wiring.bootstrap import current_product_activity_sink
 
-    behavior_matrix = await _run_action_matrix()
+    policy_sources = build_policy_source_bundle()
+    behavior_matrix = await _run_action_matrix(policy_sources)
     captured_at = _utc_now()
     run_id = f"hook-middleware-e2e-{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}"
     session_key = f"{run_id}:suite"
@@ -320,7 +324,12 @@ async def _run(
     runtime_events = RuntimeEventBus()
     store = HookEventStore(sqlite_path)
     runtime_events.register_sink(
-        HookPersistenceSink(store, session_key=session_key, run_id=run_id),
+        HookPersistenceSink(
+            store,
+            session_key=session_key,
+            run_id=run_id,
+            activity_sink_provider=current_product_activity_sink,
+        ),
         name="hook_behavior_e2e",
     )
     public_hooks = HookRegistry(events=runtime_events)
@@ -569,7 +578,7 @@ async def _run(
             self.calls.append(marker)
             return {"marker": marker, "result": "behavior probe executed"}
 
-    bootstrap_builtins()
+    bootstrap_builtins(policy_sources=policy_sources)
     probe_tool = ProbeTool()
     tool_registry = ToolRegistry()
     tool_registry.register(probe_tool)
@@ -597,6 +606,8 @@ async def _run(
         quiet=True,
         disable_settings_drift=True,
         session_id=f"{run_id}-live",
+        activity_sink_provider=current_product_activity_sink,
+        policy_sources=policy_sources,
     )
 
     timeline = RunTimeline(
@@ -656,6 +667,8 @@ async def _run(
             },
             timeout_s=30,
             hook_registry=public_hooks,
+            activity_sink_provider=current_product_activity_sink,
+            policy_sources=policy_sources,
         )
         subagent_results = await subagents.adelegate(
             [

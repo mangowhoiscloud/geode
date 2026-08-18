@@ -193,7 +193,7 @@
       {
         "context_name": "self_improving_loop_run_timeline",
         "has_default": true,
-        "line": 29,
+        "line": 32,
         "path": "core/self_improving/loop/observe/run_timeline.py",
         "symbol": "_current_run_timeline"
       },
@@ -236,8 +236,8 @@
   },
   "coordinators": {
     "AgenticLoop": {
-      "constructor_arg_count": 27,
-      "file_loc": 3154,
+      "constructor_arg_count": 30,
+      "file_loc": 3179,
       "method_count": 75,
       "path": "core/agent/loop/agent_loop.py"
     },
@@ -246,8 +246,8 @@
       "path": "core/runtime.py"
     },
     "SubAgentManager": {
-      "constructor_arg_count": 15,
-      "file_loc": 1443,
+      "constructor_arg_count": 17,
+      "file_loc": 1450,
       "method_count": 24,
       "path": "core/agent/sub_agent.py"
     }
@@ -392,22 +392,22 @@
         "path": "core/self_improving/loop/observe/attribution.py"
       },
       {
-        "line": 235,
+        "line": 236,
         "module": "plugins.petri_audit.manifest",
         "path": "core/self_improving/train.py"
       },
       {
-        "line": 236,
+        "line": 237,
         "module": "plugins.petri_audit.user_overrides",
         "path": "core/self_improving/train.py"
       },
       {
-        "line": 596,
+        "line": 597,
         "module": "plugins.petri_audit.runner",
         "path": "core/self_improving/train.py"
       },
       {
-        "line": 1366,
+        "line": 1367,
         "module": "plugins.seed_generation.baseline_reader",
         "path": "core/self_improving/train.py"
       }
@@ -476,7 +476,7 @@
     ]
   },
   "import_linter": {
-    "contract_count": 4,
+    "contract_count": 5,
     "contracts": [
       {
         "ignored_edges": [
@@ -521,22 +521,26 @@
           "core.messaging.binding -> core.server.supervised.poller_base"
         ],
         "name": "Messaging integration is capability-pure (no process imports)"
+      },
+      {
+        "ignored_edges": [],
+        "name": "Classified kernel does not import the bundled self-improving product"
       }
     ],
     "ignored_edge_count": 24
   },
   "packages": {
     "core": {
-      "python_files": 434,
-      "python_loc": 139029
+      "python_files": 437,
+      "python_loc": 139637
     },
     "plugins": {
       "python_files": 114,
-      "python_loc": 44824
+      "python_loc": 44872
     },
     "tests": {
-      "python_files": 685,
-      "python_loc": 183331
+      "python_files": 686,
+      "python_loc": 184240
     }
   },
   "schema_version": 1,

@@ -16,6 +16,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from core.self_improving.policy_sources import build_policy_source_bundle
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -170,11 +171,9 @@ def test_tool_policy_slot_is_now_alive_post_s0a() -> None:
     ``core/agent/tool_policy.py`` 에 존재 + ``_helpers.py`` 의 도구 통합
     경로에서 실제로 호출됨. PR-AUDIT-5SLOT 의 의도된 회귀 marker 의
     발화 결과 (Codex MCP catch — cosmetic 검증 → call chain 검증)."""
-    hits = _grep_inference_dirs("tool-policy.json")
-    # tool_policy.py 의 path constant alias 위치 + _helpers.py 의 호출 위치
-    assert any("tool_policy.py" in h for h in hits), (
-        f"tool-policy.json 이 core/agent/tool_policy.py 에서 발견되어야 함. hits={hits}"
-    )
+    source = build_policy_source_bundle()["tool_policy"]
+    assert source.packaged_default is not None
+    assert source.packaged_default.name == "tool-policy.json"
     # Call chain 검증 — _helpers.get_agentic_tools 가 _load_tool_policy_override 를 호출.
     helpers_src = (REPO_ROOT / "core/agent/loop/_tool_factory.py").read_text(encoding="utf-8")
     assert "_load_tool_policy_override" in helpers_src, (
@@ -194,10 +193,9 @@ def test_decomposition_slot_is_now_alive_post_s0c() -> None:
     → ``core/agent/plan.py:decompose_async`` 로 이전됨 (모듈 삭제). wiring
     자체는 동일.
     """
-    hits = _grep_inference_dirs("decomposition.json")
-    assert any("decomposition_policy.py" in h for h in hits), (
-        f"decomposition.json 이 core/agent/decomposition_policy.py 에서 발견되어야 함. hits={hits}"
-    )
+    source = build_policy_source_bundle()["decomposition"]
+    assert source.packaged_default is not None
+    assert source.packaged_default.name == "decomposition.json"
     # Call chain 검증 — plan.py:decompose_async 가 reader 를 호출.
     src = _read("core/agent/plan.py")
     assert "_load_decomposition_policy_override" in src, (
@@ -213,10 +211,9 @@ def test_reflection_slot_is_now_alive_post_s0b() -> None:
     ``core/agent/reflection_policy.py`` 에 존재 + ``_reflection.py`` 의
     reflection LLM 호출 직전에 실제로 호출됨. PR-AUDIT-5SLOT 의 의도된
     회귀 marker 의 발화 결과."""
-    hits = _grep_inference_dirs("reflection.json")
-    assert any("reflection_policy.py" in h for h in hits), (
-        f"reflection.json 이 core/agent/reflection_policy.py 에서 발견되어야 함. hits={hits}"
-    )
+    source = build_policy_source_bundle()["reflection"]
+    assert source.packaged_default is not None
+    assert source.packaged_default.name == "reflection.json"
     # Call chain 검증 — _reflection.py 가 reflection_policy 의 reader 를 호출.
     reflection_src = _read("core/agent/loop/_reflection.py")
     assert "_load_reflection_policy_override" in reflection_src, (

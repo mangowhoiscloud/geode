@@ -9,6 +9,7 @@
   <img src="https://img.shields.io/badge/while(tool__use)-agentic%20loop-E0699F?style=flat-square" alt="while(tool_use)">
   <img src="https://img.shields.io/badge/scaffold%20optimization-experimental-E0699F?style=flat-square" alt="Experimental scaffold optimization">
   <a href="https://github.com/mangowhoiscloud/geode/actions"><img src="https://img.shields.io/github/actions/workflow/status/mangowhoiscloud/geode/ci.yml?style=flat-square&label=ci&logo=github&logoColor=white" alt="CI"></a>
+  <a href="https://github.com/mangowhoiscloud/geode/releases/latest"><img src="https://img.shields.io/github/v/release/mangowhoiscloud/geode?style=flat-square&label=release" alt="최신 릴리스"></a>
 </p>
 
 <p align="center">
@@ -29,7 +30,7 @@
   <a href="README.md">English</a>
 </p>
 
-# GEODE v1.0.21 — Autonomous Agent Runtime + Evaluation Substrate
+# GEODE v1.0.22 — Autonomous Agent Runtime + Evaluation Substrate
 
 자율적인 도구 작업을 수행하는 범용 에이전트 런타임입니다. 자연어로
 요청하면 GEODE가 계획을 세우고 도구를 호출한 뒤 결과를 보고합니다. 짧은
@@ -331,6 +332,14 @@ Gateway의 원격 desktop control은 운영자가
 `[gateway] allow_computer_use = true`를 명시하기 전까지 차단됩니다. 제한된
 binding에서 열기 전에 [computer-use 안내](docs/setup.ko.md#선택-바운드-채널에서-computer-use)를
 확인하세요.
+
+[Slack 실환경 E2E 영수증](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/41e15ca262d5953d1c88f4767777331875c57c9f/reports/e2e-validation/2026-08-17-slack-gateway-live-e2e.json)은
+Socket Mode를 통한 일상 대화와 browser DOM UI 작업의 완료를 보존합니다. Strict
+pixel `computer_use`는 화면 캡처까지 성공했지만 활성 OpenAI subscription
+source에 호환 visual grounding이 없어 좌표를 추측하거나 provider를 몰래
+바꾸지 않고 중단했습니다. Primary 답변은 subscription route였지만 post-turn
+처리에 auxiliary GLM PAYG 호출도 있었으므로 전체 lifecycle을
+subscription-only로 표기하지 않습니다.
 
 ### Optional — Self-improving loop 설정 (`~/.geode/config.toml`)
 

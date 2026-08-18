@@ -14,9 +14,9 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from core.agent import tool_policy
 from core.agent.loop._tool_factory import get_agentic_tools
 from core.agent.tool_policy import _load_tool_policy_override, apply_tool_policy
+from core.config.policy_source import PolicySourcePaths
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -28,12 +28,21 @@ def isolated_sot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Pa
     """Isolate all 3 SoT layers (env / operator-local / in-repo) to tmp_path
     so tests don't read or pollute the operator's real artefacts."""
     sot = tmp_path / "tool-policy.json"
-    operator_local = tmp_path / "operator-local-tool-policy.json"
-    monkeypatch.setattr(tool_policy, "_TOOL_POLICY_SOT_PATH", sot)
-    monkeypatch.setattr(tool_policy, "_OPERATOR_LOCAL_TOOL_POLICY_PATH", operator_local)
     monkeypatch.delenv("GEODE_TOOL_POLICY_OVERRIDE", raising=False)
     monkeypatch.delenv("GEODE_TOOL_POLICY_STRICT", raising=False)
     yield sot
+
+
+def _sources(sot: Path) -> PolicySourcePaths:
+    return PolicySourcePaths(
+        "GEODE_TOOL_POLICY_OVERRIDE",
+        operator_local=sot.parent / "operator-local-tool-policy.json",
+        packaged_default=sot,
+    )
+
+
+def _bundle(sot: Path) -> dict[str, PolicySourcePaths]:
+    return {"tool_policy": _sources(sot)}
 
 
 def _write(sot: Path, payload: dict[str, Any]) -> None:
@@ -48,27 +57,27 @@ def _write(sot: Path, payload: dict[str, Any]) -> None:
 def test_load_returns_none_when_sot_missing(isolated_sot: Path) -> None:
     """SoT 파일 부재 → ``None`` (no-op)."""
     assert not isolated_sot.exists()
-    assert _load_tool_policy_override() is None
+    assert _load_tool_policy_override(sources=_sources(isolated_sot)) is None
 
 
 def test_load_returns_none_when_sot_unreadable_json(isolated_sot: Path) -> None:
     """Malformed JSON → WARNING + ``None`` (graceful)."""
     isolated_sot.write_text("not json {", encoding="utf-8")
-    assert _load_tool_policy_override() is None
+    assert _load_tool_policy_override(sources=_sources(isolated_sot)) is None
 
 
 def test_load_string_payload_normalizes_to_list(isolated_sot: Path) -> None:
     """Producer parity (Codex MCP) — string payload 는 schema violation 이
     아니라 정규화 대상. ``"bash, read"`` → ``["bash", "read"]``."""
     _write(isolated_sot, {"allowed_tools": "bash, read"})
-    result = _load_tool_policy_override()
+    result = _load_tool_policy_override(sources=_sources(isolated_sot))
     assert result == {"allowed_tools": ["bash", "read"]}
 
 
 def test_load_returns_none_when_sot_type_violation(isolated_sot: Path) -> None:
     """list 도 string 도 아닌 type (e.g. dict, int) → graceful ``None``."""
     _write(isolated_sot, {"allowed_tools": {"nested": "dict"}})
-    assert _load_tool_policy_override() is None
+    assert _load_tool_policy_override(sources=_sources(isolated_sot)) is None
 
 
 def test_load_returns_dict_when_sot_valid(isolated_sot: Path) -> None:
@@ -79,14 +88,14 @@ def test_load_returns_dict_when_sot_valid(isolated_sot: Path) -> None:
         "priority_order": ["read", "bash"],
     }
     _write(isolated_sot, payload)
-    result = _load_tool_policy_override()
+    result = _load_tool_policy_override(sources=_sources(isolated_sot))
     assert result == payload
 
 
 def test_load_unknown_fields_ignored(isolated_sot: Path) -> None:
     """Forward-compat — 알려지지 않은 field 는 무시."""
     _write(isolated_sot, {"allowed_tools": ["bash"], "unknown_field": "ignored"})
-    result = _load_tool_policy_override()
+    result = _load_tool_policy_override(sources=_sources(isolated_sot))
     assert result == {"allowed_tools": ["bash"]}
 
 
@@ -98,7 +107,7 @@ def test_strict_load_via_env_var_raises_on_missing(
     monkeypatch.setenv("GEODE_TOOL_POLICY_OVERRIDE", str(missing))
     monkeypatch.setenv("GEODE_TOOL_POLICY_STRICT", "1")
     with pytest.raises(RuntimeError, match="GEODE_TOOL_POLICY_OVERRIDE"):
-        _load_tool_policy_override()
+        _load_tool_policy_override(sources=_sources(tmp_path / "tool-policy.json"))
 
 
 def test_strict_load_via_env_var_raises_on_type_violation(
@@ -111,7 +120,7 @@ def test_strict_load_via_env_var_raises_on_type_violation(
     monkeypatch.setenv("GEODE_TOOL_POLICY_OVERRIDE", str(bad))
     monkeypatch.setenv("GEODE_TOOL_POLICY_STRICT", "1")
     with pytest.raises(RuntimeError, match="forbidden_tools"):
-        _load_tool_policy_override()
+        _load_tool_policy_override(sources=_sources(tmp_path / "tool-policy.json"))
 
 
 def test_env_var_without_strict_flag_is_graceful_on_missing(
@@ -122,7 +131,7 @@ def test_env_var_without_strict_flag_is_graceful_on_missing(
     missing = tmp_path / "nope.json"
     monkeypatch.setenv("GEODE_TOOL_POLICY_OVERRIDE", str(missing))
     monkeypatch.delenv("GEODE_TOOL_POLICY_STRICT", raising=False)
-    assert _load_tool_policy_override() is None
+    assert _load_tool_policy_override(sources=_sources(tmp_path / "tool-policy.json")) is None
 
 
 def test_env_var_without_strict_flag_is_graceful_on_invalid_json(
@@ -133,7 +142,7 @@ def test_env_var_without_strict_flag_is_graceful_on_invalid_json(
     bad.write_text("not json {", encoding="utf-8")
     monkeypatch.setenv("GEODE_TOOL_POLICY_OVERRIDE", str(bad))
     monkeypatch.delenv("GEODE_TOOL_POLICY_STRICT", raising=False)
-    assert _load_tool_policy_override() is None
+    assert _load_tool_policy_override(sources=_sources(tmp_path / "tool-policy.json")) is None
 
 
 def test_operator_local_layer_read_when_in_repo_absent(isolated_sot: Path) -> None:
@@ -142,7 +151,7 @@ def test_operator_local_layer_read_when_in_repo_absent(isolated_sot: Path) -> No
     operator_local = isolated_sot.parent / "operator-local-tool-policy.json"
     operator_local.write_text(json.dumps({"allowed_tools": ["bash"]}), encoding="utf-8")
     assert not isolated_sot.exists()
-    assert _load_tool_policy_override() == {"allowed_tools": ["bash"]}
+    assert _load_tool_policy_override(sources=_sources(isolated_sot)) == {"allowed_tools": ["bash"]}
 
 
 def test_operator_local_layer_takes_priority_over_in_repo(isolated_sot: Path) -> None:
@@ -150,7 +159,7 @@ def test_operator_local_layer_takes_priority_over_in_repo(isolated_sot: Path) ->
     operator_local = isolated_sot.parent / "operator-local-tool-policy.json"
     operator_local.write_text(json.dumps({"allowed_tools": ["from-ops"]}), encoding="utf-8")
     _write(isolated_sot, {"allowed_tools": ["from-repo"]})
-    result = _load_tool_policy_override()
+    result = _load_tool_policy_override(sources=_sources(isolated_sot))
     assert result == {"allowed_tools": ["from-ops"]}
 
 
@@ -248,14 +257,12 @@ def test_apply_unnamed_tool_passes_through() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_get_agentic_tools_applies_policy(
-    isolated_sot: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_get_agentic_tools_applies_policy(isolated_sot: Path) -> None:
     """``get_agentic_tools`` 가 ``tool-policy.json`` 정책을 실제로 적용해야 함.
     `tool_policy` slot 이 ALIVE 임을 증명하는 핵심 test."""
     # 정책: 모든 도구 제거 (whitelist = []).
     _write(isolated_sot, {"allowed_tools": []})
-    result = get_agentic_tools()
+    result = get_agentic_tools(policy_sources=_bundle(isolated_sot))
     assert result == [], (
         "tool-policy.json 의 allowed_tools=[] 정책이 적용되어야 하는데 도구가 살아있음 — "
         f"reader wiring 깨졌을 가능성. count={len(result)}"
@@ -267,7 +274,7 @@ def test_get_agentic_tools_noop_without_policy(
 ) -> None:
     """정책 부재 시 기존 동작 유지 — base + registry + mcp tools 그대로."""
     assert not isolated_sot.exists()
-    result = get_agentic_tools()
+    result = get_agentic_tools(policy_sources=_bundle(isolated_sot))
     # 정책 없을 때는 base tools 최소 1개 이상 (load_all_tool_definitions 가 비어있지 않음).
     assert len(result) > 0
 
@@ -276,11 +283,11 @@ def test_get_agentic_tools_forbidden_filter_round_trip(
     isolated_sot: Path,
 ) -> None:
     """base tools 중 하나를 forbidden 으로 지정하면 결과에서 제외."""
-    base_result = get_agentic_tools()
+    base_result = get_agentic_tools(policy_sources=_bundle(isolated_sot))
     assert base_result, "base tools should be non-empty for this test"
     target = base_result[0]["name"]
     _write(isolated_sot, {"forbidden_tools": [target]})
-    filtered = get_agentic_tools()
+    filtered = get_agentic_tools(policy_sources=_bundle(isolated_sot))
     names = [t["name"] for t in filtered]
     assert target not in names, (
         f"forbidden_tools=[{target}] 정책이 적용되어야 하는데 {target} 가 살아있음."
@@ -309,7 +316,7 @@ def test_producer_string_payload_normalized_by_reader(
     # Producer 처럼 dict[str, str] 로 직렬화 — mutation 시뮬레이션
     policies_mod.write_policy("tool_policy", {"forbidden_tools": "bash, write"})
 
-    result = _load_tool_policy_override()
+    result = _load_tool_policy_override(sources=_sources(isolated_sot))
     assert result is not None, "string payload 가 reader 에서 graceful 무시되면 parity 깨짐"
     assert result.get("forbidden_tools") == ["bash", "write"], (
         f"comma-separated string 이 list 로 정규화돼야 함. got={result}"
@@ -325,7 +332,7 @@ def test_producer_newline_separated_payload(
     monkeypatch.setattr(policies_mod, "policy_path", lambda kind: isolated_sot)
     policies_mod.write_policy("tool_policy", {"allowed_tools": "bash\nread\ngrep"})
 
-    result = _load_tool_policy_override()
+    result = _load_tool_policy_override(sources=_sources(isolated_sot))
     assert result is not None
     assert result.get("allowed_tools") == ["bash", "read", "grep"]
 
@@ -339,14 +346,14 @@ def test_producer_reader_e2e_filters_get_agentic_tools(
     from core.self_improving.loop.mutate import policies as policies_mod
 
     monkeypatch.setattr(policies_mod, "policy_path", lambda kind: isolated_sot)
-    base = get_agentic_tools()
+    base = get_agentic_tools(policy_sources=_bundle(isolated_sot))
     assert base, "base tools must exist for this E2E test"
 
     target = base[0]["name"]
     # producer 가 string 으로 mutation 출력 (실제 시나리오)
     policies_mod.write_policy("tool_policy", {"forbidden_tools": target})
 
-    after = get_agentic_tools()
+    after = get_agentic_tools(policy_sources=_bundle(isolated_sot))
     names = [t["name"] for t in after]
     assert target not in names, (
         f"E2E parity 깨짐 — producer 의 string payload 가 reader 를 통과해 "
@@ -359,24 +366,9 @@ def test_producer_reader_e2e_filters_get_agentic_tools(
 # ---------------------------------------------------------------------------
 
 
-def test_tool_policy_json_is_now_referenced_in_inference_path() -> None:
-    """ADR-012 S0a 의 핵심 결과 — `tool-policy.json` 이 `core/agent/` 경로
-    어딘가에서 grep 가능. PR-AUDIT-5SLOT 의 dead anchor 회귀 marker 의
-    의도된 발화 (DEAD → ALIVE)."""
-    from pathlib import Path
+def test_product_bundle_owns_tool_policy_source() -> None:
+    from core.self_improving.policy_sources import build_policy_source_bundle
 
-    repo_root = Path(__file__).resolve().parents[3]
-    hits: list[str] = []
-    for path in (repo_root / "core" / "agent").rglob("*.py"):
-        if "test_" in path.name:
-            continue
-        try:
-            content = path.read_text(encoding="utf-8")
-        except OSError:
-            continue
-        if "tool-policy.json" in content:
-            hits.append(str(path.relative_to(repo_root)))
-    # 적어도 tool_policy.py 의 path constant alias 위치에서 발견되어야 함
-    assert any("tool_policy.py" in h for h in hits), (
-        f"tool-policy.json 이 core/agent/tool_policy.py 에서 발견되어야 함. hits={hits}"
-    )
+    source = build_policy_source_bundle()["tool_policy"]
+    assert source.packaged_default is not None
+    assert source.packaged_default.name == "tool-policy.json"

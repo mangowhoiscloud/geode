@@ -15,6 +15,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
 
 def test_529_overloaded_class_is_sibling_of_internal_server_error() -> None:
     """``OverloadedError`` (Anthropic status 529) inherits from
@@ -57,113 +59,62 @@ def test_anthropic_retryable_errors_contains_internal_server_error() -> None:
     assert anthropic.InternalServerError in anthropic_provider.RETRYABLE_ERRORS
 
 
-# ---------------------------------------------------------------------------
-# P1a — llm_retry journal emit
-# ---------------------------------------------------------------------------
-
-
-def test_on_retry_emits_journal_event(monkeypatch: Any) -> None:
-    """The ``on_retry`` callback wired into retry_with_backoff_generic must
-    append an ``llm_retry`` event to the active RunTimeline so silent
-    retries (esp. 529 Overloaded) become observable."""
+@pytest.mark.parametrize(
+    "error_type",
+    ["InternalServerError", "RateLimitError", "OverloadedError"],
+)
+def test_retry_activity_emits_run_event(
+    monkeypatch: Any,
+    tmp_path: Any,
+    error_type: str,
+) -> None:
+    """The injected retry sink preserves the existing llm_retry projection."""
     import json
-    from pathlib import Path
 
     import core.paths
-    from core.llm.providers.anthropic import _on_retry_journal_emit
-    from core.self_improving.loop.observe.run_timeline import RunTimeline, run_timeline_scope
+    from core.llm.providers.anthropic import _emit_retry_activity
+    from core.self_improving.loop.observe.run_timeline import (
+        RunTimeline,
+        current_run_timeline,
+        run_timeline_scope,
+    )
 
-    # Redirect journal writes into a tmp dir without touching real
-    # ~/.geode/autoresearch/handoff/.
-    tmp_root = Path("/tmp") / "p1a-journal-test"  # noqa: S108 - test scope only
-    # NOTE: tmp_path fixture is unavailable in this function signature
-    # (avoid renumbering the existing tests' imports). Use mkdtemp instead.
-    import shutil
-    import tempfile
-
-    real_tmp = Path(tempfile.mkdtemp(prefix="p1a-journal-"))
-    monkeypatch.setattr(core.paths, "GLOBAL_AUTORESEARCH_HANDOFF_DIR", real_tmp)
-    try:
-        journal = RunTimeline(
-            session_id="s-retry",
-            gen_tag="gen-retry",
-            component="autoresearch",
+    monkeypatch.setattr(core.paths, "GLOBAL_AUTORESEARCH_HANDOFF_DIR", tmp_path)
+    journal = RunTimeline(
+        session_id="s-retry",
+        gen_tag="gen-retry",
+        component="autoresearch",
+    )
+    with run_timeline_scope(journal):
+        _emit_retry_activity(
+            current_run_timeline,
+            model="claude-opus-4-7",
+            attempt=2,
+            max_retries=5,
+            delay_s=1.234,
+            elapsed_s=3.45,
+            error_type=error_type,
         )
-        with run_timeline_scope(journal):
-            _on_retry_journal_emit(
-                model="claude-opus-4-7",
-                attempt=2,
-                max_retries=5,
-                delay_s=1.234,
-                elapsed_s=3.45,
-                error_type="InternalServerError",
-            )
-        rows = (real_tmp / "s-retry" / "events.jsonl").read_text().splitlines()
-        assert len(rows) == 1
-        record = json.loads(rows[0])
-        assert record["event"] == "llm_retry"
-        assert record["level"] == "warn"  # InternalServerError → warn
-        assert record["payload"] == {
-            "provider": "anthropic",
-            "model": "claude-opus-4-7",
-            "attempt": 2,
-            "max_retries": 5,
-            "delay_s": 1.234,
-            "elapsed_s": 3.45,
-            "error_type": "InternalServerError",
-        }
-        # Smoke: tmp_root isn't used, avoid lint warning.
-        assert tmp_root
-    finally:
-        shutil.rmtree(real_tmp, ignore_errors=True)
+
+    record = json.loads((tmp_path / "s-retry" / "events.jsonl").read_text())
+    assert record["event"] == "llm_retry"
+    assert record["level"] == "warn"
+    assert record["payload"] == {
+        "provider": "anthropic",
+        "model": "claude-opus-4-7",
+        "attempt": 2,
+        "max_retries": 5,
+        "delay_s": 1.234,
+        "elapsed_s": 3.45,
+        "error_type": error_type,
+    }
 
 
-def test_on_retry_overloaded_emits_warn_level(monkeypatch: Any) -> None:
-    """OverloadedError retries get level=warn (same treatment as 5xx +
-    RateLimitError) so a flurry of 529s is conspicuous in the journal."""
-    import json
-    import shutil
-    import tempfile
-    from pathlib import Path
+def test_retry_activity_noops_without_sink() -> None:
+    from core.llm.providers.anthropic import _emit_retry_activity
 
-    import core.paths
-    from core.llm.providers.anthropic import _on_retry_journal_emit
-    from core.self_improving.loop.observe.run_timeline import RunTimeline, run_timeline_scope
-
-    real_tmp = Path(tempfile.mkdtemp(prefix="p1a-overloaded-"))
-    monkeypatch.setattr(core.paths, "GLOBAL_AUTORESEARCH_HANDOFF_DIR", real_tmp)
-    try:
-        journal = RunTimeline(
-            session_id="s-529",
-            gen_tag="gen-529",
-            component="autoresearch",
-        )
-        with run_timeline_scope(journal):
-            _on_retry_journal_emit(
-                model="claude-opus-4-7",
-                attempt=1,
-                max_retries=5,
-                delay_s=0.5,
-                elapsed_s=0.5,
-                error_type="OverloadedError",
-            )
-        rows = (real_tmp / "s-529" / "events.jsonl").read_text().splitlines()
-        record = json.loads(rows[0])
-        assert record["event"] == "llm_retry"
-        assert record["level"] == "warn"
-        assert record["payload"]["error_type"] == "OverloadedError"
-    finally:
-        shutil.rmtree(real_tmp, ignore_errors=True)
-
-
-def test_on_retry_noop_when_no_journal_in_scope(monkeypatch: Any) -> None:
-    """Outside an autoresearch / seed-generation run (no journal
-    ContextVar), the helper must silently no-op so single REPL LLM calls
-    don't crash on every retry."""
-    from core.llm.providers.anthropic import _on_retry_journal_emit
-
-    # No run_timeline_scope active — must not raise.
-    _on_retry_journal_emit(
+    _emit_retry_activity(
+        lambda: None,
         model="claude-opus-4-7",
         attempt=1,
         max_retries=5,
@@ -173,28 +124,37 @@ def test_on_retry_noop_when_no_journal_in_scope(monkeypatch: Any) -> None:
     )
 
 
-def test_anthropic_retry_paths_wire_on_retry_callback(monkeypatch: Any) -> None:
-    """Both sync + async retry_with_backoff entry points must pass
-    on_retry=_on_retry_journal_emit so the journal hook fires regardless
-    of which call path the caller used."""
-    captured_sync: dict[str, Any] = {}
-    captured_async: dict[str, Any] = {}
+def test_anthropic_retry_path_wires_activity_callback(monkeypatch: Any) -> None:
+    from pathlib import Path
 
-    def _fake_sync(fn: Any, **kwargs: Any) -> Any:
-        captured_sync.update(kwargs)
-        return "ok"
+    from core.config.policy_source import PolicySourcePaths
+
+    captured: dict[str, Any] = {}
+    routing_sources = PolicySourcePaths(
+        override_env="GEODE_TEST_ROUTING_OVERRIDE",
+        packaged_default=Path("routing.json"),
+    )
 
     async def _fake_async(fn: Any, **kwargs: Any) -> Any:
-        captured_async.update(kwargs)
+        captured.update(kwargs)
         return "ok"
-
-    import core.llm.providers.anthropic as ap
-
-    # 2026-07-29: the sync retry twin was deleted with the sync LLM stack;
-    # the async path is the whole surface now.
-    monkeypatch.setattr(ap, "retry_with_backoff_generic_async", _fake_async)
 
     import asyncio
 
-    asyncio.run(ap.retry_with_backoff_async(lambda model: "x", model="claude-opus-4-7"))
-    assert captured_async.get("on_retry") is ap._on_retry_journal_emit
+    import core.llm.providers.anthropic as anthropic_provider
+
+    monkeypatch.setattr(
+        anthropic_provider,
+        "retry_with_backoff_generic_async",
+        _fake_async,
+    )
+    asyncio.run(
+        anthropic_provider.retry_with_backoff_async(
+            lambda model: "x",
+            model="claude-opus-4-7",
+            activity_sink_provider=lambda: None,
+            routing_sources=routing_sources,
+        )
+    )
+    assert callable(captured.get("on_retry"))
+    assert captured["routing_sources"] is routing_sources

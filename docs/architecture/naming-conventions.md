@@ -3,6 +3,7 @@ title: GEODE naming conventions — RESTful resource orientation
 status: living
 related:
   - docs/architecture/domain-free-core-audit.md
+  - docs/architecture/package-classification.md
   - pyproject.toml ([tool.ruff.lint.flake8-tidy-imports.banned-api])
   - core/domains/port.py (DomainPort method taxonomy)
 ---
@@ -22,29 +23,12 @@ PR.
 
 ---
 
-## 1. Plugin internal layout
+## 1. Bundled-feature layout
 
-A plugin (`plugins/<domain>/`) is a Python package whose internal structure
-follows two complementary rules:
-
-| Pattern | When to use | Examples |
-|---------|-------------|----------|
-| **Mirror core** — `plugins/<domain>/<X>/<Y>.py` matches `core/<X>/<Y>.py` | A multi-file core subpackage is being domain-extracted | `core/cli/{batch,ip_names,search}.py` → `plugins/game_ip/cli/{batch,ip_names,search}.py`; `core/tools/data_tools.py:QueryMonoLakeTool` → `plugins/game_ip/tools/data_tools.py` |
-| **Flat intent-named** — `plugins/<domain>/<noun>.py` at the package root | A single file/fragment is extracted, OR the file is a plugin-specific aggregation that has no obvious single-file core counterpart | `plugins/game_ip/{adapter,axes,wiring,prompt,scoring_constants}.py` |
-
-**Why two rules?**
-- A plugin's surface should read like *its own resources*, not like a
-  carbon-copy of `core/`'s incidental layout. `axes.py`, `prompt.py`,
-  `wiring.py`, `adapter.py` are first-class plugin resources.
-- But when `core/<X>/` had a coherent multi-file subpackage that gets
-  extracted, mirroring preserves intuition for developers who already know
-  the core layout.
-
-**The test**: an external developer scanning `plugins/game_ip/` should be
-able to predict what each name contains without opening it.
-
-Domain-shaped subpackages (`nodes/`, `fixtures/`, `config/`) are intent-named
-by definition — they describe the plugin's own structure, not core's.
+The current `plugins/` directory is a legacy namespace for first-party bundled
+product features, not an external extension contract. Its exhaustive
+classification and future `geode_product` targets are fixed by
+[`package-classification.md`](package-classification.md).
 
 ---
 

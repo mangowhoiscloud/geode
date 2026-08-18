@@ -139,6 +139,7 @@ class ToolExecutor:
         # legacy 3-arg callbacks are detected and called without it.
         approval_callback: Callable[..., str] | None = None,
         denied_tools: frozenset[str] = frozenset(),
+        allowed_tools: frozenset[str] | None = None,
         interactive_approval: bool = True,
     ) -> None:
         self._handlers: dict[str, ToolHandler] = action_handlers or {}
@@ -154,6 +155,9 @@ class ToolExecutor:
         # here. Used by headless sessions (scheduler/daemon/MCP run_agent) where
         # no human can approve. (Codex MCP review, PR-EXEC-HARDENING.)
         self._denied_tools = denied_tools
+        # Session allowlist. The central rail covers native handlers, special
+        # tools and MCP dispatch after request-name rewrites.
+        self._allowed_tools = allowed_tools
         self._hooks: HookSystem | None = hooks
         if hook_registry is None:
             from core.hooks.public import HookRegistry as _HookRegistry
@@ -275,11 +279,20 @@ class ToolExecutor:
         )
         tool_name = request.tool_name
         tool_input = dict(request.arguments)
+        contains_personal_data = contains_personal_data or tool_name in PERSONAL_DATA_TOOLS
+        scope_denial = self._session_scope_denial(tool_name)
+        if scope_denial is not None:
+            self._record_effective_request(
+                context,
+                tool_name,
+                tool_input,
+                contains_personal_data=contains_personal_data,
+            )
+            return scope_denial
         if context is not None:
             # Request middleware owns name/argument transforms, not approval
             # grants carried by the processor-owned execution context.
             context.batch_cost_approved = batch_cost_approved
-        contains_personal_data = contains_personal_data or tool_name in PERSONAL_DATA_TOOLS
         self._record_effective_request(
             context,
             tool_name,
@@ -340,6 +353,15 @@ class ToolExecutor:
                 "arguments" in decision.updates for decision in rewrite_decisions
             ) and isinstance(effective_arguments, dict):
                 tool_input = dict(effective_arguments)
+        scope_denial = self._session_scope_denial(tool_name)
+        if scope_denial is not None:
+            self._record_effective_request(
+                context,
+                tool_name,
+                tool_input,
+                contains_personal_data=(contains_personal_data or tool_name in PERSONAL_DATA_TOOLS),
+            )
+            return scope_denial
         contains_personal_data = contains_personal_data or tool_name in PERSONAL_DATA_TOOLS
         self._record_effective_request(
             context,
@@ -397,15 +419,6 @@ class ToolExecutor:
         if context and context.cancellation and context.cancellation.is_set():
             return {"error": "Tool execution cancelled before start", "cancelled": True}
 
-        # Headless denylist — refuse BEFORE the gate and the run_bash/
-        # delegate_task special-cases below (handler-dict filtering cannot stop
-        # those, since they never consult the handler dict). No human to approve.
-        if tool_name in self._denied_tools:
-            log.info("Tool %s denied on this session (headless denylist)", tool_name)
-            return {
-                "error": f"Tool '{tool_name}' is not available in this session.",
-                "denied": True,
-            }
         budget_permission = (
             tool_name == "create_goal" and tool_input.get("token_budget") is not None
         )
@@ -608,6 +621,20 @@ class ToolExecutor:
                 "recoverable": False,
             }
         return result
+
+    def _session_scope_denial(self, tool_name: str) -> dict[str, Any] | None:
+        """Reject tools outside this session before schema lookup or hooks."""
+        if tool_name in self._denied_tools:
+            reason = "headless denylist"
+        elif self._allowed_tools is not None and tool_name not in self._allowed_tools:
+            reason = "binding allowlist"
+        else:
+            return None
+        log.info("Tool %s denied on this session (%s)", tool_name, reason)
+        return {
+            "error": f"Tool '{tool_name}' is not available in this session.",
+            "denied": True,
+        }
 
     @staticmethod
     def _record_effective_request(

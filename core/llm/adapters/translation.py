@@ -44,6 +44,7 @@ def build_adapter_request(
     temperature: float,
     thinking_budget: int,
     effort: str,
+    allowed_tool_names: frozenset[str] | None = None,
     resume_session_id: str = "",
     response_schema: dict[str, Any] | None = None,
 ) -> AdapterCallRequest:
@@ -116,6 +117,7 @@ def build_adapter_request(
         temperature=temperature,
         thinking_budget=thinking_budget,
         effort=effort,
+        allowed_tool_names=allowed_tool_names,
         resume_session_id=resume_session_id,
         response_schema=response_schema,
     )

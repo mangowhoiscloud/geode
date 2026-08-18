@@ -2,7 +2,7 @@
 
 > GEODE is an autonomous agent runtime and evaluation substrate: an inner agentic loop runs tasks (research, analysis, automation, scheduling), while an experimental safety-gated outer loop mutates and evaluates scaffold candidates.
 
-Version v1.0.21. Last sync 2026-08-11. Full content of every docs page, one file (llms-full.txt convention). Per-page index: /llms.txt.
+Version v1.0.22. Last sync 2026-08-18. Full content of every docs page, one file (llms-full.txt convention). Per-page index: /llms.txt.
 
 ## Overview . 개요
 
@@ -2488,9 +2488,9 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/harness/serve-gateway.md
 
 ## 동작 구조
 
-![Gateway routing: Slack Socket Mode and Discord or Telegram pollers feed the ChannelManager binding match; unmatched messages are ignored, matched ones pass the LaneQueue into AgenticLoop in DAEMON mode](https://mangowhoiscloud.github.io/geode/diagrams/gateway-routing.svg)
+![Gateway routing: transport adapters pass exact binding and mention gates, binding policy supplies tool and budget constraints, LaneQueue serializes the session, AgenticLoop and ToolExecutor enforce the tool surface, and auto-response controls outbound delivery](https://mangowhoiscloud.github.io/geode/diagrams/gateway-routing.svg)
 
-binding에 일치한 메시지만 레인을 거쳐 루프에 닿습니다. 불일치는 무시됩니다.
+바인딩 정책은 모델에 보이는 도구와 실제 실행을 함께 제한하고, 응답 전송 여부만 마지막에 결정합니다.
 
 | 구성 요소 | 역할 | 코드 |
 | --- | --- | --- |
@@ -2535,6 +2535,10 @@ channel = "slack"
 channel_id = "C0ABCDEF1"     # 필수. 비어 있으면 규칙이 건너뜀
 require_mention = true
 ```
+
+## 실환경 검증
+
+2026-08-17의 [PR #3007](https://github.com/mangowhoiscloud/geode/pull/3007) head를 Slack Socket Mode에서 직접 실행했다. 일상 대화는 도구 없이 답했고, browser DOM 경로는 실제 `example.com` 탭과 제목을 확인했다. Strict pixel `computer_use`는 캡처에는 성공했지만 OpenAI subscription source에 호환 visual grounding이 없어 좌표를 추측하지 않고 중단했다. 공개 [E2E 영수증](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/41e15ca262d5953d1c88f4767777331875c57c9f/reports/e2e-validation/2026-08-17-slack-gateway-live-e2e.json)은 세 결과와 raw evidence digest를 보존한다. Primary 답변은 Codex OAuth subscription이었지만 post-turn GLM PAYG 호출도 관측돼 전체 lifecycle은 subscription-only가 아니다.
 
 ## 실패 모드
 
@@ -2621,9 +2625,14 @@ driver = "helper"
 
 [gateway]
 allow_computer_use = true
+
+[[gateway.bindings.rules]]
+channel = "slack"
+channel_id = "C0ABCDEF1"
+allowed_tools = ["computer", "read_file"]
 ```
 
-이 옵션은 Slack뿐 아니라 같은 DAEMON 실행 경계를 쓰는 모든 gateway binding에 적용됩니다. binding을 통과한 모든 발신자가 desktop action을 요청할 수 있으므로 제한된 채널에서만 사용하세요.`run_bash`, `delegate_task`, personal-workspace 도구, scheduler, MCP `run_agent` 차단은 유지됩니다.
+이 옵션은 Slack뿐 아니라 같은 DAEMON 실행 경계를 쓰는 모든 gateway binding에 적용됩니다. 비어 있지 않은 `allowed_tools`에서는 `computer`를 명시해야 provider가 도구를 모델에 노출하고 executor가 실행합니다. 빈 목록은 전체 허용이므로 제한된 채널에서만 사용하세요.`run_bash`, `delegate_task`, personal-workspace 도구, scheduler, MCP `run_agent` 차단은 유지됩니다.
 
 ## 실패 모드
 
@@ -4660,11 +4669,11 @@ allowed_tools = ["memory_search", "web_fetch"]
 time_budget_s = 90
 ```
 
-각 규칙은 자체 정책 손잡이를 가집니다. `require_mention`은 GEODE가 멘션됐을 때만 응답하게 하고, `allowed_tools`는 그 채널에서 허용할 도구를 제한하며(빈 리스트는 전체 허용), `time_budget_s`는 메시지당 wall-clock 예산을 지정합니다. 규칙에 없으면 gateway 레벨 기본값으로 떨어집니다. 이 필드들은 `ChannelBinding`(`core/messaging/models.py`)의 dataclass 필드와 일대일로 대응합니다.
+각 규칙은 자체 정책 손잡이를 가집니다. `require_mention`은 GEODE가 멘션됐을 때만 응답하게 하고, `allowed_tools`는 그 채널에서 허용할 도구를 제한하며(빈 리스트는 전체 허용), `time_budget_s`는 메시지당 wall-clock 예산을 지정합니다.`auto_respond=false`는 처리를 계속하고 세션은 저장하되 채널로 최종 텍스트를 보내지 않습니다. 헤드리스 denylist는 바인딩 allowlist보다 항상 우선합니다. 규칙에 없으면 gateway 레벨 기본값으로 떨어집니다. 이 필드들은 `ChannelBinding`(`core/messaging/models.py`)의 dataclass 필드와 일대일로 대응합니다.
 
 ## 2\. 세션 레인으로 라우팅됩니다
 
-메시지가 바인딩에 매칭되면 `ChannelManager.aroute_message`가 `build_gateway_session_key(channel, channel_id, sender_id, thread_id)`로 thread 단위 세션 키를 만듭니다. 같은 스레드의 메시지는 같은 키로 묶여 컨텍스트가 격리됩니다. 실행은 SessionLane → gateway Lane → global Lane 순서로 레인 큐를 거치므로, 같은 세션의 메시지는 직렬화되고 동시성은 워크로드별 상한으로 제어됩니다. `allowed_tools`가 설정돼 있으면 그 힌트가 콘텐츠 앞에 붙어 AgenticLoop로 전달됩니다.
+메시지가 바인딩에 매칭되면 `ChannelManager.aroute_message`가 `build_gateway_session_key(channel, channel_id, sender_id, thread_id)`로 thread 단위 세션 키를 만듭니다. 같은 스레드의 메시지는 같은 키로 묶여 컨텍스트가 격리됩니다. 실행은 SessionLane → gateway Lane → global Lane 순서로 레인 큐를 거치므로, 같은 세션의 메시지는 직렬화되고 동시성은 워크로드별 상한으로 제어됩니다. `allowed_tools`는 사용자 콘텐츠에 문자열로 삽입되지 않습니다. 구조화된 메타데이터로 세션 조립에 전달되어 AgenticLoop의 모델 가시 도구와 ToolExecutor의 실제 실행을 함께 제한합니다. provider adapter가 뒤늦게 추가하는 hosted tool도 같은 allowlist를 확인하므로 Anthropic, OpenAI, GLM 경로가 같은 계약을 따릅니다. 중단된 ask를 다른 binding에서 재개하면 두 allowlist의 교집합과 더 짧은 시간 예산만 사용합니다.
 
 ## 3\. 리로드합니다
 
@@ -4689,7 +4698,7 @@ for b in m.list_bindings():
 "
 ```
 
-로드된 바인딩 수와 각 규칙의 `channel` / `channel_id` / `auto_respond` / `time_budget_s`가 출력되면 라우팅이 그 채널을 인식할 수 있습니다. 실제 메시지 라우팅과 poller 운영은 serve gateway 페이지를 참고하세요.
+로드된 바인딩 수와 각 규칙의 `channel` / `channel_id` / `auto_respond` / `allowed_tools` / `time_budget_s`가 출력되면 라우팅이 그 채널을 인식할 수 있습니다. 실제 메시지 라우팅과 poller 운영은 serve gateway 페이지를 참고하세요.
 
 _참조:_ [Serve gateway](https://mangowhoiscloud.github.io/geode/docs/harness/serve-gateway.md), [Messaging](https://mangowhoiscloud.github.io/geode/docs/run/messaging.md).
 
@@ -6003,7 +6012,7 @@ status dict 반환 (절대 raise하지 않음) + 히스토리 append
 URL: https://mangowhoiscloud.github.io/geode/docs/runtime/computer-use
 Markdown: https://mangowhoiscloud.github.io/geode/docs/runtime/computer-use.md
 
-컴퓨터 사용은 모델이 스크린샷으로 화면을 보고 클릭, 타이핑, 스크롤을 지시하는 기능입니다. GEODE의 구현은 `core/tools/computer_use.py`의 `ComputerUseHarness` 하나이며 host backend는 pyautogui 또는 macOS helper입니다. 매 동작 후 base64 JPEG 스크린샷을 돌려주어 모델이 결과를 관찰합니다.
+컴퓨터 사용은 모델이 스크린샷으로 화면을 보고 클릭, 타이핑, 스크롤을 지시하는 기능입니다. GEODE의 구현은 `core/tools/computer_use.py`의 `ComputerUseHarness` 하나이며 host backend는 pyautogui 또는 macOS helper입니다. Provider-native computer surface는 스크린샷을 해당 provider wire로 돌려주지만, normal function tool인 `computer_use`는 base64를 생략하고 compact observation만 반환합니다. Function-tool 경로의 시각적 좌표 선택은 활성 provider/source에 호환되는 grounding이 있을 때만 `locate`로 수행합니다.
 
 ## 동작 방식
 
@@ -6015,7 +6024,8 @@ LLM ── tool_use("computer", action, 좌표/텍스트) ──→ handle_compu
                                               ComputerUseHarness._execute_sync
                                                           │ pyautogui / macOS helper
                                                           ▼
-LLM ←──────── { result, action, screenshot(base64 JPEG) } ◄┘
+native computer ←── screenshot(provider wire) ──────────┤
+computer_use ←────── compact observation(base64 omitted) ◄┘
 ```
 
 디스패치 테이블은 프로바이더 중립입니다. Anthropic 어휘 (`left_click`, `triple_click`, `cursor_position`)와 OpenAI 어휘 (`keypress`)를 같은 핸들러로 받습니다. 지원 동작은 `screenshot`, `click`, `double_click`, `type`, `key`, `scroll`, `move`, `drag`, `wait`와 클릭 변형들입니다. 모르는 action은 지원 목록과 함께 오류로 돌아갑니다.
@@ -6043,7 +6053,7 @@ driver = "helper"
 # helper_path = "/absolute/path/to/geode-computer-helper"
 ```
 
-프로바이더가 native computer surface를 지원하면 그 경로를 쓰고, ChatGPT subscription처럼 native surface를 받지 않는 backend에는 같은 하네스를 normal function tool `computer_use`로 노출합니다.
+프로바이더가 native computer surface를 지원하면 그 경로를 쓰고, ChatGPT subscription처럼 native surface를 받지 않는 backend에는 같은 하네스를 normal function tool `computer_use`로 노출합니다. 이 경로는 다른 provider로 몰래 fallback하지 않습니다. OpenAI subscription source에 visual grounding을 별도로 구성하지 않았다면 `capture`는 가능하지만 `locate`는 dependency error로 중단되며, browser DOM·playwriter· `ui_probe` 같은 source-safe 구조 경로를 선택해야 합니다.
 
 ## 안전
 
@@ -6054,9 +6064,12 @@ driver = "helper"
 | 증상 | 원인 | 해법 |
 | --- | --- | --- |
 | 도구 목록에 `computer`가 없음 | 설정이 꺼졌거나 선택한 driver가 준비되지 않음 | `computer_use_enabled`와 pyautogui/helper 설치 상태를 확인합니다. |
+| `computer_use locate`가 dependency error | 활성 provider/source에 source-safe visual grounding이 없음 | 좌표를 추측하지 말고 `ui_probe`, browser DOM, playwriter 또는 검증된 keyboard navigation을 사용합니다. |
 | `move`가 Accessibility 오류 | OS가 입력 이벤트를 거부했거나 helper 권한이 없음 | 활성 driver/helper에 Accessibility 권한을 주고 `geode doctor`를 다시 실행합니다. |
 | 동작이 오류로 반환 | 지원하지 않는 action 이름 | 오류 응답의 `supported_actions` 목록을 확인합니다. |
 | 클릭 위치가 어긋남 | 타깃 공간과 화면 해상도 불일치 | 스케일링은 자동입니다. 멀티 디스플레이 구성에서는 활성 디스플레이 기준임을 감안합니다. |
+
+이 경계는 2026-08-17 Slack Socket Mode 실환경 검증에서 재현됐다. Strict `computer_use` 캡처는 성공하고 locate는 안전하게 중단됐으며, 별도 browser DOM case는 `Example Domain`을 확인했다. 공개 [영수증](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/41e15ca262d5953d1c88f4767777331875c57c9f/reports/e2e-validation/2026-08-17-slack-gateway-live-e2e.json)은 두 경로를 구분한다.
 
 ## 다음
 
@@ -6105,7 +6118,7 @@ Tier 2  latex2sympy2 + sympy.pretty  블록 전용. 분수·적분을 2D Unicode
 URL: https://mangowhoiscloud.github.io/geode/docs/reference/changelog
 Markdown: https://mangowhoiscloud.github.io/geode/docs/reference/changelog.md
 
-(body omitted from llms-full: 1509 KB — fetch the Markdown twin above for the complete page)
+(body omitted from llms-full: 1511 KB — fetch the Markdown twin above for the complete page)
 
 ---
 
@@ -6163,7 +6176,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/develop/architecture.md
 
 ## 서브시스템 지도
 
-프로덕션 코드는 두 패키지입니다. `core/`는 범용 자율 에이전트 런타임이고, `plugins/`는 1차 보조 플러그인(petri\_audit, seed\_generation)입니다. `core/`의 서브시스템은 5계층 스택에 정렬됩니다.
+현재 프로덕션 소스는 두 패키지입니다. `core/`는 범용 자율 에이전트 런타임이고, `plugins/`는 함께 배포되는 1차 제품 기능의 기존 네임스페이스입니다. 독립 설치되는 외부 플러그인 계약은 아닙니다. `core/`의 서브시스템은 5계층 스택에 정렬됩니다.
 
 ```
 Self-Improving  core/self_improving/  train.py + measure/fitness/gate/ledger + loop/{mutate,observe,inject}
@@ -6265,8 +6278,8 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 
 | 측정값 | 현재 트리 |
 | --- | --- |
-| 프로덕션 Python 파일 | 548 |
-| 테스트 Python 파일 | 685 |
+| 프로덕션 Python 파일 | 551 |
+| 테스트 Python 파일 | 686 |
 | 도구 정의 / 실행 등록 / 유효 스키마 | 87 / 90 / 87 |
 | RuntimeEvent 멤버 | 57 |
 | 기본 LLM 어댑터 | 8 |

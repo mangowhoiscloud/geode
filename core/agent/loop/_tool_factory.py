@@ -27,6 +27,7 @@ from core.agent.tool_descriptions_policy import (
     apply_tool_descriptions_policy,
 )
 from core.agent.tool_policy import _load_tool_policy_override, apply_tool_policy
+from core.config.policy_source import PolicySourceBundle
 from core.tools.base import load_all_tool_definitions
 
 if TYPE_CHECKING:
@@ -85,6 +86,7 @@ def get_agentic_tools(
     force_include: set[str] | None = None,
     provider: str = "",
     source: str = "",
+    policy_sources: PolicySourceBundle | None = None,
 ) -> list[dict[str, Any]]:
     """Return the merged tool definitions for the agentic loop.
 
@@ -144,7 +146,11 @@ def get_agentic_tools(
     # base + registry + MCP merge 직후 + tool_policy filter/order 직전.
     # description override 가 먼저 적용돼야 tool_policy 가 갱신된 description
     # 기반의 forbidden/priority 판단 가능.
-    tools = apply_tool_descriptions_policy(tools, _load_tool_descriptions_override())
+    active_sources = policy_sources or {}
+    tools = apply_tool_descriptions_policy(
+        tools,
+        _load_tool_descriptions_override(sources=active_sources.get("tool_descriptions")),
+    )
 
     # ADR-012 S0a — 5축의 ``tool_policy`` SoT 가 인퍼런스 경로에서
     # 실제로 적용되는 단일 지점. 정책이 부재하면 ``apply_tool_policy``
@@ -164,7 +170,10 @@ def get_agentic_tools(
             if isinstance(name, str) and name in force_include and name not in seen:
                 preserved.append(tool)
                 seen.add(name)
-    policed = apply_tool_policy(tools, _load_tool_policy_override())
+    policed = apply_tool_policy(
+        tools,
+        _load_tool_policy_override(sources=active_sources.get("tool_policy")),
+    )
     if preserved:
         policed_names = {t.get("name") for t in policed}
         # Re-add only the forced tools the policy stripped, preserving the

@@ -30,7 +30,6 @@ from core.hooks import (
     HookRegistry,
     HookSystem,
     LlmCallRequest,
-    MiddlewareRegistry,
     ToolCallRequest,
 )
 from core.hooks.middleware import LlmNextCall, ToolNextCall
@@ -427,17 +426,23 @@ class Tau2RuntimeContract:
         self.capture = Tau2RuntimeCapture()
         self.hooks = HookSystem()
         self.event_store = HookEventStore(event_db_path)
+        from core.wiring.bootstrap import (
+            build_middleware_registry,
+            current_product_activity_sink,
+        )
+
         self.hooks.register_sink(
             HookPersistenceSink(
                 self.event_store,
                 session_key=f"tau2:{run_id}",
                 run_id=run_id,
+                activity_sink_provider=current_product_activity_sink,
             ),
             name="hook_persistence",
         )
         self.hooks.register_sink(self.capture.observe_event, name="tau2_runtime_capture")
         self.hook_registry = HookRegistry(events=self.hooks)
-        self.middleware_registry = MiddlewareRegistry(events=self.hooks)
+        self.middleware_registry = build_middleware_registry(events=self.hooks)
         for hook in HookName:
             self.hook_registry.register(
                 hook,

@@ -23,17 +23,9 @@ dim) 직접 영향.
 
 빈 entry / 누락 tool / 부적합 schema → no-op (default description 유지).
 
-**Resolution order** (PR-BACKFILL-SOT 2026-05-21, shared
-:mod:`core.self_improving.loop.mutate.sot_resolution`):
-
-1. ``GEODE_TOOL_DESCRIPTIONS_OVERRIDE`` env var — explicit override.
-
-   - With ``GEODE_TOOL_DESCRIPTIONS_STRICT=1`` (audit subprocess): strict.
-   - Without strict flag (operator daily): graceful (no fall-through).
-
-2. ``~/.geode/autoresearch/handoff/tool-descriptions.json`` — operator-local, graceful.
-3. ``core/self_improving/state/policies/tool-descriptions.json`` — in-repo, graceful.
-4. ``None`` — no-op (default description 사용).
+Candidate paths are supplied by product composition. Selection is explicit
+override → operator-local → packaged default → no-op; an explicit override is
+authoritative and may request strict loading.
 
 **Frontier**: OpenAI function calling docs — "clearer descriptions yield
 more accurate selection" + Anthropic tool-use guide.
@@ -46,34 +38,24 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from core.agent.policy_sot import load_policy_sot
-from core.paths import AUTORESEARCH_TOOL_DESCRIPTIONS_PATH, OPERATOR_LOCAL_TOOL_DESCRIPTIONS_PATH
+from core.config.policy_source import PolicySourcePaths, load_policy_source
 
 log = logging.getLogger(__name__)
-
-_TOOL_DESCRIPTIONS_OVERRIDE_ENV = "GEODE_TOOL_DESCRIPTIONS_OVERRIDE"
-
-_TOOL_DESCRIPTIONS_SOT_PATH = AUTORESEARCH_TOOL_DESCRIPTIONS_PATH
-"""Cross-process in-repo SoT path (T1, 2026-05-21). module-local alias."""
-
-_OPERATOR_LOCAL_TOOL_DESCRIPTIONS_PATH = OPERATOR_LOCAL_TOOL_DESCRIPTIONS_PATH
-"""Operator-local SoT path (PR-BACKFILL-SOT, 2026-05-21). Module-local
-alias kept for monkeypatch in tests."""
-
 
 _FIELD_DESCRIPTION = "description"
 _FIELD_HINTS = "hints"
 
 
-def _load_tool_descriptions_override() -> dict[str, dict[str, Any]] | None:
+def _load_tool_descriptions_override(
+    *,
+    sources: PolicySourcePaths | None = None,
+) -> dict[str, dict[str, Any]] | None:
     """Return active tool-descriptions override, or ``None`` if no SoT.
 
     Resolution order — see module docstring (3-layer chain).
     """
-    return load_policy_sot(
-        env_var=_TOOL_DESCRIPTIONS_OVERRIDE_ENV,
-        operator_local=_OPERATOR_LOCAL_TOOL_DESCRIPTIONS_PATH,
-        in_repo=_TOOL_DESCRIPTIONS_SOT_PATH,
+    return load_policy_source(
+        sources=sources,
         label="tool-descriptions",
         validate_strict=_validate_schema,
         validate_graceful=_validate_schema,

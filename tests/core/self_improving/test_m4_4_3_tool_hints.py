@@ -269,7 +269,7 @@ def test_orchestrator_prepends_tool_hints_block(monkeypatch: pytest.MonkeyPatch)
 
     monkeypatch.setattr(
         "core.self_improving.loop.inject.in_context_slots._load_in_context_slots_override",
-        lambda: {
+        lambda **_kwargs: {
             SLOT_TOOL_HINTS: InContextSlot(
                 name=SLOT_TOOL_HINTS,
                 max_entries=3,
@@ -299,7 +299,7 @@ def test_orchestrator_no_op_when_no_failing_tools(monkeypatch: pytest.MonkeyPatc
 
     monkeypatch.setattr(
         "core.self_improving.loop.inject.in_context_slots._load_in_context_slots_override",
-        lambda: {
+        lambda **_kwargs: {
             SLOT_TOOL_HINTS: InContextSlot(
                 name=SLOT_TOOL_HINTS,
                 max_entries=3,

@@ -22,14 +22,9 @@ exposes *concrete phrase libraries* the LLM consults at parse-time.
 빈 정책 / 누락 group → 해당 group skip (no-op). Unknown group / 부적합
 schema → graceful drop (forward-compat).
 
-**Resolution order** (PR-BACKFILL-SOT 2026-05-21 shared chain):
-
-1. ``GEODE_HEURISTICS_OVERRIDE`` env var — explicit override.
-   - With ``GEODE_HEURISTICS_STRICT=1`` (audit subprocess): strict.
-   - Without strict flag (operator daily): graceful (no fall-through).
-2. ``~/.geode/autoresearch/handoff/heuristics.json`` — operator-local, graceful.
-3. ``core/self_improving/state/policies/heuristics.json`` — in-repo, graceful.
-4. ``None`` — no-op.
+Candidate paths are supplied by product composition. Selection is explicit
+override → operator-local → packaged default → no-op; an explicit override is
+authoritative and may request strict loading.
 
 **Frontier**: Promptbreeder (Fernando et al., 2023) — self-referential
 self-improvement of mutation operators + thinking styles, JSON-driven
@@ -43,18 +38,9 @@ from html import escape
 from pathlib import Path
 from typing import Any
 
-from core.agent.policy_sot import load_policy_sot
-from core.paths import AUTORESEARCH_HEURISTICS_PATH, OPERATOR_LOCAL_HEURISTICS_PATH
+from core.config.policy_source import PolicySourcePaths, load_policy_source
 
 log = logging.getLogger(__name__)
-
-_HEURISTICS_OVERRIDE_ENV = "GEODE_HEURISTICS_OVERRIDE"
-
-_HEURISTICS_SOT_PATH = AUTORESEARCH_HEURISTICS_PATH
-"""Cross-process in-repo SoT path (T6, 2026-05-21). Module-local alias."""
-
-_OPERATOR_LOCAL_HEURISTICS_PATH = OPERATOR_LOCAL_HEURISTICS_PATH
-"""Operator-local SoT path. Module-local alias for monkey-patch."""
 
 # Known indicator groups + their human-readable labels in the rendered block.
 _GROUP_COMPLEXITY = "complexity_indicators"
@@ -68,12 +54,13 @@ _GROUP_LABELS: dict[str, str] = {
 }
 
 
-def _load_heuristics_override() -> dict[str, list[str]] | None:
+def _load_heuristics_override(
+    *,
+    sources: PolicySourcePaths | None = None,
+) -> dict[str, list[str]] | None:
     """Return the active heuristics dict, or ``None`` if no SoT applies."""
-    return load_policy_sot(
-        env_var=_HEURISTICS_OVERRIDE_ENV,
-        operator_local=_OPERATOR_LOCAL_HEURISTICS_PATH,
-        in_repo=_HEURISTICS_SOT_PATH,
+    return load_policy_source(
+        sources=sources,
         label="heuristics",
         validate_strict=_validate_schema,
         validate_graceful=_validate_schema,

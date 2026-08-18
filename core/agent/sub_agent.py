@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any
 
 from core.agent.cognitive_state_ctx import get_session_id, get_turn_id
 from core.agent.safety import SUBAGENT_CONTROL_TOOLS
+from core.config.policy_source import EMPTY_POLICY_SOURCES, PolicySourceBundle
 from core.hooks import (
     HookCorrelation,
     HookName,
@@ -35,6 +36,7 @@ from core.tools.personal_data import PERSONAL_DATA_TOOLS
 
 if TYPE_CHECKING:
     from core.agent.worker import WorkerRequest
+    from core.observability.run_event import RunEventSinkProvider
     from core.skills.agents import AgentRegistry
 
 log = logging.getLogger(__name__)
@@ -354,6 +356,8 @@ class SubAgentManager:
         # Sandbox: additional working directories for sub-agent scope
         working_dirs: list[str] | None = None,
         collaboration_store: CollaborationStore | None = None,
+        activity_sink_provider: RunEventSinkProvider | None = None,
+        policy_sources: PolicySourceBundle | None = None,
     ) -> None:
         self._runner = runner
         self._task_handler = task_handler
@@ -389,6 +393,8 @@ class SubAgentManager:
         # Sandbox: additional working directories for sub-agent
         self._working_dirs = working_dirs or []
         self._collaboration = collaboration_store or CollaborationStore()
+        self._activity_sink_provider = activity_sink_provider
+        self._policy_sources = policy_sources or EMPTY_POLICY_SOURCES
 
     async def adelegate(
         self,
@@ -1082,6 +1088,7 @@ class SubAgentManager:
         # startup without a parent context).
         from core.agent.cognitive_state_ctx import get_session_id
         from core.agent.worker import WorkerRequest
+        from core.config.policy_source import encode_policy_sources
 
         parent_uuid = get_session_id()
 
@@ -1105,6 +1112,7 @@ class SubAgentManager:
             parent_session_key=self._parent_session_key or get_session_id(),
             parent_session_id=parent_uuid,
             source=task.source,
+            policy_sources=encode_policy_sources(self._policy_sources),
             # PR-JSON-WIRE (2026-05-25) — thread per-task JSON Schema
             # from SubTask down to the worker subprocess for
             # structured-output forcing.
@@ -1137,7 +1145,10 @@ class SubAgentManager:
             apply_agent_contracts_policy,
         )
 
-        agent_def = apply_agent_contracts_policy(agent_def, _load_agent_contracts_override())
+        agent_def = apply_agent_contracts_policy(
+            agent_def,
+            _load_agent_contracts_override(sources=self._policy_sources.get("agent_contracts")),
+        )
         return {
             "agent_name": agent_def.name,
             "role": agent_def.role,
@@ -1182,14 +1193,10 @@ class SubAgentManager:
         # Falls back to "agentic_loop" when there is no active run timeline.
         # (REPL / ad-hoc spawn outside an orchestrator scope).
         try:
-            from core.self_improving.loop.observe.run_timeline import current_run_timeline
-
-            run_timeline = current_run_timeline()
-            data["component"] = (
-                run_timeline.component if run_timeline is not None else "agentic_loop"
-            )
+            sink = self._activity_sink_provider() if self._activity_sink_provider else None
         except Exception:
-            data["component"] = "agentic_loop"
+            sink = None
+        data["component"] = sink.component if sink is not None else "agentic_loop"
         if sub_result is not None:
             data["duration_ms"] = sub_result.duration_ms
             data["success"] = sub_result.success

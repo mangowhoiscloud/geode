@@ -310,6 +310,7 @@ async def reflect_async(
     provider: str | None = None,
     source: str | None = None,
     middleware_registry: Any | None = None,
+    policy_sources: Any | None = None,
 ) -> None:
     """Run the reflection LLM call and update ``state`` in place.
 
@@ -366,7 +367,9 @@ async def reflect_async(
         )
 
         active_tool, active_system = apply_reflection_policy(
-            _REFLECTION_TOOL, _SYSTEM_PROMPT, _load_reflection_policy_override()
+            _REFLECTION_TOOL,
+            _SYSTEM_PROMPT,
+            _load_reflection_policy_override(sources=(policy_sources or {}).get("reflection")),
         )
 
         async def _do_call(m: str) -> object:

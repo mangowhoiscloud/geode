@@ -34,6 +34,7 @@ from core.messaging.slack_transport import (
 log = logging.getLogger(__name__)
 
 _MAX_RECONNECT_DELAY_S = 30.0
+_IMMEDIATE_RECONNECT_REASONS = frozenset({"warning", "refresh_requested"})
 _RECV_STOP_POLL_S = 1.0
 # Bounded ingress (PR-SLACK-SOCKET-LANDING): events are admitted to this
 # queue BEFORE their envelope is acknowledged. A full queue leaves the
@@ -134,7 +135,6 @@ class SlackSocketModeClient:
                         max_size=2 * 1024 * 1024,
                     ) as socket:
                         log.info("Slack Socket Mode connected")
-                        received_frame = False
                         while not should_stop():
                             try:
                                 raw = await asyncio.wait_for(
@@ -142,18 +142,30 @@ class SlackSocketModeClient:
                                 )
                             except TimeoutError:
                                 continue
-                            if not received_frame:
-                                # A connection that reaches Slack protocol
-                                # traffic is healthy enough to reset backoff.
-                                reconnect_delay = 1.0
-                                received_frame = True
-                            reconnect = await self._handle_frame(
+                            disconnect_reason, reset_backoff = await self._handle_frame(
                                 socket,
                                 raw,
                                 queue,
                             )
-                            if reconnect:
-                                break
+                            if disconnect_reason is None:
+                                if reset_backoff:
+                                    reconnect_delay = 1.0
+                                continue
+                            if disconnect_reason not in _IMMEDIATE_RECONNECT_REASONS:
+                                log.warning(
+                                    "Slack Socket Mode disconnected (reason=%s); "
+                                    "reconnecting in %.0fs",
+                                    disconnect_reason,
+                                    reconnect_delay,
+                                )
+                                await self._wait_or_stop(reconnect_delay, should_stop)
+                                reconnect_delay = min(
+                                    reconnect_delay * 2.0,
+                                    _MAX_RECONNECT_DELAY_S,
+                                )
+                            else:
+                                reconnect_delay = 1.0
+                            break
                 except asyncio.CancelledError:
                     raise
                 except Exception as exc:
@@ -192,8 +204,8 @@ class SlackSocketModeClient:
         socket: _SocketConnection,
         raw: str | bytes,
         queue: asyncio.Queue[dict[str, Any]],
-    ) -> bool:
-        """Handle one frame. Return ``True`` when Slack requests reconnect.
+    ) -> tuple[str | None, bool]:
+        """Return ``(disconnect_reason, reset_backoff)`` for one frame.
 
         Events API envelopes are ACKed only AFTER queue admission — a full
         queue skips the ACK so Slack redelivers the envelope later.
@@ -203,19 +215,19 @@ class SlackSocketModeClient:
             envelope = json.loads(decoded)
         except (UnicodeDecodeError, json.JSONDecodeError):
             log.warning("Slack Socket Mode ignored a malformed frame")
-            return False
+            return None, False
         if not isinstance(envelope, dict):
             log.warning("Slack Socket Mode ignored a non-object frame")
-            return False
+            return None, False
 
         envelope_type = str(envelope.get("type", ""))
         if envelope_type == "hello":
             log.info("Slack Socket Mode hello received")
-            return False
+            return None, False
         if envelope_type == "disconnect":
             reason = str(envelope.get("reason", "unknown"))
-            log.info("Slack Socket Mode refresh requested (reason=%s)", reason)
-            return True
+            log.info("Slack Socket Mode disconnect requested (reason=%s)", reason)
+            return reason, False
 
         envelope_id = str(envelope.get("envelope_id", ""))
 
@@ -223,14 +235,17 @@ class SlackSocketModeClient:
             if envelope_id:
                 await cls._ack(socket, envelope_id)
             log.debug("Slack Socket Mode acknowledged unsupported envelope type=%s", envelope_type)
-            return False
+            return None, bool(envelope_id)
+
+        if not envelope_id:
+            log.warning("Slack Socket Mode ignored an unacknowledgeable Events API envelope")
+            return None, False
 
         payload = envelope.get("payload")
         if not isinstance(payload, dict):
-            if envelope_id:
-                await cls._ack(socket, envelope_id)
+            await cls._ack(socket, envelope_id)
             log.warning("Slack Socket Mode event envelope had no object payload")
-            return False
+            return None, True
 
         try:
             queue.put_nowait(payload)
@@ -241,10 +256,9 @@ class SlackSocketModeClient:
                 "Slack Socket Mode admission queue full (%d) — leaving envelope unACKed",
                 queue.maxsize,
             )
-            return False
-        if envelope_id:
-            await cls._ack(socket, envelope_id)
-        return False
+            return None, True
+        await cls._ack(socket, envelope_id)
+        return None, True
 
     @staticmethod
     async def _ack(socket: _SocketConnection, envelope_id: str) -> None:

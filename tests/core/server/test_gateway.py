@@ -151,6 +151,10 @@ class TestChannelManager:
         msg.content = "hey @geode analyze this"
         assert asyncio.run(manager.aroute_message(msg)) == "processed"
 
+        # A plain occurrence is content, not an address to the bot.
+        msg.content = "compare geode with another runtime"
+        assert asyncio.run(manager.aroute_message(msg)) is None
+
     def test_mention_override_preserves_clean_content(self):
         manager = ChannelManager()
         received: list[str] = []
@@ -248,6 +252,24 @@ class TestChannelManager:
         )
         response = asyncio.run(manager.aroute_message(msg))
         assert "Error" in response
+
+    def test_auto_respond_false_processes_without_returning_channel_text(self):
+        manager = ChannelManager()
+        processed: list[str] = []
+        manager.set_async_processor(lambda content, _meta: processed.append(content) or "hidden")
+        manager.add_binding(ChannelBinding(channel="slack", channel_id="C1", auto_respond=False))
+        msg = InboundMessage(
+            channel="slack",
+            channel_id="C1",
+            sender_id="U1",
+            sender_name="Alice",
+            content="run quietly",
+            timestamp=time.time(),
+        )
+
+        assert asyncio.run(manager.aroute_message(msg)) is None
+        assert processed == ["run quietly"]
+        assert manager.get_stats()["processed"] == 1
 
 
 # ---------------------------------------------------------------------------
@@ -438,16 +460,16 @@ class TestGatewaySessionKey:
 
 
 class TestAllowedToolsEnforcement:
-    def test_allowed_tools_hint_injected(self):
-        """Binding's allowed_tools should be prefixed to content."""
-        received_content = []
+    def test_allowed_tools_are_structured_metadata_not_prompt_text(self):
+        received: list[tuple[str, dict[str, Any]]] = []
         manager = ChannelManager()
-        manager.set_async_processor(lambda c, m: (received_content.append(c), "ok")[1])
+        manager.set_async_processor(lambda c, m: (received.append((c, m)), "ok")[1])
         manager.add_binding(
             ChannelBinding(
                 channel="slack",
                 channel_id="C1",
                 allowed_tools=["list_subjects", "search_subjects"],
+                time_budget_s=37.0,
             )
         )
 
@@ -460,8 +482,9 @@ class TestAllowedToolsEnforcement:
             timestamp=time.time(),
         )
         asyncio.run(manager.aroute_message(msg))
-        assert "[allowed_tools:" in received_content[0]
-        assert "list_subjects" in received_content[0]
+        assert received[0][0] == "show subjects"
+        assert received[0][1]["allowed_tools"] == ("list_subjects", "search_subjects")
+        assert received[0][1]["time_budget_s"] == 37.0
 
     def test_no_allowed_tools_no_prefix(self):
         """Without allowed_tools, content passes through unchanged."""

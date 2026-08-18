@@ -132,15 +132,13 @@ def test_mutated_scaffold_reaches_target_prompt_via_sot_fallback(
     env-less SoT-file fallback still injects the scaffold. Pins that the
     standalone ``geode audit`` path is NOT scaffold-free when the in-repo SoT
     exists."""
-    import core.agent.system_prompt as sp
+    import core.self_improving.policy_sources as product_sources
 
     sot = _write_marked_scaffold(tmp_path)
     monkeypatch.delenv("GEODE_WRAPPER_OVERRIDE", raising=False)
     monkeypatch.delenv("GEODE_AUDIT_UNRESTRICTED", raising=False)
     monkeypatch.setenv("GEODE_FORCE_DRY_RUN", "1")
-    # Point the module-local SoT alias at our marked file (tests are allowed
-    # to monkeypatch this alias per the constant's docstring).
-    monkeypatch.setattr(sp, "_WRAPPER_SECTIONS_SOT_PATH", sot)
+    monkeypatch.setattr(product_sources, "AUTORESEARCH_WRAPPER_SECTIONS_PATH", sot)
 
     prompt = _capture_internal_prompt(monkeypatch, auditor_messages=_auditor_messages())
 
@@ -158,12 +156,21 @@ def test_audit_mode_falls_back_to_generic_base_when_no_scaffold(
     this branch returned only dynamic context, producing a scaffold-free
     target (the genuine causal-disconnect path Codex flagged)."""
     import core.agent.system_prompt as sp
+    from core.config.policy_source import PolicySourcePaths
 
     monkeypatch.delenv("GEODE_WRAPPER_OVERRIDE", raising=False)
     monkeypatch.setenv("GEODE_AUDIT_UNRESTRICTED", "1")
-    monkeypatch.setattr(sp, "_WRAPPER_SECTIONS_SOT_PATH", tmp_path / "does-not-exist.json")
 
-    prompt = sp.build_system_prompt(model="gpt-5.5")
+    prompt = sp.build_system_prompt(
+        model="gpt-5.5",
+        policy_sources={
+            "wrapper_sections": PolicySourcePaths(
+                "GEODE_WRAPPER_OVERRIDE",
+                packaged_default=tmp_path / "does-not-exist.json",
+                override_is_strict=True,
+            )
+        },
+    )
 
     # The generic router prefix substitutes ``ip_count`` / ``ip_examples``;
     # the presence of the dynamic cache boundary + a non-trivial static body

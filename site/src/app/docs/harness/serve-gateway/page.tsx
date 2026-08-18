@@ -25,9 +25,9 @@ export default function Page() {
             <figure>
               <img
                 src="/geode/diagrams/gateway-routing.svg"
-                alt="Gateway routing: Slack Socket Mode and Discord or Telegram pollers feed the ChannelManager binding match; unmatched messages are ignored, matched ones pass the LaneQueue into AgenticLoop in DAEMON mode"
+                alt="Gateway routing: transport adapters pass exact binding and mention gates, binding policy supplies tool and budget constraints, LaneQueue serializes the session, AgenticLoop and ToolExecutor enforce the tool surface, and auto-response controls outbound delivery"
               />
-              <figcaption>binding에 일치한 메시지만 레인을 거쳐 루프에 닿습니다. 불일치는 무시됩니다.</figcaption>
+              <figcaption>바인딩 정책은 모델에 보이는 도구와 실제 실행을 함께 제한하고, 응답 전송 여부만 마지막에 결정합니다.</figcaption>
             </figure>
             <table>
               <thead>
@@ -103,6 +103,19 @@ channel = "slack"
 channel_id = "C0ABCDEF1"     # 필수. 비어 있으면 규칙이 건너뜀
 require_mention = true`}</pre>
 
+            <h2>실환경 검증</h2>
+            <p>
+              2026-08-17의 <a href="https://github.com/mangowhoiscloud/geode/pull/3007">PR #3007</a> head를
+              Slack Socket Mode에서 직접 실행했다. 일상 대화는 도구 없이 답했고,
+              browser DOM 경로는 실제 <code>example.com</code> 탭과 제목을 확인했다.
+              Strict pixel <code>computer_use</code>는 캡처에는 성공했지만 OpenAI
+              subscription source에 호환 visual grounding이 없어 좌표를 추측하지
+              않고 중단했다. 공개 <a href="https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/41e15ca262d5953d1c88f4767777331875c57c9f/reports/e2e-validation/2026-08-17-slack-gateway-live-e2e.json">E2E 영수증</a>은
+              세 결과와 raw evidence digest를 보존한다. Primary 답변은 Codex OAuth
+              subscription이었지만 post-turn GLM PAYG 호출도 관측돼 전체 lifecycle은
+              subscription-only가 아니다.
+            </p>
+
             <h2>실패 모드</h2>
             <table>
               <thead>
@@ -159,9 +172,9 @@ require_mention = true`}</pre>
             <figure>
               <img
                 src="/geode/diagrams/gateway-routing.svg"
-                alt="Gateway routing: Slack Socket Mode and Discord or Telegram pollers feed the ChannelManager binding match; unmatched messages are ignored, matched ones pass the LaneQueue into AgenticLoop in DAEMON mode"
+                alt="Gateway routing: transport adapters pass exact binding and mention gates, binding policy supplies tool and budget constraints, LaneQueue serializes the session, AgenticLoop and ToolExecutor enforce the tool surface, and auto-response controls outbound delivery"
               />
-              <figcaption>Only a message that matches a binding passes the lanes into the loop; the rest are ignored.</figcaption>
+              <figcaption>Binding policy constrains both visible and executable tools; outbound delivery is decided only after processing.</figcaption>
             </figure>
             <table>
               <thead>
@@ -237,6 +250,20 @@ time_budget_s = 120          # default wall-clock per message
 channel = "slack"
 channel_id = "C0ABCDEF1"     # required; an empty id skips the rule
 require_mention = true`}</pre>
+
+            <h2>Live verification</h2>
+            <p>
+              The 2026-08-17 <a href="https://github.com/mangowhoiscloud/geode/pull/3007">PR #3007</a> head
+              was exercised directly through Slack Socket Mode. Ordinary chat
+              answered without tools, and the browser-DOM path opened a real{" "}
+              <code>example.com</code> tab and verified its title. Strict pixel{" "}
+              <code>computer_use</code> captured the desktop but stopped instead
+              of guessing coordinates when the OpenAI subscription source had no
+              compatible visual grounding. The public <a href="https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/41e15ca262d5953d1c88f4767777331875c57c9f/reports/e2e-validation/2026-08-17-slack-gateway-live-e2e.json">E2E receipt</a> preserves
+              the three outcomes and raw-evidence digests. Primary answers used
+              Codex OAuth subscription, but observed post-turn GLM PAYG calls
+              mean the complete lifecycle was not subscription-only.
+            </p>
 
             <h2>Failure modes</h2>
             <table>

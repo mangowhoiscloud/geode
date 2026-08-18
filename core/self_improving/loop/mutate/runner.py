@@ -743,9 +743,9 @@ def _default_llm_call(
             temperature=mutator_temperature,
         )
         if middleware_registry is None:
-            from core.hooks import MiddlewareRegistry
+            from core.wiring.bootstrap import build_middleware_registry
 
-            active_middleware = MiddlewareRegistry()
+            active_middleware = build_middleware_registry()
         else:
             active_middleware = middleware_registry
         return await active_middleware.call_llm(adapter, req)

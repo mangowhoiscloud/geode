@@ -47,6 +47,10 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.22] - 2026-08-19
+
+> Slack gateway policy enforcement, bounded Socket Mode recovery, and reproducible evaluation evidence.
+
 ### Added
 
 - **Tau2 Lane 1A no-model preflight receipt.** A fail-closed runner path now
@@ -80,8 +84,30 @@ functional change.
   environment, and the runner checks dependency integrity and source imports
   before any model call.
 
+### Architecture
+
+- **Separated neutral runtime seams from the bundled self-improving product.**
+  Kernel policy readers now consume immutable source selections, Anthropic
+  prompt contributions use the existing composed middleware boundary, and
+  generic lifecycle/hook writers receive an optional bounded activity sink.
+  The product retains its policy files, prompt recipes, `RunTimeline` writer,
+  storage paths, and ContextVar; a direct-import contract prevents the closed
+  kernel from reaching back into that product surface.
+
 ### Fixed
 
+- **Gateway binding policy is now enforced at runtime.** Per-channel tool
+  allowlists constrain both model-visible schemas and ToolExecutor dispatch,
+  per-binding time budgets reach the DAEMON session, and `auto_respond=false`
+  suppresses only outbound text after processing. Ask continuations intersect
+  the origin and replying binding policies instead of widening either. Slack `app_mention` events
+  now use their authoritative event type instead of a synthetic `@geode`
+  marker, while unrelated user mentions remain intact.
+- **Slack Socket Mode reconnects and replay dedup are now bounded.** Scheduled
+  connection refreshes still reconnect immediately, while abnormal disconnect
+  reasons use exponential backoff. Unacknowledgeable Events API envelopes are
+  rejected, and a size-bounded one-hour dedup window covers delayed Slack
+  replays beyond five minutes.
 - **MCPMark Filesystem-30 now binds score and semantic fixture state.** The
   paired runner records its signed GEODE-minus-Codex verifier delta in the
   native result, rejects fixture drift in file mtimes, modes, or empty

@@ -281,19 +281,19 @@ machine-readable artifact is
 
 | Measure | Current tree |
 |---|---:|
-| Production Python files (`core/` + `plugins/`) | 548 |
-| Test Python files | 685 |
-| `core/` Python LOC | 139,029 |
-| `plugins/` Python LOC | 44,824 |
-| Test Python LOC | 183,331 |
+| Production Python files (`core/` + `plugins/`) | 551 |
+| Test Python files | 686 |
+| `core/` Python LOC | 139,637 |
+| `plugins/` Python LOC | 44,872 |
+| Test Python LOC | 184,240 |
 | Tool definitions / executable registrations / valid schemas | 87 / 90 / 87 (definition-only 0; execution-only 3; invalid schema 0) |
 | `RuntimeEvent` members | 57 |
 | Built-in LLM adapters | 8 |
 | Module-level `ContextVar` declarations under `core/` | 30 |
 | `core` → `plugins` import sites | 31 across 14 files |
-| Import-linter contracts / ignored edges | 4 / 24 |
-| `AgenticLoop` file LOC / methods / constructor args | 3,154 / 75 / 27 |
-| `SubAgentManager` file LOC / methods / constructor args | 1,443 / 24 / 15 |
+| Import-linter contracts / ignored edges | 5 / 24 |
+| `AgenticLoop` file LOC / methods / constructor args | 3,179 / 75 / 30 |
+| `SubAgentManager` file LOC / methods / constructor args | 1,450 / 24 / 17 |
 | `RuntimeCoreConfig` fields | 19 |
 | Global Ruff ratchets | complexity 52; args 23; branches 51; returns 18; statements 212 |
 <!-- generated:architecture-baseline:end -->
@@ -512,8 +512,8 @@ and closure evidence are appended in §10.
 | GOV-002 | `PARTIAL` | Hand-audited counts disagree with `AGENTS.md` (78 tools/56 hooks vs 67/65 prose) | One generated architecture baseline and a drift check own the counts | R0.2 | GOV-001 | `DONE` |
 | GOV-003 | `MISFIT` | Old plans describe removed paths and implemented work as current gaps | Overlapping docs carry a historical-status banner and point here | R0.1 | GOV-001 | `DONE` |
 | GOV-004 | `PARTIAL` | 24 import ignores and very high global Ruff ceilings lack uniform owner/expiry metadata | Every exception is removed or recorded per symbol/edge with owner, rationale, expiry, and ratchet | R0.3 | GOV-002 | `DONE` |
-| BND-001 | `MISFIT` | `plugins/` contains first-party features that `core` imports | Every package is classified kernel, product shell, bundled feature, or external extension; names match semantics | R1.1 | GOV-002 | `READY` |
-| BND-002 | `MISFIT` | 31 `core` → `plugins` import sites across 14 files | AST gate reports zero reverse dependency; composition owns feature registration | R1.2 | BND-001 | `OPEN` |
+| BND-001 | `MISFIT` | `plugins/` contains first-party features that `core` imports | Every package is classified kernel, product shell, bundled feature, or external extension; names match semantics | R1.1 | GOV-002 | `IN_DEVELOP` |
+| BND-002 | `MISFIT` | 31 `core` → `plugins` import sites across 14 files | AST gate reports zero reverse dependency; composition owns feature registration | R1.2 | BND-001 | `READY` |
 | BND-003 | `ABSENT` | One-off core-only probe fails at `core.cli`; CI does not test an installed kernel without features | Isolated wheel/package test boots and runs kernel tests without bundled/third-party modules | R1.3 | BND-001, BND-002, BND-006 | `OPEN` |
 | BND-004 | `PARTIAL` | Skills/hooks/MCP have different discovery rules; Python feature collision/trust behavior is not unified | Each supported external surface declares non-executing discovery, precedence, collision, enablement, trust-before-load, reload, isolation, and teardown | R6.3 | BND-001, LLM-002 | `OPEN` |
 | CAP-001 | `PARTIAL` | Google service bundles exist but do not own all tool/policy relationships | Generic capability records plus `GoogleServiceDescriptor` are executable SOTs | R2.1 | BND-002 | `OPEN` |
@@ -546,7 +546,7 @@ and closure evidence are appended in §10.
 | VER-002 | `ABSENT` | No contract suite measures how many central edits each extension type requires | Six extension scenarios in §8 pass without forbidden edits | R7.2 | CAP-006, LLM-002, BND-004 | `OPEN` |
 | VER-003 | `PARTIAL` | Public/internal metric prose drifts from executable counts | `sync-stats` or one shared generator updates site, AGENTS facts, and roadmap baseline; check mode is green | R0.2 | GOV-001 | `DONE` |
 | VER-004 | `PARTIAL` | Cold-start and runtime metrics exist, but refactors lack one architecture regression baseline | Startup, first-turn, tool-plan build, memory, and event-write budgets are pinned and non-regressing | R7.3 | CAP-005, LOOP-003, DI-004, LLM-004, PROTO-002, STORE-002 | `OPEN` |
-| BND-005 | `MISFIT` | Generic agent/provider/observability consumers import self-improving transcript, SoT-resolution, and prompt-injection helpers | Neutral policy snapshot/source, context-contribution, run identity, and activity-sink contracts replace every classified-kernel import of a self-improving helper without changing runtime behavior | R1.4 | BND-001 | `OPEN` |
+| BND-005 | `MISFIT` | Generic agent/provider/observability consumers import self-improving transcript, SoT-resolution, and prompt-injection helpers | Neutral policy snapshot/source, context-contribution, run identity, and activity-sink contracts replace every classified-kernel import of a self-improving helper without changing runtime behavior | R1.4 | BND-001 | `IN_DEVELOP` |
 | BND-006 | `MISFIT` | `core/self_improving` contains 39 Python files and 16,159 LOC of opt-in campaign, Petri/seed orchestration, mutation, gate, CLI/MCP, scheduler, and state policy | One cohesive first-party bundled feature owns the control plane outside the kernel; outer composition wires it, classified kernel modules import it zero times outside the exact forwarding-facade allowlist, a retirement GAP is registered before implementation, and v1.0 commands/imports/config/state behavior pass compatibility and installed-wheel tests | R1.5 | BND-002, BND-005 | `OPEN` |
 | REL-001 | `MISFIT` | PyPI and GitHub Releases still publish v1.0.0, while repository metadata and the changelog declare an untagged, unpublished v1.1.0; the operator selected v1.0.1 as the next public release | Wheel, sdist, CLI, daemon, site SOT, changelog, tag, GitHub release, and PyPI all report v1.0.1 with artifact-hash parity and no rewritten v1.0.0 evidence | R1.6 | BND-003, BND-006, GOV-004 | `OPEN` |
 | REL-002 | `ABSENT` | No registered gate prevents the v1.0.1 compatibility facade or preserved state roots from being retired immediately after a local tag, draft release, or registry publication | Official GitHub Release and PyPI evidence proves compatible public artifacts continuously exposed the facade and preserved roots for a final qualifying interval of at least 30 consecutive days, starting no earlier than v1.0.1, and every release inside that interval retained them | R8.0 | REL-001 | `OPEN` |
@@ -560,6 +560,7 @@ and closure evidence are appended in §10.
 | HOOK-003 | `PARTIAL` | All 13 public hooks are wired, but no production `PostVerify` policy is registered; an empty decision set can deliver a retryable verifier failure, continuation authority is encoded as a user-role pseudo-system message, and durable verification records aggregate handler decisions without a stable candidate target | A deterministic fallback maps pass/retryable failure/non-retryable failure to accept/revise/escalate; revision enters the bounded dynamic system context, reaches the existing verify-fail replan path, and records candidate-digest-bound per-handler decisions without replaying completed side effects or adding a new hook plane | R6.6 | HOOK-001, STORE-002 | `DONE` |
 | MEM-001 | `MISFIT` | One live system-prompt branch creates a default user profile outside the wired project scope, `TURN_COMPLETED` promotes a low-information turn/tool trace into active project memory, and caller-free session-checkpoint plus journal write/aggregate APIs imply competing authorities | The wired profile is the sole prompt profile source; automatic turn traces remain in canonical session records; dead `SessionStorePort` checkpoint and `ProjectJournal` write/aggregate APIs are removed while historical files remain untouched; executable tests and docs identify the live read/write authority without adding a store or framework | R6.7 | HOOK-001, STORE-002 | `DONE` |
 | GOAL-001 | `PARTIAL` | Explicit Goal state, contextual continuation, accounting, and trajectory events persist, but automatic continuation is owned only by one `AgenticLoop.arun()` call; no process owner discovers an active Goal after return or daemon restart, restores its checkpoint, or prevents duplicate idle launches | The existing serve process owns a bounded idle Goal continuation host that restores the same checkpoint as a new session generation, admits at most one continuation per session, uses the internal contextual-Goal path rather than a synthetic user turn, preserves Lane, PostVerify/replan, accounting, and trajectory contracts, and does not hot-loop an unchanged active Goal | R6.8 | HOOK-003, STORE-002 | `DONE` |
+| CODE-001 | `PARTIAL` | Coding work spans session/checkpoint/timeline, task preflight/TaskGraph, Goal, collaboration, worktree workflow, file/bash tools, and reviewer/verification paths, but no canonical contract maps their current writers, recovery authority, or residual coding-runtime boundaries | One reviewed coding-runtime authority contract maps every proposed record and operation to an existing or residual owner, fixes recovery/history/projection and drift/rollback invariants, and proves that no duplicate runtime store, task ledger, policy plane, or implementation API was introduced | R9.1 | STORE-002, HOOK-003, MEM-001, COLLAB-003, GOAL-001 | `OPEN` |
 
 ## 6. Dependency and merge sequence
 
@@ -1690,6 +1691,43 @@ Acceptance:
 - no active runtime or operator root is deleted without another registered,
   versioned retirement GAP after its fallback window.
 
+### R9 — Coding-agent runtime authority
+
+R9 starts from the source-pinned
+[Codex runtime evolution research](../research/2026-08-15-codex-runtime-evolution-geode-modernization.md),
+but turns none of its prospective runtime modules into implementation scope.
+Its first package freezes authority and overlap boundaries before any residual
+coding-runtime package can be registered.
+
+#### R9.1 Coding-agent runtime authority contract
+
+GAP: CODE-001.
+
+This package adds no second Goal, session, collaboration, approval, timeline,
+task, or promotion source of truth. It authorizes no runtime implementation.
+
+Acceptance:
+
+- a source-and-test census identifies the current writer, readers, lifecycle,
+  persistence, and recovery owner for coding task, session/turn, workspace,
+  process, mutation/diff, review, instructions/context, and cross-domain task
+  lookup;
+- one authority matrix names durability, recovery, migration, compatibility,
+  redaction, failure, and rollback rules while preserving messages/checkpoints
+  as recovery authority, `SessionTimeline` as append-only history, and Goal,
+  scheduler, collaboration, and evaluation/promotion as their domain sources
+  of truth unless a later registered migration says otherwise;
+- every overlap with LOOP, PROTO, CAP, TRUST, HOOK, STORE, COLLAB, GOAL, and
+  memory contracts receives a `reuse`, `extend after dependency`, or
+  `separate measured GAP` disposition; no generic thread manager, universal
+  task ledger, second transcript, policy framework, or review hook is added;
+- every deferred candidate names its registration trigger: a current consumer
+  or failure, exact affected source path, measurable exit, and independently
+  mergeable boundary;
+- crash, race, partial-mutation, drift, redaction, and rollback failure modes
+  map to observable acceptance tests, and the roadmap validator plus document
+  link checks pass without any runtime-code change.
+
 ## 8. Change-surface acceptance scenarios
 
 These black-box scenarios define extensibility more usefully than class count.
@@ -1800,6 +1838,8 @@ pre-release delivery evidence survives after the claim row is gone.
 | R6.5 | COLLAB-001, COLLAB-002, COLLAB-003 | [#2886](https://github.com/mangowhoiscloud/geode/pull/2886) | `4bf93d6415504495e54628ee5efaa88c9b828b3e` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, 10,433 non-live tests, lint/format, type check, security, Pages build, macOS/Ubuntu install smoke, durable mailbox/checkpoint/follow-up tests, and existing GPT subscription collaboration and hook E2E evidence all passed) |
 | R6.7 | MEM-001 | [#2903](https://github.com/mangowhoiscloud/geode/pull/2903) | `a7a59b69f18589bec82eb515b482355924ac9467` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, 10,407 non-live tests, lint/format, type check, security, Pages build, macOS/Ubuntu install smoke, independent GPT-5.6-Luna max review with its sole P2 fixed, 13-of-13 public-hook subscription E2E, and immutable eval-artifact [#15](https://github.com/mangowhoiscloud/geode-eval-artifacts/pull/15) with manifest `aba8839af72cd4d96e7e22979affac98e04cbe027fff41e3b67732e75720103d` all passed) |
 | R6.8 | GOAL-001 | [#2931](https://github.com/mangowhoiscloud/geode/pull/2931) | `543994952dddd068695d5717e02263322aaafd38` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, 10,377 non-live tests, lint/format, type check, security, Pages build, macOS/Ubuntu install smoke, deterministic hosted-restart/Lane/terminal-race coverage, GPT-5.6-sol committed-diff review with all seven findings resolved, and immutable eval-artifact [#16](https://github.com/mangowhoiscloud/geode-eval-artifacts/pull/16) all passed) |
+| R1.1 | BND-001 | [#3001](https://github.com/mangowhoiscloud/geode/pull/3001) | `1e62473d5a391a750068fbb8de20e303c168ce60` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, full tests, lint/format, type check, security, Pages build, official-doc parity, macOS/Ubuntu install smoke, and independent committed-diff review all passed) |
+| R1.4 | BND-005 | [#3004](https://github.com/mangowhoiscloud/geode/pull/3004) | `e20584650809d8b4f2480d45fe01359aa95a28f2` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, full tests, lint/format, type check, security, Pages build, macOS/Ubuntu install smoke, import-linter 5/5, slop ratchet 83/83, and independent committed-diff review all passed; policy paths and RunTimeline storage remain product-owned, no durable state migrated, and thin compatibility facades preserve historical readers) |
 
 ### 10.2 Main closure evidence
 
@@ -1931,18 +1971,18 @@ Commit-pinned primary source references used by the 2026-07-17 audit:
 
 ## 14. Immediate next unit
 
-R1.1 is `READY` and unclaimed. Its 2026-07-18 implementation attempt was
-abandoned after opening no implementation PR, so the stale branch is not
-delivery evidence and must not be merged wholesale. Before resuming, re-audit
-its useful decisions against current `origin/develop`, merge a fresh claim that
-names the new owner and branch, and allocate that branch from the resulting
-canonical tip. R1.1 delivers only the package-classification
-ADR and product-shell migration map; it does not move implementation modules.
-R1.4 (`BND-005`) and R1.2 (`BND-002`) remain `OPEN` until R1.1 supplies that
-classification contract. R1.5 (`BND-006`) then waits for both the neutral seams
-in R1.4 and the reverse-dependency removal in R1.2; the registered BND-007
-retirement package now satisfies its planning prerequisite without authorizing
-removal.
+R1.4 is delivered on `develop` by
+[#3004](https://github.com/mangowhoiscloud/geode/pull/3004) /
+`e20584650809d8b4f2480d45fe01359aa95a28f2`; its active claim is released and
+its durable feature/merge evidence is recorded in §10.1. R1.2 (`BND-002`) is
+the earliest `READY` package and remains unclaimed. Its claim must be recorded
+by a fresh roadmap-only claim PR before an implementation worktree is
+allocated.
+
+R1.5 (`BND-006`) now has the neutral-seam dependency from R1.4 satisfied, but
+remains `OPEN` until the reverse-dependency removal in R1.2 is delivered and
+its whole-package readiness is re-audited. The registered BND-007 retirement
+package satisfies its planning prerequisite without authorizing removal.
 R1.6 (`REL-001`) remains `OPEN` until R0.3, R1.3, and R1.5 are delivered; it
 then owns the v1.0.1 release checkpoint and does not authorize facade removal.
 R8.0 (`REL-002`) remains `OPEN` until REL-001 reaches `DONE`; its 30-day clock

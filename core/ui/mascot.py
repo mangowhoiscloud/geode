@@ -60,8 +60,12 @@ def _resolve_active_plan_summary(model: str) -> str:
     """
     try:
         from core.llm.strategies.plan_registry import resolve_routing
+        from core.wiring.bootstrap import build_product_policy_sources
 
-        target = resolve_routing(model)
+        target = resolve_routing(
+            model,
+            sources=build_product_policy_sources().get("provider_routing"),
+        )
         if target is None:
             return ""
         plan = target.plan

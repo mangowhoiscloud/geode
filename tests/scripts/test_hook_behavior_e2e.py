@@ -1,5 +1,6 @@
 import asyncio
 
+from core.config.policy_source import EMPTY_POLICY_SOURCES
 from scripts.eval.run_hook_behavior_e2e import (
     _middleware_counts_are_valid,
     _run_action_matrix,
@@ -19,7 +20,7 @@ def test_middleware_count_invariants_allow_extra_llm_rounds() -> None:
 
 
 def test_action_matrix() -> None:
-    outcomes = asyncio.run(_run_action_matrix())
+    outcomes = asyncio.run(_run_action_matrix(EMPTY_POLICY_SOURCES))
 
     assert outcomes == {
         "cancel_before_start": {"side_effect_calls": 0, "status": "pass"},

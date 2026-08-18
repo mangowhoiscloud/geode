@@ -64,12 +64,14 @@ def poller_factory(monkeypatch: pytest.MonkeyPatch, tmp_path: Any):
         *,
         require_mention: bool = True,
         bot_user_id: str = "UGEODE",
+        auto_respond: bool = True,
     ) -> tuple[SlackPoller, ChannelManager, _FakeTransport]:
         manager = ChannelManager(bot_user_id=bot_user_id)
         manager.add_binding(
             ChannelBinding(
                 channel="slack",
                 channel_id="CBOUND",
+                auto_respond=auto_respond,
                 require_mention=require_mention,
             )
         )
@@ -117,6 +119,79 @@ def test_socket_event_routes_and_replies_in_thread(poller_factory: Any) -> None:
         ("CBOUND", "171.25", "white_check_mark"),
     ]
     assert transport.posts == [("CBOUND", "done", "171.25")]
+
+
+def test_app_mention_strips_only_leading_bot_token(poller_factory: Any) -> None:
+    poller, manager, _transport = poller_factory(bot_user_id="")
+    processed: list[str] = []
+    manager.set_async_processor(lambda content, _metadata: processed.append(content) or "done")
+
+    asyncio.run(
+        poller._handle_socket_event(
+            {
+                "event_id": "Ev-other-mention",
+                "authorizations": [{"user_id": "UBOT"}],
+                "event": {
+                    "type": "app_mention",
+                    "channel": "CBOUND",
+                    "user": "U1",
+                    "text": "<@UBOT> ask <@UOTHER> for the status",
+                    "ts": "171.26",
+                },
+            }
+        )
+    )
+
+    assert processed == ["ask <@UOTHER> for the status"]
+
+
+def test_app_mention_without_bot_identity_preserves_all_mentions(poller_factory: Any) -> None:
+    poller, manager, _transport = poller_factory(bot_user_id="")
+    processed: list[str] = []
+    manager.set_async_processor(lambda content, _metadata: processed.append(content) or "done")
+
+    asyncio.run(
+        poller._handle_socket_event(
+            {
+                "event_id": "Ev-unknown-bot",
+                "event": {
+                    "type": "app_mention",
+                    "channel": "CBOUND",
+                    "user": "U1",
+                    "text": "<@UOTHER> ask <@UBOT> for the status",
+                    "ts": "171.265",
+                },
+            }
+        )
+    )
+
+    assert processed == ["<@UOTHER> ask <@UBOT> for the status"]
+
+
+def test_auto_respond_false_keeps_processing_but_sends_no_message(
+    poller_factory: Any,
+) -> None:
+    poller, manager, transport = poller_factory(auto_respond=False)
+    processed: list[str] = []
+    manager.set_async_processor(lambda content, _metadata: processed.append(content) or "hidden")
+
+    asyncio.run(
+        poller._handle_socket_event(
+            {
+                "event_id": "Ev-no-response",
+                "event": {
+                    "type": "app_mention",
+                    "channel": "CBOUND",
+                    "user": "U1",
+                    "text": "<@UGEODE> process silently",
+                    "ts": "171.27",
+                },
+            }
+        )
+    )
+
+    assert processed == ["process silently"]
+    assert transport.posts == []
 
 
 def test_thread_reply_continues_without_remention(poller_factory: Any) -> None:
@@ -343,7 +418,58 @@ def test_message_and_app_mention_for_same_timestamp_are_deduplicated(
     assert transport.posts == [("CBOUND", "once", "172.5")]
 
 
-def test_app_mention_routes_when_bootstrap_bot_id_lookup_failed(poller_factory: Any) -> None:
+def test_reconnect_redelivery_dedup_is_long_lived_and_bounded(
+    poller_factory: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    poller, manager, transport = poller_factory()
+    now = 0.0
+    calls = 0
+
+    monkeypatch.setattr(
+        "core.server.supervised.slack_poller.time.monotonic",
+        lambda: now,
+    )
+
+    async def processor(content: str, metadata: dict[str, Any]) -> str:
+        nonlocal calls
+        calls += 1
+        return "once"
+
+    manager.set_async_processor(processor)
+    payload = {
+        "event_id": "Ev-reconnect",
+        "event": {
+            "type": "app_mention",
+            "channel": "CBOUND",
+            "user": "U1",
+            "text": "<@UGEODE> hello again",
+            "ts": "172.55",
+        },
+    }
+
+    asyncio.run(poller._handle_socket_event(payload))
+    now = 6 * 60
+    asyncio.run(poller._handle_socket_event(payload))
+
+    assert calls == 1
+    assert transport.posts == [("CBOUND", "once", "172.55")]
+
+    poller.DEDUP_MAX = 1
+    now = 7 * 60
+    next_payload = {
+        **payload,
+        "event_id": "Ev-next",
+        "event": {**payload["event"], "ts": "172.56"},
+    }
+    asyncio.run(poller._handle_socket_event(next_payload))
+    assert calls == 2
+    assert set(poller._seen_events) == {"CBOUND:172.56"}
+
+
+def test_app_mention_routes_without_stripping_when_bot_id_lookup_failed(
+    poller_factory: Any,
+) -> None:
     poller, manager, transport = poller_factory(bot_user_id="")
     processed: list[str] = []
 
@@ -366,7 +492,7 @@ def test_app_mention_routes_when_bootstrap_bot_id_lookup_failed(poller_factory: 
             }
         )
     )
-    assert processed == ["still route this"]
+    assert processed == ["<@UUNKNOWN> still route this"]
     assert transport.posts == [("CBOUND", "done", "172.6")]
 
 
@@ -398,7 +524,7 @@ def test_app_mention_upgrades_previously_unaddressed_message(poller_factory: Any
         )
 
     asyncio.run(scenario())
-    assert processed == ["late mention"]
+    assert processed == ["<@UUNKNOWN> late mention"]
     assert transport.posts == [("CBOUND", "upgraded", "173.5")]
 
 

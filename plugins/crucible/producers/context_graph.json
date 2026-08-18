@@ -26,7 +26,7 @@
         "benchmark",
         "tool-projection"
       ],
-      "contentSha256": "f050adc4cbf57f7f1cca239c38208e47874f1f3f7bef4fa11847b2f37ef7ef8f"
+      "contentSha256": "ef89c44fc0bcd7a449f3d0d7e1feb6ba8ca5043887cf341386d11c133e053d11"
     },
     {
       "id": "file:plugins/benchmark_harness/tau2_lane1a_preflight.py",
@@ -38,7 +38,7 @@
         "preflight",
         "source-attestation"
       ],
-      "contentSha256": "3c3ff5811da07ceae02b0f0a2f8b128cc92c079e54a4cff1b677be7dc14b2658"
+      "contentSha256": "723c9ba021586dba1aab0e6d7861b5c782b2202dc33935f5420213e54e345b8b"
     },
     {
       "id": "file:plugins/benchmark_harness/tau2_tool_bridge.py",
@@ -61,7 +61,7 @@
         "benchmark",
         "runtime-profile"
       ],
-      "contentSha256": "71249c94717ab22709ae94bcce5f41ede56c891373f98efe36d2e71bffcd89c1"
+      "contentSha256": "9e9c6711086d48dd26652264ff498a0bbeff7eeb5be13333904c2a793ea3dd80"
     },
     {
       "id": "file:plugins/benchmark_harness/trajectory_artifacts.py",
@@ -97,7 +97,7 @@
         "runtime",
         "while-tool-use"
       ],
-      "contentSha256": "08911283459ec581b2618957cead1b0d85eeb81f42d7366c92dbcf9986474b12"
+      "contentSha256": "b06ba06ad3a0aaa1a557b0ede3a556c5fdffacd8980b10f7340a7e2734a8229e"
     },
     {
       "id": "file:core/agent/loop/_goal.py",

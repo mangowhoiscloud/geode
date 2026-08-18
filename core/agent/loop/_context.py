@@ -88,7 +88,10 @@ def build_system_prompt(loop: AgenticLoop) -> str:
         # SoT 가 부재면 apply_*_policy 는 registry.get_context_block() 에
         # 위임 (no behavior change). 정책이 있으면 per-skill description /
         # user_invocable override 적용.
-        skill_ctx = apply_skill_catalog_policy(loop._skill_registry, _load_skill_catalog_override())
+        skill_ctx = apply_skill_catalog_policy(
+            loop._skill_registry,
+            _load_skill_catalog_override(sources=loop._policy_sources.get("skill_catalog")),
+        )
     # Skills enter the active prompt path here: the loop-level registry renders
     # one context block, then ``{skill_context}`` in the system wrapper is
     # substituted below. The legacy PromptAssembler Phase 2 injection path was
@@ -116,7 +119,7 @@ def build_system_prompt(loop: AgenticLoop) -> str:
         # its authored-static zone (before <dynamic_context>), so memory
         # churn no longer invalidates the cached behaviour rules. Append-
         # ing it again here would duplicate the entire contract block.
-        base = _build_system_prompt(model=loop.model)
+        base = _build_system_prompt(model=loop.model, policy_sources=loop._policy_sources)
         prompt = base.replace("{skill_context}", skill_replacement)
     if loop._system_suffix:
         prompt = inject_runtime_hints(

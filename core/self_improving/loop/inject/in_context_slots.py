@@ -72,11 +72,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from core.config.policy_source import (
+    PolicySourcePaths,
+    select_policy_source,
+)
 from core.paths import (
     AUTORESEARCH_IN_CONTEXT_SLOTS_PATH,
     OPERATOR_LOCAL_IN_CONTEXT_SLOTS_PATH,
 )
-from core.self_improving.loop.mutate.sot_resolution import resolve_sot
 
 log = logging.getLogger(__name__)
 
@@ -130,28 +133,36 @@ class InContextSlot:
     injection_point: str
 
 
-def _load_in_context_slots_override() -> dict[str, InContextSlot] | None:
+def _load_in_context_slots_override(
+    *,
+    sources: PolicySourcePaths | None = None,
+) -> dict[str, InContextSlot] | None:
     """Return the active slot configuration, or ``None`` if no SoT applies."""
-    selection = resolve_sot(
-        env_var=_IN_CONTEXT_SLOTS_OVERRIDE_ENV,
+    source_paths = sources or PolicySourcePaths(
+        override_env=_IN_CONTEXT_SLOTS_OVERRIDE_ENV,
         operator_local=_OPERATOR_LOCAL_IN_CONTEXT_SLOTS_PATH,
-        in_repo=_IN_CONTEXT_SLOTS_SOT_PATH,
+        packaged_default=_IN_CONTEXT_SLOTS_SOT_PATH,
     )
+    selection = select_policy_source(source_paths)
     if selection is None:
         return None
     if selection.strict:
-        return _strict_load(selection.path)
+        return _strict_load(selection.path, override_env=source_paths.override_env)
     return _graceful_load(selection.path)
 
 
-def _strict_load(path: Path) -> dict[str, InContextSlot]:
+def _strict_load(
+    path: Path,
+    *,
+    override_env: str = _IN_CONTEXT_SLOTS_OVERRIDE_ENV,
+) -> dict[str, InContextSlot]:
     if not path.is_file():
-        raise RuntimeError(f"{_IN_CONTEXT_SLOTS_OVERRIDE_ENV}={path} file not found")
+        raise RuntimeError(f"{override_env}={path} file not found")
     try:
         raw = path.read_text(encoding="utf-8")
         data = json.loads(raw)
     except (OSError, json.JSONDecodeError) as exc:
-        raise RuntimeError(f"{_IN_CONTEXT_SLOTS_OVERRIDE_ENV}={path} load failed: {exc}") from exc
+        raise RuntimeError(f"{override_env}={path} load failed: {exc}") from exc
     _validate_schema(data, path)
     return _coerce(data)
 

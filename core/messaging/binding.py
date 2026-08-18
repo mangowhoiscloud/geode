@@ -7,6 +7,7 @@ Follows OpenClaw Gateway pattern: static rules, no LLM for routing.
 from __future__ import annotations
 
 import logging
+import re
 import threading
 from collections.abc import Awaitable, Callable
 from inspect import isawaitable
@@ -202,14 +203,12 @@ class ChannelManager:
             "channel": message.channel,
             "channel_id": message.channel_id,
             "sender_id": message.sender_id,
+            "allowed_tools": tuple(binding.allowed_tools) if binding.allowed_tools else None,
+            "time_budget_s": binding.time_budget_s,
         }
 
         # Strip mention tags so the LLM receives clean content
         content = self._strip_mentions(message.content)
-        if binding.allowed_tools:
-            # Prefix with tool constraint hint for AgenticLoop
-            tools_hint = ", ".join(binding.allowed_tools)
-            content = f"[allowed_tools: {tools_hint}] {content}"
 
         try:
             # Route through SessionLane → Gateway Lane → Global Lane
@@ -223,10 +222,10 @@ class ChannelManager:
                 response = await self._call_processor(content, metadata)
 
             self._stats["processed"] += 1
-            return response
+            return response if binding.auto_respond else None
         except Exception as exc:
             log.error("Message processing failed: %s", exc)
-            return f"Error processing message: {exc}"
+            return f"Error processing message: {exc}" if binding.auto_respond else None
 
     async def _call_processor(self, content: str, metadata: dict[str, Any]) -> str:
         if self._processor is None:
@@ -264,8 +263,7 @@ class ChannelManager:
         # Match GEODE's specific bot user ID (e.g. <@U0ABCDEF123>)
         if self._bot_user_id and f"<@{self._bot_user_id}>" in content:
             return True
-        content_lower = content.lower()
-        return any(mention in content_lower for mention in ("@geode", "geode"))
+        return re.search(r"(?<!\w)@geode\b", content, flags=re.IGNORECASE) is not None
 
     def _strip_mentions(self, content: str) -> str:
         """Remove GEODE's own mention tags so the LLM receives clean user intent.
@@ -273,16 +271,13 @@ class ChannelManager:
         Only strips GEODE's bot user ID mention and display name variants.
         Preserves mentions of other users (e.g. ``<@U_OTHER>``).
         """
-        import re
-
         # Remove GEODE's specific bot mention (e.g. <@U0ABCDEF123>)
         if self._bot_user_id:
             cleaned = content.replace(f"<@{self._bot_user_id}>", "").strip()
         else:
-            # Fallback: remove all Slack mentions (legacy behavior)
-            cleaned = re.sub(r"<@[UBA][A-Z0-9]+>\s*", "", content)
+            cleaned = content
         # Remove @geode / @GEODE prefix
-        cleaned = re.sub(r"@geode\s*", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"(?<!\w)@geode\b\s*", "", cleaned, flags=re.IGNORECASE)
         return cleaned.strip()
 
     def get_stats(self) -> dict[str, int]:
@@ -298,6 +293,7 @@ class ChannelManager:
                     "channel_id": b.channel_id or "*",
                     "auto_respond": b.auto_respond,
                     "require_mention": b.require_mention,
+                    "allowed_tools": list(b.allowed_tools),
                     "time_budget_s": b.time_budget_s,
                 }
                 for b in self._bindings

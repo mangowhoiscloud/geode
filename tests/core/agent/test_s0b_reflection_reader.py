@@ -11,23 +11,28 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-from core.agent import reflection_policy
 from core.agent.reflection_policy import (
     _load_reflection_policy_override,
     apply_reflection_policy,
 )
+from core.config.policy_source import PolicySourcePaths
 
 
 @pytest.fixture
 def isolated_sot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
     """Isolate all 3 SoT layers (env / operator-local / in-repo) to tmp_path."""
     sot = tmp_path / "reflection.json"
-    operator_local = tmp_path / "operator-local-reflection.json"
-    monkeypatch.setattr(reflection_policy, "_REFLECTION_POLICY_SOT_PATH", sot)
-    monkeypatch.setattr(reflection_policy, "_OPERATOR_LOCAL_REFLECTION_POLICY_PATH", operator_local)
     monkeypatch.delenv("GEODE_REFLECTION_POLICY_OVERRIDE", raising=False)
     monkeypatch.delenv("GEODE_REFLECTION_POLICY_STRICT", raising=False)
     yield sot
+
+
+def _sources(sot: Path) -> PolicySourcePaths:
+    return PolicySourcePaths(
+        "GEODE_REFLECTION_POLICY_OVERRIDE",
+        operator_local=sot.parent / "operator-local-reflection.json",
+        packaged_default=sot,
+    )
 
 
 def _write(sot: Path, payload: dict[str, str]) -> None:
@@ -49,35 +54,37 @@ _BASE_SYSTEM = "base system prompt"
 
 def test_load_returns_none_when_sot_missing(isolated_sot: Path) -> None:
     assert not isolated_sot.exists()
-    assert _load_reflection_policy_override() is None
+    assert _load_reflection_policy_override(sources=_sources(isolated_sot)) is None
 
 
 def test_load_returns_none_when_sot_unreadable_json(isolated_sot: Path) -> None:
     isolated_sot.write_text("not json {", encoding="utf-8")
-    assert _load_reflection_policy_override() is None
+    assert _load_reflection_policy_override(sources=_sources(isolated_sot)) is None
 
 
 def test_load_returns_none_when_sot_type_violation(isolated_sot: Path) -> None:
     """dict/int 등 string 이 아닌 field → graceful ``None``."""
     isolated_sot.write_text(json.dumps({"description": ["not", "a", "string"]}), encoding="utf-8")
-    assert _load_reflection_policy_override() is None
+    assert _load_reflection_policy_override(sources=_sources(isolated_sot)) is None
 
 
 def test_load_returns_dict_when_sot_valid(isolated_sot: Path) -> None:
     payload = {"description": "new desc", "system_prompt": "new sys"}
     _write(isolated_sot, payload)
-    assert _load_reflection_policy_override() == payload
+    assert _load_reflection_policy_override(sources=_sources(isolated_sot)) == payload
 
 
 def test_load_unknown_fields_ignored(isolated_sot: Path) -> None:
     _write(isolated_sot, {"description": "x", "unknown_field": "ignored"})
-    assert _load_reflection_policy_override() == {"description": "x"}
+    assert _load_reflection_policy_override(sources=_sources(isolated_sot)) == {"description": "x"}
 
 
 def test_load_empty_string_fields_dropped(isolated_sot: Path) -> None:
     """빈 string 은 None 처럼 취급 — _coerce 가 truthy filter."""
     _write(isolated_sot, {"description": "", "system_prompt": "real"})
-    assert _load_reflection_policy_override() == {"system_prompt": "real"}
+    assert _load_reflection_policy_override(sources=_sources(isolated_sot)) == {
+        "system_prompt": "real"
+    }
 
 
 def test_strict_load_via_env_var_raises_on_missing(
@@ -88,7 +95,7 @@ def test_strict_load_via_env_var_raises_on_missing(
     monkeypatch.setenv("GEODE_REFLECTION_POLICY_OVERRIDE", str(missing))
     monkeypatch.setenv("GEODE_REFLECTION_POLICY_STRICT", "1")
     with pytest.raises(RuntimeError, match="GEODE_REFLECTION_POLICY_OVERRIDE"):
-        _load_reflection_policy_override()
+        _load_reflection_policy_override(sources=_sources(tmp_path / "reflection.json"))
 
 
 def test_strict_load_via_env_var_raises_on_type_violation(
@@ -99,7 +106,7 @@ def test_strict_load_via_env_var_raises_on_type_violation(
     monkeypatch.setenv("GEODE_REFLECTION_POLICY_OVERRIDE", str(bad))
     monkeypatch.setenv("GEODE_REFLECTION_POLICY_STRICT", "1")
     with pytest.raises(RuntimeError, match="description"):
-        _load_reflection_policy_override()
+        _load_reflection_policy_override(sources=_sources(tmp_path / "reflection.json"))
 
 
 def test_env_var_without_strict_flag_is_graceful_on_missing(
@@ -109,7 +116,7 @@ def test_env_var_without_strict_flag_is_graceful_on_missing(
     missing = tmp_path / "nope.json"
     monkeypatch.setenv("GEODE_REFLECTION_POLICY_OVERRIDE", str(missing))
     monkeypatch.delenv("GEODE_REFLECTION_POLICY_STRICT", raising=False)
-    assert _load_reflection_policy_override() is None
+    assert _load_reflection_policy_override(sources=_sources(tmp_path / "reflection.json")) is None
 
 
 def test_operator_local_layer_takes_priority_over_in_repo(isolated_sot: Path) -> None:
@@ -117,7 +124,9 @@ def test_operator_local_layer_takes_priority_over_in_repo(isolated_sot: Path) ->
     operator_local = isolated_sot.parent / "operator-local-reflection.json"
     operator_local.write_text(json.dumps({"system_prompt": "from-ops"}), encoding="utf-8")
     _write(isolated_sot, {"system_prompt": "from-repo"})
-    assert _load_reflection_policy_override() == {"system_prompt": "from-ops"}
+    assert _load_reflection_policy_override(sources=_sources(isolated_sot)) == {
+        "system_prompt": "from-ops"
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -227,7 +236,7 @@ def test_producer_reader_round_trip(isolated_sot: Path, monkeypatch: pytest.Monk
         {"description": "evolved desc", "system_prompt": "evolved sys"},
     )
 
-    result = _load_reflection_policy_override()
+    result = _load_reflection_policy_override(sources=_sources(isolated_sot))
     assert result == {"description": "evolved desc", "system_prompt": "evolved sys"}
 
 
@@ -236,19 +245,9 @@ def test_producer_reader_round_trip(isolated_sot: Path, monkeypatch: pytest.Monk
 # ---------------------------------------------------------------------------
 
 
-def test_reflection_json_is_now_referenced_in_inference_path() -> None:
-    """`reflection.json` 이 `core/agent/` 경로 어딘가에서 grep 가능."""
-    repo_root = Path(__file__).resolve().parents[3]
-    hits: list[str] = []
-    for path in (repo_root / "core" / "agent").rglob("*.py"):
-        if "test_" in path.name:
-            continue
-        try:
-            content = path.read_text(encoding="utf-8")
-        except OSError:
-            continue
-        if "reflection.json" in content:
-            hits.append(str(path.relative_to(repo_root)))
-    assert any("reflection_policy.py" in h for h in hits), (
-        f"reflection.json 이 core/agent/reflection_policy.py 에서 발견되어야 함. hits={hits}"
-    )
+def test_product_bundle_owns_reflection_source() -> None:
+    from core.self_improving.policy_sources import build_policy_source_bundle
+
+    source = build_policy_source_bundle()["reflection"]
+    assert source.packaged_default is not None
+    assert source.packaged_default.name == "reflection.json"

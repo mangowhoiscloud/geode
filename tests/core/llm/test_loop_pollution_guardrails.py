@@ -261,7 +261,11 @@ def test_provider_async_clients_are_per_loop(monkeypatch: pytest.MonkeyPatch) ->
     so the provider-level pin survives for it."""
     from core.llm.providers import glm as glm_provider
 
-    monkeypatch.setattr(glm_provider, "_resolve_glm_endpoint", lambda: ("test-key", "https://e"))
+    monkeypatch.setattr(
+        glm_provider,
+        "_resolve_glm_endpoint",
+        lambda **_kwargs: ("test-key", "https://e"),
+    )
 
     getters = [
         (glm_provider._async_glm_clients, glm_provider._get_async_glm_client),

@@ -164,7 +164,7 @@ def anthropic_computer_tool_param(
     }
 
 
-def _maybe_inject_computer_use(kwargs: dict[str, Any]) -> None:
+def _maybe_inject_computer_use(kwargs: dict[str, Any], req: AdapterCallRequest) -> None:
     """Inject the computer-use tool + beta header on the LIVE adapter path.
 
     Computer-use was wired only into the now-deleted legacy
@@ -177,7 +177,9 @@ def _maybe_inject_computer_use(kwargs: dict[str, Any]) -> None:
     """
     from core.llm.providers.anthropic import is_computer_use_enabled
 
-    if not is_computer_use_enabled():
+    if not is_computer_use_enabled() or (
+        req.allowed_tool_names is not None and "computer" not in req.allowed_tool_names
+    ):
         return
     tool_type, beta = _computer_use_spec(kwargs.get("model", ""))
     tools = list(kwargs.get("tools") or [])
@@ -263,11 +265,9 @@ def _inject_native_web_tools(kwargs: dict[str, Any], req: AdapterCallRequest) ->
     Three gates, all required (Codex review 2026-07-29):
 
     1. **Opt-in** (``settings.anthropic_native_web_tools``, default False).
-       The server runs these itself, so they are invisible to
-       ``allowed_tools`` / ``forbidden_tools`` and the sub-agent whitelist —
-       a narrowed surface would otherwise regain provider-side web access.
-       GEODE's own ``general_web_search`` / ``web_fetch`` handlers stay the
-       policy-checked default path.
+       The server runs these itself, so an explicit request allowlist is
+       checked here before provider translation. GEODE's own
+       ``general_web_search`` / ``web_fetch`` handlers stay the default path.
     2. **Model support** — ``ANTHROPIC_WEB_SEARCH_20260209_MODELS``; the
        dated ``web_*_20260209`` tags 400 on unlisted models (e.g. the
        budget-lane haiku).
@@ -291,6 +291,8 @@ def _inject_native_web_tools(kwargs: dict[str, Any], req: AdapterCallRequest) ->
     # the defer threshold (they are never deferrable — the server owns them).
     existing = {t.get("name") for t in tools if isinstance(t, dict)}
     for native in _ANTHROPIC_NATIVE_TOOLS:
+        if req.allowed_tool_names is not None and native["name"] not in req.allowed_tool_names:
+            continue
         if native["name"] not in existing:
             tools.append(dict(native))
 
@@ -333,42 +335,24 @@ def _cache_shaped_system(system: str) -> str | list[dict[str, Any]]:
 
 
 def _system_and_messages(req: AdapterCallRequest) -> tuple[Any, list[dict[str, Any]]]:
-    """Shared system/messages shaping: S5 slots -> cache split -> breakpoints.
-
-    ADR-012 M4.4 ``apply_in_context_slots`` is re-wired here (it was
-    stranded inside the dead ClaudeAgenticAdapter, silently disconnecting
-    the in-context mutation surface). No-op fast path when no SoT is
-    configured; per-slot graceful on reader failure.
-    """
-    from core.agent.system_prompt import PROMPT_CACHE_BOUNDARY
-    from core.llm.cache_policy import (
-        _load_cache_policy_override,
-        apply_cache_policy_breakpoints,
-    )
+    """Shared system/messages shaping after composed request middleware."""
     from core.llm.providers.anthropic import (
         MAX_MESSAGE_CACHE_BREAKPOINTS,
         apply_messages_cache_control,
     )
-    from core.self_improving.loop.inject.in_context_wiring import apply_in_context_slots
 
     messages = build_messages(req)
     system = req.system_prompt
-    if system and PROMPT_CACHE_BOUNDARY in system:
-        # S5 slot content is per-call volatile — inject it into the DYNAMIC
-        # half (inside the envelope, before the closing tag) so it can never
-        # invalidate the 1h static prefix cache (Codex review 2026-07-29).
-        static_part, dynamic_part = system.split(PROMPT_CACHE_BOUNDARY, 1)
-        closing = "</dynamic_context>"
-        core, sep, tail = dynamic_part.rpartition(closing)
-        inner, suffix = (core, sep + tail) if sep and not tail.strip() else (dynamic_part, "")
-        messages, inner = apply_in_context_slots(messages, system=inner)
-        system = static_part + PROMPT_CACHE_BOUNDARY + inner + suffix
-    else:
-        messages, system = apply_in_context_slots(messages, system=system)
     # ADR-013 T5 — cache-breakpoint policy SoT governs the message budget
     # (was likewise stranded in the dead adapter).
-    n_breakpoints = apply_cache_policy_breakpoints(
-        MAX_MESSAGE_CACHE_BREAKPOINTS, _load_cache_policy_override()
+    raw_breakpoints = req.provider_options.get(
+        "cache_message_breakpoints",
+        MAX_MESSAGE_CACHE_BREAKPOINTS,
+    )
+    n_breakpoints = (
+        raw_breakpoints
+        if isinstance(raw_breakpoints, int) and not isinstance(raw_breakpoints, bool)
+        else MAX_MESSAGE_CACHE_BREAKPOINTS
     )
     return _cache_shaped_system(system), apply_messages_cache_control(
         messages, n_breakpoints=n_breakpoints
@@ -414,7 +398,7 @@ def build_create_kwargs(req: AdapterCallRequest) -> dict[str, Any]:
             kwargs["tool_choice"] = tc
     if req.stop_sequences:
         kwargs["stop_sequences"] = list(req.stop_sequences)
-    _maybe_inject_computer_use(kwargs)
+    _maybe_inject_computer_use(kwargs, req)
     _inject_native_web_tools(kwargs, req)
     _maybe_inject_context_management(kwargs)
     return kwargs
@@ -480,7 +464,7 @@ def build_stream_kwargs(req: AdapterCallRequest) -> dict[str, Any]:
         kwargs["tools"] = _shape_tools(req, tc)
         if tc is not None:
             kwargs["tool_choice"] = tc
-    _maybe_inject_computer_use(kwargs)
+    _maybe_inject_computer_use(kwargs, req)
     _inject_native_web_tools(kwargs, req)
     _maybe_inject_context_management(kwargs)
     return kwargs

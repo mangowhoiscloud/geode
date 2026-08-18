@@ -30,9 +30,12 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-from core.agent import tool_policy
+from core.agent.conversation import ConversationContext
 from core.agent.loop._tool_factory import get_agentic_tools
+from core.agent.loop.agent_loop import AgenticLoop
+from core.agent.tool_executor import ToolExecutor
 from core.agent.worker import filter_handlers
+from core.config.policy_source import PolicySourcePaths
 from core.tools.toolkit_registry import ToolkitRegistry
 
 
@@ -62,13 +65,19 @@ def hostile_policy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[
         ),
         encoding="utf-8",
     )
-    # Point the in-repo SoT layer at the tmp file (graceful path) and make
-    # sure no env/operator-local layer shadows it.
-    monkeypatch.setattr(tool_policy, "_TOOL_POLICY_SOT_PATH", policy_path)
-    monkeypatch.setattr(tool_policy, "_OPERATOR_LOCAL_TOOL_POLICY_PATH", tmp_path / "absent.json")
     monkeypatch.delenv("GEODE_TOOL_POLICY_OVERRIDE", raising=False)
     monkeypatch.delenv("GEODE_TOOL_POLICY_STRICT", raising=False)
     yield policy_path
+
+
+def _bundle(policy_path: Path) -> dict[str, PolicySourcePaths]:
+    return {
+        "tool_policy": PolicySourcePaths(
+            "GEODE_TOOL_POLICY_OVERRIDE",
+            operator_local=policy_path.parent / "absent.json",
+            packaged_default=policy_path,
+        )
+    }
 
 
 # A representative toolkit grant: one expensive tool the hostile policy
@@ -83,7 +92,7 @@ def test_hostile_policy_strips_petri_audit_without_force_include(hostile_policy:
     intact — the policy whitelist is authoritative when no sub-agent toolkit
     declares otherwise.
     """
-    names = {t.get("name") for t in get_agentic_tools(None)}
+    names = {t.get("name") for t in get_agentic_tools(None, policy_sources=_bundle(hostile_policy))}
     assert "petri_audit" not in names
     assert "read_document" in names
 
@@ -92,7 +101,14 @@ def test_force_include_keeps_toolkit_grant_against_hostile_policy(
     hostile_policy: Path,
 ) -> None:
     """The fix: a toolkit-granted tool survives the hostile policy."""
-    names = {t.get("name") for t in get_agentic_tools(None, force_include=_GRANTED_TOOLKIT)}
+    names = {
+        t.get("name")
+        for t in get_agentic_tools(
+            None,
+            force_include=_GRANTED_TOOLKIT,
+            policy_sources=_bundle(hostile_policy),
+        )
+    }
     assert "petri_audit" in names, (
         "petri_audit was stripped by the global tool_policy despite being a "
         "force_include (toolkit) grant — the regression is back"
@@ -103,9 +119,28 @@ def test_force_include_keeps_toolkit_grant_against_hostile_policy(
 
 def test_force_include_does_not_resurrect_non_toolkit_tools(hostile_policy: Path) -> None:
     """force_include only protects the named tools — others stay policy-governed."""
-    names = {t.get("name") for t in get_agentic_tools(None, force_include=_GRANTED_TOOLKIT)}
+    names = {
+        t.get("name")
+        for t in get_agentic_tools(
+            None,
+            force_include=_GRANTED_TOOLKIT,
+            policy_sources=_bundle(hostile_policy),
+        )
+    }
     # memory_save is neither in the whitelist nor force_include → stays stripped.
     assert "memory_save" not in names
+
+
+def test_session_allowlist_only_constrains_global_policy(hostile_policy: Path) -> None:
+    loop = AgenticLoop(
+        ConversationContext(),
+        ToolExecutor(),
+        allowed_tool_names=_GRANTED_TOOLKIT,
+        policy_sources=_bundle(hostile_policy),
+        quiet=True,
+    )
+
+    assert {tool["name"] for tool in loop._tools} == {"read_document"}
 
 
 def test_granted_worker_effective_toolset_keeps_granted_tool(hostile_policy: Path) -> None:
@@ -137,7 +172,11 @@ def test_granted_worker_effective_toolset_keeps_granted_tool(hostile_policy: Pat
     assert "petri_audit" in allowed_tool_names
 
     # Model-advertising side — the path the bug lived on.
-    tools = get_agentic_tools(None, force_include=allowed_tool_names)
+    tools = get_agentic_tools(
+        None,
+        force_include=allowed_tool_names,
+        policy_sources=_bundle(hostile_policy),
+    )
     advertised = {t.get("name") for t in tools if t.get("name") in allowed_tool_names}
     assert advertised == {"petri_audit", "read_document"}, (
         f"granted worker model-visible toolset {advertised} is missing "

@@ -42,11 +42,16 @@ _GA_MODEL = "gpt-5.5"
 _NON_GA_MODEL = "gpt-5.4"
 
 
-def _req(tools: tuple[ToolSpec, ...] = (), model: str = _GA_MODEL) -> AdapterCallRequest:
+def _req(
+    tools: tuple[ToolSpec, ...] = (),
+    model: str = _GA_MODEL,
+    allowed_tool_names: frozenset[str] | None = None,
+) -> AdapterCallRequest:
     return AdapterCallRequest(
         model=model,
         messages=(Message(role="user", content="hi"),),
         tools=tools,
+        allowed_tool_names=allowed_tool_names,
     )
 
 
@@ -91,10 +96,15 @@ class TestLivePathInjection:
             kwargs = _build(_req(tools=()))
         assert [t.get("type") for t in kwargs["tools"]] == ["computer"]
 
+    def test_explicit_allowlist_blocks_computer(self) -> None:
+        with patch(_ENABLED, return_value=True):
+            kwargs = _build(_req(allowed_tool_names=frozenset({"read_file"})))
+        assert _computer_tools(kwargs) == []
+
     def test_idempotent_no_double_inject(self) -> None:
         kwargs: dict[str, Any] = {"tools": [common.openai_computer_tool_param()]}
         with patch(_ENABLED, return_value=True):
-            common._maybe_inject_openai_computer_use(kwargs, model=_GA_MODEL, backend="platform")
+            common._maybe_inject_openai_computer_use(kwargs, req=_req(), backend="platform")
         assert len(_computer_tools(kwargs)) == 1
 
     def test_codex_backend_never_injected(self) -> None:

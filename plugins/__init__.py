@@ -1,5 +1,5 @@
-"""GEODE plugin namespace.
+"""Legacy namespace for GEODE's bundled product features.
 
-GEODE core ships domain-neutral runtime code plus first-party auxiliary
-plugins such as Petri audit.
+These modules ship in the base distribution and are not a third-party plugin
+ABI. See ``docs/architecture/package-classification.md``.
 """

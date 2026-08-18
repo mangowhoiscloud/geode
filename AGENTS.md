@@ -16,7 +16,9 @@
 - **Language**: Python 3.12+, type-hinted, uv-managed.
 - **Layout**: two top-level packages.
   - `core/` — domain-agnostic runtime.
-  - `plugins/` — domain extensions (`petri_audit`, `seed_generation`, `benchmark_harness`).
+  - `plugins/` — legacy namespace for bundled product features
+    (`benchmark_harness`, `crucible`, `petri_audit`, `seed_generation`), not a
+    third-party extension ABI.
 - **Quality bar**: ruff, mypy, pytest plus a prompt-hash ratchet. CI breaks on red.
 - **Public site**: `site/` (Next.js 16 static export, deployed to GitHub Pages).
 
@@ -28,8 +30,8 @@ owns only the package version and sync date.
 The generated architecture inventory lives at
 `site/src/data/geode/architecture-baseline.json`. Refresh it with
 `uv run python scripts/architecture_baseline.py --update`; CI uses `--check`.
-The current snapshot records 548 production Python files,
-685 test Python files,
+The current snapshot records 551 production Python files,
+686 test Python files,
 87 tool definitions, and
 57 `RuntimeEvent` members.
 <!-- generated:architecture-baseline:end -->
@@ -39,6 +41,9 @@ For architecture and extensibility work, read
 for GAP IDs, merge order, status, acceptance criteria, and closure evidence in
 that program. Older architecture audits and dated plans are design evidence,
 not competing status ledgers.
+
+The current package classification and product-shell migration boundary lives
+in `docs/architecture/package-classification.md`.
 
 Use `docs/workflow.md` as the canonical workflow summary and
 `.claude/skills/geode-workflow/` as the progressive-disclosure execution
