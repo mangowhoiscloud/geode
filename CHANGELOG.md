@@ -47,6 +47,10 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.22] - 2026-08-19
+
+> Slack gateway policy enforcement, bounded Socket Mode recovery, and reproducible evaluation evidence.
+
 ### Added
 
 - **Tau2 Lane 1A no-model preflight receipt.** A fail-closed runner path now
