@@ -621,9 +621,9 @@ Tier 3    Session         메모리 — 대화, 도구 결과, 플랜
 <summary><strong>개발 워크플로 (Scaffold)</strong></summary>
 
 CANNOT (가드레일)이 CAN (자유)보다 먼저. 7-step 워크플로 + 품질 게이트.
-CI 래칫(pytest, mypy, ruff, import-order, test-count)을 통과해야 머지합니다.
-실측 테스트 카운트 floor를 낮추려면 삭제 근거와 ratchet 갱신이 함께 있어야
-합니다.
+CI 게이트(pytest + coverage, mypy, Ruff, dependency/import 검사)를 통과해야
+머지합니다. 테스트 삭제는 남는 행동 불변식을 증명해야 하며, 원시 테스트
+개수는 품질 신호로 사용하지 않습니다.
 
 | Gate | 명령 | 목표 |
 |------|------|------|

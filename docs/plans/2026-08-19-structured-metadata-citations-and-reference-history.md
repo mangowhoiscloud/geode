@@ -6,6 +6,11 @@
 **Scope:** stale slop-audit state, JSON-LD/schema.org, robots policy, citation provenance
 **Explicit non-goal:** GEO, AI-crawler optimization, visitor analytics, backlink monitoring
 
+> Superseded note: the later
+> [runtime evidence debt modernization plan](2026-08-19-runtime-evidence-debt-modernization.md#p1--retire-ineffective-count-ratchets)
+> retires the count ratchet. The completed metadata, citation, and robots
+> decisions below remain valid; references to that ratchet are historical.
+
 ## 1. Grounded decision
 
 Three independent read-only audits evaluated the same four proposals against

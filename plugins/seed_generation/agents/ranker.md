@@ -33,7 +33,10 @@ Voters' `provider` must span ≥ 2 (per manifest `required_diversity_providers =
 
 - `elo_ratings: {candidate_id: rating}` final state.
 - `survivors: [candidate_id]` — top-K (K=5 default). Selection mode is
-  resolved from `GEODE_SEED_SURVIVOR_SELECTION` (default `elo`):
+  resolved from `GEODE_SEED_SURVIVOR_SELECTION` (default `frontier`):
+  - `frontier` — prefer the pilot's mid-band discrimination signal;
+    fall back to Elo when no usable pilot signal is available.
+  - `blend` — scalarise z-scored Elo and confidence-weighted pilot difficulty.
   - `elo` — top-K by descending Elo rating (tournament win-rate).
   - `difficulty` — top-K by descending measured pilot
     `dim_means[target_dim]` (hardest first; higher Petri elicitation =

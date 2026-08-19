@@ -244,15 +244,13 @@ def test_default_k_factor_pinned() -> None:
 # ── PR-SEEDGEN-DIFFICULTY-SELECTION — difficulty-calibrated survivor pick ──
 
 
-def test_default_survivor_selection_is_blend() -> None:
-    """Default is blend — difficulty influences selection whenever the pilot
-    measures it, degrading per-candidate to Elo when it does not."""
-    assert DEFAULT_SURVIVOR_SELECTION == "blend"
+def test_default_survivor_selection_is_frontier() -> None:
+    assert DEFAULT_SURVIVOR_SELECTION == "frontier"
 
 
 def test_resolve_selection_default_when_env_unset(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv(SURVIVOR_SELECTION_ENV, raising=False)
-    assert resolve_survivor_selection() == "blend"
+    assert resolve_survivor_selection() == "frontier"
 
 
 def test_resolve_selection_difficulty(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -272,7 +270,7 @@ def test_resolve_selection_typo_falls_back_to_default(
 ) -> None:
     """A typo must never harden the knob into an invalid mode."""
     monkeypatch.setenv(SURVIVOR_SELECTION_ENV, "difculty")
-    assert resolve_survivor_selection() == "blend"
+    assert resolve_survivor_selection() == "frontier"
 
 
 def test_rank_by_difficulty_hardest_first() -> None:

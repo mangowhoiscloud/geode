@@ -225,6 +225,7 @@ normal review and CI; implementations start only after the claim merges.
 
 | Closure package | GAP IDs | Owner/session | Implementation branch | Claim evidence | Claimed at (UTC) |
 |---|---|---|---|---|---|
+| R1.2 | BND-002 | `session=codex-root task=r1-2-reverse-dependency-removal` | `feature/r1-2-reverse-dependency-removal` | R1.1 delivery was reconciled by [#3002](https://github.com/mangowhoiscloud/geode/pull/3002); current `develop` re-audit confirms BND-001 remains delivered and the bounded §7 reverse-dependency contract remains measurable | 2026-08-19T05:43:24Z |
 
 ## 1. Program objective
 
@@ -282,10 +283,10 @@ machine-readable artifact is
 | Measure | Current tree |
 |---|---:|
 | Production Python files (`core/` + `plugins/`) | 551 |
-| Test Python files | 687 |
-| `core/` Python LOC | 139,637 |
-| `plugins/` Python LOC | 44,887 |
-| Test Python LOC | 184,340 |
+| Test Python files | 686 |
+| `core/` Python LOC | 139,636 |
+| `plugins/` Python LOC | 44,886 |
+| Test Python LOC | 184,274 |
 | Tool definitions / executable registrations / valid schemas | 87 / 90 / 87 (definition-only 0; execution-only 3; invalid schema 0) |
 | `RuntimeEvent` members | 57 |
 | Built-in LLM adapters | 8 |
@@ -513,7 +514,7 @@ and closure evidence are appended in §10.
 | GOV-003 | `MISFIT` | Old plans describe removed paths and implemented work as current gaps | Overlapping docs carry a historical-status banner and point here | R0.1 | GOV-001 | `DONE` |
 | GOV-004 | `PARTIAL` | 24 import ignores and very high global Ruff ceilings lack uniform owner/expiry metadata | Every exception is removed or recorded per symbol/edge with owner, rationale, expiry, and ratchet | R0.3 | GOV-002 | `DONE` |
 | BND-001 | `MISFIT` | `plugins/` contains first-party features that `core` imports | Every package is classified kernel, product shell, bundled feature, or external extension; names match semantics | R1.1 | GOV-002 | `IN_DEVELOP` |
-| BND-002 | `MISFIT` | 31 `core` → `plugins` import sites across 14 files | AST gate reports zero reverse dependency; composition owns feature registration | R1.2 | BND-001 | `READY` |
+| BND-002 | `MISFIT` | 31 `core` → `plugins` import sites across 14 files | AST gate reports zero reverse dependency; composition owns feature registration | R1.2 | BND-001 | `IN_PROGRESS` |
 | BND-003 | `ABSENT` | One-off core-only probe fails at `core.cli`; CI does not test an installed kernel without features | Isolated wheel/package test boots and runs kernel tests without bundled/third-party modules | R1.3 | BND-001, BND-002, BND-006 | `OPEN` |
 | BND-004 | `PARTIAL` | Skills/hooks/MCP have different discovery rules; Python feature collision/trust behavior is not unified | Each supported external surface declares non-executing discovery, precedence, collision, enablement, trust-before-load, reload, isolation, and teardown | R6.3 | BND-001, LLM-002 | `OPEN` |
 | CAP-001 | `PARTIAL` | Google service bundles exist but do not own all tool/policy relationships | Generic capability records plus `GoogleServiceDescriptor` are executable SOTs | R2.1 | BND-002 | `OPEN` |
@@ -1974,10 +1975,10 @@ Commit-pinned primary source references used by the 2026-07-17 audit:
 R1.4 is delivered on `develop` by
 [#3004](https://github.com/mangowhoiscloud/geode/pull/3004) /
 `e20584650809d8b4f2480d45fe01359aa95a28f2`; its active claim is released and
-its durable feature/merge evidence is recorded in §10.1. R1.2 (`BND-002`) is
-the earliest `READY` package and remains unclaimed. Its claim must be recorded
-by a fresh roadmap-only claim PR before an implementation worktree is
-allocated.
+its durable feature/merge evidence is recorded in §10.1. This transaction
+claims the earliest ready package, R1.2 (`BND-002`). After the claim merges,
+allocate `feature/r1-2-reverse-dependency-removal` from the updated
+`origin/develop` tip.
 
 R1.5 (`BND-006`) now has the neutral-seam dependency from R1.4 satisfied, but
 remains `OPEN` until the reverse-dependency removal in R1.2 is delivered and

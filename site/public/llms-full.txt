@@ -1711,7 +1711,7 @@ pilot은 후보마다 실제 petri\_audit 측정을 1회 돌립니다. `inspect_
 
 `plugins/seed_generation/tournament.py`가 3-judge 패널 pairwise 매치를 돌립니다. 과반이면 승자, 그 외에는 tie로 양쪽 rating이 갱신되고, 유효 표가 모자라면 매치를 건너뜁니다. Elo는 로지스틱 기대값 기반 K-factor 갱신이며, 제시 순서를 무작위로 뒤집어 position bias를 줄입니다. 기록은 `elo_log.tsv`에 남습니다.
 
-생존자 선택의 기본값은 Elo 단독이 아니라 `blend`입니다. Elo와 난이도를 z-score로 합치되, pilot 신호가 약한 후보는 자동으로 Elo만으로 평가됩니다. 식과 조정값은 [Seed 파이프라인](https://mangowhoiscloud.github.io/geode/docs/capabilities/seed-pipeline.md)에서 다룹니다.
+생존자 선택의 기본값은 `frontier`입니다. pilot 실측의 중간 판별 대역을 우선하고, pilot 신호가 없으면 Elo로 폴백합니다. 식과 조정값은 [Seed 파이프라인](https://mangowhoiscloud.github.io/geode/docs/capabilities/seed-pipeline.md)에서 다룹니다.
 
 ## 실행
 
@@ -1728,7 +1728,7 @@ geode audit-seeds config
 
 ## 다음
 
--   [Seed 파이프라인](https://mangowhoiscloud.github.io/geode/docs/capabilities/seed-pipeline.md). picker, manifest, 비용 미리보기, blend 선택식.
+-   [Seed 파이프라인](https://mangowhoiscloud.github.io/geode/docs/capabilities/seed-pipeline.md). picker, manifest, 비용 미리보기, frontier 선택식.
 -   [Seed 생성 런](https://mangowhoiscloud.github.io/geode/docs/petri/seeds.md). 세대별 결과 대시보드.
 -   [시나리오](https://mangowhoiscloud.github.io/geode/docs/petri/scenarios.md). 만들어진 scenario가 들어가는 코퍼스.
 
@@ -1756,25 +1756,22 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/capabilities/seed-pipelin
 
 `geode audit-seeds generate`는 picker → cost preview → pre-flight → confirm → pipeline 순서로 진행하고, `geode audit-seeds resume`이 체크포인트에서 이어 갑니다.
 
-![Seed pipeline 런 흐름. geode audit-seeds가 picker, cost preview와 confirm, pre-flight를 지나 9-역할 파이프라인으로 들어가고, blend 생존자 선택을 거쳐 cycle-input 풀과 번들로 나뉘며, meta-review priors가 다음 런의 picker로 되돌아간다](https://mangowhoiscloud.github.io/geode/diagrams/seed-pipeline-run.svg)
+![Seed pipeline 런 흐름. geode audit-seeds가 picker, cost preview와 confirm, pre-flight를 지나 9-역할 파이프라인으로 들어가고, frontier-band 생존자 선택을 거쳐 cycle-input 풀과 번들로 나뉘며, meta-review priors가 다음 런의 picker로 되돌아간다](https://mangowhoiscloud.github.io/geode/diagrams/seed-pipeline-run.svg)
 
-한 런의 진행. 좌측 사다리(picker, cost preview, pre-flight)를 지나 9-역할 파이프라인이 돌고, 생존자는 blend 선택을 거쳐 cycle-input 풀과 공개 번들로 갈라집니다. held-out 벤치는 점선 아래에서 변이되지 않고, meta-review의 prior만 다음 런의 picker로 돌아갑니다.
+한 런의 진행. 좌측 사다리(picker, cost preview, pre-flight)를 지나 9-역할 파이프라인이 돌고, 생존자는 frontier-band 선택을 거쳐 cycle-input 풀과 공개 번들로 갈라집니다. held-out 벤치는 점선 아래에서 변이되지 않고, meta-review의 prior만 다음 런의 picker로 돌아갑니다.
 
-## 생존자 선택: blend가 기본
+## 생존자 선택: frontier-band가 기본
 
-왜 Elo 단독이 아닌가. Elo는 judge 패널의 선호를 재지만, 루프가 원하는 seed는 "target이 어려워하는" seed입니다. pilot 실측이 주는 난이도 신호를 버리면 선택이 스타일 선호로 기웁니다. 그래서 기본 선택 모드는 `blend`입니다 (`plugins/seed_generation/tournament.py`의 `DEFAULT_SURVIVOR_SELECTION`).
+기본 선택은 pilot 실측 난이도가 양 끝이 아닌 약 50% 판별 대역에 가까운 후보를 고르는 `frontier`입니다. 너무 쉬운 seed와 항상 실패하는 불공정 seed를 함께 피하고, pilot 근거가 없으면 Elo로 결정적으로 폴백합니다 (`plugins/seed_generation/tournament.py`의 `DEFAULT_SURVIVOR_SELECTION`).
 
 ```
-final = elo_weight * z(elo)
-      + diff_weight * confidence * z(difficulty)
-
-difficulty = pilot dim_means[target_dim]   # 높을수록 target에게 어려움
-confidence = pilot stderr 기반 가중치      # 노이즈가 크면 자동 감쇠
+norm = (pilot dim_means[target_dim] - 1) / 9
+frontier_reward = 1 - 2 * abs(norm - 0.5)
 ```
 
--   z-score는 rating이 있는 후보들 사이에서 계산합니다.
--   후보 단위 점진적 약화: pilot이 깨졌거나 stderr가 없으면 그 후보는 순수 Elo로 평가됩니다. 깨진 pilot이 선택을 Elo보다 나쁘게 만들 수는 없습니다.
--   조정값: `GEODE_SEED_SURVIVOR_SELECTION`(`elo` / `difficulty` / `blend`), `GEODE_SEED_BLEND_ELO_WEIGHT` / `GEODE_SEED_BLEND_DIFFICULTY_WEIGHT` (기본 각 1.0).
+-   reward는 중간 판별 대역에서 1, Petri 척도의 양 끝에서 0입니다.
+-   pilot 신호가 없으면 기존 Elo 순위로 폴백합니다.
+-   조정값: `GEODE_SEED_SURVIVOR_SELECTION`(`frontier` / `blend` / `elo` / `difficulty`). 이전 scalarized 정책은 `blend`로 복원하며, 그 가중치는 `GEODE_SEED_BLEND_ELO_WEIGHT` / `GEODE_SEED_BLEND_DIFFICULTY_WEIGHT` (기본 각 1.0).
 
 ## seed pool로의 연결
 
@@ -5727,9 +5724,9 @@ GEODE가 메타 하네스인 이유는 세 겹의 관계 때문입니다.
 | **Workflow 0-8 + Socratic Gate** | GAP audit과 5질문 게이트가 이미 있는 것의 재구축, 불필요 구현을 사전 차단 | Socratic Q1-Q5, GAP 3-way classify | `CLAUDE.md, docs/workflow.md` |
 | **Scaffold skills** | gitflow, workflow, anti-deception, verification-team 등 절차 스킬의 progressive disclosure | skill triggers per session | `docs/scaffold-skills.md` |
 | **Local quality gates** | lint, format, type, imports, test, CLI smoke 6종. 파이프로 감싼 게이트는 금지 | exit codes asserted bare | `CLAUDE.md (Quality Gates)` |
-| **CI ratchet suite** | legacy import, repo hygiene, slop growth, llms 버전, petri bundle, hero layout 커스텀 ratchet이 침묵 퇴행을 차단 | scripts/check\_\*.py wired into ci.yml | `.github/workflows/ci.yml` |
+| **CI ratchet suite** | legacy import, repo hygiene, architecture baseline, llms 버전, petri bundle, hero layout 커스텀 ratchet이 침묵 퇴행을 차단 | CI-wired deterministic checks | `.github/workflows/ci.yml` |
 | **Prompt integrity pins** | runtime 프롬프트 변경은 같은 커밋에서 해시 pin 갱신을 강제. 의도치 않은 drift는 빌드 실패 | \_PINNED\_HASHES (4 pins), verify\_prompt\_integrity | `core/llm/prompts/__init__.py` |
-| **Test-count floor** | 테스트 수 하한 ratchet. 테스트 삭제로 만드는 가짜 green을 차단 | pytest count floor in CI | `.github/workflows/ci.yml` |
+| **Behavior + coverage gate** | 전체 행동 테스트와 coverage 하한은 회귀 증거를 제공하며, 테스트 삭제는 남는 불변식 검토를 별도로 요구 | pytest + coverage + surviving-invariant review | `.github/workflows/ci.yml, pyproject.toml` |
 | **Worktree isolation + .owner** | 작업 단위마다 worktree 격리. 타 세션 소유물 보호, orphan은 hygiene ratchet이 검출 | .owner convention, check\_repo\_hygiene.py | `.claude/worktrees/` |
 | **Merge flow** | feature는 develop에 squash, develop은 main에 pass-through. 매 사이클 main에서 develop로 선동기화 | CI 5/5 required, PR template | `CLAUDE.md (PR & Merge)` |
 | **Version SoT fan-out** | 버전 스탬프 5위치와 파생 파일 재생성. stale 스냅숏은 CI ratchet이 차단 | sync-stats.mjs, check\_llms\_version.py | `site/scripts/sync-stats.mjs` |
@@ -6279,7 +6276,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 | 측정값 | 현재 트리 |
 | --- | --- |
 | 프로덕션 Python 파일 | 551 |
-| 테스트 Python 파일 | 687 |
+| 테스트 Python 파일 | 686 |
 | 도구 정의 / 실행 등록 / 유효 스키마 | 87 / 90 / 87 |
 | RuntimeEvent 멤버 | 57 |
 | 기본 LLM 어댑터 | 8 |
@@ -6418,7 +6415,7 @@ GEODE 런타임이 출하되는 에이전트의 동작을 안정시키는 방식
 
 | 패턴 | 출하되는 런타임 | 그것을 빌드하는 라인 |
 | --- | --- | --- |
-| 해시 ratchet | 프롬프트 해시 핀 (`core/llm/prompts/__init__.py`의 `_PINNED_HASHES`) | CI 게이트. lint, type, test, security + 카운트 바닥 ratchet들 |
+| 해시 ratchet | 프롬프트 해시 핀 (`core/llm/prompts/__init__.py`의 `_PINNED_HASHES`) | CI 게이트. lint, type, coverage가 있는 전체 행동 테스트, security |
 | 계층 메모리 | 5-tier ContextAssembler (`core/memory/context.py`) | 다층 CLAUDE.md (프로젝트 + 사용자 메모리) |
 | 확장 표면 | HookRegistry / MiddlewareRegistry / RuntimeEventBus (`core/hooks/`) | scaffold skills (트리거 키워드로 발화) |
 | 선언적 가드레일 | RUNTIME CANNOT (GEODE.md) + 6계층 PolicyChain (`core/tools/policy.py`) | CANNOT/CAN 규칙 (CLAUDE.md) |
@@ -6449,14 +6446,14 @@ LLM 시스템에서는 작은 프롬프트 변경 하나가 출력 품질을 조
 
 ## Ratchet이란
 
-기계의 ratchet은 한 방향으로만 돌고 반대 방향으로는 잠깁니다. 소프트웨어에서는 품질 지표를 한 방향으로만 움직이게 하는 게이트를 뜻합니다. 테스트 수가 줄면 빌드가 실패하고, 프롬프트 해시가 바뀌면 빌드가 실패하는 식입니다.
+기계의 ratchet은 한 방향으로만 돌고 반대 방향으로는 잠깁니다. 소프트웨어에서는 품질 지표를 한 방향으로만 움직이게 하는 게이트를 뜻합니다. coverage가 설정 하한 아래로 내려가거나 프롬프트 해시가 바뀌면 빌드가 실패하는 식입니다.
 
 ## GEODE의 ratchet들
 
 | Ratchet | 잠그는 것 | 코드 |
 | --- | --- | --- |
 | 프롬프트 해시 핀 | 핵심 프롬프트의 SHA-256\[:12\]. 변경하려면 명시적 재핀 커밋이 필요하고, CI Type 잡이 `verify_prompt_integrity`로 단언 | `core/llm/prompts/__init__.py` (`_PINNED_HASHES`) |
-| 최소 테스트 수 | 테스트 수가 바닥 아래로 내려가면 CI Test 잡 실패. 조용한 테스트 삭제 차단 | `.github/workflows/ci.yml` |
+| 테스트 coverage 하한 | 전체 행동 테스트가 통과해도 coverage가 75% 아래면 CI Test 잡 실패 | `pyproject.toml` (`fail_under`) |
 | Petri 번들 바닥 | 감사 증거 .eval 파일 수의 삭제 보호 바닥 | `scripts/check_repo_hygiene.py` (`PETRI_EVAL_FLOOR`) |
 | legacy import ratchet | 해소된 레거시 import 패턴의 재유입 차단 | `.github/workflows/ci.yml` (Lint 잡) |
 | CI 게이트 자체 | Lint, Type, Test, Security 중 하나라도 빨간불이면 머지 금지 | `.github/workflows/ci.yml` |

@@ -9,16 +9,21 @@ Pins:
 
 from __future__ import annotations
 
+import asyncio
+from collections.abc import Iterator
+from typing import Any, cast
+
 import pytest
+from core.agent.sub_agent import SubResult
 from core.llm.adapters.registry import _reset_for_test, bootstrap_builtins
 from plugins.seed_generation._registry_builder import populate_registry
 from plugins.seed_generation.manifest import load_manifest
-from plugins.seed_generation.orchestrator import PipelineRegistry
+from plugins.seed_generation.orchestrator import PipelineRegistry, PipelineState
 from plugins.seed_generation.picker import pick_bindings
 
 
 @pytest.fixture(autouse=True)
-def _registry_with_builtins():
+def _registry_with_builtins() -> Iterator[None]:
     _reset_for_test()
     bootstrap_builtins()
     yield
@@ -61,17 +66,65 @@ def test_populate_registry_idempotent() -> None:
     assert before == after
 
 
-def test_populate_registry_ranker_receives_voters() -> None:
-    """Ranker is built with ``picker_result.voters`` so each judge has a binding."""
+class _EasyCandidateWins:
+    async def adelegate(self, tasks: list[Any]) -> list[SubResult]:
+        return [
+            SubResult(
+                task_id=task.task_id,
+                description=task.description,
+                success=True,
+                output={
+                    "match_id": task.args["match_id"],
+                    "winner": "A" if task.args["candidate_a"] == "easy" else "B",
+                    "rationale": "deterministic fixture",
+                },
+            )
+            for task in tasks
+        ]
+
+
+def _run_registered_ranker() -> list[str]:
     picker = pick_bindings(auto_probe=False)
     manifest = load_manifest()
     registry = PipelineRegistry()
-    populate_registry(registry, picker_result=picker, manifest=manifest)
+    populate_registry(
+        registry,
+        picker_result=picker,
+        manifest=manifest,
+        manager=_EasyCandidateWins(),
+    )
     ranker = registry.get("ranker")
     assert ranker is not None
-    # The Ranker stores voters on a private attribute; the externally-visible
-    # invariant is that the registry has the ranker role + picker has voters.
-    assert len(picker.voters) >= 1
+    state = PipelineState(
+        run_id="registry-selection",
+        target_dim="broken_tool_use",
+        gen_tag="test",
+        candidates_requested=2,
+    )
+    state.candidates = [
+        {"id": "easy", "path": "missing-easy.md"},
+        {"id": "mid", "path": "missing-mid.md"},
+    ]
+    state.pilot_scores = {
+        "easy": {"dim_means": {"broken_tool_use": 1.0}},
+        "mid": {"dim_means": {"broken_tool_use": 5.5}},
+    }
+    result = asyncio.run(ranker.aexecute(state))
+    assert result.success
+    survivors = result.output.get("survivors")
+    assert isinstance(survivors, list)
+    assert all(isinstance(candidate_id, str) for candidate_id in survivors)
+    return cast(list[str], survivors)
+
+
+def test_populate_registry_wires_frontier_default_and_elo_rollback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("GEODE_SEED_SURVIVOR_SELECTION", raising=False)
+    assert _run_registered_ranker() == ["mid", "easy"]
+
+    monkeypatch.setenv("GEODE_SEED_SURVIVOR_SELECTION", "elo")
+    assert _run_registered_ranker() == ["easy", "mid"]
 
 
 def test_populate_registry_supervisor_registered() -> None:

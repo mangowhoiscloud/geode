@@ -57,10 +57,18 @@ functional change.
 
 ### Changed
 
-- **The six-lens slop scanner is diagnostic-only.** Its stale 2026-05-18
-  absolute-count snapshot moved to a dated, provenance-bearing historical
-  reference. `scripts/check_slop_ratchet.py` remains the sole promotion-time
-  non-growth authority.
+- **Seed-generation now uses frontier-band survivor selection by default.**
+  The already-wired multi-candidate ranker promotes candidates nearest the
+  measured discrimination midpoint and falls back to Elo when pilot evidence
+  is unavailable. Operators can restore the previous scalarised policy with
+  `GEODE_SEED_SURVIVOR_SELECTION=blend`.
+
+- **Heuristic count ratchets retired.** The six-lens slop scanner remains a
+  diagnostic candidate finder and its stale 2026-05-18 snapshot remains a
+  provenance-bearing historical reference. CI no longer promotes arbitrary
+  slop counts or a raw collected-test total; full behavior tests, coverage,
+  Ruff, mypy, dependency, architecture, eval-contract, prompt-integrity, and
+  security gates remain authoritative.
 
 ## [1.0.22] - 2026-08-19
 

@@ -4,8 +4,8 @@ For each pairwise match in the tournament plan, the Ranker fans out 3
 voter sub-agents (one per :class:`VoterBinding` from the picker output)
 and majority-votes to determine the match winner. The
 :func:`plugins.seed_generation.tournament.apply_match` update is applied
-in place to a rolling ``elo_ratings`` dict; final survivors are the
-top-K by descending rating.
+in place to a rolling ``elo_ratings`` dict; final survivors use the
+composition-selected policy (frontier-band by default, with Elo fallback).
 
 Per ADR-001 §3 Ranking + the panel diversity gate (manifest-time
 ``required_diversity_providers ≥ 2``, runtime-validated by the S5.5
@@ -206,14 +206,9 @@ class Ranker(BaseSeedAgent):
         self._voters = voters
         self._k_factor = k_factor
         self._survivors_k = survivors_k
-        # PR-SEEDGEN-DIFFICULTY-SELECTION (2026-06-01) — survivor selection
-        # mode. ``"elo"`` (default) is unchanged top-K-by-rating; ``"difficulty"``
-        # keeps the seeds the target struggles most with (highest pilot
-        # target_dim elicitation). The orchestrator wires this from
-        # ``resolve_survivor_selection()`` (env knob) so it is OPT-IN.
-        # PR-SEEDGEN-ELO-DIFFICULTY-BLEND (2026-06-03) — ``"blend"`` is the
-        # new default; ``blend_weights`` = (α on z(elo), β on z(difficulty)),
-        # wired from ``resolve_blend_weights()`` env knobs by the orchestrator.
+        # Survivor selection is resolved by outer composition. Frontier is
+        # the production default; blend, difficulty, and Elo remain explicit
+        # operator overrides.
         self._selection: SurvivorSelection = selection
         self._blend_elo_weight, self._blend_diff_weight = blend_weights
         self._rng = rng
@@ -412,11 +407,12 @@ class Ranker(BaseSeedAgent):
 
         # PR-SEEDGEN-DIFFICULTY-SELECTION (2026-06-01) / PR-SEEDGEN-ELO-
         # DIFFICULTY-BLEND (2026-06-03) — survivor pick honours the resolved
-        # selection mode. ``"blend"`` (default) scalarises ``α·z(elo) +
+        # selection mode. ``"blend"`` scalarises ``α·z(elo) +
         # β·confidence·z(difficulty)`` so the panel's realism signal (Elo)
         # and the objective pilot difficulty BOTH count, degrading per
-        # candidate to Elo as the pilot weakens. ``"difficulty"`` is the
-        # binary hardest-first mode; ``"elo"`` the historical top-K-by-rating.
+        # candidate to Elo as the pilot weakens. ``"frontier"`` is the
+        # production default; ``"difficulty"`` is the binary hardest-first
+        # mode and ``"elo"`` the historical top-K-by-rating.
         # gen-2605-3 motive: elo 1084 / target_dim 4.2 ranked below elo 1094 /
         # target_dim 2.8 under pure Elo — the harder seed the blend keeps.
         survivors = select_survivors(

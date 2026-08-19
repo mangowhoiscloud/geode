@@ -83,7 +83,7 @@ SurvivorSelection = Literal["elo", "difficulty", "blend", "frontier"]
   headroom for a mutation to improve). A *binary* mode that fully
   replaces Elo and silently falls back to it when the pilot signal is
   absent — the fragility that motivated ``"blend"``.
-- ``"blend"`` (default) — scalarised multi-objective selection:
+- ``"blend"`` — scalarised multi-objective selection:
   ``final = elo_weight·z(elo) + diff_weight·confidence·z(difficulty)``
   where ``z`` is the population z-score across the rated candidates and
   ``confidence`` down-weights a noisy / low-sample pilot difficulty (see
@@ -93,7 +93,7 @@ SurvivorSelection = Literal["elo", "difficulty", "blend", "frontier"]
   as the pilot signal weakens — the operator-chosen "둘 다 + confidence"
   design. Elo is z-scored so its order is preserved, hence a blend with
   no usable difficulty signal == the historical Elo ranking.
-- ``"frontier"`` — top-K by a frontier-band reward
+- ``"frontier"`` (default) — top-K by a frontier-band reward
   ``1 − 2·|norm − 0.5|`` over normalised pilot difficulty
   (``norm = (dim_means[target_dim] − 1) / 9`` on the Petri 1-10 scale).
   Peaks at the ~50%-elicitation midpoint where a seed DISCRIMINATES most
@@ -105,17 +105,17 @@ SurvivorSelection = Literal["elo", "difficulty", "blend", "frontier"]
   pushing past the frontier into unsolvable seeds), frontier keeps the
   hard-but-solvable middle band that actually separates scaffold
   variants. Falls back to Elo when ``target_dim`` / ``pilot_means`` are
-  absent. Opt-in (env ``GEODE_SEED_SURVIVOR_SELECTION=frontier``) — the
-  saturation-escape lever, not yet the default.
+  absent. This is the production saturation-escape path; operators can
+  restore scalarised selection with ``GEODE_SEED_SURVIVOR_SELECTION=blend``.
 """
 
-DEFAULT_SURVIVOR_SELECTION: SurvivorSelection = "blend"
-"""Default survivor selection mode — :data:`blend <SurvivorSelection>`,
-so difficulty influences selection whenever the pilot measures it, but a
-missing / unreliable pilot can never make selection worse than Elo."""
+DEFAULT_SURVIVOR_SELECTION: SurvivorSelection = "frontier"
+"""Default survivor selection mode — :data:`frontier <SurvivorSelection>`,
+which keeps candidates near the measured discrimination midpoint and falls
+back to Elo when pilot evidence is unavailable."""
 
 SURVIVOR_SELECTION_ENV = "GEODE_SEED_SURVIVOR_SELECTION"
-"""Operator override — set to ``elo`` / ``difficulty`` / ``blend``.
+"""Operator override — set to ``elo`` / ``difficulty`` / ``blend`` / ``frontier``.
 Any unrecognised / empty value falls back to
 :data:`DEFAULT_SURVIVOR_SELECTION` (the knob must never harden into an
 invalid mode from a typo)."""
@@ -591,13 +591,16 @@ def select_survivors(
 ) -> list[str]:
     """Pick the top-``k`` survivors under the chosen selection mode.
 
-    - ``selection="blend"`` (default) — ranks by the scalarised
+    - ``selection="blend"`` — ranks by the scalarised
       :func:`blend_scores` (``α·z(elo) + β·confidence·z(difficulty)``),
       breaking ties by descending Elo then candidate id. Combines the
       panel's realism signal (Elo) with the objective pilot difficulty,
       degrading per-candidate to Elo as the pilot signal weakens (see
       :func:`blend_scores`). ``pilot_stderr`` feeds the confidence weight;
       absent → the difficulty term still applies at moderate confidence.
+    - ``selection="frontier"`` (default) — ranks by the measured
+      discrimination midpoint and falls back to Elo without usable pilot
+      evidence.
     - ``selection="elo"`` — delegates to :func:`top_k`; identical to the
       historical behaviour (top-K by descending Elo).
     - ``selection="difficulty"`` — ranks ALL rated candidates by measured

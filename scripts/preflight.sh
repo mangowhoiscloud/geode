@@ -50,7 +50,6 @@ echo "── ratchets / generated artifacts ──"
 run "deptry"                 uv run deptry .
 run "legacy imports"         uv run python scripts/check_legacy_imports.py --base-ref origin/develop
 run "repo hygiene"           uv run python scripts/check_repo_hygiene.py
-run "slop growth"            uv run python scripts/check_slop_ratchet.py
 run "architecture baseline"  uv run python scripts/architecture_baseline.py --check
 # CI resolves --target-branch from the PR base and --trusted-*-ref from a trust
 # resolver; locally the base is develop for every feature branch, and the trusted

@@ -901,31 +901,29 @@ def test_ranker_difficulty_missing_pilot_does_not_crash() -> None:
     assert result.output["survivors"][0] == "c-01"
 
 
-def test_ranker_default_selection_is_blend() -> None:
-    """Default (no ``selection`` arg) is the blend path, so the survivor list
-    matches an explicit blend-mode run — and the ranker threads the pilot
-    dim_stderr / sample_count + blend weights into it."""
+def test_ranker_default_selection_is_frontier() -> None:
+    """Default (no ``selection`` arg) matches an explicit frontier run."""
     state_default = _state_with_pilot_difficulty(6, hard_idx=3)
-    state_blend = _state_with_pilot_difficulty(6, hard_idx=3)
+    state_frontier = _state_with_pilot_difficulty(6, hard_idx=3)
     default_ranker = Ranker(
         manager=cast(Any, _AlwaysAWinsManager()),
         voters=_voters(),
         rng=random.Random(7),
     )
-    blend_ranker = Ranker(
+    frontier_ranker = Ranker(
         manager=cast(Any, _AlwaysAWinsManager()),
         voters=_voters(),
-        selection="blend",
+        selection="frontier",
         rng=random.Random(7),
     )
     default_result = asyncio.run(default_ranker.aexecute(state_default))
-    blend_result = asyncio.run(blend_ranker.aexecute(state_blend))
-    assert default_result.output["survivors"] == blend_result.output["survivors"]
+    frontier_result = asyncio.run(frontier_ranker.aexecute(state_frontier))
+    assert default_result.output["survivors"] == frontier_result.output["survivors"]
 
 
 def test_ranker_blend_ranks_hardest_no_worse_than_elo() -> None:
     """The hardest seed (c-03, target_dim 9.0 vs 1.0) ranks NO WORSE under the
-    blend default than under pure Elo — its difficulty bonus is the largest, so
+    blend mode than under pure Elo — its difficulty bonus is the largest, so
     blend can only move it up or hold. Proves the pilot difficulty (incl.
     dim_stderr / sample_count) flows through the ranker into the scalarised
     pick, not just the standalone tournament math. (k=6 → full order.)"""

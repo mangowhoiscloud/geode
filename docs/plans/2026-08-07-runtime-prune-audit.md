@@ -1,5 +1,10 @@
 # Runtime prune audit — 2026-08-07
 
+> Superseded note: the later
+> [runtime evidence debt modernization plan](2026-08-19-runtime-evidence-debt-modernization.md#p1--retire-ineffective-count-ratchets)
+> retires the slop and selected-test count ratchets. Their results below remain
+> historical evidence for this completed cleanup.
+
 ## Goal
 
 Remove migration residue that has no live caller while preserving public

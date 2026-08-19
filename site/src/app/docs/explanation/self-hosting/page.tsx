@@ -37,7 +37,7 @@ export default function Page() {
             <table>
               <thead><tr><th>패턴</th><th>출하되는 런타임</th><th>그것을 빌드하는 라인</th></tr></thead>
               <tbody>
-                <tr><td>해시 ratchet</td><td>프롬프트 해시 핀 (<code>core/llm/prompts/__init__.py</code>의 <code>_PINNED_HASHES</code>)</td><td>CI 게이트. lint, type, test, security + 카운트 바닥 ratchet들</td></tr>
+                <tr><td>해시 ratchet</td><td>프롬프트 해시 핀 (<code>core/llm/prompts/__init__.py</code>의 <code>_PINNED_HASHES</code>)</td><td>CI 게이트. lint, type, coverage가 있는 전체 행동 테스트, security</td></tr>
                 <tr><td>계층 메모리</td><td>5-tier ContextAssembler (<code>core/memory/context.py</code>)</td><td>다층 CLAUDE.md (프로젝트 + 사용자 메모리)</td></tr>
                 <tr><td>확장 표면</td><td>HookRegistry / MiddlewareRegistry / RuntimeEventBus (<code>core/hooks/</code>)</td><td>scaffold skills (트리거 키워드로 발화)</td></tr>
                 <tr><td>선언적 가드레일</td><td>RUNTIME CANNOT (GEODE.md) + 6계층 PolicyChain (<code>core/tools/policy.py</code>)</td><td>CANNOT/CAN 규칙 (CLAUDE.md)</td></tr>
@@ -95,7 +95,7 @@ export default function Page() {
             <table>
               <thead><tr><th>Pattern</th><th>The runtime that ships</th><th>The line that builds it</th></tr></thead>
               <tbody>
-                <tr><td>Hash ratchet</td><td>Prompt hash pins (<code>_PINNED_HASHES</code> in <code>core/llm/prompts/__init__.py</code>)</td><td>CI gate: lint, type, test, security plus count-floor ratchets</td></tr>
+                <tr><td>Hash ratchet</td><td>Prompt hash pins (<code>_PINNED_HASHES</code> in <code>core/llm/prompts/__init__.py</code>)</td><td>CI gate: lint, type, the full behavior suite with coverage, and security</td></tr>
                 <tr><td>Layered memory</td><td>5-tier ContextAssembler (<code>core/memory/context.py</code>)</td><td>Multi-level CLAUDE.md (project + user memory)</td></tr>
                 <tr><td>Extension surfaces</td><td>HookRegistry / MiddlewareRegistry / RuntimeEventBus (<code>core/hooks/</code>)</td><td>Scaffold skills (fired by trigger keywords)</td></tr>
                 <tr><td>Declarative guardrails</td><td>RUNTIME CANNOT (GEODE.md) + 6-layer PolicyChain (<code>core/tools/policy.py</code>)</td><td>CANNOT/CAN rules (CLAUDE.md)</td></tr>

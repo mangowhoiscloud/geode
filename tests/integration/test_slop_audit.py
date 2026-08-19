@@ -1,9 +1,9 @@
 """Tests for ``scripts/slop_audit.py`` — the diagnostic audit driver.
 
 Smoke-tests every lens against the current tree so a refactor that breaks the
-audit script surfaces immediately. Promotion-time non-growth is owned by
-``scripts/check_slop_ratchet.py``; the old absolute-count snapshot is preserved
-under ``docs/reference/`` as historical evidence only.
+audit script surfaces immediately. Its heuristic counts are diagnostic; the
+old absolute-count snapshot is preserved under ``docs/reference/`` as
+historical evidence only.
 """
 
 from __future__ import annotations
@@ -46,29 +46,6 @@ def test_run_all_lenses_returns_six_results(slop_audit: ModuleType) -> None:
         "lint_bypass_markers",
         "stale_references",
     ]
-
-
-def test_stale_references_zero(slop_audit: ModuleType) -> None:
-    """The stale-reference lens must be zero on develop after PR 3.
-
-    PR 0 / PR 1 documentation refers to BudgetGuard / FitnessBaseline /
-    seeds_safe10 in historical context — those occurrences carry a
-    ``# slop:keep`` marker so this lens stays clean.
-    """
-    result = slop_audit.lens_stale_references()
-    assert result.count == 0, (
-        f"stale_references must be 0; got {result.count}. Samples: {result.samples}"
-    )
-
-
-def test_unused_imports_below_threshold(slop_audit: ModuleType) -> None:
-    """Unused imports must stay under a coarse threshold.
-
-    Threshold is intentionally loose. CI fast-fail is the F401 ruff rule on
-    changed files, not this aggregate diagnostic.
-    """
-    result = slop_audit.lens_unused_imports()
-    assert result.count <= 50, f"unused_imports count {result.count} exceeds soft threshold 50"
 
 
 @pytest.mark.parametrize(("returncode", "stdout"), [(2, ""), (1, "not-json")])
@@ -136,7 +113,7 @@ def test_historical_baseline_is_reference_only() -> None:
     assert "authority: reference-only" in text
     assert "source_repository: https://github.com/mangowhoiscloud/geode" in text
     assert "source_commit: 4fe594eb66b5de6bb3daedef7b433d59fcf719bb" in text
-    assert "superseded_by: scripts/check_slop_ratchet.py" in text
+    assert "superseded_by: docs/plans/2026-08-19-runtime-evidence-debt-modernization.md" in text
     assert "| dead_private_functions | 139 |" in text
     assert "| duplicate_signatures | 76 |" in text
     assert "| lint_bypass_markers | 91 |" in text
@@ -155,18 +132,23 @@ def test_obsolete_baseline_flag_is_rejected() -> None:
     assert "unrecognized arguments: --check" in result.stderr
 
 
-def test_slop_keep_marker_works(
+def test_stale_reference_lens_reports_candidate_and_honors_keep_marker(
     slop_audit: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A line with ``# slop:keep`` and a stale ref is ignored."""
     tmp_root = tmp_path / "fake_repo"
     (tmp_root / "core").mkdir(parents=True)
-    sample = tmp_root / "core" / "fake.py"
-    sample.write_text(
+    (tmp_root / "core" / "candidate.py").write_text(
+        '"""Runtime still mentions BudgetGuard."""\n',
+        encoding="utf-8",
+    )
+    (tmp_root / "core" / "historical.py").write_text(
         '"""Doc that mentions BudgetGuard for historical context."""  # slop:keep\n',
         encoding="utf-8",
     )
     monkeypatch.setattr(slop_audit, "REPO_ROOT", tmp_root)
     monkeypatch.setattr(slop_audit, "SCAN_ROOTS", ("core/",))
+
     result = slop_audit.lens_stale_references()
-    assert result.count == 0
+
+    assert result.count == 1
+    assert result.samples == ["core/candidate.py:1 :: BudgetGuard"]

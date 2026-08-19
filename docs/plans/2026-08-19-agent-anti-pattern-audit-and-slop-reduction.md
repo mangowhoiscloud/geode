@@ -7,6 +7,11 @@
 > This document freezes the research, scope, and decision gates. It does not
 > authorize deleting production code or tests merely because a heuristic flags
 > them.
+>
+> Superseded note: the later
+> [runtime evidence debt modernization plan](2026-08-19-runtime-evidence-debt-modernization.md#p1--retire-ineffective-count-ratchets)
+> retires the count ratchet; the measurements and decisions below remain dated
+> evidence, not current promotion instructions.
 
 ## Goal
 

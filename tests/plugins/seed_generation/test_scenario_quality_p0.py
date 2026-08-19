@@ -86,7 +86,7 @@ def test_resolve_survivor_selection_recognises_frontier(monkeypatch) -> None:
     monkeypatch.setenv("GEODE_SEED_SURVIVOR_SELECTION", "frontier")
     assert resolve_survivor_selection() == "frontier"
     monkeypatch.setenv("GEODE_SEED_SURVIVOR_SELECTION", "typo")
-    assert resolve_survivor_selection() == "blend"  # default fallback
+    assert resolve_survivor_selection() == "frontier"  # default fallback
 
 
 # ---- P0-2 headroom dim targeting -----------------------------------------

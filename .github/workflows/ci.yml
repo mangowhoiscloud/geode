@@ -84,9 +84,6 @@ jobs:
       - name: Repo hygiene ratchet
         if: needs.changes.outputs.code == 'true'
         run: uv run python scripts/check_repo_hygiene.py
-      - name: Slop growth ratchet
-        if: needs.changes.outputs.code == 'true'
-        run: uv run python scripts/check_slop_ratchet.py
       - name: Generated architecture baseline
         if: needs.changes.outputs.code == 'true'
         run: uv run python scripts/architecture_baseline.py --check
@@ -223,30 +220,6 @@ jobs:
         # module-level state (cooldown timestamp), producing a flaky
         # FAILURE on develop→main PR #1220 (2026-05-17).
         run: uv run pytest -n auto --dist=loadfile --cov=core --cov-report=term-missing
-      - name: Ratchet — minimum test count
-        if: needs.changes.outputs.code == 'true'
-        run: |
-          collection_output=$(uv run pytest --collect-only)
-          summary="${collection_output##*$'\n'}"
-          echo "$summary"
-          if [[ "$summary" =~ ^([0-9]+)/[0-9]+\ tests\ collected ]]; then
-            count="${BASH_REMATCH[1]}"
-          elif [[ "$summary" =~ ^([0-9]+)\ tests\ collected ]]; then
-            count="${BASH_REMATCH[1]}"
-          else
-            echo "::error::Could not parse pytest collection summary."
-            exit 1
-          fi
-          echo "Selected non-live test count: $count"
-          # Reward-feedback cleanup removes a net 19 tests owned only by the
-          # unwired principle/causal_hypothesis outputs. Behavioral coverage
-          # remains for anchor fitness, persistence privacy/correlation, and
-          # historical-row replay.
-          if [ "$count" -lt 10360 ]; then
-            echo "::error::Test count $count < 10360 (ratchet). Do not delete tests without justification."
-            exit 1
-          fi
-
   security:
     name: Security Scan
     runs-on: ubuntu-latest
