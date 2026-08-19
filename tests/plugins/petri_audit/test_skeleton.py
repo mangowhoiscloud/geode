@@ -300,8 +300,8 @@ def test_default_runner_returns_text_and_usage_tuple(monkeypatch) -> None:
 
     monkeypatch.setattr(geode_target, "_to_geode_messages", lambda msgs: msgs)
     monkeypatch.setattr("core.wiring.startup.check_readiness", lambda: object(), raising=False)
-    monkeypatch.setattr("core.cli._set_readiness", lambda r: None, raising=False)
-    monkeypatch.setattr("core.cli._build_tool_handlers", lambda verbose=False: {}, raising=False)
+    monkeypatch.setattr("core.cli.session_state.set_readiness", lambda r: None)
+    monkeypatch.setattr("geode_product.tool_handlers.build_tool_handlers", lambda verbose=False: {})
     monkeypatch.setattr(
         "core.agent.conversation.ConversationContext", lambda: type("X", (), {"messages": []})()
     )

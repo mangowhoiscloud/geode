@@ -37,26 +37,26 @@ def test_resolve_binary_via_env_override(monkeypatch: pytest.MonkeyPatch, tmp_pa
     """``GEODE_CLAUDE_CLI_BIN`` env points at an executable."""
     from geode_product.petri_audit.claude_cli_provider import (
         CLAUDE_CLI_BIN_ENV,
-        _resolve_claude_binary,
+        resolve_claude_binary,
     )
 
     fake = tmp_path / "fake-claude"
     fake.write_text("#!/bin/sh\necho ok\n")
     fake.chmod(0o755)
     monkeypatch.setenv(CLAUDE_CLI_BIN_ENV, str(fake))
-    assert _resolve_claude_binary() == str(fake)
+    assert resolve_claude_binary() == str(fake)
 
 
 def test_resolve_binary_via_path(monkeypatch: pytest.MonkeyPatch) -> None:
     """When no env override, falls back to ``shutil.which("claude")``."""
     from geode_product.petri_audit.claude_cli_provider import (
         CLAUDE_CLI_BIN_ENV,
-        _resolve_claude_binary,
+        resolve_claude_binary,
     )
 
     monkeypatch.delenv(CLAUDE_CLI_BIN_ENV, raising=False)
     with patch("shutil.which", return_value="/fake/path/claude"):
-        assert _resolve_claude_binary() == "/fake/path/claude"
+        assert resolve_claude_binary() == "/fake/path/claude"
 
 
 def test_resolve_binary_env_invalid_path_raises(
@@ -66,7 +66,7 @@ def test_resolve_binary_env_invalid_path_raises(
     from geode_product.petri_audit.claude_cli_provider import (
         CLAUDE_CLI_BIN_ENV,
         ClaudeCliInvocationError,
-        _resolve_claude_binary,
+        resolve_claude_binary,
     )
 
     monkeypatch.setenv(CLAUDE_CLI_BIN_ENV, "/nonexistent/binary")
@@ -74,7 +74,7 @@ def test_resolve_binary_env_invalid_path_raises(
         patch("shutil.which", return_value=None),
         pytest.raises(ClaudeCliInvocationError, match="no executable"),
     ):
-        _resolve_claude_binary()
+        resolve_claude_binary()
 
 
 def test_resolve_binary_not_on_path_raises(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -82,7 +82,7 @@ def test_resolve_binary_not_on_path_raises(monkeypatch: pytest.MonkeyPatch) -> N
     from geode_product.petri_audit.claude_cli_provider import (
         CLAUDE_CLI_BIN_ENV,
         ClaudeCliInvocationError,
-        _resolve_claude_binary,
+        resolve_claude_binary,
     )
 
     monkeypatch.delenv(CLAUDE_CLI_BIN_ENV, raising=False)
@@ -90,27 +90,27 @@ def test_resolve_binary_not_on_path_raises(monkeypatch: pytest.MonkeyPatch) -> N
         patch("shutil.which", return_value=None),
         pytest.raises(ClaudeCliInvocationError, match="not found on PATH"),
     ):
-        _resolve_claude_binary()
+        resolve_claude_binary()
 
 
 def test_resolve_timeout_default() -> None:
     from geode_product.petri_audit.claude_cli_provider import (
         CLAUDE_CLI_SUBPROCESS_TIMEOUT_S,
-        _resolve_timeout_s,
+        resolve_timeout_s,
     )
 
     # Without env, returns module default
-    assert _resolve_timeout_s() == CLAUDE_CLI_SUBPROCESS_TIMEOUT_S
+    assert resolve_timeout_s() == CLAUDE_CLI_SUBPROCESS_TIMEOUT_S
 
 
 def test_resolve_timeout_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
     from geode_product.petri_audit.claude_cli_provider import (
         CLAUDE_CLI_TIMEOUT_ENV,
-        _resolve_timeout_s,
+        resolve_timeout_s,
     )
 
     monkeypatch.setenv(CLAUDE_CLI_TIMEOUT_ENV, "1200")
-    assert _resolve_timeout_s() == 1200.0
+    assert resolve_timeout_s() == 1200.0
 
 
 def test_resolve_timeout_env_garbage_falls_back(
@@ -119,11 +119,11 @@ def test_resolve_timeout_env_garbage_falls_back(
     from geode_product.petri_audit.claude_cli_provider import (
         CLAUDE_CLI_SUBPROCESS_TIMEOUT_S,
         CLAUDE_CLI_TIMEOUT_ENV,
-        _resolve_timeout_s,
+        resolve_timeout_s,
     )
 
     monkeypatch.setenv(CLAUDE_CLI_TIMEOUT_ENV, "not-a-number")
-    assert _resolve_timeout_s() == CLAUDE_CLI_SUBPROCESS_TIMEOUT_S
+    assert resolve_timeout_s() == CLAUDE_CLI_SUBPROCESS_TIMEOUT_S
 
 
 # ---------------------------------------------------------------------------
@@ -503,7 +503,7 @@ def test_parse_skips_non_object_lines() -> None:
 
 def test_extract_text_from_content_block_deltas() -> None:
     from geode_product.petri_audit.claude_cli_provider import (
-        _extract_assistant_text,
+        extract_assistant_text,
         parse_stream_json_events,
     )
 
@@ -515,59 +515,59 @@ def test_extract_text_from_content_block_deltas() -> None:
         ]
     )
     events = parse_stream_json_events(stdout)
-    assert _extract_assistant_text(events) == "Hello world"
+    assert extract_assistant_text(events) == "Hello world"
 
 
 def test_extract_text_result_fallback() -> None:
     """When no content_block_delta events, fall back to result.result."""
     from geode_product.petri_audit.claude_cli_provider import (
-        _extract_assistant_text,
+        extract_assistant_text,
         parse_stream_json_events,
     )
 
     stdout = _make_stream_json([{"type": "result", "result": "Just OK"}])
     events = parse_stream_json_events(stdout)
-    assert _extract_assistant_text(events) == "Just OK"
+    assert extract_assistant_text(events) == "Just OK"
 
 
 def test_extract_stop_reason_end_turn_maps_to_stop() -> None:
     from geode_product.petri_audit.claude_cli_provider import (
-        _extract_stop_reason,
+        extract_stop_reason,
         parse_stream_json_events,
     )
 
     stdout = _make_stream_json([{"type": "message_delta", "delta": {"stop_reason": "end_turn"}}])
-    assert _extract_stop_reason(parse_stream_json_events(stdout)) == "stop"
+    assert extract_stop_reason(parse_stream_json_events(stdout)) == "stop"
 
 
 def test_extract_stop_reason_tool_use_maps_to_tool_calls() -> None:
     from geode_product.petri_audit.claude_cli_provider import (
-        _extract_stop_reason,
+        extract_stop_reason,
         parse_stream_json_events,
     )
 
     stdout = _make_stream_json([{"type": "message_delta", "delta": {"stop_reason": "tool_use"}}])
-    assert _extract_stop_reason(parse_stream_json_events(stdout)) == "tool_calls"
+    assert extract_stop_reason(parse_stream_json_events(stdout)) == "tool_calls"
 
 
 def test_extract_stop_reason_max_tokens_preserved() -> None:
     from geode_product.petri_audit.claude_cli_provider import (
-        _extract_stop_reason,
+        extract_stop_reason,
         parse_stream_json_events,
     )
 
     stdout = _make_stream_json([{"type": "result", "stop_reason": "max_tokens"}])
-    assert _extract_stop_reason(parse_stream_json_events(stdout)) == "max_tokens"
+    assert extract_stop_reason(parse_stream_json_events(stdout)) == "max_tokens"
 
 
 def test_extract_stop_reason_unknown_when_absent() -> None:
     from geode_product.petri_audit.claude_cli_provider import (
-        _extract_stop_reason,
+        extract_stop_reason,
         parse_stream_json_events,
     )
 
     stdout = _make_stream_json([{"type": "message_start"}])
-    assert _extract_stop_reason(parse_stream_json_events(stdout)) == "unknown"
+    assert extract_stop_reason(parse_stream_json_events(stdout)) == "unknown"
 
 
 def testextract_usage_from_events_from_result_event() -> None:
@@ -618,7 +618,7 @@ def testextract_usage_from_events_zero_when_absent() -> None:
 
 def test_subprocess_runner_success(tmp_path: Any) -> None:
     """End-to-end: fake binary echoes a fixture stream-json to stdout."""
-    from geode_product.petri_audit.claude_cli_provider import _run_claude_subprocess
+    from geode_product.petri_audit.claude_cli_provider import run_claude_subprocess
 
     # Tiny fake "claude" that emits stream-json then exits 0
     fake = tmp_path / "fake-claude"
@@ -631,19 +631,19 @@ def test_subprocess_runner_success(tmp_path: Any) -> None:
     )
     fake.chmod(0o755)
     argv = [str(fake), "--print", "-"]
-    stdout, stderr, rc = asyncio.run(_run_claude_subprocess(argv, "prompt", 10.0))
+    stdout, stderr, rc = asyncio.run(run_claude_subprocess(argv, "prompt", 10.0))
     assert rc == 0
     assert '"text_delta"' in stdout
 
 
 def test_subprocess_runner_nonzero_exit(tmp_path: Any) -> None:
     """Non-zero exit returns the code; caller decides what to do."""
-    from geode_product.petri_audit.claude_cli_provider import _run_claude_subprocess
+    from geode_product.petri_audit.claude_cli_provider import run_claude_subprocess
 
     fake = tmp_path / "fake-claude"
     fake.write_text("#!/bin/sh\necho err >&2\nexit 2\n")
     fake.chmod(0o755)
-    stdout, stderr, rc = asyncio.run(_run_claude_subprocess([str(fake)], "", 10.0))
+    stdout, stderr, rc = asyncio.run(run_claude_subprocess([str(fake)], "", 10.0))
     assert rc == 2
     assert "err" in stderr
 
@@ -652,25 +652,25 @@ def test_subprocess_runner_timeout(tmp_path: Any) -> None:
     """Timeout → ClaudeCliInvocationError."""
     from geode_product.petri_audit.claude_cli_provider import (
         ClaudeCliInvocationError,
-        _run_claude_subprocess,
+        run_claude_subprocess,
     )
 
     fake = tmp_path / "fake-claude"
     fake.write_text("#!/bin/sh\nsleep 10\n")
     fake.chmod(0o755)
     with pytest.raises(ClaudeCliInvocationError, match="timed out"):
-        asyncio.run(_run_claude_subprocess([str(fake)], "", 0.5))
+        asyncio.run(run_claude_subprocess([str(fake)], "", 0.5))
 
 
 def test_subprocess_runner_binary_missing() -> None:
     """Spawn-time FileNotFoundError → ClaudeCliInvocationError."""
     from geode_product.petri_audit.claude_cli_provider import (
         ClaudeCliInvocationError,
-        _run_claude_subprocess,
+        run_claude_subprocess,
     )
 
     with pytest.raises(ClaudeCliInvocationError, match="failed to spawn"):
-        asyncio.run(_run_claude_subprocess(["/nonexistent/binary"], "", 10.0))
+        asyncio.run(run_claude_subprocess(["/nonexistent/binary"], "", 10.0))
 
 
 # ---------------------------------------------------------------------------
@@ -711,7 +711,7 @@ def test_generate_with_tools_dispatches_to_bridge_path(tmp_path: Any) -> None:
     fake.write_text("#!/bin/sh\necho ok\n")
     fake.chmod(0o755)
     with patch(
-        "geode_product.petri_audit.claude_cli_provider._resolve_claude_binary",
+        "geode_product.petri_audit.claude_cli_provider.resolve_claude_binary",
         return_value=str(fake),
     ):
         api = p.ClaudeCliAPI(model_name="claude-opus-4-7")
@@ -748,7 +748,7 @@ def test_generate_text_only_round_trip(tmp_path: Any) -> None:
     )
     fake.chmod(0o755)
     with patch(
-        "geode_product.petri_audit.claude_cli_provider._resolve_claude_binary",
+        "geode_product.petri_audit.claude_cli_provider.resolve_claude_binary",
         return_value=str(fake),
     ):
         api = p.ClaudeCliAPI(model_name="claude-opus-4-7")
@@ -770,7 +770,7 @@ def test_generate_nonzero_exit_raises(tmp_path: Any) -> None:
     fake.write_text("#!/bin/sh\necho 'oops' >&2\nexit 1\n")
     fake.chmod(0o755)
     with patch(
-        "geode_product.petri_audit.claude_cli_provider._resolve_claude_binary",
+        "geode_product.petri_audit.claude_cli_provider.resolve_claude_binary",
         return_value=str(fake),
     ):
         api = p.ClaudeCliAPI(model_name="claude-opus-4-7")
@@ -793,7 +793,7 @@ def test_generate_empty_stdout_raises(tmp_path: Any) -> None:
     fake.write_text("#!/bin/sh\nexit 0\n")  # no stdout
     fake.chmod(0o755)
     with patch(
-        "geode_product.petri_audit.claude_cli_provider._resolve_claude_binary",
+        "geode_product.petri_audit.claude_cli_provider.resolve_claude_binary",
         return_value=str(fake),
     ):
         api = p.ClaudeCliAPI(model_name="claude-opus-4-7")
@@ -855,7 +855,7 @@ def test_generate_with_tools_round_trip_returns_tool_calls(tmp_path: Any) -> Non
     fake.write_text(_TOOL_USE_STREAM)
     fake.chmod(0o755)
     with patch(
-        "geode_product.petri_audit.claude_cli_provider._resolve_claude_binary",
+        "geode_product.petri_audit.claude_cli_provider.resolve_claude_binary",
         return_value=str(fake),
     ):
         api = p.ClaudeCliAPI(model_name="claude-opus-4-7")
@@ -910,7 +910,7 @@ def test_generate_with_tools_release_bridge_called_even_on_failure(tmp_path: Any
     real_release = mcp_bridge_pkg.release_bridge
     with (
         patch(
-            "geode_product.petri_audit.claude_cli_provider._resolve_claude_binary",
+            "geode_product.petri_audit.claude_cli_provider.resolve_claude_binary",
             return_value=str(fake),
         ),
         patch.object(mcp_bridge_pkg, "release_bridge", _track_release),
