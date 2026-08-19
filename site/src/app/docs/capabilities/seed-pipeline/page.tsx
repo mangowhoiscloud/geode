@@ -8,8 +8,8 @@ export default function Page() {
       slug="capabilities/seed-pipeline"
       title="Seed pipeline"
       titleKo="Seed 파이프라인"
-      summary="The plugin that regenerates the seed corpus each generation. Picker, orchestrator, manifest, cost preview, and the blend survivor selection."
-      summaryKo="세대마다 seed 코퍼스를 다시 만드는 플러그인입니다. picker, orchestrator, manifest, cost preview와 blend 생존자 선택을 다룹니다."
+      summary="The plugin that regenerates the seed corpus each generation. Picker, orchestrator, manifest, cost preview, and frontier-band survivor selection."
+      summaryKo="세대마다 seed 코퍼스를 다시 만드는 플러그인입니다. picker, orchestrator, manifest, cost preview와 frontier-band 생존자 선택을 다룹니다."
     >
       <Bi
         ko={
@@ -46,41 +46,36 @@ export default function Page() {
             <figure>
               <img
                 src="/geode/diagrams/seed-pipeline-run.svg"
-                alt="Seed pipeline 런 흐름. geode audit-seeds가 picker, cost preview와 confirm, pre-flight를 지나 9-역할 파이프라인으로 들어가고, blend 생존자 선택을 거쳐 cycle-input 풀과 번들로 나뉘며, meta-review priors가 다음 런의 picker로 되돌아간다"
+                alt="Seed pipeline 런 흐름. geode audit-seeds가 picker, cost preview와 confirm, pre-flight를 지나 9-역할 파이프라인으로 들어가고, frontier-band 생존자 선택을 거쳐 cycle-input 풀과 번들로 나뉘며, meta-review priors가 다음 런의 picker로 되돌아간다"
               />
               <figcaption>
                 한 런의 진행. 좌측 사다리(picker, cost preview, pre-flight)를
-                지나 9-역할 파이프라인이 돌고, 생존자는 blend 선택을 거쳐
+                지나 9-역할 파이프라인이 돌고, 생존자는 frontier-band 선택을 거쳐
                 cycle-input 풀과 공개 번들로 갈라집니다. held-out 벤치는 점선
                 아래에서 변이되지 않고, meta-review의 prior만 다음 런의
                 picker로 돌아갑니다.
               </figcaption>
             </figure>
 
-            <h2>생존자 선택: blend가 기본</h2>
+            <h2>생존자 선택: frontier-band가 기본</h2>
             <p>
-              왜 Elo 단독이 아닌가. Elo는 judge 패널의 선호를 재지만, 루프가
-              원하는 seed는 &quot;target이 어려워하는&quot; seed입니다. pilot 실측이 주는
-              난이도 신호를 버리면 선택이 스타일 선호로 기웁니다. 그래서 기본
-              선택 모드는 <code>blend</code>입니다
+              기본 선택은 pilot 실측 난이도가 양 끝이 아닌 약 50% 판별 대역에
+              가까운 후보를 고르는 <code>frontier</code>입니다. 너무 쉬운 seed와
+              항상 실패하는 불공정 seed를 함께 피하고, pilot 근거가 없으면 Elo로
+              결정적으로 폴백합니다
               (<code>plugins/seed_generation/tournament.py</code>의{" "}
               <code>DEFAULT_SURVIVOR_SELECTION</code>).
             </p>
-            <pre>{`final = elo_weight * z(elo)
-      + diff_weight * confidence * z(difficulty)
-
-difficulty = pilot dim_means[target_dim]   # 높을수록 target에게 어려움
-confidence = pilot stderr 기반 가중치      # 노이즈가 크면 자동 감쇠`}</pre>
+            <pre>{`norm = (pilot dim_means[target_dim] - 1) / 9
+frontier_reward = 1 - 2 * abs(norm - 0.5)`}</pre>
             <ul>
-              <li>z-score는 rating이 있는 후보들 사이에서 계산합니다.</li>
-              <li>
-                후보 단위 점진적 약화: pilot이 깨졌거나 stderr가 없으면 그
-                후보는 순수 Elo로 평가됩니다. 깨진 pilot이 선택을 Elo보다
-                나쁘게 만들 수는 없습니다.
-              </li>
+              <li>reward는 중간 판별 대역에서 1, Petri 척도의 양 끝에서 0입니다.</li>
+              <li>pilot 신호가 없으면 기존 Elo 순위로 폴백합니다.</li>
               <li>
                 조정값: <code>GEODE_SEED_SURVIVOR_SELECTION</code>
-                (<code>elo</code> / <code>difficulty</code> / <code>blend</code>),{" "}
+                (<code>frontier</code> / <code>blend</code> / <code>elo</code> /{" "}
+                <code>difficulty</code>). 이전 scalarized 정책은 <code>blend</code>로
+                복원하며, 그 가중치는{" "}
                 <code>GEODE_SEED_BLEND_ELO_WEIGHT</code> /{" "}
                 <code>GEODE_SEED_BLEND_DIFFICULTY_WEIGHT</code> (기본 각 1.0).
               </li>
@@ -147,43 +142,37 @@ confidence = pilot stderr 기반 가중치      # 노이즈가 크면 자동 감
             <figure>
               <img
                 src="/geode/diagrams/seed-pipeline-run.svg"
-                alt="Seed pipeline run flow: geode audit-seeds passes picker, cost preview and confirm, pre-flight, enters the nine-role pipeline, then blend survivor selection splits into the cycle-input pool and the published bundle, with meta-review priors looping back to the picker"
+                alt="Seed pipeline run flow: geode audit-seeds passes picker, cost preview and confirm, pre-flight, enters the nine-role pipeline, then frontier-band survivor selection splits into the cycle-input pool and the published bundle, with meta-review priors looping back to the picker"
               />
               <figcaption>
                 One run, end to end. The left ladder (picker, cost preview,
                 pre-flight) leads into the nine-role pipeline; survivors pass
-                the blend selection and split into the cycle-input pool and
+                frontier-band selection and split into the cycle-input pool and
                 the published bundle. The held-out bench stays below the
                 dashed line, never mutated; only meta-review priors loop back
                 to the next run&apos;s picker.
               </figcaption>
             </figure>
 
-            <h2>Survivor selection: blend by default</h2>
+            <h2>Survivor selection: frontier band by default</h2>
             <p>
-              Why not pure Elo? Elo measures judge-panel preference, but the
-              loop wants seeds the target finds hard. Throwing away the
-              difficulty signal from the pilot&apos;s real measurement tilts
-              selection toward style preference. So the default mode is{" "}
-              <code>blend</code> (<code>DEFAULT_SURVIVOR_SELECTION</code> in{" "}
+              The default <code>frontier</code> mode keeps candidates near the
+              pilot&apos;s 50% discrimination band, avoiding both easy seeds and
+              unfair always-failing seeds. It falls back deterministically to
+              Elo when pilot evidence is unavailable ({" "}
+              <code>DEFAULT_SURVIVOR_SELECTION</code> in{" "}
               <code>plugins/seed_generation/tournament.py</code>).
             </p>
-            <pre>{`final = elo_weight * z(elo)
-      + diff_weight * confidence * z(difficulty)
-
-difficulty = pilot dim_means[target_dim]   # higher = harder for the target
-confidence = weight from pilot stderr      # noisy pilots are damped`}</pre>
+            <pre>{`norm = (pilot dim_means[target_dim] - 1) / 9
+frontier_reward = 1 - 2 * abs(norm - 0.5)`}</pre>
             <ul>
-              <li>z-scores are computed across the rated candidates.</li>
-              <li>
-                Per-candidate graceful degrade: a candidate with a broken pilot
-                or no stderr is scored on pure Elo. A broken pilot can never
-                make selection worse than Elo.
-              </li>
+              <li>The reward is 1 at the midpoint and 0 at either Petri-scale extreme.</li>
+              <li>Missing pilot evidence falls back to the existing Elo order.</li>
               <li>
                 Knobs: <code>GEODE_SEED_SURVIVOR_SELECTION</code>
-                (<code>elo</code> / <code>difficulty</code> /{" "}
-                <code>blend</code>), and{" "}
+                (<code>frontier</code> / <code>blend</code> / <code>elo</code> /{" "}
+                <code>difficulty</code>). Set <code>blend</code> to restore the
+                prior scalarised policy; its weights remain{" "}
                 <code>GEODE_SEED_BLEND_ELO_WEIGHT</code> /{" "}
                 <code>GEODE_SEED_BLEND_DIFFICULTY_WEIGHT</code> (each 1.0 by
                 default).

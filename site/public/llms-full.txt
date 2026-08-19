@@ -1711,7 +1711,7 @@ pilot은 후보마다 실제 petri\_audit 측정을 1회 돌립니다. `inspect_
 
 `plugins/seed_generation/tournament.py`가 3-judge 패널 pairwise 매치를 돌립니다. 과반이면 승자, 그 외에는 tie로 양쪽 rating이 갱신되고, 유효 표가 모자라면 매치를 건너뜁니다. Elo는 로지스틱 기대값 기반 K-factor 갱신이며, 제시 순서를 무작위로 뒤집어 position bias를 줄입니다. 기록은 `elo_log.tsv`에 남습니다.
 
-생존자 선택의 기본값은 Elo 단독이 아니라 `blend`입니다. Elo와 난이도를 z-score로 합치되, pilot 신호가 약한 후보는 자동으로 Elo만으로 평가됩니다. 식과 조정값은 [Seed 파이프라인](https://mangowhoiscloud.github.io/geode/docs/capabilities/seed-pipeline.md)에서 다룹니다.
+생존자 선택의 기본값은 `frontier`입니다. pilot 실측의 중간 판별 대역을 우선하고, pilot 신호가 없으면 Elo로 폴백합니다. 식과 조정값은 [Seed 파이프라인](https://mangowhoiscloud.github.io/geode/docs/capabilities/seed-pipeline.md)에서 다룹니다.
 
 ## 실행
 
@@ -1728,7 +1728,7 @@ geode audit-seeds config
 
 ## 다음
 
--   [Seed 파이프라인](https://mangowhoiscloud.github.io/geode/docs/capabilities/seed-pipeline.md). picker, manifest, 비용 미리보기, blend 선택식.
+-   [Seed 파이프라인](https://mangowhoiscloud.github.io/geode/docs/capabilities/seed-pipeline.md). picker, manifest, 비용 미리보기, frontier 선택식.
 -   [Seed 생성 런](https://mangowhoiscloud.github.io/geode/docs/petri/seeds.md). 세대별 결과 대시보드.
 -   [시나리오](https://mangowhoiscloud.github.io/geode/docs/petri/scenarios.md). 만들어진 scenario가 들어가는 코퍼스.
 
@@ -1756,25 +1756,22 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/capabilities/seed-pipelin
 
 `geode audit-seeds generate`는 picker → cost preview → pre-flight → confirm → pipeline 순서로 진행하고, `geode audit-seeds resume`이 체크포인트에서 이어 갑니다.
 
-![Seed pipeline 런 흐름. geode audit-seeds가 picker, cost preview와 confirm, pre-flight를 지나 9-역할 파이프라인으로 들어가고, blend 생존자 선택을 거쳐 cycle-input 풀과 번들로 나뉘며, meta-review priors가 다음 런의 picker로 되돌아간다](https://mangowhoiscloud.github.io/geode/diagrams/seed-pipeline-run.svg)
+![Seed pipeline 런 흐름. geode audit-seeds가 picker, cost preview와 confirm, pre-flight를 지나 9-역할 파이프라인으로 들어가고, frontier-band 생존자 선택을 거쳐 cycle-input 풀과 번들로 나뉘며, meta-review priors가 다음 런의 picker로 되돌아간다](https://mangowhoiscloud.github.io/geode/diagrams/seed-pipeline-run.svg)
 
-한 런의 진행. 좌측 사다리(picker, cost preview, pre-flight)를 지나 9-역할 파이프라인이 돌고, 생존자는 blend 선택을 거쳐 cycle-input 풀과 공개 번들로 갈라집니다. held-out 벤치는 점선 아래에서 변이되지 않고, meta-review의 prior만 다음 런의 picker로 돌아갑니다.
+한 런의 진행. 좌측 사다리(picker, cost preview, pre-flight)를 지나 9-역할 파이프라인이 돌고, 생존자는 frontier-band 선택을 거쳐 cycle-input 풀과 공개 번들로 갈라집니다. held-out 벤치는 점선 아래에서 변이되지 않고, meta-review의 prior만 다음 런의 picker로 돌아갑니다.
 
-## 생존자 선택: blend가 기본
+## 생존자 선택: frontier-band가 기본
 
-왜 Elo 단독이 아닌가. Elo는 judge 패널의 선호를 재지만, 루프가 원하는 seed는 "target이 어려워하는" seed입니다. pilot 실측이 주는 난이도 신호를 버리면 선택이 스타일 선호로 기웁니다. 그래서 기본 선택 모드는 `blend`입니다 (`plugins/seed_generation/tournament.py`의 `DEFAULT_SURVIVOR_SELECTION`).
+기본 선택은 pilot 실측 난이도가 양 끝이 아닌 약 50% 판별 대역에 가까운 후보를 고르는 `frontier`입니다. 너무 쉬운 seed와 항상 실패하는 불공정 seed를 함께 피하고, pilot 근거가 없으면 Elo로 결정적으로 폴백합니다 (`plugins/seed_generation/tournament.py`의 `DEFAULT_SURVIVOR_SELECTION`).
 
 ```
-final = elo_weight * z(elo)
-      + diff_weight * confidence * z(difficulty)
-
-difficulty = pilot dim_means[target_dim]   # 높을수록 target에게 어려움
-confidence = pilot stderr 기반 가중치      # 노이즈가 크면 자동 감쇠
+norm = (pilot dim_means[target_dim] - 1) / 9
+frontier_reward = 1 - 2 * abs(norm - 0.5)
 ```
 
--   z-score는 rating이 있는 후보들 사이에서 계산합니다.
--   후보 단위 점진적 약화: pilot이 깨졌거나 stderr가 없으면 그 후보는 순수 Elo로 평가됩니다. 깨진 pilot이 선택을 Elo보다 나쁘게 만들 수는 없습니다.
--   조정값: `GEODE_SEED_SURVIVOR_SELECTION`(`elo` / `difficulty` / `blend`), `GEODE_SEED_BLEND_ELO_WEIGHT` / `GEODE_SEED_BLEND_DIFFICULTY_WEIGHT` (기본 각 1.0).
+-   reward는 중간 판별 대역에서 1, Petri 척도의 양 끝에서 0입니다.
+-   pilot 신호가 없으면 기존 Elo 순위로 폴백합니다.
+-   조정값: `GEODE_SEED_SURVIVOR_SELECTION`(`frontier` / `blend` / `elo` / `difficulty`). 이전 scalarized 정책은 `blend`로 복원하며, 그 가중치는 `GEODE_SEED_BLEND_ELO_WEIGHT` / `GEODE_SEED_BLEND_DIFFICULTY_WEIGHT` (기본 각 1.0).
 
 ## seed pool로의 연결
 

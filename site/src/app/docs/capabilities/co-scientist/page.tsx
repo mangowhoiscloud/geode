@@ -87,9 +87,9 @@ export default function Page() {
               <code>elo_log.tsv</code>에 남습니다.
             </p>
             <p>
-              생존자 선택의 기본값은 Elo 단독이 아니라 <code>blend</code>입니다.
-              Elo와 난이도를 z-score로 합치되, pilot 신호가 약한 후보는
-              자동으로 Elo만으로 평가됩니다. 식과 조정값은{" "}
+              생존자 선택의 기본값은 <code>frontier</code>입니다. pilot 실측의
+              중간 판별 대역을 우선하고, pilot 신호가 없으면 Elo로 폴백합니다.
+              식과 조정값은{" "}
               <a href="/geode/docs/capabilities/seed-pipeline">Seed 파이프라인</a>에서
               다룹니다.
             </p>
@@ -106,7 +106,7 @@ geode audit-seeds config`}</pre>
 
             <h2>다음</h2>
             <ul>
-              <li><a href="/geode/docs/capabilities/seed-pipeline">Seed 파이프라인</a>. picker, manifest, 비용 미리보기, blend 선택식.</li>
+              <li><a href="/geode/docs/capabilities/seed-pipeline">Seed 파이프라인</a>. picker, manifest, 비용 미리보기, frontier 선택식.</li>
               <li><a href="/geode/docs/petri/seeds">Seed 생성 런</a>. 세대별 결과 대시보드.</li>
               <li><a href="/geode/docs/petri/scenarios">시나리오</a>. 만들어진 scenario가 들어가는 코퍼스.</li>
             </ul>
@@ -191,10 +191,9 @@ geode audit-seeds config`}</pre>
               <code>elo_log.tsv</code>.
             </p>
             <p>
-              Survivor selection defaults to <code>blend</code>, not pure Elo:
-              Elo and difficulty are combined as z-scores, and a candidate with
-              a weak pilot signal degrades gracefully to Elo alone. The formula
-              and knobs live in{" "}
+              Survivor selection defaults to <code>frontier</code>: the measured
+              midpoint is preferred, with a deterministic Elo fallback when
+              pilot evidence is unavailable. The formula and knobs live in{" "}
               <a href="/geode/docs/capabilities/seed-pipeline">Seed pipeline</a>.
             </p>
 
@@ -210,7 +209,7 @@ geode audit-seeds config`}</pre>
 
             <h2>Next</h2>
             <ul>
-              <li><a href="/geode/docs/capabilities/seed-pipeline">Seed pipeline</a>. Picker, manifest, cost preview, and the blend formula.</li>
+              <li><a href="/geode/docs/capabilities/seed-pipeline">Seed pipeline</a>. Picker, manifest, cost preview, and the frontier formula.</li>
               <li><a href="/geode/docs/petri/seeds">Seed-generation runs</a>. The per-generation results dashboard.</li>
               <li><a href="/geode/docs/petri/scenarios">Scenarios</a>. The corpus the generated scenarios feed.</li>
             </ul>

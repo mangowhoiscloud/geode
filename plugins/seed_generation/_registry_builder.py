@@ -236,8 +236,8 @@ def populate_registry(
         elif role_name == "ranker":
             # PR-SEEDGEN-DIFFICULTY-SELECTION (2026-06-01) / PR-SEEDGEN-ELO-
             # DIFFICULTY-BLEND (2026-06-03) — resolve the survivor-selection
-            # mode + blend weights from operator env knobs. Default "blend"
-            # scalarises Elo + confidence-weighted pilot difficulty;
+            # mode + blend weights from operator env knobs. Default "frontier"
+            # selects the measured discrimination band; "blend" /
             # "difficulty" / "elo" remain available via
             # ``GEODE_SEED_SURVIVOR_SELECTION``.
             from plugins.seed_generation.tournament import (

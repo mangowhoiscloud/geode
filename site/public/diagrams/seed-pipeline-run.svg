@@ -1,6 +1,6 @@
 <svg width="100%" viewBox="0 0 760 620" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="spr-title spr-desc">
   <title id="spr-title">Seed pipeline run flow</title>
-  <desc id="spr-desc">How one geode audit-seeds run progresses: picker, cost preview and confirm, pre-flight, the nine-role pipeline with per-phase checkpoints, blend survivor selection, bundle sync, seed pools, and the priors loop back into the picker.</desc>
+  <desc id="spr-desc">How one geode audit-seeds run progresses: picker, cost preview and confirm, pre-flight, the nine-role pipeline with per-phase checkpoints, frontier-band survivor selection, bundle sync, seed pools, and the priors loop back into the picker.</desc>
   <defs>
     <marker id="spr-arrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="strokeWidth">
       <path d="M0 0L10 4L0 8Z" fill="#ABA4BC"/>
@@ -94,8 +94,8 @@
 
   <!-- tournament -->
   <rect x="326" y="470" width="230" height="58" rx="6" class="node"/>
-  <text x="441" y="493" text-anchor="middle" class="label">survivor blend</text>
-  <text x="441" y="512" text-anchor="middle" class="sub">z(elo) + confidence·z(difficulty)</text>
+  <text x="441" y="493" text-anchor="middle" class="label">frontier selection</text>
+  <text x="441" y="512" text-anchor="middle" class="sub">mid-band pilot signal · Elo fallback</text>
   <line x1="528" y1="438" x2="528" y2="452" class="edge"/>
   <line x1="528" y1="452" x2="441" y2="452" class="edge" marker-end="none"/>
   <line x1="441" y1="452" x2="441" y2="468" class="edge"/>
