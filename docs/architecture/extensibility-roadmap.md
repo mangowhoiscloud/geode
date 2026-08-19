@@ -284,8 +284,8 @@ machine-readable artifact is
 |---|---:|
 | Production Python files (`core/` + `geode_product/` + `plugins/`) | 585 |
 | Test Python files | 685 |
-| `core/` Python LOC | 140,692 |
-| `geode_product/` Python LOC | 41,735 |
+| `core/` Python LOC | 140,694 |
+| `geode_product/` Python LOC | 41,744 |
 | `plugins/` Python LOC | 213 |
 | Test Python LOC | 182,756 |
 | Tool definitions / executable registrations / valid schemas | 87 / 90 / 87 (definition-only 0; execution-only 3; invalid schema 0) |
