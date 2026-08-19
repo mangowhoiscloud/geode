@@ -74,7 +74,7 @@ view vX.Y.Z` (errors with not-found), and the exact-version PyPI JSON
 burned — correct forward with the next free number instead. To reclaim:
 rename the CHANGELOG heading in place with a retraction blurb, restamp the
 5 locations + site SoT (`sync-stats.mjs` + `check_llms_version.py --fix`)
-+ `scripts/slop_ratchet_baseline.json` + `uv.lock`, and land through the
++ `uv.lock`, and land through the
 normal PR chain.
 
 ## Scope Rules — What to Record / What Not to Record
