@@ -57,6 +57,12 @@ functional change.
 
 ### Changed
 
+- **Seed-generation now uses frontier-band survivor selection by default.**
+  The already-wired multi-candidate ranker promotes candidates nearest the
+  measured discrimination midpoint and falls back to Elo when pilot evidence
+  is unavailable. Operators can restore the previous scalarised policy with
+  `GEODE_SEED_SURVIVOR_SELECTION=blend`.
+
 - **Heuristic count ratchets retired.** The six-lens slop scanner remains a
   diagnostic candidate finder and its stale 2026-05-18 snapshot remains a
   provenance-bearing historical reference. CI no longer promotes arbitrary
