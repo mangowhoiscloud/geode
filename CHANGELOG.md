@@ -47,6 +47,21 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **Public documentation now emits source-grounded structured metadata.** The
+  landing page publishes a minimal `SoftwareSourceCode` JSON-LD record, while
+  the lineage page renders one shared primary-source list as both visible links
+  and `TechArticle.citation` metadata. Existing built-HTML link checking remains
+  the citation reachability gate; no visitor analytics or click tracking was added.
+
+### Changed
+
+- **The six-lens slop scanner is diagnostic-only.** Its stale 2026-05-18
+  absolute-count snapshot moved to a dated, provenance-bearing historical
+  reference. `scripts/check_slop_ratchet.py` remains the sole promotion-time
+  non-growth authority.
+
 ## [1.0.22] - 2026-08-19
 
 > Slack gateway policy enforcement, bounded Socket Mode recovery, and reproducible evaluation evidence.
@@ -96,6 +111,9 @@ functional change.
 
 ### Fixed
 
+- **Seed export no-op paths no longer require audit extras.** Missing or empty
+  seed-generation runs now return without importing `inspect_ai`; populated
+  exports still require the existing optional audit dependency.
 - **Gateway binding policy is now enforced at runtime.** Per-channel tool
   allowlists constrain both model-visible schemas and ToolExecutor dispatch,
   per-binding time budgets reach the DAEMON session, and `auto_respond=false`

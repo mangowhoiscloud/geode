@@ -8,8 +8,11 @@ status payload's graceful empty states.
 
 from __future__ import annotations
 
+import ast
 import asyncio
+import inspect
 import json
+import textwrap
 from pathlib import Path
 
 import pytest
@@ -158,12 +161,17 @@ def test_run_agentic_oneshot_bootstraps_adapters() -> None:
     """geode-mcp's run_agent path must self-bootstrap the adapter registry —
     it never goes through GeodeRuntime.create. First live MCP run_agent
     failed with AdapterNotFoundError "Known pairs: []" (2026-06-11)."""
-    import inspect
-
     from core.cli.bootstrap import arun_agentic_oneshot
 
-    source = inspect.getsource(arun_agentic_oneshot)
-    assert "bootstrap_builtins(policy_sources=policy_sources)" in source
+    tree = ast.parse(textwrap.dedent(inspect.getsource(arun_agentic_oneshot)))
+    calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "bootstrap_builtins"
+    ]
+    assert any({kw.arg for kw in call.keywords} >= {"policy_sources"} for call in calls)
 
 
 def test_run_agent_tool_is_async_and_awaits_async_core() -> None:
@@ -171,20 +179,29 @@ def test_run_agent_tool_is_async_and_awaits_async_core() -> None:
     calling run_process_coroutine raises "cannot be called from an active
     event loop" (second live HTTP run_agent failure, 2026-06-11). The tool
     must be async and await arun_agentic_oneshot."""
-    import inspect
-
-    import core.mcp_server as mod
-
-    source = inspect.getsource(mod.create_mcp_server)
-    assert "async def run_agent(" in source
-    assert "await arun_agentic_oneshot(" in source
+    tree = ast.parse(textwrap.dedent(inspect.getsource(create_mcp_server)))
+    run_agent = next(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "run_agent"
+    )
+    assert any(
+        isinstance(node, ast.Await)
+        and isinstance(node.value, ast.Call)
+        and isinstance(node.value.func, ast.Name)
+        and node.value.func.id == "arun_agentic_oneshot"
+        for node in ast.walk(run_agent)
+    )
 
 
 def test_sync_oneshot_wrapper_delegates_to_async_core() -> None:
-    import inspect
-
     from core.cli.bootstrap import arun_agentic_oneshot, run_agentic_oneshot
 
     assert inspect.iscoroutinefunction(arun_agentic_oneshot)
-    source = inspect.getsource(run_agentic_oneshot)
-    assert "arun_agentic_oneshot(" in source
+    tree = ast.parse(textwrap.dedent(inspect.getsource(run_agentic_oneshot)))
+    assert any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "arun_agentic_oneshot"
+        for node in ast.walk(tree)
+    )

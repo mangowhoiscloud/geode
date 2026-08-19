@@ -190,4 +190,4 @@ Cursor API 1,000만원 + 검증 토큰 ~181만원 + 구독 200만원 + Autonomou
 - Anthropic Petri (Meridian Labs): MIT
 - inspect_ai (UK AISI): MIT
 - 본 GEODE / 본 archive: Apache-2.0
-- 본 publish 의 robots.txt 의 `noindex` — 본 viewer 의 raw archive 의 외부 crawler 의 회피 (사용자 의 직접 navigate 의 가치)
+- 본 viewer `index.html` 의 page-level `noindex` 는 검색 색인 제외 요청이다. raw archive 는 공개 자료이며 robots 정책은 접근 통제나 비밀 보호 경계가 아니다.

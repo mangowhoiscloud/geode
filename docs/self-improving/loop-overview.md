@@ -76,8 +76,9 @@ signal lives in the companion `results.jsonl`.
 
 Mutations to `WRAPPER_PROMPT_SECTIONS` propagate into the audit
 subprocess through the `GEODE_WRAPPER_OVERRIDE` env var (which points
-at `~/.geode/self-improving/wrapper-override.json`). The GEODE runtime's
-`PromptAssembler` Phase 0 reads it and replaces the wrapper base.
+at `~/.geode/self-improving/wrapper-override.json`). Product policy-source
+composition reads it, and `core.agent.system_prompt` applies the selected
+wrapper sections.
 `--dry-run` skips the subprocess entirely so plumbing can be verified
 without spending budget.
 
@@ -108,7 +109,7 @@ The final `---` block on stdout carries grep-friendly metrics.
 Boot the self-improving-loop agent with `program.md` in context. The
 boot prompt is intentionally minimal:
 
-```
+```text
 Read program.md and start a new experiment. Begin with the baseline
 for this PR.
 ```
@@ -119,7 +120,7 @@ from there.
 
 ## Project structure
 
-```
+```text
 core/self_improving/           — loop CODE + program SoT (umbrella package)
 ├── program.md     — agent instructions (humans modify)
 ├── prepare.py     — seed-pool + rubric sanity check (do not modify)

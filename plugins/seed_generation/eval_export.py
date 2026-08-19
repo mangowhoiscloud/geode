@@ -125,19 +125,6 @@ def export_run_to_evals(
     ``execute`` model role for phases that drive an LLM call. Defaults
     to the operator's typical mutator binding.
     """
-    from inspect_ai.event import InfoEvent
-    from inspect_ai.log import EvalLog, EvalSample, write_eval_log
-    from inspect_ai.log._log import (
-        EvalConfig,
-        EvalDataset,
-        EvalMetric,
-        EvalResults,
-        EvalScore,
-        EvalSpec,
-        EvalStats,
-    )
-    from inspect_ai.model import ModelOutput
-    from inspect_ai.scorer import Score
 
     def text_output(text: str) -> ModelOutput:
         """Wrap a string into a minimal ModelOutput. Empty/falsy text
@@ -192,6 +179,34 @@ def export_run_to_evals(
     evolved_candidates = _coerce_list(state.get("evolved_candidates"))
     supervisor_guidance = _coerce_dict(state.get("supervisor_guidance"))
     meta = meta_doc or _coerce_dict(state.get("meta_review"))
+
+    if not any(
+        (
+            supervisor_guidance,
+            candidates,
+            similarity_clusters,
+            reflections,
+            pilot_scores,
+            elo_ratings,
+            evolved_candidates,
+            meta,
+        )
+    ):
+        return []
+
+    from inspect_ai.event import InfoEvent
+    from inspect_ai.log import EvalLog, EvalSample, write_eval_log
+    from inspect_ai.log._log import (
+        EvalConfig,
+        EvalDataset,
+        EvalMetric,
+        EvalResults,
+        EvalScore,
+        EvalSpec,
+        EvalStats,
+    )
+    from inspect_ai.model import ModelOutput
+    from inspect_ai.scorer import Score
 
     def build_log(
         phase: str,
