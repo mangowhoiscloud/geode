@@ -35,7 +35,7 @@ abort_threshold = 0.9         # 사용량 중단 임계값
 [self_improving_loop.autoresearch]
 budget_minutes = 5            # 실험 1회 벽시계 예산
 seed_limit = 10               # 감사 1회당 seed 수
-seed_select = "plugins/petri_audit/seeds"
+seed_select = "bundled"
 dim_set = "subset"            # 22-dim 루브릭
 max_turns = 10
 promote_policy = "gate"       # gate / random / never
@@ -121,7 +121,7 @@ abort_threshold = 0.9         # usage abort threshold
 [self_improving_loop.autoresearch]
 budget_minutes = 5            # wall-clock budget per experiment
 seed_limit = 10               # seeds per audit
-seed_select = "plugins/petri_audit/seeds"
+seed_select = "bundled"
 dim_set = "subset"            # the 22-dim rubric
 max_turns = 10
 promote_policy = "gate"       # gate / random / never

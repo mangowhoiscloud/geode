@@ -153,7 +153,7 @@ retry. A semantic `REJECT` requires a new candidate and contract.
 
 ## Frozen contract
 
-`plugins.crucible.contract.ExperimentContract` is the machine-readable identity
+`geode_product.crucible.contract.ExperimentContract` is the machine-readable identity
 boundary. Its canonical SHA-256 is the `contract_id` recorded by every shard.
 
 The contract fixes:
@@ -249,7 +249,7 @@ lineage, and exact shard identity. Contract-backed tau2 runs additionally:
 - write the raw artifact SHA-256 and an atomic snapshot finalization status;
   run or route failures are preserved as `invalid`, never `complete`.
 
-`plugins.crucible.evidence` defines an immutable normalized envelope for one
+`geode_product.crucible.evidence` defines an immutable normalized envelope for one
 arm. It binds contract, revision, evaluator, harness, assay config, task pack,
 and raw bytes; records task/trial metrics, independent checks, termination and
 infrastructure status; and carries whole-arm resource totals. Tau2 normalization
@@ -260,7 +260,7 @@ validates the pinned upstream result schema without importing the harness.
 `infrastructure_error`, `user_error`, and `unexpected_error` invalidate the
 evidence.
 
-`plugins.crucible.promotion.decide()` is the assay-neutral screening rule
+`geode_product.crucible.promotion.decide()` is the assay-neutral screening rule
 (`paired_bootstrap.v2`). It requires exact paired coverage, computes
 baseline/candidate means and a deterministic one-sided paired-bootstrap lower
 bound over family-level means (trial → task → family), and keeps only when the
@@ -276,7 +276,7 @@ documented pack scales. A train-stage `KEEP` only advances a campaign search
 head and has `promotion_authority=none`. Test-stage
 verdicts cannot be produced through the reusable `score` CLI.
 
-`plugins.crucible.bundle` rebuilds the complete train chain from one
+`geode_product.crucible.bundle` rebuilds the complete train chain from one
 supervisor-owned attempt directory: request, candidate proposal, contract,
 both evidence envelopes, train KEEP verdict, canonical supervisor record, and
 the persisted intent and receipt for the search-ref CAS. The CAS atomically
@@ -286,7 +286,7 @@ verifies both that witness and the current search ref. A verdict that the
 supervisor downgraded for campaign budget cannot enter a bundle. The serialized
 bundle is a transport summary, not a bearer credential; sealed execution
 rebuilds the chain from the attempt directory itself.
-`plugins.crucible.sealed` then owns the non-adaptive test boundary. It validates
+`geode_product.crucible.sealed` then owns the non-adaptive test boundary. It validates
 the rebuilt bundle and disjoint parent, then records the pack claim, sole
 attempt, attested evidence, and terminal decision below Git's common directory.
 The evaluator is invoked only after that global attempt burn. Once raw hashes
@@ -299,7 +299,7 @@ advance only `refs/crucible/eligible/*` through the recoverable ref journal; the
 resulting decision still says `release_authority=none` and cannot move a branch,
 tag, release, `main`, or `develop`.
 
-`plugins.crucible.supervisor` is the separate outer loop. It owns one frozen
+`geode_product.crucible.supervisor` is the separate outer loop. It owns one frozen
 train plan and creates a disposable, no-remote Git checkout from its private
 search ref. The producer can commit inside that checkout but cannot see the
 authority repository's refs. The supervisor imports the resulting commit only
@@ -325,23 +325,14 @@ buy another stochastic train-gate ticket; it receives a zero-evaluator-call
 changed measurement or decision identity remains eligible for explicit replay.
 
 The shipped live path keeps the treatment smaller than the evaluator. The only
-candidate-owned file is `plugins/benchmark_harness/tau2_agent_policy.md`.
+candidate-owned file is `geode_product/benchmark_harness/tau2_agent_policy.md`.
 That file is the mutable treatment—the analogue of autoresearch's `train.py`—
-not the search program. `plugins/crucible/program.md` is the tracked central
-program for experimentation, constraints, preferences, setup, and the closed
-dynamic-feedback channel. `codex_kg` renders only its bounded
-`<candidate_program>` section; executable validators remain authoritative.
-`plugins.crucible.producers.codex_kg` asks GPT-5.4 subscription for one small
-edit using closed failure codes and a bounded architecture-graph slice; it
-cannot read raw tasks, trajectories, evaluator artifacts, or sealed state.
-The graph slice is committed beside the producer and attests every referenced
-source file by content hash. The producer validates all nodes and edges before
-selecting the candidate surface and its one-hop neighbors. The shipped graph,
-objective, model, and reasoning effort are therefore source defaults. The
-measured campaign omits graph, objective, model, and effort environment
-overrides, keeping those controls in the candidate's parent revision rather
-than an unhashed shell value.
-`scripts/eval/crucible_tau2_evaluator.py` and `plugins.crucible.tau2_live` own
+not the search program. Candidate generation is supplied explicitly through
+the frozen `producer_command`; the retired built-in Codex CLI producer is not
+part of the runtime. Executable validators remain authoritative, and external
+producers cannot read raw tasks, trajectories, evaluator artifacts, or sealed
+state.
+`scripts/eval/crucible_tau2_evaluator.py` and `geode_product.crucible.tau2_live` own
 the paired baseline/candidate execution. They derive the complete argv from the
 contract, isolate per-arm state, retain raw evidence, and compute trace checks
 separately from reward. The `crucible_user` registry identity uses the same
@@ -402,7 +393,7 @@ The packaged operational surface is:
 ```bash
 # Derive opaque task/content/family identities from the frozen harness task
 # file. The emitted manifest contains no scenario or oracle text.
-uv run python -m plugins.crucible tau2-task-pack tasks.json \
+uv run python -m geode_product.crucible tau2-task-pack tasks.json \
   --task-id 17 --task-id 42 \
   --task-split split_tasks.json --task-split-name base \
   --output train.pack.json
@@ -410,25 +401,25 @@ uv run python -m plugins.crucible tau2-task-pack tasks.json \
 # Audit an opaque train or hidden pack without exposing its task contents.
 # promotion.json is the exact frozen PromotionRule object; power-spec.json
 # binds every modeled scenario to a verified pilot artifact.
-uv run python -m plugins.crucible power-audit hidden.pack.json \
+uv run python -m geode_product.crucible power-audit hidden.pack.json \
   --promotion promotion.json --spec power-spec.json \
   --output hidden.power.json
 
 # Normalize each finalized arm. Usage and safety/tool checks are independent
 # manifests; reward is not allowed to imply those checks.
-uv run python -m plugins.crucible tau2-usage baseline.results.json \
+uv run python -m geode_product.crucible tau2-usage baseline.results.json \
   --output baseline.usage.json
-uv run python -m plugins.crucible tau2-evidence experiment.json \
+uv run python -m geode_product.crucible tau2-evidence experiment.json \
   --arm baseline --results baseline.results.json \
   --snapshot baseline.snapshot.json --usage baseline.usage.json \
   --checks baseline.checks.json --output baseline.evidence.json
 
-uv run python -m plugins.crucible score experiment.json \
+uv run python -m geode_product.crucible score experiment.json \
   --baseline baseline.evidence.json --candidate candidate.evidence.json \
   --output verdict.json
 
 # Bind the current train KEEP only from its complete supervisor attempt.
-uv run python -m plugins.crucible bundle . \
+uv run python -m geode_product.crucible bundle . \
   ../crucible-runs/verify-claims-01/attempts/0001-abc123 \
   --output promotion.bundle.json
 ```
@@ -443,8 +434,8 @@ The independent train loop is started from one JSON configuration:
   "repository": ".",
   "harness_root": "../frozen-harness",
   "state_dir": "../crucible-runs/verify-claims-01",
-  "allowed_surfaces": ["plugins/benchmark_harness/tau2_agent_policy.md"],
-  "producer_command": ["python", "-m", "plugins.crucible.producers.codex_kg"],
+  "allowed_surfaces": ["geode_product/benchmark_harness/tau2_agent_policy.md"],
+  "producer_command": ["/absolute/path/to/candidate-producer"],
   "evaluator_entrypoint": "scripts/eval/crucible_tau2_evaluator.py",
   "producer_environment": ["CODEX_HOME"],
   "evaluator_environment": ["CODEX_HOME", "CRUCIBLE_TAU2_HARNESS_ROOT"],
@@ -470,8 +461,8 @@ The independent train loop is started from one JSON configuration:
     "assay_config": {"schema": "<assay-schema>"},
     "evaluator_paths": [
       "scripts/eval/crucible_tau2_evaluator.py",
-      "plugins/benchmark_harness/tau2_geode_agent.py",
-      "plugins/crucible"
+      "geode_product/benchmark_harness/tau2_geode_agent.py",
+      "geode_product/crucible"
     ],
     "promotion": {
       "method": "paired_bootstrap.v2",
@@ -504,7 +495,7 @@ The independent train loop is started from one JSON configuration:
 ```
 
 ```bash
-uv run python -m plugins.crucible loop supervisor.json
+uv run python -m geode_product.crucible loop supervisor.json
 ```
 
 The producer process starts in the supervisor-created disposable checkout. Its
@@ -634,7 +625,7 @@ a current core promotion.
    worst run fits.
 3. Start from the current search-head commit. This is not a core-promotion ref.
 4. Choose one causal failure signature and one mutation surface through the
-   tracked `plugins/crucible/program.md` contract.
+   frozen producer contract.
 5. Make the smallest change that could alter that signature.
 6. Commit the candidate. Never measure a dirty worktree.
 7. Freeze `experiment.json`, including evaluator/harness content hashes, task

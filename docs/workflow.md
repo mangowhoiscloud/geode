@@ -98,9 +98,9 @@ radius:
 
 ```bash
 uv run pytest -q tests/<targeted_path>.py
-uv run ruff check core/ tests/ plugins/ scripts/
-uv run ruff format --check core/ tests/ plugins/ scripts/
-uv run mypy core/ plugins/
+uv run ruff check core/ geode_product/ plugins/ tests/ scripts/
+uv run ruff format --check core/ geode_product/ plugins/ tests/ scripts/
+uv run mypy core/ geode_product/ plugins/
 uv run lint-imports
 git diff --check
 ```

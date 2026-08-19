@@ -123,7 +123,7 @@ def test_context_management_dims_present_in_axis_tiers() -> None:
 def test_seed_select_points_at_hierarchical_tree() -> None:
     from core.self_improving.train import SEED_SELECT
 
-    assert SEED_SELECT == "plugins/petri_audit/seeds"
+    assert SEED_SELECT == "bundled"
 
 
 # ---------------------------------------------------------------------------
@@ -457,7 +457,7 @@ def test_resolve_seed_select_returns_default_when_env_unset(
     """Unset AUTORESEARCH_SEED_SELECT falls back to the hierarchical default."""
     monkeypatch.delenv("AUTORESEARCH_SEED_SELECT", raising=False)
     monkeypatch.setattr(ledger, "SELF_IMPROVING_LOOP_HOME", tmp_path / "sil")
-    assert auto_train._resolve_seed_select() == "plugins/petri_audit/seeds"
+    assert auto_train._resolve_seed_select() == "bundled"
 
 
 def test_resolve_seed_select_honors_env_override(
@@ -477,7 +477,7 @@ def test_resolve_seed_select_treats_whitespace_as_unset(
     """Whitespace-only env value is treated as unset to avoid breaking argv."""
     monkeypatch.setenv("AUTORESEARCH_SEED_SELECT", "   ")
     monkeypatch.setattr(ledger, "SELF_IMPROVING_LOOP_HOME", tmp_path / "sil")
-    assert auto_train._resolve_seed_select() == "plugins/petri_audit/seeds"
+    assert auto_train._resolve_seed_select() == "bundled"
 
 
 # ---------------------------------------------------------------------------

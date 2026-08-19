@@ -152,10 +152,19 @@ async def _restore_gateway_loop(loop: Any, state: Any) -> None:
         await loop.update_model_async(state.model)
 
 
-def serve(  # noqa: PLR0915
+def serve(
     poll_interval: float = typer.Option(
         3.0, "--poll", "-p", help="Gateway poll interval (seconds)"
     ),
+) -> None:
+    """Run the kernel daemon with kernel-only composition."""
+    _serve(poll_interval)
+
+
+def _serve(  # noqa: PLR0915
+    poll_interval: float,
+    *,
+    services_builder: Callable[..., Any] | None = None,
 ) -> None:
     """Run the GEODE daemon for CLI IPC and optional external channels."""
     import signal
@@ -232,7 +241,12 @@ def serve(  # noqa: PLR0915
     )
 
     # Build SharedServices for serve mode (same factory as REPL)
-    from core.server.supervised.services import SessionMode, build_shared_services
+    from core.server.supervised.services import SessionMode
+
+    if services_builder is None:
+        from core.server.supervised.services import build_shared_services
+
+        services_builder = build_shared_services
 
     # ``0`` means unlimited rounds; the per-message gateway time budget remains
     # the active-run safety net. Fallback ``0`` preserves legacy objects.
@@ -240,7 +254,7 @@ def serve(  # noqa: PLR0915
     _gw_time_budget = (
         gateway.gateway_time_budget_s if hasattr(gateway, "gateway_time_budget_s") else 120.0
     )
-    _gw_services = build_shared_services(
+    _gw_services = services_builder(
         mcp_manager=runtime.mcp_manager,
         skill_registry=runtime.skill_registry,
         hook_system=runtime.hooks,
@@ -630,6 +644,10 @@ def serve(  # noqa: PLR0915
                 log.debug("Runtime shutdown error", exc_info=True)
         console.print()
         console.print("  [dim]GEODE daemon stopped.[/dim]")
+
+
+# Public outer-composition seam; ``_serve`` remains for kernel compatibility.
+run_serve = _serve
 
 
 def _build_runtime_for_serve() -> Any:

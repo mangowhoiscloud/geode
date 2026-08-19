@@ -8,7 +8,7 @@ import pytest
 
 
 def test_eval_dspy_optimize_handler_registered() -> None:
-    from core.cli.tool_handlers.audit import _build_audit_handlers
+    from geode_product.tool_handlers import _build_audit_handlers
 
     handlers = _build_audit_handlers()
     assert "eval_dspy_optimize" in handlers
@@ -16,7 +16,7 @@ def test_eval_dspy_optimize_handler_registered() -> None:
 
 
 def test_eval_dspy_optimize_missing_args_returns_error() -> None:
-    from core.cli.tool_handlers.audit import _build_audit_handlers
+    from geode_product.tool_handlers import _build_audit_handlers
 
     handlers = _build_audit_handlers()
     result = handlers["eval_dspy_optimize"]()
@@ -25,7 +25,7 @@ def test_eval_dspy_optimize_missing_args_returns_error() -> None:
 
 
 def test_eval_dspy_optimize_same_provider_returns_error(tmp_path: Path) -> None:
-    from core.cli.tool_handlers.audit import _build_audit_handlers
+    from geode_product.tool_handlers import _build_audit_handlers
 
     log = tmp_path / "fake.eval"
     log.write_bytes(b"")
@@ -41,7 +41,7 @@ def test_eval_dspy_optimize_same_provider_returns_error(tmp_path: Path) -> None:
 
 
 def test_eval_dspy_optimize_dry_run_happy_path(tmp_path: Path) -> None:
-    from core.cli.tool_handlers.audit import _build_audit_handlers
+    from geode_product.tool_handlers import _build_audit_handlers
 
     log = tmp_path / "fake.eval"
     log.write_bytes(b"")
@@ -91,9 +91,9 @@ def test_eval_dspy_optimize_in_definitions_json() -> None:
 
 def test_eval_dspy_optimize_in_aggregate_handlers() -> None:
     """`_build_tool_handlers` must expose eval_dspy_optimize."""
-    from core.cli.tool_handlers import _build_tool_handlers
+    from geode_product.tool_handlers import build_tool_handlers
 
-    handlers = _build_tool_handlers(verbose=False)
+    handlers = build_tool_handlers(verbose=False)
     assert "eval_dspy_optimize" in handlers
 
 
@@ -121,13 +121,13 @@ def test_eval_dspy_optimize_in_aggregate_handlers() -> None:
     ],
 )
 def test_provider_of(model_id: str, expected: str) -> None:
-    from plugins.petri_audit.models import provider_of
+    from geode_product.petri_audit.models import provider_of
 
     assert provider_of(model_id) == expected
 
 
 def test_same_provider_unknown_returns_false() -> None:
-    from plugins.petri_audit.models import same_provider
+    from geode_product.petri_audit.models import same_provider
 
     # Two unknown ids must NOT count as same-provider.
     assert same_provider("mystery-a", "mystery-b") is False
@@ -135,7 +135,7 @@ def test_same_provider_unknown_returns_false() -> None:
 
 
 def test_same_provider_cross_provider_pairs() -> None:
-    from plugins.petri_audit.models import same_provider
+    from geode_product.petri_audit.models import same_provider
 
     assert same_provider("claude-haiku-4-5-20251001", "gpt-5.5") is False
     assert same_provider("claude-opus-4-7", "claude-haiku-4-5-20251001") is True

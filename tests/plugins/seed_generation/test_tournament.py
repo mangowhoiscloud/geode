@@ -1,11 +1,11 @@
-"""Tests for ``plugins.seed_generation.tournament`` — pure Elo math."""
+"""Tests for ``geode_product.seed_generation.tournament`` — pure Elo math."""
 
 from __future__ import annotations
 
 import random
 
 import pytest
-from plugins.seed_generation.tournament import (
+from geode_product.seed_generation.tournament import (
     BLEND_DIFFICULTY_WEIGHT_ENV,
     BLEND_ELO_WEIGHT_ENV,
     DEFAULT_DIFFICULTY_WEIGHT,

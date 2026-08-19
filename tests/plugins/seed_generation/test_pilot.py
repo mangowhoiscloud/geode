@@ -1,8 +1,8 @@
-"""Tests for ``plugins.seed_generation.agents.pilot`` (direct-audit Pilot).
+"""Tests for ``geode_product.seed_generation.agents.pilot`` (direct-audit Pilot).
 
 PR-PILOT-UNIFY-DIM-EXTRACT (2026-06-04) — the Pilot no longer spawns an LLM
 sub-agent that reformats audit scores into JSON. It calls
-``plugins.petri_audit.runner.run_audit`` directly per candidate and reads the
+``geode_product.petri_audit.runner.run_audit`` directly per candidate and reads the
 archived ``.eval`` with ``core.audit.dim_extractor.extract_dim_aggregates`` —
 the SAME authoritative converter + raw-Petri scale the campaign
 (``core/self_improving/train.py``) uses.
@@ -28,15 +28,15 @@ import asyncio
 from pathlib import Path
 from typing import Any
 
-import plugins.petri_audit.runner as petri_runner
+import geode_product.petri_audit.runner as petri_runner
 import pytest
 from core.audit import dim_extractor
-from plugins.seed_generation.agents.pilot import Pilot
-from plugins.seed_generation.orchestrator import PipelineState
+from geode_product.seed_generation.agents.pilot import Pilot
+from geode_product.seed_generation.orchestrator import PipelineState
 
 
 class _FakeReport:
-    """Minimal stand-in for ``plugins.petri_audit.runner.AuditReport``."""
+    """Minimal stand-in for ``geode_product.petri_audit.runner.AuditReport``."""
 
     def __init__(
         self,

@@ -1,11 +1,11 @@
-"""Tests for ``plugins.seed_generation.pre_flight``."""
+"""Tests for ``geode_product.seed_generation.pre_flight``."""
 
 from __future__ import annotations
 
 from unittest.mock import patch
 
-from plugins.seed_generation.picker import PickerResult, RoleBinding, VoterBinding
-from plugins.seed_generation.pre_flight import (
+from geode_product.seed_generation.picker import PickerResult, RoleBinding, VoterBinding
+from geode_product.seed_generation.pre_flight import (
     PreFlightIssue,
     PreFlightReport,
     check_auth,
@@ -45,21 +45,21 @@ def _good_picker() -> PickerResult:
 def test_check_auth_all_present() -> None:
     """When every credential probe returns True, no issues are reported."""
     picker = _good_picker()
-    with patch("plugins.seed_generation.pre_flight._credential_present", return_value=True):
+    with patch("geode_product.seed_generation.pre_flight._credential_present", return_value=True):
         issues = check_auth(picker)
     assert issues == []
 
 
 def test_check_auth_missing_api_key_errors() -> None:
     picker = _good_picker()
-    with patch("plugins.seed_generation.pre_flight._credential_present", return_value=False):
+    with patch("geode_product.seed_generation.pre_flight._credential_present", return_value=False):
         issues = check_auth(picker)
     assert any(i.code == "auth.unreachable" and i.severity == "error" for i in issues)
 
 
 def test_check_auth_provides_fix_hint() -> None:
     picker = _good_picker()
-    with patch("plugins.seed_generation.pre_flight._credential_present", return_value=False):
+    with patch("geode_product.seed_generation.pre_flight._credential_present", return_value=False):
         issues = check_auth(picker)
     for issue in issues:
         assert issue.fix
@@ -78,7 +78,7 @@ def test_check_auth_probes_every_resolved_binding() -> None:
         probed.append((provider, source))
         return True
 
-    with patch("plugins.seed_generation.pre_flight._credential_present", side_effect=_probe):
+    with patch("geode_product.seed_generation.pre_flight._credential_present", side_effect=_probe):
         check_auth(picker)
     # _good_picker has 2 role bindings + 3 voters all on (anthropic|openai, api_key);
     # dedup collapses the repeats, so the unique probed set is exactly those pairs.
@@ -113,7 +113,7 @@ def test_check_auth_dedups_repeated_pairs() -> None:
         probed.append((provider, source))
         return True
 
-    with patch("plugins.seed_generation.pre_flight._credential_present", side_effect=_probe):
+    with patch("geode_product.seed_generation.pre_flight._credential_present", side_effect=_probe):
         check_auth(picker)
     assert probed.count(("anthropic", "api_key")) == 1
 
@@ -141,7 +141,7 @@ def test_check_diversity_collapsed_panel_errors() -> None:
 
 def test_run_pre_flight_aggregates_all_checks() -> None:
     picker = _good_picker()
-    with patch("plugins.seed_generation.pre_flight._credential_present", return_value=True):
+    with patch("geode_product.seed_generation.pre_flight._credential_present", return_value=True):
         report = run_pre_flight(picker)
     assert isinstance(report, PreFlightReport)
     assert not report.has_errors
@@ -149,7 +149,7 @@ def test_run_pre_flight_aggregates_all_checks() -> None:
 
 def test_run_pre_flight_surfaces_errors() -> None:
     picker = _good_picker()
-    with patch("plugins.seed_generation.pre_flight._credential_present", return_value=False):
+    with patch("geode_product.seed_generation.pre_flight._credential_present", return_value=False):
         report = run_pre_flight(picker)
     assert report.has_errors
 

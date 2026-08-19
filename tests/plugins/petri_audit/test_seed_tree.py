@@ -1,11 +1,11 @@
-"""Tests for ``plugins.petri_audit.seed_tree`` — hierarchical → flat stage."""
+"""Tests for ``geode_product.petri_audit.seed_tree`` — hierarchical → flat stage."""
 
 from __future__ import annotations
 
 from pathlib import Path
 from unittest.mock import patch
 
-from plugins.petri_audit.seed_tree import (
+from geode_product.petri_audit.seed_tree import (
     flatten_for_inspect_petri,
     is_hierarchical_seed_tree,
 )
@@ -59,7 +59,7 @@ def test_flatten_for_inspect_petri_hierarchical_creates_stage(
 
     stage_root = tmp_path / "stage_root"
     # Redirect GEODE_HOME to a tmp path so the test doesn't write to ~/.geode/
-    with patch("plugins.petri_audit.seed_tree.GEODE_HOME", stage_root):
+    with patch("geode_product.petri_audit.seed_tree.GEODE_HOME", stage_root):
         out = flatten_for_inspect_petri(tree)
 
     assert out.is_dir()
@@ -81,7 +81,7 @@ def test_flatten_for_inspect_petri_idempotent(tmp_path: Path, monkeypatch: objec
     (tree / "info").mkdir()
 
     stage_root = tmp_path / "stage_root"
-    with patch("plugins.petri_audit.seed_tree.GEODE_HOME", stage_root):
+    with patch("geode_product.petri_audit.seed_tree.GEODE_HOME", stage_root):
         out1 = flatten_for_inspect_petri(tree)
         out2 = flatten_for_inspect_petri(tree)
     assert out1 == out2
@@ -99,7 +99,7 @@ def test_flatten_for_inspect_petri_symlink_content_preserved(
     (tree / "info").mkdir()
 
     stage_root = tmp_path / "stage_root"
-    with patch("plugins.petri_audit.seed_tree.GEODE_HOME", stage_root):
+    with patch("geode_product.petri_audit.seed_tree.GEODE_HOME", stage_root):
         out = flatten_for_inspect_petri(tree)
     target = out / "critical__broken_tool_use__01_base.md"
     assert target.read_text(encoding="utf-8") == seed_body
@@ -115,7 +115,7 @@ def test_flatten_single_md_stages_n_copies(tmp_path: Path, monkeypatch: object) 
     cand = tmp_path / "cand.md"
     cand.write_text("---\nname: c\n---\nscenario body", encoding="utf-8")
     stage_root = tmp_path / "stage_root"
-    with patch("plugins.petri_audit.seed_tree.GEODE_HOME", stage_root):
+    with patch("geode_product.petri_audit.seed_tree.GEODE_HOME", stage_root):
         out = flatten_for_inspect_petri(cand, samples=3)
     assert isinstance(out, Path) and out.is_dir()
     mds = sorted(p.name for p in out.glob("*.md"))
@@ -129,7 +129,7 @@ def test_flatten_single_md_default_one_copy(tmp_path: Path, monkeypatch: object)
     cand = tmp_path / "cand.md"
     cand.write_text("body", encoding="utf-8")
     stage_root = tmp_path / "stage_root"
-    with patch("plugins.petri_audit.seed_tree.GEODE_HOME", stage_root):
+    with patch("geode_product.petri_audit.seed_tree.GEODE_HOME", stage_root):
         out = flatten_for_inspect_petri(cand)  # samples defaults to 1
     assert isinstance(out, Path) and out.is_dir()
     assert [p.name for p in out.glob("*.md")] == ["cand__s1.md"]
@@ -139,7 +139,7 @@ def test_flatten_single_md_idempotent(tmp_path: Path, monkeypatch: object) -> No
     cand = tmp_path / "cand.md"
     cand.write_text("body", encoding="utf-8")
     stage_root = tmp_path / "stage_root"
-    with patch("plugins.petri_audit.seed_tree.GEODE_HOME", stage_root):
+    with patch("geode_product.petri_audit.seed_tree.GEODE_HOME", stage_root):
         out1 = flatten_for_inspect_petri(cand, samples=2)
         out2 = flatten_for_inspect_petri(cand, samples=2)
     assert out1 == out2  # content-addressed → same stage reused
@@ -151,7 +151,7 @@ def test_flatten_single_md_distinct_stage_per_sample_count(
     cand = tmp_path / "cand.md"
     cand.write_text("body", encoding="utf-8")
     stage_root = tmp_path / "stage_root"
-    with patch("plugins.petri_audit.seed_tree.GEODE_HOME", stage_root):
+    with patch("geode_product.petri_audit.seed_tree.GEODE_HOME", stage_root):
         out2 = flatten_for_inspect_petri(cand, samples=2)
         out3 = flatten_for_inspect_petri(cand, samples=3)
     assert out2 != out3  # the copy count is part of the content address

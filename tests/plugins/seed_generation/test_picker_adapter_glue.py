@@ -5,10 +5,10 @@ from __future__ import annotations
 import textwrap
 from pathlib import Path
 
-import plugins.seed_generation.picker as picker_mod
+import geode_product.seed_generation.picker as picker_mod
 import pytest
 from core.llm.adapters.registry import _reset_for_test, bootstrap_builtins
-from plugins.seed_generation.picker import (
+from geode_product.seed_generation.picker import (
     RoleBinding,
     binding_to_adapter_source,
     load_user_overrides,
@@ -190,7 +190,7 @@ def test_explicit_path_bypasses_sot_resolution(tmp_path: Path) -> None:
 def test_malformed_config_toml_falls_through(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog
 ) -> None:
-    """An unparseable config.toml does not crash the picker — fall through."""
+    """An unparsable config.toml does not crash the picker — fall through."""
     config = tmp_path / "config.toml"
     config.write_text("not = valid = toml\n", encoding="utf-8")
     monkeypatch.setattr(picker_mod, "GLOBAL_CONFIG_TOML", config)

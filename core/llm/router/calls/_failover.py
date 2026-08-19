@@ -149,7 +149,7 @@ async def call_with_failover(
                 # ``resume`` succeeded ~20 min later once the pool
                 # replenished.
                 try:
-                    from plugins.petri_audit.claude_cli_provider import (
+                    from core.llm.adapters._claude_cli_runtime import (
                         ClaudeCliTransientUpstreamError,
                     )
 

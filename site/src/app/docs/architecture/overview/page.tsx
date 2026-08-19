@@ -33,7 +33,7 @@ export default function Page() {
             <p>
               진입점은 둘입니다. <code>geode</code>(Typer CLI,{" "}
               <code>core/cli</code>)와 <code>geode-mcp</code>(MCP 서버,{" "}
-              <code>core/mcp_server.py</code>). 어느 쪽으로 들어와도 요청은
+              <code>geode_product/mcp_server.py</code>). 어느 쪽으로 들어와도 요청은
               아래 계층들을 같은 순서로 지납니다. 흐름 관점의 추적은{" "}
               <a href="/geode/docs/overview/how-it-runs">작업 처리 흐름</a>에
               있고, 이 페이지는 경계 관점입니다.
@@ -185,7 +185,7 @@ export default function Page() {
             <p>
               There are two entry points: <code>geode</code> (the Typer CLI,{" "}
               <code>core/cli</code>) and <code>geode-mcp</code> (the MCP
-              server, <code>core/mcp_server.py</code>). Whichever door a
+              server, <code>geode_product/mcp_server.py</code>). Whichever door a
               request enters, it passes the layers below in the same order.{" "}
               <a href="/geode/docs/overview/how-it-runs">How GEODE runs a task</a>{" "}
               traces the flow; this page draws the boundaries.

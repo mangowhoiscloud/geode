@@ -1,4 +1,4 @@
-"""Unit tests for :mod:`plugins.seed_generation.resume`.
+"""Unit tests for :mod:`geode_product.seed_generation.resume`.
 
 PR-CHECKPOINT-RESUME-TIMEBUDGET (2026-05-25, S5) — pin the hydration
 + next-phase contract so a future change to ``PipelineState`` or
@@ -11,9 +11,9 @@ import random
 from pathlib import Path
 
 import pytest
-from plugins.seed_generation.checkpointer import write_checkpoint
-from plugins.seed_generation.orchestrator import _PHASE_ORDER
-from plugins.seed_generation.resume import (
+from geode_product.seed_generation.checkpointer import write_checkpoint
+from geode_product.seed_generation.orchestrator import _PHASE_ORDER
+from geode_product.seed_generation.resume import (
     ResumeError,
     hydrate_state,
     load_ranker_partial_resume,
@@ -158,7 +158,7 @@ def test_state_to_json_includes_g4_attribution_field() -> None:
     """
     import json as _json
 
-    from plugins.seed_generation.orchestrator import PipelineState, _state_to_json
+    from geode_product.seed_generation.orchestrator import PipelineState, _state_to_json
 
     state = PipelineState(
         run_id="gen1-broken_tool_use",
@@ -181,8 +181,8 @@ def test_state_to_json_round_trip_through_hydrate(tmp_path: Path) -> None:
     """
     import json as _json
 
-    from plugins.seed_generation.checkpointer import write_checkpoint
-    from plugins.seed_generation.orchestrator import PipelineState, _state_to_json
+    from geode_product.seed_generation.checkpointer import write_checkpoint
+    from geode_product.seed_generation.orchestrator import PipelineState, _state_to_json
 
     original = PipelineState(
         run_id="gen1-broken_tool_use",
@@ -221,8 +221,8 @@ def test_resolve_resume_target_returns_state_and_phase(tmp_path: Path) -> None:
 
 
 def test_load_ranker_partial_resume_filters_completed_prefix(tmp_path: Path) -> None:
-    from plugins.seed_generation.checkpointer import write_partial_ranker_checkpoint
-    from plugins.seed_generation.tournament import (
+    from geode_product.seed_generation.checkpointer import write_partial_ranker_checkpoint
+    from geode_product.seed_generation.tournament import (
         MatchOutcome,
         apply_match,
         initial_ratings,
@@ -274,8 +274,8 @@ def test_load_ranker_partial_resume_filters_completed_prefix(tmp_path: Path) -> 
 
 
 def test_load_ranker_partial_resume_ignores_non_prefix_checkpoint(tmp_path: Path) -> None:
-    from plugins.seed_generation.checkpointer import write_partial_ranker_checkpoint
-    from plugins.seed_generation.tournament import initial_ratings, plan_matches
+    from geode_product.seed_generation.checkpointer import write_partial_ranker_checkpoint
+    from geode_product.seed_generation.tournament import initial_ratings, plan_matches
 
     candidate_ids = ["c-1", "c-2", "c-3", "c-4"]
     match_plan = plan_matches(candidate_ids, rng=random.Random(3))

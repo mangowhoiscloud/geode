@@ -25,7 +25,7 @@ def test_system_index_renders_the_generated_architecture_snapshot() -> None:
         "architectureBaseline.hook_events.count",
         "architectureBaseline.built_in_adapters.count",
         "architectureBaseline.context_vars.count",
-        "architectureBaseline.core_to_plugins_imports.site_count",
+        "architectureBaseline.core_to_product_imports.site_count",
         "architectureBaseline.import_linter.ignored_edge_count",
     ):
         assert selector in source

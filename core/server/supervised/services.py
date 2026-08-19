@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
@@ -119,6 +120,8 @@ class SharedServices:
     _owns_hook_system: bool = False
     lane_queue: Any = None  # Unified LaneQueue — single concurrency gate
     tool_handlers: dict[str, Any] = field(default_factory=dict)
+    worker_module: str = "core.agent.worker"
+    agent_search_dirs: tuple[Path, ...] = ()
 
     # v0.82.0 — Model + provider resolved fresh per session, NOT frozen at
     # bootstrap. The previous shape (`_model: str = ""` cached at
@@ -316,7 +319,11 @@ class SharedServices:
         agent_registry = self._build_agent_registry()
 
         return SubAgentManager(
-            IsolatedRunner(hooks=self.hook_system, lane=global_lane),
+            IsolatedRunner(
+                hooks=self.hook_system,
+                lane=global_lane,
+                worker_module=self.worker_module,
+            ),
             action_handlers=self.tool_handlers,
             agent_registry=agent_registry,
             hooks=self.hook_system,
@@ -328,7 +335,7 @@ class SharedServices:
         )
 
     def _build_agent_registry(self) -> Any:
-        """Build AgentRegistry with defaults + .claude/agents/ + plugins/*/agents/.
+        """Build AgentRegistry with defaults plus explicitly configured directories.
 
         Defaults (research_assistant, data_analyst, web_researcher) load
         first; then ``.claude/agents/`` files are loaded per-file so a
@@ -345,14 +352,9 @@ class SharedServices:
         ``$HOME``), which made the entire S2-wire dispatch a no-op in
         common operator deployments.
 
-        CSP-9 (2026-05-22) — extend the search to plugin-shipped agent
-        definitions at ``plugins/*/agents/*.md``. Operator overrides at
-        ``.claude/agents/`` still take precedence (same-basename dedup,
-        first-wins) so a plugin's ``critic.md`` can be replaced by
-        dropping a tweaked ``critic.md`` into ``.claude/agents/``. This
-        keeps seed-generation prompts (and any future plugin's agent
-        prompts) bundled with the plugin package rather than scattered
-        under the project-wide override directory.
+        Product-owned directories are supplied by the outer composition.
+        Operator overrides at ``.claude/agents/`` stay first so same-name
+        definitions use the existing first-wins rule.
         """
         from core.paths import get_project_root
         from core.skills.agents import AgentRegistry, SubagentLoader
@@ -360,12 +362,7 @@ class SharedServices:
         registry = AgentRegistry()
         registry.load_defaults()
         project_root = get_project_root()
-        agent_search_dirs: list[Path] = [project_root / ".claude" / "agents"]
-        plugins_root = project_root / "plugins"
-        if plugins_root.exists():
-            for plugin_agents in sorted(plugins_root.glob("*/agents")):
-                if plugin_agents.is_dir():
-                    agent_search_dirs.append(plugin_agents)
+        agent_search_dirs = [project_root / ".claude" / "agents", *self.agent_search_dirs]
         loader = SubagentLoader(agents_dirs=agent_search_dirs)
         discovered = loader.discover()
         if not discovered:
@@ -427,6 +424,9 @@ def build_shared_services(
     middleware_registry: Any = None,
     lane_queue: Any = None,
     verbose: bool = False,
+    tool_handler_builder: Callable[..., dict[str, Any]] | None = None,
+    worker_module: str = "core.agent.worker",
+    agent_search_dirs: Sequence[Path] = (),
 ) -> SharedServices:
     """Construct SharedServices with resolved config values.
 
@@ -469,9 +469,11 @@ def build_shared_services(
     )
 
     # Build tool handlers — no agentic_ref (uses ContextVar instead)
-    from core.cli.tool_handlers import _build_tool_handlers
+    if tool_handler_builder is None:
+        from core.cli.tool_handlers import _build_tool_handlers
 
-    tool_handlers = _build_tool_handlers(
+        tool_handler_builder = _build_tool_handlers
+    tool_handlers = tool_handler_builder(
         verbose=verbose,
         mcp_manager=mcp_manager,
         skill_registry=skill_registry,
@@ -502,5 +504,7 @@ def build_shared_services(
         _owns_hook_system=owns_hook_system,
         lane_queue=lane_queue,
         tool_handlers=tool_handlers,
+        worker_module=worker_module,
+        agent_search_dirs=tuple(agent_search_dirs),
         _cost_budget=cost_budget,
     )

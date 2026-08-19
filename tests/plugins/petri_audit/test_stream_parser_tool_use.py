@@ -46,7 +46,7 @@ def _stop(index: int) -> dict[str, Any]:
 
 
 def test_accumulator_assembles_simple_json() -> None:
-    from plugins.petri_audit.mcp_bridge.stream_parser_ext import ToolUseAccumulator
+    from geode_product.petri_audit.mcp_bridge.stream_parser_ext import ToolUseAccumulator
 
     acc = ToolUseAccumulator(index=0, id="tu_1", name="send_message")
     acc.partial_json_parts = ['{"messa', 'ge":', ' "hi"}']
@@ -56,7 +56,7 @@ def test_accumulator_assembles_simple_json() -> None:
 
 
 def test_accumulator_empty_partials_returns_empty_dict() -> None:
-    from plugins.petri_audit.mcp_bridge.stream_parser_ext import ToolUseAccumulator
+    from geode_product.petri_audit.mcp_bridge.stream_parser_ext import ToolUseAccumulator
 
     acc = ToolUseAccumulator(index=0, id="tu_1", name="send_message")
     args, err = acc.assemble_arguments()
@@ -65,7 +65,7 @@ def test_accumulator_empty_partials_returns_empty_dict() -> None:
 
 
 def test_accumulator_uses_initial_input_when_no_deltas() -> None:
-    from plugins.petri_audit.mcp_bridge.stream_parser_ext import ToolUseAccumulator
+    from geode_product.petri_audit.mcp_bridge.stream_parser_ext import ToolUseAccumulator
 
     acc = ToolUseAccumulator(index=0, id="tu_1", name="send_message", initial_input={"k": "v"})
     args, err = acc.assemble_arguments()
@@ -74,7 +74,7 @@ def test_accumulator_uses_initial_input_when_no_deltas() -> None:
 
 
 def test_accumulator_malformed_sets_parse_error() -> None:
-    from plugins.petri_audit.mcp_bridge.stream_parser_ext import ToolUseAccumulator
+    from geode_product.petri_audit.mcp_bridge.stream_parser_ext import ToolUseAccumulator
 
     acc = ToolUseAccumulator(index=0, id="tu_1", name="send_message")
     acc.partial_json_parts = ["{not json"]
@@ -85,7 +85,7 @@ def test_accumulator_malformed_sets_parse_error() -> None:
 
 
 def test_accumulator_decoded_non_object_sets_parse_error() -> None:
-    from plugins.petri_audit.mcp_bridge.stream_parser_ext import ToolUseAccumulator
+    from geode_product.petri_audit.mcp_bridge.stream_parser_ext import ToolUseAccumulator
 
     acc = ToolUseAccumulator(index=0, id="tu_1", name="send_message")
     acc.partial_json_parts = ["42"]
@@ -96,7 +96,7 @@ def test_accumulator_decoded_non_object_sets_parse_error() -> None:
 
 
 def test_accumulator_whitespace_only_partials_returns_empty() -> None:
-    from plugins.petri_audit.mcp_bridge.stream_parser_ext import ToolUseAccumulator
+    from geode_product.petri_audit.mcp_bridge.stream_parser_ext import ToolUseAccumulator
 
     acc = ToolUseAccumulator(index=0, id="tu_1", name="send_message")
     acc.partial_json_parts = ["  ", "\n"]
@@ -111,7 +111,7 @@ def test_accumulator_whitespace_only_partials_returns_empty() -> None:
 
 
 def test_extract_single_tool_call_via_deltas() -> None:
-    from plugins.petri_audit.mcp_bridge.stream_parser_ext import extract_tool_calls
+    from geode_product.petri_audit.mcp_bridge.stream_parser_ext import extract_tool_calls
 
     events = [
         _start(0, id="tu_1", name="send_message"),
@@ -128,7 +128,7 @@ def test_extract_single_tool_call_via_deltas() -> None:
 
 
 def test_extract_strips_mcp_prefix_when_server_name_given() -> None:
-    from plugins.petri_audit.mcp_bridge.stream_parser_ext import extract_tool_calls
+    from geode_product.petri_audit.mcp_bridge.stream_parser_ext import extract_tool_calls
 
     events = [
         _start(0, id="tu_1", name="mcp__bridge__send_message"),
@@ -140,7 +140,7 @@ def test_extract_strips_mcp_prefix_when_server_name_given() -> None:
 
 
 def test_extract_passthrough_when_no_server_name() -> None:
-    from plugins.petri_audit.mcp_bridge.stream_parser_ext import extract_tool_calls
+    from geode_product.petri_audit.mcp_bridge.stream_parser_ext import extract_tool_calls
 
     events = [
         _start(0, id="tu_1", name="mcp__bridge__send_message"),
@@ -152,7 +152,7 @@ def test_extract_passthrough_when_no_server_name() -> None:
 
 
 def test_extract_falls_back_to_initial_input_dict() -> None:
-    from plugins.petri_audit.mcp_bridge.stream_parser_ext import extract_tool_calls
+    from geode_product.petri_audit.mcp_bridge.stream_parser_ext import extract_tool_calls
 
     events = [
         _start(0, id="tu_1", name="send_message", input={"body": "ohai"}),
@@ -168,7 +168,7 @@ def test_extract_falls_back_to_initial_input_dict() -> None:
 
 
 def test_extract_two_parallel_tool_calls_preserves_order() -> None:
-    from plugins.petri_audit.mcp_bridge.stream_parser_ext import extract_tool_calls
+    from geode_product.petri_audit.mcp_bridge.stream_parser_ext import extract_tool_calls
 
     events = [
         _start(0, id="tu_1", name="send_message"),
@@ -185,7 +185,7 @@ def test_extract_two_parallel_tool_calls_preserves_order() -> None:
 
 
 def test_extract_interleaved_deltas_keyed_by_index() -> None:
-    from plugins.petri_audit.mcp_bridge.stream_parser_ext import extract_tool_calls
+    from geode_product.petri_audit.mcp_bridge.stream_parser_ext import extract_tool_calls
 
     events = [
         _start(0, id="tu_1", name="t_a"),
@@ -208,7 +208,7 @@ def test_extract_interleaved_deltas_keyed_by_index() -> None:
 
 
 def test_extract_text_only_events_returns_empty() -> None:
-    from plugins.petri_audit.mcp_bridge.stream_parser_ext import extract_tool_calls
+    from geode_product.petri_audit.mcp_bridge.stream_parser_ext import extract_tool_calls
 
     events = [
         _ev("message_start", message={"id": "m1"}),
@@ -229,7 +229,7 @@ def test_extract_text_only_events_returns_empty() -> None:
 
 
 def test_extract_ignores_unknown_event_types() -> None:
-    from plugins.petri_audit.mcp_bridge.stream_parser_ext import extract_tool_calls
+    from geode_product.petri_audit.mcp_bridge.stream_parser_ext import extract_tool_calls
 
     events = [
         _ev("future_event_type", weird="payload"),
@@ -245,7 +245,7 @@ def test_extract_ignores_unknown_event_types() -> None:
 
 def test_extract_orphan_delta_without_start_is_ignored() -> None:
     """A delta for an unknown index should not blow up — defensive."""
-    from plugins.petri_audit.mcp_bridge.stream_parser_ext import extract_tool_calls
+    from geode_product.petri_audit.mcp_bridge.stream_parser_ext import extract_tool_calls
 
     events = [
         _delta(99, '{"orphan": true}'),
@@ -258,7 +258,7 @@ def test_extract_orphan_delta_without_start_is_ignored() -> None:
 
 
 def test_extract_orphan_stop_without_start_is_ignored() -> None:
-    from plugins.petri_audit.mcp_bridge.stream_parser_ext import extract_tool_calls
+    from geode_product.petri_audit.mcp_bridge.stream_parser_ext import extract_tool_calls
 
     events = [
         _stop(99),  # orphan
@@ -272,7 +272,7 @@ def test_extract_orphan_stop_without_start_is_ignored() -> None:
 
 def test_extract_missing_stop_omits_call() -> None:
     """A tool_use block without content_block_stop is never materialised."""
-    from plugins.petri_audit.mcp_bridge.stream_parser_ext import extract_tool_calls
+    from geode_product.petri_audit.mcp_bridge.stream_parser_ext import extract_tool_calls
 
     events = [
         _start(0, id="tu_1", name="t"),
@@ -287,7 +287,7 @@ def test_extract_wrapped_assistant_event_shape() -> None:
     """Production claude CLI 2.x emits wrapped ``assistant`` events with
     ``message.content[]`` arrays — NOT the flat content_block_* shape.
     Verified live 2026-05-22 against claude 2.1.140."""
-    from plugins.petri_audit.mcp_bridge.stream_parser_ext import extract_tool_calls
+    from geode_product.petri_audit.mcp_bridge.stream_parser_ext import extract_tool_calls
 
     events = [
         _ev("system", subtype="init"),
@@ -317,7 +317,7 @@ def test_extract_wrapped_assistant_event_shape() -> None:
 def test_extract_wrapped_dedupe_repeated_assistant_events() -> None:
     """claude CLI sometimes re-emits the same assistant event as the
     message accumulates; dedupe on tool_use id."""
-    from plugins.petri_audit.mcp_bridge.stream_parser_ext import extract_tool_calls
+    from geode_product.petri_audit.mcp_bridge.stream_parser_ext import extract_tool_calls
 
     wrapped_block = {
         "type": "tool_use",
@@ -335,7 +335,7 @@ def test_extract_wrapped_dedupe_repeated_assistant_events() -> None:
 
 
 def test_extract_wrapped_multiple_tool_uses_in_one_message() -> None:
-    from plugins.petri_audit.mcp_bridge.stream_parser_ext import extract_tool_calls
+    from geode_product.petri_audit.mcp_bridge.stream_parser_ext import extract_tool_calls
 
     events = [
         _ev(
@@ -360,7 +360,7 @@ def test_extract_accepts_dataclass_shape_events() -> None:
     dataclasses, not dicts. The parser must accept both."""
     from dataclasses import dataclass
 
-    from plugins.petri_audit.mcp_bridge.stream_parser_ext import extract_tool_calls
+    from geode_product.petri_audit.mcp_bridge.stream_parser_ext import extract_tool_calls
 
     @dataclass(frozen=True)
     class StreamJsonEvent:

@@ -1,1 +1,1 @@
-"""Candidate producer adapters for the authority-neutral train loop."""
+"""Compatibility package for public Crucible producers."""

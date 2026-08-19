@@ -80,7 +80,7 @@
       {
         "context_name": "conversation_ctx",
         "has_default": true,
-        "line": 274,
+        "line": 271,
         "path": "core/cli/commands/_state.py",
         "symbol": "_conversation_ctx"
       },
@@ -251,166 +251,10 @@
       "path": "core/agent/sub_agent.py"
     }
   },
-  "core_to_plugins_imports": {
-    "file_count": 14,
-    "site_count": 31,
-    "sites": [
-      {
-        "line": 20,
-        "module": "plugins.petri_audit.cli_agreement",
-        "path": "core/cli/__init__.py"
-      },
-      {
-        "line": 21,
-        "module": "plugins.petri_audit.cli_audit",
-        "path": "core/cli/__init__.py"
-      },
-      {
-        "line": 22,
-        "module": "plugins.seed_generation.cli",
-        "path": "core/cli/__init__.py"
-      },
-      {
-        "line": 122,
-        "module": "plugins.petri_audit.user_overrides",
-        "path": "core/cli/commands/config.py"
-      },
-      {
-        "line": 745,
-        "module": "plugins.petri_audit.claude_code_provider",
-        "path": "core/cli/commands/login.py"
-      },
-      {
-        "line": 757,
-        "module": "plugins.petri_audit.codex_provider",
-        "path": "core/cli/commands/login.py"
-      },
-      {
-        "line": 18,
-        "module": "plugins.petri_audit.cli",
-        "path": "core/cli/commands/petri.py"
-      },
-      {
-        "line": 172,
-        "module": "plugins.petri_audit.cli_audit",
-        "path": "core/cli/dispatcher.py"
-      },
-      {
-        "line": 31,
-        "module": "plugins.petri_audit.optimize",
-        "path": "core/cli/tool_handlers/audit.py"
-      },
-      {
-        "line": 36,
-        "module": "plugins.petri_audit.runner",
-        "path": "core/cli/tool_handlers/audit.py"
-      },
-      {
-        "line": 37,
-        "module": "plugins.petri_audit.viz",
-        "path": "core/cli/tool_handlers/audit.py"
-      },
-      {
-        "line": 39,
-        "module": "plugins.petri_audit.claude_cli_provider",
-        "path": "core/llm/adapters/claude_cli.py"
-      },
-      {
-        "line": 90,
-        "module": "plugins.petri_audit.claude_cli_provider",
-        "path": "core/llm/adapters/claude_cli.py"
-      },
-      {
-        "line": 264,
-        "module": "plugins.petri_audit.claude_cli_provider",
-        "path": "core/llm/adapters/claude_cli.py"
-      },
-      {
-        "line": 308,
-        "module": "plugins.petri_audit.adapters.claude_cli_backend",
-        "path": "core/llm/adapters/claude_cli.py"
-      },
-      {
-        "line": 311,
-        "module": "plugins.petri_audit.claude_cli_provider",
-        "path": "core/llm/adapters/claude_cli.py"
-      },
-      {
-        "line": 371,
-        "module": "plugins.petri_audit.adapters.claude_cli_backend",
-        "path": "core/llm/adapters/claude_cli.py"
-      },
-      {
-        "line": 390,
-        "module": "plugins.petri_audit.adapters.claude_cli_backend",
-        "path": "core/llm/adapters/claude_cli.py"
-      },
-      {
-        "line": 58,
-        "module": "plugins.petri_audit.codex_provider",
-        "path": "core/llm/adapters/provider_inference.py"
-      },
-      {
-        "line": 293,
-        "module": "plugins.petri_audit.claude_cli_provider",
-        "path": "core/llm/errors.py"
-      },
-      {
-        "line": 152,
-        "module": "plugins.petri_audit.claude_cli_provider",
-        "path": "core/llm/router/calls/_failover.py"
-      },
-      {
-        "line": 265,
-        "module": "plugins.petri_audit.pool_validation",
-        "path": "core/self_improving/campaign.py"
-      },
-      {
-        "line": 2224,
-        "module": "plugins.petri_audit.runner",
-        "path": "core/self_improving/campaign.py"
-      },
-      {
-        "line": 2303,
-        "module": "plugins.petri_audit.pool_validation",
-        "path": "core/self_improving/campaign.py"
-      },
-      {
-        "line": 347,
-        "module": "plugins.seed_generation.baseline_reader",
-        "path": "core/self_improving/loop/mutate/runner.py"
-      },
-      {
-        "line": 538,
-        "module": "plugins.seed_generation.baseline_reader",
-        "path": "core/self_improving/loop/mutate/runner.py"
-      },
-      {
-        "line": 49,
-        "module": "plugins.seed_generation.baseline_reader",
-        "path": "core/self_improving/loop/observe/attribution.py"
-      },
-      {
-        "line": 236,
-        "module": "plugins.petri_audit.manifest",
-        "path": "core/self_improving/train.py"
-      },
-      {
-        "line": 237,
-        "module": "plugins.petri_audit.user_overrides",
-        "path": "core/self_improving/train.py"
-      },
-      {
-        "line": 597,
-        "module": "plugins.petri_audit.runner",
-        "path": "core/self_improving/train.py"
-      },
-      {
-        "line": 1367,
-        "module": "plugins.seed_generation.baseline_reader",
-        "path": "core/self_improving/train.py"
-      }
-    ]
+  "core_to_product_imports": {
+    "file_count": 0,
+    "site_count": 0,
+    "sites": []
   },
   "hook_events": {
     "count": 57,
@@ -530,19 +374,23 @@
   },
   "packages": {
     "core": {
-      "python_files": 434,
-      "python_loc": 138968
+      "python_files": 438,
+      "python_loc": 140692
+    },
+    "geode_product": {
+      "python_files": 115,
+      "python_loc": 41735
     },
     "plugins": {
-      "python_files": 111,
-      "python_loc": 44062
+      "python_files": 32,
+      "python_loc": 213
     },
     "tests": {
-      "python_files": 683,
-      "python_loc": 183042
+      "python_files": 685,
+      "python_loc": 182756
     }
   },
-  "schema_version": 1,
+  "schema_version": 2,
   "tools": {
     "deferred_loading": {
       "always_loaded_count": 16,
@@ -861,14 +709,14 @@
       "doctor_slack": "system",
       "document_ingest": "delegated",
       "edit_file": "delegated",
-      "eval_dspy_optimize": "audit",
-      "eval_inspect_viz": "audit",
+      "eval_dspy_optimize": "product-audit",
+      "eval_inspect_viz": "product-audit",
       "export_json": "output",
-      "freeze_paper_snapshot": "delegated",
+      "freeze_paper_snapshot": "product-seed",
       "general_web_search": "delegated",
       "generate_data": "data",
       "generate_report": "output",
-      "geode_seed_pool_search": "delegated",
+      "geode_seed_pool_search": "product-seed",
       "get_goal": "goal",
       "glob_files": "delegated",
       "gmail_search": "delegated",
@@ -897,7 +745,7 @@
       "note_save": "delegated",
       "obs_otel_export": "observability",
       "paper_fetch_arxiv": "delegated",
-      "petri_audit": "audit",
+      "petri_audit": "product-audit",
       "profile_learn": "delegated",
       "profile_preference": "delegated",
       "profile_show": "delegated",
@@ -908,7 +756,7 @@
       "reject_plan": "plan",
       "reject_result": "hitl",
       "schedule_job": "execution",
-      "seed_debate_turn": "delegated",
+      "seed_debate_turn": "product-seed",
       "send_notification": "notification",
       "session_search": "memory",
       "set_api_key": "system",

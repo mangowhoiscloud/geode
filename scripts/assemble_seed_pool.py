@@ -505,7 +505,7 @@ def assemble_pool(
     # removed that dim; the campaign halted but the stale pool had already
     # shipped. Live taxonomy SoT = ``core.self_improving.fitness.AXIS_TIERS``.
     from core.self_improving.fitness import AXIS_TIERS
-    from plugins.petri_audit.pool_validation import validate_pool_target_dims
+    from geode_product.petri_audit.pool_validation import validate_pool_target_dims
 
     stale = validate_pool_target_dims(pool_dir, frozenset(AXIS_TIERS))
     if stale:

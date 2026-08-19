@@ -25,6 +25,9 @@ Protocol + central dispatch (``core.llm.adapters.dispatch``) is the
 single registry / call surface.
 """
 
+from core.llm.adapters._openai_common import (
+    build_responses_kwargs as build_openai_responses_kwargs,
+)
 from core.llm.adapters.base import (
     CONCRETE_SOURCES,
     SOURCE_ADAPTER,
@@ -79,6 +82,7 @@ __all__ = [
     "UsageSummary",
     "adapter_health",
     "bootstrap_builtins",
+    "build_openai_responses_kwargs",
     "get_adapter",
     "infer_provider_from_model",
     "list_adapters",

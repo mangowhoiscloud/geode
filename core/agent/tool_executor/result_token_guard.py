@@ -108,3 +108,8 @@ def _guard_tool_result(
         else:
             high = middle - 1
     return guarded
+
+
+# Public projection boundary used by packaged benchmark adapters.
+project_mcp_result = _project_mcp_result
+guard_tool_result = _guard_tool_result

@@ -281,7 +281,7 @@ class TestAuditSafetyGuard:
         from core.config import settings
         from core.llm.providers.anthropic import is_computer_use_enabled
         from core.runtime_audit import reset_runtime_audit_active
-        from plugins.petri_audit.audit_mode import publish_runtime_state, resolve
+        from geode_product.petri_audit.audit_mode import publish_runtime_state, resolve
 
         monkeypatch.delenv("GEODE_AUDIT_UNRESTRICTED", raising=False)
         config = tmp_path / "audit-mode.toml"
@@ -324,7 +324,7 @@ class TestAuditSafetyGuard:
         from core.config import settings
         from core.llm.providers import anthropic as ap
         from core.runtime_audit import reset_runtime_audit_active
-        from plugins.petri_audit.audit_mode import publish_runtime_state, resolve
+        from geode_product.petri_audit.audit_mode import publish_runtime_state, resolve
 
         monkeypatch.delenv("GEODE_AUDIT_UNRESTRICTED", raising=False)
         config = tmp_path / "audit-mode.toml"

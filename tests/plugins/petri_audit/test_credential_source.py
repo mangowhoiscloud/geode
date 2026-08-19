@@ -1,11 +1,11 @@
-"""Unit tests for plugins.petri_audit.credential_source (P1-D)."""
+"""Unit tests for geode_product.petri_audit.credential_source (P1-D)."""
 
 from __future__ import annotations
 
 import pytest
-from plugins.petri_audit import credential_source as cs
-from plugins.petri_audit.adapters import is_adapter_available
-from plugins.petri_audit.manifest import clear_manifest_cache
+from geode_product.petri_audit import credential_source as cs
+from geode_product.petri_audit.adapters import is_adapter_available
+from geode_product.petri_audit.manifest import clear_manifest_cache
 
 
 @pytest.fixture(autouse=True)
@@ -50,7 +50,7 @@ def _stub_oauth_adapters(monkeypatch):
     is constructor-injected DI à la ``core/auth/rotation.py::ProfileRotator``;
     tracked as a backlog task. See P1-D PR body for the rationale.
     """
-    from plugins.petri_audit.adapters import claude_cli_backend, openai_codex_oauth
+    from geode_product.petri_audit.adapters import claude_cli_backend, openai_codex_oauth
 
     monkeypatch.setattr(claude_cli_backend, "is_available", lambda: False)
     monkeypatch.setattr(openai_codex_oauth, "is_available", lambda: False)
@@ -67,7 +67,7 @@ def test_list_credential_sources_anthropic_shape(monkeypatch):
     assert sources == ["claude-cli", "api_key", "auto"]
     api_key_entry = next(e for e in out if e["source"] == "api_key")
     assert api_key_entry["available"] is True
-    assert api_key_entry["adapter"] == "plugins.petri_audit.adapters.http_anthropic"
+    assert api_key_entry["adapter"] == "geode_product.petri_audit.adapters.http_anthropic"
     assert api_key_entry["inspect_prefix"] == "anthropic"
     assert api_key_entry["auth_env_vars"] == ["ANTHROPIC_API_KEY"]
     auto_entry = next(e for e in out if e["source"] == "auto")
@@ -146,7 +146,7 @@ def test_resolve_auto_oauth_priority(monkeypatch):
     wins — claude-cli is listed first so it should be preferred."""
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
     # Force claude-cli adapter to report available.
-    from plugins.petri_audit.adapters import claude_cli_backend
+    from geode_product.petri_audit.adapters import claude_cli_backend
 
     monkeypatch.setattr(claude_cli_backend, "is_available", lambda: True)
     assert cs.resolve_credential_source("anthropic") == "claude-cli"

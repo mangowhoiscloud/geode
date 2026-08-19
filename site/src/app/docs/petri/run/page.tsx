@@ -37,7 +37,7 @@ geode audit --live --unrestricted \\
             <p>
               같은 인터페이스가 세션 안에서는 <code>/audit</code> 슬래시
               명령입니다. 둘 다{" "}
-              <code>plugins/petri_audit/cli_audit.py</code>로 들어갑니다.
+              <code>geode_product/petri_audit/cli_audit.py</code>로 들어갑니다.
             </p>
 
             <h2>플래그</h2>
@@ -47,7 +47,7 @@ geode audit --live --unrestricted \\
                 <tr><td><code>--auditor/-a</code> · <code>--target/-t</code> · <code>--judge/-j</code></td><td>역할별 모델 지정</td><td>생략 시 <code>~/.geode/config.toml</code> 역할 SoT</td></tr>
                 <tr><td><code>--dry-run/--live</code></td><td>실제 호출 없이 검증 / 실측</td><td><strong>dry-run</strong></td></tr>
                 <tr><td><code>--seeds/-s</code></td><td>seed 수</td><td>1</td></tr>
-                <tr><td><code>--seed-select</code></td><td>seed 풀 경로 또는 id 선택</td><td><code>plugins/petri_audit/seeds</code></td></tr>
+                <tr><td><code>--seed-select</code></td><td>seed 풀 경로 또는 id 선택</td><td><code>bundled</code> (패키지 내 GEODE seed 풀)</td></tr>
                 <tr><td><code>--max-turns/-m</code></td><td>대화 턴 상한</td><td>10</td></tr>
                 <tr><td><code>--dim-set</code></td><td>judge 차원 세트. <code>subset</code>(22-dim 루브릭) 또는 <code>full</code>(upstream 기본 전체)</td><td><code>subset</code></td></tr>
                 <tr><td><code>--unrestricted</code></td><td>audit-mode 가드레일 전환 (HITL 해제, 한 런 한정). <code>GEODE_AUDIT_UNRESTRICTED=1</code>과 동일</td><td>off</td></tr>
@@ -120,7 +120,7 @@ geode audit --live --unrestricted \\
             <p>
               The same interface exists in-session as the <code>/audit</code>{" "}
               slash command. Both enter{" "}
-              <code>plugins/petri_audit/cli_audit.py</code>.
+              <code>geode_product/petri_audit/cli_audit.py</code>.
             </p>
 
             <h2>Flags</h2>
@@ -130,7 +130,7 @@ geode audit --live --unrestricted \\
                 <tr><td><code>--auditor/-a</code> · <code>--target/-t</code> · <code>--judge/-j</code></td><td>Model per role</td><td>Omit to use the role SoT in <code>~/.geode/config.toml</code></td></tr>
                 <tr><td><code>--dry-run/--live</code></td><td>Validate without real calls / measure</td><td><strong>dry-run</strong></td></tr>
                 <tr><td><code>--seeds/-s</code></td><td>Seed count</td><td>1</td></tr>
-                <tr><td><code>--seed-select</code></td><td>Seed pool path or id selection</td><td><code>plugins/petri_audit/seeds</code></td></tr>
+                <tr><td><code>--seed-select</code></td><td>Seed pool path or id selection</td><td><code>bundled</code> (the packaged GEODE seed pool)</td></tr>
                 <tr><td><code>--max-turns/-m</code></td><td>Conversation turn cap</td><td>10</td></tr>
                 <tr><td><code>--dim-set</code></td><td>Judge dimension set: <code>subset</code> (the 22-dim rubric) or <code>full</code> (the upstream default set)</td><td><code>subset</code></td></tr>
                 <tr><td><code>--unrestricted</code></td><td>Audit-mode guardrail lift (HITL off, one run only); same as <code>GEODE_AUDIT_UNRESTRICTED=1</code></td><td>off</td></tr>

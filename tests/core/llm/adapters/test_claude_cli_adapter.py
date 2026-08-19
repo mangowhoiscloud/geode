@@ -55,7 +55,7 @@ def test_adapter_raises_on_unexpected_error_text() -> None:
     retry-failure phrase as its only assistant text. Before the
     classifier this surfaced as a "successful" empty turn."""
     from core.llm.adapters.claude_cli import ClaudeCliAdapter
-    from plugins.petri_audit.claude_cli_provider import ClaudeCliTransientUpstreamError
+    from geode_product.petri_audit.claude_cli_provider import ClaudeCliTransientUpstreamError
 
     adapter = ClaudeCliAdapter()
     stdout = _make_stream_json(
@@ -71,11 +71,11 @@ def test_adapter_raises_on_unexpected_error_text() -> None:
     )
     with (
         patch(
-            "plugins.petri_audit.claude_cli_provider._resolve_claude_binary",
+            "core.llm.adapters._claude_cli_runtime._resolve_claude_binary",
             return_value="/fake/claude",
         ),
         patch(
-            "plugins.petri_audit.claude_cli_provider._run_claude_subprocess",
+            "core.llm.adapters._claude_cli_runtime._run_claude_subprocess",
             return_value=(stdout, "", 0),
         ),
         patch(
@@ -89,17 +89,17 @@ def test_adapter_raises_on_unexpected_error_text() -> None:
 
 def test_adapter_raises_on_rate_limit_stderr() -> None:
     from core.llm.adapters.claude_cli import ClaudeCliAdapter
-    from plugins.petri_audit.claude_cli_provider import ClaudeCliTransientUpstreamError
+    from geode_product.petri_audit.claude_cli_provider import ClaudeCliTransientUpstreamError
 
     adapter = ClaudeCliAdapter()
     stdout = _make_stream_json([{"type": "result", "stop_reason": "end_turn", "result": ""}])
     with (
         patch(
-            "plugins.petri_audit.claude_cli_provider._resolve_claude_binary",
+            "core.llm.adapters._claude_cli_runtime._resolve_claude_binary",
             return_value="/fake/claude",
         ),
         patch(
-            "plugins.petri_audit.claude_cli_provider._run_claude_subprocess",
+            "core.llm.adapters._claude_cli_runtime._run_claude_subprocess",
             return_value=(stdout, "429 rate_limit_error", 1),
         ),
         patch(
@@ -128,11 +128,11 @@ def test_adapter_returns_parsed_text_not_raw_stdout() -> None:
     )
     with (
         patch(
-            "plugins.petri_audit.claude_cli_provider._resolve_claude_binary",
+            "core.llm.adapters._claude_cli_runtime._resolve_claude_binary",
             return_value="/fake/claude",
         ),
         patch(
-            "plugins.petri_audit.claude_cli_provider._run_claude_subprocess",
+            "core.llm.adapters._claude_cli_runtime._run_claude_subprocess",
             return_value=(stdout, "", 0),
         ),
         patch(
@@ -176,11 +176,11 @@ def test_adapter_captures_usage_from_result_event() -> None:
     )
     with (
         patch(
-            "plugins.petri_audit.claude_cli_provider._resolve_claude_binary",
+            "core.llm.adapters._claude_cli_runtime._resolve_claude_binary",
             return_value="/fake/claude",
         ),
         patch(
-            "plugins.petri_audit.claude_cli_provider._run_claude_subprocess",
+            "core.llm.adapters._claude_cli_runtime._run_claude_subprocess",
             return_value=(stdout, "", 0),
         ),
         patch(
@@ -212,11 +212,11 @@ def test_adapter_usage_zero_without_result_usage() -> None:
     )
     with (
         patch(
-            "plugins.petri_audit.claude_cli_provider._resolve_claude_binary",
+            "core.llm.adapters._claude_cli_runtime._resolve_claude_binary",
             return_value="/fake/claude",
         ),
         patch(
-            "plugins.petri_audit.claude_cli_provider._run_claude_subprocess",
+            "core.llm.adapters._claude_cli_runtime._run_claude_subprocess",
             return_value=(stdout, "", 0),
         ),
         patch(
@@ -234,16 +234,16 @@ def test_adapter_raises_when_rc_zero_no_events() -> None:
     """rc=0 + empty stdout is the silent-empty-content path —
     must fail loud rather than return ``text=""`` as a normal reply."""
     from core.llm.adapters.claude_cli import ClaudeCliAdapter
-    from plugins.petri_audit.claude_cli_provider import ClaudeCliInvocationError
+    from geode_product.petri_audit.claude_cli_provider import ClaudeCliInvocationError
 
     adapter = ClaudeCliAdapter()
     with (
         patch(
-            "plugins.petri_audit.claude_cli_provider._resolve_claude_binary",
+            "core.llm.adapters._claude_cli_runtime._resolve_claude_binary",
             return_value="/fake/claude",
         ),
         patch(
-            "plugins.petri_audit.claude_cli_provider._run_claude_subprocess",
+            "core.llm.adapters._claude_cli_runtime._run_claude_subprocess",
             return_value=("", "", 0),
         ),
         patch(
@@ -266,7 +266,7 @@ def test_adapter_transient_carries_signal_dataclass() -> None:
     (AgenticLoop, worker) can act on the actual upstream signature
     instead of guessing from a generic 'transient' string."""
     from core.llm.adapters.claude_cli import ClaudeCliAdapter
-    from plugins.petri_audit.claude_cli_provider import ClaudeCliTransientUpstreamError
+    from geode_product.petri_audit.claude_cli_provider import ClaudeCliTransientUpstreamError
 
     adapter = ClaudeCliAdapter()
     stdout = _make_stream_json(
@@ -282,11 +282,11 @@ def test_adapter_transient_carries_signal_dataclass() -> None:
     )
     with (
         patch(
-            "plugins.petri_audit.claude_cli_provider._resolve_claude_binary",
+            "core.llm.adapters._claude_cli_runtime._resolve_claude_binary",
             return_value="/fake/claude",
         ),
         patch(
-            "plugins.petri_audit.claude_cli_provider._run_claude_subprocess",
+            "core.llm.adapters._claude_cli_runtime._run_claude_subprocess",
             return_value=(stdout, "", 0),
         ),
         patch(
@@ -326,7 +326,7 @@ def test_adapter_transient_writes_postmortem_dump(tmp_path) -> None:  # type: ig
     import json as _json
 
     from core.llm.adapters.claude_cli import ClaudeCliAdapter
-    from plugins.petri_audit.claude_cli_provider import ClaudeCliTransientUpstreamError
+    from geode_product.petri_audit.claude_cli_provider import ClaudeCliTransientUpstreamError
 
     # ``tmp_path`` is pytest's per-test scratch directory fixture. Alias
     # it to ``diagnostics_root`` at entry so the rest of the test reads
@@ -344,11 +344,11 @@ def test_adapter_transient_writes_postmortem_dump(tmp_path) -> None:  # type: ig
     stdout = _make_stream_json([{"type": "result", "error": error_message, "result": ""}])
     with (
         patch(
-            "plugins.petri_audit.claude_cli_provider._resolve_claude_binary",
+            "core.llm.adapters._claude_cli_runtime._resolve_claude_binary",
             return_value="/fake/claude",
         ),
         patch(
-            "plugins.petri_audit.claude_cli_provider._run_claude_subprocess",
+            "core.llm.adapters._claude_cli_runtime._run_claude_subprocess",
             return_value=(stdout, "", 1),
         ),
         patch(
@@ -407,7 +407,7 @@ def test_adapter_argv_no_longer_contains_no_session_persistence() -> None:
     import contextlib
 
     from core.llm.adapters.claude_cli import ClaudeCliAdapter
-    from plugins.petri_audit.claude_cli_provider import ClaudeCliInvocationError
+    from geode_product.petri_audit.claude_cli_provider import ClaudeCliInvocationError
 
     captured_argv: list[str] = []
 
@@ -420,11 +420,11 @@ def test_adapter_argv_no_longer_contains_no_session_persistence() -> None:
     adapter = ClaudeCliAdapter()
     with (
         patch(
-            "plugins.petri_audit.claude_cli_provider._resolve_claude_binary",
+            "core.llm.adapters._claude_cli_runtime._resolve_claude_binary",
             return_value="/fake/claude",
         ),
         patch(
-            "plugins.petri_audit.claude_cli_provider._run_claude_subprocess",
+            "core.llm.adapters._claude_cli_runtime._run_claude_subprocess",
             _fake_subprocess,
         ),
         patch(
@@ -448,7 +448,7 @@ def test_adapter_passes_task_isolated_cwd_to_subprocess() -> None:
 
     from core.agent.task_isolation import set_task_isolated_cwd
     from core.llm.adapters.claude_cli import ClaudeCliAdapter
-    from plugins.petri_audit.claude_cli_provider import ClaudeCliInvocationError
+    from geode_product.petri_audit.claude_cli_provider import ClaudeCliInvocationError
 
     captured_kwargs: dict[str, Any] = {}
 
@@ -463,11 +463,11 @@ def test_adapter_passes_task_isolated_cwd_to_subprocess() -> None:
     try:
         with (
             patch(
-                "plugins.petri_audit.claude_cli_provider._resolve_claude_binary",
+                "core.llm.adapters._claude_cli_runtime._resolve_claude_binary",
                 return_value="/fake/claude",
             ),
             patch(
-                "plugins.petri_audit.claude_cli_provider._run_claude_subprocess",
+                "core.llm.adapters._claude_cli_runtime._run_claude_subprocess",
                 _fake_subprocess,
             ),
             patch(
@@ -491,7 +491,7 @@ def test_adapter_passes_none_cwd_when_context_var_unset() -> None:
 
     from core.agent.task_isolation import set_task_isolated_cwd
     from core.llm.adapters.claude_cli import ClaudeCliAdapter
-    from plugins.petri_audit.claude_cli_provider import ClaudeCliInvocationError
+    from geode_product.petri_audit.claude_cli_provider import ClaudeCliInvocationError
 
     captured_kwargs: dict[str, Any] = {}
 
@@ -505,11 +505,11 @@ def test_adapter_passes_none_cwd_when_context_var_unset() -> None:
     adapter = ClaudeCliAdapter()
     with (
         patch(
-            "plugins.petri_audit.claude_cli_provider._resolve_claude_binary",
+            "core.llm.adapters._claude_cli_runtime._resolve_claude_binary",
             return_value="/fake/claude",
         ),
         patch(
-            "plugins.petri_audit.claude_cli_provider._run_claude_subprocess",
+            "core.llm.adapters._claude_cli_runtime._run_claude_subprocess",
             _fake_subprocess,
         ),
         patch(

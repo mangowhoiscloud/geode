@@ -1,7 +1,7 @@
 """PR-JSON-WIRE (2026-05-25) — per-role JSON Schema wire-through tests.
 
 Verifies each seed-generation role populates ``SubTask.response_schema``
-with the schema declared in ``plugins.seed_generation.json_schemas``,
+with the schema declared in ``geode_product.seed_generation.json_schemas``,
 and that the schema's ``required`` list matches the role's
 ``_REQUIRED_*_FIELDS`` constant. Drift between the schema's
 required-list and the parser's required-fields would let the LLM
@@ -20,7 +20,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
-from plugins.seed_generation.json_schemas import (
+from geode_product.seed_generation.json_schemas import (
     CRITIQUE_SCHEMA,
     EVOLVE_SCHEMA,
     LITERATURE_REVIEW_SCHEMA,
@@ -34,13 +34,13 @@ from plugins.seed_generation.json_schemas import (
 
 
 def test_proximity_schema_required_matches_parser_required() -> None:
-    from plugins.seed_generation.agents.proximity import _REQUIRED_FIELDS
+    from geode_product.seed_generation.agents.proximity import _REQUIRED_FIELDS
 
     assert set(PROXIMITY_SCHEMA["required"]) == set(_REQUIRED_FIELDS)
 
 
 def test_critique_schema_required_matches_parser_required() -> None:
-    from plugins.seed_generation.agents.critic import _REQUIRED_CRITIQUE_FIELDS
+    from geode_product.seed_generation.agents.critic import _REQUIRED_CRITIQUE_FIELDS
 
     # PR-SCHEMA-PARSER-DRIFT-CLOSE (2026-05-26) — tightened from
     # ``issubset`` to ``==``. Pre-fix the schema permissively allowed
@@ -55,19 +55,19 @@ def test_critique_schema_required_matches_parser_required() -> None:
 
 
 def test_vote_schema_required_matches_parser_required() -> None:
-    from plugins.seed_generation.agents.ranker import _REQUIRED_VOTE_FIELDS
+    from geode_product.seed_generation.agents.ranker import _REQUIRED_VOTE_FIELDS
 
     assert set(VOTE_SCHEMA["required"]) == set(_REQUIRED_VOTE_FIELDS)
 
 
 def test_evolve_schema_required_matches_parser_required() -> None:
-    from plugins.seed_generation.agents.evolver import _REQUIRED_EVOLVE_FIELDS
+    from geode_product.seed_generation.agents.evolver import _REQUIRED_EVOLVE_FIELDS
 
     assert set(EVOLVE_SCHEMA["required"]) == set(_REQUIRED_EVOLVE_FIELDS)
 
 
 def test_meta_review_schema_required_matches_parser_required() -> None:
-    from plugins.seed_generation.agents.meta_reviewer import _REQUIRED_META_FIELDS
+    from geode_product.seed_generation.agents.meta_reviewer import _REQUIRED_META_FIELDS
 
     assert set(META_REVIEW_SCHEMA["required"]) == set(_REQUIRED_META_FIELDS)
 
@@ -77,7 +77,7 @@ def test_supervisor_schema_required_matches_parser_required() -> None:
     # only Loop-1 phase whose schema did not exist. The parser tuple
     # has been in supervisor.py since the role landed; the schema
     # was added in this PR.
-    from plugins.seed_generation.agents.supervisor import _REQUIRED_SUPERVISOR_FIELDS
+    from geode_product.seed_generation.agents.supervisor import _REQUIRED_SUPERVISOR_FIELDS
 
     assert set(SUPERVISOR_SCHEMA["required"]) == set(_REQUIRED_SUPERVISOR_FIELDS)
 
@@ -87,7 +87,7 @@ def test_literature_review_schema_required_matches_parser_call_site() -> None:
     # ``parse_structured_output`` rather than declaring a
     # module-level constant. Pin the inline tuple ↔ schema equality
     # so a future caller-side edit can't drift from the schema.
-    from plugins.seed_generation.agents import literature_review as litreview
+    from geode_product.seed_generation.agents import literature_review as litreview
 
     source = Path(litreview.__file__).read_text(encoding="utf-8")
     # The required_fields tuple is the only multi-string tuple in
@@ -104,7 +104,7 @@ def test_literature_review_schema_required_matches_parser_call_site() -> None:
 
 def _pipeline_state_with_candidate() -> object:
     """Minimal PipelineState stub for _build_tasks tests."""
-    from plugins.seed_generation.orchestrator import PipelineState
+    from geode_product.seed_generation.orchestrator import PipelineState
 
     state = PipelineState(
         run_id="run-x",
@@ -124,7 +124,7 @@ def _pipeline_state_with_candidate() -> object:
 
 
 def test_proximity_build_tasks_carries_schema() -> None:
-    from plugins.seed_generation.agents.proximity import Proximity
+    from geode_product.seed_generation.agents.proximity import Proximity
 
     state = _pipeline_state_with_candidate()
     agent = Proximity(MagicMock())
@@ -133,7 +133,7 @@ def test_proximity_build_tasks_carries_schema() -> None:
 
 
 def test_critic_build_tasks_carries_schema() -> None:
-    from plugins.seed_generation.agents.critic import Critic
+    from geode_product.seed_generation.agents.critic import Critic
 
     state = _pipeline_state_with_candidate()
     agent = Critic(MagicMock())
@@ -148,7 +148,7 @@ def test_supervisor_build_task_carries_schema() -> None:
     # site previously omitted ``response_schema=`` entirely, so the
     # worker-side retry never fired and the supervisor.json checkpoint
     # regressed in smoke 18 vs smoke 17.
-    from plugins.seed_generation.agents.supervisor import Supervisor
+    from geode_product.seed_generation.agents.supervisor import Supervisor
 
     state = _pipeline_state_with_candidate()
     agent = Supervisor(MagicMock())
@@ -160,7 +160,7 @@ def test_literature_review_build_task_carries_schema() -> None:
     # PR-SCHEMA-PARSER-DRIFT-CLOSE (2026-05-26) — the schema has
     # existed since PR-JSON-WIRE (#79) but literature_review.py's
     # ``_build_task`` was the one spawn site that never wired it.
-    from plugins.seed_generation.agents.literature_review import LiteratureReview
+    from geode_product.seed_generation.agents.literature_review import LiteratureReview
 
     state = _pipeline_state_with_candidate()
     agent = LiteratureReview(MagicMock())
@@ -343,7 +343,7 @@ def test_strict_helper_derives_required_from_properties_keys() -> None:
     """``_strict_additive`` must list every property in required;
     this is what makes the schema strict-compatible.
     """
-    from plugins.seed_generation.json_schemas import _strict_additive
+    from geode_product.seed_generation.json_schemas import _strict_additive
 
     schema = _strict_additive(
         properties={

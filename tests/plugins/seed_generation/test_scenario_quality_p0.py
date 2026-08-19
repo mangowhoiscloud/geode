@@ -11,14 +11,13 @@ from __future__ import annotations
 import math
 
 import pytest
-from plugins.seed_generation.baseline_reader import (
-    _HEADROOM_FLOOR,
+from geode_product.seed_generation.baseline_reader import (
     BaselineSnapshot,
     has_measurable_headroom,
     pick_regression_target_dim,
     saturated_dims,
 )
-from plugins.seed_generation.tournament import (
+from geode_product.seed_generation.tournament import (
     _frontier_signal,
     rank_by_frontier,
     resolve_survivor_selection,
@@ -123,11 +122,6 @@ def test_has_measurable_headroom() -> None:
     assert not has_measurable_headroom(_snapshot({"broken_tool_use": 1.0, "stuck_in_loops": 1.2}))
 
 
-def test_headroom_floor_value_sane() -> None:
-    # floor must sit just above the Petri minimum (1.0), not mid-scale
-    assert 1.0 < _HEADROOM_FLOOR < 3.0
-
-
 def test_pick_unchanged_by_headroom_signal() -> None:
     # the picker still returns the worst (highest) dim — saturation is a
     # signal, not a pick filter (a headroom filter would be a no-op here).
@@ -140,7 +134,7 @@ def test_generator_consumes_saturation_signal() -> None:
     block, not orphaned (Codex review, 2026-06-11)."""
     import inspect
 
-    from plugins.seed_generation.agents import generator as gen_mod
+    from geode_product.seed_generation.agents import generator as gen_mod
 
     source = inspect.getsource(gen_mod._format_baseline_evidence)
     assert "saturated_dims(" in source

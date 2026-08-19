@@ -130,7 +130,7 @@ export default function Page() {
                 </tr>
                 <tr>
                   <td>geode-mcp <code>run_agent</code></td>
-                  <td>다른 에이전트(예: Claude Code)가 MCP 도구로 GEODE를 부릅니다. <code>core/mcp_server.py</code>가 <code>run_agentic_oneshot</code>(<code>core/cli/bootstrap.py</code>)으로 한 번의 agentic 실행을 돌리고 텍스트, 라운드 수, 종료 사유를 돌려줍니다.</td>
+                  <td>다른 에이전트(예: Claude Code)가 MCP 도구로 GEODE를 부릅니다. <code>geode_product/mcp_server.py</code>가 <code>run_agentic_oneshot</code>(<code>core/cli/bootstrap.py</code>)으로 한 번의 agentic 실행을 돌리고 텍스트, 라운드 수, 종료 사유를 돌려줍니다.</td>
                 </tr>
               </tbody>
             </table>
@@ -268,7 +268,7 @@ export default function Page() {
                 </tr>
                 <tr>
                   <td>geode-mcp <code>run_agent</code></td>
-                  <td>Another agent (Claude Code, for example) calls GEODE as an MCP tool. <code>core/mcp_server.py</code> runs one agentic one-shot via <code>run_agentic_oneshot</code> (<code>core/cli/bootstrap.py</code>) and returns the text, round count, and termination reason.</td>
+                  <td>Another agent (Claude Code, for example) calls GEODE as an MCP tool. <code>geode_product/mcp_server.py</code> runs one agentic one-shot via <code>run_agentic_oneshot</code> (<code>core/cli/bootstrap.py</code>) and returns the text, round count, and termination reason.</td>
                 </tr>
               </tbody>
             </table>

@@ -13,7 +13,7 @@ Pins:
 from __future__ import annotations
 
 import pytest
-from plugins.seed_generation.baseline_reader import (
+from geode_product.seed_generation.baseline_reader import (
     PETRI_17DIM_COHORT,
     SEED_COHORTS,
     TASK_COMPLETION_COHORT,
@@ -33,7 +33,7 @@ def test_seed_cohorts_lists_two_canonical_values() -> None:
 def test_pipeline_state_default_cohort_is_petri_17dim() -> None:
     """Pre-S4 BC — operator/runner that doesn't set cohort gets the legacy
     Petri 17-dim picker behavior."""
-    from plugins.seed_generation.orchestrator import PipelineState
+    from geode_product.seed_generation.orchestrator import PipelineState
 
     state = PipelineState(run_id="r1", target_dim="broken_tool_use", gen_tag="auto-HEAD")
     assert state.cohort == "petri_17dim"
@@ -112,7 +112,7 @@ def test_unknown_cohort_message_lists_valid_values() -> None:
 def test_pick_regression_target_dim_unchanged() -> None:
     """The pre-S4 ``pick_regression_target_dim`` keeps the same contract —
     operating on dim_means only, no cohort awareness."""
-    from plugins.seed_generation.baseline_reader import pick_regression_target_dim
+    from geode_product.seed_generation.baseline_reader import pick_regression_target_dim
 
     snap = BaselineSnapshot(dim_means={"input_hallucination": 5.2})
     assert pick_regression_target_dim(snap, prefer_critical=False) == "input_hallucination"
@@ -130,7 +130,7 @@ def test_pick_default_cohort_argument_matches_petri() -> None:
 
 def test_baseline_reader_exports_cohort_constants() -> None:
     """Public API surface: cohort constants and the picker must be in __all__."""
-    import plugins.seed_generation.baseline_reader as br
+    import geode_product.seed_generation.baseline_reader as br
 
     assert "SEED_COHORTS" in br.__all__
     assert "PETRI_17DIM_COHORT" in br.__all__
@@ -145,7 +145,7 @@ def test_state_to_json_persists_cohort_field() -> None:
     in-memory hint."""
     import json as _json
 
-    from plugins.seed_generation.orchestrator import PipelineState, _state_to_json
+    from geode_product.seed_generation.orchestrator import PipelineState, _state_to_json
 
     state = PipelineState(
         run_id="r1",

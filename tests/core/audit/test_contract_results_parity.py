@@ -3,7 +3,7 @@
 The contract ledger produced by ``extract_contract_results`` must survive two
 write paths verbatim:
 
-(a) the summary YAML written by ``plugins.petri_audit.eval_archive.archive_eval``
+(a) the summary YAML written by ``geode_product.petri_audit.eval_archive.archive_eval``
     (the committable ``docs/audits/eval-logs/*.summary.yaml``), and
 (b) ``core.self_improving.loop.mutate.runner.ApplyRecord.model_validate`` — the
     ``mutations.jsonl`` writer's Pydantic schema (``extra="allow"``), which must
@@ -129,7 +129,7 @@ def test_ledger_round_trips_through_summary_yaml(
     eval_path = tmp_path / "2026-06-03T00-00-00_audit_fake.eval"
     eval_path.write_bytes(b"placeholder")
 
-    from plugins.petri_audit.eval_archive import archive_eval
+    from geode_product.petri_audit.eval_archive import archive_eval
 
     result = archive_eval(
         eval_path,

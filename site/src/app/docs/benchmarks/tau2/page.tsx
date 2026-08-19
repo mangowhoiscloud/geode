@@ -27,7 +27,7 @@ export default function Page() {
               tau2-bench는 대화형 tool-use 벤치마크입니다. 에이전트가 시뮬레이션된
               사용자와 대화하며 airline, retail, telecom 도메인의 DB 액션을
               수행하고, verifier가 필수 액션 충족 여부로 reward를 매깁니다. GEODE는
-              <code>plugins/benchmark_harness</code>의 공개 어댑터로 참가하며,
+              <code>geode_product/benchmark_harness</code>의 공개 어댑터로 참가하며,
               점수는 그 점수를 만든 harness revision, model route, effort에
               고정해서만 게시합니다. 같은 조건의 재실행과만 비교할 수 있습니다.
             </p>
@@ -272,7 +272,7 @@ export default function Page() {
               a simulated user while performing DB actions across the airline,
               retail, and telecom domains, and a verifier scores each task by
               required-action coverage. GEODE participates through the public
-              adapter in <code>plugins/benchmark_harness</code>, and every
+              adapter in <code>geode_product/benchmark_harness</code>, and every
               published number is pinned to the harness revision, model route, and
               effort that produced it. Compare only against reruns with the same
               settings.

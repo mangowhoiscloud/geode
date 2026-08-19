@@ -35,7 +35,11 @@ AGENTS_END = "<!-- generated:architecture-baseline:end -->"
 ROADMAP_START = "<!-- generated:architecture-baseline:start -->"
 ROADMAP_END = "<!-- generated:architecture-baseline:end -->"
 
-PACKAGE_ROOTS: tuple[str, ...] = ("core", "plugins", "tests")
+PACKAGE_ROOTS: tuple[str, ...] = ("core", "geode_product", "plugins", "tests")
+PRODUCT_MODULE_ROOTS = ("geode_product", "plugins")
+PRODUCT_MODULE_REFERENCE_RE = re.compile(
+    r"^(?:geode_product|plugins)(?:\.[A-Za-z_][A-Za-z0-9_]*)+(?::[A-Za-z_][A-Za-z0-9_]*)?$"
+)
 
 
 @dataclass(frozen=True)
@@ -209,21 +213,36 @@ def _context_vars(root: Path) -> dict[str, Any]:
     return {"count": len(items), "items": items}
 
 
-def _plugins_imports(root: Path) -> dict[str, Any]:
+def _product_imports(root: Path) -> dict[str, Any]:
     sites: list[dict[str, Any]] = []
     for path in _python_files(root, "core"):
         for node in ast.walk(_parse_python(path)):
             modules: list[str] = []
             site_line = 0
             if isinstance(node, ast.Import):
-                modules = [alias.name for alias in node.names if alias.name.startswith("plugins")]
+                modules = [
+                    alias.name
+                    for alias in node.names
+                    if alias.name in PRODUCT_MODULE_ROOTS
+                    or alias.name.startswith(tuple(f"{root}." for root in PRODUCT_MODULE_ROOTS))
+                ]
                 site_line = node.lineno
             elif (
                 isinstance(node, ast.ImportFrom)
                 and node.module is not None
-                and node.module.startswith("plugins")
+                and (
+                    node.module in PRODUCT_MODULE_ROOTS
+                    or node.module.startswith(tuple(f"{root}." for root in PRODUCT_MODULE_ROOTS))
+                )
             ):
                 modules = [node.module]
+                site_line = node.lineno
+            elif (
+                isinstance(node, ast.Constant)
+                and isinstance(node.value, str)
+                and PRODUCT_MODULE_REFERENCE_RE.fullmatch(node.value)
+            ):
+                modules = [node.value]
                 site_line = node.lineno
             for module in modules:
                 sites.append(
@@ -422,8 +441,9 @@ def _tool_inventory(root: Path) -> dict[str, Any]:
     from core.agent.tool_executor.executor import SPECIAL_EXECUTION_BINDINGS
     from core.cli.tool_handlers import _build_tool_handler_catalog
     from core.llm.tool_defer import TOOL_SEARCH_ALWAYS_LOADED
+    from geode_product.tool_handlers import product_handler_groups
 
-    handler_catalog = _build_tool_handler_catalog()
+    handler_catalog = _build_tool_handler_catalog(extra_groups=product_handler_groups())
     handler_names = sorted(handler_catalog.handlers)
     execution_names = sorted(set(handler_names) | set(SPECIAL_EXECUTION_BINDINGS))
     definitions = set(definition_names)
@@ -487,13 +507,13 @@ def build_baseline(root: Path = REPO_ROOT) -> dict[str, Any]:
         if (inventory := measure_python_inventory(root, relative))
     }
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "packages": packages,
         "tools": _tool_inventory(root),
         "hook_events": _hook_events(root),
         "built_in_adapters": _built_in_adapters(root),
         "context_vars": _context_vars(root),
-        "core_to_plugins_imports": _plugins_imports(root),
+        "core_to_product_imports": _product_imports(root),
         "import_linter": _import_linter(root),
         "coordinators": _coordinator_metrics(root),
         "complexity_thresholds": _complexity_thresholds(root),
@@ -511,7 +531,9 @@ def _number(value: int) -> str:
 def render_agents_block(baseline: dict[str, Any]) -> str:
     packages = baseline["packages"]
     tools = baseline["tools"]
-    production_files = packages["core"]["python_files"] + packages["plugins"]["python_files"]
+    production_files = sum(
+        packages[name]["python_files"] for name in ("core", "geode_product", "plugins")
+    )
     return "\n".join(
         (
             AGENTS_START,
@@ -530,11 +552,13 @@ def render_agents_block(baseline: dict[str, Any]) -> str:
 def render_roadmap_block(baseline: dict[str, Any]) -> str:
     packages = baseline["packages"]
     tools = baseline["tools"]
-    imports = baseline["core_to_plugins_imports"]
+    imports = baseline["core_to_product_imports"]
     import_linter = baseline["import_linter"]
     coordinators = baseline["coordinators"]
     thresholds = baseline["complexity_thresholds"]
-    production_files = packages["core"]["python_files"] + packages["plugins"]["python_files"]
+    production_files = sum(
+        packages[name]["python_files"] for name in ("core", "geode_product", "plugins")
+    )
     parity = (
         "exact"
         if tools["exact_parity"]
@@ -553,9 +577,13 @@ def render_roadmap_block(baseline: dict[str, Any]) -> str:
             "",
             "| Measure | Current tree |",
             "|---|---:|",
-            f"| Production Python files (`core/` + `plugins/`) | {_number(production_files)} |",
+            (
+                "| Production Python files (`core/` + `geode_product/` + `plugins/`) "
+                f"| {_number(production_files)} |"
+            ),
             f"| Test Python files | {_number(packages['tests']['python_files'])} |",
             f"| `core/` Python LOC | {_number(packages['core']['python_loc'])} |",
+            f"| `geode_product/` Python LOC | {_number(packages['geode_product']['python_loc'])} |",
             f"| `plugins/` Python LOC | {_number(packages['plugins']['python_loc'])} |",
             f"| Test Python LOC | {_number(packages['tests']['python_loc'])} |",
             (
@@ -571,7 +599,7 @@ def render_roadmap_block(baseline: dict[str, Any]) -> str:
                 f"{_number(baseline['context_vars']['count'])} |"
             ),
             (
-                f"| `core` → `plugins` import sites | {_number(imports['site_count'])} "
+                f"| `core` → product import sites | {_number(imports['site_count'])} "
                 f"across {_number(imports['file_count'])} files |"
             ),
             (

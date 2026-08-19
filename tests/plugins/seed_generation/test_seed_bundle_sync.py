@@ -1,4 +1,4 @@
-"""Tests for ``plugins.seed_generation.bundle_sync`` (CSP-14 seed publish).
+"""Tests for ``geode_product.seed_generation.bundle_sync`` (CSP-14 seed publish).
 
 Covers:
 - Sync copies state.json + survivors.json + meta_review.json
@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from plugins.seed_generation.bundle_sync import iter_synced_runs, sync_run_to_bundle
+from geode_product.seed_generation.bundle_sync import iter_synced_runs, sync_run_to_bundle
 
 
 def _make_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
@@ -157,7 +157,7 @@ def test_sync_missing_run_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
 def test_sync_malformed_state_json_recovers(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """state.json is unparseable → state.json still copied verbatim, and the
+    """state.json is unparsable → state.json still copied verbatim, and the
     on-disk MDs are copied via direct filesystem scan (no longer depends on
     parsing state.json for the survivor list)."""
     repo = _make_repo(tmp_path, monkeypatch)
@@ -215,7 +215,7 @@ def test_md_subdirs_synced_via_helper_directly(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Direct unit test for _sync_md_subdirs (helper-level invariant)."""
-    from plugins.seed_generation.bundle_sync import _sync_md_subdirs
+    from geode_product.seed_generation.bundle_sync import _sync_md_subdirs
 
     repo = _make_repo(tmp_path, monkeypatch)
     src = repo / "state/seed_generation/r-100"

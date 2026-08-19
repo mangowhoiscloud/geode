@@ -332,7 +332,7 @@ class TestCallWithFailover:
         - Eventually returns success when the transient resolves
           (mirrors a pool refresh).
         """
-        from plugins.petri_audit.claude_cli_provider import (
+        from geode_product.petri_audit.claude_cli_provider import (
             ClaudeCliTransientUpstreamError,
             TransientSignal,
         )
@@ -384,7 +384,7 @@ class TestCallWithFailover:
         repeat 2h"). Without this clip a 5-attempt loop would
         ``IndexError`` on attempt 4."""
         from core.llm.claude_cli_errors import QUOTA_BACKOFF_SECONDS
-        from plugins.petri_audit.claude_cli_provider import (
+        from geode_product.petri_audit.claude_cli_provider import (
             ClaudeCliTransientUpstreamError,
             TransientSignal,
         )
@@ -429,7 +429,7 @@ class TestCallWithFailover:
         the loop exhausts ``max_retries`` then falls through to the
         next model in the chain. Mirrors the model-chain semantics
         the SDK ``RETRYABLE_ERRORS`` branch already provides."""
-        from plugins.petri_audit.claude_cli_provider import (
+        from geode_product.petri_audit.claude_cli_provider import (
             ClaudeCliTransientUpstreamError,
             TransientSignal,
         )

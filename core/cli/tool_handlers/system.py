@@ -12,6 +12,7 @@ def _build_system_handlers(
     readiness: Any,
     force_dry: bool,
     mcp_manager: Any,
+    command_registry: Any = None,
 ) -> UniqueEntries[str, Any]:
     """Build system management tool handlers."""
     from core.cli import _set_readiness
@@ -20,11 +21,13 @@ def _build_system_handlers(
     from core.wiring.startup import check_readiness
 
     def handle_show_help(**_kwargs: Any) -> dict[str, Any]:
-        show_help()
+        show_help(command_registry)
         # Surface the registered slashes so the LLM has the same view as /help.
         from core.cli.commands import COMMAND_MAP
+        from core.cli.routing import COMMAND_REGISTRY
 
-        commands = sorted(COMMAND_MAP.keys())
+        registered = COMMAND_REGISTRY if command_registry is None else command_registry
+        commands = sorted(COMMAND_MAP.keys() | registered.keys())
         return {"status": "ok", "action": "help", "commands": commands}
 
     def handle_check_status(**_kwargs: Any) -> dict[str, Any]:

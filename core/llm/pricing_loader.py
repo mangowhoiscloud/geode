@@ -49,7 +49,7 @@ class ModelPrice:
 
     P3-B (2026-05-17): canonical definition lives here.
     ``core.llm.token_tracker`` re-exports the class so every existing
-    consumer (`token_tracker.ModelPrice`, `plugins.petri_audit.runner`,
+    consumer (`token_tracker.ModelPrice`, `geode_product.petri_audit.runner`,
     tests that monkeypatch the pricing dict) keeps working unchanged.
     """
 

@@ -13,7 +13,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from plugins.petri_audit.runner import (
+from geode_product.petri_audit.runner import (
     DEFAULT_TOKEN_ASSUMPTIONS,
     USD_TO_KRW,
     AuditReport,
@@ -92,6 +92,30 @@ def test_build_command_seed_select_tags_form_works() -> None:
         seed_select="tags:initiative",
     )
     assert "seed_instructions=tags:initiative" in " ".join(cmd)
+
+
+def test_build_command_resolves_bundled_seed_pool(tmp_path: Path) -> None:
+    with patch("geode_product.petri_audit.seed_tree.GEODE_HOME", tmp_path):
+        cmd = build_command(
+            judge="anthropic/claude-haiku-4-5-20251001",
+            auditor="anthropic/claude-sonnet-4-6",
+            target="geode/claude-opus-4-7",
+            seeds=1,
+            max_turns=10,
+            tags=None,
+            cache=False,
+            seed_select="bundled",
+        )
+
+    staged = Path(
+        next(
+            value.removeprefix("seed_instructions=")
+            for value in cmd
+            if value.startswith("seed_instructions=")
+        )
+    )
+    assert staged.parent == tmp_path / "petri-audit" / "seed-stage"
+    assert len(list(staged.glob("*.md"))) == 20
 
 
 def test_build_command_reveal_reasoning_adds_inspect_flags() -> None:
@@ -192,7 +216,7 @@ def test_run_audit_resolves_none_judge_via_petri_role(
     monkeypatch.setenv("GEODE_CONFIG_TOML", str(config_toml))
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
 
-    from plugins.petri_audit.registry import get_binding
+    from geode_product.petri_audit.registry import get_binding
 
     binding = get_binding("judge")
     assert binding.model == "claude-sonnet-4-6", (
@@ -407,7 +431,7 @@ def test_geode_judge_subset_yaml_is_subset_of_inspect_petri_38() -> None:
     """
     judge_dims_mod = pytest.importorskip("inspect_petri._judge.dimensions")
     import yaml
-    from plugins.petri_audit.judge_dims import BUILTIN_DIM_SETS
+    from geode_product.petri_audit.judge_dims import BUILTIN_DIM_SETS
 
     yaml_path = BUILTIN_DIM_SETS["subset"]
     with open(yaml_path) as f:
@@ -595,8 +619,10 @@ def test_run_audit_live_calls_subprocess(monkeypatch: pytest.MonkeyPatch) -> Non
         captured["kwargs"] = kwargs
         return _FakeProc()
 
-    monkeypatch.setattr("plugins.petri_audit.runner.subprocess.run", _fake_run)
-    monkeypatch.setattr("plugins.petri_audit.runner.shutil.which", lambda _: "/usr/bin/inspect")
+    monkeypatch.setattr("geode_product.petri_audit.runner.subprocess.run", _fake_run)
+    monkeypatch.setattr(
+        "geode_product.petri_audit.runner.shutil.which", lambda _: "/usr/bin/inspect"
+    )
 
     report = run_audit(
         judge="claude-haiku-4-5-20251001",
@@ -616,7 +642,7 @@ def test_run_audit_live_calls_subprocess(monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 def test_run_audit_missing_inspect_cli_aborts(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("plugins.petri_audit.runner.shutil.which", lambda _: None)
+    monkeypatch.setattr("geode_product.petri_audit.runner.shutil.which", lambda _: None)
     report = run_audit(
         judge="claude-haiku-4-5-20251001",
         auditor="claude-sonnet-4-6",
@@ -631,13 +657,15 @@ def test_run_audit_missing_inspect_cli_aborts(monkeypatch: pytest.MonkeyPatch) -
 
 
 def test_run_audit_user_declines(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("plugins.petri_audit.runner.shutil.which", lambda _: "/usr/bin/inspect")
+    monkeypatch.setattr(
+        "geode_product.petri_audit.runner.shutil.which", lambda _: "/usr/bin/inspect"
+    )
     monkeypatch.setattr("core.ui.console.console.input", lambda _p: "n", raising=False)
     monkeypatch.setattr(
-        "plugins.petri_audit.adapters.claude_cli_backend.is_available", lambda: False
+        "geode_product.petri_audit.adapters.claude_cli_backend.is_available", lambda: False
     )
 
-    with patch("plugins.petri_audit.runner.subprocess.run") as run_mock:
+    with patch("geode_product.petri_audit.runner.subprocess.run") as run_mock:
         report = run_audit(
             judge="claude-haiku-4-5-20251001",
             auditor="claude-sonnet-4-6",
@@ -768,7 +796,7 @@ def test_purge_inspect_cache_uses_inspect_api_when_available(
     import sys
     import types
 
-    from plugins.petri_audit.runner import purge_inspect_cache
+    from geode_product.petri_audit.runner import purge_inspect_cache
 
     calls = {"clear": 0}
     fake_model = types.ModuleType("inspect_ai.model")
@@ -791,7 +819,7 @@ def test_purge_inspect_cache_graceful_without_audit_extra(
     never raises."""
     import sys
 
-    from plugins.petri_audit.runner import purge_inspect_cache
+    from geode_product.petri_audit.runner import purge_inspect_cache
 
     # Force `from inspect_ai.model import ...` to raise ImportError.
     monkeypatch.setitem(sys.modules, "inspect_ai.model", None)

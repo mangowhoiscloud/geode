@@ -1,4 +1,4 @@
-"""Unit tests for :mod:`plugins.seed_generation.checkpointer`.
+"""Unit tests for :mod:`geode_product.seed_generation.checkpointer`.
 
 PR-CHECKPOINT-RESUME-TIMEBUDGET (2026-05-25, S5) — pin the atomic
 write contract + the completed-phase ordering + the malformed-JSON
@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 
 import pytest
-from plugins.seed_generation.checkpointer import (
+from geode_product.seed_generation.checkpointer import (
     CHECKPOINT_SUBDIR,
     RANKER_PARTIAL_CHECKPOINT,
     PhaseCheckpoint,

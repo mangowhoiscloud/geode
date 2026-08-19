@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
 from core.self_improving import ledger
 from core.self_improving.bench_means import (
     BENCH_DIM_WEIGHTS,
@@ -114,6 +115,15 @@ def test_collect_rubric_version_propagates() -> None:
     상수와 일치 — baseline.json 의 cohort tag 가 grep-provable."""
     result = collect_bench_means_from_inspect_ai(target_model="gpt-5")
     assert result.rubric_version == BENCH_RUBRIC_VERSION
+
+
+def test_live_bench_fails_loud_without_composed_target_model(monkeypatch) -> None:
+    from core.self_improving import train
+
+    monkeypatch.setenv("GEODE_BENCH_S6B_LIVE", "1")
+    monkeypatch.setattr(train, "_petri_role_model", lambda *_args, **_kwargs: "")
+    with pytest.raises(RuntimeError, match="explicit autoresearch target model"):
+        train._bench_target_model(dry_run=False)
 
 
 # ---------------------------------------------------------------------------

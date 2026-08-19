@@ -36,6 +36,6 @@ def _pin_fallback_policy_true(
     """
     if request.node.get_closest_marker("policy_real") is not None:
         return
-    from plugins.petri_audit import credential_source as cs
+    from geode_product.petri_audit import credential_source as cs
 
     monkeypatch.setattr(cs, "self_improving_loop_fallback_policy", lambda: True)

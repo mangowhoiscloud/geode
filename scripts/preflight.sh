@@ -41,10 +41,10 @@ run() {
 }
 
 echo "── lint / type / security ──"
-run "ruff check"    uv run ruff check core/ tests/ plugins/ scripts/
-run "ruff format"   uv run ruff format --check core/ tests/ plugins/ scripts/
-run "mypy"          uv run mypy core/ plugins/ scripts/
-run "bandit"        uv run bandit -r core/ -c pyproject.toml
+run "ruff check"    uv run ruff check core/ geode_product/ plugins/ tests/ scripts/
+run "ruff format"   uv run ruff format --check core/ geode_product/ plugins/ tests/ scripts/
+run "mypy"          uv run mypy core/ geode_product/ plugins/ scripts/
+run "bandit"        uv run bandit -r core/ geode_product/ -c pyproject.toml
 
 echo "── ratchets / generated artifacts ──"
 run "deptry"                 uv run deptry .

@@ -212,11 +212,11 @@ def test_build_runner_context_loads_all_5_policies(
         lambda: {"role": "test"},
     )
     monkeypatch.setattr(
-        "plugins.seed_generation.baseline_reader.load_baseline",
+        "geode_product.seed_generation.baseline_reader.load_baseline",
         lambda: None,
     )
     monkeypatch.setattr(
-        "plugins.seed_generation.baseline_reader.load_latest_meta_review",
+        "geode_product.seed_generation.baseline_reader.load_latest_meta_review",
         lambda: None,
     )
     monkeypatch.setattr(

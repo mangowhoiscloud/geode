@@ -8,7 +8,7 @@ from core.self_improving.loop.observe.attribution import (
     compute_attribution,
     write_attribution,
 )
-from plugins.seed_generation.baseline_reader import BaselineSnapshot
+from geode_product.seed_generation.baseline_reader import BaselineSnapshot
 
 # ---------------------------------------------------------------------------
 # compute_attribution — payload integration

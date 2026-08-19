@@ -200,9 +200,11 @@ class IsolatedRunner:
         self,
         hooks: HookSystem | None = None,
         lane: Any | None = None,
+        worker_module: str = "core.agent.worker",
     ) -> None:
         self._hooks = hooks
         self._lane = lane  # Lane("global") from unified LaneQueue
+        self._worker_module = worker_module
         self._results: dict[str, IsolationResult] = {}
         # Only async subprocess workers register here — thread-mode runs
         # via ``asyncio.to_thread`` and is not externally cancellable.
@@ -507,7 +509,7 @@ class IsolatedRunner:
             proc = await asyncio.create_subprocess_exec(
                 sys.executable,
                 "-m",
-                "core.agent.worker",
+                self._worker_module,
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,

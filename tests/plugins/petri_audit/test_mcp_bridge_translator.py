@@ -35,7 +35,7 @@ def _make_tool_info(
 
 
 def test_spec_dict_shape_basic() -> None:
-    from plugins.petri_audit.mcp_bridge.tool_translator import tool_info_to_spec_dict
+    from geode_product.petri_audit.mcp_bridge.tool_translator import tool_info_to_spec_dict
 
     info = _make_tool_info()
     spec = tool_info_to_spec_dict(info)
@@ -47,7 +47,7 @@ def test_spec_dict_shape_basic() -> None:
 
 
 def test_spec_dict_empty_description_normalised() -> None:
-    from plugins.petri_audit.mcp_bridge.tool_translator import tool_info_to_spec_dict
+    from geode_product.petri_audit.mcp_bridge.tool_translator import tool_info_to_spec_dict
 
     info = _make_tool_info(description="")
     spec = tool_info_to_spec_dict(info)
@@ -56,7 +56,7 @@ def test_spec_dict_empty_description_normalised() -> None:
 
 
 def test_spec_dict_preserves_required_list() -> None:
-    from plugins.petri_audit.mcp_bridge.tool_translator import tool_info_to_spec_dict
+    from geode_product.petri_audit.mcp_bridge.tool_translator import tool_info_to_spec_dict
 
     info = _make_tool_info(
         properties={
@@ -70,7 +70,7 @@ def test_spec_dict_preserves_required_list() -> None:
 
 
 def test_spec_dict_nested_object_preserved() -> None:
-    from plugins.petri_audit.mcp_bridge.tool_translator import tool_info_to_spec_dict
+    from geode_product.petri_audit.mcp_bridge.tool_translator import tool_info_to_spec_dict
 
     info = _make_tool_info(
         properties={
@@ -89,7 +89,7 @@ def test_spec_dict_nested_object_preserved() -> None:
 
 
 def test_spec_dict_unicode_tool_name() -> None:
-    from plugins.petri_audit.mcp_bridge.tool_translator import tool_info_to_spec_dict
+    from geode_product.petri_audit.mcp_bridge.tool_translator import tool_info_to_spec_dict
 
     info = _make_tool_info(name="시작_메시지")
     spec = tool_info_to_spec_dict(info)
@@ -103,7 +103,7 @@ def test_spec_dict_unicode_tool_name() -> None:
 
 def test_tool_info_to_mcp_tool_constructs_valid_type() -> None:
     pytest.importorskip("mcp")
-    from plugins.petri_audit.mcp_bridge.tool_translator import tool_info_to_mcp_tool
+    from geode_product.petri_audit.mcp_bridge.tool_translator import tool_info_to_mcp_tool
 
     from mcp import types as mcp_types
 
@@ -119,7 +119,7 @@ def test_tool_info_to_mcp_tool_constructs_valid_type() -> None:
 
 def test_tool_infos_to_mcp_tools_preserves_order() -> None:
     pytest.importorskip("mcp")
-    from plugins.petri_audit.mcp_bridge.tool_translator import tool_infos_to_mcp_tools
+    from geode_product.petri_audit.mcp_bridge.tool_translator import tool_infos_to_mcp_tools
 
     infos = [_make_tool_info(name=f"tool_{i}") for i in range(3)]
     tools = tool_infos_to_mcp_tools(infos)
@@ -132,7 +132,7 @@ def test_tool_infos_to_mcp_tools_preserves_order() -> None:
 
 
 def test_serialise_round_trips_through_deserialise() -> None:
-    from plugins.petri_audit.mcp_bridge.tool_translator import (
+    from geode_product.petri_audit.mcp_bridge.tool_translator import (
         deserialise_tool_specs,
         serialise_tool_infos_for_bridge,
     )
@@ -146,7 +146,7 @@ def test_serialise_round_trips_through_deserialise() -> None:
 
 def test_serialise_emits_deterministic_json() -> None:
     """sort_keys=True so test snapshots and content-hash-based caching work."""
-    from plugins.petri_audit.mcp_bridge.tool_translator import serialise_tool_infos_for_bridge
+    from geode_product.petri_audit.mcp_bridge.tool_translator import serialise_tool_infos_for_bridge
 
     info = _make_tool_info()
     out1 = serialise_tool_infos_for_bridge([info])
@@ -155,7 +155,7 @@ def test_serialise_emits_deterministic_json() -> None:
 
 
 def test_serialise_handles_unicode_without_escaping() -> None:
-    from plugins.petri_audit.mcp_bridge.tool_translator import serialise_tool_infos_for_bridge
+    from geode_product.petri_audit.mcp_bridge.tool_translator import serialise_tool_infos_for_bridge
 
     info = _make_tool_info(name="시작", description="한국어 설명")
     payload = serialise_tool_infos_for_bridge([info])
@@ -165,28 +165,28 @@ def test_serialise_handles_unicode_without_escaping() -> None:
 
 
 def test_deserialise_rejects_non_array() -> None:
-    from plugins.petri_audit.mcp_bridge.tool_translator import deserialise_tool_specs
+    from geode_product.petri_audit.mcp_bridge.tool_translator import deserialise_tool_specs
 
     with pytest.raises(ValueError, match="expected JSON array"):
         deserialise_tool_specs(json.dumps({"not": "an array"}))
 
 
 def test_deserialise_rejects_non_dict_item() -> None:
-    from plugins.petri_audit.mcp_bridge.tool_translator import deserialise_tool_specs
+    from geode_product.petri_audit.mcp_bridge.tool_translator import deserialise_tool_specs
 
     with pytest.raises(ValueError, match="not a dict"):
         deserialise_tool_specs(json.dumps(["string instead of dict"]))
 
 
 def test_deserialise_rejects_missing_required_field() -> None:
-    from plugins.petri_audit.mcp_bridge.tool_translator import deserialise_tool_specs
+    from geode_product.petri_audit.mcp_bridge.tool_translator import deserialise_tool_specs
 
     with pytest.raises(ValueError, match="missing 'description'"):
         deserialise_tool_specs(json.dumps([{"name": "x", "inputSchema": {}}]))
 
 
 def test_deserialise_rejects_malformed_json() -> None:
-    from plugins.petri_audit.mcp_bridge.tool_translator import deserialise_tool_specs
+    from geode_product.petri_audit.mcp_bridge.tool_translator import deserialise_tool_specs
 
     with pytest.raises(json.JSONDecodeError):
         deserialise_tool_specs("{not json")
@@ -205,9 +205,9 @@ def test_auditor_tools_translate_without_error() -> None:
     ToolParam feature MCP doesn't support, this test fails early."""
     pytest.importorskip("inspect_petri")
     pytest.importorskip("mcp")
+    from geode_product.petri_audit.mcp_bridge.tool_translator import tool_info_to_mcp_tool
     from inspect_ai.tool import ToolDef, ToolInfo
     from inspect_petri._auditor.tools import auditor_tools
-    from plugins.petri_audit.mcp_bridge.tool_translator import tool_info_to_mcp_tool
 
     from mcp import types as mcp_types
 

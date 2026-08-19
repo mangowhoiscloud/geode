@@ -7,17 +7,24 @@ constructed command + cost estimate.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
-from core.cli import app
-from plugins.petri_audit.cli_audit import _build_slash_parser, cmd_audit_slash
+from geode_product.cli import app
+from geode_product.petri_audit.cli_audit import _build_slash_parser, cmd_audit_slash
 from typer.testing import CliRunner
 
 runner = CliRunner()
 
 
+@pytest.fixture(autouse=True)
+def _isolated_seed_stage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("geode_product.petri_audit.seed_tree.GEODE_HOME", tmp_path)
+
+
 def test_typer_audit_dry_run_prints_command(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "plugins.petri_audit.adapters.claude_cli_backend.is_available", lambda: True
+        "geode_product.petri_audit.adapters.claude_cli_backend.is_available", lambda: True
     )
     result = runner.invoke(
         app,

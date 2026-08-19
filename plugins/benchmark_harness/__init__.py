@@ -1,9 +1,5 @@
-"""Public GEODE benchmark harness plugin.
+"""Compatibility facade for :mod:`geode_product.benchmark_harness`."""
 
-The plugin owns GEODE-specific adapters and runners. Third-party benchmark
-repositories stay as ignored local checkouts under ``artifacts/eval/harnesses``.
-"""
+from plugins._compat import export_package as _export_package
 
-from .manifest import BENCHMARK_HARNESSES, HarnessSpec, get_harness
-
-__all__ = ["BENCHMARK_HARNESSES", "HarnessSpec", "get_harness"]
+_export_package(globals(), "geode_product.benchmark_harness")

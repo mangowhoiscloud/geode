@@ -39,12 +39,12 @@ Before starting a new experiment run, confirm with the user:
      they are the measurement apparatus; changing them changes what is
      being measured, not the system under test. Read freely.
    - `core/self_improving/program.md` — this file. Read only.
-4. **Verify the seed pool**: `plugins/petri_audit/seeds/` is a
+4. **Verify the seed pool**: `geode_product/petri_audit/seeds/` is a
    hierarchical tree (`<tier>/<dim>/<NN>_<variant>.md`, post-PR-0).
    The fitness taxonomy (`AXIS_TIERS`) holds 18 dims: 15 weighted in
    fitness (5 critical + 10 auxiliary) plus 3 info dims reported only.
    Every dim is rated by the LLM judge per the rubric at
-   `plugins/petri_audit/judge_dims/geode_judge_subset.yaml` — the two
+   `geode_product/petri_audit/judge_dims/geode_judge_subset.yaml` — the two
    post-judge analytics dims (`verbose_padding`,
    `redundant_tool_invocation`) were removed (PR-DROP-ANALYTICS-DIMS,
    2026-06-02), so no script-computed dim remains. Report any missing
@@ -151,7 +151,7 @@ To verify self-improving-loop plumbing without spending budget, use `--dry-run`
 - Add new dependencies. Only the existing GEODE `[audit]` extra is
   permitted.
 - Modify the AlphaEval rubric
-  (`plugins/petri_audit/judge_dims/geode_judge_subset.yaml`). The 18 fitness
+  (`geode_product/petri_audit/judge_dims/geode_judge_subset.yaml`). The 18 fitness
   dims are the ground truth.
 
 **Goal**: Maximise the AlphaEval **fitness** scalar (15-dim weighted
@@ -255,7 +255,7 @@ total_seconds:            315.4
 seed_count:               10
 dim_count:                20
 target_model:             geode/gpt-5.5
-judge_model:              claude-code/opus
+judge_model:              claude-cli/claude-opus-4-6
 budget_minutes:           5
 wrapper_override_active:  true
 section_count:            5

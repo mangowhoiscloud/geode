@@ -344,9 +344,9 @@ def test_deadline_override_keys_match_registered_handler_names() -> None:
     600s override silently never applied. Every override key must be an
     actually-registered handler name."""
     from core.agent.tool_executor.executor import _TOOL_DEADLINE_OVERRIDES_S
-    from core.cli.tool_handlers import _build_tool_handlers
+    from geode_product.tool_handlers import build_tool_handlers
 
-    registered = set(_build_tool_handlers().keys())
+    registered = set(build_tool_handlers())
     # ``computer`` registers only when GEODE_COMPUTER_USE_ENABLED + pyautogui
     # are present — pin its name against the builder source instead.
     single_tool_src = (REPO_ROOT / "core" / "cli" / "tool_handlers" / "single_tool.py").read_text(

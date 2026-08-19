@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from plugins.benchmark_harness.tau2_geode_agent import main
+from geode_product.benchmark_harness.tau2_geode_agent import main
 
 if __name__ == "__main__":
     raise SystemExit(main())

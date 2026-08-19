@@ -874,7 +874,7 @@ def _eval_path_from_stdout(stdout: str, stderr: str) -> str | None:
     flushed) or the resolved file does not exist, so the caller falls back to the
     legacy global pointer.
 
-    The regex is inlined (not imported from ``plugins.petri_audit.runner``) to keep
+    The regex is inlined (not imported from ``geode_product.petri_audit.runner``) to keep
     ``core`` free of a ``core → plugins`` import-contract violation.
     """
     pattern = re.compile(r"Log:\s+(\S+\.eval)\b")

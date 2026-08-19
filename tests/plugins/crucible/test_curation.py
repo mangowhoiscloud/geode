@@ -3,10 +3,10 @@ import json
 from pathlib import Path
 
 import pytest
-from plugins.crucible.artifacts import write_exclusive_json
-from plugins.crucible.contract import ContractError, task_pack_sha256
-from plugins.crucible.curation import curate_tau2_pack
-from plugins.crucible.verifiers.tau2 import tau2_task_unit
+from geode_product.crucible.artifacts import write_exclusive_json
+from geode_product.crucible.contract import ContractError, task_pack_sha256
+from geode_product.crucible.curation import curate_tau2_pack
+from geode_product.crucible.verifiers.tau2 import tau2_task_unit
 
 
 def _task(index: int, *, intent: str, persona: str, faults: int = 3) -> dict[str, object]:

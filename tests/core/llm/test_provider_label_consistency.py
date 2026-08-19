@@ -85,6 +85,11 @@ class TestCrossProviderFallbackSafety:
 
 
 class TestModelProfileLabels:
+    def test_all_gpt_models_use_openai_family_label(self) -> None:
+        profiles = [profile for profile in get_model_profiles() if profile.id.startswith("gpt-")]
+        assert profiles
+        assert {profile.provider for profile in profiles} == {"openai"}
+
     def test_gpt_5_4_mini_is_not_labelled_codex(self) -> None:
         # Pre-0.50 the UI showed "Codex (Plus)" for gpt-5.4-mini even though
         # its canonical provider family is "openai". Credential source, not

@@ -140,7 +140,7 @@ export default function Page() {
               <li>
                 <strong>MCP 양방향</strong>. <code>core/mcp/</code>가 외부 MCP
                 서버를 붙이는 클라이언트이고, <code>geode-mcp</code>
-                (<code>core/mcp_server.py</code>)가 GEODE 자체를 외부 호스트의
+                (<code>geode_product/mcp_server.py</code>)가 GEODE 자체를 외부 호스트의
                 도구로 노출하는 1급 서버입니다. Codex CLI도 양방향을
                 출하합니다(mcp-server + mcp_servers). 차이는 GEODE가
                 자기개선 루프 상태(<code>self_improving_*</code>)까지 도구로
@@ -421,7 +421,7 @@ export default function Page() {
               <li>
                 <strong>MCP in both directions</strong>. <code>core/mcp/</code>{" "}
                 is the client that attaches external MCP servers, and{" "}
-                <code>geode-mcp</code> (<code>core/mcp_server.py</code>) is the
+                <code>geode-mcp</code> (<code>geode_product/mcp_server.py</code>) is the
                 first-class server that exposes GEODE itself as a tool to
                 external hosts. Codex CLI also ships both directions
                 (mcp-server plus mcp_servers); the difference is that GEODE

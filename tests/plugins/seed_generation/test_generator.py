@@ -1,4 +1,4 @@
-"""Unit tests for ``plugins.seed_generation.agents.generator``."""
+"""Unit tests for ``geode_product.seed_generation.agents.generator``."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ from pathlib import Path
 from typing import Any
 
 from core.agent.sub_agent import SubResult, SubTask
-from plugins.seed_generation.agents.generator import Generator
-from plugins.seed_generation.orchestrator import PipelineState
+from geode_product.seed_generation.agents.generator import Generator
+from geode_product.seed_generation.orchestrator import PipelineState
 
 
 class _StubManager:
@@ -164,7 +164,7 @@ def test_generator_args_carry_output_path(tmp_path: Path) -> None:
 
 def test_generator_orchestrator_registry_accepts_generator(tmp_path: Path) -> None:
     """Smoke — registering Generator into PipelineRegistry doesn't error."""
-    from plugins.seed_generation.orchestrator import PipelineRegistry
+    from geode_product.seed_generation.orchestrator import PipelineRegistry
 
     manager = _StubManager()
     registry = PipelineRegistry()
@@ -185,7 +185,7 @@ def test_generator_injects_baseline_evidence_into_description(
     The test monkeypatches ``format_evidence_block`` so the agent layer
     can be exercised independently of the on-disk archive.
     """
-    from plugins.seed_generation.baseline_reader import BaselineSnapshot
+    from geode_product.seed_generation.baseline_reader import BaselineSnapshot
 
     run_dir = tmp_path
     state = _make_state(run_dir, n=2)
@@ -194,7 +194,7 @@ def test_generator_injects_baseline_evidence_into_description(
         dim_stderr={"broken_tool_use": 0.3},
     )
     monkeypatch.setattr(
-        "plugins.seed_generation.baseline_reader.format_evidence_block",
+        "geode_product.seed_generation.baseline_reader.format_evidence_block",
         lambda _snap, _dim, **_kw: (
             "Recent audit evidence (latest .eval, on demand)\n"
             "- dim: broken_tool_use\n"
@@ -227,13 +227,13 @@ def test_generator_skips_evidence_when_snapshot_is_none(tmp_path: Path) -> None:
 def test_generator_skips_evidence_when_block_is_empty(tmp_path: Path, monkeypatch: Any) -> None:
     """Snapshot present but format_evidence_block returns "" (no .eval, no rows
     for target_dim) → no prefix."""
-    from plugins.seed_generation.baseline_reader import BaselineSnapshot
+    from geode_product.seed_generation.baseline_reader import BaselineSnapshot
 
     run_dir = tmp_path
     state = _make_state(run_dir, n=1)
     state.baseline_snapshot = BaselineSnapshot(dim_means={"other_dim": 5.0})
     monkeypatch.setattr(
-        "plugins.seed_generation.baseline_reader.format_evidence_block",
+        "geode_product.seed_generation.baseline_reader.format_evidence_block",
         lambda _snap, _dim, **_kw: "",
     )
     manager = _StubManager()
@@ -248,7 +248,7 @@ def test_generator_skips_evidence_when_block_is_empty(tmp_path: Path, monkeypatc
 
 def test_generator_injects_priors_block_when_snapshot_present(tmp_path: Path) -> None:
     """meta_review_snapshot → priors block prepended ABOVE baseline evidence."""
-    from plugins.seed_generation.baseline_reader import MetaReviewSnapshot
+    from geode_product.seed_generation.baseline_reader import MetaReviewSnapshot
 
     run_dir = tmp_path
     state = _make_state(run_dir, n=1)

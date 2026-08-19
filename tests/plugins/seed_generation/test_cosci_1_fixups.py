@@ -21,7 +21,7 @@ def _read_contract(name: str) -> str:
     """
     repo_root = Path(__file__).resolve().parents[3]
     normalized = name.removeprefix("seed_")
-    contract = repo_root / "plugins" / "seed_generation" / "agents" / normalized
+    contract = repo_root / "geode_product" / "seed_generation" / "agents" / normalized
     assert contract.is_file(), f"missing agent contract: {contract}"
     return contract.read_text(encoding="utf-8")
 
@@ -84,7 +84,7 @@ def test_orchestrator_aborts_on_empty_candidates_after_generator(
     """
     import inspect
 
-    from plugins.seed_generation import orchestrator
+    from geode_product.seed_generation import orchestrator
 
     src = inspect.getsource(orchestrator.Pipeline.arun)
     # The abort gate must check the post-phase state for empty
@@ -100,7 +100,7 @@ def test_orchestrator_abort_emits_observability_event() -> None:
     grepping the session journal sees the root cause."""
     import inspect
 
-    from plugins.seed_generation import orchestrator
+    from geode_product.seed_generation import orchestrator
 
     src = inspect.getsource(orchestrator.Pipeline.arun)
     assert '"empty_candidates_abort"' in src

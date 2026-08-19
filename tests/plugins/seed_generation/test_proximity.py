@@ -13,13 +13,13 @@ import asyncio
 from pathlib import Path
 from typing import Any
 
-from plugins.seed_generation.agents.proximity import (
+from geode_product.seed_generation.agents.proximity import (
     HIGH_SIMILARITY_DEGREE,
     Proximity,
     _build_candidate_summary,
     _select_removals,
 )
-from plugins.seed_generation.orchestrator import PipelineState
+from geode_product.seed_generation.orchestrator import PipelineState
 
 
 class _StubSubResult:
@@ -240,8 +240,8 @@ def test_proximity_prompt_enforces_json_only_response() -> None:
     language that pilot/critic/evolver use to gate the model from
     slipping a prose preamble past the parser.
     """
-    from plugins.seed_generation.agents.proximity import Proximity
-    from plugins.seed_generation.orchestrator import PipelineState
+    from geode_product.seed_generation.agents.proximity import Proximity
+    from geode_product.seed_generation.orchestrator import PipelineState
 
     state = PipelineState(
         run_id="t-prox-prompt",

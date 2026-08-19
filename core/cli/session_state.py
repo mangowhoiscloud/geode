@@ -128,6 +128,9 @@ def _set_readiness(report: ReadinessReport) -> None:
     _readiness_ctx.set(report)
 
 
+set_readiness = _set_readiness
+
+
 def _get_last_result() -> dict[str, Any] | None:
     """Get the most recently cached pipeline result."""
     if not _result_cache._cache:

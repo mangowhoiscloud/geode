@@ -17,9 +17,6 @@ import logging
 from typing import Any
 
 import typer
-from plugins.petri_audit.cli_agreement import audit_agreement_app
-from plugins.petri_audit.cli_audit import audit, petri_archive
-from plugins.seed_generation.cli import audit_seeds_app
 
 from core import __version__
 
@@ -52,12 +49,14 @@ from core.cli.tool_handlers import (
 )
 from core.cli.typer_commands import (
     about,
-    doctor,
     history,
     setup,
     uninstall,
     update,
     version,
+)
+from core.cli.typer_commands import (
+    doctor as _doctor_command,
 )
 from core.cli.typer_init import _ensure_gitignore_entry as _ensure_gitignore_entry
 from core.cli.typer_init import init
@@ -123,6 +122,7 @@ def _thin_interactive_loop(
     *,
     resume_session: str = "",
     continue_latest: bool = False,
+    command_registry: Any = None,
 ) -> None:
     """Thin CLI client — all execution delegated to geode serve via IPC.
 
@@ -212,7 +212,7 @@ def _thin_interactive_loop(
                 # Local-only commands
                 if cmd in _LOCAL_COMMANDS:
                     try:
-                        _handle_command(cmd, args, False)
+                        _handle_command(cmd, args, False, command_registry=command_registry)
                     except (SystemExit, EOFError):
                         break
                     continue
@@ -257,10 +257,10 @@ def _thin_interactive_loop(
                 from core.cli.routing import RunLocation
                 from core.cli.routing import lookup as _lookup_spec
 
-                _spec = _lookup_spec(cmd)
+                _spec = _lookup_spec(cmd, command_registry)
                 if _spec is not None and _spec.location is RunLocation.THIN:
                     try:
-                        _handle_command(cmd, args, False)
+                        _handle_command(cmd, args, False, command_registry=command_registry)
                     except (SystemExit, EOFError):
                         break
                     # Notify daemon to reload auth state if this command
@@ -331,74 +331,29 @@ def _thin_interactive_loop(
         client.close()
 
 
-app = typer.Typer(
-    name="geode",
-    help=f"GEODE v{__version__} — 범용 자율 실행 에이전트",
-    no_args_is_help=False,
-    invoke_without_command=True,
-)
-
 # Subcommand groups
 from core.cli.commands.adapters import app as adapters_app  # noqa: E402
 from core.cli.commands.config import app as config_app  # noqa: E402
-from core.cli.commands.skill import app as skill_app  # noqa: E402
-from core.cli.typer_ask import ask_app  # noqa: E402
-
-app.add_typer(adapters_app, name="adapters")
-app.add_typer(skill_app, name="skill")
-app.add_typer(config_app, name="config")
-app.add_typer(ask_app, name="ask")
-
-# S-3 (2026-06-11) — scripts→CLI promotion: operator-procedure steps reachable
-# as geode subcommands (repo-only; thin wrappers over scripts/ modules).
-from core.cli.commands.prompt_inspect import prompt_app  # noqa: E402
-from core.cli.commands.seed_pool import hub_app, seeds_app  # noqa: E402
-
-app.add_typer(seeds_app, name="seeds")
-app.add_typer(hub_app, name="hub")
-app.add_typer(prompt_app, name="prompt")
-
-# Persisted-session listing + shareable export (checkpoint-backed).
-from core.cli.typer_session import session_app  # noqa: E402
-
-app.add_typer(session_app, name="session")
-
-
-# ---------------------------------------------------------------------------
-# Typer command registration
-# ---------------------------------------------------------------------------
-# Functions live in sibling modules; we apply Typer decorators here so
-# the package ``__init__`` remains the canonical Typer entry point.
-
-app.command()(version)
-app.command()(about)
-app.command()(setup)
-app.command()(doctor)
-app.command()(update)
-app.command()(uninstall)
-app.command()(init)
-app.command()(history)
-app.command()(serve)
-app.command()(audit)
-app.command(name="petri-archive")(petri_archive)
-app.add_typer(audit_seeds_app, name="audit-seeds")
-app.add_typer(audit_agreement_app, name="audit-agreement")
-
-# OL-A3 (2026-05-22) — outer-loop bundle viewer
-from core.cli.outer_bundle import outer_bundle_command  # noqa: E402
-
-app.command(name="outer-bundle")(outer_bundle_command)
-
-# PR-Hermes-1d.2 (2026-05-26) — cross-project search index rebuild
-from core.cli.commands.reindex import reindex  # noqa: E402
-
-app.command(name="reindex")(reindex)
 
 # PR-MEMORY-LIFECYCLE (2026-07-03) — weekly project-memory decay + HITL
 # promotion-proposal pass (dry-run default, --apply to move/write).
 from core.cli.commands.memory_lifecycle import memory_lifecycle  # noqa: E402
 
-app.command(name="memory-lifecycle")(memory_lifecycle)
+# S-3 (2026-06-11) — scripts→CLI promotion: operator-procedure steps reachable
+# as geode subcommands (repo-only; thin wrappers over scripts/ modules).
+from core.cli.commands.prompt_inspect import prompt_app  # noqa: E402
+
+# PR-Hermes-1d.2 (2026-05-26) — cross-project search index rebuild
+from core.cli.commands.reindex import reindex  # noqa: E402
+from core.cli.commands.seed_pool import hub_app, seeds_app  # noqa: E402
+from core.cli.commands.skill import app as skill_app  # noqa: E402
+
+# OL-A3 (2026-05-22) — outer-loop bundle viewer
+from core.cli.outer_bundle import outer_bundle_command  # noqa: E402
+from core.cli.typer_ask import ask_app  # noqa: E402
+
+# Persisted-session listing + shareable export (checkpoint-backed).
+from core.cli.typer_session import session_app  # noqa: E402
 
 
 # PR-CAMPAIGN-CLI: discoverable front end for the 3-arm self-improving campaign.
@@ -476,34 +431,20 @@ def campaign(
         raise typer.Exit(code=exit_code)
 
 
-app.command()(campaign)
-
-
 def _version_option(value: bool) -> None:
     if value:
         console.print(f"GEODE v{__version__}")
         raise typer.Exit()
 
 
-@app.callback()
-def main(
+def _run_main(
     ctx: typer.Context,
-    show_version: bool = typer.Option(
-        False,
-        "--version",
-        callback=_version_option,
-        is_eager=True,
-        help="Show GEODE version and exit.",
-    ),
-    continue_session: bool = typer.Option(
-        False, "--continue", help="Resume the most recent session"
-    ),
-    resume: str = typer.Option("", "--resume", help="Resume a specific session by ID"),
-    dangerously_skip_permissions: bool = typer.Option(
-        False,
-        "--dangerously-skip-permissions",
-        help="Bypass tool HITL approval gates (autonomous). Use with care.",
-    ),
+    show_version: bool,
+    continue_session: bool,
+    resume: str,
+    dangerously_skip_permissions: bool,
+    *,
+    command_registry: Any = None,
 ) -> None:
     """GEODE — Autonomous Research Harness."""
     _ = show_version
@@ -539,7 +480,101 @@ def main(
         _thin_interactive_loop(
             resume_session=resume,
             continue_latest=continue_session,
+            command_registry=command_registry,
         )
+
+
+def main(
+    ctx: typer.Context,
+    show_version: bool = typer.Option(
+        False,
+        "--version",
+        callback=_version_option,
+        is_eager=True,
+        help="Show GEODE version and exit.",
+    ),
+    continue_session: bool = typer.Option(
+        False, "--continue", help="Resume the most recent session"
+    ),
+    resume: str = typer.Option("", "--resume", help="Resume a specific session by ID"),
+    dangerously_skip_permissions: bool = typer.Option(
+        False,
+        "--dangerously-skip-permissions",
+        help="Bypass tool HITL approval gates (autonomous). Use with care.",
+    ),
+) -> None:
+    """GEODE — Autonomous Research Harness."""
+    _run_main(ctx, show_version, continue_session, resume, dangerously_skip_permissions)
+
+
+def build_app(
+    *,
+    serve_command: Any = serve,
+    config_command_app: typer.Typer = config_app,
+    command_specs: Any = (),
+) -> typer.Typer:
+    """Build the kernel CLI; outer composition may replace ``serve``."""
+    cli = typer.Typer(
+        name="geode",
+        help=f"GEODE v{__version__} — 범용 자율 실행 에이전트",
+        no_args_is_help=False,
+        invoke_without_command=True,
+    )
+    cli.add_typer(adapters_app, name="adapters")
+    cli.add_typer(skill_app, name="skill")
+    cli.add_typer(config_command_app, name="config")
+    cli.add_typer(ask_app, name="ask")
+    cli.add_typer(seeds_app, name="seeds")
+    cli.add_typer(hub_app, name="hub")
+    cli.add_typer(prompt_app, name="prompt")
+    cli.add_typer(session_app, name="session")
+    for command in (version, about, setup, _doctor_command, update, uninstall, init, history):
+        cli.command()(command)
+    cli.command()(serve_command)
+    cli.command(name="outer-bundle")(outer_bundle_command)
+    cli.command(name="reindex")(reindex)
+    cli.command(name="memory-lifecycle")(memory_lifecycle)
+    cli.command()(campaign)
+    if command_specs:
+        from core.cli.routing import compose_command_registry
+
+        command_registry = compose_command_registry(command_specs)
+
+        def composed_main(
+            ctx: typer.Context,
+            show_version: bool = typer.Option(
+                False,
+                "--version",
+                callback=_version_option,
+                is_eager=True,
+                help="Show GEODE version and exit.",
+            ),
+            continue_session: bool = typer.Option(
+                False, "--continue", help="Resume the most recent session"
+            ),
+            resume: str = typer.Option("", "--resume", help="Resume a specific session by ID"),
+            dangerously_skip_permissions: bool = typer.Option(
+                False,
+                "--dangerously-skip-permissions",
+                help="Bypass tool HITL approval gates (autonomous). Use with care.",
+            ),
+        ) -> None:
+            _run_main(
+                ctx,
+                show_version,
+                continue_session,
+                resume,
+                dangerously_skip_permissions,
+                command_registry=command_registry,
+            )
+
+        cli.callback()(composed_main)
+    else:
+        cli.callback()(main)
+    return cli
+
+
+app = build_app()
 
 
 if __name__ == "__main__":

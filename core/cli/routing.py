@@ -26,6 +26,7 @@ prompts were swallowed by ``capture_output()`` on the daemon side.
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from enum import Enum
 
@@ -90,18 +91,6 @@ COMMAND_REGISTRY: dict[str, CommandSpec] = {
         handler_path="core.cli.commands:cmd_model",
         needs_tty=True,
     ),
-    "/audit": CommandSpec(
-        name="/audit",
-        location=RunLocation.THIN,
-        description="Petri × GEODE alignment audit — choose judge/auditor/target",
-        handler_path="plugins.petri_audit.cli_audit:cmd_audit_slash",
-    ),
-    "/audit-seeds": CommandSpec(
-        name="/audit-seeds",
-        location=RunLocation.THIN,
-        description="Generate and score candidate evaluation seeds",
-        handler_path="plugins.seed_generation.cli:cmd_audit_seeds_slash",
-    ),
     "/self-improving": CommandSpec(
         name="/self-improving",
         aliases=("/sil",),
@@ -129,25 +118,43 @@ COMMAND_REGISTRY: dict[str, CommandSpec] = {
 }
 
 
-# Aliases for backwards-compat lookups.
-_ALIAS_INDEX: dict[str, str] = {}
-for _spec in COMMAND_REGISTRY.values():
-    for _alias in _spec.aliases:
-        _ALIAS_INDEX[_alias] = _spec.name
+def compose_command_registry(specs: Iterable[CommandSpec] = ()) -> dict[str, CommandSpec]:
+    """Return a collision-checked registry for one CLI composition."""
+    registry = dict(COMMAND_REGISTRY)
+    known = {name for spec in registry.values() for name in (spec.name, *spec.aliases)}
+    for spec in specs:
+        names = (spec.name, *spec.aliases)
+        if any(not name.startswith("/") for name in names):
+            raise ValueError(f"slash command names must start with '/': {names!r}")
+        collisions = [name for name in names if name in known]
+        if collisions:
+            raise ValueError(f"duplicate slash command registration: {collisions!r}")
+        registry[spec.name] = spec
+        known.update(names)
+    return registry
 
 
-def lookup(slash_command: str) -> CommandSpec | None:
+def lookup(
+    slash_command: str,
+    registry: Mapping[str, CommandSpec] | None = None,
+) -> CommandSpec | None:
     """Return the registered ``CommandSpec`` for a leading-slash command name.
 
     Returns None when the command is not registered. The REPL treats
     None as "relay to daemon as legacy DAEMON_RPC" during phases 3-4
     (transitional). Phase 6 + import-linter make unknown commands fail.
     """
-    canonical = _ALIAS_INDEX.get(slash_command, slash_command)
-    return COMMAND_REGISTRY.get(canonical)
+    active = COMMAND_REGISTRY if registry is None else registry
+    direct = active.get(slash_command)
+    if direct is not None:
+        return direct
+    return next((spec for spec in active.values() if slash_command in spec.aliases), None)
 
 
-def is_thin(slash_command: str) -> bool:
+def is_thin(
+    slash_command: str,
+    registry: Mapping[str, CommandSpec] | None = None,
+) -> bool:
     """Quick check: does this command run locally in the CLI process?"""
-    spec = lookup(slash_command)
+    spec = lookup(slash_command, registry)
     return spec is not None and spec.location is RunLocation.THIN

@@ -9,7 +9,7 @@ This is the "Adapter" choice in the user-facing PAYG / Subscription / Adapter
 trichotomy. Maps to paperclip's ``adapter-claude-local`` package.
 
 The actual subprocess implementation is reused from
-:mod:`plugins.petri_audit.claude_cli_provider` (``_run_claude_subprocess`` +
+:mod:`core.llm.adapters._claude_cli_runtime` (``_run_claude_subprocess`` +
 ``build_claude_cli_argv``) — that module is the canonical Anthropic-subprocess
 runner; the adapter is the public Layer 4-shaped surface around it.
 """
@@ -36,7 +36,7 @@ from core.llm.adapters.base import (
 )
 
 if TYPE_CHECKING:
-    from plugins.petri_audit.claude_cli_provider import StreamJsonEvent, TransientSignal
+    from core.llm.adapters._claude_cli_runtime import StreamJsonEvent, TransientSignal
 
 log = logging.getLogger(__name__)
 
@@ -72,7 +72,7 @@ class ClaudeCliAdapter:
     async def acomplete(self, req: AdapterCallRequest) -> AdapterCallResult:
         """Single-turn ``claude --print`` invocation.
 
-        Behaviour mirrors :func:`plugins.petri_audit.claude_cli_provider._generate_text_only`
+        Behaviour mirrors :func:`core.llm.adapters._claude_cli_runtime._generate_text_only`
         — the canonical Claude OAuth-subprocess path. LaneQueue
         (``core.orchestration.claude_cli_lane``) gates concurrency so multiple
         adapter callers don't burst-overload the local binary.
@@ -87,7 +87,7 @@ class ClaudeCliAdapter:
         classifier closes that path by raising
         :class:`ClaudeCliTransientUpstreamError` instead.
         """
-        from plugins.petri_audit.claude_cli_provider import (
+        from core.llm.adapters._claude_cli_runtime import (
             ClaudeCliInvocationError,
             ClaudeCliTransientUpstreamError,
             _extract_assistant_text,
@@ -98,7 +98,6 @@ class ClaudeCliAdapter:
             classify_transient_signal,
             parse_stream_json_events,
         )
-
         from core.orchestration.claude_cli_lane import acquire_claude_cli_lane_async
 
         binary = _resolve_claude_binary()
@@ -261,7 +260,7 @@ class ClaudeCliAdapter:
         # Capture the session_id claude-cli emitted in its
         # ``system.init`` event so the caller can persist it for the
         # next turn's ``resume_session_id`` (cross-call cache hit).
-        from plugins.petri_audit.claude_cli_provider import (
+        from core.llm.adapters._claude_cli_runtime import (
             extract_session_id_from_events,
             extract_usage_from_events,
         )
@@ -305,10 +304,10 @@ class ClaudeCliAdapter:
         )
 
     def test_environment(self) -> EnvironmentReport:
-        from plugins.petri_audit.adapters.claude_cli_backend import is_available
+        from core.auth.claude_cli_oauth import is_claude_oauth_available
 
         try:
-            from plugins.petri_audit.claude_cli_provider import _resolve_claude_binary
+            from core.llm.adapters._claude_cli_runtime import _resolve_claude_binary
 
             binary = _resolve_claude_binary()
         except Exception as exc:
@@ -320,7 +319,7 @@ class ClaudeCliAdapter:
                     "Install the Claude CLI from https://claude.ai/code.",
                 ),
             )
-        if not is_available():
+        if not is_claude_oauth_available():
             return EnvironmentReport(
                 ok=False,
                 checks=(
@@ -362,15 +361,15 @@ class ClaudeCliAdapter:
         return out
 
     def get_quota_windows(self) -> QuotaWindows | None:
-        """Read OAuth quota via the petri_audit helper.
+        """Read locally available OAuth subscription metadata.
 
         Returns ``None`` when the helper isn't available or quota probe fails —
         the UI then renders "unknown" instead of "zero".
         """
         try:
-            from plugins.petri_audit.adapters.claude_cli_backend import metadata
+            from core.auth.claude_cli_oauth import get_claude_oauth_metadata
 
-            md = metadata()
+            md = get_claude_oauth_metadata()
         except Exception:
             return None
         if not isinstance(md, dict):
@@ -387,9 +386,9 @@ class ClaudeCliAdapter:
         )
 
     def detect_credential(self) -> CredentialDetection | None:
-        from plugins.petri_audit.adapters.claude_cli_backend import is_available
+        from core.auth.claude_cli_oauth import is_claude_oauth_available
 
-        if not is_available():
+        if not is_claude_oauth_available():
             return None
         from core.config import ANTHROPIC_PRIMARY
 

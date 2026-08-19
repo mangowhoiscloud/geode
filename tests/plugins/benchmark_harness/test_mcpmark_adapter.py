@@ -11,7 +11,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from plugins.benchmark_harness.mcpmark_geode_agent import (
+from geode_product.benchmark_harness.mcpmark_geode_agent import (
     _CODEX_DISABLED_FEATURES,
     CodexMCPMarkAgent,
     GeodeMCPMarkAgent,
@@ -31,7 +31,7 @@ from plugins.benchmark_harness.mcpmark_geode_agent import (
     _usage_dict,
     register_mcpmark_agent,
 )
-from plugins.benchmark_harness.trajectory_artifacts import (
+from geode_product.benchmark_harness.trajectory_artifacts import (
     export_codex_mcpmark_trajectory,
     export_mcpmark_trajectory,
 )
@@ -121,7 +121,7 @@ def _geode_agent_for_execute(monkeypatch, loop, *, mcp_server=None):
 
     agent._create_mcp_server = create_server
     monkeypatch.setattr(
-        "plugins.benchmark_harness.mcpmark_geode_agent._build_loop",
+        "geode_product.benchmark_harness.mcpmark_geode_agent._build_loop",
         lambda **_kwargs: loop,
     )
     return agent
@@ -226,7 +226,7 @@ def test_geode_mcpmark_deadline_includes_mcp_startup(monkeypatch, tmp_path) -> N
 
 
 def test_geode_mcpmark_receipt_binds_the_raw_tool_schema(monkeypatch, tmp_path) -> None:
-    from plugins.benchmark_harness.mcpmark_geode_agent import _tool_schema_sha256
+    from geode_product.benchmark_harness.mcpmark_geode_agent import _tool_schema_sha256
 
     schemas = [{"name": "read", "inputSchema": {"type": "object"}}]
 
@@ -306,7 +306,7 @@ def test_geode_mcpmark_finalization_grace_is_infrastructure_invalid(monkeypatch)
     server = MCPServer()
     agent = _geode_agent_for_execute(monkeypatch, Loop(), mcp_server=server)
     monkeypatch.setattr(
-        "plugins.benchmark_harness.mcpmark_geode_agent._MCPMARK_CLEANUP_GRACE_SECONDS",
+        "geode_product.benchmark_harness.mcpmark_geode_agent._MCPMARK_CLEANUP_GRACE_SECONDS",
         0.01,
     )
 
@@ -572,7 +572,7 @@ def test_codex_mcpmark_reap_grace_is_infrastructure_invalid(monkeypatch, tmp_pat
     agent = _codex_agent_for_execute(timeout=0.01)
     monkeypatch.setattr(asyncio, "create_subprocess_exec", create_process)
     monkeypatch.setattr(
-        "plugins.benchmark_harness.mcpmark_geode_agent._MCPMARK_CLEANUP_GRACE_SECONDS",
+        "geode_product.benchmark_harness.mcpmark_geode_agent._MCPMARK_CLEANUP_GRACE_SECONDS",
         0.01,
     )
 
@@ -975,7 +975,7 @@ def test_mcpmark_adapter_bootstraps_llm_adapters() -> None:
 def test_mcpmark_adapter_keeps_service_specific_server_overrides() -> None:
     source = (
         Path(__file__).resolve().parents[3]
-        / "plugins"
+        / "geode_product"
         / "benchmark_harness"
         / "mcpmark_geode_agent.py"
     ).read_text(encoding="utf-8")
@@ -988,7 +988,7 @@ def test_mcpmark_adapter_keeps_service_specific_server_overrides() -> None:
 def test_mcpmark_adapter_supports_public_github_fixture_opt_in() -> None:
     source = (
         Path(__file__).resolve().parents[3]
-        / "plugins"
+        / "geode_product"
         / "benchmark_harness"
         / "mcpmark_geode_agent.py"
     ).read_text(encoding="utf-8")

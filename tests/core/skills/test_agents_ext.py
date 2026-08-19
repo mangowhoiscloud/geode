@@ -169,21 +169,6 @@ class TestSubagentLoader:
         assert loader.agents_dir == Path(".claude/agents")
         assert loader.agents_dirs[0] == Path(".claude/agents")
 
-    def test_default_includes_plugin_agent_dirs(self, tmp_path: Path, monkeypatch):
-        """Default discovery should pick up plugins/*/agents/*.md."""
-        monkeypatch.chdir(tmp_path)
-        (tmp_path / ".claude" / "agents").mkdir(parents=True)
-        (tmp_path / "plugins" / "alpha" / "agents").mkdir(parents=True)
-        (tmp_path / "plugins" / "beta" / "agents").mkdir(parents=True)
-        loader = SubagentLoader()
-        dirs = loader.agents_dirs
-        # First entry is the operator override dir.
-        assert dirs[0] == Path(".claude/agents")
-        # Plugin dirs are scanned in lexical order after it.
-        assert Path("plugins/alpha/agents") in dirs
-        assert Path("plugins/beta/agents") in dirs
-        assert dirs.index(Path("plugins/alpha/agents")) < dirs.index(Path("plugins/beta/agents"))
-
     def test_discover_dedups_by_filename_first_wins(self, tmp_path: Path):
         """Same-basename file in two dirs — first dir wins (operator override)."""
         override = tmp_path / "override"

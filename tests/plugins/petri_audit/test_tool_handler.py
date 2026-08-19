@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from core.cli.tool_handlers.audit import _build_audit_handlers
+from geode_product.tool_handlers import _build_audit_handlers
 
 
 def test_petri_audit_handler_registered() -> None:
@@ -29,23 +29,22 @@ def test_petri_audit_handler_dry_run_returns_dict() -> None:
     assert "inspect eval inspect_petri/audit" in audit["command"]
 
 
-def test_petri_audit_handler_defaults() -> None:
-    """Handler accepts an empty kwargs dict and falls back to safe defaults.
+def test_petri_audit_handler_defaults(monkeypatch) -> None:
+    """Handler delegates empty role values to the manifest authority."""
+    from geode_product.petri_audit.manifest import load_manifest
 
-    Auditor + judge default to claude-opus-4-8 (PR-PETRI-AUDIT-DEFAULT-OPUS-CREDS)
-    — the campaign auditor tier — not the old haiku/sonnet."""
+    monkeypatch.setattr(
+        "geode_product.petri_audit.user_overrides.read_role_override",
+        lambda _role: {},
+    )
     handlers = _build_audit_handlers()
     result = handlers["petri_audit"]()
     assert result["status"] == "ok"
     assert result["audit"]["dry_run"] is True
     cmd = result["audit"]["command"]
-    assert "auditor=anthropic/claude-opus-4-8" in cmd
-    assert "judge=anthropic/claude-opus-4-8" in cmd
-    # The OLD auditor/judge defaults must not appear in those roles (the target
-    # role legitimately carries whatever GEODE's active model is, so assert on
-    # the role-qualified strings, not bare model substrings).
-    assert "auditor=anthropic/claude-sonnet-4-6" not in cmd
-    assert "judge=anthropic/claude-haiku-4-5-20251001" not in cmd
+    manifest = load_manifest()
+    assert f"auditor=anthropic/{manifest.get_role('auditor').default_model}" in cmd
+    assert f"judge=anthropic/{manifest.get_role('judge').default_model}" in cmd
 
 
 def test_petri_audit_handler_unknown_model_returns_error() -> None:
@@ -101,7 +100,7 @@ def test_petri_audit_handler_passes_dim_set_to_runner() -> None:
 
 def test_petri_audit_in_aggregate_tool_handlers() -> None:
     """`_build_tool_handlers` must include petri_audit so AgenticLoop sees it."""
-    from core.cli.tool_handlers import _build_tool_handlers
+    from geode_product.tool_handlers import build_tool_handlers
 
-    handlers = _build_tool_handlers(verbose=False)
+    handlers = build_tool_handlers(verbose=False)
     assert "petri_audit" in handlers

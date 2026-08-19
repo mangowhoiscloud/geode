@@ -474,7 +474,7 @@ GLOBAL_AUTH_TOML = GEODE_HOME / "auth.toml"
 GLOBAL_MEMORY_DIR = GEODE_HOME / "memory"
 GLOBAL_EPISODES_LOG = GLOBAL_MEMORY_DIR / "episodes.jsonl"
 # P1-F (2026-05-17) — per-user Petri audit role × model × source override.
-# Read by ``plugins.petri_audit.user_overrides`` and merged into the
+# Read by ``geode_product.petri_audit.user_overrides`` and merged into the
 # binding resolver. Kept as a separate TOML (rather than wedged into
 # ``config.toml``) so main GEODE config stays decoupled from Petri-only
 # concerns; the /petri command writes here.
@@ -487,7 +487,7 @@ GLOBAL_PETRI_TOML = GEODE_HOME / "petri.toml"
 # global manifest.
 GLOBAL_ROUTING_TOML = GEODE_HOME / "routing.toml"
 # P5 (Session 63, S5.5) — per-user seed-generation role × source override.
-# Read by ``plugins.seed_generation.picker.load_user_overrides`` and merged
+# Read by ``geode_product.seed_generation.picker.load_user_overrides`` and merged
 # into the picker's per-role binding resolver. Distinct from
 # ``GLOBAL_PETRI_TOML`` because seed-generation owns its own 7-role × judge-
 # panel binding model (see ADR-003 §"override surface").

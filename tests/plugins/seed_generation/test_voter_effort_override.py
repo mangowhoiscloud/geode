@@ -20,14 +20,14 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 import pytest
-from plugins.seed_generation.manifest import (
+from geode_product.seed_generation.manifest import (
     JudgePanelSpec,
     SeedGenerationManifest,
     SeedRoleSpec,
     VoterSpec,
 )
-from plugins.seed_generation.picker import VoterBinding, pick_bindings
-from plugins.seed_generation.tournament import MatchPlan
+from geode_product.seed_generation.picker import VoterBinding, pick_bindings
+from geode_product.seed_generation.tournament import MatchPlan
 
 
 def test_voter_spec_accepts_optional_effort() -> None:
@@ -88,7 +88,7 @@ def test_ranker_voter_subtask_uses_voter_effort_when_set() -> None:
     """When ``VoterBinding.effort`` is non-empty, the ranker's
     SubTask carries that effort; when empty, falls back to Sprint G
     default ``"none"``."""
-    from plugins.seed_generation.agents.ranker import Ranker
+    from geode_product.seed_generation.agents.ranker import Ranker
 
     voters = [
         VoterBinding(model="gpt-5.5", provider="openai", source="openai-codex", effort="low"),
@@ -140,7 +140,7 @@ def test_config_toml_voter_overrides_full_panel_replacement(tmp_path) -> None:
     ``[[seed_generation.judge_panel.voters]]`` must actually replace
     the bundled manifest's voter list. Pre-fold the picker ignored
     this section so the advertised operator override didn't work."""
-    from plugins.seed_generation.picker import _load_config_toml_voter_overrides
+    from geode_product.seed_generation.picker import _load_config_toml_voter_overrides
 
     cfg = tmp_path / "config.toml"
     cfg.write_text(
@@ -170,7 +170,7 @@ def test_config_toml_voter_overrides_missing_returns_none(tmp_path) -> None:
     """When config.toml has no ``[[seed_generation.judge_panel.voters]]``
     section the loader returns ``None`` so pick_bindings falls back to
     the bundled manifest."""
-    from plugins.seed_generation.picker import _load_config_toml_voter_overrides
+    from geode_product.seed_generation.picker import _load_config_toml_voter_overrides
 
     cfg = tmp_path / "config.toml"
     cfg.write_text(
@@ -183,7 +183,7 @@ def test_config_toml_voter_overrides_missing_returns_none(tmp_path) -> None:
 
 def test_config_toml_voter_overrides_missing_file_returns_none(tmp_path) -> None:
     """Missing config.toml entirely → None."""
-    from plugins.seed_generation.picker import _load_config_toml_voter_overrides
+    from geode_product.seed_generation.picker import _load_config_toml_voter_overrides
 
     overrides = _load_config_toml_voter_overrides(tmp_path / "nope.toml")
     assert overrides is None
@@ -193,7 +193,7 @@ def test_config_toml_voter_overrides_invalid_entry_skipped(tmp_path) -> None:
     """A voter entry with bad effort is dropped (with a WARN) rather
     than killing the whole load — operator can still bring up the
     panel if one entry typo'd."""
-    from plugins.seed_generation.picker import _load_config_toml_voter_overrides
+    from geode_product.seed_generation.picker import _load_config_toml_voter_overrides
 
     cfg = tmp_path / "config.toml"
     cfg.write_text(

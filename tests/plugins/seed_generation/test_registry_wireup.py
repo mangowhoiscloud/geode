@@ -16,10 +16,10 @@ from typing import Any, cast
 import pytest
 from core.agent.sub_agent import SubResult
 from core.llm.adapters.registry import _reset_for_test, bootstrap_builtins
-from plugins.seed_generation._registry_builder import populate_registry
-from plugins.seed_generation.manifest import load_manifest
-from plugins.seed_generation.orchestrator import PipelineRegistry, PipelineState
-from plugins.seed_generation.picker import pick_bindings
+from geode_product.seed_generation._registry_builder import populate_registry
+from geode_product.seed_generation.manifest import load_manifest
+from geode_product.seed_generation.orchestrator import PipelineRegistry, PipelineState
+from geode_product.seed_generation.picker import pick_bindings
 
 
 @pytest.fixture(autouse=True)
@@ -164,7 +164,7 @@ def test_populate_registry_supervisor_registered() -> None:
     assert supervisor is not None
     # Concrete class check — must be Supervisor (not something else
     # accidentally registered under the same role key).
-    from plugins.seed_generation.agents.supervisor import Supervisor
+    from geode_product.seed_generation.agents.supervisor import Supervisor
 
     assert isinstance(supervisor, Supervisor)
     # The supervisor binding's model is the manifest default (opus per

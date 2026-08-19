@@ -741,29 +741,24 @@ def _format_credential_source_label(provider: str, source: str) -> str:
         return f"{env_var} {suffix}"
     if source == "oauth":
         if provider == "anthropic":
-            try:
-                from plugins.petri_audit.claude_code_provider import get_claude_oauth_metadata
+            from core.auth.claude_cli_oauth import get_claude_oauth_metadata
 
-                meta = get_claude_oauth_metadata()
-            except ImportError:
-                return "Claude subscription (audit extra not installed)"
+            meta = get_claude_oauth_metadata()
             if meta is None:
                 return "(no Claude credentials in keychain)"
             plan = meta.get("subscription_type") or "unknown plan"
             tier = meta.get("rate_limit_tier")
             tier_label = f" · {tier}" if tier else ""
             return f"Claude {plan}{tier_label}"
-        try:
-            from plugins.petri_audit.codex_provider import get_codex_oauth_metadata
+        from core.llm.providers.codex import get_codex_oauth_metadata
 
-            meta = get_codex_oauth_metadata()
-        except ImportError:
-            return "ChatGPT subscription (audit extra not installed)"
+        meta = get_codex_oauth_metadata()
         if meta is None:
             return "(no Codex auth.json detected)"
         from core.auth.oauth_login import chatgpt_plan_label
 
-        return chatgpt_plan_label(meta.get("plan_type"))
+        plan_type = meta.get("plan_type")
+        return chatgpt_plan_label(plan_type if isinstance(plan_type, str) else None)
     return source
 
 
@@ -804,7 +799,7 @@ def _login_source(args: str) -> None:
 
     Migrated from the legacy ``/auth set`` (PR #1203, removed alongside
     ``/auth`` in PR #C, 2026-05-17). The picker decides which provider
-    prefix ``plugins.petri_audit.models.to_inspect_model`` routes a
+    prefix ``geode_product.petri_audit.models.to_inspect_model`` routes a
     ``claude-*`` / ``gpt-5.*`` id through:
 
     - ``auto``     — env / keychain auto-detect (default)
@@ -857,11 +852,9 @@ def _login_oauth_anthropic() -> None:
     2026-04-04 third-party block rejects (or, in the subprocess case,
     spawned a full Claude Code REPL the user got stuck inside).
 
-    The Claude subscription path now lives **only** in
-    ``plugins/petri_audit/claude_code_provider.py``: it reads claude's
-    keychain in-process (PR #1202) and is consumed solely by Petri
-    audit/judge runs. Production GEODE chat/agent stays on a clean
-    ``sk-ant-api…`` PAYG key.
+    Claude subscription credentials are managed by the Claude CLI and
+    discovered separately; this command writes only a clean ``sk-ant-api…``
+    PAYG key.
     """
     from core.cli import commands as _pkg
 
@@ -869,8 +862,7 @@ def _login_oauth_anthropic() -> None:
     _pkg.console.print("  [bold]Anthropic Console PAYG (API key)[/bold]")
     _pkg.console.print("  [muted]Get a key at: https://console.anthropic.com/keys[/muted]")
     _pkg.console.print(
-        "  [muted]Claude subscription path is reserved for Petri audit; "
-        "see plugins/petri_audit/claude_code_provider.py.[/muted]"
+        "  [muted]Claude subscription credentials remain managed by the Claude CLI.[/muted]"
     )
     _pkg.console.print()
     _login_anthropic_api_key()

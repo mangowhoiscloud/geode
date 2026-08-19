@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -113,6 +114,7 @@ def create_mcp_server(
     host: str | None = None,
     port: int | None = None,
     auth_token: str | None = None,
+    agent_handler_builder: Callable[[], dict[str, Any]] | None = None,
 ) -> Any:
     """Create and configure the GEODE MCP server.
 
@@ -172,7 +174,12 @@ def create_mcp_server(
         """Run one GEODE agentic one-shot and return the result."""
         from core.cli.bootstrap import arun_agentic_oneshot
 
-        result = await arun_agentic_oneshot(prompt, quiet=True, time_budget_s=time_budget_s)
+        result = await arun_agentic_oneshot(
+            prompt,
+            quiet=True,
+            time_budget_s=time_budget_s,
+            handler_builder=agent_handler_builder,
+        )
         return {
             "text": getattr(result, "text", ""),
             "rounds": getattr(result, "rounds", 0),
@@ -270,7 +277,9 @@ def _is_loopback(host: str) -> bool:
     return host in ("127.0.0.1", "::1", "localhost")
 
 
-def main() -> None:
+def main(
+    agent_handler_builder: Callable[[], dict[str, Any]] | None = None,
+) -> None:
     """Entry point for running the MCP server (``geode-mcp`` console script).
 
     Default transport is stdio (the MCP client spawns this process — local
@@ -306,7 +315,7 @@ def main() -> None:
     configure_logging("mcp")
 
     if not args.http:
-        server = create_mcp_server()
+        server = create_mcp_server(agent_handler_builder=agent_handler_builder)
         server.run()
         return
 
@@ -330,7 +339,12 @@ def main() -> None:
             "processes can call all tools (same trust as stdio)."
         )
 
-    server = create_mcp_server(host=args.host, port=args.port, auth_token=auth_token or None)
+    server = create_mcp_server(
+        host=args.host,
+        port=args.port,
+        auth_token=auth_token or None,
+        agent_handler_builder=agent_handler_builder,
+    )
     log.info(
         "geode-mcp: streamable HTTP on %s:%d (auth=%s)",
         args.host,

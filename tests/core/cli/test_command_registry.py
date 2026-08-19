@@ -82,8 +82,11 @@ def test_all_known_commands_appear_in_command_map() -> None:
     from core.cli.commands import COMMAND_MAP
 
     legacy_slashes = {k for k in COMMAND_MAP if k.startswith("/")}
-    registered = set(COMMAND_REGISTRY.keys())
-    # 모든 registry 항목이 legacy 에도 있어야 (역방향은 phase 4-6 에서 채워짐)
+    registered = {
+        name for name, spec in COMMAND_REGISTRY.items() if spec.handler_path.startswith("core.")
+    }
+    # Product commands use injected handlers and intentionally bypass this
+    # kernel-only legacy action map.
     missing_from_legacy = registered - legacy_slashes
     assert not missing_from_legacy, (
         f"COMMAND_REGISTRY 의 다음 명령이 COMMAND_MAP 에 없음: {missing_from_legacy}"

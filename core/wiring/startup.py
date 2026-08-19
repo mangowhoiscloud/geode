@@ -158,7 +158,7 @@ def detect_subscription_oauth() -> str | None:
     Returns the provider variant id (``"openai-codex"``) when an imported token is
     present. This is expiry-blind: the credential owner keeps its access token
     refreshed, so an expired-looking cached token is still usable — and the
-    dispatch path (``_resolve_codex_token``) treats it the same way, so
+    dispatch path (``resolve_codex_token``) treats it the same way, so
     readiness and the call path agree. Best-effort profile registration into
     the ProfileStore follows. Returns ``None`` otherwise.
     """

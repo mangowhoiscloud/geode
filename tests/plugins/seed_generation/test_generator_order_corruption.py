@@ -16,8 +16,8 @@ import asyncio
 from pathlib import Path
 
 from core.agent.sub_agent import SubResult, SubTask
-from plugins.seed_generation.agents.generator import Generator
-from plugins.seed_generation.orchestrator import PipelineState
+from geode_product.seed_generation.agents.generator import Generator
+from geode_product.seed_generation.orchestrator import PipelineState
 
 
 class _ReverseOrderManager:

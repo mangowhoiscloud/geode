@@ -1,4 +1,4 @@
-"""Tests for ``plugins.seed_generation.agents.meta_reviewer``."""
+"""Tests for ``geode_product.seed_generation.agents.meta_reviewer``."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ import json
 from typing import Any
 
 from core.agent.sub_agent import SubResult, SubTask
-from plugins.seed_generation.agents.meta_reviewer import MetaReviewer
-from plugins.seed_generation.orchestrator import PipelineState
+from geode_product.seed_generation.agents.meta_reviewer import MetaReviewer
+from geode_product.seed_generation.orchestrator import PipelineState
 
 
 def _good_meta() -> dict[str, Any]:
@@ -353,7 +353,7 @@ def test_meta_reviewer_debate_summary_grep_provable_read_path() -> None:
 
     src = (
         Path(__file__).resolve().parents[3]
-        / "plugins"
+        / "geode_product"
         / "seed_generation"
         / "agents"
         / "meta_reviewer.py"

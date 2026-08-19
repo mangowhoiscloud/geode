@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from plugins.seed_generation.dedup import dedup_survivors_by_cluster
+from geode_product.seed_generation.dedup import dedup_survivors_by_cluster
 
 
 def test_dedup_survivors_keeps_best_high_similarity_by_elo() -> None:

@@ -11,9 +11,7 @@ A general-purpose autonomous execution agent. The core runtime is an **AgenticLo
 - **Version**: 1.0.22
 - **Python**: >= 3.12
 - **Package Manager**: uv
-- **Entry Points**: `geode` (`core.cli:app`, Typer) / `geode-mcp` (`core.mcp_server:main`)
-- **Modules**: 430 core + 111 plugins = 541
-- **Tests**: 10380 (+2 live)
+- **Entry Points**: `geode` (`geode_product.cli:app`, Typer) / `geode-mcp` (`geode_product.mcp_server:main`)
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
 ## Quick Start
@@ -25,10 +23,7 @@ uv sync
 # Thin CLI (auto-starts serve daemon if needed)
 uv run geode
 
-# Natural language CLI
-uv run geode "summarize the latest AI research trends"
-uv run geode "compare React vs Vue for a new project"
-uv run geode "schedule daily standup reminder at 9am"
+# Enter a prompt in the interactive thin client.
 ```
 
 ## SOT (Source of Truth)
@@ -47,11 +42,12 @@ uv run geode "schedule daily standup reminder at 9am"
 
 ## Project Structure
 
-Production code splits into two top-level Python packages:
+Production code uses three top-level Python packages with one dependency direction:
 - `core/` — general-purpose autonomous agent runtime. 5-layer stack (layer diagram → `GEODE.md` → Architecture).
-- `plugins/` — legacy namespace for bundled product features; it is not a third-party extension ABI.
+- `geode_product/` — bundled first-party features and outer composition over `core`.
+- `plugins/` — curated compatibility facades only; it is not an implementation root or third-party extension ABI.
 
-Check module count: `find core/ -name "*.py" | wc -l` for core, `find plugins/ -name "*.py" | wc -l` for plugins.
+Check the generated inventory in `site/src/data/geode/architecture-baseline.json`.
 Key entry points: `core/agent/loop/`(AgenticLoop), `core/runtime.py`(bootstrap).
 
 ## Development
@@ -61,10 +57,10 @@ Key entry points: `core/agent/loop/`(AgenticLoop), `core/runtime.py`(bootstrap).
 uv run python -m pytest tests/ -q
 
 # Lint (core + plugins both gated)
-uv run ruff check core/ tests/ plugins/
+uv run ruff check core/ geode_product/ plugins/ tests/
 
 # Type check (core + plugins both gated)
-uv run mypy core/ plugins/
+uv run mypy core/ geode_product/ plugins/
 ```
 
 ### Expected Test Results
@@ -298,9 +294,9 @@ Update project tracking from main. Backlog → In Progress → Done.
 
 | Gate | Command | Criteria |
 |------|---------|----------|
-| Lint | `uv run ruff check core/ tests/ plugins/ scripts/` | 0 errors — `scripts/` 포함 (CI ci.yml:60과 동일 범위; PR-CLEANUP-D2에서 로컬 게이트가 scripts/를 빼먹어 CI에서 2회 반려된 사건) |
-| Format | `uv run ruff format --check core/ tests/ plugins/ scripts/` | 0 reformats |
-| Type | `uv run mypy core/ plugins/` | 0 errors |
+| Lint | `uv run ruff check core/ geode_product/ plugins/ tests/ scripts/` | 0 errors — `scripts/` 포함 (CI와 동일 범위) |
+| Format | `uv run ruff format --check core/ geode_product/ plugins/ tests/ scripts/` | 0 reformats |
+| Type | `uv run mypy core/ geode_product/ plugins/` | 0 errors |
 | Imports | `uv run lint-imports` | contracts kept |
 | Test | `uv run pytest tests/ -m "not live"` | 9200+ pass |
 | CLI smoke | `uv run geode version` | version prints |

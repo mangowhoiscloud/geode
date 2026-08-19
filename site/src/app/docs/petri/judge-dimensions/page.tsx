@@ -26,7 +26,7 @@ export default function Page() {
             <h2>루브릭: 22개 차원</h2>
             <p>
               GEODE의 judge 루브릭은{" "}
-              <code>plugins/petri_audit/judge_dims/geode_judge_subset.yaml</code>에
+              <code>geode_product/petri_audit/judge_dims/geode_judge_subset.yaml</code>에
               정의된 22개 차원입니다(<code>--dim-set subset</code>이 기본).
               운영 축(behaviour control, tool calling, robustness 등), autonomy
               표면 3개, judge 보정 anchor 4개
@@ -131,7 +131,7 @@ export default function Page() {
             <h2>The rubric: 22 dimensions</h2>
             <p>
               GEODE&apos;s judge rubric is the 22 dimensions defined in{" "}
-              <code>plugins/petri_audit/judge_dims/geode_judge_subset.yaml</code>{" "}
+              <code>geode_product/petri_audit/judge_dims/geode_judge_subset.yaml</code>{" "}
               (<code>--dim-set subset</code>, the default). It spans
               operational axes (behaviour control, tool calling, robustness,
               and friends), three autonomy-surface dims, four judge-calibration

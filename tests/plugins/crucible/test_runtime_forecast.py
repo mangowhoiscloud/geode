@@ -6,19 +6,19 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
-from plugins.crucible.cli import main as crucible_main
-from plugins.crucible.contract import (
+from geode_product.crucible.cli import main as crucible_main
+from geode_product.crucible.contract import (
     ContractError,
     ExperimentContract,
     TaskUnit,
     task_pack_sha256,
 )
-from plugins.crucible.runtime_forecast import (
+from geode_product.crucible.runtime_forecast import (
     _exact_cycle_distribution,
     forecast_runtime,
     load_runtime_pilot,
 )
-from plugins.crucible.runtime_identity import runtime_regime, runtime_regime_id
+from geode_product.crucible.runtime_identity import runtime_regime, runtime_regime_id
 
 from tests.plugins.crucible.test_promotion import _contract
 

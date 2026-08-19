@@ -17,7 +17,7 @@ package (PR-SELF-IMPROVING-UMBRELLA, 2026-05-31):
   / :mod:`core.self_improving.bench_means` — the ground-truth preparation +
   positive-pressure / capability axis helpers (formerly ``autoresearch/*``).
 
-petri (``plugins.petri_audit``) owns the measurement layer (rubric + dim
+petri (``geode_product.petri_audit``) owns the measurement layer (rubric + dim
 scoring); this package owns the aggregation + selection layer (tier weights
 + fitness + auto-promote). PR-STATE-SOT-RUNTIME-SPLIT (2026-06-14) splits the
 mutation-loop *DATA* into two roots: the TRACKED ledgers + policies are the

@@ -1,4 +1,4 @@
-"""Tests for plugins.petri_audit.bundle_sync."""
+"""Tests for geode_product.petri_audit.bundle_sync."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from plugins.petri_audit import bundle_sync
-from plugins.petri_audit.bundle_sync import (
+from geode_product.petri_audit import bundle_sync
+from geode_product.petri_audit.bundle_sync import (
     _extract_listing_entry,
     _merge_listing,
     sync_eval_to_bundle,

@@ -52,7 +52,7 @@ sustained self-improvement.
 
 GEODE keeps benchmark numbers tied to the exact runtime and model route that
 produced them. The 2026-07-03/04 Tau2 run below used **GEODE v0.99.269** with
-the public `plugins/benchmark_harness` tau2 adapter, `sierra-research/tau2-bench@1901a30`
+the public `geode_product/benchmark_harness` tau2 adapter, `sierra-research/tau2-bench@1901a30`
 (`tau2==1.0.0`), `gpt-5.2` through OpenAI **PAYG**, agent reasoning effort
 `high`, `max_steps=200`, and tau2's native `user_simulator` using
 `gpt-4.1-2025-04-14` with effort `medium`.
@@ -92,7 +92,7 @@ canonical events and ten exact tool pairs are pinned to
 
 The 2026-07-04 MCPMark run used **GEODE v0.99.269-era code** on branch
 `feature/mcpmark-agentworld-run`, `eval-sys/mcpmark@cd45b7f`, GEODE's public
-`plugins/benchmark_harness` MCPMark adapter, `gpt-5.5` through the OpenAI
+`geode_product/benchmark_harness` MCPMark adapter, `gpt-5.5` through the OpenAI
 **Codex subscription** route, and reasoning effort `xhigh`.
 
 This is not a full MCPMark Verified leaderboard score. It covers the standard
@@ -291,23 +291,6 @@ You should see something like:
 
 If you see this, you're done. If you see an error, run `geode doctor` for a diagnosis or jump to [Troubleshooting](#troubleshooting).
 
-### Optional: Connect Google Workspace
-
-GEODE v1.0.0 can use Gmail, Calendar, Drive, Docs, Sheets, Tasks, and Contacts
-through a Google Desktop OAuth client you own. Start `geode`, then run the
-recommended slash command:
-
-```text
-> /login google
-```
-
-The prompt asks for the downloaded client JSON and least-privilege service
-bundles. See [Connect Google Workspace](https://mangowhoiscloud.github.io/geode/docs/run/google-workspace)
-for the Google Cloud console steps, seven-day External Testing expiry,
-multi-account commands, storage schema, and per-invocation consent boundary.
-In v1.0.0, `workspace-files` supports files created through GEODE; an
-existing-file Google Picker is not included yet.
-
 ### Other useful commands
 
 ```bash
@@ -318,6 +301,9 @@ geode update --latest # explicitly allow minor/major uv package upgrades
 geode uninstall       # remove runtime data and the installed CLI
 geode setup --reset   # wipe ~/.geode/.env and re-run the wizard
 ```
+
+Optional integration: connect Gmail, Calendar, Drive, Docs, Sheets, Tasks,
+and Contacts with `/login google`; see [Connect Google Workspace](https://mangowhoiscloud.github.io/geode/docs/run/google-workspace).
 
 ---
 
@@ -526,8 +512,8 @@ geode update --latest # uv tool: explicitly allow minor/major upgrades
 |---------|-------------|
 | **`while(tool_use)` loop** | The single primitive every behavior is built on. Sub-agents, plans, batches are all instances of the same loop |
 | **Experimental scaffold-optimization loop** | Mutates scaffold candidates, audits each change against an adversarial safety rubric, and permits promotion only on a real gain. The public record currently shows gate discipline, not sustained improvement. See [the closed loop](https://mangowhoiscloud.github.io/geode/docs/capabilities/autoresearch) |
-| **Agentic tools + MCP catalog** | Web search, file ops, scheduling, memory, Slack/Discord, and native Gmail, Calendar, Drive, Docs, Sheets, Tasks, and Contacts through [user-owned Google OAuth](https://mangowhoiscloud.github.io/geode/docs/run/google-workspace), plus the Anthropic-published MCP registry (cached at `~/.geode/mcp/registry-cache.json`). Auto-installed on first use |
-| **3-provider failover** | Anthropic + OpenAI + ZhipuAI. ChatGPT subscription OAuth is auto-detected through Codex CLI; Anthropic/OpenAI/ZhipuAI pay-as-you-go API keys also work. Failover is in-provider only (no surprise cross-vendor charges, v0.53.0 governance) |
+| **Agentic tools + MCP catalog** | Web search, file ops, scheduling, memory, Slack/Discord, the Anthropic-published MCP registry, and optional [Google Workspace](https://mangowhoiscloud.github.io/geode/docs/run/google-workspace) integration. MCP metadata is cached at `~/.geode/mcp/registry-cache.json` |
+| **3-provider failover** | Anthropic + OpenAI + ZhipuAI. ChatGPT subscription OAuth is handled by the in-process OpenAI adapter; pay-as-you-go API keys also work. Failover is in-provider only (no surprise cross-vendor charges, v0.53.0 governance) |
 | **5-tier memory** | SOUL (0) → User Profile (0.5) → Organization (1) → Project (2) → Session (3). Persistent, survives daemon restarts |
 | **Progress plans + review checkpoints** | `update_plan` shows a Codex-style per-turn checklist without blocking execution. `create_plan` + `approve_plan` remain for explicit review checkpoints, persisted in `.geode/plans.json` |
 | **MCP server (`geode-mcp`)** | Exposes GEODE itself as an MCP server (stdio): `run_agent`, `self_improving_status`, `self_improving_propose`/`apply` (2-step confirm gate), `query_memory`, `get_health`. Registered for Claude Code via the repo-shipped `.mcp.json` |
@@ -620,7 +606,7 @@ A qualitative read on where GEODE sits next to the frontier harnesses (Claude Co
 | **Swappable pipeline DAG** | ❌ | ❌ | ⚠️ flows (channel-setup / doctor / provider, not a DAG abstraction) | ⚠️ external package responsibility; GEODE core no longer ships a pipeline port |
 | Trace / replay / Run Log | ✅ `tengu_*` telemetry + `/insights` HTML | ⚠️ `/status` + `/debug-config` only | ✅ ACP session lineage + Task Registry | ✅ Native RunLog + Petri eval integration |
 | Safety-gated scaffold optimization | ❌ | ❌ | ❌ | ⚠️ experimental outer loop: scaffold mutation + adversarial safety audit + (1+1) promote/revert contract; zero public core promotions |
-| Cross-provider review | ❌ | ❌ | ❌ | ⚠️ multi-voter cross-provider ranking panel (≥2 providers, `plugins/seed_generation/agents/ranker.py`) in the self-improving loop; agreement calibration is WIP |
+| Cross-provider review | ❌ | ❌ | ❌ | ⚠️ multi-voter cross-provider ranking panel (≥2 providers, `geode_product/seed_generation/agents/ranker.py`) in the self-improving loop; agreement calibration is WIP |
 
 </details>
 

@@ -12,7 +12,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from plugins.petri_audit.optimize import (
+from geode_product.petri_audit.optimize import (
     DEFAULT_COMPILE_USD_CAP,
     PER_COMPILE_USD_ESTIMATE,
     OptimizeError,

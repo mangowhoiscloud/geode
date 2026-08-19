@@ -4,14 +4,14 @@ from pathlib import Path
 
 import pytest
 from core.observability.trajectory import build_trajectory
-from plugins.crucible.cli import main as crucible_main
-from plugins.crucible.contract import (
+from geode_product.crucible.cli import main as crucible_main
+from geode_product.crucible.contract import (
     ContractError,
     ExperimentContract,
     task_pack_sha256,
 )
-from plugins.crucible.evidence import ResourceUsage
-from plugins.crucible.verifiers.tau2 import (
+from geode_product.crucible.evidence import ResourceUsage
+from geode_product.crucible.verifiers.tau2 import (
     TAU2_ADAPTER,
     _canonical_task_sha256,
     _verify_attempt_manifest,
@@ -219,7 +219,7 @@ def _contract() -> ExperimentContract:
             "trials_per_task": 1,
             "assay_config": _assay_config(),
             "mutations": [{"surface": "core/agent/verify.py", "hypothesis": "fewer misses"}],
-            "evaluator_paths": ["plugins/benchmark_harness", "plugins/crucible"],
+            "evaluator_paths": list(TAU2_ADAPTER.required_evaluator_paths),
             "promotion": {
                 "method": "paired_bootstrap.v2",
                 "primary_metric": "reward",
