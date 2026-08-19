@@ -31,7 +31,7 @@ The generated architecture inventory lives at
 `site/src/data/geode/architecture-baseline.json`. Refresh it with
 `uv run python scripts/architecture_baseline.py --update`; CI uses `--check`.
 The current snapshot records 551 production Python files,
-686 test Python files,
+687 test Python files,
 87 tool definitions, and
 57 `RuntimeEvent` members.
 <!-- generated:architecture-baseline:end -->
@@ -94,8 +94,9 @@ assembly.
 
 LLM router, providers, prompt assembly, hashing.
 
-- `prompt_assembler.py` — `PromptAssembler.assemble()`. Six-step assembly
-  producing an immutable `AssembledPrompt`. Emits `PROMPT_ASSEMBLED` hook.
+- `prompt_assembler.py` — math-output helper used by the active prompt path.
+  Production assembly lives in `core.agent.system_prompt` plus AgenticLoop
+  per-round context; the legacy `PromptAssembler` class was removed.
 - `providers/` — low-level utilities only (retry, quota, cache and
   native-tool shaping) consumed by `adapters/`; the sync client layer and
   `providers/openai.py` were deleted 2026-07-29 — LLM completion is

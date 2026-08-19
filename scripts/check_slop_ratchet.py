@@ -4,9 +4,9 @@
 
 Companion to ``check_repo_hygiene.py`` (same CI step, same report/exit-code
 shape) and to the committed-baseline pattern of ``check_llms_version.py``.
-Unlike ``scripts/slop_audit.py`` — the *manual* 6-lens deep-audit tool with a
-markdown baseline under ``docs/audits/`` that is not wired into CI — this
-script is a narrow promotion gate: it measures four slop metrics, compares
+Unlike the diagnostic-only ``scripts/slop_audit.py`` six-lens scan (whose
+2026-05-18 snapshot is historical reference material under ``docs/reference/``),
+this script is a narrow promotion gate: it measures four slop metrics, compares
 each against the committed ``scripts/slop_ratchet_baseline.json``, and fails
 only when a metric GROWS (Karpathy P4 Ratchet). Absolute counts never fail.
 
@@ -237,7 +237,7 @@ def read_pyproject_version(pyproject: Path) -> str:
 
 def load_baseline(baseline_file: Path) -> dict[str, int]:
     """Return {metric: baseline count}; abort with an instructive exit 2 when
-    the baseline is missing, unparseable, or lacks a measured metric."""
+    the baseline is missing, unparsable, or lacks a measured metric."""
     remedy = (
         "    hint: generate it from the current tree with\n"
         "          uv run python scripts/check_slop_ratchet.py --update-baseline\n"

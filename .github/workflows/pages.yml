@@ -170,6 +170,9 @@ jobs:
       - name: Build static export
         run: npm run build
 
+      - name: Verify structured metadata and visible citations
+        run: npm run verify-metadata
+
       # llms.txt convention, publication side step 2 (PR-LLMS-TXT-MD-TWINS):
       # markdown twins for every docs page (rendered URL + ".md") and the
       # true full-content llms-full.txt. Runs after build because the twins

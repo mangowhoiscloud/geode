@@ -104,6 +104,7 @@ def _write_run(run_dir: Path) -> Path:
 
 
 def test_export_produces_one_eval_per_nonempty_phase(tmp_path: Path) -> None:
+    pytest.importorskip("inspect_ai")
     src = _write_run(tmp_path / "gen-test-run")
     dest = tmp_path / "logs"
     written = export_run_to_evals(src, dest)
@@ -148,6 +149,7 @@ def test_each_eval_passes_validator_shape(tmp_path: Path) -> None:
 
 
 def test_listing_json_gains_entry_per_eval(tmp_path: Path) -> None:
+    pytest.importorskip("inspect_ai")
     src = _write_run(tmp_path / "gen-listing-run")
     dest = tmp_path / "logs"
     written = export_run_to_evals(src, dest)

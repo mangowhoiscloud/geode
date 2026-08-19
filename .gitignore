@@ -136,6 +136,7 @@ geode_checkpoints.db-wal
 .claude/commands/
 .claude/hooks/
 .claude/skills/*
+!.claude/skills/agent-anti-pattern
 !.claude/skills/geode-eval
 !.claude/skills/geode-workflow/
 !.claude/skills/geode-workflow/**

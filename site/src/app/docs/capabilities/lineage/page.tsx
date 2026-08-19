@@ -1,16 +1,53 @@
 import { DocsShell, Bi } from "@/components/geode-docs/docs-shell";
+import { JsonLd } from "@/components/json-ld";
+import { LINEAGE_CITATIONS } from "@/lib/geode-docs/citations";
 
 export const metadata = { title: "Lineage and positioning — GEODE Docs" };
 
+function CitationList() {
+  return (
+    <ul>
+      {LINEAGE_CITATIONS.map((citation) => (
+        <li key={citation.url}>
+          <a href={citation.url}>{citation.name}</a>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export default function Page() {
   return (
-    <DocsShell
-      slug="capabilities/lineage"
-      title="Lineage and positioning"
-      titleKo="계보와 좌표"
-      summary="Where this loop sits in the self-evolving agents literature. An honest recombination of known parts, not a new primitive."
-      summaryKo="이 루프가 self-evolving agents 문헌에서 어디에 위치하는지 짚습니다. 새로운 primitive가 아니라, 알려진 조각들을 정직하게 재조합한 결과입니다."
-    >
+    <>
+      <JsonLd
+        data={{
+          "@context": "https://schema.org",
+          "@type": "TechArticle",
+          "@id":
+            "https://mangowhoiscloud.github.io/geode/docs/capabilities/lineage/#article",
+          headline: "Lineage and positioning",
+          description:
+            "Where this loop sits in the self-evolving agents literature. An honest recombination of known parts, not a new primitive.",
+          url: "https://mangowhoiscloud.github.io/geode/docs/capabilities/lineage/",
+          inLanguage: ["ko", "en"],
+          author: {
+            "@type": "Person",
+            name: "Jihwan Ryu",
+            url: "https://github.com/mangowhoiscloud",
+          },
+          citation: LINEAGE_CITATIONS.map((citation) => ({
+            "@type": "CreativeWork",
+            ...citation,
+          })),
+        }}
+      />
+      <DocsShell
+        slug="capabilities/lineage"
+        title="Lineage and positioning"
+        titleKo="계보와 좌표"
+        summary="Where this loop sits in the self-evolving agents literature. An honest recombination of known parts, not a new primitive."
+        summaryKo="이 루프가 self-evolving agents 문헌에서 어디에 위치하는지 짚습니다. 새로운 primitive가 아니라, 알려진 조각들을 정직하게 재조합한 결과입니다."
+      >
       <Bi
         ko={
           <>
@@ -214,21 +251,7 @@ scaffolding   DGM, ADAS, STOP,        <- 거의 비어 있음
             </blockquote>
 
             <h2>출처</h2>
-            <ul>
-              <li>Darwin Gödel Machine (arXiv:2505.22954)</li>
-              <li>ADAS / Meta Agent Search (arXiv:2408.08435)</li>
-              <li>Promptbreeder (arXiv:2309.16797)</li>
-              <li>STOP: Self-Taught Optimizer (arXiv:2310.02304)</li>
-              <li>AlphaEvolve (arXiv:2506.13131)</li>
-              <li>SICA (arXiv:2504.15228)</li>
-              <li>GEPA (arXiv:2507.19457)</li>
-              <li>A Survey of Self-Evolving Agents (arXiv:2507.21046)</li>
-              <li>Gödel Agent (arXiv:2410.04444)</li>
-              <li>EvolveR (arXiv:2510.16079)</li>
-              <li>Rainbow Teaming (arXiv:2402.16822)</li>
-              <li>MART (arXiv:2311.07689)</li>
-              <li>Anthropic, Building and evaluating alignment auditing agents</li>
-            </ul>
+            <CitationList />
           </>
         }
         en={
@@ -435,24 +458,11 @@ weight update  (RLHF family)             Constitutional AI, MART, Self-MOA`}</pr
             </blockquote>
 
             <h2>Sources</h2>
-            <ul>
-              <li>Darwin Gödel Machine (arXiv:2505.22954)</li>
-              <li>ADAS / Meta Agent Search (arXiv:2408.08435)</li>
-              <li>Promptbreeder (arXiv:2309.16797)</li>
-              <li>STOP: Self-Taught Optimizer (arXiv:2310.02304)</li>
-              <li>AlphaEvolve (arXiv:2506.13131)</li>
-              <li>SICA (arXiv:2504.15228)</li>
-              <li>GEPA (arXiv:2507.19457)</li>
-              <li>A Survey of Self-Evolving Agents (arXiv:2507.21046)</li>
-              <li>Gödel Agent (arXiv:2410.04444)</li>
-              <li>EvolveR (arXiv:2510.16079)</li>
-              <li>Rainbow Teaming (arXiv:2402.16822)</li>
-              <li>MART (arXiv:2311.07689)</li>
-              <li>Anthropic, Building and evaluating alignment auditing agents</li>
-            </ul>
+            <CitationList />
           </>
         }
-      />
-    </DocsShell>
+        />
+      </DocsShell>
+    </>
   );
 }

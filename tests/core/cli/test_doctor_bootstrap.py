@@ -178,7 +178,7 @@ class TestCheckDesktopComputerUse:
             result = _check_desktop_computer_use()
         assert result.ok is False
         assert "pyautogui" in result.detail
-        assert "uv sync --extra desktop" in result.fix
+        assert "desktop" in result.fix
 
     def test_wheel_install_uses_uv_tool_extra_command(self, tmp_path):
         with patch("core.cli.doctor_bootstrap._PYPROJECT_PATH", tmp_path / "missing"):

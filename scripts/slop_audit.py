@@ -5,27 +5,25 @@ codebase health if uncaught:
 
 1. **Unused imports** (`ruff F401`) — module-level imports never
    referenced.
-2. **Dead functions** (heuristic via vulture-style scan: defs without
-   external callers / unused private helpers).
+2. **Dead functions** (heuristic: private defs without another textual
+   reference in the same file).
 3. **Duplicate patterns** (≥3 inline copies of the same N-line
    snippet) — usually a missed lift-to-helper opportunity.
 4. **Abandoned TODOs** (`TODO` / `FIXME` / `XXX` without an owner
    handle or date stamp).
-5. **Lint bypass markers** (`# noqa` / `# type: ignore`) — counted
-   against a baseline so net additions surface in PR review.
+5. **Lint bypass markers** (`# noqa` / `# type: ignore`) — candidates for
+   review; the separate promotion ratchet owns non-growth.
 6. **Stale references** (renamed module / removed feature names that
    still appear in comments or docstrings).
 
 Usage:
 
     uv run python scripts/slop_audit.py
-    uv run python scripts/slop_audit.py --baseline-out scripts/slop_audit_baseline.md
-    uv run python scripts/slop_audit.py --check  # exit 1 on new slop vs baseline
 
-The committed operational baseline lives beside this script at
-``scripts/slop_audit_baseline.md``. The dated original report is mirrored in
-``geode-eval-artifacts``; runtime checks deliberately do not depend on network
-access to that historical archive.
+This script is diagnostic: its heuristic counts are candidates for review, not
+an accepted-debt floor. The dated 2026-05-18 snapshot lives under
+``docs/reference/`` as historical evidence. Promotion-time non-growth is owned
+by ``scripts/check_slop_ratchet.py``.
 
 Pure-script; no test dependencies — runs from a fresh checkout via
 ``uv run``. The skill at ``.geode/skills/slop-audit/SKILL.md`` documents
@@ -44,7 +42,6 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCAN_ROOTS = ("core/", "plugins/", "autoresearch/", "scripts/")
-BASELINE_FILE = REPO_ROOT / "scripts/slop_audit_baseline.md"
 
 
 @dataclass
@@ -83,10 +80,21 @@ def lens_unused_imports() -> LensResult:
     proc = subprocess.run(  # noqa: S603  # nosec B603 — argv from module constants
         cmd, capture_output=True, text=True, check=False
     )
-    try:
-        findings = json.loads(proc.stdout) if proc.stdout.strip() else []
-    except json.JSONDecodeError:
-        findings = []
+    if proc.returncode not in (0, 1):
+        detail = (proc.stderr or proc.stdout).strip()[:500]
+        raise RuntimeError(f"ruff F401 scan failed with exit {proc.returncode}: {detail}")
+    if not proc.stdout.strip():
+        if proc.returncode == 0:
+            findings = []
+        else:
+            raise RuntimeError("ruff F401 scan reported findings without JSON output")
+    else:
+        try:
+            findings = json.loads(proc.stdout)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("ruff F401 scan returned invalid JSON") from exc
+        if not isinstance(findings, list):
+            raise RuntimeError("ruff F401 scan returned a non-list JSON payload")
     samples = [
         f"{Path(f['filename']).relative_to(REPO_ROOT)}:{f['location']['row']} {f['code']}"
         for f in findings[:5]
@@ -220,9 +228,8 @@ def lens_abandoned_todos() -> LensResult:
 def lens_lint_bypass() -> LensResult:
     """Count ``# noqa`` and ``# type: ignore`` markers.
 
-    Reported as a single combined count for the baseline — net
-    additions surface in PR review. PR-time enforcement is a separate
-    ratchet (not implemented in this script; documented in the SKILL).
+    Reported as a single combined diagnostic count. PR-time enforcement is a
+    separate ratchet documented in the skill.
     """
     samples: list[str] = []
     count = 0
@@ -348,85 +355,11 @@ def format_report(results: list[LensResult], *, header: str = "") -> str:
     return "\n".join(lines)
 
 
-def load_baseline(path: Path) -> dict[str, int]:
-    """Parse a baseline file's table back into ``{lens: count}``."""
-    if not path.is_file():
-        return {}
-    counts: dict[str, int] = {}
-    table_started = False
-    for line in path.read_text(encoding="utf-8").splitlines():
-        if line.startswith("|------"):
-            table_started = True
-            continue
-        if not table_started:
-            continue
-        if not line.startswith("|"):
-            break
-        cells = [c.strip() for c in line.strip("|").split("|")]
-        if len(cells) < 2:
-            continue
-        try:
-            counts[cells[0]] = int(cells[1])
-        except (ValueError, IndexError):
-            continue
-    return counts
-
-
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--baseline",
-        type=Path,
-        default=BASELINE_FILE,
-        help="Baseline markdown file to compare against.",
-    )
-    parser.add_argument(
-        "--baseline-out",
-        type=Path,
-        default=None,
-        help="If given, write the current results as the new baseline.",
-    )
-    parser.add_argument(
-        "--check",
-        action="store_true",
-        help="Exit 1 when any lens count grew vs baseline. CI advisory.",
-    )
-    args = parser.parse_args()
-
+    argparse.ArgumentParser(description="Run the diagnostic six-lens slop audit.").parse_args()
     results = run_all_lenses()
-    report = format_report(
-        results,
-        header="GEODE slop audit — " + (args.baseline_out.name if args.baseline_out else "run"),
-    )
+    report = format_report(results, header="GEODE slop audit — diagnostic run")
     print(report)
-
-    if args.baseline_out is not None:
-        out = args.baseline_out
-        if not out.is_absolute():
-            out = REPO_ROOT / out
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(report + "\n", encoding="utf-8")
-        try:
-            display = out.relative_to(REPO_ROOT)
-        except ValueError:
-            display = out
-        print(f"\nbaseline written → {display}", file=sys.stderr)
-        return 0
-
-    if args.check:
-        baseline = load_baseline(args.baseline)
-        grew: list[str] = []
-        for r in results:
-            base = baseline.get(r.name, 0)
-            if r.count > base:
-                grew.append(f"{r.name}: {base} → {r.count}")
-        if grew:
-            print("\nslop audit: GROWTH detected vs baseline", file=sys.stderr)
-            for g in grew:
-                print(f"  - {g}", file=sys.stderr)
-            return 1
-        print("\nslop audit: no growth vs baseline.", file=sys.stderr)
-
     return 0
 
 
