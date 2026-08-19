@@ -7,6 +7,11 @@
 >
 > This is dated evidence, not a status ledger. It does not authorize deleting
 > a candidate solely because a static lens reported it.
+>
+> Superseded note: the later
+> [runtime evidence debt modernization plan](../plans/2026-08-19-runtime-evidence-debt-modernization.md#p1--retire-ineffective-count-ratchets)
+> retires the count ratchet; its results below are preserved as historical
+> execution evidence only.
 
 ## Executive result
 

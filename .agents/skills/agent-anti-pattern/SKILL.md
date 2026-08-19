@@ -48,7 +48,6 @@ Use the repository's existing surfaces when present:
 
 - `.geode/skills/slop-audit/SKILL.md` and `scripts/slop_audit.py` for
   discovery-only heuristics;
-- `scripts/check_slop_ratchet.py` for committed growth ceilings;
 - `.claude/skills/codebase-audit/SKILL.md` for general refactor workflow;
 - `.claude/skills/anti-deception-checklist/SKILL.md` after every cleanup diff;
 - Ruff, mypy, deptry, import-linter, architecture baseline, and pytest for

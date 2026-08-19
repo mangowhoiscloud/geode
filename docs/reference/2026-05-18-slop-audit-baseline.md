@@ -11,16 +11,16 @@ scope:
   - plugins/
   - autoresearch/
   - scripts/
-superseded_by: scripts/check_slop_ratchet.py
+superseded_by: docs/plans/2026-08-19-runtime-evidence-debt-modernization.md
 ---
 
 # GEODE slop audit — 2026-05-18 baseline
 
 This is a historical measurement, not an accepted-debt floor or promotion
 gate. The repository grew and moved substantially after this snapshot, so
-comparing today's absolute heuristic counts to it is not actionable. The
-canonical non-growth gate is `scripts/check_slop_ratchet.py`; run
-`scripts/slop_audit.py` without a baseline for diagnostic candidates.
+comparing today's absolute heuristic counts to it is not actionable. Run
+`scripts/slop_audit.py` without a baseline for diagnostic candidates; promotion
+uses behavioral tests, coverage, and deterministic lint/type/dependency gates.
 
 Immutable provenance:
 

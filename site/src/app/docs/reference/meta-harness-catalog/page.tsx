@@ -461,9 +461,9 @@ const SCAFFOLD_ROWS: Row[] = [
   },
   {
     name: "CI ratchet suite",
-    ko: "legacy import, repo hygiene, slop growth, llms 버전, petri bundle, hero layout 커스텀 ratchet이 침묵 퇴행을 차단",
-    en: "Custom ratchets for legacy imports, repo hygiene, slop growth, llms version, petri bundle, and hero layout block silent regressions",
-    control: "scripts/check_*.py wired into ci.yml",
+    ko: "legacy import, repo hygiene, architecture baseline, llms 버전, petri bundle, hero layout 커스텀 ratchet이 침묵 퇴행을 차단",
+    en: "Custom ratchets for legacy imports, repo hygiene, the architecture baseline, llms version, petri bundle, and hero layout block silent regressions",
+    control: "CI-wired deterministic checks",
     path: ".github/workflows/ci.yml",
   },
   {
@@ -474,11 +474,11 @@ const SCAFFOLD_ROWS: Row[] = [
     path: "core/llm/prompts/__init__.py",
   },
   {
-    name: "Test-count floor",
-    ko: "테스트 수 하한 ratchet. 테스트 삭제로 만드는 가짜 green을 차단",
-    en: "A minimum-test-count ratchet blocks fake green produced by deleting tests",
-    control: "pytest count floor in CI",
-    path: ".github/workflows/ci.yml",
+    name: "Behavior + coverage gate",
+    ko: "전체 행동 테스트와 coverage 하한은 회귀 증거를 제공하며, 테스트 삭제는 남는 불변식 검토를 별도로 요구",
+    en: "The full behavior suite and coverage floor provide regression evidence; test deletion still requires review of the surviving invariant",
+    control: "pytest + coverage + surviving-invariant review",
+    path: ".github/workflows/ci.yml, pyproject.toml",
   },
   {
     name: "Worktree isolation + .owner",

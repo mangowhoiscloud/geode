@@ -5727,9 +5727,9 @@ GEODE가 메타 하네스인 이유는 세 겹의 관계 때문입니다.
 | **Workflow 0-8 + Socratic Gate** | GAP audit과 5질문 게이트가 이미 있는 것의 재구축, 불필요 구현을 사전 차단 | Socratic Q1-Q5, GAP 3-way classify | `CLAUDE.md, docs/workflow.md` |
 | **Scaffold skills** | gitflow, workflow, anti-deception, verification-team 등 절차 스킬의 progressive disclosure | skill triggers per session | `docs/scaffold-skills.md` |
 | **Local quality gates** | lint, format, type, imports, test, CLI smoke 6종. 파이프로 감싼 게이트는 금지 | exit codes asserted bare | `CLAUDE.md (Quality Gates)` |
-| **CI ratchet suite** | legacy import, repo hygiene, slop growth, llms 버전, petri bundle, hero layout 커스텀 ratchet이 침묵 퇴행을 차단 | scripts/check\_\*.py wired into ci.yml | `.github/workflows/ci.yml` |
+| **CI ratchet suite** | legacy import, repo hygiene, architecture baseline, llms 버전, petri bundle, hero layout 커스텀 ratchet이 침묵 퇴행을 차단 | CI-wired deterministic checks | `.github/workflows/ci.yml` |
 | **Prompt integrity pins** | runtime 프롬프트 변경은 같은 커밋에서 해시 pin 갱신을 강제. 의도치 않은 drift는 빌드 실패 | \_PINNED\_HASHES (4 pins), verify\_prompt\_integrity | `core/llm/prompts/__init__.py` |
-| **Test-count floor** | 테스트 수 하한 ratchet. 테스트 삭제로 만드는 가짜 green을 차단 | pytest count floor in CI | `.github/workflows/ci.yml` |
+| **Behavior + coverage gate** | 전체 행동 테스트와 coverage 하한은 회귀 증거를 제공하며, 테스트 삭제는 남는 불변식 검토를 별도로 요구 | pytest + coverage + surviving-invariant review | `.github/workflows/ci.yml, pyproject.toml` |
 | **Worktree isolation + .owner** | 작업 단위마다 worktree 격리. 타 세션 소유물 보호, orphan은 hygiene ratchet이 검출 | .owner convention, check\_repo\_hygiene.py | `.claude/worktrees/` |
 | **Merge flow** | feature는 develop에 squash, develop은 main에 pass-through. 매 사이클 main에서 develop로 선동기화 | CI 5/5 required, PR template | `CLAUDE.md (PR & Merge)` |
 | **Version SoT fan-out** | 버전 스탬프 5위치와 파생 파일 재생성. stale 스냅숏은 CI ratchet이 차단 | sync-stats.mjs, check\_llms\_version.py | `site/scripts/sync-stats.mjs` |
@@ -6279,7 +6279,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 | 측정값 | 현재 트리 |
 | --- | --- |
 | 프로덕션 Python 파일 | 551 |
-| 테스트 Python 파일 | 687 |
+| 테스트 Python 파일 | 686 |
 | 도구 정의 / 실행 등록 / 유효 스키마 | 87 / 90 / 87 |
 | RuntimeEvent 멤버 | 57 |
 | 기본 LLM 어댑터 | 8 |
@@ -6418,7 +6418,7 @@ GEODE 런타임이 출하되는 에이전트의 동작을 안정시키는 방식
 
 | 패턴 | 출하되는 런타임 | 그것을 빌드하는 라인 |
 | --- | --- | --- |
-| 해시 ratchet | 프롬프트 해시 핀 (`core/llm/prompts/__init__.py`의 `_PINNED_HASHES`) | CI 게이트. lint, type, test, security + 카운트 바닥 ratchet들 |
+| 해시 ratchet | 프롬프트 해시 핀 (`core/llm/prompts/__init__.py`의 `_PINNED_HASHES`) | CI 게이트. lint, type, coverage가 있는 전체 행동 테스트, security |
 | 계층 메모리 | 5-tier ContextAssembler (`core/memory/context.py`) | 다층 CLAUDE.md (프로젝트 + 사용자 메모리) |
 | 확장 표면 | HookRegistry / MiddlewareRegistry / RuntimeEventBus (`core/hooks/`) | scaffold skills (트리거 키워드로 발화) |
 | 선언적 가드레일 | RUNTIME CANNOT (GEODE.md) + 6계층 PolicyChain (`core/tools/policy.py`) | CANNOT/CAN 규칙 (CLAUDE.md) |
@@ -6449,14 +6449,14 @@ LLM 시스템에서는 작은 프롬프트 변경 하나가 출력 품질을 조
 
 ## Ratchet이란
 
-기계의 ratchet은 한 방향으로만 돌고 반대 방향으로는 잠깁니다. 소프트웨어에서는 품질 지표를 한 방향으로만 움직이게 하는 게이트를 뜻합니다. 테스트 수가 줄면 빌드가 실패하고, 프롬프트 해시가 바뀌면 빌드가 실패하는 식입니다.
+기계의 ratchet은 한 방향으로만 돌고 반대 방향으로는 잠깁니다. 소프트웨어에서는 품질 지표를 한 방향으로만 움직이게 하는 게이트를 뜻합니다. coverage가 설정 하한 아래로 내려가거나 프롬프트 해시가 바뀌면 빌드가 실패하는 식입니다.
 
 ## GEODE의 ratchet들
 
 | Ratchet | 잠그는 것 | 코드 |
 | --- | --- | --- |
 | 프롬프트 해시 핀 | 핵심 프롬프트의 SHA-256\[:12\]. 변경하려면 명시적 재핀 커밋이 필요하고, CI Type 잡이 `verify_prompt_integrity`로 단언 | `core/llm/prompts/__init__.py` (`_PINNED_HASHES`) |
-| 최소 테스트 수 | 테스트 수가 바닥 아래로 내려가면 CI Test 잡 실패. 조용한 테스트 삭제 차단 | `.github/workflows/ci.yml` |
+| 테스트 coverage 하한 | 전체 행동 테스트가 통과해도 coverage가 75% 아래면 CI Test 잡 실패 | `pyproject.toml` (`fail_under`) |
 | Petri 번들 바닥 | 감사 증거 .eval 파일 수의 삭제 보호 바닥 | `scripts/check_repo_hygiene.py` (`PETRI_EVAL_FLOOR`) |
 | legacy import ratchet | 해소된 레거시 import 패턴의 재유입 차단 | `.github/workflows/ci.yml` (Lint 잡) |
 | CI 게이트 자체 | Lint, Type, Test, Security 중 하나라도 빨간불이면 머지 금지 | `.github/workflows/ci.yml` |

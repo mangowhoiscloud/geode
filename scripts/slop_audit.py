@@ -12,7 +12,7 @@ codebase health if uncaught:
 4. **Abandoned TODOs** (`TODO` / `FIXME` / `XXX` without an owner
    handle or date stamp).
 5. **Lint bypass markers** (`# noqa` / `# type: ignore`) — candidates for
-   review; the separate promotion ratchet owns non-growth.
+   review.
 6. **Stale references** (renamed module / removed feature names that
    still appear in comments or docstrings).
 
@@ -22,8 +22,8 @@ Usage:
 
 This script is diagnostic: its heuristic counts are candidates for review, not
 an accepted-debt floor. The dated 2026-05-18 snapshot lives under
-``docs/reference/`` as historical evidence. Promotion-time non-growth is owned
-by ``scripts/check_slop_ratchet.py``.
+``docs/reference/`` as historical evidence. Promotion remains owned by
+behavioral tests, coverage, and deterministic lint/type/dependency gates.
 
 Pure-script; no test dependencies — runs from a fresh checkout via
 ``uv run``. The skill at ``.geode/skills/slop-audit/SKILL.md`` documents
@@ -228,8 +228,8 @@ def lens_abandoned_todos() -> LensResult:
 def lens_lint_bypass() -> LensResult:
     """Count ``# noqa`` and ``# type: ignore`` markers.
 
-    Reported as a single combined diagnostic count. PR-time enforcement is a
-    separate ratchet documented in the skill.
+    Reported as a single combined diagnostic count. Additions are reviewed in
+    the diff; this aggregate is not a promotion gate.
     """
     samples: list[str] = []
     count = 0
