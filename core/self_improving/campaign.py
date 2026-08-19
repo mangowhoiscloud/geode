@@ -57,9 +57,6 @@ broke every cycle audit with an anthropic auth error → degenerate baseline.) A
 already-exported shell key still wins (``override=False``). The driver also sets,
 in the env it passes to each subprocess:
 
-* ``GEODE_CODEX_OAUTH_POLL_DISABLED=1`` — bypass GEODE's pre-emptive 5-hour
-  throttle so the ChatGPT-Plus subscription bucket is used directly
-  (``reference_codex_oauth_throttle_bypass``).
 * ``AUTORESEARCH_SEED_SELECT=<repo>/state/seed-pools/cycle-input`` — the
   co-evolving selection pool (highest-precedence override, see
   ``docs/self-improving/cycle-input-pool.md``).
@@ -313,7 +310,6 @@ def build_campaign_env(
     UNSET → ``train.py`` falls back to the v1 full-aggregate gate (backward-compatible).
     """
     env = dict(base_env if base_env is not None else os.environ)
-    env["GEODE_CODEX_OAUTH_POLL_DISABLED"] = "1"
     env["AUTORESEARCH_SEED_SELECT"] = str(CYCLE_INPUT_POOL)
     env["GEODE_HELD_OUT_BENCH"] = str(HELD_OUT_BENCH)
     env["GEODE_AUDIT_MAX_SAMPLES"] = str(audit_max_samples)
@@ -2128,7 +2124,6 @@ def run_arm(
             "GEODE_PROMOTE_POLICY_SEED",
             "AUTORESEARCH_SEED_SELECT",
             "GEODE_HELD_OUT_BENCH",
-            "GEODE_CODEX_OAUTH_POLL_DISABLED",
             "GEODE_AUDIT_MAX_SAMPLES",
             "GEODE_AUDIT_MAX_CONNECTIONS",
         )

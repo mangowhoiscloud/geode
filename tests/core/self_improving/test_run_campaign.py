@@ -805,7 +805,6 @@ def test_build_campaign_env_sets_fixed_vars() -> None:
         base_env={"ANTHROPIC_API_KEY": "from-operator-shell"},
     )
     assert env["ANTHROPIC_API_KEY"] == "from-operator-shell"
-    assert env["GEODE_CODEX_OAUTH_POLL_DISABLED"] == "1"
     assert env["AUTORESEARCH_SEED_SELECT"] == str(rc.CYCLE_INPUT_POOL)
     assert env["GEODE_HELD_OUT_BENCH"] == str(rc.HELD_OUT_BENCH)
     assert env["GEODE_AUDIT_MAX_SAMPLES"] == "3"
@@ -1388,7 +1387,6 @@ def test_build_worker_env_sets_isolated_state_root_and_arm(tmp_path: Path) -> No
     assert env["GEODE_PROMOTE_POLICY"] == "random"
     assert env["GEODE_PROMOTE_POLICY_SEED"] == "777"
     # The PAYG + seed-pool campaign env is layered in too.
-    assert env["GEODE_CODEX_OAUTH_POLL_DISABLED"] == "1"
     # S6 — when no transcript path / worker id is supplied, the isolation env vars
     # are ABSENT (the worker writes the home-dir transcript — sequential default).
     assert "GEODE_RUN_TIMELINE_PATH" not in env

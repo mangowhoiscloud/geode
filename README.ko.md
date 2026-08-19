@@ -134,9 +134,9 @@ uv tool install -e . --force         # `geode` 를 어디서나 쓸 수 있게 �
 geode setup
 ```
 
-Wizard 가 세 가지 경로를 제시합니다: ChatGPT 구독 (이미 `codex auth login` 했다면 자동 감지), API 키 (붙여넣기), dry-run 으로 일단 둘러보기. 본인에 맞는 걸 고르면 됩니다.
+Wizard 가 세 가지 경로를 제시합니다: ChatGPT 구독, API 키 (붙여넣기), dry-run 으로 일단 둘러보기. 기존 `~/.codex/auth.json` 자격도 가져올 수 있지만, 추론을 위해 Codex CLI를 실행하지는 않습니다.
 
-GEODE 설치 전에 이미 `codex auth login` 을 해뒀다면 이 단계 건너뛰어도 됩니다 — 다음 `geode` 실행 시 토큰을 자동 감지하고 바로 시작합니다.
+GEODE 설치 전에 이미 `codex auth login` 을 해뒀다면 다음 `geode` 실행에서 토큰을 감지할 수 있습니다. 그 외에는 Codex CLI 설치가 필요 없습니다.
 
 ### 3단계 — 경로별 수동 안내 (참고용)
 
@@ -146,12 +146,11 @@ GEODE 설치 전에 이미 `codex auth login` 을 해뒀다면 이 단계 건너
 
 #### Path A — ChatGPT 구독 (OpenAI 사용자에게 권장)
 
-Codex CLI 로 한 번 로그인하면, GEODE 가 `~/.codex/auth.json` 의 토큰을 그대로 가져다 씁니다. 비용은 구독으로 결제되고, 추가로 설정할 게 없습니다.
+GEODE는 `/login openai`로 직접 로그인하고 프로세스 내부 `codex-oauth` 어댑터로 ChatGPT 백엔드를 호출합니다. 기존 `~/.codex/auth.json` 자격을 읽을 수도 있지만 Codex CLI 실행 파일을 호출하지는 않습니다.
 
 ```bash
-brew install codex                    # macOS  (또는: npm install -g @openai/codex)
-codex auth login                      # 브라우저가 열립니다. ChatGPT 계정으로 로그인.
-geode                                 # 끝. GEODE 가 토큰을 자동으로 찾습니다.
+geode                                 # GEODE 시작
+# 세션 안에서: /login openai         # ChatGPT device-code 로그인
 ```
 
 **지원 플랜** ([Codex CLI 공식 문서](https://developers.openai.com/codex/cli/) 기준): Plus, Pro, Business, Edu, Enterprise.
@@ -160,7 +159,7 @@ geode                                 # 끝. GEODE 가 토큰을 자동으로 �
 
 **참고할 점**:
 - **gpt-5.5 는 구독 전용입니다.** GPT-5.6 Sol/Terra/Luna와 GPT-5.4는 듀얼 레인입니다. 구독 프로필이 활성화되면 ChatGPT OAuth, API 키 프로필을 선택하면 Platform API를 사용합니다. 5.5가 필요하면 ChatGPT 구독이 필요합니다.
-- **ChatGPT Team 은 현재 Codex CLI 미지원**. Team 사용자는 Path B 로 가세요.
+- 기존 Codex CLI 자격은 가져올 수 있지만, `codex-cli`는 GEODE 추론 백엔드가 아닙니다.
 - **Free / Go** 는 OpenAI 가격 페이지엔 있지만 CLI README 엔 없습니다. 동작하면 다행, 보장은 안 합니다.
 
 토큰 만료가 임박하면 GEODE 가 알아서 갱신합니다 (만료 120초 전 + 401 재시도). 사용자가 따로 신경 쓸 일은 없습니다.

@@ -110,11 +110,11 @@ def test_default_manifest_inspect_prefixes() -> None:
     manifest = load_manifest()
     assert manifest.get_adapter("anthropic", "api_key").inspect_prefix == "anthropic"
     # CSA-3 (2026-05-22) — flipped from "claude-code" / "openai-codex"
-    # to "claude-cli" / "codex-cli" so source="claude-cli" + source=
-    # "openai-codex" land on the paperclip subprocess providers.
+    # to "claude-cli" / "openai-codex" so each source lands on its
+    # supported subscription backend.
     assert manifest.get_adapter("anthropic", "claude-cli").inspect_prefix == "claude-cli"
     assert manifest.get_adapter("openai", "api_key").inspect_prefix == "openai"
-    assert manifest.get_adapter("openai", "openai-codex").inspect_prefix == "codex-cli"
+    assert manifest.get_adapter("openai", "openai-codex").inspect_prefix == "openai-codex"
     assert manifest.get_adapter("zhipuai", "api_key").inspect_prefix == "geode"
 
 

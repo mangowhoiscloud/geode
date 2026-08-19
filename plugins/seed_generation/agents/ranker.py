@@ -801,8 +801,8 @@ class Ranker(BaseSeedAgent):
                     # ``source``; ``worker_model`` fell back to the
                     # parent's ``settings.model`` so the resolved
                     # adapter ignored the voter's binding (smoke 17
-                    # RESUME: claude-cli voter dispatched via codex-cli
-                    # because ``_resolve_provider(settings.model)``
+                    # RESUME: a claude-cli voter dispatched via the parent's
+                    # OpenAI adapter because ``_resolve_provider(settings.model)``
                     # returned the parent's provider, not the voter's).
                     # Now ``task.model = voter.model`` wins in
                     # ``SubAgentManager._build_request``, so

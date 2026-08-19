@@ -13,8 +13,7 @@ Adapter owns its own ``AsyncOpenAI`` client (Codex MCP BLOCKER fix — the
 module-level singleton in ``core.llm.providers.codex`` would shadow per-call
 credential differences).
 
-Pair with :class:`OpenAIPaygAdapter` (same provider, API key path) and
-:class:`CodexCliAdapter` (subprocess path).
+Pair with :class:`OpenAIPaygAdapter` (same provider, API key path).
 """
 
 from __future__ import annotations
@@ -130,8 +129,7 @@ class CodexOAuthAdapter:
                 "CodexOAuthAdapter: ChatGPT OAuth not found. Looked in GEODE "
                 f"ProfileStore ('openai-codex' profile) and {codex_auth_path()}. "
                 "Run ``/login openai`` in GEODE or ``codex auth login`` in the "
-                "Codex CLI to provision credentials, or use the openai-payg / "
-                "codex-cli adapter."
+                "Codex CLI to provision credentials, or use the openai-payg adapter."
             )
         with self._token_lock:
             if self._token_fingerprint != resolved.fingerprint:
@@ -187,8 +185,7 @@ class CodexOAuthAdapter:
         # PR-OAUTH-API-LANES (2026-05-26) — gate concurrent API calls
         # through the shared openai-api lane so PR-RANKER-PARALLEL's
         # 177-call burst stays under the per-account 429 floor. The
-        # CLI subprocess flow has its own ``codex_cli_lane``; this
-        # lane covers the direct Responses API path.
+        # This lane covers the direct Responses API path.
         lane_key = f"codex-oauth:{req.model}"
         async with acquire_openai_api_lane_async(lane_key):
             try:

@@ -22,7 +22,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from core.llm.adapters._subprocess_common import build_subprocess_stdin
 from core.llm.adapters.base import (
     SOURCE_ADAPTER,
     AdapterBillingType,
@@ -40,6 +39,24 @@ if TYPE_CHECKING:
     from plugins.petri_audit.claude_cli_provider import StreamJsonEvent, TransientSignal
 
 log = logging.getLogger(__name__)
+
+
+def build_subprocess_stdin(req: AdapterCallRequest) -> str:
+    """Flatten a Claude CLI request, omitting cached system text on resume."""
+    parts: list[str] = []
+    if req.system_prompt and not req.resume_session_id:
+        parts.extend(("[SYSTEM]", req.system_prompt, ""))
+    for message in req.messages:
+        if message.role == "tool":
+            continue
+        parts.extend(
+            (
+                f"[{message.role.upper()}]",
+                message.content if isinstance(message.content, str) else str(message.content),
+                "",
+            )
+        )
+    return "\n".join(parts).strip() + "\n"
 
 
 @dataclass

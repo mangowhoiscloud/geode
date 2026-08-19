@@ -49,10 +49,10 @@ export default function Page() {
               </tbody>
             </table>
             <p>
-              관리형 토큰의 대표가 Codex입니다. 수명 관리는 Codex CLI가 하고
-              GEODE는 <code>~/.codex/auth.json</code>을 읽기만 합니다. 그래서
-              &quot;갱신&quot;은 새 토큰 발급이 아니라 외부 저장소 재독입니다.
-              발급이 필요하면 <code>codex login</code>을 다시 돌립니다.
+              <code>/login openai</code>으로 발급한 ChatGPT 자격은 GEODE가
+              <code>~/.geode/auth.toml</code>에서 직접 관리합니다. 기존
+              <code>~/.codex/auth.json</code>을 가져온 프로파일만 외부 저장소를
+              재독하며, 어느 경우에도 Codex CLI를 추론에 실행하지 않습니다.
             </p>
 
             <h2>운영 시 알아둘 것</h2>
@@ -143,11 +143,11 @@ export default function Page() {
               </tbody>
             </table>
             <p>
-              Codex is the canonical managed token: Codex CLI owns the
-              lifecycle and GEODE only reads <code>~/.codex/auth.json</code>.
-              &quot;Refresh&quot; therefore means re-reading external storage,
-              not minting a new token. When minting is needed, rerun
-              <code>codex login</code>.
+              GEODE directly manages ChatGPT credentials issued by
+              <code>/login openai</code> in <code>~/.geode/auth.toml</code>.
+              Only profiles imported from <code>~/.codex/auth.json</code>
+              re-read external storage, and neither path spawns Codex CLI for
+              inference.
             </p>
 
             <h2>Operational notes</h2>

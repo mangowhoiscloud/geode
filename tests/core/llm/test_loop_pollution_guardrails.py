@@ -235,11 +235,11 @@ def test_builtin_adapters_with_get_client_use_loop_affine_cache() -> None:
     finally:
         registry_mod._REGISTRY = original
 
-    assert len(adapters) >= 8
+    assert len(adapters) >= 7
     checked = 0
     for adapter in adapters:
         if not hasattr(adapter, "_get_client"):
-            continue  # subprocess adapters (claude-cli / codex-cli) own no SDK client
+            continue  # subprocess adapters such as claude-cli own no SDK client
         cache = getattr(adapter, "_clients", None)
         assert isinstance(cache, LoopAffineClientCache), (
             f"{adapter.name}: _get_client without a LoopAffineClientCache "

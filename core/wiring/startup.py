@@ -148,15 +148,15 @@ def _has_available_profile() -> bool:
 def detect_subscription_oauth() -> str | None:
     """Detect a usable subscription-OAuth credential before any wizard runs.
 
-    Currently supports Codex CLI OAuth (ChatGPT subscription — Plus /
-    Pro / Business / Edu / Enterprise). Anthropic OAuth is intentionally
+    Supports importing ChatGPT subscription credentials owned by Codex CLI
+    (Plus / Pro / Business / Edu / Enterprise). Anthropic OAuth is intentionally
     excluded — Anthropic's
     terms of service (effective 2026-01-09) prohibit third-party tools from
     reusing the Claude Code OAuth token; ``core/lifecycle/container.py:271``
     documents the policy decision.
 
-    Returns the provider id (``"openai-codex"``) when a Codex CLI token is
-    present. This is expiry-blind: the Codex CLI keeps its own access token
+    Returns the provider variant id (``"openai-codex"``) when an imported token is
+    present. This is expiry-blind: the credential owner keeps its access token
     refreshed, so an expired-looking cached token is still usable — and the
     dispatch path (``_resolve_codex_token``) treats it the same way, so
     readiness and the call path agree. Best-effort profile registration into

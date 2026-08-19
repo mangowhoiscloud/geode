@@ -206,9 +206,9 @@ uv tool install -e . --force         # makes `geode` available everywhere
 geode setup
 ```
 
-The wizard offers three paths: ChatGPT subscription (auto-detects `codex auth login` if you've already done it), API key (paste and go), or skip into dry-run mode for now. Pick whichever fits.
+The wizard offers three paths: ChatGPT subscription, API key (paste and go), or skip into dry-run mode for now. It can also import an existing `~/.codex/auth.json` credential, but GEODE does not execute Codex CLI for inference.
 
-If you already ran `codex auth login` before installing GEODE, you can skip this step entirely, the next `geode` invocation will detect the token and start.
+If you already ran `codex auth login`, the next `geode` invocation can detect that token. Codex CLI is otherwise optional.
 
 ### Step 3: Pick a path (manual reference)
 
@@ -218,12 +218,11 @@ The wizard above covers everything below; this section exists as a manual refere
 
 #### Path A: ChatGPT subscription (the recommended path for OpenAI users)
 
-Codex CLI signs you in once. GEODE picks up the token from `~/.codex/auth.json` and uses it for every call. Your subscription pays the bill; nothing extra to set up.
+GEODE signs in directly through `/login openai` and calls the ChatGPT backend through its in-process `codex-oauth` adapter. It can also read an existing `~/.codex/auth.json` credential without spawning the Codex CLI executable.
 
 ```bash
-brew install codex                    # macOS  (or: npm install -g @openai/codex)
-codex auth login                      # opens a browser; sign in with your ChatGPT account
-geode                                 # done. GEODE finds the token automatically.
+geode                                 # start GEODE
+# inside the session: /login openai   # ChatGPT device-code login
 ```
 
 **Plans that work** (per the [official Codex CLI docs](https://developers.openai.com/codex/cli/)): Plus, Pro, Business, Edu, Enterprise.
@@ -232,7 +231,7 @@ geode                                 # done. GEODE finds the token automaticall
 
 **Tier notes**:
 - **gpt-5.5 is subscription-only.** GPT-5.6 Sol/Terra/Luna and GPT-5.4 are dual-lane: GEODE uses ChatGPT OAuth when a subscription profile is active and the Platform API when an API-key profile is selected. If you want 5.5, you need ChatGPT.
-- **ChatGPT Team is not currently supported** by Codex CLI. Team users should use Path B.
+- Existing Codex CLI credentials remain importable, but `codex-cli` is not a GEODE inference backend.
 - **Free / Go** appear on OpenAI's pricing page but aren't listed in the CLI README. Treat them as best-effort; if it works, great, but no promises.
 
 When the token nears expiry, GEODE refreshes it on its own (120 seconds before, plus a 401 retry). You shouldn't see this happen.

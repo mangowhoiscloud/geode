@@ -3,8 +3,7 @@
 PR-JSON-WIRE (2026-05-25) — each role's expected output shape encoded
 as a JSON Schema. Populated into ``SubTask.response_schema`` →
 ``WorkerRequest.response_schema`` → ``AgenticLoop.response_schema``
-→ ``AdapterCallRequest.response_schema`` → claude-cli
-``--json-schema`` / codex-cli ``--output-schema``. The provider then
+→ ``AdapterCallRequest.response_schema`` → claude-cli ``--json-schema``. The provider then
 constrains the model's response to the declared shape.
 
 Without forcing, structured-output roles regularly hit invalid-JSON

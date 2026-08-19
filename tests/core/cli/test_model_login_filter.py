@@ -76,7 +76,7 @@ def test_picker_unavailable_enter_returns_cancelled(monkeypatch: pytest.MonkeyPa
 
     profiles: list[tuple[str, str, str, str, bool, str | None]] = [
         ("claude-opus-4-7", "anthropic", "Opus 4.7", "$$$", True, None),
-        ("gpt-5.5", "openai-codex", "GPT-5.5", "$$", False, None),  # unavailable
+        ("gpt-5.5", "openai", "GPT-5.5", "$$", False, None),  # unavailable
     ]
 
     keys = iter([effort_picker._KEY_DOWN, effort_picker._KEY_ENTER])

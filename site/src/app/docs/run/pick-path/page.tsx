@@ -28,8 +28,8 @@ export default function Page() {
               <tbody>
                 <tr>
                   <td>1. ChatGPT 구독 OAuth</td>
-                  <td>ChatGPT Plus 구독 (Codex CLI 토큰)</td>
-                  <td><code>geode setup</code>이 <code>~/.codex/auth.json</code>을 자동 감지합니다. 없으면 <code>/login openai</code>로 device-code 로그인.</td>
+                  <td>ChatGPT 구독 OAuth</td>
+                  <td><code>/login openai</code>로 device-code 로그인. 기존 <code>~/.codex/auth.json</code> 자격도 가져올 수 있습니다.</td>
                   <td>이미 ChatGPT를 결제 중이고 API 키를 따로 만들기 싫을 때. <code>gpt-5.5</code>는 이 경로로만 라우팅됩니다.</td>
                 </tr>
                 <tr>
@@ -104,7 +104,7 @@ export default function Page() {
                 <tr><td><code>auto</code></td><td>기본값. OAuth를 먼저 시도하고, PAYG 전환은 설정으로 게이트됩니다.</td></tr>
                 <tr><td><code>api_key</code></td><td>PAYG API 키만 사용합니다.</td></tr>
                 <tr><td><code>claude-cli</code></td><td>claude CLI의 Anthropic 구독 OAuth를 사용합니다.</td></tr>
-                <tr><td><code>openai-codex</code></td><td>Codex CLI의 ChatGPT 구독 OAuth를 사용합니다.</td></tr>
+                <tr><td><code>openai-codex</code></td><td>프로세스 내부 <code>codex-oauth</code> 어댑터로 ChatGPT 구독 OAuth를 사용합니다.</td></tr>
               </tbody>
             </table>
 
@@ -128,7 +128,7 @@ geode about              # 실효 모델 + 자격 상태 확인`}</pre>
                 <tr>
                   <td>setup이 ChatGPT OAuth를 못 찾음</td>
                   <td><code>~/.codex/auth.json</code> 없음</td>
-                  <td>Codex CLI로 먼저 로그인하거나 <code>/login openai</code>의 device-code 플로우를 씁니다. 후자는 <code>~/.geode/auth.toml</code>에 저장됩니다.</td>
+                  <td><code>/login openai</code>의 device-code 플로우를 씁니다. 기존 Codex CLI 자격은 가져오기만 하며 추론 실행 경로가 아닙니다.</td>
                 </tr>
                 <tr>
                   <td>키를 넣었는데 모델이 안 바뀜</td>
@@ -172,8 +172,8 @@ geode about              # 실효 모델 + 자격 상태 확인`}</pre>
               <tbody>
                 <tr>
                   <td>1. ChatGPT subscription OAuth</td>
-                  <td>ChatGPT Plus subscription (Codex CLI token)</td>
-                  <td><code>geode setup</code> auto-detects <code>~/.codex/auth.json</code>. Without it, <code>/login openai</code> runs a device-code login.</td>
+                  <td>ChatGPT subscription OAuth</td>
+                  <td><code>/login openai</code> runs device-code login. Existing <code>~/.codex/auth.json</code> credentials can also be imported.</td>
                   <td>You already pay for ChatGPT and do not want a separate API key. <code>gpt-5.5</code> routes only through this lane.</td>
                 </tr>
                 <tr>
@@ -249,7 +249,7 @@ geode about              # 실효 모델 + 자격 상태 확인`}</pre>
                 <tr><td><code>auto</code></td><td>Default. Tries OAuth first; falling through to PAYG is gated by configuration.</td></tr>
                 <tr><td><code>api_key</code></td><td>PAYG API key only.</td></tr>
                 <tr><td><code>claude-cli</code></td><td>Anthropic subscription OAuth via the claude CLI.</td></tr>
-                <tr><td><code>openai-codex</code></td><td>ChatGPT subscription OAuth via the Codex CLI.</td></tr>
+                <tr><td><code>openai-codex</code></td><td>ChatGPT subscription OAuth through the in-process <code>codex-oauth</code> adapter.</td></tr>
               </tbody>
             </table>
 
@@ -273,7 +273,7 @@ geode about              # effective model + credential state`}</pre>
                 <tr>
                   <td>setup does not find ChatGPT OAuth</td>
                   <td>No <code>~/.codex/auth.json</code></td>
-                  <td>Log in with the Codex CLI first, or use the <code>/login openai</code> device-code flow. The latter stores into <code>~/.geode/auth.toml</code>.</td>
+                  <td>Use the <code>/login openai</code> device-code flow. Existing Codex CLI credentials are import-only, not an inference execution path.</td>
                 </tr>
                 <tr>
                   <td>Added a key but the model did not change</td>

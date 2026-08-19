@@ -81,13 +81,33 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
-# PR-CLEANUP-D2 — shared CLI-provider serialisation (single SoT;
-# re-exported so existing call sites and tests stay stable).
-from plugins.petri_audit.prompt_serialisation import (
-    serialise_messages_to_prompt as serialise_messages_to_prompt,
-)
-
 log = logging.getLogger(__name__)
+
+_ROLE_HEADERS = {
+    "system": "<<<SYSTEM>>>",
+    "user": "<<<USER>>>",
+    "assistant": "<<<ASSISTANT>>>",
+    "tool": "<<<TOOL_RESULT>>>",
+}
+
+
+def serialise_messages_to_prompt(messages: list[Any]) -> str:
+    """Flatten ``inspect_ai.ChatMessage[]`` into one role-tagged prompt."""
+    parts: list[str] = []
+    for msg in messages:
+        role = getattr(msg, "role", "user")
+        header = _ROLE_HEADERS.get(role, f"<<<{role.upper()}>>>")
+        content = getattr(msg, "content", "")
+        if isinstance(content, str):
+            text = content
+        elif isinstance(content, list):
+            chunks = [getattr(block, "text", None) for block in content]
+            text = "".join(chunk for chunk in chunks if isinstance(chunk, str))
+        else:
+            text = ""
+        parts.append(f"{header}\n{text.rstrip()}")
+    return "\n\n".join(parts) + "\n"
+
 
 __all__ = [
     "CLAUDE_CLI_BIN_ENV",
@@ -242,11 +262,8 @@ class TransientSignal:
 # more specific alternative (e.g. ``API returned 429``) rather than
 # re-introducing a bare digit run.
 # PR-TRANSIENT-WORD-BOUNDARIES (2026-05-25) — single-word alternatives
-# now anchor on ``\b`` so they don't match inside identifiers like
-# ``CODEX_CLI_LANE_THROTTLED_MSG`` (a constant in
-# ``core/orchestration/codex_cli_lane.py``). v0.99.53 smoke 8 pilot
-# sub-agent surfaced this: the LLM was reading or quoting a Python
-# stack-trace fragment containing that constant name, and
+# now anchor on ``\b`` so they don't match inside identifiers quoted by
+# the LLM. A v0.99.53 smoke pilot surfaced this when
 # ``throttl(?:ed|ing)`` matched ``THROTTLED`` inside it (case-
 # insensitive). Real signals like "request was throttled" /
 # "Throttling exception thrown" still match because the next char

@@ -129,8 +129,7 @@ class WorkerRequest:
     # PR-JSON-WIRE (2026-05-25) — per-task JSON Schema for
     # structured-output forcing on the spawned LLM call. Threads
     # through ``AgenticLoop.response_schema`` →
-    # ``AdapterCallRequest.response_schema`` → claude-cli
-    # ``--json-schema`` / codex-cli ``--output-schema``. ``None``
+    # ``AdapterCallRequest.response_schema`` → claude-cli ``--json-schema``. ``None``
     # preserves back-compat (caller without a schema gets free-form
     # text). Per-role schemas live in
     # ``plugins/seed_generation/json_schemas.py`` and are wired in
@@ -214,9 +213,7 @@ class WorkerResult:
     Capture coverage: payg / API-key adapters and claude-cli (PR-CLI-
     USAGE-CAPTURE, 2026-07-13 — the CLI's terminal ``result`` stream-json
     event carries token usage even on subscription) populate real numbers.
-    codex-cli remains 0 — its plain-text ``codex exec`` stdout has no usage
-    block (see ``core/llm/adapters/codex_cli.py``). We never fabricate
-    counts; unmetered calls stay honestly at 0.
+    We never fabricate counts; unmetered calls stay honestly at 0.
     """
 
     task_id: str

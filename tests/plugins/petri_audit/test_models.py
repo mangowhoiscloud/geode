@@ -95,7 +95,9 @@ def test_list_audit_models_includes_each_provider() -> None:
     # PR #6 — gpt-* now resolves to ``openai-codex/`` when a token is
     # available, or ``openai/`` when not. Accept either form so the
     # test passes in both environments.
-    assert any(i.startswith("openai/gpt-") or i.startswith("codex-cli/gpt-") for i in inspect_ids)
+    assert any(
+        i.startswith("openai/gpt-") or i.startswith("openai-codex/gpt-") for i in inspect_ids
+    )
     assert any(i.startswith("geode/glm-") for i in inspect_ids)
 
 
@@ -180,7 +182,12 @@ def test_gpt_source_oauth_routes_to_codex(monkeypatch: pytest.MonkeyPatch) -> No
     from core.config import settings
 
     monkeypatch.setattr(settings, "openai_credential_source", "oauth", raising=False)
-    assert to_inspect_model("gpt-5.5") == "codex-cli/gpt-5.5"
+    assert to_inspect_model("gpt-5.5") == "openai-codex/gpt-5.5"
+
+
+def test_retired_codex_cli_identifier_fails_loudly() -> None:
+    with pytest.raises(AuditModelMappingError, match="use openai-codex"):
+        to_inspect_model("codex-cli/gpt-5.5")
 
 
 def test_gpt_source_api_key_routes_to_openai(monkeypatch: pytest.MonkeyPatch) -> None:

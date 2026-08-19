@@ -48,7 +48,7 @@ class CredentialSource(StrEnum):
     API_KEY = "api_key"
     #: Anthropic OAuth via the ``claude`` CLI (subscription).
     CLAUDE_CLI = "claude-cli"
-    #: OpenAI OAuth via the Codex CLI / ChatGPT subscription.
+    #: OpenAI OAuth via the ChatGPT subscription backend.
     OPENAI_CODEX = "openai-codex"
 
 

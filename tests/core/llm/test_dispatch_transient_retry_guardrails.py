@@ -479,7 +479,7 @@ def test_every_builtin_adapter_backs_advertised_capabilities_with_coroutines(
     monkeypatch.setattr(registry_mod, "_REGISTRY", {})
     registry_mod.bootstrap_builtins()
     adapters = registry_mod.list_adapters()
-    assert len(adapters) >= 8, "builtin set shrank — update bootstrap_builtins or this ratchet"
+    assert len(adapters) >= 7, "builtin set shrank — update bootstrap_builtins or this ratchet"
 
     for adapter in adapters:
         assert adapter.name and adapter.provider and adapter.source

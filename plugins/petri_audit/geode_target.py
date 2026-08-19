@@ -334,8 +334,7 @@ async def _default_geode_runner(
             #   ``api_key`` (Petri PAYG, provider-generic) → ``payg``
             #     (registry category; the fallback ``resolve_for(provider,
             #     "payg")`` selects the provider-specific ``*-payg`` adapter)
-            # The other concrete sources (``claude-cli`` / ``codex-cli`` /
-            # ``anthropic-oauth``) are identical across both namespaces.
+            # Other concrete source names are identical across both namespaces.
             _PETRI_TO_REGISTRY = {
                 "openai-codex": "codex-oauth",
                 "api_key": "payg",

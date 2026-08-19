@@ -644,18 +644,13 @@ def _default_llm_call(
     The mutator therefore inherits I.a's Codex OAuth header dedup and
     F's GLM adapter family on the API path directly.
 
-    **CLI-subscription paths (``claude-cli`` / ``openai-codex``)
-    deliberately stay on the dedicated ``invoke_claude_cli`` /
-    ``invoke_codex_cli`` helpers** in :mod:`core.self_improving.loop.mutate.cli_subprocess`
-    rather than going through the Path-B ``ClaudeCliAdapter`` /
-    ``CodexCliAdapter`` built-ins. The built-in adapters were designed
+    The ``claude-cli`` subscription path deliberately stays on the dedicated
+    ``invoke_claude_cli`` helper in :mod:`core.self_improving.loop.mutate.cli_subprocess`
+    rather than going through the Path-B ``ClaudeCliAdapter`` built-in. It was designed
     for the agentic-loop's streaming JSON event protocol
     (``--output-format stream-json``), whereas the mutator parser
-    expects plain text output (``--output-format text`` for claude-cli
-    and the ``--skip-git-repo-check`` codex_exec invocation). Forcing
-    the mutator through the streaming adapters would break the JSON
-    mutation-payload extraction. Migrating both adapters to support
-    a text-output mode is tracked separately (Step I.c follow-up).
+    expects plain text output. Forcing the mutator through the streaming adapter
+    would break the JSON mutation-payload extraction.
 
     Resolution order:
 
@@ -698,8 +693,8 @@ def _default_llm_call(
         max_tokens,
     )
 
-    # PR-PAPERCLIP (2026-05-21) — source-aware dispatch. The CLI-subscription
-    # branches use the dedicated text-output helpers in ``cli_subprocess``
+    # PR-PAPERCLIP (2026-05-21) — source-aware dispatch. The Claude CLI subscription
+    # branch uses the dedicated text-output helper in ``cli_subprocess``
     # (see docstring above for the streaming-vs-text incompatibility with
     # the Path-B CLI adapters). The API path (``api_key`` / ``auto``)
     # falls through to the LLMAdapter Protocol.
@@ -707,16 +702,16 @@ def _default_llm_call(
         from core.self_improving.loop.mutate.cli_subprocess import invoke_claude_cli
 
         return invoke_claude_cli(system_prompt=system_prompt, user_prompt=user_prompt)
-    if source == "openai-codex":
-        from core.self_improving.loop.mutate.cli_subprocess import invoke_codex_cli
-
-        return invoke_codex_cli(system_prompt=system_prompt, user_prompt=user_prompt)
-
     # Step J-b.2 (Path-B API path) — resolve_for + acomplete.
     from core.config import settings as _settings
     from core.llm.adapters import resolve_for
     from core.llm.adapters._source_inference import infer_source
-    from core.llm.adapters.base import SOURCE_PAYG, AdapterCallRequest, Message
+    from core.llm.adapters.base import (
+        SOURCE_PAYG,
+        SOURCE_SUBSCRIPTION,
+        AdapterCallRequest,
+        Message,
+    )
     from core.llm.adapters.registry import normalize_registry_provider
     from core.llm.router import call_with_failover
 
@@ -728,7 +723,13 @@ def _default_llm_call(
     # set via the ``[self_improving_loop] openai_source`` single entry point) must
     # route to PAYG; ``infer_source`` would otherwise re-derive subscription from a
     # present OAuth profile and silently ignore the operator's explicit lane choice.
-    resolved_source = SOURCE_PAYG if source == "api_key" else infer_source(provider)
+    resolved_source = (
+        SOURCE_PAYG
+        if source == "api_key"
+        else SOURCE_SUBSCRIPTION
+        if source == "openai-codex"
+        else infer_source(provider)
+    )
     adapter = resolve_for(normalize_registry_provider(provider), resolved_source)
     mutator_temperature = _settings.temperature_self_improving_mutation
 

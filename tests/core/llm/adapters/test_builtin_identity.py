@@ -1,4 +1,4 @@
-"""Identity invariants for each of the 8 built-in adapters.
+"""Identity invariants for each built-in adapter.
 
 These tests pin the (name, provider, source, billing_type) tuple for each
 shipped adapter. They DO NOT exercise the actual SDK / subprocess call path —
@@ -20,7 +20,6 @@ from core.llm.adapters.anthropic_oauth import AnthropicOAuthAdapter
 from core.llm.adapters.anthropic_payg import AnthropicPaygAdapter
 from core.llm.adapters.base import AdapterBillingType
 from core.llm.adapters.claude_cli import ClaudeCliAdapter
-from core.llm.adapters.codex_cli import CodexCliAdapter
 from core.llm.adapters.codex_oauth import CodexOAuthAdapter
 from core.llm.adapters.glm_coding_plan import GlmCodingPlanAdapter
 from core.llm.adapters.glm_payg import GlmPaygAdapter
@@ -52,13 +51,6 @@ from core.llm.adapters.openai_payg import OpenAIPaygAdapter
             "openai",
             "subscription",
             AdapterBillingType.SUBSCRIPTION,
-        ),
-        (
-            CodexCliAdapter,
-            "codex-cli",
-            "openai",
-            "adapter",
-            AdapterBillingType.SUBSCRIPTION_INCLUDED,
         ),
         (GlmPaygAdapter, "glm-payg", "glm", "payg", AdapterBillingType.API),
         (
@@ -96,7 +88,6 @@ def test_test_environment_returns_report() -> None:
         ClaudeCliAdapter,
         OpenAIPaygAdapter,
         CodexOAuthAdapter,
-        CodexCliAdapter,
         GlmPaygAdapter,
         GlmCodingPlanAdapter,
     ):
@@ -115,7 +106,6 @@ def test_list_models_returns_specs() -> None:
         ClaudeCliAdapter,
         OpenAIPaygAdapter,
         CodexOAuthAdapter,
-        CodexCliAdapter,
         GlmPaygAdapter,
         GlmCodingPlanAdapter,
     ):

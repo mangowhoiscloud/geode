@@ -24,10 +24,6 @@ from plugins.petri_audit.mcp_bridge.bridge_server import (
     BRIDGE_SERVER_NAME,
     BRIDGE_TOOLS_ENV,
 )
-from plugins.petri_audit.mcp_bridge.codex_overrides import (
-    build_codex_cli_mcp_overrides,
-    extract_codex_tool_calls,
-)
 from plugins.petri_audit.mcp_bridge.lifecycle import (
     BRIDGE_KEEP_TEMP_ENV,
     BridgeInvocation,
@@ -56,10 +52,8 @@ __all__ = [
     "BridgeInvocation",
     "ToolUseAccumulator",
     "allowed_tool_names",
-    "build_codex_cli_mcp_overrides",
     "build_mcp_config",
     "deserialise_tool_specs",
-    "extract_codex_tool_calls",
     "extract_tool_calls",
     "prepare_bridge",
     "release_bridge",

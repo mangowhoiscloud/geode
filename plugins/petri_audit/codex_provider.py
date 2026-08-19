@@ -178,7 +178,8 @@ def register() -> None:
                 raise environment_prerequisite_error(
                     "OpenAI Codex (ChatGPT subscription)",
                     [
-                        "~/.codex/auth.json (Codex CLI login)",
+                        "/login openai (GEODE device-code login)",
+                        "~/.codex/auth.json (optional credential import)",
                         "openai-codex profile in GEODE ProfileStore",
                     ],
                 )

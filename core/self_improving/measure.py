@@ -261,8 +261,7 @@ def _audit_sampling_params_as_sent() -> dict[str, Any]:
     ``_build_audit_command`` puts on the argv.
 
     The per-token sampling knobs (``temperature`` / ``top_p`` / ``max_tokens``) are
-    NOT pinned by GEODE — they fall to the inspect_ai + provider (claude-cli /
-    codex-cli OAuth) defaults — so they are recorded as
+    NOT pinned by GEODE — they fall to the inspect_ai + provider defaults — so they are recorded as
     :data:`~core.self_improving.loop.observe.run_provenance.SAMPLING_UNPINNED` rather than a
     fabricated value. This is the honest "GEODE did not set this" record; a future
     PR that pins these knobs (and a ctx7-verified backend-determinism live test)

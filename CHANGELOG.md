@@ -57,6 +57,10 @@ functional change.
 
 ### Changed
 
+- **OpenAI model routing now uses one provider family.** GPT picker entries
+  report `openai`; credential source selects ChatGPT subscription OAuth or
+  Platform PAYG without presenting Codex as a separate provider.
+
 - **Seed-generation now uses frontier-band survivor selection by default.**
   The already-wired multi-candidate ranker promotes candidates nearest the
   measured discrimination midpoint and falls back to Elo when pilot evidence
@@ -69,6 +73,15 @@ functional change.
   slop counts or a raw collected-test total; full behavior tests, coverage,
   Ruff, mypy, dependency, architecture, eval-contract, prompt-integrity, and
   security gates remain authoritative.
+
+### Removed
+
+- **The `codex-cli` inference backend is retired.** GEODE no longer spawns
+  `codex exec`, registers a Codex CLI adapter, or reserves a Codex CLI lane.
+  ChatGPT subscription calls use the direct `codex-oauth` adapter; an explicit
+  `codex-cli` selection fails with a migration hint. Importing credentials from
+  `~/.codex/auth.json` and the isolated MCPMark Codex comparator remain separate
+  credential/evaluation integrations, not model-provider paths.
 
 ## [1.0.22] - 2026-08-19
 

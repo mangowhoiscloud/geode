@@ -20,7 +20,7 @@ def runner() -> CliRunner:
     return CliRunner()
 
 
-def test_adapters_list_shows_all_six(runner: CliRunner) -> None:
+def test_adapters_list_shows_openai_as_payg_and_subscription(runner: CliRunner) -> None:
     from core.cli import app
 
     result = runner.invoke(app, ["adapters", "list"])
@@ -31,9 +31,9 @@ def test_adapters_list_shows_all_six(runner: CliRunner) -> None:
         "claude-cli",
         "openai-payg",
         "codex-oauth",
-        "codex-cli",
     ):
         assert adapter_name in result.output
+    assert "codex-cli" not in result.output
 
 
 def test_adapters_list_shows_billing_type(runner: CliRunner) -> None:
