@@ -39,15 +39,15 @@ def isolated_mutator_state(
     # Neutralise the upstream readers — RunnerContext fields we don't
     # care about default to None / empty.
     monkeypatch.setattr(
-        "plugins.seed_generation.baseline_reader.load_baseline",
+        "geode_product.seed_generation.baseline_reader.load_baseline",
         lambda: None,
     )
     monkeypatch.setattr(
-        "plugins.seed_generation.baseline_reader.load_latest_meta_review",
+        "geode_product.seed_generation.baseline_reader.load_latest_meta_review",
         lambda: None,
     )
     monkeypatch.setattr(
-        "plugins.seed_generation.baseline_reader.pick_regression_target_dim",
+        "geode_product.seed_generation.baseline_reader.pick_regression_target_dim",
         lambda _snapshot: "",
     )
     monkeypatch.setattr(

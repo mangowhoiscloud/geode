@@ -2,7 +2,7 @@
 
 Layer 3 adapter for OpenAI provider, source=subscription. Uses the
 ``chatgpt.com/backend-api/codex`` endpoint with the OAuth token resolved by
-:func:`core.llm.providers.codex._resolve_codex_token` — which checks **both**
+:func:`core.llm.providers.codex.resolve_codex_token` — which checks **both**
 the GEODE ``ProfileStore`` (``openai-codex`` profile registered via
 ``/login openai``) *and* the external ``~/.codex/auth.json`` (Codex CLI
 fallback). Codex MCP review 2026-05-23 HIGH finding: the prior version only
@@ -380,9 +380,9 @@ class CodexOAuthAdapter:
                     yield StreamEvent(kind="stop", payload={"stop_reason": "completed"})
 
     def test_environment(self) -> EnvironmentReport:
-        from core.llm.providers.codex import _resolve_codex_token
+        from core.llm.providers.codex import resolve_codex_token
 
-        token = _resolve_codex_token()
+        token = resolve_codex_token()
         if not token:
             return EnvironmentReport(
                 ok=False,
@@ -427,9 +427,9 @@ class CodexOAuthAdapter:
         return None
 
     def detect_credential(self) -> CredentialDetection | None:
-        from core.llm.providers.codex import _resolve_codex_token
+        from core.llm.providers.codex import resolve_codex_token
 
-        if not _resolve_codex_token():
+        if not resolve_codex_token():
             return None
         from core.config import CODEX_PRIMARY
 

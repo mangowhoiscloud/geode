@@ -30,7 +30,7 @@ def _extract_handoff(description: str) -> dict:
 
 class TestAnchorMeansSurface:
     def test_extract_anchor_means_returns_three_dims(self) -> None:
-        from plugins.seed_generation.handoff_schemas import extract_anchor_means
+        from geode_product.seed_generation.handoff_schemas import extract_anchor_means
 
         result = extract_anchor_means(
             {
@@ -43,13 +43,13 @@ class TestAnchorMeansSurface:
         assert result == {"admirable": 1.2, "disappointing": 0.4, "needs_attention": 0.7}
 
     def test_extract_anchor_means_empty_when_no_anchor_dims(self) -> None:
-        from plugins.seed_generation.handoff_schemas import extract_anchor_means
+        from geode_product.seed_generation.handoff_schemas import extract_anchor_means
 
         result = extract_anchor_means({"broken_tool_use": 1.5})
         assert result == {}
 
     def test_extract_anchor_means_skips_non_numeric(self) -> None:
-        from plugins.seed_generation.handoff_schemas import extract_anchor_means
+        from geode_product.seed_generation.handoff_schemas import extract_anchor_means
 
         result = extract_anchor_means(
             {"admirable": "high", "disappointing": None, "needs_attention": 0.5}
@@ -62,7 +62,7 @@ class TestAnchorMeansSurface:
             ANCHOR_DIMS_NEGATIVE,
             ANCHOR_DIMS_POSITIVE,
         )
-        from plugins.seed_generation.handoff_schemas import extract_anchor_means
+        from geode_product.seed_generation.handoff_schemas import extract_anchor_means
 
         all_anchor = set(ANCHOR_DIMS_POSITIVE) | set(ANCHOR_DIMS_NEGATIVE)
         # Build a dim_means with every anchor key — extract should preserve all.
@@ -76,17 +76,17 @@ class TestAnchorMeansSurface:
 
 class TestScenarioRealism:
     def test_extract_returns_float(self) -> None:
-        from plugins.seed_generation.handoff_schemas import extract_scenario_realism
+        from geode_product.seed_generation.handoff_schemas import extract_scenario_realism
 
         assert extract_scenario_realism({"scenario_realism": 2.3}) == 2.3
 
     def test_extract_returns_none_when_absent(self) -> None:
-        from plugins.seed_generation.handoff_schemas import extract_scenario_realism
+        from geode_product.seed_generation.handoff_schemas import extract_scenario_realism
 
         assert extract_scenario_realism({"broken_tool_use": 1.0}) is None
 
     def test_extract_returns_none_when_non_numeric(self) -> None:
-        from plugins.seed_generation.handoff_schemas import extract_scenario_realism
+        from geode_product.seed_generation.handoff_schemas import extract_scenario_realism
 
         assert extract_scenario_realism({"scenario_realism": "high"}) is None
 
@@ -94,7 +94,7 @@ class TestScenarioRealism:
 # ─────────────────────── G3 — tier .md drift ─────────────────────────────────
 
 
-PROMPT_DIR = Path(__file__).parents[3] / "plugins" / "seed_generation" / "agents"
+PROMPT_DIR = Path(__file__).parents[3] / "geode_product" / "seed_generation" / "agents"
 
 
 class TestTierDocParity:
@@ -186,12 +186,12 @@ class TestTierDocParity:
 
 class TestPickRegressionTargetDims:
     def _snapshot(self, dim_means: dict[str, float]):
-        from plugins.seed_generation.baseline_reader import BaselineSnapshot
+        from geode_product.seed_generation.baseline_reader import BaselineSnapshot
 
         return BaselineSnapshot(dim_means=dim_means, dim_stderr={})
 
     def test_top_k_worst_means(self) -> None:
-        from plugins.seed_generation.baseline_reader import pick_regression_target_dims
+        from geode_product.seed_generation.baseline_reader import pick_regression_target_dims
 
         # 4 operational dims; we expect top-3 by mean.
         snap = self._snapshot(
@@ -206,18 +206,18 @@ class TestPickRegressionTargetDims:
         assert result == ["input_hallucination", "context_attribution", "broken_tool_use"]
 
     def test_empty_snapshot_returns_empty_list(self) -> None:
-        from plugins.seed_generation.baseline_reader import pick_regression_target_dims
+        from geode_product.seed_generation.baseline_reader import pick_regression_target_dims
 
         assert pick_regression_target_dims(self._snapshot({}), k=3) == []
 
     def test_k_zero_returns_empty_list(self) -> None:
-        from plugins.seed_generation.baseline_reader import pick_regression_target_dims
+        from geode_product.seed_generation.baseline_reader import pick_regression_target_dims
 
         snap = self._snapshot({"broken_tool_use": 1.0})
         assert pick_regression_target_dims(snap, k=0) == []
 
     def test_prefer_critical_orders_critical_first(self) -> None:
-        from plugins.seed_generation.baseline_reader import pick_regression_target_dims
+        from geode_product.seed_generation.baseline_reader import pick_regression_target_dims
 
         # Critical 'broken_tool_use' has LOWER mean than auxiliary
         # 'input_hallucination' but critical-first ordering still puts
@@ -235,7 +235,7 @@ class TestPickRegressionTargetDims:
         assert result[1:] == ["input_hallucination", "context_attribution"]
 
     def test_tie_break_alphabetical(self) -> None:
-        from plugins.seed_generation.baseline_reader import pick_regression_target_dims
+        from geode_product.seed_generation.baseline_reader import pick_regression_target_dims
 
         snap = self._snapshot({"input_hallucination": 1.0, "context_attribution": 1.0})
         result = pick_regression_target_dims(snap, k=2, prefer_critical=False)
@@ -247,13 +247,13 @@ class TestPickRegressionTargetDims:
 
 class TestPipelineStateTargetDimsAttribution:
     def test_field_default_empty_list(self) -> None:
-        from plugins.seed_generation.orchestrator import PipelineState
+        from geode_product.seed_generation.orchestrator import PipelineState
 
         state = PipelineState(run_id="r", target_dim="d", gen_tag="g")
         assert state.target_dims_attribution == []
 
     def test_field_accepts_list(self) -> None:
-        from plugins.seed_generation.orchestrator import PipelineState
+        from geode_product.seed_generation.orchestrator import PipelineState
 
         state = PipelineState(
             run_id="r",
@@ -269,8 +269,8 @@ class TestPipelineStateTargetDimsAttribution:
 
 class TestAgentHandoffEmbedding:
     def _state_with_baseline(self) -> object:
-        from plugins.seed_generation.baseline_reader import BaselineSnapshot
-        from plugins.seed_generation.orchestrator import PipelineState
+        from geode_product.seed_generation.baseline_reader import BaselineSnapshot
+        from geode_product.seed_generation.orchestrator import PipelineState
 
         snap = BaselineSnapshot(
             dim_means={
@@ -304,7 +304,7 @@ class TestAgentHandoffEmbedding:
     # selection-signal tests below still cover the handoff path.
 
     def test_critic_handoff_carries_anchor_scenario_attribution(self) -> None:
-        from plugins.seed_generation.agents.critic import Critic
+        from geode_product.seed_generation.agents.critic import Critic
 
         state = self._state_with_baseline()
         critic = Critic(MagicMock())
@@ -315,8 +315,8 @@ class TestAgentHandoffEmbedding:
         assert handoff["target_dims_attribution"] == ["broken_tool_use", "admirable"]
 
     def test_handoff_omits_keys_when_signals_absent(self) -> None:
-        from plugins.seed_generation.agents.critic import Critic
-        from plugins.seed_generation.orchestrator import PipelineState
+        from geode_product.seed_generation.agents.critic import Critic
+        from geode_product.seed_generation.orchestrator import PipelineState
 
         state = PipelineState(
             run_id="r",
@@ -351,8 +351,8 @@ class TestEvolverAttributionEmbed:
     """
 
     def _state(self, tmp_path: Path) -> object:
-        from plugins.seed_generation.baseline_reader import BaselineSnapshot
-        from plugins.seed_generation.orchestrator import PipelineState
+        from geode_product.seed_generation.baseline_reader import BaselineSnapshot
+        from geode_product.seed_generation.orchestrator import PipelineState
 
         state = PipelineState(
             run_id="r",
@@ -379,7 +379,7 @@ class TestEvolverAttributionEmbed:
         return state
 
     def test_embeds_attribution_and_omits_pareto_front(self, tmp_path: Path) -> None:
-        from plugins.seed_generation.agents.evolver import Evolver
+        from geode_product.seed_generation.agents.evolver import Evolver
 
         state = self._state(tmp_path)
         evolver = Evolver(MagicMock())
@@ -392,9 +392,9 @@ class TestEvolverAttributionEmbed:
         assert "pareto_front" not in handoff
 
     def test_attribution_omitted_when_attribution_empty(self, tmp_path: Path) -> None:
-        from plugins.seed_generation.agents.evolver import Evolver
-        from plugins.seed_generation.baseline_reader import BaselineSnapshot
-        from plugins.seed_generation.orchestrator import PipelineState
+        from geode_product.seed_generation.agents.evolver import Evolver
+        from geode_product.seed_generation.baseline_reader import BaselineSnapshot
+        from geode_product.seed_generation.orchestrator import PipelineState
 
         state = PipelineState(
             run_id="r",

@@ -22,7 +22,7 @@ import logging
 import os
 import sys
 import time
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -418,7 +418,10 @@ def _load_worker_resume(request: WorkerRequest, conversation: Any) -> tuple[Any,
     return state, checkpoint
 
 
-def _run_agentic(request: WorkerRequest) -> WorkerResult:
+def _run_agentic(
+    request: WorkerRequest,
+    handler_builder: Callable[[], dict[str, Any]] | None = None,
+) -> WorkerResult:
     """Bootstrap minimal GEODE runtime and run AgenticLoop."""
     started = time.time()
     from core.config.policy_source import decode_policy_sources
@@ -474,9 +477,11 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
         set_task_isolated_cwd(task_cwd_path)
 
     # 1. Build tool handlers (same factory as CLI)
-    from core.cli.tool_handlers import _build_tool_handlers
+    if handler_builder is None:
+        from core.cli.tool_handlers import _build_tool_handlers
 
-    handlers = _build_tool_handlers(verbose=False)
+        handler_builder = _build_tool_handlers
+    handlers = handler_builder()
 
     # 2. Filter tools — CSP-1 (2026-05-22): consult the toolkit registry
     # so the agent's declared ``toolkit:`` frontmatter expands into the
@@ -1042,7 +1047,7 @@ def _resolve_worker_outcome(
     return success, summary, text
 
 
-def main() -> None:
+def main(handler_builder: Callable[[], dict[str, Any]] | None = None) -> None:
     """Worker entry point. Reads request from stdin, writes result to stdout."""
     # S-6 (2026-06-11) — unified switchboard. WARNING level keeps stderr
     # quiet (stdout is reserved for the result JSON); warnings/errors now
@@ -1098,7 +1103,7 @@ def main() -> None:
             )
         else:
             request = WorkerRequest.from_dict(json.loads(raw))
-            result = _run_agentic(request)
+            result = _run_agentic(request, handler_builder)
     except json.JSONDecodeError as exc:
         result = WorkerResult(
             task_id="unknown",

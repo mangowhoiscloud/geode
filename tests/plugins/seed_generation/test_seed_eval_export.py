@@ -14,7 +14,7 @@ import json
 from pathlib import Path
 
 import pytest
-from plugins.seed_generation.eval_export import PHASE_TASKS, export_run_to_evals
+from geode_product.seed_generation.eval_export import PHASE_TASKS, export_run_to_evals
 
 # ---------------------------------------------------------------------------
 # Fixtures — a minimal but multi-phase seed-gen run

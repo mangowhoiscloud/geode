@@ -141,11 +141,10 @@ class TestServeToolExecution:
     def test_exposed_agentic_tools_are_executable(self) -> None:
         """Every non-special base tool exposed to the LLM has an executor path."""
         from core.agent.tool_executor.executor import SPECIAL_EXECUTION_BINDINGS
-        from core.cli.bootstrap import bootstrap_geode
         from core.tools.base import load_all_tool_definitions
+        from geode_product.tool_handlers import build_tool_handlers
 
-        boot = bootstrap_geode()
-        handlers = set(boot.tool_handlers)
+        handlers = set(build_tool_handlers())
         exposed = {tool["name"] for tool in load_all_tool_definitions()}
         missing = sorted(exposed - handlers - SPECIAL_EXECUTION_BINDINGS)
         assert missing == []

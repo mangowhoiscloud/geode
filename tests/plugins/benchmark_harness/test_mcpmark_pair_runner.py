@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 from core.observability.trajectory import build_trajectory
-from plugins.benchmark_harness import run_mcpmark_pair as pair
+from geode_product.benchmark_harness import run_mcpmark_pair as pair
 
 _MCPMARK_VERIFIER_PREIMAGES = {
     "tasks/filesystem/standard/desktop/project_management/verify.py": (
@@ -121,6 +121,20 @@ def _fixture(category: str = "desktop") -> dict[str, object]:
         "aggregate_sha256": "b" * 64,
         "semantic_aggregate_sha256": "d" * 64,
     }
+
+
+def test_pair_runner_delegates_run_spec_authority(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from scripts.eval import contract
+
+    def reject(_path: Path) -> dict[str, object]:
+        raise ValueError("privacy contract rejected")
+
+    monkeypatch.setattr(contract, "validate_run_spec", reject)
+
+    with pytest.raises(pair.PairRunError, match="privacy contract rejected"):
+        pair.validate_run_spec(tmp_path / "run-spec.json")
 
 
 def _write_native(

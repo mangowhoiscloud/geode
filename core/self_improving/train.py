@@ -111,6 +111,7 @@ if TYPE_CHECKING:
 from core.paths import AUTORESEARCH_FEW_SHOT_POOL_PATH
 from core.self_improving import fitness as fitness_spec
 from core.self_improving import gate, ledger, measure
+from core.self_improving.baseline_reader import BaselineSnapshot
 from core.self_improving.bench_means import BenchProvenance, collect_bench_means_from_inspect_ai
 
 log = logging.getLogger(__name__)
@@ -126,12 +127,12 @@ SOURCE = "claude-cli"
 
 SEED_LIMIT = 10
 
-SEED_SELECT = "plugins/petri_audit/seeds"
+SEED_SELECT = "bundled"
 """Default seed pool — hierarchical tree (post-PR-0). P0b adds the
 ``AUTORESEARCH_SEED_SELECT`` env override consumed by
 :func:`_resolve_seed_select` so the seed-generation cross-loop handoff
-(``survivors.json``) can swap in its winners. The constant stays the
-literal default so existing tests and self-improving-loop agents can grep it."""
+(``survivors.json``) can swap in its winners. The product audit runner
+resolves this sentinel to its packaged seed directory."""
 
 HELD_OUT_BENCH: str | None = None
 """E2 (2026-05-30) — default held-out bench: NONE (no fixed-ruler measurement).
@@ -218,33 +219,35 @@ def _get_autoresearch_config() -> Any:
     return load_self_improving_loop_config().autoresearch
 
 
-def _petri_role_model(role: str) -> str:
-    """Return the model id the runner will use for ``role`` after
-    binding resolution. Honours
-    ``[self_improving_loop.petri.<role>].model`` (or the manifest
-    default when no operator pin exists) and never touches the
-    credential cascade — safe to call from print / emit paths that
-    need to report the eventual model id without depending on a
-    live credential source.
+def _petri_role_model(role: str, *, unresolved: str = "(product default)") -> str:
+    """Report an explicit role-model pin without resolving product defaults.
 
-    Falls back to a literal ``"(unconfigured)"`` when the binding
-    layer can't import (test stubs, ``core.config`` mock-out). The
-    audit path itself never reaches that branch because the runner
-    raises a clearer error before resolution.
+    The product audit registry owns manifest defaults and final binding. This
+    kernel-side status helper reads only the unified operator config; callers
+    that require an executable model must resolve it in product composition.
     """
     try:
-        from plugins.petri_audit.manifest import load_manifest
-        from plugins.petri_audit.user_overrides import read_role_override
+        configured = getattr(_get_autoresearch_config(), role).model.strip()
     except Exception:
         return "(unconfigured)"
+    if configured:
+        return str(configured)
+    return unresolved
 
-    override_model = read_role_override(role).get("model")
-    if override_model:
-        return override_model
-    try:
-        return load_manifest().get_role(role).default_model
-    except Exception:
-        return "(unconfigured)"
+
+def _bench_target_model(*, dry_run: bool) -> str:
+    target_model = _petri_role_model("target", unresolved="")
+    bench_live = os.environ.get("GEODE_BENCH_S6B_LIVE", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+    if not dry_run and not target_model and bench_live:
+        raise RuntimeError(
+            "live S6b benchmarks require an explicit autoresearch target model "
+            "or GEODE product composition"
+        )
+    return target_model
 
 
 def _resolve_seed_select() -> str:
@@ -594,7 +597,7 @@ def main() -> int:
     # real audit. Skipped under --dry-run (no subprocess). Best-effort:
     # the purge helper is graceful when the [audit] extra is absent.
     if args.purge_cache and not args.dry_run:
-        from plugins.petri_audit.runner import purge_inspect_cache
+        from core.audit.inspect_cache import purge_inspect_cache
 
         _purged = purge_inspect_cache()
         measure._emit_journal(
@@ -750,11 +753,12 @@ def main() -> int:
     # results.jsonl / canonical audit_finished marker. The collector's A1 graceful-skip
     # ensures Docker / VM / vision absence skips affected benches into
     # ``missing_benches`` rather than failing the audit.
+    bench_target_model = _bench_target_model(dry_run=args.dry_run)
     bench_provenance = (
         BenchProvenance()
         if args.dry_run
         else collect_bench_means_from_inspect_ai(
-            target_model=_petri_role_model("target"),
+            target_model=bench_target_model,
         )
     )
     # Caller-side: 빈 dict vs None 의 의미를 분리. None 은 "collector 부재" (예전),
@@ -1363,8 +1367,6 @@ def main() -> int:
     if _attribution_should_write:
         try:
             import uuid
-
-            from plugins.seed_generation.baseline_reader import BaselineSnapshot
 
             from core.self_improving.loop.observe.attribution import write_attribution
 

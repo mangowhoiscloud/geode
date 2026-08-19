@@ -8,7 +8,8 @@ sections + behaviour kinds) and selects via adversarial safety audit
 (``site/CONTENT-CANON.md`` §2). Docs prose that frames the loop as "ML",
 "training", "RL", or "fine-tuning" therefore mischaracterises the product.
 
-This script walks the docs surface and flags banned vocabulary:
+This script walks the docs surface and flags banned vocabulary and retired
+implementation paths:
 
 * ``site/src/app/docs/**/*.tsx`` (page bodies)
 * ``site/src/app/page.tsx`` (landing)
@@ -48,6 +49,12 @@ WAIVER_MARKER = "canon-ok"
 # Each entry: (label, compiled pattern). Patterns target *mischaracterising*
 # phrases; correct negations that still match must carry the waiver marker.
 BANNED_TERMS: list[tuple[str, re.Pattern[str]]] = [
+    (
+        "retired-product-path",
+        re.compile(
+            r"core/mcp_server\.py|plugins/(?:petri_audit|seed_generation|benchmark_harness|crucible)"
+        ),
+    ),
     (
         "ml-loop",
         re.compile(

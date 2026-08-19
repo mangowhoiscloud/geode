@@ -216,7 +216,7 @@ def test_write_then_load_roundtrips_3_axes(isolated_baseline: Path) -> None:
 
 def test_snapshot_has_3_new_axis_fields() -> None:
     """``BaselineSnapshot`` exposes ux/admire/bench fields (S3 schema)."""
-    from plugins.seed_generation.baseline_reader import BaselineSnapshot
+    from geode_product.seed_generation.baseline_reader import BaselineSnapshot
 
     snap = BaselineSnapshot()
     assert snap.ux_means == {}
@@ -225,7 +225,7 @@ def test_snapshot_has_3_new_axis_fields() -> None:
 
 
 def test_snapshot_loader_populates_4_axes(tmp_path: Path) -> None:
-    from plugins.seed_generation.baseline_reader import load_baseline
+    from geode_product.seed_generation.baseline_reader import load_baseline
 
     baseline_path = tmp_path / "baseline.json"
     baseline_path.write_text(
@@ -249,7 +249,7 @@ def test_snapshot_loader_populates_4_axes(tmp_path: Path) -> None:
 
 def test_snapshot_loader_pre_s3_baseline_empty_new_axes(tmp_path: Path) -> None:
     """Pre-S3 baseline → 3 newer axes default to empty dicts."""
-    from plugins.seed_generation.baseline_reader import load_baseline
+    from geode_product.seed_generation.baseline_reader import load_baseline
 
     baseline_path = tmp_path / "baseline.json"
     baseline_path.write_text(

@@ -16,6 +16,7 @@ from __future__ import annotations
 import contextvars
 import inspect
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -224,6 +225,7 @@ async def arun_agentic_oneshot(
     *,
     quiet: bool = True,
     time_budget_s: float = 60.0,
+    handler_builder: Callable[[], dict[str, Any]] | None = None,
 ) -> Any:
     """Async core of :func:`run_agentic_oneshot` — await inside a running loop.
 
@@ -256,7 +258,7 @@ async def arun_agentic_oneshot(
     ensure_user_profile()
 
     conversation = ConversationContext()
-    handlers = _build_tool_handlers_for_fork()
+    handlers = _build_tool_handlers_for_fork() if handler_builder is None else handler_builder()
     # The MCP run_agent fork is HEADLESS (no human to approve) — mirror
     # services.py and strip the headless-denied tools before the executor is
     # built, so the fork can never auto-run run_bash / delegate_task / computer.
@@ -309,6 +311,7 @@ def run_agentic_oneshot(
     *,
     quiet: bool = True,
     time_budget_s: float = 60.0,
+    handler_builder: Callable[[], dict[str, Any]] | None = None,
 ) -> Any:
     """Build a minimal isolated AgenticLoop and run a prompt one-shot.
 
@@ -320,7 +323,12 @@ def run_agentic_oneshot(
     from core.async_runtime import run_process_coroutine
 
     return run_process_coroutine(
-        arun_agentic_oneshot(prompt, quiet=quiet, time_budget_s=time_budget_s)
+        arun_agentic_oneshot(
+            prompt,
+            quiet=quiet,
+            time_budget_s=time_budget_s,
+            handler_builder=handler_builder,
+        )
     )
 
 

@@ -110,7 +110,7 @@ def test_geode_target_translates_petri_surface_alias() -> None:
     non-concrete source — the audit then falls back to PAYG.
     """
     target_module = (
-        Path(__file__).resolve().parents[3] / "plugins" / "petri_audit" / "geode_target.py"
+        Path(__file__).resolve().parents[3] / "geode_product" / "petri_audit" / "geode_target.py"
     )
     source = target_module.read_text(encoding="utf-8")
     assert '"openai-codex": "codex-oauth"' in source, (
@@ -164,7 +164,7 @@ def test_petri_to_registry_map_covers_every_petri_concrete_source() -> None:
     categories = {"payg", "subscription", "adapter"}
 
     target_module = (
-        Path(__file__).resolve().parents[3] / "plugins" / "petri_audit" / "geode_target.py"
+        Path(__file__).resolve().parents[3] / "geode_product" / "petri_audit" / "geode_target.py"
     )
     geode_target_src = target_module.read_text(encoding="utf-8")
 

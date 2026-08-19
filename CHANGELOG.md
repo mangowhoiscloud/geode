@@ -57,6 +57,13 @@ functional change.
 
 ### Changed
 
+- **Bundled product features now have an honest package boundary.** Petri,
+  seed generation, benchmark harnesses, and Crucible live under
+  `geode_product`; the closed `core` runtime has no product imports. CLI,
+  worker, server, and MCP entry points compose product tools explicitly,
+  installed artifacts ship the canonical data files, and the maintained
+  legacy entry points are thin forwarding facades over one implementation.
+
 - **OpenAI model routing now uses one provider family.** GPT picker entries
   report `openai`; credential source selects ChatGPT subscription OAuth or
   Platform PAYG without presenting Codex as a separate provider.
@@ -82,6 +89,11 @@ functional change.
   `codex-cli` selection fails with a migration hint. Importing credentials from
   `~/.codex/auth.json` and the isolated MCPMark Codex comparator remain separate
   credential/evaluation integrations, not model-provider paths.
+
+- **Legacy raw-SDK Claude and built-in Codex CLI audit producers are retired.**
+  Petri subscription audits use the supported Claude CLI bridge, while
+  Crucible accepts an explicit frozen producer command. The removed providers
+  are not recreated through compatibility facades.
 
 ## [1.0.22] - 2026-08-19
 

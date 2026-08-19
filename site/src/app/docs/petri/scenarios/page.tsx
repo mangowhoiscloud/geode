@@ -24,10 +24,10 @@ export default function Page() {
 
             <h2>티어 구조: critical / auxiliary / info</h2>
             <p>
-              GEODE 전용 seed 풀은 <code>plugins/petri_audit/seeds/</code>에
+              GEODE 전용 seed 풀은 <code>geode_product/petri_audit/seeds/</code>에
               계층 트리로 놓입니다.
             </p>
-            <pre>{`plugins/petri_audit/seeds/
+            <pre>{`geode_product/petri_audit/seeds/
 ├── critical/      # fitness에서 critical 티어인 차원들
 │   └── <dim>/<NN>_<variant>.md
 ├── auxiliary/     # auxiliary 티어 차원들
@@ -69,14 +69,14 @@ export default function Page() {
             <p>
               <code>inspect_petri</code> 패키지 자체도 일반 misalignment
               시나리오의 기본 seed를 싣고 있습니다. GEODE 감사의 기본{" "}
-              <code>--seed-select</code>는 자체 풀
-              (<code>plugins/petri_audit/seeds</code>)이지만, upstream seed를
-              선택해 함께 돌릴 수 있습니다.
+              <code>--seed-select</code>는 <code>bundled</code>이며 설치된 패키지의
+              GEODE seed 풀(<code>geode_product/petri_audit/seeds</code>)로
+              해석됩니다. upstream seed를 선택해 함께 돌릴 수도 있습니다.
             </p>
 
             <h2>커스텀 seed 추가</h2>
             <ol>
-              <li>해당 차원의 티어 폴더에 <code>plugins/petri_audit/seeds/&lt;tier&gt;/&lt;dim&gt;/&lt;NN&gt;_&lt;variant&gt;.md</code>로 생성합니다.</li>
+              <li>해당 차원의 티어 폴더에 <code>geode_product/petri_audit/seeds/&lt;tier&gt;/&lt;dim&gt;/&lt;NN&gt;_&lt;variant&gt;.md</code>로 생성합니다.</li>
               <li>frontmatter에 <code>tags</code>를 적습니다.</li>
               <li>branch별 압력 시나리오를 작성합니다 (5 branch 권장).</li>
               <li><code>geode audit --seed-select &lt;경로 또는 id&gt;</code>로 돌려봅니다.</li>
@@ -103,9 +103,9 @@ export default function Page() {
             <h2>Tier structure: critical / auxiliary / info</h2>
             <p>
               The GEODE-specific seed pool lives as a hierarchical tree under{" "}
-              <code>plugins/petri_audit/seeds/</code>.
+              <code>geode_product/petri_audit/seeds/</code>.
             </p>
-            <pre>{`plugins/petri_audit/seeds/
+            <pre>{`geode_product/petri_audit/seeds/
 ├── critical/      # dimensions in the critical fitness tier
 │   └── <dim>/<NN>_<variant>.md
 ├── auxiliary/     # auxiliary-tier dimensions
@@ -150,14 +150,15 @@ export default function Page() {
             <p>
               The <code>inspect_petri</code> package ships its own default
               seeds covering general misalignment scenarios. GEODE audits
-              default <code>--seed-select</code> to the in-repo pool
-              (<code>plugins/petri_audit/seeds</code>), but upstream seeds can
-              be selected and run alongside.
+              default <code>--seed-select</code> to <code>bundled</code>, which resolves
+              to the installed package&apos;s GEODE seed pool
+              (<code>geode_product/petri_audit/seeds</code>). Upstream seeds can be
+              selected and run alongside.
             </p>
 
             <h2>Adding a custom seed</h2>
             <ol>
-              <li>Create it under the dimension&apos;s tier folder: <code>plugins/petri_audit/seeds/&lt;tier&gt;/&lt;dim&gt;/&lt;NN&gt;_&lt;variant&gt;.md</code>.</li>
+              <li>Create it under the dimension&apos;s tier folder: <code>geode_product/petri_audit/seeds/&lt;tier&gt;/&lt;dim&gt;/&lt;NN&gt;_&lt;variant&gt;.md</code>.</li>
               <li>Add <code>tags</code> to the frontmatter.</li>
               <li>Write the per-branch pressure scenarios (5 branches recommended).</li>
               <li>Try it with <code>geode audit --seed-select &lt;path or id&gt;</code>.</li>

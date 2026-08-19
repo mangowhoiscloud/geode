@@ -1,4 +1,4 @@
-"""Tests for ``plugins.seed_generation.picker``.
+"""Tests for ``geode_product.seed_generation.picker``.
 
 P-checklist application (cycle-skill SKILL.md):
 
@@ -19,13 +19,13 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from plugins.seed_generation.manifest import (
+from geode_product.seed_generation.manifest import (
     JudgePanelSpec,
     SeedGenerationManifest,
     SeedRoleSpec,
     VoterSpec,
 )
-from plugins.seed_generation.picker import (
+from geode_product.seed_generation.picker import (
     SUBSCRIPTION_SOURCES,
     PickerResult,
     VoterBinding,
@@ -127,7 +127,7 @@ def test_infer_provider_unknown_raises() -> None:
 def test_pick_bindings_resolves_all_roles_with_oauth() -> None:
     manifest = _make_manifest()
     with (
-        patch("plugins.seed_generation.picker._probe_oauth", return_value=True),
+        patch("geode_product.seed_generation.picker._probe_oauth", return_value=True),
     ):
         result = pick_bindings(manifest=manifest, overrides={})
     assert set(result.bindings) == set(manifest.enabled_roles)
@@ -149,7 +149,7 @@ def test_pick_bindings_resolves_all_roles_with_oauth() -> None:
 
 def test_pick_bindings_resolves_payg_when_no_oauth() -> None:
     manifest = _make_manifest()
-    with patch("plugins.seed_generation.picker._probe_oauth", return_value=False):
+    with patch("geode_product.seed_generation.picker._probe_oauth", return_value=False):
         result = pick_bindings(manifest=manifest, overrides={})
     for role, binding in result.bindings.items():
         assert binding.source == "api_key", f"role={role} should fall back to api_key"
@@ -168,7 +168,7 @@ def test_pick_bindings_user_override_source() -> None:
     # override on the pilot is rerouted to api_key (claude-cli cannot deliver
     # petri_audit — PR-SEEDGEN-PILOT-TOOL-CAPABLE-SOURCE).
     overrides = {"generator": {"source": "api_key"}, "critic": {"source": "claude-cli"}}
-    with patch("plugins.seed_generation.picker._probe_oauth", return_value=True):
+    with patch("geode_product.seed_generation.picker._probe_oauth", return_value=True):
         result = pick_bindings(manifest=manifest, overrides=overrides)
     assert result.bindings["generator"].source == "api_key"
     assert result.bindings["critic"].source == "claude-cli"
@@ -179,7 +179,7 @@ def test_pick_bindings_pilot_reroutes_off_tool_incapable_source() -> None:
     (claude-cli subprocess) source — even when explicitly overridden to it or
     when OAuth would otherwise default it there. It reroutes to api_key."""
     manifest = _make_manifest()
-    with patch("plugins.seed_generation.picker._probe_oauth", return_value=True):
+    with patch("geode_product.seed_generation.picker._probe_oauth", return_value=True):
         # (a) explicit claude-cli override on the pilot → rerouted.
         forced = pick_bindings(manifest=manifest, overrides={"pilot": {"source": "claude-cli"}})
         assert forced.bindings["pilot"].source == "api_key"
@@ -191,7 +191,7 @@ def test_pick_bindings_pilot_reroutes_off_tool_incapable_source() -> None:
         aliased = pick_bindings(manifest=manifest, overrides={"pilot": {"source": "adapter"}})
         assert aliased.bindings["pilot"].source == "api_key"
     # A tool-capable explicit source on the pilot is left untouched.
-    with patch("plugins.seed_generation.picker._probe_oauth", return_value=True):
+    with patch("geode_product.seed_generation.picker._probe_oauth", return_value=True):
         explicit = pick_bindings(manifest=manifest, overrides={"pilot": {"source": "api_key"}})
         assert explicit.bindings["pilot"].source == "api_key"
 
@@ -199,14 +199,14 @@ def test_pick_bindings_pilot_reroutes_off_tool_incapable_source() -> None:
 def test_pick_bindings_user_override_model() -> None:
     manifest = _make_manifest()
     overrides = {"generator": {"model": "claude-opus-4-7"}}
-    with patch("plugins.seed_generation.picker._probe_oauth", return_value=False):
+    with patch("geode_product.seed_generation.picker._probe_oauth", return_value=False):
         result = pick_bindings(manifest=manifest, overrides=overrides)
     assert result.bindings["generator"].model == "claude-opus-4-7"
 
 
 def test_pick_bindings_voter_panel_resolved() -> None:
     manifest = _make_manifest()
-    with patch("plugins.seed_generation.picker._probe_oauth", return_value=True):
+    with patch("geode_product.seed_generation.picker._probe_oauth", return_value=True):
         result = pick_bindings(manifest=manifest, overrides={})
     assert len(result.voters) == 3
     sources = {v.source for v in result.voters}
@@ -226,7 +226,7 @@ def test_pick_bindings_diversity_providers_count() -> None:
 
 def test_pick_bindings_subscription_paths_in_use() -> None:
     manifest = _make_manifest()
-    with patch("plugins.seed_generation.picker._probe_oauth", return_value=True):
+    with patch("geode_product.seed_generation.picker._probe_oauth", return_value=True):
         result = pick_bindings(manifest=manifest, overrides={})
     # OAuth available → roles use claude-cli; voters include claude-cli + openai-codex
     assert "claude-cli" in result.subscription_paths_in_use
@@ -235,7 +235,7 @@ def test_pick_bindings_subscription_paths_in_use() -> None:
 
 def test_pick_bindings_no_subscription_when_payg() -> None:
     manifest = _make_manifest()
-    with patch("plugins.seed_generation.picker._probe_oauth", return_value=False):
+    with patch("geode_product.seed_generation.picker._probe_oauth", return_value=False):
         result = pick_bindings(manifest=manifest, overrides={})
     # Roles all fall back to api_key; only voters with explicit subscription sources remain.
     # Voters: claude-cli (explicit, not auto so probe doesn't matter) + openai-codex + api_key.
@@ -393,7 +393,7 @@ def test_validate_runtime_diversity_path_collapse_raises() -> None:
 
 def test_list_subscription_roles() -> None:
     manifest = _make_manifest()
-    with patch("plugins.seed_generation.picker._probe_oauth", return_value=True):
+    with patch("geode_product.seed_generation.picker._probe_oauth", return_value=True):
         result = pick_bindings(manifest=manifest, overrides={})
     roles = list_subscription_roles(result)
     # All claude-* roles → claude-cli when OAuth available
@@ -453,7 +453,7 @@ def test_pick_bindings_rejects_override_source_outside_petri_allowed() -> None:
     """Override source not in petri.source.<provider>.allowed falls back to auto-resolve."""
     manifest = _make_manifest()
     overrides = {"generator": {"source": "bogus-source"}}
-    with patch("plugins.seed_generation.picker._probe_oauth", return_value=False):
+    with patch("geode_product.seed_generation.picker._probe_oauth", return_value=False):
         result = pick_bindings(manifest=manifest, overrides=overrides)
     # bogus-source rejected → falls back to PAYG api_key
     assert result.bindings["generator"].source == "api_key"
@@ -491,7 +491,7 @@ def test_default_judge_panel_voters_are_payg_api_key() -> None:
     so the ranker's 59×3=177 voter calls fan out concurrently on the env-tunable
     ``openai_api_lane`` / ``anthropic_api_lane`` instead of a per-process CLI lane.
     Diversity is preserved: 2 providers + 2 distinct (provider, source) pairs."""
-    from plugins.seed_generation.manifest import load_manifest
+    from geode_product.seed_generation.manifest import load_manifest
 
     voters = load_manifest().judge_panel.voters
     assert [v.source for v in voters] == ["api_key", "api_key", "api_key"]
@@ -504,7 +504,7 @@ def test_config_voter_override_wins_over_manifest_default(tmp_path: Path) -> Non
     """The ``[[seed_generation.judge_panel.voters]]`` config override IS wired
     (picker.pick_bindings reads it over the manifest default) — a subscription-path
     deploy can flip back via config without touching the plugin manifest."""
-    from plugins.seed_generation import picker as pk
+    from geode_product.seed_generation import picker as pk
 
     cfg = tmp_path / "config.toml"
     cfg.write_text(

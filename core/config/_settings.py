@@ -367,7 +367,7 @@ class Settings(BaseSettings):
     # Credential source — chosen via the ``/login source`` picker. The picker
     # reads available sources at runtime (local Claude OAuth keychain,
     # Codex auth.json JWT, env-var API key) and persists the user's
-    # choice here so :mod:`plugins.petri_audit.models.to_inspect_model`
+    # choice here so :mod:`geode_product.petri_audit.models.to_inspect_model`
     # routes ids through the matching provider prefix. ``"auto"`` =
     # legacy behaviour (env / OAuth detection order); explicit values
     # take precedence. No subscription-plan names are hardcoded — the

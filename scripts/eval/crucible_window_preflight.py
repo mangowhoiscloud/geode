@@ -1,6 +1,6 @@
 """Launch-gate a Crucible campaign against the current quota window.
 
-Thin CLI over :mod:`plugins.crucible.preflight`, which owns the decision
+Thin CLI over :mod:`geode_product.crucible.preflight`, which owns the decision
 model (tiers, history scan, Codex usage probe) so ``prepare_campaign`` and
 this launcher share one implementation. Exit codes: 0 ``cap_fit`` ·
 1 ``history_fit`` · 3 ``defer``.
@@ -23,8 +23,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from plugins.crucible.contract import ContractError
-from plugins.crucible.preflight import (
+from geode_product.crucible.contract import ContractError
+from geode_product.crucible.preflight import (
     campaign_token_cap,
     completed_campaign_tokens,
     decide,

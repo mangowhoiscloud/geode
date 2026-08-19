@@ -38,8 +38,8 @@ export default function Page() {
             <h2>실행 흐름</h2>
             <p>
               <code>geode audit</code>(Typer)과 <code>/audit</code>(슬래시)은
-              모두 <code>plugins/petri_audit/cli_audit.py</code>로 들어와{" "}
-              <code>plugins/petri_audit/runner.py</code>의{" "}
+              모두 <code>geode_product/petri_audit/cli_audit.py</code>로 들어와{" "}
+              <code>geode_product/petri_audit/runner.py</code>의{" "}
               <code>run_audit</code>이 inspect-petri 서브프로세스를 돌립니다.
               끝난 <code>.eval</code> 아카이브는 워크트리 밖{" "}
               <code>~/.geode/petri/logs/</code>에 보존되고, 커밋 가능한 요약
@@ -65,7 +65,7 @@ export default function Page() {
             <ul>
               <li>
                 <strong>가드레일 전환</strong>
-                (<code>plugins/petri_audit/audit_mode.py</code>). 한 번의 런에
+                (<code>geode_product/petri_audit/audit_mode.py</code>). 한 번의 런에
                 한해 HITL 승인을 끄고 dry-run을 강제하는 등 영구 정책을
                 건드리지 않고 감사용 상태로 전환합니다. 활성화는{" "}
                 <code>geode audit --unrestricted</code>,{" "}
@@ -132,9 +132,9 @@ export default function Page() {
             <h2>Execution flow</h2>
             <p>
               <code>geode audit</code> (Typer) and <code>/audit</code> (slash)
-              both enter <code>plugins/petri_audit/cli_audit.py</code>, and{" "}
+              both enter <code>geode_product/petri_audit/cli_audit.py</code>, and{" "}
               <code>run_audit</code> in{" "}
-              <code>plugins/petri_audit/runner.py</code> drives the
+              <code>geode_product/petri_audit/runner.py</code> drives the
               inspect-petri subprocess. The finished <code>.eval</code> archive
               is preserved outside the worktree at{" "}
               <code>~/.geode/petri/logs/</code>, with a committable summary
@@ -160,7 +160,7 @@ export default function Page() {
             <ul>
               <li>
                 <strong>Guardrail switch</strong>
-                (<code>plugins/petri_audit/audit_mode.py</code>). For one run
+                (<code>geode_product/petri_audit/audit_mode.py</code>). For one run
                 only, it disables HITL approval and forces dry-run, without
                 touching persistent user policy. Activated by{" "}
                 <code>geode audit --unrestricted</code>,{" "}

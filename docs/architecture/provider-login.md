@@ -2,6 +2,12 @@
 
 > **English** | [한국어](provider-login.ko.md)
 
+> **Status: superseded historical design.** Current runtime policy is OpenAI
+> device-code OAuth or PAYG, plus the supported Claude CLI bridge or Anthropic
+> PAYG. GEODE no longer owns an Anthropic PKCE client, reads a raw Claude OAuth
+> token into an SDK provider, or exposes a `codex-cli` inference backend.
+> The body below is retained as decision evidence, not current authority.
+
 > The alignment spec for GEODE's per-LLM-provider credential acquisition
 > paths. The OAuth flows for OpenAI (ChatGPT subscription) and Anthropic (Claude
 > subscription) follow the same owned-credential pattern: `~/.geode/auth.toml`

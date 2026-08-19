@@ -7,7 +7,7 @@ Prior contract (G-A1, 2026-05-12 retraction): seeds had to be FLAT under
 
 Post-PR-0 contract: seeds live at ``seeds/<tier>/<dim>/<NN>_<variant>.md``
 (hierarchical SOT). The
-``plugins.petri_audit.seed_tree.flatten_for_inspect_petri`` bridge
+``geode_product.petri_audit.seed_tree.flatten_for_inspect_petri`` bridge
 produces a flat symlink-stage dir on the fly so inspect_petri's loader
 still sees a flat layout at runtime. This test pins both halves of
 the new contract.
@@ -20,7 +20,7 @@ from unittest.mock import patch
 
 import pytest
 
-SEEDS_DIR = Path(__file__).resolve().parents[3] / "plugins" / "petri_audit" / "seeds"
+SEEDS_DIR = Path(__file__).resolve().parents[3] / "geode_product" / "petri_audit" / "seeds"
 
 
 # (tier, dim, variant) — every entry corresponds to
@@ -82,11 +82,11 @@ def test_flatten_bridge_produces_flat_dir_inspect_petri_can_read(
 ) -> None:
     """The flatten bridge produces a flat staging dir with every seed."""
     pytest.importorskip("inspect_petri")
+    from geode_product.petri_audit.seed_tree import flatten_for_inspect_petri
     from inspect_petri._seeds._markdown import read_seed_directory
-    from plugins.petri_audit.seed_tree import flatten_for_inspect_petri
 
     stage_root = tmp_path / "stage_root"
-    with patch("plugins.petri_audit.seed_tree.GEODE_HOME", stage_root):
+    with patch("geode_product.petri_audit.seed_tree.GEODE_HOME", stage_root):
         flat = flatten_for_inspect_petri(SEEDS_DIR)
 
     samples = read_seed_directory(flat)

@@ -20,7 +20,7 @@ import io
 from pathlib import Path
 
 import pytest
-from plugins.seed_generation.cli import (
+from geode_product.seed_generation.cli import (
     _next_smoke_counter,
     _resolve_smoke_log_path,
     _setup_smoke_log_tee,

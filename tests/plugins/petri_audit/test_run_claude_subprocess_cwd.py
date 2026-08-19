@@ -1,4 +1,4 @@
-"""PR-RESUME-NO-PERSIST-FIX (B2) — ``_run_claude_subprocess``
+"""PR-RESUME-NO-PERSIST-FIX (B2) — ``run_claude_subprocess``
 forwards ``cwd`` to ``asyncio.create_subprocess_exec``.
 
 Verifies the lowest-level subprocess invocation receives the cwd
@@ -34,7 +34,7 @@ def _build_fake_proc(stdout: bytes = b"", stderr: bytes = b"", rc: int = 0) -> A
 
 
 def test_run_subprocess_forwards_cwd_when_set() -> None:
-    from plugins.petri_audit.claude_cli_provider import _run_claude_subprocess
+    from core.llm.adapters.claude_cli_runtime import run_claude_subprocess
 
     captured: dict[str, Any] = {}
 
@@ -44,7 +44,7 @@ def test_run_subprocess_forwards_cwd_when_set() -> None:
 
     with patch("asyncio.create_subprocess_exec", _fake_create):
         asyncio.run(
-            _run_claude_subprocess(
+            run_claude_subprocess(
                 ["/fake/claude", "--print"],
                 stdin_text="",
                 timeout_s=10.0,
@@ -60,7 +60,7 @@ def test_run_subprocess_omits_cwd_default_inherits() -> None:
     receives ``cwd=None`` (its own default = inherit caller's cwd).
     Confirms back-compat for direct callers that pre-date the B2
     fix (inspect_ai audit lane, one-shot diagnostic scripts)."""
-    from plugins.petri_audit.claude_cli_provider import _run_claude_subprocess
+    from core.llm.adapters.claude_cli_runtime import run_claude_subprocess
 
     captured: dict[str, Any] = {}
 
@@ -70,7 +70,7 @@ def test_run_subprocess_omits_cwd_default_inherits() -> None:
 
     with patch("asyncio.create_subprocess_exec", _fake_create):
         asyncio.run(
-            _run_claude_subprocess(
+            run_claude_subprocess(
                 ["/fake/claude", "--print"],
                 stdin_text="",
                 timeout_s=10.0,
@@ -85,7 +85,7 @@ def test_run_subprocess_omits_cwd_default_inherits() -> None:
 def test_run_subprocess_does_not_inherit_api_key(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from plugins.petri_audit.claude_cli_provider import _run_claude_subprocess
+    from core.llm.adapters.claude_cli_runtime import run_claude_subprocess
 
     monkeypatch.setenv("ANTHROPIC_API_KEY", "payg-parent-key")
     monkeypatch.setenv("GEODE_SUBPROCESS_SENTINEL", "kept")
@@ -97,7 +97,7 @@ def test_run_subprocess_does_not_inherit_api_key(
 
     with patch("asyncio.create_subprocess_exec", _fake_create):
         asyncio.run(
-            _run_claude_subprocess(
+            run_claude_subprocess(
                 ["/fake/claude", "--print"],
                 stdin_text="",
                 timeout_s=10.0,

@@ -11,9 +11,9 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from plugins.crucible.bundle import PromotionBundle
-from plugins.crucible.cli import main as crucible_main
-from plugins.crucible.contract import (
+from geode_product.crucible.bundle import PromotionBundle
+from geode_product.crucible.cli import main as crucible_main
+from geode_product.crucible.contract import (
     EXPERIMENT_SCHEMA,
     ContractError,
     ExperimentContract,
@@ -21,15 +21,15 @@ from plugins.crucible.contract import (
     TaskUnit,
     task_pack_sha256,
 )
-from plugins.crucible.evidence import EVIDENCE_SCHEMA, EvidenceEnvelope, ResourceUsage
-from plugins.crucible.promotion import PromotionVerdict, decide
-from plugins.crucible.ref_journal import (
+from geode_product.crucible.evidence import EVIDENCE_SCHEMA, EvidenceEnvelope, ResourceUsage
+from geode_product.crucible.promotion import PromotionVerdict, decide
+from geode_product.crucible.ref_journal import (
     RefIntent,
     RefReceipt,
     commit_ref_update,
     persist_intent,
 )
-from plugins.crucible.supervisor import RECORD_SCHEMA, CandidateProposal
+from geode_product.crucible.supervisor import RECORD_SCHEMA, CandidateProposal
 
 CAMPAIGN_ID = "bundle-test"
 ATTEMPT_ID = "0001-test"

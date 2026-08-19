@@ -79,7 +79,7 @@ export default function Page() {
               MCPMark는 실제 MCP 서버(filesystem, Postgres, GitHub, Notion,
               Playwright 등)를 대상으로 한 tool-use 벤치마크입니다. 태스크마다
               독립 검증 스크립트가 결과 상태를 확인합니다. GEODE는{" "}
-              <code>plugins/benchmark_harness</code>의 <code>BaseMCPAgent</code>{" "}
+              <code>geode_product/benchmark_harness</code>의 <code>BaseMCPAgent</code>{" "}
               어댑터로 참가하고 upstream <code>pipeline.py</code>는 패치하지
               않습니다. 점수는 harness commit, 서비스 집합, model route, timeout에
               고정해서만 게시합니다.
@@ -279,7 +279,7 @@ export default function Page() {
               (filesystem, Postgres, GitHub, Notion, Playwright, and more), with
               an independent verifier script checking the resulting state per
               task. GEODE participates through the <code>BaseMCPAgent</code>{" "}
-              adapter in <code>plugins/benchmark_harness</code> without patching
+              adapter in <code>geode_product/benchmark_harness</code> without patching
               the upstream <code>pipeline.py</code>, and every published number is
               pinned to the harness commit, service set, model route, and timeout
               settings.

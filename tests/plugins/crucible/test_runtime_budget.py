@@ -4,24 +4,24 @@ from copy import deepcopy
 from pathlib import Path
 
 import pytest
-from plugins.crucible.cli import main as crucible_main
-from plugins.crucible.contract import (
+from geode_product.crucible.cli import main as crucible_main
+from geode_product.crucible.contract import (
     ContractError,
     ExperimentContract,
     TaskUnit,
     task_pack_sha256,
 )
-from plugins.crucible.evidence import EvidenceEnvelope
-from plugins.crucible.runtime_budget import audit_runtime_budget, runtime_pilot_block_rates
-from plugins.crucible.runtime_identity import (
+from geode_product.crucible.evidence import EvidenceEnvelope
+from geode_product.crucible.runtime_budget import audit_runtime_budget, runtime_pilot_block_rates
+from geode_product.crucible.runtime_identity import (
     RUNTIME_OUTER_FINALIZATION_GRACE_SECONDS,
     canonical_runtime_hash,
     runtime_design_from_parts,
     runtime_regime_from_parts,
     runtime_regime_id,
 )
-from plugins.crucible.runtime_pilot import build_runtime_pilot
-from plugins.crucible.runtime_receipt import SharedRuntimeDeadline, runtime_artifact_bindings
+from geode_product.crucible.runtime_pilot import build_runtime_pilot
+from geode_product.crucible.runtime_receipt import SharedRuntimeDeadline, runtime_artifact_bindings
 
 from tests.plugins.crucible.test_promotion import _contract, _evidence
 

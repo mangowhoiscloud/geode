@@ -1,11 +1,11 @@
-"""Unit tests for plugins.petri_audit.user_overrides (P1-F)."""
+"""Unit tests for geode_product.petri_audit.user_overrides (P1-F)."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 import pytest
-from plugins.petri_audit import user_overrides as uo
+from geode_product.petri_audit import user_overrides as uo
 
 
 @pytest.fixture(autouse=True)

@@ -48,7 +48,7 @@ pytest.importorskip("inspect_ai")  # build_command checks inspect_ai dim sets
 
 def _build_inspect_cmd() -> list[str]:
     """Helper — call `build_command` with minimal valid args."""
-    from plugins.petri_audit.runner import build_command
+    from geode_product.petri_audit.runner import build_command
 
     return build_command(
         judge="claude-code/claude-opus-4-7",
@@ -59,7 +59,7 @@ def _build_inspect_cmd() -> list[str]:
         tags=None,
         cache=True,
         dim_set="subset",
-        seed_select="plugins/petri_audit/seeds",
+        seed_select="bundled",
     )
 
 

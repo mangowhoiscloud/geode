@@ -4,9 +4,9 @@ from copy import deepcopy
 from pathlib import Path
 
 import pytest
-from plugins.crucible.cli import main as crucible_main
-from plugins.crucible.contract import ContractError, PromotionRule, TaskUnit, task_pack_sha256
-from plugins.crucible.power import audit_family_power
+from geode_product.crucible.cli import main as crucible_main
+from geode_product.crucible.contract import ContractError, PromotionRule, TaskUnit, task_pack_sha256
+from geode_product.crucible.power import audit_family_power
 
 
 def _tasks(count: int = 9) -> tuple[TaskUnit, ...]:

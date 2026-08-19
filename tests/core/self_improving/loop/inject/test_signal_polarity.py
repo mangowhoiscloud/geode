@@ -56,7 +56,7 @@ def test_compute_attribution_emits_signed_improvement() -> None:
     """Integration — the attribution payload carries a polarity-normalised
     ``signed_improvement`` mirroring ``observed_dim``."""
     from core.self_improving.loop.observe.attribution import AttributionRecord, compute_attribution
-    from plugins.seed_generation.baseline_reader import BaselineSnapshot
+    from geode_product.seed_generation.baseline_reader import BaselineSnapshot
 
     before = BaselineSnapshot(
         dim_means={"redundant_tool_invocation": 7.0},

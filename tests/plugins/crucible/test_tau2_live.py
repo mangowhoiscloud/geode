@@ -8,33 +8,20 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from plugins.benchmark_harness.tau2_turn_supervisor import (
+from geode_product.benchmark_harness.tau2_turn_supervisor import (
     _pre_execution_retry_telemetry,
 )
-from plugins.crucible.contract import (
+from geode_product.crucible.contract import (
     ContractError,
     ExperimentContract,
     TaskUnit,
     task_pack_sha256,
 )
-from plugins.crucible.evidence import EvidenceEnvelope, ResourceUsage
-from plugins.crucible.producers.codex_kg import (
-    _DEFAULT_GRAPH_PATH,
-    _DEFAULT_OBJECTIVE,
-    _DEFAULT_PROGRAM_PATH,
-    ProducerError,
-    _codex_child_environment,
-    _codex_error_detail,
-    _load_program,
-    _prompt,
-    _validate_policy_grammar,
-    _write_error_sidecar,
-    knowledge_context,
-)
-from plugins.crucible.promotion import SCREENING_FAILURE, decide, promotion_reachability
-from plugins.crucible.row_cache import harvest_arm_rows
-from plugins.crucible.runtime_receipt import SharedRuntimeDeadline, runtime_artifact_bindings
-from plugins.crucible.tau2_live import (
+from geode_product.crucible.evidence import EvidenceEnvelope, ResourceUsage
+from geode_product.crucible.promotion import SCREENING_FAILURE, decide, promotion_reachability
+from geode_product.crucible.row_cache import harvest_arm_rows
+from geode_product.crucible.runtime_receipt import SharedRuntimeDeadline, runtime_artifact_bindings
+from geode_product.crucible.tau2_live import (
     Tau2InfrastructureError,
     _evaluation_wall_seconds,
     _index_simulations,
@@ -51,7 +38,7 @@ from plugins.crucible.tau2_live import (
     tau2_failure_feedback,
     tau2_trace_checks,
 )
-from plugins.crucible.verifiers.tau2 import _verify_snapshot
+from geode_product.crucible.verifiers.tau2 import TAU2_ADAPTER, _verify_snapshot
 
 TASKS = (
     TaskUnit("task-1", "1" * 64, "a" * 64),
@@ -108,8 +95,10 @@ def test_run_tau2_command_stops_on_finalized_infrastructure_row(
         _process.returncode = -15
         return -15
 
-    monkeypatch.setattr("plugins.crucible.tau2_live.subprocess.Popen", lambda *a, **kw: process)
-    monkeypatch.setattr("plugins.crucible.tau2_live._terminate_process_group", stop)
+    monkeypatch.setattr(
+        "geode_product.crucible.tau2_live.subprocess.Popen", lambda *a, **kw: process
+    )
+    monkeypatch.setattr("geode_product.crucible.tau2_live._terminate_process_group", stop)
 
     completed, contaminated = _run_tau2_command(
         ["tau2-fixture"],
@@ -129,7 +118,7 @@ def test_run_tau2_command_refuses_to_launch_after_absolute_deadline(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "plugins.crucible.tau2_live.subprocess.Popen",
+        "geode_product.crucible.tau2_live.subprocess.Popen",
         lambda *args, **kwargs: pytest.fail("expired work must not launch"),
     )
 
@@ -172,7 +161,7 @@ def test_signal_exit_finalizes_the_active_arm_for_receipt(
     contract = _contract()
     deadline = SharedRuntimeDeadline(contract, 100.0)
     monkeypatch.setattr(
-        "plugins.crucible.tau2_live._run_arm",
+        "geode_product.crucible.tau2_live._run_arm",
         lambda *args, **kwargs: (_ for _ in ()).throw(SystemExit(143)),
     )
 
@@ -203,7 +192,7 @@ def test_timeout_receipt_write_failure_is_not_masked_by_a_second_arm_finish(
         assert callable(on_timeout)
         on_timeout()
 
-    monkeypatch.setattr("plugins.crucible.tau2_live._run_arm", timeout)
+    monkeypatch.setattr("geode_product.crucible.tau2_live._run_arm", timeout)
 
     with pytest.raises(OSError, match="receipt write failed"):
         _run_arm_with_deadline(
@@ -264,7 +253,7 @@ def test_timeout_receipt_is_written_before_arm_returns(
     writer = _RuntimeReceiptWriter(deadline, receipt_path, lambda: None)
     monkeypatch.setenv("CRUCIBLE_ROW_CACHE_ROOT", str(tmp_path / "cache"))
     monkeypatch.setattr(
-        "plugins.crucible.tau2_live._run_tau2_command",
+        "geode_product.crucible.tau2_live._run_tau2_command",
         lambda *args, **kwargs: (_ for _ in ()).throw(
             subprocess.TimeoutExpired(cmd=["tau2-fixture"], timeout=1.0)
         ),
@@ -508,15 +497,11 @@ def _contract() -> ExperimentContract:
             "assay_config": assay,
             "mutations": [
                 {
-                    "surface": "plugins/benchmark_harness/tau2_agent_policy.md",
+                    "surface": "geode_product/benchmark_harness/tau2_agent_policy.md",
                     "hypothesis": "compress tool workflows",
                 }
             ],
-            "evaluator_paths": [
-                "scripts/eval/crucible_tau2_evaluator.py",
-                "plugins/benchmark_harness/tau2_geode_agent.py",
-                "plugins/crucible",
-            ],
+            "evaluator_paths": list(TAU2_ADAPTER.required_evaluator_paths),
             "promotion": {
                 "method": "paired_bootstrap.v2",
                 "primary_metric": "reward",
@@ -638,19 +623,19 @@ def _prepared_arm(
         raw_hash=hashlib.sha256(raw.read_bytes()).hexdigest(),
     )
     monkeypatch.setattr(
-        "plugins.crucible.tau2_live._run_tau2_command",
+        "geode_product.crucible.tau2_live._run_tau2_command",
         lambda *args, **kwargs: (
             subprocess.CompletedProcess(args=[], returncode=1),
             False,
         ),
     )
     monkeypatch.setattr(
-        "plugins.crucible.tau2_live.tau2_resource_usage_floor",
+        "geode_product.crucible.tau2_live.tau2_resource_usage_floor",
         lambda raw: ResourceUsage(1.0, 1, 10, 0.0),
     )
-    monkeypatch.setattr("plugins.crucible.tau2_live.tau2_trace_checks", lambda raw: {})
+    monkeypatch.setattr("geode_product.crucible.tau2_live.tau2_trace_checks", lambda raw: {})
     monkeypatch.setattr(
-        "plugins.crucible.tau2_live.normalize_tau2_results",
+        "geode_product.crucible.tau2_live.normalize_tau2_results",
         lambda *args, **kwargs: evidence,
     )
     return contract, checkout, harness, output
@@ -693,7 +678,7 @@ def test_run_arm_emits_invalid_evidence_after_infrastructure_fail_fast(
         invalid=True,
     )
     monkeypatch.setattr(
-        "plugins.crucible.tau2_live._run_tau2_command",
+        "geode_product.crucible.tau2_live._run_tau2_command",
         lambda *args, **kwargs: (
             subprocess.CompletedProcess(args=[], returncode=-15),
             True,
@@ -753,8 +738,8 @@ def test_run_arm_accounts_for_actual_subprocess_elapsed_time(
     # here raised StopIteration under xdist+coverage load (release-train CI,
     # 2026-07-13) whenever an extra monotonic() call slipped in.
     moments = itertools.chain((10.0,), itertools.repeat(13.5))
-    monkeypatch.setattr("plugins.crucible.tau2_live.time.monotonic", lambda: next(moments))
-    monkeypatch.setattr("plugins.crucible.tau2_live.normalize_tau2_results", normalize)
+    monkeypatch.setattr("geode_product.crucible.tau2_live.time.monotonic", lambda: next(moments))
+    monkeypatch.setattr("geode_product.crucible.tau2_live.normalize_tau2_results", normalize)
 
     _run_arm(
         contract,
@@ -865,14 +850,14 @@ def test_run_arm_disables_legacy_partial_cache_without_v4_companions(
         raw_hash="a" * 64,
     )
     monkeypatch.setenv("CRUCIBLE_ROW_CACHE_ROOT", str(cache))
-    monkeypatch.setattr("plugins.crucible.tau2_live._run_tau2_command", run)
+    monkeypatch.setattr("geode_product.crucible.tau2_live._run_tau2_command", run)
     monkeypatch.setattr(
-        "plugins.crucible.tau2_live.tau2_resource_usage_floor",
+        "geode_product.crucible.tau2_live.tau2_resource_usage_floor",
         lambda raw: ResourceUsage(0.0, 0, 0, 0.0),
     )
-    monkeypatch.setattr("plugins.crucible.tau2_live.tau2_trace_checks", lambda raw: {})
+    monkeypatch.setattr("geode_product.crucible.tau2_live.tau2_trace_checks", lambda raw: {})
     monkeypatch.setattr(
-        "plugins.crucible.tau2_live.normalize_tau2_results",
+        "geode_product.crucible.tau2_live.normalize_tau2_results",
         lambda *args, **kwargs: evidence,
     )
 
@@ -957,14 +942,14 @@ def test_run_arm_disables_legacy_full_cache_and_executes_fresh(
         (snapshot_dir / f"{run_id}.snapshot.json").write_text("{}\n", encoding="utf-8")
         return subprocess.CompletedProcess(args=command, returncode=0), False
 
-    monkeypatch.setattr("plugins.crucible.tau2_live._run_tau2_command", run)
+    monkeypatch.setattr("geode_product.crucible.tau2_live._run_tau2_command", run)
     monkeypatch.setattr(
-        "plugins.crucible.tau2_live.tau2_resource_usage_floor",
+        "geode_product.crucible.tau2_live.tau2_resource_usage_floor",
         lambda _raw: ResourceUsage(0.0, 0, 0, 0.0),
     )
-    monkeypatch.setattr("plugins.crucible.tau2_live.tau2_trace_checks", lambda _raw: {})
+    monkeypatch.setattr("geode_product.crucible.tau2_live.tau2_trace_checks", lambda _raw: {})
     monkeypatch.setattr(
-        "plugins.crucible.tau2_live.normalize_tau2_results",
+        "geode_product.crucible.tau2_live.normalize_tau2_results",
         lambda *args, **kwargs: evidence,
     )
 
@@ -1056,14 +1041,14 @@ def test_run_arm_ignores_row_cache_outside_train_stage(
         raw_hash="a" * 64,
     )
     monkeypatch.setenv("CRUCIBLE_ROW_CACHE_ROOT", str(cache))
-    monkeypatch.setattr("plugins.crucible.tau2_live._run_tau2_command", run)
+    monkeypatch.setattr("geode_product.crucible.tau2_live._run_tau2_command", run)
     monkeypatch.setattr(
-        "plugins.crucible.tau2_live.tau2_resource_usage_floor",
+        "geode_product.crucible.tau2_live.tau2_resource_usage_floor",
         lambda raw: ResourceUsage(0.0, 0, 0, 0.0),
     )
-    monkeypatch.setattr("plugins.crucible.tau2_live.tau2_trace_checks", lambda raw: {})
+    monkeypatch.setattr("geode_product.crucible.tau2_live.tau2_trace_checks", lambda raw: {})
     monkeypatch.setattr(
-        "plugins.crucible.tau2_live.normalize_tau2_results",
+        "geode_product.crucible.tau2_live.normalize_tau2_results",
         lambda *args, **kwargs: evidence,
     )
 
@@ -1259,236 +1244,3 @@ def test_tau2_feedback_projects_structure_without_task_or_tool_cases() -> None:
         "workflow_completion",
     )
     assert feedback.failed_task_ids == ("task-1", "task-2")
-
-
-def test_codex_producer_uses_bounded_local_graph_slice(tmp_path: Path) -> None:
-    sources = {
-        "plugins/benchmark_harness/tau2_agent_policy.md": "policy\n",
-        "plugins/benchmark_harness/tau2_geode_agent.py": "runner\n",
-        "core/gateway/slack.py": "unrelated\n",
-    }
-    for relative, content in sources.items():
-        source = tmp_path / relative
-        source.parent.mkdir(parents=True, exist_ok=True)
-        source.write_text(content, encoding="utf-8")
-
-    def digest(relative: str) -> str:
-        return hashlib.sha256(sources[relative].encode()).hexdigest()
-
-    graph_path = tmp_path / "knowledge-graph.json"
-    graph_path.write_text(
-        json.dumps(
-            {
-                "schema": "crucible.producer-graph.v1",
-                "project": {"name": "GEODE", "description": "agent harness"},
-                "nodes": [
-                    {
-                        "id": "policy",
-                        "filePath": "plugins/benchmark_harness/tau2_agent_policy.md",
-                        "name": "Tau2 policy",
-                        "summary": "candidate-owned behavior contract",
-                        "tags": ["prompt"],
-                        "contentSha256": digest("plugins/benchmark_harness/tau2_agent_policy.md"),
-                    },
-                    {
-                        "id": "runner",
-                        "filePath": "plugins/benchmark_harness/tau2_geode_agent.py",
-                        "name": "Tau2 runner",
-                        "summary": "loads the policy",
-                        "tags": ["benchmark"],
-                        "contentSha256": digest("plugins/benchmark_harness/tau2_geode_agent.py"),
-                    },
-                    {
-                        "id": "unrelated",
-                        "filePath": "core/gateway/slack.py",
-                        "name": "Slack",
-                        "summary": "unrelated",
-                        "tags": ["gateway"],
-                        "contentSha256": digest("core/gateway/slack.py"),
-                    },
-                ],
-                "edges": [{"source": "runner", "target": "policy", "type": "reads_from"}],
-            }
-        ),
-        encoding="utf-8",
-    )
-
-    context = json.loads(
-        knowledge_context(
-            graph_path,
-            ("plugins/benchmark_harness/tau2_agent_policy.md",),
-            repository=tmp_path,
-        )
-    )
-
-    assert {node["name"] for node in context["nodes"]} == {"Tau2 policy", "Tau2 runner"}
-    assert "unrelated" not in json.dumps(context)
-
-    (tmp_path / "plugins/benchmark_harness/tau2_geode_agent.py").write_text(
-        "changed\n",
-        encoding="utf-8",
-    )
-    with pytest.raises(ProducerError, match="knowledge graph source changed"):
-        knowledge_context(
-            graph_path,
-            ("plugins/benchmark_harness/tau2_agent_policy.md",),
-            repository=tmp_path,
-        )
-
-
-def test_codex_producer_source_graph_attests_the_current_policy_path() -> None:
-    repository = Path(__file__).parents[3]
-
-    context = json.loads(
-        knowledge_context(
-            _DEFAULT_GRAPH_PATH,
-            ("plugins/benchmark_harness/tau2_agent_policy.md",),
-            repository=repository,
-        )
-    )
-
-    names = {node["name"] for node in context["nodes"]}
-    assert "Tau2 agent policy" in names
-    assert "Tau2 GEODE adapter" in names
-    assert "AgenticLoop" in names
-    assert "Candidate replay producer" in names
-
-
-def test_codex_producer_prompt_uses_can_cannot_policy_clauses() -> None:
-    prompt = _prompt(
-        objective="Improve complete workflows.",
-        surfaces=("plugins/benchmark_harness/tau2_agent_policy.md",),
-        feedback=None,
-        graph_context="{}",
-    )
-
-    assert "CANNOT add task IDs" in prompt
-    assert "CANNOT run live/provider tests" in prompt
-    assert "every behavior bullet starts with exactly `- CAN` or `- CANNOT`" in prompt
-    legacy_negative = " ".join(("do", "not"))
-    assert legacy_negative not in prompt.casefold()
-
-
-def test_codex_producer_objective_requires_monotone_progress() -> None:
-    # The objective's single source of truth is program.md; the code module
-    # must not carry the literal (dual-SoT drift pin).
-    import plugins.crucible.producers.codex_kg as _codex_kg_module
-
-    module_source = Path(_codex_kg_module.__file__).read_text(encoding="utf-8")
-    assert "workflow monotone" not in module_source
-    assert "workflow monotone" in _DEFAULT_OBJECTIVE
-    assert "unresolved policy-required actions and terminal checks" in _DEFAULT_OBJECTIVE
-    assert "reuse confirmed successes without repeating them" in _DEFAULT_OBJECTIVE
-    assert "stop only when none remain" in _DEFAULT_OBJECTIVE
-
-
-def test_codex_producer_objective_comes_from_the_bound_request(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from plugins.crucible.producers.codex_kg import _request_objective
-
-    monkeypatch.setenv("CRUCIBLE_PRODUCER_OBJECTIVE", "ambient drift")
-
-    assert _request_objective({}) == _DEFAULT_OBJECTIVE
-    assert _request_objective({"objective": "Bound campaign objective."}) == (
-        "Bound campaign objective."
-    )
-
-
-def test_codex_producer_program_is_tracked_model_facing_source() -> None:
-    program = _load_program()
-    source = _DEFAULT_PROGRAM_PATH.read_text(encoding="utf-8")
-
-    assert _DEFAULT_PROGRAM_PATH.name == "program.md"
-    assert "## Objective" in source
-    assert "## Experimentation" in source
-    assert "## Constraints" in source
-    assert "## Preferences" in source
-    assert "## Setup" in source
-    assert "## Dynamic feedback" in source
-    assert "tau2_agent_policy.md" in source
-    assert "{{graph_context}}" in program
-    assert "You are " not in program
-    assert "Act as " not in program
-    assert "batch" not in _DEFAULT_OBJECTIVE
-    assert "defer" not in _DEFAULT_OBJECTIVE
-
-
-def test_codex_producer_extracts_bounded_structured_stdout_error() -> None:
-    stdout = "\n".join(
-        (
-            '{"type":"thread.started","thread_id":"opaque"}',
-            '{"type":"error","message":"earlier error"}',
-            '{"type":"turn.failed","error":{"message":" usage  limit \\n reset "}}',
-        )
-    )
-
-    assert _codex_error_detail(stdout, "") == "usage limit reset"
-    assert _codex_error_detail(stdout, " explicit stderr ") == "explicit stderr"
-    assert _codex_error_detail("not-json", "") == ""
-
-
-def test_codex_producer_writes_bounded_error_sidecar(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    output = tmp_path / "producer-error.json"
-    monkeypatch.setenv("CRUCIBLE_ERROR_OUTPUT", str(output))
-
-    _write_error_sidecar(ProducerError(" usage  limit \n reset "))
-
-    payload = json.loads(output.read_text(encoding="utf-8"))
-    assert payload == {
-        "schema": "crucible.producer-error.v1",
-        "error_type": "ProducerError",
-        "message": "usage limit reset",
-    }
-
-
-def test_codex_producer_reads_only_nested_closed_failure_codes() -> None:
-    prompt = _prompt(
-        objective="Improve complete workflows.",
-        surfaces=("plugins/benchmark_harness/tau2_agent_policy.md",),
-        feedback={
-            "schema": "crucible.supervisor-feedback.v3",
-            "attempt_id": "attempt-1",
-            "outcome": "REJECT",
-            "reasons": ["confidence_bound_not_positive"],
-            "search_head_sha": "a" * 40,
-            "evaluator": {
-                "schema": "crucible.failure-feedback.v3",
-                "failure_codes": ["required_user_action", "workflow_completion"],
-                "failed_task_ids": ["private-train-task"],
-            },
-        },
-        graph_context="{}",
-    )
-
-    assert 'Prior closed failure codes: ["required_user_action", "workflow_completion"]' in prompt
-    assert "private-train-task" not in prompt
-    assert "confidence_bound_not_positive" not in prompt
-
-
-def test_codex_child_cannot_read_supervisor_protocol_paths(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("CODEX_HOME", "/trusted/codex-home")
-    monkeypatch.setenv("CRUCIBLE_PROPOSAL_REQUEST", "/private/request.json")
-    monkeypatch.setenv("CRUCIBLE_CANDIDATE_OUTPUT", "/private/candidate.json")
-    monkeypatch.setenv("CRUCIBLE_ROLE", "producer")
-    monkeypatch.setenv("GEODE_STATE_ROOT", "/private/state")
-
-    environment = _codex_child_environment()
-
-    assert environment["CODEX_HOME"] == "/trusted/codex-home"
-    assert all(not name.startswith("CRUCIBLE_") for name in environment)
-    assert "GEODE_STATE_ROOT" not in environment
-
-
-def test_codex_producer_enforces_can_cannot_output_grammar() -> None:
-    _validate_policy_grammar(
-        "Mode: assay.\nBehavior:\n- CAN use tools.\n- CANNOT invent results.\n"
-    )
-
-    with pytest.raises(ProducerError, match="CAN/CANNOT"):
-        _validate_policy_grammar("Mode: assay.\nBehavior:\n- SHOULD batch tool calls.\n")

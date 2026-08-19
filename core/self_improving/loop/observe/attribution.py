@@ -38,17 +38,14 @@ import logging
 import math
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from core.self_improving.baseline_reader import BaselineSnapshot
 from core.self_improving.loop.inject.signal_polarity import to_signed_improvement
-from core.self_improving.loop.observe.run_provenance import RunProvenanceFields
-
-if TYPE_CHECKING:
-    from plugins.seed_generation.baseline_reader import BaselineSnapshot
-
 from core.self_improving.loop.mutate.runner import MUTATION_AUDIT_LOG_PATH
+from core.self_improving.loop.observe.run_provenance import RunProvenanceFields
 
 
 class AttributionRecord(BaseModel):

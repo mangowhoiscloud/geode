@@ -10,35 +10,35 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Literal
 
-import plugins.crucible.sealed as sealed_module
+import geode_product.crucible.sealed as sealed_module
 import pytest
-from plugins.crucible.artifacts import write_exclusive_json
-from plugins.crucible.bundle import PromotionBundle
-from plugins.crucible.contract import (
+from geode_product.crucible.artifacts import write_exclusive_json
+from geode_product.crucible.bundle import PromotionBundle
+from geode_product.crucible.contract import (
     EXPERIMENT_SCHEMA,
     ContractError,
     ExperimentContract,
     TaskUnit,
     task_pack_sha256,
 )
-from plugins.crucible.evidence import EVIDENCE_SCHEMA, EvidenceEnvelope, ResourceUsage
-from plugins.crucible.promotion import decide
-from plugins.crucible.ref_journal import (
+from geode_product.crucible.evidence import EVIDENCE_SCHEMA, EvidenceEnvelope, ResourceUsage
+from geode_product.crucible.promotion import decide
+from geode_product.crucible.ref_journal import (
     RefIntent,
     RefReceipt,
     commit_ref_update,
     persist_intent,
 )
-from plugins.crucible.ref_journal import commit_ref_update as real_commit_ref_update
-from plugins.crucible.runtime_receipt import SharedRuntimeDeadline, runtime_artifact_bindings
-from plugins.crucible.sealed import (
+from geode_product.crucible.ref_journal import commit_ref_update as real_commit_ref_update
+from geode_product.crucible.runtime_receipt import SharedRuntimeDeadline, runtime_artifact_bindings
+from geode_product.crucible.sealed import (
     CorePromotionDecision,
     SealedError,
     SealedInfrastructureError,
     SealedPlan,
     SealedSupervisor,
 )
-from plugins.crucible.supervisor import PROPOSAL_SCHEMA, RECORD_SCHEMA, REQUEST_SCHEMA
+from geode_product.crucible.supervisor import PROPOSAL_SCHEMA, RECORD_SCHEMA, REQUEST_SCHEMA
 
 _GIT = shutil.which("git")
 if _GIT is None:  # pragma: no cover - test environment precondition

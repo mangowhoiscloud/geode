@@ -4,8 +4,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
-from plugins.crucible.contract import ContractError
-from plugins.crucible.row_cache import (
+from geode_product.crucible.contract import ContractError
+from geode_product.crucible.row_cache import (
     cached_context,
     cached_rows,
     harvest_arm_rows,
@@ -290,7 +290,7 @@ def test_legacy_cached_row_snapshot_is_not_admitted_without_v4_companions() -> N
     contract = _contract()
     raw_sha = "a" * 64
     snapshot = synthesized_snapshot(contract, arm="candidate", raw_sha256=raw_sha)
-    from plugins.crucible.verifiers.tau2 import _verify_snapshot
+    from geode_product.crucible.verifiers.tau2 import _verify_snapshot
 
     with pytest.raises(ContractError, match="companion artifact context"):
         _verify_snapshot(

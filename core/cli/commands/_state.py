@@ -33,12 +33,9 @@ class ModelProfile:
     cost: str  # relative cost indicator
 
 
-# v0.53.0 — provider labels are CANONICAL provider IDs (matching
-# /login dashboard + auth.toml), not marketing names. Pre-fix:
-# "Codex (Plus)" label vs "openai-codex" provider ID mismatch caused
-# user confusion. Auth-mode (OAuth vs PAYG) is NOT in the picker —
-# the system auto-resolves at LLM call time via resolve_routing()
-# based on the user's active /login state.
+# Model rows expose provider families, not endpoint/auth variants. ChatGPT
+# subscription OAuth and PAYG are OpenAI sources selected at call time by
+# ``resolve_routing()``; ``openai-codex`` remains the subscription route name.
 #
 # Label = canonical provider ID + cost ($) tier.
 # Every GPT row uses the OpenAI provider family; credential source selects
@@ -316,16 +313,13 @@ COMMAND_MAP: dict[str, str] = {
     "/tasks": "tasks",
     "/task": "tasks",
     "/t": "tasks",
-    "/audit": "audit",
-    "/audit-seeds": "audit-seeds",
-    "/petri": "petri",
     "/self-improving": "self-improving",
     "/sil": "self-improving",
     "/recall": "recall",
 }
 
 
-def show_help() -> None:
+def show_help(command_registry: _Any = None) -> None:
     """Show interactive mode help."""
     console.print()
     console.print("  [header]Commands[/header]")
@@ -337,9 +331,6 @@ def show_help() -> None:
     console.print("  [label]/login add[/label]          — Interactive plan/key wizard")
     console.print("  [label]/key[/label] <value>        — Quick PAYG API key (legacy alias)")
     console.print("  [label]/model[/label]              — Show & switch LLM model")
-    console.print(
-        "  [label]/petri[/label]              — Show & switch Petri role × model × source"
-    )
     console.print("  [label]/login source[/label] <p> <t> — Pick credential source per provider")
     console.print("  [label]/schedule[/label]           — Manage scheduled automations")
     console.print("  [label]/trigger[/label]            — Manage event/cron triggers")
@@ -359,6 +350,12 @@ def show_help() -> None:
     console.print("  [label]/clear[/label]              — Clear conversation history")
     console.print("  [label]/help[/label]               — Show this help")
     console.print("  [label]/quit[/label]               — Exit GEODE")
+
+    from core.cli.routing import COMMAND_REGISTRY
+
+    for spec in (COMMAND_REGISTRY if command_registry is None else command_registry).values():
+        if spec.name not in COMMAND_MAP:
+            console.print(f"  [label]{spec.name}[/label] — {spec.description}")
 
     console.print()
     console.print("  [muted]Or just type naturally to interact with the agent.[/muted]")

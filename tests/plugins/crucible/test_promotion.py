@@ -3,15 +3,15 @@ from copy import deepcopy
 from pathlib import Path
 
 import pytest
-from plugins.crucible.cli import main as crucible_main
-from plugins.crucible.contract import (
+from geode_product.crucible.cli import main as crucible_main
+from geode_product.crucible.contract import (
     ContractError,
     ExperimentContract,
     TaskUnit,
     task_pack_sha256,
 )
-from plugins.crucible.evidence import EvidenceEnvelope
-from plugins.crucible.promotion import (
+from geode_product.crucible.evidence import EvidenceEnvelope
+from geode_product.crucible.promotion import (
     PromotionVerdict,
     decide,
     paired_bootstrap_lower_bound,

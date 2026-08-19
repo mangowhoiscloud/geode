@@ -1,9 +1,9 @@
 from copy import deepcopy
 from pathlib import Path
 
-import plugins.crucible.contract as contract_module
+import geode_product.crucible.contract as contract_module
 import pytest
-from plugins.crucible.contract import (
+from geode_product.crucible.contract import (
     ContractError,
     ExperimentContract,
     TaskUnit,

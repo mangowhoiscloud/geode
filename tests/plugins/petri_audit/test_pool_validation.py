@@ -1,4 +1,4 @@
-"""Guard tests for :func:`plugins.petri_audit.pool_validation.validate_pool_target_dims`.
+"""Guard tests for :func:`geode_product.petri_audit.pool_validation.validate_pool_target_dims`.
 
 Pins the invariant that a seed pool may only target LIVE judge dims, so a future
 dim removal that orphans a pool (the ``redundant_tool_invocation`` incident,
@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from plugins.petri_audit.pool_validation import validate_pool_target_dims
+from geode_product.petri_audit.pool_validation import validate_pool_target_dims
 
 LIVE = frozenset({"stuck_in_loops", "input_hallucination", "broken_tool_use"})
 

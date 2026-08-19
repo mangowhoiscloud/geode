@@ -35,38 +35,38 @@ import pytest
 
 def test_resolve_binary_via_env_override(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> None:
     """``GEODE_CLAUDE_CLI_BIN`` env points at an executable."""
-    from plugins.petri_audit.claude_cli_provider import (
+    from geode_product.petri_audit.claude_cli_provider import (
         CLAUDE_CLI_BIN_ENV,
-        _resolve_claude_binary,
+        resolve_claude_binary,
     )
 
     fake = tmp_path / "fake-claude"
     fake.write_text("#!/bin/sh\necho ok\n")
     fake.chmod(0o755)
     monkeypatch.setenv(CLAUDE_CLI_BIN_ENV, str(fake))
-    assert _resolve_claude_binary() == str(fake)
+    assert resolve_claude_binary() == str(fake)
 
 
 def test_resolve_binary_via_path(monkeypatch: pytest.MonkeyPatch) -> None:
     """When no env override, falls back to ``shutil.which("claude")``."""
-    from plugins.petri_audit.claude_cli_provider import (
+    from geode_product.petri_audit.claude_cli_provider import (
         CLAUDE_CLI_BIN_ENV,
-        _resolve_claude_binary,
+        resolve_claude_binary,
     )
 
     monkeypatch.delenv(CLAUDE_CLI_BIN_ENV, raising=False)
     with patch("shutil.which", return_value="/fake/path/claude"):
-        assert _resolve_claude_binary() == "/fake/path/claude"
+        assert resolve_claude_binary() == "/fake/path/claude"
 
 
 def test_resolve_binary_env_invalid_path_raises(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """env points at nonexistent file → ClaudeCliInvocationError."""
-    from plugins.petri_audit.claude_cli_provider import (
+    from geode_product.petri_audit.claude_cli_provider import (
         CLAUDE_CLI_BIN_ENV,
         ClaudeCliInvocationError,
-        _resolve_claude_binary,
+        resolve_claude_binary,
     )
 
     monkeypatch.setenv(CLAUDE_CLI_BIN_ENV, "/nonexistent/binary")
@@ -74,15 +74,15 @@ def test_resolve_binary_env_invalid_path_raises(
         patch("shutil.which", return_value=None),
         pytest.raises(ClaudeCliInvocationError, match="no executable"),
     ):
-        _resolve_claude_binary()
+        resolve_claude_binary()
 
 
 def test_resolve_binary_not_on_path_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     """No env + no PATH binary → ClaudeCliInvocationError."""
-    from plugins.petri_audit.claude_cli_provider import (
+    from geode_product.petri_audit.claude_cli_provider import (
         CLAUDE_CLI_BIN_ENV,
         ClaudeCliInvocationError,
-        _resolve_claude_binary,
+        resolve_claude_binary,
     )
 
     monkeypatch.delenv(CLAUDE_CLI_BIN_ENV, raising=False)
@@ -90,40 +90,40 @@ def test_resolve_binary_not_on_path_raises(monkeypatch: pytest.MonkeyPatch) -> N
         patch("shutil.which", return_value=None),
         pytest.raises(ClaudeCliInvocationError, match="not found on PATH"),
     ):
-        _resolve_claude_binary()
+        resolve_claude_binary()
 
 
 def test_resolve_timeout_default() -> None:
-    from plugins.petri_audit.claude_cli_provider import (
+    from geode_product.petri_audit.claude_cli_provider import (
         CLAUDE_CLI_SUBPROCESS_TIMEOUT_S,
-        _resolve_timeout_s,
+        resolve_timeout_s,
     )
 
     # Without env, returns module default
-    assert _resolve_timeout_s() == CLAUDE_CLI_SUBPROCESS_TIMEOUT_S
+    assert resolve_timeout_s() == CLAUDE_CLI_SUBPROCESS_TIMEOUT_S
 
 
 def test_resolve_timeout_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
-    from plugins.petri_audit.claude_cli_provider import (
+    from geode_product.petri_audit.claude_cli_provider import (
         CLAUDE_CLI_TIMEOUT_ENV,
-        _resolve_timeout_s,
+        resolve_timeout_s,
     )
 
     monkeypatch.setenv(CLAUDE_CLI_TIMEOUT_ENV, "1200")
-    assert _resolve_timeout_s() == 1200.0
+    assert resolve_timeout_s() == 1200.0
 
 
 def test_resolve_timeout_env_garbage_falls_back(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from plugins.petri_audit.claude_cli_provider import (
+    from geode_product.petri_audit.claude_cli_provider import (
         CLAUDE_CLI_SUBPROCESS_TIMEOUT_S,
         CLAUDE_CLI_TIMEOUT_ENV,
-        _resolve_timeout_s,
+        resolve_timeout_s,
     )
 
     monkeypatch.setenv(CLAUDE_CLI_TIMEOUT_ENV, "not-a-number")
-    assert _resolve_timeout_s() == CLAUDE_CLI_SUBPROCESS_TIMEOUT_S
+    assert resolve_timeout_s() == CLAUDE_CLI_SUBPROCESS_TIMEOUT_S
 
 
 # ---------------------------------------------------------------------------
@@ -132,7 +132,7 @@ def test_resolve_timeout_env_garbage_falls_back(
 
 
 def test_argv_minimal_shape() -> None:
-    from plugins.petri_audit.claude_cli_provider import build_claude_cli_argv
+    from geode_product.petri_audit.claude_cli_provider import build_claude_cli_argv
 
     argv = build_claude_cli_argv(
         binary="/usr/bin/claude",
@@ -151,7 +151,7 @@ def test_argv_minimal_shape() -> None:
 
 
 def test_argv_custom_max_turns() -> None:
-    from plugins.petri_audit.claude_cli_provider import build_claude_cli_argv
+    from geode_product.petri_audit.claude_cli_provider import build_claude_cli_argv
 
     argv = build_claude_cli_argv(
         binary="/usr/bin/claude",
@@ -163,7 +163,7 @@ def test_argv_custom_max_turns() -> None:
 
 def test_argv_mcp_config_adds_strict_flag() -> None:
     """CSA-2 hook: passing mcp_config_path also sets --strict-mcp-config."""
-    from plugins.petri_audit.claude_cli_provider import build_claude_cli_argv
+    from geode_product.petri_audit.claude_cli_provider import build_claude_cli_argv
 
     argv = build_claude_cli_argv(
         binary="/usr/bin/claude",
@@ -176,7 +176,7 @@ def test_argv_mcp_config_adds_strict_flag() -> None:
 
 
 def test_argv_allowed_tools_joins_csv() -> None:
-    from plugins.petri_audit.claude_cli_provider import build_claude_cli_argv
+    from geode_product.petri_audit.claude_cli_provider import build_claude_cli_argv
 
     argv = build_claude_cli_argv(
         binary="/usr/bin/claude",
@@ -191,7 +191,7 @@ def test_argv_allowed_tools_joins_csv() -> None:
 
 
 def test_argv_extra_args_appended() -> None:
-    from plugins.petri_audit.claude_cli_provider import build_claude_cli_argv
+    from geode_product.petri_audit.claude_cli_provider import build_claude_cli_argv
 
     argv = build_claude_cli_argv(
         binary="/usr/bin/claude",
@@ -205,7 +205,7 @@ def test_argv_skip_permissions_default_false() -> None:
     """PR-SKIP-PERMS (2026-05-24) — default-off so legacy
     inspect_ai / petri_audit interactive paths keep their permission
     prompts. AgenticLoop adapter explicitly opts in via True."""
-    from plugins.petri_audit.claude_cli_provider import build_claude_cli_argv
+    from geode_product.petri_audit.claude_cli_provider import build_claude_cli_argv
 
     argv = build_claude_cli_argv(binary="/x/claude", model_name="claude-opus-4-7")
     assert "--dangerously-skip-permissions" not in argv
@@ -216,7 +216,7 @@ def test_argv_skip_permissions_true_appends_flag() -> None:
     sub-agent subprocesses don't hang on interactive permission
     prompts (v0.99.53 smoke regression: Write tool denials clipped
     every generator candidate)."""
-    from plugins.petri_audit.claude_cli_provider import build_claude_cli_argv
+    from geode_product.petri_audit.claude_cli_provider import build_claude_cli_argv
 
     argv = build_claude_cli_argv(
         binary="/x/claude",
@@ -230,7 +230,7 @@ def test_argv_skip_permissions_order_after_tools_block() -> None:
     """The flag lands AFTER the optional ``--tools "" `` block (set
     by ``disable_builtin_tools=True``) so the argv shape stays
     deterministic for the CSA-2 MCP bridge path."""
-    from plugins.petri_audit.claude_cli_provider import build_claude_cli_argv
+    from geode_product.petri_audit.claude_cli_provider import build_claude_cli_argv
 
     argv = build_claude_cli_argv(
         binary="/x/claude",
@@ -247,7 +247,7 @@ def test_argv_skip_permissions_composes_with_extra_args() -> None:
     """``extra_args`` still appends LAST so operator overrides /
     test injection points stay at the tail of the argv even when
     skip_permissions is on."""
-    from plugins.petri_audit.claude_cli_provider import build_claude_cli_argv
+    from geode_product.petri_audit.claude_cli_provider import build_claude_cli_argv
 
     argv = build_claude_cli_argv(
         binary="/x/claude",
@@ -268,7 +268,7 @@ def test_argv_skip_permissions_uses_real_bypass_flag_not_meta() -> None:
     silently regress to the meta-flag and produce mixed-result smoke
     runs (1st sub-agent passes via lighter checks, 2nd fails on
     Write denial)."""
-    from plugins.petri_audit.claude_cli_provider import build_claude_cli_argv
+    from geode_product.petri_audit.claude_cli_provider import build_claude_cli_argv
 
     argv = build_claude_cli_argv(
         binary="/x/claude",
@@ -286,7 +286,7 @@ def test_argv_disable_session_persistence_default_false() -> None:
     rely on PR-V's `--resume`-based cross-turn cached-marker billing
     optimization (5-10K tokens saved per heartbeat) are unaffected.
     Sub-agent dispatch explicitly opts in via True."""
-    from plugins.petri_audit.claude_cli_provider import build_claude_cli_argv
+    from geode_product.petri_audit.claude_cli_provider import build_claude_cli_argv
 
     argv = build_claude_cli_argv(binary="/x/claude", model_name="claude-opus-4-7")
     assert "--no-session-persistence" not in argv
@@ -296,7 +296,7 @@ def test_argv_disable_session_persistence_true_appends_flag() -> None:
     """Explicit True appends the flag so sub-agent spawns get strict
     per-process isolation (no cwd-keyed claude-cli session cache
     leaking conversation context across smokes)."""
-    from plugins.petri_audit.claude_cli_provider import build_claude_cli_argv
+    from geode_product.petri_audit.claude_cli_provider import build_claude_cli_argv
 
     argv = build_claude_cli_argv(
         binary="/x/claude",
@@ -310,7 +310,7 @@ def test_argv_session_persistence_composes_with_skip_permissions() -> None:
     """Both new flags can be enabled simultaneously — both are
     sub-agent dispatch policy defaults — and they retain a stable
     ordering relative to ``--tools "" `` and ``extra_args``."""
-    from plugins.petri_audit.claude_cli_provider import build_claude_cli_argv
+    from geode_product.petri_audit.claude_cli_provider import build_claude_cli_argv
 
     argv = build_claude_cli_argv(
         binary="/x/claude",
@@ -329,7 +329,7 @@ def test_argv_json_schema_default_none_omits_flag() -> None:
     """PR-PERMS-FLAG-FIX (2026-05-25, JSON-forcing bundle) — default
     None means callers that don't need structured output retain
     free-form text responses."""
-    from plugins.petri_audit.claude_cli_provider import build_claude_cli_argv
+    from geode_product.petri_audit.claude_cli_provider import build_claude_cli_argv
 
     argv = build_claude_cli_argv(binary="/x/claude", model_name="claude-opus-4-7")
     assert "--json-schema" not in argv
@@ -342,7 +342,7 @@ def test_argv_json_schema_dict_appends_serialized_inline() -> None:
     (claude-cli accepts inline schema only)."""
     import json
 
-    from plugins.petri_audit.claude_cli_provider import build_claude_cli_argv
+    from geode_product.petri_audit.claude_cli_provider import build_claude_cli_argv
 
     schema = {
         "type": "object",
@@ -365,7 +365,7 @@ def test_argv_json_schema_composes_with_all_other_flags() -> None:
     disable_session_persistence, json_schema) can be applied in the
     same call without disturbing the existing ``extra_args``
     tail-anchor invariant."""
-    from plugins.petri_audit.claude_cli_provider import build_claude_cli_argv
+    from geode_product.petri_audit.claude_cli_provider import build_claude_cli_argv
 
     argv = build_claude_cli_argv(
         binary="/x/claude",
@@ -387,7 +387,7 @@ def test_argv_json_schema_composes_with_all_other_flags() -> None:
 
 
 def test_serialise_single_user_message() -> None:
-    from plugins.petri_audit.claude_cli_provider import serialise_messages_to_prompt
+    from geode_product.petri_audit.claude_cli_provider import serialise_messages_to_prompt
 
     msgs = [SimpleNamespace(role="user", content="Hello")]
     out = serialise_messages_to_prompt(msgs)
@@ -396,7 +396,7 @@ def test_serialise_single_user_message() -> None:
 
 
 def test_serialise_multi_turn_order_preserved() -> None:
-    from plugins.petri_audit.claude_cli_provider import serialise_messages_to_prompt
+    from geode_product.petri_audit.claude_cli_provider import serialise_messages_to_prompt
 
     msgs = [
         SimpleNamespace(role="system", content="Mode: helpful assistance."),
@@ -417,7 +417,7 @@ def test_serialise_multi_turn_order_preserved() -> None:
 
 def test_serialise_content_blocks_extracts_text() -> None:
     """list-of-Content (with .text attr) shape — extract text from each block."""
-    from plugins.petri_audit.claude_cli_provider import serialise_messages_to_prompt
+    from geode_product.petri_audit.claude_cli_provider import serialise_messages_to_prompt
 
     blocks = [
         SimpleNamespace(text="part1"),
@@ -431,7 +431,7 @@ def test_serialise_content_blocks_extracts_text() -> None:
 
 def test_serialise_unknown_role_uses_uppercase_sentinel() -> None:
     """Forward-compat — new role names get auto-sentinel."""
-    from plugins.petri_audit.claude_cli_provider import serialise_messages_to_prompt
+    from geode_product.petri_audit.claude_cli_provider import serialise_messages_to_prompt
 
     msgs = [SimpleNamespace(role="auditor", content="hmm")]
     out = serialise_messages_to_prompt(msgs)
@@ -449,7 +449,7 @@ def _make_stream_json(events: list[dict]) -> str:
 
 
 def test_parse_well_formed_events() -> None:
-    from plugins.petri_audit.claude_cli_provider import parse_stream_json_events
+    from geode_product.petri_audit.claude_cli_provider import parse_stream_json_events
 
     stdout = _make_stream_json(
         [
@@ -472,7 +472,7 @@ def test_parse_well_formed_events() -> None:
 
 def test_parse_skips_malformed_lines() -> None:
     """Non-JSON lines (debug noise) silently dropped."""
-    from plugins.petri_audit.claude_cli_provider import parse_stream_json_events
+    from geode_product.petri_audit.claude_cli_provider import parse_stream_json_events
 
     stdout = '{"type": "ok", "x": 1}\nnot-json-debug\n{"type": "ok", "x": 2}\n'
     events = parse_stream_json_events(stdout)
@@ -481,14 +481,14 @@ def test_parse_skips_malformed_lines() -> None:
 
 
 def test_parse_empty_stdout_returns_empty_list() -> None:
-    from plugins.petri_audit.claude_cli_provider import parse_stream_json_events
+    from geode_product.petri_audit.claude_cli_provider import parse_stream_json_events
 
     assert parse_stream_json_events("") == []
 
 
 def test_parse_skips_non_object_lines() -> None:
     """Top-level arrays / strings are valid JSON but not events — skip."""
-    from plugins.petri_audit.claude_cli_provider import parse_stream_json_events
+    from geode_product.petri_audit.claude_cli_provider import parse_stream_json_events
 
     stdout = '"just a string"\n[1, 2, 3]\n{"type": "ok"}\n'
     events = parse_stream_json_events(stdout)
@@ -502,8 +502,8 @@ def test_parse_skips_non_object_lines() -> None:
 
 
 def test_extract_text_from_content_block_deltas() -> None:
-    from plugins.petri_audit.claude_cli_provider import (
-        _extract_assistant_text,
+    from geode_product.petri_audit.claude_cli_provider import (
+        extract_assistant_text,
         parse_stream_json_events,
     )
 
@@ -515,63 +515,63 @@ def test_extract_text_from_content_block_deltas() -> None:
         ]
     )
     events = parse_stream_json_events(stdout)
-    assert _extract_assistant_text(events) == "Hello world"
+    assert extract_assistant_text(events) == "Hello world"
 
 
 def test_extract_text_result_fallback() -> None:
     """When no content_block_delta events, fall back to result.result."""
-    from plugins.petri_audit.claude_cli_provider import (
-        _extract_assistant_text,
+    from geode_product.petri_audit.claude_cli_provider import (
+        extract_assistant_text,
         parse_stream_json_events,
     )
 
     stdout = _make_stream_json([{"type": "result", "result": "Just OK"}])
     events = parse_stream_json_events(stdout)
-    assert _extract_assistant_text(events) == "Just OK"
+    assert extract_assistant_text(events) == "Just OK"
 
 
 def test_extract_stop_reason_end_turn_maps_to_stop() -> None:
-    from plugins.petri_audit.claude_cli_provider import (
-        _extract_stop_reason,
+    from geode_product.petri_audit.claude_cli_provider import (
+        extract_stop_reason,
         parse_stream_json_events,
     )
 
     stdout = _make_stream_json([{"type": "message_delta", "delta": {"stop_reason": "end_turn"}}])
-    assert _extract_stop_reason(parse_stream_json_events(stdout)) == "stop"
+    assert extract_stop_reason(parse_stream_json_events(stdout)) == "stop"
 
 
 def test_extract_stop_reason_tool_use_maps_to_tool_calls() -> None:
-    from plugins.petri_audit.claude_cli_provider import (
-        _extract_stop_reason,
+    from geode_product.petri_audit.claude_cli_provider import (
+        extract_stop_reason,
         parse_stream_json_events,
     )
 
     stdout = _make_stream_json([{"type": "message_delta", "delta": {"stop_reason": "tool_use"}}])
-    assert _extract_stop_reason(parse_stream_json_events(stdout)) == "tool_calls"
+    assert extract_stop_reason(parse_stream_json_events(stdout)) == "tool_calls"
 
 
 def test_extract_stop_reason_max_tokens_preserved() -> None:
-    from plugins.petri_audit.claude_cli_provider import (
-        _extract_stop_reason,
+    from geode_product.petri_audit.claude_cli_provider import (
+        extract_stop_reason,
         parse_stream_json_events,
     )
 
     stdout = _make_stream_json([{"type": "result", "stop_reason": "max_tokens"}])
-    assert _extract_stop_reason(parse_stream_json_events(stdout)) == "max_tokens"
+    assert extract_stop_reason(parse_stream_json_events(stdout)) == "max_tokens"
 
 
 def test_extract_stop_reason_unknown_when_absent() -> None:
-    from plugins.petri_audit.claude_cli_provider import (
-        _extract_stop_reason,
+    from geode_product.petri_audit.claude_cli_provider import (
+        extract_stop_reason,
         parse_stream_json_events,
     )
 
     stdout = _make_stream_json([{"type": "message_start"}])
-    assert _extract_stop_reason(parse_stream_json_events(stdout)) == "unknown"
+    assert extract_stop_reason(parse_stream_json_events(stdout)) == "unknown"
 
 
 def testextract_usage_from_events_from_result_event() -> None:
-    from plugins.petri_audit.claude_cli_provider import (
+    from geode_product.petri_audit.claude_cli_provider import (
         extract_usage_from_events,
         parse_stream_json_events,
     )
@@ -597,7 +597,7 @@ def testextract_usage_from_events_from_result_event() -> None:
 
 
 def testextract_usage_from_events_zero_when_absent() -> None:
-    from plugins.petri_audit.claude_cli_provider import (
+    from geode_product.petri_audit.claude_cli_provider import (
         extract_usage_from_events,
         parse_stream_json_events,
     )
@@ -618,7 +618,7 @@ def testextract_usage_from_events_zero_when_absent() -> None:
 
 def test_subprocess_runner_success(tmp_path: Any) -> None:
     """End-to-end: fake binary echoes a fixture stream-json to stdout."""
-    from plugins.petri_audit.claude_cli_provider import _run_claude_subprocess
+    from geode_product.petri_audit.claude_cli_provider import run_claude_subprocess
 
     # Tiny fake "claude" that emits stream-json then exits 0
     fake = tmp_path / "fake-claude"
@@ -631,46 +631,46 @@ def test_subprocess_runner_success(tmp_path: Any) -> None:
     )
     fake.chmod(0o755)
     argv = [str(fake), "--print", "-"]
-    stdout, stderr, rc = asyncio.run(_run_claude_subprocess(argv, "prompt", 10.0))
+    stdout, stderr, rc = asyncio.run(run_claude_subprocess(argv, "prompt", 10.0))
     assert rc == 0
     assert '"text_delta"' in stdout
 
 
 def test_subprocess_runner_nonzero_exit(tmp_path: Any) -> None:
     """Non-zero exit returns the code; caller decides what to do."""
-    from plugins.petri_audit.claude_cli_provider import _run_claude_subprocess
+    from geode_product.petri_audit.claude_cli_provider import run_claude_subprocess
 
     fake = tmp_path / "fake-claude"
     fake.write_text("#!/bin/sh\necho err >&2\nexit 2\n")
     fake.chmod(0o755)
-    stdout, stderr, rc = asyncio.run(_run_claude_subprocess([str(fake)], "", 10.0))
+    stdout, stderr, rc = asyncio.run(run_claude_subprocess([str(fake)], "", 10.0))
     assert rc == 2
     assert "err" in stderr
 
 
 def test_subprocess_runner_timeout(tmp_path: Any) -> None:
     """Timeout → ClaudeCliInvocationError."""
-    from plugins.petri_audit.claude_cli_provider import (
+    from geode_product.petri_audit.claude_cli_provider import (
         ClaudeCliInvocationError,
-        _run_claude_subprocess,
+        run_claude_subprocess,
     )
 
     fake = tmp_path / "fake-claude"
     fake.write_text("#!/bin/sh\nsleep 10\n")
     fake.chmod(0o755)
     with pytest.raises(ClaudeCliInvocationError, match="timed out"):
-        asyncio.run(_run_claude_subprocess([str(fake)], "", 0.5))
+        asyncio.run(run_claude_subprocess([str(fake)], "", 0.5))
 
 
 def test_subprocess_runner_binary_missing() -> None:
     """Spawn-time FileNotFoundError → ClaudeCliInvocationError."""
-    from plugins.petri_audit.claude_cli_provider import (
+    from geode_product.petri_audit.claude_cli_provider import (
         ClaudeCliInvocationError,
-        _run_claude_subprocess,
+        run_claude_subprocess,
     )
 
     with pytest.raises(ClaudeCliInvocationError, match="failed to spawn"):
-        asyncio.run(_run_claude_subprocess(["/nonexistent/binary"], "", 10.0))
+        asyncio.run(run_claude_subprocess(["/nonexistent/binary"], "", 10.0))
 
 
 # ---------------------------------------------------------------------------
@@ -685,7 +685,7 @@ pytest.importorskip("inspect_ai")
 def _register_provider_once() -> None:
     """Ensure register() has run (idempotent — modelapi registry tolerates
     re-registration on the same name)."""
-    from plugins.petri_audit import claude_cli_provider as p
+    from geode_product.petri_audit import claude_cli_provider as p
 
     if not hasattr(p, "ClaudeCliAPI"):
         p.register()
@@ -693,7 +693,7 @@ def _register_provider_once() -> None:
 
 def test_provider_registers_modelapi() -> None:
     """register() exposes ClaudeCliAPI at module level."""
-    from plugins.petri_audit import claude_cli_provider as p
+    from geode_product.petri_audit import claude_cli_provider as p
 
     assert hasattr(p, "ClaudeCliAPI")
 
@@ -705,13 +705,14 @@ def test_generate_with_tools_dispatches_to_bridge_path(tmp_path: Any) -> None:
     is gone; the provider now spins up an MCP bridge per call. Here we
     just assert the dispatch happens — full round-trip lives in the
     dedicated tool-path test below."""
-    from plugins.petri_audit import claude_cli_provider as p
+    from geode_product.petri_audit import claude_cli_provider as p
 
     fake = tmp_path / "fake-claude"
     fake.write_text("#!/bin/sh\necho ok\n")
     fake.chmod(0o755)
     with patch(
-        "plugins.petri_audit.claude_cli_provider._resolve_claude_binary", return_value=str(fake)
+        "geode_product.petri_audit.claude_cli_provider.resolve_claude_binary",
+        return_value=str(fake),
     ):
         api = p.ClaudeCliAPI(model_name="claude-opus-4-7")
 
@@ -729,8 +730,8 @@ def test_generate_with_tools_dispatches_to_bridge_path(tmp_path: Any) -> None:
 
 def test_generate_text_only_round_trip(tmp_path: Any) -> None:
     """End-to-end: fake claude binary → provider → ModelOutput."""
+    from geode_product.petri_audit import claude_cli_provider as p
     from inspect_ai.model._model_output import ModelOutput
-    from plugins.petri_audit import claude_cli_provider as p
 
     fake = tmp_path / "fake-claude"
     # Emit a complete stream-json with text + usage
@@ -747,7 +748,8 @@ def test_generate_text_only_round_trip(tmp_path: Any) -> None:
     )
     fake.chmod(0o755)
     with patch(
-        "plugins.petri_audit.claude_cli_provider._resolve_claude_binary", return_value=str(fake)
+        "geode_product.petri_audit.claude_cli_provider.resolve_claude_binary",
+        return_value=str(fake),
     ):
         api = p.ClaudeCliAPI(model_name="claude-opus-4-7")
         msgs = [SimpleNamespace(role="user", content="Say hello")]
@@ -762,13 +764,14 @@ def test_generate_text_only_round_trip(tmp_path: Any) -> None:
 
 def test_generate_nonzero_exit_raises(tmp_path: Any) -> None:
     """Subprocess non-zero exit → ClaudeCliInvocationError surfaced."""
-    from plugins.petri_audit import claude_cli_provider as p
+    from geode_product.petri_audit import claude_cli_provider as p
 
     fake = tmp_path / "fake-claude"
     fake.write_text("#!/bin/sh\necho 'oops' >&2\nexit 1\n")
     fake.chmod(0o755)
     with patch(
-        "plugins.petri_audit.claude_cli_provider._resolve_claude_binary", return_value=str(fake)
+        "geode_product.petri_audit.claude_cli_provider.resolve_claude_binary",
+        return_value=str(fake),
     ):
         api = p.ClaudeCliAPI(model_name="claude-opus-4-7")
         with pytest.raises(p.ClaudeCliInvocationError, match="exited 1"):
@@ -784,13 +787,14 @@ def test_generate_nonzero_exit_raises(tmp_path: Any) -> None:
 
 def test_generate_empty_stdout_raises(tmp_path: Any) -> None:
     """Empty stream-json output → ClaudeCliInvocationError."""
-    from plugins.petri_audit import claude_cli_provider as p
+    from geode_product.petri_audit import claude_cli_provider as p
 
     fake = tmp_path / "fake-claude"
     fake.write_text("#!/bin/sh\nexit 0\n")  # no stdout
     fake.chmod(0o755)
     with patch(
-        "plugins.petri_audit.claude_cli_provider._resolve_claude_binary", return_value=str(fake)
+        "geode_product.petri_audit.claude_cli_provider.resolve_claude_binary",
+        return_value=str(fake),
     ):
         api = p.ClaudeCliAPI(model_name="claude-opus-4-7")
         with pytest.raises(p.ClaudeCliInvocationError, match="no stream-json"):
@@ -844,14 +848,14 @@ _TOOL_USE_STREAM = (
 def test_generate_with_tools_round_trip_returns_tool_calls(tmp_path: Any) -> None:
     """End-to-end CSA-2: fake claude binary emits tool_use stream-json →
     provider parses → ChatMessageAssistant.tool_calls populated."""
+    from geode_product.petri_audit import claude_cli_provider as p
     from inspect_ai.model._model_output import ModelOutput
-    from plugins.petri_audit import claude_cli_provider as p
 
     fake = tmp_path / "fake-claude"
     fake.write_text(_TOOL_USE_STREAM)
     fake.chmod(0o755)
     with patch(
-        "plugins.petri_audit.claude_cli_provider._resolve_claude_binary",
+        "geode_product.petri_audit.claude_cli_provider.resolve_claude_binary",
         return_value=str(fake),
     ):
         api = p.ClaudeCliAPI(model_name="claude-opus-4-7")
@@ -884,7 +888,7 @@ def test_generate_with_tools_round_trip_returns_tool_calls(tmp_path: Any) -> Non
 def test_generate_with_tools_release_bridge_called_even_on_failure(tmp_path: Any) -> None:
     """When the subprocess exits non-zero, release_bridge must still
     run — otherwise parallel inspect_ai samples accumulate tempdirs."""
-    from plugins.petri_audit import claude_cli_provider as p
+    from geode_product.petri_audit import claude_cli_provider as p
 
     fake = tmp_path / "fake-claude"
     fake.write_text("#!/bin/sh\nexit 7\n")
@@ -898,15 +902,15 @@ def test_generate_with_tools_release_bridge_called_even_on_failure(tmp_path: Any
         if real_release is not None:
             real_release(inv)
 
-    # The provider's lazy import does ``from plugins.petri_audit.mcp_bridge
+    # The provider's lazy import does ``from geode_product.petri_audit.mcp_bridge
     # import release_bridge`` — so the binding lives on the package
     # __init__.py, not on lifecycle.py. Patch the package-level symbol.
-    import plugins.petri_audit.mcp_bridge as mcp_bridge_pkg
+    import geode_product.petri_audit.mcp_bridge as mcp_bridge_pkg
 
     real_release = mcp_bridge_pkg.release_bridge
     with (
         patch(
-            "plugins.petri_audit.claude_cli_provider._resolve_claude_binary",
+            "geode_product.petri_audit.claude_cli_provider.resolve_claude_binary",
             return_value=str(fake),
         ),
         patch.object(mcp_bridge_pkg, "release_bridge", _track_release),

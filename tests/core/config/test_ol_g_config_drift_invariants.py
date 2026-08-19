@@ -9,7 +9,7 @@ PR-1 G-B/G-D/G-E (2026-05-21) closed three config drift surfaces:
   ``judge_model`` fields are deprecated no-ops; the real SoT is the
   ``[self_improving_loop.petri.<role>].model`` section consulted by
   ``core.self_improving.train._petri_role_model`` and
-  ``plugins.petri_audit.registry.get_binding``.
+  ``geode_product.petri_audit.registry.get_binding``.
 - **G-D**: ``core/hooks/llm_extract_learning.py`` 의 ``"glm-4.7-flash"``
   literal → ``settings.learning_extract_model`` config-overridable.
 - **G-E**: ``settings.model`` vs ``routing.toml`` anthropic default must
@@ -94,8 +94,8 @@ def test_g_b_autoresearch_resolves_role_model_through_helper() -> None:
     Single-SoT (2026-05-22) — the legacy ``TARGET_MODEL`` /
     ``JUDGE_MODEL`` constants were removed because they shadowed the
     petri-role config section (operator-facing SoT). The remaining
-    surface is ``_petri_role_model(role)`` which consults the manifest
-    + ``[self_improving_loop.petri.<role>]`` overrides.
+    surface is ``_petri_role_model(role)`` which reads only the explicit
+    autoresearch binding; product composition owns manifest defaults.
     """
     from core.self_improving import train
 

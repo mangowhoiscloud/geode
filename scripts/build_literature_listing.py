@@ -37,7 +37,7 @@ log = logging.getLogger(__name__)
 
 LITERATURE_DIR = "docs/self-improving/petri-bundle/literature"
 MUTATIONS_LOG = "core/self_improving/state/mutations.jsonl"
-SEED_GLOB = "plugins/petri_audit/seeds_gen*/**/*.md"
+SEED_GLOB = "geode_product/petri_audit/seeds_gen*/**/*.md"
 LISTING_FILENAME = "listing.json"
 
 
@@ -142,7 +142,7 @@ def _scan_seed_frontmatter_citations(repo_root: Path) -> dict[str, list[dict[str
 
     The CSP-3 generator.md spec asks the LLM to populate ``references:``
     in the frontmatter of each seed. We grep for that field across
-    ``plugins/petri_audit/seeds_gen*/``. Best-effort — the frontmatter
+    ``geode_product/petri_audit/seeds_gen*/``. Best-effort — the frontmatter
     is YAML but we don't pull yaml in here; a simple line-based scan
     of ``references:`` + ``arxiv_id`` strings is enough.
 

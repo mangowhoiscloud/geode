@@ -134,7 +134,7 @@ def test_replaced_fire_hook_sites_delegate_to_dispatch() -> None:
     from core.agent.tool_executor.processor import ToolCallProcessor
     from core.mcp import manager as mcp_manager
     from core.orchestration.isolated_execution import IsolatedRunner
-    from plugins.seed_generation import orchestrator as seed_orchestrator
+    from geode_product.seed_generation import orchestrator as seed_orchestrator
 
     delegating_sources = [
         inspect.getsource(ApprovalWorkflow._fire_hook),
@@ -267,7 +267,7 @@ def test_fixed_seed_orchestrator_payload_does_not_warn(
 ) -> None:
     """The repaired seed-generation ``_emit_hook`` payload satisfies the
     SUBAGENT_STARTED/COMPLETED contracts."""
-    from plugins.seed_generation.orchestrator import Pipeline
+    from geode_product.seed_generation.orchestrator import Pipeline
 
     hooks = HookSystem()
     seen: list[tuple[HookEvent, dict[str, Any]]] = []

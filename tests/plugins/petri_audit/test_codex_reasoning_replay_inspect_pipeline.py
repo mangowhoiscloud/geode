@@ -104,7 +104,7 @@ def test_petri_openai_codex_api_calls_openai_responses_inputs() -> None:
     silently drop reasoning replay. This grep guard makes that change
     fail loudly in CI.
     """
-    from plugins.petri_audit import codex_provider
+    from geode_product.petri_audit import codex_provider
 
     src = inspect.getsource(codex_provider.register)
     # Match the actual call shape — not just the symbol's occurrence

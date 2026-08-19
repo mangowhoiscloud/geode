@@ -1061,7 +1061,7 @@ def test_real_campaign_purges_inspect_cache(
 ) -> None:
     """A real (non-dry-run) campaign calls purge_inspect_cache at start so the K
     gen-0 measures + cycle audits are independent re-measures, not cache hits."""
-    import plugins.petri_audit.runner as petri_runner
+    from core.audit import inspect_cache
 
     calls = {"n": 0}
 
@@ -1069,7 +1069,7 @@ def test_real_campaign_purges_inspect_cache(
         calls["n"] += 1
         return True
 
-    monkeypatch.setattr(petri_runner, "purge_inspect_cache", fake_purge)
+    monkeypatch.setattr(inspect_cache, "purge_inspect_cache", fake_purge)
     (campaign_state["policies_dir"] / "hyperparam.json").write_text("{}", encoding="utf-8")
 
     def factory(*, arm: str, env: dict[str, str], dry_run: bool) -> _RecordingRunner:
@@ -1096,7 +1096,7 @@ def test_dry_run_campaign_does_not_purge_inspect_cache(
     campaign_state: dict[str, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """--dry-run never touches the trajectory cache (synthetic audits)."""
-    import plugins.petri_audit.runner as petri_runner
+    from core.audit import inspect_cache
 
     calls = {"n": 0}
 
@@ -1104,7 +1104,7 @@ def test_dry_run_campaign_does_not_purge_inspect_cache(
         calls["n"] += 1
         return True
 
-    monkeypatch.setattr(petri_runner, "purge_inspect_cache", fake_purge)
+    monkeypatch.setattr(inspect_cache, "purge_inspect_cache", fake_purge)
     (campaign_state["policies_dir"] / "hyperparam.json").write_text("{}", encoding="utf-8")
 
     def factory(*, arm: str, env: dict[str, str], dry_run: bool) -> _RecordingRunner:
@@ -1974,9 +1974,9 @@ def test_run_campaign_async_first_routes_path_independent_to_async(
     PR-CAMPAIGN-CONCURRENT-CONTROL-ARMS (2026-06-04): never+random now go through
     ONE ``run_control_arms_async`` gather (a SINGLE call carrying BOTH control
     arms), NOT one sequential per-arm call."""
-    import plugins.petri_audit.runner as petri_runner
+    from core.audit import inspect_cache
 
-    monkeypatch.setattr(petri_runner, "purge_inspect_cache", lambda: True)
+    monkeypatch.setattr(inspect_cache, "purge_inspect_cache", lambda: True)
     (campaign_state["policies_dir"] / "hyperparam.json").write_text("{}", encoding="utf-8")
 
     band = rc.NoiseBand(
@@ -2031,9 +2031,9 @@ def test_run_campaign_loads_persisted_checkpoint_for_resume(
     """A REAL campaign REHYDRATES a pre-existing checkpoint file (Codex MCP HIGH):
     ``run_campaign`` must ``.load()`` the marker so a resumed process skips the
     already-completed cycles instead of re-running (re-paying for) every one."""
-    import plugins.petri_audit.runner as petri_runner
+    from core.audit import inspect_cache
 
-    monkeypatch.setattr(petri_runner, "purge_inspect_cache", lambda: True)
+    monkeypatch.setattr(inspect_cache, "purge_inspect_cache", lambda: True)
     (campaign_state["policies_dir"] / "hyperparam.json").write_text("{}", encoding="utf-8")
     # Point the campaign's checkpoint dir at tmp + pre-seed a marker showing some
     # never+random cycles already complete (the run_id matches run_campaign's).
@@ -2099,9 +2099,9 @@ def test_run_campaign_async_first_false_keeps_every_arm_on_sync(
     """async_first=False keeps every arm — incl. never/random — on the legacy
     sequential run_arm and never touches the async harness (the unit-test + smoke
     path is preserved)."""
-    import plugins.petri_audit.runner as petri_runner
+    from core.audit import inspect_cache
 
-    monkeypatch.setattr(petri_runner, "purge_inspect_cache", lambda: True)
+    monkeypatch.setattr(inspect_cache, "purge_inspect_cache", lambda: True)
     (campaign_state["policies_dir"] / "hyperparam.json").write_text("{}", encoding="utf-8")
 
     async def boom_async(**_kw: Any) -> Any:

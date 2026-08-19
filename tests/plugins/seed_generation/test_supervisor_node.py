@@ -7,10 +7,10 @@ import json
 from typing import Any
 
 import pytest
-from plugins.seed_generation.agents.base import SeedAgentResult
-from plugins.seed_generation.agents.supervisor import Supervisor
-from plugins.seed_generation.baseline_reader import format_supervisor_block
-from plugins.seed_generation.orchestrator import (
+from geode_product.seed_generation.agents.base import SeedAgentResult
+from geode_product.seed_generation.agents.supervisor import Supervisor
+from geode_product.seed_generation.baseline_reader import format_supervisor_block
+from geode_product.seed_generation.orchestrator import (
     Pipeline,
     PipelineRegistry,
     PipelineState,

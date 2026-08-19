@@ -1,4 +1,4 @@
-"""Tests for ``plugins.seed_generation.agents.critic``.
+"""Tests for ``geode_product.seed_generation.agents.critic``.
 
 P-checklist application (cycle-skill SKILL.md):
 
@@ -17,8 +17,8 @@ import json
 from typing import Any
 
 from core.agent.sub_agent import SubResult, SubTask
-from plugins.seed_generation.agents.critic import Critic
-from plugins.seed_generation.orchestrator import PipelineState
+from geode_product.seed_generation.agents.critic import Critic
+from geode_product.seed_generation.orchestrator import PipelineState
 
 
 def _good_critique(candidate_id: str = "c-1") -> dict[str, Any]:
@@ -363,7 +363,7 @@ def test_critic_reports_zero_tokens_for_subscription_calls() -> None:
 
 
 def test_critic_injects_baseline_evidence_into_description(monkeypatch: Any) -> None:
-    from plugins.seed_generation.baseline_reader import BaselineSnapshot
+    from geode_product.seed_generation.baseline_reader import BaselineSnapshot
 
     state = _make_state(n=2)
     _seed_candidates(state, 2)
@@ -374,7 +374,7 @@ def test_critic_injects_baseline_evidence_into_description(monkeypatch: Any) -> 
     # G2.fix (2026-05-20) — evidence pulled from latest .eval on demand;
     # mock the block renderer so this test stays agent-focused.
     monkeypatch.setattr(
-        "plugins.seed_generation.baseline_reader.format_evidence_block",
+        "geode_product.seed_generation.baseline_reader.format_evidence_block",
         lambda _snap, _dim, **_kw: (
             "Recent audit evidence (latest .eval, on demand)\n  1. seed-z — ignored tool failure"
         ),
@@ -402,7 +402,7 @@ def test_critic_no_evidence_block_without_snapshot() -> None:
 
 
 def test_critic_injects_priors_block_when_snapshot_present() -> None:
-    from plugins.seed_generation.baseline_reader import MetaReviewSnapshot
+    from geode_product.seed_generation.baseline_reader import MetaReviewSnapshot
 
     state = _make_state(n=1)
     _seed_candidates(state, 1)

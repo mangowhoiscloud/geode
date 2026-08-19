@@ -61,7 +61,7 @@ def test_autoresearch_defaults_match_train_module() -> None:
     assert a.judge_model is None  # G1a inherit
     assert a.source == "claude-cli"  # PR-SIL-5THEME C6 — subscription-first
     assert a.seed_limit == 10
-    assert a.seed_select == "plugins/petri_audit/seeds"
+    assert a.seed_select == "bundled"
     assert a.dim_set == "subset"
     assert a.max_turns == 10
     # PR-MINIMAL-2: per-component fallback_to_payg removed
@@ -722,10 +722,10 @@ def test_openai_source_rejects_non_openai_lane() -> None:
 
 def test_openai_source_reaches_petri_target_binding(tmp_path: Path, monkeypatch) -> None:
     """Cross-module parity: the single openai_source knob is what
-    ``plugins.petri_audit.user_overrides.read_role_override`` surfaces for the
+    ``geode_product.petri_audit.user_overrides.read_role_override`` surfaces for the
     petri ``target`` role — proving the propagation is not a half-disconnected
     config field but actually steers the audit target's credential lane."""
-    from plugins.petri_audit.user_overrides import read_role_override
+    from geode_product.petri_audit.user_overrides import read_role_override
 
     path = tmp_path / "config.toml"
     _write_toml(

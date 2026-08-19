@@ -157,17 +157,9 @@ class SubagentLoader:
     Each markdown file should have YAML frontmatter with agent metadata
     and a markdown body that becomes the system_prompt.
 
-    Two search roots, scanned in this order:
-
-    1. ``.claude/agents/*.md`` — operator-local overrides + ad-hoc agents.
-    2. ``plugins/*/agents/*.md`` — plugin-shipped agent definitions
-       (e.g. ``plugins/seed_generation/agents/critic.md``).
-
-    When the same filename appears in both, the ``.claude/agents/`` copy
-    wins (operator override takes precedence over plugin defaults).
-    The dedup key is the file basename, so a plugin agent named
-    ``critic.md`` can be overridden by dropping a same-named file into
-    ``.claude/agents/``.
+    The default search root is ``.claude/agents/*.md``. Outer composition
+    may pass additional directories explicitly; earlier directories win on
+    duplicate filenames.
 
     Example file format:
         ---
@@ -196,7 +188,7 @@ class SubagentLoader:
 
     @staticmethod
     def _default_agent_dirs() -> list[Path]:
-        """Return ``[.claude/agents, plugins/*/agents]`` relative to cwd.
+        """Return the operator-owned agent directory relative to cwd.
 
         Operator overrides (``.claude/agents/``) come first so they win
         the filename-dedup race against plugin-shipped defaults. Callers
@@ -204,13 +196,7 @@ class SubagentLoader:
         from $HOME) should construct the list via :func:`core.paths.get_project_root`
         and pass ``agents_dirs=``.
         """
-        dirs: list[Path] = [Path(".claude/agents")]
-        plugins_root = Path("plugins")
-        if plugins_root.exists():
-            for plugin_agents in sorted(plugins_root.glob("*/agents")):
-                if plugin_agents.is_dir():
-                    dirs.append(plugin_agents)
-        return dirs
+        return [Path(".claude/agents")]
 
     @property
     def agents_dir(self) -> Path:

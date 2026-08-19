@@ -218,7 +218,7 @@ def test_build_runner_context_with_baseline_and_priors(
 ) -> None:
     """All 3 lookups feed the RunnerContext + target_dim auto-picked."""
     from core.self_improving import train as auto_train
-    from plugins.seed_generation.baseline_reader import BaselineSnapshot, MetaReviewSnapshot
+    from core.self_improving.baseline_reader import BaselineSnapshot, MetaReviewSnapshot
 
     sot_path = tmp_path / "wrapper-sections.json"
     sot_path.write_text(json.dumps({"role": "r"}), encoding="utf-8")
@@ -227,15 +227,15 @@ def test_build_runner_context_with_baseline_and_priors(
     fake_baseline = BaselineSnapshot(dim_means={"broken_tool_use": 8.0})
     fake_priors = MetaReviewSnapshot(underrepresented_dims=["broken_tool_use"])
     monkeypatch.setattr(
-        "plugins.seed_generation.baseline_reader.load_baseline",
+        "core.self_improving.baseline_reader.load_baseline",
         lambda: fake_baseline,
     )
     monkeypatch.setattr(
-        "plugins.seed_generation.baseline_reader.load_latest_meta_review",
+        "core.self_improving.baseline_reader.load_latest_meta_review",
         lambda: fake_priors,
     )
     monkeypatch.setattr(
-        "plugins.seed_generation.baseline_reader.pick_regression_target_dim",
+        "core.self_improving.baseline_reader.pick_regression_target_dim",
         lambda _snap, **_kw: "broken_tool_use",
     )
     ctx = build_runner_context()
@@ -254,11 +254,11 @@ def test_build_runner_context_bootstrap_no_baseline(
     sot_path = tmp_path / "wrapper-sections.json"  # not created
     monkeypatch.setattr(auto_train, "WRAPPER_SECTIONS_SOT_PATH", sot_path)
     monkeypatch.setattr(
-        "plugins.seed_generation.baseline_reader.load_baseline",
+        "core.self_improving.baseline_reader.load_baseline",
         lambda: None,
     )
     monkeypatch.setattr(
-        "plugins.seed_generation.baseline_reader.load_latest_meta_review",
+        "core.self_improving.baseline_reader.load_latest_meta_review",
         lambda: None,
     )
     ctx = build_runner_context()
@@ -282,11 +282,11 @@ def test_runner_run_once_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     sot_path.write_text(json.dumps({"role": "old", "tools": "old"}), encoding="utf-8")
     monkeypatch.setattr(auto_train, "WRAPPER_SECTIONS_SOT_PATH", sot_path)
     monkeypatch.setattr(
-        "plugins.seed_generation.baseline_reader.load_baseline",
+        "core.self_improving.baseline_reader.load_baseline",
         lambda: None,
     )
     monkeypatch.setattr(
-        "plugins.seed_generation.baseline_reader.load_latest_meta_review",
+        "core.self_improving.baseline_reader.load_latest_meta_review",
         lambda: None,
     )
 
@@ -349,11 +349,11 @@ def test_runner_propagates_llm_validation_error(
     sot_path = tmp_path / "wrapper-sections.json"
     monkeypatch.setattr(auto_train, "WRAPPER_SECTIONS_SOT_PATH", sot_path)
     monkeypatch.setattr(
-        "plugins.seed_generation.baseline_reader.load_baseline",
+        "geode_product.seed_generation.baseline_reader.load_baseline",
         lambda: None,
     )
     monkeypatch.setattr(
-        "plugins.seed_generation.baseline_reader.load_latest_meta_review",
+        "geode_product.seed_generation.baseline_reader.load_latest_meta_review",
         lambda: None,
     )
 
@@ -374,7 +374,7 @@ def test_runner_uses_baseline_evidence_in_user_prompt(
 ) -> None:
     """When baseline has evidence for target_dim, the user prompt embeds it."""
     from core.self_improving import train as auto_train
-    from plugins.seed_generation.baseline_reader import BaselineSnapshot
+    from core.self_improving.baseline_reader import BaselineSnapshot
 
     sot_path = tmp_path / "wrapper-sections.json"
     monkeypatch.setattr(auto_train, "WRAPPER_SECTIONS_SOT_PATH", sot_path)
@@ -383,17 +383,17 @@ def test_runner_uses_baseline_evidence_in_user_prompt(
         dim_stderr={"broken_tool_use": 0.3},
     )
     monkeypatch.setattr(
-        "plugins.seed_generation.baseline_reader.load_baseline",
+        "core.self_improving.baseline_reader.load_baseline",
         lambda: fake_baseline,
     )
     monkeypatch.setattr(
-        "plugins.seed_generation.baseline_reader.load_latest_meta_review",
+        "core.self_improving.baseline_reader.load_latest_meta_review",
         lambda: None,
     )
     # G2.fix (2026-05-20) — evidence comes from latest .eval on demand,
     # not from a cached field on the snapshot.
     monkeypatch.setattr(
-        "plugins.seed_generation.baseline_reader.format_evidence_block",
+        "core.self_improving.baseline_reader.format_evidence_block",
         lambda _snap, _dim, **_kw: (
             "Recent audit evidence (latest .eval, on demand)\n"
             "  1. seed-x — tool result was hallucinated under stress\n"
@@ -545,11 +545,11 @@ def test_run_once_uses_program_md_in_system_prompt(
     sot_path.write_text(json.dumps({"role": "old"}), encoding="utf-8")
     monkeypatch.setattr(auto_train, "WRAPPER_SECTIONS_SOT_PATH", sot_path)
     monkeypatch.setattr(
-        "plugins.seed_generation.baseline_reader.load_baseline",
+        "core.self_improving.baseline_reader.load_baseline",
         lambda: None,
     )
     monkeypatch.setattr(
-        "plugins.seed_generation.baseline_reader.load_latest_meta_review",
+        "core.self_improving.baseline_reader.load_latest_meta_review",
         lambda: None,
     )
     monkeypatch.setattr(
@@ -595,11 +595,11 @@ def test_runner_rolls_back_sot_when_audit_log_fails(
     sot_path.write_text(json.dumps(original), encoding="utf-8")
     monkeypatch.setattr(auto_train, "WRAPPER_SECTIONS_SOT_PATH", sot_path)
     monkeypatch.setattr(
-        "plugins.seed_generation.baseline_reader.load_baseline",
+        "core.self_improving.baseline_reader.load_baseline",
         lambda: None,
     )
     monkeypatch.setattr(
-        "plugins.seed_generation.baseline_reader.load_latest_meta_review",
+        "core.self_improving.baseline_reader.load_latest_meta_review",
         lambda: None,
     )
 
@@ -639,11 +639,11 @@ def test_runner_success_path_unchanged_by_rollback_logic(
     sot_path.write_text(json.dumps({"role": "old"}), encoding="utf-8")
     monkeypatch.setattr(auto_train, "WRAPPER_SECTIONS_SOT_PATH", sot_path)
     monkeypatch.setattr(
-        "plugins.seed_generation.baseline_reader.load_baseline",
+        "core.self_improving.baseline_reader.load_baseline",
         lambda: None,
     )
     monkeypatch.setattr(
-        "plugins.seed_generation.baseline_reader.load_latest_meta_review",
+        "core.self_improving.baseline_reader.load_latest_meta_review",
         lambda: None,
     )
     monkeypatch.setattr(runner, "GLOBAL_AUTORESEARCH_HANDOFF_DIR", tmp_path / "sil_home")

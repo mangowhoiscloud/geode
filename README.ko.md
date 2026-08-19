@@ -219,22 +219,6 @@ geode                                                # 인터랙티브 채팅
 
 성공입니다. 에러가 나면 `geode doctor` 로 진단하거나 [트러블슈팅](#트러블슈팅) 으로.
 
-### 선택 — Google Workspace 연결
-
-GEODE v1.0.0은 직접 소유한 Google Desktop OAuth 클라이언트로 Gmail,
-Calendar, Drive, Docs, Sheets, Tasks, Contacts를 사용할 수 있습니다.
-`geode`를 시작한 뒤 권장 슬래시 명령을 실행하세요.
-
-```text
-> /login google
-```
-
-화면에서 내려받은 client JSON과 최소 권한 서비스 번들을 고릅니다. Google
-Cloud 콘솔 설정, External Testing의 7일 만료, 멀티 계정 명령, 저장 스키마,
-매 호출 동의 경계는 [Google Workspace 연결 가이드](https://mangowhoiscloud.github.io/geode/docs/run/google-workspace)에
-정리돼 있습니다. v1.0.0의 `workspace-files`는 GEODE로 만든 파일을 지원하며,
-기존 파일을 고르는 Google Picker는 아직 포함하지 않습니다.
-
 ### 그 외 유용한 명령
 
 ```bash
@@ -245,6 +229,9 @@ geode update --latest # uv 패키지의 minor/major 업데이트를 명시적으
 geode uninstall       # 런타임 데이터와 설치된 CLI 제거
 geode setup --reset   # ~/.geode/.env 지우고 wizard 재실행
 ```
+
+선택 통합: `/login google`로 Gmail, Calendar, Drive, Docs, Sheets, Tasks,
+Contacts를 연결할 수 있습니다. [Google Workspace 연결 가이드](https://mangowhoiscloud.github.io/geode/docs/run/google-workspace)를 참고하세요.
 
 ---
 
@@ -452,7 +439,7 @@ geode update --latest # uv 도구: minor/major 업데이트를 명시적으로 �
 |------|------|
 | **`while(tool_use)` 루프** | 모든 자율 행동의 단일 원시 동작. 서브에이전트, 플랜, 배치 모두 같은 루프의 인스턴스 |
 | **실험적 scaffold 최적화 loop** | scaffold 후보를 변이시키고 적대적 안전성 루브릭으로 audit한 뒤, 실제 이득이 있을 때만 승격을 허용합니다. 공개 기록은 현재 지속적 개선보다 게이트 규율을 입증합니다. [closed loop](https://mangowhoiscloud.github.io/geode/docs/capabilities/autoresearch) 참고 |
-| **Agentic tools + MCP 카탈로그** | 웹 검색, 파일 작업, 스케줄링, 메모리, Slack/Discord, [사용자 소유 Google OAuth](https://mangowhoiscloud.github.io/geode/docs/run/google-workspace)를 통한 Gmail·Calendar·Drive·Docs·Sheets·Tasks·Contacts, 그리고 Anthropic 발행 MCP 레지스트리 (`~/.geode/mcp/registry-cache.json` 에 캐시). 첫 사용 시 자동 설치 |
+| **Agentic tools + MCP 카탈로그** | 웹 검색, 파일 작업, 스케줄링, 메모리, Slack/Discord, Anthropic 발행 MCP 레지스트리, 선택형 [Google Workspace](https://mangowhoiscloud.github.io/geode/docs/run/google-workspace) 통합. MCP 메타데이터는 `~/.geode/mcp/registry-cache.json`에 캐시 |
 | **3-프로바이더 페일오버** | Anthropic + OpenAI + ZhipuAI. ChatGPT / Claude 구독 OAuth 자동 감지; 사용량 과금 API 키도 사용 가능; 페일오버는 동일 프로바이더 내에서만 (예상치 못한 vendor 횡단 과금 없음, v0.53.0 거버넌스) |
 | **5-tier 메모리** | SOUL (0) → User Profile (0.5) → Organization (1) → Project (2) → Session (3). 영속화, 데몬 재시작 후에도 유지 |
 | **Plan-mode + audit trail** | `create_plan` + `approve_plan` + `list_plans` 로 다단계 작업 관리. 디스크 영구화 (`.geode/plans.json`), 재시작 후에도 유지 |
@@ -546,7 +533,7 @@ frontier 하네스 (Claude Code, Codex CLI, OpenClaw) 옆에서 GEODE 가 어디
 | **교체 가능한 파이프라인 DAG** | ❌ | ❌ | ⚠️ flows (channel-setup / doctor / provider — DAG 추상화 아님) | ⚠️ 외부 패키지 책임. GEODE core 는 더 이상 파이프라인 포트를 제공하지 않음 |
 | 트레이스 / 리플레이 / Run Log | ✅ `tengu_*` 텔레메트리 + `/insights` HTML | ⚠️ `/status` + `/debug-config` 만 | ✅ ACP 세션 lineage + Task Registry | ✅ 자체 RunLog + Petri eval 통합 |
 | 안전성 게이트 기반 scaffold 최적화 | ❌ | ❌ | ❌ | ⚠️ 실험적 outer loop: scaffold 변이 + 적대적 안전성 audit + (1+1) promote/revert 계약, 공개 core 승격 0건 |
-| 크로스 프로바이더 리뷰 | ❌ | ❌ | ❌ | ⚠️ self-improving 루프의 멀티-voter 크로스 프로바이더 랭킹 패널 (≥2 providers, `plugins/seed_generation/agents/ranker.py`); 일치도 캘리브레이션은 WIP |
+| 크로스 프로바이더 리뷰 | ❌ | ❌ | ❌ | ⚠️ self-improving 루프의 멀티-voter 크로스 프로바이더 랭킹 패널 (≥2 providers, `geode_product/seed_generation/agents/ranker.py`); 일치도 캘리브레이션은 WIP |
 
 </details>
 

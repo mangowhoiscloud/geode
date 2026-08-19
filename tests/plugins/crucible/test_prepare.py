@@ -3,16 +3,16 @@ import json
 from pathlib import Path
 
 import pytest
-from plugins.crucible.cli import main as crucible_main
-from plugins.crucible.contract import ContractError, TaskUnit, task_pack_sha256
-from plugins.crucible.prepare import prepare_campaign
-from plugins.crucible.runtime_identity import (
+from geode_product.crucible.cli import main as crucible_main
+from geode_product.crucible.contract import ContractError, TaskUnit, task_pack_sha256
+from geode_product.crucible.prepare import prepare_campaign
+from geode_product.crucible.runtime_identity import (
     RUNTIME_OUTER_FINALIZATION_GRACE_SECONDS,
     canonical_runtime_hash,
     runtime_design_from_parts,
     runtime_regime_from_parts,
 )
-from plugins.crucible.supervisor import SupervisorConfig
+from geode_product.crucible.supervisor import SupervisorConfig
 
 from tests.plugins.crucible.test_supervisor import _config, _git
 
@@ -469,7 +469,7 @@ def test_prepare_curates_pack_when_spec_carries_curation(
         pack_output.write_text(reference_pack.read_text(encoding="utf-8"), encoding="utf-8")
         return {"pack_sha256": "unused"}
 
-    monkeypatch.setattr("plugins.crucible.prepare.curate_tau2_pack", fake_curate)
+    monkeypatch.setattr("geode_product.crucible.prepare.curate_tau2_pack", fake_curate)
     curation = {
         "tasks_file": str(tmp_path / "tasks.json"),
         "split_file": str(tmp_path / "split.json"),
@@ -503,7 +503,7 @@ def test_prepare_stamps_provenance_outside_the_identity_hash(tmp_path: Path) -> 
     saved = json.loads(Path(report["config_path"]).read_text(encoding="utf-8"))
     provenance = saved["prepared_by"]
     assert provenance["schema"] == "crucible.prepare-provenance.v1"
-    assert provenance["entry"] == "plugins.crucible.prepare"
+    assert provenance["entry"] == "geode_product.crucible.prepare"
     assert provenance["spec_sha256"] == hashlib.sha256(spec_path.read_bytes()).hexdigest()
     assert report["spec_sha256"] == provenance["spec_sha256"]
 
@@ -551,5 +551,5 @@ def test_prepare_replaces_inherited_provenance(tmp_path: Path) -> None:
 
     report = prepare_campaign(spec_path)
     saved = json.loads(Path(report["config_path"]).read_text(encoding="utf-8"))
-    assert saved["prepared_by"]["entry"] == "plugins.crucible.prepare"
+    assert saved["prepared_by"]["entry"] == "geode_product.crucible.prepare"
     assert saved["prepared_by"]["schema"] == "crucible.prepare-provenance.v1"

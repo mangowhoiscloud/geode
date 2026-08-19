@@ -1,4 +1,4 @@
-"""Unit tests for plugins.petri_audit.registry (P1-E)."""
+"""Unit tests for geode_product.petri_audit.registry (P1-E)."""
 
 from __future__ import annotations
 
@@ -6,9 +6,9 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-from plugins.petri_audit import credential_source as cs
-from plugins.petri_audit.manifest import clear_manifest_cache
-from plugins.petri_audit.registry import (
+from geode_product.petri_audit import credential_source as cs
+from geode_product.petri_audit.manifest import clear_manifest_cache
+from geode_product.petri_audit.registry import (
     FamilyInferenceError,
     PetriBinding,
     get_binding,
@@ -51,7 +51,7 @@ def _stub_settings(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture(autouse=True)
 def _stub_oauth(monkeypatch: pytest.MonkeyPatch) -> None:
-    from plugins.petri_audit.adapters import claude_cli_backend, openai_codex_oauth
+    from geode_product.petri_audit.adapters import claude_cli_backend, openai_codex_oauth
 
     monkeypatch.setattr(claude_cli_backend, "is_available", lambda: False)
     monkeypatch.setattr(openai_codex_oauth, "is_available", lambda: False)
@@ -103,7 +103,7 @@ def test_get_binding_auditor_default(monkeypatch: pytest.MonkeyPatch) -> None:
     assert binding.model == "claude-opus-4-7"
     assert binding.source == "api_key"
     assert binding.provider == "anthropic"
-    assert binding.adapter_module == "plugins.petri_audit.adapters.http_anthropic"
+    assert binding.adapter_module == "geode_product.petri_audit.adapters.http_anthropic"
     assert binding.inspect_prefix == "anthropic"
     assert binding.inspect_id == "anthropic/claude-opus-4-7"
 
@@ -124,7 +124,7 @@ def test_get_binding_target_uses_geode_prefix(monkeypatch: pytest.MonkeyPatch) -
     assert binding.model == "claude-haiku-4-5"
     # Family adapter still recorded — shows underlying source in picker.
     assert binding.provider == "anthropic"
-    assert binding.adapter_module == "plugins.petri_audit.adapters.http_anthropic"
+    assert binding.adapter_module == "geode_product.petri_audit.adapters.http_anthropic"
     # But the inspect id uses 'geode' prefix unconditionally.
     assert binding.inspect_prefix == "geode"
     assert binding.inspect_id == "geode/claude-haiku-4-5"
@@ -143,7 +143,7 @@ def test_get_binding_model_override(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_get_binding_source_override(monkeypatch: pytest.MonkeyPatch) -> None:
     """Explicit source override survives even when env var is set."""
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
-    from plugins.petri_audit.adapters import claude_cli_backend
+    from geode_product.petri_audit.adapters import claude_cli_backend
 
     monkeypatch.setattr(claude_cli_backend, "is_available", lambda: True)
     binding = get_binding("auditor", source="claude-cli")
@@ -182,7 +182,7 @@ def test_get_binding_no_credential_raises() -> None:
 def test_get_binding_oauth_priority(monkeypatch: pytest.MonkeyPatch) -> None:
     """When both claude-cli and api_key are available, manifest order wins."""
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
-    from plugins.petri_audit.adapters import claude_cli_backend
+    from geode_product.petri_audit.adapters import claude_cli_backend
 
     monkeypatch.setattr(claude_cli_backend, "is_available", lambda: True)
     binding = get_binding("auditor")
@@ -198,7 +198,7 @@ def test_get_binding_target_with_openai_model(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setenv("OPENAI_API_KEY", "sk-proj-test")
     binding = get_binding("target", model="gpt-5.4-mini")
     assert binding.provider == "openai"
-    assert binding.adapter_module == "plugins.petri_audit.adapters.http_openai"
+    assert binding.adapter_module == "geode_product.petri_audit.adapters.http_openai"
     assert binding.inspect_prefix == "geode"
     assert binding.inspect_id == "geode/gpt-5.4-mini"
 

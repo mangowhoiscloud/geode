@@ -25,7 +25,7 @@ pytest.importorskip("mcp", reason="audit extra required for bridge_server tests"
 
 
 def test_read_tool_specs_round_trips(tmp_path: Path) -> None:
-    from plugins.petri_audit.mcp_bridge.bridge_server import _read_tool_specs
+    from geode_product.petri_audit.mcp_bridge.bridge_server import _read_tool_specs
 
     specs = [{"name": "x", "description": "x", "inputSchema": {"type": "object"}}]
     p = tmp_path / "tools.json"
@@ -34,14 +34,14 @@ def test_read_tool_specs_round_trips(tmp_path: Path) -> None:
 
 
 def test_read_tool_specs_missing_file_raises(tmp_path: Path) -> None:
-    from plugins.petri_audit.mcp_bridge.bridge_server import _read_tool_specs
+    from geode_product.petri_audit.mcp_bridge.bridge_server import _read_tool_specs
 
     with pytest.raises(ValueError, match="does not exist"):
         _read_tool_specs(str(tmp_path / "nope.json"))
 
 
 def test_read_tool_specs_malformed_raises(tmp_path: Path) -> None:
-    from plugins.petri_audit.mcp_bridge.bridge_server import _read_tool_specs
+    from geode_product.petri_audit.mcp_bridge.bridge_server import _read_tool_specs
 
     p = tmp_path / "bad.json"
     p.write_text("{not json", encoding="utf-8")
@@ -126,7 +126,7 @@ def test_server_call_tool_returns_no_exec_sentinel() -> None:
 
 
 def _module_invocation() -> list[str]:
-    return [sys.executable, "-m", "plugins.petri_audit.mcp_bridge.bridge_server"]
+    return [sys.executable, "-m", "geode_product.petri_audit.mcp_bridge.bridge_server"]
 
 
 def test_main_missing_env_exits_2(tmp_path: Path) -> None:
@@ -178,7 +178,7 @@ def test_main_malformed_tools_json_exits_2(tmp_path: Path) -> None:
 def test_constants_match_documented_contract() -> None:
     """The lifecycle + provider layers reference these constants — keep
     them stable to avoid silent rename drift."""
-    from plugins.petri_audit.mcp_bridge.bridge_server import (
+    from geode_product.petri_audit.mcp_bridge.bridge_server import (
         BRIDGE_SERVER_NAME,
         BRIDGE_TOOLS_ENV,
     )

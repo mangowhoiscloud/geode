@@ -7,6 +7,7 @@ thin client local-handled commands and the daemon-side IPC handler.
 
 from __future__ import annotations
 
+import importlib
 from typing import Any
 
 from core.cli.commands import (
@@ -16,7 +17,6 @@ from core.cli.commands import (
     cmd_login,
     cmd_mcp,
     cmd_model,
-    cmd_petri,
     cmd_schedule,
     cmd_skills,
     cmd_trigger,
@@ -39,9 +39,21 @@ def _handle_command(
     *,
     skill_registry: Any = None,
     mcp_manager: Any = None,
+    command_registry: Any = None,
 ) -> tuple[bool, bool, Any]:
     """Handle a slash command. Returns (should_break, new_verbose, resume_state)."""
     action = resolve_action(cmd)
+
+    if action is None:
+        from core.cli.routing import lookup
+
+        spec = lookup(cmd, command_registry)
+        if spec is not None and spec.handler_path:
+            module_name, separator, attr_name = spec.handler_path.partition(":")
+            if not separator or not module_name or not attr_name:
+                raise ValueError(f"invalid slash handler path: {spec.handler_path!r}")
+            getattr(importlib.import_module(module_name), attr_name)(args)
+            return False, verbose, None
 
     if action == "quit":
         from core.ui.agentic_ui import render_session_cost_summary
@@ -51,7 +63,7 @@ def _handle_command(
         return True, verbose, None
 
     if action == "help":
-        show_help()
+        show_help(command_registry)
     elif action == "cost":
         from core.cli.commands import cmd_cost
 
@@ -73,8 +85,6 @@ def _handle_command(
         cmd_model(args)
     elif action == "login":
         cmd_login(args)
-    elif action == "petri":
-        cmd_petri(args)
     elif action == "schedule":
         cmd_schedule(args, scheduler_service=_scheduler_service_ctx.get(None))
     elif action == "trigger":
@@ -168,10 +178,6 @@ def _handle_command(
         from core.cli.commands import cmd_tasks
 
         cmd_tasks(args)
-    elif action == "audit":
-        from plugins.petri_audit.cli_audit import cmd_audit_slash
-
-        cmd_audit_slash(args)
     elif action == "self-improving":
         from core.cli.commands.self_improving import cmd_self_improving
 

@@ -8,6 +8,7 @@ const number = new Intl.NumberFormat("en-US");
 function ArchitectureBaselineTable({ locale }: { locale: "ko" | "en" }) {
   const productionFiles =
     architectureBaseline.packages.core.python_files +
+    architectureBaseline.packages.geode_product.python_files +
     architectureBaseline.packages.plugins.python_files;
   const rows =
     locale === "ko"
@@ -25,8 +26,8 @@ function ArchitectureBaselineTable({ locale }: { locale: "ko" | "en" }) {
           ["기본 LLM 어댑터", number.format(architectureBaseline.built_in_adapters.count)],
           ["모듈 수준 ContextVar", number.format(architectureBaseline.context_vars.count)],
           [
-            "core → plugins import 지점 / 파일",
-            `${architectureBaseline.core_to_plugins_imports.site_count} / ${architectureBaseline.core_to_plugins_imports.file_count}`,
+            "core → product import 지점 / 파일",
+            `${architectureBaseline.core_to_product_imports.site_count} / ${architectureBaseline.core_to_product_imports.file_count}`,
           ],
           [
             "import-linter 예외 edge",
@@ -47,8 +48,8 @@ function ArchitectureBaselineTable({ locale }: { locale: "ko" | "en" }) {
           ["Built-in LLM adapters", number.format(architectureBaseline.built_in_adapters.count)],
           ["Module-level ContextVars", number.format(architectureBaseline.context_vars.count)],
           [
-            "core → plugins import sites / files",
-            `${architectureBaseline.core_to_plugins_imports.site_count} / ${architectureBaseline.core_to_plugins_imports.file_count}`,
+            "core → product import sites / files",
+            `${architectureBaseline.core_to_product_imports.site_count} / ${architectureBaseline.core_to_product_imports.file_count}`,
           ],
           [
             "import-linter ignored edges",
@@ -113,7 +114,7 @@ export default function Page() {
               <tbody>
                 <tr><td><code>core/runtime.py</code></td><td><code>GeodeRuntime</code> 부트스트랩</td></tr>
                 <tr><td><code>core/paths.py</code></td><td>모든 디렉터리 경로의 단일 해석 지점</td></tr>
-                <tr><td><code>core/mcp_server.py</code></td><td><code>geode-mcp</code> 진입점 (stdio MCP 서버)</td></tr>
+                <tr><td><code>geode_product/mcp_server.py</code></td><td><code>geode-mcp</code> 진입점 (stdio MCP 서버)</td></tr>
                 <tr><td><code>core/async_runtime.py</code></td><td>async 이벤트 루프 헬퍼</td></tr>
               </tbody>
             </table>
@@ -176,17 +177,17 @@ export default function Page() {
               <tbody>
                 <tr><td>라우터</td><td><code>core/llm/router/</code></td><td><code>calls/_route.py</code>, <code>calls/_failover.py</code>, <code>calls/{`{text,json,streaming,tools}`}.py</code></td></tr>
                 <tr><td>어댑터</td><td><code>core/llm/adapters/</code></td><td><code>registry.py</code> (bootstrap_builtins), <code>dispatch.py</code></td></tr>
-                <tr><td>프로바이더</td><td><code>core/llm/providers/</code></td><td><code>anthropic.py</code>, <code>openai.py</code>, <code>codex.py</code>, <code>glm.py</code></td></tr>
+                <tr><td>프로바이더 유틸리티</td><td><code>core/llm/providers/</code></td><td><code>anthropic.py</code>, <code>codex.py</code>, <code>glm.py</code></td></tr>
                 <tr><td>지원 모듈</td><td><code>core/llm/</code></td><td><code>fallback.py</code>, <code>errors.py</code>, <code>token_tracker.py</code>, <code>model_pricing.toml</code>, <code>model_capabilities.py</code></td></tr>
               </tbody>
             </table>
 
-            <h2>번들 플러그인</h2>
+            <h2>번들 제품 기능</h2>
             <table>
-              <thead><tr><th>플러그인</th><th>루트</th><th>핵심 모듈</th></tr></thead>
+              <thead><tr><th>기능</th><th>루트</th><th>핵심 모듈</th></tr></thead>
               <tbody>
-                <tr><td>petri_audit</td><td><code>plugins/petri_audit/</code></td><td><code>cli_audit.py</code>, <code>runner.py</code>, <code>audit_mode.py</code>, <code>judge_dims/</code>, <code>seeds/</code></td></tr>
-                <tr><td>seed_generation</td><td><code>plugins/seed_generation/</code></td><td><code>cli.py</code>, <code>orchestrator.py</code>, <code>tournament.py</code>, <code>agents/</code></td></tr>
+                <tr><td>petri_audit</td><td><code>geode_product/petri_audit/</code></td><td><code>cli_audit.py</code>, <code>runner.py</code>, <code>audit_mode.py</code>, <code>judge_dims/</code>, <code>seeds/</code></td></tr>
+                <tr><td>seed_generation</td><td><code>geode_product/seed_generation/</code></td><td><code>cli.py</code>, <code>orchestrator.py</code>, <code>tournament.py</code>, <code>agents/</code></td></tr>
               </tbody>
             </table>
           </>
@@ -208,7 +209,7 @@ export default function Page() {
               <tbody>
                 <tr><td><code>core/runtime.py</code></td><td><code>GeodeRuntime</code> bootstrap</td></tr>
                 <tr><td><code>core/paths.py</code></td><td>Single resolution point for every directory path</td></tr>
-                <tr><td><code>core/mcp_server.py</code></td><td><code>geode-mcp</code> entry point (stdio MCP server)</td></tr>
+                <tr><td><code>geode_product/mcp_server.py</code></td><td><code>geode-mcp</code> entry point (stdio MCP server)</td></tr>
                 <tr><td><code>core/async_runtime.py</code></td><td>Async event-loop helpers</td></tr>
               </tbody>
             </table>
@@ -271,17 +272,17 @@ export default function Page() {
               <tbody>
                 <tr><td>Router</td><td><code>core/llm/router/</code></td><td><code>calls/_route.py</code>, <code>calls/_failover.py</code>, <code>calls/{`{text,json,streaming,tools}`}.py</code></td></tr>
                 <tr><td>Adapters</td><td><code>core/llm/adapters/</code></td><td><code>registry.py</code> (bootstrap_builtins), <code>dispatch.py</code></td></tr>
-                <tr><td>Providers</td><td><code>core/llm/providers/</code></td><td><code>anthropic.py</code>, <code>openai.py</code>, <code>codex.py</code>, <code>glm.py</code></td></tr>
+                <tr><td>Provider utilities</td><td><code>core/llm/providers/</code></td><td><code>anthropic.py</code>, <code>codex.py</code>, <code>glm.py</code></td></tr>
                 <tr><td>Support</td><td><code>core/llm/</code></td><td><code>fallback.py</code>, <code>errors.py</code>, <code>token_tracker.py</code>, <code>model_pricing.toml</code>, <code>model_capabilities.py</code></td></tr>
               </tbody>
             </table>
 
-            <h2>Bundled plugins</h2>
+            <h2>Bundled product features</h2>
             <table>
-              <thead><tr><th>Plugin</th><th>Root</th><th>Key modules</th></tr></thead>
+              <thead><tr><th>Feature</th><th>Root</th><th>Key modules</th></tr></thead>
               <tbody>
-                <tr><td>petri_audit</td><td><code>plugins/petri_audit/</code></td><td><code>cli_audit.py</code>, <code>runner.py</code>, <code>audit_mode.py</code>, <code>judge_dims/</code>, <code>seeds/</code></td></tr>
-                <tr><td>seed_generation</td><td><code>plugins/seed_generation/</code></td><td><code>cli.py</code>, <code>orchestrator.py</code>, <code>tournament.py</code>, <code>agents/</code></td></tr>
+                <tr><td>petri_audit</td><td><code>geode_product/petri_audit/</code></td><td><code>cli_audit.py</code>, <code>runner.py</code>, <code>audit_mode.py</code>, <code>judge_dims/</code>, <code>seeds/</code></td></tr>
+                <tr><td>seed_generation</td><td><code>geode_product/seed_generation/</code></td><td><code>cli.py</code>, <code>orchestrator.py</code>, <code>tournament.py</code>, <code>agents/</code></td></tr>
               </tbody>
             </table>
           </>

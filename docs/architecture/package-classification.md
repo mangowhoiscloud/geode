@@ -17,11 +17,12 @@ status, package ordering, and implementation permission.
 
 ## Context
 
-The base `geode-agent` distribution currently ships the `core` and `plugins`
-Python packages together. `plugins/` contains four first-party features, while
+The base `geode-agent` distribution ships the closed `core` kernel and the
+first-party `geode_product` shell together. The temporary `plugins` package
+contains only compatibility facades for the four moved bundled features;
 the self-improving control plane still lives under `core/self_improving`.
-Current code also imports `plugins` from `core`; the generated architecture
-baseline owns the live import-site count.
+The generated architecture baseline owns the live kernel-to-product import
+inventory and requires it to remain empty.
 
 Those facts do not describe an external plugin system. An external extension
 must be independently discoverable, enableable, removable, installable, and
@@ -57,7 +58,8 @@ core (closed kernel)
 
 `geode_product` is chosen instead of preserving the misleading `plugins`
 name: the latter implies independently managed extensions that do not exist.
-The old paths remain current implementations until their move owners land.
+The old package roots are compatibility projections after their move owner
+lands; canonical implementation and package data live only in `geode_product`.
 
 ### Exhaustive current classification
 
@@ -83,10 +85,16 @@ not folded into one generic feature package.
 Every migration preserves the current public and operator-visible surfaces
 until its registered compatibility gate permits removal.
 
+The table below is exhaustive for compatibility. Package roots, listed
+launchers, entry points, commands, tools, and explicitly named module surfaces
+are preserved; arbitrary internal deep-module paths are not a public API.
+Legacy package-resource lookup resolves the canonical package bytes, so data is
+not duplicated under two physical writers.
+
 | Source | Existing surfaces to preserve | State and package data | Test owner | Migration and rollback |
 |---|---|---|---|---|
 | `plugins.benchmark_harness` | Root exports and public adapters; `python -m plugins.benchmark_harness.{cli,run_mcpmark,run_mcpmark_pair,tau2_geode_agent}`; `scripts/eval` wrappers | Plugin manifest, Tau2 policy, and pinned MCPMark patch remain package data; external harnesses, native results, and run evidence keep their caller-owned `artifacts/eval` paths | `tests/plugins/benchmark_harness` plus Crucible harness-boundary, Tau2, and triad tests | BND-002 preserves adapter/module strings and package-data identity; it moves this reciprocal-import cluster with Crucible together or lands cold-import-safe forwarders before either switch; rollback changes routing without touching evidence |
-| `plugins.crucible` | Root exports; `python -m plugins.crucible`; producer modules and `scripts/eval` wrappers | `program.md` and `producers/context_graph.json` remain package data; campaign/attempt evidence, row caches, sealed state under the Git common directory, and `refs/crucible/**` keep their existing authorities | `tests/plugins/crucible` plus the benchmark Tau2 adapter tests | BND-002 preserves command/import/object identity and cold imports; it shares a migration cluster with the benchmark harness; rollback changes routing without moving state, refs, or immutable evidence |
+| `plugins.crucible` | Root exports; `python -m plugins.crucible`; replay producer and `scripts/eval` wrappers | Campaign/attempt evidence, row caches, sealed state under the Git common directory, and `refs/crucible/**` keep their existing authorities | `tests/plugins/crucible` plus the benchmark Tau2 adapter tests | BND-002 preserves command/import/object identity and cold imports; the retired Codex CLI candidate producer has no facade; it shares a migration cluster with the benchmark harness; rollback changes routing without moving state, refs, or immutable evidence |
 | `plugins.petri_audit` | Import root and registration side effects; `geode audit`, `petri-archive`, and `audit-agreement`; `/audit` and `/petri`; native audit tools; Inspect model entry points; internal MCP bridge module | `~/.geode/petri/logs`, operator configuration, agreement and seed-staging data, usage diagnostics, and tracked publication bundles keep their owners | `tests/plugins/petri_audit` plus existing CLI, config, LLM, self-improving, and tool integration tests | BND-002 preserves lazy optional-extra registration, command/tool names, string-based entry points, and old module identity; rollback restores registration imports without moving logs or config |
 | `plugins.seed_generation` | Import root and exported symbols; `geode audit-seeds`, `/audit-seeds`; native seed tools | `STATE_SEED_GENERATION_DIR`, unified config, the legacy override file, handoff/checkpoint data, Petri inputs, and publication bundles keep their current owners | `tests/plugins/seed_generation` plus existing CLI, tool, self-improving, and Petri integration tests | BND-002 preserves the CLI/slash/tool surfaces, exported-object identity, and sibling Petri dependency; rollback changes routing only |
 | `core.self_improving` | Import root; four documented `python -m core.self_improving.*` launchers; `/self-improving`, `/sil`, `geode campaign`; scheduler, hook, and MCP consumers | Tracked `core/self_improving/state`, runtime `~/.geode/self-improving`, handoff roots, and `GEODE_STATE_ROOT` semantics do not move with code | `tests/core/self_improving` plus existing agent, CLI, config, hook, LLM, observability, orchestration, Petri, and seed integration tests | BND-005 extracts neutral seams; BND-006 moves one implementation and keeps launcher forwarders; BND-007 may remove forwarders only after REL-002 and STORE-003; rollback restores composition without dual writers |

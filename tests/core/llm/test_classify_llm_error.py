@@ -19,7 +19,7 @@ import anthropic
 import httpx
 import pytest
 from core.llm.errors import classify_llm_error
-from plugins.petri_audit.claude_cli_provider import ClaudeCliTransientUpstreamError
+from geode_product.petri_audit.claude_cli_provider import ClaudeCliTransientUpstreamError
 
 
 def _fake_anthropic_response(status_code: int) -> httpx.Response:

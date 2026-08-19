@@ -104,7 +104,7 @@ def test_admire_means_reuses_ranker_panel() -> None:
     assert "3-voter" in text
     # Codex MCP 검증 catch 반영 — 문자열 매칭만으론 부족, 실제 파일이
     # ELO + voter panel 형태인지 content 검증.
-    ranker_src = (REPO_ROOT / "plugins/seed_generation/agents/ranker.py").read_text(
+    ranker_src = (REPO_ROOT / "geode_product/seed_generation/agents/ranker.py").read_text(
         encoding="utf-8"
     )
     assert "Elo" in ranker_src or "ELO" in ranker_src, (

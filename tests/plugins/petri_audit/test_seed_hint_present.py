@@ -30,7 +30,7 @@ from pathlib import Path
 
 import pytest
 
-SEEDS_DIR = Path(__file__).resolve().parents[3] / "plugins" / "petri_audit" / "seeds"
+SEEDS_DIR = Path(__file__).resolve().parents[3] / "geode_product" / "petri_audit" / "seeds"
 
 # Seeds known to trigger the auditor self-restart loop (A1 finding).
 # Paths relative to SEEDS_DIR post-PR-0 hierarchical migration.

@@ -31,10 +31,9 @@ Precedence (Codex / OpenAI Agents pattern)
    ``TARGET_MODEL`` / ``JUDGE_MODEL`` module constants, and the legacy
    ``~/.geode/petri.toml`` writer).
 2. Picker defaults in ``core/self_improving/train.py`` (``BUDGET_MINUTES``,
-   ``SEED_LIMIT``, etc.) — fallback when the section is missing. Role
-   models fall back to the manifest ``default_model`` in
-   ``plugins/petri_audit/petri.plugin.toml`` via
-   ``core.self_improving.train._petri_role_model``.
+   ``SEED_LIMIT``, etc.) — fallback when the section is missing. Product
+   audit composition owns its manifest role defaults; the kernel reports an
+   unresolved product default instead of loading product configuration.
 3. Pydantic model default — last resort.
 
 Source: 2026-05-19 config consolidation plan (settled decision #1),
@@ -71,7 +70,7 @@ __all__ = [
 
 # PR-CRED-SOURCE-CENTRALIZE (2026-05-29) made CredentialSource the single SoT.
 # Previously this module, ``MutatorConfig.source``,
-# ``plugins.seed_generation.auth_coverage.Source`` and
+# ``geode_product.seed_generation.auth_coverage.Source`` and
 # ``settings.{provider}_credential_source`` each spelled the source set
 # differently (``api_key`` in some, not others; ``auto`` in some, not others) —
 # they now all reference one enum, so a change can no longer silently diverge.
@@ -79,7 +78,7 @@ __all__ = [
 # PAYG: ``api_key`` is a valid member again. The
 # ``project_payg_exclusion_decision`` intent — a subscription-only run must not
 # *silently* fall through to PAYG — is preserved at resolution time
-# (``plugins.petri_audit.credential_source.resolve_credential_source`` filters
+# (``geode_product.petri_audit.credential_source.resolve_credential_source`` filters
 # ``api_key`` out of ``auto`` expansion unless ``[self_improving_loop]
 # fallback_to_payg=true``); an operator may still *explicitly* set
 # ``source = "api_key"`` to opt in. The earlier type-level exclusion only caused
@@ -158,7 +157,7 @@ class PetriRoleConfig(BaseModel):
     same role from different angles. ``core/self_improving/train.py`` calls
     ``geode audit --target <X> --judge <Y>`` with the model ids from
     ``[self_improving_loop.autoresearch].{target_model,judge_model}``.
-    Inside ``geode audit``, :func:`plugins.petri_audit.registry.get_binding`
+    Inside ``geode audit``, :func:`geode_product.petri_audit.registry.get_binding`
     resolves the role binding with this order::
 
         1. argv (caller override) — wins outright for the ``model`` axis
@@ -230,7 +229,7 @@ class AutoresearchConfig(BaseModel):
     # Step J-b.1 — role sub-fields (the SoT relocation).
     target: PetriRoleConfig = Field(default_factory=PetriRoleConfig)
     """petri eval ``target`` role binding (model + source). Read by
-    :func:`plugins.petri_audit.registry.get_binding` when the runtime
+    :func:`geode_product.petri_audit.registry.get_binding` when the runtime
     resolves the audit target."""
     judge: PetriRoleConfig = Field(default_factory=PetriRoleConfig)
     """petri eval ``judge`` role binding."""
@@ -348,8 +347,11 @@ class AutoresearchConfig(BaseModel):
     stderr-derived margin rises above the default floor instead of
     collapsing onto it. Operators who want faster smoke runs should
     pass ``--dry-run`` instead of setting a low ``seed_limit``."""
-    seed_select: str = "plugins/petri_audit/seeds"
+    seed_select: str = "bundled"
     """The **co-evolving** seed pool that supplies SELECTION PRESSURE.
+
+    ``bundled`` is resolved by the product audit runner to its packaged seed
+    directory; the closed kernel does not own a product filesystem path.
 
     This pool *mutates across generations* — the seed-generation co-scientist
     grows / replaces adversarial seeds alongside the agent, and
@@ -580,7 +582,7 @@ class SelfImprovingLoopConfig(BaseModel):
     That OpenAI surface is split across three sub-fields that each drive a
     distinct consumer: ``autoresearch.source`` (the ``geode audit`` subprocess's
     ``--use-oauth`` flag, ``core/self_improving/train.py``), ``autoresearch.target.source``
-    (the petri ``target`` adapter via ``plugins.petri_audit.registry.get_binding``),
+    (the petri ``target`` adapter via ``geode_product.petri_audit.registry.get_binding``),
     and ``autoresearch.mutator.source`` (the in-process mutator LLM via
     ``core/self_improving/loop/mutate/runner.py:_default_llm_call``). Keeping them in
     sync by hand is the kind of three-place edit that silently drifts, so this

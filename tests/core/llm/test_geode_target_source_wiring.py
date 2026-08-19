@@ -34,7 +34,7 @@ def test_default_geode_runner_passes_source_argument() -> None:
     before the audit-subprocess fake-success path re-emerges.
     """
     target_module = (
-        Path(__file__).resolve().parents[3] / "plugins" / "petri_audit" / "geode_target.py"
+        Path(__file__).resolve().parents[3] / "geode_product" / "petri_audit" / "geode_target.py"
     )
     source = target_module.read_text(encoding="utf-8")
     # The construction site we care about is `loop = AgenticLoop(`.
@@ -70,13 +70,13 @@ def test_default_geode_runner_uses_get_binding() -> None:
     resolves the same source the operator gets at the command line.
     """
     target_module = (
-        Path(__file__).resolve().parents[3] / "plugins" / "petri_audit" / "geode_target.py"
+        Path(__file__).resolve().parents[3] / "geode_product" / "petri_audit" / "geode_target.py"
     )
     source = target_module.read_text(encoding="utf-8")
     assert "get_binding(" in source, (
         "geode_target.py no longer calls get_binding(...). The audit "
         "subprocess will diverge from the manual `geode audit` CLI's "
-        "source resolution. Use plugins.petri_audit.registry.get_binding."
+        "source resolution. Use geode_product.petri_audit.registry.get_binding."
     )
 
 

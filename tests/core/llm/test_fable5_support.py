@@ -59,8 +59,8 @@ def test_pricing_and_context_window() -> None:
 
 def test_plugin_allowlists_include_fable() -> None:
     for rel in (
-        "plugins/seed_generation/seed_generation.plugin.toml",
-        "plugins/petri_audit/petri.plugin.toml",
+        "geode_product/seed_generation/seed_generation.plugin.toml",
+        "geode_product/petri_audit/petri.plugin.toml",
     ):
         text = (REPO_ROOT / rel).read_text(encoding="utf-8")
         assert FABLE in text, rel

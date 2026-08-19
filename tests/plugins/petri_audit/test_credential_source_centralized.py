@@ -54,7 +54,7 @@ def test_auth_coverage_source_is_concrete_subset() -> None:
     """``auth_coverage.Source`` is exactly the *concrete* (non-AUTO) members of
     the canonical enum — pinned so it can't drift (it stays a Literal because an
     auth path is never the AUTO resolver mode)."""
-    from plugins.seed_generation.auth_coverage import Source as AuthPathSource
+    from geode_product.seed_generation.auth_coverage import Source as AuthPathSource
 
     concrete = {s.value for s in CredentialSource if s is not CredentialSource.AUTO}
     assert set(get_args(AuthPathSource)) == concrete
@@ -62,8 +62,8 @@ def test_auth_coverage_source_is_concrete_subset() -> None:
 
 def test_petri_constants_sourced_from_canonical_enum() -> None:
     """The petri magic constants derive from the canonical enum (no drift)."""
-    from plugins.petri_audit.credential_source import PAYG_SOURCE
-    from plugins.petri_audit.manifest import AUTO_SOURCE
+    from geode_product.petri_audit.credential_source import PAYG_SOURCE
+    from geode_product.petri_audit.manifest import AUTO_SOURCE
 
     assert AUTO_SOURCE == CredentialSource.AUTO.value == "auto"
     assert PAYG_SOURCE == CredentialSource.API_KEY.value == "api_key"
@@ -90,7 +90,7 @@ def test_explicit_per_role_api_key_routes_to_anthropic_api() -> None:
     refactor enables. Without the runner→to_inspect_model source threading
     (Codex review fix) this opt-in was a silent no-op.
     """
-    from plugins.petri_audit.models import to_inspect_model
+    from geode_product.petri_audit.models import to_inspect_model
 
     api_key_routed = to_inspect_model("claude-opus-4-8", source="api_key")
     cli_routed = to_inspect_model("claude-opus-4-8", source="claude-cli")
@@ -106,8 +106,8 @@ def test_to_inspect_model_reraises_strict_subscription_abort(
     ``to_inspect_model`` must re-raise rather than silently routing to
     ``api_key`` — otherwise the resolution-time PAYG guard is defeated
     (Codex review fix)."""
-    from plugins.petri_audit import credential_source as cs
-    from plugins.petri_audit import models
+    from geode_product.petri_audit import credential_source as cs
+    from geode_product.petri_audit import models
 
     def _raise_strict(provider: str, **_kw: object) -> str:
         raise cs.CredentialResolutionError("anthropic", ["claude-cli"], subscription_only=True)

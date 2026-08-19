@@ -32,6 +32,7 @@ jobs:
           filters: |
             code:
               - 'core/**'
+              - 'geode_product/**'
               - 'plugins/**'
               - 'scripts/**'
               - 'tests/**'
@@ -72,9 +73,9 @@ jobs:
       - if: needs.changes.outputs.code == 'true'
         run: uv sync
       - if: needs.changes.outputs.code == 'true'
-        run: uv run ruff check core/ tests/ plugins/ scripts/
+        run: uv run ruff check core/ geode_product/ tests/ plugins/ scripts/
       - if: needs.changes.outputs.code == 'true'
-        run: uv run ruff format --check core/ tests/ plugins/ scripts/
+        run: uv run ruff format --check core/ geode_product/ tests/ plugins/ scripts/
       - name: Dependency drift (deptry)
         if: needs.changes.outputs.code == 'true'
         run: uv run deptry .
@@ -189,7 +190,7 @@ jobs:
       - if: needs.changes.outputs.code == 'true'
         run: uv sync --extra audit
       - if: needs.changes.outputs.code == 'true'
-        run: uv run mypy core/ plugins/ scripts/
+        run: uv run mypy core/ geode_product/ plugins/ scripts/
       - name: Prompt integrity check
         if: needs.changes.outputs.code == 'true'
         run: uv run python -c "from core.llm.prompts import verify_prompt_integrity; verify_prompt_integrity(raise_on_drift=True)"
@@ -219,7 +220,7 @@ jobs:
         # test_cooldown_prevents_rapid_fire} across workers — those two share
         # module-level state (cooldown timestamp), producing a flaky
         # FAILURE on develop→main PR #1220 (2026-05-17).
-        run: uv run pytest -n auto --dist=loadfile --cov=core --cov-report=term-missing
+        run: uv run pytest -n auto --dist=loadfile --cov=core --cov=geode_product --cov-report=term-missing
   security:
     name: Security Scan
     runs-on: ubuntu-latest
@@ -244,7 +245,7 @@ jobs:
             -r "$RUNNER_TEMP/geode-runtime-requirements.txt" \
             --no-deps --disable-pip --progress-spinner=off
       - if: needs.changes.outputs.code == 'true'
-        run: uv run bandit -r core/ -c pyproject.toml
+        run: uv run bandit -r core/ geode_product/ -c pyproject.toml
 
   gate:
     name: Gate

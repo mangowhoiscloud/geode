@@ -117,14 +117,14 @@ jobs:
 
       - name: Lint and hygiene
         run: |
-          uv run ruff check core plugins tests scripts
-          uv run ruff format --check core plugins tests scripts
+          uv run ruff check core geode_product plugins tests scripts
+          uv run ruff format --check core geode_product plugins tests scripts
           uv run deptry .
           npm run lint --prefix site
 
       - name: Type check
         run: >
-          uv run mypy core plugins scripts
+          uv run mypy core geode_product plugins scripts
           tests/integration/test_prepare_hf_release_bundle.py
           tests/integration/test_check_official_docs.py
 
@@ -171,6 +171,25 @@ jobs:
           .release-venv/bin/python -m pip install --upgrade pip
           .release-venv/bin/python -m pip install "dist/${dist_stem}-${version}-py3-none-any.whl"
           .release-venv/bin/geode version | grep "GEODE v${version}"
+          .release-venv/bin/python - <<'PY'
+          import importlib
+          from importlib import metadata, resources
+
+          scripts = {entry.name: entry for entry in metadata.entry_points(group="console_scripts")}
+          assert scripts["geode"].value == "geode_product.cli:app"
+          assert scripts["geode-mcp"].value == "geode_product.mcp_server:main"
+          scripts["geode-mcp"].load()
+          importlib.import_module("geode_product.wiring")
+          importlib.import_module("geode_product.worker")
+
+          for legacy, canonical in (
+              ("plugins.benchmark_harness.mcpmark_geode_agent", "geode_product.benchmark_harness.mcpmark_geode_agent"),
+              ("plugins.petri_audit.runner", "geode_product.petri_audit.runner"),
+              ("plugins.seed_generation.tools.seed_pool_search", "geode_product.seed_generation.tools.seed_pool_search"),
+          ):
+              assert importlib.import_module(legacy) is importlib.import_module(canonical)
+          assert resources.files("plugins.petri_audit").joinpath("petri.plugin.toml").is_file()
+          PY
 
       - name: Generate release notes and checksums
         run: |

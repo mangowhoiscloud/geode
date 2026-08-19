@@ -5,6 +5,10 @@
 > **Status**: Accepted (2026-05-18)
 > **Scope**: seed-generation + Petri의 user-facing surface: credential picker, cost preview, ToS notice, pre-flight check, slash command.
 
+> **Provider 경로 폐기 안내(2026-08-20).** UI 결정은 과거 증거로 보존하지만
+> `claude_code_provider`와 `codex-cli` 추론 경로는 퇴역했습니다. 현재 구독
+> 경로는 `claude-cli`와 direct `openai-codex` OAuth입니다.
+
 ## 컨텍스트
 
 GEODE의 4 auth path:

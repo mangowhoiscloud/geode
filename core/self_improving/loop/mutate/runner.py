@@ -344,13 +344,12 @@ def build_runner_context() -> RunnerContext:
     ``mutations.jsonl`` produces an empty block / empty tuple and the
     loop behaves exactly as it did pre-PR.
     """
-    from plugins.seed_generation.baseline_reader import (
+    from core.config.self_improving import load_self_improving_loop_config
+    from core.self_improving.baseline_reader import (
         load_baseline,
         load_latest_meta_review,
         pick_regression_target_dim,
     )
-
-    from core.config.self_improving import load_self_improving_loop_config
     from core.self_improving.loop.mutate.mutator_feedback import format_mutator_feedback_block
     from core.self_improving.loop.mutate.policies import TARGET_KINDS, load_policy
     from core.self_improving.loop.observe.mutations_reader import (
@@ -535,7 +534,7 @@ def _build_system_prompt() -> str:
 
 def _build_user_prompt(ctx: RunnerContext) -> str:
     """Render the per-iteration context as the LLM's user message."""
-    from plugins.seed_generation.baseline_reader import (
+    from core.self_improving.baseline_reader import (
         format_evidence_block,
         format_priors_block,
     )

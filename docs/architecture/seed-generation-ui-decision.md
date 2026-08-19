@@ -5,6 +5,11 @@
 > **Status**: Accepted (2026-05-18)
 > **Scope**: user-facing surface of seed-generation + Petri: credential picker, cost preview, ToS notice, pre-flight check, slash command.
 
+> **Provider routes superseded (2026-08-20).** The UI decision remains
+> historical evidence, but `claude_code_provider` and the `codex-cli` inference
+> path are retired. Current subscription routes are `claude-cli` and direct
+> `openai-codex` OAuth.
+
 ## Context
 
 GEODE's 4 auth paths:

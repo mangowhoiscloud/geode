@@ -34,7 +34,7 @@ importable module with a CLI front end. The driver does NOT decide policy — it
   sequential **never → random → gate** order.
 
 At the start of a REAL (non-``--dry-run``) campaign the driver purges
-``inspect_ai``'s trajectory cache (``plugins.petri_audit.runner.purge_inspect_cache``,
+``inspect_ai``'s trajectory cache (``geode_product.petri_audit.runner.purge_inspect_cache``,
 the cache at ``~/Library/Caches/inspect_ai/generate/``) so the K gen-0 measures
 + all cycle audits are INDEPENDENT re-measures, not replays of a stale cached
 trajectory for an identical seed. Skipped under ``--dry-run`` (synthetic audits
@@ -247,7 +247,7 @@ def _resolve_pool_target_dims(pool_dir: Path) -> dict[str, float]:
     difficulty-calibrated to probe a specific judge dim (e.g. ``broken_tool_use``);
     each seed carries that dim in its YAML front-matter ``target_dims``. This walks
     every ``*.md`` seed in ``pool_dir``, unions their parsed ``target_dims`` (reusing
-    ``plugins.petri_audit.pool_validation._seed_target_dims`` — the SAME frontmatter
+    ``geode_product.petri_audit.pool_validation._seed_target_dims`` — the SAME frontmatter
     parser the pool-dim guard uses, no second YAML reader), and returns
     ``{dim: 1.0 for dim in sorted(dims)}``.
 
@@ -259,12 +259,10 @@ def _resolve_pool_target_dims(pool_dir: Path) -> dict[str, float]:
     Graceful: an empty pool, a missing dir, seeds with no ``target_dims``, or
     malformed front-matter all yield ``{}`` (``_seed_target_dims`` already swallows
     a bad seed to ``[]``) — and the import itself is guarded, so a packaged distro
-    without ``plugins.petri_audit`` degrades to ``{}``. Never raises.
+    without ``geode_product.petri_audit`` degrades to ``{}``. Never raises.
     """
-    try:
-        from plugins.petri_audit.pool_validation import _seed_target_dims
-    except ImportError:
-        return {}
+    from core.self_improving.seed_pool_metadata import seed_target_dims
+
     if not pool_dir.is_dir():
         return {}
     dims: set[str] = set()
@@ -272,7 +270,7 @@ def _resolve_pool_target_dims(pool_dir: Path) -> dict[str, float]:
     # seed tree, so a nested seed must not hide its target dim (mirrors
     # ``validate_pool_target_dims``).
     for seed_md in sorted(pool_dir.rglob("*.md")):
-        dims.update(_seed_target_dims(seed_md))
+        dims.update(seed_target_dims(seed_md))
     return dict.fromkeys(sorted(dims), 1.0)
 
 
@@ -2210,21 +2208,9 @@ def _cycle_line(
 
 
 def _purge_inspect_cache_at_start(progress: ProgressLog) -> bool:
-    """Call ``plugins.petri_audit.runner.purge_inspect_cache`` at real-campaign
-    start, logging the outcome.
+    """Purge inspect_ai's optional cache before a real campaign."""
+    from core.audit.inspect_cache import purge_inspect_cache
 
-    The import is GUARDED: ``plugins.petri_audit`` pulls in ``inspect_ai`` (the
-    ``[audit]`` extra), which is absent in a base ``uv sync`` env. When the import
-    fails the purge is a logged no-op (``False``) rather than a crash, so a
-    non-audit invocation of the driver still runs. ``purge_inspect_cache`` itself
-    is graceful for the same reason (returns ``False`` when ``inspect_ai`` is
-    unavailable), so this is belt-and-braces.
-    """
-    try:
-        from plugins.petri_audit.runner import purge_inspect_cache
-    except ImportError as exc:
-        progress.emit(f"inspect cache purge: skipped (petri_audit/inspect_ai unavailable — {exc})")
-        return False
     purged = purge_inspect_cache()
     progress.emit(
         f"inspect cache purge: ran at real-campaign start (purged={purged}) — "
@@ -2300,9 +2286,8 @@ def run_campaign(
         # silently. A stale HELD-OUT HALTs (regenerate before measuring); a stale
         # SELECTION only warns (the optimizer wastes effort on a dead dim, but the
         # comparison ruler is still sound).
-        from plugins.petri_audit.pool_validation import validate_pool_target_dims
-
         from core.self_improving.fitness import AXIS_TIERS
+        from core.self_improving.seed_pool_metadata import validate_pool_target_dims
 
         _live_dims = frozenset(AXIS_TIERS)
         _held_stale = validate_pool_target_dims(HELD_OUT_BENCH, _live_dims)

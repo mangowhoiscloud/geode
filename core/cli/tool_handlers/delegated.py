@@ -46,35 +46,6 @@ _DELEGATED_TOOLS = UniqueEntries[str, tuple[str, str]](
         # CSP-2 (2026-05-22) — literature research surface
         ("arxiv_search", ("core.tools.arxiv", "ArxivSearchTool")),
         ("paper_fetch_arxiv", ("core.tools.arxiv", "ArxivFetchTool")),
-        (
-            "geode_seed_pool_search",
-            (
-                "plugins.seed_generation.tools.seed_pool_search",
-                "SeedPoolSearchTool",
-            ),
-        ),
-        # CSP-13 (2026-05-23) — Loop 2 (debate-turn) of the seed-generation
-        # 3-loop port. Records one debate turn to a per-candidate sidecar
-        # JSONL and signals continue/synthesize so the sub-agent's
-        # AgenticLoop completes the N-turn budget before writing the seed.
-        (
-            "seed_debate_turn",
-            (
-                "plugins.seed_generation.tools.seed_debate",
-                "SeedDebateTurnTool",
-            ),
-        ),
-        # CSP-14 (2026-05-23) — Loop 3 (paper-analysis) of the seed-generation
-        # 3-loop port. Freezes one fetched arXiv paper into a git-tracked
-        # snapshot under docs/self-improving/petri-bundle/literature/. Cache-hit on
-        # content_hash short-circuits re-writes.
-        (
-            "freeze_paper_snapshot",
-            (
-                "plugins.seed_generation.tools.literature_snapshot",
-                "FreezePaperSnapshotTool",
-            ),
-        ),
         # profile
         ("profile_show", ("core.tools.profile_tools", "ProfileShowTool")),
         ("profile_update", ("core.tools.profile_tools", "ProfileUpdateTool")),
@@ -158,6 +129,11 @@ def _make_delegate_handler(
         return await _safe_delegate(tool_cls, kwargs, context=tool_context)
 
     return _handler
+
+
+# Product composition consumes the handler factory as a supported boundary;
+# keep the underscored name only for existing kernel callers.
+make_delegate_handler = _make_delegate_handler
 
 
 def _build_delegated_handlers() -> UniqueEntries[str, Any]:
