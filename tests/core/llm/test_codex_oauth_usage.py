@@ -12,11 +12,6 @@ Coverage map:
   timeout / malformed JSON, header attachment, reset_at number/string
   normalisation.
 * :class:`TestParseWhamPayload` — null-tolerant field parsing.
-* :class:`TestCodexUsageIsThrottled` — threshold precedence + null
-  handling.
-* :class:`TestCodexUsagePoller` — TTL cache + force-refresh +
-  stale-on-fail + credentials hand-off.
-* :class:`TestShouldBlockCodexLaneAcquisition` — env-knob branches.
 """
 
 from __future__ import annotations
@@ -30,27 +25,13 @@ from unittest.mock import patch
 import pytest
 from core.llm import codex_oauth_usage
 from core.llm.codex_oauth_usage import (
-    CODEX_OAUTH_POLL_DISABLED_ENV,
-    CODEX_OAUTH_POLL_REQUIRED_ENV,
-    DEFAULT_CODEX_BLOCK_THRESHOLD,
     CodexAuthCredentials,
     CodexUsage,
-    CodexUsagePoller,
-    CodexUsageWindow,
     _parse_wham_payload,
-    _reset_default_codex_poller_for_tests,
     fetch_codex_usage,
     read_codex_oauth_credentials,
     read_codex_oauth_token,
-    should_block_codex_lane_acquisition,
 )
-
-
-@pytest.fixture(autouse=True)
-def _reset_codex_poller(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv(CODEX_OAUTH_POLL_DISABLED_ENV, raising=False)
-    monkeypatch.delenv(CODEX_OAUTH_POLL_REQUIRED_ENV, raising=False)
-    _reset_default_codex_poller_for_tests()
 
 
 class TestReadCodexCredentials:
@@ -308,148 +289,3 @@ class TestParseWhamPayload:
         assert usage.five_hour is not None
         assert usage.five_hour.utilization == pytest.approx(0.6)
         assert usage.weekly is None
-
-
-class TestCodexUsageIsThrottled:
-    def test_throttled_at_threshold(self) -> None:
-        usage = CodexUsage(five_hour=CodexUsageWindow("5h limit", 0.8))
-        assert usage.is_throttled(threshold=0.8) is True
-
-    def test_below_threshold_not_throttled(self) -> None:
-        usage = CodexUsage(five_hour=CodexUsageWindow("5h limit", 0.6))
-        assert usage.is_throttled(threshold=0.8) is False
-
-    def test_null_window_not_throttled(self) -> None:
-        assert CodexUsage(five_hour=None).is_throttled() is False
-
-    def test_null_utilization_not_throttled(self) -> None:
-        usage = CodexUsage(five_hour=CodexUsageWindow("5h limit", None))
-        assert usage.is_throttled() is False
-
-    def test_weekly_window_does_not_gate_admission(self) -> None:
-        """Only five_hour gates admission — weekly is dashboard-only."""
-        usage = CodexUsage(
-            five_hour=CodexUsageWindow("5h limit", 0.1),
-            weekly=CodexUsageWindow("Weekly limit", 0.95),
-        )
-        assert usage.is_throttled(threshold=0.8) is False
-
-
-class TestCodexUsagePoller:
-    def _usage(self, util: float) -> CodexUsage:
-        return CodexUsage(five_hour=CodexUsageWindow("5h limit", util))
-
-    def test_caches_within_ttl(self) -> None:
-        calls: list[CodexAuthCredentials] = []
-
-        def _fetch(creds: CodexAuthCredentials) -> CodexUsage:
-            calls.append(creds)
-            return self._usage(0.4)
-
-        poller = CodexUsagePoller(
-            ttl_s=60.0,
-            fetch_fn=_fetch,
-            token_fn=lambda: CodexAuthCredentials(token="t"),
-        )
-        poller.current()
-        poller.current()
-        assert len(calls) == 1
-
-    def test_force_refreshes(self) -> None:
-        calls: list[CodexAuthCredentials] = []
-
-        def _fetch(creds: CodexAuthCredentials) -> CodexUsage:
-            calls.append(creds)
-            return self._usage(0.5)
-
-        poller = CodexUsagePoller(
-            ttl_s=60.0,
-            fetch_fn=_fetch,
-            token_fn=lambda: CodexAuthCredentials(token="t"),
-        )
-        poller.current()
-        poller.current(force=True)
-        assert len(calls) == 2
-
-    def test_returns_stale_on_failure(self) -> None:
-        fetched: list[CodexUsage | None] = [self._usage(0.3), None]
-
-        def _fetch(creds: CodexAuthCredentials) -> CodexUsage | None:
-            return fetched.pop(0)
-
-        poller = CodexUsagePoller(
-            ttl_s=0.0,
-            fetch_fn=_fetch,
-            token_fn=lambda: CodexAuthCredentials(token="t"),
-        )
-        first = poller.current()
-        second = poller.current()
-        assert first is second
-
-    def test_returns_none_when_no_credentials(self) -> None:
-        def _fetch(creds: CodexAuthCredentials) -> CodexUsage:
-            raise AssertionError("must not be called without credentials")
-
-        poller = CodexUsagePoller(ttl_s=60.0, fetch_fn=_fetch, token_fn=lambda: None)
-        assert poller.current() is None
-
-    def test_passes_credentials_through_to_fetch(self) -> None:
-        seen: list[CodexAuthCredentials] = []
-
-        def _fetch(creds: CodexAuthCredentials) -> CodexUsage:
-            seen.append(creds)
-            return self._usage(0.1)
-
-        creds = CodexAuthCredentials(token="tk", account_id="acc")
-        poller = CodexUsagePoller(ttl_s=60.0, fetch_fn=_fetch, token_fn=lambda: creds)
-        poller.current()
-        assert seen == [creds]
-
-
-class TestShouldBlockCodexLaneAcquisition:
-    def test_disabled_env_short_circuits(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv(CODEX_OAUTH_POLL_DISABLED_ENV, "1")
-        poller = CodexUsagePoller(
-            ttl_s=60.0,
-            fetch_fn=lambda _c: pytest.fail("poller ran despite disabled env"),
-            token_fn=lambda: CodexAuthCredentials(token="t"),
-        )
-        assert should_block_codex_lane_acquisition(poller=poller) is False
-
-    def test_blocks_above_threshold(self) -> None:
-        usage = CodexUsage(five_hour=CodexUsageWindow("5h limit", 0.9))
-        poller = CodexUsagePoller(
-            ttl_s=60.0,
-            fetch_fn=lambda _c: usage,
-            token_fn=lambda: CodexAuthCredentials(token="t"),
-        )
-        assert should_block_codex_lane_acquisition(poller=poller, threshold=0.8) is True
-
-    def test_does_not_block_below_threshold(self) -> None:
-        usage = CodexUsage(five_hour=CodexUsageWindow("5h limit", 0.5))
-        poller = CodexUsagePoller(
-            ttl_s=60.0,
-            fetch_fn=lambda _c: usage,
-            token_fn=lambda: CodexAuthCredentials(token="t"),
-        )
-        assert should_block_codex_lane_acquisition(poller=poller, threshold=0.8) is False
-
-    def test_fails_open_when_poll_returns_none(self) -> None:
-        poller = CodexUsagePoller(
-            ttl_s=60.0,
-            fetch_fn=lambda _c: None,
-            token_fn=lambda: CodexAuthCredentials(token="t"),
-        )
-        assert should_block_codex_lane_acquisition(poller=poller) is False
-
-    def test_fails_closed_in_strict_mode(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv(CODEX_OAUTH_POLL_REQUIRED_ENV, "1")
-        poller = CodexUsagePoller(
-            ttl_s=60.0,
-            fetch_fn=lambda _c: None,
-            token_fn=lambda: CodexAuthCredentials(token="t"),
-        )
-        assert should_block_codex_lane_acquisition(poller=poller) is True
-
-    def test_default_threshold(self) -> None:
-        assert DEFAULT_CODEX_BLOCK_THRESHOLD == 0.8

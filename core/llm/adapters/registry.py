@@ -87,6 +87,10 @@ def get_adapter(name: str) -> LLMAdapter:
 
     Raises :class:`AdapterNotFoundError` when missing.
     """
+    if name == "codex-cli":
+        raise AdapterNotFoundError(
+            "adapter 'codex-cli' was retired; use 'codex-oauth' for ChatGPT subscription access"
+        )
     try:
         return _REGISTRY[name]
     except KeyError as exc:
@@ -216,7 +220,7 @@ def bootstrap_builtins(
     *,
     policy_sources: PolicySourceBundle | None = None,
 ) -> None:
-    """Register the 8 built-in adapters.
+    """Register the 7 built-in adapters.
 
     Called from ``core/runtime.py`` during process bootstrap. Idempotent —
     re-registration is a no-op (logs at debug level). Mirrors paperclip's
@@ -228,7 +232,6 @@ def bootstrap_builtins(
     from core.llm.adapters.anthropic_oauth import AnthropicOAuthAdapter
     from core.llm.adapters.anthropic_payg import AnthropicPaygAdapter
     from core.llm.adapters.claude_cli import ClaudeCliAdapter
-    from core.llm.adapters.codex_cli import CodexCliAdapter
     from core.llm.adapters.codex_oauth import CodexOAuthAdapter
     from core.llm.adapters.glm_coding_plan import GlmCodingPlanAdapter
     from core.llm.adapters.glm_payg import GlmPaygAdapter
@@ -240,7 +243,6 @@ def bootstrap_builtins(
         ClaudeCliAdapter,
         OpenAIPaygAdapter,
         CodexOAuthAdapter,
-        CodexCliAdapter,
         GlmPaygAdapter,
         GlmCodingPlanAdapter,
     ):

@@ -39,7 +39,6 @@ def test_five_canonical_families_covered():
         ("o3-mini", FAMILY_OPENAI),
         ("o1-preview", FAMILY_OPENAI),
         ("o4", FAMILY_OPENAI),
-        ("codex-cli", FAMILY_OPENAI),
         ("gemini-2.5-pro", FAMILY_GOOGLE),
         ("grok-4", FAMILY_XAI),
         ("glm-5.1", FAMILY_GLM),

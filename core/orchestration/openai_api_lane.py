@@ -7,13 +7,8 @@ OpenAI's server side; a single shared lane prevents a burst of
 concurrent ``responses.create`` calls from racing the per-account
 floor.
 
-Distinct from ``codex_cli_lane`` because:
-
-- ``codex-cli`` lane gates **subprocess fork** (codex-cli binary
-  cold-start, sandbox isolation, ``~/.codex/auth.json`` shared file
-  handle).
-- ``openai_api_lane`` gates **direct API call** (no subprocess, just
-  ``openai.AsyncOpenAI.responses.create``); 429 surface differs.
+The lane gates direct API calls (no subprocess) through
+``openai.AsyncOpenAI.responses.create``.
 
 Why ``max_concurrent=6`` (PR-LANE-CAP-TIGHTER, v0.99.76)
 =======================================================

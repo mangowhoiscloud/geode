@@ -119,8 +119,8 @@ _PROVIDER_DEFAULT_PAYG: dict[str, str] = {
 # ``binding_to_adapter_source`` — ``claude-cli`` → ``adapter``; the glue test
 # ``test_picker_adapter_glue`` pins ``source="adapter"`` → ClaudeCliAdapter).
 # That adapter runs the model as Claude Code and never serialises the tool
-# schemas, so a tool the model should call simply isn't there. (``openai-codex``
-# → CodexOAuthAdapter is tool-capable; ``codex-cli`` is not a picker source.)
+# schemas, so a tool the model should call simply isn't there. ``openai-codex``
+# routes to the tool-capable CodexOAuthAdapter.
 # Verified by adapter resolution, not assumed.
 _TOOL_INCAPABLE_SOURCES: frozenset[str] = frozenset({"claude-cli", "adapter"})
 
@@ -128,7 +128,7 @@ _TOOL_INCAPABLE_SOURCES: frozenset[str] = frozenset({"claude-cli", "adapter"})
 # the inner-loop audit. On a tool-incapable source the model never receives
 # ``petri_audit`` and silently degrades to native-CLI Bash improvisation
 # (``geode audit`` shellout) — uncontrolled, contention-prone, and often
-# unparseable. Such roles are rerouted to the provider's tool-capable PAYG
+# unparsable. Such roles are rerouted to the provider's tool-capable PAYG
 # source. (Other roles read/emit via native CLI tools, so they tolerate the
 # subprocess adapter.)
 _TOOL_REQUIRING_ROLES: frozenset[str] = frozenset({"pilot"})

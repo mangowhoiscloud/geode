@@ -551,7 +551,7 @@ def get_auth_status() -> list[dict[str, Any]]:
             remaining = codex_creds["expires_at"] - time.time()
             results.append(
                 {
-                    "provider": "openai (codex-cli)",
+                    "provider": "openai (imported ChatGPT credential)",
                     "email": "",
                     "plan_type": "",
                     "source": "~/.codex/auth.json",

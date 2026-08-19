@@ -512,7 +512,7 @@ class SchedulerConfig(BaseModel):
     ``forced_single_instance`` semantics for this loop role.
 
     Operator override of the four backends (subscription Claude Code /
-    Codex CLI / Anthropic PAYG / OpenAI PAYG) flows through the
+    ChatGPT OAuth / Anthropic PAYG / OpenAI PAYG) flows through the
     *existing* :class:`MutatorConfig.source` field — the auto-trigger
     invokes :func:`SelfImprovingLoopRunner.run_once` which honours that
     setting via the PAPERCLIP dispatch path (#1433). The scheduler does
@@ -571,8 +571,7 @@ class SelfImprovingLoopConfig(BaseModel):
     fallback_to_payg: bool = False
     """Subscription-soft default — true forces all source resolvers to
     fall through to ``api_key`` on subscription exhaustion. False (the
-    default) aborts with an actionable error. Codex CLI's
-    ``forced_login_method`` pattern."""
+    default) aborts with an actionable error."""
 
     openai_source: CredentialSource | None = None
     """Single entry point for the OpenAI credential lane of the **autoresearch

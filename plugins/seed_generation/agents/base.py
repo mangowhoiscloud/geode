@@ -203,8 +203,8 @@ def sum_sub_result_tokens(
     ``SeedAgentResult`` they return; the orchestrator's run-level rollup
     (``orchestrator.py``) then sums those into ``PipelineState``.
 
-    HARD LIMITATION: subscription / CLI-routed calls (claude-cli,
-    codex-cli) return an empty ``UsageSummary()`` — the subscription path
+    HARD LIMITATION: unmetered subscription / CLI-routed calls return an empty
+    ``UsageSummary()`` — the subscription path
     does not expose token usage — so their contribution is honestly 0.
     Only API-key / payg sub-agents (e.g. payg ranker voters) add non-zero
     numbers. Counts are never fabricated.

@@ -145,7 +145,7 @@ def test_resolve_for_duplicate_pair_raises() -> None:
         resolve_for("anthropic", SOURCE_PAYG)
 
 
-def test_bootstrap_builtins_registers_eight() -> None:
+def test_bootstrap_builtins_registers_seven() -> None:
     bootstrap_builtins()
     names = {a.name for a in list_adapters()}
     assert names == {
@@ -154,7 +154,6 @@ def test_bootstrap_builtins_registers_eight() -> None:
         "claude-cli",
         "openai-payg",
         "codex-oauth",
-        "codex-cli",
         "glm-payg",
         "glm-coding-plan",
     }
@@ -163,7 +162,7 @@ def test_bootstrap_builtins_registers_eight() -> None:
 def test_bootstrap_builtins_idempotent() -> None:
     bootstrap_builtins()
     bootstrap_builtins()  # Second call must not raise.
-    assert len(list_adapters()) == 8
+    assert len(list_adapters()) == 7
 
 
 def test_bootstrap_builtins_provider_source_pairs() -> None:
@@ -175,7 +174,6 @@ def test_bootstrap_builtins_provider_source_pairs() -> None:
         ("anthropic", "adapter"),
         ("openai", "payg"),
         ("openai", "subscription"),
-        ("openai", "adapter"),
         ("glm", "payg"),
         ("glm", "subscription"),
     }
@@ -185,6 +183,11 @@ def test_all_concrete_sources_covered_by_some_builtin() -> None:
     bootstrap_builtins()
     seen = {a.source for a in list_adapters()}
     assert seen >= CONCRETE_SOURCES
+
+
+def test_retired_codex_cli_has_actionable_error() -> None:
+    with pytest.raises(AdapterNotFoundError, match="use 'codex-oauth'"):
+        get_adapter("codex-cli")
 
 
 # ---------------------------------------------------------------------------

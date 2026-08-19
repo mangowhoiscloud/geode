@@ -123,7 +123,7 @@ def to_inspect_model(
     role uses :func:`to_inspect_target` instead because target is always
     routed through ``geode/...``.
 
-    Raw passthrough: any string containing ``/`` is returned untouched —
+    Raw passthrough: any supported string containing ``/`` is returned untouched —
     callers can pass ``anthropic/claude-haiku-4-5-20251001`` or
     ``openai-api/glm/glm-5.1`` directly when the alias rules don't fit.
     A user who explicitly pins ``openai/gpt-5.5`` stays on per-token
@@ -148,6 +148,10 @@ def to_inspect_model(
     if not geode_id:
         raise AuditModelMappingError("Empty model id")
     if "/" in geode_id:
+        if geode_id.startswith("codex-cli/"):
+            raise AuditModelMappingError(
+                "codex-cli was retired; use openai-codex/<model> for ChatGPT subscription access"
+            )
         return geode_id
 
     provider = provider_of(geode_id)
@@ -255,10 +259,8 @@ def is_oauth_routed(inspect_id: str) -> bool:
     the per-token cost line for judge / auditor calls that hit ChatGPT
     Plus or Claude subscription quota instead of the PAYG endpoint.
 
-    CSA-3 (2026-05-22) — the OAuth-routed prefixes are now ``claude-cli/``
-    and ``codex-cli/`` (paperclip subprocess providers); the older
-    ``claude-code/`` and ``openai-codex/`` prefixes stay recognised
-    for back-compat with already-archived eval IDs.
+    ``codex-cli/`` stays recognised only when reading historical eval IDs;
+    new routing rejects that retired execution path.
     """
     return inspect_id.startswith(("openai-codex/", "claude-code/", "claude-cli/", "codex-cli/"))
 

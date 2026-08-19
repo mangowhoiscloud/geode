@@ -446,7 +446,7 @@ GEODE를 돌리려면 프로바이더 자격이 하나 필요합니다. 이 페�
 
 | 경로 | 자격 | 등록 방법 | 적합한 상황 |
 | --- | --- | --- | --- |
-| 1\. ChatGPT 구독 OAuth | ChatGPT Plus 구독 (Codex CLI 토큰) | `geode setup`이 `~/.codex/auth.json`을 자동 감지합니다. 없으면 `/login openai`로 device-code 로그인. | 이미 ChatGPT를 결제 중이고 API 키를 따로 만들기 싫을 때. `gpt-5.5`는 이 경로로만 라우팅됩니다. |
+| 1\. ChatGPT 구독 OAuth | ChatGPT 구독 OAuth | `/login openai`로 device-code 로그인. 기존 `~/.codex/auth.json` 자격도 가져올 수 있습니다. | 이미 ChatGPT를 결제 중이고 API 키를 따로 만들기 싫을 때. `gpt-5.5`는 이 경로로만 라우팅됩니다. |
 | 2\. Anthropic 구독 OAuth | Claude 구독 (claude CLI 자격) | `/login anthropic`. macOS keychain의 Claude Code 자격을 읽습니다. | Claude 구독이 있고 `claude-opus-4-8` 계열을 기본으로 쓰고 싶을 때. |
 | 3\. PAYG API 키 | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `ZAI_API_KEY` | `~/.geode/.env`에 키만 적습니다. `geode setup` 또는 `/login add`가 대신 적어줍니다. | 토큰 단위로 비용을 직접 통제하고 싶을 때. 팀 계정과 CI에도 맞습니다. |
 | 4\. 저비용 GLM 경로 | `ZAI_API_KEY` (GLM) | 같은 방식으로 `~/.geode/.env`에 등록합니다. | 거의 무료로 먼저 체험할 때. `glm-4.7-flash`는 한시 무료 티어입니다. |
@@ -473,7 +473,7 @@ GEODE를 돌리려면 프로바이더 자격이 하나 필요합니다. 이 페�
 | `auto` | 기본값. OAuth를 먼저 시도하고, PAYG 전환은 설정으로 게이트됩니다. |
 | `api_key` | PAYG API 키만 사용합니다. |
 | `claude-cli` | claude CLI의 Anthropic 구독 OAuth를 사용합니다. |
-| `openai-codex` | Codex CLI의 ChatGPT 구독 OAuth를 사용합니다. |
+| `openai-codex` | 프로세스 내부 `codex-oauth` 어댑터로 ChatGPT 구독 OAuth를 사용합니다. |
 
 ## 예시
 
@@ -493,7 +493,7 @@ geode about              # 실효 모델 + 자격 상태 확인
 
 | 증상 | 원인 | 해법 |
 | --- | --- | --- |
-| setup이 ChatGPT OAuth를 못 찾음 | `~/.codex/auth.json` 없음 | Codex CLI로 먼저 로그인하거나 `/login openai`의 device-code 플로우를 씁니다. 후자는 `~/.geode/auth.toml`에 저장됩니다. |
+| setup이 ChatGPT OAuth를 못 찾음 | `~/.codex/auth.json` 없음 | `/login openai`의 device-code 플로우를 씁니다. 기존 Codex CLI 자격은 가져오기만 하며 추론 실행 경로가 아닙니다. |
 | 키를 넣었는데 모델이 안 바뀜 | .env는 시크릿 전용, 모델은 별개 설정 | `/model`로 고릅니다. 안 먹으면 `geode config explain model`로 어느 레이어가 이기는지 봅니다. |
 | GLM 구독인데 미터링 과금 | Coding Plan 키가 PAYG 엔드포인트로 나감 | GLM은 Coding Plan과 PAYG 엔드포인트가 다릅니다. [프로바이더 설정](https://mangowhoiscloud.github.io/geode/docs/run/providers.md)의 GLM 절을 확인합니다. |
 | 응답이 비거나 401 | OAuth 만료 또는 무효 키 | `geode doctor`로 점검하고 `/login`으로 갱신합니다. |
@@ -1292,7 +1292,7 @@ definitions.json / MCP discovery
 | `anthropic-payg`<br>`anthropic-oauth` | Messages API tool definition | `required`→`any`, named→`tool` | `tool_use_id`가 있는 `tool_result` |
 | `openai-payg`<br>`codex-oauth` | Responses API의 flat function tool, `parallel_tool_calls=true` | `any`→`required`, named→flat function | `call_id`로 묶인 `function_call` / `function_call_output` |
 | `glm-payg`<br>`glm-coding-plan` | Chat Completions의 nested function tool | `any`→`required`, named→nested function | `tool_call_id`가 있는 `role=tool` message |
-| `claude-cli`<br>`codex-cli` | GEODE adapter 경계는 text-only이며 `supports_tools=False` | 전달하지 않음 | GEODE tool result replay 없음 |
+| `claude-cli` | GEODE adapter 경계는 text-only이며 `supports_tools=False` | 전달하지 않음 | GEODE tool result replay 없음 |
 
 이 표는 GEODE request builder의 보장입니다. 특정 모델이 모든 선택 모드나 tool schema를 받아들인다는 모델별 호환성 주장까지 포함하지 않습니다.
 
@@ -1392,7 +1392,6 @@ task = SubTask(..., response_schema=DECISION_SCHEMA)
 | --- | --- | --- |
 | `openai-payg`<br>`codex-oauth` | Responses API `text.format`의 `json_schema` | strict-compatible schema면 `strict=true`, 아니면 `strict=false` hint |
 | `claude-cli` | `--json-schema <inline JSON>` | CLI subprocess 경계에서 schema flag를 전달 |
-| `codex-cli` | 임시 JSON 파일을 만든 뒤 `--output-schema <FILE>` | subprocess 종료 뒤 임시 파일 삭제 |
 | `anthropic-payg`<br>`anthropic-oauth` | 현재 공통 Messages request builder가 읽지 않음 | schema field는 무시됨. JSON discipline이 필요하면 caller prompt와 downstream validation이 별도로 필요 |
 | `glm-payg`<br>`glm-coding-plan` | 현재 Chat Completions request builder가 읽지 않음 | 이 경로에서는 provider-side schema enforcement 없음 |
 
@@ -1482,7 +1481,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/runtime/orchestration.md
 | --- | --- | --- |
 | `global` | max\_concurrent=50 | 프로덕션 기본값 (`core/wiring/container.py`) |
 | `gateway` | 설정값 | 메신저 인바운드 |
-| `claude-cli-subagent` / `codex-cli-subagent` | 레인별 설정 | CLI 구독 레인 보호 |
+| `claude-cli-subagent` | 레인별 설정 | Claude CLI 구독 레인 보호 |
 | `seed-generation` | 레인별 설정 | 시드 파이프라인 |
 
 SessionLane은 세션 키 256개까지 유지하고 유휴 키를 정리합니다.
@@ -5084,11 +5083,11 @@ GEODE는 프로바이더마다 두 종류의 자격을 받습니다. 구독 OAut
 | `auto` | 매니페스트 순서 해석. OAuth 우선, PAYG는 `fallback_to_payg`가 켜진 경우에만. |
 | `api_key` | PAYG API 키. |
 | `claude-cli` | claude CLI 구독을 통한 Anthropic OAuth. |
-| `openai-codex` | Codex CLI를 통한 ChatGPT 구독 OAuth. |
+| `openai-codex` | 프로세스 내부 `codex-oauth` 어댑터를 통한 ChatGPT 구독 OAuth. |
 | `oauth` | 레거시 별칭. Settings 검증이 받아줍니다. |
 | `none` | 해당 프로바이더 비활성 센티널. |
 
-선택은 `[llm] anthropic_credential_source` /`openai_credential_source`(기본 `auto`)에 저장됩니다. `/login source <provider> <type>`은 toml에만 쓰므로 `.env`를 지워도 선택이 살아남습니다. (provider, source) 쌍마다 구체 어댑터가 하나씩 레지스트리에 등록됩니다(`core/llm/adapters/`의`anthropic_payg`, `anthropic_oauth`,`claude_cli`, `openai_payg`,`codex_oauth`, `codex_cli`,`glm_coding_plan`, `glm_payg`).
+선택은 `[llm] anthropic_credential_source` /`openai_credential_source`(기본 `auto`)에 저장됩니다. `/login source <provider> <type>`은 toml에만 쓰므로 `.env`를 지워도 선택이 살아남습니다. (provider, source) 쌍마다 구체 어댑터가 하나씩 레지스트리에 등록됩니다(`core/llm/adapters/`의`anthropic_payg`, `anthropic_oauth`,`claude_cli`, `openai_payg`,`codex_oauth`,`glm_coding_plan`, `glm_payg`).
 
 ## /login 대시보드
 
@@ -5132,9 +5131,9 @@ uv나 GitHub에서 설치한 사용자도 중앙 GEODE OAuth 앱 없이 자신�
 
 Workspace 읽기 결과는 선택한 LLM 프로바이더로 전달될 수 있으므로 매 도구 호출 직전에 개인 데이터 disclosure와 affirmative consent가 뜹니다. 이 승인은 always-allow할 수 없고 headless·서브에이전트에서는 닫힌 채로 거부됩니다. Gmail 전송과 Drive/Docs/Sheets/Tasks/Calendar 변경도 같은 비캐시형 매 호출 승인을 거쳐 HITL 0·권한 건너뛰기로 우회할 수 없습니다. 자세한 스키마와 Hermes 비교는 설계 기록`docs/architecture/google-workspace-oauth.md`에 있습니다.
 
-## Codex 토큰 감지
+## ChatGPT 자격 가져오기
 
-ChatGPT Plus 구독 OAuth는 Codex CLI의 토큰 저장소`~/.codex/auth.json`을 읽습니다 (`core/auth/codex_cli_oauth.py`). 토큰 수명은 Codex CLI가 책임집니다. GEODE는 복사본을 영속화하지 않고 읽기만 하며, JWT exp로 만료를 판별합니다.`geode setup`도 API 키를 묻기 전에 이 파일을 먼저 감지합니다.
+기본 경로는 `/login openai`가 발급해`~/.geode/auth.toml`에 저장한 자격입니다. 기존`~/.codex/auth.json`도 읽을 수 있지만 이는 자격 가져오기일 뿐이며 GEODE는 Codex CLI를 추론에 실행하지 않습니다.
 
 ## PAYG 키
 
@@ -5183,7 +5182,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/ops/oauth.md
 | 401 자동 갱신 | 인증 실패(401/403) 시 쿨다운을 적용하기 전에 한 번 더 다시 읽고, 토큰이 바뀌었으면 오류 카운트를 리셋합니다. |
 | 쿨다운 | `calculate_cooldown_ms`가 오류 횟수에 따라 쿨다운을 키웁니다. 키별 상태는 `core/auth/cooldown.py`의 `CooldownTracker`가 보관합니다. |
 
-관리형 토큰의 대표가 Codex입니다. 수명 관리는 Codex CLI가 하고 GEODE는 `~/.codex/auth.json`을 읽기만 합니다. 그래서 "갱신"은 새 토큰 발급이 아니라 외부 저장소 재독입니다. 발급이 필요하면 `codex login`을 다시 돌립니다.
+`/login openai`으로 발급한 ChatGPT 자격은 GEODE가`~/.geode/auth.toml`에서 직접 관리합니다. 기존`~/.codex/auth.json`을 가져온 프로파일만 외부 저장소를 재독하며, 어느 경우에도 Codex CLI를 추론에 실행하지 않습니다.
 
 ## 운영 시 알아둘 것
 
@@ -6115,7 +6114,7 @@ Tier 2  latex2sympy2 + sympy.pretty  블록 전용. 분수·적분을 2D Unicode
 URL: https://mangowhoiscloud.github.io/geode/docs/reference/changelog
 Markdown: https://mangowhoiscloud.github.io/geode/docs/reference/changelog.md
 
-(body omitted from llms-full: 1512 KB — fetch the Markdown twin above for the complete page)
+(body omitted from llms-full: 1513 KB — fetch the Markdown twin above for the complete page)
 
 ---
 
@@ -6275,11 +6274,11 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 
 | 측정값 | 현재 트리 |
 | --- | --- |
-| 프로덕션 Python 파일 | 551 |
-| 테스트 Python 파일 | 686 |
+| 프로덕션 Python 파일 | 545 |
+| 테스트 Python 파일 | 683 |
 | 도구 정의 / 실행 등록 / 유효 스키마 | 87 / 90 / 87 |
 | RuntimeEvent 멤버 | 57 |
-| 기본 LLM 어댑터 | 8 |
+| 기본 LLM 어댑터 | 7 |
 | 모듈 수준 ContextVar | 30 |
 | core → plugins import 지점 / 파일 | 31 / 14 |
 | import-linter 예외 edge | 24 |

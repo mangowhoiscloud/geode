@@ -64,7 +64,6 @@ def test_paired_coding_reference_preserves_runtime_and_verification_boundaries()
         "geode-mcp run_agent",
         "CodexOAuthAdapter",
         "inside GEODE's AgenticLoop",
-        "CodexCliAdapter",
         "launches native `codex exec`",
         "`codex` and `codex-reply`",
         "must not auto-merge or auto-promote",

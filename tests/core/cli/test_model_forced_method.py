@@ -121,7 +121,7 @@ def test_picker_render_includes_forced_badge(
 
     profiles: list[tuple[str, str, str, str, bool, str | None]] = [
         ("claude-opus-4-7", "anthropic", "Opus 4.7", "$$$", True, None),
-        ("gpt-5.5", "openai-codex", "GPT-5.5", "$$", True, "apikey"),
+        ("gpt-5.5", "openai", "GPT-5.5", "$$", True, "apikey"),
     ]
     effort_picker._render(profiles, cursor=0, effort_per_model={}, initial_model="claude-opus-4-7")
     out = capsys.readouterr().out
@@ -153,7 +153,7 @@ def test_cmd_model_nontty_lists_forced_badge(capsys: pytest.CaptureFixture[str])
     from core.cli.commands import model as _model_mod
 
     def fake_forced(provider: str) -> str | None:
-        return "apikey" if provider == "openai-codex" else None
+        return "apikey" if provider == "openai" else None
 
     with (
         patch("core.cli.commands.model.model_available", return_value=True),

@@ -1,9 +1,8 @@
-"""Paperclip pattern — invoke local Claude Code / Codex CLI via subprocess.
+"""Invoke local Claude Code via subprocess.
 
 Used by the mutator runner when ``MutatorConfig.source`` is
-``"claude-cli"`` or ``"openai-codex"``. The dispatch goes through the
-operator's existing CLI subscription (Claude Code Max plan / ChatGPT
-Plus → Codex CLI) instead of the API-billed providers.
+``"claude-cli"``. The dispatch goes through the operator's existing
+Claude Code subscription instead of the API-billed provider.
 
 **Why subprocess vs HTTP**: per session decision Q1=b — keep the loop
 honest about which channel was billed. The CLI binary owns its own
@@ -12,9 +11,8 @@ stdout. No extra OAuth-token plumbing inside the loop.
 
 **Resolution**:
 
-* Binary path defaults to ``claude`` / ``codex`` on ``$PATH``. Operators
-  on non-standard installs override via ``GEODE_CLAUDE_CLI_BIN`` /
-  ``GEODE_CODEX_CLI_BIN``.
+* Binary path defaults to ``claude`` on ``$PATH``. Operators on
+  non-standard installs override via ``GEODE_CLAUDE_CLI_BIN``.
 * Missing binary → :class:`RuntimeError` with an actionable message
   (``brew install …`` / ``npm i -g @anthropic-ai/claude-code``).
 * Non-zero exit → :class:`RuntimeError` carrying stderr (truncated).
@@ -37,17 +35,13 @@ log = logging.getLogger(__name__)
 
 __all__ = [
     "CLAUDE_CLI_BIN_ENV",
-    "CODEX_CLI_BIN_ENV",
     "CliInvocationError",
     "invoke_claude_cli",
-    "invoke_codex_cli",
 ]
 
 CLAUDE_CLI_BIN_ENV = "GEODE_CLAUDE_CLI_BIN"
-CODEX_CLI_BIN_ENV = "GEODE_CODEX_CLI_BIN"
 
 _DEFAULT_CLAUDE_BIN = "claude"
-_DEFAULT_CODEX_BIN = "codex"
 
 # Per-call timeout — mutator LLM calls should finish in seconds. A long
 # subprocess hang (network stall, interactive prompt waiting on stdin)
@@ -80,8 +74,7 @@ def _resolve_binary(env_var: str, default: str) -> str:
     if not found:
         raise CliInvocationError(
             f"{default!r} not found on $PATH. Install Claude Code "
-            f"(https://docs.anthropic.com/claude/docs/claude-code) "
-            f"or Codex CLI (https://github.com/openai/codex), or set "
+            f"(https://docs.anthropic.com/claude/docs/claude-code), or set "
             f"{env_var} to point at the binary."
         )
     return found
@@ -151,36 +144,5 @@ def invoke_claude_cli(*, system_prompt: str, user_prompt: str) -> str:
         user_prompt,
     ]
     with acquire_claude_cli_lane(key="self_improving_loop.mutator"):
-        out = _run(binary, args, stdin_text="")
-    return out.strip()
-
-
-def invoke_codex_cli(*, system_prompt: str, user_prompt: str) -> str:
-    """Run ``codex exec`` with the given system + user prompts.
-
-    Wire path:
-        ``codex exec --skip-git-repo-check <COMBINED>``
-
-    Codex CLI's ``exec`` is the non-interactive one-shot mode. The
-    combined prompt prepends the system contract as a ``System:``
-    header so a single positional argument carries both halves —
-    Codex CLI doesn't have a ``--system`` flag equivalent.
-    ``--skip-git-repo-check`` lets the mutator run outside a workspace
-    tree (the self-improving-loop dispatches from
-    ``~/.geode/autoresearch/handoff/`` paths, not the repo root).
-
-    Concurrency gate (PR-LQ-Phase3, 2026-05-22): the call is wrapped
-    in :func:`core.orchestration.codex_cli_lane.acquire_codex_cli_lane`
-    so simultaneous mutator invocations + Petri inspect_ai bridge
-    spawns share a single Codex-bucket-wide cap (default 2). See
-    [[project_lanequeue_handoff_2026_05_22]] for the parity rationale
-    with the Claude side.
-    """
-    from core.orchestration.codex_cli_lane import acquire_codex_cli_lane
-
-    binary = _resolve_binary(CODEX_CLI_BIN_ENV, _DEFAULT_CODEX_BIN)
-    combined = f"System: {system_prompt}\n\nUser: {user_prompt}"
-    args = ["exec", "--skip-git-repo-check", combined]
-    with acquire_codex_cli_lane(key="self_improving_loop.mutator"):
         out = _run(binary, args, stdin_text="")
     return out.strip()

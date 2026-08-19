@@ -35,7 +35,7 @@ these pins are for AUDITABILITY — they record WHAT WAS SENT — and make NO cl
 that any backend replays deterministically from them. A ctx7 lookup of inspect_ai
 (2026-05-30, ``/ukgovernmentbeis/inspect_ai``) confirmed ``GenerateConfig`` ACCEPTS
 ``seed`` / ``temperature`` / ``top_p`` (SDK contract) but did NOT document that any
-backend — least of all GEODE's claude-cli / codex-cli OAuth subscription providers
+backend — least of all GEODE's subscription providers
 — HONORS ``seed`` for bit-identical reproducible replay. The contract is therefore
 ``unverified — live test required``: no determinism flag is set to ``True`` here,
 and ``rng_seed`` is recorded as the value actually sent (``None`` today) so a future

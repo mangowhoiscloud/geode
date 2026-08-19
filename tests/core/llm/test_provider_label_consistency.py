@@ -24,6 +24,11 @@ _LEGACY_TO_REGISTRY = {"openai-codex": "openai", "zhipuai": "glm"}
 
 
 class TestProviderRouting:
+    def test_all_picker_gpt_models_use_openai_family_label(self) -> None:
+        assert {
+            profile.provider for profile in get_model_profiles() if profile.id.startswith("gpt-")
+        } == {"openai"}
+
     def test_codex_models_route_to_openai_codex(self) -> None:
         for model in ("gpt-5.3-codex", "gpt-5.2-codex", "gpt-5.1-codex-mini"):
             assert _resolve_provider(model) == "openai-codex", model

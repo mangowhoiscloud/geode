@@ -56,8 +56,6 @@ def test_agentic_loop_resolves_via_get_adapter_first() -> None:
         "codex-oauth",
         "claude-cli",
         "anthropic-oauth",
-        # Local-CLI subprocess wrapper.
-        "codex-cli",
         # PAYG adapters by name (rather than category) — also
         # resolvable via ``get_adapter`` so callers don't need to know
         # which form the source string takes.
@@ -68,14 +66,13 @@ def test_agentic_loop_resolves_via_get_adapter_first() -> None:
     ],
 )
 def test_agentic_loop_constructs_with_adapter_name_source(adapter_name: str) -> None:
-    """All eight registered adapter names resolve through ``get_adapter``.
+    """All registered adapter names resolve through ``get_adapter``.
 
     The audit subprocess calls
     ``AgenticLoop(..., source=binding.source)`` where ``binding.source``
     is the registered adapter name (after the Petri-surface alias
-    translation in geode_target.py). Each of the eight builtins must
-    resolve cleanly — a regression that drops one (e.g. a refactor
-    that removes ``codex-cli`` from the bootstrap list) surfaces here
+    translation in geode_target.py). Each builtin must resolve cleanly —
+    a regression that drops one surfaces here
     per-adapter rather than as a remote audit-subprocess WARNING.
     """
     from core.llm.adapters.registry import (
@@ -162,7 +159,7 @@ def test_petri_to_registry_map_covers_every_petri_concrete_source() -> None:
         bootstrap_builtins()
 
     # Concrete sources Petri may emit through ``get_binding``.
-    petri_concrete_sources = {"claude-cli", "openai-codex", "codex-cli", "api_key"}
+    petri_concrete_sources = {"claude-cli", "openai-codex", "api_key"}
     # Categorical fallback values resolve_for accepts.
     categories = {"payg", "subscription", "adapter"}
 

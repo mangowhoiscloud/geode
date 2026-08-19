@@ -150,7 +150,7 @@ class AdapterUnavailableError(RuntimeError):
     Two trigger conditions:
 
     - The capability flag is not advertised by any registered adapter
-      (e.g. ``codex-cli`` does not currently expose web_search).
+      (e.g. a local adapter does not expose web_search).
     - A preference ``(prefer_provider, prefer_source)`` was given but
       no registered adapter matches both.
 

@@ -41,8 +41,8 @@ class ModelProfile:
 # based on the user's active /login state.
 #
 # Label = canonical provider ID + cost ($) tier.
-# `gpt-5.5` routes to `openai-codex`; dual-lane OpenAI rows keep provider
-# `openai` and let the credential source select subscription versus PAYG.
+# Every GPT row uses the OpenAI provider family; credential source selects
+# ChatGPT subscription versus PAYG.
 
 # GLM picker rows: id → display label. The live default (GLM_PRIMARY) leads the
 # GLM block and the rest follow, with the default skipped from the tail so an
@@ -62,13 +62,13 @@ _OPENAI_PICKER_MODELS: tuple[ModelProfile, ...] = (
     ModelProfile("gpt-5.6-sol", "openai", "GPT-5.6 Sol", "$$"),
     ModelProfile("gpt-5.6-terra", "openai", "GPT-5.6 Terra", "$$"),
     ModelProfile("gpt-5.6-luna", "openai", "GPT-5.6 Luna", "$"),
-    # GPT-5.5 is subscription-only.
-    ModelProfile("gpt-5.5", "openai-codex", "GPT-5.5", "$$"),
+    # GPT-5.5 is subscription-only, but still belongs to the OpenAI family.
+    ModelProfile("gpt-5.5", "openai", "GPT-5.5", "$$"),
     # GPT-5.4 and Mini are dual-lane.
     ModelProfile("gpt-5.4", "openai", "GPT-5.4", "$$"),
     ModelProfile("gpt-5.4-mini", "openai", "GPT-5.4 Mini", "$"),
     # One-release management compatibility for persisted installations.
-    ModelProfile("gpt-5.3-codex", "openai-codex", "GPT-5.3 Codex (Legacy)", "$$"),
+    ModelProfile("gpt-5.3-codex", "openai", "GPT-5.3 Codex (Legacy)", "$$"),
 )
 
 

@@ -339,7 +339,7 @@ def test_argv_json_schema_dict_appends_serialized_inline() -> None:
     """When ``json_schema`` is set, claude-cli's ``--json-schema``
     flag receives the schema serialised as inline JSON. Pinned shape
     so a future refactor doesn't accidentally pass a file path
-    (claude-cli accepts inline only; codex-cli is the path-based one)."""
+    (claude-cli accepts inline schema only)."""
     import json
 
     from plugins.petri_audit.claude_cli_provider import build_claude_cli_argv
@@ -509,8 +509,8 @@ def test_extract_text_from_content_block_deltas() -> None:
 
     stdout = _make_stream_json(
         [
-            {"type": "content_block_delta", "delta": {"type": "text_delta", "text": "Hel"}},
-            {"type": "content_block_delta", "delta": {"type": "text_delta", "text": "lo"}},
+            {"type": "content_block_delta", "delta": {"type": "text_delta", "text": "He"}},
+            {"type": "content_block_delta", "delta": {"type": "text_delta", "text": "llo"}},
             {"type": "content_block_delta", "delta": {"type": "text_delta", "text": " world"}},
         ]
     )

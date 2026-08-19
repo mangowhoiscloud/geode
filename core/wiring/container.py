@@ -229,21 +229,6 @@ def build_default_lanes() -> LaneQueue:
         max_concurrent=resolve_claude_cli_lane_max(),
         timeout_s=CLAUDE_CLI_LANE_TIMEOUT_S,
     )
-    # PR-LQ-Phase3 (2026-05-22) — Codex CLI parity. Sibling lane to
-    # ``claude-cli-subagent``; separate semaphore because the two
-    # provider buckets (Anthropic vs ChatGPT subscription OAuth) are
-    # independent. Operator tunes via ``GEODE_CODEX_CLI_LANE_MAX``.
-    from core.orchestration.codex_cli_lane import (
-        CODEX_CLI_LANE_NAME,
-        CODEX_CLI_LANE_TIMEOUT_S,
-        resolve_codex_cli_lane_max,
-    )
-
-    queue.add_lane(
-        CODEX_CLI_LANE_NAME,
-        max_concurrent=resolve_codex_cli_lane_max(),
-        timeout_s=CODEX_CLI_LANE_TIMEOUT_S,
-    )
     return queue
 
 
@@ -287,7 +272,8 @@ def build_auth() -> tuple[ProfileStore, ProfileRotator, CooldownTracker]:
     # Code preserved for reference; re-enable only if policy changes.
     # See: https://www.theregister.com/2026/02/20/anthropic_clarifies_ban_third_party_claude_access
 
-    # Codex CLI OAuth — OpenAI managed credential
+    # Optional import of the credential owned by Codex CLI. Inference stays
+    # in-process through the OpenAI subscription adapter.
     try:
         from core.auth.codex_cli_oauth import (
             read_codex_cli_credentials,
@@ -308,11 +294,11 @@ def build_auth() -> tuple[ProfileStore, ProfileRotator, CooldownTracker]:
                 )
             )
             log.info(
-                "Auth: Codex CLI OAuth detected (account=%s)",
+                "Auth: imported ChatGPT OAuth credential detected (account=%s)",
                 codex_creds.get("account_id", "unknown"),
             )
     except Exception as exc:
-        log.debug("Auth: Codex CLI OAuth not available: %s", exc)
+        log.debug("Auth: imported ChatGPT OAuth credential not available: %s", exc)
 
     profile_rotator = ProfileRotator(profile_store)
     _profile_rotator = profile_rotator

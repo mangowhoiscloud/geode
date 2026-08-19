@@ -8,8 +8,8 @@ export default function Page() {
       slug="runtime/auth"
       title="Auth and OAuth"
       titleKo="인증과 OAuth"
-      summary="Credential sources, OAuth profiles behind /login, the Codex token detection, and where API keys live."
-      summaryKo="자격 소스, /login 뒤의 OAuth 프로파일, Codex 토큰 감지, API 키가 사는 곳을 다룹니다."
+      summary="Credential sources, OAuth profiles behind /login, optional credential import, and where API keys live."
+      summaryKo="자격 소스, /login 뒤의 OAuth 프로파일, 선택적 자격 가져오기, API 키가 사는 곳을 다룹니다."
     >
       <Bi
         ko={
@@ -35,7 +35,7 @@ export default function Page() {
                 <tr><td><code>auto</code></td><td>매니페스트 순서 해석. OAuth 우선, PAYG는 <code>fallback_to_payg</code>가 켜진 경우에만.</td></tr>
                 <tr><td><code>api_key</code></td><td>PAYG API 키.</td></tr>
                 <tr><td><code>claude-cli</code></td><td>claude CLI 구독을 통한 Anthropic OAuth.</td></tr>
-                <tr><td><code>openai-codex</code></td><td>Codex CLI를 통한 ChatGPT 구독 OAuth.</td></tr>
+                <tr><td><code>openai-codex</code></td><td>프로세스 내부 <code>codex-oauth</code> 어댑터를 통한 ChatGPT 구독 OAuth.</td></tr>
                 <tr><td><code>oauth</code></td><td>레거시 별칭. Settings 검증이 받아줍니다.</td></tr>
                 <tr><td><code>none</code></td><td>해당 프로바이더 비활성 센티널.</td></tr>
               </tbody>
@@ -49,7 +49,7 @@ export default function Page() {
               등록됩니다(<code>core/llm/adapters/</code>의
               <code>anthropic_payg</code>, <code>anthropic_oauth</code>,
               <code>claude_cli</code>, <code>openai_payg</code>,
-              <code>codex_oauth</code>, <code>codex_cli</code>,
+              <code>codex_oauth</code>,
               <code>glm_coding_plan</code>, <code>glm_payg</code>).
             </p>
 
@@ -128,15 +128,12 @@ export default function Page() {
               <code>docs/architecture/google-workspace-oauth.md</code>에 있습니다.
             </p>
 
-            <h2>Codex 토큰 감지</h2>
+            <h2>ChatGPT 자격 가져오기</h2>
             <p>
-              ChatGPT Plus 구독 OAuth는 Codex CLI의 토큰 저장소
-              <code>~/.codex/auth.json</code>을 읽습니다
-              (<code>core/auth/codex_cli_oauth.py</code>). 토큰 수명은 Codex
-              CLI가 책임집니다. GEODE는 복사본을 영속화하지 않고 읽기만
-              하며, JWT exp로 만료를 판별합니다.
-              <code>geode setup</code>도 API 키를 묻기 전에 이 파일을 먼저
-              감지합니다.
+              기본 경로는 <code>/login openai</code>가 발급해
+              <code>~/.geode/auth.toml</code>에 저장한 자격입니다. 기존
+              <code>~/.codex/auth.json</code>도 읽을 수 있지만 이는 자격
+              가져오기일 뿐이며 GEODE는 Codex CLI를 추론에 실행하지 않습니다.
             </p>
 
             <h2>PAYG 키</h2>
@@ -216,7 +213,7 @@ ZAI_API_KEY={id}.{secret}`}</pre>
                 <tr><td><code>auto</code></td><td>Manifest-order resolution. OAuth first; PAYG only when <code>fallback_to_payg</code> allows.</td></tr>
                 <tr><td><code>api_key</code></td><td>PAYG API key.</td></tr>
                 <tr><td><code>claude-cli</code></td><td>Anthropic OAuth via the claude CLI subscription.</td></tr>
-                <tr><td><code>openai-codex</code></td><td>ChatGPT subscription OAuth via the Codex CLI.</td></tr>
+                <tr><td><code>openai-codex</code></td><td>ChatGPT subscription OAuth through the in-process <code>codex-oauth</code> adapter.</td></tr>
                 <tr><td><code>oauth</code></td><td>Legacy alias, accepted by Settings validation.</td></tr>
                 <tr><td><code>none</code></td><td>Disable sentinel for the provider.</td></tr>
               </tbody>
@@ -232,7 +229,7 @@ ZAI_API_KEY={id}.{secret}`}</pre>
               (<code>core/llm/adapters/</code>: <code>anthropic_payg</code>,
               <code>anthropic_oauth</code>, <code>claude_cli</code>,
               <code>openai_payg</code>, <code>codex_oauth</code>,
-              <code>codex_cli</code>, <code>glm_coding_plan</code>,
+              <code>glm_coding_plan</code>,
               <code>glm_payg</code>).
             </p>
 
@@ -315,15 +312,12 @@ ZAI_API_KEY={id}.{secret}`}</pre>
               <code>docs/architecture/google-workspace-oauth.md</code>.
             </p>
 
-            <h2>Codex token detection</h2>
+            <h2>ChatGPT credential import</h2>
             <p>
-              ChatGPT Plus subscription OAuth reads the Codex CLI&apos;s token
-              store at <code>~/.codex/auth.json</code>
-              (<code>core/auth/codex_cli_oauth.py</code>). This is managed
-              credential reuse: Codex CLI owns the token lifecycle; GEODE
-              reads without persisting copies and decodes the JWT exp for
-              expiry. <code>geode setup</code> also detects this file before
-              asking for any API key.
+              The default path is a credential issued by <code>/login openai</code>
+              and stored in <code>~/.geode/auth.toml</code>. GEODE can also read
+              an existing <code>~/.codex/auth.json</code>, but that is credential
+              import only: Codex CLI is never spawned for inference.
             </p>
 
             <h2>PAYG keys</h2>

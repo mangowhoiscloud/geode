@@ -283,8 +283,8 @@ def test_v3_subprocess_stdin_skips_system_prompt_when_resuming() -> None:
     actual mechanism by which PR-V's CHANGELOG-claimed quota savings
     materialise. First-turn callers (empty resume_session_id) must
     still send the prompt so claude-cli caches it for next turn."""
-    from core.llm.adapters._subprocess_common import build_subprocess_stdin
     from core.llm.adapters.base import AdapterCallRequest, Message
+    from core.llm.adapters.claude_cli import build_subprocess_stdin
 
     system_prompt = "Role: Petri seed generator. Output JSON only."
     user_msg = Message(role="user", content="Generate seed for X")

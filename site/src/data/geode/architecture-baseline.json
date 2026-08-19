@@ -6,11 +6,10 @@
       "ClaudeCliAdapter",
       "OpenAIPaygAdapter",
       "CodexOAuthAdapter",
-      "CodexCliAdapter",
       "GlmPaygAdapter",
       "GlmCodingPlanAdapter"
     ],
-    "count": 8
+    "count": 7
   },
   "complexity_thresholds": {
     "max_args": 23,
@@ -247,7 +246,7 @@
     },
     "SubAgentManager": {
       "constructor_arg_count": 17,
-      "file_loc": 1450,
+      "file_loc": 1449,
       "method_count": 24,
       "path": "core/agent/sub_agent.py"
     }
@@ -312,37 +311,37 @@
         "path": "core/cli/tool_handlers/audit.py"
       },
       {
-        "line": 40,
+        "line": 39,
         "module": "plugins.petri_audit.claude_cli_provider",
         "path": "core/llm/adapters/claude_cli.py"
       },
       {
-        "line": 73,
+        "line": 90,
         "module": "plugins.petri_audit.claude_cli_provider",
         "path": "core/llm/adapters/claude_cli.py"
       },
       {
-        "line": 247,
+        "line": 264,
         "module": "plugins.petri_audit.claude_cli_provider",
         "path": "core/llm/adapters/claude_cli.py"
       },
       {
-        "line": 291,
+        "line": 308,
         "module": "plugins.petri_audit.adapters.claude_cli_backend",
         "path": "core/llm/adapters/claude_cli.py"
       },
       {
-        "line": 294,
+        "line": 311,
         "module": "plugins.petri_audit.claude_cli_provider",
         "path": "core/llm/adapters/claude_cli.py"
       },
       {
-        "line": 354,
+        "line": 371,
         "module": "plugins.petri_audit.adapters.claude_cli_backend",
         "path": "core/llm/adapters/claude_cli.py"
       },
       {
-        "line": 373,
+        "line": 390,
         "module": "plugins.petri_audit.adapters.claude_cli_backend",
         "path": "core/llm/adapters/claude_cli.py"
       },
@@ -362,17 +361,17 @@
         "path": "core/llm/router/calls/_failover.py"
       },
       {
-        "line": 268,
+        "line": 265,
         "module": "plugins.petri_audit.pool_validation",
         "path": "core/self_improving/campaign.py"
       },
       {
-        "line": 2229,
+        "line": 2224,
         "module": "plugins.petri_audit.runner",
         "path": "core/self_improving/campaign.py"
       },
       {
-        "line": 2308,
+        "line": 2303,
         "module": "plugins.petri_audit.pool_validation",
         "path": "core/self_improving/campaign.py"
       },
@@ -531,16 +530,16 @@
   },
   "packages": {
     "core": {
-      "python_files": 437,
-      "python_loc": 139636
+      "python_files": 434,
+      "python_loc": 138968
     },
     "plugins": {
-      "python_files": 114,
-      "python_loc": 44886
+      "python_files": 111,
+      "python_loc": 44062
     },
     "tests": {
-      "python_files": 686,
-      "python_loc": 184274
+      "python_files": 683,
+      "python_loc": 183042
     }
   },
   "schema_version": 1,

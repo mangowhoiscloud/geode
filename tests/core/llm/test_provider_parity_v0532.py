@@ -144,39 +144,36 @@ def test_pricing_and_context_window_share_anthropic_keys() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_gpt_5_5_model_profile_provider_matches_resolver() -> None:
-    """v0.53.2 D4 fix: the ModelProfile picker label MUST match the
-    static provider mapping. Pre-fix gpt-5.5 was tagged ``"openai"`` in
-    the picker but ``_resolve_provider("gpt-5.5")`` returned
-    ``"openai-codex"`` (Codex-only per developers.openai.com/codex/models).
-    The actual routing was correct via resolve_routing's equivalence-class
-    scan, but the user-visible UI label was wrong."""
+def test_gpt_5_5_model_profile_uses_resolver_family() -> None:
+    """The picker presents the OpenAI family, not an auth/backend variant."""
     from core.cli.commands import get_model_profiles
     from core.config import _resolve_provider
+    from core.llm.adapters.registry import normalize_registry_provider
 
     profiles = {p.id: p for p in get_model_profiles()}
     assert "gpt-5.5" in profiles, "gpt-5.5 must be in the model picker list"
-    assert profiles["gpt-5.5"].provider == _resolve_provider("gpt-5.5"), (
+    assert profiles["gpt-5.5"].provider == normalize_registry_provider(
+        _resolve_provider("gpt-5.5")
+    ), (
         f"gpt-5.5 ModelProfile.provider = {profiles['gpt-5.5'].provider!r}, "
         f"_resolve_provider returned {_resolve_provider('gpt-5.5')!r}. "
-        "These must agree so the /model picker label is honest about "
-        "which auth-mode the user's pick will consume."
+        "The picker must expose the provider family, while credential source "
+        "owns the auth/backend selection."
     )
 
 
-def test_all_model_profiles_provider_matches_resolver() -> None:
-    """Stronger D4 invariant: every ModelProfile entry's provider field
-    must equal ``_resolve_provider(profile.id)``. Catches future
-    additions that forget the matching."""
+def test_all_model_profiles_match_resolver_family() -> None:
+    """Every picker entry matches the executable adapter provider family."""
     from core.cli.commands import get_model_profiles
     from core.config import _resolve_provider
+    from core.llm.adapters.registry import normalize_registry_provider
 
     mismatches: list[tuple[str, str, str]] = []
     for profile in get_model_profiles():
-        resolved = _resolve_provider(profile.id)
+        resolved = normalize_registry_provider(_resolve_provider(profile.id))
         if profile.provider != resolved:
             mismatches.append((profile.id, profile.provider, resolved))
     assert not mismatches, (
-        "ModelProfile.provider must match _resolve_provider for every model. "
+        "ModelProfile.provider must match the normalized provider family. "
         f"Mismatches (id, profile_label, resolver_says): {mismatches}"
     )
