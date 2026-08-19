@@ -16,8 +16,8 @@ sequences and rot codebase health when nobody is grepping for them.
   and dead-helper candidates introduced during a sprint.
 - **After a large refactor / removal PR.** Surfaces stale references
   to the removed feature in unrelated files.
-- **Before promotion.** Run the canonical non-growth gate separately with
-  `uv run python scripts/check_slop_ratchet.py`.
+- **Before promotion.** Use it to find review candidates; its counts do not
+  decide promotion.
 
 ## The 6 lenses
 
@@ -30,8 +30,8 @@ sequences and rot codebase health when nobody is grepping for them.
 | 5 | `lint_bypass_markers` | `# noqa` + `# type: ignore` count. | info |
 | 6 | `stale_references` | Known-removed names that re-appear in source (`BudgetGuard`, `seeds_safe10`, etc.). | error if >0 |
 
-Severity is **diagnostic**. The promotion ratchet is intentionally separate so
-heuristic absolute counts do not become an accepted-debt floor.
+Severity is **diagnostic**. Heuristic absolute counts are not an accepted-debt
+floor or promotion contract.
 
 ## Reading the output
 
@@ -58,16 +58,13 @@ lens. Inspect samples for patterns:
 ## Workflow
 
 ```bash
-# Heuristic discovery report
 uv run python scripts/slop_audit.py
-
-# Canonical promotion-time non-growth gate
-uv run python scripts/check_slop_ratchet.py
 ```
 
 The original 2026-05-18 absolute-count snapshot is preserved at
 `docs/reference/2026-05-18-slop-audit-baseline.md` as historical evidence. It
-is not a current pass/fail contract.
+is not a current pass/fail contract. Ruff, mypy, dependency checks, coverage,
+and behavior tests remain the promotion gates.
 
 Treat all six lenses as discovery signals. Before deleting code or tests, use
 the deletion gate in `.agents/skills/agent-anti-pattern/references/field-guide.md`.

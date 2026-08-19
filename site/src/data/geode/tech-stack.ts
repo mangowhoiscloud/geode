@@ -3,11 +3,7 @@ export interface TechCategory {
   items: string[];
 }
 
-/**
- * GEODE tech stack — verified against the repo on 2026-07-10.
- * pytest count from `pytest --co` on the same date; keep values measured,
- * never aspirational.
- */
+/** GEODE tech stack — capability labels, not count-bearing metrics. */
 export const geodeTechCategories: TechCategory[] = [
   {
     title: "Runtime",
@@ -27,7 +23,7 @@ export const geodeTechCategories: TechCategory[] = [
   },
   {
     title: "Quality",
-    items: ["pytest 9,479", "mypy", "ruff", "import-linter"],
+    items: ["pytest + coverage", "mypy", "ruff", "import-linter"],
   },
   {
     title: "Site",

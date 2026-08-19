@@ -101,8 +101,7 @@ def _git(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
 
 
 # ---------------------------------------------------------------------------
-# 1. to-do marker aging (spelled lowercase here so the slop ratchet
-#    does not self-count its own collector)
+# 1. To-do marker aging
 # ---------------------------------------------------------------------------
 
 

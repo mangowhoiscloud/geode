@@ -696,9 +696,9 @@ Tier 3    Session         In-memory, conversation, tool results, plans
 <summary><strong>Development workflow (Scaffold)</strong></summary>
 
 CANNOT (guardrails) before CAN (freedom). A 7-step workflow plus quality gates.
-The CI ratchet (pytest, mypy, ruff, import-order, test-count) must pass before
-any merge. The measured test-count floor cannot decrease without an explicit
-deletion rationale and updated ratchet.
+The CI gates (pytest with coverage, mypy, Ruff, and dependency/import checks)
+must pass before any merge. Test deletion requires a surviving behavior
+invariant; a raw test count is not a quality signal.
 
 | Gate | Command | Target |
 |------|---------|--------|
