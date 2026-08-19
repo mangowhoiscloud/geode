@@ -10,7 +10,8 @@
     "sync-stats": "node scripts/sync-stats.mjs",
     "render-diagrams": "node scripts/render-diagrams.mjs",
     "build-layer-graph": "node scripts/build-layer-graph.mjs",
-    "export-md": "node scripts/export-docs-md.mjs"
+    "export-md": "node scripts/export-docs-md.mjs",
+    "verify-metadata": "node scripts/verify-public-metadata.mjs"
   },
   "dependencies": {
     "@astryxdesign/core": "^0.1.4",

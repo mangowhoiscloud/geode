@@ -24,7 +24,11 @@ sub-agent worker subprocess, which has the identical wiring gap.
 
 from __future__ import annotations
 
-from pathlib import Path
+import ast
+import inspect
+import textwrap
+
+from plugins.petri_audit.geode_target import _default_geode_runner
 
 
 def test_default_geode_runner_calls_bootstrap_builtins() -> None:
@@ -35,11 +39,15 @@ def test_default_geode_runner_calls_bootstrap_builtins() -> None:
     call (e.g. import rearrangement, function extraction) fails the
     test before the audit subprocess fake-success regression re-lands.
     """
-    target_module = (
-        Path(__file__).resolve().parents[3] / "plugins" / "petri_audit" / "geode_target.py"
-    )
-    source = target_module.read_text(encoding="utf-8")
-    assert "bootstrap_builtins(policy_sources=policy_sources)" in source, (
+    tree = ast.parse(textwrap.dedent(inspect.getsource(_default_geode_runner)))
+    calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "bootstrap_builtins"
+    ]
+    assert any({kw.arg for kw in call.keywords} >= {"policy_sources"} for call in calls), (
         "bootstrap_builtins must be CALLED (not merely imported) inside "
         "_default_geode_runner. The audit subprocess's wiring container "
         "is the parent's, not this one's — registry stays empty without "

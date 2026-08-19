@@ -1,8 +1,11 @@
+import ast
 import asyncio
+import inspect
 import json
 import os
 import subprocess
 import sys
+import textwrap
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -958,14 +961,15 @@ def test_normalize_tool_arguments_drops_empty_start_cursor() -> None:
 
 
 def test_mcpmark_adapter_bootstraps_llm_adapters() -> None:
-    source = (
-        Path(__file__).resolve().parents[3]
-        / "plugins"
-        / "benchmark_harness"
-        / "mcpmark_geode_agent.py"
-    ).read_text(encoding="utf-8")
-
-    assert "bootstrap_builtins(policy_sources=policy_sources)" in source
+    tree = ast.parse(textwrap.dedent(inspect.getsource(_build_loop)))
+    calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "bootstrap_builtins"
+    ]
+    assert any({kw.arg for kw in call.keywords} >= {"policy_sources"} for call in calls)
 
 
 def test_mcpmark_adapter_keeps_service_specific_server_overrides() -> None:

@@ -11,11 +11,11 @@ Proven in the GEODE v0.24.0 session (3,205 lines reduced, __init__.py -57%).
 
 ## Workflow
 
-```
+```text
 1. Audit
    → Dead code + duplicates + God Object + Parameter Bloat detection
 2. Triage
-   → Verdict: immediate deletion / refactoring / defer
+   → Verdict: candidate / refactoring / defer, backed by caller evidence
 3. Kanban Registration
    → Register in Backlog by priority
 4. Workspace Isolation
@@ -51,7 +51,9 @@ Note: Search by **full module path**, not basename, to prevent false positives.
 grep -rn "^def " core/ --include="*.py" | awk -F: '{split($NF,a," "); print a[2]}' | sort | uniq -c | sort -rn | head -10
 ```
 
-If identically named functions exist in 2+ locations, **it is impossible to know which one is called until runtime** — a design flaw.
+Repeated names are discovery candidates, not proof of duplication. Trace full
+call paths and compare behavior; protocol methods and local helpers commonly
+share names legitimately.
 
 ### God Object Detection (Kent Beck criteria)
 
@@ -59,23 +61,22 @@ If identically named functions exist in 2+ locations, **it is impossible to know
 find core/ -name "*.py" -not -path "*__pycache__*" -exec wc -l {} + | sort -rn | head -10
 ```
 
-- 500+ lines: Consider splitting
-- 1000+ lines: Split immediately
+- Large files are candidates for responsibility tracing, not automatic splits.
 - `grep -c "^def " FILE` to determine the number of responsibilities
 
 ### Parameter Bloat Detection
 
 ```bash
 grep -rn "def __init__" core/ --include="*.py" -A20 | grep -B1 "def __init__" | head -20
-# 7+ parameters = refactoring candidate
+# Review call-site cohesion; parameter count alone is not a finding.
 ```
 
 ## Phase 2: Triage
 
 | Classification | Criteria | Action |
 |----------------|----------|--------|
-| **Immediate deletion** | 0 imports, only tests exist | Delete file + tests |
-| **Refactoring** | 500+ lines, 3+ responsibilities | Module extraction |
+| **Deletion candidate** | No textual imports found | Apply the agent anti-pattern deletion gate |
+| **Refactoring** | Multiple proven responsibilities or drift paths | Use the smallest extraction that removes the failure |
 | **Defer** | Planned for future use, or requires large-scale changes | Kanban Backlog |
 
 ## Phase 3: Module Extraction Patterns
@@ -119,7 +120,7 @@ uv run mypy core/cli/__init__.py core/cli/new_module.py
 # 3. Full test suite
 uv run pytest tests/ -m "not live" -q
 
-# 4. Tests for deleted modules → import error → delete those tests too
+# 4. Preserve a surviving test for each behavior or invariant after deletion
 ```
 
 ## GEODE Proven Results
@@ -135,6 +136,12 @@ uv run pytest tests/ -m "not live" -q
 ## Anti-patterns
 
 1. **Searching imports by basename** → false positives (e.g., "repl" matching the string "REPL")
-2. **Leaving duplicate functions** → impossible to know which is called until runtime
+2. **Treating shared names as duplicate behavior** → trace callers before changing either implementation
 3. **Not deleting originals after refactoring** → the most dangerous pattern; old version called from serve, leading to lengthy debugging
 4. **Assuming `uv tool install . --force` is sufficient** → `--reinstall` may be required in some cases
+
+For dead-code or test-deletion decisions, follow
+`.agents/skills/agent-anti-pattern/references/field-guide.md`. Zero textual
+imports, file size, parameter count, and test-only callers are insufficient on
+their own; check entrypoints, registries, public exports, persisted state, and
+compatibility contracts first.

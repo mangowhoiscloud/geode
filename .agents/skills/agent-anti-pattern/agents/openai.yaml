@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agent Anti-Pattern Audit"
+  short_description: "Find agent-runtime slop without false deletion"
+  default_prompt: "Use $agent-anti-pattern to audit this agent system and prove each KEEP, SHRINK, DELETE, MEASURE, or DEFER verdict."

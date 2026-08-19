@@ -24,14 +24,14 @@ export default function Page() {
               <thead><tr><th>시스템</th><th>출처</th><th>GEODE가 가져온 것</th></tr></thead>
               <tbody>
                 <tr><td><strong>Claude Code</strong></td><td><a href="https://docs.anthropic.com/en/docs/claude-code/overview">docs.anthropic.com</a></td><td>while(tool_use) primitive, CLAUDE.md 스캐폴드 패턴, 4-tier memory, hooks 패턴.</td></tr>
-                <tr><td><strong>Codex CLI</strong></td><td>OpenAI Codex</td><td>thin CLI + IPC daemon, OAuth flow, sandbox policy.</td></tr>
+                <tr><td><strong>Codex CLI</strong></td><td><a href="https://github.com/openai/codex">github.com/openai/codex</a></td><td>thin CLI + IPC daemon, OAuth flow, sandbox policy.</td></tr>
                 <tr><td><strong>OpenClaw</strong></td><td><a href="https://github.com/openclaw/openclaw">github.com/openclaw/openclaw</a></td><td>Gateway-centric routing, Lane Queue 동시성, Session 격리, Plugin 발견, Policy Chain.</td></tr>
                 <tr><td><strong>Karpathy autoresearch</strong></td><td><a href="https://github.com/karpathy/autoresearch">github.com/karpathy/autoresearch</a> (2026-03)</td><td>Fixed wall-budget으로 비교 가능성 보존. Frozen scoreboard 분리. git monotone ratchet. Token-economic loop. Simplicity criterion.</td></tr>
-                <tr><td><strong>Karpathy LLM Wiki</strong></td><td>gist (2024+)</td><td>&quot;wiki = compiled artifact&quot; 지식 컴파일 패턴.</td></tr>
+                <tr><td><strong>Karpathy LLM Wiki</strong></td><td><a href="https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f">GitHub Gist</a></td><td>&quot;wiki = compiled artifact&quot; 지식 컴파일 패턴.</td></tr>
                 <tr><td><strong>Hermes Agent (NousResearch)</strong></td><td><a href="https://hermes-agent.nousresearch.com/docs/">hermes-agent.nousresearch.com/docs</a></td><td>llms.txt / llms-full.txt 듀얼 인덱스, system_and_3 cache_control 패턴, 멀티채널 personal agent.</td></tr>
-                <tr><td><strong>Cursor</strong></td><td>cursor.com</td><td>Composer 패턴 (참조용. GEODE는 별도 구현).</td></tr>
-                <tr><td><strong>Aider</strong></td><td>aider.chat</td><td>&quot;AI pair programming in your terminal&quot; 카피 패턴 (간결한 hero 1-line).</td></tr>
-                <tr><td><strong>Devin / Cognition</strong></td><td>cognition.ai/devin</td><td>&quot;The AI software engineer&quot; 명사구 정체성. 장기 실행 소프트웨어 에이전트 비교점.</td></tr>
+                <tr><td><strong>Cursor</strong></td><td><a href="https://docs.cursor.com/">docs.cursor.com</a></td><td>Composer 패턴 (참조용. GEODE는 별도 구현).</td></tr>
+                <tr><td><strong>Aider</strong></td><td><a href="https://aider.chat/">aider.chat</a></td><td>&quot;AI pair programming in your terminal&quot; 카피 패턴 (간결한 hero 1-line).</td></tr>
+                <tr><td><strong>Devin / Cognition</strong></td><td><a href="https://cognition.ai/blog/introducing-devin">cognition.ai</a></td><td>&quot;The AI software engineer&quot; 명사구 정체성. 장기 실행 소프트웨어 에이전트 비교점.</td></tr>
               </tbody>
             </table>
 
@@ -54,14 +54,16 @@ export default function Page() {
                 <strong>Hermes llms.txt + llms-full.txt</strong> — LLM-친화 평문 인덱스 듀얼. GEODE도 같은 듀얼을 발행하고 리서치 휴리스틱으로 씁니다. <a href="/geode/docs/runtime/research">리서치·탐색과 llms.txt</a> 참고.
               </li>
               <li>
-                <strong>Google Stitch DESIGN.md 9-section spec</strong> — site/DESIGN.md의 포맷 가이드.
+                <strong>Google Stitch</strong>{" "}
+                (<a href="https://developers.googleblog.com/en/stitch-a-new-way-to-design-uis/">Google Developers Blog</a>) — UI 생성과 디자인-개발 handoff 관점이 site/DESIGN.md 작성에 준 참고점.
               </li>
             </ul>
 
             <h2>Petri / inspect_ai</h2>
             <ul>
               <li>
-                <strong>Anthropic Alignment Science Petri</strong>. alignment audit framework (Auditor·Target·Judge 3-role, seed corpus scored across judge dimensions). 본 docs <a href="/geode/docs/petri/overview">Petri × GEODE</a> 챕터 전체.
+                <strong>Anthropic Alignment Science Petri</strong>{" "}
+                (<a href="https://github.com/safety-research/petri">github.com/safety-research/petri</a>). alignment audit framework (Auditor·Target·Judge 3-role, seed corpus scored across judge dimensions). 본 docs <a href="/geode/docs/petri/overview">Petri × GEODE</a> 챕터 전체.
               </li>
               <li>
                 <strong>inspect_ai (UK AISI)</strong>{" "}
@@ -127,14 +129,14 @@ export default function Page() {
               <thead><tr><th>System</th><th>Source</th><th>What GEODE took</th></tr></thead>
               <tbody>
                 <tr><td><strong>Claude Code</strong></td><td><a href="https://docs.anthropic.com/en/docs/claude-code/overview">docs.anthropic.com</a></td><td>while(tool_use) primitive, CLAUDE.md scaffold pattern, 4-tier memory, hook pattern.</td></tr>
-                <tr><td><strong>Codex CLI</strong></td><td>OpenAI Codex</td><td>thin CLI plus IPC daemon, OAuth flow, sandbox policy.</td></tr>
+                <tr><td><strong>Codex CLI</strong></td><td><a href="https://github.com/openai/codex">github.com/openai/codex</a></td><td>thin CLI plus IPC daemon, OAuth flow, sandbox policy.</td></tr>
                 <tr><td><strong>OpenClaw</strong></td><td><a href="https://github.com/openclaw/openclaw">github.com/openclaw/openclaw</a></td><td>Gateway-centric routing, Lane Queue concurrency, Session isolation, plugin discovery, Policy Chain.</td></tr>
                 <tr><td><strong>Karpathy autoresearch</strong></td><td><a href="https://github.com/karpathy/autoresearch">github.com/karpathy/autoresearch</a> (2026-03)</td><td>Fixed wall-budget for comparability. Frozen scoreboard. git monotone ratchet. Token-economic loop. Simplicity criterion.</td></tr>
-                <tr><td><strong>Karpathy LLM Wiki</strong></td><td>gist (2024+)</td><td>&quot;wiki = compiled artifact&quot; knowledge-compilation pattern.</td></tr>
+                <tr><td><strong>Karpathy LLM Wiki</strong></td><td><a href="https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f">GitHub Gist</a></td><td>&quot;wiki = compiled artifact&quot; knowledge-compilation pattern.</td></tr>
                 <tr><td><strong>Hermes Agent (NousResearch)</strong></td><td><a href="https://hermes-agent.nousresearch.com/docs/">hermes-agent.nousresearch.com/docs</a></td><td>llms.txt and llms-full.txt dual index, system_and_3 cache_control pattern, multi-channel personal agent.</td></tr>
-                <tr><td><strong>Cursor</strong></td><td>cursor.com</td><td>Composer pattern (reference; GEODE implements separately).</td></tr>
-                <tr><td><strong>Aider</strong></td><td>aider.chat</td><td>&quot;AI pair programming in your terminal&quot; copy pattern (succinct one-line hero).</td></tr>
-                <tr><td><strong>Devin / Cognition</strong></td><td>cognition.ai/devin</td><td>&quot;The AI software engineer&quot; noun-anchored identity. Long-running software-agent comparison point.</td></tr>
+                <tr><td><strong>Cursor</strong></td><td><a href="https://docs.cursor.com/">docs.cursor.com</a></td><td>Composer pattern (reference; GEODE implements separately).</td></tr>
+                <tr><td><strong>Aider</strong></td><td><a href="https://aider.chat/">aider.chat</a></td><td>&quot;AI pair programming in your terminal&quot; copy pattern (succinct one-line hero).</td></tr>
+                <tr><td><strong>Devin / Cognition</strong></td><td><a href="https://cognition.ai/blog/introducing-devin">cognition.ai</a></td><td>&quot;The AI software engineer&quot; noun-anchored identity. Long-running software-agent comparison point.</td></tr>
               </tbody>
             </table>
 
@@ -157,14 +159,16 @@ export default function Page() {
                 <strong>Hermes llms.txt and llms-full.txt</strong> — dual LLM-friendly flat index. GEODE now publishes the same pair and uses the convention as a research heuristic; see <a href="/geode/docs/runtime/research">Research, search, and llms.txt</a>.
               </li>
               <li>
-                <strong>Google Stitch DESIGN.md 9-section spec</strong> — the format guide behind site/DESIGN.md.
+                <strong>Google Stitch</strong>{" "}
+                (<a href="https://developers.googleblog.com/en/stitch-a-new-way-to-design-uis/">Google Developers Blog</a>) — its UI-generation and design-to-development handoff informed site/DESIGN.md.
               </li>
             </ul>
 
             <h2>Petri / inspect_ai</h2>
             <ul>
               <li>
-                <strong>Anthropic Alignment Science Petri</strong>. Alignment audit framework (Auditor, Target, Judge,
+                <strong>Anthropic Alignment Science Petri</strong>{" "}
+                (<a href="https://github.com/safety-research/petri">github.com/safety-research/petri</a>). Alignment audit framework (Auditor, Target, Judge,
                 a seed corpus scored across judge dimensions). Covered in the <a href="/geode/docs/petri/overview">Petri × GEODE</a> chapter.
               </li>
               <li>
