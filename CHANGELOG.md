@@ -101,6 +101,14 @@ functional change.
   Crucible accepts an explicit frozen producer command. The removed providers
   are not recreated through compatibility facades.
 
+### Infrastructure
+
+- **CI now proves the installed kernel works without bundled features.** A
+  temporary CI-only wheel projection removes the product, compatibility
+  facades, and product entry points before isolated kernel unit tests plus
+  exhaustive import, registry, lifecycle, and package-metadata checks. Release
+  artifacts remain unchanged.
+
 ## [1.0.22] - 2026-08-19
 
 > Slack gateway policy enforcement, bounded Socket Mode recovery, and reproducible evaluation evidence.

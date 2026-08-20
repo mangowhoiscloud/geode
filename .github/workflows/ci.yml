@@ -229,6 +229,16 @@ jobs:
           wheel="$(find dist -maxdepth 1 -name '*.whl' -print -quit)"
           uv run --isolated --no-project --with "$wheel" \
             python -I scripts/check_installed_package.py
+          kernel_wheel="$RUNNER_TEMP/$(basename "$wheel")"
+          uv run python scripts/build_kernel_probe.py \
+            --input-wheel "$wheel" --output-wheel "$kernel_wheel"
+          uv run --isolated --no-project --with "$kernel_wheel" \
+            python -I scripts/check_installed_package.py --kernel-only
+          uv run --isolated --no-project --with "$kernel_wheel" --with pytest==9.0.2 \
+            python -I -m pytest -q -c /dev/null --rootdir "$RUNNER_TEMP" \
+            --import-mode=importlib --noconftest \
+            tests/core/llm/adapters/test_registry.py \
+            tests/core/tools/test_toolkit_registry.py
   security:
     name: Security Scan
     runs-on: ubuntu-latest
