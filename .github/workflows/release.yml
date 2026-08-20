@@ -173,6 +173,20 @@ jobs:
           .release-venv/bin/geode version | grep "GEODE v${version}"
           .release-venv/bin/python -I scripts/check_installed_package.py
 
+      - name: Core-only installed wheel gate
+        run: |
+          wheel="$(find dist -maxdepth 1 -name '*.whl' -print -quit)"
+          kernel_wheel="$RUNNER_TEMP/$(basename "$wheel")"
+          uv run python scripts/build_kernel_probe.py \
+            --input-wheel "$wheel" --output-wheel "$kernel_wheel"
+          uv run --isolated --no-project --with "$kernel_wheel" \
+            python -I scripts/check_installed_package.py --kernel-only
+          uv run --isolated --no-project --with "$kernel_wheel" --with pytest==9.0.2 \
+            python -I -m pytest -q -c /dev/null --rootdir "$RUNNER_TEMP" \
+            --import-mode=importlib --noconftest \
+            tests/core/llm/adapters/test_registry.py \
+            tests/core/tools/test_toolkit_registry.py
+
       - name: Generate release notes and checksums
         run: |
           version="$GEODE_VERSION"
