@@ -293,6 +293,9 @@ COMMAND_MAP: dict[str, str] = {
     "/verbose": "verbose",
     "/key": "key",
     "/model": "model",
+    "/goal": "goal",
+    "/plan": "plan",
+    "/grill": "grill",
     "/schedule": "schedule",
     "/sched": "schedule",
     "/trigger": "trigger",
@@ -328,6 +331,11 @@ def show_help(command_registry: _Any = None) -> None:
     console.print("  [label]/login add[/label]          — Interactive plan/key wizard")
     console.print("  [label]/key[/label] <value>        — Quick PAYG API key (legacy alias)")
     console.print("  [label]/model[/label]              — Show & switch LLM model")
+    console.print(
+        "  [label]/goal[/label] [objective|clear] — Show, set, or clear a persistent goal"
+    )
+    console.print("  [label]/plan[/label] [objective]    — Show or create an advisory no-tool plan")
+    console.print("  [label]/grill[/label] <decision>   — Stress-test a decision tree")
     console.print("  [label]/login source[/label] <p> <t> — Pick credential source per provider")
     console.print("  [label]/schedule[/label]           — Manage scheduled automations")
     console.print("  [label]/trigger[/label]            — Manage event/cron triggers")

@@ -188,6 +188,8 @@ class IsolatedRunner:
         "ZHIPUAI_API_KEY",
         "PYTHONPATH",
         "VIRTUAL_ENV",
+        "GEODE_HOME",
+        "GEODE_STATE_ROOT",
         "GEODE_CONFIG_PATH",
         "GEODE_DATA_DIR",
         # Daemon-wide skip-permissions; the PER-SESSION value (ContextVar) is

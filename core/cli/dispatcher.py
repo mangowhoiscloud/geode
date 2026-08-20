@@ -83,6 +83,10 @@ def _handle_command(
             render_readiness(new_readiness)
     elif action == "model":
         cmd_model(args)
+    elif action == "goal":
+        from core.cli.commands import cmd_goal
+
+        cmd_goal(args)
     elif action == "login":
         cmd_login(args)
     elif action == "schedule":

@@ -125,6 +125,17 @@ Follow `docs/eval/benchmark-publishing-cycle.md` and
    `geode.trajectory-release@1` manifests when behavior evidence is published.
 3. Build `artifact-publish-manifest.template.json`, privacy review the exact
    bytes, publish append-only, and verify remote read-back at the pinned commit.
+   Validate portable paths, classification, byte counts, SHA-256 identities,
+   and prepared/published state before copying:
+
+   ```bash
+   uv run python scripts/eval/contract.py validate-publication \
+     <run-dir>/publication-manifest.json
+   ```
+
+   Raw prompts/responses, transcripts, messages, SQLite/WAL, evidence JSONL,
+   profiles, usage, diagnostics, and provider payloads remain
+   `withheld-private` unless their exact bytes receive public approval.
 4. Derive the human run report and public page from validated sidecars; do not
    make either another score authority.
 5. Label subscription results as product-route evidence. Keep smoke,

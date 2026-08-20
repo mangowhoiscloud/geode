@@ -7,10 +7,11 @@
     "run_spec": "docs/eval/schemas/run-spec.schema.json",
     "attempt": "docs/eval/schemas/attempt.schema.json",
     "analysis": "docs/eval/schemas/analysis.schema.json",
+    "publication": "docs/eval/schemas/publication.schema.json",
     "trajectory": "core/observability/schemas/trajectory.schema.json",
     "trajectory_release": "core/observability/schemas/trajectory-release.schema.json"
   },
-  "document_count": 17,
+  "document_count": 18,
   "documents": [
     {
       "id": "agent-world-comparison",
@@ -44,7 +45,7 @@
       "authority": "process",
       "path": "docs/eval/benchmark-publishing-cycle.md",
       "summary": "End-to-end workflow from preregistered benchmark scope through evidence preservation, publication, and deployment.",
-      "sha256": "f5950283be3e85772f9a438adb170cd94a4c126c80d13dad1e7c3bc4da4b15a4",
+      "sha256": "8419062e832640c6f9c53c3fd31a298c41aa238877988c1ec0a96689f60c09b1",
       "triggers": [
         "attempts JSONL",
         "benchmark run",
@@ -59,6 +60,7 @@
         "docs/eval/eval-run-spec.template.json",
         "docs/eval/schemas/analysis.schema.json",
         "docs/eval/schemas/attempt.schema.json",
+        "docs/eval/schemas/publication.schema.json",
         "docs/eval/schemas/run-spec.schema.json"
       ]
     },
@@ -92,7 +94,7 @@
       "authority": "routing",
       "path": "docs/eval/README.md",
       "summary": "Machine and human entrypoint for GEODE evaluation contracts, benchmark ledgers, evidence, and publication.",
-      "sha256": "ed6090d48731ff76b6193c510bf2336725761b6085d33e6655bfda9c6fc0a897",
+      "sha256": "0d0d4a3ba5a1ee83d70d9e83ea09b4a7acc4c2d73b4c4876890a8134448ef95c",
       "triggers": [
         "artifact",
         "benchmark",
@@ -101,11 +103,13 @@
         "trajectory"
       ],
       "contracts": [
+        "docs/eval/artifact-publish-manifest.template.json",
         "docs/eval/eval-analysis.template.json",
         "docs/eval/eval-attempt.template.json",
         "docs/eval/eval-run-spec.template.json",
         "docs/eval/schemas/analysis.schema.json",
         "docs/eval/schemas/attempt.schema.json",
+        "docs/eval/schemas/publication.schema.json",
         "docs/eval/schemas/run-spec.schema.json"
       ],
       "latest_valid_release": "https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/1160fecfe4447f0a3f4cf30a414f29c61776d012/trajectories/mcpmark-gate0c-gpt54-high-mcpmark-gate0c-filesystem30-gpt54-high-20260813t190922z-geode-20260813T230525Z-9d6773caad04"
@@ -119,7 +123,7 @@
       "authority": "evidence-storage",
       "path": "docs/eval/external-artifact-repository.md",
       "summary": "Canonical append-only publication and disclosure contract for large GEODE evaluation artifacts.",
-      "sha256": "86c8f39d630ba40b4de80a731c1bf20f8e63e6a7fd250212de225ef7c655f4c3",
+      "sha256": "53778e2700ac50d295ee53576f609faba23cec296c17d1320c6c552ab414ae62",
       "triggers": [
         "artifact repository",
         "eval-artifact",
@@ -133,6 +137,7 @@
         "docs/eval/artifact-publish-manifest.template.json",
         "docs/eval/schemas/analysis.schema.json",
         "docs/eval/schemas/attempt.schema.json",
+        "docs/eval/schemas/publication.schema.json",
         "docs/eval/schemas/run-spec.schema.json"
       ]
     },
@@ -154,6 +159,31 @@
       ],
       "contracts": [
         "docs/eval/agent-world-comparison-contract.md"
+      ]
+    },
+    {
+      "id": "geo-visibility",
+      "family": "geo-visibility",
+      "title": "GEO Visibility Benchmark",
+      "kind": "benchmark",
+      "status": "canonical",
+      "authority": "suite-profile",
+      "path": "docs/eval/geo-visibility.md",
+      "summary": "Reproducible GEODE profile for measuring generative discovery, citation selection, answer absorption, and fidelity without collapsing them into one GEO score.",
+      "sha256": "3cb3dc684fc992e222256bc00f6ae09acdbcc1696160c65062de071883df3529",
+      "triggers": [
+        "AI search visibility",
+        "GEO",
+        "citation benchmark",
+        "generative engine optimization",
+        "query fan-out"
+      ],
+      "contracts": [
+        "core/observability/schemas/trajectory-release.schema.json",
+        "core/observability/schemas/trajectory.schema.json",
+        "docs/eval/artifact-publish-manifest.template.json",
+        "docs/eval/schemas/publication.schema.json",
+        "docs/eval/schemas/run-spec.schema.json"
       ]
     },
     {

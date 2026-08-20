@@ -60,6 +60,7 @@ def test_product_show_help_uses_the_same_slash_registry() -> None:
     assert set(result["commands"]) >= {
         "/audit",
         "/audit-seeds",
+        "/geo",
         "/petri",
         "/recall",
         "/self-improving",
@@ -68,7 +69,7 @@ def test_product_show_help_uses_the_same_slash_registry() -> None:
 
 def test_product_slash_commands_do_not_mutate_kernel_registry() -> None:
     from core.cli.routing import COMMAND_REGISTRY, compose_command_registry
-    from geode_product.cli import PRODUCT_COMMAND_SPECS
+    from geode_product.slash_commands import PRODUCT_COMMAND_SPECS
 
     product_registry = compose_command_registry(PRODUCT_COMMAND_SPECS)
     assert {"/audit", "/recall", "/self-improving"}.isdisjoint(COMMAND_REGISTRY)
@@ -95,7 +96,9 @@ def test_product_owns_self_improving_typer_commands() -> None:
 
 def test_daemon_composition_supplies_product_workers_tools_and_prompts(monkeypatch) -> None:
     from core.server.supervised import services
+    from core.slash_routing import compose_command_registry
     from geode_product import wiring
+    from geode_product.slash_commands import PRODUCT_COMMAND_SPECS
     from geode_product.tool_handlers import compose_tool_plan
 
     build_core = Mock(return_value="services")
@@ -113,6 +116,7 @@ def test_daemon_composition_supplies_product_workers_tools_and_prompts(monkeypat
         "middleware_builder": wiring.build_middleware_registry,
         "activity_sink_provider": wiring.current_activity_sink,
         "feature_hook_registrar": wiring.register_hooks,
+        "command_registry": compose_command_registry(PRODUCT_COMMAND_SPECS),
     }
 
 

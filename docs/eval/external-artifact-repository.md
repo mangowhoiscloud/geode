@@ -17,6 +17,7 @@ eval_contracts:
   - docs/eval/artifact-publish-manifest.template.json
   - docs/eval/schemas/analysis.schema.json
   - docs/eval/schemas/attempt.schema.json
+  - docs/eval/schemas/publication.schema.json
   - docs/eval/schemas/run-spec.schema.json
 ---
 
@@ -294,6 +295,7 @@ Every candidate file is classified before copying:
 | Class | Rule |
 |---|---|
 | `public` | Verifier output, completed-run transcript, reviewed eval sidecar, config, receipt, or opaque aggregate that has passed secret and identity review |
+| `withheld-private` | Raw prompts/responses, terminal transcripts, messages, evidence JSONL, worker results, SQLite/WAL, profiles, usage, diagnostics, provider payloads, or hidden reasoning that remain useful as local authority but are not approved public bytes |
 | `withheld-sealed` | Unopened sealed pack, selected-row manifest, task/family/content identities, selection salt or preregistration that makes the hidden rows derivable |
 | `private-secret` | Tokens, auth headers, cookies, environment files, DB URIs, provider credentials; never publish |
 | `reproducible-cache` | Package caches, scratch checkouts, evaluator homes; omit and record the pinned sources instead |
@@ -303,17 +305,24 @@ not printed. Publishing the pack, selection manifest, or deterministic salt
 would destroy the one-shot holdout boundary. Opaque counts, digests, and power
 reports may be public when they contain no selected identity.
 
+`withheld-private` is distinct from `private-secret`: its bytes may be useful
+for an authorized local audit, but that is not permission to publish them. A
+redacted public derivative receives its own path, byte count, and digest; it
+never inherits the raw artifact's identity.
+
 ## Publication cycle
 
 1. Preserve the source run under GEODE's ignored `artifacts/` tree.
 2. Copy `artifact-publish-manifest.template.json` beside the run record and
    replace every placeholder.
+   Validate its portable paths, unique destinations, byte counts, and SHA-256
+   identities with `scripts/eval/contract.py validate-publication`.
 3. Validate any eval sidecars and bind `analysis.json` to the exact frozen spec
    and attempts digests.
 4. Verify each source byte count and SHA-256. Mark withheld entries explicitly;
    never omit them silently from the disclosure accounting.
-5. Scan public entries for credentials, local usernames, auth headers, and
-   environment files.
+5. Scan public entries for credentials, local usernames, auth headers,
+   machine-local paths, personal data, and environment files.
 6. Copy only `public` entries into a fresh branch/worktree of
    `geode-eval-artifacts`; do not rewrite an existing run directory.
 7. Open and merge a PR in the artifact repository.

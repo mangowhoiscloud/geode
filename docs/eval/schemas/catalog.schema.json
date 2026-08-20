@@ -19,11 +19,19 @@
     "skill": {"const": ".agents/skills/geode-eval/SKILL.md"},
     "contracts": {
       "type": "object",
-      "required": ["run_spec", "attempt", "analysis", "trajectory", "trajectory_release"],
+      "required": [
+        "run_spec",
+        "attempt",
+        "analysis",
+        "publication",
+        "trajectory",
+        "trajectory_release"
+      ],
       "properties": {
         "run_spec": {"const": "docs/eval/schemas/run-spec.schema.json"},
         "attempt": {"const": "docs/eval/schemas/attempt.schema.json"},
         "analysis": {"const": "docs/eval/schemas/analysis.schema.json"},
+        "publication": {"const": "docs/eval/schemas/publication.schema.json"},
         "trajectory": {"const": "core/observability/schemas/trajectory.schema.json"},
         "trajectory_release": {
           "const": "core/observability/schemas/trajectory-release.schema.json"

@@ -277,24 +277,56 @@ class IPCClient:
         on_approval_end: Any = None,
         on_approval_request: Any = None,
     ) -> dict[str, Any]:
-        """Send a prompt and wait for the result.
+        """Send a prompt and wait for the streamed result."""
+        return self._send_streaming_request(
+            {"type": "prompt", "text": text},
+            on_stream=on_stream,
+            on_event=on_event,
+            on_approval_start=on_approval_start,
+            on_approval_end=on_approval_end,
+            on_approval_request=on_approval_request,
+        )
 
-        Callbacks:
-            on_stream(data: str): raw console output (ANSI-styled text)
-            on_event(event: dict): structured events (tool_start, tool_end)
-            on_approval_start(): called before HITL approval prompt (suspend spinners)
-            on_approval_end(): called after HITL approval prompt (resume spinners)
+    def send_command_streaming(
+        self,
+        cmd: str,
+        args: str = "",
+        *,
+        on_stream: Any = None,
+        on_event: Any = None,
+        on_approval_start: Any = None,
+        on_approval_end: Any = None,
+        on_approval_request: Any = None,
+    ) -> dict[str, Any]:
+        """Send a registered long-running slash command over the event channel."""
+        return self._send_streaming_request(
+            {"type": "command_stream", "cmd": cmd, "args": args},
+            on_stream=on_stream,
+            on_event=on_event,
+            on_approval_start=on_approval_start,
+            on_approval_end=on_approval_end,
+            on_approval_request=on_approval_request,
+        )
 
-        Returns the final ``{"type": "result", ...}`` dict.
-        """
+    def _send_streaming_request(
+        self,
+        payload: dict[str, Any],
+        *,
+        on_stream: Any = None,
+        on_event: Any = None,
+        on_approval_start: Any = None,
+        on_approval_end: Any = None,
+        on_approval_request: Any = None,
+    ) -> dict[str, Any]:
+        """Share prompt and streaming-command transport semantics."""
         if not self._sock:
             return {"type": "error", "message": "Not connected"}
-        # Refresh width immediately before each prompt. The initial handshake
+        # Refresh width immediately before each run. The initial handshake
         # happens at connect-time, but users often resize the terminal between
-        # prompts; stale Rich widths make streamed panels/code blocks paint a
+        # runs; stale Rich widths make streamed panels/code blocks paint a
         # stair-step background at the old column count.
         self._send_client_capability()
-        self._send({"type": "prompt", "text": text})
+        self._send(payload)
 
         while True:
             response = self._recv()

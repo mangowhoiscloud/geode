@@ -313,8 +313,9 @@ class FullscreenState:
 class FullscreenThinCli:
     """Prompt_toolkit Application wrapper for the thin CLI IPC client."""
 
-    def __init__(self, client: Any) -> None:
+    def __init__(self, client: Any, *, command_registry: Any = None) -> None:
         self.client = client
+        self.command_registry = command_registry
         self.state = FullscreenState()
         self._lock = threading.RLock()
         self._app: Application[Any] | None = None
@@ -586,9 +587,23 @@ class FullscreenThinCli:
                 self._app_exit_threadsafe()
                 return
             if text.startswith("/"):
-                cmd = text.split()[0]
-                response = self.client.send_command(cmd, text[len(cmd) :].strip())
-                self._handle_command_response(response)
+                cmd = text.split()[0].lower()
+                args = text[len(cmd) :].strip()
+                from core.cli.routing import RunLocation, lookup
+
+                spec = lookup(cmd, self.command_registry)
+                if spec is not None and spec.location is RunLocation.DAEMON_STREAM:
+                    response = self.client.send_command_streaming(
+                        cmd,
+                        args,
+                        on_stream=self._on_stream,
+                        on_event=self._on_event,
+                        on_approval_request=self._on_approval_request,
+                    )
+                    self._handle_prompt_response(response)
+                else:
+                    response = self.client.send_command(cmd, args)
+                    self._handle_command_response(response)
                 return
             response = self.client.send_prompt(
                 text,

@@ -25,6 +25,7 @@ CATALOG_SCHEMA = "catalog.schema.json"
 RUN_SPEC_SCHEMA = "run-spec.schema.json"
 ATTEMPT_SCHEMA = "attempt.schema.json"
 ANALYSIS_SCHEMA = "analysis.schema.json"
+PUBLICATION_SCHEMA = "publication.schema.json"
 
 PLACEHOLDER_RE = re.compile(r"<[^>\n]+>")
 URI_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
@@ -344,6 +345,7 @@ def build_catalog() -> dict[str, Any]:
             "run_spec": "docs/eval/schemas/run-spec.schema.json",
             "attempt": "docs/eval/schemas/attempt.schema.json",
             "analysis": "docs/eval/schemas/analysis.schema.json",
+            "publication": "docs/eval/schemas/publication.schema.json",
             "trajectory": "core/observability/schemas/trajectory.schema.json",
             "trajectory_release": "core/observability/schemas/trajectory-release.schema.json",
         },
@@ -591,6 +593,74 @@ def validate_analysis(path: Path, *, run_spec_path: Path, attempts_path: Path) -
             raise ValueError(f"{path}: primary metric value does not match numerator/denominator")
 
 
+def validate_publication(path: Path) -> dict[str, Any]:
+    """Validate one publication manifest and every declared local source byte."""
+    _reject_placeholders(path)
+    payload = _load_json_object(path)
+    _validate_schema(payload, PUBLICATION_SCHEMA, label=str(path))
+
+    repository = payload["artifact_repository"]
+    if repository["url"] != "https://github.com/mangowhoiscloud/geode-eval-artifacts":
+        raise ValueError(f"{path}: artifact repository URL is not canonical")
+    destination_prefix = str(repository["destination_prefix"])
+    _validate_relative_reference(destination_prefix, label=str(path))
+
+    local_paths: set[str] = set()
+    remote_paths: set[str] = set()
+    public_bytes = 0
+    public_files = 0
+    for entry in payload["entries"]:
+        local_path = str(entry["local_path"])
+        _validate_relative_reference(local_path, label=str(path))
+        if local_path in local_paths:
+            raise ValueError(f"{path}: duplicate publication local_path: {local_path}")
+        local_paths.add(local_path)
+
+        candidates = (path.parent / local_path, REPO_ROOT / local_path)
+        source = next((candidate for candidate in candidates if candidate.is_file()), None)
+        if source is None:
+            raise ValueError(f"{path}: publication source file does not exist: {local_path}")
+        if source.stat().st_size != entry["bytes"]:
+            raise ValueError(f"{path}: publication byte count does not match: {local_path}")
+        if _sha256(source) != entry["sha256"]:
+            raise ValueError(f"{path}: publication SHA-256 does not match: {local_path}")
+
+        if entry["classification"] != "public":
+            continue
+        remote_path = str(entry["remote_path"])
+        _validate_relative_reference(remote_path, label=str(path))
+        if remote_path in remote_paths:
+            raise ValueError(f"{path}: duplicate publication remote_path: {remote_path}")
+        remote_paths.add(remote_path)
+        if destination_prefix != "." and not remote_path.startswith(f"{destination_prefix}/"):
+            raise ValueError(f"{path}: public remote_path is outside destination_prefix")
+        public_files += 1
+        public_bytes += int(entry["bytes"])
+
+    verification = payload["verification"]
+    if not verification["source_hashes_verified"]:
+        raise ValueError(f"{path}: source_hashes_verified must be true after byte validation")
+    if public_files and not (
+        verification["local_identity_scrubbed"] and verification["secret_scan_passed"]
+    ):
+        raise ValueError(f"{path}: public entries require identity and secret review")
+
+    run_record = REPO_ROOT / str(payload["geode"]["run_record"])
+    if not run_record.is_file():
+        raise ValueError(f"{path}: GEODE run record does not exist")
+
+    publication = payload["publication"]
+    if publication["status"] == "published":
+        readback = publication["remote_readback"]
+        if readback["files_verified"] != public_files:
+            raise ValueError(f"{path}: remote read-back file count does not match public entries")
+        if readback["bytes_verified"] != public_bytes:
+            raise ValueError(f"{path}: remote read-back bytes do not match public entries")
+        if _parse_datetime(readback["verified_at"]) < _parse_datetime(publication["published_at"]):
+            raise ValueError(f"{path}: remote read-back predates publication")
+    return payload
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -610,6 +680,9 @@ def _parser() -> argparse.ArgumentParser:
     analysis.add_argument("path", type=Path)
     analysis.add_argument("--run-spec", type=Path, required=True)
     analysis.add_argument("--attempts", type=Path, required=True)
+
+    publication = subparsers.add_parser("validate-publication")
+    publication.add_argument("path", type=Path)
     return parser
 
 
@@ -627,6 +700,10 @@ def main() -> None:
         elif args.command == "validate-analysis":
             validate_analysis(args.path, run_spec_path=args.run_spec, attempts_path=args.attempts)
             print(f"analysis OK: {args.path}")
+        elif args.command == "validate-publication":
+            publication = validate_publication(args.path)
+            public = sum(entry["classification"] == "public" for entry in publication["entries"])
+            print(f"publication OK: {public} public entries")
     except (json.JSONDecodeError, OSError, ValueError) as exc:
         print(f"eval contract error: {exc}", file=sys.stderr)
         raise SystemExit(1) from exc

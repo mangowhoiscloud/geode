@@ -123,6 +123,7 @@ class SharedServices:
     activity_sink_provider: RunEventSinkProvider | None = None
     _owns_hook_system: bool = False
     lane_queue: Any = None  # Unified LaneQueue — single concurrency gate
+    command_registry: Any = None  # composed slash-command routing contract
     tool_handlers: dict[str, Any] = field(default_factory=dict)
     tool_plan: ToolPlan | None = None
     worker_module: str = "core.agent.worker"
@@ -155,6 +156,10 @@ class SharedServices:
             self.hook_registry = HookRegistry(events=self.hook_system)
         if self.middleware_registry is None:
             self.middleware_registry = MiddlewareRegistry(events=self.hook_system)
+        if self.command_registry is None:
+            from core.slash_routing import COMMAND_REGISTRY
+
+            self.command_registry = COMMAND_REGISTRY
 
     def close(self) -> None:
         """Release resources created by :func:`build_shared_services`."""
@@ -424,6 +429,7 @@ def build_shared_services(
     activity_sink_provider: RunEventSinkProvider | None = None,
     feature_hook_registrar: Callable[[Any], None] | None = None,
     lane_queue: Any = None,
+    command_registry: Any = None,
     verbose: bool = False,
     tool_handler_builder: Callable[..., dict[str, Any]] | None = None,
     tool_plan_builder: Callable[..., tuple[ToolPlan, dict[str, Any]]] | None = None,
@@ -525,6 +531,7 @@ def build_shared_services(
         activity_sink_provider=activity_sink_provider,
         _owns_hook_system=owns_hook_system,
         lane_queue=lane_queue,
+        command_registry=command_registry,
         tool_handlers=tool_handlers,
         tool_plan=tool_plan,
         worker_module=worker_module,

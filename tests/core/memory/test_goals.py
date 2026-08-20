@@ -6,6 +6,18 @@ import pytest
 from core.memory.goals import GoalStatus, GoalStore
 
 
+def test_goal_store_models_absence_as_empty_and_clear_is_idempotent(tmp_path: Path) -> None:
+    store = GoalStore(tmp_path / "sessions.db")
+    assert store.status("s-empty") is GoalStatus.EMPTY
+    assert store.clear("s-empty") is None
+
+    created = store.create("s-empty", "Persist until cleared")
+    assert store.status("s-empty") is GoalStatus.ACTIVE
+    assert store.clear("s-empty") == created
+    assert store.status("s-empty") is GoalStatus.EMPTY
+    assert store.get("s-empty") is None
+
+
 def test_goal_store_persists_budget_and_terminal_state(tmp_path: Path) -> None:
     store = GoalStore(tmp_path / "sessions.db")
     goal = store.create("s-1", "Finish the verified change", token_budget=100)

@@ -27,7 +27,9 @@ def test_goal_handlers_use_active_session_and_record_control_edges(tmp_path: Pat
         set_session_id("")
 
     assert created["goal"]["status"] == "active"
+    assert created["goal_status"] == "active"
     assert fetched["goal"]["goal_id"] == created["goal"]["goal_id"]
+    assert fetched["goal_status"] == "active"
     assert completed["goal"]["status"] == "complete"
     events = SessionEventStore(db_path).read("s-goal")
     assert [event.kind for event in events] == ["goal.created", "goal.updated"]
@@ -45,3 +47,14 @@ def test_update_goal_rejects_model_owned_pause(tmp_path: Path) -> None:
         set_session_id("")
 
     assert "error" in result
+
+
+def test_get_goal_reports_explicit_empty_state(tmp_path: Path) -> None:
+    handlers = _build_goal_handlers(GoalStore(tmp_path / "sessions.db"))
+    set_session_id("s-empty")
+    try:
+        result = handlers["get_goal"]()
+    finally:
+        set_session_id("")
+
+    assert result == {"status": "ok", "goal_status": "empty", "goal": None}

@@ -266,7 +266,7 @@ def test_picker_unknown_role(captured):
 
 def test_product_registry_contains_petri():
     from core.cli.routing import compose_command_registry, lookup
-    from geode_product.cli import PRODUCT_COMMAND_SPECS
+    from geode_product.slash_commands import PRODUCT_COMMAND_SPECS
 
     spec = lookup("/petri", compose_command_registry(PRODUCT_COMMAND_SPECS))
     assert spec is not None

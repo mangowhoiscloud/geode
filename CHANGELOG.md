@@ -67,11 +67,40 @@ functional change.
 
 ### Added
 
+- **Goal, planning, grilling, and GEO slash surfaces.** `/goal` now exposes
+  persisted Goal view/set/clear with an explicit non-persisted `empty` state;
+  `/plan` installs a tool-disabled structured advisory plan; `/grill` and
+  product-owned `/geo` stream their bundled skills through the existing
+  AgenticLoop. The shared `DAEMON_STREAM` IPC route now works in both legacy
+  and full-screen thin clients.
+- **GEO measurement scaffold and deterministic preflight.** The canonical
+  evaluation profile preserves fetch, retrieval, selection, placement,
+  absorption, quality, and outcome denominators; the site now exports
+  `sitemap.xml`, and `npm run verify-geo` checks the static eligibility
+  substrate without claiming live engine visibility. Broad `/geo` audits may
+  reuse the existing collaboration runtime for at most three independent
+  read-only evidence branches, joined and verified by the parent AgenticLoop;
+  no GEO-only executor or generic thought-tree engine was added. GEO evidence
+  publication now preserves Inspect-native `.eval` archives, GEODE-normalized
+  trajectories, raw private runtime evidence, and reviewed public releases as
+  separate authorities; the eval contract CLI validates publication paths,
+  classifications, byte counts, hashes, and remote read-back aggregates.
+
 - **Public documentation now emits source-grounded structured metadata.** The
   landing page publishes a minimal `SoftwareSourceCode` JSON-LD record, while
   the lineage page renders one shared primary-source list as both visible links
   and `TechArticle.citation` metadata. Existing built-HTML link checking remains
   the citation reachability gate; no visitor analytics or click tracking was added.
+
+### Fixed
+
+- **Capability-role sub-agents preserve the parent model route.** A built-in
+  role such as `repo_researcher` now inherits the active parent model and
+  credential source instead of being silently replaced by the generic
+  task-type agent's model. Explicit per-task agent/model bindings still win.
+- **Isolated sub-agents preserve runtime roots.** Subprocess workers now inherit
+  explicit `GEODE_HOME` and `GEODE_STATE_ROOT` overrides, keeping evaluation
+  histories and scratch state inside the caller's isolated run envelope.
 
 ### Changed
 

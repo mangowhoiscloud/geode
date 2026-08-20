@@ -140,15 +140,16 @@ export default function Page() {
 
             <h2>슬래시 명령</h2>
             <p>
-              명시적 실행 위치와 주입 핸들러는 <code>core/cli/routing.py</code>의
+              명시적 실행 위치와 주입 핸들러는 <code>core/slash_routing.py</code>의
               커널 <code>COMMAND_REGISTRY</code>에{" "}
-              <code>geode_product/cli.py</code>의 <code>PRODUCT_COMMAND_SPECS</code>를
+              <code>geode_product/slash_commands.py</code>의 <code>PRODUCT_COMMAND_SPECS</code>를
               조립한 레지스트리가 정의합니다. thin REPL은 <code>/help</code>,{" "}
               <code>/fleet</code>, 인자 없는 <code>/model</code>도 로컬에서 특별
               처리합니다. <code>core/cli/commands/_state.py</code>의{" "}
               <code>COMMAND_MAP</code>은 legacy dispatcher action과 별칭을
-              매핑합니다. 로컬로 처리되지 않은 명령은 IPC{" "}
-              <code>send_command</code>로 데몬에 전달됩니다.
+              매핑합니다. 로컬로 처리되지 않은 짧은 명령은 IPC{" "}
+              <code>send_command</code>, 장기 명령은
+              <code>send_command_streaming</code>으로 데몬에 전달됩니다.
             </p>
             <table>
               <thead>
@@ -166,6 +167,10 @@ export default function Page() {
                 <tr><td><code>/recall</code></td><td></td><td>THIN</td><td>기억 풀 <code>list</code> / <code>show</code> / <code>save</code></td><td><code>core/cli/commands/recall.py</code></td></tr>
                 <tr><td><code>/cognitive</code></td><td></td><td>THIN</td><td>세션의 cognitive state와 최근 이벤트 표시</td><td><code>core/cli/commands/session.py</code></td></tr>
                 <tr><td><code>/fleet</code></td><td></td><td>THIN</td><td>최근 턴의 서브에이전트 fleet 뷰</td><td><code>core/cli/dispatcher.py</code></td></tr>
+                <tr><td><code>/goal [objective|clear]</code></td><td></td><td>DAEMON_RPC</td><td>지속 Goal 조회·생성·empty 전이. 목적 문장은 파싱하지 않고 그대로 저장</td><td><code>core/cli/commands/goal.py</code></td></tr>
+                <tr><td><code>/plan [objective]</code></td><td></td><td>DAEMON_STREAM</td><td>현재 advisory plan 조회 또는 도구가 꺼진 structured planner로 계획 생성. 실행하지 않음</td><td><code>core/server/ipc_server/plan_command.py</code></td></tr>
+                <tr><td><code>/grill &lt;decision&gt;</code></td><td></td><td>DAEMON_STREAM</td><td>의존성 frontier를 따라 의사결정을 압박 검증하는 grilling 스킬</td><td><code>core/cli/commands/skills.py</code></td></tr>
+                <tr><td><code>/geo [target]</code></td><td></td><td>DAEMON_STREAM</td><td>발견→선택→인용→흡수→충실도 단계별 GEO 감사</td><td><code>geode_product/slash_commands.py</code></td></tr>
                 <tr><td><code>/quit</code></td><td><code>/exit</code>, <code>/q</code></td><td>daemon</td><td>세션 비용 요약과 함께 종료</td><td><code>core/cli/dispatcher.py</code></td></tr>
                 <tr><td><code>/verbose</code></td><td></td><td>daemon</td><td>verbose 토글</td><td><code>core/cli/dispatcher.py</code></td></tr>
                 <tr><td><code>/schedule</code></td><td><code>/sched</code></td><td>daemon</td><td>예약 자동화 관리</td><td><code>core/cli/commands/schedule.py</code></td></tr>
@@ -381,13 +386,14 @@ export default function Page() {
             <p>
               Explicit execution locations and injected handlers come from the
               composed registry: the kernel <code>COMMAND_REGISTRY</code> in{" "}
-              <code>core/cli/routing.py</code> plus <code>PRODUCT_COMMAND_SPECS</code>{" "}
-              from <code>geode_product/cli.py</code>. The thin REPL also
+              <code>core/slash_routing.py</code> plus <code>PRODUCT_COMMAND_SPECS</code>{" "}
+              from <code>geode_product/slash_commands.py</code>. The thin REPL also
               special-cases <code>/help</code>, <code>/fleet</code>, and
               argument-free <code>/model</code> locally. <code>COMMAND_MAP</code> in{" "}
               <code>core/cli/commands/_state.py</code> maps legacy dispatcher actions
               and aliases. Commands not handled locally are relayed through IPC{" "}
-              <code>send_command</code>.
+              <code>send_command</code> for short RPCs or
+              <code>send_command_streaming</code> for long-running commands.
             </p>
             <table>
               <thead>
@@ -405,6 +411,10 @@ export default function Page() {
                 <tr><td><code>/recall</code></td><td></td><td>THIN</td><td>Memory pool <code>list</code> / <code>show</code> / <code>save</code></td><td><code>core/cli/commands/recall.py</code></td></tr>
                 <tr><td><code>/cognitive</code></td><td></td><td>THIN</td><td>Show a session&apos;s cognitive state and recent events</td><td><code>core/cli/commands/session.py</code></td></tr>
                 <tr><td><code>/fleet</code></td><td></td><td>THIN</td><td>Show the latest turn&apos;s sub-agent fleet view</td><td><code>core/cli/dispatcher.py</code></td></tr>
+                <tr><td><code>/goal [objective|clear]</code></td><td></td><td>DAEMON_RPC</td><td>Show, create, or transition the persistent Goal to empty; objective text is stored without parsing</td><td><code>core/cli/commands/goal.py</code></td></tr>
+                <tr><td><code>/plan [objective]</code></td><td></td><td>DAEMON_STREAM</td><td>Show the advisory plan or create one with a tool-disabled structured planner; never executes it</td><td><code>core/server/ipc_server/plan_command.py</code></td></tr>
+                <tr><td><code>/grill &lt;decision&gt;</code></td><td></td><td>DAEMON_STREAM</td><td>Stress-test decisions through the dependency-frontier grilling skill</td><td><code>core/cli/commands/skills.py</code></td></tr>
+                <tr><td><code>/geo [target]</code></td><td></td><td>DAEMON_STREAM</td><td>Audit GEO by discovery, selection, citation, absorption, and fidelity stage</td><td><code>geode_product/slash_commands.py</code></td></tr>
                 <tr><td><code>/quit</code></td><td><code>/exit</code>, <code>/q</code></td><td>daemon</td><td>Exit with a session cost summary</td><td><code>core/cli/dispatcher.py</code></td></tr>
                 <tr><td><code>/verbose</code></td><td></td><td>daemon</td><td>Toggle verbose mode</td><td><code>core/cli/dispatcher.py</code></td></tr>
                 <tr><td><code>/schedule</code></td><td><code>/sched</code></td><td>daemon</td><td>Manage scheduled automations</td><td><code>core/cli/commands/schedule.py</code></td></tr>
