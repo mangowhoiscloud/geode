@@ -66,7 +66,7 @@
       {
         "context_name": "geode_skip_permissions",
         "has_default": true,
-        "line": 24,
+        "line": 25,
         "path": "core/agent/safety.py",
         "symbol": "_skip_permissions_var"
       },
@@ -366,11 +366,11 @@
   "packages": {
     "core": {
       "python_files": 400,
-      "python_loc": 121351
+      "python_loc": 121417
     },
     "geode_product": {
       "python_files": 160,
-      "python_loc": 61768
+      "python_loc": 61789
     },
     "plugins": {
       "python_files": 32,
@@ -378,7 +378,7 @@
     },
     "tests": {
       "python_files": 689,
-      "python_loc": 183727
+      "python_loc": 183884
     }
   },
   "schema_version": 3,

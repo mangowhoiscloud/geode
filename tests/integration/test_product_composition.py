@@ -262,6 +262,7 @@ def test_product_composition_compiles_one_lossless_immutable_plan() -> None:
     from core.agent.tool_executor.executor import SPECIAL_EXECUTION_BINDINGS
     from core.cli.tool_handlers import _build_tool_handler_catalog
     from core.tools.base import load_all_tool_definitions
+    from core.tools.google_capabilities import GOOGLE_TOOL_BINDINGS
     from geode_product.tool_handlers import compose_tool_plan, product_handler_groups
 
     definitions = load_all_tool_definitions()
@@ -285,3 +286,16 @@ def test_product_composition_compiles_one_lossless_immutable_plan() -> None:
     assert policies["gmail_search"].consent_required is True
     assert policies["gmail_search"].allow_headless is False
     assert policies["gmail_search"].allow_subagents is False
+
+    capabilities = {item.spec.name: item.capability for item in plan.registrations}
+    for name, binding in GOOGLE_TOOL_BINDINGS.items():
+        if binding.handler_class is None:
+            assert capabilities[name].services == ()
+            assert capabilities[name].auth == ()
+        else:
+            assert capabilities[name].services == tuple(
+                sorted({*binding.read_services, *binding.write_services})
+            )
+            assert capabilities[name].auth == ("google-oauth",)
+        assert capabilities[name].available is True
+        assert plan.outcomes[name].value == "enabled"

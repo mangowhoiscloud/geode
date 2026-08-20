@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from contextvars import ContextVar
 
+from core.tools.google_capabilities import GOOGLE_WRITE_TOOLS
 from core.tools.personal_data import PERSONAL_DATA_TOOLS
 
 # --dangerously-skip-permissions — PER-SESSION state (not process-global).
@@ -90,13 +91,7 @@ WRITE_TOOLS: frozenset[str] = frozenset(
         "profile_update",
         "profile_preference",
         "profile_learn",
-        "calendar_create_event",
-        "calendar_sync_scheduler",
-        "gmail_send",
-        "google_drive_create",
-        "google_docs_write",
-        "google_sheets_write",
-        "google_tasks_write",
+        *GOOGLE_WRITE_TOOLS,
         "manage_context",
         "switch_model",
         "document_ingest",

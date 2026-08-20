@@ -11,6 +11,7 @@ from typing import Any
 import httpx
 import pytest
 from core.mcp.google_workspace_client import GoogleWorkspaceAuthError
+from core.tools.google_capabilities import google_scopes_for_tool
 from core.tools.google_workspace import (
     GmailSearchTool,
     GmailSendTool,
@@ -106,7 +107,7 @@ def test_gmail_search_returns_bounded_plain_text() -> None:
     assert message["subject"] == "Subject"
     assert message["body"] == "hello"
     assert message["body_truncated"] is True
-    assert client.calls[0]["required_scopes"] == ("https://www.googleapis.com/auth/gmail.readonly",)
+    assert client.calls[0]["required_scopes"] == google_scopes_for_tool("gmail_search")
 
 
 def test_gmail_send_builds_rfc_message_and_rejects_header_injection() -> None:
@@ -126,6 +127,7 @@ def test_gmail_send_builds_rfc_message_and_rejects_header_injection() -> None:
     assert message["To"] == "reader@example.com"
     assert message["Subject"] == "Hello"
     assert message.get_body(preferencelist=("plain",)).get_content().strip() == "Body text"
+    assert client.calls[0]["required_scopes"] == google_scopes_for_tool("gmail_send", write=True)
 
     rejected = asyncio.run(
         GmailSendTool(StubGoogleClient()).aexecute(
@@ -153,6 +155,9 @@ def test_drive_search_and_create_use_drive_file_scope() -> None:
     result = asyncio.run(GoogleDriveSearchTool(search_client).aexecute(query="Report"))
     assert result["result"]["files"][0]["id"] == "f1"
     assert "name contains 'Report'" in search_client.calls[0]["params"]["q"]
+    assert search_client.calls[0]["required_scopes"] == google_scopes_for_tool(
+        "google_drive_search"
+    )
 
     create_client = StubGoogleClient(
         {"id": "folder-1", "name": "Reports", "mimeType": "application/vnd.google-apps.folder"}
@@ -162,6 +167,9 @@ def test_drive_search_and_create_use_drive_file_scope() -> None:
     )
     assert created["result"]["created"] is True
     assert create_client.calls[0]["json_body"]["mimeType"].endswith("folder")
+    assert create_client.calls[0]["required_scopes"] == google_scopes_for_tool(
+        "google_drive_create", write=True
+    )
 
 
 def test_docs_read_and_append_contracts() -> None:
@@ -183,6 +191,7 @@ def test_docs_read_and_append_contracts() -> None:
     result = asyncio.run(GoogleDocsReadTool(read_client).aexecute(document_id="doc-1", max_chars=3))
     assert result["result"]["text"] == "abc"
     assert result["result"]["truncated"] is True
+    assert read_client.calls[0]["required_scopes"] == google_scopes_for_tool("google_docs_read")
 
     write_client = StubGoogleClient(
         {"body": {"content": [{"endIndex": 12}]}},
@@ -198,6 +207,10 @@ def test_docs_read_and_append_contracts() -> None:
     assert written["result"]["updated"] is True
     insert = write_client.calls[1]["json_body"]["requests"][0]["insertText"]
     assert insert == {"location": {"index": 11}, "text": "more"}
+    assert all(
+        call["required_scopes"] == google_scopes_for_tool("google_docs_write", write=True)
+        for call in write_client.calls
+    )
 
 
 def test_sheets_tasks_and_contacts_return_structured_results() -> None:
@@ -209,6 +222,7 @@ def test_sheets_tasks_and_contacts_return_structured_results() -> None:
         )
     )
     assert sheet_result["result"]["row_count"] == 2
+    assert sheets.calls[0]["required_scopes"] == google_scopes_for_tool("google_sheets_read")
 
     tasks = StubGoogleClient(
         {"items": [{"id": "task-1", "title": "Review", "status": "needsAction"}]}
@@ -216,6 +230,7 @@ def test_sheets_tasks_and_contacts_return_structured_results() -> None:
     task_result = asyncio.run(GoogleTasksListTool(tasks).aexecute())
     assert task_result["result"]["tasks"][0]["title"] == "Review"
     assert tasks.calls[0]["any_scope"] is True
+    assert tasks.calls[0]["required_scopes"] == google_scopes_for_tool("google_tasks_list")
 
     contacts = StubGoogleClient(
         {
@@ -232,6 +247,23 @@ def test_sheets_tasks_and_contacts_return_structured_results() -> None:
     )
     contact_result = asyncio.run(GoogleContactsListTool(contacts).aexecute())
     assert contact_result["result"]["contacts"][0]["name"] == "Ada"
+    assert contacts.calls[0]["required_scopes"] == google_scopes_for_tool("google_contacts_list")
+
+
+def test_sheets_and_tasks_writes_use_their_own_descriptor_bindings() -> None:
+    sheets = StubGoogleClient({"spreadsheetId": "sheet-1"})
+    result = asyncio.run(GoogleSheetsWriteTool(sheets).aexecute(action="create", title="Review"))
+    assert result["result"]["spreadsheet_id"] == "sheet-1"
+    assert sheets.calls[0]["required_scopes"] == google_scopes_for_tool(
+        "google_sheets_write", write=True
+    )
+
+    tasks = StubGoogleClient({"id": "task-1", "title": "Review"})
+    result = asyncio.run(GoogleTasksWriteTool(tasks).aexecute(action="create", title="Review"))
+    assert result["result"]["task_id"] == "task-1"
+    assert tasks.calls[0]["required_scopes"] == google_scopes_for_tool(
+        "google_tasks_write", write=True
+    )
 
 
 def test_missing_authorization_returns_reconnect_hint() -> None:

@@ -17,14 +17,7 @@ from core.mcp.google_workspace_client import (
     get_google_workspace_client,
 )
 from core.tools.base import tool_error
-
-GMAIL_READ_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
-GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send"
-DRIVE_FILE_SCOPE = "https://www.googleapis.com/auth/drive.file"
-TASKS_READ_SCOPE = "https://www.googleapis.com/auth/tasks.readonly"
-TASKS_WRITE_SCOPE = "https://www.googleapis.com/auth/tasks"
-CONTACTS_READ_SCOPE = "https://www.googleapis.com/auth/contacts.readonly"
-_TASKS_READ_SCOPES = (TASKS_READ_SCOPE, TASKS_WRITE_SCOPE)
+from core.tools.google_capabilities import google_scopes_for_tool
 
 
 class _GoogleToolBase:
@@ -96,7 +89,7 @@ class GmailSearchTool(_GoogleToolBase):
             payload = await self._google.request_json(
                 "GET",
                 "https://gmail.googleapis.com/gmail/v1/users/me/messages",
-                required_scopes=(GMAIL_READ_SCOPE,),
+                required_scopes=google_scopes_for_tool(self.name),
                 params={
                     "q": str(kwargs.get("query", "")),
                     "maxResults": limit,
@@ -137,7 +130,7 @@ class GmailSearchTool(_GoogleToolBase):
         payload = await self._google.request_json(
             "GET",
             f"https://gmail.googleapis.com/gmail/v1/users/me/messages/{safe_id}",
-            required_scopes=(GMAIL_READ_SCOPE,),
+            required_scopes=google_scopes_for_tool(self.name),
             params={
                 "format": "full" if include_body else "metadata",
                 "metadataHeaders": ["Subject", "From", "To", "Date"],
@@ -215,7 +208,7 @@ class GmailSendTool(_GoogleToolBase):
             payload = await self._google.request_json(
                 "POST",
                 "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
-                required_scopes=(GMAIL_SEND_SCOPE,),
+                required_scopes=google_scopes_for_tool(self.name, write=True),
                 json_body=body,
             )
             return {
@@ -264,7 +257,7 @@ class GoogleDriveSearchTool(_GoogleToolBase):
             payload = await self._google.request_json(
                 "GET",
                 "https://www.googleapis.com/drive/v3/files",
-                required_scopes=(DRIVE_FILE_SCOPE,),
+                required_scopes=google_scopes_for_tool(self.name),
                 params={
                     "q": q,
                     "pageSize": max(1, min(int(kwargs.get("max_results", 20)), 100)),
@@ -320,7 +313,7 @@ class GoogleDriveCreateTool(_GoogleToolBase):
                 payload = await self._google.request_json(
                     "POST",
                     "https://www.googleapis.com/drive/v3/files",
-                    required_scopes=(DRIVE_FILE_SCOPE,),
+                    required_scopes=google_scopes_for_tool(self.name, write=True),
                     params={"fields": "id,name,mimeType,webViewLink"},
                     json_body=metadata,
                 )
@@ -346,7 +339,7 @@ class GoogleDriveCreateTool(_GoogleToolBase):
         response = await self._google.request(
             "POST",
             "https://www.googleapis.com/upload/drive/v3/files",
-            required_scopes=(DRIVE_FILE_SCOPE,),
+            required_scopes=google_scopes_for_tool(self.name, write=True),
             params={"uploadType": "multipart", "fields": "id,name,mimeType,webViewLink,size"},
             content=raw,
             headers={"Content-Type": f"multipart/related; boundary={boundary}"},
@@ -381,7 +374,7 @@ class GoogleDocsReadTool(_GoogleToolBase):
             payload = await self._google.request_json(
                 "GET",
                 f"https://docs.googleapis.com/v1/documents/{document_id}",
-                required_scopes=(DRIVE_FILE_SCOPE,),
+                required_scopes=google_scopes_for_tool(self.name),
             )
             text = _document_text(payload)
             max_chars = max(0, min(int(kwargs.get("max_chars", 30000)), 100000))
@@ -430,7 +423,7 @@ class GoogleDocsWriteTool(_GoogleToolBase):
                 created = await self._google.request_json(
                     "POST",
                     "https://docs.googleapis.com/v1/documents",
-                    required_scopes=(DRIVE_FILE_SCOPE,),
+                    required_scopes=google_scopes_for_tool(self.name, write=True),
                     json_body={"title": title},
                 )
                 document_id = str(created.get("documentId", ""))
@@ -442,7 +435,7 @@ class GoogleDocsWriteTool(_GoogleToolBase):
                 current = await self._google.request_json(
                     "GET",
                     f"https://docs.googleapis.com/v1/documents/{quote(document_id, safe='')}",
-                    required_scopes=(DRIVE_FILE_SCOPE,),
+                    required_scopes=google_scopes_for_tool(self.name, write=True),
                 )
                 index = max(1, _document_end_index(current) - 1)
             else:
@@ -453,7 +446,7 @@ class GoogleDocsWriteTool(_GoogleToolBase):
                     "https://docs.googleapis.com/v1/documents/"
                     f"{quote(document_id, safe='')}:batchUpdate"
                 ),
-                required_scopes=(DRIVE_FILE_SCOPE,),
+                required_scopes=google_scopes_for_tool(self.name, write=True),
                 json_body={
                     "requests": [{"insertText": {"location": {"index": index}, "text": text}}]
                 },
@@ -501,7 +494,7 @@ class GoogleSheetsReadTool(_GoogleToolBase):
                     "https://sheets.googleapis.com/v4/spreadsheets/"
                     f"{spreadsheet_id}/values/{cell_range}"
                 ),
-                required_scopes=(DRIVE_FILE_SCOPE,),
+                required_scopes=google_scopes_for_tool(self.name),
                 params={
                     "majorDimension": str(kwargs.get("major_dimension", "ROWS")),
                 },
@@ -553,7 +546,7 @@ class GoogleSheetsWriteTool(_GoogleToolBase):
                 created = await self._google.request_json(
                     "POST",
                     "https://sheets.googleapis.com/v4/spreadsheets",
-                    required_scopes=(DRIVE_FILE_SCOPE,),
+                    required_scopes=google_scopes_for_tool(self.name, write=True),
                     json_body={"properties": {"title": title}},
                 )
                 spreadsheet_id = str(created.get("spreadsheetId", ""))
@@ -604,7 +597,7 @@ class GoogleSheetsWriteTool(_GoogleToolBase):
                 "https://sheets.googleapis.com/v4/spreadsheets/"
                 f"{quote(spreadsheet_id, safe='')}/values/{quote(cell_range, safe='')}{suffix}"
             ),
-            required_scopes=(DRIVE_FILE_SCOPE,),
+            required_scopes=google_scopes_for_tool(self.name, write=True),
             params={"valueInputOption": "USER_ENTERED"},
             json_body={"range": cell_range, "majorDimension": "ROWS", "values": values},
         )
@@ -637,7 +630,7 @@ class GoogleTasksListTool(_GoogleToolBase):
             payload = await self._google.request_json(
                 "GET",
                 f"https://tasks.googleapis.com/tasks/v1/lists/{tasklist_id}/tasks",
-                required_scopes=_TASKS_READ_SCOPES,
+                required_scopes=google_scopes_for_tool(self.name),
                 any_scope=True,
                 params={
                     "maxResults": max(1, min(int(kwargs.get("max_results", 50)), 100)),
@@ -704,7 +697,7 @@ class GoogleTasksWriteTool(_GoogleToolBase):
                 payload = await self._google.request_json(
                     "POST",
                     base,
-                    required_scopes=(TASKS_WRITE_SCOPE,),
+                    required_scopes=google_scopes_for_tool(self.name, write=True),
                     json_body=body,
                 )
             else:
@@ -716,14 +709,14 @@ class GoogleTasksWriteTool(_GoogleToolBase):
                     payload = await self._google.request_json(
                         "PATCH",
                         url,
-                        required_scopes=(TASKS_WRITE_SCOPE,),
+                        required_scopes=google_scopes_for_tool(self.name, write=True),
                         json_body={"status": "completed"},
                     )
                 elif action == "delete":
                     payload = await self._google.request_json(
                         "DELETE",
                         url,
-                        required_scopes=(TASKS_WRITE_SCOPE,),
+                        required_scopes=google_scopes_for_tool(self.name, write=True),
                     )
                 else:
                     raise ValueError(f"Unsupported Tasks action: {action}")
@@ -774,7 +767,7 @@ class GoogleContactsListTool(_GoogleToolBase):
             payload = await self._google.request_json(
                 "GET",
                 "https://people.googleapis.com/v1/people/me/connections",
-                required_scopes=(CONTACTS_READ_SCOPE,),
+                required_scopes=google_scopes_for_tool(self.name),
                 params={
                     "personFields": "names,emailAddresses,phoneNumbers,organizations",
                     "pageSize": max(1, min(int(kwargs.get("max_results", 100)), 1000)),

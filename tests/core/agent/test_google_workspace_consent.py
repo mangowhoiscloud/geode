@@ -20,6 +20,18 @@ from core.agent.safety import (
 from core.agent.sub_agent import SUBAGENT_DENIED_TOOLS
 from core.hooks import HookEvent
 from core.memory.session_checkpoint import SessionCheckpoint, SessionState
+from core.tools.google_capabilities import (
+    GOOGLE_PERSONAL_DATA_TOOLS,
+    GOOGLE_READ_TOOLS,
+    GOOGLE_TOOL_BINDINGS,
+    GOOGLE_WRITE_TOOLS,
+)
+from core.tools.personal_data import (
+    GOOGLE_WORKSPACE_MUTATION_TOOLS,
+    GOOGLE_WORKSPACE_READ_TOOLS,
+    PERSONAL_DATA_TOOLS,
+)
+from core.tools.policy import ProfilePolicy
 
 READ_TOOLS = {
     "gmail_search",
@@ -40,6 +52,56 @@ WRITE_GOOGLE_TOOLS = {
     "calendar_create_event",
     "calendar_sync_scheduler",
 }
+
+
+def test_google_classification_consumers_share_descriptor_projections() -> None:
+    assert GOOGLE_READ_TOOLS == READ_TOOLS
+    assert GOOGLE_WRITE_TOOLS == WRITE_GOOGLE_TOOLS
+    assert GOOGLE_PERSONAL_DATA_TOOLS == READ_TOOLS | WRITE_GOOGLE_TOOLS
+    assert GOOGLE_WORKSPACE_READ_TOOLS is GOOGLE_READ_TOOLS
+    assert GOOGLE_WORKSPACE_MUTATION_TOOLS is GOOGLE_WRITE_TOOLS
+    assert PERSONAL_DATA_TOOLS is GOOGLE_PERSONAL_DATA_TOOLS
+    assert SENSITIVE_TOOLS is GOOGLE_PERSONAL_DATA_TOOLS
+
+    profile_write_policy = next(
+        policy
+        for policy in ProfilePolicy(allow_write=False).to_policies()
+        if policy.name.endswith(":no_write")
+    )
+    assert profile_write_policy.denied_tools >= GOOGLE_WRITE_TOOLS
+
+
+def test_google_delegated_handlers_derive_from_descriptor_bindings() -> None:
+    from core.cli.tool_handlers.delegated import _DELEGATED_TOOLS
+
+    delegated = tuple(
+        name for name, binding in GOOGLE_TOOL_BINDINGS.items() if binding.handler_class is not None
+    )
+    actual = tuple(
+        name
+        for name, (module, _class_name) in _DELEGATED_TOOLS.items()
+        if module == "core.tools.google_workspace"
+    )
+
+    assert delegated == (
+        "gmail_search",
+        "gmail_send",
+        "google_drive_search",
+        "google_drive_create",
+        "google_docs_read",
+        "google_docs_write",
+        "google_sheets_read",
+        "google_sheets_write",
+        "google_tasks_list",
+        "google_tasks_write",
+        "google_contacts_list",
+    )
+    assert actual == delegated
+    for name in delegated:
+        assert _DELEGATED_TOOLS[name] == (
+            "core.tools.google_workspace",
+            GOOGLE_TOOL_BINDINGS[name].handler_class,
+        )
 
 
 def test_google_reads_require_personal_data_consent() -> None:

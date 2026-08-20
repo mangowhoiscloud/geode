@@ -19,7 +19,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": "### Architecture\n\n- **Tool composition now has an immutable validation snapshot.** The product\n  handler composer joins model-facing specs, execution origins, existing safety\n  classifications, and capability requirements into a content-addressed\n  `ToolPlan` before constructing a session. Duplicate or unbound registrations\n  fail early, while current handler ordering and provider payloads remain\n  unchanged. Google OAuth's eight service bundles now derive from one frozen\n  descriptor catalog without changing login or token behavior."
+    "body": "### Architecture\n\n- **Tool composition now has an immutable validation snapshot.** The product\n  handler composer joins model-facing specs, execution origins, existing safety\n  classifications, and capability requirements into a content-addressed\n  `ToolPlan` before constructing a session. Duplicate or unbound registrations\n  fail early, while current handler ordering and provider payloads remain\n  unchanged. Google OAuth's eight service bundles now derive from one frozen\n  descriptor catalog without changing login or token behavior. Google tool\n  associations now derive personal-data, write-policy, consent, delegated\n  handler, and OAuth-scope projections from that catalog while preserving the\n  existing Workspace and Calendar behavior."
   },
   {
     "version": "1.0.23",

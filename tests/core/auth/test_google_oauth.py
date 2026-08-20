@@ -33,7 +33,11 @@ from core.auth.google_oauth import (
 from core.tools import google_capabilities
 from core.tools.google_capabilities import (
     GOOGLE_SERVICE_DESCRIPTORS,
+    GOOGLE_TOOL_BINDINGS,
+    GOOGLE_TOOL_SERVICES,
     GoogleServiceDescriptor,
+    GoogleToolBinding,
+    google_scopes_for_tool,
 )
 
 
@@ -211,6 +215,51 @@ def test_google_service_descriptor_is_deeply_immutable_and_duplicate_safe() -> N
                 replace(descriptor, name="b", implies=("a",)),
             )
         )
+
+
+def test_google_tool_bindings_preserve_services_handlers_and_scope_alternatives() -> None:
+    assert {
+        name: (binding.read_services, binding.write_services, binding.handler_class)
+        for name, binding in GOOGLE_TOOL_BINDINGS.items()
+    } == {
+        "gmail_search": (("gmail-read",), (), "GmailSearchTool"),
+        "gmail_send": ((), ("gmail-send",), "GmailSendTool"),
+        "google_drive_search": (("workspace-files",), (), "GoogleDriveSearchTool"),
+        "google_drive_create": ((), ("workspace-files",), "GoogleDriveCreateTool"),
+        "google_docs_read": (("workspace-files",), (), "GoogleDocsReadTool"),
+        "google_docs_write": ((), ("workspace-files",), "GoogleDocsWriteTool"),
+        "google_sheets_read": (("workspace-files",), (), "GoogleSheetsReadTool"),
+        "google_sheets_write": ((), ("workspace-files",), "GoogleSheetsWriteTool"),
+        "google_tasks_list": (("tasks-read", "tasks-write"), (), "GoogleTasksListTool"),
+        "google_tasks_write": ((), ("tasks-write",), "GoogleTasksWriteTool"),
+        "google_contacts_list": (("contacts-read",), (), "GoogleContactsListTool"),
+        "calendar_list_events": (("calendar-read", "calendar-write"), (), None),
+        "calendar_create_event": ((), ("calendar-write",), None),
+        "calendar_sync_scheduler": (
+            ("calendar-read", "calendar-write"),
+            ("calendar-write",),
+            None,
+        ),
+    }
+    assert tuple(service.name for service in GOOGLE_TOOL_SERVICES["google_tasks_list"]) == (
+        "tasks-read",
+        "tasks-write",
+    )
+    assert google_scopes_for_tool("calendar_list_events") == (
+        "https://www.googleapis.com/auth/calendar.events.owned.readonly",
+        "https://www.googleapis.com/auth/calendar.events.owned",
+    )
+    assert google_scopes_for_tool("calendar_sync_scheduler", write=True) == (
+        "https://www.googleapis.com/auth/calendar.events.owned",
+    )
+
+
+def test_google_tool_binding_catalog_rejects_duplicate_and_unknown_services() -> None:
+    binding = GoogleToolBinding("future_read", ("gmail-read",))
+    with pytest.raises(ValueError, match="duplicate or empty Google tool binding"):
+        google_capabilities._tool_binding_catalog((binding, binding))
+    with pytest.raises(ValueError, match="invalid Google services for tool"):
+        google_capabilities._tool_binding_catalog((GoogleToolBinding("future_read", ("missing",)),))
 
 
 def test_unknown_service_bundle_is_rejected() -> None:
