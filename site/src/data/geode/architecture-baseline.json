@@ -365,20 +365,20 @@
   },
   "packages": {
     "core": {
-      "python_files": 398,
-      "python_loc": 120928
+      "python_files": 400,
+      "python_loc": 121351
     },
     "geode_product": {
       "python_files": 160,
-      "python_loc": 61687
+      "python_loc": 61768
     },
     "plugins": {
       "python_files": 32,
       "python_loc": 213
     },
     "tests": {
-      "python_files": 688,
-      "python_loc": 183135
+      "python_files": 689,
+      "python_loc": 183727
     }
   },
   "schema_version": 3,

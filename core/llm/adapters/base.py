@@ -21,6 +21,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Protocol, runtime_checkable
 
+from core.tools.plan import ToolSpec
+
 
 class AdapterBillingType(str, Enum):  # noqa: UP042 — needs str+Enum for older serialisers
     """How an adapter's call gets billed.
@@ -85,19 +87,6 @@ class EmptyModelOutputError(RuntimeError):
             raise RuntimeError("cannot attest actionable empty output without a marker")
         for callback in self._mark_actionable_callbacks:
             callback()
-
-
-@dataclass(frozen=True)
-class ToolSpec:
-    """Tool descriptor passed to the adapter call.
-
-    Provider-agnostic — adapters translate to Anthropic ``tools`` / OpenAI
-    ``tools`` payload shape internally.
-    """
-
-    name: str
-    description: str
-    input_schema: dict[str, Any]
 
 
 @dataclass(frozen=True)
