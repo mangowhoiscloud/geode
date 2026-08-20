@@ -521,7 +521,7 @@ and closure evidence are appended in §10.
 | CAP-001 | `PARTIAL` | Google service bundles exist but do not own all tool/policy relationships | Generic capability records plus `GoogleServiceDescriptor` are executable SOTs | R2.1 | BND-002 | `IN_DEVELOP` |
 | CAP-002 | `ABSENT` | `ToolRegistry` owns tool objects while other registries/lists own execution and safety | Immutable `ToolRegistration` and `ToolPlan` derive every tool consumer | R2.1 | CAP-001 | `IN_DEVELOP` |
 | CAP-003 | `MISFIT` | Native Google handlers are bound in `core/cli/tool_handlers/delegated.py` | Runtime/composition binds handlers; CLI only renders/forwards user interaction | R2.3 | CAP-002, BND-002 | `OPEN` |
-| CAP-004 | `MISFIT` | Google names repeat in safety, approval, policy, personal-data, and CLI modules | Effect/data/auth/resource metadata derives gates; no independent tool-name allowlists | R2.2 | CAP-002 | `OPEN` |
+| CAP-004 | `MISFIT` | Google names repeat in safety, approval, policy, personal-data, and CLI modules | Effect/data/auth/resource metadata derives gates; no independent tool-name allowlists | R2.2 | CAP-002 | `READY` |
 | CAP-005 | `PARTIAL` | `definitions.json`, tool objects, provider schemas, and defer sets can drift | Anthropic/OpenAI/deferred schemas and execution map share one plan hash and parity tests | R2.3 | CAP-002 | `OPEN` |
 | CAP-006 | `ABSENT` | Adding a native/Google tool requires edits across several policy files | Change-surface fixture proves the bounded file/registration budget in §8 | R7.2 | CAP-003, CAP-004, CAP-005 | `OPEN` |
 | LOOP-001 | `ABSENT` | No immutable object freezes one step's route, policy, tool plan, and trace identity | `StepSnapshot` is created once per step and used by model/tool/telemetry paths | R3.1 | CAP-002 | `OPEN` |
@@ -2084,8 +2084,19 @@ R2.3 (`CAP-003`, `CAP-005`) supplies the immutable CAP-002 “every tool
 consumer” evidence for live `AgenticLoop`/`ToolExecutor`, provider/deferred,
 and worker/MCP roots; those remain explicit R2.3 non-goals here.
 
-The next serialized master-ledger transaction is a whole-ledger readiness
-audit. R2.2 is the earliest candidate in master order; R2.3, R3.1, and R9.1
-require their own readiness transactions even where dependencies are already
-satisfied. R8.2 (`STORE-003`) remains `OPEN` behind REL-004 and STORE-001;
-R8.4 (`BND-008`) additionally waits for STORE-003.
+R2.2 (`CAP-004`) is the sole unclaimed `READY` package in the master sequence
+after a whole-package re-audit against
+`origin/develop@646dac46a35756849d18a454e4d9cf58f8479b5c`. CAP-002 is
+`IN_DEVELOP`; §7 names all 11 native Workspace tools plus Calendar surfaces,
+the six forbidden independent edit sites, and the OAuth, consent,
+headless/sub-agent, keyring, and bounded-result compatibility criteria. The
+active R8.3 claim remains independent and unchanged. R2.2 owns only
+descriptor-driven Google metadata and consumer migration; handler-factory
+ownership and provider/deferred projections remain R2.3, while deterministic
+resource-key and data-policy derivation remains R2.4.
+
+R2.3 and R3.1 are also dependency-satisfied but remain `OPEN` pending their
+own serialized whole-package readiness transactions after R2.2 in master
+order. R9.1 is dependency-satisfied but later in master order and remains
+`OPEN`. R8.2 (`STORE-003`) remains `OPEN` behind REL-004 and STORE-001; R8.4
+(`BND-008`) additionally waits for STORE-003.
