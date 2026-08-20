@@ -13,10 +13,11 @@ from __future__ import annotations
 
 import logging
 import uuid
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
 from core.agent.safety import COMPUTER_USE_TOOLS, HEADLESS_DENIED_TOOLS
@@ -26,7 +27,7 @@ if TYPE_CHECKING:
     from core.agent.tool_executor import ToolExecutor
     from core.config.policy_source import PolicySourceBundle
     from core.observability.run_event import RunEventSinkProvider
-    from core.tools.plan import ToolPlan
+    from core.tools.plan import BoundToolPlan, ToolPlan
 
 log = logging.getLogger(__name__)
 
@@ -124,9 +125,10 @@ class SharedServices:
     _owns_hook_system: bool = False
     lane_queue: Any = None  # Unified LaneQueue — single concurrency gate
     command_registry: Any = None  # composed slash-command routing contract
-    tool_handlers: dict[str, Any] = field(default_factory=dict)
-    tool_plan: ToolPlan | None = None
-    worker_module: str = "core.agent.worker"
+    tool_handlers: Mapping[str, Any] = field(default_factory=dict)
+    bound_tool_plan: BoundToolPlan | None = None
+    transient_tool_handlers: Mapping[str, Any] = field(default_factory=dict)
+    worker_module: str | None = None
     agent_search_dirs: tuple[Path, ...] = ()
 
     # v0.82.0 — Model + provider resolved fresh per session, NOT frozen at
@@ -160,6 +162,31 @@ class SharedServices:
             from core.slash_routing import COMMAND_REGISTRY
 
             self.command_registry = COMMAND_REGISTRY
+        if self.bound_tool_plan is not None:
+            bound_handlers = dict(self.bound_tool_plan.handlers)
+            transient = dict(self.transient_tool_handlers)
+            if collisions := sorted(
+                transient.keys() & self.bound_tool_plan.plan.execution_map.keys()
+            ):
+                raise ValueError(
+                    f"transient handlers collide with tool plan: {', '.join(collisions)}"
+                )
+            if invalid := sorted(
+                name for name, handler in transient.items() if not callable(handler)
+            ):
+                raise TypeError(f"transient handlers must be callable: {', '.join(invalid)}")
+            combined = {**bound_handlers, **transient}
+            if self.tool_handlers and dict(self.tool_handlers) != combined:
+                raise ValueError("tool_handlers must match bound_tool_plan")
+            self.transient_tool_handlers = MappingProxyType(transient)
+            self.tool_handlers = MappingProxyType(combined)
+        elif self.transient_tool_handlers:
+            raise ValueError("transient_tool_handlers requires bound_tool_plan")
+
+    @property
+    def tool_plan(self) -> ToolPlan | None:
+        """Compatibility projection for diagnostics that need plan metadata."""
+        return self.bound_tool_plan.plan if self.bound_tool_plan is not None else None
 
     def close(self) -> None:
         """Release resources created by :func:`build_shared_services`."""
@@ -219,7 +246,20 @@ class SharedServices:
         # IPC mode has HITL relay — tools are gated by approval, not denied.
         # A messaging daemon may expose only the two computer-use surfaces via
         # its separate opt-in; every other headless denial remains enforced.
-        handlers = self.tool_handlers
+        bound_tool_plan = self.bound_tool_plan
+        provider = _resolve_provider(settings.model)
+        if bound_tool_plan is not None:
+            from core.agent.loop._tool_factory import project_bound_tool_plan
+            from core.llm.adapters._source_inference import infer_source
+
+            bound_tool_plan = project_bound_tool_plan(
+                bound_tool_plan,
+                provider=provider,
+                source=infer_source(provider),
+                policy_sources=self.policy_sources,
+            )
+        handlers: Mapping[str, Any] = self.tool_handlers
+        transient_handlers = self.transient_tool_handlers
         # Defense in depth: only the literal boolean True opens remote desktop
         # control.  Settings validation normally guarantees the type, but this
         # boundary stays fail-closed against legacy/mutated singleton state.
@@ -233,6 +273,24 @@ class SharedServices:
             log.info("Headless mode %s: denied tools filtered — %s", mode, denied)
         if headless_denied:
             handlers = {k: v for k, v in handlers.items() if k not in headless_denied}
+            transient_handlers = MappingProxyType(
+                {
+                    name: handler
+                    for name, handler in transient_handlers.items()
+                    if name not in headless_denied
+                }
+            )
+        if bound_tool_plan is not None:
+            bound_tool_plan = bound_tool_plan.filtered(
+                allowed_tool_names=(
+                    frozenset(allowed_tool_names) if allowed_tool_names is not None else None
+                ),
+                denied_tool_names=headless_denied,
+            )
+            handlers = bound_tool_plan.handlers
+        effective_allowed_tools = (
+            frozenset(allowed_tool_names) if allowed_tool_names is not None else None
+        )
         if mode == SessionMode.DAEMON and gateway_computer_use_enabled:
             log.info("Gateway remote computer use explicitly enabled for DAEMON session")
 
@@ -249,7 +307,9 @@ class SharedServices:
         sub_mgr = self._build_sub_agent_manager()
         approval_cb = kwargs.get("approval_callback")
         executor = ToolExecutor(
-            action_handlers=handlers,
+            action_handlers=None if bound_tool_plan is not None else dict(handlers),
+            bound_tool_plan=bound_tool_plan,
+            transient_handlers=(transient_handlers if bound_tool_plan is not None else None),
             mcp_manager=self.mcp_manager,
             sub_agent_manager=sub_mgr,
             hitl_level=hitl,
@@ -258,9 +318,7 @@ class SharedServices:
             middleware_registry=self.middleware_registry,
             approval_callback=approval_cb,
             denied_tools=headless_denied,
-            allowed_tools=(
-                frozenset(allowed_tool_names) if allowed_tool_names is not None else None
-            ),
+            allowed_tools=effective_allowed_tools,
             interactive_approval=mode in {SessionMode.REPL, SessionMode.IPC},
         )
 
@@ -280,7 +338,7 @@ class SharedServices:
             time_budget_s=time_budget,
             cost_budget=self._cost_budget,
             model=settings.model,
-            provider=_resolve_provider(settings.model),
+            provider=provider,
             effort=settings.agentic_effort,
             mcp_manager=self.mcp_manager,
             skill_registry=self.skill_registry,
@@ -326,7 +384,9 @@ class SharedServices:
                 lane=global_lane,
                 worker_module=self.worker_module,
             ),
-            action_handlers=self.tool_handlers,
+            # SubAgentManager uses non-None only to select its injected product
+            # worker subprocess; the worker owns the executable Bound snapshot.
+            action_handlers={},
             agent_registry=agent_registry,
             hooks=self.hook_system,
             hook_registry=self.hook_registry,
@@ -431,9 +491,8 @@ def build_shared_services(
     lane_queue: Any = None,
     command_registry: Any = None,
     verbose: bool = False,
-    tool_handler_builder: Callable[..., dict[str, Any]] | None = None,
-    tool_plan_builder: Callable[..., tuple[ToolPlan, dict[str, Any]]] | None = None,
-    worker_module: str = "core.agent.worker",
+    tool_plan_builder: Callable[..., tuple[BoundToolPlan, Mapping[str, Any]]] | None = None,
+    worker_module: str | None = None,
     agent_search_dirs: Sequence[Path] = (),
 ) -> SharedServices:
     """Construct SharedServices with resolved config values.
@@ -442,27 +501,26 @@ def build_shared_services(
     (per-thread, no shared mutable ref).  If *hook_system* is None, a default
     HookSystem is built via ``build_hooks()``.
     """
-    if tool_handler_builder is not None and tool_plan_builder is not None:
-        raise ValueError("tool_handler_builder and tool_plan_builder are mutually exclusive")
-
     # Validate composition before allocating hooks or process-global offload state.
-    tool_plan = None
-    if tool_plan_builder is not None:
-        tool_plan, tool_handlers = tool_plan_builder(
-            verbose=verbose,
-            mcp_manager=mcp_manager,
-            skill_registry=skill_registry,
-        )
-    else:
-        if tool_handler_builder is None:
-            from core.cli.tool_handlers import _build_tool_handlers
-
-            tool_handler_builder = _build_tool_handlers
-        tool_handlers = tool_handler_builder(
-            verbose=verbose,
-            mcp_manager=mcp_manager,
-            skill_registry=skill_registry,
-        )
+    if tool_plan_builder is None:
+        raise RuntimeError("shared services requires an injected bound tool-plan builder")
+    if not worker_module:
+        raise RuntimeError("shared services requires an injected product worker module")
+    bound_tool_plan, transient_tool_handlers = tool_plan_builder(
+        verbose=verbose,
+        mcp_manager=mcp_manager,
+        skill_registry=skill_registry,
+    )
+    transient_tool_handlers = dict(transient_tool_handlers)
+    if collisions := sorted(
+        transient_tool_handlers.keys() & bound_tool_plan.plan.execution_map.keys()
+    ):
+        raise ValueError(f"transient handlers collide with tool plan: {', '.join(collisions)}")
+    if invalid := sorted(
+        name for name, handler in transient_tool_handlers.items() if not callable(handler)
+    ):
+        raise TypeError(f"transient handlers must be callable: {', '.join(invalid)}")
+    tool_handlers = {**bound_tool_plan.handlers, **transient_tool_handlers}
 
     # Build hooks if not provided
     owns_hook_system = hook_system is None
@@ -533,7 +591,8 @@ def build_shared_services(
         lane_queue=lane_queue,
         command_registry=command_registry,
         tool_handlers=tool_handlers,
-        tool_plan=tool_plan,
+        bound_tool_plan=bound_tool_plan,
+        transient_tool_handlers=transient_tool_handlers,
         worker_module=worker_module,
         agent_search_dirs=tuple(agent_search_dirs),
         _cost_budget=cost_budget,

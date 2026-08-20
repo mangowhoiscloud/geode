@@ -6,7 +6,8 @@ import asyncio
 import inspect
 import logging
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping, Set
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
@@ -14,6 +15,7 @@ if TYPE_CHECKING:
     from core.agent.sub_agent import SubAgentManager
     from core.hooks import HookRegistry, HookSystem, MiddlewareRegistry
     from core.tools.base import ToolContext
+    from core.tools.plan import BoundToolPlan
 
 from core.agent.safety import (
     COLLABORATION_TOOLS,
@@ -125,6 +127,8 @@ class ToolExecutor:
         self,
         *,
         action_handlers: dict[str, ToolHandler] | None = None,
+        bound_tool_plan: BoundToolPlan | None = None,
+        transient_handlers: Mapping[str, ToolHandler] | None = None,
         bash_tool: BashTool | None = None,
         auto_approve: bool = False,
         sub_agent_manager: SubAgentManager | None = None,
@@ -142,7 +146,32 @@ class ToolExecutor:
         allowed_tools: frozenset[str] | None = None,
         interactive_approval: bool = True,
     ) -> None:
-        self._handlers: dict[str, ToolHandler] = action_handlers or {}
+        if action_handlers is not None and bound_tool_plan is not None:
+            raise ValueError("action_handlers and bound_tool_plan are mutually exclusive")
+        if transient_handlers is not None and bound_tool_plan is None:
+            raise ValueError("transient_handlers requires bound_tool_plan")
+        self._bound_tool_plan = bound_tool_plan
+        self._handlers: Mapping[str, ToolHandler]
+        self._transient_handlers: Mapping[str, ToolHandler]
+        if bound_tool_plan is not None:
+            transient = dict(transient_handlers or {})
+            if collisions := sorted(transient.keys() & bound_tool_plan.plan.execution_map.keys()):
+                names = ", ".join(collisions)
+                raise ValueError(f"transient handlers collide with tool plan: {names}")
+            if invalid := sorted(
+                name for name, handler in transient.items() if not callable(handler)
+            ):
+                raise TypeError(f"transient handlers must be callable: {', '.join(invalid)}")
+            self._transient_handlers = MappingProxyType(transient)
+            self._handlers = MappingProxyType({**bound_tool_plan.handlers, **transient})
+        else:
+            self._transient_handlers = MappingProxyType({})
+            self._handlers = action_handlers or {}
+        self._bound_allowed_tools = (
+            frozenset((*bound_tool_plan.tool_names, *self._transient_handlers))
+            if bound_tool_plan is not None
+            else None
+        )
         self._bash = bash_tool or BashTool()
         self._auto_approve = auto_approve  # for testing only
         self._sub_agent_manager = sub_agent_manager
@@ -169,7 +198,18 @@ class ToolExecutor:
             middleware_registry = _MiddlewareRegistry(events=hooks)
         self._hook_registry = hook_registry
         self._middleware_registry = middleware_registry
-        self._tool_input_schemas = dict(tool_input_schemas or {})
+        if bound_tool_plan is not None:
+            from core.tools.plan import thaw_tool_schema
+
+            if tool_input_schemas is not None:
+                raise ValueError("tool_input_schemas and bound_tool_plan are mutually exclusive")
+            bound_schemas = {
+                spec.name: thaw_tool_schema(spec.input_schema)
+                for spec in bound_tool_plan.ordered_specs
+            }
+            self._tool_input_schemas = bound_schemas
+        else:
+            self._tool_input_schemas = dict(tool_input_schemas or {})
         self._approval_callback = approval_callback
         self._interactive_approval = interactive_approval
 
@@ -204,6 +244,33 @@ class ToolExecutor:
         silently when none is attached.
         """
         self._approval.attach_evidence_ledger(ledger)
+
+    def _replace_bound_tool_scope(self, transient_tool_names: Set[str]) -> None:
+        """Replace the immutable dynamic overlay admitted beside this bound plan."""
+        if self._bound_tool_plan is None:
+            raise RuntimeError("bound tool scope requires a bound_tool_plan")
+        self._bound_allowed_tools = frozenset(
+            (*self._bound_tool_plan.tool_names, *self._transient_handlers, *transient_tool_names)
+        )
+
+    def _replace_bound_tool_plan(self, bound_tool_plan: BoundToolPlan) -> None:
+        """Atomically replace provider/policy-projected schemas and handlers."""
+        if self._bound_tool_plan is None:
+            raise RuntimeError("bound tool replacement requires a bound_tool_plan")
+        if collisions := sorted(
+            self._transient_handlers.keys() & bound_tool_plan.plan.execution_map.keys()
+        ):
+            raise ValueError(f"transient handlers collide with tool plan: {', '.join(collisions)}")
+        from core.tools.plan import thaw_tool_schema
+
+        self._bound_tool_plan = bound_tool_plan
+        self._handlers = MappingProxyType({**bound_tool_plan.handlers, **self._transient_handlers})
+        self._tool_input_schemas = {
+            spec.name: thaw_tool_schema(spec.input_schema) for spec in bound_tool_plan.ordered_specs
+        }
+        self._bound_allowed_tools = frozenset(
+            (*bound_tool_plan.tool_names, *self._transient_handlers)
+        )
 
     # Proxy properties for backward compat (tests access these directly)
     @property
@@ -626,6 +693,8 @@ class ToolExecutor:
         """Reject tools outside this session before schema lookup or hooks."""
         if tool_name in self._denied_tools:
             reason = "headless denylist"
+        elif self._bound_allowed_tools is not None and tool_name not in self._bound_allowed_tools:
+            reason = "bound tool plan"
         elif self._allowed_tools is not None and tool_name not in self._allowed_tools:
             reason = "binding allowlist"
         else:

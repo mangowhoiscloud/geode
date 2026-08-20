@@ -10,8 +10,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from core.cli.tool_handlers.single_tool import _build_use_skill_handler
 from core.skills.skills import SkillLoader, SkillRegistry
+from core.tools.handlers.single_tool import _build_use_skill_handler
 
 
 def _write_demo_skill(skills_root: Path) -> None:

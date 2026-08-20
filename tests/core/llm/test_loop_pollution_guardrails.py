@@ -55,7 +55,7 @@ def test_every_delegated_handler_is_async_native() -> None:
     exact pollution source. Every handler built from ``_DELEGATED_TOOLS``
     must be a coroutine function. Covers future tool additions
     automatically because it iterates the registry."""
-    from core.cli.tool_handlers.delegated import _build_delegated_handlers
+    from core.tools.handlers.delegated import _build_delegated_handlers
 
     handlers = _build_delegated_handlers()
     assert len(handlers) >= 15
@@ -74,7 +74,7 @@ def test_every_delegated_tool_class_has_async_aexecute() -> None:
     each registered class and verify."""
     import importlib
 
-    from core.cli.tool_handlers.delegated import _DELEGATED_TOOLS
+    from core.tools.handlers.delegated import _DELEGATED_TOOLS
 
     for tool_name, (module_path, class_name) in _DELEGATED_TOOLS.items():
         tool_cls = getattr(importlib.import_module(module_path), class_name)
@@ -86,7 +86,7 @@ def test_every_delegated_tool_class_has_async_aexecute() -> None:
 
 
 def test_safe_delegate_is_a_coroutine_function() -> None:
-    from core.cli.tool_handlers.clarification import _safe_delegate
+    from core.tools.handlers.clarification import _safe_delegate
 
     assert inspect.iscoroutinefunction(_safe_delegate), (
         "_safe_delegate reverted to sync — that re-routes delegated tools "
@@ -349,7 +349,7 @@ def test_deadline_override_keys_match_registered_handler_names() -> None:
     registered = set(build_tool_handlers())
     # ``computer`` registers only when GEODE_COMPUTER_USE_ENABLED + pyautogui
     # are present — pin its name against the builder source instead.
-    single_tool_src = (REPO_ROOT / "core" / "cli" / "tool_handlers" / "single_tool.py").read_text(
+    single_tool_src = (REPO_ROOT / "core" / "tools" / "handlers" / "single_tool.py").read_text(
         encoding="utf-8"
     )
     conditional = {"computer"} if '"computer"' in single_tool_src else set()

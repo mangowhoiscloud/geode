@@ -1,7 +1,12 @@
 """Subprocess worker for isolated sub-agent execution.
 
-Spawned by IsolatedRunner._execute_subprocess() as:
-    python -m core.agent.worker
+The product composition root injects its bound tool-plan builder and is spawned
+by ``IsolatedRunner._execute_subprocess()`` as::
+
+    python -m geode_product.worker
+
+This module owns the neutral request/result protocol and execution runtime; it
+does not reconstruct a product handler catalog.
 
 Protocol:
     stdin  → single JSON line (WorkerRequest)
@@ -22,7 +27,7 @@ import logging
 import os
 import sys
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -41,6 +46,7 @@ if TYPE_CHECKING:
     from core.agent.loop.models import AgenticResult
     from core.hooks import MiddlewareRegistry
     from core.observability.run_event import RunEventSinkProvider
+    from core.tools.plan import BoundToolPlan
 
 log = logging.getLogger(__name__)
 
@@ -423,13 +429,17 @@ def _load_worker_resume(request: WorkerRequest, conversation: Any) -> tuple[Any,
 
 def _run_agentic(
     request: WorkerRequest,
-    handler_builder: Callable[[], dict[str, Any]] | None = None,
+    tool_plan_builder: Callable[[], tuple[BoundToolPlan, Mapping[str, Any]]] | None = None,
     *,
     middleware_builder: Callable[..., MiddlewareRegistry] | None = None,
     activity_sink_provider: RunEventSinkProvider | None = None,
 ) -> WorkerResult:
     """Bootstrap minimal GEODE runtime and run AgenticLoop."""
     started = time.time()
+    if tool_plan_builder is None:
+        raise RuntimeError("worker requires an injected bound tool-plan builder")
+    bound_tool_plan, transient_handlers = tool_plan_builder()
+
     from core.config.policy_source import EMPTY_POLICY_SOURCES, decode_policy_sources
 
     policy_sources = (
@@ -481,38 +491,73 @@ def _run_agentic(
         task_cwd_path.mkdir(parents=True, exist_ok=True)
         set_task_isolated_cwd(task_cwd_path)
 
-    # 1. Build tool handlers (same factory as CLI)
-    if handler_builder is None:
-        from core.cli.tool_handlers import _build_tool_handlers
+    # Resolve checkpoint/model identity before freezing the executable policy
+    # projection. A resumed child may carry a different provider from the
+    # current process settings, and provider visibility is part of its Bound.
+    from core.agent.conversation import ConversationContext
+    from core.config import _resolve_provider, settings
 
-        handler_builder = _build_tool_handlers
-    handlers = handler_builder()
+    conversation = ConversationContext(max_turns=200)
+    resume_state, resume_checkpoint = _load_worker_resume(request, conversation)
+    resumed_model = str(resume_state.model) if resume_state is not None else ""
+    effective_model = resumed_model or request.model or settings.model
+    effective_provider = (
+        str(resume_state.provider)
+        if resume_state is not None and resume_state.provider
+        else request.provider
+    ) or _resolve_provider(effective_model)
+    effective_source = request.source
+    if not effective_source:
+        from core.llm.adapters._source_inference import infer_source
 
-    # 2. Filter tools — CSP-1 (2026-05-22): consult the toolkit registry
+        effective_source = infer_source(effective_provider)
+
+    # 2. Filter the complete native catalog — ordinary handlers, named special
+    # routes, and explicit execution-only overlays — from one contribution set.
+    # CSP-1 (2026-05-22): consult the toolkit registry
     # so the agent's declared ``toolkit:`` frontmatter expands into the
     # allowlist (with ``_default`` fallback when undeclared).
     from core.tools.toolkit_registry import load_default_registry
 
-    handlers = filter_handlers(
-        handlers=handlers,
+    available_names = dict.fromkeys(
+        (*bound_tool_plan.tool_names, *transient_handlers),
+        None,
+    )
+    selected = filter_handlers(
+        handlers=available_names,
         denied_tools=request.denied_tools,
         agent_allowed_tools=request.agent_allowed_tools,
         toolkit=request.toolkit,
         toolkit_registry=load_default_registry(),
     )
+    selected_names = set(selected)
+    from core.agent.loop._tool_factory import project_bound_tool_plan
+
+    bound_tool_plan = project_bound_tool_plan(
+        bound_tool_plan,
+        provider=effective_provider,
+        source=effective_source,
+        policy_sources=policy_sources,
+        force_include=selected_names,
+    )
+    bound_tool_plan = bound_tool_plan.filtered(allowed_tool_names=selected_names)
+    transient_handlers = {
+        name: handler for name, handler in transient_handlers.items() if name in selected_names
+    }
     # CSP-1 (2026-05-22) — the resulting handler key set is also the
     # set of tool names the model should see. Pass it through to
     # AgenticLoop so the tool schemas advertised to the LLM match the
     # executor's allowlist (otherwise denied tools would be visible to
     # the model and only fail at execution time as "Unknown tool").
-    allowed_tool_names = set(handlers)
+    allowed_tool_names = set(bound_tool_plan.tool_names) | set(transient_handlers)
 
     # 3. Build ToolExecutor (auto_approve=True for sub-agents)
     from core.agent.tool_executor import ToolExecutor
     from core.wiring.bootstrap import build_middleware_registry
 
     executor = ToolExecutor(
-        action_handlers=handlers,
+        bound_tool_plan=bound_tool_plan,
+        transient_handlers=transient_handlers,
         auto_approve=True,  # Sub-agents skip HITL prompts
         # PR-SUBAGENT-ROLES (2026-07-02) — enforce the parent's denied set
         # on the EXISTING executor rail, not only via handler filtering.
@@ -522,6 +567,7 @@ def _run_agentic(
         # denylist, PR-EXEC-HARDENING). This is what makes a role
         # allowlist (e.g. repo_researcher without run_bash) actually hold.
         denied_tools=frozenset(request.denied_tools) | SUBAGENT_CONTROL_TOOLS,
+        allowed_tools=frozenset(allowed_tool_names),
         interactive_approval=False,
         middleware_registry=(
             build_middleware_registry()
@@ -529,12 +575,6 @@ def _run_agentic(
             else middleware_builder(policy_sources=policy_sources)
         ),
     )
-
-    # 4. Build ConversationContext
-    from core.agent.conversation import ConversationContext
-
-    conversation = ConversationContext(max_turns=200)
-    resume_state, resume_checkpoint = _load_worker_resume(request, conversation)
 
     # 5. Build AgenticLoop
     from core.agent.loop import AgenticLoop
@@ -545,20 +585,6 @@ def _run_agentic(
     # default. Worker carries the resolved prompt over the IPC boundary so
     # the subprocess does not need its own AgentRegistry lookup.
     system_prompt_override: str | None = request.agent_system_prompt or None
-
-    # Resolve the inherit-sentinels: an empty model/provider (e.g. a
-    # directly-constructed WorkerRequest) falls back to the runtime's
-    # effective model instead of a frozen literal. Production spawns set
-    # both explicitly (sub_agent.py ``_build_worker_request``).
-    from core.config import _resolve_provider, settings
-
-    resumed_model = str(resume_state.model) if resume_state is not None else ""
-    effective_model = resumed_model or request.model or settings.model
-    effective_provider = (
-        str(resume_state.provider)
-        if resume_state is not None and resume_state.provider
-        else request.provider
-    ) or _resolve_provider(effective_model)
 
     # 5.5 Minimal hook bundle (trajectory audit 2026-07-03) — pre-fix the
     # loop below was built with ``hooks=None``, so the subprocess
@@ -1056,7 +1082,7 @@ def _resolve_worker_outcome(
 
 
 def main(
-    handler_builder: Callable[[], dict[str, Any]] | None = None,
+    tool_plan_builder: Callable[[], tuple[BoundToolPlan, Mapping[str, Any]]] | None = None,
     *,
     middleware_builder: Callable[..., MiddlewareRegistry] | None = None,
     activity_sink_provider: RunEventSinkProvider | None = None,
@@ -1116,7 +1142,7 @@ def main(
             request = WorkerRequest.from_dict(json.loads(raw))
             result = _run_agentic(
                 request,
-                handler_builder,
+                tool_plan_builder,
                 middleware_builder=middleware_builder,
                 activity_sink_provider=activity_sink_provider,
             )
@@ -1145,4 +1171,6 @@ def main(
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(
+        "core.agent.worker has no product composition; run an injected product worker module"
+    )

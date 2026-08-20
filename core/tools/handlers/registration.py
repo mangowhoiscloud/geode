@@ -1,4 +1,4 @@
-"""Lossless, immutable registration batches for CLI tool handlers."""
+"""Lossless, immutable registration batches for runtime tool handlers."""
 
 from __future__ import annotations
 

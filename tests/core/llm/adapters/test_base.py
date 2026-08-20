@@ -39,6 +39,11 @@ def test_adapter_call_request_defaults() -> None:
     assert req.max_tokens == 8192
     assert req.temperature is None
     assert req.tools == ()
+    assert req.deferred_tool_names == ()
+    assert req.tool_plan_hash == ""
+    assert req.tool_plan_generation == 0
+    assert req.denied_tool_names == frozenset()
+    assert req.executable_tool_names == frozenset()
     assert req.stop_sequences == ()
 
 

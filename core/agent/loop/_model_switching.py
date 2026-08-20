@@ -171,6 +171,9 @@ def _apply_model_update(
     loop._tool_processor._adapter_name = getattr(loop._new_adapter, "name", "")
     if old_model != model:
         loop._prompt_dirty = True
+        reproject_bound = getattr(loop, "_reproject_bound_tool_plan", None)
+        if callable(reproject_bound):
+            reproject_bound()
         refresh_tools = getattr(loop, "refresh_tools", None)
         if callable(refresh_tools):
             refresh_tools()

@@ -595,7 +595,7 @@ class TestAgenticLoop:
         from core.cli.bootstrap import run_agentic_oneshot
         from core.cli.commands.skills import cmd_skill_invoke
         from core.cli.scheduler_drain import drain_scheduler_queue
-        from core.cli.typer_serve import serve
+        from core.cli.typer_serve import run_serve
 
         forbidden = {
             "run_agentic_oneshot": (
@@ -606,7 +606,7 @@ class TestAgenticLoop:
                 inspect.getsource(drain_scheduler_queue),
                 ["_loop.run(", "main_loop.run("],
             ),
-            "serve": (inspect.getsource(serve), ["result = loop.run("]),
+            "run_serve": (inspect.getsource(run_serve), ["result = loop.run("]),
             "cmd_skill_invoke": (inspect.getsource(cmd_skill_invoke), ["_loop.run("]),
             "_run_agentic": (inspect.getsource(_run_agentic), ["loop.run("]),
         }

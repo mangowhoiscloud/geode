@@ -36,7 +36,7 @@ class InMemoryPlanStore:
 def plan_handlers(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     store = InMemoryPlanStore()
     monkeypatch.setattr(tool_handlers, "_PLAN_STORE", store)
-    return _build_plan_handlers(force_dry=True)
+    return _build_plan_handlers()
 
 
 def test_create_plan_requires_goal_or_subject(plan_handlers: dict[str, Any]) -> None:
@@ -278,7 +278,7 @@ def test_dangerously_skip_permissions_does_not_fabricate_plan_execution(
     store = InMemoryPlanStore()
     monkeypatch.setattr(tool_handlers, "_PLAN_STORE", store)
     monkeypatch.setattr("core.config.settings.dangerously_skip_permissions", True)
-    handlers = _build_plan_handlers(force_dry=True)
+    handlers = _build_plan_handlers()
 
     result = handlers["create_plan"](goal="review before proceeding")
 

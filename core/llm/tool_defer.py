@@ -12,6 +12,8 @@ a ``defer_loading`` field on tool definitions plus a hosted search tool
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+
 TOOL_DEFER_THRESHOLD = 16
 """Tool count above which deferred loading activates (both vendors cite
 10+ tools as the good-use-case bar; GEODE ships ~60). Below it, defer
@@ -46,3 +48,14 @@ provider's hosted tool-search tool."""
 # returns a 500. GEODE ships no tool named "web", but the exclusion is
 # pinned so a future tool cannot trip the upstream bug.
 OPENAI_DEFER_NAME_BLOCKLIST: frozenset[str] = frozenset({"web"})
+
+
+def default_deferred_tool_names(tool_names: Iterable[str]) -> frozenset[str]:
+    """Return the default composition-time deferred membership.
+
+    This is the only reader of :data:`TOOL_SEARCH_ALWAYS_LOADED` in the
+    native tool-plan path.  The compiler stores the result in immutable,
+    content-addressed plan metadata; provider adapters consume that snapshot
+    instead of consulting this policy again.
+    """
+    return frozenset(name for name in tool_names if name not in TOOL_SEARCH_ALWAYS_LOADED)

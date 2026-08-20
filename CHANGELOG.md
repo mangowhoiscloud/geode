@@ -60,6 +60,15 @@ functional change.
   handler, and OAuth-scope projections from that catalog while preserving the
   existing Workspace and Calendar behavior.
 
+- **Runtime tool composition now uses one bound catalog.** Product sessions,
+  workers, MCP one-shots, the agent loop, executors, and provider/deferred
+  projections share one immutable, generation/hash-bound tool plan. Policy,
+  provider, model-switch, middleware, and headless filters now fail closed
+  before advertising tools that the active executor cannot run; subprocess
+  workers require explicit product composition instead of an implicit kernel
+  launcher, and the kernel CLI no longer advertises a non-composed `serve`
+  command.
+
 ## [1.0.23] - 2026-08-20
 
 > Bundled product boundaries, a self-improving product ring, and an isolated

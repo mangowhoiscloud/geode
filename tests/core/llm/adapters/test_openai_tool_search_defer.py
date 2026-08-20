@@ -30,6 +30,9 @@ def _request(model: str = "gpt-5.5", tool_count: int = TOOL_DEFER_THRESHOLD + 5)
         model=model,
         messages=(Message(role="user", content="hi"),),
         tools=tuple(tool_specs),
+        deferred_tool_names=tuple(
+            tool.name for tool in tool_specs if tool.name.startswith("extra_")
+        ),
     )
 
 
@@ -95,7 +98,12 @@ def test_web_named_tool_never_defers() -> None:
     )
     with patch("core.llm.providers.anthropic.is_computer_use_enabled", return_value=False):
         request_kwargs = build_responses_kwargs(
-            AdapterCallRequest(model="gpt-5.5", messages=base_request.messages, tools=tool_specs),
+            AdapterCallRequest(
+                model="gpt-5.5",
+                messages=base_request.messages,
+                tools=tool_specs,
+                deferred_tool_names=(*base_request.deferred_tool_names, "web"),
+            ),
             backend="platform",
             adapter_name="openai-payg",
         )
@@ -114,8 +122,23 @@ def test_shaping_is_idempotent() -> None:
 
     reshaped = _apply_openai_tool_search_defer(
         first["tools"],
+        deferred_tool_names=_request().deferred_tool_names,
         backend="platform",
         spec=get_openai_model_spec("gpt-5.5"),
         adapter_name="openai-payg",
     )
     assert reshaped is first["tools"]
+
+
+def test_platform_uses_request_membership_not_legacy_global(monkeypatch) -> None:
+    from core.llm import tool_defer
+
+    req = _request()
+    monkeypatch.setattr(tool_defer, "TOOL_SEARCH_ALWAYS_LOADED", frozenset())
+    with patch("core.llm.providers.anthropic.is_computer_use_enabled", return_value=False):
+        tools = build_responses_kwargs(req, backend="platform", adapter_name="openai-payg")["tools"]
+
+    assert _tool_names({"tools": tools}) == [*(tool.name for tool in req.tools), "tool_search"]
+    assert [tool["name"] for tool in tools if tool.get("defer_loading")] == list(
+        req.deferred_tool_names
+    )

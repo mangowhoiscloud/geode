@@ -272,7 +272,7 @@ def test_tool_bad_inputs_classify_as_validation() -> None:
 def test_delegated_handler_executes_end_to_end() -> None:
     """E2E through the production delegation path (registry → lazy import
     → async aexecute), not just the class directly."""
-    from core.cli.tool_handlers.delegated import _build_delegated_handlers
+    from core.tools.handlers.delegated import _build_delegated_handlers
 
     handler = _build_delegated_handlers()["llms_txt_index"]
 

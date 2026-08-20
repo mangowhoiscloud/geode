@@ -19,6 +19,7 @@ from core.memory.collaboration import CollaborationStore
 from core.memory.session_checkpoint import SessionCheckpoint, SessionState
 from core.orchestration.isolated_execution import IsolatedRunner, IsolationResult
 from core.tools.base import ToolContext
+from core.tools.plan import ExecutionBinding, ToolSpec, bind_tool_plan, compile_tool_plan
 
 
 class _ControlledRunner(IsolatedRunner):
@@ -47,6 +48,9 @@ class _ControlledRunner(IsolatedRunner):
 class _ProductionWorkerRunner(IsolatedRunner):
     """Run the real worker lifecycle in-process with a test-only tool allowlist."""
 
+    def __init__(self, tool_plan_builder: Any) -> None:
+        self._tool_plan_builder = tool_plan_builder
+
     async def arun(self, request: WorkerRequest, **_kwargs: Any) -> IsolationResult:
         result = await asyncio.to_thread(
             _run_agentic,
@@ -55,6 +59,7 @@ class _ProductionWorkerRunner(IsolatedRunner):
                 agent_allowed_tools=["commit_effect"],
                 emit_activity=False,
             ),
+            self._tool_plan_builder,
         )
         return IsolationResult(
             session_id=result.task_id,
@@ -425,7 +430,6 @@ def test_collaboration_e2e_characterizes_depth_and_resume_side_effects(
     """Run parent controls through the production worker and checkpoint lifecycle."""
 
     async def scenario() -> None:
-        from core.cli import tool_handlers
         from core.memory import session_checkpoint
         from core.wiring import bootstrap
 
@@ -437,11 +441,20 @@ def test_collaboration_e2e_characterizes_depth_and_resume_side_effects(
                 stream.write(f"{operation_id}\n")
             return {"status": "committed", "operation_id": operation_id}
 
-        monkeypatch.setattr(
-            tool_handlers,
-            "_build_tool_handlers",
-            lambda *, verbose=False: {"commit_effect": commit_effect},
+        spec = ToolSpec(
+            name="commit_effect",
+            description="Record one externally visible test effect.",
+            input_schema={
+                "type": "object",
+                "properties": {"operation_id": {"type": "string"}},
+                "required": ["operation_id"],
+            },
         )
+        plan = compile_tool_plan(
+            ((spec, "test-collaboration"),),
+            (ExecutionBinding(name="commit_effect", origin="test-collaboration"),),
+        )
+        bound = bind_tool_plan(plan, {"commit_effect": commit_effect})
         monkeypatch.setattr(bootstrap, "build_worker_hooks", lambda **_kwargs: None)
 
         mutation_round_zero_messages: list[str] = []
@@ -504,7 +517,7 @@ def test_collaboration_e2e_characterizes_depth_and_resume_side_effects(
         monkeypatch.setattr(AgenticLoop, "_call_llm", scripted_llm)
         monkeypatch.setattr(AgenticLoop, "_maybe_reflect", skip_auxiliary_reflection)
 
-        runner = _ProductionWorkerRunner()
+        runner = _ProductionWorkerRunner(lambda: (bound, {}))
         manager = SubAgentManager(
             runner,
             action_handlers={},

@@ -229,8 +229,8 @@
   "coordinators": {
     "AgenticLoop": {
       "constructor_arg_count": 30,
-      "file_loc": 3179,
-      "method_count": 75,
+      "file_loc": 3378,
+      "method_count": 79,
       "path": "core/agent/loop/agent_loop.py"
     },
     "RuntimeCoreConfig": {
@@ -312,7 +312,7 @@
     ]
   },
   "import_linter": {
-    "contract_count": 5,
+    "contract_count": 6,
     "contracts": [
       {
         "ignored_edges": [
@@ -331,8 +331,7 @@
       {
         "ignored_edges": [
           "core.agent.approval -> core.cli",
-          "core.agent.loop.agent_loop -> core.cli.commands",
-          "core.agent.worker -> core.cli.tool_handlers"
+          "core.agent.loop.agent_loop -> core.cli.commands"
         ],
         "name": "Agent stays pure (no CLI/server)"
       },
@@ -340,13 +339,11 @@
         "ignored_edges": [
           "core.agent.approval -> core.cli",
           "core.agent.loop.agent_loop -> core.cli.commands",
-          "core.agent.worker -> core.cli.tool_handlers",
           "core.server.ipc_server.poller -> core.cli",
           "core.server.ipc_server.poller -> core.cli.session_state",
           "core.server.supervised.services -> core.cli.bootstrap",
           "core.server.supervised.services -> core.cli.commands",
-          "core.server.supervised.services -> core.cli.session_state",
-          "core.server.supervised.services -> core.cli.tool_handlers"
+          "core.server.supervised.services -> core.cli.session_state"
         ],
         "name": "Server may host agent but never CLI"
       },
@@ -359,26 +356,30 @@
       {
         "ignored_edges": [],
         "name": "Classified kernel does not import the bundled self-improving product"
+      },
+      {
+        "ignored_edges": [],
+        "name": "Runtime tool handlers stay capability-neutral"
       }
     ],
-    "ignored_edge_count": 22
+    "ignored_edge_count": 19
   },
   "packages": {
     "core": {
-      "python_files": 403,
-      "python_loc": 121874
+      "python_files": 404,
+      "python_loc": 122665
     },
     "geode_product": {
       "python_files": 161,
-      "python_loc": 61818
+      "python_loc": 61829
     },
     "plugins": {
       "python_files": 32,
       "python_loc": 213
     },
     "tests": {
-      "python_files": 690,
-      "python_loc": 184273
+      "python_files": 693,
+      "python_loc": 185703
     }
   },
   "schema_version": 3,

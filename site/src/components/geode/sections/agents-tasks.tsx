@@ -34,8 +34,8 @@ const subAgentDetails = [
     descKo: "TIMEOUT, API_ERROR는 retryable. VALIDATION, RESOURCE, DEPTH_EXCEEDED는 즉시 실패. 부모에게 error_category + retryable 플래그 반환.",
     descEn: "TIMEOUT, API_ERROR are retryable. VALIDATION, RESOURCE, DEPTH_EXCEEDED fail immediately. Returns error_category + retryable flag to parent." },
   { title: "Subprocess Isolation", color: "#F5C542",
-    descKo: "IsolatedRunner가 python -m core.agent.worker로 자식 프로세스 실행. 크래시 시 SIGKILL 보장. 쓰레드 모드 대비 완전 격리.",
-    descEn: "IsolatedRunner spawns child process via python -m core.agent.worker. SIGKILL guaranteed on crash. Full isolation compared to thread mode." },
+    descKo: "IsolatedRunner가 제품에서 조합한 worker로 자식 프로세스 실행. 크래시 시 SIGKILL 보장. 쓰레드 모드 대비 완전 격리.",
+    descEn: "IsolatedRunner spawns a product-composed worker process. SIGKILL guaranteed on crash. Full isolation compared to thread mode." },
 ];
 
 /* ── Task DAG nodes ── */

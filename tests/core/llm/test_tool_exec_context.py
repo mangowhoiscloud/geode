@@ -218,8 +218,8 @@ def test_web_search_tool_forwards_tool_context() -> None:
 def test_safe_delegate_injects_context_into_aexecute_kwargs() -> None:
     """When ``_safe_delegate`` receives a non-None context, the tool's
     ``aexecute`` must see ``_tool_context`` in its kwargs."""
-    from core.cli.tool_handlers.clarification import _safe_delegate
     from core.tools.base import ToolContext
+    from core.tools.handlers.clarification import _safe_delegate
 
     captured: dict[str, Any] = {}
 
@@ -239,7 +239,7 @@ def test_safe_delegate_injects_context_into_aexecute_kwargs() -> None:
 def test_safe_delegate_without_context_omits_kwarg() -> None:
     """Legacy callers (no context) must not have ``_tool_context`` injected
     so existing tools that strictly validate kwargs do not regress."""
-    from core.cli.tool_handlers.clarification import _safe_delegate
+    from core.tools.handlers.clarification import _safe_delegate
 
     captured: dict[str, Any] = {}
 

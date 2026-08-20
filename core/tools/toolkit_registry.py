@@ -20,7 +20,7 @@ Composition: a toolkit can pull tools from other toolkits via
 Why a separate registry (vs. inlining the lookup in worker.py)?
 
 - The TOML manifest is the SoT for what a sub-agent can touch — separate
-  from the handler factory (`core/cli/tool_handlers._build_tool_handlers`)
+  from runtime handler composition (``core.tools.handlers``)
   which owns *instantiation*. Keeping them apart lets a future plugin
   ship its own ``toolkits.toml`` without touching core handler code.
 - Testable in isolation — composition + fallback semantics are pure

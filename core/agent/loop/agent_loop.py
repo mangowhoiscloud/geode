@@ -19,7 +19,7 @@ import json
 import logging
 import os
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping, Set
 from typing import TYPE_CHECKING, Any
 
 from core.agent.conversation import ConversationContext
@@ -82,10 +82,36 @@ REPLAN_LOW_CONFIDENCE = 0.4  # confidence < → edge-triggered replan
 if TYPE_CHECKING:
     from core.agent.capability_graph import CapabilityGraph
     from core.agent.task_preflight import TaskPreflight
+    from core.llm.adapters.base import AdapterCallRequest
     from core.observability.run_event import RunEventSinkProvider
+    from core.tools.plan import BoundToolPlan
     from core.tools.registry import ToolRegistry
 
 log = logging.getLogger(__name__)
+
+
+def _validate_bound_request_rewrite(
+    original: AdapterCallRequest,
+    effective: AdapterCallRequest,
+) -> None:
+    """Fail closed when middleware widens or relabels a bound tool request."""
+    if (
+        effective.tool_plan_hash != original.tool_plan_hash
+        or effective.tool_plan_generation != original.tool_plan_generation
+    ):
+        raise ValueError("LLM middleware cannot change bound tool plan identity")
+
+    if effective.tools != original.tools:
+        raise ValueError("LLM middleware cannot change bound tool specs")
+    if effective.deferred_tool_names != original.deferred_tool_names:
+        raise ValueError("LLM middleware cannot change bound deferred tools")
+    if effective.allowed_tool_names != original.allowed_tool_names:
+        raise ValueError("LLM middleware cannot change bound tool allowlist")
+    if effective.denied_tool_names != original.denied_tool_names:
+        raise ValueError("LLM middleware cannot change bound tool denylist")
+    if effective.executable_tool_names != original.executable_tool_names:
+        raise ValueError("LLM middleware cannot change bound executable tools")
+
 
 _FAIL_FAST_VALUES = frozenset({"1", "true", "yes", "on"})
 _FAIL_FAST_RETRY_DELAY_S = 1.0
@@ -415,6 +441,17 @@ class AgenticLoop:
         self._yield_after_tool_round = yield_after_tool_round
         self._activity_sink_provider = activity_sink_provider
         self._policy_sources = policy_sources or EMPTY_POLICY_SOURCES
+        from core.tools.plan import BoundToolPlan as _BoundToolPlan
+
+        executor_plan = getattr(tool_executor, "_bound_tool_plan", None)
+        bound_tool_plan = executor_plan if isinstance(executor_plan, _BoundToolPlan) else None
+        if (
+            bound_tool_plan is not None
+            and allowed_tool_names is not None
+            and not set(bound_tool_plan.tool_names) <= allowed_tool_names
+        ):
+            raise ValueError("bound_tool_plan must be filtered before applying an allowlist")
+        self._bound_tool_plan = bound_tool_plan
         self.max_rounds = max_rounds
         self.max_tokens = max_tokens
         self._thinking_budget = thinking_budget
@@ -518,10 +555,11 @@ class AgenticLoop:
         # mutable global tool policy. Ordinary session allowlists only narrow.
         self._force_include_allowed_tools = force_include_allowed_tools
         mcp_tool_list = mcp_manager.get_all_tools() if mcp_manager is not None else None
+        transient_tool_names = self._transient_tool_names(mcp_tool_list)
         # Epoch snapshot pairs with the arun refresh gate: a server recycle
         # bumps the manager epoch and invalidates this tool snapshot.
         self._mcp_epoch = mcp_manager.connection_epoch if mcp_manager is not None else 0
-        self._tools = get_agentic_tools(
+        runtime_tools = get_agentic_tools(
             tool_registry,
             mcp_tools=mcp_tool_list,
             force_include=allowed_tool_names if force_include_allowed_tools else None,
@@ -530,7 +568,16 @@ class AgenticLoop:
             policy_sources=self._policy_sources,
         )
         if allowed_tool_names is not None:
-            self._tools = [t for t in self._tools if t.get("name") in allowed_tool_names]
+            runtime_tools = [t for t in runtime_tools if t.get("name") in allowed_tool_names]
+        self._transient_tools: tuple[dict[str, Any], ...] = ()
+        self._transient_deferred_tool_names: tuple[str, ...] = ()
+        if bound_tool_plan is not None:
+            self._apply_bound_tool_plan(
+                runtime_tools,
+                transient_tool_names=transient_tool_names,
+            )
+        else:
+            self._tools = runtime_tools
         self._capability_graph: CapabilityGraph | None = None
         self._task_preflight: TaskPreflight | None = None
         self._capability_graph_digest: str = ""
@@ -2062,6 +2109,98 @@ class AgenticLoop:
         """Delegates to :func:`_response.refresh_tools`."""
         return _response.refresh_tools(self)
 
+    def _transient_tool_names(
+        self,
+        mcp_tools: list[dict[str, Any]] | None,
+    ) -> frozenset[str]:
+        names = {tool["name"] for tool in (mcp_tools or ()) if isinstance(tool.get("name"), str)}
+        if self._tool_registry is not None:
+            names.update(
+                tool["name"]
+                for tool in self._tool_registry.to_anthropic_tools()
+                if isinstance(tool.get("name"), str)
+            )
+        return frozenset(names)
+
+    def _apply_bound_tool_plan(
+        self,
+        runtime_tools: list[dict[str, Any]],
+        *,
+        transient_tool_names: Set[str] = frozenset(),
+    ) -> None:
+        """Project plan-owned schemas plus explicit transient runtime overlays."""
+        from core.tools.plan import thaw_tool_schema
+
+        bound = self._bound_tool_plan
+        if bound is None:
+            self._tools = runtime_tools
+            self._transient_tools = ()
+            self._transient_deferred_tool_names = ()
+            return
+        from core.llm.tool_defer import default_deferred_tool_names
+
+        plan_names = {item.spec.name for item in bound.plan.registrations}
+        transient = tuple(
+            tool
+            for tool in runtime_tools
+            if tool.get("name") in transient_tool_names and tool.get("name") not in plan_names
+        )
+        plan_tools = [
+            {
+                "name": spec.name,
+                "description": spec.description,
+                "input_schema": thaw_tool_schema(spec.input_schema),
+            }
+            for spec in bound.ordered_specs
+        ]
+        self._transient_tools = transient
+        deferred = default_deferred_tool_names(
+            tool["name"] for tool in transient if isinstance(tool.get("name"), str)
+        )
+        self._transient_deferred_tool_names = tuple(
+            tool["name"] for tool in transient if tool.get("name") in deferred
+        )
+        self.executor._replace_bound_tool_scope(
+            frozenset(tool["name"] for tool in transient if isinstance(tool.get("name"), str))
+        )
+        self._tools = [*plan_tools, *transient]
+
+    def _reproject_bound_tool_plan(self) -> None:
+        """Rebuild one effective Bound snapshot after a provider/source switch."""
+        current = self._bound_tool_plan
+        if current is None:
+            return
+        from core.agent.loop._tool_factory import project_bound_tool_plan
+
+        projected = project_bound_tool_plan(
+            current.base,
+            provider=self._provider,
+            source=self._source,
+            policy_sources=self._policy_sources,
+            force_include=(self._allowed_tool_names if self._force_include_allowed_tools else None),
+        ).filtered(
+            allowed_tool_names=(
+                frozenset(self._allowed_tool_names)
+                if self._allowed_tool_names is not None
+                else None
+            ),
+            denied_tool_names=self.executor._denied_tools,
+        )
+        if projected.content_hash == current.content_hash:
+            return
+        projected = projected.at_generation(current.generation + 1)
+        self.executor._replace_bound_tool_plan(projected)
+        self._bound_tool_plan = projected
+
+    def bound_tool_plan_snapshot(self) -> tuple[BoundToolPlan, Mapping[str, Any]]:
+        """Return the current immutable catalog for an isolated child run."""
+        if self._bound_tool_plan is None:
+            raise RuntimeError("active AgenticLoop has no bound tool plan")
+        transient_handlers = getattr(self.executor, "_transient_handlers", None)
+        if not isinstance(transient_handlers, Mapping):
+            raise RuntimeError("active ToolExecutor has no transient handler snapshot")
+        return self._bound_tool_plan, transient_handlers
+
     # ------------------------------------------------------------------
     # Model switching / escalation — delegate to ``_model_switching``
     # ------------------------------------------------------------------
@@ -2140,6 +2279,14 @@ class AgenticLoop:
                     "capability_graph_sha256": digest,
                     "preflight": self._task_preflight,
                 }
+                if self._bound_tool_plan is not None:
+                    payload["tool_plan"] = {
+                        "generation": self._bound_tool_plan.generation,
+                        "content_hash": self._bound_tool_plan.content_hash,
+                        "tool_count": len(self._bound_tool_plan.tool_names),
+                        "eager_count": len(self._bound_tool_plan.eager_tool_names),
+                        "deferred_count": len(self._bound_tool_plan.deferred_tool_names),
+                    }
                 if digest != self._capability_graph_digest:
                     payload["capability_graph"] = summary
                     self._capability_graph_digest = digest
@@ -2905,17 +3052,55 @@ class AgenticLoop:
             frozenset(self._allowed_tool_names) if self._allowed_tool_names is not None else None
         )
 
+        request_tools: list[dict[str, Any]] | BoundToolPlan
+        if not allow_tools:
+            request_tools = []
+        elif self._bound_tool_plan is not None:
+            request_tools = self._bound_tool_plan
+        else:
+            request_tools = self._tools
+        raw_denied_tools: Any = getattr(self.executor, "_denied_tools", frozenset())
+        executor_denied_tools = (
+            frozenset(raw_denied_tools) if isinstance(raw_denied_tools, Set) else frozenset()
+        )
+        raw_executable_tools: Any = ()
+        if allow_tools:
+            if self._bound_tool_plan is not None:
+                raw_executable_tools = getattr(
+                    self.executor,
+                    "_bound_allowed_tools",
+                    (),
+                )
+            else:
+                raw_executable_tools = getattr(self.executor, "_handlers", ())
+        executor_executable_tools = (
+            frozenset(raw_executable_tools)
+            if isinstance(raw_executable_tools, (Mapping, Set))
+            else frozenset()
+        )
         req = build_adapter_request(
             model=effective_model,
             system=system,
             messages=messages,
-            tools=self._tools if allow_tools else [],
+            tools=request_tools,
+            transient_tools=(
+                list(self._transient_tools)
+                if allow_tools and self._bound_tool_plan is not None
+                else None
+            ),
+            transient_deferred_tool_names=(
+                self._transient_deferred_tool_names
+                if allow_tools and self._bound_tool_plan is not None
+                else ()
+            ),
             tool_choice=tool_choice,
             max_tokens=adaptive_max_tokens,
             temperature=loop_temperature,
             thinking_budget=adaptive_thinking,
             effort=adaptive_effort,
             allowed_tool_names=session_allowed_tools,
+            denied_tool_names=executor_denied_tools,
+            executable_tool_names=executor_executable_tools,
             resume_session_id=prior_session_id,
             # per-loop schema → claude-cli --json-schema / codex --output-schema
             response_schema=(
@@ -2931,16 +3116,22 @@ class AgenticLoop:
             "llm_call_id": llm_call_id,
             "llm_attempt_id": "",
         }
+        bound_request = req
+        original_adapter = self._new_adapter
         llm_request = await self._middleware_registry.llm_request(
             LlmCallRequest(
-                adapter=self._new_adapter,
+                adapter=original_adapter,
                 request=req,
                 correlation=correlation,
             )
         )
+        if self._bound_tool_plan is not None and llm_request.adapter is not original_adapter:
+            raise ValueError("LLM middleware cannot change a bound request adapter")
         call_adapter = llm_request.adapter
         req = llm_request.request
-        if session_allowed_tools is not None:
+        if self._bound_tool_plan is not None:
+            _validate_bound_request_rewrite(bound_request, req)
+        if session_allowed_tools is not None and self._bound_tool_plan is None:
             from dataclasses import replace
 
             effective_allowed = session_allowed_tools
@@ -2950,7 +3141,15 @@ class AgenticLoop:
                 req,
                 allowed_tool_names=effective_allowed,
                 tools=tuple(tool for tool in req.tools if tool.name in effective_allowed),
+                deferred_tool_names=tuple(
+                    name for name in req.deferred_tool_names if name in effective_allowed
+                ),
             )
+        elif session_allowed_tools is not None and (
+            req.allowed_tool_names != session_allowed_tools
+            or any(tool.name not in session_allowed_tools for tool in req.tools)
+        ):
+            raise ValueError("bound tool request escaped its pre-filtered allowlist")
         effective_model = req.model
         adapter_name = getattr(call_adapter, "name", "<unknown>")
         effective_provider = getattr(call_adapter, "provider", self._provider)

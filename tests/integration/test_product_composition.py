@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import runpy
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Any
 from unittest.mock import Mock
 
@@ -90,6 +89,8 @@ def test_product_owns_self_improving_typer_commands() -> None:
     kernel_commands = typer.main.get_command(kernel_app).commands
     product_commands = typer.main.get_command(product_app).commands
 
+    assert "serve" not in kernel_commands
+    assert "serve" in product_commands
     assert {"campaign", "outer-bundle"}.isdisjoint(kernel_commands)
     assert {"campaign", "outer-bundle"} <= product_commands.keys()
 
@@ -122,7 +123,7 @@ def test_daemon_composition_supplies_product_workers_tools_and_prompts(monkeypat
 
 def test_worker_module_supplies_the_product_handler_builder(monkeypatch) -> None:
     from core.agent import worker
-    from geode_product.tool_handlers import build_tool_handlers
+    from geode_product.tool_handlers import compose_tool_plan
     from geode_product.wiring import (
         bind_worker_activity,
         build_middleware_registry,
@@ -135,7 +136,7 @@ def test_worker_module_supplies_the_product_handler_builder(monkeypatch) -> None
     runpy.run_module("geode_product.worker", run_name="__main__")
 
     main.assert_called_once_with(
-        build_tool_handlers,
+        compose_tool_plan,
         middleware_builder=build_middleware_registry,
         activity_sink_provider=current_activity_sink,
         worker_activity_binder=bind_worker_activity,
@@ -145,7 +146,7 @@ def test_worker_module_supplies_the_product_handler_builder(monkeypatch) -> None
 def test_mcp_entrypoint_supplies_the_product_handler_builder(monkeypatch) -> None:
     from geode_product import mcp_server
     from geode_product.self_improving.mcp import register_mcp_tools
-    from geode_product.tool_handlers import build_tool_handlers
+    from geode_product.tool_handlers import compose_tool_plan
 
     run_mcp_server = Mock()
     monkeypatch.setattr(mcp_server, "run_mcp_server", run_mcp_server)
@@ -153,7 +154,7 @@ def test_mcp_entrypoint_supplies_the_product_handler_builder(monkeypatch) -> Non
     mcp_server.main()
 
     run_mcp_server.assert_called_once_with(
-        build_tool_handlers,
+        compose_tool_plan,
         agent_runner=mcp_server.run_agent,
         feature_registrar=register_mcp_tools,
     )
@@ -161,42 +162,40 @@ def test_mcp_entrypoint_supplies_the_product_handler_builder(monkeypatch) -> Non
 
 def test_model_definitions_and_execution_surfaces_have_exact_parity() -> None:
     from core.agent.tool_executor.executor import SPECIAL_EXECUTION_BINDINGS
-    from core.cli.tool_handlers import _build_tool_handler_catalog
     from core.tools.base import load_all_tool_definitions
-    from geode_product.tool_handlers import product_handler_groups
+    from geode_product.tool_handlers import compose_tool_plan
 
     definitions = {item["name"] for item in load_all_tool_definitions()}
-    catalog = _build_tool_handler_catalog(extra_groups=product_handler_groups())
-    handlers = set(catalog.handlers)
+    bound, transient_handlers = compose_tool_plan()
+    handlers = set(bound.handlers)
     special_bindings = set(SPECIAL_EXECUTION_BINDINGS)
     executable = handlers | special_bindings
 
     assert handlers.isdisjoint(special_bindings)
-    assert definitions - executable == set()
-    assert executable - definitions == _INTERNAL_ONLY_HANDLERS
+    assert executable == definitions == set(bound.tool_names)
+    assert set(transient_handlers) == _INTERNAL_ONLY_HANDLERS
 
 
 def test_product_handlers_retain_their_composition_origins() -> None:
-    from core.cli.tool_handlers import _build_tool_handler_catalog
-    from geode_product.tool_handlers import product_handler_groups
+    from geode_product.tool_handlers import compose_tool_plan
 
-    catalog = _build_tool_handler_catalog(extra_groups=product_handler_groups())
-
+    bound, _transient_handlers = compose_tool_plan()
     assert {
-        name: catalog.origins[name] for name in _PRODUCT_HANDLER_ORIGINS
+        name: bound.execution_map[name].origin for name in _PRODUCT_HANDLER_ORIGINS
     } == _PRODUCT_HANDLER_ORIGINS
-    assert set(catalog.handlers) == set(catalog.origins)
 
 
-def test_product_handler_collision_fails_before_catalog_snapshot() -> None:
-    from core.cli.tool_handlers import _build_tool_handler_catalog
-    from core.cli.tool_handlers.registration import UniqueEntries
-    from geode_product.tool_handlers import product_handler_groups
+def test_product_handler_collision_fails_before_catalog_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from core.tools.handlers.registration import UniqueEntries
+    from geode_product import tool_handlers
 
     conflicting_groups = (
-        *product_handler_groups(),
+        *tool_handlers.product_handler_groups(),
         ("product-conflict", UniqueEntries((("petri_audit", _handler),))),
     )
+    monkeypatch.setattr(tool_handlers, "product_handler_groups", lambda: conflicting_groups)
 
     with pytest.raises(
         ValueError,
@@ -205,20 +204,18 @@ def test_product_handler_collision_fails_before_catalog_snapshot() -> None:
             r"\(product-audit vs product-conflict\)"
         ),
     ):
-        _build_tool_handler_catalog(extra_groups=conflicting_groups)
+        tool_handlers.compose_tool_plan()
 
 
 def test_product_composition_rejects_non_callable_handler(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from core.tools.handlers.registration import UniqueEntries
     from geode_product.tool_handlers import compose_tool_plan
 
     monkeypatch.setattr(
-        "core.cli.tool_handlers._build_tool_handler_catalog",
-        lambda **_kwargs: SimpleNamespace(
-            handlers={"broken": None},
-            origins={"broken": "broken-source"},
-        ),
+        "core.tools.handlers.neutral_handler_groups",
+        lambda **_kwargs: (("broken-source", UniqueEntries((("broken", None),))),),
     )
 
     with pytest.raises(TypeError, match="tool handlers must be callable: broken"):
@@ -264,21 +261,23 @@ def test_provider_tool_projections_preserve_existing_wire_payloads() -> None:
 
 def test_product_composition_compiles_one_lossless_immutable_plan() -> None:
     from core.agent.tool_executor.executor import SPECIAL_EXECUTION_BINDINGS
-    from core.cli.tool_handlers import _build_tool_handler_catalog
     from core.tools.base import load_all_tool_definitions
     from core.tools.google_capabilities import GOOGLE_TOOL_BINDINGS
-    from geode_product.tool_handlers import compose_tool_plan, product_handler_groups
+    from geode_product.tool_handlers import compose_tool_plan
 
     definitions = load_all_tool_definitions()
-    catalog = _build_tool_handler_catalog(extra_groups=product_handler_groups())
-    plan, handlers = compose_tool_plan()
-    same, rebuilt_handlers = compose_tool_plan(previous=plan)
+    bound, transient_handlers = compose_tool_plan()
+    rebuilt, rebuilt_transient = compose_tool_plan(previous=bound)
+    plan = bound.plan
 
-    assert same is plan
+    assert rebuilt.plan is plan
     assert list(plan.schema_map) == [item["name"] for item in definitions]
     assert set(plan.schema_map) == set(plan.execution_map)
-    assert list(handlers) == list(rebuilt_handlers) == list(catalog.handlers)
-    assert set(handlers) - set(plan.execution_map) == _INTERNAL_ONLY_HANDLERS
+    assert list(bound.handlers) == [
+        name for name, binding in plan.execution_map.items() if binding.route == "handler"
+    ]
+    assert list(rebuilt.handlers) == list(bound.handlers)
+    assert set(transient_handlers) == set(rebuilt_transient) == _INTERNAL_ONLY_HANDLERS
     assert {
         name for name, binding in plan.execution_map.items() if binding.route == "special"
     } == set(SPECIAL_EXECUTION_BINDINGS)
