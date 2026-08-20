@@ -94,8 +94,15 @@ def compose_tool_plan(
     from core.cli.routing import compose_command_registry
     from core.cli.tool_handlers import _build_tool_handler_catalog
     from core.tools.base import load_all_tool_definitions
+    from core.tools.google_capabilities import GOOGLE_TOOL_BINDINGS
     from core.tools.personal_data import PERSONAL_DATA_TOOLS
-    from core.tools.plan import ExecutionBinding, SafetyPolicy, ToolSpec, compile_tool_plan
+    from core.tools.plan import (
+        CapabilityRequirement,
+        ExecutionBinding,
+        SafetyPolicy,
+        ToolSpec,
+        compile_tool_plan,
+    )
 
     from geode_product.cli import PRODUCT_COMMAND_SPECS
 
@@ -150,8 +157,22 @@ def compose_tool_plan(
         )
         for item in definitions
     }
+    capabilities = {
+        name: CapabilityRequirement(
+            services=tuple(dict.fromkeys((*binding.read_services, *binding.write_services))),
+            auth=("google-oauth",),
+        )
+        for name, binding in GOOGLE_TOOL_BINDINGS.items()
+        if binding.handler_class is not None
+    }
     return (
-        compile_tool_plan(specs, bindings, safety=safety, previous=previous),
+        compile_tool_plan(
+            specs,
+            bindings,
+            safety=safety,
+            capabilities=capabilities,
+            previous=previous,
+        ),
         dict(catalog.handlers),
     )
 

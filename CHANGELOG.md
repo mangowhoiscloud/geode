@@ -55,7 +55,10 @@ functional change.
   `ToolPlan` before constructing a session. Duplicate or unbound registrations
   fail early, while current handler ordering and provider payloads remain
   unchanged. Google OAuth's eight service bundles now derive from one frozen
-  descriptor catalog without changing login or token behavior.
+  descriptor catalog without changing login or token behavior. Google tool
+  associations now derive personal-data, write-policy, consent, delegated
+  handler, and OAuth-scope projections from that catalog while preserving the
+  existing Workspace and Calendar behavior.
 
 ## [1.0.23] - 2026-08-20
 
