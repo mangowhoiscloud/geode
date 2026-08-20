@@ -225,6 +225,7 @@ normal review and CI; implementations start only after the claim merges.
 
 | Closure package | GAP IDs | Owner/session | Implementation branch | Claim evidence | Claimed at (UTC) |
 |---|---|---|---|---|---|
+| R1.3 | BND-003 | `session=codex-root task=r1-3-core-only-distribution-truth` | `feature/r1-3-core-only-distribution-truth` | R1.5 delivery and R1.3 whole-package readiness were reconciled by [#3026](https://github.com/mangowhoiscloud/geode/pull/3026); current `develop` re-audit confirms the full installed-wheel gate exists while the feature-absent kernel projection, exhaustive imports, zero-extension registry construction, fake-port lifecycle, and metadata proof remain measurable | 2026-08-20T02:52:43Z |
 
 ## 1. Program objective
 
@@ -515,7 +516,7 @@ and closure evidence are appended in §10.
 | GOV-004 | `PARTIAL` | 24 import ignores and very high global Ruff ceilings lack uniform owner/expiry metadata | Every exception is removed or recorded per symbol/edge with owner, rationale, expiry, and ratchet | R0.3 | GOV-002 | `DONE` |
 | BND-001 | `MISFIT` | `plugins/` contains first-party features that `core` imports | Every package is classified kernel, product shell, bundled feature, or external extension; names match semantics | R1.1 | GOV-002 | `IN_DEVELOP` |
 | BND-002 | `MISFIT` | 31 `core` → `plugins` import sites across 14 files | AST gate reports zero reverse dependency; composition owns feature registration | R1.2 | BND-001 | `IN_DEVELOP` |
-| BND-003 | `ABSENT` | One-off core-only probe fails at `core.cli`; CI does not test an installed kernel without features | Isolated wheel/package test boots and runs kernel tests without bundled/third-party modules | R1.3 | BND-001, BND-002, BND-006 | `READY` |
+| BND-003 | `ABSENT` | One-off core-only probe fails at `core.cli`; CI does not test an installed kernel without features | Isolated wheel/package test boots and runs kernel tests without bundled/third-party modules | R1.3 | BND-001, BND-002, BND-006 | `IN_PROGRESS` |
 | BND-004 | `PARTIAL` | Skills/hooks/MCP have different discovery rules; Python feature collision/trust behavior is not unified | Each supported external surface declares non-executing discovery, precedence, collision, enablement, trust-before-load, reload, isolation, and teardown | R6.3 | BND-001, LLM-002 | `OPEN` |
 | CAP-001 | `PARTIAL` | Google service bundles exist but do not own all tool/policy relationships | Generic capability records plus `GoogleServiceDescriptor` are executable SOTs | R2.1 | BND-002 | `OPEN` |
 | CAP-002 | `ABSENT` | `ToolRegistry` owns tool objects while other registries/lists own execution and safety | Immutable `ToolRegistration` and `ToolPlan` derive every tool consumer | R2.1 | CAP-001 | `OPEN` |
@@ -1974,14 +1975,13 @@ Commit-pinned primary source references used by the 2026-07-17 audit:
 
 ## 14. Immediate next unit
 
-R1.5 is delivered on `develop` by
-[#3025](https://github.com/mangowhoiscloud/geode/pull/3025) /
-`34bce3677dee545b057d9c60a6cde56bd914cd14`; its active claim is released and
-its durable feature/merge evidence is recorded in §10.1. The whole-package
-readiness re-audit confirms R1.3 (`BND-003`) now has BND-001, BND-002, and
-BND-006 satisfied, so it is the sole earliest `READY` package and remains
-unclaimed. Before allocating an R1.3 implementation worktree, merge a fresh
-roadmap-only claim from the then-current `origin/develop` tip.
+This transaction claims R1.3 (`BND-003`), the sole earliest ready package,
+after R1.5 delivery and whole-package readiness were reconciled by
+[#3026](https://github.com/mangowhoiscloud/geode/pull/3026). After this claim
+merges, allocate `feature/r1-3-core-only-distribution-truth` from the updated
+`origin/develop` tip. R1.3 owns only the isolated kernel distribution proof;
+it does not create a second public distribution or absorb R7.1 architecture
+gate closure.
 
 R1.6 (`REL-001`) remains `OPEN` until R0.3, R1.3, and R1.5 are delivered; it
 then owns the v1.0.1 release checkpoint and does not authorize facade removal.
