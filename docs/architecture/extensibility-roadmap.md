@@ -562,7 +562,7 @@ and closure evidence are appended in §10.
 | MEM-001 | `MISFIT` | One live system-prompt branch creates a default user profile outside the wired project scope, `TURN_COMPLETED` promotes a low-information turn/tool trace into active project memory, and caller-free session-checkpoint plus journal write/aggregate APIs imply competing authorities | The wired profile is the sole prompt profile source; automatic turn traces remain in canonical session records; dead `SessionStorePort` checkpoint and `ProjectJournal` write/aggregate APIs are removed while historical files remain untouched; executable tests and docs identify the live read/write authority without adding a store or framework | R6.7 | HOOK-001, STORE-002 | `DONE` |
 | GOAL-001 | `PARTIAL` | Explicit Goal state, contextual continuation, accounting, and trajectory events persist, but automatic continuation is owned only by one `AgenticLoop.arun()` call; no process owner discovers an active Goal after return or daemon restart, restores its checkpoint, or prevents duplicate idle launches | The existing serve process owns a bounded idle Goal continuation host that restores the same checkpoint as a new session generation, admits at most one continuation per session, uses the internal contextual-Goal path rather than a synthetic user turn, preserves Lane, PostVerify/replan, accounting, and trajectory contracts, and does not hot-loop an unchanged active Goal | R6.8 | HOOK-003, STORE-002 | `DONE` |
 | CODE-001 | `PARTIAL` | Coding work spans session/checkpoint/timeline, task preflight/TaskGraph, Goal, collaboration, worktree workflow, file/bash tools, and reviewer/verification paths, but no canonical contract maps their current writers, recovery authority, or residual coding-runtime boundaries | One reviewed coding-runtime authority contract maps every proposed record and operation to an existing or residual owner, fixes recovery/history/projection and drift/rollback invariants, and proves that no duplicate runtime store, task ledger, policy plane, or implementation API was introduced | R9.1 | STORE-002, HOOK-003, MEM-001, COLLAB-003, GOAL-001 | `OPEN` |
-| REL-003 | `MISFIT` | PyPI, GitHub Releases, repository metadata, and the changelog report v1.0.22, which predates the delivered boundary refactor | Wheel, sdist, CLI, daemon, site SOT, changelog, tag, GitHub release, and PyPI all report v1.0.23 with artifact-hash parity and no rewritten earlier-release evidence | R1.7 | BND-003, BND-006, GOV-004 | `OPEN` |
+| REL-003 | `MISFIT` | PyPI, GitHub Releases, repository metadata, and the changelog report v1.0.22, which predates the delivered boundary refactor | Wheel, sdist, CLI, daemon, site SOT, changelog, tag, GitHub release, and PyPI all report v1.0.23 with artifact-hash parity and no rewritten earlier-release evidence | R1.7 | BND-003, BND-006, GOV-004 | `READY` |
 | REL-004 | `ABSENT` | No registered gate prevents the v1.0.23 compatibility facade or preserved state roots from being retired immediately after a local tag, draft release, or registry publication | Official GitHub Release and PyPI evidence proves compatible public artifacts continuously exposed the facade and preserved roots for a final qualifying interval of at least 30 consecutive days, starting no earlier than v1.0.23, and every release inside that interval retained them | R8.3 | REL-003 | `OPEN` |
 | BND-008 | `ABSENT` | The current `core/self_improving` import and source/module launcher surface has no enumerated consumer census, old-to-new migration map, or removal-only closure gate | After REL-004, every repository and documented consumer is classified, migration guidance names canonical replacements, only the forwarding facade and legacy launchers are removed, and installed-wheel import/CLI/MCP/config/state parity proves the canonical product remains intact | R8.4 | REL-004, STORE-003 | `OPEN` |
 
@@ -2058,15 +2058,15 @@ Commit-pinned primary source references used by the 2026-07-17 audit:
 
 ## 14. Immediate next unit
 
-This release-target ledger correction preserves the stale v1.0.1 contracts as
-`SUPERSEDED` history and registers REL-003/R1.7, REL-004/R8.3, and
-BND-008/R8.4 against the official v1.0.22 release state. It claims none of the
-new packages.
+The R1.7 whole-package readiness audit confirms BND-003 and BND-006 are
+delivered on `develop`, GOV-004 is `DONE`, and the measurable release criteria
+remain complete. Official GitHub Release and PyPI queries on 2026-08-20 still
+identify v1.0.22 as latest, PyPI has no v1.0.23 artifact, and repository version
+metadata and the changelog agree on v1.0.22. R1.7 (`REL-003`) is therefore the
+sole earliest `READY` package and remains unclaimed; a separate claim PR must
+merge before its implementation worktree is allocated.
 
-R1.7 (`REL-003`) remains `OPEN` until a separate roadmap-only readiness
-transaction re-audits the whole package, after which a separate claim PR must
-merge before implementation. R8.3 (`REL-004`) remains `OPEN` until REL-003 is
-`DONE`; its 30-day clock starts from public registry evidence, never from an
-implementation merge. R8.2 (`STORE-003`) remains `OPEN` behind REL-004 and
-STORE-001. R8.4 (`BND-008`) additionally waits for STORE-003, so neither can
-ship in v1.0.23.
+R8.3 (`REL-004`) remains `OPEN` until REL-003 is `DONE`; its 30-day clock starts
+from public registry evidence, never from an implementation merge. R8.2
+(`STORE-003`) remains `OPEN` behind REL-004 and STORE-001. R8.4 (`BND-008`)
+additionally waits for STORE-003, so neither can ship in v1.0.23.
