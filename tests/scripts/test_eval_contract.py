@@ -182,14 +182,114 @@ def _analysis(
     }
 
 
+def _publication(run_dir: Path) -> dict[str, object]:
+    public = run_dir / "public.json"
+    private = run_dir / "private.log"
+    public.write_text('{"result":"pass"}\n', encoding="utf-8")
+    private.write_text("private\n", encoding="utf-8")
+    prefix = "reports/e2e-validation/fixture"
+    return {
+        "artifact_repository": {
+            "base_revision": "b" * 40,
+            "destination_prefix": prefix,
+            "url": "https://github.com/mangowhoiscloud/geode-eval-artifacts",
+        },
+        "entries": [
+            {
+                "bytes": public.stat().st_size,
+                "classification": "public",
+                "local_path": public.name,
+                "remote_path": f"{prefix}/{public.name}",
+                "sha256": contract._sha256(public),
+            },
+            {
+                "bytes": private.stat().st_size,
+                "classification": "withheld-private",
+                "local_path": private.name,
+                "reason": "raw fixture is not approved for publication",
+                "remote_path": None,
+                "sha256": contract._sha256(private),
+            },
+        ],
+        "geode": {
+            "repository": "https://github.com/mangowhoiscloud/geode",
+            "revision": "a" * 40,
+            "run_record": "docs/eval/geo-visibility.md",
+        },
+        "publication": {
+            "artifact_merge_revision": None,
+            "published_at": None,
+            "status": "prepared",
+        },
+        "run_id": "geo-publication-fixture",
+        "schema": "geode.eval-artifact-publication.v1",
+        "verification": {
+            "local_identity_scrubbed": True,
+            "secret_scan_passed": True,
+            "source_hashes_verified": True,
+        },
+    }
+
+
 def test_eval_schemas_are_valid_draft_2020_12() -> None:
     for filename in (
         contract.CATALOG_SCHEMA,
         contract.RUN_SPEC_SCHEMA,
         contract.ATTEMPT_SCHEMA,
         contract.ANALYSIS_SCHEMA,
+        contract.PUBLICATION_SCHEMA,
     ):
         Draft202012Validator.check_schema(contract._load_schema(filename))
+
+
+def test_publication_validates_sources_and_withheld_accounting(tmp_path: Path) -> None:
+    manifest = tmp_path / "publication.json"
+    payload = _publication(tmp_path)
+    _write_json(manifest, payload)
+
+    assert contract.validate_publication(manifest)["publication"]["status"] == "prepared"
+
+    (tmp_path / "public.json").write_text('{"result":"changed"}\n', encoding="utf-8")
+    with pytest.raises(ValueError, match="byte count does not match"):
+        contract.validate_publication(manifest)
+
+
+def test_publication_rejects_remote_path_outside_prefix(tmp_path: Path) -> None:
+    manifest = tmp_path / "publication.json"
+    payload = _publication(tmp_path)
+    entries = payload["entries"]
+    assert isinstance(entries, list)
+    public = entries[0]
+    assert isinstance(public, dict)
+    public["remote_path"] = "other/public.json"
+    _write_json(manifest, payload)
+
+    with pytest.raises(ValueError, match="outside destination_prefix"):
+        contract.validate_publication(manifest)
+
+
+def test_published_manifest_binds_remote_readback_counts(tmp_path: Path) -> None:
+    manifest = tmp_path / "publication.json"
+    payload = _publication(tmp_path)
+    publication = payload["publication"]
+    assert isinstance(publication, dict)
+    publication.update(
+        {
+            "artifact_merge_revision": "c" * 40,
+            "published_at": "2026-08-20T08:00:00Z",
+            "remote_readback": {
+                "bytes_verified": 1,
+                "files_verified": 1,
+                "status": "passed",
+                "verified_at": "2026-08-20T08:01:00Z",
+            },
+            "status": "published",
+        }
+    )
+    _write_json(manifest, payload)
+
+    with pytest.raises(ValueError, match="read-back bytes"):
+        contract.validate_publication(manifest)
 
 
 def test_committed_eval_catalog_is_current_and_routes_every_document() -> None:

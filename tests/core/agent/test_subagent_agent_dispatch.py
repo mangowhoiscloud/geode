@@ -235,6 +235,39 @@ def test_build_worker_request_honors_default_model() -> None:
     assert request.model == "claude-opus-4-8"
 
 
+def test_builtin_role_inherits_parent_model_instead_of_type_agent() -> None:
+    """An explicit capability role must not leak into a type agent's model."""
+    registry = AgentRegistry()
+    registry.register(
+        AgentDefinition(
+            name="data_analyst",
+            role="Generic analyst",
+            system_prompt="Generic analyst prompt",
+            tools=["read_document"],
+            model="claude-sonnet-4-6",
+        )
+    )
+    manager = _make_manager(registry)
+    task = SubTask(
+        task_id="d-role",
+        description="inspect the repository",
+        task_type="analyze",
+        role="repo_researcher",
+    )
+
+    request = manager._build_worker_request(task, default_model="gpt-5.6-sol")
+
+    assert request.model == "gpt-5.6-sol"
+    assert request.agent_name == ""
+    assert request.agent_system_prompt == ""
+    assert set(request.agent_allowed_tools) == {
+        "glob_files",
+        "grep_files",
+        "read_document",
+        "session_search",
+    }
+
+
 def test_task_and_agent_model_override_win_over_default_model(
     seed_generator_registry: AgentRegistry,
 ) -> None:

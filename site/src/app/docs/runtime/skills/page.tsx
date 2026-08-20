@@ -81,6 +81,10 @@ argument-hint: "[issue-number]"
                   <td>목록, 추가, 리로드</td>
                 </tr>
                 <tr>
+                  <td><code>/grill</code>, <code>/geo</code></td>
+                  <td><code>grilling</code>과 <code>geo</code> 스킬을 기존 AgenticLoop에 스트리밍 주입하는 전용 별칭. 장기 GEO는 최대 3개의 독립 읽기 전용 증거 branch만 기존 협업 도구로 실행하고 부모가 합성·검증합니다. 별도 executor나 thought-tree 엔진은 만들지 않습니다</td>
+                </tr>
+                <tr>
                   <td><code>geode skill list / create / show / remove</code></td>
                   <td>3계층을 관리하는 CLI. <code>--private</code>로 personal 계층에 생성합니다</td>
                 </tr>
@@ -194,6 +198,10 @@ and !\`cmd\` is replaced with shell output at invocation time.`}</pre>
                 <tr>
                   <td><code>/skills</code></td>
                   <td>List, add, reload</td>
+                </tr>
+                <tr>
+                  <td><code>/grill</code>, <code>/geo</code></td>
+                  <td>Streaming aliases that inject the <code>grilling</code> and <code>geo</code> skills into the existing AgenticLoop. Long GEO runs use the existing collaboration tools for at most three independent read-only evidence branches, then the parent synthesizes and verifies; no separate executor or thought-tree engine is added</td>
                 </tr>
                 <tr>
                   <td><code>geode skill list / create / show / remove</code></td>

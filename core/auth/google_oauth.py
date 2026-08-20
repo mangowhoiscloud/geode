@@ -35,6 +35,10 @@ import httpx
 
 from core.memory.atomic_write import atomic_write_json
 from core.paths import GLOBAL_GOOGLE_ACCOUNTS_FILE
+from core.tools.google_capabilities import (
+    GOOGLE_SERVICE_DESCRIPTORS,
+    GoogleServiceDescriptor,
+)
 
 log = logging.getLogger(__name__)
 _ACCOUNT_STORE_LOCK = threading.RLock()
@@ -50,77 +54,12 @@ GOOGLE_SECRET_SCHEMA_VERSION = 1
 IDENTITY_SCOPES: tuple[str, ...] = ("openid", "email", "profile")
 
 
-@dataclass(frozen=True, slots=True)
-class GoogleServiceBundle:
-    """Named least-privilege scope bundle exposed by /login google."""
+GoogleServiceBundle = GoogleServiceDescriptor
+GOOGLE_SERVICE_BUNDLES = GOOGLE_SERVICE_DESCRIPTORS
 
-    name: str
-    scopes: tuple[str, ...]
-    description: str
-    risk: str
-
-
-GOOGLE_SERVICE_BUNDLES: dict[str, GoogleServiceBundle] = {
-    "gmail-send": GoogleServiceBundle(
-        "gmail-send",
-        ("https://www.googleapis.com/auth/gmail.send",),
-        "Send mail without reading the mailbox",
-        "sensitive",
-    ),
-    "gmail-read": GoogleServiceBundle(
-        "gmail-read",
-        ("https://www.googleapis.com/auth/gmail.readonly",),
-        "Search and read Gmail messages",
-        "restricted",
-    ),
-    "calendar-read": GoogleServiceBundle(
-        "calendar-read",
-        ("https://www.googleapis.com/auth/calendar.events.owned.readonly",),
-        "Read events on calendars owned by the account",
-        "sensitive",
-    ),
-    "calendar-write": GoogleServiceBundle(
-        "calendar-write",
-        ("https://www.googleapis.com/auth/calendar.events.owned",),
-        "Read and edit events on calendars owned by the account",
-        "sensitive",
-    ),
-    "workspace-files": GoogleServiceBundle(
-        "workspace-files",
-        ("https://www.googleapis.com/auth/drive.file",),
-        "Use Drive, Docs, and Sheets files created or explicitly opened by GEODE",
-        "non-sensitive",
-    ),
-    "tasks-read": GoogleServiceBundle(
-        "tasks-read",
-        ("https://www.googleapis.com/auth/tasks.readonly",),
-        "Read Google Tasks",
-        "sensitive",
-    ),
-    "tasks-write": GoogleServiceBundle(
-        "tasks-write",
-        ("https://www.googleapis.com/auth/tasks",),
-        "Read and edit Google Tasks",
-        "sensitive",
-    ),
-    "contacts-read": GoogleServiceBundle(
-        "contacts-read",
-        ("https://www.googleapis.com/auth/contacts.readonly",),
-        "Read Google Contacts through the People API",
-        "sensitive",
-    ),
-}
-
-RECOMMENDED_GOOGLE_SERVICES: tuple[str, ...] = (
-    "gmail-send",
-    "calendar-read",
-    "workspace-files",
+RECOMMENDED_GOOGLE_SERVICES: tuple[str, ...] = tuple(
+    descriptor.name for descriptor in GOOGLE_SERVICE_DESCRIPTORS.values() if descriptor.recommended
 )
-
-_SERVICE_IMPLICATIONS: dict[str, frozenset[str]] = {
-    "calendar-write": frozenset({"calendar-read"}),
-    "tasks-write": frozenset({"tasks-read"}),
-}
 
 
 class GoogleOAuthError(RuntimeError):
@@ -668,9 +607,9 @@ def normalize_google_services(services: Sequence[str]) -> tuple[str, ...]:
             f"Unknown Google service bundle(s): {', '.join(unknown)}. Available: "
             f"{', '.join(GOOGLE_SERVICE_BUNDLES)}"
         )
-    for parent, implied in _SERVICE_IMPLICATIONS.items():
-        if parent in normalized:
-            normalized.difference_update(implied)
+    for descriptor in GOOGLE_SERVICE_DESCRIPTORS.values():
+        if descriptor.name in normalized:
+            normalized.difference_update(descriptor.implies)
     return tuple(sorted(normalized))
 
 

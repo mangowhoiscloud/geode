@@ -11,6 +11,7 @@ from typing import Any
 
 from core.cli.tool_handlers.clarification import _safe_delegate
 from core.cli.tool_handlers.registration import UniqueEntries
+from core.tools.google_capabilities import GOOGLE_TOOL_BINDINGS
 
 _DELEGATED_TOOLS = UniqueEntries[str, tuple[str, str]](
     (
@@ -55,43 +56,13 @@ _DELEGATED_TOOLS = UniqueEntries[str, tuple[str, str]](
         ),
         ("profile_learn", ("core.tools.profile_tools", "ProfileLearnTool")),
         # Google Workspace — credentials are registered by /login google.
-        ("gmail_search", ("core.tools.google_workspace", "GmailSearchTool")),
-        ("gmail_send", ("core.tools.google_workspace", "GmailSendTool")),
-        (
-            "google_drive_search",
-            ("core.tools.google_workspace", "GoogleDriveSearchTool"),
-        ),
-        (
-            "google_drive_create",
-            ("core.tools.google_workspace", "GoogleDriveCreateTool"),
-        ),
-        (
-            "google_docs_read",
-            ("core.tools.google_workspace", "GoogleDocsReadTool"),
-        ),
-        (
-            "google_docs_write",
-            ("core.tools.google_workspace", "GoogleDocsWriteTool"),
-        ),
-        (
-            "google_sheets_read",
-            ("core.tools.google_workspace", "GoogleSheetsReadTool"),
-        ),
-        (
-            "google_sheets_write",
-            ("core.tools.google_workspace", "GoogleSheetsWriteTool"),
-        ),
-        (
-            "google_tasks_list",
-            ("core.tools.google_workspace", "GoogleTasksListTool"),
-        ),
-        (
-            "google_tasks_write",
-            ("core.tools.google_workspace", "GoogleTasksWriteTool"),
-        ),
-        (
-            "google_contacts_list",
-            ("core.tools.google_workspace", "GoogleContactsListTool"),
+        # Calendar bindings have no handler_class and stay in the composite
+        # Calendar builder (Google direct/MCP/Apple); only native Workspace
+        # classes use this lazy delegated factory.
+        *(
+            (name, ("core.tools.google_workspace", binding.handler_class))
+            for name, binding in GOOGLE_TOOL_BINDINGS.items()
+            if binding.handler_class is not None
         ),
     )
 )

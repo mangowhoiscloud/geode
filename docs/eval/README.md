@@ -12,11 +12,13 @@ eval_triggers:
   - artifact
   - research question
 eval_contracts:
+  - docs/eval/artifact-publish-manifest.template.json
   - docs/eval/eval-analysis.template.json
   - docs/eval/eval-attempt.template.json
   - docs/eval/eval-run-spec.template.json
   - docs/eval/schemas/analysis.schema.json
   - docs/eval/schemas/attempt.schema.json
+  - docs/eval/schemas/publication.schema.json
   - docs/eval/schemas/run-spec.schema.json
 eval_latest_valid_release: https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/1160fecfe4447f0a3f4cf30a414f29c61776d012/trajectories/mcpmark-gate0c-gpt54-high-mcpmark-gate0c-filesystem30-gpt54-high-20260813t190922z-geode-20260813T230525Z-9d6773caad04
 ---

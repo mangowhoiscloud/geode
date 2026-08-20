@@ -20,6 +20,8 @@ def test_geode_operator_knobs_preserved() -> None:
     worker. Removing any of them from the whitelist would silently
     break their effect."""
     required = {
+        "GEODE_HOME",
+        "GEODE_STATE_ROOT",
         "GEODE_CONFIG_PATH",
         "GEODE_DATA_DIR",
     }

@@ -18,6 +18,32 @@ class _Client:
     def send_prompt(self, *_args: object, **_kwargs: object) -> dict[str, object]:
         return {"type": "result", "text": "ok"}
 
+    def send_command_streaming(self, *_args: object, **_kwargs: object) -> dict[str, object]:
+        return {"type": "result", "text": "streamed"}
+
+
+def test_geo_slash_input_uses_streaming_command_path() -> None:
+    from core.cli.routing import compose_command_registry
+    from geode_product.slash_commands import PRODUCT_COMMAND_SPECS
+
+    calls: list[tuple[str, str]] = []
+
+    class Client(_Client):
+        def send_command_streaming(
+            self, cmd: str, args: str = "", **_callbacks: object
+        ) -> dict[str, object]:
+            calls.append((cmd, args))
+            return {"type": "result", "text": "GEO audit"}
+
+    app = FullscreenThinCli(
+        Client(),
+        command_registry=compose_command_registry(PRODUCT_COMMAND_SPECS),
+    )
+    app._run_text("/geo audit the public docs")
+
+    assert calls == [("/geo", "audit the public docs")]
+    assert "GEO audit" in app.state.transcript
+
 
 def test_progress_plan_updates_fixed_plan_pane() -> None:
     app = FullscreenThinCli(_Client())

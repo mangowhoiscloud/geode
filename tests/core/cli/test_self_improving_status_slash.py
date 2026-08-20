@@ -20,7 +20,7 @@ import pytest
 
 def test_self_improving_registered_in_command_registry() -> None:
     from core.cli.routing import COMMAND_REGISTRY, RunLocation, compose_command_registry
-    from geode_product.cli import PRODUCT_COMMAND_SPECS
+    from geode_product.slash_commands import PRODUCT_COMMAND_SPECS
 
     assert "/self-improving" not in COMMAND_REGISTRY
     spec = compose_command_registry(PRODUCT_COMMAND_SPECS).get("/self-improving")
@@ -31,7 +31,7 @@ def test_self_improving_registered_in_command_registry() -> None:
 
 def test_sil_alias_resolves_to_self_improving() -> None:
     from core.cli.routing import compose_command_registry, lookup
-    from geode_product.cli import PRODUCT_COMMAND_SPECS
+    from geode_product.slash_commands import PRODUCT_COMMAND_SPECS
 
     registry = compose_command_registry(PRODUCT_COMMAND_SPECS)
     spec_via_alias = lookup("/sil", registry)

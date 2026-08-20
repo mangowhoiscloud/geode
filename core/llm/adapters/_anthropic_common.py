@@ -32,6 +32,7 @@ from core.llm.adapters.base import (
 # injected tool DEFINITION and the local executor never drift.
 from core.tools.computer_use import TARGET_HEIGHT as _COMPUTER_DISPLAY_HEIGHT
 from core.tools.computer_use import TARGET_WIDTH as _COMPUTER_DISPLAY_WIDTH
+from core.tools.plan import thaw_tool_schema
 
 if TYPE_CHECKING:
     import anthropic
@@ -108,7 +109,7 @@ def translate_tool(tool: ToolSpec) -> dict[str, Any]:
     return {
         "name": tool.name,
         "description": tool.description,
-        "input_schema": tool.input_schema,
+        "input_schema": thaw_tool_schema(tool.input_schema),
     }
 
 

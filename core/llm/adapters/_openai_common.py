@@ -40,6 +40,7 @@ from core.llm.adapters.base import (
     UsageSummary,
 )
 from core.llm.token_tracker import MODEL_CONTEXT_WINDOW
+from core.tools.plan import thaw_tool_schema
 
 log = logging.getLogger(__name__)
 
@@ -496,7 +497,7 @@ def translate_tool(tool: ToolSpec) -> dict[str, Any]:
         "function": {
             "name": tool.name,
             "description": tool.description,
-            "parameters": tool.input_schema,
+            "parameters": thaw_tool_schema(tool.input_schema),
         },
     }
 
@@ -512,7 +513,7 @@ def translate_tool_for_codex(tool: ToolSpec) -> dict[str, Any]:
         "type": "function",
         "name": tool.name,
         "description": tool.description,
-        "parameters": tool.input_schema,
+        "parameters": thaw_tool_schema(tool.input_schema),
     }
 
 

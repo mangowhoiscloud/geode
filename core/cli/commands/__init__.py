@@ -63,6 +63,7 @@ from ._state import (
     show_help,
 )
 from .cost import _budget_bar, _get_cost_budget, _set_cost_budget, cmd_cost
+from .goal import cmd_goal
 from .key import _check_provider_key, _persist_auth_state, _seed_payg_plan_from_key, cmd_key
 from .login import (
     _login_add_interactive,
@@ -116,6 +117,7 @@ __all__ = [
     "cmd_compact",
     "cmd_context",
     "cmd_cost",
+    "cmd_goal",
     "cmd_key",
     "cmd_login",
     "cmd_mcp",

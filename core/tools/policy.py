@@ -18,6 +18,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
+from core.tools.google_capabilities import GOOGLE_WRITE_TOOLS
+
 log = logging.getLogger(__name__)
 
 
@@ -203,13 +205,7 @@ class ProfilePolicy:
                         "set_api_key",
                         "manage_login",
                         "profile_update",
-                        "calendar_create_event",
-                        "calendar_sync_scheduler",
-                        "gmail_send",
-                        "google_drive_create",
-                        "google_docs_write",
-                        "google_sheets_write",
-                        "google_tasks_write",
+                        *GOOGLE_WRITE_TOOLS,
                     },
                 )
             )

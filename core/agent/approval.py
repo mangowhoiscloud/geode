@@ -29,6 +29,7 @@ from core.agent.safety import (
     is_bash_command_read_only,
 )
 from core.hooks.system import HookEvent
+from core.tools.google_capabilities import GOOGLE_TOOL_SERVICES
 from core.ui import spinner_glyph
 from core.ui.console import console
 
@@ -45,6 +46,13 @@ _T = TypeVar("_T")
 # options line replaces them. Anything else (e.g. the computer-control
 # question) is a real question and still renders above the options line.
 _BARE_PROMPT_LABELS = frozenset({"Allow?", "Proceed?"})
+
+
+def _personal_service_label(tool_name: str) -> str:
+    services = GOOGLE_TOOL_SERVICES.get(tool_name, ())
+    if any(service.name.startswith("calendar-") for service in services):
+        return "Calendar"
+    return "Google Workspace"
 
 
 def _approval_header(tool_name: str, category: str) -> str:
@@ -726,7 +734,7 @@ class ApprovalWorkflow:
         record: ApprovalRecord | None = None,
     ) -> bool:
         """Confirm one personal-data read or mutation without a cached bypass."""
-        service = "Calendar" if tool_name.startswith("calendar_") else "Google Workspace"
+        service = _personal_service_label(tool_name)
         is_mutation = tool_name in WRITE_TOOLS
         summary = (
             self._write_summary(tool_name, tool_input)
@@ -779,7 +787,7 @@ class ApprovalWorkflow:
         record: ApprovalRecord | None = None,
     ) -> bool:
         """Async personal-data confirmation."""
-        service = "Calendar" if tool_name.startswith("calendar_") else "Google Workspace"
+        service = _personal_service_label(tool_name)
         is_mutation = tool_name in WRITE_TOOLS
         summary = (
             self._write_summary(tool_name, tool_input)

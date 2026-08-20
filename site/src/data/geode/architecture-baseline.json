@@ -66,7 +66,7 @@
       {
         "context_name": "geode_skip_permissions",
         "has_default": true,
-        "line": 24,
+        "line": 25,
         "path": "core/agent/safety.py",
         "symbol": "_skip_permissions_var"
       },
@@ -239,7 +239,7 @@
     },
     "SubAgentManager": {
       "constructor_arg_count": 17,
-      "file_loc": 1449,
+      "file_loc": 1454,
       "method_count": 24,
       "path": "core/agent/sub_agent.py"
     }
@@ -365,20 +365,20 @@
   },
   "packages": {
     "core": {
-      "python_files": 398,
-      "python_loc": 120928
+      "python_files": 403,
+      "python_loc": 121874
     },
     "geode_product": {
-      "python_files": 160,
-      "python_loc": 61687
+      "python_files": 161,
+      "python_loc": 61818
     },
     "plugins": {
       "python_files": 32,
       "python_loc": 213
     },
     "tests": {
-      "python_files": 688,
-      "python_loc": 183135
+      "python_files": 690,
+      "python_loc": 184273
     }
   },
   "schema_version": 3,

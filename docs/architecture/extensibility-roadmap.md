@@ -225,6 +225,8 @@ normal review and CI; implementations start only after the claim merges.
 
 | Closure package | GAP IDs | Owner/session | Implementation branch | Claim evidence | Claimed at (UTC) |
 |---|---|---|---|---|---|
+| R8.3 | REL-004 | `session=codex-root task=r8-3-publication-grace-evidence` | `feature/r8-3-publication-grace-evidence` | Readiness [#3039](https://github.com/mangowhoiscloud/geode/pull/3039); v1.0.23 GitHub/PyPI parity and candidate interval re-audited | `2026-08-20T07:41:19Z` |
+| R2.3 | CAP-003, CAP-005 | `session=codex-root task=r2-3-tool-plan-convergence` | `feature/r2-3-tool-plan-convergence` | Readiness [#3049](https://github.com/mangowhoiscloud/geode/pull/3049); handler/schema/provider/defer roots and package acceptance re-audited | `2026-08-20T21:56:24Z` |
 
 ## 1. Program objective
 
@@ -281,12 +283,12 @@ machine-readable artifact is
 
 | Measure | Current tree |
 |---|---:|
-| Production Python files (`core/` + `geode_product/` + `plugins/`) | 590 |
-| Test Python files | 688 |
-| `core/` Python LOC | 120,928 |
-| `geode_product/` Python LOC | 61,687 |
+| Production Python files (`core/` + `geode_product/` + `plugins/`) | 596 |
+| Test Python files | 690 |
+| `core/` Python LOC | 121,874 |
+| `geode_product/` Python LOC | 61,818 |
 | `plugins/` Python LOC | 213 |
-| Test Python LOC | 183,135 |
+| Test Python LOC | 184,273 |
 | Tool definitions / executable registrations / valid schemas | 87 / 90 / 87 (definition-only 0; execution-only 3; invalid schema 0) |
 | `RuntimeEvent` members | 57 |
 | Built-in LLM adapters | 7 |
@@ -294,7 +296,7 @@ machine-readable artifact is
 | `core` → product import sites | 0 across 0 files |
 | Import-linter contracts / ignored edges | 5 / 22 |
 | `AgenticLoop` file LOC / methods / constructor args | 3,179 / 75 / 30 |
-| `SubAgentManager` file LOC / methods / constructor args | 1,449 / 24 / 17 |
+| `SubAgentManager` file LOC / methods / constructor args | 1,454 / 24 / 17 |
 | `RuntimeCoreConfig` fields | 21 |
 | Global Ruff ratchets | complexity 52; args 23; branches 51; returns 18; statements 209 |
 <!-- generated:architecture-baseline:end -->
@@ -517,11 +519,11 @@ and closure evidence are appended in §10.
 | BND-002 | `MISFIT` | 31 `core` → `plugins` import sites across 14 files | AST gate reports zero reverse dependency; composition owns feature registration | R1.2 | BND-001 | `IN_DEVELOP` |
 | BND-003 | `ABSENT` | One-off core-only probe fails at `core.cli`; CI does not test an installed kernel without features | Isolated wheel/package test boots and runs kernel tests without bundled/third-party modules | R1.3 | BND-001, BND-002, BND-006 | `IN_DEVELOP` |
 | BND-004 | `PARTIAL` | Skills/hooks/MCP have different discovery rules; Python feature collision/trust behavior is not unified | Each supported external surface declares non-executing discovery, precedence, collision, enablement, trust-before-load, reload, isolation, and teardown | R6.3 | BND-001, LLM-002 | `OPEN` |
-| CAP-001 | `PARTIAL` | Google service bundles exist but do not own all tool/policy relationships | Generic capability records plus `GoogleServiceDescriptor` are executable SOTs | R2.1 | BND-002 | `OPEN` |
-| CAP-002 | `ABSENT` | `ToolRegistry` owns tool objects while other registries/lists own execution and safety | Immutable `ToolRegistration` and `ToolPlan` derive every tool consumer | R2.1 | CAP-001 | `OPEN` |
-| CAP-003 | `MISFIT` | Native Google handlers are bound in `core/cli/tool_handlers/delegated.py` | Runtime/composition binds handlers; CLI only renders/forwards user interaction | R2.3 | CAP-002, BND-002 | `OPEN` |
-| CAP-004 | `MISFIT` | Google names repeat in safety, approval, policy, personal-data, and CLI modules | Effect/data/auth/resource metadata derives gates; no independent tool-name allowlists | R2.2 | CAP-002 | `OPEN` |
-| CAP-005 | `PARTIAL` | `definitions.json`, tool objects, provider schemas, and defer sets can drift | Anthropic/OpenAI/deferred schemas and execution map share one plan hash and parity tests | R2.3 | CAP-002 | `OPEN` |
+| CAP-001 | `PARTIAL` | Google service bundles exist but do not own all tool/policy relationships | Generic capability records plus `GoogleServiceDescriptor` are executable SOTs | R2.1 | BND-002 | `IN_DEVELOP` |
+| CAP-002 | `ABSENT` | `ToolRegistry` owns tool objects while other registries/lists own execution and safety | Immutable `ToolRegistration` and `ToolPlan` derive every tool consumer | R2.1 | CAP-001 | `IN_DEVELOP` |
+| CAP-003 | `MISFIT` | Native Google handlers are bound in `core/cli/tool_handlers/delegated.py` | Runtime/composition binds handlers; CLI only renders/forwards user interaction | R2.3 | CAP-002, BND-002 | `IN_PROGRESS` |
+| CAP-004 | `MISFIT` | Google names repeat in safety, approval, policy, personal-data, and CLI modules | Effect/data/auth/resource metadata derives gates; no independent tool-name allowlists | R2.2 | CAP-002 | `IN_DEVELOP` |
+| CAP-005 | `PARTIAL` | `definitions.json`, tool objects, provider schemas, and defer sets can drift | Anthropic/OpenAI/deferred schemas and execution map share one plan hash and parity tests | R2.3 | CAP-002 | `IN_PROGRESS` |
 | CAP-006 | `ABSENT` | Adding a native/Google tool requires edits across several policy files | Change-surface fixture proves the bounded file/registration budget in §8 | R7.2 | CAP-003, CAP-004, CAP-005 | `OPEN` |
 | LOOP-001 | `ABSENT` | No immutable object freezes one step's route, policy, tool plan, and trace identity | `StepSnapshot` is created once per step and used by model/tool/telemetry paths | R3.1 | CAP-002 | `OPEN` |
 | LOOP-002 | `PARTIAL` | Mutable state is distributed across loop fields, contexts, checkpoints, and helpers | `TurnState` and explicit session/turn/step ownership replace ambiguous lifetimes | R3.1 | LOOP-001 | `OPEN` |
@@ -563,7 +565,7 @@ and closure evidence are appended in §10.
 | GOAL-001 | `PARTIAL` | Explicit Goal state, contextual continuation, accounting, and trajectory events persist, but automatic continuation is owned only by one `AgenticLoop.arun()` call; no process owner discovers an active Goal after return or daemon restart, restores its checkpoint, or prevents duplicate idle launches | The existing serve process owns a bounded idle Goal continuation host that restores the same checkpoint as a new session generation, admits at most one continuation per session, uses the internal contextual-Goal path rather than a synthetic user turn, preserves Lane, PostVerify/replan, accounting, and trajectory contracts, and does not hot-loop an unchanged active Goal | R6.8 | HOOK-003, STORE-002 | `DONE` |
 | CODE-001 | `PARTIAL` | Coding work spans session/checkpoint/timeline, task preflight/TaskGraph, Goal, collaboration, worktree workflow, file/bash tools, and reviewer/verification paths, but no canonical contract maps their current writers, recovery authority, or residual coding-runtime boundaries | One reviewed coding-runtime authority contract maps every proposed record and operation to an existing or residual owner, fixes recovery/history/projection and drift/rollback invariants, and proves that no duplicate runtime store, task ledger, policy plane, or implementation API was introduced | R9.1 | STORE-002, HOOK-003, MEM-001, COLLAB-003, GOAL-001 | `OPEN` |
 | REL-003 | `MISFIT` | PyPI, GitHub Releases, repository metadata, and the changelog report v1.0.22, which predates the delivered boundary refactor | Wheel, sdist, CLI, daemon, site SOT, changelog, tag, GitHub release, and PyPI all report v1.0.23 with artifact-hash parity and no rewritten earlier-release evidence | R1.7 | BND-003, BND-006, GOV-004 | `DONE` |
-| REL-004 | `ABSENT` | No registered gate prevents the v1.0.23 compatibility facade or preserved state roots from being retired immediately after a local tag, draft release, or registry publication | Official GitHub Release and PyPI evidence proves compatible public artifacts continuously exposed the facade and preserved roots for a final qualifying interval of at least 30 consecutive days, starting no earlier than v1.0.23, and every release inside that interval retained them | R8.3 | REL-003 | `OPEN` |
+| REL-004 | `ABSENT` | No registered gate prevents the v1.0.23 compatibility facade or preserved state roots from being retired immediately after a local tag, draft release, or registry publication | Official GitHub Release and PyPI evidence proves compatible public artifacts continuously exposed the facade and preserved roots for a final qualifying interval of at least 30 consecutive days, starting no earlier than v1.0.23, and every release inside that interval retained them | R8.3 | REL-003 | `IN_PROGRESS` |
 | BND-008 | `ABSENT` | The current `core/self_improving` import and source/module launcher surface has no enumerated consumer census, old-to-new migration map, or removal-only closure gate | After REL-004, every repository and documented consumer is classified, migration guidance names canonical replacements, only the forwarding facade and legacy launchers are removed, and installed-wheel import/CLI/MCP/config/state parity proves the canonical product remains intact | R8.4 | REL-004, STORE-003 | `OPEN` |
 
 ## 6. Dependency and merge sequence
@@ -1924,6 +1926,8 @@ pre-release delivery evidence survives after the claim row is gone.
 | R1.5 | BND-006 | [#3025](https://github.com/mangowhoiscloud/geode/pull/3025) | `34bce3677dee545b057d9c60a6cde56bd914cd14` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, full non-live tests, lint/format, type check, security, Pages build, official-doc parity, macOS/Ubuntu install smoke, isolated wheel/resource checks, exact five-facade census, zero classified-kernel product imports, and committed-diff review all passed) |
 | R1.3 | BND-003 | [#3028](https://github.com/mangowhoiscloud/geode/pull/3028) | `6f1581c9bc64ff22e3e3cf7f05ea45c01179ebba` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, full non-live tests, lint/format, type check, security, Pages build, macOS/Ubuntu install smoke, an ephemeral core-only wheel projection, exhaustive isolated import of 393 installed kernel modules, zero-extension registry and lifecycle checks, 42 installed-kernel unit tests, and committed-diff review all passed) |
 | R1.7 | REL-003 | [#3033](https://github.com/mangowhoiscloud/geode/pull/3033) | `70a1f1bcd0520b33e50436cc340265b6534bc133` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, full non-live tests, lint/format, type check, security, Pages build, macOS/Ubuntu install smoke, committed-lock validation, clean-wheel daemon IPC v1.0.23, 393 isolated kernel imports plus 42 installed-kernel tests, public-metadata parity, and independent committed-diff review all passed) |
+| R2.1 | CAP-001, CAP-002 | [#3043](https://github.com/mangowhoiscloud/geode/pull/3043) | `ba7eea3288bd443a52181151de13032f5280d263` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, full non-live tests with coverage, lint/format, type check, security, Pages build, official-doc parity, macOS/Ubuntu install smoke, wheel/sdist inspection, clean installed-package smoke, and independent staged-diff review all passed; the product daemon now retains a generation/hash-bound immutable ToolPlan beside the compatibility handler map, while live consumer convergence remains required before R2.1 can reach DONE) |
+| R2.2 | CAP-004 | [#3047](https://github.com/mangowhoiscloud/geode/pull/3047) | `9038d635d0ed3989b11569de5dbfd6cb7a47db43` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, full non-live tests with coverage, lint/format, type check, security, Pages build, macOS/Ubuntu install smoke, wheel/sdist and isolated installed-package checks, exact descriptor-consumer parity, and independent staged-diff review all passed; `definitions.json` convergence remains required in R2.3 before R2.2 can reach DONE) |
 
 ### 10.2 Main closure evidence
 
@@ -2060,14 +2064,51 @@ Commit-pinned primary source references used by the 2026-07-17 audit:
 
 ## 14. Immediate next unit
 
-R1.7 (`REL-003`) is `IN_DEVELOP` after
-[#3033](https://github.com/mangowhoiscloud/geode/pull/3033) merged as
-`70a1f1bcd0520b33e50436cc340265b6534bc133`. The next unit is the same-repository
-`main` to `develop` CI-gated sync, followed by the synced `develop` to `main`
-promotion under trusted develop validation and then the release workflow's tag,
-GitHub Release, PyPI publication, and public artifact verification.
+R1.7 (`REL-003`) is `DONE` after the v1.0.23 promotion, tracking-only main
+closure [#3037](https://github.com/mangowhoiscloud/geode/pull/3037), and
+CI-gated main-to-develop sync
+[#3038](https://github.com/mangowhoiscloud/geode/pull/3038).
 
-R8.3 (`REL-004`) remains `OPEN` until REL-003 is `DONE`; its 30-day clock starts
-from public registry evidence, never from an implementation merge. R8.2
-(`STORE-003`) remains `OPEN` behind REL-004 and STORE-001. R8.4 (`BND-008`)
-additionally waits for STORE-003, so neither can ship in v1.0.23.
+R8.3 (`REL-004`) is `IN_PROGRESS` under the active claim for
+`feature/r8-3-publication-grace-evidence`. Its candidate interval starts at
+PyPI file availability at `2026-08-20T06:53:01.550033Z`; no closure is eligible
+before `2026-09-19T06:53:01.550033Z`, and any intervening incompatible release
+restarts the interval. This evidence-only package reuses the public
+distribution verifier and does not authorize runtime or schema changes.
+
+R2.1 (`CAP-001`, `CAP-002`) is `IN_DEVELOP` after feature
+[#3043](https://github.com/mangowhoiscloud/geode/pull/3043) merged as
+`ba7eea3288bd443a52181151de13032f5280d263`. The delivered boundary retains
+one immutable, generation/hash-bound native `ToolPlan` beside the compatibility
+handler map and validates ordered schema, execution, safety, and capability
+parity before product daemon sessions. R2.1 is not eligible for `DONE` until
+R2.3 (`CAP-003`, `CAP-005`) supplies the immutable CAP-002 “every tool
+consumer” evidence for live `AgenticLoop`/`ToolExecutor`, provider/deferred,
+and worker/MCP roots; those remain explicit R2.3 non-goals here.
+
+R2.2 (`CAP-004`) is `IN_DEVELOP` after feature
+[#3047](https://github.com/mangowhoiscloud/geode/pull/3047) merged as
+`9038d635d0ed3989b11569de5dbfd6cb7a47db43`. One frozen association now maps
+all 14 Google and Calendar tool names to service alternatives and derives the
+migrated safety, approval, profile-policy, personal-data, delegated-handler,
+and direct-Google scope projections. Native Workspace registrations record
+declarative OAuth capabilities while Calendar remains enabled for its Google,
+MCP, and Apple alternatives. R2.2 is not eligible for `DONE` until R2.3 closes
+the remaining independent `definitions.json` schema edit surface; handler
+ownership and provider/deferred projection remain R2.3, while deterministic
+resource-key and data-policy derivation remains R2.4. The active R8.3 claim and
+publication clock remain independent and unchanged.
+
+R2.3 (`CAP-003`, `CAP-005`) is `IN_PROGRESS` under the active claim for
+`feature/r2-3-tool-plan-convergence`, based on readiness
+[#3049](https://github.com/mangowhoiscloud/geode/pull/3049). Implementation
+starts only after this claim merges and a new worktree is allocated from the
+updated `develop`. CAP-002 and BND-002 are `IN_DEVELOP`. The package owns one
+immutable, generation/hash-bound plan across handler construction,
+`AgenticLoop`/`ToolExecutor`, worker/MCP, provider, and deferred projections
+with exact schema/execution parity and bounded diagnostics. R2.3 authorizes no
+R2.4 resource/data-policy work or R3.1 step/turn lifetime work. The active
+R8.3 claim and publication clock remain unchanged; R2.4, R3.1, and R9.1 remain
+`OPEN` pending their own serialized transactions. R8.2 (`STORE-003`) remains
+`OPEN` behind REL-004 and STORE-001; R8.4 (`BND-008`) additionally waits for
+STORE-003.

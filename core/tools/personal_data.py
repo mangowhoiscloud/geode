@@ -11,31 +11,15 @@ from __future__ import annotations
 import json
 from typing import Any
 
-GOOGLE_WORKSPACE_READ_TOOLS: frozenset[str] = frozenset(
-    {
-        "gmail_search",
-        "google_drive_search",
-        "google_docs_read",
-        "google_sheets_read",
-        "google_tasks_list",
-        "google_contacts_list",
-        "calendar_list_events",
-    }
+from core.tools.google_capabilities import (
+    GOOGLE_PERSONAL_DATA_TOOLS,
+    GOOGLE_READ_TOOLS,
+    GOOGLE_WRITE_TOOLS,
 )
 
-GOOGLE_WORKSPACE_MUTATION_TOOLS: frozenset[str] = frozenset(
-    {
-        "gmail_send",
-        "google_drive_create",
-        "google_docs_write",
-        "google_sheets_write",
-        "google_tasks_write",
-        "calendar_create_event",
-        "calendar_sync_scheduler",
-    }
-)
-
-PERSONAL_DATA_TOOLS: frozenset[str] = GOOGLE_WORKSPACE_READ_TOOLS | GOOGLE_WORKSPACE_MUTATION_TOOLS
+GOOGLE_WORKSPACE_READ_TOOLS: frozenset[str] = GOOGLE_READ_TOOLS
+GOOGLE_WORKSPACE_MUTATION_TOOLS: frozenset[str] = GOOGLE_WRITE_TOOLS
+PERSONAL_DATA_TOOLS: frozenset[str] = GOOGLE_PERSONAL_DATA_TOOLS
 PERSONAL_DATA_ERROR_OMITTED = "personal account operation failed; details omitted"
 
 

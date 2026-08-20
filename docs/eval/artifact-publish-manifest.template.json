@@ -9,7 +9,15 @@
       "bytes": 0,
       "classification": "public",
       "local_path": "<repo-relative-or-artifact-root-relative-path>",
-      "remote_path": "<destination-relative-path>",
+      "remote_path": "<destination-prefix>/<path>",
+      "sha256": "<64-lowercase-hex>"
+    },
+    {
+      "bytes": 0,
+      "classification": "withheld-private",
+      "local_path": "<private-local-path>",
+      "reason": "raw behavior evidence not approved for public disclosure",
+      "remote_path": null,
       "sha256": "<64-lowercase-hex>"
     },
     {

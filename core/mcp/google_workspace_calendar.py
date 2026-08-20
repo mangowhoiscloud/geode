@@ -10,10 +10,11 @@ from core.mcp.google_workspace_client import (
     GoogleWorkspaceClient,
     get_google_workspace_client,
 )
+from core.tools.google_capabilities import google_scopes_for_tool
 
-CALENDAR_READ_SCOPE = "https://www.googleapis.com/auth/calendar.events.owned.readonly"
-CALENDAR_WRITE_SCOPE = "https://www.googleapis.com/auth/calendar.events.owned"
-_CALENDAR_SCOPES = (CALENDAR_READ_SCOPE, CALENDAR_WRITE_SCOPE)
+CALENDAR_READ_SCOPE = google_scopes_for_tool("calendar_list_events")[0]
+CALENDAR_WRITE_SCOPE = google_scopes_for_tool("calendar_create_event", write=True)[0]
+_CALENDAR_SCOPES = google_scopes_for_tool("calendar_list_events")
 
 
 class GoogleWorkspaceCalendarAdapter:
