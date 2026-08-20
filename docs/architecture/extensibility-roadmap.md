@@ -563,7 +563,7 @@ and closure evidence are appended in §10.
 | GOAL-001 | `PARTIAL` | Explicit Goal state, contextual continuation, accounting, and trajectory events persist, but automatic continuation is owned only by one `AgenticLoop.arun()` call; no process owner discovers an active Goal after return or daemon restart, restores its checkpoint, or prevents duplicate idle launches | The existing serve process owns a bounded idle Goal continuation host that restores the same checkpoint as a new session generation, admits at most one continuation per session, uses the internal contextual-Goal path rather than a synthetic user turn, preserves Lane, PostVerify/replan, accounting, and trajectory contracts, and does not hot-loop an unchanged active Goal | R6.8 | HOOK-003, STORE-002 | `DONE` |
 | CODE-001 | `PARTIAL` | Coding work spans session/checkpoint/timeline, task preflight/TaskGraph, Goal, collaboration, worktree workflow, file/bash tools, and reviewer/verification paths, but no canonical contract maps their current writers, recovery authority, or residual coding-runtime boundaries | One reviewed coding-runtime authority contract maps every proposed record and operation to an existing or residual owner, fixes recovery/history/projection and drift/rollback invariants, and proves that no duplicate runtime store, task ledger, policy plane, or implementation API was introduced | R9.1 | STORE-002, HOOK-003, MEM-001, COLLAB-003, GOAL-001 | `OPEN` |
 | REL-003 | `MISFIT` | PyPI, GitHub Releases, repository metadata, and the changelog report v1.0.22, which predates the delivered boundary refactor | Wheel, sdist, CLI, daemon, site SOT, changelog, tag, GitHub release, and PyPI all report v1.0.23 with artifact-hash parity and no rewritten earlier-release evidence | R1.7 | BND-003, BND-006, GOV-004 | `DONE` |
-| REL-004 | `ABSENT` | No registered gate prevents the v1.0.23 compatibility facade or preserved state roots from being retired immediately after a local tag, draft release, or registry publication | Official GitHub Release and PyPI evidence proves compatible public artifacts continuously exposed the facade and preserved roots for a final qualifying interval of at least 30 consecutive days, starting no earlier than v1.0.23, and every release inside that interval retained them | R8.3 | REL-003 | `OPEN` |
+| REL-004 | `ABSENT` | No registered gate prevents the v1.0.23 compatibility facade or preserved state roots from being retired immediately after a local tag, draft release, or registry publication | Official GitHub Release and PyPI evidence proves compatible public artifacts continuously exposed the facade and preserved roots for a final qualifying interval of at least 30 consecutive days, starting no earlier than v1.0.23, and every release inside that interval retained them | R8.3 | REL-003 | `READY` |
 | BND-008 | `ABSENT` | The current `core/self_improving` import and source/module launcher surface has no enumerated consumer census, old-to-new migration map, or removal-only closure gate | After REL-004, every repository and documented consumer is classified, migration guidance names canonical replacements, only the forwarding facade and legacy launchers are removed, and installed-wheel import/CLI/MCP/config/state parity proves the canonical product remains intact | R8.4 | REL-004, STORE-003 | `OPEN` |
 
 ## 6. Dependency and merge sequence
@@ -2060,14 +2060,18 @@ Commit-pinned primary source references used by the 2026-07-17 audit:
 
 ## 14. Immediate next unit
 
-R1.7 (`REL-003`) is `IN_DEVELOP` after
-[#3033](https://github.com/mangowhoiscloud/geode/pull/3033) merged as
-`70a1f1bcd0520b33e50436cc340265b6534bc133`. The next unit is the same-repository
-`main` to `develop` CI-gated sync, followed by the synced `develop` to `main`
-promotion under trusted develop validation and then the release workflow's tag,
-GitHub Release, PyPI publication, and public artifact verification.
+R1.7 (`REL-003`) is `DONE` after the v1.0.23 promotion, tracking-only main
+closure [#3037](https://github.com/mangowhoiscloud/geode/pull/3037), and
+CI-gated main-to-develop sync
+[#3038](https://github.com/mangowhoiscloud/geode/pull/3038).
 
-R8.3 (`REL-004`) remains `OPEN` until REL-003 is `DONE`; its 30-day clock starts
-from public registry evidence, never from an implementation merge. R8.2
-(`STORE-003`) remains `OPEN` behind REL-004 and STORE-001. R8.4 (`BND-008`)
-additionally waits for STORE-003, so neither can ship in v1.0.23.
+R8.3 (`REL-004`) is the next package and is `READY` for a separate claim. Its
+candidate 30-day interval starts at the later official publication timestamp,
+PyPI file availability at `2026-08-20T06:53:01.550033Z`; the earliest eligible
+closure is `2026-09-19T06:53:01.550033Z`. `READY` records measurable evidence
+collection, not elapsed time or ownership, and any intervening incompatible
+release restarts the interval.
+
+R2.1 and R9.1 are dependency-satisfied but remain `OPEN` pending separate
+readiness transactions. R8.2 (`STORE-003`) remains `OPEN` behind REL-004 and
+STORE-001; R8.4 (`BND-008`) additionally waits for STORE-003.
