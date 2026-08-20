@@ -711,7 +711,7 @@ The baseline row collapses to a single empty-message cell **while remaining insi
   <td class="id">baseline.json <span class="bucket autoresearch">autoresearch</span></td>
   <td colspan="4" class="muted">
     <em>No baseline written yet — run
-      <code>uv run python core/self_improving/train.py --promote</code>.
+      <code>uv run python geode_product/self_improving/train.py --promote</code>.
     </em>
   </td>
 </tr>

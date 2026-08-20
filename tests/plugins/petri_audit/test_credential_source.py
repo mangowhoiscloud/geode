@@ -335,11 +335,11 @@ def test_self_improving_loop_fallback_policy_returns_true_when_unconfigured(monk
     SelfImprovingLoopConfig (which has fallback_to_payg=False per the strict
     default settled in PR-α1 — but the helper itself just reads the field).
     """
-    from core.config.self_improving import SelfImprovingLoopConfig
+    from geode_product.self_improving.config import SelfImprovingLoopConfig
 
     # Unconfigured → default SelfImprovingLoopConfig().fallback_to_payg is False.
     monkeypatch.setattr(
-        "core.config.self_improving.load_self_improving_loop_config",
+        "geode_product.self_improving.config.load_self_improving_loop_config",
         lambda: SelfImprovingLoopConfig(),
     )
     assert cs.self_improving_loop_fallback_policy() is False
@@ -348,10 +348,10 @@ def test_self_improving_loop_fallback_policy_returns_true_when_unconfigured(monk
 @pytest.mark.policy_real
 def test_self_improving_loop_fallback_policy_reads_user_config(monkeypatch):
     """When config sets fallback_to_payg=True, helper returns True."""
-    from core.config.self_improving import SelfImprovingLoopConfig
+    from geode_product.self_improving.config import SelfImprovingLoopConfig
 
     monkeypatch.setattr(
-        "core.config.self_improving.load_self_improving_loop_config",
+        "geode_product.self_improving.config.load_self_improving_loop_config",
         lambda: SelfImprovingLoopConfig(fallback_to_payg=True),
     )
     assert cs.self_improving_loop_fallback_policy() is True
@@ -359,14 +359,14 @@ def test_self_improving_loop_fallback_policy_reads_user_config(monkeypatch):
 
 @pytest.mark.policy_real
 def test_self_improving_loop_fallback_policy_safe_on_import_error(monkeypatch):
-    """If core.config.self_improving is unavailable, helper returns True
+    """If geode_product.self_improving.config is unavailable, helper returns True
     (back-compat preservation)."""
     import builtins
 
     real_import = builtins.__import__
 
     def _raising(name, *args, **kwargs):
-        if name == "core.config.self_improving":
+        if name == "geode_product.self_improving.config":
             raise ImportError("simulated")
         return real_import(name, *args, **kwargs)
 
@@ -383,7 +383,7 @@ def test_self_improving_loop_fallback_policy_safe_on_load_failure(monkeypatch):
         raise RuntimeError("corrupt config")
 
     monkeypatch.setattr(
-        "core.config.self_improving.load_self_improving_loop_config",
+        "geode_product.self_improving.config.load_self_improving_loop_config",
         _raise,
     )
     assert cs.self_improving_loop_fallback_policy() is True
@@ -463,7 +463,7 @@ def test_subscription_only_banner_trip_safe_when_no_banner_installed():
 
 def _emit_test_journal(tmp_path):
     """Build a RunTimeline under tmp_path. Caller activates with run_timeline_scope."""
-    from core.self_improving.loop.observe.run_timeline import RunTimeline
+    from geode_product.self_improving.loop.observe.run_timeline import RunTimeline
 
     sip_home = tmp_path / "self-improving-loop"
 
@@ -484,7 +484,7 @@ def test_subscription_only_credential_error_emits_journal(tmp_path, monkeypatch)
     credential_subscription_abort event with provider + allowed payload."""
     import json
 
-    from core.self_improving.loop.observe.run_timeline import run_timeline_scope
+    from geode_product.self_improving.loop.observe.run_timeline import run_timeline_scope
 
     journal, _ = _emit_test_journal(tmp_path)
     with run_timeline_scope(journal), pytest.raises(cs.CredentialResolutionError):
@@ -506,7 +506,7 @@ def test_self_improving_loop_fallback_policy_emits_journal_on_config_success(tmp
     source='config' so the operator sees which path the resolver took."""
     import json
 
-    from core.self_improving.loop.observe.run_timeline import run_timeline_scope
+    from geode_product.self_improving.loop.observe.run_timeline import run_timeline_scope
 
     journal, _ = _emit_test_journal(tmp_path)
 
@@ -514,7 +514,7 @@ def test_self_improving_loop_fallback_policy_emits_journal_on_config_success(tmp
     from types import SimpleNamespace
 
     monkeypatch.setattr(
-        "core.config.self_improving.load_self_improving_loop_config",
+        "geode_product.self_improving.config.load_self_improving_loop_config",
         lambda: SimpleNamespace(fallback_to_payg=False),
     )
     with run_timeline_scope(journal):
@@ -532,7 +532,7 @@ def test_self_improving_loop_fallback_policy_emits_journal_on_load_error(tmp_pat
     silent fallback is auditable."""
     import json
 
-    from core.self_improving.loop.observe.run_timeline import run_timeline_scope
+    from geode_product.self_improving.loop.observe.run_timeline import run_timeline_scope
 
     journal, _ = _emit_test_journal(tmp_path)
 
@@ -540,7 +540,7 @@ def test_self_improving_loop_fallback_policy_emits_journal_on_load_error(tmp_pat
         raise RuntimeError("corrupt config")
 
     monkeypatch.setattr(
-        "core.config.self_improving.load_self_improving_loop_config",
+        "geode_product.self_improving.config.load_self_improving_loop_config",
         _raise,
     )
     with run_timeline_scope(journal):

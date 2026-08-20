@@ -70,9 +70,9 @@ def _model_visible_tau2_tool_schemas(tools: list[Any] | None) -> list[dict[str, 
     from core.agent.loop import get_agentic_tools
     from core.llm.adapters import build_openai_responses_kwargs
     from core.llm.adapters.translation import build_adapter_request
-    from core.wiring.bootstrap import build_product_policy_sources
 
     from geode_product.benchmark_harness.tau2_tool_bridge import _tau2_tool_registry
+    from geode_product.wiring import build_policy_sources
 
     registry, handlers = _tau2_tool_registry(tools)
     allowed = set(handlers)
@@ -81,7 +81,7 @@ def _model_visible_tau2_tool_schemas(tools: list[Any] | None) -> list[dict[str, 
         force_include=allowed,
         provider="openai",
         source="subscription",
-        policy_sources=build_product_policy_sources(),
+        policy_sources=build_policy_sources(),
     )
     request = build_adapter_request(
         model="gpt-5.4",

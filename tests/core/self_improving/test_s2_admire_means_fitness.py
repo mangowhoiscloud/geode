@@ -9,12 +9,12 @@ ranker.py 의 실제 ELO + voter panel 호출 wiring 은 S2b (별도 PR).
 from __future__ import annotations
 
 import pytest
-from core.self_improving.admire_means import (
+from geode_product.self_improving.admire_means import (
     ADMIRE_DIM_WEIGHTS,
     CALIBRATION_THRESHOLD,
     compute_admire_aggregate,
 )
-from core.self_improving.fitness import (
+from geode_product.self_improving.fitness import (
     FITNESS_ADMIRE_WEIGHT,
     FITNESS_DIM_3AX,
     FITNESS_DIM_WEIGHT,

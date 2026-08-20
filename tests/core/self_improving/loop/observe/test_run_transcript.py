@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 from core.hooks import HookEvent
-from core.self_improving.loop.observe.run_timeline import (
+from geode_product.self_improving.loop.observe.run_timeline import (
     RunTimeline,
     current_run_timeline,
     run_timeline_scope,
@@ -183,12 +183,12 @@ def test_default_path_uses_geode_home(monkeypatch: pytest.MonkeyPatch, tmp_path:
     """Unset path falls back to ``GLOBAL_AUTORESEARCH_HANDOFF_DIR`` / <session> / events.jsonl."""
     fake_home = tmp_path / "home"
     monkeypatch.setattr(Path, "home", classmethod(lambda _cls: fake_home))
-    # Reload both core.paths and core.self_improving.loop.observe.run_timeline so
+    # Reload both core.paths and geode_product.self_improving.loop.observe.run_timeline so
     # the lazy import resolves under the monkeypatched Path.home().
     import importlib
 
     import core.paths as paths_mod
-    import core.self_improving.loop.observe.run_timeline as journal_mod
+    import geode_product.self_improving.loop.observe.run_timeline as journal_mod
 
     importlib.reload(paths_mod)
     importlib.reload(journal_mod)

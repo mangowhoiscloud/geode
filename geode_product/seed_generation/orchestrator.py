@@ -197,7 +197,7 @@ def _emit_orchestrator_event(
     swallowed so the pipeline contract is unchanged.
     """
     try:
-        from core.self_improving.loop.observe.run_timeline import current_run_timeline
+        from geode_product.self_improving.loop.observe.run_timeline import current_run_timeline
 
         journal = current_run_timeline()
         if journal is None:

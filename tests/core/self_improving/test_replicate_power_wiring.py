@@ -1,5 +1,5 @@
 """E4 (2026-05-30) — wiring tests for the per-mutation replicate loop + the power /
-gain-evidence records in ``core/self_improving/train.py``.
+gain-evidence records in ``geode_product/self_improving/train.py``.
 
 The pure statistics (decomposition / ci-excludes-0 / power formula) are pinned in
 ``test_statistical_power.py``; this file pins the WIRING:
@@ -24,8 +24,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from core.self_improving import gate, ledger
-from core.self_improving import train as auto_train
+from geode_product.self_improving import gate, ledger
+from geode_product.self_improving import train as auto_train
 
 # --- resolver precedence -----------------------------------------------------
 
@@ -221,7 +221,7 @@ def test_main_threads_e4_fields_into_both_sinks() -> None:
 def test_attribution_carries_e4_fields() -> None:
     """When supplied, the per-cycle attribution row records the decomposition +
     gain-evidence verdict."""
-    from core.self_improving.loop.observe.attribution import compute_attribution
+    from geode_product.self_improving.loop.observe.attribution import compute_attribution
 
     payload = compute_attribution(
         mutation_id="m1",
@@ -244,7 +244,7 @@ def test_attribution_carries_e4_fields() -> None:
 def test_attribution_m1_omits_within_keeps_between() -> None:
     """M=1: within is unestimated (None) → omitted from the row, but the
     between-seed stderr + the verdict are still present (the row stays useful)."""
-    from core.self_improving.loop.observe.attribution import compute_attribution
+    from geode_product.self_improving.loop.observe.attribution import compute_attribution
 
     payload = compute_attribution(
         mutation_id="m1",
@@ -266,7 +266,10 @@ def test_attribution_m1_omits_within_keeps_between() -> None:
 def test_attribution_legacy_omits_all_e4_fields() -> None:
     """A pre-E4 / no-power caller omits every E4 field → the row shape is exactly
     the legacy shape (no new required key breaks a reader)."""
-    from core.self_improving.loop.observe.attribution import AttributionRecord, compute_attribution
+    from geode_product.self_improving.loop.observe.attribution import (
+        AttributionRecord,
+        compute_attribution,
+    )
 
     payload = compute_attribution(
         mutation_id="m1",
@@ -316,7 +319,7 @@ def _rows(archive: Path) -> list[dict]:
 
 
 def test_registry_row_records_e4_fields_when_present(isolated: Path) -> None:
-    from core.self_improving.loop.observe.statistical_power import PowerRecordFields
+    from geode_product.self_improving.loop.observe.statistical_power import PowerRecordFields
 
     ledger._write_baseline(
         {"broken_tool_use": 3.0},
@@ -357,7 +360,7 @@ def test_baseline_raw_payload_carries_decomposition(isolated: Path) -> None:
     """The promoted ``baseline.json`` ``raw`` namespace carries the within/between
     decomposition (alongside ``fitness_stderr``) when present — so the next cycle's
     reader sees the noise split, not just the combined stderr."""
-    from core.self_improving.loop.observe.statistical_power import PowerRecordFields
+    from geode_product.self_improving.loop.observe.statistical_power import PowerRecordFields
 
     ledger._write_baseline(
         {"broken_tool_use": 3.0},
@@ -370,7 +373,7 @@ def test_baseline_raw_payload_carries_decomposition(isolated: Path) -> None:
 
 
 def test_baseline_raw_payload_m1_omits_within(isolated: Path) -> None:
-    from core.self_improving.loop.observe.statistical_power import PowerRecordFields
+    from geode_product.self_improving.loop.observe.statistical_power import PowerRecordFields
 
     ledger._write_baseline(
         {"broken_tool_use": 3.0},

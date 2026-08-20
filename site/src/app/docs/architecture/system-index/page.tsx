@@ -123,9 +123,9 @@ export default function Page() {
             <table>
               <thead><tr><th>서브시스템</th><th>루트</th><th>핵심 모듈</th></tr></thead>
               <tbody>
-                <tr><td>루프 드라이버</td><td><code>core/self_improving/</code></td><td><code>train.py</code>, <code>campaign.py</code>, <code>prepare.py</code>, <code>program.md</code>, <code>watch_campaign.py</code></td></tr>
-                <tr><td>측정 장비</td><td><code>core/self_improving/</code></td><td><code>measure.py</code>, <code>fitness.py</code>, <code>gate.py</code>, <code>ledger.py</code></td></tr>
-                <tr><td>변이 런타임</td><td><code>core/self_improving/loop/</code></td><td><code>mutate/runner.py</code>, <code>mutate/policies.py</code>, <code>observe/baseline_epoch.py</code>, <code>inject/in_context_wiring.py</code>, <code>auto_trigger.py</code></td></tr>
+                <tr><td>루프 드라이버</td><td><code>geode_product/self_improving/</code></td><td><code>train.py</code>, <code>campaign.py</code>, <code>prepare.py</code>, <code>program.md</code>, <code>watch_campaign.py</code></td></tr>
+                <tr><td>측정 장비</td><td><code>geode_product/self_improving/</code></td><td><code>measure.py</code>, <code>fitness.py</code>, <code>gate.py</code>, <code>ledger.py</code></td></tr>
+                <tr><td>변이 런타임</td><td><code>geode_product/self_improving/loop/</code></td><td><code>mutate/runner.py</code>, <code>mutate/policies.py</code>, <code>observe/baseline_epoch.py</code>, <code>inject/in_context_wiring.py</code>, <code>auto_trigger.py</code></td></tr>
               </tbody>
             </table>
 
@@ -218,9 +218,9 @@ export default function Page() {
             <table>
               <thead><tr><th>Subsystem</th><th>Root</th><th>Key modules</th></tr></thead>
               <tbody>
-                <tr><td>Loop driver</td><td><code>core/self_improving/</code></td><td><code>train.py</code>, <code>campaign.py</code>, <code>prepare.py</code>, <code>program.md</code>, <code>watch_campaign.py</code></td></tr>
-                <tr><td>Measurement gear</td><td><code>core/self_improving/</code></td><td><code>measure.py</code>, <code>fitness.py</code>, <code>gate.py</code>, <code>ledger.py</code></td></tr>
-                <tr><td>Mutation runtime</td><td><code>core/self_improving/loop/</code></td><td><code>mutate/runner.py</code>, <code>mutate/policies.py</code>, <code>observe/baseline_epoch.py</code>, <code>inject/in_context_wiring.py</code>, <code>auto_trigger.py</code></td></tr>
+                <tr><td>Loop driver</td><td><code>geode_product/self_improving/</code></td><td><code>train.py</code>, <code>campaign.py</code>, <code>prepare.py</code>, <code>program.md</code>, <code>watch_campaign.py</code></td></tr>
+                <tr><td>Measurement gear</td><td><code>geode_product/self_improving/</code></td><td><code>measure.py</code>, <code>fitness.py</code>, <code>gate.py</code>, <code>ledger.py</code></td></tr>
+                <tr><td>Mutation runtime</td><td><code>geode_product/self_improving/loop/</code></td><td><code>mutate/runner.py</code>, <code>mutate/policies.py</code>, <code>observe/baseline_epoch.py</code>, <code>inject/in_context_wiring.py</code>, <code>auto_trigger.py</code></td></tr>
               </tbody>
             </table>
 

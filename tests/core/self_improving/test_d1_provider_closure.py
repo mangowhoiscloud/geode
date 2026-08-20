@@ -22,7 +22,7 @@ Remaining wiring (unchanged):
 from __future__ import annotations
 
 from core.config.credential_source import CredentialSource
-from core.config.self_improving import (
+from geode_product.self_improving.config import (
     AutoresearchConfig,
     PetriRoleConfig,
 )

@@ -1,7 +1,7 @@
 """Registration + smoke tests for the ``geode campaign`` Typer command.
 
 PR-CAMPAIGN-CLI. ``geode campaign`` is a thin forwarder over the argparse
-driver in ``core/self_improving/campaign.py`` (it rebuilds the user options as
+driver in ``geode_product/self_improving/campaign.py`` (it rebuilds the user options as
 an argv list and hands them to ``campaign.main``). These tests assert the
 command is discoverable and that the flags forward faithfully WITHOUT launching
 a real campaign: the delegation test mocks ``campaign.main`` so no audit
@@ -13,7 +13,7 @@ from __future__ import annotations
 from unittest.mock import patch
 
 import typer
-from core.cli import app
+from geode_product.cli import app
 from typer.testing import CliRunner
 
 
@@ -44,7 +44,7 @@ def test_campaign_help_lists_core_flags() -> None:
 
 
 def test_campaign_forwards_options_to_campaign_main() -> None:
-    with patch("core.self_improving.campaign.main", return_value=0) as mock_main:
+    with patch("geode_product.self_improving.campaign.main", return_value=0) as mock_main:
         result = CliRunner().invoke(
             app,
             [
@@ -86,7 +86,7 @@ def test_campaign_forwards_options_to_campaign_main() -> None:
 
 
 def test_campaign_defaults_forward_without_dry_run() -> None:
-    with patch("core.self_improving.campaign.main", return_value=0) as mock_main:
+    with patch("geode_product.self_improving.campaign.main", return_value=0) as mock_main:
         result = CliRunner().invoke(app, ["campaign"])
 
     assert result.exit_code == 0
@@ -110,7 +110,7 @@ def test_campaign_defaults_forward_without_dry_run() -> None:
 
 
 def test_campaign_propagates_nonzero_exit_code() -> None:
-    with patch("core.self_improving.campaign.main", return_value=2):
+    with patch("geode_product.self_improving.campaign.main", return_value=2):
         result = CliRunner().invoke(app, ["campaign", "--arms", "bogus"])
 
     assert result.exit_code == 2

@@ -17,7 +17,7 @@ import pytest
 
 
 def _stub_runner_proposal() -> tuple[MagicMock, MagicMock]:
-    from core.self_improving.loop.mutate.runner import Mutation, Proposal
+    from geode_product.self_improving.loop.mutate.runner import Mutation, Proposal
 
     mutation = Mutation(
         target_section="role.intro",
@@ -44,7 +44,7 @@ def test_summary_line_includes_model_and_source(
     """After ``y`` confirmation, the summary line must surface
     ``model=...`` and ``source=...`` so the operator knows which
     channel was billed."""
-    from core.cli.commands import self_improving
+    from geode_product.self_improving import cli_commands as self_improving
 
     runner, _ = _stub_runner_proposal()
     monkeypatch.setattr(self_improving, "_build_runner", lambda: runner)
@@ -68,7 +68,7 @@ def test_resolve_telemetry_inherits_settings_model_when_default_is_none(
     """G1a inherit — when ``MutatorConfig.default_model is None``, the
     telemetry resolver must fall back to ``Settings.model`` so the
     summary line shows what the runner actually invoked."""
-    from core.cli.commands import self_improving
+    from geode_product.self_improving import cli_commands as self_improving
 
     class _StubMutator:
         default_model = None
@@ -85,7 +85,7 @@ def test_resolve_telemetry_inherits_settings_model_when_default_is_none(
         model = "claude-opus-4-7"
 
     monkeypatch.setattr(
-        "core.config.self_improving.load_self_improving_loop_config",
+        "geode_product.self_improving.config.load_self_improving_loop_config",
         lambda: _StubCfg(),
     )
     monkeypatch.setattr("core.config.settings", _StubSettings())
@@ -98,7 +98,7 @@ def test_resolve_telemetry_uses_explicit_default_model(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Operator-set ``default_model`` wins over the inherit fallback."""
-    from core.cli.commands import self_improving
+    from geode_product.self_improving import cli_commands as self_improving
 
     class _StubMutator:
         default_model = "claude-haiku-4-5-20251001"
@@ -111,7 +111,7 @@ def test_resolve_telemetry_uses_explicit_default_model(
         autoresearch = _StubAutoresearch()
 
     monkeypatch.setattr(
-        "core.config.self_improving.load_self_improving_loop_config",
+        "geode_product.self_improving.config.load_self_improving_loop_config",
         lambda: _StubCfg(),
     )
     model, source = self_improving._resolve_run_summary_telemetry()
@@ -124,13 +124,13 @@ def test_resolve_telemetry_returns_placeholders_on_config_failure(
 ) -> None:
     """Defensive — config-import failure (e.g. test stub) returns
     ``("?", "?")`` so the slash never crashes on the summary line."""
-    from core.cli.commands import self_improving
+    from geode_product.self_improving import cli_commands as self_improving
 
     def _broken_loader() -> None:
         raise ImportError("simulated config layer missing")
 
     monkeypatch.setattr(
-        "core.config.self_improving.load_self_improving_loop_config",
+        "geode_product.self_improving.config.load_self_improving_loop_config",
         _broken_loader,
     )
     model, source = self_improving._resolve_run_summary_telemetry()

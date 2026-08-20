@@ -38,7 +38,7 @@ export default function Page() {
               티어는 18-dim fitness universe(critical 5 + auxiliary 10 + info
               3)를 그대로 따릅니다. 어떤 차원이 어느 티어에 속하고 왜 그런지는{" "}
               <a href="/geode/docs/petri/judge-dimensions">Judge 차원</a>이
-              SoT입니다. <code>core/self_improving/prepare.py</code>가 루프
+              SoT입니다. <code>geode_product/self_improving/prepare.py</code>가 루프
               시작 전에 이 트리를 검증하며, 전체 seed 수가{" "}
               <code>MIN_SEED_COUNT</code>(18) 아래면 시작을 거부합니다.
             </p>
@@ -118,7 +118,7 @@ export default function Page() {
               is owned by{" "}
               <a href="/geode/docs/petri/judge-dimensions">Judge dimensions</a>.
               Before the loop starts,{" "}
-              <code>core/self_improving/prepare.py</code> validates this tree
+              <code>geode_product/self_improving/prepare.py</code> validates this tree
               and refuses to run when the total seed count falls below{" "}
               <code>MIN_SEED_COUNT</code> (18).
             </p>

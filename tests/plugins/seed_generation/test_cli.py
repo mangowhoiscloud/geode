@@ -344,7 +344,7 @@ def test_get_seed_generation_config_returns_loader_value() -> None:
 
     fake = SimpleNamespace(candidates_default=42, default_gen_tag="genQ")
     with patch(
-        "core.config.self_improving.load_self_improving_loop_config",
+        "geode_product.self_improving.config.load_self_improving_loop_config",
         return_value=SimpleNamespace(seed_generation=fake),
     ):
         cfg = cli_mod._get_seed_generation_config()
@@ -359,7 +359,7 @@ def test_get_seed_generation_config_falls_back_when_loader_raises() -> None:
     def _boom() -> object:
         raise RuntimeError("simulated load failure")
 
-    with patch("core.config.self_improving.load_self_improving_loop_config", _boom):
+    with patch("geode_product.self_improving.config.load_self_improving_loop_config", _boom):
         cfg = cli_mod._get_seed_generation_config()
     assert cfg.candidates_default == 15
     assert cfg.default_gen_tag == "gen1"
@@ -384,7 +384,10 @@ def test_audit_seeds_generate_uses_config_defaults() -> None:
         seed_generation=SimpleNamespace(candidates_default=8, default_gen_tag="gen7"),
     )
     with (
-        patch("core.config.self_improving.load_self_improving_loop_config", return_value=fake_cfg),
+        patch(
+            "geode_product.self_improving.config.load_self_improving_loop_config",
+            return_value=fake_cfg,
+        ),
         patch("geode_product.seed_generation.cli.run_audit_seeds", _capture_run),
     ):
         result = CliRunner().invoke(
@@ -424,13 +427,13 @@ def test_run_audit_seeds_emits_cost_preview_into_session_journal(tmp_path: Any) 
     # IS the module being patched, so importing ``RunTimeline`` from
     # inside the patch context yields ``MockJournal`` and causes
     # ``side_effect = lambda: RealJournal(...)`` to recurse.
-    from core.self_improving.loop.observe.run_timeline import RunTimeline as RealJournal
+    from geode_product.self_improving.loop.observe.run_timeline import RunTimeline as RealJournal
 
     with (
         patch("geode_product.seed_generation.cli.pick_bindings", return_value=_good_picker()),
         patch("geode_product.seed_generation.cli.run_pre_flight", return_value=PreFlightReport()),
         patch("geode_product.seed_generation.cli._dispatch_pipeline"),
-        patch("core.self_improving.loop.observe.run_timeline.RunTimeline") as MockJournal,
+        patch("geode_product.self_improving.loop.observe.run_timeline.RunTimeline") as MockJournal,
     ):
         MockJournal.side_effect = lambda **kwargs: RealJournal(
             session_id=kwargs["session_id"],
@@ -457,7 +460,7 @@ def test_run_audit_seeds_emits_cost_preview_into_session_journal(tmp_path: Any) 
 
 def test_run_audit_seeds_emits_preflight_passed_when_clean(tmp_path: Any) -> None:
     journal_path = tmp_path / "events.jsonl"
-    from core.self_improving.loop.observe.run_timeline import RunTimeline as RealJournal
+    from geode_product.self_improving.loop.observe.run_timeline import RunTimeline as RealJournal
 
     def _bind(**kwargs: Any) -> Any:
         return RealJournal(
@@ -472,7 +475,9 @@ def test_run_audit_seeds_emits_preflight_passed_when_clean(tmp_path: Any) -> Non
         patch("geode_product.seed_generation.cli.pick_bindings", return_value=_good_picker()),
         patch("geode_product.seed_generation.cli.run_pre_flight", return_value=PreFlightReport()),
         patch("geode_product.seed_generation.cli._dispatch_pipeline"),
-        patch("core.self_improving.loop.observe.run_timeline.RunTimeline", side_effect=_bind),
+        patch(
+            "geode_product.self_improving.loop.observe.run_timeline.RunTimeline", side_effect=_bind
+        ),
     ):
         run_audit_seeds(target_dim="broken_tool_use", yes=True, stdout=out, stderr=err)
 
@@ -505,7 +510,7 @@ def test_run_audit_seeds_emits_preflight_failed_with_issue_list(tmp_path: Any) -
         ]
     )
 
-    from core.self_improving.loop.observe.run_timeline import RunTimeline as RealJournal
+    from geode_product.self_improving.loop.observe.run_timeline import RunTimeline as RealJournal
 
     def _bind(**kwargs: Any) -> Any:
         return RealJournal(
@@ -520,7 +525,9 @@ def test_run_audit_seeds_emits_preflight_failed_with_issue_list(tmp_path: Any) -
         patch("geode_product.seed_generation.cli.pick_bindings", return_value=_good_picker()),
         patch("geode_product.seed_generation.cli.run_pre_flight", return_value=bad_report),
         patch("geode_product.seed_generation.cli._dispatch_pipeline") as mock_dispatch,
-        patch("core.self_improving.loop.observe.run_timeline.RunTimeline", side_effect=_bind),
+        patch(
+            "geode_product.self_improving.loop.observe.run_timeline.RunTimeline", side_effect=_bind
+        ),
     ):
         code = run_audit_seeds(
             target_dim="broken_tool_use",
@@ -543,7 +550,7 @@ def test_run_audit_seeds_emits_preflight_failed_with_issue_list(tmp_path: Any) -
 
 def test_run_audit_seeds_emits_user_aborted_on_decline(tmp_path: Any) -> None:
     journal_path = tmp_path / "events.jsonl"
-    from core.self_improving.loop.observe.run_timeline import RunTimeline as RealJournal
+    from geode_product.self_improving.loop.observe.run_timeline import RunTimeline as RealJournal
 
     def _bind(**kwargs: Any) -> Any:
         return RealJournal(
@@ -558,7 +565,9 @@ def test_run_audit_seeds_emits_user_aborted_on_decline(tmp_path: Any) -> None:
         patch("geode_product.seed_generation.cli.pick_bindings", return_value=_good_picker()),
         patch("geode_product.seed_generation.cli.run_pre_flight", return_value=PreFlightReport()),
         patch("geode_product.seed_generation.cli._dispatch_pipeline"),
-        patch("core.self_improving.loop.observe.run_timeline.RunTimeline", side_effect=_bind),
+        patch(
+            "geode_product.self_improving.loop.observe.run_timeline.RunTimeline", side_effect=_bind
+        ),
     ):
         code = run_audit_seeds(
             target_dim="broken_tool_use",
@@ -577,8 +586,8 @@ def test_run_audit_seeds_emits_user_aborted_on_decline(tmp_path: Any) -> None:
 
 def test_emit_cost_divergence_info_when_within_threshold(tmp_path: Any) -> None:
     """Predicted vs actual within ±50 % stays at ``info`` level."""
-    from core.self_improving.loop.observe.run_timeline import RunTimeline
     from geode_product.seed_generation.cli import _emit_cost_divergence
+    from geode_product.self_improving.loop.observe.run_timeline import RunTimeline
 
     journal = RunTimeline(
         session_id="t", gen_tag="t", component="seed-generation", path=tmp_path / "j.jsonl"
@@ -596,8 +605,8 @@ def test_emit_cost_divergence_info_when_within_threshold(tmp_path: Any) -> None:
 
 def test_emit_cost_divergence_warn_when_overspend(tmp_path: Any) -> None:
     """Actual > 1.5 × predicted → ``warn`` level so a dashboard can highlight."""
-    from core.self_improving.loop.observe.run_timeline import RunTimeline
     from geode_product.seed_generation.cli import _emit_cost_divergence
+    from geode_product.self_improving.loop.observe.run_timeline import RunTimeline
 
     journal = RunTimeline(
         session_id="t", gen_tag="t", component="seed-generation", path=tmp_path / "j.jsonl"
@@ -611,8 +620,8 @@ def test_emit_cost_divergence_warn_when_overspend(tmp_path: Any) -> None:
 def test_emit_cost_divergence_ratio_none_when_predicted_zero(tmp_path: Any) -> None:
     """Subscription-only run with $0 predicted PAYG → ratio is ``None``,
     level stays ``info`` (we can't compute a meaningful overshoot %)."""
-    from core.self_improving.loop.observe.run_timeline import RunTimeline
     from geode_product.seed_generation.cli import _emit_cost_divergence
+    from geode_product.self_improving.loop.observe.run_timeline import RunTimeline
 
     journal = RunTimeline(
         session_id="t", gen_tag="t", component="seed-generation", path=tmp_path / "j.jsonl"
@@ -641,7 +650,10 @@ def test_audit_seeds_generate_cli_overrides_win_over_config() -> None:
         seed_generation=SimpleNamespace(candidates_default=8, default_gen_tag="gen7"),
     )
     with (
-        patch("core.config.self_improving.load_self_improving_loop_config", return_value=fake_cfg),
+        patch(
+            "geode_product.self_improving.config.load_self_improving_loop_config",
+            return_value=fake_cfg,
+        ),
         patch("geode_product.seed_generation.cli.run_audit_seeds", _capture_run),
     ):
         result = CliRunner().invoke(

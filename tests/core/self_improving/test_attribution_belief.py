@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from core.self_improving.loop.observe.attribution import (
+from geode_product.seed_generation.baseline_reader import BaselineSnapshot
+from geode_product.self_improving.loop.observe.attribution import (
     compute_attribution,
     write_attribution,
 )
-from geode_product.seed_generation.baseline_reader import BaselineSnapshot
 
 # ---------------------------------------------------------------------------
 # compute_attribution — payload integration

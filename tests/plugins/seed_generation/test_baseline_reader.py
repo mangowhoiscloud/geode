@@ -6,13 +6,13 @@ import json
 from pathlib import Path
 
 import pytest
-from core.self_improving import ledger
 from geode_product.seed_generation.baseline_reader import (
     BaselineSnapshot,
     format_evidence_block,
     load_baseline,
     pick_regression_target_dim,
 )
+from geode_product.self_improving import ledger
 
 # ---------------------------------------------------------------------------
 # load_baseline
@@ -323,7 +323,7 @@ def test_format_evidence_truncates_long_explanation(
 def test_load_baseline_uses_autoresearch_default_path(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """When no path arg, reader pulls core.self_improving.train.BASELINE_PATH."""
+    """When no path arg, reader pulls geode_product.self_improving.train.BASELINE_PATH."""
     state_dir = tmp_path
     autoresearch_baseline = state_dir / "baseline.json"
     autoresearch_baseline.write_text(

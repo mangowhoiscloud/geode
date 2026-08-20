@@ -26,7 +26,9 @@ from core.llm.cache_policy import (
     _load_cache_policy_override,
     apply_cache_policy_breakpoints,
 )
-from core.self_improving.loop.inject.in_context_wiring import register_in_context_middleware
+from geode_product.self_improving.loop.inject.in_context_wiring import (
+    register_in_context_middleware,
+)
 
 
 @pytest.fixture
@@ -190,7 +192,7 @@ def test_active_policy_reaches_create_and_stream_wire(isolated_sot: Path) -> Non
 
 
 def test_product_source_candidates_present() -> None:
-    from core.self_improving.policy_sources import build_policy_source_bundle
+    from geode_product.self_improving.policy_sources import build_policy_source_bundle
 
     sources = build_policy_source_bundle()["cache_policy"]
     assert sources.packaged_default is not None
@@ -206,7 +208,7 @@ def test_product_source_candidates_present() -> None:
 
 def test_train_py_sets_cache_policy_env_pair() -> None:
     repo_root = Path(__file__).resolve().parents[3]
-    src = (repo_root / "core/self_improving/measure.py").read_text(encoding="utf-8")
+    src = (repo_root / "geode_product/self_improving/measure.py").read_text(encoding="utf-8")
     assert "GEODE_CACHE_POLICY_OVERRIDE" in src
     assert "GEODE_CACHE_POLICY_STRICT" in src
     assert "AUTORESEARCH_CACHE_POLICY_PATH" in src
@@ -217,6 +219,8 @@ def test_train_py_sets_cache_policy_env_pair() -> None:
 
 def test_cache_policy_json_referenced_in_inference_path() -> None:
     repo_root = Path(__file__).resolve().parents[3]
-    composition = (repo_root / "core/self_improving/policy_sources.py").read_text(encoding="utf-8")
+    composition = (repo_root / "geode_product/self_improving/policy_sources.py").read_text(
+        encoding="utf-8"
+    )
     assert '"cache_policy"' in composition
     assert "AUTORESEARCH_CACHE_POLICY_PATH" in composition

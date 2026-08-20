@@ -191,7 +191,7 @@ def _emit_credential_event(
     Failure to emit must not break the resolver — exception swallowed.
     """
     try:
-        from core.self_improving.loop.observe.run_timeline import current_run_timeline
+        from geode_product.self_improving.loop.observe.run_timeline import current_run_timeline
 
         journal = current_run_timeline()
         if journal is None:
@@ -262,7 +262,7 @@ def self_improving_loop_fallback_policy() -> bool:
     stub ``core.config``.
     """
     try:
-        from core.config.self_improving import load_self_improving_loop_config
+        from geode_product.self_improving.config import load_self_improving_loop_config
     except ImportError:
         # P1b — record the silent default so the operator can see
         # whether the run actually consulted the user's config or fell

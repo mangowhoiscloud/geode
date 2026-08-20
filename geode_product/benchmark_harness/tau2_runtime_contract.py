@@ -426,9 +426,9 @@ class Tau2RuntimeContract:
         self.capture = Tau2RuntimeCapture()
         self.hooks = HookSystem()
         self.event_store = HookEventStore(event_db_path)
-        from core.wiring.bootstrap import (
+        from geode_product.wiring import (
             build_middleware_registry,
-            current_product_activity_sink,
+            current_activity_sink,
         )
 
         self.hooks.register_sink(
@@ -436,7 +436,7 @@ class Tau2RuntimeContract:
                 self.event_store,
                 session_key=f"tau2:{run_id}",
                 run_id=run_id,
-                activity_sink_provider=current_product_activity_sink,
+                activity_sink_provider=current_activity_sink,
             ),
             name="hook_persistence",
         )

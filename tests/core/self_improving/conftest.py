@@ -18,7 +18,7 @@ decoupled. The production path HOMES are asserted separately by
 from __future__ import annotations
 
 import pytest
-from core.self_improving import ledger
+from geode_product.self_improving import ledger
 
 
 @pytest.fixture(autouse=True)

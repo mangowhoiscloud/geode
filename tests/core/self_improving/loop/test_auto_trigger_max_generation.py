@@ -54,7 +54,7 @@ def _write_history_row(
 
 
 def test_count_fired_generations_missing_file_returns_zero(tmp_path: Path) -> None:
-    from core.self_improving.loop.auto_trigger import count_fired_generations
+    from geode_product.self_improving.loop.auto_trigger import count_fired_generations
 
     assert count_fired_generations(history_path=tmp_path / "missing.jsonl") == 0
 
@@ -62,7 +62,7 @@ def test_count_fired_generations_missing_file_returns_zero(tmp_path: Path) -> No
 def test_count_fired_generations_only_counts_fired_state(tmp_path: Path) -> None:
     """``interval_blocked`` / ``lock_busy`` / ``runner_error`` etc. are
     history rows too — they must NOT contribute to the fire count."""
-    from core.self_improving.loop.auto_trigger import count_fired_generations
+    from geode_product.self_improving.loop.auto_trigger import count_fired_generations
 
     history = tmp_path / "history.jsonl"
     _write_history_row(history, state="fired")
@@ -79,7 +79,7 @@ def test_count_fired_generations_only_counts_fired_state(tmp_path: Path) -> None
 def test_count_fired_generations_skips_malformed_rows(tmp_path: Path) -> None:
     """Best-effort — malformed JSON / non-dict rows / blank lines all
     skipped silently without aborting the scan."""
-    from core.self_improving.loop.auto_trigger import count_fired_generations
+    from geode_product.self_improving.loop.auto_trigger import count_fired_generations
 
     history = tmp_path / "history.jsonl"
     _write_history_row(history, state="fired")
@@ -94,7 +94,7 @@ def test_count_fired_generations_skips_malformed_rows(tmp_path: Path) -> None:
 
 def test_count_fired_generations_oserror_returns_partial(tmp_path: Path) -> None:
     """OSError mid-read returns the count accumulated so far (best-effort)."""
-    from core.self_improving.loop.auto_trigger import count_fired_generations
+    from geode_product.self_improving.loop.auto_trigger import count_fired_generations
 
     history = tmp_path / "history.jsonl"
     history.write_text("dummy\n", encoding="utf-8")
@@ -114,7 +114,7 @@ def test_max_generation_zero_means_unlimited(tmp_path: Path) -> None:
     with 100 prior fires the next call still proceeds past the cap
     check (it may still hit lock/interval/runner gates, but the cap
     itself doesn't block)."""
-    from core.self_improving.loop.auto_trigger import auto_trigger_mutator
+    from geode_product.self_improving.loop.auto_trigger import auto_trigger_mutator
 
     history = tmp_path / "history.jsonl"
     for _ in range(100):
@@ -148,7 +148,7 @@ def test_max_generation_zero_means_unlimited(tmp_path: Path) -> None:
 def test_max_generation_blocks_when_history_at_cap(tmp_path: Path) -> None:
     """``max_generation=3`` + history already has 3 fired rows → next
     call returns ``max_generation_reached`` without invoking runner."""
-    from core.self_improving.loop.auto_trigger import auto_trigger_mutator
+    from geode_product.self_improving.loop.auto_trigger import auto_trigger_mutator
 
     history = tmp_path / "history.jsonl"
     for _ in range(3):
@@ -180,7 +180,7 @@ def test_max_generation_blocks_when_history_above_cap(tmp_path: Path) -> None:
     """Pre-existing history with 5 fires + cap=3 → still blocked. The
     ``>=`` comparison ensures the cap can't be re-entered after the
     operator raises and lowers it."""
-    from core.self_improving.loop.auto_trigger import auto_trigger_mutator
+    from geode_product.self_improving.loop.auto_trigger import auto_trigger_mutator
 
     history = tmp_path / "history.jsonl"
     for _ in range(5):
@@ -205,7 +205,7 @@ def test_max_generation_blocks_when_history_above_cap(tmp_path: Path) -> None:
 def test_max_generation_allows_when_below_cap(tmp_path: Path) -> None:
     """``max_generation=3`` + history has 2 fired rows → next call
     proceeds (only 2 of 3 used)."""
-    from core.self_improving.loop.auto_trigger import auto_trigger_mutator
+    from geode_product.self_improving.loop.auto_trigger import auto_trigger_mutator
 
     history = tmp_path / "history.jsonl"
     _write_history_row(history, state="fired")
@@ -235,7 +235,7 @@ def test_max_generation_cap_evaluated_before_lock(tmp_path: Path) -> None:
     """The cap check must fire BEFORE the lock acquisition, otherwise a
     saturated history would still consume + release the lock on every
     cron tick (lock cost wasted)."""
-    from core.self_improving.loop import auto_trigger as mod
+    from geode_product.self_improving.loop import auto_trigger as mod
 
     history = tmp_path / "history.jsonl"
     for _ in range(2):
@@ -269,7 +269,7 @@ def test_register_auto_trigger_forwards_max_generation(
     ``register_auto_trigger`` actually forwards ``max_generation``
     into the scheduler callback. Without this wiring, the new
     config knob was a dead parameter."""
-    from core.self_improving.loop import auto_trigger as mod
+    from geode_product.self_improving.loop import auto_trigger as mod
 
     forwarded: dict[str, Any] = {}
 
@@ -309,7 +309,7 @@ def test_max_generation_stage_registered() -> None:
     stage of the single ``SELF_IMPROVING_AUTO_TRIGGER`` event. Without
     the stage entry ``_emit_state_event`` silently skips telemetry."""
     from core.hooks import HookEvent
-    from core.self_improving.loop.auto_trigger import AUTO_TRIGGER_TELEMETRY_STAGES
+    from geode_product.self_improving.loop.auto_trigger import AUTO_TRIGGER_TELEMETRY_STAGES
 
     assert "max_generation_reached" in AUTO_TRIGGER_TELEMETRY_STAGES
     assert HookEvent.SELF_IMPROVING_AUTO_TRIGGER.value == "self_improving_auto_trigger"
@@ -322,7 +322,7 @@ def test_max_generation_post_lock_recheck_blocks_overshoot(
     cap re-check exists. Simulates the race: pre-lock count is below
     cap, but by the time the lock is acquired another process has
     bumped the count to/above cap. Without re-check both would fire."""
-    from core.self_improving.loop import auto_trigger as mod
+    from geode_product.self_improving.loop import auto_trigger as mod
 
     history = tmp_path / "history.jsonl"
     # Pre-lock state: 2 fires, cap=3 → pre-lock check allows.
@@ -364,7 +364,7 @@ def test_max_generation_emits_hook_event(tmp_path: Path, monkeypatch: pytest.Mon
     ``_finalize_status`` → ``_emit_state_event`` →
     ``stage="max_generation_reached"``."""
     from core.hooks import HookEvent
-    from core.self_improving.loop import auto_trigger as mod
+    from geode_product.self_improving.loop import auto_trigger as mod
 
     history = tmp_path / "history.jsonl"
     for _ in range(3):
@@ -404,7 +404,7 @@ def test_max_generation_emits_hook_event(tmp_path: Path, monkeypatch: pytest.Mon
 def test_max_generation_disabled_state_short_circuits_before_cap(tmp_path: Path) -> None:
     """``enabled=False`` short-circuits BEFORE the cap check — disabled
     is a defensive guard that never touches disk."""
-    from core.self_improving.loop.auto_trigger import auto_trigger_mutator
+    from geode_product.self_improving.loop.auto_trigger import auto_trigger_mutator
 
     history = tmp_path / "history.jsonl"
     for _ in range(5):

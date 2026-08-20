@@ -29,8 +29,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from core.self_improving import fitness, ledger, measure
-from core.self_improving import train as auto_train
+from geode_product.self_improving import fitness, ledger, measure
+from geode_product.self_improving import train as auto_train
 
 # --- _resolve_held_out_bench precedence --------------------------------------
 

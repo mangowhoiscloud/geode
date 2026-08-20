@@ -31,7 +31,7 @@ export default function Page() {
               선별된 호환 facade만 보유합니다. <code>core/</code>의
               서브시스템은 5계층 스택에 정렬됩니다.
             </p>
-            <pre>{`Self-Improving  core/self_improving/  train.py + measure/fitness/gate/ledger + loop/{mutate,observe,inject}
+            <pre>{`Self-Improving  geode_product/self_improving/  train.py + measure/fitness/gate/ledger + loop/{mutate,observe,inject}
 Agent           core/agent/           AgenticLoop(while tool_use), sub_agent, system_prompt
 Harness         core/cli/             thin CLI + commands/ + IPC 클라이언트
                 core/server/          serve 데몬. ipc_server(CLIPoller) + supervised(메신저 폴러)
@@ -108,7 +108,7 @@ LLM 호출  (core/llm/router/ → core/llm/providers/)
             <h2>흐름 추적 둘. 자기개선 사이클</h2>
             <pre>{`auto-trigger 또는 운영자  (core/wiring/scheduling.py → loop/auto_trigger.py)
    ▼
-변이 제안 + 적용  (core/self_improving/loop/mutate/runner.py, 7 behaviour kinds)
+변이 제안 + 적용  (geode_product/self_improving/loop/mutate/runner.py, 7 behaviour kinds)
    ▼
 Petri 감사 서브프로세스  (measure.py → geode audit → geode_product/petri_audit/)
    │  GEODE_WRAPPER_OVERRIDE로 변이된 스캐폴드를 주입한 같은 AgenticLoop를 측정
@@ -157,7 +157,7 @@ margin 게이트  (gate.py)
               compatibility facades. The subsystems inside{" "}
               <code>core/</code> line up with the five-layer stack.
             </p>
-            <pre>{`Self-Improving  core/self_improving/  train.py + measure/fitness/gate/ledger + loop/{mutate,observe,inject}
+            <pre>{`Self-Improving  geode_product/self_improving/  train.py + measure/fitness/gate/ledger + loop/{mutate,observe,inject}
 Agent           core/agent/           AgenticLoop (while tool_use), sub_agent, system_prompt
 Harness         core/cli/             thin CLI + commands/ + IPC client
                 core/server/          serve daemon: ipc_server (CLIPoller) + supervised (messenger pollers)
@@ -232,7 +232,7 @@ tool requested?  ── yes → run core/tools/ → observe result → next roun
             <h2>Trace two. A self-improving cycle</h2>
             <pre>{`auto-trigger or operator  (core/wiring/scheduling.py → loop/auto_trigger.py)
    ▼
-propose + apply a mutation  (core/self_improving/loop/mutate/runner.py, 7 behaviour kinds)
+propose + apply a mutation  (geode_product/self_improving/loop/mutate/runner.py, 7 behaviour kinds)
    ▼
 Petri audit subprocess  (measure.py → geode audit → geode_product/petri_audit/)
    │  measures the same AgenticLoop with the mutated scaffold injected

@@ -1,4 +1,4 @@
-"""Tests for ``core.self_improving.loop.mutate.runner`` — PR-G5b (2026-05-20)."""
+"""Tests for ``geode_product.self_improving.loop.mutate.runner`` — PR-G5b (2026-05-20)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from core.self_improving.loop.mutate.runner import (
+from geode_product.self_improving.loop.mutate.runner import (
     Mutation,
     RunnerContext,
     SelfImprovingLoopRunner,
@@ -88,7 +88,7 @@ class TestParseMutation:
 def test_apply_mutation_rewrites_existing_section(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from core.self_improving import train as auto_train
+    from geode_product.self_improving import train as auto_train
 
     sot_path = tmp_path / "wrapper-sections.json"
     monkeypatch.setattr(auto_train, "WRAPPER_SECTIONS_SOT_PATH", sot_path)
@@ -109,7 +109,7 @@ def test_apply_mutation_rewrites_existing_section(
 def test_apply_mutation_inserts_new_section(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from core.self_improving import train as auto_train
+    from geode_product.self_improving import train as auto_train
 
     sot_path = tmp_path / "wrapper-sections.json"
     monkeypatch.setattr(auto_train, "WRAPPER_SECTIONS_SOT_PATH", sot_path)
@@ -159,7 +159,7 @@ def test_append_audit_log_records_role_provenance(
     """PR-ROLE-PROVENANCE — every cycle's apply row carries per-role
     {model, source, lane} so the credential lane is observable on a REJECT
     (no baseline_archive row), not just on promote."""
-    import core.config.self_improving as cfg_mod
+    import geode_product.self_improving.config as cfg_mod
 
     fake = SimpleNamespace(
         autoresearch=SimpleNamespace(
@@ -217,8 +217,8 @@ def test_build_runner_context_with_baseline_and_priors(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """All 3 lookups feed the RunnerContext + target_dim auto-picked."""
-    from core.self_improving import train as auto_train
-    from core.self_improving.baseline_reader import BaselineSnapshot, MetaReviewSnapshot
+    from geode_product.self_improving import train as auto_train
+    from geode_product.self_improving.baseline_reader import BaselineSnapshot, MetaReviewSnapshot
 
     sot_path = tmp_path / "wrapper-sections.json"
     sot_path.write_text(json.dumps({"role": "r"}), encoding="utf-8")
@@ -227,15 +227,15 @@ def test_build_runner_context_with_baseline_and_priors(
     fake_baseline = BaselineSnapshot(dim_means={"broken_tool_use": 8.0})
     fake_priors = MetaReviewSnapshot(underrepresented_dims=["broken_tool_use"])
     monkeypatch.setattr(
-        "core.self_improving.baseline_reader.load_baseline",
+        "geode_product.self_improving.baseline_reader.load_baseline",
         lambda: fake_baseline,
     )
     monkeypatch.setattr(
-        "core.self_improving.baseline_reader.load_latest_meta_review",
+        "geode_product.self_improving.baseline_reader.load_latest_meta_review",
         lambda: fake_priors,
     )
     monkeypatch.setattr(
-        "core.self_improving.baseline_reader.pick_regression_target_dim",
+        "geode_product.self_improving.baseline_reader.pick_regression_target_dim",
         lambda _snap, **_kw: "broken_tool_use",
     )
     ctx = build_runner_context()
@@ -249,16 +249,16 @@ def test_build_runner_context_bootstrap_no_baseline(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """No baseline → target_dim empty, snapshots None, fallback sections."""
-    from core.self_improving import train as auto_train
+    from geode_product.self_improving import train as auto_train
 
     sot_path = tmp_path / "wrapper-sections.json"  # not created
     monkeypatch.setattr(auto_train, "WRAPPER_SECTIONS_SOT_PATH", sot_path)
     monkeypatch.setattr(
-        "core.self_improving.baseline_reader.load_baseline",
+        "geode_product.self_improving.baseline_reader.load_baseline",
         lambda: None,
     )
     monkeypatch.setattr(
-        "core.self_improving.baseline_reader.load_latest_meta_review",
+        "geode_product.self_improving.baseline_reader.load_latest_meta_review",
         lambda: None,
     )
     ctx = build_runner_context()
@@ -276,17 +276,17 @@ def test_build_runner_context_bootstrap_no_baseline(
 
 def test_runner_run_once_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Mock LLM + audit-log path + disable commit/rerun → run_once returns Mutation."""
-    from core.self_improving import train as auto_train
+    from geode_product.self_improving import train as auto_train
 
     sot_path = tmp_path / "wrapper-sections.json"
     sot_path.write_text(json.dumps({"role": "old", "tools": "old"}), encoding="utf-8")
     monkeypatch.setattr(auto_train, "WRAPPER_SECTIONS_SOT_PATH", sot_path)
     monkeypatch.setattr(
-        "core.self_improving.baseline_reader.load_baseline",
+        "geode_product.self_improving.baseline_reader.load_baseline",
         lambda: None,
     )
     monkeypatch.setattr(
-        "core.self_improving.baseline_reader.load_latest_meta_review",
+        "geode_product.self_improving.baseline_reader.load_latest_meta_review",
         lambda: None,
     )
 
@@ -313,7 +313,7 @@ def test_runner_run_once_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     )
     # Prevent the sessions.jsonl side-effect from touching real ~/.geode.
     monkeypatch.setattr(
-        "core.self_improving.loop.mutate.runner.GLOBAL_AUTORESEARCH_HANDOFF_DIR",
+        "geode_product.self_improving.loop.mutate.runner.GLOBAL_AUTORESEARCH_HANDOFF_DIR",
         tmp_path / "sil_home",
     )
     mutation = runner.run_once()
@@ -344,7 +344,7 @@ def test_runner_propagates_llm_validation_error(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Bad LLM response → parse_mutation ValueError bubbles up."""
-    from core.self_improving import train as auto_train
+    from geode_product.self_improving import train as auto_train
 
     sot_path = tmp_path / "wrapper-sections.json"
     monkeypatch.setattr(auto_train, "WRAPPER_SECTIONS_SOT_PATH", sot_path)
@@ -373,8 +373,8 @@ def test_runner_uses_baseline_evidence_in_user_prompt(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """When baseline has evidence for target_dim, the user prompt embeds it."""
-    from core.self_improving import train as auto_train
-    from core.self_improving.baseline_reader import BaselineSnapshot
+    from geode_product.self_improving import train as auto_train
+    from geode_product.self_improving.baseline_reader import BaselineSnapshot
 
     sot_path = tmp_path / "wrapper-sections.json"
     monkeypatch.setattr(auto_train, "WRAPPER_SECTIONS_SOT_PATH", sot_path)
@@ -383,17 +383,17 @@ def test_runner_uses_baseline_evidence_in_user_prompt(
         dim_stderr={"broken_tool_use": 0.3},
     )
     monkeypatch.setattr(
-        "core.self_improving.baseline_reader.load_baseline",
+        "geode_product.self_improving.baseline_reader.load_baseline",
         lambda: fake_baseline,
     )
     monkeypatch.setattr(
-        "core.self_improving.baseline_reader.load_latest_meta_review",
+        "geode_product.self_improving.baseline_reader.load_latest_meta_review",
         lambda: None,
     )
     # G2.fix (2026-05-20) — evidence comes from latest .eval on demand,
     # not from a cached field on the snapshot.
     monkeypatch.setattr(
-        "core.self_improving.baseline_reader.format_evidence_block",
+        "geode_product.self_improving.baseline_reader.format_evidence_block",
         lambda _snap, _dim, **_kw: (
             "Recent audit evidence (latest .eval, on demand)\n"
             "  1. seed-x — tool result was hallucinated under stress\n"
@@ -408,7 +408,7 @@ def test_runner_uses_baseline_evidence_in_user_prompt(
         return json.dumps({"target_section": "role", "new_value": "v", "rationale": "r"})
 
     monkeypatch.setattr(
-        "core.self_improving.loop.mutate.runner.GLOBAL_AUTORESEARCH_HANDOFF_DIR",
+        "geode_product.self_improving.loop.mutate.runner.GLOBAL_AUTORESEARCH_HANDOFF_DIR",
         tmp_path / "sil_home",
     )
     SelfImprovingLoopRunner(
@@ -478,7 +478,7 @@ def test_system_prompt_loads_program_md_when_present(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """When program.md is readable, _build_system_prompt prepends its body."""
-    from core.self_improving.loop.mutate import runner
+    from geode_product.self_improving.loop.mutate import runner
 
     monkeypatch.setattr(
         runner,
@@ -507,12 +507,12 @@ def test_system_prompt_fails_loud_when_program_md_missing(
     plain notify that always precedes the raise.
     """
     from core.hooks.system import HookEvent
-    from core.self_improving.loop.mutate import runner
+    from geode_product.self_improving.loop.mutate import runner
 
     fired: list[tuple[HookEvent, dict[str, str]]] = []
     monkeypatch.setattr(runner, "_load_program_md", lambda: None)
     monkeypatch.setattr(
-        "core.self_improving.loop._hooks._fire_hook",
+        "geode_product.self_improving.loop._hooks._fire_hook",
         lambda event, data: fired.append((event, data)),
     )
     with pytest.raises(RuntimeError, match=r"program\.md unreadable"):
@@ -522,12 +522,12 @@ def test_system_prompt_fails_loud_when_program_md_missing(
 
 
 def test_load_program_md_reads_real_file_in_repo() -> None:
-    """The real ``core/self_improving/program.md`` file is reachable from the runner."""
-    from core.self_improving.loop.mutate.runner import _load_program_md
+    """The real ``geode_product/self_improving/program.md`` file is reachable from the runner."""
+    from geode_product.self_improving.loop.mutate.runner import _load_program_md
 
     program_md = _load_program_md()
     assert program_md is not None, (
-        "core/self_improving/program.md was not reachable from the runner. "
+        "geode_product/self_improving/program.md was not reachable from the runner. "
         "Check the path resolution in _load_program_md if the runner "
         "module moved."
     )
@@ -538,18 +538,18 @@ def test_run_once_uses_program_md_in_system_prompt(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """End-to-end: SelfImprovingLoopRunner.run_once passes program.md body to LLM."""
-    from core.self_improving import train as auto_train
-    from core.self_improving.loop.mutate import runner
+    from geode_product.self_improving import train as auto_train
+    from geode_product.self_improving.loop.mutate import runner
 
     sot_path = tmp_path / "wrapper-sections.json"
     sot_path.write_text(json.dumps({"role": "old"}), encoding="utf-8")
     monkeypatch.setattr(auto_train, "WRAPPER_SECTIONS_SOT_PATH", sot_path)
     monkeypatch.setattr(
-        "core.self_improving.baseline_reader.load_baseline",
+        "geode_product.self_improving.baseline_reader.load_baseline",
         lambda: None,
     )
     monkeypatch.setattr(
-        "core.self_improving.baseline_reader.load_latest_meta_review",
+        "geode_product.self_improving.baseline_reader.load_latest_meta_review",
         lambda: None,
     )
     monkeypatch.setattr(
@@ -587,19 +587,19 @@ def test_runner_rolls_back_sot_when_audit_log_fails(
 ) -> None:
     """If append_audit_log raises OSError after SoT mutation, the SoT must
     revert to the pre-mutation state so the next iteration sees consistency."""
-    from core.self_improving import train as auto_train
-    from core.self_improving.loop.mutate import runner
+    from geode_product.self_improving import train as auto_train
+    from geode_product.self_improving.loop.mutate import runner
 
     sot_path = tmp_path / "wrapper-sections.json"
     original = {"role": "ORIGINAL_ROLE", "tools": "ORIGINAL_TOOLS"}
     sot_path.write_text(json.dumps(original), encoding="utf-8")
     monkeypatch.setattr(auto_train, "WRAPPER_SECTIONS_SOT_PATH", sot_path)
     monkeypatch.setattr(
-        "core.self_improving.baseline_reader.load_baseline",
+        "geode_product.self_improving.baseline_reader.load_baseline",
         lambda: None,
     )
     monkeypatch.setattr(
-        "core.self_improving.baseline_reader.load_latest_meta_review",
+        "geode_product.self_improving.baseline_reader.load_latest_meta_review",
         lambda: None,
     )
 
@@ -632,18 +632,18 @@ def test_runner_success_path_unchanged_by_rollback_logic(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """When audit-log write succeeds, SoT carries the mutation forward."""
-    from core.self_improving import train as auto_train
-    from core.self_improving.loop.mutate import runner
+    from geode_product.self_improving import train as auto_train
+    from geode_product.self_improving.loop.mutate import runner
 
     sot_path = tmp_path / "wrapper-sections.json"
     sot_path.write_text(json.dumps({"role": "old"}), encoding="utf-8")
     monkeypatch.setattr(auto_train, "WRAPPER_SECTIONS_SOT_PATH", sot_path)
     monkeypatch.setattr(
-        "core.self_improving.baseline_reader.load_baseline",
+        "geode_product.self_improving.baseline_reader.load_baseline",
         lambda: None,
     )
     monkeypatch.setattr(
-        "core.self_improving.baseline_reader.load_latest_meta_review",
+        "geode_product.self_improving.baseline_reader.load_latest_meta_review",
         lambda: None,
     )
     monkeypatch.setattr(runner, "GLOBAL_AUTORESEARCH_HANDOFF_DIR", tmp_path / "sil_home")

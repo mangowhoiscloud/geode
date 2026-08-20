@@ -29,7 +29,7 @@ import threading
 from pathlib import Path
 
 import pytest
-from core.self_improving import measure
+from geode_product.self_improving import measure
 
 # ---------------------------------------------------------------------------
 # FIX-1 + FIX-2 — `inspect eval` argv flags
@@ -38,7 +38,7 @@ from core.self_improving import measure
 # Codex MCP catch (PR-OL-AUDIT-BURST-FIX fix-up): the burst flags must
 # land in the actual `inspect eval` argv assembled by
 # `plugins/petri_audit/runner.py::build_command`, NOT in the outer
-# `geode audit` argv assembled by `core/self_improving/train.py::_build_audit_command`.
+# `geode audit` argv assembled by `geode_product/self_improving/train.py::_build_audit_command`.
 # The `geode audit` Typer command doesn't accept `--max-connections` —
 # the flags would be rejected before reaching `inspect eval`.
 
@@ -281,16 +281,16 @@ def test_audit_lane_lazy_init_is_thread_safe() -> None:
 
 
 def test_audit_train_source_grep_pins_lane_integration() -> None:
-    """Source-level pin: ``core/self_improving/train.py`` must call the audit
+    """Source-level pin: ``geode_product/self_improving/train.py`` must call the audit
     lane around the subprocess. A future refactor that drops the
     ``with acquire_audit_lane(...)`` wrapper re-introduces the
     overlapping-audit race.
     """
-    from core.self_improving import measure as train
+    from geode_product.self_improving import measure as train
 
     source = Path(train.__file__).read_text(encoding="utf-8")
     assert "from core.orchestration.audit_lane import acquire_audit_lane" in source, (
-        "FIX-3 regressed: core/self_improving/train.py no longer imports the audit lane."
+        "FIX-3 regressed: geode_product/self_improving/train.py no longer imports the audit lane."
     )
     assert "with acquire_audit_lane(" in source, (
         "FIX-3 regressed: subprocess.run no longer wrapped in audit lane."

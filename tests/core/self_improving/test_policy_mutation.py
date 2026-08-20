@@ -1,7 +1,7 @@
 """PR-6 C-5 — policy mutation expansion invariants.
 
 Pins the new ``target_kind`` field on :class:`Mutation`, the
-``core.self_improving.loop.mutate.policies`` SoT helpers, and
+``geode_product.self_improving.loop.mutate.policies`` SoT helpers, and
 ``apply_mutation``'s dispatcher routing to the right policy file.
 """
 
@@ -11,14 +11,14 @@ import json
 from pathlib import Path
 
 import pytest
-from core.self_improving.loop.mutate import policies as _policies_mod
-from core.self_improving.loop.mutate.policies import (
+from geode_product.self_improving.loop.mutate import policies as _policies_mod
+from geode_product.self_improving.loop.mutate.policies import (
     TARGET_KINDS,
     load_policy,
     policy_path,
     write_policy,
 )
-from core.self_improving.loop.mutate.runner import (
+from geode_product.self_improving.loop.mutate.runner import (
     Mutation,
     apply_mutation,
     parse_mutation,
@@ -273,7 +273,7 @@ def test_apply_mutation_decomposition_writes_to_decomposition_file(
 def test_apply_mutation_retrieval_is_rejected_post_s0d() -> None:
     """ADR-012 S0d (2026-05-21) — retrieval 은 TARGET_KINDS 에서 deprecate.
     parse_mutation 의 entry guard 가 ``retrieval`` mutation 을 거부한다."""
-    from core.self_improving.loop.mutate.policies import policy_path
+    from geode_product.self_improving.loop.mutate.policies import policy_path
 
     assert "retrieval" not in TARGET_KINDS, "S0d 후 retrieval 은 active target_kind 가 아님"
     # policy_path 는 raise ValueError on unknown kinds — 그러나 dict 매핑은
@@ -301,10 +301,10 @@ def test_apply_mutation_prompt_kind_uses_legacy_writer(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The legacy ``prompt`` kind must still route through
-    ``core.self_improving.train.write_wrapper_prompt_sections`` so the
+    ``geode_product.self_improving.train.write_wrapper_prompt_sections`` so the
     schema enforcement (single paragraph / 600-char cap) survives
     the PR-6 dispatcher rewrite."""
-    from core.self_improving import train as _train
+    from geode_product.self_improving import train as _train
 
     written: list[dict[str, str]] = []
 
@@ -354,8 +354,8 @@ def test_run_once_loads_target_kind_policy_not_wrapper_sections(
     apply_mutation, which would write wrapper-prompt content into the
     wrong SoT for non-prompt target_kinds. Pin that run_once now
     loads the correct policy via ``load_policy(mutation.target_kind)``."""
-    from core.self_improving import train as _train
-    from core.self_improving.loop.mutate.runner import SelfImprovingLoopRunner
+    from geode_product.self_improving import train as _train
+    from geode_product.self_improving.loop.mutate.runner import SelfImprovingLoopRunner
 
     # Redirect tool_policy SoT to a tmp path so the test never touches
     # ~/.geode/. Pre-populate with one entry to confirm load_policy is
@@ -379,8 +379,8 @@ def test_run_once_loads_target_kind_policy_not_wrapper_sections(
 
     # Stub build_runner_context so the test doesn't depend on a real
     # baseline / wrapper-sections file.
-    from core.self_improving.loop.mutate import runner as _runner_mod
-    from core.self_improving.loop.mutate.runner import RunnerContext
+    from geode_product.self_improving.loop.mutate import runner as _runner_mod
+    from geode_product.self_improving.loop.mutate.runner import RunnerContext
 
     monkeypatch.setattr(
         _runner_mod,
@@ -416,7 +416,7 @@ def test_rollback_sot_dispatches_on_target_kind(
     call write_wrapper_prompt_sections, which for non-prompt mutations
     would restore the wrong destination. Pin that rollback now
     dispatches by target_kind."""
-    from core.self_improving.loop.mutate.runner import SelfImprovingLoopRunner
+    from geode_product.self_improving.loop.mutate.runner import SelfImprovingLoopRunner
 
     tool_path = tmp_path / "tool-policy.json"
     _redirect_kind(monkeypatch, "tool_policy", tool_path)
@@ -446,10 +446,10 @@ def test_rollback_sot_prompt_kind_still_uses_legacy_writer(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Pin that the prompt branch still routes through
-    core.self_improving.train.write_wrapper_prompt_sections — schema
+    geode_product.self_improving.train.write_wrapper_prompt_sections — schema
     enforcement (single-paragraph 600-char cap) must survive PR-6."""
-    from core.self_improving import train as _train
-    from core.self_improving.loop.mutate.runner import SelfImprovingLoopRunner
+    from geode_product.self_improving import train as _train
+    from geode_product.self_improving.loop.mutate.runner import SelfImprovingLoopRunner
 
     written: list[dict[str, str]] = []
     monkeypatch.setattr(_train, "write_wrapper_prompt_sections", lambda s: written.append(dict(s)))
@@ -508,7 +508,7 @@ def test_parse_mutation_rejects_hyperparam_kind_with_clear_message() -> None:
     not-in-TARGET_KINDS enumeration."""
     import json
 
-    from core.self_improving.loop.mutate.runner import parse_mutation
+    from geode_product.self_improving.loop.mutate.runner import parse_mutation
 
     for section in ("reflection_depth", "max_turns", "seed_limit", "dim_set", "anything"):
         payload = json.dumps(
@@ -531,8 +531,8 @@ def test_parse_mutation_accepts_all_seven_behaviour_kinds() -> None:
     nested-schema kinds use a dotted ``target_section``."""
     import json
 
-    from core.self_improving.loop.mutate.policies import _NESTED_KINDS
-    from core.self_improving.loop.mutate.runner import parse_mutation
+    from geode_product.self_improving.loop.mutate.policies import _NESTED_KINDS
+    from geode_product.self_improving.loop.mutate.runner import parse_mutation
 
     for kind in TARGET_KINDS:
         section = "tool.description" if kind in _NESTED_KINDS else "some_section"
@@ -553,7 +553,7 @@ def test_parse_mutation_accepts_all_seven_behaviour_kinds() -> None:
 def test_reject_hyperparam_mutation_helper_always_raises() -> None:
     """The dedicated rejection helper raises unconditionally with the
     operator-facing message (pins the message text the contract promises)."""
-    from core.self_improving.loop.mutate.runner import _reject_hyperparam_mutation
+    from geode_product.self_improving.loop.mutate.runner import _reject_hyperparam_mutation
 
     with pytest.raises(ValueError, match="reflection_depth axis is exhausted"):
         _reject_hyperparam_mutation()
@@ -565,7 +565,7 @@ def test_apply_mutation_rejects_hyperparam_kind(
     """Second-layer defense: an externally-constructed ``hyperparam``
     Mutation that bypassed parse_mutation is still rejected at apply, before
     any write — the SoT path stays untouched."""
-    from core.self_improving.loop.mutate.runner import Mutation, apply_mutation
+    from geode_product.self_improving.loop.mutate.runner import Mutation, apply_mutation
 
     target = tmp_path / "hyperparam.json"
     _redirect_kind(monkeypatch, "hyperparam", target)

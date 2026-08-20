@@ -15,7 +15,7 @@ from core.hooks import (
 )
 from core.observability.event_store import HookEventStore
 from core.observability.hook_persistence import HookPersistenceSink
-from core.self_improving.loop.observe.run_timeline import (
+from geode_product.self_improving.loop.observe.run_timeline import (
     RunTimeline,
     current_run_timeline,
     run_timeline_scope,

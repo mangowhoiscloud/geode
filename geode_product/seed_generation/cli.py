@@ -88,7 +88,7 @@ audit_seeds_app = typer.Typer(
 # duplicates every write to the log file. Subprocesses spawned later
 # (claude-cli, codex) actually run with PIPE-captured stdout/stderr
 # (``core/orchestration/isolated_execution.py:414`` +
-# ``core/self_improving/loop/mutate/cli_subprocess.py:97`` both use
+# ``geode_product/self_improving/loop/mutate/cli_subprocess.py:97`` both use
 # ``capture_output=True`` / ``stdout=PIPE``), so their raw output
 # never reaches the parent's terminal anyway — it lands in the
 # per-task ``state/seed_generation/<run>/sub_agents/<task>/`` records
@@ -216,7 +216,7 @@ def _get_seed_generation_config() -> Any:
     usable when ``core.config`` is unavailable in test contexts.
     """
     try:
-        from core.config.self_improving import load_self_improving_loop_config
+        from geode_product.self_improving.config import load_self_improving_loop_config
 
         return load_self_improving_loop_config().seed_generation
     except Exception:
@@ -430,11 +430,14 @@ def run_audit_seeds_resume(
 
     from core.observability.run_dir import run_dir_scope
     from core.paths import STATE_SEED_GENERATION_DIR
-    from core.self_improving.loop.observe.run_timeline import RunTimeline, run_timeline_scope
 
     from geode_product.seed_generation.resume import (
         ResumeError,
         resolve_resume_target,
+    )
+    from geode_product.self_improving.loop.observe.run_timeline import (
+        RunTimeline,
+        run_timeline_scope,
     )
 
     run_dir = STATE_SEED_GENERATION_DIR / run_id
@@ -557,7 +560,7 @@ def _resolve_target_dim(
        return ``(None, None)``; the caller surfaces an exit code.
 
     Lazy import so the import graph stays:
-    cli → baseline_reader (only when needed) → core.self_improving.train (lazy
+    cli → baseline_reader (only when needed) → geode_product.self_improving.train (lazy
     inside baseline_reader).
     """
     from geode_product.seed_generation.baseline_reader import (
@@ -696,7 +699,11 @@ def run_audit_seeds(
 
     from core.observability.run_dir import run_dir_scope
     from core.paths import STATE_SEED_GENERATION_DIR
-    from core.self_improving.loop.observe.run_timeline import RunTimeline, run_timeline_scope
+
+    from geode_product.self_improving.loop.observe.run_timeline import (
+        RunTimeline,
+        run_timeline_scope,
+    )
 
     run_id = f"{gen_tag}-{resolved_dim}"
     # PR-Q (2026-05-24) — run-dir-as-anchor consolidation. The pipeline
@@ -873,7 +880,8 @@ def _dispatch_pipeline(
     before this dispatch land in the same per-session journal.
     Pipeline lifecycle markers (``pipeline_started`` /
     ``pipeline_finished``) and the post-run ``cost_divergence`` event
-    are emitted via :func:`core.self_improving.loop.observe.run_timeline.current_run_timeline`.
+    are emitted via
+    :func:`geode_product.self_improving.loop.observe.run_timeline.current_run_timeline`.
     """
     # CSP-7 (2026-05-22) — per-run artefacts moved into the repo
     # under ``state/seed_generation/`` (env-overridable via
@@ -881,13 +889,13 @@ def _dispatch_pipeline(
     # ``~/.geode/seed-generation/`` (pre-CSP-7) — machine-specific, broke
     # cross-host reproducibility.
     from core.paths import STATE_SEED_GENERATION_DIR
-    from core.self_improving.loop.observe.run_timeline import current_run_timeline
 
     from geode_product.seed_generation.orchestrator import (
         Pipeline,
         PipelineRegistry,
         PipelineState,
     )
+    from geode_product.self_improving.loop.observe.run_timeline import current_run_timeline
 
     run_id = f"{gen_tag}-{target_dim}"
     run_dir = STATE_SEED_GENERATION_DIR / run_id

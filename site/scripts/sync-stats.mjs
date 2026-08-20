@@ -95,7 +95,7 @@ function readArchitectureBaseline() {
     );
   }
   if (
-    baseline?.schema_version !== 2 ||
+    baseline?.schema_version !== 3 ||
     !Number.isInteger(baseline?.packages?.core?.python_files) ||
     !Number.isInteger(baseline?.packages?.plugins?.python_files) ||
     !Number.isInteger(baseline?.packages?.tests?.python_files) ||

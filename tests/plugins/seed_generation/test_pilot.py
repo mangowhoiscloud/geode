@@ -5,7 +5,7 @@ sub-agent that reformats audit scores into JSON. It calls
 ``geode_product.petri_audit.runner.run_audit`` directly per candidate and reads the
 archived ``.eval`` with ``core.audit.dim_extractor.extract_dim_aggregates`` —
 the SAME authoritative converter + raw-Petri scale the campaign
-(``core/self_improving/train.py``) uses.
+(``geode_product/self_improving/train.py``) uses.
 
 These tests pin the unification invariants:
 

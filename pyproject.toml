@@ -275,7 +275,7 @@ viz = [
 # CLI/agent/server/channels 사이의 직접 import 를 정적 차단한다.
 # 위반 시 `lint-imports` 실패 → CI 에서 PR merge 차단.
 [tool.importlinter]
-root_package = "core"
+root_packages = ["core", "geode_product"]
 
 [[tool.importlinter.contracts]]
 name = "CLI must not import server/messaging (process boundary)"
@@ -306,7 +306,6 @@ ignore_imports = [
     "core.agent.loop.agent_loop -> core.cli.commands",
     "core.agent.approval -> core.cli",
     "core.agent.worker -> core.cli.tool_handlers",
-    "core.self_improving.measure -> core.cli.quota_banner",
 ]
 
 [[tool.importlinter.contracts]]
@@ -325,7 +324,6 @@ ignore_imports = [
     "core.agent.approval -> core.cli",
     "core.server.ipc_server.poller -> core.cli",
     "core.server.ipc_server.poller -> core.cli.session_state",
-    "core.self_improving.measure -> core.cli.quota_banner",
 ]
 
 [[tool.importlinter.contracts]]
@@ -342,7 +340,7 @@ ignore_imports = [
 name = "Classified kernel does not import the bundled self-improving product"
 type = "forbidden"
 source_modules = ["core.agent", "core.llm", "core.memory", "core.observability", "core.skills"]
-forbidden_modules = ["core.self_improving"]
+forbidden_modules = ["core.self_improving", "geode_product.self_improving"]
 allow_indirect_imports = true
 
 [tool.ruff]
@@ -409,7 +407,7 @@ max-complexity = 52
 max-args = 23
 max-branches = 51
 max-returns = 18
-max-statements = 212
+max-statements = 209
 
 # TID251 — banned imports with educational error messages (LangGraph pattern).
 # Symbol-level guardrail complementary to import-linter (which is module-level

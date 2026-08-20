@@ -116,7 +116,7 @@ RUN_REPORT_GLOB = "run-*.md"
 PYPROJECT = REPO_ROOT / "pyproject.toml"
 
 # E6 (2026-05-30) — the three control arms of the matched held-out comparison.
-# Mirrors the writer-side ``_VALID_PROMOTE_POLICIES`` in ``core/self_improving/train.py``
+# Mirrors the writer-side ``_VALID_PROMOTE_POLICIES`` in ``geode_product/self_improving/train.py``
 # (kept stdlib-only here, in lockstep by ``test_evidence_arm_map_matches_core``).
 # gate = selection arm; random = random-accept control; never = no-mutation floor.
 _EVIDENCE_ARMS: tuple[tuple[str, str], ...] = (
@@ -145,7 +145,7 @@ _PETRI_BUNDLE_DEEPLINK_BASE = "/geode/self-improving/petri-bundle/"
 _AUDIT_MATCH_TOLERANCE_S = 180.0
 
 # Per-cycle parse of campaign-progress.log. SoT for the line format is the campaign
-# driver ``core/self_improving/campaign.py`` (the ``progress.emit(...)`` writers), kept
+# driver ``geode_product/self_improving/campaign.py`` (the ``progress.emit(...)`` writers), kept
 # in lockstep by ``test_campaign_regex_matches_digest_sot``.
 # "... arm 'gate' cycle 3/10: fitness_after=0.67 fitness_delta=-0.13 held_out=0.79 reject ..."
 _CAMPAIGN_CYCLE_RE = re.compile(
@@ -164,7 +164,7 @@ _CAMPAIGN_NOISE_RE = re.compile(
 _CAMPAIGN_TS_RE = re.compile(r"^(?P<ts>\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ)")
 
 # E6 (2026-05-30) — the standard two-sample mean-difference power constants,
-# MIRRORING the SoT in ``core/self_improving/loop/observe/statistical_power.py`` (this
+# MIRRORING the SoT in ``geode_product/self_improving/loop/observe/statistical_power.py`` (this
 # builder is intentionally stdlib-only so it cannot import core). The defaults
 # below are the same δ / α / power the writer powers for; the formula
 # (``n ≈ 2(z_{α/2}+z_β)²σ²/δ²``) is reproduced in ``_required_n_seed`` so the page
@@ -174,7 +174,7 @@ _POWER_DEFAULT_TARGET_EFFECT_SIZE = 0.02
 _POWER_DEFAULT_ALPHA = 0.05
 _POWER_DEFAULT_POWER = 0.8
 
-# 12-col header from core/self_improving/train.py:1284 RESULTS_TSV_HEADER.
+# 12-col header from geode_product/self_improving/train.py:1284 RESULTS_TSV_HEADER.
 # Verified against actual code (P-Phase-6 baseline 2026-05-26).
 AUTORESEARCH_RESULTS_TSV_HEADER: tuple[str, ...] = (
     "session_id",
@@ -214,7 +214,7 @@ PETRI_SIDEBAR_LIMIT = 3
 # sub_agents (``SeedGenRow.harness_models``); this constant remains only for
 # the autoresearch mutations row, whose actual mutator model is not yet exposed
 # in the hub-read baseline. FOLLOW-UP: read it from role-provenance
-# (``core.self_improving.loop.observe.role_provenance`` records the mutator
+# (``geode_product.self_improving.loop.observe.role_provenance`` records the mutator
 # model+source) so this row stops hardcoding a possibly-stale version.
 DEFAULT_MUTATOR_MODEL = "claude-cli/claude-opus-4-7"
 # Canonical 20-dim subset displayed on the pilot-score heatmap (the two
@@ -672,7 +672,7 @@ def render_autoresearch_rows(state: AutoresearchState) -> str:
         gen_label = "—"
         models_cell = (
             '<span class="muted">no baseline written yet — run '
-            "<code>uv run python -m core.self_improving.train --promote</code></span>"
+            "<code>uv run python -m geode_product.self_improving.train --promote</code></span>"
         )
         fitness_cell = '<span class="muted">.</span>'
     elif baseline is None:
@@ -3823,7 +3823,7 @@ def _load_baseline(baseline_dir: Path) -> tuple[dict[str, Any] | None, bool, Pat
 
 
 # PR-BASELINE-REGISTRY (2026-05-30) — discriminator for the registry's
-# baseline rows (mirrors ``core.self_improving.train._BASELINE_REGISTRY_KIND``). The
+# baseline rows (mirrors ``geode_product.self_improving.train._BASELINE_REGISTRY_KIND``). The
 # legacy gen timeline filters these out; the dedicated index lands in a
 # follow-up phase.
 _BASELINE_REGISTRY_ROW_KIND = "baseline"
@@ -3884,7 +3884,7 @@ def _load_campaign_progress(runtime_dir: Path) -> dict[str, Any]:
     (``promote`` / ``reject`` / ``SKIP``) and the gen-0 K-mean baseline band —
     neither is in ``mutations.jsonl`` (its attribution rows carry the numbers but
     not the gate decision, and a SKIP cycle writes no attribution row at all). Mirrors
-    the live log-line format written by ``core/self_improving/campaign.py`` (the SoT)
+    the live log-line format written by ``geode_product/self_improving/campaign.py`` (the SoT)
     so the two stay in lockstep.
 
     Returns ``{"cycles": [{arm, n, total, sel, held, delta, verdict, skip, ts}],
@@ -4323,7 +4323,7 @@ def _render_warning_banner(baseline_path: Path | None, stale: bool) -> str:
         "Autoresearch baseline read from <code>"
         f"{html_escape(baseline_path.name)}</code>, no live "
         "<code>baseline.json</code> present in <code>~/.geode/self-improving/</code>. "
-        "Run <code>uv run python -m core.self_improving.train --promote</code> to refresh."
+        "Run <code>uv run python -m geode_product.self_improving.train --promote</code> to refresh."
         "</div>"
     )
 
@@ -4717,7 +4717,8 @@ def _render_baseline_registry_index(archive: list[dict[str, Any]]) -> str:
     if not rows:
         return (
             '    <p class="empty-namespace">No <code>kind="baseline"</code> registry rows yet. '
-            "A row is appended on every promote (<code>core/self_improving/train.py</code>).</p>"
+            "A row is appended on every promote "
+            "(<code>geode_product/self_improving/train.py</code>).</p>"
         )
     # Group by epoch_hash, preserving each epoch's label + spec from its first row.
     # Rows written before the epoch schema (no epoch_hash) bucket under a single
@@ -4892,7 +4893,7 @@ def _autoresearch_status_grid(
             ("current baseline", "<em>no baseline yet</em>"),
             (
                 "next action",
-                "<code>uv run python -m core.self_improving.train --promote</code>",
+                "<code>uv run python -m geode_product.self_improving.train --promote</code>",
             ),
         ]
     else:
@@ -5174,7 +5175,7 @@ def _render_mutations_rows(joined: list[dict[str, Any]]) -> str:
         return (
             f'        <tr><td colspan="{_MUTATIONS_COLSPAN}" class="empty">'
             "<em>No mutations recorded. Run "
-            "<code>uv run python -m core.self_improving.train</code>."
+            "<code>uv run python -m geode_product.self_improving.train</code>."
             "</em></td></tr>"
         )
     out: list[str] = []
@@ -5337,7 +5338,7 @@ def _collect_held_out_curve(mutations: list[dict[str, Any]]) -> list[dict[str, A
 
     Reads ``kind="attribution"`` rows that carry ``held_out_fitness`` — the
     fixed-ruler measurement recorded EVERY cycle when a held-out bench is
-    configured (``core/self_improving/train.py`` E2-wire). Rows without the field
+    configured (``geode_product/self_improving/train.py`` E2-wire). Rows without the field
     (no-bench / legacy) are skipped. Points are ordered by ``ts`` ascending so the
     list reads chronologically — generation 1 first — which is how a
     fitness-vs-generation curve is read.
@@ -5459,7 +5460,7 @@ def _required_n_seed(sigma: float | None) -> int | None:
     """Required N_seed per arm to detect ``_POWER_DEFAULT_TARGET_EFFECT_SIZE`` at
     ``_POWER_DEFAULT_POWER`` given the RECORDED combined fitness-stderr ``sigma``.
 
-    Mirrors ``core.self_improving.loop.observe.statistical_power.required_samples`` (the
+    Mirrors ``geode_product.self_improving.loop.observe.statistical_power.required_samples`` (the
     stdlib-only builder cannot import core): the textbook two-sample mean-difference
     sample size ``n ≈ 2·(z_{α/2}+z_β)²·σ²/δ²`` per arm, rounded UP. Computed from the
     σ actually recorded on the E4 rows — NOT a fabricated number — so the page never
@@ -5768,7 +5769,7 @@ def _render_campaign_margin_rule(
 
     The per-cycle promote margin is NOT persisted as a single number per cycle, so
     rather than inventing one, the rule is stated verbatim (SoT
-    ``core/self_improving/train.py::_should_promote``) and the one input that IS recorded —
+    ``geode_product/self_improving/train.py::_should_promote``) and the one input that IS recorded —
     the gen-0 baseline's ``raw.fitness_stderr`` — is surfaced. The "gate decision so
     far" line is COMPUTED from the recorded gate-arm ``fitness_delta`` values
     (campaign-progress.log), NOT a hard-coded claim — so it never goes stale as the
@@ -5810,7 +5811,8 @@ def _render_campaign_margin_rule(
     return (
         '    <h3 class="section"><span>promote-gate margin rule</span></h3>\n'
         '    <p class="page-sub">The gate promotes only when the fitness gain clears '
-        "its own margin (SoT <code>core/self_improving/train.py::_should_promote</code>). The "
+        "its own margin (SoT "
+        "<code>geode_product/self_improving/train.py::_should_promote</code>). The "
         "margin is NOT persisted per-cycle, so the RULE + the recorded baseline stderr "
         "are shown rather than a fabricated number.</p>\n"
         '    <dl class="status-grid">\n'
@@ -6302,7 +6304,7 @@ def _render_evidence_results(
         blocks.append(
             '    <p class="empty"><em>No held-out campaign recorded yet — awaiting the '
             "matched 3-arm 10-cycle run. The per-arm curves render here once "
-            "<code>core/self_improving/train.py</code> writes them.</em></p>"
+            "<code>geode_product/self_improving/train.py</code> writes them.</em></p>"
         )
     else:
         for arm, label in _EVIDENCE_ARMS:
@@ -6417,7 +6419,7 @@ def _render_evidence_power(mutations: list[dict[str, Any]]) -> str:
 def _eval_archive_basename(archive: Any) -> Any:
     """Reduce an ``eval_archive`` value to its basename if it is a path string.
 
-    ``core/self_improving/train.py`` writes ``eval_archive`` as an ABSOLUTE
+    ``geode_product/self_improving/train.py`` writes ``eval_archive`` as an ABSOLUTE
     local path (``/Users/<name>/.geode/petri/logs/…_audit_<id>.eval``). Anything
     that embeds it verbatim into the published static site would leak the
     operator's home directory (no-hardcoded-user-paths rule). The
@@ -6539,7 +6541,7 @@ def _render_results_rows(
 
 
 # target_kind -> mirrored policy filename. Local copy of the SoT in
-# core/self_improving/loop/mutate/policies.py::_KIND_TO_PATH (the docs builder is
+# geode_product/self_improving/loop/mutate/policies.py::_KIND_TO_PATH (the docs builder is
 # intentionally stdlib-only, so it cannot import core). Kept in lockstep by
 # test_policy_file_map_matches_core (dual-SoT drift guard).
 _TARGET_KIND_TO_POLICY_FILE: dict[str, str] = {
@@ -6727,7 +6729,7 @@ def render_autoresearch_baseline(
             "      <h3>no baseline</h3>\n"
             '      <p class="empty-namespace">No live <code>baseline.json</code> '
             "and no <code>baseline.json.outdated-*</code> snapshot found. Run "
-            "<code>uv run python -m core.self_improving.train --promote</code>.</p>\n"
+            "<code>uv run python -m geode_product.self_improving.train --promote</code>.</p>\n"
             "    </div>"
         )
     else:

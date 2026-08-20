@@ -27,8 +27,8 @@ The single-sentence mission of this self-improving loop:
 | Karpathy original | GEODE fork | Mutation? |
 |---|---|---|
 | `prepare.py` (data + tokenizer + eval, ~300 LOC) | `autoresearch/prepare.py` (seed pool + rubric sanity check) + `plugins/petri_audit/` (audit pipeline) | NO (read-only) |
-| `train.py` (GPT model + optimizer, ~630 LOC) | `core/self_improving/train.py` (`WRAPPER_PROMPT_SECTIONS` dict + audit invoke + fitness extraction, ~300 LOC) | **YES** (agent mutates) |
-| `program.md` (human-authored instruction) | `core/self_improving/program.md` | NO (human only) |
+| `train.py` (GPT model + optimizer, ~630 LOC) | `geode_product/self_improving/train.py` (`WRAPPER_PROMPT_SECTIONS` dict + audit invoke + fitness extraction, ~300 LOC) | **YES** (agent mutates) |
+| `program.md` (human-authored instruction) | `geode_product/self_improving/program.md` | NO (human only) |
 | Loop (5-minute train run → grep metric → keep/reset) | The outer-loop agent (Claude Code / Codex) runs LOOP FOREVER per the instructions in `program.md`, ratcheting via `git commit` / `git reset --hard` | (agent-driven) |
 
 The core design patterns (Karpathy's 5 principles) are preserved:
@@ -47,13 +47,13 @@ The core design patterns (Karpathy's 5 principles) are preserved:
 ## 3. Actual directory layout
 
 PR-SELF-IMPROVING-UMBRELLA (2026-05-31) settled the code into the
-`core/self_improving/` package, and PR-STATE-SOT-RUNTIME-SPLIT (2026-06-14)
+`geode_product/self_improving/` package, and PR-STATE-SOT-RUNTIME-SPLIT (2026-06-14)
 split the data into two lifecycle homes: the git-tracked SoT lives in-repo,
 runtime scratch lives out-of-repo (`~/.geode`).
 
 ```
 geode/
-├── core/self_improving/         ← loop code (umbrella for the Karpathy 3-file pattern)
+├── geode_product/self_improving/         ← loop code (umbrella for the Karpathy 3-file pattern)
 │   ├── program.md               ← human-authored research direction (instruction)
 │   ├── prepare.py               ← seed pool + rubric sanity check (do not modify)
 │   ├── train.py                 ← mutation target (agent modifies WRAPPER_PROMPT_SECTIONS)
@@ -91,7 +91,7 @@ Confirm the current branch (`autoresearch/<tag>`) + commit.
 ### Step 2 -- apply the hypothesis (mutation)
 
 Directly hack one section of the `WRAPPER_PROMPT_SECTIONS` dict in
-`core/self_improving/train.py`: wording changes, additions, deletions, and
+`geode_product/self_improving/train.py`: wording changes, additions, deletions, and
 reordering are all fair game. The self-improving-loop agent edits the code
 directly (there is no separate `hypothesis.py` module, same as the original
 Karpathy pattern).
@@ -104,7 +104,7 @@ Karpathy pattern).
 ### Step 4 -- run the inner-loop audit
 
 ```bash
-uv run python core/self_improving/train.py > ~/.geode/self-improving/run.log 2>&1
+uv run python geode_product/self_improving/train.py > ~/.geode/self-improving/run.log 2>&1
 ```
 
 What train.py performs internally:
@@ -147,7 +147,7 @@ runner appends automatically on every non-dry-run; no manual append).
 **Reject condition**: any one of the above fails. `git reset --hard HEAD~1`.
 
 This convention is the implementation contract of
-`core/self_improving/train.py::compute_fitness`: a baseline-aware per-axis
+`geode_product/self_improving/train.py::compute_fitness`: a baseline-aware per-axis
 gate instead of a single scalar weighted sum. When two hypotheses tie on
 fitness, the simpler wrapper wins (Karpathy Simplicity Selection).
 
@@ -160,7 +160,7 @@ new baseline). Rejection tries a different hypothesis on the same baseline.
 
 ## 5. Fitness definition
 
-The 5-axis weighted aggregate of `core/self_improving/train.py::compute_fitness`:
+The 5-axis weighted aggregate of `geode_product/self_improving/train.py::compute_fitness`:
 
 ```
 fitness = (
@@ -233,7 +233,7 @@ Append-only. 9 columns.
   schema mismatches, fails closed with a `RuntimeError`.
 
 This hook is the single channel that propagates mutations of
-`core/self_improving/train.py::WRAPPER_PROMPT_SECTIONS` all the way into the
+`geode_product/self_improving/train.py::WRAPPER_PROMPT_SECTIONS` all the way into the
 actual GEODE runtime system prompt.
 
 Prompt assembly was consolidated into a single active path after the PR #1181
@@ -291,7 +291,7 @@ When added, each §10 item gets its own spec section in this architecture.md.
 
 - This architecture: `docs/architecture/autoresearch.md` (this document)
 - Fork README: `docs/self-improving/loop-overview.md`
-- Agent instruction: `core/self_improving/program.md`
+- Agent instruction: `geode_product/self_improving/program.md`
 - Karpathy reference: `~/.claude/projects/-Users-mango-workspace-geode/memory/research_karpathy_autoresearch_agenthub.md` + `~/workspace/autoresearch/` (228791f)
 - Gen 0 plan + signal: `https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-15-autoresearch-gen0-plan.md` + `https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-15-petri-insights.md`
 - Gen 0 baseline attempt (BLOCKED): `https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-16-autoresearch-gen0-baseline.md`

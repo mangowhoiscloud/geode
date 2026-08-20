@@ -16,7 +16,7 @@ all funnel through — then reads the run's archived ``.eval`` with
 :func:`core.audit.dim_extractor.extract_dim_aggregates`. This is the
 identical converter (and identical raw-Petri scale, baseline = 1.0) the
 ``broken_tool_use`` self-improving CAMPAIGN
-(``core/self_improving/train.py:run_audit``) uses, so seed-gen difficulty
+(``geode_product/self_improving/train.py:run_audit``) uses, so seed-gen difficulty
 scores and campaign fitness scores now live on ONE scale.
 
 There is no LLM in the dim_means loop. Before this PR the Pilot spawned a
@@ -257,7 +257,7 @@ class Pilot(BaseSeedAgent):
         try:
             # Serialise the inspect_ai subprocess across the host via the
             # SAME inter-process audit lane the campaign uses
-            # (``core/self_improving/train.py:run_audit``). The
+            # (``geode_product/self_improving/train.py:run_audit``). The
             # ``geode_product.petri_audit.runner.run_audit`` runner does NOT acquire
             # the lane itself, so without this each fan-out candidate would
             # spawn a concurrent ``inspect eval`` — N parallel audits burst the

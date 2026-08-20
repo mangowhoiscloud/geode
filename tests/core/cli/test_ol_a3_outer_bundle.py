@@ -22,7 +22,7 @@ import pytest
 
 
 def test_bundle_event_round_trip() -> None:
-    from core.cli.outer_bundle import BundleEvent
+    from geode_product.self_improving.outer_bundle import BundleEvent
 
     ev = BundleEvent(ts=1000.5, source="auto_trigger", detail="fired — target=x")
     d = ev.as_dict()
@@ -30,7 +30,7 @@ def test_bundle_event_round_trip() -> None:
 
 
 def test_parse_iso_or_epoch_accepts_float() -> None:
-    from core.cli.outer_bundle import _parse_iso_or_epoch
+    from geode_product.self_improving.outer_bundle import _parse_iso_or_epoch
 
     assert _parse_iso_or_epoch(1234567890.5) == 1234567890.5
     assert _parse_iso_or_epoch(1234567890) == 1234567890.0
@@ -40,7 +40,7 @@ def test_parse_iso_or_epoch_accepts_iso8601() -> None:
     # Round-trip via datetime to get expected epoch
     from datetime import datetime
 
-    from core.cli.outer_bundle import _parse_iso_or_epoch
+    from geode_product.self_improving.outer_bundle import _parse_iso_or_epoch
 
     expected = datetime.fromisoformat("2026-05-22T12:34:56").timestamp()
     assert _parse_iso_or_epoch("2026-05-22T12:34:56") == expected
@@ -49,7 +49,7 @@ def test_parse_iso_or_epoch_accepts_iso8601() -> None:
 
 
 def test_parse_iso_or_epoch_garbage_returns_none() -> None:
-    from core.cli.outer_bundle import _parse_iso_or_epoch
+    from geode_product.self_improving.outer_bundle import _parse_iso_or_epoch
 
     assert _parse_iso_or_epoch(None) is None
     assert _parse_iso_or_epoch("") is None
@@ -89,7 +89,7 @@ def test_load_bundle_events_auto_trigger_only(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Bundle reader picks up auto_trigger rows when only that source exists."""
-    from core.cli import outer_bundle as ob
+    from geode_product.self_improving import outer_bundle as ob
 
     hist = tmp_path / "auto_trigger_history.jsonl"
     rows = [
@@ -101,7 +101,7 @@ def test_load_bundle_events_auto_trigger_only(
     # auto_trigger contributes.
     monkeypatch.setattr(ob, "AUTO_TRIGGER_HISTORY_PATH", hist)
     monkeypatch.setattr(
-        "core.self_improving.loop.mutate.runner.MUTATION_AUDIT_LOG_PATH",
+        "geode_product.self_improving.loop.mutate.runner.MUTATION_AUDIT_LOG_PATH",
         tmp_path / "no_mutations.jsonl",
     )
     events = ob.load_bundle_events(limit=10)
@@ -114,7 +114,7 @@ def test_load_bundle_events_auto_trigger_only(
 
 
 def test_load_bundle_events_mutation_row(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from core.cli import outer_bundle as ob
+    from geode_product.self_improving import outer_bundle as ob
 
     mut = tmp_path / "mutations.jsonl"
     rows = [
@@ -134,7 +134,9 @@ def test_load_bundle_events_mutation_row(tmp_path: Path, monkeypatch: pytest.Mon
         },
     ]
     mut.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
-    monkeypatch.setattr("core.self_improving.loop.mutate.runner.MUTATION_AUDIT_LOG_PATH", mut)
+    monkeypatch.setattr(
+        "geode_product.self_improving.loop.mutate.runner.MUTATION_AUDIT_LOG_PATH", mut
+    )
     monkeypatch.setattr(ob, "AUTO_TRIGGER_HISTORY_PATH", tmp_path / "no_history.jsonl")
     events = ob.load_bundle_events(limit=10)
     assert len(events) == 2
@@ -147,7 +149,7 @@ def test_load_bundle_events_mutation_row(tmp_path: Path, monkeypatch: pytest.Mon
 def test_load_bundle_events_baseline_synthetic(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from core.cli import outer_bundle as ob
+    from geode_product.self_improving import outer_bundle as ob
 
     mut = tmp_path / "state" / "mutations.jsonl"
     mut.parent.mkdir(parents=True)
@@ -165,7 +167,9 @@ def test_load_bundle_events_baseline_synthetic(
         ),
         encoding="utf-8",
     )
-    monkeypatch.setattr("core.self_improving.loop.mutate.runner.MUTATION_AUDIT_LOG_PATH", mut)
+    monkeypatch.setattr(
+        "geode_product.self_improving.loop.mutate.runner.MUTATION_AUDIT_LOG_PATH", mut
+    )
     monkeypatch.setattr(ob, "AUTO_TRIGGER_HISTORY_PATH", tmp_path / "no_history.jsonl")
     events = ob.load_bundle_events(limit=10)
     assert len(events) == 1
@@ -178,7 +182,7 @@ def test_load_bundle_events_sorts_ascending(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Crosswalk must interleave the three sources by timestamp."""
-    from core.cli import outer_bundle as ob
+    from geode_product.self_improving import outer_bundle as ob
 
     hist = tmp_path / "auto_trigger_history.jsonl"
     mut = tmp_path / "state" / "mutations.jsonl"
@@ -210,7 +214,9 @@ def test_load_bundle_events_sorts_ascending(
     )
 
     monkeypatch.setattr(ob, "AUTO_TRIGGER_HISTORY_PATH", hist)
-    monkeypatch.setattr("core.self_improving.loop.mutate.runner.MUTATION_AUDIT_LOG_PATH", mut)
+    monkeypatch.setattr(
+        "geode_product.self_improving.loop.mutate.runner.MUTATION_AUDIT_LOG_PATH", mut
+    )
     events = ob.load_bundle_events(limit=10)
     assert [ev.source for ev in events] == ["baseline", "auto_trigger", "mutation"]
     assert events[0].ts == 1200.0 < events[1].ts == 1500.0 < events[2].ts == 1700.0
@@ -220,11 +226,11 @@ def test_load_bundle_events_all_missing_returns_empty(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """No files anywhere → empty list, no exception."""
-    from core.cli import outer_bundle as ob
+    from geode_product.self_improving import outer_bundle as ob
 
     monkeypatch.setattr(ob, "AUTO_TRIGGER_HISTORY_PATH", tmp_path / "no_hist.jsonl")
     monkeypatch.setattr(
-        "core.self_improving.loop.mutate.runner.MUTATION_AUDIT_LOG_PATH",
+        "geode_product.self_improving.loop.mutate.runner.MUTATION_AUDIT_LOG_PATH",
         tmp_path / "no_state" / "no_mut.jsonl",
     )
     assert ob.load_bundle_events(limit=10) == []
@@ -232,7 +238,7 @@ def test_load_bundle_events_all_missing_returns_empty(
 
 def test_outer_bundle_command_registered_on_app() -> None:
     """Typer should resolve `outer-bundle` as a registered command."""
-    from core.cli import app
+    from geode_product.cli import app
 
     cmd_names = {c.name for c in app.registered_commands}
     assert "outer-bundle" in cmd_names
@@ -243,11 +249,11 @@ def test_outer_bundle_command_callable_with_no_data(
 ) -> None:
     """Calling the command directly with no input files should
     print the empty-state message without raising."""
-    from core.cli import outer_bundle as ob
+    from geode_product.self_improving import outer_bundle as ob
 
     monkeypatch.setattr(ob, "AUTO_TRIGGER_HISTORY_PATH", tmp_path / "no_hist.jsonl")
     monkeypatch.setattr(
-        "core.self_improving.loop.mutate.runner.MUTATION_AUDIT_LOG_PATH",
+        "geode_product.self_improving.loop.mutate.runner.MUTATION_AUDIT_LOG_PATH",
         tmp_path / "no_state" / "no_mut.jsonl",
     )
     # Call the function directly (bypass Typer arg parsing).
@@ -263,7 +269,7 @@ def test_outer_bundle_command_json_output(
     across multiple lines per object, which breaks downstream jq /
     line-based readers. Pin the JSONL contract here.
     """
-    from core.cli import outer_bundle as ob
+    from geode_product.self_improving import outer_bundle as ob
 
     hist = tmp_path / "auto_trigger_history.jsonl"
     rows = [
@@ -273,7 +279,7 @@ def test_outer_bundle_command_json_output(
     hist.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
     monkeypatch.setattr(ob, "AUTO_TRIGGER_HISTORY_PATH", hist)
     monkeypatch.setattr(
-        "core.self_improving.loop.mutate.runner.MUTATION_AUDIT_LOG_PATH",
+        "geode_product.self_improving.loop.mutate.runner.MUTATION_AUDIT_LOG_PATH",
         tmp_path / "no_mut.jsonl",
     )
     ob.outer_bundle_command(limit=10, json_output=True)
@@ -291,7 +297,7 @@ def test_baseline_uses_file_mtime_when_no_timestamp_field(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Codex MCP catch (PR-OL-A3 fix-up): the real `baseline.json` writer
-    (`core/self_improving/train.py:_persist_baseline`) does NOT emit ``timestamp``
+    (`geode_product/self_improving/train.py:_persist_baseline`) does NOT emit ``timestamp``
     or ``fitness`` fields — only ``dim_means`` / ``dim_stderr`` /
     optional axis-specific means. The viewer must fall back to file
     mtime + synthesise the detail from dim count.
@@ -299,7 +305,7 @@ def test_baseline_uses_file_mtime_when_no_timestamp_field(
     import os
     import time
 
-    from core.cli import outer_bundle as ob
+    from geode_product.self_improving import outer_bundle as ob
 
     mut = tmp_path / "state" / "mutations.jsonl"
     mut.parent.mkdir(parents=True)
@@ -320,7 +326,9 @@ def test_baseline_uses_file_mtime_when_no_timestamp_field(
     # Stamp a known mtime so the test is deterministic.
     fixed_mtime = time.time() - 3600  # 1 hour ago
     os.utime(baseline, (fixed_mtime, fixed_mtime))
-    monkeypatch.setattr("core.self_improving.loop.mutate.runner.MUTATION_AUDIT_LOG_PATH", mut)
+    monkeypatch.setattr(
+        "geode_product.self_improving.loop.mutate.runner.MUTATION_AUDIT_LOG_PATH", mut
+    )
     monkeypatch.setattr(ob, "AUTO_TRIGGER_HISTORY_PATH", tmp_path / "no_history.jsonl")
     events = ob.load_bundle_events(limit=10)
     assert len(events) == 1

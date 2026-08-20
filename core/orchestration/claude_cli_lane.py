@@ -8,7 +8,7 @@ Why a separate lane (not just ``global``)
 =========================================
 
 Both the self-improving-loop mutator runner
-(:func:`core.self_improving.loop.mutate.cli_subprocess.invoke_claude_cli`) and
+(:func:`geode_product.self_improving.loop.mutate.cli_subprocess.invoke_claude_cli`) and
 the Petri inspect_ai bridge
 (:class:`geode_product.petri_audit.claude_cli_provider.ClaudeCliAPI`) spawn
 ``claude --print`` subprocesses for their inference path. Those

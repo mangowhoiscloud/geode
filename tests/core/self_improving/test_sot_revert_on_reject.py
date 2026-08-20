@@ -5,7 +5,7 @@ attribution/wiring sprint Phase A audit:
 
 * ``SelfImprovingLoopRunner.apply_proposal`` (runner.py:1865) writes the
   mutated section to the canonical SoT BEFORE the audit subprocess runs.
-* ``core.self_improving.train.main`` (train.py:2453) used to call
+* ``geode_product.self_improving.train.main`` (train.py:2453) used to call
   ``_write_baseline`` only when ``_should_promote`` returned ``True`` —
   the ``False`` branch had no else clause, so the SoT remained mutated
   even though the baseline was unchanged.
@@ -58,7 +58,7 @@ def _write_apply_row(
 
 def test_revert_returns_false_when_mutation_id_missing(tmp_path: Path) -> None:
     """Empty mutations.jsonl → (False, 'not found') without raising."""
-    from core.self_improving.gate import _revert_sot_after_reject
+    from geode_product.self_improving.gate import _revert_sot_after_reject
 
     empty_log = tmp_path / "mutations.jsonl"
     empty_log.touch()
@@ -71,7 +71,7 @@ def test_revert_returns_false_when_mutation_id_missing(tmp_path: Path) -> None:
 
 def test_revert_returns_false_when_log_file_absent(tmp_path: Path) -> None:
     """Missing mutations.jsonl is graceful (iter_mutations yields empty)."""
-    from core.self_improving.gate import _revert_sot_after_reject
+    from geode_product.self_improving.gate import _revert_sot_after_reject
 
     nonexistent_log = tmp_path / "does-not-exist.jsonl"
 
@@ -83,8 +83,8 @@ def test_revert_returns_false_when_log_file_absent(tmp_path: Path) -> None:
 
 def test_revert_restores_prompt_kind_via_wrapper_sections(tmp_path: Path) -> None:
     """``prompt`` kind dispatches through wrapper-sections SoT helpers."""
-    from core.self_improving import train as train_module
-    from core.self_improving.gate import _revert_sot_after_reject
+    from geode_product.self_improving import train as train_module
+    from geode_product.self_improving.gate import _revert_sot_after_reject
 
     log_path = tmp_path / "mutations.jsonl"
     _write_apply_row(
@@ -123,7 +123,7 @@ def test_revert_restores_prompt_kind_via_wrapper_sections(tmp_path: Path) -> Non
 def test_revert_restores_policy_kind_via_policies_helpers(tmp_path: Path) -> None:
     """Non-prompt kinds dispatch through ``policies.load_policy`` /
     ``policies.write_policy``."""
-    from core.self_improving.gate import _revert_sot_after_reject
+    from geode_product.self_improving.gate import _revert_sot_after_reject
 
     log_path = tmp_path / "mutations.jsonl"
     _write_apply_row(
@@ -151,8 +151,8 @@ def test_revert_restores_policy_kind_via_policies_helpers(tmp_path: Path) -> Non
         return tmp_path / f"{kind}.json"
 
     with (
-        patch("core.self_improving.loop.mutate.policies.load_policy", fake_load),
-        patch("core.self_improving.loop.mutate.policies.write_policy", fake_write),
+        patch("geode_product.self_improving.loop.mutate.policies.load_policy", fake_load),
+        patch("geode_product.self_improving.loop.mutate.policies.write_policy", fake_write),
     ):
         ok, detail = _revert_sot_after_reject("mut-tool-policy-1", audit_log_path=log_path)
 
@@ -168,8 +168,8 @@ def test_revert_picks_latest_apply_row_on_duplicate_mutation_id(tmp_path: Path) 
     mutation_id (rare; mutator should mint fresh IDs), revert restores
     the LATEST previous_value so the newest mutation is the one
     unwound."""
-    from core.self_improving import train as train_module
-    from core.self_improving.gate import _revert_sot_after_reject
+    from geode_product.self_improving import train as train_module
+    from geode_product.self_improving.gate import _revert_sot_after_reject
 
     log_path = tmp_path / "mutations.jsonl"
     _write_apply_row(
@@ -211,8 +211,8 @@ def test_revert_picks_latest_apply_row_on_duplicate_mutation_id(tmp_path: Path) 
 def test_revert_returns_false_when_writer_raises(tmp_path: Path) -> None:
     """Writer OSError must not bubble — caller surfaces the leak status
     in the audit's promoted_line, never crashes the audit."""
-    from core.self_improving import train as train_module
-    from core.self_improving.gate import _revert_sot_after_reject
+    from geode_product.self_improving import train as train_module
+    from geode_product.self_improving.gate import _revert_sot_after_reject
 
     log_path = tmp_path / "mutations.jsonl"
     _write_apply_row(
@@ -247,7 +247,7 @@ def test_only_kind_applied_is_considered_not_applied_sibling(tmp_path: Path) -> 
     non-best siblings were never committed to the canonical SoT. The
     current (1+1)-ES reader filters on ``kind="applied"`` only, so this
     pins that a stray legacy row is ignored rather than reverted."""
-    from core.self_improving.gate import _revert_sot_after_reject
+    from geode_product.self_improving.gate import _revert_sot_after_reject
 
     log_path = tmp_path / "mutations.jsonl"
     # Write a sibling-only row first (must be ignored)
@@ -277,8 +277,8 @@ def test_revert_deletes_section_when_previous_value_empty(tmp_path: Path) -> Non
     the mutation (runner.py:978, :991). Revert must DELETE the
     inserted key, not write back an empty string, or the rejected
     insertion leaves a residual empty-string section in the SoT."""
-    from core.self_improving import train as train_module
-    from core.self_improving.gate import _revert_sot_after_reject
+    from geode_product.self_improving import train as train_module
+    from geode_product.self_improving.gate import _revert_sot_after_reject
 
     log_path = tmp_path / "mutations.jsonl"
     _write_apply_row(
@@ -317,7 +317,7 @@ def test_revert_deletes_section_when_previous_value_empty(tmp_path: Path) -> Non
 def test_revert_deletes_inserted_policy_kind_section(tmp_path: Path) -> None:
     """Same insertion semantics for non-prompt kinds — ``write_policy``
     must receive a sections dict without the inserted key."""
-    from core.self_improving.gate import _revert_sot_after_reject
+    from geode_product.self_improving.gate import _revert_sot_after_reject
 
     log_path = tmp_path / "mutations.jsonl"
     _write_apply_row(
@@ -346,8 +346,8 @@ def test_revert_deletes_inserted_policy_kind_section(tmp_path: Path) -> None:
         return tmp_path / f"{kind}.json"
 
     with (
-        patch("core.self_improving.loop.mutate.policies.load_policy", fake_load),
-        patch("core.self_improving.loop.mutate.policies.write_policy", fake_write),
+        patch("geode_product.self_improving.loop.mutate.policies.load_policy", fake_load),
+        patch("geode_product.self_improving.loop.mutate.policies.write_policy", fake_write),
     ):
         ok, _ = _revert_sot_after_reject("mut-insert-policy", audit_log_path=log_path)
 

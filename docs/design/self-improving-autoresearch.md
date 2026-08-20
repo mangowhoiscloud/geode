@@ -85,7 +85,7 @@ Sort: newest first. Highlight current baseline row with `.active` styling.
 
 | Scenario | Treatment |
 |---|---|
-| `baseline.json` missing | Status block reads "no baseline yet — run <code>uv run python core/self_improving/train.py --promote</code>" |
+| `baseline.json` missing | Status block reads "no baseline yet — run <code>uv run python geode_product/self_improving/train.py --promote</code>" |
 | `baseline_archive.jsonl` 0 rows | timeline section empty table |
 | All artifacts missing | landing reads "autoresearch publisher not yet wired — see <code>plugins/autoresearch/bundle_sync.py</code>" |
 

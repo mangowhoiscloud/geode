@@ -1,12 +1,12 @@
 """PR-AR-L6 (2026-05-26) — attribution writer standalone graceful invariants.
 
-Pre-PR-AR-L6 the ``core/self_improving/train.py`` W2 attribution block gated
+Pre-PR-AR-L6 the ``geode_product/self_improving/train.py`` W2 attribution block gated
 on three envs being set:
 
     if not args.dry_run and _sil_mutation_id and _sil_audit_run_id:
         write_attribution(...)
 
-Operator standalone runs (``uv run python -m core.self_improving.train``,
+Operator standalone runs (``uv run python -m geode_product.self_improving.train``,
 ``--promote``) had none of those envs, so the attribution row was
 silently skipped — downstream consumers (operator analytics; a
 future source-aware attribution variant) had no ledger visibility
@@ -32,12 +32,12 @@ import re
 from pathlib import Path
 
 import pytest
-from core.self_improving.loop.observe.attribution import (
+from geode_product.seed_generation.baseline_reader import BaselineSnapshot
+from geode_product.self_improving.loop.observe.attribution import (
     AttributionRecord,
     compute_attribution,
     write_attribution,
 )
-from geode_product.seed_generation.baseline_reader import BaselineSnapshot
 
 
 def test_attribution_record_has_source_field() -> None:

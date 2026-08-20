@@ -3,7 +3,7 @@
 The 2026-05-26 autoresearch attribution sprint Phase A audit (§5
 mutation surface verification) found an asymmetry between the
 canonical ``TARGET_KINDS`` (6 active mutation slots) and
-``core.self_improving.train.run_audit``'s env override block (13 STRICT-mode
+``geode_product.self_improving.train.run_audit``'s env override block (13 STRICT-mode
 env vars for the 6 active + 1 deprecated + 7 reader-only).
 
 The asymmetry is **intentional** (ADR-013 phased rollout) but
@@ -21,7 +21,7 @@ This file pins:
    fast at ``parse_mutation`` with a clear ValueError. This is the
    operator-visible signal that the surface isn't yet writable.
 3. The reader-only set matches the 7 surfaces with env wiring in
-   ``core/self_improving/train.py:840-903`` (the audit-side override block).
+   ``geode_product/self_improving/train.py:840-903`` (the audit-side override block).
    A future PR that adds an env var without graduating the kind to
    ``TARGET_KINDS`` or adding to ``_READER_ONLY_KINDS`` will fail
    this test, forcing explicit triage.
@@ -38,7 +38,7 @@ def test_target_kinds_and_reader_only_are_disjoint() -> None:
     """A kind can be EITHER mutator-dispatchable (in TARGET_KINDS) OR
     reader-only (in _READER_ONLY_KINDS), never both. Catches a future
     PR that accidentally double-lists a kind during a graduation."""
-    from core.self_improving.loop.mutate.policies import _READER_ONLY_KINDS, TARGET_KINDS
+    from geode_product.self_improving.loop.mutate.policies import _READER_ONLY_KINDS, TARGET_KINDS
 
     overlap = set(TARGET_KINDS) & _READER_ONLY_KINDS
     assert not overlap, (
@@ -54,8 +54,8 @@ def test_reader_only_kind_emit_fails_fast_at_parse_mutation() -> None:
     target_kind raises ValueError at ``parse_mutation``, not silently
     succeeds. Iterates every entry in ``_READER_ONLY_KINDS`` so adding
     a new entry automatically gains test coverage."""
-    from core.self_improving.loop.mutate.policies import _READER_ONLY_KINDS
-    from core.self_improving.loop.mutate.runner import parse_mutation
+    from geode_product.self_improving.loop.mutate.policies import _READER_ONLY_KINDS
+    from geode_product.self_improving.loop.mutate.runner import parse_mutation
 
     for kind in _READER_ONLY_KINDS:
         payload = json.dumps(
@@ -73,7 +73,7 @@ def test_reader_only_kind_emit_fails_fast_at_parse_mutation() -> None:
 def test_reader_only_kinds_match_env_override_block() -> None:
     """Static-source pin: every kind in ``_READER_ONLY_KINDS`` must have
     a corresponding ``GEODE_<KIND>_OVERRIDE`` env var set in
-    ``core/self_improving/train.py:run_audit``'s override block (the audit-
+    ``geode_product/self_improving/train.py:run_audit``'s override block (the audit-
     side STRICT-mode wiring). Catches the future PR that adds env
     wiring for a new SoT without listing it in ``_READER_ONLY_KINDS``.
 
@@ -84,8 +84,8 @@ def test_reader_only_kinds_match_env_override_block() -> None:
     """
     import inspect
 
-    from core.self_improving import measure as train_mod
-    from core.self_improving.loop.mutate.policies import _READER_ONLY_KINDS
+    from geode_product.self_improving import measure as train_mod
+    from geode_product.self_improving.loop.mutate.policies import _READER_ONLY_KINDS
 
     src = inspect.getsource(train_mod)
     # Each kind in _READER_ONLY_KINDS must have its env var present.
@@ -95,7 +95,7 @@ def test_reader_only_kinds_match_env_override_block() -> None:
         env_var = f"GEODE_{kind.upper()}_OVERRIDE"
         assert env_var in src, (
             f"_READER_ONLY_KINDS contains {kind!r} but "
-            f"core/self_improving/train.py has no {env_var} env wiring. "
+            f"geode_product/self_improving/train.py has no {env_var} env wiring. "
             "Either remove the kind from _READER_ONLY_KINDS (it's not "
             "actually reader-deployed) or add the STRICT-mode env in "
             "run_audit's override block."
@@ -109,7 +109,7 @@ def test_reader_only_set_size_matches_audit_finding() -> None:
     If a future PR graduates another the size should drop; if a new
     surface lands the size should grow. Either way the explicit count
     makes the change impossible to miss in code review."""
-    from core.self_improving.loop.mutate.policies import _READER_ONLY_KINDS
+    from geode_product.self_improving.loop.mutate.policies import _READER_ONLY_KINDS
 
     assert len(_READER_ONLY_KINDS) == 6, (
         f"_READER_ONLY_KINDS has {len(_READER_ONLY_KINDS)} entries; the "

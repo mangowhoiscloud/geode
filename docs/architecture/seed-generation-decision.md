@@ -101,6 +101,6 @@ The parent `AgenticLoop` is the central orchestrator. Within the `depth=1` limit
 - AlphaEval 5-axis (parity dropped, see ADR-002) -- arXiv:2508.13174
 - GEODE SubAgentManager -- `core/agent/sub_agent.py:1-114`
 - Petri inner-loop -- `plugins/petri_audit/` (P1-A~G manifest pattern)
-- Outer-loop SOT -- `core/self_improving/program.md`
+- Outer-loop SOT -- `geode_product/self_improving/program.md`
 - Petri × autoresearch closed-loop -- `[[project_autoresearch_self_improving_loop]]`
 - Plan A revised cumulative meeting notes -- the preceding 4 reports (Plan A vs B, infrastructure assessment, UI/UX integration, folder layout)

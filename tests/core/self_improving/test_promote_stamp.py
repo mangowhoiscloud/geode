@@ -32,7 +32,7 @@ import json
 from pathlib import Path
 
 import pytest
-from core.self_improving import ledger
+from geode_product.self_improving import ledger
 
 
 def _common_kwargs() -> dict[str, object]:

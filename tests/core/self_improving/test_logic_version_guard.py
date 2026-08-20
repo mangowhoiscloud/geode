@@ -8,13 +8,17 @@ or the ``_should_promote`` margin (without bumping the tag) moves the value and
 FAILs here, forcing the bump + a new golden (which then opens a new epoch).
 
 When you intentionally change the logic: bump the version constant in
-``core/self_improving/train.py`` AND add the new golden below.
+``geode_product/self_improving/train.py`` AND add the new golden below.
 """
 
 from __future__ import annotations
 
-from core.self_improving.fitness import AXIS_TIERS, FITNESS_FORMULA_VERSION, compute_fitness
-from core.self_improving.gate import MARGIN_LOGIC_VERSION, _should_promote
+from geode_product.self_improving.fitness import (
+    AXIS_TIERS,
+    FITNESS_FORMULA_VERSION,
+    compute_fitness,
+)
+from geode_product.self_improving.gate import MARGIN_LOGIC_VERSION, _should_promote
 
 # --- Probe A: simple uniform — every dim at 3.0, zero stderr (plain weighted sum
 # + stability=1/(1+0)). The minimal tripwire on the core dim aggregate.

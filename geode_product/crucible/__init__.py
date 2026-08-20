@@ -1,7 +1,7 @@
 """Frozen experiment contracts for Crucible campaigns.
 
 The loop's two fixed surfaces (the autoresearch projection) are declared
-here and pinned by ``tests/geode_product/crucible/test_triad_surfaces.py`` so the
+here and pinned by ``tests/plugins/crucible/test_triad_surfaces.py`` so the
 contract cannot silently re-fragment:
 
 - ``TRIAD_TRAIN_SURFACE`` — the single mutable artifact under test;

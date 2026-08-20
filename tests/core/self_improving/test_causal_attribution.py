@@ -3,7 +3,7 @@
 Pins the extended ``Mutation`` schema (mutation_id / expected_dim /
 rollback_condition), the ``parse_mutation`` graceful-fallback
 behaviour, and the attribution math + audit-log append in
-``core/self_improving/loop/observe/attribution.py``.
+``geode_product/self_improving/loop/observe/attribution.py``.
 """
 
 from __future__ import annotations
@@ -13,9 +13,10 @@ import math
 from pathlib import Path
 
 import pytest
-from core.self_improving.loop.mutate.runner import Mutation, parse_mutation
-from core.self_improving.loop.observe import attribution
-from core.self_improving.loop.observe.attribution import (
+from geode_product.seed_generation.baseline_reader import BaselineSnapshot
+from geode_product.self_improving.loop.mutate.runner import Mutation, parse_mutation
+from geode_product.self_improving.loop.observe import attribution
+from geode_product.self_improving.loop.observe.attribution import (
     _attribution_score,
     _ci95,
     _dim_delta,
@@ -23,7 +24,6 @@ from core.self_improving.loop.observe.attribution import (
     compute_attribution,
     write_attribution,
 )
-from geode_product.seed_generation.baseline_reader import BaselineSnapshot
 
 # ---------------------------------------------------------------------------
 # Mutation schema extension

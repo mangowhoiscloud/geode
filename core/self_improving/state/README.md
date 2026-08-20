@@ -3,7 +3,7 @@
 This directory is the **git-tracked Source of Truth** for the self-improving
 (autoresearch) loop: the versioned INPUTS + ledgers a reviewer must see and the
 loop reads across runs. It is data-in-package, colocated with its code
-(`core/self_improving/`), exactly like `core/llm/model_pricing.toml`.
+(`geode_product/self_improving/`), exactly like `core/llm/model_pricing.toml`.
 
 The companion **RUNTIME scratch** (per-run execution traces, the LATEST baseline,
 handoff pointers, logs) lives OUT of the repo under `~/.geode/self-improving/`

@@ -132,7 +132,7 @@ def test_mutated_scaffold_reaches_target_prompt_via_sot_fallback(
     env-less SoT-file fallback still injects the scaffold. Pins that the
     standalone ``geode audit`` path is NOT scaffold-free when the in-repo SoT
     exists."""
-    import core.self_improving.policy_sources as product_sources
+    import geode_product.self_improving.policy_sources as product_sources
 
     sot = _write_marked_scaffold(tmp_path)
     monkeypatch.delenv("GEODE_WRAPPER_OVERRIDE", raising=False)

@@ -134,7 +134,7 @@ export default function Page() {
                 <strong>명시적 자기개선 계층</strong>. 다섯 번째 계층이 일곱
                 behaviour kinds의 스캐폴드를 변이하고, Petri 22-dim 감사와
                 margin 게이트로 선택하며, 계보를 git champion chain으로
-                보존합니다(<code>core/self_improving/</code>). 가중치나
+                보존합니다(<code>geode_product/self_improving/</code>). 가중치나
                 파라미터 갱신은 없습니다. 메커니즘은 선택입니다.
               </li>
               <li>
@@ -414,7 +414,7 @@ export default function Page() {
                 <strong>An explicit self-improving layer</strong>. The fifth
                 layer mutates a scaffold of seven behaviour kinds, selects via
                 Petri 22-dim audits and a margin gate, and preserves lineage as
-                a git champion chain (<code>core/self_improving/</code>). No
+                a git champion chain (<code>geode_product/self_improving/</code>). No
                 weight or parameter updates anywhere; the mechanism is
                 selection.
               </li>

@@ -9,8 +9,8 @@ explicitly enables tracing.
 
 PR-CLEANUP-7 (2026-05-23): the per-self-improving-loop-run lifecycle
 writer (``SessionJournal`` re-exported from here, since renamed to
-:class:`~core.self_improving.loop.observe.run_timeline.RunTimeline`)
-moved into :mod:`core.self_improving.loop.observe.run_timeline`; this
+:class:`~geode_product.self_improving.loop.observe.run_timeline.RunTimeline`)
+moved into :mod:`geode_product.self_improving.loop.observe.run_timeline`; this
 package retains only its neutral run-event contracts and compaction helper;
 the product still owns the writer, path, and active binding.
 

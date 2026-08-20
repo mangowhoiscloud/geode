@@ -11,7 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-SI = REPO_ROOT / "core" / "self_improving"
+SI = REPO_ROOT / "geode_product" / "self_improving"
 
 
 def test_train_py_stays_slim() -> None:
@@ -24,7 +24,7 @@ def test_train_py_stays_slim() -> None:
 
 
 def test_gear_modules_exist_with_key_surfaces() -> None:
-    from core.self_improving import fitness, gate, ledger, measure
+    from geode_product.self_improving import fitness, gate, ledger, measure
 
     assert hasattr(fitness, "compute_fitness") and hasattr(fitness, "DIM_WEIGHTS")
     assert hasattr(measure, "run_audit") and hasattr(measure, "_build_audit_env")
@@ -33,7 +33,7 @@ def test_gear_modules_exist_with_key_surfaces() -> None:
 
 
 def test_train_keeps_mutation_surface() -> None:
-    from core.self_improving import train
+    from geode_product.self_improving import train
 
     assert hasattr(train, "WRAPPER_PROMPT_SECTIONS")
     assert hasattr(train, "load_wrapper_prompt_sections")

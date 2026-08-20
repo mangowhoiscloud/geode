@@ -40,7 +40,13 @@ def test_product_show_help_uses_the_same_slash_registry() -> None:
 
     result = build_tool_handlers()["show_help"]()
 
-    assert set(result["commands"]) >= {"/audit", "/audit-seeds", "/petri"}
+    assert set(result["commands"]) >= {
+        "/audit",
+        "/audit-seeds",
+        "/petri",
+        "/recall",
+        "/self-improving",
+    }
 
 
 def test_product_slash_commands_do_not_mutate_kernel_registry() -> None:
@@ -48,8 +54,26 @@ def test_product_slash_commands_do_not_mutate_kernel_registry() -> None:
     from geode_product.cli import PRODUCT_COMMAND_SPECS
 
     product_registry = compose_command_registry(PRODUCT_COMMAND_SPECS)
-    assert "/audit" not in COMMAND_REGISTRY
-    assert product_registry.keys() >= {"/audit", "/audit-seeds", "/petri"}
+    assert {"/audit", "/recall", "/self-improving"}.isdisjoint(COMMAND_REGISTRY)
+    assert product_registry.keys() >= {
+        "/audit",
+        "/audit-seeds",
+        "/petri",
+        "/recall",
+        "/self-improving",
+    }
+
+
+def test_product_owns_self_improving_typer_commands() -> None:
+    import typer
+    from core.cli import app as kernel_app
+    from geode_product.cli import app as product_app
+
+    kernel_commands = typer.main.get_command(kernel_app).commands
+    product_commands = typer.main.get_command(product_app).commands
+
+    assert {"campaign", "outer-bundle"}.isdisjoint(kernel_commands)
+    assert {"campaign", "outer-bundle"} <= product_commands.keys()
 
 
 def test_daemon_composition_supplies_product_workers_tools_and_prompts(monkeypatch) -> None:
@@ -58,7 +82,9 @@ def test_daemon_composition_supplies_product_workers_tools_and_prompts(monkeypat
     from geode_product.tool_handlers import build_tool_handlers
 
     build_core = Mock(return_value="services")
+    policy_sources = object()
     monkeypatch.setattr(services, "build_shared_services", build_core)
+    monkeypatch.setattr(wiring, "build_policy_sources", Mock(return_value=policy_sources))
 
     assert wiring.build_shared_services(marker=True) == "services"
     assert build_core.call_args.kwargs == {
@@ -66,23 +92,38 @@ def test_daemon_composition_supplies_product_workers_tools_and_prompts(monkeypat
         "tool_handler_builder": build_tool_handlers,
         "worker_module": "geode_product.worker",
         "agent_search_dirs": (Path(wiring.__file__).parent / "seed_generation" / "agents",),
+        "policy_sources": policy_sources,
+        "middleware_builder": wiring.build_middleware_registry,
+        "activity_sink_provider": wiring.current_activity_sink,
+        "feature_hook_registrar": wiring.register_hooks,
     }
 
 
 def test_worker_module_supplies_the_product_handler_builder(monkeypatch) -> None:
     from core.agent import worker
     from geode_product.tool_handlers import build_tool_handlers
+    from geode_product.wiring import (
+        bind_worker_activity,
+        build_middleware_registry,
+        current_activity_sink,
+    )
 
     main = Mock()
     monkeypatch.setattr(worker, "main", main)
 
     runpy.run_module("geode_product.worker", run_name="__main__")
 
-    main.assert_called_once_with(build_tool_handlers)
+    main.assert_called_once_with(
+        build_tool_handlers,
+        middleware_builder=build_middleware_registry,
+        activity_sink_provider=current_activity_sink,
+        worker_activity_binder=bind_worker_activity,
+    )
 
 
 def test_mcp_entrypoint_supplies_the_product_handler_builder(monkeypatch) -> None:
     from geode_product import mcp_server
+    from geode_product.self_improving.mcp import register_mcp_tools
     from geode_product.tool_handlers import build_tool_handlers
 
     run_mcp_server = Mock()
@@ -90,4 +131,8 @@ def test_mcp_entrypoint_supplies_the_product_handler_builder(monkeypatch) -> Non
 
     mcp_server.main()
 
-    run_mcp_server.assert_called_once_with(build_tool_handlers)
+    run_mcp_server.assert_called_once_with(
+        build_tool_handlers,
+        agent_runner=mcp_server.run_agent,
+        feature_registrar=register_mcp_tools,
+    )

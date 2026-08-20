@@ -91,19 +91,6 @@ COMMAND_REGISTRY: dict[str, CommandSpec] = {
         handler_path="core.cli.commands:cmd_model",
         needs_tty=True,
     ),
-    "/self-improving": CommandSpec(
-        name="/self-improving",
-        aliases=("/sil",),
-        location=RunLocation.THIN,
-        description="Self-improving loop status (PR-OPS-1 — run/history/rollback deferred)",
-        handler_path="core.cli.commands.self_improving:cmd_self_improving",
-    ),
-    "/recall": CommandSpec(
-        name="/recall",
-        location=RunLocation.THIN,
-        description="Memory-recall pool — list/show/save persistent memory entries",
-        handler_path="core.cli.commands.recall:cmd_recall",
-    ),
     "/cognitive": CommandSpec(
         name="/cognitive",
         location=RunLocation.THIN,

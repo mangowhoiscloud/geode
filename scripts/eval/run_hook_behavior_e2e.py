@@ -293,13 +293,13 @@ async def _run(
     from core.observability.event_store import HookEventStore
     from core.observability.hook_persistence import HookPersistenceSink
     from core.orchestration.isolated_execution import IsolatedRunner
-    from core.self_improving.loop.observe.run_timeline import (
+    from core.tools.registry import ToolRegistry
+    from geode_product.self_improving.loop.observe.run_timeline import (
         RunTimeline,
         run_timeline_scope,
     )
-    from core.self_improving.policy_sources import build_policy_source_bundle
-    from core.tools.registry import ToolRegistry
-    from core.wiring.bootstrap import current_product_activity_sink
+    from geode_product.self_improving.policy_sources import build_policy_source_bundle
+    from geode_product.wiring import current_activity_sink
 
     policy_sources = build_policy_source_bundle()
     behavior_matrix = await _run_action_matrix(policy_sources)
@@ -328,7 +328,7 @@ async def _run(
             store,
             session_key=session_key,
             run_id=run_id,
-            activity_sink_provider=current_product_activity_sink,
+            activity_sink_provider=current_activity_sink,
         ),
         name="hook_behavior_e2e",
     )
@@ -606,7 +606,7 @@ async def _run(
         quiet=True,
         disable_settings_drift=True,
         session_id=f"{run_id}-live",
-        activity_sink_provider=current_product_activity_sink,
+        activity_sink_provider=current_activity_sink,
         policy_sources=policy_sources,
     )
 
@@ -667,7 +667,7 @@ async def _run(
             },
             timeout_s=30,
             hook_registry=public_hooks,
-            activity_sink_provider=current_product_activity_sink,
+            activity_sink_provider=current_activity_sink,
             policy_sources=policy_sources,
         )
         subagent_results = await subagents.adelegate(

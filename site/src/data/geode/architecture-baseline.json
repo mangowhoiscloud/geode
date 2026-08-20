@@ -16,10 +16,10 @@
     "max_branches": 51,
     "max_complexity": 52,
     "max_returns": 18,
-    "max_statements": 212
+    "max_statements": 209
   },
   "context_vars": {
-    "count": 30,
+    "count": 29,
     "items": [
       {
         "context_name": "geode_active_cognitive_state",
@@ -190,13 +190,6 @@
         "symbol": "_runtime_audit_active"
       },
       {
-        "context_name": "self_improving_loop_run_timeline",
-        "has_default": true,
-        "line": 32,
-        "path": "core/self_improving/loop/observe/run_timeline.py",
-        "symbol": "_current_run_timeline"
-      },
-      {
         "context_name": "default_session_store",
         "has_default": true,
         "line": 31,
@@ -241,7 +234,7 @@
       "path": "core/agent/loop/agent_loop.py"
     },
     "RuntimeCoreConfig": {
-      "field_count": 19,
+      "field_count": 21,
       "path": "core/runtime.py"
     },
     "SubAgentManager": {
@@ -339,8 +332,7 @@
         "ignored_edges": [
           "core.agent.approval -> core.cli",
           "core.agent.loop.agent_loop -> core.cli.commands",
-          "core.agent.worker -> core.cli.tool_handlers",
-          "core.self_improving.measure -> core.cli.quota_banner"
+          "core.agent.worker -> core.cli.tool_handlers"
         ],
         "name": "Agent stays pure (no CLI/server)"
       },
@@ -349,7 +341,6 @@
           "core.agent.approval -> core.cli",
           "core.agent.loop.agent_loop -> core.cli.commands",
           "core.agent.worker -> core.cli.tool_handlers",
-          "core.self_improving.measure -> core.cli.quota_banner",
           "core.server.ipc_server.poller -> core.cli",
           "core.server.ipc_server.poller -> core.cli.session_state",
           "core.server.supervised.services -> core.cli.bootstrap",
@@ -370,27 +361,52 @@
         "name": "Classified kernel does not import the bundled self-improving product"
       }
     ],
-    "ignored_edge_count": 24
+    "ignored_edge_count": 22
   },
   "packages": {
     "core": {
-      "python_files": 438,
-      "python_loc": 140694
+      "python_files": 398,
+      "python_loc": 120928
     },
     "geode_product": {
-      "python_files": 115,
-      "python_loc": 41744
+      "python_files": 160,
+      "python_loc": 61687
     },
     "plugins": {
       "python_files": 32,
       "python_loc": 213
     },
     "tests": {
-      "python_files": 685,
-      "python_loc": 182756
+      "python_files": 686,
+      "python_loc": 182994
     }
   },
-  "schema_version": 2,
+  "schema_version": 3,
+  "self_improving_facades": {
+    "count": 5,
+    "items": [
+      {
+        "path": "core/self_improving/__init__.py",
+        "target": "geode_product.self_improving"
+      },
+      {
+        "path": "core/self_improving/campaign.py",
+        "target": "geode_product.self_improving.campaign"
+      },
+      {
+        "path": "core/self_improving/prepare.py",
+        "target": "geode_product.self_improving.prepare"
+      },
+      {
+        "path": "core/self_improving/train.py",
+        "target": "geode_product.self_improving.train"
+      },
+      {
+        "path": "core/self_improving/watch_campaign.py",
+        "target": "geode_product.self_improving.watch_campaign"
+      }
+    ]
+  },
   "tools": {
     "deferred_loading": {
       "always_loaded_count": 16,

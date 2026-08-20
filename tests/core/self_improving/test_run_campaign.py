@@ -1,6 +1,6 @@
-"""Unit tests for the self-improving campaign driver (``core/self_improving/campaign.py``).
+"""Unit tests for the self-improving campaign driver.
 
-PR-CAMPAIGN-DRIVER (2026-05-31); relocated under the ``core.self_improving``
+PR-CAMPAIGN-DRIVER (2026-05-31); relocated under the ``geode_product.self_improving``
 umbrella by PR-SELF-IMPROVING-UMBRELLA (2026-05-31). NO live audits — every
 boundary is mocked:
 the mutator ``propose()``, the ``train.py`` subprocess, ``read_eval_log``, and
@@ -27,16 +27,16 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-import core.self_improving.campaign as rc
+import geode_product.self_improving.campaign as rc
 import pytest
-from core.self_improving.loop.mutate.mutator_feedback import (
+from geode_product.self_improving.loop.mutate.mutator_feedback import (
     RepetitionFinding,
     RepetitiveMutationError,
 )
-from core.self_improving.loop.mutate.runner import Mutation, Proposal
+from geode_product.self_improving.loop.mutate.runner import Mutation, Proposal
 
 # tests/core/self_improving/test_run_campaign.py → parents[3] = repo root (where ``core/`` is importable
-# so ``python -m core.self_improving.campaign`` / ``…train`` resolve their package).
+# so ``python -m geode_product.self_improving.campaign`` / ``…train`` resolve their package).
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
 # ---------------------------------------------------------------------------
@@ -1157,27 +1157,25 @@ def test_read_latest_attribution_none_when_absent(campaign_state: dict[str, Path
 # ---------------------------------------------------------------------------
 
 
-def test_campaign_dry_run_via_real_subprocess_completes() -> None:
-    """``python -m core.self_improving.campaign --dry-run`` runs end-to-end green.
+def test_campaign_dry_run_via_real_subprocess_completes(tmp_path: Path) -> None:
+    """``python -m geode_product.self_improving.campaign --dry-run`` runs end-to-end green.
 
     PR-SELF-IMPROVING-UMBRELLA (2026-05-31) relocated the campaign driver +
-    audit runner under ``core.self_improving``. This test exercises the REAL
-    moved import wiring + the ``-m core.self_improving.train`` spawn path the
+    audit runner under ``geode_product.self_improving``. This test exercises the REAL
+    moved import wiring + the ``-m geode_product.self_improving.train`` spawn path the
     way the operator runs it — NOT the mocked-subprocess smoke
     (``test_dry_run_end_to_end_smoke``). It is the "logic didn't break" gate:
     a future move that orphans an import or breaks the
-    ``campaign → -m core.self_improving.train`` spawn fails here, in the normal
+    ``campaign → -m geode_product.self_improving.train`` spawn fails here, in the normal
     ``not live`` suite, with NO network / PAYG spend (``--dry-run`` synthesises
-    every audit). The campaign writes only to the repo's real
-    ``state/autoresearch`` log files in append mode, which is the same
-    behaviour as the operator dry-run; it never promotes (dry-run skips the
-    baseline rewrite + git commit).
+    every audit). Runtime state and logs are redirected to the test directory;
+    dry-run never promotes or commits.
     """
     proc = subprocess.run(  # noqa: S603 — argv is constant, no shell
         [
             sys.executable,
             "-m",
-            "core.self_improving.campaign",
+            "geode_product.self_improving.campaign",
             "--dry-run",
             "--n",
             "1",
@@ -1185,6 +1183,11 @@ def test_campaign_dry_run_via_real_subprocess_completes() -> None:
             "never,random,gate",
         ],
         cwd=str(_REPO_ROOT),
+        env={
+            **os.environ,
+            "GEODE_HOME": str(tmp_path / "home"),
+            "GEODE_STATE_ROOT": str(tmp_path / "state"),
+        },
         capture_output=True,
         text=True,
         check=False,
@@ -1192,7 +1195,7 @@ def test_campaign_dry_run_via_real_subprocess_completes() -> None:
     )
     assert proc.returncode == 0, (
         f"campaign dry-run exited {proc.returncode} — the moved import wiring or "
-        f"the '-m core.self_improving.train' spawn regressed.\n"
+        f"the '-m geode_product.self_improving.train' spawn regressed.\n"
         f"stdout tail:\n{proc.stdout[-2000:]}\n"
         f"stderr tail:\n{proc.stderr[-2000:]}"
     )

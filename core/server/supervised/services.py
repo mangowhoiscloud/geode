@@ -24,6 +24,8 @@ from core.agent.safety import COMPUTER_USE_TOOLS, HEADLESS_DENIED_TOOLS
 if TYPE_CHECKING:
     from core.agent.loop import AgenticLoop
     from core.agent.tool_executor import ToolExecutor
+    from core.config.policy_source import PolicySourceBundle
+    from core.observability.run_event import RunEventSinkProvider
 
 log = logging.getLogger(__name__)
 
@@ -116,7 +118,8 @@ class SharedServices:
     hook_system: Any = None  # HookSystem — never None after init
     hook_registry: Any = None  # process-owned public HookRegistry
     middleware_registry: Any = None  # process-owned trusted MiddlewareRegistry
-    policy_sources: Any = None  # immutable product policy candidates
+    policy_sources: PolicySourceBundle | None = None
+    activity_sink_provider: RunEventSinkProvider | None = None
     _owns_hook_system: bool = False
     lane_queue: Any = None  # Unified LaneQueue — single concurrency gate
     tool_handlers: dict[str, Any] = field(default_factory=dict)
@@ -140,21 +143,16 @@ class SharedServices:
 
     def __post_init__(self) -> None:
         """Ensure directly-constructed services still own one registry pair."""
-        from core.hooks import HookRegistry
-        from core.wiring.bootstrap import build_product_policy_sources
+        from core.config.policy_source import EMPTY_POLICY_SOURCES
+        from core.hooks import HookRegistry, MiddlewareRegistry
 
         if self.policy_sources is None:
-            self.policy_sources = build_product_policy_sources()
+            self.policy_sources = EMPTY_POLICY_SOURCES
 
         if self.hook_registry is None:
             self.hook_registry = HookRegistry(events=self.hook_system)
         if self.middleware_registry is None:
-            from core.wiring.bootstrap import build_middleware_registry
-
-            self.middleware_registry = build_middleware_registry(
-                events=self.hook_system,
-                policy_sources=self.policy_sources,
-            )
+            self.middleware_registry = MiddlewareRegistry(events=self.hook_system)
 
     def close(self) -> None:
         """Release resources created by :func:`build_shared_services`."""
@@ -268,8 +266,6 @@ class SharedServices:
         # honor Hermes-style boundary read end-to-end (sub-agents already
         # do via ``sub_agent.py:533``'s direct ``settings.agentic_effort``
         # read).
-        from core.wiring.bootstrap import current_product_activity_sink
-
         loop = AgenticLoop(
             conversation,
             executor,
@@ -289,7 +285,7 @@ class SharedServices:
             # stable derived id so a thread's turns share ONE checkpoint
             # chain; empty keeps the loop's fresh ``s-<uuid>``.
             session_id=session_id,
-            activity_sink_provider=current_product_activity_sink,
+            activity_sink_provider=self.activity_sink_provider,
             policy_sources=self.policy_sources,
         )
         # Set per-thread ContextVar so tool handlers see the correct loop
@@ -313,7 +309,6 @@ class SharedServices:
         from core.agent.sub_agent import SubAgentManager
         from core.config import settings
         from core.orchestration.isolated_execution import IsolatedRunner
-        from core.wiring.bootstrap import current_product_activity_sink
 
         global_lane = self.lane_queue.get_lane("global") if self.lane_queue else None
         agent_registry = self._build_agent_registry()
@@ -330,7 +325,7 @@ class SharedServices:
             hook_registry=self.hook_registry,
             max_depth=settings.max_subagent_depth,
             max_total_subagents=settings.max_total_subagents,
-            activity_sink_provider=current_product_activity_sink,
+            activity_sink_provider=self.activity_sink_provider,
             policy_sources=self.policy_sources,
         )
 
@@ -422,6 +417,10 @@ def build_shared_services(
     hook_system: Any = None,
     hook_registry: Any = None,
     middleware_registry: Any = None,
+    middleware_builder: Callable[..., Any] | None = None,
+    policy_sources: PolicySourceBundle | None = None,
+    activity_sink_provider: RunEventSinkProvider | None = None,
+    feature_hook_registrar: Callable[[Any], None] | None = None,
     lane_queue: Any = None,
     verbose: bool = False,
     tool_handler_builder: Callable[..., dict[str, Any]] | None = None,
@@ -443,22 +442,30 @@ def build_shared_services(
             session_key=f"geode-{uuid.uuid4().hex[:8]}",
             run_id=uuid.uuid4().hex[:12],
             log_dir=None,
+            activity_sink_provider=activity_sink_provider,
+            feature_hook_registrar=feature_hook_registrar,
         )
+    elif feature_hook_registrar is not None:
+        feature_hook_registrar(hook_system)
 
     from core.hooks import HookRegistry
 
     if hook_registry is None:
         hook_registry = HookRegistry(events=hook_system)
-    from core.wiring.bootstrap import build_product_policy_sources
+    from core.config.policy_source import EMPTY_POLICY_SOURCES
 
-    policy_sources = build_product_policy_sources()
+    if policy_sources is None:
+        policy_sources = EMPTY_POLICY_SOURCES
     if middleware_registry is None:
-        from core.wiring.bootstrap import build_middleware_registry
+        if middleware_builder is None:
+            from core.hooks import MiddlewareRegistry
 
-        middleware_registry = build_middleware_registry(
-            events=hook_system,
-            policy_sources=policy_sources,
-        )
+            middleware_registry = MiddlewareRegistry(events=hook_system)
+        else:
+            middleware_registry = middleware_builder(
+                events=hook_system,
+                policy_sources=policy_sources,
+            )
 
     # P0: Tool result offloading
     from core.wiring.bootstrap import build_tool_offload
@@ -501,6 +508,7 @@ def build_shared_services(
         hook_registry=hook_registry,
         middleware_registry=middleware_registry,
         policy_sources=policy_sources,
+        activity_sink_provider=activity_sink_provider,
         _owns_hook_system=owns_hook_system,
         lane_queue=lane_queue,
         tool_handlers=tool_handlers,

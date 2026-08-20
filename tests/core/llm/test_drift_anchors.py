@@ -48,12 +48,12 @@ class TestProviderNormalizationAnchor:
         assert normalize_registry_provider("glm") == "glm"
 
     def test_no_literal_copies_at_former_sites(self) -> None:
-        """The four former copy sites must call the anchor, not re-declare
+        """The four former copy sites must call the anchor, not redeclare
         the dict. Source-scan guard (same style as TestCacheContract)."""
         import core.agent.loop._model_switching as model_switching
         import core.agent.loop._reflection as reflection
         from core.agent.loop.agent_loop import AgenticLoop
-        from core.self_improving.loop.mutate import runner
+        from geode_product.self_improving.loop.mutate import runner
 
         for src in (
             inspect.getsource(AgenticLoop.__init__),

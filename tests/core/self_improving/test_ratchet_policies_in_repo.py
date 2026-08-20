@@ -117,7 +117,7 @@ def test_migration_copies_legacy_when_new_missing(
 ) -> None:
     """When the in-repo path is missing AND the legacy file exists,
     the migration copies legacy → new."""
-    from core.self_improving.loop.mutate import policies as policies_mod
+    from geode_product.self_improving.loop.mutate import policies as policies_mod
 
     legacy_dir = tmp_path / "legacy"
     legacy_dir.mkdir()
@@ -138,7 +138,7 @@ def test_migration_no_op_when_new_exists(monkeypatch: pytest.MonkeyPatch, tmp_pa
     """Idempotency — once the in-repo path is populated, subsequent
     migration calls leave it untouched (even if legacy has different
     content)."""
-    from core.self_improving.loop.mutate import policies as policies_mod
+    from geode_product.self_improving.loop.mutate import policies as policies_mod
 
     legacy_dir = tmp_path / "legacy"
     legacy_dir.mkdir()
@@ -161,7 +161,7 @@ def test_migration_no_op_when_legacy_missing(
 ) -> None:
     """Fresh-install path — no legacy file means no migration; the
     caller falls through to the empty-state branch."""
-    from core.self_improving.loop.mutate import policies as policies_mod
+    from geode_product.self_improving.loop.mutate import policies as policies_mod
 
     legacy_dir = tmp_path / "legacy"
     legacy_dir.mkdir()
@@ -177,7 +177,7 @@ def test_migration_handles_unknown_kind(monkeypatch: pytest.MonkeyPatch, tmp_pat
     """Unknown kinds (not in ``_LEGACY_FILE_NAMES``) must no-op
     silently rather than raise — defensive for future kinds added
     after RATCHET-1."""
-    from core.self_improving.loop.mutate import policies as policies_mod
+    from geode_product.self_improving.loop.mutate import policies as policies_mod
 
     new_path = tmp_path / "future_kind.json"
     policies_mod._maybe_migrate_legacy_sot("unknown_kind", new_path)
@@ -191,7 +191,7 @@ def test_migration_swallows_unicode_decode_error(
     content used to raise ``UnicodeDecodeError`` past the ``OSError``
     catch. The widened ``except Exception`` must swallow it so the
     caller falls through to the empty-state branch."""
-    from core.self_improving.loop.mutate import policies as policies_mod
+    from geode_product.self_improving.loop.mutate import policies as policies_mod
 
     legacy_dir = tmp_path / "legacy"
     legacy_dir.mkdir()
@@ -221,7 +221,7 @@ def test_migration_swallows_unicode_decode_error(
 def test_legacy_filename_map_matches_target_kinds(kind: str, expected_filename: str) -> None:
     """The migration's ``_LEGACY_FILE_NAMES`` map must include every
     public target_kind so no migration path goes silently dark."""
-    from core.self_improving.loop.mutate import policies as policies_mod
+    from geode_product.self_improving.loop.mutate import policies as policies_mod
 
     assert kind in policies_mod._LEGACY_FILE_NAMES
     assert policies_mod._LEGACY_FILE_NAMES[kind] == expected_filename
@@ -236,7 +236,7 @@ def test_load_policy_triggers_migration(monkeypatch: pytest.MonkeyPatch, tmp_pat
     """``load_policy`` must invoke ``_maybe_migrate_legacy_sot``
     BEFORE attempting to read, so a freshly-upgraded operator gets
     their last mutation state visible on the first call."""
-    from core.self_improving.loop.mutate import policies as policies_mod
+    from geode_product.self_improving.loop.mutate import policies as policies_mod
 
     legacy_dir = tmp_path / "legacy"
     legacy_dir.mkdir()
@@ -254,7 +254,7 @@ def test_load_policy_triggers_migration(monkeypatch: pytest.MonkeyPatch, tmp_pat
 
 
 def test_train_module_fallback_path_points_in_repo() -> None:
-    """Codex MCP catch (PR-RATCHET-1): ``core/self_improving/train.py`` has a
+    """Codex MCP catch (PR-RATCHET-1): ``geode_product/self_improving/train.py`` has a
     fallback path used when ``core.paths`` cannot be imported. Pre-fix
     the fallback hardcoded ``~/.geode/self-improving-loop/...`` (pre-fix) —
     silently re-introducing the out-of-repo location. Pin that the
@@ -262,7 +262,7 @@ def test_train_module_fallback_path_points_in_repo() -> None:
     degraded import does not bypass the git-as-optimiser invariant."""
     import inspect
 
-    import core.self_improving.train as auto_train
+    import geode_product.self_improving.train as auto_train
 
     src = inspect.getsource(auto_train)
     # The fallback must NOT contain the legacy operator-home literal.
@@ -276,7 +276,7 @@ def test_write_policy_triggers_migration_before_write(
 ) -> None:
     """Write path must run migration too — otherwise a write that
     happens BEFORE the first read would clobber the legacy state."""
-    from core.self_improving.loop.mutate import policies as policies_mod
+    from geode_product.self_improving.loop.mutate import policies as policies_mod
 
     legacy_dir = tmp_path / "legacy"
     legacy_dir.mkdir()

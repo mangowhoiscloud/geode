@@ -4,7 +4,7 @@ GEODE's self-improving loop scores every audit transcript with an LLM
 judge (``plugins/petri_audit`` → inspect_petri's ``audit_judge``, the
 22-dim rubric in ``judge_dims/geode_judge_subset.yaml``). The judge's
 per-dim scores drive the fitness aggregate in
-``core/self_improving/`` — but nothing outside that loop tells us
+``geode_product/self_improving/`` — but nothing outside that loop tells us
 whether the judge's numbers track a human's. A judge validated only by
 another judge is a closed loop.
 

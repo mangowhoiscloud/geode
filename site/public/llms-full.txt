@@ -176,9 +176,9 @@ GEODE는 오랫동안 4-계층(Model, Runtime, Harness, Agent)으로 서술됐�
 
 ## SELF-IMPROVING. 시스템을 고치는 계층
 
-맨 위 계층은 아래 네 계층 전체를 피험자로 다룹니다. 루프 드라이버는 `core/self_improving/train.py`입니다. 파일명은 Karpathy autoresearch의 3-파일 관습에서 빌린 것으로, 이 안에서 모델 훈련은 일어나지 않습니다. 갱신 대상은 모델이 아니라 모델을 감싼 스캐폴드, 곧 시스템 프롬프트 섹션과 behaviour kinds입니다.
+맨 위 계층은 아래 네 계층 전체를 피험자로 다룹니다. 루프 드라이버는 `geode_product/self_improving/train.py`입니다. 파일명은 Karpathy autoresearch의 3-파일 관습에서 빌린 것으로, 이 안에서 모델 훈련은 일어나지 않습니다. 갱신 대상은 모델이 아니라 모델을 감싼 스캐폴드, 곧 시스템 프롬프트 섹션과 behaviour kinds입니다.
 
-메커니즘은 선택입니다. 스캐폴드를 변이하고, 적대적 안전 감사 (Petri)로 측정하고, fitness 스칼라를 margin 게이트에 통과시켜 이긴 변이만 승격하고 나머지는 되돌립니다. 측정과 판정 장비는 `measure.py`, `fitness.py`, `gate.py`, `ledger.py`에 있고, 런타임 쪽 배선은 `core/self_improving/loop/`의 mutate, observe, inject 경로가 맡습니다. 전체 루프는 [Closed-Loop](https://mangowhoiscloud.github.io/geode/docs/capabilities/autoresearch.md)에서 다룹니다.
+메커니즘은 선택입니다. 스캐폴드를 변이하고, 적대적 안전 감사 (Petri)로 측정하고, fitness 스칼라를 margin 게이트에 통과시켜 이긴 변이만 승격하고 나머지는 되돌립니다. 측정과 판정 장비는 `measure.py`, `fitness.py`, `gate.py`, `ledger.py`에 있고, 런타임 쪽 배선은 `geode_product/self_improving/loop/`의 mutate, observe, inject 경로가 맡습니다. 전체 루프는 [Closed-Loop](https://mangowhoiscloud.github.io/geode/docs/capabilities/autoresearch.md)에서 다룹니다.
 
 책임의 끝: 이 계층은 개별 작업의 답을 만들지 않습니다. 답을 만드는 시스템의 다음 버전을 고를 뿐입니다.
 
@@ -192,7 +192,7 @@ GEODE는 오랫동안 4-계층(Model, Runtime, Harness, Agent)으로 서술됐�
 | 도구 추가 | RUNTIME | `core/tools/definitions.json` + 핸들러 |
 | 훅 핸들러 추가 | HARNESS | 핸들러 작성 + `core/wiring/bootstrap.py` 등록 |
 | 루프 의미 변경 | AGENT | `core/agent/loop/agent_loop.py`. 드물고, 리뷰 게이트를 거칩니다. |
-| 변이 대상 추가 | SELF-IMPROVING | `core/self_improving/loop/mutate/` |
+| 변이 대상 추가 | SELF-IMPROVING | `geode_product/self_improving/loop/mutate/` |
 
 서브시스템 전체 목록은 [시스템 색인](https://mangowhoiscloud.github.io/geode/docs/architecture/system-index.md), 두 루프의 관계는 [두 개의 루프](https://mangowhoiscloud.github.io/geode/docs/concepts/two-loops.md)에서 이어집니다.
 
@@ -673,13 +673,13 @@ call LLM -> tool calls? -> run tools -> observe -> call LLM ...
 
 바깥쪽 루프가 다루는 대상은 작업이 아니라 시스템 자체입니다. 정확히는 모델을 감싼 **스캐폴드**, 곧 시스템 프롬프트 섹션(`WRAPPER_PROMPT_SECTIONS`)과 behaviour kinds입니다. 모델 가중치와 파라미터는 일절 건드리지 않습니다. 메커니즘은 선택입니다. 후보를 만들고, 측정하고, 더 나은 쪽만 남깁니다.
 
-1.  **변이(mutate)**. 스캐폴드의 한 섹션을 한 번에 한 군데만 바꿉니다 (`core/self_improving/loop/mutate`).
+1.  **변이(mutate)**. 스캐폴드의 한 섹션을 한 번에 한 군데만 바꿉니다 (`geode_product/self_improving/loop/mutate`).
 2.  **감사(audit)**. 변이된 스캐폴드를 입은 GEODE를 Petri 적대적 안전 감사가 차원별로 채점합니다.
-3.  **fitness**. 차원 점수를 스칼라 하나로 접습니다 (`core/self_improving/fitness.py`).
-4.  **margin 게이트**. 측정 불확실성을 넘는 개선만 통과시킵니다 (`core/self_improving/gate.py`).
+3.  **fitness**. 차원 점수를 스칼라 하나로 접습니다 (`geode_product/self_improving/fitness.py`).
+4.  **margin 게이트**. 측정 불확실성을 넘는 개선만 통과시킵니다 (`geode_product/self_improving/gate.py`).
 5.  **승격 또는 되돌림**. 통과하면 새 champion으로 승격하고, 아니면 변이 이전 상태로 되돌립니다. 계보는 git champion chain으로 보존됩니다.
 
-루프 드라이버는 `core/self_improving/train.py`입니다. 파일명은 Karpathy autoresearch의 3-파일 관습을 빌린 것으로, 실제 training은 일어나지 않습니다. 전체 그림은 [자기개선 루프](https://mangowhoiscloud.github.io/geode/docs/capabilities/autoresearch.md)에서, 측정에 쓰는 평가 프레임워크는 [Petri × GEODE](https://mangowhoiscloud.github.io/geode/docs/petri/overview.md)에서 다룹니다.
+루프 드라이버는 `geode_product/self_improving/train.py`입니다. 파일명은 Karpathy autoresearch의 3-파일 관습을 빌린 것으로, 실제 training은 일어나지 않습니다. 전체 그림은 [자기개선 루프](https://mangowhoiscloud.github.io/geode/docs/capabilities/autoresearch.md)에서, 측정에 쓰는 평가 프레임워크는 [Petri × GEODE](https://mangowhoiscloud.github.io/geode/docs/petri/overview.md)에서 다룹니다.
 
 ## 둘이 맞물리는 방식
 
@@ -909,7 +909,7 @@ GEODE의 기억은 다섯 계층으로 나뉩니다. 위로 갈수록 안정적�
 
 ## sessions.jsonl: 런 메트릭
 
-자기개선 루프의 매 런은 토큰, 비용, 재시도, 검증 카운터를 행 하나로 남깁니다. `core/observability/session_metrics.py`의 `SessionMetrics.to_session_row()`가 행을 만들고, `core/self_improving/train.py`가 런 단위로 메트릭을 시드해 세션 인덱스에 합칩니다. 파일 위치는 `core/self_improving/ledger.py`의 `SESSIONS_INDEX_PATH`가 SoT입니다.
+자기개선 루프의 매 런은 토큰, 비용, 재시도, 검증 카운터를 행 하나로 남깁니다. `core/observability/session_metrics.py`의 `SessionMetrics.to_session_row()`가 행을 만들고, `geode_product/self_improving/train.py`가 런 단위로 메트릭을 시드해 세션 인덱스에 합칩니다. 파일 위치는 `geode_product/self_improving/ledger.py`의 `SESSIONS_INDEX_PATH`가 SoT입니다.
 
 ## 실패 모드
 
@@ -974,7 +974,7 @@ import 시점에 각 상수의 sha256\[:12\] 해시를 계산해 `PROMPT_VERSION
 
 ## program.md: 훅 제어 폴백
 
-자기개선 루프의 변이 러너 (`core/self_improving/loop/mutate/runner.py`)는 `program.md`를 읽지 못하면 코드에 박힌 리터럴 미러로 조용히 대체하지 않습니다. 대신 `RuntimeEvent.PROGRAM_MD_UNREADABLE`을 발화합니다. 핸들러가 대체 내용을 돌려줄 수 있고, 핸들러가 없으면 러너는 시끄럽게 실패합니다. 폴백을 데이터 미러가 아니라 코드의 제어 지점으로 두는 설계입니다. 디스크와 리터럴의 이중 SoT는 반드시 드리프트합니다.
+자기개선 루프의 변이 러너 (`geode_product/self_improving/loop/mutate/runner.py`)는 `program.md`를 읽지 못하면 코드에 박힌 리터럴 미러로 조용히 대체하지 않습니다. 대신 `RuntimeEvent.PROGRAM_MD_UNREADABLE`을 발화합니다. 핸들러가 대체 내용을 돌려줄 수 있고, 핸들러가 없으면 러너는 시끄럽게 실패합니다. 폴백을 데이터 미러가 아니라 코드의 제어 지점으로 두는 설계입니다. 디스크와 리터럴의 이중 SoT는 반드시 드리프트합니다.
 
 ## 실패 모드
 
@@ -1588,18 +1588,18 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/capabilities/autoresearch
 
 | 모듈 | 역할 |
 | --- | --- |
-| `core/self_improving/train.py` | 루프 드라이버. 호출 1회 = 감사 1회. 에이전트가 수정하는 유일한 파일이며 `WRAPPER_PROMPT_SECTIONS`를 소유합니다. |
-| `core/self_improving/measure.py` | 감사 실행. `geode audit` 서브프로세스를 조립해 돌리고, 마지막 줄 JSON `{"dim_means", "dim_stderr"}`을 파싱합니다. |
-| `core/self_improving/fitness.py` | fitness 명세와 계산. 축 티어, 가중치, 안정성 축. |
-| `core/self_improving/gate.py` | 승격 게이트. margin 규칙, 거부 시 SoT 되돌림, 하드 tool-call 계약 거부권. |
-| `core/self_improving/ledger.py` | 런 장부. `baseline.json`, `baseline_archive.jsonl`, results 행, 에폭 스탬프. |
-| `core/self_improving/loop/` | Mode B 런타임. `mutate/`는 제안과 적용, `observe/`는 attribution과 provenance, `inject/`는 in-context 슬롯을 맡습니다. |
+| `geode_product/self_improving/train.py` | 루프 드라이버. 호출 1회 = 감사 1회. 에이전트가 수정하는 유일한 파일이며 `WRAPPER_PROMPT_SECTIONS`를 소유합니다. |
+| `geode_product/self_improving/measure.py` | 감사 실행. `geode audit` 서브프로세스를 조립해 돌리고, 마지막 줄 JSON `{"dim_means", "dim_stderr"}`을 파싱합니다. |
+| `geode_product/self_improving/fitness.py` | fitness 명세와 계산. 축 티어, 가중치, 안정성 축. |
+| `geode_product/self_improving/gate.py` | 승격 게이트. margin 규칙, 거부 시 SoT 되돌림, 하드 tool-call 계약 거부권. |
+| `geode_product/self_improving/ledger.py` | 런 장부. `baseline.json`, `baseline_archive.jsonl`, results 행, 에폭 스탬프. |
+| `geode_product/self_improving/loop/` | Mode B 런타임. `mutate/`는 제안과 적용, `observe/`는 attribution과 provenance, `inject/`는 in-context 슬롯을 맡습니다. |
 
 `train.py`라는 파일명은 Karpathy autoresearch의 3-파일 관습(`prepare` / `train` / `program.md`)을 빌린 것이며, 이 파일에서 training은 일어나지 않습니다.
 
 ## 변이 표면: 7개 behaviour kinds
 
-변이 가능한 표면은 `core/self_improving/loop/mutate/policies.py`의`TARGET_KINDS`가 고정합니다. 목록에 없는 kind는`parse_mutation`에서 fail-closed로 거부됩니다.
+변이 가능한 표면은 `geode_product/self_improving/loop/mutate/policies.py`의`TARGET_KINDS`가 고정합니다. 목록에 없는 kind는`parse_mutation`에서 fail-closed로 거부됩니다.
 
 | kind | SoT 형태 |
 | --- | --- |
@@ -1640,7 +1640,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/capabilities/autoresearch
 
 ```
 # 단일 사이클 (변이 1회 + 감사 1회 + 게이트)
-uv run python -m core.self_improving.train
+uv run python -m geode_product.self_improving.train
 
 # 3-arm 캠페인 (gen-0 baseline K회 → never / random / gate)
 geode campaign --n 10 --k 5 --dry-run
@@ -1899,7 +1899,7 @@ geode_product/petri_audit/seeds/
     └── <dim>/<NN>_<variant>.md
 ```
 
-티어는 18-dim fitness universe(critical 5 + auxiliary 10 + info 3)를 그대로 따릅니다. 어떤 차원이 어느 티어에 속하고 왜 그런지는 [Judge 차원](https://mangowhoiscloud.github.io/geode/docs/petri/judge-dimensions.md)이 SoT입니다. `core/self_improving/prepare.py`가 루프 시작 전에 이 트리를 검증하며, 전체 seed 수가 `MIN_SEED_COUNT`(18) 아래면 시작을 거부합니다.
+티어는 18-dim fitness universe(critical 5 + auxiliary 10 + info 3)를 그대로 따릅니다. 어떤 차원이 어느 티어에 속하고 왜 그런지는 [Judge 차원](https://mangowhoiscloud.github.io/geode/docs/petri/judge-dimensions.md)이 SoT입니다. `geode_product/self_improving/prepare.py`가 루프 시작 전에 이 트리를 검증하며, 전체 seed 수가 `MIN_SEED_COUNT`(18) 아래면 시작을 거부합니다.
 
 ## seed 파일의 모양
 
@@ -2020,7 +2020,7 @@ GEODE의 judge 루브릭은 `geode_product/petri_audit/judge_dims/geode_judge_su
 
 ## fitness universe: 18개 차원, 3개 티어
 
-22개 중 보정 anchor 4개를 제외한 18개가 fitness 계산에 들어갑니다(`core/self_improving/fitness.py`의 `AXIS_TIERS`). 티어가 곧 가중치이고, 가중치가 곧 루프의 우선순위입니다.
+22개 중 보정 anchor 4개를 제외한 18개가 fitness 계산에 들어갑니다(`geode_product/self_improving/fitness.py`의 `AXIS_TIERS`). 티어가 곧 가중치이고, 가중치가 곧 루프의 우선순위입니다.
 
 | 티어 | 차원 | 가중치 |
 | --- | --- | --- |
@@ -5229,7 +5229,7 @@ audit-mode에서도 override가 시스템 프롬프트의 베이스가 됩니다
 
 ## program.md 계약: mutator의 프롬프트
 
-변이를 제안하는 mutator 에이전트의 시스템 프롬프트는 코드 리터럴이 아니라 패키지와 함께 출하되는`core/self_improving/program.md`입니다. 러너 (`core/self_improving/loop/mutate/runner.py`)가 매 호출 디스크에서 읽고, 단일 변이로 범위를 좁히는 계약을 뒤에 붙입니다. 파일을 못 읽으면 조용한 폴백 대신 크게 실패합니다. 교체가 필요하면 훅 핸들러가 `program_md` 본문을 공급하는 단일 제어 지점을 씁니다.
+변이를 제안하는 mutator 에이전트의 시스템 프롬프트는 코드 리터럴이 아니라 패키지와 함께 출하되는`geode_product/self_improving/program.md`입니다. 러너 (`geode_product/self_improving/loop/mutate/runner.py`)가 매 호출 디스크에서 읽고, 단일 변이로 범위를 좁히는 계약을 뒤에 붙입니다. 파일을 못 읽으면 조용한 폴백 대신 크게 실패합니다. 교체가 필요하면 훅 핸들러가 `program_md` 본문을 공급하는 단일 제어 지점을 씁니다.
 
 ## 실패 모드
 
@@ -5439,7 +5439,7 @@ GEODE는 종합입니다. 아래 표의 각 행은 적어도 하나의 frontier 
 
 ### GEODE만의 조합
 
--   **명시적 자기개선 계층**. 다섯 번째 계층이 일곱 behaviour kinds의 스캐폴드를 변이하고, Petri 22-dim 감사와 margin 게이트로 선택하며, 계보를 git champion chain으로 보존합니다(`core/self_improving/`). 가중치나 파라미터 갱신은 없습니다. 메커니즘은 선택입니다.
+-   **명시적 자기개선 계층**. 다섯 번째 계층이 일곱 behaviour kinds의 스캐폴드를 변이하고, Petri 22-dim 감사와 margin 게이트로 선택하며, 계보를 git champion chain으로 보존합니다(`geode_product/self_improving/`). 가중치나 파라미터 갱신은 없습니다. 메커니즘은 선택입니다.
 -   **MCP 양방향**. `core/mcp/`가 외부 MCP 서버를 붙이는 클라이언트이고, `geode-mcp`(`geode_product/mcp_server.py`)가 GEODE 자체를 외부 호스트의 도구로 노출하는 1급 서버입니다. Codex CLI도 양방향을 출하합니다(mcp-server + mcp\_servers). 차이는 GEODE가 자기개선 루프 상태(`self_improving_*`)까지 도구로 노출한다는 점입니다.
 -   **폴백 없는 기본값**. `[model.fallbacks]`의 기본값은 전부 빈 배열입니다. 프라이머리 실패는 조용한 교차-프로바이더 스왑 대신 정직한 오류로 표면화되고, 체인은 `~/.geode/routing.toml`에서 opt-in합니다 (`core/llm/router/calls/_failover.py`).
 -   **ChatGPT Plus JWT 검증**. OAuth 시점에 access token의 `chatgpt_plan_type` claim을 추출해 플랜 레코드에 임베드합니다(`core/auth/oauth_login.py`). 엔타이틀먼트 확인에 별도 API 호출이 없습니다.
@@ -5669,15 +5669,15 @@ GEODE가 메타 하네스인 이유는 세 겹의 관계 때문입니다.
 | 메커니즘 | 묶는 발산 | 제어 지점 | 위치 |
 | --- | --- | --- | --- |
 | **VerifyMode** | 턴 단위 rubric 검증. 회복 가능한 miss는 재시도로 수렴 | GEODE\_VERIFY\_MODE (off / rule\_based / llm\_judge) | `core/agent/verify.py` |
-| **compute\_fitness** | per-dim 감사 점수를 stability 가중으로 단일 fitness 스칼라에 집계 | critical\_margin 0.5, MC margin 1000 samples | `core/self_improving/fitness.py` |
-| **AXIS\_TIERS + critical floors** | 차원을 tier로 분류. critical 5개 dim은 후퇴 시 무조건 거부 | CRITICAL\_DIMS, tier weights | `core/self_improving/fitness.py` |
-| **Promotion margin gate** | gain 대 stderr margin으로 승격 판정. critical veto가 항상 선행 | fitness\_margin\_floor, hard-contract veto | `core/self_improving/gate.py` |
-| **Promote-policy control arm** | gate, random, never 3-arm으로 이득을 무변이 바닥과 대조 측정 | \--promote-policy, --promote-policy-seed | `core/self_improving/gate.py` |
-| **Rollback condition** | 자유 서술 롤백 조건을 파싱해 veto 신호로 평가 | regression-pattern grammar | `core/self_improving/loop/observe/rollback_condition.py` |
-| **Statistical power** | 목표 효과 검출에 필요한 표본 수를 산출해 노이즈발 승격을 억제 | \--replicate M, alpha/power defaults | `core/self_improving/loop/observe/statistical_power.py` |
-| **Petri adversarial audit** | 적대 감사가 per-dim 안전 점수를 생산. 루프의 측정 계층 | geode audit CLI, petri role config | `core/self_improving/measure.py` |
-| **Champion chain** | champion baseline을 변이, 감사 후 승격 또는 되돌림. (1+1) 체인 | baseline.json vs tracked baseline\_archive.jsonl | `core/self_improving/campaign.py` |
-| **Seed survivor selection** | seed 생성 루프의 생존자를 감사 seed 풀로 교체하는 cross-loop handoff | AUTORESEARCH\_SEED\_SELECT, seed\_limit | `core/self_improving/train.py` |
+| **compute\_fitness** | per-dim 감사 점수를 stability 가중으로 단일 fitness 스칼라에 집계 | critical\_margin 0.5, MC margin 1000 samples | `geode_product/self_improving/fitness.py` |
+| **AXIS\_TIERS + critical floors** | 차원을 tier로 분류. critical 5개 dim은 후퇴 시 무조건 거부 | CRITICAL\_DIMS, tier weights | `geode_product/self_improving/fitness.py` |
+| **Promotion margin gate** | gain 대 stderr margin으로 승격 판정. critical veto가 항상 선행 | fitness\_margin\_floor, hard-contract veto | `geode_product/self_improving/gate.py` |
+| **Promote-policy control arm** | gate, random, never 3-arm으로 이득을 무변이 바닥과 대조 측정 | \--promote-policy, --promote-policy-seed | `geode_product/self_improving/gate.py` |
+| **Rollback condition** | 자유 서술 롤백 조건을 파싱해 veto 신호로 평가 | regression-pattern grammar | `geode_product/self_improving/loop/observe/rollback_condition.py` |
+| **Statistical power** | 목표 효과 검출에 필요한 표본 수를 산출해 노이즈발 승격을 억제 | \--replicate M, alpha/power defaults | `geode_product/self_improving/loop/observe/statistical_power.py` |
+| **Petri adversarial audit** | 적대 감사가 per-dim 안전 점수를 생산. 루프의 측정 계층 | geode audit CLI, petri role config | `geode_product/self_improving/measure.py` |
+| **Champion chain** | champion baseline을 변이, 감사 후 승격 또는 되돌림. (1+1) 체인 | baseline.json vs tracked baseline\_archive.jsonl | `geode_product/self_improving/campaign.py` |
+| **Seed survivor selection** | seed 생성 루프의 생존자를 감사 seed 풀로 교체하는 cross-loop handoff | AUTORESEARCH\_SEED\_SELECT, seed\_limit | `geode_product/self_improving/train.py` |
 | **Judge selection** | cross-LLM judge가 N개 후보 출력을 하나로 수렴. 실패는 관측 가능 | select\_candidate judge tool | `core/agent/candidate_sampling.py` |
 
 ## 4\. Observe
@@ -5775,7 +5775,7 @@ HITL 승인 프롬프트(`core/cli/ipc_client.py`의 `_handle_approval_request`)
 | `geode petri-archive` | petri eval 로그를 워크트리 밖으로 보존하고 YAML 요약 작성 | `--raw-archive-dir`, `--summary-dir` | `geode_product/petri_audit/cli_audit.py` |
 | `geode outer-bundle` | 자기개선 루프 활동을 하나의 타임라인으로 묶어 보는 뷰어 | `--limit`, `--json` | `core/cli/outer_bundle.py` |
 | `geode reindex` | 전 프로젝트 sessions.db에서 `~/.geode/search/global.db` FTS5 인덱스 재구축 | `--projects-root` | `core/cli/commands/reindex.py` |
-| `geode campaign` | 3-arm 자기개선 캠페인 드라이버의 thin 포워더 | `--n`, `--k`, `--arms`, `--dry-run` | `core/self_improving/campaign.py` |
+| `geode campaign` | 3-arm 자기개선 캠페인 드라이버의 thin 포워더 | `--n`, `--k`, `--arms`, `--dry-run` | `geode_product/self_improving/campaign.py` |
 
 ## 서브커맨드 그룹
 
@@ -5935,7 +5935,7 @@ GEODE 문서 사이트도 같은 컨벤션으로 발행합니다. 빌드마다`s
 URL: https://mangowhoiscloud.github.io/geode/docs/runtime/automation
 Markdown: https://mangowhoiscloud.github.io/geode/docs/runtime/automation.md
 
-자동 트리거는 자기개선 루프의 변이 러너 (`SelfImprovingLoopRunner.run_once`)를 스케줄러에 연결해, 키보드 앞에 운영자가 없어도 루프가 cron 주기로 도는 사이드카입니다. 구현은 `core/self_improving/loop/auto_trigger.py`, 배선은 `core/wiring/scheduling.py`의 `build_scheduling`입니다.
+자동 트리거는 자기개선 루프의 변이 러너 (`SelfImprovingLoopRunner.run_once`)를 스케줄러에 연결해, 키보드 앞에 운영자가 없어도 루프가 cron 주기로 도는 사이드카입니다. 구현은 `geode_product/self_improving/loop/auto_trigger.py`, 배선은 `core/wiring/scheduling.py`의 `build_scheduling`입니다.
 
 한때 이 자리에 있던 별도 자동화 파이프라인(drift 감지, 모델 프로모션, 전문가 패널이 있던 `core/automation/`)은 v0.99.149에서 삭제되었습니다. 그 체인의 모든 진입점이 emitter가 사라진 파이프라인 이벤트였고, 부팅마다 만들어지되 일을 하지 않는 구성물이었기 때문입니다. 지금 남아 있는 자동화는 이 페이지의 사이드카와 [스케줄러](https://mangowhoiscloud.github.io/geode/docs/runtime/scheduler.md)가 전부입니다.
 
@@ -6104,7 +6104,7 @@ Tier 2  latex2sympy2 + sympy.pretty  블록 전용. 분수·적분을 2D Unicode
 URL: https://mangowhoiscloud.github.io/geode/docs/reference/changelog
 Markdown: https://mangowhoiscloud.github.io/geode/docs/reference/changelog.md
 
-(body omitted from llms-full: 1513 KB — fetch the Markdown twin above for the complete page)
+(body omitted from llms-full: 1514 KB — fetch the Markdown twin above for the complete page)
 
 ---
 
@@ -6165,7 +6165,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/develop/architecture.md
 프로덕션 소스는 닫힌 커널과 외곽 제품 셸로 나뉩니다. `core/`는 범용 자율 에이전트 런타임이고, `geode_product/`는 함께 배포되는 1차 제품 기능과 조립을 소유합니다. `plugins/`는 선별된 호환 facade만 보유합니다. `core/`의 서브시스템은 5계층 스택에 정렬됩니다.
 
 ```
-Self-Improving  core/self_improving/  train.py + measure/fitness/gate/ledger + loop/{mutate,observe,inject}
+Self-Improving  geode_product/self_improving/  train.py + measure/fitness/gate/ledger + loop/{mutate,observe,inject}
 Agent           core/agent/           AgenticLoop(while tool_use), sub_agent, system_prompt
 Harness         core/cli/             thin CLI + commands/ + IPC 클라이언트
                 core/server/          serve 데몬. ipc_server(CLIPoller) + supervised(메신저 폴러)
@@ -6228,7 +6228,7 @@ thin CLI는 직접 일하지 않습니다. IPC로 `geode serve` 데몬에 붙고
 ```
 auto-trigger 또는 운영자  (core/wiring/scheduling.py → loop/auto_trigger.py)
    ▼
-변이 제안 + 적용  (core/self_improving/loop/mutate/runner.py, 7 behaviour kinds)
+변이 제안 + 적용  (geode_product/self_improving/loop/mutate/runner.py, 7 behaviour kinds)
    ▼
 Petri 감사 서브프로세스  (measure.py → geode audit → geode_product/petri_audit/)
    │  GEODE_WRAPPER_OVERRIDE로 변이된 스캐폴드를 주입한 같은 AgenticLoop를 측정
@@ -6264,14 +6264,14 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 
 | 측정값 | 현재 트리 |
 | --- | --- |
-| 프로덕션 Python 파일 | 585 |
-| 테스트 Python 파일 | 685 |
+| 프로덕션 Python 파일 | 590 |
+| 테스트 Python 파일 | 686 |
 | 도구 정의 / 실행 등록 / 유효 스키마 | 87 / 90 / 87 |
 | RuntimeEvent 멤버 | 57 |
 | 기본 LLM 어댑터 | 7 |
-| 모듈 수준 ContextVar | 30 |
+| 모듈 수준 ContextVar | 29 |
 | core → product import 지점 / 파일 | 0 / 0 |
-| import-linter 예외 edge | 24 |
+| import-linter 예외 edge | 22 |
 
 ## 최상위 진입 모듈
 
@@ -6286,9 +6286,9 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 
 | 서브시스템 | 루트 | 핵심 모듈 |
 | --- | --- | --- |
-| 루프 드라이버 | `core/self_improving/` | `train.py`, `campaign.py`, `prepare.py`, `program.md`, `watch_campaign.py` |
-| 측정 장비 | `core/self_improving/` | `measure.py`, `fitness.py`, `gate.py`, `ledger.py` |
-| 변이 런타임 | `core/self_improving/loop/` | `mutate/runner.py`, `mutate/policies.py`, `observe/baseline_epoch.py`, `inject/in_context_wiring.py`, `auto_trigger.py` |
+| 루프 드라이버 | `geode_product/self_improving/` | `train.py`, `campaign.py`, `prepare.py`, `program.md`, `watch_campaign.py` |
+| 측정 장비 | `geode_product/self_improving/` | `measure.py`, `fitness.py`, `gate.py`, `ledger.py` |
+| 변이 런타임 | `geode_product/self_improving/loop/` | `mutate/runner.py`, `mutate/policies.py`, `observe/baseline_epoch.py`, `inject/in_context_wiring.py`, `auto_trigger.py` |
 
 ## Agent
 
@@ -6359,7 +6359,7 @@ Karpathy의 LLM-OS 비유는 LLM을 컴퓨터의 CPU 자리에 둡니다. GEODE�
 | **Runtime** | 시스템콜 + 드라이버 | 도구, MCP, 메모리, 스킬. LLM이 외부와 닿는 모든 경로 | `core/tools/`, `core/mcp/`, `core/memory/` |
 | **Harness** | 셸 + init | CLI, serve, 훅, 게이트웨이, 레인. 사용자와 메신저가 시스템에 닿는 경로 | `core/cli/`, `core/server/`, `core/hooks/`, `core/orchestration/` |
 | **Agent** | 실행 루프 | while(tool\_use). 항상 도는 실행 단위와 서브에이전트 | `core/agent/loop/`, `core/agent/sub_agent.py` |
-| **Self-Improving** | 패키지 매니저 + 업데이트 채널 | 에이전트가 도는 스캐폴드 자체를 변이하고, 감사로 선택하고, 계보를 보존 | `core/self_improving/` |
+| **Self-Improving** | 패키지 매니저 + 업데이트 채널 | 에이전트가 도는 스캐폴드 자체를 변이하고, 감사로 선택하고, 계보를 보존 | `geode_product/self_improving/` |
 
 ## 왜 다섯 번째 계층이 명시적이 되었나
 
@@ -6409,7 +6409,7 @@ GEODE 런타임이 출하되는 에이전트의 동작을 안정시키는 방식
 | 확장 표면 | HookRegistry / MiddlewareRegistry / RuntimeEventBus (`core/hooks/`) | scaffold skills (트리거 키워드로 발화) |
 | 선언적 가드레일 | RUNTIME CANNOT (GEODE.md) + 6계층 PolicyChain (`core/tools/policy.py`) | CANNOT/CAN 규칙 (CLAUDE.md) |
 | 루프 + 종료 경로 | while(tool\_use) + 라운드/시간/비용 가드 (`core/agent/loop/agent_loop.py`) | 8단계 워크플로우 (Board → GAP → Plan → Implement → Verify → Docs → PR → Rebuild) |
-| 선택과 되돌림 | margin 게이트의 promote/revert (`core/self_improving/gate.py`) | PR 게이트. CI 실패는 머지되지 않고, 머지된 것만 main에 남음 |
+| 선택과 되돌림 | margin 게이트의 promote/revert (`geode_product/self_improving/gate.py`) | PR 게이트. CI 실패는 머지되지 않고, 머지된 것만 main에 남음 |
 
 ## 왜 중요한가
 
@@ -6453,7 +6453,7 @@ ratchet discipline은 Andrej Karpathy의 _autoresearch_ 프로젝트에서 정�
 
 ## 왜 양쪽 모두 필요한가
 
-출력 측 ratchet(프롬프트 해시)만 있으면 빌드 라인의 회귀를 막지 못합니다. 빌드 측 ratchet(CI)만 있으면 같은 코드에 다른 프롬프트가 실리는 조용한 회귀를 막지 못합니다. 둘이 동시에 있어야 자기일치가 보장됩니다. 같은 구조가 자기개선 루프에도 있습니다. margin 게이트를 통과한 변이만 승격되고, 실패한 변이는 되돌려집니다 (`core/self_improving/gate.py`). 게이트는 champion chain을 한 방향으로만 움직이게 하는 ratchet입니다.
+출력 측 ratchet(프롬프트 해시)만 있으면 빌드 라인의 회귀를 막지 못합니다. 빌드 측 ratchet(CI)만 있으면 같은 코드에 다른 프롬프트가 실리는 조용한 회귀를 막지 못합니다. 둘이 동시에 있어야 자기일치가 보장됩니다. 같은 구조가 자기개선 루프에도 있습니다. margin 게이트를 통과한 변이만 승격되고, 실패한 변이는 되돌려집니다 (`geode_product/self_improving/gate.py`). 게이트는 champion chain을 한 방향으로만 움직이게 하는 ratchet입니다.
 
 ## 비용
 
