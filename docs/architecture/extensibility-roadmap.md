@@ -518,8 +518,8 @@ and closure evidence are appended in §10.
 | BND-002 | `MISFIT` | 31 `core` → `plugins` import sites across 14 files | AST gate reports zero reverse dependency; composition owns feature registration | R1.2 | BND-001 | `IN_DEVELOP` |
 | BND-003 | `ABSENT` | One-off core-only probe fails at `core.cli`; CI does not test an installed kernel without features | Isolated wheel/package test boots and runs kernel tests without bundled/third-party modules | R1.3 | BND-001, BND-002, BND-006 | `IN_DEVELOP` |
 | BND-004 | `PARTIAL` | Skills/hooks/MCP have different discovery rules; Python feature collision/trust behavior is not unified | Each supported external surface declares non-executing discovery, precedence, collision, enablement, trust-before-load, reload, isolation, and teardown | R6.3 | BND-001, LLM-002 | `OPEN` |
-| CAP-001 | `PARTIAL` | Google service bundles exist but do not own all tool/policy relationships | Generic capability records plus `GoogleServiceDescriptor` are executable SOTs | R2.1 | BND-002 | `OPEN` |
-| CAP-002 | `ABSENT` | `ToolRegistry` owns tool objects while other registries/lists own execution and safety | Immutable `ToolRegistration` and `ToolPlan` derive every tool consumer | R2.1 | CAP-001 | `OPEN` |
+| CAP-001 | `PARTIAL` | Google service bundles exist but do not own all tool/policy relationships | Generic capability records plus `GoogleServiceDescriptor` are executable SOTs | R2.1 | BND-002 | `READY` |
+| CAP-002 | `ABSENT` | `ToolRegistry` owns tool objects while other registries/lists own execution and safety | Immutable `ToolRegistration` and `ToolPlan` derive every tool consumer | R2.1 | CAP-001 | `READY` |
 | CAP-003 | `MISFIT` | Native Google handlers are bound in `core/cli/tool_handlers/delegated.py` | Runtime/composition binds handlers; CLI only renders/forwards user interaction | R2.3 | CAP-002, BND-002 | `OPEN` |
 | CAP-004 | `MISFIT` | Google names repeat in safety, approval, policy, personal-data, and CLI modules | Effect/data/auth/resource metadata derives gates; no independent tool-name allowlists | R2.2 | CAP-002 | `OPEN` |
 | CAP-005 | `PARTIAL` | `definitions.json`, tool objects, provider schemas, and defer sets can drift | Anthropic/OpenAI/deferred schemas and execution map share one plan hash and parity tests | R2.3 | CAP-002 | `OPEN` |
@@ -2073,7 +2073,9 @@ before `2026-09-19T06:53:01.550033Z`, and any intervening incompatible release
 restarts the interval. This evidence-only package reuses the public
 distribution verifier and does not authorize runtime or schema changes.
 
-The next serialized ledger unit is a separate R2.1 readiness audit. R9.1 is
-also dependency-satisfied but remains `OPEN` pending its own transaction. R8.2
-(`STORE-003`) remains `OPEN` behind REL-004 and STORE-001; R8.4 (`BND-008`)
-additionally waits for STORE-003.
+R2.1 (`CAP-001`, `CAP-002`) is the sole unclaimed `READY` package in the
+master sequence and requires a separate claim. BND-002 is `IN_DEVELOP`, and
+the CAP-002-to-CAP-001 edge is internal to R2.1. R9.1 is also
+dependency-satisfied but remains `OPEN` pending its own serialized readiness
+transaction. R8.2 (`STORE-003`) remains `OPEN` behind REL-004 and STORE-001;
+R8.4 (`BND-008`) additionally waits for STORE-003.
