@@ -10,6 +10,7 @@ Protocol: line-delimited JSON over Unix domain socket.
 Client → Server:
     {"type": "prompt", "text": "summarize this repository", "session_id": "..."}
     {"type": "command", "cmd": "/model", "args": "sonnet"}
+    {"type": "command_stream", "cmd": "/plan", "args": "ship safely"}
     {"type": "exit"}
 
 Server → Client:
@@ -24,6 +25,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import importlib
 import json
 import logging
 import os
@@ -597,6 +599,13 @@ class CLIPoller:
         if msg_type == "command":
             return await asyncio.to_thread(self._handle_command_on_server, msg, loop)
 
+        if msg_type == "command_stream":
+            try:
+                return await self._run_command_streaming_async(msg, loop, msg.get("_client"))
+            except Exception as exc:
+                log.warning("CLI streaming command error", exc_info=True)
+                return {"type": "error", "message": str(exc)}
+
         if msg_type == "resume":
             return await self._handle_resume_async(msg, loop, conversation)
 
@@ -651,6 +660,65 @@ class CLIPoller:
             return {"type": "ack"}
 
         return {"type": "error", "message": f"Unknown message type: {msg_type}"}
+
+    async def _run_command_streaming_async(
+        self,
+        msg: dict[str, Any],
+        loop: Any,
+        client: _AsyncClientEndpoint | None,
+    ) -> dict[str, Any]:
+        """Resolve a trusted DAEMON_STREAM command and run its canonical path."""
+        from core.slash_routing import RunLocation, lookup
+
+        cmd = str(msg.get("cmd", "")).strip().lower()
+        args = str(msg.get("args", "")).strip()
+        spec = lookup(cmd, self._services.command_registry)
+        if spec is None:
+            raise ValueError(f"Unknown slash command: {cmd or '(empty)'}")
+        if spec.location is not RunLocation.DAEMON_STREAM:
+            raise ValueError(f"Slash command is not streaming: {cmd}")
+
+        if spec.name == "/plan":
+            from core.server.ipc_server.plan_command import run_plan_slash
+
+            lane_queue = self._services.lane_queue
+            if lane_queue is not None:
+                async with lane_queue.acquire_all_async(loop._session_id, ["session", "global"]):
+                    text, plan, created = await run_plan_slash(loop, args)
+            else:
+                text, plan, created = await run_plan_slash(loop, args)
+            if client is not None and plan is not None:
+                await client.send_json_async(
+                    {
+                        "type": "progress_plan",
+                        "plan": [
+                            {
+                                "step": step.description,
+                                "status": "in_progress" if index == plan.current else "pending",
+                            }
+                            for index, step in enumerate(plan.steps)
+                        ],
+                        "explanation": plan.reasoning,
+                    }
+                )
+            return {
+                "type": "result",
+                "text": text,
+                "rounds": 0,
+                "tool_calls": [],
+                "termination": "slash_plan",
+                "model": getattr(loop, "model", "unknown"),
+                "summary": "advisory plan created" if created else "advisory plan status",
+            }
+
+        if not spec.handler_path:
+            raise ValueError(f"Streaming slash command has no handler: {spec.name}")
+        module_name, separator, attr_name = spec.handler_path.partition(":")
+        if not separator or not module_name or not attr_name:
+            raise ValueError(f"Invalid slash handler path: {spec.handler_path!r}")
+        prompt_builder = getattr(importlib.import_module(module_name), attr_name)
+        prompt = prompt_builder(args, skill_registry=self._services.skill_registry)
+        return await self._run_prompt_streaming_async(prompt, loop, client)
 
     async def _run_prompt_streaming_async(
         self,
@@ -807,6 +875,16 @@ class CLIPoller:
         """
         cmd = msg.get("cmd", "")
         args = msg.get("args", "")
+        from core.slash_routing import RunLocation, lookup
+
+        spec = lookup(str(cmd).lower(), self._services.command_registry)
+        if spec is not None and spec.location is RunLocation.DAEMON_STREAM:
+            return {
+                "type": "command_result",
+                "cmd": cmd,
+                "status": "error",
+                "message": f"Slash command requires streaming transport: {cmd}",
+            }
         # Capture the primary model + effort BEFORE the command so the live-loop
         # sync below fires only when THIS /model actually changed the primary
         # axis. A role-specific switch (``/model reflection X`` writes
@@ -834,6 +912,7 @@ class CLIPoller:
                     False,
                     skill_registry=self._services.skill_registry,
                     mcp_manager=self._services.mcp_manager,
+                    command_registry=self._services.command_registry,
                 )
             # /model writes config.toml + the daemon's Settings singleton but
             # cmd_model does NOT touch the live session's AgenticLoop — its

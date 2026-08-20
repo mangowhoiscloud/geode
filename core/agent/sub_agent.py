@@ -1125,11 +1125,16 @@ class SubAgentManager:
     def _resolve_agent(self, task: SubTask) -> dict[str, Any] | None:
         """Resolve agent context.
 
-        Priority: task.agent > _TYPE_AGENT_MAP > None.
+        Priority: explicit task.agent > explicit capability role > type default.
+
+        A built-in role already owns the worker's tools, output schema, and
+        behavioral contract. Letting the generic task-type agent override its
+        model would silently move a subscription parent onto that agent's
+        unrelated credential route.
         """
         if self._agent_registry is None:
             return None
-        agent_name = task.agent or _TYPE_AGENT_MAP.get(task.task_type)
+        agent_name = task.agent or (None if task.role else _TYPE_AGENT_MAP.get(task.task_type))
         if agent_name is None:
             return None
         agent_def = self._agent_registry.get(agent_name)

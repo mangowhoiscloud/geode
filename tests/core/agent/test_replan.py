@@ -22,6 +22,7 @@ Coverage:
 from __future__ import annotations
 
 import asyncio
+import json
 from types import MappingProxyType, SimpleNamespace
 from typing import Any
 
@@ -470,6 +471,24 @@ def test_parse_replan_bad_json_returns_none() -> None:
 
 def test_parse_replan_missing_steps_returns_none() -> None:
     assert parse_replan_response('{"reasoning": "no steps"}') is None
+    assert parse_replan_response("[]") is None
+
+
+def test_parse_replan_enforces_nonempty_unique_bounded_steps() -> None:
+    raw = json.dumps(
+        {
+            "steps": [
+                {"id": "same", "description": ""},
+                *[{"id": "same", "description": f"step {index}"} for index in range(10)],
+            ],
+            "reasoning": "selected",
+        }
+    )
+    parsed = parse_replan_response(raw)
+    assert parsed is not None
+    steps, _reasoning = parsed
+    assert len(steps) == 8
+    assert len({step.id for step in steps}) == len(steps)
 
 
 # -- replan_async (LLM call orchestration) ----------------------------

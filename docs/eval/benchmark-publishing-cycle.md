@@ -18,6 +18,7 @@ eval_contracts:
   - docs/eval/eval-run-spec.template.json
   - docs/eval/schemas/analysis.schema.json
   - docs/eval/schemas/attempt.schema.json
+  - docs/eval/schemas/publication.schema.json
   - docs/eval/schemas/run-spec.schema.json
 ---
 
@@ -95,6 +96,8 @@ uv run python scripts/eval/contract.py validate-attempts <run-dir>/attempts.json
 uv run python scripts/eval/contract.py validate-analysis <run-dir>/analysis.json \
   --run-spec <run-dir>/run-spec.json \
   --attempts <run-dir>/attempts.jsonl
+uv run python scripts/eval/contract.py validate-publication \
+  <run-dir>/publication-manifest.json
 ```
 
 ## Required Fields

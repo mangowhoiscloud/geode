@@ -103,12 +103,16 @@ def build_runtime() -> Any:
 def build_shared_services(**kwargs: Any) -> Any:
     """Build kernel services with product tools, workers, and agent prompts."""
     from core.server.supervised.services import build_shared_services as build_core_services
+    from core.slash_routing import compose_command_registry
+
+    from geode_product.slash_commands import PRODUCT_COMMAND_SPECS
 
     if kwargs.get("policy_sources") is None:
         kwargs["policy_sources"] = build_policy_sources()
     kwargs.setdefault("middleware_builder", build_middleware_registry)
     kwargs.setdefault("activity_sink_provider", current_activity_sink)
     kwargs.setdefault("feature_hook_registrar", register_hooks)
+    kwargs.setdefault("command_registry", compose_command_registry(PRODUCT_COMMAND_SPECS))
     return build_core_services(
         **kwargs,
         tool_plan_builder=compose_tool_plan,

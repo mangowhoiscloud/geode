@@ -106,6 +106,36 @@ def _fullscreen_enabled(env_value: str | None, *, stdin_isatty: bool) -> bool:
     return (env_value or "").lower() in {"1", "true", "on", "yes"}
 
 
+def _relay_streaming(call: Callable[..., dict[str, Any]]) -> tuple[dict[str, Any], bool]:
+    """Render one prompt-like IPC exchange and report whether events arrived."""
+    from core.ui.event_renderer import EventRenderer
+
+    renderer = EventRenderer(live_regions=False)
+    stream_started = False
+
+    def on_stream(data: str) -> None:
+        nonlocal stream_started
+        stream_started = True
+        renderer.on_stream(data)
+
+    def on_event(event: dict[str, object]) -> None:
+        nonlocal stream_started
+        stream_started = True
+        renderer.on_event(event)
+
+    renderer.start_activity()
+    try:
+        response = call(
+            on_stream=on_stream,
+            on_event=on_event,
+            on_approval_start=renderer.suspend_for_approval,
+            on_approval_end=renderer.resume_from_approval,
+        )
+    finally:
+        renderer.stop()
+    return response, stream_started
+
+
 def _thin_interactive_loop(
     *,
     resume_session: str = "",
@@ -162,7 +192,7 @@ def _thin_interactive_loop(
         try:
             from core.cli.fullscreen_app import FullscreenThinCli
 
-            FullscreenThinCli(client).run()
+            FullscreenThinCli(client, command_registry=command_registry).run()
             return
         except Exception:
             log.warning("fullscreen CLI failed; falling back to legacy prompt", exc_info=True)
@@ -264,6 +294,22 @@ def _thin_interactive_loop(
                             client.send_command("/login", "refresh")
                     continue
 
+                if _spec is not None and _spec.location is RunLocation.DAEMON_STREAM:
+                    response, stream_started = _relay_streaming(
+                        lambda _cmd=cmd, _args=args, **callbacks: client.send_command_streaming(
+                            _cmd,
+                            _args,
+                            **callbacks,
+                        )
+                    )
+                    if response.get("type") == "error" and "Connection lost" in response.get(
+                        "message", ""
+                    ):
+                        console.print("\n  [error]Connection to serve lost[/error]\n")
+                        break
+                    _render_ipc_response(response, streamed=stream_started)
+                    continue
+
                 # All other commands → relay to serve
                 response = client.send_command(cmd, args)
                 # Render captured output from serve (ANSI-styled text)
@@ -279,46 +325,14 @@ def _thin_interactive_loop(
                     break
                 continue
 
-            # Free text → relay as prompt (client-side direct rendering)
-            from core.ui.event_renderer import EventRenderer
-
-            # The legacy prompt_toolkit prompt owns the input line. Keep this
-            # renderer append-only so cursor-up live regions never fight the
-            # prompt while a turn is running; the opt-in full-screen TUI owns
-            # the stable composer/live-pane experience.
-            _renderer = EventRenderer(live_regions=False)
-            _stream_started = False
-            _r = _renderer  # bind for closures (B023)
-
-            def _on_stream(data: str, *, _rr: Any = _r) -> None:
-                nonlocal _stream_started
-                _stream_started = True
-                _rr.on_stream(data)
-
-            def _on_event(event: dict[str, object], *, _rr: Any = _r) -> None:
-                nonlocal _stream_started
-                _stream_started = True
-                _rr.on_event(event)
-
-            def _on_approval_start(*, _rr: Any = _r) -> None:
-                _rr.suspend_for_approval()
-
-            def _on_approval_end(*, _rr: Any = _r) -> None:
-                _rr.resume_from_approval()
-
-            _renderer.start_activity()  # persistent spinner until result
-            response = client.send_prompt(
-                user_input,
-                on_stream=_on_stream,
-                on_event=_on_event,
-                on_approval_start=_on_approval_start,
-                on_approval_end=_on_approval_end,
+            # Free text → relay as prompt (client-side direct rendering).
+            response, stream_started = _relay_streaming(
+                lambda _text=user_input, **callbacks: client.send_prompt(_text, **callbacks)
             )
-            _renderer.stop()
             if response.get("type") == "error" and "Connection lost" in response.get("message", ""):
                 console.print("\n  [error]Connection to serve lost[/error]\n")
                 break
-            _render_ipc_response(response, streamed=_stream_started)
+            _render_ipc_response(response, streamed=stream_started)
     finally:
         client.close()
 

@@ -18,6 +18,7 @@ from core.memory.sqlite_store import short_sqlite_connection
 
 
 class GoalStatus(StrEnum):
+    EMPTY = "empty"
     ACTIVE = "active"
     BLOCKED = "blocked"
     BUDGET_LIMITED = "budget_limited"
@@ -94,6 +95,23 @@ class GoalStore:
             row = conn.execute(
                 "SELECT * FROM thread_goals WHERE session_id = ?", (session_id,)
             ).fetchone()
+        return self._from_row(row) if row is not None else None
+
+    def status(self, session_id: str) -> GoalStatus:
+        """Return the explicit state-machine state, including no stored goal."""
+        goal = self.get(session_id)
+        return goal.status if goal is not None else GoalStatus.EMPTY
+
+    def clear(self, session_id: str) -> ThreadGoal | None:
+        """Transition the session to ``empty`` by removing its goal projection."""
+        if not session_id:
+            raise ValueError("clear_goal requires an active session")
+        with short_sqlite_connection(self._db_path, ensure_goal_schema, immediate=True) as conn:
+            row = conn.execute(
+                "SELECT * FROM thread_goals WHERE session_id = ?", (session_id,)
+            ).fetchone()
+            if row is not None:
+                conn.execute("DELETE FROM thread_goals WHERE session_id = ?", (session_id,))
         return self._from_row(row) if row is not None else None
 
     def list_active(self) -> list[ThreadGoal]:

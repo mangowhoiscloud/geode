@@ -2,7 +2,6 @@
 
 from core.cli import build_app
 from core.cli.commands.config import build_config_app
-from core.cli.routing import CommandSpec, RunLocation
 
 from geode_product.config_cli import register_config_commands
 from geode_product.petri_audit.cli_agreement import audit_agreement_app
@@ -12,6 +11,7 @@ from geode_product.self_improving.cli_commands import (
     register_commands as register_self_improving_commands,
 )
 from geode_product.self_improving.config import load_self_improving_loop_config
+from geode_product.slash_commands import PRODUCT_COMMAND_SPECS
 from geode_product.wiring import serve
 
 _self_improving_config = load_self_improving_loop_config()
@@ -20,39 +20,6 @@ QUOTA_THRESHOLDS = (
     _self_improving_config.abort_threshold,
 )
 
-PRODUCT_COMMAND_SPECS = (
-    CommandSpec(
-        name="/audit",
-        location=RunLocation.THIN,
-        description="Petri × GEODE alignment audit",
-        handler_path="geode_product.petri_audit.cli_audit:cmd_audit_slash",
-    ),
-    CommandSpec(
-        name="/audit-seeds",
-        location=RunLocation.THIN,
-        description="Generate and score candidate evaluation seeds",
-        handler_path="geode_product.seed_generation.cli:cmd_audit_seeds_slash",
-    ),
-    CommandSpec(
-        name="/petri",
-        location=RunLocation.THIN,
-        description="Show or switch Petri role bindings",
-        handler_path="geode_product.petri_audit.cli:cmd_petri",
-    ),
-    CommandSpec(
-        name="/self-improving",
-        aliases=("/sil",),
-        location=RunLocation.THIN,
-        description="Self-improving loop status, execution, and configuration",
-        handler_path="geode_product.self_improving.cli_commands:cmd_self_improving",
-    ),
-    CommandSpec(
-        name="/recall",
-        location=RunLocation.THIN,
-        description="Memory-recall pool — list/show/save persistent memory entries",
-        handler_path="geode_product.self_improving.recall_cli:cmd_recall",
-    ),
-)
 config_app = build_config_app()
 register_config_commands(config_app)
 

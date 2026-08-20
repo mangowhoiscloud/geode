@@ -43,11 +43,16 @@ def _build_goal_handlers(store: GoalStore | None = None) -> UniqueEntries[str, A
         except (TypeError, ValueError) as exc:
             return {"error": str(exc)}
         _record(goal, created=True, trigger="create_goal")
-        return {"status": "ok", "goal": goal.to_dict()}
+        return {"status": "ok", "goal_status": goal.status.value, "goal": goal.to_dict()}
 
     def handle_get_goal(**_: Any) -> dict[str, Any]:
-        goal = goal_store.get(_session_id())
-        return {"status": "ok", "goal": goal.to_dict() if goal is not None else None}
+        session_id = _session_id()
+        goal = goal_store.get(session_id)
+        return {
+            "status": "ok",
+            "goal_status": (goal.status if goal is not None else GoalStatus.EMPTY).value,
+            "goal": goal.to_dict() if goal is not None else None,
+        }
 
     def handle_update_goal(**kwargs: Any) -> dict[str, Any]:
         raw_status = str(kwargs.get("status") or "")
@@ -57,7 +62,7 @@ def _build_goal_handlers(store: GoalStore | None = None) -> UniqueEntries[str, A
         except ValueError as exc:
             return {"error": str(exc)}
         _record(goal, created=False, trigger="update_goal")
-        return {"status": "ok", "goal": goal.to_dict()}
+        return {"status": "ok", "goal_status": goal.status.value, "goal": goal.to_dict()}
 
     return UniqueEntries(
         (

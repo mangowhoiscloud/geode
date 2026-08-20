@@ -30,8 +30,8 @@ owns only the package version and sync date.
 The generated architecture inventory lives at
 `site/src/data/geode/architecture-baseline.json`. Refresh it with
 `uv run python scripts/architecture_baseline.py --update`; CI uses `--check`.
-The current snapshot records 592 production Python files,
-689 test Python files,
+The current snapshot records 596 production Python files,
+690 test Python files,
 87 tool definitions, and
 57 `RuntimeEvent` members.
 <!-- generated:architecture-baseline:end -->
@@ -54,6 +54,18 @@ For benchmark execution, evaluation artifact audits, research-question
 framing, attempt lineage, or trajectory publication, start at the generated
 `docs/eval/index.json` and use `.agents/skills/geode-eval/`. Claude Code sees
 the same tracked skill through the relative `.claude/skills/geode-eval` alias.
+
+For `/geo`, generative-search visibility, citation readiness, or GEO
+measurement, use `.agents/skills/geo/` and treat
+`docs/eval/geo-visibility.md` as the suite profile. Run the deterministic site
+preflight before proposing a score-bearing engine run; live commercial-engine
+repetitions require a frozen run spec and explicit approval. Runtime behavior
+lives separately in `.geode/skills/geo/`.
+
+For `/grill` or dependency-aware decision clarification, use
+`.agents/skills/grilling/`; runtime interview behavior lives in
+`.geode/skills/grilling/`. Candidate trees select structure before side
+effects and do not imply shared-state MCTS/LATS execution.
 
 For test-time compute, best-of-N, verifier-aware scheduling, inference-program
 search, or GEODE/Eco²/SIL/Crucible comparisons, use

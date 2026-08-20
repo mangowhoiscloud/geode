@@ -241,7 +241,7 @@ def test_dispatcher_executes_registered_audit_seeds_handler() -> None:
     """The product registry reaches the callable, not an Unknown-command branch."""
     from core.cli.dispatcher import _handle_command
     from core.cli.routing import compose_command_registry
-    from geode_product.cli import PRODUCT_COMMAND_SPECS
+    from geode_product.slash_commands import PRODUCT_COMMAND_SPECS
 
     with patch("geode_product.seed_generation.cli.cmd_audit_seeds_slash") as handler:
         result = _handle_command(

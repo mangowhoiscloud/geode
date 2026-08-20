@@ -15,6 +15,22 @@ from typing import Any as _Any
 log = logging.getLogger(__name__)
 
 
+def build_skill_prompt(skill_registry: _Any, name: str, arguments: str = "") -> str:
+    """Render one trusted registry skill for AgenticLoop execution."""
+    skill = skill_registry.get(name) if skill_registry is not None else None
+    if skill is None:
+        raise ValueError(f"Skill not found: {name}")
+    rendered = skill.render(arguments=arguments.strip())
+    if not rendered:
+        raise ValueError(f"Skill '{name}' has no body content")
+    return f"[skill:{name}] {rendered}"
+
+
+def build_grilling_prompt(arg: str, *, skill_registry: _Any) -> str:
+    """Build the `/grill` prompt without adding a second execution engine."""
+    return build_skill_prompt(skill_registry, "grilling", arg)
+
+
 def cmd_skills(skill_registry: _Any, arg: str) -> None:
     """Handle /skills command — list/inspect loaded skills.
 

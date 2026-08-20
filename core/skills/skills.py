@@ -107,9 +107,10 @@ class SkillDefinition(BaseModel):
 
         rendered = _DYNAMIC_CMD_RE.sub(_exec_cmd, body)
 
-        # $ARGUMENTS substitution
+        # $ARGUMENTS substitution. Empty invocation must erase the placeholder
+        # too; otherwise a bare slash alias leaks the literal token to the LLM.
+        rendered = rendered.replace("$ARGUMENTS", arguments)
         if arguments:
-            rendered = rendered.replace("$ARGUMENTS", arguments)
             parts = arguments.split()
             for i, part in enumerate(parts[:10]):
                 rendered = rendered.replace(f"${i}", part)

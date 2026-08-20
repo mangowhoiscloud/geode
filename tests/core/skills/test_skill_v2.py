@@ -109,6 +109,31 @@ class TestSkillDefinitionV2:
         assert "remain depth one" in skill.body
         assert "memory_save" not in skill.body
 
+    def test_bundled_geo_uses_bounded_evidence_frontier(self) -> None:
+        repo_root = Path(__file__).parents[3]
+        skill = SkillLoader(lazy=False).load_file(repo_root / ".geode/skills/geo/SKILL.md")
+
+        assert "delegate_task" in skill.tools
+        assert "spawn_agent" in skill.tools
+        assert "read_document" in skill.tools
+        assert "read_file" not in skill.tools
+        assert "at most three finite branches" in skill.body
+        assert "hidden chain-of-thought" in skill.body
+        assert "not_measured" in skill.body
+        assert "parent AgenticLoop" in skill.body
+        assert "deterministically" in skill.body
+        assert "parent's active model and credential source" in skill.body
+        assert "never rename or transcode" in skill.body
+        assert "geode.trajectory@1" in skill.body
+        assert "withheld-private" in skill.body
+        assert "--allow-replay-incomplete" in skill.body
+
+        scaffold = (repo_root / ".agents/skills/geo/SKILL.md").read_text()
+        assert "at most three independent read-only branches" in scaffold
+        assert "generic Tree-of-Thought/MCTS engine" in scaffold
+        assert "Inspect `.eval`" in scaffold
+        assert "geode-eval-artifacts" in scaffold
+
 
 class TestProgressiveDisclosure:
     """Test 3-tier loading behavior."""
@@ -209,6 +234,10 @@ class TestDynamicContext:
         skill = SkillDefinition(name="test", body="Static content only")
         rendered = skill.render()
         assert rendered == "Static content only"
+
+    def test_empty_arguments_erase_placeholder(self) -> None:
+        skill = SkillDefinition(name="test", body="Target: $ARGUMENTS")
+        assert skill.render() == "Target: "
 
 
 class TestMultiScopeDiscovery:

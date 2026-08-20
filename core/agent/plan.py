@@ -58,6 +58,7 @@ __all__ = [
     "decompose_async",
     "decomposition_response_schema",
     "parse_replan_response",
+    "plan_async",
     "render_plan_for_prompt",
     "replan_async",
     "replan_response_schema",
@@ -466,6 +467,25 @@ Keep the step count ≤ 8 (smaller is better). The first step must
 address the failure the previous turn surfaced.
 """
 
+_PLAN_SYSTEM_PROMPT = """\
+Mode: advisory planning.
+Authority: produce structure only; do not execute tools or claim work is done.
+Task: turn the operator's objective into a dependency-correct, verifiable plan.
+
+Method:
+- Consider 2-4 materially different plan structures internally.
+- Compare prerequisite order, reversibility, observable verification, and
+  unnecessary work.
+- Select the strongest structure and return only its steps plus a concise
+  selection summary. Do not reveal private chain-of-thought.
+- Keep the selected plan at 8 steps or fewer. Each expected outcome must be an
+  observable completion condition. tool_name must be an available tool or an
+  empty string when no single tool owns the step.
+
+Reply with exactly one JSON object matching the supplied schema. The
+"reasoning" field is a short selection summary, not hidden reasoning.
+"""
+
 
 def replan_response_schema() -> dict[str, Any]:
     """Return the structured-output schema for plan revision."""
@@ -516,26 +536,100 @@ def parse_replan_response(raw: str) -> tuple[list[PlanStep], str] | None:
     except (json.JSONDecodeError, ValueError):
         log.debug("Replan response not JSON; keeping prior plan", extra={"raw": text[:200]})
         return None
+    if not isinstance(obj, dict):
+        return None
     raw_steps = obj.get("steps")
     if not isinstance(raw_steps, list) or not raw_steps:
         return None
     steps: list[PlanStep] = []
-    for idx, raw_step in enumerate(raw_steps):
+    used_ids: set[str] = set()
+    for raw_step in raw_steps:
+        if len(steps) >= 8:
+            break
         if not isinstance(raw_step, dict):
             continue
+        description = str(raw_step.get("description") or "").strip()
+        if not description:
+            continue
+        step_id = str(raw_step.get("id") or f"step_{len(steps) + 1}").strip()
+        if not step_id or step_id in used_ids:
+            suffix = len(steps) + 1
+            while f"step_{suffix}" in used_ids:
+                suffix += 1
+            step_id = f"step_{suffix}"
+        used_ids.add(step_id)
+        raw_tool_args = raw_step.get("tool_args")
         steps.append(
             PlanStep(
-                id=str(raw_step.get("id") or f"step_{idx + 1}"),
-                description=str(raw_step.get("description") or ""),
-                expected_outcome=str(raw_step.get("expected_outcome") or ""),
-                tool_name=str(raw_step.get("tool_name") or ""),
-                tool_args=dict(raw_step.get("tool_args") or {}),
+                id=step_id,
+                description=description,
+                expected_outcome=str(raw_step.get("expected_outcome") or "").strip(),
+                tool_name=str(raw_step.get("tool_name") or "").strip(),
+                tool_args=dict(raw_tool_args) if isinstance(raw_tool_args, dict) else {},
             )
         )
     if not steps:
         return None
     reasoning = str(obj.get("reasoning") or "")
     return steps, reasoning
+
+
+async def plan_async(
+    loop: AgenticLoop,
+    objective: str,
+    *,
+    timeout_s: float = 60.0,
+) -> Plan | None:
+    """Create a selected advisory plan with tools disabled."""
+    objective = objective.strip()
+    if not objective:
+        raise ValueError("planning requires a non-empty objective")
+    try:
+        import asyncio
+
+        user_prompt = (
+            f"Objective:\n{objective}\n\n"
+            f"Available tools (planning references only):\n{_build_tool_summary(loop._tools)}"
+        )
+        response = await asyncio.wait_for(
+            loop._call_llm(
+                _PLAN_SYSTEM_PROMPT,
+                [{"role": "user", "content": user_prompt}],
+                model=loop.model,
+                response_schema=replan_response_schema(),
+                allow_tools=False,
+            ),
+            timeout=timeout_s,
+        )
+        if response is None:
+            return None
+        track = getattr(loop, "_track_usage_async", None)
+        if track is not None:
+            try:
+                await track(response)
+            except Exception:
+                log.debug("Plan usage tracking failed", exc_info=True)
+        parsed = parse_replan_response((getattr(response, "text", "") or "").strip())
+        if parsed is None:
+            return None
+        steps, selection_summary = parsed
+        if not selection_summary.strip() or any(not step.expected_outcome for step in steps):
+            return None
+        available_tools = {str(tool.get("name", "")) for tool in loop._tools}
+        grounded_steps = tuple(
+            PlanStep(
+                id=step.id,
+                description=step.description,
+                expected_outcome=step.expected_outcome,
+                tool_name=step.tool_name if step.tool_name in available_tools else "",
+                tool_args=step.tool_args,
+            )
+            for step in steps
+        )
+        return Plan(steps=grounded_steps, reasoning=selection_summary.strip())
+    except Exception:
+        log.warning("plan_async call failed", exc_info=True)
+        return None
 
 
 def _build_replan_user_prompt(plan: Plan | None, turn_result: Any, trigger: str) -> str:

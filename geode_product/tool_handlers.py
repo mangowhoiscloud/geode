@@ -91,7 +91,7 @@ def compose_tool_plan(
     )
     from core.agent.sub_agent import SUBAGENT_DENIED_TOOLS
     from core.agent.tool_executor.executor import SPECIAL_EXECUTION_BINDINGS
-    from core.cli.routing import compose_command_registry
+    from core.slash_routing import compose_command_registry
     from core.cli.tool_handlers import _build_tool_handler_catalog
     from core.tools.base import load_all_tool_definitions
     from core.tools.google_capabilities import GOOGLE_TOOL_BINDINGS
@@ -104,7 +104,7 @@ def compose_tool_plan(
         compile_tool_plan,
     )
 
-    from geode_product.cli import PRODUCT_COMMAND_SPECS
+    from geode_product.slash_commands import PRODUCT_COMMAND_SPECS
 
     catalog = _build_tool_handler_catalog(
         mcp_manager=mcp_manager,

@@ -1549,6 +1549,7 @@ argument-hint: "[issue-number]"
 | `/skill <name> [args]` | 스킬 하나를 호출합니다. `$ARGUMENTS` 치환과 동적 컨텍스트 실행 포함 (`core/cli/commands/skills.py`) |
 | `context: fork` 스킬 | 렌더된 본문을 `run_agentic_oneshot`(`core/cli/bootstrap.py`)으로 넘겨 격리된 서브에이전트 원샷으로 실행합니다. geode-mcp의 `run_agent`와 같은 최소 스택입니다 |
 | `/skills` | 목록, 추가, 리로드 |
+| `/grill`, `/geo` | `grilling`과 `geo` 스킬을 기존 AgenticLoop에 스트리밍 주입하는 전용 별칭. 장기 GEO는 최대 3개의 독립 읽기 전용 증거 branch만 기존 협업 도구로 실행하고 부모가 합성·검증합니다. 별도 executor나 thought-tree 엔진은 만들지 않습니다 |
 | `geode skill list / create / show / remove` | 3계층을 관리하는 CLI. `--private`로 personal 계층에 생성합니다 |
 
 frontmatter의 `user-invocable: false`는 스킬을 배경 지식으로 돌려 `/skills` 목록에서 숨깁니다.
@@ -5792,7 +5793,7 @@ HITL 승인 프롬프트(`core/cli/ipc_client.py`의 `_handle_approval_request`)
 
 ## 슬래시 명령
 
-명시적 실행 위치와 주입 핸들러는 `core/cli/routing.py`의 커널 `COMMAND_REGISTRY`에 `geode_product/cli.py`의 `PRODUCT_COMMAND_SPECS`를 조립한 레지스트리가 정의합니다. thin REPL은 `/help`, `/fleet`, 인자 없는 `/model`도 로컬에서 특별 처리합니다. `core/cli/commands/_state.py`의 `COMMAND_MAP`은 legacy dispatcher action과 별칭을 매핑합니다. 로컬로 처리되지 않은 명령은 IPC `send_command`로 데몬에 전달됩니다.
+명시적 실행 위치와 주입 핸들러는 `core/slash_routing.py`의 커널 `COMMAND_REGISTRY`에 `geode_product/slash_commands.py`의 `PRODUCT_COMMAND_SPECS`를 조립한 레지스트리가 정의합니다. thin REPL은 `/help`, `/fleet`, 인자 없는 `/model`도 로컬에서 특별 처리합니다. `core/cli/commands/_state.py`의 `COMMAND_MAP`은 legacy dispatcher action과 별칭을 매핑합니다. 로컬로 처리되지 않은 짧은 명령은 IPC `send_command`, 장기 명령은`send_command_streaming`으로 데몬에 전달됩니다.
 
 | 명령 | 별칭 | 실행 위치 | 용도 | 핸들러 |
 | --- | --- | --- | --- | --- |
@@ -5807,6 +5808,10 @@ HITL 승인 프롬프트(`core/cli/ipc_client.py`의 `_handle_approval_request`)
 | `/recall` |  | THIN | 기억 풀 `list` / `show` / `save` | `core/cli/commands/recall.py` |
 | `/cognitive` |  | THIN | 세션의 cognitive state와 최근 이벤트 표시 | `core/cli/commands/session.py` |
 | `/fleet` |  | THIN | 최근 턴의 서브에이전트 fleet 뷰 | `core/cli/dispatcher.py` |
+| `/goal [objective|clear]` |  | DAEMON\_RPC | 지속 Goal 조회·생성·empty 전이. 목적 문장은 파싱하지 않고 그대로 저장 | `core/cli/commands/goal.py` |
+| `/plan [objective]` |  | DAEMON\_STREAM | 현재 advisory plan 조회 또는 도구가 꺼진 structured planner로 계획 생성. 실행하지 않음 | `core/server/ipc_server/plan_command.py` |
+| `/grill <decision>` |  | DAEMON\_STREAM | 의존성 frontier를 따라 의사결정을 압박 검증하는 grilling 스킬 | `core/cli/commands/skills.py` |
+| `/geo [target]` |  | DAEMON\_STREAM | 발견→선택→인용→흡수→충실도 단계별 GEO 감사 | `geode_product/slash_commands.py` |
 | `/quit` | `/exit`, `/q` | daemon | 세션 비용 요약과 함께 종료 | `core/cli/dispatcher.py` |
 | `/verbose` |  | daemon | verbose 토글 | `core/cli/dispatcher.py` |
 | `/schedule` | `/sched` | daemon | 예약 자동화 관리 | `core/cli/commands/schedule.py` |
@@ -6264,8 +6269,8 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 
 | 측정값 | 현재 트리 |
 | --- | --- |
-| 프로덕션 Python 파일 | 592 |
-| 테스트 Python 파일 | 689 |
+| 프로덕션 Python 파일 | 596 |
+| 테스트 Python 파일 | 690 |
 | 도구 정의 / 실행 등록 / 유효 스키마 | 87 / 90 / 87 |
 | RuntimeEvent 멤버 | 57 |
 | 기본 LLM 어댑터 | 7 |
