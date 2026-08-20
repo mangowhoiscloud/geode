@@ -7,18 +7,21 @@ import os
 import urllib.request
 from dataclasses import replace
 from pathlib import Path
+from typing import Any, cast
 from urllib.parse import parse_qs, urlparse
 
 import httpx
 import pytest
 from core.auth.google_oauth import (
     GOOGLE_SERVICE_BUNDLES,
+    RECOMMENDED_GOOGLE_SERVICES,
     GoogleAccount,
     GoogleAccountStore,
     GoogleCredentialStoreError,
     GoogleLoopbackReceiver,
     GoogleOAuthError,
     GoogleSecret,
+    GoogleServiceBundle,
     KeyringGoogleSecretStore,
     build_google_authorization_url,
     google_scopes_for_services,
@@ -26,6 +29,11 @@ from core.auth.google_oauth import (
     login_google,
     normalize_google_services,
     revoke_google_account,
+)
+from core.tools import google_capabilities
+from core.tools.google_capabilities import (
+    GOOGLE_SERVICE_DESCRIPTORS,
+    GoogleServiceDescriptor,
 )
 
 
@@ -74,6 +82,135 @@ def test_service_bundles_collapse_implied_read_scopes() -> None:
     scopes = google_scopes_for_services(["gmail-send", "calendar-read"])
     assert "openid" in scopes
     assert GOOGLE_SERVICE_BUNDLES["gmail-send"].scopes[0] in scopes
+
+
+def test_google_service_bundle_catalog_is_stable() -> None:
+    assert {
+        name: (bundle.name, bundle.scopes, bundle.description, bundle.risk)
+        for name, bundle in GOOGLE_SERVICE_BUNDLES.items()
+    } == {
+        "gmail-send": (
+            "gmail-send",
+            ("https://www.googleapis.com/auth/gmail.send",),
+            "Send mail without reading the mailbox",
+            "sensitive",
+        ),
+        "gmail-read": (
+            "gmail-read",
+            ("https://www.googleapis.com/auth/gmail.readonly",),
+            "Search and read Gmail messages",
+            "restricted",
+        ),
+        "calendar-read": (
+            "calendar-read",
+            ("https://www.googleapis.com/auth/calendar.events.owned.readonly",),
+            "Read events on calendars owned by the account",
+            "sensitive",
+        ),
+        "calendar-write": (
+            "calendar-write",
+            ("https://www.googleapis.com/auth/calendar.events.owned",),
+            "Read and edit events on calendars owned by the account",
+            "sensitive",
+        ),
+        "workspace-files": (
+            "workspace-files",
+            ("https://www.googleapis.com/auth/drive.file",),
+            "Use Drive, Docs, and Sheets files created or explicitly opened by GEODE",
+            "non-sensitive",
+        ),
+        "tasks-read": (
+            "tasks-read",
+            ("https://www.googleapis.com/auth/tasks.readonly",),
+            "Read Google Tasks",
+            "sensitive",
+        ),
+        "tasks-write": (
+            "tasks-write",
+            ("https://www.googleapis.com/auth/tasks",),
+            "Read and edit Google Tasks",
+            "sensitive",
+        ),
+        "contacts-read": (
+            "contacts-read",
+            ("https://www.googleapis.com/auth/contacts.readonly",),
+            "Read Google Contacts through the People API",
+            "sensitive",
+        ),
+    }
+
+
+def test_google_service_descriptors_own_static_requirements() -> None:
+    assert GOOGLE_SERVICE_BUNDLES is GOOGLE_SERVICE_DESCRIPTORS
+    assert GoogleServiceBundle is GoogleServiceDescriptor
+    assert RECOMMENDED_GOOGLE_SERVICES == (
+        "gmail-send",
+        "calendar-read",
+        "workspace-files",
+    )
+    assert {
+        name: (
+            descriptor.required_api_services,
+            descriptor.implies,
+            descriptor.recommended,
+        )
+        for name, descriptor in GOOGLE_SERVICE_DESCRIPTORS.items()
+    } == {
+        "gmail-send": (("gmail.googleapis.com",), (), True),
+        "gmail-read": (("gmail.googleapis.com",), (), False),
+        "calendar-read": (("calendar-json.googleapis.com",), (), True),
+        "calendar-write": (
+            ("calendar-json.googleapis.com",),
+            ("calendar-read",),
+            False,
+        ),
+        "workspace-files": (
+            (
+                "drive.googleapis.com",
+                "docs.googleapis.com",
+                "sheets.googleapis.com",
+            ),
+            (),
+            True,
+        ),
+        "tasks-read": (("tasks.googleapis.com",), (), False),
+        "tasks-write": (("tasks.googleapis.com",), ("tasks-read",), False),
+        "contacts-read": (("people.googleapis.com",), (), False),
+    }
+    assert not hasattr(GOOGLE_SERVICE_DESCRIPTORS, "__setitem__")
+    assert GoogleServiceDescriptor("test", (), "Test", "sensitive").required_api_services == ()
+
+
+def test_google_service_descriptor_is_deeply_immutable_and_duplicate_safe() -> None:
+    scopes = ["scope"]
+    services = ["service.googleapis.com"]
+    implied = ["parent"]
+    descriptor = GoogleServiceDescriptor(
+        "test",
+        cast(Any, scopes),
+        "Test",
+        "sensitive",
+        cast(Any, services),
+        cast(Any, implied),
+    )
+    scopes.clear()
+    services.clear()
+    implied.clear()
+
+    assert descriptor.scopes == ("scope",)
+    assert descriptor.required_api_services == ("service.googleapis.com",)
+    assert descriptor.implies == ("parent",)
+    with pytest.raises(ValueError, match="duplicate Google service descriptor: test"):
+        google_capabilities._descriptor_catalog((descriptor, descriptor))
+    with pytest.raises(ValueError, match="invalid Google service implications: test"):
+        google_capabilities._descriptor_catalog((replace(descriptor, implies=("missing",)),))
+    with pytest.raises(ValueError, match="cyclic Google service implications"):
+        google_capabilities._descriptor_catalog(
+            (
+                replace(descriptor, name="a", implies=("b",)),
+                replace(descriptor, name="b", implies=("a",)),
+            )
+        )
 
 
 def test_unknown_service_bundle_is_rejected() -> None:

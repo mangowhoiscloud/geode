@@ -47,6 +47,16 @@ functional change.
 
 ## [Unreleased]
 
+### Architecture
+
+- **Tool composition now has an immutable validation snapshot.** The product
+  handler composer joins model-facing specs, execution origins, existing safety
+  classifications, and capability requirements into a content-addressed
+  `ToolPlan` before constructing a session. Duplicate or unbound registrations
+  fail early, while current handler ordering and provider payloads remain
+  unchanged. Google OAuth's eight service bundles now derive from one frozen
+  descriptor catalog without changing login or token behavior.
+
 ## [1.0.23] - 2026-08-20
 
 > Bundled product boundaries, a self-improving product ring, and an isolated

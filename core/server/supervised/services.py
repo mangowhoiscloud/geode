@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from core.agent.tool_executor import ToolExecutor
     from core.config.policy_source import PolicySourceBundle
     from core.observability.run_event import RunEventSinkProvider
+    from core.tools.plan import ToolPlan
 
 log = logging.getLogger(__name__)
 
@@ -123,6 +124,7 @@ class SharedServices:
     _owns_hook_system: bool = False
     lane_queue: Any = None  # Unified LaneQueue — single concurrency gate
     tool_handlers: dict[str, Any] = field(default_factory=dict)
+    tool_plan: ToolPlan | None = None
     worker_module: str = "core.agent.worker"
     agent_search_dirs: tuple[Path, ...] = ()
 
@@ -424,6 +426,7 @@ def build_shared_services(
     lane_queue: Any = None,
     verbose: bool = False,
     tool_handler_builder: Callable[..., dict[str, Any]] | None = None,
+    tool_plan_builder: Callable[..., tuple[ToolPlan, dict[str, Any]]] | None = None,
     worker_module: str = "core.agent.worker",
     agent_search_dirs: Sequence[Path] = (),
 ) -> SharedServices:
@@ -433,6 +436,28 @@ def build_shared_services(
     (per-thread, no shared mutable ref).  If *hook_system* is None, a default
     HookSystem is built via ``build_hooks()``.
     """
+    if tool_handler_builder is not None and tool_plan_builder is not None:
+        raise ValueError("tool_handler_builder and tool_plan_builder are mutually exclusive")
+
+    # Validate composition before allocating hooks or process-global offload state.
+    tool_plan = None
+    if tool_plan_builder is not None:
+        tool_plan, tool_handlers = tool_plan_builder(
+            verbose=verbose,
+            mcp_manager=mcp_manager,
+            skill_registry=skill_registry,
+        )
+    else:
+        if tool_handler_builder is None:
+            from core.cli.tool_handlers import _build_tool_handlers
+
+            tool_handler_builder = _build_tool_handlers
+        tool_handlers = tool_handler_builder(
+            verbose=verbose,
+            mcp_manager=mcp_manager,
+            skill_registry=skill_registry,
+        )
+
     # Build hooks if not provided
     owns_hook_system = hook_system is None
     if hook_system is None:
@@ -475,17 +500,6 @@ def build_shared_services(
         hooks=hook_system,
     )
 
-    # Build tool handlers — no agentic_ref (uses ContextVar instead)
-    if tool_handler_builder is None:
-        from core.cli.tool_handlers import _build_tool_handlers
-
-        tool_handler_builder = _build_tool_handlers
-    tool_handlers = tool_handler_builder(
-        verbose=verbose,
-        mcp_manager=mcp_manager,
-        skill_registry=skill_registry,
-    )
-
     # Resolve cost budget
     cost_budget = 0.0
     try:
@@ -512,6 +526,7 @@ def build_shared_services(
         _owns_hook_system=owns_hook_system,
         lane_queue=lane_queue,
         tool_handlers=tool_handlers,
+        tool_plan=tool_plan,
         worker_module=worker_module,
         agent_search_dirs=tuple(agent_search_dirs),
         _cost_budget=cost_budget,

@@ -7,7 +7,7 @@ from typing import Any
 
 import typer
 
-from geode_product.tool_handlers import build_tool_handlers
+from geode_product.tool_handlers import compose_tool_plan
 
 
 def build_policy_sources() -> Any:
@@ -111,7 +111,7 @@ def build_shared_services(**kwargs: Any) -> Any:
     kwargs.setdefault("feature_hook_registrar", register_hooks)
     return build_core_services(
         **kwargs,
-        tool_handler_builder=build_tool_handlers,
+        tool_plan_builder=compose_tool_plan,
         worker_module="geode_product.worker",
         agent_search_dirs=(Path(__file__).parent / "seed_generation" / "agents",),
     )

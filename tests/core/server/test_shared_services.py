@@ -327,6 +327,45 @@ class TestBuildSharedServices:
         services = build_shared_services()
         assert len(services.tool_handlers) > 0
 
+    def test_tool_plan_builder_keeps_plan_and_handlers_together(self) -> None:
+        plan = object()
+        handlers = {"test_tool": MagicMock()}
+        builder = MagicMock(return_value=(plan, handlers))
+
+        services = build_shared_services(
+            hook_system=MagicMock(),
+            lane_queue=MagicMock(),
+            tool_plan_builder=builder,
+        )
+
+        assert services.tool_plan is plan
+        assert services.tool_handlers is handlers
+        builder.assert_called_once_with(
+            verbose=False,
+            mcp_manager=None,
+            skill_registry=None,
+        )
+
+    def test_tool_composition_has_one_authority(self) -> None:
+        with pytest.raises(ValueError, match="mutually exclusive"):
+            build_shared_services(
+                tool_handler_builder=MagicMock(),
+                tool_plan_builder=MagicMock(),
+            )
+
+    def test_tool_plan_failure_precedes_process_side_effects(self) -> None:
+        builder = MagicMock(side_effect=ValueError("invalid plan"))
+
+        with (
+            patch("core.wiring.bootstrap.build_hooks") as build_hooks,
+            patch("core.wiring.bootstrap.build_tool_offload") as build_tool_offload,
+            pytest.raises(ValueError, match="invalid plan"),
+        ):
+            build_shared_services(tool_plan_builder=builder)
+
+        build_hooks.assert_not_called()
+        build_tool_offload.assert_not_called()
+
     def test_explicit_composition_reaches_every_session_owner(self) -> None:
         from core.hooks import MiddlewareRegistry
 

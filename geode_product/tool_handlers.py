@@ -21,10 +21,13 @@ tools into the GEODE ToolExecutor:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from core.cli.tool_handlers.delegated import make_delegate_handler
 from core.cli.tool_handlers.registration import UniqueEntries
+
+if TYPE_CHECKING:
+    from core.tools.plan import ToolPlan
 
 _SEED_TOOL_CLASSES = (
     (
@@ -44,6 +47,8 @@ _SEED_TOOL_CLASSES = (
     ),
 )
 
+_INTERNAL_ONLY_HANDLERS = frozenset({"computer", "doctor_slack", "recall_tool_result"})
+
 
 def product_handler_groups() -> tuple[tuple[str, UniqueEntries[str, Any]], ...]:
     """Return the product-owned batches consumed by the core composer."""
@@ -60,18 +65,94 @@ def build_tool_handlers(
     mcp_manager: Any = None,
     skill_registry: Any = None,
 ) -> dict[str, Any]:
-    """Compose the kernel and product handler groups once."""
+    """Compose and validate the kernel and product handler groups once."""
+    _plan, handlers = compose_tool_plan(
+        verbose=verbose,
+        mcp_manager=mcp_manager,
+        skill_registry=skill_registry,
+    )
+    return handlers
+
+
+def compose_tool_plan(
+    *,
+    verbose: bool = False,
+    mcp_manager: Any = None,
+    skill_registry: Any = None,
+    previous: ToolPlan | None = None,
+) -> tuple[ToolPlan, dict[str, Any]]:
+    """Validate the current product catalog without changing its projections."""
+    from core.agent.safety import (
+        DANGEROUS_TOOLS,
+        EXPENSIVE_TOOLS,
+        HEADLESS_DENIED_TOOLS,
+        SENSITIVE_TOOLS,
+        WRITE_TOOLS,
+    )
+    from core.agent.sub_agent import SUBAGENT_DENIED_TOOLS
+    from core.agent.tool_executor.executor import SPECIAL_EXECUTION_BINDINGS
     from core.cli.routing import compose_command_registry
-    from core.cli.tool_handlers import build_tool_handlers as build_core_tool_handlers
+    from core.cli.tool_handlers import _build_tool_handler_catalog
+    from core.tools.base import load_all_tool_definitions
+    from core.tools.personal_data import PERSONAL_DATA_TOOLS
+    from core.tools.plan import ExecutionBinding, SafetyPolicy, ToolSpec, compile_tool_plan
 
     from geode_product.cli import PRODUCT_COMMAND_SPECS
 
-    return build_core_tool_handlers(
-        verbose=verbose,
+    catalog = _build_tool_handler_catalog(
         mcp_manager=mcp_manager,
         skill_registry=skill_registry,
         command_registry=compose_command_registry(PRODUCT_COMMAND_SPECS),
         extra_groups=product_handler_groups(),
+    )
+    if invalid := [name for name, handler in catalog.handlers.items() if not callable(handler)]:
+        raise TypeError(f"tool handlers must be callable: {', '.join(invalid)}")
+    definitions = load_all_tool_definitions()
+    specs = tuple(
+        (
+            ToolSpec(
+                name=item["name"],
+                description=item["description"],
+                input_schema=item["input_schema"],
+            ),
+            f"core/tools/definitions.json[{index}]",
+        )
+        for index, item in enumerate(definitions)
+    )
+    bindings = tuple(
+        ExecutionBinding(name=name, origin=catalog.origins[name])
+        for name in catalog.handlers
+        if name not in _INTERNAL_ONLY_HANDLERS
+    ) + tuple(
+        ExecutionBinding(
+            name=name,
+            origin="core.agent.tool_executor.special",
+            route="special",
+        )
+        for name in sorted(SPECIAL_EXECUTION_BINDINGS)
+    )
+    gated = DANGEROUS_TOOLS | SENSITIVE_TOOLS | WRITE_TOOLS | set(EXPENSIVE_TOOLS)
+    safety = {
+        item["name"]: SafetyPolicy(
+            effect=(
+                "system"
+                if item["name"] in DANGEROUS_TOOLS
+                else "write"
+                if item["name"] in WRITE_TOOLS
+                else "external"
+                if item["name"] in SENSITIVE_TOOLS or item["name"] in EXPENSIVE_TOOLS
+                else "read"
+            ),
+            data_class="personal" if item["name"] in PERSONAL_DATA_TOOLS else "public",
+            consent_required=item["name"] in gated,
+            allow_headless=item["name"] not in HEADLESS_DENIED_TOOLS,
+            allow_subagents=item["name"] not in SUBAGENT_DENIED_TOOLS,
+        )
+        for item in definitions
+    }
+    return (
+        compile_tool_plan(specs, bindings, safety=safety, previous=previous),
+        dict(catalog.handlers),
     )
 
 
