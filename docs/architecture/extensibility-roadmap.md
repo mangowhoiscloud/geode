@@ -226,7 +226,6 @@ normal review and CI; implementations start only after the claim merges.
 | Closure package | GAP IDs | Owner/session | Implementation branch | Claim evidence | Claimed at (UTC) |
 |---|---|---|---|---|---|
 | R8.3 | REL-004 | `session=codex-root task=r8-3-publication-grace-evidence` | `feature/r8-3-publication-grace-evidence` | Readiness [#3039](https://github.com/mangowhoiscloud/geode/pull/3039); v1.0.23 GitHub/PyPI parity and candidate interval re-audited | `2026-08-20T07:41:19Z` |
-| R2.1 | CAP-001, CAP-002 | `session=codex-root task=r2-1-capability-records` | `feature/r2-1-capability-records` | Readiness [#3041](https://github.com/mangowhoiscloud/geode/pull/3041); package acceptance and current capability/tool consumers re-audited | `2026-08-20T08:06:08Z` |
 
 ## 1. Program objective
 
@@ -519,8 +518,8 @@ and closure evidence are appended in §10.
 | BND-002 | `MISFIT` | 31 `core` → `plugins` import sites across 14 files | AST gate reports zero reverse dependency; composition owns feature registration | R1.2 | BND-001 | `IN_DEVELOP` |
 | BND-003 | `ABSENT` | One-off core-only probe fails at `core.cli`; CI does not test an installed kernel without features | Isolated wheel/package test boots and runs kernel tests without bundled/third-party modules | R1.3 | BND-001, BND-002, BND-006 | `IN_DEVELOP` |
 | BND-004 | `PARTIAL` | Skills/hooks/MCP have different discovery rules; Python feature collision/trust behavior is not unified | Each supported external surface declares non-executing discovery, precedence, collision, enablement, trust-before-load, reload, isolation, and teardown | R6.3 | BND-001, LLM-002 | `OPEN` |
-| CAP-001 | `PARTIAL` | Google service bundles exist but do not own all tool/policy relationships | Generic capability records plus `GoogleServiceDescriptor` are executable SOTs | R2.1 | BND-002 | `IN_PROGRESS` |
-| CAP-002 | `ABSENT` | `ToolRegistry` owns tool objects while other registries/lists own execution and safety | Immutable `ToolRegistration` and `ToolPlan` derive every tool consumer | R2.1 | CAP-001 | `IN_PROGRESS` |
+| CAP-001 | `PARTIAL` | Google service bundles exist but do not own all tool/policy relationships | Generic capability records plus `GoogleServiceDescriptor` are executable SOTs | R2.1 | BND-002 | `IN_DEVELOP` |
+| CAP-002 | `ABSENT` | `ToolRegistry` owns tool objects while other registries/lists own execution and safety | Immutable `ToolRegistration` and `ToolPlan` derive every tool consumer | R2.1 | CAP-001 | `IN_DEVELOP` |
 | CAP-003 | `MISFIT` | Native Google handlers are bound in `core/cli/tool_handlers/delegated.py` | Runtime/composition binds handlers; CLI only renders/forwards user interaction | R2.3 | CAP-002, BND-002 | `OPEN` |
 | CAP-004 | `MISFIT` | Google names repeat in safety, approval, policy, personal-data, and CLI modules | Effect/data/auth/resource metadata derives gates; no independent tool-name allowlists | R2.2 | CAP-002 | `OPEN` |
 | CAP-005 | `PARTIAL` | `definitions.json`, tool objects, provider schemas, and defer sets can drift | Anthropic/OpenAI/deferred schemas and execution map share one plan hash and parity tests | R2.3 | CAP-002 | `OPEN` |
@@ -1926,6 +1925,7 @@ pre-release delivery evidence survives after the claim row is gone.
 | R1.5 | BND-006 | [#3025](https://github.com/mangowhoiscloud/geode/pull/3025) | `34bce3677dee545b057d9c60a6cde56bd914cd14` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, full non-live tests, lint/format, type check, security, Pages build, official-doc parity, macOS/Ubuntu install smoke, isolated wheel/resource checks, exact five-facade census, zero classified-kernel product imports, and committed-diff review all passed) |
 | R1.3 | BND-003 | [#3028](https://github.com/mangowhoiscloud/geode/pull/3028) | `6f1581c9bc64ff22e3e3cf7f05ea45c01179ebba` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, full non-live tests, lint/format, type check, security, Pages build, macOS/Ubuntu install smoke, an ephemeral core-only wheel projection, exhaustive isolated import of 393 installed kernel modules, zero-extension registry and lifecycle checks, 42 installed-kernel unit tests, and committed-diff review all passed) |
 | R1.7 | REL-003 | [#3033](https://github.com/mangowhoiscloud/geode/pull/3033) | `70a1f1bcd0520b33e50436cc340265b6534bc133` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, full non-live tests, lint/format, type check, security, Pages build, macOS/Ubuntu install smoke, committed-lock validation, clean-wheel daemon IPC v1.0.23, 393 isolated kernel imports plus 42 installed-kernel tests, public-metadata parity, and independent committed-diff review all passed) |
+| R2.1 | CAP-001, CAP-002 | [#3043](https://github.com/mangowhoiscloud/geode/pull/3043) | `ba7eea3288bd443a52181151de13032f5280d263` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, full non-live tests with coverage, lint/format, type check, security, Pages build, official-doc parity, macOS/Ubuntu install smoke, wheel/sdist inspection, clean installed-package smoke, and independent staged-diff review all passed; the product daemon now retains a generation/hash-bound immutable ToolPlan beside the compatibility handler map, while live consumer convergence remains required before R2.1 can reach DONE) |
 
 ### 10.2 Main closure evidence
 
@@ -2074,12 +2074,18 @@ before `2026-09-19T06:53:01.550033Z`, and any intervening incompatible release
 restarts the interval. This evidence-only package reuses the public
 distribution verifier and does not authorize runtime or schema changes.
 
-R2.1 (`CAP-001`, `CAP-002`) is `IN_PROGRESS` under the active claim for
-`feature/r2-1-capability-records`, based on readiness
-[#3041](https://github.com/mangowhoiscloud/geode/pull/3041). Implementation
-starts only after this claim lands and a new worktree is allocated from the
-updated `develop`. BND-002 is `IN_DEVELOP`, and the CAP-002-to-CAP-001 edge is
-internal to R2.1. R9.1 is also dependency-satisfied but remains `OPEN` pending
-its own serialized readiness transaction. R8.2 (`STORE-003`) remains `OPEN`
-behind REL-004 and STORE-001; R8.4 (`BND-008`) additionally waits for
-STORE-003.
+R2.1 (`CAP-001`, `CAP-002`) is `IN_DEVELOP` after feature
+[#3043](https://github.com/mangowhoiscloud/geode/pull/3043) merged as
+`ba7eea3288bd443a52181151de13032f5280d263`. The delivered boundary retains
+one immutable, generation/hash-bound native `ToolPlan` beside the compatibility
+handler map and validates ordered schema, execution, safety, and capability
+parity before product daemon sessions. R2.1 is not eligible for `DONE` until
+R2.3 (`CAP-003`, `CAP-005`) supplies the immutable CAP-002 “every tool
+consumer” evidence for live `AgenticLoop`/`ToolExecutor`, provider/deferred,
+and worker/MCP roots; those remain explicit R2.3 non-goals here.
+
+The next serialized master-ledger transaction is a whole-ledger readiness
+audit. R2.2 is the earliest candidate in master order; R2.3, R3.1, and R9.1
+require their own readiness transactions even where dependencies are already
+satisfied. R8.2 (`STORE-003`) remains `OPEN` behind REL-004 and STORE-001;
+R8.4 (`BND-008`) additionally waits for STORE-003.
