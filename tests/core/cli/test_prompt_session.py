@@ -84,10 +84,13 @@ class _FakeFileHistory:
         self.strings.append(string)
 
 
-def _build_with_fakes(monkeypatch: pytest.MonkeyPatch) -> Any:
+def _build_with_fakes(
+    monkeypatch: pytest.MonkeyPatch,
+    quota_thresholds: tuple[float, float] | None = None,
+) -> Any:
     monkeypatch.setattr("prompt_toolkit.PromptSession", _FakePromptSession)
     monkeypatch.setattr("prompt_toolkit.history.FileHistory", _FakeFileHistory)
-    return _build_prompt_session()
+    return _build_prompt_session(quota_thresholds)
 
 
 def test_prompt_session_keeps_default_editing_bindings(
@@ -134,6 +137,18 @@ def test_prompt_session_uses_compact_geode_colored_prompt(
     assert spinner_glyph.ROSE_HEX in message
 
 
+def test_prompt_session_uses_explicit_quota_thresholds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from core.cli.quota_banner import current_banner
+
+    _build_with_fakes(monkeypatch, (0.2, 0.8))
+    banner = current_banner()
+    assert banner is not None
+    banner.set_state(provider="test", used_tokens=5, total_tokens=10)
+    assert banner.tier() == "yellow"
+
+
 def test_invalidate_on_text_changed_invalidates_running_app(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -164,7 +179,11 @@ def _fail_then_succeed_session(fail_times: int) -> Any:
 def _patch_read_input_collaborators(monkeypatch: pytest.MonkeyPatch, session: Any) -> MagicMock:
     monkeypatch.setattr(prompt_session_mod, "_prompt_session", session)
     monkeypatch.setattr(prompt_session_mod, "_prompt_failures", 0)
-    monkeypatch.setattr(prompt_session_mod, "_get_prompt_session", lambda: session)
+    monkeypatch.setattr(
+        prompt_session_mod,
+        "_get_prompt_session",
+        lambda _quota_thresholds=None: session,
+    )
     monkeypatch.setattr(prompt_session_mod, "_apply_toolbar_visibility", lambda s: None)
     monkeypatch.setattr(prompt_session_mod, "_drain_stdin", lambda: None)
     monkeypatch.setattr(prompt_session_mod, "_restore_terminal", lambda: None)

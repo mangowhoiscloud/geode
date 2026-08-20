@@ -111,7 +111,7 @@ export default function Page() {
                 <tr><td><code>geode petri-archive</code></td><td>petri eval 로그를 워크트리 밖으로 보존하고 YAML 요약 작성</td><td><code>--raw-archive-dir</code>, <code>--summary-dir</code></td><td><code>geode_product/petri_audit/cli_audit.py</code></td></tr>
                 <tr><td><code>geode outer-bundle</code></td><td>자기개선 루프 활동을 하나의 타임라인으로 묶어 보는 뷰어</td><td><code>--limit</code>, <code>--json</code></td><td><code>core/cli/outer_bundle.py</code></td></tr>
                 <tr><td><code>geode reindex</code></td><td>전 프로젝트 sessions.db에서 <code>~/.geode/search/global.db</code> FTS5 인덱스 재구축</td><td><code>--projects-root</code></td><td><code>core/cli/commands/reindex.py</code></td></tr>
-                <tr><td><code>geode campaign</code></td><td>3-arm 자기개선 캠페인 드라이버의 thin 포워더</td><td><code>--n</code>, <code>--k</code>, <code>--arms</code>, <code>--dry-run</code></td><td><code>core/self_improving/campaign.py</code></td></tr>
+                <tr><td><code>geode campaign</code></td><td>3-arm 자기개선 캠페인 드라이버의 thin 포워더</td><td><code>--n</code>, <code>--k</code>, <code>--arms</code>, <code>--dry-run</code></td><td><code>geode_product/self_improving/campaign.py</code></td></tr>
               </tbody>
             </table>
 
@@ -350,7 +350,7 @@ export default function Page() {
                 <tr><td><code>geode petri-archive</code></td><td>Persist a petri eval log outside the worktree plus a YAML summary</td><td><code>--raw-archive-dir</code>, <code>--summary-dir</code></td><td><code>geode_product/petri_audit/cli_audit.py</code></td></tr>
                 <tr><td><code>geode outer-bundle</code></td><td>Crosswalk self-improving activity into one timeline</td><td><code>--limit</code>, <code>--json</code></td><td><code>core/cli/outer_bundle.py</code></td></tr>
                 <tr><td><code>geode reindex</code></td><td>Rebuild the cross-project FTS5 index at <code>~/.geode/search/global.db</code></td><td><code>--projects-root</code></td><td><code>core/cli/commands/reindex.py</code></td></tr>
-                <tr><td><code>geode campaign</code></td><td>Thin forwarder for the 3-arm self-improving campaign driver</td><td><code>--n</code>, <code>--k</code>, <code>--arms</code>, <code>--dry-run</code></td><td><code>core/self_improving/campaign.py</code></td></tr>
+                <tr><td><code>geode campaign</code></td><td>Thin forwarder for the 3-arm self-improving campaign driver</td><td><code>--n</code>, <code>--k</code>, <code>--arms</code>, <code>--dry-run</code></td><td><code>geode_product/self_improving/campaign.py</code></td></tr>
               </tbody>
             </table>
 

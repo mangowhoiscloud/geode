@@ -64,6 +64,12 @@ functional change.
   installed artifacts ship the canonical data files, and the maintained
   legacy entry points are thin forwarding facades over one implementation.
 
+- **The self-improving control plane now lives in the product ring.** Runtime,
+  policy, measurement, CLI, scheduler, worker, and MCP implementations moved to
+  `geode_product.self_improving`; `core` retains only tracked state plus the
+  import root and four documented launcher facades. Product capabilities are
+  injected explicitly, while state paths and replay identifiers remain stable.
+
 - **OpenAI model routing now uses one provider family.** GPT picker entries
   report `openai`; credential source selects ChatGPT subscription OAuth or
   Platform PAYG without presenting Codex as a separate provider.

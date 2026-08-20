@@ -19,14 +19,18 @@ status, package ordering, and implementation permission.
 
 The base `geode-agent` distribution ships the closed `core` kernel and the
 first-party `geode_product` shell together. The temporary `plugins` package
-contains only compatibility facades for the four moved bundled features;
-the self-improving control plane still lives under `core/self_improving`.
+contains only compatibility facades for four moved bundled features, and
+`core.self_improving` contains the import root plus four documented launcher
+facades. The self-improving implementation lives under
+`geode_product/self_improving` while its tracked state remains under
+`core/self_improving/state`.
 The generated architecture baseline owns the live kernel-to-product import
 inventory and requires it to remain empty.
 
 Those facts do not describe an external plugin system. An external extension
 must be independently discoverable, enableable, removable, installable, and
-testable. None of the five packages classified here meets that test today.
+testable. None of the five bundled feature families classified here meets
+that test.
 
 R1.1 is a boundary decision only. It moves no module, import, entry point,
 state root, package data, registration, or writer.
@@ -71,10 +75,10 @@ lands; canonical implementation and package data live only in `geode_product`.
 | `plugins.seed_generation` | bundled product feature | `geode_product.seed_generation` | BND-002 |
 | `core.self_improving` | bundled product feature in the wrong ring | `geode_product.self_improving` | BND-005, then BND-006 |
 
-There is no independently removable external extension, misplaced kernel
-concern, or compatibility-only package among these current source packages.
-An old path becomes a compatibility facade only after its canonical code has
-moved.
+There is no independently removable external extension among these feature
+families. The old `plugins.*` roots and the bounded `core.self_improving`
+surface are compatibility projections; canonical implementation and package
+data are owned by `geode_product`.
 
 Petri, seed generation, and self-improving remain cohesive sibling features.
 Benchmark harness and Crucible remain sibling evaluation features. They are

@@ -13,17 +13,18 @@ OL-P2 adds two pieces:
 2. **Opt-in call gate** — `enforce_or_raise()` raises
    `QuotaAbortError` when the banner is aborted. Callers wire this
    before LLM call to fail-fast instead of consuming more quota.
-3. **autoresearch audit wired** — `core/self_improving/train.py::main`'s
+3. **autoresearch audit wired** — `geode_product/self_improving/train.py::main`'s
    audit subprocess invocation calls `enforce_or_raise` before
    `subprocess.run` so an aborted quota stops the audit at the gate.
 """
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pytest
-from core.self_improving import measure
+from geode_product.self_improving import measure
 
 # ---------------------------------------------------------------------------
 # Auto-trip on threshold breach
@@ -166,21 +167,22 @@ def test_autoresearch_train_calls_enforce_or_raise(
     """
     from pathlib import Path
 
-    from core.self_improving import measure as train
+    from geode_product.self_improving import measure as train
 
     source = Path(train.__file__).read_text(encoding="utf-8")
     # The gate call must be in the file
     assert "enforce_or_raise" in source, (
-        "OL-P2 regressed: core/self_improving/train.py does not call enforce_or_raise"
+        "OL-P2 regressed: geode_product/self_improving/train.py does not call enforce_or_raise"
     )
     # And QuotaAbortError must be imported / caught
     assert "QuotaAbortError" in source, (
-        "OL-P2 regressed: core/self_improving/train.py does not handle QuotaAbortError"
+        "OL-P2 regressed: geode_product/self_improving/train.py does not handle QuotaAbortError"
     )
 
 
 def test_autoresearch_run_audit_aborts_on_tripped_banner(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     """When `current_banner()` returns a tripped banner, `run_audit`
     should RuntimeError BEFORE `subprocess.run` is reached.
@@ -194,6 +196,11 @@ def test_autoresearch_run_audit_aborts_on_tripped_banner(
     banner.trip_abort(reason="test-tripped")
 
     monkeypatch.setattr("core.cli.quota_banner.current_banner", lambda: banner)
+    monkeypatch.setattr(
+        measure,
+        "_dump_wrapper_override",
+        lambda: tmp_path / "wrapper-override.json",
+    )
     subprocess_calls: list[Any] = []
 
     def _fake_run(*args: Any, **kwargs: Any) -> Any:

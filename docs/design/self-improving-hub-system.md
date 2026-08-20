@@ -306,7 +306,7 @@ When citing data that may change, anchor to source with version:
 | Judge dimension count (full) | 38 | inspect-petri default |
 | Pipeline phase count | 8 | `plugins/seed_generation/orchestrator.py:_PHASE_ORDER` |
 | Baseline schema version | v2 | PR-2 of petri-schema-v2 cascade |
-| Mutation row schema | W4 | `core/self_improving_loop/runner.py:81` ApplyRecord |
+| Mutation row schema | W4 | `geode_product/self_improving/loop/runner.py:81` ApplyRecord |
 | Fitness axes count | 4 (dim / ux / admire / bench) | ADR-012 §Decision.2 amendment |
 | Hub surface count | 3 (petri / seedgen / autoresearch) | This DESIGN.md |
 | Harness chip count | 4 (PAYG / Claude Code / Codex / GEODE) | This DESIGN.md §3 |

@@ -25,8 +25,8 @@
 | Karpathy 원본 | GEODE fork | Mutation? |
 |---|---|---|
 | `prepare.py` (data + tokenizer + eval, ~300 LOC) | `autoresearch/prepare.py` (seed pool + rubric sanity check) + `plugins/petri_audit/` (audit pipeline) | NO (read-only) |
-| `train.py` (GPT model + optimizer, ~630 LOC) | `core/self_improving/train.py` (`WRAPPER_PROMPT_SECTIONS` dict + audit invoke + fitness 추출, ~300 LOC) | **YES** (agent가 mutate) |
-| `program.md` (human-authored instruction) | `core/self_improving/program.md` | NO (human only) |
+| `train.py` (GPT model + optimizer, ~630 LOC) | `geode_product/self_improving/train.py` (`WRAPPER_PROMPT_SECTIONS` dict + audit invoke + fitness 추출, ~300 LOC) | **YES** (agent가 mutate) |
+| `program.md` (human-authored instruction) | `geode_product/self_improving/program.md` | NO (human only) |
 | Loop (5분 train run → grep metric → keep/reset) | outer-loop agent(Claude Code / Codex)가 `program.md`의 instruction에 따라 LOOP FOREVER를 수행하고 `git commit` / `git reset --hard`로 ratchet한다 | (agent-driven) |
 
 핵심 design pattern(Karpathy 5원칙)을 보존한다:
@@ -44,14 +44,14 @@
 
 ## 3. 실제 디렉터리 구조
 
-PR-SELF-IMPROVING-UMBRELLA(2026-05-31)로 코드는 `core/self_improving/`
+PR-SELF-IMPROVING-UMBRELLA(2026-05-31)로 코드는 `geode_product/self_improving/`
 패키지에 안착했고, PR-STATE-SOT-RUNTIME-SPLIT(2026-06-14)로 데이터가
 lifecycle의 두 home으로 분리되었다. git-tracked SoT는 in-repo에, runtime
 scratch는 out-of-repo(`~/.geode`)에 둔다.
 
 ```
 geode/
-├── core/self_improving/         ← 루프 코드 (Karpathy 3-file 패턴의 umbrella)
+├── geode_product/self_improving/         ← 루프 코드 (Karpathy 3-file 패턴의 umbrella)
 │   ├── program.md               ← human-authored research direction (instruction)
 │   ├── prepare.py               ← seed pool + rubric sanity check (do not modify)
 │   ├── train.py                 ← mutation target (agent modifies WRAPPER_PROMPT_SECTIONS)
@@ -88,7 +88,7 @@ geode/
 
 ### Step 2 -- hypothesis 적용 (mutation)
 
-`core/self_improving/train.py`의 `WRAPPER_PROMPT_SECTIONS` dict에서 한
+`geode_product/self_improving/train.py`의 `WRAPPER_PROMPT_SECTIONS` dict에서 한
 섹션을 직접 hack한다. wording 변경, 추가, 삭제, 순서 변경 모두 fair
 game이다. self-improving-loop agent가 코드를 직접 편집한다(별도
 `hypothesis.py` 모듈 없음, Karpathy 원본 패턴과 동일).
@@ -101,7 +101,7 @@ game이다. self-improving-loop agent가 코드를 직접 편집한다(별도
 ### Step 4 -- inner-loop audit 실행
 
 ```bash
-uv run python core/self_improving/train.py > ~/.geode/self-improving/run.log 2>&1
+uv run python geode_product/self_improving/train.py > ~/.geode/self-improving/run.log 2>&1
 ```
 
 train.py가 내부적으로 수행하는 일:
@@ -142,7 +142,7 @@ non-dry-run에서 runner가 자동으로 append하므로 수동 append는 없다
 
 **reject 조건**: 위 조건 중 하나라도 실패. `git reset --hard HEAD~1`.
 
-이 규약이 `core/self_improving/train.py::compute_fitness`의 implementation
+이 규약이 `geode_product/self_improving/train.py::compute_fitness`의 implementation
 contract다. single scalar weighted sum 대신 baseline-aware per-axis gate를
 쓴다. 두 hypothesis의 fitness가 같으면 더 단순한 wrapper가 우선한다
 (Karpathy Simplicity Selection).
@@ -156,7 +156,7 @@ rejection이면 같은 baseline 위에서 다른 hypothesis를 시도한다.
 
 ## 5. Fitness 정의
 
-`core/self_improving/train.py::compute_fitness`의 5-axis weighted aggregate:
+`geode_product/self_improving/train.py::compute_fitness`의 5-axis weighted aggregate:
 
 ```
 fitness = (
@@ -225,7 +225,7 @@ append-only이며 9개 column이다.
 - env가 set됐는데 파일이 없거나, JSON 파싱이 실패하거나, schema가 맞지
   않으면 `RuntimeError`로 fail-closed한다.
 
-이 hook이 `core/self_improving/train.py::WRAPPER_PROMPT_SECTIONS`의
+이 hook이 `geode_product/self_improving/train.py::WRAPPER_PROMPT_SECTIONS`의
 mutation을 실제 GEODE runtime의 system prompt까지 propagate하는 단일
 통로다.
 
@@ -280,7 +280,7 @@ PR로 추가될 수 있는 컴포넌트(현재는 미구현):
 
 - 이 architecture: `docs/architecture/autoresearch.md` (본 문서)
 - Fork README: `docs/self-improving/loop-overview.md`
-- Agent instruction: `core/self_improving/program.md`
+- Agent instruction: `geode_product/self_improving/program.md`
 - Karpathy reference: `~/.claude/projects/-Users-mango-workspace-geode/memory/research_karpathy_autoresearch_agenthub.md` + `~/workspace/autoresearch/` (228791f)
 - Gen 0 plan + signal: `https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-15-autoresearch-gen0-plan.md` + `https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-15-petri-insights.md`
 - Gen 0 baseline 시도 (BLOCKED): `https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-16-autoresearch-gen0-baseline.md`

@@ -207,7 +207,7 @@ def test_system_prompt_wires_apply_into_static() -> None:
 
 
 def test_product_source_candidates_present() -> None:
-    from core.self_improving.policy_sources import build_policy_source_bundle
+    from geode_product.self_improving.policy_sources import build_policy_source_bundle
 
     sources = build_policy_source_bundle()["style_guide"]
     assert sources.packaged_default is not None
@@ -223,7 +223,7 @@ def test_product_source_candidates_present() -> None:
 
 def test_train_py_sets_style_guide_env_pair() -> None:
     repo_root = Path(__file__).resolve().parents[3]
-    src = (repo_root / "core/self_improving/measure.py").read_text(encoding="utf-8")
+    src = (repo_root / "geode_product/self_improving/measure.py").read_text(encoding="utf-8")
     assert "GEODE_STYLE_GUIDE_OVERRIDE" in src
     assert "GEODE_STYLE_GUIDE_STRICT" in src
     assert "AUTORESEARCH_STYLE_GUIDE_PATH" in src
@@ -234,6 +234,8 @@ def test_train_py_sets_style_guide_env_pair() -> None:
 
 def test_style_guide_json_referenced_in_inference_path() -> None:
     repo_root = Path(__file__).resolve().parents[3]
-    composition = (repo_root / "core/self_improving/policy_sources.py").read_text(encoding="utf-8")
+    composition = (repo_root / "geode_product/self_improving/policy_sources.py").read_text(
+        encoding="utf-8"
+    )
     assert '"style_guide"' in composition
     assert "AUTORESEARCH_STYLE_GUIDE_PATH" in composition

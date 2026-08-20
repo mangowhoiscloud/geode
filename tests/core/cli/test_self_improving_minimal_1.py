@@ -4,7 +4,7 @@ Pins:
 - ``/self-improving history`` prints git log recipes (B1)
 - ``/self-improving rollback`` prints git revert recipes (B2)
 - ``/self-improving rollback <mutation_id>`` includes the grep form
-- ``_load_program_md`` actually reads ``core/self_improving/program.md``
+- ``_load_program_md`` actually reads ``geode_product/self_improving/program.md``
   from disk (H4 regression guard for incident PR-G5b #1350, codified
   in `CLAUDE.md` → Refactoring Deception Prevention →
   "CHANGELOG/PR-body parity")
@@ -28,7 +28,7 @@ def test_history_action_prints_git_log_recipes(
     valid; PR-MINIMAL-1 wires the slash to that path. Codex MCP
     catch (PR-MINIMAL-1) — pin the empty-state caveat so a future
     refactor that drops it surfaces here."""
-    from core.cli.commands.self_improving import cmd_self_improving
+    from geode_product.self_improving.cli_commands import cmd_self_improving
 
     cmd_self_improving("history")
     out = capsys.readouterr().out
@@ -53,7 +53,7 @@ def test_rollback_action_prints_git_revert_recipes(
 ) -> None:
     """Bare ``/self-improving rollback`` must point at ``git log``
     (to find the SHA) and ``git revert <sha>`` (to undo)."""
-    from core.cli.commands.self_improving import cmd_self_improving
+    from geode_product.self_improving.cli_commands import cmd_self_improving
 
     cmd_self_improving("rollback")
     out = capsys.readouterr().out
@@ -69,7 +69,7 @@ def test_rollback_with_mutation_id_uses_grep_form(
     """``/self-improving rollback <mutation_id>`` must use the
     ``git log --grep=<id>`` form so the operator can find the commit
     that applied that specific mutation without scrolling."""
-    from core.cli.commands.self_improving import cmd_self_improving
+    from geode_product.self_improving.cli_commands import cmd_self_improving
 
     cmd_self_improving("rollback mut-abc12345")
     out = capsys.readouterr().out
@@ -87,7 +87,7 @@ def test_known_actions_includes_history_and_rollback() -> None:
     """Pin that the public-action set lists the now-wired
     ``history`` + ``rollback`` so the help-line and unknown-action
     fallback both stay in sync."""
-    from core.cli.commands.self_improving import _KNOWN_ACTIONS
+    from geode_product.self_improving.cli_commands import _KNOWN_ACTIONS
 
     assert "history" in _KNOWN_ACTIONS
     assert "rollback" in _KNOWN_ACTIONS
@@ -100,7 +100,7 @@ def test_unknown_action_help_line_lists_history_and_rollback(
 ) -> None:
     """Bogus action → help line must include ``history`` /
     ``rollback`` in the "Available now" group."""
-    from core.cli.commands.self_improving import cmd_self_improving
+    from geode_product.self_improving.cli_commands import cmd_self_improving
 
     cmd_self_improving("nonsense")
     out = capsys.readouterr().out
@@ -120,14 +120,14 @@ def test_load_program_md_actually_reads_disk_file() -> None:
     ``_SYSTEM_PROMPT`` was a hardcoded f-string while the PR title
     claimed "program.md-driven". The G5b.fix1.b commit introduced
     ``_load_program_md`` which actually reads
-    ``core/self_improving/program.md``. Pin that behavior so a future
+    ``geode_product/self_improving/program.md``. Pin that behavior so a future
     refactor that regresses to hardcoded prompts surfaces here.
     """
-    from core.self_improving.loop.mutate import runner as runner_mod
+    from geode_product.self_improving.loop.mutate import runner as runner_mod
 
     content = runner_mod._load_program_md()
     assert content is not None, "program.md should be readable from disk"
-    # Content sanity — these phrases come from core/self_improving/program.md
+    # Content sanity — these phrases come from geode_product/self_improving/program.md
     # body (per the README + module docstring).
     assert "autoresearch" in content.lower()
     assert "self-improving" in content.lower() or "self improving" in content.lower()
@@ -137,7 +137,7 @@ def test_build_system_prompt_includes_program_md_content() -> None:
     """The system prompt the mutator LLM actually sees must include
     the ``program.md`` body — otherwise the "program.md-driven" claim
     is fiction. Picks a phrase grep-provable from program.md."""
-    from core.self_improving.loop.mutate import runner as runner_mod
+    from geode_product.self_improving.loop.mutate import runner as runner_mod
 
     program_md = runner_mod._load_program_md()
     assert program_md is not None
@@ -154,7 +154,7 @@ def test_build_system_prompt_includes_program_md_content() -> None:
 def test_program_md_can_table_matches_target_kinds() -> None:
     """PR-PROGRAMMD-TARGET-KIND-SYNC (2026-05-28) drift invariant.
 
-    ``core/self_improving/program.md`` lists the agent-authoritative
+    ``geode_product/self_improving/program.md`` lists the agent-authoritative
     ``target_kind`` surface in a markdown table under "The agent CAN".
     The mutator LLM reads this table verbatim (program.md is spliced
     into the system prompt), so any row missing here equals a
@@ -173,8 +173,8 @@ def test_program_md_can_table_matches_target_kinds() -> None:
     """
     import re
 
-    from core.self_improving.loop.mutate import runner as runner_mod
-    from core.self_improving.loop.mutate.policies import TARGET_KINDS
+    from geode_product.self_improving.loop.mutate import runner as runner_mod
+    from geode_product.self_improving.loop.mutate.policies import TARGET_KINDS
 
     program_md = runner_mod._load_program_md()
     assert program_md is not None

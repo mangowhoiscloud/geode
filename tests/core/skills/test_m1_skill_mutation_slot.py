@@ -10,7 +10,7 @@ import json
 from pathlib import Path
 
 import pytest
-from core.self_improving.loop.mutate import policies as pol
+from geode_product.self_improving.loop.mutate import policies as pol
 
 
 @pytest.fixture

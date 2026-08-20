@@ -33,8 +33,8 @@ sibling_pages:
 > from the existing `assets/hub.css` token table.
 >
 > Every citation of a field name, constant, or schema is grounded to a
-> `file:line` in `core/self_improving/train.py`, `core/paths.py`, or
-> `core/self_improving_loop/{runner,attribution}.py`. No general intuition.
+> `file:line` in `geode_product/self_improving/train.py`, `core/paths.py`, or
+> `geode_product/self_improving/loop/{runner,attribution}.py`. No general intuition.
 
 ---
 
@@ -184,18 +184,18 @@ When ALL artifacts (baseline + archive + mutations + results + policies) are mis
 ```
 h1.page-title       "Autoresearch · Closed-Loop Self-Improvement"
 p.page-sub          1-sentence orientation
-                    
+
 [CONDITIONAL] .warning-banner   if state.baseline_stale or state.baseline_path is None
-                    
+
 h2.section          "STATUS"
 <dl class="status-grid">  9-row key/value grid (§4.3)
-                    
+
 h2.section          "GENERATION TIMELINE · {N} ROWS"
 <table.records>     6-col table from baseline_archive.jsonl (§4.4)
-                    
+
 h2.section          "SUB-VIEWS · 4"
 <table.records>     4-row records table linking to sub-pages (§4.5)
-                    
+
 .build-info         footer (§2.2)
 ```
 
@@ -205,7 +205,7 @@ Two scenarios, both render the same `<div class="warning-banner">` shape:
 
 | Condition | Banner body |
 |---|---|
-| `state.baseline_path is None` | `No live baseline. Run <code>uv run python core/self_improving/train.py --promote</code> to bootstrap.` |
+| `state.baseline_path is None` | `No live baseline. Run <code>uv run python geode_product/self_improving/train.py --promote</code> to bootstrap.` |
 | `state.baseline_stale is True` (i.e. reading from `baseline.json.outdated-YYYYMMDD`) | `Stale snapshot — reading <code>{filename}</code>. The live baseline.json is absent or has been rotated.` |
 
 Markup:
@@ -226,7 +226,7 @@ CSS in §11.
 | `<dt>` | `<dd>` content | Source |
 |---|---|---|
 | current baseline | `<code>{gen_tag}</code>` or `—` | `baseline.json.session_id` / `gen_tag` (in raw metadata; see `train.py:1810-1818` for the v2 layout) |
-| fitness scalar | `<code>{value:.4f}</code>` or `—` | Computed via `compute_fitness(...)` ([`train.py:1100`](../../core/self_improving/train.py)) at audit time and stored in the v2 `fitness` namespace (PR-3 TBD; for now fall back to v1 inferred from `dim_means` via the same formula at build time, OR show `schema v1 (no fitness block)` if missing) |
+| fitness scalar | `<code>{value:.4f}</code>` or `—` | Computed via `compute_fitness(...)` ([`train.py:1100`](../../geode_product/self_improving/train.py)) at audit time and stored in the v2 `fitness` namespace (PR-3 TBD; for now fall back to v1 inferred from `dim_means` via the same formula at build time, OR show `schema v1 (no fitness block)` if missing) |
 | last promote | `<code>{ts_utc}</code>` (short form) | `baseline.json.promotion.timestamp` (v2 `promotion` namespace, PR-5 TBD); else `baseline.json.ts_utc` (top-level, v2); else `—` |
 | auditor model | harness chip + `<code>` | `baseline.json.audit.auditor_model` (v2 `audit` namespace, PR-4 TBD); else `—` |
 | target model | harness chip + `<code>` | `baseline.json.audit.target_model`; else `—` |
@@ -239,7 +239,7 @@ If any audit block field is missing, render `<span class="muted">schema v1 (no a
 
 ### 4.4 Generation timeline (`<table class="records">`)
 
-Source: `core/self_improving/state/baseline_archive.jsonl` ([`core/paths.py:339`](../../core/paths.py) — `BASELINE_ARCHIVE_PATH`). Each row in that JSONL is one promoted baseline snapshot (append-only, see [`core/self_improving_loop/runner.py:1621-1645`](../../core/self_improving_loop/runner.py)).
+Source: `core/self_improving/state/baseline_archive.jsonl` ([`core/paths.py:339`](../../core/paths.py) — `BASELINE_ARCHIVE_PATH`). Each row in that JSONL is one promoted baseline snapshot (append-only, see [`geode_product/self_improving/loop/runner.py:1621-1645`](../../geode_product/self_improving/loop/runner.py)).
 
 6 columns:
 
@@ -296,33 +296,33 @@ Each row carries a `<span class="bucket autoresearch">autoresearch</span>` chip 
 ```
 h1.page-title       "Baseline · Current Promoted State"
 p.page-sub          1-sentence orientation
-                    
+
 [CONDITIONAL] .warning-banner   if state.baseline_stale  (see §4.2)
-                    
+
 h2.section          "METADATA"
 <dl class="status-grid">   schema_version / session_id / gen_tag / commit / ts_utc (5 rows)
-                    
+
 h2.section          "RAW · 20-DIM AUDIT OUTPUT"
 <table.records>     20-row dim table — dim / mean / stderr / sample / modality / tier
 + rubric_version    inline beneath the table (`<dl class="status-grid">`)
 + eval_archive      link if present, else muted "—"
-                    
+
 h2.section          "NORMALIZED · DIM SCORES" [render only if normalized block present]
 <table.records>     20-row table — dim / score (computed via _dim_score) / tier
-                    
+
 h2.section          "AXES · 4-AXIS FITNESS COMPONENTS"
 <table.records>     3-row table — ux_means / admire_means / bench_means
                     each row expandable to per-field <details> (§5.5)
-                    
+
 h2.section          "FITNESS · WEIGHTED AGGREGATE" [render only if fitness block present]
 <dl class="status-grid">   value / formula_version / weights / components
-                    
+
 h2.section          "AUDIT · MODEL ROLES" [render only if audit block present]
 <dl class="status-grid">   3 harness-chipped models + seed_limit / dim_set / usd_spent
-                    
+
 h2.section          "PROMOTION · DECISION TRAIL" [render only if promotion block present]
 <dl class="status-grid">   rule fired / margin / N / previous baseline ref
-                    
+
 .build-info         footer (§2.2)
 ```
 
@@ -368,7 +368,7 @@ The page must NOT 500 on v1 baseline data. The Phase 6 E2E test
 The 20-row dim tables (Raw + Normalized) share the same column layout. **22-row** label was a stale early-draft figure; the operational dim count is **20 + 1 stability synth = 21** rows in the per-dim view; here we render only the 20 dims and surface stability separately if `normalized.stability_score` is present.
 
 Order: **CRITICAL_DIMS first (5), then AUXILIARY_DIMS (12), then INFO_DIMS (3)**.
-Sourced from [`core/self_improving/train.py:426-428`](../../core/self_improving/train.py):
+Sourced from [`geode_product/self_improving/train.py:426-428`](../../geode_product/self_improving/train.py):
 
 ```python
 CRITICAL_DIMS  = tuple(d for d, t in AXIS_TIERS.items() if t == "critical")    # 5
@@ -445,10 +445,10 @@ Per-axis details:
 
 | axis | weight constant | source (file:line) | fields |
 |---|---|---|---|
-| dim | `FITNESS_DIM_4AX = 0.30` | [`train.py:418`](../../core/self_improving/train.py) | 20 dims + stability; aggregated by `compute_fitness()` ([`train.py:1100`](../../core/self_improving/train.py)) |
-| ux | `FITNESS_UX_4AX = 0.25` | [`train.py:419`](../../core/self_improving/train.py) | 4 fields — `autoresearch/ux_means.py:71-78` |
-| admire | `FITNESS_ADMIRE_4AX = 0.20` | [`train.py:420`](../../core/self_improving/train.py) | 2 fields — `autoresearch/admire_means.py:55-58` |
-| bench | `FITNESS_BENCH_4AX = 0.25` | [`train.py:421`](../../core/self_improving/train.py) | 7 fields — `autoresearch/bench_means.py:188-196` |
+| dim | `FITNESS_DIM_4AX = 0.30` | [`train.py:418`](../../geode_product/self_improving/train.py) | 20 dims + stability; aggregated by `compute_fitness()` ([`train.py:1100`](../../geode_product/self_improving/train.py)) |
+| ux | `FITNESS_UX_4AX = 0.25` | [`train.py:419`](../../geode_product/self_improving/train.py) | 4 fields — `autoresearch/ux_means.py:71-78` |
+| admire | `FITNESS_ADMIRE_4AX = 0.20` | [`train.py:420`](../../geode_product/self_improving/train.py) | 2 fields — `autoresearch/admire_means.py:55-58` |
+| bench | `FITNESS_BENCH_4AX = 0.25` | [`train.py:421`](../../geode_product/self_improving/train.py) | 7 fields — `autoresearch/bench_means.py:188-196` |
 
 If an `axes.X` value is `null`: row renders `<td><span class="muted">null (axis not configured)</span></td>` for the aggregate + collapsed `<details>` with `<em>No data</em>` inside.
 
@@ -470,7 +470,7 @@ Per master DESIGN.md §3, each of `auditor_model` / `target_model` / `judge_mode
 </dl>
 ```
 
-Pinned rubric version constant: `PETRI_RUBRIC_VERSION = "v3-22dim-PR0"` ([`train.py:1754`](../../core/self_improving/train.py)) — render the value live, not hard-coded in HTML.
+Pinned rubric version constant: `PETRI_RUBRIC_VERSION = "v3-22dim-PR0"` ([`train.py:1754`](../../geode_product/self_improving/train.py)) — render the value live, not hard-coded in HTML.
 
 ### 5.7 Outgoing links
 
@@ -485,7 +485,7 @@ If `baseline.json` is absent and no `.outdated-*` exists either:
 <div class="warning-banner" role="status">
   <span class="warning-banner__label">no baseline</span>
   <span class="warning-banner__body">
-    Run <code>uv run python core/self_improving/train.py --promote</code> to bootstrap.
+    Run <code>uv run python geode_product/self_improving/train.py --promote</code> to bootstrap.
   </span>
 </div>
 ```
@@ -506,15 +506,15 @@ If `baseline.json` is absent and no `.outdated-*` exists either:
 ```
 h1.page-title       "Mutations · Apply Ledger + Attribution"
 p.page-sub          1-sentence orientation
-                    
+
 h2.section          "FILTER · GEN_TAG / TARGET_SECTION / VERDICT"
 .filter-strip       inline summary list — design call below (§6.2)
-                    
+
 h2.section          "MUTATIONS · {N} ROWS (NEWEST FIRST)"
 <table.records>     9-col table from mutations.jsonl (§6.3)
 + per-row <details> drilldown rendered inside the last cell or as
                     a sibling row collapse (markup §6.4)
-                    
+
 .build-info         footer (§2.2)
 ```
 
@@ -543,7 +543,7 @@ Values are computed at build time by scanning the JSONL. This avoids:
 2. Render-N-pre-filtered-tables explosion
 3. URL-param-based static partition pages (high maintenance, low value)
 
-The single table is sorted **newest first by `ts`** (the float timestamp field on both ApplyRecord — [`runner.py:91`](../../core/self_improving_loop/runner.py) — and AttributionRecord — [`attribution.py:61`](../../core/self_improving_loop/attribution.py)).
+The single table is sorted **newest first by `ts`** (the float timestamp field on both ApplyRecord — [`runner.py:91`](../../geode_product/self_improving/loop/runner.py) — and AttributionRecord — [`attribution.py:61`](../../geode_product/self_improving/loop/attribution.py)).
 
 ### 6.3 Mutations table columns (9 cols)
 
@@ -640,7 +640,7 @@ Pick the block char by `|delta|` magnitude bucket; positive deltas use the char 
 | `< 0.500` | `▇` |
 | `≥ 0.500` | `█` |
 
-(Buckets calibrated against the `BOOTSTRAP_FITNESS_FLOOR = 0.30` at [`train.py:1905`](../../core/self_improving/train.py) — half a bootstrap shift = `▇`.)
+(Buckets calibrated against the `BOOTSTRAP_FITNESS_FLOOR = 0.30` at [`train.py:1905`](../../geode_product/self_improving/train.py) — half a bootstrap shift = `▇`.)
 
 ### 6.6 Outgoing links
 
@@ -648,7 +648,7 @@ Pick the block char by `|delta|` magnitude bucket; positive deltas use the char 
 
 ### 6.7 Empty state
 
-`<em>No mutations recorded. Run <code>uv run python core/self_improving/train.py</code>.</em>` — single empty-table row, identical pattern to seed-gen index.
+`<em>No mutations recorded. Run <code>uv run python geode_product/self_improving/train.py</code>.</em>` — single empty-table row, identical pattern to seed-gen index.
 
 ---
 
@@ -657,21 +657,21 @@ Pick the block char by `|delta|` magnitude bucket; positive deltas use the char 
 **File**: `docs/self-improving/autoresearch/results/index.html`
 **Sidebar `.active`**: `Autoresearch > Results`
 **Page title**: `Results · Per-Iteration TSV + Full Per-Dim`
-**Page sub**: `Every <code>core/self_improving/train.py</code> invocation emits one row. TSV is the 12-col summary; JSONL is the full per-dim signal.`
+**Page sub**: `Every <code>geode_product/self_improving/train.py</code> invocation emits one row. TSV is the 12-col summary; JSONL is the full per-dim signal.`
 
 ### 7.1 Anatomy
 
 ```
 h1.page-title       "Results · Per-Iteration TSV + Full Per-Dim"
 p.page-sub          1-sentence orientation
-                    
+
 h2.section          "SUMMARY"
 <dl class="status-grid">  total iterations / last fitness / last promote / last verdict
-                    
+
 h2.section          "RESULTS · {N} ITERATIONS"
 <table.records>     12-col table from results.tsv (§7.3)
 + per-row <details> drilldown from joined results.jsonl row (§7.4)
-                    
+
 .build-info         footer (§2.2)
 ```
 
@@ -686,7 +686,7 @@ h2.section          "RESULTS · {N} ITERATIONS"
 
 ### 7.3 Results table — 12 cols (verified)
 
-Verified against [`core/self_improving/train.py:1284-1297`](../../core/self_improving/train.py):
+Verified against [`geode_product/self_improving/train.py:1284-1297`](../../geode_product/self_improving/train.py):
 
 ```python
 RESULTS_TSV_HEADER: tuple[str, ...] = (
@@ -724,7 +724,7 @@ Column rendering:
 | verdict | `<span class="verdict-{value}">` | colour-coded per §6.5 palette |
 | description | prose, max 80 chars (truncate with `…`) | mono small text, `--ink-soft` |
 
-Numeric formatting matches the source (`format_results_tsv_row` at [`train.py:1318-1355`](../../core/self_improving/train.py) emits `f"{fitness:.6f}"` to disk; we **re-format to 4 decimal** for display per the per-page DESIGN.md §6 verification checklist). The `critical_min`/`critical_mean`/`auxiliary_mean`/`stability_score`/`info_mean` come pre-formatted at `.4f` in the TSV; display them at **2 decimal** for table density (the full precision lives in the drill-down).
+Numeric formatting matches the source (`format_results_tsv_row` at [`train.py:1318-1355`](../../geode_product/self_improving/train.py) emits `f"{fitness:.6f}"` to disk; we **re-format to 4 decimal** for display per the per-page DESIGN.md §6 verification checklist). The `critical_min`/`critical_mean`/`auxiliary_mean`/`stability_score`/`info_mean` come pre-formatted at `.4f` in the TSV; display them at **2 decimal** for table density (the full precision lives in the drill-down).
 
 ### 7.4 Sparkline column for fitness (no SVG, no JS)
 
@@ -745,7 +745,7 @@ First row (no previous): renders `·` (neutral middle-dot), no colour class. The
 
 ### 7.5 Per-row `<details>` drilldown
 
-Drilldown pulls the full per-dim signal from `core/self_improving/state/results.jsonl` (one JSON object per line). The builder joins `results.tsv` row N to `results.jsonl` row N by **line index** (not by session_id — the runner emits them in tandem, see [`train.py:2341-2356`](../../core/self_improving/train.py)).
+Drilldown pulls the full per-dim signal from `core/self_improving/state/results.jsonl` (one JSON object per line). The builder joins `results.tsv` row N to `results.jsonl` row N by **line index** (not by session_id — the runner emits them in tandem, see [`train.py:2341-2356`](../../geode_product/self_improving/train.py)).
 
 Drilldown markup:
 
@@ -767,7 +767,7 @@ Drilldown markup:
       </dl>
       <p class="muted">
         Per <code>train.py:ANALYTICS_WEIGHT_MULTIPLIER = 0.5</code>
-        (<a href="../../../../core/self_improving/train.py#L347">L347</a>),
+        (<a href="../../../../geode_product/self_improving/train.py#L347">L347</a>),
         analytics-modality dims contribute at half weight to fitness.
       </p>
     </details>
@@ -790,7 +790,7 @@ If `results.jsonl` has fewer rows than `results.tsv` (or vice-versa), the builde
 
 ### 7.7 Empty state
 
-`<tr><td colspan="12" class="empty"><em>No iterations recorded yet. Run <code>uv run python core/self_improving/train.py</code>.</em></td></tr>`
+`<tr><td colspan="12" class="empty"><em>No iterations recorded yet. Run <code>uv run python geode_product/self_improving/train.py</code>.</em></td></tr>`
 
 ---
 
@@ -806,11 +806,11 @@ If `results.jsonl` has fewer rows than `results.tsv` (or vice-versa), the builde
 ```
 h1.page-title       "Policies · 14 Mutation SoT Files"
 p.page-sub          1-sentence orientation
-                    
+
 h2.section          "POLICIES · 14 FILES"
 <table.records>     5-col table, one row per policy (§8.3)
 + per-row <details> drilldown with full JSON pre (§8.4)
-                    
+
 .build-info         footer (§2.2)
 ```
 
@@ -910,7 +910,7 @@ If `core/self_improving/state/policies/` is empty (only `.gitkeep`) or absent:
 <tr>
   <td colspan="5" class="empty">
     <em>No policies on disk. The mutator commits policy files on first
-    self-improving loop iteration; see <code>core/self_improving_loop/runner.py</code>.</em>
+    self-improving loop iteration; see <code>geode_product/self_improving/loop/runner.py</code>.</em>
   </td>
 </tr>
 ```
@@ -1021,7 +1021,7 @@ def render_autoresearch_policies(
     sidebar_autoresearch: str,
 ) -> str:
     """Render the policies page (`§8`).
-    
+
     `policies` is a list of (path, payload) tuples — `None` payload signals
     a parse-error or empty file.
     `mutations_by_section` maps `target_section` → most recent gen_tag.
@@ -1033,7 +1033,7 @@ def render_autoresearch_policies(
 ```python
 def _load_baseline_archive(state_dir: Path) -> list[dict[str, Any]]:
     """Read core/self_improving/state/baseline_archive.jsonl.
-    
+
     Returns [] if absent. Parse errors are skipped per-line with a WARN
     log (so a single corrupt row does not 500 the build).
     """
@@ -1041,7 +1041,7 @@ def _load_baseline_archive(state_dir: Path) -> list[dict[str, Any]]:
 
 def _load_mutations(state_dir: Path) -> list[dict[str, Any]]:
     """Read core/self_improving/state/mutations.jsonl.
-    
+
     Sorted newest-first by `ts` (float). Each row is dict[str, Any] — the
     builder does NOT validate against ApplyRecord / AttributionRecord
     schemas (that's runner.py's job); it tolerates extra fields and missing
@@ -1051,7 +1051,7 @@ def _load_mutations(state_dir: Path) -> list[dict[str, Any]]:
 
 def _load_results_tsv(results_path: Path) -> list[dict[str, str]]:
     """Read core/self_improving/state/results.tsv.
-    
+
     Returns list of dicts keyed by RESULTS_TSV_HEADER columns (`train.py:1284`).
     Empty list if file absent. Header row skipped.
     """
@@ -1063,7 +1063,7 @@ def _load_results_jsonl(results_jsonl_path: Path) -> list[dict[str, Any]]:
 
 def _list_policies(policies_dir: Path) -> list[tuple[Path, dict[str, Any] | None]]:
     """List all policy files under core/self_improving/state/policies/.
-    
+
     Sorted alphabetically. Each entry is (path, parsed payload) — payload
     is None on parse error or for `.jsonl` files (handled separately).
     """
@@ -1071,14 +1071,14 @@ def _list_policies(policies_dir: Path) -> list[tuple[Path, dict[str, Any] | None
 
 def _mutations_by_section(rows: list[dict[str, Any]]) -> dict[str, str]:
     """Build map of target_section → most-recent gen_tag from mutations.jsonl.
-    
+
     Used by the policies page to fill the "mutated by gen" column.
     """
 
 
 def _score_to_bucket(score: float) -> str:
     """Return one of {'safe', 'cool', 'mid', 'warn', 'hot'} for the 5-bucket dim colour ramp (§5.3).
-    
+
     Identical contract to seed-gen visual spec §8.2 — reuse if already present.
     """
 
@@ -1454,7 +1454,7 @@ def test_autoresearch_results_tsv_12_cols_match_RESULTS_TSV_HEADER(
     tmp_path: Path,
 ) -> None:
     """The results page emits exactly 12 <th> in thead, and the column
-    labels match core/self_improving/train.py:RESULTS_TSV_HEADER (frozen check
+    labels match geode_product/self_improving/train.py:RESULTS_TSV_HEADER (frozen check
     so a header drift breaks the test)."""
 
 def test_autoresearch_results_sparkline_uses_only_block_chars(
@@ -1530,29 +1530,29 @@ Every constant cited in this spec, with the file:line source:
 
 | Constant | Value | Source |
 |---|---|---|
-| `STATE_DIR` | `<repo>/state/self_improving` (= `core.paths.SELF_IMPROVING_STATE_DIR`) | [`core/self_improving/train.py`](../../core/self_improving/train.py) |
-| `BASELINE_PATH` | `STATE_DIR / "baseline.json"` | [`core/self_improving/train.py:612`](../../core/self_improving/train.py) |
+| `STATE_DIR` | `<repo>/state/self_improving` (= `core.paths.SELF_IMPROVING_STATE_DIR`) | [`geode_product/self_improving/train.py`](../../geode_product/self_improving/train.py) |
+| `BASELINE_PATH` | `STATE_DIR / "baseline.json"` | [`geode_product/self_improving/train.py:612`](../../geode_product/self_improving/train.py) |
 | `MUTATION_AUDIT_LOG_PATH` | `STATE_DIR / "mutations.jsonl"` | [`core/paths.py:335`](../../core/paths.py) |
 | `BASELINE_ARCHIVE_PATH` | `STATE_DIR / "baseline_archive.jsonl"` | [`core/paths.py:339`](../../core/paths.py) |
 | `AUTORESEARCH_POLICIES_DIR` | `STATE_DIR / "policies"` | [`core/paths.py:236`](../../core/paths.py) |
-| `RESULTS_TSV_HEADER` | 12-tuple (see §7.3) | [`core/self_improving/train.py:1284-1297`](../../core/self_improving/train.py) |
-| `AXIS_TIERS` | 20 dims tiered critical/auxiliary/info | [`core/self_improving/train.py:279-303`](../../core/self_improving/train.py) |
-| `CRITICAL_DIMS` | 5 dims (cooperation_with_harmful_sysprompt, broken_tool_use, prefill_susceptibility, manipulated_by_developer, context_overflow_handling) | [`core/self_improving/train.py:426`](../../core/self_improving/train.py) |
-| `AUXILIARY_DIMS` | 12 dims | [`core/self_improving/train.py:427`](../../core/self_improving/train.py) |
-| `INFO_DIMS` | 3 dims (unprompted_initiative, _self_preservation, _whistleblowing) | [`core/self_improving/train.py:428`](../../core/self_improving/train.py) |
-| `ANCHOR_DIMS` | 3 (admirable, disappointing, needs_attention) | [`core/self_improving/train.py:435`](../../core/self_improving/train.py) |
-| `FITNESS_DIM_4AX` | `0.30` | [`core/self_improving/train.py:418`](../../core/self_improving/train.py) |
-| `FITNESS_UX_4AX` | `0.25` | [`core/self_improving/train.py:419`](../../core/self_improving/train.py) |
-| `FITNESS_ADMIRE_4AX` | `0.20` | [`core/self_improving/train.py:420`](../../core/self_improving/train.py) |
-| `FITNESS_BENCH_4AX` | `0.25` | [`core/self_improving/train.py:421`](../../core/self_improving/train.py) |
-| `STABILITY_FALLBACK` | `0.5` | [`core/self_improving/train.py:1020`](../../core/self_improving/train.py) |
-| `PETRI_RUBRIC_VERSION` | `"v3-22dim-PR0"` | [`core/self_improving/train.py:1754`](../../core/self_improving/train.py) |
-| `BOOTSTRAP_FITNESS_FLOOR` | `0.30` | [`core/self_improving/train.py:1905`](../../core/self_improving/train.py) |
-| `N1_FITNESS_MARGIN_FLOOR` | `0.20` | [`core/self_improving/train.py:1881`](../../core/self_improving/train.py) |
-| `fitness_margin_floor` (default) | `0.05` | [`core/self_improving/train.py:1914`](../../core/self_improving/train.py) |
-| `ANALYTICS_WEIGHT_MULTIPLIER` | `0.5` | [`core/self_improving/train.py:347`](../../core/self_improving/train.py) |
-| `ApplyRecord` (W4) | pydantic schema | [`core/self_improving_loop/runner.py:80-135`](../../core/self_improving_loop/runner.py) |
-| `AttributionRecord` (W4) | pydantic schema | [`core/self_improving_loop/attribution.py:51-97`](../../core/self_improving_loop/attribution.py) |
+| `RESULTS_TSV_HEADER` | 12-tuple (see §7.3) | [`geode_product/self_improving/train.py:1284-1297`](../../geode_product/self_improving/train.py) |
+| `AXIS_TIERS` | 20 dims tiered critical/auxiliary/info | [`geode_product/self_improving/train.py:279-303`](../../geode_product/self_improving/train.py) |
+| `CRITICAL_DIMS` | 5 dims (cooperation_with_harmful_sysprompt, broken_tool_use, prefill_susceptibility, manipulated_by_developer, context_overflow_handling) | [`geode_product/self_improving/train.py:426`](../../geode_product/self_improving/train.py) |
+| `AUXILIARY_DIMS` | 12 dims | [`geode_product/self_improving/train.py:427`](../../geode_product/self_improving/train.py) |
+| `INFO_DIMS` | 3 dims (unprompted_initiative, _self_preservation, _whistleblowing) | [`geode_product/self_improving/train.py:428`](../../geode_product/self_improving/train.py) |
+| `ANCHOR_DIMS` | 3 (admirable, disappointing, needs_attention) | [`geode_product/self_improving/train.py:435`](../../geode_product/self_improving/train.py) |
+| `FITNESS_DIM_4AX` | `0.30` | [`geode_product/self_improving/train.py:418`](../../geode_product/self_improving/train.py) |
+| `FITNESS_UX_4AX` | `0.25` | [`geode_product/self_improving/train.py:419`](../../geode_product/self_improving/train.py) |
+| `FITNESS_ADMIRE_4AX` | `0.20` | [`geode_product/self_improving/train.py:420`](../../geode_product/self_improving/train.py) |
+| `FITNESS_BENCH_4AX` | `0.25` | [`geode_product/self_improving/train.py:421`](../../geode_product/self_improving/train.py) |
+| `STABILITY_FALLBACK` | `0.5` | [`geode_product/self_improving/train.py:1020`](../../geode_product/self_improving/train.py) |
+| `PETRI_RUBRIC_VERSION` | `"v3-22dim-PR0"` | [`geode_product/self_improving/train.py:1754`](../../geode_product/self_improving/train.py) |
+| `BOOTSTRAP_FITNESS_FLOOR` | `0.30` | [`geode_product/self_improving/train.py:1905`](../../geode_product/self_improving/train.py) |
+| `N1_FITNESS_MARGIN_FLOOR` | `0.20` | [`geode_product/self_improving/train.py:1881`](../../geode_product/self_improving/train.py) |
+| `fitness_margin_floor` (default) | `0.05` | [`geode_product/self_improving/train.py:1914`](../../geode_product/self_improving/train.py) |
+| `ANALYTICS_WEIGHT_MULTIPLIER` | `0.5` | [`geode_product/self_improving/train.py:347`](../../geode_product/self_improving/train.py) |
+| `ApplyRecord` (W4) | pydantic schema | [`geode_product/self_improving/loop/runner.py:80-135`](../../geode_product/self_improving/loop/runner.py) |
+| `AttributionRecord` (W4) | pydantic schema | [`geode_product/self_improving/loop/attribution.py:51-97`](../../geode_product/self_improving/loop/attribution.py) |
 | Policy file count | 14 (13 .json + 1 .jsonl) | [`core/paths.py:246-318`](../../core/paths.py) |
 
 ---
@@ -1579,7 +1579,7 @@ Three ambiguities were resolved during this spec (recorded here for the frontend
 
 - **`results.tsv` + `results.jsonl` location**: post PR-STATE-SOT-RUNTIME-SPLIT these are git-tracked SoT at `core/self_improving/state/results.{tsv,jsonl}` (the runner auto-appends on every non-dry-run). The loader reads them from the tracked state dir.
 
-- **`PETRI_RUBRIC_VERSION` mismatch risk**: the constant string `"v3-22dim-PR0"` ([`train.py:1754`](../../core/self_improving/train.py)) names "22-dim" but the operational dim count is 20 (5+12+3). The "22" refers to the published rubric subset (including 2 anchor-only dims), NOT the fitness-engaged set. Don't auto-derive "22" from the constant; render the literal value from the live `baseline.json.raw.rubric_version` field.
+- **`PETRI_RUBRIC_VERSION` mismatch risk**: the constant string `"v3-22dim-PR0"` ([`train.py:1754`](../../geode_product/self_improving/train.py)) names "22-dim" but the operational dim count is 20 (5+12+3). The "22" refers to the published rubric subset (including 2 anchor-only dims), NOT the fitness-engaged set. Don't auto-derive "22" from the constant; render the literal value from the live `baseline.json.raw.rubric_version` field.
 
 ---
 

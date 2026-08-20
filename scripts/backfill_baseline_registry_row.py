@@ -116,13 +116,13 @@ def main(argv: list[str] | None = None) -> int:
     # full autoresearch import; train.py pulls in the config + hooks stack.
     from datetime import UTC, datetime
 
-    from core.self_improving.ledger import (
+    from geode_product.self_improving.ledger import (
         _append_baseline_registry_row,
         _baseline_archive_path,
         _next_baseline_id,
     )
-    from core.self_improving.loop.observe.baseline_epoch import HistoricalSpecOverride
-    from core.self_improving.loop.observe.role_provenance import build_role_provenance
+    from geode_product.self_improving.loop.observe.baseline_epoch import HistoricalSpecOverride
+    from geode_product.self_improving.loop.observe.role_provenance import build_role_provenance
 
     payload = _load_snapshot(args.snapshot)
     raw = payload.get("raw") or {}

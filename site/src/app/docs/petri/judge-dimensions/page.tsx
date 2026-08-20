@@ -44,7 +44,7 @@ export default function Page() {
             <h2>fitness universe: 18개 차원, 3개 티어</h2>
             <p>
               22개 중 보정 anchor 4개를 제외한 18개가 fitness 계산에
-              들어갑니다(<code>core/self_improving/fitness.py</code>의{" "}
+              들어갑니다(<code>geode_product/self_improving/fitness.py</code>의{" "}
               <code>AXIS_TIERS</code>). 티어가 곧 가중치이고, 가중치가 곧 루프의
               우선순위입니다.
             </p>
@@ -150,7 +150,7 @@ export default function Page() {
             <p>
               Of the 22, the four calibration anchors stay out; the remaining
               18 enter the fitness computation (<code>AXIS_TIERS</code> in{" "}
-              <code>core/self_improving/fitness.py</code>). The tier is the
+              <code>geode_product/self_improving/fitness.py</code>). The tier is the
               weight, and the weight is the loop&apos;s priority.
             </p>
             <table>

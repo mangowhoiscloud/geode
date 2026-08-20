@@ -14,6 +14,7 @@ split — see ``CHANGELOG`` for v0.77.0.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable, Iterable
 from typing import Any
 
 import typer
@@ -67,19 +68,6 @@ from core.cli.welcome import _render_welcome_brand as _render_welcome_brand
 from core.cli.welcome import _welcome_screen as _welcome_screen
 from core.hooks import HookEvent, HookSystem
 from core.hooks.dispatch import fire_hook
-
-# PR-CLEANUP-D2 (2026-06-10) — campaign CLI defaults come from the campaign
-# module (they were re-hardcoded literals here, with help text asserting the
-# old values whenever campaign.py changed them).
-from core.self_improving.campaign import (
-    DEFAULT_AUDIT_MAX_CONNECTIONS as _CAMPAIGN_DEFAULT_AUDIT_MAX_CONNECTIONS,
-)
-from core.self_improving.campaign import (
-    DEFAULT_AUDIT_MAX_SAMPLES as _CAMPAIGN_DEFAULT_AUDIT_MAX_SAMPLES,
-)
-from core.self_improving.campaign import (
-    DEFAULT_MAX_PROPOSE_ATTEMPTS as _CAMPAIGN_DEFAULT_MAX_PROPOSE_ATTEMPTS,
-)
 from core.ui.console import console
 
 log = logging.getLogger(__name__)
@@ -123,6 +111,7 @@ def _thin_interactive_loop(
     resume_session: str = "",
     continue_latest: bool = False,
     command_registry: Any = None,
+    quota_thresholds: tuple[float, float] | None = None,
 ) -> None:
     """Thin CLI client — all execution delegated to geode serve via IPC.
 
@@ -185,7 +174,10 @@ def _thin_interactive_loop(
         while True:
             console.show_cursor(True)
             try:
-                user_input = _read_multiline_input("[header]geode[/header] [muted]>[/muted] ")
+                user_input = _read_multiline_input(
+                    "[header]geode[/header] [muted]>[/muted] ",
+                    quota_thresholds,
+                )
             except (KeyboardInterrupt, EOFError):
                 console.print("\n  [muted]Goodbye.[/muted]\n")
                 break
@@ -347,88 +339,10 @@ from core.cli.commands.prompt_inspect import prompt_app  # noqa: E402
 from core.cli.commands.reindex import reindex  # noqa: E402
 from core.cli.commands.seed_pool import hub_app, seeds_app  # noqa: E402
 from core.cli.commands.skill import app as skill_app  # noqa: E402
-
-# OL-A3 (2026-05-22) — outer-loop bundle viewer
-from core.cli.outer_bundle import outer_bundle_command  # noqa: E402
 from core.cli.typer_ask import ask_app  # noqa: E402
 
 # Persisted-session listing + shareable export (checkpoint-backed).
 from core.cli.typer_session import session_app  # noqa: E402
-
-
-# PR-CAMPAIGN-CLI: discoverable front end for the 3-arm self-improving campaign.
-# This is a THIN forwarder: it collects the same options the argparse driver in
-# ``core/self_improving/campaign.py`` exposes (``--n`` / ``--k`` / ``--arms`` +
-# the pass-through flags) and rebuilds them as an argv list handed straight to
-# ``campaign.main``. No campaign logic is reimplemented here, so ``geode
-# campaign`` and ``python core/self_improving/campaign.py`` stay byte-identical
-# in behaviour. The import is local to the command body so loading the CLI
-# package never eagerly pulls the self-improving runtime (and its heavy deps).
-def campaign(
-    n: int = typer.Option(
-        10,
-        "--n",
-        help="Cycles per arm (campaign-procedure.md section 6). Default 10.",
-    ),
-    k: int = typer.Option(
-        5,
-        "--k",
-        help="gen-0 baseline repeats, the noise-band K-mean. Default 5.",
-    ),
-    arms: str = typer.Option(
-        "never,random,gate",
-        "--arms",
-        help="Comma-separated arm order, gate LAST. Default 'never,random,gate'.",
-    ),
-    mc: int = typer.Option(
-        _CAMPAIGN_DEFAULT_MAX_PROPOSE_ATTEMPTS,
-        "--mc",
-        help="Max propose-guard re-proposal attempts M (campaign.py default).",
-    ),
-    audit_max_samples: int = typer.Option(
-        _CAMPAIGN_DEFAULT_AUDIT_MAX_SAMPLES,
-        "--audit-max-samples",
-        help="GEODE_AUDIT_MAX_SAMPLES export passed to each audit (campaign.py default).",
-    ),
-    audit_max_connections: int = typer.Option(
-        _CAMPAIGN_DEFAULT_AUDIT_MAX_CONNECTIONS,
-        "--audit-max-connections",
-        help="GEODE_AUDIT_MAX_CONNECTIONS export passed to each audit (campaign.py default).",
-    ),
-    dry_run: bool = typer.Option(
-        False,
-        "--dry-run",
-        help="Synthetic audits, no PAYG/network. Passed through to train.py + the runner.",
-    ),
-) -> None:
-    """Run the 3-arm self-improving campaign (gen-0 baseline, then never/random/gate).
-
-    Thin wrapper over ``core/self_improving/campaign.py``: forwards the flags
-    unchanged, so behaviour matches ``python core/self_improving/campaign.py``.
-    A real (non --dry-run) campaign spawns audit subprocesses and spends PAYG
-    budget, so launch it deliberately.
-    """
-    from core.self_improving.campaign import main as _campaign_main
-
-    argv: list[str] = [
-        "--n",
-        str(n),
-        "--k",
-        str(k),
-        "--arms",
-        arms,
-        "--mc",
-        str(mc),
-        "--audit-max-samples",
-        str(audit_max_samples),
-        "--audit-max-connections",
-        str(audit_max_connections),
-    ]
-    if dry_run:
-        argv.append("--dry-run")
-    exit_code = _campaign_main(argv)
-    if exit_code != 0:
-        raise typer.Exit(code=exit_code)
 
 
 def _version_option(value: bool) -> None:
@@ -445,6 +359,7 @@ def _run_main(
     dangerously_skip_permissions: bool,
     *,
     command_registry: Any = None,
+    quota_thresholds: tuple[float, float] | None = None,
 ) -> None:
     """GEODE — Autonomous Research Harness."""
     _ = show_version
@@ -481,6 +396,7 @@ def _run_main(
             resume_session=resume,
             continue_latest=continue_session,
             command_registry=command_registry,
+            quota_thresholds=quota_thresholds,
         )
 
 
@@ -512,8 +428,10 @@ def build_app(
     serve_command: Any = serve,
     config_command_app: typer.Typer = config_app,
     command_specs: Any = (),
+    command_registrars: Iterable[Callable[[typer.Typer], None]] = (),
+    quota_thresholds: tuple[float, float] | None = None,
 ) -> typer.Typer:
-    """Build the kernel CLI; outer composition may replace ``serve``."""
+    """Build the kernel CLI with optional product-owned command registrations."""
     cli = typer.Typer(
         name="geode",
         help=f"GEODE v{__version__} — 범용 자율 실행 에이전트",
@@ -531,10 +449,10 @@ def build_app(
     for command in (version, about, setup, _doctor_command, update, uninstall, init, history):
         cli.command()(command)
     cli.command()(serve_command)
-    cli.command(name="outer-bundle")(outer_bundle_command)
     cli.command(name="reindex")(reindex)
     cli.command(name="memory-lifecycle")(memory_lifecycle)
-    cli.command()(campaign)
+    for register_commands in command_registrars:
+        register_commands(cli)
     if command_specs:
         from core.cli.routing import compose_command_registry
 
@@ -566,6 +484,7 @@ def build_app(
                 resume,
                 dangerously_skip_permissions,
                 command_registry=command_registry,
+                quota_thresholds=quota_thresholds,
             )
 
         cli.callback()(composed_main)

@@ -237,7 +237,10 @@ def test_pipeline_emits_phase_started_finished_for_every_phase(tmp_path) -> None
     """Every phase fires phase_started + phase_finished in order."""
     import json
 
-    from core.self_improving.loop.observe.run_timeline import RunTimeline, run_timeline_scope
+    from geode_product.self_improving.loop.observe.run_timeline import (
+        RunTimeline,
+        run_timeline_scope,
+    )
 
     registry, _ = _make_registry_with_all_stubs()
     state = PipelineState(run_id="t-p1c", target_dim="broken_tool_use", gen_tag="gen2")
@@ -282,7 +285,10 @@ def test_pipeline_emits_phase_failed_soft_failure(tmp_path) -> None:
     raised=False + error head."""
     import json
 
-    from core.self_improving.loop.observe.run_timeline import RunTimeline, run_timeline_scope
+    from geode_product.self_improving.loop.observe.run_timeline import (
+        RunTimeline,
+        run_timeline_scope,
+    )
 
     registry = PipelineRegistry()
     registry.register(_FailingAgent("generator"))
@@ -311,7 +317,10 @@ def test_pipeline_emits_phase_failed_hard_failure(tmp_path) -> None:
     exception bubbles."""
     import json
 
-    from core.self_improving.loop.observe.run_timeline import RunTimeline, run_timeline_scope
+    from geode_product.self_improving.loop.observe.run_timeline import (
+        RunTimeline,
+        run_timeline_scope,
+    )
 
     registry = PipelineRegistry()
     registry.register(_RaisingAgent("generator"))
@@ -337,7 +346,10 @@ def test_registry_register_replace_emits_agent_reregistered(tmp_path) -> None:
     """Re-registering an existing role emits agent_reregistered (warn level)."""
     import json
 
-    from core.self_improving.loop.observe.run_timeline import RunTimeline, run_timeline_scope
+    from geode_product.self_improving.loop.observe.run_timeline import (
+        RunTimeline,
+        run_timeline_scope,
+    )
 
     journal = RunTimeline(
         session_id="t-rereg",

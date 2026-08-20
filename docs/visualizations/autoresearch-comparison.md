@@ -15,7 +15,7 @@
 |---|---|---|
 | Three-file shape | `prepare.py` / `train.py` / `program.md` | identical names + roles |
 | Single-file mutation scope | agent edits `train.py` only | agent edits `train.py` only |
-| Fixed 5-min wall-clock budget per run | "Training runs for a fixed 5-minute time budget … regardless of the details of your compute." | `BUDGET_MINUTES = 5` in `core/self_improving/train.py` |
+| Fixed 5-min wall-clock budget per run | "Training runs for a fixed 5-minute time budget … regardless of the details of your compute." | `BUDGET_MINUTES = 5` in `geode_product/self_improving/train.py` |
 | Git-as-optimiser idiom | branch tip = best run; `git reset` = discard | identical — see `program.md` "The experiment loop" |
 | One-shot per invocation | `uv run python train.py` runs one experiment | identical entry point |
 | Read-only harness | `prepare.py` immutable | `prepare.py` immutable, only verifies harness (no fineweb / BPE) |
@@ -38,7 +38,7 @@
 
 | Addition | Where | Why it's new (no Karpathy original counterpart) |
 |---|---|---|
-| **Multi-objective tiered scoring** | `AXIS_TIERS` (5 critical / 10 auxiliary / 3 info — 18-dim taxonomy, 15 weighted) in `core/self_improving/train.py` | val_bpb is scalar; alignment audit needs differentiated risk policy across dims |
+| **Multi-objective tiered scoring** | `AXIS_TIERS` (5 critical / 10 auxiliary / 3 info — 18-dim taxonomy, 15 weighted) in `geode_product/self_improving/train.py` | val_bpb is scalar; alignment audit needs differentiated risk policy across dims |
 | **Critical floor (hard reject)** | `compute_fitness` — `if new_mean > baseline + stderr + margin: return 0.0` | safety dims must not be traded for efficiency gains |
 | **Auxiliary squared penalty** | `compute_fitness` — `λ × (Δ / 10)²` summed across the 10 aux dims | soft regularization on non-safety axes |
 | **Stability axis** | `_stability_score = 1 / (1 + mean(dim_stderr))` | judge-LLM noise floor needs to enter fitness; rewards confident measurements |
@@ -105,7 +105,7 @@ rule, honest Resolution) is GEODE-specific.
 
 ## 6. Files & line references
 
-* GEODE autoresearch: `core/self_improving/train.py`
+* GEODE autoresearch: `geode_product/self_improving/train.py`
   - `_dim_score` (line 1911)
   - `_stability_score` (line 1953)
   - `compute_fitness` (line 2019)
@@ -113,7 +113,7 @@ rule, honest Resolution) is GEODE-specific.
   - `DIM_WEIGHTS` / `STABILITY_WEIGHT` (lines 606 / 669)
   - `AXIS_TIERS` 5+10+3 listing (line 582)
   - promote margin `_MARGIN_GAIN_SIGMA` / `_FITNESS_MARGIN_FLOOR_DEFAULT` (lines 3527 / 3513)
-  - `TARGET_KINDS` (7 scaffold kinds) — `core/self_improving/loop/policies.py`
+  - `TARGET_KINDS` (7 scaffold kinds) — `geode_product/self_improving/loop/policies.py`
 * Karpathy autoresearch: https://github.com/karpathy/autoresearch
   (228791f) — local reference clone `~/workspace/autoresearch/`
 * GEODE README on this split: `docs/self-improving/loop-overview.md`

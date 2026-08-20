@@ -187,7 +187,7 @@ def migrate_petri_toml(
     sip_section = parsed.get("self_improving_loop")
     if isinstance(sip_section, dict):
         try:
-            from core.config.self_improving import SelfImprovingLoopConfig
+            from geode_product.self_improving.config import SelfImprovingLoopConfig
 
             SelfImprovingLoopConfig.model_validate(sip_section)
         except Exception as exc:

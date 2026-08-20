@@ -12,7 +12,7 @@ aggregate as a discrete PASS / FAIL ledger that the promote gate can VETO on.
 
 Layer rationale: this module sits at the ``core`` layer (alongside
 ``core/audit/dim_extractor.py``, the precedent ``.eval`` reader) because
-``core/self_improving/train.py`` consumes the veto and CANNOT import
+``geode_product/self_improving/train.py`` consumes the veto and CANNOT import
 ``plugins.*`` (an upward-dependency violation). ``plugins`` may import ``core``
 (``plugins/petri_audit/eval_archive.py`` records the result into the summary
 YAML), so the dependency arrow only ever points plugins → core.
@@ -112,7 +112,7 @@ class ContractResult:
 
     ``hard`` marks a contract as veto-eligible: a ``hard`` contract whose
     ``status == "fail"`` blocks promotion (see
-    ``core/self_improving/train.py:_hard_contract_violations`` +
+    ``geode_product/self_improving/train.py:_hard_contract_violations`` +
     ``_should_promote``). ``claim_grounded`` is ``hard=False`` so its stub
     verdict can never veto.
     """
@@ -241,7 +241,7 @@ def check_contracts(samples: list[Any]) -> list[ContractResult]:
     elif args_indeterminate > 0:
         # ANY un-parseable arg (no hard failure) → the contract was NOT fully
         # verified. Honest status is "indeterminate" — covers both the
-        # all-unparseable case (validated == 0) and the MIXED case
+        # all-unparsable case (validated == 0) and the MIXED case
         # (validated > 0 AND indeterminate > 0). "pass" here would be a false
         # "validated" signal. This never vetoes (only "fail" does); it only
         # keeps the recorded ledger honest.
@@ -320,7 +320,7 @@ def _collect_tool_schemas(sample: Any) -> dict[str, dict[str, Any]]:
     (these are the AUDITOR's tool-creation calls). ``arguments`` is
     ``{name, description, parameters}`` where ``parameters`` is either an inline
     JSON-schema string or an ``attachment://<sha>`` pointer into
-    ``sample.attachments``. An unparseable / non-object schema is recorded as
+    ``sample.attachments``. An unparsable / non-object schema is recorded as
     ``{}`` (the tool exists but its shape is unknown → args validation skips it).
     """
     attachments = getattr(sample, "attachments", None) or {}
@@ -511,7 +511,7 @@ def _coerce_scalar(token: str) -> Any:
     - ``[...]`` / ``{...}`` → the parsed ``list`` / ``dict`` when it is valid
       JSON (so ``ids=[1,2,3]`` is a non-scalar the scalar-only type check skips,
       NOT the string ``"[1,2,3]"`` that would spuriously fail an ``array`` /
-      scalar schema — Codex review, 2026-06-03); an unparseable bracket token
+      scalar schema — Codex review, 2026-06-03); an unparsable bracket token
       falls through to the stripped ``str``,
     - ``int`` / ``float`` when the token parses as a number,
     - else the stripped ``str``.
@@ -589,7 +589,7 @@ def _check_args_shape_valid(
     - calls with ``args is None`` (un-parseable text body) → ``indeterminate``,
       counted but NEVER failed.
     - a call to a tool with no recorded schema, or a tool whose schema is ``{}``
-      (unparseable ``create_tool`` parameters), is skipped (not validated, not
+      (unparsable ``create_tool`` parameters), is skipped (not validated, not
       failed).
     """
     ok = True

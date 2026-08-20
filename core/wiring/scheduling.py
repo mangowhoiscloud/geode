@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+from collections.abc import Callable
 from typing import Any
 
 from core.hooks import HookEvent, HookSystem
@@ -21,7 +22,11 @@ from core.scheduler.triggers import TriggerManager
 log = logging.getLogger(__name__)
 
 
-def build_scheduling(*, hooks: HookSystem) -> dict[str, Any]:
+def build_scheduling(
+    *,
+    hooks: HookSystem,
+    feature_registrar: Callable[[TriggerManager, HookSystem], None] | None = None,
+) -> dict[str, Any]:
     """Build the scheduler stack and wire its hook handlers.
 
     Returns a dict of component name -> instance for the runtime constructor.
@@ -71,29 +76,11 @@ def build_scheduling(*, hooks: HookSystem) -> dict[str, Any]:
                 interval_s=settings.scheduler_interval_s,
             )
 
-        # OL-A1 (2026-05-22) — self-improving-loop auto-trigger. Opt-in:
-        # only fires when [self_improving_loop.scheduler] enabled=true in
-        # ~/.geode/config.toml. Default off → register_auto_trigger no-ops.
-        try:
-            from core.config.self_improving import load_self_improving_loop_config
-            from core.self_improving.loop.auto_trigger import register_auto_trigger
-
-            sil_cfg = load_self_improving_loop_config()
-            register_auto_trigger(
-                trigger_manager,
-                enabled=sil_cfg.scheduler.enabled,
-                cron=sil_cfg.scheduler.cron,
-                min_interval_minutes=sil_cfg.scheduler.min_interval_minutes,
-                # PR-MAX-GEN (2026-05-26) — production wiring for the
-                # generation cap. ``0`` (config default) preserves legacy
-                # unbounded behaviour. Operators set a non-zero cap in
-                # ~/.geode/config.toml under [self_improving_loop.scheduler]
-                # max_generation = N.
-                max_generation=sil_cfg.scheduler.max_generation,
-                hooks=hooks,
-            )
-        except Exception:
-            log.exception("auto_trigger wiring failed; scheduler continues without it")
+        if feature_registrar is not None:
+            try:
+                feature_registrar(trigger_manager, hooks)
+            except Exception:
+                log.exception("feature scheduler wiring failed; scheduler continues without it")
 
         _register_trigger_logger(hooks)
 

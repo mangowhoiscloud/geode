@@ -3,10 +3,10 @@
 Pattern source: PR-MINIMAL-2 #1398 — `_FALLBACK_SYSTEM_PROMPT` ↔ `program.md`
 shared-anchor invariant. Same dual-SoT shape risk applies here:
 
-- ``core/self_improving/train.py:_WRAPPER_PROMPT_SECTIONS_FALLBACK`` — bootstrap
+- ``geode_product/self_improving/train.py:_WRAPPER_PROMPT_SECTIONS_FALLBACK`` — bootstrap
   default loaded when ``state/autoresearch/policies/wrapper-sections.json``
   (canonical, mutator-written runtime SoT) is absent.
-- ``core/self_improving/train.py:write_wrapper_prompt_sections`` — validator the
+- ``geode_product/self_improving/train.py:write_wrapper_prompt_sections`` — validator the
   mutator goes through when promoting a wrapper-prompt mutation.
 
 A future PR could:
@@ -39,8 +39,8 @@ import json
 from pathlib import Path
 
 import pytest
-from core.self_improving import train as auto_train
-from core.self_improving.train import (
+from geode_product.self_improving import train as auto_train
+from geode_product.self_improving.train import (
     _WRAPPER_PROMPT_SECTIONS_FALLBACK,
     load_wrapper_prompt_sections,
     write_wrapper_prompt_sections,

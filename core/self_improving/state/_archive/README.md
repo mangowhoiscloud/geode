@@ -2,7 +2,7 @@
 
 Epoch-boundary snapshot location for the self-improving loop.
 Content-addressed by the baseline **epoch label** `be-NNN` (assigned by
-`core/self_improving/loop/baseline_epoch.py` — `resolve_epoch_label`,
+`geode_product/self_improving/loop/baseline_epoch.py` — `resolve_epoch_label`,
 keyed on the `sha256` of the full baseline production + measurement spec:
 `margin_rule` + fitness/margin logic version + the 4 roles' model/source +
 rubric/dim-set + bench + seed-pool identity).
@@ -27,7 +27,7 @@ rather than overwritten — mirroring the seed-generation `gen-*` series.
 ## Status (PR-STATE-SELF-IMPROVING-RENAME, 2026-06-01)
 
 The convention is **documented**; the auto-snapshot-on-epoch-change is
-**deferred** (TODO marked at `core/self_improving/train.py`, in the
+**deferred** (TODO marked at `geode_product/self_improving/train.py`, in the
 `if _epoch_is_new:` branch). Rationale: adding snapshot I/O inside the promote
 write path risks the promote itself — a copy failure must not abort a
 gate-approved promote. The snapshot should run as a separate, post-promote

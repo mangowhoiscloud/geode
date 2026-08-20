@@ -9,14 +9,24 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from core.self_improving.loop.mutate.sot_resolution import SoTSelection, resolve_sot
+from core.config.policy_source import (
+    PolicySourcePaths,
+    PolicySourceSelection,
+    select_policy_source,
+)
 
 _ENV = "GEODE_FAKE_POLICY_OVERRIDE"
 _STRICT_ENV = "GEODE_FAKE_POLICY_STRICT"
 
 
-def _resolve(operator_local: Path, in_repo: Path) -> SoTSelection | None:
-    return resolve_sot(env_var=_ENV, operator_local=operator_local, in_repo=in_repo)
+def _resolve(operator_local: Path, in_repo: Path) -> PolicySourceSelection | None:
+    return select_policy_source(
+        PolicySourcePaths(
+            override_env=_ENV,
+            operator_local=operator_local,
+            packaged_default=in_repo,
+        )
+    )
 
 
 def _clear(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -44,7 +54,7 @@ def test_returns_in_repo_graceful_when_only_in_repo_present(
     in_repo = tmp_path / "repo.json"
     in_repo.write_text("{}", encoding="utf-8")
     result = _resolve(tmp_path / "ops.json", in_repo)
-    assert result == SoTSelection(in_repo, strict=False)
+    assert result == PolicySourceSelection(in_repo, strict=False)
 
 
 # Operator-local layer --------------------------------------------------------
@@ -59,7 +69,7 @@ def test_returns_operator_local_graceful_when_present(
     in_repo = tmp_path / "repo.json"
     in_repo.write_text("{}", encoding="utf-8")
     result = _resolve(operator_local, in_repo)
-    assert result == SoTSelection(operator_local, strict=False)
+    assert result == PolicySourceSelection(operator_local, strict=False)
 
 
 def test_operator_local_takes_priority_over_in_repo(
@@ -88,7 +98,7 @@ def test_env_var_alone_returns_graceful_selection(
     monkeypatch.setenv(_ENV, str(target))
     monkeypatch.delenv(_STRICT_ENV, raising=False)
     result = _resolve(tmp_path / "ops.json", tmp_path / "repo.json")
-    assert result == SoTSelection(target, strict=False)
+    assert result == PolicySourceSelection(target, strict=False)
 
 
 def test_env_var_with_strict_flag_returns_strict_selection(
@@ -100,7 +110,7 @@ def test_env_var_with_strict_flag_returns_strict_selection(
     monkeypatch.setenv(_ENV, str(target))
     monkeypatch.setenv(_STRICT_ENV, "1")
     result = _resolve(tmp_path / "ops.json", tmp_path / "repo.json")
-    assert result == SoTSelection(target, strict=True)
+    assert result == PolicySourceSelection(target, strict=True)
 
 
 def test_strict_flag_value_other_than_one_is_graceful(
@@ -113,7 +123,7 @@ def test_strict_flag_value_other_than_one_is_graceful(
     for non_one in ("0", "true", "True", "yes", ""):
         monkeypatch.setenv(_STRICT_ENV, non_one)
         result = _resolve(tmp_path / "ops.json", tmp_path / "repo.json")
-        assert result == SoTSelection(target, strict=False), (
+        assert result == PolicySourceSelection(target, strict=False), (
             f"_STRICT={non_one!r} should be graceful, got strict=True"
         )
 
@@ -148,10 +158,12 @@ def test_strict_env_name_is_derived_from_override_env(
     monkeypatch.setenv("GEODE_CUSTOM_STRICT", "1")
     monkeypatch.delenv("GEODE_FAKE_POLICY_OVERRIDE", raising=False)
     monkeypatch.delenv("GEODE_FAKE_POLICY_STRICT", raising=False)
-    result = resolve_sot(
-        env_var="GEODE_CUSTOM_OVERRIDE",
-        operator_local=tmp_path / "ops.json",
-        in_repo=tmp_path / "repo.json",
+    result = select_policy_source(
+        PolicySourcePaths(
+            override_env="GEODE_CUSTOM_OVERRIDE",
+            operator_local=tmp_path / "ops.json",
+            packaged_default=tmp_path / "repo.json",
+        )
     )
     assert result is not None
     assert result.strict is True

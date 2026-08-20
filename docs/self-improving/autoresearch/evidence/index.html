@@ -720,7 +720,7 @@
       </tbody>
     </table>
     <h3 class="section"><span>promote-gate margin rule</span></h3>
-    <p class="page-sub">The gate promotes only when the fitness gain clears its own margin (SoT <code>core/self_improving/train.py::_should_promote</code>). The margin is NOT persisted per-cycle, so the RULE + the recorded baseline stderr are shown rather than a fabricated number.</p>
+    <p class="page-sub">The gate promotes only when the fitness gain clears its own margin (SoT <code>geode_product/self_improving/train.py::_should_promote</code>). The margin is NOT persisted per-cycle, so the RULE + the recorded baseline stderr are shown rather than a fabricated number.</p>
     <dl class="status-grid">
       <dt>margin</dt><dd><code>max(1.0&middot;&radic;(&sigma;_prior&sup2;+&sigma;_current&sup2;), 0.005 floor, 0.05 if baseline N=1 critical)</code></dd>
       <dt>fitness scale</dt><dd>0-1 <code>compute_fitness</code>, HIGHER-is-better</dd>

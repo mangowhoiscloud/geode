@@ -33,7 +33,7 @@ _PYPROJECT_PATH = Path(__file__).resolve().parents[2] / "pyproject.toml"
 
 # [audit] extra: distribution name (PEP 503 normalized) -> top-level import
 # name, verified against the imports the codebase itself performs
-# (core/self_improving/bench_means.py, core/audit/). Only distributions with
+# (geode_product/self_improving/bench_means.py, core/audit/). Only distributions with
 # an unambiguous import name are probed — ``mcp`` is deliberately absent
 # because the separate [mcp] extra provides the same module, so its presence
 # proves nothing about [audit].
@@ -619,7 +619,7 @@ def _check_desktop_computer_use() -> CheckResult:
             detail="dependencies present; macOS Accessibility permission is not trusted",
             fix=(
                 "Grant Accessibility permission to the app launching GEODE "
-                "(Terminal/iTerm/Codex), then restart that app and retry."
+                "(Terminal, Codex, or another terminal app), then restart it and retry."
             ),
         )
 

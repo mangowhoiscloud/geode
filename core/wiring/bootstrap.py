@@ -6,6 +6,7 @@ Extracted from core.runtime as standalone functions (formerly GeodeRuntime stati
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -14,7 +15,6 @@ if TYPE_CHECKING:
     # annotations (``from __future__ import annotations``).  Each class
     # is imported lazily inside its build_* function below; this block
     # exists solely so mypy / IDEs can resolve the annotations.
-    from core.config.policy_source import PolicySourceBundle
     from core.hooks import MiddlewareRegistry, RuntimeEventBus
     from core.memory.context import ContextAssembler
     from core.memory.organization import MonoLakeOrganizationMemory
@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from core.memory.project import ProjectMemory
     from core.memory.user_profile import FileBasedUserProfile
     from core.observability.event_store import HookEventStore
-    from core.observability.run_event import RunEventSink
+    from core.observability.run_event import RunEventSinkProvider
     from core.orchestration.hot_reload import ConfigWatcher
     from core.orchestration.task_system import TaskGraph
 
@@ -31,80 +31,14 @@ from core.hooks import HookEvent, HookSystem
 log = logging.getLogger(__name__)
 
 
-def build_product_policy_sources() -> PolicySourceBundle:
-    """Build the optional product policy bundle; empty is the kernel default."""
-    from core.config.policy_source import EMPTY_POLICY_SOURCES
-
-    try:
-        from core.self_improving.policy_sources import build_policy_source_bundle
-    except ModuleNotFoundError as exc:
-        if exc.name == "core.self_improving":
-            return EMPTY_POLICY_SOURCES
-        raise
-    return build_policy_source_bundle()
-
-
-def _missing_optional_product(exc: ModuleNotFoundError) -> bool:
-    return exc.name == "core.self_improving"
-
-
-def current_product_activity_sink() -> RunEventSink | None:
-    """Return the optional product projection without leaking it into kernel code."""
-    try:
-        from core.self_improving.loop.observe.run_timeline import current_run_timeline
-    except ModuleNotFoundError as exc:
-        if not _missing_optional_product(exc):
-            raise
-        return None
-    return current_run_timeline()
-
-
-def bind_product_worker_activity(run_dir: Path) -> None:
-    """Rebind the existing product projection inside a worker subprocess."""
-    try:
-        from core.self_improving.loop.observe.run_timeline import (
-            RunTimeline,
-            set_current_run_timeline,
-        )
-    except ModuleNotFoundError as exc:
-        if not _missing_optional_product(exc):
-            raise
-        return
-
-    set_current_run_timeline(
-        RunTimeline(
-            session_id=run_dir.name,
-            gen_tag="",
-            component="seed-generation",
-            path=run_dir / "events.jsonl",
-        )
-    )
-
-
 def build_middleware_registry(
     *,
     events: RuntimeEventBus | None = None,
-    policy_sources: PolicySourceBundle | None = None,
 ) -> MiddlewareRegistry:
-    """Build one product-composed request middleware registry."""
+    """Build an empty kernel request-middleware registry."""
     from core.hooks import MiddlewareRegistry
 
-    registry = MiddlewareRegistry(events=events)
-    try:
-        from core.self_improving.loop.inject.in_context_wiring import (
-            register_in_context_middleware,
-        )
-    except ModuleNotFoundError as exc:
-        if not _missing_optional_product(exc):
-            raise
-        return registry
-    register_in_context_middleware(
-        registry,
-        policy_sources=(
-            build_product_policy_sources() if policy_sources is None else policy_sources
-        ),
-    )
-    return registry
+    return MiddlewareRegistry(events=events)
 
 
 # ---------------------------------------------------------------------------
@@ -228,6 +162,7 @@ def build_worker_hooks(
     session_key: str,
     run_id: str,
     log_dir: Path | str | None = None,
+    activity_sink_provider: RunEventSinkProvider | None = None,
 ) -> HookSystem:
     """Minimal hook bundle for the subprocess sub-agent worker.
 
@@ -255,7 +190,7 @@ def build_worker_hooks(
             event_store,
             session_key=session_key,
             run_id=run_id,
-            activity_sink_provider=current_product_activity_sink,
+            activity_sink_provider=activity_sink_provider,
         ),
         name="hook_persistence",
     )
@@ -316,6 +251,8 @@ def build_hooks(
     session_key: str,
     run_id: str,
     log_dir: Path | str | None,
+    activity_sink_provider: RunEventSinkProvider | None = None,
+    feature_hook_registrar: Callable[[HookSystem], None] | None = None,
 ) -> tuple[HookSystem, HookEventStore, Any]:
     """Build HookSystem with bounded SQLite persistence and metrics."""
     from core.observability.hook_persistence import HookPersistenceSink
@@ -328,7 +265,7 @@ def build_hooks(
             event_store,
             session_key=session_key,
             run_id=run_id,
-            activity_sink_provider=current_product_activity_sink,
+            activity_sink_provider=activity_sink_provider,
         ),
         name="hook_persistence",
     )
@@ -499,7 +436,7 @@ def build_hooks(
         journal = get_project_journal()
         for handler_name, handler_fn in make_journal_handlers(
             journal,
-            activity_sink_provider=current_product_activity_sink,
+            activity_sink_provider=activity_sink_provider,
         ):
             target_events = {
                 "journal_subagent": [HookEvent.SUBAGENT_COMPLETED],
@@ -627,24 +564,8 @@ def build_hooks(
 
     _register_plugin("llm_lifecycle_hook", _reg_llm_lifecycle)
 
-    # PR-MUTATION-EMIT-WIRE (2026-05-27) — wire HookSystem into the
-    # self-improving-loop emit sites. The runner's ``append_audit_log``
-    # + train.py's ``BASELINE_PATH.write_text`` + the SoT-revert paths
-    # call :func:`_fire_hook` with the payload schema documented on
-    # the ``HookEvent.MUTATION_*`` / ``BASELINE_PROMOTED`` enum.
-    def _reg_self_improving_loop_hooks() -> None:
-        from core.self_improving.loop._hooks import (
-            clear_self_improving_loop_hooks,
-            set_self_improving_loop_hooks,
-        )
-
-        set_self_improving_loop_hooks(hooks)
-        hooks.add_owner_cleanup(
-            "self_improving_loop_hooks",
-            clear_self_improving_loop_hooks,
-        )
-
-    _register_plugin("self_improving_loop_hooks", _reg_self_improving_loop_hooks)
+    if feature_hook_registrar is not None:
+        _register_plugin("feature_hooks", feature_hook_registrar, hooks)
 
     # PR-4 C-3 — episodic action-outcome ledger. TOOL_EXEC_ENDED carries
     # (tool_name, tool_input, has_error, result, duration_ms); we record

@@ -13,8 +13,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from core.cli.commands.recall import cmd_recall
 from core.memory.recall_writer import GEODE_MEMORY_RECALL_DIR_ENV
+from geode_product.self_improving.recall_cli import cmd_recall
 
 
 @pytest.fixture()
@@ -39,7 +39,7 @@ def test_save_writes_reader_parseable_entry(
     assert "saved" in capsys.readouterr().out
 
     # Read-write parity — the M4.4.1 reader must parse what save wrote.
-    from core.self_improving.loop.inject.memory_recall import load_memory_entries
+    from geode_product.self_improving.loop.inject.memory_recall import load_memory_entries
 
     entries = load_memory_entries()
     assert [e.name for e in entries] == ["quota-pref"]

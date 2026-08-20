@@ -1,7 +1,7 @@
 """PR-WIRE-1 (2026-05-26) — orphan helper CLI wiring.
 
 The 2026-05-26 autoresearch attribution sprint Phase A audit identified
-production-orphan helpers in ``core/self_improving/loop/``:
+production-orphan helpers in ``geode_product/self_improving/loop/``:
 
 * ``compute_kind_dim_matrix`` / ``rank_dims_by_kind`` (kind_dim_matrix.py)
   — 0 production callers
@@ -94,7 +94,7 @@ def test_dispatcher_routes_new_action_to_handler(
     """``cmd_self_improving("matrix")`` must invoke ``_cmd_matrix``, etc.
     Pin the dispatcher branch so a typo in the action string fails fast
     in CI instead of silently falling through to the unknown-action path."""
-    from core.cli.commands import self_improving as mod
+    from geode_product.self_improving import cli_commands as mod
 
     calls: list[tuple[str, list[str]]] = []
 
@@ -119,7 +119,7 @@ def test_unknown_action_help_lists_new_subcommands(
     """The unknown-action help text must mention matrix /
     rollback-check so an operator who typos a sub-action sees the new
     wiring as available."""
-    from core.cli.commands.self_improving import cmd_self_improving
+    from geode_product.self_improving.cli_commands import cmd_self_improving
 
     cmd_self_improving("nonexistent-action")
     output = capsys.readouterr().out
@@ -133,19 +133,19 @@ def test_unknown_action_help_lists_new_subcommands(
 
 
 def test_parse_last_n_default() -> None:
-    from core.cli.commands.self_improving import _parse_last_n
+    from geode_product.self_improving.cli_commands import _parse_last_n
 
     assert _parse_last_n([]) == 20
 
 
 def test_parse_last_n_explicit() -> None:
-    from core.cli.commands.self_improving import _parse_last_n
+    from geode_product.self_improving.cli_commands import _parse_last_n
 
     assert _parse_last_n(["--last", "5"]) == 5
 
 
 def test_parse_last_n_invalid_falls_back() -> None:
-    from core.cli.commands.self_improving import _parse_last_n
+    from geode_product.self_improving.cli_commands import _parse_last_n
 
     assert _parse_last_n(["--last", "not-a-number"]) == 20
     assert _parse_last_n(["--last", "0"]) == 20
@@ -167,7 +167,7 @@ def test_matrix_invokes_matrix_helper_on_real_rows(
     orphan ``compute_kind_dim_matrix`` helper. Writes matched apply +
     attribution rows so the inner-join yields a non-empty matrix, then
     checks the target_kind names appear in stdout."""
-    from core.cli.commands.self_improving import _cmd_matrix
+    from geode_product.self_improving.cli_commands import _cmd_matrix
 
     log_path = tmp_path / "mutations.jsonl"
     _write_apply_row(
@@ -214,7 +214,7 @@ def test_matrix_empty_state_when_no_overlap(
 ) -> None:
     """Apply + attribution rows with disjoint mutation_id → empty matrix
     → muted "no mutation_id overlap" line."""
-    from core.cli.commands.self_improving import _cmd_matrix
+    from geode_product.self_improving.cli_commands import _cmd_matrix
 
     log_path = tmp_path / "mutations.jsonl"
     _write_apply_row(log_path, mutation_id="m1", target_kind="prompt", target_section="role")
@@ -242,7 +242,7 @@ def test_rollback_check_evaluates_predicate_on_real_rows(
     row with a "fitness drops below X" predicate + a matching
     attribution row whose ``fitness_after`` triggers the predicate;
     checks that the WOULD-TRIGGER label appears in stdout."""
-    from core.cli.commands.self_improving import _cmd_rollback_check
+    from geode_product.self_improving.cli_commands import _cmd_rollback_check
 
     log_path = tmp_path / "mutations.jsonl"
     _write_apply_row(
@@ -294,7 +294,7 @@ def test_rollback_check_empty_state_when_no_predicates(
     rollback_condition predicates" line. The predicate field has
     always been wired into the apply row but the evaluator function
     was orphan pre-PR-WIRE-1."""
-    from core.cli.commands.self_improving import _cmd_rollback_check
+    from geode_product.self_improving.cli_commands import _cmd_rollback_check
 
     log_path = tmp_path / "mutations.jsonl"
     _write_apply_row(
@@ -331,7 +331,7 @@ def test_rollback_check_baseline_dependent_predicate_uses_patched_path(
     regression-by-more-than-0.5 predicate, and an attribution row whose
     observed_dim shows dim at 6.0 (regression of 1.0 > threshold 0.5).
     Asserts WOULD-TRIGGER fires."""
-    from core.cli.commands.self_improving import _cmd_rollback_check
+    from geode_product.self_improving.cli_commands import _cmd_rollback_check
 
     log_path = tmp_path / "mutations.jsonl"
     baseline_path = tmp_path / "baseline.json"
@@ -370,7 +370,7 @@ def test_rollback_check_no_apply_rows_empty_state(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """Fresh mutations.jsonl → muted "no applied mutations" line."""
-    from core.cli.commands.self_improving import _cmd_rollback_check
+    from geode_product.self_improving.cli_commands import _cmd_rollback_check
 
     log_path = tmp_path / "mutations.jsonl"
     monkeypatch.setattr("core.paths.MUTATION_AUDIT_LOG_PATH", log_path)

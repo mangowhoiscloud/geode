@@ -210,7 +210,7 @@ def test_wrapper_fallback_role_is_generic_not_geode_persona() -> None:
     mutator may still *propose* a GEODE-named role; this pins only the
     shipped baseline so GEODE_PERSONA=off stays a thin wrapper.
     """
-    from core.self_improving.train import _WRAPPER_PROMPT_SECTIONS_FALLBACK
+    from geode_product.self_improving.train import _WRAPPER_PROMPT_SECTIONS_FALLBACK
 
     role = _WRAPPER_PROMPT_SECTIONS_FALLBACK["role"]
     assert "You are GEODE" not in role

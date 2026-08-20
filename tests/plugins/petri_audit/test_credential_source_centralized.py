@@ -32,7 +32,7 @@ def test_canonical_membership_is_stable() -> None:
 
 
 def test_self_improving_loop_source_alias_is_canonical() -> None:
-    from core.config.self_improving import Source
+    from geode_product.self_improving.config import Source
 
     assert Source is CredentialSource
 
@@ -40,7 +40,7 @@ def test_self_improving_loop_source_alias_is_canonical() -> None:
 def test_config_source_fields_use_canonical_enum() -> None:
     """Every ``source`` field on the loop config models is typed as the
     canonical enum (previously: two different Literals)."""
-    from core.config.self_improving import (
+    from geode_product.self_improving.config import (
         AutoresearchConfig,
         MutatorConfig,
         PetriRoleConfig,

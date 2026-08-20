@@ -67,7 +67,9 @@ def _invalidate_on_text_changed(_buffer: Any) -> None:
         log.debug("invalidate skipped: no running prompt application", exc_info=True)
 
 
-def _build_prompt_session() -> Any:
+def _build_prompt_session(
+    quota_thresholds: tuple[float, float] | None = None,
+) -> Any:
     """Create a prompt_toolkit PromptSession with history + GEODE styling.
 
     multiline=True so that pasted multi-line text stays in the buffer
@@ -105,10 +107,9 @@ def _build_prompt_session() -> Any:
 
     history_path = Path.home() / ".geode_history"
 
-    # PR-γ1 — install + bind the subscription quota banner. Lazy-load
-    # the self-improving-loop config so prompt_session stays importable when
-    # ``core.config.self_improving`` is unavailable (test contexts).
-    bottom_toolbar = _make_bottom_toolbar()
+    # PR-γ1 — install + bind the subscription quota banner. Product shells
+    # may supply thresholds explicitly; the kernel keeps neutral defaults.
+    bottom_toolbar = _make_bottom_toolbar(quota_thresholds)
     # Stash the render callable so _apply_toolbar_visibility (run before
     # each prompt) can show/hide the bar by reassigning the session's
     # ``bottom_toolbar`` attribute. prompt_toolkit keys bar visibility on
@@ -133,28 +134,20 @@ def _build_prompt_session() -> Any:
     return session
 
 
-def _make_bottom_toolbar() -> Any:
+def _make_bottom_toolbar(
+    quota_thresholds: tuple[float, float] | None = None,
+) -> Any:
     """Build the bottom_toolbar callable for the REPL.
 
-    Installs a process-wide :class:`SubscriptionQuotaBanner` keyed on
-    the self-improving-loop config's warn / abort thresholds, then returns its
-    ``render`` method as the prompt_toolkit ``bottom_toolbar`` value.
-    Returns ``None`` when the self-improving-loop config is unavailable so the
-    REPL falls back to no-banner gracefully.
+    Installs a process-wide :class:`SubscriptionQuotaBanner` keyed on the
+    explicitly composed warn / abort thresholds, then returns its ``render``
+    method as the prompt_toolkit ``bottom_toolbar`` value.
     """
     from prompt_toolkit.formatted_text import HTML as _HTML
 
     from core.cli.quota_banner import SubscriptionQuotaBanner, install_banner
 
-    try:
-        from core.config.self_improving import load_self_improving_loop_config
-
-        cfg = load_self_improving_loop_config()
-        warn = cfg.warn_threshold
-        abort = cfg.abort_threshold
-    except Exception:
-        log.warning("self-improving-loop config unavailable; banner uses defaults", exc_info=True)
-        warn, abort = 0.5, 0.9
+    warn, abort = quota_thresholds or (0.5, 0.9)
 
     banner = SubscriptionQuotaBanner(
         warn_threshold=warn,
@@ -262,7 +255,9 @@ def _apply_toolbar_visibility(session: Any) -> None:
     session.bottom_toolbar = render if has_content else None
 
 
-def _get_prompt_session() -> Any:
+def _get_prompt_session(
+    quota_thresholds: tuple[float, float] | None = None,
+) -> Any:
     global _prompt_session
     if _prompt_session is False:
         return None  # permanently disabled after runtime failure
@@ -273,7 +268,7 @@ def _get_prompt_session() -> Any:
         if sys.version_info >= (3, 14):
             _force_select_event_loop()
         try:
-            _prompt_session = _build_prompt_session()
+            _prompt_session = _build_prompt_session(quota_thresholds)
         except Exception:
             log.warning("prompt_toolkit init failed, falling back to console.input", exc_info=True)
             _prompt_session = False  # sentinel: disabled
@@ -287,7 +282,10 @@ def _drain_stdin() -> None:
     drain_stdin()
 
 
-def _read_multiline_input(prompt: str) -> str:
+def _read_multiline_input(
+    prompt: str,
+    quota_thresholds: tuple[float, float] | None = None,
+) -> str:
     """Read user input via prompt_toolkit (arrow keys, history).
 
     Falls back to Rich console.input if prompt_toolkit is unavailable.
@@ -295,7 +293,7 @@ def _read_multiline_input(prompt: str) -> str:
     paste support (no manual stdin polling).
     """
     global _prompt_failures, _prompt_session
-    session = _get_prompt_session()
+    session = _get_prompt_session(quota_thresholds)
     if session is not None:
         try:
             # Restore default SIGINT so prompt_toolkit can handle Ctrl-C internally.

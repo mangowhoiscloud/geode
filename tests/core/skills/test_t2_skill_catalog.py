@@ -208,7 +208,7 @@ def test_context_module_calls_apply_instead_of_get_context_block_direct() -> Non
 
 
 def test_product_source_candidates_present() -> None:
-    from core.self_improving.policy_sources import build_policy_source_bundle
+    from geode_product.self_improving.policy_sources import build_policy_source_bundle
 
     sources = build_policy_source_bundle()["skill_catalog"]
     assert sources.packaged_default is not None
@@ -224,7 +224,7 @@ def test_product_source_candidates_present() -> None:
 
 def test_train_py_sets_skill_catalog_env() -> None:
     repo_root = Path(__file__).resolve().parents[3]
-    src = (repo_root / "core/self_improving/measure.py").read_text(encoding="utf-8")
+    src = (repo_root / "geode_product/self_improving/measure.py").read_text(encoding="utf-8")
     assert "GEODE_SKILL_CATALOG_OVERRIDE" in src
     assert "GEODE_SKILL_CATALOG_STRICT" in src
     assert "AUTORESEARCH_SKILL_CATALOG_PATH" in src
@@ -236,6 +236,8 @@ def test_train_py_sets_skill_catalog_env() -> None:
 def test_skill_catalog_json_referenced_in_inference_path() -> None:
     """grep `skill-catalog.json` lands in product policy composition."""
     repo_root = Path(__file__).resolve().parents[3]
-    composition = (repo_root / "core/self_improving/policy_sources.py").read_text(encoding="utf-8")
+    composition = (repo_root / "geode_product/self_improving/policy_sources.py").read_text(
+        encoding="utf-8"
+    )
     assert '"skill_catalog"' in composition
     assert "AUTORESEARCH_SKILL_CATALOG_PATH" in composition

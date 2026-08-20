@@ -8,7 +8,7 @@ a polarity-normalised ``signed_improvement`` alongside ``observed_dim``.
 
 from __future__ import annotations
 
-from core.self_improving.loop.inject.signal_polarity import (
+from geode_product.self_improving.loop.inject.signal_polarity import (
     metric_polarity,
     to_signed_improvement,
 )
@@ -44,8 +44,8 @@ def test_higher_is_better_set_derived_from_canonical_weights() -> None:
     canonical weight dicts (admire + bench; ux removed
     PR-MARGIN-FITNESS-SCALE), so there is no hand-maintained second copy
     to drift from the SoT."""
-    from core.self_improving.admire_means import ADMIRE_DIM_WEIGHTS
-    from core.self_improving.bench_means import BENCH_DIM_WEIGHTS
+    from geode_product.self_improving.admire_means import ADMIRE_DIM_WEIGHTS
+    from geode_product.self_improving.bench_means import BENCH_DIM_WEIGHTS
 
     expected = {*ADMIRE_DIM_WEIGHTS, *BENCH_DIM_WEIGHTS}
     for field in expected:
@@ -55,8 +55,11 @@ def test_higher_is_better_set_derived_from_canonical_weights() -> None:
 def test_compute_attribution_emits_signed_improvement() -> None:
     """Integration — the attribution payload carries a polarity-normalised
     ``signed_improvement`` mirroring ``observed_dim``."""
-    from core.self_improving.loop.observe.attribution import AttributionRecord, compute_attribution
     from geode_product.seed_generation.baseline_reader import BaselineSnapshot
+    from geode_product.self_improving.loop.observe.attribution import (
+        AttributionRecord,
+        compute_attribution,
+    )
 
     before = BaselineSnapshot(
         dim_means={"redundant_tool_invocation": 7.0},
@@ -83,7 +86,7 @@ def test_compute_attribution_emits_signed_improvement() -> None:
 
 def test_signed_improvement_empty_without_baseline() -> None:
     """No baseline → no observed_dim → signed_improvement stays {} (legacy)."""
-    from core.self_improving.loop.observe.attribution import compute_attribution
+    from geode_product.self_improving.loop.observe.attribution import compute_attribution
 
     payload = compute_attribution(
         mutation_id="mut-1",

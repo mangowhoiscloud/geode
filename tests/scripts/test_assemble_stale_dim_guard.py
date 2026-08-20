@@ -1,7 +1,7 @@
 """Stale-dim assemble guard (v0.99.178).
 
 A seed whose ``target_dims`` reference a dim removed from the live fitness
-taxonomy (``core.self_improving.fitness.AXIS_TIERS``) is a phantom-dim
+taxonomy (``geode_product.self_improving.fitness.AXIS_TIERS``) is a phantom-dim
 hallucination: the audit probes a dimension the loop no longer scores, so
 the held-out ruler pins at the floor and the gate rejects every cycle for a
 measurement reason. Previously this surfaced only at campaign RUNTIME (the
@@ -52,7 +52,7 @@ def _write_run(
 
 
 def test_redundant_tool_invocation_is_not_a_live_dim() -> None:
-    from core.self_improving.fitness import AXIS_TIERS
+    from geode_product.self_improving.fitness import AXIS_TIERS
 
     # the dim that triggered the incident must genuinely be absent
     assert "redundant_tool_invocation" not in AXIS_TIERS

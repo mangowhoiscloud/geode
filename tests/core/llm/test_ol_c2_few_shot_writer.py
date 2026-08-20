@@ -5,7 +5,7 @@ Pins:
 - Idempotency: same ``(user_msg, assistant_msg)`` → no second write.
 - FIFO eviction: pool > ``max_size`` drops oldest entries.
 - Graceful: read/write OSError → False return, no raise.
-- core/self_improving/train.py promote step calls ``append_exemplar`` with
+- geode_product/self_improving/train.py promote step calls ``append_exemplar`` with
   ``source="autoresearch_audit_promote"`` only on PROMOTED audits.
 """
 
@@ -179,7 +179,7 @@ def test_append_preserves_unicode(pool_path: Path) -> None:
 
 def test_train_py_imports_append_exemplar() -> None:
     """The promoted-audit path keeps its canonical few-shot writer."""
-    train_py = Path("core/self_improving/train.py").read_text(encoding="utf-8")
+    train_py = Path("geode_product/self_improving/train.py").read_text(encoding="utf-8")
     assert "from core.llm.few_shot_pool import append_exemplar" in train_py
     assert "append_exemplar(" in train_py
     assert 'source="autoresearch_audit_promote"' in train_py
@@ -188,7 +188,7 @@ def test_train_py_imports_append_exemplar() -> None:
 def test_train_py_writer_gated_on_promote() -> None:
     """The writer call must be guarded by ``promoted_line`` check
     (rejected audits stay out of the pool)."""
-    train_py = Path("core/self_improving/train.py").read_text(encoding="utf-8")
+    train_py = Path("geode_product/self_improving/train.py").read_text(encoding="utf-8")
     # Pin the gate shape — args.dry_run skip + promoted_line truthy
     assert "not args.dry_run" in train_py
     assert '"true" in promoted_line.lower()' in train_py
@@ -196,7 +196,7 @@ def test_train_py_writer_gated_on_promote() -> None:
 
 def test_train_py_writer_wrapped_in_try_except() -> None:
     """Writer must be wrapped in try/except so audit cycle never breaks."""
-    train_py = Path("core/self_improving/train.py").read_text(encoding="utf-8")
+    train_py = Path("geode_product/self_improving/train.py").read_text(encoding="utf-8")
     pos = train_py.find("append_exemplar(")
     assert pos > 0
     preceding = train_py[train_py.find("# OL-C2") : pos]
@@ -205,7 +205,7 @@ def test_train_py_writer_wrapped_in_try_except() -> None:
 
 def test_train_py_writer_follows_canonical_audit_event() -> None:
     """The exemplar writer follows the canonical audit marker only."""
-    train_py = Path("core/self_improving/train.py").read_text(encoding="utf-8")
+    train_py = Path("geode_product/self_improving/train.py").read_text(encoding="utf-8")
     audit_pos = train_py.find('"audit_finished"')
     append_pos = train_py.find("append_exemplar(")
     assert "emit_eval_response_recorded" not in train_py

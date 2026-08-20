@@ -60,7 +60,7 @@ loop autonomously.
    - Agent reads the current baseline + meta-review + 5 policy SoTs
      from `autoresearch/state/policies/`.
    - Agent edits ONE mutation target (per the program.md CAN list).
-   - Agent runs `uv run python -m core.self_improving.train` and waits
+   - Agent runs `uv run python -m geode_product.self_improving.train` and waits
      for the `---` separator output.
    - Agent decides promote/reject per the 3-rule gate in
      `_should_promote`.
@@ -117,9 +117,9 @@ section (PR-MINIMAL-2 G1a defaults to `Settings.model` for both).
 - `autoresearch/state/mutations.jsonl` — git-tracked audit ledger
   (one row per applied / rejected / rolled_back mutation)
 - `autoresearch/state/baseline.json` — fitness baseline snapshot
-  (writer: `core/self_improving/train.py:_should_promote`)
+  (writer: `geode_product/self_improving/train.py:_should_promote`)
 - `autoresearch/state/results.tsv` — operator-facing 12-col
-  results journal (writer: `core/self_improving/train.py:main`)
+  results journal (writer: `geode_product/self_improving/train.py:main`)
 - `autoresearch/state/results.jsonl` — full 20-dim per-row
   archive
 
@@ -146,7 +146,7 @@ is no "Mode A history" vs "Mode B history".
 
 - **Operator wants explicit consent per mutation**. The
   confirmation prompt prevents surprise.
-- **Scheduled jobs**. Mode B is invokable from a `geode schedule`
+- **Scheduled jobs**. Mode B is invocable from a `geode schedule`
   task without booting a new agent session.
 - **Reproducibility**. The mutator LLM (model + source) is pinned
   in `~/.geode/config.toml` — easier to audit "what model

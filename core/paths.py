@@ -118,10 +118,9 @@ HELD_OUT_BENCH_POOL = SEED_POOLS_DIR / "held-out"
 
 # TRACKED ledgers + policies (mutations audit, baseline-history registry,
 # baseline_epochs map, mutation-target policy JSONs) — the in-repo SoT. The
-# CODE package ``core/self_improving/`` keeps its name; the tracked STATE now
-# lives at ``core/self_improving/state/`` (was the interim repo-root
-# ``state/autoresearch/`` under CSP-7). Single canonical definition imported by
-# ``core.self_improving.*`` + ``scripts/build_self_improving_hub.py``.
+# CODE lives in ``geode_product/self_improving/`` while tracked STATE remains at
+# ``core/self_improving/state/`` (the compatibility data root selected after the
+# interim repo-root ``state/autoresearch/`` layout under CSP-7).
 AUTORESEARCH_STATE_DIR = SELF_IMPROVING_SOT_DIR
 
 # Cross-run handoff (latest_pointer.json, sessions.jsonl) — RUNTIME (per-run
@@ -331,7 +330,7 @@ GLOBAL_AUTORESEARCH_HANDOFF_DIR = GEODE_HOME / "autoresearch" / "handoff"
 # names match the new directory's "policies" semantics rather than
 # the legacy "source of truth" label. Lazy migration of any legacy
 # ``~/.geode/autoresearch/handoff/<file>.json`` payload is handled
-# by :mod:`core.self_improving.loop.mutate.policies`.
+# by :mod:`geode_product.self_improving.loop.mutate.policies`.
 # The in-repo policy/ledger state dir is ``AUTORESEARCH_STATE_DIR``
 # (``core/self_improving/state/``, defined at the top of this module).
 AUTORESEARCH_POLICIES_DIR = AUTORESEARCH_STATE_DIR / "policies"
@@ -341,7 +340,8 @@ Kept for the lazy migration path so an upgrade of an existing
 operator install copies their last-known wrapper/policy state into
 the new in-repo location on first read/write."""
 # G5a (2026-05-20) — cross-process SoT for the AgenticLoop wrapper prompt
-# sections. Written by ``core.self_improving.train.write_wrapper_prompt_sections``
+# sections. Written by
+# ``geode_product.self_improving.train.write_wrapper_prompt_sections``
 # after a self-improving-loop promotion; read by
 # ``core.agent.system_prompt._load_wrapper_override`` for daily GEODE runs.
 AUTORESEARCH_WRAPPER_SECTIONS_PATH = AUTORESEARCH_POLICIES_DIR / "wrapper-sections.json"
@@ -351,7 +351,7 @@ AUTORESEARCH_WRAPPER_SECTIONS_PATH = AUTORESEARCH_POLICIES_DIR / "wrapper-sectio
 # ``wrapper-sections.json``. ``prompt`` keeps the legacy wrapper-
 # sections name so older mutation rows replay correctly; the others
 # land in fresh files because they evolve independently. Read /
-# written by :mod:`core.self_improving.loop.mutate.policies`.
+# written by :mod:`geode_product.self_improving.loop.mutate.policies`.
 AUTORESEARCH_TOOL_POLICY_PATH = AUTORESEARCH_POLICIES_DIR / "tool-policy.json"
 AUTORESEARCH_DECOMPOSITION_POLICY_PATH = AUTORESEARCH_POLICIES_DIR / "decomposition.json"
 AUTORESEARCH_RETRIEVAL_POLICY_PATH = AUTORESEARCH_POLICIES_DIR / "retrieval.json"
@@ -439,7 +439,7 @@ OPERATOR_LOCAL_FEW_SHOT_POOL_PATH = GLOBAL_AUTORESEARCH_HANDOFF_DIR / "few-shot-
 # applied mutation. Lives in-repo alongside the 5 policy SoT JSONs
 # so the git-as-optimiser ledger and the current-state files are
 # co-located. Previously declared in
-# ``core/self_improving/loop/mutate/runner.py``; moved here for consistency
+# ``geode_product/self_improving/loop/mutate/runner.py``; moved here for consistency
 # with the other path constants. The runner re-exports the constant
 # for backwards compat with existing callers.
 MUTATION_AUDIT_LOG_PATH = AUTORESEARCH_STATE_DIR / "mutations.jsonl"

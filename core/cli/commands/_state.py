@@ -313,9 +313,6 @@ COMMAND_MAP: dict[str, str] = {
     "/tasks": "tasks",
     "/task": "tasks",
     "/t": "tasks",
-    "/self-improving": "self-improving",
-    "/sil": "self-improving",
-    "/recall": "recall",
 }
 
 
@@ -345,7 +342,6 @@ def show_help(command_registry: _Any = None) -> None:
     console.print("  [label]/context[/label]            — Show assembled context tiers")
     console.print("  [label]/apply[/label]              — Manage job applications")
     console.print("  [label]/tasks[/label]              — Show task list")
-    console.print("  [label]/recall[/label]             — Memory-recall pool (list/show/save)")
     console.print("  [label]/compact[/label]            — Compact conversation context")
     console.print("  [label]/clear[/label]              — Clear conversation history")
     console.print("  [label]/help[/label]               — Show this help")
@@ -390,10 +386,8 @@ def model_available(model_id: str) -> bool:
     """
     try:
         from core.llm.strategies.plan_registry import resolve_routing
-        from core.wiring.bootstrap import build_product_policy_sources
 
-        sources = build_product_policy_sources().get("provider_routing")
-        return resolve_routing(model_id, sources=sources) is not None
+        return resolve_routing(model_id, sources=None) is not None
     except Exception:
         return False
 

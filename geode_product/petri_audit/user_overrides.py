@@ -56,7 +56,7 @@ def _emit_user_overrides_event(
     override resolver — exception swallowed.
     """
     try:
-        from core.self_improving.loop.observe.run_timeline import current_run_timeline
+        from geode_product.self_improving.loop.observe.run_timeline import current_run_timeline
 
         journal = current_run_timeline()
         if journal is None:
@@ -173,7 +173,7 @@ def _read_role_from_self_improving_loop(role: str) -> RoleOverride:
     stub out ``core.config``.
     """
     try:
-        from core.config.self_improving import load_self_improving_loop_config
+        from geode_product.self_improving.config import load_self_improving_loop_config
     except ImportError:
         # P1b — emit so the operator can see that the run silently fell
         # back to the legacy petri.toml instead of consulting the new

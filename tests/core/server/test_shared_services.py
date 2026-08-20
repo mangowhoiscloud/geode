@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from types import MappingProxyType
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -325,6 +326,29 @@ class TestBuildSharedServices:
     def test_tool_handlers_populated(self) -> None:
         services = build_shared_services()
         assert len(services.tool_handlers) > 0
+
+    def test_explicit_composition_reaches_every_session_owner(self) -> None:
+        from core.hooks import MiddlewareRegistry
+
+        policy_sources = MappingProxyType({"test": MagicMock()})
+        activity_sink_provider = MagicMock(return_value=None)
+        middleware_registry = MiddlewareRegistry()
+        services = build_shared_services(
+            policy_sources=policy_sources,
+            activity_sink_provider=activity_sink_provider,
+            middleware_registry=middleware_registry,
+        )
+
+        executor, loop = services.create_session(SessionMode.REPL)
+        subagents = services._build_sub_agent_manager()
+
+        assert services.policy_sources is policy_sources
+        assert services.activity_sink_provider is activity_sink_provider
+        assert executor.middleware_registry is middleware_registry
+        assert loop._policy_sources is policy_sources
+        assert loop._activity_sink_provider is activity_sink_provider
+        assert subagents._policy_sources is policy_sources
+        assert subagents._activity_sink_provider is activity_sink_provider
 
     def test_model_resolved_per_session(self) -> None:
         """v0.82.0 — `SharedServices` no longer freezes `_model` at boot.

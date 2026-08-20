@@ -221,6 +221,14 @@ jobs:
         # module-level state (cooldown timestamp), producing a flaky
         # FAILURE on develop→main PR #1220 (2026-05-17).
         run: uv run pytest -n auto --dist=loadfile --cov=core --cov=geode_product --cov-report=term-missing
+      - name: Build and inspect package artifacts
+        if: needs.changes.outputs.code == 'true'
+        run: |
+          uv build
+          uv run python scripts/check_package_artifacts.py
+          wheel="$(find dist -maxdepth 1 -name '*.whl' -print -quit)"
+          uv run --isolated --no-project --with "$wheel" \
+            python -I scripts/check_installed_package.py
   security:
     name: Security Scan
     runs-on: ubuntu-latest

@@ -28,7 +28,7 @@ import pytest
 
 def test_invoke_claude_cli_argv_shape(monkeypatch: pytest.MonkeyPatch) -> None:
     """``claude --print --output-format text --append-system-prompt <SYS> <USER>``."""
-    from core.self_improving.loop.mutate import cli_subprocess
+    from geode_product.self_improving.loop.mutate import cli_subprocess
 
     monkeypatch.setattr(cli_subprocess.shutil, "which", lambda b: f"/usr/local/bin/{b}")
     captured: dict[str, list[str]] = {}
@@ -53,7 +53,7 @@ def test_invoke_claude_cli_argv_shape(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_invoke_claude_cli_missing_binary(monkeypatch: pytest.MonkeyPatch) -> None:
     """Missing binary → CliInvocationError with actionable install hint."""
-    from core.self_improving.loop.mutate import cli_subprocess
+    from geode_product.self_improving.loop.mutate import cli_subprocess
 
     monkeypatch.setattr(cli_subprocess.shutil, "which", lambda b: None)
     monkeypatch.delenv(cli_subprocess.CLAUDE_CLI_BIN_ENV, raising=False)
@@ -63,7 +63,7 @@ def test_invoke_claude_cli_missing_binary(monkeypatch: pytest.MonkeyPatch) -> No
 
 def test_binary_env_override_used(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """``GEODE_CLAUDE_CLI_BIN`` overrides PATH lookup."""
-    from core.self_improving.loop.mutate import cli_subprocess
+    from geode_product.self_improving.loop.mutate import cli_subprocess
 
     bin_path = tmp_path / "custom_claude"
     bin_path.write_text("#!/bin/sh\n")
@@ -83,7 +83,7 @@ def test_binary_env_override_used(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
 
 def test_invoke_nonzero_exit_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     """Non-zero exit → CliInvocationError carrying stderr clip."""
-    from core.self_improving.loop.mutate import cli_subprocess
+    from geode_product.self_improving.loop.mutate import cli_subprocess
 
     monkeypatch.setattr(cli_subprocess.shutil, "which", lambda b: f"/bin/{b}")
 
@@ -97,7 +97,7 @@ def test_invoke_nonzero_exit_raises(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_invoke_timeout_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     """``subprocess.TimeoutExpired`` → ``CliInvocationError`` with timeout hint."""
-    from core.self_improving.loop.mutate import cli_subprocess
+    from geode_product.self_improving.loop.mutate import cli_subprocess
 
     monkeypatch.setattr(cli_subprocess.shutil, "which", lambda b: f"/bin/{b}")
 
@@ -142,14 +142,14 @@ def test_default_llm_call_dispatches_to_claude_cli(monkeypatch: pytest.MonkeyPat
     not the plain-text shape the mutator parser consumes. Codex MCP
     BLOCKER fix-up.
     """
-    from core.self_improving.loop.mutate import runner
+    from geode_product.self_improving.loop.mutate import runner
 
     cfg_mock = MagicMock()
     cfg_mock.autoresearch.mutator.default_model = "claude-opus-4-7"
     cfg_mock.autoresearch.mutator.source = "claude-cli"
     cfg_mock.autoresearch.mutator.max_tokens = 1024
     monkeypatch.setattr(
-        "core.config.self_improving.load_self_improving_loop_config",
+        "geode_product.self_improving.config.load_self_improving_loop_config",
         lambda: cfg_mock,
     )
     monkeypatch.setattr("core.config._resolve_provider", lambda m: "anthropic")
@@ -163,7 +163,7 @@ def test_default_llm_call_dispatches_to_claude_cli(monkeypatch: pytest.MonkeyPat
         return "from claude-cli"
 
     monkeypatch.setattr(
-        "core.self_improving.loop.mutate.cli_subprocess.invoke_claude_cli", _fake_invoke
+        "geode_product.self_improving.loop.mutate.cli_subprocess.invoke_claude_cli", _fake_invoke
     )
     result = runner._default_llm_call("SYS", "USR")
     assert result == "from claude-cli"
@@ -191,14 +191,14 @@ def test_default_llm_call_routes_openai_sources(
     the legacy key so the API path resolves to ``openai-payg`` instead
     of erroring with ``AdapterNotFoundError``.
     """
-    from core.self_improving.loop.mutate import runner
+    from geode_product.self_improving.loop.mutate import runner
 
     cfg_mock = MagicMock()
     cfg_mock.autoresearch.mutator.default_model = "gpt-5.5"
     cfg_mock.autoresearch.mutator.source = configured_source
     cfg_mock.autoresearch.mutator.max_tokens = 1024
     monkeypatch.setattr(
-        "core.config.self_improving.load_self_improving_loop_config",
+        "geode_product.self_improving.config.load_self_improving_loop_config",
         lambda: cfg_mock,
     )
     monkeypatch.setattr("core.config._resolve_provider", lambda m: "openai-codex")
@@ -262,14 +262,14 @@ def test_default_llm_call_api_key_path_unchanged(monkeypatch: pytest.MonkeyPatch
     ``resolve_agentic_adapter(provider).agentic_call(...)`` →
     ``resolve_for(provider, "payg").acomplete(req)``.
     """
-    from core.self_improving.loop.mutate import runner
+    from geode_product.self_improving.loop.mutate import runner
 
     cfg_mock = MagicMock()
     cfg_mock.autoresearch.mutator.default_model = "claude-opus-4-7"
     cfg_mock.autoresearch.mutator.source = "api_key"
     cfg_mock.autoresearch.mutator.max_tokens = 1024
     monkeypatch.setattr(
-        "core.config.self_improving.load_self_improving_loop_config",
+        "geode_product.self_improving.config.load_self_improving_loop_config",
         lambda: cfg_mock,
     )
     monkeypatch.setattr("core.config._resolve_provider", lambda m: "anthropic")
@@ -375,7 +375,7 @@ def test_cmd_source_set_rejects_invalid_source(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Bad source value → no file written."""
-    from core.cli.commands import self_improving
+    from geode_product.self_improving import cli_commands as self_improving
 
     fake_toml = tmp_path / "config.toml"
     monkeypatch.setattr("core.paths.GLOBAL_CONFIG_TOML", fake_toml)
@@ -396,7 +396,7 @@ def test_cmd_source_set_persists_valid_source(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """source=claude-cli writes the line to ~/.geode/config.toml."""
-    from core.cli.commands import self_improving
+    from geode_product.self_improving import cli_commands as self_improving
 
     fake_toml = tmp_path / "config.toml"
     monkeypatch.setattr("core.paths.GLOBAL_CONFIG_TOML", fake_toml)
@@ -411,7 +411,7 @@ def test_cmd_source_set_persists_valid_source(
 
 def test_valid_sources_constant_matches_config_enum() -> None:
     """``_VALID_SOURCES`` must stay in sync with ``MutatorConfig.source`` Literal."""
-    from core.cli.commands.self_improving import _VALID_SOURCES
+    from geode_product.self_improving.cli_commands import _VALID_SOURCES
 
     assert set(_VALID_SOURCES) == {"auto", "api_key", "claude-cli", "openai-codex"}
 
@@ -426,8 +426,8 @@ def test_persist_full_config_uses_plural_roles_path(
     next config load raises ``ValidationError``. Codex MCP catch on
     PR-PAPERCLIP.
     """
-    from core.cli.commands import self_improving
-    from core.config.self_improving import load_self_improving_loop_config
+    from geode_product.self_improving import cli_commands as self_improving
+    from geode_product.self_improving.config import load_self_improving_loop_config
 
     fake_toml = tmp_path / "config.toml"
     monkeypatch.setattr("core.paths.GLOBAL_CONFIG_TOML", fake_toml)
@@ -455,14 +455,14 @@ def test_default_llm_call_explicit_api_key_routes_payg_not_inferred_subscription
     single entry point actually reaches the mutator (regression guard for the
     half-honored knob: pre-fix the API branch discarded ``source`` and used
     ``infer_source(provider)`` unconditionally)."""
-    from core.self_improving.loop.mutate import runner
+    from geode_product.self_improving.loop.mutate import runner
 
     cfg_mock = MagicMock()
     cfg_mock.autoresearch.mutator.default_model = "gpt-5.5"
     cfg_mock.autoresearch.mutator.source = "api_key"
     cfg_mock.autoresearch.mutator.max_tokens = 1024
     monkeypatch.setattr(
-        "core.config.self_improving.load_self_improving_loop_config",
+        "geode_product.self_improving.config.load_self_improving_loop_config",
         lambda: cfg_mock,
     )
     monkeypatch.setattr("core.config._resolve_provider", lambda m: "openai-codex")

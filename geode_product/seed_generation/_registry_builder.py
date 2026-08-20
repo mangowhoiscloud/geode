@@ -53,12 +53,13 @@ def build_subagent_manager() -> Any:
     from core.agent.sub_agent import SubAgentManager
     from core.config import settings
     from core.orchestration.isolated_execution import IsolatedRunner
-    from core.wiring.bootstrap import (
-        build_product_policy_sources,
-        current_product_activity_sink,
+
+    from geode_product.wiring import (
+        build_policy_sources,
+        current_activity_sink,
     )
 
-    policy_sources = build_product_policy_sources()
+    policy_sources = build_policy_sources()
 
     # Best-effort dependency resolution — none of these are strictly required
     # for the SubAgentManager to dispatch a subprocess worker, but the worker
@@ -91,7 +92,7 @@ def build_subagent_manager() -> Any:
         agent_registry=agent_registry,
         hooks=hooks,
         max_depth=settings.max_subagent_depth,
-        activity_sink_provider=current_product_activity_sink,
+        activity_sink_provider=current_activity_sink,
         policy_sources=policy_sources,
         # GEODE policy: 30-minute time-cap (no turn-cap). Matches the
         # ``claude-cli`` adapter's ``_run_claude_subprocess`` ceiling

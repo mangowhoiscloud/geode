@@ -55,7 +55,7 @@ export default function Page() {
               실리는 조용한 회귀를 막지 못합니다. 둘이 동시에 있어야 자기일치가
               보장됩니다. 같은 구조가 자기개선 루프에도 있습니다. margin
               게이트를 통과한 변이만 승격되고, 실패한 변이는 되돌려집니다
-              (<code>core/self_improving/gate.py</code>). 게이트는 champion
+              (<code>geode_product/self_improving/gate.py</code>). 게이트는 champion
               chain을 한 방향으로만 움직이게 하는 ratchet입니다.
             </p>
 
@@ -117,7 +117,7 @@ export default function Page() {
               catch the silent regression of same code, different prompt. Both
               together guarantee self-consistency. The same shape exists in the
               self-improving loop: only gate-passing mutations promote, and
-              failures revert (<code>core/self_improving/gate.py</code>). The
+              failures revert (<code>geode_product/self_improving/gate.py</code>). The
               gate is the ratchet that moves the champion chain in one direction
               only.
             </p>

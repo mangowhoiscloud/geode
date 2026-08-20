@@ -179,7 +179,7 @@ Lives as Phase ζ in `docs/plans/2026-05-19-self-improving-loop-config-consolida
 
 - **PR-ζ1**: extend `SessionCheckpoint` schema for self-improving-loop fields (active_sources, completed_units, next_unit, fallback_to_payg, active_profile). Tests round-trip.
 - **PR-ζ2**: `_load_state()` companion for `plugins/seed_generation/orchestrator.py:PipelineState`. CLI flag `geode audit-seeds resume <run_id>`.
-- **PR-ζ3**: autoresearch `_load_pending_audit()` + `--resume <session_id>` flag in `core/self_improving/train.py`.
+- **PR-ζ3**: autoresearch `_load_pending_audit()` + `--resume <session_id>` flag in `geode_product/self_improving/train.py`.
 - **PR-ζ4**: idempotency-key embedding in LLM call metadata + local response cache lookup (`~/.geode/self-improving-loop/<session>/idempotency.db`).
 - **PR-ζ5**: credential-rollover detection — at resume, compare active sources to checkpoint; emit `credential_rolled_over_at` event into journal.
 - **PR-ζ5.5** (NEW): wire `ProfileRotator` into the self-improving-loop credential path. `resolve_self_improving_loop_binding(family) → (source, profile)` adds the profile dimension. `plugins/petri_audit/credential_source.py` routes failures through `ProfileRotator.mark_failure(profile)` instead of the in-process suppress set. autoresearch + seed-generation pass `profile.name` through LLM call metadata so cooldowns track per-account.

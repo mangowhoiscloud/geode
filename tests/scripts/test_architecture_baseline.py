@@ -14,7 +14,7 @@ def test_build_baseline_is_deterministic_and_internally_consistent() -> None:
     second = baseline.build_baseline()
 
     assert first == second
-    assert first["schema_version"] == 2
+    assert first["schema_version"] == 3
     assert baseline.serialize_baseline(first) == baseline.serialize_baseline(second)
 
     for package in ("core", "geode_product", "plugins", "tests"):
@@ -47,6 +47,13 @@ def test_inventory_lists_traceable_architecture_details() -> None:
         "site_count": 0,
         "file_count": 0,
         "sites": [],
+    }
+    assert measured["self_improving_facades"] == {
+        "count": len(baseline.SELF_IMPROVING_FACADE_TARGETS),
+        "items": [
+            {"path": path, "target": target}
+            for path, target in sorted(baseline.SELF_IMPROVING_FACADE_TARGETS.items())
+        ],
     }
     assert measured["import_linter"]["ignored_edge_count"] == sum(
         len(contract["ignored_edges"]) for contract in measured["import_linter"]["contracts"]

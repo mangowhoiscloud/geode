@@ -242,7 +242,7 @@ class TestDecay:
     ):
         """Pin the prompt-injection exclusion: the recall reader's walk must
         never surface `_archive/` (or `_proposals/`) entries."""
-        from core.self_improving.loop.inject.memory_recall import load_memory_entries
+        from geode_product.self_improving.loop.inject.memory_recall import load_memory_entries
 
         _write_entry(memory_dir, "live", description="live memory")
         _write_entry(memory_dir / ARCHIVE_DIR_NAME, "dead", description="archived memory")

@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -35,9 +36,11 @@ if TYPE_CHECKING:
     # from the cold-start path.  Each tree is loaded lazily by the wiring
     # builders (``core.wiring.{bootstrap,scheduling}``) only when the
     # matching component actually fires.
+    from core.config.policy_source import PolicySourceBundle
     from core.memory.context import ContextAssembler
     from core.memory.organization import MonoLakeOrganizationMemory
     from core.memory.project import ProjectMemory
+    from core.observability.run_event import RunEventSinkProvider
     from core.orchestration.hot_reload import ConfigWatcher
     from core.orchestration.metrics import LatencyMetrics
     from core.orchestration.task_system import TaskGraph
@@ -95,6 +98,8 @@ class RuntimeCoreConfig:
     mcp_manager: Any = None
     skill_registry: Any = None
     readiness: Any = None
+    policy_sources: PolicySourceBundle | None = None
+    activity_sink_provider: RunEventSinkProvider | None = None
 
 
 @dataclass
@@ -158,6 +163,8 @@ class GeodeRuntime:
         self.mcp_manager = core.mcp_manager
         self.skill_registry = core.skill_registry
         self.readiness = core.readiness
+        self.policy_sources = core.policy_sources
+        self.activity_sink_provider = core.activity_sink_provider
         # Unpack scheduling
         sched = scheduling or RuntimeSchedulingConfig()
         self.trigger_manager = sched.trigger_manager
@@ -181,6 +188,11 @@ class GeodeRuntime:
         phase: str = "analysis",
         log_dir: Path | str | None = None,
         session_ttl: float = DEFAULT_SESSION_TTL,
+        policy_sources: PolicySourceBundle | None = None,
+        middleware_builder: Callable[..., MiddlewareRegistry] | None = None,
+        activity_sink_provider: RunEventSinkProvider | None = None,
+        feature_hook_registrar: Callable[[Any], None] | None = None,
+        scheduling_registrar: Callable[[Any, Any], None] | None = None,
     ) -> GeodeRuntime:
         """Factory method — create a fully wired runtime for a GEODE session.
 
@@ -190,8 +202,11 @@ class GeodeRuntime:
         3. _build_memory: project/org memory, context assembler, scheduling
         4. Assembly: pack configs, create instance, attach optional components
         """
+        from core.config.policy_source import EMPTY_POLICY_SOURCES
         from core.wiring import bootstrap
         from core.wiring import container as infra
+
+        resolved_policy_sources = EMPTY_POLICY_SOURCES if policy_sources is None else policy_sources
 
         # Stage 0: Session identity.
         session_key = build_session_key(subject_id, phase)
@@ -205,6 +220,10 @@ class GeodeRuntime:
             run_id=run_id,
             log_dir=log_dir,
             session_ttl=session_ttl,
+            policy_sources=resolved_policy_sources,
+            middleware_builder=middleware_builder,
+            activity_sink_provider=activity_sink_provider,
+            feature_hook_registrar=feature_hook_registrar,
         )
 
         # Stage 2: Tools, MCP, Skills
@@ -218,6 +237,7 @@ class GeodeRuntime:
             core["event_store"],
             session_key=session_key,
             subject_id=subject_id,
+            scheduling_registrar=scheduling_registrar,
         )
 
         log.info(
@@ -249,6 +269,8 @@ class GeodeRuntime:
             mcp_manager=tools["mcp_manager"],
             skill_registry=tools["skill_registry"],
             readiness=tools["readiness"],
+            policy_sources=resolved_policy_sources,
+            activity_sink_provider=activity_sink_provider,
         )
         scheduling_config = RuntimeSchedulingConfig(**scheduling)
         memory_config = RuntimeMemoryConfig(
@@ -273,18 +295,24 @@ class GeodeRuntime:
         run_id: str,
         log_dir: Path | str | None,
         session_ttl: float,
+        policy_sources: PolicySourceBundle,
+        middleware_builder: Callable[..., MiddlewareRegistry] | None,
+        activity_sink_provider: RunEventSinkProvider | None,
+        feature_hook_registrar: Callable[[Any], None] | None,
     ) -> dict[str, Any]:
         """Stage 1: Build core infrastructure (hooks, auth, LLM, lanes)."""
         hooks, event_store, hook_metrics = bootstrap.build_hooks(
             session_key=session_key,
             run_id=run_id,
             log_dir=log_dir,
+            activity_sink_provider=activity_sink_provider,
+            feature_hook_registrar=feature_hook_registrar,
         )
         hook_registry = HookRegistry(events=hooks)
-        policy_sources = bootstrap.build_product_policy_sources()
-        middleware_registry = bootstrap.build_middleware_registry(
-            events=hooks,
-            policy_sources=policy_sources,
+        middleware_registry = (
+            bootstrap.build_middleware_registry(events=hooks)
+            if middleware_builder is None
+            else middleware_builder(events=hooks, policy_sources=policy_sources)
         )
         session_store = bootstrap.build_session_store(session_ttl=session_ttl)
         policy_chain = infra.build_default_policies()
@@ -350,6 +378,7 @@ class GeodeRuntime:
         *,
         session_key: str,
         subject_id: str,
+        scheduling_registrar: Callable[[Any, Any], None] | None = None,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         """Stage 3: Build memory, scheduling, and optional components."""
         from core.wiring import scheduling as scheduling_wiring
@@ -365,7 +394,10 @@ class GeodeRuntime:
             event_store=event_store,
         )
 
-        scheduling = scheduling_wiring.build_scheduling(hooks=hooks)
+        scheduling = scheduling_wiring.build_scheduling(
+            hooks=hooks,
+            feature_registrar=scheduling_registrar,
+        )
 
         try:
             task_graph = bootstrap.build_task_graph()

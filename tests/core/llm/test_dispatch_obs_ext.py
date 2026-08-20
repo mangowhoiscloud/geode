@@ -364,7 +364,11 @@ def test_typer_serve_wires_rotating_file_handler_for_serve_log(monkeypatch) -> N
     monkeypatch.setattr(bootstrap, "setup_contextvars", lambda **_kwargs: None)
     monkeypatch.setattr(typer_serve, "check_readiness", lambda: object())
     monkeypatch.setattr(typer_serve, "_set_readiness", lambda _value: None)
-    monkeypatch.setattr(typer_serve, "_build_runtime_for_serve", lambda: None)
+    monkeypatch.setattr(
+        typer_serve,
+        "_build_runtime_for_serve",
+        lambda _runtime_builder=None: None,
+    )
     with pytest.raises(typer.Exit):
         typer_serve._serve(3.0)
 
@@ -373,6 +377,13 @@ def test_typer_serve_wires_rotating_file_handler_for_serve_log(monkeypatch) -> N
     assert serve_file == SERVE_LOG_PATH
     assert logging_config._DEFAULT_MAX_BYTES == 10 * 1024 * 1024
     assert logging_config._DEFAULT_BACKUP_COUNT == 5
+
+
+def test_typer_serve_uses_explicit_runtime_builder() -> None:
+    from core.cli.typer_serve import _build_runtime_for_serve
+
+    runtime = object()
+    assert _build_runtime_for_serve(lambda: runtime) is runtime
 
 
 # ---------------------------------------------------------------------------

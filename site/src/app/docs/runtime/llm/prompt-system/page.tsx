@@ -132,7 +132,7 @@ export default function Page() {
             <h2>program.md: 훅 제어 폴백</h2>
             <p>
               자기개선 루프의 변이 러너
-              (<code>core/self_improving/loop/mutate/runner.py</code>)는{" "}
+              (<code>geode_product/self_improving/loop/mutate/runner.py</code>)는{" "}
               <code>program.md</code>를 읽지 못하면 코드에 박힌 리터럴 미러로
               조용히 대체하지 않습니다. 대신{" "}
               <code>RuntimeEvent.PROGRAM_MD_UNREADABLE</code>을 발화합니다.
@@ -294,7 +294,7 @@ export default function Page() {
             <h2>program.md: hook-controlled fallback</h2>
             <p>
               The self-improving loop&apos;s mutation runner
-              (<code>core/self_improving/loop/mutate/runner.py</code>) does not
+              (<code>geode_product/self_improving/loop/mutate/runner.py</code>) does not
               silently substitute a code-embedded literal mirror when{" "}
               <code>program.md</code> is unreadable. It fires{" "}
               <code>RuntimeEvent.PROGRAM_MD_UNREADABLE</code> instead. A handler may

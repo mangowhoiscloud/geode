@@ -331,13 +331,14 @@ def _build_loop(
     from core.agent.tool_executor import ToolExecutor
     from core.llm.adapters.registry import bootstrap_builtins
     from core.tools.registry import ToolRegistry
-    from core.wiring.bootstrap import (
+
+    from geode_product.wiring import (
         build_middleware_registry,
-        build_product_policy_sources,
-        current_product_activity_sink,
+        build_policy_sources,
+        current_activity_sink,
     )
 
-    policy_sources = build_product_policy_sources()
+    policy_sources = build_policy_sources()
     bootstrap_builtins(policy_sources=policy_sources)
 
     registry = ToolRegistry()
@@ -379,7 +380,7 @@ def _build_loop(
         ),
         quiet=True,
         enable_goal_decomposition=False,
-        activity_sink_provider=current_product_activity_sink,
+        activity_sink_provider=current_activity_sink,
         policy_sources=policy_sources,
     )
 

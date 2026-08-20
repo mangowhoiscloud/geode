@@ -6,7 +6,7 @@ Covers the closed loop completion from
 * **W1** — ``expected_dim`` is requested by the mutator prompt and
   warned-on-empty by ``parse_mutation``.
 * **W2** — the ``compute_attribution`` caller hook in
-  ``core/self_improving/train.py`` fires when ``GEODE_SIL_*`` env triplet is
+  ``geode_product/self_improving/train.py`` fires when ``GEODE_SIL_*`` env triplet is
   set, and skips otherwise (legacy --promote preserved).
 * **W3** — ``audit_run_id`` propagates from ``apply_proposal`` through
   ``Mutation.to_audit_row`` and the autoresearch subprocess env.
@@ -22,7 +22,7 @@ import logging
 from pathlib import Path
 
 import pytest
-from core.self_improving.loop.mutate.runner import (
+from geode_product.self_improving.loop.mutate.runner import (
     _MUTATION_CONTRACT_SUFFIX,
     ApplyRecord,
     Mutation,
@@ -30,7 +30,7 @@ from core.self_improving.loop.mutate.runner import (
     append_audit_log,
     parse_mutation,
 )
-from core.self_improving.loop.observe.attribution import (
+from geode_product.self_improving.loop.observe.attribution import (
     AttributionRecord,
     append_attribution_log,
 )
@@ -72,7 +72,9 @@ class TestW1ExpectedDimPromptAndParse:
                 # expected_dim intentionally omitted
             }
         )
-        with caplog.at_level(logging.WARNING, logger="core.self_improving.loop.mutate.runner"):
+        with caplog.at_level(
+            logging.WARNING, logger="geode_product.self_improving.loop.mutate.runner"
+        ):
             mutation = parse_mutation(raw)
         assert mutation.expected_dim == {}
         assert any("empty expected_dim" in record.getMessage() for record in caplog.records)
@@ -90,7 +92,9 @@ class TestW1ExpectedDimPromptAndParse:
                 "expected_dim": {"helpfulness": 0.1},
             }
         )
-        with caplog.at_level(logging.WARNING, logger="core.self_improving.loop.mutate.runner"):
+        with caplog.at_level(
+            logging.WARNING, logger="geode_product.self_improving.loop.mutate.runner"
+        ):
             mutation = parse_mutation(raw)
         assert mutation.expected_dim == {"helpfulness": 0.1}
         assert not any("empty expected_dim" in record.getMessage() for record in caplog.records)
@@ -125,7 +129,7 @@ class TestW2SubprocessEnvPropagation:
             return _Fake()
 
         monkeypatch.setattr(
-            "core.self_improving.loop.mutate.runner.subprocess.run",
+            "geode_product.self_improving.loop.mutate.runner.subprocess.run",
             fake_run,
         )
         _run_autoresearch_subprocess(
@@ -162,7 +166,7 @@ class TestW2SubprocessEnvPropagation:
             return _Fake()
 
         monkeypatch.setattr(
-            "core.self_improving.loop.mutate.runner.subprocess.run",
+            "geode_product.self_improving.loop.mutate.runner.subprocess.run",
             fake_run,
         )
         _run_autoresearch_subprocess(repo_root=tmp_path, dry_run=True)
@@ -190,7 +194,9 @@ class TestW2SubprocessEnvPropagation:
 
             return _Fake()
 
-        monkeypatch.setattr("core.self_improving.loop.mutate.runner.subprocess.run", fake_run)
+        monkeypatch.setattr(
+            "geode_product.self_improving.loop.mutate.runner.subprocess.run", fake_run
+        )
         _run_autoresearch_subprocess(
             repo_root=tmp_path,
             dry_run=True,
@@ -217,7 +223,9 @@ class TestW2SubprocessEnvPropagation:
 
             return _Fake()
 
-        monkeypatch.setattr("core.self_improving.loop.mutate.runner.subprocess.run", fake_run)
+        monkeypatch.setattr(
+            "geode_product.self_improving.loop.mutate.runner.subprocess.run", fake_run
+        )
         _run_autoresearch_subprocess(repo_root=tmp_path, dry_run=True, rollback_condition="")
         assert "GEODE_SIL_ROLLBACK_CONDITION" not in captured
 

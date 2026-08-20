@@ -165,6 +165,7 @@ def _serve(  # noqa: PLR0915
     poll_interval: float,
     *,
     services_builder: Callable[..., Any] | None = None,
+    runtime_builder: Callable[[], Any] | None = None,
 ) -> None:
     """Run the GEODE daemon for CLI IPC and optional external channels."""
     import signal
@@ -198,7 +199,7 @@ def _serve(  # noqa: PLR0915
 
     # Build runtime (wires env, notifications, gateway + MCP startup)
     # MCP startup is now inside _build_gateway() via mcp.startup()
-    runtime = _build_runtime_for_serve()
+    runtime = _build_runtime_for_serve(runtime_builder)
     if runtime is None:
         console.print("  [warning]Runtime initialization failed.[/warning]")
         raise typer.Exit(1)
@@ -260,6 +261,8 @@ def _serve(  # noqa: PLR0915
         hook_system=runtime.hooks,
         hook_registry=runtime.hook_registry,
         middleware_registry=runtime.middleware_registry,
+        policy_sources=runtime.policy_sources,
+        activity_sink_provider=runtime.activity_sink_provider,
         lane_queue=runtime.lane_queue,
     )
 
@@ -650,13 +653,14 @@ def _serve(  # noqa: PLR0915
 run_serve = _serve
 
 
-def _build_runtime_for_serve() -> Any:
+def _build_runtime_for_serve(runtime_builder: Callable[[], Any] | None = None) -> Any:
     """Minimal runtime init for serve mode without REPL."""
     try:
-        from core.runtime import GeodeRuntime
+        if runtime_builder is None:
+            from core.runtime import GeodeRuntime
 
-        runtime = GeodeRuntime.create("gateway")
-        return runtime
+            return GeodeRuntime.create("gateway")
+        return runtime_builder()
     except Exception as exc:
         log.error("Failed to build runtime for serve: %s", exc, exc_info=True)
         return None

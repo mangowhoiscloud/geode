@@ -482,7 +482,7 @@ def _ruff_executable() -> str | None:
 def _production_python_files(root: Path) -> tuple[str, ...]:
     root_resolved = root.resolve()
     files: list[str] = []
-    for source_root in ("core", "plugins", "scripts"):
+    for source_root in ("core", "geode_product", "plugins", "scripts"):
         for candidate in sorted((root / source_root).rglob("*.py")):
             if not candidate.is_file():
                 continue
