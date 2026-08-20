@@ -226,6 +226,7 @@ normal review and CI; implementations start only after the claim merges.
 | Closure package | GAP IDs | Owner/session | Implementation branch | Claim evidence | Claimed at (UTC) |
 |---|---|---|---|---|---|
 | R8.3 | REL-004 | `session=codex-root task=r8-3-publication-grace-evidence` | `feature/r8-3-publication-grace-evidence` | Readiness [#3039](https://github.com/mangowhoiscloud/geode/pull/3039); v1.0.23 GitHub/PyPI parity and candidate interval re-audited | `2026-08-20T07:41:19Z` |
+| R2.2 | CAP-004 | `session=codex-root task=r2-2-google-descriptor-pilot` | `feature/r2-2-google-descriptor-pilot` | Readiness [#3045](https://github.com/mangowhoiscloud/geode/pull/3045); package acceptance and duplicated Google metadata consumers re-audited | `2026-08-20T11:21:09Z` |
 
 ## 1. Program objective
 
@@ -521,7 +522,7 @@ and closure evidence are appended in §10.
 | CAP-001 | `PARTIAL` | Google service bundles exist but do not own all tool/policy relationships | Generic capability records plus `GoogleServiceDescriptor` are executable SOTs | R2.1 | BND-002 | `IN_DEVELOP` |
 | CAP-002 | `ABSENT` | `ToolRegistry` owns tool objects while other registries/lists own execution and safety | Immutable `ToolRegistration` and `ToolPlan` derive every tool consumer | R2.1 | CAP-001 | `IN_DEVELOP` |
 | CAP-003 | `MISFIT` | Native Google handlers are bound in `core/cli/tool_handlers/delegated.py` | Runtime/composition binds handlers; CLI only renders/forwards user interaction | R2.3 | CAP-002, BND-002 | `OPEN` |
-| CAP-004 | `MISFIT` | Google names repeat in safety, approval, policy, personal-data, and CLI modules | Effect/data/auth/resource metadata derives gates; no independent tool-name allowlists | R2.2 | CAP-002 | `READY` |
+| CAP-004 | `MISFIT` | Google names repeat in safety, approval, policy, personal-data, and CLI modules | Effect/data/auth/resource metadata derives gates; no independent tool-name allowlists | R2.2 | CAP-002 | `IN_PROGRESS` |
 | CAP-005 | `PARTIAL` | `definitions.json`, tool objects, provider schemas, and defer sets can drift | Anthropic/OpenAI/deferred schemas and execution map share one plan hash and parity tests | R2.3 | CAP-002 | `OPEN` |
 | CAP-006 | `ABSENT` | Adding a native/Google tool requires edits across several policy files | Change-surface fixture proves the bounded file/registration budget in §8 | R7.2 | CAP-003, CAP-004, CAP-005 | `OPEN` |
 | LOOP-001 | `ABSENT` | No immutable object freezes one step's route, policy, tool plan, and trace identity | `StepSnapshot` is created once per step and used by model/tool/telemetry paths | R3.1 | CAP-002 | `OPEN` |
@@ -2084,16 +2085,15 @@ R2.3 (`CAP-003`, `CAP-005`) supplies the immutable CAP-002 “every tool
 consumer” evidence for live `AgenticLoop`/`ToolExecutor`, provider/deferred,
 and worker/MCP roots; those remain explicit R2.3 non-goals here.
 
-R2.2 (`CAP-004`) is the sole unclaimed `READY` package in the master sequence
-after a whole-package re-audit against
-`origin/develop@646dac46a35756849d18a454e4d9cf58f8479b5c`. CAP-002 is
-`IN_DEVELOP`; §7 names all 11 native Workspace tools plus Calendar surfaces,
-the six forbidden independent edit sites, and the OAuth, consent,
-headless/sub-agent, keyring, and bounded-result compatibility criteria. The
-active R8.3 claim remains independent and unchanged. R2.2 owns only
-descriptor-driven Google metadata and consumer migration; handler-factory
-ownership and provider/deferred projections remain R2.3, while deterministic
-resource-key and data-policy derivation remains R2.4.
+R2.2 (`CAP-004`) is `IN_PROGRESS` under the active claim for
+`feature/r2-2-google-descriptor-pilot`, based on readiness
+[#3045](https://github.com/mangowhoiscloud/geode/pull/3045). Implementation
+starts only after this claim merges and a new worktree is allocated from the
+updated `develop`. CAP-002 is `IN_DEVELOP`; R2.2 owns only descriptor-driven
+Google metadata and consumer migration. Handler-factory ownership and
+provider/deferred projections remain R2.3, while deterministic resource-key
+and data-policy derivation remains R2.4. The active R8.3 claim remains
+independent and unchanged.
 
 R2.3 and R3.1 are also dependency-satisfied but remain `OPEN` pending their
 own serialized whole-package readiness transactions after R2.2 in master
