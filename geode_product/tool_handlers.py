@@ -91,8 +91,8 @@ def compose_tool_plan(
     )
     from core.agent.sub_agent import SUBAGENT_DENIED_TOOLS
     from core.agent.tool_executor.executor import SPECIAL_EXECUTION_BINDINGS
-    from core.slash_routing import compose_command_registry
     from core.cli.tool_handlers import _build_tool_handler_catalog
+    from core.slash_routing import compose_command_registry
     from core.tools.base import load_all_tool_definitions
     from core.tools.google_capabilities import GOOGLE_TOOL_BINDINGS
     from core.tools.personal_data import PERSONAL_DATA_TOOLS
