@@ -47,6 +47,11 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.23] - 2026-08-20
+
+> Bundled product boundaries, a self-improving product ring, and an isolated
+> kernel distribution gate.
+
 ### Added
 
 - **Public documentation now emits source-grounded structured metadata.** The
@@ -102,6 +107,10 @@ functional change.
   are not recreated through compatibility facades.
 
 ### Infrastructure
+
+- **Release validation now fails on lockfile or installed-daemon drift.** The
+  stable workflow checks the committed `uv.lock` before project-aware `uv`
+  commands, then starts the clean-wheel daemon and verifies its IPC version.
 
 - **CI now proves the installed kernel works without bundled features.** A
   temporary CI-only wheel projection removes the product, compatibility
