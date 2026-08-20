@@ -520,9 +520,9 @@ and closure evidence are appended in §10.
 | BND-004 | `PARTIAL` | Skills/hooks/MCP have different discovery rules; Python feature collision/trust behavior is not unified | Each supported external surface declares non-executing discovery, precedence, collision, enablement, trust-before-load, reload, isolation, and teardown | R6.3 | BND-001, LLM-002 | `OPEN` |
 | CAP-001 | `PARTIAL` | Google service bundles exist but do not own all tool/policy relationships | Generic capability records plus `GoogleServiceDescriptor` are executable SOTs | R2.1 | BND-002 | `IN_DEVELOP` |
 | CAP-002 | `ABSENT` | `ToolRegistry` owns tool objects while other registries/lists own execution and safety | Immutable `ToolRegistration` and `ToolPlan` derive every tool consumer | R2.1 | CAP-001 | `IN_DEVELOP` |
-| CAP-003 | `MISFIT` | Native Google handlers are bound in `core/cli/tool_handlers/delegated.py` | Runtime/composition binds handlers; CLI only renders/forwards user interaction | R2.3 | CAP-002, BND-002 | `OPEN` |
+| CAP-003 | `MISFIT` | Native Google handlers are bound in `core/cli/tool_handlers/delegated.py` | Runtime/composition binds handlers; CLI only renders/forwards user interaction | R2.3 | CAP-002, BND-002 | `READY` |
 | CAP-004 | `MISFIT` | Google names repeat in safety, approval, policy, personal-data, and CLI modules | Effect/data/auth/resource metadata derives gates; no independent tool-name allowlists | R2.2 | CAP-002 | `IN_DEVELOP` |
-| CAP-005 | `PARTIAL` | `definitions.json`, tool objects, provider schemas, and defer sets can drift | Anthropic/OpenAI/deferred schemas and execution map share one plan hash and parity tests | R2.3 | CAP-002 | `OPEN` |
+| CAP-005 | `PARTIAL` | `definitions.json`, tool objects, provider schemas, and defer sets can drift | Anthropic/OpenAI/deferred schemas and execution map share one plan hash and parity tests | R2.3 | CAP-002 | `READY` |
 | CAP-006 | `ABSENT` | Adding a native/Google tool requires edits across several policy files | Change-surface fixture proves the bounded file/registration budget in §8 | R7.2 | CAP-003, CAP-004, CAP-005 | `OPEN` |
 | LOOP-001 | `ABSENT` | No immutable object freezes one step's route, policy, tool plan, and trace identity | `StepSnapshot` is created once per step and used by model/tool/telemetry paths | R3.1 | CAP-002 | `OPEN` |
 | LOOP-002 | `PARTIAL` | Mutable state is distributed across loop fields, contexts, checkpoints, and helpers | `TurnState` and explicit session/turn/step ownership replace ambiguous lifetimes | R3.1 | LOOP-001 | `OPEN` |
@@ -2098,8 +2098,16 @@ ownership and provider/deferred projection remain R2.3, while deterministic
 resource-key and data-policy derivation remains R2.4. The active R8.3 claim and
 publication clock remain independent and unchanged.
 
-The next serialized master-ledger transaction is a whole-package readiness
-audit for R2.3 (`CAP-003`, `CAP-005`). R2.4, R3.1, and R9.1 are also
-dependency-satisfied but remain `OPEN` pending their own transactions in
-master order. R8.2 (`STORE-003`) remains `OPEN` behind REL-004 and STORE-001;
-R8.4 (`BND-008`) additionally waits for STORE-003.
+R2.3 (`CAP-003`, `CAP-005`) is the sole unclaimed `READY` package after a
+whole-package re-audit against
+`origin/develop@489f9104572e00d31e600ad1c398fd726039add6`. CAP-002 and BND-002
+are `IN_DEVELOP`. Current code retains CLI-owned handler construction and
+stores `ToolPlan` beside independent `AgenticLoop`/`ToolExecutor`, worker/MCP,
+provider, and deferred projections. Acceptance requires one immutable,
+generation/hash-bound plan across those roots with exact schema, execution,
+provider, and defer parity plus bounded diagnostics. R2.3 authorizes no R2.4
+resource/data-policy work or R3.1 step/turn lifetime work. The active R8.3
+claim and publication clock remain unchanged; R2.4, R3.1, and R9.1 remain
+`OPEN` pending their own serialized transactions. R8.2 (`STORE-003`) remains
+`OPEN` behind REL-004 and STORE-001; R8.4 (`BND-008`) additionally waits for
+STORE-003.
