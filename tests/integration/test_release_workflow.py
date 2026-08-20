@@ -58,6 +58,37 @@ def test_release_run_blocks_parse_as_bash() -> None:
             )
 
 
+def test_release_checks_lock_before_uv_and_probes_installed_daemon() -> None:
+    jobs = _workflow()["jobs"]
+    assert isinstance(jobs, dict)
+    validate = jobs["validate-build"]
+    assert isinstance(validate, dict)
+    steps = validate["steps"]
+    assert isinstance(steps, list)
+    named = {
+        step["name"]: (index, step)
+        for index, step in enumerate(steps)
+        if isinstance(step, dict) and isinstance(step.get("name"), str)
+    }
+
+    lock_index, lock_step = named["Require committed lockfile"]
+    assert lock_step["run"] == "uv lock --check"
+    assert lock_index < min(
+        index
+        for index, step in enumerate(steps)
+        if isinstance(step, dict)
+        and any(command in str(step.get("run", "")) for command in ("uv run", "uv sync"))
+    )
+
+    _, smoke_step = named["Clean wheel install smoke"]
+    smoke = str(smoke_step["run"])
+    assert 'exec "$release_venv/bin/geode" serve --poll 0.05' in smoke
+    assert 'test -S "$GEODE_HOME/cli.sock"' in smoke
+    assert "query_serve_version" in smoke
+    assert "timeout_s=30.0" in smoke
+    assert "cleanup_daemon" in smoke
+
+
 def test_pypi_oidc_is_isolated_from_public_verification() -> None:
     jobs = _workflow()["jobs"]
     assert isinstance(jobs, dict)
