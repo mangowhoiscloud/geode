@@ -1,7 +1,7 @@
 """ADR-012 ↔ code parity invariants — catches silent drift between the
 ADR (`docs/adr/ADR-012-self-improvement-surface-tiers.md`) and the
-ground-truth runtime constants (`core/self_improving/train.py` /
-`core/self_improving/bench_means.py`).
+ground-truth runtime constants (`geode_product/self_improving/train.py` /
+`geode_product/self_improving/bench_means.py`).
 
 PR-SIL-5THEME C1 (2026-05-23) — codifies the
 CHANGELOG/PR-body-parity anti-deception lesson (`CLAUDE.md` →
@@ -16,8 +16,12 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from core.self_improving.bench_means import BENCH_DIM_WEIGHTS
-from core.self_improving.fitness import FITNESS_ADMIRE_3AX, FITNESS_BENCH_3AX, FITNESS_DIM_3AX
+from geode_product.self_improving.bench_means import BENCH_DIM_WEIGHTS
+from geode_product.self_improving.fitness import (
+    FITNESS_ADMIRE_3AX,
+    FITNESS_BENCH_3AX,
+    FITNESS_DIM_3AX,
+)
 
 ADR_PATH = (
     Path(__file__).resolve().parents[3]
@@ -50,7 +54,7 @@ def test_adr012_decision2_header_says_3axis() -> None:
 def test_adr012_decision2_weights_match_code_constants() -> None:
     """§Decision.2 의 "축별 권장 가중치" 줄 3 개 weight 가 코드 상수와 일치.
 
-    코드 상수는 ``core/self_improving/train.py`` 의 ``FITNESS_*_3AX``
+    코드 상수는 ``geode_product/self_improving/train.py`` 의 ``FITNESS_*_3AX``
     (합 1.0 assert). 이 테스트가 ADR 측 표기 ``0.55 / 0.20 / 0.25``
     가 코드와 같은지 검증 — 둘 다 1.0 이라도 분배가 다르면 fail.
     """
@@ -91,7 +95,7 @@ def test_adr012_deprecates_seed_pool_diversity() -> None:
 def test_adr012_has_s6_section() -> None:
     """ADR 에 ``### S6.`` 섹션 헤더 존재.
 
-    Why: ``core/self_improving/bench_means.py`` docstring 의 "ADR-012 §S6"
+    Why: ``geode_product/self_improving/bench_means.py`` docstring 의 "ADR-012 §S6"
     인용이 grep-provable — PR-G5b #1350 lesson.
     """
     txt = _adr_text()
@@ -131,7 +135,7 @@ def test_adr012_s6_weights_match_bench_dim_weights() -> None:
 def test_adr012_has_s6b_section() -> None:
     """ADR 에 ``### S6b.`` (production wiring) 섹션 존재.
 
-    Why: ``core/self_improving/bench_means.py`` docstring 의 "§S6b 의 wiring
+    Why: ``geode_product/self_improving/bench_means.py`` docstring 의 "§S6b 의 wiring
     명세" 인용이 grep-provable.
     """
     txt = _adr_text()

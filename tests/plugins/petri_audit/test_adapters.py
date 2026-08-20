@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import pytest
-from plugins.petri_audit.adapters import (
+from geode_product.petri_audit.adapters import (
     get_adapter_metadata,
     get_adapter_spec,
     is_adapter_available,
     load_adapter_module,
     register_adapter,
 )
-from plugins.petri_audit.manifest import AUTO_SOURCE, clear_manifest_cache, load_manifest
+from geode_product.petri_audit.manifest import AUTO_SOURCE, clear_manifest_cache, load_manifest
 
 
 @pytest.fixture(autouse=True)

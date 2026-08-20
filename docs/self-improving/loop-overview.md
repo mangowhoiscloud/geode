@@ -7,13 +7,13 @@ canonical `core.paths.AUTORESEARCH_STATE_DIR`), while the runtime scratch (the
 LATEST `baseline.json`, `run.log`, handoff, per-run dirs) is out-of-repo at
 `~/.geode/self-improving/` (`core.paths.RUNTIME_ROOT`, env-overridable via
 `GEODE_STATE_ROOT`). The **agent program SoT** is
-`core/self_improving/program.md`. The loop *CODE* lives under the
-`core.self_improving` umbrella package (PR-SELF-IMPROVING-UMBRELLA,
-2026-05-31) — `core/self_improving/train.py` (the audit runner, formerly
-`autoresearch/train.py`), `core/self_improving/prepare.py`,
-`core/self_improving/{admire,bench}_means.py`, the loop runtime under
-`core/self_improving/loop/`, and the campaign driver
-`core/self_improving/campaign.py`.
+`geode_product/self_improving/program.md`. The loop *CODE* lives under the
+`geode_product.self_improving` product package —
+`geode_product/self_improving/train.py` (the audit runner, formerly
+`autoresearch/train.py`), `geode_product/self_improving/prepare.py`,
+`geode_product/self_improving/{admire,bench}_means.py`, the loop runtime under
+`geode_product/self_improving/loop/`, and the campaign driver
+`geode_product/self_improving/campaign.py`.
 
 PR-STATE-SELF-IMPROVING-RENAME (2026-06-01) moved the DATA + program SoT off
 the vestigial `autoresearch/` package (which had become an empty shell — only
@@ -22,7 +22,7 @@ related to the self-improving loop). This file was that package's `README.md`.
 
 Petri's `geode audit` subprocess scores each transcript on the 20-dim
 alignment rubric and emits a per-dim `mean + stderr` baseline; the driver
-(now `core/self_improving/train.py`) runs the wrapper-prompt mutation loop on
+(now `geode_product/self_improving/train.py`) runs the wrapper-prompt mutation loop on
 top of that baseline, picking hypotheses that push the fitness scalar up
 without regressing the 5 critical dims.
 
@@ -54,16 +54,16 @@ runs through `dim_extractor` → `compute_fitness`.
 ## How it works
 
 Same three-file structure borrowed from Karpathy autoresearch (the code
-lives under `core/self_improving/`; `program.md` stays here):
+lives under `geode_product/self_improving/`; `program.md` stays here):
 
-- **`core/self_improving/prepare.py`** — Petri seed pool + AlphaEval 20-dim
+- **`geode_product/self_improving/prepare.py`** — Petri seed pool + AlphaEval 20-dim
   rubric existence/format sanity check and audit-harness self-test. The
   agent **does not modify** this file.
-- **`core/self_improving/train.py`** — GEODE wrapper system-prompt sections
+- **`geode_product/self_improving/train.py`** — GEODE wrapper system-prompt sections
   (mutation target) + `geode audit` subprocess invocation + AlphaEval fitness
   extraction. **The single file the agent modifies.** Section
   wording, additions, deletions, and reordering are all fair game.
-- **`core/self_improving/program.md`** — instructions to the agent. Humans modify this.
+- **`geode_product/self_improving/program.md`** — instructions to the agent. Humans modify this.
 
 The Karpathy 5-min wall-clock budget maps onto the audit budget
 (default ~5 min, capped by ChatGPT subscription quota / Anthropic API spend).
@@ -93,13 +93,13 @@ OAuth) or `ANTHROPIC_API_KEY`.
 uv sync --extra audit
 
 # 2. One-time seed-pool + rubric sanity check
-uv run python -m core.self_improving.prepare
+uv run python -m geode_product.self_improving.prepare
 
 # 3. Real audit experiment (~5 min, consumes LLM quota / API budget)
-uv run python -m core.self_improving.train
+uv run python -m geode_product.self_improving.train
 
 # 3-alt. Plumbing-only smoke (no quota / spend)
-uv run python -m core.self_improving.train --dry-run
+uv run python -m geode_product.self_improving.train --dry-run
 ```
 
 The final `---` block on stdout carries grep-friendly metrics.
@@ -121,11 +121,11 @@ from there.
 ## Project structure
 
 ```text
-core/self_improving/           — loop CODE + program SoT (umbrella package)
+geode_product/self_improving/           — loop CODE + program SoT (umbrella package)
 ├── program.md     — agent instructions (humans modify)
 ├── prepare.py     — seed-pool + rubric sanity check (do not modify)
 ├── train.py       — wrapper prompt sections + audit invocation (agent modifies)
-├── campaign.py    — campaign driver (python -m core.self_improving.campaign)
+├── campaign.py    — campaign driver (python -m geode_product.self_improving.campaign)
 ├── admire_means.py / bench_means.py — positive-pressure / capability axes
 └── loop/          — loop runtime (runner, mutator, policies, …)
 
@@ -157,7 +157,7 @@ back to the hierarchical `plugins/petri_audit/seeds/` default.
 ## Design choices
 
 - **Single file to modify.** The agent only edits
-  `core/self_improving/train.py`. The mutation scope's upper bound is
+  `geode_product/self_improving/train.py`. The mutation scope's upper bound is
   explicit, so every diff is meaningful.
 - **Fixed budget.** Each audit is ~5 min wall-clock. Every hypothesis
   costs the same — apples-to-apples comparison. Roughly 12

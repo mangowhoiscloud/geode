@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from plugins.petri_audit.models import (
+from geode_product.petri_audit.models import (
     AuditModelMappingError,
     list_audit_models,
     to_inspect_model,
@@ -95,7 +95,9 @@ def test_list_audit_models_includes_each_provider() -> None:
     # PR #6 — gpt-* now resolves to ``openai-codex/`` when a token is
     # available, or ``openai/`` when not. Accept either form so the
     # test passes in both environments.
-    assert any(i.startswith("openai/gpt-") or i.startswith("codex-cli/gpt-") for i in inspect_ids)
+    assert any(
+        i.startswith("openai/gpt-") or i.startswith("openai-codex/gpt-") for i in inspect_ids
+    )
     assert any(i.startswith("geode/glm-") for i in inspect_ids)
 
 
@@ -143,7 +145,7 @@ def test_claude_source_api_key_routes_to_anthropic(monkeypatch: pytest.MonkeyPat
     """``settings.anthropic_credential_source = 'api_key'`` keeps the
     stock ``anthropic/`` prefix even when a keychain entry exists."""
     from core.config import settings
-    from plugins.petri_audit.adapters import claude_cli_backend
+    from geode_product.petri_audit.adapters import claude_cli_backend
 
     monkeypatch.setattr(settings, "anthropic_credential_source", "api_key", raising=False)
     # Pretend keychain says yes — explicit api_key must still win.
@@ -158,7 +160,7 @@ def test_claude_source_auto_prefers_oauth_when_keychain_present(
     """In ``auto`` mode the keychain detection takes over — keychain
     present → ``claude-code/``, absent → ``anthropic/``."""
     from core.config import settings
-    from plugins.petri_audit.adapters import claude_cli_backend
+    from geode_product.petri_audit.adapters import claude_cli_backend
 
     monkeypatch.setattr(settings, "anthropic_credential_source", "auto", raising=False)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
@@ -180,13 +182,23 @@ def test_gpt_source_oauth_routes_to_codex(monkeypatch: pytest.MonkeyPatch) -> No
     from core.config import settings
 
     monkeypatch.setattr(settings, "openai_credential_source", "oauth", raising=False)
-    assert to_inspect_model("gpt-5.5") == "codex-cli/gpt-5.5"
+    assert to_inspect_model("gpt-5.5") == "openai-codex/gpt-5.5"
+
+
+def test_retired_codex_cli_identifier_fails_loudly() -> None:
+    with pytest.raises(AuditModelMappingError, match="use openai-codex"):
+        to_inspect_model("codex-cli/gpt-5.5")
+
+
+def test_retired_claude_code_identifier_fails_loudly() -> None:
+    with pytest.raises(AuditModelMappingError, match="use claude-cli"):
+        to_inspect_model("claude-code/claude-opus-4-7")
 
 
 def test_gpt_source_api_key_routes_to_openai(monkeypatch: pytest.MonkeyPatch) -> None:
     """``api_key`` keeps the PAYG path even with a Codex token present."""
     from core.config import settings
-    from plugins.petri_audit.adapters import openai_codex_oauth
+    from geode_product.petri_audit.adapters import openai_codex_oauth
 
     monkeypatch.setattr(settings, "openai_credential_source", "api_key", raising=False)
     monkeypatch.setattr(openai_codex_oauth, "is_available", lambda: True)

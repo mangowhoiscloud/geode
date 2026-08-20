@@ -1,4 +1,4 @@
-"""Unit tests for ``plugins.petri_audit.eval_archive``.
+"""Unit tests for ``geode_product.petri_audit.eval_archive``.
 
 The archiver wraps ``inspect_ai.log.read_eval_log`` so we can keep the
 test [audit]-extra-conditional. When the extra is not installed,
@@ -23,7 +23,7 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
-from plugins.petri_audit.eval_archive import _summary_filename
+from geode_product.petri_audit.eval_archive import _summary_filename
 
 
 def test_summary_filename_keeps_iso_date_prefix() -> None:
@@ -88,7 +88,7 @@ class _FakeLog:
 
 @pytest.mark.skipif(not _AUDIT_INSTALLED, reason="[audit] extra not installed")
 def test_extract_summary_filters_to_non_baseline_dims(tmp_path: Path) -> None:
-    from plugins.petri_audit.eval_archive import extract_summary
+    from geode_product.petri_audit.eval_archive import extract_summary
 
     fake = _FakeLog(
         samples=[
@@ -126,7 +126,7 @@ def test_extract_summary_filters_to_non_baseline_dims(tmp_path: Path) -> None:
 def test_archive_eval_copies_raw_and_writes_yaml(tmp_path: Path) -> None:
     """End-to-end: a fake .eval gets copied to raw archive + summary YAML
     is written. Tests use a mock so no real audit cost."""
-    from plugins.petri_audit.eval_archive import archive_eval
+    from geode_product.petri_audit.eval_archive import archive_eval
 
     src = tmp_path / "2026-05-10T15-37-13-00-00_audit_FAKE.eval"
     src.write_bytes(b"\x00\x01stub")
@@ -158,7 +158,7 @@ def test_archive_eval_copies_raw_and_writes_yaml(tmp_path: Path) -> None:
 def test_archive_eval_is_idempotent(tmp_path: Path) -> None:
     """Re-running over the same eval must not raise (overwrite, not
     skip). Avoids a stale-summary footgun when the extractor evolves."""
-    from plugins.petri_audit.eval_archive import archive_eval
+    from geode_product.petri_audit.eval_archive import archive_eval
 
     src = tmp_path / "2026-05-10T00-00-00-00-00_audit_REPEAT.eval"
     src.write_bytes(b"\x00")
@@ -182,7 +182,7 @@ def test_archive_eval_is_idempotent(tmp_path: Path) -> None:
 def test_archive_eval_missing_source_raises(tmp_path: Path) -> None:
     """Missing input is a user error (typo'd path) — surface a clear
     error instead of silently writing a 0-byte archive."""
-    from plugins.petri_audit.eval_archive import archive_eval
+    from geode_product.petri_audit.eval_archive import archive_eval
 
     with pytest.raises(FileNotFoundError):
         archive_eval(tmp_path / "does-not-exist.eval")
@@ -197,7 +197,7 @@ def test_petri_archive_command_registered_on_typer_app() -> None:
     """Regression guard — the `petri-archive` Typer command must remain
     on `core.cli.app` so `geode petri-archive` keeps working after
     refactors of the cli wiring module."""
-    from core.cli import app
+    from geode_product.cli import app
 
     names: list[str] = []
     for cmd in app.registered_commands:
@@ -210,7 +210,7 @@ def test_petri_archive_command_registered_on_typer_app() -> None:
 
 
 def test_petri_archive_appears_in_cli_audit_all() -> None:
-    from plugins.petri_audit import cli_audit
+    from geode_product.petri_audit import cli_audit
 
     assert "petri_archive" in cli_audit.__all__
 
@@ -225,7 +225,7 @@ def test_extract_summary_includes_eval_level_timing(tmp_path: Path) -> None:
     """Eval-level ``timing`` block must carry ``started_at``,
     ``completed_at`` + parsed ``duration_seconds`` so reports can show
     end-to-end wall-time without re-walking ``log.stats``."""
-    from plugins.petri_audit.eval_archive import extract_summary
+    from geode_product.petri_audit.eval_archive import extract_summary
 
     @dataclass
     class _Stats:
@@ -254,7 +254,7 @@ def test_extract_summary_per_sample_timing_and_messages(tmp_path: Path) -> None:
     """Per-sample ``timing`` (total/working) + ``messages`` count + the
     derived ``seed_id`` are the report-generator's input for the time-
     efficiency axis (5-axis 5번) the petri 36 dim does not measure."""
-    from plugins.petri_audit.eval_archive import extract_summary
+    from geode_product.petri_audit.eval_archive import extract_summary
 
     @dataclass
     class _S:
@@ -291,7 +291,7 @@ def test_extract_summary_seed_id_strips_inspect_petri_id_prefix(tmp_path: Path) 
     """결함 R guard — the first item of an ``id:a,b,c`` seed_select
     leaks an ``id:`` prefix into ``sample.input``. Strip it so the
     summary's ``seed_id`` joins cleanly across samples."""
-    from plugins.petri_audit.eval_archive import extract_summary
+    from geode_product.petri_audit.eval_archive import extract_summary
 
     @dataclass
     class _S:
@@ -324,7 +324,7 @@ def test_extract_summary_models_use_bare_model_string(tmp_path: Path) -> None:
     """``EvalSpec.model_roles`` carries pydantic ``ModelConfig``
     objects whose ``str()`` is a giant verbose dump. Summary YAML
     keeps ``ModelConfig.model`` (the ``provider/name`` string) only."""
-    from plugins.petri_audit.eval_archive import extract_summary
+    from geode_product.petri_audit.eval_archive import extract_summary
 
     @dataclass
     class _MC:
@@ -367,7 +367,7 @@ def test_archive_eval_idempotent_when_source_is_already_archived(tmp_path: Path)
     """
     if not _AUDIT_INSTALLED:
         pytest.skip("[audit] extra not installed")
-    from plugins.petri_audit.eval_archive import archive_eval
+    from geode_product.petri_audit.eval_archive import archive_eval
 
     raw_dir = tmp_path / "archive"
     raw_dir.mkdir()
@@ -394,7 +394,7 @@ def test_archive_eval_idempotent_when_source_is_already_archived(tmp_path: Path)
 def test_extract_eval_log_path_finds_inspect_log_line() -> None:
     """``inspect eval`` prints exactly one ``Log: <path>.eval`` line
     at end of run. The runner uses this to find the archive source."""
-    from plugins.petri_audit.runner import _extract_eval_log_path
+    from geode_product.petri_audit.runner import _extract_eval_log_path
 
     stdout = (
         "auditor (role)    34,937 tokens [I: 9,103, ...]\n"
@@ -406,7 +406,7 @@ def test_extract_eval_log_path_finds_inspect_log_line() -> None:
 
 
 def test_extract_eval_log_path_returns_none_when_absent() -> None:
-    from plugins.petri_audit.runner import _extract_eval_log_path
+    from geode_product.petri_audit.runner import _extract_eval_log_path
 
     assert _extract_eval_log_path("nothing here", "or here") is None
 
@@ -414,6 +414,6 @@ def test_extract_eval_log_path_returns_none_when_absent() -> None:
 def test_extract_eval_log_path_falls_back_to_stderr() -> None:
     """``capture_output=True`` keeps stdout/stderr separate; some
     inspect modes route the Log line to stderr."""
-    from plugins.petri_audit.runner import _extract_eval_log_path
+    from geode_product.petri_audit.runner import _extract_eval_log_path
 
     assert _extract_eval_log_path("", "Log: logs/from-stderr.eval") == "logs/from-stderr.eval"

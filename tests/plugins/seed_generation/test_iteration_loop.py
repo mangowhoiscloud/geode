@@ -7,8 +7,8 @@ import asyncio
 import json
 from typing import Any
 
-from plugins.seed_generation.agents.base import BaseSeedAgent, SeedAgentResult
-from plugins.seed_generation.orchestrator import (
+from geode_product.seed_generation.agents.base import BaseSeedAgent, SeedAgentResult
+from geode_product.seed_generation.orchestrator import (
     _ITERATION_PHASE_ORDER,
     _PHASE_ORDER,
     Pipeline,

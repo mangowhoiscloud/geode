@@ -24,6 +24,11 @@ _LEGACY_TO_REGISTRY = {"openai-codex": "openai", "zhipuai": "glm"}
 
 
 class TestProviderRouting:
+    def test_all_picker_gpt_models_use_openai_family_label(self) -> None:
+        assert {
+            profile.provider for profile in get_model_profiles() if profile.id.startswith("gpt-")
+        } == {"openai"}
+
     def test_codex_models_route_to_openai_codex(self) -> None:
         for model in ("gpt-5.3-codex", "gpt-5.2-codex", "gpt-5.1-codex-mini"):
             assert _resolve_provider(model) == "openai-codex", model
@@ -80,6 +85,11 @@ class TestCrossProviderFallbackSafety:
 
 
 class TestModelProfileLabels:
+    def test_all_gpt_models_use_openai_family_label(self) -> None:
+        profiles = [profile for profile in get_model_profiles() if profile.id.startswith("gpt-")]
+        assert profiles
+        assert {profile.provider for profile in profiles} == {"openai"}
+
     def test_gpt_5_4_mini_is_not_labelled_codex(self) -> None:
         # Pre-0.50 the UI showed "Codex (Plus)" for gpt-5.4-mini even though
         # its canonical provider family is "openai". Credential source, not

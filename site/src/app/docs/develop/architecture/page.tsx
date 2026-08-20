@@ -25,13 +25,13 @@ export default function Page() {
 
             <h2>서브시스템 지도</h2>
             <p>
-              현재 프로덕션 소스는 두 패키지입니다. <code>core/</code>는 범용
-              자율 에이전트 런타임이고, <code>plugins/</code>는 함께 배포되는
-              1차 제품 기능의 기존 네임스페이스입니다. 독립 설치되는 외부
-              플러그인 계약은 아닙니다. <code>core/</code>의
+              프로덕션 소스는 닫힌 커널과 외곽 제품 셸로 나뉩니다. <code>core/</code>는
+              범용 자율 에이전트 런타임이고, <code>geode_product/</code>는 함께
+              배포되는 1차 제품 기능과 조립을 소유합니다. <code>plugins/</code>는
+              선별된 호환 facade만 보유합니다. <code>core/</code>의
               서브시스템은 5계층 스택에 정렬됩니다.
             </p>
-            <pre>{`Self-Improving  core/self_improving/  train.py + measure/fitness/gate/ledger + loop/{mutate,observe,inject}
+            <pre>{`Self-Improving  geode_product/self_improving/  train.py + measure/fitness/gate/ledger + loop/{mutate,observe,inject}
 Agent           core/agent/           AgenticLoop(while tool_use), sub_agent, system_prompt
 Harness         core/cli/             thin CLI + commands/ + IPC 클라이언트
                 core/server/          serve 데몬. ipc_server(CLIPoller) + supervised(메신저 폴러)
@@ -56,7 +56,7 @@ Model           core/llm/             라우터 + 어댑터 레지스트리
               최상위에는 진입 모듈이 몇 개 있습니다.{" "}
               <code>core/runtime.py</code>의 <code>GeodeRuntime</code>이
               부트스트랩이고, <code>core/paths.py</code>가 모든 디렉터리 경로를
-              한곳에서 해석하며, <code>core/mcp_server.py</code>가{" "}
+              한곳에서 해석하며, <code>geode_product/mcp_server.py</code>가{" "}
               <code>geode-mcp</code> 진입점입니다. 계층 경계가 왜 이렇게
               그어졌는지는{" "}
               <a href="/geode/docs/explanation/4-layer">왜 5계층인가</a>에
@@ -108,9 +108,9 @@ LLM 호출  (core/llm/router/ → core/llm/providers/)
             <h2>흐름 추적 둘. 자기개선 사이클</h2>
             <pre>{`auto-trigger 또는 운영자  (core/wiring/scheduling.py → loop/auto_trigger.py)
    ▼
-변이 제안 + 적용  (core/self_improving/loop/mutate/runner.py, 7 behaviour kinds)
+변이 제안 + 적용  (geode_product/self_improving/loop/mutate/runner.py, 7 behaviour kinds)
    ▼
-Petri 감사 서브프로세스  (measure.py → geode audit → plugins/petri_audit/)
+Petri 감사 서브프로세스  (measure.py → geode audit → geode_product/petri_audit/)
    │  GEODE_WRAPPER_OVERRIDE로 변이된 스캐폴드를 주입한 같은 AgenticLoop를 측정
    ▼
 fitness 계산  (fitness.py, 22-dim 판정 → 스칼라)
@@ -150,14 +150,14 @@ margin 게이트  (gate.py)
 
             <h2>Subsystem map</h2>
             <p>
-              Production source currently spans two packages: <code>core/</code>{" "}
-              is the general-purpose autonomous agent runtime, while{" "}
-              <code>plugins/</code> is the legacy namespace for bundled
-              first-party product features. It is not an independently
-              installed third-party plugin contract. The subsystems inside{" "}
+              Production source uses a closed kernel and an outer product shell:{" "}
+              <code>core/</code> is the general-purpose autonomous agent runtime,
+              while <code>geode_product/</code> owns bundled first-party features
+              and composition. <code>plugins/</code> contains only curated
+              compatibility facades. The subsystems inside{" "}
               <code>core/</code> line up with the five-layer stack.
             </p>
-            <pre>{`Self-Improving  core/self_improving/  train.py + measure/fitness/gate/ledger + loop/{mutate,observe,inject}
+            <pre>{`Self-Improving  geode_product/self_improving/  train.py + measure/fitness/gate/ledger + loop/{mutate,observe,inject}
 Agent           core/agent/           AgenticLoop (while tool_use), sub_agent, system_prompt
 Harness         core/cli/             thin CLI + commands/ + IPC client
                 core/server/          serve daemon: ipc_server (CLIPoller) + supervised (messenger pollers)
@@ -182,7 +182,7 @@ Model           core/llm/             router + adapter registry
               A few entry modules sit at the top level:{" "}
               <code>GeodeRuntime</code> in <code>core/runtime.py</code> is the
               bootstrap, <code>core/paths.py</code> resolves every directory
-              path in one place, and <code>core/mcp_server.py</code> is the{" "}
+              path in one place, and <code>geode_product/mcp_server.py</code> is the{" "}
               <code>geode-mcp</code> entry point. For why the layer boundaries
               fall where they do, see{" "}
               <a href="/geode/docs/explanation/4-layer">Why five layers</a>.
@@ -232,9 +232,9 @@ tool requested?  ── yes → run core/tools/ → observe result → next roun
             <h2>Trace two. A self-improving cycle</h2>
             <pre>{`auto-trigger or operator  (core/wiring/scheduling.py → loop/auto_trigger.py)
    ▼
-propose + apply a mutation  (core/self_improving/loop/mutate/runner.py, 7 behaviour kinds)
+propose + apply a mutation  (geode_product/self_improving/loop/mutate/runner.py, 7 behaviour kinds)
    ▼
-Petri audit subprocess  (measure.py → geode audit → plugins/petri_audit/)
+Petri audit subprocess  (measure.py → geode audit → geode_product/petri_audit/)
    │  measures the same AgenticLoop with the mutated scaffold injected
    │  via GEODE_WRAPPER_OVERRIDE
    ▼

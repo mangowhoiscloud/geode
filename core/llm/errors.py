@@ -290,7 +290,7 @@ def classify_llm_error(exc: Exception) -> tuple[str, str, str]:
     # plugin-as-optional-dep). Lazy-import + isinstance gate — when the
     # plugin isn't loaded, falls through to the SDK branches.
     try:
-        from plugins.petri_audit.claude_cli_provider import (
+        from core.llm.adapters._claude_cli_runtime import (
             ClaudeCliTransientUpstreamError,
         )
 

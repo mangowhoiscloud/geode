@@ -74,6 +74,9 @@ jobs:
             exit 1
           fi
 
+      - name: Require committed lockfile
+        run: uv lock --check
+
       - name: Require current main or the exact existing release target
         if: inputs.publish_stable == true
         run: |
@@ -117,14 +120,14 @@ jobs:
 
       - name: Lint and hygiene
         run: |
-          uv run ruff check core plugins tests scripts
-          uv run ruff format --check core plugins tests scripts
+          uv run ruff check core geode_product plugins tests scripts
+          uv run ruff format --check core geode_product plugins tests scripts
           uv run deptry .
           npm run lint --prefix site
 
       - name: Type check
         run: >
-          uv run mypy core plugins scripts
+          uv run mypy core geode_product plugins scripts
           tests/integration/test_prepare_hf_release_bundle.py
           tests/integration/test_check_official_docs.py
 
@@ -159,6 +162,7 @@ jobs:
       - name: Clean wheel install smoke
         run: |
           version="$GEODE_VERSION"
+          release_venv="$PWD/.release-venv"
           dist_stem=$(uv run python - <<'PY'
           import re
           import tomllib
@@ -171,6 +175,63 @@ jobs:
           .release-venv/bin/python -m pip install --upgrade pip
           .release-venv/bin/python -m pip install "dist/${dist_stem}-${version}-py3-none-any.whl"
           .release-venv/bin/geode version | grep "GEODE v${version}"
+          .release-venv/bin/python -I scripts/check_installed_package.py
+          daemon_root=$(mktemp -d "$RUNNER_TEMP/geode-release-daemon.XXXXXX")
+          export GEODE_HOME="$daemon_root/home"
+          export GEODE_PROJECT_DIR="$daemon_root/project"
+          export GEODE_STATE_ROOT="$daemon_root/state"
+          export GEODE_GATEWAY_ENABLED=false
+          export GEODE_WEBHOOK_ENABLED=false
+          export CODEX_HOME="$daemon_root/codex"
+          export ANTHROPIC_API_KEY=
+          export OPENAI_API_KEY=
+          export ZAI_API_KEY=
+          mkdir -p "$GEODE_PROJECT_DIR"
+          (
+            cd "$GEODE_PROJECT_DIR"
+            exec "$release_venv/bin/geode" serve --poll 0.05
+          ) >"$daemon_root/serve.log" 2>&1 &
+          daemon_pid=$!
+          cleanup_daemon() {
+            kill "$daemon_pid" 2>/dev/null || true
+            wait "$daemon_pid" 2>/dev/null || true
+          }
+          trap cleanup_daemon EXIT
+          for _ in $(seq 1 150); do
+            test -S "$GEODE_HOME/cli.sock" && break
+            kill -0 "$daemon_pid" 2>/dev/null || break
+            sleep 0.1
+          done
+          if ! test -S "$GEODE_HOME/cli.sock"; then
+            cat "$daemon_root/serve.log"
+            exit 1
+          fi
+          .release-venv/bin/python -I - "$version" "$GEODE_HOME/cli.sock" <<'PY'
+          import sys
+          from pathlib import Path
+
+          from core.cli.ipc_client import query_serve_version
+
+          actual = query_serve_version(Path(sys.argv[2]), timeout_s=30.0)
+          if actual != sys.argv[1]:
+              raise SystemExit(f"daemon version mismatch: {actual!r} != {sys.argv[1]!r}")
+          PY
+          cleanup_daemon
+          trap - EXIT
+
+      - name: Core-only installed wheel gate
+        run: |
+          wheel="$(find dist -maxdepth 1 -name '*.whl' -print -quit)"
+          kernel_wheel="$RUNNER_TEMP/$(basename "$wheel")"
+          uv run python scripts/build_kernel_probe.py \
+            --input-wheel "$wheel" --output-wheel "$kernel_wheel"
+          uv run --isolated --no-project --with "$kernel_wheel" \
+            python -I scripts/check_installed_package.py --kernel-only
+          uv run --isolated --no-project --with "$kernel_wheel" --with pytest==9.0.2 \
+            python -I -m pytest -q -c /dev/null --rootdir "$RUNNER_TEMP" \
+            --import-mode=importlib --noconftest \
+            tests/core/llm/adapters/test_registry.py \
+            tests/core/tools/test_toolkit_registry.py
 
       - name: Generate release notes and checksums
         run: |

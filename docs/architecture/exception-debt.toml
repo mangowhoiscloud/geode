@@ -123,19 +123,6 @@ target = "DI-003"
 expires_when = "The poller contract moves to a neutral capability module and the dependency is inverted."
 
 [[import_edge]]
-id = "IMP-012"
-edge = "core.self_improving.measure -> core.cli.quota_banner"
-contracts = [
-  "Agent stays pure (no CLI/server)",
-  "Server may host agent but never CLI",
-]
-owner = "core.self_improving"
-reason = "The self-improving runner lazily imports CLI quota presentation as a degraded optional path."
-created = "2026-06-11"
-target = "BND-006"
-expires_when = "The bundled product composition injects quota reporting and both ignores are removed."
-
-[[import_edge]]
 id = "IMP-013"
 edge = "core.server.ipc_server.poller -> core.cli"
 contracts = ["Server may host agent but never CLI"]
@@ -275,40 +262,40 @@ expires_when = "Cohesive runtime groups reduce the constructor to at most the gl
 id = "RUFF-005"
 rule = "PLR0913"
 mode = "ceiling"
-path = "core/self_improving/ledger.py"
+path = "geode_product/self_improving/ledger.py"
 symbol = "_append_baseline_registry_row"
 observed = 23
-owner = "core.self_improving"
+owner = "geode_product.self_improving"
 reason = "The baseline writer still accepts provenance and evaluation fields as separate arguments."
 created = "2026-05-30"
 target = "STORE-003"
 expires_when = "A typed dataset record reduces the writer below 23 arguments and the ceiling is lowered."
 
 [[ruff_debt]]
-id = "RUFF-006"
+id = "RUFF-011"
 rule = "PLR0915"
 mode = "ceiling"
-path = "core/self_improving/train.py"
-symbol = "main"
-observed = 212
-owner = "core.self_improving"
-reason = "The self-improving launcher still combines parsing, composition, execution, and reporting."
-created = "2026-05-06"
-target = "BND-006"
-expires_when = "Product-boundary extraction reduces main below 212 statements and the ceiling is lowered."
+path = "core/agent/loop/agent_loop.py"
+symbol = "AgenticLoop._arun_once"
+observed = 209
+owner = "core.agent"
+reason = "The physical turn still combines retry, tool execution, observation, and continuation phases."
+created = "2026-08-20"
+target = "LOOP-003"
+expires_when = "Phase extraction reduces _arun_once below 209 statements and the ceiling is lowered."
 
 [[ruff_debt]]
 id = "RUFF-010"
 rule = "PLR0915"
 mode = "override"
 path = "core/cli/typer_serve.py"
-symbol = "serve"
-observed = 216
+symbol = "_serve"
+observed = 219
 owner = "core.cli"
 reason = "The serve command still composes gateway, scheduler, IPC, and shutdown lifecycles inline."
 created = "2026-08-05"
 target = "DI-003"
-expires_when = "Serve composition is split to at most the 212-statement global ceiling."
+expires_when = "_serve composition is split to at most the 212-statement global ceiling."
 
 [[ruff_debt]]
 id = "RUFF-007"

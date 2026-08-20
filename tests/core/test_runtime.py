@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import MappingProxyType
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -47,6 +48,46 @@ class TestGeodeRuntimeCreate:
     def test_create_custom_phase(self, tmp_path: Path):
         runtime = GeodeRuntime.create("Demo Subject", phase="scoring", log_dir=tmp_path)
         assert runtime.session_key == "subject:demo_subject:scoring"
+
+    def test_feature_composition_is_explicit_and_identity_preserving(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        from core.hooks import MiddlewareRegistry
+
+        policy_sources = MappingProxyType({})
+        activity_sink_provider = MagicMock(return_value=None)
+        observed: dict[str, object] = {}
+
+        def build_middleware(**kwargs: object) -> MiddlewareRegistry:
+            observed["middleware_events"] = kwargs["events"]
+            observed["middleware_policy_sources"] = kwargs["policy_sources"]
+            return MiddlewareRegistry(events=kwargs["events"])
+
+        def register_hooks(hooks: object) -> None:
+            observed["hooks"] = hooks
+
+        def register_scheduling(trigger_manager: object, hooks: object) -> None:
+            observed["trigger_manager"] = trigger_manager
+            observed["scheduler_hooks"] = hooks
+
+        runtime = GeodeRuntime.create(
+            "composed",
+            log_dir=tmp_path,
+            policy_sources=policy_sources,
+            middleware_builder=build_middleware,
+            activity_sink_provider=activity_sink_provider,
+            feature_hook_registrar=register_hooks,
+            scheduling_registrar=register_scheduling,
+        )
+
+        assert runtime.policy_sources is policy_sources
+        assert runtime.activity_sink_provider is activity_sink_provider
+        assert observed["middleware_events"] is runtime.hooks
+        assert observed["middleware_policy_sources"] is policy_sources
+        assert observed["hooks"] is runtime.hooks
+        assert observed["trigger_manager"] is runtime.trigger_manager
+        assert observed["scheduler_hooks"] is runtime.hooks
 
     def test_staged_scheduling_is_stopped_when_task_graph_creation_fails(self) -> None:
         bootstrap = MagicMock()

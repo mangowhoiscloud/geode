@@ -75,7 +75,7 @@ def test_live_claude_cli_emits_tool_use_under_max_turns_1() -> None:
     output tells the operator to consider a different bounding flag or
     a more aggressive handler stub.
     """
-    from plugins.petri_audit import claude_cli_provider as p
+    from geode_product.petri_audit import claude_cli_provider as p
 
     if not hasattr(p, "ClaudeCliAPI"):
         p.register()

@@ -1,11 +1,11 @@
-"""Unit tests for ``plugins.seed_generation.agents.base``."""
+"""Unit tests for ``geode_product.seed_generation.agents.base``."""
 
 from __future__ import annotations
 
 import asyncio
 
 import pytest
-from plugins.seed_generation.agents.base import BaseSeedAgent, SeedAgentResult
+from geode_product.seed_generation.agents.base import BaseSeedAgent, SeedAgentResult
 
 
 def test_seed_agent_result_default_status_ok() -> None:

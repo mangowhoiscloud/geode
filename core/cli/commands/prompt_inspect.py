@@ -30,7 +30,7 @@ def prompt_dump(
     """Dump assembled system prompts for a (model, surface) matrix."""
     from core.agent.prompt_dump import DUMP_SURFACES, dump_matrix
     from core.config import ANTHROPIC_PRIMARY, GLM_PRIMARY, OPENAI_PRIMARY
-    from core.wiring.bootstrap import build_product_policy_sources
+    from core.config.policy_source import EMPTY_POLICY_SOURCES
 
     models = tuple(model) if model else (ANTHROPIC_PRIMARY, OPENAI_PRIMARY, GLM_PRIMARY)
     surfaces = tuple(surface) if surface else DUMP_SURFACES
@@ -39,7 +39,7 @@ def prompt_dump(
         models,
         surfaces,
         measure=measure,
-        policy_sources=build_product_policy_sources(),
+        policy_sources=EMPTY_POLICY_SOURCES,
     )
 
     token_label = "tokens" if measure else "~tokens(est)"

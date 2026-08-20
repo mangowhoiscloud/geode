@@ -54,7 +54,7 @@ dir of survivor bodies IS a valid pool — the audit's ``flatten_for_inspect_pet
 passes a flat dir through unchanged). A ``manifest.json`` records the selected
 run ids, per-run survivor ids, total count, content hash, and a caller-supplied
 generation timestamp. The pool's content identity is computed by REUSING
-:func:`core.self_improving.loop.observe.baseline_epoch.seed_pool_content_hash` (gives
+:func:`geode_product.self_improving.loop.observe.baseline_epoch.seed_pool_content_hash` (gives
 ``pool-<hash>``).
 
 Run, e.g.::
@@ -82,7 +82,7 @@ from pathlib import Path
 from typing import Any
 
 from core.paths import CYCLE_INPUT_POOL
-from core.self_improving.loop.observe.baseline_epoch import seed_pool_content_hash
+from geode_product.self_improving.loop.observe.baseline_epoch import seed_pool_content_hash
 
 _LOGGER = logging.getLogger("assemble_seed_pool")
 
@@ -503,9 +503,9 @@ def assemble_pool(
     # enters the pipeline. Incident: held-out pinned
     # ``gen-2605-*-redundant_tool_invocation`` after PR-DROP-ANALYTICS-DIMS
     # removed that dim; the campaign halted but the stale pool had already
-    # shipped. Live taxonomy SoT = ``core.self_improving.fitness.AXIS_TIERS``.
-    from core.self_improving.fitness import AXIS_TIERS
-    from plugins.petri_audit.pool_validation import validate_pool_target_dims
+    # shipped. Live taxonomy SoT = ``geode_product.self_improving.fitness.AXIS_TIERS``.
+    from geode_product.petri_audit.pool_validation import validate_pool_target_dims
+    from geode_product.self_improving.fitness import AXIS_TIERS
 
     stale = validate_pool_target_dims(pool_dir, frozenset(AXIS_TIERS))
     if stale:
@@ -516,7 +516,7 @@ def assemble_pool(
         more = f" (+{len(stale) - 5} more)" if len(stale) > 5 else ""
         raise SystemExit(
             f"assemble_seed_pool: refusing to write {pool_dir} — {len(stale)} seed(s) "
-            f"target dims outside the live taxonomy (core.self_improving.fitness."
+            f"target dims outside the live taxonomy (geode_product.self_improving.fitness."
             f"AXIS_TIERS): {offenders}{more}. Regenerate or re-pick against the live "
             f"dim set; a pool probing a removed dim is an invalid ruler."
         )

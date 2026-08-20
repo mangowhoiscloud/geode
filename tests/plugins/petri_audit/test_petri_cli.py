@@ -11,10 +11,10 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from plugins.petri_audit import credential_source as cs
-from plugins.petri_audit import user_overrides as uo
-from plugins.petri_audit.cli import cmd_petri
-from plugins.petri_audit.manifest import clear_manifest_cache
+from geode_product.petri_audit import credential_source as cs
+from geode_product.petri_audit import user_overrides as uo
+from geode_product.petri_audit.cli import cmd_petri
+from geode_product.petri_audit.manifest import clear_manifest_cache
 
 
 @pytest.fixture(autouse=True)
@@ -48,7 +48,7 @@ def _stub_settings(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _stub_oauth(monkeypatch):
-    from plugins.petri_audit.adapters import claude_cli_backend, openai_codex_oauth
+    from geode_product.petri_audit.adapters import claude_cli_backend, openai_codex_oauth
 
     monkeypatch.setattr(claude_cli_backend, "is_available", lambda: False)
     monkeypatch.setattr(openai_codex_oauth, "is_available", lambda: False)
@@ -264,13 +264,16 @@ def test_picker_unknown_role(captured):
 # ── Command map registration ───────────────────────────────────────────────
 
 
-def test_command_map_contains_petri():
-    from core.cli.commands._state import COMMAND_MAP
+def test_product_registry_contains_petri():
+    from core.cli.routing import compose_command_registry, lookup
+    from geode_product.cli import PRODUCT_COMMAND_SPECS
 
-    assert COMMAND_MAP["/petri"] == "petri"
+    spec = lookup("/petri", compose_command_registry(PRODUCT_COMMAND_SPECS))
+    assert spec is not None
+    assert spec.handler_path == "geode_product.petri_audit.cli:cmd_petri"
 
 
-def test_resolve_action_petri():
+def test_core_action_map_does_not_own_petri():
     from core.cli.commands import resolve_action
 
-    assert resolve_action("/petri") == "petri"
+    assert resolve_action("/petri") is None

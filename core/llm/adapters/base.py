@@ -184,7 +184,7 @@ class AdapterCallRequest:
     # * OpenAI SDK ``chat.completions.parse(response_format=PydanticModel)`` →
     #   ``json_schema`` with ``strict=true``.
     # * claude-cli (``--print``) flag ``--json-schema <schema>`` (inline string).
-    # * codex-cli (``exec``) flag ``--output-schema <FILE>`` (path-based).
+    # Historical codex-cli used a path-based ``--output-schema`` flag.
     #
     # Set this dict (a JSON Schema object) when the caller expects a
     # validated JSON shape — eliminates the "LLM returns natural

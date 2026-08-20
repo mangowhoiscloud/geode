@@ -28,7 +28,7 @@ import ast
 import inspect
 import textwrap
 
-from plugins.petri_audit.geode_target import _default_geode_runner
+from geode_product.petri_audit.geode_target import _default_geode_runner
 
 
 def test_default_geode_runner_calls_bootstrap_builtins() -> None:

@@ -13,8 +13,8 @@ indistinguishable from a real adapter-missing error in the trace.
 
 The fix routes the (provider, source) pair through
 ``plugins/petri_audit/registry.get_binding("target", model=...)``, the
-same resolver the manual ``geode audit`` CLI uses, so the three
-source categories (PAYG / subscription / local-cli) all reach
+same resolver the manual ``geode audit`` CLI uses, so the PAYG and
+subscription categories both reach
 ``AgenticLoop`` exactly as the operator configured them.
 """
 
@@ -34,7 +34,7 @@ def test_default_geode_runner_passes_source_argument() -> None:
     before the audit-subprocess fake-success path re-emerges.
     """
     target_module = (
-        Path(__file__).resolve().parents[3] / "plugins" / "petri_audit" / "geode_target.py"
+        Path(__file__).resolve().parents[3] / "geode_product" / "petri_audit" / "geode_target.py"
     )
     source = target_module.read_text(encoding="utf-8")
     # The construction site we care about is `loop = AgenticLoop(`.
@@ -70,13 +70,13 @@ def test_default_geode_runner_uses_get_binding() -> None:
     resolves the same source the operator gets at the command line.
     """
     target_module = (
-        Path(__file__).resolve().parents[3] / "plugins" / "petri_audit" / "geode_target.py"
+        Path(__file__).resolve().parents[3] / "geode_product" / "petri_audit" / "geode_target.py"
     )
     source = target_module.read_text(encoding="utf-8")
     assert "get_binding(" in source, (
         "geode_target.py no longer calls get_binding(...). The audit "
         "subprocess will diverge from the manual `geode audit` CLI's "
-        "source resolution. Use plugins.petri_audit.registry.get_binding."
+        "source resolution. Use geode_product.petri_audit.registry.get_binding."
     )
 
 
@@ -94,21 +94,17 @@ def test_default_geode_runner_uses_get_binding() -> None:
         ("subscription", "claude-cli"),
         ("subscription", "codex-oauth"),
         ("subscription", "anthropic-oauth"),
-        # Local CLI subprocess — codex-cli wraps a local Codex
-        # binary. Lower-latency option when an OAuth subscription is
-        # unavailable.
-        ("local-cli", "codex-cli"),
     ],
 )
-def test_bootstrap_registers_all_three_source_categories(category: str, source_value: str) -> None:
+def test_bootstrap_registers_supported_source_categories(category: str, source_value: str) -> None:
     """Each source the operator may configure resolves to a registered adapter.
 
-    The full set of three categories (PAYG / subscription / local-cli)
-    must be present after ``bootstrap_builtins()`` so
+    The supported PAYG and subscription categories must be present after
+    ``bootstrap_builtins()`` so
     ``AgenticLoop._new_adapter = resolve_for(provider, source)`` does
     not raise ``AdapterNotFoundError`` regardless of which credential
     path the operator selects. A regression that drops one of the
-    eight builtin adapter imports surfaces here per-source rather
+    builtin adapter imports surfaces here per-source rather
     than as a remote audit-subprocess failure.
     """
     from core.llm.adapters.registry import (

@@ -11,7 +11,7 @@ Pins:
 from __future__ import annotations
 
 import pytest
-from plugins.seed_generation.agents.base import (
+from geode_product.seed_generation.agents.base import (
     BaseSeedAgent,
     SeedAgentResult,
     picker_source_to_adapter_source,
@@ -61,7 +61,7 @@ def test_agent_adapter_source_property(agent_source: str, expected: str) -> None
 def test_pipeline_carries_bindings() -> None:
     """Pipeline stores picker bindings; agents (built earlier with binding
     values) supply ``source`` directly on SubTask creation. No double-injection."""
-    from plugins.seed_generation.orchestrator import (
+    from geode_product.seed_generation.orchestrator import (
         Pipeline,
         PipelineRegistry,
         PipelineState,
@@ -74,7 +74,7 @@ def test_pipeline_carries_bindings() -> None:
 
 def test_pipeline_default_bindings_empty_dict() -> None:
     """No bindings passed → empty dict (not None)."""
-    from plugins.seed_generation.orchestrator import (
+    from geode_product.seed_generation.orchestrator import (
         Pipeline,
         PipelineRegistry,
         PipelineState,

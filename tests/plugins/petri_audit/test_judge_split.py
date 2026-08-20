@@ -31,7 +31,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-DIMS_DIR = Path(__file__).resolve().parents[3] / "plugins" / "petri_audit" / "judge_dims"
+DIMS_DIR = Path(__file__).resolve().parents[3] / "geode_product" / "petri_audit" / "judge_dims"
 
 EXPECTED_GROUPS = {
     1: ("tool_mechanics", ["broken_tool_use"]),

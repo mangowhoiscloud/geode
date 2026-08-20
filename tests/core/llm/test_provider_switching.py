@@ -349,14 +349,14 @@ def test_path_e_glm_coding_to_glm_payg_within_provider(isolated_auth) -> None:
 
 
 def test_codex_token_resolution_uses_geode_profile_first(isolated_auth) -> None:
-    """v0.52.4 contract: ``_resolve_codex_token`` checks ProfileStore first
+    """v0.52.4 contract: ``resolve_codex_token`` checks ProfileStore first
     so the OAuth token registered via /login openai is the one used,
     not whatever ~/.codex/auth.json carries from Codex CLI."""
     _register_codex_oauth()
-    from core.llm.providers.codex import _resolve_codex_token
+    from core.llm.providers.codex import resolve_codex_token
 
     # The geode-registered profile token should be returned.
-    token = _resolve_codex_token()
+    token = resolve_codex_token()
     assert token == "oauth-codex-token"
 
 

@@ -195,7 +195,7 @@ def test_decompose_async_applies_policy_after_load_prompt() -> None:
 
 
 def test_producer_reader_round_trip(isolated_sot: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from core.self_improving.loop.mutate import policies as policies_mod
+    from geode_product.self_improving.loop.mutate import policies as policies_mod
 
     monkeypatch.setattr(policies_mod, "policy_path", lambda kind: isolated_sot)
     policies_mod.write_policy(
@@ -210,7 +210,7 @@ def test_producer_reader_round_trip(isolated_sot: Path, monkeypatch: pytest.Monk
 
 
 def test_product_bundle_owns_decomposition_source() -> None:
-    from core.self_improving.policy_sources import build_policy_source_bundle
+    from geode_product.self_improving.policy_sources import build_policy_source_bundle
 
     source = build_policy_source_bundle()["decomposition"]
     assert source.packaged_default is not None

@@ -39,7 +39,7 @@ def _build_test_runner(
 ) -> Any:
     """Construct a SelfImprovingLoopRunner with a canned LLM response
     and a tmp_path-redirected audit log + SoT."""
-    from core.self_improving.loop.mutate import runner as runner_mod
+    from geode_product.self_improving.loop.mutate import runner as runner_mod
 
     audit_path = tmp_path / "state" / "mutations.jsonl"
     audit_path.parent.mkdir(parents=True, exist_ok=True)
@@ -55,7 +55,7 @@ def _build_test_runner(
         )
 
     def _fake_context() -> Any:
-        from core.self_improving.loop.mutate.runner import RunnerContext
+        from geode_product.self_improving.loop.mutate.runner import RunnerContext
 
         return RunnerContext(current_sections={"role.intro": "Mode: baseline."})
 
@@ -68,7 +68,9 @@ def _build_test_runner(
     def _fake_write(sections: dict[str, str]) -> None:
         sections_path.write_text(json.dumps(sections), encoding="utf-8")
 
-    monkeypatch.setattr("core.self_improving.train.write_wrapper_prompt_sections", _fake_write)
+    monkeypatch.setattr(
+        "geode_product.self_improving.train.write_wrapper_prompt_sections", _fake_write
+    )
 
     return runner_mod.SelfImprovingLoopRunner(
         llm_call=_fake_llm,
@@ -148,7 +150,7 @@ def test_proposal_in_runner_all_exports() -> None:
     """``Proposal`` must be exported alongside ``Mutation`` /
     ``SelfImprovingLoopRunner`` so external callers can type-annotate
     against it."""
-    from core.self_improving.loop.mutate import runner
+    from geode_product.self_improving.loop.mutate import runner
 
     assert "Proposal" in runner.__all__
 
@@ -159,14 +161,14 @@ def test_proposal_in_runner_all_exports() -> None:
 
 
 def test_parse_run_opts_defaults() -> None:
-    from core.cli.commands.self_improving import _parse_run_opts
+    from geode_product.self_improving.cli_commands import _parse_run_opts
 
     flags = _parse_run_opts([])
     assert flags == {"dry_run": False, "iterations": 1, "target_kind": ""}
 
 
 def test_parse_run_opts_dry_run() -> None:
-    from core.cli.commands.self_improving import _parse_run_opts
+    from geode_product.self_improving.cli_commands import _parse_run_opts
 
     flags = _parse_run_opts(["--dry-run"])
     assert flags is not None
@@ -178,7 +180,7 @@ def test_parse_run_opts_dry_run() -> None:
     [(["--n", "5"], 5), (["--n=3"], 3), (["--n", "10"], 10)],
 )
 def test_parse_run_opts_iterations(tok_seq: list[str], expected_n: int) -> None:
-    from core.cli.commands.self_improving import _parse_run_opts
+    from geode_product.self_improving.cli_commands import _parse_run_opts
 
     flags = _parse_run_opts(tok_seq)
     assert flags is not None
@@ -188,7 +190,7 @@ def test_parse_run_opts_iterations(tok_seq: list[str], expected_n: int) -> None:
 def test_parse_run_opts_iterations_out_of_range(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    from core.cli.commands.self_improving import _parse_run_opts
+    from geode_product.self_improving.cli_commands import _parse_run_opts
 
     assert _parse_run_opts(["--n", "0"]) is None
     assert _parse_run_opts(["--n", "11"]) is None
@@ -202,7 +204,7 @@ def test_parse_run_opts_iterations_out_of_range(
     ["prompt", "tool_policy", "decomposition", "reflection"],
 )
 def test_parse_run_opts_target_kind_valid(kind: str) -> None:
-    from core.cli.commands.self_improving import _parse_run_opts
+    from geode_product.self_improving.cli_commands import _parse_run_opts
 
     flags = _parse_run_opts(["--target-kind", kind])
     assert flags is not None
@@ -211,7 +213,7 @@ def test_parse_run_opts_target_kind_valid(kind: str) -> None:
 
 def test_parse_run_opts_target_kind_retrieval_rejected_post_s0d() -> None:
     """ADR-012 S0d — retrieval 은 더 이상 valid CLI target_kind 아님."""
-    from core.cli.commands.self_improving import _parse_run_opts
+    from geode_product.self_improving.cli_commands import _parse_run_opts
 
     flags = _parse_run_opts(["--target-kind", "retrieval"])
     assert flags is None, "retrieval 은 S0d 후 deprecated — CLI parsing 이 거부해야 함"
@@ -220,7 +222,7 @@ def test_parse_run_opts_target_kind_retrieval_rejected_post_s0d() -> None:
 def test_parse_run_opts_target_kind_invalid(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    from core.cli.commands.self_improving import _parse_run_opts
+    from geode_product.self_improving.cli_commands import _parse_run_opts
 
     assert _parse_run_opts(["--target-kind", "nonsense"]) is None
     out = capsys.readouterr().out
@@ -230,7 +232,7 @@ def test_parse_run_opts_target_kind_invalid(
 def test_parse_run_opts_unknown_flag_rejected(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    from core.cli.commands.self_improving import _parse_run_opts
+    from geode_product.self_improving.cli_commands import _parse_run_opts
 
     assert _parse_run_opts(["--bogus"]) is None
     out = capsys.readouterr().out
@@ -247,7 +249,7 @@ def _stub_runner_with_proposal(
 ) -> tuple[Any, Any]:
     """Build a mock SelfImprovingLoopRunner that returns a canned
     proposal and tracks apply_proposal calls."""
-    from core.self_improving.loop.mutate.runner import Mutation, Proposal
+    from geode_product.self_improving.loop.mutate.runner import Mutation, Proposal
 
     mutation = Mutation(
         target_section="role.intro",
@@ -271,7 +273,7 @@ def _stub_runner_with_proposal(
 def test_cmd_run_dry_run_skips_apply(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from core.cli.commands import self_improving
+    from geode_product.self_improving import cli_commands as self_improving
 
     runner, _ = _stub_runner_with_proposal()
     monkeypatch.setattr(self_improving, "_build_runner", lambda: runner)
@@ -288,7 +290,7 @@ def test_cmd_run_target_kind_filter_skips_mismatched(
 ) -> None:
     """--target-kind=tool_policy with an LLM that proposes 'prompt'
     must skip the iteration WITHOUT applying."""
-    from core.cli.commands import self_improving
+    from geode_product.self_improving import cli_commands as self_improving
 
     runner, _ = _stub_runner_with_proposal(target_kind="prompt")
     monkeypatch.setattr(self_improving, "_build_runner", lambda: runner)
@@ -302,7 +304,7 @@ def test_cmd_run_target_kind_filter_skips_mismatched(
 def test_cmd_run_confirm_y_applies(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from core.cli.commands import self_improving
+    from geode_product.self_improving import cli_commands as self_improving
 
     runner, _ = _stub_runner_with_proposal()
     monkeypatch.setattr(self_improving, "_build_runner", lambda: runner)
@@ -320,7 +322,7 @@ def test_cmd_run_confirm_n_records_rejection(
 ) -> None:
     """Rejection must NOT call apply_proposal AND must append a
     kind=rejected row to the audit log."""
-    from core.cli.commands import self_improving
+    from geode_product.self_improving import cli_commands as self_improving
 
     runner, _ = _stub_runner_with_proposal()
     audit_path = tmp_path / "mutations.jsonl"
@@ -347,13 +349,13 @@ def test_cmd_run_confirm_n_with_default_audit_path(
     to ``MUTATION_AUDIT_LOG_PATH`` rather than crash on
     ``Path(None)``. Pin the fallback so a refactor that drops it
     surfaces here."""
-    from core.cli.commands import self_improving
+    from geode_product.self_improving import cli_commands as self_improving
 
     runner, _ = _stub_runner_with_proposal()
     runner.audit_log_path = None  # default value the real slash uses
     fake_default = tmp_path / "fallback_mutations.jsonl"
     monkeypatch.setattr(
-        "core.self_improving.loop.mutate.runner.MUTATION_AUDIT_LOG_PATH",
+        "geode_product.self_improving.loop.mutate.runner.MUTATION_AUDIT_LOG_PATH",
         fake_default,
     )
     monkeypatch.setattr(self_improving, "_build_runner", lambda: runner)
@@ -370,7 +372,7 @@ def test_cmd_run_abort_breaks_loop(
 ) -> None:
     """User-initiated abort (EOF / Ctrl-D) must stop the iteration loop
     without calling apply_proposal."""
-    from core.cli.commands import self_improving
+    from geode_product.self_improving import cli_commands as self_improving
 
     runner, _ = _stub_runner_with_proposal()
     monkeypatch.setattr(self_improving, "_build_runner", lambda: runner)
@@ -386,7 +388,7 @@ def test_cmd_run_abort_breaks_loop(
 def test_cmd_run_propose_failure_breaks_loop(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from core.cli.commands import self_improving
+    from geode_product.self_improving import cli_commands as self_improving
 
     runner = MagicMock()
     runner.propose.side_effect = ValueError("LLM parse failure")
@@ -405,7 +407,7 @@ def test_cmd_run_propose_failure_breaks_loop(
 def test_run_action_dispatches_to_cmd_run(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from core.cli.commands import self_improving
+    from geode_product.self_improving import cli_commands as self_improving
 
     called: list[list[str]] = []
     monkeypatch.setattr(self_improving, "_cmd_run", lambda opts: called.append(opts))
@@ -417,7 +419,7 @@ def test_deferred_actions_set_now_empty() -> None:
     """PR-PAPERCLIP wired ``config`` to the interactive settings form,
     so the deferred set is now empty. ``run`` / ``history`` /
     ``rollback`` were wired in earlier PRs (OPS-2a / MINIMAL-1)."""
-    from core.cli.commands.self_improving import (
+    from geode_product.self_improving.cli_commands import (
         _RUN_DEFAULT_ITERATIONS,
         _RUN_DEFERRED_ACTIONS,
         _RUN_MAX_ITERATIONS,

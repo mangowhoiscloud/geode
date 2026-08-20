@@ -18,15 +18,15 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from core.self_improving import ledger
-from core.self_improving.fitness import (
+from geode_product.self_improving import ledger
+from geode_product.self_improving.fitness import (
     DIM_WEIGHTS,
     JUDGE_LLM_MODALITIES,
     _dim_weight_with_modality,
     compute_fitness,
 )
-from core.self_improving.gate import N1_FITNESS_MARGIN_FLOOR, _should_promote
-from core.self_improving.ledger import _load_baseline_measurement_modality
+from geode_product.self_improving.gate import N1_FITNESS_MARGIN_FLOOR, _should_promote
+from geode_product.self_improving.ledger import _load_baseline_measurement_modality
 
 # ---------------------------------------------------------------------------
 # 1. Modality weight constants — schema invariants
@@ -123,7 +123,7 @@ def test_should_promote_n1_widening_fires_for_judge_llm_critical() -> None:
 def test_should_promote_n1_widening_conservative_default_for_missing_modality() -> None:
     """baseline_measurement_modality=None (v1 legacy baseline) → guard 가
     conservative default (judge_llm 가정) 로 widening 유지."""
-    from core.self_improving.fitness import CRITICAL_DIMS
+    from geode_product.self_improving.fitness import CRITICAL_DIMS
 
     a_critical = CRITICAL_DIMS[0]
     baseline_means = {a_critical: 5.0}

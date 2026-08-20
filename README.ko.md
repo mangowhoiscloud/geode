@@ -30,7 +30,7 @@
   <a href="README.md">English</a>
 </p>
 
-# GEODE v1.0.22 — Autonomous Agent Runtime + Evaluation Substrate
+# GEODE v1.0.23 — Autonomous Agent Runtime + Evaluation Substrate
 
 자율적인 도구 작업을 수행하는 범용 에이전트 런타임입니다. 자연어로
 요청하면 GEODE가 계획을 세우고 도구를 호출한 뒤 결과를 보고합니다. 짧은
@@ -134,9 +134,9 @@ uv tool install -e . --force         # `geode` 를 어디서나 쓸 수 있게 �
 geode setup
 ```
 
-Wizard 가 세 가지 경로를 제시합니다: ChatGPT 구독 (이미 `codex auth login` 했다면 자동 감지), API 키 (붙여넣기), dry-run 으로 일단 둘러보기. 본인에 맞는 걸 고르면 됩니다.
+Wizard 가 세 가지 경로를 제시합니다: ChatGPT 구독, API 키 (붙여넣기), dry-run 으로 일단 둘러보기. 기존 `~/.codex/auth.json` 자격도 가져올 수 있지만, 추론을 위해 Codex CLI를 실행하지는 않습니다.
 
-GEODE 설치 전에 이미 `codex auth login` 을 해뒀다면 이 단계 건너뛰어도 됩니다 — 다음 `geode` 실행 시 토큰을 자동 감지하고 바로 시작합니다.
+GEODE 설치 전에 이미 `codex auth login` 을 해뒀다면 다음 `geode` 실행에서 토큰을 감지할 수 있습니다. 그 외에는 Codex CLI 설치가 필요 없습니다.
 
 ### 3단계 — 경로별 수동 안내 (참고용)
 
@@ -146,12 +146,11 @@ GEODE 설치 전에 이미 `codex auth login` 을 해뒀다면 이 단계 건너
 
 #### Path A — ChatGPT 구독 (OpenAI 사용자에게 권장)
 
-Codex CLI 로 한 번 로그인하면, GEODE 가 `~/.codex/auth.json` 의 토큰을 그대로 가져다 씁니다. 비용은 구독으로 결제되고, 추가로 설정할 게 없습니다.
+GEODE는 `/login openai`로 직접 로그인하고 프로세스 내부 `codex-oauth` 어댑터로 ChatGPT 백엔드를 호출합니다. 기존 `~/.codex/auth.json` 자격을 읽을 수도 있지만 Codex CLI 실행 파일을 호출하지는 않습니다.
 
 ```bash
-brew install codex                    # macOS  (또는: npm install -g @openai/codex)
-codex auth login                      # 브라우저가 열립니다. ChatGPT 계정으로 로그인.
-geode                                 # 끝. GEODE 가 토큰을 자동으로 찾습니다.
+geode                                 # GEODE 시작
+# 세션 안에서: /login openai         # ChatGPT device-code 로그인
 ```
 
 **지원 플랜** ([Codex CLI 공식 문서](https://developers.openai.com/codex/cli/) 기준): Plus, Pro, Business, Edu, Enterprise.
@@ -160,7 +159,7 @@ geode                                 # 끝. GEODE 가 토큰을 자동으로 �
 
 **참고할 점**:
 - **gpt-5.5 는 구독 전용입니다.** GPT-5.6 Sol/Terra/Luna와 GPT-5.4는 듀얼 레인입니다. 구독 프로필이 활성화되면 ChatGPT OAuth, API 키 프로필을 선택하면 Platform API를 사용합니다. 5.5가 필요하면 ChatGPT 구독이 필요합니다.
-- **ChatGPT Team 은 현재 Codex CLI 미지원**. Team 사용자는 Path B 로 가세요.
+- 기존 Codex CLI 자격은 가져올 수 있지만, `codex-cli`는 GEODE 추론 백엔드가 아닙니다.
 - **Free / Go** 는 OpenAI 가격 페이지엔 있지만 CLI README 엔 없습니다. 동작하면 다행, 보장은 안 합니다.
 
 토큰 만료가 임박하면 GEODE 가 알아서 갱신합니다 (만료 120초 전 + 401 재시도). 사용자가 따로 신경 쓸 일은 없습니다.
@@ -220,22 +219,6 @@ geode                                                # 인터랙티브 채팅
 
 성공입니다. 에러가 나면 `geode doctor` 로 진단하거나 [트러블슈팅](#트러블슈팅) 으로.
 
-### 선택 — Google Workspace 연결
-
-GEODE v1.0.0은 직접 소유한 Google Desktop OAuth 클라이언트로 Gmail,
-Calendar, Drive, Docs, Sheets, Tasks, Contacts를 사용할 수 있습니다.
-`geode`를 시작한 뒤 권장 슬래시 명령을 실행하세요.
-
-```text
-> /login google
-```
-
-화면에서 내려받은 client JSON과 최소 권한 서비스 번들을 고릅니다. Google
-Cloud 콘솔 설정, External Testing의 7일 만료, 멀티 계정 명령, 저장 스키마,
-매 호출 동의 경계는 [Google Workspace 연결 가이드](https://mangowhoiscloud.github.io/geode/docs/run/google-workspace)에
-정리돼 있습니다. v1.0.0의 `workspace-files`는 GEODE로 만든 파일을 지원하며,
-기존 파일을 고르는 Google Picker는 아직 포함하지 않습니다.
-
 ### 그 외 유용한 명령
 
 ```bash
@@ -246,6 +229,9 @@ geode update --latest # uv 패키지의 minor/major 업데이트를 명시적으
 geode uninstall       # 런타임 데이터와 설치된 CLI 제거
 geode setup --reset   # ~/.geode/.env 지우고 wizard 재실행
 ```
+
+선택 통합: `/login google`로 Gmail, Calendar, Drive, Docs, Sheets, Tasks,
+Contacts를 연결할 수 있습니다. [Google Workspace 연결 가이드](https://mangowhoiscloud.github.io/geode/docs/run/google-workspace)를 참고하세요.
 
 ---
 
@@ -453,7 +439,7 @@ geode update --latest # uv 도구: minor/major 업데이트를 명시적으로 �
 |------|------|
 | **`while(tool_use)` 루프** | 모든 자율 행동의 단일 원시 동작. 서브에이전트, 플랜, 배치 모두 같은 루프의 인스턴스 |
 | **실험적 scaffold 최적화 loop** | scaffold 후보를 변이시키고 적대적 안전성 루브릭으로 audit한 뒤, 실제 이득이 있을 때만 승격을 허용합니다. 공개 기록은 현재 지속적 개선보다 게이트 규율을 입증합니다. [closed loop](https://mangowhoiscloud.github.io/geode/docs/capabilities/autoresearch) 참고 |
-| **Agentic tools + MCP 카탈로그** | 웹 검색, 파일 작업, 스케줄링, 메모리, Slack/Discord, [사용자 소유 Google OAuth](https://mangowhoiscloud.github.io/geode/docs/run/google-workspace)를 통한 Gmail·Calendar·Drive·Docs·Sheets·Tasks·Contacts, 그리고 Anthropic 발행 MCP 레지스트리 (`~/.geode/mcp/registry-cache.json` 에 캐시). 첫 사용 시 자동 설치 |
+| **Agentic tools + MCP 카탈로그** | 웹 검색, 파일 작업, 스케줄링, 메모리, Slack/Discord, Anthropic 발행 MCP 레지스트리, 선택형 [Google Workspace](https://mangowhoiscloud.github.io/geode/docs/run/google-workspace) 통합. MCP 메타데이터는 `~/.geode/mcp/registry-cache.json`에 캐시 |
 | **3-프로바이더 페일오버** | Anthropic + OpenAI + ZhipuAI. ChatGPT / Claude 구독 OAuth 자동 감지; 사용량 과금 API 키도 사용 가능; 페일오버는 동일 프로바이더 내에서만 (예상치 못한 vendor 횡단 과금 없음, v0.53.0 거버넌스) |
 | **5-tier 메모리** | SOUL (0) → User Profile (0.5) → Organization (1) → Project (2) → Session (3). 영속화, 데몬 재시작 후에도 유지 |
 | **Plan-mode + audit trail** | `create_plan` + `approve_plan` + `list_plans` 로 다단계 작업 관리. 디스크 영구화 (`.geode/plans.json`), 재시작 후에도 유지 |
@@ -547,7 +533,7 @@ frontier 하네스 (Claude Code, Codex CLI, OpenClaw) 옆에서 GEODE 가 어디
 | **교체 가능한 파이프라인 DAG** | ❌ | ❌ | ⚠️ flows (channel-setup / doctor / provider — DAG 추상화 아님) | ⚠️ 외부 패키지 책임. GEODE core 는 더 이상 파이프라인 포트를 제공하지 않음 |
 | 트레이스 / 리플레이 / Run Log | ✅ `tengu_*` 텔레메트리 + `/insights` HTML | ⚠️ `/status` + `/debug-config` 만 | ✅ ACP 세션 lineage + Task Registry | ✅ 자체 RunLog + Petri eval 통합 |
 | 안전성 게이트 기반 scaffold 최적화 | ❌ | ❌ | ❌ | ⚠️ 실험적 outer loop: scaffold 변이 + 적대적 안전성 audit + (1+1) promote/revert 계약, 공개 core 승격 0건 |
-| 크로스 프로바이더 리뷰 | ❌ | ❌ | ❌ | ⚠️ self-improving 루프의 멀티-voter 크로스 프로바이더 랭킹 패널 (≥2 providers, `plugins/seed_generation/agents/ranker.py`); 일치도 캘리브레이션은 WIP |
+| 크로스 프로바이더 리뷰 | ❌ | ❌ | ❌ | ⚠️ self-improving 루프의 멀티-voter 크로스 프로바이더 랭킹 패널 (≥2 providers, `geode_product/seed_generation/agents/ranker.py`); 일치도 캘리브레이션은 WIP |
 
 </details>
 

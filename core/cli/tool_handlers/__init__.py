@@ -36,12 +36,11 @@ sub-module — see ``tests/core/orchestration/test_plan_mode.py`` for the fixtur
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any
 
-from core.cli.tool_handlers.audit import _build_audit_handlers
 from core.cli.tool_handlers.clarification import (
     _clarify,
     _safe_delegate,
@@ -51,6 +50,7 @@ from core.cli.tool_handlers.delegated import (
     _DELEGATED_TOOLS,
     _build_delegated_handlers,
     _make_delegate_handler,
+    make_delegate_handler,
 )
 from core.cli.tool_handlers.execution import _build_execution_handlers
 from core.cli.tool_handlers.goal import _build_goal_handlers
@@ -76,7 +76,6 @@ from core.cli.tool_handlers.task import _build_task_handlers
 __all__ = [
     "_DELEGATED_TOOLS",
     "_PLAN_STORE",
-    "_build_audit_handlers",
     "_build_calendar_handlers",
     "_build_computer_use_handler",
     "_build_context_handlers",
@@ -100,6 +99,8 @@ __all__ = [
     "_get_plan_store",
     "_make_delegate_handler",
     "_safe_delegate",
+    "build_tool_handlers",
+    "make_delegate_handler",
 ]
 
 
@@ -179,6 +180,8 @@ def _build_tool_handler_catalog(
     *,
     mcp_manager: Any = None,
     skill_registry: Any = None,
+    command_registry: Any = None,
+    extra_groups: Iterable[tuple[str, UniqueEntries[str, Any]]] = (),
 ) -> _ToolHandlerCatalog:
     """Build the collision-checked handler catalog used by ToolExecutor."""
     from core.cli import _get_readiness
@@ -191,7 +194,10 @@ def _build_tool_handler_catalog(
     registrar.add("plan", _build_plan_handlers(force_dry))
     registrar.add("goal", _build_goal_handlers())
     registrar.add("hitl", _build_hitl_handlers())
-    registrar.add("system", _build_system_handlers(readiness, force_dry, mcp_manager))
+    registrar.add(
+        "system",
+        _build_system_handlers(readiness, force_dry, mcp_manager, command_registry),
+    )
     registrar.add("execution", _build_execution_handlers())
     registrar.add("math", _build_math_handlers())
     registrar.add("data", _build_data_handlers())
@@ -204,9 +210,10 @@ def _build_tool_handler_catalog(
     registrar.add("task", _build_task_handlers())
     registrar.add("offload", _build_offload_handlers())
     registrar.add("computer-use", _build_computer_use_handler())
-    registrar.add("audit", _build_audit_handlers())
     registrar.add("observability", _build_observability_handlers())
     registrar.add("skill", _build_use_skill_handler(skill_registry))
+    for source, handlers in extra_groups:
+        registrar.add(source, handlers)
     return registrar.snapshot()
 
 
@@ -215,6 +222,8 @@ def _build_tool_handlers(
     *,
     mcp_manager: Any = None,
     skill_registry: Any = None,
+    command_registry: Any = None,
+    extra_groups: Iterable[tuple[str, UniqueEntries[str, Any]]] = (),
 ) -> dict[str, Any]:
     """Build the backwards-compatible handler mapping for ToolExecutor.
 
@@ -229,5 +238,12 @@ def _build_tool_handlers(
     catalog = _build_tool_handler_catalog(
         mcp_manager=mcp_manager,
         skill_registry=skill_registry,
+        command_registry=command_registry,
+        extra_groups=extra_groups,
     )
     return dict(catalog.handlers)
+
+
+# Stable composition boundary for the product shell.  The private alias stays
+# available to the existing kernel/test surface during the package migration.
+build_tool_handlers = _build_tool_handlers

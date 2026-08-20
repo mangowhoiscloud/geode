@@ -33,16 +33,13 @@ class ModelProfile:
     cost: str  # relative cost indicator
 
 
-# v0.53.0 — provider labels are CANONICAL provider IDs (matching
-# /login dashboard + auth.toml), not marketing names. Pre-fix:
-# "Codex (Plus)" label vs "openai-codex" provider ID mismatch caused
-# user confusion. Auth-mode (OAuth vs PAYG) is NOT in the picker —
-# the system auto-resolves at LLM call time via resolve_routing()
-# based on the user's active /login state.
+# Model rows expose provider families, not endpoint/auth variants. ChatGPT
+# subscription OAuth and PAYG are OpenAI sources selected at call time by
+# ``resolve_routing()``; ``openai-codex`` remains the subscription route name.
 #
 # Label = canonical provider ID + cost ($) tier.
-# `gpt-5.5` routes to `openai-codex`; dual-lane OpenAI rows keep provider
-# `openai` and let the credential source select subscription versus PAYG.
+# Every GPT row uses the OpenAI provider family; credential source selects
+# ChatGPT subscription versus PAYG.
 
 # GLM picker rows: id → display label. The live default (GLM_PRIMARY) leads the
 # GLM block and the rest follow, with the default skipped from the tail so an
@@ -62,13 +59,13 @@ _OPENAI_PICKER_MODELS: tuple[ModelProfile, ...] = (
     ModelProfile("gpt-5.6-sol", "openai", "GPT-5.6 Sol", "$$"),
     ModelProfile("gpt-5.6-terra", "openai", "GPT-5.6 Terra", "$$"),
     ModelProfile("gpt-5.6-luna", "openai", "GPT-5.6 Luna", "$"),
-    # GPT-5.5 is subscription-only.
-    ModelProfile("gpt-5.5", "openai-codex", "GPT-5.5", "$$"),
+    # GPT-5.5 is subscription-only, but still belongs to the OpenAI family.
+    ModelProfile("gpt-5.5", "openai", "GPT-5.5", "$$"),
     # GPT-5.4 and Mini are dual-lane.
     ModelProfile("gpt-5.4", "openai", "GPT-5.4", "$$"),
     ModelProfile("gpt-5.4-mini", "openai", "GPT-5.4 Mini", "$"),
     # One-release management compatibility for persisted installations.
-    ModelProfile("gpt-5.3-codex", "openai-codex", "GPT-5.3 Codex (Legacy)", "$$"),
+    ModelProfile("gpt-5.3-codex", "openai", "GPT-5.3 Codex (Legacy)", "$$"),
 )
 
 
@@ -316,16 +313,10 @@ COMMAND_MAP: dict[str, str] = {
     "/tasks": "tasks",
     "/task": "tasks",
     "/t": "tasks",
-    "/audit": "audit",
-    "/audit-seeds": "audit-seeds",
-    "/petri": "petri",
-    "/self-improving": "self-improving",
-    "/sil": "self-improving",
-    "/recall": "recall",
 }
 
 
-def show_help() -> None:
+def show_help(command_registry: _Any = None) -> None:
     """Show interactive mode help."""
     console.print()
     console.print("  [header]Commands[/header]")
@@ -337,9 +328,6 @@ def show_help() -> None:
     console.print("  [label]/login add[/label]          — Interactive plan/key wizard")
     console.print("  [label]/key[/label] <value>        — Quick PAYG API key (legacy alias)")
     console.print("  [label]/model[/label]              — Show & switch LLM model")
-    console.print(
-        "  [label]/petri[/label]              — Show & switch Petri role × model × source"
-    )
     console.print("  [label]/login source[/label] <p> <t> — Pick credential source per provider")
     console.print("  [label]/schedule[/label]           — Manage scheduled automations")
     console.print("  [label]/trigger[/label]            — Manage event/cron triggers")
@@ -354,11 +342,16 @@ def show_help() -> None:
     console.print("  [label]/context[/label]            — Show assembled context tiers")
     console.print("  [label]/apply[/label]              — Manage job applications")
     console.print("  [label]/tasks[/label]              — Show task list")
-    console.print("  [label]/recall[/label]             — Memory-recall pool (list/show/save)")
     console.print("  [label]/compact[/label]            — Compact conversation context")
     console.print("  [label]/clear[/label]              — Clear conversation history")
     console.print("  [label]/help[/label]               — Show this help")
     console.print("  [label]/quit[/label]               — Exit GEODE")
+
+    from core.cli.routing import COMMAND_REGISTRY
+
+    for spec in (COMMAND_REGISTRY if command_registry is None else command_registry).values():
+        if spec.name not in COMMAND_MAP:
+            console.print(f"  [label]{spec.name}[/label] — {spec.description}")
 
     console.print()
     console.print("  [muted]Or just type naturally to interact with the agent.[/muted]")
@@ -393,10 +386,8 @@ def model_available(model_id: str) -> bool:
     """
     try:
         from core.llm.strategies.plan_registry import resolve_routing
-        from core.wiring.bootstrap import build_product_policy_sources
 
-        sources = build_product_policy_sources().get("provider_routing")
-        return resolve_routing(model_id, sources=sources) is not None
+        return resolve_routing(model_id, sources=None) is not None
     except Exception:
         return False
 

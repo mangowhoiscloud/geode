@@ -12,9 +12,9 @@ from pathlib import Path
 from typing import Literal
 
 import pytest
-from plugins.crucible.bundle import PromotionBundle
-from plugins.crucible.cli import main as crucible_main
-from plugins.crucible.contract import (
+from geode_product.crucible.bundle import PromotionBundle
+from geode_product.crucible.cli import main as crucible_main
+from geode_product.crucible.contract import (
     ExperimentContract,
     Mutation,
     TaskUnit,
@@ -23,10 +23,10 @@ from plugins.crucible.contract import (
     task_pack_sha256,
     tracked_tree_sha256,
 )
-from plugins.crucible.evidence import EvidenceEnvelope, ResourceUsage
-from plugins.crucible.ref_journal import load_receipt
-from plugins.crucible.runtime_receipt import SharedRuntimeDeadline, runtime_artifact_bindings
-from plugins.crucible.supervisor import (
+from geode_product.crucible.evidence import EvidenceEnvelope, ResourceUsage
+from geode_product.crucible.ref_journal import load_receipt
+from geode_product.crucible.runtime_receipt import SharedRuntimeDeadline, runtime_artifact_bindings
+from geode_product.crucible.supervisor import (
     CandidateProposal,
     FailureFeedback,
     GitWorkspace,
@@ -75,9 +75,11 @@ def test_role_process_sigterm_reaps_its_session(
         if signum == signal.SIGTERM:
             process.stopped = True
 
-    monkeypatch.setattr("plugins.crucible.supervisor.subprocess.Popen", lambda *a, **kw: process)
-    monkeypatch.setattr("plugins.crucible.supervisor.signal.signal", install)
-    monkeypatch.setattr("plugins.crucible.supervisor.os.killpg", kill_group)
+    monkeypatch.setattr(
+        "geode_product.crucible.supervisor.subprocess.Popen", lambda *a, **kw: process
+    )
+    monkeypatch.setattr("geode_product.crucible.supervisor.signal.signal", install)
+    monkeypatch.setattr("geode_product.crucible.supervisor.os.killpg", kill_group)
 
     with pytest.raises(SystemExit, match=str(128 + signal.SIGTERM)):
         _run_process(
@@ -1086,7 +1088,7 @@ def test_failed_keep_cas_leaves_a_record_but_no_receipt_or_ledger(
         assert receipt_path.name == "search-ref.receipt.json"
         raise SupervisorError("fixture CAS conflict")
 
-    monkeypatch.setattr("plugins.crucible.supervisor.reconcile_ref_update", fail_reconcile)
+    monkeypatch.setattr("geode_product.crucible.supervisor.reconcile_ref_update", fail_reconcile)
     with pytest.raises(SupervisorError, match="CAS conflict"):
         PromotionSupervisor(
             config,

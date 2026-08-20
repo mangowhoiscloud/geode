@@ -26,9 +26,9 @@ CLI와 메신저(Slack, Discord, Telegram)에서 수행한다. 자기개선 루�
 → margin 게이트 → 승격 또는 되돌림 (옵티마이저 = git champion chain)
 ```
 
-근거 코드: `core/self_improving/train.py`(루프 드라이버),
+근거 코드: `geode_product/self_improving/train.py`(루프 드라이버),
 `measure.py` / `fitness.py` / `gate.py` / `ledger.py`(장비),
-`core/self_improving/loop/{mutate,observe,inject}`(Mode B 런타임).
+`geode_product/self_improving/loop/{mutate,observe,inject}`(Mode B 런타임).
 
 | 구분 | 공식 어휘 | 금지 어휘 |
 |------|----------|----------|

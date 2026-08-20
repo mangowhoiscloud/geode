@@ -33,14 +33,14 @@ def _make_tool_info(name: str = "send_message") -> Any:
 
 
 def test_allowed_tool_names_prefixes_with_server() -> None:
-    from plugins.petri_audit.mcp_bridge.lifecycle import allowed_tool_names
+    from geode_product.petri_audit.mcp_bridge.lifecycle import allowed_tool_names
 
     out = allowed_tool_names(["send_message", "resume"], server_name="bridge")
     assert out == ["mcp__bridge__send_message", "mcp__bridge__resume"]
 
 
 def test_strip_mcp_prefix_inverse() -> None:
-    from plugins.petri_audit.mcp_bridge.lifecycle import allowed_tool_names, strip_mcp_prefix
+    from geode_product.petri_audit.mcp_bridge.lifecycle import allowed_tool_names, strip_mcp_prefix
 
     decorated = allowed_tool_names(["send_message"], server_name="bridge")
     assert [strip_mcp_prefix(d, server_name="bridge") for d in decorated] == ["send_message"]
@@ -52,7 +52,7 @@ def test_strip_mcp_prefix_passthrough_when_no_match() -> None:
     The auditor's tool dispatcher matches on the bare name; a stripper
     that mangles unrelated names would silently break passthrough
     consumers."""
-    from plugins.petri_audit.mcp_bridge.lifecycle import strip_mcp_prefix
+    from geode_product.petri_audit.mcp_bridge.lifecycle import strip_mcp_prefix
 
     assert strip_mcp_prefix("plain_tool", server_name="bridge") == "plain_tool"
     # Wrong server → passthrough (defensive)
@@ -65,7 +65,7 @@ def test_strip_mcp_prefix_passthrough_when_no_match() -> None:
 
 
 def test_build_mcp_config_default_uses_sys_executable(tmp_path: Path) -> None:
-    from plugins.petri_audit.mcp_bridge.lifecycle import build_mcp_config
+    from geode_product.petri_audit.mcp_bridge.lifecycle import build_mcp_config
 
     cfg = build_mcp_config(
         server_name="bridge",
@@ -73,12 +73,12 @@ def test_build_mcp_config_default_uses_sys_executable(tmp_path: Path) -> None:
     )
     bridge = cfg["mcpServers"]["bridge"]  # type: ignore[index]
     assert bridge["command"] == sys.executable
-    assert bridge["args"] == ["-m", "plugins.petri_audit.mcp_bridge.bridge_server"]
+    assert bridge["args"] == ["-m", "geode_product.petri_audit.mcp_bridge.bridge_server"]
     assert bridge["env"]["GEODE_AUDIT_BRIDGE_TOOLS_JSON"] == str(tmp_path / "tools.json")
 
 
 def test_build_mcp_config_python_bin_override(tmp_path: Path) -> None:
-    from plugins.petri_audit.mcp_bridge.lifecycle import build_mcp_config
+    from geode_product.petri_audit.mcp_bridge.lifecycle import build_mcp_config
 
     cfg = build_mcp_config(
         server_name="bridge",
@@ -89,7 +89,7 @@ def test_build_mcp_config_python_bin_override(tmp_path: Path) -> None:
 
 
 def test_build_mcp_config_custom_server_name(tmp_path: Path) -> None:
-    from plugins.petri_audit.mcp_bridge.lifecycle import build_mcp_config
+    from geode_product.petri_audit.mcp_bridge.lifecycle import build_mcp_config
 
     cfg = build_mcp_config(
         server_name="alt",
@@ -105,7 +105,7 @@ def test_build_mcp_config_custom_server_name(tmp_path: Path) -> None:
 
 
 def test_prepare_bridge_creates_tempdir_with_two_files(tmp_path: Path) -> None:
-    from plugins.petri_audit.mcp_bridge.lifecycle import prepare_bridge, release_bridge
+    from geode_product.petri_audit.mcp_bridge.lifecycle import prepare_bridge, release_bridge
 
     tools = [_make_tool_info(f"t_{i}") for i in range(3)]
     inv = prepare_bridge(tools, base_tmp_dir=tmp_path)
@@ -124,8 +124,8 @@ def test_prepare_bridge_creates_tempdir_with_two_files(tmp_path: Path) -> None:
 
 
 def test_prepare_bridge_tools_json_round_trips(tmp_path: Path) -> None:
-    from plugins.petri_audit.mcp_bridge.lifecycle import prepare_bridge, release_bridge
-    from plugins.petri_audit.mcp_bridge.tool_translator import deserialise_tool_specs
+    from geode_product.petri_audit.mcp_bridge.lifecycle import prepare_bridge, release_bridge
+    from geode_product.petri_audit.mcp_bridge.tool_translator import deserialise_tool_specs
 
     tools = [_make_tool_info("send_message")]
     inv = prepare_bridge(tools, base_tmp_dir=tmp_path)
@@ -138,7 +138,7 @@ def test_prepare_bridge_tools_json_round_trips(tmp_path: Path) -> None:
 
 
 def test_prepare_bridge_mcp_config_points_at_tools_json(tmp_path: Path) -> None:
-    from plugins.petri_audit.mcp_bridge.lifecycle import prepare_bridge, release_bridge
+    from geode_product.petri_audit.mcp_bridge.lifecycle import prepare_bridge, release_bridge
 
     inv = prepare_bridge([_make_tool_info()], base_tmp_dir=tmp_path)
     try:
@@ -151,7 +151,7 @@ def test_prepare_bridge_mcp_config_points_at_tools_json(tmp_path: Path) -> None:
 
 def test_prepare_bridge_each_call_isolates_to_own_dir(tmp_path: Path) -> None:
     """Parallel inspect_ai samples must not race on shared paths."""
-    from plugins.petri_audit.mcp_bridge.lifecycle import prepare_bridge, release_bridge
+    from geode_product.petri_audit.mcp_bridge.lifecycle import prepare_bridge, release_bridge
 
     inv_a = prepare_bridge([_make_tool_info()], base_tmp_dir=tmp_path)
     inv_b = prepare_bridge([_make_tool_info()], base_tmp_dir=tmp_path)
@@ -164,7 +164,7 @@ def test_prepare_bridge_each_call_isolates_to_own_dir(tmp_path: Path) -> None:
 
 
 def test_release_bridge_removes_tempdir(tmp_path: Path) -> None:
-    from plugins.petri_audit.mcp_bridge.lifecycle import prepare_bridge, release_bridge
+    from geode_product.petri_audit.mcp_bridge.lifecycle import prepare_bridge, release_bridge
 
     inv = prepare_bridge([_make_tool_info()], base_tmp_dir=tmp_path)
     assert inv.work_dir.exists()
@@ -176,7 +176,7 @@ def test_release_bridge_tolerates_already_removed(tmp_path: Path) -> None:
     """Double-release must not raise — defensive for finally-block re-entry."""
     import shutil
 
-    from plugins.petri_audit.mcp_bridge.lifecycle import prepare_bridge, release_bridge
+    from geode_product.petri_audit.mcp_bridge.lifecycle import prepare_bridge, release_bridge
 
     inv = prepare_bridge([_make_tool_info()], base_tmp_dir=tmp_path)
     shutil.rmtree(inv.work_dir, ignore_errors=True)
@@ -187,7 +187,7 @@ def test_release_bridge_tolerates_already_removed(tmp_path: Path) -> None:
 def test_release_bridge_keep_temp_env_preserves_dir(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from plugins.petri_audit.mcp_bridge.lifecycle import (
+    from geode_product.petri_audit.mcp_bridge.lifecycle import (
         BRIDGE_KEEP_TEMP_ENV,
         prepare_bridge,
         release_bridge,
@@ -209,7 +209,7 @@ def test_release_bridge_keep_temp_env_preserves_dir(
 def test_prepare_bridge_empty_tool_list(tmp_path: Path) -> None:
     """Edge case — empty tools is technically valid (text-only path
     should NOT reach here, but defensive coding catches misroutes)."""
-    from plugins.petri_audit.mcp_bridge.lifecycle import prepare_bridge, release_bridge
+    from geode_product.petri_audit.mcp_bridge.lifecycle import prepare_bridge, release_bridge
 
     inv = prepare_bridge([], base_tmp_dir=tmp_path)
     try:
@@ -222,7 +222,7 @@ def test_prepare_bridge_empty_tool_list(tmp_path: Path) -> None:
 
 def test_prepare_bridge_default_tmpdir_when_none(tmp_path: Path) -> None:
     """When base_tmp_dir is None, prepare_bridge uses the system tempdir."""
-    from plugins.petri_audit.mcp_bridge.lifecycle import prepare_bridge, release_bridge
+    from geode_product.petri_audit.mcp_bridge.lifecycle import prepare_bridge, release_bridge
 
     inv = prepare_bridge([_make_tool_info()])
     try:
@@ -235,7 +235,7 @@ def test_prepare_bridge_default_tmpdir_when_none(tmp_path: Path) -> None:
 
 
 def test_prepare_bridge_unicode_tool_names(tmp_path: Path) -> None:
-    from plugins.petri_audit.mcp_bridge.lifecycle import prepare_bridge, release_bridge
+    from geode_product.petri_audit.mcp_bridge.lifecycle import prepare_bridge, release_bridge
 
     inv = prepare_bridge([_make_tool_info("시작")], base_tmp_dir=tmp_path)
     try:
@@ -254,7 +254,7 @@ def test_lifecycle_does_not_leak_files_on_environ_cleared(
     monkeypatch.delenv("GEODE_AUDIT_BRIDGE_KEEP_TEMP", raising=False)
     assert "GEODE_AUDIT_BRIDGE_KEEP_TEMP" not in os.environ
 
-    from plugins.petri_audit.mcp_bridge.lifecycle import prepare_bridge, release_bridge
+    from geode_product.petri_audit.mcp_bridge.lifecycle import prepare_bridge, release_bridge
 
     inv = prepare_bridge([_make_tool_info()], base_tmp_dir=tmp_path)
     release_bridge(inv)

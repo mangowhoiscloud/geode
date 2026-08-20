@@ -18,7 +18,7 @@ export default function Page() {
               자동 트리거는 자기개선 루프의 변이 러너
               (<code>SelfImprovingLoopRunner.run_once</code>)를 스케줄러에 연결해,
               키보드 앞에 운영자가 없어도 루프가 cron 주기로 도는 사이드카입니다.
-              구현은 <code>core/self_improving/loop/auto_trigger.py</code>,
+              구현은 <code>geode_product/self_improving/loop/auto_trigger.py</code>,
               배선은 <code>core/wiring/scheduling.py</code>의{" "}
               <code>build_scheduling</code>입니다.
             </p>
@@ -111,7 +111,7 @@ status dict 반환 (절대 raise하지 않음) + 히스토리 append`}</pre>
               (<code>SelfImprovingLoopRunner.run_once</code>) to the scheduler,
               so the loop fires on a cron cadence without an operator at the
               keyboard. The implementation is{" "}
-              <code>core/self_improving/loop/auto_trigger.py</code>; the wiring
+              <code>geode_product/self_improving/loop/auto_trigger.py</code>; the wiring
               is <code>build_scheduling</code> in{" "}
               <code>core/wiring/scheduling.py</code>.
             </p>

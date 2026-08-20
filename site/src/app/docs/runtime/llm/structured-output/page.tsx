@@ -91,11 +91,6 @@ task = SubTask(..., response_schema=DECISION_SCHEMA)`}</pre>
                   <td>CLI subprocess 경계에서 schema flag를 전달</td>
                 </tr>
                 <tr>
-                  <td><code>codex-cli</code></td>
-                  <td>임시 JSON 파일을 만든 뒤 <code>--output-schema &lt;FILE&gt;</code></td>
-                  <td>subprocess 종료 뒤 임시 파일 삭제</td>
-                </tr>
-                <tr>
                   <td><code>anthropic-payg</code><br /><code>anthropic-oauth</code></td>
                   <td>현재 공통 Messages request builder가 읽지 않음</td>
                   <td>schema field는 무시됨. JSON discipline이 필요하면 caller prompt와 downstream validation이 별도로 필요</td>
@@ -258,7 +253,6 @@ task = SubTask(..., response_schema=DECISION_SCHEMA)`}</pre>
               <tbody>
                 <tr><td><code>openai-payg</code><br /><code>codex-oauth</code></td><td>Responses API <code>json_schema</code> under <code>text.format</code></td><td><code>strict=true</code> when compatible; otherwise a <code>strict=false</code> hint</td></tr>
                 <tr><td><code>claude-cli</code></td><td><code>--json-schema &lt;inline JSON&gt;</code></td><td>Passes the schema flag at the CLI subprocess boundary</td></tr>
-                <tr><td><code>codex-cli</code></td><td>Writes a temporary JSON file, then <code>--output-schema &lt;FILE&gt;</code></td><td>Deletes the temporary file after the subprocess exits</td></tr>
                 <tr><td><code>anthropic-payg</code><br /><code>anthropic-oauth</code></td><td>The shared Messages request builder does not currently read it</td><td>The schema field is ignored; JSON discipline requires a caller prompt and downstream validation</td></tr>
                 <tr><td><code>glm-payg</code><br /><code>glm-coding-plan</code></td><td>The Chat Completions request builders do not currently read it</td><td>No provider-side schema enforcement on these paths</td></tr>
               </tbody>

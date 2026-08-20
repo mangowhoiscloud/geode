@@ -2,11 +2,20 @@
 
 > [English](provider-login.md) | **한국어**
 
+> **상태: 폐기된 과거 설계.** 현재 런타임 정책은 OpenAI device-code OAuth
+> 또는 PAYG, 그리고 지원되는 Claude CLI 브리지 또는 Anthropic PAYG입니다.
+> GEODE는 더 이상 Anthropic PKCE client를 직접 소유하거나 raw Claude OAuth
+> token을 SDK provider로 읽지 않으며 `codex-cli` 추론 backend도 노출하지
+> 않습니다. 아래 본문은 현재 권위가 아니라 결정 이력으로만 보존합니다.
+
 > GEODE의 LLM provider별 credential 획득 경로에 대한 정합 spec입니다.
-> OpenAI(Codex CLI Plus)와 Anthropic(Claude subscription)의 OAuth flow는
+> OpenAI(ChatGPT 구독)와 Anthropic(Claude subscription)의 OAuth flow는
 > 동일한 owned-credential 패턴을 따릅니다. `~/.geode/auth.toml`이 SOT이고,
 > GEODE가 직접 OAuth client 역할을 하며, claude CLI 같은 외부 binary
 > 의존성은 없습니다.
+
+기존 `~/.codex/auth.json` 자격은 가져올 수 있지만, 폐기된 `codex-cli`
+추론 백엔드는 실행하지 않습니다.
 
 ## 1. 두 provider의 정합 -- owned-credential 패턴
 

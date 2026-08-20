@@ -58,6 +58,34 @@ def _extract_account_id(token: str) -> str:
     return str(auth_claim.get("chatgpt_account_id", "")) if isinstance(auth_claim, dict) else ""
 
 
+def get_codex_oauth_metadata() -> dict[str, object] | None:
+    """Return plan/account metadata from the currently resolved Codex JWT."""
+    try:
+        token = resolve_codex_token()
+    except Exception:
+        return None
+    payload = decode_jwt_claims(token)
+    if not payload:
+        return None
+    auth_claim = payload.get("https://api.openai.com/auth", {})
+    if not isinstance(auth_claim, dict):
+        auth_claim = {}
+    return {
+        "plan_type": auth_claim.get("chatgpt_plan_type"),
+        "account_id": auth_claim.get("chatgpt_account_id"),
+        "user_id": auth_claim.get("chatgpt_user_id"),
+        "expires_at": payload.get("exp"),
+    }
+
+
+def is_codex_oauth_available() -> bool:
+    """Return whether the Codex OAuth source currently resolves."""
+    try:
+        return bool(resolve_codex_token())
+    except Exception:
+        return False
+
+
 def build_codex_oauth_headers(token: str) -> dict[str, str]:
     """Build the headers Codex OAuth requires on every Responses-API call.
 
@@ -146,7 +174,7 @@ def _resolve_codex_token_info(*, force_refresh: bool = False) -> _ResolvedCodexT
     return None
 
 
-def _resolve_codex_token() -> str:
+def resolve_codex_token() -> str:
     """Resolve Codex OAuth token."""
     resolved = _resolve_codex_token_info(force_refresh=True)
     return resolved.token if resolved else ""

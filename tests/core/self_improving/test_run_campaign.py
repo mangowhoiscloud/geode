@@ -1,6 +1,6 @@
-"""Unit tests for the self-improving campaign driver (``core/self_improving/campaign.py``).
+"""Unit tests for the self-improving campaign driver.
 
-PR-CAMPAIGN-DRIVER (2026-05-31); relocated under the ``core.self_improving``
+PR-CAMPAIGN-DRIVER (2026-05-31); relocated under the ``geode_product.self_improving``
 umbrella by PR-SELF-IMPROVING-UMBRELLA (2026-05-31). NO live audits — every
 boundary is mocked:
 the mutator ``propose()``, the ``train.py`` subprocess, ``read_eval_log``, and
@@ -27,16 +27,16 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-import core.self_improving.campaign as rc
+import geode_product.self_improving.campaign as rc
 import pytest
-from core.self_improving.loop.mutate.mutator_feedback import (
+from geode_product.self_improving.loop.mutate.mutator_feedback import (
     RepetitionFinding,
     RepetitiveMutationError,
 )
-from core.self_improving.loop.mutate.runner import Mutation, Proposal
+from geode_product.self_improving.loop.mutate.runner import Mutation, Proposal
 
 # tests/core/self_improving/test_run_campaign.py → parents[3] = repo root (where ``core/`` is importable
-# so ``python -m core.self_improving.campaign`` / ``…train`` resolve their package).
+# so ``python -m geode_product.self_improving.campaign`` / ``…train`` resolve their package).
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
 # ---------------------------------------------------------------------------
@@ -805,7 +805,6 @@ def test_build_campaign_env_sets_fixed_vars() -> None:
         base_env={"ANTHROPIC_API_KEY": "from-operator-shell"},
     )
     assert env["ANTHROPIC_API_KEY"] == "from-operator-shell"
-    assert env["GEODE_CODEX_OAUTH_POLL_DISABLED"] == "1"
     assert env["AUTORESEARCH_SEED_SELECT"] == str(rc.CYCLE_INPUT_POOL)
     assert env["GEODE_HELD_OUT_BENCH"] == str(rc.HELD_OUT_BENCH)
     assert env["GEODE_AUDIT_MAX_SAMPLES"] == "3"
@@ -1062,7 +1061,7 @@ def test_real_campaign_purges_inspect_cache(
 ) -> None:
     """A real (non-dry-run) campaign calls purge_inspect_cache at start so the K
     gen-0 measures + cycle audits are independent re-measures, not cache hits."""
-    import plugins.petri_audit.runner as petri_runner
+    from core.audit import inspect_cache
 
     calls = {"n": 0}
 
@@ -1070,7 +1069,7 @@ def test_real_campaign_purges_inspect_cache(
         calls["n"] += 1
         return True
 
-    monkeypatch.setattr(petri_runner, "purge_inspect_cache", fake_purge)
+    monkeypatch.setattr(inspect_cache, "purge_inspect_cache", fake_purge)
     (campaign_state["policies_dir"] / "hyperparam.json").write_text("{}", encoding="utf-8")
 
     def factory(*, arm: str, env: dict[str, str], dry_run: bool) -> _RecordingRunner:
@@ -1097,7 +1096,7 @@ def test_dry_run_campaign_does_not_purge_inspect_cache(
     campaign_state: dict[str, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """--dry-run never touches the trajectory cache (synthetic audits)."""
-    import plugins.petri_audit.runner as petri_runner
+    from core.audit import inspect_cache
 
     calls = {"n": 0}
 
@@ -1105,7 +1104,7 @@ def test_dry_run_campaign_does_not_purge_inspect_cache(
         calls["n"] += 1
         return True
 
-    monkeypatch.setattr(petri_runner, "purge_inspect_cache", fake_purge)
+    monkeypatch.setattr(inspect_cache, "purge_inspect_cache", fake_purge)
     (campaign_state["policies_dir"] / "hyperparam.json").write_text("{}", encoding="utf-8")
 
     def factory(*, arm: str, env: dict[str, str], dry_run: bool) -> _RecordingRunner:
@@ -1158,27 +1157,25 @@ def test_read_latest_attribution_none_when_absent(campaign_state: dict[str, Path
 # ---------------------------------------------------------------------------
 
 
-def test_campaign_dry_run_via_real_subprocess_completes() -> None:
-    """``python -m core.self_improving.campaign --dry-run`` runs end-to-end green.
+def test_campaign_dry_run_via_real_subprocess_completes(tmp_path: Path) -> None:
+    """``python -m geode_product.self_improving.campaign --dry-run`` runs end-to-end green.
 
     PR-SELF-IMPROVING-UMBRELLA (2026-05-31) relocated the campaign driver +
-    audit runner under ``core.self_improving``. This test exercises the REAL
-    moved import wiring + the ``-m core.self_improving.train`` spawn path the
+    audit runner under ``geode_product.self_improving``. This test exercises the REAL
+    moved import wiring + the ``-m geode_product.self_improving.train`` spawn path the
     way the operator runs it — NOT the mocked-subprocess smoke
     (``test_dry_run_end_to_end_smoke``). It is the "logic didn't break" gate:
     a future move that orphans an import or breaks the
-    ``campaign → -m core.self_improving.train`` spawn fails here, in the normal
+    ``campaign → -m geode_product.self_improving.train`` spawn fails here, in the normal
     ``not live`` suite, with NO network / PAYG spend (``--dry-run`` synthesises
-    every audit). The campaign writes only to the repo's real
-    ``state/autoresearch`` log files in append mode, which is the same
-    behaviour as the operator dry-run; it never promotes (dry-run skips the
-    baseline rewrite + git commit).
+    every audit). Runtime state and logs are redirected to the test directory;
+    dry-run never promotes or commits.
     """
     proc = subprocess.run(  # noqa: S603 — argv is constant, no shell
         [
             sys.executable,
             "-m",
-            "core.self_improving.campaign",
+            "geode_product.self_improving.campaign",
             "--dry-run",
             "--n",
             "1",
@@ -1186,6 +1183,11 @@ def test_campaign_dry_run_via_real_subprocess_completes() -> None:
             "never,random,gate",
         ],
         cwd=str(_REPO_ROOT),
+        env={
+            **os.environ,
+            "GEODE_HOME": str(tmp_path / "home"),
+            "GEODE_STATE_ROOT": str(tmp_path / "state"),
+        },
         capture_output=True,
         text=True,
         check=False,
@@ -1193,7 +1195,7 @@ def test_campaign_dry_run_via_real_subprocess_completes() -> None:
     )
     assert proc.returncode == 0, (
         f"campaign dry-run exited {proc.returncode} — the moved import wiring or "
-        f"the '-m core.self_improving.train' spawn regressed.\n"
+        f"the '-m geode_product.self_improving.train' spawn regressed.\n"
         f"stdout tail:\n{proc.stdout[-2000:]}\n"
         f"stderr tail:\n{proc.stderr[-2000:]}"
     )
@@ -1388,7 +1390,6 @@ def test_build_worker_env_sets_isolated_state_root_and_arm(tmp_path: Path) -> No
     assert env["GEODE_PROMOTE_POLICY"] == "random"
     assert env["GEODE_PROMOTE_POLICY_SEED"] == "777"
     # The PAYG + seed-pool campaign env is layered in too.
-    assert env["GEODE_CODEX_OAUTH_POLL_DISABLED"] == "1"
     # S6 — when no transcript path / worker id is supplied, the isolation env vars
     # are ABSENT (the worker writes the home-dir transcript — sequential default).
     assert "GEODE_RUN_TIMELINE_PATH" not in env
@@ -1976,9 +1977,9 @@ def test_run_campaign_async_first_routes_path_independent_to_async(
     PR-CAMPAIGN-CONCURRENT-CONTROL-ARMS (2026-06-04): never+random now go through
     ONE ``run_control_arms_async`` gather (a SINGLE call carrying BOTH control
     arms), NOT one sequential per-arm call."""
-    import plugins.petri_audit.runner as petri_runner
+    from core.audit import inspect_cache
 
-    monkeypatch.setattr(petri_runner, "purge_inspect_cache", lambda: True)
+    monkeypatch.setattr(inspect_cache, "purge_inspect_cache", lambda: True)
     (campaign_state["policies_dir"] / "hyperparam.json").write_text("{}", encoding="utf-8")
 
     band = rc.NoiseBand(
@@ -2033,9 +2034,9 @@ def test_run_campaign_loads_persisted_checkpoint_for_resume(
     """A REAL campaign REHYDRATES a pre-existing checkpoint file (Codex MCP HIGH):
     ``run_campaign`` must ``.load()`` the marker so a resumed process skips the
     already-completed cycles instead of re-running (re-paying for) every one."""
-    import plugins.petri_audit.runner as petri_runner
+    from core.audit import inspect_cache
 
-    monkeypatch.setattr(petri_runner, "purge_inspect_cache", lambda: True)
+    monkeypatch.setattr(inspect_cache, "purge_inspect_cache", lambda: True)
     (campaign_state["policies_dir"] / "hyperparam.json").write_text("{}", encoding="utf-8")
     # Point the campaign's checkpoint dir at tmp + pre-seed a marker showing some
     # never+random cycles already complete (the run_id matches run_campaign's).
@@ -2101,9 +2102,9 @@ def test_run_campaign_async_first_false_keeps_every_arm_on_sync(
     """async_first=False keeps every arm — incl. never/random — on the legacy
     sequential run_arm and never touches the async harness (the unit-test + smoke
     path is preserved)."""
-    import plugins.petri_audit.runner as petri_runner
+    from core.audit import inspect_cache
 
-    monkeypatch.setattr(petri_runner, "purge_inspect_cache", lambda: True)
+    monkeypatch.setattr(inspect_cache, "purge_inspect_cache", lambda: True)
     (campaign_state["policies_dir"] / "hyperparam.json").write_text("{}", encoding="utf-8")
 
     async def boom_async(**_kw: Any) -> Any:

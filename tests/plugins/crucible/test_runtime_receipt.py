@@ -2,9 +2,9 @@ import json
 from pathlib import Path
 
 import pytest
-from plugins.crucible.contract import ContractError
-from plugins.crucible.runtime_identity import canonical_runtime_hash, runtime_regime_id
-from plugins.crucible.runtime_receipt import SharedRuntimeDeadline, load_runtime_receipt
+from geode_product.crucible.contract import ContractError
+from geode_product.crucible.runtime_identity import canonical_runtime_hash, runtime_regime_id
+from geode_product.crucible.runtime_receipt import SharedRuntimeDeadline, load_runtime_receipt
 
 from tests.plugins.crucible.test_promotion import _contract
 

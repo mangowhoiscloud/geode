@@ -26,10 +26,10 @@ from core.config.policy_source import (
 from core.llm.cache_policy import _load_cache_policy_override
 from core.llm.few_shot_pool import _load_few_shot_pool_override
 from core.llm.strategies.provider_routing_policy import _load_provider_routing_override
-from core.self_improving.loop.inject.in_context_slots import (
+from core.skills.skill_catalog_policy import _load_skill_catalog_override
+from geode_product.self_improving.loop.inject.in_context_slots import (
     _load_in_context_slots_override,
 )
-from core.skills.skill_catalog_policy import _load_skill_catalog_override
 
 _OVERRIDE_ENV = "GEODE_TEST_POLICY_SOURCE_OVERRIDE"
 _STRICT_ENV = "GEODE_TEST_POLICY_SOURCE_STRICT"
@@ -201,26 +201,3 @@ def test_legacy_policy_loader_signature_delegates_to_neutral_loader(
     )
 
     assert result == 3
-
-
-def test_compatibility_facade_reuses_selection_type(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from core.self_improving.loop.mutate.sot_resolution import (
-        SoTSelection,
-        resolve_sot,
-    )
-
-    sources = _sources(tmp_path)
-    packaged_default = _required(sources.packaged_default)
-    packaged_default.write_text("{}", encoding="utf-8")
-    monkeypatch.delenv(_OVERRIDE_ENV, raising=False)
-    monkeypatch.delenv(_STRICT_ENV, raising=False)
-
-    assert SoTSelection is PolicySourceSelection
-    assert resolve_sot(
-        env_var=sources.override_env,
-        operator_local=_required(sources.operator_local),
-        in_repo=packaged_default,
-    ) == select_policy_source(sources, environ={})

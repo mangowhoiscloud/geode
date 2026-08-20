@@ -1,4 +1,4 @@
-"""Tests for ``plugins.seed_generation.agents.ranker``.
+"""Tests for ``geode_product.seed_generation.agents.ranker``.
 
 P-checklist application (cycle-skill SKILL.md):
 
@@ -20,9 +20,9 @@ from typing import Any, cast
 
 import pytest
 from core.agent.sub_agent import SubResult, SubTask
-from plugins.seed_generation.agents.ranker import Ranker
-from plugins.seed_generation.orchestrator import PipelineState
-from plugins.seed_generation.picker import VoterBinding
+from geode_product.seed_generation.agents.ranker import Ranker
+from geode_product.seed_generation.orchestrator import PipelineState
+from geode_product.seed_generation.picker import VoterBinding
 
 
 def _voters() -> list[VoterBinding]:
@@ -281,7 +281,7 @@ def test_ranker_dispatches_matches_concurrently() -> None:
 
 def test_ranker_applies_elo_after_parallel_dispatch_in_match_plan_order() -> None:
     """Elo remains deterministic even when match calls complete asynchronously."""
-    from plugins.seed_generation.tournament import (
+    from geode_product.seed_generation.tournament import (
         MatchOutcome,
         apply_match,
         initial_ratings,
@@ -319,8 +319,8 @@ def test_ranker_applies_elo_after_parallel_dispatch_in_match_plan_order() -> Non
 
 def test_ranker_writes_partial_checkpoint(tmp_path: Any) -> None:
     """PR-RANKER-PARTIAL-CHECKPOINT — final prefix is resumable."""
-    from plugins.seed_generation.checkpointer import load_partial_ranker_checkpoint
-    from plugins.seed_generation.tournament import plan_matches
+    from geode_product.seed_generation.checkpointer import load_partial_ranker_checkpoint
+    from geode_product.seed_generation.tournament import plan_matches
 
     seed = 7
     state = _state_with_candidates(5)
@@ -346,8 +346,8 @@ def test_ranker_resumes_from_partial_checkpoint_without_replaying_completed_matc
     tmp_path: Any,
 ) -> None:
     """A partial checkpoint skips the already-applied match prefix."""
-    from plugins.seed_generation.checkpointer import write_partial_ranker_checkpoint
-    from plugins.seed_generation.tournament import (
+    from geode_product.seed_generation.checkpointer import write_partial_ranker_checkpoint
+    from geode_product.seed_generation.tournament import (
         MatchOutcome,
         apply_match,
         initial_ratings,
@@ -723,7 +723,7 @@ def test_ranker_voter_task_ids_unique_across_duplicate_bindings() -> None:
     (``v{idx:02d}``) into the task_id so duplicate bindings stay
     distinct. Same pattern as ``mutation_eval.py``.
     """
-    from plugins.seed_generation.tournament import MatchPlan
+    from geode_product.seed_generation.tournament import MatchPlan
 
     # Replicate the default manifest: two duplicate openai-codex bindings
     # plus one claude-cli binding.
@@ -777,7 +777,7 @@ def test_ranker_voter_task_ids_match_mutation_eval_shape() -> None:
     survive duplicate (provider, source) bindings. Pinning the shape
     here prevents the two from drifting back out of sync.
     """
-    from plugins.seed_generation.tournament import MatchPlan
+    from geode_product.seed_generation.tournament import MatchPlan
 
     voters = _voters()
     ranker = Ranker(

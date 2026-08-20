@@ -2,9 +2,9 @@
 
 Covers the two surfaces introduced by PR-CSP-13:
 
-1. ``plugins.seed_generation.tools.seed_debate.SeedDebateTurnTool`` — bounds, sidecar
+1. ``geode_product.seed_generation.tools.seed_debate.SeedDebateTurnTool`` — bounds, sidecar
    shape, next_action signaling, defensive arg validation.
-2. ``plugins.seed_generation.agents.generator.Generator`` — backwards
+2. ``geode_product.seed_generation.agents.generator.Generator`` — backwards
    compatibility for ``num_turns=0`` (single-shot path unchanged),
    sidecar-read merge for ``num_turns>=2``, ``_build_description``
    debate-budget block injection.
@@ -21,9 +21,9 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from plugins.seed_generation.agents.generator import Generator, _read_debate_sidecars
-from plugins.seed_generation.orchestrator import PipelineState
-from plugins.seed_generation.tools.seed_debate import SeedDebateTurnTool
+from geode_product.seed_generation.agents.generator import Generator, _read_debate_sidecars
+from geode_product.seed_generation.orchestrator import PipelineState
+from geode_product.seed_generation.tools.seed_debate import SeedDebateTurnTool
 
 # ── SeedDebateTurnTool ────────────────────────────────────────────────────
 
@@ -309,7 +309,7 @@ def test_seed_debate_turn_rejects_mismatched_output_sidecar_pair(
 
 def test_self_improving_loop_bindings_num_turns_validator() -> None:
     """Operator-config slot enforces same {0} ∪ [2,6] window as manifest (Codex MEDIUM)."""
-    from core.config.self_improving import SelfImprovingLoopBindings
+    from geode_product.self_improving.config import SelfImprovingLoopBindings
 
     SelfImprovingLoopBindings(model="x", source="auto", num_turns=0)
     SelfImprovingLoopBindings(model="x", source="auto", num_turns=2)
@@ -518,7 +518,7 @@ def test_pipeline_state_merge_debate_transcripts_dict_update(tmp_path: Path) -> 
 
 def test_manifest_role_spec_accepts_num_turns_zero_or_in_range() -> None:
     """SeedRoleSpec validator: 0 = off; 2..6 = active; everything else invalid."""
-    from plugins.seed_generation.manifest import SeedRoleSpec
+    from geode_product.seed_generation.manifest import SeedRoleSpec
 
     SeedRoleSpec(
         default_model="claude-sonnet-4-6",
@@ -540,7 +540,7 @@ def test_manifest_role_spec_accepts_num_turns_zero_or_in_range() -> None:
 @pytest.mark.parametrize("bad", [1, 7, -1, 100])
 def test_manifest_role_spec_rejects_num_turns_out_of_range(bad: int) -> None:
     """Values outside {0} ∪ [2, 6] are rejected by the SeedRoleSpec validator."""
-    from plugins.seed_generation.manifest import SeedRoleSpec
+    from geode_product.seed_generation.manifest import SeedRoleSpec
 
     with pytest.raises(ValueError, match="num_turns"):
         SeedRoleSpec(

@@ -103,7 +103,7 @@ export default function Page() {
                   <td><code>tool_call_id</code>가 있는 <code>role=tool</code> message</td>
                 </tr>
                 <tr>
-                  <td><code>claude-cli</code><br /><code>codex-cli</code></td>
+                  <td><code>claude-cli</code></td>
                   <td>GEODE adapter 경계는 text-only이며 <code>supports_tools=False</code></td>
                   <td>전달하지 않음</td>
                   <td>GEODE tool result replay 없음</td>
@@ -235,7 +235,7 @@ export default function Page() {
                 <tr><td><code>anthropic-payg</code><br /><code>anthropic-oauth</code></td><td>Messages API tool definition</td><td><code>required</code>→<code>any</code>, named→<code>tool</code></td><td><code>tool_result</code> with <code>tool_use_id</code></td></tr>
                 <tr><td><code>openai-payg</code><br /><code>codex-oauth</code></td><td>Responses API flat function tool with <code>parallel_tool_calls=true</code></td><td><code>any</code>→<code>required</code>, named→flat function</td><td><code>function_call</code> / <code>function_call_output</code> paired by <code>call_id</code></td></tr>
                 <tr><td><code>glm-payg</code><br /><code>glm-coding-plan</code></td><td>Chat Completions nested function tool</td><td><code>any</code>→<code>required</code>, named→nested function</td><td><code>role=tool</code> message with <code>tool_call_id</code></td></tr>
-                <tr><td><code>claude-cli</code><br /><code>codex-cli</code></td><td>Text-only GEODE adapter boundary with <code>supports_tools=False</code></td><td>Not forwarded</td><td>No GEODE tool-result replay</td></tr>
+                <tr><td><code>claude-cli</code></td><td>Text-only GEODE adapter boundary with <code>supports_tools=False</code></td><td>Not forwarded</td><td>No GEODE tool-result replay</td></tr>
               </tbody>
             </table>
             <p>

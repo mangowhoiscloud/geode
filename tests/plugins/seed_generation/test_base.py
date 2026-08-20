@@ -1,4 +1,4 @@
-"""Tests for ``plugins.seed_generation.agents.base.parse_structured_output``.
+"""Tests for ``geode_product.seed_generation.agents.base.parse_structured_output``.
 
 Shared parser used by Critic (S3), Pilot (S5), and Ranker voters (S6).
 Tested here in isolation so future agents (Evolver, Meta-review) reuse
@@ -7,7 +7,7 @@ it with the same contract.
 
 from __future__ import annotations
 
-from plugins.seed_generation.agents.base import parse_structured_output
+from geode_product.seed_generation.agents.base import parse_structured_output
 
 
 def test_parse_dict_with_required_fields() -> None:

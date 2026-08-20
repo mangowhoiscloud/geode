@@ -7,8 +7,7 @@ module-level singleton in ``core.llm.providers.openai`` which routes through
 MCP review 2026-05-23 flagged that singleton sharing as a BLOCKER for source
 isolation.
 
-Pair with :class:`CodexOAuthAdapter` (same provider, OAuth path) and
-:class:`CodexCliAdapter` (subprocess path).
+Pair with :class:`CodexOAuthAdapter` (same provider, OAuth path).
 
 PR-OPENAI-RESPONSES (2026-06-13): ``acomplete``/``astream`` moved from
 Chat Completions to the Responses API via the shared
@@ -102,7 +101,7 @@ class OpenAIPaygAdapter:
             raise RuntimeError(
                 "OpenAIPaygAdapter: OPENAI_API_KEY not set. PAYG path requires "
                 "an explicit API key — set ``openai_api_key`` in settings or use "
-                "the codex-oauth / codex-cli adapter instead."
+                "the codex-oauth adapter instead."
             )
         return self._clients.get(lambda: build_async_openai_client(api_key))
 
@@ -202,7 +201,7 @@ class OpenAIPaygAdapter:
                 checks=(("openai_api_key", "missing"),),
                 hints=(
                     "Set ``OPENAI_API_KEY`` in your environment or in ~/.geode/config.toml.",
-                    "Or use codex-oauth (ChatGPT subscription) / codex-cli (local binary).",
+                    "Or use codex-oauth (ChatGPT subscription).",
                 ),
             )
         return EnvironmentReport(

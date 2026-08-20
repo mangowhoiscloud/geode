@@ -14,10 +14,10 @@
 
 - **What**: a self-hosting autonomous-agent harness whose runtime is an AgenticLoop (`while tool_use`).
 - **Language**: Python 3.12+, type-hinted, uv-managed.
-- **Layout**: two top-level packages.
+- **Layout**: three top-level packages with one implementation direction.
   - `core/` — domain-agnostic runtime.
-  - `plugins/` — legacy namespace for bundled product features
-    (`benchmark_harness`, `crucible`, `petri_audit`, `seed_generation`), not a
+  - `geode_product/` — bundled first-party features and outer composition.
+  - `plugins/` — curated compatibility facades only; no implementation or
     third-party extension ABI.
 - **Quality bar**: ruff, mypy, pytest plus a prompt-hash ratchet. CI breaks on red.
 - **Public site**: `site/` (Next.js 16 static export, deployed to GitHub Pages).
@@ -30,8 +30,8 @@ owns only the package version and sync date.
 The generated architecture inventory lives at
 `site/src/data/geode/architecture-baseline.json`. Refresh it with
 `uv run python scripts/architecture_baseline.py --update`; CI uses `--check`.
-The current snapshot records 551 production Python files,
-686 test Python files,
+The current snapshot records 590 production Python files,
+688 test Python files,
 87 tool definitions, and
 57 `RuntimeEvent` members.
 <!-- generated:architecture-baseline:end -->
@@ -218,7 +218,7 @@ Typer commands and thin CLI surface. Slash commands.
 
 Slack / Discord / Telegram adapters. Lane queue concurrency.
 
-### `plugins/petri_audit/`
+### `geode_product/petri_audit/`
 
 Petri × GEODE alignment audit (v0.92+).
 
@@ -322,9 +322,9 @@ mirrors that scaffold.
 Use the repo's current CI-equivalent commands when scope requires full checks:
 
 ```bash
-uv run ruff check core/ tests/ plugins/ scripts/
-uv run ruff format --check core/ tests/ plugins/ scripts/
-uv run mypy core/ plugins/
+uv run ruff check core/ geode_product/ plugins/ tests/ scripts/
+uv run ruff format --check core/ geode_product/ plugins/ tests/ scripts/
+uv run mypy core/ geode_product/ plugins/
 uv run lint-imports
 uv run pytest tests/ -m "not live"
 uv run geode version
@@ -364,7 +364,7 @@ Add a GAP Audit table when the PR was driven by a plan, audit, or cleanup.
 | Why a layer? | `core/agent/loop/agent_loop.py` plus `docs/architecture/` |
 | How are hooks wired? | `core/hooks/system.py` plus `core/wiring/bootstrap.py` |
 | How is cost tracked? | `~/.geode/usage/*.jsonl` plus `core/audit/diagnostics.py` |
-| Petri audit run? | `plugins/petri_audit/cli_audit.py` |
+| Petri audit run? | `geode_product/petri_audit/cli_audit.py` |
 | Site docs? | `site/src/app/docs/**` |
 
 ## Tests

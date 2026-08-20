@@ -3,7 +3,7 @@
 Loads ``core/config/routing.toml`` (shipped default) merged with
 ``~/.geode/routing.toml`` (user override) into a validated pydantic
 :class:`RoutingManifest`. Mirrors the Petri plugin's
-:mod:`plugins.petri_audit.manifest` design — same 4-layer manifest
+:mod:`geode_product.petri_audit.manifest` design — same 4-layer manifest
 pattern (data → cross-layer consistency → cached load → typed
 accessors).
 
@@ -12,7 +12,7 @@ Migration history:
 - P2-A (2026-05-17): schema + loader (dormant).
 - P2-B: ``ANTHROPIC_PRIMARY`` / ``OPENAI_PRIMARY`` etc. constants now
   load from ``[model.defaults]`` + ``[model.fallbacks.<provider>]``.
-- P2-C: ``onboarding._KEY_PATTERNS`` + ``claude_code_provider.
+- P2-C: ``onboarding._KEY_PATTERNS`` + ``core.auth.claude_cli_oauth.
   KEYCHAIN_SERVICE`` route through ``[credentials.*]``.
 - P2-D: ``core.config._resolve_provider`` + ``petri.models.provider_of``
   delegate to ``[routing.prefixes]`` + ``codex_only_models`` +
@@ -160,7 +160,7 @@ class CredentialPatterns(BaseModel):
 class CredentialKeychain(BaseModel):
     """``[credentials.keychain]`` — provider → macOS keychain service name.
 
-    Used by ``plugins.petri_audit.claude_code_provider`` (and downstream
+    Used by ``core.auth.claude_cli_oauth`` (and downstream
     code in P2-C migration) to locate the OAuth blob the local
     Claude / Codex / etc. CLI persists on login.
     """

@@ -47,6 +47,11 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.23] - 2026-08-20
+
+> Bundled product boundaries, a self-improving product ring, and an isolated
+> kernel distribution gate.
+
 ### Added
 
 - **Public documentation now emits source-grounded structured metadata.** The
@@ -56,6 +61,23 @@ functional change.
   the citation reachability gate; no visitor analytics or click tracking was added.
 
 ### Changed
+
+- **Bundled product features now have an honest package boundary.** Petri,
+  seed generation, benchmark harnesses, and Crucible live under
+  `geode_product`; the closed `core` runtime has no product imports. CLI,
+  worker, server, and MCP entry points compose product tools explicitly,
+  installed artifacts ship the canonical data files, and the maintained
+  legacy entry points are thin forwarding facades over one implementation.
+
+- **The self-improving control plane now lives in the product ring.** Runtime,
+  policy, measurement, CLI, scheduler, worker, and MCP implementations moved to
+  `geode_product.self_improving`; `core` retains only tracked state plus the
+  import root and four documented launcher facades. Product capabilities are
+  injected explicitly, while state paths and replay identifiers remain stable.
+
+- **OpenAI model routing now uses one provider family.** GPT picker entries
+  report `openai`; credential source selects ChatGPT subscription OAuth or
+  Platform PAYG without presenting Codex as a separate provider.
 
 - **Seed-generation now uses frontier-band survivor selection by default.**
   The already-wired multi-candidate ranker promotes candidates nearest the
@@ -69,6 +91,32 @@ functional change.
   slop counts or a raw collected-test total; full behavior tests, coverage,
   Ruff, mypy, dependency, architecture, eval-contract, prompt-integrity, and
   security gates remain authoritative.
+
+### Removed
+
+- **The `codex-cli` inference backend is retired.** GEODE no longer spawns
+  `codex exec`, registers a Codex CLI adapter, or reserves a Codex CLI lane.
+  ChatGPT subscription calls use the direct `codex-oauth` adapter; an explicit
+  `codex-cli` selection fails with a migration hint. Importing credentials from
+  `~/.codex/auth.json` and the isolated MCPMark Codex comparator remain separate
+  credential/evaluation integrations, not model-provider paths.
+
+- **Legacy raw-SDK Claude and built-in Codex CLI audit producers are retired.**
+  Petri subscription audits use the supported Claude CLI bridge, while
+  Crucible accepts an explicit frozen producer command. The removed providers
+  are not recreated through compatibility facades.
+
+### Infrastructure
+
+- **Release validation now fails on lockfile or installed-daemon drift.** The
+  stable workflow checks the committed `uv.lock` before project-aware `uv`
+  commands, then starts the clean-wheel daemon and verifies its IPC version.
+
+- **CI now proves the installed kernel works without bundled features.** A
+  temporary CI-only wheel projection removes the product, compatibility
+  facades, and product entry points before isolated kernel unit tests plus
+  exhaustive import, registry, lifecycle, and package-metadata checks. Release
+  artifacts remain unchanged.
 
 ## [1.0.22] - 2026-08-19
 

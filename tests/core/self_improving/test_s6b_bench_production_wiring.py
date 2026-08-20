@@ -12,8 +12,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from core.self_improving import ledger
-from core.self_improving.bench_means import (
+import pytest
+from geode_product.self_improving import ledger
+from geode_product.self_improving.bench_means import (
     BENCH_DIM_WEIGHTS,
     BENCH_PORT_MAP,
     BENCH_REQUIRES_DOCKER,
@@ -116,6 +117,15 @@ def test_collect_rubric_version_propagates() -> None:
     assert result.rubric_version == BENCH_RUBRIC_VERSION
 
 
+def test_live_bench_fails_loud_without_composed_target_model(monkeypatch) -> None:
+    from geode_product.self_improving import train
+
+    monkeypatch.setenv("GEODE_BENCH_S6B_LIVE", "1")
+    monkeypatch.setattr(train, "_petri_role_model", lambda *_args, **_kwargs: "")
+    with pytest.raises(RuntimeError, match="explicit autoresearch target model"):
+        train._bench_target_model(dry_run=False)
+
+
 # ---------------------------------------------------------------------------
 # 5. format_results_jsonl_row — 4-axis breakdown columns
 # ---------------------------------------------------------------------------
@@ -127,7 +137,7 @@ def test_results_jsonl_row_emits_bench_columns_when_provenance_passed() -> None:
     ``missing_benches`` / ``bench_rubric_version``) emit."""
     import json
 
-    from core.self_improving.ledger import format_results_jsonl_row
+    from geode_product.self_improving.ledger import format_results_jsonl_row
 
     prov = BenchProvenance(
         bench_means={"swe_bench_pro_pass": 0.42, "gpqa_diamond": 0.71},
@@ -171,7 +181,7 @@ def test_results_jsonl_row_default_empty_when_no_provenance() -> None:
     schema 일관성 유지. legacy reader backward-compat."""
     import json
 
-    from core.self_improving.ledger import format_results_jsonl_row
+    from geode_product.self_improving.ledger import format_results_jsonl_row
 
     row = json.loads(
         format_results_jsonl_row(
@@ -236,7 +246,7 @@ def test_should_promote_passes_bench_to_compute_fitness() -> None:
     """``_should_promote`` 가 bench_means + baseline_bench_means 를
     internal ``compute_fitness`` 호출에 forward. 이전엔 미전달 → Goodhart
     cross-validation gate 가 promote 결정에 0 영향. 이제 forward → fire 가능."""
-    from core.self_improving.gate import _should_promote
+    from geode_product.self_improving.gate import _should_promote
 
     # alignment_only_fooling scenario: dim 개선 (lower) + bench regress (lower)
     dim_means = {"broken_tool_use": 2.0}  # promote (lower than baseline 3.0)

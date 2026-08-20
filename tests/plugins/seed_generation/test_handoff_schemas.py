@@ -30,7 +30,7 @@ import json
 from pathlib import Path
 
 import pytest
-from plugins.seed_generation.handoff_schemas import (
+from geode_product.seed_generation.handoff_schemas import (
     CRITIC_HANDOFF,
     EVOLVE_HANDOFF,
     GENERATOR_HANDOFF,
@@ -41,7 +41,7 @@ from plugins.seed_generation.handoff_schemas import (
     embed_handoff,
 )
 
-ROLE_PROMPTS = Path(__file__).parents[3] / "plugins" / "seed_generation" / "agents"
+ROLE_PROMPTS = Path(__file__).parents[3] / "geode_product" / "seed_generation" / "agents"
 
 
 # ─────────────────────────── Schema shape pinning ─────────────────────────────
@@ -122,7 +122,7 @@ class TestRoleHandoffDrift:
     def test_evolver_handoff_matches_schema(self) -> None:
         from unittest.mock import MagicMock
 
-        from plugins.seed_generation.agents.evolver import Evolver
+        from geode_product.seed_generation.agents.evolver import Evolver
 
         agent = Evolver(MagicMock())
         desc = agent._build_description(
@@ -147,8 +147,8 @@ class TestRoleHandoffDrift:
     def test_ranker_voter_handoff_matches_schema(self) -> None:
         from unittest.mock import MagicMock
 
-        from plugins.seed_generation.agents.ranker import Ranker
-        from plugins.seed_generation.tournament import MatchPlan
+        from geode_product.seed_generation.agents.ranker import Ranker
+        from geode_product.seed_generation.tournament import MatchPlan
 
         ranker = Ranker.__new__(Ranker)
         match = MatchPlan(match_id="m-0", a="cand-a", b="cand-b")

@@ -135,7 +135,7 @@ GEODE
 
 - Petri table 0 rows → `<tr><td colspan="6"><em>No audits published yet. Run <code>geode audit --live</code>.</em></td></tr>`
 - Seed-gen 0 rows → `<tr><td colspan="7"><em>No seed-generation runs published yet.</em></td></tr>`
-- Autoresearch `baseline.json` absent → row reads "no baseline written yet — run <code>uv run python core/self_improving/train.py --promote</code>"
+- Autoresearch `baseline.json` absent → row reads "no baseline written yet — run <code>uv run python geode_product/self_improving/train.py --promote</code>"
 
 ## 8. Error states
 

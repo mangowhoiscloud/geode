@@ -17,34 +17,91 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-REQUIRED_WHEEL_PATHS = {
-    "core/GEODE.md",
-    "core/tools/definitions.json",
-    "core/tools/mcp_tools.json",
-    "core/config/routing.toml",
-    "core/llm/model_pricing.toml",
-    "core/llm/prompts/router.md",
-    "core/llm/prompts/decomposer.md",
-    "plugins/petri_audit/petri.plugin.toml",
-    "plugins/petri_audit/roles/auditor.md",
-    "plugins/petri_audit/roles/target.md",
-    "plugins/petri_audit/roles/judge.md",
-    "plugins/petri_audit/judge_dims/geode_judge_subset.yaml",
-    "plugins/petri_audit/seeds/auxiliary/overrefusal/01_base.md",
+SELF_IMPROVING_FACADES = {
+    "core/self_improving/__init__.py",
+    "core/self_improving/campaign.py",
+    "core/self_improving/prepare.py",
+    "core/self_improving/train.py",
+    "core/self_improving/watch_campaign.py",
 }
 
-REQUIRED_SDIST_PATHS = {
-    "GEODE.md",
-    "pyproject.toml",
-    "README.md",
-    "README.ko.md",
-    "CHANGELOG.md",
-    "LICENSE",
-    "NOTICE",
-    "core/__init__.py",
-    "plugins/__init__.py",
-    "plugins/petri_audit/__init__.py",
+SELF_IMPROVING_RUNTIME_PATHS = {
+    "geode_product/self_improving/__init__.py",
+    "geode_product/self_improving/campaign.py",
+    "geode_product/self_improving/cli_commands.py",
+    "geode_product/self_improving/config.py",
+    "geode_product/self_improving/loop/mutate/runner.py",
+    "geode_product/self_improving/loop/observe/run_timeline.py",
+    "geode_product/self_improving/mcp.py",
+    "geode_product/self_improving/mcp_tools.json",
+    "geode_product/self_improving/outer_bundle.py",
+    "geode_product/self_improving/program.md",
+    "geode_product/self_improving/train.py",
 }
+
+SELF_IMPROVING_STATE_PATHS = {
+    "core/self_improving/state/README.md",
+    "core/self_improving/state/baseline_archive.jsonl",
+    "core/self_improving/state/baseline_epochs.json",
+    "core/self_improving/state/mutations.jsonl",
+    "core/self_improving/state/policies/hyperparam.json",
+    "core/self_improving/state/results.jsonl",
+    "core/self_improving/state/results.tsv",
+}
+
+REQUIRED_WHEEL_PATHS = (
+    {
+        "core/GEODE.md",
+        "core/tools/definitions.json",
+        "core/tools/mcp_tools.json",
+        "core/config/routing.toml",
+        "core/llm/model_pricing.toml",
+        "core/llm/prompts/router.md",
+        "core/llm/prompts/decomposer.md",
+        "geode_product/benchmark_harness/benchmark_harness.plugin.toml",
+        "geode_product/benchmark_harness/tau2_agent_policy.md",
+        "geode_product/benchmark_harness/patches/mcpmark-cd45b7f-filesystem-standard-verifier-missing-output.patch",
+        "geode_product/petri_audit/petri.plugin.toml",
+        "geode_product/petri_audit/roles/auditor.md",
+        "geode_product/petri_audit/roles/target.md",
+        "geode_product/petri_audit/roles/judge.md",
+        "geode_product/petri_audit/judge_dims/geode_judge_subset.yaml",
+        "geode_product/petri_audit/seeds/auxiliary/overrefusal/01_base.md",
+        "geode_product/seed_generation/seed_generation.plugin.toml",
+        "geode_product/seed_generation/agents/generator.md",
+        "geode_product/seed_generation/agents/critic.md",
+        "geode_product/seed_generation/agents/proximity.md",
+        "geode_product/seed_generation/agents/ranker.md",
+        "geode_product/seed_generation/agents/evolver.md",
+        "geode_product/seed_generation/agents/meta_reviewer.md",
+        "geode_product/seed_generation/agents/supervisor.md",
+        "geode_product/seed_generation/agents/literature_review.md",
+        "plugins/petri_audit/__init__.py",
+        "plugins/benchmark_harness/mcpmark_geode_agent.py",
+    }
+    | SELF_IMPROVING_FACADES
+    | SELF_IMPROVING_RUNTIME_PATHS
+    | SELF_IMPROVING_STATE_PATHS
+)
+
+REQUIRED_SDIST_PATHS = (
+    {
+        "GEODE.md",
+        "pyproject.toml",
+        "README.md",
+        "README.ko.md",
+        "CHANGELOG.md",
+        "LICENSE",
+        "NOTICE",
+        "core/__init__.py",
+        "geode_product/__init__.py",
+        "plugins/__init__.py",
+        "plugins/petri_audit/__init__.py",
+    }
+    | SELF_IMPROVING_FACADES
+    | SELF_IMPROVING_RUNTIME_PATHS
+    | SELF_IMPROVING_STATE_PATHS
+)
 
 BANNED_COMMON_PARTS = {
     "__pycache__",
@@ -167,6 +224,26 @@ def _check_banned(label: str, paths: set[str], prefixes: tuple[str, ...]) -> lis
     return problems
 
 
+def _check_self_improving_layout(label: str, paths: set[str]) -> list[str]:
+    legacy_python = {
+        path
+        for path in paths
+        if path.startswith("core/self_improving/")
+        and path.endswith(".py")
+        and not path.startswith("core/self_improving/state/")
+    }
+    problems = [
+        f"{label}: unexpected legacy self-improving module {path}"
+        for path in sorted(legacy_python - SELF_IMPROVING_FACADES)
+    ]
+    problems.extend(
+        f"{label}: self-improving state duplicated under product package: {path}"
+        for path in sorted(paths)
+        if path.startswith("geode_product/self_improving/state/")
+    )
+    return problems
+
+
 def validate(dist_dir: Path) -> None:
     wheel_path, sdist_path = _find_artifacts(dist_dir, _project_version())
     wheel_paths, wheel_symlinks = _read_wheel(wheel_path)
@@ -177,6 +254,8 @@ def validate(dist_dir: Path) -> None:
     problems.extend(_check_required("sdist", sdist_paths, REQUIRED_SDIST_PATHS))
     problems.extend(_check_banned("wheel", wheel_paths, BANNED_WHEEL_PREFIXES))
     problems.extend(_check_banned("sdist", sdist_paths, BANNED_SDIST_PREFIXES))
+    problems.extend(_check_self_improving_layout("wheel", wheel_paths))
+    problems.extend(_check_self_improving_layout("sdist", sdist_paths))
     problems.extend(f"wheel: symlink is not allowed: {path}" for path in wheel_symlinks)
     problems.extend(f"sdist: symlink is not allowed: {path}" for path in sdist_symlinks)
 

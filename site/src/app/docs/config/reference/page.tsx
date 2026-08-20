@@ -306,7 +306,7 @@ export default function Page() {
                 <tr><td><code>anchor_confidence_mode</code></td><td>bool = false</td><td>anchor 신뢰도 모드.</td></tr>
                 <tr><td><code>source</code></td><td><code>claude-cli</code></td><td>역할 공통 기본 자격 소스.</td></tr>
                 <tr><td><code>seed_limit</code></td><td>int = 10 (5-1000)</td><td>감사당 seed 수.</td></tr>
-                <tr><td><code>seed_select</code></td><td><code>&quot;plugins/petri_audit/seeds&quot;</code></td><td>공진화 seed 풀 경로.</td></tr>
+                <tr><td><code>seed_select</code></td><td><code>&quot;bundled&quot;</code></td><td>패키지에 포함된 공진화 seed 풀.</td></tr>
                 <tr><td><code>held_out_bench</code></td><td>None</td><td>고정 자 역할의 frozen seed 디렉터리.</td></tr>
                 <tr><td><code>promote_policy</code></td><td><code>&quot;gate&quot;</code></td><td><code>gate</code> / <code>random</code> / <code>never</code>.</td></tr>
                 <tr><td><code>promote_policy_seed</code></td><td>int = 0</td><td>random 정책의 시드.</td></tr>
@@ -670,7 +670,7 @@ export default function Page() {
                 <tr><td><code>anchor_confidence_mode</code></td><td>bool = false</td><td>Anchor confidence mode.</td></tr>
                 <tr><td><code>source</code></td><td><code>claude-cli</code></td><td>Default credential source shared by the roles.</td></tr>
                 <tr><td><code>seed_limit</code></td><td>int = 10 (5-1000)</td><td>Seeds per audit.</td></tr>
-                <tr><td><code>seed_select</code></td><td><code>&quot;plugins/petri_audit/seeds&quot;</code></td><td>Co-evolving seed pool path.</td></tr>
+                <tr><td><code>seed_select</code></td><td><code>&quot;bundled&quot;</code></td><td>Packaged co-evolving seed pool.</td></tr>
                 <tr><td><code>held_out_bench</code></td><td>None</td><td>Frozen fixed-ruler seed dir.</td></tr>
                 <tr><td><code>promote_policy</code></td><td><code>&quot;gate&quot;</code></td><td><code>gate</code> / <code>random</code> / <code>never</code>.</td></tr>
                 <tr><td><code>promote_policy_seed</code></td><td>int = 0</td><td>Seed for the random policy.</td></tr>

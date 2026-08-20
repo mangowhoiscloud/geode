@@ -1,4 +1,4 @@
-"""Tests for ``plugins.seed_generation.cli`` — Typer sub-app + slash command + human gate.
+"""Tests for ``geode_product.seed_generation.cli`` — Typer sub-app + slash command + human gate.
 
 P-checklist application (cycle-skill SKILL.md):
 
@@ -17,13 +17,13 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
-from plugins.seed_generation.cli import (
+from geode_product.seed_generation.cli import (
     cmd_audit_seeds_slash,
     render_pre_flight_report,
     run_audit_seeds,
 )
-from plugins.seed_generation.picker import PickerResult, RoleBinding, VoterBinding
-from plugins.seed_generation.pre_flight import PreFlightIssue, PreFlightReport
+from geode_product.seed_generation.picker import PickerResult, RoleBinding, VoterBinding
+from geode_product.seed_generation.pre_flight import PreFlightIssue, PreFlightReport
 
 
 def _good_picker() -> PickerResult:
@@ -63,9 +63,11 @@ def test_run_audit_seeds_yes_flag_skips_prompt() -> None:
         dispatched.update(kwargs)
 
     with (
-        patch("plugins.seed_generation.cli.pick_bindings", return_value=_good_picker()),
-        patch("plugins.seed_generation.cli.run_pre_flight", return_value=PreFlightReport()),
-        patch("plugins.seed_generation.cli._dispatch_pipeline", side_effect=_capture_dispatch),
+        patch("geode_product.seed_generation.cli.pick_bindings", return_value=_good_picker()),
+        patch("geode_product.seed_generation.cli.run_pre_flight", return_value=PreFlightReport()),
+        patch(
+            "geode_product.seed_generation.cli._dispatch_pipeline", side_effect=_capture_dispatch
+        ),
     ):
         code = run_audit_seeds(
             target_dim="broken_tool_use",
@@ -84,9 +86,9 @@ def test_run_audit_seeds_user_says_no_aborts() -> None:
         return False
 
     with (
-        patch("plugins.seed_generation.cli.pick_bindings", return_value=_good_picker()),
-        patch("plugins.seed_generation.cli.run_pre_flight", return_value=PreFlightReport()),
-        patch("plugins.seed_generation.cli._dispatch_pipeline") as mock_dispatch,
+        patch("geode_product.seed_generation.cli.pick_bindings", return_value=_good_picker()),
+        patch("geode_product.seed_generation.cli.run_pre_flight", return_value=PreFlightReport()),
+        patch("geode_product.seed_generation.cli._dispatch_pipeline") as mock_dispatch,
     ):
         code = run_audit_seeds(
             target_dim="broken_tool_use",
@@ -107,9 +109,9 @@ def test_run_audit_seeds_user_says_yes_dispatches() -> None:
         return True
 
     with (
-        patch("plugins.seed_generation.cli.pick_bindings", return_value=_good_picker()),
-        patch("plugins.seed_generation.cli.run_pre_flight", return_value=PreFlightReport()),
-        patch("plugins.seed_generation.cli._dispatch_pipeline") as mock_dispatch,
+        patch("geode_product.seed_generation.cli.pick_bindings", return_value=_good_picker()),
+        patch("geode_product.seed_generation.cli.run_pre_flight", return_value=PreFlightReport()),
+        patch("geode_product.seed_generation.cli._dispatch_pipeline") as mock_dispatch,
     ):
         code = run_audit_seeds(
             target_dim="broken_tool_use",
@@ -135,9 +137,9 @@ def test_run_audit_seeds_pre_flight_error_aborts() -> None:
         ]
     )
     with (
-        patch("plugins.seed_generation.cli.pick_bindings", return_value=_good_picker()),
-        patch("plugins.seed_generation.cli.run_pre_flight", return_value=bad_report),
-        patch("plugins.seed_generation.cli._dispatch_pipeline") as mock_dispatch,
+        patch("geode_product.seed_generation.cli.pick_bindings", return_value=_good_picker()),
+        patch("geode_product.seed_generation.cli.run_pre_flight", return_value=bad_report),
+        patch("geode_product.seed_generation.cli._dispatch_pipeline") as mock_dispatch,
     ):
         code = run_audit_seeds(
             target_dim="broken_tool_use",
@@ -158,9 +160,11 @@ def test_run_audit_seeds_dispatch_exception_returns_2() -> None:
         raise RuntimeError(msg)
 
     with (
-        patch("plugins.seed_generation.cli.pick_bindings", return_value=_good_picker()),
-        patch("plugins.seed_generation.cli.run_pre_flight", return_value=PreFlightReport()),
-        patch("plugins.seed_generation.cli._dispatch_pipeline", side_effect=_crashing_dispatch),
+        patch("geode_product.seed_generation.cli.pick_bindings", return_value=_good_picker()),
+        patch("geode_product.seed_generation.cli.run_pre_flight", return_value=PreFlightReport()),
+        patch(
+            "geode_product.seed_generation.cli._dispatch_pipeline", side_effect=_crashing_dispatch
+        ),
     ):
         code = run_audit_seeds(
             target_dim="broken_tool_use",
@@ -175,9 +179,9 @@ def test_run_audit_seeds_dispatch_exception_returns_2() -> None:
 def test_run_audit_seeds_emits_cost_summary_to_stdout() -> None:
     out, err = io.StringIO(), io.StringIO()
     with (
-        patch("plugins.seed_generation.cli.pick_bindings", return_value=_good_picker()),
-        patch("plugins.seed_generation.cli.run_pre_flight", return_value=PreFlightReport()),
-        patch("plugins.seed_generation.cli._dispatch_pipeline"),
+        patch("geode_product.seed_generation.cli.pick_bindings", return_value=_good_picker()),
+        patch("geode_product.seed_generation.cli.run_pre_flight", return_value=PreFlightReport()),
+        patch("geode_product.seed_generation.cli._dispatch_pipeline"),
     ):
         run_audit_seeds(
             target_dim="broken_tool_use",
@@ -222,15 +226,33 @@ def test_render_pre_flight_report_includes_severity_and_fix() -> None:
 def test_cmd_audit_seeds_slash_parses_target_dim() -> None:
     """Slash command parses --target-dim and dispatches."""
     with (
-        patch("plugins.seed_generation.cli.pick_bindings", return_value=_good_picker()),
-        patch("plugins.seed_generation.cli.run_pre_flight", return_value=PreFlightReport()),
-        patch("plugins.seed_generation.cli._dispatch_pipeline") as mock_dispatch,
+        patch("geode_product.seed_generation.cli.pick_bindings", return_value=_good_picker()),
+        patch("geode_product.seed_generation.cli.run_pre_flight", return_value=PreFlightReport()),
+        patch("geode_product.seed_generation.cli._dispatch_pipeline") as mock_dispatch,
     ):
         code = cmd_audit_seeds_slash("--target-dim broken_tool_use --yes")
     assert code == 0
     mock_dispatch.assert_called_once()
     args = mock_dispatch.call_args.kwargs
     assert args["target_dim"] == "broken_tool_use"
+
+
+def test_dispatcher_executes_registered_audit_seeds_handler() -> None:
+    """The product registry reaches the callable, not an Unknown-command branch."""
+    from core.cli.dispatcher import _handle_command
+    from core.cli.routing import compose_command_registry
+    from geode_product.cli import PRODUCT_COMMAND_SPECS
+
+    with patch("geode_product.seed_generation.cli.cmd_audit_seeds_slash") as handler:
+        result = _handle_command(
+            "/audit-seeds",
+            "--target-dim x --yes",
+            False,
+            command_registry=compose_command_registry(PRODUCT_COMMAND_SPECS),
+        )
+
+    handler.assert_called_once_with("--target-dim x --yes")
+    assert result == (False, False, None)
 
 
 def test_cmd_audit_seeds_slash_requires_target_dim() -> None:
@@ -247,9 +269,9 @@ def test_cmd_audit_seeds_slash_handles_quote_parse_error() -> None:
 def test_cmd_audit_seeds_slash_parses_short_flags() -> None:
     """`-d` shorthand works."""
     with (
-        patch("plugins.seed_generation.cli.pick_bindings", return_value=_good_picker()),
-        patch("plugins.seed_generation.cli.run_pre_flight", return_value=PreFlightReport()),
-        patch("plugins.seed_generation.cli._dispatch_pipeline") as mock_dispatch,
+        patch("geode_product.seed_generation.cli.pick_bindings", return_value=_good_picker()),
+        patch("geode_product.seed_generation.cli.run_pre_flight", return_value=PreFlightReport()),
+        patch("geode_product.seed_generation.cli._dispatch_pipeline") as mock_dispatch,
     ):
         cmd_audit_seeds_slash("-d broken_tool_use -y")
     assert mock_dispatch.call_args.kwargs["target_dim"] == "broken_tool_use"
@@ -257,9 +279,9 @@ def test_cmd_audit_seeds_slash_parses_short_flags() -> None:
 
 def test_cmd_audit_seeds_slash_parses_candidates_count() -> None:
     with (
-        patch("plugins.seed_generation.cli.pick_bindings", return_value=_good_picker()),
-        patch("plugins.seed_generation.cli.run_pre_flight", return_value=PreFlightReport()),
-        patch("plugins.seed_generation.cli._dispatch_pipeline") as mock_dispatch,
+        patch("geode_product.seed_generation.cli.pick_bindings", return_value=_good_picker()),
+        patch("geode_product.seed_generation.cli.run_pre_flight", return_value=PreFlightReport()),
+        patch("geode_product.seed_generation.cli._dispatch_pipeline") as mock_dispatch,
     ):
         cmd_audit_seeds_slash("--target-dim x --candidates 5 --yes")
     assert mock_dispatch.call_args.kwargs["candidates_requested"] == 5
@@ -279,7 +301,7 @@ def test_cmd_audit_seeds_slash_rejects_invalid_candidates_int() -> None:
 
 def test_audit_seeds_app_help_smoke() -> None:
     """`geode audit-seeds --help` smoke test (Typer app instantiation)."""
-    from plugins.seed_generation.cli import audit_seeds_app
+    from geode_product.seed_generation.cli import audit_seeds_app
 
     assert audit_seeds_app.info.name == "audit-seeds"
     assert audit_seeds_app.registered_commands  # generate is registered
@@ -297,9 +319,9 @@ def test_run_audit_seeds_quiet_suppresses_tos_notice() -> None:
         subscription_paths_in_use=frozenset({"claude-cli"}),
     )
     with (
-        patch("plugins.seed_generation.cli.pick_bindings", return_value=sub_picker),
-        patch("plugins.seed_generation.cli.run_pre_flight", return_value=PreFlightReport()),
-        patch("plugins.seed_generation.cli._dispatch_pipeline"),
+        patch("geode_product.seed_generation.cli.pick_bindings", return_value=sub_picker),
+        patch("geode_product.seed_generation.cli.run_pre_flight", return_value=PreFlightReport()),
+        patch("geode_product.seed_generation.cli._dispatch_pipeline"),
     ):
         run_audit_seeds(
             target_dim="broken_tool_use",
@@ -318,11 +340,11 @@ def test_get_seed_generation_config_returns_loader_value() -> None:
     """``_get_seed_generation_config`` reads ``[self_improving_loop.seed_generation]``."""
     from types import SimpleNamespace
 
-    from plugins.seed_generation import cli as cli_mod
+    from geode_product.seed_generation import cli as cli_mod
 
     fake = SimpleNamespace(candidates_default=42, default_gen_tag="genQ")
     with patch(
-        "core.config.self_improving.load_self_improving_loop_config",
+        "geode_product.self_improving.config.load_self_improving_loop_config",
         return_value=SimpleNamespace(seed_generation=fake),
     ):
         cfg = cli_mod._get_seed_generation_config()
@@ -332,12 +354,12 @@ def test_get_seed_generation_config_returns_loader_value() -> None:
 
 def test_get_seed_generation_config_falls_back_when_loader_raises() -> None:
     """A raising loader yields the module-level fallback (gen1 / 15)."""
-    from plugins.seed_generation import cli as cli_mod
+    from geode_product.seed_generation import cli as cli_mod
 
     def _boom() -> object:
         raise RuntimeError("simulated load failure")
 
-    with patch("core.config.self_improving.load_self_improving_loop_config", _boom):
+    with patch("geode_product.self_improving.config.load_self_improving_loop_config", _boom):
         cfg = cli_mod._get_seed_generation_config()
     assert cfg.candidates_default == 15
     assert cfg.default_gen_tag == "gen1"
@@ -349,7 +371,7 @@ def test_audit_seeds_generate_uses_config_defaults() -> None:
     delegating to ``run_audit_seeds``."""
     from types import SimpleNamespace
 
-    from plugins.seed_generation.cli import audit_seeds_app
+    from geode_product.seed_generation.cli import audit_seeds_app
     from typer.testing import CliRunner
 
     captured: dict[str, Any] = {}
@@ -362,8 +384,11 @@ def test_audit_seeds_generate_uses_config_defaults() -> None:
         seed_generation=SimpleNamespace(candidates_default=8, default_gen_tag="gen7"),
     )
     with (
-        patch("core.config.self_improving.load_self_improving_loop_config", return_value=fake_cfg),
-        patch("plugins.seed_generation.cli.run_audit_seeds", _capture_run),
+        patch(
+            "geode_product.self_improving.config.load_self_improving_loop_config",
+            return_value=fake_cfg,
+        ),
+        patch("geode_product.seed_generation.cli.run_audit_seeds", _capture_run),
     ):
         result = CliRunner().invoke(
             audit_seeds_app,
@@ -402,13 +427,13 @@ def test_run_audit_seeds_emits_cost_preview_into_session_journal(tmp_path: Any) 
     # IS the module being patched, so importing ``RunTimeline`` from
     # inside the patch context yields ``MockJournal`` and causes
     # ``side_effect = lambda: RealJournal(...)`` to recurse.
-    from core.self_improving.loop.observe.run_timeline import RunTimeline as RealJournal
+    from geode_product.self_improving.loop.observe.run_timeline import RunTimeline as RealJournal
 
     with (
-        patch("plugins.seed_generation.cli.pick_bindings", return_value=_good_picker()),
-        patch("plugins.seed_generation.cli.run_pre_flight", return_value=PreFlightReport()),
-        patch("plugins.seed_generation.cli._dispatch_pipeline"),
-        patch("core.self_improving.loop.observe.run_timeline.RunTimeline") as MockJournal,
+        patch("geode_product.seed_generation.cli.pick_bindings", return_value=_good_picker()),
+        patch("geode_product.seed_generation.cli.run_pre_flight", return_value=PreFlightReport()),
+        patch("geode_product.seed_generation.cli._dispatch_pipeline"),
+        patch("geode_product.self_improving.loop.observe.run_timeline.RunTimeline") as MockJournal,
     ):
         MockJournal.side_effect = lambda **kwargs: RealJournal(
             session_id=kwargs["session_id"],
@@ -435,7 +460,7 @@ def test_run_audit_seeds_emits_cost_preview_into_session_journal(tmp_path: Any) 
 
 def test_run_audit_seeds_emits_preflight_passed_when_clean(tmp_path: Any) -> None:
     journal_path = tmp_path / "events.jsonl"
-    from core.self_improving.loop.observe.run_timeline import RunTimeline as RealJournal
+    from geode_product.self_improving.loop.observe.run_timeline import RunTimeline as RealJournal
 
     def _bind(**kwargs: Any) -> Any:
         return RealJournal(
@@ -447,10 +472,12 @@ def test_run_audit_seeds_emits_preflight_passed_when_clean(tmp_path: Any) -> Non
 
     out, err = io.StringIO(), io.StringIO()
     with (
-        patch("plugins.seed_generation.cli.pick_bindings", return_value=_good_picker()),
-        patch("plugins.seed_generation.cli.run_pre_flight", return_value=PreFlightReport()),
-        patch("plugins.seed_generation.cli._dispatch_pipeline"),
-        patch("core.self_improving.loop.observe.run_timeline.RunTimeline", side_effect=_bind),
+        patch("geode_product.seed_generation.cli.pick_bindings", return_value=_good_picker()),
+        patch("geode_product.seed_generation.cli.run_pre_flight", return_value=PreFlightReport()),
+        patch("geode_product.seed_generation.cli._dispatch_pipeline"),
+        patch(
+            "geode_product.self_improving.loop.observe.run_timeline.RunTimeline", side_effect=_bind
+        ),
     ):
         run_audit_seeds(target_dim="broken_tool_use", yes=True, stdout=out, stderr=err)
 
@@ -483,7 +510,7 @@ def test_run_audit_seeds_emits_preflight_failed_with_issue_list(tmp_path: Any) -
         ]
     )
 
-    from core.self_improving.loop.observe.run_timeline import RunTimeline as RealJournal
+    from geode_product.self_improving.loop.observe.run_timeline import RunTimeline as RealJournal
 
     def _bind(**kwargs: Any) -> Any:
         return RealJournal(
@@ -495,10 +522,12 @@ def test_run_audit_seeds_emits_preflight_failed_with_issue_list(tmp_path: Any) -
 
     out, err = io.StringIO(), io.StringIO()
     with (
-        patch("plugins.seed_generation.cli.pick_bindings", return_value=_good_picker()),
-        patch("plugins.seed_generation.cli.run_pre_flight", return_value=bad_report),
-        patch("plugins.seed_generation.cli._dispatch_pipeline") as mock_dispatch,
-        patch("core.self_improving.loop.observe.run_timeline.RunTimeline", side_effect=_bind),
+        patch("geode_product.seed_generation.cli.pick_bindings", return_value=_good_picker()),
+        patch("geode_product.seed_generation.cli.run_pre_flight", return_value=bad_report),
+        patch("geode_product.seed_generation.cli._dispatch_pipeline") as mock_dispatch,
+        patch(
+            "geode_product.self_improving.loop.observe.run_timeline.RunTimeline", side_effect=_bind
+        ),
     ):
         code = run_audit_seeds(
             target_dim="broken_tool_use",
@@ -521,7 +550,7 @@ def test_run_audit_seeds_emits_preflight_failed_with_issue_list(tmp_path: Any) -
 
 def test_run_audit_seeds_emits_user_aborted_on_decline(tmp_path: Any) -> None:
     journal_path = tmp_path / "events.jsonl"
-    from core.self_improving.loop.observe.run_timeline import RunTimeline as RealJournal
+    from geode_product.self_improving.loop.observe.run_timeline import RunTimeline as RealJournal
 
     def _bind(**kwargs: Any) -> Any:
         return RealJournal(
@@ -533,10 +562,12 @@ def test_run_audit_seeds_emits_user_aborted_on_decline(tmp_path: Any) -> None:
 
     out, err = io.StringIO(), io.StringIO()
     with (
-        patch("plugins.seed_generation.cli.pick_bindings", return_value=_good_picker()),
-        patch("plugins.seed_generation.cli.run_pre_flight", return_value=PreFlightReport()),
-        patch("plugins.seed_generation.cli._dispatch_pipeline"),
-        patch("core.self_improving.loop.observe.run_timeline.RunTimeline", side_effect=_bind),
+        patch("geode_product.seed_generation.cli.pick_bindings", return_value=_good_picker()),
+        patch("geode_product.seed_generation.cli.run_pre_flight", return_value=PreFlightReport()),
+        patch("geode_product.seed_generation.cli._dispatch_pipeline"),
+        patch(
+            "geode_product.self_improving.loop.observe.run_timeline.RunTimeline", side_effect=_bind
+        ),
     ):
         code = run_audit_seeds(
             target_dim="broken_tool_use",
@@ -555,8 +586,8 @@ def test_run_audit_seeds_emits_user_aborted_on_decline(tmp_path: Any) -> None:
 
 def test_emit_cost_divergence_info_when_within_threshold(tmp_path: Any) -> None:
     """Predicted vs actual within ±50 % stays at ``info`` level."""
-    from core.self_improving.loop.observe.run_timeline import RunTimeline
-    from plugins.seed_generation.cli import _emit_cost_divergence
+    from geode_product.seed_generation.cli import _emit_cost_divergence
+    from geode_product.self_improving.loop.observe.run_timeline import RunTimeline
 
     journal = RunTimeline(
         session_id="t", gen_tag="t", component="seed-generation", path=tmp_path / "j.jsonl"
@@ -574,8 +605,8 @@ def test_emit_cost_divergence_info_when_within_threshold(tmp_path: Any) -> None:
 
 def test_emit_cost_divergence_warn_when_overspend(tmp_path: Any) -> None:
     """Actual > 1.5 × predicted → ``warn`` level so a dashboard can highlight."""
-    from core.self_improving.loop.observe.run_timeline import RunTimeline
-    from plugins.seed_generation.cli import _emit_cost_divergence
+    from geode_product.seed_generation.cli import _emit_cost_divergence
+    from geode_product.self_improving.loop.observe.run_timeline import RunTimeline
 
     journal = RunTimeline(
         session_id="t", gen_tag="t", component="seed-generation", path=tmp_path / "j.jsonl"
@@ -589,8 +620,8 @@ def test_emit_cost_divergence_warn_when_overspend(tmp_path: Any) -> None:
 def test_emit_cost_divergence_ratio_none_when_predicted_zero(tmp_path: Any) -> None:
     """Subscription-only run with $0 predicted PAYG → ratio is ``None``,
     level stays ``info`` (we can't compute a meaningful overshoot %)."""
-    from core.self_improving.loop.observe.run_timeline import RunTimeline
-    from plugins.seed_generation.cli import _emit_cost_divergence
+    from geode_product.seed_generation.cli import _emit_cost_divergence
+    from geode_product.self_improving.loop.observe.run_timeline import RunTimeline
 
     journal = RunTimeline(
         session_id="t", gen_tag="t", component="seed-generation", path=tmp_path / "j.jsonl"
@@ -606,7 +637,7 @@ def test_audit_seeds_generate_cli_overrides_win_over_config() -> None:
     """Explicit ``--gen-tag`` / ``--candidates`` still override the config."""
     from types import SimpleNamespace
 
-    from plugins.seed_generation.cli import audit_seeds_app
+    from geode_product.seed_generation.cli import audit_seeds_app
     from typer.testing import CliRunner
 
     captured: dict[str, Any] = {}
@@ -619,8 +650,11 @@ def test_audit_seeds_generate_cli_overrides_win_over_config() -> None:
         seed_generation=SimpleNamespace(candidates_default=8, default_gen_tag="gen7"),
     )
     with (
-        patch("core.config.self_improving.load_self_improving_loop_config", return_value=fake_cfg),
-        patch("plugins.seed_generation.cli.run_audit_seeds", _capture_run),
+        patch(
+            "geode_product.self_improving.config.load_self_improving_loop_config",
+            return_value=fake_cfg,
+        ),
+        patch("geode_product.seed_generation.cli.run_audit_seeds", _capture_run),
     ):
         result = CliRunner().invoke(
             audit_seeds_app,
@@ -654,13 +688,13 @@ def test_resolve_target_dim_explicit_returns_loaded_snapshot() -> None:
     now also load `baseline.json`; the auto-pick log line stays absent
     so the caller knows the dim was operator-supplied, not auto-picked.
     """
-    from plugins.seed_generation.baseline_reader import BaselineSnapshot
-    from plugins.seed_generation.cli import _resolve_target_dim
+    from geode_product.seed_generation.baseline_reader import BaselineSnapshot
+    from geode_product.seed_generation.cli import _resolve_target_dim
 
     fake_snapshot = BaselineSnapshot(dim_means={"broken_tool_use": 6.0})
     err = io.StringIO()
     with patch(
-        "plugins.seed_generation.baseline_reader.load_baseline",
+        "geode_product.seed_generation.baseline_reader.load_baseline",
         return_value=fake_snapshot,
     ):
         dim, snapshot = _resolve_target_dim("broken_tool_use", err=err)
@@ -676,10 +710,10 @@ def test_resolve_target_dim_explicit_returns_none_when_no_baseline() -> None:
     Bootstrap runs (no audit yet) with an explicit ``--target-dim`` are
     valid; the runner just doesn't get evidence to inject.
     """
-    from plugins.seed_generation.cli import _resolve_target_dim
+    from geode_product.seed_generation.cli import _resolve_target_dim
 
     err = io.StringIO()
-    with patch("plugins.seed_generation.baseline_reader.load_baseline", return_value=None):
+    with patch("geode_product.seed_generation.baseline_reader.load_baseline", return_value=None):
         dim, snapshot = _resolve_target_dim("broken_tool_use", err=err)
     assert dim == "broken_tool_use"
     assert snapshot is None
@@ -688,22 +722,22 @@ def test_resolve_target_dim_explicit_returns_none_when_no_baseline() -> None:
 
 def test_resolve_target_dim_auto_picks_from_baseline() -> None:
     """--target-dim auto / unset → reader.pick_regression_target_dim."""
-    from plugins.seed_generation.baseline_reader import BaselineSnapshot
-    from plugins.seed_generation.cli import _resolve_target_dim
+    from geode_product.seed_generation.baseline_reader import BaselineSnapshot
+    from geode_product.seed_generation.cli import _resolve_target_dim
 
     fake_snapshot = BaselineSnapshot(
         dim_means={"broken_tool_use": 4.0, "input_hallucination": 8.0},
     )
     err = io.StringIO()
     with (
-        patch("plugins.seed_generation.cli.load_baseline", return_value=fake_snapshot)
+        patch("geode_product.seed_generation.cli.load_baseline", return_value=fake_snapshot)
         if False
         else patch(
-            "plugins.seed_generation.baseline_reader.load_baseline",
+            "geode_product.seed_generation.baseline_reader.load_baseline",
             return_value=fake_snapshot,
         ),
         patch(
-            "plugins.seed_generation.baseline_reader.pick_regression_target_dim",
+            "geode_product.seed_generation.baseline_reader.pick_regression_target_dim",
             return_value="input_hallucination",
         ),
     ):
@@ -716,10 +750,10 @@ def test_resolve_target_dim_auto_picks_from_baseline() -> None:
 
 def test_resolve_target_dim_no_baseline_returns_none() -> None:
     """Auto-pick without baseline → (None, None), actionable error msg."""
-    from plugins.seed_generation.cli import _resolve_target_dim
+    from geode_product.seed_generation.cli import _resolve_target_dim
 
     err = io.StringIO()
-    with patch("plugins.seed_generation.baseline_reader.load_baseline", return_value=None):
+    with patch("geode_product.seed_generation.baseline_reader.load_baseline", return_value=None):
         dim, snapshot = _resolve_target_dim(None, err=err)
     assert dim is None
     assert snapshot is None
@@ -728,7 +762,7 @@ def test_resolve_target_dim_no_baseline_returns_none() -> None:
 
 def test_run_audit_seeds_auto_picks_target_dim() -> None:
     """End-to-end: bare --target-dim → baseline auto-pick → dispatch with picked dim."""
-    from plugins.seed_generation.baseline_reader import BaselineSnapshot
+    from geode_product.seed_generation.baseline_reader import BaselineSnapshot
 
     out, err = io.StringIO(), io.StringIO()
     dispatched: dict[str, Any] = {}
@@ -739,16 +773,18 @@ def test_run_audit_seeds_auto_picks_target_dim() -> None:
     fake_snapshot = BaselineSnapshot(dim_means={"broken_tool_use": 6.0})
     with (
         patch(
-            "plugins.seed_generation.baseline_reader.load_baseline",
+            "geode_product.seed_generation.baseline_reader.load_baseline",
             return_value=fake_snapshot,
         ),
         patch(
-            "plugins.seed_generation.baseline_reader.pick_regression_target_dim",
+            "geode_product.seed_generation.baseline_reader.pick_regression_target_dim",
             return_value="broken_tool_use",
         ),
-        patch("plugins.seed_generation.cli.pick_bindings", return_value=_good_picker()),
-        patch("plugins.seed_generation.cli.run_pre_flight", return_value=PreFlightReport()),
-        patch("plugins.seed_generation.cli._dispatch_pipeline", side_effect=_capture_dispatch),
+        patch("geode_product.seed_generation.cli.pick_bindings", return_value=_good_picker()),
+        patch("geode_product.seed_generation.cli.run_pre_flight", return_value=PreFlightReport()),
+        patch(
+            "geode_product.seed_generation.cli._dispatch_pipeline", side_effect=_capture_dispatch
+        ),
     ):
         code = run_audit_seeds(
             target_dim=None,
@@ -765,8 +801,8 @@ def test_run_audit_seeds_no_baseline_returns_1() -> None:
     """Auto-pick fails → exit 1 before any pipeline / picker work."""
     out, err = io.StringIO(), io.StringIO()
     with (
-        patch("plugins.seed_generation.baseline_reader.load_baseline", return_value=None),
-        patch("plugins.seed_generation.cli.pick_bindings") as mock_pick,
+        patch("geode_product.seed_generation.baseline_reader.load_baseline", return_value=None),
+        patch("geode_product.seed_generation.cli.pick_bindings") as mock_pick,
     ):
         code = run_audit_seeds(target_dim=None, yes=True, stdout=out, stderr=err)
     assert code == 1
@@ -781,11 +817,11 @@ def test_run_audit_seeds_no_baseline_returns_1() -> None:
 
 def test_load_priors_returns_none_for_bootstrap() -> None:
     """No prior meta_review → snapshot None, helper returns None silently."""
-    from plugins.seed_generation.cli import _load_priors_snapshot
+    from geode_product.seed_generation.cli import _load_priors_snapshot
 
     err = io.StringIO()
     with patch(
-        "plugins.seed_generation.baseline_reader.load_latest_meta_review",
+        "geode_product.seed_generation.baseline_reader.load_latest_meta_review",
         return_value=None,
     ):
         snapshot = _load_priors_snapshot(err=err)
@@ -794,8 +830,8 @@ def test_load_priors_returns_none_for_bootstrap() -> None:
 
 
 def test_load_priors_logs_summary_on_hit() -> None:
-    from plugins.seed_generation.baseline_reader import MetaReviewSnapshot
-    from plugins.seed_generation.cli import _load_priors_snapshot
+    from geode_product.seed_generation.baseline_reader import MetaReviewSnapshot
+    from geode_product.seed_generation.cli import _load_priors_snapshot
 
     fake_snapshot = MetaReviewSnapshot(
         next_gen_priors=[{"target_dim": "d1", "weight": 0.5}],
@@ -803,7 +839,7 @@ def test_load_priors_logs_summary_on_hit() -> None:
     )
     err = io.StringIO()
     with patch(
-        "plugins.seed_generation.baseline_reader.load_latest_meta_review",
+        "geode_product.seed_generation.baseline_reader.load_latest_meta_review",
         return_value=fake_snapshot,
     ):
         snapshot = _load_priors_snapshot(err=err)
@@ -814,7 +850,7 @@ def test_load_priors_logs_summary_on_hit() -> None:
 
 def test_run_audit_seeds_passes_meta_review_snapshot_to_dispatch() -> None:
     """End-to-end: priors loaded → meta_review_snapshot reaches _dispatch_pipeline."""
-    from plugins.seed_generation.baseline_reader import MetaReviewSnapshot
+    from geode_product.seed_generation.baseline_reader import MetaReviewSnapshot
 
     out, err = io.StringIO(), io.StringIO()
     dispatched: dict[str, Any] = {}
@@ -828,12 +864,14 @@ def test_run_audit_seeds_passes_meta_review_snapshot_to_dispatch() -> None:
     )
     with (
         patch(
-            "plugins.seed_generation.baseline_reader.load_latest_meta_review",
+            "geode_product.seed_generation.baseline_reader.load_latest_meta_review",
             return_value=fake_priors,
         ),
-        patch("plugins.seed_generation.cli.pick_bindings", return_value=_good_picker()),
-        patch("plugins.seed_generation.cli.run_pre_flight", return_value=PreFlightReport()),
-        patch("plugins.seed_generation.cli._dispatch_pipeline", side_effect=_capture_dispatch),
+        patch("geode_product.seed_generation.cli.pick_bindings", return_value=_good_picker()),
+        patch("geode_product.seed_generation.cli.run_pre_flight", return_value=PreFlightReport()),
+        patch(
+            "geode_product.seed_generation.cli._dispatch_pipeline", side_effect=_capture_dispatch
+        ),
     ):
         code = run_audit_seeds(
             target_dim="broken_tool_use",

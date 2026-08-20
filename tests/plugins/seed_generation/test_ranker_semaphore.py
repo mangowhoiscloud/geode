@@ -12,7 +12,7 @@ test, which observes start timestamps under the semaphore.
 from __future__ import annotations
 
 import pytest
-from plugins.seed_generation.agents.ranker import (
+from geode_product.seed_generation.agents.ranker import (
     DEFAULT_RANKER_MAX_INFLIGHT_MATCHES,
     RANKER_MAX_INFLIGHT_MATCHES_ENV,
     resolve_ranker_max_inflight_matches,

@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import tomllib
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
 import pytest
-from plugins.petri_audit.manifest import (
+from geode_product.petri_audit.manifest import (
     DEFAULT_MANIFEST_PATH,
     AdapterSpec,
     PetriManifest,
@@ -53,13 +54,13 @@ def _valid_dict() -> dict[str, Any]:
             "adapter": {
                 "anthropic": {
                     "api_key": {
-                        "module": "plugins.petri_audit.adapters.http_anthropic",
+                        "module": "geode_product.petri_audit.adapters.http_anthropic",
                         "inspect_prefix": "anthropic",
                         "auth_env_vars": ["ANTHROPIC_API_KEY"],
                         "endpoint": "https://api.anthropic.com",
                     },
                     "claude-cli": {
-                        "module": "plugins.petri_audit.adapters.claude_cli_backend",
+                        "module": "geode_product.petri_audit.adapters.claude_cli_backend",
                         "inspect_prefix": "claude-code",
                         "auth_env_vars": ["ANTHROPIC_OAUTH_TOKEN"],
                         "binary": "claude",
@@ -110,12 +111,19 @@ def test_default_manifest_inspect_prefixes() -> None:
     manifest = load_manifest()
     assert manifest.get_adapter("anthropic", "api_key").inspect_prefix == "anthropic"
     # CSA-3 (2026-05-22) — flipped from "claude-code" / "openai-codex"
-    # to "claude-cli" / "codex-cli" so source="claude-cli" + source=
-    # "openai-codex" land on the paperclip subprocess providers.
+    # to "claude-cli" / "openai-codex" so each source lands on its
+    # supported subscription backend.
     assert manifest.get_adapter("anthropic", "claude-cli").inspect_prefix == "claude-cli"
     assert manifest.get_adapter("openai", "api_key").inspect_prefix == "openai"
-    assert manifest.get_adapter("openai", "openai-codex").inspect_prefix == "codex-cli"
+    assert manifest.get_adapter("openai", "openai-codex").inspect_prefix == "openai-codex"
     assert manifest.get_adapter("zhipuai", "api_key").inspect_prefix == "geode"
+
+
+def test_manifest_prefixes_have_inspect_entry_points() -> None:
+    with (DEFAULT_MANIFEST_PATH.parents[2] / "pyproject.toml").open("rb") as handle:
+        entry_points = tomllib.load(handle)["project"]["entry-points"]["inspect_ai"]
+
+    assert {"claude-cli", "openai-codex", "geode"} <= set(entry_points)
 
 
 # ── Negative validation paths ──────────────────────────────────────────────
@@ -202,7 +210,7 @@ allowed_models = ["claude-sonnet-4-6"]
 default = "api_key"
 allowed = ["api_key"]
 [petri.adapter.anthropic.api_key]
-module = "plugins.petri_audit.adapters.http_anthropic"
+module = "geode_product.petri_audit.adapters.http_anthropic"
 inspect_prefix = "anthropic"
 auth_env_vars = ["ANTHROPIC_API_KEY"]
 """,
@@ -225,7 +233,7 @@ allowed_models = ["claude-sonnet-4-6"]
 default = "api_key"
 allowed = ["api_key"]
 [petri.adapter.anthropic.api_key]
-module = "plugins.petri_audit.adapters.http_anthropic"
+module = "geode_product.petri_audit.adapters.http_anthropic"
 inspect_prefix = "anthropic"
 auth_env_vars = ["ANTHROPIC_API_KEY"]
 """
@@ -256,7 +264,7 @@ def test_source_spec_round_trip() -> None:
 
 def test_adapter_spec_optional_fields() -> None:
     spec = AdapterSpec(
-        module="plugins.petri_audit.adapters.http_anthropic",
+        module="geode_product.petri_audit.adapters.http_anthropic",
         inspect_prefix="anthropic",
     )
     assert spec.auth_env_vars == []

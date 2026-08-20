@@ -132,7 +132,7 @@ Both pages share the **same sidebar markup** as the hub (`self-improving-hub-vis
 | 1 | `run_id` | `runs[].run_id` | `<a href="/geode/self-improving/seed-generation/{run_id}/">{run_id}</a>` + `<span class="bucket seedgen">seedgen</span>` |
 | 2 | `gen` | `runs[].gen_tag` | `<code>{gen_tag}</code>` (mono inline) |
 | 3 | `target dim` | `runs[].target_dim` | `<code>{target_dim}</code>` |
-| 4 | `mutator` | constant `claude-cli/claude-opus-4-7` (v0.99.65 default) — *not* in `listing.json`; build script supplies it from `core/self_improving_loop/runner.py` config | `<span class="chip claude">Claude Code</span> <code>claude-cli/claude-opus-4-7</code>`. When a future run records a per-run mutator override, source it from `state.json.mutator_override` (does not yet exist; fall back to constant). |
+| 4 | `mutator` | constant `claude-cli/claude-opus-4-7` (v0.99.65 default) — *not* in `listing.json`; build script supplies it from `geode_product/self_improving/loop/runner.py` config | `<span class="chip claude">Claude Code</span> <code>claude-cli/claude-opus-4-7</code>`. When a future run records a per-run mutator override, source it from `state.json.mutator_override` (does not yet exist; fall back to constant). |
 | 5 | `draft → surv` | `runs[].candidates_drafted` `→` `runs[].survivors_count` | `<td class="num">{drafted} → {surv}</td>`. The `→` is U+2192 with a single space each side. |
 | 6 | `evolved` | `runs[].evolved_count` | `<td class="num">{n}</td>` |
 | 7 | `iter` | `runs[].iterations` / `runs[].max_iterations` | `<td class="num">{cur} / {max}</td>` — render `0 / 0` when both are 0 (warm-up runs) |
@@ -1171,7 +1171,7 @@ Per CLAUDE.md "Wiring Verification":
 
 | Item | Rule applied here |
 |---|---|
-| Read-Write parity | Every JSON key the renderer reads (e.g. `state.candidates[].duration_ms`) must exist somewhere in `core/self_improving_loop/` or `plugins/seed_generation/` write path. Build script logs `WARNING seedgen: unread state key {k}` for any top-level state.json key the renderer ignored (forward-compat detection). |
+| Read-Write parity | Every JSON key the renderer reads (e.g. `state.candidates[].duration_ms`) must exist somewhere in `geode_product/self_improving/loop/` or `plugins/seed_generation/` write path. Build script logs `WARNING seedgen: unread state key {k}` for any top-level state.json key the renderer ignored (forward-compat detection). |
 | Conditional read parity | The mutator banner must render whether the run came from `audit-seeds generate --mutator …` or default — both branches feed the same `mutator_banner` template slot. |
 | Writer destination tracked | `git check-ignore docs/self-improving/seed-generation/index.html` MUST return non-zero (tracked). Pin via `tests/test_ratchet_policies_in_repo.py::test_seedgen_outputs_not_gitignored`. |
 

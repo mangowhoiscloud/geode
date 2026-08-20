@@ -14,29 +14,33 @@ import inspect
 import json
 import textwrap
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 pytest.importorskip("mcp")
 
-from core.mcp_server import _self_improving_status_payload, create_mcp_server
+from core.mcp_server import create_mcp_server
+from geode_product.self_improving.mcp import _status_payload, register_mcp_tools
 
-EXPECTED_TOOLS = {
+CORE_TOOLS = {
     "run_agent",
+    "query_memory",
+    "get_health",
+}
+PRODUCT_TOOLS = {
     "self_improving_status",
     "self_improving_propose",
     "self_improving_apply",
-    "query_memory",
-    "get_health",
 }
 
 
 def test_server_identity_and_tool_surface() -> None:
-    server = create_mcp_server()
+    server = create_mcp_server(feature_registrar=register_mcp_tools)
     assert server.name == "geode"
     tools = asyncio.run(server.list_tools())
     names = {tool.name for tool in tools}
-    assert names >= EXPECTED_TOOLS
+    assert names >= CORE_TOOLS | PRODUCT_TOOLS
 
 
 def test_handshake_advertises_geode_version_not_sdk_version() -> None:
@@ -75,15 +79,18 @@ def test_get_health_reports_credential_sources() -> None:
 
 
 def test_tool_descriptions_sourced_from_json() -> None:
-    """Every registered core tool keeps its description in mcp_tools.json."""
-    descriptions_path = Path("core/tools/mcp_tools.json")
-    described = set(json.loads(descriptions_path.read_text(encoding="utf-8")))
-    assert described >= EXPECTED_TOOLS
+    """Kernel and product tools keep descriptions with their owners."""
+    core_described = set(json.loads(Path("core/tools/mcp_tools.json").read_text(encoding="utf-8")))
+    product_described = set(
+        json.loads(Path("geode_product/self_improving/mcp_tools.json").read_text(encoding="utf-8"))
+    )
+    assert core_described >= CORE_TOOLS
+    assert product_described == PRODUCT_TOOLS
 
 
 def test_apply_without_propose_is_refused() -> None:
     """Two-step contract — apply must not write without a parked proposal."""
-    server = create_mcp_server()
+    server = create_mcp_server(feature_registrar=register_mcp_tools)
     result = asyncio.run(server.call_tool("self_improving_apply", {"mutation_id": "nope"}))
     payload = result[1] if isinstance(result, tuple) else result
     text = json.dumps(payload, default=str)
@@ -102,7 +109,7 @@ def test_status_payload_graceful_on_missing_files(
     # point it at a nonexistent tmp path so the reader doesn't fall through to the
     # operator's real ~/.geode/self-improving/baseline.json.
     monkeypatch.setattr(core_paths, "BASELINE_JSON_PATH", tmp_path / "state" / "baseline.json")
-    payload = _self_improving_status_payload()
+    payload = _status_payload()
     assert payload == {"baseline": None, "recent_mutations": []}
 
 
@@ -144,7 +151,7 @@ def test_status_payload_reads_baseline_and_ledger_tail(
         "\n".join(json.dumps(row) for row in ledger_rows) + "\nnot-json\n", encoding="utf-8"
     )
 
-    payload = _self_improving_status_payload()
+    payload = _status_payload()
     assert payload["baseline"] == {
         "fitness": 0.7915,
         "ts_utc": "2026-06-10T00:00:00Z",
@@ -174,24 +181,17 @@ def test_run_agentic_oneshot_bootstraps_adapters() -> None:
     assert any({kw.arg for kw in call.keywords} >= {"policy_sources"} for call in calls)
 
 
-def test_run_agent_tool_is_async_and_awaits_async_core() -> None:
-    """FastMCP executes tools inside the server's event loop — a sync tool
-    calling run_process_coroutine raises "cannot be called from an active
-    event loop" (second live HTTP run_agent failure, 2026-06-11). The tool
-    must be async and await arun_agentic_oneshot."""
-    tree = ast.parse(textwrap.dedent(inspect.getsource(create_mcp_server)))
-    run_agent = next(
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.AsyncFunctionDef) and node.name == "run_agent"
-    )
-    assert any(
-        isinstance(node, ast.Await)
-        and isinstance(node.value, ast.Call)
-        and isinstance(node.value.func, ast.Name)
-        and node.value.func.id == "arun_agentic_oneshot"
-        for node in ast.walk(run_agent)
-    )
+def test_run_agent_tool_awaits_injected_async_runner() -> None:
+    calls: list[tuple[str, bool, float]] = []
+
+    async def runner(prompt: str, *, quiet: bool, time_budget_s: float, **_: object) -> object:
+        calls.append((prompt, quiet, time_budget_s))
+        return SimpleNamespace(text="done", rounds=2, termination_reason="completed", error=None)
+
+    server = create_mcp_server(agent_runner=runner)
+    result = asyncio.run(server.call_tool("run_agent", {"prompt": "check", "time_budget_s": 3.0}))
+    assert calls == [("check", True, 3.0)]
+    assert "done" in json.dumps(result, default=str)
 
 
 def test_sync_oneshot_wrapper_delegates_to_async_core() -> None:

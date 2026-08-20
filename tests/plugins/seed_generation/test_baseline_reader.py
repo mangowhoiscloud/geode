@@ -1,4 +1,4 @@
-"""Tests for ``plugins.seed_generation.baseline_reader`` — G3 (2026-05-20)."""
+"""Tests for ``geode_product.seed_generation.baseline_reader`` — G3 (2026-05-20)."""
 
 from __future__ import annotations
 
@@ -6,13 +6,13 @@ import json
 from pathlib import Path
 
 import pytest
-from core.self_improving import ledger
-from plugins.seed_generation.baseline_reader import (
+from geode_product.seed_generation.baseline_reader import (
     BaselineSnapshot,
     format_evidence_block,
     load_baseline,
     pick_regression_target_dim,
 )
+from geode_product.self_improving import ledger
 
 # ---------------------------------------------------------------------------
 # load_baseline
@@ -323,7 +323,7 @@ def test_format_evidence_truncates_long_explanation(
 def test_load_baseline_uses_autoresearch_default_path(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """When no path arg, reader pulls core.self_improving.train.BASELINE_PATH."""
+    """When no path arg, reader pulls geode_product.self_improving.train.BASELINE_PATH."""
     state_dir = tmp_path
     autoresearch_baseline = state_dir / "baseline.json"
     autoresearch_baseline.write_text(
@@ -342,7 +342,7 @@ def test_load_baseline_uses_autoresearch_default_path(
 # ---------------------------------------------------------------------------
 
 
-from plugins.seed_generation.baseline_reader import (  # noqa: E402
+from geode_product.seed_generation.baseline_reader import (  # noqa: E402
     MetaReviewSnapshot,
     format_priors_block,
     load_latest_meta_review,
@@ -507,7 +507,7 @@ def test_load_baseline_drops_non_numeric_dim_means(tmp_path: Path) -> None:
     assert snapshot is not None, (
         "G3.fix2 regression: load_baseline raised instead of dropping the "
         "non-numeric dim. The graceful-contract docstring promises None on "
-        "unparseable input, not a half-state."
+        "unparsable input, not a half-state."
     )
     # Good entries kept, bad entries dropped silently.
     assert snapshot.dim_means == {

@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from core.self_improving.loop.mutate.mutator_feedback import (
+from geode_product.self_improving.loop.mutate.mutator_feedback import (
     RepetitionFinding,
     RepetitiveMutationError,
     check_repetitive_mutation,
@@ -454,7 +454,7 @@ def test_repetitive_mutation_error_subclasses_value_error() -> None:
 def test_dedup_threshold_default_matches_difflib_grounding() -> None:
     """Default ``mutator_dedup_threshold`` (0.85) sits well above
     ``difflib.get_close_matches`` cutoff (0.6 "close match" band)."""
-    from core.config.self_improving import AutoresearchConfig
+    from geode_product.self_improving.config import AutoresearchConfig
 
     cfg = AutoresearchConfig()
     assert cfg.mutator_dedup_threshold == 0.85
@@ -463,8 +463,8 @@ def test_dedup_threshold_default_matches_difflib_grounding() -> None:
 def test_feedback_window_default_matches_wire_default_last() -> None:
     """Default ``mutator_feedback_window`` (20) matches the operator
     dashboard convention so the mutator sees the same recent slice."""
-    from core.cli.commands.self_improving import _WIRE_DEFAULT_LAST
-    from core.config.self_improving import AutoresearchConfig
+    from geode_product.self_improving.cli_commands import _WIRE_DEFAULT_LAST
+    from geode_product.self_improving.config import AutoresearchConfig
 
     cfg = AutoresearchConfig()
     assert cfg.mutator_feedback_window == _WIRE_DEFAULT_LAST

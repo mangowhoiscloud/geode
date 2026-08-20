@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from plugins.petri_audit.viz import (
+from geode_product.petri_audit.viz import (
     VizError,
     available_charts,
     render_agreement,
@@ -129,7 +129,7 @@ def test_render_heatmap_without_matplotlib_raises(
 
 
 def test_eval_inspect_viz_handler_registered() -> None:
-    from core.cli.tool_handlers.audit import _build_audit_handlers
+    from geode_product.tool_handlers import _build_audit_handlers
 
     handlers = _build_audit_handlers()
     assert "eval_inspect_viz" in handlers
@@ -137,7 +137,7 @@ def test_eval_inspect_viz_handler_registered() -> None:
 
 
 def test_eval_inspect_viz_missing_log_path_returns_error() -> None:
-    from core.cli.tool_handlers.audit import _build_audit_handlers
+    from geode_product.tool_handlers import _build_audit_handlers
 
     handlers = _build_audit_handlers()
     result = handlers["eval_inspect_viz"](chart="heatmap")
@@ -162,7 +162,7 @@ def test_eval_inspect_viz_in_definitions_json() -> None:
 
 @pytest.mark.skipif(_AUDIT_INSTALLED, reason="[audit] extra installed")
 def test_eval_inspect_viz_handler_without_audit_returns_error(tmp_path: Path) -> None:
-    from core.cli.tool_handlers.audit import _build_audit_handlers
+    from geode_product.tool_handlers import _build_audit_handlers
 
     handlers = _build_audit_handlers()
     result = handlers["eval_inspect_viz"](

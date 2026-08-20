@@ -1,4 +1,4 @@
-"""Unit tests for ``core.cli.commands.config`` (PR-ε1).
+"""Unit tests for the product-owned config migration command (PR-ε1).
 
 Covers the ``geode config migrate-petri-toml`` Typer subcommand:
 - dry-run path renders the [self_improving_loop.petri.*] snippets to
@@ -17,10 +17,14 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from core.cli.commands.config import _render_petri_sections, app
+import typer
+from geode_product.config_cli import _render_petri_sections, register_config_commands
 from typer.testing import CliRunner
 
 runner = CliRunner()
+app = typer.Typer(no_args_is_help=True)
+app.command("explain")(lambda: None)
+register_config_commands(app)
 
 
 # ── _render_petri_sections (pure unit) ──────────────────────────────────
@@ -58,7 +62,7 @@ def test_render_preserves_role_insertion_order() -> None:
 def _stub_plan(monkeypatch: pytest.MonkeyPatch, plan: dict[str, dict[str, str]]) -> None:
     """Replace migration_plan_from_petri_toml to avoid touching the host's
     real ~/.geode/petri.toml."""
-    import plugins.petri_audit.user_overrides as uo
+    import geode_product.petri_audit.user_overrides as uo
 
     monkeypatch.setattr(uo, "migration_plan_from_petri_toml", lambda: plan)
 
@@ -244,7 +248,7 @@ def test_yes_atomic_write_rollback_preserves_existing_config_on_failure(
     keep its original contents — atomic_io's tmp+rename pattern means we
     never see a partial file even on simulated disk-full."""
     import core.paths
-    from core.cli.commands import config as cmd_config
+    import geode_product.config_cli as cmd_config
 
     target = tmp_path / "config.toml"
     original = '[mcp.servers.calendar]\ncommand = "npx"\n'
@@ -315,7 +319,7 @@ def test_yes_post_render_validation_blocks_corrupt_combined_toml(
     destination must NOT be written. Force the case by stubbing the
     renderer to return a known-bad snippet."""
     import core.paths
-    from core.cli.commands import config as cmd_config
+    import geode_product.config_cli as cmd_config
 
     target = tmp_path / "config.toml"
     original = '[mcp.servers.calendar]\ncommand = "npx"\n'

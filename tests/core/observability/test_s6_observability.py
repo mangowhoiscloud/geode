@@ -24,38 +24,43 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 # ---------------------------------------------------------------------------
 
 
-def test_train_session_index_merges_metrics_row() -> None:
-    """train.py's registry append must spread the SessionMetrics row.
+def test_train_session_index_merges_metrics_without_clobbering_identity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The product summary owns identity while SessionMetrics contributes counters."""
+    import core.observability
+    from geode_product.self_improving import train
 
-    Source-level pin: the write-only ``to_session_row()`` regression was
-    invisible to unit tests (the method itself was tested); what broke was
-    the CALL. Assert the call site exists and spreads into ``extra``.
-    """
-    src = (REPO_ROOT / "core" / "self_improving" / "train.py").read_text(encoding="utf-8")
-    assert "to_session_row()" in src, "metrics row no longer persisted to sessions.jsonl"
-    call_block = src[src.index("_metrics_row = current_session_metrics().to_session_row()") :]
-    call_block = call_block[: call_block.index(")\n\n")]
-    assert "**_metrics_row" in call_block, "metrics row not merged into the extra payload"
+    class _Metrics:
+        def to_session_row(self) -> dict[str, object]:
+            return {
+                "session_id": "stale",
+                "gen_tag": "stale",
+                "component": "stale",
+                "started_at": -1.0,
+                "tokens_in": 7,
+            }
 
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(core.observability, "current_session_metrics", lambda: _Metrics())
+    monkeypatch.setattr(
+        train.ledger,
+        "_append_session_index",
+        lambda **kwargs: captured.update(kwargs),
+    )
 
-def test_train_seeds_session_metrics_identity() -> None:
-    """The run-scoped SessionMetrics is identity-seeded at main() start."""
-    src = (REPO_ROOT / "core" / "self_improving" / "train.py").read_text(encoding="utf-8")
-    assert "set_current_session_metrics(" in src
-    seed_block = src[src.index("set_current_session_metrics(") :][:400]
-    for ident in ("session_id=session_id", "gen_tag=gen_tag", 'component="autoresearch"'):
-        assert ident in seed_block, f"identity field missing from seed: {ident}"
+    train._append_session_metrics(
+        session_id="session",
+        gen_tag="gen-1",
+        started_at=12.5,
+        extra={"fitness": 0.9},
+    )
 
-
-def test_metrics_row_identity_keys_do_not_clobber() -> None:
-    """to_session_row identity keys are stripped before the extra merge."""
-    from core.observability import SessionMetrics
-
-    row = SessionMetrics(session_id="s", gen_tag="g", component="c").to_session_row()
-    for key in ("session_id", "gen_tag", "component", "started_at"):
-        assert key in row  # produced by the method...
-    src = (REPO_ROOT / "core" / "self_improving" / "train.py").read_text(encoding="utf-8")
-    assert "_metrics_row.pop(_identity_key, None)" in src  # ...and stripped at merge
+    assert captured["session_id"] == "session"
+    assert captured["gen_tag"] == "gen-1"
+    assert captured["component"] == "autoresearch"
+    assert captured["started_at"] == 12.5
+    assert captured["extra"] == {"fitness": 0.9, "tokens_in": 7}
 
 
 # ---------------------------------------------------------------------------
@@ -155,7 +160,7 @@ def test_every_entry_point_uses_switchboard() -> None:
         "core/cli/typer_serve.py": '"serve"',
         "core/mcp_server.py": '"mcp"',
         "core/agent/worker.py": '"worker"',
-        "core/self_improving/campaign.py": '"campaign"',
+        "geode_product/self_improving/campaign.py": '"campaign"',
     }
     for rel_path, mode_literal in entry_points.items():
         src = (REPO_ROOT / rel_path).read_text(encoding="utf-8")

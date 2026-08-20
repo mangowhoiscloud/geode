@@ -73,7 +73,7 @@ def test_retry_activity_emits_run_event(
 
     import core.paths
     from core.llm.providers.anthropic import _emit_retry_activity
-    from core.self_improving.loop.observe.run_timeline import (
+    from geode_product.self_improving.loop.observe.run_timeline import (
         RunTimeline,
         current_run_timeline,
         run_timeline_scope,

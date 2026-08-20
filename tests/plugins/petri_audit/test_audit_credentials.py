@@ -12,7 +12,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
-from plugins.petri_audit.runner import _resolve_anthropic_api_key, run_audit
+from geode_product.petri_audit.runner import _resolve_anthropic_api_key, run_audit
 
 
 def test_resolve_anthropic_api_key_prefers_settings(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -55,9 +55,12 @@ def test_run_audit_injects_anthropic_key_into_subprocess(monkeypatch: pytest.Mon
         return proc
 
     with (
-        patch("plugins.petri_audit.runner._resolve_anthropic_api_key", return_value="sk-injected"),
-        patch("plugins.petri_audit.runner.subprocess.run", side_effect=_fake_run),
-        patch("plugins.petri_audit.runner.shutil.which", return_value="/usr/bin/inspect"),
+        patch(
+            "geode_product.petri_audit.runner._resolve_anthropic_api_key",
+            return_value="sk-injected",
+        ),
+        patch("geode_product.petri_audit.runner.subprocess.run", side_effect=_fake_run),
+        patch("geode_product.petri_audit.runner.shutil.which", return_value="/usr/bin/inspect"),
     ):
         run_audit(
             judge="claude-opus-4-8",
@@ -90,11 +93,11 @@ def test_run_audit_keeps_existing_anthropic_key(monkeypatch: pytest.MonkeyPatch)
     # The resolver must NOT even be consulted when the key is already present.
     with (
         patch(
-            "plugins.petri_audit.runner._resolve_anthropic_api_key",
+            "geode_product.petri_audit.runner._resolve_anthropic_api_key",
             side_effect=AssertionError("resolver should not run when key present"),
         ),
-        patch("plugins.petri_audit.runner.subprocess.run", side_effect=_fake_run),
-        patch("plugins.petri_audit.runner.shutil.which", return_value="/usr/bin/inspect"),
+        patch("geode_product.petri_audit.runner.subprocess.run", side_effect=_fake_run),
+        patch("geode_product.petri_audit.runner.shutil.which", return_value="/usr/bin/inspect"),
     ):
         run_audit(
             judge="claude-opus-4-8",
@@ -129,9 +132,9 @@ def test_anthropic_auditor_judge_default_to_api_key_payg() -> None:
     the api_key (PAYG) path, NOT the claude-cli OAuth route (which refuses the
     adversarial auditor role). openai/codex roles are unaffected (separate test
     coverage in test_oauth_judge)."""
-    from plugins.petri_audit.runner import run_audit
+    from geode_product.petri_audit.runner import run_audit
 
-    with patch("plugins.petri_audit.user_overrides.read_role_override", return_value={}):
+    with patch("geode_product.petri_audit.user_overrides.read_role_override", return_value={}):
         report = run_audit(
             judge="claude-opus-4-8",
             auditor="claude-opus-4-8",
@@ -149,12 +152,14 @@ def test_anthropic_auditor_judge_default_to_api_key_payg() -> None:
 def test_explicit_source_override_wins_over_payg_default() -> None:
     """An explicit per-role source override is still honored over the api_key
     default (the default only fills when no override is set)."""
-    from plugins.petri_audit.runner import run_audit
+    from geode_product.petri_audit.runner import run_audit
 
     def _override(role: str) -> dict[str, str]:
         return {"source": "claude-cli"} if role in ("auditor", "judge") else {}
 
-    with patch("plugins.petri_audit.user_overrides.read_role_override", side_effect=_override):
+    with patch(
+        "geode_product.petri_audit.user_overrides.read_role_override", side_effect=_override
+    ):
         report = run_audit(
             judge="claude-opus-4-8",
             auditor="claude-opus-4-8",

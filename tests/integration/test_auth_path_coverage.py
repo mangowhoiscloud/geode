@@ -1,7 +1,7 @@
 """Integration test — 4-path × 4-component auth coverage matrix.
 
 Walks every (component, provider, source) cell in
-``plugins.seed_generation.auth_coverage.AUTH_COVERAGE_MATRIX`` and
+``geode_product.seed_generation.auth_coverage.AUTH_COVERAGE_MATRIX`` and
 verifies the routing surface is actually wired:
 
 - **seed_generation** — `pick_bindings()` with a user override forces the
@@ -22,7 +22,7 @@ petri_audit → anthropic.claude-cli).
 from __future__ import annotations
 
 import pytest
-from plugins.seed_generation.auth_coverage import (
+from geode_product.seed_generation.auth_coverage import (
     AUTH_COVERAGE_MATRIX,
     TEST_SETUP_PROFILE,
     AuthCell,
@@ -83,13 +83,13 @@ def test_seed_generation_routes_to_cell(cell: AuthCell) -> None:
     resolved RoleBinding for the cell's provider lands on the requested
     source.
     """
-    from plugins.seed_generation.manifest import (
+    from geode_product.seed_generation.manifest import (
         JudgePanelSpec,
         SeedGenerationManifest,
         SeedRoleSpec,
         VoterSpec,
     )
-    from plugins.seed_generation.picker import pick_bindings
+    from geode_product.seed_generation.picker import pick_bindings
 
     # Pick a model whose provider matches the cell.
     model = "claude-sonnet-4-6" if cell.path.provider == "anthropic" else "gpt-5.5"
@@ -120,7 +120,7 @@ def test_seed_generation_routes_to_cell(cell: AuthCell) -> None:
 @pytest.mark.parametrize("cell", _cells_for("petri_audit"))
 def test_petri_manifest_supports_cell(cell: AuthCell) -> None:
     """Petri's `[petri.source.<provider>].allowed` lists the cell source."""
-    from plugins.petri_audit.manifest import load_manifest as load_petri_manifest
+    from geode_product.petri_audit.manifest import load_manifest as load_petri_manifest
 
     petri = load_petri_manifest()
     source_spec = petri.get_source(cell.path.provider)
@@ -132,7 +132,7 @@ def test_petri_manifest_supports_cell(cell: AuthCell) -> None:
 
 @pytest.mark.parametrize("cell", _cells_for("autoresearch"))
 def test_autoresearch_can_target_cell(cell: AuthCell) -> None:
-    """`core/self_improving/train.py`'s flags can drive each cell's provider.
+    """`geode_product/self_improving/train.py`'s flags can drive each cell's provider.
 
     PR-MINIMAL-2 (2026-05-21) — ``USE_OAUTH: bool`` module constant
     replaced by ``SOURCE: str`` (B1: aligns shape with
@@ -142,13 +142,12 @@ def test_autoresearch_can_target_cell(cell: AuthCell) -> None:
     branch. The test just confirms the constants + flag plumbing
     exist; live OAuth probing is out of scope here.
     """
-    from core.self_improving import train
+    from geode_product.self_improving import train
 
     assert hasattr(train, "SOURCE")
     # Single-SoT (2026-05-22) — ``TARGET_MODEL`` / ``JUDGE_MODEL``
     # module constants removed; role models now resolve through the
-    # ``_petri_role_model`` helper which consults
-    # ``[self_improving_loop.petri.<role>]`` then the manifest.
+    # ``_petri_role_model`` helper; product composition owns manifest defaults.
     assert hasattr(train, "_petri_role_model")
     assert callable(train._petri_role_model)
     # Subscription path needs a non-api_key SOURCE; PAYG needs an env key field.
@@ -175,11 +174,11 @@ def test_geode_main_has_credential_field_for_cell(cell: AuthCell) -> None:
         attr = f"{cell.path.provider}_api_key"
         assert hasattr(settings, attr), f"settings missing {attr}"
     elif cell.path.source == "claude-cli":
-        from plugins.petri_audit.claude_code_provider import is_claude_oauth_available
+        from core.auth.claude_cli_oauth import is_claude_oauth_available
 
         assert callable(is_claude_oauth_available)
     elif cell.path.source == "openai-codex":
-        from plugins.petri_audit.codex_provider import is_codex_oauth_available
+        from geode_product.petri_audit.codex_provider import is_codex_oauth_available
 
         assert callable(is_codex_oauth_available)
 

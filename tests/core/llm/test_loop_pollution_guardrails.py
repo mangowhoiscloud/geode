@@ -235,11 +235,11 @@ def test_builtin_adapters_with_get_client_use_loop_affine_cache() -> None:
     finally:
         registry_mod._REGISTRY = original
 
-    assert len(adapters) >= 8
+    assert len(adapters) >= 7
     checked = 0
     for adapter in adapters:
         if not hasattr(adapter, "_get_client"):
-            continue  # subprocess adapters (claude-cli / codex-cli) own no SDK client
+            continue  # subprocess adapters such as claude-cli own no SDK client
         cache = getattr(adapter, "_clients", None)
         assert isinstance(cache, LoopAffineClientCache), (
             f"{adapter.name}: _get_client without a LoopAffineClientCache "
@@ -344,9 +344,9 @@ def test_deadline_override_keys_match_registered_handler_names() -> None:
     600s override silently never applied. Every override key must be an
     actually-registered handler name."""
     from core.agent.tool_executor.executor import _TOOL_DEADLINE_OVERRIDES_S
-    from core.cli.tool_handlers import _build_tool_handlers
+    from geode_product.tool_handlers import build_tool_handlers
 
-    registered = set(_build_tool_handlers().keys())
+    registered = set(build_tool_handlers())
     # ``computer`` registers only when GEODE_COMPUTER_USE_ENABLED + pyautogui
     # are present — pin its name against the builder source instead.
     single_tool_src = (REPO_ROOT / "core" / "cli" / "tool_handlers" / "single_tool.py").read_text(

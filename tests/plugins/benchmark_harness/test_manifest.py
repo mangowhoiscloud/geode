@@ -1,13 +1,27 @@
+import importlib
 from pathlib import Path
 
-from plugins.benchmark_harness.env import env_status, missing_required, read_dotenv_status
-from plugins.benchmark_harness.manifest import BENCHMARK_HARNESSES, get_harness
+from geode_product.benchmark_harness.env import env_status, missing_required, read_dotenv_status
+from geode_product.benchmark_harness.manifest import BENCHMARK_HARNESSES, get_harness
+
+
+def test_documented_mcpmark_legacy_module_is_the_canonical_module() -> None:
+    legacy = importlib.import_module("plugins.benchmark_harness.mcpmark_geode_agent")
+    canonical = importlib.import_module("geode_product.benchmark_harness.mcpmark_geode_agent")
+
+    assert legacy is canonical
 
 
 def test_manifest_lists_public_harnesses() -> None:
     assert set(BENCHMARK_HARNESSES) == {"mcpmark", "tau2-bench"}
-    assert get_harness("mcpmark").public_adapter == "plugins.benchmark_harness.mcpmark_geode_agent"
-    assert get_harness("tau2-bench").public_adapter == "plugins.benchmark_harness.tau2_geode_agent"
+    assert (
+        get_harness("mcpmark").public_adapter
+        == "geode_product.benchmark_harness.mcpmark_geode_agent"
+    )
+    assert (
+        get_harness("tau2-bench").public_adapter
+        == "geode_product.benchmark_harness.tau2_geode_agent"
+    )
     assert get_harness("tau2-bench").commit == "79975ac5741e23fbb1d2ac44262d62398a6d87bd"
 
 

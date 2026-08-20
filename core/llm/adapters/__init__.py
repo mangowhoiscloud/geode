@@ -11,7 +11,7 @@ Layer 4 of the design in
 Layer 3 concrete adapters (one per provider × source pair):
 
 - ``anthropic_payg`` / ``anthropic_oauth`` / ``claude_cli``
-- ``openai_payg`` / ``codex_oauth`` / ``codex_cli``
+- ``openai_payg`` / ``codex_oauth``
 
 External plugins implement :class:`LLMAdapter` and register via
 :func:`register_adapter` from their entry point.
@@ -25,6 +25,9 @@ Protocol + central dispatch (``core.llm.adapters.dispatch``) is the
 single registry / call surface.
 """
 
+from core.llm.adapters._openai_common import (
+    build_responses_kwargs as build_openai_responses_kwargs,
+)
 from core.llm.adapters.base import (
     CONCRETE_SOURCES,
     SOURCE_ADAPTER,
@@ -79,6 +82,7 @@ __all__ = [
     "UsageSummary",
     "adapter_health",
     "bootstrap_builtins",
+    "build_openai_responses_kwargs",
     "get_adapter",
     "infer_provider_from_model",
     "list_adapters",

@@ -18,8 +18,8 @@ export default function Page() {
               GEODE의 진입점은 둘입니다. <code>geode</code>(Typer CLI)와{" "}
               <code>geode-mcp</code>(stdio MCP 서버). 둘 다{" "}
               <code>pyproject.toml</code>의 <code>[project.scripts]</code>에
-              선언되어 있고, 각각 <code>core/cli/__init__.py</code>와{" "}
-              <code>core/mcp_server.py</code>로 들어갑니다. 이 페이지는 그 두
+              선언되어 있고, 각각 <code>geode_product/cli.py</code>와{" "}
+              <code>geode_product/mcp_server.py</code>로 들어갑니다. 이 페이지는 그 두
               표면의 전체 목록입니다.
             </p>
             <p>
@@ -36,7 +36,7 @@ export default function Page() {
             <h2>2-프로세스 구조</h2>
             <pre>{`geode (thin CLI)  ── Unix socket IPC (~/.geode/cli.sock) ──→  geode serve (데몬)
   자유 텍스트 → send_prompt 스트리밍                            AgenticLoop, MCP, 스케줄러,
-  슬래시 → core/cli/routing.py 가 THIN/daemon 결정              메신저 폴러, CLIPoller`}</pre>
+  슬래시 → 조립된 command registry가 THIN/daemon 결정           메신저 폴러, CLIPoller`}</pre>
             <p>
               bare <code>geode</code>는 환영 화면을 띄우고 소켓을 조사한 뒤,
               데몬이 없으면 자동 기동합니다(<code>start_serve_if_needed</code>,{" "}
@@ -97,7 +97,7 @@ export default function Page() {
                 <tr><th>명령</th><th>용도</th><th>주요 옵션</th><th>코드</th></tr>
               </thead>
               <tbody>
-                <tr><td><code>geode</code></td><td>환영 화면, 필요 시 serve 자동 기동, thin REPL 진입</td><td><code>--version</code>, <code>--continue</code>, <code>--resume &lt;id&gt;</code></td><td><code>core/cli/__init__.py</code></td></tr>
+                <tr><td><code>geode</code></td><td>환영 화면, 필요 시 serve 자동 기동, thin REPL 진입</td><td><code>--version</code>, <code>--continue</code>, <code>--resume &lt;id&gt;</code></td><td><code>geode_product/cli.py</code> → <code>core/cli/__init__.py</code></td></tr>
                 <tr><td><code>geode version</code></td><td>버전 출력</td><td>없음</td><td><code>core/cli/typer_commands.py</code></td></tr>
                 <tr><td><code>geode about</code></td><td>실행 중인 것의 한 화면 요약. EFFECTIVE 모델, env가 toml을 가리는 경고, 경로, 데몬 소켓 상태</td><td>없음</td><td><code>core/cli/typer_commands.py</code></td></tr>
                 <tr><td><code>geode setup</code></td><td>최초 설정 마법사. ChatGPT 구독 OAuth(<code>~/.codex/auth.json</code>)를 API 키보다 먼저 감지</td><td><code>--reset/-r</code></td><td><code>core/cli/onboarding.py</code></td></tr>
@@ -106,12 +106,12 @@ export default function Page() {
                 <tr><td><code>geode uninstall</code></td><td>런타임 데이터와 CLI 제거</td><td><code>--dry-run</code>, <code>--force/-f</code>, <code>--keep-config</code>, <code>--keep-data</code></td><td><code>core/cli/commands/lifecycle.py</code></td></tr>
                 <tr><td><code>geode init</code></td><td><code>.geode/</code> 프로젝트 골격 생성. 프로젝트 타입 자동 감지</td><td><code>--force/-f</code></td><td><code>core/cli/typer_init.py</code></td></tr>
                 <tr><td><code>geode history</code></td><td>실행 이력과 월간 비용 요약</td><td><code>--limit/-n</code>, <code>--month/-m YYYY-MM</code></td><td><code>core/llm/usage_store.py</code></td></tr>
-                <tr><td><code>geode serve</code></td><td>CLI IPC 데몬. <code>gateway_enabled</code>를 켜면 메신저 폴러도 함께 실행</td><td><code>--poll/-p</code></td><td><code>core/cli/typer_serve.py</code></td></tr>
-                <tr><td><code>geode audit</code></td><td>Petri × GEODE 정렬 감사 실행</td><td><code>--judge/-j</code>, <code>--auditor/-a</code>, <code>--target/-t</code>, <code>--seeds/-s</code>, <code>--max-turns/-m</code>, <code>--seed-select</code>, <code>--dim-set</code>, <code>--dry-run/--live</code>, <code>--unrestricted</code>, <code>--cache/--no-cache</code></td><td><code>plugins/petri_audit/cli_audit.py</code></td></tr>
-                <tr><td><code>geode petri-archive</code></td><td>petri eval 로그를 워크트리 밖으로 보존하고 YAML 요약 작성</td><td><code>--raw-archive-dir</code>, <code>--summary-dir</code></td><td><code>plugins/petri_audit/cli_audit.py</code></td></tr>
+                <tr><td><code>geode serve</code></td><td>CLI IPC 데몬. <code>gateway_enabled</code>를 켜면 메신저 폴러도 함께 실행</td><td><code>--poll/-p</code></td><td><code>geode_product/wiring.py</code> → <code>core/cli/typer_serve.py</code></td></tr>
+                <tr><td><code>geode audit</code></td><td>Petri × GEODE 정렬 감사 실행</td><td><code>--judge/-j</code>, <code>--auditor/-a</code>, <code>--target/-t</code>, <code>--seeds/-s</code>, <code>--max-turns/-m</code>, <code>--seed-select</code>, <code>--dim-set</code>, <code>--dry-run/--live</code>, <code>--unrestricted</code>, <code>--cache/--no-cache</code></td><td><code>geode_product/petri_audit/cli_audit.py</code></td></tr>
+                <tr><td><code>geode petri-archive</code></td><td>petri eval 로그를 워크트리 밖으로 보존하고 YAML 요약 작성</td><td><code>--raw-archive-dir</code>, <code>--summary-dir</code></td><td><code>geode_product/petri_audit/cli_audit.py</code></td></tr>
                 <tr><td><code>geode outer-bundle</code></td><td>자기개선 루프 활동을 하나의 타임라인으로 묶어 보는 뷰어</td><td><code>--limit</code>, <code>--json</code></td><td><code>core/cli/outer_bundle.py</code></td></tr>
                 <tr><td><code>geode reindex</code></td><td>전 프로젝트 sessions.db에서 <code>~/.geode/search/global.db</code> FTS5 인덱스 재구축</td><td><code>--projects-root</code></td><td><code>core/cli/commands/reindex.py</code></td></tr>
-                <tr><td><code>geode campaign</code></td><td>3-arm 자기개선 캠페인 드라이버의 thin 포워더</td><td><code>--n</code>, <code>--k</code>, <code>--arms</code>, <code>--dry-run</code></td><td><code>core/self_improving/campaign.py</code></td></tr>
+                <tr><td><code>geode campaign</code></td><td>3-arm 자기개선 캠페인 드라이버의 thin 포워더</td><td><code>--n</code>, <code>--k</code>, <code>--arms</code>, <code>--dry-run</code></td><td><code>geode_product/self_improving/campaign.py</code></td></tr>
               </tbody>
             </table>
 
@@ -126,7 +126,7 @@ export default function Page() {
                 <tr><td><code>geode config</code></td><td><code>explain [key]</code> / <code>migrate-petri-toml</code></td><td>설정 레이어별 후보 표. 어느 레이어가 이기고 무엇이 가려졌는지 보여 줍니다</td><td><code>core/cli/commands/config.py</code></td></tr>
                 <tr><td><code>geode seeds</code></td><td><code>assemble</code></td><td>cycle-input 시드 풀 조립. repo 체크아웃 전용 래퍼</td><td><code>core/cli/commands/seed_pool.py</code></td></tr>
                 <tr><td><code>geode hub</code></td><td><code>build</code></td><td>자기개선 허브 정적 페이지 빌드. repo 체크아웃 전용 래퍼</td><td><code>core/cli/commands/seed_pool.py</code></td></tr>
-                <tr><td><code>geode audit-seeds</code></td><td><code>generate</code> / <code>resume</code> / <code>config</code></td><td>타깃 dim 하나에 대한 시드 생성 파이프라인. 페이즈별 체크포인트에서 재개 가능</td><td><code>plugins/seed_generation/cli.py</code></td></tr>
+                <tr><td><code>geode audit-seeds</code></td><td><code>generate</code> / <code>resume</code> / <code>config</code></td><td>타깃 dim 하나에 대한 시드 생성 파이프라인. 페이즈별 체크포인트에서 재개 가능</td><td><code>geode_product/seed_generation/cli.py</code></td></tr>
               </tbody>
             </table>
             <p>
@@ -140,11 +140,14 @@ export default function Page() {
 
             <h2>슬래시 명령</h2>
             <p>
-              SoT는 <code>core/cli/commands/_state.py</code>의{" "}
-              <code>COMMAND_MAP</code>이고, 실행 위치는{" "}
-              <code>core/cli/routing.py</code>의 <code>COMMAND_REGISTRY</code>가
-              결정합니다. THIN은 CLI 프로세스에서 로컬로 실행되고(터미널과
-              브라우저가 붙어 있어야 하는 명령), 나머지는 IPC{" "}
+              명시적 실행 위치와 주입 핸들러는 <code>core/cli/routing.py</code>의
+              커널 <code>COMMAND_REGISTRY</code>에{" "}
+              <code>geode_product/cli.py</code>의 <code>PRODUCT_COMMAND_SPECS</code>를
+              조립한 레지스트리가 정의합니다. thin REPL은 <code>/help</code>,{" "}
+              <code>/fleet</code>, 인자 없는 <code>/model</code>도 로컬에서 특별
+              처리합니다. <code>core/cli/commands/_state.py</code>의{" "}
+              <code>COMMAND_MAP</code>은 legacy dispatcher action과 별칭을
+              매핑합니다. 로컬로 처리되지 않은 명령은 IPC{" "}
               <code>send_command</code>로 데몬에 전달됩니다.
             </p>
             <table>
@@ -156,13 +159,15 @@ export default function Page() {
                 <tr><td><code>/login</code></td><td></td><td>THIN</td><td>플랜과 자격 대시보드. <code>openai</code>, <code>anthropic</code>, <code>google</code>, <code>add</code>, <code>use</code>, <code>route</code>, <code>quota</code>, <code>source</code></td><td><code>core/cli/commands/login.py</code></td></tr>
                 <tr><td><code>/key &lt;value&gt;</code></td><td></td><td>THIN</td><td>PAYG API 키 빠른 등록(/login의 legacy 별칭)</td><td><code>core/cli/commands/key.py</code></td></tr>
                 <tr><td><code>/model</code></td><td></td><td>THIN</td><td>모델 확인과 전환. Tab으로 역할(primary, reflection, mutator) 순환</td><td><code>core/cli/commands/model.py</code></td></tr>
-                <tr><td><code>/audit</code></td><td></td><td>THIN</td><td><code>geode audit</code>의 슬래시 형태</td><td><code>plugins/petri_audit/cli_audit.py</code></td></tr>
-                <tr><td><code>/audit-seeds</code></td><td></td><td>THIN</td><td>시드 후보 생성 파이프라인</td><td><code>plugins/seed_generation/cli.py</code></td></tr>
-                <tr><td><code>/self-improving</code></td><td><code>/sil</code></td><td>THIN</td><td>자기개선 루프 운영. <code>status</code>, <code>run</code>, <code>history</code>, <code>rollback</code>, <code>config</code>, <code>source</code>, <code>matrix</code></td><td><code>core/cli/commands/self_improving.py</code></td></tr>
+                <tr><td><code>/audit</code></td><td></td><td>THIN</td><td><code>geode audit</code>의 슬래시 형태</td><td><code>geode_product/petri_audit/cli_audit.py</code></td></tr>
+                <tr><td><code>/audit-seeds</code></td><td></td><td>THIN</td><td>시드 후보 생성 파이프라인</td><td><code>geode_product/seed_generation/cli.py</code></td></tr>
+                <tr><td><code>/petri</code></td><td></td><td>THIN</td><td>Petri 역할 × 모델 × 소스 확인과 전환</td><td><code>geode_product/petri_audit/cli.py</code></td></tr>
+                <tr><td><code>/self-improving</code></td><td><code>/sil</code></td><td>THIN</td><td>상태·설정·관측과 제안→확인→적용 실행. <code>run</code>의 harness 평가는 아직 no-op이고, <code>history</code>/<code>rollback</code>은 git 명령 안내만 출력</td><td><code>core/cli/commands/self_improving.py</code></td></tr>
                 <tr><td><code>/recall</code></td><td></td><td>THIN</td><td>기억 풀 <code>list</code> / <code>show</code> / <code>save</code></td><td><code>core/cli/commands/recall.py</code></td></tr>
+                <tr><td><code>/cognitive</code></td><td></td><td>THIN</td><td>세션의 cognitive state와 최근 이벤트 표시</td><td><code>core/cli/commands/session.py</code></td></tr>
+                <tr><td><code>/fleet</code></td><td></td><td>THIN</td><td>최근 턴의 서브에이전트 fleet 뷰</td><td><code>core/cli/dispatcher.py</code></td></tr>
                 <tr><td><code>/quit</code></td><td><code>/exit</code>, <code>/q</code></td><td>daemon</td><td>세션 비용 요약과 함께 종료</td><td><code>core/cli/dispatcher.py</code></td></tr>
                 <tr><td><code>/verbose</code></td><td></td><td>daemon</td><td>verbose 토글</td><td><code>core/cli/dispatcher.py</code></td></tr>
-                <tr><td><code>/petri</code></td><td></td><td>daemon</td><td>Petri 역할 × 모델 × 소스 확인과 전환</td><td><code>core/cli/commands/petri.py</code></td></tr>
                 <tr><td><code>/schedule</code></td><td><code>/sched</code></td><td>daemon</td><td>예약 자동화 관리</td><td><code>core/cli/commands/schedule.py</code></td></tr>
                 <tr><td><code>/trigger</code></td><td></td><td>daemon</td><td>이벤트와 cron 트리거 관리</td><td><code>core/cli/commands/trigger.py</code></td></tr>
                 <tr><td><code>/status</code></td><td></td><td>daemon</td><td>모델, 키 상태, MCP 서버, 데몬과 디스크 사용량</td><td><code>core/cli/dispatcher.py</code></td></tr>
@@ -199,7 +204,7 @@ export default function Page() {
             <h2>geode-mcp 서버</h2>
             <p>
               <code>geode-mcp</code>는 GEODE를 외부 MCP 호스트(Claude Code 등)에
-              도구로 노출하는 stdio 서버입니다(<code>core/mcp_server.py</code>).
+              도구로 노출하는 stdio 서버입니다(<code>geode_product/mcp_server.py</code>).
               repo 루트의 <code>.mcp.json</code>이 이 프로젝트에서 연 Claude
               Code 세션에 자동 등록하고, 수동 등록은{" "}
               <code>claude mcp add geode -- geode-mcp</code>입니다. 도구 설명은{" "}
@@ -247,8 +252,8 @@ export default function Page() {
               GEODE has two entry points: <code>geode</code> (a Typer CLI) and{" "}
               <code>geode-mcp</code> (a stdio MCP server). Both are declared in{" "}
               <code>pyproject.toml</code> under <code>[project.scripts]</code>{" "}
-              and land in <code>core/cli/__init__.py</code> and{" "}
-              <code>core/mcp_server.py</code>. This page is the complete
+              and land in <code>geode_product/cli.py</code> and{" "}
+              <code>geode_product/mcp_server.py</code>. This page is the complete
               reference for both surfaces.
             </p>
             <p>
@@ -265,7 +270,7 @@ export default function Page() {
             <h2>Two-process split</h2>
             <pre>{`geode (thin CLI)  ── Unix socket IPC (~/.geode/cli.sock) ──→  geode serve (daemon)
   free text → send_prompt streaming                            AgenticLoop, MCP, scheduler,
-  slash → core/cli/routing.py picks THIN vs daemon             messenger pollers, CLIPoller`}</pre>
+  slash → composed command registry picks THIN vs daemon       messenger pollers, CLIPoller`}</pre>
             <p>
               Bare <code>geode</code> renders the welcome screen, probes the
               socket, and auto-starts the daemon if absent
@@ -331,7 +336,7 @@ export default function Page() {
                 <tr><th>Command</th><th>Purpose</th><th>Key options</th><th>Code</th></tr>
               </thead>
               <tbody>
-                <tr><td><code>geode</code></td><td>Welcome screen, auto-start serve if needed, enter the thin REPL</td><td><code>--version</code>, <code>--continue</code>, <code>--resume &lt;id&gt;</code></td><td><code>core/cli/__init__.py</code></td></tr>
+                <tr><td><code>geode</code></td><td>Welcome screen, auto-start serve if needed, enter the thin REPL</td><td><code>--version</code>, <code>--continue</code>, <code>--resume &lt;id&gt;</code></td><td><code>geode_product/cli.py</code> → <code>core/cli/__init__.py</code></td></tr>
                 <tr><td><code>geode version</code></td><td>Print the version</td><td>none</td><td><code>core/cli/typer_commands.py</code></td></tr>
                 <tr><td><code>geode about</code></td><td>One screen of what is running: EFFECTIVE model, env-masks-toml warning, paths, daemon socket state</td><td>none</td><td><code>core/cli/typer_commands.py</code></td></tr>
                 <tr><td><code>geode setup</code></td><td>First-time wizard; detects ChatGPT subscription OAuth (<code>~/.codex/auth.json</code>) before asking for API keys</td><td><code>--reset/-r</code></td><td><code>core/cli/onboarding.py</code></td></tr>
@@ -340,12 +345,12 @@ export default function Page() {
                 <tr><td><code>geode uninstall</code></td><td>Remove runtime data and the installed CLI</td><td><code>--dry-run</code>, <code>--force/-f</code>, <code>--keep-config</code>, <code>--keep-data</code></td><td><code>core/cli/commands/lifecycle.py</code></td></tr>
                 <tr><td><code>geode init</code></td><td>Create the <code>.geode/</code> project skeleton; auto-detects the project type</td><td><code>--force/-f</code></td><td><code>core/cli/typer_init.py</code></td></tr>
                 <tr><td><code>geode history</code></td><td>Execution history and monthly cost summary</td><td><code>--limit/-n</code>, <code>--month/-m YYYY-MM</code></td><td><code>core/llm/usage_store.py</code></td></tr>
-                <tr><td><code>geode serve</code></td><td>CLI IPC daemon; also runs messenger pollers when <code>gateway_enabled</code> is on</td><td><code>--poll/-p</code></td><td><code>core/cli/typer_serve.py</code></td></tr>
-                <tr><td><code>geode audit</code></td><td>Run a Petri × GEODE alignment audit</td><td><code>--judge/-j</code>, <code>--auditor/-a</code>, <code>--target/-t</code>, <code>--seeds/-s</code>, <code>--max-turns/-m</code>, <code>--seed-select</code>, <code>--dim-set</code>, <code>--dry-run/--live</code>, <code>--unrestricted</code>, <code>--cache/--no-cache</code></td><td><code>plugins/petri_audit/cli_audit.py</code></td></tr>
-                <tr><td><code>geode petri-archive</code></td><td>Persist a petri eval log outside the worktree plus a YAML summary</td><td><code>--raw-archive-dir</code>, <code>--summary-dir</code></td><td><code>plugins/petri_audit/cli_audit.py</code></td></tr>
+                <tr><td><code>geode serve</code></td><td>CLI IPC daemon; also runs messenger pollers when <code>gateway_enabled</code> is on</td><td><code>--poll/-p</code></td><td><code>geode_product/wiring.py</code> → <code>core/cli/typer_serve.py</code></td></tr>
+                <tr><td><code>geode audit</code></td><td>Run a Petri × GEODE alignment audit</td><td><code>--judge/-j</code>, <code>--auditor/-a</code>, <code>--target/-t</code>, <code>--seeds/-s</code>, <code>--max-turns/-m</code>, <code>--seed-select</code>, <code>--dim-set</code>, <code>--dry-run/--live</code>, <code>--unrestricted</code>, <code>--cache/--no-cache</code></td><td><code>geode_product/petri_audit/cli_audit.py</code></td></tr>
+                <tr><td><code>geode petri-archive</code></td><td>Persist a petri eval log outside the worktree plus a YAML summary</td><td><code>--raw-archive-dir</code>, <code>--summary-dir</code></td><td><code>geode_product/petri_audit/cli_audit.py</code></td></tr>
                 <tr><td><code>geode outer-bundle</code></td><td>Crosswalk self-improving activity into one timeline</td><td><code>--limit</code>, <code>--json</code></td><td><code>core/cli/outer_bundle.py</code></td></tr>
                 <tr><td><code>geode reindex</code></td><td>Rebuild the cross-project FTS5 index at <code>~/.geode/search/global.db</code></td><td><code>--projects-root</code></td><td><code>core/cli/commands/reindex.py</code></td></tr>
-                <tr><td><code>geode campaign</code></td><td>Thin forwarder for the 3-arm self-improving campaign driver</td><td><code>--n</code>, <code>--k</code>, <code>--arms</code>, <code>--dry-run</code></td><td><code>core/self_improving/campaign.py</code></td></tr>
+                <tr><td><code>geode campaign</code></td><td>Thin forwarder for the 3-arm self-improving campaign driver</td><td><code>--n</code>, <code>--k</code>, <code>--arms</code>, <code>--dry-run</code></td><td><code>geode_product/self_improving/campaign.py</code></td></tr>
               </tbody>
             </table>
 
@@ -360,7 +365,7 @@ export default function Page() {
                 <tr><td><code>geode config</code></td><td><code>explain [key]</code> / <code>migrate-petri-toml</code></td><td>Per-layer candidate table for a setting: which layer wins, which are masked</td><td><code>core/cli/commands/config.py</code></td></tr>
                 <tr><td><code>geode seeds</code></td><td><code>assemble</code></td><td>Assemble the cycle-input seed pool. Repo-checkout-only wrapper</td><td><code>core/cli/commands/seed_pool.py</code></td></tr>
                 <tr><td><code>geode hub</code></td><td><code>build</code></td><td>Build the self-improving hub static pages. Repo-checkout-only wrapper</td><td><code>core/cli/commands/seed_pool.py</code></td></tr>
-                <tr><td><code>geode audit-seeds</code></td><td><code>generate</code> / <code>resume</code> / <code>config</code></td><td>Seed-generation pipeline for one target dim, resumable from per-phase checkpoints</td><td><code>plugins/seed_generation/cli.py</code></td></tr>
+                <tr><td><code>geode audit-seeds</code></td><td><code>generate</code> / <code>resume</code> / <code>config</code></td><td>Seed-generation pipeline for one target dim, resumable from per-phase checkpoints</td><td><code>geode_product/seed_generation/cli.py</code></td></tr>
               </tbody>
             </table>
             <p>
@@ -374,12 +379,15 @@ export default function Page() {
 
             <h2>Slash commands</h2>
             <p>
-              The source of truth is <code>COMMAND_MAP</code> in{" "}
-              <code>core/cli/commands/_state.py</code>; execution location is
-              decided by <code>COMMAND_REGISTRY</code> in{" "}
-              <code>core/cli/routing.py</code>. THIN runs locally in the CLI
-              process (commands that need the terminal or a browser); everything
-              else is relayed to the daemon via IPC <code>send_command</code>.
+              Explicit execution locations and injected handlers come from the
+              composed registry: the kernel <code>COMMAND_REGISTRY</code> in{" "}
+              <code>core/cli/routing.py</code> plus <code>PRODUCT_COMMAND_SPECS</code>{" "}
+              from <code>geode_product/cli.py</code>. The thin REPL also
+              special-cases <code>/help</code>, <code>/fleet</code>, and
+              argument-free <code>/model</code> locally. <code>COMMAND_MAP</code> in{" "}
+              <code>core/cli/commands/_state.py</code> maps legacy dispatcher actions
+              and aliases. Commands not handled locally are relayed through IPC{" "}
+              <code>send_command</code>.
             </p>
             <table>
               <thead>
@@ -390,13 +398,15 @@ export default function Page() {
                 <tr><td><code>/login</code></td><td></td><td>THIN</td><td>Plans and credentials dashboard: <code>openai</code>, <code>anthropic</code>, <code>google</code>, <code>add</code>, <code>use</code>, <code>route</code>, <code>quota</code>, <code>source</code></td><td><code>core/cli/commands/login.py</code></td></tr>
                 <tr><td><code>/key &lt;value&gt;</code></td><td></td><td>THIN</td><td>Quick PAYG API key (legacy alias for /login)</td><td><code>core/cli/commands/key.py</code></td></tr>
                 <tr><td><code>/model</code></td><td></td><td>THIN</td><td>Show and switch models; Tab cycles agent roles (primary, reflection, mutator)</td><td><code>core/cli/commands/model.py</code></td></tr>
-                <tr><td><code>/audit</code></td><td></td><td>THIN</td><td>Slash form of <code>geode audit</code></td><td><code>plugins/petri_audit/cli_audit.py</code></td></tr>
-                <tr><td><code>/audit-seeds</code></td><td></td><td>THIN</td><td>Seed candidate generation pipeline</td><td><code>plugins/seed_generation/cli.py</code></td></tr>
-                <tr><td><code>/self-improving</code></td><td><code>/sil</code></td><td>THIN</td><td>Self-improving loop ops: <code>status</code>, <code>run</code>, <code>history</code>, <code>rollback</code>, <code>config</code>, <code>source</code>, <code>matrix</code></td><td><code>core/cli/commands/self_improving.py</code></td></tr>
+                <tr><td><code>/audit</code></td><td></td><td>THIN</td><td>Slash form of <code>geode audit</code></td><td><code>geode_product/petri_audit/cli_audit.py</code></td></tr>
+                <tr><td><code>/audit-seeds</code></td><td></td><td>THIN</td><td>Seed candidate generation pipeline</td><td><code>geode_product/seed_generation/cli.py</code></td></tr>
+                <tr><td><code>/petri</code></td><td></td><td>THIN</td><td>Show and switch Petri role × model × source</td><td><code>geode_product/petri_audit/cli.py</code></td></tr>
+                <tr><td><code>/self-improving</code></td><td><code>/sil</code></td><td>THIN</td><td>Status, configuration, observability, and propose→confirm→apply. Harness evaluation in <code>run</code> is still a no-op; <code>history</code>/<code>rollback</code> only print git recipes</td><td><code>core/cli/commands/self_improving.py</code></td></tr>
                 <tr><td><code>/recall</code></td><td></td><td>THIN</td><td>Memory pool <code>list</code> / <code>show</code> / <code>save</code></td><td><code>core/cli/commands/recall.py</code></td></tr>
+                <tr><td><code>/cognitive</code></td><td></td><td>THIN</td><td>Show a session&apos;s cognitive state and recent events</td><td><code>core/cli/commands/session.py</code></td></tr>
+                <tr><td><code>/fleet</code></td><td></td><td>THIN</td><td>Show the latest turn&apos;s sub-agent fleet view</td><td><code>core/cli/dispatcher.py</code></td></tr>
                 <tr><td><code>/quit</code></td><td><code>/exit</code>, <code>/q</code></td><td>daemon</td><td>Exit with a session cost summary</td><td><code>core/cli/dispatcher.py</code></td></tr>
                 <tr><td><code>/verbose</code></td><td></td><td>daemon</td><td>Toggle verbose mode</td><td><code>core/cli/dispatcher.py</code></td></tr>
-                <tr><td><code>/petri</code></td><td></td><td>daemon</td><td>Show and switch Petri role × model × source</td><td><code>core/cli/commands/petri.py</code></td></tr>
                 <tr><td><code>/schedule</code></td><td><code>/sched</code></td><td>daemon</td><td>Manage scheduled automations</td><td><code>core/cli/commands/schedule.py</code></td></tr>
                 <tr><td><code>/trigger</code></td><td></td><td>daemon</td><td>Manage event and cron triggers</td><td><code>core/cli/commands/trigger.py</code></td></tr>
                 <tr><td><code>/status</code></td><td></td><td>daemon</td><td>Model, credential state, MCP servers, daemon and disk usage</td><td><code>core/cli/dispatcher.py</code></td></tr>
@@ -436,7 +446,7 @@ export default function Page() {
             <p>
               <code>geode-mcp</code> is the stdio server that exposes GEODE as a
               tool to external MCP hosts such as Claude Code
-              (<code>core/mcp_server.py</code>). The repo ships{" "}
+              (<code>geode_product/mcp_server.py</code>). The repo ships{" "}
               <code>.mcp.json</code> at its root, which registers the server for
               Claude Code sessions opened in this project; manual registration
               is <code>claude mcp add geode -- geode-mcp</code>. Tool

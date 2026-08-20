@@ -55,7 +55,7 @@ on the canonical 0-1 fitness scale).
    Honest empty state per arm when no cycle recorded.
 3. **Power** — the required `N_seed × M_replicate` line computed from the recorded
    σ (`√(within²+between²)`) at δ=0.02, α=0.05, 80% power (the formula mirrors
-   `core/self_improving_loop/statistical_power.py::required_samples`) + the honest
+   `geode_product/self_improving/loop/statistical_power.py::required_samples`) + the honest
    verdict ("no evidence yet" when the gain CI includes 0; "indeterminate" when σ is
    unrecorded — never a fabricated N).
 

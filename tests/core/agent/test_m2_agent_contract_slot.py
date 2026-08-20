@@ -23,7 +23,7 @@ from core.agent.agent_contracts_policy import (
     apply_agent_contracts_policy,
 )
 from core.config.policy_source import PolicySourcePaths
-from core.self_improving.loop.mutate import policies as pol
+from geode_product.self_improving.loop.mutate import policies as pol
 
 
 @pytest.fixture
@@ -71,7 +71,7 @@ def test_target_kinds_count_is_7_behaviour_kinds() -> None:
 
 
 def test_policy_path_agent_contract_maps_to_in_repo() -> None:
-    from core.self_improving.policy_sources import build_policy_source_bundle
+    from geode_product.self_improving.policy_sources import build_policy_source_bundle
 
     assert (
         pol.policy_path("agent_contract")

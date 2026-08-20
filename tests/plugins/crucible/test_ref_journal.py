@@ -6,9 +6,9 @@ import subprocess
 from copy import deepcopy
 from pathlib import Path
 
-import plugins.crucible.ref_journal as journal_module
+import geode_product.crucible.ref_journal as journal_module
 import pytest
-from plugins.crucible.ref_journal import (
+from geode_product.crucible.ref_journal import (
     RefIntent,
     RefJournalError,
     RefReceipt,

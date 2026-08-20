@@ -19,47 +19,54 @@ import pytest
 
 
 def test_self_improving_registered_in_command_registry() -> None:
-    from core.cli.routing import COMMAND_REGISTRY, RunLocation
+    from core.cli.routing import COMMAND_REGISTRY, RunLocation, compose_command_registry
+    from geode_product.cli import PRODUCT_COMMAND_SPECS
 
-    spec = COMMAND_REGISTRY.get("/self-improving")
+    assert "/self-improving" not in COMMAND_REGISTRY
+    spec = compose_command_registry(PRODUCT_COMMAND_SPECS).get("/self-improving")
     assert spec is not None
     assert spec.location is RunLocation.THIN
-    assert spec.handler_path == "core.cli.commands.self_improving:cmd_self_improving"
+    assert spec.handler_path == "geode_product.self_improving.cli_commands:cmd_self_improving"
 
 
 def test_sil_alias_resolves_to_self_improving() -> None:
-    from core.cli.routing import lookup
+    from core.cli.routing import compose_command_registry, lookup
+    from geode_product.cli import PRODUCT_COMMAND_SPECS
 
-    spec_via_alias = lookup("/sil")
-    spec_canonical = lookup("/self-improving")
+    registry = compose_command_registry(PRODUCT_COMMAND_SPECS)
+    spec_via_alias = lookup("/sil", registry)
+    spec_canonical = lookup("/self-improving", registry)
     assert spec_via_alias is not None
     assert spec_canonical is not None
     assert spec_via_alias.name == spec_canonical.name == "/self-improving"
 
 
 def test_self_improving_in_command_map() -> None:
-    """Both ``/self-improving`` and ``/sil`` must map to the same action
-    string the dispatcher branches on."""
+    """Product slash commands bypass the kernel's legacy action map."""
     from core.cli.commands._state import COMMAND_MAP
 
-    assert COMMAND_MAP["/self-improving"] == "self-improving"
-    assert COMMAND_MAP["/sil"] == "self-improving"
+    assert "/self-improving" not in COMMAND_MAP
+    assert "/sil" not in COMMAND_MAP
 
 
-def test_dispatcher_routes_self_improving_action_to_handler() -> None:
-    """The slash flows registry → COMMAND_MAP → ``_handle_command``
-    dispatcher branch. Codex MCP review (FAIL verdict on PR #1394)
-    flagged the missing source-grep — pin the branch presence so a
-    refactor that drops it surfaces here."""
-    import inspect
+def test_dispatcher_routes_product_spec_to_handler(monkeypatch: pytest.MonkeyPatch) -> None:
+    from core.cli.dispatcher import _handle_command
+    from core.cli.routing import compose_command_registry
+    from geode_product import cli
+    from geode_product.self_improving import cli_commands
 
-    from core.cli import dispatcher
+    called: list[str] = []
+    monkeypatch.setattr(cli_commands, "cmd_self_improving", called.append)
 
-    src = inspect.getsource(dispatcher._handle_command)
-    # The dispatcher must branch on the COMMAND_MAP action string AND
-    # invoke the handler. Both anchors must exist.
-    assert 'action == "self-improving"' in src
-    assert "cmd_self_improving(args)" in src
+    result = _handle_command(
+        "/self-improving",
+        "status",
+        False,
+        command_registry=compose_command_registry(cli.PRODUCT_COMMAND_SPECS),
+    )
+
+    assert called == ["status"]
+    assert result == (False, False, None)
 
 
 # ---------------------------------------------------------------------------
@@ -69,7 +76,7 @@ def test_dispatcher_routes_self_improving_action_to_handler() -> None:
 
 def test_no_args_dispatches_to_status(monkeypatch: pytest.MonkeyPatch) -> None:
     """``/self-improving`` (empty args) must behave as ``status``."""
-    from core.cli.commands import self_improving
+    from geode_product.self_improving import cli_commands as self_improving
 
     called: list[bool] = []
 
@@ -82,7 +89,7 @@ def test_no_args_dispatches_to_status(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_status_action_dispatches_to_status(monkeypatch: pytest.MonkeyPatch) -> None:
-    from core.cli.commands import self_improving
+    from geode_product.self_improving import cli_commands as self_improving
 
     called: list[bool] = []
     monkeypatch.setattr(self_improving, "_cmd_status", lambda: called.append(True))
@@ -100,7 +107,7 @@ def test_config_action_dispatches_to_cmd_config(monkeypatch: pytest.MonkeyPatch)
     the interactive settings form. The dispatcher must route to
     ``_cmd_config``; the form itself is exercised in
     ``tests/core/self_improving/test_paperclip_wiring.py``."""
-    from core.cli.commands import self_improving
+    from geode_product.self_improving import cli_commands as self_improving
 
     called: list[bool] = []
     monkeypatch.setattr(self_improving, "_cmd_config", lambda: called.append(True))
@@ -111,7 +118,7 @@ def test_config_action_dispatches_to_cmd_config(monkeypatch: pytest.MonkeyPatch)
 def test_source_action_dispatches_to_cmd_source(monkeypatch: pytest.MonkeyPatch) -> None:
     """``source`` (no args) and ``source set <key>=<value>`` both route
     through ``_cmd_source`` which then sub-dispatches."""
-    from core.cli.commands import self_improving
+    from geode_product.self_improving import cli_commands as self_improving
 
     called: list[list[str]] = []
     monkeypatch.setattr(self_improving, "_cmd_source", lambda opts: called.append(opts))
@@ -121,7 +128,7 @@ def test_source_action_dispatches_to_cmd_source(monkeypatch: pytest.MonkeyPatch)
 
 
 def test_unknown_action_emits_help_hint(capsys: pytest.CaptureFixture[str]) -> None:
-    from core.cli.commands.self_improving import cmd_self_improving
+    from geode_product.self_improving.cli_commands import cmd_self_improving
 
     cmd_self_improving("nonsense-action")
     out = capsys.readouterr().out
@@ -145,10 +152,10 @@ def test_status_with_no_baseline_and_no_mutations(
     fake_audit.parent.mkdir(parents=True)
     # don't create the file — empty-state path
     monkeypatch.setattr(
-        "core.self_improving.loop.mutate.runner.MUTATION_AUDIT_LOG_PATH",
+        "geode_product.self_improving.loop.mutate.runner.MUTATION_AUDIT_LOG_PATH",
         fake_audit,
     )
-    from core.cli.commands.self_improving import _cmd_status
+    from geode_product.self_improving.cli_commands import _cmd_status
 
     _cmd_status()
     out = capsys.readouterr().out
@@ -180,10 +187,10 @@ def test_status_renders_baseline_block(
     )
     fake_audit.touch()
     monkeypatch.setattr(
-        "core.self_improving.loop.mutate.runner.MUTATION_AUDIT_LOG_PATH",
+        "geode_product.self_improving.loop.mutate.runner.MUTATION_AUDIT_LOG_PATH",
         fake_audit,
     )
-    from core.cli.commands.self_improving import _cmd_status
+    from geode_product.self_improving.cli_commands import _cmd_status
 
     _cmd_status()
     out = capsys.readouterr().out
@@ -229,10 +236,10 @@ def test_status_renders_baseline_v2_block(
     )
     fake_audit.touch()
     monkeypatch.setattr(
-        "core.self_improving.loop.mutate.runner.MUTATION_AUDIT_LOG_PATH",
+        "geode_product.self_improving.loop.mutate.runner.MUTATION_AUDIT_LOG_PATH",
         fake_audit,
     )
-    from core.cli.commands.self_improving import _cmd_status
+    from geode_product.self_improving.cli_commands import _cmd_status
 
     _cmd_status()
     out = capsys.readouterr().out
@@ -268,10 +275,10 @@ def test_status_renders_rolled_back_row_with_muted_style(
         encoding="utf-8",
     )
     monkeypatch.setattr(
-        "core.self_improving.loop.mutate.runner.MUTATION_AUDIT_LOG_PATH",
+        "geode_product.self_improving.loop.mutate.runner.MUTATION_AUDIT_LOG_PATH",
         fake_audit,
     )
-    from core.cli.commands.self_improving import _cmd_status
+    from geode_product.self_improving.cli_commands import _cmd_status
 
     _cmd_status()
     out = capsys.readouterr().out
@@ -313,10 +320,10 @@ def test_status_renders_recent_mutations(
     ]
     fake_audit.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
     monkeypatch.setattr(
-        "core.self_improving.loop.mutate.runner.MUTATION_AUDIT_LOG_PATH",
+        "geode_product.self_improving.loop.mutate.runner.MUTATION_AUDIT_LOG_PATH",
         fake_audit,
     )
-    from core.cli.commands.self_improving import _cmd_status
+    from geode_product.self_improving.cli_commands import _cmd_status
 
     _cmd_status()
     out = capsys.readouterr().out
@@ -344,10 +351,10 @@ def test_status_tolerates_malformed_baseline(
     baseline_path.write_text("{not valid json", encoding="utf-8")
     fake_audit.touch()
     monkeypatch.setattr(
-        "core.self_improving.loop.mutate.runner.MUTATION_AUDIT_LOG_PATH",
+        "geode_product.self_improving.loop.mutate.runner.MUTATION_AUDIT_LOG_PATH",
         fake_audit,
     )
-    from core.cli.commands.self_improving import _cmd_status
+    from geode_product.self_improving.cli_commands import _cmd_status
 
     _cmd_status()
     out = capsys.readouterr().out
@@ -376,10 +383,10 @@ def test_status_tolerates_partial_jsonl_row(
         encoding="utf-8",
     )
     monkeypatch.setattr(
-        "core.self_improving.loop.mutate.runner.MUTATION_AUDIT_LOG_PATH",
+        "geode_product.self_improving.loop.mutate.runner.MUTATION_AUDIT_LOG_PATH",
         fake_audit,
     )
-    from core.cli.commands.self_improving import _cmd_status
+    from geode_product.self_improving.cli_commands import _cmd_status
 
     _cmd_status()
     out = capsys.readouterr().out
@@ -394,15 +401,15 @@ def test_status_tolerates_partial_jsonl_row(
 
 
 def test_seed_generator_contract_requires_tags_field() -> None:
-    """The seed_generator agent contract (`plugins/seed_generation/agents/generator.md`)
+    """The seed_generator product contract
     must require BOTH the co-scientist canonical ``target_dims`` field and
     a Petri-compatible ``tags`` field so a mixed pool (seed_generation
-    survivors + plugins/petri_audit/seeds/) keeps dim attribution
+    survivors + Petri seeds) keeps dim attribution
     readable by both consumers."""
     from core.paths import get_project_root
 
     contract = (
-        get_project_root() / "plugins" / "seed_generation" / "agents" / "generator.md"
+        get_project_root() / "geode_product" / "seed_generation" / "agents" / "generator.md"
     ).read_text(encoding="utf-8")
     assert "`target_dims`" in contract
     assert "`tags`" in contract
@@ -415,7 +422,7 @@ def test_generator_description_includes_tags_hint() -> None:
     re-reading the system prompt."""
     import inspect
 
-    from plugins.seed_generation.agents import generator
+    from geode_product.seed_generation.agents import generator
 
     src = inspect.getsource(generator.Generator._build_description)
     assert "tags" in src

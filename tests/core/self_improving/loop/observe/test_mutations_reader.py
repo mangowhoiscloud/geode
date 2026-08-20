@@ -16,9 +16,9 @@ import time
 from pathlib import Path
 
 import pytest
-from core.self_improving.loop.mutate.runner import ApplyRecord
-from core.self_improving.loop.observe.attribution import AttributionRecord
-from core.self_improving.loop.observe.mutations_reader import (
+from geode_product.self_improving.loop.mutate.runner import ApplyRecord
+from geode_product.self_improving.loop.observe.attribution import AttributionRecord
+from geode_product.self_improving.loop.observe.mutations_reader import (
     iter_mutations,
     read_recent_applies,
     read_recent_attributions,

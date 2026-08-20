@@ -9,7 +9,7 @@ from pathlib import Path
 from types import ModuleType, SimpleNamespace
 
 import pytest
-from plugins.benchmark_harness.tau2_geode_agent import (
+from geode_product.benchmark_harness.tau2_geode_agent import (
     REPO_ROOT,
     _assert_tau2_route_ready,
     _build_loop,
@@ -27,7 +27,7 @@ from plugins.benchmark_harness.tau2_geode_agent import (
     _validate_tau2_task_order,
     _write_trajectory_snapshot,
 )
-from plugins.benchmark_harness.tau2_lane1a_preflight import (
+from geode_product.benchmark_harness.tau2_lane1a_preflight import (
     _attest_tau2_resets,
     _model_visible_tau2_tool_schemas,
     _tau2_import_origins,
@@ -36,12 +36,12 @@ from plugins.benchmark_harness.tau2_lane1a_preflight import (
     _tau2_runtime_identity,
     _write_tau2_lane1a_preflight_receipt,
 )
-from plugins.benchmark_harness.tau2_runtime_contract import (
+from geode_product.benchmark_harness.tau2_runtime_contract import (
     Tau2AttemptTracker,
     Tau2RuntimeContract,
 )
-from plugins.benchmark_harness.tau2_tool_bridge import Tau2GeodeTool
-from plugins.benchmark_harness.tau2_turn_supervisor import (
+from geode_product.benchmark_harness.tau2_tool_bridge import Tau2GeodeTool
+from geode_product.benchmark_harness.tau2_turn_supervisor import (
     GeodeTau2State,
     _agent_system_prompt,
     _message_to_prompt,
@@ -54,12 +54,12 @@ from plugins.benchmark_harness.tau2_turn_supervisor import (
     _tool_mutates_state,
     _user_system_prompt,
 )
-from plugins.benchmark_harness.trajectory_artifacts import (
+from geode_product.benchmark_harness.trajectory_artifacts import (
     geode_trajectory_snapshot_path,
     tau2_session_ids,
 )
-from plugins.crucible.contract import ContractError, TaskUnit
-from plugins.crucible.verifiers.tau2 import tau2_task_unit
+from geode_product.crucible.contract import ContractError, TaskUnit
+from geode_product.crucible.verifiers.tau2 import TAU2_ADAPTER, tau2_task_unit
 
 
 def test_tau2_agent_prompt_blocks_inferred_optional_tool_args() -> None:
@@ -735,7 +735,7 @@ def test_tau2_preflight_rejects_mismatched_frozen_runtime_package(
     (harness_dir / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
     (harness_dir / "uv.lock").write_text("version = 1\n", encoding="utf-8")
     monkeypatch.setattr(
-        "plugins.benchmark_harness.tau2_lane1a_preflight.TAU2_LANE1A_RUNTIME_DISTRIBUTIONS",
+        "geode_product.benchmark_harness.tau2_lane1a_preflight.TAU2_LANE1A_RUNTIME_DISTRIBUTIONS",
         {},
     )
 
@@ -750,7 +750,7 @@ def test_tau2_preflight_hashes_post_policy_codex_tool_surface(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "core.agent.loop._tool_factory.get_agentic_tools",
+        "core.agent.loop.get_agentic_tools",
         lambda *_args, **_kwargs: [
             {"name": "second", "description": "overridden", "input_schema": {"type": "object"}},
             {"name": "first", "description": "original", "input_schema": {"type": "object"}},
@@ -777,7 +777,7 @@ def test_tau2_preflight_rejects_dirty_producer_and_repo_output(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "plugins.benchmark_harness.tau2_lane1a_preflight._git_output",
+        "geode_product.benchmark_harness.tau2_lane1a_preflight._git_output",
         lambda _root, *args: " M source.py" if args == ("status", "--porcelain") else "head",
     )
     with pytest.raises(ContractError, match="clean GEODE producer"):
@@ -1022,7 +1022,7 @@ def test_tau2_contract_run_must_match_frozen_identity_axes() -> None:
         task_ids=("task-1", "task-2"),
         trials_per_task=1,
         assay_config=assay_config,
-        evaluator_paths=("plugins/benchmark_harness", "plugins/crucible"),
+        evaluator_paths=TAU2_ADAPTER.required_evaluator_paths,
     )
 
     _validate_contract_run_args(

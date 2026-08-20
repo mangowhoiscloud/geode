@@ -1,6 +1,6 @@
 """PR-MINIMAL-4 — subprocess_failed journal event on non-zero exit.
 
-Pre-PR ``core/self_improving/train.py:run_audit`` only emitted
+Pre-PR ``geode_product/self_improving/train.py:run_audit`` only emitted
 ``subprocess_finished`` (with ``exit_code`` in the payload). The
 top-level ``audit_failed`` event at ``main()`` caught the resulting
 ``RuntimeError`` but lost subprocess-specific context (exit_code,
@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import inspect
 
-from core.self_improving import measure
+from geode_product.self_improving import measure
 
 
 def test_subprocess_failed_event_emitted_before_runtime_error() -> None:

@@ -23,7 +23,7 @@ export default function Page() {
               맞게 적용했습니다. 한 target dimension(예:{" "}
               <code>broken_tool_use</code>)에 대해 후보 scenario를 생성하고,
               토너먼트로 순위를 매기고, 생존자를 진화시켜 다음 세대로
-              넘깁니다. <code>plugins/seed_generation/orchestrator.py</code>의{" "}
+              넘깁니다. <code>geode_product/seed_generation/orchestrator.py</code>의{" "}
               <code>Pipeline.arun</code>이 phase 순서대로 sub-agent를
               fan-out합니다.
             </p>
@@ -41,7 +41,7 @@ export default function Page() {
 
             <h2>9개 역할</h2>
             <p>
-              역할은 <code>plugins/seed_generation/agents/</code>에 역할별{" "}
+              역할은 <code>geode_product/seed_generation/agents/</code>에 역할별{" "}
               <code>&lt;role&gt;.py</code> + <code>&lt;role&gt;.md</code> 프롬프트
               쌍으로 구현되며, task prefix가 phase를 식별합니다
               (<code>orchestrator.py</code>의 <code>_TASK_PREFIX_TO_PHASE</code>).
@@ -79,7 +79,7 @@ export default function Page() {
 
             <h2>토너먼트와 생존자 선택</h2>
             <p>
-              <code>plugins/seed_generation/tournament.py</code>가 3-judge 패널
+              <code>geode_product/seed_generation/tournament.py</code>가 3-judge 패널
               pairwise 매치를 돌립니다. 과반이면 승자, 그 외에는 tie로 양쪽
               rating이 갱신되고, 유효 표가 모자라면 매치를 건너뜁니다. Elo는
               로지스틱 기대값 기반 K-factor 갱신이며, 제시 순서를 무작위로
@@ -124,7 +124,7 @@ geode audit-seeds config`}</pre>
               target dimension (say <code>broken_tool_use</code>) it drafts
               candidate scenarios, ranks them in a tournament, and evolves the
               survivors into the next generation. <code>Pipeline.arun</code> in{" "}
-              <code>plugins/seed_generation/orchestrator.py</code> fans out one
+              <code>geode_product/seed_generation/orchestrator.py</code> fans out one
               sub-agent per phase, in order.
             </p>
             <figure>
@@ -143,7 +143,7 @@ geode audit-seeds config`}</pre>
             <p>
               Each role is a paired <code>&lt;role&gt;.py</code> +{" "}
               <code>&lt;role&gt;.md</code> prompt under{" "}
-              <code>plugins/seed_generation/agents/</code>; task prefixes
+              <code>geode_product/seed_generation/agents/</code>; task prefixes
               identify the phase (<code>_TASK_PREFIX_TO_PHASE</code> in{" "}
               <code>orchestrator.py</code>).
             </p>
@@ -182,7 +182,7 @@ geode audit-seeds config`}</pre>
 
             <h2>Tournament and survivor selection</h2>
             <p>
-              <code>plugins/seed_generation/tournament.py</code> runs pairwise
+              <code>geode_product/seed_generation/tournament.py</code> runs pairwise
               matches judged by a 3-judge panel. A majority picks the winner,
               anything else is a tie that still updates both ratings, and a
               match without enough valid votes is skipped. Elo updates use a

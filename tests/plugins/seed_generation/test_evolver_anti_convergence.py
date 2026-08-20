@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from plugins.seed_generation.agents.evolver import (
+from geode_product.seed_generation.agents.evolver import (
     ANTI_CONVERGENCE_JACCARD_THRESHOLD,
     Evolver,
 )
@@ -135,7 +135,7 @@ class TestEvolverExecuteAdmissionFlow:
     def test_near_duplicate_dropped(self, tmp_path: Path, monkeypatch) -> None:
         # Two evolved bodies share the same prefix → second one is the
         # near-duplicate and should be dropped from evolved_candidates.
-        from plugins.seed_generation.orchestrator import PipelineState
+        from geode_product.seed_generation.orchestrator import PipelineState
 
         shared = (
             "the model misuses tool error to escalate without reflection in repeated tries today"

@@ -82,7 +82,7 @@ def test_v2_argv_includes_resume_flag_when_session_id_supplied() -> None:
     """paperclip ``execute.ts:680`` parity — ``--resume <session_id>``
     precedes ``--model`` so claude-cli pulls the cached model from the
     resumed session."""
-    from plugins.petri_audit.claude_cli_provider import build_claude_cli_argv
+    from geode_product.petri_audit.claude_cli_provider import build_claude_cli_argv
 
     argv = build_claude_cli_argv(
         binary="/x/claude", model_name="claude-opus-4-7", resume_session_id="abc123"
@@ -98,7 +98,7 @@ def test_v2_argv_includes_resume_flag_when_session_id_supplied() -> None:
 def test_v2_argv_omits_resume_flag_when_session_id_empty() -> None:
     """When ``resume_session_id`` is None/empty the argv is byte-equivalent
     to the pre-PR-V form (no behaviour change for first-turn callers)."""
-    from plugins.petri_audit.claude_cli_provider import build_claude_cli_argv
+    from geode_product.petri_audit.claude_cli_provider import build_claude_cli_argv
 
     argv_none = build_claude_cli_argv(binary="/x/claude", model_name="claude-opus-4-7")
     argv_empty = build_claude_cli_argv(
@@ -111,7 +111,7 @@ def test_v2_argv_omits_resume_flag_when_session_id_empty() -> None:
 def test_v2_extract_session_id_from_system_init_event() -> None:
     """paperclip ``parse.ts:30-33`` parity — ``system.init`` event's
     ``session_id`` field is the freshly-allocated session for this turn."""
-    from plugins.petri_audit.claude_cli_provider import (
+    from geode_product.petri_audit.claude_cli_provider import (
         extract_session_id_from_events,
         parse_stream_json_events,
     )
@@ -130,7 +130,7 @@ def test_v2_extract_session_id_returns_empty_when_no_init() -> None:
     """When claude-cli crashes before the ``system.init`` event the
     extractor returns empty string (not None / not raise) so the
     caller can fall back to a fresh next-turn session."""
-    from plugins.petri_audit.claude_cli_provider import (
+    from geode_product.petri_audit.claude_cli_provider import (
         extract_session_id_from_events,
         parse_stream_json_events,
     )
@@ -144,7 +144,7 @@ def test_v2_extract_session_id_returns_empty_when_no_init() -> None:
 def test_v2_extract_session_id_ignores_non_init_system_events() -> None:
     """Only ``subtype == "init"`` events carry the session-id contract;
     other system events (``error`` / ``warning``) must NOT be misread."""
-    from plugins.petri_audit.claude_cli_provider import (
+    from geode_product.petri_audit.claude_cli_provider import (
         extract_session_id_from_events,
         parse_stream_json_events,
     )
@@ -253,11 +253,11 @@ def test_v3_adapter_round_trip_threads_resume_and_emits_session_id() -> None:
 
     with (
         patch(
-            "plugins.petri_audit.claude_cli_provider._resolve_claude_binary",
+            "core.llm.adapters._claude_cli_runtime._resolve_claude_binary",
             return_value="/fake/claude",
         ),
         patch(
-            "plugins.petri_audit.claude_cli_provider._run_claude_subprocess",
+            "core.llm.adapters._claude_cli_runtime._run_claude_subprocess",
             _fake_subprocess,
         ),
         patch(
@@ -283,8 +283,8 @@ def test_v3_subprocess_stdin_skips_system_prompt_when_resuming() -> None:
     actual mechanism by which PR-V's CHANGELOG-claimed quota savings
     materialise. First-turn callers (empty resume_session_id) must
     still send the prompt so claude-cli caches it for next turn."""
-    from core.llm.adapters._subprocess_common import build_subprocess_stdin
     from core.llm.adapters.base import AdapterCallRequest, Message
+    from core.llm.adapters.claude_cli import build_subprocess_stdin
 
     system_prompt = "Role: Petri seed generator. Output JSON only."
     user_msg = Message(role="user", content="Generate seed for X")

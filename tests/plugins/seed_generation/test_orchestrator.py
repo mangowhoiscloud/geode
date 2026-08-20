@@ -1,4 +1,4 @@
-"""Unit tests for ``plugins.seed_generation.orchestrator``."""
+"""Unit tests for ``geode_product.seed_generation.orchestrator``."""
 
 from __future__ import annotations
 
@@ -6,8 +6,8 @@ import asyncio
 
 import pytest
 from core.orchestration.lane_queue import LaneQueue
-from plugins.seed_generation.agents.base import BaseSeedAgent, SeedAgentResult
-from plugins.seed_generation.orchestrator import (
+from geode_product.seed_generation.agents.base import BaseSeedAgent, SeedAgentResult
+from geode_product.seed_generation.orchestrator import (
     Pipeline,
     PipelineRegistry,
     PipelineState,
@@ -237,7 +237,10 @@ def test_pipeline_emits_phase_started_finished_for_every_phase(tmp_path) -> None
     """Every phase fires phase_started + phase_finished in order."""
     import json
 
-    from core.self_improving.loop.observe.run_timeline import RunTimeline, run_timeline_scope
+    from geode_product.self_improving.loop.observe.run_timeline import (
+        RunTimeline,
+        run_timeline_scope,
+    )
 
     registry, _ = _make_registry_with_all_stubs()
     state = PipelineState(run_id="t-p1c", target_dim="broken_tool_use", gen_tag="gen2")
@@ -282,7 +285,10 @@ def test_pipeline_emits_phase_failed_soft_failure(tmp_path) -> None:
     raised=False + error head."""
     import json
 
-    from core.self_improving.loop.observe.run_timeline import RunTimeline, run_timeline_scope
+    from geode_product.self_improving.loop.observe.run_timeline import (
+        RunTimeline,
+        run_timeline_scope,
+    )
 
     registry = PipelineRegistry()
     registry.register(_FailingAgent("generator"))
@@ -311,7 +317,10 @@ def test_pipeline_emits_phase_failed_hard_failure(tmp_path) -> None:
     exception bubbles."""
     import json
 
-    from core.self_improving.loop.observe.run_timeline import RunTimeline, run_timeline_scope
+    from geode_product.self_improving.loop.observe.run_timeline import (
+        RunTimeline,
+        run_timeline_scope,
+    )
 
     registry = PipelineRegistry()
     registry.register(_RaisingAgent("generator"))
@@ -337,7 +346,10 @@ def test_registry_register_replace_emits_agent_reregistered(tmp_path) -> None:
     """Re-registering an existing role emits agent_reregistered (warn level)."""
     import json
 
-    from core.self_improving.loop.observe.run_timeline import RunTimeline, run_timeline_scope
+    from geode_product.self_improving.loop.observe.run_timeline import (
+        RunTimeline,
+        run_timeline_scope,
+    )
 
     journal = RunTimeline(
         session_id="t-rereg",
@@ -473,7 +485,7 @@ def test_all_role_subtask_spawns_carry_model_for_role_binding() -> None:
         "meta_reviewer": "meta_reviewer.py",
         "supervisor": "supervisor.py",
     }
-    base = _Path(__file__).parent.parent.parent.parent / "plugins/seed_generation/agents"
+    base = _Path(__file__).parent.parent.parent.parent / "geode_product/seed_generation/agents"
     for role, fname in role_files.items():
         src = (base / fname).read_text()
         # Every ``source=self.adapter_source,`` line in a role agent
@@ -569,14 +581,14 @@ def test_all_json_based_role_prompts_carry_final_response_enforcement() -> None:
     # raw source text.
     import random
 
-    from plugins.seed_generation.agents.critic import Critic
-    from plugins.seed_generation.agents.evolver import Evolver
-    from plugins.seed_generation.agents.literature_review import LiteratureReview
-    from plugins.seed_generation.agents.meta_reviewer import MetaReviewer
-    from plugins.seed_generation.agents.proximity import Proximity
-    from plugins.seed_generation.agents.ranker import Ranker
-    from plugins.seed_generation.agents.supervisor import Supervisor
-    from plugins.seed_generation.picker import VoterBinding
+    from geode_product.seed_generation.agents.critic import Critic
+    from geode_product.seed_generation.agents.evolver import Evolver
+    from geode_product.seed_generation.agents.literature_review import LiteratureReview
+    from geode_product.seed_generation.agents.meta_reviewer import MetaReviewer
+    from geode_product.seed_generation.agents.proximity import Proximity
+    from geode_product.seed_generation.agents.ranker import Ranker
+    from geode_product.seed_generation.agents.supervisor import Supervisor
+    from geode_product.seed_generation.picker import VoterBinding
 
     state = PipelineState(run_id="t-prompt-gate", target_dim="broken_tool_use", gen_tag="gen2")
 
@@ -632,7 +644,7 @@ def test_all_json_based_role_prompts_carry_final_response_enforcement() -> None:
         return agent._build_description(state_with_cands, "- c-0\n- c-1")
 
     def _ranker_prompt() -> str:
-        from plugins.seed_generation.tournament import MatchPlan
+        from geode_product.seed_generation.tournament import MatchPlan
 
         agent = Ranker(manager=_NoOp(), voters=voters, rng=random.Random(0))  # type: ignore[arg-type]
         return agent._build_description(

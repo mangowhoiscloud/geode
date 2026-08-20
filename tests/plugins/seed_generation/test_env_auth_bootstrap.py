@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import inspect
 
-from plugins.seed_generation import cli as seedgen_cli
+from geode_product.seed_generation import cli as seedgen_cli
 
 
 def test_bootstrap_helper_loads_env_and_hydrates_auth() -> None:

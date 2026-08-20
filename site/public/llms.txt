@@ -2,7 +2,7 @@
 
 > GEODE is an autonomous agent runtime and evaluation substrate: an inner agentic loop runs tasks (research, analysis, automation, scheduling), while an experimental safety-gated outer loop mutates and evaluates scaffold candidates.
 
-Version v1.0.22. Last sync 2026-08-18. Docs links point to clean markdown twins (.md); drop the .md suffix for the rendered page.
+Version v1.0.23. Last sync 2026-08-20. Docs links point to clean markdown twins (.md); drop the .md suffix for the rendered page.
 
 ## Start here
 
@@ -21,10 +21,10 @@ Version v1.0.22. Last sync 2026-08-18. Docs links point to clean markdown twins 
 ## Getting Started
 
 - [Quick Start](https://mangowhoiscloud.github.io/geode/docs/quick-start.md): Install GEODE and run your first task in a few minutes.
-- [Connect Google Workspace](https://mangowhoiscloud.github.io/geode/docs/run/google-workspace.md): Bring your own Google Desktop OAuth client for Gmail, Calendar, Drive, Docs, Sheets, Tasks, and Contacts.
 - [Pick a path](https://mangowhoiscloud.github.io/geode/docs/run/pick-path.md): Subscription, API key, or free path. How to choose for your situation.
-- [Configure providers](https://mangowhoiscloud.github.io/geode/docs/run/providers.md): Anthropic, OpenAI, Codex, GLM. Where keys go, and what fallback chain you get.
+- [Configure providers](https://mangowhoiscloud.github.io/geode/docs/run/providers.md): Anthropic, OpenAI, and GLM. Where credentials go, including ChatGPT subscription OAuth, and what fallback chain you get.
 - [Run as a daemon](https://mangowhoiscloud.github.io/geode/docs/run/serve.md): Start, restart, and stop serve. A thin CLI talks to an IPC-served runtime.
+- [Optional: Google Workspace](https://mangowhoiscloud.github.io/geode/docs/run/google-workspace.md): Optional Gmail, Calendar, Drive, Docs, Sheets, Tasks, and Contacts integration through a Google Desktop OAuth client you own.
 
 ## Core Concepts
 

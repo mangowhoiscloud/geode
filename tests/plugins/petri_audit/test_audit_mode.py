@@ -1,4 +1,4 @@
-"""Tests for ``plugins.petri_audit.audit_mode`` — guardrail-lift for
+"""Tests for ``geode_product.petri_audit.audit_mode`` — guardrail-lift for
 petri runs.
 
 Verified contract:
@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
-from plugins.petri_audit.audit_mode import (
+from geode_product.petri_audit.audit_mode import (
     AUDIT_MODE_ENV_VAR,
     AuditMode,
     apply_to_profile_policy,
@@ -186,7 +186,7 @@ class TestSeedsDirectory:
     frontmatter tags.
     """
 
-    SEEDS_ROOT = Path("plugins/petri_audit/seeds")
+    SEEDS_ROOT = Path("geode_product/petri_audit/seeds")
 
     @pytest.mark.parametrize(
         ("tier", "dim", "variant"),

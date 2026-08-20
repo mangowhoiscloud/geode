@@ -1,15 +1,15 @@
-"""Tests for ``plugins.seed_generation.cost_preview``."""
+"""Tests for ``geode_product.seed_generation.cost_preview``."""
 
 from __future__ import annotations
 
-from plugins.seed_generation.cost_preview import (
+from geode_product.seed_generation.cost_preview import (
     DEFAULT_CANDIDATE_COUNT,
     CostEstimate,
     CostRow,
     estimate_cost,
     format_cost_summary,
 )
-from plugins.seed_generation.picker import PickerResult, RoleBinding, VoterBinding
+from geode_product.seed_generation.picker import PickerResult, RoleBinding, VoterBinding
 
 
 def _make_picker_result(*, voter_source: str = "api_key") -> PickerResult:

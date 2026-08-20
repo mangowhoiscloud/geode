@@ -176,14 +176,6 @@ class IsolatedRunner:
 
     # Subprocess env whitelist — only these vars are forwarded to child processes.
     # Prevents accidental leakage of secrets or shell-specific vars.
-    # PR-ENV-WHITELIST-CODEX-BYPASS (2026-05-25) — added
-    # ``GEODE_CODEX_OAUTH_POLL_DISABLED`` after smoke 13 surfaced the
-    # gap: operator set the env on the parent serve process to bypass
-    # GEODE's pre-emptive 5-hour Codex OAuth throttle gate, but the
-    # worker subprocess didn't inherit it, so
-    # ``should_block_codex_lane_acquisition`` re-fired its
-    # ``TimeoutError(CODEX_CLI_LANE_THROTTLED_MSG)`` for every codex
-    # voter even though the actual subscription bucket had headroom.
     _SUBPROCESS_ENV_WHITELIST: set[str] = {
         "PATH",
         "HOME",
@@ -198,7 +190,6 @@ class IsolatedRunner:
         "VIRTUAL_ENV",
         "GEODE_CONFIG_PATH",
         "GEODE_DATA_DIR",
-        "GEODE_CODEX_OAUTH_POLL_DISABLED",
         # Daemon-wide skip-permissions; the PER-SESSION value (ContextVar) is
         # forwarded explicitly at spawn (the whitelist only carries the parent
         # process env, not the per-connection ContextVar).
@@ -209,9 +200,11 @@ class IsolatedRunner:
         self,
         hooks: HookSystem | None = None,
         lane: Any | None = None,
+        worker_module: str = "core.agent.worker",
     ) -> None:
         self._hooks = hooks
         self._lane = lane  # Lane("global") from unified LaneQueue
+        self._worker_module = worker_module
         self._results: dict[str, IsolationResult] = {}
         # Only async subprocess workers register here — thread-mode runs
         # via ``asyncio.to_thread`` and is not externally cancellable.
@@ -516,7 +509,7 @@ class IsolatedRunner:
             proc = await asyncio.create_subprocess_exec(
                 sys.executable,
                 "-m",
-                "core.agent.worker",
+                self._worker_module,
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,

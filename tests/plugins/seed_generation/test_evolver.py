@@ -1,4 +1,4 @@
-"""Tests for ``plugins.seed_generation.agents.evolver``.
+"""Tests for ``geode_product.seed_generation.agents.evolver``.
 
 P-checklist application (cycle-skill SKILL.md):
 
@@ -16,8 +16,8 @@ import asyncio
 from typing import Any
 
 from core.agent.sub_agent import SubResult, SubTask
-from plugins.seed_generation.agents.evolver import Evolver
-from plugins.seed_generation.orchestrator import PipelineState
+from geode_product.seed_generation.agents.evolver import Evolver
+from geode_product.seed_generation.orchestrator import PipelineState
 
 
 def _good_evolve(parent_id: str = "c-1", verdict: str = "ok") -> dict[str, Any]:
@@ -306,7 +306,7 @@ def test_evolver_evolved_row_schema_mirrors_candidates() -> None:
 
 
 def test_evolver_injects_baseline_evidence_into_description(monkeypatch: Any) -> None:
-    from plugins.seed_generation.baseline_reader import BaselineSnapshot
+    from geode_product.seed_generation.baseline_reader import BaselineSnapshot
 
     state = _state_with_survivors(n=1)
     state.baseline_snapshot = BaselineSnapshot(
@@ -315,7 +315,7 @@ def test_evolver_injects_baseline_evidence_into_description(monkeypatch: Any) ->
     )
     # G2.fix (2026-05-20) — evidence pulled from latest .eval on demand.
     monkeypatch.setattr(
-        "plugins.seed_generation.baseline_reader.format_evidence_block",
+        "geode_product.seed_generation.baseline_reader.format_evidence_block",
         lambda _snap, _dim, **_kw: (
             "Recent audit evidence (latest .eval, on demand)\n"
             "  1. seed-evolver — target ignored verification step"

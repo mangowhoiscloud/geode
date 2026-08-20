@@ -21,7 +21,6 @@ strict-dispatch + ADAPTER_DISPATCH_ATTEMPT hook:
 from __future__ import annotations
 
 import asyncio
-import inspect
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
@@ -353,23 +352,38 @@ def test_adapters_stats_empty_window_message(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_typer_serve_wires_rotating_file_handler_for_serve_log() -> None:
-    """Source-level pin: ``serve`` keeps its file-log contract — dispatch
-    INFO logs persist across serve restarts at ``SERVE_LOG_PATH`` with
-    10MB / 5-backup rotation. S-6 (2026-06-11) moved the wiring into the
-    unified switchboard (``configure_logging("serve")``); the contract is
-    now pinned at the switchboard's mode spec instead of inline handler
-    construction."""
-    src = inspect.getsource(__import__("core.cli.typer_serve", fromlist=["serve"]).serve)
-    assert 'configure_logging("serve")' in src
-
+def test_typer_serve_wires_rotating_file_handler_for_serve_log(monkeypatch) -> None:
+    """The shared serve implementation selects the rotating serve log."""
+    import typer
+    from core.cli import bootstrap, typer_serve
     from core.observability import logging_config
     from core.paths import SERVE_LOG_PATH
 
+    configured: list[str] = []
+    monkeypatch.setattr(logging_config, "configure_logging", configured.append)
+    monkeypatch.setattr(bootstrap, "setup_contextvars", lambda **_kwargs: None)
+    monkeypatch.setattr(typer_serve, "check_readiness", lambda: object())
+    monkeypatch.setattr(typer_serve, "_set_readiness", lambda _value: None)
+    monkeypatch.setattr(
+        typer_serve,
+        "_build_runtime_for_serve",
+        lambda _runtime_builder=None: None,
+    )
+    with pytest.raises(typer.Exit):
+        typer_serve._serve(3.0)
+
+    assert configured == ["serve"]
     serve_file, _fmt = logging_config._MODE_SPECS["serve"]
     assert serve_file == SERVE_LOG_PATH
     assert logging_config._DEFAULT_MAX_BYTES == 10 * 1024 * 1024
     assert logging_config._DEFAULT_BACKUP_COUNT == 5
+
+
+def test_typer_serve_uses_explicit_runtime_builder() -> None:
+    from core.cli.typer_serve import _build_runtime_for_serve
+
+    runtime = object()
+    assert _build_runtime_for_serve(lambda: runtime) is runtime
 
 
 # ---------------------------------------------------------------------------

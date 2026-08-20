@@ -22,8 +22,9 @@ import logging
 import os
 import sys
 import time
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from core.agent.loop.models import (
@@ -38,6 +39,8 @@ from core.paths import GLOBAL_WORKERS_DIR
 
 if TYPE_CHECKING:
     from core.agent.loop.models import AgenticResult
+    from core.hooks import MiddlewareRegistry
+    from core.observability.run_event import RunEventSinkProvider
 
 log = logging.getLogger(__name__)
 
@@ -129,8 +132,7 @@ class WorkerRequest:
     # PR-JSON-WIRE (2026-05-25) — per-task JSON Schema for
     # structured-output forcing on the spawned LLM call. Threads
     # through ``AgenticLoop.response_schema`` →
-    # ``AdapterCallRequest.response_schema`` → claude-cli
-    # ``--json-schema`` / codex-cli ``--output-schema``. ``None``
+    # ``AdapterCallRequest.response_schema`` → claude-cli ``--json-schema``. ``None``
     # preserves back-compat (caller without a schema gets free-form
     # text). Per-role schemas live in
     # ``plugins/seed_generation/json_schemas.py`` and are wired in
@@ -214,9 +216,7 @@ class WorkerResult:
     Capture coverage: payg / API-key adapters and claude-cli (PR-CLI-
     USAGE-CAPTURE, 2026-07-13 — the CLI's terminal ``result`` stream-json
     event carries token usage even on subscription) populate real numbers.
-    codex-cli remains 0 — its plain-text ``codex exec`` stdout has no usage
-    block (see ``core/llm/adapters/codex_cli.py``). We never fabricate
-    counts; unmetered calls stay honestly at 0.
+    We never fabricate counts; unmetered calls stay honestly at 0.
     """
 
     task_id: str
@@ -421,16 +421,21 @@ def _load_worker_resume(request: WorkerRequest, conversation: Any) -> tuple[Any,
     return state, checkpoint
 
 
-def _run_agentic(request: WorkerRequest) -> WorkerResult:
+def _run_agentic(
+    request: WorkerRequest,
+    handler_builder: Callable[[], dict[str, Any]] | None = None,
+    *,
+    middleware_builder: Callable[..., MiddlewareRegistry] | None = None,
+    activity_sink_provider: RunEventSinkProvider | None = None,
+) -> WorkerResult:
     """Bootstrap minimal GEODE runtime and run AgenticLoop."""
     started = time.time()
-    from core.config.policy_source import decode_policy_sources
-    from core.wiring.bootstrap import build_product_policy_sources
+    from core.config.policy_source import EMPTY_POLICY_SOURCES, decode_policy_sources
 
     policy_sources = (
         decode_policy_sources(request.policy_sources)
         if request.policy_sources is not None
-        else build_product_policy_sources()
+        else EMPTY_POLICY_SOURCES
     )
     from core.llm.adapters.registry import bootstrap_builtins
 
@@ -477,9 +482,11 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
         set_task_isolated_cwd(task_cwd_path)
 
     # 1. Build tool handlers (same factory as CLI)
-    from core.cli.tool_handlers import _build_tool_handlers
+    if handler_builder is None:
+        from core.cli.tool_handlers import _build_tool_handlers
 
-    handlers = _build_tool_handlers(verbose=False)
+        handler_builder = _build_tool_handlers
+    handlers = handler_builder()
 
     # 2. Filter tools — CSP-1 (2026-05-22): consult the toolkit registry
     # so the agent's declared ``toolkit:`` frontmatter expands into the
@@ -516,7 +523,11 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
         # allowlist (e.g. repo_researcher without run_bash) actually hold.
         denied_tools=frozenset(request.denied_tools) | SUBAGENT_CONTROL_TOOLS,
         interactive_approval=False,
-        middleware_registry=build_middleware_registry(policy_sources=policy_sources),
+        middleware_registry=(
+            build_middleware_registry()
+            if middleware_builder is None
+            else middleware_builder(policy_sources=policy_sources)
+        ),
     )
 
     # 4. Build ConversationContext
@@ -560,14 +571,13 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
     # Best-effort: a hook bootstrap failure must never take down the
     # sub-agent itself.
     worker_hooks = None
-    activity_sink_provider = None
     try:
-        from core.wiring.bootstrap import build_worker_hooks, current_product_activity_sink
+        from core.wiring.bootstrap import build_worker_hooks
 
-        activity_sink_provider = current_product_activity_sink
         worker_hooks = build_worker_hooks(
             session_key=request.task_id or "worker",
             run_id=request.task_id or "worker",
+            activity_sink_provider=activity_sink_provider,
         )
     except Exception:
         log.warning(
@@ -1045,7 +1055,13 @@ def _resolve_worker_outcome(
     return success, summary, text
 
 
-def main() -> None:
+def main(
+    handler_builder: Callable[[], dict[str, Any]] | None = None,
+    *,
+    middleware_builder: Callable[..., MiddlewareRegistry] | None = None,
+    activity_sink_provider: RunEventSinkProvider | None = None,
+    worker_activity_binder: Callable[[Path], None] | None = None,
+) -> None:
     """Worker entry point. Reads request from stdin, writes result to stdout."""
     # S-6 (2026-06-11) — unified switchboard. WARNING level keeps stderr
     # quiet (stdout is reserved for the result JSON); warnings/errors now
@@ -1082,12 +1098,9 @@ def main() -> None:
         # cosmetic — the actual row classification comes from the
         # sink's explicit ``actor_type="agent"`` / ``action=...``
         # kwargs which override the orchestrator defaults.
-        from pathlib import Path
-
-        from core.wiring.bootstrap import bind_product_worker_activity
-
-        # No reset token is needed: the subprocess exits at the bottom of main.
-        bind_product_worker_activity(Path(inherited_run_dir))
+        if worker_activity_binder is not None:
+            # No reset token is needed: the subprocess exits at the bottom of main.
+            worker_activity_binder(Path(inherited_run_dir))
 
     result: WorkerResult | None = None
     try:
@@ -1101,7 +1114,12 @@ def main() -> None:
             )
         else:
             request = WorkerRequest.from_dict(json.loads(raw))
-            result = _run_agentic(request)
+            result = _run_agentic(
+                request,
+                handler_builder,
+                middleware_builder=middleware_builder,
+                activity_sink_provider=activity_sink_provider,
+            )
     except json.JSONDecodeError as exc:
         result = WorkerResult(
             task_id="unknown",

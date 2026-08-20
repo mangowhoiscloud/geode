@@ -32,10 +32,8 @@ def infer_provider_from_model(model: str) -> str:
       ``openai-codex`` (OAuth-routed), otherwise the bare model id is
       reclassified by the provider rules above.
 
-    The OAuth probe is read-only and tolerates a missing
-    ``plugins.petri_audit`` package (the predicate lives there because
-    the bridge is plugin-scoped). When the import fails the function
-    falls back to the per-token ``openai`` path.
+    The OAuth probe is read-only. A missing or invalid token falls back to the
+    per-token ``openai`` path.
     """
     if not model:
         return "anthropic"
@@ -54,13 +52,10 @@ def infer_provider_from_model(model: str) -> str:
     if base.startswith("glm-"):
         return "glm"
     if base.startswith("gpt-") or base in ("o3", "o4-mini"):
-        try:
-            from plugins.petri_audit.codex_provider import is_codex_oauth_available
+        from core.llm.providers.codex import is_codex_oauth_available
 
-            if is_codex_oauth_available():
-                return "openai-codex"
-        except ImportError:
-            pass
+        if is_codex_oauth_available():
+            return "openai-codex"
         return "openai"
     return "anthropic"
 

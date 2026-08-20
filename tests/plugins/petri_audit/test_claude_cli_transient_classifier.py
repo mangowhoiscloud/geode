@@ -21,7 +21,7 @@ def _make_stream_json(events: list[dict[str, Any]]) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Extended _extract_assistant_text — assistant event aggregated shape
+# Extended extract_assistant_text — assistant event aggregated shape
 # ---------------------------------------------------------------------------
 
 
@@ -29,8 +29,8 @@ def test_extract_text_from_assistant_event_aggregated() -> None:
     """claude-cli's aggregated ``assistant`` event shape (paperclip
     parse.ts:36) — one event per finished assistant message, with
     text blocks under ``message.content[]``."""
-    from plugins.petri_audit.claude_cli_provider import (
-        _extract_assistant_text,
+    from core.llm.adapters.claude_cli_runtime import (
+        extract_assistant_text,
         parse_stream_json_events,
     )
 
@@ -48,14 +48,14 @@ def test_extract_text_from_assistant_event_aggregated() -> None:
         ]
     )
     events = parse_stream_json_events(stdout)
-    assert _extract_assistant_text(events) == "First second."
+    assert extract_assistant_text(events) == "First second."
 
 
 def test_extract_text_delta_wins_over_assistant_and_result() -> None:
     """``content_block_delta`` has highest priority — when all three
     sources are populated the deltas are the freshest stream."""
-    from plugins.petri_audit.claude_cli_provider import (
-        _extract_assistant_text,
+    from core.llm.adapters.claude_cli_runtime import (
+        extract_assistant_text,
         parse_stream_json_events,
     )
 
@@ -66,13 +66,13 @@ def test_extract_text_delta_wins_over_assistant_and_result() -> None:
             {"type": "result", "result": "fallback"},
         ]
     )
-    assert _extract_assistant_text(parse_stream_json_events(stdout)) == "delta"
+    assert extract_assistant_text(parse_stream_json_events(stdout)) == "delta"
 
 
 def test_extract_text_assistant_wins_over_result_when_no_deltas() -> None:
     """``assistant`` event takes precedence over the ``result`` fallback."""
-    from plugins.petri_audit.claude_cli_provider import (
-        _extract_assistant_text,
+    from core.llm.adapters.claude_cli_runtime import (
+        extract_assistant_text,
         parse_stream_json_events,
     )
 
@@ -82,7 +82,7 @@ def test_extract_text_assistant_wins_over_result_when_no_deltas() -> None:
             {"type": "result", "result": "fallback"},
         ]
     )
-    assert _extract_assistant_text(parse_stream_json_events(stdout)) == "agg"
+    assert extract_assistant_text(parse_stream_json_events(stdout)) == "agg"
 
 
 # ---------------------------------------------------------------------------
@@ -94,7 +94,7 @@ def test_transient_classifier_matches_unexpected_error_text() -> None:
     """The specific phrase claude-cli prints during its internal
     retry storm — this is what the smoke run was returning as the
     assistant's text reply before the classifier was wired in."""
-    from plugins.petri_audit.claude_cli_provider import is_claude_transient_upstream_error
+    from core.llm.adapters.claude_cli_runtime import is_claude_transient_upstream_error
 
     assert is_claude_transient_upstream_error(
         stdout="! Unexpected error. Auto-retrying.\n",
@@ -103,7 +103,7 @@ def test_transient_classifier_matches_unexpected_error_text() -> None:
 
 
 def test_transient_classifier_matches_rate_limit_in_stderr() -> None:
-    from plugins.petri_audit.claude_cli_provider import is_claude_transient_upstream_error
+    from core.llm.adapters.claude_cli_runtime import is_claude_transient_upstream_error
 
     assert is_claude_transient_upstream_error(
         stdout="",
@@ -112,7 +112,7 @@ def test_transient_classifier_matches_rate_limit_in_stderr() -> None:
 
 
 def test_transient_classifier_matches_overloaded_error() -> None:
-    from plugins.petri_audit.claude_cli_provider import is_claude_transient_upstream_error
+    from core.llm.adapters.claude_cli_runtime import is_claude_transient_upstream_error
 
     assert is_claude_transient_upstream_error(
         stdout="overloaded_error from upstream",
@@ -123,7 +123,7 @@ def test_transient_classifier_matches_overloaded_error() -> None:
 def test_transient_classifier_matches_usage_limit_in_assistant_event() -> None:
     """Quota text surfaced as the assistant's textual reply — the
     silent-success path the classifier was added to close."""
-    from plugins.petri_audit.claude_cli_provider import (
+    from core.llm.adapters.claude_cli_runtime import (
         is_claude_transient_upstream_error,
         parse_stream_json_events,
     )
@@ -148,7 +148,7 @@ def test_transient_classifier_matches_usage_limit_in_assistant_event() -> None:
 
 
 def test_transient_classifier_matches_result_event_error_field() -> None:
-    from plugins.petri_audit.claude_cli_provider import (
+    from core.llm.adapters.claude_cli_runtime import (
         is_claude_transient_upstream_error,
         parse_stream_json_events,
     )
@@ -162,7 +162,7 @@ def test_transient_classifier_matches_result_event_error_field() -> None:
 
 def test_transient_classifier_negative_on_normal_text() -> None:
     """Plain successful output must not trip the classifier."""
-    from plugins.petri_audit.claude_cli_provider import (
+    from core.llm.adapters.claude_cli_runtime import (
         is_claude_transient_upstream_error,
         parse_stream_json_events,
     )
@@ -178,7 +178,7 @@ def test_transient_classifier_negative_on_normal_text() -> None:
 
 
 def test_transient_classifier_negative_empty_inputs() -> None:
-    from plugins.petri_audit.claude_cli_provider import is_claude_transient_upstream_error
+    from core.llm.adapters.claude_cli_runtime import is_claude_transient_upstream_error
 
     assert not is_claude_transient_upstream_error(stdout="", stderr="")
     assert not is_claude_transient_upstream_error(stdout="", stderr="", events=[])
@@ -188,7 +188,7 @@ def test_transient_classifier_subclass_caught_by_invocation_error() -> None:
     """``ClaudeCliTransientUpstreamError`` must remain a subclass of
     ``ClaudeCliInvocationError`` so existing call sites don't have
     to be touched to keep catching errors."""
-    from plugins.petri_audit.claude_cli_provider import (
+    from core.llm.adapters.claude_cli_runtime import (
         ClaudeCliInvocationError,
         ClaudeCliTransientUpstreamError,
     )
@@ -204,7 +204,7 @@ def test_transient_classifier_subclass_caught_by_invocation_error() -> None:
 
 
 def test_classify_signal_stdout_source() -> None:
-    from plugins.petri_audit.claude_cli_provider import classify_transient_signal
+    from core.llm.adapters.claude_cli_runtime import classify_transient_signal
 
     signal = classify_transient_signal(
         stdout="oops! Unexpected error. Auto-retrying.\n",
@@ -218,7 +218,7 @@ def test_classify_signal_stdout_source() -> None:
 
 
 def test_classify_signal_stderr_source() -> None:
-    from plugins.petri_audit.claude_cli_provider import classify_transient_signal
+    from core.llm.adapters.claude_cli_runtime import classify_transient_signal
 
     signal = classify_transient_signal(
         stdout="",
@@ -236,7 +236,7 @@ def test_classify_signal_result_event_with_field() -> None:
     """``result`` event hit must carry the ``event_field`` so the
     operator can tell whether the upstream error landed in
     ``result.error`` vs ``result.message`` vs ``result.stderr``."""
-    from plugins.petri_audit.claude_cli_provider import (
+    from core.llm.adapters.claude_cli_runtime import (
         classify_transient_signal,
         parse_stream_json_events,
     )
@@ -258,7 +258,7 @@ def test_classify_signal_assistant_event_no_field() -> None:
     """``assistant`` events carry text in ``message.content[].text`` —
     the ``event_field`` is ``None`` because there's only one canonical
     text location."""
-    from plugins.petri_audit.claude_cli_provider import (
+    from core.llm.adapters.claude_cli_runtime import (
         classify_transient_signal,
         parse_stream_json_events,
     )
@@ -291,7 +291,7 @@ def test_classify_signal_assistant_event_no_field() -> None:
 def test_classify_signal_negative_returns_none() -> None:
     """Normal successful output must return ``None`` (not bool ``False``)
     so callers can use ``if signal is not None:`` for clarity."""
-    from plugins.petri_audit.claude_cli_provider import (
+    from core.llm.adapters.claude_cli_runtime import (
         classify_transient_signal,
         parse_stream_json_events,
     )
@@ -321,7 +321,7 @@ def test_classify_signal_search_order_events_first_stdout_fallback() -> None:
     already covers every structured field — a stdout re-scan only
     risks the LLM's free-form prose triggering the regex.
     """
-    from plugins.petri_audit.claude_cli_provider import (
+    from core.llm.adapters.claude_cli_runtime import (
         classify_transient_signal,
         parse_stream_json_events,
     )
@@ -349,7 +349,7 @@ def test_classify_signal_stdout_fallback_when_events_empty() -> None:
     envelope), the raw stdout scan IS exercised as the last-resort
     signal source. This keeps detection working on genuine
     pre-protocol failures."""
-    from plugins.petri_audit.claude_cli_provider import classify_transient_signal
+    from core.llm.adapters.claude_cli_runtime import classify_transient_signal
 
     signal = classify_transient_signal(
         stdout="rate_limit exceeded before stream started\n",
@@ -365,7 +365,7 @@ def test_classify_signal_content_block_delta_transient_match() -> None:
     """PR-TRANSIENT-CLASSIFIER-SCOPE (2026-05-26, Codex MCP catch) —
     streaming text_delta events must be scanned too.
 
-    ``_extract_assistant_text`` treats ``content_block_delta`` as a
+    ``extract_assistant_text`` treats ``content_block_delta`` as a
     first-class text source (priority over aggregated assistant +
     result events per its docstring). Without scanning these events
     a CLI error emitted via the streaming path would silently bypass
@@ -373,7 +373,7 @@ def test_classify_signal_content_block_delta_transient_match() -> None:
     errors arrive in the FIRST delta chunk, LLM prose accumulates
     over many.
     """
-    from plugins.petri_audit.claude_cli_provider import (
+    from core.llm.adapters.claude_cli_runtime import (
         classify_transient_signal,
         parse_stream_json_events,
     )
@@ -405,7 +405,7 @@ def test_classify_signal_content_block_delta_no_cli_injection_prefix_suppressed(
     the body. Renamed from the prior ``header_limit_suppresses`` test
     after PR-TRANSIENT-CLI-INJECTION-PREFIX (2026-05-26) replaced the
     200-char positional heuristic with a prefix-allowlist gate."""
-    from plugins.petri_audit.claude_cli_provider import (
+    from core.llm.adapters.claude_cli_runtime import (
         classify_transient_signal,
         parse_stream_json_events,
     )
@@ -444,7 +444,7 @@ def test_classify_signal_smoke19_llm_seed_prose_not_false_positive() -> None:
     so the generator phase doesn't falsely abort — exactly the smoke
     19 outcome we need.
     """
-    from plugins.petri_audit.claude_cli_provider import (
+    from core.llm.adapters.claude_cli_runtime import (
         classify_transient_signal,
         parse_stream_json_events,
     )
@@ -503,7 +503,7 @@ def test_classify_signal_smoke21_llm_short_preamble_not_false_positive() -> None
     reached``, so the block is skipped before the transient regex
     runs. The smoke 21 false-positive cannot recur.
     """
-    from plugins.petri_audit.claude_cli_provider import (
+    from core.llm.adapters.claude_cli_runtime import (
         classify_transient_signal,
         parse_stream_json_events,
     )
@@ -527,7 +527,7 @@ def test_classify_signal_smoke21_llm_short_preamble_not_false_positive() -> None
     )
     # Sanity: the transient regex still matches "rate-limit" inside the
     # body — the test would be vacuous if the regex no longer fired.
-    from plugins.petri_audit.claude_cli_provider import CLAUDE_TRANSIENT_UPSTREAM_RE
+    from core.llm.adapters.claude_cli_runtime import CLAUDE_TRANSIENT_UPSTREAM_RE
 
     match = CLAUDE_TRANSIENT_UPSTREAM_RE.search(assistant_text)
     assert match is not None, "smoke 21 regression: regex should still match"
@@ -560,7 +560,7 @@ def test_classify_signal_assistant_event_exclamation_prefix_still_fires() -> Non
     ``~/.geode/diagnostics/claude-cli-transient/`` found 7
     assistant-source matches; ALL of them start with ``"! "``. The
     prefix allowlist must keep firing on this convention."""
-    from plugins.petri_audit.claude_cli_provider import (
+    from core.llm.adapters.claude_cli_runtime import (
         classify_transient_signal,
         parse_stream_json_events,
     )
@@ -598,7 +598,7 @@ def test_classify_signal_smoke22_llm_prose_in_result_event_not_false_positive() 
     ``result.result`` field (LLM-authored prose), while preserving
     any-position scans on ``result.error`` / ``result.message`` /
     ``result.stderr`` (CLI-injected error text)."""
-    from plugins.petri_audit.claude_cli_provider import (
+    from core.llm.adapters.claude_cli_runtime import (
         classify_transient_signal,
         parse_stream_json_events,
     )
@@ -623,7 +623,7 @@ def test_classify_signal_result_event_error_field_still_fires_any_position() -> 
     LLM-authored prose. The fix must keep the any-position scan on this
     field — only ``result.result`` (LLM aggregate) gets the prefix
     allowlist. Regression guard for the Sprint H1 scope."""
-    from plugins.petri_audit.claude_cli_provider import (
+    from core.llm.adapters.claude_cli_runtime import (
         classify_transient_signal,
         parse_stream_json_events,
     )
@@ -651,7 +651,7 @@ def test_classify_signal_result_event_cli_injection_prefix_in_result_fires() -> 
     the prefix-allowlist gate lets the transient regex run and fires
     normally. Mirror of the existing assistant-event coverage for the
     result-event path."""
-    from plugins.petri_audit.claude_cli_provider import (
+    from core.llm.adapters.claude_cli_runtime import (
         classify_transient_signal,
         parse_stream_json_events,
     )
@@ -669,7 +669,7 @@ def test_classify_signal_content_block_delta_exclamation_prefix_still_fires() ->
     """Same prefix-allowlist guarantee for the streaming delta path —
     a CLI-injected error chunk that arrives as ``content_block_delta``
     still fires when its text starts with ``"! "``."""
-    from plugins.petri_audit.claude_cli_provider import (
+    from core.llm.adapters.claude_cli_runtime import (
         classify_transient_signal,
         parse_stream_json_events,
     )
@@ -696,7 +696,7 @@ def test_classify_signal_content_block_delta_exclamation_prefix_still_fires() ->
 def test_signal_excerpt_bounded_to_200_chars() -> None:
     """``matched_text`` must stay ≤ 200 chars so log lines remain
     readable even when claude-cli emits multi-KB error blobs."""
-    from plugins.petri_audit.claude_cli_provider import classify_transient_signal
+    from core.llm.adapters.claude_cli_runtime import classify_transient_signal
 
     long_pad = "x" * 500
     # PR-TRANSIENT-BARE-HTTP-CODES — was "429" (bare digit run); that
@@ -714,7 +714,7 @@ def test_transient_exception_carries_signal_and_dump_path() -> None:
     these are the diagnostic the bool-only path lost. ``signal`` and
     ``dump_path`` together let downstream callers route on the
     actual upstream signature without re-running the cycle."""
-    from plugins.petri_audit.claude_cli_provider import (
+    from core.llm.adapters.claude_cli_runtime import (
         ClaudeCliTransientUpstreamError,
         TransientSignal,
     )
@@ -729,7 +729,7 @@ def test_transient_exception_carries_signal_and_dump_path() -> None:
 def test_transient_exception_default_signal_none_for_backwards_compat() -> None:
     """Pre-PR-T callers that raise without keyword args must still
     work — ``signal`` and ``dump_path`` default to ``None``."""
-    from plugins.petri_audit.claude_cli_provider import ClaudeCliTransientUpstreamError
+    from core.llm.adapters.claude_cli_runtime import ClaudeCliTransientUpstreamError
 
     exc = ClaudeCliTransientUpstreamError("legacy")
     assert exc.signal is None
@@ -750,7 +750,7 @@ def test_bare_429_in_source_code_comment_does_not_match() -> None:
     """Smoke 7 pilot regression — the literal stdout substring that
     misfired previously. Bare digit alone must not classify as a
     transient signal."""
-    from plugins.petri_audit.claude_cli_provider import (
+    from core.llm.adapters.claude_cli_runtime import (
         CLAUDE_TRANSIENT_UPSTREAM_RE,
         classify_transient_signal,
     )
@@ -767,7 +767,7 @@ def test_bare_429_in_source_code_comment_does_not_match() -> None:
 
 
 def test_bare_503_in_code_does_not_match() -> None:
-    from plugins.petri_audit.claude_cli_provider import CLAUDE_TRANSIENT_UPSTREAM_RE
+    from core.llm.adapters.claude_cli_runtime import CLAUDE_TRANSIENT_UPSTREAM_RE
 
     payload = "if response.status == 503:  # service unavailable on upstream"
     # The named phrase 'service unavailable' WILL match — verify the
@@ -780,7 +780,7 @@ def test_bare_503_in_code_does_not_match() -> None:
 
 
 def test_bare_529_in_code_does_not_match() -> None:
-    from plugins.petri_audit.claude_cli_provider import CLAUDE_TRANSIENT_UPSTREAM_RE
+    from core.llm.adapters.claude_cli_runtime import CLAUDE_TRANSIENT_UPSTREAM_RE
 
     assert CLAUDE_TRANSIENT_UPSTREAM_RE.search("retry_codes = {429, 503, 529}") is None
 
@@ -789,7 +789,7 @@ def test_real_rate_limit_signal_still_matches_after_bare_removal() -> None:
     """Regression — the canonical Anthropic-API rate-limit signal
     must still classify. The named ``rate_limit_error`` alternative
     catches this even without the bare ``\\b429\\b`` fallback."""
-    from plugins.petri_audit.claude_cli_provider import (
+    from core.llm.adapters.claude_cli_runtime import (
         is_claude_transient_upstream_error,
     )
 
@@ -800,7 +800,7 @@ def test_real_rate_limit_signal_still_matches_after_bare_removal() -> None:
 
 
 def test_overloaded_error_still_matches_after_bare_removal() -> None:
-    from plugins.petri_audit.claude_cli_provider import (
+    from core.llm.adapters.claude_cli_runtime import (
         is_claude_transient_upstream_error,
     )
 
@@ -811,7 +811,7 @@ def test_overloaded_error_still_matches_after_bare_removal() -> None:
 
 
 def test_too_many_requests_phrase_still_matches() -> None:
-    from plugins.petri_audit.claude_cli_provider import CLAUDE_TRANSIENT_UPSTREAM_RE
+    from core.llm.adapters.claude_cli_runtime import CLAUDE_TRANSIENT_UPSTREAM_RE
 
     # The HTTP 429 status text is the phrase-form equivalent of the
     # bare-digit alternative we removed — must still match.
@@ -830,7 +830,7 @@ def test_too_many_requests_phrase_still_matches() -> None:
 def test_throttled_inside_identifier_does_not_match() -> None:
     """Smoke 8 pilot regression — the literal stack-trace fragment
     that misfired previously."""
-    from plugins.petri_audit.claude_cli_provider import CLAUDE_TRANSIENT_UPSTREAM_RE
+    from core.llm.adapters.claude_cli_runtime import CLAUDE_TRANSIENT_UPSTREAM_RE
 
     stack_trace = (
         "│ ❱ 171 │ │ raise TimeoutError(CODEX_CLI_LANE_THROTTLED_MSG) │\n"
@@ -841,33 +841,33 @@ def test_throttled_inside_identifier_does_not_match() -> None:
 
 def test_throttled_real_phrase_still_matches() -> None:
     """Real signal — phrase form with whitespace boundary."""
-    from plugins.petri_audit.claude_cli_provider import CLAUDE_TRANSIENT_UPSTREAM_RE
+    from core.llm.adapters.claude_cli_runtime import CLAUDE_TRANSIENT_UPSTREAM_RE
 
     assert CLAUDE_TRANSIENT_UPSTREAM_RE.search("request was throttled") is not None
     assert CLAUDE_TRANSIENT_UPSTREAM_RE.search("Throttling exception thrown") is not None
 
 
 def test_overloaded_inside_identifier_does_not_match() -> None:
-    from plugins.petri_audit.claude_cli_provider import CLAUDE_TRANSIENT_UPSTREAM_RE
+    from core.llm.adapters.claude_cli_runtime import CLAUDE_TRANSIENT_UPSTREAM_RE
 
     assert CLAUDE_TRANSIENT_UPSTREAM_RE.search("OVERLOADED_ERROR_MSG = '...'") is None
 
 
 def test_overloaded_error_real_phrase_still_matches() -> None:
-    from plugins.petri_audit.claude_cli_provider import CLAUDE_TRANSIENT_UPSTREAM_RE
+    from core.llm.adapters.claude_cli_runtime import CLAUDE_TRANSIENT_UPSTREAM_RE
 
     assert CLAUDE_TRANSIENT_UPSTREAM_RE.search("upstream returned overloaded_error\n") is not None
     assert CLAUDE_TRANSIENT_UPSTREAM_RE.search("status: overloaded") is not None
 
 
 def test_throttling_exception_inside_identifier_does_not_match() -> None:
-    from plugins.petri_audit.claude_cli_provider import CLAUDE_TRANSIENT_UPSTREAM_RE
+    from core.llm.adapters.claude_cli_runtime import CLAUDE_TRANSIENT_UPSTREAM_RE
 
     assert CLAUDE_TRANSIENT_UPSTREAM_RE.search("THROTTLINGEXCEPTION_DEFAULT_MSG") is None
 
 
 def test_throttling_exception_real_phrase_still_matches() -> None:
-    from plugins.petri_audit.claude_cli_provider import CLAUDE_TRANSIENT_UPSTREAM_RE
+    from core.llm.adapters.claude_cli_runtime import CLAUDE_TRANSIENT_UPSTREAM_RE
 
     assert CLAUDE_TRANSIENT_UPSTREAM_RE.search("ThrottlingException ") is not None
     assert CLAUDE_TRANSIENT_UPSTREAM_RE.search('"errorCode": "ThrottlingException"') is not None

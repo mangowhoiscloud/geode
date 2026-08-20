@@ -7,9 +7,12 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from plugins.crucible.contract import content_sha256
-from plugins.crucible.producers.codex_kg import ProducerError
-from plugins.crucible.producers.replay import _attested_object, replay_candidate
+from geode_product.crucible.contract import content_sha256
+from geode_product.crucible.producers.replay import (
+    ProducerError,
+    _attested_object,
+    replay_candidate,
+)
 
 POLICY = """\
 Mode: executable assay.

@@ -1,4 +1,4 @@
-"""Tests for ``plugins.seed_generation.manifest``.
+"""Tests for ``geode_product.seed_generation.manifest``.
 
 Coverage targets the P-checklist (cycle-skill SKILL.md):
 
@@ -13,7 +13,7 @@ import textwrap
 from pathlib import Path
 
 import pytest
-from plugins.seed_generation.manifest import (
+from geode_product.seed_generation.manifest import (
     DEFAULT_MANIFEST_PATH,
     JudgePanelSpec,
     SeedGenerationManifest,
@@ -242,7 +242,7 @@ def test_bundled_manifest_proximity_role_loads_without_kind() -> None:
 
     toml_body = (
         Path(__file__).resolve().parents[3]
-        / "plugins"
+        / "geode_product"
         / "seed_generation"
         / "seed_generation.plugin.toml"
     ).read_text(encoding="utf-8")

@@ -16,8 +16,14 @@ from __future__ import annotations
 import contextvars
 import inspect
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from core.config.policy_source import PolicySourceBundle
+    from core.hooks import MiddlewareRegistry
+    from core.observability.run_event import RunEventSinkProvider
 
 log = logging.getLogger(__name__)
 
@@ -224,6 +230,10 @@ async def arun_agentic_oneshot(
     *,
     quiet: bool = True,
     time_budget_s: float = 60.0,
+    handler_builder: Callable[[], dict[str, Any]] | None = None,
+    policy_sources: PolicySourceBundle | None = None,
+    middleware_builder: Callable[..., MiddlewareRegistry] | None = None,
+    activity_sink_provider: RunEventSinkProvider | None = None,
 ) -> Any:
     """Async core of :func:`run_agentic_oneshot` — await inside a running loop.
 
@@ -238,11 +248,10 @@ async def arun_agentic_oneshot(
     from core.agent.tool_executor import ToolExecutor
     from core.config import _resolve_provider
     from core.config import settings as _stk_settings
+    from core.config.policy_source import EMPTY_POLICY_SOURCES
     from core.llm.adapters.registry import bootstrap_builtins
     from core.wiring.bootstrap import (
         build_middleware_registry,
-        build_product_policy_sources,
-        current_product_activity_sink,
         ensure_user_profile,
     )
 
@@ -251,12 +260,12 @@ async def arun_agentic_oneshot(
     # failed with AdapterNotFoundError "Known pairs: []" (2026-06-11).
     # Same pattern as core/agent/worker.py:858. Idempotent: already-
     # registered adapters are skipped.
-    policy_sources = build_product_policy_sources()
-    bootstrap_builtins(policy_sources=policy_sources)
+    resolved_policy_sources = EMPTY_POLICY_SOURCES if policy_sources is None else policy_sources
+    bootstrap_builtins(policy_sources=resolved_policy_sources)
     ensure_user_profile()
 
     conversation = ConversationContext()
-    handlers = _build_tool_handlers_for_fork()
+    handlers = _build_tool_handlers_for_fork() if handler_builder is None else handler_builder()
     # The MCP run_agent fork is HEADLESS (no human to approve) — mirror
     # services.py and strip the headless-denied tools before the executor is
     # built, so the fork can never auto-run run_bash / delegate_task / computer.
@@ -275,7 +284,11 @@ async def arun_agentic_oneshot(
         hitl_level=0,
         denied_tools=HEADLESS_DENIED_TOOLS,
         interactive_approval=False,
-        middleware_registry=build_middleware_registry(policy_sources=policy_sources),
+        middleware_registry=(
+            build_middleware_registry()
+            if middleware_builder is None
+            else middleware_builder(policy_sources=resolved_policy_sources)
+        ),
     )
     loop = AgenticLoop(
         conversation,
@@ -285,8 +298,8 @@ async def arun_agentic_oneshot(
         quiet=quiet,
         time_budget_s=time_budget_s,
         max_rounds=0,
-        activity_sink_provider=current_product_activity_sink,
-        policy_sources=policy_sources,
+        activity_sink_provider=activity_sink_provider,
+        policy_sources=resolved_policy_sources,
     )
     try:
         result = await loop.arun(prompt)
@@ -309,6 +322,10 @@ def run_agentic_oneshot(
     *,
     quiet: bool = True,
     time_budget_s: float = 60.0,
+    handler_builder: Callable[[], dict[str, Any]] | None = None,
+    policy_sources: PolicySourceBundle | None = None,
+    middleware_builder: Callable[..., MiddlewareRegistry] | None = None,
+    activity_sink_provider: RunEventSinkProvider | None = None,
 ) -> Any:
     """Build a minimal isolated AgenticLoop and run a prompt one-shot.
 
@@ -320,7 +337,15 @@ def run_agentic_oneshot(
     from core.async_runtime import run_process_coroutine
 
     return run_process_coroutine(
-        arun_agentic_oneshot(prompt, quiet=quiet, time_budget_s=time_budget_s)
+        arun_agentic_oneshot(
+            prompt,
+            quiet=quiet,
+            time_budget_s=time_budget_s,
+            handler_builder=handler_builder,
+            policy_sources=policy_sources,
+            middleware_builder=middleware_builder,
+            activity_sink_provider=activity_sink_provider,
+        )
     )
 
 

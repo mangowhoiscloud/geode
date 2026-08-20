@@ -12,7 +12,7 @@ So ``fitness_delta = fitness_after - fitness_before`` subtracted a 1-10 dim
 mean from a 0-1 fitness → nonsense (e.g. ≈ -1.7, deterministically negative).
 
 E1 reconciles both sides to the single 0-1 ``compute_fitness`` scale via the
-:func:`core.self_improving.train._baseline_raw_fitness` helper (the shared SoT for
+:func:`geode_product.self_improving.train._baseline_raw_fitness` helper (the shared SoT for
 the attribution ledger's ``fitness_before`` and the few-shot/DPO pile's
 ``fitness_delta``). This file pins:
 
@@ -28,10 +28,15 @@ the attribution ledger's ``fitness_before`` and the few-shot/DPO pile's
 
 from __future__ import annotations
 
-from core.self_improving.fitness import ANCHOR_DIMS, AUXILIARY_DIMS, AXIS_TIERS, compute_fitness
-from core.self_improving.gate import _baseline_raw_fitness
-from core.self_improving.loop.observe.attribution import compute_attribution
-from plugins.seed_generation.baseline_reader import BaselineSnapshot
+from geode_product.seed_generation.baseline_reader import BaselineSnapshot
+from geode_product.self_improving.fitness import (
+    ANCHOR_DIMS,
+    AUXILIARY_DIMS,
+    AXIS_TIERS,
+    compute_fitness,
+)
+from geode_product.self_improving.gate import _baseline_raw_fitness
+from geode_product.self_improving.loop.observe.attribution import compute_attribution
 
 # A complete dim_means over every AXIS_TIERS dim so the "missing dim = best
 # case" fallback in compute_dim_scores does not silently inflate fitness and

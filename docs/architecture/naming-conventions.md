@@ -25,9 +25,9 @@ PR.
 
 ## 1. Bundled-feature layout
 
-The current `plugins/` directory is a legacy namespace for first-party bundled
-product features, not an external extension contract. Its exhaustive
-classification and future `geode_product` targets are fixed by
+Bundled first-party features live under `geode_product/`. The `plugins/`
+directory contains only curated compatibility facades and is not an external
+extension contract or implementation root. The exhaustive classification is fixed by
 [`package-classification.md`](package-classification.md).
 
 ---
@@ -93,7 +93,7 @@ of every relocated symbol with its origin release.
 
 ---
 
-## 5. Tool class names (`core/tools/`, `plugins/*/tools/`)
+## 5. Tool class names (`core/tools/`, `geode_product/*/tools/`)
 
 `<Verb><Noun>Tool` (action-oriented) or `<Noun>Tool` (resource-oriented) are
 both accepted; pick whichever reads better for the operation. Be consistent

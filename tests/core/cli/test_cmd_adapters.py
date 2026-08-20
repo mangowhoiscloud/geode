@@ -20,7 +20,7 @@ def runner() -> CliRunner:
     return CliRunner()
 
 
-def test_adapters_list_shows_all_six(runner: CliRunner) -> None:
+def test_adapters_list_shows_openai_as_payg_and_subscription(runner: CliRunner) -> None:
     from core.cli import app
 
     result = runner.invoke(app, ["adapters", "list"])
@@ -31,9 +31,9 @@ def test_adapters_list_shows_all_six(runner: CliRunner) -> None:
         "claude-cli",
         "openai-payg",
         "codex-oauth",
-        "codex-cli",
     ):
         assert adapter_name in result.output
+    assert "codex-cli" not in result.output
 
 
 def test_adapters_list_shows_billing_type(runner: CliRunner) -> None:
@@ -64,7 +64,7 @@ def test_adapters_detect_model_no_credential_exits_2(runner: CliRunner, monkeypa
 
 
 def test_audit_seeds_config_shows_role_table(runner: CliRunner) -> None:
-    from core.cli import app
+    from geode_product.cli import app
 
     result = runner.invoke(app, ["audit-seeds", "config"])
     assert result.exit_code == 0, result.output
@@ -82,7 +82,7 @@ def test_audit_seeds_config_shows_role_table(runner: CliRunner) -> None:
 
 
 def test_audit_seeds_config_shows_judge_voters(runner: CliRunner) -> None:
-    from core.cli import app
+    from geode_product.cli import app
 
     result = runner.invoke(app, ["audit-seeds", "config"])
     assert "Judge panel voters" in result.output

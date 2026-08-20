@@ -77,7 +77,7 @@ def test_telemetry_stages_cover_terminal_states() -> None:
     """`disabled` is intentionally absent — see module docstring.
     PR-MAX-GEN (2026-05-26) added ``max_generation_reached`` for the
     generation-cap state, bringing the set to six stages."""
-    from core.self_improving.loop.auto_trigger import AUTO_TRIGGER_TELEMETRY_STAGES
+    from geode_product.self_improving.loop.auto_trigger import AUTO_TRIGGER_TELEMETRY_STAGES
 
     assert {
         "fired",
@@ -96,7 +96,7 @@ def test_telemetry_stages_cover_terminal_states() -> None:
 
 
 def test_history_entry_writes_one_jsonl_row(trigger_paths: tuple[Path, Path, Path]) -> None:
-    from core.self_improving.loop.auto_trigger import append_history_entry
+    from geode_product.self_improving.loop.auto_trigger import append_history_entry
 
     _, _, hist = trigger_paths
     ok = append_history_entry(
@@ -121,7 +121,7 @@ def test_history_entry_writes_one_jsonl_row(trigger_paths: tuple[Path, Path, Pat
 def test_history_entry_appends_multiple_rows(
     trigger_paths: tuple[Path, Path, Path],
 ) -> None:
-    from core.self_improving.loop.auto_trigger import append_history_entry
+    from geode_product.self_improving.loop.auto_trigger import append_history_entry
 
     _, _, hist = trigger_paths
     for i in range(3):
@@ -133,7 +133,7 @@ def test_history_entry_appends_multiple_rows(
 
 
 def test_history_entry_creates_parent_dir(tmp_path: Path) -> None:
-    from core.self_improving.loop.auto_trigger import append_history_entry
+    from geode_product.self_improving.loop.auto_trigger import append_history_entry
 
     nested = tmp_path / "deep" / "nested" / "history.jsonl"
     assert not nested.parent.exists()
@@ -146,7 +146,7 @@ def test_history_entry_preserves_unicode_in_detail(
     trigger_paths: tuple[Path, Path, Path],
 ) -> None:
     """Korean / non-ASCII detail must not be escaped to ``\\uXXXX``."""
-    from core.self_improving.loop.auto_trigger import append_history_entry
+    from geode_product.self_improving.loop.auto_trigger import append_history_entry
 
     _, _, hist = trigger_paths
     append_history_entry(
@@ -162,7 +162,7 @@ def test_history_entry_preserves_unicode_in_detail(
 
 def test_history_entry_graceful_on_oserror(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Disk failure → returns False, does not raise."""
-    from core.self_improving.loop import auto_trigger as at_module
+    from geode_product.self_improving.loop import auto_trigger as at_module
 
     def _boom_mkdir(self: Path, *args: Any, **kwargs: Any) -> None:
         raise OSError("disk full")
@@ -182,7 +182,7 @@ def test_fired_emits_hook_and_appends_history(
     trigger_paths: tuple[Path, Path, Path],
 ) -> None:
     from core.hooks import HookEvent
-    from core.self_improving.loop.auto_trigger import auto_trigger_mutator
+    from geode_product.self_improving.loop.auto_trigger import auto_trigger_mutator
 
     lock, ts, hist = trigger_paths
     runner = _FakeRunner(target_section="wrapper.intro")
@@ -216,7 +216,7 @@ def test_lock_busy_emits_hook_and_appends_history(
     trigger_paths: tuple[Path, Path, Path],
 ) -> None:
     from core.hooks import HookEvent
-    from core.self_improving.loop.auto_trigger import (
+    from geode_product.self_improving.loop.auto_trigger import (
         acquire_auto_trigger_lock,
         auto_trigger_mutator,
         release_auto_trigger_lock,
@@ -249,7 +249,7 @@ def test_interval_blocked_emits_hook_and_appends_history(
     trigger_paths: tuple[Path, Path, Path],
 ) -> None:
     from core.hooks import HookEvent
-    from core.self_improving.loop.auto_trigger import (
+    from geode_product.self_improving.loop.auto_trigger import (
         auto_trigger_mutator,
         write_last_run_timestamp,
     )
@@ -278,7 +278,7 @@ def test_runner_error_emits_hook_and_appends_history(
     trigger_paths: tuple[Path, Path, Path],
 ) -> None:
     from core.hooks import HookEvent
-    from core.self_improving.loop.auto_trigger import auto_trigger_mutator
+    from geode_product.self_improving.loop.auto_trigger import auto_trigger_mutator
 
     lock, ts, hist = trigger_paths
     runner = _FakeRunner(raises=RuntimeError("boom"))
@@ -302,7 +302,7 @@ def test_parse_error_emits_hook_and_appends_history(
     trigger_paths: tuple[Path, Path, Path],
 ) -> None:
     from core.hooks import HookEvent
-    from core.self_improving.loop.auto_trigger import auto_trigger_mutator
+    from geode_product.self_improving.loop.auto_trigger import auto_trigger_mutator
 
     lock, ts, hist = trigger_paths
     runner = _FakeRunner(raises=ValueError("malformed mutation"))
@@ -328,7 +328,7 @@ def test_disabled_skips_hook_and_history(
     """`disabled` is the only state that does NOT emit a hook OR
     append a row — see AUTO_TRIGGER_TELEMETRY_STAGES docstring for rationale.
     """
-    from core.self_improving.loop.auto_trigger import auto_trigger_mutator
+    from geode_product.self_improving.loop.auto_trigger import auto_trigger_mutator
 
     lock, ts, hist = trigger_paths
     hooks = _CapturingHooks()
@@ -348,7 +348,7 @@ def test_disabled_skips_hook_and_history(
 
 def test_hooks_none_does_not_crash(trigger_paths: tuple[Path, Path, Path]) -> None:
     """Manual REPL / unit-test path: hooks=None must not raise."""
-    from core.self_improving.loop.auto_trigger import auto_trigger_mutator
+    from geode_product.self_improving.loop.auto_trigger import auto_trigger_mutator
 
     lock, ts, hist = trigger_paths
     runner = _FakeRunner()
@@ -370,7 +370,7 @@ def test_multi_call_history_is_append_only(
     trigger_paths: tuple[Path, Path, Path],
 ) -> None:
     """Three sequential calls → three rows."""
-    from core.self_improving.loop.auto_trigger import auto_trigger_mutator
+    from geode_product.self_improving.loop.auto_trigger import auto_trigger_mutator
 
     lock, ts, hist = trigger_paths
     for i in range(3):
@@ -394,7 +394,7 @@ def test_hook_handler_exception_does_not_break_mutator(
     trigger_paths: tuple[Path, Path, Path],
 ) -> None:
     """A misbehaving hook subscriber must not crash the state machine."""
-    from core.self_improving.loop.auto_trigger import auto_trigger_mutator
+    from geode_product.self_improving.loop.auto_trigger import auto_trigger_mutator
 
     lock, ts, hist = trigger_paths
 

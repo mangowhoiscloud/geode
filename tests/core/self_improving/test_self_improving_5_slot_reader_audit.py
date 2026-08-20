@@ -16,7 +16,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from core.self_improving.policy_sources import build_policy_source_bundle
+from geode_product.self_improving.policy_sources import build_policy_source_bundle
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -36,7 +36,7 @@ _READER_SEARCH_DIRS: tuple[str, ...] = (
     "core/orchestration",
     "core/skills",
     "core/llm",
-    "core/self_improving/loop",
+    "geode_product/self_improving/loop",
     "plugins",
     "autoresearch",
 )
@@ -242,7 +242,7 @@ def test_active_slots_registered_as_mutation_targets() -> None:
     reader + 미래 재추가)."""
     import importlib
 
-    mod = importlib.import_module("core.self_improving.loop.mutate.policies")
+    mod = importlib.import_module("geode_product.self_improving.loop.mutate.policies")
     target_kinds = set(getattr(mod, "TARGET_KINDS", ()))
     expected = {
         "prompt",
@@ -261,7 +261,7 @@ def test_active_slots_registered_as_mutation_targets() -> None:
         "hyperparam 은 PR-DROP-HYPERPARAM-MUTATION 이후 deprecate"
     )
     # path constant 보존 — 미래 복원용 + runtime config reader
-    src = _read("core/self_improving/loop/mutate/policies.py")
+    src = _read("geode_product/self_improving/loop/mutate/policies.py")
     assert '"retrieval": AUTORESEARCH_RETRIEVAL_POLICY_PATH' in src, (
         "AUTORESEARCH_RETRIEVAL_POLICY_PATH 매핑은 deprecate 후에도 보존 필요"
     )

@@ -27,15 +27,12 @@ from core.config.policy_source import EMPTY_POLICY_SOURCES, PolicySourceBundle, 
 from core.hooks import DuplicateMiddlewareError, LlmCallRequest, MiddlewareRegistry
 from core.llm.adapters._anthropic_common import build_create_kwargs, build_stream_kwargs
 from core.llm.adapters.base import AdapterCallRequest, Message
-from core.self_improving.loop.inject.in_context_wiring import (
+from core.wiring.bootstrap import build_middleware_registry as build_core_middleware_registry
+from geode_product.self_improving.loop.inject.in_context_wiring import (
     apply_in_context_slots,
     register_in_context_middleware,
 )
-from core.wiring.bootstrap import (
-    bind_product_worker_activity,
-    build_middleware_registry,
-    current_product_activity_sink,
-)
+from geode_product.wiring import build_middleware_registry
 
 # No-op fast path ------------------------------------------------------------
 
@@ -43,7 +40,7 @@ from core.wiring.bootstrap import (
 def test_no_sot_configured_returns_identity(monkeypatch: pytest.MonkeyPatch) -> None:
     """No SoT → identical objects returned (zero allocation)."""
     monkeypatch.setattr(
-        "core.self_improving.loop.inject.in_context_slots._load_in_context_slots_override",
+        "geode_product.self_improving.loop.inject.in_context_slots._load_in_context_slots_override",
         lambda **_kwargs: None,
     )
     msgs = [{"role": "user", "content": "hi"}]
@@ -55,7 +52,7 @@ def test_no_sot_configured_returns_identity(monkeypatch: pytest.MonkeyPatch) -> 
 def test_empty_dict_slots_returns_identity(monkeypatch: pytest.MonkeyPatch) -> None:
     """Empty dict from the reader → identity (truthiness check)."""
     monkeypatch.setattr(
-        "core.self_improving.loop.inject.in_context_slots._load_in_context_slots_override",
+        "geode_product.self_improving.loop.inject.in_context_slots._load_in_context_slots_override",
         lambda **_kwargs: {},
     )
     msgs = [{"role": "user", "content": "hi"}]
@@ -72,7 +69,7 @@ def test_load_failure_returns_identity_and_swallows(
         raise RuntimeError("synthetic")
 
     monkeypatch.setattr(
-        "core.self_improving.loop.inject.in_context_slots._load_in_context_slots_override",
+        "geode_product.self_improving.loop.inject.in_context_slots._load_in_context_slots_override",
         _boom,
     )
     msgs = [{"role": "user", "content": "hi"}]
@@ -87,10 +84,13 @@ def test_exemplars_slot_prepends_few_shot_pool(monkeypatch: pytest.MonkeyPatch) 
     """When exemplars slot active + pool has entries → ``(user, assistant)``
     pairs land at head of messages."""
     from core.llm.few_shot_pool import FewShotExemplar
-    from core.self_improving.loop.inject.in_context_slots import SLOT_EXEMPLARS, InContextSlot
+    from geode_product.self_improving.loop.inject.in_context_slots import (
+        SLOT_EXEMPLARS,
+        InContextSlot,
+    )
 
     monkeypatch.setattr(
-        "core.self_improving.loop.inject.in_context_slots._load_in_context_slots_override",
+        "geode_product.self_improving.loop.inject.in_context_slots._load_in_context_slots_override",
         lambda **_kwargs: {
             SLOT_EXEMPLARS: InContextSlot(
                 name=SLOT_EXEMPLARS,
@@ -130,10 +130,13 @@ def test_exemplars_slot_prepends_few_shot_pool(monkeypatch: pytest.MonkeyPatch) 
 
 def test_exemplars_slot_empty_pool_no_op(monkeypatch: pytest.MonkeyPatch) -> None:
     """exemplars slot configured but pool empty → messages unchanged."""
-    from core.self_improving.loop.inject.in_context_slots import SLOT_EXEMPLARS, InContextSlot
+    from geode_product.self_improving.loop.inject.in_context_slots import (
+        SLOT_EXEMPLARS,
+        InContextSlot,
+    )
 
     monkeypatch.setattr(
-        "core.self_improving.loop.inject.in_context_slots._load_in_context_slots_override",
+        "geode_product.self_improving.loop.inject.in_context_slots._load_in_context_slots_override",
         lambda **_kwargs: {
             SLOT_EXEMPLARS: InContextSlot(
                 name=SLOT_EXEMPLARS,
@@ -156,10 +159,13 @@ def test_exemplars_slot_pool_failure_logged_not_raised(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """exemplars reader exception → swallowed; other slots / call proceed."""
-    from core.self_improving.loop.inject.in_context_slots import SLOT_EXEMPLARS, InContextSlot
+    from geode_product.self_improving.loop.inject.in_context_slots import (
+        SLOT_EXEMPLARS,
+        InContextSlot,
+    )
 
     monkeypatch.setattr(
-        "core.self_improving.loop.inject.in_context_slots._load_in_context_slots_override",
+        "geode_product.self_improving.loop.inject.in_context_slots._load_in_context_slots_override",
         lambda **_kwargs: {
             SLOT_EXEMPLARS: InContextSlot(
                 name=SLOT_EXEMPLARS,
@@ -185,10 +191,13 @@ def test_exemplars_slot_pool_failure_logged_not_raised(
 def test_system_passthrough_when_no_slot_targets_it(monkeypatch: pytest.MonkeyPatch) -> None:
     """exemplars only mutates messages, never system."""
     from core.llm.few_shot_pool import FewShotExemplar
-    from core.self_improving.loop.inject.in_context_slots import SLOT_EXEMPLARS, InContextSlot
+    from geode_product.self_improving.loop.inject.in_context_slots import (
+        SLOT_EXEMPLARS,
+        InContextSlot,
+    )
 
     monkeypatch.setattr(
-        "core.self_improving.loop.inject.in_context_slots._load_in_context_slots_override",
+        "geode_product.self_improving.loop.inject.in_context_slots._load_in_context_slots_override",
         lambda **_kwargs: {
             SLOT_EXEMPLARS: InContextSlot(
                 name=SLOT_EXEMPLARS,
@@ -243,7 +252,7 @@ def test_anthropic_api_middleware_preserves_wire_shape_and_dynamic_cache_prefix(
     adapter_name: str,
 ) -> None:
     """Both API lanes get the old contribution immediately before adaptation."""
-    import core.self_improving.loop.inject.in_context_wiring as wiring
+    import geode_product.self_improving.loop.inject.in_context_wiring as wiring
 
     calls: list[tuple[list[dict[str, Any]], str]] = []
 
@@ -328,7 +337,7 @@ def test_non_anthropic_api_adapters_are_not_modified(
     monkeypatch: pytest.MonkeyPatch,
     adapter_name: str,
 ) -> None:
-    import core.self_improving.loop.inject.in_context_wiring as wiring
+    import geode_product.self_improving.loop.inject.in_context_wiring as wiring
 
     def _unexpected(*_args: Any, **_kwargs: Any) -> Any:
         raise AssertionError("in-context contribution must not run")
@@ -369,7 +378,7 @@ def test_missing_slot_policy_keeps_anthropic_request_unchanged(
     monkeypatch: pytest.MonkeyPatch,
     policy_sources: PolicySourceBundle,
 ) -> None:
-    import core.self_improving.loop.inject.in_context_wiring as wiring
+    import geode_product.self_improving.loop.inject.in_context_wiring as wiring
 
     def _unexpected(*_args: Any, **_kwargs: Any) -> Any:
         raise AssertionError("explicit empty policy must not load product slots")
@@ -393,22 +402,19 @@ def test_missing_slot_policy_keeps_anthropic_request_unchanged(
 
 def test_neutral_bootstrap_tolerates_absent_product(
     monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Any,
 ) -> None:
     real_import = builtins.__import__
 
     def _without_product(name: str, *args: Any, **kwargs: Any) -> Any:
-        if name.startswith("core.self_improving"):
+        if name.startswith("geode_product.self_improving"):
             raise ModuleNotFoundError(
-                "No module named 'core.self_improving'",
-                name="core.self_improving",
+                "No module named 'geode_product.self_improving'",
+                name="geode_product.self_improving",
             )
         return real_import(name, *args, **kwargs)
 
     monkeypatch.setattr(builtins, "__import__", _without_product)
-    assert isinstance(build_middleware_registry(), MiddlewareRegistry)
-    assert current_product_activity_sink() is None
-    bind_product_worker_activity(tmp_path)
+    assert isinstance(build_core_middleware_registry(), MiddlewareRegistry)
 
 
 def test_neutral_bootstrap_does_not_hide_broken_product_dependency(
@@ -417,7 +423,7 @@ def test_neutral_bootstrap_does_not_hide_broken_product_dependency(
     real_import = builtins.__import__
 
     def _broken_product(name: str, *args: Any, **kwargs: Any) -> Any:
-        if name.startswith("core.self_improving"):
+        if name.startswith("geode_product.self_improving"):
             raise ModuleNotFoundError(
                 "No module named 'missing_product_dependency'",
                 name="missing_product_dependency",
@@ -435,10 +441,10 @@ def test_neutral_bootstrap_does_not_hide_partial_product_install(
     real_import = builtins.__import__
 
     def _partial_product(name: str, *args: Any, **kwargs: Any) -> Any:
-        if name.startswith("core.self_improving"):
+        if name.startswith("geode_product.self_improving"):
             raise ModuleNotFoundError(
-                "No module named 'core.self_improving.policy_sources'",
-                name="core.self_improving.policy_sources",
+                "No module named 'geode_product.self_improving.policy_sources'",
+                name="geode_product.self_improving.policy_sources",
             )
         return real_import(name, *args, **kwargs)
 
@@ -459,7 +465,7 @@ def test_stub_slots_do_not_break_when_configured(monkeypatch: pytest.MonkeyPatch
     assertion is hermetic and never leaks the dev machine's real episodic store
     (which would inject a ``<tool-hints>`` block and fail the ``== "S"`` check).
     """
-    from core.self_improving.loop.inject.in_context_slots import (
+    from geode_product.self_improving.loop.inject.in_context_slots import (
         SLOT_MEMORY_RECALL,
         SLOT_RUBRIC_EXCERPTS,
         SLOT_TOOL_HINTS,
@@ -469,12 +475,12 @@ def test_stub_slots_do_not_break_when_configured(monkeypatch: pytest.MonkeyPatch
     # tool_hints is imported lazily inside apply_in_context_slots from the
     # source module, so patch the source (not the wiring namespace).
     monkeypatch.setattr(
-        "core.self_improving.loop.inject.tool_hints.load_recent_episodes",
+        "geode_product.self_improving.loop.inject.tool_hints.load_recent_episodes",
         lambda *a, **k: [],
     )
 
     monkeypatch.setattr(
-        "core.self_improving.loop.inject.in_context_slots._load_in_context_slots_override",
+        "geode_product.self_improving.loop.inject.in_context_slots._load_in_context_slots_override",
         lambda **_kwargs: {
             SLOT_MEMORY_RECALL: InContextSlot(
                 name=SLOT_MEMORY_RECALL,

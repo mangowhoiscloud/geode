@@ -6,21 +6,20 @@
       "ClaudeCliAdapter",
       "OpenAIPaygAdapter",
       "CodexOAuthAdapter",
-      "CodexCliAdapter",
       "GlmPaygAdapter",
       "GlmCodingPlanAdapter"
     ],
-    "count": 8
+    "count": 7
   },
   "complexity_thresholds": {
     "max_args": 23,
     "max_branches": 51,
     "max_complexity": 52,
     "max_returns": 18,
-    "max_statements": 212
+    "max_statements": 209
   },
   "context_vars": {
-    "count": 30,
+    "count": 29,
     "items": [
       {
         "context_name": "geode_active_cognitive_state",
@@ -81,7 +80,7 @@
       {
         "context_name": "conversation_ctx",
         "has_default": true,
-        "line": 274,
+        "line": 271,
         "path": "core/cli/commands/_state.py",
         "symbol": "_conversation_ctx"
       },
@@ -191,13 +190,6 @@
         "symbol": "_runtime_audit_active"
       },
       {
-        "context_name": "self_improving_loop_run_timeline",
-        "has_default": true,
-        "line": 32,
-        "path": "core/self_improving/loop/observe/run_timeline.py",
-        "symbol": "_current_run_timeline"
-      },
-      {
         "context_name": "default_session_store",
         "has_default": true,
         "line": 31,
@@ -242,176 +234,20 @@
       "path": "core/agent/loop/agent_loop.py"
     },
     "RuntimeCoreConfig": {
-      "field_count": 19,
+      "field_count": 21,
       "path": "core/runtime.py"
     },
     "SubAgentManager": {
       "constructor_arg_count": 17,
-      "file_loc": 1450,
+      "file_loc": 1449,
       "method_count": 24,
       "path": "core/agent/sub_agent.py"
     }
   },
-  "core_to_plugins_imports": {
-    "file_count": 14,
-    "site_count": 31,
-    "sites": [
-      {
-        "line": 20,
-        "module": "plugins.petri_audit.cli_agreement",
-        "path": "core/cli/__init__.py"
-      },
-      {
-        "line": 21,
-        "module": "plugins.petri_audit.cli_audit",
-        "path": "core/cli/__init__.py"
-      },
-      {
-        "line": 22,
-        "module": "plugins.seed_generation.cli",
-        "path": "core/cli/__init__.py"
-      },
-      {
-        "line": 122,
-        "module": "plugins.petri_audit.user_overrides",
-        "path": "core/cli/commands/config.py"
-      },
-      {
-        "line": 745,
-        "module": "plugins.petri_audit.claude_code_provider",
-        "path": "core/cli/commands/login.py"
-      },
-      {
-        "line": 757,
-        "module": "plugins.petri_audit.codex_provider",
-        "path": "core/cli/commands/login.py"
-      },
-      {
-        "line": 18,
-        "module": "plugins.petri_audit.cli",
-        "path": "core/cli/commands/petri.py"
-      },
-      {
-        "line": 172,
-        "module": "plugins.petri_audit.cli_audit",
-        "path": "core/cli/dispatcher.py"
-      },
-      {
-        "line": 31,
-        "module": "plugins.petri_audit.optimize",
-        "path": "core/cli/tool_handlers/audit.py"
-      },
-      {
-        "line": 36,
-        "module": "plugins.petri_audit.runner",
-        "path": "core/cli/tool_handlers/audit.py"
-      },
-      {
-        "line": 37,
-        "module": "plugins.petri_audit.viz",
-        "path": "core/cli/tool_handlers/audit.py"
-      },
-      {
-        "line": 40,
-        "module": "plugins.petri_audit.claude_cli_provider",
-        "path": "core/llm/adapters/claude_cli.py"
-      },
-      {
-        "line": 73,
-        "module": "plugins.petri_audit.claude_cli_provider",
-        "path": "core/llm/adapters/claude_cli.py"
-      },
-      {
-        "line": 247,
-        "module": "plugins.petri_audit.claude_cli_provider",
-        "path": "core/llm/adapters/claude_cli.py"
-      },
-      {
-        "line": 291,
-        "module": "plugins.petri_audit.adapters.claude_cli_backend",
-        "path": "core/llm/adapters/claude_cli.py"
-      },
-      {
-        "line": 294,
-        "module": "plugins.petri_audit.claude_cli_provider",
-        "path": "core/llm/adapters/claude_cli.py"
-      },
-      {
-        "line": 354,
-        "module": "plugins.petri_audit.adapters.claude_cli_backend",
-        "path": "core/llm/adapters/claude_cli.py"
-      },
-      {
-        "line": 373,
-        "module": "plugins.petri_audit.adapters.claude_cli_backend",
-        "path": "core/llm/adapters/claude_cli.py"
-      },
-      {
-        "line": 58,
-        "module": "plugins.petri_audit.codex_provider",
-        "path": "core/llm/adapters/provider_inference.py"
-      },
-      {
-        "line": 293,
-        "module": "plugins.petri_audit.claude_cli_provider",
-        "path": "core/llm/errors.py"
-      },
-      {
-        "line": 152,
-        "module": "plugins.petri_audit.claude_cli_provider",
-        "path": "core/llm/router/calls/_failover.py"
-      },
-      {
-        "line": 268,
-        "module": "plugins.petri_audit.pool_validation",
-        "path": "core/self_improving/campaign.py"
-      },
-      {
-        "line": 2229,
-        "module": "plugins.petri_audit.runner",
-        "path": "core/self_improving/campaign.py"
-      },
-      {
-        "line": 2308,
-        "module": "plugins.petri_audit.pool_validation",
-        "path": "core/self_improving/campaign.py"
-      },
-      {
-        "line": 347,
-        "module": "plugins.seed_generation.baseline_reader",
-        "path": "core/self_improving/loop/mutate/runner.py"
-      },
-      {
-        "line": 538,
-        "module": "plugins.seed_generation.baseline_reader",
-        "path": "core/self_improving/loop/mutate/runner.py"
-      },
-      {
-        "line": 49,
-        "module": "plugins.seed_generation.baseline_reader",
-        "path": "core/self_improving/loop/observe/attribution.py"
-      },
-      {
-        "line": 236,
-        "module": "plugins.petri_audit.manifest",
-        "path": "core/self_improving/train.py"
-      },
-      {
-        "line": 237,
-        "module": "plugins.petri_audit.user_overrides",
-        "path": "core/self_improving/train.py"
-      },
-      {
-        "line": 597,
-        "module": "plugins.petri_audit.runner",
-        "path": "core/self_improving/train.py"
-      },
-      {
-        "line": 1367,
-        "module": "plugins.seed_generation.baseline_reader",
-        "path": "core/self_improving/train.py"
-      }
-    ]
+  "core_to_product_imports": {
+    "file_count": 0,
+    "site_count": 0,
+    "sites": []
   },
   "hook_events": {
     "count": 57,
@@ -496,8 +332,7 @@
         "ignored_edges": [
           "core.agent.approval -> core.cli",
           "core.agent.loop.agent_loop -> core.cli.commands",
-          "core.agent.worker -> core.cli.tool_handlers",
-          "core.self_improving.measure -> core.cli.quota_banner"
+          "core.agent.worker -> core.cli.tool_handlers"
         ],
         "name": "Agent stays pure (no CLI/server)"
       },
@@ -506,7 +341,6 @@
           "core.agent.approval -> core.cli",
           "core.agent.loop.agent_loop -> core.cli.commands",
           "core.agent.worker -> core.cli.tool_handlers",
-          "core.self_improving.measure -> core.cli.quota_banner",
           "core.server.ipc_server.poller -> core.cli",
           "core.server.ipc_server.poller -> core.cli.session_state",
           "core.server.supervised.services -> core.cli.bootstrap",
@@ -527,23 +361,52 @@
         "name": "Classified kernel does not import the bundled self-improving product"
       }
     ],
-    "ignored_edge_count": 24
+    "ignored_edge_count": 22
   },
   "packages": {
     "core": {
-      "python_files": 437,
-      "python_loc": 139636
+      "python_files": 398,
+      "python_loc": 120928
+    },
+    "geode_product": {
+      "python_files": 160,
+      "python_loc": 61687
     },
     "plugins": {
-      "python_files": 114,
-      "python_loc": 44886
+      "python_files": 32,
+      "python_loc": 213
     },
     "tests": {
-      "python_files": 686,
-      "python_loc": 184274
+      "python_files": 688,
+      "python_loc": 183135
     }
   },
-  "schema_version": 1,
+  "schema_version": 3,
+  "self_improving_facades": {
+    "count": 5,
+    "items": [
+      {
+        "path": "core/self_improving/__init__.py",
+        "target": "geode_product.self_improving"
+      },
+      {
+        "path": "core/self_improving/campaign.py",
+        "target": "geode_product.self_improving.campaign"
+      },
+      {
+        "path": "core/self_improving/prepare.py",
+        "target": "geode_product.self_improving.prepare"
+      },
+      {
+        "path": "core/self_improving/train.py",
+        "target": "geode_product.self_improving.train"
+      },
+      {
+        "path": "core/self_improving/watch_campaign.py",
+        "target": "geode_product.self_improving.watch_campaign"
+      }
+    ]
+  },
   "tools": {
     "deferred_loading": {
       "always_loaded_count": 16,
@@ -862,14 +725,14 @@
       "doctor_slack": "system",
       "document_ingest": "delegated",
       "edit_file": "delegated",
-      "eval_dspy_optimize": "audit",
-      "eval_inspect_viz": "audit",
+      "eval_dspy_optimize": "product-audit",
+      "eval_inspect_viz": "product-audit",
       "export_json": "output",
-      "freeze_paper_snapshot": "delegated",
+      "freeze_paper_snapshot": "product-seed",
       "general_web_search": "delegated",
       "generate_data": "data",
       "generate_report": "output",
-      "geode_seed_pool_search": "delegated",
+      "geode_seed_pool_search": "product-seed",
       "get_goal": "goal",
       "glob_files": "delegated",
       "gmail_search": "delegated",
@@ -898,7 +761,7 @@
       "note_save": "delegated",
       "obs_otel_export": "observability",
       "paper_fetch_arxiv": "delegated",
-      "petri_audit": "audit",
+      "petri_audit": "product-audit",
       "profile_learn": "delegated",
       "profile_preference": "delegated",
       "profile_show": "delegated",
@@ -909,7 +772,7 @@
       "reject_plan": "plan",
       "reject_result": "hitl",
       "schedule_job": "execution",
-      "seed_debate_turn": "delegated",
+      "seed_debate_turn": "product-seed",
       "send_notification": "notification",
       "session_search": "memory",
       "set_api_key": "system",

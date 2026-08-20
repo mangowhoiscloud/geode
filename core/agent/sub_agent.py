@@ -241,9 +241,8 @@ class SubTask:
     # the dispatch path only honored ``source``; ``worker_model`` fell
     # back to the parent's default → ``_resolve_provider(worker_model)``
     # returned the wrong provider key → ``resolve_for(provider, source)``
-    # picked the wrong adapter (smoke 17 RESUME evidence: voter binding
-    # ``claude-cli`` voter dispatched via ``codex-cli`` subprocess
-    # adapter, because the parent's default model resolved to
+    # picked the wrong adapter (smoke 17 RESUME evidence: a ``claude-cli``
+    # voter was dispatched through the parent's OpenAI adapter because the default model resolved to
     # ``openai-codex`` provider via ``_PROVIDER_NORMALIZATION``).
     # Empty preserves back-compat: callers that don't need per-task
     # override (the common case) still inherit settings/agent_ctx.
@@ -252,7 +251,7 @@ class SubTask:
     # the spawned LLM call's response to the role's expected shape.
     # Threads through ``WorkerRequest.response_schema`` →
     # ``AgenticLoop.response_schema`` → ``AdapterCallRequest.response_schema``
-    # → claude-cli ``--json-schema`` / codex-cli ``--output-schema``.
+    # → claude-cli ``--json-schema``.
     # Without forcing, structured-output roles (pilot / proximity /
     # critic / evolver / meta_reviewer) regularly hit invalid-JSON
     # responses (smoke 14 pilot: LLM emitted ``...all zero...``

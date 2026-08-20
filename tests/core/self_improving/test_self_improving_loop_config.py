@@ -12,7 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from core.config.self_improving import (
+from geode_product.self_improving.config import (
     AutoresearchConfig,
     PetriRoleConfig,
     SeedGenerationConfig,
@@ -44,7 +44,7 @@ def test_default_config_has_safe_defaults() -> None:
 
 
 def test_autoresearch_defaults_match_train_module() -> None:
-    """Defaults mirror the existing core/self_improving/train.py module constants.
+    """Defaults mirror the existing geode_product/self_improving/train.py module constants.
 
     PR-MINIMAL-2 (2026-05-21):
     - ``target_model`` / ``judge_model`` defaults flipped to ``None``
@@ -61,7 +61,7 @@ def test_autoresearch_defaults_match_train_module() -> None:
     assert a.judge_model is None  # G1a inherit
     assert a.source == "claude-cli"  # PR-SIL-5THEME C6 — subscription-first
     assert a.seed_limit == 10
-    assert a.seed_select == "plugins/petri_audit/seeds"
+    assert a.seed_select == "bundled"
     assert a.dim_set == "subset"
     assert a.max_turns == 10
     # PR-MINIMAL-2: per-component fallback_to_payg removed
@@ -164,7 +164,7 @@ def test_get_autoresearch_config_propagates_validation_error_to_operator(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """PR-C-P1 Codex MCP catch — ``core.self_improving.train._get_autoresearch_config``
+    """PR-C-P1 Codex MCP catch — ``geode_product.self_improving.train._get_autoresearch_config``
     used to ``except Exception:`` and silently fall back to the module
     defaults, so an operator config with ``seed_limit = 2`` (< new
     ``ge=5`` floor) produced no error. The narrowed catch now lets
@@ -181,12 +181,12 @@ def test_get_autoresearch_config_propagates_validation_error_to_operator(
 seed_limit = 2
 """,
     )
-    import core.self_improving.train as auto_train
-    from core.config import self_improving as sil_config
+    import geode_product.self_improving.train as auto_train
+    from geode_product.self_improving import config as sil_config
 
     # Capture the unpatched loader, then monkeypatch the import target
     # to force the tmp_path. ``_get_autoresearch_config`` imports the
-    # loader from ``core.config.self_improving`` so the patch
+    # loader from ``geode_product.self_improving.config`` so the patch
     # needs to land on that module attribute.
     original_loader = sil_config.load_self_improving_loop_config
 
@@ -411,7 +411,7 @@ def test_default_path_resolves_to_global_config_toml(
 
 def _make_journal(tmp_path: Path):
     """Construct a RunTimeline pointing at a temp file."""
-    from core.self_improving.loop.observe.run_timeline import RunTimeline
+    from geode_product.self_improving.loop.observe.run_timeline import RunTimeline
 
     return RunTimeline(
         session_id="p2-test",
@@ -432,7 +432,7 @@ def test_load_emits_file_missing_notice_into_session_journal(tmp_path: Path) -> 
     """When config file is absent and a RunTimeline scope is active,
     the loader emits a ``self_improving_loop_config_defaults_applied``
     event with ``reason='file_missing'``."""
-    from core.self_improving.loop.observe.run_timeline import run_timeline_scope
+    from geode_product.self_improving.loop.observe.run_timeline import run_timeline_scope
 
     journal = _make_journal(tmp_path)
     missing = tmp_path / "nope.toml"
@@ -450,7 +450,7 @@ def test_load_emits_file_missing_notice_into_session_journal(tmp_path: Path) -> 
 def test_load_emits_section_missing_notice_into_session_journal(tmp_path: Path) -> None:
     """File exists but the ``[self_improving_loop]`` section is absent →
     notice with ``reason='section_missing'``."""
-    from core.self_improving.loop.observe.run_timeline import run_timeline_scope
+    from geode_product.self_improving.loop.observe.run_timeline import run_timeline_scope
 
     journal = _make_journal(tmp_path)
     path = tmp_path / "config.toml"
@@ -469,7 +469,7 @@ def test_load_emits_read_error_notice_as_warn(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """OSError on read → notice with ``reason='read_error'`` at level ``warn``."""
-    from core.self_improving.loop.observe.run_timeline import run_timeline_scope
+    from geode_product.self_improving.loop.observe.run_timeline import run_timeline_scope
 
     journal = _make_journal(tmp_path)
     path = tmp_path / "config.toml"
@@ -503,7 +503,7 @@ def test_load_silent_when_no_run_timeline_scope(tmp_path: Path) -> None:
 def test_load_does_not_emit_notice_when_section_present(tmp_path: Path) -> None:
     """When the [self_improving_loop] section is populated, no
     defaults-applied event fires — the loader is using user values."""
-    from core.self_improving.loop.observe.run_timeline import run_timeline_scope
+    from geode_product.self_improving.loop.observe.run_timeline import run_timeline_scope
 
     journal = _make_journal(tmp_path)
     path = tmp_path / "config.toml"
@@ -722,10 +722,10 @@ def test_openai_source_rejects_non_openai_lane() -> None:
 
 def test_openai_source_reaches_petri_target_binding(tmp_path: Path, monkeypatch) -> None:
     """Cross-module parity: the single openai_source knob is what
-    ``plugins.petri_audit.user_overrides.read_role_override`` surfaces for the
+    ``geode_product.petri_audit.user_overrides.read_role_override`` surfaces for the
     petri ``target`` role — proving the propagation is not a half-disconnected
     config field but actually steers the audit target's credential lane."""
-    from plugins.petri_audit.user_overrides import read_role_override
+    from geode_product.petri_audit.user_overrides import read_role_override
 
     path = tmp_path / "config.toml"
     _write_toml(

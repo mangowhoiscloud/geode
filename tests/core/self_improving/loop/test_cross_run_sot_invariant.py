@@ -110,7 +110,7 @@ def test_read_latest_pointer_missing_file_returns_none(tmp_path: Path) -> None:
 
 
 def test_read_latest_pointer_malformed_returns_none(tmp_path: Path) -> None:
-    """Unparseable JSON → None (graceful, no crash)."""
+    """Unparsable JSON → None (graceful, no crash)."""
     from core import paths as paths_module
 
     pointer_path = tmp_path / "latest_pointer.json"
@@ -174,7 +174,7 @@ def test_sessions_jsonl_run_id_key_naming() -> None:
     orchestrator.py 의 append 로직과 schema 일치 확인."""
     import inspect
 
-    from plugins.seed_generation import orchestrator
+    from geode_product.seed_generation import orchestrator
 
     # The orchestrator's _append_session_index emits run_id (cross-ref to
     # latest_pointer.json). Check source contains the key.
@@ -188,7 +188,7 @@ def test_sessions_jsonl_run_id_key_naming() -> None:
 def test_meta_review_snapshot_module_import_available() -> None:
     """MetaReviewSnapshot 이 baseline_reader 로부터 import 가능 — F1 의
     cross-run SoT 3중 중첩의 3번째 SoT 가 reachable."""
-    from plugins.seed_generation.baseline_reader import MetaReviewSnapshot
+    from geode_product.seed_generation.baseline_reader import MetaReviewSnapshot
 
     assert MetaReviewSnapshot is not None
 

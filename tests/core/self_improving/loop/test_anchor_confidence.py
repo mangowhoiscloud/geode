@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from core.self_improving.loop.observe.anchor_confidence import (
+from geode_product.self_improving.loop.observe.anchor_confidence import (
     ANCHOR_DIMS_NEGATIVE,
     ANCHOR_DIMS_POSITIVE,
     MULTIPLIER_MAX,
@@ -59,7 +59,7 @@ class TestComputeAnchorConfidenceMultiplier:
 
 
 def test_anchor_confidence_default_disabled() -> None:
-    from core.config.self_improving import AutoresearchConfig
+    from geode_product.self_improving.config import AutoresearchConfig
 
     assert AutoresearchConfig().anchor_confidence_mode is False
 

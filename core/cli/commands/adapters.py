@@ -40,10 +40,10 @@ app = typer.Typer(
 @app.command("list")
 def adapters_list() -> None:
     """List all registered adapters with billing_type + environment status."""
+    from core.config.policy_source import EMPTY_POLICY_SOURCES
     from core.llm.adapters import bootstrap_builtins, list_adapters
-    from core.wiring.bootstrap import build_product_policy_sources
 
-    bootstrap_builtins(policy_sources=build_product_policy_sources())
+    bootstrap_builtins(policy_sources=EMPTY_POLICY_SOURCES)
     adapters = list_adapters()
     if not adapters:
         typer.echo("No LLM adapters registered.")
@@ -67,10 +67,10 @@ def adapters_list() -> None:
 @app.command("detect-model")
 def adapters_detect_model(name: str) -> None:
     """Report the currently configured model + provenance for ``name``."""
+    from core.config.policy_source import EMPTY_POLICY_SOURCES
     from core.llm.adapters import AdapterNotFoundError, bootstrap_builtins, get_adapter
-    from core.wiring.bootstrap import build_product_policy_sources
 
-    bootstrap_builtins(policy_sources=build_product_policy_sources())
+    bootstrap_builtins(policy_sources=EMPTY_POLICY_SOURCES)
     try:
         adapter = get_adapter(name)
     except AdapterNotFoundError as exc:
