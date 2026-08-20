@@ -226,7 +226,6 @@ normal review and CI; implementations start only after the claim merges.
 | Closure package | GAP IDs | Owner/session | Implementation branch | Claim evidence | Claimed at (UTC) |
 |---|---|---|---|---|---|
 | R8.3 | REL-004 | `session=codex-root task=r8-3-publication-grace-evidence` | `feature/r8-3-publication-grace-evidence` | Readiness [#3039](https://github.com/mangowhoiscloud/geode/pull/3039); v1.0.23 GitHub/PyPI parity and candidate interval re-audited | `2026-08-20T07:41:19Z` |
-| R2.2 | CAP-004 | `session=codex-root task=r2-2-google-descriptor-pilot` | `feature/r2-2-google-descriptor-pilot` | Readiness [#3045](https://github.com/mangowhoiscloud/geode/pull/3045); package acceptance and duplicated Google metadata consumers re-audited | `2026-08-20T11:21:09Z` |
 
 ## 1. Program objective
 
@@ -522,7 +521,7 @@ and closure evidence are appended in §10.
 | CAP-001 | `PARTIAL` | Google service bundles exist but do not own all tool/policy relationships | Generic capability records plus `GoogleServiceDescriptor` are executable SOTs | R2.1 | BND-002 | `IN_DEVELOP` |
 | CAP-002 | `ABSENT` | `ToolRegistry` owns tool objects while other registries/lists own execution and safety | Immutable `ToolRegistration` and `ToolPlan` derive every tool consumer | R2.1 | CAP-001 | `IN_DEVELOP` |
 | CAP-003 | `MISFIT` | Native Google handlers are bound in `core/cli/tool_handlers/delegated.py` | Runtime/composition binds handlers; CLI only renders/forwards user interaction | R2.3 | CAP-002, BND-002 | `OPEN` |
-| CAP-004 | `MISFIT` | Google names repeat in safety, approval, policy, personal-data, and CLI modules | Effect/data/auth/resource metadata derives gates; no independent tool-name allowlists | R2.2 | CAP-002 | `IN_PROGRESS` |
+| CAP-004 | `MISFIT` | Google names repeat in safety, approval, policy, personal-data, and CLI modules | Effect/data/auth/resource metadata derives gates; no independent tool-name allowlists | R2.2 | CAP-002 | `IN_DEVELOP` |
 | CAP-005 | `PARTIAL` | `definitions.json`, tool objects, provider schemas, and defer sets can drift | Anthropic/OpenAI/deferred schemas and execution map share one plan hash and parity tests | R2.3 | CAP-002 | `OPEN` |
 | CAP-006 | `ABSENT` | Adding a native/Google tool requires edits across several policy files | Change-surface fixture proves the bounded file/registration budget in §8 | R7.2 | CAP-003, CAP-004, CAP-005 | `OPEN` |
 | LOOP-001 | `ABSENT` | No immutable object freezes one step's route, policy, tool plan, and trace identity | `StepSnapshot` is created once per step and used by model/tool/telemetry paths | R3.1 | CAP-002 | `OPEN` |
@@ -1927,6 +1926,7 @@ pre-release delivery evidence survives after the claim row is gone.
 | R1.3 | BND-003 | [#3028](https://github.com/mangowhoiscloud/geode/pull/3028) | `6f1581c9bc64ff22e3e3cf7f05ea45c01179ebba` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, full non-live tests, lint/format, type check, security, Pages build, macOS/Ubuntu install smoke, an ephemeral core-only wheel projection, exhaustive isolated import of 393 installed kernel modules, zero-extension registry and lifecycle checks, 42 installed-kernel unit tests, and committed-diff review all passed) |
 | R1.7 | REL-003 | [#3033](https://github.com/mangowhoiscloud/geode/pull/3033) | `70a1f1bcd0520b33e50436cc340265b6534bc133` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, full non-live tests, lint/format, type check, security, Pages build, macOS/Ubuntu install smoke, committed-lock validation, clean-wheel daemon IPC v1.0.23, 393 isolated kernel imports plus 42 installed-kernel tests, public-metadata parity, and independent committed-diff review all passed) |
 | R2.1 | CAP-001, CAP-002 | [#3043](https://github.com/mangowhoiscloud/geode/pull/3043) | `ba7eea3288bd443a52181151de13032f5280d263` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, full non-live tests with coverage, lint/format, type check, security, Pages build, official-doc parity, macOS/Ubuntu install smoke, wheel/sdist inspection, clean installed-package smoke, and independent staged-diff review all passed; the product daemon now retains a generation/hash-bound immutable ToolPlan beside the compatibility handler map, while live consumer convergence remains required before R2.1 can reach DONE) |
+| R2.2 | CAP-004 | [#3047](https://github.com/mangowhoiscloud/geode/pull/3047) | `9038d635d0ed3989b11569de5dbfd6cb7a47db43` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, full non-live tests with coverage, lint/format, type check, security, Pages build, macOS/Ubuntu install smoke, wheel/sdist and isolated installed-package checks, exact descriptor-consumer parity, and independent staged-diff review all passed; `definitions.json` convergence remains required in R2.3 before R2.2 can reach DONE) |
 
 ### 10.2 Main closure evidence
 
@@ -2085,18 +2085,21 @@ R2.3 (`CAP-003`, `CAP-005`) supplies the immutable CAP-002 “every tool
 consumer” evidence for live `AgenticLoop`/`ToolExecutor`, provider/deferred,
 and worker/MCP roots; those remain explicit R2.3 non-goals here.
 
-R2.2 (`CAP-004`) is `IN_PROGRESS` under the active claim for
-`feature/r2-2-google-descriptor-pilot`, based on readiness
-[#3045](https://github.com/mangowhoiscloud/geode/pull/3045). Implementation
-starts only after this claim merges and a new worktree is allocated from the
-updated `develop`. CAP-002 is `IN_DEVELOP`; R2.2 owns only descriptor-driven
-Google metadata and consumer migration. Handler-factory ownership and
-provider/deferred projections remain R2.3, while deterministic resource-key
-and data-policy derivation remains R2.4. The active R8.3 claim remains
-independent and unchanged.
+R2.2 (`CAP-004`) is `IN_DEVELOP` after feature
+[#3047](https://github.com/mangowhoiscloud/geode/pull/3047) merged as
+`9038d635d0ed3989b11569de5dbfd6cb7a47db43`. One frozen association now maps
+all 14 Google and Calendar tool names to service alternatives and derives the
+migrated safety, approval, profile-policy, personal-data, delegated-handler,
+and direct-Google scope projections. Native Workspace registrations record
+declarative OAuth capabilities while Calendar remains enabled for its Google,
+MCP, and Apple alternatives. R2.2 is not eligible for `DONE` until R2.3 closes
+the remaining independent `definitions.json` schema edit surface; handler
+ownership and provider/deferred projection remain R2.3, while deterministic
+resource-key and data-policy derivation remains R2.4. The active R8.3 claim and
+publication clock remain independent and unchanged.
 
-R2.3 and R3.1 are also dependency-satisfied but remain `OPEN` pending their
-own serialized whole-package readiness transactions after R2.2 in master
-order. R9.1 is dependency-satisfied but later in master order and remains
-`OPEN`. R8.2 (`STORE-003`) remains `OPEN` behind REL-004 and STORE-001; R8.4
-(`BND-008`) additionally waits for STORE-003.
+The next serialized master-ledger transaction is a whole-package readiness
+audit for R2.3 (`CAP-003`, `CAP-005`). R2.4, R3.1, and R9.1 are also
+dependency-satisfied but remain `OPEN` pending their own transactions in
+master order. R8.2 (`STORE-003`) remains `OPEN` behind REL-004 and STORE-001;
+R8.4 (`BND-008`) additionally waits for STORE-003.
