@@ -107,12 +107,6 @@ class TestRenderToolResult:
         assert "5 items" in printed
 
     @patch("core.ui.agentic_ui.console")
-    def test_success_with_plan_id(self, mock_console) -> None:  # type: ignore[no-untyped-def]
-        render_tool_result("create_plan", {"plan_id": "abc12345678"})
-        printed = str(mock_console.print.call_args)
-        assert "plan:abc12345" in printed
-
-    @patch("core.ui.agentic_ui.console")
     def test_error_result(self, mock_console) -> None:  # type: ignore[no-untyped-def]
         render_tool_result("analyze_subject", {"error": "Not found"})
         printed = str(mock_console.print.call_args)

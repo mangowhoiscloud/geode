@@ -69,7 +69,6 @@ export default function Page() {
               </thead>
               <tbody>
                 <tr><td><code>replan_enabled</code></td><td><code>replan.enabled</code></td><td>bool = true</td><td>리플랜 활성화.</td></tr>
-                <tr><td><code>replan_interval</code></td><td><code>replan.interval</code></td><td>int = 5</td><td>리플랜 주기. 0이면 주기 비활성.</td></tr>
                 <tr><td><code>replan_max_attempts</code></td><td><code>replan.max_attempts</code></td><td>int = 3</td><td>리플랜 시도 상한.</td></tr>
               </tbody>
             </table>
@@ -432,7 +431,6 @@ export default function Page() {
               </thead>
               <tbody>
                 <tr><td><code>replan_enabled</code></td><td><code>replan.enabled</code></td><td>bool = true</td><td>Enable replanning.</td></tr>
-                <tr><td><code>replan_interval</code></td><td><code>replan.interval</code></td><td>int = 5</td><td>Replan cadence. 0 turns the cadence off.</td></tr>
                 <tr><td><code>replan_max_attempts</code></td><td><code>replan.max_attempts</code></td><td>int = 3</td><td>Replan attempt cap.</td></tr>
               </tbody>
             </table>

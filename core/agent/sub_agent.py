@@ -334,9 +334,8 @@ class SubAgentManager:
         # convergence from openclaw (`agents/timeout.ts:3` 48h default)
         # while still leaving room for the IsolationConfig outer cap.
         # 120s was too tight for tool-using sub-agents — smoke 16
-        # evolver TimeoutError surfaced at 122s in
-        # ``plan.decompose_async``. Pilot's 90s Petri audit alone
-        # leaves <30s for plan + tool overhead at 120s; 600s gives
+        # evolver TimeoutError surfaced at 122s. Pilot's 90s Petri audit
+        # alone leaves <30s for tool overhead at 120s; 600s gives
         # multi-round tool reasoning the headroom it needs. Override
         # via ``GEODE_SUBAGENT_TIMEOUT_S`` env (clamped [10, 3600]).
         timeout_s: float = 600.0,

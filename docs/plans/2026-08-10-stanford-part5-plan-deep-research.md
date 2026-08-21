@@ -23,9 +23,9 @@ flowchart LR
     R --> P
 ```
 
-`PlanStep.tool_name`과 `tool_args`는 실행 명령이 아니다. 모델에게 현재
-단계를 보여주는 advisory metadata이고, 실제 action은 AgenticLoop가
-선택·실행한다. `update_plan`은 관측된 완료만 기록한다.
+`PlanStep`은 `id`, 설명, 관측 가능한 완료 조건만 가진다. tool 이름·인자와
+dependency edge를 미리 고정하지 않으며 실제 action은 AgenticLoop가 최신
+관측에서 선택·실행한다. `update_plan`은 관측된 완료만 기록한다.
 
 여기서 Goal도 plan executor가 아니다. Codex의 Goal과 같이 명시적
 objective를 여러 turn에 걸쳐 보존하고 사용량을 계량하며, 성공한 turn이
@@ -186,7 +186,7 @@ authorization이다. OS가 종료된 daemon을 깨우지 않고, cross-process l
 
 | GAP | 심각도 | 조치 | 완료 조건 |
 |---|---:|---|---|
-| `PlanMode`가 executor 없이 completed를 생성 | P0 | 실행 메서드와 auto-execute 설정 삭제 | 승인 결과가 `executed=false` |
+| 별도 `PlanMode`·review-plan store가 advisory Plan과 중복 | P0 | legacy 상태기계·store·model tools 삭제 | `update_plan`만 model-visible |
 | advisory Plan의 stable identity 부재 | P1 | `plan_id`를 revision 전반에 보존 | create→progress→replan join 가능 |
 | plan edge가 session trajectory에서 뭉개짐 | P1 | typed plan lifecycle events 추가 | SQLite 정본과 run의 optional JSONL projection에 동일 적재 |
 | deep-research skill의 `web_search` 오배선 | P1 | canonical tools와 parent/child 계약으로 교체 | skill tool resolution 통과 |

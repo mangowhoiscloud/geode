@@ -4,8 +4,8 @@ PR-CHECKPOINT-RESUME-TIMEBUDGET (2026-05-25, S5) — append-only JSON
 checkpoint file per completed phase, written to
 ``<run_dir>/checkpoints/<phase>.json``. The orchestrator calls
 :func:`write_checkpoint` after each successful phase so a mid-run
-crash (e.g. ``plan.decompose_async`` timeout, claude-cli network
-hang) doesn't lose prior phase output.
+crash (e.g. an LLM timeout, provider network hang) doesn't lose prior phase
+output.
 
 Convergence basis (plan §5.3):
 

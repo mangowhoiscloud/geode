@@ -169,7 +169,7 @@ Karpathy's agent only modified `train.py`. GEODE's agent can modify **14 policy 
 |---|---|---|---|
 | 1 | `wrapper-sections.json` | System prompt | Wrapper prompt section text (5 sections) |
 | 2 | `tool-policy.json` | Tool selection | Per-tool allow/deny + parameter constraints |
-| 3 | `decomposition.json` | Task decomposition | Goal decomposition prompt + heuristics |
+| 3 | `decomposition.json` | Advisory planning | Plan/replan structure prompt (legacy stable target name) |
 | 4 | `retrieval.json` | Memory / RAG | Retrieval policies (what to recall, when) |
 | 5 | `reflection.json` | Self-reflection | Reflection-node gate parameters |
 | 6 | `tool-descriptions.json` | Tool prose | Per-tool description text for context |

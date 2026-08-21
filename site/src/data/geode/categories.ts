@@ -54,7 +54,7 @@ export const geodeCategories: CategoryData[] = [
     descriptionEn:
       "The Planner uses the main loop model to decompose work and surface progress. Routine work uses a live checklist and keeps going; explicit review checkpoints remain available when needed.",
     achievements: [
-      { icon: "⚙️", titleKo: "Planner가 메인 루프 모델을 상속해 작업 분해", titleEn: "Planner inherits the main loop model for task decomposition", modalId: "modal-geode-settings" },
+      { icon: "⚙️", titleKo: "Advisory planner가 메인 루프 모델로 관측 기반 계획 수정", titleEn: "Advisory planner inherits the loop model for evidence-based revision", modalId: "modal-geode-settings" },
       { icon: "🏭", titleKo: "Progress Plan 진행 상태 표시 + 명시적 checkpoint 분리", titleEn: "Progress Plan updates with explicit checkpoints separated", modalId: "modal-geode-factory" },
       { icon: "💉", titleKo: "LLMClientPort 추상화로 Claude·GPT·GLM 계열 역할별 DI", titleEn: "LLMClientPort abstraction wires Claude/GPT/GLM families by role", modalId: "modal-geode-di" },
     ],
