@@ -41,6 +41,12 @@ export default function Page() {
               </tbody>
             </table>
             <p>
+              Anthropic은 오픈소스를 포함한 서드파티 도구에 API 키 인증을
+              권장합니다. <code>claude-cli</code>는 경고가 붙는 레거시 호환
+              경로이며 구독 사용량이 usage credit에서 차감될 수 있습니다.{" "}
+              <a href="https://support.claude.com/en/articles/13189465-log-in-to-your-claude-account">현행 Anthropic 안내</a>를 확인하세요.
+            </p>
+            <p>
               선택은 <code>[llm] anthropic_credential_source</code> /
               <code>openai_credential_source</code>(기본 <code>auto</code>)에
               저장됩니다. <code>/login source &lt;provider&gt; &lt;type&gt;</code>은
@@ -66,7 +72,7 @@ export default function Page() {
               </thead>
               <tbody>
                 <tr><td><code>/login openai</code></td><td>ChatGPT 구독 OAuth 로그인. device-code 플로우는 <code>core/auth/oauth_login.py</code>이고, 결과는 <code>auth.toml</code>에 OAUTH_BORROWED 플랜 + 프로파일 쌍으로 저장됩니다.</td></tr>
-                <tr><td><code>/login anthropic</code></td><td>Claude 구독 OAuth. macOS 키체인의 <code>&quot;Claude Code-credentials&quot;</code> 항목을 읽습니다(routing.toml <code>[credentials.keychain]</code>, override는 <code>GEODE_ANTHROPIC_KEYCHAIN_SERVICE</code>).</td></tr>
+                <tr><td><code>/login anthropic</code></td><td>경고를 표시하고 레거시 <code>claude-cli</code> 경로를 선택합니다. 로그인은 공식 CLI에서 <code>claude /login</code>으로 별도 수행합니다.</td></tr>
                 <tr><td><code>/login google</code></td><td>Gmail, Calendar, Drive, Docs, Sheets, Tasks, Contacts용 Google Workspace OAuth. 사용자가 만든 Desktop 앱 클라이언트를 가져오며 LLM 프로바이더 자격과 분리됩니다.</td></tr>
                 <tr><td><code>/login add</code></td><td>자격 추가. 키 모양(<code>sk-ant-</code>, <code>sk-proj-</code>, GLM {`{id}.{secret}`})으로 프로바이더를 추정합니다.</td></tr>
                 <tr><td><code>/login use</code> / <code>remove</code></td><td>프로파일 선택과 제거.</td></tr>
@@ -219,6 +225,13 @@ ZAI_API_KEY={id}.{secret}`}</pre>
               </tbody>
             </table>
             <p>
+              Anthropic recommends API-key authentication for third-party
+              tools, including open-source projects. <code>claude-cli</code> is
+              a warning-bearing legacy compatibility route, and subscription
+              use may draw from usage credits. See the{" "}
+              <a href="https://support.claude.com/en/articles/13189465-log-in-to-your-claude-account">current Anthropic guidance</a>.
+            </p>
+            <p>
               The choice persists as <code>[llm]
               anthropic_credential_source</code> /
               <code>openai_credential_source</code> (default
@@ -246,7 +259,7 @@ ZAI_API_KEY={id}.{secret}`}</pre>
               </thead>
               <tbody>
                 <tr><td><code>/login openai</code></td><td>ChatGPT subscription OAuth login. The device-code flow lives in <code>core/auth/oauth_login.py</code>; the result lands in <code>auth.toml</code> as an OAUTH_BORROWED plan plus profile pair.</td></tr>
-                <tr><td><code>/login anthropic</code></td><td>Claude subscription OAuth. Reads the macOS keychain entry <code>&quot;Claude Code-credentials&quot;</code> (routing.toml <code>[credentials.keychain]</code>; override with <code>GEODE_ANTHROPIC_KEYCHAIN_SERVICE</code>).</td></tr>
+                <tr><td><code>/login anthropic</code></td><td>Shows the policy warning and selects the legacy <code>claude-cli</code> route. Authenticate separately in the official CLI with <code>claude /login</code>.</td></tr>
                 <tr><td><code>/login google</code></td><td>Google Workspace OAuth for Gmail, Calendar, Drive, Docs, Sheets, Tasks, and Contacts. Imports a user-owned Desktop app client and stays separate from LLM-provider credentials.</td></tr>
                 <tr><td><code>/login add</code></td><td>Add a credential. The provider is sniffed from the key shape (<code>sk-ant-</code>, <code>sk-proj-</code>, GLM {`{id}.{secret}`}).</td></tr>
                 <tr><td><code>/login use</code> / <code>remove</code></td><td>Select and remove profiles.</td></tr>

@@ -44,7 +44,10 @@ loop는 scaffold 후보를 변이시키고 증거 기반 안전성 게이트로 
 
 > **ChatGPT Plus, Pro, Business, Edu, Enterprise 결제 중이신가요?** 그 구독을 GEODE 가 그대로 씁니다. API 키 필요 없습니다. [구독 setup ↓](#path-a--chatgpt-구독-openai-사용자에게-권장)
 >
-> **Claude Pro / Max 사용자라면** — 2026-01-09 발효된 Anthropic 약관이 Claude Code OAuth 토큰의 외부 도구 재사용을 금지합니다. 그래서 GEODE 는 그 토큰을 읽지 않습니다. 대신 Anthropic API 키 (Path B) 를 쓰시면 됩니다. Console 계정은 같고, 신규 가입자는 $5 무료 크레딧을 받습니다.
+> **Claude Pro / Max 사용자라면** — GEODE는 레거시 `claude-cli` 구독 경로를
+> 유지합니다. 다만 Anthropic은 오픈소스를 포함한 서드파티 도구에 API 키를
+> 권장합니다. 공식 CLI에서 인증한 뒤 `/login anthropic`으로 활성화할 수 있으며
+> usage credit이 적용될 수 있습니다. [현행 Anthropic 안내](https://support.claude.com/en/articles/13189465-log-in-to-your-claude-account).
 
 ---
 
@@ -164,13 +167,20 @@ geode                                 # GEODE 시작
 
 토큰 만료가 임박하면 GEODE 가 알아서 갱신합니다 (만료 120초 전 + 401 재시도). 사용자가 따로 신경 쓸 일은 없습니다.
 
-**Claude Pro 가 Path A 가 아닌 이유.** 2026-01-09 부로 Anthropic 약관이 바뀌어, 외부 도구가 Claude Code OAuth 토큰을 재사용할 수 없습니다. GEODE 는 사용자 계정 보호를 위해 `~/.claude/.credentials.json` 을 읽지 않습니다. Anthropic 은 API 키 (Path B) 만 받습니다. ([Reference](https://www.theregister.com/2026/02/20/anthropic_clarifies_ban_third_party_claude_access))
+**Claude 구독 호환 경로.** GEODE는 레거시 `claude-cli` 경로에서 공식
+`claude` CLI를 호출합니다. `/login anthropic`은 경로만 선택하며 Claude 로그인을
+직접 구현하거나 CLI 토큰을 복사하지 않습니다. `claude /login`을 먼저 실행하면 됩니다.
+Anthropic의 현행 안내는 오픈소스를 포함한 서드파티 도구에 API 키를 권장하고,
+구독 사용분이 usage credit에서 차감될 수 있다고 명시합니다. 운영 환경에서는
+API 키 경로가 권장됩니다. ([공식 안내](https://support.claude.com/en/articles/13189465-log-in-to-your-claude-account))
 
 ---
 
 #### Path B — API 키 (사용량 과금)
 
-Anthropic 사용자 (Claude Pro / Max 포함 — OAuth 안 되니까), ChatGPT Team 사용자, 그리고 OpenAI 유료 구독이 없는 분이 여기 해당. API 크레딧을 직접 충전하는 방식입니다. 신규 Anthropic 계정은 $5 무료 크레딧을 받고, 이걸로 수백 번 프롬프트 가능합니다.
+권장되는 서드파티 연동 경로를 원하는 Anthropic 사용자, ChatGPT Team 사용자,
+그리고 OpenAI 유료 구독이 없는 사용자가 여기 해당합니다. API 크레딧을 직접
+충전하는 방식입니다.
 
 **Anthropic API 키 발급** (4클릭):
 
@@ -503,7 +513,7 @@ frontier 하네스 (Claude Code, Codex CLI, OpenClaw) 옆에서 GEODE 가 어디
 | | Claude Code | Codex CLI | OpenClaw | **GEODE** |
 |---|---|---|---|---|
 | 멀티 프로바이더 페일오버 | ✅ Anthropic + AWS Bedrock + Google Vertex (환경변수 라우팅) | ✅✅ OpenAI + Azure + Bedrock + Ollama + OpenAI-호환 엔드포인트 전체 (`model_providers` 설정) | ✅ `auth.order` 쿨다운 기반 자동 페일오버 | ✅ Anthropic + OpenAI + ZhipuAI, in-provider 전용 |
-| 구독 OAuth tier | ✅ Pro / Max | ✅✅ Plus · Pro · Business · Edu · Enterprise | ⚠️ OpenAI + Gemini 온보딩 | ⚠️ ChatGPT 만 (Plus / Pro / Business / Edu / Enterprise) — Anthropic 약관 (2026-01-09) 이 3rd-party Claude OAuth 차단 |
+| 구독 OAuth tier | ✅ Pro / Max | ✅✅ Plus · Pro · Business · Edu · Enterprise | ⚠️ OpenAI + Gemini 온보딩 | ⚠️ ChatGPT; 경고가 붙는 레거시 Claude CLI 경로(API 키 권장) |
 | 토큰 / 비용 예산 가드 | ⚠️ 캐시 토큰 추적만 | ⚠️ 재시도 cap 만 (`request_max_retries`) | ⚠️ 부분 | ✅ 명시적 토큰 + 비용 예산 거버넌스 |
 | 컨텍스트 overflow 처리 | ✅ 자동 컴팩션 | ⚠️ Skills progressive disclosure + fork | ✅ 컴팩션 + 트랜스크립트 스트리밍 | ✅✅ 계층형 컨텍스트 overflow 처리 |
 | 벤더 간 페일오버 정책 | ❌ | ⚠️ `model_providers` 수동 전환 | ✅ 자동 | ❌ 의도적 (예기치 못한 cross-vendor 과금 방지) |

@@ -35,8 +35,8 @@ export default function Page() {
                 <tr>
                   <td>2. Anthropic 구독 OAuth</td>
                   <td>Claude 구독 (claude CLI 자격)</td>
-                  <td><code>/login anthropic</code>. macOS keychain의 Claude Code 자격을 읽습니다.</td>
-                  <td>Claude 구독이 있고 <code>claude-opus-4-8</code> 계열을 기본으로 쓰고 싶을 때.</td>
+                  <td>공식 CLI에서 <code>claude /login</code> 후 <code>/login anthropic</code>으로 레거시 경로를 선택합니다.</td>
+                  <td>정책 경고를 확인하고 Claude 구독 호환 경로를 직접 선택할 때. Anthropic은 오픈소스에도 API 키를 권장합니다.</td>
                 </tr>
                 <tr>
                   <td>3. PAYG API 키</td>
@@ -70,7 +70,7 @@ export default function Page() {
                 </tr>
                 <tr>
                   <td>Claude 구독으로 쓰고 싶습니다</td>
-                  <td><code>geode</code> 안에서 <code>/login anthropic</code>을 실행합니다.</td>
+                  <td>공식 CLI에서 <code>claude /login</code> 후 <code>geode</code> 안에서 <code>/login anthropic</code>을 실행합니다.</td>
                 </tr>
                 <tr>
                   <td>API 키로 비용을 직접 통제하고 싶습니다</td>
@@ -179,8 +179,8 @@ geode about              # 실효 모델 + 자격 상태 확인`}</pre>
                 <tr>
                   <td>2. Anthropic subscription OAuth</td>
                   <td>Claude subscription (claude CLI credential)</td>
-                  <td><code>/login anthropic</code>. Reads the Claude Code credential from the macOS keychain.</td>
-                  <td>You hold a Claude subscription and want <code>claude-opus-4-8</code> models as the default.</td>
+                  <td>Run <code>claude /login</code> in the official CLI, then select the legacy route with <code>/login anthropic</code>.</td>
+                  <td>You explicitly accept the policy warning for Claude subscription compatibility. Anthropic recommends API keys even for open-source tools.</td>
                 </tr>
                 <tr>
                   <td>3. PAYG API keys</td>
@@ -215,7 +215,7 @@ geode about              # 실효 모델 + 자격 상태 확인`}</pre>
                 </tr>
                 <tr>
                   <td>I want to use my Claude subscription</td>
-                  <td>Run <code>/login anthropic</code> inside <code>geode</code>.</td>
+                  <td>Run <code>claude /login</code> in the official CLI, then <code>/login anthropic</code> inside <code>geode</code>.</td>
                 </tr>
                 <tr>
                   <td>I want per-token cost control with API keys</td>

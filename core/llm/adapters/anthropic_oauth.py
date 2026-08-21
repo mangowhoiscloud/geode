@@ -15,6 +15,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import threading
+import warnings
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -118,6 +119,13 @@ class AnthropicOAuthAdapter:
         return anthropic_computer_tool_param(display_width, display_height)
 
     def _get_client(self) -> Any:
+        warnings.warn(
+            "Direct Anthropic subscription OAuth is a legacy compatibility path. "
+            "Anthropic recommends API-key authentication for third-party tools, "
+            "including open-source projects.",
+            UserWarning,
+            stacklevel=2,
+        )
         token = _resolve_oauth_token()
         if not token:
             raise RuntimeError(

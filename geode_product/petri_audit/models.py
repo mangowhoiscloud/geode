@@ -8,8 +8,10 @@ input (``--judge sonnet-4-6``) into the form ``inspect eval`` expects
 
 Mapping policy:
 
-- Raw passthrough — input contains ``/`` → returned untouched.
-  Escape hatch for ``openai-api/...``, ``anthropic/...:tier`` etc.
+- Raw identifiers pass through except the legacy ``claude-code/`` and
+  ``codex-cli/`` prefixes, which normalize to their maintained routes.
+  Other forms remain an escape hatch for ``openai-api/...``,
+  ``anthropic/...:tier`` etc.
 - ``claude-*``                → ``anthropic/<model>``      (inspect_ai native)
 - ``gpt-*``, ``o3``, ``o4-mini`` → ``openai/<model>``       (inspect_ai native)
 - ``glm-*``                  → ``geode/<model>``           (routed through our
@@ -20,6 +22,8 @@ Mapping policy:
 """
 
 from __future__ import annotations
+
+import warnings
 
 from core.llm.token_tracker import MODEL_PRICING
 
@@ -149,13 +153,19 @@ def to_inspect_model(
         raise AuditModelMappingError("Empty model id")
     if "/" in geode_id:
         if geode_id.startswith("claude-code/"):
-            raise AuditModelMappingError(
-                "claude-code was retired; use claude-cli/<model> for Claude subscription access"
+            warnings.warn(
+                "claude-code/<model> is a legacy alias; use claude-cli/<model>",
+                DeprecationWarning,
+                stacklevel=2,
             )
+            return f"claude-cli/{geode_id.removeprefix('claude-code/')}"
         if geode_id.startswith("codex-cli/"):
-            raise AuditModelMappingError(
-                "codex-cli was retired; use openai-codex/<model> for ChatGPT subscription access"
+            warnings.warn(
+                "codex-cli/<model> is a legacy alias; use openai-codex/<model>",
+                DeprecationWarning,
+                stacklevel=2,
             )
+            return f"openai-codex/{geode_id.removeprefix('codex-cli/')}"
         return geode_id
 
     provider = provider_of(geode_id)

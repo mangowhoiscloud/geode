@@ -44,7 +44,10 @@ sustained self-improvement.
 
 > **Have a ChatGPT Plus, Pro, Business, Edu, or Enterprise plan?** Route GEODE through that subscription. No API key. [Subscription setup ↓](#path-a--chatgpt-subscription-the-recommended-path-for-openai-users)
 >
-> **Claude Pro / Max?** Anthropic's terms (effective 2026-01-09) forbid third-party harness from using the Claude Code OAuth token, so GEODE doesn't read it. Use an Anthropic API key instead (Path B). Your Console account is the same; new accounts get $5 free credit.
+> **Claude Pro / Max?** GEODE keeps a legacy `claude-cli` subscription route,
+> but Anthropic recommends API keys for third-party tools, explicitly including
+> open-source projects. Run `/login anthropic` to enable it after authenticating
+> the official CLI; usage credits may apply. [Current Anthropic guidance](https://support.claude.com/en/articles/13189465-log-in-to-your-claude-account).
 
 ---
 
@@ -236,13 +239,21 @@ geode                                 # start GEODE
 
 When the token nears expiry, GEODE refreshes it on its own (120 seconds before, plus a 401 retry). You shouldn't see this happen.
 
-**Why Claude Pro isn't a Path A option.** Anthropic's terms changed on 2026-01-09: third-party tools may no longer reuse the Claude Code OAuth token. GEODE doesn't read `~/.claude/.credentials.json` to keep your account safe. The only Anthropic path GEODE accepts is an API key (Path B). ([Reference](https://www.theregister.com/2026/02/20/anthropic_clarifies_ban_third_party_claude_access))
+**Claude subscription compatibility path.** GEODE can invoke the official
+`claude` CLI through the legacy `claude-cli` route. `/login anthropic` only
+selects that route; it does not implement Claude login or copy the CLI token.
+Run `claude /login` first. Anthropic's current guidance recommends API-key authentication for
+third-party tools, including open-source projects, and says subscription use may
+draw from usage credits. API keys remain the recommended production path.
+([Official guidance](https://support.claude.com/en/articles/13189465-log-in-to-your-claude-account))
 
 ---
 
 #### Path B: API key (pay-as-you-go)
 
-For Anthropic users (any tier, including Claude Pro / Max, OAuth isn't available), ChatGPT Team users, and anyone without a paid OpenAI subscription. You buy API credits directly. New Anthropic accounts get $5 in free credits, enough for hundreds of prompts.
+For Anthropic users who want the recommended third-party integration path,
+ChatGPT Team users, and anyone without a paid OpenAI subscription. You buy API
+credits directly.
 
 **Get an Anthropic API key** (4 clicks):
 
@@ -576,7 +587,7 @@ A qualitative read on where GEODE sits next to the frontier harnesses (Claude Co
 | | Claude Code | Codex CLI | OpenClaw | **GEODE** |
 |---|---|---|---|---|
 | Multi-provider failover | ✅ Anthropic + AWS Bedrock + Google Vertex (env routing) | ✅✅ OpenAI + Azure + Bedrock + Ollama + any OpenAI-compatible (`model_providers` config) | ✅ `auth.order` cooldown-based auto-failover | ✅ Anthropic + OpenAI + ZhipuAI, in-provider only |
-| Subscription OAuth tier | ✅ Pro / Max | ✅✅ Plus · Pro · Business · Edu · Enterprise | ⚠️ OpenAI + Gemini onboarding | ⚠️ ChatGPT only (Plus / Pro / Business / Edu / Enterprise), Anthropic ToS (2026-01-09) blocks third-party Claude OAuth |
+| Subscription OAuth tier | ✅ Pro / Max | ✅✅ Plus · Pro · Business · Edu · Enterprise | ⚠️ OpenAI + Gemini onboarding | ⚠️ ChatGPT; legacy Claude CLI route with policy warning (API key recommended) |
 | Token / cost budget guard | ⚠️ cache token tracking only | ⚠️ retry caps (`request_max_retries`) | ⚠️ partial | ✅ explicit token + cost budget governance |
 | Context overflow handling | ✅ autocompaction | ⚠️ skills progressive disclosure + fork | ✅ compaction + transcript streaming | ✅✅ layered context-overflow handling |
 | Cross-vendor failover policy | ❌ | ⚠️ manual `model_providers` switch | ✅ automatic | ❌ by design (no surprise cross-vendor charges) |
