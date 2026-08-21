@@ -105,6 +105,13 @@ functional change.
   serialize conflicting mutations across daemon sessions and MCP one-shots
   while unrelated resources remain concurrent.
 
+- **Agent turns now have explicit step and turn state.** Every model sampling
+  request freezes its route, bound tool plan, budgets, cancellation handle, and
+  trace correlation in one immutable `StepSnapshot`; the response's tool batch
+  receives that same identity. A mutable `TurnState` owns messages, completed
+  rounds, sampling/retry counts, plan hint, and the closed terminal reason
+  without changing the existing while-tool-use or checkpoint contracts.
+
 ## [1.0.23] - 2026-08-20
 
 > Bundled product boundaries, a self-improving product ring, and an isolated
