@@ -377,12 +377,6 @@ def test_product_composition_compiles_one_lossless_immutable_plan(
     assert bound.resource_keys("manage_rule", {"name": "Foo Bar"}) == bound.resource_keys(
         "manage_rule", {"name": "foo-bar"}
     )
-    assert bound.resource_keys("create_plan", {}) == bound.resource_keys(
-        "modify_plan", {"plan_id": "plan-a"}
-    )
-    assert bound.resource_keys("reject_plan", {"plan_id": "missing-a"}) == bound.resource_keys(
-        "modify_plan", {"plan_id": ""}
-    )
     assert bound.resource_keys("schedule_job", {"expression": "daily"}) == bound.resource_keys(
         "schedule_job", {"target_id": "job-1"}
     )

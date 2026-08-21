@@ -378,7 +378,7 @@
     },
     "geode_product": {
       "python_files": 161,
-      "python_loc": 62093
+      "python_loc": 62089
     },
     "plugins": {
       "python_files": 32,
@@ -386,7 +386,7 @@
     },
     "tests": {
       "python_files": 691,
-      "python_loc": 185751
+      "python_loc": 185745
     }
   },
   "schema_version": 3,
