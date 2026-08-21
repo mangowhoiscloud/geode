@@ -29,12 +29,16 @@ def _req(
     tools: tuple[ToolSpec, ...] = (),
     model: str = "claude-opus-4-8",
     allowed_tool_names: frozenset[str] | None = None,
+    denied_tool_names: frozenset[str] = frozenset(),
+    executable_tool_names: frozenset[str] = frozenset({"computer"}),
 ) -> AdapterCallRequest:
     return AdapterCallRequest(
         model=model,
         messages=(Message(role="user", content="hi"),),
         tools=tools,
         allowed_tool_names=allowed_tool_names,
+        denied_tool_names=denied_tool_names,
+        executable_tool_names=executable_tool_names,
     )
 
 
@@ -102,6 +106,16 @@ class TestLivePathInjection:
             kwargs = common.build_create_kwargs(_req(allowed_tool_names=frozenset({"read_file"})))
         assert not any(t.get("name") == "computer" for t in kwargs.get("tools", []))
 
+    def test_explicit_denylist_blocks_computer_without_an_allowlist(self) -> None:
+        with patch(_ENABLED, return_value=True):
+            kwargs = common.build_create_kwargs(_req(denied_tool_names=frozenset({"computer"})))
+        assert not any(t.get("name") == "computer" for t in kwargs.get("tools", []))
+
+    def test_missing_executable_handler_blocks_computer(self) -> None:
+        with patch(_ENABLED, return_value=True):
+            kwargs = common.build_create_kwargs(_req(executable_tool_names=frozenset()))
+        assert not any(t.get("name") == "computer" for t in kwargs.get("tools", []))
+
     def test_no_double_inject_if_already_present(self) -> None:
         kwargs: dict = {
             "tools": [common.anthropic_computer_tool_param(TARGET_WIDTH, TARGET_HEIGHT)]
@@ -141,7 +155,10 @@ class TestLivePathInjection:
             {"name": f"t{i}", "description": "x", "input_schema": {"type": "object"}}
             for i in range(40)
         ]
-        shaped = apply_tool_search_defer([*big, param])
+        shaped = apply_tool_search_defer(
+            [*big, param],
+            deferred_tool_names=tuple(tool["name"] for tool in big),
+        )
         computer = next(t for t in shaped if t.get("name") == "computer")
         assert "defer_loading" not in computer
 

@@ -6,7 +6,7 @@ from core.cli.bootstrap import arun_agentic_oneshot
 from core.mcp_server import main as run_mcp_server
 
 from geode_product.self_improving.mcp import register_mcp_tools
-from geode_product.tool_handlers import build_tool_handlers
+from geode_product.tool_handlers import compose_tool_plan
 from geode_product.wiring import (
     build_middleware_registry,
     build_policy_sources,
@@ -27,7 +27,7 @@ async def run_agent(prompt: str, **kwargs: Any) -> Any:
 
 def main() -> None:
     run_mcp_server(
-        build_tool_handlers,
+        compose_tool_plan,
         agent_runner=run_agent,
         feature_registrar=register_mcp_tools,
     )

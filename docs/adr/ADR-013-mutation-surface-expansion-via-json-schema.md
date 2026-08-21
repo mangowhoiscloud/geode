@@ -92,10 +92,10 @@ ADR-012 의 단기/중기 (S3-S5, M1-M5) 외에 **JSON 명세로 노출 가능�
 | | |
 |---|---|
 | SoT | `heuristics.json` |
-| Schema | `{simple_patterns: [str], compound_indicators: [str]}` |
-| Reader 위치 | `core/agent/heuristics_policy.py` (신설) |
-| Inference 진입 | `core/agent/plan.py:_is_clearly_simple` + `_has_compound_indicators` 의 hardcoded list override (PR-CL-A1-followup 2026-05-23 — `goal_decomposer.py` 삭제 후 host 이전) |
-| 영향 | decomposer 의 simple/compound 판별 정확도 → `gaia_accuracy` (S6) 영향 |
+| Schema | `{complexity_indicators: [str], high_risk_indicators: [str], time_pressure_indicators: [str]}` |
+| Reader 위치 | `core/agent/heuristics_policy.py` |
+| Inference 진입 | `core/agent/system_prompt.py:apply_heuristics_policy` → static system-prompt block |
+| 영향 | task triage와 risk calibration을 통해 `gaia_accuracy` 등 held-out task 품질에 간접 영향 |
 
 ### 3. AlphaEvolve 명시적 배제
 
@@ -138,7 +138,7 @@ ADR-012 의 단기/중기 (S3-S5, M1-M5) 외에 **JSON 명세로 노출 가능�
 | 3 | T3 Response style guide | 사용자 만족도/스타일 knob (구 `ux_means` 축 제거 2026-05-30 — dim 경유) |
 | 4 | T4 Provider routing | 비용/품질 trade-off knob (구 `ux_means.token_cost_norm` 축 제거 2026-05-30) |
 | 5 | T5 Cache breakpoint policy | M3 와 결합, prompt caching ROI 정량적 |
-| 6 | T6 Heuristic indicators | decomposer 의 simple/compound 판별 정확도 ↑ → `gaia_accuracy` 영향 |
+| 6 | T6 Heuristic indicators | complexity/risk/time-pressure triage → `gaia_accuracy` 등 held-out task 품질 |
 
 배제된 24 표면 (Lane config / Token budget / Agent topology / Custom dims / Voter panel / Pilot dim / Calibration corpus / Goodhart rules 등) 은 다음 중 하나 사유:
 - Tier 2 보호 영역과 충돌 (fitness gate / eval 정확성 / Goodhart defense)
@@ -193,9 +193,9 @@ ADR-012 의 단기/중기 (S3-S5, M1-M5) 외에 **JSON 명세로 노출 가능�
 - **GEODE 의 PROMPT_CACHE_BOUNDARY** (`system_prompt.py`): 이미 가동, 정책화 가능
 
 ### T6 — Heuristic indicators
-- **Promptbreeder** (DeepMind, 2023): task prompts + mutation prompts evolve — 본 ADR 의 keyword list mutation 은 그 *축소판* (단순 string list 의 evolve, 전체 prompt 의 evolve 가 아님)
-- **DSPy bootstrap**: heuristic 의 LLM-as-judge 적응
-- **GEODE 의 `core/agent/plan.py`** (현재 hardcoded list — PR-CL-A1-followup 2026-05-23 에 `goal_decomposer.py` 에서 이전): JSON 으로 추출 가능
+- **Promptbreeder** (DeepMind, 2023): task prompt와 mutation prompt를 함께 진화
+- **DSPy bootstrap**: evaluator feedback을 prompt policy 적응에 사용
+- **GEODE `core/agent/system_prompt.py:apply_heuristics_policy`**: complexity/risk/time-pressure phrase groups를 static prompt block에 주입
 
 ### 배제 — AlphaEvolve / FunSearch
 - **AlphaEvolve** (DeepMind, 2025-05): algorithm function mutation — risk 너무 高, 명시적 배제

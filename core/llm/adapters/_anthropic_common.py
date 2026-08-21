@@ -178,8 +178,12 @@ def _maybe_inject_computer_use(kwargs: dict[str, Any], req: AdapterCallRequest) 
     """
     from core.llm.providers.anthropic import is_computer_use_enabled
 
-    if not is_computer_use_enabled() or (
-        req.allowed_tool_names is not None and "computer" not in req.allowed_tool_names
+    if (
+        not is_computer_use_enabled()
+        or "computer" not in req.executable_tool_names
+        or "computer" in req.denied_tool_names
+        or "computer_use" in req.denied_tool_names
+        or (req.allowed_tool_names is not None and "computer" not in req.allowed_tool_names)
     ):
         return
     tool_type, beta = _computer_use_spec(kwargs.get("model", ""))
@@ -424,7 +428,9 @@ def _shape_tools(req: AdapterCallRequest, tc: dict[str, Any] | None) -> list[dic
     if tc is not None and tc.get("type") == "tool":
         return translated
     return apply_tool_search_defer(
-        translated, enabled=getattr(_settings, "tool_search_defer", True)
+        translated,
+        deferred_tool_names=req.deferred_tool_names,
+        enabled=getattr(_settings, "tool_search_defer", True),
     )
 
 

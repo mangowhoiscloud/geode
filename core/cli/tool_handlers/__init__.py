@@ -1,179 +1,70 @@
-"""Tool handler factory — builds tool name -> handler function mapping.
+"""CLI interaction contributions and legacy handler-map forwarders.
 
-Originally a single 1472-LOC module (``core/cli/tool_handlers.py``); split
-into one file per handler group while preserving the public API surface
-(``_build_tool_handlers``) and the names imported by external callers.
-
-Handler groups:
-- :mod:`memory`         — memory_search, memory_save, manage_rule
-- :mod:`plan`           — create/approve/reject/modify/list_plan
-- :mod:`hitl`           — rate/accept/reject_result
-- :mod:`system`         — show_help, check_status, switch_model, set_api_key,
-                           manage_auth, manage_login, doctor_slack
-- :mod:`execution`      — schedule_job, trigger_event
-- :mod:`delegated`      — registry-based wrappers for web/file/note/profile tools
-- :mod:`mcp`            — install_mcp_server
-- :mod:`context`        — manage_context (status/compact/clear)
-- :mod:`task`           — task_create/update/get/list/stop
-- :mod:`audit`          — view_audit_log / audit-trail surface
-- :mod:`observability`  — observability tools
-- :mod:`single_tool`    — handlers that each wrap exactly one
-                           tool class: calculate, generate_data, send_notification,
-                           generate_report/export_json,
-                           recall_tool_result, computer (env-gated),
-                           calendar_list/create_event/sync_scheduler
-                           (folded together in PR-CLEANUP-5).
-
-Plus shared clarification helpers in :mod:`clarification`
-(``_clarify``, ``_safe_delegate``) — renamed from the pre-PR-CLEANUP-5
-``_helpers.py``.
-
-The disk-persistent ``PlanStore`` singleton (``_PLAN_STORE`` /
-``_get_plan_store``) lives at this package level so test fixtures can
-``monkeypatch.setattr(th, "_PLAN_STORE", ...)`` without reaching into a
-sub-module — see ``tests/core/orchestration/test_plan_mode.py`` for the fixture pattern.
+The collision-checked runtime catalog lives in :mod:`core.tools.handlers`.
+This package owns callbacks that depend on CLI, UI, or session process state,
+plus the private dictionary builder retained for CLI and test compatibility.
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
-from types import MappingProxyType
+from collections.abc import Iterable
 from typing import Any
 
-from core.cli.tool_handlers.clarification import (
-    _clarify,
-    _safe_delegate,
-)
 from core.cli.tool_handlers.context import _build_context_handlers
-from core.cli.tool_handlers.delegated import (
-    _DELEGATED_TOOLS,
-    _build_delegated_handlers,
-    _make_delegate_handler,
-    make_delegate_handler,
-)
 from core.cli.tool_handlers.execution import _build_execution_handlers
 from core.cli.tool_handlers.goal import _build_goal_handlers
 from core.cli.tool_handlers.hitl import _build_hitl_handlers
-from core.cli.tool_handlers.mcp import _build_mcp_handler
 from core.cli.tool_handlers.memory import _build_memory_handlers
-from core.cli.tool_handlers.observability import _build_observability_handlers
 from core.cli.tool_handlers.plan import _build_plan_handlers
-from core.cli.tool_handlers.registration import UniqueEntries
-from core.cli.tool_handlers.single_tool import (
-    _build_calendar_handlers,
-    _build_computer_use_handler,
-    _build_data_handlers,
-    _build_math_handlers,
-    _build_notification_handlers,
-    _build_offload_handlers,
-    _build_output_handlers,
-    _build_use_skill_handler,
-)
 from core.cli.tool_handlers.system import _build_system_handlers
 from core.cli.tool_handlers.task import _build_task_handlers
+from core.tools.handlers import (
+    _build_tool_handler_catalog as _compose_handler_catalog,
+)
+from core.tools.handlers import _HandlerRegistrar, _ToolHandlerCatalog, neutral_handler_groups
+from core.tools.handlers.registration import UniqueEntries
 
 __all__ = [
-    "_DELEGATED_TOOLS",
-    "_PLAN_STORE",
-    "_build_calendar_handlers",
-    "_build_computer_use_handler",
+    "_HandlerRegistrar",
+    "_ToolHandlerCatalog",
     "_build_context_handlers",
-    "_build_data_handlers",
-    "_build_delegated_handlers",
     "_build_execution_handlers",
     "_build_goal_handlers",
     "_build_hitl_handlers",
-    "_build_math_handlers",
-    "_build_mcp_handler",
     "_build_memory_handlers",
-    "_build_notification_handlers",
-    "_build_observability_handlers",
-    "_build_offload_handlers",
-    "_build_output_handlers",
     "_build_plan_handlers",
     "_build_system_handlers",
     "_build_task_handlers",
+    "_build_tool_handler_catalog",
     "_build_tool_handlers",
-    "_clarify",
-    "_get_plan_store",
-    "_make_delegate_handler",
-    "_safe_delegate",
     "build_tool_handlers",
-    "make_delegate_handler",
+    "cli_handler_groups",
 ]
 
 
-# v0.53.3 — module-level disk-persistent PlanStore. Replaces the
-# v0.53.2-and-earlier closure-bound ``_plan_cache: dict = {}`` that had
-# two compounding bugs:
-#   B1: Each ``_build_tool_handlers`` invocation produced a fresh closure
-#       with its own dict → ``create_plan`` and ``list_plans`` could end
-#       up bound to different dicts and the user saw "0 items" after a
-#       successful ``create_plan``.
-#   Persistence: in-memory only → daemon restart wiped all plan history.
-# ``PlanStore`` lives at ``.geode/plans.json`` (atomic write via
-# tmp+rename, mirrors ``core/scheduler/service.py:save``) and is shared
-# across factories.
-_PLAN_STORE: Any | None = None
+def cli_handler_groups(
+    *,
+    mcp_manager: Any = None,
+    command_registry: Any = None,
+) -> tuple[tuple[str, UniqueEntries[str, Any]], ...]:
+    """Return callbacks that deliberately cross into CLI interaction state."""
+    from core.cli import _get_readiness
 
-
-@dataclass(frozen=True)
-class _ToolHandlerCatalog:
-    """Immutable handler snapshot with one traceable origin per tool name."""
-
-    handlers: Mapping[str, Any]
-    origins: Mapping[str, str]
-
-
-class _HandlerRegistrar:
-    """Fail-closed composer for the legacy CLI handler groups.
-
-    ``dict.update`` silently replaced an earlier handler when two builder
-    groups claimed the same name.  That made runtime behavior depend on merge
-    order and left architecture inventory unable to observe the collision.
-    This registrar is the single composition point: every name keeps its
-    source and duplicate registration aborts before a ``ToolExecutor`` exists.
-    """
-
-    def __init__(self) -> None:
-        self._handlers: dict[str, Any] = {}
-        self._origins: dict[str, str] = {}
-
-    def add(self, source: str, handlers: UniqueEntries[str, Any]) -> None:
-        if not isinstance(handlers, UniqueEntries):
-            raise TypeError(
-                f"{source}: handler builders must return lossless UniqueEntries, "
-                f"not {type(handlers).__name__}"
-            )
-        duplicates = sorted(set(handlers) & set(self._handlers))
-        if duplicates:
-            detail = ", ".join(
-                f"{name!r} ({self._origins[name]} vs {source})" for name in duplicates
-            )
-            raise ValueError(f"duplicate tool handler registration: {detail}")
-        self._handlers.update(handlers)
-        self._origins.update(dict.fromkeys(handlers, source))
-
-    def snapshot(self) -> _ToolHandlerCatalog:
-        return _ToolHandlerCatalog(
-            handlers=MappingProxyType(dict(self._handlers)),
-            origins=MappingProxyType(dict(self._origins)),
-        )
-
-
-def _get_plan_store() -> Any:
-    """Lazy singleton accessor for the disk-persistent PlanStore.
-
-    Lazy so test fixtures that monkeypatch ``PROJECT_PLANS_FILE`` (or that
-    reset ``_PLAN_STORE`` to None) take effect on the next call.
-    """
-    global _PLAN_STORE
-    if _PLAN_STORE is None:
-        from core.orchestration.plan_store import PlanStore
-
-        _PLAN_STORE = PlanStore()
-    return _PLAN_STORE
+    readiness = _get_readiness()
+    force_dry = readiness.force_dry_run if readiness else True
+    return (
+        ("plan", _build_plan_handlers()),
+        ("goal", _build_goal_handlers()),
+        ("hitl", _build_hitl_handlers()),
+        ("memory", _build_memory_handlers()),
+        (
+            "system",
+            _build_system_handlers(readiness, force_dry, mcp_manager, command_registry),
+        ),
+        ("execution", _build_execution_handlers()),
+        ("context", _build_context_handlers()),
+        ("task", _build_task_handlers()),
+    )
 
 
 def _build_tool_handler_catalog(
@@ -183,38 +74,20 @@ def _build_tool_handler_catalog(
     command_registry: Any = None,
     extra_groups: Iterable[tuple[str, UniqueEntries[str, Any]]] = (),
 ) -> _ToolHandlerCatalog:
-    """Build the collision-checked handler catalog used by ToolExecutor."""
-    from core.cli import _get_readiness
-
-    readiness = _get_readiness()
-    force_dry = readiness.force_dry_run if readiness else True
-
-    registrar = _HandlerRegistrar()
-    registrar.add("memory", _build_memory_handlers())
-    registrar.add("plan", _build_plan_handlers(force_dry))
-    registrar.add("goal", _build_goal_handlers())
-    registrar.add("hitl", _build_hitl_handlers())
-    registrar.add(
-        "system",
-        _build_system_handlers(readiness, force_dry, mcp_manager, command_registry),
+    """Compatibility composer over the neutral runtime registrar."""
+    return _compose_handler_catalog(
+        (
+            *neutral_handler_groups(
+                mcp_manager=mcp_manager,
+                skill_registry=skill_registry,
+            ),
+            *cli_handler_groups(
+                mcp_manager=mcp_manager,
+                command_registry=command_registry,
+            ),
+            *extra_groups,
+        )
     )
-    registrar.add("execution", _build_execution_handlers())
-    registrar.add("math", _build_math_handlers())
-    registrar.add("data", _build_data_handlers())
-    registrar.add("delegated", _build_delegated_handlers())
-    registrar.add("output", _build_output_handlers())
-    registrar.add("notification", _build_notification_handlers())
-    registrar.add("calendar", _build_calendar_handlers())
-    registrar.add("mcp", _build_mcp_handler(mcp_manager))
-    registrar.add("context", _build_context_handlers())
-    registrar.add("task", _build_task_handlers())
-    registrar.add("offload", _build_offload_handlers())
-    registrar.add("computer-use", _build_computer_use_handler())
-    registrar.add("observability", _build_observability_handlers())
-    registrar.add("skill", _build_use_skill_handler(skill_registry))
-    for source, handlers in extra_groups:
-        registrar.add(source, handlers)
-    return registrar.snapshot()
 
 
 def _build_tool_handlers(
@@ -225,16 +98,8 @@ def _build_tool_handlers(
     command_registry: Any = None,
     extra_groups: Iterable[tuple[str, UniqueEntries[str, Any]]] = (),
 ) -> dict[str, Any]:
-    """Build the backwards-compatible handler mapping for ToolExecutor.
-
-    Each handler receives tool_input kwargs and returns a dict result.
-    ``mcp_manager`` is used by install_mcp_server.
-    ``skill_registry`` is used by generate_report (skill-enhanced narrative)
-    and use_skill (model-side skill body loading).
-
-    Delegates to group-specific builder functions and merges the results.
-    """
-    _ = verbose  # retained for API compatibility with existing callers
+    """Return a mutable copy for legacy CLI-only consumers."""
+    _ = verbose
     catalog = _build_tool_handler_catalog(
         mcp_manager=mcp_manager,
         skill_registry=skill_registry,
@@ -244,6 +109,4 @@ def _build_tool_handlers(
     return dict(catalog.handlers)
 
 
-# Stable composition boundary for the product shell.  The private alias stays
-# available to the existing kernel/test surface during the package migration.
 build_tool_handlers = _build_tool_handlers

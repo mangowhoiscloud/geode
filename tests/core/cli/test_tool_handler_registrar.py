@@ -6,7 +6,7 @@ from typing import Any, cast
 
 import pytest
 from core.cli.tool_handlers import _build_tool_handler_catalog, _HandlerRegistrar
-from core.cli.tool_handlers.registration import UniqueEntries
+from core.tools.handlers.registration import UniqueEntries
 
 
 def _handler(**_: Any) -> dict[str, object]:

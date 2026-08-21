@@ -138,9 +138,17 @@ def cmd_skill_invoke(skill_registry: _Any, arg: str, *, agentic_ref: _Any = None
         # Fork execution: run in isolated subagent
         _pkg.console.print(f"  [dim]Skill '{name}' → forked subagent[/dim]")
         from core.cli.bootstrap import run_agentic_oneshot
+        from core.cli.session_state import get_current_loop
 
         try:
-            result = run_agentic_oneshot(rendered, quiet=True)
+            loop = get_current_loop()
+            if loop is None:
+                raise RuntimeError("AgenticLoop not available for forked skill execution")
+            result = run_agentic_oneshot(
+                rendered,
+                quiet=True,
+                tool_plan_builder=loop.bound_tool_plan_snapshot,
+            )
             status = "ok" if result and not getattr(result, "error", False) else "err"
             summary = getattr(result, "text", "")[:200] if result else "(no output)"
             _pkg.console.print(f"  [dim]skill:{name} → {status}[/dim]")

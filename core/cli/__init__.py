@@ -5,7 +5,7 @@ Architecture (OpenClaw-inspired):
   free-text → agentic_loop.py (AgenticLoop: multi-turn tool_use loop)
 
 This module is the slim Typer entry point. Internal helpers and the
-heavyweight ``init``/``serve`` commands live in sibling modules
+heavyweight ``init`` command and product-injected ``serve`` host live in sibling modules
 (``welcome``, ``dispatcher``, ``prompt_session``, ``interactive_loop``,
 ``typer_commands``, ``typer_init``, ``typer_serve``). Tier 3 God Object
 split — see ``CHANGELOG`` for v0.77.0.
@@ -62,7 +62,6 @@ from core.cli.typer_commands import (
 from core.cli.typer_init import _ensure_gitignore_entry as _ensure_gitignore_entry
 from core.cli.typer_init import init
 from core.cli.typer_serve import _build_runtime_for_serve as _build_runtime_for_serve
-from core.cli.typer_serve import serve
 from core.cli.welcome import _render_readiness_compact as _render_readiness_compact
 from core.cli.welcome import _render_welcome_brand as _render_welcome_brand
 from core.cli.welcome import _welcome_screen as _welcome_screen
@@ -439,7 +438,7 @@ def main(
 
 def build_app(
     *,
-    serve_command: Any = serve,
+    serve_command: Any | None = None,
     config_command_app: typer.Typer = config_app,
     command_specs: Any = (),
     command_registrars: Iterable[Callable[[typer.Typer], None]] = (),
@@ -462,7 +461,8 @@ def build_app(
     cli.add_typer(session_app, name="session")
     for command in (version, about, setup, _doctor_command, update, uninstall, init, history):
         cli.command()(command)
-    cli.command()(serve_command)
+    if serve_command is not None:
+        cli.command()(serve_command)
     cli.command(name="reindex")(reindex)
     cli.command(name="memory-lifecycle")(memory_lifecycle)
     for register_commands in command_registrars:

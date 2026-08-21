@@ -9,9 +9,9 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from core.cli.tool_handlers.clarification import _safe_delegate
-from core.cli.tool_handlers.registration import UniqueEntries
 from core.tools.google_capabilities import GOOGLE_TOOL_BINDINGS
+from core.tools.handlers.clarification import _safe_delegate
+from core.tools.handlers.registration import UniqueEntries
 
 _DELEGATED_TOOLS = UniqueEntries[str, tuple[str, str]](
     (

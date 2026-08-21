@@ -399,7 +399,7 @@ def audit_seeds_resume(
 
     PR-CHECKPOINT-RESUME-TIMEBUDGET (2026-05-25, S5) — when a prior
     ``audit-seeds generate`` aborted mid-pipeline (e.g.
-    ``plan.decompose_async`` timeout, claude-cli network hang, OS
+    an LLM timeout, provider network hang, or OS
     crash), the per-phase checkpoints under
     ``state/seed_generation/<run_id>/checkpoints/`` let a follow-up
     invocation skip the already-completed phases instead of paying for

@@ -11,10 +11,10 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from core.cli.tool_handlers.clarification import _clarify
-from core.cli.tool_handlers.registration import UniqueEntries
 from core.hooks.system import HookEvent
 from core.hooks.tool_hooks import fire_tool_hook
+from core.tools.handlers.clarification import _clarify
+from core.tools.handlers.registration import UniqueEntries
 from core.ui.console import console
 
 log = logging.getLogger(__name__)

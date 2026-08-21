@@ -319,7 +319,7 @@ def test_document_ingest_is_wired() -> None:
     assert "zhipu_ocr" in definition["description"]
 
     from core.agent.safety import WRITE_TOOLS
-    from core.cli.tool_handlers.delegated import _DELEGATED_TOOLS
+    from core.tools.handlers.delegated import _DELEGATED_TOOLS
 
     assert _DELEGATED_TOOLS["document_ingest"] == (
         "core.tools.document_ingest",

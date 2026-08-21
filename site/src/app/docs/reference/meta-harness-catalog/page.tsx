@@ -123,9 +123,9 @@ const EXECUTE_ROWS: Row[] = [
   },
   {
     name: "Plan + Dynamic Replan",
-    ko: "명시적 Plan 객체를 세션에 유지하고 verify FAIL, cadence, low-confidence 세 트리거로 planner LLM을 재발화",
-    en: "Keeps an explicit Plan object per session and re-fires the planner LLM on three triggers: verify FAIL, cadence, low confidence",
-    control: "replan_interval, REPLAN_LOW_CONFIDENCE=0.4",
+    ko: "명시적 Plan 객체를 세션에 유지하고 verify FAIL 또는 low-confidence 관측으로 planner LLM을 재발화",
+    en: "Keeps an explicit Plan object per session and re-fires the planner LLM from verify FAIL or observed low confidence",
+    control: "replan_enabled, REPLAN_LOW_CONFIDENCE=0.4",
     path: "core/agent/plan.py",
   },
   {
@@ -225,13 +225,6 @@ const EXECUTE_ROWS: Row[] = [
     en: "Four typed join points separate tool and LLM request transforms from execution wrapping",
     control: "single-use next_call, request mutation rejection, per-handler timeout_s",
     path: "core/hooks/middleware.py",
-  },
-  {
-    name: "PlanMode",
-    ko: "다단계 작업의 plan, approve, execute 게이트",
-    en: "Plan, approve, execute gate for multi-step work",
-    control: "MANUAL (default) vs AUTO execution mode",
-    path: "core/orchestration/plan_mode.py",
   },
   {
     name: "SchedulerService",
@@ -751,8 +744,8 @@ export default function Page() {
             <ul>
               <li>
                 <strong>Planning</strong>. 명시적 <code>Plan</code> 객체가
-                세션에 붙고 replan마다 revision이 증가합니다. 다단계 작업의
-                승인 게이트는 별도 메커니즘인 PlanMode가 맡습니다.
+                세션에 붙고 replan마다 revision이 증가합니다. Plan은 실행이나
+                승인 권한을 갖지 않는 관측 조건부 안내 구조입니다.
               </li>
               <li>
                 <strong>Reflection (cognitive)</strong>. 도구 라운드마다{" "}
@@ -762,9 +755,8 @@ export default function Page() {
                 아니라 상태 스냅숏과 도구 요약만 봅니다(clean-context 규율).
               </li>
               <li>
-                <strong>verify 후 replan</strong>. replan은 세 트리거로
-                발화합니다. verify FAIL(다음 실행의 첫 라운드), cadence(
-                <code>replan_interval</code> 라운드마다), low-confidence
+                <strong>verify 후 replan</strong>. replan은 관측된 두 트리거로
+                발화합니다. verify FAIL(다음 실행의 첫 라운드), low-confidence
                 (confidence 0.4 미만, edge-trigger라 회복 전 재발화가 없어
                 replan 폭풍을 방지). replan 실패는 루프를 죽이지 않습니다.
               </li>
@@ -805,8 +797,8 @@ export default function Page() {
               <li>
                 <strong>Planning</strong>. An explicit <code>Plan</code> object
                 is attached to the session, its revision incremented on every
-                replan. The approve gate for multi-step work is a separate
-                mechanism, PlanMode.
+                replan. It is advisory and grants no execution or approval
+                authority.
               </li>
               <li>
                 <strong>Reflection (cognitive)</strong>. One structured{" "}
@@ -817,9 +809,8 @@ export default function Page() {
                 (clean-context discipline).
               </li>
               <li>
-                <strong>verify then replan</strong>. Replan fires on three
-                triggers: verify FAIL (first round of the next run), cadence
-                (every <code>replan_interval</code> rounds), and low confidence
+                <strong>verify then replan</strong>. Replan fires on two observed
+                triggers: verify FAIL (first round of the next run) and low confidence
                 (below 0.4, edge-triggered so it cannot re-fire before
                 confidence recovers, preventing a replan storm). A failed
                 replan never kills the loop.

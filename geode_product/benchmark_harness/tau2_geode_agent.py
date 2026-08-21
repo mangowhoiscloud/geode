@@ -203,7 +203,6 @@ def _build_loop(
         force_include_allowed_tools=True,
         system_prompt_override=system_prompt,
         quiet=True,
-        enable_goal_decomposition=False,
         allow_actionable_partial_on_empty=allow_actionable_partial_on_empty,
         yield_after_tool_round=True,
         hooks=runtime_contract.hooks,

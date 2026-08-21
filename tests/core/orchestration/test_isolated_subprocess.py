@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from unittest.mock import patch
 
 from core.agent.worker import WorkerRequest
 from core.orchestration.isolated_execution import (
@@ -12,12 +13,31 @@ from core.orchestration.isolated_execution import (
 )
 
 
+def _runner(*, lane: object | None = None) -> IsolatedRunner:
+    return IsolatedRunner(lane=lane, worker_module="geode_product.worker")
+
+
 class TestSubprocessMode:
     """Test IsolatedRunner with WorkerRequest (subprocess path)."""
 
+    def test_subprocess_requires_composed_worker_before_spawn(self) -> None:
+        runner = IsolatedRunner()
+        req = WorkerRequest(task_id="unconfigured", description="hello")
+        cfg = IsolationConfig(session_id="unconfigured", post_to_main=False)
+
+        with patch(
+            "asyncio.create_subprocess_exec",
+            side_effect=AssertionError("must not spawn"),
+        ) as spawn:
+            result = asyncio.run(runner.arun(req, config=cfg))
+
+        assert result.success is False
+        assert "not provided by composition" in (result.error or "")
+        spawn.assert_not_called()
+
     def test_dispatch_routes_worker_request_to_subprocess(self) -> None:
         """WorkerRequest should trigger _execute_subprocess, not _execute_thread."""
-        runner = IsolatedRunner()
+        runner = _runner()
         req = WorkerRequest(task_id="route-001", description="hello")
         cfg = IsolationConfig(session_id="route-001", timeout_s=15, post_to_main=False)
         result = asyncio.run(runner.arun(req, config=cfg))
@@ -28,7 +48,7 @@ class TestSubprocessMode:
 
     def test_dispatch_routes_callable_to_thread(self) -> None:
         """Plain callable should still use thread mode."""
-        runner = IsolatedRunner()
+        runner = _runner()
         cfg = IsolationConfig(session_id="thread-001", timeout_s=5, post_to_main=False)
         result = asyncio.run(runner.arun(lambda: "hello-thread", config=cfg))
         assert result.success is True
@@ -36,7 +56,7 @@ class TestSubprocessMode:
 
     def test_subprocess_timeout_kills_process(self) -> None:
         """Subprocess should be killed on timeout, not left as zombie."""
-        runner = IsolatedRunner()
+        runner = _runner()
         # Use an extremely short timeout so even a fast-failing worker gets killed
         req = WorkerRequest(task_id="timeout-001", description="complex task")
         cfg = IsolationConfig(session_id="timeout-001", timeout_s=0.05, post_to_main=False)
@@ -51,7 +71,7 @@ class TestSubprocessMode:
         from core.orchestration.lane_queue import Lane
 
         lane = Lane("global", max_concurrent=1, timeout_s=30.0)
-        runner = IsolatedRunner(lane=lane)
+        runner = _runner(lane=lane)
         runner.SLOT_WAIT_S = 0.1
 
         # Pre-fill the slot so the next request hits 'lane full'.
@@ -67,7 +87,7 @@ class TestSubprocessMode:
 
     def test_subprocess_result_has_duration(self) -> None:
         """Subprocess results should have duration_ms."""
-        runner = IsolatedRunner()
+        runner = _runner()
         req = WorkerRequest(task_id="dur-001", description="hello")
         cfg = IsolationConfig(session_id="dur-001", timeout_s=15, post_to_main=False)
         result = asyncio.run(runner.arun(req, config=cfg))
@@ -78,7 +98,7 @@ class TestSubprocessMode:
         """If worker produces no stdout, should get an error result."""
         # This is hard to trigger directly; tested via the code path
         # that checks for empty stdout_text
-        runner = IsolatedRunner()
+        runner = _runner()
         req = WorkerRequest(task_id="empty-001", description="hello")
         cfg = IsolationConfig(session_id="empty-001", timeout_s=15, post_to_main=False)
         result = asyncio.run(runner.arun(req, config=cfg))
@@ -96,7 +116,7 @@ class TestAsyncSubprocessNative:
 
     def test_arun_routes_worker_request_to_aexecute_subprocess(self) -> None:
         """arun(WorkerRequest) must invoke _aexecute_subprocess."""
-        runner = IsolatedRunner()
+        runner = _runner()
         called: list[int] = []
 
         original_async = runner._aexecute_subprocess
@@ -126,7 +146,7 @@ class TestAsyncSubprocessNative:
         """
 
         async def _scenario() -> tuple[IsolationResult, IsolationResult]:
-            runner = IsolatedRunner()
+            runner = _runner()
             req1 = WorkerRequest(task_id="concur-001", description="a")
             req2 = WorkerRequest(task_id="concur-002", description="b")
             cfg1 = IsolationConfig(session_id="concur-001", timeout_s=0.1, post_to_main=False)
@@ -148,7 +168,7 @@ class TestAsyncSubprocessNative:
         the ``asyncio.wait_for`` + ``proc.kill()`` recovery."""
 
         async def _scenario() -> IsolationResult:
-            runner = IsolatedRunner()
+            runner = _runner()
             req = WorkerRequest(task_id="kill-001", description="long")
             cfg = IsolationConfig(session_id="kill-001", timeout_s=0.05, post_to_main=False)
             return await runner._aexecute_subprocess(req, cfg)
@@ -179,7 +199,7 @@ class TestAsyncSubprocessCancel:
 
         async def _scenario() -> tuple[bool, int | None, int, Lane]:
             lane = Lane("global", max_concurrent=1, timeout_s=30.0)
-            runner = IsolatedRunner(lane=lane)
+            runner = _runner(lane=lane)
             req = WorkerRequest(task_id="cx-001", description="long task")
             cfg = IsolationConfig(session_id="cx-001", timeout_s=30.0, post_to_main=False)
             task = asyncio.create_task(runner.arun(req, config=cfg))
@@ -219,7 +239,7 @@ class TestAsyncSubprocessCancel:
 
         async def _scenario() -> Lane:
             lane = Lane("global", max_concurrent=1, timeout_s=30.0)
-            runner = IsolatedRunner(lane=lane)
+            runner = _runner(lane=lane)
             # Pre-fill the only slot so the next arun blocks on acquire.
             assert lane.try_acquire("blocker") is True
             req = WorkerRequest(task_id="wait-cancel", description="blocked")
@@ -252,7 +272,7 @@ class TestAsyncSubprocessCancel:
 
         async def _scenario() -> Lane:
             lane = Lane("global", max_concurrent=1, timeout_s=30.0)
-            runner = IsolatedRunner(lane=lane)
+            runner = _runner(lane=lane)
             req = WorkerRequest(task_id="cx-002", description="long task")
             cfg = IsolationConfig(session_id="cx-002", timeout_s=30.0, post_to_main=False)
             task = asyncio.create_task(runner.arun(req, config=cfg))
@@ -284,7 +304,7 @@ class TestAsyncSubprocessLaneRelease:
         from core.orchestration.lane_queue import Lane
 
         lane = Lane("global", max_concurrent=1, timeout_s=30.0)
-        runner = IsolatedRunner(lane=lane)
+        runner = _runner(lane=lane)
         req = WorkerRequest(task_id="rel-001", description="hello")
         cfg = IsolationConfig(session_id="rel-001", timeout_s=15.0, post_to_main=False)
         asyncio.run(runner.arun(req, config=cfg))
@@ -294,7 +314,7 @@ class TestAsyncSubprocessLaneRelease:
         from core.orchestration.lane_queue import Lane
 
         lane = Lane("global", max_concurrent=1, timeout_s=30.0)
-        runner = IsolatedRunner(lane=lane)
+        runner = _runner(lane=lane)
         req = WorkerRequest(task_id="rel-002", description="long")
         cfg = IsolationConfig(session_id="rel-002", timeout_s=0.05, post_to_main=False)
         result = asyncio.run(runner.arun(req, config=cfg))

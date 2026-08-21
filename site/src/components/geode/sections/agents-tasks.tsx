@@ -34,8 +34,8 @@ const subAgentDetails = [
     descKo: "TIMEOUT, API_ERROR는 retryable. VALIDATION, RESOURCE, DEPTH_EXCEEDED는 즉시 실패. 부모에게 error_category + retryable 플래그 반환.",
     descEn: "TIMEOUT, API_ERROR are retryable. VALIDATION, RESOURCE, DEPTH_EXCEEDED fail immediately. Returns error_category + retryable flag to parent." },
   { title: "Subprocess Isolation", color: "#F5C542",
-    descKo: "IsolatedRunner가 python -m core.agent.worker로 자식 프로세스 실행. 크래시 시 SIGKILL 보장. 쓰레드 모드 대비 완전 격리.",
-    descEn: "IsolatedRunner spawns child process via python -m core.agent.worker. SIGKILL guaranteed on crash. Full isolation compared to thread mode." },
+    descKo: "IsolatedRunner가 제품에서 조합한 worker로 자식 프로세스 실행. 크래시 시 SIGKILL 보장. 쓰레드 모드 대비 완전 격리.",
+    descEn: "IsolatedRunner spawns a product-composed worker process. SIGKILL guaranteed on crash. Full isolation compared to thread mode." },
 ];
 
 /* ── Task DAG nodes ── */
@@ -52,11 +52,8 @@ const taskNodes = [
   { id: "synthesis", label: "Synthesis\n+Report", color: "#F4B8C8", col: 6 },
 ];
 
-/* ── PlanMode lifecycle ── */
-const planStates = ["DRAFT", "PRESENTED", "APPROVED", "EXECUTING", "COMPLETED"];
-
 /* ── Tabs ── */
-type Tab = "subagent" | "taskgraph" | "planmode";
+type Tab = "subagent" | "taskgraph" | "plan";
 
 export function AgentsTasksSection() {
   const locale = useLocale();
@@ -70,12 +67,12 @@ export function AgentsTasksSection() {
             Orchestration
           </p>
           <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-white/90 mb-3">
-            SubAgent · TaskGraph · PlanMode
+            SubAgent · TaskGraph · Advisory Plan
           </h2>
           <p className="text-sm sm:text-base text-[#A0B4D4] max-w-xl mb-8 leading-relaxed">
             {t(locale,
-              "병렬 에이전트 위임(SubAgent), 의존성 기반 작업 추적(TaskGraph), 명시적 계획 검토 체크포인트(PlanMode). 실제 실행은 AgenticLoop가 단독 소유합니다.",
-              "Parallel agent delegation (SubAgent), dependency-based task tracking (TaskGraph), and explicit plan review checkpoints (PlanMode). The AgenticLoop remains the sole execution owner."
+              "SubAgent는 독립 작업을 위임하고 TaskGraph는 명시적 dependency 상태를 추적합니다. Advisory Plan은 현재 의도만 안내하며 실제 실행은 AgenticLoop가 단독 소유합니다.",
+              "SubAgent delegates independent work and TaskGraph tracks explicit dependency state. Advisory Plan expresses current intent while AgenticLoop remains the sole execution owner."
             )}
           </p>
         </ScrollReveal>
@@ -86,7 +83,7 @@ export function AgentsTasksSection() {
             {([
               { id: "subagent" as Tab, label: "SubAgent", sub: t(locale, "병렬 위임", "Parallel delegation"), color: "#4ECDC4" },
               { id: "taskgraph" as Tab, label: "TaskGraph", sub: t(locale, "DAG 추적", "DAG tracking"), color: "#818CF8" },
-              { id: "planmode" as Tab, label: "PlanMode", sub: t(locale, "계획 검토", "Plan review"), color: "#F5C542" },
+              { id: "plan" as Tab, label: "Advisory Plan", sub: t(locale, "관측 조건부", "Observation-conditioned"), color: "#F5C542" },
             ]).map((t) => (
               <button
                 key={t.id}
@@ -305,8 +302,8 @@ export function AgentsTasksSection() {
                 </div>
                 <p className="text-sm text-[#A0B4D4] leading-relaxed mt-2">
                   {t(locale,
-                    "task_create·task_update·task_list가 세션별 TaskGraph를 관리합니다. Goal decomposition은 별도의 advisory Plan을 만들며 이 TaskGraph를 자동 생성하거나 실행하지 않습니다.",
-                    "task_create, task_update, and task_list manage the per-session TaskGraph. Goal decomposition creates a separate advisory Plan; it neither creates nor executes this TaskGraph automatically."
+                    "task_create·task_update·task_list가 세션별 TaskGraph를 관리합니다. /plan은 이 TaskGraph를 자동 생성하거나 실행하지 않습니다.",
+                    "task_create, task_update, and task_list manage the per-session TaskGraph. /plan neither creates nor executes this TaskGraph automatically."
                   )}
                 </p>
               </div>
@@ -314,39 +311,39 @@ export function AgentsTasksSection() {
             </motion.div>
           )}
 
-          {/* ── PlanMode Tab ── */}
-          {activeTab === "planmode" && (
+          {/* ── Advisory Plan Tab ── */}
+          {activeTab === "plan" && (
             <motion.div
-              key="planmode"
+              key="plan"
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.25 }}
             >
             <div>
-              {/* PlanMode lifecycle SVG */}
+              {/* Observation-conditioned advisory lifecycle */}
               <div className="overflow-x-auto -mx-4 px-4 pb-2 mb-6">
                 <svg viewBox="0 0 760 200" className="w-full min-w-[560px]" style={{ maxHeight: 230 }}>
-                  {/* Review-checkpoint creation */}
+                  {/* Explicit tools-off planning */}
                   <rect x={20} y={60} width={100} height={60} rx={10} fill="#0C1220" stroke="#60A5FA" strokeWidth={1} strokeOpacity={0.4} />
-                  <text x={70} y={83} textAnchor="middle" fill="#60A5FA" fontSize={11} fontFamily="ui-monospace, monospace" fontWeight={700}>create_plan</text>
-                  <text x={70} y={100} textAnchor="middle" fill="#60A5FA" fillOpacity={0.35} fontSize={8} fontFamily="ui-monospace, monospace">review gate</text>
+                  <text x={70} y={83} textAnchor="middle" fill="#60A5FA" fontSize={11} fontFamily="ui-monospace, monospace" fontWeight={700}>/plan</text>
+                  <text x={70} y={100} textAnchor="middle" fill="#60A5FA" fillOpacity={0.35} fontSize={8} fontFamily="ui-monospace, monospace">tools off</text>
 
                   <line x1={120} y1={90} x2={160} y2={90} stroke="white" strokeOpacity={0.22} strokeWidth={1} />
 
-                  {/* Plan lifecycle states */}
+                  {/* Advisory lifecycle states */}
                   {[
-                    { label: "DRAFT", x: 190, color: "#5A6A8A" },
-                    { label: "PRESENT", x: 290, color: "#818CF8" },
-                    { label: "APPROVE", x: 390, color: "#F5C542" },
-                    { label: "AGENT LOOP", x: 490, color: "#4ECDC4" },
-                    { label: "OBSERVED", x: 590, color: "#34D399" },
+                    { label: "PROPOSE", x: 190, color: "#5A6A8A" },
+                    { label: "SELECT", x: 290, color: "#818CF8" },
+                    { label: "OBSERVE", x: 390, color: "#F5C542" },
+                    { label: "ACT", x: 490, color: "#4ECDC4" },
+                    { label: "VERIFY", x: 590, color: "#34D399" },
                   ].map((s, i) => (
                     <g key={s.label}>
                       <rect x={s.x - 40} y={65} width={80} height={50} rx={8} fill="#0A0F1A" stroke={s.color} strokeWidth={0.8} strokeOpacity={0.35} />
                       <text x={s.x} y={85} textAnchor="middle" fill={s.color} fontSize={9} fontFamily="ui-monospace, monospace" fontWeight={700}>{s.label}</text>
                       <text x={s.x} y={100} textAnchor="middle" fill={s.color} fillOpacity={0.45} fontSize={8} fontFamily="ui-monospace, monospace">
-                        {["생성", "리뷰", "권한 기록", "실제 행동", "진척 기록"][i]}
+                        {["2–4 구조", "≤8 steps", "현재 상태", "AgenticLoop", "근거 판정"][i]}
                       </text>
                       {i < 4 && (
                         <line x1={s.x + 40} y1={90} x2={[290, 390, 490, 590][i] - 40} y2={90} stroke="white" strokeOpacity={0.22} strokeWidth={1} />
@@ -354,18 +351,18 @@ export function AgentsTasksSection() {
                     </g>
                   ))}
 
-                  {/* REJECTED fork */}
+                  {/* Evidence-triggered revision */}
                   <path d="M390,115 L390,150 L190,150 L190,115" fill="none" stroke="#E87080" strokeOpacity={0.28} strokeWidth={1} strokeDasharray="4 4" />
-                  <text x={290} y={163} textAnchor="middle" fill="#E87080" fillOpacity={0.35} fontSize={8} fontFamily="ui-monospace, monospace">REJECTED · 실행 없음</text>
+                  <text x={290} y={163} textAnchor="middle" fill="#E87080" fillOpacity={0.35} fontSize={8} fontFamily="ui-monospace, monospace">VERIFY FAIL · LOW CONFIDENCE → REPLAN</text>
 
-                  {/* Templates */}
+                  {/* Schema boundary */}
                   <rect x={640} y={30} width={100} height={42} rx={8} fill="#0C1220" stroke="#F5C542" strokeWidth={0.6} strokeOpacity={0.2} />
-                  <text x={690} y={48} textAnchor="middle" fill="#F5C542" fontSize={9} fontFamily="ui-monospace, monospace" fontWeight={600}>full_pipeline</text>
-                  <text x={690} y={62} textAnchor="middle" fill="#5A6A8A" fontSize={8} fontFamily="ui-monospace, monospace">5 steps · $0.50</text>
+                  <text x={690} y={48} textAnchor="middle" fill="#F5C542" fontSize={9} fontFamily="ui-monospace, monospace" fontWeight={600}>id · description</text>
+                  <text x={690} y={62} textAnchor="middle" fill="#5A6A8A" fontSize={8} fontFamily="ui-monospace, monospace">expected outcome</text>
 
                   <rect x={640} y={80} width={100} height={42} rx={8} fill="#0C1220" stroke="#818CF8" strokeWidth={0.6} strokeOpacity={0.2} />
-                  <text x={690} y={98} textAnchor="middle" fill="#818CF8" fontSize={9} fontFamily="ui-monospace, monospace" fontWeight={600}>prospect</text>
-                  <text x={690} y={112} textAnchor="middle" fill="#5A6A8A" fontSize={8} fontFamily="ui-monospace, monospace">3 steps · $0.25</text>
+                  <text x={690} y={98} textAnchor="middle" fill="#818CF8" fontSize={9} fontFamily="ui-monospace, monospace" fontWeight={600}>no tool · args</text>
+                  <text x={690} y={112} textAnchor="middle" fill="#5A6A8A" fontSize={8} fontFamily="ui-monospace, monospace">no dependency edges</text>
 
                   {/* Connection to templates */}
                   <line x1={630} y1={90} x2={640} y2={51} stroke="#F5C542" strokeOpacity={0.22} strokeWidth={1} />
@@ -373,15 +370,15 @@ export function AgentsTasksSection() {
 
                   {/* Top label */}
                   <text x={400} y={25} textAnchor="middle" fill="white" fillOpacity={0.28} fontSize={9} fontFamily="ui-monospace, monospace" letterSpacing="0.1em">
-                    REVIEW CHECKPOINT ┃ APPROVAL ≠ EXECUTION ┃ AGENTIC LOOP
+                    ADVISORY INTENT ┃ OBSERVATION-CONDITIONED ACTION ┃ EVIDENCE REPLAN
                   </text>
                 </svg>
               </div>
 
               <p className="text-sm text-[#A0B4D4] leading-relaxed">
                 {t(locale,
-                  "PlanMode는 DRAFT → PRESENTED → APPROVED 또는 REJECTED의 검토 상태만 관리합니다. 승인은 실행 완료가 아닙니다. 실제 도구 행동은 AgenticLoop가 수행하고, update_plan이 관측된 진척만 기록합니다.",
-                  "PlanMode manages review state only: DRAFT → PRESENTED → APPROVED or REJECTED. Approval is not execution. AgenticLoop performs tool actions, and update_plan records only observed progress."
+                  "Advisory Plan은 실행 그래프나 승인 상태기계가 아닙니다. AgenticLoop가 최신 관측에서 행동을 선택하고 update_plan은 관측된 진척만 기록합니다. Cognitive verify/replan은 유지됩니다.",
+                  "Advisory Plan is neither an execution graph nor an approval state machine. AgenticLoop selects actions from current observations, update_plan records observed progress, and Cognitive verify/replan remains active."
                 )}
               </p>
             </div>

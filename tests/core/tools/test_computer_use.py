@@ -17,7 +17,7 @@ class TestHandlerActionForwarding:
     was never live-exercised)."""
 
     def test_action_not_passed_twice(self) -> None:
-        from core.cli.tool_handlers.single_tool import _build_computer_use_handler
+        from core.tools.handlers.single_tool import _build_computer_use_handler
 
         with (
             patch(
@@ -38,7 +38,7 @@ class TestHandlerActionForwarding:
         mock_exec.assert_awaited_once_with("click", x=10, y=20)
 
     def test_emulated_computer_use_handler_strips_screenshot(self) -> None:
-        from core.cli.tool_handlers.single_tool import _build_computer_use_handler
+        from core.tools.handlers.single_tool import _build_computer_use_handler
 
         with (
             patch(
@@ -67,7 +67,7 @@ class TestHandlerActionForwarding:
         assert "BASE64DATA" not in str(result)
 
     def test_emulated_computer_use_disabled_returns_permission_error(self) -> None:
-        from core.cli.tool_handlers.single_tool import _build_computer_use_handler
+        from core.tools.handlers.single_tool import _build_computer_use_handler
 
         with patch(
             "core.llm.providers.anthropic.is_computer_use_enabled",
@@ -146,7 +146,7 @@ class TestOpenAIBatchedActions:
     _ENABLED = "core.llm.providers.anthropic.is_computer_use_enabled"
 
     def test_batched_actions_run_in_order_final_screenshot(self) -> None:
-        from core.cli.tool_handlers.single_tool import _build_computer_use_handler
+        from core.tools.handlers.single_tool import _build_computer_use_handler
 
         calls: list[tuple[str, dict]] = []
 
@@ -180,7 +180,7 @@ class TestOpenAIBatchedActions:
         assert result["trajectory"]["events"][1]["params"]["text"] == "<redacted:length=2>"
 
     def test_keypress_list_joined_scroll_and_drag_remapped(self) -> None:
-        from core.cli.tool_handlers.single_tool import _openai_action_to_harness
+        from core.tools.handlers.single_tool import _openai_action_to_harness
 
         # keypress: GA ``keys`` list → ``+``-joined combo string.
         name, params = _openai_action_to_harness({"type": "keypress", "keys": ["ctrl", "c"]})
@@ -203,7 +203,7 @@ class TestOpenAIBatchedActions:
         assert params == {"start_x": 1, "start_y": 2, "end_x": 30, "end_y": 40}
 
     def test_batched_actions_collect_errors_honestly(self) -> None:
-        from core.cli.tool_handlers.single_tool import _build_computer_use_handler
+        from core.tools.handlers.single_tool import _build_computer_use_handler
 
         async def fake_exec(self: object, action: str, **params: object) -> dict:
             if action == "double_click":
@@ -232,7 +232,7 @@ class TestOpenAIBatchedActions:
         with no screenshot, the handler must still capture one — else the pending
         ``computer_call`` gets no serializable ``computer_call_output`` and the
         loop stalls. The error is still surfaced honestly."""
-        from core.cli.tool_handlers.single_tool import _build_computer_use_handler
+        from core.tools.handlers.single_tool import _build_computer_use_handler
 
         async def fake_exec(self: object, action: str, **params: object) -> dict:
             if action == "screenshot":
@@ -253,7 +253,7 @@ class TestOpenAIBatchedActions:
     def test_unmapped_action_reaches_harness_for_honest_error(self) -> None:
         """An unknown GA action type must reach the harness (which returns an
         honest ``error`` dict) — never a silent skip."""
-        from core.cli.tool_handlers.single_tool import _openai_action_to_harness
+        from core.tools.handlers.single_tool import _openai_action_to_harness
 
         name, params = _openai_action_to_harness({"type": "teleport", "x": 1})
         assert name == "teleport"
@@ -263,7 +263,7 @@ class TestOpenAIBatchedActions:
         assert "error" in result
 
     def test_empty_batch_falls_back_to_screenshot(self) -> None:
-        from core.cli.tool_handlers.single_tool import _build_computer_use_handler
+        from core.tools.handlers.single_tool import _build_computer_use_handler
 
         async def fake_exec(self: object, action: str, **params: object) -> dict:
             return {"result": "success", "action": action, "screenshot": "current"}
@@ -278,7 +278,7 @@ class TestOpenAIBatchedActions:
         assert result["screenshot"] == "current"
 
     def test_pending_safety_checks_echoed_as_acknowledged(self) -> None:
-        from core.cli.tool_handlers.single_tool import _build_computer_use_handler
+        from core.tools.handlers.single_tool import _build_computer_use_handler
 
         async def fake_exec(self: object, action: str, **params: object) -> dict:
             return {"result": "success", "action": action, "screenshot": "s"}
@@ -300,7 +300,7 @@ class TestOpenAIBatchedActions:
 
     def test_single_action_anthropic_path_preserved(self) -> None:
         """No ``actions`` list → the legacy single-``action`` path runs."""
-        from core.cli.tool_handlers.single_tool import _build_computer_use_handler
+        from core.tools.handlers.single_tool import _build_computer_use_handler
 
         with (
             patch(self._ENABLED, return_value=True),

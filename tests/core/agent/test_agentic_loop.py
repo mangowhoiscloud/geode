@@ -595,7 +595,7 @@ class TestAgenticLoop:
         from core.cli.bootstrap import run_agentic_oneshot
         from core.cli.commands.skills import cmd_skill_invoke
         from core.cli.scheduler_drain import drain_scheduler_queue
-        from core.cli.typer_serve import serve
+        from core.cli.typer_serve import run_serve
 
         forbidden = {
             "run_agentic_oneshot": (
@@ -606,7 +606,7 @@ class TestAgenticLoop:
                 inspect.getsource(drain_scheduler_queue),
                 ["_loop.run(", "main_loop.run("],
             ),
-            "serve": (inspect.getsource(serve), ["result = loop.run("]),
+            "run_serve": (inspect.getsource(run_serve), ["result = loop.run("]),
             "cmd_skill_invoke": (inspect.getsource(cmd_skill_invoke), ["_loop.run("]),
             "_run_agentic": (inspect.getsource(_run_agentic), ["loop.run("]),
         }
@@ -710,7 +710,6 @@ class TestAgenticLoop:
             executor_with_hooks,
             hooks=hooks,
             quiet=True,
-            enable_goal_decomposition=False,
         )
 
         with patch.object(loop, "_call_llm", new=AsyncMock()) as mock_call:
@@ -775,7 +774,6 @@ class TestAgenticLoop:
             ConversationContext(),
             executor,
             session_id="session-a",
-            enable_goal_decomposition=False,
             quiet=True,
         )
         warm_response = MagicMock(stop_reason="end_turn", usage=MagicMock(output_tokens=50))
@@ -794,7 +792,7 @@ class TestAgenticLoop:
         text_response = MagicMock(stop_reason="end_turn", usage=MagicMock(output_tokens=50))
         text_response.content = [SimpleNamespace(type="text", text="done")]
 
-        async def run_same_task() -> tuple[AgenticResult, AgenticResult, AsyncMock, AsyncMock, Any]:
+        async def run_same_task() -> tuple[AgenticResult, AgenticResult, AsyncMock, Any]:
             with (
                 patch.object(loop_a, "_call_llm", return_value=warm_response),
                 patch.object(loop_a, "_track_usage"),
@@ -807,7 +805,6 @@ class TestAgenticLoop:
             loop_a._session_metrics.time_budget_start_s = time.monotonic() - 86951.0
             with (
                 patch.object(loop_a, "_call_llm", new=AsyncMock()) as call_llm,
-                patch.object(loop_a, "_try_decompose", new=AsyncMock()) as decompose,
                 patch.object(loop_a, "_persist_handoff_request") as persist_handoff,
             ):
                 result_a = await loop_a.arun("expired work")
@@ -816,7 +813,6 @@ class TestAgenticLoop:
                 ConversationContext(),
                 executor,
                 session_id="session-b",
-                enable_goal_decomposition=False,
                 quiet=True,
             )
             assert loop_b._session_metrics is not loop_a._session_metrics
@@ -826,16 +822,15 @@ class TestAgenticLoop:
                 patch.object(loop_b, "_maybe_reflect", new=AsyncMock()),
             ):
                 result_b = await loop_b.arun("use the tool")
-            return result_b, result_a, call_llm, decompose, persist_handoff
+            return result_b, result_a, call_llm, persist_handoff
 
-        result_b, result_a, call_llm, decompose, persist_handoff = asyncio.run(run_same_task())
+        result_b, result_a, call_llm, persist_handoff = asyncio.run(run_same_task())
 
         assert result_b.termination_reason == "natural"
         handler.assert_called_once()
         assert result_a.termination_reason == "session_time_budget_expired"
         assert "over the 7200s budget" in result_a.text
         call_llm.assert_not_awaited()
-        decompose.assert_not_awaited()
         persist_handoff.assert_not_called()
         assert loop_a._session_metrics.handoff_triggered_at == 0.0
 
@@ -873,7 +868,6 @@ class TestAgenticLoop:
             max_rounds=0,
             yield_after_tool_round=True,
             quiet=True,
-            enable_goal_decomposition=False,
         )
         tool_response = MagicMock()
         tool_response.stop_reason = "tool_use"
@@ -912,7 +906,6 @@ class TestAgenticLoop:
             context,
             executor,
             quiet=True,
-            enable_goal_decomposition=False,
             allow_actionable_partial_on_empty=True,
         )
         tool_response = MagicMock()
@@ -953,7 +946,6 @@ class TestAgenticLoop:
             context,
             executor,
             quiet=True,
-            enable_goal_decomposition=False,
             allow_actionable_partial_on_empty=True,
         )
         empty = EmptyModelOutputError("empty before action")
@@ -1699,16 +1691,8 @@ class TestAgenticLoopEdgeCases:
     def test_multiple_tool_calls_in_single_response(
         self, context: ConversationContext, executor: ToolExecutor
     ) -> None:
-        """Test response with 2+ tool_use blocks processed in one round.
-
-        PR-CL-A1-followup (2026-05-23) — disable goal_decomposition so
-        the test's mocked ``_call_llm`` side_effect list isn't consumed
-        by the new ``decompose_async`` planner LLM call. The prompt
-        ``"list and search"`` matches ``_has_compound_indicators``
-        (" and " connector); the test is about multi-tool dispatch, not
-        decomposition, so isolation keeps the assertion stable.
-        """
-        loop = AgenticLoop(context, executor, quiet=True, enable_goal_decomposition=False)
+        """Test response with 2+ tool_use blocks processed in one round."""
+        loop = AgenticLoop(context, executor, quiet=True)
 
         # Round 1: LLM calls 2 tools simultaneously
         tool_response = MagicMock()
@@ -1901,38 +1885,36 @@ class TestSubAgentEdgeCases:
 
 
 class TestPlanDelegateTools:
-    """Verify create_plan and approve_plan are in tool definitions."""
+    """Verify the single advisory progress surface and delegation tool."""
 
-    def test_create_plan_in_tools(self) -> None:
+    def test_only_update_plan_is_exposed(self) -> None:
         names = {t["name"] for t in AGENTIC_TOOLS}
-        assert "create_plan" in names
-
-    def test_approve_plan_in_tools(self) -> None:
-        names = {t["name"] for t in AGENTIC_TOOLS}
-        assert "approve_plan" in names
+        assert "update_plan" in names
+        assert (
+            not {
+                "create_plan",
+                "approve_plan",
+                "reject_plan",
+                "modify_plan",
+                "list_plans",
+            }
+            & names
+        )
 
     def test_delegate_task_in_tools(self) -> None:
         names = {t["name"] for t in AGENTIC_TOOLS}
         assert "delegate_task" in names
 
-    def test_create_plan_schema(self) -> None:
-        tool = next(t for t in AGENTIC_TOOLS if t["name"] == "create_plan")
+    def test_update_plan_schema(self) -> None:
+        tool = next(t for t in AGENTIC_TOOLS if t["name"] == "update_plan")
         schema = tool["input_schema"]
-        assert "goal" in schema["properties"]
-        assert "goal" in schema["required"]
-        assert "subject" in schema["properties"]
-
-    def test_approve_plan_schema(self) -> None:
-        tool = next(t for t in AGENTIC_TOOLS if t["name"] == "approve_plan")
-        schema = tool["input_schema"]
-        assert "plan_id" in schema["properties"]
-        assert "plan_id" in schema["required"]
+        assert "plan" in schema["properties"]
+        assert "plan" in schema["required"]
 
     def test_get_agentic_tools_includes_plan(self) -> None:
         tools = get_agentic_tools()
         names = {t["name"] for t in tools}
-        assert "create_plan" in names
-        assert "approve_plan" in names
+        assert "update_plan" in names
 
 
 class TestAgenticLoopToolCallRendering:

@@ -23,11 +23,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from core.cli.tool_handlers.delegated import make_delegate_handler
-from core.cli.tool_handlers.registration import UniqueEntries
+from core.tools.handlers import make_delegate_handler
+from core.tools.handlers.registration import UniqueEntries
 
 if TYPE_CHECKING:
-    from core.tools.plan import ToolPlan
+    from core.tools.plan import BoundToolPlan
 
 _SEED_TOOL_CLASSES = (
     (
@@ -65,13 +65,13 @@ def build_tool_handlers(
     mcp_manager: Any = None,
     skill_registry: Any = None,
 ) -> dict[str, Any]:
-    """Compose and validate the kernel and product handler groups once."""
-    _plan, handlers = compose_tool_plan(
+    """Return a mutable compatibility copy of the validated product catalog."""
+    bound, transient_handlers = compose_tool_plan(
         verbose=verbose,
         mcp_manager=mcp_manager,
         skill_registry=skill_registry,
     )
-    return handlers
+    return {**bound.handlers, **transient_handlers}
 
 
 def compose_tool_plan(
@@ -79,9 +79,9 @@ def compose_tool_plan(
     verbose: bool = False,
     mcp_manager: Any = None,
     skill_registry: Any = None,
-    previous: ToolPlan | None = None,
-) -> tuple[ToolPlan, dict[str, Any]]:
-    """Validate the current product catalog without changing its projections."""
+    previous: BoundToolPlan | None = None,
+) -> tuple[BoundToolPlan, dict[str, Any]]:
+    """Bind one product plan and its non-schema execution overlays."""
     from core.agent.safety import (
         DANGEROUS_TOOLS,
         EXPENSIVE_TOOLS,
@@ -91,26 +91,36 @@ def compose_tool_plan(
     )
     from core.agent.sub_agent import SUBAGENT_DENIED_TOOLS
     from core.agent.tool_executor.executor import SPECIAL_EXECUTION_BINDINGS
-    from core.cli.tool_handlers import _build_tool_handler_catalog
+    from core.cli.tool_handlers import cli_handler_groups
+    from core.llm.tool_defer import default_deferred_tool_names
     from core.slash_routing import compose_command_registry
     from core.tools.base import load_all_tool_definitions
     from core.tools.google_capabilities import GOOGLE_TOOL_BINDINGS
+    from core.tools.handlers import _build_tool_handler_catalog, neutral_handler_groups
     from core.tools.personal_data import PERSONAL_DATA_TOOLS
     from core.tools.plan import (
         CapabilityRequirement,
         ExecutionBinding,
         SafetyPolicy,
         ToolSpec,
+        bind_tool_plan,
         compile_tool_plan,
     )
 
     from geode_product.slash_commands import PRODUCT_COMMAND_SPECS
 
     catalog = _build_tool_handler_catalog(
-        mcp_manager=mcp_manager,
-        skill_registry=skill_registry,
-        command_registry=compose_command_registry(PRODUCT_COMMAND_SPECS),
-        extra_groups=product_handler_groups(),
+        (
+            *neutral_handler_groups(
+                mcp_manager=mcp_manager,
+                skill_registry=skill_registry,
+            ),
+            *cli_handler_groups(
+                mcp_manager=mcp_manager,
+                command_registry=compose_command_registry(PRODUCT_COMMAND_SPECS),
+            ),
+            *product_handler_groups(),
+        )
     )
     if invalid := [name for name, handler in catalog.handlers.items() if not callable(handler)]:
         raise TypeError(f"tool handlers must be callable: {', '.join(invalid)}")
@@ -165,16 +175,22 @@ def compose_tool_plan(
         for name, binding in GOOGLE_TOOL_BINDINGS.items()
         if binding.handler_class is not None
     }
-    return (
-        compile_tool_plan(
-            specs,
-            bindings,
-            safety=safety,
-            capabilities=capabilities,
-            previous=previous,
-        ),
-        dict(catalog.handlers),
+    plan = compile_tool_plan(
+        specs,
+        bindings,
+        safety=safety,
+        capabilities=capabilities,
+        deferred_tools=default_deferred_tool_names(item["name"] for item in definitions),
+        previous=previous.plan if previous is not None else None,
     )
+    ordinary_handlers = {
+        name: catalog.handlers[name]
+        for name, binding in plan.execution_map.items()
+        if binding.route == "handler"
+    }
+    bound = bind_tool_plan(plan, ordinary_handlers)
+    transient_handlers = {name: catalog.handlers[name] for name in _INTERNAL_ONLY_HANDLERS}
+    return bound, transient_handlers
 
 
 def _build_audit_handlers() -> UniqueEntries[str, Any]:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -18,6 +19,13 @@ from core.agent.worker import (
     _needs_schema_retry,
     _resolve_worker_outcome,
 )
+from core.tools.plan import bind_tool_plan, compile_tool_plan
+
+
+def _empty_tool_plan_builder():
+    """Return the explicit empty catalog used by worker wiring unit tests."""
+    return bind_tool_plan(compile_tool_plan((), ()), {}), {}
+
 
 # ---------------------------------------------------------------------------
 # WorkerRequest / WorkerResult serialization
@@ -182,37 +190,40 @@ class TestWorkerResult:
 class TestWorkerSubprocess:
     """Test the worker as an actual subprocess (stdin/stdout JSON protocol)."""
 
-    def test_empty_stdin_returns_error(self) -> None:
+    def test_empty_stdin_returns_error(self, tmp_path: Path) -> None:
         proc = subprocess.run(  # noqa: S603
-            [sys.executable, "-m", "core.agent.worker"],
+            [sys.executable, "-m", "geode_product.worker"],
             input="\n",
             capture_output=True,
             text=True,
             timeout=15,
+            env={**os.environ, "GEODE_HOME": str(tmp_path / "geode-home")},
         )
         result = json.loads(proc.stdout.strip())
         assert result["success"] is False
         assert "Empty stdin" in result["error"]
 
-    def test_invalid_json_returns_error(self) -> None:
+    def test_invalid_json_returns_error(self, tmp_path: Path) -> None:
         proc = subprocess.run(  # noqa: S603
-            [sys.executable, "-m", "core.agent.worker"],
+            [sys.executable, "-m", "geode_product.worker"],
             input="not-json\n",
             capture_output=True,
             text=True,
             timeout=15,
+            env={**os.environ, "GEODE_HOME": str(tmp_path / "geode-home")},
         )
         result = json.loads(proc.stdout.strip())
         assert result["success"] is False
         assert "Invalid JSON" in result["error"]
 
-    def test_missing_task_id_returns_error(self) -> None:
+    def test_missing_task_id_returns_error(self, tmp_path: Path) -> None:
         proc = subprocess.run(  # noqa: S603
-            [sys.executable, "-m", "core.agent.worker"],
+            [sys.executable, "-m", "geode_product.worker"],
             input=json.dumps({"description": "hello"}) + "\n",
             capture_output=True,
             text=True,
             timeout=15,
+            env={**os.environ, "GEODE_HOME": str(tmp_path / "geode-home")},
         )
         result = json.loads(proc.stdout.strip())
         assert result["success"] is False
@@ -420,7 +431,6 @@ class TestSubAgentReasoningWiring:
         # Stub out everything _run_agentic touches except the bit we test.
         monkeypatch.setattr("core.agent.worker.WORKER_DIR", tmp_path)
         with (
-            patch("core.cli.tool_handlers._build_tool_handlers", return_value={}),
             patch("core.agent.tool_executor.ToolExecutor"),
             patch("core.agent.conversation.ConversationContext"),
             patch("core.agent.loop.AgenticLoop", side_effect=_fake_loop),
@@ -434,11 +444,113 @@ class TestSubAgentReasoningWiring:
                 thinking_budget=8192,
                 time_budget_s=240.0,
             )
-            _run_agentic(request)
+            _run_agentic(request, _empty_tool_plan_builder)
 
         assert captured.get("effort") == "max"
         assert captured.get("thinking_budget") == 8192
         assert captured.get("time_budget_s") == 240.0
+
+
+def test_run_agentic_shares_one_bound_plan_with_executor_and_loop(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """The worker must retain its injected catalog instead of rebuilding a dict."""
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    bound, transient_handlers = _empty_tool_plan_builder()
+    captured: dict[str, object] = {}
+
+    def tool_plan_builder():
+        return bound, transient_handlers
+
+    def fake_executor(**kwargs):
+        captured["executor_bound"] = kwargs["bound_tool_plan"]
+        executor = MagicMock()
+        executor._bound_tool_plan = kwargs["bound_tool_plan"]
+        return executor
+
+    def fake_loop(*args, **_kwargs):
+        captured["loop_bound"] = args[1]._bound_tool_plan
+        loop = MagicMock()
+        loop.arun = AsyncMock(return_value=AgenticResult(text="ok", termination_reason="unknown"))
+        return loop
+
+    monkeypatch.setattr("core.agent.worker.WORKER_DIR", tmp_path)
+    with (
+        patch("core.agent.tool_executor.ToolExecutor", side_effect=fake_executor),
+        patch("core.agent.conversation.ConversationContext"),
+        patch("core.agent.loop.AgenticLoop", side_effect=fake_loop),
+    ):
+        from core.agent.worker import _run_agentic
+
+        _run_agentic(
+            WorkerRequest(task_id="bound-plan-worker", description="verify ownership"),
+            tool_plan_builder,
+        )
+
+    assert captured == {"executor_bound": bound, "loop_bound": bound}
+
+
+def test_worker_toolkit_filter_blocks_special_route_before_side_effect(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A special executor route outside the worker allowlist stays unreachable."""
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    from core.tools.plan import ExecutionBinding, ToolSpec
+
+    plan = compile_tool_plan(
+        (
+            (ToolSpec("memory_search", "Search memory", {}), "test"),
+            (ToolSpec("run_bash", "Run a command", {}), "test"),
+        ),
+        (
+            ExecutionBinding("memory_search", "test"),
+            ExecutionBinding("run_bash", "test", route="special"),
+        ),
+    )
+    bound = bind_tool_plan(plan, {"memory_search": MagicMock()})
+
+    def tool_plan_builder():
+        return bound, {}
+
+    async def fake_arun(_prompt: str) -> AgenticResult:
+        denied = await executor.aexecute("run_bash", {"command": "touch must-not-run"})
+        assert denied["denied"] is True
+        return AgenticResult(text="ok", termination_reason="unknown")
+
+    def fake_loop(_conversation, loop_executor, **_kwargs):
+        nonlocal executor
+        executor = loop_executor
+        loop = MagicMock()
+        loop.arun = AsyncMock(side_effect=fake_arun)
+        return loop
+
+    executor = None
+    run_bash = AsyncMock(side_effect=AssertionError("run_bash side effect reached"))
+    monkeypatch.setattr("core.agent.worker.WORKER_DIR", tmp_path)
+    with (
+        patch("core.agent.conversation.ConversationContext"),
+        patch("core.agent.loop.AgenticLoop", side_effect=fake_loop),
+        patch(
+            "core.agent.tool_executor.executor.ToolExecutor._run_bash_exec_async",
+            run_bash,
+        ),
+    ):
+        from core.agent.worker import _run_agentic
+
+        _run_agentic(
+            WorkerRequest(
+                task_id="filtered-special-route",
+                description="verify allowlist",
+                agent_allowed_tools=["memory_search"],
+            ),
+            tool_plan_builder,
+        )
+
+    run_bash.assert_not_awaited()
 
 
 # ---------------------------------------------------------------------------
@@ -647,7 +759,6 @@ class TestSchemaAwareRetryWiring:
 
         monkeypatch.setattr("core.agent.worker.WORKER_DIR", tmp_path)
         with (
-            patch("core.cli.tool_handlers._build_tool_handlers", return_value={}),
             patch("core.agent.tool_executor.ToolExecutor"),
             patch("core.agent.conversation.ConversationContext"),
             patch("core.agent.loop.AgenticLoop", return_value=mock_loop),
@@ -659,7 +770,7 @@ class TestSchemaAwareRetryWiring:
                 description="seed scoring",
                 response_schema=_SAMPLE_ROLE_SCHEMA,
             )
-            result = _run_agentic(request)
+            result = _run_agentic(request, _empty_tool_plan_builder)
 
         assert mock_loop.arun.await_count == 2, (
             "expected exactly one retry when first attempt is empty"
@@ -680,7 +791,6 @@ class TestSchemaAwareRetryWiring:
 
         monkeypatch.setattr("core.agent.worker.WORKER_DIR", tmp_path)
         with (
-            patch("core.cli.tool_handlers._build_tool_handlers", return_value={}),
             patch("core.agent.tool_executor.ToolExecutor"),
             patch("core.agent.conversation.ConversationContext"),
             patch("core.agent.loop.AgenticLoop", return_value=mock_loop),
@@ -692,7 +802,7 @@ class TestSchemaAwareRetryWiring:
                 description="seed scoring",
                 response_schema=_SAMPLE_ROLE_SCHEMA,
             )
-            _run_agentic(request)
+            _run_agentic(request, _empty_tool_plan_builder)
 
         assert mock_loop.arun.await_count == 1, (
             "no retry expected when first attempt satisfies the schema"
@@ -711,7 +821,6 @@ class TestSchemaAwareRetryWiring:
 
         monkeypatch.setattr("core.agent.worker.WORKER_DIR", tmp_path)
         with (
-            patch("core.cli.tool_handlers._build_tool_handlers", return_value={}),
             patch("core.agent.tool_executor.ToolExecutor"),
             patch("core.agent.conversation.ConversationContext"),
             patch("core.agent.loop.AgenticLoop", return_value=mock_loop),
@@ -723,7 +832,7 @@ class TestSchemaAwareRetryWiring:
                 description="free-form task",
                 response_schema=None,
             )
-            _run_agentic(request)
+            _run_agentic(request, _empty_tool_plan_builder)
 
         assert mock_loop.arun.await_count == 1, (
             "no retry expected when caller did not declare a schema"
@@ -744,7 +853,6 @@ class TestSchemaAwareRetryWiring:
 
         monkeypatch.setattr("core.agent.worker.WORKER_DIR", tmp_path)
         with (
-            patch("core.cli.tool_handlers._build_tool_handlers", return_value={}),
             patch("core.agent.tool_executor.ToolExecutor"),
             patch("core.agent.conversation.ConversationContext"),
             patch("core.agent.loop.AgenticLoop", return_value=mock_loop),
@@ -756,7 +864,7 @@ class TestSchemaAwareRetryWiring:
                 description="seed scoring",
                 response_schema=_SAMPLE_ROLE_SCHEMA,
             )
-            result = _run_agentic(request)
+            result = _run_agentic(request, _empty_tool_plan_builder)
 
         assert mock_loop.arun.await_count == 2, (
             "retry must cap at exactly one — third pass not allowed"
@@ -788,7 +896,6 @@ class TestSchemaAwareRetryWiring:
 
         monkeypatch.setattr("core.agent.worker.WORKER_DIR", tmp_path)
         with (
-            patch("core.cli.tool_handlers._build_tool_handlers", return_value={}),
             patch("core.agent.tool_executor.ToolExecutor"),
             patch("core.agent.conversation.ConversationContext"),
             patch("core.agent.loop.AgenticLoop", return_value=mock_loop),
@@ -800,7 +907,7 @@ class TestSchemaAwareRetryWiring:
                 description="seed scoring",
                 response_schema=_SAMPLE_ROLE_SCHEMA,
             )
-            _run_agentic(request)
+            _run_agentic(request, _empty_tool_plan_builder)
 
         assert mock_loop.arun.await_count == 1, (
             f"termination_reason={termination_reason!r} must not trigger retry "
@@ -839,7 +946,6 @@ class TestSchemaAwareRetryWiring:
         monkeypatch.setattr("core.agent.worker.WORKER_DIR", tmp_path)
         monkeypatch.setattr("core.agent.worker.time.time", _fake_time)
         with (
-            patch("core.cli.tool_handlers._build_tool_handlers", return_value={}),
             patch("core.agent.tool_executor.ToolExecutor"),
             patch("core.agent.conversation.ConversationContext"),
             patch("core.agent.loop.AgenticLoop", return_value=mock_loop),
@@ -852,7 +958,7 @@ class TestSchemaAwareRetryWiring:
                 response_schema=_SAMPLE_ROLE_SCHEMA,
                 timeout_s=100.0,
             )
-            _run_agentic(request)
+            _run_agentic(request, _empty_tool_plan_builder)
 
         assert mock_loop.arun.await_count == 1, (
             "retry must be vetoed when elapsed time > 50%% of wall-clock cap"
@@ -880,7 +986,6 @@ class TestSchemaAwareRetryWiring:
 
         monkeypatch.setattr("core.agent.worker.WORKER_DIR", tmp_path)
         with (
-            patch("core.cli.tool_handlers._build_tool_handlers", return_value={}),
             patch("core.agent.tool_executor.ToolExecutor"),
             patch("core.agent.conversation.ConversationContext"),
             patch("core.agent.loop.AgenticLoop", return_value=mock_loop),
@@ -892,7 +997,7 @@ class TestSchemaAwareRetryWiring:
                 description="original prompt text",
                 response_schema=_SAMPLE_ROLE_SCHEMA,
             )
-            _run_agentic(request)
+            _run_agentic(request, _empty_tool_plan_builder)
 
         assert len(prompts_seen) == 2
         # First attempt is the caller's prompt verbatim.

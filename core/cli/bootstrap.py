@@ -16,7 +16,7 @@ from __future__ import annotations
 import contextvars
 import inspect
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from core.config.policy_source import PolicySourceBundle
     from core.hooks import MiddlewareRegistry
     from core.observability.run_event import RunEventSinkProvider
+    from core.tools.plan import BoundToolPlan
 
 log = logging.getLogger(__name__)
 
@@ -230,7 +231,7 @@ async def arun_agentic_oneshot(
     *,
     quiet: bool = True,
     time_budget_s: float = 60.0,
-    handler_builder: Callable[[], dict[str, Any]] | None = None,
+    tool_plan_builder: Callable[[], tuple[BoundToolPlan, Mapping[str, Any]]] | None = None,
     policy_sources: PolicySourceBundle | None = None,
     middleware_builder: Callable[..., MiddlewareRegistry] | None = None,
     activity_sink_provider: RunEventSinkProvider | None = None,
@@ -243,6 +244,10 @@ async def arun_agentic_oneshot(
     tool handlers await this directly; sync callers (fork skill) keep the
     wrapper below.
     """
+    if tool_plan_builder is None:
+        raise RuntimeError("agentic one-shot requires an injected bound tool-plan builder")
+    bound_tool_plan, transient_handlers = tool_plan_builder()
+
     from core.agent.conversation import ConversationContext
     from core.agent.loop import AgenticLoop
     from core.agent.tool_executor import ToolExecutor
@@ -264,23 +269,39 @@ async def arun_agentic_oneshot(
     bootstrap_builtins(policy_sources=resolved_policy_sources)
     ensure_user_profile()
 
+    from core.agent.loop._tool_factory import project_bound_tool_plan
+    from core.llm.adapters._source_inference import infer_source
+
+    provider = _resolve_provider(_stk_settings.model)
+    bound_tool_plan = project_bound_tool_plan(
+        bound_tool_plan,
+        provider=provider,
+        source=infer_source(provider),
+        policy_sources=resolved_policy_sources,
+    )
+
     conversation = ConversationContext()
-    handlers = _build_tool_handlers_for_fork() if handler_builder is None else handler_builder()
     # The MCP run_agent fork is HEADLESS (no human to approve) — mirror
     # services.py and strip the headless-denied tools before the executor is
     # built, so the fork can never auto-run run_bash / delegate_task / computer.
     from core.agent.safety import HEADLESS_DENIED_TOOLS
 
-    denied = HEADLESS_DENIED_TOOLS & set(handlers)
+    denied = HEADLESS_DENIED_TOOLS & (set(bound_tool_plan.tool_names) | set(transient_handlers))
     if denied:
         log.info("Headless run_agent fork: denied tools filtered — %s", denied)
-    handlers = {k: v for k, v in handlers.items() if k not in HEADLESS_DENIED_TOOLS}
+    bound_tool_plan = bound_tool_plan.filtered(denied_tool_names=HEADLESS_DENIED_TOOLS)
+    transient_handlers = {
+        name: handler
+        for name, handler in transient_handlers.items()
+        if name not in HEADLESS_DENIED_TOOLS
+    }
     # denied_tools is the REAL enforcement — run_bash and collaboration tools
     # are special-cased ahead of handler lookup, so the filter
     # above alone cannot stop them (handler-filter is defense-in-depth for
     # handler-dispatched tools).
     executor = ToolExecutor(
-        action_handlers=handlers,
+        bound_tool_plan=bound_tool_plan,
+        transient_handlers=transient_handlers,
         hitl_level=0,
         denied_tools=HEADLESS_DENIED_TOOLS,
         interactive_approval=False,
@@ -294,7 +315,7 @@ async def arun_agentic_oneshot(
         conversation,
         executor,
         model=_stk_settings.model,
-        provider=_resolve_provider(_stk_settings.model),
+        provider=provider,
         quiet=quiet,
         time_budget_s=time_budget_s,
         max_rounds=0,
@@ -322,7 +343,7 @@ def run_agentic_oneshot(
     *,
     quiet: bool = True,
     time_budget_s: float = 60.0,
-    handler_builder: Callable[[], dict[str, Any]] | None = None,
+    tool_plan_builder: Callable[[], tuple[BoundToolPlan, Mapping[str, Any]]] | None = None,
     policy_sources: PolicySourceBundle | None = None,
     middleware_builder: Callable[..., MiddlewareRegistry] | None = None,
     activity_sink_provider: RunEventSinkProvider | None = None,
@@ -341,16 +362,9 @@ def run_agentic_oneshot(
             prompt,
             quiet=quiet,
             time_budget_s=time_budget_s,
-            handler_builder=handler_builder,
+            tool_plan_builder=tool_plan_builder,
             policy_sources=policy_sources,
             middleware_builder=middleware_builder,
             activity_sink_provider=activity_sink_provider,
         )
     )
-
-
-def _build_tool_handlers_for_fork() -> dict[str, Any]:
-    """Minimal tool handlers for forked skill execution (no MCP, no sub-agents)."""
-    from core.cli.tool_handlers import _build_tool_handlers
-
-    return _build_tool_handlers(verbose=False)

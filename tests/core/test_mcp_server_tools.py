@@ -182,15 +182,30 @@ def test_run_agentic_oneshot_bootstraps_adapters() -> None:
 
 
 def test_run_agent_tool_awaits_injected_async_runner() -> None:
-    calls: list[tuple[str, bool, float]] = []
+    from core.tools.plan import bind_tool_plan, compile_tool_plan
 
-    async def runner(prompt: str, *, quiet: bool, time_budget_s: float, **_: object) -> object:
-        calls.append((prompt, quiet, time_budget_s))
+    calls: list[tuple[str, bool, float, object]] = []
+
+    def tool_plan_builder():
+        return bind_tool_plan(compile_tool_plan((), ()), {}), {}
+
+    async def runner(
+        prompt: str,
+        *,
+        quiet: bool,
+        time_budget_s: float,
+        tool_plan_builder: object,
+        **_: object,
+    ) -> object:
+        calls.append((prompt, quiet, time_budget_s, tool_plan_builder))
         return SimpleNamespace(text="done", rounds=2, termination_reason="completed", error=None)
 
-    server = create_mcp_server(agent_runner=runner)
+    server = create_mcp_server(
+        agent_tool_plan_builder=tool_plan_builder,
+        agent_runner=runner,
+    )
     result = asyncio.run(server.call_tool("run_agent", {"prompt": "check", "time_budget_s": 3.0}))
-    assert calls == [("check", True, 3.0)]
+    assert calls == [("check", True, 3.0, tool_plan_builder)]
     assert "done" in json.dumps(result, default=str)
 
 

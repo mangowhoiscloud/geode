@@ -33,20 +33,29 @@ def test_run_agent_fork_excludes_denied_tools() -> None:
     """The MCP run_agent fork is headless — its executor must never receive
     run_bash / delegate_task / computer handlers."""
     from core.cli import bootstrap
+    from core.tools.plan import ExecutionBinding, ToolSpec, bind_tool_plan, compile_tool_plan
 
-    fork_handlers = {
-        "web_fetch": MagicMock(),
-        "run_bash": MagicMock(),
-        "delegate_task": MagicMock(),
-        "computer": MagicMock(),
-        "computer_use": MagicMock(),
-        "memory_search": MagicMock(),
-    }
+    ordinary_names = ("web_fetch", "computer_use", "memory_search")
+    special_names = ("run_bash", "delegate_task")
+    specs = tuple(
+        (ToolSpec(name, f"{name} description", {}), "test")
+        for name in (*ordinary_names, *special_names)
+    )
+    bindings = tuple(
+        ExecutionBinding(name, "test", route="handler") for name in ordinary_names
+    ) + tuple(ExecutionBinding(name, "test", route="special") for name in special_names)
+    handlers = {name: MagicMock() for name in ordinary_names}
+    bound = bind_tool_plan(compile_tool_plan(specs, bindings), handlers)
+    transient_handlers = {"computer": MagicMock()}
+
+    def _build_tool_plan():
+        return bound, transient_handlers
 
     captured: dict[str, object] = {}
 
-    def _capture_executor(*, action_handlers: dict[str, object], **kw: object) -> MagicMock:
-        captured["handlers"] = action_handlers
+    def _capture_executor(*, bound_tool_plan, transient_handlers, **kw: object) -> MagicMock:
+        captured["bound_tool_plan"] = bound_tool_plan
+        captured["transient_handlers"] = transient_handlers
         captured["denied_tools"] = kw.get("denied_tools")
         return MagicMock()
 
@@ -58,24 +67,22 @@ def test_run_agent_fork_excludes_denied_tools() -> None:
             return "ok"
 
     with (
-        patch.object(bootstrap, "_build_tool_handlers_for_fork", return_value=fork_handlers),
         patch("core.agent.tool_executor.ToolExecutor", side_effect=_capture_executor),
         patch("core.agent.loop.AgenticLoop", _FakeLoop),
         patch("core.llm.adapters.registry.bootstrap_builtins"),
         patch("core.wiring.bootstrap.ensure_user_profile") as ensure_user_profile,
     ):
-        asyncio.run(bootstrap.arun_agentic_oneshot("hi"))
+        asyncio.run(bootstrap.arun_agentic_oneshot("hi", tool_plan_builder=_build_tool_plan))
 
     ensure_user_profile.assert_called_once_with()
-    handlers = captured["handlers"]
-    assert isinstance(handlers, dict)
-    assert "run_bash" not in handlers
-    assert "delegate_task" not in handlers
-    assert "computer" not in handlers
-    assert "computer_use" not in handlers
+    filtered_bound = captured["bound_tool_plan"]
+    assert "run_bash" not in filtered_bound.tool_names
+    assert "delegate_task" not in filtered_bound.tool_names
+    assert "computer_use" not in filtered_bound.tool_names
+    assert "computer" not in captured["transient_handlers"]
     # Non-denied tools survive the filter.
-    assert "web_fetch" in handlers
-    assert "memory_search" in handlers
+    assert "web_fetch" in filtered_bound.tool_names
+    assert "memory_search" in filtered_bound.tool_names
     # The REAL enforcement: denied_tools is passed to the executor (the handler
     # filter alone cannot stop the special-cased run_bash / delegate_task).
     from core.agent.safety import HEADLESS_DENIED_TOOLS

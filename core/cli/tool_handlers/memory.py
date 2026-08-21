@@ -5,8 +5,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from core.cli.tool_handlers.clarification import _clarify
-from core.cli.tool_handlers.registration import UniqueEntries
+from core.tools.handlers.clarification import _clarify
+from core.tools.handlers.registration import UniqueEntries
 from core.ui.console import console
 
 log = logging.getLogger(__name__)

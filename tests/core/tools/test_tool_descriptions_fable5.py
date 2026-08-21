@@ -35,10 +35,8 @@ def test_sibling_collisions_disambiguated() -> None:
     # recall siblings cross-reference.
     assert "note_read" in d["memory_search"] or "session_search" in d["memory_search"]
     assert "memory_search" in d["note_read"]
-    # progress checklist vs durable tasks vs review checkpoint.
-    assert "create_plan" in d["update_plan"]
-    assert "update_plan" in d["create_plan"]
-    assert "create_plan" in d["task_create"]
+    # progress checklist vs durable tasks.
+    assert "advisory" in d["update_plan"]
     assert "update_plan" in d["task_create"]
 
 

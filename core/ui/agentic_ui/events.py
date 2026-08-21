@@ -262,7 +262,7 @@ def emit_plan_step(*, current: int, total: int, description: str, revision: int)
 def emit_replan(*, trigger: str, step_count: int, revision: int) -> None:
     """PR-CL-A1 — emit ``replan`` event when ``_maybe_replan_async``
     installs a new Plan revision. ``trigger`` is ``"verify_fail"`` or
-    ``"cadence"``."""
+    ``"low_confidence"``. Historical event rows may contain other strings."""
     from core.ui import agentic_ui as _pkg
 
     writer = getattr(_ipc_writer_local, "writer", None)

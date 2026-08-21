@@ -155,7 +155,7 @@ class SeedPoolSearchTool:
         """Async entry point — required by ``_safe_delegate`` worker path.
 
         CSP-2 fix-up (Codex MCP CRITICAL): the delegated handler in
-        ``core/cli/tool_handlers/clarification.py:_safe_delegate`` calls
+        ``core/tools/handlers/clarification.py:_safe_delegate`` calls
         ``aexecute`` on the tool instance; without this wrapper the
         worker subprocess would raise "must implement aexecute()". The
         sync body does only local file I/O so ``asyncio.to_thread``

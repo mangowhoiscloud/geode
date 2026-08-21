@@ -10,6 +10,7 @@ removed 2026-07-29 once its last caller (the legacy agentic adapter) was gone.
 from __future__ import annotations
 
 import logging
+from collections.abc import Collection
 from typing import TYPE_CHECKING, Any
 
 from core.config import is_model_allowed
@@ -623,25 +624,24 @@ _TOOL_SEARCH_TOOL: dict[str, Any] = {
 # the OpenAI Responses builder shares the same policy.
 from core.llm.tool_defer import (  # noqa: E402  (policy import next to its use)
     TOOL_DEFER_THRESHOLD,
-    TOOL_SEARCH_ALWAYS_LOADED,
 )
 
 
 def apply_tool_search_defer(
     api_tools: list[dict[str, Any]],
     *,
+    deferred_tool_names: Collection[str],
     enabled: bool = True,
     threshold: int = TOOL_DEFER_THRESHOLD,
 ) -> list[dict[str, Any]]:
     """Shape *api_tools* for the hosted tool-search tool.
 
-    Above *threshold*: every custom tool outside
-    :data:`TOOL_SEARCH_ALWAYS_LOADED` gets ``defer_loading: True`` and the
-    hosted search tool is prepended. Hosted/native entries (anything
-    carrying a ``type``) are never deferred — together with the core set
-    they satisfy the API's at-least-one-non-deferred invariant. Returns
-    the input unchanged when disabled, under threshold, or when nothing
-    would defer (a defer pass that defers zero tools is pure overhead).
+    Above *threshold*: custom tools named by the request's immutable tool-plan
+    projection get ``defer_loading: True`` and the hosted search tool is
+    prepended. Hosted/native entries (anything carrying a ``type``) are never
+    deferred. Returns the input unchanged when disabled, under threshold, or
+    when nothing would defer (a defer pass that defers zero tools is pure
+    overhead).
     """
     if not enabled or len(api_tools) <= threshold:
         return api_tools
@@ -653,7 +653,7 @@ def apply_tool_search_defer(
     shaped: list[dict[str, Any]] = []
     deferred_count = 0
     for tool in api_tools:
-        if tool.get("type") or tool.get("name", "") in TOOL_SEARCH_ALWAYS_LOADED:
+        if tool.get("type") or tool.get("name", "") not in deferred_tool_names:
             shaped.append(tool)
             continue
         deferred_tool = dict(tool)

@@ -153,21 +153,9 @@ class Settings(BaseSettings):
         default=True,
         validation_alias=AliasChoices("replan_enabled", "GEODE_REPLAN_ENABLED"),
         description=(
-            "When True (default) the loop calls the planner LLM on "
-            "verify FAIL and every ``replan_interval`` rounds. False "
-            "disables the replan feature entirely (the explicit Plan "
-            "object still tracks step progress but never revises). PR-CL-A1."
-        ),
-    )
-    replan_interval: int = Field(
-        default=5,
-        ge=0,
-        validation_alias=AliasChoices("replan_interval", "GEODE_REPLAN_INTERVAL"),
-        description=(
-            "Number of rounds between cadence-based replans. ``0`` "
-            "disables cadence (verify FAIL still triggers). Default 5 "
-            "balances ReWOO 5x-token-efficiency target with the cost of "
-            "an extra planner call per N rounds. PR-CL-A1."
+            "When True, observed verification failures and low-confidence "
+            "edges may revise an active advisory Plan. False disables "
+            "revision while preserving progress tracking."
         ),
     )
     replan_max_attempts: int = Field(

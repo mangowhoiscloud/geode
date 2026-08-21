@@ -5,8 +5,8 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-from collections.abc import Iterable, Iterator, Mapping
-from dataclasses import dataclass
+from collections.abc import Iterable, Iterator, Mapping, Set
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from types import MappingProxyType
 from typing import Any
@@ -151,6 +151,7 @@ class ToolRegistration:
     execution: ExecutionBinding
     safety: SafetyPolicy
     capability: CapabilityRequirement
+    deferred: bool = False
 
     def __post_init__(self) -> None:
         if self.spec.name != self.execution.name:
@@ -204,6 +205,223 @@ class ToolPlan:
         object.__setattr__(self, "schema_map", MappingProxyType(schemas))
         object.__setattr__(self, "execution_map", MappingProxyType(executions))
         object.__setattr__(self, "outcomes", MappingProxyType(outcomes))
+
+    @property
+    def eager_tool_names(self) -> tuple[str, ...]:
+        """Enabled tools loaded eagerly, in provider-visible order."""
+        return tuple(
+            item.spec.name
+            for item in self.registrations
+            if item.spec.name in self.schema_map and not item.deferred
+        )
+
+    @property
+    def deferred_tool_names(self) -> tuple[str, ...]:
+        """Enabled tools eligible for provider-side deferred loading."""
+        return tuple(
+            item.spec.name
+            for item in self.registrations
+            if item.spec.name in self.schema_map and item.deferred
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class BoundToolPlan:
+    """One plan bound to its exact ordinary execution handlers."""
+
+    plan: ToolPlan
+    handlers: Mapping[str, Any]
+    tool_names: tuple[str, ...]
+    _generation: int | None = None
+    _content_hash: str = ""
+    _base: BoundToolPlan | None = field(default=None, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        names = tuple(self.tool_names)
+        if len(set(names)) != len(names):
+            raise ValueError("bound tool plan contains duplicate tool names")
+        unknown = set(names) - self.plan.schema_map.keys()
+        if unknown:
+            names_list = ", ".join(sorted(unknown))
+            raise ValueError(f"bound tool plan references unknown tools: {names_list}")
+        expected_order = tuple(name for name in self.plan.schema_map if name in set(names))
+        if names != expected_order:
+            raise ValueError("bound tool names must preserve plan order")
+
+        handlers = dict(self.handlers)
+        ordinary = {name for name in names if self.plan.execution_map[name].route == "handler"}
+        if missing := sorted(ordinary - handlers.keys()):
+            raise ValueError(f"missing ordinary handlers: {', '.join(missing)}")
+        if extra := sorted(handlers.keys() - ordinary):
+            raise ValueError(f"unexpected ordinary handlers: {', '.join(extra)}")
+        if invalid := sorted(name for name, handler in handlers.items() if not callable(handler)):
+            raise TypeError(f"tool handlers must be callable: {', '.join(invalid)}")
+
+        generation = self.plan.generation if self._generation is None else self._generation
+        if generation < 1:
+            raise ValueError("bound tool plan generation must be positive")
+        content_hash = _bound_content_hash(self.plan.content_hash, names)
+        if self._content_hash and self._content_hash != content_hash:
+            raise ValueError("bound tool plan content hash does not match its projection")
+
+        object.__setattr__(self, "handlers", MappingProxyType(handlers))
+        object.__setattr__(self, "tool_names", names)
+        object.__setattr__(self, "_generation", generation)
+        object.__setattr__(self, "_content_hash", content_hash)
+
+    @property
+    def generation(self) -> int:
+        assert self._generation is not None
+        return self._generation
+
+    @property
+    def content_hash(self) -> str:
+        return self._content_hash
+
+    @property
+    def base(self) -> BoundToolPlan:
+        """Return the unprojected catalog retained across provider switches."""
+        return self if self._base is None else self._base
+
+    @property
+    def schema_map(self) -> Mapping[str, ToolSpec]:
+        return MappingProxyType({name: self.plan.schema_map[name] for name in self.tool_names})
+
+    @property
+    def execution_map(self) -> Mapping[str, ExecutionBinding]:
+        return MappingProxyType({name: self.plan.execution_map[name] for name in self.tool_names})
+
+    @property
+    def ordered_specs(self) -> tuple[ToolSpec, ...]:
+        return tuple(self.plan.schema_map[name] for name in self.tool_names)
+
+    @property
+    def eager_tool_names(self) -> tuple[str, ...]:
+        eager = set(self.plan.eager_tool_names)
+        return tuple(name for name in self.tool_names if name in eager)
+
+    @property
+    def deferred_tool_names(self) -> tuple[str, ...]:
+        deferred = set(self.plan.deferred_tool_names)
+        return tuple(name for name in self.tool_names if name in deferred)
+
+    def filtered(
+        self,
+        *,
+        allowed_tool_names: Set[str] | None = None,
+        denied_tool_names: Set[str] = frozenset(),
+    ) -> BoundToolPlan:
+        """Return an immutable session projection without changing the parent."""
+        selected = tuple(
+            name
+            for name in self.tool_names
+            if (allowed_tool_names is None or name in allowed_tool_names)
+            and name not in denied_tool_names
+        )
+        if selected == self.tool_names:
+            return self
+        selected_set = set(selected)
+        return BoundToolPlan(
+            self.plan,
+            {name: handler for name, handler in self.handlers.items() if name in selected_set},
+            selected,
+            self.generation + 1,
+            _base=self.base,
+        )
+
+    def projected(
+        self,
+        specs: Iterable[ToolSpec],
+        *,
+        unavailable_tool_names: Set[str] = frozenset(),
+    ) -> BoundToolPlan:
+        """Bind an ordered policy projection without mutating this snapshot."""
+        projected_specs = tuple(specs)
+        names = tuple(spec.name for spec in projected_specs)
+        if len(set(names)) != len(names):
+            raise ValueError("bound tool projection contains duplicate tool names")
+        if unknown := sorted(set(names) - set(self.tool_names)):
+            names_list = ", ".join(unknown)
+            raise ValueError(f"bound tool projection references unknown tools: {names_list}")
+        unavailable = set(unavailable_tool_names)
+        if unknown := sorted(unavailable - set(self.tool_names)):
+            names_list = ", ".join(unknown)
+            raise ValueError(f"unavailable projection references unknown tools: {names_list}")
+        if overlap := sorted(unavailable & set(names)):
+            names_list = ", ".join(overlap)
+            raise ValueError(f"unavailable projection includes visible tools: {names_list}")
+        if projected_specs == self.ordered_specs and not unavailable:
+            return self
+
+        registrations = {item.spec.name: item for item in self.plan.registrations}
+        selected = set(names)
+        remaining = tuple(
+            item for item in self.plan.registrations if item.spec.name not in selected
+        )
+        all_specs = tuple(
+            (spec, registrations[spec.name].execution.origin) for spec in projected_specs
+        ) + tuple((item.spec, item.execution.origin) for item in remaining)
+        all_names = (*names, *(item.spec.name for item in remaining))
+        projected_plan = compile_tool_plan(
+            all_specs,
+            (registrations[name].execution for name in all_names),
+            safety={
+                name: (
+                    replace(registrations[name].safety, denied=True)
+                    if name not in selected
+                    and name not in unavailable
+                    and name in self.plan.schema_map
+                    else registrations[name].safety
+                )
+                for name in all_names
+            },
+            capabilities={
+                name: (
+                    replace(registrations[name].capability, available=False)
+                    if name in unavailable
+                    else registrations[name].capability
+                )
+                for name in all_names
+            },
+            deferred_tools=frozenset(name for name in all_names if registrations[name].deferred),
+            previous=self.plan,
+        )
+        return BoundToolPlan(
+            projected_plan,
+            {name: self.handlers[name] for name in names if name in self.handlers},
+            names,
+            self.generation + 1,
+            _base=self.base,
+        )
+
+    def at_generation(self, generation: int) -> BoundToolPlan:
+        """Return this content at a later session generation."""
+        if generation == self.generation:
+            return self
+        if generation < self.generation:
+            raise ValueError("bound tool plan generation cannot decrease")
+        return BoundToolPlan(
+            self.plan,
+            self.handlers,
+            self.tool_names,
+            generation,
+            _base=self.base,
+        )
+
+
+def bind_tool_plan(plan: ToolPlan, handlers: Mapping[str, Any]) -> BoundToolPlan:
+    """Bind every enabled ordinary route to one callable before side effects."""
+    return BoundToolPlan(plan, handlers, tuple(plan.schema_map))
+
+
+def _bound_content_hash(plan_hash: str, tool_names: tuple[str, ...]) -> str:
+    canonical = json.dumps(
+        {"plan_hash": plan_hash, "tool_names": tool_names},
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _collect_specs(
@@ -263,6 +481,7 @@ def _content_hash(registrations: tuple[ToolRegistration, ...]) -> str:
                 "auth": item.capability.auth,
                 "available": item.capability.available,
             },
+            "deferred": item.deferred,
             "outcome": _decision(item).value,
         }
         for item in registrations
@@ -283,6 +502,7 @@ def compile_tool_plan(
     *,
     safety: Mapping[str, SafetyPolicy] | None = None,
     capabilities: Mapping[str, CapabilityRequirement] | None = None,
+    deferred_tools: Set[str] = frozenset(),
     previous: ToolPlan | None = None,
 ) -> ToolPlan:
     """Validate and compile separate schema/execution inputs into one snapshot."""
@@ -297,8 +517,15 @@ def compile_tool_plan(
 
     safety = safety or {}
     capabilities = capabilities or {}
+    if type(deferred_tools) in {str, bytes}:
+        raise TypeError("deferred_tools must be a set of tool names")
+    deferred_names = set(deferred_tools)
+    if any(not isinstance(name, str) or not name.strip() for name in deferred_names):
+        raise ValueError("deferred tool names cannot be empty")
     if unknown := sorted((set(safety) | set(capabilities)) - spec_names):
         raise ValueError(f"metadata references unknown tools: {', '.join(unknown)}")
+    if unknown := sorted(deferred_names - spec_names):
+        raise ValueError(f"deferred metadata references unknown tools: {', '.join(unknown)}")
 
     registrations = tuple(
         ToolRegistration(
@@ -306,6 +533,7 @@ def compile_tool_plan(
             execution=bindings_by_name[name],
             safety=safety.get(name, SafetyPolicy()),
             capability=capabilities.get(name, CapabilityRequirement()),
+            deferred=name in deferred_names,
         )
         for name in specs_by_name
     )
@@ -330,6 +558,7 @@ def compile_tool_plan(
 
 
 __all__ = [
+    "BoundToolPlan",
     "CapabilityRequirement",
     "ExecutionBinding",
     "SafetyPolicy",
@@ -337,6 +566,7 @@ __all__ = [
     "ToolPlan",
     "ToolRegistration",
     "ToolSpec",
+    "bind_tool_plan",
     "compile_tool_plan",
     "thaw_tool_schema",
 ]

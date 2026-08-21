@@ -1,7 +1,12 @@
 """Subprocess worker for isolated sub-agent execution.
 
-Spawned by IsolatedRunner._execute_subprocess() as:
-    python -m core.agent.worker
+The product composition root injects its bound tool-plan builder and is spawned
+by ``IsolatedRunner._execute_subprocess()`` as::
+
+    python -m geode_product.worker
+
+This module owns the neutral request/result protocol and execution runtime; it
+does not reconstruct a product handler catalog.
 
 Protocol:
     stdin  → single JSON line (WorkerRequest)
@@ -22,7 +27,7 @@ import logging
 import os
 import sys
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -41,6 +46,7 @@ if TYPE_CHECKING:
     from core.agent.loop.models import AgenticResult
     from core.hooks import MiddlewareRegistry
     from core.observability.run_event import RunEventSinkProvider
+    from core.tools.plan import BoundToolPlan
 
 log = logging.getLogger(__name__)
 
@@ -89,8 +95,7 @@ class WorkerRequest:
     subagent_max_tokens: int = 32768
     # PR-CHECKPOINT-RESUME-TIMEBUDGET (2026-05-25, S6) — default raised
     # 120 → 600 to match SubAgentManager default (env-tunable via
-    # ``GEODE_SUBAGENT_TIMEOUT_S``). Smoke 16 evolver hit 122s in
-    # plan.decompose_async on the prior cap.
+    # ``GEODE_SUBAGENT_TIMEOUT_S``). Smoke 16 evolver exceeded the prior cap.
     timeout_s: float = 600.0
     time_budget_s: float = 0.0  # 0 = inherit parent's budget
     thinking_budget: int = 0  # 0 = disabled; >0 = thinking tokens per call (legacy)
@@ -423,13 +428,17 @@ def _load_worker_resume(request: WorkerRequest, conversation: Any) -> tuple[Any,
 
 def _run_agentic(
     request: WorkerRequest,
-    handler_builder: Callable[[], dict[str, Any]] | None = None,
+    tool_plan_builder: Callable[[], tuple[BoundToolPlan, Mapping[str, Any]]] | None = None,
     *,
     middleware_builder: Callable[..., MiddlewareRegistry] | None = None,
     activity_sink_provider: RunEventSinkProvider | None = None,
 ) -> WorkerResult:
     """Bootstrap minimal GEODE runtime and run AgenticLoop."""
     started = time.time()
+    if tool_plan_builder is None:
+        raise RuntimeError("worker requires an injected bound tool-plan builder")
+    bound_tool_plan, transient_handlers = tool_plan_builder()
+
     from core.config.policy_source import EMPTY_POLICY_SOURCES, decode_policy_sources
 
     policy_sources = (
@@ -481,38 +490,73 @@ def _run_agentic(
         task_cwd_path.mkdir(parents=True, exist_ok=True)
         set_task_isolated_cwd(task_cwd_path)
 
-    # 1. Build tool handlers (same factory as CLI)
-    if handler_builder is None:
-        from core.cli.tool_handlers import _build_tool_handlers
+    # Resolve checkpoint/model identity before freezing the executable policy
+    # projection. A resumed child may carry a different provider from the
+    # current process settings, and provider visibility is part of its Bound.
+    from core.agent.conversation import ConversationContext
+    from core.config import _resolve_provider, settings
 
-        handler_builder = _build_tool_handlers
-    handlers = handler_builder()
+    conversation = ConversationContext(max_turns=200)
+    resume_state, resume_checkpoint = _load_worker_resume(request, conversation)
+    resumed_model = str(resume_state.model) if resume_state is not None else ""
+    effective_model = resumed_model or request.model or settings.model
+    effective_provider = (
+        str(resume_state.provider)
+        if resume_state is not None and resume_state.provider
+        else request.provider
+    ) or _resolve_provider(effective_model)
+    effective_source = request.source
+    if not effective_source:
+        from core.llm.adapters._source_inference import infer_source
 
-    # 2. Filter tools — CSP-1 (2026-05-22): consult the toolkit registry
+        effective_source = infer_source(effective_provider)
+
+    # 2. Filter the complete native catalog — ordinary handlers, named special
+    # routes, and explicit execution-only overlays — from one contribution set.
+    # CSP-1 (2026-05-22): consult the toolkit registry
     # so the agent's declared ``toolkit:`` frontmatter expands into the
     # allowlist (with ``_default`` fallback when undeclared).
     from core.tools.toolkit_registry import load_default_registry
 
-    handlers = filter_handlers(
-        handlers=handlers,
+    available_names = dict.fromkeys(
+        (*bound_tool_plan.tool_names, *transient_handlers),
+        None,
+    )
+    selected = filter_handlers(
+        handlers=available_names,
         denied_tools=request.denied_tools,
         agent_allowed_tools=request.agent_allowed_tools,
         toolkit=request.toolkit,
         toolkit_registry=load_default_registry(),
     )
+    selected_names = set(selected)
+    from core.agent.loop._tool_factory import project_bound_tool_plan
+
+    bound_tool_plan = project_bound_tool_plan(
+        bound_tool_plan,
+        provider=effective_provider,
+        source=effective_source,
+        policy_sources=policy_sources,
+        force_include=selected_names,
+    )
+    bound_tool_plan = bound_tool_plan.filtered(allowed_tool_names=selected_names)
+    transient_handlers = {
+        name: handler for name, handler in transient_handlers.items() if name in selected_names
+    }
     # CSP-1 (2026-05-22) — the resulting handler key set is also the
     # set of tool names the model should see. Pass it through to
     # AgenticLoop so the tool schemas advertised to the LLM match the
     # executor's allowlist (otherwise denied tools would be visible to
     # the model and only fail at execution time as "Unknown tool").
-    allowed_tool_names = set(handlers)
+    allowed_tool_names = set(bound_tool_plan.tool_names) | set(transient_handlers)
 
     # 3. Build ToolExecutor (auto_approve=True for sub-agents)
     from core.agent.tool_executor import ToolExecutor
     from core.wiring.bootstrap import build_middleware_registry
 
     executor = ToolExecutor(
-        action_handlers=handlers,
+        bound_tool_plan=bound_tool_plan,
+        transient_handlers=transient_handlers,
         auto_approve=True,  # Sub-agents skip HITL prompts
         # PR-SUBAGENT-ROLES (2026-07-02) — enforce the parent's denied set
         # on the EXISTING executor rail, not only via handler filtering.
@@ -522,6 +566,7 @@ def _run_agentic(
         # denylist, PR-EXEC-HARDENING). This is what makes a role
         # allowlist (e.g. repo_researcher without run_bash) actually hold.
         denied_tools=frozenset(request.denied_tools) | SUBAGENT_CONTROL_TOOLS,
+        allowed_tools=frozenset(allowed_tool_names),
         interactive_approval=False,
         middleware_registry=(
             build_middleware_registry()
@@ -529,12 +574,6 @@ def _run_agentic(
             else middleware_builder(policy_sources=policy_sources)
         ),
     )
-
-    # 4. Build ConversationContext
-    from core.agent.conversation import ConversationContext
-
-    conversation = ConversationContext(max_turns=200)
-    resume_state, resume_checkpoint = _load_worker_resume(request, conversation)
 
     # 5. Build AgenticLoop
     from core.agent.loop import AgenticLoop
@@ -545,20 +584,6 @@ def _run_agentic(
     # default. Worker carries the resolved prompt over the IPC boundary so
     # the subprocess does not need its own AgentRegistry lookup.
     system_prompt_override: str | None = request.agent_system_prompt or None
-
-    # Resolve the inherit-sentinels: an empty model/provider (e.g. a
-    # directly-constructed WorkerRequest) falls back to the runtime's
-    # effective model instead of a frozen literal. Production spawns set
-    # both explicitly (sub_agent.py ``_build_worker_request``).
-    from core.config import _resolve_provider, settings
-
-    resumed_model = str(resume_state.model) if resume_state is not None else ""
-    effective_model = resumed_model or request.model or settings.model
-    effective_provider = (
-        str(resume_state.provider)
-        if resume_state is not None and resume_state.provider
-        else request.provider
-    ) or _resolve_provider(effective_model)
 
     # 5.5 Minimal hook bundle (trajectory audit 2026-07-03) — pre-fix the
     # loop below was built with ``hooks=None``, so the subprocess
@@ -629,34 +654,6 @@ def _run_agentic(
         # preserves legacy free-form text responses for callers that
         # didn't declare a schema (REPL, gateway, ad-hoc CLI).
         response_schema=request.response_schema,
-        # PR-GENERATOR-PLAN-LEAK-FIX (2026-05-26) — disable goal
-        # decomposition for sub-agents. Sub-agents are specialised
-        # executors driven by an AgentDefinition + supervisor-built
-        # task description; the parent orchestrator already performed
-        # whatever decomposition was needed. Leaving it on caused a
-        # silent partial-write defect (smoke 20, 2/15 generator spawns):
-        # the per-task description contained natural English
-        # connectors ("frontmatter fields ... AND tags",
-        # "call ``seed_debate_turn`` ... then turn=2") that tripped
-        # ``_has_compound_indicators`` → ``decompose_async`` fired with
-        # the decomposer system prompt → claude-cli cached that prompt
-        # under the sub-agent's session_id → ``_persist_session_id``
-        # stamped it as the resume target → the next ``_call_llm``
-        # turn (now carrying the *generator* system prompt) was
-        # dispatched with ``resume_session_id`` set, which makes
-        # ``build_subprocess_stdin`` SKIP the system prompt block
-        # ("already cached"). claude-cli resumed the decomposer
-        # conversation, the model stayed in decomposition mode, and
-        # emitted a ``DecompositionResult``-shape JSON instead of
-        # calling ``seed_debate_turn`` / ``write_file``. Worker
-        # reported ``success=True`` (non-empty text, no error,
-        # ``termination_reason="unknown"``) but no seed markdown was
-        # written; downstream ranker hit FileNotFoundError and the
-        # PR-VOTER-PROMPT-ANTI-PHANTOM UNAVAILABLE sentinel kicked in.
-        # Evidence: ``state/seed_generation/gen1-redundant_tool_invocation/
-        # sub_agents/gen-gen1-000-fe17d6c5/result.json`` — output is a
-        # verbatim ``DecompositionResult`` JSON.
-        enable_goal_decomposition=False,
     )
     if resume_state is not None and resume_checkpoint is not None:
         resume_checkpoint.reopen(resume_state.session_id)
@@ -951,56 +948,6 @@ def _build_schema_retry_prompt(
     )
 
 
-# PR-GENERATOR-PLAN-LEAK-FIX (2026-05-26) — defence-in-depth detector
-# for the ``DecompositionResult``-shape JSON leak documented at the
-# ``enable_goal_decomposition=False`` site above. The structural fix is
-# in ``_run_agentic`` (no decomposer call → no cached prompt to resume
-# from); this helper is the last safety net before a ``success=True``
-# row with a planner-shape body slips past into the orchestrator. The
-# three-key shape (``is_compound`` bool + ``goals`` list + ``reasoning``
-# string) matches ``core.agent.plan.DecompositionResult`` *exactly* —
-# no real sub-agent role emits that triple (seed_generator writes
-# markdown via ``write_file``; ranker / critic / proximity emit role
-# schemas with ``candidate_id`` / ``score`` / ``reason`` keys).
-_DECOMPOSITION_RESULT_KEYS: frozenset[str] = frozenset({"is_compound", "goals", "reasoning"})
-
-
-def _looks_like_decomposition_result(text: str) -> bool:
-    """Return True iff ``text``'s last balanced JSON object is a planner
-    ``DecompositionResult`` echo (the leak documented at the
-    ``enable_goal_decomposition=False`` worker call site).
-
-    Conservative: requires the parsed object to be a ``dict`` containing
-    ALL THREE planner keys with their canonical types (``is_compound``
-    bool + ``goals`` list + ``reasoning`` string). Single-key overlaps
-    (e.g. a role schema happening to include ``reasoning``) do not
-    match.
-    """
-    if not text or not text.strip():
-        return False
-    # Local import to keep ``worker.py``'s module-level import surface
-    # small (the IPC entry point should bootstrap without dragging in
-    # the SubAgentManager).
-    from core.agent.sub_agent import _last_balanced_json_object
-
-    candidate = _last_balanced_json_object(text)
-    if candidate is None:
-        return False
-    try:
-        parsed = json.loads(candidate)
-    except (json.JSONDecodeError, ValueError):
-        return False
-    if not isinstance(parsed, dict):
-        return False
-    if not _DECOMPOSITION_RESULT_KEYS.issubset(parsed.keys()):
-        return False
-    return (
-        isinstance(parsed.get("is_compound"), bool)
-        and isinstance(parsed.get("goals"), list)
-        and isinstance(parsed.get("reasoning"), str)
-    )
-
-
 def _resolve_worker_outcome(
     agentic_result: AgenticResult | None,
 ) -> tuple[bool, str, str]:
@@ -1016,18 +963,6 @@ def _resolve_worker_outcome(
 
     success = bool(text) and not error and not is_failure_termination(termination_reason)
 
-    # PR-GENERATOR-PLAN-LEAK-FIX (2026-05-26) — defence-in-depth: even
-    # when the loop reports a clean termination with non-empty text, a
-    # ``DecompositionResult``-shape body means the sub-agent never
-    # executed its role tools (no ``seed_debate_turn`` / ``write_file``
-    # for a generator; no schema-keyed output for evaluator roles).
-    # Downgrade to ``success=False`` so the parent surfaces the defect
-    # in the timeline instead of accepting a phantom seed.
-    plan_leak = False
-    if success and _looks_like_decomposition_result(text):
-        success = False
-        plan_leak = True
-
     # Summary surfaces the actual failure cause when ``success`` is False so
     # parent timeline rows ("Tool returned: ...") explain WHY the sub-agent
     # produced no usable output instead of echoing the fallback UI string.
@@ -1040,11 +975,6 @@ def _resolve_worker_outcome(
             cause_bits.append(error)
         if termination_reason and termination_reason != "unknown":
             cause_bits.append(f"termination_reason={termination_reason}")
-        if plan_leak:
-            cause_bits.append(
-                "decomposition_result_leak (planner JSON emitted instead of tool calls)"
-            )
-
     if cause_bits:
         summary = "Sub-agent failed: " + "; ".join(cause_bits)
     elif text:
@@ -1056,7 +986,7 @@ def _resolve_worker_outcome(
 
 
 def main(
-    handler_builder: Callable[[], dict[str, Any]] | None = None,
+    tool_plan_builder: Callable[[], tuple[BoundToolPlan, Mapping[str, Any]]] | None = None,
     *,
     middleware_builder: Callable[..., MiddlewareRegistry] | None = None,
     activity_sink_provider: RunEventSinkProvider | None = None,
@@ -1116,7 +1046,7 @@ def main(
             request = WorkerRequest.from_dict(json.loads(raw))
             result = _run_agentic(
                 request,
-                handler_builder,
+                tool_plan_builder,
                 middleware_builder=middleware_builder,
                 activity_sink_provider=activity_sink_provider,
             )
@@ -1145,4 +1075,6 @@ def main(
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(
+        "core.agent.worker has no product composition; run an injected product worker module"
+    )

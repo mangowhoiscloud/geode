@@ -62,7 +62,7 @@ def test_llms_txt_index_tool_is_wired() -> None:
     assert "/llms.txt" in index_def["description"]
     assert "web_fetch" in index_def["description"], "must hand off page fetch to web_fetch"
 
-    from core.cli.tool_handlers.delegated import _DELEGATED_TOOLS
+    from core.tools.handlers.delegated import _DELEGATED_TOOLS
 
     assert _DELEGATED_TOOLS["llms_txt_index"] == ("core.tools.llms_txt", "LlmsTxtIndexTool")
 

@@ -26,7 +26,7 @@ def run_process_coroutine[T](coro: Coroutine[Any, Any, T]) -> T:
     insta-fail/hang incident. The warning below keeps any regression
     observable in serve logs; the structural fix is to register the
     handler as async and ``await`` it (see
-    core/cli/tool_handlers/delegated.py).
+    core/tools/handlers/delegated.py).
     """
     thread_name = threading.current_thread().name
     if thread_name.startswith("asyncio_"):

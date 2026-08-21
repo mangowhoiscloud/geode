@@ -602,7 +602,6 @@ async def _run(
         tool_registry=tool_registry,
         allowed_tool_names={probe_tool.name},
         hooks=runtime_events,
-        enable_goal_decomposition=False,
         quiet=True,
         disable_settings_drift=True,
         session_id=f"{run_id}-live",
