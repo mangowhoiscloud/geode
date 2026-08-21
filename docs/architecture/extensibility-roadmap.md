@@ -543,7 +543,7 @@ and closure evidence are appended in §10.
 | STORE-002 | `PARTIAL` | Logging/transcript/resume/replay plan still contains staged/open parity work | Each subsystem has one declared writer, resume contract, replay doctrine, retention, and redaction test | R6.2 | STORE-001 | `DONE` |
 | TRUST-001 | `ABSENT` | Registration/enabled status does not uniformly distinguish trusted authority | Installed, enabled, trusted, and granted-capability states are separate and observable; executable code is never imported before trust approval | R6.3 | BND-004 | `OPEN` |
 | TRUST-002 | `PARTIAL` | Extension seams can receive broader runtime objects than required, and arbitrary in-process Python cannot be capability-confined | Trusted in-process code receives narrow ports for API discipline; untrusted executable code runs out of process behind a brokered capability boundary | R6.3 | DI-002, TRUST-001, TRUST-003 | `OPEN` |
-| TRUST-003 | `ABSENT` | Mutation serialization is not derived from explicit tool resource metadata | `resource_keys(args)` drives per-resource serialization; no argument-name heuristic | R2.4 | CAP-004 | `OPEN` |
+| TRUST-003 | `ABSENT` | Mutation serialization is not derived from explicit tool resource metadata | `resource_keys(args)` drives per-resource serialization; no argument-name heuristic | R2.4 | CAP-004 | `READY` |
 | VER-001 | `PARTIAL` | Quality gates pass but lack core-only, reverse-import, exception-budget, and tool-plan drift tests | All architecture gates in §9 run in CI and locally | R7.1 | BND-003, BND-004, CAP-005, LOOP-004, DI-003, LLM-002, PROTO-002, GOV-004, VER-003 | `OPEN` |
 | VER-002 | `ABSENT` | No contract suite measures how many central edits each extension type requires | Six extension scenarios in §8 pass without forbidden edits | R7.2 | CAP-006, LLM-002, BND-004 | `OPEN` |
 | VER-003 | `PARTIAL` | Public/internal metric prose drifts from executable counts | `sync-stats` or one shared generator updates site, AGENTS facts, and roadmap baseline; check mode is green | R0.2 | GOV-001 | `DONE` |
@@ -2107,9 +2107,19 @@ generation/hash-bound plan now owns handler construction,
 with exact schema/execution parity, explicit transient overlays, and bounded
 diagnostics. Public product worker and daemon roots inject composition; the
 direct kernel worker and uncomposed `SharedServices` construction fail closed.
-R2.4 (`TRUST-003`) is next in master order but remains `OPEN`
-pending its own serialized whole-package readiness transaction. R3.1 and R9.1
-are dependency-satisfied but remain `OPEN` for later serialized transactions.
-The active R8.3 claim and publication clock remain unchanged. R8.2
-(`STORE-003`) remains `OPEN` behind REL-004 and STORE-001; R8.4 (`BND-008`)
-additionally waits for STORE-003.
+R2.4 (`TRUST-003`) is the sole unclaimed `READY` package after a whole-package
+re-audit against
+`origin/develop@2865a0fe5007769eb648b74fb78200733041ad06`. CAP-004 is
+`IN_DEVELOP`. The current `ToolPlan` captures only partial safety metadata,
+while approval, personal-data, headless/sub-agent, profile-policy, and mutation
+scheduling still consume independent tool-name sets; deterministic resource
+keys are absent, and write/dangerous calls are only serialized within one tool
+batch. Acceptance requires one plan-owned minimum policy across those readers,
+effective-request resource serialization, and fail-closed monotone overrides.
+This authorizes no R2.3
+binding/provider work, R3.1 step/turn lifetime work, or R6.3 extension-trust
+work; a separate claim is required before implementation. R3.1 and R9.1 are
+dependency-satisfied but remain `OPEN` for later serialized transactions. The
+active R8.3 claim and publication clock remain unchanged. R8.2 (`STORE-003`)
+remains `OPEN` behind REL-004 and STORE-001; R8.4 (`BND-008`) additionally
+waits for STORE-003.
