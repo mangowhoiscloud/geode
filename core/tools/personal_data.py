@@ -1,14 +1,16 @@
-"""Personal-data tool classification and persistence redaction.
+"""Plan-derived tool-data persistence redaction.
 
-Google Workspace content is available to the active model turn only after an
-in-context approval.  It must not be copied into GEODE's durable tool logs or
-session checkpoints.  This module is dependency-light so both the agent and
-memory layers can share one classification and one redaction contract.
+Data declared ``REDACT`` is available to the active model turn but must not be
+copied into durable tool logs or checkpoints. Google Workspace names remain a
+compatibility fallback for unbound/transient callers.
 """
 
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
+from contextvars import ContextVar
+from types import MappingProxyType
 from typing import Any
 
 from core.tools.google_capabilities import (
@@ -16,11 +18,54 @@ from core.tools.google_capabilities import (
     GOOGLE_READ_TOOLS,
     GOOGLE_WRITE_TOOLS,
 )
+from core.tools.plan import (
+    BoundToolPlan,
+    DataClassification,
+    PersistenceRule,
+    SafetyPolicy,
+)
 
 GOOGLE_WORKSPACE_READ_TOOLS: frozenset[str] = GOOGLE_READ_TOOLS
 GOOGLE_WORKSPACE_MUTATION_TOOLS: frozenset[str] = GOOGLE_WRITE_TOOLS
+# Compatibility fallback for unbound/transient Workspace execution.
 PERSONAL_DATA_TOOLS: frozenset[str] = GOOGLE_PERSONAL_DATA_TOOLS
 PERSONAL_DATA_ERROR_OMITTED = "personal account operation failed; details omitted"
+
+# Per-task native safety snapshot. ``None`` means an unbound/legacy caller and
+# deliberately falls back to the Google compatibility set below.
+_safety_policies: ContextVar[Mapping[str, SafetyPolicy] | None] = ContextVar(
+    "geode_tool_data_policies",
+    default=None,
+)
+
+
+def set_bound_tool_data_policies(bound: BoundToolPlan | None) -> None:
+    """Bind one plan's native data policies for durable persistence writers."""
+    if bound is None:
+        _safety_policies.set(None)
+        return
+    base = bound.base
+    _safety_policies.set(
+        MappingProxyType(
+            {
+                name: registration.safety
+                for name in base.tool_names
+                if (registration := base.registration_for(name)) is not None
+            }
+        )
+    )
+
+
+def requires_durable_redaction(tool_name: str) -> bool:
+    """Return the plan-declared rule, or the unbound compatibility fallback."""
+    policies = _safety_policies.get()
+    if policies is not None and tool_name in policies:
+        safety = policies[tool_name]
+        return bool(
+            safety.data_class is DataClassification.PERSONAL
+            or safety.persistence is PersistenceRule.REDACT
+        )
+    return tool_name in PERSONAL_DATA_TOOLS
 
 
 def personal_data_omitted(tool_name: str) -> dict[str, Any]:
@@ -28,7 +73,7 @@ def personal_data_omitted(tool_name: str) -> dict[str, Any]:
     return {
         "_personal_data_omitted": True,
         "tool_name": tool_name,
-        "reason": "Google Workspace data is not retained; invoke again with consent.",
+        "reason": "Tool data is not retained by its declared safety policy.",
     }
 
 
@@ -53,9 +98,9 @@ def sanitize_personal_data_payload(value: Any) -> Any:
         tool_name = ""
         if node_type in {"tool_use", "function_call"}:
             tool_name = str(node.get("name", ""))
-        elif str(node.get("tool", "")) in PERSONAL_DATA_TOOLS:
+        elif requires_durable_redaction(str(node.get("tool", ""))):
             tool_name = str(node["tool"])
-        if tool_name in PERSONAL_DATA_TOOLS:
+        if requires_durable_redaction(tool_name):
             for key in ("id", "call_id", "tool_use_id"):
                 identifier = node.get(key)
                 if isinstance(identifier, str) and identifier:
@@ -75,7 +120,7 @@ def sanitize_personal_data_payload(value: Any) -> Any:
         named_tool = str(node.get("name", ""))
         logged_tool = str(node.get("tool", ""))
 
-        if logged_tool in PERSONAL_DATA_TOOLS:
+        if requires_durable_redaction(logged_tool):
             kept = {
                 key: rewrite(item) for key, item in node.items() if key not in {"input", "result"}
             }
@@ -83,7 +128,7 @@ def sanitize_personal_data_payload(value: Any) -> Any:
             kept["result"] = personal_data_omitted(logged_tool)
             return kept
 
-        if node_type in {"tool_use", "function_call"} and named_tool in PERSONAL_DATA_TOOLS:
+        if node_type in {"tool_use", "function_call"} and requires_durable_redaction(named_tool):
             kept = dict(node)
             if "input" in kept:
                 kept["input"] = personal_data_omitted(named_tool)

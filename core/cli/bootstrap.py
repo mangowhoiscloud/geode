@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from core.agent.tool_executor.executor import ResourceLockPool
     from core.config.policy_source import PolicySourceBundle
     from core.hooks import MiddlewareRegistry
     from core.observability.run_event import RunEventSinkProvider
@@ -235,6 +236,7 @@ async def arun_agentic_oneshot(
     policy_sources: PolicySourceBundle | None = None,
     middleware_builder: Callable[..., MiddlewareRegistry] | None = None,
     activity_sink_provider: RunEventSinkProvider | None = None,
+    resource_lock_pool: ResourceLockPool | None = None,
 ) -> Any:
     """Async core of :func:`run_agentic_oneshot` — await inside a running loop.
 
@@ -279,21 +281,33 @@ async def arun_agentic_oneshot(
         source=infer_source(provider),
         policy_sources=resolved_policy_sources,
     )
+    from core.tools.policy import apply_profile_policy, load_profile_policy
+
+    profile = load_profile_policy()
+    bound_tool_plan = apply_profile_policy(bound_tool_plan, profile)
 
     conversation = ConversationContext()
     # The MCP run_agent fork is HEADLESS (no human to approve) — mirror
     # services.py and strip the headless-denied tools before the executor is
     # built, so the fork can never auto-run run_bash / delegate_task / computer.
-    from core.agent.safety import HEADLESS_DENIED_TOOLS
+    from core.agent.safety import (
+        COMPUTER_USE_TOOLS,
+        HEADLESS_DENIED_TOOLS,
+        headless_denied_tools,
+        residual_denied_tools,
+    )
 
-    denied = HEADLESS_DENIED_TOOLS & (set(bound_tool_plan.tool_names) | set(transient_handlers))
+    native_denied = headless_denied_tools(bound_tool_plan) | (
+        COMPUTER_USE_TOOLS & set(bound_tool_plan.tool_names)
+    )
+    residual_denied = residual_denied_tools(HEADLESS_DENIED_TOOLS, bound_tool_plan)
+    denied_tools = native_denied | residual_denied | profile.denied_tools
+    denied = denied_tools & (set(bound_tool_plan.tool_names) | set(transient_handlers))
     if denied:
         log.info("Headless run_agent fork: denied tools filtered — %s", denied)
-    bound_tool_plan = bound_tool_plan.filtered(denied_tool_names=HEADLESS_DENIED_TOOLS)
+    bound_tool_plan = bound_tool_plan.filtered(denied_tool_names=native_denied)
     transient_handlers = {
-        name: handler
-        for name, handler in transient_handlers.items()
-        if name not in HEADLESS_DENIED_TOOLS
+        name: handler for name, handler in transient_handlers.items() if name not in residual_denied
     }
     # denied_tools is the REAL enforcement — run_bash and collaboration tools
     # are special-cased ahead of handler lookup, so the filter
@@ -303,13 +317,14 @@ async def arun_agentic_oneshot(
         bound_tool_plan=bound_tool_plan,
         transient_handlers=transient_handlers,
         hitl_level=0,
-        denied_tools=HEADLESS_DENIED_TOOLS,
+        denied_tools=denied_tools,
         interactive_approval=False,
         middleware_registry=(
             build_middleware_registry()
             if middleware_builder is None
             else middleware_builder(policy_sources=resolved_policy_sources)
         ),
+        resource_lock_pool=resource_lock_pool,
     )
     loop = AgenticLoop(
         conversation,
@@ -347,6 +362,7 @@ def run_agentic_oneshot(
     policy_sources: PolicySourceBundle | None = None,
     middleware_builder: Callable[..., MiddlewareRegistry] | None = None,
     activity_sink_provider: RunEventSinkProvider | None = None,
+    resource_lock_pool: ResourceLockPool | None = None,
 ) -> Any:
     """Build a minimal isolated AgenticLoop and run a prompt one-shot.
 
@@ -366,5 +382,6 @@ def run_agentic_oneshot(
             policy_sources=policy_sources,
             middleware_builder=middleware_builder,
             activity_sink_provider=activity_sink_provider,
+            resource_lock_pool=resource_lock_pool,
         )
     )

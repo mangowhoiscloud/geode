@@ -78,7 +78,8 @@ def test_payg_and_oauth_anthropic_get_distinct_clients(
     oauth = AnthropicOAuthAdapter()
 
     payg_client = payg._get_client()
-    oauth_client = oauth._get_client()
+    with pytest.warns(UserWarning, match="legacy compatibility path"):
+        oauth_client = oauth._get_client()
 
     # Distinct instances + distinct keys passed to the builder.
     assert payg_client is not oauth_client
@@ -144,7 +145,10 @@ def test_anthropic_oauth_raises_without_token_file(
 
     monkeypatch.setattr(oauth_mod, "CLAUDE_OAUTH_TOKEN_PATH", tmp_path / "missing.json")
     a = AnthropicOAuthAdapter()
-    with pytest.raises(RuntimeError, match="Claude OAuth token not found"):
+    with (
+        pytest.warns(UserWarning, match="legacy compatibility path"),
+        pytest.raises(RuntimeError, match="Claude OAuth token not found"),
+    ):
         a._get_client()
     assert CLAUDE_OAUTH_TOKEN_PATH
 

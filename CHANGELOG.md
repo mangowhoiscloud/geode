@@ -49,6 +49,13 @@ functional change.
 
 ### Changed
 
+- **Claude subscription compatibility is warning-only.** Legacy
+  `claude-code/<model>` and `codex-cli/<model>` audit identifiers now normalize
+  to their maintained routes instead of raising migration errors. Anthropic's
+  `oauth` setting resolves through the official Claude CLI adapter, `/login`
+  can enable that route without owning or copying Claude credentials, and all
+  exposed notices point to Anthropic's current third-party/OSS guidance.
+
 - **Planning is now a single observation-conditioned advisory contract.**
   Explicit `/plan` compares candidate structures with action tools disabled and
   stores at most eight verifiable steps containing no tool, argument, or
@@ -88,6 +95,15 @@ functional change.
   workers require explicit product composition instead of an implicit kernel
   launcher, and the kernel CLI no longer advertises a non-composed `serve`
   command.
+
+- **Tool safety and mutation serialization now derive from the bound plan.**
+  Effect, data handling, approval lifetime, headless/sub-agent availability,
+  profile restrictions, and deterministic resource strategies are hash-bound
+  registration metadata. Middleware and hook rewrites cannot weaken that
+  minimum; personal results remain available to the active turn but are
+  redacted from durable and public projections. Process-shared resource locks
+  serialize conflicting mutations across daemon sessions and MCP one-shots
+  while unrelated resources remain concurrent.
 
 ## [1.0.23] - 2026-08-20
 

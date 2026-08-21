@@ -259,3 +259,33 @@ def test_personal_result_skips_reflection_and_cognitive_persistence(tmp_path: Pa
     state_json = tmp_path / "sessions" / "personal-reflection" / "state.json"
     assert private_echo not in state_json.read_text(encoding="utf-8")
     assert private_echo.encode() not in (tmp_path / "sessions" / "sessions.db").read_bytes()
+
+
+def test_effective_request_redaction_skips_reflection_after_tool_rewrite() -> None:
+    class _Processor:
+        last_batch_requires_redaction = True
+
+        async def process(self, _response: Any) -> list[dict[str, Any]]:
+            return [{"content": "private effective result"}]
+
+    class _Loop:
+        def __init__(self) -> None:
+            self.cognitive_state = CognitiveState(goal="inspect")
+            self._tool_processor = _Processor()
+            self.reflected = False
+
+        async def _emit_cognitive(self, _event: HookEvent, **_payload: Any) -> None:
+            return
+
+        async def _maybe_reflect(self, _results: list[dict[str, Any]]) -> None:
+            self.reflected = True
+
+    loop = _Loop()
+    response = SimpleNamespace(
+        content=[SimpleNamespace(type="tool_use", name="public_alias")],
+    )
+
+    returned = asyncio.run(AgenticLoop._run_cognitive_act_observe_cycle(loop, response, 0))
+
+    assert returned == [{"content": "private effective result"}]
+    assert loop.reflected is False

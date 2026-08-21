@@ -84,6 +84,21 @@ class TestSubcommandRouter:
             cmd_login("openai")
             mock_oauth.assert_called_once_with("openai")
 
+    def test_anthropic_login_enables_legacy_cli_route_with_policy_warning(self) -> None:
+        _reset_state()
+        with (
+            patch("core.cli.commands.login._persist_credential_source") as persist,
+            patch("core.cli.commands.login.clear_dry_run_opt_in"),
+            patch("core.cli.commands.console") as mock_console,
+        ):
+            cmd_login("anthropic")
+        persist.assert_called_once_with("anthropic", "claude-cli")
+        text = " ".join(
+            str(call.args[0]) for call in mock_console.print.call_args_list if call.args
+        )
+        assert "open-source projects" in text
+        assert "claude /login" in text
+
     def test_unknown_subcommand_warns(self) -> None:
         _reset_state()
         with patch("core.cli.commands.console") as mock_console:

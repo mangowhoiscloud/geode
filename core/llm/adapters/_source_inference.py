@@ -2,9 +2,10 @@
 
 Bridges the operator-facing credential layer (``settings.openai_credential_source``
 + :class:`ProfileStore` OAuth registrations) to the adapter-registry source axis
-(``payg`` / ``subscription``). The legacy ``_resolve_provider(model)`` returns
-only the provider key; the AgenticLoop main path then defaulted ``source`` to
-``"payg"``, so a freshly-completed ``/login openai`` (which writes the
+(``payg`` / ``subscription`` / ``adapter``). The legacy
+``_resolve_provider(model)`` returns only the provider key; the AgenticLoop
+main path then defaulted ``source`` to ``"payg"``, so a freshly-completed
+``/login openai`` (which writes the
 ``openai-codex-geode:user`` OAuth profile) had no path to surface as a
 subscription dispatch — every gpt-5.x call collapsed to
 ``resolve_for("openai", "payg")`` → ``openai-payg`` → ``api.openai.com``,
@@ -14,8 +15,10 @@ the subscription bucket sat unused.
 Resolution order (highest precedence first):
 
 1. Explicit operator pin via ``/login source <provider> <type>`` —
-   ``settings.{provider}_credential_source`` of ``"oauth"`` → subscription,
-   ``"api_key"`` → payg. ``"none"`` falls back to payg (the historical default
+   ``settings.{provider}_credential_source`` normalises Anthropic's legacy
+   ``"oauth"`` alias to the ``claude-cli`` adapter, OpenAI's alias to its
+   subscription adapter, and ``"api_key"`` to payg. ``"none"`` falls back to
+   payg (the historical default
    so a disabled credential source still routes through the configured PAYG
    key rather than raising at the registry).
 2. ``"auto"`` (the unconfigured default) probes :class:`ProfileStore` —
@@ -32,9 +35,10 @@ this helper.
 from __future__ import annotations
 
 import logging
+import warnings
 from typing import TYPE_CHECKING
 
-from core.llm.adapters.base import SOURCE_PAYG, SOURCE_SUBSCRIPTION
+from core.llm.adapters.base import SOURCE_ADAPTER, SOURCE_PAYG, SOURCE_SUBSCRIPTION
 
 if TYPE_CHECKING:
     from core.auth.profiles import ProfileStore
@@ -58,7 +62,7 @@ _OAUTH_PROVIDER_KEY: dict[str, str] = {
 def infer_source(provider: str) -> str:
     """Pick the adapter-registry source for *provider* based on operator state.
 
-    Returns one of :data:`SOURCE_PAYG` / :data:`SOURCE_SUBSCRIPTION`. Falls back
+    Returns one of the three concrete adapter sources. Falls back
     to :data:`SOURCE_PAYG` for any provider not in :data:`_SETTINGS_FIELD` so
     the AgenticLoop registry lookup stays consistent with the historical
     default (the loop's ``source or "payg"`` had no concept of inference).
@@ -68,13 +72,29 @@ def infer_source(provider: str) -> str:
         return SOURCE_PAYG
 
     raw = _read_setting(field)
-    if raw == "oauth":
+    if provider == "anthropic" and raw in ("oauth", "claude-cli"):
+        _warn_anthropic_subscription_policy()
+        return SOURCE_ADAPTER
+    if provider in ("openai", "openai-codex") and raw in ("oauth", "openai-codex"):
         return SOURCE_SUBSCRIPTION
     if raw in ("api_key", "none"):
         return SOURCE_PAYG
     if _has_oauth_profile(provider):
+        if provider == "anthropic":
+            _warn_anthropic_subscription_policy()
         return SOURCE_SUBSCRIPTION
     return SOURCE_PAYG
+
+
+def _warn_anthropic_subscription_policy() -> None:
+    warnings.warn(
+        "Anthropic recommends API-key authentication for third-party tools, "
+        "including open-source projects. Claude subscription routing is a legacy "
+        "compatibility path and remains subject to Anthropic's terms and possible "
+        "usage-credit billing: https://support.claude.com/en/articles/13189465",
+        UserWarning,
+        stacklevel=2,
+    )
 
 
 def _read_setting(field: str) -> str:

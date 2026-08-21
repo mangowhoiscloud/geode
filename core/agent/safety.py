@@ -7,10 +7,15 @@ parallel batching).
 
 from __future__ import annotations
 
+from collections.abc import Set
 from contextvars import ContextVar
+from typing import TYPE_CHECKING
 
 from core.tools.google_capabilities import GOOGLE_WRITE_TOOLS
 from core.tools.personal_data import PERSONAL_DATA_TOOLS
+
+if TYPE_CHECKING:
+    from core.tools.plan import BoundToolPlan
 
 # --dangerously-skip-permissions — PER-SESSION state (not process-global).
 #
@@ -110,10 +115,10 @@ COLLABORATION_TOOLS: frozenset[str] = frozenset(
 )
 SUBAGENT_CONTROL_TOOLS: frozenset[str] = frozenset({"delegate_task", *COLLABORATION_TOOLS})
 
-# Tools denied on headless (no-human-to-approve) sessions: scheduler, daemon,
-# and the MCP run_agent fork. A messaging DAEMON may subtract only
-# ``COMPUTER_USE_TOOLS`` behind the explicit gateway opt-in; scheduler,
-# run_agent, and personal-workspace consent boundaries remain fail-closed.
+# Compatibility denials for tools outside a BoundToolPlan (native hosted,
+# transient, and MCP routes). Plan-owned tools derive their minimum from
+# ``SafetyPolicy.allow_headless``; the mode-specific computer-use gate remains
+# explicit because the daemon alone has an operator opt-in.
 HEADLESS_DENIED_TOOLS: frozenset[str] = frozenset(
     {
         "run_bash",
@@ -122,6 +127,40 @@ HEADLESS_DENIED_TOOLS: frozenset[str] = frozenset(
         *SENSITIVE_TOOLS,
     }
 )
+
+
+def declared_tool_names(bound: BoundToolPlan) -> frozenset[str]:
+    """Return native names owned by the plan, including filtered projections."""
+    return frozenset(bound.base.tool_names)
+
+
+def headless_denied_tools(bound: BoundToolPlan) -> frozenset[str]:
+    """Project native headless denials from the plan's minimum policy."""
+    return frozenset(
+        name
+        for name in bound.tool_names
+        if (registration := bound.registration_for(name)) is not None
+        and not registration.safety.allow_headless
+    )
+
+
+def subagent_denied_tools(bound: BoundToolPlan) -> frozenset[str]:
+    """Project native sub-agent denials from the plan's minimum policy."""
+    return frozenset(
+        name
+        for name in bound.tool_names
+        if (registration := bound.registration_for(name)) is not None
+        and not registration.safety.allow_subagents
+    )
+
+
+def residual_denied_tools(
+    denied_tools: Set[str],
+    bound: BoundToolPlan,
+) -> frozenset[str]:
+    """Keep name-based compatibility gates only outside the native plan."""
+    return frozenset(denied_tools) - declared_tool_names(bound)
+
 
 # Expensive tools require cost confirmation before execution
 EXPENSIVE_TOOLS: dict[str, float] = {

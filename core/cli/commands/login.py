@@ -26,7 +26,14 @@ from core.cli.onboarding import clear_dry_run_opt_in
 log = logging.getLogger(__name__)
 
 
-_VALID_CREDENTIAL_SOURCES: tuple[str, ...] = ("auto", "oauth", "api_key", "none")
+_VALID_CREDENTIAL_SOURCES: tuple[str, ...] = (
+    "auto",
+    "oauth",
+    "api_key",
+    "claude-cli",
+    "openai-codex",
+    "none",
+)
 _VALID_CREDENTIAL_PROVIDERS: tuple[str, ...] = ("anthropic", "openai")
 
 
@@ -656,7 +663,7 @@ def _login_add_interactive(_args: str) -> None:
     if kind_id == "oauth":
         oauth_entries = [
             "OpenAI Codex CLI (chatgpt.com/backend-api/codex)",
-            "Claude Code (currently disabled — Anthropic ToS)",
+            "Claude Code subscription (legacy compatibility path)",
         ]
         omenu = TerminalMenu(
             oauth_entries,
@@ -668,26 +675,22 @@ def _login_add_interactive(_args: str) -> None:
             _pkg.console.print("  [muted]Cancelled[/muted]\n")
             return
         if oidx == 1:
-            _pkg.console.print(
-                "  [warning]Claude Code OAuth is disabled (Anthropic ToS, "
-                "see core/runtime_wiring/infra.py).[/warning]\n"
-            )
+            _login_oauth("anthropic")
             return
         _login_oauth("openai")
         return
 
 
 def _login_oauth(target: str) -> None:
-    """Run the OAuth login flow for a subscription provider.
+    """Activate a subscription provider's supported credential route.
 
     ``target`` is the canonical key (``openai`` / ``anthropic``) — the
     caller has already resolved aliases via :data:`_PROVIDER_ALIASES`.
     Each branch is responsible for the provider-specific flow:
 
     - ``openai``: GEODE-native device-code flow (ChatGPT subscription quota).
-    - ``anthropic``: delegate to the local ``claude`` CLI's
-      ``claude /login`` browser flow, then sync the keychain blob into
-      ``ProfileStore`` so other parts of the system see the credential.
+    - ``anthropic``: show the policy warning and select the legacy local
+      ``claude`` CLI route; login remains owned by the official CLI.
     """
     from core.cli import commands as _pkg
 
@@ -739,7 +742,7 @@ def _format_credential_source_label(provider: str, source: str) -> str:
         env_var = "ANTHROPIC_API_KEY" if provider == "anthropic" else "OPENAI_API_KEY"
         suffix = "(set)" if os.environ.get(env_var) else "(env not set)"
         return f"{env_var} {suffix}"
-    if source == "oauth":
+    if source in ("oauth", "claude-cli", "openai-codex"):
         if provider == "anthropic":
             from core.auth.claude_cli_oauth import get_claude_oauth_metadata
 
@@ -803,7 +806,8 @@ def _login_source(args: str) -> None:
     ``claude-*`` / ``gpt-5.*`` id through:
 
     - ``auto``     — env / keychain auto-detect (default)
-    - ``oauth``    — subscription quota (claude-code / openai-codex)
+    - ``oauth``    — legacy subscription alias (claude-cli / openai-codex)
+    - ``claude-cli`` / ``openai-codex`` — provider-specific subscription route
     - ``api_key``  — PAYG env (ANTHROPIC_API_KEY / OPENAI_API_KEY)
     - ``none``     — disabled
     """
@@ -833,6 +837,15 @@ def _login_source(args: str) -> None:
         )
         _pkg.console.print()
         return
+    if (source == "claude-cli" and provider != "anthropic") or (
+        source == "openai-codex" and provider != "openai"
+    ):
+        _pkg.console.print(
+            f"  [warning]{source} is not a credential source for {provider}.[/warning]\n"
+        )
+        return
+    if provider == "anthropic" and source in ("oauth", "claude-cli"):
+        _print_anthropic_subscription_warning()
     _persist_credential_source(provider, source)
     label = _format_credential_source_label(provider, source)
     _pkg.console.print(
@@ -843,29 +856,30 @@ def _login_source(args: str) -> None:
 
 
 def _login_oauth_anthropic() -> None:
-    """Anthropic credential setup — API key (PAYG) only on the production path.
-
-    v0.99.10 limits ``/login anthropic`` to the Anthropic Console PAYG
-    API key path (Tier 0). Earlier iterations (v0.99.0..v0.99.9) tried
-    an owned PKCE flow and a claude-CLI subprocess delegate; both routed
-    through the first-party OAuth client ``9d1c250a-…`` which Anthropic's
-    2026-04-04 third-party block rejects (or, in the subprocess case,
-    spawned a full Claude Code REPL the user got stuck inside).
-
-    Claude subscription credentials are managed by the Claude CLI and
-    discovered separately; this command writes only a clean ``sk-ant-api…``
-    PAYG key.
-    """
+    """Enable the legacy Claude CLI subscription route without owning login."""
     from core.cli import commands as _pkg
 
     _pkg.console.print()
-    _pkg.console.print("  [bold]Anthropic Console PAYG (API key)[/bold]")
-    _pkg.console.print("  [muted]Get a key at: https://console.anthropic.com/keys[/muted]")
-    _pkg.console.print(
-        "  [muted]Claude subscription credentials remain managed by the Claude CLI.[/muted]"
-    )
+    _print_anthropic_subscription_warning()
+    _persist_credential_source("anthropic", "claude-cli")
+    clear_dry_run_opt_in()
+    _pkg.console.print("  [success]Claude CLI subscription route enabled.[/success]")
     _pkg.console.print()
-    _login_anthropic_api_key()
+    _pkg.console.print(
+        "  [muted]This command does not perform Claude login or copy its token. "
+        "If needed, run `claude /login` in the official CLI.[/muted]\n"
+    )
+
+
+def _print_anthropic_subscription_warning() -> None:
+    from core.cli import commands as _pkg
+
+    _pkg.console.print(
+        "  [warning]Anthropic recommends API-key authentication for third-party tools, "
+        "including open-source projects. Subscription use remains subject to Anthropic's "
+        "terms and may draw from usage credits.[/warning]"
+    )
+    _pkg.console.print("  [muted]Policy: https://support.claude.com/en/articles/13189465[/muted]")
 
 
 def _login_anthropic_api_key() -> None:

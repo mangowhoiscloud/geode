@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from core.agent.tool_executor.executor import ResourceLockPool
 from core.cli.bootstrap import arun_agentic_oneshot
 from core.mcp_server import main as run_mcp_server
 
@@ -13,6 +14,8 @@ from geode_product.wiring import (
     current_activity_sink,
 )
 
+_RESOURCE_LOCK_POOL = ResourceLockPool()
+
 
 async def run_agent(prompt: str, **kwargs: Any) -> Any:
     """Run the MCP one-shot with the same product contributions as the daemon."""
@@ -21,6 +24,7 @@ async def run_agent(prompt: str, **kwargs: Any) -> Any:
         policy_sources=build_policy_sources(),
         middleware_builder=build_middleware_registry,
         activity_sink_provider=current_activity_sink,
+        resource_lock_pool=_RESOURCE_LOCK_POOL,
         **kwargs,
     )
 

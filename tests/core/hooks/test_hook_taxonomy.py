@@ -411,14 +411,14 @@ def test_activity_and_hook_store_schema_versions_are_pinned():
 def test_single_approval_requested_per_gate():
     """The outer safety gates no longer double-emit TOOL_APPROVAL_REQUESTED
     around confirm_* (which emits internally, with the richer payload) —
-    Codex LOW-2. Pin: 10 sync/async emission sites, all inside
+    Codex LOW-2. Pin: 11 sync/async emission sites, all inside
     confirm_*/request_*."""
     import inspect
 
     from core.agent import approval as approval_mod
 
     src = inspect.getsource(approval_mod)
-    assert src.count("HookEvent.TOOL_APPROVAL_REQUESTED") == 10
+    assert src.count("HookEvent.TOOL_APPROVAL_REQUESTED") == 11
     gates_src = inspect.getsource(approval_mod.ApprovalWorkflow.apply_safety_gates)
     assert "TOOL_APPROVAL_REQUESTED" not in gates_src
     gates_async_src = inspect.getsource(approval_mod.ApprovalWorkflow.apply_safety_gates_async)

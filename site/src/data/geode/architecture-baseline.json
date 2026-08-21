@@ -19,7 +19,7 @@
     "max_statements": 207
   },
   "context_vars": {
-    "count": 29,
+    "count": 30,
     "items": [
       {
         "context_name": "geode_active_cognitive_state",
@@ -66,7 +66,7 @@
       {
         "context_name": "geode_skip_permissions",
         "has_default": true,
-        "line": 25,
+        "line": 30,
         "path": "core/agent/safety.py",
         "symbol": "_skip_permissions_var"
       },
@@ -218,6 +218,13 @@
         "symbol": "_hooks_ctx"
       },
       {
+        "context_name": "geode_tool_data_policies",
+        "has_default": true,
+        "line": 36,
+        "path": "core/tools/personal_data.py",
+        "symbol": "_safety_policies"
+      },
+      {
         "context_name": "user_profile_tools",
         "has_default": true,
         "line": 23,
@@ -229,7 +236,7 @@
   "coordinators": {
     "AgenticLoop": {
       "constructor_arg_count": 29,
-      "file_loc": 3337,
+      "file_loc": 3355,
       "method_count": 78,
       "path": "core/agent/loop/agent_loop.py"
     },
@@ -238,8 +245,8 @@
       "path": "core/runtime.py"
     },
     "SubAgentManager": {
-      "constructor_arg_count": 17,
-      "file_loc": 1453,
+      "constructor_arg_count": 18,
+      "file_loc": 1464,
       "method_count": 24,
       "path": "core/agent/sub_agent.py"
     }
@@ -367,19 +374,19 @@
   "packages": {
     "core": {
       "python_files": 401,
-      "python_loc": 121112
+      "python_loc": 122075
     },
     "geode_product": {
       "python_files": 161,
-      "python_loc": 61827
+      "python_loc": 62097
     },
     "plugins": {
       "python_files": 32,
       "python_loc": 213
     },
     "tests": {
-      "python_files": 690,
-      "python_loc": 184109
+      "python_files": 691,
+      "python_loc": 185792
     }
   },
   "schema_version": 3,

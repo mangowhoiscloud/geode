@@ -9,11 +9,17 @@ from typing import Any, cast
 
 import pytest
 from core.tools.plan import (
+    ApprovalPolicy,
     BoundToolPlan,
     CapabilityRequirement,
+    DataClassification,
     ExecutionBinding,
+    PersistenceRule,
+    ProfileRestriction,
+    ResourceKeyResolutionError,
     SafetyPolicy,
     ToolDecision,
+    ToolEffect,
     ToolSpec,
     bind_tool_plan,
     compile_tool_plan,
@@ -33,9 +39,18 @@ def _spec(name: str = "search", *, description: str = "Search") -> ToolSpec:
 
 
 def _binding(
-    name: str = "search", *, origin: str = "handlers.search", route: str = "handler"
+    name: str = "search",
+    *,
+    origin: str = "handlers.search",
+    route: str = "handler",
+    resource_strategy: str = "none",
 ) -> ExecutionBinding:
-    return ExecutionBinding(name=name, origin=origin, route=route)
+    return ExecutionBinding(
+        name=name,
+        origin=origin,
+        route=route,
+        resource_strategy=resource_strategy,
+    )
 
 
 def test_records_reject_missing_identity_before_compilation() -> None:
@@ -110,6 +125,27 @@ def test_execution_binding_records_handler_or_named_route_identity() -> None:
         ExecutionBinding(name="search", origin="handlers.search", route="")
     with pytest.raises(ValueError, match="invalid route"):
         ExecutionBinding(name="search", origin="handlers.search", route="unknown")
+    with pytest.raises(ValueError, match="resource strategy cannot be empty"):
+        ExecutionBinding(name="search", origin="handlers.search", resource_strategy="")
+
+
+def test_safety_policy_uses_closed_vocabularies() -> None:
+    policy = SafetyPolicy(
+        effect=ToolEffect.MUTATE,
+        data_class=DataClassification.PERSONAL,
+        persistence=PersistenceRule.REDACT,
+        approval=ApprovalPolicy.PER_INVOCATION,
+        profile_restrictions=(ProfileRestriction.WRITE, ProfileRestriction.WRITE),
+    )
+
+    assert policy.consent_required is True
+    assert policy.approval_cacheable is False
+    assert policy.per_invocation_consent is True
+    assert policy.profile_restrictions == (ProfileRestriction.WRITE,)
+    with pytest.raises(ValueError, match="invalid safety policy vocabulary"):
+        SafetyPolicy(effect=cast(Any, "write"))
+    with pytest.raises(ValueError, match="invalid safety policy vocabulary"):
+        SafetyPolicy(profile_restrictions=cast(Any, ("unknown",)))
 
 
 @pytest.mark.parametrize(
@@ -305,8 +341,15 @@ def test_compiler_distinguishes_capability_unavailable_from_policy_denied() -> N
 def test_plan_mappings_and_registration_metadata_are_immutable() -> None:
     plan = compile_tool_plan(
         ((_spec(), "definitions[0]"),),
-        (_binding(),),
-        safety={"search": SafetyPolicy(effect="external", data_class="personal")},
+        (_binding(resource_strategy="remote-service:v1"),),
+        safety={
+            "search": SafetyPolicy(
+                effect=ToolEffect.COMMUNICATE,
+                data_class=DataClassification.PERSONAL,
+                persistence=PersistenceRule.REDACT,
+                approval=ApprovalPolicy.PER_INVOCATION,
+            )
+        },
         capabilities={
             "search": CapabilityRequirement(
                 providers=("openai",), services=("search",), auth=("oauth",)
@@ -318,9 +361,128 @@ def test_plan_mappings_and_registration_metadata_are_immutable() -> None:
     with pytest.raises(TypeError):
         plan.schema_map["other"] = _spec("other")
     registration = plan.registrations[0]
-    assert registration.safety.effect == "external"
-    assert registration.safety.data_class == "personal"
+    assert registration.safety.effect is ToolEffect.COMMUNICATE
+    assert registration.safety.data_class is DataClassification.PERSONAL
+    assert registration.safety.persistence is PersistenceRule.REDACT
+    assert registration.safety.approval is ApprovalPolicy.PER_INVOCATION
     assert registration.capability.providers == ("openai",)
+
+
+def test_side_effecting_plan_requires_and_immutably_binds_resource_resolver() -> None:
+    spec = _spec("write")
+    policy = {"write": SafetyPolicy(effect=ToolEffect.MUTATE)}
+
+    with pytest.raises(ValueError, match="side-effecting tools require resource strategies: write"):
+        compile_tool_plan(((spec, "definitions[0]"),), (_binding("write"),), safety=policy)
+
+    with pytest.raises(ValueError, match="side-effecting tools require resource strategies: run"):
+        compile_tool_plan(
+            ((_spec("run"), "definitions[0]"),),
+            (_binding("run"),),
+            safety={"run": SafetyPolicy(effect=ToolEffect.EXECUTE)},
+        )
+
+    plan = compile_tool_plan(
+        ((spec, "definitions[0]"),),
+        (_binding("write", resource_strategy="local-file:v1"),),
+        safety=policy,
+    )
+
+    def handler() -> None:
+        return None
+
+    def resolver(arguments: Mapping[str, Any]) -> tuple[str, ...]:
+        return (str(arguments["file_path"]), str(arguments["file_path"]))
+
+    with pytest.raises(ValueError, match="missing resource key resolvers: write"):
+        bind_tool_plan(plan, {"write": handler})
+    bound = bind_tool_plan(plan, {"write": handler}, {"write": resolver})
+    keys = bound.resource_keys("write", {"file_path": "/private/user.txt"})
+
+    assert len(keys) == 1
+    assert len(keys[0]) == 64
+    assert "/private/user.txt" not in keys[0]
+    assert bound.registration_for("write") is plan.registration_for("write")
+    with pytest.raises(TypeError):
+        bound.resource_key_resolvers["write"] = resolver
+
+
+def test_resource_strategy_is_hashed_but_callable_is_not() -> None:
+    spec = _spec("write")
+    policy = {"write": SafetyPolicy(effect=ToolEffect.MUTATE)}
+    plan = compile_tool_plan(
+        ((spec, "definitions[0]"),),
+        (_binding("write", resource_strategy="local-file:v1"),),
+        safety=policy,
+    )
+    changed = compile_tool_plan(
+        ((spec, "definitions[0]"),),
+        (_binding("write", resource_strategy="workspace-file:v1"),),
+        safety=policy,
+        previous=plan,
+    )
+    same = compile_tool_plan(
+        ((spec, "definitions[0]"),),
+        (_binding("write", resource_strategy="local-file:v1"),),
+        safety=policy,
+        previous=plan,
+    )
+    first = bind_tool_plan(plan, {"write": lambda: None}, {"write": lambda _args: ("a",)})
+    second = bind_tool_plan(same, {"write": lambda: None}, {"write": lambda _args: ("b",)})
+
+    assert changed.content_hash != plan.content_hash
+    assert same is plan
+    assert first.content_hash == second.content_hash
+    assert first.resource_keys("write", {}) != second.resource_keys("write", {})
+
+
+def test_resource_projection_hides_registration_and_preserves_resolver_identity() -> None:
+    plan = compile_tool_plan(
+        ((_spec("read"), "definitions[0]"), (_spec("write"), "definitions[1]")),
+        (
+            _binding("read"),
+            _binding("write", resource_strategy="local-file:v1"),
+        ),
+        safety={"write": SafetyPolicy(effect=ToolEffect.MUTATE)},
+    )
+
+    def resolver(_arguments: Mapping[str, Any]) -> tuple[str, ...]:
+        return ("path",)
+
+    bound = bind_tool_plan(
+        plan,
+        {"read": lambda: None, "write": lambda: None},
+        {"write": resolver},
+    )
+    projected = bound.filtered(denied_tool_names=frozenset({"read"}))
+    hidden = bound.filtered(denied_tool_names=frozenset({"write"}))
+    provider_projected = bound.projected((_spec("write"),))
+
+    assert projected.resource_key_resolvers["write"] is resolver
+    assert projected.base is bound
+    assert provider_projected.resource_key_resolvers["write"] is resolver
+    assert provider_projected.base is bound
+    assert provider_projected.registration_for("read") is None
+    assert hidden.registration_for("write") is None
+    assert hidden.resource_key_resolvers == {}
+    with pytest.raises(KeyError, match="not in the bound tool plan"):
+        hidden.resource_keys("write", {})
+
+
+@pytest.mark.parametrize(
+    "resolver",
+    [lambda _args: (), lambda _args: ("",), lambda _args: "raw", lambda _args: (1,)],
+)
+def test_resource_resolver_fails_closed_on_malformed_output(resolver: Any) -> None:
+    plan = compile_tool_plan(
+        ((_spec("write"), "definitions[0]"),),
+        (_binding("write", resource_strategy="local-file:v1"),),
+        safety={"write": SafetyPolicy(effect=ToolEffect.MUTATE)},
+    )
+    bound = bind_tool_plan(plan, {"write": lambda: None}, {"write": resolver})
+
+    with pytest.raises(ResourceKeyResolutionError, match="resource key resolution failed"):
+        bound.resource_keys("write", {})
 
 
 def test_capability_requirements_have_canonical_set_identity() -> None:

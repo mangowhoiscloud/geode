@@ -15,7 +15,10 @@ from core.orchestration.tool_offload import (
     get_offload_store,
     set_offload_store,
 )
-from core.tools.personal_data import sanitize_personal_data_payload
+from core.tools.personal_data import (
+    sanitize_personal_data_payload,
+    set_bound_tool_data_policies,
+)
 
 
 def test_sanitizer_rewrites_anthropic_tool_call_and_result_by_call_id() -> None:
@@ -50,6 +53,227 @@ def test_sanitizer_rewrites_anthropic_tool_call_and_result_by_call_id() -> None:
     assert "private mailbox body" not in encoded
     assert encoded.count("_personal_data_omitted") == 2
     assert "call-1" in encoded
+
+
+def test_plan_declared_redaction_covers_future_tool_without_static_name_edit() -> None:
+    from core.tools.plan import (
+        DataClassification,
+        ExecutionBinding,
+        PersistenceRule,
+        SafetyPolicy,
+        ToolSpec,
+        bind_tool_plan,
+        compile_tool_plan,
+    )
+
+    redacted_name = "future_sensitive_read"
+    personal_name = "future_personal_read"
+    plan = compile_tool_plan(
+        (
+            (ToolSpec(redacted_name, "Future", {}), "test"),
+            (ToolSpec(personal_name, "Future personal", {}), "test"),
+        ),
+        (
+            ExecutionBinding(redacted_name, "test"),
+            ExecutionBinding(personal_name, "test"),
+        ),
+        safety={
+            redacted_name: SafetyPolicy(persistence=PersistenceRule.REDACT),
+            personal_name: SafetyPolicy(data_class=DataClassification.PERSONAL),
+        },
+    )
+    bound = bind_tool_plan(
+        plan,
+        {redacted_name: MagicMock(), personal_name: MagicMock()},
+    )
+    payload = [
+        {
+            "type": "tool_use",
+            "id": "future-call",
+            "name": redacted_name,
+            "input": {"secret": 1},
+        },
+        {"type": "tool_result", "tool_use_id": "future-call", "content": "payload-value"},
+        {
+            "tool": personal_name,
+            "input": {"secret": 2},
+            "result": {"content": "personal-value"},
+        },
+    ]
+
+    try:
+        set_bound_tool_data_policies(bound)
+        encoded = json.dumps(sanitize_personal_data_payload(payload))
+    finally:
+        set_bound_tool_data_policies(None)
+
+    assert "secret" not in encoded
+    assert "payload-value" not in encoded
+    assert "personal-value" not in encoded
+    assert encoded.count("_personal_data_omitted") == 4
+
+
+def test_bound_public_policy_overrides_legacy_personal_name_fallback() -> None:
+    from core.tools.plan import (
+        ExecutionBinding,
+        SafetyPolicy,
+        ToolSpec,
+        bind_tool_plan,
+        compile_tool_plan,
+    )
+
+    name = "gmail_search"
+    plan = compile_tool_plan(
+        ((ToolSpec(name, "Compatibility-name probe", {}), "test"),),
+        (ExecutionBinding(name, "test"),),
+        safety={name: SafetyPolicy()},
+    )
+    bound = bind_tool_plan(plan, {name: MagicMock()})
+    payload = {
+        "tool": name,
+        "input": {"query": "public-query"},
+        "result": {"content": "public-result"},
+    }
+
+    try:
+        set_bound_tool_data_policies(bound)
+        sanitized = sanitize_personal_data_payload(payload)
+    finally:
+        set_bound_tool_data_policies(None)
+
+    assert sanitized == payload
+
+
+def test_plan_redaction_keeps_raw_active_result_out_of_durable_sinks(tmp_path) -> None:
+    from core.hooks import HookEvent
+    from core.memory.episodic import EpisodicStore, set_episodic_store
+    from core.memory.session_checkpoint import SessionCheckpoint, SessionState
+    from core.tools.plan import (
+        DataClassification,
+        ExecutionBinding,
+        PersistenceRule,
+        SafetyPolicy,
+        ToolSpec,
+        bind_tool_plan,
+        compile_tool_plan,
+    )
+
+    name = "future_sensitive_read"
+    plan = compile_tool_plan(
+        ((ToolSpec(name, "Future", {}), "test"),),
+        (ExecutionBinding(name, "test"),),
+        safety={
+            name: SafetyPolicy(
+                data_class=DataClassification.PERSONAL,
+                persistence=PersistenceRule.REDACT,
+            )
+        },
+    )
+    bound = bind_tool_plan(
+        plan,
+        {name: MagicMock(return_value={"content": "payload-value " * 100})},
+    )
+    public_payloads: list[dict[str, object]] = []
+    hooks = HookRegistry()
+    hooks.register(
+        HookName.PRE_TOOL_USE,
+        lambda invocation: public_payloads.append(dict(invocation.payload)),
+    )
+    hooks.register(
+        HookName.POST_TOOL_USE,
+        lambda invocation: public_payloads.append(dict(invocation.payload)),
+    )
+    transcript = MagicMock()
+    processor = ToolCallProcessor(
+        executor=ToolExecutor(
+            bound_tool_plan=bound,
+            auto_approve=True,
+            hook_registry=hooks,
+        ),
+        op_logger=MagicMock(log_tool_call=MagicMock(return_value=True)),
+        error_recovery=MagicMock(),
+        timeline=transcript,
+    )
+    block = type(
+        "Block",
+        (),
+        {"name": name, "input": {"query": "private-query"}, "id": "future-call"},
+    )()
+    previous = get_offload_store()
+    episodic_store = EpisodicStore(path=tmp_path / "episodes.jsonl")
+    try:
+        set_bound_tool_data_policies(bound)
+        set_offload_store(
+            ToolResultOffloadStore(
+                session_id="future",
+                threshold=1,
+                base_dir=tmp_path / "offload",
+            )
+        )
+        active = asyncio.run(processor._execute_single(block))
+
+        checkpoint = SessionCheckpoint(tmp_path / "checkpoint")
+        checkpoint.save(
+            SessionState(
+                session_id="future-sensitive",
+                messages=[
+                    {
+                        "type": "tool_use",
+                        "id": "future-call",
+                        "name": name,
+                        "input": {"query": "private-query"},
+                    },
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "future-call",
+                        "content": "payload-value",
+                    },
+                ],
+                tool_log=processor.tool_log,
+            )
+        )
+
+        set_episodic_store(episodic_store)
+        from core.wiring.bootstrap import make_episodic_recorder_handler
+
+        _hook_name, record_episode = make_episodic_recorder_handler()
+        record_episode(
+            HookEvent.TOOL_EXEC_ENDED,
+            {
+                "tool_name": name,
+                "tool_input": {"query": "private-query"},
+                "has_error": True,
+                "result": {"error": "payload-value"},
+                "duration_ms": 1.0,
+            },
+        )
+    finally:
+        set_offload_store(previous)
+        set_episodic_store(None)
+        set_bound_tool_data_policies(None)
+
+    assert "payload-value" in active["content"]
+    durable = json.dumps(processor.tool_log)
+    assert "private-query" not in durable
+    assert "payload-value" not in durable
+    assert "_personal_data_omitted" in durable
+    assert list((tmp_path / "offload").rglob("*.json")) == []
+    transcript.record_tool_call.assert_called_once()
+    assert transcript.record_tool_call.call_args.args[1]["_personal_data_omitted"] is True
+    encoded_hooks = json.dumps(public_payloads)
+    assert "private-query" not in encoded_hooks
+    assert "payload-value" not in encoded_hooks
+    assert "_personal_data_omitted" in encoded_hooks
+    checkpoint_bytes = b"".join(
+        path.read_bytes() for path in (tmp_path / "checkpoint").rglob("*") if path.is_file()
+    )
+    assert b"private-query" not in checkpoint_bytes
+    assert b"payload-value" not in checkpoint_bytes
+    assert b"_personal_data_omitted" in checkpoint_bytes
+    episodic_bytes = episodic_store.path.read_bytes()
+    assert b"private-query" not in episodic_bytes
+    assert b"payload-value" not in episodic_bytes
+    assert b"_personal_data_omitted" in episodic_bytes
 
 
 def test_sanitizer_rewrites_openai_function_call_and_output() -> None:
