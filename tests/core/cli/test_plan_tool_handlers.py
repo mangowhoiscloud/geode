@@ -66,6 +66,39 @@ def test_update_plan_advances_only_matching_linear_plan(plan_handlers: dict[str,
         assert metrics.active_plan.current == 1
 
 
+@pytest.mark.parametrize(
+    "statuses",
+    [
+        ("pending", "completed"),
+        ("in_progress", "in_progress"),
+    ],
+)
+def test_update_plan_does_not_sync_nonlinear_exact_matches(
+    plan_handlers: dict[str, Any],
+    statuses: tuple[str, str],
+) -> None:
+    from core.agent.plan import Plan, PlanStep
+    from core.observability.session_metrics import current_session_metrics, session_metrics_scope
+
+    active = Plan(
+        steps=(
+            PlanStep("s1", "Inspect", "Evidence inspected"),
+            PlanStep("s2", "Patch", "Patch applied"),
+        )
+    )
+    with session_metrics_scope(session_id="nonlinear-progress"):
+        metrics = current_session_metrics()
+        metrics.set_active_plan(active)
+        result = plan_handlers["update_plan"](
+            plan=[
+                {"step": "Inspect", "status": statuses[0]},
+                {"step": "Patch", "status": statuses[1]},
+            ]
+        )
+        assert result["runtime_plan_synced"] is False
+        assert metrics.active_plan.current == 0
+
+
 def test_update_plan_records_observed_progress_edge(
     plan_handlers: dict[str, Any], tmp_path: Path
 ) -> None:

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import json
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -19,6 +21,7 @@ from core.agent.plan import (
     should_replan,
 )
 from core.agent.verify import verify_turn
+from core.config.policy_source import PolicySourcePaths
 from core.observability.session_metrics import current_session_metrics, session_metrics_scope
 
 
@@ -155,18 +158,18 @@ def test_plan_schema_and_parser_reject_execution_metadata() -> None:
     assert parse_replan_response('{"steps":[],"reasoning":"x"}') is None
 
 
-def test_plan_async_disables_tools_and_applies_sil_policy(
-    monkeypatch: pytest.MonkeyPatch,
+def test_plan_and_replan_load_file_backed_sil_policy(
+    tmp_path: Path,
 ) -> None:
-    captured: dict[str, Any] = {}
-
-    monkeypatch.setattr(
-        "core.agent.decomposition_policy._load_decomposition_policy_override",
-        lambda **_kwargs: {"prefix": "SIL policy"},
+    policy_path = tmp_path / "decomposition.json"
+    policy_path.write_text(
+        json.dumps({"prefix": "SIL policy"}),
+        encoding="utf-8",
     )
+    captured: list[dict[str, Any]] = []
 
     async def call_llm(system: str, messages: list[dict[str, str]], **kwargs: Any) -> Any:
-        captured.update(system=system, messages=messages, **kwargs)
+        captured.append({"system": system, "messages": messages, **kwargs})
         return SimpleNamespace(
             text=(
                 '{"steps":[{"id":"s1","description":"Inspect",'
@@ -176,39 +179,28 @@ def test_plan_async_disables_tools_and_applies_sil_policy(
 
     loop = SimpleNamespace(
         _call_llm=call_llm,
-        _policy_sources={},
+        _policy_sources={
+            "decomposition": PolicySourcePaths(
+                "GEODE_TEST_DECOMPOSITION_OVERRIDE",
+                packaged_default=policy_path,
+            )
+        },
         model="gpt-test",
     )
     plan = asyncio.run(plan_async(loop, "Inspect the runtime"))
     assert plan is not None
-    assert captured["system"].startswith("SIL policy")
-    assert captured["allow_tools"] is False
-    assert "Available tools" not in captured["messages"][0]["content"]
-
-
-def test_replan_async_preserves_identity_and_uses_tools_off_schema() -> None:
-    captured: dict[str, Any] = {}
-
-    async def call_llm(_system: str, _messages: list[dict[str, str]], **kwargs: Any) -> Any:
-        captured.update(kwargs)
-        return SimpleNamespace(
-            text=(
-                '{"steps":[{"id":"r1","description":"Repair",'
-                '"expected_outcome":"Failure resolved"}],"reasoning":"failure first"}'
-            )
-        )
-
-    prior = _plan("s1")
-    loop = SimpleNamespace(_call_llm=call_llm, _policy_sources={}, model="gpt-test")
     revised = asyncio.run(
         replan_async(
-            loop, plan=prior, turn_result=SimpleNamespace(text="failed"), trigger="verify_fail"
+            loop, plan=plan, turn_result=SimpleNamespace(text="failed"), trigger="verify_fail"
         )
     )
     assert revised is not None
-    assert revised.plan_id == prior.plan_id
+    assert revised.plan_id == plan.plan_id
     assert revised.revision == 1
-    assert captured["allow_tools"] is False
+    assert len(captured) == 2
+    assert all(call["system"].startswith("SIL policy") for call in captured)
+    assert all(call["allow_tools"] is False for call in captured)
+    assert "Available tools" not in captured[0]["messages"][0]["content"]
 
 
 def test_low_confidence_replan_is_edge_triggered(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -216,26 +208,50 @@ def test_low_confidence_replan_is_edge_triggered(monkeypatch: pytest.MonkeyPatch
     from core.agent.cognitive_state import CognitiveState
     from core.agent.loop.agent_loop import AgenticLoop
 
-    observed: list[bool] = []
+    replan_triggers: list[str] = []
+    timeline_events: list[tuple[Any, Plan, dict[str, Any]]] = []
 
-    def fake_should_replan(**kwargs: Any) -> str | None:
-        low = bool(kwargs["low_confidence"])
-        observed.append(low)
-        return "low_confidence" if low else None
+    async def fake_replan(
+        _loop: Any,
+        *,
+        plan: Plan,
+        turn_result: Any,
+        trigger: str,
+    ) -> Plan:
+        del turn_result
+        replan_triggers.append(trigger)
+        return Plan(
+            steps=plan.steps,
+            plan_id=plan.plan_id,
+            revision=plan.revision + 1,
+        )
 
-    async def failed_replan(*_args: Any, **_kwargs: Any) -> None:
-        return None
-
-    monkeypatch.setattr(plan_module, "should_replan", fake_should_replan)
-    monkeypatch.setattr(plan_module, "replan_async", failed_replan)
+    monkeypatch.setattr(plan_module, "replan_async", fake_replan)
     state = CognitiveState()
-    stub = SimpleNamespace(cognitive_state=state, _low_confidence_replan_armed=True)
+    original = _plan("s1")
+    stub = SimpleNamespace(
+        cognitive_state=state,
+        _low_confidence_replan_armed=True,
+        _prompt_dirty=False,
+        _tool_processor=SimpleNamespace(tool_log=[]),
+        _timeline=SimpleNamespace(
+            record_plan_state=lambda kind, plan, **kwargs: timeline_events.append(
+                (kind, plan, kwargs)
+            )
+        ),
+    )
     bound = AgenticLoop._maybe_replan_async.__get__(stub, SimpleNamespace)
     with session_metrics_scope():
+        metrics = current_session_metrics()
+        metrics.set_active_plan(original)
         for confidence in (0.2, 0.2, 0.9, 0.2):
             state.confidence = confidence
             asyncio.run(bound(1))
-    assert observed == [True, False, False, True]
+        assert metrics.active_plan.plan_id == original.plan_id
+        assert metrics.active_plan.revision == 2
+    assert replan_triggers == ["low_confidence", "low_confidence"]
+    assert len(timeline_events) == 2
+    assert all(event[2]["trigger"] == "low_confidence" for event in timeline_events)
 
 
 def test_verify_expected_outcome_feeds_retryable_replan_evidence() -> None:

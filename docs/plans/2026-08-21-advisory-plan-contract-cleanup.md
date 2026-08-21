@@ -160,6 +160,9 @@ Codex primary source:
   abandon, plan identity/revision, timeline event 경로를 유지하고 회귀 테스트로
   고정했다.
 - full non-live: `10332 passed, 61 skipped, 1 deselected`.
+- `gpt-5.6-sol` subscription medium verifier가 찾은 세 테스트 공백을 닫았다:
+  file-backed SIL policy의 plan/replan 양방향 적용, low-confidence edge 재무장과
+  identity/revision/timeline 보존, 비선형 `update_plan`의 runtime sync 거부다.
 - Ruff·format, mypy 433 source files, 6 import contracts, architecture baseline,
   architecture exception ratchet가 통과했다.
 - wheel/sdist artifact 검사와 fresh virtualenv 설치가 통과했고, 설치 wheel에서
