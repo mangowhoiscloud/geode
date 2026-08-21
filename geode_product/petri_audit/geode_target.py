@@ -265,16 +265,12 @@ async def _default_geode_runner(
     from geode_product.tool_handlers import compose_tool_plan
 
     bound_tool_plan, transient_handlers = compose_tool_plan(verbose=False)
-    handlers = {**bound_tool_plan.handlers, **transient_handlers}
+    from core.tools.policy import load_profile_policy
+
+    effective_profile = load_profile_policy()
     if audit_mode.enabled:
         try:
-            from core.tools.policy import load_profile_policy
-
-            original_policy = load_profile_policy()
-            patched_policy = apply_to_profile_policy(original_policy, audit_mode)
-            for handler in handlers.values() if isinstance(handlers, dict) else handlers:
-                if hasattr(handler, "policy"):
-                    handler.policy = patched_policy
+            effective_profile = apply_to_profile_policy(effective_profile, audit_mode)
             log.info("petri runner: audit-mode active (%s)", audit_mode)
             diag(
                 "petri.runner.policy",
@@ -330,6 +326,9 @@ async def _default_geode_runner(
         source=resolved_source or infer_source(resolved_provider),
         policy_sources=policy_sources,
     )
+    from core.tools.policy import apply_profile_policy
+
+    bound_tool_plan = apply_profile_policy(bound_tool_plan, effective_profile)
     effective_tool_names = frozenset((*bound_tool_plan.tool_names, *transient_handlers))
 
     executor = ToolExecutor(
@@ -337,6 +336,7 @@ async def _default_geode_runner(
         transient_handlers=transient_handlers,
         auto_approve=True,
         allowed_tools=effective_tool_names,
+        denied_tools=frozenset(effective_profile.denied_tools),
         middleware_registry=build_middleware_registry(policy_sources=policy_sources),
     )
     # G2 (2026-05-12) — max_rounds cap removed. Prior `max_rounds=4`

@@ -14,7 +14,14 @@ from core.server.supervised.services import (
     _headless_denied_tools_for_mode,
     build_shared_services,
 )
-from core.tools.plan import ExecutionBinding, ToolSpec, bind_tool_plan, compile_tool_plan
+from core.tools.plan import (
+    ExecutionBinding,
+    ProfileRestriction,
+    SafetyPolicy,
+    ToolSpec,
+    bind_tool_plan,
+    compile_tool_plan,
+)
 
 
 def _bound_plan(*names: str):
@@ -94,6 +101,40 @@ class TestSharedServicesCreateSession:
             executor, loop = services.create_session(mode)
             assert loop._hooks is not None
             assert loop._hooks is services.hook_system
+
+    def test_profile_restrictions_filter_the_live_bound_session(self) -> None:
+        from core.tools.policy import ProfilePolicy
+
+        plan = compile_tool_plan(
+            ((ToolSpec("danger", "danger", {"type": "object"}), "test"),),
+            (ExecutionBinding("danger", "test", resource_strategy="danger"),),
+            safety={
+                "danger": SafetyPolicy(
+                    effect="execute",
+                    profile_restrictions=(ProfileRestriction.DANGEROUS,),
+                )
+            },
+        )
+        services = SharedServices(
+            hook_system=MagicMock(),
+            bound_tool_plan=bind_tool_plan(
+                plan,
+                {"danger": MagicMock()},
+                {"danger": lambda _arguments: ("danger",)},
+            ),
+            transient_tool_handlers={"custom": MagicMock()},
+        )
+
+        with patch(
+            "core.tools.policy.load_profile_policy",
+            return_value=ProfilePolicy(denied_tools={"custom"}),
+        ):
+            executor, loop = services.create_session(SessionMode.REPL)
+
+        assert "danger" not in executor._bound_tool_plan.tool_names
+        assert "custom" not in executor._handlers
+        assert executor._session_scope_denial("custom") is not None
+        assert executor._bound_tool_plan is loop._bound_tool_plan
 
     def test_public_and_middleware_registries_are_process_owned(
         self, services: SharedServices
@@ -228,6 +269,37 @@ class TestSharedServicesCreateSession:
                 gateway_allow_computer_use=False,
             )
 
+    @pytest.mark.parametrize(
+        ("mode", "opted_in", "denied"),
+        (
+            (SessionMode.DAEMON, False, True),
+            (SessionMode.DAEMON, True, False),
+            (SessionMode.SCHEDULER, False, True),
+            (SessionMode.SCHEDULER, True, True),
+        ),
+    )
+    def test_plan_owned_computer_use_preserves_headless_opt_in_matrix(
+        self,
+        mode: SessionMode,
+        opted_in: bool,
+        denied: bool,
+    ) -> None:
+        name = "computer_use"
+        plan = compile_tool_plan(
+            ((ToolSpec(name, "Computer", {}), "test"),),
+            (ExecutionBinding(name, "test"),),
+            safety={name: SafetyPolicy(allow_headless=True)},
+        )
+        bound = bind_tool_plan(plan, {name: MagicMock()})
+
+        actual = _headless_denied_tools_for_mode(
+            mode,
+            gateway_allow_computer_use=opted_in,
+            bound_tool_plan=bound,
+        )
+
+        assert (name in actual) is denied
+
     def test_daemon_opt_in_wires_only_computer_handlers(
         self,
         monkeypatch: pytest.MonkeyPatch,
@@ -289,6 +361,23 @@ class TestSharedServicesCreateSession:
         snapshot_plan, snapshot_transient = loop.bound_tool_plan_snapshot()
         assert snapshot_plan is executor._bound_tool_plan
         assert snapshot_transient is executor._transient_handlers
+
+    def test_bound_plan_headless_policy_denies_unlisted_future_tool(self) -> None:
+        name = "future_private_read"
+        plan = compile_tool_plan(
+            ((ToolSpec(name, "Future", {}), "test"),),
+            (ExecutionBinding(name, "test"),),
+            safety={name: SafetyPolicy(allow_headless=False)},
+        )
+        services = SharedServices(
+            hook_system=MagicMock(),
+            bound_tool_plan=bind_tool_plan(plan, {name: MagicMock()}),
+        )
+
+        executor, loop = services.create_session(SessionMode.DAEMON)
+
+        assert name in executor._denied_tools
+        assert name not in loop._bound_tool_plan.tool_names
 
     def test_policy_projected_special_route_is_denied_before_side_effect(
         self,

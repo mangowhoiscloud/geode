@@ -539,6 +539,10 @@ def _run_agentic(
         policy_sources=policy_sources,
         force_include=selected_names,
     )
+    from core.tools.policy import apply_profile_policy, load_profile_policy
+
+    profile = load_profile_policy()
+    bound_tool_plan = apply_profile_policy(bound_tool_plan, profile)
     bound_tool_plan = bound_tool_plan.filtered(allowed_tool_names=selected_names)
     transient_handlers = {
         name: handler for name, handler in transient_handlers.items() if name in selected_names
@@ -565,7 +569,9 @@ def _run_agentic(
         # from the handler dict is theater (same finding as the headless
         # denylist, PR-EXEC-HARDENING). This is what makes a role
         # allowlist (e.g. repo_researcher without run_bash) actually hold.
-        denied_tools=frozenset(request.denied_tools) | SUBAGENT_CONTROL_TOOLS,
+        denied_tools=(
+            frozenset(request.denied_tools) | SUBAGENT_CONTROL_TOOLS | profile.denied_tools
+        ),
         allowed_tools=frozenset(allowed_tool_names),
         interactive_approval=False,
         middleware_registry=(

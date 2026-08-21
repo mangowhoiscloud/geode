@@ -33,7 +33,13 @@ def test_run_agent_fork_excludes_denied_tools() -> None:
     """The MCP run_agent fork is headless — its executor must never receive
     run_bash / delegate_task / computer handlers."""
     from core.cli import bootstrap
-    from core.tools.plan import ExecutionBinding, ToolSpec, bind_tool_plan, compile_tool_plan
+    from core.tools.plan import (
+        ExecutionBinding,
+        SafetyPolicy,
+        ToolSpec,
+        bind_tool_plan,
+        compile_tool_plan,
+    )
 
     ordinary_names = ("web_fetch", "computer_use", "memory_search")
     special_names = ("run_bash", "delegate_task")
@@ -45,7 +51,17 @@ def test_run_agent_fork_excludes_denied_tools() -> None:
         ExecutionBinding(name, "test", route="handler") for name in ordinary_names
     ) + tuple(ExecutionBinding(name, "test", route="special") for name in special_names)
     handlers = {name: MagicMock() for name in ordinary_names}
-    bound = bind_tool_plan(compile_tool_plan(specs, bindings), handlers)
+    bound = bind_tool_plan(
+        compile_tool_plan(
+            specs,
+            bindings,
+            safety={
+                name: SafetyPolicy(allow_headless=name in {"web_fetch", "memory_search"})
+                for name in (*ordinary_names, *special_names)
+            },
+        ),
+        handlers,
+    )
     transient_handlers = {"computer": MagicMock()}
 
     def _build_tool_plan():
@@ -85,9 +101,54 @@ def test_run_agent_fork_excludes_denied_tools() -> None:
     assert "memory_search" in filtered_bound.tool_names
     # The REAL enforcement: denied_tools is passed to the executor (the handler
     # filter alone cannot stop the special-cased run_bash / delegate_task).
-    from core.agent.safety import HEADLESS_DENIED_TOOLS
+    assert {"run_bash", "delegate_task", "computer"} <= captured["denied_tools"]
 
-    assert captured["denied_tools"] == HEADLESS_DENIED_TOOLS
+
+def test_plan_metadata_denies_future_headless_tool_without_static_name_edit() -> None:
+    from core.agent.safety import headless_denied_tools
+    from core.tools.plan import (
+        ExecutionBinding,
+        SafetyPolicy,
+        ToolSpec,
+        bind_tool_plan,
+        compile_tool_plan,
+    )
+
+    name = "future_private_read"
+    plan = compile_tool_plan(
+        ((ToolSpec(name, "Future", {}), "test"),),
+        (ExecutionBinding(name, "test"),),
+        safety={name: SafetyPolicy(allow_headless=False)},
+    )
+    bound = bind_tool_plan(plan, {name: MagicMock()})
+
+    assert headless_denied_tools(bound) == {name}
+
+
+def test_plan_headless_allow_overrides_legacy_name_fallback() -> None:
+    from core.agent.safety import (
+        HEADLESS_DENIED_TOOLS,
+        headless_denied_tools,
+        residual_denied_tools,
+    )
+    from core.tools.plan import (
+        ExecutionBinding,
+        SafetyPolicy,
+        ToolSpec,
+        bind_tool_plan,
+        compile_tool_plan,
+    )
+
+    name = "run_bash"
+    plan = compile_tool_plan(
+        ((ToolSpec(name, "Compatibility-name probe", {}), "test"),),
+        (ExecutionBinding(name, "test", route="special"),),
+        safety={name: SafetyPolicy(allow_headless=True)},
+    )
+    bound = bind_tool_plan(plan, {})
+
+    assert name not in headless_denied_tools(bound)
+    assert name not in residual_denied_tools(HEADLESS_DENIED_TOOLS, bound)
 
 
 def test_executor_denied_tools_refuses_run_bash_at_top() -> None:

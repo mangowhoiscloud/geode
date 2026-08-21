@@ -16,9 +16,12 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from core.tools.google_capabilities import GOOGLE_WRITE_TOOLS
+
+if TYPE_CHECKING:
+    from core.tools.plan import BoundToolPlan, ProfileRestriction
 
 log = logging.getLogger(__name__)
 
@@ -180,6 +183,30 @@ class ProfilePolicy:
     allow_dangerous: bool = False
     denied_tools: set[str] = field(default_factory=set)
 
+    def denied_tool_names(self, bound: BoundToolPlan) -> frozenset[str]:
+        """Project the profile onto one native plan without name-list drift."""
+        from core.tools.plan import ProfileRestriction
+
+        disabled: set[ProfileRestriction] = set()
+        if not self.allow_write:
+            disabled.add(ProfileRestriction.WRITE)
+        if not self.allow_dangerous:
+            disabled.add(ProfileRestriction.DANGEROUS)
+        if not self.allow_expensive:
+            disabled.add(ProfileRestriction.EXPENSIVE)
+        return frozenset(
+            name
+            for name in bound.tool_names
+            if name in self.denied_tools
+            or bool(
+                disabled.intersection(
+                    registration.safety.profile_restrictions
+                    if (registration := bound.registration_for(name)) is not None
+                    else ()
+                )
+            )
+        )
+
     def to_policies(self) -> list[ToolPolicy]:
         """Convert profile preferences into PolicyChain-compatible policies."""
         policies: list[ToolPolicy] = []
@@ -228,6 +255,15 @@ class ProfilePolicy:
                 )
             )
         return policies
+
+
+def apply_profile_policy(
+    bound: BoundToolPlan,
+    profile: ProfilePolicy | None = None,
+) -> BoundToolPlan:
+    """Return the plan filtered by the current typed profile restrictions."""
+    resolved = load_profile_policy() if profile is None else profile
+    return bound.filtered(denied_tool_names=resolved.denied_tool_names(bound))
 
 
 # ---------------------------------------------------------------------------

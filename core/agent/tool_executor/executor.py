@@ -5,8 +5,11 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
+import threading
 import time
 from collections.abc import Awaitable, Callable, Mapping, Set
+from contextvars import copy_context
+from functools import partial
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, cast
 
@@ -15,7 +18,7 @@ if TYPE_CHECKING:
     from core.agent.sub_agent import SubAgentManager
     from core.hooks import HookRegistry, HookSystem, MiddlewareRegistry
     from core.tools.base import ToolContext
-    from core.tools.plan import BoundToolPlan
+    from core.tools.plan import BoundToolPlan, ToolRegistration
 
 from core.agent.safety import (
     COLLABORATION_TOOLS,
@@ -40,11 +43,93 @@ from core.tools.personal_data import (
     PERSONAL_DATA_TOOLS,
     personal_data_omitted,
 )
+from core.tools.plan import (
+    ApprovalPolicy,
+    DataClassification,
+    PersistenceRule,
+    ResourceKeyResolutionError,
+    SafetyPolicy,
+    ToolEffect,
+)
 
 log = logging.getLogger(__name__)
 
 ToolHandler = Callable[..., dict[str, Any] | Awaitable[dict[str, Any]] | Any]
 ToolExecutionStartedCallback = Callable[[str, dict[str, Any]], None]
+
+
+class _ResourceLockEntry:
+    __slots__ = ("lock", "references")
+
+    def __init__(self) -> None:
+        self.lock = threading.Lock()
+        self.references = 0
+
+
+ResourceLockLease = tuple[str, _ResourceLockEntry]
+
+
+class ResourceLockPool:
+    """Process-shareable keyed locks for policy-declared resources."""
+
+    def __init__(self) -> None:
+        self._registry_lock = threading.Lock()
+        self._entries: dict[str, _ResourceLockEntry] = {}
+
+    @property
+    def entry_count(self) -> int:
+        with self._registry_lock:
+            return len(self._entries)
+
+    def _reserve(self, key: str) -> _ResourceLockEntry:
+        with self._registry_lock:
+            entry = self._entries.setdefault(key, _ResourceLockEntry())
+            entry.references += 1
+            return entry
+
+    def _drop(self, key: str, entry: _ResourceLockEntry) -> None:
+        with self._registry_lock:
+            entry.references -= 1
+            if entry.references == 0 and self._entries.get(key) is entry:
+                self._entries.pop(key, None)
+
+    async def _acquire_cancel_safe(self, key: str, entry: _ResourceLockEntry) -> None:
+        future = asyncio.get_running_loop().run_in_executor(None, entry.lock.acquire)
+        try:
+            acquired = await asyncio.shield(future)
+        except asyncio.CancelledError:
+
+            def _release_stray_grant(done: asyncio.Future[bool]) -> None:
+                if not done.cancelled() and done.exception() is None and done.result():
+                    entry.lock.release()
+                self._drop(key, entry)
+
+            future.add_done_callback(_release_stray_grant)
+            raise
+        if not acquired:
+            raise RuntimeError(f"Failed to acquire resource lock: {key}")
+
+    async def acquire(self, keys: tuple[str, ...]) -> tuple[ResourceLockLease, ...]:
+        acquired: list[ResourceLockLease] = []
+        for key in sorted(set(keys)):
+            entry = self._reserve(key)
+            try:
+                await self._acquire_cancel_safe(key, entry)
+            except asyncio.CancelledError:
+                self.release(tuple(acquired))
+                raise
+            except BaseException:
+                self._drop(key, entry)
+                self.release(tuple(acquired))
+                raise
+            acquired.append((key, entry))
+        return tuple(acquired)
+
+    def release(self, leases: tuple[ResourceLockLease, ...]) -> None:
+        for key, entry in reversed(leases):
+            entry.lock.release()
+            self._drop(key, entry)
+
 
 # Execution bindings that bypass the ordinary handler map.  Architecture
 # inventory imports this set so the model-visible schema and executable surface
@@ -145,6 +230,7 @@ class ToolExecutor:
         denied_tools: frozenset[str] = frozenset(),
         allowed_tools: frozenset[str] | None = None,
         interactive_approval: bool = True,
+        resource_lock_pool: ResourceLockPool | None = None,
     ) -> None:
         if action_handlers is not None and bound_tool_plan is not None:
             raise ValueError("action_handlers and bound_tool_plan are mutually exclusive")
@@ -212,6 +298,7 @@ class ToolExecutor:
             self._tool_input_schemas = dict(tool_input_schemas or {})
         self._approval_callback = approval_callback
         self._interactive_approval = interactive_approval
+        self._resource_lock_pool = resource_lock_pool or ResourceLockPool()
 
         # HITL approval workflow (extracted — SRP)
         from core.agent.approval import ApprovalWorkflow
@@ -272,6 +359,107 @@ class ToolExecutor:
             (*bound_tool_plan.tool_names, *self._transient_handlers)
         )
 
+    def _registration_for(self, tool_name: str) -> ToolRegistration | None:
+        if self._bound_tool_plan is None:
+            return None
+        return self._bound_tool_plan.registration_for(tool_name)
+
+    def _contains_restricted_data(self, tool_name: str) -> bool:
+        registration = self._registration_for(tool_name)
+        if registration is None:
+            return tool_name in PERSONAL_DATA_TOOLS
+        return bool(
+            registration.safety.data_class is DataClassification.PERSONAL
+            or registration.safety.persistence is PersistenceRule.REDACT
+        )
+
+    def _safety_minimum_for(self, tool_name: str) -> SafetyPolicy | None:
+        registration = self._registration_for(tool_name)
+        if registration is not None:
+            return registration.safety
+        if tool_name in SENSITIVE_TOOLS:
+            return SafetyPolicy(
+                data_class=DataClassification.PERSONAL,
+                persistence=PersistenceRule.REDACT,
+                approval=ApprovalPolicy.PER_INVOCATION,
+                allow_headless=False,
+            )
+        if tool_name in DANGEROUS_TOOLS:
+            return SafetyPolicy(
+                effect=ToolEffect.EXECUTE,
+                approval=ApprovalPolicy.CACHED,
+                allow_headless=False,
+            )
+        if tool_name in WRITE_TOOLS:
+            return SafetyPolicy(
+                effect=ToolEffect.MUTATE,
+                approval=ApprovalPolicy.CACHED,
+            )
+        if tool_name in EXPENSIVE_TOOLS:
+            return SafetyPolicy(approval=ApprovalPolicy.CACHED)
+        if self._mcp_manager is not None:
+            try:
+                if self._mcp_manager.find_server_for_tool(tool_name) is not None:
+                    return SafetyPolicy(approval=ApprovalPolicy.CACHED)
+            except Exception:
+                log.debug("MCP safety lookup failed for %s", tool_name, exc_info=True)
+        return None
+
+    def _runtime_policy_denial(
+        self,
+        tool_name: str,
+        context: ToolContext | None,
+    ) -> dict[str, Any] | None:
+        registration = self._registration_for(tool_name)
+        if registration is None:
+            return None
+        safety = registration.safety
+        if safety.denied:
+            reason = "declared policy"
+        elif context is not None and context.is_subagent and not safety.allow_subagents:
+            reason = "sub-agent policy"
+        elif not self._interactive_approval and not safety.allow_headless:
+            reason = "headless policy"
+        else:
+            return None
+        return {
+            "error": f"Tool '{tool_name}' is unavailable under {reason}.",
+            "error_type": "tool_policy_denied",
+            "denied": True,
+            "recoverable": False,
+        }
+
+    @staticmethod
+    def _policy_downgrade(
+        minimum: SafetyPolicy | None,
+        current: SafetyPolicy | None,
+    ) -> bool:
+        if minimum is None:
+            return False
+        if current is None:
+            return True
+        approval_rank = {
+            ApprovalPolicy.NONE: 0,
+            ApprovalPolicy.CACHED: 1,
+            ApprovalPolicy.PER_INVOCATION: 2,
+        }
+        effect_downgrade = current.effect is not minimum.effect and not (
+            minimum.effect is ToolEffect.READ and current.effect is not ToolEffect.READ
+        )
+        return any(
+            (
+                approval_rank[current.approval] < approval_rank[minimum.approval],
+                effect_downgrade,
+                minimum.data_class is DataClassification.PERSONAL
+                and current.data_class is DataClassification.PUBLIC,
+                minimum.persistence is PersistenceRule.REDACT
+                and current.persistence is PersistenceRule.PERSIST,
+                not minimum.allow_headless and current.allow_headless,
+                not minimum.allow_subagents and current.allow_subagents,
+                minimum.denied and not current.denied,
+            )
+        )
+
     # Proxy properties for backward compat (tests access these directly)
     @property
     def _always_approved_categories(self) -> set[str]:
@@ -324,12 +512,22 @@ class ToolExecutor:
         on_execution_started: ToolExecutionStartedCallback | None,
     ) -> dict[str, Any]:
         """Execute inside the physical tool-call correlation scope."""
-        contains_personal_data = tool_name in PERSONAL_DATA_TOOLS
+        minimum_safety = self._safety_minimum_for(tool_name)
+        contains_personal_data = self._contains_restricted_data(tool_name)
         batch_cost_approved = bool(context and context.batch_cost_approved)
         if context is not None:
             context.contains_personal_data = (
                 context.contains_personal_data or contains_personal_data
             )
+        initial_scope_denial = self._session_scope_denial(tool_name)
+        if initial_scope_denial is not None:
+            self._record_effective_request(
+                context,
+                tool_name,
+                tool_input,
+                contains_personal_data=contains_personal_data,
+            )
+            return initial_scope_denial
         correlation = self._tool_correlation(context)
         request = await self._middleware_registry.tool_request(
             ToolCallRequest(
@@ -346,7 +544,39 @@ class ToolExecutor:
         )
         tool_name = request.tool_name
         tool_input = dict(request.arguments)
-        contains_personal_data = contains_personal_data or tool_name in PERSONAL_DATA_TOOLS
+        request_safety = self._safety_minimum_for(tool_name)
+        if contains_personal_data and not self._contains_restricted_data(tool_name):
+            self._record_effective_request(
+                context,
+                tool_name,
+                tool_input,
+                contains_personal_data=True,
+            )
+            return {
+                "error": "Personal-data classification cannot be downgraded by a tool rewrite.",
+                "error_type": "privacy_classification_downgrade",
+                "denied": True,
+                "recoverable": False,
+            }
+        if self._policy_downgrade(
+            minimum_safety,
+            request_safety,
+        ):
+            self._record_effective_request(
+                context,
+                tool_name,
+                tool_input,
+                contains_personal_data=contains_personal_data,
+            )
+            return {
+                "error": "Tool rewrite cannot weaken its declared safety policy.",
+                "error_type": "tool_policy_downgrade",
+                "denied": True,
+                "recoverable": False,
+            }
+        if request_safety is not None:
+            minimum_safety = request_safety
+        contains_personal_data = contains_personal_data or self._contains_restricted_data(tool_name)
         scope_denial = self._session_scope_denial(tool_name)
         if scope_denial is not None:
             self._record_effective_request(
@@ -356,6 +586,15 @@ class ToolExecutor:
                 contains_personal_data=contains_personal_data,
             )
             return scope_denial
+        policy_denial = self._runtime_policy_denial(tool_name, context)
+        if policy_denial is not None:
+            self._record_effective_request(
+                context,
+                tool_name,
+                tool_input,
+                contains_personal_data=contains_personal_data,
+            )
+            return policy_denial
         if context is not None:
             # Request middleware owns name/argument transforms, not approval
             # grants carried by the processor-owned execution context.
@@ -366,13 +605,6 @@ class ToolExecutor:
             tool_input,
             contains_personal_data=contains_personal_data,
         )
-        if contains_personal_data and tool_name not in PERSONAL_DATA_TOOLS:
-            return {
-                "error": "Personal-data classification cannot be downgraded by a tool rewrite.",
-                "error_type": "privacy_classification_downgrade",
-                "denied": True,
-                "recoverable": False,
-            }
         validation_error = self._validate_tool_input(tool_name, tool_input)
         if validation_error:
             return {
@@ -420,29 +652,65 @@ class ToolExecutor:
                 "arguments" in decision.updates for decision in rewrite_decisions
             ) and isinstance(effective_arguments, dict):
                 tool_input = dict(effective_arguments)
-        scope_denial = self._session_scope_denial(tool_name)
-        if scope_denial is not None:
+        hook_safety = self._safety_minimum_for(tool_name)
+        if contains_personal_data and not self._contains_restricted_data(tool_name):
             self._record_effective_request(
                 context,
                 tool_name,
                 tool_input,
-                contains_personal_data=(contains_personal_data or tool_name in PERSONAL_DATA_TOOLS),
+                contains_personal_data=True,
             )
-            return scope_denial
-        contains_personal_data = contains_personal_data or tool_name in PERSONAL_DATA_TOOLS
-        self._record_effective_request(
-            context,
-            tool_name,
-            tool_input,
-            contains_personal_data=contains_personal_data,
-        )
-        if contains_personal_data and tool_name not in PERSONAL_DATA_TOOLS:
             return {
                 "error": "Personal-data classification cannot be downgraded by a tool rewrite.",
                 "error_type": "privacy_classification_downgrade",
                 "denied": True,
                 "recoverable": False,
             }
+        if self._policy_downgrade(
+            minimum_safety,
+            hook_safety,
+        ):
+            self._record_effective_request(
+                context,
+                tool_name,
+                tool_input,
+                contains_personal_data=contains_personal_data,
+            )
+            return {
+                "error": "Tool rewrite cannot weaken its declared safety policy.",
+                "error_type": "tool_policy_downgrade",
+                "denied": True,
+                "recoverable": False,
+            }
+        scope_denial = self._session_scope_denial(tool_name)
+        if scope_denial is not None:
+            self._record_effective_request(
+                context,
+                tool_name,
+                tool_input,
+                contains_personal_data=(
+                    contains_personal_data or self._contains_restricted_data(tool_name)
+                ),
+            )
+            return scope_denial
+        policy_denial = self._runtime_policy_denial(tool_name, context)
+        if policy_denial is not None:
+            self._record_effective_request(
+                context,
+                tool_name,
+                tool_input,
+                contains_personal_data=(
+                    contains_personal_data or self._contains_restricted_data(tool_name)
+                ),
+            )
+            return policy_denial
+        contains_personal_data = contains_personal_data or self._contains_restricted_data(tool_name)
+        self._record_effective_request(
+            context,
+            tool_name,
+            tool_input,
+            contains_personal_data=contains_personal_data,
+        )
         validation_error = self._validate_tool_input(tool_name, tool_input)
         if validation_error:
             return {
@@ -452,8 +720,6 @@ class ToolExecutor:
             }
         force_permission = any(
             decision.action is HookAction.REQUEST_PERMISSION for decision in pre_use.decisions
-        ) and tool_name not in (
-            set(DANGEROUS_TOOLS) | set(EXPENSIVE_TOOLS) | set(SENSITIVE_TOOLS) | set(WRITE_TOOLS)
         )
 
         return await self._aexecute_effective(
@@ -478,7 +744,7 @@ class ToolExecutor:
         tool_name = request.tool_name
         tool_input = dict(request.arguments)
         context = cast("ToolContext | None", request.context)
-        contains_personal_data = tool_name in PERSONAL_DATA_TOOLS or bool(
+        contains_personal_data = self._contains_restricted_data(tool_name) or bool(
             context and context.contains_personal_data
         )
         log.debug("ToolExecutor.async: %s(keys=%s)", tool_name, sorted(tool_input))
@@ -494,15 +760,14 @@ class ToolExecutor:
             detail = (
                 f"token_budget={tool_input['token_budget']}" if budget_permission else tool_name
             )
-            permission = await self._approval.prompt_with_always_async(
+            permission_granted = await self._approval.confirm_permission_request_async(
                 "Allow token-limited Goal?" if budget_permission else "Allow?",
                 detail,
                 safety_level="goal_budget" if budget_permission else "hook_requested",
                 tool_name=tool_name,
-                allow_always=False,
                 allow_human_prompt=self._interactive_approval,
             )
-            if permission != "y":
+            if not permission_granted:
                 return {
                     "error": (
                         "token_budget requires explicit PermissionRequest approval; "
@@ -534,13 +799,68 @@ class ToolExecutor:
         # ApprovalRecord through gate → verdict → dispatch so a lost or
         # misrouted decision (the A-but-denied incident) is diagnosable from
         # the transition trail instead of a bare denial string.
-        record = self._approval.begin_record(tool_name)
-        gate_result, approved_via_hitl = await self._gate_async(
-            tool_name,
-            tool_input,
-            record,
-            batch_cost_approved=bool(context and context.batch_cost_approved),
+        registration = self._registration_for(tool_name)
+        declared_approval = (
+            registration.safety.approval if registration is not None else ApprovalPolicy.NONE
         )
+        record = (
+            self._approval.begin_record(tool_name)
+            if declared_approval is ApprovalPolicy.NONE
+            else self._approval.begin_record(
+                tool_name,
+                declared_approval=declared_approval.value,
+            )
+        )
+        declared_approval_granted = force_permission
+        if force_permission:
+            self._approval.record_transition(record, "granted", "hook:permission")
+        if registration is not None:
+            uses_special_gate = tool_name in DANGEROUS_TOOLS
+            if not declared_approval_granted and (
+                declared_approval is ApprovalPolicy.PER_INVOCATION
+                or (declared_approval is ApprovalPolicy.CACHED and not uses_special_gate)
+            ):
+                if (
+                    declared_approval is ApprovalPolicy.CACHED
+                    and tool_name in EXPENSIVE_TOOLS
+                    and bool(context and context.batch_cost_approved)
+                ):
+                    self._approval.record_transition(record, "granted", "batch:cost-approved")
+                    declared_approval_granted = True
+                else:
+                    declared_approval_granted = await self._approval.confirm_declared_async(
+                        tool_name,
+                        tool_input,
+                        per_invocation=declared_approval is ApprovalPolicy.PER_INVOCATION,
+                        contains_personal_data=contains_personal_data,
+                        record=record,
+                    )
+                    if not declared_approval_granted:
+                        self._approval.record_transition(record, "skipped", "gate-rejected")
+                        return {
+                            "error": f"Permission denied for '{tool_name}'",
+                            "denied": True,
+                            "recoverable": False,
+                        }
+            if uses_special_gate:
+                gate_result, approved_via_hitl = await self._gate_dangerous_async(
+                    tool_name,
+                    tool_input,
+                    record,
+                    approval_already_granted=(
+                        declared_approval is ApprovalPolicy.NONE or declared_approval_granted
+                    ),
+                )
+            else:
+                gate_result, approved_via_hitl = None, declared_approval_granted
+        else:
+            gate_result, approved_via_hitl = await self._gate_async(
+                tool_name,
+                tool_input,
+                record,
+                batch_cost_approved=bool(context and context.batch_cost_approved),
+                approval_already_granted=force_permission,
+            )
         if gate_result is not None:
             self._approval.record_transition(record, "skipped", "gate-rejected")
             return gate_result
@@ -563,30 +883,60 @@ class ToolExecutor:
                 raise InvalidMiddlewareResultError(
                     "tool_execution middleware cannot change an already-approved request"
                 )
+            resource_keys: tuple[str, ...] = ()
+            if self._bound_tool_plan is not None and registration is not None:
+                try:
+                    resource_keys = self._bound_tool_plan.resource_keys(tool_name, tool_input)
+                except ResourceKeyResolutionError:
+                    return {
+                        "error": f"Resource policy could not resolve '{tool_name}'.",
+                        "error_type": "resource_key_resolution",
+                        "denied": True,
+                        "recoverable": False,
+                    }
+            leases = await self._resource_lock_pool.acquire(resource_keys)
+            release_deferred = False
+
+            def defer_release(future: asyncio.Future[Any]) -> None:
+                nonlocal release_deferred
+                release_deferred = True
+
+                def release_when_done(done: asyncio.Future[Any]) -> None:
+                    if not done.cancelled():
+                        done.exception()
+                    self._resource_lock_pool.release(leases)
+
+                future.add_done_callback(release_when_done)
+
             terminal_started = True
             from core.hooks.dispatch import fire_hook_async
             from core.hooks.system import RuntimeEvent
 
-            if on_execution_started is not None:
-                try:
-                    on_execution_started(tool_name, event_tool_input)
-                except Exception:
-                    log.debug("Tool execution-start recorder failed", exc_info=True)
-            await fire_hook_async(
-                self._hooks,
-                RuntimeEvent.TOOL_EXEC_STARTED,
-                {
-                    **event_correlation,
-                    "tool_name": tool_name,
-                    "tool_input": event_tool_input,
-                },
-            )
-            return await self._dispatch_async(
-                tool_name,
-                tool_input,
-                context=context,
-                approved_via_hitl=approved_via_hitl,
-            )
+            try:
+                if on_execution_started is not None:
+                    try:
+                        on_execution_started(tool_name, event_tool_input)
+                    except Exception:
+                        log.debug("Tool execution-start recorder failed", exc_info=True)
+                await fire_hook_async(
+                    self._hooks,
+                    RuntimeEvent.TOOL_EXEC_STARTED,
+                    {
+                        **event_correlation,
+                        "tool_name": tool_name,
+                        "tool_input": event_tool_input,
+                    },
+                )
+                return await self._dispatch_async(
+                    tool_name,
+                    tool_input,
+                    context=context,
+                    approved_via_hitl=approved_via_hitl,
+                    on_sync_abandoned=defer_release,
+                )
+            finally:
+                if not release_deferred:
+                    self._resource_lock_pool.release(leases)
 
         try:
             result = await self._middleware_registry.tool_execution(request, dispatch)
@@ -767,6 +1117,7 @@ class ToolExecutor:
         *,
         context: ToolContext | None = None,
         approved_via_hitl: bool = False,
+        on_sync_abandoned: Callable[[asyncio.Future[Any]], None] | None = None,
     ) -> dict[str, Any]:
         """Uniform post-gate dispatch — 'how does it run?', gate-free.
 
@@ -846,20 +1197,42 @@ class ToolExecutor:
             return {"error": f"Unknown tool: '{tool_name}'. Use 'show_help' for available tools."}
 
         deadline_s = _tool_deadline_s(tool_name)
+        sync_future: asyncio.Future[Any] | None = None
+
+        def capture_sync_future(future: asyncio.Future[Any]) -> None:
+            nonlocal sync_future
+            sync_future = future
+
         try:
             if approved_via_hitl:
                 with _tool_spinner(f"Executing {tool_name}..."):
                     raw = await asyncio.wait_for(
-                        self._call_handler_async(handler, tool_input, context=context),
+                        self._call_handler_async(
+                            handler,
+                            tool_input,
+                            context=context,
+                            on_sync_future=capture_sync_future,
+                        ),
                         timeout=deadline_s,
                     )
             else:
                 raw = await asyncio.wait_for(
-                    self._call_handler_async(handler, tool_input, context=context),
+                    self._call_handler_async(
+                        handler,
+                        tool_input,
+                        context=context,
+                        on_sync_future=capture_sync_future,
+                    ),
                     timeout=deadline_s,
                 )
             return self._normalize_raw_result(tool_name, raw)
+        except asyncio.CancelledError:
+            if sync_future is not None and not sync_future.done() and on_sync_abandoned is not None:
+                on_sync_abandoned(sync_future)
+            raise
         except TimeoutError:
+            if sync_future is not None and not sync_future.done() and on_sync_abandoned is not None:
+                on_sync_abandoned(sync_future)
             log.error(
                 "Tool %s exceeded its %.0fs wall-clock deadline — aborting the call "
                 "(harness deadline, not an HTTP timeout; see PR-LOOP-POLLUTION-FIX)",
@@ -884,6 +1257,7 @@ class ToolExecutor:
         record: ApprovalRecord | None = None,
         *,
         batch_cost_approved: bool = False,
+        approval_already_granted: bool = False,
     ) -> tuple[dict[str, Any] | None, bool]:
         """Single safety gate for EVERY tool — classify by safety level + approve.
 
@@ -894,7 +1268,14 @@ class ToolExecutor:
         that decides "may this run?", separate from "how does it run?".
         """
         if tool_name in DANGEROUS_TOOLS:
-            return await self._gate_dangerous_async(tool_name, tool_input, record)
+            return await self._gate_dangerous_async(
+                tool_name,
+                tool_input,
+                record,
+                approval_already_granted=approval_already_granted,
+            )
+        if approval_already_granted:
+            return None, True
         return await self._approval.apply_safety_gates_async(
             tool_name,
             tool_input,
@@ -907,6 +1288,8 @@ class ToolExecutor:
         tool_name: str,
         tool_input: dict[str, Any],
         record: ApprovalRecord | None = None,
+        *,
+        approval_already_granted: bool = False,
     ) -> tuple[dict[str, Any] | None, bool]:
         """Approval gate for DANGEROUS tools — approval ONLY (execution happens
         in the uniform dispatch so each reaches its handler).
@@ -924,7 +1307,9 @@ class ToolExecutor:
                 if blocked:
                     self._approval.record_transition(record, "denied", "validator:blocked")
                     return self._bash.to_tool_result(blocked), False
-                if self._approval.is_bash_auto_approved(command):
+                if approval_already_granted:
+                    pass
+                elif self._approval.is_bash_auto_approved(command):
                     self._approval.record_transition(record, "granted", "auto:bash")
                 else:
                     approved = await self._request_approval_async(
@@ -934,6 +1319,8 @@ class ToolExecutor:
                         return {"error": "User denied execution", "denied": True}, False
             return None, True
         if tool_name in {"computer", "computer_use"}:
+            if approval_already_granted:
+                return None, True
             if not await self._approval.confirm_computer_async(record):
                 return {"error": "User denied computer-use", "denied": True}, False
             return None, True
@@ -956,6 +1343,7 @@ class ToolExecutor:
         tool_input: dict[str, Any],
         *,
         context: ToolContext | None = None,
+        on_sync_future: Callable[[asyncio.Future[Any]], None] | None = None,
     ) -> Any:
         # PR-TOOL-EXEC-CONTEXT (2026-05-28) — inject the loop's
         # ``ToolContext`` as a reserved ``_tool_context`` kwarg. Handlers
@@ -973,7 +1361,14 @@ class ToolExecutor:
         if self._is_async_handler(handler):
             raw = handler(**kwargs)
             return await cast(Awaitable[Any], raw)
-        return await asyncio.to_thread(handler, **kwargs)
+        dispatch_context = copy_context()
+        future = asyncio.get_running_loop().run_in_executor(
+            None,
+            partial(dispatch_context.run, handler, **kwargs),
+        )
+        if on_sync_future is not None:
+            on_sync_future(future)
+        return await asyncio.shield(future)
 
     @staticmethod
     def _handler_accepts_tool_context(handler: ToolHandler) -> bool:
@@ -1026,9 +1421,11 @@ class ToolExecutor:
             return {"result": raw}
         return raw
 
-    @staticmethod
-    def _classify_execution_exception(tool_name: str, exc: Exception) -> dict[str, Any]:
-        log.error("Tool %s failed: %s", tool_name, exc, exc_info=True)
+    def _classify_execution_exception(self, tool_name: str, exc: Exception) -> dict[str, Any]:
+        if self._contains_restricted_data(tool_name):
+            log.error("Tool %s failed with %s", tool_name, type(exc).__name__)
+        else:
+            log.error("Tool %s failed: %s", tool_name, exc, exc_info=True)
         from core.tools.base import classify_tool_exception
 
         return classify_tool_exception(exc, tool_name=tool_name)
