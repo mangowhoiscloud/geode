@@ -288,7 +288,7 @@ machine-readable artifact is
 | `core/` Python LOC | 121,112 |
 | `geode_product/` Python LOC | 61,827 |
 | `plugins/` Python LOC | 213 |
-| Test Python LOC | 184,060 |
+| Test Python LOC | 184,109 |
 | Tool definitions / executable registrations / valid schemas | 82 / 85 / 82 (definition-only 0; execution-only 3; invalid schema 0) |
 | `RuntimeEvent` members | 57 |
 | Built-in LLM adapters | 7 |
