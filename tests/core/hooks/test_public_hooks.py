@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import json
 import threading
 import time
@@ -12,7 +13,9 @@ import pytest
 from core.hooks import (
     PUBLIC_HOOK_SCHEMA_VERSION,
     HookAction,
+    HookCorrelation,
     HookDecision,
+    HookInvocation,
     HookName,
     HookRegistry,
     InvalidHookPayloadError,
@@ -29,7 +32,7 @@ def _async_test(func: Callable[[], Awaitable[None]]) -> Callable[[], None]:
     return run
 
 
-def test_public_hook_allowlist_is_exactly_the_version_one_contract() -> None:
+def test_public_hook_allowlist_and_current_version_are_explicit() -> None:
     assert [hook.value for hook in HookName] == [
         "UserPromptSubmit",
         "PreToolUse",
@@ -45,7 +48,7 @@ def test_public_hook_allowlist_is_exactly_the_version_one_contract() -> None:
         "PostVerify",
         "Stop",
     ]
-    assert PUBLIC_HOOK_SCHEMA_VERSION == "geode.public-hook.v1"
+    assert PUBLIC_HOOK_SCHEMA_VERSION == "geode.public-hook.v2"
 
 
 def test_unknown_hook_name_is_rejected() -> None:
@@ -87,6 +90,76 @@ def test_all_public_hook_schemas_are_generated_and_json_round_trip() -> None:
     assert set(round_tripped) == {hook.value for hook in HookName}
     for schema in round_tripped.values():
         Draft202012Validator.check_schema(schema)
+
+
+def test_version_one_correlation_schema_remains_byte_compatible() -> None:
+    schema = public_hook_schema(
+        HookName.PRE_TOOL_USE,
+        version="geode.public-hook.v1",
+    )
+    correlation = schema["properties"]["correlation"]
+
+    assert tuple(correlation["properties"]) == (
+        "session_id",
+        "turn_id",
+        "run_id",
+        "session_generation",
+        "verify_attempt",
+        "tool_call_id",
+        "llm_call_id",
+        "llm_attempt_id",
+    )
+    assert correlation["required"] == list(correlation["properties"])
+    legacy = dataclasses.asdict(
+        HookInvocation(
+            name=HookName.PRE_TOOL_USE,
+            payload={"tool_name": "ordinary", "arguments": {}},
+        )
+    )
+    legacy["schema_version"] = "geode.public-hook.v1"
+    legacy["correlation"].pop("step_id")
+    assert list(Draft202012Validator(schema).iter_errors(legacy)) == []
+
+
+def test_current_invocation_serializes_against_version_two_schema() -> None:
+    invocation = HookInvocation(
+        name=HookName.PRE_TOOL_USE,
+        correlation=HookCorrelation(
+            session_id="session-1",
+            turn_id="turn-1",
+            step_id="turn-1:step-1",
+        ),
+        payload={"tool_name": "ordinary", "arguments": {}},
+    )
+
+    errors = list(
+        Draft202012Validator(public_hook_schema(HookName.PRE_TOOL_USE)).iter_errors(
+            dataclasses.asdict(invocation)
+        )
+    )
+
+    assert errors == []
+
+
+def test_hook_correlation_preserves_version_one_positional_arguments() -> None:
+    correlation = HookCorrelation(
+        "session-1",
+        "turn-1",
+        "run-1",
+        2,
+        3,
+        "tool-1",
+        "llm-1",
+        "attempt-1",
+    )
+
+    assert correlation.run_id == "run-1"
+    assert correlation.session_generation == 2
+    assert correlation.verify_attempt == 3
+    assert correlation.tool_call_id == "tool-1"
+    assert correlation.llm_call_id == "llm-1"
+    assert correlation.llm_attempt_id == "attempt-1"
+    assert correlation.step_id == ""
 
 
 @_async_test

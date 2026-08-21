@@ -16,7 +16,8 @@ import json
 import logging
 import threading
 import time
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping, MutableMapping
+from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from typing import Any, Protocol
 
@@ -225,6 +226,8 @@ class MiddlewareRegistry:
         current = _clone_tool_request(request)
         for registration in self._snapshot(self._tool_request):
             before = _request_hash(current)
+            before_correlation = copy.deepcopy(dict(current.correlation))
+            before_context = _physical_context_state(current.context)
             started = time.monotonic()
             try:
                 result = await self._invoke(
@@ -237,11 +240,20 @@ class MiddlewareRegistry:
                         f"{registration.name} returned {type(result).__name__}; "
                         "expected ToolCallRequest"
                     )
-                if _request_hash(current) != before:
+                if (
+                    _request_hash(current) != before
+                    or dict(current.correlation) != before_correlation
+                    or _physical_context_state(current.context) != before_context
+                ):
                     raise InvalidMiddlewareResultError(
-                        f"{registration.name} mutated its immutable ToolCallRequest input"
+                        f"{registration.name} mutated its immutable ToolCallRequest input "
+                        "or physical correlation"
                     )
-                current = result
+                current = replace(
+                    result,
+                    context=copy.copy(request.context),
+                    correlation=copy.deepcopy(dict(request.correlation)),
+                )
             except BaseException as exc:
                 await self._record(
                     surface="tool_request",
@@ -264,12 +276,17 @@ class MiddlewareRegistry:
                 effective_hash=_request_hash(current),
                 correlation=request.correlation,
             )
-        return current
+        return replace(
+            current,
+            context=request.context,
+            correlation=copy.deepcopy(dict(request.correlation)),
+        )
 
     async def llm_request(self, request: LlmCallRequest) -> LlmCallRequest:
         current = _clone_llm_request(request)
         for registration in self._snapshot(self._llm_request):
             before = _request_hash(current)
+            before_correlation = copy.deepcopy(dict(current.correlation))
             started = time.monotonic()
             try:
                 result = await self._invoke(
@@ -282,16 +299,23 @@ class MiddlewareRegistry:
                         f"{registration.name} returned {type(result).__name__}; "
                         "expected LlmCallRequest"
                     )
-                if _request_hash(current) != before:
+                if (
+                    _request_hash(current) != before
+                    or dict(current.correlation) != before_correlation
+                ):
                     raise InvalidMiddlewareResultError(
-                        f"{registration.name} mutated its immutable LlmCallRequest input"
+                        f"{registration.name} mutated its immutable LlmCallRequest input "
+                        "or physical correlation"
                     )
                 self._validate_llm_request_transform(
                     registration,
                     before_request=current,
                     after_request=result,
                 )
-                current = result
+                current = replace(
+                    result,
+                    correlation=copy.deepcopy(dict(request.correlation)),
+                )
             except BaseException as exc:
                 await self._record(
                     surface="llm_request",
@@ -314,7 +338,7 @@ class MiddlewareRegistry:
                 effective_hash=_request_hash(current),
                 correlation=request.correlation,
             )
-        return current
+        return replace(current, correlation=copy.deepcopy(dict(request.correlation)))
 
     @staticmethod
     def _validate_llm_request_transform(
@@ -437,6 +461,8 @@ class MiddlewareRegistry:
         used = False
         downstream_result: dict[str, Any] | None = None
         before = _request_hash(request)
+        before_correlation = copy.deepcopy(dict(request.correlation))
+        before_context = _physical_context_state(request.context)
 
         async def next_once(current: ToolCallRequest) -> dict[str, Any]:
             nonlocal downstream_result, used
@@ -450,7 +476,12 @@ class MiddlewareRegistry:
                     f"{registration.name} passed {type(current).__name__} to next_call; "
                     "expected ToolCallRequest"
                 )
-            if _request_hash(current) != before:
+            if (
+                current.context is not request.context
+                or dict(current.correlation) != before_correlation
+                or _physical_context_state(current.context) != before_context
+                or _request_hash(current) != before
+            ):
                 raise InvalidMiddlewareResultError(
                     f"{registration.name} changed the request at tool_execution; "
                     "use tool_request for transforms"
@@ -470,12 +501,18 @@ class MiddlewareRegistry:
                 raise InvalidMiddlewareResultError(
                     f"{registration.name} returned {type(result).__name__}; expected dict"
                 )
-            if _request_hash(request) != before:
+            if (
+                _request_hash(request) != before
+                or dict(request.correlation) != before_correlation
+                or _physical_context_state(request.context) != before_context
+            ):
                 raise InvalidMiddlewareResultError(
                     f"{registration.name} mutated the request at tool_execution; "
                     "use tool_request for transforms"
                 )
         except BaseException as exc:
+            _restore_physical_context(request.context, before_context)
+            _restore_correlation(request.correlation, before_correlation)
             await self._record(
                 surface="tool_execution",
                 registration=registration,
@@ -484,7 +521,7 @@ class MiddlewareRegistry:
                 duration_ms=(time.monotonic() - started) * 1_000,
                 original_hash=before,
                 effective_hash=before,
-                correlation=request.correlation,
+                correlation=before_correlation,
             )
             if (
                 used
@@ -507,7 +544,7 @@ class MiddlewareRegistry:
             duration_ms=(time.monotonic() - started) * 1_000,
             original_hash=before,
             effective_hash=before,
-            correlation=request.correlation,
+            correlation=before_correlation,
         )
         return result
 
@@ -520,6 +557,7 @@ class MiddlewareRegistry:
         used = False
         downstream_result: AdapterCallResult | None = None
         before = _request_hash(request)
+        before_correlation = copy.deepcopy(dict(request.correlation))
 
         async def next_once(current: LlmCallRequest) -> AdapterCallResult:
             nonlocal downstream_result, used
@@ -533,7 +571,11 @@ class MiddlewareRegistry:
                     f"{registration.name} passed {type(current).__name__} to next_call; "
                     "expected LlmCallRequest"
                 )
-            if current.adapter is not request.adapter or _request_hash(current) != before:
+            if (
+                current.adapter is not request.adapter
+                or dict(current.correlation) != before_correlation
+                or _request_hash(current) != before
+            ):
                 raise InvalidMiddlewareResultError(
                     f"{registration.name} changed the request at llm_execution; "
                     "use llm_request for transforms"
@@ -554,12 +596,13 @@ class MiddlewareRegistry:
                     f"{registration.name} returned {type(result).__name__}; "
                     "expected AdapterCallResult"
                 )
-            if _request_hash(request) != before:
+            if _request_hash(request) != before or dict(request.correlation) != before_correlation:
                 raise InvalidMiddlewareResultError(
                     f"{registration.name} mutated the request at llm_execution; "
                     "use llm_request for transforms"
                 )
         except BaseException as exc:
+            _restore_correlation(request.correlation, before_correlation)
             await self._record(
                 surface="llm_execution",
                 registration=registration,
@@ -568,7 +611,7 @@ class MiddlewareRegistry:
                 duration_ms=(time.monotonic() - started) * 1_000,
                 original_hash=before,
                 effective_hash=before,
-                correlation=request.correlation,
+                correlation=before_correlation,
             )
             if (
                 used
@@ -591,7 +634,7 @@ class MiddlewareRegistry:
             duration_ms=(time.monotonic() - started) * 1_000,
             original_hash=before,
             effective_hash=before,
-            correlation=request.correlation,
+            correlation=before_correlation,
         )
         return result
 
@@ -647,7 +690,10 @@ class MiddlewareRegistry:
                     "effective_hash": effective_hash,
                     "session_id": str(correlation.get("session_id", "")),
                     "turn_id": str(correlation.get("turn_id", "")),
+                    "step_id": str(correlation.get("step_id", "")),
                     "run_id": str(correlation.get("run_id", "")),
+                    "session_generation": int(correlation.get("session_generation", 0) or 0),
+                    "verify_attempt": int(correlation.get("verify_attempt", 0) or 0),
                     "tool_call_id": str(correlation.get("tool_call_id", "")),
                     "llm_call_id": str(correlation.get("llm_call_id", "")),
                     "llm_attempt_id": str(correlation.get("llm_attempt_id", "")),
@@ -691,6 +737,7 @@ def _clone_tool_request(request: ToolCallRequest) -> ToolCallRequest:
     return replace(
         request,
         arguments=copy.deepcopy(dict(request.arguments)),
+        context=copy.copy(request.context),
         correlation=copy.deepcopy(dict(request.correlation)),
     )
 
@@ -701,6 +748,42 @@ def _clone_llm_request(request: LlmCallRequest) -> LlmCallRequest:
         request=copy.deepcopy(request.request),
         correlation=copy.deepcopy(dict(request.correlation)),
     )
+
+
+_PHYSICAL_CONTEXT_FIELDS = (
+    "session_id",
+    "turn_id",
+    "step_id",
+    "session_generation",
+    "verify_attempt",
+    "tool_call_id",
+    "provider",
+    "source",
+    "model",
+    "adapter_name",
+    "tool_plan_hash",
+    "tool_plan_generation",
+    "bound_tool_plan",
+)
+
+
+def _physical_context_state(context: Any) -> tuple[Any, ...]:
+    return tuple(getattr(context, name, None) for name in _PHYSICAL_CONTEXT_FIELDS)
+
+
+def _restore_physical_context(context: Any, state: tuple[Any, ...]) -> None:
+    for name, value in zip(_PHYSICAL_CONTEXT_FIELDS, state, strict=True):
+        with suppress(AttributeError, TypeError):
+            setattr(context, name, value)
+
+
+def _restore_correlation(
+    correlation: Mapping[str, Any],
+    state: Mapping[str, Any],
+) -> None:
+    if isinstance(correlation, MutableMapping):
+        correlation.clear()
+        correlation.update(copy.deepcopy(dict(state)))
 
 
 def _json_default(value: Any) -> Any:

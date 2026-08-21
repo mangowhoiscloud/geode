@@ -922,6 +922,9 @@ async def finalize_and_return_async(
         result.text = ""
         result.error = str(TerminationReason.EXTERNAL_VERIFICATION_REQUIRED)
         result.termination_reason = TerminationReason.EXTERNAL_VERIFICATION_REQUIRED
+        set_turn_termination = getattr(loop, "_set_turn_termination", None)
+        if callable(set_turn_termination):
+            set_turn_termination(TerminationReason.EXTERNAL_VERIFICATION_REQUIRED)
         loop._pending_verification = {
             "candidate": candidate,
             "root_turn_id": correlation.turn_id,

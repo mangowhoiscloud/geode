@@ -26,7 +26,8 @@ from core.observability.redaction import redact_secrets
 
 log = logging.getLogger(__name__)
 
-PUBLIC_HOOK_SCHEMA_VERSION = "geode.public-hook.v1"
+PUBLIC_HOOK_SCHEMA_VERSION = "geode.public-hook.v2"
+_PUBLIC_HOOK_SCHEMA_V1 = "geode.public-hook.v1"
 PUBLIC_HOOK_DEFAULT_TIMEOUT_S = 10.0
 _MAX_STRING_CHARS = 4_096
 _MAX_PAYLOAD_BYTES = 32 * 1_024
@@ -346,41 +347,41 @@ _PAYLOAD_SCHEMAS: dict[HookName, dict[str, Any]] = {
 }
 
 
-def public_hook_schema(hook: HookName) -> dict[str, Any]:
+def public_hook_schema(
+    hook: HookName,
+    *,
+    version: str = PUBLIC_HOOK_SCHEMA_VERSION,
+) -> dict[str, Any]:
     """Generate the stable JSON Schema for one public hook envelope."""
     resolved = HookName(hook)
+    if version not in {_PUBLIC_HOOK_SCHEMA_V1, PUBLIC_HOOK_SCHEMA_VERSION}:
+        raise ValueError(f"unsupported public hook schema version: {version}")
     payload = _PAYLOAD_SCHEMAS[resolved]
+    correlation_properties = {
+        "session_id": _STRING,
+        "turn_id": _STRING,
+        **({"step_id": _STRING} if version == PUBLIC_HOOK_SCHEMA_VERSION else {}),
+        "run_id": _STRING,
+        "session_generation": _INTEGER,
+        "verify_attempt": _INTEGER,
+        "tool_call_id": _STRING,
+        "llm_call_id": _STRING,
+        "llm_attempt_id": _STRING,
+    }
+    schema_path = version.rsplit(".", 1)[-1]
     return copy.deepcopy(
         {
             "$schema": "https://json-schema.org/draft/2020-12/schema",
-            "$id": f"https://geode.dev/schemas/hooks/v1/{resolved.value}.json",
+            "$id": f"https://geode.dev/schemas/hooks/{schema_path}/{resolved.value}.json",
             "title": resolved.value,
             "type": "object",
             "properties": {
-                "schema_version": {"const": PUBLIC_HOOK_SCHEMA_VERSION},
+                "schema_version": {"const": version},
                 "name": {"const": resolved.value},
                 "correlation": {
                     "type": "object",
-                    "properties": {
-                        "session_id": _STRING,
-                        "turn_id": _STRING,
-                        "run_id": _STRING,
-                        "session_generation": _INTEGER,
-                        "verify_attempt": _INTEGER,
-                        "tool_call_id": _STRING,
-                        "llm_call_id": _STRING,
-                        "llm_attempt_id": _STRING,
-                    },
-                    "required": [
-                        "session_id",
-                        "turn_id",
-                        "run_id",
-                        "session_generation",
-                        "verify_attempt",
-                        "tool_call_id",
-                        "llm_call_id",
-                        "llm_attempt_id",
-                    ],
+                    "properties": correlation_properties,
+                    "required": list(correlation_properties),
                     "additionalProperties": False,
                 },
                 "payload": {
@@ -426,6 +427,7 @@ class HookCorrelation:
     tool_call_id: str = ""
     llm_call_id: str = ""
     llm_attempt_id: str = ""
+    step_id: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -697,6 +699,7 @@ class HookRegistry:
                     "duration_ms": round(duration_ms, 3),
                     "session_id": correlation.session_id,
                     "turn_id": correlation.turn_id,
+                    "step_id": correlation.step_id,
                     "run_id": correlation.run_id,
                     "session_generation": correlation.session_generation,
                     "verify_attempt": correlation.verify_attempt,

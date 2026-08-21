@@ -47,6 +47,17 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Step snapshots remain authoritative through tool execution.** Middleware-selected
+  routes are finalized without replacing physical-turn history, the response tool
+  batch executes against the captured bound plan, step correlation reaches tool
+  hooks and runtime events through the versioned `geode.public-hook.v2` envelope
+  and indexed durable audit projections while the v1 schema remains queryable,
+  approval events inherit the same physical correlation, usage is charged to the
+  middleware-finalized model, request middleware cannot mutate that identity, and
+  verification escalation updates the turn's final termination reason.
+
 ### Changed
 
 - **Claude subscription compatibility is warning-only.** Legacy
