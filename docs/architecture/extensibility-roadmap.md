@@ -226,6 +226,7 @@ normal review and CI; implementations start only after the claim merges.
 | Closure package | GAP IDs | Owner/session | Implementation branch | Claim evidence | Claimed at (UTC) |
 |---|---|---|---|---|---|
 | R8.3 | REL-004 | `session=codex-root task=r8-3-publication-grace-evidence` | `feature/r8-3-publication-grace-evidence` | Readiness [#3039](https://github.com/mangowhoiscloud/geode/pull/3039); v1.0.23 GitHub/PyPI parity and candidate interval re-audited | `2026-08-20T07:41:19Z` |
+| R3.2 | LOOP-003 | `session=codex-root task=r3-2-phase-collaborators` | `feature/r3-2-phase-collaborators` | Reconciliation/readiness [#3069](https://github.com/mangowhoiscloud/geode/pull/3069); six bounded loop phases and compatibility acceptance re-audited | `2026-08-21T12:36:16Z` |
 
 ## 1. Program objective
 
@@ -526,7 +527,7 @@ and closure evidence are appended in §10.
 | CAP-006 | `ABSENT` | Adding a native/Google tool requires edits across several policy files | Change-surface fixture proves the bounded file/registration budget in §8 | R7.2 | CAP-003, CAP-004, CAP-005 | `OPEN` |
 | LOOP-001 | `ABSENT` | No immutable object freezes one step's route, policy, tool plan, and trace identity | `StepSnapshot` is created once per step and used by model/tool/telemetry paths | R3.1 | CAP-002 | `IN_DEVELOP` |
 | LOOP-002 | `PARTIAL` | Mutable state is distributed across loop fields, contexts, checkpoints, and helpers | `TurnState` and explicit session/turn/step ownership replace ambiguous lifetimes | R3.1 | LOOP-001 | `IN_DEVELOP` |
-| LOOP-003 | `MISFIT` | `AgenticLoop` owns orchestration plus many independently changing policies | Visible loop delegates to bounded input/model/tool/observe/termination phases | R3.2 | LOOP-001, LOOP-002 | `READY` |
+| LOOP-003 | `MISFIT` | `AgenticLoop` owns orchestration plus many independently changing policies | Visible loop delegates to bounded input/model/tool/observe/termination phases | R3.2 | LOOP-001, LOOP-002 | `IN_PROGRESS` |
 | LOOP-004 | `ABSENT` | Loop has 2,714 LOC, 67 methods, and 27 constructor args with no local ratchet | Closure budgets in §7.3 are executable and cannot regress | R3.3 | LOOP-003 | `OPEN` |
 | LOOP-005 | `MISFIT` | `SubAgentManager` combines request codec, role resolution, execution, validation, and announcements | Separate collaborators own those responsibilities; manager remains an orchestrator | R3.4 | LOOP-002 | `READY` |
 | DI-001 | `PARTIAL` | 26 module-level `ContextVar` declarations have no lifecycle classification | Generated inventory classifies request identity, diagnostics, mutable request state, request-local cache, and forbidden service lookup | R4.1 | LOOP-002 | `READY` |
@@ -2130,16 +2131,20 @@ usage identity for each step, while `TurnState` owns mutable turn
 accumulation. Additive event schema v5 persists `step_id`; public-hook v1
 queries and prior stored rows remain compatible.
 
-R3.2 (`LOOP-003`), R3.4 (`LOOP-005`), and R4.1 (`DI-001`) are the newly
-dependency-satisfied unclaimed `READY` packages after whole-package re-audit
-against `origin/develop@e6ccaf73e1ff6027e510bfc5e4e16b8679f369e4`.
-The generated baseline measures `AgenticLoop` at 3,462 LOC, 82 methods, and 29
-constructor arguments; `SubAgentManager` at 1,464 LOC, 24 methods, and 18
-constructor arguments; and 30 module-level `ContextVar` declarations. R3.2
-owns the six bounded loop phases, R3.4 owns the sub-agent collaborator split,
-and R4.1 owns classification, lifetime, propagation, and teardown evidence for
-the ContextVar inventory. Each requires a separate claim; R3.2 is the next
-master-sequence claim. R3.3 remains `OPEN` behind LOOP-003 delivery.
+R3.2 (`LOOP-003`) is `IN_PROGRESS` under the active claim for
+`feature/r3-2-phase-collaborators` after reconciliation/readiness
+[#3069](https://github.com/mangowhoiscloud/geode/pull/3069) merged as
+`250ea5ae776e58820ced466579524a3af0bf5fa6`. Implementation may start only
+after this claim merges and a fresh worktree is allocated from the updated
+canonical `develop`. The claimed scope extracts the six ordered input,
+model-call, provider/retry, tool, observation/compaction, and termination/result
+phases behind the existing `AgenticLoop.arun` behavior. It authorizes no R3.3
+budget change, R3.4 sub-agent decomposition, or R4 service restructuring.
+
+R3.4 (`LOOP-005`) and R4.1 (`DI-001`) remain unclaimed `READY` packages. Their
+current re-audit baselines are `SubAgentManager` at 1,464 LOC, 24 methods, and
+18 constructor arguments, plus 30 generated module-level `ContextVar`
+declarations. R3.3 remains `OPEN` behind LOOP-003 delivery.
 
 R9.1 (`CODE-001`) was already dependency-satisfied and remains `OPEN` pending
 its own serialized whole-package readiness transaction later in master order.
