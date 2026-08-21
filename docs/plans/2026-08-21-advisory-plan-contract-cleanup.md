@@ -39,7 +39,7 @@ round의 목표·관찰·이력·현재 step을 조건으로 AgenticLoop가 선�
 | PLAN-C05 | verify-fail·low-confidence replan | 유지 | 기존 Plan이 있을 때 관측된 failure/belief change로만 revision한다. |
 | PLAN-C06 | `PlanMode`·`AnalysisPlan`·`PlanStore` | 제거 | advisory Plan과 별도인 dependency DAG·template·status store다. |
 | PLAN-C07 | `create/approve/reject/modify/list_plan(s)` model tools | 제거 | approval이 tool execution authority와 결속되지 않은 중복 checkpoint다. |
-| PLAN-C08 | SIL `decomposition` mutation target | 제거 | runtime reader 제거 뒤에는 효과 없는 mutation surface가 된다. |
+| PLAN-C08 | SIL `decomposition` mutation target | 유지·재연결 | lineage와 실험 표면을 보존하되 자동 DAG decomposer가 아니라 advisory plan/replan 구조 정책에 적용한다. |
 | PLAN-C09 | `update_plan` checklist | 유지·단순화 | Codex와 같은 progress surface이며 step을 실행하지 않는다. |
 | PLAN-C10 | `/plan` | 유지 | tools-off planner가 최대 8개의 advisory step 하나만 설치한다. |
 
@@ -70,10 +70,11 @@ round의 목표·관찰·이력·현재 step을 조건으로 AgenticLoop가 선�
 ### Prompt and self-improving surfaces
 
 - `core/llm/prompts/decomposer.md`와 pinned hash를 삭제한다.
-- `core.agent.decomposition_policy`와 product policy-source binding을
-  삭제한다.
-- SIL mutator의 `decomposition` target kind와 경로 상수를 삭제한다. 과거
-  mutation row는 기록으로 남지만 새 mutation은 fail-closed reject된다.
+- `core.agent.decomposition_policy`, product policy-source binding,
+  `decomposition` target kind와 경로는 lineage 호환성을 위해 보존한다.
+- 해당 정책은 `/plan`과 evidence-triggered replan의 구조 선택 prompt에만
+  적용한다. structured schema와 `allow_tools=False` 경계는 mutation으로
+  확장할 수 없어 실행 권한이나 DAG executor를 되살리지 않는다.
 - 현재 동작을 설명하는 config·runtime·portfolio 문서는 새 계약으로
   동기화한다. 역사적 CHANGELOG 본문과 과거 실험 결과는 다시 쓰지 않는다.
 
@@ -125,7 +126,8 @@ Codex primary source:
 3. 자동 decomposition과 dependency/tool-bound plan schema를 삭제한다.
 4. duplicate PlanMode/store/tool surface를 삭제하고 tool catalog parity를
    재생성한다.
-5. SIL의 dead decomposition mutation surface와 현재 문서를 정리한다.
+5. SIL `decomposition` mutation surface를 advisory planning 정책에 재연결하고
+   현재 문서를 정리한다.
 6. targeted → prompt/static → package/install → full non-live 순으로 검증한다.
 7. committed diff를 독립 검토한 뒤 feature → develop → main으로 승격한다.
 
