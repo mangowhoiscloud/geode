@@ -43,6 +43,14 @@ export default function Page() {
               <li>모델이 요청한 도구 실행.</li>
               <li>assistant 메시지와 tool_result를 히스토리에 붙이고 다음 라운드로 진입합니다.</li>
             </ol>
+            <p>
+              각 LLM 샘플링 직전에는 불변 <code>StepSnapshot</code>이 모델 경로,
+              도구 계획 세대, 예산, 취소 핸들, 추적 상관관계를 고정합니다. 그
+              응답의 도구 배치는 같은 스냅샷을 사용합니다. 한 물리적 턴의 메시지,
+              완료 라운드, 재시도, 계획 힌트, 종료 사유는 가변 <code>TurnState</code>가
+              소유합니다. 따라서 같은 라운드 번호로 재시도해도 샘플링 step ID는
+              단조 증가합니다.
+            </p>
             <figure>
               <img
                 src="/geode/diagrams/agentic-loop.svg"
@@ -193,6 +201,15 @@ export default function Page() {
               <li>Execute the tools the model requested.</li>
               <li>Append the assistant message and tool_results to history, enter the next round.</li>
             </ol>
+            <p>
+              Immediately before each LLM sample, an immutable{" "}
+              <code>StepSnapshot</code> pins the model route, tool-plan generation,
+              budgets, cancellation handle, and trace correlation. The response&apos;s
+              tool batch uses that same snapshot. A mutable <code>TurnState</code>{" "}
+              owns one physical turn&apos;s messages, completed rounds, retries, plan
+              hint, and terminal reason, so retries at the same round still receive
+              monotone sampling-step IDs.
+            </p>
             <figure>
               <img
                 src="/geode/diagrams/agentic-loop.svg"

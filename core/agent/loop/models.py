@@ -5,6 +5,7 @@ Extracted from the monolithic ``core/agent/loop.py`` (Tier 3 #7).
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 import logging
 from dataclasses import dataclass, field
@@ -12,9 +13,60 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from core.hooks import HookCorrelation
     from core.llm.token_tracker import LLMUsage
+    from core.tools.plan import BoundToolPlan
 
 log = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class StepSnapshot:
+    """Immutable identity and runtime inputs for one model sampling step."""
+
+    step_id: str
+    step_index: int
+    round_index: int
+    model: str
+    provider: str
+    source: str
+    adapter_name: str
+    bound_tool_plan: BoundToolPlan | None
+    time_budget_s: float
+    cost_budget_usd: float
+    cancellation: asyncio.Event
+    correlation: HookCorrelation
+
+    @property
+    def tool_plan_hash(self) -> str:
+        return self.bound_tool_plan.content_hash if self.bound_tool_plan is not None else ""
+
+    @property
+    def tool_plan_generation(self) -> int:
+        return self.bound_tool_plan.generation if self.bound_tool_plan is not None else 0
+
+    @property
+    def policy_generation(self) -> int:
+        """The projected plan generation also owns effective policy metadata."""
+        return self.tool_plan_generation
+
+
+@dataclass(slots=True)
+class TurnState:
+    """Mutable accumulator owned by one physical AgenticLoop turn."""
+
+    turn_id: str
+    messages: list[dict[str, Any]] = field(default_factory=list)
+    plan_hint: str = ""
+    round_index: int = 0
+    step_count: int = 0
+    retry_count: int = 0
+    termination_reason: TerminationReason | None = None
+    cancellation: asyncio.Event = field(default_factory=asyncio.Event)
+
+    def next_step_index(self) -> int:
+        self.step_count += 1
+        return self.step_count
 
 
 class TerminationReason(StrEnum):

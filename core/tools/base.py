@@ -109,6 +109,9 @@ class ToolContext:
     """
 
     session_id: str = ""
+    step_id: str = ""
+    session_generation: int = 0
+    verify_attempt: int = 0
     tool_call_id: str = ""
     cwd: Path = field(default_factory=Path.cwd)
     permission_mode: str = ""
@@ -123,6 +126,8 @@ class ToolContext:
     source: str = ""
     model: str = ""
     adapter_name: str = ""
+    tool_plan_hash: str = ""
+    tool_plan_generation: int = 0
     # Effective request metadata is written by ToolExecutor after trusted and
     # public request transforms. ToolCallProcessor consumes it for persistence,
     # privacy classification, and result offload decisions.

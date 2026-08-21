@@ -65,7 +65,9 @@ from ._tool_factory import (
 )
 from .models import (
     AgenticResult,
+    StepSnapshot,
     TerminationReason,
+    TurnState,
     _context_exhausted_message,
     _ContextExhaustedError,
 )
@@ -529,6 +531,8 @@ class AgenticLoop:
             else MiddlewareRegistry(events=hooks)
         )
         self._turn_id = ""
+        self._turn_state: TurnState | None = None
+        self._current_step_snapshot: StepSnapshot | None = None
         self._verify_root_turn_id = ""
         self._verify_root_user_input = ""
         self._verify_attempt = 0
@@ -833,7 +837,11 @@ class AgenticLoop:
         await self._emit_cognitive(HookEvent.COGNITIVE_UPDATE_MEMORY, round=round_idx + 1)
 
     async def _run_cognitive_act_observe_cycle(
-        self, response: Any, round_idx: int
+        self,
+        response: Any,
+        round_idx: int,
+        *,
+        step_snapshot: StepSnapshot | None = None,
     ) -> list[dict[str, Any]]:
         """Emit ACT before the tool batch, run the batch, emit OBSERVE
         after, update :attr:`cognitive_state` round-end fields, emit
@@ -853,6 +861,8 @@ class AgenticLoop:
             tool_names=tool_names,
         )
 
+        if step_snapshot is not None:
+            self._tool_processor.bind_step(step_snapshot)
         tool_results = await self._tool_processor.process(response)
 
         await self._emit_cognitive(
@@ -1078,6 +1088,58 @@ class AgenticLoop:
                 rounds=round_idx + 1,
             )
 
+    def _open_step_snapshot(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        round_idx: int,
+        model: str,
+        allow_tools: bool,
+    ) -> StepSnapshot:
+        """Freeze the exact runtime inputs for one model sampling request."""
+        turn = self._turn_state
+        if turn is None or turn.turn_id != self._turn_id:
+            turn = TurnState(turn_id=self._turn_id, messages=messages)
+            self._turn_state = turn
+        elif turn.messages is not messages:
+            turn.messages = messages
+        step_index = turn.next_step_index()
+        adapter = self._new_adapter
+        snapshot = StepSnapshot(
+            step_id=f"{self._turn_id or 'unbound'}:step-{step_index}",
+            step_index=step_index,
+            round_index=round_idx,
+            model=model,
+            provider=str(getattr(adapter, "provider", self._provider)),
+            source=str(getattr(adapter, "source", self._source)),
+            adapter_name=str(getattr(adapter, "name", "")),
+            bound_tool_plan=(self._bound_tool_plan if allow_tools else None),
+            time_budget_s=self._time_budget_s,
+            cost_budget_usd=self._cost_budget,
+            cancellation=turn.cancellation,
+            correlation=HookCorrelation(
+                session_id=self._session_id,
+                turn_id=self._turn_id,
+                session_generation=self._session_generation,
+                verify_attempt=self._verify_attempt,
+            ),
+        )
+        self._current_step_snapshot = snapshot
+        self._tool_processor.bind_step(snapshot)
+        return snapshot
+
+    def _bind_turn_messages(self, messages: list[dict[str, Any]]) -> TurnState:
+        turn = self._turn_state
+        if turn is None:
+            raise RuntimeError("agent turn state was not initialized")
+        turn.messages = messages
+        return turn
+
+    def _set_llm_retry_count(self, count: int) -> None:
+        self._consecutive_llm_failures = count
+        if self._turn_state is not None:
+            self._turn_state.retry_count = count
+
     async def _sync_model_and_rebuild_prompt(
         self,
         system_prompt: str,
@@ -1134,6 +1196,8 @@ class AgenticLoop:
                         "prompt_len": len(system_prompt),
                     },
                 )
+        if (turn := getattr(self, "_turn_state", None)) is not None:
+            turn.plan_hint = self._last_plan_hint
         return system_prompt
 
     def _check_round_guards(self, round_idx: int) -> str | None:
@@ -1191,6 +1255,11 @@ class AgenticLoop:
         )
         if tool_calls is not None:
             result.tool_calls = tool_calls
+        turn = getattr(self, "_turn_state", None)
+        if turn is not None and turn.turn_id == getattr(self, "_turn_id", ""):
+            turn.termination_reason = reason
+            if reason is TerminationReason.USER_CANCELLED:
+                turn.cancellation.set()
         return result
 
     async def _apply_user_prompt_hook(
@@ -1242,6 +1311,8 @@ class AgenticLoop:
         self._op_logger.reset()
         self._pre_execution_retry_errors.clear()
         self._turn_id = f"t-{uuid.uuid4().hex[:12]}"
+        self._turn_state = TurnState(turn_id=self._turn_id)
+        self._current_step_snapshot = None
         if self._timeline is not None:
             self._timeline.bind_turn(
                 self._turn_id,
@@ -2395,6 +2466,7 @@ class AgenticLoop:
         self._preflight_hint = preflight_hint
 
         messages = self.context.get_messages()
+        turn_state = self._bind_turn_messages(messages)
         # Codex Goal uses a hidden contextual-user fragment for idle-turn
         # steering. Keep this request-local so the continuation is visible to
         # the model without masquerading as a persisted human message.
@@ -2427,9 +2499,9 @@ class AgenticLoop:
         from core.llm.token_tracker import get_tracker as _get_tracker
 
         self._usage_snapshot = _get_tracker().snapshot()
-        round_idx = 0
         guard_reason: str | None = None
         while True:
+            round_idx = turn_state.round_index
             guard_reason = self._check_round_guards(round_idx)
             if guard_reason is not None:
                 break
@@ -2508,7 +2580,7 @@ class AgenticLoop:
                         user_input,
                         round_idx + 1,
                     )
-                response = _llm_outcome
+                response, response_step = _llm_outcome, self._current_step_snapshot
             except EmptyModelOutputError as exc:
                 partial = await self._afinalize_actionable_partial_on_empty(
                     exc,
@@ -2628,7 +2700,7 @@ class AgenticLoop:
                             },
                         )
 
-                self._consecutive_llm_failures += 1
+                self._set_llm_retry_count(self._consecutive_llm_failures + 1)
 
                 # auto-checkpoint before retry (resume after a model switch)
                 # — after the increment so the persisted guard state carries
@@ -2663,7 +2735,7 @@ class AgenticLoop:
                             self._consecutive_llm_failures,
                             self.model,
                         )
-                        self._consecutive_llm_failures = 0
+                        self._set_llm_retry_count(0)
                         continue
 
                 # Below retry cap: backoff and retry (don't break the loop)
@@ -2713,7 +2785,7 @@ class AgenticLoop:
                 return await self._afinalize_and_return(result, user_input, round_idx + 1)
 
             # Successful LLM response — reset failure counter
-            self._consecutive_llm_failures = 0
+            self._set_llm_retry_count(0)
 
             # Track usage + Claude Code-style token display
             await self._track_usage_async(response)
@@ -2769,7 +2841,11 @@ class AgenticLoop:
                 )
                 return await self._afinalize_and_return(result, user_input, round_idx + 1)
 
-            tool_results = await self._run_cognitive_act_observe_cycle(response, round_idx)
+            tool_results = await self._run_cognitive_act_observe_cycle(
+                response,
+                round_idx,
+                step_snapshot=response_step,
+            )
 
             # External half-duplex orchestrators must receive every proposed
             # call before convergence guards can replace it with terminal text.
@@ -2863,7 +2939,7 @@ class AgenticLoop:
             # accumulate serialized messages for the next round
             messages.append(self._tool_round_assistant_message(response))
             messages.append({"role": "user", "content": tool_results})
-            round_idx += 1
+            turn_state.round_index += 1
 
         # Loop exited via guard — determine reason
         self._op_logger.finalize()
@@ -2981,6 +3057,12 @@ class AgenticLoop:
         effective_model = model or self.model
         # Shared list — in-place pruning must persist into later rounds.
         await self._check_context_overflow(system, messages)
+        step_snapshot = self._open_step_snapshot(
+            messages,
+            round_idx=round_idx,
+            model=effective_model,
+            allow_tools=allow_tools,
+        )
 
         # WRAP_UP: force text-only when approaching limits
         wrap_up = False
@@ -3032,8 +3114,8 @@ class AgenticLoop:
         request_tools: list[dict[str, Any]] | BoundToolPlan
         if not allow_tools:
             request_tools = []
-        elif self._bound_tool_plan is not None:
-            request_tools = self._bound_tool_plan
+        elif step_snapshot.bound_tool_plan is not None:
+            request_tools = step_snapshot.bound_tool_plan
         else:
             request_tools = self._tools
         raw_denied_tools: Any = getattr(self.executor, "_denied_tools", frozenset())
@@ -3042,7 +3124,7 @@ class AgenticLoop:
         )
         raw_executable_tools: Any = ()
         if allow_tools:
-            if self._bound_tool_plan is not None:
+            if step_snapshot.bound_tool_plan is not None:
                 raw_executable_tools = getattr(
                     self.executor,
                     "_bound_allowed_tools",
@@ -3062,12 +3144,12 @@ class AgenticLoop:
             tools=request_tools,
             transient_tools=(
                 list(self._transient_tools)
-                if allow_tools and self._bound_tool_plan is not None
+                if allow_tools and step_snapshot.bound_tool_plan is not None
                 else None
             ),
             transient_deferred_tool_names=(
                 self._transient_deferred_tool_names
-                if allow_tools and self._bound_tool_plan is not None
+                if allow_tools and step_snapshot.bound_tool_plan is not None
                 else ()
             ),
             tool_choice=tool_choice,
@@ -3086,10 +3168,13 @@ class AgenticLoop:
         )
         import uuid as _uuid
 
-        llm_call_id = f"llm-{self._turn_id}-{round_idx + 1}-{_uuid.uuid4().hex[:8]}"
+        llm_call_id = f"llm-{step_snapshot.step_id}-{_uuid.uuid4().hex[:8]}"
         correlation = {
-            "session_id": self._session_id,
-            "turn_id": self._turn_id,
+            "session_id": step_snapshot.correlation.session_id,
+            "turn_id": step_snapshot.correlation.turn_id,
+            "step_id": step_snapshot.step_id,
+            "session_generation": step_snapshot.correlation.session_generation,
+            "verify_attempt": step_snapshot.correlation.verify_attempt,
             "llm_call_id": llm_call_id,
             "llm_attempt_id": "",
         }
@@ -3102,13 +3187,16 @@ class AgenticLoop:
                 correlation=correlation,
             )
         )
-        if self._bound_tool_plan is not None and llm_request.adapter is not original_adapter:
+        if (
+            step_snapshot.bound_tool_plan is not None
+            and llm_request.adapter is not original_adapter
+        ):
             raise ValueError("LLM middleware cannot change a bound request adapter")
         call_adapter = llm_request.adapter
         req = llm_request.request
-        if self._bound_tool_plan is not None:
+        if step_snapshot.bound_tool_plan is not None:
             _validate_bound_request_rewrite(bound_request, req)
-        if session_allowed_tools is not None and self._bound_tool_plan is None:
+        if session_allowed_tools is not None and step_snapshot.bound_tool_plan is None:
             from dataclasses import replace
 
             effective_allowed = session_allowed_tools

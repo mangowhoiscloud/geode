@@ -18,9 +18,8 @@ Static + behavioural pins:
    pin so future refactors that silently drop the wiring fail visibly).
 4. ``_safe_delegate`` injects ``_tool_context`` into the tool's
    ``aexecute`` kwargs when given a non-None context.
-5. ``ToolCallProcessor`` builds a fresh ``ToolContext`` per dispatch and
-   passes it to ``executor.aexecute(..., context=ctx)`` (source-level
-   pin — runtime test would require a full executor fixture).
+5. ``ToolCallProcessor`` builds a fresh ``ToolContext`` per dispatch from its
+   resolved route.
 """
 
 from __future__ import annotations
@@ -272,20 +271,26 @@ def test_processor_init_accepts_provider_source_adapter() -> None:
 
 
 def test_processor_builds_tool_context_for_each_dispatch() -> None:
-    """Source-level pin: the processor's dispatch path must construct a
-    ``ToolContext`` carrying its own provider/source/model/adapter_name
-    and pass it as ``context=`` to the executor. A regression here
-    silently disconnects the loop from the tool layer (each tool would
-    fall back to ``infer_source`` independently)."""
-    src = (
-        Path(__file__).resolve().parents[3] / "core" / "agent" / "tool_executor" / "processor.py"
-    ).read_text(encoding="utf-8")
-    assert "tool_ctx = ToolContext(" in src
-    assert "provider=self._provider" in src
-    assert "source=self._source" in src
-    assert "model=self._model" in src
-    assert "adapter_name=self._adapter_name" in src
-    assert "context=tool_ctx" in src
+    """The processor's fallback context preserves its resolved route."""
+    from core.agent.tool_executor.processor import ToolCallProcessor
+
+    processor = ToolCallProcessor(
+        executor=MagicMock(),
+        op_logger=MagicMock(),
+        error_recovery=MagicMock(),
+        provider="anthropic",
+        source="subscription",
+        model="claude-opus-4-7",
+        adapter_name="anthropic-oauth",
+    )
+
+    context = processor._new_tool_context("call-1")
+
+    assert context.tool_call_id == "call-1"
+    assert context.provider == "anthropic"
+    assert context.source == "subscription"
+    assert context.model == "claude-opus-4-7"
+    assert context.adapter_name == "anthropic-oauth"
 
 
 # ---------------------------------------------------------------------------
