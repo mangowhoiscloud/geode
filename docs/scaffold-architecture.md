@@ -415,9 +415,10 @@ REODE에서 이식한 칸반 시스템:
 
 ### 5.4 워크플로우 자동화
 - `orchestration/task_system.py`: TaskGraph DAG 관리
-- `orchestration/plan_mode.py`: 플랜 모드 (create → approve/reject)
 - `orchestration/stuck_detection.py`: 스턱 감지 → 자동 복구
-- *목표 → 서브태스크 분해* — `core/agent/plan.py:decompose_async` (PR-CL-A1-followup 2026-05-23 에서 `orchestration/goal_decomposer.py` 삭제 후 흡수)
+- `core/agent/plan.py`: 명시적 tools-off advisory plan과 관측된
+  verify/low-confidence evidence에 따른 replan. TaskGraph를 생성하거나
+  실행하지 않는다.
 
 ---
 

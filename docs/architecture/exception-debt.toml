@@ -197,19 +197,6 @@ target = "LOOP-003"
 expires_when = "Transition table extraction makes Ruff report complexity below 52 and the ceiling is lowered."
 
 [[ruff_debt]]
-id = "RUFF-002"
-rule = "PLR0912"
-mode = "ceiling"
-path = "core/agent/loop/agent_loop.py"
-symbol = "AgenticLoop._arun_once"
-observed = 51
-owner = "core.agent"
-reason = "The physical turn still owns the branch-heavy retry, guard, and tool-result control flow."
-created = "2026-05-06"
-target = "LOOP-003"
-expires_when = "Phase extraction makes Ruff report fewer than 51 branches and the ceiling is lowered."
-
-[[ruff_debt]]
 id = "RUFF-009"
 rule = "PLR0912"
 mode = "ceiling"
@@ -228,7 +215,7 @@ rule = "PLR0913"
 mode = "override"
 path = "core/agent/loop/agent_loop.py"
 symbol = "AgenticLoop.__init__"
-observed = 30
+observed = 29
 owner = "core.agent"
 reason = "The legacy AgenticLoop constructor still receives multiple lifecycle service groups."
 created = "2026-05-17"
@@ -249,17 +236,17 @@ target = "STORE-003"
 expires_when = "A typed dataset record reduces the writer below 23 arguments and the ceiling is lowered."
 
 [[ruff_debt]]
-id = "RUFF-011"
+id = "RUFF-012"
 rule = "PLR0915"
 mode = "ceiling"
-path = "core/agent/loop/agent_loop.py"
-symbol = "AgenticLoop._arun_once"
-observed = 209
-owner = "core.agent"
-reason = "The physical turn still combines retry, tool execution, observation, and continuation phases."
-created = "2026-08-20"
-target = "LOOP-003"
-expires_when = "Phase extraction reduces _arun_once below 209 statements and the ceiling is lowered."
+path = "geode_product/self_improving/train.py"
+symbol = "main"
+observed = 207
+owner = "geode_product.self_improving"
+reason = "The self-improving entry point still composes the full experiment lifecycle."
+created = "2026-08-21"
+target = "DI-003"
+expires_when = "Lifecycle extraction reduces main below 207 statements and the ceiling is lowered."
 
 [[ruff_debt]]
 id = "RUFF-010"

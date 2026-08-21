@@ -379,7 +379,6 @@ def _build_loop(
             "When finished, provide a concise final answer."
         ),
         quiet=True,
-        enable_goal_decomposition=False,
         activity_sink_provider=current_activity_sink,
         policy_sources=policy_sources,
     )

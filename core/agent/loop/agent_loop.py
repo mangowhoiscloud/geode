@@ -8,7 +8,7 @@ Supports:
 - Multi-intent: "분석하고 비교해줘" → sequential tool calls
 - Multi-turn: context preserved across interactions
 - Self-correction: LLM can retry or adjust based on tool results
-- Goal decomposition: compound requests auto-decomposed into sub-goal DAGs
+- Advisory plans: explicit structure, revised only from observed evidence
 """
 
 from __future__ import annotations
@@ -52,7 +52,6 @@ from . import (
     _goal,
     _lifecycle,
     _model_switching,
-    _planner_dispatch,
     _response,
 )
 from ._tool_factory import (
@@ -404,7 +403,6 @@ class AgenticLoop:
         mcp_manager: Any | None = None,
         skill_registry: Any | None = None,
         hooks: HookSystem | None = None,
-        enable_goal_decomposition: bool = True,
         parent_session_key: str = "",
         parent_session_id: str = "",
         system_suffix: str = "",
@@ -685,9 +683,6 @@ class AgenticLoop:
             source=_ctx_source,
             adapter_name=getattr(self._new_adapter, "name", ""),
         )
-
-        # Goal decomposition: auto-decompose compound requests into sub-goal DAGs
-        self._enable_goal_decomposition = enable_goal_decomposition
 
         # LLM-call retry budget; at the cap the loop exits with
         # model_action_required so the user picks a model via /model.
@@ -1667,9 +1662,9 @@ class AgenticLoop:
         installs the new :class:`Plan` via ``set_active_plan``.
 
         Triggers: ``verify_fail`` (fires at the first round of the *next*
-        ``arun``, since verify runs at finalization) and ``cadence``
-        (every ``settings.replan_interval`` rounds). Failures NEVER raise;
-        no-op when ``replan_enabled=False`` or no trigger fires.
+        ``arun``, since verify runs at finalization) and an edge-triggered
+        ``low_confidence`` signal. Failures NEVER raise; no-op when
+        ``replan_enabled=False`` or no trigger fires.
         """
         try:
             from core.agent.plan import (
@@ -1708,9 +1703,8 @@ class AgenticLoop:
             if trigger == "low_confidence":
                 # consume the edge — no refire until confidence recovers
                 self._low_confidence_replan_armed = False
-            # Abandon path: a verify_fail past replan_max_attempts on one
-            # step advances the plan instead of calling the planner (step
-            # is stuck). The cadence trigger isn't capped.
+            # A verify_fail past replan_max_attempts abandons the stuck step
+            # instead of calling the planner again.
             if trigger == "verify_fail" and metrics.active_plan is not None:
                 metrics.record_step_attempt()
                 cap = _replan_max_attempts()
@@ -2382,27 +2376,6 @@ class AgenticLoop:
         # Retained on self so mid-arun prompt rebuilds re-apply it.
         self._preflight_hint = preflight_hint
 
-        # Goal decomposition — break compound requests into sub-goal DAGs
-        # (planner LLM call; the Plan is installed on SessionMetrics and
-        # rendered via ``_consume_plan_hint`` — the hint return was removed
-        # as dead plumbing, it had been None-only since the Plan migration).
-        try:
-            await self._try_decompose(
-                user_input,
-                enabled=not verification_continuation and _goal_continuation is None,
-            )
-        except BillingError as exc:
-            self._emit_quota_panel(exc)
-            return await self._afinalize_and_return(
-                self._terminal_result(
-                    TerminationReason.BILLING_ERROR,
-                    exc.user_message(),
-                    rounds=0,
-                ),
-                user_input,
-                0,
-            )
-
         messages = self.context.get_messages()
         # Codex Goal uses a hidden contextual-user fragment for idle-turn
         # steering. Keep this request-local so the continuation is visible to
@@ -2446,7 +2419,7 @@ class AgenticLoop:
             is_last_round = (self.max_rounds > 0) and (round_idx == self.max_rounds - 1)
             self._op_logger.begin_round("AgenticLoop")
 
-            # Dynamic Replan trigger (verify-FAIL / cadence); the rebuild
+            # Evidence-triggered replan; the rebuild
             # below picks up the new plan via _consume_plan_hint.
             await self._maybe_replan_async(
                 round_idx,
@@ -2939,20 +2912,6 @@ class AgenticLoop:
     def _build_system_prompt(self) -> str:
         """Delegates to :func:`_context.build_system_prompt`."""
         return _context.build_system_prompt(self)
-
-    # ------------------------------------------------------------------
-    # Goal decomposition — delegate to ``_planner_dispatch``
-    # ------------------------------------------------------------------
-
-    async def _try_decompose(self, user_input: str, *, enabled: bool = True) -> str | None:
-        """Delegates to :func:`_planner_dispatch.try_decompose`.
-
-        Async because the planner path awaits ``loop._call_llm`` — single
-        async LLM dispatch, no thread-pool hop.
-        """
-        if not enabled:
-            return None
-        return await _planner_dispatch.try_decompose(self, user_input)
 
     # ------------------------------------------------------------------
     # Durable child mailbox — delegate to ``_collaboration_mailbox``

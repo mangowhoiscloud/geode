@@ -3,7 +3,7 @@
 작성: 2026-08-21
 기준: `origin/develop@2704002ba0b3`
 구현 브랜치: `codex/plan-contract-cleanup`
-상태: scope frozen before implementation
+상태: implemented and locally verified; promotion pending
 
 ## 1. 결과 계약
 
@@ -69,7 +69,7 @@ round의 목표·관찰·이력·현재 step을 조건으로 AgenticLoop가 선�
 
 ### Prompt and self-improving surfaces
 
-- `core/llm/prompts/decomposer.md`와 pinned hash를 삭제한다.
+- `core/llm/prompts/decomposer.md`와 loader/package reference를 삭제한다.
 - `core.agent.decomposition_policy`, product policy-source binding,
   `decomposition` target kind와 경로는 lineage 호환성을 위해 보존한다.
 - 해당 정책은 `/plan`과 evidence-triggered replan의 구조 선택 prompt에만
@@ -149,3 +149,20 @@ Codex primary source:
 - full non-live suite와 CI가 green이다.
 - feature PR이 develop에, pass-through PR이 main에 병합되고 원격 main tree에서
   제거된 module/tool이 다시 나타나지 않는다.
+
+## 8. 구현·검증 증거
+
+- 자동 compound decomposition, planner dispatch, dependency/tool-bound Plan
+  metadata, cadence replan과 중복 PlanMode/PlanStore/model tool 5개를 삭제했다.
+- SIL `decomposition` 정책 파일·target kind·schema는 같은 안정 이름으로
+  유지하고 tools-off `/plan` 및 evidence-triggered replan prompt에 연결했다.
+- Cognitive Loop의 verify-fail, edge-triggered low-confidence, per-step bounded
+  abandon, plan identity/revision, timeline event 경로를 유지하고 회귀 테스트로
+  고정했다.
+- full non-live: `10332 passed, 61 skipped, 1 deselected`.
+- Ruff·format, mypy 433 source files, 6 import contracts, architecture baseline,
+  architecture exception ratchet가 통과했다.
+- wheel/sdist artifact 검사와 fresh virtualenv 설치가 통과했고, 설치 wheel에서
+  `update_plan`만 존재하며 제거된 5개 plan tool이 없음을 확인했다.
+- public site build 238 pages, metadata, exported Markdown, GEO preflight 77 pages가
+  통과했다. live GEO 축은 실행하지 않고 `unmeasured`로 보존했다.

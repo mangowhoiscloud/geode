@@ -163,7 +163,7 @@ export default function Page() {
                 <tr><td>MCP 클라이언트</td><td><code>core/mcp/</code></td><td><code>manager.py</code> (MCPServerManager), <code>stdio_client.py</code>, <code>registry.py</code>, 알림/캘린더 어댑터</td></tr>
                 <tr><td>메모리</td><td><code>core/memory/</code></td><td><code>context.py</code> (ContextAssembler), <code>project.py</code>, <code>session_manager.py</code>, <code>episodic.py</code>, <code>recall_writer.py</code>, <code>user_profile.py</code></td></tr>
                 <tr><td>스킬</td><td><code>core/skills/</code></td><td><code>skills.py</code> (레지스트리), <code>agents.py</code></td></tr>
-                <tr><td>프롬프트</td><td><code>core/llm/prompts/</code></td><td><code>router.md</code>, <code>commentary.md</code>, <code>decomposer.md</code>, 해시 핀은 <code>__init__.py</code></td></tr>
+                <tr><td>프롬프트</td><td><code>core/llm/prompts/</code></td><td><code>router.md</code>, 해시 핀은 <code>__init__.py</code></td></tr>
                 <tr><td>감사 추출</td><td><code>core/audit/</code></td><td><code>dim_extractor.py</code>, <code>manifest.py</code>, <code>eval_to_jsonl.py</code>, <code>contracts.py</code></td></tr>
                 <tr><td>관측성</td><td><code>core/observability/</code></td><td><code>session_timeline.py</code>, <code>event_store.py</code>, <code>hook_persistence.py</code>, <code>trajectory.py</code>, <code>session_metrics.py</code>, <code>logging_config.py</code></td></tr>
                 <tr><td>설정</td><td><code>core/config/</code></td><td><code>_settings.py</code>, <code>explain.py</code>, <code>env_io.py</code>, <code>routing.toml</code> + <code>routing_manifest.py</code>, <code>self_improving.py</code></td></tr>
@@ -258,7 +258,7 @@ export default function Page() {
                 <tr><td>MCP client</td><td><code>core/mcp/</code></td><td><code>manager.py</code> (MCPServerManager), <code>stdio_client.py</code>, <code>registry.py</code>, notification/calendar adapters</td></tr>
                 <tr><td>Memory</td><td><code>core/memory/</code></td><td><code>context.py</code> (ContextAssembler), <code>project.py</code>, <code>session_manager.py</code>, <code>episodic.py</code>, <code>recall_writer.py</code>, <code>user_profile.py</code></td></tr>
                 <tr><td>Skills</td><td><code>core/skills/</code></td><td><code>skills.py</code> (registry), <code>agents.py</code></td></tr>
-                <tr><td>Prompts</td><td><code>core/llm/prompts/</code></td><td><code>router.md</code>, <code>commentary.md</code>, <code>decomposer.md</code>; hash pins in <code>__init__.py</code></td></tr>
+                <tr><td>Prompts</td><td><code>core/llm/prompts/</code></td><td><code>router.md</code>; hash pins in <code>__init__.py</code></td></tr>
                 <tr><td>Audit extraction</td><td><code>core/audit/</code></td><td><code>dim_extractor.py</code>, <code>manifest.py</code>, <code>eval_to_jsonl.py</code>, <code>contracts.py</code></td></tr>
                 <tr><td>Observability</td><td><code>core/observability/</code></td><td><code>session_timeline.py</code>, <code>event_store.py</code>, <code>hook_persistence.py</code>, <code>trajectory.py</code>, <code>session_metrics.py</code>, <code>logging_config.py</code></td></tr>
                 <tr><td>Config</td><td><code>core/config/</code></td><td><code>_settings.py</code>, <code>explain.py</code>, <code>env_io.py</code>, <code>routing.toml</code> + <code>routing_manifest.py</code>, <code>self_improving.py</code></td></tr>

@@ -42,13 +42,11 @@ def _loop(tmp_path: Path) -> Any:
                     "id": "inspect",
                     "description": "Inspect the current path",
                     "expected_outcome": "The gap is evidenced",
-                    "tool_name": "read_file",
                 },
                 {
                     "id": "verify",
                     "description": "Verify the selected change",
                     "expected_outcome": "The targeted check passes",
-                    "tool_name": "hallucinated_tool",
                 },
             ],
             "reasoning": "Selected the prerequisite-first structure.",
@@ -107,7 +105,9 @@ def test_real_slash_input_routes_goal_plan_grill_and_geo(tmp_path: Path) -> None
         assert planned["termination"] == "slash_plan"
         assert "no step was executed" in planned["text"]
         assert loop._session_metrics.active_plan.steps[0].id == "inspect"
-        assert loop._session_metrics.active_plan.steps[1].tool_name == ""
+        assert loop._session_metrics.active_plan.steps[1].expected_outcome == (
+            "The targeted check passes"
+        )
         planner_call = loop._call_llm.await_args
         assert planner_call.kwargs["allow_tools"] is False
         assert "Consider 2-4 materially different" in planner_call.args[0]

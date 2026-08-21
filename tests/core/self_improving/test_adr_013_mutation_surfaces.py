@@ -68,7 +68,7 @@ def test_adr_013_each_t_has_inference_entry_point() -> None:
         "build_system_prompt",  # T3
         "core/llm/router/calls/_route.py",  # T4 (post-Codex fix — package not single module)
         "apply_messages_cache_control",  # T5
-        "_is_clearly_simple",  # T6
+        "apply_heuristics_policy",  # T6
     ):
         assert entry in text, f"inference entry point not cited: {entry}"
 
@@ -89,11 +89,10 @@ def test_adr_013_inference_entry_points_actually_exist_in_repo() -> None:
     # T5
     anth_src = (REPO_ROOT / "core/llm/providers/anthropic.py").read_text(encoding="utf-8")
     assert "apply_messages_cache_control" in anth_src
-    # T6 — heuristic host moved to core/agent/plan.py (PR-CL-A1-followup
-    # 2026-05-23 — goal_decomposer.py 삭제 후 흡수).
-    plan_src = (REPO_ROOT / "core/agent/plan.py").read_text(encoding="utf-8")
-    assert "_is_clearly_simple" in plan_src
-    assert "_has_compound_indicators" in plan_src
+    # T6 — heuristic indicators are injected into the static prompt block.
+    prompt_src = (REPO_ROOT / "core/agent/system_prompt.py").read_text(encoding="utf-8")
+    assert "apply_heuristics_policy" in prompt_src
+    assert "_load_heuristics_override" in prompt_src
 
 
 # ---------------------------------------------------------------------------

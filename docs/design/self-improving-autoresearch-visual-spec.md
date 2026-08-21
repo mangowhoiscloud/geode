@@ -822,7 +822,7 @@ Sourced from [`core/paths.py:235-318`](../../core/paths.py) — every `GLOBAL_*`
 |---|---|---|---|
 | 1 | `wrapper-sections.json` | `AUTORESEARCH_WRAPPER_SECTIONS_PATH` ([L246](../../core/paths.py)) | Wrapper system-prompt sections (sycophancy_guardrail etc.) |
 | 2 | `tool-policy.json` | `AUTORESEARCH_TOOL_POLICY_PATH` ([L254](../../core/paths.py)) | Per-tool allow/deny + parameter constraints |
-| 3 | `decomposition.json` | `AUTORESEARCH_DECOMPOSITION_POLICY_PATH` ([L255](../../core/paths.py)) | Goal decomposition prompt + rules |
+| 3 | `decomposition.json` | `AUTORESEARCH_DECOMPOSITION_POLICY_PATH` | Advisory plan/replan structure prompt + rules (legacy stable target name) |
 | 4 | `retrieval.json` | `AUTORESEARCH_RETRIEVAL_POLICY_PATH` ([L256](../../core/paths.py)) | Memory retrieval policy |
 | 5 | `reflection.json` | `AUTORESEARCH_REFLECTION_POLICY_PATH` ([L257](../../core/paths.py)) | Reflection-node policy |
 | 6 | `tool-descriptions.json` | `AUTORESEARCH_TOOL_DESCRIPTIONS_PATH` ([L259](../../core/paths.py)) | Per-tool description prose |

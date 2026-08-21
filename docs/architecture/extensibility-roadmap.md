@@ -283,22 +283,22 @@ machine-readable artifact is
 
 | Measure | Current tree |
 |---|---:|
-| Production Python files (`core/` + `geode_product/` + `plugins/`) | 597 |
-| Test Python files | 693 |
-| `core/` Python LOC | 122,665 |
-| `geode_product/` Python LOC | 61,829 |
+| Production Python files (`core/` + `geode_product/` + `plugins/`) | 594 |
+| Test Python files | 690 |
+| `core/` Python LOC | 121,112 |
+| `geode_product/` Python LOC | 61,827 |
 | `plugins/` Python LOC | 213 |
-| Test Python LOC | 185,703 |
-| Tool definitions / executable registrations / valid schemas | 87 / 90 / 87 (definition-only 0; execution-only 3; invalid schema 0) |
+| Test Python LOC | 184,060 |
+| Tool definitions / executable registrations / valid schemas | 82 / 85 / 82 (definition-only 0; execution-only 3; invalid schema 0) |
 | `RuntimeEvent` members | 57 |
 | Built-in LLM adapters | 7 |
 | Module-level `ContextVar` declarations under `core/` | 29 |
 | `core` → product import sites | 0 across 0 files |
 | Import-linter contracts / ignored edges | 6 / 19 |
-| `AgenticLoop` file LOC / methods / constructor args | 3,378 / 79 / 30 |
-| `SubAgentManager` file LOC / methods / constructor args | 1,454 / 24 / 17 |
+| `AgenticLoop` file LOC / methods / constructor args | 3,337 / 78 / 29 |
+| `SubAgentManager` file LOC / methods / constructor args | 1,453 / 24 / 17 |
 | `RuntimeCoreConfig` fields | 21 |
-| Global Ruff ratchets | complexity 52; args 23; branches 51; returns 18; statements 209 |
+| Global Ruff ratchets | complexity 52; args 23; branches 51; returns 18; statements 207 |
 <!-- generated:architecture-baseline:end -->
 
 `uv run lint-imports` passes all four configured contracts. That is useful

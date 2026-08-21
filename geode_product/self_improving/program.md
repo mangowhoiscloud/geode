@@ -92,7 +92,7 @@ To verify self-improving-loop plumbing without spending budget, use `--dry-run`
   |----------------------|----------------------------|-----------------------------------------------------------------|
   | `prompt`             | `wrapper-sections.json`    | Wrapper prompt section text (legacy)                            |
   | `tool_policy`        | `tool-policy.json`         | Tool selection priority + permissions                           |
-  | `decomposition`      | `decomposition.json`       | Task decomposition heuristics                                   |
+  | `decomposition`      | `decomposition.json`       | Advisory plan/replan structure policy (legacy stable name)      |
   | `reflection`         | `reflection.json`          | Self-reflection gate parameters                                 |
   | `skill_catalog`      | `skill-catalog.json`       | Skill descriptions + `user_invocable` flag (ADR-012 M1)         |
   | `agent_contract`     | `agent-contracts.json`     | Sub-agent role / system_prompt / tools (ADR-012 M2)             |

@@ -57,7 +57,6 @@ REQUIRED_WHEEL_PATHS = (
         "core/config/routing.toml",
         "core/llm/model_pricing.toml",
         "core/llm/prompts/router.md",
-        "core/llm/prompts/decomposer.md",
         "geode_product/benchmark_harness/benchmark_harness.plugin.toml",
         "geode_product/benchmark_harness/tau2_agent_policy.md",
         "geode_product/benchmark_harness/patches/mcpmark-cd45b7f-filesystem-standard-verifier-missing-output.patch",

@@ -3,7 +3,7 @@
 Used by callers that pin a model (e.g. Petri audit target
 ``geode/gpt-5.5``) but did not pin a provider — without this helper,
 :class:`AgenticLoop` falls back to its ``provider="anthropic"`` default
-and the orchestration layer (GoalDecomposer, extract hooks) silent-fails
+and the orchestration layer (auxiliary planners, extract hooks) silent-fails
 on ``ANTHROPIC_API_KEY`` when the OAuth-only environment never had one.
 
 PR-MAINPATH-67 (2026-05-24) — extracted from the deleted ``_legacy``

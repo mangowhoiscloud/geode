@@ -1,1 +1,1 @@
-"""Harness — execution control: TaskGraph, PlanMode, SessionLane, LaneQueue."""
+"""Harness execution control: TaskGraph, SessionLane, and LaneQueue."""

@@ -27,7 +27,7 @@ export default function Page() {
               <code>&lt;user&gt;</code>, <code>&lt;agentic_suffix&gt;</code> 같은
               XML 형태 섹션 태그로 나뉘고, <code>core/llm/prompts/__init__.py</code>의{" "}
               <code>_load_template</code>이 파싱합니다. 현재 살아 있는 템플릿은
-              셋입니다.
+              <code>router.md</code> 하나입니다.
             </p>
             <table>
               <thead>
@@ -35,8 +35,6 @@ export default function Page() {
               </thead>
               <tbody>
                 <tr><td><code>router.md</code></td><td><code>ROUTER_SYSTEM</code>, <code>AGENTIC_SUFFIX</code></td><td>메인 에이전트 시스템 프롬프트와 agentic 접미사</td></tr>
-                <tr><td><code>commentary.md</code></td><td><code>COMMENTARY_SYSTEM</code>, <code>COMMENTARY_USER</code></td><td>진행 코멘터리</td></tr>
-                <tr><td><code>decomposer.md</code></td><td>호출부에서 <code>load_prompt</code></td><td>복합 요청 분해</td></tr>
               </tbody>
             </table>
             <p>
@@ -189,8 +187,8 @@ export default function Page() {
               section tags (<code>&lt;system&gt;</code>, <code>&lt;user&gt;</code>,{" "}
               <code>&lt;agentic_suffix&gt;</code>) parsed by{" "}
               <code>_load_template</code> in{" "}
-              <code>core/llm/prompts/__init__.py</code>. Three templates are live
-              today.
+              <code>core/llm/prompts/__init__.py</code>. The live template is
+              <code>router.md</code>.
             </p>
             <table>
               <thead>
@@ -198,8 +196,6 @@ export default function Page() {
               </thead>
               <tbody>
                 <tr><td><code>router.md</code></td><td><code>ROUTER_SYSTEM</code>, <code>AGENTIC_SUFFIX</code></td><td>The main agent system prompt and the agentic suffix</td></tr>
-                <tr><td><code>commentary.md</code></td><td><code>COMMENTARY_SYSTEM</code>, <code>COMMENTARY_USER</code></td><td>Progress commentary</td></tr>
-                <tr><td><code>decomposer.md</code></td><td><code>load_prompt</code> at call sites</td><td>Compound-request decomposition</td></tr>
               </tbody>
             </table>
             <p>
