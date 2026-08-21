@@ -185,14 +185,14 @@ def test_gpt_source_oauth_routes_to_codex(monkeypatch: pytest.MonkeyPatch) -> No
     assert to_inspect_model("gpt-5.5") == "openai-codex/gpt-5.5"
 
 
-def test_retired_codex_cli_identifier_fails_loudly() -> None:
-    with pytest.raises(AuditModelMappingError, match="use openai-codex"):
-        to_inspect_model("codex-cli/gpt-5.5")
+def test_legacy_codex_cli_identifier_normalizes() -> None:
+    with pytest.warns(DeprecationWarning, match="legacy alias"):
+        assert to_inspect_model("codex-cli/gpt-5.5") == "openai-codex/gpt-5.5"
 
 
-def test_retired_claude_code_identifier_fails_loudly() -> None:
-    with pytest.raises(AuditModelMappingError, match="use claude-cli"):
-        to_inspect_model("claude-code/claude-opus-4-7")
+def test_legacy_claude_code_identifier_normalizes() -> None:
+    with pytest.warns(DeprecationWarning, match="legacy alias"):
+        assert to_inspect_model("claude-code/claude-opus-4-7") == ("claude-cli/claude-opus-4-7")
 
 
 def test_gpt_source_api_key_routes_to_openai(monkeypatch: pytest.MonkeyPatch) -> None:

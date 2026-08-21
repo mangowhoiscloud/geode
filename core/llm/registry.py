@@ -103,9 +103,8 @@ PROVIDER_EQUIVALENCE: dict[str, list[str]] = {
     "openai-codex": ["openai-codex", "openai"],
     "glm": ["glm-coding", "glm"],
     "glm-coding": ["glm-coding", "glm"],
-    # Anthropic OAuth (Claude Code) is currently disabled in GEODE
-    # per Anthropic ToS clarification 2026-01-09; kept singleton until
-    # policy changes.
+    # Anthropic stays one model family here; the adapter source axis selects
+    # PAYG, direct OAuth compatibility, or the legacy Claude CLI route.
     "anthropic": ["anthropic"],
 }
 

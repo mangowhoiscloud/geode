@@ -27,13 +27,12 @@ openai         ``openai-codex``       ``api_key``
 ToS notice
 ==========
 
-Subscription-backed OAuth paths (``claude-cli``, ``openai-codex``) drive
-LLM calls through the user's Claude.ai / ChatGPT subscription quota. Anthropic
-and OpenAI's Terms of Service permit individual programmatic use but
-discourage automation at scale, so the picker surfaces a one-time
-warning when any role resolves to a subscription path. The notice is
-emitted once per process via :func:`print_tos_notice` (idempotent under
-a module-level flag); CLI front-ends can suppress with ``quiet=True``.
+Subscription-backed paths (``claude-cli``, ``openai-codex``) may draw from
+subscription quota or usage credits. Anthropic recommends API-key auth for
+third-party tools, including open-source projects, so the picker surfaces a
+one-time warning when any role resolves to a subscription path. The notice is
+emitted once per process via :func:`print_tos_notice` (idempotent under a
+module-level flag); CLI front-ends can suppress with ``quiet=True``.
 
 Diversity validator
 ===================
@@ -720,11 +719,10 @@ def print_tos_notice(
         "\n"
         "─── seed-generation ToS notice ─────────────────────────────────────\n"
         f"Subscription-backed auth path(s) in use: {paths_in_use}\n"
-        "These paths charge the run against your Claude.ai / ChatGPT subscription\n"
-        "quota. The vendors' Terms of Service permit individual programmatic\n"
-        "use but discourage automation at scale; review the linked policies\n"
-        "before running unattended.\n"
-        "  - Anthropic: https://www.anthropic.com/legal/aup\n"
+        "These paths may charge the run against subscription quota or usage credits.\n"
+        "Anthropic recommends API keys for third-party tools, including open-source\n"
+        "projects; subscription use remains subject to its terms.\n"
+        "  - Anthropic: https://support.claude.com/en/articles/13189465\n"
         "  - OpenAI:    https://openai.com/policies/usage-policies\n"
         "Switch a role to PAYG via ~/.geode/seed_generation.toml\n"
         "  e.g.  [ranker]\n"

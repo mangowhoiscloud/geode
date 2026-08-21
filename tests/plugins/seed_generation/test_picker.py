@@ -289,6 +289,7 @@ def test_print_tos_notice_emits_when_subscription_in_use() -> None:
     assert "ToS notice" in out
     assert "claude-cli" in out
     assert "Anthropic" in out
+    assert "open-source" in out
 
 
 def test_print_tos_notice_silent_when_no_subscription() -> None:

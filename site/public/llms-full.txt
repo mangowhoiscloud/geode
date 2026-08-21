@@ -305,7 +305,7 @@ GEODE를 돌리려면 프로바이더 자격이 하나 필요합니다. 이 페�
 | 경로 | 자격 | 등록 방법 | 적합한 상황 |
 | --- | --- | --- | --- |
 | 1\. ChatGPT 구독 OAuth | ChatGPT 구독 OAuth | `/login openai`로 device-code 로그인. 기존 `~/.codex/auth.json` 자격도 가져올 수 있습니다. | 이미 ChatGPT를 결제 중이고 API 키를 따로 만들기 싫을 때. `gpt-5.5`는 이 경로로만 라우팅됩니다. |
-| 2\. Anthropic 구독 OAuth | Claude 구독 (claude CLI 자격) | `/login anthropic`. macOS keychain의 Claude Code 자격을 읽습니다. | Claude 구독이 있고 `claude-opus-4-8` 계열을 기본으로 쓰고 싶을 때. |
+| 2\. Anthropic 구독 OAuth | Claude 구독 (claude CLI 자격) | 공식 CLI에서 `claude /login` 후 `/login anthropic`으로 레거시 경로를 선택합니다. | 정책 경고를 확인하고 Claude 구독 호환 경로를 직접 선택할 때. Anthropic은 오픈소스에도 API 키를 권장합니다. |
 | 3\. PAYG API 키 | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `ZAI_API_KEY` | `~/.geode/.env`에 키만 적습니다. `geode setup` 또는 `/login add`가 대신 적어줍니다. | 토큰 단위로 비용을 직접 통제하고 싶을 때. 팀 계정과 CI에도 맞습니다. |
 | 4\. 저비용 GLM 경로 | `ZAI_API_KEY` (GLM) | 같은 방식으로 `~/.geode/.env`에 등록합니다. | 거의 무료로 먼저 체험할 때. `glm-4.7-flash`는 한시 무료 티어입니다. |
 
@@ -316,7 +316,7 @@ GEODE를 돌리려면 프로바이더 자격이 하나 필요합니다. 이 페�
 | 원하는 것 | 이렇게 합니다 |
 | --- | --- |
 | 이미 ChatGPT Plus를 결제 중입니다 | `geode setup`. `~/.codex/auth.json`이 있으면 API 키를 묻기 전에 먼저 잡습니다. |
-| Claude 구독으로 쓰고 싶습니다 | `geode` 안에서 `/login anthropic`을 실행합니다. |
+| Claude 구독으로 쓰고 싶습니다 | 공식 CLI에서 `claude /login` 후 `geode` 안에서 `/login anthropic`을 실행합니다. |
 | API 키로 비용을 직접 통제하고 싶습니다 | `~/.geode/.env`에 키를 넣고 [비용 모니터링](https://mangowhoiscloud.github.io/geode/docs/ops/cost.md)으로 예산을 겁니다. |
 | 거의 무료로 먼저 체험하고 싶습니다 | GLM 키(`ZAI_API_KEY`)를 등록하고 `/model`에서 `glm-4.7-flash`를 고릅니다. |
 | 특정 프로바이더를 OAuth 대신 키로 강제하고 싶습니다 | `/login source <provider> api_key`. 선택은 `config.toml`에만 저장됩니다. |
@@ -5075,6 +5075,8 @@ GEODE는 프로바이더마다 두 종류의 자격을 받습니다. 구독 OAut
 | `oauth` | 레거시 별칭. Settings 검증이 받아줍니다. |
 | `none` | 해당 프로바이더 비활성 센티널. |
 
+Anthropic은 오픈소스를 포함한 서드파티 도구에 API 키 인증을 권장합니다. `claude-cli`는 경고가 붙는 레거시 호환 경로이며 구독 사용량이 usage credit에서 차감될 수 있습니다. [현행 Anthropic 안내](https://support.claude.com/en/articles/13189465-log-in-to-your-claude-account)를 확인하세요.
+
 선택은 `[llm] anthropic_credential_source` /`openai_credential_source`(기본 `auto`)에 저장됩니다. `/login source <provider> <type>`은 toml에만 쓰므로 `.env`를 지워도 선택이 살아남습니다. (provider, source) 쌍마다 구체 어댑터가 하나씩 레지스트리에 등록됩니다(`core/llm/adapters/`의`anthropic_payg`, `anthropic_oauth`,`claude_cli`, `openai_payg`,`codex_oauth`,`glm_coding_plan`, `glm_payg`).
 
 ## /login 대시보드
@@ -5084,7 +5086,7 @@ GEODE는 프로바이더마다 두 종류의 자격을 받습니다. 구독 OAut
 | 서브커맨드 | 동작 |
 | --- | --- |
 | `/login openai` | ChatGPT 구독 OAuth 로그인. device-code 플로우는 `core/auth/oauth_login.py`이고, 결과는 `auth.toml`에 OAUTH\_BORROWED 플랜 + 프로파일 쌍으로 저장됩니다. |
-| `/login anthropic` | Claude 구독 OAuth. macOS 키체인의 `"Claude Code-credentials"` 항목을 읽습니다(routing.toml `[credentials.keychain]`, override는 `GEODE_ANTHROPIC_KEYCHAIN_SERVICE`). |
+| `/login anthropic` | 경고를 표시하고 레거시 `claude-cli` 경로를 선택합니다. 로그인은 공식 CLI에서 `claude /login`으로 별도 수행합니다. |
 | `/login google` | Gmail, Calendar, Drive, Docs, Sheets, Tasks, Contacts용 Google Workspace OAuth. 사용자가 만든 Desktop 앱 클라이언트를 가져오며 LLM 프로바이더 자격과 분리됩니다. |
 | `/login add` | 자격 추가. 키 모양(`sk-ant-`, `sk-proj-`, GLM {id}.{secret})으로 프로바이더를 추정합니다. |
 | `/login use` / `remove` | 프로파일 선택과 제거. |
