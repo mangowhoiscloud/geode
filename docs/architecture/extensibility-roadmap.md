@@ -226,7 +226,6 @@ normal review and CI; implementations start only after the claim merges.
 | Closure package | GAP IDs | Owner/session | Implementation branch | Claim evidence | Claimed at (UTC) |
 |---|---|---|---|---|---|
 | R8.3 | REL-004 | `session=codex-root task=r8-3-publication-grace-evidence` | `feature/r8-3-publication-grace-evidence` | Readiness [#3039](https://github.com/mangowhoiscloud/geode/pull/3039); v1.0.23 GitHub/PyPI parity and candidate interval re-audited | `2026-08-20T07:41:19Z` |
-| R2.4 | TRUST-003 | `session=codex-root task=r2-4-resource-data-policy` | `feature/r2-4-resource-data-policy` | Readiness [#3055](https://github.com/mangowhoiscloud/geode/pull/3055); plan-owned minimum safety policy, data handling, approval, and deterministic resource serialization re-audited | `2026-08-21T00:41:51Z` |
 
 ## 1. Program objective
 
@@ -544,7 +543,7 @@ and closure evidence are appended in §10.
 | STORE-002 | `PARTIAL` | Logging/transcript/resume/replay plan still contains staged/open parity work | Each subsystem has one declared writer, resume contract, replay doctrine, retention, and redaction test | R6.2 | STORE-001 | `DONE` |
 | TRUST-001 | `ABSENT` | Registration/enabled status does not uniformly distinguish trusted authority | Installed, enabled, trusted, and granted-capability states are separate and observable; executable code is never imported before trust approval | R6.3 | BND-004 | `OPEN` |
 | TRUST-002 | `PARTIAL` | Extension seams can receive broader runtime objects than required, and arbitrary in-process Python cannot be capability-confined | Trusted in-process code receives narrow ports for API discipline; untrusted executable code runs out of process behind a brokered capability boundary | R6.3 | DI-002, TRUST-001, TRUST-003 | `OPEN` |
-| TRUST-003 | `ABSENT` | Mutation serialization is not derived from explicit tool resource metadata | `resource_keys(args)` drives per-resource serialization; no argument-name heuristic | R2.4 | CAP-004 | `IN_PROGRESS` |
+| TRUST-003 | `ABSENT` | Mutation serialization is not derived from explicit tool resource metadata | `resource_keys(args)` drives per-resource serialization; no argument-name heuristic | R2.4 | CAP-004 | `IN_DEVELOP` |
 | VER-001 | `PARTIAL` | Quality gates pass but lack core-only, reverse-import, exception-budget, and tool-plan drift tests | All architecture gates in §9 run in CI and locally | R7.1 | BND-003, BND-004, CAP-005, LOOP-004, DI-003, LLM-002, PROTO-002, GOV-004, VER-003 | `OPEN` |
 | VER-002 | `ABSENT` | No contract suite measures how many central edits each extension type requires | Six extension scenarios in §8 pass without forbidden edits | R7.2 | CAP-006, LLM-002, BND-004 | `OPEN` |
 | VER-003 | `PARTIAL` | Public/internal metric prose drifts from executable counts | `sync-stats` or one shared generator updates site, AGENTS facts, and roadmap baseline; check mode is green | R0.2 | GOV-001 | `DONE` |
@@ -1929,6 +1928,7 @@ pre-release delivery evidence survives after the claim row is gone.
 | R2.1 | CAP-001, CAP-002 | [#3043](https://github.com/mangowhoiscloud/geode/pull/3043) | `ba7eea3288bd443a52181151de13032f5280d263` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, full non-live tests with coverage, lint/format, type check, security, Pages build, official-doc parity, macOS/Ubuntu install smoke, wheel/sdist inspection, clean installed-package smoke, and independent staged-diff review all passed; the product daemon now retains a generation/hash-bound immutable ToolPlan beside the compatibility handler map, while live consumer convergence remains required before R2.1 can reach DONE) |
 | R2.2 | CAP-004 | [#3047](https://github.com/mangowhoiscloud/geode/pull/3047) | `9038d635d0ed3989b11569de5dbfd6cb7a47db43` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, full non-live tests with coverage, lint/format, type check, security, Pages build, macOS/Ubuntu install smoke, wheel/sdist and isolated installed-package checks, exact descriptor-consumer parity, and independent staged-diff review all passed; `definitions.json` convergence remains required in R2.3 before R2.2 can reach DONE) |
 | R2.3 | CAP-003, CAP-005 | [#3053](https://github.com/mangowhoiscloud/geode/pull/3053) | `ffeb41e13d4bd9c59bc1ba286300c352800f6a03` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, 10,431 non-live tests, lint/format, type check, security, Pages build, macOS/Ubuntu install smoke, wheel/sdist and clean installed-package checks, 399 isolated kernel imports plus 42 installed-kernel tests, installed daemon IPC v1.0.23, exact bound-plan schema/execution/provider/defer parity, and independent adversarial review all passed) |
+| R2.4 | TRUST-003 | [#3060](https://github.com/mangowhoiscloud/geode/pull/3060) | `709ccb0d0eb31080ed3b17896d4056f784db0281` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, 10,431 selected non-live tests, lint/format, type check, security, Pages build, official-doc parity, macOS/Ubuntu install smoke, wheel/sdist inspection, clean installed-package smoke, 396 isolated kernel imports plus 42 installed-kernel tests, plan-owned safety/redaction/resource-lock poison coverage, and independent committed-diff review all passed) |
 
 ### 10.2 Main closure evidence
 
@@ -2108,20 +2108,20 @@ generation/hash-bound plan now owns handler construction,
 with exact schema/execution parity, explicit transient overlays, and bounded
 diagnostics. Public product worker and daemon roots inject composition; the
 direct kernel worker and uncomposed `SharedServices` construction fail closed.
-R2.4 (`TRUST-003`) is `IN_PROGRESS` under the active claim for
-`feature/r2-4-resource-data-policy`, based on readiness
-[#3055](https://github.com/mangowhoiscloud/geode/pull/3055). Implementation
-starts only after this claim merges and a new worktree is allocated from the
-updated `develop`. CAP-004 is `IN_DEVELOP`. The current `ToolPlan` captures
-only partial safety metadata,
-while approval, personal-data, headless/sub-agent, profile-policy, and mutation
-scheduling still consume independent tool-name sets; deterministic resource
-keys are absent, and write/dangerous calls are only serialized within one tool
-batch. Acceptance requires one plan-owned minimum policy across those readers,
-effective-request resource serialization, and fail-closed monotone overrides.
-The package authorizes no R2.3 binding/provider work, R3.1 step/turn lifetime
-work, or R6.3 extension-trust work. R3.1 and R9.1 are
-dependency-satisfied but remain `OPEN` for later serialized transactions. The
-active R8.3 claim and publication clock remain unchanged. R8.2 (`STORE-003`)
-remains `OPEN` behind REL-004 and STORE-001; R8.4 (`BND-008`) additionally
-waits for STORE-003.
+R2.4 (`TRUST-003`) is `IN_DEVELOP` after feature
+[#3060](https://github.com/mangowhoiscloud/geode/pull/3060) merged as
+`709ccb0d0eb31080ed3b17896d4056f784db0281`. One hash-bound native plan now
+owns minimum effect, data handling, approval lifetime, profile restrictions,
+and deterministic resource strategies. Effective middleware and hook rewrites
+cannot weaken that minimum; durable personal-data projections are redacted;
+and one process-owned lock pool serializes conflicting daemon-session and MCP
+mutations while preserving unrelated concurrency and sync-handler lease
+lifetime through timeout or cancellation.
+
+R3.1 (`LOOP-001`, `LOOP-002`) and R9.1 (`CODE-001`) are dependency-satisfied
+but remain `OPEN` pending their own serialized whole-package readiness
+transactions; R3.1 is next in master order. R6.3 remains `OPEN` behind its
+other package dependencies and is not newly ready because of this transition.
+The active R8.3 claim and publication clock remain unchanged. R8.2
+(`STORE-003`) remains `OPEN` behind REL-004 and STORE-001; R8.4 (`BND-008`)
+additionally waits for STORE-003.
