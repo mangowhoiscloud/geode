@@ -43,13 +43,18 @@ order, and a block or denial stops the chain.
 | `PostVerify` | After immutable verifier output | accept, revise, escalate |
 | `Stop` | Immediately before final delivery | finalize, bounded continue |
 
-Every invocation uses the versioned `geode.public-hook.v1` envelope:
+Current invocations use the versioned `geode.public-hook.v2` envelope. The
+unchanged v1 schema remains available for compatibility:
 
 ```python
 from core.hooks import HookName, HookRegistry, public_hook_schema
 
 hooks = HookRegistry()
 schema = public_hook_schema(HookName.POST_VERIFY)
+legacy_schema = public_hook_schema(
+    HookName.POST_VERIFY,
+    version="geode.public-hook.v1",
+)
 ```
 
 Inputs are JSON-safe, secret-redacted, depth/size bounded, and validated

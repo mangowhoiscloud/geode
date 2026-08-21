@@ -437,8 +437,8 @@ def test_execution_short_circuit_records_skipped_not_executed() -> None:
     records: list[Any] = []
     original_begin = executor._approval.begin_record
 
-    def capture_record(tool_name: str) -> Any:
-        record = original_begin(tool_name)
+    def capture_record(tool_name: str, **kwargs: Any) -> Any:
+        record = original_begin(tool_name, **kwargs)
         records.append(record)
         return record
 

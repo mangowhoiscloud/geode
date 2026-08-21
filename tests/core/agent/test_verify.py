@@ -550,16 +550,19 @@ def test_post_verify_escalation_withholds_candidate_before_persistence(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from core.agent.loop import _lifecycle
-    from core.agent.loop.models import TerminationReason
+    from core.agent.loop.models import TerminationReason, TurnState
     from core.hooks import HookCorrelation
 
     checkpoint = SimpleNamespace(status="active")
     checkpoint.mark_paused = lambda _session_id: setattr(checkpoint, "status", "paused")
     checkpoint.current_status = lambda _session_id: checkpoint.status
+    turn = TurnState(turn_id="t-1", termination_reason=TerminationReason.NATURAL)
     loop = SimpleNamespace(
         _verify_attempt_results=[],
         _checkpoint=checkpoint,
         _session_id="s-escalated",
+        _turn_state=turn,
+        _set_turn_termination=lambda reason: setattr(turn, "termination_reason", reason),
     )
     correlation = HookCorrelation(session_id="s-escalated", turn_id="t-1")
 
@@ -586,6 +589,7 @@ def test_post_verify_escalation_withholds_candidate_before_persistence(
     assert finalized.pending_text == "withheld candidate"
     assert finalized.error == "external_verification_required"
     assert finalized.termination_reason is TerminationReason.EXTERNAL_VERIFICATION_REQUIRED
+    assert turn.termination_reason is TerminationReason.EXTERNAL_VERIFICATION_REQUIRED
     assert checkpoint.status == "paused"
 
 

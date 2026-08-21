@@ -95,6 +95,7 @@ class HookPersistenceSink:
         if spec.persist_sql:
             live_session_id = str(dispatch.data.get("session_id") or "")
             live_turn_id = str(dispatch.data.get("turn_id") or "")
+            step_id = str(dispatch.data.get("step_id") or "")
             tool_call_id = str(dispatch.data.get("tool_call_id") or "")
             llm_call_id = str(dispatch.data.get("llm_call_id") or "")
             llm_attempt_id = str(dispatch.data.get("llm_attempt_id") or "")
@@ -105,6 +106,7 @@ class HookPersistenceSink:
                     run_id=self.run_id,
                     session_id=live_session_id,
                     turn_id=live_turn_id,
+                    step_id=step_id,
                     tool_call_id=tool_call_id,
                     llm_call_id=llm_call_id,
                     llm_attempt_id=llm_attempt_id,
@@ -150,12 +152,17 @@ class HookPersistenceSink:
             for key in (
                 "session_id",
                 "turn_id",
+                "step_id",
                 "tool_call_id",
                 "llm_call_id",
                 "llm_attempt_id",
             ):
                 value = dispatch.data.get(key)
                 if isinstance(value, str) and value:
+                    details[key] = value
+            for key in ("session_generation", "verify_attempt"):
+                value = dispatch.data.get(key)
+                if isinstance(value, int) and not isinstance(value, bool):
                     details[key] = value
             if type(row).__name__ == "GenericActivityRow":
                 # A future/untyped event must not turn its arbitrary source

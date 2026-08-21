@@ -32,6 +32,7 @@ from core.agent.approval_fsm import (
     parse_decision,
 )
 from core.agent.tool_executor import ToolExecutor
+from core.hooks import HookCorrelation
 from core.hooks.system import HookEvent
 
 # ---------------------------------------------------------------------------
@@ -168,6 +169,42 @@ class TestApprovalRecordLifecycle:
             ["requested", record.transitions[0].ts, "gate", False],
             ["granted", record.transitions[1].ts, "auto:skip-permissions", False],
         ]
+
+    def test_approval_events_keep_physical_correlation(self) -> None:
+        hooks = _RecordingHooks()
+        correlation = HookCorrelation(
+            session_id="session-1",
+            turn_id="turn-1",
+            step_id="turn-1:step-2",
+            session_generation=3,
+            verify_attempt=1,
+            tool_call_id="call-1",
+        )
+        workflow = _workflow(
+            hooks=hooks,
+            approval_callback=lambda *_args: "y",
+        )
+        record = workflow.begin_record("memory_save", correlation=correlation)
+        assert record is not None
+
+        assert asyncio.run(
+            workflow.confirm_write_async(
+                "memory_save",
+                {"content": "remember"},
+                record=record,
+            )
+        )
+
+        correlated = [
+            data
+            for event, data in hooks.fired
+            if event in (HookEvent.APPROVAL_TRANSITION, HookEvent.TOOL_APPROVAL_REQUESTED)
+        ]
+        assert correlated
+        assert all(data["step_id"] == "turn-1:step-2" for data in correlated)
+        assert all(data["session_generation"] == 3 for data in correlated)
+        assert all(data["verify_attempt"] == 1 for data in correlated)
+        assert all(data["tool_call_id"] == "call-1" for data in correlated)
 
 
 # ---------------------------------------------------------------------------
@@ -340,14 +377,24 @@ class TestGateIntegration:
     def test_batch_gate_records_decision(self) -> None:
         hooks = _RecordingHooks()
         wf = _workflow(hooks=hooks)
+        correlation = HookCorrelation(
+            session_id="session-1",
+            turn_id="turn-1",
+            step_id="turn-1:step-1",
+        )
         blocks = [
             SimpleNamespace(name="petri_audit", input={"x": 1}),
             SimpleNamespace(name="eval_dspy_optimize", input={}),
         ]
         with _console_input("core.agent.approval.console", "y"):
-            approved = asyncio.run(wf.batch_cost_approval(blocks))
+            approved = asyncio.run(wf.batch_cost_approval(blocks, correlation=correlation))
         assert approved is True
         assert hooks.states() == ["requested", "displayed", "user_selected", "parsed", "granted"]
+        assert all(
+            payload["step_id"] == "turn-1:step-1"
+            for event, payload in hooks.fired
+            if event is HookEvent.APPROVAL_TRANSITION
+        )
 
     def test_batch_gate_deny(self) -> None:
         wf = _workflow()

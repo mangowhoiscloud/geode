@@ -236,8 +236,8 @@
   "coordinators": {
     "AgenticLoop": {
       "constructor_arg_count": 29,
-      "file_loc": 3443,
-      "method_count": 81,
+      "file_loc": 3462,
+      "method_count": 82,
       "path": "core/agent/loop/agent_loop.py"
     },
     "RuntimeCoreConfig": {
@@ -374,7 +374,7 @@
   "packages": {
     "core": {
       "python_files": 401,
-      "python_loc": 122246
+      "python_loc": 122627
     },
     "geode_product": {
       "python_files": 161,
@@ -386,7 +386,7 @@
     },
     "tests": {
       "python_files": 692,
-      "python_loc": 185954
+      "python_loc": 186519
     }
   },
   "schema_version": 3,

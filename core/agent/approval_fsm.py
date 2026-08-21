@@ -32,8 +32,11 @@ from __future__ import annotations
 import logging
 import time
 import uuid
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import asdict, dataclass, field
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from core.hooks import HookCorrelation
 
 log = logging.getLogger(__name__)
 
@@ -109,6 +112,7 @@ class ApprovalRecord:
     state: str = ""
     raw_input: str = ""
     verdict: str = ""  # allow / deny / always — set at the parsed transition
+    correlation: HookCorrelation | None = None
     transitions: list[ApprovalTransition] = field(default_factory=list)
 
     def transition(self, state: str, detail: str = "") -> ApprovalTransition:
@@ -142,7 +146,7 @@ class ApprovalRecord:
 
     def to_event_payload(self) -> dict[str, Any]:
         """Flat payload for the ``APPROVAL_TRANSITION`` hook / ledger row."""
-        return {
+        payload = {
             "approval_id": self.approval_id,
             "tool_name": self.tool_name,
             "category": self.category,
@@ -152,3 +156,6 @@ class ApprovalRecord:
             "illegal": any(t.illegal for t in self.transitions),
             "transitions": [[t.state, t.ts, t.detail, t.illegal] for t in self.transitions],
         }
+        if self.correlation is not None:
+            payload.update(asdict(self.correlation))
+        return payload

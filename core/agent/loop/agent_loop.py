@@ -20,6 +20,7 @@ import logging
 import os
 import time
 from collections.abc import Awaitable, Callable, Mapping, Set
+from dataclasses import asdict, replace
 from typing import TYPE_CHECKING, Any
 
 from core.agent.conversation import ConversationContext
@@ -1090,7 +1091,6 @@ class AgenticLoop:
 
     def _open_step_snapshot(
         self,
-        messages: list[dict[str, Any]],
         *,
         round_idx: int,
         model: str,
@@ -1099,14 +1099,13 @@ class AgenticLoop:
         """Freeze the exact runtime inputs for one model sampling request."""
         turn = self._turn_state
         if turn is None or turn.turn_id != self._turn_id:
-            turn = TurnState(turn_id=self._turn_id, messages=messages)
+            turn = TurnState(turn_id=self._turn_id)
             self._turn_state = turn
-        elif turn.messages is not messages:
-            turn.messages = messages
         step_index = turn.next_step_index()
+        step_id = f"{self._turn_id or 'unbound'}:step-{step_index}"
         adapter = self._new_adapter
         snapshot = StepSnapshot(
-            step_id=f"{self._turn_id or 'unbound'}:step-{step_index}",
+            step_id=step_id,
             step_index=step_index,
             round_index=round_idx,
             model=model,
@@ -1120,6 +1119,7 @@ class AgenticLoop:
             correlation=HookCorrelation(
                 session_id=self._session_id,
                 turn_id=self._turn_id,
+                step_id=step_id,
                 session_generation=self._session_generation,
                 verify_attempt=self._verify_attempt,
             ),
@@ -1127,6 +1127,14 @@ class AgenticLoop:
         self._current_step_snapshot = snapshot
         self._tool_processor.bind_step(snapshot)
         return snapshot
+
+    def _set_turn_termination(self, reason: TerminationReason) -> None:
+        turn = getattr(self, "_turn_state", None)
+        if turn is None or turn.turn_id != self._turn_id:
+            return
+        turn.termination_reason = reason
+        if reason is TerminationReason.USER_CANCELLED:
+            turn.cancellation.set()
 
     def _bind_turn_messages(self, messages: list[dict[str, Any]]) -> TurnState:
         turn = self._turn_state
@@ -1255,11 +1263,7 @@ class AgenticLoop:
         )
         if tool_calls is not None:
             result.tool_calls = tool_calls
-        turn = getattr(self, "_turn_state", None)
-        if turn is not None and turn.turn_id == getattr(self, "_turn_id", ""):
-            turn.termination_reason = reason
-            if reason is TerminationReason.USER_CANCELLED:
-                turn.cancellation.set()
+        AgenticLoop._set_turn_termination(self, reason)
         return result
 
     async def _apply_user_prompt_hook(
@@ -2692,6 +2696,11 @@ class AgenticLoop:
                         await self._hooks.trigger_async(
                             HookEvent.LLM_CALL_FAILED,
                             {
+                                **(
+                                    asdict(response_step.correlation)
+                                    if response_step is not None
+                                    else {}
+                                ),
                                 "model": self.model,
                                 "provider": self._provider,
                                 "error_type": _et,
@@ -2762,6 +2771,11 @@ class AgenticLoop:
                         await self._hooks.trigger_async(
                             HookEvent.LLM_CALL_RETRIED,
                             {
+                                **(
+                                    asdict(response_step.correlation)
+                                    if response_step is not None
+                                    else {}
+                                ),
                                 "model": self.model,
                                 "provider": self._provider,
                                 "error_type": _et,
@@ -3058,7 +3072,6 @@ class AgenticLoop:
         # Shared list — in-place pruning must persist into later rounds.
         await self._check_context_overflow(system, messages)
         step_snapshot = self._open_step_snapshot(
-            messages,
             round_idx=round_idx,
             model=effective_model,
             allow_tools=allow_tools,
@@ -3197,8 +3210,6 @@ class AgenticLoop:
         if step_snapshot.bound_tool_plan is not None:
             _validate_bound_request_rewrite(bound_request, req)
         if session_allowed_tools is not None and step_snapshot.bound_tool_plan is None:
-            from dataclasses import replace
-
             effective_allowed = session_allowed_tools
             if req.allowed_tool_names is not None:
                 effective_allowed &= req.allowed_tool_names
@@ -3218,6 +3229,16 @@ class AgenticLoop:
         effective_model = req.model
         adapter_name = getattr(call_adapter, "name", "<unknown>")
         effective_provider = getattr(call_adapter, "provider", self._provider)
+        effective_source = getattr(call_adapter, "source", self._source)
+        step_snapshot = replace(
+            step_snapshot,
+            model=effective_model,
+            provider=str(effective_provider),
+            source=str(effective_source),
+            adapter_name=str(adapter_name),
+        )
+        self._current_step_snapshot = step_snapshot
+        self._tool_processor.bind_step(step_snapshot)
         llm_attempt_number = 0
 
         async def _complete_attempt(adapter: Any, request: Any) -> Any:
@@ -3331,9 +3352,7 @@ class AgenticLoop:
                     await self._hooks.trigger_async(
                         HookEvent.LLM_CALL_RETRIED,
                         {
-                            "session_id": self._session_id,
-                            "turn_id": self._turn_id,
-                            "llm_call_id": llm_call_id,
+                            **correlation,
                             "llm_attempt_id": f"{llm_call_id}:attempt-{attempt}",
                             "model": effective_model,
                             "provider": effective_provider,

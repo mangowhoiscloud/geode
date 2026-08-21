@@ -10,7 +10,10 @@ import asyncio
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal, Protocol, cast, runtime_checkable
+from typing import TYPE_CHECKING, Any, Literal, Protocol, cast, runtime_checkable
+
+if TYPE_CHECKING:
+    from core.tools.plan import BoundToolPlan
 
 # Valid values for tool metadata fields.
 VALID_CATEGORIES = frozenset(
@@ -109,6 +112,7 @@ class ToolContext:
     """
 
     session_id: str = ""
+    turn_id: str = ""
     step_id: str = ""
     session_generation: int = 0
     verify_attempt: int = 0
@@ -128,6 +132,7 @@ class ToolContext:
     adapter_name: str = ""
     tool_plan_hash: str = ""
     tool_plan_generation: int = 0
+    bound_tool_plan: BoundToolPlan | None = field(default=None, repr=False, compare=False)
     # Effective request metadata is written by ToolExecutor after trusted and
     # public request transforms. ToolCallProcessor consumes it for persistence,
     # privacy classification, and result offload decisions.

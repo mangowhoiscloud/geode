@@ -40,9 +40,9 @@ def _event_filter_variants(event_filter: str) -> list[str]:
     return variants
 
 
-# v2 (PR-HOOK-TAXONOMY, 2026-07-14): event vocabulary — tense-aligned
-# values, collapsed D2/D3 families; readers use the alias/collapsed maps.
-EVENT_SCHEMA_VERSION = 3
+# v5 (R3.1, 2026-08-21): operational rows gained indexed physical step
+# correlation. Older rows remain readable because the column is additive.
+EVENT_SCHEMA_VERSION = 5
 
 _CREATE_HOOK_EVENTS_TABLE_SQL = """\
 CREATE TABLE IF NOT EXISTS hook_events (
@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS hook_events (
     run_id              TEXT NOT NULL,
     session_id          TEXT NOT NULL DEFAULT '',
     turn_id             TEXT NOT NULL DEFAULT '',
+    step_id             TEXT NOT NULL DEFAULT '',
     tool_call_id        TEXT NOT NULL DEFAULT '',
     llm_call_id         TEXT NOT NULL DEFAULT '',
     llm_attempt_id      TEXT NOT NULL DEFAULT '',
@@ -82,6 +83,8 @@ _HOOK_EVENT_INDEXES = (
     "CREATE INDEX IF NOT EXISTS idx_hook_events_run ON hook_events (run_id, occurred_at)",
     "CREATE INDEX IF NOT EXISTS idx_hook_events_correlation ON hook_events "
     "(session_id, turn_id, occurred_at)",
+    "CREATE INDEX IF NOT EXISTS idx_hook_events_step ON hook_events "
+    "(step_id, occurred_at) WHERE step_id != ''",
     "CREATE INDEX IF NOT EXISTS idx_hook_events_tool_call ON hook_events "
     "(tool_call_id, occurred_at) WHERE tool_call_id != ''",
     "CREATE INDEX IF NOT EXISTS idx_hook_events_llm_call ON hook_events "
@@ -140,6 +143,7 @@ def ensure_event_schema(conn: sqlite3.Connection) -> None:
     for column in (
         "session_id",
         "turn_id",
+        "step_id",
         "tool_call_id",
         "llm_call_id",
         "llm_attempt_id",
@@ -197,6 +201,7 @@ class HookEventWrite:
     payload: dict[str, Any] = field(default_factory=dict)
     session_id: str = ""
     turn_id: str = ""
+    step_id: str = ""
     tool_call_id: str = ""
     llm_call_id: str = ""
     llm_attempt_id: str = ""
@@ -211,6 +216,7 @@ class PersistedHookEvent:
     run_id: str
     session_id: str
     turn_id: str
+    step_id: str
     tool_call_id: str
     llm_call_id: str
     llm_attempt_id: str
@@ -290,15 +296,15 @@ class HookEventStore:
                     """\
                     INSERT INTO hook_events (
                         schema_version, occurred_at, session_key, run_id,
-                        session_id, turn_id, tool_call_id, llm_call_id,
-                        llm_attempt_id, event,
+                        session_id, turn_id, step_id, tool_call_id,
+                        llm_call_id, llm_attempt_id, event,
                         dispatch_mode, status, retention_class, handler_count,
                         handler_error_count, blocked, block_reason, actor_type,
                         actor_id, action, entity_type, entity_id, task_id, level,
                         payload_json, payload_hash
                     ) VALUES (
                         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                        ?, ?, ?, ?, ?, ?, ?, ?
+                        ?, ?, ?, ?, ?, ?, ?, ?, ?
                     )
                     """,
                     (
@@ -308,6 +314,7 @@ class HookEventStore:
                         redact_and_bound_text(record.run_id, 256),
                         redact_and_bound_text(record.session_id, 256),
                         redact_and_bound_text(record.turn_id, 256),
+                        redact_and_bound_text(record.step_id, 256),
                         redact_and_bound_text(record.tool_call_id, 256),
                         redact_and_bound_text(record.llm_call_id, 256),
                         redact_and_bound_text(record.llm_attempt_id, 256),
@@ -354,6 +361,7 @@ class HookEventStore:
         run_id: str | None = None,
         session_id: str | None = None,
         turn_id: str | None = None,
+        step_id: str | None = None,
         tool_call_id: str | None = None,
         llm_call_id: str | None = None,
         event_filter: str | None = None,
@@ -382,6 +390,7 @@ class HookEventStore:
             ("run_id", run_id),
             ("session_id", session_id),
             ("turn_id", turn_id),
+            ("step_id", step_id),
             ("tool_call_id", tool_call_id),
             ("llm_call_id", llm_call_id),
             ("status", status_filter),
@@ -600,6 +609,7 @@ def _row_to_event(row: sqlite3.Row) -> PersistedHookEvent:
         run_id=str(row["run_id"]),
         session_id=str(row["session_id"]),
         turn_id=str(row["turn_id"]),
+        step_id=str(row["step_id"]),
         tool_call_id=str(row["tool_call_id"]),
         llm_call_id=str(row["llm_call_id"]),
         llm_attempt_id=str(row["llm_attempt_id"]),

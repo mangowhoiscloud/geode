@@ -1094,8 +1094,8 @@ GEODE의 확장 표면은 하나의 거대한 이벤트 목록이 아닙니다. 
 
 | 항목 | 계약 |
 | --- | --- |
-| 버전 | `geode.public-hook.v1` |
-| 상관관계 | `session_id`, `turn_id`, `run_id`, session generation, verify attempt, tool/LLM call ID |
+| 버전 | `geode.public-hook.v2` (v1 schema 조회 가능) |
+| 상관관계 | `session_id`, `turn_id`, `step_id`, `run_id`, session generation, verify attempt, tool/LLM call ID |
 | payload 상한 | 문자열 4,096자, JSON 32 KiB, collection 64개, depth 8 |
 | decision 상한 | reason 1,024자, instruction 4,096자, evidence reference 32개 |
 | 기본 timeout | handler별 10초. sync handler는 event loop 밖에서 실행 |
@@ -6111,7 +6111,7 @@ Tier 2  latex2sympy2 + sympy.pretty  블록 전용. 분수·적분을 2D Unicode
 URL: https://mangowhoiscloud.github.io/geode/docs/reference/changelog
 Markdown: https://mangowhoiscloud.github.io/geode/docs/reference/changelog.md
 
-(body omitted from llms-full: 1520 KB — fetch the Markdown twin above for the complete page)
+(body omitted from llms-full: 1521 KB — fetch the Markdown twin above for the complete page)
 
 ---
 

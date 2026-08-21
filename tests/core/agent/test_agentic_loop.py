@@ -26,6 +26,7 @@ from core.agent.tool_executor import (
 )
 from core.hooks import (
     HookAction,
+    HookCorrelation,
     HookDecision,
     HookEvent,
     HookName,
@@ -378,6 +379,26 @@ class TestToolExecutor:
         mcp.acall_tool.assert_not_awaited()
         assert executor._auto_approve is False
 
+    def test_batch_cost_approval_forwards_step_correlation(self) -> None:
+        executor = ToolExecutor()
+        executor._approval.batch_cost_approval = AsyncMock(return_value=True)
+        processor = ToolCallProcessor(
+            executor=executor,
+            op_logger=MagicMock(),
+            error_recovery=MagicMock(),
+        )
+        correlation = HookCorrelation(step_id="turn-1:step-1")
+        processor._step_snapshot = SimpleNamespace(correlation=correlation)
+        blocks = [SimpleNamespace(name="petri_audit", input={})]
+
+        approved = asyncio.run(processor._batch_cost_approval(blocks))
+
+        assert approved is True
+        executor._approval.batch_cost_approval.assert_awaited_once_with(
+            blocks,
+            correlation=correlation,
+        )
+
     def test_runtime_event_observers_do_not_control_tool_calls(self) -> None:
         """Legacy event callbacks are observation-only after the surface split."""
         executor = MagicMock(spec=ToolExecutor)
@@ -442,6 +463,16 @@ class TestToolExecutor:
         processor = ToolCallProcessor(
             executor=executor, op_logger=MagicMock(), error_recovery=MagicMock(), hooks=hooks
         )
+        processor._step_snapshot = SimpleNamespace(
+            correlation=HookCorrelation(
+                session_id="session-offload",
+                turn_id="turn-offload",
+                step_id="turn-offload:step-1",
+                session_generation=3,
+                verify_attempt=1,
+            ),
+            bound_tool_plan=None,
+        )
         prev = get_offload_store()
         store = ToolResultOffloadStore(
             session_id="offload-test",
@@ -458,6 +489,9 @@ class TestToolExecutor:
         assert result["tool_use_id"] == "toolu_offload"
         assert store.recall("toolu_offload") == payload
         assert hook_calls and hook_calls[0]["ref_id"] == "toolu_offload"
+        assert hook_calls[0]["step_id"] == "turn-offload:step-1"
+        assert hook_calls[0]["session_generation"] == 3
+        assert hook_calls[0]["verify_attempt"] == 1
 
     def test_offload_threshold_uses_ceiling_token_estimate(self, tmp_path: Any) -> None:
         from core.orchestration.tool_offload import (
@@ -994,10 +1028,23 @@ class TestAgenticLoop:
         """
         from unittest.mock import AsyncMock
 
-        loop = AgenticLoop(context, executor, quiet=True)
+        hooks = HookSystem()
+        dispatches: list[Any] = []
+        hooks.register_sink(dispatches.append, name="capture")
+        loop = AgenticLoop(context, executor, quiet=True, hooks=hooks)
+        step_correlation = HookCorrelation(
+            session_id="session-retry",
+            turn_id="turn-retry",
+            step_id="turn-retry:step-1",
+            session_generation=4,
+            verify_attempt=2,
+        )
+
+        async def fail_with_step(*_args: Any, **_kwargs: Any) -> None:
+            loop._current_step_snapshot = SimpleNamespace(correlation=step_correlation)
 
         with (
-            patch.object(loop, "_call_llm", return_value=None),
+            patch.object(loop, "_call_llm", side_effect=fail_with_step),
             patch.object(loop, "_aggressive_context_recovery", new=AsyncMock(return_value=0)),
             patch("asyncio.sleep", new=AsyncMock(return_value=None)),
         ):
@@ -1006,6 +1053,14 @@ class TestAgenticLoop:
         assert result.error == "model_action_required"
         assert result.termination_reason == "model_action_required"
         assert "/model" in result.text  # diagnostic points to user action
+        retry_payloads = [
+            dispatch.data for dispatch in dispatches if dispatch.event is HookEvent.LLM_CALL_RETRIED
+        ]
+        assert retry_payloads
+        assert {
+            (payload["step_id"], payload["session_generation"], payload["verify_attempt"])
+            for payload in retry_payloads
+        } == {("turn-retry:step-1", 4, 2)}
 
     def test_context_preserved(self, context: ConversationContext, executor: ToolExecutor) -> None:
         """Test that conversation context is maintained across runs."""

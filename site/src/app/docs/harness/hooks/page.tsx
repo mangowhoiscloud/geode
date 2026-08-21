@@ -83,8 +83,8 @@ export default function Page() {
             <table>
               <thead><tr><th>항목</th><th>계약</th></tr></thead>
               <tbody>
-                <tr><td>버전</td><td><code>geode.public-hook.v1</code></td></tr>
-                <tr><td>상관관계</td><td><code>session_id</code>, <code>turn_id</code>, <code>run_id</code>, session generation, verify attempt, tool/LLM call ID</td></tr>
+                <tr><td>버전</td><td><code>geode.public-hook.v2</code> (v1 schema 조회 가능)</td></tr>
+                <tr><td>상관관계</td><td><code>session_id</code>, <code>turn_id</code>, <code>step_id</code>, <code>run_id</code>, session generation, verify attempt, tool/LLM call ID</td></tr>
                 <tr><td>payload 상한</td><td>문자열 4,096자, JSON 32 KiB, collection 64개, depth 8</td></tr>
                 <tr><td>decision 상한</td><td>reason 1,024자, instruction 4,096자, evidence reference 32개</td></tr>
                 <tr><td>기본 timeout</td><td>handler별 10초. sync handler는 event loop 밖에서 실행</td></tr>
@@ -215,8 +215,8 @@ export default function Page() {
             <table>
               <thead><tr><th>Item</th><th>Contract</th></tr></thead>
               <tbody>
-                <tr><td>Version</td><td><code>geode.public-hook.v1</code></td></tr>
-                <tr><td>Correlation</td><td><code>session_id</code>, <code>turn_id</code>, <code>run_id</code>, session generation, verify attempt, and tool/LLM call IDs</td></tr>
+                <tr><td>Version</td><td><code>geode.public-hook.v2</code> (v1 schema remains queryable)</td></tr>
+                <tr><td>Correlation</td><td><code>session_id</code>, <code>turn_id</code>, <code>step_id</code>, <code>run_id</code>, session generation, verify attempt, and tool/LLM call IDs</td></tr>
                 <tr><td>Payload bounds</td><td>4,096 characters per string, 32 KiB JSON, 64 collection items, depth 8</td></tr>
                 <tr><td>Decision bounds</td><td>1,024-character reason, 4,096-character instruction, 32 evidence references</td></tr>
                 <tr><td>Default timeout</td><td>10 seconds per handler; synchronous handlers run off the event loop</td></tr>

@@ -11,6 +11,7 @@ import asyncio
 import inspect
 import logging
 from collections.abc import Awaitable, Callable
+from dataclasses import asdict
 from typing import TYPE_CHECKING, Any, TypeVar
 
 from core.agent.approval_fsm import (
@@ -34,7 +35,7 @@ from core.ui import spinner_glyph
 from core.ui.console import console
 
 if TYPE_CHECKING:
-    from core.hooks import HookRegistry, HookSystem
+    from core.hooks import HookCorrelation, HookRegistry, HookSystem
 
 log = logging.getLogger(__name__)
 
@@ -163,14 +164,30 @@ class ApprovalWorkflow:
 
         return current_skip_permissions()
 
-    def _fire_hook(self, event: HookEvent, data: dict[str, Any]) -> None:
+    def _fire_hook(
+        self,
+        event: HookEvent,
+        data: dict[str, Any],
+        *,
+        record: ApprovalRecord | None = None,
+    ) -> None:
         from core.hooks.dispatch import fire_hook
 
+        if record is not None and record.correlation is not None:
+            data = {**asdict(record.correlation), **data}
         fire_hook(self._hooks, event, data)
 
-    async def _fire_hook_async(self, event: HookEvent, data: dict[str, Any]) -> None:
+    async def _fire_hook_async(
+        self,
+        event: HookEvent,
+        data: dict[str, Any],
+        *,
+        record: ApprovalRecord | None = None,
+    ) -> None:
         from core.hooks.dispatch import fire_hook_async
 
+        if record is not None and record.correlation is not None:
+            data = {**asdict(record.correlation), **data}
         await fire_hook_async(self._hooks, event, data)
 
     async def _with_approval_locks(self, body: Callable[[], Awaitable[_T]]) -> _T:
@@ -194,6 +211,7 @@ class ApprovalWorkflow:
         tool_name: str,
         *,
         declared_approval: str = "none",
+        correlation: HookCorrelation | None = None,
     ) -> ApprovalRecord | None:
         """Create an ApprovalRecord for a gated tool; ``None`` for ungated.
 
@@ -216,13 +234,27 @@ class ApprovalWorkflow:
             category = f"policy:{declared_approval}"
         else:
             return None
-        record = ApprovalRecord(tool_name=tool_name, category=category)
+        record = ApprovalRecord(
+            tool_name=tool_name,
+            category=category,
+            correlation=correlation,
+        )
         self.record_transition(record, "requested", "gate")
         return record
 
-    def begin_mcp_record(self, server: str, tool_name: str) -> ApprovalRecord:
+    def begin_mcp_record(
+        self,
+        server: str,
+        tool_name: str,
+        *,
+        correlation: HookCorrelation | None = None,
+    ) -> ApprovalRecord:
         """Create the ApprovalRecord for an MCP server confirmation."""
-        record = ApprovalRecord(tool_name=tool_name, category="mcp")
+        record = ApprovalRecord(
+            tool_name=tool_name,
+            category="mcp",
+            correlation=correlation,
+        )
         self.record_transition(record, "requested", f"server={server}")
         return record
 
@@ -387,6 +419,7 @@ class ApprovalWorkflow:
         record: ApprovalRecord | None = None,
         allow_always: bool = True,
         allow_human_prompt: bool | None = None,
+        correlation: HookCorrelation | None = None,
     ) -> str:
         """Async wrapper for approval prompts.
 
@@ -397,6 +430,7 @@ class ApprovalWorkflow:
             tool_name=tool_name or label,
             safety_level=safety_level,
             detail=detail,
+            correlation=correlation or (record.correlation if record is not None else None),
         )
         if public_decision is not None:
             return public_decision
@@ -421,6 +455,7 @@ class ApprovalWorkflow:
         tool_name: str,
         safety_level: str,
         detail: str,
+        correlation: HookCorrelation | None = None,
     ) -> str | None:
         """Return ``y``/``n`` for a decisive public hook, else ask the user."""
         if self._hook_registry is None:
@@ -447,7 +482,8 @@ class ApprovalWorkflow:
                     else detail
                 ),
             },
-            correlation=HookCorrelation(
+            correlation=correlation
+            or HookCorrelation(
                 session_id=get_session_id(),
                 turn_id=get_turn_id(),
                 tool_call_id=get_tool_call_id(),
@@ -624,6 +660,7 @@ class ApprovalWorkflow:
                     "safety_level": "PER_INVOCATION" if per_invocation else "DECLARED",
                     "args_preview": detail,
                 },
+                record=record,
             )
             response = await self.prompt_with_always_async(
                 "Allow?",
@@ -653,6 +690,7 @@ class ApprovalWorkflow:
         safety_level: str,
         tool_name: str,
         allow_human_prompt: bool,
+        correlation: HookCorrelation | None = None,
     ) -> bool:
         """Honor an explicit one-call permission request without cache bypasses."""
 
@@ -664,6 +702,7 @@ class ApprovalWorkflow:
                 tool_name=tool_name,
                 allow_always=False,
                 allow_human_prompt=allow_human_prompt,
+                correlation=correlation,
             )
             return response == "y"
 
@@ -693,6 +732,7 @@ class ApprovalWorkflow:
                 "safety_level": "MCP",
                 "args_preview": f"server={server}",
             },
+            record=record,
         )
 
         response = self.prompt_with_always(
@@ -733,6 +773,7 @@ class ApprovalWorkflow:
                     "safety_level": "MCP",
                     "args_preview": f"server={server}",
                 },
+                record=record,
             )
 
             response = await self.prompt_with_always_async(
@@ -849,6 +890,7 @@ class ApprovalWorkflow:
                 "safety_level": "SENSITIVE",
                 "args_preview": summary,
             },
+            record=record,
         )
         response = self.prompt_with_always(
             "Allow?",
@@ -902,6 +944,7 @@ class ApprovalWorkflow:
                 "safety_level": "SENSITIVE",
                 "args_preview": summary,
             },
+            record=record,
         )
         response = await self.prompt_with_always_async(
             "Allow?",
@@ -964,6 +1007,7 @@ class ApprovalWorkflow:
                 "safety_level": "WRITE",
                 "args_preview": str(tool_input)[:200],
             },
+            record=record,
         )
 
         response = self.prompt_with_always(
@@ -1011,6 +1055,7 @@ class ApprovalWorkflow:
                 "safety_level": "WRITE",
                 "args_preview": str(tool_input)[:200],
             },
+            record=record,
         )
 
         response = await self.prompt_with_always_async(
@@ -1052,6 +1097,7 @@ class ApprovalWorkflow:
                 "safety_level": "EXPENSIVE",
                 "args_preview": f"estimated_cost=${estimated_cost:.2f}",
             },
+            record=record,
         )
 
         if self.check_auto_deny(tool_name):
@@ -1093,6 +1139,7 @@ class ApprovalWorkflow:
                 "safety_level": "EXPENSIVE",
                 "args_preview": f"estimated_cost=${estimated_cost:.2f}",
             },
+            record=record,
         )
 
         if self.check_auto_deny(tool_name):
@@ -1133,6 +1180,7 @@ class ApprovalWorkflow:
                 "safety_level": "DANGEROUS",
                 "args_preview": str(command)[:200],
             },
+            record=record,
         )
 
         if self.check_auto_deny("run_bash"):
@@ -1175,6 +1223,7 @@ class ApprovalWorkflow:
                     "safety_level": "DANGEROUS",
                     "args_preview": str(command)[:200],
                 },
+                record=record,
             )
 
             if self.check_auto_deny("run_bash"):
@@ -1266,7 +1315,12 @@ class ApprovalWorkflow:
     # Batch cost approval (used by ToolCallProcessor)
     # -----------------------------------------------------------------
 
-    async def batch_cost_approval(self, blocks: list[Any]) -> bool:
+    async def batch_cost_approval(
+        self,
+        blocks: list[Any],
+        *,
+        correlation: HookCorrelation | None = None,
+    ) -> bool:
         """Show a single cost confirmation prompt for all EXPENSIVE tools.
 
         Threads ONE ApprovalRecord for the whole batch (the per-tool records
@@ -1275,6 +1329,7 @@ class ApprovalWorkflow:
         record = ApprovalRecord(
             tool_name=",".join(str(block.name) for block in blocks) or "batch",
             category="expensive",
+            correlation=correlation,
         )
         self.record_transition(record, "requested", f"batch:{len(blocks)}")
         # --dangerously-skip-permissions / fully-open HITL / always-approved

@@ -154,14 +154,16 @@ class ActivityRowBase(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: int = 2
+    schema_version: int = 3
     """Row-schema version (PR-OBS-CONTRACT, 2026-06-13). Bump when a
     field is added/renamed/retyped on any row class so JSONL re-readers
     can branch on shape instead of guessing from key presence.
     v2 (PR-HOOK-TAXONOMY, 2026-07-14): collapsed families — RuleChangedRow
     (+details.action) replaces the rule.* trio, AutoTriggerRow
     (+details.stage) replaces six per-state auto-trigger rows, approval
-    granted/denied rows deleted."""
+    granted/denied rows deleted.
+    v3 (R3.1, 2026-08-21): extension audit details gained physical step
+    correlation."""
 
     ts: float
     run_id: str
@@ -613,6 +615,7 @@ class ExtensionInvokedDetails(BaseModel):
     status: str
     duration_ms: float = 0.0
     turn_id: str = ""
+    step_id: str = ""
     session_generation: int = 0
     verify_attempt: int = 0
 

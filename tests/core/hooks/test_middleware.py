@@ -144,6 +144,78 @@ async def test_tool_request_middleware_composes_n_to_n_plus_one() -> None:
 
 
 @_async_test
+async def test_request_transforms_preserve_physical_correlation() -> None:
+    class RebuildToolRequest:
+        async def tool_request(self, request: ToolCallRequest) -> ToolCallRequest:
+            return ToolCallRequest(request.tool_name, request.arguments)
+
+    class RebuildLlmRequest:
+        async def llm_request(self, request: LlmCallRequest) -> LlmCallRequest:
+            return LlmCallRequest(request.adapter, request.request)
+
+    registry = MiddlewareRegistry()
+    registry.register_tool_request(RebuildToolRequest())
+    registry.register_llm_request(RebuildLlmRequest())
+    context = object()
+    correlation = {"step_id": "turn-1:step-1"}
+
+    tool = await registry.tool_request(
+        ToolCallRequest("demo", context=context, correlation=correlation)
+    )
+    llm = await registry.llm_request(
+        LlmCallRequest(
+            cast(LLMAdapter, _Adapter()),
+            AdapterCallRequest(model="model", messages=()),
+            correlation,
+        )
+    )
+
+    assert tool.context is context
+    assert tool.correlation == correlation
+    assert llm.correlation == correlation
+
+
+@_async_test
+async def test_request_middleware_rejects_in_place_physical_correlation_mutation() -> None:
+    class Context:
+        step_id = "turn-1:step-1"
+
+    class MutateToolCorrelation:
+        async def tool_request(self, request: ToolCallRequest) -> ToolCallRequest:
+            cast(dict[str, Any], request.correlation)["step_id"] = "spoofed"
+            request.context.step_id = "spoofed-context"
+            return request
+
+    class MutateLlmCorrelation:
+        async def llm_request(self, request: LlmCallRequest) -> LlmCallRequest:
+            cast(dict[str, Any], request.correlation)["step_id"] = "spoofed"
+            return request
+
+    context = Context()
+    correlation = {"step_id": "turn-1:step-1"}
+    tool_registry = MiddlewareRegistry()
+    tool_registry.register_tool_request(MutateToolCorrelation())
+    llm_registry = MiddlewareRegistry()
+    llm_registry.register_llm_request(MutateLlmCorrelation())
+
+    with pytest.raises(InvalidMiddlewareResultError, match="physical correlation"):
+        await tool_registry.tool_request(
+            ToolCallRequest("demo", context=context, correlation=correlation)
+        )
+    with pytest.raises(InvalidMiddlewareResultError, match="physical correlation"):
+        await llm_registry.llm_request(
+            LlmCallRequest(
+                cast(LLMAdapter, _Adapter()),
+                AdapterCallRequest(model="model", messages=()),
+                correlation,
+            )
+        )
+
+    assert context.step_id == "turn-1:step-1"
+    assert correlation == {"step_id": "turn-1:step-1"}
+
+
+@_async_test
 async def test_tool_execution_is_an_onion_and_terminal_runs_once() -> None:
     order: list[str] = []
     registry = MiddlewareRegistry()
@@ -177,6 +249,57 @@ async def test_execution_next_call_is_single_use() -> None:
 
     with pytest.raises(NextCallAlreadyUsedError):
         await registry.tool_execution(ToolCallRequest(tool_name="demo"), terminal)
+
+
+@_async_test
+async def test_execution_middleware_rejects_in_place_identity_mutation() -> None:
+    class Context:
+        step_id = "turn-1:step-1"
+
+    class MutateToolIdentity:
+        async def tool_execution(self, request: ToolCallRequest, next_call: Any) -> dict[str, Any]:
+            cast(dict[str, Any], request.correlation)["step_id"] = "spoofed"
+            request.context.step_id = "spoofed-context"
+            return await next_call(request)
+
+    class MutateLlmIdentity:
+        async def llm_execution(
+            self,
+            request: LlmCallRequest,
+            next_call: Any,
+        ) -> AdapterCallResult:
+            cast(dict[str, Any], request.correlation)["step_id"] = "spoofed"
+            return await next_call(request)
+
+    context = Context()
+    tool_registry = MiddlewareRegistry()
+    tool_registry.register_tool_execution(MutateToolIdentity())
+    llm_registry = MiddlewareRegistry()
+    llm_registry.register_llm_execution(MutateLlmIdentity())
+    tool_correlation = {"step_id": "turn-1:step-1"}
+    llm_correlation = {"step_id": "turn-1:step-1"}
+
+    with pytest.raises(InvalidMiddlewareResultError, match="tool_execution"):
+        await tool_registry.tool_execution(
+            ToolCallRequest(
+                "demo",
+                context=context,
+                correlation=tool_correlation,
+            ),
+            lambda _request: pytest.fail("mutated tool identity reached the terminal"),
+        )
+    with pytest.raises(InvalidMiddlewareResultError, match="llm_execution"):
+        await llm_registry.llm_execution(
+            LlmCallRequest(
+                cast(LLMAdapter, _Adapter()),
+                AdapterCallRequest(model="model", messages=()),
+                llm_correlation,
+            ),
+            lambda _request: pytest.fail("mutated LLM identity reached the terminal"),
+        )
+    assert context.step_id == "turn-1:step-1"
+    assert tool_correlation == {"step_id": "turn-1:step-1"}
+    assert llm_correlation == {"step_id": "turn-1:step-1"}
 
 
 @_async_test
