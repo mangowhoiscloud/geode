@@ -14,7 +14,7 @@ state. Folding them removes 6 sibling files without coupling any
 new code paths.
 
 The ``_build_<area>_handlers`` symbol names are preserved verbatim
-so ``core/cli/tool_handlers/__init__.py`` and external callers
+so the runtime composer and existing callers
 (e.g. the tool-handler audit script) keep working unchanged.
 """
 
@@ -22,13 +22,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from core.cli.tool_handlers.registration import UniqueEntries
 from core.tools.computer_observation import (
     ComputerActionEvent,
     build_action_event,
     evaluate_trajectory,
     trajectory_metrics,
 )
+from core.tools.handlers.registration import UniqueEntries
 
 # ---------------------------------------------------------------------------
 # math — calculate
@@ -165,7 +165,7 @@ def _openai_action_to_harness(action: dict[str, Any]) -> tuple[str, dict[str, An
 
     Schema ref: ctx7 /websites/developers_openai_api
     api-reference/responses/get "actions: ComputerActionList"
-    (Click/DoubleClick/Scroll/Type/Keypress/Move/Drag/Wait/Screenshot).
+    (click/double-click/scroll/type/keypress/move/drag/wait/screenshot).
     # backend acceptance: platform live-verified 2026-06-17 (codex rejects)
     """
     atype = str(action.get("type", ""))

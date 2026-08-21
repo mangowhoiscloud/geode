@@ -154,13 +154,13 @@ class IsolatedRunner:
     Supports two execution modes:
     - **Thread mode** (default): Run a callable in-process via daemon thread.
       Used for simple callbacks and tests.
-    - **Subprocess mode**: Run a WorkerRequest in a child process via
-      ``python -m core.agent.worker``. Used for sub-agent and scheduler
-      workloads. Provides crash isolation and clean timeout via SIGKILL.
+    - **Subprocess mode**: Run a WorkerRequest through a composition-provided
+      worker module. Used for sub-agent and scheduler workloads. Provides crash
+      isolation and clean timeout via SIGKILL.
 
     Usage::
 
-        runner = IsolatedRunner(hooks=hook_system)
+        runner = IsolatedRunner(hooks=hook_system, worker_module="geode_product.worker")
         config = IsolationConfig(timeout_s=60, post_mode=PostToMainMode.FULL)
         result = await runner.arun(my_callable, args=("hello",), config=config)
 
@@ -202,7 +202,7 @@ class IsolatedRunner:
         self,
         hooks: HookSystem | None = None,
         lane: Any | None = None,
-        worker_module: str = "core.agent.worker",
+        worker_module: str | None = None,
     ) -> None:
         self._hooks = hooks
         self._lane = lane  # Lane("global") from unified LaneQueue
@@ -433,7 +433,7 @@ class IsolatedRunner:
                 self._release_slot(config)
 
     # ------------------------------------------------------------------
-    # Subprocess mode (WorkerRequest → python -m core.agent.worker)
+    # Subprocess mode (WorkerRequest → composition-provided module)
     # async-native via ``asyncio.create_subprocess_exec``.
     # ------------------------------------------------------------------
 
@@ -466,6 +466,17 @@ class IsolatedRunner:
         the ``IsolationResult``. A worker that emits only a bare legacy result
         line still parses correctly (backward compatible).
         """
+        if self._worker_module is None:
+            now = time.time()
+            return IsolationResult(
+                session_id=config.session_id,
+                success=False,
+                error="Subprocess worker module was not provided by composition",
+                started_at=now,
+                completed_at=now,
+                metadata=dict(config.metadata),
+            )
+
         # PR-Async-Phase-C step 4b fix-up — Codex MCP CRITICAL catch
         # (2026-05-22). Previously the slot acquire was a bare
         # ``await asyncio.to_thread(...)``; cancelling the coroutine

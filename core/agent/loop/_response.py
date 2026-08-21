@@ -25,7 +25,7 @@ def refresh_tools(loop: AgenticLoop) -> int:
     """Reload MCP tools into the tool list without reconstructing the loop.
 
     Called after install_mcp_server to make new tools available immediately.
-    Rebuilds the unified tool list with deferred loading applied.
+    Rebuilds the unified schemas; the loop refreshes transient defer membership.
     Returns number of newly added tools.
     """
     old_count = len(loop._tools)
@@ -48,6 +48,11 @@ def refresh_tools(loop: AgenticLoop) -> int:
     )
     if allowed is not None:
         loop._tools = [t for t in loop._tools if t.get("name") in allowed]
+    if loop._bound_tool_plan is not None:
+        loop._apply_bound_tool_plan(
+            loop._tools,
+            transient_tool_names=loop._transient_tool_names(mcp_tool_list),
+        )
     try:
         from core.agent.capability_graph import build_capability_graph
         from core.llm.providers.anthropic import is_computer_use_enabled

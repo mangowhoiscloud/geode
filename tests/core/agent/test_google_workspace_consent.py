@@ -72,7 +72,7 @@ def test_google_classification_consumers_share_descriptor_projections() -> None:
 
 
 def test_google_delegated_handlers_derive_from_descriptor_bindings() -> None:
-    from core.cli.tool_handlers.delegated import _DELEGATED_TOOLS
+    from core.tools.handlers.delegated import _DELEGATED_TOOLS
 
     delegated = tuple(
         name for name, binding in GOOGLE_TOOL_BINDINGS.items() if binding.handler_class is not None

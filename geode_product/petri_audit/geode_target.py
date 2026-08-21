@@ -41,6 +41,17 @@ from typing import Any
 
 log = logging.getLogger("plugins.petri_audit.geode_target")
 
+_PETRI_SOURCE_ALIASES = {
+    "openai-codex": "codex-oauth",
+    "api_key": "payg",
+}
+
+
+def translate_petri_source(source: str) -> str:
+    """Translate a Petri binding source into GEODE's adapter namespace."""
+    return _PETRI_SOURCE_ALIASES.get(source, source)
+
+
 # Single-turn GEODE runner. Caller owns AgenticLoop bootstrap; we hand
 # it the converted GEODE-format message history and receive the assistant
 # text PLUS an optional usage dict.
@@ -251,9 +262,10 @@ async def _default_geode_runner(
     readiness = check_readiness()
     readiness = apply_to_readiness(readiness, audit_mode)
     set_readiness(readiness)
-    from geode_product.tool_handlers import build_tool_handlers
+    from geode_product.tool_handlers import compose_tool_plan
 
-    handlers = build_tool_handlers(verbose=False)
+    bound_tool_plan, transient_handlers = compose_tool_plan(verbose=False)
+    handlers = {**bound_tool_plan.handlers, **transient_handlers}
     if audit_mode.enabled:
         try:
             from core.tools.policy import load_profile_policy
@@ -286,9 +298,45 @@ async def _default_geode_runner(
 
     policy_sources = build_policy_sources()
 
+    # Resolve the audit binding before freezing the executable plan so provider
+    # visibility and ADR-012/013 policy are shared by executor and loop.
+    from core.llm.adapters import infer_provider_from_model
+    from core.llm.adapters.registry import bootstrap_builtins
+
+    bootstrap_builtins(policy_sources=policy_sources)
+    resolved_provider = infer_provider_from_model(model) if model else "anthropic"
+    resolved_source = ""
+    if model:
+        try:
+            from geode_product.petri_audit.registry import get_binding
+
+            binding = get_binding("target", model=model)
+            resolved_provider = binding.provider
+            resolved_source = translate_petri_source(binding.source)
+        except Exception:
+            log.debug(
+                "geode_target: get_binding('target', model=%s) failed; "
+                "falling back to inferred provider + default source",
+                model,
+                exc_info=True,
+            )
+
+    from core.agent.loop._tool_factory import project_bound_tool_plan
+    from core.llm.adapters._source_inference import infer_source
+
+    bound_tool_plan = project_bound_tool_plan(
+        bound_tool_plan,
+        provider=resolved_provider,
+        source=resolved_source or infer_source(resolved_provider),
+        policy_sources=policy_sources,
+    )
+    effective_tool_names = frozenset((*bound_tool_plan.tool_names, *transient_handlers))
+
     executor = ToolExecutor(
-        action_handlers=handlers,
+        bound_tool_plan=bound_tool_plan,
+        transient_handlers=transient_handlers,
         auto_approve=True,
+        allowed_tools=effective_tool_names,
         middleware_registry=build_middleware_registry(policy_sources=policy_sources),
     )
     # G2 (2026-05-12) — max_rounds cap removed. Prior `max_rounds=4`
@@ -310,54 +358,6 @@ async def _default_geode_runner(
     # ``core/agent/worker.py:817-823`` pattern for the sub-agent worker
     # subprocess, which has the identical wiring gap. Idempotent — safe to
     # re-call when the parent already populated the registry.
-    from core.llm.adapters import infer_provider_from_model
-    from core.llm.adapters.registry import bootstrap_builtins
-
-    bootstrap_builtins(policy_sources=policy_sources)
-
-    # Resolve (provider, source) via ``get_binding`` — the same path
-    # the manual ``geode audit`` CLI uses — so the audit subprocess,
-    # the CLI, and the closed-loop all share one source SoT
-    # (``[petri.target]`` / ``[self_improving_loop.petri.target]``).
-    resolved_provider = infer_provider_from_model(model) if model else "anthropic"
-    resolved_source = ""
-    if model:
-        try:
-            from geode_product.petri_audit.registry import get_binding
-
-            binding = get_binding("target", model=model)
-            resolved_provider = binding.provider
-            resolved_source = binding.source
-            # Translate Petri-surface source names to the GEODE
-            # adapter-registry namespace so AgenticLoop's
-            # ``get_adapter(name)`` / ``resolve_for(provider, category)``
-            # lookups hit. Only two pairs diverge:
-            #   ``openai-codex`` (Petri name) → ``codex-oauth`` (registry name)
-            #   ``api_key`` (Petri PAYG, provider-generic) → ``payg``
-            #     (registry category; the fallback ``resolve_for(provider,
-            #     "payg")`` selects the provider-specific ``*-payg`` adapter)
-            # Other concrete sources such as ``claude-cli`` are identical
-            # across both namespaces.
-            _PETRI_TO_REGISTRY = {
-                "openai-codex": "codex-oauth",
-                "api_key": "payg",
-            }
-            resolved_source = _PETRI_TO_REGISTRY.get(resolved_source, resolved_source)
-        except Exception:
-            # get_binding can raise if the model is not in the role
-            # manifest's allowed_models list (manual override / custom
-            # model). Fall through to provider inference + AgenticLoop
-            # default source — preserves legacy behaviour for callers
-            # that have not migrated their config to the [petri.target]
-            # section yet. Logged at DEBUG so production noise stays
-            # quiet but post-mortems can trace the fallback.
-            log.debug(
-                "geode_target: get_binding('target', model=%s) failed; "
-                "falling back to inferred provider + default source",
-                model,
-                exc_info=True,
-            )
-
     loop = AgenticLoop(
         ctx,
         executor,

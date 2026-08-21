@@ -185,7 +185,7 @@ class TestToolRegistry:
             asyncio.run(registry.aexecute("nonexistent"))
 
     def test_migrated_tool_handlers_do_not_call_sync_execute(self):
-        from core.cli.tool_handlers.single_tool import (
+        from core.tools.handlers.single_tool import (
             _build_calendar_handlers,
             _build_notification_handlers,
         )

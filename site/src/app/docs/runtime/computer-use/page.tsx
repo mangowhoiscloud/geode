@@ -29,7 +29,7 @@ export default function Page() {
 
             <h2>동작 방식</h2>
             <pre>{`LLM ── tool_use("computer", action, 좌표/텍스트) ──→ handle_computer
-                                                     (core/cli/tool_handlers/single_tool.py)
+                                                     (core/tools/handlers/single_tool.py)
                                                           │ asyncio.to_thread
                                                           ▼
                                               ComputerUseHarness._execute_sync
@@ -174,7 +174,7 @@ driver = "helper"
 
             <h2>How it runs</h2>
             <pre>{`LLM ── tool_use("computer", action, coords/text) ──→ handle_computer
-                                                     (core/cli/tool_handlers/single_tool.py)
+                                                     (core/tools/handlers/single_tool.py)
                                                           │ asyncio.to_thread
                                                           ▼
                                               ComputerUseHarness._execute_sync

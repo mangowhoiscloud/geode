@@ -14,6 +14,28 @@ from core.server.supervised.services import (
     _headless_denied_tools_for_mode,
     build_shared_services,
 )
+from core.tools.plan import ExecutionBinding, ToolSpec, bind_tool_plan, compile_tool_plan
+
+
+def _bound_plan(*names: str):
+    plan = compile_tool_plan(
+        tuple(
+            (
+                ToolSpec(name=name, description=name, input_schema={"type": "object"}),
+                f"test[{index}]",
+            )
+            for index, name in enumerate(names)
+        ),
+        tuple(ExecutionBinding(name=name, origin="test") for name in names),
+    )
+    return bind_tool_plan(plan, {name: MagicMock(return_value={"ok": True}) for name in names})
+
+
+def _bound_builder(**_kwargs):
+    return _bound_plan("test_tool"), {}
+
+
+_TEST_WORKER_MODULE = "geode_product.worker"
 
 
 class TestSessionMode:
@@ -249,6 +271,206 @@ class TestSharedServicesCreateSession:
         assert {tool["name"] for tool in loop._tools} == {"calculate"}
         assert executor._allowed_tools == frozenset({"calculate"})
 
+    def test_bound_plan_is_filtered_once_and_shared_by_identity(self) -> None:
+        parent = _bound_plan("keep", "drop")
+        services = SharedServices(hook_system=MagicMock(), bound_tool_plan=parent)
+
+        executor, loop = services.create_session(
+            SessionMode.REPL,
+            allowed_tool_names={"keep"},
+        )
+
+        assert services.bound_tool_plan is parent
+        assert executor._bound_tool_plan is loop._bound_tool_plan
+        assert executor._bound_tool_plan is not parent
+        assert executor._bound_tool_plan.tool_names == ("keep",)
+        assert parent.tool_names == ("keep", "drop")
+        assert tuple(executor._handlers) == ("keep",)
+        snapshot_plan, snapshot_transient = loop.bound_tool_plan_snapshot()
+        assert snapshot_plan is executor._bound_tool_plan
+        assert snapshot_transient is executor._transient_handlers
+
+    def test_policy_projected_special_route_is_denied_before_side_effect(
+        self,
+        tmp_path,
+    ) -> None:
+        import json
+        from unittest.mock import AsyncMock
+
+        from core.config.policy_source import PolicySourcePaths
+
+        policy_path = tmp_path / "tool-policy.json"
+        policy_path.write_text(
+            json.dumps({"forbidden_tools": ["run_bash"]}),
+            encoding="utf-8",
+        )
+        plan = compile_tool_plan(
+            (
+                (ToolSpec("memory_search", "Search memory", {}), "test"),
+                (ToolSpec("run_bash", "Run command", {}), "test"),
+            ),
+            (
+                ExecutionBinding("memory_search", "test"),
+                ExecutionBinding("run_bash", "test", route="special"),
+            ),
+        )
+        services = SharedServices(
+            hook_system=MagicMock(),
+            bound_tool_plan=bind_tool_plan(
+                plan,
+                {"memory_search": MagicMock(return_value={"ok": True})},
+            ),
+            policy_sources={
+                "tool_policy": PolicySourcePaths(
+                    "GEODE_TOOL_POLICY_OVERRIDE",
+                    packaged_default=policy_path,
+                )
+            },
+        )
+        run_bash = AsyncMock(side_effect=AssertionError("run_bash side effect reached"))
+
+        with (
+            patch("core.config.reload_settings_from_disk"),
+            patch(
+                "core.agent.tool_executor.executor.ToolExecutor._run_bash_exec_async",
+                run_bash,
+            ),
+        ):
+            executor, loop = services.create_session(SessionMode.REPL)
+            denied = asyncio.run(executor.aexecute("run_bash", {"command": "touch must-not-run"}))
+
+        assert "run_bash" not in loop._bound_tool_plan.tool_names
+        assert denied["denied"] is True
+        run_bash.assert_not_awaited()
+
+    def test_bound_session_executes_mcp_tool_added_after_start(self) -> None:
+        from unittest.mock import AsyncMock
+
+        mcp_manager = MagicMock(connection_epoch=0)
+        mcp_manager.get_all_tools.return_value = []
+        mcp_manager.find_server_for_tool.return_value = "dynamic"
+        mcp_manager.acall_tool = AsyncMock(return_value={"ok": True})
+        services = SharedServices(
+            hook_system=MagicMock(),
+            mcp_manager=mcp_manager,
+            bound_tool_plan=_bound_plan("keep"),
+        )
+        executor, loop = services.create_session(SessionMode.REPL)
+        added = {
+            "name": "mcp_added_after_start",
+            "description": "Added later",
+            "input_schema": {"type": "object"},
+        }
+
+        mcp_manager.get_all_tools.return_value = [added]
+        loop.refresh_tools()
+        executor._mcp_approved_servers.add("dynamic")
+        result = asyncio.run(executor.aexecute("mcp_added_after_start", {}))
+
+        assert executor._allowed_tools is None
+        assert "mcp_added_after_start" in executor._bound_allowed_tools
+        assert result["ok"] is True
+        mcp_manager.acall_tool.assert_awaited_once_with(
+            "dynamic",
+            "mcp_added_after_start",
+            {},
+        )
+
+    @pytest.mark.parametrize(
+        ("mode", "computer_visible"),
+        [(SessionMode.DAEMON, False), (SessionMode.REPL, True)],
+    )
+    def test_session_denial_reaches_native_computer_wire(
+        self,
+        mode: SessionMode,
+        computer_visible: bool,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from core.config import settings
+        from core.llm.adapters import _anthropic_common
+        from core.llm.adapters.base import AdapterCallResult, UsageSummary
+
+        captured: dict[str, object] = {}
+
+        class CaptureAdapter:
+            name = "capture-anthropic"
+            provider = "anthropic"
+
+            async def acomplete(self, request):
+                captured.update(_anthropic_common.build_create_kwargs(request))
+                return AdapterCallResult(
+                    text="ok",
+                    usage=UsageSummary(),
+                    stop_reason="completed",
+                )
+
+        monkeypatch.setattr(settings, "gateway_allow_computer_use", False)
+        services = SharedServices(
+            bound_tool_plan=_bound_plan("keep"),
+            transient_tool_handlers={"computer": lambda **_kwargs: {"ok": True}},
+        )
+        with patch("core.config.reload_settings_from_disk"):
+            _executor, loop = services.create_session(mode)
+        loop._new_adapter = CaptureAdapter()
+
+        with patch(
+            "core.llm.providers.anthropic.is_computer_use_enabled",
+            return_value=True,
+        ):
+            asyncio.run(
+                loop._call_llm(
+                    "Computer wire",
+                    [{"role": "user", "content": "Continue."}],
+                )
+            )
+
+        tools = captured.get("tools", [])
+        assert isinstance(tools, list)
+        assert any(tool.get("name") == "computer" for tool in tools) is computer_visible
+
+    def test_session_without_computer_handler_never_advertises_native_computer(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from core.config import settings
+        from core.llm.adapters import _anthropic_common
+        from core.llm.adapters.base import AdapterCallResult, UsageSummary
+
+        captured: dict[str, object] = {}
+
+        class CaptureAdapter:
+            name = "capture-anthropic"
+            provider = "anthropic"
+
+            async def acomplete(self, request):
+                captured.update(_anthropic_common.build_create_kwargs(request))
+                return AdapterCallResult(
+                    text="ok",
+                    usage=UsageSummary(),
+                    stop_reason="completed",
+                )
+
+        monkeypatch.setattr(settings, "gateway_allow_computer_use", False)
+        services = SharedServices(bound_tool_plan=_bound_plan("keep"))
+        with patch("core.config.reload_settings_from_disk"):
+            _executor, loop = services.create_session(SessionMode.REPL)
+        loop._new_adapter = CaptureAdapter()
+
+        with patch(
+            "core.llm.providers.anthropic.is_computer_use_enabled",
+            return_value=True,
+        ):
+            asyncio.run(
+                loop._call_llm(
+                    "Computer wire",
+                    [{"role": "user", "content": "Continue."}],
+                )
+            )
+
+        tools = captured.get("tools", [])
+        assert isinstance(tools, list)
+        assert not any(tool.get("name") == "computer" for tool in tools)
+
     def test_system_suffix_passed(self, services: SharedServices) -> None:
         _, loop = services.create_session(SessionMode.DAEMON, system_suffix="gateway instructions")
         assert "gateway instructions" in loop._system_suffix
@@ -316,30 +538,44 @@ class TestBuildSharedServices:
     """build_shared_services() factory integration."""
 
     def test_returns_shared_services(self) -> None:
-        services = build_shared_services()
+        services = build_shared_services(
+            tool_plan_builder=_bound_builder,
+            worker_module=_TEST_WORKER_MODULE,
+        )
         assert isinstance(services, SharedServices)
 
     def test_hook_system_auto_created(self) -> None:
-        services = build_shared_services()
+        services = build_shared_services(
+            tool_plan_builder=_bound_builder,
+            worker_module=_TEST_WORKER_MODULE,
+        )
         assert services.hook_system is not None
 
     def test_tool_handlers_populated(self) -> None:
-        services = build_shared_services()
+        services = build_shared_services(
+            tool_plan_builder=_bound_builder,
+            worker_module=_TEST_WORKER_MODULE,
+        )
         assert len(services.tool_handlers) > 0
 
     def test_tool_plan_builder_keeps_plan_and_handlers_together(self) -> None:
-        plan = object()
-        handlers = {"test_tool": MagicMock()}
-        builder = MagicMock(return_value=(plan, handlers))
+        bound = _bound_plan("test_tool")
+        internal = {"internal": MagicMock()}
+        builder = MagicMock(return_value=(bound, internal))
 
         services = build_shared_services(
             hook_system=MagicMock(),
             lane_queue=MagicMock(),
             tool_plan_builder=builder,
+            worker_module=_TEST_WORKER_MODULE,
         )
 
-        assert services.tool_plan is plan
-        assert services.tool_handlers is handlers
+        assert services.bound_tool_plan is bound
+        assert services.tool_plan is bound.plan
+        assert services.tool_handlers == {**bound.handlers, **internal}
+        assert services.transient_tool_handlers == internal
+        with pytest.raises(TypeError):
+            services.tool_handlers["mutable"] = MagicMock()
         builder.assert_called_once_with(
             verbose=False,
             mcp_manager=None,
@@ -347,11 +583,12 @@ class TestBuildSharedServices:
         )
 
     def test_tool_composition_has_one_authority(self) -> None:
-        with pytest.raises(ValueError, match="mutually exclusive"):
-            build_shared_services(
-                tool_handler_builder=MagicMock(),
-                tool_plan_builder=MagicMock(),
-            )
+        with pytest.raises(RuntimeError, match="injected bound tool-plan builder"):
+            build_shared_services()
+
+    def test_worker_composition_has_one_authority(self) -> None:
+        with pytest.raises(RuntimeError, match="injected product worker module"):
+            build_shared_services(tool_plan_builder=_bound_builder)
 
     def test_tool_plan_failure_precedes_process_side_effects(self) -> None:
         builder = MagicMock(side_effect=ValueError("invalid plan"))
@@ -361,7 +598,10 @@ class TestBuildSharedServices:
             patch("core.wiring.bootstrap.build_tool_offload") as build_tool_offload,
             pytest.raises(ValueError, match="invalid plan"),
         ):
-            build_shared_services(tool_plan_builder=builder)
+            build_shared_services(
+                tool_plan_builder=builder,
+                worker_module=_TEST_WORKER_MODULE,
+            )
 
         build_hooks.assert_not_called()
         build_tool_offload.assert_not_called()
@@ -376,6 +616,8 @@ class TestBuildSharedServices:
             policy_sources=policy_sources,
             activity_sink_provider=activity_sink_provider,
             middleware_registry=middleware_registry,
+            tool_plan_builder=_bound_builder,
+            worker_module=_TEST_WORKER_MODULE,
         )
 
         executor, loop = services.create_session(SessionMode.REPL)
@@ -400,7 +642,10 @@ class TestBuildSharedServices:
         from core.config import settings
         from core.server.supervised.services import SessionMode
 
-        services = build_shared_services()
+        services = build_shared_services(
+            tool_plan_builder=_bound_builder,
+            worker_module=_TEST_WORKER_MODULE,
+        )
         _, loop = services.create_session(SessionMode.DAEMON)
         assert loop.model == settings.model
 
@@ -425,7 +670,10 @@ class TestBuildSharedServices:
         from core.config import ANTHROPIC_PRIMARY, OPENAI_PRIMARY
         from core.server.supervised.services import SessionMode
 
-        services = build_shared_services()
+        services = build_shared_services(
+            tool_plan_builder=_bound_builder,
+            worker_module=_TEST_WORKER_MODULE,
+        )
         monkeypatch.setenv("GEODE_MODEL", ANTHROPIC_PRIMARY)
         _, loop_a = services.create_session(SessionMode.DAEMON)
         assert loop_a.model == ANTHROPIC_PRIMARY
@@ -440,7 +688,10 @@ class TestBuildSharedServices:
 
     def test_no_agentic_ref_attribute(self) -> None:
         """SharedServices should not have agentic_ref (removed in system-hardening)."""
-        services = build_shared_services()
+        services = build_shared_services(
+            tool_plan_builder=_bound_builder,
+            worker_module=_TEST_WORKER_MODULE,
+        )
         assert not hasattr(services, "agentic_ref")
 
 
@@ -493,5 +744,9 @@ class TestSchedulerREPLIsolation:
 
     def test_explicit_hook_system_used(self) -> None:
         mock_hooks = MagicMock()
-        services = build_shared_services(hook_system=mock_hooks)
+        services = build_shared_services(
+            hook_system=mock_hooks,
+            tool_plan_builder=_bound_builder,
+            worker_module=_TEST_WORKER_MODULE,
+        )
         assert services.hook_system is mock_hooks

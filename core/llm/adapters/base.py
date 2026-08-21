@@ -147,6 +147,13 @@ class AdapterCallRequest:
     messages: Sequence[Message]
     system_prompt: str = ""
     tools: Sequence[ToolSpec] = field(default_factory=tuple)
+    # R2.3 — native names come from the hash-bound ToolPlan projection;
+    # explicit transient overlay names append in wire order outside that
+    # native hash. Provider adapters may apply support/threshold/settings
+    # gates, but must not infer membership from a second name registry.
+    deferred_tool_names: tuple[str, ...] = ()
+    tool_plan_hash: str = ""
+    tool_plan_generation: int = 0
     tool_choice: str | dict[str, Any] = "auto"
     max_tokens: int = 8192
     temperature: float | None = None
@@ -159,6 +166,13 @@ class AdapterCallRequest:
     # explicit set constrains both registry tools (filtered by AgenticLoop)
     # and tools injected later by provider adapters.
     allowed_tool_names: frozenset[str] | None = None
+    # Explicit session denials remain separate from allowlist semantics so
+    # headless computer-use gating does not suppress unrelated hosted tools.
+    denied_tool_names: frozenset[str] = frozenset()
+    # Names backed by the current executor snapshot. Provider-native tools
+    # (for example Anthropic/OpenAI computer use) must not be advertised unless
+    # the loop can execute the resulting call.
+    executable_tool_names: frozenset[str] = frozenset()
     # PR-V (2026-05-24, spec doc §3 — paperclip `--resume <sessionId>`
     # parity). When non-empty the adapter passes ``--resume <session_id>``
     # to claude-cli so the backend reuses the cached system prompt +

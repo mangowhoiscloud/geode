@@ -16,14 +16,14 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from core.cli.tool_handlers.clarification import _clarify
-from core.cli.tool_handlers.registration import UniqueEntries
+from core.tools.handlers.clarification import _clarify
+from core.tools.handlers.registration import UniqueEntries
 from core.ui.console import console
 
 log = logging.getLogger(__name__)
 
 
-def _build_plan_handlers(force_dry: bool) -> UniqueEntries[str, Any]:
+def _build_plan_handlers() -> UniqueEntries[str, Any]:
     """Build plan mode tool handlers (multi-plan store keyed by plan_id)."""
     from core.cli.tool_handlers import _get_plan_store
 

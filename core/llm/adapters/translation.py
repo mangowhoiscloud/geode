@@ -29,6 +29,7 @@ from core.llm.agentic_response import (
     TextBlock,
     ToolUseBlock,
 )
+from core.tools.plan import BoundToolPlan
 
 log = logging.getLogger(__name__)
 
@@ -38,15 +39,19 @@ def build_adapter_request(
     model: str,
     system: str,
     messages: list[dict[str, Any]],
-    tools: list[dict[str, Any]],
+    tools: list[dict[str, Any]] | BoundToolPlan,
     tool_choice: dict[str, str] | str,
     max_tokens: int,
     temperature: float,
     thinking_budget: int,
     effort: str,
     allowed_tool_names: frozenset[str] | None = None,
+    denied_tool_names: frozenset[str] = frozenset(),
+    executable_tool_names: frozenset[str] = frozenset(),
     resume_session_id: str = "",
     response_schema: dict[str, Any] | None = None,
+    transient_tools: list[dict[str, Any]] | None = None,
+    transient_deferred_tool_names: tuple[str, ...] = (),
 ) -> AdapterCallRequest:
     """Translate AgenticLoop's call-site args → :class:`AdapterCallRequest`.
 
@@ -55,8 +60,12 @@ def build_adapter_request(
     adapter-neutral :class:`Message(tool_use_id=...)` form; adapter
     implementations re-encode for their provider.
 
-    ``tools`` arrive in Anthropic shape (``[{"name": ..., "description": ...,
-    "input_schema": ...}]``) and translate directly to :class:`ToolSpec`.
+    ``tools`` is either the exact filtered :class:`BoundToolPlan` snapshot or
+    a legacy caller-owned list in Anthropic shape. Plan-owned specs keep their
+    identity and order. Explicit transient schemas (dynamic MCP/ToolRegistry)
+    append after that order and are deliberately outside the native plan hash.
+    Their explicit defer membership is merged in actual wire order; exact
+    in-flight refresh pinning belongs to R3.1.
     """
     adapter_messages: list[Message] = []
     for m in messages:
@@ -99,25 +108,61 @@ def build_adapter_request(
                 phase=phase,
             )
         )
-    adapter_tools: list[ToolSpec] = [
-        ToolSpec(
-            name=t.get("name", ""),
-            description=t.get("description", ""),
-            input_schema=t.get("input_schema", {}),
-        )
-        for t in tools
-    ]
+    if isinstance(tools, BoundToolPlan):
+        adapter_tools = list(tools.ordered_specs)
+        seen_names = {tool.name for tool in adapter_tools}
+        transient_names: list[str] = []
+        for raw_tool in transient_tools or ():
+            tool = ToolSpec(
+                name=raw_tool.get("name", ""),
+                description=raw_tool.get("description", ""),
+                input_schema=raw_tool.get("input_schema", {}),
+            )
+            if tool.name in seen_names:
+                raise ValueError(f"duplicate transient tool spec: {tool.name}")
+            seen_names.add(tool.name)
+            transient_names.append(tool.name)
+            adapter_tools.append(tool)
+        if len(set(transient_deferred_tool_names)) != len(transient_deferred_tool_names):
+            raise ValueError("duplicate transient deferred tool name")
+        if unknown := sorted(set(transient_deferred_tool_names) - set(transient_names)):
+            raise ValueError(
+                f"transient deferred metadata references unknown tools: {', '.join(unknown)}"
+            )
+        deferred = set(tools.deferred_tool_names) | set(transient_deferred_tool_names)
+        deferred_tool_names = tuple(tool.name for tool in adapter_tools if tool.name in deferred)
+        tool_plan_hash = tools.content_hash
+        tool_plan_generation = tools.generation
+    else:
+        if transient_tools is not None or transient_deferred_tool_names:
+            raise ValueError("transient tool metadata requires a BoundToolPlan")
+        adapter_tools = [
+            ToolSpec(
+                name=tool.get("name", ""),
+                description=tool.get("description", ""),
+                input_schema=tool.get("input_schema", {}),
+            )
+            for tool in tools
+        ]
+        deferred_tool_names = ()
+        tool_plan_hash = ""
+        tool_plan_generation = 0
     return AdapterCallRequest(
         model=model,
         messages=adapter_messages,
         system_prompt=system,
-        tools=adapter_tools,
+        tools=tuple(adapter_tools),
+        deferred_tool_names=deferred_tool_names,
+        tool_plan_hash=tool_plan_hash,
+        tool_plan_generation=tool_plan_generation,
         tool_choice=tool_choice,
         max_tokens=max_tokens,
         temperature=temperature,
         thinking_budget=thinking_budget,
         effort=effort,
         allowed_tool_names=allowed_tool_names,
+        denied_tool_names=denied_tool_names,
+        executable_tool_names=executable_tool_names,
         resume_session_id=resume_session_id,
         response_schema=response_schema,
     )

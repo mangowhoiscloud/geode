@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from core.cli.tool_handlers.registration import UniqueEntries
 from core.memory.goals import GoalStatus, GoalStore
+from core.tools.handlers.registration import UniqueEntries
 
 
 def _build_goal_handlers(store: GoalStore | None = None) -> UniqueEntries[str, Any]:

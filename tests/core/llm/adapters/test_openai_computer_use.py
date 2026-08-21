@@ -46,12 +46,16 @@ def _req(
     tools: tuple[ToolSpec, ...] = (),
     model: str = _GA_MODEL,
     allowed_tool_names: frozenset[str] | None = None,
+    denied_tool_names: frozenset[str] = frozenset(),
+    executable_tool_names: frozenset[str] = frozenset({"computer"}),
 ) -> AdapterCallRequest:
     return AdapterCallRequest(
         model=model,
         messages=(Message(role="user", content="hi"),),
         tools=tools,
         allowed_tool_names=allowed_tool_names,
+        denied_tool_names=denied_tool_names,
+        executable_tool_names=executable_tool_names,
     )
 
 
@@ -99,6 +103,16 @@ class TestLivePathInjection:
     def test_explicit_allowlist_blocks_computer(self) -> None:
         with patch(_ENABLED, return_value=True):
             kwargs = _build(_req(allowed_tool_names=frozenset({"read_file"})))
+        assert _computer_tools(kwargs) == []
+
+    def test_explicit_denylist_blocks_computer_without_an_allowlist(self) -> None:
+        with patch(_ENABLED, return_value=True):
+            kwargs = _build(_req(denied_tool_names=frozenset({"computer"})))
+        assert _computer_tools(kwargs) == []
+
+    def test_missing_executable_handler_blocks_computer(self) -> None:
+        with patch(_ENABLED, return_value=True):
+            kwargs = _build(_req(executable_tool_names=frozenset()))
         assert _computer_tools(kwargs) == []
 
     def test_idempotent_no_double_inject(self) -> None:

@@ -1,4 +1,4 @@
-"""Clarification-shaped responses for tool dispatch.
+"""Clarification-shaped responses for runtime tool dispatch.
 
 ``_clarify`` builds the canonical ``clarification_needed`` dict that the
 agent loop renders as a follow-up question; ``_safe_delegate`` translates

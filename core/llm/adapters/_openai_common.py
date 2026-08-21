@@ -726,8 +726,12 @@ def _maybe_inject_openai_computer_use(
     """
     from core.llm.providers.anthropic import is_computer_use_enabled
 
-    if not is_computer_use_enabled() or (
-        req.allowed_tool_names is not None and "computer" not in req.allowed_tool_names
+    if (
+        not is_computer_use_enabled()
+        or "computer" not in req.executable_tool_names
+        or "computer" in req.denied_tool_names
+        or "computer_use" in req.denied_tool_names
+        or (req.allowed_tool_names is not None and "computer" not in req.allowed_tool_names)
     ):
         return
     if backend == "codex":
@@ -1403,15 +1407,16 @@ def _normalize_computer_call(item: Any) -> dict[str, Any]:
 def _apply_openai_tool_search_defer(
     tools: list[dict[str, Any]],
     *,
+    deferred_tool_names: tuple[str, ...],
     backend: str,
     spec: OpenAIModelSpec,
     adapter_name: str,
 ) -> list[dict[str, Any]]:
     """OpenAI Responses deferred tool loading — official mechanism.
 
-    Marks non-core function tools with the official ``defer_loading: true``
-    field and appends the hosted ``{"type": "tool_search"}`` tool, mirroring
-    the Anthropic wiring (policy SoT: ``core.llm.tool_defer``).
+    Marks function tools named by the request's immutable tool-plan projection
+    with the official ``defer_loading: true`` field and appends the hosted
+    ``{"type": "tool_search"}`` tool.
     ref: https://developers.openai.com/api/docs/guides/tools-tool-search
     (Responses-only; "only gpt-5.4 and later models support tool_search").
 
@@ -1427,15 +1432,14 @@ def _apply_openai_tool_search_defer(
 
     Never defers: the model lacks ``supports_tool_search``, hosted entries
     (anything whose ``type`` is not ``"function"``), the always-loaded core
-    set, and names in ``OPENAI_DEFER_NAME_BLOCKLIST`` (upstream 500 when a
-    deferred function named "web" rides with tool_search + web_search).
+    projection, and names in ``OPENAI_DEFER_NAME_BLOCKLIST`` (upstream 500
+    when a deferred function named "web" rides with tool_search + web_search).
     Idempotent: already-shaped input passes through unchanged.
     """
     from core.config import settings as _settings
     from core.llm.tool_defer import (
         OPENAI_DEFER_NAME_BLOCKLIST,
         TOOL_DEFER_THRESHOLD,
-        TOOL_SEARCH_ALWAYS_LOADED,
     )
 
     if not spec.supports_tool_search or len(tools) <= TOOL_DEFER_THRESHOLD:
@@ -1453,7 +1457,7 @@ def _apply_openai_tool_search_defer(
         name = str(tool.get("name", ""))
         if (
             tool.get("type") != "function"
-            or name in TOOL_SEARCH_ALWAYS_LOADED
+            or name not in deferred_tool_names
             or name in OPENAI_DEFER_NAME_BLOCKLIST
         ):
             shaped.append(tool)
@@ -1583,7 +1587,11 @@ def build_responses_kwargs(
         translated = [translate_tool_for_codex(t) for t in req.tools]
         capped = cap_tools(translated, model=req.model, adapter_name=adapter_name)
         kwargs["tools"] = _apply_openai_tool_search_defer(
-            capped, backend=backend, spec=spec, adapter_name=adapter_name
+            capped,
+            deferred_tool_names=req.deferred_tool_names,
+            backend=backend,
+            spec=spec,
+            adapter_name=adapter_name,
         )
         kwargs["tool_choice"] = translate_responses_tool_choice(req.tool_choice)
         kwargs["parallel_tool_calls"] = True

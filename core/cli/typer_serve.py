@@ -1,10 +1,9 @@
-"""Typer ``geode serve`` command implementation.
+"""Kernel daemon host for product-owned ``geode serve`` composition.
 
 Extracted from ``core/cli/__init__.py`` (Tier 3 God Object split). Hosts
 the headless gateway-mode entry point plus the small
-``_build_runtime_for_serve`` helper. The Typer ``app`` registers this
-function from the package ``__init__``; no decorator here to keep the
-import edge clean.
+``_build_runtime_for_serve`` helper. The product shell injects runtime and
+service builders through ``run_serve``.
 """
 
 from __future__ import annotations
@@ -150,15 +149,6 @@ async def _restore_gateway_loop(loop: Any, state: Any) -> None:
     loop.restore_from_checkpoint(state)
     if state.model and state.model != loop.model:
         await loop.update_model_async(state.model)
-
-
-def serve(
-    poll_interval: float = typer.Option(
-        3.0, "--poll", "-p", help="Gateway poll interval (seconds)"
-    ),
-) -> None:
-    """Run the kernel daemon with kernel-only composition."""
-    _serve(poll_interval)
 
 
 def _serve(  # noqa: PLR0915
@@ -649,7 +639,7 @@ def _serve(  # noqa: PLR0915
         console.print("  [dim]GEODE daemon stopped.[/dim]")
 
 
-# Public outer-composition seam; ``_serve`` remains for kernel compatibility.
+# Public outer-composition seam.
 run_serve = _serve
 
 

@@ -9,11 +9,13 @@ from typing import Any, cast
 
 import pytest
 from core.tools.plan import (
+    BoundToolPlan,
     CapabilityRequirement,
     ExecutionBinding,
     SafetyPolicy,
     ToolDecision,
     ToolSpec,
+    bind_tool_plan,
     compile_tool_plan,
 )
 
@@ -164,6 +166,122 @@ def test_compiler_preserves_provider_visible_definition_order() -> None:
     assert list(reordered.schema_map) == ["alpha", "zeta"]
     assert reordered.content_hash != plan.content_hash
     assert reordered.generation == plan.generation + 1
+
+
+def test_deferred_membership_is_hash_bound_and_ordered() -> None:
+    specs = ((_spec("zeta"), "definitions[0]"), (_spec("alpha"), "definitions[1]"))
+    bindings = (_binding("alpha"), _binding("zeta"))
+    eager = compile_tool_plan(specs, bindings)
+    deferred = compile_tool_plan(
+        specs,
+        bindings,
+        deferred_tools=frozenset({"zeta"}),
+        previous=eager,
+    )
+
+    assert eager.eager_tool_names == ("zeta", "alpha")
+    assert eager.deferred_tool_names == ()
+    assert deferred.eager_tool_names == ("alpha",)
+    assert deferred.deferred_tool_names == ("zeta",)
+    assert deferred.generation == eager.generation + 1
+    assert deferred.content_hash != eager.content_hash
+    assert eager.registrations[0].deferred is False
+    assert deferred.registrations[0].deferred is True
+
+    with pytest.raises(ValueError, match="deferred metadata references unknown tools: missing"):
+        compile_tool_plan(specs, bindings, deferred_tools=frozenset({"missing"}))
+
+
+def test_bound_plan_validates_routes_and_filters_without_mutating_parent() -> None:
+    plan = compile_tool_plan(
+        ((_spec("ordinary"), "definitions[0]"), (_spec("special"), "definitions[1]")),
+        (_binding("ordinary"), _binding("special", route="special")),
+        deferred_tools=frozenset({"ordinary"}),
+    )
+
+    def handler(**_kwargs: Any) -> dict[str, bool]:
+        return {"ok": True}
+
+    bound = bind_tool_plan(plan, {"ordinary": handler})
+
+    assert isinstance(bound, BoundToolPlan)
+    assert bound.tool_names == ("ordinary", "special")
+    assert tuple(spec.name for spec in bound.ordered_specs) == bound.tool_names
+    assert bound.handlers["ordinary"] is handler
+    assert bound.eager_tool_names == ("special",)
+    assert bound.deferred_tool_names == ("ordinary",)
+    assert bound.filtered() is bound
+
+    narrowed = bound.filtered(denied_tool_names=frozenset({"ordinary"}))
+    assert narrowed is not bound
+    assert narrowed.plan is plan
+    assert narrowed.tool_names == ("special",)
+    assert narrowed.handlers == {}
+    assert narrowed.eager_tool_names == ("special",)
+    assert narrowed.deferred_tool_names == ()
+    assert narrowed.content_hash != bound.content_hash
+    assert narrowed.generation == bound.generation + 1
+    assert bound.tool_names == ("ordinary", "special")
+    assert tuple(bound.handlers) == ("ordinary",)
+    with pytest.raises(TypeError):
+        bound.handlers["other"] = handler
+
+
+def test_bound_plan_projects_order_and_description_as_new_identity() -> None:
+    plan = compile_tool_plan(
+        ((_spec("alpha"), "definitions[0]"), (_spec("beta"), "definitions[1]")),
+        (_binding("alpha"), _binding("beta")),
+        deferred_tools=frozenset({"beta"}),
+    )
+
+    def alpha() -> str:
+        return "alpha"
+
+    def beta() -> str:
+        return "beta"
+
+    bound = bind_tool_plan(plan, {"alpha": alpha, "beta": beta})
+
+    projected = bound.projected((_spec("beta", description="Policy override"), _spec("alpha")))
+
+    assert projected is not bound
+    assert projected.tool_names == ("beta", "alpha")
+    assert projected.ordered_specs[0].description == "Policy override"
+    assert tuple(projected.handlers) == ("beta", "alpha")
+    assert projected.handlers["alpha"] is alpha
+    assert projected.handlers["beta"] is beta
+    assert projected.deferred_tool_names == ("beta",)
+    assert projected.content_hash != bound.content_hash
+    assert projected.generation == bound.generation + 1
+    assert bound.tool_names == ("alpha", "beta")
+    assert bound.ordered_specs[1].description == "Search"
+    assert bound.projected(bound.ordered_specs) is bound
+
+    with pytest.raises(ValueError, match="duplicate tool names"):
+        bound.projected((_spec("alpha"), _spec("alpha")))
+    with pytest.raises(ValueError, match="unknown tools: missing"):
+        bound.projected((_spec("missing"),))
+
+
+@pytest.mark.parametrize(
+    ("handlers", "message"),
+    [
+        ({}, "missing ordinary handlers: search"),
+        ({"search": None}, "tool handlers must be callable: search"),
+        (
+            {"search": lambda: None, "extra": lambda: None},
+            "unexpected ordinary handlers: extra",
+        ),
+    ],
+)
+def test_bound_plan_rejects_missing_noncallable_and_extra_handlers(
+    handlers: dict[str, Any],
+    message: str,
+) -> None:
+    plan = compile_tool_plan(((_spec(), "definitions[0]"),), (_binding(),))
+
+    with pytest.raises((TypeError, ValueError), match=message):
+        bind_tool_plan(plan, handlers)
 
 
 def test_compiler_distinguishes_capability_unavailable_from_policy_denied() -> None:

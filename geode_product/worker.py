@@ -2,7 +2,7 @@
 
 from core.agent.worker import main
 
-from geode_product.tool_handlers import build_tool_handlers
+from geode_product.tool_handlers import compose_tool_plan
 from geode_product.wiring import (
     bind_worker_activity,
     build_middleware_registry,
@@ -11,7 +11,7 @@ from geode_product.wiring import (
 
 if __name__ == "__main__":
     main(
-        build_tool_handlers,
+        compose_tool_plan,
         middleware_builder=build_middleware_registry,
         activity_sink_provider=current_activity_sink,
         worker_activity_binder=bind_worker_activity,

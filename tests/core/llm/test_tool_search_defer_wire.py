@@ -23,9 +23,12 @@ from __future__ import annotations
 from core.llm.providers.anthropic import (
     _API_ALLOWED_KEYS,
     _TOOL_SEARCH_TOOL,
+    apply_tool_search_defer,
+)
+from core.llm.tool_defer import (
     TOOL_DEFER_THRESHOLD,
     TOOL_SEARCH_ALWAYS_LOADED,
-    apply_tool_search_defer,
+    default_deferred_tool_names,
 )
 
 
@@ -44,8 +47,23 @@ def _big_toolset() -> list[dict]:
     return core_tools + extra_tools + native
 
 
+def _apply(
+    tools: list[dict],
+    *,
+    enabled: bool = True,
+    threshold: int = TOOL_DEFER_THRESHOLD,
+) -> list[dict]:
+    names = [str(tool.get("name", "")) for tool in tools]
+    return apply_tool_search_defer(
+        tools,
+        deferred_tool_names=default_deferred_tool_names(names),
+        enabled=enabled,
+        threshold=threshold,
+    )
+
+
 def test_defer_activates_above_threshold_with_search_tool_first() -> None:
-    shaped = apply_tool_search_defer(_big_toolset())
+    shaped = _apply(_big_toolset())
     assert shaped[0]["name"] == _TOOL_SEARCH_TOOL["name"]
     assert "defer_loading" not in shaped[0], "search tool must never defer (API 400)"
     deferred = [t for t in shaped if t.get("defer_loading")]
@@ -53,7 +71,7 @@ def test_defer_activates_above_threshold_with_search_tool_first() -> None:
 
 
 def test_core_set_and_natives_stay_loaded() -> None:
-    shaped = apply_tool_search_defer(_big_toolset())
+    shaped = _apply(_big_toolset())
     loaded_names = {t["name"] for t in shaped if not t.get("defer_loading")}
     assert "web_search" in loaded_names, "hosted/native (type-carrying) entries never defer"
     assert "calculate" in TOOL_SEARCH_ALWAYS_LOADED
@@ -66,10 +84,10 @@ def test_core_set_and_natives_stay_loaded() -> None:
 
 def test_under_threshold_and_kill_switch_are_noops() -> None:
     small_toolset = [_custom_tool(f"t{i}") for i in range(TOOL_DEFER_THRESHOLD)]
-    assert apply_tool_search_defer(small_toolset) is small_toolset
+    assert _apply(small_toolset) is small_toolset
 
     big_toolset = _big_toolset()
-    assert apply_tool_search_defer(big_toolset, enabled=False) is big_toolset
+    assert _apply(big_toolset, enabled=False) is big_toolset
     assert not any(t.get("defer_loading") for t in big_toolset), "input must not be mutated"
 
 
@@ -78,7 +96,7 @@ def test_all_core_toolset_defers_nothing_and_skips_search_tool() -> None:
     search tool — a defer pass that defers zero tools is pure overhead."""
     all_core = [_custom_tool(n) for n in sorted(TOOL_SEARCH_ALWAYS_LOADED)]
     all_core += [{"type": f"hosted_{i}", "name": f"hosted_{i}"} for i in range(10)]
-    shaped = apply_tool_search_defer(all_core, threshold=5)
+    shaped = _apply(all_core, threshold=5)
     assert shaped is all_core
 
 
@@ -127,6 +145,7 @@ def _live_request(tool_count: int, tool_choice: str | dict = "auto"):
         model="claude-opus-4-8",
         messages=(Message(role="user", content="hi"),),
         tools=tool_specs,
+        deferred_tool_names=tuple(tool.name for tool in tool_specs),
         tool_choice=tool_choice,
     )
 
@@ -161,6 +180,25 @@ def test_live_path_skips_shaping_under_forced_tool_choice() -> None:
 
 
 def test_apply_is_idempotent_on_already_shaped_input() -> None:
-    shaped_once = apply_tool_search_defer(_big_toolset())
-    shaped_twice = apply_tool_search_defer(shaped_once)
+    shaped_once = _apply(_big_toolset())
+    shaped_twice = _apply(shaped_once)
     assert shaped_twice is shaped_once, "second pass must not duplicate the search tool"
+
+
+def test_live_path_uses_request_membership_not_legacy_global(monkeypatch) -> None:
+    from core.llm import tool_defer
+    from core.llm.adapters._anthropic_common import build_create_kwargs
+    from core.llm.providers import anthropic
+
+    req = _live_request(TOOL_DEFER_THRESHOLD + 5)
+    monkeypatch.setattr(tool_defer, "TOOL_SEARCH_ALWAYS_LOADED", frozenset({"extra_0"}))
+    monkeypatch.setattr(anthropic, "is_computer_use_enabled", lambda: False)
+
+    shaped = build_create_kwargs(req)["tools"]
+    assert [tool["name"] for tool in shaped] == [
+        _TOOL_SEARCH_TOOL["name"],
+        *(tool.name for tool in req.tools),
+    ]
+    assert [tool["name"] for tool in shaped if tool.get("defer_loading")] == [
+        tool.name for tool in req.tools
+    ]

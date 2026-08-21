@@ -20,6 +20,7 @@ This module owns the inference-time tool list:
 
 from __future__ import annotations
 
+from collections.abc import Set
 from typing import TYPE_CHECKING, Any
 
 from core.agent.tool_descriptions_policy import (
@@ -31,6 +32,7 @@ from core.config.policy_source import PolicySourceBundle
 from core.tools.base import load_all_tool_definitions
 
 if TYPE_CHECKING:
+    from core.tools.plan import BoundToolPlan
     from core.tools.registry import ToolRegistry
 
 
@@ -91,12 +93,13 @@ def get_agentic_tools(
     """Return the merged tool definitions for the agentic loop.
 
     Merges base tools, registry extras, and MCP tools into a single list.
-    Deferred loading is NOT applied here — it happens at the Anthropic
-    adapter (``core.llm.providers.anthropic.apply_tool_search_defer``,
-    PR-TOOL-SEARCH-WIRE), where the official ``defer_loading`` field and
-    the hosted tool-search tool are a Messages-API concern. This docstring
-    previously claimed a defer threshold that the body never implemented
-    (the v1.0 audit's doc-implementation parity finding).
+    Deferred membership is NOT decided here. Native membership is compiled
+    into the content-addressed ``ToolPlan`` and carried on
+    ``AdapterCallRequest``; provider adapters apply only their wire-specific
+    support, threshold, settings, blocklist, and hosted-search gates. Dynamic
+    MCP/registry entries remain explicit transient overlays; their defer
+    membership is projected when the overlay refreshes, outside the native
+    plan hash.
 
     Args:
         registry: Optional ToolRegistry with additional native tools.
@@ -142,6 +145,61 @@ def get_agentic_tools(
             if name and name not in existing_names:
                 existing_names.add(name)
                 tools.append(mcp_tool)
+    return _apply_tool_policies(
+        tools,
+        force_include=force_include,
+        policy_sources=policy_sources,
+    )
+
+
+def project_bound_tool_plan(
+    bound: BoundToolPlan,
+    *,
+    provider: str = "",
+    source: str = "",
+    policy_sources: PolicySourceBundle | None = None,
+    force_include: Set[str] | None = None,
+) -> BoundToolPlan:
+    """Capture provider visibility and ADR policy in one executable snapshot."""
+    from core.tools.plan import ToolSpec, thaw_tool_schema
+
+    include_emulated = _computer_use_emulation_visible(provider=provider, source=source)
+    unavailable = frozenset(
+        {"computer_use"} if not include_emulated and "computer_use" in bound.tool_names else ()
+    )
+    tools = [
+        {
+            "name": spec.name,
+            "description": spec.description,
+            "input_schema": thaw_tool_schema(spec.input_schema),
+        }
+        for spec in bound.ordered_specs
+        if include_emulated or spec.name != "computer_use"
+    ]
+    projected = _apply_tool_policies(
+        tools,
+        force_include=force_include,
+        policy_sources=policy_sources,
+    )
+    return bound.projected(
+        (
+            ToolSpec(
+                name=tool["name"],
+                description=tool["description"],
+                input_schema=tool["input_schema"],
+            )
+            for tool in projected
+        ),
+        unavailable_tool_names=unavailable,
+    )
+
+
+def _apply_tool_policies(
+    tools: list[dict[str, Any]],
+    *,
+    force_include: Set[str] | None,
+    policy_sources: PolicySourceBundle | None,
+) -> list[dict[str, Any]]:
     # ADR-013 T1 (2026-05-21) — tool descriptions override 적용.
     # base + registry + MCP merge 직후 + tool_policy filter/order 직전.
     # description override 가 먼저 적용돼야 tool_policy 가 갱신된 description

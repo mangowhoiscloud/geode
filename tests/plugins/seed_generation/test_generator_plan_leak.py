@@ -40,6 +40,13 @@ from core.agent.worker import (
     _looks_like_decomposition_result,
     _resolve_worker_outcome,
 )
+from core.tools.plan import bind_tool_plan, compile_tool_plan
+
+
+def _empty_tool_plan_builder():
+    """Return the explicit empty catalog used by this worker wiring test."""
+    return bind_tool_plan(compile_tool_plan((), ()), {}), {}
+
 
 # ---------------------------------------------------------------------------
 # Invariant 1: ``_has_compound_indicators`` tripped on the supervisor-built
@@ -113,7 +120,6 @@ class TestWorkerDisablesGoalDecomposition:
 
         monkeypatch.setattr("core.agent.worker.WORKER_DIR", tmp_path)
         with (
-            patch("core.cli.tool_handlers._build_tool_handlers", return_value={}),
             patch("core.agent.tool_executor.ToolExecutor"),
             patch("core.agent.conversation.ConversationContext"),
             patch("core.agent.loop.AgenticLoop", side_effect=_fake_loop),
@@ -124,7 +130,7 @@ class TestWorkerDisablesGoalDecomposition:
                 task_id="leak-fix-test",
                 description="placeholder",
             )
-            _run_agentic(request)
+            _run_agentic(request, _empty_tool_plan_builder)
 
         assert captured.get("enable_goal_decomposition") is False, (
             "Worker must construct sub-agent AgenticLoop with "

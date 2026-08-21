@@ -110,7 +110,8 @@ def test_create_session_bridges_effort_to_loop(monkeypatch: pytest.MonkeyPatch) 
     meant the loop never observed the change. This test pins both ends of
     the wire: ``settings.agentic_effort`` change → ``loop._effort`` reflects.
     """
-    from core.server.supervised.services import SessionMode, build_shared_services
+    from core.server.supervised.services import SessionMode
+    from geode_product.wiring import build_shared_services
 
     services = build_shared_services()
     monkeypatch.setenv("GEODE_AGENTIC_EFFORT", "low")

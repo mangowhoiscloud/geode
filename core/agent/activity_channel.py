@@ -2,7 +2,7 @@
 
 Design SOT: ``docs/plans/2026-07-03-fleet-view.md``.
 
-Sub-agents run as ``python -m core.agent.worker`` subprocesses with the child
+Sub-agents run through the product-composed worker subprocess with the child
 :class:`~core.agent.loop.AgenticLoop` in ``quiet=True`` mode, so the child emits
 no per-tool IPC back to the parent's renderer — the parent learns a task's state
 only from the single final ``WorkerResult`` line at exit. Stage 1 left

@@ -5,7 +5,7 @@ from __future__ import annotations
 import sys
 
 import pytest
-from core.cli.tool_handlers.observability import _build_observability_handlers
+from core.tools.handlers.observability import _build_observability_handlers
 
 
 def test_observability_handlers_registered() -> None:

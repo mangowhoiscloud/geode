@@ -100,7 +100,7 @@ def test_agentic_loop_constructs_with_adapter_name_source(adapter_name: str) -> 
 
 
 def test_geode_target_translates_petri_surface_alias() -> None:
-    """Source-level pin: ``geode_target`` maps ``openai-codex`` → ``codex-oauth``.
+    """The Petri boundary translates aliases and preserves registry names.
 
     Petri's ``get_binding("target")`` returns the Petri-surface name
     (``openai-codex``) but the GEODE adapter registry uses
@@ -109,24 +109,11 @@ def test_geode_target_translates_petri_surface_alias() -> None:
     registered) and the fallback ``resolve_for`` raises on the
     non-concrete source — the audit then falls back to PAYG.
     """
-    target_module = (
-        Path(__file__).resolve().parents[3] / "geode_product" / "petri_audit" / "geode_target.py"
-    )
-    source = target_module.read_text(encoding="utf-8")
-    assert '"openai-codex": "codex-oauth"' in source, (
-        "geode_target.py no longer translates the Petri-surface "
-        "'openai-codex' alias to the GEODE registry name "
-        "'codex-oauth'. The audit subprocess will silently fall back "
-        "to PAYG when the operator pins openai-codex as the source."
-    )
-    assert '"api_key": "payg"' in source, (
-        "geode_target.py no longer translates the Petri-surface "
-        "'api_key' alias to the GEODE registry category 'payg'. PAYG "
-        "operators (anthropic/openai/glm) will fail because Petri's "
-        "concrete PAYG source name is 'api_key' but the GEODE registry "
-        "uses provider-specific '{provider}-payg' adapters; the 'payg' "
-        "category lets resolve_for pick the right one."
-    )
+    from geode_product.petri_audit.geode_target import translate_petri_source
+
+    assert translate_petri_source("openai-codex") == "codex-oauth"
+    assert translate_petri_source("api_key") == "payg"
+    assert translate_petri_source("claude-cli") == "claude-cli"
 
 
 def test_petri_to_registry_map_covers_every_petri_concrete_source() -> None:
@@ -140,8 +127,8 @@ def test_petri_to_registry_map_covers_every_petri_concrete_source() -> None:
     - zhipuai: ``api_key``
 
     Petri concrete sources that are NOT identical to a registered
-    GEODE adapter name MUST appear in ``_PETRI_TO_REGISTRY`` so the
-    AgenticLoop lookup (``get_adapter`` → ``resolve_for`` fallback)
+    GEODE adapter name MUST be translated by the product boundary so
+    the AgenticLoop lookup (``get_adapter`` → ``resolve_for`` fallback)
     succeeds for every operator configuration.
     """
     from core.llm.adapters.registry import (
@@ -149,6 +136,7 @@ def test_petri_to_registry_map_covers_every_petri_concrete_source() -> None:
         bootstrap_builtins,
         list_adapters,
     )
+    from geode_product.petri_audit.geode_target import translate_petri_source
 
     try:
         _reset_for_test()
@@ -162,28 +150,6 @@ def test_petri_to_registry_map_covers_every_petri_concrete_source() -> None:
     petri_concrete_sources = {"claude-cli", "openai-codex", "api_key"}
     # Categorical fallback values resolve_for accepts.
     categories = {"payg", "subscription", "adapter"}
-
-    target_module = (
-        Path(__file__).resolve().parents[3] / "geode_product" / "petri_audit" / "geode_target.py"
-    )
-    geode_target_src = target_module.read_text(encoding="utf-8")
-
-    # Build the actual translation map by importing the module's
-    # source and evaluating the dict literal. This guards against
-    # ``"api_key": "subscription"`` (a wrong mapping that would
-    # category-resolve but to the wrong adapter category) — the
-    # earlier presence check only verified the key existed.
-    import re
-
-    match = re.search(
-        r"_PETRI_TO_REGISTRY\s*=\s*\{([^}]+)\}",
-        geode_target_src,
-        re.DOTALL,
-    )
-    assert match, "_PETRI_TO_REGISTRY literal not found in geode_target.py"
-    translation_map: dict[str, str] = {}
-    for entry in re.finditer(r'"([^"]+)"\s*:\s*"([^"]+)"', match.group(1)):
-        translation_map[entry.group(1)] = entry.group(2)
 
     def _value_resolves_for_some_provider(value: str) -> bool:
         # Direct registry hit (e.g. ``codex-oauth``).
@@ -210,24 +176,20 @@ def test_petri_to_registry_map_covers_every_petri_concrete_source() -> None:
         # Direct registry hit?
         if petri_source in registry_names:
             continue
-        # Otherwise the translation entry must exist AND the translated
-        # value must actually resolve (rejects ``"api_key": "subscription"``
-        # which would be a syntactically valid but semantically wrong
-        # mapping that category-resolves to the wrong adapter pool).
-        translated = translation_map.get(petri_source)
-        assert translated is not None, (
-            f"Petri concrete source {petri_source!r} has no "
-            f"_PETRI_TO_REGISTRY entry. Registered: {sorted(registry_names)}; "
-            f"categories: {sorted(categories)}."
+        # Otherwise the boundary must change the source AND the translated
+        # value must actually resolve. This rejects a missing identity mapping
+        # as well as a syntactically valid but semantically invalid value.
+        translated = translate_petri_source(petri_source)
+        assert translated != petri_source, (
+            f"Petri concrete source {petri_source!r} was not translated. "
+            f"Registered: {sorted(registry_names)}; categories: {sorted(categories)}."
         )
         try:
             _reset_for_test()
             bootstrap_builtins()
             assert _value_resolves_for_some_provider(translated), (
-                f"_PETRI_TO_REGISTRY[{petri_source!r}] = {translated!r} "
-                f"does not resolve to any registered adapter nor to a "
-                f"valid category that selects one. The mapping is "
-                f"syntactically present but semantically wrong."
+                f"translate_petri_source({petri_source!r}) = {translated!r} "
+                f"does not resolve to any registered adapter or valid category."
             )
         finally:
             _reset_for_test()
@@ -237,8 +199,8 @@ def test_petri_to_registry_map_covers_every_petri_concrete_source() -> None:
 def test_negative_openai_codex_without_translation_misses_registry() -> None:
     """Without the geode_target translation, ``openai-codex`` would miss.
 
-    Pins the *necessity* of the translation: if a future refactor drops
-    ``_PETRI_TO_REGISTRY`` and passes the raw Petri-surface alias to
+    Pins the *necessity* of the translation: if a future refactor passes
+    the raw Petri-surface alias to
     AgenticLoop, ``get_adapter`` returns ``AdapterNotFoundError`` (the
     name is unregistered) and the fallback ``resolve_for`` raises
     ``ValueError`` (the name is not a category) — the audit subprocess

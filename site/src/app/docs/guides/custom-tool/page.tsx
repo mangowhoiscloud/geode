@@ -94,31 +94,31 @@ class WeatherLookupTool:
             <h2>3. 핸들러 맵에 등록합니다</h2>
             <p>
               핸들러가 존재한다고 자동으로 호출 대상이 되지는 않습니다.
-              실행은 <code>ToolExecutor</code>가 이름과 핸들러 함수의 dict에서
-              찾아 일어나고, 그 dict은{" "}
-              <code>core/cli/tool_handlers/</code>의{" "}
-              <code>_build_tool_handlers()</code>가 그룹별 빌더를 합쳐
-              만듭니다. 기존 단일 도구들과 같은 모양으로, 클래스를 인스턴스화해{" "}
-              <code>aexecute</code>를 감싼 클로저를 돌려주는 빌더를 추가하고
-              병합 목록에 넣습니다
-              (<code>core/cli/tool_handlers/single_tool.py</code>의 패턴).
+              중립 런타임 조합점은 <code>core/tools/handlers/</code>의
+              그룹별 빌더를 충돌 검사 후 하나의 불변 플랜으로 묶습니다.
+              클래스를 인스턴스화해 <code>aexecute</code>를 감싼 클로저를
+              <code>UniqueEntries</code>로 돌려주고, <code>neutral_handler_groups()</code>에
+              한 번 등록합니다
+              (<code>core/tools/handlers/single_tool.py</code>의 패턴).
             </p>
-            <pre>{`# core/cli/tool_handlers/single_tool.py 패턴
-def _build_weather_handlers() -> dict[str, Any]:
+            <pre>{`# core/tools/handlers/single_tool.py 패턴
+from core.tools.handlers.registration import UniqueEntries
+
+def _build_weather_handlers() -> UniqueEntries[str, Any]:
     from core.tools.weather_tools import WeatherLookupTool
     tool = WeatherLookupTool()
 
     async def handle_weather_lookup(**kwargs: Any) -> dict[str, Any]:
         return await tool.aexecute(**kwargs)
 
-    return {"weather_lookup": handle_weather_lookup}
+    return UniqueEntries((("weather_lookup", handle_weather_lookup),))
 
-# core/cli/tool_handlers/__init__.py — _build_tool_handlers()
-handlers.update(_build_weather_handlers())`}</pre>
+# core/tools/handlers/__init__.py — neutral_handler_groups()
+("weather", _build_weather_handlers()),`}</pre>
             <p>
               definitions.json의 <code>name</code>과 dict 키가 정확히 같아야
-              합니다. 스키마만 있고 핸들러가 없으면 LLM이 도구를 부를 때
-              &quot;No handler for tool&quot; 경고와 함께 실패합니다.
+              합니다. 스키마나 핸들러 한쪽이 빠지면 세션을 시작하기 전
+              <code>compose_tool_plan()</code>이 명시적으로 실패합니다.
             </p>
 
             <h2>4. 권한 등급을 정합니다</h2>
@@ -150,10 +150,10 @@ SAFE_TOOLS = frozenset({
               스키마와 핸들러 양쪽이 실제로 연결됐는지 확인합니다.
             </p>
             <pre>{`uv run python -c "
-from core.tools.base import load_tool_definition
-from core.cli.tool_handlers import _build_tool_handlers
-print(load_tool_definition('weather_lookup')['name'])
-print('weather_lookup' in _build_tool_handlers())
+from geode_product.tool_handlers import compose_tool_plan
+bound, _transient = compose_tool_plan()
+print('weather_lookup' in bound.schema_map)
+print('weather_lookup' in bound.handlers)
 "`}</pre>
             <p>
               둘 다 통과하면 LLM에 스키마가 노출되고 호출이 실행됩니다. 마지막으로
@@ -253,31 +253,31 @@ class WeatherLookupTool:
             <h2>3. Register it in the handler map</h2>
             <p>
               A handler that exists is not yet callable. Execution happens when{" "}
-              <code>ToolExecutor</code> looks the name up in a dict of handler
-              functions, and that dict is assembled by{" "}
-              <code>_build_tool_handlers()</code> in{" "}
-              <code>core/cli/tool_handlers/</code> from per-group builders. Add
-              a builder in the same shape as the existing single-tool wrappers
-              (instantiate the class, wrap <code>aexecute</code> in a closure)
-              and merge it in
-              (the pattern in <code>core/cli/tool_handlers/single_tool.py</code>).
+              the neutral composition in <code>core/tools/handlers/</code> folds
+              per-group builders into one collision-checked immutable plan.
+              Instantiate the class, wrap <code>aexecute</code> in a closure,
+              return it as <code>UniqueEntries</code>, and register the builder
+              once in <code>neutral_handler_groups()</code> (the pattern in{" "}
+              <code>core/tools/handlers/single_tool.py</code>).
             </p>
-            <pre>{`# the core/cli/tool_handlers/single_tool.py pattern
-def _build_weather_handlers() -> dict[str, Any]:
+            <pre>{`# the core/tools/handlers/single_tool.py pattern
+from core.tools.handlers.registration import UniqueEntries
+
+def _build_weather_handlers() -> UniqueEntries[str, Any]:
     from core.tools.weather_tools import WeatherLookupTool
     tool = WeatherLookupTool()
 
     async def handle_weather_lookup(**kwargs: Any) -> dict[str, Any]:
         return await tool.aexecute(**kwargs)
 
-    return {"weather_lookup": handle_weather_lookup}
+    return UniqueEntries((("weather_lookup", handle_weather_lookup),))
 
-# core/cli/tool_handlers/__init__.py — _build_tool_handlers()
-handlers.update(_build_weather_handlers())`}</pre>
+# core/tools/handlers/__init__.py — neutral_handler_groups()
+("weather", _build_weather_handlers()),`}</pre>
             <p>
               The dict key must match the <code>name</code> in definitions.json
-              exactly. A schema without a handler fails at call time with a
-              &quot;No handler for tool&quot; warning.
+              exactly. A missing schema or handler now fails explicitly in{" "}
+              <code>compose_tool_plan()</code> before the session starts.
             </p>
 
             <h2>4. Set the permission tier</h2>
@@ -308,10 +308,10 @@ SAFE_TOOLS = frozenset({
             <h2>Verify</h2>
             <p>Confirm both ends, the schema and the handler, are wired.</p>
             <pre>{`uv run python -c "
-from core.tools.base import load_tool_definition
-from core.cli.tool_handlers import _build_tool_handlers
-print(load_tool_definition('weather_lookup')['name'])
-print('weather_lookup' in _build_tool_handlers())
+from geode_product.tool_handlers import compose_tool_plan
+bound, _transient = compose_tool_plan()
+print('weather_lookup' in bound.schema_map)
+print('weather_lookup' in bound.handlers)
 "`}</pre>
             <p>
               When both pass, the LLM sees the schema and calls execute. Finally

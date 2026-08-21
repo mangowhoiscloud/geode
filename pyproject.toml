@@ -305,7 +305,6 @@ forbidden_modules = ["core.cli", "core.server"]
 ignore_imports = [
     "core.agent.loop.agent_loop -> core.cli.commands",
     "core.agent.approval -> core.cli",
-    "core.agent.worker -> core.cli.tool_handlers",
 ]
 
 [[tool.importlinter.contracts]]
@@ -317,9 +316,7 @@ forbidden_modules = ["core.cli"]
 ignore_imports = [
     "core.server.supervised.services -> core.cli.commands",
     "core.server.supervised.services -> core.cli.session_state",
-    "core.server.supervised.services -> core.cli.tool_handlers",
     "core.server.supervised.services -> core.cli.bootstrap",
-    "core.agent.worker -> core.cli.tool_handlers",
     "core.agent.loop.agent_loop -> core.cli.commands",
     "core.agent.approval -> core.cli",
     "core.server.ipc_server.poller -> core.cli",
@@ -341,6 +338,15 @@ name = "Classified kernel does not import the bundled self-improving product"
 type = "forbidden"
 source_modules = ["core.agent", "core.llm", "core.memory", "core.observability", "core.skills"]
 forbidden_modules = ["core.self_improving", "geode_product.self_improving"]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "Runtime tool handlers stay capability-neutral"
+type = "forbidden"
+source_modules = ["core.tools.handlers"]
+forbidden_modules = ["core.agent", "core.cli", "core.server", "core.ui"]
+# This ownership rule targets direct imports; existing transitive core-tool
+# dependencies remain governed by their owning layer contracts.
 allow_indirect_imports = true
 
 [tool.ruff]

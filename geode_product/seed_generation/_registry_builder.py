@@ -44,7 +44,8 @@ def build_subagent_manager() -> Any:
     standalone — the seed_generation CLI runs outside the gateway, so we
     rebuild the dependency stack inline rather than reach into the
     Supervisor's instance. The shape matches: ``IsolatedRunner`` + hooks +
-    tool handlers + MCP / skill registries + agent registry.
+    subprocess routing + agent registry. The product worker owns its bound tool
+    catalog, so this parent-side manager does not build a duplicate map.
 
     Falls back to the minimum viable manager when individual dependencies
     are unavailable (tests, ad-hoc CLI use) — observability hooks may be
@@ -67,7 +68,6 @@ def build_subagent_manager() -> Any:
     # we pass everything we can find.
     hooks = None
     lane = None
-    tool_handlers: dict[str, Any] = {}
     agent_registry = _try_build_agent_registry()
     # ``get_lane_queue`` is not a public surface in this worktree's wiring;
     # the SubAgentManager constructs its own IsolatedRunner with the bare
@@ -75,20 +75,15 @@ def build_subagent_manager() -> Any:
     # falls back to a default semaphore). The follow-up D PR can plumb the
     # gateway lane through ``runtime.GeodeRuntime`` when the seed-generation
     # CLI runs under the supervisor.
-    try:
-        from geode_product.tool_handlers import build_tool_handlers
-
-        tool_handlers = build_tool_handlers(verbose=False)
-    except Exception:
-        log.debug("seed-generation: tool handler build failed", exc_info=True)
-
     return SubAgentManager(
         IsolatedRunner(
             hooks=hooks,
             lane=lane,
             worker_module="geode_product.worker",
         ),
-        action_handlers=tool_handlers,
+        # A non-None value selects the subprocess protocol; execution handlers
+        # are compiled and filtered inside ``geode_product.worker``.
+        action_handlers={},
         agent_registry=agent_registry,
         hooks=hooks,
         max_depth=settings.max_subagent_depth,

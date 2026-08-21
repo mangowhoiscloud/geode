@@ -19,9 +19,12 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from core.tools.plan import BoundToolPlan
 
 log = logging.getLogger(__name__)
 
@@ -60,7 +63,7 @@ def create_mcp_server(
     host: str | None = None,
     port: int | None = None,
     auth_token: str | None = None,
-    agent_handler_builder: Callable[[], dict[str, Any]] | None = None,
+    agent_tool_plan_builder: Callable[[], tuple[BoundToolPlan, Mapping[str, Any]]] | None = None,
     agent_runner: Callable[..., Awaitable[Any]] | None = None,
     feature_registrar: Callable[[Any], None] | None = None,
 ) -> Any:
@@ -126,7 +129,7 @@ def create_mcp_server(
             prompt,
             quiet=True,
             time_budget_s=time_budget_s,
-            handler_builder=agent_handler_builder,
+            tool_plan_builder=agent_tool_plan_builder,
         )
         return {
             "text": getattr(result, "text", ""),
@@ -188,7 +191,7 @@ def _is_loopback(host: str) -> bool:
 
 
 def main(
-    agent_handler_builder: Callable[[], dict[str, Any]] | None = None,
+    agent_tool_plan_builder: Callable[[], tuple[BoundToolPlan, Mapping[str, Any]]] | None = None,
     *,
     agent_runner: Callable[..., Awaitable[Any]] | None = None,
     feature_registrar: Callable[[Any], None] | None = None,
@@ -229,7 +232,7 @@ def main(
 
     if not args.http:
         server = create_mcp_server(
-            agent_handler_builder=agent_handler_builder,
+            agent_tool_plan_builder=agent_tool_plan_builder,
             agent_runner=agent_runner,
             feature_registrar=feature_registrar,
         )
@@ -260,7 +263,7 @@ def main(
         host=args.host,
         port=args.port,
         auth_token=auth_token or None,
-        agent_handler_builder=agent_handler_builder,
+        agent_tool_plan_builder=agent_tool_plan_builder,
         agent_runner=agent_runner,
         feature_registrar=feature_registrar,
     )
