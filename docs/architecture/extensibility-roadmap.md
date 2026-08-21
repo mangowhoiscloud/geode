@@ -524,8 +524,8 @@ and closure evidence are appended in §10.
 | CAP-004 | `MISFIT` | Google names repeat in safety, approval, policy, personal-data, and CLI modules | Effect/data/auth/resource metadata derives gates; no independent tool-name allowlists | R2.2 | CAP-002 | `IN_DEVELOP` |
 | CAP-005 | `PARTIAL` | `definitions.json`, tool objects, provider schemas, and defer sets can drift | Anthropic/OpenAI/deferred schemas and execution map share one plan hash and parity tests | R2.3 | CAP-002 | `IN_DEVELOP` |
 | CAP-006 | `ABSENT` | Adding a native/Google tool requires edits across several policy files | Change-surface fixture proves the bounded file/registration budget in §8 | R7.2 | CAP-003, CAP-004, CAP-005 | `OPEN` |
-| LOOP-001 | `ABSENT` | No immutable object freezes one step's route, policy, tool plan, and trace identity | `StepSnapshot` is created once per step and used by model/tool/telemetry paths | R3.1 | CAP-002 | `OPEN` |
-| LOOP-002 | `PARTIAL` | Mutable state is distributed across loop fields, contexts, checkpoints, and helpers | `TurnState` and explicit session/turn/step ownership replace ambiguous lifetimes | R3.1 | LOOP-001 | `OPEN` |
+| LOOP-001 | `ABSENT` | No immutable object freezes one step's route, policy, tool plan, and trace identity | `StepSnapshot` is created once per step and used by model/tool/telemetry paths | R3.1 | CAP-002 | `READY` |
+| LOOP-002 | `PARTIAL` | Mutable state is distributed across loop fields, contexts, checkpoints, and helpers | `TurnState` and explicit session/turn/step ownership replace ambiguous lifetimes | R3.1 | LOOP-001 | `READY` |
 | LOOP-003 | `MISFIT` | `AgenticLoop` owns orchestration plus many independently changing policies | Visible loop delegates to bounded input/model/tool/observe/termination phases | R3.2 | LOOP-001, LOOP-002 | `OPEN` |
 | LOOP-004 | `ABSENT` | Loop has 2,714 LOC, 67 methods, and 27 constructor args with no local ratchet | Closure budgets in §7.3 are executable and cannot regress | R3.3 | LOOP-003 | `OPEN` |
 | LOOP-005 | `MISFIT` | `SubAgentManager` combines request codec, role resolution, execution, validation, and announcements | Separate collaborators own those responsibilities; manager remains an orchestrator | R3.4 | LOOP-002 | `OPEN` |
@@ -2118,10 +2118,21 @@ and one process-owned lock pool serializes conflicting daemon-session and MCP
 mutations while preserving unrelated concurrency and sync-handler lease
 lifetime through timeout or cancellation.
 
-R3.1 (`LOOP-001`, `LOOP-002`) and R9.1 (`CODE-001`) are dependency-satisfied
-but remain `OPEN` pending their own serialized whole-package readiness
-transactions; R3.1 is next in master order. R6.3 remains `OPEN` behind its
-other package dependencies and is not newly ready because of this transition.
-The active R8.3 claim and publication clock remain unchanged. R8.2
-(`STORE-003`) remains `OPEN` behind REL-004 and STORE-001; R8.4 (`BND-008`)
-additionally waits for STORE-003.
+R3.1 (`LOOP-001`, `LOOP-002`) is the sole unclaimed `READY` package after a
+whole-package re-audit against
+`origin/develop@7631892a878e65fedf19cc5fd416c44919402403`. CAP-002 is
+`IN_DEVELOP`; LOOP-002 depends only on LOOP-001 inside the same package.
+Current step identity remains distributed across `round_idx`, mutable loop
+fields, hook correlations, tool contexts, checkpoints, and the immutable
+`BoundToolPlan`. Acceptance requires one immutable `StepSnapshot` shared by
+model, tool, and telemetry paths plus an explicit mutable `TurnState`, while
+preserving the §7 termination, budget, recovery, checkpoint, approval, hook,
+usage, cancellation, and sub-agent contracts. This authorizes no R3.2 phase
+extraction or R3.3 structural-budget work.
+
+R9.1 (`CODE-001`) is dependency-satisfied but remains `OPEN` pending its own
+serialized whole-package readiness transaction later in master order. R6.3
+remains `OPEN` behind its other package dependencies. The active R8.3 claim
+and publication clock remain unchanged. R8.2 (`STORE-003`) remains `OPEN`
+behind REL-004 and STORE-001; R8.4 (`BND-008`) additionally waits for
+STORE-003.
