@@ -198,7 +198,7 @@ def test_geode_target_runner_invokes_token_tracker_record() -> None:
 
     # PR-CLEANUP-1 (2026-05-23) — ``core.agent.loop.loop`` shim removed;
     # ``core.agent.loop.agent_loop`` is the canonical module.
-    from core.agent.loop import _response
+    from core.agent.loop import _phases, _response
     from core.agent.loop import agent_loop as loop_mod
     from core.llm import token_tracker
     from geode_product.petri_audit import geode_target
@@ -208,9 +208,11 @@ def test_geode_target_runner_invokes_token_tracker_record() -> None:
     assert "AgenticLoop(" in runner_src
     assert "await loop.arun(" in runner_src
 
-    # Link 2: AgenticLoop.arun → await self._track_usage_async(response)
+    # Link 2: AgenticLoop.arun → tool phase → usage tracking
     arun_src = inspect.getsource(loop_mod.AgenticLoop._arun_once)
-    assert "await self._track_usage_async(response)" in arun_src, (
+    phase_src = inspect.getsource(_phases.process_tool_calls)
+    assert "_phases.process_tool_calls(" in arun_src
+    assert "await loop._track_usage_async(response)" in phase_src, (
         "AgenticLoop.arun must await self._track_usage_async(response) on a "
         "successful LLM response. Without it the petri audit's target "
         "calls bypass the tracker."

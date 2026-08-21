@@ -710,7 +710,7 @@ while stop_reason == "tool_use":
     run tool calls -> append assistant msg + tool_results
 ```
 
-루프 클래스 본체 옆에 책임별 모듈이 같은 패키지에 나뉘어 있습니다. 시스템 프롬프트와 컨텍스트 위임은 `_context.py`, 결과 모델과 컨텍스트 고갈 처리는 `models.py`, 모델 전환은 `_model_switching.py`, 서브에이전트 알림은 `_collaboration_mailbox.py`입니다. 예전 단일 파일 `core/agent/loop.py`는 더 이상 존재하지 않습니다.
+루프 클래스 본체 옆에 책임별 모듈이 같은 패키지에 나뉘어 있습니다. 물리적 턴의 순서는 `agent_loop.py`에 그대로 보이고, 입력 준비, 모델 호출 준비, 제공자 호출/재시도, 도구 처리, 관찰/히스토리 정리, 종료 조립은 `_phases.py`의 여섯 함수가 담당합니다. 시스템 프롬프트와 컨텍스트 위임은 `_context.py`, 결과 모델과 컨텍스트 고갈 처리는 `models.py`, 모델 전환은 `_model_switching.py`, 서브에이전트 알림은 `_collaboration_mailbox.py`입니다. 예전 단일 파일 `core/agent/loop.py`는 더 이상 존재하지 않습니다.
 
 ## 턴 사이클
 
@@ -6271,8 +6271,8 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 
 | 측정값 | 현재 트리 |
 | --- | --- |
-| 프로덕션 Python 파일 | 594 |
-| 테스트 Python 파일 | 692 |
+| 프로덕션 Python 파일 | 595 |
+| 테스트 Python 파일 | 693 |
 | 도구 정의 / 실행 등록 / 유효 스키마 | 82 / 85 / 82 |
 | RuntimeEvent 멤버 | 57 |
 | 기본 LLM 어댑터 | 7 |
@@ -6301,7 +6301,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 
 | 서브시스템 | 루트 | 핵심 모듈 |
 | --- | --- | --- |
-| agentic 루프 | `core/agent/loop/` | `agent_loop.py` (AgenticLoop), `models.py`, `_context.py` |
+| agentic 루프 | `core/agent/loop/` | `agent_loop.py` (AgenticLoop), `_phases.py`, `models.py`, `_context.py` |
 | 서브에이전트 | `core/agent/` | `sub_agent.py`, `worker.py`, `task_isolation.py` |
 | 시스템 프롬프트 | `core/agent/` | `system_prompt.py` |
 | 가드 | `core/agent/` | `safety.py`, `budget.py`, `approval.py`, `context_manager.py` |

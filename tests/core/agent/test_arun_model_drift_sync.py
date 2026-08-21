@@ -20,6 +20,7 @@ import asyncio
 import inspect
 
 import pytest
+from core.agent.loop import _phases
 from core.agent.loop.agent_loop import AgenticLoop
 
 # ---------------------------------------------------------------------------
@@ -212,7 +213,9 @@ def test_arun_calls_sync_and_rebuild_helper() -> None:
     """``arun``'s while-loop must call the helper and rebind
     ``system_prompt`` from its return value."""
     src = inspect.getsource(AgenticLoop._arun_once)
-    assert "system_prompt = await self._sync_model_and_rebuild_prompt(" in src
+    phase_src = inspect.getsource(_phases.prepare_model_call)
+    assert "_phases.prepare_model_call(" in src
+    assert "turn.system_prompt = await loop._sync_model_and_rebuild_prompt(" in phase_src
 
 
 def test_arun_no_longer_inlines_drift_sync() -> None:

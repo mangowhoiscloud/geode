@@ -20,7 +20,7 @@ import logging
 import os
 import time
 from collections.abc import Awaitable, Callable, Mapping, Set
-from dataclasses import asdict, replace
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
 from core.agent.conversation import ConversationContext
@@ -56,6 +56,7 @@ from . import (
     _goal,
     _lifecycle,
     _model_switching,
+    _phases,
     _response,
 )
 from ._tool_factory import (
@@ -362,22 +363,15 @@ def _persist_session_id(session_id: str, emitted_session_id: str) -> None:
 
 
 def _tool_args_signature(tool_input: Any) -> str:
-    """Short stable signature of a tool call's arguments.
+    """Compatibility alias for the observation phase's stable signature."""
+    return _phases.tool_args_signature(tool_input)
 
-    The diversity guard folds this into the call identity so that two calls
-    of the same tool only count as a no-progress repeat when their arguments
-    ALSO match. Five ``grep_files`` with five different patterns therefore
-    produce five distinct signatures and never look like a stuck loop, while
-    the identical call issued over and over does.
-    """
-    import hashlib
-    import json
 
-    try:
-        canonical = json.dumps(tool_input, sort_keys=True, ensure_ascii=False, default=str)
-    except (TypeError, ValueError):
-        canonical = repr(tool_input)
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
+def _set_conversation_context(context: ConversationContext) -> None:
+    """Publish the active conversation to slash-command guards."""
+    from core.cli.commands import set_conversation_context
+
+    set_conversation_context(context)
 
 
 class AgenticLoop:
@@ -586,6 +580,8 @@ class AgenticLoop:
             self._tools = runtime_tools
         self._capability_graph: CapabilityGraph | None = None
         self._task_preflight: TaskPreflight | None = None
+        self._preflight_hint = ""
+        self._usage_snapshot: Any | None = None
         self._capability_graph_digest: str = ""
         self._last_llm_error: str | None = None  # last error type for user message
         # Per-loop structured-output JSON schema (None = free-form text);
@@ -2420,567 +2416,69 @@ class AgenticLoop:
         _goal_continuation: Any | None = None,
         _goal_continuation_trigger: str = "active_goal",
     ) -> AgenticResult:
-        """Run one physical agent turn until the model emits a terminal."""
-        user_input, blocked = await self._begin_turn(
+        """Run one physical agent turn through the six explicit phases."""
+        prepared = await _phases.prepare_input(
+            self,
             user_input,
-            _verify_continuation,
-            internal_continuation=_goal_continuation is not None,
-        )
-        if blocked is not None:
-            return await self._finalize_blocked_turn(blocked)
-
-        # Wire conversation context so /model command guard can check size
-        from core.cli.commands import set_conversation_context
-
-        set_conversation_context(self.context)
-
-        # Lazy MCP tool refresh — load tools empty at init (startup timing
-        # gap), and re-snapshot after any server recycle (epoch drift): a
-        # reconnected server may advertise a different tool set (ADR-014 R5).
-        self._refresh_mcp_tools_at_turn_start()
-
-        # Open the durable turn before preflight/decomposition so every later
-        # diagnostic row and early billing failure has a preceding
-        # session.started + message.user anchor.
-        intercept_result = await self._open_turn(
-            user_input,
-            verification_continuation=_verify_continuation is not None,
+            verify_continuation=_verify_continuation,
             goal_continuation=_goal_continuation,
             goal_continuation_trigger=_goal_continuation_trigger,
         )
-        if intercept_result is not None:
-            return intercept_result
+        if isinstance(prepared, AgenticResult):
+            return prepared
 
-        verification_continuation = _verify_continuation is not None
-        task_input = (
-            self._verify_root_user_input or user_input if verification_continuation else user_input
-        )
-        verification_hint = (
-            _context.render_verification_continuation_hint(user_input)
-            if verification_continuation
-            else ""
-        )
-        goal_hint = (
-            _context.render_goal_continuation_hint(_goal_continuation)
-            if _goal_continuation is not None
-            else ""
-        )
-        preflight_hint = self._prepare_task_preflight(task_input)
-        # Retained on self so mid-arun prompt rebuilds re-apply it.
-        self._preflight_hint = preflight_hint
-
-        messages = self.context.get_messages()
-        turn_state = self._bind_turn_messages(messages)
-        # Codex Goal uses a hidden contextual-user fragment for idle-turn
-        # steering. Keep this request-local so the continuation is visible to
-        # the model without masquerading as a persisted human message.
-        messages.extend(_context.goal_continuation_messages(goal_hint))
-
-        # Unified runtime-hint grammar: every per-turn injection is an XML
-        # block INSIDE <dynamic_context> — preflight, prior-turn reflection
-        # (consume semantics), and the current-step <plan>.
-        from core.agent.loop._context import inject_runtime_hints
-
-        reflection_hint = self._consume_reflection_hint()
-        plan_hint = self._consume_plan_hint()
-        self._last_plan_hint = plan_hint
-        system_prompt = inject_runtime_hints(
-            self._build_system_prompt(),
-            preflight_hint,
-            reflection_hint,
-            verification_hint,
-            plan_hint,
-        )
-
-        # Prune old messages to stay within context budget (Karpathy P6)
-        self._maybe_prune_messages(messages)
-
-        import time as _time
-
-        self._loop_start_time = _time.monotonic()
-        # tracker snapshot at entry → finalize computes a per-arun usage
-        # delta without double-counting sibling loops on the shared tracker
-        from core.llm.token_tracker import get_tracker as _get_tracker
-
-        self._usage_snapshot = _get_tracker().snapshot()
         guard_reason: str | None = None
+        round_idx = prepared.turn_state.round_index
         while True:
-            round_idx = turn_state.round_index
+            round_idx = prepared.turn_state.round_index
             guard_reason = self._check_round_guards(round_idx)
             if guard_reason is not None:
                 break
+            is_last_round = self.max_rounds > 0 and round_idx == self.max_rounds - 1
 
-            is_last_round = (self.max_rounds > 0) and (round_idx == self.max_rounds - 1)
-            self._op_logger.begin_round("AgenticLoop")
+            model_call = await _phases.prepare_model_call(self, prepared, round_idx)
+            if isinstance(model_call, AgenticResult):
+                return model_call
 
-            # Evidence-triggered replan; the rebuild
-            # below picks up the new plan via _consume_plan_hint.
-            await self._maybe_replan_async(
+            provider_result = await _phases.call_provider(
+                self,
+                prepared,
+                model_call,
                 round_idx,
-                failure_context=user_input if verification_continuation else "",
             )
+            if provider_result is None:
+                continue
+            if isinstance(provider_result, AgenticResult):
+                return provider_result
 
-            system_prompt = await self._sync_model_and_rebuild_prompt(
-                system_prompt,
-                reflection_hint=reflection_hint,
-                verification_hint=verification_hint,
-            )
-
-            # Admit durable child messages before their mailbox acknowledgement.
-            self._admit_collaboration_messages(
-                messages,
-                user_input=user_input,
-                round_idx=round_idx,
-            )
-
-            # Pre-call context check — proactive compress/prune (prevents 400)
-            try:
-                await self._check_context_overflow(system_prompt, messages)
-            except _ContextExhaustedError:
-                log.warning("Pre-call context exhausted — attempting aggressive recovery")
-                recovered = await self._aggressive_context_recovery(system_prompt, messages)
-                if recovered:
-                    self._notify_context_event(
-                        "prune",
-                        original_count=len(messages) + recovered,
-                        new_count=len(messages),
-                    )
-                    log.info("Pre-call recovery succeeded — proceeding with pruned context")
-                else:
-                    return await self._finalize_context_exhausted(user_input, messages, round_idx)
-
-            # Pre-LLM-call PLAN event. See ``_emit_cognitive``.
-            await self._emit_cognitive(
-                HookEvent.COGNITIVE_PLAN,
-                round=round_idx + 1,
-                model=self.model,
-            )
-
-            # spinner while waiting for the LLM (IPC event or TextSpinner);
-            # a reflection round (verify-FAIL hint injected) is disclosed as such
-            from core.ui.agentic_ui import _ipc_writer_local
-
-            _ipc_writer = getattr(_ipc_writer_local, "writer", None)
-            if _ipc_writer is not None and not self._quiet:
-                _ipc_writer.send_event(
-                    "thinking_start",
-                    model=self.model,
-                    round=round_idx + 1,
-                    reflection=bool(reflection_hint),
-                )
-                _spinner = TextSpinner("", quiet=True)  # no-op spinner
-            else:
-                verb = "Reflecting..." if reflection_hint else "Thinking..."
-                label = verb if round_idx == 0 else f"{verb} (round {round_idx + 1})"
-                _spinner = TextSpinner(label, quiet=self._quiet)
-            _spinner.start()
-            try:
-                _llm_outcome = await self._dispatch_llm_call(
-                    system_prompt, messages, round_idx, _spinner
-                )
-                if isinstance(_llm_outcome, AgenticResult):
-                    return await self._afinalize_and_return(
-                        _llm_outcome,
-                        user_input,
-                        round_idx + 1,
-                    )
-                response, response_step = _llm_outcome, self._current_step_snapshot
-            except EmptyModelOutputError as exc:
-                partial = await self._afinalize_actionable_partial_on_empty(
-                    exc,
-                    messages=messages,
-                    user_input=user_input,
-                    round_idx=round_idx,
-                )
-                if partial is None:
-                    raise
-                return partial
-            except _ContextExhaustedError as exc:
-                _spinner.stop()
-                log.warning("Context exhausted: %s — attempting aggressive recovery", exc)
-
-                # Aggressive recovery: prune harder + summarize tool results
-                recovered = await self._aggressive_context_recovery(system_prompt, messages)
-                if recovered:
-                    self._notify_context_event(
-                        "prune",
-                        original_count=len(messages) + recovered,
-                        new_count=len(messages),
-                    )
-                    log.info("Aggressive recovery succeeded — continuing loop")
-                    continue  # retry LLM call with pruned context
-
-                # Recovery failed — finalize the terminal result.
-                return await self._finalize_context_exhausted(user_input, messages, round_idx)
-            finally:
-                _spinner.stop()
-                if _ipc_writer is not None and not self._quiet:
-                    _ipc_writer.send_event("thinking_end")
-
-            if response is None:
-                # Classify error for type-specific retry; defaults cover an
-                # adapter that swallowed the exception (None, no _last_error).
-                adapter_exc = getattr(self._new_adapter, "_last_error", None)
-                from core.llm.errors import _ERROR_CLASSIFICATION
-
-                _et, _sev, _hint = _ERROR_CLASSIFICATION["unknown"]
-                if adapter_exc is not None:
-                    from core.llm.errors import classify_llm_error
-
-                    _et, _sev, _hint = classify_llm_error(adapter_exc)
-
-                    # context overflow from 400 → recovery + retry
-                    if _et == "context_overflow":
-                        log.warning("Context overflow detected from 400 — attempting recovery")
-                        recovered = await self._aggressive_context_recovery(system_prompt, messages)
-                        if recovered:
-                            self._notify_context_event(
-                                "prune",
-                                original_count=len(messages) + recovered,
-                                new_count=len(messages),
-                            )
-                            log.info("Context overflow recovery succeeded — retrying LLM call")
-                            continue  # retry with pruned context
-                        # recovery failed — context unrecoverably large
-                        return await self._finalize_context_exhausted(
-                            user_input, messages, round_idx
-                        )
-
-                    # Auth errors surface to the user (credentials are
-                    # user-owned — refresh keys or pick a provider via /model).
-                    if _et == "auth":
-                        if not self._quiet:
-                            from core.ui.agentic_ui import emit_llm_error
-
-                            emit_llm_error(_et, _sev, _hint, self.model, self._provider)
-                        # LLM-readable credential breadcrumb for the next round
-                        self._inject_credential_breadcrumb()
-                        result = self._build_model_action_result(
-                            error_type=_et,
-                            severity=_sev,
-                            hint=_hint,
-                            rounds=round_idx + 1,
-                            detail=self._last_llm_error or str(adapter_exc),
-                        )
-                        return await self._afinalize_and_return(result, user_input, round_idx + 1)
-
-                    # Non-retryable → immediate exit via the structured
-                    # builder (raw SDK JSON must not leak into session history).
-                    if _et == "bad_request":
-                        if not self._quiet:
-                            from core.ui.agentic_ui import emit_llm_error
-
-                            emit_llm_error(_et, _sev, _hint, self.model, self._provider)
-                        result = self._build_model_action_result(
-                            error_type=_et,
-                            severity=_sev,
-                            hint=_hint,
-                            rounds=round_idx + 1,
-                            detail=self._last_llm_error or str(adapter_exc),
-                        )
-                        return await self._afinalize_and_return(result, user_input, round_idx + 1)
-
-                    if not self._quiet:
-                        from core.ui.agentic_ui import emit_llm_error
-
-                        emit_llm_error(
-                            _et,
-                            _sev,
-                            _hint,
-                            self.model,
-                            self._provider,
-                            attempt=self._consecutive_llm_failures + 1,
-                        )
-
-                    if self._hooks:
-                        await self._hooks.trigger_async(
-                            HookEvent.LLM_CALL_FAILED,
-                            {
-                                **(
-                                    asdict(response_step.correlation)
-                                    if response_step is not None
-                                    else {}
-                                ),
-                                "model": self.model,
-                                "provider": self._provider,
-                                "error_type": _et,
-                                "severity": _sev,
-                                "attempt": self._consecutive_llm_failures + 1,
-                            },
-                        )
-
-                self._set_llm_retry_count(self._consecutive_llm_failures + 1)
-
-                # auto-checkpoint before retry (resume after a model switch)
-                # — after the increment so the persisted guard state carries
-                # the failure just observed (crash-recovery parity).
-                self._sync_messages_to_context(messages)
-                self._save_checkpoint(user_input, round_idx=round_idx)
-
-                # rate_limit → surface to user (no auto-swap; the diagnostic
-                # carries the suggested fallback chain)
-                if _et == "rate_limit":
-                    result = self._build_model_action_result(
-                        error_type=_et,
-                        severity=_sev,
-                        hint=_hint,
-                        rounds=round_idx + 1,
-                        detail=self._last_llm_error or str(adapter_exc),
-                    )
-                    return await self._afinalize_and_return(result, user_input, round_idx + 1)
-
-                # Non-rate-limit: try context recovery before retrying the
-                # same model; on success reset the failure counter.
-                if self._consecutive_llm_failures >= 2:
-                    recovered = await self._aggressive_context_recovery(system_prompt, messages)
-                    if recovered:
-                        self._notify_context_event(
-                            "prune",
-                            original_count=len(messages) + recovered,
-                            new_count=len(messages),
-                        )
-                        log.info(
-                            "Context compacted after %d failures — retrying same model (%s)",
-                            self._consecutive_llm_failures,
-                            self.model,
-                        )
-                        self._set_llm_retry_count(0)
-                        continue
-
-                # Below retry cap: backoff and retry (don't break the loop)
-                if self._consecutive_llm_failures < self._LLM_RETRY_CAP:
-                    import asyncio as _asyncio
-
-                    delay = min(2**self._consecutive_llm_failures, 30)
-                    log.info(
-                        "LLM call failed (%s) — retrying in %ds (attempt %d/%d)",
-                        _et,
-                        delay,
-                        self._consecutive_llm_failures,
-                        self._LLM_RETRY_CAP,
-                    )
-                    if not self._quiet:
-                        from core.ui.agentic_ui import emit_llm_retry
-
-                        emit_llm_retry(
-                            delay,
-                            self._consecutive_llm_failures,
-                            self._LLM_RETRY_CAP,
-                        )
-                    if self._hooks:
-                        await self._hooks.trigger_async(
-                            HookEvent.LLM_CALL_RETRIED,
-                            {
-                                **(
-                                    asdict(response_step.correlation)
-                                    if response_step is not None
-                                    else {}
-                                ),
-                                "model": self.model,
-                                "provider": self._provider,
-                                "error_type": _et,
-                                "delay_s": delay,
-                                "attempt": self._consecutive_llm_failures,
-                                "max_attempts": self._LLM_RETRY_CAP,
-                            },
-                        )
-                    await _asyncio.sleep(delay)
-                    continue  # retry without incrementing round_idx
-
-                # all retries exhausted → model_action_required diagnostic
-                detail = self._last_llm_error or "unknown error"
-                result = self._build_model_action_result(
-                    error_type=_et,
-                    severity=_sev,
-                    hint=_hint,
-                    rounds=round_idx + 1,
-                    detail=detail,
-                )
-                return await self._afinalize_and_return(result, user_input, round_idx + 1)
-
-            # Successful LLM response — reset failure counter
-            self._set_llm_retry_count(0)
-
-            # Track usage + Claude Code-style token display
-            await self._track_usage_async(response)
-
-            # --- Post-response guard chain — priority order IS this call
-            # order; the first terminal outcome wins. Guard bodies live in
-            # the "guard chain" section next to ``_terminal_result``.
-            _terminal = self._guard_cost_budget(messages=messages, round_idx=round_idx)
-            if _terminal is None:
-                _terminal = await self._guard_overthinking(
-                    response, messages=messages, round_idx=round_idx
-                )
-            if _terminal is None:
-                _terminal = self._guard_model_refusal(
-                    response,
-                    messages=messages,
-                    round_idx=round_idx,
-                )
-            if _terminal is not None:
-                return await self._afinalize_and_return(_terminal, user_input, round_idx + 1)
-
-            if response.stop_reason != "tool_use":
-                # end_turn or max_tokens → extract text, done
-                self._op_logger.finalize()
-                text = self._extract_text(response)
-                # Sync all intermediate tool-use messages + final response to context
-                assistant_content = self._serialize_content(response.content)
-                _assistant_msg: dict[str, Any] = {
-                    "role": "assistant",
-                    "content": assistant_content,
-                }
-                # Codex encrypted-reasoning passthrough — echoed back into
-                # the next-turn input array (other adapters ignore the field)
-                if getattr(response, "codex_reasoning_items", None):
-                    _assistant_msg["codex_reasoning_items"] = response.codex_reasoning_items
-                if getattr(response, "codex_output_items", None):
-                    _assistant_msg["codex_output_items"] = response.codex_output_items
-                # Codex phase for the next-turn replay (other adapters ignore)
-                _phase = getattr(response, "assistant_phase", "")
-                if _phase:
-                    _assistant_msg["phase"] = _phase
-                messages.append(_assistant_msg)
-                self._sync_messages_to_context(messages)
-                await self._record_text_only_round(round_idx, text=text)
-                reason = (
-                    TerminationReason.FORCED_TEXT if is_last_round else TerminationReason.NATURAL
-                )
-                result = self._terminal_result(
-                    reason,
-                    text,
-                    rounds=round_idx + 1,
-                    tool_calls=self._tool_processor.tool_log,
-                )
-                return await self._afinalize_and_return(result, user_input, round_idx + 1)
-
-            tool_results = await self._run_cognitive_act_observe_cycle(
-                response,
+            tool_result = await _phases.process_tool_calls(
+                self,
+                prepared,
+                provider_result,
                 round_idx,
-                step_snapshot=response_step,
+                is_last_round=is_last_round,
+                step_snapshot=model_call.step_snapshot,
             )
+            if isinstance(tool_result, AgenticResult):
+                return tool_result
 
-            # External half-duplex orchestrators must receive every proposed
-            # call before convergence guards can replace it with terminal text.
-            # The authoritative result arrives on the next participant turn.
-            if self._yield_after_tool_round:
-                messages.append(self._tool_round_assistant_message(response))
-                messages.append({"role": "user", "content": tool_results})
-                return await self._afinalize_tool_round_yield(
-                    messages=messages,
-                    user_input=user_input,
-                    round_idx=round_idx,
-                )
+            terminal = await _phases.observe_and_compact(
+                self,
+                prepared,
+                provider_result,
+                tool_result,
+                round_idx,
+            )
+            if terminal is not None:
+                return terminal
 
-            # backpressure on consecutive tool failures + convergence detection
-            self._update_tool_error_tracking(tool_results)
-
-            # --- Post-tool guard chain — same first-terminal-wins contract.
-            _terminal = self._guard_convergence(messages=messages, round_idx=round_idx)
-            if _terminal is None:
-                _terminal = self._guard_repeated_success(
-                    messages=messages,
-                    round_idx=round_idx,
-                )
-            if _terminal is not None:
-                return await self._afinalize_and_return(_terminal, user_input, round_idx + 1)
-
-            if self._convergence.total_consecutive_tool_errors >= 3:
-                # backpressure cooldown hint
-                from core.ui.agentic_ui import emit_tool_backpressure
-
-                emit_tool_backpressure(self._convergence.total_consecutive_tool_errors)
-                await asyncio.sleep(1.0)
-                backpressure_hint = {
-                    "type": "text",
-                    "text": (
-                        "[system] Multiple tools are failing consecutively. "
-                        "Consider a different approach. "
-                        "If you cannot verify the answer through tools, "
-                        "tell the user what failed and what remains unverified. "
-                        "CANNOT silently answer from training data."
-                    ),
-                }
-                tool_results.append(backpressure_hint)
-
-            # Diversity forcing — fire only on a genuine no-progress loop: the
-            # SAME tool called with IDENTICAL arguments N times in a row. Folding
-            # args into the identity means five grep_files with five different
-            # patterns (healthy fan-out research) never trip it, so no exempt
-            # list of "naturally repetitive" tools is needed. Distinct calls
-            # inside a single response are deduped so one parallel batch of N
-            # distinct calls adds N distinct signatures (never trips), while an
-            # identical call repeated across turns does.
-            _DIVERSITY_N = 5
-            _this_response: list[tuple[str, str]] = []
-            for block in response.content:
-                if getattr(block, "type", None) == "tool_use":
-                    _sig = (
-                        getattr(block, "name", ""),
-                        _tool_args_signature(getattr(block, "input", None)),
-                    )
-                    if _sig not in _this_response:
-                        _this_response.append(_sig)
-            self._consecutive_tool_tracker.extend(_this_response)
-            if len(self._consecutive_tool_tracker) > 10:
-                self._consecutive_tool_tracker = self._consecutive_tool_tracker[-10:]
-            if len(self._consecutive_tool_tracker) >= _DIVERSITY_N:
-                _last_n = self._consecutive_tool_tracker[-_DIVERSITY_N:]
-                if len(set(_last_n)) == 1:
-                    _repeated_tool = _last_n[0][0]
-                    diversity_hint = {
-                        "type": "text",
-                        "text": (
-                            f"[system] The tool '{_repeated_tool}' has been called "
-                            f"{_DIVERSITY_N} times with identical arguments — repeating this "
-                            "exact call is unlikely to add new evidence. Try a different "
-                            "approach or tool to make progress."
-                        ),
-                    }
-                    tool_results.append(diversity_hint)
-                    self._consecutive_tool_tracker.clear()
-
-                    from core.ui.agentic_ui import emit_tool_diversity_forced
-
-                    emit_tool_diversity_forced(_repeated_tool, _DIVERSITY_N)
-                    log.warning(
-                        "Diversity forcing: %s called %dx with identical args — injecting hint",
-                        _repeated_tool,
-                        _DIVERSITY_N,
-                    )
-
-            # accumulate serialized messages for the next round
-            messages.append(self._tool_round_assistant_message(response))
-            messages.append({"role": "user", "content": tool_results})
-            turn_state.round_index += 1
-
-        # Loop exited via guard — determine reason
-        self._op_logger.finalize()
-        elapsed = _time.monotonic() - self._loop_start_time
-        if guard_reason == "time_budget":
-            from core.ui.agentic_ui import emit_time_budget_expired
-
-            emit_time_budget_expired(self._time_budget_s, elapsed, round_idx)
-        reason, text = self._guard_exit_result(
-            guard_reason,
-            rounds=round_idx,
+        return await _phases.assemble_termination(
+            self,
+            user_input=prepared.user_input,
+            round_idx=round_idx,
+            turn=prepared,
+            guard_reason=guard_reason,
         )
-        messages.append(
-            {
-                "role": "assistant",
-                "content": [{"type": "text", "text": text}],
-            }
-        )
-        self._sync_messages_to_context(messages)
-        result = self._terminal_result(
-            reason,
-            text,
-            rounds=round_idx,
-            error=True,
-            tool_calls=self._tool_processor.tool_log,
-        )
-        return await self._afinalize_and_return(result, user_input, round_idx)
 
     # ------------------------------------------------------------------
     # Context window — delegate to ``_context``

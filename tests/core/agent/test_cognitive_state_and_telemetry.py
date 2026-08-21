@@ -225,9 +225,10 @@ def test_arun_emits_all_six_cognitive_events() -> None:
     cognitive events. Without this the event taxonomy would be
     declarative-only (knob-vs-deletion anti-pattern from the PR-1
     Codex MCP review)."""
+    from core.agent.loop import _phases
     from core.agent.loop import agent_loop as _agent_loop_mod
 
-    src = inspect.getsource(_agent_loop_mod)
+    src = inspect.getsource(_agent_loop_mod) + inspect.getsource(_phases)
     for member in (
         "COGNITIVE_PERCEIVE",
         "COGNITIVE_PLAN",
@@ -255,6 +256,7 @@ def test_text_only_round_also_calls_record_round() -> None:
     both text-only return paths so round_count + observations stay
     in lock-step with the actual round count regardless of how the
     round ended."""
+    from core.agent.loop import _phases
     from core.agent.loop import agent_loop as _agent_loop_mod
     from core.agent.loop.agent_loop import AgenticLoop
 
@@ -267,7 +269,10 @@ def test_text_only_round_also_calls_record_round() -> None:
 
     # Both text-only return paths call it before ``return``.
     module_src = inspect.getsource(_agent_loop_mod)
-    assert module_src.count("await self._record_text_only_round(") >= 2, (
+    phase_src = inspect.getsource(_phases)
+    calls = module_src.count("await self._record_text_only_round(")
+    calls += phase_src.count("await loop._record_text_only_round(")
+    assert calls >= 2, (
         "Both text-only return paths (user_clarification_needed and "
         "natural/forced_text) must call _record_text_only_round before "
         "returning, or round_count drifts from the actual round count."

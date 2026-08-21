@@ -22,6 +22,7 @@ import asyncio
 import inspect
 
 import pytest
+from core.agent.loop import _phases
 from core.agent.loop.agent_loop import AgenticLoop
 from core.agent.loop.models import AgenticResult, _ContextExhaustedError
 from core.llm.agentic_response import AgenticResponse
@@ -207,7 +208,9 @@ def test_context_exhausted_error_propagates() -> None:
 
 def test_arun_calls_dispatch_helper() -> None:
     src = inspect.getsource(AgenticLoop._arun_once)
-    assert "self._dispatch_llm_call(" in src
+    phase_src = inspect.getsource(_phases.call_provider)
+    assert "_phases.call_provider(" in src
+    assert "await loop._dispatch_llm_call(" in phase_src
 
 
 def test_arun_persists_early_agentic_result_without_verification() -> None:
@@ -216,8 +219,10 @@ def test_arun_persists_early_agentic_result_without_verification() -> None:
     pattern so a refactor that drops the isinstance check doesn't
     accidentally treat AgenticResult as a response."""
     src = inspect.getsource(AgenticLoop._arun_once)
-    assert "isinstance(_llm_outcome, AgenticResult)" in src
-    assert "self._afinalize_and_return(" in src
+    phase_src = inspect.getsource(_phases.call_provider)
+    assert "isinstance(outcome, AgenticResult)" in phase_src
+    assert "assemble_termination(" in phase_src
+    assert "if isinstance(provider_result, AgenticResult):" in src
 
 
 def test_arun_no_longer_inlines_billing_or_cancelled_handlers() -> None:
@@ -230,10 +235,10 @@ def test_arun_no_longer_inlines_billing_or_cancelled_handlers() -> None:
 
 
 def test_arun_still_handles_context_exhausted_inline() -> None:
-    """Cross-phase regression — _ContextExhaustedError handler must
-    STILL be in arun (NOT moved to the helper). Pin via grep."""
-    src = inspect.getsource(AgenticLoop._arun_once)
+    """The provider phase preserves aggressive context recovery."""
+    src = inspect.getsource(_phases.call_provider)
     assert "except _ContextExhaustedError" in src
+    assert "loop._aggressive_context_recovery(" in src
 
 
 # ---------------------------------------------------------------------------
