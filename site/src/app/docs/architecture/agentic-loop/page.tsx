@@ -27,6 +27,9 @@ export default function Page() {
     run tool calls -> append assistant msg + tool_results`}</pre>
             <p>
               루프 클래스 본체 옆에 책임별 모듈이 같은 패키지에 나뉘어 있습니다.
+              물리적 턴의 순서는 <code>agent_loop.py</code>에 그대로 보이고,
+              입력 준비, 모델 호출 준비, 제공자 호출/재시도, 도구 처리, 관찰/히스토리
+              정리, 종료 조립은 <code>_phases.py</code>의 여섯 함수가 담당합니다.
               시스템 프롬프트와 컨텍스트 위임은 <code>_context.py</code>, 결과
               모델과 컨텍스트 고갈 처리는 <code>models.py</code>, 모델 전환은{" "}
               <code>_model_switching.py</code>, 서브에이전트 알림은{" "}
@@ -184,6 +187,10 @@ export default function Page() {
     run tool calls -> append assistant msg + tool_results`}</pre>
             <p>
               Responsibilities are split into sibling modules in the same package:
+              the physical-turn order remains visible in <code>agent_loop.py</code>,
+              while <code>_phases.py</code> owns six functions for input preparation,
+              model-call preparation, provider retry decisions, tool processing,
+              observation/history compaction, and terminal assembly;
               system-prompt and context delegation in <code>_context.py</code>,
               the result model and context-exhaustion handling in{" "}
               <code>models.py</code>, model switching in{" "}

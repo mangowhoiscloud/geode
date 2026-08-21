@@ -19,6 +19,7 @@ import inspect
 import time
 
 import pytest
+from core.agent.loop import _phases
 from core.agent.loop.agent_loop import AgenticLoop
 
 # ---------------------------------------------------------------------------
@@ -157,9 +158,11 @@ def test_arun_preserves_non_none_guard_response() -> None:
     not mislabeled as max_rounds.
     """
     src = inspect.getsource(AgenticLoop._arun_once)
+    termination_src = inspect.getsource(_phases.assemble_termination)
     assert "guard_reason = self._check_round_guards(round_idx)" in src
     assert "if guard_reason is not None:" in src
-    assert "self._guard_exit_result(" in src
+    assert "_phases.assemble_termination(" in src
+    assert "loop._guard_exit_result(" in termination_src
     idx = src.index("if guard_reason is not None:")
     after = src[idx:].splitlines()[1:5]  # next 4 lines
     next_nonblank = next((ln.strip() for ln in after if ln.strip()), "")

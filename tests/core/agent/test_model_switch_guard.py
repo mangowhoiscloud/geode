@@ -411,10 +411,12 @@ class TestConversationContextWired:
         """arun must call set_conversation_context so /model guard works."""
         import inspect
 
-        from core.agent.loop import AgenticLoop
+        from core.agent.loop import AgenticLoop, _phases
 
         source = inspect.getsource(AgenticLoop._arun_once)
-        assert "set_conversation_context" in source
+        input_source = inspect.getsource(_phases.prepare_input)
+        assert "_phases.prepare_input" in source
+        assert "set_conversation_context" in input_source
 
 
 # ---------------------------------------------------------------------------

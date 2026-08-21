@@ -87,6 +87,13 @@ functional change.
 
 ### Architecture
 
+- **Agentic turns now run through six explicit phases.** The public
+  `AgenticLoop.arun()` behavior is unchanged, while input preparation,
+  model-call preparation, provider retry decisions, tool processing,
+  observation/history compaction, and terminal assembly live in one bounded
+  sibling module. The central physical-turn loop now reads as a compact
+  top-to-bottom orchestrator and keeps the same `StepSnapshot`/`TurnState` objects.
+
 - **Tool composition now has an immutable validation snapshot.** The product
   handler composer joins model-facing specs, execution origins, existing safety
   classifications, and capability requirements into a content-addressed
