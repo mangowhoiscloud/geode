@@ -286,6 +286,7 @@ class TestToolExecutor:
         }
         executor = MagicMock(spec=ToolExecutor)
         executor.aexecute = AsyncMock(return_value=raw_result)
+        executor._contains_restricted_data.return_value = False
         op_logger = MagicMock()
         op_logger.log_tool_call.return_value = True
         timeline = MagicMock()
@@ -436,11 +437,10 @@ class TestToolExecutor:
             hook_calls.append(data)
 
         hooks.register(HookEvent.TOOL_RESULT_OFFLOADED, record_offload, name="record_offload")
+        executor = MagicMock(spec=ToolExecutor)
+        executor._contains_restricted_data.return_value = False
         processor = ToolCallProcessor(
-            executor=MagicMock(spec=ToolExecutor),
-            op_logger=MagicMock(),
-            error_recovery=MagicMock(),
-            hooks=hooks,
+            executor=executor, op_logger=MagicMock(), error_recovery=MagicMock(), hooks=hooks
         )
         prev = get_offload_store()
         store = ToolResultOffloadStore(
@@ -466,10 +466,10 @@ class TestToolExecutor:
             set_offload_store,
         )
 
+        executor = MagicMock(spec=ToolExecutor)
+        executor._contains_restricted_data.return_value = False
         processor = ToolCallProcessor(
-            executor=MagicMock(spec=ToolExecutor),
-            op_logger=MagicMock(),
-            error_recovery=MagicMock(),
+            executor=executor, op_logger=MagicMock(), error_recovery=MagicMock()
         )
         previous = get_offload_store()
         store = ToolResultOffloadStore(

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import runpy
 from pathlib import Path
 from typing import Any
@@ -160,6 +161,22 @@ def test_mcp_entrypoint_supplies_the_product_handler_builder(monkeypatch) -> Non
     )
 
 
+def test_product_mcp_runner_reuses_one_resource_lock_pool(monkeypatch) -> None:
+    from geode_product import mcp_server
+
+    captured: list[object] = []
+
+    async def fake_run(_prompt: str, **kwargs: object) -> None:
+        captured.append(kwargs["resource_lock_pool"])
+
+    monkeypatch.setattr(mcp_server, "arun_agentic_oneshot", fake_run)
+
+    asyncio.run(mcp_server.run_agent("one"))
+    asyncio.run(mcp_server.run_agent("two"))
+
+    assert captured == [mcp_server._RESOURCE_LOCK_POOL, mcp_server._RESOURCE_LOCK_POOL]
+
+
 def test_model_definitions_and_execution_surfaces_have_exact_parity() -> None:
     from core.agent.tool_executor.executor import SPECIAL_EXECUTION_BINDINGS
     from core.tools.base import load_all_tool_definitions
@@ -259,10 +276,20 @@ def test_provider_tool_projections_preserve_existing_wire_payloads() -> None:
     ]
 
 
-def test_product_composition_compiles_one_lossless_immutable_plan() -> None:
+def test_product_composition_compiles_one_lossless_immutable_plan(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from core.agent.tool_executor.executor import SPECIAL_EXECUTION_BINDINGS
     from core.tools.base import load_all_tool_definitions
     from core.tools.google_capabilities import GOOGLE_TOOL_BINDINGS
+    from core.tools.plan import (
+        ApprovalPolicy,
+        DataClassification,
+        PersistenceRule,
+        ProfileRestriction,
+        ToolEffect,
+    )
     from geode_product.tool_handlers import compose_tool_plan
 
     definitions = load_all_tool_definitions()
@@ -284,11 +311,125 @@ def test_product_composition_compiles_one_lossless_immutable_plan() -> None:
     assert plan.execution_map["petri_audit"].origin == "product-audit"
 
     policies = {item.spec.name: item.safety for item in plan.registrations}
-    assert policies["run_bash"].effect == "system"
-    assert policies["gmail_search"].data_class == "personal"
+    assert policies["run_bash"].effect is ToolEffect.EXECUTE
+    assert policies["edit_file"].effect is ToolEffect.MUTATE
+    assert policies["gmail_send"].effect is ToolEffect.COMMUNICATE
+    assert policies["manage_auth"].effect is ToolEffect.ADMINISTRATIVE
+    assert policies["gmail_search"].data_class is DataClassification.PERSONAL
+    assert policies["gmail_search"].persistence is PersistenceRule.REDACT
+    assert policies["gmail_search"].approval is ApprovalPolicy.PER_INVOCATION
     assert policies["gmail_search"].consent_required is True
+    assert policies["gmail_search"].approval_cacheable is False
     assert policies["gmail_search"].allow_headless is False
     assert policies["gmail_search"].allow_subagents is False
+    assert policies["computer_use"].allow_headless is True
+    assert policies["run_bash"].profile_restrictions == (ProfileRestriction.DANGEROUS,)
+    assert policies["memory_save"].profile_restrictions == (ProfileRestriction.WRITE,)
+    assert policies["petri_audit"].profile_restrictions == (ProfileRestriction.EXPENSIVE,)
+
+    from core.tools.policy import ProfilePolicy, apply_profile_policy
+
+    default_profile = apply_profile_policy(bound, ProfilePolicy())
+    assert "run_bash" not in default_profile.tool_names
+    assert "memory_save" in default_profile.tool_names
+    restricted_profile = apply_profile_policy(
+        bound,
+        ProfilePolicy(allow_expensive=False, allow_write=False, allow_dangerous=True),
+    )
+    assert "run_bash" in restricted_profile.tool_names
+    assert "memory_save" not in restricted_profile.tool_names
+    assert "petri_audit" not in restricted_profile.tool_names
+
+    resource_names = {
+        name for name, binding in plan.execution_map.items() if binding.resource_strategy != "none"
+    }
+    assert set(bound.resource_key_resolvers) == resource_names
+    file_path = str(tmp_path / "private.txt")
+    assert bound.resource_keys("edit_file", {"file_path": file_path}) == bound.resource_keys(
+        "write_file", {"file_path": file_path}
+    )
+    edit_keys = bound.resource_keys("edit_file", {"file_path": file_path})
+    assert edit_keys == bound.resource_keys(
+        "edit_file",
+        {"file_path": file_path, "old_string": "private-a", "new_string": "private-b"},
+    )
+    assert edit_keys != bound.resource_keys("edit_file", {"file_path": str(tmp_path / "other.txt")})
+    monkeypatch.chdir(tmp_path)
+    assert edit_keys == bound.resource_keys("write_file", {"file_path": "./private.txt"})
+    assert file_path not in "".join(edit_keys)
+    assert rebuilt.resource_keys("edit_file", {"file_path": file_path}) == bound.resource_keys(
+        "edit_file", {"file_path": file_path}
+    )
+    assert set(bound.resource_keys("generate_report", {"subject": "a"})) & set(
+        bound.resource_keys("export_json", {"output_dir": tmp_path})
+    )
+    assert bound.resource_keys("eval_inspect_viz", {"chart": "cost"}) == bound.resource_keys(
+        "eval_inspect_viz",
+        {"output_path": "./reports/cost.png"},
+    )
+    sidecar = str(tmp_path / "seed.debate.jsonl")
+    assert bound.resource_keys(
+        "seed_debate_turn", {"sidecar_path": sidecar}
+    ) == bound.resource_keys("seed_debate_turn", {"sidecar_path": f" {sidecar} "})
+    assert bound.resource_keys("memory_save", {"key": "a"}) == bound.resource_keys(
+        "note_save", {"key": "b"}
+    )
+    assert bound.resource_keys("manage_rule", {"name": "Foo Bar"}) == bound.resource_keys(
+        "manage_rule", {"name": "foo-bar"}
+    )
+    assert bound.resource_keys("create_plan", {}) == bound.resource_keys(
+        "modify_plan", {"plan_id": "plan-a"}
+    )
+    assert bound.resource_keys("reject_plan", {"plan_id": "missing-a"}) == bound.resource_keys(
+        "modify_plan", {"plan_id": ""}
+    )
+    assert bound.resource_keys("schedule_job", {"expression": "daily"}) == bound.resource_keys(
+        "schedule_job", {"target_id": "job-1"}
+    )
+    assert bound.resource_keys("send_notification", {"channel": "slack"}) == bound.resource_keys(
+        "send_notification", {"channel": "slack", "recipient": "default"}
+    )
+    sync_keys = set(bound.resource_keys("calendar_sync_scheduler", {}))
+    assert sync_keys & set(bound.resource_keys("schedule_job", {"target_id": "job-1"}))
+    assert sync_keys & set(bound.resource_keys("calendar_create_event", {}))
+    absolute_export = str(tmp_path / "shared.json")
+    assert bound.resource_keys(
+        "export_json", {"output_dir": tmp_path / "one", "filename": absolute_export}
+    ) == bound.resource_keys(
+        "export_json", {"output_dir": tmp_path / "two", "filename": absolute_export}
+    )
+    assert bound.resource_keys(
+        "google_docs_write", {"document_id": " doc-1 ", "title": "old"}
+    ) == bound.resource_keys("google_docs_write", {"document_id": "doc-1", "title": "new"})
+    assert bound.resource_keys(
+        "google_docs_write", {"action": "create", "document_id": "ignored-a"}
+    ) == bound.resource_keys("google_docs_write", {"action": "create", "document_id": "ignored-b"})
+    assert bound.resource_keys("google_drive_create", {"name": " x "}) == bound.resource_keys(
+        "google_drive_create", {"parent_id": "", "name": "x"}
+    )
+    assert bound.resource_keys(
+        "google_drive_create", {"parent_id": " root ", "name": "x"}
+    ) == bound.resource_keys("google_drive_create", {"parent_id": "root", "name": " x "})
+    assert bound.resource_keys(
+        "google_sheets_write", {"spreadsheet_id": "sheet-1", "title": "old"}
+    ) == bound.resource_keys("google_sheets_write", {"spreadsheet_id": "sheet-1", "title": "new"})
+    assert bound.resource_keys(
+        "google_sheets_write", {"action": "create", "spreadsheet_id": "ignored-a"}
+    ) == bound.resource_keys(
+        "google_sheets_write", {"action": "create", "spreadsheet_id": "ignored-b"}
+    )
+    assert bound.resource_keys(
+        "google_tasks_write", {"tasklist_id": "list-1", "task_id": "task-1", "title": "old"}
+    ) == bound.resource_keys(
+        "google_tasks_write", {"tasklist_id": "list-1", "task_id": "task-1", "title": "new"}
+    )
+    assert bound.resource_keys(
+        "google_tasks_write",
+        {"action": "create", "tasklist_id": "list-1", "task_id": "ignored-a"},
+    ) == bound.resource_keys(
+        "google_tasks_write",
+        {"action": "create", "tasklist_id": "list-1", "task_id": "ignored-b"},
+    )
 
     capabilities = {item.spec.name: item.capability for item in plan.registrations}
     for name, binding in GOOGLE_TOOL_BINDINGS.items():

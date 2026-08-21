@@ -16,7 +16,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from core.agent.cognitive_state_ctx import get_session_id, get_turn_id
-from core.agent.safety import SUBAGENT_CONTROL_TOOLS
+from core.agent.safety import (
+    SUBAGENT_CONTROL_TOOLS,
+    residual_denied_tools,
+    subagent_denied_tools,
+)
 from core.config.policy_source import EMPTY_POLICY_SOURCES, PolicySourceBundle
 from core.hooks import (
     HookCorrelation,
@@ -38,6 +42,7 @@ if TYPE_CHECKING:
     from core.agent.worker import WorkerRequest
     from core.observability.run_event import RunEventSinkProvider
     from core.skills.agents import AgentRegistry
+    from core.tools.plan import BoundToolPlan
 
 log = logging.getLogger(__name__)
 
@@ -190,8 +195,8 @@ _TYPE_AGENT_MAP: dict[str, str] = {
     "compare": "data_analyst",
 }
 
-# Default denied tools for sub-agents (sandbox hardening).
-# These tools should only be invoked by the parent agent.
+# Compatibility denials for unbound and plan-external sub-agent tools. Native
+# plan-owned tools derive the same boundary from ``SafetyPolicy.allow_subagents``.
 SUBAGENT_DENIED_TOOLS: set[str] = {
     "set_api_key",  # credential changes — parent only
     "manage_auth",  # auth profile management — parent only
@@ -357,6 +362,7 @@ class SubAgentManager:
         collaboration_store: CollaborationStore | None = None,
         activity_sink_provider: RunEventSinkProvider | None = None,
         policy_sources: PolicySourceBundle | None = None,
+        bound_tool_plan: BoundToolPlan | None = None,
     ) -> None:
         self._runner = runner
         self._task_handler = task_handler
@@ -387,7 +393,12 @@ class SubAgentManager:
         # omitted ``denied_tools`` entirely, so a constant that was not folded
         # in here provided no protection to the worker request.
         self._custom_denied_tools: set[str] = set(denied_tools or ())
-        self._denied_tools: set[str] = set(SUBAGENT_DENIED_TOOLS)
+        self._denied_tools: set[str] = (
+            set(SUBAGENT_DENIED_TOOLS)
+            if bound_tool_plan is None
+            else set(subagent_denied_tools(bound_tool_plan))
+            | set(residual_denied_tools(SUBAGENT_DENIED_TOOLS, bound_tool_plan))
+        )
         self._denied_tools.update(self._custom_denied_tools)
         # Sandbox: additional working directories for sub-agent
         self._working_dirs = working_dirs or []

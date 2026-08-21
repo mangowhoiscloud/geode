@@ -31,7 +31,7 @@ The generated architecture inventory lives at
 `site/src/data/geode/architecture-baseline.json`. Refresh it with
 `uv run python scripts/architecture_baseline.py --update`; CI uses `--check`.
 The current snapshot records 597 production Python files,
-693 test Python files,
+694 test Python files,
 87 tool definitions, and
 57 `RuntimeEvent` members.
 <!-- generated:architecture-baseline:end -->

@@ -99,8 +99,8 @@ def make_episodic_recorder_handler() -> tuple[str, Any]:
     from core.memory.episodic import Episode, _summarise_tool_input, get_episodic_store
     from core.tools.personal_data import (
         PERSONAL_DATA_ERROR_OMITTED,
-        PERSONAL_DATA_TOOLS,
         personal_data_omitted,
+        requires_durable_redaction,
     )
 
     store = get_episodic_store()
@@ -132,7 +132,7 @@ def make_episodic_recorder_handler() -> tuple[str, Any]:
         round_raw = snapshot.get("round_count", 0)
         round_count = round_raw if isinstance(round_raw, int) else 0
         input_head_arg = tool_input if isinstance(tool_input, dict | str) else None
-        if tool_name in PERSONAL_DATA_TOOLS:
+        if requires_durable_redaction(tool_name):
             input_head_arg = personal_data_omitted(tool_name)
             if error is not None:
                 error = PERSONAL_DATA_ERROR_OMITTED

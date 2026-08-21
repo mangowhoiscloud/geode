@@ -139,6 +139,16 @@ class TestApplyToProfilePolicy:
         # user_id preserved
         assert result.user_id == "u"
 
+    def test_unrestricted_profile_preserves_dangerous_bound_tools(self):
+        from core.tools.policy import ProfilePolicy, apply_profile_policy
+        from geode_product.tool_handlers import compose_tool_plan
+
+        mode = AuditMode(enabled=True, allow_dangerous=True)
+        effective = apply_to_profile_policy(ProfilePolicy(), mode)
+        bound, _transient = compose_tool_plan()
+
+        assert "run_bash" in apply_profile_policy(bound, effective).tool_names
+
 
 class TestApplyToReadiness:
     def test_disabled_is_noop(self):

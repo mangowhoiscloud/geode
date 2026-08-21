@@ -23,9 +23,15 @@ from core.agent.safety import (
 from core.hooks.system import HookEvent
 from core.tools.computer_observation import sanitize_computer_payload
 from core.tools.personal_data import (
-    PERSONAL_DATA_TOOLS,
     personal_data_omitted,
     sanitize_personal_data_payload,
+)
+from core.tools.plan import (
+    ApprovalPolicy,
+    DataClassification,
+    PersistenceRule,
+    ToolEffect,
+    ToolRegistration,
 )
 
 from .executor import ToolExecutor
@@ -97,6 +103,7 @@ class ToolCallProcessor:
         self._last_error_recoverable: dict[str, bool] = {}
         self._tool_log: list[dict[str, Any]] = []
         self._clarification_count: int = 0
+        self._last_batch_requires_redaction = False
 
     def reset(self) -> None:
         """Reset per-run tracking state. Call at the start of each agentic run."""
@@ -104,11 +111,41 @@ class ToolCallProcessor:
         self._last_error_recoverable.clear()
         self._tool_log.clear()
         self._clarification_count = 0
+        self._last_batch_requires_redaction = False
 
     @property
     def tool_log(self) -> list[dict[str, Any]]:
         """Read-only access to the tool execution log."""
         return self._tool_log
+
+    @property
+    def last_batch_requires_redaction(self) -> bool:
+        return self._last_batch_requires_redaction
+
+    def _log_tool_exception(
+        self,
+        message: str,
+        tool_name: str,
+        exc: Exception,
+        *,
+        contains_personal_data: bool = False,
+    ) -> None:
+        if contains_personal_data or self._executor._contains_restricted_data(tool_name):
+            log.error("%s for %s (%s)", message, tool_name, type(exc).__name__)
+        else:
+            log.exception("%s for %s", message, tool_name)
+
+    def _plan_allows_automatic_recovery(self, tool_name: str) -> bool:
+        registration = self._executor._registration_for(tool_name)
+        if not isinstance(registration, ToolRegistration):
+            return True
+        safety = registration.safety
+        return bool(
+            safety.effect is ToolEffect.READ
+            and safety.data_class is DataClassification.PUBLIC
+            and safety.persistence is PersistenceRule.PERSIST
+            and safety.approval is not ApprovalPolicy.PER_INVOCATION
+        )
 
     async def process(self, response: Any) -> list[dict[str, Any]]:
         """Execute tool_use blocks — parallel when multiple, sequential when single.
@@ -120,6 +157,7 @@ class ToolCallProcessor:
         Tracks consecutive failures per tool name.  After MAX_CONSECUTIVE_FAILURES
         for the same tool, triggers the adaptive error recovery chain.
         """
+        self._last_batch_requires_redaction = False
         tool_blocks = [b for b in response.content if b.type == "tool_use"]
 
         if len(tool_blocks) <= 1:
@@ -139,7 +177,7 @@ class ToolCallProcessor:
         record_call: bool = True,
     ) -> None:
         """Log result, record session events, and append to tool_log."""
-        personal = contains_personal_data or tool_name in PERSONAL_DATA_TOOLS
+        personal = contains_personal_data or self._executor._contains_restricted_data(tool_name)
         durable_input = personal_data_omitted(tool_name) if personal else tool_input
         durable_result = personal_data_omitted(tool_name) if personal else result
 
@@ -307,7 +345,7 @@ class ToolCallProcessor:
             and offload_store.threshold > 0
             and estimated_tokens > offload_store.threshold
             and not contains_personal_data
-            and tool_name not in PERSONAL_DATA_TOOLS
+            and not self._executor._contains_restricted_data(tool_name)
         ):
             from core.orchestration.tool_offload import extract_result_summary
 
@@ -373,7 +411,11 @@ class ToolCallProcessor:
         execution_started = False
 
         last_recoverable = self._last_error_recoverable.get(tool_name, True)
-        if fail_count >= self.MAX_CONSECUTIVE_FAILURES and last_recoverable:
+        if (
+            fail_count >= self.MAX_CONSECUTIVE_FAILURES
+            and last_recoverable
+            and self._plan_allows_automatic_recovery(tool_name)
+        ):
             try:
                 result = await self._attempt_recovery(
                     tool_name,
@@ -382,7 +424,7 @@ class ToolCallProcessor:
                     tool_use_id=block.id,
                 )
             except Exception as exc:
-                log.exception("Tool recovery raised for %s", tool_name)
+                self._log_tool_exception("Tool recovery raised", tool_name, exc)
                 result = {
                     "error": str(exc),
                     "error_type": type(exc).__name__,
@@ -401,12 +443,17 @@ class ToolCallProcessor:
             # using instead of independently re-resolving via
             # ``infer_source``. Tools that do not consume the context absorb
             # the ``_tool_context`` kwarg through their ``**kwargs`` splat.
-            from core.agent.cognitive_state_ctx import get_session_id
+            from core.agent.cognitive_state_ctx import (
+                get_parent_session_id,
+                get_parent_session_key,
+                get_session_id,
+            )
             from core.tools.base import ToolContext
 
             tool_ctx = ToolContext(
                 session_id=get_session_id(),
                 tool_call_id=str(block.id),
+                is_subagent=bool(get_parent_session_id() or get_parent_session_key()),
                 provider=self._provider,
                 source=self._source,
                 model=self._model,
@@ -435,7 +482,13 @@ class ToolCallProcessor:
                     on_execution_started=record_execution_start,
                 )
             except Exception as exc:
-                log.exception("Tool execution raised for %s", tool_name)
+                effective_name = tool_ctx.effective_tool_name or tool_name
+                self._log_tool_exception(
+                    "Tool execution raised",
+                    effective_name,
+                    exc,
+                    contains_personal_data=tool_ctx.contains_personal_data,
+                )
                 result = {
                     "error": str(exc),
                     "error_type": type(exc).__name__,
@@ -452,8 +505,12 @@ class ToolCallProcessor:
             else tool_input
         )
         contains_personal_data = (
-            bool(tool_ctx is not None and tool_ctx.contains_personal_data)
-            or effective_tool_name in PERSONAL_DATA_TOOLS
+            bool(tool_ctx.contains_personal_data)
+            if tool_ctx is not None
+            else self._executor._contains_restricted_data(effective_tool_name)
+        )
+        self._last_batch_requires_redaction = (
+            self._last_batch_requires_redaction or contains_personal_data
         )
 
         # Apply clarification guard before the result reaches model context.
@@ -557,7 +614,15 @@ class ToolCallProcessor:
         # Step 1: Classify blocks into tiers
         tiered: dict[int, list[tuple[int, Any]]] = {0: [], 1: [], 2: [], 3: [], 4: []}
         for idx, block in enumerate(tool_blocks):
-            tier = self._classify_tier(block.name, self._mcp_manager)
+            registration = self._executor._registration_for(block.name)
+            if registration is not None:
+                # Native approval and serialization are authoritative in the
+                # final executor. Resource locks make side-effecting calls safe
+                # to schedule concurrently; update_plan alone preserves model
+                # call order as part of its existing checklist contract.
+                tier = 3 if block.name == "update_plan" else 0
+            else:
+                tier = self._classify_tier(block.name, self._mcp_manager)
             tiered[tier].append((idx, block))
             log.debug("Tool %s -> tier %d", block.name, tier)
 
@@ -616,11 +681,10 @@ class ToolCallProcessor:
                 batch_cost_approved=batch_cost_approved,
             )
         except Exception as exc:
-            log.error(
-                "Parallel tool %s raised unexpected error: %s",
+            self._log_tool_exception(
+                "Parallel tool raised unexpected error",
                 block.name,
                 exc,
-                exc_info=True,
             )
             return self._make_error_result(block, exc)
 
@@ -704,10 +768,11 @@ class ToolCallProcessor:
                 call_id = f"{tool_use_id}:recovery:{index}"
                 started = started_attempts.get(index)
                 effective_name = started[0] if started is not None else attempt.tool_name
+                personal = self._executor._contains_restricted_data(effective_name)
                 if started is None:
                     self._timeline.record_tool_call(
                         effective_name,
-                        tool_input,
+                        personal_data_omitted(effective_name) if personal else tool_input,
                         call_id=call_id,
                     )
                 self._timeline.record_tool_result(
@@ -715,7 +780,7 @@ class ToolCallProcessor:
                     "ok" if attempt.success else "error",
                     f"recovery:{attempt.strategy.value}",
                     call_id=call_id,
-                    result=attempt.result,
+                    result=(personal_data_omitted(effective_name) if personal else attempt.result),
                 )
 
         if recovery_result.recovered:

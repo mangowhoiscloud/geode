@@ -401,8 +401,10 @@ class TestComputerResultImageBlock:
     def test_computer_tool_log_omits_screenshot_bytes(self) -> None:
         from core.agent.tool_executor.processor import ToolCallProcessor
 
+        executor = MagicMock()
+        executor._contains_restricted_data.return_value = False
         proc = ToolCallProcessor(
-            executor=MagicMock(), op_logger=MagicMock(), error_recovery=MagicMock()
+            executor=executor, op_logger=MagicMock(), error_recovery=MagicMock()
         )
         proc._record_tool_activity(
             "computer",

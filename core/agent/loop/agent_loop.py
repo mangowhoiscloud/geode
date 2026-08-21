@@ -42,7 +42,10 @@ from core.hooks import (
 from core.llm.adapters.base import EmptyModelOutputError
 from core.llm.agentic_response import AgenticResponse
 from core.llm.errors import BillingError, UserCancelledError
-from core.tools.personal_data import PERSONAL_DATA_TOOLS
+from core.tools.personal_data import (
+    requires_durable_redaction,
+    set_bound_tool_data_policies,
+)
 from core.ui.agentic_ui import OperationLogger
 from core.ui.status import TextSpinner
 
@@ -875,11 +878,20 @@ class AgenticLoop:
         # hypotheses, so skip that secondary processing for the whole batch if
         # any personal-data tool ran.  The deterministic count/tool-name
         # snapshot above remains available to cognitive listeners.
-        personal_tools = sorted(set(tool_names).intersection(PERSONAL_DATA_TOOLS))
-        if personal_tools:
+        personal_tools = sorted(
+            name for name in set(tool_names) if requires_durable_redaction(name)
+        )
+        batch_requires_redaction = bool(
+            getattr(
+                self._tool_processor,
+                "last_batch_requires_redaction",
+                False,
+            )
+        ) or bool(personal_tools)
+        if batch_requires_redaction:
             log.info(
                 "reflection skipped for personal-data tool batch: tools=%s",
-                ",".join(personal_tools),
+                ",".join(personal_tools) or "effective-request",
             )
         else:
             # reflection runs before the REFLECT hook so listeners see the
@@ -1229,6 +1241,7 @@ class AgenticLoop:
         from core.observability.session_metrics import set_current_session_metrics
 
         set_current_session_metrics(self._session_metrics)
+        set_bound_tool_data_policies(self._bound_tool_plan)
 
         self._tool_processor.reset()
         self._op_logger.reset()
@@ -2143,7 +2156,9 @@ class AgenticLoop:
         transient = tuple(
             tool
             for tool in runtime_tools
-            if tool.get("name") in transient_tool_names and tool.get("name") not in plan_names
+            if tool.get("name") in transient_tool_names
+            and tool.get("name") not in plan_names
+            and tool.get("name") not in self.executor._denied_tools
         )
         plan_tools = [
             {
@@ -2178,7 +2193,10 @@ class AgenticLoop:
             source=self._source,
             policy_sources=self._policy_sources,
             force_include=(self._allowed_tool_names if self._force_include_allowed_tools else None),
-        ).filtered(
+        )
+        from core.tools.policy import apply_profile_policy
+
+        projected = apply_profile_policy(projected).filtered(
             allowed_tool_names=(
                 frozenset(self._allowed_tool_names)
                 if self._allowed_tool_names is not None

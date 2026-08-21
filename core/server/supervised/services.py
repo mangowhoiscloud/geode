@@ -20,11 +20,19 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
-from core.agent.safety import COMPUTER_USE_TOOLS, HEADLESS_DENIED_TOOLS
+from core.agent.safety import (
+    COMPUTER_USE_TOOLS,
+    HEADLESS_DENIED_TOOLS,
+    residual_denied_tools,
+)
+from core.agent.safety import (
+    headless_denied_tools as plan_headless_denied_tools,
+)
 
 if TYPE_CHECKING:
     from core.agent.loop import AgenticLoop
     from core.agent.tool_executor import ToolExecutor
+    from core.agent.tool_executor.executor import ResourceLockPool
     from core.config.policy_source import PolicySourceBundle
     from core.observability.run_event import RunEventSinkProvider
     from core.tools.plan import BoundToolPlan, ToolPlan
@@ -50,6 +58,7 @@ def _headless_denied_tools_for_mode(
     mode: SessionMode,
     *,
     gateway_allow_computer_use: bool,
+    bound_tool_plan: BoundToolPlan | None = None,
 ) -> frozenset[str]:
     """Resolve the enforced denylist for one session mode.
 
@@ -60,9 +69,18 @@ def _headless_denied_tools_for_mode(
     """
     if mode not in (SessionMode.SCHEDULER, SessionMode.DAEMON):
         return frozenset()
+    residual = HEADLESS_DENIED_TOOLS
     if mode == SessionMode.DAEMON and gateway_allow_computer_use is True:
-        return HEADLESS_DENIED_TOOLS - COMPUTER_USE_TOOLS
-    return HEADLESS_DENIED_TOOLS
+        residual -= COMPUTER_USE_TOOLS
+    if bound_tool_plan is None:
+        return residual
+    native_denied = plan_headless_denied_tools(bound_tool_plan)
+    if not (mode == SessionMode.DAEMON and gateway_allow_computer_use is True):
+        native_denied |= COMPUTER_USE_TOOLS & set(bound_tool_plan.tool_names)
+    return native_denied | residual_denied_tools(
+        residual,
+        bound_tool_plan,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -110,8 +128,9 @@ class SharedServices:
     returns a fully-wired ``(ToolExecutor, AgenticLoop)`` pair that
     automatically receives hooks, MCP, skills, cost budget, and time budget.
 
-    No shared mutable state — each ``create_session()`` returns independent
-    instances.  Tool handlers that need the current loop read from
+    Session objects are independent. The process-owned resource lock pool is
+    shared deliberately so two sessions cannot mutate the same declared
+    resource concurrently. Tool handlers that need the current loop read from
     ``_current_loop_ctx`` ContextVar (per-thread, no race condition).
     """
 
@@ -128,6 +147,7 @@ class SharedServices:
     tool_handlers: Mapping[str, Any] = field(default_factory=dict)
     bound_tool_plan: BoundToolPlan | None = None
     transient_tool_handlers: Mapping[str, Any] = field(default_factory=dict)
+    resource_lock_pool: ResourceLockPool | None = None
     worker_module: str | None = None
     agent_search_dirs: tuple[Path, ...] = ()
 
@@ -148,11 +168,14 @@ class SharedServices:
 
     def __post_init__(self) -> None:
         """Ensure directly-constructed services still own one registry pair."""
+        from core.agent.tool_executor.executor import ResourceLockPool
         from core.config.policy_source import EMPTY_POLICY_SOURCES
         from core.hooks import HookRegistry, MiddlewareRegistry
 
         if self.policy_sources is None:
             self.policy_sources = EMPTY_POLICY_SOURCES
+        if self.resource_lock_pool is None:
+            self.resource_lock_pool = ResourceLockPool()
 
         if self.hook_registry is None:
             self.hook_registry = HookRegistry(events=self.hook_system)
@@ -247,6 +270,7 @@ class SharedServices:
         # A messaging daemon may expose only the two computer-use surfaces via
         # its separate opt-in; every other headless denial remains enforced.
         bound_tool_plan = self.bound_tool_plan
+        profile_denied_tools: frozenset[str] = frozenset()
         provider = _resolve_provider(settings.model)
         if bound_tool_plan is not None:
             from core.agent.loop._tool_factory import project_bound_tool_plan
@@ -258,6 +282,11 @@ class SharedServices:
                 source=infer_source(provider),
                 policy_sources=self.policy_sources,
             )
+            from core.tools.policy import apply_profile_policy, load_profile_policy
+
+            profile = load_profile_policy()
+            bound_tool_plan = apply_profile_policy(bound_tool_plan, profile)
+            profile_denied_tools = frozenset(profile.denied_tools)
         handlers: Mapping[str, Any] = self.tool_handlers
         transient_handlers = self.transient_tool_handlers
         # Defense in depth: only the literal boolean True opens remote desktop
@@ -267,7 +296,9 @@ class SharedServices:
         headless_denied = _headless_denied_tools_for_mode(
             mode,
             gateway_allow_computer_use=gateway_computer_use_enabled,
+            bound_tool_plan=bound_tool_plan,
         )
+        headless_denied = headless_denied | profile_denied_tools
         denied = headless_denied & set(handlers)
         if denied:
             log.info("Headless mode %s: denied tools filtered — %s", mode, denied)
@@ -320,6 +351,7 @@ class SharedServices:
             denied_tools=headless_denied,
             allowed_tools=effective_allowed_tools,
             interactive_approval=mode in {SessionMode.REPL, SessionMode.IPC},
+            resource_lock_pool=self.resource_lock_pool,
         )
 
         # PR-R6 (2026-05-24) — operator's effort choice from ``/model``
@@ -394,6 +426,7 @@ class SharedServices:
             max_total_subagents=settings.max_total_subagents,
             activity_sink_provider=self.activity_sink_provider,
             policy_sources=self.policy_sources,
+            bound_tool_plan=self.bound_tool_plan,
         )
 
     def _build_agent_registry(self) -> Any:

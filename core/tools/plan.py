@@ -5,11 +5,48 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-from collections.abc import Iterable, Iterator, Mapping, Set
+from collections.abc import Callable, Iterable, Iterator, Mapping, Set
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from types import MappingProxyType
 from typing import Any
+
+
+class ToolEffect(StrEnum):
+    READ = "read"
+    MUTATE = "mutate"
+    EXECUTE = "execute"
+    COMMUNICATE = "communicate"
+    ADMINISTRATIVE = "administrative"
+
+
+class DataClassification(StrEnum):
+    PUBLIC = "public"
+    PERSONAL = "personal"
+
+
+class PersistenceRule(StrEnum):
+    PERSIST = "persist"
+    REDACT = "redact"
+
+
+class ApprovalPolicy(StrEnum):
+    NONE = "none"
+    CACHED = "cached"
+    PER_INVOCATION = "per_invocation"
+
+
+class ProfileRestriction(StrEnum):
+    WRITE = "write"
+    DANGEROUS = "dangerous"
+    EXPENSIVE = "expensive"
+
+
+ResourceKeyResolver = Callable[[Mapping[str, Any]], Iterable[str]]
+
+
+class ResourceKeyResolutionError(ValueError):
+    """A declared resource strategy could not produce safe canonical keys."""
 
 
 class _ImmutableMapping(Mapping[str, Any]):
@@ -93,6 +130,7 @@ class ExecutionBinding:
     name: str
     origin: str
     route: str = "handler"
+    resource_strategy: str = "none"
 
     def __post_init__(self) -> None:
         if not self.name.strip():
@@ -101,22 +139,49 @@ class ExecutionBinding:
             raise ValueError("binding origin cannot be empty")
         if self.route not in {"handler", "special"}:
             raise ValueError(f"execution binding {self.name!r} has invalid route {self.route!r}")
+        if not self.resource_strategy.strip():
+            raise ValueError("resource strategy cannot be empty")
 
 
 @dataclass(frozen=True, slots=True)
 class SafetyPolicy:
     """Minimum effect, data, consent, and runtime safety constraints."""
 
-    effect: str = "read"
-    data_class: str = "public"
-    consent_required: bool = False
+    effect: ToolEffect = ToolEffect.READ
+    data_class: DataClassification = DataClassification.PUBLIC
+    persistence: PersistenceRule = PersistenceRule.PERSIST
+    approval: ApprovalPolicy = ApprovalPolicy.NONE
     allow_headless: bool = True
     allow_subagents: bool = True
     denied: bool = False
+    profile_restrictions: tuple[ProfileRestriction, ...] = ()
 
     def __post_init__(self) -> None:
-        if not self.effect.strip() or not self.data_class.strip():
-            raise ValueError("safety effect and data class cannot be empty")
+        try:
+            object.__setattr__(self, "effect", ToolEffect(self.effect))
+            object.__setattr__(self, "data_class", DataClassification(self.data_class))
+            object.__setattr__(self, "persistence", PersistenceRule(self.persistence))
+            object.__setattr__(self, "approval", ApprovalPolicy(self.approval))
+            restrictions = self.profile_restrictions
+            object.__setattr__(
+                self,
+                "profile_restrictions",
+                tuple(sorted({ProfileRestriction(item) for item in restrictions}, key=str)),
+            )
+        except ValueError as exc:
+            raise ValueError(f"invalid safety policy vocabulary: {exc}") from exc
+
+    @property
+    def consent_required(self) -> bool:
+        return self.approval is not ApprovalPolicy.NONE
+
+    @property
+    def approval_cacheable(self) -> bool:
+        return self.approval is ApprovalPolicy.CACHED
+
+    @property
+    def per_invocation_consent(self) -> bool:
+        return self.approval is ApprovalPolicy.PER_INVOCATION
 
 
 @dataclass(frozen=True, slots=True)
@@ -158,6 +223,8 @@ class ToolRegistration:
             raise ValueError(
                 f"tool registration name mismatch: {self.spec.name!r} vs {self.execution.name!r}"
             )
+        if self.safety.effect is not ToolEffect.READ and self.execution.resource_strategy == "none":
+            raise ValueError(f"side-effecting tool requires a resource strategy: {self.spec.name}")
 
 
 class ToolDecision(StrEnum):
@@ -224,6 +291,13 @@ class ToolPlan:
             if item.spec.name in self.schema_map and item.deferred
         )
 
+    def registration_for(self, tool_name: str) -> ToolRegistration | None:
+        """Return registration metadata without exposing a mutable index."""
+        return next(
+            (item for item in self.registrations if item.spec.name == tool_name),
+            None,
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class BoundToolPlan:
@@ -232,6 +306,7 @@ class BoundToolPlan:
     plan: ToolPlan
     handlers: Mapping[str, Any]
     tool_names: tuple[str, ...]
+    resource_key_resolvers: Mapping[str, ResourceKeyResolver] = field(default_factory=dict)
     _generation: int | None = None
     _content_hash: str = ""
     _base: BoundToolPlan | None = field(default=None, repr=False, compare=False)
@@ -257,6 +332,19 @@ class BoundToolPlan:
         if invalid := sorted(name for name, handler in handlers.items() if not callable(handler)):
             raise TypeError(f"tool handlers must be callable: {', '.join(invalid)}")
 
+        resolvers = dict(self.resource_key_resolvers)
+        expected_resolvers = {
+            name for name in names if self.plan.execution_map[name].resource_strategy != "none"
+        }
+        if missing := sorted(expected_resolvers - resolvers.keys()):
+            raise ValueError(f"missing resource key resolvers: {', '.join(missing)}")
+        if extra := sorted(resolvers.keys() - expected_resolvers):
+            raise ValueError(f"unexpected resource key resolvers: {', '.join(extra)}")
+        if invalid := sorted(
+            name for name, resolver in resolvers.items() if not callable(resolver)
+        ):
+            raise TypeError(f"resource key resolvers must be callable: {', '.join(invalid)}")
+
         generation = self.plan.generation if self._generation is None else self._generation
         if generation < 1:
             raise ValueError("bound tool plan generation must be positive")
@@ -266,6 +354,7 @@ class BoundToolPlan:
 
         object.__setattr__(self, "handlers", MappingProxyType(handlers))
         object.__setattr__(self, "tool_names", names)
+        object.__setattr__(self, "resource_key_resolvers", MappingProxyType(resolvers))
         object.__setattr__(self, "_generation", generation)
         object.__setattr__(self, "_content_hash", content_hash)
 
@@ -305,6 +394,51 @@ class BoundToolPlan:
         deferred = set(self.plan.deferred_tool_names)
         return tuple(name for name in self.tool_names if name in deferred)
 
+    def registration_for(self, tool_name: str) -> ToolRegistration | None:
+        """Return metadata only for tools visible in this projection."""
+        if tool_name not in self.tool_names:
+            return None
+        return self.plan.registration_for(tool_name)
+
+    def resource_keys(
+        self,
+        tool_name: str,
+        arguments: Mapping[str, Any],
+    ) -> tuple[str, ...]:
+        """Resolve opaque lock keys without exposing semantic resource values."""
+        registration = self.registration_for(tool_name)
+        if registration is None:
+            raise KeyError(f"tool {tool_name!r} is not in the bound tool plan")
+        strategy = registration.execution.resource_strategy
+        if strategy == "none":
+            return ()
+        resolver = self.resource_key_resolvers[str(tool_name)]
+        try:
+            resolved = resolver(MappingProxyType(dict(arguments)))
+            if isinstance(resolved, (str, bytes)):
+                raise TypeError("resolver returned a string instead of an iterable")
+            canonical = tuple(resolved)
+        except Exception as exc:
+            raise ResourceKeyResolutionError(
+                f"resource key resolution failed for {tool_name!r}"
+            ) from exc
+        if not canonical or any(not isinstance(key, str) or not key.strip() for key in canonical):
+            raise ResourceKeyResolutionError(f"resource key resolution failed for {tool_name!r}")
+        return tuple(
+            sorted(
+                {
+                    hashlib.sha256(
+                        json.dumps(
+                            (strategy, key.strip()),
+                            ensure_ascii=False,
+                            separators=(",", ":"),
+                        ).encode()
+                    ).hexdigest()
+                    for key in canonical
+                }
+            )
+        )
+
     def filtered(
         self,
         *,
@@ -325,6 +459,11 @@ class BoundToolPlan:
             self.plan,
             {name: handler for name, handler in self.handlers.items() if name in selected_set},
             selected,
+            {
+                name: resolver
+                for name, resolver in self.resource_key_resolvers.items()
+                if name in selected_set
+            },
             self.generation + 1,
             _base=self.base,
         )
@@ -390,6 +529,11 @@ class BoundToolPlan:
             projected_plan,
             {name: self.handlers[name] for name in names if name in self.handlers},
             names,
+            {
+                name: self.resource_key_resolvers[name]
+                for name in names
+                if name in self.resource_key_resolvers
+            },
             self.generation + 1,
             _base=self.base,
         )
@@ -404,14 +548,24 @@ class BoundToolPlan:
             self.plan,
             self.handlers,
             self.tool_names,
+            self.resource_key_resolvers,
             generation,
             _base=self.base,
         )
 
 
-def bind_tool_plan(plan: ToolPlan, handlers: Mapping[str, Any]) -> BoundToolPlan:
+def bind_tool_plan(
+    plan: ToolPlan,
+    handlers: Mapping[str, Any],
+    resource_key_resolvers: Mapping[str, ResourceKeyResolver] | None = None,
+) -> BoundToolPlan:
     """Bind every enabled ordinary route to one callable before side effects."""
-    return BoundToolPlan(plan, handlers, tuple(plan.schema_map))
+    return BoundToolPlan(
+        plan,
+        handlers,
+        tuple(plan.schema_map),
+        resource_key_resolvers or {},
+    )
 
 
 def _bound_content_hash(plan_hash: str, tool_names: tuple[str, ...]) -> str:
@@ -466,14 +620,17 @@ def _content_hash(registrations: tuple[ToolRegistration, ...]) -> str:
             "execution": {
                 "origin": item.execution.origin,
                 "route": item.execution.route,
+                "resource_strategy": item.execution.resource_strategy,
             },
             "safety": {
-                "effect": item.safety.effect,
-                "data_class": item.safety.data_class,
-                "consent_required": item.safety.consent_required,
+                "effect": item.safety.effect.value,
+                "data_class": item.safety.data_class.value,
+                "persistence": item.safety.persistence.value,
+                "approval": item.safety.approval.value,
                 "allow_headless": item.safety.allow_headless,
                 "allow_subagents": item.safety.allow_subagents,
                 "denied": item.safety.denied,
+                "profile_restrictions": item.safety.profile_restrictions,
             },
             "capability": {
                 "providers": item.capability.providers,
@@ -526,6 +683,13 @@ def compile_tool_plan(
         raise ValueError(f"metadata references unknown tools: {', '.join(unknown)}")
     if unknown := sorted(deferred_names - spec_names):
         raise ValueError(f"deferred metadata references unknown tools: {', '.join(unknown)}")
+    if missing := sorted(
+        name
+        for name in specs_by_name
+        if safety.get(name, SafetyPolicy()).effect is not ToolEffect.READ
+        and bindings_by_name[name].resource_strategy == "none"
+    ):
+        raise ValueError(f"side-effecting tools require resource strategies: {', '.join(missing)}")
 
     registrations = tuple(
         ToolRegistration(
@@ -558,11 +722,18 @@ def compile_tool_plan(
 
 
 __all__ = [
+    "ApprovalPolicy",
     "BoundToolPlan",
     "CapabilityRequirement",
+    "DataClassification",
     "ExecutionBinding",
+    "PersistenceRule",
+    "ProfileRestriction",
+    "ResourceKeyResolutionError",
+    "ResourceKeyResolver",
     "SafetyPolicy",
     "ToolDecision",
+    "ToolEffect",
     "ToolPlan",
     "ToolRegistration",
     "ToolSpec",

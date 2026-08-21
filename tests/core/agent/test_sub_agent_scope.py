@@ -7,6 +7,13 @@ from unittest.mock import MagicMock
 
 from core.agent.sub_agent import SUBAGENT_DENIED_TOOLS, SubAgentManager
 from core.orchestration.isolated_execution import IsolatedRunner
+from core.tools.plan import (
+    ExecutionBinding,
+    SafetyPolicy,
+    ToolSpec,
+    bind_tool_plan,
+    compile_tool_plan,
+)
 
 
 def _make_handler(name: str) -> Any:
@@ -34,6 +41,32 @@ class TestSubAgentDeniedTools:
         assert "manage_auth" in SUBAGENT_DENIED_TOOLS
         assert "delegate_task" in SUBAGENT_DENIED_TOOLS
         assert "calendar_create_event" in SUBAGENT_DENIED_TOOLS
+
+    def test_plan_metadata_denies_future_subagent_tool(self) -> None:
+        name = "future_parent_only"
+        plan = compile_tool_plan(
+            ((ToolSpec(name, "Future", {}), "test"),),
+            (ExecutionBinding(name, "test"),),
+            safety={name: SafetyPolicy(allow_subagents=False)},
+        )
+        bound = bind_tool_plan(plan, {name: _make_handler(name)})
+
+        mgr = SubAgentManager(IsolatedRunner(), bound_tool_plan=bound)
+
+        assert name in mgr._denied_tools
+
+    def test_plan_subagent_allow_overrides_legacy_name_fallback(self) -> None:
+        name = "delegate_task"
+        plan = compile_tool_plan(
+            ((ToolSpec(name, "Compatibility-name probe", {}), "test"),),
+            (ExecutionBinding(name, "test"),),
+            safety={name: SafetyPolicy(allow_subagents=True)},
+        )
+        bound = bind_tool_plan(plan, {name: _make_handler(name)})
+
+        mgr = SubAgentManager(IsolatedRunner(), bound_tool_plan=bound)
+
+        assert name not in mgr._denied_tools
 
     def test_denied_tools_not_in_safe_set(self) -> None:
         """Denied tools should not overlap with commonly-needed tools."""

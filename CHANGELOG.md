@@ -69,6 +69,15 @@ functional change.
   launcher, and the kernel CLI no longer advertises a non-composed `serve`
   command.
 
+- **Tool safety and mutation serialization now derive from the bound plan.**
+  Effect, data handling, approval lifetime, headless/sub-agent availability,
+  profile restrictions, and deterministic resource strategies are hash-bound
+  registration metadata. Middleware and hook rewrites cannot weaken that
+  minimum; personal results remain available to the active turn but are
+  redacted from durable and public projections. Process-shared resource locks
+  serialize conflicting mutations across daemon sessions and MCP one-shots
+  while unrelated resources remain concurrent.
+
 ## [1.0.23] - 2026-08-20
 
 > Bundled product boundaries, a self-improving product ring, and an isolated

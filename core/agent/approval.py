@@ -189,7 +189,12 @@ class ApprovalWorkflow:
         """Attach the session's EvidenceLedger (terminal-state rows rail)."""
         self._evidence_ledger = ledger
 
-    def begin_record(self, tool_name: str) -> ApprovalRecord | None:
+    def begin_record(
+        self,
+        tool_name: str,
+        *,
+        declared_approval: str = "none",
+    ) -> ApprovalRecord | None:
         """Create an ApprovalRecord for a gated tool; ``None`` for ungated.
 
         Category mirrors the gate that will run: ``bash`` (run_bash),
@@ -207,6 +212,8 @@ class ApprovalWorkflow:
             category = "write"
         elif tool_name in EXPENSIVE_TOOLS:
             category = "expensive"
+        elif declared_approval != "none":
+            category = f"policy:{declared_approval}"
         else:
             return None
         record = ApprovalRecord(tool_name=tool_name, category=category)
@@ -584,6 +591,83 @@ class ApprovalWorkflow:
                 return gate_result, False
 
         return None, approved
+
+    async def confirm_declared_async(
+        self,
+        tool_name: str,
+        tool_input: dict[str, Any],
+        *,
+        per_invocation: bool,
+        contains_personal_data: bool,
+        record: ApprovalRecord | None = None,
+    ) -> bool:
+        """Confirm a plan-declared minimum without weakening legacy gates."""
+
+        async def gate() -> bool:
+            if not per_invocation:
+                auto_reason = self._auto_grant_reason("", tool_name)
+                if auto_reason:
+                    self.record_transition(record, "granted", auto_reason)
+                    return True
+            if self.check_auto_deny(tool_name):
+                self.record_transition(record, "denied", "auto_denied:3-strikes")
+                return False
+            detail = (
+                "personal data request (details omitted)"
+                if contains_personal_data
+                else self._write_summary(tool_name, tool_input) or tool_name
+            )
+            await self._fire_hook_async(
+                HookEvent.TOOL_APPROVAL_REQUESTED,
+                {
+                    "tool_name": tool_name,
+                    "safety_level": "PER_INVOCATION" if per_invocation else "DECLARED",
+                    "args_preview": detail,
+                },
+            )
+            response = await self.prompt_with_always_async(
+                "Allow?",
+                detail,
+                safety_level="sensitive" if contains_personal_data else "declared",
+                tool_name=tool_name,
+                record=record,
+                allow_always=not per_invocation,
+            )
+            if not per_invocation:
+                self.track_decision(tool_name, response)
+            if response in ("a", "y"):
+                if response == "a":
+                    self._always_approved_tools.add(tool_name)
+                self.record_transition(record, "granted", f"user:{response}")
+                return True
+            self.record_transition(record, "denied", f"user:{response}")
+            return False
+
+        return await self._with_approval_locks(gate)
+
+    async def confirm_permission_request_async(
+        self,
+        label: str,
+        detail: str,
+        *,
+        safety_level: str,
+        tool_name: str,
+        allow_human_prompt: bool,
+    ) -> bool:
+        """Honor an explicit one-call permission request without cache bypasses."""
+
+        async def gate() -> bool:
+            response = await self.prompt_with_always_async(
+                label,
+                detail,
+                safety_level=safety_level,
+                tool_name=tool_name,
+                allow_always=False,
+                allow_human_prompt=allow_human_prompt,
+            )
+            return response == "y"
+
+        return await self._with_approval_locks(gate)
 
     # -----------------------------------------------------------------
     # Confirmation prompts
