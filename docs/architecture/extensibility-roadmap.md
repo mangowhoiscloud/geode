@@ -226,6 +226,7 @@ normal review and CI; implementations start only after the claim merges.
 | Closure package | GAP IDs | Owner/session | Implementation branch | Claim evidence | Claimed at (UTC) |
 |---|---|---|---|---|---|
 | R8.3 | REL-004 | `session=codex-root task=r8-3-publication-grace-evidence` | `feature/r8-3-publication-grace-evidence` | Readiness [#3039](https://github.com/mangowhoiscloud/geode/pull/3039); v1.0.23 GitHub/PyPI parity and candidate interval re-audited | `2026-08-20T07:41:19Z` |
+| R3.1 | LOOP-001, LOOP-002 | `session=codex-root task=r3-1-step-turn-state` | `feature/r3-1-step-turn-state` | Readiness [#3063](https://github.com/mangowhoiscloud/geode/pull/3063); immutable step and explicit turn-lifetime acceptance re-audited | `2026-08-21T08:05:40Z` |
 
 ## 1. Program objective
 
@@ -524,8 +525,8 @@ and closure evidence are appended in §10.
 | CAP-004 | `MISFIT` | Google names repeat in safety, approval, policy, personal-data, and CLI modules | Effect/data/auth/resource metadata derives gates; no independent tool-name allowlists | R2.2 | CAP-002 | `IN_DEVELOP` |
 | CAP-005 | `PARTIAL` | `definitions.json`, tool objects, provider schemas, and defer sets can drift | Anthropic/OpenAI/deferred schemas and execution map share one plan hash and parity tests | R2.3 | CAP-002 | `IN_DEVELOP` |
 | CAP-006 | `ABSENT` | Adding a native/Google tool requires edits across several policy files | Change-surface fixture proves the bounded file/registration budget in §8 | R7.2 | CAP-003, CAP-004, CAP-005 | `OPEN` |
-| LOOP-001 | `ABSENT` | No immutable object freezes one step's route, policy, tool plan, and trace identity | `StepSnapshot` is created once per step and used by model/tool/telemetry paths | R3.1 | CAP-002 | `READY` |
-| LOOP-002 | `PARTIAL` | Mutable state is distributed across loop fields, contexts, checkpoints, and helpers | `TurnState` and explicit session/turn/step ownership replace ambiguous lifetimes | R3.1 | LOOP-001 | `READY` |
+| LOOP-001 | `ABSENT` | No immutable object freezes one step's route, policy, tool plan, and trace identity | `StepSnapshot` is created once per step and used by model/tool/telemetry paths | R3.1 | CAP-002 | `IN_PROGRESS` |
+| LOOP-002 | `PARTIAL` | Mutable state is distributed across loop fields, contexts, checkpoints, and helpers | `TurnState` and explicit session/turn/step ownership replace ambiguous lifetimes | R3.1 | LOOP-001 | `IN_PROGRESS` |
 | LOOP-003 | `MISFIT` | `AgenticLoop` owns orchestration plus many independently changing policies | Visible loop delegates to bounded input/model/tool/observe/termination phases | R3.2 | LOOP-001, LOOP-002 | `OPEN` |
 | LOOP-004 | `ABSENT` | Loop has 2,714 LOC, 67 methods, and 27 constructor args with no local ratchet | Closure budgets in §7.3 are executable and cannot regress | R3.3 | LOOP-003 | `OPEN` |
 | LOOP-005 | `MISFIT` | `SubAgentManager` combines request codec, role resolution, execution, validation, and announcements | Separate collaborators own those responsibilities; manager remains an orchestrator | R3.4 | LOOP-002 | `OPEN` |
@@ -2118,17 +2119,17 @@ and one process-owned lock pool serializes conflicting daemon-session and MCP
 mutations while preserving unrelated concurrency and sync-handler lease
 lifetime through timeout or cancellation.
 
-R3.1 (`LOOP-001`, `LOOP-002`) is the sole unclaimed `READY` package after a
-whole-package re-audit against
-`origin/develop@7631892a878e65fedf19cc5fd416c44919402403`. CAP-002 is
-`IN_DEVELOP`; LOOP-002 depends only on LOOP-001 inside the same package.
-Current step identity remains distributed across `round_idx`, mutable loop
-fields, hook correlations, tool contexts, checkpoints, and the immutable
-`BoundToolPlan`. Acceptance requires one immutable `StepSnapshot` shared by
-model, tool, and telemetry paths plus an explicit mutable `TurnState`, while
-preserving the §7 termination, budget, recovery, checkpoint, approval, hook,
-usage, cancellation, and sub-agent contracts. This authorizes no R3.2 phase
-extraction or R3.3 structural-budget work.
+R3.1 (`LOOP-001`, `LOOP-002`) is `IN_PROGRESS` under the active claim for
+`feature/r3-1-step-turn-state` after readiness
+[#3063](https://github.com/mangowhoiscloud/geode/pull/3063) merged as
+`4d901769d0593db104d5bf723410457edbea2e09`. CAP-002 is `IN_DEVELOP`, and
+LOOP-002 depends only on LOOP-001 inside the same package. Implementation may
+start only after this claim merges and a new worktree is allocated from the
+updated canonical `develop`. The claimed scope is one immutable
+`StepSnapshot` shared by model, tool, and telemetry paths plus an explicit
+mutable `TurnState`, preserving the §7 termination, budget, recovery,
+checkpoint, approval, hook, usage, cancellation, and sub-agent contracts. It
+authorizes no R3.2 phase extraction or R3.3 structural-budget work.
 
 R9.1 (`CODE-001`) is dependency-satisfied but remains `OPEN` pending its own
 serialized whole-package readiness transaction later in master order. R6.3
