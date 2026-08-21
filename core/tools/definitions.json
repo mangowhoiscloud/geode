@@ -837,7 +837,7 @@
   },
   {
     "name": "update_plan",
-    "description": "Show or update the current turn's progress checklist. Use for complex, multi-step work to keep the user informed while continuing execution. This is NOT an approval gate and never executes a step. When an internal <plan> is present, submit its exact full checklist or remaining suffix after observing completion, using descriptions or displayed 'id: description' texts; the completed prefix advances that advisory plan and the next round sees the new current step. A different checklist remains display-only. Keep steps concise, exactly one in_progress step while work remains, and update statuses as steps complete. Sibling: create_plan is only for an explicit review checkpoint that should wait for approve_plan.",
+    "description": "Show or update the current turn's progress checklist. Use for complex, multi-step work to keep the user informed while continuing execution. This is advisory bookkeeping, not an approval gate, dependency graph, or step executor. When an internal <plan> is present, submit its exact full checklist or remaining suffix after observing completion, using descriptions or displayed 'id: description' texts; the completed prefix advances that advisory plan and the next round sees the new current step. A different checklist remains display-only. Keep steps concise, exactly one in_progress step while work remains, and update statuses as steps complete.",
     "category": "planning",
     "cost_tier": "free",
     "input_schema": {
@@ -879,60 +879,6 @@
         "plan"
       ],
       "additionalProperties": false
-    }
-  },
-  {
-    "name": "create_plan",
-    "description": "Create a disk-persistent review checkpoint that waits for approve_plan before proceeding. It never executes checklist steps. Use only when the user explicitly asks to review/approve a plan first, or when you need an intentional stop before an unusually risky/expensive workflow. For ordinary multi-step work, use update_plan and continue through the agent loop; do not turn routine planning into a permission prompt.",
-    "category": "planning",
-    "cost_tier": "cheap",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "goal": {
-          "type": "string",
-          "description": "Execution goal (e.g. 'Research AI trends and write a report')"
-        },
-        "steps": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "description": "List of plan steps (e.g. ['web search', 'data collection', 'analysis', 'report writing']). Auto-generated if omitted."
-        },
-        "subject": {
-          "type": "string",
-          "description": "Optional subject label for the plan"
-        },
-        "template": {
-          "type": "string",
-          "enum": [
-            "agentic"
-          ],
-          "description": "Plan template."
-        }
-      },
-      "required": [
-        "goal"
-      ]
-    }
-  },
-  {
-    "name": "approve_plan",
-    "description": "Record approval of a review checkpoint created by create_plan. This grants authority to proceed but does not execute checklist steps; the agent loop still owns actions and update_plan records observed progress. Use only after the user explicitly accepts that checkpoint and pass its plan_id. Siblings: modify_plan to adjust it first, reject_plan to discard it.",
-    "category": "planning",
-    "cost_tier": "cheap",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "plan_id": {
-          "type": "string",
-          "description": "ID of the plan to approve (from create_plan result)"
-        }
-      },
-      "required": [
-        "plan_id"
-      ]
     }
   },
   {
@@ -1314,68 +1260,6 @@
           "description": "Optional search query to filter notes"
         }
       },
-      "required": []
-    }
-  },
-  {
-    "name": "reject_plan",
-    "description": "Discard a review checkpoint created by create_plan when the user doesn't want it. Pass plan_id (reason optional). Siblings: approve_plan to authorize proceeding, modify_plan to adjust it. Do not use for update_plan checklists.",
-    "category": "planning",
-    "cost_tier": "free",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "plan_id": {
-          "type": "string",
-          "description": "Plan ID to reject"
-        },
-        "reason": {
-          "type": "string",
-          "description": "Rejection reason (optional)"
-        }
-      },
-      "required": []
-    }
-  },
-  {
-    "name": "modify_plan",
-    "description": "Adjust a review checkpoint created by create_plan — change its template or remove steps — when the user wants to tweak it rather than approve or reject it outright. Pass plan_id. Siblings: approve_plan, reject_plan. Use update_plan for ordinary progress checklist changes.",
-    "category": "planning",
-    "cost_tier": "free",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "plan_id": {
-          "type": "string",
-          "description": "Plan ID to modify"
-        },
-        "template": {
-          "type": "string",
-          "enum": [
-            "full_pipeline",
-            "prospect"
-          ],
-          "description": "Template to change to"
-        },
-        "remove_steps": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "description": "List of step IDs to remove"
-        }
-      },
-      "required": []
-    }
-  },
-  {
-    "name": "list_plans",
-    "description": "List disk-persistent review checkpoints created this session via create_plan. This does not list update_plan progress checklists.",
-    "category": "planning",
-    "cost_tier": "free",
-    "input_schema": {
-      "type": "object",
-      "properties": {},
       "required": []
     }
   },
@@ -1921,7 +1805,7 @@
   },
   {
     "name": "task_create",
-    "description": "Create a durable tracked item in the task list for follow-ups or work that should survive the current turn. subject (imperative, e.g. 'Analyze repository state') is required. Siblings: update_plan shows the current turn's non-persistent progress checklist; create_plan creates an explicit review checkpoint.",
+    "description": "Create a durable tracked item in the task list for follow-ups or work that should survive the current turn. subject (imperative, e.g. 'Analyze repository state') is required. Sibling: update_plan shows the current turn's non-persistent advisory progress checklist.",
     "category": "task",
     "cost_tier": "free",
     "input_schema": {

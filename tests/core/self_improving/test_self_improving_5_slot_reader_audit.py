@@ -187,23 +187,22 @@ def test_tool_policy_slot_is_now_alive_post_s0a() -> None:
 
 def test_decomposition_slot_is_now_alive_post_s0c() -> None:
     """ADR-012 S0c 머지 이후 ``decomposition.json`` 은 ALIVE — reader 가
-    ``core/agent/decomposition_policy.py`` 에 존재 + 호출 chain 활성.
-
-    PR-CL-A1-followup (2026-05-23): host 가 ``core/orchestration/goal_decomposer.py``
-    → ``core/agent/plan.py:decompose_async`` 로 이전됨 (모듈 삭제). wiring
-    자체는 동일.
+    ``core/agent/decomposition_policy.py`` 에 존재하고 advisory plan/replan
+    호출 chain에 연결된다.
     """
     source = build_policy_source_bundle()["decomposition"]
     assert source.packaged_default is not None
     assert source.packaged_default.name == "decomposition.json"
-    # Call chain 검증 — plan.py:decompose_async 가 reader 를 호출.
+    # Call chain 검증 — plan.py의 tools-off planner가 reader를 호출.
     src = _read("core/agent/plan.py")
     assert "_load_decomposition_policy_override" in src, (
-        "plan.py:decompose_async 가 _load_decomposition_policy_override 를 호출해야 함."
+        "advisory planner가 _load_decomposition_policy_override 를 호출해야 함."
     )
     assert "apply_decomposition_policy" in src, (
-        "plan.py:decompose_async 가 apply_decomposition_policy 를 호출해야 함."
+        "advisory planner가 apply_decomposition_policy 를 호출해야 함."
     )
+    assert "_apply_planning_policy(loop, _PLAN_SYSTEM_PROMPT)" in src
+    assert "_apply_planning_policy(loop, _REPLAN_SYSTEM_PROMPT)" in src
 
 
 def test_reflection_slot_is_now_alive_post_s0b() -> None:

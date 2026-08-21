@@ -201,7 +201,7 @@ class SessionMetrics:
     active_plan: Any = None
     replan_count: int = 0
     replan_attempts_on_current_step: int = 0
-    last_replan_trigger: str = ""  # "verify_fail" / "cadence" / ""
+    last_replan_trigger: str = ""  # "verify_fail" / "low_confidence" / ""
 
     # ------------------------------------------------------------------
     # Mutation API
@@ -377,7 +377,7 @@ class SessionMetrics:
 
     def record_replan(self, trigger: str) -> None:
         """PR-CL-A1 — increment the replan counter and remember the
-        trigger ("verify_fail" / "low_confidence" / "cadence") for
+        trigger ("verify_fail" / "low_confidence") for
         telemetry.
 
         Does NOT reset ``replan_attempts_on_current_step`` — the caller

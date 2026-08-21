@@ -23,7 +23,7 @@ Renders the 14 policy SoT files under `core/self_improving/state/policies/`. Eac
 |---|---|
 | `wrapper-sections.json` | Wrapper system-prompt sections (sycophancy_guardrail etc.) |
 | `tool-policy.json` | Per-tool allow/deny + parameter constraints |
-| `decomposition.json` | Goal decomposition prompt + rules |
+| `decomposition.json` | Advisory plan/replan structure prompt + rules (legacy stable target name) |
 | `retrieval.json` | Memory retrieval policy |
 | `reflection.json` | Reflection-node policy |
 | `tool-descriptions.json` | Per-tool description prose |

@@ -42,21 +42,6 @@ __all__ = [
 ]
 
 
-# Shared CLI plan store. Kept lazy so tests and alternate roots can replace
-# the configured plans path before the first handler catalog is composed.
-_PLAN_STORE: Any | None = None
-
-
-def _get_plan_store() -> Any:
-    """Return the process-wide disk-persistent CLI plan store."""
-    global _PLAN_STORE
-    if _PLAN_STORE is None:
-        from core.orchestration.plan_store import PlanStore
-
-        _PLAN_STORE = PlanStore()
-    return _PLAN_STORE
-
-
 def cli_handler_groups(
     *,
     mcp_manager: Any = None,

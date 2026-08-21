@@ -6,7 +6,6 @@ Coverage:
 - TOML mapping covers both live knobs.
 - ``AgenticLoop.__init__`` honours ``settings.act_model`` when no explicit
   ``model`` is passed; explicit ``model`` wins.
-- ``decompose_async`` inherits the active loop model.
 - ``_call_llm(model=...)`` override threads through to the adapter call.
 - ``_verify_llm_judge`` actually calls the LLM via ``loop._call_llm`` with
   ``settings.judge_model`` + parses the judge JSON response.
@@ -32,7 +31,6 @@ from core.agent.verify import (
     _verify_llm_judge,
     verify_turn,
 )
-from core.config.policy_source import EMPTY_POLICY_SOURCES
 
 
 @pytest.fixture(autouse=True)
@@ -220,70 +218,6 @@ def test_call_llm_disables_action_tools_for_auxiliary_calls() -> None:
     assert not request.tools
     assert request.tool_choice == {"type": "none"}
     assert request.allowed_tool_names == frozenset({"read_file"})
-
-
-# -- Goal decomposition inherits loop model ---------------------------
-
-
-def test_decompose_async_inherits_loop_model(monkeypatch: pytest.MonkeyPatch) -> None:
-    """``decompose_async`` threads the active loop model through
-    ``loop._call_llm``."""
-    import asyncio
-
-    fake_settings = SimpleNamespace(model="claude-haiku-4-5")
-    monkeypatch.setattr("core.config.settings", fake_settings)
-
-    captured: dict[str, str] = {}
-
-    async def _fake_call_llm(
-        _system: str, _msgs: list, *, model: str | None = None, **_kwargs: object
-    ) -> SimpleNamespace:
-        captured["model"] = model or ""
-        # Return None so decompose_async early-exits without parsing
-        # (we only care which model was requested for the call).
-        return None
-
-    loop = SimpleNamespace(
-        _call_llm=_fake_call_llm,
-        _tools=[],
-        _policy_sources=EMPTY_POLICY_SOURCES,
-        model="claude-haiku-4-5",
-    )
-
-    from core.agent.plan import decompose_async
-
-    asyncio.run(decompose_async(loop, "comprehensive analysis and report"))
-    assert captured["model"] == "claude-haiku-4-5"
-
-
-def test_decompose_async_ignores_removed_plan_model(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A stale ``settings.plan_model`` attribute cannot split planner model
-    selection away from the active loop."""
-    import asyncio
-
-    fake_settings = SimpleNamespace(plan_model="claude-opus-4-7", model="claude-haiku-4-5")
-    monkeypatch.setattr("core.config.settings", fake_settings)
-    captured: dict[str, str] = {}
-
-    async def _fake_call_llm(
-        _system: str, _msgs: list, *, model: str | None = None, **_kwargs: object
-    ) -> SimpleNamespace:
-        captured["model"] = model or ""
-        return None
-
-    loop = SimpleNamespace(
-        _call_llm=_fake_call_llm,
-        _tools=[],
-        _policy_sources=EMPTY_POLICY_SOURCES,
-        model="claude-opus-4-7",
-    )
-
-    from core.agent.plan import decompose_async
-
-    asyncio.run(decompose_async(loop, "comprehensive analysis and report"))
-    assert captured["model"] == "claude-opus-4-7"
 
 
 # -- LLM judge wiring -------------------------------------------------

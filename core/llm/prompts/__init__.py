@@ -11,9 +11,8 @@ and Claude Code's ``<system-reminder>``/``<workingDir>`` tags.
 Slop-cleanup (2026-06-11): the analyst / evaluator / synthesizer /
 tool_augmented templates and the empty-husk ``axes.py`` were deleted —
 they served the Game-IP analysis pipeline removed in v0.99.149 and had
-zero production callers since. Live templates: ``router`` (AgenticLoop
-system + agentic suffix) and ``decomposer`` (loaded via
-``load_prompt`` at call sites).
+zero production callers since. The live template is ``router``
+(AgenticLoop system + agentic suffix).
 """
 
 from __future__ import annotations
@@ -57,7 +56,6 @@ def _load_template(name: str) -> dict[str, str]:
 def load_prompt(name: str, section: str = "system") -> str:
     """Public API — load a prompt section by template name.
 
-    >>> system = load_prompt("decomposer", "system")
     >>> router_system = load_prompt("router", "system")
     """
     sections = _load_template(name)
@@ -113,7 +111,7 @@ _log.debug("Prompt versions loaded (%d): %s", len(PROMPT_VERSIONS), PROMPT_VERSI
 #   python -c "from core.llm.prompts import PROMPT_VERSIONS as V; \
 #     print(dict(sorted(V.items())))"
 _PINNED_HASHES: dict[str, str] = {
-    "AGENTIC_SUFFIX": "0fd3ecbc37ff",
+    "AGENTIC_SUFFIX": "842dcc4a6935",
     "ROUTER_SYSTEM": "6e86f4dc622c",
 }
 

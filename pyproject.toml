@@ -413,7 +413,7 @@ max-complexity = 52
 max-args = 23
 max-branches = 51
 max-returns = 18
-max-statements = 209
+max-statements = 207
 
 # TID251 — banned imports with educational error messages (LangGraph pattern).
 # Symbol-level guardrail complementary to import-linter (which is module-level

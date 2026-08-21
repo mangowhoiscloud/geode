@@ -16,7 +16,7 @@
     "max_branches": 51,
     "max_complexity": 52,
     "max_returns": 18,
-    "max_statements": 209
+    "max_statements": 207
   },
   "context_vars": {
     "count": 30,
@@ -235,9 +235,9 @@
   },
   "coordinators": {
     "AgenticLoop": {
-      "constructor_arg_count": 30,
-      "file_loc": 3396,
-      "method_count": 79,
+      "constructor_arg_count": 29,
+      "file_loc": 3355,
+      "method_count": 78,
       "path": "core/agent/loop/agent_loop.py"
     },
     "RuntimeCoreConfig": {
@@ -246,7 +246,7 @@
     },
     "SubAgentManager": {
       "constructor_arg_count": 18,
-      "file_loc": 1465,
+      "file_loc": 1464,
       "method_count": 24,
       "path": "core/agent/sub_agent.py"
     }
@@ -373,20 +373,20 @@
   },
   "packages": {
     "core": {
-      "python_files": 404,
-      "python_loc": 123587
+      "python_files": 401,
+      "python_loc": 122034
     },
     "geode_product": {
       "python_files": 161,
-      "python_loc": 62095
+      "python_loc": 62093
     },
     "plugins": {
       "python_files": 32,
       "python_loc": 213
     },
     "tests": {
-      "python_files": 694,
-      "python_loc": 187345
+      "python_files": 691,
+      "python_loc": 185751
     }
   },
   "schema_version": 3,
@@ -438,10 +438,9 @@
       ],
       "unknown_always_loaded_names": []
     },
-    "definition_count": 87,
+    "definition_count": 82,
     "definition_names": [
       "accept_result",
-      "approve_plan",
       "arxiv_search",
       "browser_execute_js",
       "browser_scan",
@@ -452,7 +451,6 @@
       "check_status",
       "computer_use",
       "create_goal",
-      "create_plan",
       "delegate_task",
       "document_ingest",
       "edit_file",
@@ -482,7 +480,6 @@
       "install_mcp_server",
       "interrupt_agent",
       "list_agents",
-      "list_plans",
       "llms_txt_index",
       "manage_auth",
       "manage_context",
@@ -490,7 +487,6 @@
       "manage_rule",
       "memory_save",
       "memory_search",
-      "modify_plan",
       "note_read",
       "note_save",
       "obs_otel_export",
@@ -502,7 +498,6 @@
       "profile_update",
       "rate_result",
       "read_document",
-      "reject_plan",
       "reject_result",
       "run_bash",
       "schedule_job",
@@ -537,10 +532,9 @@
       "doctor_slack",
       "recall_tool_result"
     ],
-    "execution_registration_count": 90,
+    "execution_registration_count": 85,
     "execution_registration_names": [
       "accept_result",
-      "approve_plan",
       "arxiv_search",
       "browser_execute_js",
       "browser_scan",
@@ -552,7 +546,6 @@
       "computer",
       "computer_use",
       "create_goal",
-      "create_plan",
       "delegate_task",
       "doctor_slack",
       "document_ingest",
@@ -583,7 +576,6 @@
       "install_mcp_server",
       "interrupt_agent",
       "list_agents",
-      "list_plans",
       "llms_txt_index",
       "manage_auth",
       "manage_context",
@@ -591,7 +583,6 @@
       "manage_rule",
       "memory_save",
       "memory_search",
-      "modify_plan",
       "note_read",
       "note_save",
       "obs_otel_export",
@@ -604,7 +595,6 @@
       "rate_result",
       "read_document",
       "recall_tool_result",
-      "reject_plan",
       "reject_result",
       "run_bash",
       "schedule_job",
@@ -630,10 +620,9 @@
       "web_fetch",
       "write_file"
     ],
-    "handler_registration_count": 82,
+    "handler_registration_count": 77,
     "handler_registration_names": [
       "accept_result",
-      "approve_plan",
       "arxiv_search",
       "browser_execute_js",
       "browser_scan",
@@ -645,7 +634,6 @@
       "computer",
       "computer_use",
       "create_goal",
-      "create_plan",
       "doctor_slack",
       "document_ingest",
       "edit_file",
@@ -672,7 +660,6 @@
       "google_tasks_write",
       "grep_files",
       "install_mcp_server",
-      "list_plans",
       "llms_txt_index",
       "manage_auth",
       "manage_context",
@@ -680,7 +667,6 @@
       "manage_rule",
       "memory_save",
       "memory_search",
-      "modify_plan",
       "note_read",
       "note_save",
       "obs_otel_export",
@@ -693,7 +679,6 @@
       "rate_result",
       "read_document",
       "recall_tool_result",
-      "reject_plan",
       "reject_result",
       "schedule_job",
       "seed_debate_turn",
@@ -717,7 +702,6 @@
     ],
     "handler_registration_origins": {
       "accept_result": "hitl",
-      "approve_plan": "plan",
       "arxiv_search": "delegated",
       "browser_execute_js": "delegated",
       "browser_scan": "delegated",
@@ -729,7 +713,6 @@
       "computer": "computer-use",
       "computer_use": "computer-use",
       "create_goal": "goal",
-      "create_plan": "plan",
       "doctor_slack": "system",
       "document_ingest": "delegated",
       "edit_file": "delegated",
@@ -756,7 +739,6 @@
       "google_tasks_write": "delegated",
       "grep_files": "delegated",
       "install_mcp_server": "mcp",
-      "list_plans": "plan",
       "llms_txt_index": "delegated",
       "manage_auth": "system",
       "manage_context": "context",
@@ -764,7 +746,6 @@
       "manage_rule": "memory",
       "memory_save": "memory",
       "memory_search": "memory",
-      "modify_plan": "plan",
       "note_read": "delegated",
       "note_save": "delegated",
       "obs_otel_export": "observability",
@@ -777,7 +758,6 @@
       "rate_result": "hitl",
       "read_document": "delegated",
       "recall_tool_result": "offload",
-      "reject_plan": "plan",
       "reject_result": "hitl",
       "schedule_job": "execution",
       "seed_debate_turn": "product-seed",
@@ -799,11 +779,10 @@
       "web_fetch": "delegated",
       "write_file": "delegated"
     },
-    "schema_count": 87,
+    "schema_count": 82,
     "schema_errors": [],
     "schema_names": [
       "accept_result",
-      "approve_plan",
       "arxiv_search",
       "browser_execute_js",
       "browser_scan",
@@ -814,7 +793,6 @@
       "check_status",
       "computer_use",
       "create_goal",
-      "create_plan",
       "delegate_task",
       "document_ingest",
       "edit_file",
@@ -844,7 +822,6 @@
       "install_mcp_server",
       "interrupt_agent",
       "list_agents",
-      "list_plans",
       "llms_txt_index",
       "manage_auth",
       "manage_context",
@@ -852,7 +829,6 @@
       "manage_rule",
       "memory_save",
       "memory_search",
-      "modify_plan",
       "note_read",
       "note_save",
       "obs_otel_export",
@@ -864,7 +840,6 @@
       "profile_update",
       "rate_result",
       "read_document",
-      "reject_plan",
       "reject_result",
       "run_bash",
       "schedule_job",

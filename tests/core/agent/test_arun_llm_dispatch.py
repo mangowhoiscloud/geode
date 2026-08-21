@@ -221,23 +221,11 @@ def test_arun_persists_early_agentic_result_without_verification() -> None:
 
 
 def test_arun_no_longer_inlines_billing_or_cancelled_handlers() -> None:
-    """Anti-residue — the pre-refactor PER-ROUND inline handlers must
-    be gone. ``arun`` still has ONE BillingError handler at session-
-    start (around the ``_try_decompose`` call); that one is intentional
-    and lives outside the while-loop body. Pin the count instead of
-    grepping "not in"."""
+    """The dispatch helper owns billing and cancellation handling."""
     src = inspect.getsource(AgenticLoop._arun_once)
-    # Exactly ONE BillingError handler remains (the _try_decompose
-    # one); the per-round LLM-call handler is gone.
-    assert src.count("except BillingError as exc:") == 1
-    # UserCancelledError was only in the per-round LLM-call path;
-    # ``arun`` should have zero handlers now.
+    assert "except BillingError as exc:" not in src
     assert "except UserCancelledError:" not in src
-    # The user_cancelled termination reason lived only in the LLM-call
-    # handler. The billing_error reason is still raised by the
-    # session-start _try_decompose handler — verify it remains there
-    # exactly once.
-    assert src.count("TerminationReason.BILLING_ERROR") == 1
+    assert "TerminationReason.BILLING_ERROR" not in src
     assert "TerminationReason.USER_CANCELLED" not in src
 
 

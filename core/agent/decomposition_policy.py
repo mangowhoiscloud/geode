@@ -1,14 +1,15 @@
-"""Decomposition policy SoT reader — ADR-012 S0c, dead slot 살리기.
+"""Advisory planning policy reader (legacy target: ``decomposition``).
 
-Applies an optional decomposition policy immediately before
-``core.agent.plan.decompose_async`` sends its LLM request.
+Applies the SIL ``decomposition`` mutation surface to advisory plan/replan
+structure selection. The stable target and file names preserve lineage and
+operator overrides; the runtime no longer performs automatic DAG decomposition.
 
 **SoT schema** (모든 field optional, string):
 
 .. code-block:: json
 
     {
-      "system_prompt": "...",      # load_prompt("decomposer","system") override
+      "system_prompt": "...",      # advisory planner prompt override
       "prefix": "...",             # default system_prompt 앞에 prefix 추가
       "suffix": "..."              # default system_prompt 뒤에 suffix 추가
     }
@@ -77,7 +78,7 @@ def apply_decomposition_policy(
     system_prompt: str,
     policy: dict[str, str] | None,
 ) -> str:
-    """Apply ``policy`` to the decomposer's system prompt.
+    """Apply ``policy`` to an advisory planner system prompt.
 
     ``policy is None`` → 입력 그대로.
 

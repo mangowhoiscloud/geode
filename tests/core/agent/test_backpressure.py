@@ -271,7 +271,6 @@ class TestConvergenceDetection:
                 side_effect=fake_process_tool_calls,
             ),
             patch.object(loop, "_build_system_prompt", return_value="system"),
-            patch.object(loop, "_try_decompose", return_value=None),
         ):
             result = asyncio.run(loop.arun("test prompt"))
 
@@ -325,7 +324,6 @@ class TestConvergenceDetection:
                 side_effect=fake_process_tool_calls,
             ),
             patch.object(loop, "_build_system_prompt", return_value="system"),
-            patch.object(loop, "_try_decompose", return_value=None),
         ):
             result = asyncio.run(loop.arun("test prompt"))
 

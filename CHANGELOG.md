@@ -47,6 +47,26 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- **Planning is now a single observation-conditioned advisory contract.**
+  Explicit `/plan` compares candidate structures with action tools disabled and
+  stores at most eight verifiable steps containing no tool, argument, or
+  dependency metadata. Ordinary compound input now enters AgenticLoop directly.
+  Cognitive verify-failure and low-confidence replans remain active, while
+  round-cadence replanning and its setting are removed. The SIL
+  `decomposition` mutation surface keeps its stable lineage and now controls
+  advisory plan/replan structure prompts without expanding the structured
+  schema or execution authority.
+
+### Removed
+
+- **Removed the duplicate execution-shaped planning stack.** The automatic
+  decomposer, `PlanMode`/`PlanStore`, decomposer prompt, and the model-visible
+  `create_plan`, `approve_plan`, `reject_plan`, `modify_plan`, and `list_plans`
+  tools are gone. `update_plan` remains the sole model-visible progress surface;
+  TaskGraph and immutable runtime ToolPlan are unchanged.
+
 ### Architecture
 
 - **Tool composition now has an immutable validation snapshot.** The product

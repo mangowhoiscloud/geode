@@ -935,13 +935,11 @@ GEODE의 프롬프트는 두 단으로 관리됩니다. 디스크의 마크다�
 
 ## 템플릿: 마크다운이 SoT
 
-프롬프트 텍스트는 `core/llm/prompts/`의 마크다운 파일에 삽니다. 각 파일은 `<system>`, `<user>`, `<agentic_suffix>` 같은 XML 형태 섹션 태그로 나뉘고, `core/llm/prompts/__init__.py`의 `_load_template`이 파싱합니다. 현재 살아 있는 템플릿은 셋입니다.
+프롬프트 텍스트는 `core/llm/prompts/`의 마크다운 파일에 삽니다. 각 파일은 `<system>`, `<user>`, `<agentic_suffix>` 같은 XML 형태 섹션 태그로 나뉘고, `core/llm/prompts/__init__.py`의 `_load_template`이 파싱합니다. 현재 살아 있는 템플릿은`router.md` 하나입니다.
 
 | 템플릿 | 노출 상수 | 용도 |
 | --- | --- | --- |
 | `router.md` | `ROUTER_SYSTEM`, `AGENTIC_SUFFIX` | 메인 에이전트 시스템 프롬프트와 agentic 접미사 |
-| `commentary.md` | `COMMENTARY_SYSTEM`, `COMMENTARY_USER` | 진행 코멘터리 |
-| `decomposer.md` | 호출부에서 `load_prompt` | 복합 요청 분해 |
 
 `AGENTIC_SUFFIX`는 항상-on 운영 규칙을 담습니다. 완료 기준, 도구 선택 매트릭스, Grounding & Citation(도구 출력은 데이터지 지시가 아님 포함), Answering discipline(미인식 개체 선검색, 정쟁 토픽 even-handedness), Source fidelity & copyright.
 
@@ -4854,7 +4852,6 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/config/reference.md
 | 필드 | toml 키 | 타입 / 기본값 | 용도 |
 | --- | --- | --- | --- |
 | `replan_enabled` | `replan.enabled` | bool = true | 리플랜 활성화. |
-| `replan_interval` | `replan.interval` | int = 5 | 리플랜 주기. 0이면 주기 비활성. |
 | `replan_max_attempts` | `replan.max_attempts` | int = 3 | 리플랜 시도 상한. |
 
 ### \[cognitive\]
@@ -5618,9 +5615,9 @@ GEODE가 메타 하네스인 이유는 세 겹의 관계 때문입니다.
 
 한 라운드는 도구 실행 결과를 관측하고, reflection으로 믿음을 갱신하고, 트리거가 서면 plan을 다시 씁니다. 네 조각이 하나의 사이클로 묶입니다.
 
--   **Planning**. 명시적 `Plan` 객체가 세션에 붙고 replan마다 revision이 증가합니다. 다단계 작업의 승인 게이트는 별도 메커니즘인 PlanMode가 맡습니다.
+-   **Planning**. 명시적 `Plan` 객체가 세션에 붙고 replan마다 revision이 증가합니다. Plan은 실행이나 승인 권한을 갖지 않는 관측 조건부 안내 구조입니다.
 -   **Reflection (cognitive)**. 도구 라운드마다 `record_reflection` 구조화 호출 1회가 CognitiveState를 갱신합니다. hypotheses 5개 이하, confidence 0..1, next\_action\_hint가 subgoals로 들어갑니다. 전체 대화가 아니라 상태 스냅숏과 도구 요약만 봅니다(clean-context 규율).
--   **verify 후 replan**. replan은 세 트리거로 발화합니다. verify FAIL(다음 실행의 첫 라운드), cadence(`replan_interval` 라운드마다), low-confidence (confidence 0.4 미만, edge-trigger라 회복 전 재발화가 없어 replan 폭풍을 방지). replan 실패는 루프를 죽이지 않습니다.
+-   **verify 후 replan**. replan은 관측된 두 트리거로 발화합니다. verify FAIL(다음 실행의 첫 라운드), low-confidence (confidence 0.4 미만, edge-trigger라 회복 전 재발화가 없어 replan 폭풍을 방지). replan 실패는 루프를 죽이지 않습니다.
 -   **지속화**. CognitiveStateStore가 스냅숏과 이벤트 스트림을 SQLite에 저장하고, 세션 재개의 DB-first 소스가 됩니다.
 
 기본 round 상한이 0(무제한)이라 실질적 경계는 시간과 비용 예산입니다. 루프가 정직하게 끝나는 명명된 종료 경로는 아래 16개에 정상 완료(도구 호출 없는 텍스트 응답)를 더한 것입니다.
@@ -5646,7 +5643,7 @@ GEODE가 메타 하네스인 이유는 세 겹의 관계 때문입니다.
 | 메커니즘 | 묶는 발산 | 제어 지점 | 위치 |
 | --- | --- | --- | --- |
 | **AgenticLoop** | perceive, plan, act, observe inner 루프. round, time, cost 가드가 폭주를 절단 | max\_rounds (default 0=unlimited), time\_budget\_s, cost\_budget | `core/agent/loop/agent_loop.py` |
-| **Plan + Dynamic Replan** | 명시적 Plan 객체를 세션에 유지하고 verify FAIL, cadence, low-confidence 세 트리거로 planner LLM을 재발화 | replan\_interval, REPLAN\_LOW\_CONFIDENCE=0.4 | `core/agent/plan.py` |
+| **Plan + Dynamic Replan** | 명시적 Plan 객체를 세션에 유지하고 verify FAIL 또는 low-confidence 관측으로 planner LLM을 재발화 | replan\_enabled, REPLAN\_LOW\_CONFIDENCE=0.4 | `core/agent/plan.py` |
 | **Reflection node** | 도구 라운드마다 record\_reflection 구조화 호출 1회로 CognitiveState의 가설과 confidence를 갱신 | cognitive\_reflection\_enabled, max\_tokens 512 | `core/agent/loop/_reflection.py` |
 | **CognitiveState + store** | hypotheses, confidence, subgoals 믿음 상태를 SQLite에 지속화. 세션 재개의 DB-first 소스 | snapshot + append-only event stream | `core/memory/cognitive_state_store.py` |
 | **ConvergenceDetector** | 동일 도구 에러 3연속 또는 무진전 성공 반복에서 루프를 종료 | REPEATED\_SUCCESS\_THRESHOLD=5 | `core/agent/convergence.py` |
@@ -5661,7 +5658,6 @@ GEODE가 메타 하네스인 이유는 세 겹의 관계 때문입니다.
 | **Computer-use HITL** | 화면 제어 도구는 명시적 사용자 거부 경로가 있는 게이트를 통과 | 600s tool deadline, denied result contract | `core/agent/tool_executor/executor.py` |
 | **Approval FSM** | HITL 승인 상태기계. 3-strike 자동 거부, 모든 전이를 기록 | legal-transition table, APPROVAL\_TRANSITION hook | `core/agent/approval_fsm.py` |
 | **Trusted middleware** | 도구·LLM 요청 변환과 실제 실행 래핑을 네 개의 typed 결합점으로 분리 | single-use next\_call, request mutation rejection, per-handler timeout\_s | `core/hooks/middleware.py` |
-| **PlanMode** | 다단계 작업의 plan, approve, execute 게이트 | MANUAL (default) vs AUTO execution mode | `core/orchestration/plan_mode.py` |
 | **SchedulerService** | lock과 jitter로 반복 작업의 동시 발화를 억제 | enable\_jitter, max\_jitter\_ms, SchedulerLock | `core/scheduler/service.py` |
 | **Model switching** | /model 전환 시 drift-health 체크와 캐시 안전 breadcrumb 주입 | /model command, MODEL\_SWITCHED hook | `core/agent/loop/_model_switching.py` |
 
@@ -6111,7 +6107,7 @@ Tier 2  latex2sympy2 + sympy.pretty  블록 전용. 분수·적분을 2D Unicode
 URL: https://mangowhoiscloud.github.io/geode/docs/reference/changelog
 Markdown: https://mangowhoiscloud.github.io/geode/docs/reference/changelog.md
 
-(body omitted from llms-full: 1517 KB — fetch the Markdown twin above for the complete page)
+(body omitted from llms-full: 1518 KB — fetch the Markdown twin above for the complete page)
 
 ---
 
@@ -6271,9 +6267,9 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 
 | 측정값 | 현재 트리 |
 | --- | --- |
-| 프로덕션 Python 파일 | 597 |
-| 테스트 Python 파일 | 693 |
-| 도구 정의 / 실행 등록 / 유효 스키마 | 87 / 90 / 87 |
+| 프로덕션 Python 파일 | 594 |
+| 테스트 Python 파일 | 690 |
+| 도구 정의 / 실행 등록 / 유효 스키마 | 82 / 85 / 82 |
 | RuntimeEvent 멤버 | 57 |
 | 기본 LLM 어댑터 | 7 |
 | 모듈 수준 ContextVar | 29 |
@@ -6327,7 +6323,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 | MCP 클라이언트 | `core/mcp/` | `manager.py` (MCPServerManager), `stdio_client.py`, `registry.py`, 알림/캘린더 어댑터 |
 | 메모리 | `core/memory/` | `context.py` (ContextAssembler), `project.py`, `session_manager.py`, `episodic.py`, `recall_writer.py`, `user_profile.py` |
 | 스킬 | `core/skills/` | `skills.py` (레지스트리), `agents.py` |
-| 프롬프트 | `core/llm/prompts/` | `router.md`, `commentary.md`, `decomposer.md`, 해시 핀은 `__init__.py` |
+| 프롬프트 | `core/llm/prompts/` | `router.md`, 해시 핀은 `__init__.py` |
 | 감사 추출 | `core/audit/` | `dim_extractor.py`, `manifest.py`, `eval_to_jsonl.py`, `contracts.py` |
 | 관측성 | `core/observability/` | `session_timeline.py`, `event_store.py`, `hook_persistence.py`, `trajectory.py`, `session_metrics.py`, `logging_config.py` |
 | 설정 | `core/config/` | `_settings.py`, `explain.py`, `env_io.py`, `routing.toml` + `routing_manifest.py`, `self_improving.py` |
