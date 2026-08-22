@@ -578,6 +578,14 @@ def _unsupported_context_alias(
     constructor_reference: Callable[[ast.expr], str | None],
     module_reference: Callable[[ast.expr], bool],
 ) -> bool:
+    if isinstance(node, ast.DictComp | ast.ListComp | ast.SetComp):
+        outputs = (node.key, node.value) if isinstance(node, ast.DictComp) else (node.elt,)
+        return any(
+            constructor_reference(candidate) is not None or module_reference(candidate)
+            for output in outputs
+            for candidate in ast.walk(output)
+            if isinstance(candidate, ast.expr)
+        )
     if isinstance(node, ast.Attribute) and node.attr == "__dict__" and module_reference(node.value):
         return True
     if isinstance(node, ast.NamedExpr):
@@ -708,6 +716,10 @@ def _reject_context_factories(
             children = (*expression.keys, *expression.values)
         elif isinstance(expression, ast.List | ast.Set | ast.Tuple):
             children = expression.elts
+        elif isinstance(expression, ast.IfExp):
+            children = (expression.body, expression.orelse)
+        elif isinstance(expression, ast.BoolOp):
+            children = expression.values
         else:
             return False
         return any(child is not None and contains_context_module(child) for child in children)
@@ -722,6 +734,10 @@ def _reject_context_factories(
             children = (*expression.keys, *expression.values)
         elif isinstance(expression, ast.List | ast.Set | ast.Tuple):
             children = expression.elts
+        elif isinstance(expression, ast.IfExp):
+            children = (expression.body, expression.orelse)
+        elif isinstance(expression, ast.BoolOp):
+            children = expression.values
         else:
             return False
         return any(child is not None and contains_context_constructor(child) for child in children)

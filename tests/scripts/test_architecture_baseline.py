@@ -961,6 +961,8 @@ def test_context_var_inventory_rejects_shadowed_builtin_observer(
         'def factory():\n    import core.alias as alias\n    return alias.CV("state")',
         'def factory():\n    from core import alias\n    return alias.CV("state")',
         'def factory():\n    from . import alias\n    return alias.CV("state")',
+        "from contextvars import ContextVar\ndef factory():\n"
+        "    return ContextVar if enabled else object",
     ],
 )
 def test_context_var_inventory_rejects_function_local_constructor_import(
@@ -1091,6 +1093,8 @@ def test_notification_probe_preserves_process_fallback(tmp_path: Path) -> None:
         'state = (ContextVar if enabled else object)("state")',
         'state = [ContextVar][0]("state")',
         'Factory = (ContextVar,)[0]\nstate = Factory("state")',
+        'constructors = {name: ContextVar for name in ("ctx",)}\n'
+        'state = constructors["ctx"]("state")',
         'match ContextVar:\n    case Factory:\n        state = Factory("state")',
     ],
 )
