@@ -446,7 +446,7 @@ geode update --latest # uv 도구: minor/major 업데이트를 명시적으로 �
 | **`while(tool_use)` 루프** | 모든 자율 행동의 단일 원시 동작. 서브에이전트, 플랜, 배치 모두 같은 루프의 인스턴스 |
 | **실험적 scaffold 최적화 loop** | scaffold 후보를 변이시키고 적대적 안전성 루브릭으로 audit한 뒤, 실제 이득이 있을 때만 승격을 허용합니다. 공개 기록은 현재 지속적 개선보다 게이트 규율을 입증합니다. [closed loop](https://mangowhoiscloud.github.io/geode/docs/capabilities/autoresearch) 참고 |
 | **Agentic tools + MCP 카탈로그** | 웹 검색, 파일 작업, 스케줄링, 메모리, Slack/Discord, Anthropic 발행 MCP 레지스트리, 선택형 [Google Workspace](https://mangowhoiscloud.github.io/geode/docs/run/google-workspace) 통합. MCP 메타데이터는 `~/.geode/mcp/registry-cache.json`에 캐시 |
-| **3-프로바이더 페일오버** | Anthropic + OpenAI + ZhipuAI. ChatGPT OAuth는 in-process adapter가, Claude 구독은 공식 CLI가 소유; 사용량 과금 API 키도 사용 가능; 페일오버는 동일 프로바이더 내에서만 (예상치 못한 vendor 횡단 과금 없음, v0.53.0 거버넌스) |
+| **3-프로바이더 페일오버** | Anthropic + OpenAI + ZhipuAI. ChatGPT 구독 OAuth는 프로세스 내부 OpenAI 어댑터가 처리하고 Anthropic은 API 키만 지원합니다. 페일오버는 동일 프로바이더 내에서만 동작합니다(예상치 못한 vendor 횡단 과금 없음, v0.53.0 거버넌스). |
 | **5-tier 메모리** | SOUL (0) → User Profile (0.5) → Organization (1) → Project (2) → Session (3). 영속화, 데몬 재시작 후에도 유지 |
 | **진행 plan + 검증 재계획** | `/plan`이 관측에 따라 갱신 가능한 advisory checklist를 설치하고, `update_plan`이 진행 상태를 갱신. verify 실패 시 cognitive replan은 유지 |
 | **MCP 서버 (`geode-mcp`)** | GEODE 자체를 MCP 서버(stdio)로 노출: `run_agent`, `self_improving_status`, `self_improving_propose`/`apply`(2-step 확인 게이트), `query_memory`, `get_health`. repo의 `.mcp.json`으로 Claude Code에 자동 등록 |
@@ -581,8 +581,8 @@ graph LR
 |-------|------|--------------|
 | **Agent** | AgenticLoop, SubAgentManager, CLIPoller, Gateway wiring | `core/cli/`, `core/server/`, `core/messaging/`, `core/integrations/messaging/`, `core/wiring/` |
 | **Harness** | SessionLane, LaneQueue, PolicyChain, TaskGraph, HookSystem | `core/orchestration/`, `core/hooks/` |
-| **Runtime** | Agentic tools, native ToolRegistry, MCP Catalog (Anthropic registry + 프로젝트 설정 서버), 런타임 Skills, Memory (multi-tier), PlanStore | `core/tools/`, `core/memory/`, `core/orchestration/plan_store.py` |
-| **Model** | ClaudeAdapter, OpenAIAdapter, CodexAdapter, GLMAdapter | `core/llm/` |
+| **Runtime** | Agentic tools, native ToolRegistry, MCP Catalog (Anthropic registry + 프로젝트 설정 서버), 런타임 Skills, Memory (multi-tier), advisory Plan | `core/tools/`, `core/memory/`, `core/agent/plan.py` |
+| **Model** | 5개 어댑터 레지스트리: Anthropic PAYG, OpenAI PAYG/Codex OAuth, GLM PAYG/Coding Plan | `core/llm/adapters/` |
 
 `.geode/` — 에이전트 컨텍스트 라이프사이클 (모든 LLM 호출에 5-tier 계층 어셈블):
 

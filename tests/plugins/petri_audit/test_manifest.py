@@ -258,7 +258,7 @@ def test_adapter_spec_optional_fields() -> None:
     )
     assert spec.auth_env_vars == []
     assert spec.endpoint is None
-    assert spec.binary is None
+    assert "binary" not in AdapterSpec.model_fields
 
 
 # ── Role contract parsing ──────────────────────────────────────────────────

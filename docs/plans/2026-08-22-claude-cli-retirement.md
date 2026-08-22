@@ -1,7 +1,7 @@
 # Claude CLI retirement scope
 
-작성: 2026-08-22  
-기준: `origin/develop`  
+작성: 2026-08-22
+기준: `origin/develop`
 상태: complete
 
 ## 삭제 대상
@@ -34,3 +34,13 @@
 - legacy source는 네트워크·subprocess 호출 전에 fail loud 한다.
 - Anthropic 활성 경로는 API key뿐이며 OpenAI Codex subscription 경로는 회귀하지 않는다.
 - dedicated tests, full non-live suite, static gates, package/site 생성 검증이 통과한다.
+
+## 병합 후 독립 감사
+
+빈 컨텍스트의 세 에이전트가 runtime reachability, module dependency,
+anti-deception을 각각 검사했다. 실행 adapter·auth·subprocess·resume 경로는
+모두 0개였고 SIL mutation 및 cognitive verify/replan은 연결된 상태였다.
+감사에서 발견한 활성 문서·주석의 삭제 모듈명과 Petri의 미사용 `binary`
+필드는 후속 정돈했다. fresh-build 감사에서 확인한 누락도 함께 닫아
+`/grill`·`/geo`의 `.geode/skills`가 wheel/sdist에 포함되도록 했다. 과거 `.eval`·trajectory·fixture의 판독 문자열,
+legacy fail-loud migration 값, 외부 호스트의 일반 Claude Code 참고는 유지한다.

@@ -728,17 +728,9 @@ def is_computer_use_enabled() -> bool:
         return False
 
 
-# ── 2026-07-29 prune ───────────────────────────────────────────────────────
-# ``ClaudeAgenticAdapter`` (and its private ``_resolve_plan_meta``) were
-# deleted here: the class was registered nowhere and instantiated nowhere —
-# the production AgenticLoop reaches Anthropic exclusively through
-# ``core/llm/adapters/_anthropic_common.build_create_kwargs`` /
-# ``build_stream_kwargs``, which now own the prompt-cache split, message
-# breakpoints, and the ADR-012 M4.4 in-context slot wiring this class had
-# stranded. This module is a low-level utility layer (clients, retry,
-# quota, cache helpers, native-tool shaping) consumed by ``core/llm/adapters``.
-#
-# 2026-07-29 (같은 날 후속): the two deferred re-wires — context management
+# This module is a low-level utility layer (clients, retry, quota, cache
+# helpers, native-tool shaping) consumed by ``core/llm/adapters``.
+# Context management
 # (``_CONTEXT_MGMT_MODELS``) and native web_search/web_fetch injection
 # (``_ANTHROPIC_NATIVE_TOOLS``) — were live-verified on the Messages API
 # (context-mgmt 200 with merged beta tokens; web_search 200 with a real

@@ -183,6 +183,7 @@ packages = ["core", "geode_product", "plugins"]
 [tool.hatch.build.targets.wheel.force-include]
 "scripts/macos" = "scripts/macos"
 "GEODE.md" = "core/GEODE.md"
+".geode/skills" = ".geode/skills"
 
 [tool.hatch.build.targets.sdist]
 include = [
@@ -197,6 +198,7 @@ include = [
     "/geode_product",
     "/plugins",
     "/scripts/macos",
+    "/.geode/skills",
 ]
 
 [tool.pytest.ini_options]

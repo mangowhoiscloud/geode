@@ -36,7 +36,7 @@ export default function Page() {
                   <td>Anthropic</td>
                   <td><code>claude-opus-4-8</code> (보조 <code>claude-sonnet-4-6</code>, 저비용 <code>claude-haiku-4-5-20251001</code>)</td>
                   <td><code>claude-</code> 접두사</td>
-                  <td>공식 <code>claude</code> CLI 구독 또는 <code>ANTHROPIC_API_KEY</code></td>
+                  <td><code>ANTHROPIC_API_KEY</code></td>
                 </tr>
                 <tr>
                   <td>OpenAI / Codex</td>

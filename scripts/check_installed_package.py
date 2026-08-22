@@ -80,6 +80,10 @@ def _check_full_package() -> None:
     assert resources.files("plugins.petri_audit").joinpath("petri.plugin.toml").is_file()
     assert resources.files("geode_product.self_improving").joinpath("program.md").is_file()
     assert resources.files("core").joinpath("self_improving/state/results.tsv").is_file()
+    distribution = metadata.distribution("geode-agent")
+    for skill in ("geo", "grilling"):
+        skill_path = distribution.locate_file(f".geode/skills/{skill}/SKILL.md")
+        assert Path(str(skill_path)).is_file()
 
     print("installed package OK")
 

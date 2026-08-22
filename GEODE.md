@@ -62,9 +62,9 @@ Headless modes (DAEMON / SCHEDULER) have no user to approve, so `run_bash`, `com
 SELF-IMPROVING: train.py (mutation surface + loop) ← measure / fitness / gate / ledger
                 ← loop/{mutate, observe, inject}
 AGENT:    AgenticLoop (while tool_use), SubAgentManager, CLIPoller, Gateway
-HARNESS:  SessionLane, LaneQueue(global:50), PolicyChain, TaskGraph, HookSystem(56 events)
+HARNESS:  SessionLane, LaneQueue(global:50), PolicyChain, TaskGraph, HookSystem(57 events)
 RUNTIME:  ToolRegistry, MCP Registry, Skills, Memory(5-Tier), Reports
-MODEL:    ClaudeAdapter, OpenAIAdapter, GLMAdapter (3-provider routing)
+MODEL:    AdapterRegistry (5 built-ins: Anthropic PAYG, OpenAI PAYG/Codex OAuth, GLM PAYG/Coding Plan)
 ```
 
 **Thin-only runtime.** `geode` (thin CLI) talks to one `geode serve` daemon over a Unix socket; the daemon holds the single `GeodeRuntime` and auto-starts if absent. Sessions serialize per key (`SessionLane`, max 256) and run in parallel across keys; idle cleanup at 300s. Entry modes carry their own session policy: CLIPoller → IPC (hitl=2 — full HITL relayed to the thin CLI; no headless deny filter), Gateway → DAEMON (hitl=0, headless — `run_bash` and collaboration tools denied), Scheduler → SCHEDULER (hitl=0, 300s cap, same deny policy). Gateway pollers run in daemon threads that do not inherit ContextVars — each handler calls `boot.propagate_to_thread()` to re-inject readiness / memory / profile context.
@@ -108,7 +108,7 @@ Primary / secondary / node defaults come from `core/config/routing.toml` `[model
 - **Structured output**: Anthropic `messages.parse()` with typed Pydantic models; `call_llm_json()` with robust JSON extraction is the legacy fallback.
 - **Fixture vs real**: external data = fixture, LLM calls = real.
 - **Verbose gating**: debug prints only under the `--verbose` flag.
-- **Hook-driven**: `core.hooks` — 56 lifecycle events, cross-cutting and accessible from all layers.
+- **Hook-driven**: `core.hooks` — 57 lifecycle events, cross-cutting and accessible from all layers.
 
 ## Defaults
 

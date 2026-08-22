@@ -196,10 +196,9 @@ ZAI_API_KEY={id}.{secret}`}</pre>
         en={
           <>
             <p>
-              GEODE accepts subscription routes and PAYG API keys. The choice
-              is expressed by a single <code>CredentialSource</code>. Claude
-              subscription credentials remain inside the official CLI;
-              GEODE-managed plans and profiles persist in
+              GEODE accepts ChatGPT subscription OAuth and provider PAYG API keys.
+              The choice is expressed by a single <code>CredentialSource</code>.
+              GEODE-managed OpenAI plans and profiles persist in
               <code>~/.geode/auth.toml</code>, and API keys in <code>~/.geode/.env</code>.
             </p>
 

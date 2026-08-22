@@ -150,12 +150,8 @@ def anthropic_computer_tool_param(
 def _maybe_inject_computer_use(kwargs: dict[str, Any], req: AdapterCallRequest) -> None:
     """Inject the computer-use tool + beta header on the LIVE adapter path.
 
-    Computer-use was wired only into the now-deleted legacy
-    ``ClaudeAgenticAdapter.agentic_call`` (PR-MAINPATH-67, 2026-05-24 removed
-    that branch), so it never reached production through ``build_*_kwargs`` —
-    the model was never even offered the tool. This restores it on the live
-    path. The tool is type-carrying so it is exempt from tool-search defer; it
-    is appended here (not inside ``_shape_tools``) so it also injects when the
+    The tool is type-carrying so it is exempt from tool-search defer. It is
+    appended here (not inside ``_shape_tools``) so it also injects when the
     request carries no registry tools.
     """
     from core.llm.providers.anthropic import is_computer_use_enabled
@@ -214,9 +210,8 @@ def _merge_beta(kwargs: dict[str, Any], *betas: str) -> None:
 def _maybe_inject_context_management(kwargs: dict[str, Any]) -> None:
     """Server-side context editing for supporting models.
 
-    Ported from the deleted ClaudeAgenticAdapter (stranded, never live);
-    live-verified on the Anthropic Messages API 2026-07-29 (probe B1: merged beta
-    tokens, trigger from ``resolve_context_budget_policy``). Haiku 4.5
+    Live-verified on the Anthropic Messages API 2026-07-29 (probe B1: merged
+    beta tokens, trigger from ``resolve_context_budget_policy``). Haiku 4.5
     rejects the compact beta, hence the model gate.
     """
     from core.llm.providers.anthropic import _CONTEXT_MGMT_MODELS
@@ -244,10 +239,10 @@ def _maybe_inject_context_management(kwargs: dict[str, Any]) -> None:
 def _inject_native_web_tools(kwargs: dict[str, Any], req: AdapterCallRequest) -> None:
     """Append Anthropic-hosted web_search / web_fetch server tools.
 
-    Ported from the deleted ClaudeAgenticAdapter; live-verified on the
-    Anthropic Messages API 2026-07-29 (probe B2: 200 + ``server_tool_use`` block
-    actually invoked). ``translate_response`` skips server-tool block types,
-    so hosted rounds surface through the model's final text.
+    Live-verified on the Anthropic Messages API 2026-07-29 (probe B2: 200 +
+    ``server_tool_use`` block actually invoked). ``translate_response`` skips
+    server-tool block types, so hosted rounds surface through the model's final
+    text.
 
     Three gates, all required (Codex review 2026-07-29):
 
@@ -287,9 +282,6 @@ def _inject_native_web_tools(kwargs: dict[str, Any], req: AdapterCallRequest) ->
 def _cache_shaped_system(system: str) -> str | list[dict[str, Any]]:
     """STATIC/DYNAMIC prompt-cache split for the LIVE adapter path.
 
-    Ported 2026-07-29 from the never-registered ``ClaudeAgenticAdapter``
-    (the entire cache apparatus was unreachable in production — same
-    docstring-vs-live-path class as the tool-search defer fix above).
     Static prefix (before ``<dynamic_context>``) gets the 1h-TTL
     ``cache_control``; the dynamic tail stays unmarked. Unlike the dead
     original, the boundary tag itself is KEPT in the dynamic block so the
@@ -347,7 +339,7 @@ def _system_and_messages(req: AdapterCallRequest) -> tuple[Any, list[dict[str, A
 
 
 def build_create_kwargs(req: AdapterCallRequest) -> dict[str, Any]:
-    """Shared ``messages.create`` kwargs for both PAYG + OAuth Anthropic adapters."""
+    """Build ``messages.create`` kwargs for the Anthropic PAYG adapter."""
     system, messages = _system_and_messages(req)
     kwargs: dict[str, Any] = {
         "model": req.model,
@@ -362,17 +354,13 @@ def build_create_kwargs(req: AdapterCallRequest) -> dict[str, Any]:
         # sampling params are rejected — omit temperature. Explicit
         # ``display: "summarized"`` because Opus 4.7 defaults to "omitted"
         # (empty thinking blocks → no reasoning trace in the activity feed).
-        # Ported 2026-07-29 from the deleted ClaudeAgenticAdapter, where the
-        # branch had been stranded (production never sent it); rationale +
-        # Hermes parity refs preserved from the original.
         kwargs["thinking"] = {"type": "adaptive", "display": "summarized"}
         effort = req.effort if req.effort != "xhigh" or _supports_xhigh_effort(req.model) else "max"
         kwargs["output_config"] = {"effort": effort}
     elif req.thinking_budget > 0:
         # Anthropic contract: ``budget_tokens < max_tokens`` and extended
         # thinking requires temperature=1 — extend max_tokens to preserve
-        # the visible-output budget (ported from the deleted adapter; the
-        # first port dropped this and produced an API-invalid payload).
+        # the visible-output budget.
         kwargs["thinking"] = {"type": "enabled", "budget_tokens": req.thinking_budget}
         kwargs["max_tokens"] = req.max_tokens + req.thinking_budget
         kwargs["temperature"] = 1.0
@@ -394,11 +382,6 @@ def build_create_kwargs(req: AdapterCallRequest) -> dict[str, Any]:
 def _shape_tools(req: AdapterCallRequest, tc: dict[str, Any] | None) -> list[dict[str, Any]]:
     """Translate + apply hosted tool-search defer on the LIVE adapter path.
 
-    PR-TOOL-SEARCH-WIRE Codex review finding 1 (2026-06-13): the defer
-    shaping was first wired into the legacy ``ClaudeAgenticAdapter``
-    request builder, but the production AgenticLoop reaches Anthropic
-    through ``build_create_kwargs`` / ``build_stream_kwargs`` here — the
-    exact docstring-vs-live-path class of bug this PR set out to fix.
     Shaping is skipped under a forced single-tool ``tool_choice`` (the
     official docs do not state that a forced DEFERRED tool resolves, so
     we do not gamble a 400 on it).

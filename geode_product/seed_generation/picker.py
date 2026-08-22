@@ -197,7 +197,7 @@ def load_user_overrides(
        source = "payg"
 
        [seed_generation.role.pilot]
-       source = "subscription"
+       source = "api_key"
        model  = "claude-opus-4-7"
 
     The legacy ``~/.geode/seed_generation.toml`` schema (per-role top-level

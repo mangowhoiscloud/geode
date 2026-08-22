@@ -30,7 +30,7 @@ export default function Page() {
                 <tr><th>계층</th><th>위치</th><th>성격</th></tr>
               </thead>
               <tbody>
-                <tr><td>builtin</td><td><code>core/skills/</code> (저장소와 함께 배포)</td><td>코드와 같이 버전 관리</td></tr>
+                <tr><td>builtin</td><td><code>&lt;package&gt;/.geode/skills/</code> (wheel과 함께 배포)</td><td>코드와 같이 버전 관리</td></tr>
                 <tr><td>project</td><td><code>.geode/skills/</code></td><td>팀 공유, git에 커밋</td></tr>
                 <tr><td>personal</td><td><code>~/.geode/skills/</code></td><td>개인 로컬 전용</td></tr>
               </tbody>
@@ -147,7 +147,7 @@ argument-hint: "[issue-number]"
                 <tr><th>Tier</th><th>Location</th><th>Nature</th></tr>
               </thead>
               <tbody>
-                <tr><td>builtin</td><td><code>core/skills/</code> (ships with the repo)</td><td>Versioned with the code</td></tr>
+                <tr><td>builtin</td><td><code>&lt;package&gt;/.geode/skills/</code> (ships in the wheel)</td><td>Versioned with the code</td></tr>
                 <tr><td>project</td><td><code>.geode/skills/</code></td><td>Team-shared, committed to git</td></tr>
                 <tr><td>personal</td><td><code>~/.geode/skills/</code></td><td>Local-only</td></tr>
               </tbody>
