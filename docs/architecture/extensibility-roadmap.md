@@ -226,6 +226,7 @@ normal review and CI; implementations start only after the claim merges.
 | Closure package | GAP IDs | Owner/session | Implementation branch | Claim evidence | Claimed at (UTC) |
 |---|---|---|---|---|---|
 | R8.3 | REL-004 | `session=codex-root task=r8-3-publication-grace-evidence` | `feature/r8-3-publication-grace-evidence` | Readiness [#3039](https://github.com/mangowhoiscloud/geode/pull/3039); v1.0.23 GitHub/PyPI parity and candidate interval re-audited | `2026-08-20T07:41:19Z` |
+| R4.1 | DI-001 | `session=codex-root task=r4-1-ambient-state-inventory` | `feature/r4-1-ambient-state-inventory` | Reconciliation/readiness [#3069](https://github.com/mangowhoiscloud/geode/pull/3069); generated ContextVar inventory and lifetime/teardown acceptance re-audited | `2026-08-22T04:09:22Z` |
 
 ## 1. Program objective
 
@@ -529,7 +530,7 @@ and closure evidence are appended in §10.
 | LOOP-003 | `MISFIT` | `AgenticLoop` owns orchestration plus many independently changing policies | Visible loop delegates to bounded input/model/tool/observe/termination phases | R3.2 | LOOP-001, LOOP-002 | `IN_DEVELOP` |
 | LOOP-004 | `ABSENT` | Loop has 2,714 LOC, 67 methods, and 27 constructor args with no local ratchet | Closure budgets in §7.3 are executable and cannot regress | R3.3 | LOOP-003 | `IN_DEVELOP` |
 | LOOP-005 | `MISFIT` | `SubAgentManager` combines request codec, role resolution, execution, validation, and announcements | Separate collaborators own those responsibilities; manager remains an orchestrator | R3.4 | LOOP-002 | `IN_DEVELOP` |
-| DI-001 | `PARTIAL` | 26 module-level `ContextVar` declarations have no lifecycle classification | Generated inventory classifies request identity, diagnostics, mutable request state, request-local cache, and forbidden service lookup | R4.1 | LOOP-002 | `READY` |
+| DI-001 | `PARTIAL` | 26 module-level `ContextVar` declarations have no lifecycle classification | Generated inventory classifies request identity, diagnostics, mutable request state, request-local cache, and forbidden service lookup | R4.1 | LOOP-002 | `IN_PROGRESS` |
 | DI-002 | `PARTIAL` | `GeodeRuntime` groups config, but `RuntimeCoreConfig` still has 17 fields | Cohesive lifecycle groups contain at most seven fields and have explicit owners/teardown | R4.2 | DI-001 | `OPEN` |
 | DI-003 | `MISFIT` | Downstream modules obtain injectable services through globals and CLI modules | Constructor/factory injection owns services; allowed ambient context is documented and tested | R4.2 | DI-001, DI-002 | `OPEN` |
 | DI-004 | `MISFIT` | `MCPServerManager` combines config, discovery, connection, call, trace/persistence, and lifecycle | Separate config catalog, connection pool, invoker, and persistence collaborators preserve public behavior | R4.3 | DI-002 | `OPEN` |
@@ -2159,9 +2160,15 @@ constructor arguments; the existing `IsolatedRunner`, role registry, and
 candidate-sampling judge remain the single worker-launch, policy, and best-of
 implementations.
 
-R4.1 (`DI-001`) remains the sole unclaimed `READY` package later in master
-order and requires its own claim transaction. Its generated baseline now
-records 29 module-level `ContextVar` declarations.
+R4.1 (`DI-001`) is `IN_PROGRESS` under the active claim for
+`feature/r4-1-ambient-state-inventory` after reconciliation/readiness
+[#3069](https://github.com/mangowhoiscloud/geode/pull/3069) merged as
+`250ea5ae776e58820ced466579524a3af0bf5fa6`. The implementation worktree may
+be allocated only after this claim merges from the updated canonical
+`develop`. The claimed scope classifies the generated inventory of 29
+module-level `ContextVar` declarations by ownership, lifetime, propagation,
+reset, and teardown; it does not authorize R4.2 service-group or injection
+changes.
 
 R9.1 (`CODE-001`) was already dependency-satisfied and remains `OPEN` pending
 its own serialized whole-package readiness transaction later in master order.
