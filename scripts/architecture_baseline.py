@@ -984,6 +984,12 @@ def _reject_forwarded_context_modules(
             children = argument.elts
         elif isinstance(argument, ast.BinOp):
             children = (argument.left, argument.right)
+        elif isinstance(argument, ast.IfExp):
+            children = (argument.body, argument.orelse)
+        elif isinstance(argument, ast.BoolOp):
+            children = argument.values
+        elif isinstance(argument, ast.Subscript):
+            children = (argument.value, argument.slice)
         else:
             return False
         return any(child is not None and contains_module(child) for child in children)
@@ -1002,6 +1008,38 @@ def _reject_forwarded_context_modules(
             )
 
 
+def _reject_literal_context_imports(path: Path, module: ast.Module) -> None:
+    importlib_aliases = {
+        alias.asname or alias.name
+        for node in module.body
+        if isinstance(node, ast.Import)
+        for alias in node.names
+        if alias.name == "importlib"
+    }
+    import_module_names = {
+        alias.asname or alias.name
+        for node in module.body
+        if isinstance(node, ast.ImportFrom) and node.module == "importlib"
+        for alias in node.names
+        if alias.name == "import_module"
+    }
+    lazy_imports = {
+        "__import__",
+        *import_module_names,
+        *(f"{name}.import_module" for name in importlib_aliases),
+    }
+    for call in (node for node in ast.walk(module) if isinstance(node, ast.Call)):
+        if (
+            _dotted_name(call.func) in lazy_imports
+            and call.args
+            and isinstance(call.args[0], ast.Constant)
+            and call.args[0].value in {*CONTEXT_VAR_MODULES, "core.ui.context_local"}
+        ):
+            raise ValueError(
+                f"{path}:{call.lineno}: ContextVar constructors must use static imports"
+            )
+
+
 def _reject_context_keyword_unpacking(path: Path, calls: Iterable[ast.Call]) -> None:
     for call in calls:
         if any(keyword.arg is None for keyword in call.keywords):
@@ -1017,6 +1055,8 @@ def _context_vars(root: Path) -> dict[str, Any]:
         for package in ("core", *PRODUCT_MODULE_ROOTS)
         for path in _python_files(root, package)
     }
+    for path, (module, _package_parts) in parsed_modules.items():
+        _reject_literal_context_imports(path, module)
 
     module_names = {
         path: path.relative_to(root)

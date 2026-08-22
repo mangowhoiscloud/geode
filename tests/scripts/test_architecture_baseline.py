@@ -726,6 +726,11 @@ def test_context_var_inventory_rejects_separately_invoked_factory(
         'def make(constructor):\n    return constructor("state")\nstate = make(ContextVar)',
         'import contextvars\ndef make(module):\n    return module.ContextVar("state")\nstate = make(contextvars)',
         'import contextvars\ndef identity(value):\n    return value\nmods = identity([contextvars])\nstate = mods[0].ContextVar("state")',
+        "import contextvars\ndef identity(value):\n    return value\n"
+        "module = identity(contextvars if enabled else object)\n"
+        'state = module.ContextVar("state")',
+        "import contextvars\ndef identity(value):\n    return value\n"
+        'module = identity([contextvars][0])\nstate = module.ContextVar("state")',
         'state = ContextVar.__call__("state")',
     ],
 )
@@ -745,6 +750,30 @@ def test_context_var_inventory_rejects_forwarded_constructor(
     monkeypatch.setattr(baseline, "CONTEXT_VAR_LIFECYCLES", manifest)
 
     with pytest.raises(ValueError, match="must not be passed through factories"):
+        baseline._context_vars(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        'import importlib\nmodule = importlib.import_module("contextvars")',
+        'module = __import__("contextvars")',
+    ],
+)
+def test_context_var_inventory_rejects_literal_lazy_import(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, source: str
+) -> None:
+    core = tmp_path / "core"
+    core.mkdir()
+    (core / "sample.py").write_text(
+        f'{source}\nstate = module.ContextVar("state")\n',
+        encoding="utf-8",
+    )
+    manifest = tmp_path / "context-var-lifecycles.json"
+    manifest.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(baseline, "CONTEXT_VAR_LIFECYCLES", manifest)
+
+    with pytest.raises(ValueError, match="must use static imports"):
         baseline._context_vars(tmp_path)
 
 
