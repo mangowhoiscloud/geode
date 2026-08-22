@@ -52,6 +52,7 @@ CONTEXT_VAR_LIFECYCLE_FIELDS = (
 CONTEXT_LOCAL_DEFINING_MODULE_CONSTRUCTORS = {
     "core.ui.context_local": {"ContextLocal": "ContextLocal"}
 }
+CONTEXT_VAR_MODULES = frozenset({"contextvars", "_contextvars"})
 
 AGENTS_START = "<!-- generated:architecture-baseline:start -->"
 AGENTS_END = "<!-- generated:architecture-baseline:end -->"
@@ -342,7 +343,7 @@ def _context_constructor_exports(
                     continue
                 if isinstance(node, ast.Import):
                     for alias in node.names:
-                        if alias.name in {"contextvars", "core.ui.context_local"} or (
+                        if alias.name in {*CONTEXT_VAR_MODULES, "core.ui.context_local"} or (
                             alias.name in known_modules
                         ):
                             module_aliases[alias.asname or alias.name] = alias.name
@@ -350,7 +351,7 @@ def _context_constructor_exports(
                     source = _imported_module(node, package_parts)
                     for alias in node.names:
                         local_name = alias.asname or alias.name
-                        if source == "contextvars" and alias.name == "ContextVar":
+                        if source in CONTEXT_VAR_MODULES and alias.name == "ContextVar":
                             exported[local_name] = "ContextVar"
                         elif source == "core.ui.context_local" and alias.name == "ContextLocal":
                             exported[local_name] = "ContextLocal"
@@ -384,7 +385,7 @@ def _context_constructor_exports(
                             if dotted.startswith(prefix):
                                 imported_symbol = dotted.removeprefix(prefix)
                                 if (
-                                    imported_name == "contextvars"
+                                    imported_name in CONTEXT_VAR_MODULES
                                     and imported_symbol == "ContextVar"
                                 ):
                                     implementation = "ContextVar"
@@ -422,7 +423,7 @@ def _exported_context_constructor_paths(
     module_exports: dict[str, dict[str, str]],
     seen: frozenset[str] = frozenset(),
 ) -> dict[str, str]:
-    if module_path == "contextvars":
+    if module_path in CONTEXT_VAR_MODULES:
         return {"ContextVar": "ContextVar"}
     if module_path == "core.ui.context_local":
         return {"ContextLocal": "ContextLocal"}
@@ -688,6 +689,8 @@ def _reject_context_factories(
     constructor_reference: Callable[[ast.expr], str | None],
     module_reference: Callable[[ast.expr], bool],
     is_context_import: Callable[[ast.stmt], bool],
+    builtin_observer_calls: set[int],
+    cast_calls: set[int],
 ) -> None:
     postponed_annotations = any(
         isinstance(node, ast.ImportFrom)
@@ -801,6 +804,8 @@ def _reject_context_factories(
                 path,
                 (child for child in ast.walk(node) if isinstance(child, ast.Call)),
                 lambda expression: constructor_reference(expression) is not None,
+                builtin_observer_calls=builtin_observer_calls,
+                cast_calls=cast_calls,
             )
             _reject_forwarded_context_modules(
                 path,
@@ -837,6 +842,8 @@ def _reject_context_factories(
                 path,
                 (child for child in ast.walk(deferred) if isinstance(child, ast.Call)),
                 lambda expression: constructor_reference(expression) is not None,
+                builtin_observer_calls=builtin_observer_calls,
+                cast_calls=cast_calls,
             )
 
 
@@ -866,20 +873,70 @@ def _reject_deferred_context_generators(
                 )
 
 
+def _context_observation_calls(module: ast.Module) -> tuple[set[int], set[int]]:
+    """Resolve builtin type checks and typing.cast calls without trusting names."""
+
+    nodes = tuple(ast.walk(module))
+    shadowed = {
+        node.arg if isinstance(node, ast.arg) else node.id
+        for node in nodes
+        if isinstance(node, ast.arg)
+        or (isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store))
+    }
+    shadowed.update(
+        node.name
+        for node in nodes
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef)
+    )
+
+    cast_names = {
+        alias.asname or alias.name
+        for node in module.body
+        if isinstance(node, ast.ImportFrom) and node.module == "typing"
+        for alias in node.names
+        if alias.name == "cast" and (alias.asname or alias.name) not in shadowed
+    }
+    typing_names = {
+        alias.asname or alias.name
+        for node in module.body
+        if isinstance(node, ast.Import)
+        for alias in node.names
+        if alias.name == "typing" and (alias.asname or alias.name) not in shadowed
+    }
+    builtin_calls: set[int] = set()
+    cast_calls: set[int] = set()
+    for call in (node for node in ast.walk(module) if isinstance(node, ast.Call)):
+        if isinstance(call.func, ast.Name):
+            name = call.func.id
+            if name in {"isinstance", "issubclass"} and name not in shadowed:
+                builtin_calls.add(id(call))
+            elif name in cast_names:
+                cast_calls.add(id(call))
+        elif isinstance(call.func, ast.Attribute) and isinstance(call.func.value, ast.Name):
+            name = call.func.value.id
+            if call.func.attr == "cast" and name in typing_names:
+                cast_calls.add(id(call))
+    return builtin_calls, cast_calls
+
+
 def _reject_forwarded_context_constructors(
     path: Path,
     calls: Iterable[ast.Call],
     context_reference: Callable[[ast.expr], bool],
+    *,
+    builtin_observer_calls: set[int],
+    cast_calls: set[int],
 ) -> None:
     for call in calls:
-        if _dotted_name(call.func) in {"isinstance", "issubclass"}:
+        if id(call) in builtin_observer_calls:
             continue
         receiver_hides_constructor = not context_reference(call.func) and any(
             context_reference(expression)
             for expression in ast.walk(call.func)
             if isinstance(expression, ast.expr) and expression is not call.func
         )
-        arguments = (*call.args, *(keyword.value for keyword in call.keywords))
+        positional = call.args[1:] if id(call) in cast_calls else call.args
+        arguments = (*positional, *(keyword.value for keyword in call.keywords))
         if receiver_hides_constructor or any(
             context_reference(expression)
             for argument in arguments
@@ -954,6 +1011,7 @@ def _context_vars(root: Path) -> dict[str, Any]:
     for path, (module, package_parts) in parsed_modules.items():
         module_nodes = tuple(_module_scope_nodes(module))
         module_name = module_names[path]
+        builtin_observer_calls, cast_calls = _context_observation_calls(module)
 
         def is_context_import(
             node: ast.stmt,
@@ -961,7 +1019,7 @@ def _context_vars(root: Path) -> dict[str, Any]:
         ) -> bool:
             if isinstance(node, ast.Import):
                 return any(
-                    alias.name in {"contextvars", "core.ui.context_local"}
+                    alias.name in {*CONTEXT_VAR_MODULES, "core.ui.context_local"}
                     or bool(constructor_exports.get(alias.name))
                     or bool(constructor_module_exports.get(alias.name))
                     for alias in node.names
@@ -971,7 +1029,7 @@ def _context_vars(root: Path) -> dict[str, Any]:
             source = _imported_module(node, package)
             return (
                 (
-                    source == "contextvars"
+                    source in CONTEXT_VAR_MODULES
                     and any(alias.name == "ContextVar" for alias in node.names)
                 )
                 or (
@@ -1003,7 +1061,7 @@ def _context_vars(root: Path) -> dict[str, Any]:
             alias.asname or alias.name: "ContextVar"
             for node, owner in module_nodes
             if not owner
-            if isinstance(node, ast.ImportFrom) and node.module == "contextvars"
+            if isinstance(node, ast.ImportFrom) and node.module in CONTEXT_VAR_MODULES
             for alias in node.names
             if alias.name == "ContextVar"
         }
@@ -1026,7 +1084,8 @@ def _context_vars(root: Path) -> dict[str, Any]:
             if not owner
             if isinstance(node, ast.Import)
             for alias in node.names
-            if alias.name in {"contextvars", "core.ui.context_local"} or alias.name in known_modules
+            if alias.name in {*CONTEXT_VAR_MODULES, "core.ui.context_local"}
+            or alias.name in known_modules
         }
         module_aliases.update(
             {
@@ -1169,11 +1228,15 @@ def _context_vars(root: Path) -> dict[str, Any]:
             constructor_reference,
             module_reference,
             is_context_import,
+            builtin_observer_calls,
+            cast_calls,
         )
         _reject_forwarded_context_constructors(
             path,
             _module_scope_calls(module),
             lambda expression: constructor_reference(expression) is not None,
+            builtin_observer_calls=builtin_observer_calls,
+            cast_calls=cast_calls,
         )
         _reject_forwarded_context_modules(
             path,

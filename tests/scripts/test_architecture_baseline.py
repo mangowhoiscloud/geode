@@ -789,6 +789,29 @@ def test_context_var_inventory_rejects_constructor_method_alias(
 @pytest.mark.parametrize(
     "source",
     [
+        'from _contextvars import ContextVar\nstate = ContextVar("state")\n',
+        'import _contextvars\nstate = _contextvars.ContextVar("state")\n',
+    ],
+)
+def test_context_var_inventory_includes_private_stdlib_constructor(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    source: str,
+) -> None:
+    core = tmp_path / "core"
+    core.mkdir()
+    (core / "sample.py").write_text(source, encoding="utf-8")
+    manifest = tmp_path / "context-var-lifecycles.json"
+    manifest.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(baseline, "CONTEXT_VAR_LIFECYCLES", manifest)
+
+    with pytest.raises(ValueError, match="ContextVar lifecycle drift"):
+        baseline._context_vars(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
         'factories = {} | {"ctx": ContextVar}\nstate = factories["ctx"]("state")',
         'factories = {}\nfactories |= {"ctx": ContextVar}\nstate = factories["ctx"]("state")',
         'constructors = [*[ContextVar]]\nstate = constructors[0]("state")',
@@ -878,6 +901,10 @@ def test_context_var_inventory_ignores_function_local_type_annotation(
     [
         "def probe(value: ContextVar[str]) -> ContextVar[str]:\n    return value",
         "def probe(value: object) -> bool:\n    return isinstance(value, ContextVar)",
+        "from typing import cast\ndef probe(value: object) -> ContextVar[str]:\n"
+        "    return cast(ContextVar[str], value)",
+        "import typing\ndef probe(value: object) -> ContextVar[str]:\n"
+        "    return typing.cast(ContextVar[str], value)",
     ],
 )
 def test_context_var_inventory_allows_non_constructing_type_references(
@@ -896,6 +923,28 @@ def test_context_var_inventory_allows_non_constructing_type_references(
     monkeypatch.setattr(baseline, "CONTEXT_VAR_LIFECYCLES", manifest)
 
     assert baseline._context_vars(tmp_path)["count"] == 0
+
+
+def test_context_var_inventory_rejects_shadowed_builtin_observer(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    core = tmp_path / "core"
+    core.mkdir()
+    (core / "sample.py").write_text(
+        "from contextvars import ContextVar\n"
+        "from typing import Any\n"
+        "def isinstance(factory: Any) -> object:\n"
+        '    return factory("hidden")\n'
+        "state = isinstance(ContextVar)\n",
+        encoding="utf-8",
+    )
+    manifest = tmp_path / "context-var-lifecycles.json"
+    manifest.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(baseline, "CONTEXT_VAR_LIFECYCLES", manifest)
+
+    with pytest.raises(ValueError, match="must not be passed through factories"):
+        baseline._context_vars(tmp_path)
 
 
 @pytest.mark.parametrize(
