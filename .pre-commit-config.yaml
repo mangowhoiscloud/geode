@@ -22,6 +22,9 @@ repos:
     hooks:
       - id: codespell
         additional_dependencies: [tomli]
+        # Generated Hub pages embed verbatim historical receipts. Lint their
+        # templates and source records; never rewrite the rendered evidence.
+        exclude: ^docs/self-improving/.*\.html$
 
   # Standard pre-commit hooks
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -29,6 +32,9 @@ repos:
     hooks:
       - id: trailing-whitespace
         args: [--markdown-linebreak-ext=md]
+        # Generated Hub pages embed verbatim historical receipts. Lint their
+        # templates and source records; never rewrite the rendered evidence.
+        exclude: ^docs/self-improving/.*\.html$
       - id: end-of-file-fixer
       - id: check-yaml
       - id: check-json
