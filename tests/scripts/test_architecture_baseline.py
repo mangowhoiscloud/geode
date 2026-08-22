@@ -768,6 +768,24 @@ def test_context_var_inventory_rejects_constructor_stored_in_container(
         baseline._context_vars(tmp_path)
 
 
+def test_context_var_inventory_rejects_constructor_method_alias(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    core = tmp_path / "core"
+    core.mkdir()
+    (core / "sample.py").write_text(
+        'from contextvars import ContextVar\nfactory = ContextVar.__call__\nstate = factory("state")\n',
+        encoding="utf-8",
+    )
+    manifest = tmp_path / "context-var-lifecycles.json"
+    manifest.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(baseline, "CONTEXT_VAR_LIFECYCLES", manifest)
+
+    with pytest.raises(ValueError, match="constructor methods must not be aliased"):
+        baseline._context_vars(tmp_path)
+
+
 @pytest.mark.parametrize(
     "source",
     [
@@ -846,6 +864,31 @@ def test_context_var_inventory_ignores_function_local_type_annotation(
     core.mkdir()
     (core / "sample.py").write_text(
         "from contextvars import ContextVar\ndef probe():\n    value: ContextVar[str]\n",
+        encoding="utf-8",
+    )
+    manifest = tmp_path / "context-var-lifecycles.json"
+    manifest.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(baseline, "CONTEXT_VAR_LIFECYCLES", manifest)
+
+    assert baseline._context_vars(tmp_path)["count"] == 0
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "def probe(value: ContextVar[str]) -> ContextVar[str]:\n    return value",
+        "def probe(value: object) -> bool:\n    return isinstance(value, ContextVar)",
+    ],
+)
+def test_context_var_inventory_allows_non_constructing_type_references(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    body: str,
+) -> None:
+    core = tmp_path / "core"
+    core.mkdir()
+    (core / "sample.py").write_text(
+        f"from contextvars import ContextVar\n{body}\n",
         encoding="utf-8",
     )
     manifest = tmp_path / "context-var-lifecycles.json"

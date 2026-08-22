@@ -519,6 +519,14 @@ def _context_alias_assignment(
         return None
     if value is None:
         return None
+    if (
+        isinstance(value, ast.Attribute)
+        and value.attr in {"__call__", "__new__"}
+        and constructor_reference(value.value) is not None
+    ):
+        raise ValueError(
+            f"{path}:{node.lineno}: ContextVar constructor methods must not be aliased"
+        )
     if isinstance(target, ast.Name):
         if (
             isinstance(value, ast.Subscript)
@@ -701,6 +709,20 @@ def _reject_context_factories(
             return False
         return any(child is not None and contains_context_module(child) for child in children)
 
+    def contains_context_constructor(expression: ast.expr) -> bool:
+        if constructor_reference(expression) is not None:
+            return True
+        children: Iterable[ast.expr | None]
+        if isinstance(expression, ast.Starred):
+            children = (expression.value,)
+        elif isinstance(expression, ast.Dict):
+            children = (*expression.keys, *expression.values)
+        elif isinstance(expression, ast.List | ast.Set | ast.Tuple):
+            children = expression.elts
+        else:
+            return False
+        return any(child is not None and contains_context_constructor(child) for child in children)
+
     for node, owner in module_nodes:
         if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
             if path.parts[-3:] == ("core", "ui", "context_local.py") and (
@@ -739,20 +761,25 @@ def _reject_context_factories(
                 )
             hides_constructor = (
                 any(
-                    constructor_reference(expression) is not None
+                    isinstance(expression, ast.Call)
+                    and constructor_reference(expression.func) is not None
                     for expression in _runtime_expressions(
                         node,
                         include_annotations=not postponed_annotations,
                     )
                 )
                 or any(
-                    module_reference(child.value)
+                    module_reference(child.value) or contains_context_constructor(child.value)
                     for child in ast.walk(node)
                     if isinstance(child, ast.Assign | ast.AnnAssign)
                     if child.value is not None
                 )
                 or any(
-                    child.value is not None and contains_context_module(child.value)
+                    child.value is not None
+                    and (
+                        contains_context_module(child.value)
+                        or contains_context_constructor(child.value)
+                    )
                     for child in ast.walk(node)
                     if isinstance(child, ast.Return | ast.Yield | ast.YieldFrom)
                 )
@@ -765,11 +792,16 @@ def _reject_context_factories(
                 *node.args.kw_defaults,
             )
             if any(
-                module_reference(expression)
+                module_reference(expression) or constructor_reference(expression) is not None
                 for expression in definition_inputs
                 if expression is not None
             ):
                 raise ValueError(f"{path}:{node.lineno}: ContextVar factories must assign directly")
+            _reject_forwarded_context_constructors(
+                path,
+                (child for child in ast.walk(node) if isinstance(child, ast.Call)),
+                lambda expression: constructor_reference(expression) is not None,
+            )
             _reject_forwarded_context_modules(
                 path,
                 (
@@ -782,20 +814,30 @@ def _reject_context_factories(
             )
         for deferred in (child for child in ast.walk(node) if isinstance(child, ast.Lambda)):
             if any(
-                constructor_reference(expression) is not None
+                isinstance(expression, ast.Call)
+                and constructor_reference(expression.func) is not None
                 for expression in _runtime_expressions(deferred)
             ):
                 raise ValueError(
                     f"{path}:{deferred.lineno}: ContextVar factories must assign directly"
                 )
-            if any(
-                module_reference(expression)
-                for expression in (*deferred.args.defaults, *deferred.args.kw_defaults)
-                if expression is not None
+            if (
+                any(
+                    module_reference(expression) or constructor_reference(expression) is not None
+                    for expression in (*deferred.args.defaults, *deferred.args.kw_defaults)
+                    if expression is not None
+                )
+                or contains_context_module(deferred.body)
+                or contains_context_constructor(deferred.body)
             ):
                 raise ValueError(
                     f"{path}:{deferred.lineno}: ContextVar factories must assign directly"
                 )
+            _reject_forwarded_context_constructors(
+                path,
+                (child for child in ast.walk(deferred) if isinstance(child, ast.Call)),
+                lambda expression: constructor_reference(expression) is not None,
+            )
 
 
 def _reject_deferred_context_generators(
@@ -830,6 +872,8 @@ def _reject_forwarded_context_constructors(
     context_reference: Callable[[ast.expr], bool],
 ) -> None:
     for call in calls:
+        if _dotted_name(call.func) in {"isinstance", "issubclass"}:
+            continue
         receiver_hides_constructor = not context_reference(call.func) and any(
             context_reference(expression)
             for expression in ast.walk(call.func)
