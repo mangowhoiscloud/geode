@@ -959,6 +959,8 @@ def test_context_var_inventory_rejects_shadowed_builtin_observer(
         'import contextvars\ndef factory():\n    cv = contextvars\n    return cv.ContextVar("state")',
         "import contextvars\ndef factory():\n    modules = [contextvars]\n"
         '    return modules[0].ContextVar("state")',
+        "from contextvars import ContextVar\ndef factory():\n    factories = []\n"
+        '    factories += [ContextVar]\n    return factories[0]("state")',
         'import contextvars\ndef factory():\n    return contextvars\nstate = factory().ContextVar("state")',
         'def factory():\n    import core.alias as alias\n    return alias.CV("state")',
         'def factory():\n    from core import alias\n    return alias.CV("state")',
@@ -1365,6 +1367,7 @@ def test_context_var_inventory_rejects_constructor_in_factory_default_container(
     [
         "pending = (ContextVar(str(i)) for i in range(2))\nstates = tuple(pending)\n",
         "for state in (ContextVar(str(i)) for i in range(2)):\n    pass\n",
+        'factories = (ContextVar for _ in (0,))\nstate = next(factories)("state")\n',
     ],
 )
 def test_context_var_inventory_rejects_deferred_generator(
@@ -1408,6 +1411,25 @@ def test_context_var_inventory_rejects_eager_generator_consumers(
     monkeypatch.setattr(baseline, "CONTEXT_VAR_LIFECYCLES", manifest)
 
     with pytest.raises(ValueError, match="ContextVar"):
+        baseline._context_vars(tmp_path)
+
+
+def test_context_var_inventory_rejects_constructor_module_dunder_lookup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    core = tmp_path / "core"
+    core.mkdir()
+    (core / "sample.py").write_text(
+        "import contextvars\n"
+        'factory = contextvars.__getattribute__("ContextVar")\n'
+        'state = factory("state")\n',
+        encoding="utf-8",
+    )
+    manifest = tmp_path / "context-var-lifecycles.json"
+    manifest.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(baseline, "CONTEXT_VAR_LIFECYCLES", manifest)
+
+    with pytest.raises(ValueError, match="constructor modules must not be passed"):
         baseline._context_vars(tmp_path)
 
 

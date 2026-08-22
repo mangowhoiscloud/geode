@@ -791,7 +791,7 @@ def _reject_context_factories(
                     contains_context_module(child.value)
                     or contains_context_constructor(child.value)
                     for child in ast.walk(node)
-                    if isinstance(child, ast.Assign | ast.AnnAssign)
+                    if isinstance(child, ast.Assign | ast.AnnAssign | ast.AugAssign)
                     if child.value is not None
                 )
                 or any(
@@ -867,7 +867,8 @@ def _reject_context_factories(
 def _reject_deferred_context_generators(
     path: Path,
     module_nodes: Sequence[tuple[ast.stmt, str]],
-    constructor_type: Callable[[ast.Call], str | None],
+    constructor_reference: Callable[[ast.expr], str | None],
+    module_reference: Callable[[ast.expr], bool],
 ) -> None:
     def evaluated_generators(node: ast.AST) -> Iterator[ast.GeneratorExp]:
         if isinstance(node, ast.Lambda | ast.FunctionDef | ast.AsyncFunctionDef):
@@ -881,9 +882,9 @@ def _reject_deferred_context_generators(
     for node, _owner in module_nodes:
         for generator in evaluated_generators(node):
             if any(
-                constructor_type(call) is not None
-                for call in ast.walk(generator)
-                if isinstance(call, ast.Call)
+                constructor_reference(expression) is not None or module_reference(expression)
+                for expression in ast.walk(generator)
+                if isinstance(expression, ast.expr)
             ):
                 raise ValueError(
                     f"{path}:{generator.lineno}: ContextVar generators must not be deferred"
@@ -989,7 +990,12 @@ def _reject_forwarded_context_modules(
 
     for call in calls:
         arguments = (*call.args, *(keyword.value for keyword in call.keywords))
-        if any(contains_module(argument) for argument in arguments):
+        receiver_hides_module = (
+            isinstance(call.func, ast.Attribute)
+            and call.func.attr == "__getattribute__"
+            and contains_module(call.func.value)
+        )
+        if receiver_hides_module or any(contains_module(argument) for argument in arguments):
             raise ValueError(
                 f"{path}:{call.lineno}: ContextVar constructor modules must not be passed "
                 "through factories"
@@ -1260,7 +1266,12 @@ def _context_vars(root: Path) -> dict[str, Any]:
             _module_scope_calls(module),
             module_reference,
         )
-        _reject_deferred_context_generators(path, module_nodes, constructor_type)
+        _reject_deferred_context_generators(
+            path,
+            module_nodes,
+            constructor_reference,
+            module_reference,
+        )
 
         module_context_calls = {
             id(candidate): candidate
