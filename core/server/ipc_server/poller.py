@@ -989,7 +989,7 @@ class CLIPoller:
                 )
                 if changed:
                     _model_switching._inject_model_switch_breadcrumb(loop, old_model, target)
-                    loop._adapt_context_for_model(target)
+                    _model_switching.adapt_context_for_model(loop, target)
                     log.info("model command: live session loop synced to %s", target)
             except Exception:
                 log.warning("model command: live loop model sync failed", exc_info=True)

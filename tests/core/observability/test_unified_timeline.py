@@ -8,13 +8,13 @@ from pathlib import Path
 
 def test_agentic_loop_honours_caller_supplied_session_id() -> None:
     from core.agent.conversation import ConversationContext
-    from core.agent.loop import AgenticLoop
+    from core.agent.loop import AgenticLoop, AgenticLoopConfig
     from core.agent.tool_executor import ToolExecutor
 
     loop = AgenticLoop(
         ConversationContext(),
         ToolExecutor(),
-        session_id="gen-gen1-001-bd2e3854",
+        config=AgenticLoopConfig(session_id="gen-gen1-001-bd2e3854"),
         quiet=True,
     )
     assert loop._session_id == "gen-gen1-001-bd2e3854"

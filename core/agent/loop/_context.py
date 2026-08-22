@@ -60,9 +60,10 @@ async def aggressive_context_recovery(
     loop: AgenticLoop, system: str, messages: list[dict[str, Any]]
 ) -> int:
     """Last-resort context recovery. Delegates to ContextWindowManager."""
-    return await loop._ctx_mgr.aggressive_context_recovery(
+    recovered: int = await loop._ctx_mgr.aggressive_context_recovery(
         system, messages, loop.model, loop._provider
     )
+    return recovered
 
 
 def repair_messages(messages: list[dict[str, Any]]) -> None:

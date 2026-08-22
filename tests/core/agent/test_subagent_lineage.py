@@ -186,13 +186,10 @@ def test_agentic_loop_binds_parent_session_key_from_parent_key() -> None:
 
 
 def test_agentic_loop_init_accepts_parent_session_key() -> None:
-    """The constructor's parent_session_key kwarg already existed;
-    pin it so a future refactor doesn't drop the entry point the
-    sub-agent spawner relies on."""
-    from core.agent.loop.agent_loop import AgenticLoop
+    """The grouped loop policy retains the lineage entry point."""
+    from core.agent.loop import AgenticLoopConfig
 
-    sig = inspect.signature(AgenticLoop.__init__)
-    assert "parent_session_key" in sig.parameters
+    sig = inspect.signature(AgenticLoopConfig)
     assert sig.parameters["parent_session_key"].default == ""
 
 

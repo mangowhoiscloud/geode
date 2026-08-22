@@ -200,7 +200,7 @@ def _inject_model_switch_breadcrumb(loop: AgenticLoop, old_model: str, model: st
     # this, the new model reads "I am gpt-5.4-mini" assistant
     # messages and asserts the wrong identity (production
     # incident 2026-04-27 — gpt-5.5 answered "I am gpt-5.4-mini").
-    purged = loop._purge_stale_model_switch_acks()
+    purged = purge_stale_model_switch_acks(loop)
     loop.context.add_user_message(
         f"[system] Model switched: {old_model} -> {model}. "
         "Current model identity has changed. Do not reference the "
@@ -247,7 +247,7 @@ async def update_model_async(
             )
 
     # Proactively adapt context for the new model's context window
-    loop._adapt_context_for_model(model)
+    adapt_context_for_model(loop, model)
 
 
 def purge_stale_model_switch_acks(loop: AgenticLoop) -> int:

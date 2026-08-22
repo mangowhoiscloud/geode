@@ -43,7 +43,8 @@ Wiring history
   now resolves ``SubTask.agent="seed_generator"`` to the AgentDefinition,
   propagates ``system_prompt`` / ``tools`` / ``model`` to the worker via
   ``WorkerRequest`` new fields, and the worker applies them as
-  ``AgenticLoop(system_prompt_override=…)``. The whitelist filter
+  ``AgenticLoop(config=AgenticLoopConfig(system_prompt_override=…))``. The
+  whitelist filter
   (``filter_handlers``) removes non-allowed tools.
 """
 

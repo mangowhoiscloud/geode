@@ -87,6 +87,13 @@ functional change.
 
 ### Architecture
 
+- **The agent loop now has executable structural budgets.** Construction-time
+  scalar policy is grouped in `AgenticLoopConfig`, initialization and guard/provider
+  policy live in explicit sibling collaborators, and the production coordinator is
+  ratcheted to at most 1,600 lines, 40 methods, 12 constructor arguments, complexity
+  30, 35 branches, and 120 statements. The obsolete `AgenticLoop.__init__` Ruff
+  exception is removed without changing turn behavior.
+
 - **Agentic turns now run through six explicit phases.** The public
   `AgenticLoop.arun()` behavior is unchanged, while input preparation,
   model-call preparation, provider retry decisions, tool processing,

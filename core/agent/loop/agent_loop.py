@@ -13,50 +13,41 @@ Supports:
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import json
 import logging
-import os
-import time
-from collections.abc import Awaitable, Callable, Mapping, Set
-from dataclasses import replace
+from collections.abc import Mapping, Set
 from typing import TYPE_CHECKING, Any
 
 from core.agent.conversation import ConversationContext
-from core.agent.error_recovery import ErrorRecoveryStrategy
 from core.agent.tool_executor import (
     ToolCallProcessor,
     ToolExecutor,
 )
 from core.config.policy_source import EMPTY_POLICY_SOURCES, PolicySourceBundle
 from core.hooks import (
-    HookAction,
     HookCorrelation,
     HookEvent,
-    HookName,
     HookRegistry,
     HookSystem,
-    LlmCallRequest,
     MiddlewareRegistry,
 )
-from core.llm.adapters.base import EmptyModelOutputError
 from core.llm.agentic_response import AgenticResponse
 from core.llm.errors import BillingError, UserCancelledError
 from core.tools.personal_data import (
     requires_durable_redaction,
-    set_bound_tool_data_policies,
 )
-from core.ui.agentic_ui import OperationLogger
 from core.ui.status import TextSpinner
 
 from . import (
-    _collaboration_mailbox,
+    _bootstrap,
     _context,
     _goal,
+    _guards,
     _lifecycle,
     _model_switching,
     _phases,
+    _provider_call,
     _response,
 )
 from ._tool_factory import (
@@ -83,12 +74,8 @@ from .models import (
 # on/off knob exists (``cognitive_reflection_adaptive``).
 REFLECTION_STRETCH_CONFIDENCE = 0.8  # confidence >= → interval doubled
 REFLECTION_FORCE_CONFIDENCE = 0.4  # confidence < → reflect every round
-REPLAN_LOW_CONFIDENCE = 0.4  # confidence < → edge-triggered replan
 
 if TYPE_CHECKING:
-    from core.agent.capability_graph import CapabilityGraph
-    from core.agent.task_preflight import TaskPreflight
-    from core.llm.adapters.base import AdapterCallRequest
     from core.observability.run_event import RunEventSinkProvider
     from core.tools.plan import BoundToolPlan
     from core.tools.registry import ToolRegistry
@@ -96,270 +83,12 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-def _validate_bound_request_rewrite(
-    original: AdapterCallRequest,
-    effective: AdapterCallRequest,
-) -> None:
-    """Fail closed when middleware widens or relabels a bound tool request."""
-    if (
-        effective.tool_plan_hash != original.tool_plan_hash
-        or effective.tool_plan_generation != original.tool_plan_generation
-    ):
-        raise ValueError("LLM middleware cannot change bound tool plan identity")
-
-    if effective.tools != original.tools:
-        raise ValueError("LLM middleware cannot change bound tool specs")
-    if effective.deferred_tool_names != original.deferred_tool_names:
-        raise ValueError("LLM middleware cannot change bound deferred tools")
-    if effective.allowed_tool_names != original.allowed_tool_names:
-        raise ValueError("LLM middleware cannot change bound tool allowlist")
-    if effective.denied_tool_names != original.denied_tool_names:
-        raise ValueError("LLM middleware cannot change bound tool denylist")
-    if effective.executable_tool_names != original.executable_tool_names:
-        raise ValueError("LLM middleware cannot change bound executable tools")
-
-
-_FAIL_FAST_VALUES = frozenset({"1", "true", "yes", "on"})
-_FAIL_FAST_RETRY_DELAY_S = 1.0
-_FAIL_FAST_EMPTY_OUTPUT_MAX_ATTEMPTS = 3
-
-
-def _fail_fast_adapter_errors_enabled() -> bool:
-    return (
-        os.environ.get("GEODE_LLM_FAIL_FAST_ON_ADAPTER_ERROR", "").strip().lower()
-        in _FAIL_FAST_VALUES
-    )
-
-
-async def _acomplete_with_fail_fast_pre_execution_retry(
-    adapter: Any,
-    request: Any,
-    *,
-    on_retry: Callable[[Exception, int, int], Awaitable[None]] | None = None,
-    complete: Callable[[Any, Any], Awaitable[Any]] | None = None,
-) -> Any:
-    """Retry bounded pre-execution failures without reopening completed tool work.
-
-    Normal AgenticLoop calls already retry after ``_call_llm`` returns
-    ``None``. Strict evaluator routes instead raise adapter errors immediately
-    so infrastructure cannot become semantic output. Preserve that boundary
-    while giving a connection-class stream failure one same-adapter retry. An
-    empty completed response gets at most three total attempts because repeated
-    GPT-5.4 subscription empties have occurred at the previous two-attempt
-    boundary. Every attempt uses the identical request before tool execution.
-    """
-
-    async def invoke() -> Any:
-        if complete is not None:
-            return await complete(adapter, request)
-        return await adapter.acomplete(request)
-
-    try:
-        return await invoke()
-    except Exception as exc:
-        if not _fail_fast_adapter_errors_enabled():
-            raise
-        from core.llm.adapters.dispatch import _is_connection_transient
-
-        if isinstance(exc, EmptyModelOutputError):
-            empty_errors = [exc]
-            for attempt in range(2, _FAIL_FAST_EMPTY_OUTPUT_MAX_ATTEMPTS + 1):
-                log.warning(
-                    "AgenticLoop: fail-fast empty model output (%s); "
-                    "retrying the same adapter (attempt %d/%d)",
-                    type(empty_errors[-1]).__name__,
-                    attempt,
-                    _FAIL_FAST_EMPTY_OUTPUT_MAX_ATTEMPTS,
-                )
-                if on_retry is not None:
-                    await on_retry(
-                        empty_errors[-1],
-                        attempt,
-                        _FAIL_FAST_EMPTY_OUTPUT_MAX_ATTEMPTS,
-                    )
-                await asyncio.sleep(_FAIL_FAST_RETRY_DELAY_S * (attempt - 1))
-                try:
-                    result = await invoke()
-                except EmptyModelOutputError as retry_error:
-                    empty_errors.append(retry_error)
-                    if attempt == _FAIL_FAST_EMPTY_OUTPUT_MAX_ATTEMPTS:
-                        retry_error.include_actionable_attempts(empty_errors[:-1])
-                        raise
-                    continue
-                for empty_error in empty_errors:
-                    empty_error.mark_recovered()
-                return result
-            raise AssertionError("bounded empty-output retry loop did not terminate") from exc
-        if not _is_connection_transient(exc):
-            raise
-        log.warning(
-            "AgenticLoop: fail-fast transport error (%s); retrying the same adapter once",
-            type(exc).__name__,
-        )
-        if on_retry is not None:
-            await on_retry(exc, 2, 2)
-        await asyncio.sleep(_FAIL_FAST_RETRY_DELAY_S)
-        return await invoke()
-
-
-def _saved_cwd_matches_current(stored_cwd: str, current_cwd: str) -> bool:
-    """cwd-equality check for the claude-cli resume gate.
-
-    Contract: True when either side is empty (no per-task cwd → skip the
-    gate); otherwise ``Path.resolve()`` equality (normalises symlinks /
-    ``..`` / trailing slashes). Resolution failure → False (force fresh
-    session).
-    """
-    from pathlib import Path
-
-    if not stored_cwd or not current_cwd:
-        return True
-    try:
-        return Path(stored_cwd).resolve() == Path(current_cwd).resolve()
-    except (OSError, RuntimeError):
-        # resolution failure → mismatch (force fresh session)
-        return False
-
-
-def _load_prior_session_id(session_id: str) -> str:
-    """Return the claude-cli session_id from this sub-agent's prior turn.
-
-    Contract: claude-cli session storage is cwd-keyed, so the saved
-    ``cwd`` must equal ``get_task_isolated_cwd()`` or the id is unusable.
-    Returns ``""`` on cwd mismatch, missing session, or any I/O/parse
-    error (force a fresh session — never crash, never resume a stale id).
-    Reads SQLite runtime-state first, then the legacy session.json file.
-    """
-    from core.agent.task_isolation import get_task_isolated_cwd
-
-    current_cwd = get_task_isolated_cwd() or ""
-
-    # SQLite primary — per-agent row landed by record_agent_session_end.
-    try:
-        from core.observability.agent_runtime_state import get_agent_runtime_state
-
-        state = get_agent_runtime_state(session_id)
-        if state is not None and state.claude_cli_session_id:
-            stored_cwd = str(state.session_resume_params.get("cwd", ""))
-            if _saved_cwd_matches_current(stored_cwd, current_cwd):
-                return state.claude_cli_session_id
-            log.info(
-                "session %s saved for cwd=%r — skipping resume in cwd=%r",
-                state.claude_cli_session_id,
-                stored_cwd,
-                current_cwd,
-            )
-            return ""
-    except Exception:
-        log.debug(
-            "agent_runtime_state read failed for %s — falling back to session.json",
-            session_id,
-            exc_info=True,
-        )
-
-    # File fallback — when the SQLite runtime-state row is absent.
-    try:
-        from core.observability.run_dir import resolve_sub_agent_path
-
-        session_path = resolve_sub_agent_path(session_id, "session.json")
-    except Exception:
-        log.debug(
-            "resolve_sub_agent_path failed for %s — no resume id",
-            session_id,
-            exc_info=True,
-        )
-        return ""
-    if session_path is None or not session_path.exists():
-        return ""
-    try:
-        import json
-
-        payload = json.loads(session_path.read_text(encoding="utf-8"))
-        cached = payload.get("claude_cli_session_id", "")
-        if not cached:
-            return ""
-        # same paired-cwd gate; missing key → skip gate (back-compat)
-        stored_cwd_file = str(payload.get("cwd", ""))
-        if not _saved_cwd_matches_current(stored_cwd_file, current_cwd):
-            log.info(
-                "session %s (file) saved for cwd=%r — skipping resume in cwd=%r",
-                cached,
-                stored_cwd_file,
-                current_cwd,
-            )
-            return ""
-        return str(cached)
-    except Exception:
-        log.debug("session.json read failed for %s", session_id, exc_info=True)
-        return ""
-
-
-def _persist_session_id(session_id: str, emitted_session_id: str) -> None:
-    """Persist the claude-cli session_id this turn emitted for the next
-    turn's ``--resume <id>``.
-
-    Dual-write: SQLite ``agent_runtime_state.claude_cli_session_id``
-    (primary, covers the case where the id is emitted before the round's
-    SESSION_ENDED hook fires) + the legacy session.json file. The cwd is
-    paired into both writes (storage is cwd-keyed). Empty
-    ``emitted_session_id`` is a no-op (non-claude-cli adapters).
-    """
-    if not emitted_session_id:
-        return
-
-    # cwd the session was written from — reader's gate is keyed on it
-    from core.agent.task_isolation import get_task_isolated_cwd
-
-    write_cwd = get_task_isolated_cwd() or ""
-    resume_params = {"cwd": write_cwd} if write_cwd else {}
-
-    # SQLite primary write — upsert the resumable session_id
-    try:
-        from core.observability.agent_runtime_state import record_agent_session_end
-
-        record_agent_session_end(
-            agent_id=session_id,
-            claude_cli_session_id=emitted_session_id,
-            session_resume_params=resume_params,
-        )
-    except Exception:
-        log.debug(
-            "agent_runtime_state write failed for %s — file fallback only",
-            session_id,
-            exc_info=True,
-        )
-
-    # File-fallback write — mirrors the SQLite primary.
-    try:
-        from core.observability.run_dir import resolve_sub_agent_path
-
-        session_path = resolve_sub_agent_path(session_id, "session.json")
-    except Exception:
-        log.debug(
-            "resolve_sub_agent_path failed for %s — file fallback skipped",
-            session_id,
-            exc_info=True,
-        )
-        return
-    if session_path is None:
-        return
-    try:
-        import json
-        import time
-
-        payload = {
-            "claude_cli_session_id": emitted_session_id,
-            "updated_at": time.time(),
-        }
-        # pair cwd here too — reader's gate is symmetric across both paths
-        if write_cwd:
-            payload["cwd"] = write_cwd
-        session_path.write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-    except Exception:
-        log.debug("session.json write failed for %s", session_id, exc_info=True)
+_acomplete_with_fail_fast_pre_execution_retry = (
+    _provider_call._acomplete_with_fail_fast_pre_execution_retry
+)
+_saved_cwd_matches_current = _provider_call._saved_cwd_matches_current
+_load_prior_session_id = _provider_call._load_prior_session_id
+_persist_session_id = _provider_call._persist_session_id
 
 
 def _tool_args_signature(tool_input: Any) -> str:
@@ -386,39 +115,75 @@ class AgenticLoop:
     WRAP_UP_HEADROOM = 2  # force text response N rounds before max
     _WRAP_UP_TIME_HEADROOM_S = 30.0  # force text 30s before time budget expires
 
-    def __init__(  # noqa: PLR0913 — config knobs grow incrementally; refactor pending
+    _source: str
+    _allowed_tool_names: set[str] | None
+    _force_include_allowed_tools: bool
+    _tools: list[dict[str, Any]]
+    _transient_tools: tuple[dict[str, Any], ...]
+    _transient_deferred_tool_names: tuple[str, ...]
+    _capability_graph: Any | None
+    _task_preflight: Any | None
+    _preflight_hint: str
+    _usage_snapshot: Any | None
+    _capability_graph_digest: str
+    _last_llm_error: str | None
+    _response_schema: dict[str, Any] | None
+    _new_adapter: Any
+    _last_emitted_session_id: str
+    _op_logger: Any
+    _error_recovery: Any
+    _timeline: Any | None
+    _session_id: str
+    _goal_store: Any | None
+    _session_metrics: Any
+    _evidence_ledger: Any | None
+    _tool_processor: ToolCallProcessor
+    _pre_execution_retry_errors: list[str]
+    _LLM_RETRY_CAP: int
+    _ctx_mgr: Any
+    _convergence: Any
+    _consecutive_tool_tracker: list[tuple[str, str]]
+    _budget_warned: bool
+    _checkpoint: Any | None
+    cognitive_state: Any
+
+    def __init__(
         self,
         context: ConversationContext,
         tool_executor: ToolExecutor,
         *,
-        max_rounds: int = DEFAULT_MAX_ROUNDS,
-        max_tokens: int = DEFAULT_MAX_TOKENS,
-        thinking_budget: int = 0,  # 0 = disabled; >0 = Extended Thinking tokens (legacy)
-        effort: str = "high",  # "low" | "medium" | "high" | "max" (adaptive thinking)
-        time_budget_s: float = 0.0,  # 0 = no time limit (OpenClaw pattern)
-        cost_budget: float = 0.0,  # 0 = defer to settings.cost_limit_usd (0 there too = no limit)
+        config: _bootstrap.AgenticLoopConfig | None = None,
         model: str | None = None,
         provider: str = "anthropic",
+        quiet: bool = False,
         tool_registry: ToolRegistry | None = None,
         mcp_manager: Any | None = None,
         skill_registry: Any | None = None,
         hooks: HookSystem | None = None,
-        parent_session_key: str = "",
-        parent_session_id: str = "",
-        system_suffix: str = "",
-        system_prompt_override: str | None = None,
-        quiet: bool = False,
-        disable_settings_drift: bool = False,
-        allowed_tool_names: set[str] | None = None,
-        force_include_allowed_tools: bool = False,
-        source: str = "",
-        session_id: str = "",
-        response_schema: dict[str, Any] | None = None,
-        allow_actionable_partial_on_empty: bool = False,
-        yield_after_tool_round: bool = False,
         activity_sink_provider: RunEventSinkProvider | None = None,
         policy_sources: PolicySourceBundle | None = None,
+        **legacy_config: Any,
     ) -> None:
+        if legacy_config:
+            if config is not None:
+                raise TypeError("config cannot be combined with legacy policy keywords")
+            config = _bootstrap.AgenticLoopConfig(**legacy_config)
+        else:
+            config = config or _bootstrap.AgenticLoopConfig()
+        max_rounds = config.max_rounds
+        max_tokens = config.max_tokens
+        thinking_budget = config.thinking_budget
+        effort = config.effort
+        time_budget_s = config.time_budget_s
+        cost_budget = config.cost_budget
+        parent_session_key = config.parent_session_key
+        parent_session_id = config.parent_session_id
+        system_suffix = config.system_suffix
+        system_prompt_override = config.system_prompt_override
+        disable_settings_drift = config.disable_settings_drift
+        allowed_tool_names = config.allowed_tool_names
+        allow_actionable_partial_on_empty = config.allow_actionable_partial_on_empty
+        yield_after_tool_round = config.yield_after_tool_round
         self.context = context
         self.executor = tool_executor
         self._parent_session_key = parent_session_key
@@ -538,195 +303,7 @@ class AgenticLoop:
         self._session_generation = 1
         self._public_session_started = False
         self._public_session_ended = False
-        # No explicit source → infer_source promotes an OAuth provider to
-        # "subscription". _source_explicit tracks the pin so a cross-provider
-        # /model switch only re-infers when the source was inferred here.
-        self._source_explicit = bool(source)
-        if not source:
-            from core.llm.adapters._source_inference import infer_source
-
-            source = infer_source(provider)
-        self._source = source
-        # security: model-visible tool schemas filtered to the allowlist —
-        # the full surface must not leak past the whitelist (None = no
-        # filter). Stored on self so refresh_tools re-applies it on rebuild.
-        self._allowed_tool_names = allowed_tool_names
-        # Sub-agent/toolkit and benchmark grants may explicitly outrank the
-        # mutable global tool policy. Ordinary session allowlists only narrow.
-        self._force_include_allowed_tools = force_include_allowed_tools
-        mcp_tool_list = mcp_manager.get_all_tools() if mcp_manager is not None else None
-        transient_tool_names = self._transient_tool_names(mcp_tool_list)
-        # Epoch snapshot pairs with the arun refresh gate: a server recycle
-        # bumps the manager epoch and invalidates this tool snapshot.
-        self._mcp_epoch = mcp_manager.connection_epoch if mcp_manager is not None else 0
-        runtime_tools = get_agentic_tools(
-            tool_registry,
-            mcp_tools=mcp_tool_list,
-            force_include=allowed_tool_names if force_include_allowed_tools else None,
-            provider=self._provider,
-            source=self._source,
-            policy_sources=self._policy_sources,
-        )
-        if allowed_tool_names is not None:
-            runtime_tools = [t for t in runtime_tools if t.get("name") in allowed_tool_names]
-        self._transient_tools: tuple[dict[str, Any], ...] = ()
-        self._transient_deferred_tool_names: tuple[str, ...] = ()
-        if bound_tool_plan is not None:
-            self._apply_bound_tool_plan(
-                runtime_tools,
-                transient_tool_names=transient_tool_names,
-            )
-        else:
-            self._tools = runtime_tools
-        self._capability_graph: CapabilityGraph | None = None
-        self._task_preflight: TaskPreflight | None = None
-        self._preflight_hint = ""
-        self._usage_snapshot: Any | None = None
-        self._capability_graph_digest: str = ""
-        self._last_llm_error: str | None = None  # last error type for user message
-        # Per-loop structured-output JSON schema (None = free-form text);
-        # threaded into every _call_llm's AdapterCallRequest.response_schema.
-        self._response_schema: dict[str, Any] | None = response_schema
-        from core.llm.adapters import resolve_for
-        from core.llm.adapters.registry import normalize_registry_provider
-
-        registry_provider = normalize_registry_provider(self._provider)
-        # Adapter resolution: direct registry-name lookup, else legacy
-        # category-axis path. Missing adapter HARD-FAILS (no silent fallback).
-        from core.llm.adapters.registry import AdapterNotFoundError, get_adapter
-
-        try:
-            self._new_adapter: Any = get_adapter(self._source)
-        except AdapterNotFoundError:
-            self._new_adapter = resolve_for(registry_provider, self._source)
-        # latest claude-cli sessionId the adapter emitted — SESSION_ENDED
-        # carries it to the agent_runtime_state writer (empty for others)
-        self._last_emitted_session_id: str = ""
-        self._op_logger = OperationLogger(quiet=self._quiet)
-        self._error_recovery = ErrorRecoveryStrategy(tool_executor)
-
-        # Immutable session history: canonical SQLite rows with an optional
-        # run-scoped JSONL projection.
-        self._timeline: Any | None = None
-        self._session_id: str = ""
-        self._goal_store: Any | None = None
-        try:
-            import uuid as _uuid
-
-            from core.observability.session_timeline import SessionTimeline
-
-            # caller-provided session_id wins (keeps the worker's artifacts
-            # under one sub_agents/<task_id>/ dir); else ephemeral s-<uuid>
-            if session_id:
-                self._session_id = session_id
-            else:
-                self._session_id = f"s-{_uuid.uuid4().hex[:12]}"
-            self._timeline = SessionTimeline(self._session_id)
-            from core.memory.goals import GoalStore
-
-            self._goal_store = GoalStore(self._timeline.db_path)
-        except Exception:
-            log.warning("Session timeline init failed", exc_info=True)
-        from core.observability.session_metrics import SessionMetrics, current_session_metrics
-
-        ambient_metrics = current_session_metrics()
-        self._session_metrics = (
-            ambient_metrics
-            if ambient_metrics.session_id == self._session_id or ambient_metrics.gen_tag
-            else SessionMetrics(
-                session_id=self._session_id,
-                component="agentic_loop",
-                started_at=time.time(),
-            )
-        )
-        try:
-            from core.agent.capability_graph import build_capability_graph
-            from core.agent.evidence_ledger import EvidenceLedger
-            from core.llm.providers.anthropic import is_computer_use_enabled
-
-            self._capability_graph = build_capability_graph(
-                model=self.model,
-                provider=self._provider,
-                source=self._source,
-                visible_tool_names={
-                    str(tool.get("name", "")) for tool in self._tools if tool.get("name")
-                },
-                computer_use_enabled=is_computer_use_enabled(),
-            )
-            self._evidence_ledger: Any | None = EvidenceLedger.for_session(
-                self._session_id,
-                turn_id_provider=lambda: self._turn_id,
-            )
-            # PR-HITL-APPROVAL-FSM (2026-07-02) — hand the session ledger to
-            # the executor so approval-FSM terminal states (granted/denied +
-            # executed/skipped) land as evidence rows. getattr-guarded: tests
-            # construct the loop with executor doubles that lack the hook.
-            _attach_ledger = getattr(tool_executor, "attach_evidence_ledger", None)
-            if callable(_attach_ledger):
-                _attach_ledger(self._evidence_ledger)
-        except Exception:
-            self._capability_graph = None
-            self._evidence_ledger = None
-            log.debug("Capability graph/evidence ledger init failed", exc_info=True)
-
-        # ToolCallProcessor: orchestrates tool_use block execution. Pull
-        # (provider, source) from the resolved adapter — the loop's own
-        # fields can hold pre-normalisation values the registry collapses,
-        # while dispatch's _apply_prefer compares against the adapter's.
-        _ctx_provider = getattr(self._new_adapter, "provider", self._provider)
-        _ctx_source = getattr(self._new_adapter, "source", self._source)
-        self._tool_processor = ToolCallProcessor(
-            executor=tool_executor,
-            op_logger=self._op_logger,
-            error_recovery=self._error_recovery,
-            hooks=hooks,
-            mcp_manager=mcp_manager,
-            timeline=self._timeline,
-            model=self.model,
-            provider=_ctx_provider,
-            source=_ctx_source,
-            adapter_name=getattr(self._new_adapter, "name", ""),
-        )
-
-        # LLM-call retry budget; at the cap the loop exits with
-        # model_action_required so the user picks a model via /model.
-        self._consecutive_llm_failures: int = 0
-        self._LLM_RETRY_CAP: int = 5  # max retries before giving up
-        self._pre_execution_retry_errors: list[str] = []
-
-        from core.agent.context_manager import ContextWindowManager
-
-        self._ctx_mgr = ContextWindowManager(
-            hooks=hooks,
-            hook_registry=self._hook_registry,
-            quiet=quiet,
-            session_id_provider=lambda: self._session_id or None,
-        )
-
-        # Convergence detection — 3 identical errors break the loop.
-        from core.agent.convergence import ConvergenceDetector
-
-        self._convergence = ConvergenceDetector()
-
-        # Diversity forcing — detect the SAME tool called with IDENTICAL
-        # arguments N times in a row (a genuine no-progress loop). Entries are
-        # ``(tool_name, args_signature)`` tuples.
-        self._consecutive_tool_tracker: list[tuple[str, str]] = []
-
-        # full message persistence for /resume
-        self._checkpoint: Any | None = None
-        try:
-            from core.memory.session_checkpoint import SessionCheckpoint
-
-            self._checkpoint = SessionCheckpoint()
-        except Exception:
-            log.warning("SessionCheckpoint init failed", exc_info=True)
-
-        # Cognitive state container — goal set on first arun(); round-end
-        # fields updated each round; hypotheses/confidence by the reflection node.
-        from core.agent.cognitive_state import CognitiveState
-
-        self.cognitive_state = CognitiveState()
+        _bootstrap.initialize_runtime(self, tool_executor, hooks, config, quiet=quiet)
 
     # ------------------------------------------------------------------
     # Lifecycle / metrics — delegate to ``_lifecycle``
@@ -763,14 +340,6 @@ class AgenticLoop:
         resume surgery (session id + cognitive state + guard counters)."""
         return _lifecycle.restore_loop_state(self, state)
 
-    def _record_timeline_end(
-        self,
-        result: Any,
-        verify_payload: dict[str, Any] | None = None,
-    ) -> None:
-        """Delegates to :func:`_lifecycle.record_timeline_end`."""
-        return _lifecycle.record_timeline_end(self, result, verify_payload)
-
     async def _afinalize_and_return(
         self,
         result: AgenticResult,
@@ -780,17 +349,9 @@ class AgenticLoop:
         """Delegates to :func:`_lifecycle.finalize_and_return_async`."""
         return await _lifecycle.finalize_and_return_async(self, result, user_input, round_idx)
 
-    def _build_reasoning_metrics(self, result: AgenticResult) -> Any:
-        """Delegates to :func:`_lifecycle.build_reasoning_metrics`."""
-        return _lifecycle.build_reasoning_metrics(self, result)
-
     def _emit_quota_panel(self, exc: BillingError) -> None:
         """Delegates to :func:`_lifecycle.emit_quota_panel`."""
         return _lifecycle.emit_quota_panel(self, exc)
-
-    def _inject_credential_breadcrumb(self) -> None:
-        """Delegates to :func:`_lifecycle.inject_credential_breadcrumb`."""
-        return _lifecycle.inject_credential_breadcrumb(self)
 
     async def _emit_cognitive(self, event: HookEvent, **payload: Any) -> None:
         """Emit a cognitive-cycle event with the state snapshot attached.
@@ -1071,7 +632,8 @@ class AgenticLoop:
         except BillingError as exc:
             spinner.stop()
             self._emit_quota_panel(exc)
-            return self._terminal_result(
+            return _guards._terminal_result(
+                self,
                 TerminationReason.BILLING_ERROR,
                 exc.user_message(),
                 rounds=round_idx + 1,
@@ -1079,7 +641,8 @@ class AgenticLoop:
         except UserCancelledError:
             spinner.stop()
             log.info("LLM call interrupted by user")
-            return self._terminal_result(
+            return _guards._terminal_result(
+                self,
                 TerminationReason.USER_CANCELLED,
                 "Interrupted.",
                 rounds=round_idx + 1,
@@ -1159,10 +722,9 @@ class AgenticLoop:
         a mid-arun change does not drop them. Returns the (possibly-rebuilt)
         prompt; clears ``_prompt_dirty``.
         """
-        drift_detected = await self._sync_model_from_settings_async()
+        drift_detected = await _model_switching.sync_model_from_settings_async(self)
         prompt_dirty = self._prompt_dirty
-        _plan_consume = getattr(self, "_consume_plan_hint", None)
-        raw_plan_hint = _plan_consume() if callable(_plan_consume) else ""
+        raw_plan_hint = _guards._consume_plan_hint(self)
         plan_hint = raw_plan_hint if isinstance(raw_plan_hint, str) else ""
         last_plan_hint = getattr(self, "_last_plan_hint", "")
         if not isinstance(last_plan_hint, str):
@@ -1203,981 +765,6 @@ class AgenticLoop:
         if (turn := getattr(self, "_turn_state", None)) is not None:
             turn.plan_hint = self._last_plan_hint
         return system_prompt
-
-    def _check_round_guards(self, round_idx: int) -> str | None:
-        """Run the round-entry guards.
-
-        Returns ``None`` to proceed, else a short guard-name string
-        (``arun`` breaks the while-loop on a non-None response).
-
-        Guards (Karpathy P3): ``round_limit`` (``max_rounds > 0``, 0-based
-        index), ``time_budget`` (``time_budget_s > 0``, wall clock vs
-        ``_loop_start_time``), and the session-wide budget/handoff check.
-        """
-        import time as _time
-
-        if self.max_rounds > 0 and round_idx >= self.max_rounds:
-            return "round_limit"
-        if self._time_budget_s > 0:
-            elapsed = _time.monotonic() - self._loop_start_time
-            if elapsed >= self._time_budget_s:
-                return "time_budget"
-        # session-wide cap + T-threshold handoff (getattr tolerates stub loops)
-        handoff_check = getattr(self, "_check_session_budget_and_maybe_handoff", None)
-        if handoff_check is not None:
-            handoff_reason: str | None = handoff_check()
-            if handoff_reason is not None:
-                return handoff_reason
-        return None
-
-    def _terminal_result(
-        self,
-        reason: TerminationReason,
-        text: str,
-        *,
-        rounds: int,
-        error: bool = False,
-        tool_calls: list[dict[str, Any]] | None = None,
-    ) -> AgenticResult:
-        """Sole birth-place of terminal results — the loop's exit alphabet.
-
-        Every terminal exit constructs its :class:`AgenticResult` here, so
-        the reachable terminal-state space is exactly
-        :class:`TerminationReason` (pinned by
-        ``tests/core/agent/test_loop_state_machine.py``). ``error=True``
-        mirrors *reason* into ``AgenticResult.error`` — the legacy dual
-        encoding some consumers still read. ``tool_calls=None`` keeps the
-        dataclass default (empty list) for pre-tool exits; pass
-        ``self._tool_processor.tool_log`` explicitly where the exit carries
-        tool work.
-        """
-        result = AgenticResult(
-            text=text,
-            rounds=rounds,
-            error=str(reason) if error else None,
-            termination_reason=reason,
-        )
-        if tool_calls is not None:
-            result.tool_calls = tool_calls
-        AgenticLoop._set_turn_termination(self, reason)
-        return result
-
-    async def _apply_user_prompt_hook(
-        self,
-        user_input: str,
-    ) -> tuple[str, AgenticResult | None]:
-        """Apply the public input boundary before any planning or model work."""
-        outcome = await self._hook_registry.invoke(
-            HookName.USER_PROMPT_SUBMIT,
-            payload={"user_input": user_input},
-            correlation=HookCorrelation(
-                session_id=self._session_id,
-                turn_id=self._turn_id,
-            ),
-        )
-        if outcome.blocked:
-            reason = next(
-                (
-                    decision.reason
-                    for decision in outcome.decisions
-                    if decision.action is HookAction.BLOCK
-                ),
-                "Blocked by UserPromptSubmit hook",
-            )
-            return user_input, self._terminal_result(
-                TerminationReason.INPUT_BLOCKED,
-                reason,
-                rounds=0,
-            )
-        effective = outcome.invocation.payload.get("user_input")
-        return (effective if isinstance(effective, str) else user_input), None
-
-    async def _begin_turn(
-        self,
-        user_input: str,
-        continuation: HookCorrelation | None,
-        *,
-        internal_continuation: bool = False,
-    ) -> tuple[str, AgenticResult | None]:
-        """Reset per-turn state and cross the public input boundary."""
-        import uuid
-
-        from core.observability.session_metrics import set_current_session_metrics
-
-        set_current_session_metrics(self._session_metrics)
-        set_bound_tool_data_policies(self._bound_tool_plan)
-
-        self._tool_processor.reset()
-        self._op_logger.reset()
-        self._pre_execution_retry_errors.clear()
-        self._turn_id = f"t-{uuid.uuid4().hex[:12]}"
-        self._turn_state = TurnState(turn_id=self._turn_id)
-        self._current_step_snapshot = None
-        if self._timeline is not None:
-            self._timeline.bind_turn(
-                self._turn_id,
-                session_generation=int(getattr(self, "_session_generation", 1)),
-            )
-        from core.observability.session_timeline import set_current_session_timeline
-
-        set_current_session_timeline(self._timeline)
-        if continuation is None:
-            self._verify_root_turn_id = self._turn_id
-            self._verify_root_user_input = ""
-            self._verify_attempt = 0
-            self._verify_attempt_results = []
-        else:
-            self._verify_root_turn_id = continuation.turn_id or self._turn_id
-            self._verify_attempt = continuation.verify_attempt
-
-        from core.agent.cognitive_state_ctx import set_session_id, set_turn_id
-
-        set_session_id(self._session_id)
-        set_turn_id(self._turn_id)
-        if continuation is not None:
-            return user_input, None
-        if internal_continuation:
-            from core.agent.cognitive_state_ctx import (
-                set_cognitive_state,
-                set_parent_session_id,
-                set_parent_session_key,
-            )
-
-            set_cognitive_state(self.cognitive_state)
-            set_parent_session_key(self._parent_session_key)
-            set_parent_session_id(self._parent_session_id)
-            self._verify_root_user_input = user_input
-            return user_input, None
-        effective, blocked = await self._apply_user_prompt_hook(user_input)
-        self._verify_root_user_input = effective
-        return effective, blocked
-
-    def _refresh_mcp_tools_at_turn_start(self) -> None:
-        """Refresh a lazy or stale MCP schema snapshot."""
-        if self._mcp_manager is None or (
-            len(self._tools) >= TOOL_LAZY_LOAD_THRESHOLD
-            and self._mcp_manager.connection_epoch == self._mcp_epoch
-        ):
-            return
-        added = self.refresh_tools()
-        self._mcp_epoch = self._mcp_manager.connection_epoch
-        if added > 0:
-            log.info("MCP tools lazy-loaded: +%d tools (total %d)", added, len(self._tools))
-
-    async def _open_turn(
-        self,
-        user_input: str,
-        *,
-        verification_continuation: bool = False,
-        goal_continuation: Any | None = None,
-        goal_continuation_trigger: str = "active_goal",
-    ) -> AgenticResult | None:
-        """Publish legacy start signals, then the durable public boundary."""
-        if verification_continuation:
-            if self._timeline is not None:
-                self._timeline.record_verification_continuation(
-                    user_input,
-                    root_turn_id=self._verify_root_turn_id,
-                    verify_attempt=self._verify_attempt,
-                )
-            root_input = self._verify_root_user_input or user_input
-            self._save_checkpoint(root_input, round_idx=0)
-            return await self._admit_session_budget(user_input)
-        if goal_continuation is not None:
-            resumed_start = (
-                int(getattr(self, "_session_generation", 1)) > 1
-                and not self._public_session_started
-            )
-            if self._timeline is not None:
-                from core.observability.session_timeline import SessionEventKind
-
-                if resumed_start:
-                    self._timeline.record_session_start(
-                        model=self.model,
-                        provider=self._provider,
-                    )
-                self._timeline.record_goal_state(
-                    SessionEventKind.GOAL_CONTINUED,
-                    goal_continuation,
-                    trigger=goal_continuation_trigger,
-                )
-            if resumed_start:
-                from core.llm.adapters.dispatch import begin_session_adapter_tracking
-
-                begin_session_adapter_tracking()
-                if self._hooks:
-                    await self._hooks.trigger_async(
-                        HookEvent.SESSION_STARTED,
-                        {
-                            "model": self.model,
-                            "provider": self._provider,
-                            "session_id": self._session_id,
-                            "resumed": True,
-                        },
-                    )
-            objective = str(getattr(goal_continuation, "objective", user_input))
-            if self._save_checkpoint(objective, round_idx=0) and resumed_start:
-                await _lifecycle.emit_public_session_start(self)
-            return await self._admit_session_budget(user_input)
-        intercepted = await self._emit_session_start_signals(user_input)
-        if intercepted is not None:
-            return intercepted
-        if self._save_checkpoint(user_input, round_idx=0):
-            await _lifecycle.emit_public_session_start(self)
-        return await self._admit_session_budget(user_input)
-
-    async def _finalize_blocked_turn(self, result: AgenticResult) -> AgenticResult:
-        """Persist a rejected prompt attempt without storing its prompt body."""
-        if self._timeline is not None:
-            self._timeline.record_session_start(
-                model=self.model,
-                provider=self._provider,
-            )
-        return await self._afinalize_and_return(result, "", 0)
-
-    async def _admit_session_budget(self, user_input: str) -> AgenticResult | None:
-        """Stop an expired opt-in session before planner, model, or tool work."""
-        self._maybe_start_session_budget()
-        guard = self._check_session_budget_and_maybe_handoff()
-        if guard is None:
-            return None
-        reason, text = self._guard_exit_result(guard, rounds=0)
-        return await self._afinalize_and_return(
-            self._terminal_result(reason, text, rounds=0),
-            user_input,
-            0,
-        )
-
-    # ------------------------------------------------------------------
-    # Guard chain — the loop's transition guards, in priority order
-    # ------------------------------------------------------------------
-    # Call order in ``arun`` IS the priority order:
-    #   post-response: cost_budget → overthinking → model_refusal
-    #   post-tool:     convergence → repeated_success_no_progress
-    # Each guard returns a terminal AgenticResult (born via
-    # ``_terminal_result``) or None to proceed. Guard counters live on
-    # ``self`` and are checkpointed via ``_lifecycle.collect_guard_state``
-    # so a resumed session keeps its guard progress.
-
-    def _guard_cost_budget(
-        self,
-        *,
-        messages: list[dict[str, Any]],
-        round_idx: int,
-    ) -> AgenticResult | None:
-        """Cost budget guard (Karpathy P3 — resource budget).
-
-        Warns once at 80% of budget; terminates with
-        ``cost_budget_exceeded`` at 100%.
-        """
-        if self._cost_budget <= 0:
-            return None
-        try:
-            from core.llm.token_tracker import get_tracker as _get_cost_tracker
-
-            _cost_tracker = _get_cost_tracker()
-            _session_cost = _cost_tracker.accumulator.total_cost_usd
-
-            _warn_threshold = self._cost_budget * 0.8
-            if (
-                _session_cost >= _warn_threshold
-                and _session_cost < self._cost_budget
-                and not getattr(self, "_budget_warned", False)
-            ):
-                self._budget_warned = True
-                if not self._quiet:
-                    from core.ui.agentic_ui import emit_budget_warning
-
-                    emit_budget_warning(
-                        self._cost_budget,
-                        _session_cost,
-                        pct=_session_cost / self._cost_budget * 100,
-                    )
-
-            if _session_cost >= self._cost_budget:
-                from core.ui.agentic_ui import emit_cost_budget_exceeded
-
-                emit_cost_budget_exceeded(self._cost_budget, _session_cost)
-                self._op_logger.finalize()
-                self._sync_messages_to_context(messages)
-                text = (
-                    f"Cost budget (${self._cost_budget:.2f}) exceeded. "
-                    f"Session cost: ${_session_cost:.2f}"
-                )
-                log.warning(text)
-                return self._terminal_result(
-                    TerminationReason.COST_BUDGET_EXCEEDED,
-                    text,
-                    rounds=round_idx + 1,
-                    error=True,
-                    tool_calls=self._tool_processor.tool_log,
-                )
-        except Exception:
-            log.debug("Cost budget check failed", exc_info=True)
-        return None
-
-    async def _guard_overthinking(
-        self,
-        response: Any,
-        *,
-        messages: list[dict[str, Any]],
-        round_idx: int,
-    ) -> AgenticResult | None:
-        """Overthinking guard — N consecutive long-text/no-tool rounds stop
-        the loop with ``user_clarification_needed`` (threshold is
-        context-proportional, 1% / floor 1024). Owns the counter reset on
-        tool-use rounds.
-        """
-        if response.stop_reason != "tool_use":
-            out_tok = getattr(response.usage, "output_tokens", 0) if response.usage else 0
-            threshold = self._overthinking_token_threshold()
-            if out_tok > threshold:
-                self._consecutive_text_only_rounds += 1
-            else:
-                self._consecutive_text_only_rounds = 0
-            if self._consecutive_text_only_rounds >= 2:
-                # count this flagged round ONCE — adding the running
-                # consec would inflate the total quadratically
-                self._total_empty_rounds += 1
-                log.warning(
-                    "Overthinking detected: %d consecutive text-only rounds "
-                    "(>%d tok each) — surfacing user_clarification_needed",
-                    self._consecutive_text_only_rounds,
-                    threshold,
-                )
-                self._op_logger.finalize()
-                self._sync_messages_to_context(messages)
-                last_text = self._extract_text(response).strip()
-                summary = last_text[:400] + ("…" if len(last_text) > 400 else "")
-                clarification = (
-                    f"~ I've spent {self._consecutive_text_only_rounds} consecutive "
-                    f"rounds reasoning without taking any action "
-                    f"(>{threshold} output tokens each). "
-                    "Could you narrow the request — point at a specific file, "
-                    "behaviour, or step you want me to focus on next?\n\n"
-                    f"Most recent reasoning (truncated):\n{summary}"
-                )
-                await self._record_text_only_round(round_idx, text=last_text)
-                return self._terminal_result(
-                    TerminationReason.USER_CLARIFICATION_NEEDED,
-                    clarification,
-                    rounds=round_idx + 1,
-                    tool_calls=self._tool_processor.tool_log,
-                )
-        else:
-            self._consecutive_text_only_rounds = 0
-        return None
-
-    def _guard_model_refusal(
-        self,
-        response: Any,
-        *,
-        messages: list[dict[str, Any]],
-        round_idx: int,
-    ) -> AgenticResult | None:
-        """Fable 5 safety decline (HTTP 200, often empty) — surface it
-        honestly instead of a silent empty turn.
-
-        ref: https://platform.claude.com/docs/en/about-claude/models/migration-guide
-        """
-        if response.stop_reason != "refusal":
-            return None
-        self._op_logger.finalize()
-        self._sync_messages_to_context(messages)
-        stop_details = getattr(response, "stop_details", None)
-        category = stop_details.get("category") if isinstance(stop_details, dict) else None
-        refusal_text = self._extract_text(response).strip() or (
-            "The model declined this request"
-            + (f" (safety classifier category: {category})" if category else "")
-            + ". Rephrase the request or retry on another model via /model."
-        )
-        return self._terminal_result(
-            TerminationReason.MODEL_REFUSAL,
-            refusal_text,
-            rounds=round_idx + 1,
-            tool_calls=self._tool_processor.tool_log,
-        )
-
-    def _guard_convergence(
-        self,
-        *,
-        messages: list[dict[str, Any]],
-        round_idx: int,
-    ) -> AgenticResult | None:
-        """Convergence guard — 3 identical tool errors break the loop."""
-        if not self._check_convergence_break():
-            return None
-        from core.ui.agentic_ui import emit_convergence_detected
-
-        last_err = (
-            self._convergence.recent_errors[-1] if self._convergence.recent_errors else "unknown"
-        )
-        emit_convergence_detected(last_err, round_idx + 1)
-        self._op_logger.finalize()
-        self._sync_messages_to_context(messages)
-        return self._terminal_result(
-            TerminationReason.CONVERGENCE_DETECTED,
-            "Detected repeating failure pattern. Breaking loop to avoid infinite retry.",
-            rounds=round_idx + 1,
-            error=True,
-            tool_calls=self._tool_processor.tool_log,
-        )
-
-    def _guard_repeated_success(
-        self,
-        *,
-        messages: list[dict[str, Any]],
-        round_idx: int,
-    ) -> AgenticResult | None:
-        """Repeated-success guard — identical successful results without new
-        progress stop the loop (polling the same state indefinitely).
-        """
-        if not self._check_repeated_success_no_progress():
-            return None
-        from core.ui.agentic_ui import emit_repeated_success_no_progress
-
-        tool_name = self._convergence.last_success_tool or "unknown"
-        streak = self._convergence.repeated_success_streak
-        emit_repeated_success_no_progress(tool_name, streak, round_idx + 1)
-        self._op_logger.finalize()
-        self._sync_messages_to_context(messages)
-        return self._terminal_result(
-            TerminationReason.REPEATED_SUCCESS_NO_PROGRESS,
-            "Detected repeated successful tool results without new progress. "
-            "Breaking loop to avoid polling the same state indefinitely.",
-            rounds=round_idx + 1,
-            error=True,
-            tool_calls=self._tool_processor.tool_log,
-        )
-
-    def _guard_exit_result(
-        self,
-        guard_reason: str | None,
-        *,
-        rounds: int,
-    ) -> tuple[TerminationReason, str]:
-        """Map a loop-entry guard reason to a terminal result.
-
-        The guard helper returns precise internal reasons. Preserve that
-        precision here so session-wide budget handoff/expiry does not leak as
-        the unrelated legacy "max rounds" fallback.
-        """
-        if guard_reason == "time_budget":
-            return (
-                TerminationReason.TIME_BUDGET_EXPIRED,
-                f"Time budget ({self._time_budget_s:.0f}s) expired after {rounds} rounds.",
-            )
-        if guard_reason in {"session_time_budget_handoff", "session_time_budget_expired"}:
-            remaining = None
-            total = None
-            try:
-                metrics = self._session_metrics
-                remaining = metrics.time_budget_remaining_s()
-                total = metrics.time_budget_total_s
-            except Exception:
-                log.debug("session budget summary unavailable for guard exit", exc_info=True)
-
-            if guard_reason == "session_time_budget_handoff":
-                if remaining is not None and total is not None and total > 0:
-                    text = (
-                        "Session time budget is in the handoff window "
-                        f"({remaining:.0f}s remaining of {total:.0f}s). "
-                        "Start a new GEODE session or restart GEODE to continue safely."
-                    )
-                else:
-                    text = (
-                        "Session time budget is in the handoff window. "
-                        "Start a new GEODE session or restart GEODE to continue safely."
-                    )
-                return TerminationReason.SESSION_TIME_BUDGET_HANDOFF, text
-
-            if remaining is not None and total is not None and total > 0:
-                text = (
-                    "Session time budget expired "
-                    f"({abs(min(remaining, 0.0)):.0f}s over the {total:.0f}s budget). "
-                    "Start a new GEODE session or restart GEODE to continue."
-                )
-            else:
-                text = (
-                    "Session time budget expired. "
-                    "Start a new GEODE session or restart GEODE to continue."
-                )
-            return TerminationReason.SESSION_TIME_BUDGET_EXPIRED, text
-
-        # Back-compat: an exhausted positive max_rounds cap keeps the legacy
-        # result text/termination reason.
-        return (
-            TerminationReason.MAX_ROUNDS,
-            "Max agentic rounds reached. Please try a more specific request.",
-        )
-
-    def _persist_handoff_request(self) -> None:
-        """Flip the ``sessions`` row to ``handoff_state='pending'`` via the
-        DB CAS helper (once per session at the T-threshold crossing).
-
-        Failures NEVER raise. No-op when no session_id is bound or the row
-        isn't upserted yet.
-        """
-        session_id = getattr(self, "_session_id", "")
-        if not session_id:
-            return
-        mgr = None
-        try:
-            from core.agent.handoff import request_handoff
-            from core.memory.session_manager import SessionManager
-
-            mgr = SessionManager()
-            request_handoff(mgr._conn, session_id=session_id, platform="agentic_loop")
-        except Exception:
-            log.debug("Handoff DB request skipped", exc_info=True)
-        finally:
-            # Close to avoid leaked SQLite handles.
-            if mgr is not None:
-                try:
-                    mgr.close()
-                except Exception:
-                    log.debug("Handoff SessionManager close failed", exc_info=True)
-
-    async def _maybe_replan_async(self, round_idx: int, *, failure_context: str = "") -> None:
-        """Per-round Dynamic Replan trigger.
-
-        Asks :func:`core.agent.plan.should_replan`; on a trigger calls
-        :func:`replan_async` (planner LLM via the active loop model) and
-        installs the new :class:`Plan` via ``set_active_plan``.
-
-        Triggers: ``verify_fail`` (fires at the first round of the *next*
-        ``arun``, since verify runs at finalization) and an edge-triggered
-        ``low_confidence`` signal. Failures NEVER raise; no-op when
-        ``replan_enabled=False`` or no trigger fires.
-        """
-        try:
-            from core.agent.plan import (
-                _replan_max_attempts,
-                replan_async,
-                should_replan,
-            )
-            from core.observability.session_metrics import current_session_metrics
-
-            metrics = current_session_metrics()
-            # Low-confidence replan (edge-triggered; see constructor
-            # comment on _low_confidence_replan_armed). Re-arm on
-            # recovery, fire only on an armed drop below threshold.
-            # getattr tolerates stub loops (same convention as
-            # _check_round_guards' handoff check).
-            raw_confidence = getattr(getattr(self, "cognitive_state", None), "confidence", None)
-            confidence: float | None = (
-                float(raw_confidence) if isinstance(raw_confidence, int | float) else None
-            )
-            if confidence is not None and confidence >= REPLAN_LOW_CONFIDENCE:
-                self._low_confidence_replan_armed = True
-            low_confidence = (
-                getattr(self, "_low_confidence_replan_armed", True)
-                and confidence is not None
-                and confidence < REPLAN_LOW_CONFIDENCE
-            )
-            trigger = should_replan(
-                round_idx=round_idx,
-                plan=metrics.active_plan,
-                verify_failed=not metrics.last_verify_passed,
-                verify_should_retry=metrics.last_verify_should_retry,
-                low_confidence=low_confidence,
-            )
-            if trigger is None:
-                return
-            if trigger == "low_confidence":
-                # consume the edge — no refire until confidence recovers
-                self._low_confidence_replan_armed = False
-            # A verify_fail past replan_max_attempts abandons the stuck step
-            # instead of calling the planner again.
-            if trigger == "verify_fail" and metrics.active_plan is not None:
-                metrics.record_step_attempt()
-                cap = _replan_max_attempts()
-                if metrics.replan_attempts_on_current_step > cap:
-                    abandoned_step = metrics.active_plan.current_step()
-                    advanced = metrics.active_plan.abandon_and_advance()
-                    # new step → reset the per-step counter
-                    metrics.set_active_plan(advanced, reset_attempts=True)
-                    timeline = getattr(self, "_timeline", None)
-                    if timeline is not None:
-                        from core.observability.session_timeline import SessionEventKind
-
-                        timeline.record_plan_state(
-                            SessionEventKind.PLAN_ABANDONED,
-                            advanced,
-                            trigger="retry_budget_exhausted",
-                            changed_step_ids=(abandoned_step.id,)
-                            if abandoned_step is not None
-                            else (),
-                        )
-                    self._prompt_dirty = True
-                    log.info(
-                        "Replan abandon: step exceeded %d attempts; advancing plan",
-                        cap,
-                    )
-                    return
-            # Replan against the failed candidate and verifier instruction;
-            # the per-turn tool log was reset before a verify continuation.
-            from types import SimpleNamespace
-
-            recent_parts: list[str] = []
-            if trigger == "verify_fail":
-                attempts = getattr(self, "_verify_attempt_results", ())
-                if attempts:
-                    recent_parts.append(str(getattr(attempts[-1], "text", "") or ""))
-                if failure_context:
-                    recent_parts.append(failure_context)
-            if not recent_parts:
-                try:
-                    recent_parts.append(str(self._tool_processor.tool_log[-1].get("result", "")))
-                except Exception:
-                    log.debug("recent tool_log read for replanner failed", exc_info=True)
-            recent_text = "\n\n".join(part for part in recent_parts if part)
-            stub_result = SimpleNamespace(text=str(recent_text))
-            new_plan = await replan_async(
-                self, plan=metrics.active_plan, turn_result=stub_result, trigger=trigger
-            )
-            if new_plan is None:
-                log.info("Replan trigger=%s: planner failed; keeping prior plan", trigger)
-                return
-            metrics.record_replan(trigger)
-            metrics.set_active_plan(new_plan)
-            timeline = getattr(self, "_timeline", None)
-            if timeline is not None:
-                from core.observability.session_timeline import SessionEventKind
-
-                timeline.record_plan_state(
-                    SessionEventKind.PLAN_REPLANNED,
-                    new_plan,
-                    trigger=trigger,
-                )
-            # next LLM call must see the new plan
-            self._prompt_dirty = True
-            # UI replan banner
-            try:
-                from core.ui.agentic_ui import emit_plan_step, emit_replan
-
-                emit_replan(
-                    trigger=trigger,
-                    step_count=len(new_plan.steps),
-                    revision=new_plan.revision,
-                )
-                first_step = new_plan.current_step()
-                if first_step is not None:
-                    emit_plan_step(
-                        current=new_plan.current + 1,
-                        total=len(new_plan.steps),
-                        description=first_step.description,
-                        revision=new_plan.revision,
-                    )
-            except Exception:
-                log.debug("Replan UI emit failed", exc_info=True)
-            log.info(
-                "Replan trigger=%s: installed %d-step plan (revision %d)",
-                trigger,
-                len(new_plan.steps),
-                new_plan.revision,
-            )
-        except Exception:
-            log.warning("Replan dispatch crashed", exc_info=True)
-
-    def _consume_plan_hint(self) -> str:
-        """Render the active :class:`Plan` as a ``<plan>...</plan>`` block.
-
-        Read-only (no clear) — the plan persists until a replan installs a
-        new revision. Empty string when no plan is active. Failures NEVER raise.
-        """
-        try:
-            from core.agent.plan import render_plan_for_prompt
-            from core.observability.session_metrics import current_session_metrics
-
-            plan = current_session_metrics().active_plan
-            if plan is None:
-                return ""
-            return render_plan_for_prompt(plan)
-        except Exception:
-            log.warning("Plan hint consume failed", exc_info=True)
-            return ""
-
-    def _consume_reflection_hint(self) -> str:
-        """Read+clear the failure-reflection hint left by the prior turn.
-
-        Returns the ``<reflection>...</reflection>`` block from the prior
-        turn's verify FAIL, else empty (verify passed / didn't run).
-        Read+clear is asyncio-task safe (no ``await`` between); a threaded
-        race only risks a duplicate prepend, not data loss. Failures NEVER
-        raise.
-
-        Contract: pre-finalize exits (BillingError / UserCancelledError)
-        skip verify, so the next arun's hint slot is empty by design.
-        """
-        try:
-            from core.observability.session_metrics import current_session_metrics
-
-            metrics = current_session_metrics()
-            hint = metrics.last_verify_reflection_hint
-            if hint:
-                metrics.last_verify_reflection_hint = ""
-            return hint
-        except Exception:
-            log.warning("Reflection hint consume failed", exc_info=True)
-            return ""
-
-    def _consume_reflexion_hint(self) -> str:
-        """Legacy alias for :meth:`_consume_reflection_hint`."""
-        return AgenticLoop._consume_reflection_hint(self)
-
-    def _maybe_start_session_budget(self) -> None:
-        """Begin the session-wide wall-clock budget if not already started.
-
-        Idempotent — no-op when a prior loop in the same SessionMetrics
-        scope already started it (clock keeps running across nested loops).
-        The cap is opt-in via ``GEODE_SESSION_TIME_BUDGET_S``; unset, invalid,
-        and non-positive values leave durable sessions unbounded.
-        Failures NEVER raise.
-        """
-        import math
-        import os
-
-        try:
-            from core.agent.budget import (
-                DEFAULT_HANDOFF_THRESHOLD_S,
-                start_session_budget,
-            )
-
-            metrics = self._session_metrics
-            if metrics.time_budget_total_s > 0.0:
-                return  # Already started in this session.
-            raw = os.environ.get("GEODE_SESSION_TIME_BUDGET_S")
-            if raw is None:
-                return
-            try:
-                total = float(raw)
-            except ValueError:
-                log.warning("Ignoring invalid GEODE_SESSION_TIME_BUDGET_S=%r", raw)
-                return
-            if not math.isfinite(total) or total <= 0.0:
-                log.warning("Ignoring non-positive or non-finite session time budget: %r", raw)
-                return  # Explicitly disabled.
-            start_session_budget(
-                total_seconds=total,
-                handoff_threshold_seconds=min(DEFAULT_HANDOFF_THRESHOLD_S, total / 2.0),
-                metrics=metrics,
-            )
-        except Exception:
-            log.warning("Session budget start failed", exc_info=True)
-
-    def _check_session_budget_and_maybe_handoff(self) -> str | None:
-        """Check session-wide wall-clock budget. Returns a guard-string when
-        the loop must break, ``None`` otherwise. Fires ``HANDOFF_TRIGGERED``
-        on the first threshold crossing.
-
-        Returns:
-            * ``"session_time_budget_handoff"`` on first T-threshold crossing.
-            * ``"session_time_budget_expired"`` when fully past the cap.
-            * ``None`` when still within budget (or no budget set).
-        """
-        import time as _time
-
-        try:
-            from core.agent.budget import budget_summary, check_session_budget
-
-            metrics = self._session_metrics
-            check = check_session_budget(metrics=metrics)
-            if check.expired:
-                return "session_time_budget_expired"
-            if check.handoff_due:
-                payload: dict[str, Any] = {
-                    "session_id": self._session_id,
-                    "platform": "",  # adapter binding can override
-                    "remaining_s": check.remaining_seconds,
-                    "ts": _time.time(),
-                    **budget_summary(metrics=metrics),
-                }
-                if self._hooks is not None:
-                    try:
-                        self._hooks.trigger(HookEvent.HANDOFF_TRIGGERED, payload)
-                    except Exception:
-                        log.warning("HANDOFF_TRIGGERED hook failed", exc_info=True)
-                if self._timeline is not None:
-                    try:
-                        self._timeline.record_lifecycle_event(
-                            event="handoff_triggered",
-                            component="agentic_loop",
-                            level="warning",
-                            payload=payload,
-                            action="agent.handoff_triggered",
-                            entity_type="session",
-                            entity_id=self._session_id,
-                        )
-                    except Exception:
-                        log.warning("Timeline handoff_triggered record failed", exc_info=True)
-                # flip the sessions row to handoff_state=PENDING (read-write
-                # parity; no-op when no session row exists yet)
-                self._persist_handoff_request()
-                return "session_time_budget_handoff"
-        except Exception:
-            log.warning("Session budget check failed", exc_info=True)
-        return None
-
-    def _overthinking_token_threshold(self) -> int:
-        """Per-round output-token threshold for the overthinking signal.
-
-        Context-proportional (1% of context window, floor 1024). Falls
-        back to 2000 when the token-tracker lookup fails (mocked module).
-        """
-        try:
-            from core.llm.token_tracker import MODEL_CONTEXT_WINDOW
-
-            ctx_window = MODEL_CONTEXT_WINDOW.get(self.model, 200_000)
-            return max(1024, int(ctx_window) // 100)
-        except (TypeError, ValueError, AttributeError):
-            return 2000
-
-    def _build_model_action_result(
-        self,
-        *,
-        error_type: str,
-        severity: str,
-        hint: str,
-        rounds: int,
-        detail: str | None = None,
-    ) -> AgenticResult:
-        """Build an ``AgenticResult`` carrying a user-facing diagnostic.
-
-        Used when an LLM error survives the retry budget (or convergence
-        breaks) — surfaces context for the user to pick a model via ``/model``.
-        """
-        from core.llm.errors import build_model_action_message, summarize_error_detail
-
-        cost: float | None = None
-        try:
-            from core.llm.token_tracker import get_tracker
-
-            cost = float(get_tracker().accumulator.total_cost_usd)
-        except Exception:
-            log.debug("total_cost_usd read for diagnostic failed", exc_info=True)
-            cost = None
-        # strip raw SDK JSON to the underlying message (no-op if unclear)
-        clean_detail = summarize_error_detail(detail) if detail else None
-        text = build_model_action_message(
-            error_type=error_type,
-            severity=severity,
-            hint=hint,
-            model=self.model,
-            provider=self._provider,
-            attempts=self._consecutive_llm_failures,
-            cost_so_far_usd=cost,
-            suggested_models=self._fallback_chain_suggestions() or None,
-            detail=clean_detail,
-        )
-        return self._terminal_result(
-            TerminationReason.MODEL_ACTION_REQUIRED,
-            text,
-            rounds=rounds,
-            error=True,
-            tool_calls=self._tool_processor.tool_log,
-        )
-
-    async def _afinalize_actionable_partial_on_empty(
-        self,
-        exc: EmptyModelOutputError,
-        *,
-        messages: list[dict[str, Any]],
-        user_input: str,
-        round_idx: int,
-    ) -> AgenticResult | None:
-        """Preserve prior tool work when an opted-in continuation is empty."""
-
-        usable_tool_actions = any(
-            not isinstance(entry.get("result"), dict) or not entry["result"].get("error")
-            for entry in self._tool_processor.tool_log
-        )
-        if not self._allow_actionable_partial_on_empty or not usable_tool_actions:
-            return None
-        # The current continuation is empty, but an earlier round in this
-        # same turn already emitted executable tool work. Preserve that work
-        # and attest every exhausted empty attempt. Empty-before-action stays
-        # a hard infrastructure failure.
-        exc.mark_actionable()
-        log.warning(
-            "AgenticLoop: finalized actionable partial turn after empty "
-            "continuation (rounds=%d tools=%d)",
-            round_idx,
-            len(self._tool_processor.tool_log),
-        )
-        self._op_logger.finalize()
-        self._sync_messages_to_context(messages)
-        result = self._terminal_result(
-            TerminationReason.ACTIONABLE_PARTIAL,
-            "",
-            rounds=round_idx,
-            tool_calls=list(self._tool_processor.tool_log),
-        )
-        return await self._afinalize_and_return(result, user_input, round_idx)
-
-    async def _finalize_context_exhausted(
-        self,
-        user_input: str,
-        messages: list[dict[str, Any]],
-        round_idx: int,
-    ) -> AgenticResult:
-        """Build + finalize the terminal context-exhausted result.
-
-        Shared recovery-failed tail (pre-call / post-call / 400-overflow):
-        notify ``exhausted``, sync messages back to context, return the
-        terminal ``context_exhausted`` result through finalize.
-        """
-        self._notify_context_event(
-            "exhausted",
-            original_count=len(messages),
-            new_count=len(messages),
-        )
-        self._sync_messages_to_context(messages)
-        result = self._terminal_result(
-            TerminationReason.CONTEXT_EXHAUSTED,
-            await _context_exhausted_message(user_input),
-            rounds=round_idx + 1,
-            error=True,
-            tool_calls=self._tool_processor.tool_log,
-        )
-        return await self._afinalize_and_return(result, user_input, round_idx + 1)
-
-    async def _afinalize_tool_round_yield(
-        self,
-        *,
-        messages: list[dict[str, Any]],
-        user_input: str,
-        round_idx: int,
-    ) -> AgenticResult:
-        """Yield one completed tool batch to an external turn orchestrator."""
-
-        self._op_logger.finalize()
-        self._sync_messages_to_context(messages)
-        result = self._terminal_result(
-            TerminationReason.TOOL_USE_YIELD,
-            "",
-            rounds=round_idx + 1,
-            tool_calls=list(self._tool_processor.tool_log),
-        )
-        return await self._afinalize_and_return(result, user_input, round_idx + 1)
-
-    def _tool_round_assistant_message(self, response: AgenticResponse) -> dict[str, Any]:
-        """Serialize one tool-use response with provider replay sidecars."""
-
-        message: dict[str, Any] = {
-            "role": "assistant",
-            "content": self._serialize_content(response.content),
-        }
-        reasoning_items = getattr(response, "codex_reasoning_items", None)
-        output_items = getattr(response, "codex_output_items", None)
-        phase = getattr(response, "assistant_phase", "")
-        if reasoning_items:
-            message["codex_reasoning_items"] = reasoning_items
-        if output_items:
-            message["codex_output_items"] = output_items
-        if phase:
-            message["phase"] = phase
-        return message
 
     # ------------------------------------------------------------------
     # Tool list refresh — delegate to ``_response``
@@ -2288,22 +875,6 @@ class AgenticLoop:
     # Model switching / escalation — delegate to ``_model_switching``
     # ------------------------------------------------------------------
 
-    async def _sync_model_from_settings_async(self) -> bool:
-        """Async drift sync used by ``arun``."""
-        return await _model_switching.sync_model_from_settings_async(self)
-
-    def _drift_target_is_healthy(self, target_model: str) -> bool:
-        """Health check: ``_resolve_provider`` → ``rotator.resolve`` lookup.
-
-        Resolves ``target_model`` to its provider via ``_resolve_provider``
-        and asks ``ProfileRotator.resolve`` whether any eligible profile
-        could serve the next call. The query mirrors the actual selection
-        path used by the LLM call so the answer matches what the next
-        call would pick. Delegates to
-        :func:`_model_switching.drift_target_is_healthy`.
-        """
-        return _model_switching.drift_target_is_healthy(self, target_model)
-
     async def update_model_async(
         self,
         model: str,
@@ -2312,22 +883,6 @@ class AgenticLoop:
     ) -> None:
         """Delegates to :func:`_model_switching.update_model_async`."""
         return await _model_switching.update_model_async(self, model, provider, reason)
-
-    def _purge_stale_model_switch_acks(self) -> int:
-        """Delegates to :func:`_model_switching.purge_stale_model_switch_acks`.
-
-        Returns the purged count, which the caller forwards to the
-        MODEL_SWITCHED payload.
-        """
-        return _model_switching.purge_stale_model_switch_acks(self)
-
-    def _adapt_context_for_model(self, target_model: str) -> None:
-        """Delegates to :func:`_model_switching.adapt_context_for_model`."""
-        return _model_switching.adapt_context_for_model(self, target_model)
-
-    def _fallback_chain_suggestions(self) -> list[str]:
-        """Remaining models in the current adapter's chain — for diagnostics."""
-        return _model_switching.fallback_chain_suggestions(self)
 
     # ------------------------------------------------------------------
     # Run loop entry points
@@ -2431,7 +986,7 @@ class AgenticLoop:
         round_idx = prepared.turn_state.round_index
         while True:
             round_idx = prepared.turn_state.round_index
-            guard_reason = self._check_round_guards(round_idx)
+            guard_reason = _guards._check_round_guards(self, round_idx)
             if guard_reason is not None:
                 break
             is_last_round = self.max_rounds > 0 and round_idx == self.max_rounds - 1
@@ -2484,37 +1039,6 @@ class AgenticLoop:
     # Context window — delegate to ``_context``
     # ------------------------------------------------------------------
 
-    def _sync_messages_to_context(self, messages: list[dict[str, Any]]) -> None:
-        """Delegates to :func:`_context.sync_messages_to_context`."""
-        return _context.sync_messages_to_context(self, messages)
-
-    def _notify_context_event(
-        self, event_type: str, *, original_count: int, new_count: int
-    ) -> None:
-        """Delegates to :func:`_context.notify_context_event`."""
-        return _context.notify_context_event(
-            self, event_type, original_count=original_count, new_count=new_count
-        )
-
-    def _maybe_prune_messages(self, messages: list[dict[str, Any]]) -> None:
-        """Delegates to :func:`_context.maybe_prune_messages`."""
-        return _context.maybe_prune_messages(self, messages)
-
-    async def _check_context_overflow(self, system: str, messages: list[dict[str, Any]]) -> None:
-        """Delegates to :func:`_context.check_context_overflow`."""
-        return await _context.check_context_overflow(self, system, messages)
-
-    async def _aggressive_context_recovery(
-        self, system: str, messages: list[dict[str, Any]]
-    ) -> int:
-        """Delegates to :func:`_context.aggressive_context_recovery`."""
-        return await _context.aggressive_context_recovery(self, system, messages)
-
-    @staticmethod
-    def _repair_messages(messages: list[dict[str, Any]]) -> None:
-        """Delegates to :func:`_context.repair_messages`."""
-        return _context.repair_messages(messages)
-
     def _build_system_prompt(self) -> str:
         """Delegates to :func:`_context.build_system_prompt`."""
         return _context.build_system_prompt(self)
@@ -2522,21 +1046,6 @@ class AgenticLoop:
     # ------------------------------------------------------------------
     # Durable child mailbox — delegate to ``_collaboration_mailbox``
     # ------------------------------------------------------------------
-
-    def _admit_collaboration_messages(
-        self,
-        messages: list[dict[str, Any]],
-        *,
-        user_input: str = "",
-        round_idx: int = 0,
-    ) -> int:
-        """Delegates to :func:`_collaboration_mailbox.admit_collaboration_messages`."""
-        return _collaboration_mailbox.admit_collaboration_messages(
-            self,
-            messages,
-            user_input=user_input,
-            round_idx=round_idx,
-        )
 
     # ------------------------------------------------------------------
     # LLM call (stays in this file — tightly coupled to ``arun`` body)
@@ -2552,364 +1061,16 @@ class AgenticLoop:
         response_schema: dict[str, Any] | None = None,
         allow_tools: bool = True,
     ) -> AgenticResponse | None:
-        """Multi-provider LLM call via :class:`LLMAdapter` (P1 Gateway pattern).
-
-        Delegates to ``self._new_adapter.acomplete()`` (provider-specific
-        conversion, retry, failover). Returns a normalized
-        ``AgenticResponse`` or None on failure. Raises ``UserCancelledError``
-        on Ctrl+C (caught by ``arun()``). Optional ``model`` overrides the
-        request model for one call without mutating ``self.model``. Optional
-        ``response_schema`` overrides the loop-level schema for this call only.
-        ``allow_tools=False`` keeps auxiliary planner / judge calls on their
-        structured text contract instead of inheriting the action tool surface.
-
-        The context-overflow check mutates the shared messages list in place,
-        so it must run before the adapter request is assembled.
-        """
-        effective_model = model or self.model
-        # Shared list — in-place pruning must persist into later rounds.
-        await self._check_context_overflow(system, messages)
-        step_snapshot = self._open_step_snapshot(
+        """Assemble and dispatch one provider request."""
+        return await _provider_call.call_llm(
+            self,
+            system,
+            messages,
             round_idx=round_idx,
-            model=effective_model,
+            model=model,
+            response_schema=response_schema,
             allow_tools=allow_tools,
         )
-
-        # WRAP_UP: force text-only when approaching limits
-        wrap_up = False
-        if self.max_rounds > 0:
-            remaining = self.max_rounds - round_idx
-            wrap_up = remaining <= self.WRAP_UP_HEADROOM
-        if not wrap_up and self._time_budget_s > 0:
-            import time as _time
-
-            remaining_time = self._time_budget_s - (_time.monotonic() - self._loop_start_time)
-            wrap_up = remaining_time <= self._WRAP_UP_TIME_HEADROOM_S
-        tool_choice: dict[str, str] = (
-            {"type": "none"} if wrap_up or not allow_tools else {"type": "auto"}
-        )
-
-        # Adaptive compute — context-proportional caps; the only adaptive
-        # case left is wrap-up (overthinking exits the loop instead).
-        from core.config import settings as _settings
-        from core.llm.token_tracker import MODEL_CONTEXT_WINDOW
-
-        ctx_window = MODEL_CONTEXT_WINDOW.get(effective_model, 200_000)
-
-        adaptive_max_tokens = self.max_tokens
-        adaptive_thinking = self._thinking_budget
-        adaptive_effort = self._effort
-        if wrap_up:
-            # wrap-up: minimal budget (0.5% of window, floor 4096)
-            adaptive_max_tokens = max(4096, min(self.max_tokens, ctx_window // 200))
-            adaptive_thinking = 0
-            adaptive_effort = "low"
-
-        # config-driven temperature (1.0 default)
-        loop_temperature = _settings.temperature_agent_loop
-
-        # build the adapter-neutral request, then translate back to
-        # AgenticResponse so the rest of the loop is unchanged
-        from core.llm.adapters.translation import (
-            agentic_response_from_adapter_result,
-            build_adapter_request,
-        )
-
-        # prior session_id → adapter ``--resume <id>`` (claude-cli reuses the
-        # cached prefix); empty on first turn (behaviour unchanged)
-        prior_session_id = _load_prior_session_id(self._session_id)
-        session_allowed_tools = (
-            frozenset(self._allowed_tool_names) if self._allowed_tool_names is not None else None
-        )
-
-        request_tools: list[dict[str, Any]] | BoundToolPlan
-        if not allow_tools:
-            request_tools = []
-        elif step_snapshot.bound_tool_plan is not None:
-            request_tools = step_snapshot.bound_tool_plan
-        else:
-            request_tools = self._tools
-        raw_denied_tools: Any = getattr(self.executor, "_denied_tools", frozenset())
-        executor_denied_tools = (
-            frozenset(raw_denied_tools) if isinstance(raw_denied_tools, Set) else frozenset()
-        )
-        raw_executable_tools: Any = ()
-        if allow_tools:
-            if step_snapshot.bound_tool_plan is not None:
-                raw_executable_tools = getattr(
-                    self.executor,
-                    "_bound_allowed_tools",
-                    (),
-                )
-            else:
-                raw_executable_tools = getattr(self.executor, "_handlers", ())
-        executor_executable_tools = (
-            frozenset(raw_executable_tools)
-            if isinstance(raw_executable_tools, (Mapping, Set))
-            else frozenset()
-        )
-        req = build_adapter_request(
-            model=effective_model,
-            system=system,
-            messages=messages,
-            tools=request_tools,
-            transient_tools=(
-                list(self._transient_tools)
-                if allow_tools and step_snapshot.bound_tool_plan is not None
-                else None
-            ),
-            transient_deferred_tool_names=(
-                self._transient_deferred_tool_names
-                if allow_tools and step_snapshot.bound_tool_plan is not None
-                else ()
-            ),
-            tool_choice=tool_choice,
-            max_tokens=adaptive_max_tokens,
-            temperature=loop_temperature,
-            thinking_budget=adaptive_thinking,
-            effort=adaptive_effort,
-            allowed_tool_names=session_allowed_tools,
-            denied_tool_names=executor_denied_tools,
-            executable_tool_names=executor_executable_tools,
-            resume_session_id=prior_session_id,
-            # per-loop schema → claude-cli --json-schema / codex --output-schema
-            response_schema=(
-                response_schema if response_schema is not None else self._response_schema
-            ),
-        )
-        import uuid as _uuid
-
-        llm_call_id = f"llm-{step_snapshot.step_id}-{_uuid.uuid4().hex[:8]}"
-        correlation = {
-            "session_id": step_snapshot.correlation.session_id,
-            "turn_id": step_snapshot.correlation.turn_id,
-            "step_id": step_snapshot.step_id,
-            "session_generation": step_snapshot.correlation.session_generation,
-            "verify_attempt": step_snapshot.correlation.verify_attempt,
-            "llm_call_id": llm_call_id,
-            "llm_attempt_id": "",
-        }
-        bound_request = req
-        original_adapter = self._new_adapter
-        llm_request = await self._middleware_registry.llm_request(
-            LlmCallRequest(
-                adapter=original_adapter,
-                request=req,
-                correlation=correlation,
-            )
-        )
-        if (
-            step_snapshot.bound_tool_plan is not None
-            and llm_request.adapter is not original_adapter
-        ):
-            raise ValueError("LLM middleware cannot change a bound request adapter")
-        call_adapter = llm_request.adapter
-        req = llm_request.request
-        if step_snapshot.bound_tool_plan is not None:
-            _validate_bound_request_rewrite(bound_request, req)
-        if session_allowed_tools is not None and step_snapshot.bound_tool_plan is None:
-            effective_allowed = session_allowed_tools
-            if req.allowed_tool_names is not None:
-                effective_allowed &= req.allowed_tool_names
-            req = replace(
-                req,
-                allowed_tool_names=effective_allowed,
-                tools=tuple(tool for tool in req.tools if tool.name in effective_allowed),
-                deferred_tool_names=tuple(
-                    name for name in req.deferred_tool_names if name in effective_allowed
-                ),
-            )
-        elif session_allowed_tools is not None and (
-            req.allowed_tool_names != session_allowed_tools
-            or any(tool.name not in session_allowed_tools for tool in req.tools)
-        ):
-            raise ValueError("bound tool request escaped its pre-filtered allowlist")
-        effective_model = req.model
-        adapter_name = getattr(call_adapter, "name", "<unknown>")
-        effective_provider = getattr(call_adapter, "provider", self._provider)
-        effective_source = getattr(call_adapter, "source", self._source)
-        step_snapshot = replace(
-            step_snapshot,
-            model=effective_model,
-            provider=str(effective_provider),
-            source=str(effective_source),
-            adapter_name=str(adapter_name),
-        )
-        self._current_step_snapshot = step_snapshot
-        self._tool_processor.bind_step(step_snapshot)
-        llm_attempt_number = 0
-
-        async def _complete_attempt(adapter: Any, request: Any) -> Any:
-            nonlocal llm_attempt_number
-            llm_attempt_number += 1
-            attempt_correlation = {
-                **correlation,
-                "llm_attempt_id": f"{llm_call_id}:attempt-{llm_attempt_number}",
-            }
-            current = LlmCallRequest(
-                adapter=adapter,
-                request=request,
-                correlation=attempt_correlation,
-            )
-
-            async def terminal(effective: LlmCallRequest) -> Any:
-                import time as _llm_call_time
-
-                from core.hooks.dispatch import fire_hook_async
-
-                started_at = _llm_call_time.monotonic()
-                active_adapter = effective.adapter
-                active_request = effective.request
-                active_name = getattr(active_adapter, "name", "<unknown>")
-                active_provider = getattr(active_adapter, "provider", effective_provider)
-                await fire_hook_async(
-                    self._hooks,
-                    HookEvent.LLM_CALL_STARTED,
-                    {
-                        **attempt_correlation,
-                        "model": active_request.model,
-                        "provider": active_provider,
-                        "adapter": active_name,
-                    },
-                )
-                try:
-                    attempt_result = await active_adapter.acomplete(active_request)
-                except BaseException as exc:
-                    await fire_hook_async(
-                        self._hooks,
-                        HookEvent.LLM_CALL_ENDED,
-                        {
-                            **attempt_correlation,
-                            "model": active_request.model,
-                            "provider": active_provider,
-                            "adapter": active_name,
-                            "latency_ms": (_llm_call_time.monotonic() - started_at) * 1_000,
-                            "error": str(exc) or type(exc).__name__,
-                        },
-                    )
-                    raise
-
-                usage = getattr(attempt_result, "usage", None)
-                input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
-                output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
-                cached_input_tokens = int(getattr(usage, "cached_input_tokens", 0) or 0)
-                reasoning_tokens = int(getattr(usage, "reasoning_tokens", 0) or 0)
-                cache_write_tokens = int(getattr(usage, "cache_write_tokens", 0) or 0)
-                try:
-                    from core.llm.token_tracker import calculate_cost
-
-                    cost_usd = float(
-                        calculate_cost(
-                            active_request.model,
-                            input_tokens,
-                            output_tokens,
-                            cache_creation_tokens=cache_write_tokens,
-                            cache_read_tokens=cached_input_tokens,
-                        )
-                    )
-                except Exception:
-                    log.warning(
-                        "calculate_cost failed for model=%s — recording cost_usd=0.0 "
-                        "(cost limiter will under-count this call)",
-                        active_request.model,
-                        exc_info=True,
-                    )
-                    cost_usd = 0.0
-                await fire_hook_async(
-                    self._hooks,
-                    HookEvent.LLM_CALL_ENDED,
-                    {
-                        **attempt_correlation,
-                        "model": active_request.model,
-                        "provider": active_provider,
-                        "adapter": active_name,
-                        "latency_ms": (_llm_call_time.monotonic() - started_at) * 1_000,
-                        "error": None,
-                        "usage": {
-                            "input_tokens": input_tokens,
-                            "output_tokens": output_tokens,
-                            "cached_input_tokens": cached_input_tokens,
-                            "reasoning_tokens": reasoning_tokens,
-                            "cache_write_tokens": cache_write_tokens,
-                        },
-                        "cost_usd": cost_usd,
-                    },
-                )
-                return attempt_result
-
-            return await self._middleware_registry.llm_execution(current, terminal)
-
-        async def _on_fail_fast_pre_execution_retry(
-            exc: Exception,
-            attempt: int,
-            max_attempts: int,
-        ) -> None:
-            self._pre_execution_retry_errors.append(type(exc).__name__)
-            if self._hooks:
-                try:
-                    await self._hooks.trigger_async(
-                        HookEvent.LLM_CALL_RETRIED,
-                        {
-                            **correlation,
-                            "llm_attempt_id": f"{llm_call_id}:attempt-{attempt}",
-                            "model": effective_model,
-                            "provider": effective_provider,
-                            "adapter": adapter_name,
-                            "error_type": type(exc).__name__,
-                            "delay_s": _FAIL_FAST_RETRY_DELAY_S,
-                            "attempt": attempt,
-                            "max_attempts": max_attempts,
-                        },
-                    )
-                except Exception:
-                    log.debug("LLM_CALL_RETRIED hook trigger failed", exc_info=True)
-
-        try:
-            result = await _acomplete_with_fail_fast_pre_execution_retry(
-                call_adapter,
-                req,
-                on_retry=_on_fail_fast_pre_execution_retry,
-                complete=_complete_attempt,
-            )
-        except Exception as exc:
-            error_detail = str(exc) or type(exc).__name__
-            self._last_llm_error = error_detail
-            log.warning(
-                "AgenticLoop: adapter.acomplete failed (adapter=%s): %s",
-                adapter_name,
-                error_detail,
-            )
-            if _fail_fast_adapter_errors_enabled():
-                raise
-            response = None
-        else:
-            response = agentic_response_from_adapter_result(result)
-            # persist the emitted session_id for the next turn's resume
-            # (no-op for non-claude-cli adapters)
-            emitted_sid = getattr(result, "session_id", "")
-            _persist_session_id(self._session_id, emitted_sid)
-            # cache for the SESSION_ENDED claude_cli_session_id write
-            if emitted_sid:
-                self._last_emitted_session_id = emitted_sid
-
-        if response is None:
-            adapter_err = getattr(call_adapter, "_last_error", None)
-            if adapter_err:
-                self._last_llm_error = str(adapter_err)
-            elif not self._last_llm_error:
-                self._last_llm_error = f"All {self._provider} models exhausted"
-
-        # surface reasoning summaries to AgenticUI per finished item
-        if response is not None and not self._quiet:
-            summaries = getattr(response, "reasoning_summaries", None) or []
-            for summary in summaries:
-                if not summary:
-                    continue
-                from core.ui.agentic_ui import emit_reasoning_summary
-
-                emit_reasoning_summary(self._provider, self.model, summary)
-
-        return response
 
     # ------------------------------------------------------------------
     # Response handling — delegate to ``_response``
@@ -2934,14 +1095,6 @@ class AgenticLoop:
     def _update_tool_error_tracking(self, tool_results: list[dict[str, Any]]) -> None:
         """Delegates to :func:`_response.update_tool_error_tracking`."""
         return _response.update_tool_error_tracking(self, tool_results)
-
-    def _check_convergence_break(self) -> bool:
-        """Delegates to :func:`_response.check_convergence_break`."""
-        return _response.check_convergence_break(self)
-
-    def _check_repeated_success_no_progress(self) -> bool:
-        """Delegates to :func:`_response.check_repeated_success_no_progress`."""
-        return _response.check_repeated_success_no_progress(self)
 
 
 # ---------------------------------------------------------------------------

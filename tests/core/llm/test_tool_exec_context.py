@@ -300,18 +300,18 @@ def test_processor_builds_tool_context_for_each_dispatch() -> None:
 
 def test_agentic_loop_passes_identity_to_processor() -> None:
     """Source-level pin: AgenticLoop must pull provider / source from the
-    RESOLVED adapter (``self._new_adapter``), not the loop's pre-
-    normalisation ``self._provider`` / ``self._source``. The registry
+    RESOLVED adapter (``loop._new_adapter``), not the loop's pre-
+    normalisation provider/source. The registry
     collapses ``openai-codex → openai`` / ``zhipuai → glm``; the
     strict-dispatch helper (``_select_adapter`` PR-NO-FALLBACK) compares
     against the adapter's own identity so the pre-normalisation values
     would silently miss every match."""
     src = (
-        Path(__file__).resolve().parents[3] / "core" / "agent" / "loop" / "agent_loop.py"
+        Path(__file__).resolve().parents[3] / "core" / "agent" / "loop" / "_bootstrap.py"
     ).read_text(encoding="utf-8")
-    assert 'getattr(self._new_adapter, "provider", self._provider)' in src
-    assert 'getattr(self._new_adapter, "source", self._source)' in src
-    assert 'adapter_name=getattr(self._new_adapter, "name", "")' in src
+    assert 'getattr(loop._new_adapter, "provider", loop._provider)' in src
+    assert 'getattr(loop._new_adapter, "source", loop._source)' in src
+    assert 'adapter_name=getattr(loop._new_adapter, "name", "")' in src
 
 
 def test_handler_signature_gating_skips_closed_signature_handlers() -> None:

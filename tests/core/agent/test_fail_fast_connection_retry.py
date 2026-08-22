@@ -41,7 +41,7 @@ def _no_delay(monkeypatch: pytest.MonkeyPatch) -> None:
     async def immediate(_delay: float) -> None:
         return None
 
-    monkeypatch.setattr("core.agent.loop.agent_loop.asyncio.sleep", immediate)
+    monkeypatch.setattr("core.agent.loop._provider_call.asyncio.sleep", immediate)
 
 
 def test_fail_fast_retries_one_read_timeout_with_the_identical_request(

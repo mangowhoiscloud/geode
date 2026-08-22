@@ -53,7 +53,9 @@ def admit_collaboration_messages(
         checkpoint = getattr(loop, "_checkpoint", None)
         if checkpoint is None:
             return injected
-        loop._sync_messages_to_context(messages)
+        from . import _context
+
+        _context.sync_messages_to_context(loop, messages)
         if not loop._save_checkpoint(user_input, round_idx):
             return injected
         store.ack_mailbox(loop._session_id, [item.id for item in mailbox])

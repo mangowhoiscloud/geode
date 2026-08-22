@@ -27,9 +27,6 @@ class _FakeLoop:
         self._effort = "high"
         self.adapted_to: str | None = None
 
-    def _adapt_context_for_model(self, target: str) -> None:
-        self.adapted_to = target
-
 
 class _FakeSettings:
     model = "claude-fable-5"
@@ -51,6 +48,10 @@ def poller(monkeypatch) -> CLIPoller:
 def test_sync_repoints_live_loop_model(poller: CLIPoller, monkeypatch) -> None:
     monkeypatch.setattr("core.config.settings", _FakeSettings(), raising=False)
     loop = _FakeLoop()
+    monkeypatch.setattr(
+        "core.agent.loop._model_switching.adapt_context_for_model",
+        lambda current_loop, target: setattr(current_loop, "adapted_to", target),
+    )
     # primary moved: model_before is the old value, settings.model is the new
     poller._sync_live_loop_to_settings(loop, "claude-opus-4-8", "high")
     assert loop.model == "claude-fable-5"

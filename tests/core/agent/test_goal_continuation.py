@@ -4,9 +4,9 @@ import asyncio
 from pathlib import Path
 from types import MethodType
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from core.agent.loop import AgenticLoop, AgenticResult, _goal
+from core.agent.loop import AgenticLoop, AgenticResult, _goal, _guards
 from core.hooks import HookEvent, HookName
 from core.llm.token_tracker import LLMUsage
 from core.memory.goals import GoalStatus, GoalStore
@@ -219,13 +219,15 @@ def test_hosted_generation_emits_start_before_goal_continuation(tmp_path: Path) 
     loop._save_checkpoint = MagicMock(return_value=True)
     goal = GoalStore(tmp_path / "sessions.db").create("s-goal", "Resume")
 
-    result = asyncio.run(
-        loop._open_turn(
-            goal.objective,
-            goal_continuation=goal,
-            goal_continuation_trigger="serve_idle",
+    with patch.object(_guards, "_admit_session_budget", new=AsyncMock(return_value=None)):
+        result = asyncio.run(
+            _guards._open_turn(
+                loop,
+                goal.objective,
+                goal_continuation=goal,
+                goal_continuation_trigger="serve_idle",
+            )
         )
-    )
 
     assert result is None
     loop._timeline.record_session_start.assert_called_once_with(

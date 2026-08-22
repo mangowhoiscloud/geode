@@ -239,11 +239,9 @@ class TestLoopEmitsAfterCall:
     the actual loop requires a real LLM."""
 
     def test_loop_calls_emit_reasoning_summary(self) -> None:
-        # The call lives in agent_loop._call_llm (the run-loop module), not the
-        # package __init__ — scan the real file, not the re-export surface.
-        from core.agent.loop import agent_loop as loop_mod
+        from core.agent.loop import _provider_call
 
-        with open(loop_mod.__file__, encoding="utf-8") as f:
+        with open(_provider_call.__file__, encoding="utf-8") as f:
             text = f.read()
         assert "emit_reasoning_summary" in text, (
             "agent_loop.py must call emit_reasoning_summary for "
