@@ -882,6 +882,132 @@
     }
   },
   {
+    "name": "get_grill",
+    "description": "Read the typed dependency tree for the current /grill interview, including settled answers and the computed answerable frontier.",
+    "category": "planning",
+    "cost_tier": "free",
+    "input_schema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "update_grill",
+    "description": "Mutate the current typed /grill tree. Define an acyclic dependency tree, answer only a node on the computed frontier, or complete only after every node is answered. Prose does not mutate this state and this is not MCTS/LATS.",
+    "category": "planning",
+    "cost_tier": "free",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": ["define", "answer", "complete"]
+        },
+        "nodes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 24,
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {"type": "string", "minLength": 1, "maxLength": 64},
+              "question": {"type": "string", "minLength": 1, "maxLength": 1000},
+              "depends_on": {
+                "type": "array",
+                "items": {"type": "string", "minLength": 1, "maxLength": 64}
+              },
+              "options": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 3,
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "label": {"type": "string", "minLength": 1, "maxLength": 120},
+                    "consequence": {"type": "string", "minLength": 1, "maxLength": 1000}
+                  },
+                  "required": ["label", "consequence"],
+                  "additionalProperties": false
+                }
+              },
+              "recommended": {"type": "string", "minLength": 1, "maxLength": 120},
+              "recommendation_reason": {"type": "string", "minLength": 1, "maxLength": 1000}
+            },
+            "required": ["id", "question", "depends_on", "options", "recommended", "recommendation_reason"],
+            "additionalProperties": false
+          }
+        },
+        "node_id": {"type": "string", "minLength": 1, "maxLength": 64},
+        "answer": {"type": "string", "minLength": 1, "maxLength": 120}
+      },
+      "required": ["action"],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "get_geo",
+    "description": "Read the typed GEO run, its current phase, frozen measurement config, and the independent F/R/C/P/A/Q/O evidence vector.",
+    "category": "evaluation",
+    "cost_tier": "free",
+    "input_schema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "update_geo",
+    "description": "Mutate the current typed GEO evidence run. Configure frozen inputs, record one stage with its own denominator and evidence locators, advance phases in order, or complete only after F/R/C/P/A/Q/O are all explicitly measured, partial, or not_measured. Never emits an aggregate GEO score or grants live-execution approval.",
+    "category": "evaluation",
+    "cost_tier": "free",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": ["configure", "record", "advance", "complete"]
+        },
+        "config": {
+          "type": "object",
+          "properties": {
+            "workload_digest": {"type": "string", "minLength": 1, "maxLength": 1000},
+            "engine": {"type": "string", "minLength": 1, "maxLength": 1000},
+            "model": {"type": "string", "minLength": 1, "maxLength": 1000},
+            "locale": {"type": "string", "minLength": 1, "maxLength": 1000},
+            "repetitions": {"type": "integer", "minimum": 1, "maximum": 1000}
+          },
+          "additionalProperties": false
+        },
+        "evidence": {
+          "type": "object",
+          "properties": {
+            "stage": {"type": "string", "enum": ["F", "R", "C", "P", "A", "Q", "O"]},
+            "status": {"type": "string", "enum": ["not_measured", "partial", "measured"]},
+            "numerator": {"type": ["integer", "null"], "minimum": 0},
+            "denominator": {"type": ["integer", "null"], "minimum": 1},
+            "finding": {"type": "string", "minLength": 1, "maxLength": 2000},
+            "evidence": {
+              "type": "array",
+              "maxItems": 24,
+              "items": {"type": "string", "minLength": 1, "maxLength": 1000}
+            }
+          },
+          "required": ["stage", "status", "numerator", "denominator", "finding", "evidence"],
+          "additionalProperties": false
+        },
+        "phase": {
+          "type": "string",
+          "enum": ["offline_measure", "live_observe", "experiment"]
+        }
+      },
+      "required": ["action"],
+      "additionalProperties": false
+    }
+  },
+  {
     "name": "llms_txt_index",
     "description": "Fetches a documentation site's /llms.txt index (llmstxt.org convention) and returns it parsed into structured sections of links: title, summary, sections[].links[{name, url, notes, same_origin}]. Use this FIRST when researching a documentation site, then web_fetch only the relevant linked pages. Accepts a site or base URL (probes <path>/llms.txt then <origin>/llms.txt) or a direct llms.txt URL. Unlike web_fetch, the full index is parsed without the 10k-char truncation. If the site publishes no llms.txt, returns not_found with a fallback hint (general_web_search scoped to the site).",
     "category": "external",

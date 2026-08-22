@@ -122,12 +122,14 @@ async def prepare_input(
     reflection_hint = _guards._consume_reflection_hint(loop)
     plan_hint = _guards._consume_plan_hint(loop)
     loop._last_plan_hint = plan_hint
+    control_hint = _context.render_control_state_hints(loop)
     system_prompt = _context.inject_runtime_hints(
         loop._build_system_prompt(),
         loop._preflight_hint,
         reflection_hint,
         verification_hint,
         plan_hint,
+        control_hint,
     )
     _context.maybe_prune_messages(loop, messages)
 

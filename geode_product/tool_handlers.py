@@ -196,6 +196,8 @@ def _resource_metadata() -> dict[str, tuple[str, Any]]:
         "create_goal": ("active-goal:v1", constant("goal")),
         "update_goal": ("active-goal:v1", constant("goal")),
         "update_plan": ("turn-plan:v1", constant("plan")),
+        "update_grill": ("grill-session:v1", constant("grill")),
+        "update_geo": ("geo-run:v1", constant("geo")),
         "document_ingest": ("local-path:v1", _document_resources),
         "edit_file": ("local-path:v1", _path_resource("file_path")),
         "write_file": ("local-path:v1", _path_resource("file_path")),
@@ -251,11 +253,17 @@ def _resource_metadata() -> dict[str, tuple[str, Any]]:
 
 def product_handler_groups() -> tuple[tuple[str, UniqueEntries[str, Any]], ...]:
     """Return the product-owned batches consumed by the core composer."""
+    from geode_product.geo_state import build_geo_handlers
+
     seed_handlers = UniqueEntries[str, Any](
         (name, make_delegate_handler(module, class_name))
         for name, module, class_name in _SEED_TOOL_CLASSES
     )
-    return (("product-audit", _build_audit_handlers()), ("product-seed", seed_handlers))
+    return (
+        ("product-audit", _build_audit_handlers()),
+        ("product-seed", seed_handlers),
+        ("product-geo", build_geo_handlers()),
+    )
 
 
 def build_tool_handlers(

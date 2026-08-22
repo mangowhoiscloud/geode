@@ -13,6 +13,7 @@ from typing import Any
 from core.cli.tool_handlers.context import _build_context_handlers
 from core.cli.tool_handlers.execution import _build_execution_handlers
 from core.cli.tool_handlers.goal import _build_goal_handlers
+from core.cli.tool_handlers.grill import _build_grill_handlers
 from core.cli.tool_handlers.hitl import _build_hitl_handlers
 from core.cli.tool_handlers.memory import _build_memory_handlers
 from core.cli.tool_handlers.plan import _build_plan_handlers
@@ -30,6 +31,7 @@ __all__ = [
     "_build_context_handlers",
     "_build_execution_handlers",
     "_build_goal_handlers",
+    "_build_grill_handlers",
     "_build_hitl_handlers",
     "_build_memory_handlers",
     "_build_plan_handlers",
@@ -55,6 +57,7 @@ def cli_handler_groups(
     return (
         ("plan", _build_plan_handlers()),
         ("goal", _build_goal_handlers()),
+        ("grill", _build_grill_handlers()),
         ("hitl", _build_hitl_handlers()),
         ("memory", _build_memory_handlers()),
         (

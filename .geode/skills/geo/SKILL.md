@@ -2,7 +2,7 @@
 name: geo
 description: Audit and improve Generative Engine Optimization as a measurable discovery-to-citation pipeline. Use for /geo, AI-search visibility, citation readiness, and GEO benchmark work.
 triggers: geo, generative engine optimization, AI search visibility, 생성형 검색, 인용 최적화
-tools: update_plan, delegate_task, spawn_agent, list_agents, wait_agent, send_message, followup_task, interrupt_agent, general_web_search, web_fetch, llms_txt_index, glob_files, grep_files, read_document
+tools: get_geo, update_geo, update_plan, delegate_task, spawn_agent, list_agents, wait_agent, send_message, followup_task, interrupt_agent, general_web_search, web_fetch, llms_txt_index, glob_files, grep_files, read_document
 ---
 
 # GEO
@@ -24,6 +24,21 @@ Run states are `preflight → offline_measure → live_observe → experiment`.
 Finishing an earlier state never proves a later one. Without its prerequisite,
 approval, frozen workload, or receipt, preserve the later state as
 `not_measured` instead of converting it to zero or failure.
+Each executable phase must record at least one phase-bound evidence item before
+advancing; completion is legal only from `experiment` after all seven stages
+are explicit. A `not_measured` item records the boundary, but never skips it.
+
+The runtime creates a typed `geo_state` before this prompt. Use `update_geo` to
+configure frozen inputs, record each stage, advance phases, and complete the
+run. Every `partial` or `measured` stage requires its own integer numerator,
+positive denominator, and evidence locator. Every unobserved stage must be
+recorded explicitly as `not_measured` with null numerator/denominator and a
+reason. Prose cannot advance or complete the state, and the typed receipt never
+grants network/payment approval. Use `get_geo` after a rejected transition.
+The model-visible tool cannot set approval or preregistration receipts. The
+operator must issue `/geo approve-live <receipt>` before live observation and
+`/geo preregister <receipt>` before experiment admission. Workload, engine,
+model, locale, and repetitions freeze when live observation starts.
 
 ## Evidence frontier
 

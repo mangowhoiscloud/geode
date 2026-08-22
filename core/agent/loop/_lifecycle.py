@@ -44,6 +44,8 @@ def collect_guard_state(loop: AgenticLoop) -> dict[str, Any]:
     ``apply_guard_state(collect_guard_state(loop))`` round-trips. Pinned by
     ``tests/core/agent/test_loop_state_machine.py``.
     """
+    metrics = getattr(loop, "_session_metrics", None)
+    active_plan = getattr(metrics, "active_plan", None)
     return {
         "consecutive_text_only_rounds": loop._consecutive_text_only_rounds,
         "consecutive_llm_failures": loop._consecutive_llm_failures,
@@ -52,6 +54,24 @@ def collect_guard_state(loop: AgenticLoop) -> dict[str, Any]:
         "low_confidence_replan_armed": bool(getattr(loop, "_low_confidence_replan_armed", True)),
         "consecutive_tool_tracker": [list(sig) for sig in loop._consecutive_tool_tracker],
         "convergence": loop._convergence.to_snapshot(),
+        "active_plan": (
+            active_plan.to_dict()
+            if active_plan is not None and hasattr(active_plan, "to_dict")
+            else None
+        ),
+        "replan_count": _as_int(getattr(metrics, "replan_count", 0)),
+        "replan_attempts_on_current_step": _as_int(
+            getattr(metrics, "replan_attempts_on_current_step", 0)
+        ),
+        "last_replan_trigger": str(getattr(metrics, "last_replan_trigger", "")),
+        "verify_pass_count": _as_int(getattr(metrics, "verify_pass_count", 0)),
+        "verify_fail_count": _as_int(getattr(metrics, "verify_fail_count", 0)),
+        "last_verify_passed": bool(getattr(metrics, "last_verify_passed", True)),
+        "last_verify_mode": str(getattr(metrics, "last_verify_mode", "")),
+        "last_verify_effective_mode": str(getattr(metrics, "last_verify_effective_mode", "")),
+        "last_verify_rubric_misses": list(getattr(metrics, "last_verify_rubric_misses", ())),
+        "last_verify_reflection_hint": str(getattr(metrics, "last_verify_reflection_hint", "")),
+        "last_verify_should_retry": bool(getattr(metrics, "last_verify_should_retry", False)),
     }
 
 
@@ -86,6 +106,33 @@ def apply_guard_state(loop: AgenticLoop, data: Any) -> None:
     ]
     convergence = data.get("convergence", {})
     loop._convergence.apply_snapshot(convergence if isinstance(convergence, dict) else {})
+    metrics = getattr(loop, "_session_metrics", None)
+    if metrics is not None:
+        metrics.active_plan = None
+        raw_plan = data.get("active_plan")
+        if raw_plan is not None:
+            try:
+                from core.agent.plan import Plan
+
+                metrics.active_plan = Plan.from_dict(raw_plan)
+            except (TypeError, ValueError):
+                log.warning("Malformed checkpointed plan ignored", exc_info=True)
+        metrics.replan_count = _as_int(data.get("replan_count"))
+        metrics.replan_attempts_on_current_step = _as_int(
+            data.get("replan_attempts_on_current_step")
+        )
+        metrics.last_replan_trigger = str(data.get("last_replan_trigger") or "")
+        metrics.verify_pass_count = _as_int(data.get("verify_pass_count"))
+        metrics.verify_fail_count = _as_int(data.get("verify_fail_count"))
+        metrics.last_verify_passed = bool(data.get("last_verify_passed", True))
+        metrics.last_verify_mode = str(data.get("last_verify_mode") or "")
+        metrics.last_verify_effective_mode = str(data.get("last_verify_effective_mode") or "")
+        raw_misses = data.get("last_verify_rubric_misses", [])
+        metrics.last_verify_rubric_misses = (
+            tuple(str(item) for item in raw_misses) if isinstance(raw_misses, list) else ()
+        )
+        metrics.last_verify_reflection_hint = str(data.get("last_verify_reflection_hint") or "")
+        metrics.last_verify_should_retry = bool(data.get("last_verify_should_retry", False))
 
 
 def restore_loop_state(loop: AgenticLoop, state: Any) -> None:
@@ -873,6 +920,8 @@ async def _finalize_without_public_verify_async(
     _prepare_final_result(loop, result, user_input, round_idx, persist=False)
     _merge_verify_attempts(loop, result)
     _persist_final_result(loop, result, user_input, round_idx)
+    if getattr(loop, "_suppress_public_verify", False):
+        _persist_verify_state(loop, loop._session_metrics, False)
     if loop._hooks:
         session_ended, turn_completed, reasoning_metrics = _final_hook_payloads(
             loop, result, user_input
@@ -890,7 +939,7 @@ async def finalize_and_return_async(
     round_idx: int,
 ) -> AgenticResult:
     """Async finalizer for ``AgenticLoop.arun`` hook emission."""
-    if _skips_public_finalization(result):
+    if getattr(loop, "_suppress_public_verify", False) or _skips_public_finalization(result):
         return await _finalize_without_public_verify_async(loop, result, user_input, round_idx)
     _prepare_final_result(loop, result, user_input, round_idx, persist=False)
     verify_payload, follow_up, escalated, correlation = await _run_public_finalization_async(

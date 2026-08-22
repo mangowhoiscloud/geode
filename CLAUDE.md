@@ -308,8 +308,10 @@ Update project tracking from main. Backlog → In Progress → Done.
 
 ## Custom Skills (Scaffold)
 
-Cross-host scaffold skills are authored under `.agents/skills/` and may expose
-a relative `.claude/skills/` alias so Claude Code and Codex read identical
-bytes. Existing Claude-only skills remain under `.claude/skills/`. Full catalog for human readers:
+Cross-host scaffold skills are authored under `.agents/skills/` and expose a
+relative per-skill `.claude/skills/` alias so Claude Code and Codex read
+identical bytes. Existing Claude-only skills remain under `.claude/skills/`.
+Same-named `.geode/skills/` files remain runtime contracts; a cross-host
+scaffold links to them instead of duplicating them. Full catalog for human readers:
 [docs/scaffold-skills.md](docs/scaffold-skills.md). Separate from the GEODE
 runtime's `core/skills/` SkillRegistry.

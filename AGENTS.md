@@ -30,9 +30,9 @@ owns only the package version and sync date.
 The generated architecture inventory lives at
 `site/src/data/geode/architecture-baseline.json`. Refresh it with
 `uv run python scripts/architecture_baseline.py --update`; CI uses `--check`.
-The current snapshot records 580 production Python files,
-677 test Python files,
-82 tool definitions, and
+The current snapshot records 583 production Python files,
+685 test Python files,
+86 tool definitions, and
 57 `RuntimeEvent` members.
 <!-- generated:architecture-baseline:end -->
 
@@ -212,11 +212,17 @@ Per-call diagnostics for Petri audits (v0.92+).
 
 ### `core/skills/`
 
-Runtime SkillRegistry. Distinct from scaffold `.claude/skills/`.
+Runtime SkillRegistry. Distinct from the cross-host `.agents/skills/`
+development scaffold and its relative `.claude/skills/` aliases.
 
 - `skills.py` — `SkillLoader` / `SkillRegistry`, 3-tier discovery
   (bundled → global user `~/.geode/skills/` → project `.geode/skills/`).
 - `use_skill` tool loads a skill body on demand (Progressive Disclosure Tier 2).
+
+Keep runtime behavior under `.geode/skills/`. When a same-named
+`.agents/skills/` scaffold exists, it must link to that runtime contract rather
+than copy it; Claude Code consumes the scaffold through a relative per-skill
+alias under `.claude/skills/`.
 
 ### `core/scheduler/`, `core/orchestration/`
 

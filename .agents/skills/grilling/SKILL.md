@@ -6,11 +6,13 @@ description: Design or audit GEODE's dependency-aware grilling flow and slash in
 # GEODE grilling scaffold
 
 1. Read `.geode/skills/grilling/SKILL.md` for the runtime interview contract.
-2. Read `docs/plans/2026-08-20-slash-goal-geo.md` for the Tree-of-Thought
+2. Read `docs/plans/2026-08-22-slash-control-enforcement.md` for the typed
+   frontier contract, then `docs/plans/2026-08-20-slash-goal-geo.md` for the Tree-of-Thought
    boundary and Codex grounding.
 3. Resolve repository facts before asking the user. Ask all independent
    frontier decisions together and defer only dependency-blocked questions.
 4. Use internal candidate tree comparison only before side effects. Do not
    describe shared-state execution as MCTS, LATS, or branch rollback.
-5. Verify slash input routes through `SkillRegistry → AgenticLoop` and that the
-   command does not gain execution authority beyond an ordinary prompt.
+5. Verify `.geode/skills/grilling/SKILL.md` is the runtime source selected by
+   `SkillLoader`, slash input routes through `SkillRegistry → AgenticLoop`, and
+   `get_grill`/`update_grill` enforce the tree independently of prose.

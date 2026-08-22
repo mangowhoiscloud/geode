@@ -149,3 +149,28 @@ def test_update_plan_context_survives_executor_thread_bridge(
         )
         assert result["runtime_plan_synced"] is True
         assert metrics.active_plan.done is True
+
+
+def test_update_plan_rolls_back_when_runtime_checkpoint_fails(
+    plan_handlers: dict[str, Any],
+) -> None:
+    from types import SimpleNamespace
+
+    from core.agent.plan import Plan, PlanStep
+    from core.cli.session_state import set_current_loop
+    from core.observability.session_metrics import current_session_metrics, session_metrics_scope
+
+    active = Plan(steps=(PlanStep("s1", "Inspect", "Evidence inspected"),))
+    loop = SimpleNamespace(_save_checkpoint=lambda *_args, **_kwargs: False)
+    set_current_loop(loop)
+    try:
+        with session_metrics_scope(session_id="progress-checkpoint-fail"):
+            metrics = current_session_metrics()
+            metrics.set_active_plan(active)
+            metrics.replan_attempts_on_current_step = 2
+            result = plan_handlers["update_plan"](plan=[{"step": "Inspect", "status": "completed"}])
+            assert "checkpoint failed" in result["error"]
+            assert metrics.active_plan is active
+            assert metrics.replan_attempts_on_current_step == 2
+    finally:
+        set_current_loop(None)

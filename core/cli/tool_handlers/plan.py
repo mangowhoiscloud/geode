@@ -95,24 +95,46 @@ def _build_plan_handlers() -> UniqueEntries[str, Any]:
                     updated = active.complete_and_advance(advance_count)
                     advanced = updated.current != active.current
                     if advanced:
+                        prior_attempts = metrics.replan_attempts_on_current_step
                         metrics.set_active_plan(updated, reset_attempts=True)
+                    current = updated.current
+                    plan_id = updated.plan_id
+                    revision = updated.revision
+                    done = updated.done
+                    if advanced:
+                        from core.cli.session_state import get_current_loop
+
+                        runtime_loop = get_current_loop()
+                        save_checkpoint = getattr(runtime_loop, "_save_checkpoint", None)
+                        if runtime_loop is not None and (
+                            not callable(save_checkpoint)
+                            or not save_checkpoint("update_plan", round_idx=0)
+                        ):
+                            metrics.set_active_plan(active)
+                            metrics.replan_attempts_on_current_step = prior_attempts
+                            return {
+                                "error": (
+                                    "Advisory plan checkpoint failed; progress was not applied"
+                                ),
+                                "action": "update_plan",
+                                "runtime_plan_synced": False,
+                            }
                         timeline = current_session_timeline()
                         if timeline is not None:
                             changed = tuple(
                                 step.id for step in active.steps[active.current : updated.current]
                             )
-                            timeline.record_plan_state(
-                                SessionEventKind.PLAN_COMPLETED
-                                if updated.done
-                                else SessionEventKind.PLAN_PROGRESSED,
-                                updated,
-                                trigger="update_plan",
-                                changed_step_ids=changed,
-                            )
-                    current = updated.current
-                    plan_id = updated.plan_id
-                    revision = updated.revision
-                    done = updated.done
+                            try:
+                                timeline.record_plan_state(
+                                    SessionEventKind.PLAN_COMPLETED
+                                    if updated.done
+                                    else SessionEventKind.PLAN_PROGRESSED,
+                                    updated,
+                                    trigger="update_plan",
+                                    changed_step_ids=changed,
+                                )
+                            except Exception:
+                                log.debug("Durable plan progress event failed", exc_info=True)
                     synced = True
         except Exception:
             log.debug("Runtime advisory plan progress sync skipped", exc_info=True)
