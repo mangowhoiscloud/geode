@@ -244,7 +244,7 @@ PILOT_HEATMAP_DIMS: tuple[str, ...] = (
 
 # Map provider prefix (model.split("/")[0]) -> chip class + chip label.
 # Per master DESIGN.md §3 — 4 chips only; palette explosion forbidden.
-# The label names the ACCESS LANE: PAYG = API-key billing; the Claude Code
+# The label names the ACCESS LANE: PAYG = API-key billing; the legacy Claude
 # entry renders historical artifacts; ChatGPT = ChatGPT subscription
 # via the Codex CLI/backend (ChatGPT OAuth — see core.config.credential_source
 # OPENAI_CODEX + core.llm.adapters.codex_oauth). The ``openai-codex`` prefix is
@@ -254,7 +254,7 @@ PILOT_HEATMAP_DIMS: tuple[str, ...] = (
 HARNESS_MAP: dict[str, tuple[str, str]] = {
     "anthropic": ("payg", "PAYG"),
     "openai": ("payg", "PAYG"),
-    "claude-cli": ("claude", "Claude Code"),
+    "claude-cli": ("claude", "Legacy Claude CLI"),
     "codex": ("codex", "ChatGPT"),
     "openai-codex": ("codex", "ChatGPT"),
     "geode": ("geode", "GEODE"),
@@ -356,8 +356,8 @@ def seedgen_harness_chips(models: list[str]) -> str:
 
     A run is multi-model (a Claude drafter/evolver + gpt-5.5 critics), so this
     renders one chip per actual model instead of the former hardcoded single
-    ``claude-cli/claude-opus-4-7`` chip, which mislabeled every run as
-    "Claude Code" on the wrong version and hid the Codex half. Empty (legacy
+    ``claude-cli/claude-opus-4-7`` chip, which mislabeled every run as a
+    Claude CLI run on the wrong version and hid the Codex half. Empty (legacy
     listing without ``harness_models``) degrades to a muted dot.
     """
     if not models:
@@ -1896,7 +1896,7 @@ def _resolve_subagent_model(
     """Return ``(display_model, provider)`` for a sub-agent's harness chip.
 
     The chip reflects the execution **source**, not the model's billing
-    provider. Seed-generation sub-agents run via either the Claude Code CLI
+    provider. Historical seed-generation sub-agents ran via either Claude CLI
     (``claude_cli_session_id`` in session.json; session_start records the bare
     model provider ``anthropic``) or the Codex CLI (session_start already
     records the source-aligned provider ``openai-codex``). Keying the chip off
@@ -1987,7 +1987,7 @@ def _load_subagents(bundle_dir: Path) -> list[dict[str, Any]]:
             except (OSError, json.JSONDecodeError):
                 result = {}
         # Resolve the harness chip's model from the actual run record. The
-        # chip must reflect the execution SOURCE (claude-cli = Claude Code,
+        # chip must reflect the historical execution source,
         # openai-codex = Codex), NOT the model's billing provider (anthropic /
         # openai = PAYG). session.json omits model/provider for cli-managed
         # sub-agents, so prefer events.jsonl's session start; the codex path

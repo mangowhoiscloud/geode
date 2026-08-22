@@ -62,7 +62,7 @@ Sort: `started_at` descending. Limit: 10 rows. Footer link "→ /geode/self-impr
 | run_id | `runs[].run_id` (anchor → seed-gen run detail) |
 | gen_tag | `runs[].gen_tag` |
 | target_dim | `runs[].target_dim` |
-| mutator | always `claude-cli/claude-opus-4-7` for now (single mutator) — harness chip + mono |
+| models | `runs[].harness_models[]` — distinct recorded execution sources, one harness chip each; missing legacy data renders muted |
 | draft → surv | `runs[].candidates_drafted` → `runs[].survivors_count` |
 | evolved | `runs[].evolved_count` |
 | cost USD | `runs[].usd_spent` ($X.XX) |
@@ -147,7 +147,7 @@ GEODE
 ```
 Source: docs/self-improving/ (mirrors docs/petri-bundle/ post-relocation).
 Built by .github/workflows/pages.yml on every main push.
-Harness chip legend: PAYG · Claude Code · Codex · GEODE.
+Harness chip legend: PAYG · Legacy Claude CLI · ChatGPT · GEODE.
 Repo: github.com/mangowhoiscloud/geode
 ```
 

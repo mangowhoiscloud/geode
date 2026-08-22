@@ -461,9 +461,9 @@ Per master DESIGN.md §3, each of `auditor_model` / `target_model` / `judge_mode
   <dt>auditor</dt>
   <dd><span class="chip codex">Codex</span> <code>codex/gpt-5-codex-high</code></dd>
   <dt>target</dt>
-  <dd><span class="chip claude">Claude Code</span> <code>claude-cli/claude-opus-4-7</code></dd>
+  <dd><span class="chip payg">PAYG</span> <code>anthropic/claude-opus-4-7</code></dd>
   <dt>judge</dt>
-  <dd><span class="chip claude">Claude Code</span> <code>claude-cli/claude-sonnet-4-5</code></dd>
+  <dd><span class="chip payg">PAYG</span> <code>anthropic/claude-sonnet-4-5</code></dd>
   <dt>seed_limit</dt><dd><code>10</code></dd>
   <dt>dim_set</dt><dd><code>geode_judge_subset_v3-22dim-PR0</code></dd>
   <dt>usd_spent</dt><dd class="num">$2.18</dd>

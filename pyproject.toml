@@ -46,6 +46,9 @@ dependencies = [
     "websockets>=12.0",
     "openai>=2.26.0",
     "openai-agents>=0.13.0",
+    # geode-mcp is an unconditional console entry point. MCP 2 removes
+    # FastMCP, so the supported v1 protocol line must be a base dependency.
+    "mcp>=1.28,<2",
     # Durable collaboration distinguishes a live owner from a reused PID.
     "psutil>=7.2.0",
     "prompt-toolkit>=3.0.52",
@@ -103,6 +106,7 @@ geode = "geode_product.petri_audit"
 openai-codex = "geode_product.petri_audit"
 
 [project.optional-dependencies]
+# Compatibility extra retained for existing ``geode-agent[mcp]`` installs.
 # mcp 2.0.0 (2026-07-28 stateless spec) renames FastMCP -> MCPServer and
 # restructures the client stack; the v1 line is maintenance-mode and its
 # supported floor is 1.28 (official guidance: mcp>=1.28,<2). Bounded until the

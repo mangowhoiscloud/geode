@@ -3,7 +3,7 @@
 A seed-gen run is multi-model (a Claude drafter/evolver + gpt-5.5 critics). The
 hub formerly hardcoded a single ``claude-cli/claude-opus-4-7`` chip in every
 seedgen row/detail, so a run executed with opus-4-8 + gpt-5.5 was mislabeled as
-"Claude Code" on the wrong version, hiding the Codex half (operator report:
+the retired Claude CLI on the wrong version, hiding the Codex half (operator report:
 ``payg:opus-4-8`` / ``payg:gpt-5-5`` runs shown as "claude code"). The fix
 derives ``harness_models`` from each run's ``sub_agents/*/`` and renders one
 chip per actual model.
@@ -34,7 +34,7 @@ def _make_subagent(parent: Path, name: str, model: str, provider: str, *, cli: b
 def test_run_harness_models_derives_distinct_multi_model(tmp_path: Path) -> None:
     run = tmp_path / "gen-x-broken_tool_use"
     run.mkdir()
-    # Claude drafter via Claude Code CLI + gpt-5.5 critics via codex + a PAYG lane
+    # Historical Claude CLI drafter + gpt-5.5 critics + a PAYG lane.
     _make_subagent(run, "evolve-0", "claude-opus-4-8", "anthropic", cli=True)
     _make_subagent(run, "critic-0", "gpt-5.5", "openai-codex", cli=False)
     _make_subagent(run, "critic-1", "gpt-5.5", "openai-codex", cli=False)  # dup collapses
@@ -92,9 +92,9 @@ def test_chips_render_real_models_not_hardcoded_claude_code() -> None:
     # the actual models appear...
     assert "claude-opus-4-8" in html
     assert "gpt-5.5" in html
-    # ...with the right chips: Claude Code (cli), ChatGPT (openai-codex
-    # subscription lane — NOT the opaque "Codex" CLI name), PAYG (anthropic)
-    assert "Claude Code" in html
+    # ...with the right chips: historical Claude CLI, ChatGPT
+    # (openai-codex subscription lane), and PAYG (anthropic).
+    assert "Legacy Claude CLI" in html
     assert "ChatGPT" in html
     assert "Codex" not in html  # the openai-codex lane reveals the ChatGPT subscription
     assert "PAYG" in html

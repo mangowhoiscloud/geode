@@ -53,6 +53,10 @@ functional change.
   and sdist installs now include `.geode/skills`, with artifact and installed-
   package gates pinning the `/grill` and `/geo` skill contracts.
 
+- **Base installs can start `geode-mcp`.** The unconditional MCP console entry
+  point now installs its supported `mcp>=1.28,<2` runtime, and the clean-wheel
+  smoke constructs the server instead of only importing the entry function.
+
 - **Anthropic credential boundaries hold across benchmarks and Petri.** MCPMark
   Claude labels select the API-key adapter, while Petri's strict fallback gate
   permits sole or explicitly selected API-key routes without allowing an

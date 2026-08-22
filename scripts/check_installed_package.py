@@ -37,6 +37,8 @@ def _check_full_package() -> None:
     assert scripts["geode"].value == "geode_product.cli:app"
     assert scripts["geode-mcp"].value == "geode_product.mcp_server:main"
     scripts["geode-mcp"].load()
+    mcp_server = importlib.import_module("core.mcp_server").create_mcp_server()
+    assert mcp_server is not None
     importlib.import_module("geode_product.wiring")
     importlib.import_module("geode_product.worker")
 
