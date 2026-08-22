@@ -505,6 +505,16 @@ def _context_alias_assignment(
             target = node.targets[0]
     elif isinstance(node, ast.AnnAssign):
         target, value = node.target, node.value
+    elif isinstance(node, ast.AugAssign):
+        if any(
+            constructor_reference(expression) is not None or module_reference(expression)
+            for expression in ast.walk(node.value)
+            if isinstance(expression, ast.expr)
+        ):
+            raise ValueError(
+                f"{path}:{node.lineno}: ContextVar constructors must not be stored in containers"
+            )
+        return None
     if value is None:
         return None
     if isinstance(target, ast.Name):
@@ -521,6 +531,14 @@ def _context_alias_assignment(
         if isinstance(value, ast.Dict | ast.List | ast.Set | ast.Tuple) and any(
             constructor_reference(expression) is not None or module_reference(expression)
             for expression in container_values(value)
+        ):
+            raise ValueError(
+                f"{path}:{node.lineno}: ContextVar constructors must not be stored in containers"
+            )
+        if isinstance(value, ast.BinOp) and any(
+            constructor_reference(expression) is not None or module_reference(expression)
+            for expression in ast.walk(value)
+            if isinstance(expression, ast.expr)
         ):
             raise ValueError(
                 f"{path}:{node.lineno}: ContextVar constructors must not be stored in containers"
@@ -888,6 +906,7 @@ def _context_vars(root: Path) -> dict[str, Any]:
                 or any(
                     alias.name in constructor_exports.get(source, {})
                     or alias.name in constructor_module_exports.get(source, {})
+                    or bool(constructor_exports.get(f"{source}.{alias.name}"))
                     for alias in node.names
                 )
             )

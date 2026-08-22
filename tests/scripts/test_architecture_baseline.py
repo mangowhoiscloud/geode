@@ -767,6 +767,32 @@ def test_context_var_inventory_rejects_constructor_stored_in_container(
 
 
 @pytest.mark.parametrize(
+    "source",
+    [
+        'factories = {} | {"ctx": ContextVar}\nstate = factories["ctx"]("state")',
+        'factories = {}\nfactories |= {"ctx": ContextVar}\nstate = factories["ctx"]("state")',
+    ],
+)
+def test_context_var_inventory_rejects_constructor_container_merge(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    source: str,
+) -> None:
+    core = tmp_path / "core"
+    core.mkdir()
+    (core / "sample.py").write_text(
+        f"from contextvars import ContextVar\n{source}\n",
+        encoding="utf-8",
+    )
+    manifest = tmp_path / "context-var-lifecycles.json"
+    manifest.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(baseline, "CONTEXT_VAR_LIFECYCLES", manifest)
+
+    with pytest.raises(ValueError, match="must not be stored in containers"):
+        baseline._context_vars(tmp_path)
+
+
+@pytest.mark.parametrize(
     "assignment",
     ["Factory = ContextVar if enabled else object", "Factory = True and ContextVar"],
 )
@@ -838,6 +864,8 @@ def test_context_var_inventory_ignores_function_local_type_annotation(
         'import contextvars\ndef factory():\n    cv = contextvars\n    return cv.ContextVar("state")',
         'import contextvars\ndef factory():\n    return contextvars\nstate = factory().ContextVar("state")',
         'def factory():\n    import core.alias as alias\n    return alias.CV("state")',
+        'def factory():\n    from core import alias\n    return alias.CV("state")',
+        'def factory():\n    from . import alias\n    return alias.CV("state")',
     ],
 )
 def test_context_var_inventory_rejects_function_local_constructor_import(
