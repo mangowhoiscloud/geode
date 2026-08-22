@@ -725,6 +725,7 @@ def test_context_var_inventory_rejects_separately_invoked_factory(
         'from functools import partial\nstate = partial(ContextVar, "state")()',
         'def make(constructor):\n    return constructor("state")\nstate = make(ContextVar)',
         'import contextvars\ndef make(module):\n    return module.ContextVar("state")\nstate = make(contextvars)',
+        'import contextvars\ndef identity(value):\n    return value\nmods = identity([contextvars])\nstate = mods[0].ContextVar("state")',
     ],
 )
 def test_context_var_inventory_rejects_forwarded_constructor(
@@ -993,6 +994,7 @@ def test_notification_probe_preserves_process_fallback(tmp_path: Path) -> None:
         'import contextvars\nFactory = contextvars.__dict__["ContextVar"]\nstate = Factory("state")',
         'for Factory in [ContextVar]:\n    state = Factory("state")',
         'states = [Factory("state") for Factory in (ContextVar,)]',
+        'state = (ContextVar if enabled else object)("state")',
         'state = [ContextVar][0]("state")',
         'Factory = (ContextVar,)[0]\nstate = Factory("state")',
         'match ContextVar:\n    case Factory:\n        state = Factory("state")',

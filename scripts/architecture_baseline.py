@@ -577,11 +577,23 @@ def _unsupported_context_alias(
         )
     if (
         isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Subscript)
+        and isinstance(node.func, ast.Subscript | ast.IfExp | ast.BoolOp)
         and constructor_reference(node.func) is None
+        and any(
+            constructor_reference(candidate) is not None or module_reference(candidate)
+            for candidate in ast.walk(node.func)
+            if isinstance(candidate, ast.expr) and candidate is not node.func
+        )
+    ):
+        return True
+    if (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "ContextVar"
+        and isinstance(node.func.value, ast.Subscript | ast.IfExp | ast.BoolOp)
     ):
         return any(
-            constructor_reference(candidate) is not None or module_reference(candidate)
+            module_reference(candidate)
             for candidate in ast.walk(node.func.value)
             if isinstance(candidate, ast.expr)
         )
@@ -834,9 +846,23 @@ def _reject_forwarded_context_modules(
     calls: Iterable[ast.Call],
     module_reference: Callable[[ast.expr], bool],
 ) -> None:
+    def contains_module(argument: ast.expr) -> bool:
+        if module_reference(argument):
+            return True
+        children: Iterable[ast.expr | None]
+        if isinstance(argument, ast.Dict):
+            children = (*argument.keys, *argument.values)
+        elif isinstance(argument, ast.List | ast.Set | ast.Tuple):
+            children = argument.elts
+        elif isinstance(argument, ast.BinOp):
+            children = (argument.left, argument.right)
+        else:
+            return False
+        return any(child is not None and contains_module(child) for child in children)
+
     for call in calls:
         arguments = (*call.args, *(keyword.value for keyword in call.keywords))
-        if any(module_reference(argument) for argument in arguments):
+        if any(contains_module(argument) for argument in arguments):
             raise ValueError(
                 f"{path}:{call.lineno}: ContextVar constructor modules must not be passed "
                 "through factories"
