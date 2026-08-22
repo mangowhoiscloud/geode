@@ -42,6 +42,7 @@ jobs:
               - 'CHANGELOG.md'
               - '.pre-commit-config.yaml'
               - 'docs/architecture/exception-debt.*'
+              - 'docs/architecture/context-var-lifecycles.json'
               - 'docs/architecture/extensibility-roadmap.md'
               - 'docs/eval/**'
               - 'site/scripts/sync-stats.mjs'

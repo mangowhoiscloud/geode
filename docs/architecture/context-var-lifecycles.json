@@ -1,0 +1,282 @@
+{
+  "core/agent/cognitive_state_ctx.py:_active_state": {
+    "classification": "request_local_mutable_state",
+    "owner": "core.agent.loop.AgenticLoop",
+    "setter": "core.agent.cognitive_state_ctx.set_cognitive_state",
+    "resetter": "async task teardown; the next arun() rebinds",
+    "lifetime": "one AgenticLoop task",
+    "teardown": "a later arun rebinds it; the owning task exit discards the context"
+  },
+  "core/agent/cognitive_state_ctx.py:_active_session_id": {
+    "classification": "request_identity",
+    "owner": "core.agent.loop.AgenticLoop",
+    "setter": "core.agent.cognitive_state_ctx.set_session_id",
+    "resetter": "async task teardown; the next arun() rebinds",
+    "lifetime": "one AgenticLoop task",
+    "teardown": "a later arun rebinds it; the owning task exit discards the context"
+  },
+  "core/agent/cognitive_state_ctx.py:_active_turn_id": {
+    "classification": "request_identity",
+    "owner": "core.agent.loop.AgenticLoop",
+    "setter": "core.agent.cognitive_state_ctx.set_turn_id",
+    "resetter": "the next turn rebinds; owning task teardown discards the context",
+    "lifetime": "current turn and idle interval until the next rebind or task exit",
+    "teardown": "a later turn rebinds it; the owning task exit discards the context"
+  },
+  "core/agent/cognitive_state_ctx.py:_active_tool_call_id": {
+    "classification": "request_identity",
+    "owner": "core.agent.tool_executor.ToolExecutor",
+    "setter": "core.agent.cognitive_state_ctx.set_tool_call_id",
+    "resetter": "core.agent.cognitive_state_ctx.reset_tool_call_id",
+    "lifetime": "one physical tool dispatch",
+    "teardown": "ToolExecutor finally resets the ContextVar token"
+  },
+  "core/agent/cognitive_state_ctx.py:_active_parent_session_key": {
+    "classification": "request_identity",
+    "owner": "core.agent.loop.AgenticLoop",
+    "setter": "core.agent.cognitive_state_ctx.set_parent_session_key",
+    "resetter": "async task teardown; the next arun() rebinds",
+    "lifetime": "one child AgenticLoop task",
+    "teardown": "a later arun rebinds it; the owning child task exit discards the context"
+  },
+  "core/agent/cognitive_state_ctx.py:_active_parent_session_id": {
+    "classification": "request_identity",
+    "owner": "core.agent.loop.AgenticLoop",
+    "setter": "core.agent.cognitive_state_ctx.set_parent_session_id",
+    "resetter": "async task teardown; the next arun() rebinds",
+    "lifetime": "one child AgenticLoop task",
+    "teardown": "a later arun rebinds it; the owning child task exit discards the context"
+  },
+  "core/agent/safety.py:_skip_permissions_var": {
+    "classification": "request_local_mutable_state",
+    "owner": "core.server.ipc_server.poller",
+    "setter": "core.agent.safety.set_skip_permissions",
+    "resetter": "client task teardown",
+    "lifetime": "one IPC client task",
+    "teardown": "the client task context is discarded on disconnect"
+  },
+  "core/cli/commands/_state.py:_conversation_ctx": {
+    "classification": "request_local_mutable_state",
+    "owner": "core.agent.loop.AgenticLoop",
+    "setter": "core.cli.commands.set_conversation_context",
+    "resetter": "core.cli.commands.set_conversation_context(None)",
+    "lifetime": "one AgenticLoop task",
+    "teardown": "each response phase rebinds it and task exit discards the context"
+  },
+  "core/cli/session_state.py:_readiness_ctx": {
+    "classification": "request_local_mutable_state",
+    "owner": "core.cli",
+    "setter": "core.cli.session_state.set_readiness",
+    "resetter": "CLI or daemon task teardown",
+    "lifetime": "one CLI or daemon task context",
+    "teardown": "the owning task context is discarded"
+  },
+  "core/cli/session_state.py:_scheduler_service_ctx": {
+    "classification": "service_locator",
+    "owner": "core.cli.typer_serve.run_serve",
+    "setter": "core.cli.typer_serve.run_serve and core.server.ipc_server.poller",
+    "resetter": "none; remove through R4.2 constructor injection",
+    "lifetime": "daemon process and copied IPC task contexts",
+    "teardown": "run_serve stops its scheduler but leaves the binding"
+  },
+  "core/cli/session_state.py:_user_task_graph_ctx": {
+    "classification": "request_local_mutable_state",
+    "owner": "core.cli.session_state",
+    "setter": "core.cli.session_state._get_user_task_graph",
+    "resetter": "none in production; core.cli.session_state._reset_user_task_graph is test-only",
+    "lifetime": "the long-lived caller task or process",
+    "teardown": "there is no production reset; task or process exit discards the context"
+  },
+  "core/cli/session_state.py:_current_loop_ctx": {
+    "classification": "service_locator",
+    "owner": "core.server.supervised.services.SharedServices",
+    "setter": "core.cli.session_state.set_current_loop",
+    "resetter": "none; remove through R4.2 narrow service injection",
+    "lifetime": "the caller task; gateway pollers reuse one task and overwrite the binding between sessions",
+    "teardown": "there is no reset; the last loop remains bound until overwrite or caller-task exit"
+  },
+  "core/hooks/tool_hooks.py:_tool_hooks_ctx": {
+    "classification": "service_locator",
+    "owner": "core.wiring.bootstrap and propagated daemon/session tasks",
+    "setter": "core.hooks.tool_hooks.set_tool_hooks via bootstrap and GeodeBootstrap.propagate_to_thread",
+    "resetter": "core.hooks.tool_hooks.clear_tool_hooks for the owner context; propagated contexts end with their task/thread",
+    "lifetime": "the runtime bootstrap context plus each propagated daemon/session task context",
+    "teardown": "HookSystem owner cleanup clears the matching owner-context binding; propagated bindings disappear when their task/thread context is discarded"
+  },
+  "core/llm/adapters/dispatch.py:_session_adapter_usage_ctx": {
+    "classification": "diagnostic_scope",
+    "owner": "core.agent.loop",
+    "setter": "core.llm.adapters.dispatch.begin_session_adapter_tracking",
+    "resetter": "core.llm.adapters.dispatch.end_session_adapter_tracking",
+    "lifetime": "one AgenticLoop session",
+    "teardown": "session finalization replaces the counter with None"
+  },
+  "core/llm/platform_hints.py:_current_surface": {
+    "classification": "request_identity",
+    "owner": "core.llm.platform_hints",
+    "setter": "core.llm.platform_hints.set_current_surface (compatibility/test API; no production caller)",
+    "resetter": "caller may reset the set_current_surface token; no production binding exists",
+    "lifetime": "unbound in current production; caller-owned context when explicitly set",
+    "teardown": "caller token reset or context discard"
+  },
+  "core/llm/token_tracker.py:_tracker_ctx": {
+    "classification": "diagnostic_scope",
+    "owner": "core.llm.token_tracker",
+    "setter": "core.llm.token_tracker.get_tracker",
+    "resetter": "core.llm.token_tracker.reset_tracker",
+    "lifetime": "one CLI or agent session context",
+    "teardown": "session reset clears counters; task exit discards the context"
+  },
+  "core/mcp/calendar_port.py:_calendar_ctx": {
+    "classification": "service_locator",
+    "owner": "core.wiring.adapters",
+    "setter": "core.mcp.calendar_port.set_calendar",
+    "resetter": "core.mcp.calendar_port.set_calendar(None)",
+    "lifetime": "runtime process and copied request contexts",
+    "teardown": "no production clear; remove through R4.2 port injection"
+  },
+  "core/mcp/notification_port.py:_notification_ctx": {
+    "classification": "service_locator",
+    "owner": "core.wiring.adapters",
+    "setter": "core.mcp.notification_port.set_notification",
+    "resetter": "core.wiring.adapters sets None when plugin configuration fails",
+    "lifetime": "runtime process and copied request contexts",
+    "teardown": "plugin failure clears it; otherwise process exit discards the fallback"
+  },
+  "core/observability/run_dir.py:_active_run_dir": {
+    "classification": "diagnostic_scope",
+    "owner": "geode_product.seed_generation and core.agent.worker",
+    "setter": "run_dir_scope or worker main via set_active_run_dir",
+    "resetter": "run_dir_scope finally; inherited worker binding ends at process exit",
+    "lifetime": "one seed/audit cycle or inherited worker process",
+    "teardown": "the scope resets its token; worker process exit discards its direct binding"
+  },
+  "core/observability/session_metrics.py:_current_metrics": {
+    "classification": "request_local_mutable_state",
+    "owner": "AgenticLoop, plan command, hosted Goal continuation, and self-improving training",
+    "setter": "session_metrics_scope or direct set_current_session_metrics binding",
+    "resetter": "scope finally; direct bindings end at task/process exit or later rebind",
+    "lifetime": "one measured session, turn task, or campaign process",
+    "teardown": "the scope resets its token; direct binding relies on task/process lifetime"
+  },
+  "core/observability/session_timeline.py:_CURRENT_SESSION_TIMELINE": {
+    "classification": "diagnostic_scope",
+    "owner": "core.agent.loop.AgenticLoop",
+    "setter": "core.observability.session_timeline.set_current_session_timeline",
+    "resetter": "core.observability.session_timeline.set_current_session_timeline(None)",
+    "lifetime": "one AgenticLoop session task",
+    "teardown": "session task exit discards the context; tests and owners may clear explicitly"
+  },
+  "core/orchestration/tool_offload.py:_offload_store_ctx": {
+    "classification": "service_locator",
+    "owner": "core.wiring.bootstrap.build_tool_offload",
+    "setter": "core.orchestration.tool_offload.set_offload_store",
+    "resetter": "none in production; remove through R4.2 execution-service injection",
+    "lifetime": "the runtime or shared-service bootstrap context, shared across later sessions where inherited",
+    "teardown": "SESSION_ENDED deletes files but not the binding; gateway and IPC poller contexts do not inherit it"
+  },
+  "core/runtime_audit.py:_runtime_audit_active": {
+    "classification": "request_local_mutable_state",
+    "owner": "geode_product.petri_audit.audit_mode",
+    "setter": "core.runtime_audit.set_runtime_audit_active",
+    "resetter": "none in production; later publication may rebind",
+    "lifetime": "Petri runner task until rebind or task teardown",
+    "teardown": "the owning task context is discarded"
+  },
+  "core/tools/memory_tools.py:_default_session_store_ctx": {
+    "classification": "service_locator",
+    "owner": "core.wiring.bootstrap.build_memory",
+    "setter": "core.tools.memory_tools.set_default_session_store",
+    "resetter": "none; remove through R4.2 persistence-service injection",
+    "lifetime": "runtime process and copied request contexts",
+    "teardown": "runtime closes the store owner but leaves the binding"
+  },
+  "core/tools/memory_tools.py:_project_memory_ctx": {
+    "classification": "service_locator",
+    "owner": "core.wiring.bootstrap.build_memory",
+    "setter": "core.tools.memory_tools.set_project_memory",
+    "resetter": "core.tools.memory_tools.set_project_memory(None)",
+    "lifetime": "runtime process and copied request contexts",
+    "teardown": "no production clear; remove through R4.2 persistence-service injection"
+  },
+  "core/tools/memory_tools.py:_org_memory_ctx": {
+    "classification": "service_locator",
+    "owner": "core.wiring.bootstrap.build_memory",
+    "setter": "core.tools.memory_tools.set_org_memory",
+    "resetter": "core.tools.memory_tools.set_org_memory(None)",
+    "lifetime": "runtime process and copied request contexts",
+    "teardown": "no production clear; remove through R4.2 persistence-service injection"
+  },
+  "core/tools/memory_tools.py:_hooks_ctx": {
+    "classification": "service_locator",
+    "owner": "core.wiring.bootstrap.build_memory",
+    "setter": "core.tools.memory_tools.set_memory_hooks",
+    "resetter": "core.tools.memory_tools.clear_memory_hooks",
+    "lifetime": "one runtime bootstrap context",
+    "teardown": "HookSystem owner cleanup clears the matching binding"
+  },
+  "core/tools/personal_data.py:_safety_policies": {
+    "classification": "cache",
+    "owner": "core.agent.loop",
+    "setter": "core.tools.personal_data.set_bound_tool_data_policies",
+    "resetter": "core.tools.personal_data.set_bound_tool_data_policies(None)",
+    "lifetime": "one bound AgenticLoop task",
+    "teardown": "the task context is discarded after the session"
+  },
+  "core/tools/profile_tools.py:_user_profile_ctx": {
+    "classification": "service_locator",
+    "owner": "core.wiring.bootstrap.ensure_user_profile",
+    "setter": "core.tools.profile_tools.set_user_profile",
+    "resetter": "core.tools.profile_tools.set_user_profile(None)",
+    "lifetime": "runtime process and copied request contexts",
+    "teardown": "no production clear; remove through R4.2 persistence-service injection"
+  },
+  "core/ui/agentic_ui/_state.py:_ipc_writer_local": {
+    "classification": "request_local_mutable_state",
+    "owner": "core.server.ipc_server.poller.CLIPoller",
+    "setter": "core.server.ipc_server.poller.CLIPoller._run_prompt_streaming_async",
+    "resetter": "the poller finally replaces writer with None",
+    "lifetime": "one IPC streaming prompt",
+    "teardown": "the poller finally clears the writer; task or thread exit discards fallback state"
+  },
+  "core/ui/agentic_ui/_state.py:_pipeline_subject_local": {
+    "classification": "request_identity",
+    "owner": "core.ui.agentic_ui",
+    "setter": "core.ui.agentic_ui.set_pipeline_subject (no production caller)",
+    "resetter": "none; a later call overwrites the subject",
+    "lifetime": "caller task or thread when the compatibility API is used",
+    "teardown": "there is no production reset; task or thread exit discards the binding"
+  },
+  "core/ui/agentic_ui/_state.py:_meter_local": {
+    "classification": "diagnostic_scope",
+    "owner": "core.server.ipc_server.poller.CLIPoller",
+    "setter": "core.ui.agentic_ui.init_session_meter",
+    "resetter": "none; each IPC prompt overwrites the meter",
+    "lifetime": "current IPC prompt and idle interval until the next initialization",
+    "teardown": "a later prompt overwrites the meter; task or thread exit discards fallback state"
+  },
+  "core/ui/console.py:_ConsoleProxy._local": {
+    "classification": "request_local_mutable_state",
+    "owner": "core.server.ipc_server.poller.CLIPoller",
+    "setter": "core.ui.console.set_thread_console",
+    "resetter": "core.ui.console.reset_thread_console",
+    "lifetime": "one IPC streaming prompt",
+    "teardown": "the poller finally removes the console; task or thread exit discards fallback state"
+  },
+  "geode_product/benchmark_harness/tau2_runtime_contract.py:_CURRENT_ATTEMPT": {
+    "classification": "diagnostic_scope",
+    "owner": "geode_product.benchmark_harness.tau2_runtime_contract.Tau2AttemptTracker",
+    "setter": "Tau2AttemptTracker.wrap sets a token around one upstream run attempt",
+    "resetter": "Tau2AttemptTracker.wrap finally resets the token",
+    "lifetime": "one tau2 run attempt",
+    "teardown": "the wrapper finally restores the caller context even when the attempt raises"
+  },
+  "geode_product/self_improving/loop/observe/run_timeline.py:_current_run_timeline": {
+    "classification": "diagnostic_scope",
+    "owner": "geode_product.self_improving.loop.observe.run_timeline and geode_product.worker",
+    "setter": "run_timeline_scope, or geode_product.wiring.bind_worker_activity at worker-process entry",
+    "resetter": "run_timeline_scope finally resets its token; a worker binding ends with its subprocess",
+    "lifetime": "one self-improving run scope or one inherited worker subprocess",
+    "teardown": "the context manager restores the caller binding; worker-process exit discards its inherited binding"
+  }
+}

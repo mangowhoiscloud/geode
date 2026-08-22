@@ -17,212 +17,543 @@
     "max_statements": 207
   },
   "context_vars": {
-    "count": 29,
+    "classification_counts": {
+      "cache": 1,
+      "diagnostic_scope": 7,
+      "request_identity": 7,
+      "request_local_mutable_state": 9,
+      "service_locator": 11
+    },
+    "count": 35,
     "items": [
       {
+        "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
+        "classification": "request_local_mutable_state",
         "context_name": "geode_active_cognitive_state",
         "has_default": true,
+        "implementation": "ContextVar",
+        "lifetime": "one AgenticLoop task",
         "line": 33,
+        "owner": "core.agent.loop.AgenticLoop",
         "path": "core/agent/cognitive_state_ctx.py",
-        "symbol": "_active_state"
+        "resetter": "async task teardown; the next arun() rebinds",
+        "setter": "core.agent.cognitive_state_ctx.set_cognitive_state",
+        "symbol": "_active_state",
+        "teardown": "a later arun rebinds it; the owning task exit discards the context"
       },
       {
+        "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
+        "classification": "request_identity",
         "context_name": "geode_active_session_id",
         "has_default": true,
+        "implementation": "ContextVar",
+        "lifetime": "one AgenticLoop task",
         "line": 36,
+        "owner": "core.agent.loop.AgenticLoop",
         "path": "core/agent/cognitive_state_ctx.py",
-        "symbol": "_active_session_id"
+        "resetter": "async task teardown; the next arun() rebinds",
+        "setter": "core.agent.cognitive_state_ctx.set_session_id",
+        "symbol": "_active_session_id",
+        "teardown": "a later arun rebinds it; the owning task exit discards the context"
       },
       {
+        "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
+        "classification": "request_identity",
         "context_name": "geode_active_turn_id",
         "has_default": true,
+        "implementation": "ContextVar",
+        "lifetime": "current turn and idle interval until the next rebind or task exit",
         "line": 37,
+        "owner": "core.agent.loop.AgenticLoop",
         "path": "core/agent/cognitive_state_ctx.py",
-        "symbol": "_active_turn_id"
+        "resetter": "the next turn rebinds; owning task teardown discards the context",
+        "setter": "core.agent.cognitive_state_ctx.set_turn_id",
+        "symbol": "_active_turn_id",
+        "teardown": "a later turn rebinds it; the owning task exit discards the context"
       },
       {
+        "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
+        "classification": "request_identity",
         "context_name": "geode_active_tool_call_id",
         "has_default": true,
+        "implementation": "ContextVar",
+        "lifetime": "one physical tool dispatch",
         "line": 38,
+        "owner": "core.agent.tool_executor.ToolExecutor",
         "path": "core/agent/cognitive_state_ctx.py",
-        "symbol": "_active_tool_call_id"
+        "resetter": "core.agent.cognitive_state_ctx.reset_tool_call_id",
+        "setter": "core.agent.cognitive_state_ctx.set_tool_call_id",
+        "symbol": "_active_tool_call_id",
+        "teardown": "ToolExecutor finally resets the ContextVar token"
       },
       {
+        "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
+        "classification": "request_identity",
         "context_name": "geode_active_parent_session_key",
         "has_default": true,
+        "implementation": "ContextVar",
+        "lifetime": "one child AgenticLoop task",
         "line": 54,
+        "owner": "core.agent.loop.AgenticLoop",
         "path": "core/agent/cognitive_state_ctx.py",
-        "symbol": "_active_parent_session_key"
+        "resetter": "async task teardown; the next arun() rebinds",
+        "setter": "core.agent.cognitive_state_ctx.set_parent_session_key",
+        "symbol": "_active_parent_session_key",
+        "teardown": "a later arun rebinds it; the owning child task exit discards the context"
       },
       {
+        "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
+        "classification": "request_identity",
         "context_name": "geode_active_parent_session_id",
         "has_default": true,
+        "implementation": "ContextVar",
+        "lifetime": "one child AgenticLoop task",
         "line": 65,
+        "owner": "core.agent.loop.AgenticLoop",
         "path": "core/agent/cognitive_state_ctx.py",
-        "symbol": "_active_parent_session_id"
+        "resetter": "async task teardown; the next arun() rebinds",
+        "setter": "core.agent.cognitive_state_ctx.set_parent_session_id",
+        "symbol": "_active_parent_session_id",
+        "teardown": "a later arun rebinds it; the owning child task exit discards the context"
       },
       {
+        "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
+        "classification": "request_local_mutable_state",
         "context_name": "geode_skip_permissions",
         "has_default": true,
+        "implementation": "ContextVar",
+        "lifetime": "one IPC client task",
         "line": 30,
+        "owner": "core.server.ipc_server.poller",
         "path": "core/agent/safety.py",
-        "symbol": "_skip_permissions_var"
+        "resetter": "client task teardown",
+        "setter": "core.agent.safety.set_skip_permissions",
+        "symbol": "_skip_permissions_var",
+        "teardown": "the client task context is discarded on disconnect"
       },
       {
+        "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
+        "classification": "request_local_mutable_state",
         "context_name": "conversation_ctx",
         "has_default": true,
+        "implementation": "ContextVar",
+        "lifetime": "one AgenticLoop task",
         "line": 271,
+        "owner": "core.agent.loop.AgenticLoop",
         "path": "core/cli/commands/_state.py",
-        "symbol": "_conversation_ctx"
+        "resetter": "core.cli.commands.set_conversation_context(None)",
+        "setter": "core.cli.commands.set_conversation_context",
+        "symbol": "_conversation_ctx",
+        "teardown": "each response phase rebinds it and task exit discards the context"
       },
       {
+        "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
+        "classification": "request_local_mutable_state",
         "context_name": "readiness",
         "has_default": true,
+        "implementation": "ContextVar",
+        "lifetime": "one CLI or daemon task context",
         "line": 22,
+        "owner": "core.cli",
         "path": "core/cli/session_state.py",
-        "symbol": "_readiness_ctx"
+        "resetter": "CLI or daemon task teardown",
+        "setter": "core.cli.session_state.set_readiness",
+        "symbol": "_readiness_ctx",
+        "teardown": "the owning task context is discarded"
       },
       {
+        "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
+        "classification": "service_locator",
         "context_name": "scheduler_service",
         "has_default": true,
+        "implementation": "ContextVar",
+        "lifetime": "daemon process and copied IPC task contexts",
         "line": 23,
+        "owner": "core.cli.typer_serve.run_serve",
         "path": "core/cli/session_state.py",
-        "symbol": "_scheduler_service_ctx"
+        "resetter": "none; remove through R4.2 constructor injection",
+        "setter": "core.cli.typer_serve.run_serve and core.server.ipc_server.poller",
+        "symbol": "_scheduler_service_ctx",
+        "teardown": "run_serve stops its scheduler but leaves the binding"
       },
       {
+        "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
+        "classification": "request_local_mutable_state",
         "context_name": "user_task_graph",
         "has_default": true,
+        "implementation": "ContextVar",
+        "lifetime": "the long-lived caller task or process",
         "line": 24,
+        "owner": "core.cli.session_state",
         "path": "core/cli/session_state.py",
-        "symbol": "_user_task_graph_ctx"
+        "resetter": "none in production; core.cli.session_state._reset_user_task_graph is test-only",
+        "setter": "core.cli.session_state._get_user_task_graph",
+        "symbol": "_user_task_graph_ctx",
+        "teardown": "there is no production reset; task or process exit discards the context"
       },
       {
+        "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
+        "classification": "service_locator",
         "context_name": "current_agentic_loop",
         "has_default": true,
+        "implementation": "ContextVar",
+        "lifetime": "the caller task; gateway pollers reuse one task and overwrite the binding between sessions",
         "line": 25,
+        "owner": "core.server.supervised.services.SharedServices",
         "path": "core/cli/session_state.py",
-        "symbol": "_current_loop_ctx"
+        "resetter": "none; remove through R4.2 narrow service injection",
+        "setter": "core.cli.session_state.set_current_loop",
+        "symbol": "_current_loop_ctx",
+        "teardown": "there is no reset; the last loop remains bound until overwrite or caller-task exit"
       },
       {
+        "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
+        "classification": "service_locator",
         "context_name": "tool_hooks",
         "has_default": true,
+        "implementation": "ContextVar",
+        "lifetime": "the runtime bootstrap context plus each propagated daemon/session task context",
         "line": 19,
+        "owner": "core.wiring.bootstrap and propagated daemon/session tasks",
         "path": "core/hooks/tool_hooks.py",
-        "symbol": "_tool_hooks_ctx"
+        "resetter": "core.hooks.tool_hooks.clear_tool_hooks for the owner context; propagated contexts end with their task/thread",
+        "setter": "core.hooks.tool_hooks.set_tool_hooks via bootstrap and GeodeBootstrap.propagate_to_thread",
+        "symbol": "_tool_hooks_ctx",
+        "teardown": "HookSystem owner cleanup clears the matching owner-context binding; propagated bindings disappear when their task/thread context is discarded"
       },
       {
+        "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
+        "classification": "diagnostic_scope",
         "context_name": "session_adapter_usage",
         "has_default": true,
+        "implementation": "ContextVar",
+        "lifetime": "one AgenticLoop session",
         "line": 86,
+        "owner": "core.agent.loop",
         "path": "core/llm/adapters/dispatch.py",
-        "symbol": "_session_adapter_usage_ctx"
+        "resetter": "core.llm.adapters.dispatch.end_session_adapter_tracking",
+        "setter": "core.llm.adapters.dispatch.begin_session_adapter_tracking",
+        "symbol": "_session_adapter_usage_ctx",
+        "teardown": "session finalization replaces the counter with None"
       },
       {
+        "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
+        "classification": "request_identity",
         "context_name": "geode_surface_type",
         "has_default": true,
+        "implementation": "ContextVar",
+        "lifetime": "unbound in current production; caller-owned context when explicitly set",
         "line": 125,
+        "owner": "core.llm.platform_hints",
         "path": "core/llm/platform_hints.py",
-        "symbol": "_current_surface"
+        "resetter": "caller may reset the set_current_surface token; no production binding exists",
+        "setter": "core.llm.platform_hints.set_current_surface (compatibility/test API; no production caller)",
+        "symbol": "_current_surface",
+        "teardown": "caller token reset or context discard"
       },
       {
+        "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
+        "classification": "diagnostic_scope",
         "context_name": "token_tracker",
         "has_default": true,
+        "implementation": "ContextVar",
+        "lifetime": "one CLI or agent session context",
         "line": 455,
+        "owner": "core.llm.token_tracker",
         "path": "core/llm/token_tracker.py",
-        "symbol": "_tracker_ctx"
+        "resetter": "core.llm.token_tracker.reset_tracker",
+        "setter": "core.llm.token_tracker.get_tracker",
+        "symbol": "_tracker_ctx",
+        "teardown": "session reset clears counters; task exit discards the context"
       },
       {
+        "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
+        "classification": "service_locator",
         "context_name": "calendar_port",
         "has_default": true,
+        "implementation": "ContextVar",
+        "lifetime": "runtime process and copied request contexts",
         "line": 100,
+        "owner": "core.wiring.adapters",
         "path": "core/mcp/calendar_port.py",
-        "symbol": "_calendar_ctx"
+        "resetter": "core.mcp.calendar_port.set_calendar(None)",
+        "setter": "core.mcp.calendar_port.set_calendar",
+        "symbol": "_calendar_ctx",
+        "teardown": "no production clear; remove through R4.2 port injection"
       },
       {
+        "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
+        "classification": "service_locator",
         "context_name": "notification_port",
         "has_default": true,
+        "implementation": "ContextVar",
+        "lifetime": "runtime process and copied request contexts",
         "line": 67,
+        "owner": "core.wiring.adapters",
         "path": "core/mcp/notification_port.py",
-        "symbol": "_notification_ctx"
+        "resetter": "core.wiring.adapters sets None when plugin configuration fails",
+        "setter": "core.mcp.notification_port.set_notification",
+        "symbol": "_notification_ctx",
+        "teardown": "plugin failure clears it; otherwise process exit discards the fallback"
       },
       {
+        "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
+        "classification": "diagnostic_scope",
         "context_name": "geode_active_run_dir",
         "has_default": true,
+        "implementation": "ContextVar",
+        "lifetime": "one seed/audit cycle or inherited worker process",
         "line": 58,
+        "owner": "geode_product.seed_generation and core.agent.worker",
         "path": "core/observability/run_dir.py",
-        "symbol": "_active_run_dir"
+        "resetter": "run_dir_scope finally; inherited worker binding ends at process exit",
+        "setter": "run_dir_scope or worker main via set_active_run_dir",
+        "symbol": "_active_run_dir",
+        "teardown": "the scope resets its token; worker process exit discards its direct binding"
       },
       {
+        "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
+        "classification": "request_local_mutable_state",
         "context_name": "session_metrics",
         "has_default": true,
+        "implementation": "ContextVar",
+        "lifetime": "one measured session, turn task, or campaign process",
         "line": 88,
+        "owner": "AgenticLoop, plan command, hosted Goal continuation, and self-improving training",
         "path": "core/observability/session_metrics.py",
-        "symbol": "_current_metrics"
+        "resetter": "scope finally; direct bindings end at task/process exit or later rebind",
+        "setter": "session_metrics_scope or direct set_current_session_metrics binding",
+        "symbol": "_current_metrics",
+        "teardown": "the scope resets its token; direct binding relies on task/process lifetime"
       },
       {
+        "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
+        "classification": "diagnostic_scope",
         "context_name": "geode_session_timeline",
         "has_default": true,
+        "implementation": "ContextVar",
+        "lifetime": "one AgenticLoop session task",
         "line": 41,
+        "owner": "core.agent.loop.AgenticLoop",
         "path": "core/observability/session_timeline.py",
-        "symbol": "_CURRENT_SESSION_TIMELINE"
+        "resetter": "core.observability.session_timeline.set_current_session_timeline(None)",
+        "setter": "core.observability.session_timeline.set_current_session_timeline",
+        "symbol": "_CURRENT_SESSION_TIMELINE",
+        "teardown": "session task exit discards the context; tests and owners may clear explicitly"
       },
       {
+        "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
+        "classification": "service_locator",
         "context_name": "tool_offload_store",
         "has_default": true,
+        "implementation": "ContextVar",
+        "lifetime": "the runtime or shared-service bootstrap context, shared across later sessions where inherited",
         "line": 26,
+        "owner": "core.wiring.bootstrap.build_tool_offload",
         "path": "core/orchestration/tool_offload.py",
-        "symbol": "_offload_store_ctx"
+        "resetter": "none in production; remove through R4.2 execution-service injection",
+        "setter": "core.orchestration.tool_offload.set_offload_store",
+        "symbol": "_offload_store_ctx",
+        "teardown": "SESSION_ENDED deletes files but not the binding; gateway and IPC poller contexts do not inherit it"
       },
       {
+        "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
+        "classification": "request_local_mutable_state",
         "context_name": "geode_runtime_audit_active",
         "has_default": true,
+        "implementation": "ContextVar",
+        "lifetime": "Petri runner task until rebind or task teardown",
         "line": 19,
+        "owner": "geode_product.petri_audit.audit_mode",
         "path": "core/runtime_audit.py",
-        "symbol": "_runtime_audit_active"
+        "resetter": "none in production; later publication may rebind",
+        "setter": "core.runtime_audit.set_runtime_audit_active",
+        "symbol": "_runtime_audit_active",
+        "teardown": "the owning task context is discarded"
       },
       {
+        "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
+        "classification": "service_locator",
         "context_name": "default_session_store",
         "has_default": true,
+        "implementation": "ContextVar",
+        "lifetime": "runtime process and copied request contexts",
         "line": 31,
+        "owner": "core.wiring.bootstrap.build_memory",
         "path": "core/tools/memory_tools.py",
-        "symbol": "_default_session_store_ctx"
+        "resetter": "none; remove through R4.2 persistence-service injection",
+        "setter": "core.tools.memory_tools.set_default_session_store",
+        "symbol": "_default_session_store_ctx",
+        "teardown": "runtime closes the store owner but leaves the binding"
       },
       {
+        "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
+        "classification": "service_locator",
         "context_name": "project_memory_tools",
         "has_default": true,
+        "implementation": "ContextVar",
+        "lifetime": "runtime process and copied request contexts",
         "line": 34,
+        "owner": "core.wiring.bootstrap.build_memory",
         "path": "core/tools/memory_tools.py",
-        "symbol": "_project_memory_ctx"
+        "resetter": "core.tools.memory_tools.set_project_memory(None)",
+        "setter": "core.tools.memory_tools.set_project_memory",
+        "symbol": "_project_memory_ctx",
+        "teardown": "no production clear; remove through R4.2 persistence-service injection"
       },
       {
+        "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
+        "classification": "service_locator",
         "context_name": "org_memory_tools",
         "has_default": true,
+        "implementation": "ContextVar",
+        "lifetime": "runtime process and copied request contexts",
         "line": 37,
+        "owner": "core.wiring.bootstrap.build_memory",
         "path": "core/tools/memory_tools.py",
-        "symbol": "_org_memory_ctx"
+        "resetter": "core.tools.memory_tools.set_org_memory(None)",
+        "setter": "core.tools.memory_tools.set_org_memory",
+        "symbol": "_org_memory_ctx",
+        "teardown": "no production clear; remove through R4.2 persistence-service injection"
       },
       {
+        "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
+        "classification": "service_locator",
         "context_name": "memory_tools_hooks",
         "has_default": true,
+        "implementation": "ContextVar",
+        "lifetime": "one runtime bootstrap context",
         "line": 58,
+        "owner": "core.wiring.bootstrap.build_memory",
         "path": "core/tools/memory_tools.py",
-        "symbol": "_hooks_ctx"
+        "resetter": "core.tools.memory_tools.clear_memory_hooks",
+        "setter": "core.tools.memory_tools.set_memory_hooks",
+        "symbol": "_hooks_ctx",
+        "teardown": "HookSystem owner cleanup clears the matching binding"
       },
       {
+        "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
+        "classification": "cache",
         "context_name": "geode_tool_data_policies",
         "has_default": true,
+        "implementation": "ContextVar",
+        "lifetime": "one bound AgenticLoop task",
         "line": 36,
+        "owner": "core.agent.loop",
         "path": "core/tools/personal_data.py",
-        "symbol": "_safety_policies"
+        "resetter": "core.tools.personal_data.set_bound_tool_data_policies(None)",
+        "setter": "core.tools.personal_data.set_bound_tool_data_policies",
+        "symbol": "_safety_policies",
+        "teardown": "the task context is discarded after the session"
       },
       {
+        "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
+        "classification": "service_locator",
         "context_name": "user_profile_tools",
         "has_default": true,
+        "implementation": "ContextVar",
+        "lifetime": "runtime process and copied request contexts",
         "line": 23,
+        "owner": "core.wiring.bootstrap.ensure_user_profile",
         "path": "core/tools/profile_tools.py",
-        "symbol": "_user_profile_ctx"
+        "resetter": "core.tools.profile_tools.set_user_profile(None)",
+        "setter": "core.tools.profile_tools.set_user_profile",
+        "symbol": "_user_profile_ctx",
+        "teardown": "no production clear; remove through R4.2 persistence-service injection"
+      },
+      {
+        "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
+        "classification": "request_local_mutable_state",
+        "context_name": "geode_ipc_writer_local",
+        "has_default": true,
+        "implementation": "ContextLocal",
+        "lifetime": "one IPC streaming prompt",
+        "line": 27,
+        "owner": "core.server.ipc_server.poller.CLIPoller",
+        "path": "core/ui/agentic_ui/_state.py",
+        "resetter": "the poller finally replaces writer with None",
+        "setter": "core.server.ipc_server.poller.CLIPoller._run_prompt_streaming_async",
+        "symbol": "_ipc_writer_local",
+        "teardown": "the poller finally clears the writer; task or thread exit discards fallback state"
+      },
+      {
+        "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
+        "classification": "request_identity",
+        "context_name": "geode_pipeline_subject_local",
+        "has_default": true,
+        "implementation": "ContextLocal",
+        "lifetime": "caller task or thread when the compatibility API is used",
+        "line": 30,
+        "owner": "core.ui.agentic_ui",
+        "path": "core/ui/agentic_ui/_state.py",
+        "resetter": "none; a later call overwrites the subject",
+        "setter": "core.ui.agentic_ui.set_pipeline_subject (no production caller)",
+        "symbol": "_pipeline_subject_local",
+        "teardown": "there is no production reset; task or thread exit discards the binding"
+      },
+      {
+        "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
+        "classification": "diagnostic_scope",
+        "context_name": "geode_session_meter_local",
+        "has_default": true,
+        "implementation": "ContextLocal",
+        "lifetime": "current IPC prompt and idle interval until the next initialization",
+        "line": 84,
+        "owner": "core.server.ipc_server.poller.CLIPoller",
+        "path": "core/ui/agentic_ui/_state.py",
+        "resetter": "none; each IPC prompt overwrites the meter",
+        "setter": "core.ui.agentic_ui.init_session_meter",
+        "symbol": "_meter_local",
+        "teardown": "a later prompt overwrites the meter; task or thread exit discards fallback state"
+      },
+      {
+        "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
+        "classification": "request_local_mutable_state",
+        "context_name": "geode_console_local",
+        "has_default": true,
+        "implementation": "ContextLocal",
+        "lifetime": "one IPC streaming prompt",
+        "line": 112,
+        "owner": "core.server.ipc_server.poller.CLIPoller",
+        "path": "core/ui/console.py",
+        "resetter": "core.ui.console.reset_thread_console",
+        "setter": "core.ui.console.set_thread_console",
+        "symbol": "_ConsoleProxy._local",
+        "teardown": "the poller finally removes the console; task or thread exit discards fallback state"
+      },
+      {
+        "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
+        "classification": "diagnostic_scope",
+        "context_name": "geode_tau2_attempt",
+        "has_default": true,
+        "implementation": "ContextVar",
+        "lifetime": "one tau2 run attempt",
+        "line": 141,
+        "owner": "geode_product.benchmark_harness.tau2_runtime_contract.Tau2AttemptTracker",
+        "path": "geode_product/benchmark_harness/tau2_runtime_contract.py",
+        "resetter": "Tau2AttemptTracker.wrap finally resets the token",
+        "setter": "Tau2AttemptTracker.wrap sets a token around one upstream run attempt",
+        "symbol": "_CURRENT_ATTEMPT",
+        "teardown": "the wrapper finally restores the caller context even when the attempt raises"
+      },
+      {
+        "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
+        "classification": "diagnostic_scope",
+        "context_name": "self_improving_loop_run_timeline",
+        "has_default": true,
+        "implementation": "ContextVar",
+        "lifetime": "one self-improving run scope or one inherited worker subprocess",
+        "line": 32,
+        "owner": "geode_product.self_improving.loop.observe.run_timeline and geode_product.worker",
+        "path": "geode_product/self_improving/loop/observe/run_timeline.py",
+        "resetter": "run_timeline_scope finally resets its token; a worker binding ends with its subprocess",
+        "setter": "run_timeline_scope, or geode_product.wiring.bind_worker_activity at worker-process entry",
+        "symbol": "_current_run_timeline",
+        "teardown": "the context manager restores the caller binding; worker-process exit discards its inherited binding"
       }
-    ]
+    ],
+    "lifecycle_source": "docs/architecture/context-var-lifecycles.json",
+    "service_locator_count": 11
   },
   "coordinators": {
     "AgenticLoop": {
@@ -377,10 +708,10 @@
     },
     "tests": {
       "python_files": 685,
-      "python_loc": 181919
+      "python_loc": 183458
     }
   },
-  "schema_version": 3,
+  "schema_version": 4,
   "self_improving_facades": {
     "count": 5,
     "items": [

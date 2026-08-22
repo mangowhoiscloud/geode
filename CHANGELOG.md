@@ -133,6 +133,14 @@ functional change.
 
 ### Architecture
 
+- **Ambient state now has a generated lifecycle inventory.** Every module/class-
+  scoped `ContextVar`, including `ContextLocal`-backed bindings, is classified
+  with an owner, setter/reset boundary, lifetime, teardown behavior, and
+  executable async propagation check. New or removed
+  declarations fail the architecture baseline until the inventory is reconciled;
+  the 11 service locators remain explicit R4.2 removal inputs rather than being
+  relabeled as request state.
+
 - **Sub-agent delegation now has bounded collaborators.** `SubAgentManager`
   remains the depth-one orchestration and cancellation owner, while
   `SubagentProtocol` owns request construction and result validation and

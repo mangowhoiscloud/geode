@@ -101,14 +101,15 @@ status는 `SessionStatus`로 정규화 — 미지 문자열은 경고와 함께 
 
 ## 주변 상태 (수용, 문서화)
 
-ContextVar(코어 전체 26개)는 횡단 참조(cognitive state, 세션 id,
-알림 어댑터, 게이트웨이, 스케줄러)를 주입한다. 이들은 머신 상태가
-아니다: `arun()`이 매 턴 세션 스코프 항목을 루프의 복원된 필드에서
-재바인딩하므로, `restore_from_checkpoint`가 올바르면 주변 뷰는
-수렴한다. 배선 규칙(set/get parity, bootstrap 등록)은 CLAUDE.md의
-Wiring Verification 표에 있다. 주변 표면 축소는 오토마타 범위에서
-의도적으로 제외한다: 재바인딩 계약이 유지되는 한, 주입 지점 26곳을
-재배선하는 위험이 가치를 초과한다.
+생성 인벤토리는 `ContextLocal`이 만드는 4개를 포함해 현재 프로덕션
+패키지의 모듈/클래스 범위 ContextVar 35개를 기록한다: 요청 식별 7개,
+요청 로컬 가변 값 9개, 진단 범위 7개, 캐시 1개, 서비스 로케이터 11개다. 각 행의
+소유자, setter/reset 경계, 수명, 종료 동작은
+[`context-var-lifecycles.json`](context-var-lifecycles.json)에 고정되고,
+생성 architecture baseline이 각 항목에 실행 가능한 async 전파/reset
+테스트 참조를 붙인다. 이들은 머신 상태가 아니다. `arun()`은 복원한 루프
+상태에서 세션 범위 값을 다시 바인딩한다. 서비스 로케이터는 수용된 머신
+상태 의존성이 아니라 R4.2의 명시적 제거 입력이다.
 
 ## 관측성
 
