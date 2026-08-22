@@ -553,6 +553,7 @@ def test_context_var_inventory_detects_reexported_constructors(
         'from core.source import cv\nstate = cv.ContextVar("state")\n',
         'import core.source as source\nstate = source.cv.ContextVar("state")\n',
         'import core\nstate = core.source.cv.ContextVar("state")\n',
+        'from core import source\ncv = source.cv\nstate = cv.ContextVar("state")\n',
     ],
 )
 def test_context_var_inventory_detects_reexported_constructor_modules(
@@ -908,6 +909,7 @@ def test_notification_probe_preserves_process_fallback(tmp_path: Path) -> None:
         'if (Factory := ContextVar):\n    state = Factory("state")',
         'import contextvars\nFactory = contextvars.__dict__["ContextVar"]\nstate = Factory("state")',
         'for Factory in [ContextVar]:\n    state = Factory("state")',
+        'states = [Factory("state") for Factory in (ContextVar,)]',
         'match ContextVar:\n    case Factory:\n        state = Factory("state")',
     ],
 )

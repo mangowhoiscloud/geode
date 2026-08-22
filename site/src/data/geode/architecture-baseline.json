@@ -542,14 +542,14 @@
         "context_name": "self_improving_loop_run_timeline",
         "has_default": true,
         "implementation": "ContextVar",
-        "lifetime": "one self-improving run scope",
+        "lifetime": "one self-improving run scope or one inherited worker subprocess",
         "line": 32,
-        "owner": "geode_product.self_improving.loop.observe.run_timeline",
+        "owner": "geode_product.self_improving.loop.observe.run_timeline and geode_product.worker",
         "path": "geode_product/self_improving/loop/observe/run_timeline.py",
-        "resetter": "run_timeline_scope finally resets its token",
-        "setter": "run_timeline_scope or set_current_run_timeline",
+        "resetter": "run_timeline_scope finally resets its token; a worker binding ends with its subprocess",
+        "setter": "run_timeline_scope, or geode_product.wiring.bind_worker_activity at worker-process entry",
         "symbol": "_current_run_timeline",
-        "teardown": "the context manager restores the caller binding on every exit"
+        "teardown": "the context manager restores the caller binding; worker-process exit discards its inherited binding"
       }
     ],
     "lifecycle_source": "docs/architecture/context-var-lifecycles.json",
@@ -708,7 +708,7 @@
     },
     "tests": {
       "python_files": 685,
-      "python_loc": 183189
+      "python_loc": 183191
     }
   },
   "schema_version": 4,

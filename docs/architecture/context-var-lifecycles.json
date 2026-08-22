@@ -273,10 +273,10 @@
   },
   "geode_product/self_improving/loop/observe/run_timeline.py:_current_run_timeline": {
     "classification": "diagnostic_scope",
-    "owner": "geode_product.self_improving.loop.observe.run_timeline",
-    "setter": "run_timeline_scope or set_current_run_timeline",
-    "resetter": "run_timeline_scope finally resets its token",
-    "lifetime": "one self-improving run scope",
-    "teardown": "the context manager restores the caller binding on every exit"
+    "owner": "geode_product.self_improving.loop.observe.run_timeline and geode_product.worker",
+    "setter": "run_timeline_scope, or geode_product.wiring.bind_worker_activity at worker-process entry",
+    "resetter": "run_timeline_scope finally resets its token; a worker binding ends with its subprocess",
+    "lifetime": "one self-improving run scope or one inherited worker subprocess",
+    "teardown": "the context manager restores the caller binding; worker-process exit discards its inherited binding"
   }
 }

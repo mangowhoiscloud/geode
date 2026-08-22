@@ -444,6 +444,37 @@ def _exported_context_constructor_paths(
     return paths
 
 
+def _context_constructor_module_path(
+    expression: ast.expr,
+    aliases: dict[str, str],
+    constructor_exports: dict[str, dict[str, str]],
+    module_exports: dict[str, dict[str, str]],
+) -> str | None:
+    dotted = _dotted_name(expression.value if isinstance(expression, ast.Subscript) else expression)
+    if dotted is None:
+        return None
+    if dotted in aliases:
+        module_path = aliases[dotted]
+        return (
+            module_path
+            if _exported_context_constructor_paths(module_path, constructor_exports, module_exports)
+            else None
+        )
+    for alias_name, imported_name in aliases.items():
+        if not dotted.startswith(f"{alias_name}."):
+            continue
+        module_path = imported_name
+        for part in dotted.removeprefix(f"{alias_name}.").split("."):
+            module_path = module_exports.get(module_path, {}).get(part, "")
+            if not module_path:
+                break
+        if module_path and _exported_context_constructor_paths(
+            module_path, constructor_exports, module_exports
+        ):
+            return module_path
+    return None
+
+
 def _context_alias_assignment(
     node: ast.stmt,
     *,
@@ -514,10 +545,14 @@ def _unsupported_context_alias(
             for candidate in ast.walk(node.value)
             if isinstance(candidate, ast.expr)
         )
-    if isinstance(node, ast.Match) or (
+    if isinstance(node, ast.Match | ast.comprehension) or (
         isinstance(node, ast.For | ast.AsyncFor) and not isinstance(node.iter, ast.GeneratorExp)
     ):
-        source = node.iter if isinstance(node, ast.For | ast.AsyncFor) else node.subject
+        source = (
+            node.iter
+            if isinstance(node, ast.For | ast.AsyncFor | ast.comprehension)
+            else node.subject
+        )
         return any(
             constructor_reference(candidate) is not None or module_reference(candidate)
             for candidate in ast.walk(source)
@@ -859,27 +894,19 @@ def _context_vars(root: Path) -> dict[str, Any]:
             dotted = _dotted_name(function)
             return qualified.get(dotted) if dotted else None
 
-        def module_reference(
+        def module_path_reference(
             expression: ast.expr,
             aliases: dict[str, str] = module_aliases,
-        ) -> bool:
-            dotted = _dotted_name(
-                expression.value if isinstance(expression, ast.Subscript) else expression
+        ) -> str | None:
+            return _context_constructor_module_path(
+                expression,
+                aliases,
+                constructor_exports,
+                constructor_module_exports,
             )
-            if dotted is None:
-                return False
-            if dotted in aliases:
-                return bool(
-                    _exported_context_constructor_paths(
-                        aliases[dotted], constructor_exports, constructor_module_exports
-                    )
-                )
-            return any(
-                dotted.removeprefix(f"{alias_name}.")
-                in constructor_module_exports.get(imported_name, {})
-                for alias_name, imported_name in aliases.items()
-                if dotted.startswith(f"{alias_name}.")
-            )
+
+        def module_reference(expression: ast.expr) -> bool:
+            return module_path_reference(expression) is not None
 
         while True:
             for name, module_path in module_aliases.items():
@@ -904,8 +931,8 @@ def _context_vars(root: Path) -> dict[str, Any]:
                     continue
                 alias_target, alias_value = assignment
                 implementation = constructor_reference(alias_value)
-                dotted = _dotted_name(alias_value)
-                if owner and (implementation is not None or dotted in module_aliases):
+                resolved_module = module_path_reference(alias_value)
+                if owner and (implementation is not None or resolved_module is not None):
                     raise ValueError(
                         f"{path}:{node.lineno}: ContextVar constructor aliases must be "
                         "module-scoped"
@@ -914,8 +941,8 @@ def _context_vars(root: Path) -> dict[str, Any]:
                     continue
                 if implementation is not None and alias_target.id not in constructors:
                     constructor_aliases[alias_target.id] = implementation
-                if dotted in module_aliases and alias_target.id not in module_aliases:
-                    new_module_aliases[alias_target.id] = module_aliases[dotted]
+                if resolved_module is not None and alias_target.id not in module_aliases:
+                    new_module_aliases[alias_target.id] = resolved_module
             if not constructor_aliases and not new_module_aliases:
                 break
             constructors.update(constructor_aliases)
