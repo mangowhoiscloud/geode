@@ -226,7 +226,6 @@ normal review and CI; implementations start only after the claim merges.
 | Closure package | GAP IDs | Owner/session | Implementation branch | Claim evidence | Claimed at (UTC) |
 |---|---|---|---|---|---|
 | R8.3 | REL-004 | `session=codex-root task=r8-3-publication-grace-evidence` | `feature/r8-3-publication-grace-evidence` | Readiness [#3039](https://github.com/mangowhoiscloud/geode/pull/3039); v1.0.23 GitHub/PyPI parity and candidate interval re-audited | `2026-08-20T07:41:19Z` |
-| R4.2 | DI-002, DI-003 | `session=codex-root task=r4-2-cohesive-runtime-services` | `feature/r4-2-cohesive-runtime-services` | Reconciliation/readiness [#3089](https://github.com/mangowhoiscloud/geode/pull/3089); 21-field runtime config and eleven service-locator removal inputs re-audited | `2026-08-22T18:35:48Z` |
 
 ## 1. Program objective
 
@@ -531,15 +530,15 @@ and closure evidence are appended in §10.
 | LOOP-004 | `ABSENT` | Loop has 2,714 LOC, 67 methods, and 27 constructor args with no local ratchet | Closure budgets in §7.3 are executable and cannot regress | R3.3 | LOOP-003 | `IN_DEVELOP` |
 | LOOP-005 | `MISFIT` | `SubAgentManager` combines request codec, role resolution, execution, validation, and announcements | Separate collaborators own those responsibilities; manager remains an orchestrator | R3.4 | LOOP-002 | `IN_DEVELOP` |
 | DI-001 | `PARTIAL` | 26 module-level `ContextVar` declarations have no lifecycle classification | Generated inventory classifies request identity, diagnostics, mutable request state, request-local cache, and forbidden service lookup | R4.1 | LOOP-002 | `IN_DEVELOP` |
-| DI-002 | `PARTIAL` | `GeodeRuntime` groups config, but `RuntimeCoreConfig` still has 17 fields | Cohesive lifecycle groups contain at most seven fields and have explicit owners/teardown | R4.2 | DI-001 | `IN_PROGRESS` |
-| DI-003 | `MISFIT` | Downstream modules obtain injectable services through globals and CLI modules | Constructor/factory injection owns services; allowed ambient context is documented and tested | R4.2 | DI-001, DI-002 | `IN_PROGRESS` |
-| DI-004 | `MISFIT` | `MCPServerManager` combines config, discovery, connection, call, trace/persistence, and lifecycle | Separate config catalog, connection pool, invoker, and persistence collaborators preserve public behavior | R4.3 | DI-002 | `OPEN` |
-| LLM-001 | `MISFIT` | `LLMAdapter` documentation calls the contract minimal but requires streaming and introspection methods | Minimal completion protocol plus optional capability protocols; no empty stubs required | R5.1 | DI-002 | `OPEN` |
+| DI-002 | `PARTIAL` | `GeodeRuntime` groups config, but `RuntimeCoreConfig` still has 17 fields | Cohesive lifecycle groups contain at most seven fields and have explicit owners/teardown | R4.2 | DI-001 | `IN_DEVELOP` |
+| DI-003 | `MISFIT` | Downstream modules obtain injectable services through globals and CLI modules | Constructor/factory injection owns services; allowed ambient context is documented and tested | R4.2 | DI-001, DI-002 | `IN_DEVELOP` |
+| DI-004 | `MISFIT` | `MCPServerManager` combines config, discovery, connection, call, trace/persistence, and lifecycle | Separate config catalog, connection pool, invoker, and persistence collaborators preserve public behavior | R4.3 | DI-002 | `READY` |
+| LLM-001 | `MISFIT` | `LLMAdapter` documentation calls the contract minimal but requires streaming and introspection methods | Minimal completion protocol plus optional capability protocols; no empty stubs required | R5.1 | DI-002 | `READY` |
 | LLM-002 | `PARTIAL` | Eight built-ins use a mutable registry with broad bootstrap lifetime | Built-in plus entry-point discovery yields immutable session snapshots with generation and collision policy | R5.2 | LLM-001, BND-001 | `OPEN` |
 | LLM-003 | `PARTIAL` | Provider identity, credential source, transport, and adapter selection overlap | Provider profile, credential route, and transport are separate composable records | R5.3 | LLM-001, LLM-002 | `OPEN` |
 | LLM-004 | `PARTIAL` | Interactive and autonomous LLM paths share taxonomy but retain multiple retry/failover implementations | Explicit `RetryPolicy` preserves intentional differences on one classification/telemetry substrate | R5.4 | LLM-003 | `OPEN` |
-| PROTO-001 | `MISFIT` | Internal `HookEvent` taxonomy can leak into persistence/IPC expectations | Public activity/event projections are separate from internal dispatch events | R6.1 | LOOP-002, DI-002 | `OPEN` |
-| PROTO-002 | `PARTIAL` | IPC has typed behavior but no single versioned external compatibility contract | Versioned envelopes, capability negotiation, unknown-field behavior, and golden compatibility tests | R6.1 | PROTO-001 | `OPEN` |
+| PROTO-001 | `MISFIT` | Internal `HookEvent` taxonomy can leak into persistence/IPC expectations | Public activity/event projections are separate from internal dispatch events | R6.1 | LOOP-002, DI-002 | `READY` |
+| PROTO-002 | `PARTIAL` | IPC has typed behavior but no single versioned external compatibility contract | Versioned envelopes, capability negotiation, unknown-field behavior, and golden compatibility tests | R6.1 | PROTO-001 | `READY` |
 | STORE-001 | `PARTIAL` | `SessionStorePort`, `SessionManager`, checkpoints, transcripts, and event store have overlapping ownership | Ports and writers conform to the existing sessions.db/JSONL destination matrix; projections are rebuildable | R6.2 | — | `DONE` |
 | STORE-002 | `PARTIAL` | Logging/transcript/resume/replay plan still contains staged/open parity work | Each subsystem has one declared writer, resume contract, replay doctrine, retention, and redaction test | R6.2 | STORE-001 | `DONE` |
 | TRUST-001 | `ABSENT` | Registration/enabled status does not uniformly distinguish trusted authority | Installed, enabled, trusted, and granted-capability states are separate and observable; executable code is never imported before trust approval | R6.3 | BND-004 | `OPEN` |
@@ -1936,6 +1935,7 @@ pre-release delivery evidence survives after the claim row is gone.
 | R3.3 | LOOP-004 | [#3074](https://github.com/mangowhoiscloud/geode/pull/3074) | `8469092baddff2d0b453b03230c46ec2b7e79bac` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, 10,411 non-live tests, lint/format, type check, security, Pages build, official-doc parity, macOS/Ubuntu install smoke, wheel/sdist and clean full/kernel installed-package checks, executable structural budgets, and independent committed-diff review all passed) |
 | R3.4 | LOOP-005 | [#3079](https://github.com/mangowhoiscloud/geode/pull/3079) | `8a73c6be74f31d7611730d44321b9cdceabdaad5` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, full non-live tests, lint/format, type check, security, Pages build, official-doc parity, macOS/Ubuntu install smoke, wheel/sdist and clean full/kernel installed-package checks, 393 isolated kernel imports plus 42 installed-kernel tests, executable `SubAgentManager` structural budget, and independent committed-diff review all passed) |
 | R4.1 | DI-001 | [#3088](https://github.com/mangowhoiscloud/geode/pull/3088) | `90e039ceab5b510f26a7a38df1aceebad1fd35f7` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, 10,306 non-live tests with 80.01% coverage, lint/format, type check, import contracts, architecture and official-doc gates, Pages build, wheel/sdist inspection, clean full and kernel installed-package smoke, 395 isolated kernel imports plus 42 installed-kernel tests, literal dynamic-import drift coverage, and independent committed-diff review all passed) |
+| R4.2 | DI-002, DI-003 | [#3091](https://github.com/mangowhoiscloud/geode/pull/3091) | `d7f566e12ce96adabd74e6c268d53336ec12fc81` | `uv run python scripts/architecture_baseline.py --check`; `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, full non-live tests, lint/format, type check, security, import contracts, official-doc and Pages build, macOS/Ubuntu install smoke, wheel/sdist inspection, clean daemon and full/kernel installed-package checks, 394 isolated kernel imports plus 42 installed-kernel tests, zero remaining service-locator `ContextVar` bindings, and three independent committed-diff reviews with all ten findings resolved) |
 
 ### 10.2 Main closure evidence
 
@@ -2163,26 +2163,35 @@ implementations.
 
 R4.1 (`DI-001`) is `IN_DEVELOP` after feature
 [#3088](https://github.com/mangowhoiscloud/geode/pull/3088) merged as
-`90e039ceab5b510f26a7a38df1aceebad1fd35f7`. The generated manifest now
-classifies all 35 module/class-scoped `ContextVar`-backed bindings: seven
-request identities, nine request-local mutable states, seven diagnostic
-scopes, one cache, and eleven service locators. CI owns the declaration,
-ownership, lifetime, propagation, reset, teardown, and literal dynamic-import
-drift checks. The eleven service locators are measured R4.2 inputs, so R4.1 is
-not eligible for `DONE` until those bindings are removed through explicit
-service ownership and injection.
+`90e039ceab5b510f26a7a38df1aceebad1fd35f7`. Its generated manifest first
+classified 35 module/class-scoped `ContextVar`-backed bindings, including the
+eleven service-locator removal inputs. R4.2 has now removed those inputs; the
+current inventory contains 24 bindings limited to seven request identities,
+nine request-local mutable states, seven diagnostic scopes, and one cache. CI
+continues to own declaration, lifecycle, propagation, reset, teardown, and
+literal dynamic-import drift checks, and rejects any new service locator.
 
-R4.2 (`DI-002`, `DI-003`) is `IN_PROGRESS` under the active claim for
-`feature/r4-2-cohesive-runtime-services` after reconciliation/readiness
-[#3089](https://github.com/mangowhoiscloud/geode/pull/3089) merged as
-`2cfd765b3ce6122c7ca0cf361e39422c89991e4f`. DI-001 is `IN_DEVELOP`, and
-DI-002 to DI-003 remains the package's internal implementation order. The
-claimed scope replaces the measured 21-field `RuntimeCoreConfig` and eleven
-service-locator bindings with lifecycle-owned groups of at most seven cohesive
-fields, explicit teardown, composition-root injection, and a generated
-prohibition on new service-locator `ContextVar` bindings. It authorizes no
-R4.3 manager split or R5 adapter work. The implementation worktree may be
-allocated only after this claim merges and canonical `develop` is refreshed.
+R4.2 (`DI-002`, `DI-003`) is `IN_DEVELOP` after feature
+[#3091](https://github.com/mangowhoiscloud/geode/pull/3091) merged as
+`d7f566e12ce96adabd74e6c268d53336ec12fc81`. Six lifecycle-owned execution,
+persistence, lifecycle, integration, authentication, and identity groups now
+contain at most seven cohesive fields; runtime, daemon, worker, MCP one-shot,
+tool, scheduler, hook, and adapter paths receive their owned services through
+composition-root, constructor, or `ToolContext` injection. The eleven ambient
+service locators are removed, lifecycle shutdown remains runtime-owned, and no
+durable schema or provider/tool contract migrated.
+
+R4.3 (`DI-004`), R5.1 (`LLM-001`), and R6.1 (`PROTO-001`, `PROTO-002`) are
+newly dependency-satisfied `READY` packages after whole-package re-audit
+against `origin/develop@d7f566e12ce96adabd74e6c268d53336ec12fc81`. Their
+§7 acceptance remains measurable: `MCPServerManager` still combines catalog,
+connection, invocation, trace/persistence, and lifecycle responsibilities;
+the required adapter surface still mixes completion with optional
+capabilities; and public protocol projections still need one versioned,
+negotiated compatibility envelope. R4.3 is the earliest unclaimed package in
+master order and requires a separate claim PR before implementation. R5.1 and
+R6.1 remain unclaimed and authorize no implementation until their own
+serialized claims merge.
 
 R9.1 (`CODE-001`) was already dependency-satisfied and remains `OPEN` pending
 its own serialized whole-package readiness transaction later in master order.
