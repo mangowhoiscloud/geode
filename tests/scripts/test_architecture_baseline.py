@@ -726,6 +726,7 @@ def test_context_var_inventory_rejects_separately_invoked_factory(
         'def make(constructor):\n    return constructor("state")\nstate = make(ContextVar)',
         'import contextvars\ndef make(module):\n    return module.ContextVar("state")\nstate = make(contextvars)',
         'import contextvars\ndef identity(value):\n    return value\nmods = identity([contextvars])\nstate = mods[0].ContextVar("state")',
+        'state = ContextVar.__call__("state")',
     ],
 )
 def test_context_var_inventory_rejects_forwarded_constructor(
@@ -772,6 +773,7 @@ def test_context_var_inventory_rejects_constructor_stored_in_container(
     [
         'factories = {} | {"ctx": ContextVar}\nstate = factories["ctx"]("state")',
         'factories = {}\nfactories |= {"ctx": ContextVar}\nstate = factories["ctx"]("state")',
+        'constructors = [*[ContextVar]]\nstate = constructors[0]("state")',
     ],
 )
 def test_context_var_inventory_rejects_constructor_container_merge(

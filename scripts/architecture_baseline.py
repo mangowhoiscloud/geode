@@ -486,7 +486,9 @@ def _context_alias_assignment(
 ) -> tuple[ast.Name, ast.expr] | None:
     def container_values(value: ast.expr) -> Iterator[ast.expr]:
         children: Iterable[ast.expr | None]
-        if isinstance(value, ast.Dict):
+        if isinstance(value, ast.Starred):
+            children = (value.value,)
+        elif isinstance(value, ast.Dict):
             children = (*value.keys, *value.values)
         elif isinstance(value, ast.List | ast.Set | ast.Tuple):
             children = value.elts
@@ -828,8 +830,13 @@ def _reject_forwarded_context_constructors(
     context_reference: Callable[[ast.expr], bool],
 ) -> None:
     for call in calls:
+        receiver_hides_constructor = not context_reference(call.func) and any(
+            context_reference(expression)
+            for expression in ast.walk(call.func)
+            if isinstance(expression, ast.expr) and expression is not call.func
+        )
         arguments = (*call.args, *(keyword.value for keyword in call.keywords))
-        if any(
+        if receiver_hides_constructor or any(
             context_reference(expression)
             for argument in arguments
             for expression in ast.walk(argument)
@@ -850,7 +857,9 @@ def _reject_forwarded_context_modules(
         if module_reference(argument):
             return True
         children: Iterable[ast.expr | None]
-        if isinstance(argument, ast.Dict):
+        if isinstance(argument, ast.Starred):
+            children = (argument.value,)
+        elif isinstance(argument, ast.Dict):
             children = (*argument.keys, *argument.values)
         elif isinstance(argument, ast.List | ast.Set | ast.Tuple):
             children = argument.elts
