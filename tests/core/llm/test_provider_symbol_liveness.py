@@ -23,7 +23,7 @@ def test_anthropic_async_client_builder_constructs() -> None:
     """The live async client builder must import + run end to end."""
     from core.llm.adapters._anthropic_common import build_async_anthropic_client
 
-    client = build_async_anthropic_client(auth_token="probe-token")
+    client = build_async_anthropic_client("sk-ant-api-test")
     assert type(client).__name__ == "AsyncAnthropic"
 
 

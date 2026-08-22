@@ -44,10 +44,9 @@ loop는 scaffold 후보를 변이시키고 증거 기반 안전성 게이트로 
 
 > **ChatGPT Plus, Pro, Business, Edu, Enterprise 결제 중이신가요?** 그 구독을 GEODE 가 그대로 씁니다. API 키 필요 없습니다. [구독 setup ↓](#path-a--chatgpt-구독-openai-사용자에게-권장)
 >
-> **Claude Pro / Max 사용자라면** — GEODE는 레거시 `claude-cli` 구독 경로를
-> 유지합니다. 다만 Anthropic은 오픈소스를 포함한 서드파티 도구에 API 키를
-> 권장합니다. 공식 CLI에서 인증한 뒤 `/login anthropic`으로 활성화할 수 있으며
-> usage credit이 적용될 수 있습니다. [현행 Anthropic 안내](https://support.claude.com/en/articles/13189465-log-in-to-your-claude-account).
+> **Anthropic 사용자라면** — GEODE의 내장 Anthropic 경로는
+> `ANTHROPIC_API_KEY`가 필요합니다. 이전 Claude CLI 구독 통합은 퇴역했으며,
+> 레거시 설정은 dispatch 전에 migration 안내와 함께 중단됩니다.
 
 ---
 
@@ -167,12 +166,9 @@ geode                                 # GEODE 시작
 
 토큰 만료가 임박하면 GEODE 가 알아서 갱신합니다 (만료 120초 전 + 401 재시도). 사용자가 따로 신경 쓸 일은 없습니다.
 
-**Claude 구독 호환 경로.** GEODE는 레거시 `claude-cli` 경로에서 공식
-`claude` CLI를 호출합니다. `/login anthropic`은 경로만 선택하며 Claude 로그인을
-직접 구현하거나 CLI 토큰을 복사하지 않습니다. `claude /login`을 먼저 실행하면 됩니다.
-Anthropic의 현행 안내는 오픈소스를 포함한 서드파티 도구에 API 키를 권장하고,
-구독 사용분이 usage credit에서 차감될 수 있다고 명시합니다. 운영 환경에서는
-API 키 경로가 권장됩니다. ([공식 안내](https://support.claude.com/en/articles/13189465-log-in-to-your-claude-account))
+**Anthropic API-key 경로.** `/login anthropic`은 이제
+`ANTHROPIC_API_KEY`를 설정합니다. 레거시 `claude-cli` 또는 Anthropic
+`oauth` 설정은 migration 오류를 내기 위해서만 읽으며 CLI를 실행하지 않습니다.
 
 ---
 
@@ -450,9 +446,9 @@ geode update --latest # uv 도구: minor/major 업데이트를 명시적으로 �
 | **`while(tool_use)` 루프** | 모든 자율 행동의 단일 원시 동작. 서브에이전트, 플랜, 배치 모두 같은 루프의 인스턴스 |
 | **실험적 scaffold 최적화 loop** | scaffold 후보를 변이시키고 적대적 안전성 루브릭으로 audit한 뒤, 실제 이득이 있을 때만 승격을 허용합니다. 공개 기록은 현재 지속적 개선보다 게이트 규율을 입증합니다. [closed loop](https://mangowhoiscloud.github.io/geode/docs/capabilities/autoresearch) 참고 |
 | **Agentic tools + MCP 카탈로그** | 웹 검색, 파일 작업, 스케줄링, 메모리, Slack/Discord, Anthropic 발행 MCP 레지스트리, 선택형 [Google Workspace](https://mangowhoiscloud.github.io/geode/docs/run/google-workspace) 통합. MCP 메타데이터는 `~/.geode/mcp/registry-cache.json`에 캐시 |
-| **3-프로바이더 페일오버** | Anthropic + OpenAI + ZhipuAI. ChatGPT / Claude 구독 OAuth 자동 감지; 사용량 과금 API 키도 사용 가능; 페일오버는 동일 프로바이더 내에서만 (예상치 못한 vendor 횡단 과금 없음, v0.53.0 거버넌스) |
+| **3-프로바이더 페일오버** | Anthropic + OpenAI + ZhipuAI. ChatGPT OAuth는 in-process adapter가, Claude 구독은 공식 CLI가 소유; 사용량 과금 API 키도 사용 가능; 페일오버는 동일 프로바이더 내에서만 (예상치 못한 vendor 횡단 과금 없음, v0.53.0 거버넌스) |
 | **5-tier 메모리** | SOUL (0) → User Profile (0.5) → Organization (1) → Project (2) → Session (3). 영속화, 데몬 재시작 후에도 유지 |
-| **Plan-mode + audit trail** | `create_plan` + `approve_plan` + `list_plans` 로 다단계 작업 관리. 디스크 영구화 (`.geode/plans.json`), 재시작 후에도 유지 |
+| **진행 plan + 검증 재계획** | `/plan`이 관측에 따라 갱신 가능한 advisory checklist를 설치하고, `update_plan`이 진행 상태를 갱신. verify 실패 시 cognitive replan은 유지 |
 | **MCP 서버 (`geode-mcp`)** | GEODE 자체를 MCP 서버(stdio)로 노출: `run_agent`, `self_improving_status`, `self_improving_propose`/`apply`(2-step 확인 게이트), `query_memory`, `get_health`. repo의 `.mcp.json`으로 Claude Code에 자동 등록 |
 | **장시간 데몬** | `geode serve` 가 백그라운드로 상주. Slack Socket Mode + Discord / Telegram 폴러 + 스케줄러 tick + thin CLI 용 IPC |
 | **서브에이전트** | 부모 권한 완전 상속, depth/cost 가드, Lane 격리 |
@@ -513,7 +509,7 @@ frontier 하네스 (Claude Code, Codex CLI, OpenClaw) 옆에서 GEODE 가 어디
 | | Claude Code | Codex CLI | OpenClaw | **GEODE** |
 |---|---|---|---|---|
 | 멀티 프로바이더 페일오버 | ✅ Anthropic + AWS Bedrock + Google Vertex (환경변수 라우팅) | ✅✅ OpenAI + Azure + Bedrock + Ollama + OpenAI-호환 엔드포인트 전체 (`model_providers` 설정) | ✅ `auth.order` 쿨다운 기반 자동 페일오버 | ✅ Anthropic + OpenAI + ZhipuAI, in-provider 전용 |
-| 구독 OAuth tier | ✅ Pro / Max | ✅✅ Plus · Pro · Business · Edu · Enterprise | ⚠️ OpenAI + Gemini 온보딩 | ⚠️ ChatGPT; 경고가 붙는 레거시 Claude CLI 경로(API 키 권장) |
+| 구독 OAuth tier | ✅ Pro / Max | ✅✅ Plus · Pro · Business · Edu · Enterprise | ⚠️ OpenAI + Gemini 온보딩 | ChatGPT만 지원; Anthropic은 API key 사용 |
 | 토큰 / 비용 예산 가드 | ⚠️ 캐시 토큰 추적만 | ⚠️ 재시도 cap 만 (`request_max_retries`) | ⚠️ 부분 | ✅ 명시적 토큰 + 비용 예산 거버넌스 |
 | 컨텍스트 overflow 처리 | ✅ 자동 컴팩션 | ⚠️ Skills progressive disclosure + fork | ✅ 컴팩션 + 트랜스크립트 스트리밍 | ✅✅ 계층형 컨텍스트 overflow 처리 |
 | 벤더 간 페일오버 정책 | ❌ | ⚠️ `model_providers` 수동 전환 | ✅ 자동 | ❌ 의도적 (예기치 못한 cross-vendor 과금 방지) |
@@ -526,7 +522,7 @@ frontier 하네스 (Claude Code, Codex CLI, OpenClaw) 옆에서 GEODE 가 어디
 | | Claude Code | Codex CLI | OpenClaw | **GEODE** |
 |---|---|---|---|---|
 | 메모리 tier | ✅ CLAUDE.md 머지 + auto memory (`~/.claude/projects/*/memory`) | ✅ 계층적 AGENTS.md (전역 `~/.codex/` + repo + nested dirs) | ⚠️ 세션 범위 | ✅✅ **multi-tier** (SOUL · User · Org · Project · Session) |
-| 디스크 영구 plan | ✅ TodoWrite 영속화 | ⚠️ resumable 스레드 경유 | ✅ task registry | ✅ `.geode/plans.json` |
+| 진행 / 검토 plan | ✅ TodoWrite 영속화 | ⚠️ resumable 스레드 경유 | ✅ task registry | ✅ advisory `update_plan` + 영속 session event |
 | 권한 / 샌드박스 계층 | ✅ default / auto / bypass 모드 + Confirmation UI | ✅ `sandbox_mode` (read-only / workspace-write / danger-full-access) | ✅✅ Policy Chain, 다수 감사 표면 | ✅ Policy Chain + 도구 게이트 |
 | 다중 계층 가드레일 | ⚠️ 권한 + hooks | ⚠️ hooks + 샌드박스 | ✅ `audit.runtime` 엔진 | ✅ **턴 검증** (rule-based + opt-in LLM-judge, `core/agent/verify.py`) → FAIL 시 리플랜, self-improving 루프의 safety-axis fitness 게이트 별도 |
 | Hook 이벤트 | ✅ PreToolUse / PostToolUse / UserPromptSubmit / Stop / SubagentStop / PreCompact / SessionStart / SessionEnd / Notification | ⚠️ SessionStart / UserPromptSubmit / PreToolUse / PostToolUse / PermissionRequest / Stop | ✅ 여러 이벤트 타입 · 다수 번들 핸들러 | ✅✅ 넓은 이벤트 표면 (`docs/architecture/hook-system.md`) |
@@ -605,7 +601,6 @@ Tier 3    Session         메모리 — 대화, 도구 결과, 플랜
 ├── rules/              # 자동 생성 도메인 규칙
 ├── vault/              # 영구 산출물 (리포트, 리서치)
 ├── skills/             # 프로젝트 런타임 스킬 (5-tier discovery)
-├── plans.json          # 디스크 영구 PlanStore (v0.53.3)
 └── result_cache/       # 파이프라인 LRU (SHA-256, 24h TTL)
 ```
 

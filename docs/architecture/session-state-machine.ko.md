@@ -16,7 +16,6 @@
 |---|---|
 | `AgenticLoop._session_id` | 라이브 루프의 인스턴스 바인딩; 생성 시 또는 `restore_from_checkpoint`가 설정 |
 | 게이트웨이 `session_key` (채널/스레드) | 안정 인스턴스 id로 결정론 매핑(`s-gw-<sha256[:12]>`, v0.99.329) — 메시징 스레드 하나가 턴을 가로질러 머신 인스턴스 하나 |
-| `claude_cli_session_id` | 어댑터 쪽 resume 토큰. 인스턴스에 저장될 뿐(SQLite `agent_runtime_state`) 인스턴스 키가 아님 |
 | Transcript / evidence ledger | 같은 `session_id`로 키된 write-only 싱크 |
 | 스케줄러 레인 키(`sched:<job>`) | 동시성 제어 전용; 발화된 잡마다 새 인스턴스 |
 

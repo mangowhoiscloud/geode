@@ -40,7 +40,6 @@ def _reset_legacy_warned():
     [
         ("api_key", "payg"),
         ("payg", "payg"),
-        ("claude-cli", "adapter"),
         ("openai-codex", "subscription"),
         ("subscription", "subscription"),
         ("adapter", "adapter"),
@@ -58,14 +57,6 @@ def test_binding_to_adapter_source_unknown_raises() -> None:
 # ── resolve_binding_to_adapter end-to-end ─────────────────────────────────
 
 
-def test_resolve_binding_claude_cli_returns_claude_cli_adapter() -> None:
-    b = RoleBinding(
-        role="generator", model="claude-sonnet-4-6", provider="anthropic", source="claude-cli"
-    )
-    adapter = resolve_binding_to_adapter(b)
-    assert adapter.name == "claude-cli"  # type: ignore[attr-defined]
-
-
 def test_resolve_binding_api_key_returns_payg_adapter() -> None:
     b = RoleBinding(
         role="critic", model="claude-sonnet-4-6", provider="anthropic", source="api_key"
@@ -80,11 +71,13 @@ def test_resolve_binding_openai_codex_returns_codex_oauth_adapter() -> None:
     assert adapter.name == "codex-oauth"  # type: ignore[attr-defined]
 
 
-def test_resolve_binding_new_adapter_name_passthrough() -> None:
-    """A binding with adapter-native source (``adapter`` / ``subscription``) resolves directly."""
+def test_resolve_binding_external_adapter_source_requires_registration() -> None:
+    """The extension category stays valid but has no Anthropic built-in."""
+    from core.llm.adapters import AdapterNotFoundError
+
     b = RoleBinding(role="pilot", model="claude-sonnet-4-6", provider="anthropic", source="adapter")
-    adapter = resolve_binding_to_adapter(b)
-    assert adapter.name == "claude-cli"  # type: ignore[attr-defined]
+    with pytest.raises(AdapterNotFoundError):
+        resolve_binding_to_adapter(b)
 
 
 # ── Config SoT — config.toml [seed_generation.role.*] precedence ──────────

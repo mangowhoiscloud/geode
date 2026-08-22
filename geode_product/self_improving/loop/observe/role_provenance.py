@@ -6,7 +6,7 @@ model id:
 
 - ``api_key``    → **PAYG**          (metered ANTHROPIC_API_KEY / OPENAI_API_KEY)
 - ``openai-codex`` → **Subscription** (ChatGPT subscription OAuth via Codex)
-- ``claude-cli`` → **CLI**           (Claude Code CLI subscription OAuth)
+- historical ``claude-cli`` → **CLI** (read-only artifact label)
 - ``auto``       → **Auto**          (manifest cascade)
 
 Recording only the model id loses that lane — so a cycle audited under PAYG
@@ -25,13 +25,12 @@ from typing import Any
 from core.config.credential_source import CredentialSource
 
 # Operator-facing lane label per concrete credential source. Mirrors the
-# operator's own taxonomy (PAYG / Subscription / CLI): ``claude-cli`` is the
-# Claude Code CLI subscription lane, kept distinct from the OpenAI Codex
-# subscription lane.
+# operator's own taxonomy. The retired Claude label remains so old ledgers
+# render without rewriting evidence.
 _SOURCE_TO_LANE: dict[str, str] = {
     CredentialSource.API_KEY.value: "PAYG",
     CredentialSource.OPENAI_CODEX.value: "Subscription",
-    CredentialSource.CLAUDE_CLI.value: "CLI",
+    CredentialSource.LEGACY_CLAUDE_CLI.value: "CLI",
     CredentialSource.AUTO.value: "Auto",
 }
 
@@ -42,7 +41,7 @@ def source_to_lane(source: str | CredentialSource | None) -> str:
     """Map a credential source to the operator-facing lane.
 
     ``"api_key"`` → ``"PAYG"``, ``"openai-codex"`` → ``"Subscription"``,
-    ``"claude-cli"`` → ``"CLI"``, ``"auto"`` → ``"Auto"``. Anything else
+    historical ``"claude-cli"`` → ``"CLI"``, ``"auto"`` → ``"Auto"``. Anything else
     (or ``None``) → ``"Unknown"`` — never raises, so a logging path can't be
     broken by an unexpected source string.
     """

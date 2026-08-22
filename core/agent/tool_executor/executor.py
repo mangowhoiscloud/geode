@@ -50,6 +50,7 @@ from core.tools.plan import (
     ResourceKeyResolutionError,
     SafetyPolicy,
     ToolEffect,
+    thaw_tool_schema,
 )
 
 log = logging.getLogger(__name__)
@@ -359,13 +360,37 @@ class ToolExecutor:
             (*bound_tool_plan.tool_names, *self._transient_handlers)
         )
 
-    def _registration_for(self, tool_name: str) -> ToolRegistration | None:
-        if self._bound_tool_plan is None:
-            return None
-        return self._bound_tool_plan.registration_for(tool_name)
+    def _execution_plan(self, context: ToolContext | None) -> BoundToolPlan | None:
+        captured = context.bound_tool_plan if context is not None else None
+        if captured is None:
+            return self._bound_tool_plan
+        if self._bound_tool_plan is None or captured.base is not self._bound_tool_plan.base:
+            raise ValueError("tool context carries an unrelated bound tool plan")
+        if context is not None and (
+            context.tool_plan_hash != captured.content_hash
+            or context.tool_plan_generation != captured.generation
+        ):
+            raise ValueError("tool context plan identity does not match its captured plan")
+        return captured
 
-    def _contains_restricted_data(self, tool_name: str) -> bool:
-        registration = self._registration_for(tool_name)
+    def _registration_for(
+        self,
+        tool_name: str,
+        *,
+        bound_tool_plan: BoundToolPlan | None = None,
+    ) -> ToolRegistration | None:
+        plan = bound_tool_plan or self._bound_tool_plan
+        if plan is None:
+            return None
+        return plan.registration_for(tool_name)
+
+    def _contains_restricted_data(
+        self,
+        tool_name: str,
+        *,
+        bound_tool_plan: BoundToolPlan | None = None,
+    ) -> bool:
+        registration = self._registration_for(tool_name, bound_tool_plan=bound_tool_plan)
         if registration is None:
             return tool_name in PERSONAL_DATA_TOOLS
         return bool(
@@ -373,8 +398,13 @@ class ToolExecutor:
             or registration.safety.persistence is PersistenceRule.REDACT
         )
 
-    def _safety_minimum_for(self, tool_name: str) -> SafetyPolicy | None:
-        registration = self._registration_for(tool_name)
+    def _safety_minimum_for(
+        self,
+        tool_name: str,
+        *,
+        bound_tool_plan: BoundToolPlan | None = None,
+    ) -> SafetyPolicy | None:
+        registration = self._registration_for(tool_name, bound_tool_plan=bound_tool_plan)
         if registration is not None:
             return registration.safety
         if tool_name in SENSITIVE_TOOLS:
@@ -409,8 +439,10 @@ class ToolExecutor:
         self,
         tool_name: str,
         context: ToolContext | None,
+        *,
+        bound_tool_plan: BoundToolPlan | None = None,
     ) -> dict[str, Any] | None:
-        registration = self._registration_for(tool_name)
+        registration = self._registration_for(tool_name, bound_tool_plan=bound_tool_plan)
         if registration is None:
             return None
         safety = registration.safety
@@ -512,14 +544,24 @@ class ToolExecutor:
         on_execution_started: ToolExecutionStartedCallback | None,
     ) -> dict[str, Any]:
         """Execute inside the physical tool-call correlation scope."""
-        minimum_safety = self._safety_minimum_for(tool_name)
-        contains_personal_data = self._contains_restricted_data(tool_name)
+        bound_tool_plan = self._execution_plan(context)
+        minimum_safety = self._safety_minimum_for(
+            tool_name,
+            bound_tool_plan=bound_tool_plan,
+        )
+        contains_personal_data = self._contains_restricted_data(
+            tool_name,
+            bound_tool_plan=bound_tool_plan,
+        )
         batch_cost_approved = bool(context and context.batch_cost_approved)
         if context is not None:
             context.contains_personal_data = (
                 context.contains_personal_data or contains_personal_data
             )
-        initial_scope_denial = self._session_scope_denial(tool_name)
+        initial_scope_denial = self._session_scope_denial(
+            tool_name,
+            bound_tool_plan=bound_tool_plan,
+        )
         if initial_scope_denial is not None:
             self._record_effective_request(
                 context,
@@ -537,15 +579,24 @@ class ToolExecutor:
                 correlation={
                     "session_id": correlation.session_id,
                     "turn_id": correlation.turn_id,
+                    "step_id": correlation.step_id,
                     "run_id": correlation.run_id,
+                    "session_generation": correlation.session_generation,
+                    "verify_attempt": correlation.verify_attempt,
                     "tool_call_id": correlation.tool_call_id,
                 },
             )
         )
         tool_name = request.tool_name
         tool_input = dict(request.arguments)
-        request_safety = self._safety_minimum_for(tool_name)
-        if contains_personal_data and not self._contains_restricted_data(tool_name):
+        request_safety = self._safety_minimum_for(
+            tool_name,
+            bound_tool_plan=bound_tool_plan,
+        )
+        if contains_personal_data and not self._contains_restricted_data(
+            tool_name,
+            bound_tool_plan=bound_tool_plan,
+        ):
             self._record_effective_request(
                 context,
                 tool_name,
@@ -576,8 +627,14 @@ class ToolExecutor:
             }
         if request_safety is not None:
             minimum_safety = request_safety
-        contains_personal_data = contains_personal_data or self._contains_restricted_data(tool_name)
-        scope_denial = self._session_scope_denial(tool_name)
+        contains_personal_data = contains_personal_data or self._contains_restricted_data(
+            tool_name,
+            bound_tool_plan=bound_tool_plan,
+        )
+        scope_denial = self._session_scope_denial(
+            tool_name,
+            bound_tool_plan=bound_tool_plan,
+        )
         if scope_denial is not None:
             self._record_effective_request(
                 context,
@@ -586,7 +643,11 @@ class ToolExecutor:
                 contains_personal_data=contains_personal_data,
             )
             return scope_denial
-        policy_denial = self._runtime_policy_denial(tool_name, context)
+        policy_denial = self._runtime_policy_denial(
+            tool_name,
+            context,
+            bound_tool_plan=bound_tool_plan,
+        )
         if policy_denial is not None:
             self._record_effective_request(
                 context,
@@ -605,7 +666,11 @@ class ToolExecutor:
             tool_input,
             contains_personal_data=contains_personal_data,
         )
-        validation_error = self._validate_tool_input(tool_name, tool_input)
+        validation_error = self._validate_tool_input(
+            tool_name,
+            tool_input,
+            bound_tool_plan=bound_tool_plan,
+        )
         if validation_error:
             return {
                 "error": validation_error,
@@ -652,8 +717,14 @@ class ToolExecutor:
                 "arguments" in decision.updates for decision in rewrite_decisions
             ) and isinstance(effective_arguments, dict):
                 tool_input = dict(effective_arguments)
-        hook_safety = self._safety_minimum_for(tool_name)
-        if contains_personal_data and not self._contains_restricted_data(tool_name):
+        hook_safety = self._safety_minimum_for(
+            tool_name,
+            bound_tool_plan=bound_tool_plan,
+        )
+        if contains_personal_data and not self._contains_restricted_data(
+            tool_name,
+            bound_tool_plan=bound_tool_plan,
+        ):
             self._record_effective_request(
                 context,
                 tool_name,
@@ -682,36 +753,58 @@ class ToolExecutor:
                 "denied": True,
                 "recoverable": False,
             }
-        scope_denial = self._session_scope_denial(tool_name)
+        scope_denial = self._session_scope_denial(
+            tool_name,
+            bound_tool_plan=bound_tool_plan,
+        )
         if scope_denial is not None:
             self._record_effective_request(
                 context,
                 tool_name,
                 tool_input,
                 contains_personal_data=(
-                    contains_personal_data or self._contains_restricted_data(tool_name)
+                    contains_personal_data
+                    or self._contains_restricted_data(
+                        tool_name,
+                        bound_tool_plan=bound_tool_plan,
+                    )
                 ),
             )
             return scope_denial
-        policy_denial = self._runtime_policy_denial(tool_name, context)
+        policy_denial = self._runtime_policy_denial(
+            tool_name,
+            context,
+            bound_tool_plan=bound_tool_plan,
+        )
         if policy_denial is not None:
             self._record_effective_request(
                 context,
                 tool_name,
                 tool_input,
                 contains_personal_data=(
-                    contains_personal_data or self._contains_restricted_data(tool_name)
+                    contains_personal_data
+                    or self._contains_restricted_data(
+                        tool_name,
+                        bound_tool_plan=bound_tool_plan,
+                    )
                 ),
             )
             return policy_denial
-        contains_personal_data = contains_personal_data or self._contains_restricted_data(tool_name)
+        contains_personal_data = contains_personal_data or self._contains_restricted_data(
+            tool_name,
+            bound_tool_plan=bound_tool_plan,
+        )
         self._record_effective_request(
             context,
             tool_name,
             tool_input,
             contains_personal_data=contains_personal_data,
         )
-        validation_error = self._validate_tool_input(tool_name, tool_input)
+        validation_error = self._validate_tool_input(
+            tool_name,
+            tool_input,
+            bound_tool_plan=bound_tool_plan,
+        )
         if validation_error:
             return {
                 "error": validation_error,
@@ -731,6 +824,7 @@ class ToolExecutor:
             ),
             force_permission=force_permission,
             on_execution_started=on_execution_started,
+            bound_tool_plan=bound_tool_plan,
         )
 
     async def _aexecute_effective(
@@ -739,14 +833,17 @@ class ToolExecutor:
         *,
         force_permission: bool = False,
         on_execution_started: ToolExecutionStartedCallback | None = None,
+        bound_tool_plan: BoundToolPlan | None = None,
     ) -> dict[str, Any]:
         """Gate one effective request, then wrap only its accepted dispatch."""
         tool_name = request.tool_name
         tool_input = dict(request.arguments)
         context = cast("ToolContext | None", request.context)
-        contains_personal_data = self._contains_restricted_data(tool_name) or bool(
-            context and context.contains_personal_data
-        )
+        correlation = self._tool_correlation(context)
+        contains_personal_data = self._contains_restricted_data(
+            tool_name,
+            bound_tool_plan=bound_tool_plan,
+        ) or bool(context and context.contains_personal_data)
         log.debug("ToolExecutor.async: %s(keys=%s)", tool_name, sorted(tool_input))
 
         if context and context.cancellation and context.cancellation.is_set():
@@ -766,6 +863,7 @@ class ToolExecutor:
                 safety_level="goal_budget" if budget_permission else "hook_requested",
                 tool_name=tool_name,
                 allow_human_prompt=self._interactive_approval,
+                correlation=correlation,
             )
             if not permission_granted:
                 return {
@@ -799,16 +897,17 @@ class ToolExecutor:
         # ApprovalRecord through gate → verdict → dispatch so a lost or
         # misrouted decision (the A-but-denied incident) is diagnosable from
         # the transition trail instead of a bare denial string.
-        registration = self._registration_for(tool_name)
+        registration = self._registration_for(tool_name, bound_tool_plan=bound_tool_plan)
         declared_approval = (
             registration.safety.approval if registration is not None else ApprovalPolicy.NONE
         )
         record = (
-            self._approval.begin_record(tool_name)
+            self._approval.begin_record(tool_name, correlation=correlation)
             if declared_approval is ApprovalPolicy.NONE
             else self._approval.begin_record(
                 tool_name,
                 declared_approval=declared_approval.value,
+                correlation=correlation,
             )
         )
         declared_approval_granted = force_permission
@@ -884,9 +983,9 @@ class ToolExecutor:
                     "tool_execution middleware cannot change an already-approved request"
                 )
             resource_keys: tuple[str, ...] = ()
-            if self._bound_tool_plan is not None and registration is not None:
+            if bound_tool_plan is not None and registration is not None:
                 try:
-                    resource_keys = self._bound_tool_plan.resource_keys(tool_name, tool_input)
+                    resource_keys = bound_tool_plan.resource_keys(tool_name, tool_input)
                 except ResourceKeyResolutionError:
                     return {
                         "error": f"Resource policy could not resolve '{tool_name}'.",
@@ -933,6 +1032,7 @@ class ToolExecutor:
                     context=context,
                     approved_via_hitl=approved_via_hitl,
                     on_sync_abandoned=defer_release,
+                    bound_tool_plan=bound_tool_plan,
                 )
             finally:
                 if not release_deferred:
@@ -1039,11 +1139,24 @@ class ToolExecutor:
             }
         return result
 
-    def _session_scope_denial(self, tool_name: str) -> dict[str, Any] | None:
+    def _session_scope_denial(
+        self,
+        tool_name: str,
+        *,
+        bound_tool_plan: BoundToolPlan | None = None,
+    ) -> dict[str, Any] | None:
         """Reject tools outside this session before schema lookup or hooks."""
+        bound_allowed_tools = self._bound_allowed_tools
+        if (
+            bound_tool_plan is not None
+            and self._bound_tool_plan is not None
+            and bound_tool_plan is not self._bound_tool_plan
+        ):
+            transient_names = set(bound_allowed_tools or ()) - set(self._bound_tool_plan.tool_names)
+            bound_allowed_tools = frozenset((*bound_tool_plan.tool_names, *transient_names))
         if tool_name in self._denied_tools:
             reason = "headless denylist"
-        elif self._bound_allowed_tools is not None and tool_name not in self._bound_allowed_tools:
+        elif bound_allowed_tools is not None and tool_name not in bound_allowed_tools:
             reason = "bound tool plan"
         elif self._allowed_tools is not None and tool_name not in self._allowed_tools:
             reason = "binding allowlist"
@@ -1075,8 +1188,11 @@ class ToolExecutor:
             from core.agent.cognitive_state_ctx import get_session_id, get_turn_id
 
             return HookCorrelation(
-                session_id=get_session_id(),
-                turn_id=get_turn_id(),
+                session_id=(context.session_id if context is not None else "") or get_session_id(),
+                turn_id=(context.turn_id if context is not None else "") or get_turn_id(),
+                step_id=(context.step_id if context is not None else ""),
+                session_generation=(context.session_generation if context is not None else 0),
+                verify_attempt=(context.verify_attempt if context is not None else 0),
                 tool_call_id=str(
                     getattr(context, "tool_call_id", "") if context is not None else ""
                 ),
@@ -1084,11 +1200,20 @@ class ToolExecutor:
         except Exception:
             return HookCorrelation()
 
-    def _validate_tool_input(self, tool_name: str, tool_input: dict[str, Any]) -> str:
+    def _validate_tool_input(
+        self,
+        tool_name: str,
+        tool_input: dict[str, Any],
+        *,
+        bound_tool_plan: BoundToolPlan | None = None,
+    ) -> str:
         """Validate against a caller-owned schema before the built-in fallback."""
         from jsonschema import Draft202012Validator
 
-        schema = self._tool_input_schemas.get(tool_name)
+        spec = bound_tool_plan.schema_map.get(tool_name) if bound_tool_plan is not None else None
+        schema = thaw_tool_schema(spec.input_schema) if spec is not None else None
+        if schema is None:
+            schema = self._tool_input_schemas.get(tool_name)
         if schema is None:
             try:
                 from core.tools.base import load_tool_definition
@@ -1118,6 +1243,7 @@ class ToolExecutor:
         context: ToolContext | None = None,
         approved_via_hitl: bool = False,
         on_sync_abandoned: Callable[[asyncio.Future[Any]], None] | None = None,
+        bound_tool_plan: BoundToolPlan | None = None,
     ) -> dict[str, Any]:
         """Uniform post-gate dispatch — 'how does it run?', gate-free.
 
@@ -1147,7 +1273,11 @@ class ToolExecutor:
             # subprocess execution, dispatched uniformly like any handler.
             return await self._run_bash_exec_async(tool_input, context=context)
 
-        handler = self._handlers.get(tool_name)
+        handler = (
+            bound_tool_plan.handlers.get(tool_name)
+            if bound_tool_plan is not None and tool_name in bound_tool_plan.tool_names
+            else self._handlers.get(tool_name)
+        )
         if handler is None:
             if self._mcp_manager is not None:
                 server = await asyncio.to_thread(self._mcp_manager.find_server_for_tool, tool_name)
@@ -1159,7 +1289,7 @@ class ToolExecutor:
                     mcp_deadline_s = _tool_deadline_s(tool_name)
                     try:
                         return await asyncio.wait_for(
-                            self._execute_mcp_async(server, tool_name, tool_input),
+                            self._execute_mcp_async(server, tool_name, tool_input, context=context),
                             timeout=mcp_deadline_s,
                         )
                     except TimeoutError:
@@ -1248,7 +1378,11 @@ class ToolExecutor:
                 "timeout": True,
             }
         except Exception as exc:
-            return self._classify_execution_exception(tool_name, exc)
+            return self._classify_execution_exception(
+                tool_name,
+                exc,
+                bound_tool_plan=bound_tool_plan,
+            )
 
     async def _gate_async(
         self,
@@ -1421,8 +1555,14 @@ class ToolExecutor:
             return {"result": raw}
         return raw
 
-    def _classify_execution_exception(self, tool_name: str, exc: Exception) -> dict[str, Any]:
-        if self._contains_restricted_data(tool_name):
+    def _classify_execution_exception(
+        self,
+        tool_name: str,
+        exc: Exception,
+        *,
+        bound_tool_plan: BoundToolPlan | None = None,
+    ) -> dict[str, Any]:
+        if self._contains_restricted_data(tool_name, bound_tool_plan=bound_tool_plan):
             log.error("Tool %s failed with %s", tool_name, type(exc).__name__)
         else:
             log.error("Tool %s failed: %s", tool_name, exc, exc_info=True)
@@ -1825,14 +1965,23 @@ class ToolExecutor:
         return self._bash.to_tool_result(result)
 
     async def _execute_mcp_async(
-        self, server: str, tool_name: str, tool_input: dict[str, Any]
+        self,
+        server: str,
+        tool_name: str,
+        tool_input: dict[str, Any],
+        *,
+        context: ToolContext | None = None,
     ) -> dict[str, Any]:
         """Async MCP tool execution with async server approval."""
         log.info("MCP tool: %s → %s (args=%s)", tool_name, server, list(tool_input.keys()))
 
         mcp_record: ApprovalRecord | None = None
         if not self._auto_approve and not self._approval.is_mcp_approved(server):
-            mcp_record = self._approval.begin_mcp_record(server, tool_name)
+            mcp_record = self._approval.begin_mcp_record(
+                server,
+                tool_name,
+                correlation=self._tool_correlation(context),
+            )
             if not await self._approval.confirm_mcp_async(server, tool_name, record=mcp_record):
                 self._approval.record_transition(mcp_record, "skipped", "mcp-denial")
                 return {"error": "User denied MCP tool execution", "denied": True}

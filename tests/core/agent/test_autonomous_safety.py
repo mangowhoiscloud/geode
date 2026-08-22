@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from core.agent.conversation import ConversationContext
-from core.agent.loop import AgenticLoop, AgenticResult
+from core.agent.loop import AgenticLoop, AgenticLoopConfig, AgenticResult, _response
 from core.agent.tool_executor import ToolExecutor
 from core.observability.session_metrics import session_metrics_scope
 
@@ -115,7 +115,7 @@ class TestCostBudgetAutoStop:
         self, context: ConversationContext, executor: ToolExecutor
     ) -> None:
         """When session cost >= cost_budget, loop should terminate with cost_budget_exceeded."""
-        loop = AgenticLoop(context, executor, cost_budget=1.00)
+        loop = AgenticLoop(context, executor, config=AgenticLoopConfig(cost_budget=1.00))
 
         # Mock tracker with accumulated cost above budget
         mock_tracker = MagicMock()
@@ -149,7 +149,7 @@ class TestCostBudgetAutoStop:
         from core.config import settings
 
         monkeypatch.setattr(settings, "cost_limit_usd", 0.0, raising=False)
-        loop = AgenticLoop(context, executor, cost_budget=0.0)
+        loop = AgenticLoop(context, executor, config=AgenticLoopConfig(cost_budget=0.0))
         assert loop._cost_budget == 0.0
 
         response = _make_text_response("Hello world")
@@ -184,7 +184,7 @@ class TestCostBudgetAutoStop:
         from core.config import settings
 
         monkeypatch.setattr(settings, "cost_limit_usd", 2.5, raising=False)
-        loop = AgenticLoop(context, executor, cost_budget=7.0)
+        loop = AgenticLoop(context, executor, config=AgenticLoopConfig(cost_budget=7.0))
         assert loop._cost_budget == 7.0
 
     def test_cost_limit_usd_terminates_loop(
@@ -217,7 +217,7 @@ class TestCostBudgetAutoStop:
         self, context: ConversationContext, executor: ToolExecutor
     ) -> None:
         """When session cost < cost_budget, loop should continue normally."""
-        loop = AgenticLoop(context, executor, cost_budget=10.00)
+        loop = AgenticLoop(context, executor, config=AgenticLoopConfig(cost_budget=10.00))
 
         mock_tracker = MagicMock()
         mock_tracker.accumulator.total_cost_usd = 0.50
@@ -271,7 +271,7 @@ class TestConvergenceBreak:
             "web_search:timeout",
             "web_search:timeout",
         ]
-        assert loop._check_convergence_break() is True
+        assert _response.check_convergence_break(loop) is True
 
     def test_two_identical_errors_no_break(
         self, context: ConversationContext, executor: ToolExecutor
@@ -279,7 +279,7 @@ class TestConvergenceBreak:
         """Fewer than 3 identical errors → loop continues."""
         loop = AgenticLoop(context, executor)
         loop._convergence.recent_errors = ["web_search:timeout", "web_search:timeout"]
-        assert loop._check_convergence_break() is False
+        assert _response.check_convergence_break(loop) is False
 
     def test_mixed_errors_no_break(
         self, context: ConversationContext, executor: ToolExecutor
@@ -291,7 +291,7 @@ class TestConvergenceBreak:
             "fs:not_found",
             "web_search:timeout",
         ]
-        assert loop._check_convergence_break() is False
+        assert _response.check_convergence_break(loop) is False
 
     def test_no_escalation_state_on_detector(
         self, context: ConversationContext, executor: ToolExecutor

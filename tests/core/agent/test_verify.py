@@ -18,9 +18,10 @@ import asyncio
 import inspect
 import os
 from types import SimpleNamespace
-from typing import cast
+from unittest.mock import AsyncMock, patch
 
 import pytest
+from core.agent.loop import _guards
 from core.agent.loop.models import AgenticResult
 from core.agent.verify import (
     DEFAULT_MIN_TEXT_CHARS,
@@ -304,28 +305,20 @@ def test_session_row_exposes_verify_telemetry() -> None:
 def test_consume_reflection_hint_clears_after_read() -> None:
     """``_consume_reflection_hint`` returns the hint then leaves an empty slot
     so the same hint can't be injected into two consecutive arun's."""
-    from core.agent.loop.agent_loop import AgenticLoop
-
     with session_metrics_scope(session_id="t-consume"):
         current_session_metrics().last_verify_reflection_hint = "<reflection>z</reflection>"
-        consume = AgenticLoop._consume_reflection_hint.__get__(
-            object(), object
-        )  # bind to a bare stub
-        assert consume() == "<reflection>z</reflection>"
+        assert _guards._consume_reflection_hint(object()) == "<reflection>z</reflection>"
         # Second call yields empty.
-        assert consume() == ""
+        assert _guards._consume_reflection_hint(object()) == ""
         # Stored value also cleared.
         assert current_session_metrics().last_verify_reflection_hint == ""
 
 
 def test_consume_reflexion_hint_legacy_alias() -> None:
     """The old AgenticLoop method name remains as an alias."""
-    from core.agent.loop.agent_loop import AgenticLoop
-
     with session_metrics_scope(session_id="t-consume-legacy"):
         current_session_metrics().last_verify_reflection_hint = "<reflection>z</reflection>"
-        consume = AgenticLoop._consume_reflexion_hint.__get__(object(), object)
-        assert consume() == "<reflection>z</reflection>"
+        assert _guards._consume_reflexion_hint(object()) == "<reflection>z</reflection>"
 
 
 def test_verify_turn_crash_treats_as_pass() -> None:
@@ -550,16 +543,19 @@ def test_post_verify_escalation_withholds_candidate_before_persistence(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from core.agent.loop import _lifecycle
-    from core.agent.loop.models import TerminationReason
+    from core.agent.loop.models import TerminationReason, TurnState
     from core.hooks import HookCorrelation
 
     checkpoint = SimpleNamespace(status="active")
     checkpoint.mark_paused = lambda _session_id: setattr(checkpoint, "status", "paused")
     checkpoint.current_status = lambda _session_id: checkpoint.status
+    turn = TurnState(turn_id="t-1", termination_reason=TerminationReason.NATURAL)
     loop = SimpleNamespace(
         _verify_attempt_results=[],
         _checkpoint=checkpoint,
         _session_id="s-escalated",
+        _turn_state=turn,
+        _set_turn_termination=lambda reason: setattr(turn, "termination_reason", reason),
     )
     correlation = HookCorrelation(session_id="s-escalated", turn_id="t-1")
 
@@ -586,6 +582,7 @@ def test_post_verify_escalation_withholds_candidate_before_persistence(
     assert finalized.pending_text == "withheld candidate"
     assert finalized.error == "external_verification_required"
     assert finalized.termination_reason is TerminationReason.EXTERNAL_VERIFICATION_REQUIRED
+    assert turn.termination_reason is TerminationReason.EXTERNAL_VERIFICATION_REQUIRED
     assert checkpoint.status == "paused"
 
 
@@ -684,8 +681,6 @@ def test_verify_continuation_does_not_emit_or_persist_session_end(
 
 
 def test_verify_continuation_stays_out_of_user_history_and_checkpoint() -> None:
-    from core.agent.loop.agent_loop import AgenticLoop
-
     context = SimpleNamespace(
         add_system_event=lambda *_args: pytest.fail("policy entered user history")
     )
@@ -709,13 +704,14 @@ def test_verify_continuation_stays_out_of_user_history_and_checkpoint() -> None:
         _admit_session_budget=admit_session_budget,
     )
 
-    result = asyncio.run(
-        AgenticLoop._open_turn(
-            cast(AgenticLoop, loop),
-            "repair instruction",
-            verification_continuation=True,
+    with patch.object(_guards, "_admit_session_budget", new=AsyncMock(return_value=None)):
+        result = asyncio.run(
+            _guards._open_turn(
+                loop,
+                "repair instruction",
+                verification_continuation=True,
+            )
         )
-    )
 
     assert result is None
     assert recorded == ["repair instruction"]
@@ -875,12 +871,8 @@ def test_verify_continuation_results_merge_before_final_persistence() -> None:
     final.usage = LLMUsage(model="model", input_tokens=5, output_tokens=2, cost_usd=0.2)
     loop = SimpleNamespace(
         _verify_attempt_results=[first],
-        _build_reasoning_metrics=lambda result: SimpleNamespace(
-            to_dict=lambda: {
-                "rounds": result.rounds,
-                "tools": len(result.tool_calls),
-            }
-        ),
+        _total_empty_rounds=0,
+        _consecutive_text_only_rounds=0,
     )
 
     _lifecycle._merge_verify_attempts(loop, final)
@@ -891,7 +883,8 @@ def test_verify_continuation_results_merge_before_final_persistence() -> None:
     assert final.usage.input_tokens == 15
     assert final.usage.output_tokens == 5
     assert final.usage.cost_usd == pytest.approx(0.3)
-    assert final.reasoning_metrics == {"rounds": 3, "tools": 2}
+    assert final.reasoning_metrics["total_rounds"] == 3
+    assert final.reasoning_metrics["tool_calls_total"] == 2
     assert loop._verify_attempt_results == []
 
 
@@ -906,7 +899,8 @@ def test_final_result_detaches_from_the_reusable_tool_log() -> None:
         max_rounds=0,
         model="model",
         _usage_snapshot=None,
-        _build_reasoning_metrics=lambda _result: SimpleNamespace(to_dict=lambda: {"rounds": 1}),
+        _total_empty_rounds=0,
+        _consecutive_text_only_rounds=0,
     )
 
     _lifecycle._prepare_final_result(loop, result, "work", 1, persist=False)
@@ -1155,7 +1149,6 @@ def test_handoff_db_wiring(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     from types import SimpleNamespace
 
     from core.agent.handoff import HandoffState, get_handoff
-    from core.agent.loop.agent_loop import AgenticLoop
     from core.memory.session_manager import SessionManager, SessionMeta
 
     monkeypatch.setattr(
@@ -1174,8 +1167,7 @@ def test_handoff_db_wiring(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
 
     # Bind ``_persist_handoff_request`` to a stub with the session_id field.
     stub = SimpleNamespace(_session_id="t-handoff-wire")
-    bound = AgenticLoop._persist_handoff_request.__get__(stub, SimpleNamespace)
-    bound()
+    _guards._persist_handoff_request(stub)
     snap = get_handoff(SessionManager()._conn, session_id="t-handoff-wire")
     assert snap is not None
     assert snap.state is HandoffState.PENDING

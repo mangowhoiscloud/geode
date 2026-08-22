@@ -135,15 +135,15 @@ def test_estimate_cost_subscription_vs_payg_split() -> None:
     bindings = dict(pr.bindings)
     bindings["generator"] = RoleBinding(
         role="generator",
-        model="claude-sonnet-4-6",
-        provider="anthropic",
-        source="claude-cli",
+        model="gpt-5.5",
+        provider="openai",
+        source="openai-codex",
     )
     pr = PickerResult(
         bindings=bindings,
         voters=pr.voters,
         diversity_providers=pr.diversity_providers,
-        subscription_paths_in_use=frozenset({"claude-cli"}),
+        subscription_paths_in_use=frozenset({"openai-codex"}),
     )
     est = estimate_cost(pr, candidate_count=15)
     assert est.subscription_usd > 0
@@ -185,15 +185,15 @@ def test_format_cost_summary_marks_subscription_rows() -> None:
     bindings = dict(pr.bindings)
     bindings["generator"] = RoleBinding(
         role="generator",
-        model="claude-sonnet-4-6",
-        provider="anthropic",
-        source="claude-cli",
+        model="gpt-5.5",
+        provider="openai",
+        source="openai-codex",
     )
     pr = PickerResult(
         bindings=bindings,
         voters=pr.voters,
         diversity_providers=pr.diversity_providers,
-        subscription_paths_in_use=frozenset({"claude-cli"}),
+        subscription_paths_in_use=frozenset({"openai-codex"}),
     )
     est = estimate_cost(pr, candidate_count=5)
     summary = format_cost_summary(est)

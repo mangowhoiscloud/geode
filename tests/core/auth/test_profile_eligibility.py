@@ -217,7 +217,7 @@ class TestBreadcrumbFormatter:
 class TestAgenticLoopBreadcrumbInjection:
     def test_inject_credential_breadcrumb_appends_user_message(self) -> None:
         # Light smoke — exercises the wiring without spinning up a real loop.
-        from core.agent.loop import AgenticLoop
+        from core.agent.loop import AgenticLoop, _lifecycle
 
         loop = AgenticLoop.__new__(AgenticLoop)
         loop._provider = "openai"  # type: ignore[attr-defined]
@@ -251,7 +251,7 @@ class TestAgenticLoopBreadcrumbInjection:
                 ]
             },
         ):
-            loop._inject_credential_breadcrumb()
+            _lifecycle.inject_credential_breadcrumb(loop)
 
         injected = [m for m in loop.context.messages if "credential note" in m["content"]]
         assert injected, "breadcrumb was not appended to context"

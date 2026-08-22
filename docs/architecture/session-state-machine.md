@@ -18,7 +18,6 @@ into it:
 | `AgenticLoop._session_id` | The live loop's binding to its instance; set at construction or by `restore_from_checkpoint` |
 | Gateway `session_key` (channel/thread) | Maps deterministically to a stable instance id (`s-gw-<sha256[:12]>`, v0.99.329) — a messaging thread IS one machine instance across turns |
 | IPC/gateway SessionLane key | The same checkpoint `session_id`; foreground turns and hosted Goal continuation serialize on one machine key |
-| `claude_cli_session_id` | Adapter-side resume token, stored ON the instance (SQLite `agent_runtime_state`), never an instance key |
 | Transcript / evidence ledger | Write-only sinks keyed by the same `session_id` |
 | Scheduler lane key (`sched:<job>`) | Concurrency control only; each fired job builds a fresh instance |
 

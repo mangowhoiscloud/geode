@@ -26,9 +26,8 @@ to ``[]`` when ``None`` lets the SDK reach its completion state and our
 own accumulator pipeline takes over from there.
 
 The patch is idempotent and applies only once per process; it is
-installed lazily on the first import of any module that needs the Codex
-backend so non-OpenAI processes (pure-Anthropic, claude-cli only) don't
-pay for it. We restore the original symbol on test teardown via
+installed lazily on the first import of a module that needs the Codex backend,
+so pure-Anthropic processes do not pay for it. We restore the original symbol on test teardown via
 :func:`_for_test_restore` so the unit test can exercise the unpatched
 crash before re-applying the patch.
 

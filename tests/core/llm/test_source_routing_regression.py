@@ -39,7 +39,7 @@ from pathlib import Path
 import pytest
 from core.auth.profiles import AuthProfile, CredentialType, ProfileStore
 from core.llm.adapters._source_inference import infer_source
-from core.llm.adapters.base import SOURCE_ADAPTER, SOURCE_PAYG, SOURCE_SUBSCRIPTION
+from core.llm.adapters.base import SOURCE_PAYG, SOURCE_SUBSCRIPTION
 
 # ---------------------------------------------------------------------------
 # Layer 1 — infer_source resolution priority
@@ -176,23 +176,45 @@ def test_infer_source_anthropic_setting_independent(monkeypatch: pytest.MonkeyPa
     assert infer_source("anthropic") == SOURCE_PAYG
 
 
+@pytest.mark.parametrize("provider", ["anthropic", "openai"])
+def test_infer_source_none_disables_provider(
+    monkeypatch: pytest.MonkeyPatch, provider: str
+) -> None:
+    _patch_settings(
+        monkeypatch,
+        anthropic_credential_source="none",
+        openai_credential_source="none",
+    )
+    with pytest.raises(RuntimeError, match="is disabled"):
+        infer_source(provider)
+
+
 @pytest.mark.parametrize("setting", ["oauth", "claude-cli"])
-def test_infer_source_anthropic_legacy_subscription_uses_cli_adapter(
+def test_infer_source_anthropic_legacy_subscription_is_retired(
     monkeypatch: pytest.MonkeyPatch, setting: str
 ) -> None:
-    from core.llm.adapters.registry import _reset_for_test, bootstrap_builtins, resolve_for
-
     _patch_settings(monkeypatch, anthropic_credential_source=setting)
     _patch_store(monkeypatch, _stub_store([]))
-    _reset_for_test()
-    try:
-        bootstrap_builtins()
-        with pytest.warns(UserWarning, match="open-source projects"):
-            source = infer_source("anthropic")
-        assert source == SOURCE_ADAPTER
-        assert resolve_for("anthropic", source).name == "claude-cli"
-    finally:
-        _reset_for_test()
+    with pytest.raises(RuntimeError, match="integration is retired"):
+        infer_source("anthropic")
+
+
+def test_infer_source_rejects_cross_provider_subscription_sources(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_settings(monkeypatch, openai_credential_source="claude-cli")
+    with pytest.raises(RuntimeError, match="integration is retired"):
+        infer_source("openai")
+
+    _patch_settings(monkeypatch, anthropic_credential_source="openai-codex")
+    with pytest.raises(RuntimeError, match="not a credential source"):
+        infer_source("anthropic")
+
+
+def test_infer_source_anthropic_auto_uses_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_settings(monkeypatch, anthropic_credential_source="auto")
+    _patch_store(monkeypatch, _stub_store([]))
+    assert infer_source("anthropic") == SOURCE_PAYG
 
 
 def test_infer_source_openai_concrete_subscription_setting(
@@ -215,11 +237,11 @@ def test_agentic_loop_default_source_no_longer_payg_literal() -> None:
     every interactive call (the daemon never passes ``source=``) onto the
     PAYG adapter and silently masquerade an OAuth-registered subscription
     operator's session as a PAYG call. The fix lives in
-    :func:`core.agent.loop.agent_loop.AgenticLoop.__init__` and must
+    :func:`core.agent.loop._bootstrap.initialize_runtime` and must
     consult :func:`infer_source` before defaulting.
     """
     loop_source = (
-        Path(__file__).resolve().parents[3] / "core" / "agent" / "loop" / "agent_loop.py"
+        Path(__file__).resolve().parents[3] / "core" / "agent" / "loop" / "_bootstrap.py"
     ).read_text(encoding="utf-8")
     # The legacy single-line default must be gone.
     assert 'self._source = source or "payg"' not in loop_source, (
@@ -228,8 +250,8 @@ def test_agentic_loop_default_source_no_longer_payg_literal() -> None:
         "the depleted PAYG endpoint."
     )
     # The inference call must be present.
-    assert "infer_source(provider)" in loop_source, (
-        "AgenticLoop.__init__ no longer consults infer_source — the "
+    assert "infer_source(loop._provider)" in loop_source, (
+        "loop bootstrap no longer consults infer_source — the "
         "credential_source setting + ProfileStore OAuth presence will be "
         "ignored when source is unspecified."
     )
@@ -289,17 +311,16 @@ def test_agentic_loop_explicit_source_still_wins(monkeypatch: pytest.MonkeyPatch
         # Build a loop with an explicit source — inference would say
         # "subscription" but explicit "payg" should win.
         from core.agent.conversation import ConversationContext
-        from core.agent.loop import AgenticLoop
+        from core.agent.loop import AgenticLoop, AgenticLoopConfig
         from core.agent.tool_executor import ToolExecutor
 
         loop = AgenticLoop(
             ConversationContext(),
             ToolExecutor(action_handlers={}, hitl_level=0),
+            config=AgenticLoopConfig(source="payg", max_rounds=0),
             model="gpt-5.5",
             provider="openai-codex",
-            source="payg",
             quiet=True,
-            max_rounds=0,
         )
         assert loop._source == "payg", (
             f"Explicit source='payg' was overridden by inference "
@@ -346,16 +367,16 @@ def test_agentic_loop_dispatches_codex_oauth_when_oauth_profile_present(
         bootstrap_builtins()
 
         from core.agent.conversation import ConversationContext
-        from core.agent.loop import AgenticLoop
+        from core.agent.loop import AgenticLoop, AgenticLoopConfig
         from core.agent.tool_executor import ToolExecutor
 
         loop = AgenticLoop(
             ConversationContext(),
             ToolExecutor(action_handlers={}, hitl_level=0),
+            config=AgenticLoopConfig(max_rounds=0),
             model="gpt-5.5",
             provider="openai-codex",
             quiet=True,
-            max_rounds=0,
         )
         assert loop._new_adapter.name == "codex-oauth", (
             f"AgenticLoop dispatched {loop._new_adapter.name!r} instead of "
@@ -382,16 +403,16 @@ def test_agentic_loop_dispatches_openai_payg_without_oauth_profile(
         bootstrap_builtins()
 
         from core.agent.conversation import ConversationContext
-        from core.agent.loop import AgenticLoop
+        from core.agent.loop import AgenticLoop, AgenticLoopConfig
         from core.agent.tool_executor import ToolExecutor
 
         loop = AgenticLoop(
             ConversationContext(),
             ToolExecutor(action_handlers={}, hitl_level=0),
+            config=AgenticLoopConfig(max_rounds=0),
             model="gpt-5.5",
             provider="openai-codex",
             quiet=True,
-            max_rounds=0,
         )
         assert loop._new_adapter.name == "openai-payg", (
             f"Without an OAuth profile, AgenticLoop must keep dispatching "

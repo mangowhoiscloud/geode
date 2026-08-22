@@ -315,7 +315,7 @@ def _prepare_final_result(
     )
 
     # Reasoning metrics (DTR-inspired observability)
-    metrics = loop._build_reasoning_metrics(result)
+    metrics = build_reasoning_metrics(loop, result)
     result.reasoning_metrics = metrics.to_dict()
 
     # Defect A F-A1 (2026-05-11) — aggregate per-arun usage via tracker
@@ -358,7 +358,7 @@ def _persist_final_result(
     verify_payload: dict[str, Any] | None = None,
 ) -> None:
     """Commit timeline, evidence, and checkpoint after stop is final."""
-    loop._record_timeline_end(result, verify_payload)
+    record_timeline_end(loop, result, verify_payload)
     ledger = getattr(loop, "_evidence_ledger", None)
     if ledger is not None:
         try:
@@ -394,9 +394,8 @@ def _final_hook_payloads(
 
     PR-COMM-3b (2026-05-24) enriches SESSION_ENDED with four columns the
     SQLite ``agent_runtime_state`` writer needs: ``agent_kind`` (process
-    origin), ``component`` (GEODE subsystem), ``adapter_type`` (adapter
-    name), and ``claude_cli_session_id`` (the resumable session captured
-    by the loop's PR-V persistence helper). Falls back to safe defaults
+    origin), ``component`` (GEODE subsystem), and ``adapter_type`` (adapter
+    name). Falls back to safe defaults
     when the loop is bare (REPL without orchestrator, tests).
     """
     agent_kind = "subagent" if getattr(loop, "_parent_session_id", "") else "repl"
@@ -449,7 +448,6 @@ def _final_hook_payloads(
         "agent_kind": agent_kind,
         "component": component,
         "adapter_type": adapter_type,
-        "claude_cli_session_id": getattr(loop, "_last_emitted_session_id", ""),
         # PR-DISPATCH-OBS-EXT (2026-05-28) — per-session aggregate.
         "adapter_usage": adapter_usage,
     }
@@ -769,7 +767,7 @@ def _merge_verify_attempts(loop: AgenticLoop, result: AgenticResult) -> None:
             cache_read_tokens=sum(usage.cache_read_tokens for usage in usages),
             cost_usd=sum(usage.cost_usd for usage in usages),
         )
-    result.reasoning_metrics = loop._build_reasoning_metrics(result).to_dict()
+    result.reasoning_metrics = build_reasoning_metrics(loop, result).to_dict()
     loop._verify_attempt_results = []
 
 
@@ -922,6 +920,9 @@ async def finalize_and_return_async(
         result.text = ""
         result.error = str(TerminationReason.EXTERNAL_VERIFICATION_REQUIRED)
         result.termination_reason = TerminationReason.EXTERNAL_VERIFICATION_REQUIRED
+        set_turn_termination = getattr(loop, "_set_turn_termination", None)
+        if callable(set_turn_termination):
+            set_turn_termination(TerminationReason.EXTERNAL_VERIFICATION_REQUIRED)
         loop._pending_verification = {
             "candidate": candidate,
             "root_turn_id": correlation.turn_id,

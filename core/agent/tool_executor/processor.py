@@ -5,11 +5,15 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from dataclasses import asdict
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from core.agent.error_recovery import ErrorRecoveryStrategy
+    from core.agent.loop.models import StepSnapshot
     from core.hooks import HookSystem
+    from core.tools.base import ToolContext
+    from core.tools.plan import BoundToolPlan
     from core.ui.agentic_ui import OperationLogger
 
 from core.agent.safety import (
@@ -104,6 +108,7 @@ class ToolCallProcessor:
         self._tool_log: list[dict[str, Any]] = []
         self._clarification_count: int = 0
         self._last_batch_requires_redaction = False
+        self._step_snapshot: StepSnapshot | None = None
 
     def reset(self) -> None:
         """Reset per-run tracking state. Call at the start of each agentic run."""
@@ -112,6 +117,48 @@ class ToolCallProcessor:
         self._tool_log.clear()
         self._clarification_count = 0
         self._last_batch_requires_redaction = False
+        self._step_snapshot = None
+
+    def bind_step(self, snapshot: StepSnapshot) -> None:
+        """Bind the sampling snapshot that produced the next tool batch."""
+        self._step_snapshot = snapshot
+
+    def _step_bound_plan(self) -> BoundToolPlan | None:
+        step = self._step_snapshot
+        return step.bound_tool_plan if step is not None else None
+
+    def _new_tool_context(
+        self,
+        tool_call_id: str,
+        *,
+        batch_cost_approved: bool = False,
+    ) -> ToolContext:
+        from core.agent.cognitive_state_ctx import (
+            get_parent_session_id,
+            get_parent_session_key,
+            get_session_id,
+        )
+        from core.tools.base import ToolContext
+
+        step = self._step_snapshot
+        return ToolContext(
+            session_id=(step.correlation.session_id if step is not None else get_session_id()),
+            turn_id=(step.correlation.turn_id if step is not None else ""),
+            step_id=(step.step_id if step is not None else ""),
+            session_generation=(step.correlation.session_generation if step is not None else 0),
+            verify_attempt=(step.correlation.verify_attempt if step is not None else 0),
+            tool_call_id=tool_call_id,
+            is_subagent=bool(get_parent_session_id() or get_parent_session_key()),
+            cancellation=(step.cancellation if step is not None else None),
+            provider=(step.provider if step is not None else self._provider),
+            source=(step.source if step is not None else self._source),
+            model=(step.model if step is not None else self._model),
+            adapter_name=(step.adapter_name if step is not None else self._adapter_name),
+            tool_plan_hash=(step.tool_plan_hash if step is not None else ""),
+            tool_plan_generation=(step.tool_plan_generation if step is not None else 0),
+            bound_tool_plan=(step.bound_tool_plan if step is not None else None),
+            batch_cost_approved=batch_cost_approved,
+        )
 
     @property
     def tool_log(self) -> list[dict[str, Any]]:
@@ -130,13 +177,19 @@ class ToolCallProcessor:
         *,
         contains_personal_data: bool = False,
     ) -> None:
-        if contains_personal_data or self._executor._contains_restricted_data(tool_name):
+        if contains_personal_data or self._executor._contains_restricted_data(
+            tool_name,
+            bound_tool_plan=self._step_bound_plan(),
+        ):
             log.error("%s for %s (%s)", message, tool_name, type(exc).__name__)
         else:
             log.exception("%s for %s", message, tool_name)
 
     def _plan_allows_automatic_recovery(self, tool_name: str) -> bool:
-        registration = self._executor._registration_for(tool_name)
+        registration = self._executor._registration_for(
+            tool_name,
+            bound_tool_plan=self._step_bound_plan(),
+        )
         if not isinstance(registration, ToolRegistration):
             return True
         safety = registration.safety
@@ -177,7 +230,10 @@ class ToolCallProcessor:
         record_call: bool = True,
     ) -> None:
         """Log result, record session events, and append to tool_log."""
-        personal = contains_personal_data or self._executor._contains_restricted_data(tool_name)
+        personal = contains_personal_data or self._executor._contains_restricted_data(
+            tool_name,
+            bound_tool_plan=self._step_bound_plan(),
+        )
         durable_input = personal_data_omitted(tool_name) if personal else tool_input
         durable_result = personal_data_omitted(tool_name) if personal else result
 
@@ -345,7 +401,10 @@ class ToolCallProcessor:
             and offload_store.threshold > 0
             and estimated_tokens > offload_store.threshold
             and not contains_personal_data
-            and not self._executor._contains_restricted_data(tool_name)
+            and not self._executor._contains_restricted_data(
+                tool_name,
+                bound_tool_plan=self._step_bound_plan(),
+            )
         ):
             from core.orchestration.tool_offload import extract_result_summary
 
@@ -362,7 +421,7 @@ class ToolCallProcessor:
             if self._hooks:
                 from core.hooks import HookEvent
 
-                await self._hooks.trigger_async(
+                await self._fire_hook(
                     HookEvent.TOOL_RESULT_OFFLOADED,
                     {
                         "ref_id": ref_id,
@@ -443,21 +502,8 @@ class ToolCallProcessor:
             # using instead of independently re-resolving via
             # ``infer_source``. Tools that do not consume the context absorb
             # the ``_tool_context`` kwarg through their ``**kwargs`` splat.
-            from core.agent.cognitive_state_ctx import (
-                get_parent_session_id,
-                get_parent_session_key,
-                get_session_id,
-            )
-            from core.tools.base import ToolContext
-
-            tool_ctx = ToolContext(
-                session_id=get_session_id(),
-                tool_call_id=str(block.id),
-                is_subagent=bool(get_parent_session_id() or get_parent_session_key()),
-                provider=self._provider,
-                source=self._source,
-                model=self._model,
-                adapter_name=self._adapter_name,
+            tool_ctx = self._new_tool_context(
+                str(block.id),
                 batch_cost_approved=batch_cost_approved,
             )
 
@@ -507,7 +553,10 @@ class ToolCallProcessor:
         contains_personal_data = (
             bool(tool_ctx.contains_personal_data)
             if tool_ctx is not None
-            else self._executor._contains_restricted_data(effective_tool_name)
+            else self._executor._contains_restricted_data(
+                effective_tool_name,
+                bound_tool_plan=self._step_bound_plan(),
+            )
         )
         self._last_batch_requires_redaction = (
             self._last_batch_requires_redaction or contains_personal_data
@@ -614,7 +663,10 @@ class ToolCallProcessor:
         # Step 1: Classify blocks into tiers
         tiered: dict[int, list[tuple[int, Any]]] = {0: [], 1: [], 2: [], 3: [], 4: []}
         for idx, block in enumerate(tool_blocks):
-            registration = self._executor._registration_for(block.name)
+            registration = self._executor._registration_for(
+                block.name,
+                bound_tool_plan=self._step_bound_plan(),
+            )
             if registration is not None:
                 # Native approval and serialization are authoritative in the
                 # final executor. Resource locks make side-effecting calls safe
@@ -690,7 +742,11 @@ class ToolCallProcessor:
 
     async def _batch_cost_approval(self, blocks: list[Any]) -> bool:
         """Delegates to ApprovalWorkflow."""
-        return await self._executor._approval.batch_cost_approval(blocks)
+        step = self._step_snapshot
+        return await self._executor._approval.batch_cost_approval(
+            blocks,
+            correlation=step.correlation if step is not None else None,
+        )
 
     async def _attempt_recovery(
         self,
@@ -715,19 +771,11 @@ class ToolCallProcessor:
             },
         )
 
-        from core.agent.cognitive_state_ctx import get_session_id
-        from core.tools.base import ToolContext
-
         started_attempts: dict[int, tuple[str, dict[str, Any]]] = {}
 
         def context_factory(_attempt_tool: str, attempt_index: int) -> ToolContext:
-            return ToolContext(
-                session_id=get_session_id(),
-                tool_call_id=f"{tool_use_id}:recovery:{attempt_index}",
-                provider=self._provider,
-                source=self._source,
-                model=self._model,
-                adapter_name=self._adapter_name,
+            return self._new_tool_context(
+                f"{tool_use_id}:recovery:{attempt_index}",
             )
 
         def record_execution_start(
@@ -768,7 +816,10 @@ class ToolCallProcessor:
                 call_id = f"{tool_use_id}:recovery:{index}"
                 started = started_attempts.get(index)
                 effective_name = started[0] if started is not None else attempt.tool_name
-                personal = self._executor._contains_restricted_data(effective_name)
+                personal = self._executor._contains_restricted_data(
+                    effective_name,
+                    bound_tool_plan=self._step_bound_plan(),
+                )
                 if started is None:
                     self._timeline.record_tool_call(
                         effective_name,
@@ -822,6 +873,8 @@ class ToolCallProcessor:
         """Emit a hook event via the single shared dispatch path."""
         from core.hooks.dispatch import fire_hook_async
 
+        if self._step_snapshot is not None:
+            data = {**asdict(self._step_snapshot.correlation), **data}
         await fire_hook_async(self._hooks, event, data)
 
     @staticmethod

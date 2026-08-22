@@ -1,19 +1,14 @@
 """Shared Anthropic-side helpers for the v0.99.39 LLMAdapter built-ins.
 
-Lives next to the concrete Anthropic adapters (``anthropic_payg.py``,
-``anthropic_oauth.py``, ``claude_cli.py``) and holds:
+Lives next to the concrete Anthropic adapters and holds:
 
 1. ``build_async_anthropic_client(api_key)`` — creates a NEW
    :class:`anthropic.AsyncAnthropic` per adapter rather than reusing the
    module-level singleton from ``core.llm.providers.anthropic``. The singleton
-   path caches the first caller's api_key, so passing a fresh key from a
-   different adapter (PAYG api_key vs OAuth token) silently returns the
-   already-cached client and the source boundary collapses. Codex MCP review
-   2026-05-23 flagged this as a BLOCKER for the source/billing guarantee.
+   path caches the first caller's api_key. Codex MCP review 2026-05-23 flagged
+   this as a BLOCKER for the source/billing guarantee.
 2. ``build_messages`` / ``translate_response`` / ``translate_tool`` / etc. —
-   the request and response shape helpers shared across the three Anthropic
-   adapters. Moving them here removes the prior cross-adapter import
-   (``anthropic_oauth`` → ``anthropic_payg``) flagged as MEDIUM layering smell.
+   request and response shape helpers for the Anthropic API-key adapter.
 """
 
 from __future__ import annotations
@@ -38,23 +33,17 @@ if TYPE_CHECKING:
     import anthropic
 
 
-def build_async_anthropic_client(
-    api_key: str = "", *, auth_token: str = ""
-) -> anthropic.AsyncAnthropic:
-    """Construct a fresh ``AsyncAnthropic`` bound to ``api_key`` or ``auth_token``.
+def build_async_anthropic_client(api_key: str) -> anthropic.AsyncAnthropic:
+    """Construct a fresh ``AsyncAnthropic`` bound to an API key.
 
     Each adapter owns its client — bypassing the module-level singleton in
     ``core.llm.providers.anthropic`` which is keyed solely by the first
     caller's resolved key. Same httpx limits/timeout/event-hooks as the
     singleton so the response-header banner pipeline keeps working.
 
-    ``auth_token`` routes subscription OAuth tokens as ``Authorization:
-    Bearer`` + the ``oauth-2025-04-20`` beta header — the Claude.ai OAuth
-    access token is NOT an API key, and sending it as ``x-api-key`` returns
-    401 ``invalid x-api-key`` (sub-claude track incident, 2026-07-05).
     """
-    if bool(api_key) == bool(auth_token):
-        raise ValueError("build_async_anthropic_client: exactly one of api_key/auth_token required")
+    if not api_key:
+        raise ValueError("build_async_anthropic_client: api_key is required")
     import anthropic
     import httpx
 
@@ -69,13 +58,6 @@ def build_async_anthropic_client(
         timeout=_build_httpx_timeout(),
         event_hooks={"response": [_async_response_hook]},
     )
-    if auth_token:
-        return anthropic.AsyncAnthropic(
-            auth_token=auth_token,
-            default_headers={"anthropic-beta": "oauth-2025-04-20"},
-            max_retries=0,  # app-level retry handles this
-            http_client=http_client,
-        )
     return anthropic.AsyncAnthropic(
         api_key=api_key,
         max_retries=0,  # app-level retry handles this
@@ -233,7 +215,7 @@ def _maybe_inject_context_management(kwargs: dict[str, Any]) -> None:
     """Server-side context editing for supporting models.
 
     Ported from the deleted ClaudeAgenticAdapter (stranded, never live);
-    live-verified 200 on anthropic-oauth 2026-07-29 (probe B1: merged beta
+    live-verified on the Anthropic Messages API 2026-07-29 (probe B1: merged beta
     tokens, trigger from ``resolve_context_budget_policy``). Haiku 4.5
     rejects the compact beta, hence the model gate.
     """
@@ -262,8 +244,8 @@ def _maybe_inject_context_management(kwargs: dict[str, Any]) -> None:
 def _inject_native_web_tools(kwargs: dict[str, Any], req: AdapterCallRequest) -> None:
     """Append Anthropic-hosted web_search / web_fetch server tools.
 
-    Ported from the deleted ClaudeAgenticAdapter; live-verified on
-    anthropic-oauth 2026-07-29 (probe B2: 200 + ``server_tool_use`` block
+    Ported from the deleted ClaudeAgenticAdapter; live-verified on the
+    Anthropic Messages API 2026-07-29 (probe B2: 200 + ``server_tool_use`` block
     actually invoked). ``translate_response`` skips server-tool block types,
     so hosted rounds surface through the model's final text.
 

@@ -52,18 +52,18 @@ class TestProviderNormalizationAnchor:
         the dict. Source-scan guard (same style as TestCacheContract)."""
         import core.agent.loop._model_switching as model_switching
         import core.agent.loop._reflection as reflection
-        from core.agent.loop.agent_loop import AgenticLoop
+        from core.agent.loop import _bootstrap
         from geode_product.self_improving.loop.mutate import runner
 
         for src in (
-            inspect.getsource(AgenticLoop.__init__),
+            inspect.getsource(_bootstrap.initialize_runtime),
             inspect.getsource(model_switching._resolve_path_b_adapter),
             inspect.getsource(reflection),
             inspect.getsource(runner),
         ):
             assert "_PROVIDER_NORMALIZATION = {" not in src
             assert "_normalize_provider_for_registry" not in src
-        assert "normalize_registry_provider" in inspect.getsource(AgenticLoop.__init__)
+        assert "normalize_registry_provider" in inspect.getsource(_bootstrap.initialize_runtime)
 
 
 class TestModelCapabilityAnchor:

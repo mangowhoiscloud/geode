@@ -314,13 +314,16 @@ def test_agentic_loop_arun_binds_contextvars() -> None:
     into the extracted ``_emit_session_start_signals`` helper which
     ``arun`` always awaits before the while-loop. Either call site
     satisfies the contract; check both."""
+    from core.agent.loop import _guards, _phases
     from core.agent.loop.agent_loop import AgenticLoop
 
     arun_src = inspect.getsource(AgenticLoop._arun_once)
-    open_src = inspect.getsource(AgenticLoop._open_turn)
+    input_src = inspect.getsource(_phases.prepare_input)
+    open_src = inspect.getsource(_guards._open_turn)
     helper_src = inspect.getsource(AgenticLoop._emit_session_start_signals)
     # arun must AT LEAST call the phase that calls the helper owning the bind.
-    assert "_open_turn" in arun_src
+    assert "_phases.prepare_input" in arun_src
+    assert "_open_turn" in input_src
     assert "_emit_session_start_signals" in open_src
     # And the helper must do the bind (so the parity claim holds
     # transitively).

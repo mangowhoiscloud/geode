@@ -249,7 +249,7 @@ class BaseSeedAgent(abc.ABC):
         """Picker-source → adapter-source translation for ``SubTask.source``.
 
         v0.99.40 Follow-up B: the picker emits historical source names
-        (``api_key`` / ``claude-cli`` / ``openai-codex`` / ``auto``). The
+        (``api_key`` / ``openai-codex`` / ``auto``). The
         v0.99.39 :class:`LLMAdapter` registry uses the paperclip-aligned
         names (``payg`` / ``subscription`` / ``adapter``). This property
         bridges the two so each agent's ``SubTask(source=...)`` call

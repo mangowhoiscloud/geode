@@ -16,7 +16,6 @@ from core.llm.adapters import (
     unregister_adapter,
 )
 from core.llm.adapters.base import (
-    CONCRETE_SOURCES,
     SOURCE_AUTO,
     SOURCE_PAYG,
     SOURCE_SUBSCRIPTION,
@@ -145,13 +144,11 @@ def test_resolve_for_duplicate_pair_raises() -> None:
         resolve_for("anthropic", SOURCE_PAYG)
 
 
-def test_bootstrap_builtins_registers_seven() -> None:
+def test_bootstrap_builtins_registers_five() -> None:
     bootstrap_builtins()
     names = {a.name for a in list_adapters()}
     assert names == {
         "anthropic-payg",
-        "anthropic-oauth",
-        "claude-cli",
         "openai-payg",
         "codex-oauth",
         "glm-payg",
@@ -162,7 +159,7 @@ def test_bootstrap_builtins_registers_seven() -> None:
 def test_bootstrap_builtins_idempotent() -> None:
     bootstrap_builtins()
     bootstrap_builtins()  # Second call must not raise.
-    assert len(list_adapters()) == 7
+    assert len(list_adapters()) == 5
 
 
 def test_bootstrap_builtins_provider_source_pairs() -> None:
@@ -170,8 +167,6 @@ def test_bootstrap_builtins_provider_source_pairs() -> None:
     pairs = {(a.provider, a.source) for a in list_adapters()}
     assert pairs == {
         ("anthropic", "payg"),
-        ("anthropic", "subscription"),
-        ("anthropic", "adapter"),
         ("openai", "payg"),
         ("openai", "subscription"),
         ("glm", "payg"),
@@ -179,10 +174,10 @@ def test_bootstrap_builtins_provider_source_pairs() -> None:
     }
 
 
-def test_all_concrete_sources_covered_by_some_builtin() -> None:
+def test_builtin_sources_cover_payg_and_subscription() -> None:
     bootstrap_builtins()
     seen = {a.source for a in list_adapters()}
-    assert seen >= CONCRETE_SOURCES
+    assert seen == {SOURCE_PAYG, SOURCE_SUBSCRIPTION}
 
 
 def test_retired_codex_cli_has_actionable_error() -> None:

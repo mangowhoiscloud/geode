@@ -41,10 +41,6 @@ _DEEP_ALIASES = (
         "geode_product.crucible.producers.replay",
     ),
     ("plugins.crucible.tau2_live", "geode_product.crucible.tau2_live"),
-    (
-        "plugins.petri_audit.claude_cli_provider",
-        "geode_product.petri_audit.claude_cli_provider",
-    ),
     ("plugins.petri_audit.cli", "geode_product.petri_audit.cli"),
     (
         "plugins.petri_audit.cli_agreement",
@@ -54,10 +50,6 @@ _DEEP_ALIASES = (
     (
         "plugins.petri_audit.geode_target",
         "geode_product.petri_audit.geode_target",
-    ),
-    (
-        "plugins.petri_audit.mcp_bridge.bridge_server",
-        "geode_product.petri_audit.mcp_bridge.bridge_server",
     ),
     ("plugins.petri_audit.runner", "geode_product.petri_audit.runner"),
     (
@@ -87,7 +79,6 @@ _IMPORT_ONLY_FACADES = frozenset(
         "plugins.crucible",
         "plugins.crucible.producers",
         "plugins.petri_audit",
-        "plugins.petri_audit.mcp_bridge",
         "plugins.seed_generation",
         "plugins.seed_generation.tools",
     }
@@ -111,7 +102,7 @@ def _physical_facade_modules() -> set[str]:
 
 
 def test_curated_physical_facade_census_is_complete() -> None:
-    assert len(_PHYSICAL_FACADES) == 32
+    assert len(_PHYSICAL_FACADES) == 29
     assert _physical_facade_modules() == _PHYSICAL_FACADES
 
 

@@ -49,8 +49,7 @@ log = logging.getLogger(__name__)
 
 # Matches a fenced code block (optional `json` / `JSON` lang tag, optional
 # surrounding newlines). Smoke 7 surfaced both proximity and critic
-# failing because the LLM (claude-cli without --json-schema wired
-# through) returned otherwise-valid JSON wrapped in a ```json``` fence
+# failing because an LLM returned otherwise-valid JSON wrapped in a fence
 # plus narrative prose. The pre-fix `json.loads(isolation.output)`
 # rejected the wrapper and the SubAgentManager fell back to
 # `{"raw": <wrapped-text>}` — which downstream consumers cannot
@@ -246,17 +245,15 @@ class SubTask:
     # the dispatch path only honored ``source``; ``worker_model`` fell
     # back to the parent's default → ``_resolve_provider(worker_model)``
     # returned the wrong provider key → ``resolve_for(provider, source)``
-    # picked the wrong adapter (smoke 17 RESUME evidence: a ``claude-cli``
-    # voter was dispatched through the parent's OpenAI adapter because the default model resolved to
-    # ``openai-codex`` provider via ``_PROVIDER_NORMALIZATION``).
+    # picked the wrong adapter for a voter because the default model resolved
+    # to the parent's provider via ``_PROVIDER_NORMALIZATION``.
     # Empty preserves back-compat: callers that don't need per-task
     # override (the common case) still inherit settings/agent_ctx.
     model: str = ""
     # PR-JSON-WIRE (2026-05-25) — per-task JSON Schema that constrains
     # the spawned LLM call's response to the role's expected shape.
     # Threads through ``WorkerRequest.response_schema`` →
-    # ``AgenticLoop.response_schema`` → ``AdapterCallRequest.response_schema``
-    # → claude-cli ``--json-schema``.
+    # ``AgenticLoop.response_schema`` → ``AdapterCallRequest.response_schema``.
     # Without forcing, structured-output roles (pilot / proximity /
     # critic / evolver / meta_reviewer) regularly hit invalid-JSON
     # responses (smoke 14 pilot: LLM emitted ``...all zero...``

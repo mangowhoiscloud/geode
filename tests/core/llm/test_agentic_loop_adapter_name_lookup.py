@@ -4,7 +4,7 @@ Before PR-AGENTIC-LOOP-ADAPTER-NAME-LOOKUP (2026-05-27), the loop's
 adapter resolution was a single ``resolve_for(provider, source)`` call
 that required ``source`` to be one of the three concrete categories
 (``payg`` / ``subscription`` / ``adapter``). Callers that passed an
-actual registered adapter name (``codex-oauth`` / ``claude-cli`` /
+actual registered adapter name (``codex-oauth`` /
 ``openai-payg`` / ...) hit ``ValueError: source not concrete`` and the
 exception was swallowed upstream — the audit subprocess silently fell
 back to PAYG and emitted ``OPENAI_API_KEY not set`` for every target
@@ -29,19 +29,19 @@ import pytest
 def test_agentic_loop_resolves_via_get_adapter_first() -> None:
     """Source-level pin: AgenticLoop tries ``get_adapter`` before ``resolve_for``.
 
-    Greps ``core/agent/loop/agent_loop.py`` for the dual-lookup pattern
+    Greps the loop bootstrap for the dual-lookup pattern
     so a future refactor that drops the adapter-name path fails this
     test before the audit-subprocess fake-success failure re-emerges.
     """
-    loop_module = Path(__file__).resolve().parents[3] / "core" / "agent" / "loop" / "agent_loop.py"
+    loop_module = Path(__file__).resolve().parents[3] / "core" / "agent" / "loop" / "_bootstrap.py"
     source = loop_module.read_text(encoding="utf-8")
-    assert "get_adapter(self._source)" in source, (
-        "agent_loop.py no longer calls get_adapter(self._source). The "
+    assert "get_adapter(loop._source)" in source, (
+        "loop bootstrap no longer calls get_adapter(loop._source). The "
         "audit subprocess will silently fall back to PAYG when the "
         "operator's source is an adapter name (e.g. 'codex-oauth')."
     )
     assert "AdapterNotFoundError" in source, (
-        "agent_loop.py does not handle AdapterNotFoundError; the "
+        "loop bootstrap does not handle AdapterNotFoundError; the "
         "category-axis fallback (resolve_for) is unreachable."
     )
 
@@ -54,8 +54,6 @@ def test_agentic_loop_resolves_via_get_adapter_first() -> None:
         # ``resolve_for("openai", "codex-oauth")`` would raise because
         # codex-oauth is an adapter name, not a category.
         "codex-oauth",
-        "claude-cli",
-        "anthropic-oauth",
         # PAYG adapters by name (rather than category) — also
         # resolvable via ``get_adapter`` so callers don't need to know
         # which form the source string takes.
@@ -113,7 +111,6 @@ def test_geode_target_translates_petri_surface_alias() -> None:
 
     assert translate_petri_source("openai-codex") == "codex-oauth"
     assert translate_petri_source("api_key") == "payg"
-    assert translate_petri_source("claude-cli") == "claude-cli"
 
 
 def test_petri_to_registry_map_covers_every_petri_concrete_source() -> None:
@@ -122,7 +119,7 @@ def test_petri_to_registry_map_covers_every_petri_concrete_source() -> None:
     ``plugins/petri_audit/petri.plugin.toml`` declares the concrete
     sources per provider:
 
-    - anthropic: ``claude-cli``, ``api_key``
+    - anthropic: ``api_key``
     - openai: ``openai-codex``, ``api_key``
     - zhipuai: ``api_key``
 
@@ -147,7 +144,7 @@ def test_petri_to_registry_map_covers_every_petri_concrete_source() -> None:
         bootstrap_builtins()
 
     # Concrete sources Petri may emit through ``get_binding``.
-    petri_concrete_sources = {"claude-cli", "openai-codex", "api_key"}
+    petri_concrete_sources = {"openai-codex", "api_key"}
     # Categorical fallback values resolve_for accepts.
     categories = {"payg", "subscription", "adapter"}
 

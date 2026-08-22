@@ -45,8 +45,6 @@ Many GEODE subsystems already manage their own session-scoped state:
 - ``UsageStore`` (``core/llm/usage_store.py``) — *daily* rolling
   ``~/.geode/usage/*.jsonl``. Not absorbed because the grain is
   per-calendar-day, not per-session.
-- ``OAuthUsage`` (``core/llm/oauth_usage.py``) — 5-hour OAuth quota
-  cache. Provider-wide, not session-scoped.
 - ``LaneQueue`` (``core/orchestration/audit_lane.py``) — process-wide throttle.
 - ``ContextLocal`` (``core/ui/context_local.py``) — UI ephemerals
   (SessionMeter backing). Read-only consumer of metrics in future.

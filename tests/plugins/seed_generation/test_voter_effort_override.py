@@ -30,6 +30,14 @@ from geode_product.seed_generation.picker import VoterBinding, pick_bindings
 from geode_product.seed_generation.tournament import MatchPlan
 
 
+@pytest.fixture(autouse=True)
+def _isolate_voter_overrides(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "geode_product.seed_generation.picker.GLOBAL_CONFIG_TOML",
+        tmp_path / "config.toml",
+    )
+
+
 def test_voter_spec_accepts_optional_effort() -> None:
     """``VoterSpec`` exposes ``effort`` with empty-string default
     (back-compat — pre-fix TOML rows without ``effort`` still load)."""
@@ -56,7 +64,7 @@ def _minimal_manifest(voter_effort: str = "") -> SeedGenerationManifest:
     voter_first = VoterSpec(
         model="gpt-5.5", provider="openai", source="openai-codex", effort=voter_effort
     )
-    voter_second = VoterSpec(model="claude-opus-4-7", provider="anthropic", source="claude-cli")
+    voter_second = VoterSpec(model="claude-opus-4-7", provider="anthropic", source="api_key")
     return SeedGenerationManifest(
         enabled_roles=["generator"],
         roles={
@@ -92,7 +100,7 @@ def test_ranker_voter_subtask_uses_voter_effort_when_set() -> None:
 
     voters = [
         VoterBinding(model="gpt-5.5", provider="openai", source="openai-codex", effort="low"),
-        VoterBinding(model="claude-opus-4-7", provider="anthropic", source="claude-cli"),
+        VoterBinding(model="claude-opus-4-7", provider="anthropic", source="api_key"),
     ]
     ranker = Ranker(manager=MagicMock(), voters=voters)
     match = MatchPlan(match_id="m000", a="c_a", b="c_b")

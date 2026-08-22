@@ -26,7 +26,7 @@ log = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Anthropic — used by AnthropicPaygAdapter + AnthropicOAuthAdapter
+# Anthropic — used by AnthropicPaygAdapter
 # ---------------------------------------------------------------------------
 
 # Per-attempt client timeout for the server-side web_search call.
@@ -52,8 +52,7 @@ async def anthropic_web_search(
     adapter_name: str,
     prepare_kwargs: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
 ) -> WebSearchResult:
-    """Anthropic native ``web_search_20260209`` tool — same shape on PAYG and
-    OAuth subscription endpoints."""
+    """Anthropic native ``web_search_20260209`` tool on the PAYG API."""
     kwargs: dict[str, Any] = {
         "model": model,
         "max_tokens": 1024,

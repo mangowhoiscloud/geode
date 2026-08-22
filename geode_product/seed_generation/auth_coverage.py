@@ -1,10 +1,9 @@
-"""4-path × N-component auth coverage matrix.
+"""3-path × N-component auth coverage matrix.
 
 Defines the canonical matrix the GEODE seed-generation sprint must keep
 green: every component (seed-generation, petri_audit, autoresearch,
 GEODE main) must be reachable via every supported auth path
-(``anthropic.claude-cli``, ``anthropic.api_key``,
-``openai.openai-codex``, ``openai.api_key``).
+(``anthropic.api_key``, ``openai.openai-codex``, ``openai.api_key``).
 
 The matrix is the **single source of truth** for which (component,
 provider, source) cells the system claims to support. Tests in
@@ -39,7 +38,7 @@ Family = Literal["anthropic", "openai"]
 # ``AUTO`` resolver mode. Pinned to the canonical enum by
 # ``test_credential_source_centralized.test_auth_coverage_source_is_concrete_subset``
 # so it cannot silently drift (PR-CRED-SOURCE-CENTRALIZE).
-Source = Literal["claude-cli", "openai-codex", "api_key"]
+Source = Literal["openai-codex", "api_key"]
 
 
 @dataclass(frozen=True)
@@ -64,7 +63,6 @@ class AuthCell:
 
 
 _PATHS: tuple[Path, ...] = (
-    Path("anthropic", "claude-cli"),
     Path("anthropic", "api_key"),
     Path("openai", "openai-codex"),
     Path("openai", "api_key"),
@@ -80,10 +78,9 @@ _COMPONENTS: tuple[Component, ...] = (
 
 
 def _build_matrix() -> tuple[AuthCell, ...]:
-    """Build the canonical 4×4 cell list.
+    """Build the canonical 4-component × 3-path cell list.
 
-    All 16 cells currently expected to be supported — the seed-generation
-    sprint settled on a uniform 4-path matrix. A cell is set
+    All 12 cells currently expected to be supported. A cell is set
     ``supported=False`` only when the component has a documented
     structural reason it cannot reach the path (e.g., a future
     embeddings-only component that has no Anthropic surface).
@@ -110,7 +107,7 @@ AUTH_COVERAGE_MATRIX: tuple[AuthCell, ...] = _build_matrix()
 # their target test paths" stays self-documenting.
 TEST_SETUP_PROFILE: dict[Component, Path] = {
     "seed_generation": Path("openai", "openai-codex"),  # gpt-5.5 subscription
-    "petri_audit": Path("anthropic", "claude-cli"),
+    "petri_audit": Path("anthropic", "api_key"),
     "autoresearch": Path("openai", "openai-codex"),  # gpt-5.5 subscription
     "geode_main": Path("openai", "openai-codex"),  # gpt-5.5 subscription
 }
@@ -124,9 +121,9 @@ def auth_status_table(probe_resolved_path: dict[Component, Path] | None = None) 
     settings probe) so the operator can see canonical-vs-actual. When
     omitted, only the canonical support flags are printed.
     """
-    lines = ["seed-generation auth coverage matrix (4 path × 4 component)"]
+    lines = ["seed-generation auth coverage matrix (3 path × 4 component)"]
     lines.append("")
-    header = f"  {'component':<15}  {'anth.cli':<9} {'anth.api':<9} {'oai.cdx':<9} {'oai.api':<9}"
+    header = f"  {'component':<15}  {'anth.api':<9} {'oai.cdx':<9} {'oai.api':<9}"
     lines.append(header)
     lines.append("  " + "─" * (len(header) - 2))
     by_component: dict[Component, dict[str, bool]] = {}

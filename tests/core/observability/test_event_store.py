@@ -147,6 +147,7 @@ def test_read_combines_indexable_filters(tmp_path: Path) -> None:
             _record(occurred_at=200.0, event="session_end"),
             session_key="subject:a",
             run_id="run-a",
+            step_id="turn-1:step-1",
             status="ok",
         )
     )
@@ -162,6 +163,7 @@ def test_read_combines_indexable_filters(tmp_path: Path) -> None:
     rows = store.read(
         session_key="subject:a",
         run_id="run-a",
+        step_id="turn-1:step-1",
         event_filter="session_end",
         status_filter="ok",
         occurred_after=150.0,

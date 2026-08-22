@@ -455,9 +455,8 @@ def _dump_empty_text_postmortem(
     """Persist a JSON post-mortem for every codex-oauth empty-text
     response so operators can diagnose without re-running the cycle.
     Returns the dump path (str) on success, ``None`` on any I/O error
-    (best-effort — diagnostic, not correctness-critical). Mirrors
-    ``claude_cli._dump_transient_postmortem`` shape so the same
-    operator's ``diagnostics tar-up`` workflow catches both.
+    (best-effort — diagnostic, not correctness-critical). Uses the stable
+    diagnostic JSON shape consumed by the operator's tar-up workflow.
 
     PR-CODEX-OAUTH-EMPTY-TEXT-DUMP (2026-05-25) — Codex gpt-5.x
     sometimes returns reasoning items with no visible-answer text;

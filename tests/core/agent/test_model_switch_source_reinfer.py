@@ -129,7 +129,7 @@ def test_agentic_loop_records_source_explicitness() -> None:
     caller-pinned (the re-inference gate reads ``_source_explicit``)."""
     import inspect
 
-    from core.agent.loop import agent_loop
+    from core.agent.loop import _bootstrap
 
-    src = inspect.getsource(agent_loop.AgenticLoop.__init__)
+    src = inspect.getsource(_bootstrap.initialize_runtime)
     assert "_source_explicit" in src

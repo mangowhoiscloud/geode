@@ -209,7 +209,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/quick-start.md
 
 -   Python 3.12 이상
 -   `uv` 패키지 매니저 ([설치 안내](https://docs.astral.sh/uv/))
--   프로바이더 자격 1개 이상. ChatGPT Plus 구독(OAuth), Anthropic 구독(OAuth) 또는 API 키 중 하나면 충분합니다.
+-   프로바이더 자격 1개 이상. ChatGPT Plus 구독(OAuth) 또는 Anthropic·OpenAI·GLM API 키 중 하나면 충분합니다.
 
 ## 1\. 설치
 
@@ -298,16 +298,15 @@ geode uninstall               # 런타임 데이터 + CLI 제거
 URL: https://mangowhoiscloud.github.io/geode/docs/run/pick-path
 Markdown: https://mangowhoiscloud.github.io/geode/docs/run/pick-path.md
 
-GEODE를 돌리려면 프로바이더 자격이 하나 필요합니다. 이 페이지는 네 가지 자격 경로를 비교하고, 본인 상황에 맞는 가장 빠른 길을 안내합니다.
+GEODE를 돌리려면 프로바이더 자격이 하나 필요합니다. 이 페이지는 세 가지 자격 경로를 비교하고, 본인 상황에 맞는 가장 빠른 길을 안내합니다.
 
-## 네 가지 경로
+## 세 가지 경로
 
 | 경로 | 자격 | 등록 방법 | 적합한 상황 |
 | --- | --- | --- | --- |
 | 1\. ChatGPT 구독 OAuth | ChatGPT 구독 OAuth | `/login openai`로 device-code 로그인. 기존 `~/.codex/auth.json` 자격도 가져올 수 있습니다. | 이미 ChatGPT를 결제 중이고 API 키를 따로 만들기 싫을 때. `gpt-5.5`는 이 경로로만 라우팅됩니다. |
-| 2\. Anthropic 구독 OAuth | Claude 구독 (claude CLI 자격) | 공식 CLI에서 `claude /login` 후 `/login anthropic`으로 레거시 경로를 선택합니다. | 정책 경고를 확인하고 Claude 구독 호환 경로를 직접 선택할 때. Anthropic은 오픈소스에도 API 키를 권장합니다. |
-| 3\. PAYG API 키 | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `ZAI_API_KEY` | `~/.geode/.env`에 키만 적습니다. `geode setup` 또는 `/login add`가 대신 적어줍니다. | 토큰 단위로 비용을 직접 통제하고 싶을 때. 팀 계정과 CI에도 맞습니다. |
-| 4\. 저비용 GLM 경로 | `ZAI_API_KEY` (GLM) | 같은 방식으로 `~/.geode/.env`에 등록합니다. | 거의 무료로 먼저 체험할 때. `glm-4.7-flash`는 한시 무료 티어입니다. |
+| 2\. PAYG API 키 | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `ZAI_API_KEY` | `~/.geode/.env`에 키만 적습니다. `geode setup` 또는 `/login add`가 대신 적어줍니다. | 토큰 단위로 비용을 직접 통제하고 싶을 때. 팀 계정과 CI에도 맞습니다. |
+| 3\. 저비용 GLM 경로 | `ZAI_API_KEY` (GLM) | 같은 방식으로 `~/.geode/.env`에 등록합니다. | 거의 무료로 먼저 체험할 때. `glm-4.7-flash`는 한시 무료 티어입니다. |
 
 `~/.geode/.env`는 시크릿 전용 파일입니다. 모델 선택 같은 동작 설정은 `~/.geode/config.toml`에 저장되며, .env에 모델을 적는 방식은 더 이상 쓰지 않습니다.
 
@@ -316,7 +315,6 @@ GEODE를 돌리려면 프로바이더 자격이 하나 필요합니다. 이 페�
 | 원하는 것 | 이렇게 합니다 |
 | --- | --- |
 | 이미 ChatGPT Plus를 결제 중입니다 | `geode setup`. `~/.codex/auth.json`이 있으면 API 키를 묻기 전에 먼저 잡습니다. |
-| Claude 구독으로 쓰고 싶습니다 | 공식 CLI에서 `claude /login` 후 `geode` 안에서 `/login anthropic`을 실행합니다. |
 | API 키로 비용을 직접 통제하고 싶습니다 | `~/.geode/.env`에 키를 넣고 [비용 모니터링](https://mangowhoiscloud.github.io/geode/docs/ops/cost.md)으로 예산을 겁니다. |
 | 거의 무료로 먼저 체험하고 싶습니다 | GLM 키(`ZAI_API_KEY`)를 등록하고 `/model`에서 `glm-4.7-flash`를 고릅니다. |
 | 특정 프로바이더를 OAuth 대신 키로 강제하고 싶습니다 | `/login source <provider> api_key`. 선택은 `config.toml`에만 저장됩니다. |
@@ -330,7 +328,7 @@ GEODE를 돌리려면 프로바이더 자격이 하나 필요합니다. 이 페�
 | --- | --- |
 | `auto` | 기본값. OAuth를 먼저 시도하고, PAYG 전환은 설정으로 게이트됩니다. |
 | `api_key` | PAYG API 키만 사용합니다. |
-| `claude-cli` | claude CLI의 Anthropic 구독 OAuth를 사용합니다. |
+| `claude-cli` | 퇴역한 Anthropic 입력입니다. migration 오류만 내며 실행되지 않습니다. |
 | `openai-codex` | 프로세스 내부 `codex-oauth` 어댑터로 ChatGPT 구독 OAuth를 사용합니다. |
 
 ## 예시
@@ -341,7 +339,7 @@ geode                    # 대화 시작
 
 > /login                 # 자격 대시보드
 > /login openai          # ChatGPT 구독 OAuth 로그인
-> /login anthropic       # Claude 구독 OAuth 로그인
+> /login anthropic       # Anthropic API 키 등록
 > /login source openai api_key   # OpenAI를 키 경로로 고정
 
 geode about              # 실효 모델 + 자격 상태 확인
@@ -377,7 +375,7 @@ GEODE는 Anthropic, OpenAI(ChatGPT 구독 OAuth 레인 포함), GLM 세 프로�
 
 | 프로바이더 | 기본 모델 | 라우팅 규칙 | 인증 레인 |
 | --- | --- | --- | --- |
-| Anthropic | `claude-opus-4-8` (보조 `claude-sonnet-4-6`, 저비용 `claude-haiku-4-5-20251001`) | `claude-` 접두사 | 구독 OAuth(claude CLI keychain) 또는 `ANTHROPIC_API_KEY` |
+| Anthropic | `claude-opus-4-8` (보조 `claude-sonnet-4-6`, 저비용 `claude-haiku-4-5-20251001`) | `claude-` 접두사 | 공식 `claude` CLI 구독 또는 `ANTHROPIC_API_KEY` |
 | OpenAI / Codex | `gpt-5.5` | `gpt-`, `o3-`, `o4-` 접두사. 단 `gpt-5.5`, `gpt-5.5-pro`와 `-codex` 계열 접미사는 Codex OAuth 백엔드로만 라우팅. `gpt-5.6-sol/terra/luna`와 `gpt-5.4` 계열은 듀얼 레인 — 로그인 상태(API 키 ↔ 구독 OAuth)가 백엔드를 결정 | ChatGPT 구독 OAuth(`~/.codex/auth.json`) 또는 `OPENAI_API_KEY` |
 | GLM (ZhipuAI) | `glm-5.2` (무료 티어 `glm-4.7-flash`) | `glm-` 접두사 | `ZAI_API_KEY`. Coding Plan과 PAYG 엔드포인트가 분리되어 있습니다. |
 
@@ -710,7 +708,7 @@ while stop_reason == "tool_use":
     run tool calls -> append assistant msg + tool_results
 ```
 
-루프 클래스 본체 옆에 책임별 모듈이 같은 패키지에 나뉘어 있습니다. 시스템 프롬프트와 컨텍스트 위임은 `_context.py`, 결과 모델과 컨텍스트 고갈 처리는 `models.py`, 모델 전환은 `_model_switching.py`, 서브에이전트 알림은 `_collaboration_mailbox.py`입니다. 예전 단일 파일 `core/agent/loop.py`는 더 이상 존재하지 않습니다.
+루프 클래스 본체 옆에 책임별 모듈이 같은 패키지에 나뉘어 있습니다. 물리적 턴의 순서는 `agent_loop.py`에 그대로 보이고, 입력 준비, 모델 호출 준비, 제공자 호출/재시도, 도구 처리, 관찰/히스토리 정리, 종료 조립은 `_phases.py`의 여섯 함수가 담당합니다. 시스템 프롬프트와 컨텍스트 위임은 `_context.py`, 결과 모델과 컨텍스트 고갈 처리는 `models.py`, 모델 전환은 `_model_switching.py`, 서브에이전트 알림은 `_collaboration_mailbox.py`입니다. 예전 단일 파일 `core/agent/loop.py`는 더 이상 존재하지 않습니다.
 
 ## 턴 사이클
 
@@ -721,6 +719,8 @@ while stop_reason == "tool_use":
 3.  LLM 호출.
 4.  모델이 요청한 도구 실행.
 5.  assistant 메시지와 tool\_result를 히스토리에 붙이고 다음 라운드로 진입합니다.
+
+각 LLM 샘플링 직전에는 불변 `StepSnapshot`이 모델 경로, 도구 계획 세대, 예산, 취소 핸들, 추적 상관관계를 고정합니다. 그 응답의 도구 배치는 같은 스냅샷을 사용합니다. 한 물리적 턴의 메시지, 완료 라운드, 재시도, 계획 힌트, 종료 사유는 가변 `TurnState`가 소유합니다. 따라서 같은 라운드 번호로 재시도해도 샘플링 step ID는 단조 증가합니다.
 
 ![AgenticLoop turn cycle: round-entry guards, context-overflow check, LLM call, tool execution, and the early-termination paths](https://mangowhoiscloud.github.io/geode/diagrams/agentic-loop.svg)
 
@@ -1092,8 +1092,8 @@ GEODE의 확장 표면은 하나의 거대한 이벤트 목록이 아닙니다. 
 
 | 항목 | 계약 |
 | --- | --- |
-| 버전 | `geode.public-hook.v1` |
-| 상관관계 | `session_id`, `turn_id`, `run_id`, session generation, verify attempt, tool/LLM call ID |
+| 버전 | `geode.public-hook.v2` (v1 schema 조회 가능) |
+| 상관관계 | `session_id`, `turn_id`, `step_id`, `run_id`, session generation, verify attempt, tool/LLM call ID |
 | payload 상한 | 문자열 4,096자, JSON 32 KiB, collection 64개, depth 8 |
 | decision 상한 | reason 1,024자, instruction 4,096자, evidence reference 32개 |
 | 기본 timeout | handler별 10초. sync handler는 event loop 밖에서 실행 |
@@ -1275,10 +1275,9 @@ definitions.json / MCP discovery
 
 | 경로 | GEODE가 만드는 요청 | 선택 변환 | 결과 replay |
 | --- | --- | --- | --- |
-| `anthropic-payg`<br>`anthropic-oauth` | Messages API tool definition | `required`→`any`, named→`tool` | `tool_use_id`가 있는 `tool_result` |
+| `anthropic-payg` | Messages API tool definition | `required`→`any`, named→`tool` | `tool_use_id`가 있는 `tool_result` |
 | `openai-payg`<br>`codex-oauth` | Responses API의 flat function tool, `parallel_tool_calls=true` | `any`→`required`, named→flat function | `call_id`로 묶인 `function_call` / `function_call_output` |
 | `glm-payg`<br>`glm-coding-plan` | Chat Completions의 nested function tool | `any`→`required`, named→nested function | `tool_call_id`가 있는 `role=tool` message |
-| `claude-cli` | GEODE adapter 경계는 text-only이며 `supports_tools=False` | 전달하지 않음 | GEODE tool result replay 없음 |
 
 이 표는 GEODE request builder의 보장입니다. 특정 모델이 모든 선택 모드나 tool schema를 받아들인다는 모델별 호환성 주장까지 포함하지 않습니다.
 
@@ -1343,7 +1342,7 @@ GEODE의 구조화 출력 표면은 `response_schema` 하나입니다. caller가
 ```
 SubTask.response_schema
   → WorkerRequest.response_schema
-  → AgenticLoop(response_schema=...)
+  → AgenticLoop(config=AgenticLoopConfig(response_schema=...))
   → AdapterCallRequest.response_schema
   → adapter-specific output constraint
 ```
@@ -1377,13 +1376,12 @@ task = SubTask(..., response_schema=DECISION_SCHEMA)
 | 경로 | `response_schema` wire | 보장 경계 |
 | --- | --- | --- |
 | `openai-payg`<br>`codex-oauth` | Responses API `text.format`의 `json_schema` | strict-compatible schema면 `strict=true`, 아니면 `strict=false` hint |
-| `claude-cli` | `--json-schema <inline JSON>` | CLI subprocess 경계에서 schema flag를 전달 |
-| `anthropic-payg`<br>`anthropic-oauth` | 현재 공통 Messages request builder가 읽지 않음 | schema field는 무시됨. JSON discipline이 필요하면 caller prompt와 downstream validation이 별도로 필요 |
+| `anthropic-payg` | 현재 공통 Messages request builder가 읽지 않음 | schema field는 무시됨. JSON discipline이 필요하면 caller prompt와 downstream validation이 별도로 필요 |
 | `glm-payg`<br>`glm-coding-plan` | 현재 Chat Completions request builder가 읽지 않음 | 이 경로에서는 provider-side schema enforcement 없음 |
 
 따라서 `response_schema`가 설정되어도 adapter 선택에 따라 wire에서 무시될 수 있습니다. GEODE에는 아직 structured-output capability를 기준으로 adapter를 선제 차단하는 registry field가 없습니다. schema 강제가 필요한 작업은 위에서 배선된 경로를 명시적으로 선택해야 합니다.
 
-OpenAI Responses request builder는 tools가 있으면 tool payload와 `text.format`을 같은 요청에 함께 실을 수 있습니다. 반대로 두 CLI adapter는 structured-output flag는 전달하지만 GEODE tool calling은 지원하지 않습니다. 두 capability는 독립적이며, 이 배선 사실을 모든 모델의 조합 수용 보장으로 확대하지 않습니다.
+OpenAI Responses request builder는 tools가 있으면 tool payload와 `text.format`을 같은 요청에 함께 실을 수 있습니다. 반대로 기존 CLI adapter와 달리 현재 내장 경로는 GEODE tool calling은 지원하지 않습니다. 두 capability는 독립적이며, 이 배선 사실을 모든 모델의 조합 수용 보장으로 확대하지 않습니다.
 
 ## OpenAI strict 판정
 
@@ -1420,7 +1418,6 @@ retry는 첫 실행 시간이 task timeout의 50% 미만일 때만 허용합니�
 -   `core/llm/adapters/base.py`: `AdapterCallRequest.response_schema`.
 -   `core/agent/loop/agent_loop.py`: loop-level schema와 per-call override.
 -   `core/llm/adapters/_openai_common.py`: Responses wire와 strict compatibility.
--   `core/llm/adapters/claude_cli.py`, `codex_cli.py`: CLI flags.
 -   `core/agent/worker.py`: JSON object 검사와 one-retry gate.
 
 ## 다음
@@ -1467,7 +1464,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/runtime/orchestration.md
 | --- | --- | --- |
 | `global` | max\_concurrent=50 | 프로덕션 기본값 (`core/wiring/container.py`) |
 | `gateway` | 설정값 | 메신저 인바운드 |
-| `claude-cli-subagent` | 레인별 설정 | Claude CLI 구독 레인 보호 |
+| `anthropic-api` | 레인별 설정 | Anthropic PAYG API 동시성 보호 |
 | `seed-generation` | 레인별 설정 | 시드 파이프라인 |
 
 SessionLane은 세션 키 256개까지 유지하고 유휴 키를 정리합니다.
@@ -1801,7 +1798,7 @@ replicate = 1                 # 감사 반복 M
 
 [self_improving_loop.autoresearch.target]    # judge / auditor 동일 형태
 model = "..."
-source = "claude_cli"         # 자격 lane
+source = "api_key"            # 자격 lane
 
 [self_improving_loop.autoresearch.mutator]
 default_model = "..."
@@ -4990,7 +4987,6 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/config/reference.md
 | `[nodes]` | `analyst`, `evaluator`, `scoring`, `synthesizer` | 파이프라인 노드 모델. 전부 `claude-opus-4-8` 고정이라 노드가 REPL 모델을 상속하지 않습니다. 조회 순서는 프로젝트 `.geode/routing.toml`, 매니페스트, 없으면 `settings.model`. |
 | `[credentials.patterns]` | `sk-ant-`, `sk-proj-`, `sk-` | 키 모양에서 프로바이더를 추정합니다. GLM 키({id}.{secret} 모양)는 `core.config.env_io.is_glm_key`가 감지합니다. |
 | `[credentials.env_vars]` | 3개 | anthropic은 `ANTHROPIC_API_KEY`, openai는 `OPENAI_API_KEY`, glm은 `ZAI_API_KEY`. |
-| `[credentials.keychain]` | 1개 | anthropic은 `"Claude Code-credentials"`(macOS). 프로세스 단위 override는 `GEODE_<PROVIDER>_KEYCHAIN_SERVICE`. |
 
 ## \[self\_improving\_loop.\*\]
 
@@ -5014,7 +5010,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/config/reference.md
 | `mutator_dedup_window` | int = 20 | 중복 변이 검사 창. |
 | `mutator_dedup_threshold` | float = 0.85 | 중복 판정 유사도. |
 | `anchor_confidence_mode` | bool = false | anchor 신뢰도 모드. |
-| `source` | `claude-cli` | 역할 공통 기본 자격 소스. |
+| `source` | `api_key` | 역할 공통 기본 자격 소스. |
 | `seed_limit` | int = 10 (5-1000) | 감사당 seed 수. |
 | `seed_select` | `"bundled"` | 패키지에 포함된 공진화 seed 풀. |
 | `held_out_bench` | None | 고정 자 역할의 frozen seed 디렉터리. |
@@ -5026,7 +5022,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/config/reference.md
 | `max_turns` | int = 10 (1-200) | 감사당 턴 상한. |
 | `target_model` / `judge_model` | deprecated | no-op 슬롯. 역할 서브섹션을 쓰세요. |
 
-역할 서브섹션`[self_improving_loop.autoresearch.target|judge|auditor]`는`model`(기본 `""`)과`source`(기본 `claude-cli`)를 받고, mutator 서브섹션은 `default_model`(None이면`Settings.model` 상속),`source`(`auto`),`max_tokens`(1024)를 받습니다. 레거시`[self_improving_loop.petri.*]`와`[self_improving_loop.mutator]`는 DeprecationWarning과 함께 자동 이전됩니다. `geode audit`의 역할 해석 순서는 argv, 역할 서브섹션, 매니페스트 기본값 순입니다.
+역할 서브섹션`[self_improving_loop.autoresearch.target|judge|auditor]`는`model`(기본 `""`)과`source`(기본 `api_key`)를 받고, mutator 서브섹션은 `default_model`(None이면`Settings.model` 상속),`source`(`auto`),`max_tokens`(1024)를 받습니다. 레거시`[self_improving_loop.petri.*]`와`[self_improving_loop.mutator]`는 DeprecationWarning과 함께 자동 이전됩니다. `geode audit`의 역할 해석 순서는 argv, 역할 서브섹션, 매니페스트 기본값 순입니다.
 
 env 사이드 채널이 키 몇 개에 붙어 있습니다.`GEODE_HELD_OUT_BENCH`,`GEODE_PROMOTE_POLICY`,`GEODE_AUDIT_REPLICATE`,`GEODE_TARGET_EFFECT_SIZE`이고 각각`AUTORESEARCH_*` 별칭을 동반합니다. 해석 순서는 env, CLI 플래그, config 필드, 기본값 순입니다.
 
@@ -5060,7 +5056,7 @@ env 사이드 채널이 키 몇 개에 붙어 있습니다.`GEODE_HELD_OUT_BENCH
 URL: https://mangowhoiscloud.github.io/geode/docs/runtime/auth
 Markdown: https://mangowhoiscloud.github.io/geode/docs/runtime/auth.md
 
-GEODE는 프로바이더마다 두 종류의 자격을 받습니다. 구독 OAuth와 PAYG API 키입니다. 어느 쪽을 쓸지는`CredentialSource` 하나로 표현되고, 프로파일과 플랜은`~/.geode/auth.toml`에, API 키는`~/.geode/.env`에 저장됩니다.
+GEODE는 구독 경로와 PAYG API 키를 받습니다. 어느 쪽을 쓸지는 `CredentialSource` 하나로 표현됩니다. OpenAI 구독 프로파일과 플랜은 `~/.geode/auth.toml`에, API 키는`~/.geode/.env`에 저장됩니다.
 
 ## 자격 소스
 
@@ -5070,14 +5066,14 @@ GEODE는 프로바이더마다 두 종류의 자격을 받습니다. 구독 OAut
 | --- | --- |
 | `auto` | 매니페스트 순서 해석. OAuth 우선, PAYG는 `fallback_to_payg`가 켜진 경우에만. |
 | `api_key` | PAYG API 키. |
-| `claude-cli` | claude CLI 구독을 통한 Anthropic OAuth. |
+| `claude-cli` | 퇴역한 Anthropic 입력. migration 오류만 내며 실행되지 않습니다. |
 | `openai-codex` | 프로세스 내부 `codex-oauth` 어댑터를 통한 ChatGPT 구독 OAuth. |
-| `oauth` | 레거시 별칭. Settings 검증이 받아줍니다. |
+| `oauth` | OpenAI는 Codex OAuth 별칭, Anthropic은 퇴역 오류 입력. |
 | `none` | 해당 프로바이더 비활성 센티널. |
 
-Anthropic은 오픈소스를 포함한 서드파티 도구에 API 키 인증을 권장합니다. `claude-cli`는 경고가 붙는 레거시 호환 경로이며 구독 사용량이 usage credit에서 차감될 수 있습니다. [현행 Anthropic 안내](https://support.claude.com/en/articles/13189465-log-in-to-your-claude-account)를 확인하세요.
+Anthropic의 내장 경로는 `api_key`뿐입니다. 과거`claude-cli`/`oauth` 값은 migration 안내를 위해 읽지만 binary나 네트워크 호출 전에 중단됩니다.
 
-선택은 `[llm] anthropic_credential_source` /`openai_credential_source`(기본 `auto`)에 저장됩니다. `/login source <provider> <type>`은 toml에만 쓰므로 `.env`를 지워도 선택이 살아남습니다. (provider, source) 쌍마다 구체 어댑터가 하나씩 레지스트리에 등록됩니다(`core/llm/adapters/`의`anthropic_payg`, `anthropic_oauth`,`claude_cli`, `openai_payg`,`codex_oauth`,`glm_coding_plan`, `glm_payg`).
+선택은 `[llm] anthropic_credential_source` /`openai_credential_source`(기본 `auto`)에 저장됩니다. `/login source <provider> <type>`은 toml에만 쓰므로 `.env`를 지워도 선택이 살아남습니다. (provider, source) 쌍마다 구체 어댑터가 하나씩 레지스트리에 등록됩니다(`core/llm/adapters/`의`anthropic_payg`, `openai_payg`,`codex_oauth`,`glm_coding_plan`, `glm_payg`).
 
 ## /login 대시보드
 
@@ -5086,7 +5082,7 @@ Anthropic은 오픈소스를 포함한 서드파티 도구에 API 키 인증을 
 | 서브커맨드 | 동작 |
 | --- | --- |
 | `/login openai` | ChatGPT 구독 OAuth 로그인. device-code 플로우는 `core/auth/oauth_login.py`이고, 결과는 `auth.toml`에 OAUTH\_BORROWED 플랜 + 프로파일 쌍으로 저장됩니다. |
-| `/login anthropic` | 경고를 표시하고 레거시 `claude-cli` 경로를 선택합니다. 로그인은 공식 CLI에서 `claude /login`으로 별도 수행합니다. |
+| `/login anthropic` | `ANTHROPIC_API_KEY`를 등록하고 `api_key` 경로를 선택합니다. |
 | `/login google` | Gmail, Calendar, Drive, Docs, Sheets, Tasks, Contacts용 Google Workspace OAuth. 사용자가 만든 Desktop 앱 클라이언트를 가져오며 LLM 프로바이더 자격과 분리됩니다. |
 | `/login add` | 자격 추가. 키 모양(`sk-ant-`, `sk-proj-`, GLM {id}.{secret})으로 프로바이더를 추정합니다. |
 | `/login use` / `remove` | 프로파일 선택과 제거. |
@@ -5145,7 +5141,7 @@ GLM은 엔드포인트가 둘입니다. Coding Plan(구독 과금)과 PAYG(종�
 | 응답이 비거나 401 | 토큰 만료 또는 키 무효 | `geode doctor`로 자격 상태를 보고 `/login`으로 갱신합니다. Codex 쪽은 `codex login`을 다시 실행합니다. |
 | 소스를 바꿨는데 그대로 | 구버전의 `GEODE_*_CREDENTIAL_SOURCE` env 줄이 마스크 | `geode config explain anthropic_credential_source`로 WINNER 층을 확인하고 그 줄을 지웁니다. |
 | 서브프로세스에서 `AdapterNotFoundError` | 어댑터 레지스트리는 프로세스 단위인데 부트스트랩 누락 | 워커가 `core.llm.adapters.registry.bootstrap_builtins()`를 호출하는지 확인합니다. |
-| 구독이 있는데 PAYG로 과금 | `auto`가 OAuth를 못 찾고 키로 해석 | `/login route`와 `/login quota`로 플랜 상태를 확인하고, 필요하면 소스를 `claude-cli`/`openai-codex`로 고정합니다. |
+| 구독이 있는데 PAYG로 과금 | `auto`가 OAuth를 못 찾고 키로 해석 | OpenAI는 `/login route`와 `/login quota`를 확인하고 `openai-codex`로 고정합니다. Anthropic은 `api_key`만 지원합니다. |
 
 ## 다음
 
@@ -5184,7 +5180,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/ops/oauth.md
 
 | 증상 | 원인 | 해법 |
 | --- | --- | --- |
-| 한 프로파일만 계속 401 | 외부 저장소의 토큰 자체가 만료 | Codex는 `codex login`, Anthropic 구독은 Claude Code 재로그인으로 원본 토큰을 갱신합니다. |
+| 한 프로파일만 계속 401 | 외부 저장소의 토큰 자체가 만료 | Codex는 `codex login`으로 원본 토큰을 갱신합니다. Anthropic은 `ANTHROPIC_API_KEY`를 교체합니다. |
 | 호출이 점점 뜸해짐 | 반복 실패로 쿨다운 에스컬레이션 | 원인 자격을 고치면 성공 콜백이 쿨다운을 리셋합니다. |
 | 프로파일을 지웠는데 계속 쓰임 | 데몬 리로드가 추가 전용 | 데몬을 재시작합니다. |
 
@@ -5696,7 +5692,7 @@ GEODE가 메타 하네스인 이유는 세 겹의 관계 때문입니다.
 | **JobRunLog** | 스케줄 job별 실행 이력. 크기와 행 수로 자동 prune | get\_runs(limit), size/row prune | `core/observability/run_log.py` |
 | **UsageStore** | 일, 월 롤링 사용량 ledger. geode history의 데이터 소스 | ~/.geode/usage/\*.jsonl, eval-id dedup | `core/llm/usage_store.py` |
 | **Token tracker** | 호출당 로컬 비용 계산과 cache-hit-rate 집계 | per-provider cost tables | `core/llm/token_tracker.py` |
-| **OAuth usage windows** | 5시간, 7일 quota 버킷을 추적해 rate-limit 전에 backoff | quota-aware backoff windows | `core/llm/oauth_usage.py` |
+| **Codex OAuth usage windows** | Codex 5시간, 7일 quota 버킷을 추적해 rate-limit 전에 backoff | quota-aware backoff windows | `core/llm/codex_oauth_usage.py` |
 | **OTel export** | 런타임 이벤트의 선택적 OpenTelemetry span, metric 내보내기 | env/config gated exporter | `core/observability/otel_export.py` |
 | **ActivityRegistry** | 지금 실행 중인 도구를 보여주는 라이브 activity 레지스트리 | updated per tool execution | `core/observability/activity_registry.py` |
 
@@ -6109,7 +6105,7 @@ Tier 2  latex2sympy2 + sympy.pretty  블록 전용. 분수·적분을 2D Unicode
 URL: https://mangowhoiscloud.github.io/geode/docs/reference/changelog
 Markdown: https://mangowhoiscloud.github.io/geode/docs/reference/changelog.md
 
-(body omitted from llms-full: 1519 KB — fetch the Markdown twin above for the complete page)
+(body omitted from llms-full: 1522 KB — fetch the Markdown twin above for the complete page)
 
 ---
 
@@ -6269,12 +6265,12 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 
 | 측정값 | 현재 트리 |
 | --- | --- |
-| 프로덕션 Python 파일 | 594 |
-| 테스트 Python 파일 | 691 |
+| 프로덕션 Python 파일 | 578 |
+| 테스트 Python 파일 | 676 |
 | 도구 정의 / 실행 등록 / 유효 스키마 | 82 / 85 / 82 |
 | RuntimeEvent 멤버 | 57 |
-| 기본 LLM 어댑터 | 7 |
-| 모듈 수준 ContextVar | 30 |
+| 기본 LLM 어댑터 | 5 |
+| 모듈 수준 ContextVar | 29 |
 | core → product import 지점 / 파일 | 0 / 0 |
 | import-linter 예외 edge | 19 |
 
@@ -6299,7 +6295,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 
 | 서브시스템 | 루트 | 핵심 모듈 |
 | --- | --- | --- |
-| agentic 루프 | `core/agent/loop/` | `agent_loop.py` (AgenticLoop), `models.py`, `_context.py` |
+| agentic 루프 | `core/agent/loop/` | `agent_loop.py` (AgenticLoop), `_phases.py`, `models.py`, `_context.py` |
 | 서브에이전트 | `core/agent/` | `sub_agent.py`, `worker.py`, `task_isolation.py` |
 | 시스템 프롬프트 | `core/agent/` | `system_prompt.py` |
 | 가드 | `core/agent/` | `safety.py`, `budget.py`, `approval.py`, `context_manager.py` |

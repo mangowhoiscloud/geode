@@ -103,7 +103,7 @@ export default function Page() {
               <tbody>
                 <tr><td><code>global</code></td><td>max_concurrent=50</td><td>프로덕션 기본값 (<code>core/wiring/container.py</code>)</td></tr>
                 <tr><td><code>gateway</code></td><td>설정값</td><td>메신저 인바운드</td></tr>
-                <tr><td><code>claude-cli-subagent</code></td><td>레인별 설정</td><td>Claude CLI 구독 레인 보호</td></tr>
+                <tr><td><code>anthropic-api</code></td><td>레인별 설정</td><td>Anthropic PAYG API 동시성 보호</td></tr>
                 <tr><td><code>seed-generation</code></td><td>레인별 설정</td><td>시드 파이프라인</td></tr>
               </tbody>
             </table>
@@ -279,7 +279,7 @@ export default function Page() {
               <tbody>
                 <tr><td><code>global</code></td><td>max_concurrent=50</td><td>Production default (<code>core/wiring/container.py</code>)</td></tr>
                 <tr><td><code>gateway</code></td><td>settings-driven</td><td>Messenger inbound</td></tr>
-                <tr><td><code>claude-cli-subagent</code></td><td>per-lane</td><td>Protects the Claude CLI subscription lane</td></tr>
+                <tr><td><code>anthropic-api</code></td><td>per-lane</td><td>Protects Anthropic PAYG API concurrency</td></tr>
                 <tr><td><code>seed-generation</code></td><td>per-lane</td><td>The seed pipeline</td></tr>
               </tbody>
             </table>

@@ -15,7 +15,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from core.agent.conversation import ConversationContext
-from core.agent.loop import AGENTIC_TOOLS, AgenticLoop, AgenticResult, get_agentic_tools
+from core.agent.loop import (
+    AGENTIC_TOOLS,
+    AgenticLoop,
+    AgenticLoopConfig,
+    AgenticResult,
+    _context,
+    _guards,
+    get_agentic_tools,
+)
 from core.agent.sub_agent import SubAgentManager, SubTask
 from core.agent.tool_executor import (
     DANGEROUS_TOOLS,
@@ -26,6 +34,7 @@ from core.agent.tool_executor import (
 )
 from core.hooks import (
     HookAction,
+    HookCorrelation,
     HookDecision,
     HookEvent,
     HookName,
@@ -378,6 +387,26 @@ class TestToolExecutor:
         mcp.acall_tool.assert_not_awaited()
         assert executor._auto_approve is False
 
+    def test_batch_cost_approval_forwards_step_correlation(self) -> None:
+        executor = ToolExecutor()
+        executor._approval.batch_cost_approval = AsyncMock(return_value=True)
+        processor = ToolCallProcessor(
+            executor=executor,
+            op_logger=MagicMock(),
+            error_recovery=MagicMock(),
+        )
+        correlation = HookCorrelation(step_id="turn-1:step-1")
+        processor._step_snapshot = SimpleNamespace(correlation=correlation)
+        blocks = [SimpleNamespace(name="petri_audit", input={})]
+
+        approved = asyncio.run(processor._batch_cost_approval(blocks))
+
+        assert approved is True
+        executor._approval.batch_cost_approval.assert_awaited_once_with(
+            blocks,
+            correlation=correlation,
+        )
+
     def test_runtime_event_observers_do_not_control_tool_calls(self) -> None:
         """Legacy event callbacks are observation-only after the surface split."""
         executor = MagicMock(spec=ToolExecutor)
@@ -442,6 +471,16 @@ class TestToolExecutor:
         processor = ToolCallProcessor(
             executor=executor, op_logger=MagicMock(), error_recovery=MagicMock(), hooks=hooks
         )
+        processor._step_snapshot = SimpleNamespace(
+            correlation=HookCorrelation(
+                session_id="session-offload",
+                turn_id="turn-offload",
+                step_id="turn-offload:step-1",
+                session_generation=3,
+                verify_attempt=1,
+            ),
+            bound_tool_plan=None,
+        )
         prev = get_offload_store()
         store = ToolResultOffloadStore(
             session_id="offload-test",
@@ -458,6 +497,9 @@ class TestToolExecutor:
         assert result["tool_use_id"] == "toolu_offload"
         assert store.recall("toolu_offload") == payload
         assert hook_calls and hook_calls[0]["ref_id"] == "toolu_offload"
+        assert hook_calls[0]["step_id"] == "turn-offload:step-1"
+        assert hook_calls[0]["session_generation"] == 3
+        assert hook_calls[0]["verify_attempt"] == 1
 
     def test_offload_threshold_uses_ceiling_token_estimate(self, tmp_path: Any) -> None:
         from core.orchestration.tool_offload import (
@@ -773,7 +815,7 @@ class TestAgenticLoop:
         loop_a = AgenticLoop(
             ConversationContext(),
             executor,
-            session_id="session-a",
+            config=AgenticLoopConfig(session_id="session-a"),
             quiet=True,
         )
         warm_response = MagicMock(stop_reason="end_turn", usage=MagicMock(output_tokens=50))
@@ -805,14 +847,14 @@ class TestAgenticLoop:
             loop_a._session_metrics.time_budget_start_s = time.monotonic() - 86951.0
             with (
                 patch.object(loop_a, "_call_llm", new=AsyncMock()) as call_llm,
-                patch.object(loop_a, "_persist_handoff_request") as persist_handoff,
+                patch.object(_guards, "_persist_handoff_request") as persist_handoff,
             ):
                 result_a = await loop_a.arun("expired work")
 
             loop_b = AgenticLoop(
                 ConversationContext(),
                 executor,
-                session_id="session-b",
+                config=AgenticLoopConfig(session_id="session-b"),
                 quiet=True,
             )
             assert loop_b._session_metrics is not loop_a._session_metrics
@@ -843,19 +885,19 @@ class TestAgenticLoop:
         loop = AgenticLoop(context, executor, quiet=True)
 
         monkeypatch.delenv("GEODE_SESSION_TIME_BUDGET_S", raising=False)
-        loop._maybe_start_session_budget()
+        _guards._maybe_start_session_budget(loop)
         assert loop._session_metrics.time_budget_total_s == 0.0
 
         for invalid in ("not-a-number", "nan", "inf", "-inf"):
             monkeypatch.setenv("GEODE_SESSION_TIME_BUDGET_S", invalid)
-            loop._maybe_start_session_budget()
+            _guards._maybe_start_session_budget(loop)
             assert loop._session_metrics.time_budget_total_s == 0.0
 
         monkeypatch.setenv("GEODE_SESSION_TIME_BUDGET_S", "120")
-        loop._maybe_start_session_budget()
+        _guards._maybe_start_session_budget(loop)
         assert loop._session_metrics.time_budget_total_s == 120.0
         assert loop._session_metrics.handoff_threshold_s == 60.0
-        assert loop._check_session_budget_and_maybe_handoff() is None
+        assert _guards._check_session_budget_and_maybe_handoff(loop) is None
 
     def test_external_orchestrator_yields_after_one_tool_round_without_round_cap(
         self,
@@ -865,8 +907,7 @@ class TestAgenticLoop:
         loop = AgenticLoop(
             context,
             executor,
-            max_rounds=0,
-            yield_after_tool_round=True,
+            config=AgenticLoopConfig(max_rounds=0, yield_after_tool_round=True),
             quiet=True,
         )
         tool_response = MagicMock()
@@ -882,7 +923,7 @@ class TestAgenticLoop:
         with (
             patch.object(loop, "_call_llm", return_value=tool_response) as call_llm,
             patch.object(loop, "_track_usage"),
-            patch.object(loop, "_guard_repeated_success") as repeated_success,
+            patch.object(_guards, "_guard_repeated_success") as repeated_success,
         ):
             result = asyncio.run(loop.arun("run one externally orchestrated tool round"))
 
@@ -905,8 +946,8 @@ class TestAgenticLoop:
         loop = AgenticLoop(
             context,
             executor,
+            config=AgenticLoopConfig(allow_actionable_partial_on_empty=True),
             quiet=True,
-            allow_actionable_partial_on_empty=True,
         )
         tool_response = MagicMock()
         tool_response.stop_reason = "tool_use"
@@ -945,8 +986,8 @@ class TestAgenticLoop:
         loop = AgenticLoop(
             context,
             executor,
+            config=AgenticLoopConfig(allow_actionable_partial_on_empty=True),
             quiet=True,
-            allow_actionable_partial_on_empty=True,
         )
         empty = EmptyModelOutputError("empty before action")
 
@@ -958,7 +999,12 @@ class TestAgenticLoop:
 
     def test_run_max_rounds(self, context: ConversationContext, executor: ToolExecutor) -> None:
         """Test max rounds limit."""
-        loop = AgenticLoop(context, executor, max_rounds=2, quiet=True)
+        loop = AgenticLoop(
+            context,
+            executor,
+            config=AgenticLoopConfig(max_rounds=2),
+            quiet=True,
+        )
 
         # Always return tool_use → never ends
         tool_response = MagicMock()
@@ -994,11 +1040,24 @@ class TestAgenticLoop:
         """
         from unittest.mock import AsyncMock
 
-        loop = AgenticLoop(context, executor, quiet=True)
+        hooks = HookSystem()
+        dispatches: list[Any] = []
+        hooks.register_sink(dispatches.append, name="capture")
+        loop = AgenticLoop(context, executor, quiet=True, hooks=hooks)
+        step_correlation = HookCorrelation(
+            session_id="session-retry",
+            turn_id="turn-retry",
+            step_id="turn-retry:step-1",
+            session_generation=4,
+            verify_attempt=2,
+        )
+
+        async def fail_with_step(*_args: Any, **_kwargs: Any) -> None:
+            loop._current_step_snapshot = SimpleNamespace(correlation=step_correlation)
 
         with (
-            patch.object(loop, "_call_llm", return_value=None),
-            patch.object(loop, "_aggressive_context_recovery", new=AsyncMock(return_value=0)),
+            patch.object(loop, "_call_llm", side_effect=fail_with_step),
+            patch.object(_context, "aggressive_context_recovery", new=AsyncMock(return_value=0)),
             patch("asyncio.sleep", new=AsyncMock(return_value=None)),
         ):
             result = asyncio.run(loop.arun("test"))
@@ -1006,6 +1065,14 @@ class TestAgenticLoop:
         assert result.error == "model_action_required"
         assert result.termination_reason == "model_action_required"
         assert "/model" in result.text  # diagnostic points to user action
+        retry_payloads = [
+            dispatch.data for dispatch in dispatches if dispatch.event is HookEvent.LLM_CALL_RETRIED
+        ]
+        assert retry_payloads
+        assert {
+            (payload["step_id"], payload["session_generation"], payload["verify_attempt"])
+            for payload in retry_payloads
+        } == {("turn-retry:step-1", 4, 2)}
 
     def test_context_preserved(self, context: ConversationContext, executor: ToolExecutor) -> None:
         """Test that conversation context is maintained across runs."""
@@ -1034,11 +1101,33 @@ class TestAgenticLoop:
         """Verify DEFAULT_MAX_ROUNDS is 0 (unlimited — time-based control)."""
         assert AgenticLoop.DEFAULT_MAX_ROUNDS == 0
 
+    def test_legacy_policy_keywords_map_to_config(
+        self,
+        context: ConversationContext,
+        executor: ToolExecutor,
+    ) -> None:
+        loop = AgenticLoop(context, executor, max_rounds=4, session_id="legacy", quiet=True)
+
+        assert loop.max_rounds == 4
+        assert loop._session_id == "legacy"
+        with pytest.raises(TypeError, match="cannot be combined"):
+            AgenticLoop(
+                context,
+                executor,
+                config=AgenticLoopConfig(max_rounds=2),
+                max_rounds=4,
+            )
+
     def test_forced_text_on_last_round(
         self, context: ConversationContext, executor: ToolExecutor
     ) -> None:
         """On the last round, tool_choice=none forces text output."""
-        loop = AgenticLoop(context, executor, max_rounds=3, quiet=True)
+        loop = AgenticLoop(
+            context,
+            executor,
+            config=AgenticLoopConfig(max_rounds=3),
+            quiet=True,
+        )
 
         call_kwargs: list[dict[str, Any]] = []
 
@@ -2017,7 +2106,7 @@ class TestMessagePruning:
             {"role": "user", "content": "hello"},
             {"role": "assistant", "content": [_txt("hi")]},
         ]
-        loop._maybe_prune_messages(messages)
+        _context.maybe_prune_messages(loop, messages)
         assert len(messages) == 2
 
     def test_prune_skips_orphaned_tool_result(self) -> None:
@@ -2038,7 +2127,7 @@ class TestMessagePruning:
             {"role": "assistant", "content": [_txt("done3")]},
             {"role": "user", "content": "q4"},
         ]
-        loop._maybe_prune_messages(messages)
+        _context.maybe_prune_messages(loop, messages)
         # After pruning, no tool_result should be orphaned
         for i, msg in enumerate(messages):
             if msg["role"] != "user":
@@ -2083,7 +2172,7 @@ class TestMessagePruning:
             ]
         )
         assert len(messages) > 30
-        loop._maybe_prune_messages(messages)
+        _context.maybe_prune_messages(loop, messages)
         assert messages[0]["role"] == "user"
         assert messages[1]["role"] == "assistant"
         # After pruning, no orphaned tool_result in first user msg
@@ -2104,7 +2193,7 @@ class TestRepairMessages:
             {"role": "assistant", "content": [_txt("resp")]},
             {"role": "user", "content": "next question"},
         ]
-        AgenticLoop._repair_messages(messages)
+        _context.repair_messages(messages)
         for msg in messages:
             content = msg.get("content")
             if isinstance(content, list):
@@ -2124,7 +2213,7 @@ class TestRepairMessages:
             {"role": "assistant", "content": [_txt("done")]},
         ]
         original_len = len(messages)
-        AgenticLoop._repair_messages(messages)
+        _context.repair_messages(messages)
         assert len(messages) == original_len
 
 

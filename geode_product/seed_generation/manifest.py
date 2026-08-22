@@ -124,8 +124,7 @@ class VoterSpec(BaseModel):
     - ``model`` — the LLM model name (e.g. ``claude-sonnet-4-6``).
     - ``provider`` — provider id (e.g. ``anthropic``, ``openai``); must
       match one of Petri's ``[petri.source.<provider>]`` keys.
-    - ``source`` — credential source (e.g. ``claude-cli``, ``openai-codex``,
-      ``api_key``); must be in
+    - ``source`` — credential source (``openai-codex`` or ``api_key``); must be in
       ``petri.source.<provider>.allowed``. The ``auto`` sentinel is rejected
       here — judge voters require a concrete binding so the panel diversity
       check is meaningful.

@@ -213,10 +213,10 @@ def test_agentic_loop_init_attaches_cognitive_state() -> None:
     """The constructor must create the state container — readers
     (PR-3 reflection, PR-4 episodic) expect ``self.cognitive_state``
     to exist at any point in the loop lifecycle, not be lazy-inited."""
-    from core.agent.loop.agent_loop import AgenticLoop
+    from core.agent.loop import _bootstrap
 
-    src = inspect.getsource(AgenticLoop.__init__)
-    assert "self.cognitive_state" in src
+    src = inspect.getsource(_bootstrap.initialize_runtime)
+    assert "loop.cognitive_state" in src
     assert "CognitiveState()" in src
 
 
@@ -225,9 +225,10 @@ def test_arun_emits_all_six_cognitive_events() -> None:
     cognitive events. Without this the event taxonomy would be
     declarative-only (knob-vs-deletion anti-pattern from the PR-1
     Codex MCP review)."""
+    from core.agent.loop import _phases
     from core.agent.loop import agent_loop as _agent_loop_mod
 
-    src = inspect.getsource(_agent_loop_mod)
+    src = inspect.getsource(_agent_loop_mod) + inspect.getsource(_phases)
     for member in (
         "COGNITIVE_PERCEIVE",
         "COGNITIVE_PLAN",
@@ -255,6 +256,7 @@ def test_text_only_round_also_calls_record_round() -> None:
     both text-only return paths so round_count + observations stay
     in lock-step with the actual round count regardless of how the
     round ended."""
+    from core.agent.loop import _guards, _phases
     from core.agent.loop import agent_loop as _agent_loop_mod
     from core.agent.loop.agent_loop import AgenticLoop
 
@@ -267,7 +269,11 @@ def test_text_only_round_also_calls_record_round() -> None:
 
     # Both text-only return paths call it before ``return``.
     module_src = inspect.getsource(_agent_loop_mod)
-    assert module_src.count("await self._record_text_only_round(") >= 2, (
+    phase_src = inspect.getsource(_phases)
+    calls = module_src.count("await self._record_text_only_round(")
+    calls += phase_src.count("await loop._record_text_only_round(")
+    calls += inspect.getsource(_guards).count("await loop._record_text_only_round(")
+    assert calls >= 2, (
         "Both text-only return paths (user_clarification_needed and "
         "natural/forced_text) must call _record_text_only_round before "
         "returning, or round_count drifts from the actual round count."

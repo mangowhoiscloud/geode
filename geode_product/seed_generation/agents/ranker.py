@@ -116,15 +116,11 @@ def _serialise_match_outcome(outcome: MatchOutcome) -> dict[str, Any]:
 
 # PR-LANE-CAP-TIGHTER (v0.99.76, 2026-05-27) — phase-local
 # concurrency cap for the ranker's ``asyncio.gather`` match-dispatch
-# burst. Sits on top of the per-adapter lanes (claude_cli=3 /
-# openai_api=6) and is sized to match them exactly so the gather
+# burst. Sits on top of provider adapter lanes and is sized so the gather
 # submission queue doesn't grow a hidden depth.
 #
-# Concurrency budget (default 3-voter panel = 2 codex + 1 claude-cli):
+# Concurrency budget (default 3-voter panel):
 #   3 matches inflight * 3 voters = 9 voter tasks
-#     - claude-cli tasks: 3 (1 per match) — saturates claude_cli_lane=3
-#     - codex tasks: 6 (2 per match)     — saturates openai_api_lane=6
-#   Net: all three caps balance with zero queue behind them.
 #
 # Why 3 (and not the prior v0.99.75 cap 5): cap 5 still needed ~3 GB
 # of free host RAM per burst, but the operator's M3 16 GB host
@@ -133,9 +129,7 @@ def _serialise_match_outcome(outcome: MatchOutcome) -> dict[str, Any]:
 # survives without requiring the operator to close desktop apps
 # first — the "safe default" goal.
 #
-# Operators on bigger hardware should raise all three lockstep,
-# e.g. 32 GB host: ``RANKER_MAX_INFLIGHT_MATCHES=6`` +
-# ``CLAUDE_CLI_LANE_MAX=6`` + ``OPENAI_API_LANE_MAX=12``.
+# Operators on bigger hardware can raise this with the provider lane caps.
 DEFAULT_RANKER_MAX_INFLIGHT_MATCHES = 3
 """Default match-dispatch cap sized to the local-RSS-safe ceiling on
 a 16 GB host (see module-level comment). Operator override via
@@ -265,8 +259,7 @@ class Ranker(BaseSeedAgent):
         # resolve nor read that fake path, so it hallucinated
         # session continuity ("I already read both candidate files
         # in the previous turn and can answer from context") and
-        # exited on turn 1 with empty output (smoke 18
-        # vote-m000-anthropic.claude-cli/dialogue.jsonl). Co-scientist
+        # exited on turn 1 with empty output (smoke 18). Co-scientist
         # (open-coscientist/src/open_coscientist/nodes/ranking.py
         # ``debate_pair`` flow) instead inlines the full hypothesis
         # body in the user_message — no Read tool needed, no
@@ -335,8 +328,7 @@ class Ranker(BaseSeedAgent):
             # ``_play_match_with_checkpoint_report`` in a phase-local
             # semaphore acquire so the gather submission queue depth
             # never exceeds :data:`DEFAULT_RANKER_MAX_INFLIGHT_MATCHES`.
-            # The per-adapter lanes (claude_cli_lane=3 / openai_api_lane=6)
-            # already throttle the downstream subprocess/API calls; this
+            # Per-provider API lanes already throttle downstream calls; this
             # cap keeps the gather "in-flight" task count from balloon-
             # ing past the lane ceiling on a 59-match Loop 1 burst.
             match_semaphore = asyncio.Semaphore(resolve_ranker_max_inflight_matches())
@@ -764,8 +756,7 @@ class Ranker(BaseSeedAgent):
                     # PR-CODEX-GPT55-OUTPUT-EMIT fix-up (Codex MCP catch,
                     # 2026-05-26) — the default judge panel in
                     # ``plugins/seed_generation/seed_generation.plugin.toml``
-                    # ships with TWO ``openai.openai-codex`` voters
-                    # (cost-balance: 2x codex + 1x claude-cli). Pre-fix
+                    # may ship duplicate provider/source voters. Pre-fix
                     # the task_id was ``vote-{match_id}-{provider}.{source}``
                     # which collided for both codex voters;
                     # ``SubAgentManager._deduplicate`` then silently
@@ -801,8 +792,8 @@ class Ranker(BaseSeedAgent):
                     # ``source``; ``worker_model`` fell back to the
                     # parent's ``settings.model`` so the resolved
                     # adapter ignored the voter's binding (smoke 17
-                    # RESUME: a claude-cli voter dispatched via the parent's
-                    # OpenAI adapter because ``_resolve_provider(settings.model)``
+                    # a voter dispatched via the parent's adapter because
+                    # ``_resolve_provider(settings.model)``
                     # returned the parent's provider, not the voter's).
                     # Now ``task.model = voter.model`` wins in
                     # ``SubAgentManager._build_request``, so

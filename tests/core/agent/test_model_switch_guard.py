@@ -16,7 +16,7 @@ from typing import Any
 from unittest.mock import patch
 
 from core.agent.conversation import ConversationContext
-from core.agent.loop import AgenticLoop
+from core.agent.loop import AgenticLoop, _model_switching
 from core.agent.tool_executor import ToolExecutor
 from core.orchestration.context_monitor import (
     check_context,
@@ -84,7 +84,7 @@ class TestT1LargeToSmall:
         loop = _make_loop(ctx, model="claude-opus-4-6")
         before = check_context(ctx.messages, "glm-5").estimated_tokens
 
-        loop._adapt_context_for_model("glm-5")
+        _model_switching.adapt_context_for_model(loop, "glm-5")
 
         after = check_context(ctx.messages, "glm-5").estimated_tokens
         assert after < before
@@ -95,7 +95,7 @@ class TestT1LargeToSmall:
         original_count = len(ctx.messages)
 
         loop = _make_loop(ctx, model="claude-opus-4-6")
-        loop._adapt_context_for_model("glm-5")
+        _model_switching.adapt_context_for_model(loop, "glm-5")
 
         after = check_context(ctx.messages, "glm-5")
         assert not after.is_critical
@@ -119,7 +119,7 @@ class TestT2SmallContext:
         original = list(ctx.messages)
 
         loop = _make_loop(ctx, model="claude-opus-4-6")
-        loop._adapt_context_for_model("glm-5")
+        _model_switching.adapt_context_for_model(loop, "glm-5")
 
         # Messages unchanged
         assert ctx.messages == original
@@ -138,7 +138,7 @@ class TestT3HugeContext:
         assert before.usage_pct > 200  # way over
 
         loop = _make_loop(ctx, model="claude-opus-4-6")
-        loop._adapt_context_for_model("glm-5")
+        _model_switching.adapt_context_for_model(loop, "glm-5")
 
         after = check_context(ctx.messages, "glm-5")
         assert after.estimated_tokens < before.estimated_tokens
@@ -160,7 +160,7 @@ class TestT4Upgrade:
         original_count = len(ctx.messages)
 
         loop = _make_loop(ctx, model="glm-5")
-        loop._adapt_context_for_model("claude-opus-4-6")
+        _model_switching.adapt_context_for_model(loop, "claude-opus-4-6")
 
         # No changes — context fits easily in 1M window
         assert len(ctx.messages) == original_count
@@ -176,7 +176,7 @@ class TestT4Upgrade:
         assert not before_small.is_critical
 
         loop = _make_loop(ctx, model="glm-5")
-        loop._adapt_context_for_model("claude-opus-4-6")
+        _model_switching.adapt_context_for_model(loop, "claude-opus-4-6")
 
         after_large = check_context(ctx.messages, "claude-opus-4-6")
         assert ctx.messages == original
@@ -199,7 +199,7 @@ class TestOpenAIBidirectionalSwitch:
         assert before.is_critical
 
         loop = _make_loop(ctx, model="gpt-5.5")
-        loop._adapt_context_for_model("gpt-5.4-mini")
+        _model_switching.adapt_context_for_model(loop, "gpt-5.4-mini")
 
         after = check_context(ctx.messages, "gpt-5.4-mini")
         assert after.estimated_tokens < before.estimated_tokens
@@ -214,7 +214,7 @@ class TestOpenAIBidirectionalSwitch:
         assert before.is_critical
 
         loop = _make_loop(ctx, model="gpt-5.5")
-        loop._adapt_context_for_model("o4-mini")
+        _model_switching.adapt_context_for_model(loop, "o4-mini")
 
         after = check_context(ctx.messages, "o4-mini")
         assert after.estimated_tokens < before.estimated_tokens
@@ -233,7 +233,7 @@ class TestOpenAIBidirectionalSwitch:
         assert not before_large.is_warning
 
         loop = _make_loop(ctx, model="gpt-5.4-mini")
-        loop._adapt_context_for_model("gpt-5.5")
+        _model_switching.adapt_context_for_model(loop, "gpt-5.5")
 
         after_large = check_context(ctx.messages, "gpt-5.5")
         assert ctx.messages == original
@@ -261,7 +261,7 @@ class TestT6PureText:
         ctx.messages = msgs
 
         loop = _make_loop(ctx, model="claude-opus-4-6")
-        loop._adapt_context_for_model("glm-5")
+        _model_switching.adapt_context_for_model(loop, "glm-5")
 
         after = check_context(ctx.messages, "glm-5")
         assert after.estimated_tokens < before.estimated_tokens
@@ -318,7 +318,7 @@ class TestUpdateModelIntegration:
         try:
             settings.model = "glm-5"
             with patch("core.ui.agentic_ui.update_session_model"):
-                asyncio.run(loop._sync_model_from_settings_async())
+                asyncio.run(_model_switching.sync_model_from_settings_async(loop))
             assert loop.model == "claude-opus-4-6"  # PR-DRIFT-CUT: no auto-swap
         finally:
             settings.model = old
@@ -334,7 +334,7 @@ class TestUpdateModelIntegration:
         try:
             settings.model = "claude-opus-4-6"
             with patch.object(loop, "update_model_async") as mock_update:
-                asyncio.run(loop._sync_model_from_settings_async())
+                asyncio.run(_model_switching.sync_model_from_settings_async(loop))
                 mock_update.assert_not_called()
         finally:
             settings.model = old
@@ -411,10 +411,12 @@ class TestConversationContextWired:
         """arun must call set_conversation_context so /model guard works."""
         import inspect
 
-        from core.agent.loop import AgenticLoop
+        from core.agent.loop import AgenticLoop, _phases
 
         source = inspect.getsource(AgenticLoop._arun_once)
-        assert "set_conversation_context" in source
+        input_source = inspect.getsource(_phases.prepare_input)
+        assert "_phases.prepare_input" in source
+        assert "set_conversation_context" in input_source
 
 
 # ---------------------------------------------------------------------------

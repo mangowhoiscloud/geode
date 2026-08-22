@@ -210,19 +210,6 @@ target = "LOOP-003"
 expires_when = "Transition table extraction makes Ruff report fewer than 51 branches and the ceiling is lowered."
 
 [[ruff_debt]]
-id = "RUFF-004"
-rule = "PLR0913"
-mode = "override"
-path = "core/agent/loop/agent_loop.py"
-symbol = "AgenticLoop.__init__"
-observed = 29
-owner = "core.agent"
-reason = "The legacy AgenticLoop constructor still receives multiple lifecycle service groups."
-created = "2026-05-17"
-target = "DI-002"
-expires_when = "Cohesive runtime groups reduce the constructor to at most the global argument ceiling."
-
-[[ruff_debt]]
 id = "RUFF-005"
 rule = "PLR0913"
 mode = "ceiling"

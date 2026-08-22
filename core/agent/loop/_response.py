@@ -109,9 +109,11 @@ def _record_usage(loop: AgenticLoop, response: Any) -> Any | None:
     think_tok = int(getattr(response.usage, "thinking_tokens", 0) or 0)
     cache_create = int(getattr(response.usage, "cache_creation_tokens", 0) or 0)
     cache_read = int(getattr(response.usage, "cache_read_tokens", 0) or 0)
+    step = getattr(loop, "_current_step_snapshot", None)
+    model = str(getattr(step, "model", "") or loop.model)
     tracker = get_tracker()
     usage = tracker.record(
-        loop.model,
+        model,
         in_tok,
         out_tok,
         cache_creation_tokens=cache_create,
@@ -119,10 +121,10 @@ def _record_usage(loop: AgenticLoop, response: Any) -> Any | None:
         thinking_tokens=think_tok,
     )
     if not loop._quiet:
-        render_tokens(loop.model, in_tok, out_tok, cost_usd=usage.cost_usd)
+        render_tokens(model, in_tok, out_tok, cost_usd=usage.cost_usd)
     log.info(
         "LLM call: model=%s in=%d out=%d think=%d cache_w=%d cache_r=%d cost=$%.4f",
-        loop.model,
+        model,
         in_tok,
         out_tok,
         think_tok,
@@ -214,9 +216,11 @@ def update_tool_error_tracking(loop: AgenticLoop, tool_results: list[dict[str, A
 
 def check_convergence_break(loop: AgenticLoop) -> bool:
     """Check for stuck loop. Delegates to ConvergenceDetector."""
-    return loop._convergence.check_convergence_break()
+    result: bool = loop._convergence.check_convergence_break()
+    return result
 
 
 def check_repeated_success_no_progress(loop: AgenticLoop) -> bool:
     """Check for repeated identical successful tool observations."""
-    return loop._convergence.check_repeated_success_no_progress()
+    result: bool = loop._convergence.check_repeated_success_no_progress()
+    return result

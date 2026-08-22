@@ -142,8 +142,13 @@ def _codex_agent_for_execute(*, timeout: float) -> CodexMCPMarkAgent:
     return agent
 
 
+class _TerminalLoop:
+    def _set_turn_termination(self, _reason) -> None:
+        pass
+
+
 def test_geode_mcpmark_timeout_is_a_performance_outcome(monkeypatch) -> None:
-    class Loop:
+    class Loop(_TerminalLoop):
         marked_error = False
         finalize_calls = 0
         cognitive_state = SimpleNamespace(round_count=3)
@@ -152,16 +157,6 @@ def test_geode_mcpmark_timeout_is_a_performance_outcome(monkeypatch) -> None:
         async def arun(self, _instruction):
             assert os.environ["GEODE_CODEX_OAUTH_FAIL_EMPTY_TEXT"] == "1"
             await asyncio.Event().wait()
-
-        def _terminal_result(self, reason, text, *, rounds, error, tool_calls):
-            return SimpleNamespace(
-                text=text,
-                rounds=rounds,
-                error=str(reason) if error else None,
-                termination_reason=reason,
-                tool_calls=tool_calls,
-                usage=None,
-            )
 
         async def _afinalize_and_return(self, result, _instruction, _rounds):
             self.finalize_calls += 1
@@ -240,22 +235,12 @@ def test_geode_mcpmark_receipt_binds_the_raw_tool_schema(monkeypatch, tmp_path) 
         async def list_tools(self):
             return schemas
 
-    class Loop:
+    class Loop(_TerminalLoop):
         cognitive_state = SimpleNamespace(round_count=1)
         _tool_processor = SimpleNamespace(tool_log=[])
 
         async def arun(self, _instruction):
             await asyncio.Event().wait()
-
-        def _terminal_result(self, reason, text, *, rounds, error, tool_calls):
-            return SimpleNamespace(
-                text=text,
-                rounds=rounds,
-                error=str(reason),
-                termination_reason=reason,
-                tool_calls=tool_calls,
-                usage=None,
-            )
 
         async def amark_session_error(self):
             return None
@@ -283,22 +268,12 @@ def test_geode_mcpmark_finalization_grace_is_infrastructure_invalid(monkeypatch)
         async def list_tools(self):
             return []
 
-    class Loop:
+    class Loop(_TerminalLoop):
         cognitive_state = SimpleNamespace(round_count=1)
         _tool_processor = SimpleNamespace(tool_log=[])
 
         async def arun(self, _instruction):
             await asyncio.Event().wait()
-
-        def _terminal_result(self, reason, text, *, rounds, error, tool_calls):
-            return SimpleNamespace(
-                text=text,
-                rounds=rounds,
-                error=str(reason) if error else None,
-                termination_reason=reason,
-                tool_calls=tool_calls,
-                usage=None,
-            )
 
         async def amark_session_error(self):
             await asyncio.Event().wait()
@@ -317,7 +292,7 @@ def test_geode_mcpmark_finalization_grace_is_infrastructure_invalid(monkeypatch)
 
 
 def test_geode_mcpmark_detects_a_noncooperative_deadline_overrun(monkeypatch) -> None:
-    class Loop:
+    class Loop(_TerminalLoop):
         cognitive_state = SimpleNamespace(round_count=1)
         _tool_processor = SimpleNamespace(tool_log=[])
 
@@ -329,16 +304,6 @@ def test_geode_mcpmark_detects_a_noncooperative_deadline_overrun(monkeypatch) ->
                 error=None,
                 termination_reason="natural",
                 tool_calls=[],
-                usage=None,
-            )
-
-        def _terminal_result(self, reason, text, *, rounds, error, tool_calls):
-            return SimpleNamespace(
-                text=text,
-                rounds=rounds,
-                error=str(reason) if error else None,
-                termination_reason=reason,
-                tool_calls=tool_calls,
                 usage=None,
             )
 
@@ -354,7 +319,7 @@ def test_geode_mcpmark_detects_a_noncooperative_deadline_overrun(monkeypatch) ->
 
 
 def test_geode_mcpmark_timeout_does_not_add_second_terminal_edge(monkeypatch) -> None:
-    class Loop:
+    class Loop(_TerminalLoop):
         terminal_edges = 0
         session_terminal = False
         cognitive_state = SimpleNamespace(round_count=1)
@@ -364,16 +329,6 @@ def test_geode_mcpmark_timeout_does_not_add_second_terminal_edge(monkeypatch) ->
             self.terminal_edges += 1
             self.session_terminal = True
             await asyncio.Event().wait()
-
-        def _terminal_result(self, reason, text, *, rounds, error, tool_calls):
-            return SimpleNamespace(
-                text=text,
-                rounds=rounds,
-                error=str(reason) if error else None,
-                termination_reason=reason,
-                tool_calls=tool_calls,
-                usage=None,
-            )
 
         async def amark_session_error(self):
             if not self.session_terminal:
@@ -704,9 +659,23 @@ def test_route_from_geode_model_label() -> None:
     assert _route_from_model("geode-claude-sonnet-4-6") == (
         "claude-sonnet-4-6",
         "anthropic",
-        "subscription",
+        "payg",
     )
     assert _route_from_model("geode-glm-4-6") == ("glm-4-6", "zhipuai", "api_key")
+
+
+def test_claude_route_builds_anthropic_payg_loop() -> None:
+    model, provider, source = _route_from_model("geode-claude-sonnet-4-6")
+    loop = _build_loop(
+        tools=[],
+        instruction="answer",
+        model=model,
+        provider=provider,
+        source=source,
+        effort="high",
+        timeout=30,
+    )
+    assert loop._new_adapter.name == "anthropic-payg"
 
 
 def test_usage_dict_translates_geode_usage_for_mcpmark_summary() -> None:

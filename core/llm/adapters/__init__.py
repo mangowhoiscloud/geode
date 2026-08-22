@@ -10,7 +10,7 @@ Layer 4 of the design in
 
 Layer 3 concrete adapters (one per provider × source pair):
 
-- ``anthropic_payg`` / ``anthropic_oauth`` / ``claude_cli``
+- ``anthropic_payg``
 - ``openai_payg`` / ``codex_oauth``
 
 External plugins implement :class:`LLMAdapter` and register via

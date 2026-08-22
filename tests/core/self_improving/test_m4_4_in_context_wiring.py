@@ -246,14 +246,13 @@ class _CaptureRequest:
         return request
 
 
-@pytest.mark.parametrize("adapter_name", ["anthropic-payg", "anthropic-oauth"])
 def test_anthropic_api_middleware_preserves_wire_shape_and_dynamic_cache_prefix(
     monkeypatch: pytest.MonkeyPatch,
-    adapter_name: str,
 ) -> None:
-    """Both API lanes get the old contribution immediately before adaptation."""
+    """The Anthropic API lane gets contributions immediately before adaptation."""
     import geode_product.self_improving.loop.inject.in_context_wiring as wiring
 
+    adapter_name = "anthropic-payg"
     calls: list[tuple[list[dict[str, Any]], str]] = []
 
     def _inject(

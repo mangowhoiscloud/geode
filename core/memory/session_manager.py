@@ -188,10 +188,8 @@ CREATE INDEX IF NOT EXISTS idx_context_artifacts_kind
     ON context_artifacts (kind, updated_at DESC)
 """
 
-# PR-COMM-3 (2026-05-24) — per-agent cumulative state. Mirrors paperclip
-# ``agent_runtime_state`` table (Anthropic-internal docs §session-state):
-# one row per agent_id carrying the claude-cli sessionId for the next
-# ``--resume``, cumulative token / cost totals, and the last error.
+# PR-COMM-3 (2026-05-24) — per-agent cumulative state: one row per agent_id
+# carrying cumulative token / cost totals and the last error.
 #
 # Two extra columns split the cumulative state along orthogonal axes
 # (see docs/plans/2026-05-24-pr-comm-3-runtime-db-integration-audit.md §9):
@@ -215,7 +213,6 @@ CREATE TABLE IF NOT EXISTS agent_runtime_state (
     agent_kind                TEXT NOT NULL DEFAULT 'subagent',
     component                 TEXT NOT NULL DEFAULT 'agentic_loop',
     adapter_type              TEXT NOT NULL DEFAULT '',
-    claude_cli_session_id     TEXT NOT NULL DEFAULT '',
     last_run_id               TEXT NOT NULL DEFAULT '',
     last_run_status           TEXT NOT NULL DEFAULT '',
     total_input_tokens        INTEGER NOT NULL DEFAULT 0,
@@ -223,26 +220,10 @@ CREATE TABLE IF NOT EXISTS agent_runtime_state (
     total_cached_input_tokens INTEGER NOT NULL DEFAULT 0,
     total_cost_cents          INTEGER NOT NULL DEFAULT 0,
     last_error                TEXT NOT NULL DEFAULT '',
-    session_resume_params     TEXT NOT NULL DEFAULT '{}',
     created_at                REAL NOT NULL,
     updated_at                REAL NOT NULL
 )
 """
-
-# PR-SESSION-RESUME-PARAMS (2026-05-25) — additive ALTER for legacy DBs
-# that pre-date the column. Mirrors paperclip's ``sessionParams`` JSON
-# blob (``packages/adapters/claude-local/src/server/execute.ts:592``) —
-# a single TEXT column that carries every resume-context field
-# (currently ``cwd``; future ``prompt_bundle_key`` / ``adapter_type`` /
-# ``remote_id`` etc. can land in the same JSON without further ALTERs).
-# Read-time the JSON is parsed once and validated against the current
-# execution context (see
-# ``core/agent/loop/agent_loop.py:_load_prior_session_id``); a mismatch
-# forces a fresh session instead of a doomed ``--resume <id>`` against
-# a cwd-pool that does not hold that session file.
-_AGENT_RUNTIME_STATE_EXTRA_COLUMNS: tuple[tuple[str, str], ...] = (
-    ("session_resume_params", "TEXT NOT NULL DEFAULT '{}'"),
-)
 
 _CREATE_AGENT_RUNTIME_KIND_INDEX_SQL = """\
 CREATE INDEX IF NOT EXISTS idx_agent_runtime_kind
@@ -257,12 +238,6 @@ CREATE INDEX IF NOT EXISTS idx_agent_runtime_component
 _CREATE_AGENT_RUNTIME_UPDATED_INDEX_SQL = """\
 CREATE INDEX IF NOT EXISTS idx_agent_runtime_updated
     ON agent_runtime_state (updated_at DESC)
-"""
-
-_CREATE_AGENT_RUNTIME_SESSION_INDEX_SQL = """\
-CREATE INDEX IF NOT EXISTS idx_agent_runtime_session
-    ON agent_runtime_state (claude_cli_session_id)
-    WHERE claude_cli_session_id != ''
 """
 
 # PR-COMM-3 (2026-05-24) — per-cycle run lineage for multi-cycle agents
@@ -587,30 +562,9 @@ class SessionManager:
         # runs) stay local. ``IF NOT EXISTS`` keeps the bootstrap
         # idempotent on legacy DBs.
         self._conn.execute(_CREATE_AGENT_RUNTIME_STATE_TABLE_SQL)
-        # PR-SESSION-RESUME-PARAMS (2026-05-25) — additive ALTER for legacy
-        # DBs whose ``agent_runtime_state`` was created before the
-        # ``session_resume_params`` column existed. Same pattern as the
-        # PR-CL-BUDGET / PR-CL-A3 ``sessions`` table migration above.
-        self._conn.execute("BEGIN IMMEDIATE")
-        try:
-            existing_agent_cols = {
-                str(r[1])
-                for r in self._conn.execute("PRAGMA table_info(agent_runtime_state)").fetchall()
-            }
-            for col_name, col_decl in _AGENT_RUNTIME_STATE_EXTRA_COLUMNS:
-                if col_name not in existing_agent_cols:
-                    # col_name + col_decl sourced from a module-level constant — not user input.
-                    self._conn.execute(
-                        f"ALTER TABLE agent_runtime_state ADD COLUMN {col_name} {col_decl}"
-                    )
-            self._conn.commit()
-        except Exception:
-            self._conn.rollback()
-            raise
         self._conn.execute(_CREATE_AGENT_RUNTIME_KIND_INDEX_SQL)
         self._conn.execute(_CREATE_AGENT_RUNTIME_COMPONENT_INDEX_SQL)
         self._conn.execute(_CREATE_AGENT_RUNTIME_UPDATED_INDEX_SQL)
-        self._conn.execute(_CREATE_AGENT_RUNTIME_SESSION_INDEX_SQL)
         self._conn.execute(_CREATE_RUN_LINEAGE_TABLE_SQL)
         self._conn.execute(_CREATE_RUN_LINEAGE_AGENT_INDEX_SQL)
         self._conn.execute(_CREATE_RUN_LINEAGE_PARENT_INDEX_SQL)

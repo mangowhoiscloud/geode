@@ -1,10 +1,10 @@
 """LLM Adapter base contract — single Protocol for all call paths.
 
 Mirrors paperclip's ``ServerAdapterModule`` (``packages/adapter-utils/src/
-types.ts:349``): one interface that covers PAYG API calls, OAuth subscription
-calls, and local agent-cli subprocess calls. Provider routing decisions live
-inside concrete adapters (`Layer 3`) — callers above just pick a name (or
-provider+source pair) and invoke ``acomplete`` / ``astream``.
+types.ts:349``): one interface covers built-in API/subscription calls and
+externally supplied adapters. Provider routing decisions live inside concrete
+adapters (`Layer 3`) — callers above just pick a name (or provider+source pair)
+and invoke ``acomplete`` / ``astream``.
 
 The Protocol is intentionally duck-typed (PEP 544) so external plugins can
 implement it without subclassing — same plug-in friendliness as paperclip's TS
@@ -173,21 +173,12 @@ class AdapterCallRequest:
     # (for example Anthropic/OpenAI computer use) must not be advertised unless
     # the loop can execute the resulting call.
     executable_tool_names: frozenset[str] = frozenset()
-    # PR-V (2026-05-24, spec doc §3 — paperclip `--resume <sessionId>`
-    # parity). When non-empty the adapter passes ``--resume <session_id>``
-    # to claude-cli so the backend reuses the cached system prompt +
-    # prior conversation context — paperclip ``execute.ts:680`` says
-    # this saves 5-10K tokens per heartbeat. Empty = fresh session
-    # (pre-PR-V behaviour). Non-claude-cli adapters ignore this field.
-    resume_session_id: str = ""
     # PR-PERMS-FLAG-FIX (2026-05-25) — JSON-schema forcing parity
     # across both Anthropic + OpenAI structured-output APIs:
     # * Anthropic SDK ``messages.parse(output_format=PydanticModel)`` →
     #   ``JSONOutputFormatParam(schema=..., type="json_schema")``.
     # * OpenAI SDK ``chat.completions.parse(response_format=PydanticModel)`` →
     #   ``json_schema`` with ``strict=true``.
-    # * claude-cli (``--print``) flag ``--json-schema <schema>`` (inline string).
-    # Historical codex-cli used a path-based ``--output-schema`` flag.
     #
     # Set this dict (a JSON Schema object) when the caller expects a
     # validated JSON shape — eliminates the "LLM returns natural
@@ -262,13 +253,6 @@ class AdapterCallResult:
     # so the AgenticLoop can persist it on the next-turn message dict
     # for multi-turn replay.
     assistant_phase: str = ""
-    # PR-V (2026-05-24, spec doc §3) — sessionId emitted by claude-cli's
-    # ``system.init`` event (paperclip ``parse.ts:30``). Callers persist
-    # this so the next turn can resume the same backend session via
-    # ``AdapterCallRequest.resume_session_id``. Mirrors paperclip's
-    # ``heartbeat_runs.sessionIdBefore/After`` capture. Empty for
-    # non-claude-cli adapters (they don't have a resumable session).
-    session_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -319,7 +303,7 @@ class EnvironmentReport:
 
     ``ok`` is the headline pass/fail; ``checks`` carries per-credential /
     per-binary detail rows the UI surfaces. ``hints`` are operator-facing fix
-    suggestions ("set ``ANTHROPIC_API_KEY``", "run ``claude /login``").
+    suggestions ("set ``ANTHROPIC_API_KEY``", "run ``codex login``").
     """
 
     ok: bool
@@ -331,9 +315,8 @@ class EnvironmentReport:
 class CredentialDetection:
     """``detect_credential`` result — paperclip ``detectModel`` mirror.
 
-    Adapters that read a local config (``~/.claude/oauth-token.json`` etc.)
-    return the currently configured model + provenance so the UI can show
-    "currently configured: claude-sonnet-4-7 (from ~/.claude/oauth-token.json)".
+    Adapters that read local provider config return the currently configured
+    model and provenance for operator diagnostics.
     """
 
     model: str
@@ -388,7 +371,7 @@ class LLMAdapter(Protocol):
 # Why split the Protocol: the core ``LLMAdapter`` stays minimal (one method)
 # so adding an adapter only requires implementing ``acomplete`` + identity
 # attrs. Tool-side capabilities (web_search, text_completion) are opt-in via
-# mixin so non-LLM adapters or local-CLI subprocess adapters can omit them
+# mixin so non-LLM or externally supplied adapters can omit them
 # without satisfying spurious stubs.
 
 

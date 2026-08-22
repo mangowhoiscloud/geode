@@ -379,7 +379,7 @@
       "authority": "suite-profile",
       "path": "docs/eval/tau2-bench.md",
       "summary": "GEODE evaluation profile, evidence ledger, and rollout plan for the tau2 conversational tool-use benchmark.",
-      "sha256": "57d563618e6133e6276fa993dd9077a2366abde97ca2c74b87a740a288f65543",
+      "sha256": "7bcd325c102fc675be885be936324ec86e3a7ec7cb81ae9ddab2032aca980cee",
       "triggers": [
         "conversational tool use",
         "tau-bench",

@@ -47,14 +47,28 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Anthropic credential boundaries hold across benchmarks and Petri.** MCPMark
+  Claude labels select the API-key adapter, while Petri's strict fallback gate
+  permits sole or explicitly selected API-key routes without allowing an
+  implicit OpenAI subscription-to-PAYG transition.
+
+- **Step snapshots remain authoritative through tool execution.** Middleware-selected
+  routes are finalized without replacing physical-turn history, the response tool
+  batch executes against the captured bound plan, step correlation reaches tool
+  hooks and runtime events through the versioned `geode.public-hook.v2` envelope
+  and indexed durable audit projections while the v1 schema remains queryable,
+  approval events inherit the same physical correlation, usage is charged to the
+  middleware-finalized model, request middleware cannot mutate that identity, and
+  verification escalation updates the turn's final termination reason.
+
 ### Changed
 
-- **Claude subscription compatibility is warning-only.** Legacy
-  `claude-code/<model>` and `codex-cli/<model>` audit identifiers now normalize
-  to their maintained routes instead of raising migration errors. Anthropic's
-  `oauth` setting resolves through the official Claude CLI adapter, `/login`
-  can enable that route without owning or copying Claude credentials, and all
-  exposed notices point to Anthropic's current third-party/OSS guidance.
+- **Anthropic legacy settings fail before dispatch.** Existing `claude-cli` and
+  Anthropic `oauth` values still load so operators receive an actionable
+  migration error, but they never invoke a subprocess or silently authorize
+  PAYG. Historical evaluation and trajectory labels remain readable.
 
 - **Planning is now a single observation-conditioned advisory contract.**
   Explicit `/plan` compares candidate structures with action tools disabled and
@@ -68,6 +82,11 @@ functional change.
 
 ### Removed
 
+- **Removed every built-in Claude CLI and Anthropic OAuth execution path.** The
+  adapters, subprocess runtime, auth/quota readers, retry classifier, lane,
+  resume state, Petri MCP bridge, and SIL subprocess mutator are gone. Anthropic
+  execution is API-key only; SIL mutation and cognitive verify/replan remain.
+
 - **Removed the duplicate execution-shaped planning stack.** The automatic
   decomposer, `PlanMode`/`PlanStore`, decomposer prompt, and the model-visible
   `create_plan`, `approve_plan`, `reject_plan`, `modify_plan`, and `list_plans`
@@ -75,6 +94,20 @@ functional change.
   TaskGraph and immutable runtime ToolPlan are unchanged.
 
 ### Architecture
+
+- **The agent loop now has executable structural budgets.** Construction-time
+  scalar policy is grouped in `AgenticLoopConfig`, initialization and guard/provider
+  policy live in explicit sibling collaborators, and the production coordinator is
+  ratcheted to at most 1,600 lines, 40 methods, 12 constructor arguments, complexity
+  30, 35 branches, and 120 statements. The obsolete `AgenticLoop.__init__` Ruff
+  exception is removed without changing turn behavior.
+
+- **Agentic turns now run through six explicit phases.** The public
+  `AgenticLoop.arun()` behavior is unchanged, while input preparation,
+  model-call preparation, provider retry decisions, tool processing,
+  observation/history compaction, and terminal assembly live in one bounded
+  sibling module. The central physical-turn loop now reads as a compact
+  top-to-bottom orchestrator and keeps the same `StepSnapshot`/`TurnState` objects.
 
 - **Tool composition now has an immutable validation snapshot.** The product
   handler composer joins model-facing specs, execution origins, existing safety
@@ -104,6 +137,13 @@ functional change.
   redacted from durable and public projections. Process-shared resource locks
   serialize conflicting mutations across daemon sessions and MCP one-shots
   while unrelated resources remain concurrent.
+
+- **Agent turns now have explicit step and turn state.** Every model sampling
+  request freezes its route, bound tool plan, budgets, cancellation handle, and
+  trace correlation in one immutable `StepSnapshot`; the response's tool batch
+  receives that same identity. A mutable `TurnState` owns messages, completed
+  rounds, sampling/retry counts, plan hint, and the closed terminal reason
+  without changing the existing while-tool-use or checkpoint contracts.
 
 ## [1.0.23] - 2026-08-20
 

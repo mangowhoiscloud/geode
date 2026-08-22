@@ -10,7 +10,10 @@ import asyncio
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal, Protocol, cast, runtime_checkable
+from typing import TYPE_CHECKING, Any, Literal, Protocol, cast, runtime_checkable
+
+if TYPE_CHECKING:
+    from core.tools.plan import BoundToolPlan
 
 # Valid values for tool metadata fields.
 VALID_CATEGORIES = frozenset(
@@ -96,8 +99,8 @@ class ToolContext:
     from operator settings + ProfileStore — so the tool may land on a
     different (provider, source) pair than the orchestration loop's main
     LLM call. That is fine when the operator has one credential per
-    provider, but breaks the moment a session is intentionally driven by
-    Claude OAuth subscription while PAYG keys also sit in the environment.
+    provider, but breaks when a session intentionally selects one source while
+    another source for the same provider is also configured.
     Tools that read these fields can pass ``prefer_provider`` /
     ``prefer_source`` to ``core.llm.adapters.dispatch`` helpers so the
     candidate ordering matches the loop's choice.
@@ -109,6 +112,10 @@ class ToolContext:
     """
 
     session_id: str = ""
+    turn_id: str = ""
+    step_id: str = ""
+    session_generation: int = 0
+    verify_attempt: int = 0
     tool_call_id: str = ""
     cwd: Path = field(default_factory=Path.cwd)
     permission_mode: str = ""
@@ -123,6 +130,9 @@ class ToolContext:
     source: str = ""
     model: str = ""
     adapter_name: str = ""
+    tool_plan_hash: str = ""
+    tool_plan_generation: int = 0
+    bound_tool_plan: BoundToolPlan | None = field(default=None, repr=False, compare=False)
     # Effective request metadata is written by ToolExecutor after trusted and
     # public request transforms. ToolCallProcessor consumes it for persistence,
     # privacy classification, and result offload decisions.

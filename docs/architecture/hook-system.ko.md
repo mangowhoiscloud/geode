@@ -40,13 +40,18 @@ handler는 priority 순서로 실행되고 rewrite는 앞 결과를 다음 입�
 | `PostVerify` | immutable verifier 결과 후 | accept, revise, escalate |
 | `Stop` | 최종 전달 직전 | finalize, bounded continue |
 
-모든 호출은 버전이 고정된 `geode.public-hook.v1` envelope를 쓴다.
+현재 호출은 버전이 고정된 `geode.public-hook.v2` envelope를 쓴다. 기존 v1
+schema는 호환성을 위해 그대로 조회할 수 있다.
 
 ```python
 from core.hooks import HookName, HookRegistry, public_hook_schema
 
 hooks = HookRegistry()
 schema = public_hook_schema(HookName.POST_VERIFY)
+legacy_schema = public_hook_schema(
+    HookName.POST_VERIFY,
+    version="geode.public-hook.v1",
+)
 ```
 
 입력은 JSON-safe, secret-redacted, 깊이·크기 제한을 거치며 hook별 JSON

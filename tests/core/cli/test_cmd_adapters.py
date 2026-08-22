@@ -27,8 +27,6 @@ def test_adapters_list_shows_openai_as_payg_and_subscription(runner: CliRunner) 
     assert result.exit_code == 0, result.output
     for adapter_name in (
         "anthropic-payg",
-        "anthropic-oauth",
-        "claude-cli",
         "openai-payg",
         "codex-oauth",
     ):
@@ -42,7 +40,6 @@ def test_adapters_list_shows_billing_type(runner: CliRunner) -> None:
     result = runner.invoke(app, ["adapters", "list"])
     assert "api" in result.output
     assert "subscription" in result.output
-    assert "subscription_included" in result.output
 
 
 def test_adapters_detect_model_missing_adapter_exits_1(runner: CliRunner) -> None:
@@ -63,8 +60,18 @@ def test_adapters_detect_model_no_credential_exits_2(runner: CliRunner, monkeypa
     assert "no credential" in result.output.lower()
 
 
-def test_audit_seeds_config_shows_role_table(runner: CliRunner) -> None:
+def test_audit_seeds_config_shows_role_table(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
     from geode_product.cli import app
+
+    monkeypatch.setattr(
+        "geode_product.seed_generation.picker.GLOBAL_CONFIG_TOML", tmp_path / "config.toml"
+    )
+    monkeypatch.setattr(
+        "geode_product.seed_generation.picker.GLOBAL_SEED_PIPELINE_TOML",
+        tmp_path / "seed_generation.toml",
+    )
 
     result = runner.invoke(app, ["audit-seeds", "config"])
     assert result.exit_code == 0, result.output
@@ -81,8 +88,18 @@ def test_audit_seeds_config_shows_role_table(runner: CliRunner) -> None:
         assert role in result.output
 
 
-def test_audit_seeds_config_shows_judge_voters(runner: CliRunner) -> None:
+def test_audit_seeds_config_shows_judge_voters(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
     from geode_product.cli import app
+
+    monkeypatch.setattr(
+        "geode_product.seed_generation.picker.GLOBAL_CONFIG_TOML", tmp_path / "config.toml"
+    )
+    monkeypatch.setattr(
+        "geode_product.seed_generation.picker.GLOBAL_SEED_PIPELINE_TOML",
+        tmp_path / "seed_generation.toml",
+    )
 
     result = runner.invoke(app, ["audit-seeds", "config"])
     assert "Judge panel voters" in result.output

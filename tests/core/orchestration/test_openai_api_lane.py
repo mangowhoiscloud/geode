@@ -32,13 +32,7 @@ def _reset_lane(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_default_max_concurrent_is_six() -> None:
-    """Default capacity 6 — PR-LANE-CAP-TIGHTER (v0.99.76, 2026-05-27)
-    lowered from 10 to 6 in lockstep with the ``claude_cli_lane``
-    5 → 3 drop. Paired with ``claude_cli_lane=3`` for the standard
-    1-claude + 2-codex voter panel: 3 matches × 2 codex voters = 6
-    in-flight, saturating this cap with zero queue depth. RPM
-    headroom against the 500 RPM ChatGPT subscription ceiling
-    stays at ~464 RPM."""
+    """Default capacity stays bounded at six concurrent OpenAI calls."""
     assert DEFAULT_OPENAI_API_LANE_MAX == 6
     assert resolve_openai_api_lane_max() == 6
 

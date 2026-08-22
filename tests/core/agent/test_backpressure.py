@@ -17,7 +17,7 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 from core.agent.conversation import ConversationContext
-from core.agent.loop import AgenticLoop
+from core.agent.loop import AgenticLoop, AgenticLoopConfig, _response
 from core.agent.tool_executor import ToolExecutor
 from core.config import ANTHROPIC_PRIMARY
 
@@ -29,9 +29,9 @@ def _make_loop() -> AgenticLoop:
     loop = AgenticLoop(
         ctx,
         executor,
+        config=AgenticLoopConfig(max_rounds=10),
         model=ANTHROPIC_PRIMARY,
         provider="anthropic",
-        max_rounds=10,
     )
     return loop
 
@@ -134,13 +134,13 @@ class TestConvergenceDetection:
     def test_check_convergence_no_errors(self) -> None:
         """No errors → no convergence."""
         loop = _make_loop()
-        assert loop._check_convergence_break() is False
+        assert _response.check_convergence_break(loop) is False
 
     def test_check_convergence_few_errors(self) -> None:
         """Fewer than 3 errors → no convergence."""
         loop = _make_loop()
         loop._convergence.recent_errors = ["tool_a:timeout", "tool_a:timeout"]
-        assert loop._check_convergence_break() is False
+        assert _response.check_convergence_break(loop) is False
 
     def test_check_convergence_3_identical_breaks_immediately(self) -> None:
         """v0.90.0 — 3 identical errors break the loop on first detection.
@@ -153,14 +153,14 @@ class TestConvergenceDetection:
         loop = _make_loop()
         loop._convergence.total_consecutive_tool_errors = 3
         loop._convergence.recent_errors = ["tool_a:timeout", "tool_a:timeout", "tool_a:timeout"]
-        assert loop._check_convergence_break() is True
+        assert _response.check_convergence_break(loop) is True
 
     def test_check_convergence_5_identical_still_breaks(self) -> None:
         """5+ identical errors still break (idempotent past the threshold)."""
         loop = _make_loop()
         loop._convergence.total_consecutive_tool_errors = 5
         loop._convergence.recent_errors = ["tool_a:timeout"] * 5
-        assert loop._check_convergence_break() is True
+        assert _response.check_convergence_break(loop) is True
 
     def test_check_convergence_mixed_errors_no_break(self) -> None:
         """Different errors → no convergence."""
@@ -171,7 +171,7 @@ class TestConvergenceDetection:
             "tool_a:timeout",
             "tool_c:denied",
         ]
-        assert loop._check_convergence_break() is False
+        assert _response.check_convergence_break(loop) is False
 
     def test_check_convergence_4_with_different_prefix_no_break(self) -> None:
         """4 errors where last 4 aren't all identical → no break."""
@@ -182,7 +182,7 @@ class TestConvergenceDetection:
             "tool_a:timeout",
             "tool_a:timeout",
         ]
-        assert loop._check_convergence_break() is False
+        assert _response.check_convergence_break(loop) is False
 
     def test_recent_errors_max_6(self) -> None:
         """Recent errors list is capped at 6 entries."""

@@ -274,7 +274,7 @@ async def _run(
     from core.agent.cognitive_state_ctx import set_session_id, set_turn_id
     from core.agent.context_manager import ContextWindowManager
     from core.agent.conversation import ConversationContext
-    from core.agent.loop import AgenticLoop
+    from core.agent.loop import AgenticLoop, AgenticLoopConfig
     from core.agent.sub_agent import SubAgentManager, SubTask
     from core.agent.tool_executor import ToolExecutor
     from core.hooks import (
@@ -592,19 +592,21 @@ async def _run(
     loop = AgenticLoop(
         ConversationContext(max_turns=50),
         executor,
+        config=AgenticLoopConfig(
+            source="codex-oauth",
+            effort=effort,
+            max_tokens=16_384,
+            max_rounds=6,
+            time_budget_s=360,
+            allowed_tool_names={probe_tool.name},
+            disable_settings_drift=True,
+            session_id=f"{run_id}-live",
+        ),
         model=model,
         provider="openai",
-        source="codex-oauth",
-        effort=effort,
-        max_tokens=16_384,
-        max_rounds=6,
-        time_budget_s=360,
         tool_registry=tool_registry,
-        allowed_tool_names={probe_tool.name},
         hooks=runtime_events,
         quiet=True,
-        disable_settings_drift=True,
-        session_id=f"{run_id}-live",
         activity_sink_provider=current_activity_sink,
         policy_sources=policy_sources,
     )

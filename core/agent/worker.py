@@ -135,11 +135,9 @@ class WorkerRequest:
     source: str = ""
     policy_sources: EncodedPolicySourceBundle | None = None
     # PR-JSON-WIRE (2026-05-25) — per-task JSON Schema for
-    # structured-output forcing on the spawned LLM call. Threads
-    # through ``AgenticLoop.response_schema`` →
-    # ``AdapterCallRequest.response_schema`` → claude-cli ``--json-schema``. ``None``
-    # preserves back-compat (caller without a schema gets free-form
-    # text). Per-role schemas live in
+    # structured-output forcing on the spawned LLM call. Threads through
+    # ``AgenticLoop.response_schema`` → ``AdapterCallRequest.response_schema``.
+    # ``None`` preserves free-form output. Per-role schemas live in
     # ``plugins/seed_generation/json_schemas.py`` and are wired in
     # each role's ``_build_tasks``.
     response_schema: dict[str, Any] | None = None
@@ -218,10 +216,8 @@ class WorkerResult:
     ``WorkerResult`` had no usage fields, so everything serialized to the
     parent reported zeros.
 
-    Capture coverage: payg / API-key adapters and claude-cli (PR-CLI-
-    USAGE-CAPTURE, 2026-07-13 — the CLI's terminal ``result`` stream-json
-    event carries token usage even on subscription) populate real numbers.
-    We never fabricate counts; unmetered calls stay honestly at 0.
+    API-key and subscription adapters populate real counts when the provider
+    reports them. We never fabricate counts; unmetered calls stay at 0.
     """
 
     task_id: str
@@ -460,36 +456,6 @@ def _run_agentic(
 
         set_activity_sink(_make_activity_sink(request.task_id))
 
-    # PR-RESUME-NO-PERSIST-FIX (2026-05-25) — bind a per-task isolated
-    # working directory so claude-cli's cwd-keyed session cache
-    # (``~/.claude/projects/<cwd-hash>/sessions/``) is unique per
-    # ``task_id``. This replaces the blunt ``--no-session-persistence``
-    # flag from PR-PERMS-FLAG-FIX B (which disabled ALL persistence and
-    # broke PR-V's intra-task ``--resume`` path). Cross-sub-agent leak
-    # via cwd-cache auto-pickup is now prevented because each task_id
-    # has its own cache pool; within-task continuity still works
-    # because turn N+1 sees the same cwd as turn N.
-    #
-    # PR-CLEANUP-WORKER-REQUEST-RUN-DIR (2026-05-25) — the first cut
-    # of this binding read ``request.run_dir`` (a dead field on
-    # ``WorkerRequest`` that no producer ever populated), so the
-    # guard never fired and the mkdir never ran. Smoke 11 confirmed
-    # the wiring gap (no ``cwd/`` subdir in ``sub_agents/<task_id>/``).
-    # The live SoT for an orchestrator-bound run_dir at the worker
-    # side is :func:`core.observability.run_dir.get_active_run_dir`
-    # — ``worker.main()`` already re-binds the ContextVar from the
-    # ``GEODE_RUN_DIR`` env var on entry, so by the time
-    # ``_run_agentic`` runs the value is available.
-    from core.observability.run_dir import get_active_run_dir
-
-    active_run_dir = get_active_run_dir()
-    if active_run_dir is not None and request.task_id:
-        from core.agent.task_isolation import set_task_isolated_cwd
-
-        task_cwd_path = active_run_dir / "sub_agents" / request.task_id / "cwd"
-        task_cwd_path.mkdir(parents=True, exist_ok=True)
-        set_task_isolated_cwd(task_cwd_path)
-
     # Resolve checkpoint/model identity before freezing the executable policy
     # projection. A resumed child may carry a different provider from the
     # current process settings, and provider visibility is part of its Bound.
@@ -582,7 +548,7 @@ def _run_agentic(
     )
 
     # 5. Build AgenticLoop
-    from core.agent.loop import AgenticLoop
+    from core.agent.loop import AgenticLoop, AgenticLoopConfig
 
     # S2-wire (2026-05-18): propagate AgentDefinition.system_prompt into the
     # spawned loop so AgentDefinition-driven sub-agents (seed_generator etc.)
@@ -619,8 +585,21 @@ def _run_agentic(
     loop = AgenticLoop(
         conversation,
         executor,
-        max_rounds=0,  # unlimited — controlled by timeout_s from parent
-        max_tokens=request.subagent_max_tokens,
+        config=AgenticLoopConfig(
+            max_rounds=0,
+            max_tokens=request.subagent_max_tokens,
+            thinking_budget=request.thinking_budget,
+            effort=request.effort,
+            time_budget_s=request.time_budget_s,
+            system_prompt_override=system_prompt_override,
+            parent_session_key=request.parent_session_key,
+            parent_session_id=request.parent_session_id,
+            allowed_tool_names=allowed_tool_names,
+            force_include_allowed_tools=True,
+            source=request.source,
+            session_id=request.task_id,
+            response_schema=request.response_schema,
+        ),
         model=effective_model,
         provider=effective_provider,
         hooks=worker_hooks,
@@ -634,16 +613,7 @@ def _run_agentic(
         # Hermes ``delegate_tool.py:607-636`` (parent-inherit + per-child
         # config override) and Claude Code ``loadAgentsDir.ts:116``
         # (agent-level effort frontmatter).
-        thinking_budget=request.thinking_budget,
-        effort=request.effort,
-        time_budget_s=request.time_budget_s,
-        system_prompt_override=system_prompt_override,
-        parent_session_key=request.parent_session_key,
-        parent_session_id=request.parent_session_id,
         quiet=True,  # Suppress spinner — parent handles UI
-        allowed_tool_names=allowed_tool_names,
-        force_include_allowed_tools=True,
-        source=request.source,
         # PR-Q.5 (2026-05-24, single-anchor invariant I1 in
         # docs/plans/2026-05-24-timeline-standardization-and-claude-resume.md):
         # the sub-agent's task_id becomes the AgenticLoop's session_id so
@@ -653,13 +623,11 @@ def _run_agentic(
         # a fresh ``s-<uuid>`` and events.jsonl falls into a sibling
         # directory that the operator cannot reach from the timeline's
         # ``details.task_id`` reference.
-        session_id=request.task_id,
         # PR-JSON-WIRE (2026-05-25) — thread the per-task JSON Schema
         # to the AgenticLoop so every spawned adapter call carries
         # ``AdapterCallRequest.response_schema``. Empty / None
         # preserves legacy free-form text responses for callers that
         # didn't declare a schema (REPL, gateway, ad-hoc CLI).
-        response_schema=request.response_schema,
     )
     if resume_state is not None and resume_checkpoint is not None:
         resume_checkpoint.reopen(resume_state.session_id)
@@ -693,8 +661,8 @@ def _run_agentic(
     # Codex MCP review (2026-05-26) caught two pre-merge issues, both
     # patched below:
     #
-    # 1. ``AgenticLoop.arun`` resets ``_loop_start_time`` on every call
-    #    (``agent_loop.py:1463``), so the second pass would get another
+    # 1. ``AgenticLoop.arun`` resets ``_loop_start_time`` on every call,
+    #    so the second pass would get another
     #    full ``time_budget_s`` rather than the remainder. Guard the
     #    retry on ``elapsed_before_retry < 0.5 * request.timeout_s`` so
     #    a worker pegged near its wall-clock cap doesn't get pushed past
@@ -788,7 +756,7 @@ def _run_agentic(
 # explicit failure sentinels below — gate ``success`` on the absence of
 # those plus the absence of ``error``. Sentinels are members of
 # ``core.agent.loop.models.TerminationReason`` (the loop's closed terminal
-# alphabet; every terminal is born in ``AgenticLoop._terminal_result``):
+# alphabet; every terminal is born in ``_guards._terminal_result``):
 #
 # * Failure exits (text is fallback / diagnostic UI, NOT a real answer):
 #   ``model_action_required``, ``context_exhausted``, ``llm_error``,
@@ -814,7 +782,7 @@ _FAILURE_TERMINATION_REASONS = FAILURE_TERMINATION_REASONS
 # * ``input_blocked`` — policy filter rejected the prompt. Retrying with
 #   stronger schema language wouldn't change the input that got blocked.
 # * ``user_cancelled`` — operator pressed cancel. The "Interrupted."
-#   marker is the legitimate output (see ``agent_loop.py:705``); a
+#   marker is the legitimate loop output; a
 #   retry would override the cancel intent.
 # * ``user_clarification_needed`` — overthinking detected; text IS the
 #   follow-up question. Retrying re-burns the budget that the loop

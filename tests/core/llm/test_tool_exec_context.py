@@ -18,9 +18,8 @@ Static + behavioural pins:
    pin so future refactors that silently drop the wiring fail visibly).
 4. ``_safe_delegate`` injects ``_tool_context`` into the tool's
    ``aexecute`` kwargs when given a non-None context.
-5. ``ToolCallProcessor`` builds a fresh ``ToolContext`` per dispatch and
-   passes it to ``executor.aexecute(..., context=ctx)`` (source-level
-   pin — runtime test would require a full executor fixture).
+5. ``ToolCallProcessor`` builds a fresh ``ToolContext`` per dispatch from its
+   resolved route.
 """
 
 from __future__ import annotations
@@ -63,12 +62,12 @@ def test_tool_context_accepts_loop_routing() -> None:
         provider="anthropic",
         source="subscription",
         model="claude-opus-4-7",
-        adapter_name="anthropic-oauth",
+        adapter_name="anthropic-subscription-test",
     )
     assert ctx.provider == "anthropic"
     assert ctx.source == "subscription"
     assert ctx.model == "claude-opus-4-7"
-    assert ctx.adapter_name == "anthropic-oauth"
+    assert ctx.adapter_name == "anthropic-subscription-test"
 
 
 # ---------------------------------------------------------------------------
@@ -100,17 +99,17 @@ def test_select_adapter_exact_match_required_with_prefer(
     cands = [
         _fake_adapter("openai-payg", "openai", "payg"),
         _fake_adapter("anthropic-payg", "anthropic", "payg"),
-        _fake_adapter("anthropic-oauth", "anthropic", "subscription"),
+        _fake_adapter("anthropic-subscription-test", "anthropic", "subscription"),
     ]
     monkeypatch.setattr("core.llm.adapters.dispatch.list_adapters", lambda: cands)
 
-    # Exact match — anthropic-oauth picked.
+    # Exact subscription match picked.
     picked = _select_adapter(
         "supports_web_search",
         prefer_provider="anthropic",
         prefer_source="subscription",
     )
-    assert picked is not None and picked.name == "anthropic-oauth"
+    assert picked is not None and picked.name == "anthropic-subscription-test"
 
     # No exact match for (openai, subscription) — even though openai-payg
     # is registered, dispatch refuses to widen.
@@ -131,7 +130,7 @@ def test_select_adapter_without_route_returns_none(
 
     cands = [
         _fake_adapter("anthropic-payg", "anthropic", "payg"),
-        _fake_adapter("anthropic-oauth", "anthropic", "subscription"),
+        _fake_adapter("anthropic-subscription-test", "anthropic", "subscription"),
         _fake_adapter("openai-payg", "openai", "payg"),
     ]
     monkeypatch.setattr("core.llm.adapters.dispatch.list_adapters", lambda: cands)
@@ -272,20 +271,26 @@ def test_processor_init_accepts_provider_source_adapter() -> None:
 
 
 def test_processor_builds_tool_context_for_each_dispatch() -> None:
-    """Source-level pin: the processor's dispatch path must construct a
-    ``ToolContext`` carrying its own provider/source/model/adapter_name
-    and pass it as ``context=`` to the executor. A regression here
-    silently disconnects the loop from the tool layer (each tool would
-    fall back to ``infer_source`` independently)."""
-    src = (
-        Path(__file__).resolve().parents[3] / "core" / "agent" / "tool_executor" / "processor.py"
-    ).read_text(encoding="utf-8")
-    assert "tool_ctx = ToolContext(" in src
-    assert "provider=self._provider" in src
-    assert "source=self._source" in src
-    assert "model=self._model" in src
-    assert "adapter_name=self._adapter_name" in src
-    assert "context=tool_ctx" in src
+    """The processor's fallback context preserves its resolved route."""
+    from core.agent.tool_executor.processor import ToolCallProcessor
+
+    processor = ToolCallProcessor(
+        executor=MagicMock(),
+        op_logger=MagicMock(),
+        error_recovery=MagicMock(),
+        provider="anthropic",
+        source="subscription",
+        model="claude-opus-4-7",
+        adapter_name="anthropic-subscription-test",
+    )
+
+    context = processor._new_tool_context("call-1")
+
+    assert context.tool_call_id == "call-1"
+    assert context.provider == "anthropic"
+    assert context.source == "subscription"
+    assert context.model == "claude-opus-4-7"
+    assert context.adapter_name == "anthropic-subscription-test"
 
 
 # ---------------------------------------------------------------------------
@@ -295,18 +300,18 @@ def test_processor_builds_tool_context_for_each_dispatch() -> None:
 
 def test_agentic_loop_passes_identity_to_processor() -> None:
     """Source-level pin: AgenticLoop must pull provider / source from the
-    RESOLVED adapter (``self._new_adapter``), not the loop's pre-
-    normalisation ``self._provider`` / ``self._source``. The registry
+    RESOLVED adapter (``loop._new_adapter``), not the loop's pre-
+    normalisation provider/source. The registry
     collapses ``openai-codex → openai`` / ``zhipuai → glm``; the
     strict-dispatch helper (``_select_adapter`` PR-NO-FALLBACK) compares
     against the adapter's own identity so the pre-normalisation values
     would silently miss every match."""
     src = (
-        Path(__file__).resolve().parents[3] / "core" / "agent" / "loop" / "agent_loop.py"
+        Path(__file__).resolve().parents[3] / "core" / "agent" / "loop" / "_bootstrap.py"
     ).read_text(encoding="utf-8")
-    assert 'getattr(self._new_adapter, "provider", self._provider)' in src
-    assert 'getattr(self._new_adapter, "source", self._source)' in src
-    assert 'adapter_name=getattr(self._new_adapter, "name", "")' in src
+    assert 'getattr(loop._new_adapter, "provider", loop._provider)' in src
+    assert 'getattr(loop._new_adapter, "source", loop._source)' in src
+    assert 'adapter_name=getattr(loop._new_adapter, "name", "")' in src
 
 
 def test_handler_signature_gating_skips_closed_signature_handlers() -> None:
@@ -339,7 +344,7 @@ def test_handler_signature_gating_skips_closed_signature_handlers() -> None:
 
 def test_web_search_via_adapters_routes_to_exact_match() -> None:
     """PR-NO-FALLBACK — when the loop is on anthropic-subscription,
-    dispatch routes to anthropic-oauth (the exact match). The PAYG sibling
+    dispatch routes to the exact subscription match. The PAYG sibling
     is registered but never tried — strict single-adapter mode."""
     from core.llm.adapters.base import WebSearchResult
     from core.llm.adapters.dispatch import web_search_via_adapters
@@ -353,12 +358,14 @@ def test_web_search_via_adapters_routes_to_exact_match() -> None:
         return_value=WebSearchResult(query="q", text="from-payg", adapter_name="anthropic-payg")
     )
     sub = MagicMock(spec_set=["name", "provider", "source", "supports_web_search", "aweb_search"])
-    sub.name = "anthropic-oauth"
+    sub.name = "anthropic-subscription-test"
     sub.provider = "anthropic"
     sub.source = "subscription"
     sub.supports_web_search = True
     sub.aweb_search = AsyncMock(
-        return_value=WebSearchResult(query="q", text="from-sub", adapter_name="anthropic-oauth")
+        return_value=WebSearchResult(
+            query="q", text="from-sub", adapter_name="anthropic-subscription-test"
+        )
     )
 
     with patch("core.llm.adapters.dispatch.list_adapters", return_value=[payg, sub]):
@@ -366,7 +373,7 @@ def test_web_search_via_adapters_routes_to_exact_match() -> None:
             web_search_via_adapters("q", prefer_provider="anthropic", prefer_source="subscription")
         )
 
-    assert result.adapter_name == "anthropic-oauth"
+    assert result.adapter_name == "anthropic-subscription-test"
     sub.aweb_search.assert_called_once()
     payg.aweb_search.assert_not_called()
 

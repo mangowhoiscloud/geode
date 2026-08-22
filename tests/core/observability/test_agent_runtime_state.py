@@ -7,7 +7,7 @@ PR-COMM-3 (2026-05-24, spec doc:
 Coverage map:
 
 * :class:`TestSchemaBootstrap` — `agent_runtime_state` + `run_lineage`
-  tables + 7 indexes land in `sessions.db` on `SessionManager.__init__`.
+  tables + 6 indexes land in `sessions.db` on `SessionManager.__init__`.
 * :class:`TestAgentRuntimeStateWriters` — `record_agent_session_end`,
   `record_subagent_completed`, `accumulate_tokens_and_cost` upsert /
   preserve / accumulate semantics.
@@ -57,7 +57,6 @@ class TestSchemaBootstrap:
             "agent_kind",
             "component",
             "adapter_type",
-            "claude_cli_session_id",
             "last_run_id",
             "last_run_status",
             "total_input_tokens",
@@ -94,7 +93,6 @@ class TestSchemaBootstrap:
             "idx_agent_runtime_kind",
             "idx_agent_runtime_component",
             "idx_agent_runtime_updated",
-            "idx_agent_runtime_session",
             "idx_run_lineage_agent",
             "idx_run_lineage_parent",
             "idx_run_lineage_root",
@@ -117,15 +115,13 @@ class TestAgentRuntimeStateWriters:
             agent_id="s-abc123",
             agent_kind="repl",
             component="agentic_loop",
-            adapter_type="claude-cli",
-            claude_cli_session_id="cli-xyz",
+            adapter_type="anthropic-payg",
         )
         state = ars.get_agent_runtime_state("s-abc123")
         assert state is not None
         assert state.agent_kind == "repl"
         assert state.component == "agentic_loop"
-        assert state.adapter_type == "claude-cli"
-        assert state.claude_cli_session_id == "cli-xyz"
+        assert state.adapter_type == "anthropic-payg"
 
     def test_record_agent_session_end_empty_id_is_noop(self, tmp_db: Path) -> None:
         """Defensive: callers may forward an empty session_id from a
@@ -134,17 +130,6 @@ class TestAgentRuntimeStateWriters:
         conn = sqlite3.connect(str(tmp_db))
         count = conn.execute("SELECT COUNT(*) FROM agent_runtime_state").fetchone()[0]
         assert count == 0
-
-    def test_session_end_preserves_session_id_when_called_without(self, tmp_db: Path) -> None:
-        """A subsequent ``record_agent_session_end`` without
-        ``claude_cli_session_id`` must NOT overwrite a previously-set one
-        — the writer uses a CASE-WHEN guard so empty values don't clear
-        prior session_ids."""
-        ars.record_agent_session_end(agent_id="s-1", claude_cli_session_id="cli-first")
-        ars.record_agent_session_end(agent_id="s-1", claude_cli_session_id="")
-        state = ars.get_agent_runtime_state("s-1")
-        assert state is not None
-        assert state.claude_cli_session_id == "cli-first"
 
     def test_subagent_completed_links_run_id(self, tmp_db: Path) -> None:
         ars.record_subagent_completed(

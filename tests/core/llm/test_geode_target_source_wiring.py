@@ -88,12 +88,8 @@ def test_default_geode_runner_uses_get_binding() -> None:
         # to force per-token billing.
         ("PAYG", "anthropic-payg"),
         ("PAYG", "openai-payg"),
-        # Subscription OAuth — claude-cli (Anthropic Max), codex-oauth
-        # (ChatGPT Plus). These ride the operator's interactive
-        # subscription quota.
-        ("subscription", "claude-cli"),
+        # ChatGPT subscription OAuth.
         ("subscription", "codex-oauth"),
-        ("subscription", "anthropic-oauth"),
     ],
 )
 def test_bootstrap_registers_supported_source_categories(category: str, source_value: str) -> None:

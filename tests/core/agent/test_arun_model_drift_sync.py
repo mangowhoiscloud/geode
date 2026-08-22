@@ -18,8 +18,10 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+from unittest.mock import patch
 
 import pytest
+from core.agent.loop import _guards, _model_switching, _phases
 from core.agent.loop.agent_loop import AgenticLoop
 
 # ---------------------------------------------------------------------------
@@ -89,8 +91,16 @@ def _call_helper(
     hint: str | None,
     verification_hint: str | None = None,
 ) -> str:
+    async def sync(_loop: object) -> bool:
+        stub.sync_calls += 1
+        return stub._sync_returns_drifted
+
     bound = AgenticLoop._sync_model_and_rebuild_prompt.__get__(stub, _StubLoop)
-    return asyncio.run(bound(system_prompt, hint, verification_hint))
+    with (
+        patch.object(_model_switching, "sync_model_from_settings_async", side_effect=sync),
+        patch.object(_guards, "_consume_plan_hint", return_value=stub._plan_hint),
+    ):
+        return asyncio.run(bound(system_prompt, hint, verification_hint))
 
 
 def test_no_drift_no_dirty_returns_input_unchanged() -> None:
@@ -212,7 +222,9 @@ def test_arun_calls_sync_and_rebuild_helper() -> None:
     """``arun``'s while-loop must call the helper and rebind
     ``system_prompt`` from its return value."""
     src = inspect.getsource(AgenticLoop._arun_once)
-    assert "system_prompt = await self._sync_model_and_rebuild_prompt(" in src
+    phase_src = inspect.getsource(_phases.prepare_model_call)
+    assert "_phases.prepare_model_call(" in src
+    assert "turn.system_prompt = await loop._sync_model_and_rebuild_prompt(" in phase_src
 
 
 def test_arun_no_longer_inlines_drift_sync() -> None:
@@ -235,7 +247,7 @@ def test_phase1_and_phase2a_helpers_still_exist() -> None:
     """Phase 1 (_emit_session_start_signals) and Phase 2a
     (_check_round_guards) must remain intact. Phase 2b is additive."""
     assert hasattr(AgenticLoop, "_emit_session_start_signals")
-    assert hasattr(AgenticLoop, "_check_round_guards")
+    assert callable(_guards._check_round_guards)
 
 
 @pytest.fixture(autouse=True)

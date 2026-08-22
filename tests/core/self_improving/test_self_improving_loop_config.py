@@ -36,7 +36,7 @@ def test_default_config_has_safe_defaults() -> None:
     assert isinstance(cfg.autoresearch, AutoresearchConfig)
     assert isinstance(cfg.seed_generation, SeedGenerationConfig)
     # Step J-b.1 — audit role bindings moved into autoresearch namespace.
-    # Defaults are now PetriRoleConfig() instances (model="", source="claude-cli"),
+    # Defaults are PetriRoleConfig() instances (model="", source="api_key"),
     # not entries in a top-level petri dict.
     assert cfg.autoresearch.target.model == ""
     assert cfg.autoresearch.judge.model == ""
@@ -51,15 +51,13 @@ def test_autoresearch_defaults_match_train_module() -> None:
       (G1a: inherit ``Settings.model`` when unset).
     - ``use_oauth: bool = True`` → ``source: Source = "auto"`` (B1).
     - ``fallback_to_payg`` per-component override removed (C2).
-    PR-SIL-5THEME C6 (2026-05-23):
-    - ``source`` default ``"auto"`` → ``"claude-cli"`` (operator decision
-      ``project_payg_exclusion_decision.md``).
+    Anthropic's built-in route now defaults to the API-key adapter.
     """
     a = AutoresearchConfig()
     assert a.budget_minutes == 5
     assert a.target_model is None  # G1a inherit
     assert a.judge_model is None  # G1a inherit
-    assert a.source == "claude-cli"  # PR-SIL-5THEME C6 — subscription-first
+    assert a.source == "api_key"
     assert a.seed_limit == 10
     assert a.seed_select == "bundled"
     assert a.dim_set == "subset"
@@ -120,8 +118,7 @@ seed_limit = 25
     assert cfg.autoresearch.seed_limit == 25
     # PR-MINIMAL-2 — untouched ``source`` field keeps its default
     # (was ``use_oauth: bool = True``; now ``source: Source``).
-    # PR-SIL-5THEME C6 (2026-05-23) — default ``"auto" → "claude-cli"``.
-    assert cfg.autoresearch.source == "claude-cli"
+    assert cfg.autoresearch.source == "api_key"
 
 
 # ---------------------------------------------------------------------------
@@ -353,16 +350,9 @@ def test_bindings_dataclass_round_trip() -> None:
     assert not hasattr(b, "fallback_to_payg")
 
 
-def test_petri_role_default_source_is_subscription_first() -> None:
-    """PetriRoleConfig without explicit source picks ``claude-cli`` default.
-
-    PR-SIL-5THEME C6 (2026-05-23) — operator decision
-    (``project_payg_exclusion_decision.md``) 으로 default ``auto`` → ``claude-cli``.
-    ``auto`` 는 manifest cascade 가 PAYG 까지 fallback 가능 → 명시
-    subscription-first default 로 silent leak 차단.
-    """
+def test_petri_role_default_source_is_api_key() -> None:
     p = PetriRoleConfig(model="claude-sonnet-4-6")
-    assert p.source == "claude-cli"
+    assert p.source == "api_key"
 
 
 def test_load_handles_empty_self_improving_loop_section(tmp_path: Path) -> None:
@@ -643,8 +633,8 @@ def test_openai_source_none_leaves_per_role_defaults() -> None:
     cfg = SelfImprovingLoopConfig()
     assert cfg.openai_source is None
     # the three OpenAI-role sources keep their own schema defaults
-    assert cfg.autoresearch.source.value == "claude-cli"
-    assert cfg.autoresearch.target.source.value == "claude-cli"
+    assert cfg.autoresearch.source.value == "api_key"
+    assert cfg.autoresearch.target.source.value == "api_key"
     assert cfg.autoresearch.mutator.source.value == "auto"
 
 

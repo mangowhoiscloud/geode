@@ -54,9 +54,7 @@ def _welcome_screen() -> None:
 
     # v0.54.0 — proactive subscription OAuth detection. If the user already
     # ran ``codex auth login``, GEODE picks up the token from
-    # ``~/.codex/auth.json`` and skips the wizard entirely. Anthropic OAuth
-    # is intentionally excluded (Anthropic ToS prohibits third-party
-    # reuse — see ``core/lifecycle/container.py:271``).
+    # ``~/.codex/auth.json`` and skips the wizard entirely.
     from core.wiring.startup import _has_any_llm_key, detect_subscription_oauth
 
     if _has_any_llm_key():

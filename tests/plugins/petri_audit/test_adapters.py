@@ -142,20 +142,20 @@ def test_metadata_stock_provider_returns_none():
 
 def test_metadata_swallows_exception(monkeypatch):
     """A metadata function that raises returns None."""
-    module = load_adapter_module("anthropic", "claude-cli")
+    module = load_adapter_module("openai", "openai-codex")
 
     def _boom() -> dict:
         raise RuntimeError("metadata boom")
 
     monkeypatch.setattr(module, "metadata", _boom)
-    assert get_adapter_metadata("anthropic", "claude-cli") is None
+    assert get_adapter_metadata("openai", "openai-codex") is None
 
 
 def test_metadata_rejects_non_dict(monkeypatch):
     """Non-dict return values collapse to None."""
-    module = load_adapter_module("anthropic", "claude-cli")
+    module = load_adapter_module("openai", "openai-codex")
     monkeypatch.setattr(module, "metadata", lambda: ["not", "a", "dict"])
-    assert get_adapter_metadata("anthropic", "claude-cli") is None
+    assert get_adapter_metadata("openai", "openai-codex") is None
 
 
 # ── Unknown bindings ───────────────────────────────────────────────────────

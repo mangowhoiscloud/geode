@@ -126,13 +126,6 @@ def test_bootstrap_registers_codex_oauth_for_petri_target() -> None:
             f"codex-oauth adapter missing after bootstrap. Registered: "
             f"{sorted(names)!r}. The Petri target inference will fail."
         )
-        # Also pin claude-cli (auditor + judge source) so a regression
-        # that drops either bootstrap surfaces in a single test rather
-        # than as a remote AdapterNotFoundError during a live audit.
-        assert "claude-cli" in names, (
-            f"claude-cli adapter missing after bootstrap. Registered: "
-            f"{sorted(names)!r}. The Petri auditor + judge will fail."
-        )
     finally:
         _reset_for_test()
         bootstrap_builtins()

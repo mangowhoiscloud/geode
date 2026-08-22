@@ -141,7 +141,12 @@ def test_public_extension_audit_uses_sqlite_and_active_timeline_only(
         public_hooks.invoke(
             HookName.SESSION_END,
             payload={"reason": "completed", "status": "completed"},
-            correlation=HookCorrelation(session_id="s-1", turn_id="t-1", run_id="run-1"),
+            correlation=HookCorrelation(
+                session_id="s-1",
+                turn_id="t-1",
+                step_id="t-1:step-1",
+                run_id="run-1",
+            ),
         )
     )
 
@@ -156,6 +161,7 @@ def test_public_extension_audit_uses_sqlite_and_active_timeline_only(
         "duration_ms": row.payload["duration_ms"],
         "session_id": "s-1",
         "turn_id": "t-1",
+        "step_id": "t-1:step-1",
         "session_generation": 0,
         "verify_attempt": 0,
         "_dispatch_duration_ms": row.payload["_dispatch_duration_ms"],
@@ -167,7 +173,12 @@ def test_public_extension_audit_uses_sqlite_and_active_timeline_only(
             public_hooks.invoke(
                 HookName.SESSION_END,
                 payload={"reason": "completed", "status": "completed"},
-                correlation=HookCorrelation(session_id="s-1", turn_id="t-2", run_id="run-1"),
+                correlation=HookCorrelation(
+                    session_id="s-1",
+                    turn_id="t-2",
+                    step_id="t-2:step-1",
+                    run_id="run-1",
+                ),
             )
         )
 
@@ -175,6 +186,7 @@ def test_public_extension_audit_uses_sqlite_and_active_timeline_only(
     assert len(timeline_rows) == 1
     assert timeline_rows[0]["event"] == HookEvent.EXTENSION_INVOKED.value
     assert timeline_rows[0]["payload"]["turn_id"] == "t-2"
+    assert timeline_rows[0]["payload"]["step_id"] == "t-2:step-1"
     hooks.close()
 
 
@@ -187,17 +199,30 @@ def test_tool_correlation_survives_sqlite_and_timeline_projection(tmp_path: Path
             {
                 "session_id": "s-tool",
                 "turn_id": "t-tool",
+                "step_id": "t-tool:step-2",
+                "session_generation": 3,
+                "verify_attempt": 1,
+                "tool_call_id": "call-tool",
                 "tool_name": "check",
                 "duration_ms": 1.0,
                 "has_error": False,
             },
         )
 
-    assert store.read()[0].payload["session_id"] == "s-tool"
-    assert store.read()[0].payload["turn_id"] == "t-tool"
+    row = store.read(step_id="t-tool:step-2")[0]
+    assert row.session_id == "s-tool"
+    assert row.turn_id == "t-tool"
+    assert row.step_id == "t-tool:step-2"
+    assert row.tool_call_id == "call-tool"
+    assert row.payload["step_id"] == "t-tool:step-2"
+    assert row.payload["session_generation"] == 3
+    assert row.payload["verify_attempt"] == 1
     timeline_row = _read_timeline(tmp_path / "events.jsonl")[0]
     assert timeline_row["payload"]["session_id"] == "s-tool"
     assert timeline_row["payload"]["turn_id"] == "t-tool"
+    assert timeline_row["payload"]["step_id"] == "t-tool:step-2"
+    assert timeline_row["payload"]["session_generation"] == 3
+    assert timeline_row["payload"]["verify_attempt"] == 1
     hooks.close()
 
 

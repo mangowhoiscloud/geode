@@ -244,7 +244,12 @@ def _build_audit_command() -> list[str]:
     # directly — see plugins/petri_audit/cli_audit.py for the surface.
     # This argv stays unchanged; the inspect_ai connection / sample
     # caps live one layer down.
-    if getattr(cfg, "source", "auto") != "api_key":
+    source = getattr(cfg, "source", "auto")
+    if source == "claude-cli":
+        from core.config.credential_source import CLAUDE_CLI_RETIRED_MESSAGE
+
+        raise RuntimeError(CLAUDE_CLI_RETIRED_MESSAGE)
+    if source != "api_key":
         argv.append("--use-oauth")
     return argv
 

@@ -229,10 +229,9 @@ def _apply_model(
         if _pkg.remove_env("GEODE_AGENTIC_EFFORT"):
             _pkg.console.print("  [muted]removed stale GEODE_AGENTIC_EFFORT from .env[/muted]")
 
-    # Model hot-swap is deferred: AgenticLoop._sync_model_from_settings_async()
-    # checks settings.model at the start of each round and applies
-    # the change safely between LLM calls. Direct loop.update_model_async()
-    # during tool execution caused adapter swap mid-call → crash.
+    # The daemon command boundary applies the primary model after this
+    # settings write. Direct loop.update_model_async() during tool execution
+    # caused adapter swap mid-call → crash.
     # Reflection model is read lazily inside ``_maybe_reflect`` so no
     # hot-swap plumbing is needed there.
 

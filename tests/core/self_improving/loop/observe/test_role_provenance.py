@@ -26,7 +26,7 @@ from geode_product.self_improving.loop.observe.role_provenance import (
         ("claude-cli", "CLI"),
         ("auto", "Auto"),
         (CredentialSource.API_KEY, "PAYG"),  # enum form
-        (CredentialSource.CLAUDE_CLI, "CLI"),
+        (CredentialSource.LEGACY_CLAUDE_CLI, "CLI"),
         ("totally-unknown", "Unknown"),
         (None, "Unknown"),
     ],

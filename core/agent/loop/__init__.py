@@ -28,15 +28,25 @@ from __future__ import annotations
 # split-into-package refactor preserves this surface.
 from core.config import _resolve_provider as _resolve_provider
 
+from ._bootstrap import AgenticLoopConfig
 from ._tool_factory import AGENTIC_TOOLS, MAX_TOOL_RESULT_TOKENS, get_agentic_tools
 from .agent_loop import AgenticLoop
-from .models import AgenticResult, _context_exhausted_message, _ContextExhaustedError
+from .models import (
+    AgenticResult,
+    StepSnapshot,
+    TurnState,
+    _context_exhausted_message,
+    _ContextExhaustedError,
+)
 
 __all__ = [
     "AGENTIC_TOOLS",
     "MAX_TOOL_RESULT_TOKENS",
     "AgenticLoop",
+    "AgenticLoopConfig",
     "AgenticResult",
+    "StepSnapshot",
+    "TurnState",
     "_ContextExhaustedError",
     "_context_exhausted_message",
     "_resolve_provider",

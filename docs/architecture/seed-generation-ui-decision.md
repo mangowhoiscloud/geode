@@ -5,26 +5,25 @@
 > **Status**: Accepted (2026-05-18)
 > **Scope**: user-facing surface of seed-generation + Petri: credential picker, cost preview, ToS notice, pre-flight check, slash command.
 
-> **Provider routes superseded (2026-08-20).** The UI decision remains
-> historical evidence, but `claude_code_provider` and the `codex-cli` inference
-> path are retired. Current subscription routes are `claude-cli` and direct
-> `openai-codex` OAuth.
+> **Superseded routes (2026-08-22).** This ADR remains historical evidence.
+> Claude CLI is retired; current Anthropic roles use `api_key`, while OpenAI
+> may use `openai-codex`. The examples below do not describe executable routes.
 
 ## Context
 
 GEODE's 4 auth paths:
 
-- **A**: local `claude` CLI (Claude subscription via macOS keychain) -- `claude_code_provider`
-- **B**: local `codex` CLI (ChatGPT OAuth, device-code) -- `codex_provider`
+- **A**: official `claude` subprocess (Claude subscription; credentials remain CLI-owned) -- `claude-cli`
+- **B**: OpenAI Codex adapter (ChatGPT OAuth/device-code profile) -- `openai-codex`
 - **C**: OpenAI PAYG (sk-…) -- `openai-payg`
 - **D**: Anthropic PAYG (sk-ant-…) -- `anthropic-payg-geode`
 
 Petri supports all 4 paths (P1-C 5-adapter split). seed-generation (ADR-001) needs the same coverage. In addition:
 
 - **Enforced provider diversity** for the 3-judge panel (minimum 2 families), preventing single-provider panel bias.
-- **ToS gray-area** notice for the subscription paths (A, B), warning that they are unsuitable for external distribution.
+- **provider-policy notice** for the Anthropic subscription path, recommending API keys for third-party/OSS use.
 - **cost preview**: estimate the PAYG cost + subscription quota %, then require user confirmation.
-- **auth expiry pre-flight**: check the OAuth token TTL; abort with a recovery suggestion when insufficient.
+- **auth readiness pre-flight**: query provider-owned status without copying Claude credentials.
 
 ## Decision
 
@@ -158,29 +157,26 @@ The provider the new tool `core/tools/text_embed.py` (S4) uses by default:
 │   anthropic.allowed = [claude-cli, api_key, auto]                          │
 │   openai.allowed    = [openai-codex, api_key, auto]                        │
 │                                                                            │
-│ Cost preview:  $0.30 PAYG + ~12% Plus + ~8% Max                            │
+│ Cost preview:  $0.30 PAYG; subscription usage is provider-owned           │
 │ Diversity:     Voter A/B/C = 2 family (anthropic + openai) ✓               │
 │                                                                            │
-│ [1-9] Edit  [a] Auto  [r] Refresh OAuth  [s] Save & exit  [q] Cancel       │
+│ [1-9] Edit  [a] Auto  [r] Refresh status [s] Save & exit  [q] Cancel       │
 ╰────────────────────────────────────────────────────────────────────────────╯
 ```
 
 On a `required_diversity_families` violation the picker rejects the save and requires reselection.
 
-### 3. ToS notice (first activation of a subscription path)
+### 3. Provider-policy notice (Anthropic subscription activation)
 
-Reuses the policy notice pattern of `claude_code_provider.py:38-56`. This ADR consolidates it into an inline notice in the picker, with a first-activation hook per manifest source:
+The picker reuses `core/cli/commands/login.py::_print_anthropic_subscription_warning`:
 
 ```
-First activation of the Claude subscription path -- ToS gray area:
+Anthropic recommends API-key authentication for third-party tools,
+including open-source projects. Subscription use remains subject to
+Anthropic's terms and may draw from usage credits.
 
-Whether the "automated access" definition in Anthropic Consumer ToS §3
-(Acceptable Use) applies to OAuth-routed subprocess calls is ambiguous.
-Not a literal violation; possibly a violation in spirit (narrow
-interpretation). Unsuitable for external distribution / public hosting.
-
-Recommended for Petri / seed-generation use only.
-Production chat uses sk-ant-PAYG only.
+GEODE will use only the official `claude` subprocess and will not read
+or copy its credentials.
 
 Activate? [y/N]:
 ```
@@ -253,15 +249,15 @@ A slash command separate from `/petri`. seed-generation is conceptually separate
 The existing `_login_oauth(openai|anthropic)` + `_login_set_key` are kept as-is. For status-view consistency, however:
 
 - `_login_show_status` also displays the role bindings of the seed-generation manifest (optional, S11).
-- New sub-action `geode login claude-cli status` (keychain inspect); the seed-generation picker depends on this status.
+- Claude readiness comes from `claude auth status --json`; the picker does not inspect credential storage.
 
 ## Decision Drivers
 
 - **Petri pattern reuse**: manifest + adapter + credential_source + picker, the same PR-unit breakdown as P1-A~G.
 - **Co-evolution bias avoidance**: enforced provider diversity for the 3-judge panel (minimum 2 families); with single-provider management the ranker skews toward one model.
-- **External-distribution safety net**: the ToS gray area is stated explicitly when a subscription path is used, so the user can choose to consolidate on PAYG for production external distribution.
+- **External-distribution safety net**: Anthropic's third-party-use warning is explicit, so the user can choose PAYG for production distribution.
 - **Cost visibility**: one pipeline run ≈ $0.30 PAYG + quota; a confirmation step to avoid cost accumulation during unattended evolution.
-- **Auth fragility mitigation**: OAuth token expiry is a silent fail; pre-flight turns it into an explicit abort plus a recovery suggestion.
+- **Auth fragility mitigation**: provider-owned readiness failures become an explicit abort plus a recovery suggestion.
 
 ## Considered Options
 
@@ -304,7 +300,7 @@ The existing `_login_oauth(openai|anthropic)` + `_login_set_key` are kept as-is.
 - ADR-001 -- seed-generation architecture
 - Petri P1-A~G manifest pattern -- `plugins/petri_audit/{petri.plugin.toml, manifest.py, cli.py:264,309}`
 - 4-auth path definition -- `core/llm/routing/plans.py:PlanKind`
-- ToS notice pattern -- `plugins/petri_audit/claude_code_provider.py:38-56`
+- provider-policy notice -- `core/cli/commands/login.py::_print_anthropic_subscription_warning`
 - Quota estimation base -- `core/cli/commands/login.py:_login_quota` (line 886)
 - Pricing loader (P3-A) -- `core/llm/model_pricing.toml`
 - `_login_oauth` flow -- `core/cli/commands/login.py:509-700`

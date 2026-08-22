@@ -60,8 +60,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Final
 
-from core.llm.oauth_usage import _normalise_utilization
-
 log = logging.getLogger(__name__)
 
 __all__ = [
@@ -100,15 +98,23 @@ class CodexAuthCredentials:
 
 
 def _codex_home_dir() -> Path:
-    """Return ``$CODEX_HOME`` or ``~/.codex`` (codex CLI standard).
-
-    Mirrors :func:`core.llm.oauth_usage._claude_config_dir` shape but
-    for the Codex tree.
-    """
+    """Return ``$CODEX_HOME`` or ``~/.codex`` (Codex CLI standard)."""
     env = os.environ.get("CODEX_HOME", "").strip()
     if env:
         return Path(env)
     return Path.home() / ".codex"
+
+
+def _normalise_utilization(raw: object) -> float | None:
+    """Map a 0-1 fraction or 0-100 percentage to a clamped fraction."""
+    if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+        return None
+    value = float(raw)
+    if value < 0:
+        return 0.0
+    if value <= 1.0:
+        return value
+    return min(value / 100.0, 1.0)
 
 
 def _extract_credentials(parsed: object) -> CodexAuthCredentials | None:
@@ -185,9 +191,7 @@ def read_codex_oauth_token() -> str | None:
 
 @dataclass(frozen=True, slots=True)
 class CodexUsageWindow:
-    """One Codex quota window. Shape parity with
-    :class:`core.llm.oauth_usage.OAuthUsageWindow` so a generic
-    dashboard can render either provider without branching."""
+    """One Codex quota window rendered by the generic usage dashboard."""
 
     label: str
     utilization: float | None

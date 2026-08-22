@@ -272,9 +272,7 @@ def build_hooks(
 
     # PR-COMM-3b (2026-05-24) — wire the SQLite ``agent_runtime_state``
     # writers landed by PR-COMM-3 into the now-augmented SESSION_ENDED
-    # and SUBAGENT_COMPLETED payloads (this PR added the required
-    # ``agent_kind`` / ``component`` / ``adapter_type`` /
-    # ``claude_cli_session_id`` / ``status`` fields at the emit sites).
+    # and SUBAGENT_COMPLETED payloads.
     # The ``LLM_CALL_ENDED`` cumulative-tokens handler is deferred to a
     # follow-up because AgenticLoop's main path does NOT yet emit
     # LLM_CALL_ENDED — that's a separate emit-augmentation PR
@@ -290,25 +288,11 @@ def build_hooks(
             agent_id = str(data.get("session_id") or data.get("agent_id") or "")
             if not agent_id:
                 return
-            # PR-SESSION-RESUME-PARAMS (2026-05-25) — capture the
-            # per-task cwd alongside the claude-cli session_id so
-            # the next reader can verify the saved session belongs
-            # to the current cwd-pool (paperclip
-            # ``execute.ts:592`` ``claudeSessionCwdMatchesExecutionTarget``).
-            # Empty when no per-task isolation is in scope (REPL /
-            # gateway) — the reader's gate skips on empty
-            # stored_cwd, preserving legacy behaviour.
-            from core.agent.task_isolation import get_task_isolated_cwd
-
-            task_cwd = get_task_isolated_cwd() or ""
-            resume_params: dict[str, Any] = {"cwd": task_cwd} if task_cwd else {}
             record_agent_session_end(
                 agent_id=agent_id,
                 agent_kind=str(data.get("agent_kind", "repl")),
                 component=str(data.get("component", "agentic_loop")),
                 adapter_type=str(data.get("adapter_type", "")),
-                claude_cli_session_id=str(data.get("claude_cli_session_id", "")),
-                session_resume_params=resume_params,
             )
 
         def _on_subagent_completed(_event: HookEvent, data: dict[str, Any]) -> None:

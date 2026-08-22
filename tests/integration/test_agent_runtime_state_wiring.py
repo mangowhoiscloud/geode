@@ -5,8 +5,7 @@ writers.
 PR-COMM-3 landed the schema + writer module but explicitly deferred
 bootstrap wiring because the existing SESSION_ENDED /
 SUBAGENT_COMPLETED payloads did not carry the fields the writers need
-(``agent_kind`` / ``component`` / ``adapter_type`` /
-``claude_cli_session_id`` / ``status``).
+(``agent_kind`` / ``component`` / ``adapter_type`` / ``status``).
 
 PR-COMM-3b closes that gap. These tests pin the wire so future
 refactors of the emit sites or the bootstrap handlers can't
@@ -15,7 +14,7 @@ reintroduce the silent-no-op regression.
 Coverage map:
 
 * :class:`TestSessionEndedPayloadEnrichment` — verifies
-  ``_final_hook_payloads`` adds the four new keys with the expected
+  ``_final_hook_payloads`` adds the runtime-state keys with the expected
   values across REPL / sub-agent / no-orchestrator paths.
 * :class:`TestSubagentCompletedPayloadEnrichment` — verifies
   ``SubAgent._emit_hook`` populates ``component`` + ``status`` on
@@ -56,8 +55,7 @@ def _fake_loop(
     *,
     session_id: str = "s-test",
     parent_session_id: str = "",
-    last_emitted_session_id: str = "",
-    adapter_name: str = "claude-cli",
+    adapter_name: str = "anthropic-payg",
     provider: str = "anthropic",
     model: str = "claude-sonnet-4-6",
 ) -> Any:
@@ -67,7 +65,6 @@ def _fake_loop(
         _provider=provider,
         _session_id=session_id,
         _parent_session_id=parent_session_id,
-        _last_emitted_session_id=last_emitted_session_id,
         _new_adapter=SimpleNamespace(name=adapter_name),
     )
 
@@ -95,11 +92,6 @@ class TestSessionEndedPayloadEnrichment:
         loop = _fake_loop(adapter_name="claude-payg")
         session_ended, _turn, _metrics = _final_hook_payloads(loop, _ok_result(), "hi")
         assert session_ended["adapter_type"] == "claude-payg"
-
-    def test_claude_cli_session_id_carried_from_loop(self) -> None:
-        loop = _fake_loop(last_emitted_session_id="cli-abc-123")
-        session_ended, _turn, _metrics = _final_hook_payloads(loop, _ok_result(), "hi")
-        assert session_ended["claude_cli_session_id"] == "cli-abc-123"
 
     def test_component_falls_back_when_no_run_timeline(self) -> None:
         """REPL / ad-hoc spawn without an active RunTimeline must
@@ -252,8 +244,7 @@ class TestBootstrapHandlerWiring:
                 "provider": "anthropic",
                 "agent_kind": "repl",
                 "component": "seed-generation",
-                "adapter_type": "claude-cli",
-                "claude_cli_session_id": "cli-e2e-1",
+                "adapter_type": "anthropic-payg",
                 "termination_reason": "unknown",
                 "rounds": 3,
                 "tool_count": 2,
@@ -265,8 +256,7 @@ class TestBootstrapHandlerWiring:
         assert state is not None
         assert state.agent_kind == "repl"
         assert state.component == "seed-generation"
-        assert state.adapter_type == "claude-cli"
-        assert state.claude_cli_session_id == "cli-e2e-1"
+        assert state.adapter_type == "anthropic-payg"
 
     def test_subagent_completed_writes_run_link(self, tmp_db: Path) -> None:
         from core.hooks import HookEvent

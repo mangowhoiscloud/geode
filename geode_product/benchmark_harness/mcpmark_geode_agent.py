@@ -327,7 +327,7 @@ def _build_loop(
     timeout: float,
 ) -> Any:
     from core.agent.conversation import ConversationContext
-    from core.agent.loop import AgenticLoop
+    from core.agent.loop import AgenticLoop, AgenticLoopConfig
     from core.agent.tool_executor import ToolExecutor
     from core.llm.adapters.registry import bootstrap_builtins
     from core.tools.registry import ToolRegistry
@@ -363,21 +363,23 @@ def _build_loop(
     return AgenticLoop(
         ConversationContext(max_turns=200),
         executor,
+        config=AgenticLoopConfig(
+            source=source,
+            effort=effort,
+            max_tokens=32768,
+            max_rounds=0,
+            time_budget_s=float(timeout),
+            allowed_tool_names=set(handlers),
+            force_include_allowed_tools=True,
+            system_prompt_override=(
+                "Agent: GEODE running inside MCPMark. Complete the benchmark task "
+                "using only the provided MCP tools. Do not invent tool results. "
+                "When finished, provide a concise final answer."
+            ),
+        ),
         model=model,
         provider=provider,
-        source=source,
-        effort=effort,
-        max_tokens=32768,
-        max_rounds=0,
-        time_budget_s=float(timeout),
         tool_registry=registry,
-        allowed_tool_names=set(handlers),
-        force_include_allowed_tools=True,
-        system_prompt_override=(
-            "Agent: GEODE running inside MCPMark. Complete the benchmark task "
-            "using only the provided MCP tools. Do not invent tool results. "
-            "When finished, provide a concise final answer."
-        ),
         quiet=True,
         activity_sink_provider=current_activity_sink,
         policy_sources=policy_sources,
@@ -389,7 +391,7 @@ def _route_from_model(model_name: str) -> tuple[str, str, str]:
     if normalized.startswith("gpt-"):
         return normalized, "openai", "subscription"
     if normalized.startswith("claude-"):
-        return normalized, "anthropic", "subscription"
+        return normalized, "anthropic", "payg"
     if normalized.startswith("glm-"):
         return normalized, "zhipuai", "api_key"
     return normalized, "openai", "subscription"
@@ -619,11 +621,14 @@ class GeodeMCPMarkAgent(BaseMCPAgent):
 
         if action_timed_out:
             if loop is not None:
+                from core.agent.loop import _guards
+
                 cognitive_state = getattr(loop, "cognitive_state", None)
                 rounds = int(getattr(cognitive_state, "round_count", 0) or 0)
                 tool_processor = getattr(loop, "_tool_processor", None)
                 tool_calls = list(getattr(tool_processor, "tool_log", []) or [])
-                result = loop._terminal_result(
+                result = _guards._terminal_result(
+                    loop,
                     TerminationReason.TIME_BUDGET_EXPIRED,
                     f"GEODE exceeded MCPMark action deadline ({self.timeout}s)",
                     rounds=rounds,
