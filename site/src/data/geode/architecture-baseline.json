@@ -365,11 +365,11 @@
   "packages": {
     "core": {
       "python_files": 398,
-      "python_loc": 118778
+      "python_loc": 118752
     },
     "geode_product": {
       "python_files": 153,
-      "python_loc": 60651
+      "python_loc": 60646
     },
     "plugins": {
       "python_files": 29,

@@ -105,7 +105,7 @@ export default function Page() {
                   <td>9개 model API 계열</td>
                   <td>Anthropic-centric</td>
                   <td>(single)</td>
-                  <td>3-프로바이더 라우팅 (Anthropic / OpenAI+Codex / GLM), PAYG·OAuth·CLI 어댑터 레인</td>
+                  <td>3-프로바이더 라우팅 (Anthropic / OpenAI+Codex / GLM): PAYG, ChatGPT OAuth, GLM Coding Plan 레인</td>
                 </tr>
                 <tr>
                   <td>서브에이전트</td>
@@ -385,7 +385,7 @@ export default function Page() {
                   <td>9 model API families</td>
                   <td>Anthropic-centric</td>
                   <td>(single)</td>
-                  <td>3-provider routing (Anthropic / OpenAI+Codex / GLM) with PAYG, OAuth, and CLI adapter lanes</td>
+                  <td>3-provider routing (Anthropic / OpenAI+Codex / GLM): PAYG, ChatGPT OAuth, and GLM Coding Plan lanes</td>
                 </tr>
                 <tr>
                   <td>Sub-agent</td>

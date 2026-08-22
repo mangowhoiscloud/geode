@@ -9,8 +9,8 @@ model id:
 - historical ``claude-cli`` → **CLI** (read-only artifact label)
 - ``auto``       → **Auto**          (manifest cascade)
 
-Recording only the model id loses that lane — so a cycle audited under PAYG
-Opus is indistinguishable from one under subscription Opus. This module is the
+Recording only the model id loses that lane — so historical PAYG and subscription
+Opus cycles would otherwise be indistinguishable. This module is the
 **single source of truth** for the per-role ``{model, source, lane}`` block so
 the two git-tracked ledgers that record it — ``baseline_archive.jsonl`` (on
 promote) and ``mutations.jsonl`` (every cycle) — never drift. The canonical

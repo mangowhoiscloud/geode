@@ -100,8 +100,8 @@ role_contract = "agents/critic.md"
 # now an LLM completion call like every other role. CSP-10 dropped the
 # ``kind`` field from the schema (every role is completion now).
 default_model = "claude-opus-4-8"
-# ``claude-opus-4-7`` accepted for the same Claude Code Max routing
-# reason as critic — proximity is also a reasoning-heavy role.
+# ``claude-opus-4-7`` remains accepted for API-backed runs; proximity is
+# also a reasoning-heavy role.
 allowed_models = [
     "claude-fable-5",
     "claude-opus-4-8",

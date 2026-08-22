@@ -10,9 +10,9 @@ const steps = [
   { id: 2, name: "Session", detailKo: "InMemory / Hybrid SessionStore", detailEn: "InMemory / Hybrid SessionStore", subKo: "SessionMode(REPL/IPC/DAEMON)에 따라 스토어 분기", subEn: "Store branches by SessionMode (REPL/IPC/DAEMON)", color: "#60A5FA" },
   { id: 3, name: "Memory", detailKo: "ProjectMemory + MonoLake + UserProfile + Journal", detailEn: "ProjectMemory + MonoLake + UserProfile + Journal", subKo: "5-Tier 메모리 계층 마운트. Session 스토어에 의존", subEn: "Mount 5-tier memory hierarchy. Depends on session store", color: "#F4B8C8" },
   { id: 4, name: "Config", detailKo: ".env hot-reload + constraint validation", detailEn: ".env hot-reload + constraint validation", subKo: "ConfigWatcher 시작. Hook으로 CONFIG_RELOADED 발화", subEn: "Start ConfigWatcher. Fires CONFIG_RELOADED via Hook", color: "#F5C542" },
-  { id: 5, name: "TaskGraph", detailKo: "create_geode_task_graph() + HookBridge", detailEn: "create_geode_task_graph() + HookBridge", subKo: "Hook 이벤트와 Task 상태를 브릿지 연결", subEn: "Bridge Hook events to Task state transitions", color: "#818CF8" },
-  { id: 6, name: "Prompt", detailKo: "SkillRegistry discover + PromptAssembler", detailEn: "SkillRegistry discover + PromptAssembler", subKo: "스캐폴드 스킬을 5계층 디렉토리에서 디스커버하고 시스템 프롬프트를 조립한다. 결과는 frozen=True 의 AssembledPrompt", subEn: "Discover scaffold skills across 5-tier directories and assemble the system prompt. Result is a frozen AssembledPrompt", color: "#C084FC" },
-  { id: 7, name: "Graph", detailKo: "StateGraph compile + checkpoint setup", detailEn: "StateGraph compile + checkpoint setup", subKo: "LangGraph 파이프라인 컴파일. 부트스트랩 완료", subEn: "Compile LangGraph pipeline. Bootstrap complete", color: "#34D399" },
+  { id: 5, name: "TaskGraph", detailKo: "build_task_graph() + Runtime attachment", detailEn: "build_task_graph() + Runtime attachment", subKo: "L4 Task 추적 상태를 구성합니다. AgenticLoop 실행 DAG는 아닙니다", subEn: "Build L4 task-tracking state. It is not an AgenticLoop execution DAG", color: "#818CF8" },
+  { id: 6, name: "Tools", detailKo: "MCP + SkillRegistry + ToolRegistry", detailEn: "MCP + SkillRegistry + ToolRegistry", subKo: "도구·스킬·readiness를 로드하고 provider adapter 5개를 등록합니다", subEn: "Load tools, skills, readiness, and the five provider adapters", color: "#C084FC" },
+  { id: 7, name: "Runtime", detailKo: "GeodeRuntime assembly", detailEn: "GeodeRuntime assembly", subKo: "메모리·스케줄링·도구를 조립합니다. 그래프 컴파일 단계는 없습니다", subEn: "Assemble memory, scheduling, and tools. No graph compilation step exists", color: "#34D399" },
 ];
 
 const ease = [0.22, 1, 0.36, 1] as const;

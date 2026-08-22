@@ -49,6 +49,14 @@ functional change.
 
 ### Fixed
 
+- **Bundled slash-command skills ship in distribution artifacts.** Fresh wheel
+  and sdist installs now include `.geode/skills`, with artifact and installed-
+  package gates pinning the `/grill` and `/geo` skill contracts.
+
+- **Base installs can start `geode-mcp`.** The unconditional MCP console entry
+  point now installs its supported `mcp>=1.28,<2` runtime, and the clean-wheel
+  smoke constructs the server instead of only importing the entry function.
+
 - **Anthropic credential boundaries hold across benchmarks and Petri.** MCPMark
   Claude labels select the API-key adapter, while Petri's strict fallback gate
   permits sole or explicitly selected API-key routes without allowing an
@@ -81,6 +89,11 @@ functional change.
   schema or execution authority.
 
 ### Removed
+
+- **Removed the final active Claude CLI residue.** Current architecture and
+  provider guidance now describe only supported routes, and Petri no longer
+  exposes the unused CLI `binary` adapter field. Historical evidence readers
+  and fail-loud legacy migration values remain intact.
 
 - **Removed every built-in Claude CLI and Anthropic OAuth execution path.** The
   adapters, subprocess runtime, auth/quota readers, retry classifier, lane,

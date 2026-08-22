@@ -16,9 +16,9 @@
 # Global flags (apply to every self-improving-loop driver)
 # ---------------------------------------------------------------------------
 [self_improving_loop]
-# Block PAYG fallback when subscription quota is exhausted. Default `false`
-# aborts with an actionable error (Codex CLI `forced_login_method` pattern).
-# Flip to `true` to opt into automatic PAYG charges when the OAuth path
+# Block OpenAI PAYG fallback when ChatGPT OAuth quota is exhausted. Default
+# `false` aborts with an actionable error. Flip to `true` to opt into automatic
+# OpenAI PAYG charges when the OAuth path
 # runs out — the change is logged via the credential resolver journal
 # (`fallback_policy_resolved` event with source="config").
 fallback_to_payg = false
@@ -34,7 +34,7 @@ abort_threshold = 0.9
 # Inner-audit wall-clock budget (minutes). 1–60. Subprocess timeout is
 # `budget_minutes * 60 + 120`. Default 5.
 budget_minutes = 5
-# Use Claude Code / Codex OAuth for the audit subprocess when available.
+# Use Codex/ChatGPT OAuth for the audit subprocess when available.
 # Falls through to PAYG only when `fallback_to_payg = true` above.
 use_oauth = true
 # Number of seed prompts to sample from `seed_select`. 1–1000.

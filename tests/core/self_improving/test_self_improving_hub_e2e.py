@@ -19,7 +19,7 @@ documented in ``docs/design/self-improving-hub-system.md`` +
 3. **Section contract** — 4 main sections (Petri Audit / Seed Generation
    / Autoresearch / Documentation) each render with expected columns.
 4. **Harness chip mapping** — every model prefix resolves to the
-   correct chip class (PAYG / Claude Code / Codex / GEODE).
+   correct chip class (PAYG / Legacy Claude CLI / ChatGPT / GEODE).
 5. **URL safety** — every ``href`` starts with ``/geode/`` (no missing
    basePath) or is an external ``https://``.
 6. **Version stamp** — ``pyproject.toml`` version is interpolated into
@@ -2140,11 +2140,11 @@ def test_pr2_agents_index_renders(built_seedgen_pages: dict[str, str]) -> None:
     """`/agents/` lists each sub-agent with harness chip + cost + duration.
 
     Regression for the cli-local PAYG-misclassification (2026-05-29): a
-    sub-agent that ran via the Claude Code CLI records the bare model provider
+    historical sub-agent that ran via Claude CLI records the bare model provider
     (``anthropic``) in session_start + a ``claude_cli_session_id`` in
     session.json (the gen-c-001 fixture now mirrors that real shape). Keying
     the chip off the provider mislabels it PAYG; ``_resolve_subagent_model``
-    overrides the source to ``claude-cli`` so it renders Claude Code with
+    overrides the source to ``claude-cli`` so it renders the legacy lane with
     source-aligned naming.
     """
     html = built_seedgen_pages.get(f"{SEEDGEN_FIXTURE_RUN_ID}/agents")
@@ -2152,8 +2152,8 @@ def test_pr2_agents_index_renders(built_seedgen_pages: dict[str, str]) -> None:
     assert 'class="records seedgen-agents"' in html
     assert "gen-c-001" in html
     # gen-c-001 ran via claude-cli (cli-local) despite provider=anthropic →
-    # Claude Code chip + source-aligned model name, NOT PAYG.
-    assert 'class="chip claude"' in html or "Claude Code" in html
+    # Legacy CLI chip + source-aligned model name, NOT PAYG.
+    assert 'class="chip claude"' in html or "Legacy Claude CLI" in html
     assert "claude-cli/claude-opus-4-7" in html, "expected source-aligned cli-local model name"
     # The openai-codex voter keeps the `codex` chip CSS class but the visible
     # label is "ChatGPT" (the subscription lane), not the opaque "Codex" name.

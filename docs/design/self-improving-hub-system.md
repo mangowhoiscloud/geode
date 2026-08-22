@@ -65,7 +65,7 @@ Visitors range from operators (daily status check) to external readers (PR demo)
 | Chip | Bg / Fg | Use |
 |---|---|---|
 | `.chip.payg` | `#f1f3f5` / `#4a5260` | `anthropic/` or `openai/` prefix — PAYG API billing |
-| `.chip.claude` | `#efe7fb` / `#5a2ca0` | `claude-cli/` prefix — Claude Code Max OAuth |
+| `.chip.claude` | `#efe7fb` / `#5a2ca0` | historical `claude-cli/` artifact prefix — read-only legacy receipt |
 | `.chip.codex` | `#d1e7dd` / `#0a3622` | `codex/` or `openai-codex/` prefix — ChatGPT OAuth |
 | `.chip.geode` | `#cfe2ff` / `#052c65` | `geode/` prefix — self-target wrapper |
 
@@ -309,7 +309,7 @@ When citing data that may change, anchor to source with version:
 | Mutation row schema | W4 | `geode_product/self_improving/loop/runner.py:81` ApplyRecord |
 | Fitness axes count | 4 (dim / ux / admire / bench) | ADR-012 §Decision.2 amendment |
 | Hub surface count | 3 (petri / seedgen / autoresearch) | This DESIGN.md |
-| Harness chip count | 4 (PAYG / Claude Code / Codex / GEODE) | This DESIGN.md §3 |
+| Harness chip count | 4 (PAYG / Legacy Claude CLI / ChatGPT / GEODE) | This DESIGN.md §3 |
 
 If any of these change, the master DESIGN.md schema_version bumps + every sibling per-page doc that cites it must re-stamp `last_updated`.
 

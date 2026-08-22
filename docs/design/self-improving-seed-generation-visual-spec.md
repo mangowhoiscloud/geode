@@ -113,7 +113,7 @@ Both pages share the **same sidebar markup** as the hub (`self-improving-hub-vis
       </td>
       <td><code>gen1</code></td>
       <td><code>redundant_tool_invocation</code></td>
-      <td><span class="chip claude">Claude Code</span> <code>claude-cli/claude-opus-4-7</code></td>
+      <td><span class="chip payg">PAYG</span> <code>anthropic/claude-opus-4-8</code></td>
       <td class="num">2 → 2</td>
       <td class="num">1</td>
       <td class="num">0 / 0</td>
@@ -132,7 +132,7 @@ Both pages share the **same sidebar markup** as the hub (`self-improving-hub-vis
 | 1 | `run_id` | `runs[].run_id` | `<a href="/geode/self-improving/seed-generation/{run_id}/">{run_id}</a>` + `<span class="bucket seedgen">seedgen</span>` |
 | 2 | `gen` | `runs[].gen_tag` | `<code>{gen_tag}</code>` (mono inline) |
 | 3 | `target dim` | `runs[].target_dim` | `<code>{target_dim}</code>` |
-| 4 | `mutator` | constant `claude-cli/claude-opus-4-7` (v0.99.65 default) — *not* in `listing.json`; build script supplies it from `geode_product/self_improving/loop/runner.py` config | `<span class="chip claude">Claude Code</span> <code>claude-cli/claude-opus-4-7</code>`. When a future run records a per-run mutator override, source it from `state.json.mutator_override` (does not yet exist; fall back to constant). |
+| 4 | `models` | `runs[].harness_models[]` from recorded sub-agent events | Render one `harness_chip(model)` per distinct source. Missing legacy metadata renders a muted placeholder; never invent a default. |
 | 5 | `draft → surv` | `runs[].candidates_drafted` `→` `runs[].survivors_count` | `<td class="num">{drafted} → {surv}</td>`. The `→` is U+2192 with a single space each side. |
 | 6 | `evolved` | `runs[].evolved_count` | `<td class="num">{n}</td>` |
 | 7 | `iter` | `runs[].iterations` / `runs[].max_iterations` | `<td class="num">{cur} / {max}</td>` — render `0 / 0` when both are 0 (warm-up runs) |
@@ -337,17 +337,20 @@ The "All runs" `<a>` itself is NOT active when on a per-run page — only the ne
 
 ---
 
-## 7. Mutator banner (`<div class="mutator-banner">`)
+## 7. Execution-source banner (`<div class="mutator-banner">`)
 
-Prominent block immediately under the page subtitle, above all data sections. Single source of truth for "which LLM drove this run's mutations".
+Prominent block immediately under the page subtitle, above all data sections.
+It renders the execution sources recorded for the run.
 
 ### 7.1 Canonical markup
 
 ```html
-<div class="mutator-banner" role="note" aria-label="Mutator model">
-  <span class="label">Mutator</span>
-  <span class="chip claude">Claude Code</span>
-  <code>claude-cli/claude-opus-4-7</code>
+<div class="mutator-banner" role="note" aria-label="Execution models">
+  <span class="label">Models</span>
+  <span class="chip payg">PAYG</span>
+  <code>anthropic/claude-opus-4-8</code>
+  <span class="chip codex">ChatGPT</span>
+  <code>openai-codex/gpt-5.5</code>
 </div>
 ```
 
@@ -388,9 +391,9 @@ When a future run records per-phase mutator overrides (`state.json.mutator_by_ph
 
 ```html
 <div class="mutator-banner mutator-banner--split">
-  <span class="label">Mutator</span>
-  <span class="role-label">gen</span> <span class="chip claude">Claude Code</span> <code>claude-cli/claude-opus-4-7</code>
-  <span class="role-label">critic</span> <span class="chip codex">Codex</span> <code>codex/gpt-5.5</code>
+  <span class="label">Models</span>
+  <span class="role-label">gen</span> <span class="chip payg">PAYG</span> <code>anthropic/claude-opus-4-8</code>
+  <span class="role-label">critic</span> <span class="chip codex">ChatGPT</span> <code>openai-codex/gpt-5.5</code>
   <!-- one inline group per phase override -->
 </div>
 ```
@@ -1015,7 +1018,7 @@ Every `<a href>` on either page falls into one of these 6 patterns. All start wi
 | Index · Phases legend | Static fallback (8 hard-coded entries) | n/a | n/a |
 | Index · Cost rollup | n/a | All `<dd>` → `—` §5.2 | CI build fails |
 | Per-run · Header | CI build fails (state.json required for the run page to exist) | n/a | CI build fails |
-| Per-run · Mutator banner | Constant fallback `claude-cli/claude-opus-4-7` | n/a | n/a |
+| Per-run · Execution-source banner | Muted “no recorded model source” | n/a | n/a |
 | Per-run · Candidates | colspan-4 `.empty` row §10.2 | colspan-4 `.empty` row | Log warning, render empty |
 | Per-run · Survivors | colspan-4 `.empty` row | colspan-4 `.empty` row | Log warning, render empty |
 | Per-run · Evolved | colspan-4 `.empty` row | colspan-4 `.empty` row | Log warning, render empty |
@@ -1079,7 +1082,6 @@ Inherits all 20 anti-patterns from `self-improving-hub-visual-spec.md` §11. Exp
 | `--seedgen-out-dir` | `docs/self-improving/seed-generation` | Root output directory. Build script creates `index.html` + `<run_id>/index.html` per run under this dir. |
 | `--seedgen-template-index` | `scripts/templates/seedgen_index.html` | Jinja-style template (uses existing `{{ key }}` substitution helper) for index page. |
 | `--seedgen-template-run` | `scripts/templates/seedgen_run.html` | Template for per-run page. |
-| `--seedgen-mutator-default` | `claude-cli/claude-opus-4-7` | Constant fed into mutator banner until per-run override exists. |
 
 All other flags inherited from existing CLI (`--bundle-root`, `--autoresearch-root`, `--pyproject`).
 
@@ -1226,7 +1228,7 @@ Frontend agent self-verifies before PR:
 ### 17.3 Both pages
 
 - [ ] Page weighs < 80 KB gzipped (index typically ~10 KB, per-run ~30 KB; the 80 KB ceiling absorbs the heatmap)
-- [ ] All chips present + use locked vocabulary (`PAYG` / `Claude Code` / `Codex` / `GEODE`)
+- [ ] All chips present + use locked vocabulary (`PAYG` / `Legacy Claude CLI` / `ChatGPT` / `GEODE`)
 - [ ] Same sidebar HTML structure as hub (only `.active` location changes)
 - [ ] HTML validates (W3C); CSS validates (no parse errors)
 - [ ] Lighthouse a11y score ≥ 95

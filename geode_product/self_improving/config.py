@@ -498,8 +498,7 @@ class SchedulerConfig(BaseModel):
     them through. Together they implement Codex CLI's
     ``forced_single_instance`` semantics for this loop role.
 
-    Operator override of the four backends (subscription Claude Code /
-    ChatGPT OAuth / Anthropic PAYG / OpenAI PAYG) flows through the
+    Operator selection of ChatGPT OAuth or provider PAYG routes flows through the
     *existing* :class:`MutatorConfig.source` field — the auto-trigger
     invokes :func:`SelfImprovingLoopRunner.run_once` which honours that
     setting via the PAPERCLIP dispatch path (#1433). The scheduler does

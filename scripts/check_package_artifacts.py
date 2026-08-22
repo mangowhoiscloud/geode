@@ -51,6 +51,8 @@ SELF_IMPROVING_STATE_PATHS = {
 
 REQUIRED_WHEEL_PATHS = (
     {
+        ".geode/skills/geo/SKILL.md",
+        ".geode/skills/grilling/SKILL.md",
         "core/GEODE.md",
         "core/tools/definitions.json",
         "core/tools/mcp_tools.json",
@@ -85,6 +87,8 @@ REQUIRED_WHEEL_PATHS = (
 
 REQUIRED_SDIST_PATHS = (
     {
+        ".geode/skills/geo/SKILL.md",
+        ".geode/skills/grilling/SKILL.md",
         "GEODE.md",
         "pyproject.toml",
         "README.md",
@@ -209,7 +213,7 @@ def _check_required(label: str, paths: set[str], required: set[str]) -> list[str
 # ``scripts/macos/`` ships on purpose (computer-use helper source + build
 # script; consumed at runtime by core/cli/onboarding.py and doctor), so the
 # blanket ``scripts/`` ban carves it out.
-ALLOWED_PREFIXES = ("scripts/macos/",)
+ALLOWED_PREFIXES = ("scripts/macos/", ".geode/skills/")
 
 
 def _check_banned(label: str, paths: set[str], prefixes: tuple[str, ...]) -> list[str]:

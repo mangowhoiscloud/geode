@@ -655,8 +655,8 @@ graph LR
 |-------|------|--------------|
 | **Agent** | AgenticLoop, SubAgentManager, CLIPoller, Gateway wiring | `core/cli/`, `core/server/`, `core/messaging/`, `core/integrations/messaging/`, `core/wiring/` |
 | **Harness** | SessionLane, LaneQueue, PolicyChain, TaskGraph, HookSystem | `core/orchestration/`, `core/hooks/` |
-| **Runtime** | Agentic tools, native ToolRegistry, MCP Catalog (Anthropic registry plus project-configured servers), runtime Skills, Memory (multi-tier), PlanStore | `core/tools/`, `core/memory/`, `core/orchestration/plan_store.py` |
-| **Model** | ClaudeAdapter, OpenAIAdapter, CodexAdapter, GLMAdapter | `core/llm/` |
+| **Runtime** | Agentic tools, native ToolRegistry, MCP Catalog (Anthropic registry plus project-configured servers), runtime Skills, Memory (multi-tier), advisory Plan | `core/tools/`, `core/memory/`, `core/agent/plan.py` |
+| **Model** | 5-adapter registry: Anthropic PAYG, OpenAI PAYG/Codex OAuth, GLM PAYG/Coding Plan | `core/llm/adapters/` |
 
 `.geode/`, agent context lifecycle (5-tier hierarchy assembled into every LLM call):
 

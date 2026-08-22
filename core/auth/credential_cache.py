@@ -1,8 +1,7 @@
-"""Managed credential cache — shared TTL + mtime fingerprint pattern.
+"""Managed credential cache for external credential owners.
 
-Both Claude Code and Codex CLI credential readers use an identical
-cache pattern: thread-safe, TTL-based, with file mtime invalidation.
-This module extracts that shared infrastructure.
+The Codex CLI reader uses a thread-safe, TTL-based cache with file mtime
+invalidation. This module keeps that lifecycle independent from the provider.
 """
 
 from __future__ import annotations
@@ -114,7 +113,7 @@ def refresh_managed_token(
     """Re-read token from managed storage and update profile if changed.
 
     Args:
-        provider_name: Display name for logging ("Claude Code", "Codex CLI").
+        provider_name: Display name for logging (for example, "Codex CLI").
         read_fn: Callable that returns credentials dict with "access_token" key.
         profile: Profile object with .key and .expires_at attributes.
 

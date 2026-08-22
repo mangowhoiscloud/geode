@@ -253,15 +253,15 @@ def build_command(
     # per-provider connection pool (default 10) and per-sample
     # parallelism (default also 10) down to 1 each. Matches Paperclip's
     # empirical "1 active subprocess at a time, serial-turn loop"
-    # pattern that keeps Anthropic Max OAuth's ~5 req/sec soft limit
-    # honoured. Without these flags inspect_ai bursts 30 concurrent
+    # pattern and keeps the default safe across provider rate limits.
+    # Without these flags inspect_ai bursts 30 concurrent
     # POST /v1/messages (auditor + judge + target × 10) → instant 429
     # storm → 769s retry-after backoff → 17-min timeout with 0 samples.
     #
     # Cost: audit wall time scales linearly with sample count instead
     # of fan-out parallel. Trade: actually completing > 0 samples.
     # Operators with a multi-account pool (future AccountPool sprint)
-    # can lift these caps; the single-OAuth default stays at 1.
+    # can lift these caps; the conservative default stays at 1.
     #
     # An operator on a higher-limit lane (PAYG api_key, or a multi-account
     # pool) lifts these via GEODE_AUDIT_MAX_CONNECTIONS / _MAX_SAMPLES. A

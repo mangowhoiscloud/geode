@@ -170,7 +170,7 @@ VOTE_HANDOFF: Final[dict[str, Any]] = _additive(
                 # both candidate seeds". The model couldn't resolve
                 # the fake path (per-task isolated cwd per
                 # PR-RESUME-NO-PERSIST-FIX, not the orchestrator
-                # run_dir) so claude-cli hallucinated session
+                # run_dir) so historical Claude CLI runs hallucinated session
                 # continuity ("I already read both candidate files in
                 # the previous turn") and exited turn 1 with empty
                 # output. Now the full seed body is inlined per the
@@ -297,9 +297,9 @@ def embed_handoff(description: str, handoff: dict[str, Any]) -> str:
     The sub-agent reads the prose for instruction and the JSON for
     accurate values (candidate_id / dim_means / rewrite_section etc.).
     The block uses a labeled fenced code block so the LLM cannot
-    mistake the handoff for its expected JSON output. claude-cli
-    `--json-schema` enforcement applies to the response, not the
-    prompt — embedding JSON in the prompt is safe.
+    mistake the handoff for its expected JSON output. Historical Claude CLI
+    ``--json-schema`` enforcement applied to the response, not the prompt;
+    embedding JSON in the prompt remains safe for current adapters.
     """
     import json
 

@@ -25,7 +25,7 @@ a run that looks like it works but measures nothing.
 | `uv` | `uv --version` | Package manager + runner for every command here. |
 | Base sync | `uv sync` | Installs GEODE core. Not enough on its own for the loop. |
 | Audit extra | `uv sync --extra audit` | Installs `inspect_ai` + Petri (puts the `inspect` CLI on PATH). WITHOUT it the audit aborts loudly: `plugins/petri_audit/runner.py` checks `shutil.which("inspect")` and returns an aborted report with `` `inspect` CLI not found on PATH — install the [audit] extra: `uv sync --extra audit`. `` (`geode_product.self_improving.train` then returns failure for that cycle). Install it before your first run. |
-| Auditor + judge model | Anthropic account (Claude). See model accounts below. | The Petri auditor drives each scenario, the judge scores each rollout on the rubric. No judge means no fitness. |
+| Auditor + judge model | `ANTHROPIC_API_KEY`. See model accounts below. | The Petri auditor drives each scenario, the judge scores each rollout on the rubric. No judge means no fitness. |
 | Target model | `geode/gpt-5.5` via ChatGPT / Codex OAuth, or override `[self_improving_loop.autoresearch.target] model = ...` in config. | The audit target is GEODE-as-a-system running the mutated scaffold. No target means no audit. |
 
 Without these model accounts the loop cannot run: the auditor, judge, and target
@@ -42,9 +42,9 @@ override them per role under `[self_improving_loop.autoresearch.<role>]` in
 
 | Role | Manifest default model | Default source | Provider account needed |
 |------|------------------------|----------------|-------------------------|
-| auditor | `claude-opus-4-7` | `claude-cli` | Anthropic (Claude Code OAuth or API key) |
-| target | `claude-haiku-4-5` | `claude-cli` | Anthropic (or override to `geode/gpt-5.5` on ChatGPT / Codex OAuth) |
-| judge | `claude-sonnet-4-6` | `claude-cli` | Anthropic (kept on a different provider than the target for the cross-provider guard) |
+| auditor | `claude-opus-4-7` | `api_key` | Anthropic API key |
+| target | `claude-haiku-4-5` | `api_key` | Anthropic API key (or override to `geode/gpt-5.5` on ChatGPT OAuth) |
+| judge | `claude-sonnet-4-6` | `api_key` | Anthropic API key (kept on a different provider than the target for the cross-provider guard) |
 
 For a cross-provider audit, override the target to `geode/gpt-5.5`: it routes
 through `GeodeModelAPI` to the `AgenticLoop`, so the mutated scaffold is in the
@@ -75,10 +75,9 @@ can reach instead.
    ANTHROPIC_API_KEY=sk-ant-...
    ```
 
-   The Claude Code / Codex OAuth path (`use_oauth = true`, the default) lets the
-   audit subprocess reuse your subscription quota instead of PAYG. PAYG fallback
-   stays off unless you flip `fallback_to_payg = true`. The OAuth audit path is
-   roughly $0; the Anthropic PAYG path is roughly $5 to $10 per audit.
+   `use_oauth = true` lets OpenAI roles use Codex/ChatGPT OAuth. Anthropic roles
+   remain API-key-only. OpenAI PAYG fallback stays off unless you explicitly set
+   `fallback_to_payg = true`.
 
 3. Optional outer-loop env hook: `GEODE_WRAPPER_OVERRIDE` points at the JSON file
    of system-prompt sections that the loop writes per cycle. The loop sets it for
