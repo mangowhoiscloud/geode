@@ -226,6 +226,7 @@ normal review and CI; implementations start only after the claim merges.
 | Closure package | GAP IDs | Owner/session | Implementation branch | Claim evidence | Claimed at (UTC) |
 |---|---|---|---|---|---|
 | R8.3 | REL-004 | `session=codex-root task=r8-3-publication-grace-evidence` | `feature/r8-3-publication-grace-evidence` | Readiness [#3039](https://github.com/mangowhoiscloud/geode/pull/3039); v1.0.23 GitHub/PyPI parity and candidate interval re-audited | `2026-08-20T07:41:19Z` |
+| R5.1 | LLM-001 | `session=codex-root task=r5-1-interface-segregation` | `feature/r5-1-interface-segregation` | Reconciliation/readiness [#3092](https://github.com/mangowhoiscloud/geode/pull/3092); minimal completion protocol and optional capability surfaces re-audited | `2026-08-22T23:35:55Z` |
 
 ## 1. Program objective
 
@@ -533,7 +534,7 @@ and closure evidence are appended in §10.
 | DI-002 | `PARTIAL` | `GeodeRuntime` groups config, but `RuntimeCoreConfig` still has 17 fields | Cohesive lifecycle groups contain at most seven fields and have explicit owners/teardown | R4.2 | DI-001 | `IN_DEVELOP` |
 | DI-003 | `MISFIT` | Downstream modules obtain injectable services through globals and CLI modules | Constructor/factory injection owns services; allowed ambient context is documented and tested | R4.2 | DI-001, DI-002 | `IN_DEVELOP` |
 | DI-004 | `MISFIT` | `MCPServerManager` combines config, discovery, connection, call, trace/persistence, and lifecycle | Separate config catalog, connection pool, invoker, and persistence collaborators preserve public behavior | R4.3 | DI-002 | `IN_DEVELOP` |
-| LLM-001 | `MISFIT` | `LLMAdapter` documentation calls the contract minimal but requires streaming and introspection methods | Minimal completion protocol plus optional capability protocols; no empty stubs required | R5.1 | DI-002 | `READY` |
+| LLM-001 | `MISFIT` | `LLMAdapter` documentation calls the contract minimal but requires streaming and introspection methods | Minimal completion protocol plus optional capability protocols; no empty stubs required | R5.1 | DI-002 | `IN_PROGRESS` |
 | LLM-002 | `PARTIAL` | Eight built-ins use a mutable registry with broad bootstrap lifetime | Built-in plus entry-point discovery yields immutable session snapshots with generation and collision policy | R5.2 | LLM-001, BND-001 | `OPEN` |
 | LLM-003 | `PARTIAL` | Provider identity, credential source, transport, and adapter selection overlap | Provider profile, credential route, and transport are separate composable records | R5.3 | LLM-001, LLM-002 | `OPEN` |
 | LLM-004 | `PARTIAL` | Interactive and autonomous LLM paths share taxonomy but retain multiple retry/failover implementations | Explicit `RetryPolicy` preserves intentional differences on one classification/telemetry substrate | R5.4 | LLM-003 | `OPEN` |
@@ -2190,10 +2191,22 @@ trace persistence, and lifecycle cleanup to focused collaborators while its
 public facade and behavior remain compatible. No other manager, R5 adapter,
 or R6 protocol responsibility moved.
 
-R5.1 (`LLM-001`) is the earliest `READY`, unclaimed package in master order.
-R6.1 (`PROTO-001`, `PROTO-002`) also remains `READY` and unclaimed. Their
-required adapter and public-protocol gaps remain measurable, but neither
-package authorizes implementation until its own serialized claim merges.
+R5.1 (`LLM-001`) is `IN_PROGRESS` under the active claim for
+`feature/r5-1-interface-segregation` after reconciliation/readiness
+[#3092](https://github.com/mangowhoiscloud/geode/pull/3092) merged as
+`3f059ba467ff58cde47095ffef94730ac39fbaef`. DI-002 is `IN_DEVELOP`. The
+claimed scope makes identity plus `acomplete` the required `LLMAdapter`
+surface, moves streaming, model listing, environment diagnostics, quota,
+credential detection, web search, computer use, and text completion behind
+optional capability protocols, and removes dishonest empty stubs without
+changing provider wire behavior. It authorizes no R5.2 registry/discovery,
+R5.3 provider-profile/transport, or R5.4 retry/failover work. The implementation
+worktree may be allocated only after this claim merges and canonical `develop`
+is refreshed.
+
+R6.1 (`PROTO-001`, `PROTO-002`) remains `READY` and unclaimed. Its public
+protocol gap remains measurable but authorizes no implementation until its own
+serialized claim merges.
 
 R9.1 (`CODE-001`) was already dependency-satisfied and remains `OPEN` pending
 its own serialized whole-package readiness transaction later in master order.
