@@ -83,9 +83,18 @@ def _check_full_package() -> None:
     assert resources.files("geode_product.self_improving").joinpath("program.md").is_file()
     assert resources.files("core").joinpath("self_improving/state/results.tsv").is_file()
     distribution = metadata.distribution("geode-agent")
-    for skill in ("geo", "grilling"):
-        skill_path = distribution.locate_file(f".geode/skills/{skill}/SKILL.md")
-        assert Path(str(skill_path)).is_file()
+    bundled_skills = Path(str(distribution.locate_file(".geode/skills")))
+    from core.skills.skills import SkillLoader, SkillRegistry
+
+    loader = SkillLoader(skills_dir=bundled_skills, lazy=False)
+    registry = SkillRegistry()
+    loader.load_all(registry=registry)
+    assert SkillLoader().skills_dir.resolve() == bundled_skills.resolve()
+    for skill_name in ("geo", "grilling"):
+        skill = registry.get(skill_name)
+        assert skill is not None and skill.body
+        assert skill.source_path is not None
+        assert skill.source_path.resolve().is_relative_to(bundled_skills.resolve())
 
     print("installed package OK")
 

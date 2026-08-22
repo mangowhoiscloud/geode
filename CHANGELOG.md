@@ -69,6 +69,11 @@ functional change.
   freeze measurement inputs. Release admission now rejects unscoped or
   uncorrelated tool-driven control events.
 
+- **Skill surfaces keep one owner per contract.** `.geode/skills` remains the
+  packaged GEODE runtime source, fresh-wheel smoke now parses its slash skills
+  through `SkillLoader`, and every cross-host `.agents` scaffold has a checked
+  relative `.claude/skills` alias.
+
 - **Bundled slash-command skills ship in distribution artifacts.** Fresh wheel
   and sdist installs now include `.geode/skills`, with artifact and installed-
   package gates pinning the `/grill` and `/geo` skill contracts.
