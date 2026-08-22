@@ -12,6 +12,7 @@ FitnessBaseline wrapping), and the per-dim score map.
 
 from __future__ import annotations
 
+import contextvars
 import json
 import subprocess
 import sys
@@ -2186,7 +2187,7 @@ def _drive_main_dry_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tupl
     monkeypatch.setenv("AUTORESEARCH_VERDICT", "pending")
     monkeypatch.setenv("AUTORESEARCH_DESCRIPTION", "test-dry-run")
     monkeypatch.setattr(sys, "argv", ["geode_product/self_improving/train.py", "--dry-run"])
-    exit_code = auto_train.main()
+    exit_code = contextvars.Context().run(auto_train.main)
 
     # Find the single run dir under sip_home (session_id resolved at runtime).
     run_dirs = [p for p in sip_home.iterdir() if p.is_dir()]
