@@ -30,7 +30,7 @@ owns only the package version and sync date.
 The generated architecture inventory lives at
 `site/src/data/geode/architecture-baseline.json`. Refresh it with
 `uv run python scripts/architecture_baseline.py --update`; CI uses `--check`.
-The current snapshot records 582 production Python files,
+The current snapshot records 586 production Python files,
 685 test Python files,
 86 tool definitions, and
 57 `RuntimeEvent` members.
@@ -148,7 +148,10 @@ register in `registry.py`, expose schema in `definitions.json`.
 
 MCP server adapters plus 25K result guard.
 
-- `manager.py` — `MCPServerManager`.
+- `manager.py` — `MCPServerManager` compatibility facade over concrete
+  configuration, connection, discovery/invocation, trace, and lifecycle owners.
+- `config_catalog.py`, `connection_pool.py`, `tool_runtime.py`,
+  `lifecycle.py` — the facade's single-purpose collaborators.
 - `stdio_client.py` — STDIO transport. Declares protocol revision
   `2025-06-18`, records the server-negotiated revision in
   `server_protocol_version`, and fail-loud-rejects revisions outside the

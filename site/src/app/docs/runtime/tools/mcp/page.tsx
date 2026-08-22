@@ -27,6 +27,13 @@ export default function Page() {
               <code>MCPServerManager</code>가 세 곳에서 서버 설정을 읽습니다.
               같은 이름이 겹치면 더 가까운 쪽이 이깁니다.
             </p>
+            <p>
+              manager는 기존 호출 경로를 유지하는 facade입니다. 설정·env는
+              <code>config_catalog.py</code>, stdio 연결과 재시작은
+              <code>connection_pool.py</code>, 도구 발견·호출·결과 보정은
+              <code>tool_runtime.py</code>, signal/atexit 정리는
+              <code>lifecycle.py</code>가 각각 소유합니다.
+            </p>
             <table>
               <thead>
                 <tr><th>우선</th><th>위치</th><th>역할</th></tr>
@@ -184,6 +191,14 @@ export default function Page() {
               <code>MCPServerManager</code> in <code>core/mcp/manager.py</code>
               reads server definitions from three places. On a name clash the
               closer layer wins.
+            </p>
+            <p>
+              The manager remains the compatibility facade. Configuration and
+              env expansion live in <code>config_catalog.py</code>, stdio
+              connection/restart state in <code>connection_pool.py</code>, tool
+              discovery/invocation/result normalization in
+              <code>tool_runtime.py</code>, and signal/atexit cleanup in
+              <code>lifecycle.py</code>.
             </p>
             <table>
               <thead>

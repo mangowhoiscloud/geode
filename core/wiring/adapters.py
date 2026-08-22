@@ -230,7 +230,11 @@ def build_gateway(*, notification: Any = None) -> None:
         from core.mcp.manager import get_mcp_manager
 
         mcp = get_mcp_manager(auto_startup=True)
-        log.info("Gateway MCP: %d/%d servers connected", len(mcp._clients), len(mcp._servers))
+        log.info(
+            "Gateway MCP: %d/%d servers connected",
+            mcp.connected_count,
+            mcp.server_count,
+        )
     except Exception as exc:
         _plugin_status["gateway_mcp"] = "unavailable"
         log.warning("Plugin gateway_mcp: MCP manager failed (%s)", exc)

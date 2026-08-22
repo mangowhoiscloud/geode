@@ -138,6 +138,12 @@ functional change.
 
 ### Architecture
 
+- **MCP runtime responsibilities now have one owner each.**
+  `MCPServerManager` remains the public compatibility facade, while concrete
+  catalog, connection-pool, discovery, invocation/trace, and lifecycle
+  collaborators own their mutable state. Configuration priority, tool order,
+  retry safety, hook events, and shutdown behavior remain unchanged.
+
 - **Runtime services now have explicit lifecycle owners.** The former flat
   `RuntimeCoreConfig` is split into six cohesive groups of at most seven fields,
   and eleven ambient service-locator `ContextVar` bindings are replaced by
