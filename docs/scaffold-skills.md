@@ -2,11 +2,29 @@
 
 Skills used by Scaffold during GEODE development (`.agents/skills/` and `.claude/skills/`). Separate from GEODE runtime's `core/skills/` SkillRegistry.
 
-> Cross-host skills use `.agents/skills/` as their tracked source and may expose a relative `.claude/skills/` alias. `.claude/skills/` otherwise remains scaffold-local except for explicitly tracked project skills. Additional machine-local skills are intentionally not listed.
+Three paths have three owners:
+
+- `.geode/skills/` is the GEODE runtime source of truth. `SkillLoader` discovers
+  bundled, user-global, and project-local contracts there; wheel and sdist
+  artifacts ship the bundled tree.
+- `.agents/skills/` is the tracked cross-host development scaffold. Codex
+  discovers this path directly. When a same-named runtime skill exists, the
+  scaffold stays thin and links to `.geode/skills/<name>/SKILL.md` rather than
+  copying its behavior contract.
+- `.claude/skills/` is Claude Code's project discovery surface. Every shared
+  `.agents` skill is exposed through a relative per-skill symlink so both hosts
+  read identical bytes. Claude-only skills may remain real directories here.
+
+This follows the [Codex skill locations and symlink contract](https://developers.openai.com/codex/skills/#where-codex-loads-local-skills)
+and [Claude Code project skill and symlink contract](https://code.claude.com/docs/en/slash-commands#where-skills-live).
+Additional machine-local skills are intentionally not listed.
 
 | Skill | Triggers | Content |
 |-------|----------|---------|
+| `agent-anti-pattern` | agent audit, deletion, cleanup, slop | Evidence-first audit scaffold with fail-closed KEEP/SHRINK/DELETE/MEASURE/DEFER verdicts |
+| `geo` | GEO, generative search, visibility, citations | Thin repository scaffold that routes implementation and evaluation work to the runtime GEO contract and frozen measurement profile |
 | `geode-eval` | evaluation, benchmark, run spec, research question, attempt lineage, trajectory, artifact, MCPMark, tau2, Agent-World | Cross-host evaluation workflow with generated routing, frozen research/reproduction contract, append-only retries, digest-bound analysis, and immutable publication |
+| `grilling` | grill, interview, decision tree | Thin repository scaffold for the runtime dependency-aware interview contract and slash integration |
 | `geode-workflow` | workflow, scaffold, feature work, provider/model changes, GUI/computer-use, observability, verification | Evidence-first execution scaffold with progressive-disclosure references |
 | `stanford-test-time-compute` | test-time compute, inference-time scaling, best-of-N, parallel width, sequential repair, measurement replication, verifier/evaluator, promotion authority, Archon | Stanford CS329A Part 2 grounding with GEODE/Eco²/SIL/Crucible decision-plane and authority boundaries |
 | `agent-world-benchmark` | Agent-World, AgentWorld, MCP-Mark, BFCL V4, tau2 comparator, paired runtime, mean_accuracy@8 | Agent-World v1 directional reference plus matched thin-runtime control, replication, comparability, and artifact workflow |
