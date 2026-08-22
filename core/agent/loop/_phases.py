@@ -20,7 +20,7 @@ from core.llm.adapters.base import EmptyModelOutputError
 from core.llm.agentic_response import AgenticResponse
 from core.ui.status import TextSpinner
 
-from . import _context
+from . import _collaboration_mailbox, _context, _guards, _lifecycle
 from .models import (
     AgenticResult,
     StepSnapshot,
@@ -76,19 +76,21 @@ async def prepare_input(
     goal_continuation_trigger: str,
 ) -> PreparedTurn | AgenticResult:
     """Cross input/interceptor boundaries and freeze turn-level inputs."""
-    user_input, blocked = await loop._begin_turn(
+    user_input, blocked = await _guards._begin_turn(
+        loop,
         user_input,
         verify_continuation,
         internal_continuation=goal_continuation is not None,
     )
     if blocked is not None:
-        return await loop._finalize_blocked_turn(blocked)
+        return await _guards._finalize_blocked_turn(loop, blocked)
 
     from .agent_loop import _set_conversation_context
 
     _set_conversation_context(loop.context)
-    loop._refresh_mcp_tools_at_turn_start()
-    intercepted = await loop._open_turn(
+    _guards._refresh_mcp_tools_at_turn_start(loop)
+    intercepted = await _guards._open_turn(
+        loop,
         user_input,
         verification_continuation=verify_continuation is not None,
         goal_continuation=goal_continuation,
@@ -117,8 +119,8 @@ async def prepare_input(
     turn_state = loop._bind_turn_messages(messages)
     messages.extend(_context.goal_continuation_messages(goal_hint))
 
-    reflection_hint = loop._consume_reflection_hint()
-    plan_hint = loop._consume_plan_hint()
+    reflection_hint = _guards._consume_reflection_hint(loop)
+    plan_hint = _guards._consume_plan_hint(loop)
     loop._last_plan_hint = plan_hint
     system_prompt = _context.inject_runtime_hints(
         loop._build_system_prompt(),
@@ -127,7 +129,7 @@ async def prepare_input(
         verification_hint,
         plan_hint,
     )
-    loop._maybe_prune_messages(messages)
+    _context.maybe_prune_messages(loop, messages)
 
     loop._loop_start_time = time.monotonic()
     from core.llm.token_tracker import get_tracker
@@ -151,7 +153,8 @@ async def prepare_model_call(
 ) -> PreparedModelCall | AgenticResult:
     """Prepare the prompt, context, cognitive event, and call presentation."""
     loop._op_logger.begin_round("AgenticLoop")
-    await loop._maybe_replan_async(
+    await _guards._maybe_replan_async(
+        loop,
         round_idx,
         failure_context=(turn.user_input if turn.verification_continuation else ""),
     )
@@ -160,29 +163,33 @@ async def prepare_model_call(
         reflection_hint=turn.reflection_hint,
         verification_hint=turn.verification_hint,
     )
-    loop._admit_collaboration_messages(
+    _collaboration_mailbox.admit_collaboration_messages(
+        loop,
         turn.messages,
         user_input=turn.user_input,
         round_idx=round_idx,
     )
 
     try:
-        await loop._check_context_overflow(turn.system_prompt, turn.messages)
+        await _context.check_context_overflow(loop, turn.system_prompt, turn.messages)
     except _ContextExhaustedError:
         log.warning("Pre-call context exhausted — attempting aggressive recovery")
-        recovered = await loop._aggressive_context_recovery(
+        recovered = await _context.aggressive_context_recovery(
+            loop,
             turn.system_prompt,
             turn.messages,
         )
         if recovered:
-            loop._notify_context_event(
+            _context.notify_context_event(
+                loop,
                 "prune",
                 original_count=len(turn.messages) + recovered,
                 new_count=len(turn.messages),
             )
             log.info("Pre-call recovery succeeded — proceeding with pruned context")
         else:
-            return await loop._finalize_context_exhausted(
+            return await _guards._finalize_context_exhausted(
+                loop,
                 turn.user_input,
                 turn.messages,
                 round_idx,
@@ -239,7 +246,8 @@ async def call_provider(
         response_step = loop._current_step_snapshot
         call.step_snapshot = response_step
     except EmptyModelOutputError as exc:
-        partial = await loop._afinalize_actionable_partial_on_empty(
+        partial = await _guards._afinalize_actionable_partial_on_empty(
+            loop,
             exc,
             messages=turn.messages,
             user_input=turn.user_input,
@@ -251,19 +259,22 @@ async def call_provider(
     except _ContextExhaustedError as exc:
         call.spinner.stop()
         log.warning("Context exhausted: %s — attempting aggressive recovery", exc)
-        recovered = await loop._aggressive_context_recovery(
+        recovered = await _context.aggressive_context_recovery(
+            loop,
             call.system_prompt,
             turn.messages,
         )
         if recovered:
-            loop._notify_context_event(
+            _context.notify_context_event(
+                loop,
                 "prune",
                 original_count=len(turn.messages) + recovered,
                 new_count=len(turn.messages),
             )
             log.info("Aggressive recovery succeeded — continuing loop")
             return None
-        return await loop._finalize_context_exhausted(
+        return await _guards._finalize_context_exhausted(
+            loop,
             turn.user_input,
             turn.messages,
             round_idx,
@@ -286,19 +297,22 @@ async def call_provider(
         error_type, severity, hint = classify_llm_error(adapter_exc)
         if error_type == "context_overflow":
             log.warning("Context overflow detected from 400 — attempting recovery")
-            recovered = await loop._aggressive_context_recovery(
+            recovered = await _context.aggressive_context_recovery(
+                loop,
                 call.system_prompt,
                 turn.messages,
             )
             if recovered:
-                loop._notify_context_event(
+                _context.notify_context_event(
+                    loop,
                     "prune",
                     original_count=len(turn.messages) + recovered,
                     new_count=len(turn.messages),
                 )
                 log.info("Context overflow recovery succeeded — retrying LLM call")
                 return None
-            return await loop._finalize_context_exhausted(
+            return await _guards._finalize_context_exhausted(
+                loop,
                 turn.user_input,
                 turn.messages,
                 round_idx,
@@ -310,8 +324,9 @@ async def call_provider(
 
                 emit_llm_error(error_type, severity, hint, loop.model, loop._provider)
             if error_type == "auth":
-                loop._inject_credential_breadcrumb()
-            result = loop._build_model_action_result(
+                _lifecycle.inject_credential_breadcrumb(loop)
+            result = _guards._build_model_action_result(
+                loop,
                 error_type=error_type,
                 severity=severity,
                 hint=hint,
@@ -351,11 +366,12 @@ async def call_provider(
             )
 
     loop._set_llm_retry_count(loop._consecutive_llm_failures + 1)
-    loop._sync_messages_to_context(turn.messages)
+    _context.sync_messages_to_context(loop, turn.messages)
     loop._save_checkpoint(turn.user_input, round_idx=round_idx)
 
     if error_type == "rate_limit":
-        result = loop._build_model_action_result(
+        result = _guards._build_model_action_result(
+            loop,
             error_type=error_type,
             severity=severity,
             hint=hint,
@@ -370,12 +386,14 @@ async def call_provider(
         )
 
     if loop._consecutive_llm_failures >= 2:
-        recovered = await loop._aggressive_context_recovery(
+        recovered = await _context.aggressive_context_recovery(
+            loop,
             call.system_prompt,
             turn.messages,
         )
         if recovered:
-            loop._notify_context_event(
+            _context.notify_context_event(
+                loop,
                 "prune",
                 original_count=len(turn.messages) + recovered,
                 new_count=len(turn.messages),
@@ -417,7 +435,8 @@ async def call_provider(
         await asyncio.sleep(delay)
         return None
 
-    result = loop._build_model_action_result(
+    result = _guards._build_model_action_result(
+        loop,
         error_type=error_type,
         severity=severity,
         hint=hint,
@@ -445,15 +464,17 @@ async def process_tool_calls(
     loop._set_llm_retry_count(0)
     await loop._track_usage_async(response)
 
-    terminal = loop._guard_cost_budget(messages=turn.messages, round_idx=round_idx)
+    terminal = _guards._guard_cost_budget(loop, messages=turn.messages, round_idx=round_idx)
     if terminal is None:
-        terminal = await loop._guard_overthinking(
+        terminal = await _guards._guard_overthinking(
+            loop,
             response,
             messages=turn.messages,
             round_idx=round_idx,
         )
     if terminal is None:
-        terminal = loop._guard_model_refusal(
+        terminal = _guards._guard_model_refusal(
+            loop,
             response,
             messages=turn.messages,
             round_idx=round_idx,
@@ -480,10 +501,11 @@ async def process_tool_calls(
         if phase := getattr(response, "assistant_phase", ""):
             assistant_message["phase"] = phase
         turn.messages.append(assistant_message)
-        loop._sync_messages_to_context(turn.messages)
+        _context.sync_messages_to_context(loop, turn.messages)
         await loop._record_text_only_round(round_idx, text=text)
         reason = TerminationReason.FORCED_TEXT if is_last_round else TerminationReason.NATURAL
-        result = loop._terminal_result(
+        result = _guards._terminal_result(
+            loop,
             reason,
             text,
             rounds=round_idx + 1,
@@ -502,9 +524,10 @@ async def process_tool_calls(
         step_snapshot=step_snapshot,
     )
     if loop._yield_after_tool_round:
-        turn.messages.append(loop._tool_round_assistant_message(response))
+        turn.messages.append(_guards._tool_round_assistant_message(loop, response))
         turn.messages.append({"role": "user", "content": tool_results})
-        return await loop._afinalize_tool_round_yield(
+        return await _guards._afinalize_tool_round_yield(
+            loop,
             messages=turn.messages,
             user_input=turn.user_input,
             round_idx=round_idx,
@@ -521,9 +544,11 @@ async def observe_and_compact(
 ) -> AgenticResult | None:
     """Observe a tool batch, apply progress guards, and advance history."""
     loop._update_tool_error_tracking(tool_results)
-    terminal = loop._guard_convergence(messages=turn.messages, round_idx=round_idx)
+    terminal = _guards._guard_convergence(loop, messages=turn.messages, round_idx=round_idx)
     if terminal is None:
-        terminal = loop._guard_repeated_success(messages=turn.messages, round_idx=round_idx)
+        terminal = _guards._guard_repeated_success(
+            loop, messages=turn.messages, round_idx=round_idx
+        )
     if terminal is not None:
         return await assemble_termination(
             loop,
@@ -587,7 +612,7 @@ async def observe_and_compact(
                 diversity_n,
             )
 
-    turn.messages.append(loop._tool_round_assistant_message(response))
+    turn.messages.append(_guards._tool_round_assistant_message(loop, response))
     turn.messages.append({"role": "user", "content": tool_results})
     turn.turn_state.round_index += 1
     return None
@@ -614,15 +639,16 @@ async def assemble_termination(
         from core.ui.agentic_ui import emit_time_budget_expired
 
         emit_time_budget_expired(loop._time_budget_s, elapsed, round_idx)
-    reason, text = loop._guard_exit_result(guard_reason, rounds=round_idx)
+    reason, text = _guards._guard_exit_result(loop, guard_reason, rounds=round_idx)
     turn.messages.append(
         {
             "role": "assistant",
             "content": [{"type": "text", "text": text}],
         }
     )
-    loop._sync_messages_to_context(turn.messages)
-    terminal = loop._terminal_result(
+    _context.sync_messages_to_context(loop, turn.messages)
+    terminal = _guards._terminal_result(
+        loop,
         reason,
         text,
         rounds=round_idx,

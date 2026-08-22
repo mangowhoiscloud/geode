@@ -12,7 +12,7 @@ from unittest.mock import MagicMock
 import pytest
 from core.agent.capability_graph import build_capability_graph
 from core.agent.conversation import ConversationContext
-from core.agent.loop import AgenticLoop
+from core.agent.loop import AgenticLoop, AgenticLoopConfig
 from core.agent.loop._tool_factory import project_bound_tool_plan
 from core.agent.tool_executor import ToolExecutor
 from core.config.policy_source import PolicySourcePaths
@@ -135,7 +135,7 @@ def test_loop_rejects_unfiltered_bound_plan_with_explicit_allowlist() -> None:
         AgenticLoop(
             ConversationContext(),
             executor,
-            allowed_tool_names=set(),
+            config=AgenticLoopConfig(allowed_tool_names=set()),
             quiet=True,
         )
 
@@ -199,8 +199,8 @@ def test_policy_projection_is_same_model_and_execution_snapshot(tmp_path: Path) 
     loop = AgenticLoop(
         ConversationContext(),
         executor,
+        config=AgenticLoopConfig(source="payg"),
         provider="anthropic",
-        source="payg",
         policy_sources=sources,
         quiet=True,
     )
@@ -245,7 +245,9 @@ def test_transient_defer_membership_refresh_replaces_stale_scope() -> None:
         ConversationContext(),
         executor,
         mcp_manager=mcp_manager,
-        allowed_tool_names={"ordinary", "mcp_custom_search"},
+        config=AgenticLoopConfig(
+            allowed_tool_names={"ordinary", "mcp_custom_search"},
+        ),
         quiet=True,
     )
 
@@ -311,10 +313,9 @@ def test_model_switch_reprojects_bound_plan_in_both_provider_directions(
     loop = AgenticLoop(
         ConversationContext(),
         executor,
+        config=AgenticLoopConfig(source="subscription", disable_settings_drift=True),
         model="gpt-5.6-luna",
         provider="openai",
-        source="subscription",
-        disable_settings_drift=True,
         quiet=True,
     )
     loop._source_explicit = False
@@ -385,10 +386,9 @@ def test_bound_request_rejects_middleware_tool_rewrite_before_adapter(rewrite: s
     loop = AgenticLoop(
         ConversationContext(),
         executor,
+        config=AgenticLoopConfig(source="payg", disable_settings_drift=True),
         model="gpt-5.6-luna",
         provider="openai",
-        source="payg",
-        disable_settings_drift=True,
         quiet=True,
     )
     loop._new_adapter = CaptureAdapter()
@@ -439,10 +439,9 @@ def test_bound_request_rejects_middleware_adapter_swap_before_provider() -> None
     loop = AgenticLoop(
         ConversationContext(),
         executor,
+        config=AgenticLoopConfig(source="payg", disable_settings_drift=True),
         model="gpt-5.6-luna",
         provider="openai",
-        source="payg",
-        disable_settings_drift=True,
         quiet=True,
     )
     loop._new_adapter = OriginalAdapter()

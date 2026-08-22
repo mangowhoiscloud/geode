@@ -73,15 +73,14 @@ def test_refusal_stop_reason_flows_to_result() -> None:
     ``_guard_model_refusal`` (early-return on non-refusal stop reasons)
     terminating with ``TerminationReason.MODEL_REFUSAL``.
     """
-    from core.agent.loop.agent_loop import AgenticLoop
+    from core.agent.loop import _guards
     from core.agent.loop.models import TerminationReason
     from core.llm.agentic_response import AgenticResponse
 
     resp = AgenticResponse(stop_reason="refusal", stop_details={"category": "cyber"})
     assert resp.stop_details == {"category": "cyber"}
 
-    assert callable(getattr(AgenticLoop, "_guard_model_refusal", None))
-    guard_src = inspect.getsource(AgenticLoop._guard_model_refusal)
+    guard_src = inspect.getsource(_guards._guard_model_refusal)
     assert 'response.stop_reason != "refusal"' in guard_src
     assert "TerminationReason.MODEL_REFUSAL" in guard_src
     assert TerminationReason.MODEL_REFUSAL == "model_refusal"

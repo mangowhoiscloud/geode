@@ -356,7 +356,7 @@ class TestResolveWorkerOutcome:
 
     def test_user_cancelled_is_success(self) -> None:
         """Operator-requested halt — text is the legitimate "Interrupted."
-        marker (see agent_loop.py:705). No ``error`` is set, so the worker
+        marker. No ``error`` is set, so the worker
         surfaces this as a clean exit and the parent decides what to do
         with the half-finished task rather than the parent treating it as
         a sub-agent failure."""
@@ -446,9 +446,10 @@ class TestSubAgentReasoningWiring:
             )
             _run_agentic(request, _empty_tool_plan_builder)
 
-        assert captured.get("effort") == "max"
-        assert captured.get("thinking_budget") == 8192
-        assert captured.get("time_budget_s") == 240.0
+        config = captured["config"]
+        assert config.effort == "max"
+        assert config.thinking_budget == 8192
+        assert config.time_budget_s == 240.0
 
 
 def test_run_agentic_shares_one_bound_plan_with_executor_and_loop(

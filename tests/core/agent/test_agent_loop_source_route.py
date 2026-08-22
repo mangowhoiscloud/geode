@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import pytest
 from core.agent.conversation import ConversationContext
-from core.agent.loop import AgenticLoop
+from core.agent.loop import AgenticLoop, AgenticLoopConfig
 from core.agent.tool_executor import ToolExecutor
 from core.llm.adapters import AdapterNotFoundError
 from core.llm.adapters.registry import _reset_for_test, bootstrap_builtins
@@ -42,8 +42,8 @@ def _make_loop(*, source: str = "", provider: str = "anthropic") -> AgenticLoop:
     return AgenticLoop(
         ConversationContext(),
         ToolExecutor(action_handlers={}, auto_approve=True),
+        config=AgenticLoopConfig(source=source),
         provider=provider,
-        source=source,
         quiet=True,
     )
 

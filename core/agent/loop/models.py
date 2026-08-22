@@ -73,7 +73,7 @@ class TerminationReason(StrEnum):
     """Closed alphabet of AgenticLoop terminal states.
 
     Every terminal :class:`AgenticResult` is born through
-    ``AgenticLoop._terminal_result`` with one of these members — the loop's
+    ``_guards._terminal_result`` with one of these members — the loop's
     exit state space is this enum, nothing else. ``StrEnum`` keeps every
     existing string comparison and JSON serialization working unchanged.
 

@@ -43,8 +43,8 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import MagicMock
 
-import core.agent.loop as _loop_mod
 import pytest
+from core.agent.loop import _model_switching
 from core.agent.system_prompt import _build_model_card
 
 
@@ -127,10 +127,6 @@ def _make_loop_stub_with_history(messages: list[dict[str, Any]]) -> MagicMock:
     stub = MagicMock()
     stub.context = MagicMock()
     stub.context.messages = list(messages)
-    # Bind the real method so we test the actual logic.
-    stub._purge_stale_model_switch_acks = (
-        _loop_mod.AgenticLoop._purge_stale_model_switch_acks.__get__(stub)
-    )
     return stub
 
 
@@ -147,7 +143,7 @@ def test_purge_removes_understood_ack_from_history() -> None:
             {"role": "assistant", "content": "you're welcome"},
         ]
     )
-    stub._purge_stale_model_switch_acks()
+    _model_switching.purge_stale_model_switch_acks(stub)
     msgs = stub.context.messages
     # The ack is gone.
     assert all(
@@ -171,7 +167,7 @@ def test_purge_removes_multiple_stale_acks() -> None:
             {"role": "assistant", "content": "Understood. I am now gpt-5.3-codex."},
         ]
     )
-    stub._purge_stale_model_switch_acks()
+    _model_switching.purge_stale_model_switch_acks(stub)
     msgs = stub.context.messages
     assert not any(
         msg["role"] == "assistant" and "Understood. I am now" in msg.get("content", "")
@@ -190,7 +186,7 @@ def test_purge_does_not_touch_user_messages() -> None:
             {"role": "assistant", "content": "ok"},
         ]
     )
-    stub._purge_stale_model_switch_acks()
+    _model_switching.purge_stale_model_switch_acks(stub)
     msgs = stub.context.messages
     # The user message is preserved despite matching the prefix.
     assert msgs[0]["role"] == "user"
@@ -208,7 +204,7 @@ def test_purge_does_not_touch_unrelated_assistant_replies() -> None:
             {"role": "assistant", "content": "Understood. I am now gpt-5.4-mini."},  # the only one
         ]
     )
-    stub._purge_stale_model_switch_acks()
+    _model_switching.purge_stale_model_switch_acks(stub)
     msgs = stub.context.messages
     contents = [m["content"] for m in msgs if m["role"] == "assistant"]
     assert "Understood, but here's a different thing." in contents
@@ -219,7 +215,7 @@ def test_purge_does_not_touch_unrelated_assistant_replies() -> None:
 def test_purge_on_empty_history_is_noop() -> None:
     """Edge case: switch happens before any messages exist."""
     stub = _make_loop_stub_with_history([])
-    stub._purge_stale_model_switch_acks()
+    _model_switching.purge_stale_model_switch_acks(stub)
     assert stub.context.messages == []
 
 
@@ -243,7 +239,7 @@ def test_purge_handles_block_form_content() -> None:
             },
         ]
     )
-    stub._purge_stale_model_switch_acks()
+    _model_switching.purge_stale_model_switch_acks(stub)
     msgs = stub.context.messages
     # Both prefix-matching acks gone (block + string). Unrelated block survives.
     assert len(msgs) == 1
@@ -265,6 +261,6 @@ def test_purge_handles_mixed_block_types() -> None:
             },
         ]
     )
-    stub._purge_stale_model_switch_acks()
+    _model_switching.purge_stale_model_switch_acks(stub)
     # Any text-block matching the prefix → drop the whole message.
     assert stub.context.messages == []

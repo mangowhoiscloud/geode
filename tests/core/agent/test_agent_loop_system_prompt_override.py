@@ -5,7 +5,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 from core.agent.conversation import ConversationContext
-from core.agent.loop import AgenticLoop
+from core.agent.loop import AgenticLoop, AgenticLoopConfig
 from core.agent.loop._context import build_system_prompt
 from core.agent.tool_executor import ToolExecutor
 
@@ -17,7 +17,7 @@ def _make_loop(*, override: str | None = None) -> AgenticLoop:
     return AgenticLoop(
         conversation,
         executor,
-        system_prompt_override=override,
+        config=AgenticLoopConfig(system_prompt_override=override),
     )
 
 

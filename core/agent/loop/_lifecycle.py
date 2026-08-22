@@ -315,7 +315,7 @@ def _prepare_final_result(
     )
 
     # Reasoning metrics (DTR-inspired observability)
-    metrics = loop._build_reasoning_metrics(result)
+    metrics = build_reasoning_metrics(loop, result)
     result.reasoning_metrics = metrics.to_dict()
 
     # Defect A F-A1 (2026-05-11) — aggregate per-arun usage via tracker
@@ -358,7 +358,7 @@ def _persist_final_result(
     verify_payload: dict[str, Any] | None = None,
 ) -> None:
     """Commit timeline, evidence, and checkpoint after stop is final."""
-    loop._record_timeline_end(result, verify_payload)
+    record_timeline_end(loop, result, verify_payload)
     ledger = getattr(loop, "_evidence_ledger", None)
     if ledger is not None:
         try:
@@ -767,7 +767,7 @@ def _merge_verify_attempts(loop: AgenticLoop, result: AgenticResult) -> None:
             cache_read_tokens=sum(usage.cache_read_tokens for usage in usages),
             cost_usd=sum(usage.cost_usd for usage in usages),
         )
-    result.reasoning_metrics = loop._build_reasoning_metrics(result).to_dict()
+    result.reasoning_metrics = build_reasoning_metrics(loop, result).to_dict()
     loop._verify_attempt_results = []
 
 

@@ -160,7 +160,7 @@ Repository script:
   handler로 wrap
 - tau2 `user_simulator` 대신 기본 `geode_user` 등록 → user side도
   `source=subscription`으로 실행
-- `domain_policy` → `AgenticLoop(system_prompt_override=...)`
+- `domain_policy` → `AgenticLoop(config=AgenticLoopConfig(system_prompt_override=...))`
 - `state` → per-task `ConversationContext`와 `AgenticLoop` 보존
 
 GEODE smoke command:

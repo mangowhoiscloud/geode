@@ -216,8 +216,9 @@ def test_finalize_appends_evidence_check_after_final_row(tmp_path) -> None:
         _usage_snapshot=None,
         _evidence_ledger=ledger,
         _task_preflight=preflight,
-        _build_reasoning_metrics=lambda result: SimpleNamespace(to_dict=lambda: {}),
-        _record_timeline_end=lambda result, verify_payload=None: None,
+        _timeline=None,
+        _total_empty_rounds=0,
+        _consecutive_text_only_rounds=0,
         _save_checkpoint=lambda user_input, round_idx=0: None,
     )
     result = AgenticResult(text="정리했습니다", rounds=1)
@@ -250,8 +251,9 @@ def test_finalize_without_preflight_skips_evidence_check(tmp_path) -> None:
         _usage_snapshot=None,
         _evidence_ledger=ledger,
         _task_preflight=None,
-        _build_reasoning_metrics=lambda result: SimpleNamespace(to_dict=lambda: {}),
-        _record_timeline_end=lambda result, verify_payload=None: None,
+        _timeline=None,
+        _total_empty_rounds=0,
+        _consecutive_text_only_rounds=0,
         _save_checkpoint=lambda user_input, round_idx=0: None,
     )
 

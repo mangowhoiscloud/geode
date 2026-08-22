@@ -22,6 +22,7 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
+from core.agent.loop import AgenticLoopConfig
 from core.agent.loop.models import AgenticResult
 from core.agent.verify import (
     VerifyMode,
@@ -197,12 +198,14 @@ def test_call_llm_disables_action_tools_for_auxiliary_calls() -> None:
     loop = AgenticLoop(
         ConversationContext(),
         ToolExecutor(middleware_registry=middleware),
+        config=AgenticLoopConfig(
+            source="codex-oauth",
+            disable_settings_drift=True,
+            allowed_tool_names={"read_file"},
+        ),
         model="gpt-5.6-luna",
         provider="openai",
-        source="codex-oauth",
         quiet=True,
-        disable_settings_drift=True,
-        allowed_tool_names={"read_file"},
     )
     loop._new_adapter = CaptureAdapter()
 

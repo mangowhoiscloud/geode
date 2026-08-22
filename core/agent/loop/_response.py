@@ -216,9 +216,11 @@ def update_tool_error_tracking(loop: AgenticLoop, tool_results: list[dict[str, A
 
 def check_convergence_break(loop: AgenticLoop) -> bool:
     """Check for stuck loop. Delegates to ConvergenceDetector."""
-    return loop._convergence.check_convergence_break()
+    result: bool = loop._convergence.check_convergence_break()
+    return result
 
 
 def check_repeated_success_no_progress(loop: AgenticLoop) -> bool:
     """Check for repeated identical successful tool observations."""
-    return loop._convergence.check_repeated_success_no_progress()
+    result: bool = loop._convergence.check_repeated_success_no_progress()
+    return result

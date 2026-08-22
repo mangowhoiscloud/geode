@@ -29,19 +29,19 @@ import pytest
 def test_agentic_loop_resolves_via_get_adapter_first() -> None:
     """Source-level pin: AgenticLoop tries ``get_adapter`` before ``resolve_for``.
 
-    Greps ``core/agent/loop/agent_loop.py`` for the dual-lookup pattern
+    Greps the loop bootstrap for the dual-lookup pattern
     so a future refactor that drops the adapter-name path fails this
     test before the audit-subprocess fake-success failure re-emerges.
     """
-    loop_module = Path(__file__).resolve().parents[3] / "core" / "agent" / "loop" / "agent_loop.py"
+    loop_module = Path(__file__).resolve().parents[3] / "core" / "agent" / "loop" / "_bootstrap.py"
     source = loop_module.read_text(encoding="utf-8")
-    assert "get_adapter(self._source)" in source, (
-        "agent_loop.py no longer calls get_adapter(self._source). The "
+    assert "get_adapter(loop._source)" in source, (
+        "loop bootstrap no longer calls get_adapter(loop._source). The "
         "audit subprocess will silently fall back to PAYG when the "
         "operator's source is an adapter name (e.g. 'codex-oauth')."
     )
     assert "AdapterNotFoundError" in source, (
-        "agent_loop.py does not handle AdapterNotFoundError; the "
+        "loop bootstrap does not handle AdapterNotFoundError; the "
         "category-axis fallback (resolve_for) is unreachable."
     )
 

@@ -235,10 +235,9 @@ def test_build_worker_request_lineage_defaults_when_no_loop_bound() -> None:
 
 
 def test_agenticloop_constructor_accepts_parent_session_id_kwarg() -> None:
-    from core.agent.loop.agent_loop import AgenticLoop
+    from core.agent.loop import AgenticLoopConfig
 
-    sig = inspect.signature(AgenticLoop.__init__)
-    assert "parent_session_id" in sig.parameters
+    sig = inspect.signature(AgenticLoopConfig)
     assert sig.parameters["parent_session_id"].default == ""
 
 

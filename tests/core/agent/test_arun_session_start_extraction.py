@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import inspect
 
-from core.agent.loop import _phases
+from core.agent.loop import _guards, _phases
 from core.agent.loop.agent_loop import AgenticLoop
 
 # ---------------------------------------------------------------------------
@@ -109,11 +109,11 @@ def test_arun_calls_session_start_helper() -> None:
     Mirrors the DONT-table "stub disguise" lens."""
     src = inspect.getsource(AgenticLoop._arun_once)
     phase_src = inspect.getsource(_phases.prepare_input)
-    open_src = inspect.getsource(AgenticLoop._open_turn)
+    open_src = inspect.getsource(_guards._open_turn)
     assert "_phases.prepare_input(" in src
-    assert "intercepted = await loop._open_turn(" in phase_src
+    assert "intercepted = await _guards._open_turn(" in phase_src
     assert "verification_continuation=verify_continuation is not None" in phase_src
-    assert "await self._emit_session_start_signals(user_input)" in open_src
+    assert "await loop._emit_session_start_signals(user_input)" in open_src
     assert 'context.add_system_event("verification_continuation"' not in open_src
     assert "_try_decompose" not in src
 
@@ -125,11 +125,13 @@ def test_arun_surfaces_intercept_result_verbatim() -> None:
     swallow the blocked result."""
     src = inspect.getsource(AgenticLoop._arun_once)
     phase_src = inspect.getsource(_phases.prepare_input)
-    open_src = inspect.getsource(AgenticLoop._open_turn)
-    assert "intercepted = await self._emit_session_start_signals(user_input)" in open_src
-    assert "if intercepted is not None:\n            return intercepted" in open_src
+    open_src = inspect.getsource(_guards._open_turn)
+    assert "intercepted = await loop._emit_session_start_signals(user_input)" in open_src
+    assert (
+        "if intercepted is not None:\n        return cast(AgenticResult, intercepted)" in open_src
+    )
     # The exact pattern arun uses:
-    assert "intercepted = await loop._open_turn(" in phase_src
+    assert "intercepted = await _guards._open_turn(" in phase_src
     assert "if intercepted is not None:\n        return intercepted" in phase_src
     assert "if isinstance(prepared, AgenticResult):\n            return prepared" in src
 

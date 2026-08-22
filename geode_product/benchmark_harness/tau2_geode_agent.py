@@ -162,7 +162,7 @@ def _build_loop(
     allow_actionable_partial_on_empty: bool = False,
 ) -> Any:
     from core.agent.conversation import ConversationContext
-    from core.agent.loop import AgenticLoop
+    from core.agent.loop import AgenticLoop, AgenticLoopConfig
     from core.agent.tool_executor import ToolExecutor
 
     tool_registry, handlers = _tau2_tool_registry(tools)
@@ -191,20 +191,22 @@ def _build_loop(
     return AgenticLoop(
         ConversationContext(max_turns=200),
         executor,
+        config=AgenticLoopConfig(
+            source=source,
+            effort=effort,
+            max_tokens=max_tokens,
+            max_rounds=max_rounds,
+            time_budget_s=time_budget_s,
+            allowed_tool_names=allowed_tool_names,
+            force_include_allowed_tools=True,
+            system_prompt_override=system_prompt,
+            allow_actionable_partial_on_empty=allow_actionable_partial_on_empty,
+            yield_after_tool_round=True,
+        ),
         model=model,
         provider=provider,
-        source=source,
-        effort=effort,
-        max_tokens=max_tokens,
-        max_rounds=max_rounds,
-        time_budget_s=time_budget_s,
         tool_registry=tool_registry,
-        allowed_tool_names=allowed_tool_names,
-        force_include_allowed_tools=True,
-        system_prompt_override=system_prompt,
         quiet=True,
-        allow_actionable_partial_on_empty=allow_actionable_partial_on_empty,
-        yield_after_tool_round=True,
         hooks=runtime_contract.hooks,
         activity_sink_provider=current_activity_sink,
         policy_sources=policy_sources,

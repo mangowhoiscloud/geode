@@ -37,10 +37,10 @@ def _reset_hook_correlation_context() -> Iterator[None]:
 
 
 def test_public_session_start_is_after_initial_durable_checkpoint() -> None:
-    from core.agent.loop.agent_loop import AgenticLoop
+    from core.agent.loop import _guards
 
-    source = inspect.getsource(AgenticLoop._open_turn)
-    assert source.index("if self._save_checkpoint(") < source.index("emit_public_session_start(")
+    source = inspect.getsource(_guards._open_turn)
+    assert source.index("if loop._save_checkpoint(") < source.index("emit_public_session_start(")
 
 
 def test_public_session_start_and_end_have_durable_cardinality() -> None:

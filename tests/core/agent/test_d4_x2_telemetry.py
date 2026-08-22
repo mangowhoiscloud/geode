@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import asyncio
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from core.agent.loop._model_switching import (
     _inject_model_switch_breadcrumb,
@@ -213,13 +213,16 @@ def test_sync_and_rebuild_fires_prompt_assembled_on_drift() -> None:
     loop.model = "gpt-5.5"
     loop._provider = "openai"
     loop._prompt_dirty = False
-    loop._sync_model_from_settings_async = AsyncMock(return_value=True)  # drift!
     loop._build_system_prompt = MagicMock(return_value="rebuilt system prompt body")
 
     # Manually invoke the bound method
     from core.agent.loop.agent_loop import AgenticLoop
 
-    result = asyncio.run(AgenticLoop._sync_model_and_rebuild_prompt(loop, "old prompt", None))
+    with patch(
+        "core.agent.loop._model_switching.sync_model_from_settings_async",
+        new=AsyncMock(return_value=True),
+    ):
+        result = asyncio.run(AgenticLoop._sync_model_and_rebuild_prompt(loop, "old prompt", None))
     # rebuild 됐는지 — _build_system_prompt 가 호출됐는지 확인
     loop._build_system_prompt.assert_called_once()
     assert result == "rebuilt system prompt body"
@@ -248,12 +251,15 @@ def test_sync_and_rebuild_fires_prompt_assembled_on_prompt_dirty() -> None:
     loop.model = "claude-opus-4-7"
     loop._provider = "anthropic"
     loop._prompt_dirty = True  # dirty!
-    loop._sync_model_from_settings_async = AsyncMock(return_value=False)  # no drift
     loop._build_system_prompt = MagicMock(return_value="rebuilt body")
 
     from core.agent.loop.agent_loop import AgenticLoop
 
-    asyncio.run(AgenticLoop._sync_model_and_rebuild_prompt(loop, "old", None))
+    with patch(
+        "core.agent.loop._model_switching.sync_model_from_settings_async",
+        new=AsyncMock(return_value=False),
+    ):
+        asyncio.run(AgenticLoop._sync_model_and_rebuild_prompt(loop, "old", None))
     assert received[0]["reason"] == "prompt_dirty"
 
 
@@ -272,12 +278,15 @@ def test_sync_and_rebuild_no_fire_when_no_drift_no_dirty() -> None:
     loop.model = "gpt-5.5"
     loop._provider = "openai"
     loop._prompt_dirty = False
-    loop._sync_model_from_settings_async = AsyncMock(return_value=False)
     loop._build_system_prompt = MagicMock()
 
     from core.agent.loop.agent_loop import AgenticLoop
 
-    result = asyncio.run(AgenticLoop._sync_model_and_rebuild_prompt(loop, "untouched", None))
+    with patch(
+        "core.agent.loop._model_switching.sync_model_from_settings_async",
+        new=AsyncMock(return_value=False),
+    ):
+        result = asyncio.run(AgenticLoop._sync_model_and_rebuild_prompt(loop, "untouched", None))
     # rebuild 미발생
     loop._build_system_prompt.assert_not_called()
     assert result == "untouched"
@@ -293,11 +302,14 @@ def test_sync_and_rebuild_no_hook_when_loop_has_none_hooks() -> None:
     loop.model = "gpt-5.5"
     loop._provider = "openai"
     loop._prompt_dirty = False
-    loop._sync_model_from_settings_async = AsyncMock(return_value=True)
     loop._build_system_prompt = MagicMock(return_value="rebuilt")
 
     from core.agent.loop.agent_loop import AgenticLoop
 
-    result = asyncio.run(AgenticLoop._sync_model_and_rebuild_prompt(loop, "old", None))
+    with patch(
+        "core.agent.loop._model_switching.sync_model_from_settings_async",
+        new=AsyncMock(return_value=True),
+    ):
+        result = asyncio.run(AgenticLoop._sync_model_and_rebuild_prompt(loop, "old", None))
     assert result == "rebuilt"
     # 예외 없이 통과

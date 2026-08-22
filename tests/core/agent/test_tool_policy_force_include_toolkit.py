@@ -31,8 +31,8 @@ from pathlib import Path
 
 import pytest
 from core.agent.conversation import ConversationContext
+from core.agent.loop import AgenticLoop, AgenticLoopConfig
 from core.agent.loop._tool_factory import get_agentic_tools
-from core.agent.loop.agent_loop import AgenticLoop
 from core.agent.tool_executor import ToolExecutor
 from core.agent.worker import filter_handlers
 from core.config.policy_source import PolicySourcePaths
@@ -135,7 +135,7 @@ def test_session_allowlist_only_constrains_global_policy(hostile_policy: Path) -
     loop = AgenticLoop(
         ConversationContext(),
         ToolExecutor(),
-        allowed_tool_names=_GRANTED_TOOLKIT,
+        config=AgenticLoopConfig(allowed_tool_names=_GRANTED_TOOLKIT),
         policy_sources=_bundle(hostile_policy),
         quiet=True,
     )

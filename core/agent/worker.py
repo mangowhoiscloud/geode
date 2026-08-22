@@ -548,7 +548,7 @@ def _run_agentic(
     )
 
     # 5. Build AgenticLoop
-    from core.agent.loop import AgenticLoop
+    from core.agent.loop import AgenticLoop, AgenticLoopConfig
 
     # S2-wire (2026-05-18): propagate AgentDefinition.system_prompt into the
     # spawned loop so AgentDefinition-driven sub-agents (seed_generator etc.)
@@ -585,8 +585,21 @@ def _run_agentic(
     loop = AgenticLoop(
         conversation,
         executor,
-        max_rounds=0,  # unlimited — controlled by timeout_s from parent
-        max_tokens=request.subagent_max_tokens,
+        config=AgenticLoopConfig(
+            max_rounds=0,
+            max_tokens=request.subagent_max_tokens,
+            thinking_budget=request.thinking_budget,
+            effort=request.effort,
+            time_budget_s=request.time_budget_s,
+            system_prompt_override=system_prompt_override,
+            parent_session_key=request.parent_session_key,
+            parent_session_id=request.parent_session_id,
+            allowed_tool_names=allowed_tool_names,
+            force_include_allowed_tools=True,
+            source=request.source,
+            session_id=request.task_id,
+            response_schema=request.response_schema,
+        ),
         model=effective_model,
         provider=effective_provider,
         hooks=worker_hooks,
@@ -600,16 +613,7 @@ def _run_agentic(
         # Hermes ``delegate_tool.py:607-636`` (parent-inherit + per-child
         # config override) and Claude Code ``loadAgentsDir.ts:116``
         # (agent-level effort frontmatter).
-        thinking_budget=request.thinking_budget,
-        effort=request.effort,
-        time_budget_s=request.time_budget_s,
-        system_prompt_override=system_prompt_override,
-        parent_session_key=request.parent_session_key,
-        parent_session_id=request.parent_session_id,
         quiet=True,  # Suppress spinner — parent handles UI
-        allowed_tool_names=allowed_tool_names,
-        force_include_allowed_tools=True,
-        source=request.source,
         # PR-Q.5 (2026-05-24, single-anchor invariant I1 in
         # docs/plans/2026-05-24-timeline-standardization-and-claude-resume.md):
         # the sub-agent's task_id becomes the AgenticLoop's session_id so
@@ -619,13 +623,11 @@ def _run_agentic(
         # a fresh ``s-<uuid>`` and events.jsonl falls into a sibling
         # directory that the operator cannot reach from the timeline's
         # ``details.task_id`` reference.
-        session_id=request.task_id,
         # PR-JSON-WIRE (2026-05-25) — thread the per-task JSON Schema
         # to the AgenticLoop so every spawned adapter call carries
         # ``AdapterCallRequest.response_schema``. Empty / None
         # preserves legacy free-form text responses for callers that
         # didn't declare a schema (REPL, gateway, ad-hoc CLI).
-        response_schema=request.response_schema,
     )
     if resume_state is not None and resume_checkpoint is not None:
         resume_checkpoint.reopen(resume_state.session_id)
@@ -659,8 +661,8 @@ def _run_agentic(
     # Codex MCP review (2026-05-26) caught two pre-merge issues, both
     # patched below:
     #
-    # 1. ``AgenticLoop.arun`` resets ``_loop_start_time`` on every call
-    #    (``agent_loop.py:1463``), so the second pass would get another
+    # 1. ``AgenticLoop.arun`` resets ``_loop_start_time`` on every call,
+    #    so the second pass would get another
     #    full ``time_budget_s`` rather than the remainder. Guard the
     #    retry on ``elapsed_before_retry < 0.5 * request.timeout_s`` so
     #    a worker pegged near its wall-clock cap doesn't get pushed past
@@ -754,7 +756,7 @@ def _run_agentic(
 # explicit failure sentinels below — gate ``success`` on the absence of
 # those plus the absence of ``error``. Sentinels are members of
 # ``core.agent.loop.models.TerminationReason`` (the loop's closed terminal
-# alphabet; every terminal is born in ``AgenticLoop._terminal_result``):
+# alphabet; every terminal is born in ``_guards._terminal_result``):
 #
 # * Failure exits (text is fallback / diagnostic UI, NOT a real answer):
 #   ``model_action_required``, ``context_exhausted``, ``llm_error``,
@@ -780,7 +782,7 @@ _FAILURE_TERMINATION_REASONS = FAILURE_TERMINATION_REASONS
 # * ``input_blocked`` — policy filter rejected the prompt. Retrying with
 #   stronger schema language wouldn't change the input that got blocked.
 # * ``user_cancelled`` — operator pressed cancel. The "Interrupted."
-#   marker is the legitimate output (see ``agent_loop.py:705``); a
+#   marker is the legitimate loop output; a
 #   retry would override the cancel intent.
 # * ``user_clarification_needed`` — overthinking detected; text IS the
 #   follow-up question. Retrying re-burns the budget that the loop
