@@ -49,9 +49,10 @@ functional change.
 
 ### Fixed
 
-- **Benchmark routing respects the Anthropic credential boundary.** MCPMark
-  Claude model labels now select the API-key source instead of the retired
-  subscription source.
+- **Anthropic credential boundaries hold across benchmarks and Petri.** MCPMark
+  Claude labels select the API-key adapter, while Petri's strict fallback gate
+  permits sole or explicitly selected API-key routes without allowing an
+  implicit OpenAI subscription-to-PAYG transition.
 
 - **Step snapshots remain authoritative through tool execution.** Middleware-selected
   routes are finalized without replacing physical-turn history, the response tool

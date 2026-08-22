@@ -284,10 +284,10 @@ machine-readable artifact is
 |---|---:|
 | Production Python files (`core/` + `geode_product/` + `plugins/`) | 578 |
 | Test Python files | 676 |
-| `core/` Python LOC | 118,941 |
-| `geode_product/` Python LOC | 60,645 |
+| `core/` Python LOC | 118,940 |
+| `geode_product/` Python LOC | 60,651 |
 | `plugins/` Python LOC | 193 |
-| Test Python LOC | 180,401 |
+| Test Python LOC | 180,446 |
 | Tool definitions / executable registrations / valid schemas | 82 / 85 / 82 (definition-only 0; execution-only 3; invalid schema 0) |
 | `RuntimeEvent` members | 57 |
 | Built-in LLM adapters | 5 |

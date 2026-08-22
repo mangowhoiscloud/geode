@@ -107,6 +107,14 @@ def test_get_binding_auditor_default(monkeypatch: pytest.MonkeyPatch) -> None:
     assert binding.inspect_id == "anthropic/claude-opus-4-7"
 
 
+def test_get_binding_anthropic_survives_subscription_fallback_gate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    monkeypatch.setattr(cs, "self_improving_loop_fallback_policy", lambda: False)
+    assert get_binding("auditor").source == "api_key"
+
+
 def test_get_binding_judge_default(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
     binding = get_binding("judge")

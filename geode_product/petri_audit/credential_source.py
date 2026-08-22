@@ -69,9 +69,10 @@ Sourced from the canonical :class:`core.config.credential_source.CredentialSourc
 
 Every provider in the Petri manifest has ``api_key`` as its PAYG entry
 (``anthropic.api_key``, ``openai.api_key``, ``zhipuai.api_key``).
-``resolve_credential_source(fallback_to_payg=False)`` filters this
-source out so a subscription run never silently bills the user's API
-key after OAuth quota exhaustion. See
+``resolve_credential_source(fallback_to_payg=False)`` filters an implicit
+PAYG fallback only when that provider also has a subscription source. A
+sole API-key route or an explicitly configured API-key source remains usable.
+See
 ``docs/plans/2026-05-19-self-improving-loop-config-consolidation.md`` Phase β.
 """
 
@@ -313,10 +314,10 @@ def resolve_credential_source(
         override: explicit source request; bypasses both auto resolution
             and the ``fallback_to_payg`` filter (the caller is taking
             responsibility for the choice).
-        fallback_to_payg: when ``False``, the ``api_key`` source is
-            filtered out of auto expansion so subscription-only runs
-            cannot silently fall through to PAYG. The first OAuth-like
-            source's availability is now load-bearing; if it fails, a
+        fallback_to_payg: when ``False``, an implicit ``api_key`` fallback is
+            filtered out for providers that also expose a subscription source.
+            Sole API-key providers and explicit source settings remain usable.
+            If the subscription source fails, a
             ``CredentialResolutionError(subscription_only=True)`` is
             raised with an actionable message. Default ``True`` keeps
             the pre-2026-05-19 behaviour for back-compat callers.
@@ -326,7 +327,15 @@ def resolve_credential_source(
     manifest = load_manifest()
     spec = manifest.get_source(provider)
 
-    candidate = override or _settings_source(provider) or spec.default
+    configured_source = _settings_source(provider)
+    candidate = override or configured_source or spec.default
+    explicit_source = override or configured_source
+    has_subscription_source = any(
+        source not in {AUTO_SOURCE, PAYG_SOURCE} for source in spec.allowed
+    )
+    block_implicit_payg = (
+        not fallback_to_payg and has_subscription_source and explicit_source != PAYG_SOURCE
+    )
 
     if provider == "anthropic" and candidate == "claude-cli":
         from core.config.credential_source import CLAUDE_CLI_RETIRED_MESSAGE
@@ -336,10 +345,7 @@ def resolve_credential_source(
     if candidate != AUTO_SOURCE:
         if candidate not in spec.allowed:
             raise CredentialResolutionError(provider, spec.allowed)
-        # Strict mode also blocks a PAYG-default manifest entry (e.g.
-        # zhipuai whose manifest default is ``api_key``). Explicit
-        # ``override`` is unaffected — caller takes responsibility.
-        if not fallback_to_payg and override is None and candidate == PAYG_SOURCE:
+        if block_implicit_payg and candidate == PAYG_SOURCE:
             raise CredentialResolutionError(
                 provider,
                 spec.allowed,
@@ -354,7 +360,7 @@ def resolve_credential_source(
     for source in spec.allowed:
         if source == AUTO_SOURCE:
             continue
-        if not fallback_to_payg and source == PAYG_SOURCE:
+        if block_implicit_payg and source == PAYG_SOURCE:
             continue
         if is_suppressed(provider, source):
             continue
@@ -363,7 +369,7 @@ def resolve_credential_source(
     raise CredentialResolutionError(
         provider,
         spec.allowed,
-        subscription_only=not fallback_to_payg,
+        subscription_only=block_implicit_payg,
     )
 
 

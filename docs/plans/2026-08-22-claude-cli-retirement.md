@@ -2,7 +2,7 @@
 
 작성: 2026-08-22  
 기준: `origin/develop`  
-상태: verification in progress
+상태: complete
 
 ## 삭제 대상
 

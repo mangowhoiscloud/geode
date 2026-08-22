@@ -199,39 +199,30 @@ def test_error_carries_provider_and_allowed():
 # ── PR-β1: subscription-only mode (fallback_to_payg=False) ─────────────────
 
 
-def test_fallback_disabled_filters_api_key_from_auto_expansion(monkeypatch):
-    """With fallback_to_payg=False, auto expansion must skip api_key
-    even when ANTHROPIC_API_KEY is set."""
+def test_strict_mode_keeps_anthropic_sole_api_key_route(monkeypatch):
     monkeypatch.delenv("ANTHROPIC_OAUTH_TOKEN", raising=False)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
-    # Without fallback: api_key chosen.
     assert cs.resolve_credential_source("anthropic") == "api_key"
-    # With fallback disabled: api_key filtered → no OAuth available → raise.
-    with pytest.raises(cs.CredentialResolutionError) as excinfo:
-        cs.resolve_credential_source("anthropic", fallback_to_payg=False)
-    assert excinfo.value.subscription_only is True
+    assert cs.resolve_credential_source("anthropic", fallback_to_payg=False) == "api_key"
 
 
 def test_subscription_only_error_message_actionable(monkeypatch):
-    """Anthropic strict-mode errors point to the only built-in route."""
-    monkeypatch.delenv("ANTHROPIC_OAUTH_TOKEN", raising=False)
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    monkeypatch.setattr(cs, "is_adapter_available", lambda provider, source: False)
     with pytest.raises(cs.CredentialResolutionError) as excinfo:
-        cs.resolve_credential_source("anthropic", fallback_to_payg=False)
+        cs.resolve_credential_source("openai", fallback_to_payg=False)
     msg = str(excinfo.value)
-    assert "source='api_key'" in msg
-    assert "ANTHROPIC_API_KEY" in msg
+    assert "fallback_to_payg=false" in msg
+    assert "subscription credential source" in msg
 
 
 def test_subscription_only_error_carries_flag(monkeypatch):
     """``subscription_only`` attribute exposed for FE banner consumption."""
-    monkeypatch.delenv("ANTHROPIC_OAUTH_TOKEN", raising=False)
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    monkeypatch.setattr(cs, "is_adapter_available", lambda provider, source: False)
     with pytest.raises(cs.CredentialResolutionError) as excinfo:
-        cs.resolve_credential_source("anthropic", fallback_to_payg=False)
+        cs.resolve_credential_source("openai", fallback_to_payg=False)
     assert excinfo.value.subscription_only is True
     # Backwards-compat: default invocation has subscription_only=False.
-    monkeypatch.delenv("ANTHROPIC_API_KEY")
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     with pytest.raises(cs.CredentialResolutionError) as excinfo2:
         cs.resolve_credential_source("anthropic")
     assert excinfo2.value.subscription_only is False
@@ -261,25 +252,57 @@ def test_payg_source_constant_matches_manifest():
     assert cs.PAYG_SOURCE == "api_key"
 
 
-def test_strict_mode_blocks_payg_default_for_zhipuai(monkeypatch):
-    """zhipuai manifest default is `api_key` (no OAuth alternative).
-
-    Strict mode (fallback_to_payg=False) must block the concrete-default
-    path too, not only the auto-expansion loop. Explicit override stays
-    a valid escape hatch.
-    """
+def test_strict_mode_keeps_zhipuai_sole_api_key_route(monkeypatch):
     monkeypatch.setenv("ZHIPUAI_API_KEY", "glm-test")
-    # Default kwarg returns api_key as before.
     assert cs.resolve_credential_source("zhipuai") == "api_key"
-    # Strict mode + no override → raise.
-    with pytest.raises(cs.CredentialResolutionError) as excinfo:
-        cs.resolve_credential_source("zhipuai", fallback_to_payg=False)
-    assert excinfo.value.subscription_only is True
-    # Explicit override bypasses the filter (caller responsibility).
-    assert (
-        cs.resolve_credential_source("zhipuai", override="api_key", fallback_to_payg=False)
-        == "api_key"
+    assert cs.resolve_credential_source("zhipuai", fallback_to_payg=False) == "api_key"
+
+
+def test_explicit_settings_api_key_bypasses_openai_fallback_gate(monkeypatch):
+    monkeypatch.setattr(cs, "_settings_source", lambda provider: "api_key")
+    monkeypatch.setattr(
+        cs,
+        "is_adapter_available",
+        lambda provider, source: provider == "openai" and source == "api_key",
     )
+    assert cs.resolve_credential_source("openai", fallback_to_payg=False) == "api_key"
+
+
+@pytest.mark.parametrize("source_origin", ["override", "settings"])
+def test_openai_auto_or_suppressed_subscription_cannot_bypass_fallback_gate(
+    monkeypatch,
+    source_origin,
+):
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-proj-test")
+    monkeypatch.setattr(
+        cs,
+        "is_adapter_available",
+        lambda provider, source: provider == "openai" and source == "api_key",
+    )
+    kwargs = {"override": "auto"} if source_origin == "override" else {}
+    if source_origin == "settings":
+        monkeypatch.setattr(cs, "_settings_source", lambda provider: "openai-codex")
+        cs.suppress_credential_source("openai", "openai-codex")
+    with pytest.raises(cs.CredentialResolutionError) as excinfo:
+        cs.resolve_credential_source("openai", fallback_to_payg=False, **kwargs)
+    assert excinfo.value.subscription_only is True
+
+
+def test_auto_override_outranks_api_key_setting_without_authorizing_fallback(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-proj-test")
+    monkeypatch.setattr(cs, "_settings_source", lambda provider: "api_key")
+    monkeypatch.setattr(
+        cs,
+        "is_adapter_available",
+        lambda provider, source: provider == "openai" and source == "api_key",
+    )
+    with pytest.raises(cs.CredentialResolutionError) as excinfo:
+        cs.resolve_credential_source(
+            "openai",
+            override="auto",
+            fallback_to_payg=False,
+        )
+    assert excinfo.value.subscription_only is True
 
 
 @pytest.mark.policy_real

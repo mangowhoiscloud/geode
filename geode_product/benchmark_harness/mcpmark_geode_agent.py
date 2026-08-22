@@ -391,7 +391,7 @@ def _route_from_model(model_name: str) -> tuple[str, str, str]:
     if normalized.startswith("gpt-"):
         return normalized, "openai", "subscription"
     if normalized.startswith("claude-"):
-        return normalized, "anthropic", "api_key"
+        return normalized, "anthropic", "payg"
     if normalized.startswith("glm-"):
         return normalized, "zhipuai", "api_key"
     return normalized, "openai", "subscription"

@@ -209,7 +209,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/quick-start.md
 
 -   Python 3.12 이상
 -   `uv` 패키지 매니저 ([설치 안내](https://docs.astral.sh/uv/))
--   프로바이더 자격 1개 이상. ChatGPT Plus 구독(OAuth), Anthropic 구독(OAuth) 또는 API 키 중 하나면 충분합니다.
+-   프로바이더 자격 1개 이상. ChatGPT Plus 구독(OAuth) 또는 Anthropic·OpenAI·GLM API 키 중 하나면 충분합니다.
 
 ## 1\. 설치
 
@@ -1342,7 +1342,7 @@ GEODE의 구조화 출력 표면은 `response_schema` 하나입니다. caller가
 ```
 SubTask.response_schema
   → WorkerRequest.response_schema
-  → AgenticLoop(response_schema=...)
+  → AgenticLoop(config=AgenticLoopConfig(response_schema=...))
   → AdapterCallRequest.response_schema
   → adapter-specific output constraint
 ```
@@ -5180,7 +5180,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/ops/oauth.md
 
 | 증상 | 원인 | 해법 |
 | --- | --- | --- |
-| 한 프로파일만 계속 401 | 외부 저장소의 토큰 자체가 만료 | Codex는 `codex login`, Anthropic 구독은 Claude Code 재로그인으로 원본 토큰을 갱신합니다. |
+| 한 프로파일만 계속 401 | 외부 저장소의 토큰 자체가 만료 | Codex는 `codex login`으로 원본 토큰을 갱신합니다. Anthropic은 `ANTHROPIC_API_KEY`를 교체합니다. |
 | 호출이 점점 뜸해짐 | 반복 실패로 쿨다운 에스컬레이션 | 원인 자격을 고치면 성공 콜백이 쿨다운을 리셋합니다. |
 | 프로파일을 지웠는데 계속 쓰임 | 데몬 리로드가 추가 전용 | 데몬을 재시작합니다. |
 
@@ -6105,7 +6105,7 @@ Tier 2  latex2sympy2 + sympy.pretty  블록 전용. 분수·적분을 2D Unicode
 URL: https://mangowhoiscloud.github.io/geode/docs/reference/changelog
 Markdown: https://mangowhoiscloud.github.io/geode/docs/reference/changelog.md
 
-(body omitted from llms-full: 1521 KB — fetch the Markdown twin above for the complete page)
+(body omitted from llms-full: 1522 KB — fetch the Markdown twin above for the complete page)
 
 ---
 
@@ -6265,8 +6265,8 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 
 | 측정값 | 현재 트리 |
 | --- | --- |
-| 프로덕션 Python 파일 | 575 |
-| 테스트 Python 파일 | 675 |
+| 프로덕션 Python 파일 | 578 |
+| 테스트 Python 파일 | 676 |
 | 도구 정의 / 실행 등록 / 유효 스키마 | 82 / 85 / 82 |
 | RuntimeEvent 멤버 | 57 |
 | 기본 LLM 어댑터 | 5 |
