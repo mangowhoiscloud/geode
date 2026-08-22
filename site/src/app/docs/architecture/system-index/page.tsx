@@ -24,7 +24,7 @@ function ArchitectureBaselineTable({ locale }: { locale: "ko" | "en" }) {
           ],
           ["RuntimeEvent 멤버", number.format(architectureBaseline.hook_events.count)],
           ["기본 LLM 어댑터", number.format(architectureBaseline.built_in_adapters.count)],
-          ["모듈 수준 ContextVar", number.format(architectureBaseline.context_vars.count)],
+          ["프로덕션 ContextVar", number.format(architectureBaseline.context_vars.count)],
           [
             "core → product import 지점 / 파일",
             `${architectureBaseline.core_to_product_imports.site_count} / ${architectureBaseline.core_to_product_imports.file_count}`,
@@ -46,7 +46,7 @@ function ArchitectureBaselineTable({ locale }: { locale: "ko" | "en" }) {
           ],
           ["RuntimeEvent members", number.format(architectureBaseline.hook_events.count)],
           ["Built-in LLM adapters", number.format(architectureBaseline.built_in_adapters.count)],
-          ["Module-level ContextVars", number.format(architectureBaseline.context_vars.count)],
+          ["Production ContextVars", number.format(architectureBaseline.context_vars.count)],
           [
             "core → product import sites / files",
             `${architectureBaseline.core_to_product_imports.site_count} / ${architectureBaseline.core_to_product_imports.file_count}`,
