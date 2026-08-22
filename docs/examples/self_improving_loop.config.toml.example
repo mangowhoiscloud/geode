@@ -16,9 +16,9 @@
 # Global flags (apply to every self-improving-loop driver)
 # ---------------------------------------------------------------------------
 [self_improving_loop]
-# Block PAYG fallback when subscription quota is exhausted. Default `false`
-# aborts with an actionable error (Codex CLI `forced_login_method` pattern).
-# Flip to `true` to opt into automatic PAYG charges when the OAuth path
+# Block OpenAI PAYG fallback when ChatGPT OAuth quota is exhausted. Default
+# `false` aborts with an actionable error. Flip to `true` to opt into automatic
+# OpenAI PAYG charges when the OAuth path
 # runs out — the change is logged via the credential resolver journal
 # (`fallback_policy_resolved` event with source="config").
 fallback_to_payg = false
