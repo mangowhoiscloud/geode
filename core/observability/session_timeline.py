@@ -81,6 +81,12 @@ class SessionEventKind(StrEnum):
     GOAL_CREATED = "goal.created"
     GOAL_UPDATED = "goal.updated"
     GOAL_CONTINUED = "goal.continued"
+    GRILL_STARTED = "grill.started"
+    GRILL_UPDATED = "grill.updated"
+    GRILL_COMPLETED = "grill.completed"
+    GEO_STARTED = "geo.started"
+    GEO_UPDATED = "geo.updated"
+    GEO_COMPLETED = "geo.completed"
     USER_MESSAGE = "message.user"
     ASSISTANT_MESSAGE = "message.assistant"
     TOOL_CALLED = "tool.called"
@@ -712,6 +718,12 @@ class SessionTimeline:
         if session_generation is not None:
             self._session_generation = max(1, int(session_generation))
 
+    def begin_control_turn(self) -> str:
+        """Bind one non-model slash mutation to its own correlation turn."""
+        turn_id = f"t-{uuid.uuid4().hex[:12]}"
+        self.bind_turn(turn_id)
+        return turn_id
+
     def rebind(self, session_id: str, *, session_generation: int) -> None:
         """Rebind after resume so history follows the restored session id."""
         self._session_id = session_id
@@ -962,6 +974,7 @@ class SessionTimeline:
         goal: Any,
         *,
         trigger: str,
+        call_id: str = "",
     ) -> None:
         """Persist a goal control edge without duplicating its objective."""
         if kind not in {
@@ -984,6 +997,38 @@ class SessionTimeline:
                 "time_used_seconds": round(float(getattr(goal, "time_used_seconds", 0.0)), 3),
                 "trigger": trigger,
             },
+            call_id=call_id,
+        )
+
+    def record_control_state(
+        self,
+        kind: SessionEventKind,
+        state: Any,
+        *,
+        trigger: str,
+        call_id: str = "",
+    ) -> None:
+        """Persist a compact typed grill/GEO transition receipt."""
+        allowed = {
+            SessionEventKind.GRILL_STARTED,
+            SessionEventKind.GRILL_UPDATED,
+            SessionEventKind.GRILL_COMPLETED,
+            SessionEventKind.GEO_STARTED,
+            SessionEventKind.GEO_UPDATED,
+            SessionEventKind.GEO_COMPLETED,
+        }
+        if kind not in allowed:
+            raise ValueError(f"unsupported control-state event kind: {kind.value}")
+        payload = state.to_dict()
+        subject = str(payload.pop("subject", ""))
+        payload["subject_sha256"] = sha256(subject.encode("utf-8")).hexdigest()
+        payload["trigger"] = trigger
+        self._record(
+            kind,
+            role="policy",
+            status=str(payload.get("status") or payload.get("phase") or ""),
+            payload=payload,
+            call_id=call_id,
         )
 
     def record_tool_call(

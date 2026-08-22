@@ -100,6 +100,7 @@ def test_daemon_composition_supplies_product_workers_tools_and_prompts(monkeypat
     from core.server.supervised import services
     from core.slash_routing import compose_command_registry
     from geode_product import wiring
+    from geode_product.geo_state import GeoStore
     from geode_product.slash_commands import PRODUCT_COMMAND_SPECS
     from geode_product.tool_handlers import compose_tool_plan
 
@@ -114,6 +115,7 @@ def test_daemon_composition_supplies_product_workers_tools_and_prompts(monkeypat
         "tool_plan_builder": compose_tool_plan,
         "worker_module": "geode_product.worker",
         "agent_search_dirs": (Path(wiring.__file__).parent / "seed_generation" / "agents",),
+        "control_state_factories": {"geo": GeoStore},
         "policy_sources": policy_sources,
         "middleware_builder": wiring.build_middleware_registry,
         "activity_sink_provider": wiring.current_activity_sink,

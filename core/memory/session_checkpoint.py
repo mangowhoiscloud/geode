@@ -192,53 +192,43 @@ class SessionCheckpoint:
                 self._record_transition(
                     state.session_id, "save", from_status=current, to_status=incoming
                 )
-            # Write state.json (metadata) inside the lock so a concurrent
-            # transition cannot interleave its read-check-write with ours.
+
+            self._sync_cognitive_state_to_db(state)
+            personal_safe = sanitize_personal_data_payload(
+                {
+                    "messages": sanitize_computer_payload(state.messages),
+                    "tool_log": sanitize_computer_payload(state.tool_log),
+                }
+            )
+            persisted_state = replace(
+                state,
+                messages=personal_safe["messages"],
+                tool_log=personal_safe["tool_log"],
+            )
+
+            # Phase 1b: SoT lives in SQLite ``messages`` table. Mirror the
+            # full message list before publishing the metadata commit point.
+            self._sync_messages_to_db(persisted_state)
+
+            # JSON message/tool files are compatibility caches, not the SoT.
+            msg_file = session_path / "messages.json"
+            atomic_write_json(msg_file, persisted_state.messages)
+            if persisted_state.tool_log:
+                tools_file = session_path / "tools.json"
+                atomic_write_json(tools_file, persisted_state.tool_log[-50:])
+
+            self._dir.mkdir(parents=True, exist_ok=True)
+            active_file = self._dir / "active.json"
+            atomic_write_json(
+                active_file,
+                {"session_id": state.session_id, "updated_at": state.updated_at},
+                indent=2,
+            )
+            self._sync_to_index(state, len(state.messages))
+
+            # state.json is the guard/checkpoint commit marker. Publish it last
+            # so a failed save cannot make resume observe uncommitted plan state.
             atomic_write_json(state_file, data, indent=2)
-
-        self._sync_cognitive_state_to_db(state)
-        personal_safe = sanitize_personal_data_payload(
-            {
-                "messages": sanitize_computer_payload(state.messages),
-                "tool_log": sanitize_computer_payload(state.tool_log),
-            }
-        )
-        persisted_state = replace(
-            state,
-            messages=personal_safe["messages"],
-            tool_log=personal_safe["tool_log"],
-        )
-
-        # Phase 1b: SoT lives in SQLite ``messages`` table. Mirror the
-        # *full* message list into the DB **first** so a JSON-only failure
-        # below (disk full, write race) cannot leave the SoT with a stale
-        # message count.
-        self._sync_messages_to_db(persisted_state)
-
-        # Write messages.json as a hot cache (full list, no trim). Old
-        # offline tooling can still read this; the runtime ``load()`` path
-        # prefers the DB.
-        msg_file = session_path / "messages.json"
-        atomic_write_json(msg_file, persisted_state.messages)
-
-        # Write tools.json hot cache when tool log exists. The structured
-        # ``tool_calls`` column on each ``messages`` row is now the SoT,
-        # so this is a convenience copy only.
-        if persisted_state.tool_log:
-            tools_file = session_path / "tools.json"
-            atomic_write_json(tools_file, persisted_state.tool_log[-50:])
-
-        # Update active.json pointer
-        self._dir.mkdir(parents=True, exist_ok=True)
-        active_file = self._dir / "active.json"
-        atomic_write_json(
-            active_file,
-            {"session_id": state.session_id, "updated_at": state.updated_at},
-            indent=2,
-        )
-
-        # Sync session metadata to SQLite index for fast query (GAP 3).
-        self._sync_to_index(state, len(state.messages))
 
     def load(self, session_id: str) -> SessionState | None:
         """Load a session checkpoint. Returns None if not found.

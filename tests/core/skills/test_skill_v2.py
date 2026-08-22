@@ -113,6 +113,8 @@ class TestSkillDefinitionV2:
         repo_root = Path(__file__).parents[3]
         skill = SkillLoader(lazy=False).load_file(repo_root / ".geode/skills/geo/SKILL.md")
 
+        assert "get_geo" in skill.tools
+        assert "update_geo" in skill.tools
         assert "delegate_task" in skill.tools
         assert "spawn_agent" in skill.tools
         assert "read_document" in skill.tools
@@ -133,6 +135,14 @@ class TestSkillDefinitionV2:
         assert "generic Tree-of-Thought/MCTS engine" in scaffold
         assert "Inspect `.eval`" in scaffold
         assert "geode-eval-artifacts" in scaffold
+
+    def test_bundled_grilling_uses_typed_runtime_state(self) -> None:
+        repo_root = Path(__file__).parents[3]
+        skill = SkillLoader(lazy=False).load_file(repo_root / ".geode/skills/grilling/SKILL.md")
+
+        assert {"get_grill", "update_grill"} <= set(skill.tools)
+        assert "typed `grill_state`" in skill.body
+        assert "Do not simulate MCTS or LATS" in skill.body
 
 
 class TestProgressiveDisclosure:

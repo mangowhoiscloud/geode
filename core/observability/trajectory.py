@@ -72,6 +72,14 @@ __all__ = [
 _DIALOGUE_EVENTS = {"user_message", "assistant_message", "tool_call", "tool_result"}
 _TOOL_CALL_KINDS = {"tool.called", "tool_call"}
 _TOOL_RESULT_KINDS = {"tool.completed", "tool_result"}
+_CONTROL_STATE_KINDS = {
+    "grill.started",
+    "grill.updated",
+    "grill.completed",
+    "geo.started",
+    "geo.updated",
+    "geo.completed",
+}
 _TURN_SCOPED_KINDS = {
     "message.user",
     "message.assistant",
@@ -92,6 +100,7 @@ _TURN_SCOPED_KINDS = {
     "goal.created",
     "goal.updated",
     "goal.continued",
+    *_CONTROL_STATE_KINDS,
 }
 
 
@@ -295,6 +304,7 @@ def _trajectory_quality(events: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     orphan_results = 0
     tool_events = 0
     missing_tool_call_ids = 0
+    missing_control_call_ids = 0
     turn_scoped_events = 0
     missing_turn_ids = 0
     payload_issue_events = 0
@@ -326,6 +336,14 @@ def _trajectory_quality(events: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
                     open_calls[key] -= 1
                 else:
                     orphan_results += 1
+        if (
+            kind in _CONTROL_STATE_KINDS
+            and str((event.get("payload") or {}).get("trigger") or "").startswith(
+                ("update_grill:", "update_geo:")
+            )
+            and not call_id
+        ):
+            missing_control_call_ids += 1
         if _payload_has_quality_issue(event.get("payload")):
             payload_issue_events += 1
 
@@ -336,6 +354,10 @@ def _trajectory_quality(events: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         scope_incompleteness.append("trajectory contains no events")
     if missing_tool_call_ids:
         scope_incompleteness.append(f"{missing_tool_call_ids} tool event(s) lack call_id")
+    if missing_control_call_ids:
+        scope_incompleteness.append(
+            f"{missing_control_call_ids} tool-driven control event(s) lack call_id"
+        )
     if missing_turn_ids:
         scope_incompleteness.append(f"{missing_turn_ids} turn-scoped event(s) lack turn_id")
     if orphan_calls:
@@ -356,6 +378,7 @@ def _trajectory_quality(events: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
             "turn_id_required": turn_scoped_events,
             "turn_id_missing": missing_turn_ids,
             "tool_call_id_present": tool_events - missing_tool_call_ids,
+            "control_call_id_missing": missing_control_call_ids,
             "event_count": len(events),
         },
         "tool_pairing": {
@@ -732,8 +755,13 @@ def _digest_private_event_payload(
         "changed_step_ids",
         "trigger",
     }
+    control_fields = {"trigger"}
     allowed = structural | (
-        plan_fields if kind.startswith("plan.") else safe_by_kind.get(kind, set())
+        plan_fields
+        if kind.startswith("plan.")
+        else control_fields
+        if kind in _CONTROL_STATE_KINDS
+        else safe_by_kind.get(kind, set())
     )
     omitted_payload = {field: protected.pop(field) for field in sorted(set(protected) - allowed)}
     if omitted_payload:

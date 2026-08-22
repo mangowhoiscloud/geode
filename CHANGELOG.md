@@ -47,7 +47,27 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **Slash controls now have typed runtime authority.** `/goal` supports
+  compare-and-set pause, resume, edit, and empty transitions; `/plan` restores
+  strict advisory checkpoints; `/grill` enforces an acyclic dependency
+  frontier; and `/geo` preserves phase-gated `F/R/C/P/A/Q/O` evidence with
+  per-stage denominators and explicit `not_measured` states.
+
 ### Fixed
+
+- **Slash trajectories retain control correlation without hijacking cognitive
+  verification.** Non-model goal and plan mutations receive turn identities,
+  tool-driven state edges retain call IDs, and active `/grill` or `/geo`
+  continuations clear only stale verify-retry signals without retiring the
+  cognitive verify/replan loop or fabricating a new verify pass. Verify/replan
+  state survives resume, active control state cannot fall through fast-chat,
+  revision compare-and-set prevents cross-process lost updates, and `/plan`
+  rolls back failed checkpoint installs or progress. GEO requires evidence at
+  every ordered phase; its live/experiment receipts remain operator-owned and
+  freeze measurement inputs. Release admission now rejects unscoped or
+  uncorrelated tool-driven control events.
 
 - **Bundled slash-command skills ship in distribution artifacts.** Fresh wheel
   and sdist installs now include `.geode/skills`, with artifact and installed-

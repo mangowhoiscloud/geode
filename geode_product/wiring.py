@@ -105,6 +105,7 @@ def build_shared_services(**kwargs: Any) -> Any:
     from core.server.supervised.services import build_shared_services as build_core_services
     from core.slash_routing import compose_command_registry
 
+    from geode_product.geo_state import GeoStore
     from geode_product.slash_commands import PRODUCT_COMMAND_SPECS
 
     if kwargs.get("policy_sources") is None:
@@ -118,6 +119,7 @@ def build_shared_services(**kwargs: Any) -> Any:
         tool_plan_builder=compose_tool_plan,
         worker_module="geode_product.worker",
         agent_search_dirs=(Path(__file__).parent / "seed_generation" / "agents",),
+        control_state_factories={"geo": GeoStore},
     )
 
 

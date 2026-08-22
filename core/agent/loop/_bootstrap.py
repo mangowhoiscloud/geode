@@ -109,15 +109,19 @@ def initialize_runtime(
     loop._timeline = None
     loop._session_id = ""
     loop._goal_store = None
+    loop._control_state_renderers = {}
     try:
         import uuid
 
         from core.memory.goals import GoalStore
+        from core.memory.grills import GrillStore
         from core.observability.session_timeline import SessionTimeline
 
         loop._session_id = config.session_id or f"s-{uuid.uuid4().hex[:12]}"
         loop._timeline = SessionTimeline(loop._session_id)
         loop._goal_store = GoalStore(loop._timeline.db_path)
+        loop._control_state_renderers["goal"] = loop._goal_store
+        loop._control_state_renderers["grill"] = GrillStore(loop._timeline.db_path)
     except Exception:
         import logging
 

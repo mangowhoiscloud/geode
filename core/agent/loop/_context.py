@@ -187,6 +187,24 @@ def render_goal_continuation_hint(goal: Any) -> str:
     )
 
 
+def render_control_state_hints(loop: AgenticLoop) -> str:
+    """Render attached typed slash projections inside dynamic context only."""
+    renderers = getattr(loop, "_control_state_renderers", {})
+    if not isinstance(renderers, dict):
+        return ""
+    blocks: list[str] = []
+    for name in sorted(renderers):
+        renderer = renderers[name]
+        try:
+            block = renderer.render_prompt(loop._session_id)
+        except Exception:
+            log.warning("%s control-state prompt render failed", name, exc_info=True)
+            continue
+        if isinstance(block, str) and block:
+            blocks.append(block)
+    return "\n\n".join(blocks)
+
+
 def goal_continuation_messages(hint: str) -> list[dict[str, str]]:
     """Return request-local Goal steering without polluting human history."""
     return [{"role": "user", "content": hint}] if hint else []

@@ -622,6 +622,19 @@ class TestSharedServicesCreateSession:
             services.create_session(SessionMode.REPL)
             mock_prop.assert_not_called()
 
+    def test_product_control_state_factory_reaches_fresh_and_resumed_sessions(self) -> None:
+        marker = MagicMock()
+        factory = MagicMock(return_value=marker)
+        services = SharedServices(
+            hook_system=MagicMock(),
+            control_state_factories={"geo": factory},
+        )
+
+        _, loop = services.create_session(SessionMode.IPC, session_id="s-resumable")
+
+        assert loop._control_state_renderers["geo"] is marker
+        factory.assert_called_once_with(loop._timeline.db_path)
+
 
 class TestBuildSharedServices:
     """build_shared_services() factory integration."""

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 
+import pytest
 from core.memory.session_checkpoint import (
     SessionCheckpoint,
     SessionState,
@@ -439,3 +440,28 @@ class TestPhase1bDbFirst:
             assert mgr.count_messages("sot-1") == 1
         finally:
             mgr.close()
+
+    def test_failed_save_does_not_publish_new_guard_state(self, tmp_path, monkeypatch):
+        cp = SessionCheckpoint(tmp_path / "session")
+        cp.save(
+            SessionState(
+                session_id="guard-commit",
+                loop_guards={"active_plan": {"current": 0}},
+            )
+        )
+
+        def fail_index(*_args, **_kwargs):
+            raise OSError("injected index failure")
+
+        monkeypatch.setattr(cp, "_sync_to_index", fail_index)
+        with pytest.raises(OSError, match="injected"):
+            cp.save(
+                SessionState(
+                    session_id="guard-commit",
+                    loop_guards={"active_plan": {"current": 1}},
+                )
+            )
+
+        loaded = cp.load("guard-commit")
+        assert loaded is not None
+        assert loaded.loop_guards == {"active_plan": {"current": 0}}

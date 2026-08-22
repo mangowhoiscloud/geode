@@ -345,6 +345,11 @@ class SessionMetrics:
         self.last_verify_reflection_hint = str(hint)
         self.last_verify_should_retry = bool(should_retry)
 
+    def clear_verify_retry_signal(self) -> None:
+        """Clear the prior turn's replan edge without changing verify counters."""
+        self.last_verify_reflection_hint = ""
+        self.last_verify_should_retry = False
+
     @property
     def last_verify_reflexion_hint(self) -> str:
         """Legacy alias for ``last_verify_reflection_hint``."""

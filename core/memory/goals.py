@@ -11,6 +11,7 @@ import time
 import uuid
 from dataclasses import asdict, dataclass
 from enum import StrEnum
+from html import escape
 from pathlib import Path
 from typing import Any
 
@@ -20,23 +21,25 @@ from core.memory.sqlite_store import short_sqlite_connection
 class GoalStatus(StrEnum):
     EMPTY = "empty"
     ACTIVE = "active"
+    PAUSED = "paused"
     BLOCKED = "blocked"
     BUDGET_LIMITED = "budget_limited"
     COMPLETE = "complete"
 
 
-_UNFINISHED = frozenset({GoalStatus.ACTIVE})
+_UNFINISHED = frozenset({GoalStatus.ACTIVE, GoalStatus.PAUSED})
 _CREATE_GOALS_SQL = """\
 CREATE TABLE IF NOT EXISTS thread_goals (
     session_id        TEXT PRIMARY KEY,
     goal_id           TEXT NOT NULL UNIQUE,
     objective         TEXT NOT NULL,
     status            TEXT NOT NULL CHECK (
-        status IN ('active', 'blocked', 'budget_limited', 'complete')
+        status IN ('active', 'paused', 'blocked', 'budget_limited', 'complete')
     ),
     token_budget      INTEGER,
     tokens_used       INTEGER NOT NULL DEFAULT 0,
     time_used_seconds REAL NOT NULL DEFAULT 0,
+    revision          INTEGER NOT NULL DEFAULT 0,
     created_at        REAL NOT NULL,
     updated_at        REAL NOT NULL
 )
@@ -54,6 +57,7 @@ class ThreadGoal:
     time_used_seconds: float
     created_at: float
     updated_at: float
+    revision: int = 0
 
     @property
     def remaining_tokens(self) -> int | None:
@@ -70,7 +74,31 @@ class ThreadGoal:
 
 def ensure_goal_schema(conn: sqlite3.Connection) -> None:
     """Create the additive goal projection table."""
-    conn.execute(_CREATE_GOALS_SQL)
+    existing = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'thread_goals'"
+    ).fetchone()
+    if existing is not None and "'paused'" not in str(existing[0]):
+        conn.execute("ALTER TABLE thread_goals RENAME TO thread_goals_legacy")
+        conn.execute(_CREATE_GOALS_SQL)
+        conn.execute(
+            """INSERT INTO thread_goals
+                   (session_id, goal_id, objective, status, token_budget, tokens_used,
+                    time_used_seconds, revision, created_at, updated_at)
+               SELECT session_id, goal_id, objective, status, token_budget, tokens_used,
+                      time_used_seconds, 0, created_at, updated_at
+               FROM thread_goals_legacy"""
+        )
+        conn.execute("DROP TABLE thread_goals_legacy")
+    else:
+        conn.execute(_CREATE_GOALS_SQL)
+    columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(thread_goals)")}
+    if "revision" not in columns:
+        try:
+            conn.execute("ALTER TABLE thread_goals ADD COLUMN revision INTEGER NOT NULL DEFAULT 0")
+        except sqlite3.OperationalError:
+            columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(thread_goals)")}
+            if "revision" not in columns:
+                raise
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_thread_goals_status "
         "ON thread_goals (status, updated_at DESC)"
@@ -102,7 +130,13 @@ class GoalStore:
         goal = self.get(session_id)
         return goal.status if goal is not None else GoalStatus.EMPTY
 
-    def clear(self, session_id: str) -> ThreadGoal | None:
+    def clear(
+        self,
+        session_id: str,
+        *,
+        expected_goal_id: str | None = None,
+        expected_revision: int | None = None,
+    ) -> ThreadGoal | None:
         """Transition the session to ``empty`` by removing its goal projection."""
         if not session_id:
             raise ValueError("clear_goal requires an active session")
@@ -111,7 +145,14 @@ class GoalStore:
                 "SELECT * FROM thread_goals WHERE session_id = ?", (session_id,)
             ).fetchone()
             if row is not None:
-                conn.execute("DELETE FROM thread_goals WHERE session_id = ?", (session_id,))
+                if expected_goal_id is not None and str(row["goal_id"]) != expected_goal_id:
+                    raise ValueError("stale goal update: goal_id no longer matches")
+                if expected_revision is not None and int(row["revision"]) != expected_revision:
+                    raise ValueError("stale goal update: revision no longer matches")
+                conn.execute(
+                    "DELETE FROM thread_goals WHERE session_id = ? AND revision = ?",
+                    (session_id, int(row["revision"])),
+                )
         return self._from_row(row) if row is not None else None
 
     def list_active(self) -> list[ThreadGoal]:
@@ -159,6 +200,7 @@ class GoalStore:
                        token_budget=excluded.token_budget,
                        tokens_used=0,
                        time_used_seconds=0,
+                       revision=0,
                        created_at=excluded.created_at,
                        updated_at=excluded.updated_at""",
                 (session_id, goal_id, objective, token_budget, now, now),
@@ -170,16 +212,44 @@ class GoalStore:
             raise RuntimeError("goal was not persisted")
         return self._from_row(row)
 
-    def update_terminal(self, session_id: str, status: GoalStatus) -> ThreadGoal:
+    def update_terminal(
+        self,
+        session_id: str,
+        status: GoalStatus,
+        *,
+        expected_goal_id: str | None = None,
+        expected_revision: int | None = None,
+    ) -> ThreadGoal:
         if status not in {GoalStatus.COMPLETE, GoalStatus.BLOCKED}:
             raise ValueError("update_goal may only set complete or blocked")
         with short_sqlite_connection(self._db_path, ensure_goal_schema, immediate=True) as conn:
+            if expected_goal_id is None:
+                row = conn.execute(
+                    "SELECT goal_id FROM thread_goals WHERE session_id = ? AND status = 'active'",
+                    (session_id,),
+                ).fetchone()
+                expected_goal_id = str(row["goal_id"]) if row is not None else ""
             cursor = conn.execute(
-                """UPDATE thread_goals SET status = ?, updated_at = ?
-                   WHERE session_id = ? AND status = 'active'""",
-                (status.value, time.time(), session_id),
+                """UPDATE thread_goals SET status = ?, revision = revision + 1,
+                                           updated_at = ?
+                   WHERE session_id = ? AND goal_id = ? AND status = 'active'
+                     AND (? IS NULL OR revision = ?)""",
+                (
+                    status.value,
+                    time.time(),
+                    session_id,
+                    expected_goal_id,
+                    expected_revision,
+                    expected_revision,
+                ),
             )
             if cursor.rowcount != 1:
+                current = conn.execute(
+                    "SELECT goal_id, status FROM thread_goals WHERE session_id = ?",
+                    (session_id,),
+                ).fetchone()
+                if current is not None and str(current["status"]) == GoalStatus.ACTIVE.value:
+                    raise ValueError("stale goal update: identity or revision no longer matches")
                 raise ValueError("no active goal exists for this session")
             row = conn.execute(
                 "SELECT * FROM thread_goals WHERE session_id = ?", (session_id,)
@@ -187,6 +257,79 @@ class GoalStore:
         if row is None:
             raise RuntimeError("goal disappeared after update")
         return self._from_row(row)
+
+    def update_operator(
+        self,
+        session_id: str,
+        action: str,
+        *,
+        expected_goal_id: str,
+        expected_revision: int,
+        objective: str = "",
+    ) -> ThreadGoal:
+        """Apply an operator-owned pause/resume/edit transition with CAS."""
+        action = action.strip().lower()
+        if action not in {"pause", "resume", "edit"}:
+            raise ValueError("goal action must be pause, resume, or edit")
+        objective = objective.strip()
+        if action == "edit" and (not objective or len(objective) > 4000):
+            raise ValueError("edited objective must contain 1-4000 characters")
+        with short_sqlite_connection(self._db_path, ensure_goal_schema, immediate=True) as conn:
+            if action == "edit":
+                cursor = conn.execute(
+                    """UPDATE thread_goals SET objective = ?, revision = revision + 1,
+                                                   updated_at = ?
+                       WHERE session_id = ? AND goal_id = ?
+                         AND revision = ? AND status IN ('active', 'paused')""",
+                    (
+                        objective,
+                        time.time(),
+                        session_id,
+                        expected_goal_id,
+                        expected_revision,
+                    ),
+                )
+            else:
+                expected = GoalStatus.PAUSED if action == "resume" else GoalStatus.ACTIVE
+                target = GoalStatus.ACTIVE if action == "resume" else GoalStatus.PAUSED
+                cursor = conn.execute(
+                    """UPDATE thread_goals SET status = ?, revision = revision + 1,
+                                                updated_at = ?
+                       WHERE session_id = ? AND goal_id = ? AND revision = ? AND status = ?""",
+                    (
+                        target.value,
+                        time.time(),
+                        session_id,
+                        expected_goal_id,
+                        expected_revision,
+                        expected.value,
+                    ),
+                )
+            if cursor.rowcount != 1:
+                raise ValueError("stale or illegal goal transition")
+            row = conn.execute(
+                "SELECT * FROM thread_goals WHERE session_id = ?", (session_id,)
+            ).fetchone()
+        if row is None:
+            raise RuntimeError("goal disappeared after operator update")
+        return self._from_row(row)
+
+    def render_prompt(self, session_id: str) -> str:
+        goal = self.get(session_id)
+        if goal is None:
+            return '<goal_state status="empty" />'
+        remaining = goal.remaining_tokens if goal.remaining_tokens is not None else "unbounded"
+        return (
+            '<goal_state authority="typed_projection">\n'
+            f"<goal_id>{goal.goal_id}</goal_id>\n"
+            f"<status>{goal.status.value}</status>\n"
+            f"<objective>{escape(goal.objective, quote=False)}</objective>\n"
+            f"<tokens_used>{goal.tokens_used}</tokens_used>\n"
+            f"<revision>{goal.revision}</revision>\n"
+            f"<remaining_tokens>{remaining}</remaining_tokens>\n"
+            "Only explicit user controls may pause, resume, edit, or clear this goal.\n"
+            "</goal_state>"
+        )
 
     def account(
         self,
@@ -217,9 +360,18 @@ class GoalStore:
             )
             conn.execute(
                 """UPDATE thread_goals
-                   SET status = ?, tokens_used = ?, time_used_seconds = ?, updated_at = ?
-                   WHERE session_id = ? AND goal_id = ?""",
-                (status.value, used, elapsed, time.time(), session_id, goal.goal_id),
+                   SET status = ?, tokens_used = ?, time_used_seconds = ?,
+                       revision = revision + 1, updated_at = ?
+                   WHERE session_id = ? AND goal_id = ? AND revision = ?""",
+                (
+                    status.value,
+                    used,
+                    elapsed,
+                    time.time(),
+                    session_id,
+                    goal.goal_id,
+                    goal.revision,
+                ),
             )
             updated = conn.execute(
                 "SELECT * FROM thread_goals WHERE session_id = ?", (session_id,)
@@ -236,6 +388,7 @@ class GoalStore:
             token_budget=int(row["token_budget"]) if row["token_budget"] is not None else None,
             tokens_used=int(row["tokens_used"]),
             time_used_seconds=float(row["time_used_seconds"]),
+            revision=int(row["revision"]),
             created_at=float(row["created_at"]),
             updated_at=float(row["updated_at"]),
         )
