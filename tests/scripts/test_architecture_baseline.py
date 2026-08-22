@@ -957,6 +957,8 @@ def test_context_var_inventory_rejects_shadowed_builtin_observer(
         'from contextvars import ContextVar\ndef factory(CV=ContextVar):\n    return CV("state")',
         'import contextvars\ndef factory(cv=contextvars):\n    return cv.ContextVar("state")',
         'import contextvars\ndef factory():\n    cv = contextvars\n    return cv.ContextVar("state")',
+        "import contextvars\ndef factory():\n    modules = [contextvars]\n"
+        '    return modules[0].ContextVar("state")',
         'import contextvars\ndef factory():\n    return contextvars\nstate = factory().ContextVar("state")',
         'def factory():\n    import core.alias as alias\n    return alias.CV("state")',
         'def factory():\n    from core import alias\n    return alias.CV("state")',
@@ -1324,6 +1326,30 @@ def test_context_var_inventory_rejects_definition_time_and_async_factories(
     core.mkdir()
     (core / "sample.py").write_text(
         f"from contextvars import ContextVar\n{source}",
+        encoding="utf-8",
+    )
+    manifest = tmp_path / "context-var-lifecycles.json"
+    manifest.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(baseline, "CONTEXT_VAR_LIFECYCLES", manifest)
+
+    with pytest.raises(ValueError, match="factories must assign directly"):
+        baseline._context_vars(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "factory",
+    [
+        'def make(factories=(ContextVar,)):\n    return factories[0]("hidden")',
+        'make = lambda factories=[ContextVar]: factories[0]("hidden")',
+    ],
+)
+def test_context_var_inventory_rejects_constructor_in_factory_default_container(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, factory: str
+) -> None:
+    core = tmp_path / "core"
+    core.mkdir()
+    (core / "sample.py").write_text(
+        f"from contextvars import ContextVar\n{factory}\nstate = make()\n",
         encoding="utf-8",
     )
     manifest = tmp_path / "context-var-lifecycles.json"

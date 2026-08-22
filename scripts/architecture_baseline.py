@@ -788,7 +788,8 @@ def _reject_context_factories(
                     )
                 )
                 or any(
-                    module_reference(child.value) or contains_context_constructor(child.value)
+                    contains_context_module(child.value)
+                    or contains_context_constructor(child.value)
                     for child in ast.walk(node)
                     if isinstance(child, ast.Assign | ast.AnnAssign)
                     if child.value is not None
@@ -811,7 +812,7 @@ def _reject_context_factories(
                 *node.args.kw_defaults,
             )
             if any(
-                module_reference(expression) or constructor_reference(expression) is not None
+                contains_context_module(expression) or contains_context_constructor(expression)
                 for expression in definition_inputs
                 if expression is not None
             ):
@@ -844,7 +845,7 @@ def _reject_context_factories(
                 )
             if (
                 any(
-                    module_reference(expression) or constructor_reference(expression) is not None
+                    contains_context_module(expression) or contains_context_constructor(expression)
                     for expression in (*deferred.args.defaults, *deferred.args.kw_defaults)
                     if expression is not None
                 )
