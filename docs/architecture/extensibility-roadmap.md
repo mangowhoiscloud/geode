@@ -226,6 +226,7 @@ normal review and CI; implementations start only after the claim merges.
 | Closure package | GAP IDs | Owner/session | Implementation branch | Claim evidence | Claimed at (UTC) |
 |---|---|---|---|---|---|
 | R8.3 | REL-004 | `session=codex-root task=r8-3-publication-grace-evidence` | `feature/r8-3-publication-grace-evidence` | Readiness [#3039](https://github.com/mangowhoiscloud/geode/pull/3039); v1.0.23 GitHub/PyPI parity and candidate interval re-audited | `2026-08-20T07:41:19Z` |
+| R4.2 | DI-002, DI-003 | `session=codex-root task=r4-2-cohesive-runtime-services` | `feature/r4-2-cohesive-runtime-services` | Reconciliation/readiness [#3089](https://github.com/mangowhoiscloud/geode/pull/3089); 21-field runtime config and eleven service-locator removal inputs re-audited | `2026-08-22T18:35:48Z` |
 
 ## 1. Program objective
 
@@ -530,8 +531,8 @@ and closure evidence are appended in §10.
 | LOOP-004 | `ABSENT` | Loop has 2,714 LOC, 67 methods, and 27 constructor args with no local ratchet | Closure budgets in §7.3 are executable and cannot regress | R3.3 | LOOP-003 | `IN_DEVELOP` |
 | LOOP-005 | `MISFIT` | `SubAgentManager` combines request codec, role resolution, execution, validation, and announcements | Separate collaborators own those responsibilities; manager remains an orchestrator | R3.4 | LOOP-002 | `IN_DEVELOP` |
 | DI-001 | `PARTIAL` | 26 module-level `ContextVar` declarations have no lifecycle classification | Generated inventory classifies request identity, diagnostics, mutable request state, request-local cache, and forbidden service lookup | R4.1 | LOOP-002 | `IN_DEVELOP` |
-| DI-002 | `PARTIAL` | `GeodeRuntime` groups config, but `RuntimeCoreConfig` still has 17 fields | Cohesive lifecycle groups contain at most seven fields and have explicit owners/teardown | R4.2 | DI-001 | `READY` |
-| DI-003 | `MISFIT` | Downstream modules obtain injectable services through globals and CLI modules | Constructor/factory injection owns services; allowed ambient context is documented and tested | R4.2 | DI-001, DI-002 | `READY` |
+| DI-002 | `PARTIAL` | `GeodeRuntime` groups config, but `RuntimeCoreConfig` still has 17 fields | Cohesive lifecycle groups contain at most seven fields and have explicit owners/teardown | R4.2 | DI-001 | `IN_PROGRESS` |
+| DI-003 | `MISFIT` | Downstream modules obtain injectable services through globals and CLI modules | Constructor/factory injection owns services; allowed ambient context is documented and tested | R4.2 | DI-001, DI-002 | `IN_PROGRESS` |
 | DI-004 | `MISFIT` | `MCPServerManager` combines config, discovery, connection, call, trace/persistence, and lifecycle | Separate config catalog, connection pool, invoker, and persistence collaborators preserve public behavior | R4.3 | DI-002 | `OPEN` |
 | LLM-001 | `MISFIT` | `LLMAdapter` documentation calls the contract minimal but requires streaming and introspection methods | Minimal completion protocol plus optional capability protocols; no empty stubs required | R5.1 | DI-002 | `OPEN` |
 | LLM-002 | `PARTIAL` | Eight built-ins use a mutable registry with broad bootstrap lifetime | Built-in plus entry-point discovery yields immutable session snapshots with generation and collision policy | R5.2 | LLM-001, BND-001 | `OPEN` |
@@ -2171,17 +2172,17 @@ drift checks. The eleven service locators are measured R4.2 inputs, so R4.1 is
 not eligible for `DONE` until those bindings are removed through explicit
 service ownership and injection.
 
-R4.2 (`DI-002`, `DI-003`) is the sole unclaimed `READY` package after a
-whole-package re-audit against
-`origin/develop@90e039ceab5b510f26a7a38df1aceebad1fd35f7`. Its external dependency
-DI-001 is `IN_DEVELOP`; DI-002 to DI-003 is the package's internal
-implementation order. Current develop has a 21-field `RuntimeCoreConfig` and
-eleven generated service-locator bindings. Acceptance requires lifecycle-owned
-groups of at most seven cohesive fields, explicit teardown, constructor or
-factory injection at composition roots, and a generated prohibition on new
-service-locator `ContextVar` bindings. This readiness authorizes no R4.3
-manager split or R5 adapter work; implementation still requires a separate
-claim PR and a fresh worktree from the post-claim canonical `develop`.
+R4.2 (`DI-002`, `DI-003`) is `IN_PROGRESS` under the active claim for
+`feature/r4-2-cohesive-runtime-services` after reconciliation/readiness
+[#3089](https://github.com/mangowhoiscloud/geode/pull/3089) merged as
+`2cfd765b3ce6122c7ca0cf361e39422c89991e4f`. DI-001 is `IN_DEVELOP`, and
+DI-002 to DI-003 remains the package's internal implementation order. The
+claimed scope replaces the measured 21-field `RuntimeCoreConfig` and eleven
+service-locator bindings with lifecycle-owned groups of at most seven cohesive
+fields, explicit teardown, composition-root injection, and a generated
+prohibition on new service-locator `ContextVar` bindings. It authorizes no
+R4.3 manager split or R5 adapter work. The implementation worktree may be
+allocated only after this claim merges and canonical `develop` is refreshed.
 
 R9.1 (`CODE-001`) was already dependency-satisfied and remains `OPEN` pending
 its own serialized whole-package readiness transaction later in master order.
