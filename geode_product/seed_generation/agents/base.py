@@ -155,7 +155,7 @@ def parse_structured_output(
 class SeedAgentResult:
     """Standardized result of one phase-agent invocation.
 
-    Why not reuse ``core.agent.sub_agent.SubResult``? S2-fix
+    Why not reuse ``core.agent.subagent_protocol.SubResult``? S2-fix
     (2026-05-18) explicit rationale — both dataclasses share ~80% of
     fields (status / duration / token counts / error category), but
     their *aggregation semantics* differ:

@@ -3,7 +3,7 @@
 PR-SEEDGEN-TOKENS (2026-05-30) — the sub-agent runs in a subprocess; its
 ``AgenticResult.usage`` reaches the parent as ``WorkerResult`` token
 fields → ``IsolationResult`` → ``SubResult`` (via
-``SubAgentManager._to_sub_result``). Pre-fix every link dropped the
+``SubAgentManager._protocol.to_sub_result``). Pre-fix every link dropped the
 usage and seed-gen runs reported all zeros. These tests pin the
 ``IsolationResult`` → ``SubResult`` link.
 
@@ -36,7 +36,7 @@ def test_to_sub_result_forwards_usage_on_success() -> None:
         completion_tokens=300,
         usd_spent=0.018,
     )
-    sub = mgr._to_sub_result(_task(), isolation)
+    sub = mgr._protocol.to_sub_result(_task(), isolation)
     assert sub.success
     assert sub.prompt_tokens == 900
     assert sub.completion_tokens == 300
@@ -55,7 +55,7 @@ def test_to_sub_result_forwards_usage_on_failure() -> None:
         completion_tokens=40,
         usd_spent=0.003,
     )
-    sub = mgr._to_sub_result(_task(), isolation)
+    sub = mgr._protocol.to_sub_result(_task(), isolation)
     assert not sub.success
     assert sub.prompt_tokens == 120
     assert sub.completion_tokens == 40
@@ -70,7 +70,7 @@ def test_to_sub_result_zero_for_subscription() -> None:
         output='{"ok": true}',
         # Subscription / CLI path → empty UsageSummary → all 0.
     )
-    sub = mgr._to_sub_result(_task(), isolation)
+    sub = mgr._protocol.to_sub_result(_task(), isolation)
     assert sub.success
     assert sub.prompt_tokens == 0
     assert sub.completion_tokens == 0

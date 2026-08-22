@@ -8,12 +8,12 @@ single declarative home for both:
 
 - **Role → tool allowlist** — enforced through the EXISTING
   ``ToolExecutor.denied_tools`` rail (denied = all tools − allowed);
-  ``SubAgentManager._build_worker_request`` computes the denied set via
+  ``SubagentProtocol.build_worker_request`` computes the denied set via
   :func:`role_denied_tools` and the worker passes it into the child
   executor. No second enforcement path.
 - **Role → output schema** — a pydantic model the parent validates the
   sub-agent's raw text against at the parse site
-  (``SubAgentManager._to_sub_result``). Validation NEVER raises into the
+  (``SubagentProtocol.to_sub_result``). Validation NEVER raises into the
   loop: failure produces an observable ``{"validated": False, ...}``
   structured error + ``log.warning`` (fail-loud, no silent garbage).
 

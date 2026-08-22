@@ -226,24 +226,24 @@ class TestPromptOutputSection:
 
 class TestLastBalancedJsonObject:
     def test_returns_object_at_end_of_prose(self) -> None:
-        from core.agent.sub_agent import _last_balanced_json_object
+        from core.agent.subagent_protocol import _last_balanced_json_object
 
         text = 'I did the work. Result: {"a": 1, "b": 2}'
         assert _last_balanced_json_object(text) == '{"a": 1, "b": 2}'
 
     def test_picks_last_when_multiple(self) -> None:
-        from core.agent.sub_agent import _last_balanced_json_object
+        from core.agent.subagent_protocol import _last_balanced_json_object
 
         text = 'Intermediate {"step": 1}. Final {"answer": 42}.'
         assert _last_balanced_json_object(text) == '{"answer": 42}'
 
     def test_returns_none_when_no_braces(self) -> None:
-        from core.agent.sub_agent import _last_balanced_json_object
+        from core.agent.subagent_protocol import _last_balanced_json_object
 
         assert _last_balanced_json_object("plain prose with no json") is None
 
     def test_ignores_braces_inside_strings(self) -> None:
-        from core.agent.sub_agent import _last_balanced_json_object
+        from core.agent.subagent_protocol import _last_balanced_json_object
 
         text = 'final {"msg": "has } embedded", "ok": true}'
         out = _last_balanced_json_object(text)
@@ -251,7 +251,7 @@ class TestLastBalancedJsonObject:
         assert json.loads(out) == {"msg": "has } embedded", "ok": True}
 
     def test_handles_escaped_quotes_in_strings(self) -> None:
-        from core.agent.sub_agent import _last_balanced_json_object
+        from core.agent.subagent_protocol import _last_balanced_json_object
 
         text = r'{"text": "she said \"hi\"", "n": 1}'
         out = _last_balanced_json_object(text)
@@ -259,7 +259,7 @@ class TestLastBalancedJsonObject:
         assert json.loads(out) == {"text": 'she said "hi"', "n": 1}
 
     def test_nested_objects_balance_correctly(self) -> None:
-        from core.agent.sub_agent import _last_balanced_json_object
+        from core.agent.subagent_protocol import _last_balanced_json_object
 
         text = 'prose {"outer": {"inner": {"deep": 1}}, "k": "v"} more prose'
         out = _last_balanced_json_object(text)
@@ -268,7 +268,7 @@ class TestLastBalancedJsonObject:
         assert parsed["outer"]["inner"]["deep"] == 1
 
     def test_skips_unparseable_blocks(self) -> None:
-        from core.agent.sub_agent import _last_balanced_json_object
+        from core.agent.subagent_protocol import _last_balanced_json_object
 
         # First block (later in text — scanned first) is malformed; second
         # block is valid; the function falls back to the valid one.
@@ -311,7 +311,7 @@ class TestSubAgentParseFallback:
             error=None,
             duration_ms=10.0,
         )
-        result = mgr._to_sub_result(task, isolation)  # type: ignore[attr-defined]
+        result = mgr._protocol.to_sub_result(task, isolation)
         assert result.success is True
         assert isinstance(result.output, dict)
         # Fallback path must NOT return `{"raw": ...}`.

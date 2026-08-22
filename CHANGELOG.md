@@ -95,6 +95,13 @@ functional change.
 
 ### Architecture
 
+- **Sub-agent delegation now has bounded collaborators.** `SubAgentManager`
+  remains the depth-one orchestration and cancellation owner, while
+  `SubagentProtocol` owns request construction and result validation and
+  `SubagentAnnouncements` owns runtime/public hook and timeline projection.
+  Existing role policy, `IsolatedRunner`, and candidate sampling remain the
+  single policy, worker-launch, and best-of implementations.
+
 - **The agent loop now has executable structural budgets.** Construction-time
   scalar policy is grouped in `AgenticLoopConfig`, initialization and guard/provider
   policy live in explicit sibling collaborators, and the production coordinator is

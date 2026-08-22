@@ -4,7 +4,7 @@ Companion to ``test_subagent_lineage.py`` (which pins the in-process
 PR-F wiring). Pins the subprocess thread:
 
     parent AgenticLoop (binds ContextVar)
-      → SubAgentManager._build_worker_request reads it
+      → SubAgentManager._protocol.build_worker_request reads it
       → WorkerRequest carries parent_session_key + parent_session_id
       → worker._run_agentic threads them into the child AgenticLoop
       → child Episode rows record both fields
@@ -178,14 +178,14 @@ def test_build_worker_request_threads_parent_session_key_from_kwarg() -> None:
 
     from core.agent.sub_agent import SubAgentManager, SubTask
 
-    runner = _cast(Any, object())  # _build_worker_request does not touch it
+    runner = _cast(Any, object())  # request construction does not touch it
     mgr = SubAgentManager(
         runner,
         parent_session_key="subject:foo:bar",
         action_handlers={},  # enable subprocess routing path
     )
     task = SubTask(task_id="t1", description="d", task_type="analyze")
-    req = mgr._build_worker_request(task)
+    req = mgr._protocol.build_worker_request(task)
     assert req.parent_session_key == "subject:foo:bar"
 
 
@@ -204,7 +204,7 @@ def test_build_worker_request_reads_parent_session_id_from_contextvar() -> None:
     task = SubTask(task_id="t1", description="d", task_type="analyze")
     set_session_id("s-parent-uuid-from-loop")
     try:
-        req = mgr._build_worker_request(task)
+        req = mgr._protocol.build_worker_request(task)
         assert req.parent_session_id == "s-parent-uuid-from-loop"
     finally:
         set_session_id("")
@@ -224,7 +224,7 @@ def test_build_worker_request_lineage_defaults_when_no_loop_bound() -> None:
     )
     task = SubTask(task_id="t1", description="d", task_type="analyze")
     set_session_id("")
-    req = mgr._build_worker_request(task)
+    req = mgr._protocol.build_worker_request(task)
     assert req.parent_session_id == ""
     assert req.parent_session_key == ""
 

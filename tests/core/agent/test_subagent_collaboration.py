@@ -311,8 +311,8 @@ def test_worker_request_marks_resume_without_changing_fresh_default(tmp_path) ->
         collaboration_store=CollaborationStore(tmp_path / "sessions.db"),
     )
     task = SubTask("child-3", "continue", "analyze")
-    assert manager._build_worker_request(task).resume is False
-    assert manager._build_worker_request(task, resume=True).resume is True
+    assert manager._protocol.build_worker_request(task).resume is False
+    assert manager._protocol.build_worker_request(task, resume=True).resume is True
 
 
 def test_worker_resume_loads_existing_child_messages(tmp_path, monkeypatch) -> None:

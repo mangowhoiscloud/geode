@@ -39,7 +39,7 @@ Generator orchestration.
 Wiring history
 ==============
 
-- **S2-wire (RESOLVED, 2026-05-18)**: ``SubAgentManager._build_worker_request``
+- **S2-wire (RESOLVED, 2026-05-18)**: ``SubagentProtocol.build_worker_request``
   now resolves ``SubTask.agent="seed_generator"`` to the AgentDefinition,
   propagates ``system_prompt`` / ``tools`` / ``model`` to the worker via
   ``WorkerRequest`` new fields, and the worker applies them as

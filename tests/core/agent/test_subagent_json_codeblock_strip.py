@@ -3,7 +3,7 @@
 Smoke 7 (v0.99.53, post-PR-JSON-CODEBLOCK-STRIP) surfaced both
 proximity and critic still failing because the LLM wrapped its
 otherwise-valid JSON in a ```json``` markdown fence. The pre-fix
-`SubAgentManager._to_sub_result` called
+`SubAgentManager._protocol.to_sub_result` called
 `json.loads(isolation.output)` directly, which raises JSONDecodeError
 on the fence and falls back to `{"raw": <wrapped-text>}` —
 downstream parsers (proximity uses a non-`text`-key consumer) can't
@@ -36,7 +36,7 @@ def test_to_sub_result_unwraps_json_codeblock_fence() -> None:
     task = _make_task()
     isolation = _make_isolation('```json\n{"similarity_clusters": [], "k": 1}\n```')
 
-    result = manager._to_sub_result(task, isolation)
+    result = manager._protocol.to_sub_result(task, isolation)
 
     assert result.success is True
     assert result.output == {"similarity_clusters": [], "k": 1}
@@ -56,7 +56,7 @@ def test_to_sub_result_unwraps_fence_with_leading_prose() -> None:
     )
     isolation = _make_isolation(text)
 
-    result = manager._to_sub_result(task, isolation)
+    result = manager._protocol.to_sub_result(task, isolation)
 
     assert result.success is True
     assert result.output == {"similarity_clusters": [{"cluster_id": "c0"}]}
@@ -68,7 +68,7 @@ def test_to_sub_result_plain_json_still_works() -> None:
     task = _make_task()
     isolation = _make_isolation('{"a": 1, "b": 2}')
 
-    result = manager._to_sub_result(task, isolation)
+    result = manager._protocol.to_sub_result(task, isolation)
 
     assert result.output == {"a": 1, "b": 2}
 
@@ -80,7 +80,7 @@ def test_to_sub_result_non_json_text_falls_back_to_raw() -> None:
     task = _make_task()
     isolation = _make_isolation("just plain prose, no JSON here")
 
-    result = manager._to_sub_result(task, isolation)
+    result = manager._protocol.to_sub_result(task, isolation)
 
     assert result.output == {"raw": "just plain prose, no JSON here"}
 
@@ -92,7 +92,7 @@ def test_to_sub_result_empty_output_yields_empty_dict() -> None:
     task = _make_task()
     isolation = _make_isolation("")
 
-    result = manager._to_sub_result(task, isolation)
+    result = manager._protocol.to_sub_result(task, isolation)
 
     assert result.output == {}
 
@@ -104,6 +104,6 @@ def test_to_sub_result_bare_fence_no_lang_tag() -> None:
     task = _make_task()
     isolation = _make_isolation('```\n{"x": 42}\n```')
 
-    result = manager._to_sub_result(task, isolation)
+    result = manager._protocol.to_sub_result(task, isolation)
 
     assert result.output == {"x": 42}
