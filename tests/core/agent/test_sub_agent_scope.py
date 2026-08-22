@@ -28,12 +28,12 @@ class TestSubAgentDeniedTools:
         runner = IsolatedRunner()
         denied = {"set_api_key", "manage_auth"}
         mgr = SubAgentManager(runner, denied_tools=denied)
-        assert mgr._denied_tools == SUBAGENT_DENIED_TOOLS | denied
+        assert mgr._protocol.denied_tools == SUBAGENT_DENIED_TOOLS | denied
 
     def test_denied_tools_default_to_security_baseline(self) -> None:
         runner = IsolatedRunner()
         mgr = SubAgentManager(runner)
-        assert mgr._denied_tools == SUBAGENT_DENIED_TOOLS
+        assert mgr._protocol.denied_tools == SUBAGENT_DENIED_TOOLS
 
     def test_default_subagent_denied_tools_defined(self) -> None:
         """SUBAGENT_DENIED_TOOLS constant contains expected tools."""
@@ -53,7 +53,7 @@ class TestSubAgentDeniedTools:
 
         mgr = SubAgentManager(IsolatedRunner(), bound_tool_plan=bound)
 
-        assert name in mgr._denied_tools
+        assert name in mgr._protocol.denied_tools
 
     def test_plan_subagent_allow_overrides_legacy_name_fallback(self) -> None:
         name = "delegate_task"
@@ -66,7 +66,7 @@ class TestSubAgentDeniedTools:
 
         mgr = SubAgentManager(IsolatedRunner(), bound_tool_plan=bound)
 
-        assert name not in mgr._denied_tools
+        assert name not in mgr._protocol.denied_tools
 
     def test_denied_tools_not_in_safe_set(self) -> None:
         """Denied tools should not overlap with commonly-needed tools."""

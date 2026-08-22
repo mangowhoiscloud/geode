@@ -242,7 +242,7 @@ def test_build_adapter_request_default_response_schema_none() -> None:
 
 
 def test_subagent_manager_threads_schema_to_worker_request() -> None:
-    """SubAgentManager._build_worker_request copies SubTask.response_schema
+    """SubAgentManager._protocol.build_worker_request copies SubTask.response_schema
     into WorkerRequest.response_schema (the parent → child IPC SoT)."""
     from core.agent.sub_agent import SubAgentManager, SubTask
     from core.orchestration.isolated_execution import IsolatedRunner
@@ -255,7 +255,7 @@ def test_subagent_manager_threads_schema_to_worker_request() -> None:
         response_schema=schema,
     )
     manager = SubAgentManager(runner=IsolatedRunner(), action_handlers={})
-    request = manager._build_worker_request(task)
+    request = manager._protocol.build_worker_request(task)
     assert request.response_schema == schema
 
 

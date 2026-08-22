@@ -226,7 +226,6 @@ normal review and CI; implementations start only after the claim merges.
 | Closure package | GAP IDs | Owner/session | Implementation branch | Claim evidence | Claimed at (UTC) |
 |---|---|---|---|---|---|
 | R8.3 | REL-004 | `session=codex-root task=r8-3-publication-grace-evidence` | `feature/r8-3-publication-grace-evidence` | Readiness [#3039](https://github.com/mangowhoiscloud/geode/pull/3039); v1.0.23 GitHub/PyPI parity and candidate interval re-audited | `2026-08-20T07:41:19Z` |
-| R3.4 | LOOP-005 | `session=codex-root task=r3-4-subagent-decomposition` | `feature/r3-4-subagent-decomposition` | Reconciliation/readiness [#3069](https://github.com/mangowhoiscloud/geode/pull/3069); sub-agent collaborator split and current manager baseline re-audited | `2026-08-22T02:49:01Z` |
 
 ## 1. Program objective
 
@@ -283,12 +282,12 @@ machine-readable artifact is
 
 | Measure | Current tree |
 |---|---:|
-| Production Python files (`core/` + `geode_product/` + `plugins/`) | 578 |
-| Test Python files | 676 |
-| `core/` Python LOC | 118,914 |
+| Production Python files (`core/` + `geode_product/` + `plugins/`) | 580 |
+| Test Python files | 677 |
+| `core/` Python LOC | 118,752 |
 | `geode_product/` Python LOC | 60,646 |
 | `plugins/` Python LOC | 193 |
-| Test Python LOC | 180,446 |
+| Test Python LOC | 180,468 |
 | Tool definitions / executable registrations / valid schemas | 82 / 85 / 82 (definition-only 0; execution-only 3; invalid schema 0) |
 | `RuntimeEvent` members | 57 |
 | Built-in LLM adapters | 5 |
@@ -296,7 +295,7 @@ machine-readable artifact is
 | `core` → product import sites | 0 across 0 files |
 | Import-linter contracts / ignored edges | 6 / 19 |
 | `AgenticLoop` file LOC / methods / constructor args | 1,109 / 38 / 12 |
-| `SubAgentManager` file LOC / methods / constructor args | 1,461 / 24 / 18 |
+| `SubAgentManager` file LOC / methods / constructor args | 811 / 17 / 18 |
 | `RuntimeCoreConfig` fields | 21 |
 | Global Ruff ratchets | complexity 52; args 23; branches 51; returns 18; statements 207 |
 <!-- generated:architecture-baseline:end -->
@@ -529,7 +528,7 @@ and closure evidence are appended in §10.
 | LOOP-002 | `PARTIAL` | Mutable state is distributed across loop fields, contexts, checkpoints, and helpers | `TurnState` and explicit session/turn/step ownership replace ambiguous lifetimes | R3.1 | LOOP-001 | `IN_DEVELOP` |
 | LOOP-003 | `MISFIT` | `AgenticLoop` owns orchestration plus many independently changing policies | Visible loop delegates to bounded input/model/tool/observe/termination phases | R3.2 | LOOP-001, LOOP-002 | `IN_DEVELOP` |
 | LOOP-004 | `ABSENT` | Loop has 2,714 LOC, 67 methods, and 27 constructor args with no local ratchet | Closure budgets in §7.3 are executable and cannot regress | R3.3 | LOOP-003 | `IN_DEVELOP` |
-| LOOP-005 | `MISFIT` | `SubAgentManager` combines request codec, role resolution, execution, validation, and announcements | Separate collaborators own those responsibilities; manager remains an orchestrator | R3.4 | LOOP-002 | `IN_PROGRESS` |
+| LOOP-005 | `MISFIT` | `SubAgentManager` combines request codec, role resolution, execution, validation, and announcements | Separate collaborators own those responsibilities; manager remains an orchestrator | R3.4 | LOOP-002 | `IN_DEVELOP` |
 | DI-001 | `PARTIAL` | 26 module-level `ContextVar` declarations have no lifecycle classification | Generated inventory classifies request identity, diagnostics, mutable request state, request-local cache, and forbidden service lookup | R4.1 | LOOP-002 | `READY` |
 | DI-002 | `PARTIAL` | `GeodeRuntime` groups config, but `RuntimeCoreConfig` still has 17 fields | Cohesive lifecycle groups contain at most seven fields and have explicit owners/teardown | R4.2 | DI-001 | `OPEN` |
 | DI-003 | `MISFIT` | Downstream modules obtain injectable services through globals and CLI modules | Constructor/factory injection owns services; allowed ambient context is documented and tested | R4.2 | DI-001, DI-002 | `OPEN` |
@@ -1934,6 +1933,7 @@ pre-release delivery evidence survives after the claim row is gone.
 | R3.1 | LOOP-001, LOOP-002 | [#3067](https://github.com/mangowhoiscloud/geode/pull/3067) with follow-up [#3068](https://github.com/mangowhoiscloud/geode/pull/3068) | `e6ccaf73e1ff6027e510bfc5e4e16b8679f369e4` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature and follow-up CI Gates, 10,398 non-live tests, lint/format, type check, security, Pages build, official-doc parity, macOS/Ubuntu install smoke, additive event schema v5 with public-hook v1 query compatibility, exact step/turn/model/tool/telemetry correlation coverage, and independent committed-diff review all passed; the original feature merged as `c3e309f01e939e69bd22876df7f79b41731ac733`) |
 | R3.2 | LOOP-003 | [#3071](https://github.com/mangowhoiscloud/geode/pull/3071) | `a130ceb75364e128cf0e273edbff65302273bb3e` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, full non-live tests, lint/format, type check, security, Pages build, official-doc parity, macOS/Ubuntu install smoke, wheel/sdist and clean installed-package checks, 397 isolated kernel imports plus 42 installed-kernel tests, ordered six-phase characterization, and two independent committed-diff reviews all passed) |
 | R3.3 | LOOP-004 | [#3074](https://github.com/mangowhoiscloud/geode/pull/3074) | `8469092baddff2d0b453b03230c46ec2b7e79bac` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, 10,411 non-live tests, lint/format, type check, security, Pages build, official-doc parity, macOS/Ubuntu install smoke, wheel/sdist and clean full/kernel installed-package checks, executable structural budgets, and independent committed-diff review all passed) |
+| R3.4 | LOOP-005 | [#3079](https://github.com/mangowhoiscloud/geode/pull/3079) | `8a73c6be74f31d7611730d44321b9cdceabdaad5` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, full non-live tests, lint/format, type check, security, Pages build, official-doc parity, macOS/Ubuntu install smoke, wheel/sdist and clean full/kernel installed-package checks, 393 isolated kernel imports plus 42 installed-kernel tests, executable `SubAgentManager` structural budget, and independent committed-diff review all passed) |
 
 ### 10.2 Main closure evidence
 
@@ -2148,20 +2148,20 @@ arguments, complexity at most 30, branches at most 35, and statements at most
 120; the obsolete constructor exception is removed and legacy policy keywords
 still map to `AgenticLoopConfig`.
 
-R3.4 (`LOOP-005`) is `IN_PROGRESS` under the active claim for
-`feature/r3-4-subagent-decomposition` after reconciliation/readiness
-[#3069](https://github.com/mangowhoiscloud/geode/pull/3069) merged as
-`250ea5ae776e58820ced466579524a3af0bf5fa6`. Implementation may start only
-after this claim merges and a fresh worktree is allocated from the updated
-canonical `develop`. The claimed scope extracts the request codec, role/tool
-policy resolver, worker launcher, result validator, best-of judge, and
-announcement publisher while preserving max depth, session cap, Lane
-concurrency, task isolation, and cancellation. The current baseline is
-`SubAgentManager` at 1,464 LOC, 24 methods, and 18 constructor arguments.
+R3.4 (`LOOP-005`) is `IN_DEVELOP` after feature
+[#3079](https://github.com/mangowhoiscloud/geode/pull/3079) merged as
+`8a73c6be74f31d7611730d44321b9cdceabdaad5`. `SubagentProtocol` now owns
+request construction, role resolution, and result validation, while
+`SubagentAnnouncements` owns runtime/public hook and timeline projection.
+`SubAgentManager` remains the depth-one orchestration, session-cap, durable
+collaboration, and cancellation owner at 811 LOC, 17 methods, and 18
+constructor arguments; the existing `IsolatedRunner`, role registry, and
+candidate-sampling judge remain the single worker-launch, policy, and best-of
+implementations.
 
 R4.1 (`DI-001`) remains the sole unclaimed `READY` package later in master
-order and requires its own claim transaction. Its generated baseline remains
-30 module-level `ContextVar` declarations.
+order and requires its own claim transaction. Its generated baseline now
+records 29 module-level `ContextVar` declarations.
 
 R9.1 (`CODE-001`) was already dependency-satisfied and remains `OPEN` pending
 its own serialized whole-package readiness transaction later in master order.

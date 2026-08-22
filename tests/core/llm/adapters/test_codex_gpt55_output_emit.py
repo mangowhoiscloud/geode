@@ -26,7 +26,7 @@ These tests pin:
 
 1. ``SubTask.effort`` field exists with empty-string default
    (back-compat — preserves the legacy difficulty path).
-2. ``_build_worker_request`` honours ``SubTask.effort`` when set,
+2. ``SubagentProtocol.build_worker_request`` honours ``SubTask.effort`` when set,
    overriding both ``task.difficulty`` and ``settings.agentic_effort``.
 3. The ranker's voter SubTasks set ``effort="none"`` so the codex-oauth
    adapter forwards ``reasoning.effort="none"`` to the gpt-5.5 backend
@@ -44,7 +44,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 from core.agent.sub_agent import SubAgentManager, SubTask
-from core.config.policy_source import EMPTY_POLICY_SOURCES
+from core.orchestration.isolated_execution import IsolatedRunner
 from geode_product.seed_generation.agents.ranker import Ranker
 from geode_product.seed_generation.picker import VoterBinding
 from geode_product.seed_generation.tournament import MatchPlan
@@ -78,20 +78,14 @@ def test_build_worker_request_uses_task_effort_when_set() -> None:
     inherited the global default and gpt-5.5 burned the entire
     output budget on reasoning.
     """
-    mgr = SubAgentManager.__new__(SubAgentManager)
-    mgr._denied_tools = set()  # type: ignore[attr-defined]
-    mgr._agent_registry = None  # type: ignore[attr-defined]
-    mgr._parent_session_key = ""  # type: ignore[attr-defined]
-    mgr._timeout_s = 60  # type: ignore[attr-defined]
-    mgr._time_budget_s = 0.0  # type: ignore[attr-defined]
-    mgr._policy_sources = EMPTY_POLICY_SOURCES  # type: ignore[attr-defined]
+    mgr = SubAgentManager(IsolatedRunner(), timeout_s=60)
     task = SubTask(
         task_id="vote-m000-openai.subscription",
         description="vote",
         task_type="vote",
         effort="none",
     )
-    req = mgr._build_worker_request(task)
+    req = mgr._protocol.build_worker_request(task)
     assert req.effort == "none", (
         "WorkerRequest must inherit SubTask.effort='none' — otherwise the "
         "codex-oauth adapter forwards reasoning.effort=medium and gpt-5.5 "
@@ -106,15 +100,9 @@ def test_build_worker_request_falls_back_when_effort_empty() -> None:
     per-task effort (the common case) still inherit
     ``settings.agentic_effort`` via ``_DIFFICULTY_TO_EFFORT``.
     """
-    mgr = SubAgentManager.__new__(SubAgentManager)
-    mgr._denied_tools = set()  # type: ignore[attr-defined]
-    mgr._agent_registry = None  # type: ignore[attr-defined]
-    mgr._parent_session_key = ""  # type: ignore[attr-defined]
-    mgr._timeout_s = 60  # type: ignore[attr-defined]
-    mgr._time_budget_s = 0.0  # type: ignore[attr-defined]
-    mgr._policy_sources = EMPTY_POLICY_SOURCES  # type: ignore[attr-defined]
+    mgr = SubAgentManager(IsolatedRunner(), timeout_s=60)
     task = SubTask(task_id="t1", description="x", task_type="analyze")
-    req = mgr._build_worker_request(task)
+    req = mgr._protocol.build_worker_request(task)
     # Legacy path: ``difficulty`` defaults to "medium" via the
     # ``getattr(task, "difficulty", "medium")`` fallback at
     # ``core/agent/sub_agent.py:719``, so
