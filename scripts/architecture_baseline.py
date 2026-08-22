@@ -585,30 +585,61 @@ def _unsupported_context_alias(
     )
 
 
-def _runtime_expressions(node: ast.AST) -> Iterator[ast.expr]:
-    """Yield expressions Python evaluates, excluding type annotations and targets."""
+def _runtime_expressions(
+    node: ast.AST,
+    *,
+    include_annotations: bool = True,
+) -> Iterator[ast.expr]:
+    """Yield expressions Python evaluates, optionally including annotations."""
 
     if isinstance(node, ast.Assign | ast.AnnAssign | ast.AugAssign):
         value = node.value
         if value is not None:
-            yield from _runtime_expressions(value)
+            yield from _runtime_expressions(value, include_annotations=include_annotations)
         return
     if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-        for expression in (*node.decorator_list, *node.args.defaults, *node.args.kw_defaults):
+        expressions: list[ast.expr | None] = [
+            *node.decorator_list,
+            *node.args.defaults,
+            *node.args.kw_defaults,
+        ]
+        if include_annotations:
+            expressions.extend(
+                argument.annotation
+                for argument in (
+                    *node.args.posonlyargs,
+                    *node.args.args,
+                    *node.args.kwonlyargs,
+                    node.args.vararg,
+                    node.args.kwarg,
+                )
+                if argument is not None
+            )
+            expressions.append(node.returns)
+        for expression in expressions:
             if expression is not None:
-                yield from _runtime_expressions(expression)
+                yield from _runtime_expressions(
+                    expression,
+                    include_annotations=include_annotations,
+                )
         for statement in node.body:
-            yield from _runtime_expressions(statement)
+            yield from _runtime_expressions(
+                statement,
+                include_annotations=include_annotations,
+            )
         return
     if isinstance(node, ast.Lambda):
         for expression in (*node.args.defaults, *node.args.kw_defaults, node.body):
             if expression is not None:
-                yield from _runtime_expressions(expression)
+                yield from _runtime_expressions(
+                    expression,
+                    include_annotations=include_annotations,
+                )
         return
     if isinstance(node, ast.expr):
         yield node
     for child in ast.iter_child_nodes(node):
-        yield from _runtime_expressions(child)
+        yield from _runtime_expressions(child, include_annotations=include_annotations)
 
 
 def _reject_context_factories(
@@ -618,6 +649,26 @@ def _reject_context_factories(
     module_reference: Callable[[ast.expr], bool],
     is_context_import: Callable[[ast.stmt], bool],
 ) -> None:
+    postponed_annotations = any(
+        isinstance(node, ast.ImportFrom)
+        and node.module == "__future__"
+        and any(alias.name == "annotations" for alias in node.names)
+        for node, owner in module_nodes
+        if not owner
+    )
+
+    def contains_context_module(expression: ast.expr) -> bool:
+        if module_reference(expression):
+            return True
+        children: Iterable[ast.expr | None]
+        if isinstance(expression, ast.Dict):
+            children = (*expression.keys, *expression.values)
+        elif isinstance(expression, ast.List | ast.Set | ast.Tuple):
+            children = expression.elts
+        else:
+            return False
+        return any(child is not None and contains_context_module(child) for child in children)
+
     for node, owner in module_nodes:
         if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
             if path.parts[-3:] == ("core", "ui", "context_local.py") and (
@@ -657,7 +708,10 @@ def _reject_context_factories(
             hides_constructor = (
                 any(
                     constructor_reference(expression) is not None
-                    for expression in _runtime_expressions(node)
+                    for expression in _runtime_expressions(
+                        node,
+                        include_annotations=not postponed_annotations,
+                    )
                 )
                 or any(
                     module_reference(child.value)
@@ -666,9 +720,9 @@ def _reject_context_factories(
                     if child.value is not None
                 )
                 or any(
-                    child.value is not None and module_reference(child.value)
+                    child.value is not None and contains_context_module(child.value)
                     for child in ast.walk(node)
-                    if isinstance(child, ast.Return)
+                    if isinstance(child, ast.Return | ast.Yield | ast.YieldFrom)
                 )
             )
             if hides_constructor:

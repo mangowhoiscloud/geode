@@ -643,7 +643,7 @@ def test_context_var_inventory_checks_only_runtime_annotations(
     monkeypatch.setattr(baseline, "CONTEXT_VAR_LIFECYCLES", manifest)
 
     if rejected:
-        with pytest.raises(ValueError, match="must assign one module/class name"):
+        with pytest.raises(ValueError, match="ContextVar"):
             baseline._context_vars(tmp_path)
     else:
         assert baseline._context_vars(tmp_path)["count"] == 0
@@ -665,6 +665,32 @@ def test_context_var_inventory_skips_postponed_assignment_annotations(
     monkeypatch.setattr(baseline, "CONTEXT_VAR_LIFECYCLES", manifest)
 
     assert baseline._context_vars(tmp_path)["count"] == 0
+
+
+@pytest.mark.parametrize("postponed", [False, True])
+def test_context_var_inventory_checks_nested_runtime_annotations(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    postponed: bool,
+) -> None:
+    core = tmp_path / "core"
+    core.mkdir()
+    future = "from __future__ import annotations\n" if postponed else ""
+    (core / "sample.py").write_text(
+        f"{future}from contextvars import ContextVar\n"
+        'def make():\n    def inner(value: ContextVar("hidden")):\n        pass\n'
+        '    return inner.__annotations__["value"]\nstate = make()\n',
+        encoding="utf-8",
+    )
+    manifest = tmp_path / "context-var-lifecycles.json"
+    manifest.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(baseline, "CONTEXT_VAR_LIFECYCLES", manifest)
+
+    if postponed:
+        assert baseline._context_vars(tmp_path)["count"] == 0
+    else:
+        with pytest.raises(ValueError, match="factories must assign directly"):
+            baseline._context_vars(tmp_path)
 
 
 @pytest.mark.parametrize(
@@ -828,6 +854,33 @@ def test_context_var_inventory_rejects_function_local_constructor_import(
     monkeypatch.setattr(baseline, "CONTEXT_VAR_LIFECYCLES", manifest)
 
     with pytest.raises(ValueError, match="ContextVar"):
+        baseline._context_vars(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "factory",
+    [
+        'def factory():\n    yield contextvars\nstate = next(factory()).ContextVar("state")',
+        'def factory():\n    yield from (contextvars,)\nstate = next(factory()).ContextVar("state")',
+        'def factory():\n    return [contextvars]\nstate = factory()[0].ContextVar("state")',
+    ],
+)
+def test_context_var_inventory_rejects_context_module_factory_escape(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    factory: str,
+) -> None:
+    core = tmp_path / "core"
+    core.mkdir()
+    (core / "sample.py").write_text(
+        f"import contextvars\n{factory}\n",
+        encoding="utf-8",
+    )
+    manifest = tmp_path / "context-var-lifecycles.json"
+    manifest.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(baseline, "CONTEXT_VAR_LIFECYCLES", manifest)
+
+    with pytest.raises(ValueError, match="factories must assign directly"):
         baseline._context_vars(tmp_path)
 
 
