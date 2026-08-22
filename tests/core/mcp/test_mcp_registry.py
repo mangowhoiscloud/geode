@@ -151,7 +151,7 @@ class TestManagerGetStatus:
         from core.mcp.manager import MCPServerManager
 
         mgr = MCPServerManager()
-        mgr._servers = {
+        mgr._catalog.servers = {
             "steam": {"command": "npx", "args": ["-y", "steam-mcp"]},
         }
         status = mgr.get_status()

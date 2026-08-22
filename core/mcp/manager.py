@@ -1,65 +1,34 @@
-"""MCP Server Manager — load config, discover tools, and call MCP servers.
-
-Manages external MCP server connections using stdio-based JSON-RPC protocol.
-Configuration is loaded from three sources (priority order):
-  1. {workspace}/.geode/config.toml [mcp.servers] — project override
-  2. ~/.geode/config.toml [mcp.servers] — global user config
-  3. .claude/mcp_servers.json — fallback / legacy / install target
-
-Lifecycle:
-  startup()  — load config + connect all + register signal handlers
-  shutdown() — graceful close all + unregister signal handlers
-"""
+"""Public MCP manager facade over lifecycle-owned collaborators."""
 
 from __future__ import annotations
 
-import asyncio
-import atexit
-import contextlib
-import json
 import logging
-import os
-import signal
 import threading
-import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from dotenv import dotenv_values
-
+from core.mcp.config_catalog import MCPConfigCatalog
+from core.mcp.connection_pool import MCPConnectionPool
+from core.mcp.lifecycle import MCPLifecycle
 from core.mcp.stdio_client import StdioMCPClient
+from core.mcp.tool_runtime import (
+    ADAPTER_ONLY_MCP_SERVERS as _ADAPTER_ONLY_MCP_SERVERS,
+)
+from core.mcp.tool_runtime import (
+    MCPToolDiscovery,
+    MCPToolInvoker,
+    MCPTraceStore,
+    normalise_mcp_tool,
+    normalise_mcp_tool_args,
+)
 from core.paths import GLOBAL_ENV_FILE, get_project_root
 
 log = logging.getLogger(__name__)
 
-# Calendar MCP servers are implementation adapters behind GEODE's native
-# ``calendar_*`` tools. Exposing their raw ``list_events`` / ``create_event``
-# definitions would bypass the native per-invocation personal-data gate.
-ADAPTER_ONLY_MCP_SERVERS: frozenset[str] = frozenset({"google-calendar", "caldav"})
-
+ADAPTER_ONLY_MCP_SERVERS = _ADAPTER_ONLY_MCP_SERVERS
 _GLOBAL_DOTENV_PATH = GLOBAL_ENV_FILE
 
-_EMPTY_SCHEMA: dict[str, Any] = {"type": "object", "properties": {}}
-_FAILED_RETRY_COOLDOWN_S = 300.0
-
-_MCP_TOOL_DESCRIPTION_NOTES: dict[str, str] = {
-    "read_multiple_files": (
-        "For exact file-copy or text-conversion work, do not infer source EOF from "
-        "combined display separators. GEODE tracks local source EOF metadata after "
-        "successful reads and preserves it for same-name writes when possible."
-    ),
-    "read_text_file": (
-        "For whole-file reads, omit head and tail. Do not pass head and tail together."
-    ),
-    "write_file": (
-        "Use the server schema's path argument when it is present; GEODE also accepts "
-        "file_path as a compatibility alias for path and preserves cached source EOF "
-        "for same-name text writes when possible."
-    ),
-}
-
-# Hook system injection (same pattern as core/llm/router.py)
 _mcp_hooks: Any = None
 
 
@@ -79,767 +48,99 @@ def clear_mcp_hooks(expected: Any) -> bool:
 
 
 def _fire_mcp_hook(event: Any, data: dict[str, Any]) -> None:
-    """Fire a hook event if HookSystem is available.
-
-    ``event`` is a ``HookEvent`` member (typed via ``Any`` only so the
-    annotation does not require importing HookEvent at module top level,
-    which would create a circular dependency in some bootstrap paths).
-    """
     from core.hooks.dispatch import fire_hook
 
     fire_hook(_mcp_hooks, event, data)
 
 
-# Singleton instance — prevents duplicate MCP server processes
-_singleton_instance: MCPServerManager | None = None
-_singleton_lock = __import__("threading").Lock()
-
-
-def get_mcp_manager(
-    config_path: Path | None = None,
-    *,
-    auto_startup: bool = False,
-) -> MCPServerManager:
-    """Return the singleton MCPServerManager instance.
-
-    First call creates the instance. If ``auto_startup`` is True and
-    the instance hasn't been started yet, calls ``startup()`` which
-    loads config AND connects all servers.
-
-    Subsequent calls return the same instance regardless of arguments,
-    preventing duplicate MCP server processes.
-    """
-    global _singleton_instance
-    if _singleton_instance is not None:
-        if auto_startup and not _singleton_instance._clients:
-            _singleton_instance.startup()
-        return _singleton_instance
-    with _singleton_lock:
-        if _singleton_instance is None:
-            mgr = MCPServerManager(config_path=config_path)
-            if auto_startup:
-                mgr.startup()
-            _singleton_instance = mgr
-        return _singleton_instance
-
-
-def _normalise_mcp_tool(raw: dict[str, Any]) -> dict[str, Any]:
-    """Convert an MCP tool dict to Anthropic API format.
-
-    MCP spec returns ``inputSchema`` (camelCase); Anthropic requires
-    ``input_schema`` (snake_case).  Missing schema is replaced with a
-    minimal ``{"type": "object", "properties": {}}``.
-    """
-    schema = raw.get("input_schema") or raw.get("inputSchema") or _EMPTY_SCHEMA
-    tool = {
-        "name": raw.get("name", ""),
-        "description": raw.get("description", ""),
-        "input_schema": schema,
-    }
-    _augment_mcp_tool_description(tool)
-    return tool
-
-
-def _augment_mcp_tool_description(tool: dict[str, Any]) -> None:
-    """Add GEODE-side compatibility notes for common MCP tool ambiguities."""
-    name = str(tool.get("name") or "")
-    note = _MCP_TOOL_DESCRIPTION_NOTES.get(name)
-    if not note:
-        return
-    description = str(tool.get("description") or "")
-    if note in description:
-        return
-    separator = " " if description else ""
-    tool["description"] = f"{description}{separator}GEODE note: {note}"
-
-
-def _mcp_tool_schema_properties(raw_tool: dict[str, Any]) -> dict[str, Any]:
-    schema = raw_tool.get("input_schema") or raw_tool.get("inputSchema") or {}
-    if not isinstance(schema, dict):
-        return {}
-    properties = schema.get("properties")
-    return properties if isinstance(properties, dict) else {}
-
-
-def _mcp_result_text(result: dict[str, Any]) -> str | None:
-    content = result.get("content")
-    if not isinstance(content, list):
-        return None
-    for item in content:
-        if not isinstance(item, dict):
-            continue
-        text = item.get("text")
-        if isinstance(text, str):
-            return text
-    return None
-
-
-def _normalise_mcp_tool_args(
-    *,
-    tool_name: str,
-    args: dict[str, Any],
-    raw_tool: dict[str, Any] | None,
-) -> dict[str, Any]:
-    """Apply narrow MCP argument compatibility fixes before dispatch.
-
-    These are not semantic rewrites of tool calls. They handle common schema
-    aliasing and mutually-exclusive parameter mistakes that otherwise produce
-    deterministic MCP validation failures.
-    """
-    normalised = dict(args)
-    properties = _mcp_tool_schema_properties(raw_tool or {})
-
-    if (
-        "path" in properties
-        and "file_path" not in properties
-        and "path" not in normalised
-        and "file_path" in normalised
-    ):
-        normalised["path"] = normalised.pop("file_path")
-
-    if tool_name == "read_text_file" and "head" in normalised and "tail" in normalised:
-        normalised.pop("head", None)
-        normalised.pop("tail", None)
-
-    return normalised
-
-
 class MCPServerManager:
-    """Manages multiple MCP server connections and tool dispatch.
-
-    Provides lifecycle hooks (startup/shutdown) with signal-handler
-    registration so that MCP subprocess cleanup happens even on
-    SIGTERM/SIGINT, preventing orphan processes.
-    """
+    """Compatibility facade for MCP configuration, discovery, and dispatch."""
 
     def __init__(self, config_path: Path | None = None) -> None:
-        self._config_path = config_path or (get_project_root() / ".claude" / "mcp_servers.json")
-        self._servers: dict[str, dict[str, Any]] = {}
-        self._clients: dict[str, StdioMCPClient] = {}
-        self._failed_at: dict[str, float] = {}
-        # Bumped whenever a NEW client connects — lets long-lived AgenticLoop
-        # sessions detect a server recycle and refresh their tool snapshot.
-        self._connection_epoch = 0
-        # tool name -> server that last advertised it; distinguishes "server
-        # down" from "tool never existed" when find_server_for_tool misses.
-        self._last_seen_tools: dict[str, str] = {}
-        # Serializes mid-call respawns so concurrent failures on the same
-        # server can't each spawn a subprocess and orphan the loser.
-        self._respawn_lock = threading.Lock()
-        self._dotenv_cache: dict[str, str | None] = {}
-        self._text_read_cache: dict[tuple[str, str], str] = {}
-        self._signal_installed = False
-        self._prev_sigterm: Any = None
-        self._prev_sigint: signal.Handlers | None = None
-        self._atexit_registered = False
-        self._shutdown_called = False
+        path = config_path or (get_project_root() / ".claude" / "mcp_servers.json")
+        self._catalog = MCPConfigCatalog(
+            path,
+            global_env_path=lambda: _GLOBAL_DOTENV_PATH,
+            project_root=lambda: get_project_root(),
+        )
+        self._trace = MCPTraceStore(lambda event, data: _fire_mcp_hook(event, data))
+        self._pool = MCPConnectionPool(
+            self._catalog,
+            client_factory=lambda **kwargs: StdioMCPClient(**kwargs),
+            event_sink=self._trace.fire,
+        )
+        self._discovery = MCPToolDiscovery(
+            self._catalog,
+            self._pool,
+            get_client=lambda name: self._get_client(name),
+            connect_all=lambda: self._connect_all(),
+        )
+        self._invoker = MCPToolInvoker(
+            self._trace,
+            get_client=lambda name: self._get_client(name),
+            respawn=lambda name: self._respawn_after_death(name),
+        )
+        self._lifecycle = MCPLifecycle(lambda: _is_main_thread())
 
-    # ------------------------------------------------------------------
-    # Lifecycle
-    # ------------------------------------------------------------------
+    @property
+    def server_count(self) -> int:
+        return len(self._catalog.servers)
+
+    @property
+    def connected_count(self) -> int:
+        return len(self._pool.clients)
 
     def startup(
         self,
         *,
         on_progress: Callable[[int, int, str], None] | None = None,
     ) -> int:
-        """Full lifecycle startup: load config, connect all servers, register signal handlers.
-
-        Args:
-            on_progress: Optional callback ``(done, total, server_name)`` invoked
-                each time a server finishes connecting (success or failure).
-
-        Returns the number of servers that connected successfully.
-        """
-        if not self._servers:
+        if not self._catalog.servers:
             self.load_config()
         connected = self._connect_all(on_progress=on_progress)
         self._install_signal_handlers()
-        log.info("MCP startup complete: %d/%d servers connected", connected, len(self._servers))
+        log.info("MCP startup complete: %d/%d servers connected", connected, self.server_count)
         return connected
 
     def shutdown(self) -> None:
-        """Full lifecycle shutdown: close all servers, unregister signal handlers.
-
-        Safe to call multiple times (idempotent).
-        """
-        if self._shutdown_called:
+        if self._lifecycle.shutdown_called:
             return
-        self._shutdown_called = True
+        self._lifecycle.shutdown_called = True
         log.info("MCP shutdown initiated")
         self.close_all()
         self._uninstall_signal_handlers()
         log.info("MCP shutdown complete")
 
-    def _connect_all(
-        self,
-        *,
-        on_progress: Callable[[int, int, str], None] | None = None,
-    ) -> int:
-        """Connect to all configured servers in parallel.
-
-        Uses ThreadPoolExecutor to start all MCP subprocess connections
-        concurrently. Each server takes ~10s (npx startup + JSON-RPC
-        handshake), so parallel execution reduces total from N×10s to ~10-15s.
-
-        Args:
-            on_progress: Optional callback ``(done, total, server_name)`` invoked
-                each time a server finishes connecting (success or failure).
-        """
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-
-        server_names = list(self._servers.keys())
-        if not server_names:
-            return 0
-
-        connected = 0
-        done = 0
-        total = len(server_names)
-        max_workers = min(total, 8)
-
-        with ThreadPoolExecutor(max_workers=max_workers) as pool:
-            futures = {pool.submit(self._get_client, name): name for name in server_names}
-            for future in as_completed(futures):
-                name = futures[future]
-                try:
-                    client = future.result()
-                    if client is not None:
-                        connected += 1
-                except Exception:
-                    log.debug("MCP parallel connect failed: %s", name, exc_info=True)
-                done += 1
-                if on_progress:
-                    on_progress(done, total, name)
-
-        return connected
-
-    def _install_signal_handlers(self) -> None:
-        """Register SIGTERM/SIGINT handlers for graceful cleanup.
-
-        Chains with existing handlers so other shutdown logic still runs.
-        Also registers an atexit handler as a safety net.
-        """
-        if self._signal_installed:
-            return
-
-        # Only install signal handlers in the main thread
-        try:
-            if not _is_main_thread():
-                log.debug("MCP signal handlers skipped (not main thread)")
-                return
-        except Exception:
-            log.debug("MCP signal handler thread check failed", exc_info=True)
-            return
-
-        def _signal_shutdown(signum: int, frame: Any) -> None:
-            """Signal handler that ensures MCP cleanup before exit."""
-            log.info("MCP received signal %d, shutting down servers", signum)
-            self.shutdown()
-            # Chain to previous handler
-            prev = self._prev_sigterm if signum == signal.SIGTERM else self._prev_sigint
-            if prev and callable(prev):
-                prev(signum, frame)
-            elif prev == signal.SIG_DFL:
-                # Re-raise with default handler
-                signal.signal(signum, signal.SIG_DFL)
-                signal.raise_signal(signum)
-
-        try:
-            self._prev_sigterm = signal.getsignal(signal.SIGTERM)
-            signal.signal(signal.SIGTERM, _signal_shutdown)
-            # Note: SIGINT is typically managed by the REPL's own handler.
-            # We save a reference but only install a SIGTERM handler to
-            # avoid interfering with KeyboardInterrupt handling.
-            self._signal_installed = True
-            log.debug("MCP SIGTERM handler installed")
-        except (OSError, ValueError):
-            # Cannot set signal handler (e.g., not main thread, or restricted env)
-            log.debug("MCP signal handler installation failed", exc_info=True)
-
-        # Atexit safety net
-        if not self._atexit_registered:
-            atexit.register(self._atexit_cleanup)
-            self._atexit_registered = True
-
-    def _atexit_cleanup(self) -> None:
-        """Atexit fallback — ensures cleanup even if signals were not caught."""
-        if not self._shutdown_called:
-            log.debug("MCP atexit cleanup triggered")
-            self.close_all()
-
-    def _uninstall_signal_handlers(self) -> None:
-        """Restore previous signal handlers."""
-        if not self._signal_installed:
-            return
-
-        try:
-            if not _is_main_thread():
-                return
-        except Exception:
-            return
-
-        try:
-            if self._prev_sigterm is not None:
-                signal.signal(signal.SIGTERM, self._prev_sigterm)
-            self._signal_installed = False
-            log.debug("MCP signal handlers restored")
-        except (OSError, ValueError):
-            log.debug("MCP signal handler restoration failed", exc_info=True)
-
-    # ------------------------------------------------------------------
-    # Configuration
-    # ------------------------------------------------------------------
-
     def load_config(self) -> int:
-        """Load MCP server configurations from config.toml (global + project) + json fallback.
-
-        Priority order (later wins):
-          1. ~/.geode/config.toml [mcp.servers] — global user config
-          2. {workspace}/.geode/config.toml [mcp.servers] — project override
-          3. .claude/mcp_servers.json — legacy fallback, install target
-
-        Returns total number of servers loaded.
-        """
-        import tomllib
-
-        from core.paths import GLOBAL_CONFIG_TOML
-
-        self._servers = {}
-        self._failed_at.clear()
-
-        # Layer 1 & 2: Global then project config.toml [mcp.servers]
-        config_toml_paths = [
-            GLOBAL_CONFIG_TOML,
-            get_project_root() / ".geode" / "config.toml",
-        ]
-        for config_toml in config_toml_paths:
-            if not config_toml.exists():
-                continue
-            try:
-                with open(config_toml, "rb") as f:
-                    toml_data = tomllib.load(f)
-                mcp_section = toml_data.get("mcp", {}).get("servers", {})
-                for name, cfg in mcp_section.items():
-                    entry: dict[str, Any] = {"command": cfg["command"]}
-                    if "args" in cfg:
-                        entry["args"] = cfg["args"]
-                    if "env" in cfg:
-                        entry["env"] = cfg["env"]
-                    self._servers[name] = entry
-                if mcp_section:
-                    log.info("MCP %s: %d servers", config_toml, len(mcp_section))
-            except Exception as exc:
-                log.debug("Failed to load MCP from %s: %s", config_toml, exc)
-
-        # Layer 2: .claude/mcp_servers.json (fallback — toml entries take priority)
-        if self._config_path.exists():
-            try:
-                raw = self._config_path.read_text(encoding="utf-8")
-                file_servers: dict[str, dict[str, Any]] = json.loads(raw)
-                added = 0
-                for name, cfg in file_servers.items():
-                    if name not in self._servers:
-                        self._servers[name] = cfg
-                        added += 1
-                if added > 0:
-                    log.info("MCP mcp_servers.json: %d additional servers", added)
-            except (json.JSONDecodeError, OSError) as exc:
-                log.debug("Failed to load MCP config file: %s", exc)
-
-        total = len(self._servers)
-        if total > 0:
-            log.info("MCP total: %d servers configured", total)
-        else:
-            log.debug("MCP: no servers configured")
-        return total
+        self._pool.failed_at.clear()
+        return self._catalog.load()
 
     def get_status(self) -> dict[str, Any]:
-        """Build MCP status report: active servers from config.
-
-        Returns:
-            active: servers currently configured (from config.toml + json)
-        """
-        active: list[dict[str, str]] = []
-        for name in sorted(self._servers):
-            active.append({"name": name, "description": ""})
-
-        return {
-            "active": active,
-            "active_count": len(active),
-        }
-
-    def _load_dotenv_cache(self) -> None:
-        """Populate dotenv cache if empty.
-
-        Cascade: project .env fills gaps, then ~/.geode/.env wins.
-        """
-        if not self._dotenv_cache:
-            project_dotenv = get_project_root() / ".env"
-            if project_dotenv.exists():
-                for k, v in dotenv_values(str(project_dotenv)).items():
-                    if v:  # skip empty/None — must not clobber real values
-                        self._dotenv_cache[k] = v
-            if _GLOBAL_DOTENV_PATH.exists():
-                for k, v in dotenv_values(str(_GLOBAL_DOTENV_PATH)).items():
-                    if v:
-                        self._dotenv_cache[k] = v
-
-    def _resolve_env(self, env: dict[str, str]) -> dict[str, str]:
-        """Resolve ${VAR} references in env values.
-
-        Checks os.environ first, then falls back to .env file values.
-        pydantic-settings loads .env into Settings fields but NOT into
-        os.environ, so MCP keys defined only in .env would be invisible.
-        """
-        self._load_dotenv_cache()
-
-        resolved: dict[str, str] = {}
-        for key, value in env.items():
-            if value.startswith("${") and value.endswith("}"):
-                var_name = value[2:-1]
-                resolved[key] = os.environ.get(var_name, self._dotenv_cache.get(var_name) or "")
-            else:
-                resolved[key] = value
-        return resolved
-
-    def _get_client(self, server_name: str) -> StdioMCPClient | None:
-        """Get or create a client for a server."""
-        if server_name in self._clients:
-            client = self._clients[server_name]
-            if client.is_connected():
-                return client
-            stale = self._clients.pop(server_name, None)
-            if stale is not None:
-                stale.close()  # reap the dead Popen instead of leaking it
-
-        failed_at = self._failed_at.get(server_name)
-        if failed_at is not None and (time.monotonic() - failed_at) < _FAILED_RETRY_COOLDOWN_S:
-            return None
-
-        config = self._servers.get(server_name)
-        if config is None:
-            return None
-
-        command = config.get("command", "")
-        args = config.get("args", [])
-        # SECURITY: resolved env may contain API keys — never log env values.
-        env = self._resolve_env(config.get("env", {}))
-
-        # Skip server if any required env var resolved to empty string
-        missing = [k for k, v in env.items() if not v]
-        if missing:
-            log.debug(
-                "MCP server '%s' skipped — missing env: %s",
-                server_name,
-                ", ".join(missing),
-            )
-            return None
-
-        from core.hooks import HookEvent
-
-        client = StdioMCPClient(command=command, args=args, env=env)
-        if client.connect():
-            self._clients[server_name] = client
-            self._connection_epoch += 1
-            self._failed_at.pop(server_name, None)
-            _fire_mcp_hook(HookEvent.MCP_SERVER_CONNECTED, {"server_name": server_name})
-            return client
-
-        self._failed_at[server_name] = time.monotonic()
-        _fire_mcp_hook(
-            HookEvent.MCP_SERVER_FAILED,
-            {"server_name": server_name, "error": "Connection failed"},
-        )
-        log.debug("MCP server not available (skipped): %s", server_name)
-        return None
-
-    # ------------------------------------------------------------------
-    # Tool dispatch
-    # ------------------------------------------------------------------
+        return self._catalog.status()
 
     def get_all_tools(self) -> list[dict[str, Any]]:
-        """Gather tool definitions from all configured MCP servers.
-
-        MCP spec uses camelCase (``inputSchema``), but Anthropic API
-        requires snake_case (``input_schema``).  This method normalises
-        each tool dict so it can be passed directly to ``messages.create(tools=...)``.
-
-        If servers haven't been connected yet, triggers parallel connection
-        via ``_connect_all()`` to avoid sequential ~10s-per-server latency.
-        """
-        # Lazy parallel connect: avoid sequential _get_client() per server
-        if self._servers and not self._clients:
-            self._connect_all()
-
-        all_tools: list[dict[str, Any]] = []
-        for server_name in self._servers:
-            if server_name in ADAPTER_ONLY_MCP_SERVERS:
-                continue
-            client = self._get_client(server_name)
-            if client is None:
-                continue
-            tools = client.list_tools()
-            for tool in tools:
-                normalised = _normalise_mcp_tool(tool)
-                normalised["_mcp_server"] = server_name
-                name = normalised.get("name")
-                if isinstance(name, str):
-                    self._last_seen_tools[name] = server_name
-                all_tools.append(normalised)
-        return all_tools
+        return self._discovery.get_all_tools()
 
     @property
     def connection_epoch(self) -> int:
-        """Monotonic count of client connects — changes signal a recycle."""
-        return self._connection_epoch
+        return self._pool.connection_epoch
 
     def last_known_server_for_tool(self, tool_name: str) -> str | None:
-        """Server that previously advertised ``tool_name`` (may be down now)."""
-        return self._last_seen_tools.get(tool_name)
-
-    # MCP server fallback hints: when a server is unavailable or fails,
-    # the error message includes a hint so the LLM can try an alternative.
-    _FALLBACK_HINTS: dict[str, str] = {
-        "playwriter": "playwright (playwright__browser_navigate, etc.)",
-        "puppeteer": "playwright (playwright__browser_navigate, etc.)",
-    }
+        return self._discovery.last_seen_tools.get(tool_name)
 
     async def acall_tool(
         self, server_name: str, tool_name: str, args: dict[str, Any]
     ) -> dict[str, Any]:
-        """Async tool call on a specific MCP server."""
-        from core.tools.base import tool_error
-
-        client = await asyncio.to_thread(self._get_client, server_name)
-        if client is None:
-            hint = self._FALLBACK_HINTS.get(server_name, "")
-            return tool_error(
-                f"MCP server '{server_name}' not available",
-                error_type="connection",
-                hint=f"Use {hint} instead" if hint else "Check server configuration.",
-                context={"server": server_name, "tool": tool_name},
-            )
-
-        try:
-            raw_tool = self._raw_tool_for_client(client, tool_name)
-            normalised_args = _normalise_mcp_tool_args(
-                tool_name=tool_name,
-                args=args,
-                raw_tool=raw_tool,
-            )
-            normalised_args = self._normalise_cached_text_write(
-                server_name=server_name,
-                tool_name=tool_name,
-                args=normalised_args,
-            )
-            try:
-                result = await client.acall_tool(tool_name, normalised_args)
-                died_mid_call = (
-                    isinstance(result, dict)
-                    and bool(result.get("error"))
-                    and not client.is_connected()
-                )
-            except ConnectionError:
-                result = {}
-                died_mid_call = True
-            if died_mid_call:
-                # Stateless-era servers may recycle between rounds (ADR-014):
-                # retry ONCE on a fresh client — but only for tools annotated
-                # read-only/idempotent. The death is no proof the original
-                # call did NOT execute, so blind retry would be at-least-once.
-                annotations = (raw_tool or {}).get("annotations") or {}
-                if not (annotations.get("readOnlyHint") or annotations.get("idempotentHint")):
-                    raise ConnectionError(
-                        f"MCP server '{server_name}' died during '{tool_name}'; "
-                        "the tool is not marked read-only/idempotent so it was "
-                        "not retried — outcome unknown"
-                    )
-                fresh = await asyncio.to_thread(self._respawn_after_death, server_name)
-                if fresh is None:
-                    raise ConnectionError(
-                        f"MCP server '{server_name}' died mid-call and did not reconnect"
-                    )
-                log.info(
-                    "MCP server '%s' respawned mid-call; retrying %s",
-                    server_name,
-                    tool_name,
-                )
-                result = await fresh.acall_tool(tool_name, normalised_args)
-            self._record_text_read_result(
-                server_name=server_name,
-                tool_name=tool_name,
-                args=normalised_args,
-                result=result,
-            )
-            return result
-        except Exception as exc:
-            log.error("MCP async tool call failed: %s/%s: %s", server_name, tool_name, exc)
-            hint = self._FALLBACK_HINTS.get(server_name, "")
-            is_timeout = "timeout" in str(exc).lower()
-            detail = f" ({exc})" if str(exc) else ""
-            return tool_error(
-                f"MCP tool call failed: {tool_name}{detail}",
-                error_type="timeout" if is_timeout else "connection",
-                hint=f"Use {hint} instead" if hint else "Retry or use an alternative tool.",
-                context={"server": server_name, "tool": tool_name},
-            )
-
-    def _respawn_after_death(self, server_name: str) -> StdioMCPClient | None:
-        """Replace a mid-call-dead client under the respawn lock.
-
-        Concurrent callers observing the same death serialize here; the
-        second caller reuses the first one's fresh client instead of
-        spawning a competing subprocess and orphaning one of them.
-        """
-        with self._respawn_lock:
-            existing = self._clients.get(server_name)
-            if existing is not None and existing.is_connected():
-                return existing
-            stale = self._clients.pop(server_name, None)
-            if stale is not None:
-                stale.close()
-            return self._get_client(server_name)
-
-    def _raw_tool_for_client(self, client: StdioMCPClient, tool_name: str) -> dict[str, Any] | None:
-        try:
-            tools = client.list_tools()
-        except Exception:
-            log.debug("MCP tool schema lookup failed: %s", tool_name, exc_info=True)
-            return None
-        for tool in tools:
-            if tool.get("name") == tool_name:
-                return tool
-        return None
-
-    def _record_text_read_result(
-        self,
-        *,
-        server_name: str,
-        tool_name: str,
-        args: dict[str, Any],
-        result: dict[str, Any],
-    ) -> None:
-        if result.get("isError") or result.get("error"):
-            return
-
-        paths: list[str] = []
-        if tool_name in {"read_file", "read_text_file"} and isinstance(args.get("path"), str):
-            paths.append(args["path"])
-        elif tool_name == "read_multiple_files" and isinstance(args.get("paths"), list):
-            paths.extend(path for path in args["paths"] if isinstance(path, str))
-        else:
-            return
-
-        fallback_text = _mcp_result_text(result)
-        for path in paths:
-            text = self._read_local_text_if_available(path)
-            if text is None and len(paths) == 1 and tool_name in {"read_file", "read_text_file"}:
-                text = fallback_text
-            if text is None:
-                continue
-            self._text_read_cache[(server_name, Path(path).name)] = text
-
-    def _normalise_cached_text_write(
-        self,
-        *,
-        server_name: str,
-        tool_name: str,
-        args: dict[str, Any],
-    ) -> dict[str, Any]:
-        if tool_name != "write_file":
-            return args
-        content = args.get("content")
-        path = args.get("path") or args.get("file_path")
-        if not isinstance(content, str) or not isinstance(path, str):
-            return args
-        if not content.endswith("\n"):
-            return args
-
-        source = self._text_read_cache.get((server_name, Path(path).name))
-        if source is None or source.endswith("\n"):
-            return args
-
-        candidate = content[:-1]
-        if candidate not in {source, source.upper(), source.lower()}:
-            return args
-
-        normalised = dict(args)
-        normalised["content"] = candidate
-        return normalised
-
-    def _read_local_text_if_available(self, path: str) -> str | None:
-        try:
-            file_path = Path(path)
-            if not file_path.is_file():
-                return None
-            return file_path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
-            return None
+        return await self._invoker.call(server_name, tool_name, args)
 
     def find_server_for_tool(self, tool_name: str) -> str | None:
-        """Find a model-dispatchable server providing a given tool."""
-        for server_name in self._servers:
-            if server_name in ADAPTER_ONLY_MCP_SERVERS:
-                continue
-            client = self._get_client(server_name)
-            if client is None:
-                continue
-            for tool in client.list_tools():
-                if tool.get("name") == tool_name:
-                    # Memo here too — sessions that never called
-                    # get_all_tools still get the honest "unavailable"
-                    # error (instead of "Unknown tool") after a recycle.
-                    self._last_seen_tools[tool_name] = server_name
-                    return server_name
-        return None
-
-    # ------------------------------------------------------------------
-    # Server management
-    # ------------------------------------------------------------------
+        return self._discovery.find_server(tool_name)
 
     def list_servers(self) -> list[dict[str, Any]]:
-        """List configured servers with their status."""
-        result: list[dict[str, Any]] = []
-        for name, config in self._servers.items():
-            client = self._clients.get(name)
-            result.append(
-                {
-                    "name": name,
-                    "command": config.get("command", ""),
-                    "connected": client.is_connected() if client else False,
-                    "tool_count": len(client.list_tools())
-                    if client and client.is_connected()
-                    else 0,
-                }
-            )
-        return result
+        return self._pool.list_servers()
 
     def check_health(self, *, auto_restart: bool = False) -> dict[str, bool]:
-        """Return connection health status for each configured server.
-
-        Args:
-            auto_restart: If True, attempt to reconnect dead servers.
-        """
-        result: dict[str, bool] = {}
-        for name in self._servers:
-            client = self._clients.get(name)
-            alive = client.is_connected() if client else False
-
-            if not alive and auto_restart:
-                log.info("MCP server '%s' is down, attempting restart", name)
-                dead = self._clients.pop(name, None)
-                if dead is not None:
-                    dead.close()  # reap the dead Popen instead of leaking it
-                self._failed_at.pop(name, None)
-                new_client = self._get_client(name)
-                alive = new_client is not None and new_client.is_connected()
-                if alive:
-                    log.info("MCP server '%s' restarted successfully", name)
-                else:
-                    log.warning("MCP server '%s' restart failed", name)
-
-            result[name] = alive
-        return result
+        return self._pool.check_health(auto_restart=auto_restart, connector=self._get_client)
 
     def add_server(
         self,
@@ -848,49 +149,82 @@ class MCPServerManager:
         args: list[str] | None = None,
         env: dict[str, str] | None = None,
     ) -> bool:
-        """Add a new MCP server and persist to config file.
-
-        Returns True if successfully added and saved.
-        """
-        entry: dict[str, Any] = {"command": command}
-        if args:
-            entry["args"] = args
-        if env:
-            entry["env"] = env
-
-        self._servers[name] = entry
-        self._failed_at.pop(name, None)
-
-        # Persist to config file
-        try:
-            self._config_path.parent.mkdir(parents=True, exist_ok=True)
-            self._config_path.write_text(
-                json.dumps(self._servers, indent=2, ensure_ascii=False) + "\n",
-                encoding="utf-8",
-            )
-            log.info("Added MCP server '%s' and saved config", name)
-            return True
-        except OSError as exc:
-            log.error("Failed to save MCP config after adding '%s': %s", name, exc)
-            return False
+        self._pool.failed_at.pop(name, None)
+        return self._catalog.add(name, command, args=args, env=env)
 
     def reload_config(self) -> int:
-        """Close all connections, reload config, and return new server count."""
         self.close_all()
-        self._servers.clear()
+        self._catalog.servers.clear()
         return self.load_config()
 
     def close_all(self) -> None:
-        """Close all MCP server connections."""
-        for name, client in self._clients.items():
-            with contextlib.suppress(Exception):
-                log.debug("Closing MCP server '%s' (PID %s)", name, client.pid)
-                client.close()
-        self._clients.clear()
+        self._pool.close_all()
+
+    # Compatibility forwarding for existing internal callers and tests. The
+    # collaborators above remain the sole state owners.
+    def _connect_all(
+        self,
+        *,
+        on_progress: Callable[[int, int, str], None] | None = None,
+    ) -> int:
+        return self._pool.connect_all(connector=self._get_client, on_progress=on_progress)
+
+    def _get_client(self, server_name: str) -> StdioMCPClient | None:
+        return self._pool.get_client(server_name)
+
+    def _respawn_after_death(self, server_name: str) -> StdioMCPClient | None:
+        return self._pool.respawn(server_name, connector=self._get_client)
+
+    def _install_signal_handlers(self) -> None:
+        self._lifecycle.install(self.shutdown, self._atexit_cleanup)
+
+    def _uninstall_signal_handlers(self) -> None:
+        self._lifecycle.uninstall()
+
+    def _atexit_cleanup(self) -> None:
+        if not self._lifecycle.shutdown_called:
+            log.debug("MCP atexit cleanup triggered")
+            self.close_all()
+
+    def _resolve_env(self, env: dict[str, str]) -> dict[str, str]:
+        return self._catalog.resolve_env(env)
+
+
+_singleton_instance: MCPServerManager | None = None
+_singleton_lock = threading.Lock()
+
+
+def get_mcp_manager(
+    config_path: Path | None = None,
+    *,
+    auto_startup: bool = False,
+) -> MCPServerManager:
+    """Return the process-wide compatibility MCP facade."""
+    global _singleton_instance
+    if _singleton_instance is not None:
+        if auto_startup and not _singleton_instance.connected_count:
+            _singleton_instance.startup()
+        return _singleton_instance
+    with _singleton_lock:
+        if _singleton_instance is None:
+            manager = MCPServerManager(config_path=config_path)
+            if auto_startup:
+                manager.startup()
+            _singleton_instance = manager
+        return _singleton_instance
+
+
+def _normalise_mcp_tool(raw: dict[str, Any]) -> dict[str, Any]:
+    """Compatibility alias for the discovery normalizer."""
+    return normalise_mcp_tool(raw)
+
+
+def _normalise_mcp_tool_args(
+    *, tool_name: str, args: dict[str, Any], raw_tool: dict[str, Any] | None
+) -> dict[str, Any]:
+    """Compatibility alias for the invocation normalizer."""
+    return normalise_mcp_tool_args(tool_name=tool_name, args=args, raw_tool=raw_tool)
 
 
 def _is_main_thread() -> bool:
-    """Check if current thread is the main thread."""
-    import threading
-
     return threading.current_thread() is threading.main_thread()

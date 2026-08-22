@@ -5354,6 +5354,8 @@ GEODE는 MCP의 양쪽에 다 섭니다. 클라이언트로서 외부 MCP 서버
 
 `core/mcp/manager.py`의`MCPServerManager`가 세 곳에서 서버 설정을 읽습니다. 같은 이름이 겹치면 더 가까운 쪽이 이깁니다.
 
+manager는 기존 호출 경로를 유지하는 facade입니다. 설정·env는`config_catalog.py`, stdio 연결과 재시작은`connection_pool.py`, 도구 발견·호출·결과 보정은`tool_runtime.py`, signal/atexit 정리는`lifecycle.py`가 각각 소유합니다.
+
 | 우선 | 위치 | 역할 |
 | --- | --- | --- |
 | 1 | `.geode/config.toml`의 `[mcp.servers]` | 프로젝트 override. |
@@ -6105,7 +6107,7 @@ Tier 2  latex2sympy2 + sympy.pretty  블록 전용. 분수·적분을 2D Unicode
 URL: https://mangowhoiscloud.github.io/geode/docs/reference/changelog
 Markdown: https://mangowhoiscloud.github.io/geode/docs/reference/changelog.md
 
-(body omitted from llms-full: 1525 KB — fetch the Markdown twin above for the complete page)
+(body omitted from llms-full: 1526 KB — fetch the Markdown twin above for the complete page)
 
 ---
 
@@ -6265,7 +6267,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 
 | 측정값 | 현재 트리 |
 | --- | --- |
-| 프로덕션 Python 파일 | 582 |
+| 프로덕션 Python 파일 | 586 |
 | 테스트 Python 파일 | 685 |
 | 도구 정의 / 실행 등록 / 유효 스키마 | 86 / 89 / 86 |
 | RuntimeEvent 멤버 | 57 |
@@ -6318,7 +6320,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 | 서브시스템 | 루트 | 핵심 모듈 |
 | --- | --- | --- |
 | 도구 | `core/tools/` | `registry.py`, `definitions.json`, `policy.py` (PolicyChain), `toolkit_registry.py` + `toolkits.toml`, `computer_use.py` |
-| MCP 클라이언트 | `core/mcp/` | `manager.py` (MCPServerManager), `stdio_client.py`, `registry.py`, 알림/캘린더 어댑터 |
+| MCP 클라이언트 | `core/mcp/` | `manager.py` facade, `config_catalog.py`, `connection_pool.py`, `tool_runtime.py`, `lifecycle.py`, `stdio_client.py`, `registry.py`, 알림/캘린더 어댑터 |
 | 메모리 | `core/memory/` | `context.py` (ContextAssembler), `project.py`, `session_manager.py`, `episodic.py`, `recall_writer.py`, `user_profile.py` |
 | 스킬 | `core/skills/` | `skills.py` (레지스트리), `agents.py` |
 | 프롬프트 | `core/llm/prompts/` | `router.md`, 해시 핀은 `__init__.py` |
