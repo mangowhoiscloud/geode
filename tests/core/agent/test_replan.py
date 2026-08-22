@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from core.agent.loop import _guards
 from core.agent.loop.models import AgenticResult
 from core.agent.plan import (
     Plan,
@@ -206,7 +207,6 @@ def test_plan_and_replan_load_file_backed_sil_policy(
 def test_low_confidence_replan_is_edge_triggered(monkeypatch: pytest.MonkeyPatch) -> None:
     from core.agent import plan as plan_module
     from core.agent.cognitive_state import CognitiveState
-    from core.agent.loop.agent_loop import AgenticLoop
 
     replan_triggers: list[str] = []
     timeline_events: list[tuple[Any, Plan, dict[str, Any]]] = []
@@ -240,13 +240,12 @@ def test_low_confidence_replan_is_edge_triggered(monkeypatch: pytest.MonkeyPatch
             )
         ),
     )
-    bound = AgenticLoop._maybe_replan_async.__get__(stub, SimpleNamespace)
     with session_metrics_scope():
         metrics = current_session_metrics()
         metrics.set_active_plan(original)
         for confidence in (0.2, 0.2, 0.9, 0.2):
             state.confidence = confidence
-            asyncio.run(bound(1))
+            asyncio.run(_guards._maybe_replan_async(stub, 1))
         assert metrics.active_plan.plan_id == original.plan_id
         assert metrics.active_plan.revision == 2
     assert replan_triggers == ["low_confidence", "low_confidence"]
@@ -267,7 +266,6 @@ def test_verify_expected_outcome_feeds_retryable_replan_evidence() -> None:
 
 def test_maybe_replan_installs_verify_revision(monkeypatch: pytest.MonkeyPatch) -> None:
     from core.agent import plan as plan_module
-    from core.agent.loop.agent_loop import AgenticLoop
 
     revised = Plan(steps=(PlanStep("r1", "Repair", "Resolved"),), revision=1)
 
@@ -285,8 +283,7 @@ def test_maybe_replan_installs_verify_revision(monkeypatch: pytest.MonkeyPatch) 
             _verify_attempt_results=[SimpleNamespace(text="failed candidate")],
             _prompt_dirty=False,
         )
-        bound = AgenticLoop._maybe_replan_async.__get__(stub, SimpleNamespace)
-        asyncio.run(bound(0, failure_context="missing receipt"))
+        asyncio.run(_guards._maybe_replan_async(stub, 0, failure_context="missing receipt"))
         assert stub._prompt_dirty is True
         assert metrics.active_plan is revised
         assert metrics.last_replan_trigger == "verify_fail"
@@ -296,7 +293,6 @@ def test_verify_replan_abandons_after_bounded_attempts(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from core.agent import plan as plan_module
-    from core.agent.loop.agent_loop import AgenticLoop
 
     monkeypatch.setenv("GEODE_REPLAN_MAX_ATTEMPTS", "1")
     planner_calls = 0
@@ -311,11 +307,10 @@ def test_verify_replan_abandons_after_bounded_attempts(
         metrics = current_session_metrics()
         metrics.set_active_plan(_plan("s1", "s2"), reset_attempts=True)
         stub = SimpleNamespace(_tool_processor=SimpleNamespace(tool_log=[]), _prompt_dirty=False)
-        bound = AgenticLoop._maybe_replan_async.__get__(stub, SimpleNamespace)
         for _ in range(2):
             metrics.last_verify_passed = False
             metrics.last_verify_should_retry = True
-            asyncio.run(bound(0))
+            asyncio.run(_guards._maybe_replan_async(stub, 0))
         assert planner_calls == 1
         assert metrics.active_plan.current == 1
         assert metrics.active_plan.abandoned == (0,)

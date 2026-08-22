@@ -7,7 +7,7 @@ import inspect
 from typing import Any
 
 import pytest
-from core.agent.loop import _phases
+from core.agent.loop import _guards, _phases
 from core.agent.loop.agent_loop import AgenticLoop
 from core.agent.loop.models import AgenticResult, TerminationReason, TurnState
 from core.llm.agentic_response import AgenticResponse
@@ -90,9 +90,7 @@ def test_arun_once_returns_the_observation_terminal(monkeypatch: pytest.MonkeyPa
     class Stub:
         max_rounds = 0
 
-        @staticmethod
-        def _check_round_guards(_round_idx: int) -> None:
-            return None
+    monkeypatch.setattr(_guards, "_check_round_guards", lambda *_args: None)
 
     result = asyncio.run(AgenticLoop._arun_once.__get__(Stub(), Stub)("task"))
 

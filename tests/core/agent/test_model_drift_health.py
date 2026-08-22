@@ -26,7 +26,6 @@ import asyncio
 import inspect
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import core.agent.loop as _loop_mod
 from core.agent.loop import _model_switching
 
 # ---------------------------------------------------------------------------
@@ -68,14 +67,11 @@ def test_sync_returns_false_when_drift_disabled() -> None:
     stub.model = "claude-opus-4-7"
     stub.update_model_async = AsyncMock()
     stub._disable_settings_drift = True
-    stub._sync_model_from_settings_async = (
-        _loop_mod.AgenticLoop._sync_model_from_settings_async.__get__(stub)
-    )
 
     # settings.model intentionally divergent — would normally trigger drift.
     fake_settings = MagicMock(model="gpt-5.5")
     with patch("core.config.settings", fake_settings):
-        changed = asyncio.run(stub._sync_model_from_settings_async())
+        changed = asyncio.run(_model_switching.sync_model_from_settings_async(stub))
 
     assert changed is False
     stub.update_model_async.assert_not_called()
@@ -85,7 +81,7 @@ def test_drift_target_is_healthy_uses_rotator() -> None:
     """The health helper must consult ProfileRotator.resolve, not invent
     its own definition of health (which would diverge from the actual
     selection used by the next LLM call)."""
-    src = inspect.getsource(_loop_mod.AgenticLoop._drift_target_is_healthy)
+    src = inspect.getsource(_model_switching.drift_target_is_healthy)
     assert "rotator.resolve" in src, (
         "Health check must use ProfileRotator.resolve so the answer matches "
         "what the next LLM call would actually pick"
@@ -112,10 +108,6 @@ def _make_loop_stub(loop_model: str = "glm-5.1") -> MagicMock:
     # in *every* test. Pin to False so existing contracts run as before.
     stub._disable_settings_drift = False
     # Bind the real methods to the stub so we exercise the patched logic.
-    stub._sync_model_from_settings_async = (
-        _loop_mod.AgenticLoop._sync_model_from_settings_async.__get__(stub)
-    )
-    stub._drift_target_is_healthy = _loop_mod.AgenticLoop._drift_target_is_healthy.__get__(stub)
     return stub
 
 
@@ -133,7 +125,7 @@ def test_drift_refused_when_rotator_returns_none(monkeypatch) -> None:
 
     fake_settings = MagicMock(model="glm-4.7-flash")
     with patch("core.config.settings", fake_settings):
-        changed = asyncio.run(stub._sync_model_from_settings_async())
+        changed = asyncio.run(_model_switching.sync_model_from_settings_async(stub))
 
     assert changed is False
     stub.update_model_async.assert_not_called()
@@ -158,7 +150,7 @@ def test_drift_is_noop_even_when_rotator_returns_profile(monkeypatch) -> None:
 
     fake_settings = MagicMock(model="glm-4.7-flash")
     with patch("core.config.settings", fake_settings):
-        changed = asyncio.run(stub._sync_model_from_settings_async())
+        changed = asyncio.run(_model_switching.sync_model_from_settings_async(stub))
 
     assert changed is False
     stub.update_model_async.assert_not_awaited()
@@ -176,7 +168,7 @@ def test_drift_is_noop_when_rotator_not_initialised(monkeypatch) -> None:
 
     fake_settings = MagicMock(model="glm-4.7-flash")
     with patch("core.config.settings", fake_settings):
-        changed = asyncio.run(stub._sync_model_from_settings_async())
+        changed = asyncio.run(_model_switching.sync_model_from_settings_async(stub))
 
     assert changed is False
     stub.update_model_async.assert_not_awaited()
@@ -191,7 +183,7 @@ def test_drift_no_op_when_models_match(monkeypatch) -> None:
 
     fake_settings = MagicMock(model="glm-5.1")
     with patch("core.config.settings", fake_settings):
-        changed = asyncio.run(stub._sync_model_from_settings_async())
+        changed = asyncio.run(_model_switching.sync_model_from_settings_async(stub))
 
     assert changed is False
     fake_rotator.resolve.assert_not_called()

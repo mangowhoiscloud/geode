@@ -234,7 +234,7 @@ class SharedServices:
         Every call receives identical shared resources (hooks, MCP, skills,
         cost_budget).  Only mode-specific behavior differs.
         """
-        from core.agent.loop import AgenticLoop
+        from core.agent.loop import AgenticLoop, AgenticLoopConfig
         from core.agent.tool_executor import ToolExecutor
 
         if propagate_context:
@@ -366,22 +366,24 @@ class SharedServices:
         loop = AgenticLoop(
             conversation,
             executor,
-            max_rounds=max_rounds,
-            time_budget_s=time_budget,
-            cost_budget=self._cost_budget,
+            config=AgenticLoopConfig(
+                max_rounds=max_rounds,
+                time_budget_s=time_budget,
+                cost_budget=self._cost_budget,
+                effort=settings.agentic_effort,
+                system_suffix=system_suffix,
+                allowed_tool_names=allowed_tool_names,
+                session_id=session_id,
+            ),
             model=settings.model,
             provider=provider,
-            effort=settings.agentic_effort,
             mcp_manager=self.mcp_manager,
             skill_registry=self.skill_registry,
             hooks=self.hook_system,
-            system_suffix=system_suffix,
             quiet=quiet,
-            allowed_tool_names=allowed_tool_names,
             # Caller-provided machine-instance id — gateway threads pass a
             # stable derived id so a thread's turns share ONE checkpoint
             # chain; empty keeps the loop's fresh ``s-<uuid>``.
-            session_id=session_id,
             activity_sink_provider=self.activity_sink_provider,
             policy_sources=self.policy_sources,
         )

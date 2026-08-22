@@ -510,7 +510,7 @@ class TestAgenticLoopFailover:
     def _make_loop(self, model: str | None = None) -> Any:
         """Create a minimal AgenticLoop instance for testing."""
         from core.agent.conversation import ConversationContext
-        from core.agent.loop import AgenticLoop
+        from core.agent.loop import AgenticLoop, AgenticLoopConfig
         from core.agent.tool_executor import ToolExecutor
 
         context = ConversationContext()
@@ -518,8 +518,8 @@ class TestAgenticLoopFailover:
         return AgenticLoop(
             context=context,
             tool_executor=executor,
+            config=AgenticLoopConfig(max_rounds=5),
             model=model or ANTHROPIC_PRIMARY,
-            max_rounds=5,
         )
 
     def _install_acomplete_stub(self, loop: Any, result: Any) -> MagicMock:

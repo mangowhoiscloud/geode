@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from core.agent.conversation import ConversationContext
-from core.agent.loop import AgenticLoop
+from core.agent.loop import AgenticLoop, AgenticLoopConfig
 from core.agent.loop.models import StepSnapshot, TerminationReason, TurnState
 from core.agent.tool_executor import ToolExecutor
 from core.hooks import (
@@ -106,11 +106,13 @@ def test_one_sampling_snapshot_reaches_its_tool_context_and_retries_are_monotone
         loop = AgenticLoop(
             ConversationContext(),
             ToolExecutor(bound_tool_plan=bound),
+            config=AgenticLoopConfig(
+                source="subscription",
+                disable_settings_drift=True,
+                session_id="session-1",
+            ),
             model="gpt-5.6-luna",
             provider="openai",
-            source="subscription",
-            disable_settings_drift=True,
-            session_id="session-1",
             quiet=True,
         )
         loop._turn_id = "turn-1"
@@ -175,10 +177,9 @@ def test_auxiliary_sampling_does_not_replace_turn_messages() -> None:
         loop = AgenticLoop(
             ConversationContext(),
             ToolExecutor(action_handlers={}),
+            config=AgenticLoopConfig(source="subscription", disable_settings_drift=True),
             model="gpt-5.6-luna",
             provider="openai",
-            source="subscription",
-            disable_settings_drift=True,
             quiet=True,
         )
         loop._turn_id = "turn-1"
@@ -245,10 +246,9 @@ def test_sampling_snapshot_finalizes_the_middleware_route_for_tools() -> None:
         loop = AgenticLoop(
             ConversationContext(),
             executor,
+            config=AgenticLoopConfig(source="subscription", disable_settings_drift=True),
             model="initial-model",
             provider="openai",
-            source="subscription",
-            disable_settings_drift=True,
             quiet=True,
         )
         loop._turn_id = "turn-1"
@@ -386,7 +386,9 @@ def test_terminal_result_records_the_closed_reason_on_the_active_turn() -> None:
     loop._turn_id = "turn-1"
     loop._turn_state = TurnState(turn_id="turn-1")
 
-    result = loop._terminal_result(TerminationReason.USER_CANCELLED, "stopped", rounds=1)
+    from core.agent.loop import _guards
+
+    result = _guards._terminal_result(loop, TerminationReason.USER_CANCELLED, "stopped", rounds=1)
 
     assert result.termination_reason is TerminationReason.USER_CANCELLED
     assert loop._turn_state.termination_reason is TerminationReason.USER_CANCELLED

@@ -3,7 +3,7 @@
 Three invariants introduced by the FSM formalization:
 
 1. State-space closure — every terminal ``AgenticResult`` is born in
-   exactly ONE place (``AgenticLoop._terminal_result``) with a
+   exactly ONE place (``_guards._terminal_result``) with a
    :class:`TerminationReason` member; no inline string reasons remain.
 2. Snapshot completeness — ``collect_guard_state``/``apply_guard_state``
    round-trip the guard counters the conversation messages don't carry,
@@ -23,8 +23,8 @@ from core.agent.loop import _lifecycle
 from core.agent.loop.models import TerminationReason
 from core.memory.session_checkpoint import SessionCheckpoint, SessionState, SessionStatus
 
-_AGENT_LOOP_SRC = (
-    Path(__file__).resolve().parents[3] / "core" / "agent" / "loop" / "agent_loop.py"
+_GUARDS_SRC = (
+    Path(__file__).resolve().parents[3] / "core" / "agent" / "loop" / "_guards.py"
 ).read_text(encoding="utf-8")
 
 
@@ -34,15 +34,15 @@ _AGENT_LOOP_SRC = (
 
 
 def test_terminal_results_born_in_one_place():
-    """``AgenticResult(`` appears once in agent_loop.py — inside
+    """``AgenticResult(`` appears once in ``_guards.py`` — inside
     ``_terminal_result``. New exits must route through the choke-point."""
-    assert _AGENT_LOOP_SRC.count("AgenticResult(") == 1
+    assert _GUARDS_SRC.count("AgenticResult(") == 1
 
 
 def test_no_inline_string_termination_reasons():
     """No ``termination_reason=<string literal>`` in code — either quote
     style, any spacing (docstring mentions wrapped in backticks exempt)."""
-    assert re.search(r"(?<!`)termination_reason\s*=\s*[\"']", _AGENT_LOOP_SRC) is None
+    assert re.search(r"(?<!`)termination_reason\s*=\s*[\"']", _GUARDS_SRC) is None
 
 
 def test_enum_covers_documented_terminal_alphabet():

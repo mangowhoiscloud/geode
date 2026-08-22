@@ -1345,7 +1345,7 @@ GEODE의 구조화 출력 표면은 `response_schema` 하나입니다. caller가
 ```
 SubTask.response_schema
   → WorkerRequest.response_schema
-  → AgenticLoop(response_schema=...)
+  → AgenticLoop(config=AgenticLoopConfig(response_schema=...))
   → AdapterCallRequest.response_schema
   → adapter-specific output constraint
 ```
@@ -6271,8 +6271,8 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 
 | 측정값 | 현재 트리 |
 | --- | --- |
-| 프로덕션 Python 파일 | 595 |
-| 테스트 Python 파일 | 693 |
+| 프로덕션 Python 파일 | 598 |
+| 테스트 Python 파일 | 694 |
 | 도구 정의 / 실행 등록 / 유효 스키마 | 82 / 85 / 82 |
 | RuntimeEvent 멤버 | 57 |
 | 기본 LLM 어댑터 | 7 |

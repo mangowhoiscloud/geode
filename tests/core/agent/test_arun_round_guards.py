@@ -19,7 +19,7 @@ import inspect
 import time
 
 import pytest
-from core.agent.loop import _phases
+from core.agent.loop import _guards, _phases
 from core.agent.loop.agent_loop import AgenticLoop
 
 # ---------------------------------------------------------------------------
@@ -28,8 +28,7 @@ from core.agent.loop.agent_loop import AgenticLoop
 
 
 def test_check_round_guards_method_exists() -> None:
-    assert hasattr(AgenticLoop, "_check_round_guards")
-    method = AgenticLoop._check_round_guards
+    method = _guards._check_round_guards
     sig = inspect.signature(method)
     assert "round_idx" in sig.parameters
     # Returns str | None — non-None reason on break, None when
@@ -40,7 +39,7 @@ def test_check_round_guards_method_exists() -> None:
 def test_check_round_guards_is_sync() -> None:
     """Guards are pure functions — no await needed. Async return
     would force callers to redundantly await."""
-    assert not inspect.iscoroutinefunction(AgenticLoop._check_round_guards)
+    assert not inspect.iscoroutinefunction(_guards._check_round_guards)
 
 
 # ---------------------------------------------------------------------------
@@ -68,8 +67,7 @@ class _StubLoop:
 def _call_guards(stub: _StubLoop, round_idx: int) -> str | None:
     """Bind the helper to a stub via descriptor protocol — avoids
     AgenticLoop.__init__ side-effects."""
-    bound = AgenticLoop._check_round_guards.__get__(stub, _StubLoop)
-    return bound(round_idx)
+    return _guards._check_round_guards(stub, round_idx)
 
 
 def test_no_limits_means_no_guard_trigger() -> None:
@@ -144,7 +142,7 @@ def test_arun_calls_check_round_guards() -> None:
     blocks must NOT remain in ``arun``."""
     src = inspect.getsource(AgenticLoop._arun_once)
     # Helper is invoked
-    assert "guard_reason = self._check_round_guards(round_idx)" in src
+    assert "guard_reason = _guards._check_round_guards(self, round_idx)" in src
     # Inline guards removed
     assert "Guard 1: Round limit" not in src
     assert "Guard 2: Time budget" not in src
@@ -159,10 +157,10 @@ def test_arun_preserves_non_none_guard_response() -> None:
     """
     src = inspect.getsource(AgenticLoop._arun_once)
     termination_src = inspect.getsource(_phases.assemble_termination)
-    assert "guard_reason = self._check_round_guards(round_idx)" in src
+    assert "guard_reason = _guards._check_round_guards(self, round_idx)" in src
     assert "if guard_reason is not None:" in src
     assert "_phases.assemble_termination(" in src
-    assert "loop._guard_exit_result(" in termination_src
+    assert "_guards._guard_exit_result(" in termination_src
     idx = src.index("if guard_reason is not None:")
     after = src[idx:].splitlines()[1:5]  # next 4 lines
     next_nonblank = next((ln.strip() for ln in after if ln.strip()), "")
@@ -175,23 +173,21 @@ def test_arun_preserves_non_none_guard_response() -> None:
 
 def test_guard_exit_result_keeps_session_budget_reasons() -> None:
     stub = _StubLoop(time_budget_s=1.0)
-    bound = AgenticLoop._guard_exit_result.__get__(stub, _StubLoop)
-
-    assert bound("round_limit", rounds=3) == (
+    assert _guards._guard_exit_result(stub, "round_limit", rounds=3) == (
         "max_rounds",
         "Max agentic rounds reached. Please try a more specific request.",
     )
-    assert bound("time_budget", rounds=2) == (
+    assert _guards._guard_exit_result(stub, "time_budget", rounds=2) == (
         "time_budget_expired",
         "Time budget (1s) expired after 2 rounds.",
     )
 
-    reason, text = bound("session_time_budget_handoff", rounds=0)
+    reason, text = _guards._guard_exit_result(stub, "session_time_budget_handoff", rounds=0)
     assert reason == "session_time_budget_handoff"
     assert "handoff window" in text
     assert "Max agentic rounds" not in text
 
-    reason, text = bound("session_time_budget_expired", rounds=0)
+    reason, text = _guards._guard_exit_result(stub, "session_time_budget_expired", rounds=0)
     assert reason == "session_time_budget_expired"
     assert "Session time budget expired" in text
     assert "Max agentic rounds" not in text

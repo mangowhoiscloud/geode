@@ -16,8 +16,8 @@ finally migrated to the adapter registry's
    operator without an Anthropic key (the entire localisation point
    defeated). Now async + model-routed dispatch.
 
-Both sites become async; their call paths (``agent_loop.py:1562 / 1627
-/ 1682`` for the context-exhausted message, ``HookSystem.trigger_async``
+Both sites become async; their loop-phase call paths for the context-exhausted
+message and ``HookSystem.trigger_async``
 at ``_lifecycle.py:351`` for the extraction handler) are already in
 async contexts so the migration is signature-only at the boundary.
 """
@@ -118,7 +118,7 @@ def test_context_exhausted_call_sites_are_awaited() -> None:
     assert ALL occurrences are awaited (the real invariant) rather than pinning
     a fixed count of duplicates."""
     src = (
-        Path(__file__).resolve().parents[3] / "core" / "agent" / "loop" / "agent_loop.py"
+        Path(__file__).resolve().parents[3] / "core" / "agent" / "loop" / "_guards.py"
     ).read_text(encoding="utf-8")
     total = src.count("_context_exhausted_message(user_input)")
     awaited = src.count("await _context_exhausted_message(user_input)")

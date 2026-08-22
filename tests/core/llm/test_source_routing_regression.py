@@ -215,11 +215,11 @@ def test_agentic_loop_default_source_no_longer_payg_literal() -> None:
     every interactive call (the daemon never passes ``source=``) onto the
     PAYG adapter and silently masquerade an OAuth-registered subscription
     operator's session as a PAYG call. The fix lives in
-    :func:`core.agent.loop.agent_loop.AgenticLoop.__init__` and must
+    :func:`core.agent.loop._bootstrap.initialize_runtime` and must
     consult :func:`infer_source` before defaulting.
     """
     loop_source = (
-        Path(__file__).resolve().parents[3] / "core" / "agent" / "loop" / "agent_loop.py"
+        Path(__file__).resolve().parents[3] / "core" / "agent" / "loop" / "_bootstrap.py"
     ).read_text(encoding="utf-8")
     # The legacy single-line default must be gone.
     assert 'self._source = source or "payg"' not in loop_source, (
@@ -228,8 +228,8 @@ def test_agentic_loop_default_source_no_longer_payg_literal() -> None:
         "the depleted PAYG endpoint."
     )
     # The inference call must be present.
-    assert "infer_source(provider)" in loop_source, (
-        "AgenticLoop.__init__ no longer consults infer_source — the "
+    assert "infer_source(loop._provider)" in loop_source, (
+        "loop bootstrap no longer consults infer_source — the "
         "credential_source setting + ProfileStore OAuth presence will be "
         "ignored when source is unspecified."
     )
@@ -289,17 +289,16 @@ def test_agentic_loop_explicit_source_still_wins(monkeypatch: pytest.MonkeyPatch
         # Build a loop with an explicit source — inference would say
         # "subscription" but explicit "payg" should win.
         from core.agent.conversation import ConversationContext
-        from core.agent.loop import AgenticLoop
+        from core.agent.loop import AgenticLoop, AgenticLoopConfig
         from core.agent.tool_executor import ToolExecutor
 
         loop = AgenticLoop(
             ConversationContext(),
             ToolExecutor(action_handlers={}, hitl_level=0),
+            config=AgenticLoopConfig(source="payg", max_rounds=0),
             model="gpt-5.5",
             provider="openai-codex",
-            source="payg",
             quiet=True,
-            max_rounds=0,
         )
         assert loop._source == "payg", (
             f"Explicit source='payg' was overridden by inference "
@@ -346,16 +345,16 @@ def test_agentic_loop_dispatches_codex_oauth_when_oauth_profile_present(
         bootstrap_builtins()
 
         from core.agent.conversation import ConversationContext
-        from core.agent.loop import AgenticLoop
+        from core.agent.loop import AgenticLoop, AgenticLoopConfig
         from core.agent.tool_executor import ToolExecutor
 
         loop = AgenticLoop(
             ConversationContext(),
             ToolExecutor(action_handlers={}, hitl_level=0),
+            config=AgenticLoopConfig(max_rounds=0),
             model="gpt-5.5",
             provider="openai-codex",
             quiet=True,
-            max_rounds=0,
         )
         assert loop._new_adapter.name == "codex-oauth", (
             f"AgenticLoop dispatched {loop._new_adapter.name!r} instead of "
@@ -382,16 +381,16 @@ def test_agentic_loop_dispatches_openai_payg_without_oauth_profile(
         bootstrap_builtins()
 
         from core.agent.conversation import ConversationContext
-        from core.agent.loop import AgenticLoop
+        from core.agent.loop import AgenticLoop, AgenticLoopConfig
         from core.agent.tool_executor import ToolExecutor
 
         loop = AgenticLoop(
             ConversationContext(),
             ToolExecutor(action_handlers={}, hitl_level=0),
+            config=AgenticLoopConfig(max_rounds=0),
             model="gpt-5.5",
             provider="openai-codex",
             quiet=True,
-            max_rounds=0,
         )
         assert loop._new_adapter.name == "openai-payg", (
             f"Without an OAuth profile, AgenticLoop must keep dispatching "

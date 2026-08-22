@@ -251,7 +251,7 @@ async def arun_agentic_oneshot(
     bound_tool_plan, transient_handlers = tool_plan_builder()
 
     from core.agent.conversation import ConversationContext
-    from core.agent.loop import AgenticLoop
+    from core.agent.loop import AgenticLoop, AgenticLoopConfig
     from core.agent.tool_executor import ToolExecutor
     from core.config import _resolve_provider
     from core.config import settings as _stk_settings
@@ -329,11 +329,10 @@ async def arun_agentic_oneshot(
     loop = AgenticLoop(
         conversation,
         executor,
+        config=AgenticLoopConfig(time_budget_s=time_budget_s, max_rounds=0),
         model=_stk_settings.model,
         provider=provider,
         quiet=quiet,
-        time_budget_s=time_budget_s,
-        max_rounds=0,
         activity_sink_provider=activity_sink_provider,
         policy_sources=resolved_policy_sources,
     )

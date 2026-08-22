@@ -81,7 +81,7 @@ def test_temperature_setting_range_validation() -> None:
 # a regression (someone reverted to a literal or removed the call entirely).
 _RATCHET_SITES = (
     (
-        Path("core/agent/loop/agent_loop.py"),
+        Path("core/agent/loop/_provider_call.py"),
         "_settings.temperature_agent_loop",
     ),
     (

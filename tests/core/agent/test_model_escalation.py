@@ -20,7 +20,7 @@ from typing import Any
 from unittest.mock import MagicMock
 
 from core.agent.conversation import ConversationContext
-from core.agent.loop import AgenticLoop
+from core.agent.loop import AgenticLoop, AgenticLoopConfig, _guards, _model_switching
 from core.agent.tool_executor import ToolExecutor
 from core.config import ANTHROPIC_PRIMARY
 
@@ -34,9 +34,9 @@ def _make_loop(
     return AgenticLoop(
         ctx,
         executor,
+        config=AgenticLoopConfig(max_rounds=10),
         model=model,
         provider=provider,
-        max_rounds=10,
         quiet=True,
     )
 
@@ -73,7 +73,7 @@ class TestNoAutoEscalation:
         loop = _make_loop()
         loop._new_adapter = MagicMock(fallback_chain=["a", "b", "c"])
         loop.model = "a"
-        assert loop._fallback_chain_suggestions() == ["b", "c"]
+        assert _model_switching.fallback_chain_suggestions(loop) == ["b", "c"]
 
 
 class TestModelActionDiagnostic:
@@ -84,7 +84,8 @@ class TestModelActionDiagnostic:
         loop._new_adapter = MagicMock(fallback_chain=[ANTHROPIC_PRIMARY, "claude-sonnet-4-6"])
         loop._consecutive_llm_failures = 5
 
-        result = loop._build_model_action_result(
+        result = _guards._build_model_action_result(
+            loop,
             error_type="rate_limit",
             severity="warning",
             hint="API rate limited. Switch to a different model with /model and re-run.",
@@ -138,7 +139,7 @@ class TestOverthinkingThreshold:
         # Pick any registered model — the formula should match exactly.
         for model, ctx in MODEL_CONTEXT_WINDOW.items():
             loop.model = model
-            assert loop._overthinking_token_threshold() == max(1024, ctx // 100), (
+            assert _guards._overthinking_token_threshold(loop) == max(1024, ctx // 100), (
                 f"threshold mismatch for model={model} (ctx={ctx})"
             )
 
@@ -146,7 +147,7 @@ class TestOverthinkingThreshold:
         loop = _make_loop()
         loop.model = "definitely-not-a-real-model"
         # 200_000 // 100 = 2000 (parity with the legacy magic number)
-        assert loop._overthinking_token_threshold() == 2000
+        assert _guards._overthinking_token_threshold(loop) == 2000
 
     def test_threshold_floor_protects_small_context_models(self) -> None:
         """Models with <102_400 ctx hit the 1024 floor instead of going below."""
@@ -159,7 +160,7 @@ class TestOverthinkingThreshold:
             {"tiny-model": 64_000},
             clear=False,
         ):
-            assert loop._overthinking_token_threshold() == 1024
+            assert _guards._overthinking_token_threshold(loop) == 1024
 
 
 # ---------------------------------------------------------------------------

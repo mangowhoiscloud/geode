@@ -44,7 +44,7 @@ export default function Page() {
             <h2>전달 경로</h2>
             <pre>{`SubTask.response_schema
   → WorkerRequest.response_schema
-  → AgenticLoop(response_schema=...)
+  → AgenticLoop(config=AgenticLoopConfig(response_schema=...))
   → AdapterCallRequest.response_schema
   → adapter-specific output constraint`}</pre>
             <p>
@@ -217,7 +217,7 @@ task = SubTask(..., response_schema=DECISION_SCHEMA)`}</pre>
             <h2>Propagation path</h2>
             <pre>{`SubTask.response_schema
   → WorkerRequest.response_schema
-  → AgenticLoop(response_schema=...)
+  → AgenticLoop(config=AgenticLoopConfig(response_schema=...))
   → AdapterCallRequest.response_schema
   → adapter-specific output constraint`}</pre>
             <p>

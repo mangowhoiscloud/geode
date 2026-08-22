@@ -210,7 +210,7 @@ async def _default_geode_runner(
 
     # Lazy imports — keep the module-level surface bootstrap-free.
     from core.agent.conversation import ConversationContext
-    from core.agent.loop import AgenticLoop
+    from core.agent.loop import AgenticLoop, AgenticLoopConfig
     from core.agent.tool_executor import ToolExecutor
     from core.audit.diagnostics import diag
     from core.cli.session_state import set_readiness
@@ -361,11 +361,13 @@ async def _default_geode_runner(
     loop = AgenticLoop(
         ctx,
         executor,
-        system_suffix=system_text,
+        config=AgenticLoopConfig(
+            system_suffix=system_text,
+            source=resolved_source,
+            disable_settings_drift=(model is not None),
+        ),
         model=model,
         provider=resolved_provider,
-        source=resolved_source,
-        disable_settings_drift=(model is not None),
         activity_sink_provider=current_activity_sink,
         policy_sources=policy_sources,
     )

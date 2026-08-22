@@ -22,7 +22,7 @@ import asyncio
 import inspect
 
 import pytest
-from core.agent.loop import _phases
+from core.agent.loop import _guards, _phases
 from core.agent.loop.agent_loop import AgenticLoop
 from core.agent.loop.models import AgenticResult, _ContextExhaustedError
 from core.llm.agentic_response import AgenticResponse
@@ -81,9 +81,8 @@ class _StubLoop:
     def _emit_quota_panel(self, _exc: BillingError) -> None:
         self.quota_panel_calls += 1
 
-    # Real choke-point method — terminal results are born through
-    # ``_terminal_result`` even on the stub (FSM formalization).
-    _terminal_result = AgenticLoop._terminal_result
+    def _set_turn_termination(self, _reason: object) -> None:
+        pass
 
 
 def _run_dispatch(
@@ -238,7 +237,7 @@ def test_arun_still_handles_context_exhausted_inline() -> None:
     """The provider phase preserves aggressive context recovery."""
     src = inspect.getsource(_phases.call_provider)
     assert "except _ContextExhaustedError" in src
-    assert "loop._aggressive_context_recovery(" in src
+    assert "_context.aggressive_context_recovery(" in src
 
 
 # ---------------------------------------------------------------------------
@@ -249,7 +248,7 @@ def test_arun_still_handles_context_exhausted_inline() -> None:
 def test_prior_phase_helpers_still_exist() -> None:
     """Phase 1 + 2a + 2b helpers must remain intact."""
     assert hasattr(AgenticLoop, "_emit_session_start_signals")
-    assert hasattr(AgenticLoop, "_check_round_guards")
+    assert callable(_guards._check_round_guards)
     assert hasattr(AgenticLoop, "_sync_model_and_rebuild_prompt")
 
 

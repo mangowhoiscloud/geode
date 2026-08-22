@@ -15,7 +15,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from core.agent.conversation import ConversationContext
-from core.agent.loop import AGENTIC_TOOLS, AgenticLoop, AgenticResult, get_agentic_tools
+from core.agent.loop import (
+    AGENTIC_TOOLS,
+    AgenticLoop,
+    AgenticLoopConfig,
+    AgenticResult,
+    _context,
+    _guards,
+    get_agentic_tools,
+)
 from core.agent.sub_agent import SubAgentManager, SubTask
 from core.agent.tool_executor import (
     DANGEROUS_TOOLS,
@@ -807,7 +815,7 @@ class TestAgenticLoop:
         loop_a = AgenticLoop(
             ConversationContext(),
             executor,
-            session_id="session-a",
+            config=AgenticLoopConfig(session_id="session-a"),
             quiet=True,
         )
         warm_response = MagicMock(stop_reason="end_turn", usage=MagicMock(output_tokens=50))
@@ -839,14 +847,14 @@ class TestAgenticLoop:
             loop_a._session_metrics.time_budget_start_s = time.monotonic() - 86951.0
             with (
                 patch.object(loop_a, "_call_llm", new=AsyncMock()) as call_llm,
-                patch.object(loop_a, "_persist_handoff_request") as persist_handoff,
+                patch.object(_guards, "_persist_handoff_request") as persist_handoff,
             ):
                 result_a = await loop_a.arun("expired work")
 
             loop_b = AgenticLoop(
                 ConversationContext(),
                 executor,
-                session_id="session-b",
+                config=AgenticLoopConfig(session_id="session-b"),
                 quiet=True,
             )
             assert loop_b._session_metrics is not loop_a._session_metrics
@@ -877,19 +885,19 @@ class TestAgenticLoop:
         loop = AgenticLoop(context, executor, quiet=True)
 
         monkeypatch.delenv("GEODE_SESSION_TIME_BUDGET_S", raising=False)
-        loop._maybe_start_session_budget()
+        _guards._maybe_start_session_budget(loop)
         assert loop._session_metrics.time_budget_total_s == 0.0
 
         for invalid in ("not-a-number", "nan", "inf", "-inf"):
             monkeypatch.setenv("GEODE_SESSION_TIME_BUDGET_S", invalid)
-            loop._maybe_start_session_budget()
+            _guards._maybe_start_session_budget(loop)
             assert loop._session_metrics.time_budget_total_s == 0.0
 
         monkeypatch.setenv("GEODE_SESSION_TIME_BUDGET_S", "120")
-        loop._maybe_start_session_budget()
+        _guards._maybe_start_session_budget(loop)
         assert loop._session_metrics.time_budget_total_s == 120.0
         assert loop._session_metrics.handoff_threshold_s == 60.0
-        assert loop._check_session_budget_and_maybe_handoff() is None
+        assert _guards._check_session_budget_and_maybe_handoff(loop) is None
 
     def test_external_orchestrator_yields_after_one_tool_round_without_round_cap(
         self,
@@ -899,8 +907,7 @@ class TestAgenticLoop:
         loop = AgenticLoop(
             context,
             executor,
-            max_rounds=0,
-            yield_after_tool_round=True,
+            config=AgenticLoopConfig(max_rounds=0, yield_after_tool_round=True),
             quiet=True,
         )
         tool_response = MagicMock()
@@ -916,7 +923,7 @@ class TestAgenticLoop:
         with (
             patch.object(loop, "_call_llm", return_value=tool_response) as call_llm,
             patch.object(loop, "_track_usage"),
-            patch.object(loop, "_guard_repeated_success") as repeated_success,
+            patch.object(_guards, "_guard_repeated_success") as repeated_success,
         ):
             result = asyncio.run(loop.arun("run one externally orchestrated tool round"))
 
@@ -939,8 +946,8 @@ class TestAgenticLoop:
         loop = AgenticLoop(
             context,
             executor,
+            config=AgenticLoopConfig(allow_actionable_partial_on_empty=True),
             quiet=True,
-            allow_actionable_partial_on_empty=True,
         )
         tool_response = MagicMock()
         tool_response.stop_reason = "tool_use"
@@ -979,8 +986,8 @@ class TestAgenticLoop:
         loop = AgenticLoop(
             context,
             executor,
+            config=AgenticLoopConfig(allow_actionable_partial_on_empty=True),
             quiet=True,
-            allow_actionable_partial_on_empty=True,
         )
         empty = EmptyModelOutputError("empty before action")
 
@@ -992,7 +999,12 @@ class TestAgenticLoop:
 
     def test_run_max_rounds(self, context: ConversationContext, executor: ToolExecutor) -> None:
         """Test max rounds limit."""
-        loop = AgenticLoop(context, executor, max_rounds=2, quiet=True)
+        loop = AgenticLoop(
+            context,
+            executor,
+            config=AgenticLoopConfig(max_rounds=2),
+            quiet=True,
+        )
 
         # Always return tool_use → never ends
         tool_response = MagicMock()
@@ -1045,7 +1057,7 @@ class TestAgenticLoop:
 
         with (
             patch.object(loop, "_call_llm", side_effect=fail_with_step),
-            patch.object(loop, "_aggressive_context_recovery", new=AsyncMock(return_value=0)),
+            patch.object(_context, "aggressive_context_recovery", new=AsyncMock(return_value=0)),
             patch("asyncio.sleep", new=AsyncMock(return_value=None)),
         ):
             result = asyncio.run(loop.arun("test"))
@@ -1089,11 +1101,33 @@ class TestAgenticLoop:
         """Verify DEFAULT_MAX_ROUNDS is 0 (unlimited — time-based control)."""
         assert AgenticLoop.DEFAULT_MAX_ROUNDS == 0
 
+    def test_legacy_policy_keywords_map_to_config(
+        self,
+        context: ConversationContext,
+        executor: ToolExecutor,
+    ) -> None:
+        loop = AgenticLoop(context, executor, max_rounds=4, session_id="legacy", quiet=True)
+
+        assert loop.max_rounds == 4
+        assert loop._session_id == "legacy"
+        with pytest.raises(TypeError, match="cannot be combined"):
+            AgenticLoop(
+                context,
+                executor,
+                config=AgenticLoopConfig(max_rounds=2),
+                max_rounds=4,
+            )
+
     def test_forced_text_on_last_round(
         self, context: ConversationContext, executor: ToolExecutor
     ) -> None:
         """On the last round, tool_choice=none forces text output."""
-        loop = AgenticLoop(context, executor, max_rounds=3, quiet=True)
+        loop = AgenticLoop(
+            context,
+            executor,
+            config=AgenticLoopConfig(max_rounds=3),
+            quiet=True,
+        )
 
         call_kwargs: list[dict[str, Any]] = []
 
@@ -2072,7 +2106,7 @@ class TestMessagePruning:
             {"role": "user", "content": "hello"},
             {"role": "assistant", "content": [_txt("hi")]},
         ]
-        loop._maybe_prune_messages(messages)
+        _context.maybe_prune_messages(loop, messages)
         assert len(messages) == 2
 
     def test_prune_skips_orphaned_tool_result(self) -> None:
@@ -2093,7 +2127,7 @@ class TestMessagePruning:
             {"role": "assistant", "content": [_txt("done3")]},
             {"role": "user", "content": "q4"},
         ]
-        loop._maybe_prune_messages(messages)
+        _context.maybe_prune_messages(loop, messages)
         # After pruning, no tool_result should be orphaned
         for i, msg in enumerate(messages):
             if msg["role"] != "user":
@@ -2138,7 +2172,7 @@ class TestMessagePruning:
             ]
         )
         assert len(messages) > 30
-        loop._maybe_prune_messages(messages)
+        _context.maybe_prune_messages(loop, messages)
         assert messages[0]["role"] == "user"
         assert messages[1]["role"] == "assistant"
         # After pruning, no orphaned tool_result in first user msg
@@ -2159,7 +2193,7 @@ class TestRepairMessages:
             {"role": "assistant", "content": [_txt("resp")]},
             {"role": "user", "content": "next question"},
         ]
-        AgenticLoop._repair_messages(messages)
+        _context.repair_messages(messages)
         for msg in messages:
             content = msg.get("content")
             if isinstance(content, list):
@@ -2179,7 +2213,7 @@ class TestRepairMessages:
             {"role": "assistant", "content": [_txt("done")]},
         ]
         original_len = len(messages)
-        AgenticLoop._repair_messages(messages)
+        _context.repair_messages(messages)
         assert len(messages) == original_len
 
 
