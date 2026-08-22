@@ -30,12 +30,23 @@ async def run_plan_slash(loop: Any, objective: str) -> tuple[str, Any | None, bo
             return "No advisory plan is active. Usage: /plan <objective>", None, False
         return format_advisory_plan(plan), plan, False
 
+    if loop._timeline is not None:
+        loop._timeline.begin_control_turn()
+
     from core.agent.plan import plan_async
 
     plan = await plan_async(loop, objective)
     if plan is None:
         raise RuntimeError("Planner returned no valid structured plan")
+    previous_plan = metrics.active_plan
+    previous_attempts = metrics.replan_attempts_on_current_step
     metrics.set_active_plan(plan, reset_attempts=True)
+    save_checkpoint = getattr(loop, "_save_checkpoint", None)
+    saved = callable(save_checkpoint) and save_checkpoint(objective, round_idx=0)
+    if not saved:
+        metrics.set_active_plan(previous_plan)
+        metrics.replan_attempts_on_current_step = previous_attempts
+        raise RuntimeError("Advisory plan checkpoint failed; plan was not installed")
     if loop._timeline is not None:
         from core.observability.session_timeline import SessionEventKind
 

@@ -31,6 +31,7 @@ import logging
 import os
 import queue
 import threading
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -583,10 +584,6 @@ class CLIPoller:
             if not text:
                 return {"type": "error", "message": "Empty prompt"}
             try:
-                from core.server.ipc_server.fast_chat import should_use_fast_chat
-
-                if should_use_fast_chat(text):
-                    return await self._run_fast_chat_async(text, loop, msg.get("_client"))
                 return await self._run_prompt_streaming_async(
                     text,
                     loop,
@@ -597,6 +594,14 @@ class CLIPoller:
                 return {"type": "error", "message": str(exc)}
 
         if msg_type == "command":
+            if str(msg.get("cmd") or "").casefold() == "/goal":
+                lane_queue = self._services.lane_queue
+                if lane_queue is not None:
+                    async with lane_queue.acquire_all_async(
+                        loop._session_id,
+                        ["session", "global"],
+                    ):
+                        return await asyncio.to_thread(self._handle_command_on_server, msg, loop)
             return await asyncio.to_thread(self._handle_command_on_server, msg, loop)
 
         if msg_type == "command_stream":
@@ -717,14 +722,52 @@ class CLIPoller:
         if not separator or not module_name or not attr_name:
             raise ValueError(f"Invalid slash handler path: {spec.handler_path!r}")
         prompt_builder = getattr(importlib.import_module(module_name), attr_name)
-        prompt = prompt_builder(args, skill_registry=self._services.skill_registry)
-        return await self._run_prompt_streaming_async(prompt, loop, client)
+        return await self._run_prompt_streaming_async(
+            lambda: prompt_builder(args, skill_registry=self._services.skill_registry),
+            loop,
+            client,
+            suppress_public_verify=spec.name in {"/grill", "/geo"},
+            control_name=spec.name.removeprefix("/"),
+        )
+
+    @staticmethod
+    def _has_active_control_workflow(loop: Any) -> bool:
+        controls = getattr(loop, "_control_state_renderers", {})
+        if not isinstance(controls, dict):
+            return False
+        for name in ("grill", "geo"):
+            store = controls.get(name)
+            if store is None:
+                continue
+            state = store.get(loop._session_id)
+            if state is None:
+                continue
+            status = getattr(state, "status", None) or getattr(state, "phase", None)
+            if str(status) != "complete":
+                return True
+        return False
+
+    @classmethod
+    def _requires_agentic_prompt(cls, loop: Any) -> bool:
+        """Keep managed goal/plan/control state on the full AgenticLoop path."""
+        if cls._has_active_control_workflow(loop):
+            return True
+        metrics = getattr(loop, "_session_metrics", None)
+        plan = getattr(metrics, "active_plan", None)
+        if plan is not None and not bool(getattr(plan, "done", False)):
+            return True
+        goal_store = getattr(loop, "_goal_store", None)
+        goal = goal_store.get(loop._session_id) if goal_store is not None else None
+        return str(getattr(goal, "status", "")) in {"active", "paused"}
 
     async def _run_prompt_streaming_async(
         self,
-        text: str,
+        text: str | Callable[[], str],
         loop: Any,
         client: _AsyncClientEndpoint | None,
+        *,
+        suppress_public_verify: bool = False,
+        control_name: str = "",
     ) -> dict[str, Any]:
         """Run an IPC prompt on the async daemon path.
 
@@ -741,18 +784,47 @@ class CLIPoller:
         )
 
         init_session_meter()
-        old_quiet = getattr(loop, "_quiet", True)
-        old_op_quiet = getattr(loop, "_op_logger", None)
-        loop._quiet = False
-        if old_op_quiet is not None:
-            loop._op_logger._quiet = False
-
         writer = _StreamingWriter(client) if client else None
         if writer:
             assert client is not None
             is_tty, width = client.get_capability()
             set_thread_console(make_session_console(writer, force_terminal=is_tty, width=width))
             _ipc_writer_local.writer = writer
+
+        async def _run_admitted() -> dict[str, Any]:
+            if isinstance(text, str):
+                from core.server.ipc_server.fast_chat import should_use_fast_chat
+
+                if should_use_fast_chat(text) and not self._requires_agentic_prompt(loop):
+                    return await self._run_fast_chat_async(text, loop, client)
+            old_quiet = getattr(loop, "_quiet", True)
+            old_op_quiet = getattr(loop, "_op_logger", None)
+            old_suppress_verify = getattr(loop, "_suppress_public_verify", False)
+            effective_suppression = suppress_public_verify or self._has_active_control_workflow(
+                loop
+            )
+            loop._quiet = False
+            loop._suppress_public_verify = effective_suppression
+            if old_op_quiet is not None:
+                loop._op_logger._quiet = False
+            if effective_suppression:
+                loop._session_metrics.clear_verify_retry_signal()
+            try:
+                prompt = text() if callable(text) else text
+                result = await loop.arun(prompt)
+                response = self._build_prompt_result(loop, result)
+                if control_name:
+                    controls = getattr(loop, "_control_state_renderers", {})
+                    store = controls.get(control_name) if isinstance(controls, dict) else None
+                    if store is not None:
+                        state = store.get(loop._session_id)
+                        response["control_state"] = state.to_dict() if state is not None else None
+                return response
+            finally:
+                loop._quiet = old_quiet
+                loop._suppress_public_verify = old_suppress_verify
+                if old_op_quiet is not None:
+                    loop._op_logger._quiet = old_quiet
 
         try:
             lane_queue = self._services.lane_queue
@@ -761,20 +833,16 @@ class CLIPoller:
                     loop._session_id,
                     ["session", "global"],
                 ):
-                    result = await loop.arun(text)
+                    response = await _run_admitted()
             else:
-                result = await loop.arun(text)
+                response = await _run_admitted()
             if client is not None:
                 await client.drain_pending_sends()
         finally:
             if writer:
                 reset_thread_console()
                 _ipc_writer_local.writer = None
-            loop._quiet = old_quiet
-            if old_op_quiet is not None:
-                loop._op_logger._quiet = old_quiet
-
-        return self._build_prompt_result(loop, result)
+        return response
 
     async def _run_fast_chat_async(
         self,

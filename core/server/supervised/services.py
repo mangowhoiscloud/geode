@@ -150,6 +150,7 @@ class SharedServices:
     resource_lock_pool: ResourceLockPool | None = None
     worker_module: str | None = None
     agent_search_dirs: tuple[Path, ...] = ()
+    control_state_factories: Mapping[str, Callable[[Path], Any]] = field(default_factory=dict)
 
     # v0.82.0 — Model + provider resolved fresh per session, NOT frozen at
     # bootstrap. The previous shape (`_model: str = ""` cached at
@@ -185,6 +186,11 @@ class SharedServices:
             from core.slash_routing import COMMAND_REGISTRY
 
             self.command_registry = COMMAND_REGISTRY
+        if invalid := sorted(
+            name for name, factory in self.control_state_factories.items() if not callable(factory)
+        ):
+            raise TypeError(f"control state factories must be callable: {', '.join(invalid)}")
+        self.control_state_factories = MappingProxyType(dict(self.control_state_factories))
         if self.bound_tool_plan is not None:
             bound_handlers = dict(self.bound_tool_plan.handlers)
             transient = dict(self.transient_tool_handlers)
@@ -387,6 +393,14 @@ class SharedServices:
             activity_sink_provider=self.activity_sink_provider,
             policy_sources=self.policy_sources,
         )
+        timeline = getattr(loop, "_timeline", None)
+        if timeline is not None:
+            loop._control_state_renderers.update(
+                {
+                    name: factory(timeline.db_path)
+                    for name, factory in self.control_state_factories.items()
+                }
+            )
         # Set per-thread ContextVar so tool handlers see the correct loop
         from core.cli.session_state import set_current_loop
 
@@ -529,6 +543,7 @@ def build_shared_services(
     tool_plan_builder: Callable[..., tuple[BoundToolPlan, Mapping[str, Any]]] | None = None,
     worker_module: str | None = None,
     agent_search_dirs: Sequence[Path] = (),
+    control_state_factories: Mapping[str, Callable[[Path], Any]] | None = None,
 ) -> SharedServices:
     """Construct SharedServices with resolved config values.
 
@@ -630,5 +645,6 @@ def build_shared_services(
         transient_tool_handlers=transient_tool_handlers,
         worker_module=worker_module,
         agent_search_dirs=tuple(agent_search_dirs),
+        control_state_factories=control_state_factories or {},
         _cost_budget=cost_budget,
     )

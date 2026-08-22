@@ -131,6 +131,7 @@ class AgenticLoop:
     _timeline: Any | None
     _session_id: str
     _goal_store: Any | None
+    _control_state_renderers: dict[str, Any]
     _session_metrics: Any
     _evidence_ledger: Any | None
     _tool_processor: ToolCallProcessor
@@ -735,6 +736,7 @@ class AgenticLoop:
                 reflection_hint,
                 verification_hint,
                 plan_hint if isinstance(plan_hint, str) else "",
+                _context.render_control_state_hints(self),
             )
             self._prompt_dirty = False
             self._last_plan_hint = plan_hint

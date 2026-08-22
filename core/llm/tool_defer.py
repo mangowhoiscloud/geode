@@ -37,6 +37,10 @@ TOOL_SEARCH_ALWAYS_LOADED: frozenset[str] = frozenset(
         "create_goal",
         "get_goal",
         "update_goal",
+        "get_grill",
+        "update_grill",
+        "get_geo",
+        "update_geo",
     }
 )
 """Immediately-loaded core set — high-frequency tools the loop should

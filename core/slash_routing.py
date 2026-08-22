@@ -100,7 +100,7 @@ COMMAND_REGISTRY: dict[str, CommandSpec] = {
     "/goal": CommandSpec(
         name="/goal",
         location=RunLocation.DAEMON_RPC,
-        description="Show, set, or clear the persistent session goal",
+        description="Show, set, pause, resume, edit, or clear the persistent session goal",
     ),
     "/plan": CommandSpec(
         name="/plan",

@@ -194,6 +194,97 @@ class TestCLIPoller:
         mock_loop.run.assert_not_called()
         assert entered == [("s-machine", ["session", "global"])]
 
+    def test_verify_suppression_is_scoped_inside_the_session_lane(self) -> None:
+        from core.observability.session_metrics import SessionMetrics
+        from core.orchestration.lane_queue import LaneQueue, SessionLane
+        from core.server.ipc_server.poller import CLIPoller
+
+        lanes = LaneQueue()
+        lanes.set_session_lane(SessionLane(max_sessions=4))
+        lanes.add_lane("global", max_concurrent=2)
+        poller = CLIPoller(MagicMock(lane_queue=lanes), socket_path=_test_sock())
+        first_entered = asyncio.Event()
+        observed: list[tuple[str, bool]] = []
+
+        async def arun(prompt: str) -> MagicMock:
+            observed.append((prompt, loop._suppress_public_verify))
+            if prompt == "control":
+                first_entered.set()
+                await asyncio.sleep(0.01)
+            result = MagicMock(
+                text=prompt,
+                rounds=1,
+                tool_calls=[],
+                termination_reason="natural",
+                summary="",
+            )
+            return result
+
+        loop = MagicMock(
+            _session_id="s-machine",
+            _quiet=True,
+            _op_logger=MagicMock(_quiet=True),
+            _suppress_public_verify=False,
+            _control_state_renderers={},
+            _session_metrics=SessionMetrics(session_id="s-machine"),
+        )
+        loop.arun = AsyncMock(side_effect=arun)
+
+        async def scenario() -> None:
+            control = asyncio.create_task(
+                poller._run_prompt_streaming_async(
+                    "control",
+                    loop,
+                    None,
+                    suppress_public_verify=True,
+                )
+            )
+            await first_entered.wait()
+            ordinary = asyncio.create_task(
+                poller._run_prompt_streaming_async("ordinary", loop, None)
+            )
+            await asyncio.gather(control, ordinary)
+
+        asyncio.run(scenario())
+
+        assert observed == [("control", True), ("ordinary", False)]
+        assert loop._suppress_public_verify is False
+
+    def test_goal_daemon_command_mutates_inside_the_session_lane(self) -> None:
+        from core.server.ipc_server.poller import CLIPoller
+
+        admitted = False
+        observed: list[bool] = []
+
+        class AsyncLaneQueue:
+            @asynccontextmanager
+            async def acquire_all_async(self, _key: str, _lanes: list[str]) -> Any:
+                nonlocal admitted
+                admitted = True
+                try:
+                    yield
+                finally:
+                    admitted = False
+
+        services = MagicMock(lane_queue=AsyncLaneQueue())
+        poller = CLIPoller(services, socket_path=_test_sock())
+        poller._handle_command_on_server = MagicMock(
+            side_effect=lambda *_args: observed.append(admitted) or {"status": "ok"}
+        )
+        loop = MagicMock(_session_id="s-machine")
+
+        result = asyncio.run(
+            poller._process_message_async(
+                {"type": "command", "cmd": "/goal", "args": "pause"},
+                loop,
+                None,
+                "s-machine",
+            )
+        )
+
+        assert result == {"status": "ok"}
+        assert observed == [True]
+
     def test_async_resume_reloads_inside_machine_lane(
         self,
         monkeypatch: pytest.MonkeyPatch,

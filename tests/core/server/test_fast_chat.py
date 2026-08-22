@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
@@ -56,11 +57,32 @@ def test_fast_chat_system_prompt_honors_persona_opt_out(
     assert "Tool loop: inactive" in system
 
 
+def test_active_goal_or_plan_requires_the_agentic_path() -> None:
+    from core.server.ipc_server.poller import CLIPoller
+
+    active_plan = SimpleNamespace(
+        _session_id="s-plan",
+        _session_metrics=SimpleNamespace(active_plan=SimpleNamespace(done=False)),
+        _control_state_renderers={},
+        _goal_store=None,
+    )
+    active_goal = SimpleNamespace(
+        _session_id="s-goal",
+        _session_metrics=SimpleNamespace(active_plan=None),
+        _control_state_renderers={},
+        _goal_store=SimpleNamespace(get=lambda _session_id: SimpleNamespace(status="active")),
+    )
+
+    assert CLIPoller._requires_agentic_prompt(active_plan) is True
+    assert CLIPoller._requires_agentic_prompt(active_goal) is True
+
+
 def test_ipc_poller_fast_chat_uses_text_completion(monkeypatch: pytest.MonkeyPatch) -> None:
     from core.llm.adapters.base import TextCompletionResult, UsageSummary
     from core.server.ipc_server.poller import CLIPoller
 
     calls: dict[str, object] = {}
+    monkeypatch.setenv("GEODE_FAST_CHAT", "1")
 
     async def fake_complete_text(prompt: str, **kwargs: object) -> TextCompletionResult:
         calls["prompt"] = prompt
@@ -78,14 +100,28 @@ def test_ipc_poller_fast_chat_uses_text_completion(monkeypatch: pytest.MonkeyPat
         fake_complete_text,
     )
 
-    poller = CLIPoller(services=cast(Any, object()))
+    poller = CLIPoller(services=SimpleNamespace(lane_queue=None))
     loop = type(
         "Loop",
         (),
-        {"model": "gpt-5.5", "_provider": "openai-codex", "_source": "subscription"},
+        {
+            "model": "gpt-5.5",
+            "_provider": "openai-codex",
+            "_source": "subscription",
+            "_session_id": "s-fast",
+            "_control_state_renderers": {},
+            "_goal_store": None,
+        },
     )()
 
-    result = asyncio.run(poller._run_fast_chat_async("자기소개 부탁해", loop, None))
+    result = asyncio.run(
+        poller._process_message_async(
+            {"type": "prompt", "text": "자기소개 부탁해"},
+            loop,
+            None,
+            "s-fast",
+        )
+    )
 
     assert result["type"] == "result"
     assert result["text"] == "짧은 답변"

@@ -6,7 +6,7 @@ import uuid
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 from core.cli.ipc_client import IPCClient
 from core.cli.routing import compose_command_registry
@@ -75,6 +75,7 @@ def _loop(tmp_path: Path) -> Any:
         _session_metrics=SessionMetrics(session_id="slash-e2e"),
         _goal_store=GoalStore(timeline.db_path),
         _timeline=timeline,
+        _save_checkpoint=MagicMock(return_value=True),
         arun=AsyncMock(return_value=result),
         _call_llm=AsyncMock(return_value=SimpleNamespace(text=plan_payload)),
         _track_usage_async=AsyncMock(),
@@ -128,6 +129,10 @@ def test_real_slash_input_routes_goal_plan_grill_and_geo(tmp_path: Path) -> None
         assert "Evidence frontier" in prompts[1]
         assert "delegate_task" in prompts[1]
         assert "F fetch/index eligibility" in prompts[1]
+        assert grilled["control_state"]["status"] == "draft"
+        assert grilled["control_state"]["subject"] == "Choose the rollout boundary"
+        assert geo["control_state"]["phase"] == "preflight"
+        assert set(geo["control_state"]["vector"]) == {"F", "R", "C", "P", "A", "Q", "O"}
 
         rejected = client.send_command_streaming("/goal", "wrong transport")
         assert rejected["type"] == "error"
@@ -143,6 +148,8 @@ def test_real_slash_input_routes_goal_plan_grill_and_geo(tmp_path: Path) -> None
         assert [event.kind for event in events] == [
             "goal.created",
             "plan.created",
+            "grill.started",
+            "geo.started",
             "goal.updated",
         ]
         assert events[-1].status == "empty"

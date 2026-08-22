@@ -11,7 +11,8 @@ visibility, citations, or the GEO benchmark.
 1. Read `.geode/skills/geo/SKILL.md` for the runtime behavior contract.
 2. Read `docs/eval/geo-visibility.md` before defining a metric or run. Freeze a
    prospective run spec before any score-bearing commercial-engine call.
-3. Read `docs/plans/2026-08-20-slash-goal-geo.md` before changing slash routing,
+3. Read `docs/plans/2026-08-22-slash-control-enforcement.md` for typed state,
+   then `docs/plans/2026-08-20-slash-goal-geo.md` before changing slash routing,
    planning authority, or Goal coupling.
 4. Diagnose the exact stage and preserve its denominator:
    `F` fetch/index eligibility, `R` retrieval inclusion/rank, `C` citation
@@ -20,7 +21,13 @@ visibility, citations, or the GEO benchmark.
    `not_measured`; never collapse the vector into one GEO score.
 5. Run deterministic site preflight and relevant unit/E2E checks before asking
    for live-test approval. Never infer organic lift from a fixed-context test.
-6. Record primary sources, facts, inferences, unobserved stages, repetitions,
+   Model tool calls cannot mint approval or preregistration receipts; exercise
+   the operator-owned `/geo approve-live <receipt>` and `/geo preregister
+   <receipt>` boundaries in state-machine tests. Require phase-bound evidence
+   before each transition and permit completion only from `experiment`.
+6. Confirm `.geode/skills/geo/SKILL.md` is the runtime source selected by
+   `SkillLoader`; use `get_geo`/`update_geo` as the state authority. Record
+   primary sources, facts, inferences, unobserved stages, repetitions,
    locale, account state, and timestamps in the result.
 
 ## Long-running execution

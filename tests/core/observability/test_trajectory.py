@@ -5,6 +5,7 @@ docstrings name the population rather than restating the assertion.
 """
 
 import json
+from types import SimpleNamespace
 
 import pytest
 from core.observability.trajectory import (
@@ -387,6 +388,73 @@ def test_turn_scoped_event_without_turn_id_is_scope_incomplete():
     assert correlation["turn_id_required"] == 1
     assert correlation["turn_id_missing"] == 1
     assert trajectory["integrity"]["scope_complete"] is False
+
+
+def test_tool_driven_control_event_requires_turn_and_call_identity():
+    trajectory = build_trajectory(
+        trajectory_id="traj-control-correlation",
+        captured_at="2026-07-31T00:00:00Z",
+        source={"harness": "test", "session": "s-1"},
+        events=[
+            {
+                "kind": "geo.updated",
+                "actor": "policy",
+                "payload": {"trigger": "update_geo:record"},
+            }
+        ],
+        outcome={},
+        provenance={},
+        privacy={},
+    )
+
+    correlation = trajectory["integrity"]["quality"]["correlation"]
+    assert correlation["turn_id_missing"] == 1
+    assert correlation["control_call_id_missing"] == 1
+    assert trajectory["integrity"]["scope_complete"] is False
+
+
+@pytest.mark.parametrize(
+    ("trigger", "scope_complete", "missing_call_ids"),
+    (
+        ("update_geo:record", False, 1),
+        ("slash_geo_approve_live", True, 0),
+    ),
+)
+def test_digest_export_preserves_control_origin_for_correlation(
+    tmp_path,
+    trigger: str,
+    scope_complete: bool,
+    missing_call_ids: int,
+):
+    from core.observability.session_timeline import SessionEventKind, SessionTimeline
+
+    db = tmp_path / "sessions.db"
+    timeline = SessionTimeline("s-control", db_path=db)
+    timeline.bind_turn("t-control")
+    state = SimpleNamespace(
+        status="active",
+        to_dict=lambda: {"subject": "private target", "status": "active"},
+    )
+    timeline.record_control_state(
+        SessionEventKind.GEO_UPDATED,
+        state,
+        trigger=trigger,
+    )
+    timeline.record_session_end()
+
+    trajectory = trajectory_from_session(
+        "s-control",
+        db_path=db,
+        content_policy="digest",
+    )
+
+    event = next(item for item in trajectory["events"] if item["kind"] == "geo.updated")
+    assert event["payload"]["trigger"] == trigger
+    assert trajectory["integrity"]["scope_complete"] is scope_complete
+    assert (
+        trajectory["integrity"]["quality"]["correlation"]["control_call_id_missing"]
+        == missing_call_ids
+    )
 
 
 def test_trajectory_rejects_duplicate_event_ids():

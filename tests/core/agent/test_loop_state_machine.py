@@ -21,7 +21,9 @@ from types import SimpleNamespace
 from core.agent.convergence import ConvergenceDetector
 from core.agent.loop import _lifecycle
 from core.agent.loop.models import TerminationReason
+from core.agent.plan import Plan, PlanStep
 from core.memory.session_checkpoint import SessionCheckpoint, SessionState, SessionStatus
+from core.observability.session_metrics import SessionMetrics
 
 _GUARDS_SRC = (
     Path(__file__).resolve().parents[3] / "core" / "agent" / "loop" / "_guards.py"
@@ -94,6 +96,7 @@ def _fake_loop() -> SimpleNamespace:
         _consecutive_tool_tracker=[],
         _convergence=ConvergenceDetector(),
         _session_id="",
+        _session_metrics=SessionMetrics(session_id="s-test"),
         cognitive_state=None,
     )
 
@@ -121,6 +124,55 @@ def test_guard_state_roundtrip():
     assert dst._budget_warned is True
     assert dst._consecutive_tool_tracker == [("grep_files", "sig-a"), ("read_file", "sig-b")]
     assert dst._convergence.to_snapshot() == src._convergence.to_snapshot()
+
+
+def test_guard_state_roundtrips_active_advisory_plan() -> None:
+    src = _fake_loop()
+    src._session_metrics.set_active_plan(
+        Plan(
+            plan_id="plan-checkpoint",
+            steps=(PlanStep("inspect", "Inspect evidence", "Gap is observed"),),
+            reasoning="Prerequisite first.",
+        ),
+        reset_attempts=True,
+    )
+    src._session_metrics.replan_count = 2
+    src._session_metrics.replan_attempts_on_current_step = 1
+    src._session_metrics.record_verify(
+        passed=False,
+        mode="rule_based",
+        effective_mode="rule_based",
+        rubric_misses=("missing-test",),
+        reflection_hint="Run the missing test.",
+        should_retry=True,
+    )
+    snapshot = _lifecycle.collect_guard_state(src)
+
+    dst = _fake_loop()
+    _lifecycle.apply_guard_state(dst, snapshot)
+
+    assert dst._session_metrics.active_plan.to_dict() == src._session_metrics.active_plan.to_dict()
+    assert dst._session_metrics.replan_count == 2
+    assert dst._session_metrics.replan_attempts_on_current_step == 1
+    assert dst._session_metrics.verify_fail_count == 1
+    assert dst._session_metrics.last_verify_passed is False
+    assert dst._session_metrics.last_verify_mode == "rule_based"
+    assert dst._session_metrics.last_verify_rubric_misses == ("missing-test",)
+    assert dst._session_metrics.last_verify_reflection_hint == "Run the missing test."
+    assert dst._session_metrics.last_verify_should_retry is True
+
+
+def test_guard_state_roundtrips_plan_dataclass_defaults() -> None:
+    src = _fake_loop()
+    src._session_metrics.set_active_plan(
+        Plan(steps=(PlanStep("inspect", "Inspect evidence"),)),
+        reset_attempts=True,
+    )
+
+    dst = _fake_loop()
+    _lifecycle.apply_guard_state(dst, _lifecycle.collect_guard_state(src))
+
+    assert dst._session_metrics.active_plan.to_dict() == src._session_metrics.active_plan.to_dict()
 
 
 def test_apply_guard_state_is_replacement_not_merge():
@@ -151,12 +203,28 @@ def test_apply_guard_state_coerces_malformed_values():
             "consecutive_text_only_rounds": "not-a-number",
             "consecutive_tool_tracker": "garbage",
             "convergence": "garbage",
+            "active_plan": {
+                "plan_id": "bad",
+                "steps": [
+                    {
+                        "id": "inspect",
+                        "description": "Inspect",
+                        "expected_outcome": "Observed",
+                    }
+                ],
+                "current": 1,
+                "completed": [],
+                "abandoned": [],
+                "reasoning": "bad progress",
+                "revision": 0,
+            },
         },
     )
     assert dst._consecutive_llm_failures == 0
     assert dst._consecutive_text_only_rounds == 0
     assert dst._consecutive_tool_tracker == []
     assert dst._convergence.to_snapshot() == ConvergenceDetector().to_snapshot()
+    assert dst._session_metrics.active_plan is None
 
 
 def test_restore_loop_state_is_the_single_surgery():

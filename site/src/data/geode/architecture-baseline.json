@@ -227,7 +227,7 @@
   "coordinators": {
     "AgenticLoop": {
       "constructor_arg_count": 12,
-      "file_loc": 1109,
+      "file_loc": 1111,
       "method_count": 38,
       "path": "core/agent/loop/agent_loop.py"
     },
@@ -364,20 +364,20 @@
   },
   "packages": {
     "core": {
-      "python_files": 398,
-      "python_loc": 118752
+      "python_files": 400,
+      "python_loc": 119776
     },
     "geode_product": {
-      "python_files": 153,
-      "python_loc": 60646
+      "python_files": 154,
+      "python_loc": 61204
     },
     "plugins": {
       "python_files": 29,
       "python_loc": 193
     },
     "tests": {
-      "python_files": 677,
-      "python_loc": 180468
+      "python_files": 684,
+      "python_loc": 181887
     }
   },
   "schema_version": 3,
@@ -408,13 +408,15 @@
   },
   "tools": {
     "deferred_loading": {
-      "always_loaded_count": 16,
+      "always_loaded_count": 20,
       "always_loaded_names": [
         "calculate",
         "check_status",
         "create_goal",
         "general_web_search",
+        "get_geo",
         "get_goal",
+        "get_grill",
         "glob_files",
         "grep_files",
         "llms_txt_index",
@@ -423,13 +425,15 @@
         "note_read",
         "note_save",
         "read_document",
+        "update_geo",
         "update_goal",
+        "update_grill",
         "use_skill",
         "web_fetch"
       ],
       "unknown_always_loaded_names": []
     },
-    "definition_count": 82,
+    "definition_count": 86,
     "definition_names": [
       "accept_result",
       "arxiv_search",
@@ -454,7 +458,9 @@
       "generate_data",
       "generate_report",
       "geode_seed_pool_search",
+      "get_geo",
       "get_goal",
+      "get_grill",
       "glob_files",
       "gmail_search",
       "gmail_send",
@@ -507,7 +513,9 @@
       "task_update",
       "trigger_event",
       "ui_probe",
+      "update_geo",
       "update_goal",
+      "update_grill",
       "update_plan",
       "use_skill",
       "wait_agent",
@@ -523,7 +531,7 @@
       "doctor_slack",
       "recall_tool_result"
     ],
-    "execution_registration_count": 85,
+    "execution_registration_count": 89,
     "execution_registration_names": [
       "accept_result",
       "arxiv_search",
@@ -550,7 +558,9 @@
       "generate_data",
       "generate_report",
       "geode_seed_pool_search",
+      "get_geo",
       "get_goal",
+      "get_grill",
       "glob_files",
       "gmail_search",
       "gmail_send",
@@ -604,14 +614,16 @@
       "task_update",
       "trigger_event",
       "ui_probe",
+      "update_geo",
       "update_goal",
+      "update_grill",
       "update_plan",
       "use_skill",
       "wait_agent",
       "web_fetch",
       "write_file"
     ],
-    "handler_registration_count": 77,
+    "handler_registration_count": 81,
     "handler_registration_names": [
       "accept_result",
       "arxiv_search",
@@ -636,7 +648,9 @@
       "generate_data",
       "generate_report",
       "geode_seed_pool_search",
+      "get_geo",
       "get_goal",
+      "get_grill",
       "glob_files",
       "gmail_search",
       "gmail_send",
@@ -685,7 +699,9 @@
       "task_update",
       "trigger_event",
       "ui_probe",
+      "update_geo",
       "update_goal",
+      "update_grill",
       "update_plan",
       "use_skill",
       "web_fetch",
@@ -715,7 +731,9 @@
       "generate_data": "data",
       "generate_report": "output",
       "geode_seed_pool_search": "product-seed",
+      "get_geo": "product-geo",
       "get_goal": "goal",
+      "get_grill": "grill",
       "glob_files": "delegated",
       "gmail_search": "delegated",
       "gmail_send": "delegated",
@@ -764,13 +782,15 @@
       "task_update": "task",
       "trigger_event": "execution",
       "ui_probe": "delegated",
+      "update_geo": "product-geo",
       "update_goal": "goal",
+      "update_grill": "grill",
       "update_plan": "plan",
       "use_skill": "skill",
       "web_fetch": "delegated",
       "write_file": "delegated"
     },
-    "schema_count": 82,
+    "schema_count": 86,
     "schema_errors": [],
     "schema_names": [
       "accept_result",
@@ -796,7 +816,9 @@
       "generate_data",
       "generate_report",
       "geode_seed_pool_search",
+      "get_geo",
       "get_goal",
+      "get_grill",
       "glob_files",
       "gmail_search",
       "gmail_send",
@@ -849,7 +871,9 @@
       "task_update",
       "trigger_event",
       "ui_probe",
+      "update_geo",
       "update_goal",
+      "update_grill",
       "update_plan",
       "use_skill",
       "wait_agent",
