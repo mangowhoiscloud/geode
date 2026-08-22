@@ -14,28 +14,12 @@ from __future__ import annotations
 import json
 import logging
 import time
-from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
 
 from core.memory.atomic_write import atomic_write_json
 
 log = logging.getLogger(__name__)
-
-# ContextVar DI (following memory_tools.py pattern)
-_offload_store_ctx: ContextVar[ToolResultOffloadStore | None] = ContextVar(
-    "tool_offload_store", default=None
-)
-
-
-def set_offload_store(store: ToolResultOffloadStore | None) -> None:
-    """Inject the offload store into the current context."""
-    _offload_store_ctx.set(store)
-
-
-def get_offload_store() -> ToolResultOffloadStore | None:
-    """Retrieve the offload store from the current context."""
-    return _offload_store_ctx.get()
 
 
 class ToolResultOffloadStore:

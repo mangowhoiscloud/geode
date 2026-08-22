@@ -99,9 +99,6 @@ class TestSendNotificationTool:
 
     def test_aexecute_slack_no_adapter(self):
         """Without adapter, falls back to stub response."""
-        from core.mcp.notification_port import set_notification
-
-        set_notification(None)
         tool = SendNotificationTool()
         result = asyncio.run(
             tool.aexecute(
@@ -122,19 +119,14 @@ class TestSendNotificationTool:
         """With adapter available, sends via NotificationPort."""
         from unittest.mock import MagicMock
 
-        from core.mcp.notification_port import (
-            NotificationResult,
-            set_notification,
-        )
+        from core.mcp.notification_port import NotificationResult
 
         mock_adapter = MagicMock()
         mock_adapter.ais_available = AsyncMock(return_value=True)
         mock_adapter.asend_message = AsyncMock(
             return_value=NotificationResult(success=True, channel="slack", message_id="ts_123")
         )
-        set_notification(mock_adapter)
-
-        tool = SendNotificationTool()
+        tool = SendNotificationTool(mock_adapter)
         result = asyncio.run(
             tool.aexecute(
                 channel="slack",
@@ -145,15 +137,10 @@ class TestSendNotificationTool:
         assert result["result"]["sent"] is True
         assert result["result"]["message_id"] == "ts_123"
 
-        set_notification(None)
-
     def test_aexecute_with_adapter_uses_async_notification_path(self):
         from unittest.mock import MagicMock
 
-        from core.mcp.notification_port import (
-            NotificationResult,
-            set_notification,
-        )
+        from core.mcp.notification_port import NotificationResult
 
         mock_adapter = MagicMock()
         mock_adapter.ais_available = AsyncMock(return_value=True)
@@ -161,9 +148,7 @@ class TestSendNotificationTool:
             return_value=NotificationResult(success=True, channel="slack", message_id="ts_async")
         )
         mock_adapter.send_message.side_effect = AssertionError("sync notification path used")
-        set_notification(mock_adapter)
-
-        tool = SendNotificationTool()
+        tool = SendNotificationTool(mock_adapter)
         result = asyncio.run(
             tool.aexecute(
                 channel="slack",
@@ -175,8 +160,6 @@ class TestSendNotificationTool:
         assert result["result"]["message_id"] == "ts_async"
         mock_adapter.asend_message.assert_awaited_once()
         mock_adapter.send_message.assert_not_called()
-
-        set_notification(None)
 
     def test_cli_handler_is_async_for_notification_tool(self):
         from core.tools.handlers.single_tool import _build_notification_handlers
@@ -192,17 +175,11 @@ class TestSendNotificationTool:
         assert asyncio.iscoroutinefunction(handlers["export_json"])
 
     def test_aexecute_default_severity(self):
-        from core.mcp.notification_port import set_notification
-
-        set_notification(None)
         tool = SendNotificationTool()
         result = asyncio.run(tool.aexecute(channel="email", message="Test"))
         assert result["result"]["severity"] == "info"
 
     def test_aexecute_message_preview_truncated(self):
-        from core.mcp.notification_port import set_notification
-
-        set_notification(None)
         tool = SendNotificationTool()
         long_msg = "A" * 200
         result = asyncio.run(tool.aexecute(channel="webhook", message=long_msg))

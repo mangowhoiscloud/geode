@@ -315,12 +315,9 @@ forbidden_modules = ["core.cli"]
 # Metadata and expiry are enforced from the exception-debt ledger.
 ignore_imports = [
     "core.server.supervised.services -> core.cli.commands",
-    "core.server.supervised.services -> core.cli.session_state",
-    "core.server.supervised.services -> core.cli.bootstrap",
     "core.agent.loop.agent_loop -> core.cli.commands",
     "core.agent.approval -> core.cli",
     "core.server.ipc_server.poller -> core.cli",
-    "core.server.ipc_server.poller -> core.cli.session_state",
 ]
 
 [[tool.importlinter.contracts]]

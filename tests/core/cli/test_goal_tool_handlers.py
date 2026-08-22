@@ -4,7 +4,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from core.agent.cognitive_state_ctx import reset_tool_call_id, set_session_id, set_tool_call_id
-from core.cli.session_state import set_current_loop
 from core.cli.tool_handlers.goal import _build_goal_handlers
 from core.memory.goals import GoalStore
 from core.observability.session_timeline import (
@@ -12,6 +11,7 @@ from core.observability.session_timeline import (
     SessionTimeline,
     set_current_session_timeline,
 )
+from core.tools.base import ToolContext
 
 
 def test_goal_handlers_use_active_session_and_record_control_edges(tmp_path: Path) -> None:
@@ -21,23 +21,28 @@ def test_goal_handlers_use_active_session_and_record_control_edges(tmp_path: Pat
     loop = SimpleNamespace(_prompt_dirty=False)
     set_session_id("s-goal")
     set_current_session_timeline(timeline)
-    set_current_loop(loop)
     try:
         token = set_tool_call_id("goal-create")
         try:
-            created = handlers["create_goal"](objective="Ship verified change", token_budget=200)
+            created = handlers["create_goal"](
+                objective="Ship verified change",
+                token_budget=200,
+                _tool_context=ToolContext(agent_loop=loop),
+            )
         finally:
             reset_tool_call_id(token)
         fetched = handlers["get_goal"]()
         token = set_tool_call_id("goal-complete")
         try:
-            completed = handlers["update_goal"](status="complete")
+            completed = handlers["update_goal"](
+                status="complete",
+                _tool_context=ToolContext(agent_loop=loop),
+            )
         finally:
             reset_tool_call_id(token)
     finally:
         set_current_session_timeline(None)
         set_session_id("")
-        set_current_loop(None)
 
     assert created["goal"]["status"] == "active"
     assert created["goal_status"] == "active"

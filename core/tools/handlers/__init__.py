@@ -26,9 +26,9 @@ and task-session callbacks remain injectable interaction groups.
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from core.tools.handlers.clarification import (
     _clarify,
@@ -53,9 +53,19 @@ from core.tools.handlers.single_tool import (
     _build_output_handlers,
     _build_use_skill_handler,
 )
+from core.tools.memory_tools import MemoryToolServices
+
+if TYPE_CHECKING:
+    from core.mcp.calendar_port import CalendarPort
+    from core.mcp.notification_port import NotificationPort
+    from core.memory.user_profile import FileBasedUserProfile
+    from core.orchestration.tool_offload import ToolResultOffloadStore
+    from core.scheduler.calendar_bridge import CalendarSchedulerBridge
 
 __all__ = [
     "_DELEGATED_TOOLS",
+    "ToolIntegrationServices",
+    "ToolPersistenceServices",
     "_build_calendar_handlers",
     "_build_computer_use_handler",
     "_build_data_handlers",
@@ -73,6 +83,24 @@ __all__ = [
     "make_delegate_handler",
     "neutral_handler_groups",
 ]
+
+
+@dataclass(frozen=True, slots=True)
+class ToolPersistenceServices:
+    """Persistence dependencies consumed by native tool instances."""
+
+    memory: MemoryToolServices = field(default_factory=MemoryToolServices)
+    user_profile: FileBasedUserProfile | None = None
+    offload_store: ToolResultOffloadStore | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ToolIntegrationServices:
+    """External ports consumed by native tool instances."""
+
+    calendar: CalendarPort | None = None
+    notification: NotificationPort | None = None
+    calendar_bridge: CalendarSchedulerBridge | None = None
 
 
 @dataclass(frozen=True)
@@ -123,17 +151,40 @@ def neutral_handler_groups(
     *,
     mcp_manager: Any = None,
     skill_registry: Any = None,
+    persistence: ToolPersistenceServices | None = None,
+    integrations: ToolIntegrationServices | None = None,
 ) -> tuple[tuple[str, UniqueEntries[str, Any]], ...]:
     """Return the neutral contribution set for an outer composition root."""
+    from core.tools.memory_tools import NoteReadTool, NoteSaveTool
+    from core.tools.profile_tools import (
+        ProfileLearnTool,
+        ProfilePreferenceTool,
+        ProfileShowTool,
+        ProfileUpdateTool,
+    )
+
+    persistence = persistence or ToolPersistenceServices()
+    integrations = integrations or ToolIntegrationServices()
+    delegated_instances = {
+        "note_save": NoteSaveTool(persistence.memory),
+        "note_read": NoteReadTool(persistence.memory),
+        "profile_show": ProfileShowTool(persistence.user_profile),
+        "profile_update": ProfileUpdateTool(persistence.user_profile),
+        "profile_preference": ProfilePreferenceTool(persistence.user_profile),
+        "profile_learn": ProfileLearnTool(persistence.user_profile),
+    }
     return (
         ("math", _build_math_handlers()),
         ("data", _build_data_handlers()),
-        ("delegated", _build_delegated_handlers()),
+        ("delegated", _build_delegated_handlers(delegated_instances)),
         ("output", _build_output_handlers()),
-        ("notification", _build_notification_handlers()),
-        ("calendar", _build_calendar_handlers()),
+        ("notification", _build_notification_handlers(integrations.notification)),
+        (
+            "calendar",
+            _build_calendar_handlers(integrations.calendar, integrations.calendar_bridge),
+        ),
         ("mcp", _build_mcp_handler(mcp_manager)),
-        ("offload", _build_offload_handlers()),
+        ("offload", _build_offload_handlers(persistence.offload_store)),
         ("computer-use", _build_computer_use_handler()),
         ("observability", _build_observability_handlers()),
         ("skill", _build_use_skill_handler(skill_registry)),

@@ -63,7 +63,7 @@ def create_mcp_server(
     host: str | None = None,
     port: int | None = None,
     auth_token: str | None = None,
-    agent_tool_plan_builder: Callable[[], tuple[BoundToolPlan, Mapping[str, Any]]] | None = None,
+    agent_tool_plan_builder: Callable[..., tuple[BoundToolPlan, Mapping[str, Any]]] | None = None,
     agent_runner: Callable[..., Awaitable[Any]] | None = None,
     feature_registrar: Callable[[Any], None] | None = None,
 ) -> Any:
@@ -191,7 +191,7 @@ def _is_loopback(host: str) -> bool:
 
 
 def main(
-    agent_tool_plan_builder: Callable[[], tuple[BoundToolPlan, Mapping[str, Any]]] | None = None,
+    agent_tool_plan_builder: Callable[..., tuple[BoundToolPlan, Mapping[str, Any]]] | None = None,
     *,
     agent_runner: Callable[..., Awaitable[Any]] | None = None,
     feature_registrar: Callable[[Any], None] | None = None,

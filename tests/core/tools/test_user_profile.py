@@ -206,20 +206,18 @@ class TestContextSummary:
 
 class TestProfileShowTool:
     def test_show_no_profile(self):
-        from core.tools.profile_tools import ProfileShowTool, set_user_profile
+        from core.tools.profile_tools import ProfileShowTool
 
-        set_user_profile(None)
         tool = ProfileShowTool()
         result = asyncio.run(tool.aexecute())
         assert "error" in result
 
     def test_show_with_profile(self, tmp_path):
-        from core.tools.profile_tools import ProfileShowTool, set_user_profile
+        from core.tools.profile_tools import ProfileShowTool
 
         profile = FileBasedUserProfile(global_dir=tmp_path / "profile")
         profile.ensure_structure()
-        set_user_profile(profile)
-        tool = ProfileShowTool()
+        tool = ProfileShowTool(profile)
         result = asyncio.run(tool.aexecute())
         assert "result" in result
         assert result["result"]["exists"] is True
@@ -227,11 +225,10 @@ class TestProfileShowTool:
 
 class TestProfileUpdateTool:
     def test_update_fields(self, tmp_path):
-        from core.tools.profile_tools import ProfileUpdateTool, set_user_profile
+        from core.tools.profile_tools import ProfileUpdateTool
 
         profile = FileBasedUserProfile(global_dir=tmp_path / "profile")
-        set_user_profile(profile)
-        tool = ProfileUpdateTool()
+        tool = ProfileUpdateTool(profile)
         result = asyncio.run(tool.aexecute(role="Data Scientist", expertise="Statistics"))
         assert result["result"]["updated"] is True
 
@@ -242,11 +239,10 @@ class TestProfileUpdateTool:
 
 class TestProfilePreferenceTool:
     def test_set_and_get(self, tmp_path):
-        from core.tools.profile_tools import ProfilePreferenceTool, set_user_profile
+        from core.tools.profile_tools import ProfilePreferenceTool
 
         profile = FileBasedUserProfile(global_dir=tmp_path / "profile")
-        set_user_profile(profile)
-        tool = ProfilePreferenceTool()
+        tool = ProfilePreferenceTool(profile)
 
         # Set
         result = asyncio.run(tool.aexecute(key="language", value="ko"))
@@ -261,11 +257,10 @@ class TestProfilePreferenceTool:
 
 class TestProfileLearnTool:
     def test_learn_pattern(self, tmp_path):
-        from core.tools.profile_tools import ProfileLearnTool, set_user_profile
+        from core.tools.profile_tools import ProfileLearnTool
 
         profile = FileBasedUserProfile(global_dir=tmp_path / "profile")
-        set_user_profile(profile)
-        tool = ProfileLearnTool()
+        tool = ProfileLearnTool(profile)
         result = asyncio.run(
             tool.aexecute(pattern="User prefers dry-run first", category="workflow")
         )
@@ -273,11 +268,10 @@ class TestProfileLearnTool:
         assert result["result"]["category"] == "workflow"
 
     def test_learn_dedup(self, tmp_path):
-        from core.tools.profile_tools import ProfileLearnTool, set_user_profile
+        from core.tools.profile_tools import ProfileLearnTool
 
         profile = FileBasedUserProfile(global_dir=tmp_path / "profile")
-        set_user_profile(profile)
-        tool = ProfileLearnTool()
+        tool = ProfileLearnTool(profile)
         asyncio.run(tool.aexecute(pattern="Same pattern"))
         result = asyncio.run(tool.aexecute(pattern="Same pattern"))
         assert result["result"]["saved"] is False
@@ -364,7 +358,7 @@ class TestCareerIdentity:
 
 class TestProfileShowToolWithCareer:
     def test_show_includes_career(self, tmp_path):
-        from core.tools.profile_tools import ProfileShowTool, set_user_profile
+        from core.tools.profile_tools import ProfileShowTool
 
         gdir = tmp_path / "profile"
         gdir.mkdir(parents=True)
@@ -374,8 +368,7 @@ class TestProfileShowToolWithCareer:
         )
         profile = FileBasedUserProfile(global_dir=gdir)
         profile.ensure_structure()
-        set_user_profile(profile)
-        tool = ProfileShowTool()
+        tool = ProfileShowTool(profile)
         result = asyncio.run(tool.aexecute())
         assert "career" in result["result"]
         assert result["result"]["career"]["identity"]["title"] == "ML Engineer"

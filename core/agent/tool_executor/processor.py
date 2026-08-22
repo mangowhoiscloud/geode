@@ -84,6 +84,8 @@ class ToolCallProcessor:
         provider: str = "",
         source: str = "",
         adapter_name: str = "",
+        agent_loop: Any | None = None,
+        offload_store: Any = None,
     ) -> None:
         self._executor = executor
         self._op_logger = op_logger
@@ -100,6 +102,8 @@ class ToolCallProcessor:
         self._provider = provider
         self._source = source
         self._adapter_name = adapter_name
+        self._agent_loop = agent_loop
+        self._offload_store = offload_store
 
         # Per-run mutable state — reset via reset()
         self._consecutive_failures: dict[str, int] = {}
@@ -157,6 +161,7 @@ class ToolCallProcessor:
             tool_plan_hash=(step.tool_plan_hash if step is not None else ""),
             tool_plan_generation=(step.tool_plan_generation if step is not None else 0),
             bound_tool_plan=(step.bound_tool_plan if step is not None else None),
+            agent_loop=self._agent_loop,
             batch_cost_approved=batch_cost_approved,
         )
 
@@ -393,9 +398,7 @@ class ToolCallProcessor:
         estimated_tokens = (
             len(serialized) + TOKEN_ESTIMATE_CHARS_PER_TOKEN - 1
         ) // TOKEN_ESTIMATE_CHARS_PER_TOKEN
-        from core.orchestration.tool_offload import get_offload_store
-
-        offload_store = get_offload_store()
+        offload_store = self._offload_store
         if (
             offload_store
             and offload_store.threshold > 0

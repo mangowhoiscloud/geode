@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -367,7 +368,7 @@ def test_typer_serve_wires_rotating_file_handler_for_serve_log(monkeypatch) -> N
     monkeypatch.setattr(
         typer_serve,
         "_build_runtime_for_serve",
-        lambda _runtime_builder=None: None,
+        lambda _runtime_builder=None, **_kwargs: None,
     )
     with pytest.raises(typer.Exit):
         typer_serve._serve(3.0)
@@ -383,7 +384,59 @@ def test_typer_serve_uses_explicit_runtime_builder() -> None:
     from core.cli.typer_serve import _build_runtime_for_serve
 
     runtime = object()
-    assert _build_runtime_for_serve(lambda: runtime) is runtime
+    callback = object()
+    received: list[object] = []
+
+    def build(*, scheduler_callback: object) -> object:
+        received.append(scheduler_callback)
+        return runtime
+
+    assert _build_runtime_for_serve(build, scheduler_callback=callback) is runtime
+    assert received == [callback]
+
+
+def test_typer_serve_keeps_zero_argument_runtime_builder_compatibility(tmp_path: Path) -> None:
+    import threading
+    import time
+
+    from core.cli.typer_serve import _build_runtime_for_serve
+    from core.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
+
+    fired: list[tuple[str, str, bool, str]] = []
+    dispatched = threading.Event()
+
+    def callback(jid: str, action: str, isolated: bool, agent_id: str) -> None:
+        fired.append((jid, action, isolated, agent_id))
+        dispatched.set()
+
+    scheduler = SchedulerService(
+        store_path=tmp_path / "jobs.json",
+        log_dir=tmp_path / "logs",
+    )
+    job = ScheduledJob(
+        job_id="compat-job",
+        name="compat",
+        schedule=Schedule(kind=ScheduleKind.AT, at_ms=time.time() * 1000 + 5),
+        delete_after_run=True,
+        action="dispatch me",
+        agent_id="agent-1",
+    )
+    scheduler.add_job(job)
+
+    def build() -> object:
+        scheduler.start(interval_s=0.001)
+        time.sleep(0.03)
+        assert scheduler.get_job(job.job_id) is job
+        return SimpleNamespace(scheduler_service=scheduler)
+
+    try:
+        runtime = _build_runtime_for_serve(build, scheduler_callback=callback)
+        assert runtime.scheduler_service is scheduler
+        assert dispatched.wait(1.0)
+    finally:
+        scheduler.stop()
+
+    assert fired == [("compat-job", "dispatch me", True, "agent-1")]
 
 
 # ---------------------------------------------------------------------------

@@ -45,6 +45,7 @@ if TYPE_CHECKING:
     from core.orchestration.metrics import LatencyMetrics
     from core.orchestration.task_system import TaskGraph
     from core.scheduler.triggers import TriggerManager
+    from core.tools.handlers import ToolIntegrationServices, ToolPersistenceServices
 
 from core.auth.cooldown import CooldownTracker
 from core.auth.profiles import ProfileStore
@@ -75,47 +76,81 @@ DEFAULT_SESSION_TTL = 3600.0  # 1 hour
 
 
 @dataclass
-class RuntimeCoreConfig:
-    """Essential infrastructure parameters (always required)."""
+class RuntimeExecutionConfig:
+    """Request execution services owned for the runtime lifetime."""
 
     hooks: RuntimeEventBus
     hook_registry: HookRegistry
     middleware_registry: MiddlewareRegistry
-    session_store: SessionStorePort
     policy_chain: PolicyChain
     tool_registry: ToolRegistry
-    event_store: HookEventStore
-    hook_metrics: LatencyMetrics
-    config_watcher: ConfigWatcher
     lane_queue: LaneQueue
-    project_memory: ProjectMemory
-    session_key: str
-    subject_id: str
-    profile_store: ProfileStore | None = None
-    profile_rotator: ProfileRotator | None = None
-    cooldown_tracker: CooldownTracker | None = None
-    # Unified bootstrap: resources previously in bootstrap_geode() only
-    mcp_manager: Any = None
-    skill_registry: Any = None
-    readiness: Any = None
-    policy_sources: PolicySourceBundle | None = None
     activity_sink_provider: RunEventSinkProvider | None = None
 
 
 @dataclass
-class RuntimeSchedulingConfig:
-    """Scheduler components (all optional)."""
+class RuntimePersistenceConfig:
+    """State stores and memory services owned by the runtime."""
 
+    session_store: SessionStorePort
+    event_store: HookEventStore
+    project_memory: ProjectMemory
+    organization_memory: MonoLakeOrganizationMemory | None = None
+    context_assembler: ContextAssembler | None = None
+    offload_store: Any = None
+
+
+@dataclass
+class RuntimeLifecycleConfig:
+    """Started components whose teardown is owned by :class:`GeodeRuntime`."""
+
+    config_watcher: ConfigWatcher
+    hook_metrics: LatencyMetrics
     trigger_manager: TriggerManager | None = None
     scheduler_service: Any | None = None
 
 
 @dataclass
-class RuntimeMemoryConfig:
-    """L2 Memory components (all optional)."""
+class RuntimeIntegrationConfig:
+    """External and extension-facing runtime services."""
 
-    organization_memory: MonoLakeOrganizationMemory | None = None
-    context_assembler: ContextAssembler | None = None
+    mcp_manager: Any = None
+    skill_registry: Any = None
+    policy_sources: PolicySourceBundle | None = None
+    calendar: Any = None
+    notification: Any = None
+    calendar_bridge: Any = None
+
+
+@dataclass
+class RuntimeAuthenticationConfig:
+    """Authentication and operator-profile services."""
+
+    profile_store: ProfileStore | None = None
+    profile_rotator: ProfileRotator | None = None
+    cooldown_tracker: CooldownTracker | None = None
+    user_profile: Any = None
+    readiness: Any = None
+
+
+@dataclass
+class RuntimeIdentityConfig:
+    """Stable identity for one runtime instance."""
+
+    session_key: str
+    subject_id: str
+
+
+@dataclass
+class RuntimeCoreConfig:
+    """Lifecycle-owned service groups; no group exceeds seven fields."""
+
+    execution: RuntimeExecutionConfig
+    persistence: RuntimePersistenceConfig
+    lifecycle: RuntimeLifecycleConfig
+    integration: RuntimeIntegrationConfig
+    authentication: RuntimeAuthenticationConfig
+    identity: RuntimeIdentityConfig
 
 
 # ---------------------------------------------------------------------------
@@ -136,45 +171,77 @@ class GeodeRuntime:
     def __init__(
         self,
         core: RuntimeCoreConfig,
-        scheduling: RuntimeSchedulingConfig | None = None,
-        memory: RuntimeMemoryConfig | None = None,
     ) -> None:
         # Unpack core (flat attributes for backward compat)
-        self.hooks = core.hooks
-        self.hook_registry = core.hook_registry
-        self.middleware_registry = core.middleware_registry
-        self.session_store = core.session_store
-        self.policy_chain = core.policy_chain
-        self.tool_registry = core.tool_registry
-        self.event_store = core.event_store
-        self.hook_metrics = core.hook_metrics
-        self.profile_store = core.profile_store
-        self.profile_rotator = core.profile_rotator
-        self.cooldown_tracker = core.cooldown_tracker or CooldownTracker()
-        self.config_watcher = core.config_watcher
-        self.lane_queue = core.lane_queue
-        self.project_memory = core.project_memory
-        self.session_key = core.session_key
-        self.subject_id = core.subject_id
+        execution = core.execution
+        persistence = core.persistence
+        lifecycle = core.lifecycle
+        integration = core.integration
+        authentication = core.authentication
+        identity = core.identity
+        self.hooks = execution.hooks
+        self.hook_registry = execution.hook_registry
+        self.middleware_registry = execution.middleware_registry
+        self.policy_chain = execution.policy_chain
+        self.tool_registry = execution.tool_registry
+        self.lane_queue = execution.lane_queue
+        self.activity_sink_provider = execution.activity_sink_provider
+        self.session_store = persistence.session_store
+        self.event_store = persistence.event_store
+        self.project_memory = persistence.project_memory
+        self.organization_memory = persistence.organization_memory
+        self.context_assembler = persistence.context_assembler
+        self.offload_store = persistence.offload_store
+        self.config_watcher = lifecycle.config_watcher
+        self.hook_metrics = lifecycle.hook_metrics
+        self.trigger_manager = lifecycle.trigger_manager
+        self.scheduler_service = lifecycle.scheduler_service
+        self.mcp_manager = integration.mcp_manager
+        self.skill_registry = integration.skill_registry
+        self.policy_sources = integration.policy_sources
+        self.calendar = integration.calendar
+        self.notification = integration.notification
+        self.calendar_bridge = integration.calendar_bridge
+        self.profile_store = authentication.profile_store
+        self.profile_rotator = authentication.profile_rotator
+        self.cooldown_tracker = authentication.cooldown_tracker or CooldownTracker()
+        self.user_profile = authentication.user_profile
+        self.readiness = authentication.readiness
+        self.session_key = identity.session_key
+        self.subject_id = identity.subject_id
         self.run_id = ""
         self.is_subagent: bool = False
         self._shutdown = False
-        # Unified bootstrap resources
-        self.mcp_manager = core.mcp_manager
-        self.skill_registry = core.skill_registry
-        self.readiness = core.readiness
-        self.policy_sources = core.policy_sources
-        self.activity_sink_provider = core.activity_sink_provider
-        # Unpack scheduling
-        sched = scheduling or RuntimeSchedulingConfig()
-        self.trigger_manager = sched.trigger_manager
-        self.scheduler_service = sched.scheduler_service
-        # Unpack memory (L2)
-        mem = memory or RuntimeMemoryConfig()
-        self.organization_memory = mem.organization_memory
-        self.context_assembler = mem.context_assembler
         # L4 Task tracking
         self.task_graph: TaskGraph | None = None
+
+    @property
+    def persistence_services(self) -> ToolPersistenceServices:
+        """Narrow tool persistence view for the product composition root."""
+        from core.tools.handlers import ToolPersistenceServices
+        from core.tools.memory_tools import MemoryToolServices
+
+        return ToolPersistenceServices(
+            memory=MemoryToolServices(
+                session_store=self.session_store,
+                project_memory=self.project_memory,
+                organization_memory=self.organization_memory,
+                hooks=self.hooks,
+            ),
+            user_profile=self.user_profile,
+            offload_store=self.offload_store,
+        )
+
+    @property
+    def integration_services(self) -> ToolIntegrationServices:
+        """Narrow external-port view for the product composition root."""
+        from core.tools.handlers import ToolIntegrationServices
+
+        return ToolIntegrationServices(
+            calendar=self.calendar,
+            notification=self.notification,
+            calendar_bridge=self.calendar_bridge,
+        )
 
     # ------------------------------------------------------------------
     # Factory method
@@ -193,6 +260,7 @@ class GeodeRuntime:
         activity_sink_provider: RunEventSinkProvider | None = None,
         feature_hook_registrar: Callable[[Any], None] | None = None,
         scheduling_registrar: Callable[[Any, Any], None] | None = None,
+        scheduler_callback: Callable[[str, str, bool, str], None] | None = None,
     ) -> GeodeRuntime:
         """Factory method — create a fully wired runtime for a GEODE session.
 
@@ -211,6 +279,7 @@ class GeodeRuntime:
         # Stage 0: Session identity.
         session_key = build_session_key(subject_id, phase)
         run_id = uuid.uuid4().hex[:12]
+        user_profile = bootstrap.ensure_user_profile()
 
         # Stage 1: Core sub-systems
         core = cls._build_core(
@@ -224,10 +293,20 @@ class GeodeRuntime:
             middleware_builder=middleware_builder,
             activity_sink_provider=activity_sink_provider,
             feature_hook_registrar=feature_hook_registrar,
+            user_profile=user_profile,
         )
 
         # Stage 2: Tools, MCP, Skills
         tools = cls._build_tools(bootstrap, core["hooks"], session_key=session_key)
+        from core.config import settings
+        from core.hooks.plugins.notification_hook.hook import register_notification_hooks
+
+        register_notification_hooks(
+            core["hooks"],
+            channel=settings.notification_channel,
+            recipient=settings.notification_recipient,
+            notification=tools["notification"],
+        )
 
         # Stage 3: Memory + Scheduling
         memory, scheduling = cls._build_memory_and_scheduling(
@@ -238,47 +317,81 @@ class GeodeRuntime:
             session_key=session_key,
             subject_id=subject_id,
             scheduling_registrar=scheduling_registrar,
+            scheduler_callback=scheduler_callback,
+            user_profile=user_profile,
+        )
+
+        from core.tools.memory_tools import MemoryToolServices
+
+        memory_services = MemoryToolServices(
+            session_store=core["session_store"],
+            project_memory=memory["project_memory"],
+            organization_memory=memory["organization_memory"],
+            hooks=core["hooks"],
+        )
+        tool_registry = infra.build_default_registry(
+            memory_services=memory_services,
+            notification=tools["notification"],
         )
 
         log.info(
             "GeodeRuntime created: subject=%s, key=%s, tools=%d, lanes=%s",
             subject_id,
             session_key,
-            len(core["tool_registry"]),
+            len(tool_registry),
             core["lane_queue"].list_lanes(),
         )
 
         # Stage 4: Assembly
-        core_config = RuntimeCoreConfig(
-            hooks=core["hooks"],
-            hook_registry=core["hook_registry"],
-            middleware_registry=core["middleware_registry"],
-            session_store=core["session_store"],
-            policy_chain=core["policy_chain"],
-            tool_registry=core["tool_registry"],
-            event_store=core["event_store"],
-            hook_metrics=core["hook_metrics"],
-            config_watcher=core["config_watcher"],
-            lane_queue=core["lane_queue"],
-            project_memory=memory["project_memory"],
-            session_key=session_key,
-            subject_id=subject_id,
-            profile_store=core["profile_store"],
-            profile_rotator=core["profile_rotator"],
-            cooldown_tracker=core["cooldown_tracker"],
-            mcp_manager=tools["mcp_manager"],
-            skill_registry=tools["skill_registry"],
-            readiness=tools["readiness"],
-            policy_sources=resolved_policy_sources,
-            activity_sink_provider=activity_sink_provider,
+        from core.scheduler.calendar_bridge import CalendarSchedulerBridge
+
+        calendar_bridge = (
+            CalendarSchedulerBridge(scheduling["scheduler_service"], tools["calendar"])
+            if scheduling.get("scheduler_service") is not None and tools["calendar"] is not None
+            else None
         )
-        scheduling_config = RuntimeSchedulingConfig(**scheduling)
-        memory_config = RuntimeMemoryConfig(
-            organization_memory=memory["organization_memory"],
-            context_assembler=memory["context_assembler"],
+        core_config = RuntimeCoreConfig(
+            execution=RuntimeExecutionConfig(
+                hooks=core["hooks"],
+                hook_registry=core["hook_registry"],
+                middleware_registry=core["middleware_registry"],
+                policy_chain=core["policy_chain"],
+                tool_registry=tool_registry,
+                lane_queue=core["lane_queue"],
+                activity_sink_provider=activity_sink_provider,
+            ),
+            persistence=RuntimePersistenceConfig(
+                session_store=core["session_store"],
+                event_store=core["event_store"],
+                project_memory=memory["project_memory"],
+                organization_memory=memory["organization_memory"],
+                context_assembler=memory["context_assembler"],
+                offload_store=tools["offload_store"],
+            ),
+            lifecycle=RuntimeLifecycleConfig(
+                config_watcher=core["config_watcher"],
+                hook_metrics=core["hook_metrics"],
+                **scheduling,
+            ),
+            integration=RuntimeIntegrationConfig(
+                mcp_manager=tools["mcp_manager"],
+                skill_registry=tools["skill_registry"],
+                policy_sources=resolved_policy_sources,
+                calendar=tools["calendar"],
+                notification=tools["notification"],
+                calendar_bridge=calendar_bridge,
+            ),
+            authentication=RuntimeAuthenticationConfig(
+                profile_store=core["profile_store"],
+                profile_rotator=core["profile_rotator"],
+                cooldown_tracker=core["cooldown_tracker"],
+                user_profile=memory["user_profile"],
+                readiness=tools["readiness"],
+            ),
+            identity=RuntimeIdentityConfig(session_key=session_key, subject_id=subject_id),
         )
         try:
-            instance = cls(core_config, scheduling_config, memory_config)
+            instance = cls(core_config)
             instance.run_id = run_id
             instance.task_graph = memory["task_graph"]
             return instance
@@ -299,6 +412,7 @@ class GeodeRuntime:
         middleware_builder: Callable[..., MiddlewareRegistry] | None,
         activity_sink_provider: RunEventSinkProvider | None,
         feature_hook_registrar: Callable[[Any], None] | None,
+        user_profile: Any,
     ) -> dict[str, Any]:
         """Stage 1: Build core infrastructure (hooks, auth, LLM, lanes)."""
         hooks, event_store, hook_metrics = bootstrap.build_hooks(
@@ -307,6 +421,7 @@ class GeodeRuntime:
             log_dir=log_dir,
             activity_sink_provider=activity_sink_provider,
             feature_hook_registrar=feature_hook_registrar,
+            user_profile=user_profile,
         )
         hook_registry = HookRegistry(events=hooks)
         middleware_registry = (
@@ -316,7 +431,6 @@ class GeodeRuntime:
         )
         session_store = bootstrap.build_session_store(session_ttl=session_ttl)
         policy_chain = infra.build_default_policies()
-        tool_registry = infra.build_default_registry()
         profile_store, profile_rotator, cooldown_tracker = infra.build_auth()
         # PR-LLMCLIENTPORT-COLLAPSE (2026-05-28) — was
         # ``infra.build_llm_adapters(...)`` whose sole production effect was
@@ -336,7 +450,6 @@ class GeodeRuntime:
             "hook_metrics": hook_metrics,
             "session_store": session_store,
             "policy_chain": policy_chain,
-            "tool_registry": tool_registry,
             "profile_store": profile_store,
             "profile_rotator": profile_rotator,
             "cooldown_tracker": cooldown_tracker,
@@ -361,12 +474,15 @@ class GeodeRuntime:
         hooks.add_owner_cleanup("mcp_hooks", clear_mcp_hooks)
         skill_registry = bootstrap.build_skill_registry()
         readiness = bootstrap.build_readiness()
-        bootstrap.build_tool_offload(session_id=session_key, hooks=hooks)
-        adapter_wiring.build_plugins()
+        offload_store = bootstrap.build_tool_offload(session_id=session_key, hooks=hooks)
+        notification, calendar = adapter_wiring.build_plugins()
         return {
             "mcp_manager": mcp_manager,
             "skill_registry": skill_registry,
             "readiness": readiness,
+            "offload_store": offload_store,
+            "notification": notification,
+            "calendar": calendar,
         }
 
     @staticmethod
@@ -379,6 +495,8 @@ class GeodeRuntime:
         session_key: str,
         subject_id: str,
         scheduling_registrar: Callable[[Any, Any], None] | None = None,
+        scheduler_callback: Callable[[str, str, bool, str], None] | None = None,
+        user_profile: Any = None,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         """Stage 3: Build memory, scheduling, and optional components."""
         from core.wiring import scheduling as scheduling_wiring
@@ -392,11 +510,13 @@ class GeodeRuntime:
             session_store=session_store,
             hooks=hooks,
             event_store=event_store,
+            user_profile=user_profile,
         )
 
         scheduling = scheduling_wiring.build_scheduling(
             hooks=hooks,
             feature_registrar=scheduling_registrar,
+            on_job_fired=scheduler_callback,
         )
 
         try:
@@ -410,6 +530,7 @@ class GeodeRuntime:
             "organization_memory": organization_memory,
             "context_assembler": context_assembler,
             "task_graph": task_graph,
+            "user_profile": _user_profile,
         }
         return memory, scheduling
 

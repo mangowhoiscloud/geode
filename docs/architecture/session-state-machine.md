@@ -115,16 +115,17 @@ inputs, same source) but still a dual-SoT read.
 
 ## Ambient state (accepted, documented)
 
-The generated inventory currently records 35 module/class-scoped ContextVars
+The generated inventory currently records 24 module/class-scoped ContextVars
 across the production packages, including four created by `ContextLocal`: 7 request
-identities, 9 request-local mutable values, 7 diagnostic scopes, 1 cache, and 11 service
-locators. Every row records its owner,
+identities, 9 request-local mutable values, 7 diagnostic scopes, and 1 cache.
+Every row records its owner,
 setter/reset boundary, lifetime, and teardown in
 [`context-var-lifecycles.json`](context-var-lifecycles.json); the generated
 architecture baseline attaches the executable async propagation/reset test
 reference to every item. They are NOT machine state: `arun()` re-binds the
-session-scoped values from restored loop state. The service locators are
-explicit R4.2 removal inputs rather than accepted machine-state dependencies.
+session-scoped values from restored loop state. Runtime services instead cross
+composition boundaries through grouped configuration, constructors, and
+`ToolContext`.
 
 ## Observability
 

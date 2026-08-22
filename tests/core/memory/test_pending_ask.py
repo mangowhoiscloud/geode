@@ -166,19 +166,17 @@ class _FakeNotification:
 
 
 def test_publish_persists_and_notifies(tmp_path):
-    from core.mcp.notification_port import set_notification
-
     store = _make_store(tmp_path)
     fake = _FakeNotification()
-    set_notification(fake)
-    try:
-        ask = asyncio.run(
-            apublish_clarification_ask(
-                "Which branch?", session_id="s-42", source="scheduled:nightly", store=store
-            )
+    ask = asyncio.run(
+        apublish_clarification_ask(
+            "Which branch?",
+            session_id="s-42",
+            source="scheduled:nightly",
+            store=store,
+            notification=fake,
         )
-    finally:
-        set_notification(None)
+    )
 
     assert ask is not None
     assert len(fake.sent) == 1
@@ -191,10 +189,7 @@ def test_publish_persists_and_notifies(tmp_path):
 
 
 def test_publish_without_adapter_still_persists(tmp_path):
-    from core.mcp.notification_port import set_notification
-
     store = _make_store(tmp_path)
-    set_notification(None)
     ask = asyncio.run(
         apublish_clarification_ask("Q", session_id="s-1", source="scheduled:x", store=store)
     )
@@ -204,16 +199,16 @@ def test_publish_without_adapter_still_persists(tmp_path):
 
 
 def test_publish_survives_adapter_exception(tmp_path):
-    from core.mcp.notification_port import set_notification
-
     store = _make_store(tmp_path)
-    set_notification(_FakeNotification(raise_on_send=True))
-    try:
-        ask = asyncio.run(
-            apublish_clarification_ask("Q", session_id="s-1", source="scheduled:x", store=store)
+    ask = asyncio.run(
+        apublish_clarification_ask(
+            "Q",
+            session_id="s-1",
+            source="scheduled:x",
+            store=store,
+            notification=_FakeNotification(raise_on_send=True),
         )
-    finally:
-        set_notification(None)
+    )
     assert ask is not None
     assert store.get(ask.ask_id) is not None
 

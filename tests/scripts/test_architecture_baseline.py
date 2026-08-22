@@ -24,18 +24,8 @@ _CONTEXT_SETTERS = {
     "core/agent/safety.py:_skip_permissions_var": "core.agent.safety.set_skip_permissions",
     "core/cli/commands/_state.py:_conversation_ctx": "core.cli.commands._state.set_conversation_context",
     "core/cli/session_state.py:_readiness_ctx": "core.cli.session_state._set_readiness",
-    "core/cli/session_state.py:_current_loop_ctx": "core.cli.session_state.set_current_loop",
-    "core/hooks/tool_hooks.py:_tool_hooks_ctx": "core.hooks.tool_hooks.set_tool_hooks",
-    "core/mcp/calendar_port.py:_calendar_ctx": "core.mcp.calendar_port.set_calendar",
-    "core/mcp/notification_port.py:_notification_ctx": "core.mcp.notification_port.set_notification",
     "core/observability/session_metrics.py:_current_metrics": "core.observability.session_metrics.set_current_session_metrics",
     "core/observability/session_timeline.py:_CURRENT_SESSION_TIMELINE": "core.observability.session_timeline.set_current_session_timeline",
-    "core/orchestration/tool_offload.py:_offload_store_ctx": "core.orchestration.tool_offload.set_offload_store",
-    "core/tools/memory_tools.py:_default_session_store_ctx": "core.tools.memory_tools.set_default_session_store",
-    "core/tools/memory_tools.py:_project_memory_ctx": "core.tools.memory_tools.set_project_memory",
-    "core/tools/memory_tools.py:_org_memory_ctx": "core.tools.memory_tools.set_org_memory",
-    "core/tools/memory_tools.py:_hooks_ctx": "core.tools.memory_tools.set_memory_hooks",
-    "core/tools/profile_tools.py:_user_profile_ctx": "core.tools.profile_tools.set_user_profile",
 }
 _UNSET = object()
 
@@ -82,36 +72,13 @@ def _bind_context_boundary(
 ) -> tuple[object, Callable[[], object], bool]:
     if setter_path := _CONTEXT_SETTERS.get(label):
         setter = _resolve_callable(setter_path)
-        if label == "core/mcp/notification_port.py:_notification_ctx":
-            module = importlib.import_module("core.mcp.notification_port")
-            previous_fallback = module._notification_fallback
-            setter(marker)
-
-            def restore_notification() -> None:
-                setter(None)
-                module._notification_fallback = previous_fallback
-
-            return marker, restore_notification, True
         setter(marker)
         cleanup: Callable[[], object] = _noop
         resets = False
-        if label == "core/hooks/tool_hooks.py:_tool_hooks_ctx":
-            cleanup = partial(_resolve_callable("core.hooks.tool_hooks.clear_tool_hooks"), marker)
-            resets = True
-        elif label == "core/tools/memory_tools.py:_hooks_ctx":
-            cleanup = partial(
-                _resolve_callable("core.tools.memory_tools.clear_memory_hooks"), marker
-            )
-            resets = True
-        elif label in {
+        if label in {
             "core/cli/commands/_state.py:_conversation_ctx",
-            "core/mcp/calendar_port.py:_calendar_ctx",
-            "core/mcp/notification_port.py:_notification_ctx",
             "core/observability/session_metrics.py:_current_metrics",
             "core/observability/session_timeline.py:_CURRENT_SESSION_TIMELINE",
-            "core/tools/memory_tools.py:_project_memory_ctx",
-            "core/tools/memory_tools.py:_org_memory_ctx",
-            "core/tools/profile_tools.py:_user_profile_ctx",
         }:
             cleanup = partial(setter, None)
             resets = True
@@ -121,9 +88,6 @@ def _bind_context_boundary(
         module = importlib.import_module("core.agent.cognitive_state_ctx")
         token = module.set_tool_call_id(marker)
         return marker, partial(module.reset_tool_call_id, token), True
-    if label == "core/cli/session_state.py:_scheduler_service_ctx":
-        variable.set(marker)
-        return marker, _noop, False
     if label == "core/cli/session_state.py:_user_task_graph_ctx":
         module = importlib.import_module("core.cli.session_state")
         graph = module._get_user_task_graph()
@@ -242,27 +206,15 @@ def test_context_var_inventory_has_complete_lifecycle_classification() -> None:
         "request_local_mutable_state": 9,
         "diagnostic_scope": 7,
         "cache": 1,
-        "service_locator": 11,
+        "service_locator": 0,
     }
-    assert inventory["service_locator_count"] == 11
+    assert inventory["service_locator_count"] == 0
     assert inventory["lifecycle_source"] == baseline.CONTEXT_VAR_LIFECYCLES.as_posix()
     assert {
         f"{item['path']}:{item['symbol']}"
         for item in inventory["items"]
         if item["classification"] == "service_locator"
-    } == {
-        "core/cli/session_state.py:_current_loop_ctx",
-        "core/cli/session_state.py:_scheduler_service_ctx",
-        "core/hooks/tool_hooks.py:_tool_hooks_ctx",
-        "core/mcp/calendar_port.py:_calendar_ctx",
-        "core/mcp/notification_port.py:_notification_ctx",
-        "core/orchestration/tool_offload.py:_offload_store_ctx",
-        "core/tools/memory_tools.py:_default_session_store_ctx",
-        "core/tools/memory_tools.py:_hooks_ctx",
-        "core/tools/memory_tools.py:_org_memory_ctx",
-        "core/tools/memory_tools.py:_project_memory_ctx",
-        "core/tools/profile_tools.py:_user_profile_ctx",
-    }
+    } == set()
     for item in inventory["items"]:
         assert item["async_propagation_test"] == baseline.CONTEXT_VAR_PROPAGATION_TEST
         assert all(item[field] for field in baseline.CONTEXT_VAR_LIFECYCLE_FIELDS)
@@ -1094,29 +1046,10 @@ def test_context_value_handles_context_vars_without_defaults() -> None:
     assert _context_value("probe", contextvars.ContextVar("probe"), object()) is _UNSET
 
 
-def test_notification_probe_preserves_process_fallback(tmp_path: Path) -> None:
-    module = importlib.import_module("core.mcp.notification_port")
-    previous_fallback = module._notification_fallback
-    fallback = object()
-    marker = object()
-    module._notification_fallback = fallback
-
-    def exercise() -> None:
-        _expected, cleanup, _resets = _bind_context_boundary(
-            "core/mcp/notification_port.py:_notification_ctx",
-            module._notification_ctx,
-            module._notification_ctx,
-            marker,
-            tmp_path,
-        )
-        assert module._notification_fallback is marker
-        cleanup()
-
-    try:
-        contextvars.Context().run(exercise)
-        assert module._notification_fallback is fallback
-    finally:
-        module._notification_fallback = previous_fallback
+def test_service_ports_expose_no_process_fallback() -> None:
+    for module_name in ("core.mcp.calendar_port", "core.mcp.notification_port"):
+        module = importlib.import_module(module_name)
+        assert not any(name.startswith(("get_", "set_")) for name in vars(module))
 
 
 @pytest.mark.parametrize(
@@ -1595,7 +1528,7 @@ def test_context_var_inventory_rejects_an_unclassified_declaration(
     lifecycles = json.loads(
         (baseline.REPO_ROOT / baseline.CONTEXT_VAR_LIFECYCLES).read_text(encoding="utf-8")
     )
-    lifecycles.pop("core/tools/profile_tools.py:_user_profile_ctx")
+    lifecycles.pop("core/agent/safety.py:_skip_permissions_var")
     manifest = tmp_path / "context-var-lifecycles.json"
     manifest.write_text(json.dumps(lifecycles), encoding="utf-8")
     monkeypatch.setattr(baseline, "CONTEXT_VAR_LIFECYCLES", manifest)

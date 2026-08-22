@@ -157,7 +157,16 @@ def _import_core_modules(modules: tuple[str, ...], *, cwd: Path, geode_home: Pat
 def _check_kernel_runtime() -> None:
     from core.hooks import HookRegistry, MiddlewareRegistry
     from core.llm.adapters import bootstrap_builtins, list_adapters
-    from core.runtime import GeodeRuntime, RuntimeCoreConfig
+    from core.runtime import (
+        GeodeRuntime,
+        RuntimeAuthenticationConfig,
+        RuntimeCoreConfig,
+        RuntimeExecutionConfig,
+        RuntimeIdentityConfig,
+        RuntimeIntegrationConfig,
+        RuntimeLifecycleConfig,
+        RuntimePersistenceConfig,
+    )
     from core.tools.policy import PolicyChain
     from core.wiring.container import build_default_registry
 
@@ -181,19 +190,29 @@ def _check_kernel_runtime() -> None:
     config_watcher = Mock()
     runtime = GeodeRuntime(
         RuntimeCoreConfig(
-            hooks=events,
-            hook_registry=hooks,
-            middleware_registry=middleware,
-            session_store=Mock(),
-            policy_chain=PolicyChain(),
-            tool_registry=tools,
-            event_store=Mock(),
-            hook_metrics=Mock(),
-            config_watcher=config_watcher,
-            lane_queue=Mock(),
-            project_memory=Mock(),
-            session_key="kernel-probe:analysis",
-            subject_id="kernel-probe",
+            execution=RuntimeExecutionConfig(
+                hooks=events,
+                hook_registry=hooks,
+                middleware_registry=middleware,
+                policy_chain=PolicyChain(),
+                tool_registry=tools,
+                lane_queue=Mock(),
+            ),
+            persistence=RuntimePersistenceConfig(
+                session_store=Mock(),
+                event_store=Mock(),
+                project_memory=Mock(),
+            ),
+            lifecycle=RuntimeLifecycleConfig(
+                config_watcher=config_watcher,
+                hook_metrics=Mock(),
+            ),
+            integration=RuntimeIntegrationConfig(),
+            authentication=RuntimeAuthenticationConfig(),
+            identity=RuntimeIdentityConfig(
+                session_key="kernel-probe:analysis",
+                subject_id="kernel-probe",
+            ),
         )
     )
     runtime.shutdown()

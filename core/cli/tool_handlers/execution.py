@@ -11,9 +11,8 @@ from core.ui.console import console
 log = logging.getLogger(__name__)
 
 
-def _build_execution_handlers() -> UniqueEntries[str, Any]:
+def _build_execution_handlers(scheduler_service: Any = None) -> UniqueEntries[str, Any]:
     """Build execution-related tool handlers."""
-    from core.cli import _scheduler_service_ctx
     from core.cli.commands import cmd_trigger
 
     def handle_schedule_job(**kwargs: Any) -> dict[str, Any]:
@@ -21,7 +20,7 @@ def _build_execution_handlers() -> UniqueEntries[str, Any]:
         target_id = kwargs.get("target_id", "")
         expression = kwargs.get("expression", "")
         action_text = kwargs.get("action", "")
-        svc = _scheduler_service_ctx.get(None)
+        svc = scheduler_service
 
         if sub_action == "create" and expression:
             if not action_text:

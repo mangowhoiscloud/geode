@@ -6,7 +6,7 @@ Adding a new delegated tool requires only one line in ``_DELEGATED_TOOLS``.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any
 
 from core.tools.google_capabilities import GOOGLE_TOOL_BINDINGS
@@ -71,6 +71,7 @@ _DELEGATED_TOOLS = UniqueEntries[str, tuple[str, str]](
 def _make_delegate_handler(
     module_path: str,
     class_name: str,
+    instance: Any = None,
 ) -> Callable[..., Any]:
     """Return an ASYNC handler that lazily imports *class_name* from
     *module_path* and awaits its ``aexecute``.
@@ -92,12 +93,15 @@ def _make_delegate_handler(
     """
 
     async def _handler(**kwargs: Any) -> dict[str, Any]:
-        import importlib
-
         tool_context = kwargs.pop("_tool_context", None)
-        mod = importlib.import_module(module_path)
-        tool_cls = getattr(mod, class_name)
-        return await _safe_delegate(tool_cls, kwargs, context=tool_context)
+        if instance is None:
+            import importlib
+
+            mod = importlib.import_module(module_path)
+            tool: Any = getattr(mod, class_name)
+        else:
+            tool = instance
+        return await _safe_delegate(tool, kwargs, context=tool_context)
 
     return _handler
 
@@ -107,11 +111,13 @@ def _make_delegate_handler(
 make_delegate_handler = _make_delegate_handler
 
 
-def _build_delegated_handlers() -> UniqueEntries[str, Any]:
+def _build_delegated_handlers(
+    instances: Mapping[str, Any] | None = None,
+) -> UniqueEntries[str, Any]:
     """Build all delegated tool handlers from ``_DELEGATED_TOOLS`` registry."""
     return UniqueEntries[str, Any](
         (
-            (name, _make_delegate_handler(module, class_name))
+            (name, _make_delegate_handler(module, class_name, (instances or {}).get(name)))
             for name, (module, class_name) in _DELEGATED_TOOLS.items()
         )
     )

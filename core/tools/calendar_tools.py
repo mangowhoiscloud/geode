@@ -18,6 +18,9 @@ from core.tools.base import tool_error
 class CalendarListEventsTool:
     """Tool for listing calendar events."""
 
+    def __init__(self, calendar: Any = None) -> None:
+        self._calendar = calendar
+
     @property
     def name(self) -> str:
         return "calendar_list_events"
@@ -58,9 +61,7 @@ class CalendarListEventsTool:
         }
 
     async def aexecute(self, **kwargs: Any) -> dict[str, Any]:
-        from core.mcp.calendar_port import get_calendar
-
-        adapter = get_calendar()
+        adapter = self._calendar
         if adapter is None or not await adapter.ais_available():
             return {
                 "result": {
@@ -90,6 +91,9 @@ class CalendarListEventsTool:
 
 class CalendarCreateEventTool:
     """Tool for creating calendar events."""
+
+    def __init__(self, calendar: Any = None) -> None:
+        self._calendar = calendar
 
     @property
     def name(self) -> str:
@@ -137,9 +141,7 @@ class CalendarCreateEventTool:
         }
 
     async def aexecute(self, **kwargs: Any) -> dict[str, Any]:
-        from core.mcp.calendar_port import get_calendar
-
-        adapter = get_calendar()
+        adapter = self._calendar
         if adapter is None or not await adapter.ais_available():
             return tool_error(
                 "No calendar adapter available.",
@@ -185,6 +187,9 @@ class CalendarCreateEventTool:
 class CalendarSyncSchedulerTool:
     """Tool for syncing GEODE scheduler jobs with external calendars."""
 
+    def __init__(self, bridge: Any = None) -> None:
+        self._bridge = bridge
+
     @property
     def name(self) -> str:
         return "calendar_sync_scheduler"
@@ -213,9 +218,7 @@ class CalendarSyncSchedulerTool:
         }
 
     async def aexecute(self, **kwargs: Any) -> dict[str, Any]:
-        from core.scheduler.calendar_bridge import get_calendar_bridge
-
-        bridge = get_calendar_bridge()
+        bridge = self._bridge
         if bridge is None:
             return tool_error(
                 "Calendar bridge not available.",

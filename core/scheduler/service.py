@@ -99,6 +99,10 @@ class SchedulerService:
         # CRON dedup: prevent same cron job from firing twice in same minute
         self._last_fired_minute: dict[str, int] = {}
 
+    def set_on_job_fired(self, callback: OnJobFired | None) -> None:
+        """Replace the action-dispatch callback for this scheduler."""
+        self._on_job_fired = callback
+
     # -- CRUD ---------------------------------------------------------------
 
     def add_job(self, job: ScheduledJob) -> None:
@@ -326,6 +330,13 @@ class SchedulerService:
 
         for job in snapshot:
             if not job.enabled:
+                continue
+
+            # A composition root may attach the action callback immediately
+            # after constructing an already-running scheduler. Keep due jobs
+            # pending until that dispatch path exists instead of recording a
+            # false success and deleting one-shot work.
+            if job.callback is None and job.action and self._on_job_fired is None:
                 continue
 
             kind = job.schedule.kind

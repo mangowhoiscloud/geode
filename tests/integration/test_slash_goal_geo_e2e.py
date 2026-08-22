@@ -10,7 +10,6 @@ from unittest.mock import AsyncMock, MagicMock
 
 from core.cli.ipc_client import IPCClient
 from core.cli.routing import compose_command_registry
-from core.cli.session_state import set_current_loop
 from core.memory.goals import GoalStatus, GoalStore
 from core.observability.session_metrics import SessionMetrics
 from core.observability.session_timeline import SessionEventStore, SessionTimeline
@@ -28,7 +27,6 @@ class _Services:
         self.mcp_manager = None
 
     def create_session(self, *_args: Any, **_kwargs: Any) -> tuple[None, Any]:
-        set_current_loop(self.loop)
         return None, self.loop
 
 

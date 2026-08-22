@@ -24,7 +24,11 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from core.tools.handlers import make_delegate_handler
+from core.tools.handlers import (
+    ToolIntegrationServices,
+    ToolPersistenceServices,
+    make_delegate_handler,
+)
 from core.tools.handlers.registration import UniqueEntries
 
 if TYPE_CHECKING:
@@ -287,6 +291,10 @@ def compose_tool_plan(
     mcp_manager: Any = None,
     skill_registry: Any = None,
     previous: BoundToolPlan | None = None,
+    persistence: ToolPersistenceServices | None = None,
+    integrations: ToolIntegrationServices | None = None,
+    hooks: Any = None,
+    scheduler_service: Any = None,
 ) -> tuple[BoundToolPlan, dict[str, Any]]:
     """Bind one product plan and its non-schema execution overlays."""
     from core.agent.safety import (
@@ -327,10 +335,15 @@ def compose_tool_plan(
             *neutral_handler_groups(
                 mcp_manager=mcp_manager,
                 skill_registry=skill_registry,
+                persistence=persistence,
+                integrations=integrations,
             ),
             *cli_handler_groups(
                 mcp_manager=mcp_manager,
                 command_registry=compose_command_registry(PRODUCT_COMMAND_SPECS),
+                hooks=hooks,
+                project_memory=(persistence.memory.project_memory if persistence else None),
+                scheduler_service=scheduler_service,
             ),
             *product_handler_groups(),
         )

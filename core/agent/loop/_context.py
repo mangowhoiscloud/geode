@@ -120,7 +120,11 @@ def build_system_prompt(loop: AgenticLoop) -> str:
         # its authored-static zone (before <dynamic_context>), so memory
         # churn no longer invalidates the cached behaviour rules. Append-
         # ing it again here would duplicate the entire contract block.
-        base = _build_system_prompt(model=loop.model, policy_sources=loop._policy_sources)
+        base = _build_system_prompt(
+            model=loop.model,
+            policy_sources=loop._policy_sources,
+            user_profile=loop._user_profile,
+        )
         prompt = base.replace("{skill_context}", skill_replacement)
     if loop._system_suffix:
         prompt = inject_runtime_hints(

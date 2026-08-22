@@ -10,11 +10,7 @@ from unittest.mock import MagicMock
 from core.agent.tool_executor import ToolExecutor
 from core.agent.tool_executor.processor import ToolCallProcessor
 from core.hooks import HookAction, HookDecision, HookName, HookRegistry, MiddlewareRegistry
-from core.orchestration.tool_offload import (
-    ToolResultOffloadStore,
-    get_offload_store,
-    set_offload_store,
-)
+from core.orchestration.tool_offload import ToolResultOffloadStore
 from core.tools.personal_data import (
     sanitize_personal_data_payload,
     set_bound_tool_data_policies,
@@ -184,6 +180,11 @@ def test_plan_redaction_keeps_raw_active_result_out_of_durable_sinks(tmp_path) -
         lambda invocation: public_payloads.append(dict(invocation.payload)),
     )
     transcript = MagicMock()
+    offload_store = ToolResultOffloadStore(
+        session_id="future",
+        threshold=1,
+        base_dir=tmp_path / "offload",
+    )
     processor = ToolCallProcessor(
         executor=ToolExecutor(
             bound_tool_plan=bound,
@@ -193,23 +194,16 @@ def test_plan_redaction_keeps_raw_active_result_out_of_durable_sinks(tmp_path) -
         op_logger=MagicMock(log_tool_call=MagicMock(return_value=True)),
         error_recovery=MagicMock(),
         timeline=transcript,
+        offload_store=offload_store,
     )
     block = type(
         "Block",
         (),
         {"name": name, "input": {"query": "private-query"}, "id": "future-call"},
     )()
-    previous = get_offload_store()
     episodic_store = EpisodicStore(path=tmp_path / "episodes.jsonl")
     try:
         set_bound_tool_data_policies(bound)
-        set_offload_store(
-            ToolResultOffloadStore(
-                session_id="future",
-                threshold=1,
-                base_dir=tmp_path / "offload",
-            )
-        )
         active = asyncio.run(processor._execute_single(block))
 
         checkpoint = SessionCheckpoint(tmp_path / "checkpoint")
@@ -248,7 +242,6 @@ def test_plan_redaction_keeps_raw_active_result_out_of_durable_sinks(tmp_path) -
             },
         )
     finally:
-        set_offload_store(previous)
         set_episodic_store(None)
         set_bound_tool_data_policies(None)
 
@@ -348,28 +341,24 @@ def test_tool_processor_records_only_markers_in_builtin_durable_sinks() -> None:
 
 
 def test_personal_result_reaches_active_turn_without_filesystem_offload(tmp_path) -> None:
-    processor = ToolCallProcessor(
-        executor=MagicMock(),
-        op_logger=MagicMock(),
-        error_recovery=MagicMock(),
-    )
-    previous = get_offload_store()
     store = ToolResultOffloadStore(
         session_id="personal",
         threshold=1,
         base_dir=tmp_path,
     )
-    try:
-        set_offload_store(store)
-        block = asyncio.run(
-            processor._serialize_tool_result(
-                {"messages": [{"body": "private body " * 100}]},
-                "call-4",
-                "gmail_search",
-            )
+    processor = ToolCallProcessor(
+        executor=MagicMock(),
+        op_logger=MagicMock(),
+        error_recovery=MagicMock(),
+        offload_store=store,
+    )
+    block = asyncio.run(
+        processor._serialize_tool_result(
+            {"messages": [{"body": "private body " * 100}]},
+            "call-4",
+            "gmail_search",
         )
-    finally:
-        set_offload_store(previous)
+    )
 
     assert "private body" in block["content"]
     assert "_offloaded" not in block["content"]

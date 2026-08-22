@@ -57,6 +57,11 @@ functional change.
 
 ### Fixed
 
+- **Runtime-owned scheduling keeps both dispatch directions live.** Calendar
+  pull now creates only future, executable one-shot jobs, while legacy
+  zero-argument serve builders attach daemon dispatch without losing due work
+  from an already-running scheduler.
+
 - **Slash trajectories retain control correlation without hijacking cognitive
   verification.** Non-model goal and plan mutations receive turn identities,
   tool-driven state edges retain call IDs, and active `/grill` or `/geo`
@@ -132,6 +137,13 @@ functional change.
   TaskGraph and immutable runtime ToolPlan are unchanged.
 
 ### Architecture
+
+- **Runtime services now have explicit lifecycle owners.** The former flat
+  `RuntimeCoreConfig` is split into six cohesive groups of at most seven fields,
+  and eleven ambient service-locator `ContextVar` bindings are replaced by
+  constructor, composition-root, and `ToolContext` injection. The remaining 24
+  ContextVars are limited to request identity, diagnostics, request-local state,
+  and one cache.
 
 - **Ambient state now has a generated lifecycle inventory.** Every module/class-
   scoped `ContextVar`, including `ContextLocal`-backed bindings, is classified

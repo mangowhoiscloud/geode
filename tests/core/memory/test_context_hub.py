@@ -111,8 +111,7 @@ class TestUserContextSystemPrompt:
         )
         profile = FileBasedUserProfile(global_dir=global_dir, project_dir=project_dir)
 
-        with patch("core.tools.profile_tools.get_user_profile", return_value=profile):
-            result = _build_user_context()
+        result = _build_user_context(profile)
 
         assert "<user_context>" in result
         assert "Project Operator" in result
@@ -121,8 +120,7 @@ class TestUserContextSystemPrompt:
     def test_build_user_context_without_wired_profile(self) -> None:
         from core.agent.system_prompt import _build_user_context
 
-        with patch("core.tools.profile_tools.get_user_profile", return_value=None):
-            result = _build_user_context()
+        result = _build_user_context()
         assert result == ""
 
 

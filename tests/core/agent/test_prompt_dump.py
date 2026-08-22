@@ -36,17 +36,11 @@ def test_assembled_prompt_matches_loop_composition_contract() -> None:
 
 
 def test_assembled_prompt_binds_configured_profile_when_missing(monkeypatch) -> None:
-    from core.tools.profile_tools import set_user_profile
-
     profile = MagicMock()
     profile.get_context_summary.return_value = "User: Project Operator"
     profile.get_career_summary.return_value = "ML Engineer"
     monkeypatch.setattr("core.memory.user_profile.FileBasedUserProfile", lambda **_kwargs: profile)
-    set_user_profile(None)
-    try:
-        prompt = assemble_full_prompt("claude-opus-4-8", "cli")
-    finally:
-        set_user_profile(None)
+    prompt = assemble_full_prompt("claude-opus-4-8", "cli")
 
     assert "User: Project Operator" in prompt
     assert "Career: ML Engineer" in prompt

@@ -15,7 +15,6 @@ log = logging.getLogger(__name__)
 
 def _load_mcp_manager_for_plugin(
     plugin_name: str,
-    setter_fn: Any,
 ) -> Any | None:
     """Load MCP manager config, or mark plugin unavailable and return None."""
     from core.mcp.manager import get_mcp_manager
@@ -27,25 +26,23 @@ def _load_mcp_manager_for_plugin(
     except Exception as exc:
         _plugin_status[plugin_name] = "unavailable"
         log.warning("Plugin %s: MCP manager failed (%s)", plugin_name, exc)
-        setter_fn(None)
         return None
 
 
-def build_notification_adapter() -> None:
-    """Build and inject CompositeNotificationAdapter with MCP-backed channels.
+def build_notification_adapter() -> Any | None:
+    """Build a CompositeNotificationAdapter with MCP-backed channels.
 
     Chains Slack + Discord + Telegram adapters. If no messaging MCP servers
     are available, notification tools fall back to stub responses.
     """
     from core.mcp.composite_notification import CompositeNotificationAdapter
     from core.mcp.discord_adapter import DiscordNotificationAdapter
-    from core.mcp.notification_port import set_notification
     from core.mcp.slack_adapter import SlackNotificationAdapter
     from core.mcp.telegram_adapter import TelegramNotificationAdapter
 
-    manager = _load_mcp_manager_for_plugin("notification_adapter", set_notification)
+    manager = _load_mcp_manager_for_plugin("notification_adapter")
     if manager is None:
-        return
+        return None
 
     adapters = [
         # Slack posts directly to the Web API (PR-SLACK-TRANSPORT);
@@ -56,24 +53,23 @@ def build_notification_adapter() -> None:
     ]
     composite = CompositeNotificationAdapter(adapters)  # type: ignore[arg-type]
     log.info("Notification adapter wired: channels=%s", composite.list_channels())
-    set_notification(composite)
+    return composite
 
 
-def build_calendar_adapter() -> None:
-    """Build and inject direct Google OAuth plus MCP-backed calendar sources.
+def build_calendar_adapter() -> Any:
+    """Build direct Google OAuth plus MCP-backed calendar sources.
 
     The direct Google adapter is always present and discovers credentials at
     call time, so /login google takes effect without restarting the daemon.
     Google/Apple MCP adapters remain available as compatibility fallbacks.
     """
     from core.mcp.apple_calendar_adapter import AppleCalendarAdapter
-    from core.mcp.calendar_port import set_calendar
     from core.mcp.composite_calendar import CompositeCalendarAdapter
     from core.mcp.google_calendar_adapter import GoogleCalendarAdapter
     from core.mcp.google_workspace_calendar import GoogleWorkspaceCalendarAdapter
 
     adapters: list[Any] = [GoogleWorkspaceCalendarAdapter()]
-    manager = _load_mcp_manager_for_plugin("calendar_adapter", set_calendar)
+    manager = _load_mcp_manager_for_plugin("calendar_adapter")
     if manager is not None:
         adapters.extend(
             [
@@ -83,7 +79,7 @@ def build_calendar_adapter() -> None:
         )
     composite = CompositeCalendarAdapter(adapters)
     log.info("Calendar adapter wired; availability will be checked at call time")
-    set_calendar(composite)
+    return composite
 
 
 _POLLER_REGISTRY: dict[str, str] = {
@@ -175,7 +171,7 @@ def _load_gateway_config() -> tuple[dict[str, Any], list[str]]:
     return ({"gateway": merged_gateway} if merged_gateway else {}), sources
 
 
-def build_gateway() -> None:
+def build_gateway(*, notification: Any = None) -> None:
     """Build the channel manager and optional external-channel pollers.
 
     Reads ``[gateway] pollers`` from ``.geode/config.toml`` to determine
@@ -184,7 +180,6 @@ def build_gateway() -> None:
     disabled, an empty manager still backs the local CLI IPC daemon.
     """
     from core.config import settings
-    from core.mcp.notification_port import get_notification
     from core.messaging.binding import ChannelManager, set_gateway
 
     if not settings.gateway_enabled:
@@ -213,7 +208,6 @@ def build_gateway() -> None:
         bot_user_id = _resolve_slack_bot_user_id()
 
     manager = ChannelManager(lane_queue=lane_queue, bot_user_id=bot_user_id)
-    notification = get_notification()
     poll_interval = settings.gateway_poll_interval_s
 
     # Load config from TOML — root-level SoT (PR-SLACK-TRANSPORT).
@@ -301,20 +295,9 @@ def build_gateway() -> None:
     )
 
 
-def build_plugins() -> None:
-    """Wire all MCP plugin adapters: notification, calendar, gateway."""
-    build_notification_adapter()
-    build_calendar_adapter()
-    build_gateway()
-    try:
-        from core.mcp.calendar_port import get_calendar
-        from core.scheduler.calendar_bridge import set_calendar_bridge
-
-        cal = get_calendar()
-        if cal is None:
-            set_calendar_bridge(None)
-        else:
-            log.debug("Calendar adapter available — bridge will wire in REPL")
-    except Exception as exc:
-        _plugin_status["calendar_bridge"] = "error"
-        log.warning("Plugin calendar_bridge: setup failed (%s)", exc)
+def build_plugins() -> tuple[Any | None, Any]:
+    """Build plugin adapters and return the owned notification/calendar pair."""
+    notification = build_notification_adapter()
+    calendar = build_calendar_adapter()
+    build_gateway(notification=notification)
+    return notification, calendar

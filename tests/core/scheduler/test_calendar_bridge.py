@@ -11,11 +11,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from core.mcp.calendar_port import CalendarEvent
-from core.scheduler.calendar_bridge import (
-    CalendarSchedulerBridge,
-    get_calendar_bridge,
-    set_calendar_bridge,
-)
+from core.scheduler import SchedulerService
+from core.scheduler.calendar_bridge import CalendarSchedulerBridge
 
 NOW = datetime(2026, 3, 18, 14, 0, 0, tzinfo=UTC)
 
@@ -62,16 +59,19 @@ def bridge(mock_scheduler: MagicMock, mock_calendar: MagicMock) -> CalendarSched
 
 
 # ---------------------------------------------------------------------------
-# contextvars
+# Explicit dependencies
 # ---------------------------------------------------------------------------
 
 
-class TestBridgeContextvar:
-    def test_set_get_round_trip(self, bridge: CalendarSchedulerBridge):
-        set_calendar_bridge(bridge)
-        assert get_calendar_bridge() is bridge
-        set_calendar_bridge(None)
-        assert get_calendar_bridge() is None
+class TestBridgeDependencies:
+    def test_preserves_injected_services(
+        self,
+        bridge: CalendarSchedulerBridge,
+        mock_scheduler: MagicMock,
+        mock_calendar: MagicMock,
+    ):
+        assert bridge._scheduler is mock_scheduler
+        assert bridge._calendar is mock_calendar
 
 
 # ---------------------------------------------------------------------------
@@ -124,18 +124,55 @@ class TestPushToCalendar:
 
 
 class TestPullFromCalendar:
-    def test_pull_creates_job(self, bridge: CalendarSchedulerBridge, mock_calendar: MagicMock):
+    def test_pull_creates_job(self, mock_calendar: MagicMock, tmp_path):
+        start = datetime.now(UTC) + timedelta(days=3)
         mock_calendar.alist_events.return_value = [
             CalendarEvent(
                 event_id="cal_1",
                 title="[GEODE] weekly-report",
-                start=NOW + timedelta(days=3),
-                end=NOW + timedelta(days=3, hours=1),
+                start=start,
+                end=start + timedelta(hours=1),
                 is_geode=True,
             )
         ]
+        scheduler = SchedulerService(
+            store_path=tmp_path / "jobs.json",
+            log_dir=tmp_path / "logs",
+        )
+        bridge = CalendarSchedulerBridge(scheduler, mock_calendar)
         result = asyncio.run(bridge.sync(direction="pull"))
         assert result["pulled"] == 1
+        assert result["errors"] == []
+        [job] = scheduler.list_jobs()
+        assert job.name == "weekly-report"
+        assert job.action == "weekly-report"
+        assert job.schedule.kind.value == "at"
+        assert job.next_run_at_ms is not None
+        assert job.metadata == {"source": "calendar", "event_id": "cal_1"}
+
+    def test_pull_skips_events_that_can_no_longer_fire(
+        self, mock_calendar: MagicMock, tmp_path
+    ) -> None:
+        mock_calendar.alist_events.return_value = [
+            CalendarEvent(
+                event_id="cal_past",
+                title="[GEODE] stale-action",
+                start=datetime.now(UTC) - timedelta(minutes=1),
+                end=datetime.now(UTC) + timedelta(minutes=29),
+                is_geode=True,
+            )
+        ]
+        scheduler = SchedulerService(
+            store_path=tmp_path / "jobs.json",
+            log_dir=tmp_path / "logs",
+        )
+
+        result = asyncio.run(
+            CalendarSchedulerBridge(scheduler, mock_calendar).sync(direction="pull")
+        )
+
+        assert result["pulled"] == 0
+        assert scheduler.list_jobs() == []
 
     def test_pull_skips_non_geode(self, bridge: CalendarSchedulerBridge, mock_calendar: MagicMock):
         mock_calendar.alist_events.return_value = [

@@ -295,6 +295,7 @@ async def apublish_clarification_ask(
     allowed_tools: list[str] | None = None,
     time_budget_s: float | None = None,
     store: PendingAskStore | None = None,
+    notification: Any = None,
 ) -> PendingAsk | None:
     """Persist a pending ask and best-effort notify the operator.
 
@@ -317,9 +318,8 @@ async def apublish_clarification_ask(
 
     try:
         from core.config import settings
-        from core.mcp.notification_port import get_notification
 
-        adapter = get_notification()
+        adapter = notification
         if adapter is None:
             log.info(
                 "Pending ask %s persisted; no notification adapter configured "

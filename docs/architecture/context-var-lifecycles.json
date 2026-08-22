@@ -71,14 +71,6 @@
     "lifetime": "one CLI or daemon task context",
     "teardown": "the owning task context is discarded"
   },
-  "core/cli/session_state.py:_scheduler_service_ctx": {
-    "classification": "service_locator",
-    "owner": "core.cli.typer_serve.run_serve",
-    "setter": "core.cli.typer_serve.run_serve and core.server.ipc_server.poller",
-    "resetter": "none; remove through R4.2 constructor injection",
-    "lifetime": "daemon process and copied IPC task contexts",
-    "teardown": "run_serve stops its scheduler but leaves the binding"
-  },
   "core/cli/session_state.py:_user_task_graph_ctx": {
     "classification": "request_local_mutable_state",
     "owner": "core.cli.session_state",
@@ -86,22 +78,6 @@
     "resetter": "none in production; core.cli.session_state._reset_user_task_graph is test-only",
     "lifetime": "the long-lived caller task or process",
     "teardown": "there is no production reset; task or process exit discards the context"
-  },
-  "core/cli/session_state.py:_current_loop_ctx": {
-    "classification": "service_locator",
-    "owner": "core.server.supervised.services.SharedServices",
-    "setter": "core.cli.session_state.set_current_loop",
-    "resetter": "none; remove through R4.2 narrow service injection",
-    "lifetime": "the caller task; gateway pollers reuse one task and overwrite the binding between sessions",
-    "teardown": "there is no reset; the last loop remains bound until overwrite or caller-task exit"
-  },
-  "core/hooks/tool_hooks.py:_tool_hooks_ctx": {
-    "classification": "service_locator",
-    "owner": "core.wiring.bootstrap and propagated daemon/session tasks",
-    "setter": "core.hooks.tool_hooks.set_tool_hooks via bootstrap and GeodeBootstrap.propagate_to_thread",
-    "resetter": "core.hooks.tool_hooks.clear_tool_hooks for the owner context; propagated contexts end with their task/thread",
-    "lifetime": "the runtime bootstrap context plus each propagated daemon/session task context",
-    "teardown": "HookSystem owner cleanup clears the matching owner-context binding; propagated bindings disappear when their task/thread context is discarded"
   },
   "core/llm/adapters/dispatch.py:_session_adapter_usage_ctx": {
     "classification": "diagnostic_scope",
@@ -127,22 +103,6 @@
     "lifetime": "one CLI or agent session context",
     "teardown": "session reset clears counters; task exit discards the context"
   },
-  "core/mcp/calendar_port.py:_calendar_ctx": {
-    "classification": "service_locator",
-    "owner": "core.wiring.adapters",
-    "setter": "core.mcp.calendar_port.set_calendar",
-    "resetter": "core.mcp.calendar_port.set_calendar(None)",
-    "lifetime": "runtime process and copied request contexts",
-    "teardown": "no production clear; remove through R4.2 port injection"
-  },
-  "core/mcp/notification_port.py:_notification_ctx": {
-    "classification": "service_locator",
-    "owner": "core.wiring.adapters",
-    "setter": "core.mcp.notification_port.set_notification",
-    "resetter": "core.wiring.adapters sets None when plugin configuration fails",
-    "lifetime": "runtime process and copied request contexts",
-    "teardown": "plugin failure clears it; otherwise process exit discards the fallback"
-  },
   "core/observability/run_dir.py:_active_run_dir": {
     "classification": "diagnostic_scope",
     "owner": "geode_product.seed_generation and core.agent.worker",
@@ -167,14 +127,6 @@
     "lifetime": "one AgenticLoop session task",
     "teardown": "session task exit discards the context; tests and owners may clear explicitly"
   },
-  "core/orchestration/tool_offload.py:_offload_store_ctx": {
-    "classification": "service_locator",
-    "owner": "core.wiring.bootstrap.build_tool_offload",
-    "setter": "core.orchestration.tool_offload.set_offload_store",
-    "resetter": "none in production; remove through R4.2 execution-service injection",
-    "lifetime": "the runtime or shared-service bootstrap context, shared across later sessions where inherited",
-    "teardown": "SESSION_ENDED deletes files but not the binding; gateway and IPC poller contexts do not inherit it"
-  },
   "core/runtime_audit.py:_runtime_audit_active": {
     "classification": "request_local_mutable_state",
     "owner": "geode_product.petri_audit.audit_mode",
@@ -183,38 +135,6 @@
     "lifetime": "Petri runner task until rebind or task teardown",
     "teardown": "the owning task context is discarded"
   },
-  "core/tools/memory_tools.py:_default_session_store_ctx": {
-    "classification": "service_locator",
-    "owner": "core.wiring.bootstrap.build_memory",
-    "setter": "core.tools.memory_tools.set_default_session_store",
-    "resetter": "none; remove through R4.2 persistence-service injection",
-    "lifetime": "runtime process and copied request contexts",
-    "teardown": "runtime closes the store owner but leaves the binding"
-  },
-  "core/tools/memory_tools.py:_project_memory_ctx": {
-    "classification": "service_locator",
-    "owner": "core.wiring.bootstrap.build_memory",
-    "setter": "core.tools.memory_tools.set_project_memory",
-    "resetter": "core.tools.memory_tools.set_project_memory(None)",
-    "lifetime": "runtime process and copied request contexts",
-    "teardown": "no production clear; remove through R4.2 persistence-service injection"
-  },
-  "core/tools/memory_tools.py:_org_memory_ctx": {
-    "classification": "service_locator",
-    "owner": "core.wiring.bootstrap.build_memory",
-    "setter": "core.tools.memory_tools.set_org_memory",
-    "resetter": "core.tools.memory_tools.set_org_memory(None)",
-    "lifetime": "runtime process and copied request contexts",
-    "teardown": "no production clear; remove through R4.2 persistence-service injection"
-  },
-  "core/tools/memory_tools.py:_hooks_ctx": {
-    "classification": "service_locator",
-    "owner": "core.wiring.bootstrap.build_memory",
-    "setter": "core.tools.memory_tools.set_memory_hooks",
-    "resetter": "core.tools.memory_tools.clear_memory_hooks",
-    "lifetime": "one runtime bootstrap context",
-    "teardown": "HookSystem owner cleanup clears the matching binding"
-  },
   "core/tools/personal_data.py:_safety_policies": {
     "classification": "cache",
     "owner": "core.agent.loop",
@@ -222,14 +142,6 @@
     "resetter": "core.tools.personal_data.set_bound_tool_data_policies(None)",
     "lifetime": "one bound AgenticLoop task",
     "teardown": "the task context is discarded after the session"
-  },
-  "core/tools/profile_tools.py:_user_profile_ctx": {
-    "classification": "service_locator",
-    "owner": "core.wiring.bootstrap.ensure_user_profile",
-    "setter": "core.tools.profile_tools.set_user_profile",
-    "resetter": "core.tools.profile_tools.set_user_profile(None)",
-    "lifetime": "runtime process and copied request contexts",
-    "teardown": "no production clear; remove through R4.2 persistence-service injection"
   },
   "core/ui/agentic_ui/_state.py:_ipc_writer_local": {
     "classification": "request_local_mutable_state",

@@ -102,9 +102,8 @@ def _build_plan_handlers() -> UniqueEntries[str, Any]:
                     revision = updated.revision
                     done = updated.done
                     if advanced:
-                        from core.cli.session_state import get_current_loop
-
-                        runtime_loop = get_current_loop()
+                        context = kwargs.get("_tool_context")
+                        runtime_loop = getattr(context, "agent_loop", None)
                         save_checkpoint = getattr(runtime_loop, "_save_checkpoint", None)
                         if runtime_loop is not None and (
                             not callable(save_checkpoint)

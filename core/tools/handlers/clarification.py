@@ -36,7 +36,7 @@ def _clarify(
 
 
 async def _safe_delegate(
-    tool_class: type,
+    tool_class: Any,
     kwargs: dict[str, Any],
     *,
     context: ToolContext | None = None,
@@ -56,11 +56,12 @@ async def _safe_delegate(
     with shared SDK clients to poison httpx connection pools (instant
     APIConnectionError / eternal hang; see core/llm/loop_affinity.py).
     """
+    name = getattr(tool_class, "__name__", type(tool_class).__name__)
     try:
-        tool = tool_class()
+        tool = tool_class() if isinstance(tool_class, type) else tool_class
         aexecute = getattr(tool, "aexecute", None)
         if not callable(aexecute):
-            raise TypeError(f"{tool_class.__name__} must implement aexecute()")
+            raise TypeError(f"{name} must implement aexecute()")
         if context is not None:
             kwargs["_tool_context"] = context
         result: dict[str, Any] = await aexecute(**kwargs)
@@ -68,7 +69,7 @@ async def _safe_delegate(
     except (KeyError, TypeError) as exc:
         param = str(exc).strip("'\"")
         return _clarify(
-            tool_class.__name__,
+            name,
             [param],
             f"'{param}' 값을 알려주세요.",
         )

@@ -152,14 +152,13 @@ class TestAutoLearnHandler:
         return profile
 
     def test_saves_pattern_on_match(self):
-        _, handler = make_auto_learn_handler()
         mock_profile = self._make_mock_profile()
+        _, handler = make_auto_learn_handler(lambda: mock_profile)
 
-        with patch("core.tools.profile_tools.get_user_profile", return_value=mock_profile):
-            handler(
-                HookEvent.TURN_COMPLETED,
-                {"user_input": "I am a game designer at Nexon", "tool_calls": []},
-            )
+        handler(
+            HookEvent.TURN_COMPLETED,
+            {"user_input": "I am a game designer at Nexon", "tool_calls": []},
+        )
 
         mock_profile.add_learned_pattern.assert_called_once()
         args = mock_profile.add_learned_pattern.call_args
@@ -169,38 +168,31 @@ class TestAutoLearnHandler:
     def test_no_profile_is_noop(self):
         _, handler = make_auto_learn_handler()
 
-        with patch("core.tools.profile_tools.get_user_profile", return_value=None):
-            # Should not raise
-            handler(
-                HookEvent.TURN_COMPLETED,
-                {"user_input": "I am a game designer at Nexon", "tool_calls": []},
-            )
+        handler(
+            HookEvent.TURN_COMPLETED,
+            {"user_input": "I am a game designer at Nexon", "tool_calls": []},
+        )
 
     def test_cooldown_prevents_rapid_fire(self):
-        _, handler = make_auto_learn_handler()
         mock_profile = self._make_mock_profile()
+        _, handler = make_auto_learn_handler(lambda: mock_profile)
 
-        with patch("core.tools.profile_tools.get_user_profile", return_value=mock_profile):
-            handler(
-                HookEvent.TURN_COMPLETED,
-                {"user_input": "I am a game designer at Nexon", "tool_calls": []},
-            )
-            # Second call within cooldown — should be suppressed
-            handler(
-                HookEvent.TURN_COMPLETED,
-                {"user_input": "I prefer concise answers always", "tool_calls": []},
-            )
+        handler(
+            HookEvent.TURN_COMPLETED,
+            {"user_input": "I am a game designer at Nexon", "tool_calls": []},
+        )
+        handler(
+            HookEvent.TURN_COMPLETED,
+            {"user_input": "I prefer concise answers always", "tool_calls": []},
+        )
 
         assert mock_profile.add_learned_pattern.call_count == 1
 
     def test_session_cap(self):
-        _, handler = make_auto_learn_handler()
         mock_profile = self._make_mock_profile()
+        _, handler = make_auto_learn_handler(lambda: mock_profile)
 
-        with (
-            patch("core.tools.profile_tools.get_user_profile", return_value=mock_profile),
-            patch("core.hooks.auto_learn._COOLDOWN_S", 0),  # disable cooldown for this test
-        ):
+        with patch("core.hooks.auto_learn._COOLDOWN_S", 0):
             for i in range(_MAX_PER_SESSION + 5):
                 handler(
                     HookEvent.TURN_COMPLETED,
@@ -211,14 +203,11 @@ class TestAutoLearnHandler:
 
     def test_dedup_not_counted(self):
         """Dedup (add_learned_pattern returns False) doesn't increment session count."""
-        _, handler = make_auto_learn_handler()
         mock_profile = self._make_mock_profile()
         mock_profile.add_learned_pattern.return_value = False  # dedup
+        _, handler = make_auto_learn_handler(lambda: mock_profile)
 
-        with (
-            patch("core.tools.profile_tools.get_user_profile", return_value=mock_profile),
-            patch("core.hooks.auto_learn._COOLDOWN_S", 0),
-        ):
+        with patch("core.hooks.auto_learn._COOLDOWN_S", 0):
             handler(
                 HookEvent.TURN_COMPLETED,
                 {"user_input": "I am a game designer at Nexon", "tool_calls": []},
@@ -232,16 +221,14 @@ class TestAutoLearnHandler:
         assert mock_profile.add_learned_pattern.call_count == 2
 
     def test_exception_in_profile_is_swallowed(self):
-        _, handler = make_auto_learn_handler()
         mock_profile = self._make_mock_profile()
         mock_profile.add_learned_pattern.side_effect = OSError("disk full")
+        _, handler = make_auto_learn_handler(lambda: mock_profile)
 
-        with patch("core.tools.profile_tools.get_user_profile", return_value=mock_profile):
-            # Should not raise
-            handler(
-                HookEvent.TURN_COMPLETED,
-                {"user_input": "I am a game designer at Nexon", "tool_calls": []},
-            )
+        handler(
+            HookEvent.TURN_COMPLETED,
+            {"user_input": "I am a game designer at Nexon", "tool_calls": []},
+        )
 
 
 class TestHookRegistration:

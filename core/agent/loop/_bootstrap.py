@@ -36,6 +36,7 @@ class AgenticLoopConfig:
     response_schema: dict[str, Any] | None = None
     allow_actionable_partial_on_empty: bool = False
     yield_after_tool_round: bool = False
+    user_profile: Any = None
 
 
 def initialize_runtime(
@@ -184,6 +185,8 @@ def initialize_runtime(
         provider=getattr(loop._new_adapter, "provider", loop._provider),
         source=getattr(loop._new_adapter, "source", loop._source),
         adapter_name=getattr(loop._new_adapter, "name", ""),
+        agent_loop=loop,
+        offload_store=getattr(tool_executor, "_offload_store", None),
     )
     loop._consecutive_llm_failures = 0
     loop._LLM_RETRY_CAP = 5

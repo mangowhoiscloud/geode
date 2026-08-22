@@ -468,7 +468,6 @@ class CLIPoller:
         _executor, agent_loop = self._services.create_session(
             SessionMode.IPC,
             conversation=conversation,
-            propagate_context=True,
             approval_callback=_ipc_approval,
         )
 
@@ -723,7 +722,11 @@ class CLIPoller:
             raise ValueError(f"Invalid slash handler path: {spec.handler_path!r}")
         prompt_builder = getattr(importlib.import_module(module_name), attr_name)
         return await self._run_prompt_streaming_async(
-            lambda: prompt_builder(args, skill_registry=self._services.skill_registry),
+            lambda: prompt_builder(
+                args,
+                skill_registry=self._services.skill_registry,
+                agentic_ref=loop,
+            ),
             loop,
             client,
             suppress_public_verify=spec.name in {"/grill", "/geo"},
@@ -981,6 +984,8 @@ class CLIPoller:
                     skill_registry=self._services.skill_registry,
                     mcp_manager=self._services.mcp_manager,
                     command_registry=self._services.command_registry,
+                    scheduler_service=self._scheduler_service,
+                    agentic_ref=loop,
                 )
             # /model writes config.toml + the daemon's Settings singleton but
             # cmd_model does NOT touch the live session's AgenticLoop — its
@@ -1169,24 +1174,12 @@ class CLIPoller:
             return await asyncio.to_thread(self._handle_resume, resolved, loop, conversation)
 
     def _propagate_contextvars(self) -> None:
-        """Set ContextVars needed by slash command handlers in this thread.
-
-        Python ContextVars do NOT inherit across threads. The CLI poller
-        thread must explicitly set readiness, scheduler_service, memory, and
-        profile so that ``_handle_command()`` works correctly.
-        """
+        """Set request-local CLI readiness in this thread."""
         try:
             from core.cli import _set_readiness
-            from core.cli.session_state import _scheduler_service_ctx
             from core.wiring.startup import check_readiness
 
             _set_readiness(check_readiness())
 
-            if self._scheduler_service is not None:
-                _scheduler_service_ctx.set(self._scheduler_service)
-
-            # Memory and profile — delegated to SharedServices helper
-            if hasattr(self._services, "_propagate_contextvars"):
-                self._services._propagate_contextvars()
         except Exception:
             log.debug("ContextVar propagation skipped", exc_info=True)
