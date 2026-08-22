@@ -16,11 +16,11 @@ export default function Page() {
           <>
             <p>
               GEODE를 돌리려면 프로바이더 자격이 하나 필요합니다. 이 페이지는
-              네 가지 자격 경로를 비교하고, 본인 상황에 맞는 가장 빠른 길을
+              세 가지 자격 경로를 비교하고, 본인 상황에 맞는 가장 빠른 길을
               안내합니다.
             </p>
 
-            <h2>네 가지 경로</h2>
+            <h2>세 가지 경로</h2>
             <table>
               <thead>
                 <tr><th>경로</th><th>자격</th><th>등록 방법</th><th>적합한 상황</th></tr>
@@ -33,19 +33,13 @@ export default function Page() {
                   <td>이미 ChatGPT를 결제 중이고 API 키를 따로 만들기 싫을 때. <code>gpt-5.5</code>는 이 경로로만 라우팅됩니다.</td>
                 </tr>
                 <tr>
-                  <td>2. Anthropic 구독 OAuth</td>
-                  <td>Claude 구독 (claude CLI 자격)</td>
-                  <td>공식 CLI에서 <code>claude /login</code> 후 <code>/login anthropic</code>으로 레거시 경로를 선택합니다.</td>
-                  <td>정책 경고를 확인하고 Claude 구독 호환 경로를 직접 선택할 때. Anthropic은 오픈소스에도 API 키를 권장합니다.</td>
-                </tr>
-                <tr>
-                  <td>3. PAYG API 키</td>
+                  <td>2. PAYG API 키</td>
                   <td><code>ANTHROPIC_API_KEY</code>, <code>OPENAI_API_KEY</code>, <code>ZAI_API_KEY</code></td>
                   <td><code>~/.geode/.env</code>에 키만 적습니다. <code>geode setup</code> 또는 <code>/login add</code>가 대신 적어줍니다.</td>
                   <td>토큰 단위로 비용을 직접 통제하고 싶을 때. 팀 계정과 CI에도 맞습니다.</td>
                 </tr>
                 <tr>
-                  <td>4. 저비용 GLM 경로</td>
+                  <td>3. 저비용 GLM 경로</td>
                   <td><code>ZAI_API_KEY</code> (GLM)</td>
                   <td>같은 방식으로 <code>~/.geode/.env</code>에 등록합니다.</td>
                   <td>거의 무료로 먼저 체험할 때. <code>glm-4.7-flash</code>는 한시 무료 티어입니다.</td>
@@ -67,10 +61,6 @@ export default function Page() {
                 <tr>
                   <td>이미 ChatGPT Plus를 결제 중입니다</td>
                   <td><code>geode setup</code>. <code>~/.codex/auth.json</code>이 있으면 API 키를 묻기 전에 먼저 잡습니다.</td>
-                </tr>
-                <tr>
-                  <td>Claude 구독으로 쓰고 싶습니다</td>
-                  <td>공식 CLI에서 <code>claude /login</code> 후 <code>geode</code> 안에서 <code>/login anthropic</code>을 실행합니다.</td>
                 </tr>
                 <tr>
                   <td>API 키로 비용을 직접 통제하고 싶습니다</td>
@@ -103,7 +93,7 @@ export default function Page() {
               <tbody>
                 <tr><td><code>auto</code></td><td>기본값. OAuth를 먼저 시도하고, PAYG 전환은 설정으로 게이트됩니다.</td></tr>
                 <tr><td><code>api_key</code></td><td>PAYG API 키만 사용합니다.</td></tr>
-                <tr><td><code>claude-cli</code></td><td>claude CLI의 Anthropic 구독 OAuth를 사용합니다.</td></tr>
+                <tr><td><code>claude-cli</code></td><td>퇴역한 Anthropic 입력입니다. migration 오류만 내며 실행되지 않습니다.</td></tr>
                 <tr><td><code>openai-codex</code></td><td>프로세스 내부 <code>codex-oauth</code> 어댑터로 ChatGPT 구독 OAuth를 사용합니다.</td></tr>
               </tbody>
             </table>
@@ -114,7 +104,7 @@ geode                    # 대화 시작
 
 > /login                 # 자격 대시보드
 > /login openai          # ChatGPT 구독 OAuth 로그인
-> /login anthropic       # Claude 구독 OAuth 로그인
+> /login anthropic       # Anthropic API 키 등록
 > /login source openai api_key   # OpenAI를 키 경로로 고정
 
 geode about              # 실효 모델 + 자격 상태 확인`}</pre>
@@ -160,11 +150,11 @@ geode about              # 실효 모델 + 자격 상태 확인`}</pre>
           <>
             <p>
               GEODE needs one provider credential to run. This page compares the
-              four credential paths and points you to the fastest one for your
+              three credential paths and points you to the fastest one for your
               situation.
             </p>
 
-            <h2>The four paths</h2>
+            <h2>The three paths</h2>
             <table>
               <thead>
                 <tr><th>Path</th><th>Credential</th><th>How to register</th><th>When it fits</th></tr>
@@ -177,19 +167,13 @@ geode about              # 실효 모델 + 자격 상태 확인`}</pre>
                   <td>You already pay for ChatGPT and do not want a separate API key. <code>gpt-5.5</code> routes only through this lane.</td>
                 </tr>
                 <tr>
-                  <td>2. Anthropic subscription OAuth</td>
-                  <td>Claude subscription (claude CLI credential)</td>
-                  <td>Run <code>claude /login</code> in the official CLI, then select the legacy route with <code>/login anthropic</code>.</td>
-                  <td>You explicitly accept the policy warning for Claude subscription compatibility. Anthropic recommends API keys even for open-source tools.</td>
-                </tr>
-                <tr>
-                  <td>3. PAYG API keys</td>
+                  <td>2. PAYG API keys</td>
                   <td><code>ANTHROPIC_API_KEY</code>, <code>OPENAI_API_KEY</code>, <code>ZAI_API_KEY</code></td>
                   <td>Keys go in <code>~/.geode/.env</code>, written for you by <code>geode setup</code> or <code>/login add</code>.</td>
                   <td>You want per-token cost control. Also the right fit for team accounts and CI.</td>
                 </tr>
                 <tr>
-                  <td>4. Budget GLM lane</td>
+                  <td>3. Budget GLM lane</td>
                   <td><code>ZAI_API_KEY</code> (GLM)</td>
                   <td>Same mechanism, a key in <code>~/.geode/.env</code>.</td>
                   <td>Trying GEODE at near-zero cost. <code>glm-4.7-flash</code> is a limited-time free tier.</td>
@@ -212,10 +196,6 @@ geode about              # 실효 모델 + 자격 상태 확인`}</pre>
                 <tr>
                   <td>I already pay for ChatGPT Plus</td>
                   <td>Run <code>geode setup</code>. It detects <code>~/.codex/auth.json</code> before asking for API keys.</td>
-                </tr>
-                <tr>
-                  <td>I want to use my Claude subscription</td>
-                  <td>Run <code>claude /login</code> in the official CLI, then <code>/login anthropic</code> inside <code>geode</code>.</td>
                 </tr>
                 <tr>
                   <td>I want per-token cost control with API keys</td>
@@ -248,7 +228,7 @@ geode about              # 실효 모델 + 자격 상태 확인`}</pre>
               <tbody>
                 <tr><td><code>auto</code></td><td>Default. Tries OAuth first; falling through to PAYG is gated by configuration.</td></tr>
                 <tr><td><code>api_key</code></td><td>PAYG API key only.</td></tr>
-                <tr><td><code>claude-cli</code></td><td>Anthropic subscription OAuth via the claude CLI.</td></tr>
+                <tr><td><code>claude-cli</code></td><td>Retired Anthropic input. It emits a migration error and never executes.</td></tr>
                 <tr><td><code>openai-codex</code></td><td>ChatGPT subscription OAuth through the in-process <code>codex-oauth</code> adapter.</td></tr>
               </tbody>
             </table>
@@ -259,7 +239,7 @@ geode                    # start chatting
 
 > /login                 # credentials dashboard
 > /login openai          # ChatGPT subscription OAuth
-> /login anthropic       # Claude subscription OAuth
+> /login anthropic       # register an Anthropic API key
 > /login source openai api_key   # pin OpenAI to the key lane
 
 geode about              # effective model + credential state`}</pre>

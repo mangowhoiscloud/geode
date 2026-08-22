@@ -683,11 +683,8 @@ def run_audit(
     assert auditor is not None and judge is not None and target is not None  # narrowed
     # PR-PETRI-AUDIT-DEFAULT-OPUS-CREDS (2026-06-03) — an anthropic auditor/judge
     # with no per-role source override DEFAULTS to api_key (PAYG) instead of the
-    # OAuth cascade (operator: "default를 PAYG로 둬"). The anthropic OAuth route is
-    # claude-cli, which runs the model as Claude Code and REFUSES the adversarial
-    # auditor role (treats the injected sysprompt as data → 0 send_message →
-    # degenerate all-zero audit). api_key is the verified alignment-audit path
-    # (+ ANTHROPIC_API_KEY is injected into the subprocess below). openai/codex
+    # OAuth cascade (operator: "default를 PAYG로 둬"). api_key is the verified
+    # alignment-audit path (+ ANTHROPIC_API_KEY is injected into the subprocess below). openai/codex
     # roles keep their OAuth cascade (gpt-5.5 via codex subscription, $0). An
     # explicit operator source override always wins (resolved above).
     if auditor_source is None and auditor.startswith("claude"):

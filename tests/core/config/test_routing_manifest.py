@@ -53,7 +53,6 @@ def _valid_dict() -> dict[str, Any]:
         },
         "credentials": {
             "patterns": {"^sk-ant-": "anthropic"},
-            "keychain": {"anthropic": "Claude Code-credentials"},
         },
     }
 
@@ -90,11 +89,6 @@ def test_default_manifest_routing_rules() -> None:
     assert manifest.routing.prefixes.get("claude-") == "anthropic"
     assert "gpt-5.5" in manifest.routing.codex_only_models
     assert manifest.routing.fallback_provider == "openai"
-
-
-def test_default_manifest_credentials_keychain() -> None:
-    manifest = load_routing_manifest()
-    assert manifest.credential_keychain.services.get("anthropic") == "Claude Code-credentials"
 
 
 def test_default_manifest_credentials_patterns() -> None:
@@ -228,17 +222,14 @@ def test_routing_rules_defaults() -> None:
 
 
 def test_user_override_merges_single_key(tmp_path: Path) -> None:
-    """A user TOML that only sets ``[credentials.keychain]`` overrides exactly
-    that section, leaving every other default intact."""
+    """A user TOML override changes one key and preserves the defaults."""
     override = tmp_path / "routing.toml"
     override.write_text(
-        '[credentials.keychain]\nopenai = "Codex-credentials"\n',
+        '[credentials.env_vars]\nopenai = "CUSTOM_OPENAI_API_KEY"\n',
         encoding="utf-8",
     )
     manifest = load_routing_manifest(user_path=override)
-    assert manifest.credential_keychain.services.get("openai") == "Codex-credentials"
-    # Shipped keychain entries preserved
-    assert manifest.credential_keychain.services.get("anthropic") == "Claude Code-credentials"
+    assert manifest.credential_env_vars.env_vars.get("openai") == "CUSTOM_OPENAI_API_KEY"
     # Other sections untouched
     assert manifest.defaults.anthropic == "claude-opus-4-8"
     assert manifest.defaults.openai == "gpt-5.5"

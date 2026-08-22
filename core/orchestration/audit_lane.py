@@ -27,26 +27,20 @@ Two stacked rationales:
    collides with a manual ``geode audit`` (operator-initiated), both
    would otherwise spawn ``inspect eval`` simultaneously. Even after
    FIX-1/2 caps inspect_ai's *per-process* burst to 1, two processes
-   running together = 2 inflight = potential 2x of Max OAuth's soft
-   limit on the host. Lane=1 keeps the host emitting at most one
-   audit's worth of API requests at a time.
-2. **Self-conflict with host Claude Code session**: the operator's
-   active Claude Code session (this conversation, REPL session, etc.)
-   shares the same Max OAuth token via the system keychain. Anthropic
-   rate-limits per-account-bucket, not per-process. By serialising the
-   audit's own subprocess, we leave headroom for whatever the operator
-   is actively doing in their host session.
+   running together = 2 inflight against the same provider account.
+   Lane=1 keeps the host emitting at most one audit's worth of API
+   requests at a time.
+2. **Predictable external load**: an audit can fan out many judge calls.
+   Serialising audit subprocesses preserves provider headroom for the
+   interactive runtime regardless of whether it uses API-key or Codex
+   subscription credentials.
 
 Multi-account future
 ====================
 
-When operator provisions a dedicated Anthropic account for audit
-(future AccountPool work), the audit subprocess routes through that
-account's API key — completely separate rate bucket from the host
-session. At that point ``max_concurrent`` can be raised (controlled by
-account-tier metadata) and this module's Lane becomes a hint rather
-than a hard bottleneck. The Lane shape is preserved; only its capacity
-moves.
+When an operator provisions a dedicated account for audit, its API key
+uses a separate rate bucket from the interactive runtime. At that point
+``max_concurrent`` can be raised from account-tier evidence.
 """
 
 from __future__ import annotations

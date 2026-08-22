@@ -212,14 +212,12 @@ def _read_role_from_self_improving_loop(role: str) -> RoleOverride:
     out: RoleOverride = {}
     if entry.model:
         out["model"] = entry.model
-    # PR-SIL-5THEME C6 (2026-05-23) — Pydantic 의 default 가 explicit 과
-    # 구분 불가하므로 known defaults ("auto", "claude-cli") 는 override
-    # output 에서 제거. operator 가 명시 설정한 explicit 만 surface — 기존
-    # 행동 (auto skip) 보존 + 새 default ("claude-cli") 도 동일 처리.
-    # explicit "claude-cli" 설정이 silent 되는 minor UX corner: operator 가
-    # default 와 같은 값을 명시 설정한 경우 → 효과 같음, 명시 사실만 감춰짐.
-    _KNOWN_DEFAULTS = ("auto", "claude-cli")
-    if entry.source and entry.source not in _KNOWN_DEFAULTS:
+    # Pydantic does not expose whether a default was explicit here. Skip active
+    # defaults; retain retired ``claude-cli`` so the resolver emits migration
+    # guidance instead of silently changing billing routes.
+    _KNOWN_DEFAULTS = ("auto", "api_key")
+    explicit_openai_source = role == "target" and getattr(cfg, "openai_source", None)
+    if entry.source and (entry.source not in _KNOWN_DEFAULTS or explicit_openai_source):
         out["source"] = entry.source
     return out
 

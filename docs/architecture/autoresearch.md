@@ -268,7 +268,7 @@ archive of the experiment trace.
 |---|---|
 | A mutation breaks GEODE syntax | The wrapper override JSON schema is simple (str→str dict). No syntax break. If the env var is wrong, the load in `core/agent/system_prompt.py` fails closed, so fitness is never silently contaminated by the default wrapper. |
 | Generation drift (cumulative bias) | Per-generation `results.tsv` + the cross-axis ratchet (§5) + the critical-axis strict gate. |
-| Cost blow-up of the long-running loop | Per-audit budget of 5 minutes + the self-improving-loop agent's timeout (program.md). ChatGPT subscription / Claude Max OAuth path = $0 per token. |
+| Cost blow-up of the long-running loop | Per-audit budget of 5 minutes + the self-improving-loop agent's timeout (program.md). ChatGPT OAuth consumes subscription quota; Anthropic uses the configured API budget. |
 | Goodhart's law (rubric self-mutation) | The AlphaEval rubric (`plugins/petri_audit/judge_dims/geode_judge_subset.yaml`) is a CANNOT item in program.md. The seed pool (`plugins/petri_audit/seeds_safe10/`) is also non-mutable. |
 | Self-referential loop (autoresearch mutating autoresearch) | The mutation target is a single site, the `WRAPPER_PROMPT_SECTIONS` dict; the `autoresearch/` directory itself cannot be mutated (nothing outside program.md's 4 in-scope files). |
 | Information loss from rejected hypotheses | The discard rows in `results.tsv` act as negative priors for the next hypothesis. Results accumulate in the agent context. |

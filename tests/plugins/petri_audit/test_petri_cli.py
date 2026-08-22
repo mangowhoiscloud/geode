@@ -48,9 +48,8 @@ def _stub_settings(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _stub_oauth(monkeypatch):
-    from geode_product.petri_audit.adapters import claude_cli_backend, openai_codex_oauth
+    from geode_product.petri_audit.adapters import openai_codex_oauth
 
-    monkeypatch.setattr(claude_cli_backend, "is_available", lambda: False)
     monkeypatch.setattr(openai_codex_oauth, "is_available", lambda: False)
 
 
@@ -130,8 +129,8 @@ def test_set_model_normalised_match(captured, monkeypatch):
 def test_set_model_provider_change_resets_source(captured, monkeypatch):
     """Switching provider (claude- → gpt-) erases the now-incompatible source."""
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
-    # Initial — claude provider + claude-cli source.
-    uo.save_role_override("auditor", model="claude-opus-4-7", source="claude-cli")
+    # Initial — Claude provider + API-key source.
+    uo.save_role_override("auditor", model="claude-opus-4-7", source="api_key")
     cmd_petri("model auditor gpt-5.5")
     out = uo.read_role_override("auditor")
     assert out.get("model") == "gpt-5.5"

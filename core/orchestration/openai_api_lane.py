@@ -1,47 +1,8 @@
-"""Module-level Lane for OpenAI API call concurrency (codex-oauth + payg).
+"""Module-level concurrency lane shared by OpenAI PAYG and Codex OAuth.
 
-PR-OAUTH-API-LANES (2026-05-26) — covers ``openai-codex`` (ChatGPT
-subscription via Codex Responses API) and ``openai-payg`` (OpenAI
-API key). Both share the same per-account rate-limit bucket on
-OpenAI's server side; a single shared lane prevents a burst of
-concurrent ``responses.create`` calls from racing the per-account
-floor.
-
-The lane gates direct API calls (no subprocess) through
-``openai.AsyncOpenAI.responses.create``.
-
-Why ``max_concurrent=6`` (PR-LANE-CAP-TIGHTER, v0.99.76)
-=======================================================
-
-Lowered from 10 (v0.99.75) to **6** in lockstep with the
-``claude_cli_lane`` 5 → 3 drop. Panel arithmetic: 3 matches × 2
-codex voters per match = 6 in-flight codex calls — exactly
-saturating this cap with zero queue depth, same balance the
-v0.99.75 default had at the 10/5 scale.
-
-Codex API calls are *not* subprocess-based — they fire from the
-parent Python process via ``openai.AsyncOpenAI.responses.create``,
-so the cap itself is not RSS-bound. The lower default exists only
-to keep the 1-claude + 2-codex panel balanced under the tighter
-``claude_cli_lane=3``; operators raising claude-cli should raise
-this in lockstep.
-
-**Upstream RPM headroom retained**: ChatGPT subscription bucket
-documents ~500 RPM aggregate; cap 6 with ~10s voter wallclock =
-~36 RPM — still 14× below the ceiling, so this is *not* a quota
-governor.
-
-Operator override via :data:`OPENAI_API_LANE_MAX_ENV`. Rule of
-thumb: keep this at ``2 × claude_cli_lane`` for cross-provider
-panels; codex-only panels (no claude voter) can raise freely up to
-the 500 RPM tier ceiling.
-
-Why module-level (not LaneQueue-registered)
-===========================================
-
-Same rationale as the other module-level lanes: contexts where the
-global LaneQueue singleton is not built (standalone CLI, pytest,
-autoresearch subprocess) still need the gate.
+The singleton protects standalone and subprocess callers that do not construct
+the global :class:`LaneQueue`. Operators can override the default with
+:data:`OPENAI_API_LANE_MAX_ENV`.
 """
 
 from __future__ import annotations
@@ -76,32 +37,10 @@ OPENAI_API_LANE_MAX_ENV = "GEODE_OPENAI_API_LANE_MAX"
 """Operator override for :data:`DEFAULT_OPENAI_API_LANE_MAX`."""
 
 DEFAULT_OPENAI_API_LANE_MAX = 6
-"""PR-LANE-CAP-TIGHTER (v0.99.76, 2026-05-27) — lowered from 10.
-
-Paired with the ``claude_cli_lane`` cap-3 default for the standard
-1-claude + 2-codex voter panel: ``ranker_max_inflight=3`` × 2 codex
-voters = 6 in-flight codex calls, exactly saturating this cap. The
-10 → 6 drop is the sibling correction of the same-PR claude-cli
-cap drop (see ``claude_cli_lane.py`` for why the operator's M3
-16 GB host's steady-state PhysMem unused — ~150-750 MB — couldn't
-absorb cap 5).
-
-Throughput-wise this still leaves ~464 RPM of the documented 500
-RPM ChatGPT subscription headroom unused — the binding constraint
-is panel balance, not OpenAI quota.
-
-Operator override via :data:`OPENAI_API_LANE_MAX_ENV`. Rule of
-thumb: keep this at ``2 × claude_cli_lane`` for cross-provider
-panels; operators running codex-only panels (no claude voter) can
-raise freely up to the 500 RPM tier ceiling."""
+"""Default concurrent OpenAI calls; configurable for account quotas."""
 
 OPENAI_API_LANE_TIMEOUT_S = 7200.0
-"""PR-LANE-CAP-AGGRESSIVE (2026-05-27) — raised from 300s (5min) to
-7200s (2h). Same rationale as ``claude_cli_lane`` — the parallel
-ranker burst can push the last-queued voter well past 5min even
-under the new 16-cap if a single 429 cascades. 2h matches the
-ranker phase's hard time budget; a genuinely-stuck call still
-surfaces at the 2h boundary."""
+"""Two-hour ceiling for queued long-running evaluation calls."""
 
 
 _OPENAI_API_LANE: Lane | None = None

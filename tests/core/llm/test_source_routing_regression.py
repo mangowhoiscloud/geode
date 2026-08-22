@@ -39,7 +39,7 @@ from pathlib import Path
 import pytest
 from core.auth.profiles import AuthProfile, CredentialType, ProfileStore
 from core.llm.adapters._source_inference import infer_source
-from core.llm.adapters.base import SOURCE_ADAPTER, SOURCE_PAYG, SOURCE_SUBSCRIPTION
+from core.llm.adapters.base import SOURCE_PAYG, SOURCE_SUBSCRIPTION
 
 # ---------------------------------------------------------------------------
 # Layer 1 — infer_source resolution priority
@@ -176,23 +176,45 @@ def test_infer_source_anthropic_setting_independent(monkeypatch: pytest.MonkeyPa
     assert infer_source("anthropic") == SOURCE_PAYG
 
 
+@pytest.mark.parametrize("provider", ["anthropic", "openai"])
+def test_infer_source_none_disables_provider(
+    monkeypatch: pytest.MonkeyPatch, provider: str
+) -> None:
+    _patch_settings(
+        monkeypatch,
+        anthropic_credential_source="none",
+        openai_credential_source="none",
+    )
+    with pytest.raises(RuntimeError, match="is disabled"):
+        infer_source(provider)
+
+
 @pytest.mark.parametrize("setting", ["oauth", "claude-cli"])
-def test_infer_source_anthropic_legacy_subscription_uses_cli_adapter(
+def test_infer_source_anthropic_legacy_subscription_is_retired(
     monkeypatch: pytest.MonkeyPatch, setting: str
 ) -> None:
-    from core.llm.adapters.registry import _reset_for_test, bootstrap_builtins, resolve_for
-
     _patch_settings(monkeypatch, anthropic_credential_source=setting)
     _patch_store(monkeypatch, _stub_store([]))
-    _reset_for_test()
-    try:
-        bootstrap_builtins()
-        with pytest.warns(UserWarning, match="open-source projects"):
-            source = infer_source("anthropic")
-        assert source == SOURCE_ADAPTER
-        assert resolve_for("anthropic", source).name == "claude-cli"
-    finally:
-        _reset_for_test()
+    with pytest.raises(RuntimeError, match="integration is retired"):
+        infer_source("anthropic")
+
+
+def test_infer_source_rejects_cross_provider_subscription_sources(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_settings(monkeypatch, openai_credential_source="claude-cli")
+    with pytest.raises(RuntimeError, match="integration is retired"):
+        infer_source("openai")
+
+    _patch_settings(monkeypatch, anthropic_credential_source="openai-codex")
+    with pytest.raises(RuntimeError, match="not a credential source"):
+        infer_source("anthropic")
+
+
+def test_infer_source_anthropic_auto_uses_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_settings(monkeypatch, anthropic_credential_source="auto")
+    _patch_store(monkeypatch, _stub_store([]))
+    assert infer_source("anthropic") == SOURCE_PAYG
 
 
 def test_infer_source_openai_concrete_subscription_setting(

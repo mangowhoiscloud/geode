@@ -86,9 +86,6 @@ log = logging.getLogger(__name__)
 _acomplete_with_fail_fast_pre_execution_retry = (
     _provider_call._acomplete_with_fail_fast_pre_execution_retry
 )
-_saved_cwd_matches_current = _provider_call._saved_cwd_matches_current
-_load_prior_session_id = _provider_call._load_prior_session_id
-_persist_session_id = _provider_call._persist_session_id
 
 
 def _tool_args_signature(tool_input: Any) -> str:
@@ -129,7 +126,6 @@ class AgenticLoop:
     _last_llm_error: str | None
     _response_schema: dict[str, Any] | None
     _new_adapter: Any
-    _last_emitted_session_id: str
     _op_logger: Any
     _error_recovery: Any
     _timeline: Any | None

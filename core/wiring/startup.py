@@ -116,7 +116,7 @@ def _has_available_profile() -> bool:
     """True if the ProfileStore holds any usable (``is_available``) credential.
 
     Covers credential origins the raw-key and Codex-CLI probes miss — chiefly
-    GEODE-owned ``/login`` profiles (``openai-codex-geode``, ``anthropic-cli``,
+    GEODE-owned ``/login`` profiles (``openai-codex-geode``, Anthropic API keys,
     ``glm`` …) hydrated from ``~/.geode/auth.toml``. Mirrors the dispatch
     eligibility filter (``is_available``) so readiness and the actual call
     path agree on what counts as usable.
@@ -149,11 +149,7 @@ def detect_subscription_oauth() -> str | None:
     """Detect a usable subscription-OAuth credential before any wizard runs.
 
     Supports importing ChatGPT subscription credentials owned by Codex CLI
-    (Plus / Pro / Business / Edu / Enterprise). Anthropic OAuth is intentionally
-    excluded — Anthropic's
-    terms of service (effective 2026-01-09) prohibit third-party tools from
-    reusing the Claude Code OAuth token; ``core/lifecycle/container.py:271``
-    documents the policy decision.
+    (Plus / Pro / Business / Edu / Enterprise).
 
     Returns the provider variant id (``"openai-codex"``) when an imported token is
     present. This is expiry-blind: the credential owner keeps its access token

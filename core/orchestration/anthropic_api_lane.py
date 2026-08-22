@@ -1,54 +1,8 @@
-"""Module-level Lane for Anthropic API call concurrency (oauth + payg).
+"""Module-level concurrency lane for Anthropic PAYG API calls.
 
-PR-OAUTH-API-LANES (2026-05-26) — covers ``anthropic-oauth`` (Claude Max
-OAuth subscription) and ``anthropic-payg`` (Anthropic API key). Both
-billing paths share the same per-account rate-limit bucket on
-Anthropic's server side, so a single shared lane prevents a burst of
-concurrent ``messages.create`` calls from racing the per-account
-floor.
-
-Distinct from ``claude_cli_lane`` because:
-
-- ``claude-cli`` lane gates **subprocess fork** (`claude --print` cold-
-  start cost, sandbox isolation, host-session OAuth keychain sharing).
-- ``anthropic_api_lane`` gates **direct API call** (no subprocess, just
-  ``anthropic.AsyncClient.messages.create``); the burst pattern + 429
-  surface differ.
-
-Why ``max_concurrent=50``
-========================
-
-Mid-range default selected from three reference points:
-
-1. **Anthropic API documented tier 1** allows ~50 RPM = ~0.83 RPS. A
-   single match's voter latency is ~70s (per smoke-24 evidence) →
-   throughput-limit is roughly 1 inflight at a time before the bucket
-   starts gating. 4 leaves headroom for cluster-level concurrency
-   without crossing the 50 RPM ceiling on the typical seed-gen Loop
-   (59 matches × 1 anthropic voter = 59 RPM if fully parallel, well
-   under 50 RPM when amortised across the ~5-min wallclock).
-2. **claude_cli_lane=3** + ``audit_lane=1`` already consume 4 slots
-   of the per-account budget when active; the API lane sits on top,
-   so the historical "4 keeps total per-account inflight ≤ 7" budget
-   line still holds — claude-cli's cap has only ever moved within
-   the small-integer band (2 → 4 → 50 → 5 → 3) and stays well below
-   the soft throttle threshold per [[project_lanequeue_handoff_2026_05_22]].
-3. **PR-RANKER-PARALLEL** (the immediate consumer) needs the lane to
-   smooth a 59-match burst, not to add ceiling — 4 is enough for
-   60% wallclock reduction without 429 spikes (vs unbounded → ~30%
-   chance of 429 per smoke run pre-PR).
-
-Operator override via :data:`ANTHROPIC_API_LANE_MAX_ENV` for tiers
-with higher RPM (custom enterprise quotas) or lower (degraded shared
-account).
-
-Why module-level (not LaneQueue-registered)
-===========================================
-
-Same rationale as ``audit_lane`` + ``claude_cli_lane``: contexts where
-the global ``LaneQueue`` singleton is not built (standalone CLI,
-pytest harness, autoresearch subprocess) still need the gate. A
-module-level singleton works in both contexts and stays cheap.
+The module-level singleton protects standalone and subprocess callers that do
+not construct the global :class:`LaneQueue`. Operators can override the default
+for their account tier with :data:`ANTHROPIC_API_LANE_MAX_ENV`.
 """
 
 from __future__ import annotations
@@ -83,19 +37,7 @@ ANTHROPIC_API_LANE_MAX_ENV = "GEODE_ANTHROPIC_API_LANE_MAX"
 """Operator override for :data:`DEFAULT_ANTHROPIC_API_LANE_MAX`."""
 
 DEFAULT_ANTHROPIC_API_LANE_MAX = 50
-"""PR-LANE-CAP-AGGRESSIVE (2026-05-27) — raised from 4 to 8.
-
-Anthropic tier 1 documents 50 RPM aggregate per account. Voter calls
-land in 60-70s wallclock each → steady-state ~0.86 inflight per cap
-slot, so cap 8 = ~7 RPM steady state, well under the 50 RPM
-ceiling. The ranker.py panel uses claude-cli (subprocess, gated by
-``claude_cli_lane``) for the anthropic voter, NOT direct API, so the
-8-slot cap here exists to cover hybrid panels and the autoresearch
-mutator's direct API path; it is the natural pair to
-``claude_cli_lane`` raised to 4 in the same PR.
-
-Operator override via :data:`ANTHROPIC_API_LANE_MAX_ENV` for
-enterprise tiers with higher per-account RPM budgets."""
+"""Default concurrent Anthropic API calls; configurable for account quotas."""
 
 ANTHROPIC_API_LANE_TIMEOUT_S = 7200.0
 """PR-LANE-CAP-AGGRESSIVE (2026-05-27) — raised from 300s (5min) to
@@ -104,10 +46,7 @@ ANTHROPIC_API_LANE_TIMEOUT_S = 7200.0
 
 _ANTHROPIC_API_LANE: Lane | None = None
 _ANTHROPIC_API_LANE_INIT_LOCK = threading.Lock()
-"""Double-checked locking around lazy init (mirrors ``audit_lane``
-+ ``claude_cli_lane`` pattern). Two concurrent first-callers could
-otherwise observe ``_ANTHROPIC_API_LANE is None`` and construct
-distinct ``Lane`` instances, defeating the per-account cap."""
+"""Protect lazy singleton creation from concurrent first callers."""
 
 
 def resolve_anthropic_api_lane_max() -> int:

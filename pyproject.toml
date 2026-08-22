@@ -101,7 +101,6 @@ geode-mcp = "geode_product.mcp_server:main"
 geode_audit = "geode_product.petri_audit"
 geode = "geode_product.petri_audit"
 openai-codex = "geode_product.petri_audit"
-claude-cli = "geode_product.petri_audit"
 
 [project.optional-dependencies]
 # mcp 2.0.0 (2026-07-28 stateless spec) renames FastMCP -> MCPServer and
@@ -130,13 +129,8 @@ audit = [
     # supports the wider project-level compatibility range above.
     "anthropic>=0.115.0",
     "openai>=2.45.0",
-    # CSA-2 (2026-05-22) — paperclip-pattern auditor tool_use bridge.
-    # plugins/petri_audit/mcp_bridge/ stands up a stdio MCP server that
-    # exposes inspect_ai ToolInfo[] as MCP tools so the claude CLI
-    # subprocess (--mcp-config + --strict-mcp-config + --allowed-tools)
-    # can emit tool_use blocks under --max-turns 1 without raw-SDK
-    # 429 enforcement on Claude Max OAuth tokens. Same bound as the
-    # [mcp] extra (ADR-014) — the bridge uses the v1 low-level Server API.
+    # Keep audit installs on the same MCP protocol range as the runtime; Inspect
+    # tasks may expose MCP tools even though the retired Claude CLI bridge is gone.
     "mcp>=1.28,<2",
     # PR-SIL-5THEME C2 (2026-05-23) — S6b production wiring 의 7-bench
     # federation dependencies. ``inspect-evals`` 가 6 bench

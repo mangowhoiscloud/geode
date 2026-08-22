@@ -30,7 +30,6 @@ _VALID_CREDENTIAL_SOURCES: tuple[str, ...] = (
     "auto",
     "oauth",
     "api_key",
-    "claude-cli",
     "openai-codex",
     "none",
 )
@@ -43,27 +42,21 @@ _PROVIDER_ALIASES: dict[str, str] = {
     "chatgpt": "openai",
     "anthropic": "anthropic",
     "claude": "anthropic",
-    "claude-code": "anthropic",
 }
 """User-facing provider names → canonical key. Accepts both the marketing
-name (``chatgpt``, ``claude``) and the CLI binary name (``codex``,
-``claude-code``) so the picker is forgiving of typos and habit."""
+name (``chatgpt``, ``claude``) and the maintained Codex source alias."""
 
 
 def cmd_login(args: str) -> None:
     """Handle /login — unified credentials/plans command.
 
-    Parameter shape: ``/login [<provider>|<subcommand>]``. Providers run
-    the OAuth login flow directly (no extra subcommand), so the command
-    surface stays grep-able by provider name alone — this is the consolidated
-    replacement for the removed legacy auth-login subcommand (PR #B,
-    2026-05-17).
+    Parameter shape: ``/login [<provider>|<subcommand>]``. OpenAI runs the
+    device-code login flow; Anthropic opens API-key setup.
 
     Providers (case-insensitive, aliases accepted)::
 
         /login openai      — ChatGPT subscription device-code flow (aliases: codex, chatgpt)
-        /login anthropic   — Claude subscription login via local `claude` CLI
-                             (aliases: claude, claude-code)
+        /login anthropic   — Anthropic API-key setup (alias: claude)
 
     Subcommands::
 
@@ -95,7 +88,7 @@ def cmd_login(args: str) -> None:
         return
 
     # Provider-as-parameter dispatch: ``/login openai`` /
-    # ``/login anthropic`` (+ aliases) run the OAuth flow directly. This
+    # ``/login anthropic`` (+ aliases) select the provider route. This
     # path is reached before any subcommand match so a provider name and
     # a subcommand never collide in practice — providers live in
     # ``_PROVIDER_ALIASES``, subcommands are checked below.
@@ -286,7 +279,7 @@ def _login_help() -> None:
         "  [muted]  ok               — profile passes every check, ready to dispatch[/muted]\n"
         "  [muted]  missing_key      — key/token field is empty; rerun add or set-key[/muted]\n"
         "  [muted]  expired          — OAuth token past expires_at; refresh via the[/muted]\n"
-        "  [muted]                     owning CLI (`claude` / `codex`) and rerun /login[/muted]\n"
+        "  [muted]                     owning CLI (`codex`) and rerun /login[/muted]\n"
         "  [muted]  cooling_down     — consecutive failures tripped backoff; wait for[/muted]\n"
         "  [muted]                     cooldown or run /login health <profile> for ETA[/muted]\n"
         "  [muted]  disabled         — manually disabled (`/login remove` to delete)[/muted]\n"
@@ -528,11 +521,10 @@ def _login_add_interactive(_args: str) -> None:
         (
             "subscription",
             "Subscription (GLM Coding Lite/Pro/Max · "
-            "ChatGPT Plus/Pro/Pro Lite/Team/Business/Enterprise/Edu · "
-            "Claude Pro/Max ×5/Max ×20/Team)",
+            "ChatGPT Plus/Pro/Pro Lite/Team/Business/Enterprise/Edu)",
         ),
         ("payg", "Pay-as-you-go API key (Anthropic, OpenAI, GLM PAYG)"),
-        ("oauth", "OAuth borrowed (Codex CLI / Claude Code)"),
+        ("oauth", "OAuth borrowed (Codex CLI)"),
     ]
     menu = TerminalMenu(
         [label for _, label in kinds],
@@ -661,22 +653,6 @@ def _login_add_interactive(_args: str) -> None:
         return
 
     if kind_id == "oauth":
-        oauth_entries = [
-            "OpenAI Codex CLI (chatgpt.com/backend-api/codex)",
-            "Claude Code subscription (legacy compatibility path)",
-        ]
-        omenu = TerminalMenu(
-            oauth_entries,
-            title="\n  OAuth source?\n",
-            menu_cursor="  > ",
-        )
-        oidx = omenu.show()
-        if oidx is None:
-            _pkg.console.print("  [muted]Cancelled[/muted]\n")
-            return
-        if oidx == 1:
-            _login_oauth("anthropic")
-            return
         _login_oauth("openai")
         return
 
@@ -689,8 +665,7 @@ def _login_oauth(target: str) -> None:
     Each branch is responsible for the provider-specific flow:
 
     - ``openai``: GEODE-native device-code flow (ChatGPT subscription quota).
-    - ``anthropic``: show the policy warning and select the legacy local
-      ``claude`` CLI route; login remains owned by the official CLI.
+    - ``anthropic``: prompt for a PAYG API key.
     """
     from core.cli import commands as _pkg
 
@@ -718,41 +693,31 @@ def _login_oauth(target: str) -> None:
         return
 
     if target == "anthropic":
-        _login_oauth_anthropic()
+        _login_anthropic_api_key()
         return
 
     _pkg.console.print(
         f"  [warning]OAuth not implemented for '{target}'.[/warning]\n"
         "  [muted]Available: openai (ChatGPT subscription), "
-        "anthropic (Claude subscription)[/muted]\n"
+        "anthropic (API key)[/muted]\n"
     )
 
 
 def _format_credential_source_label(provider: str, source: str) -> str:
     """Human-readable label for the ``source`` picker — pulls live
-    subscription info from the credential blob rather than baking
+    subscription info from provider-owned state rather than baking
     plan names into the code."""
     import os
 
     if source == "auto":
-        return "auto-detect from env / keychain"
+        return "auto-detect from configured credentials"
     if source == "none":
         return "disabled"
     if source == "api_key":
         env_var = "ANTHROPIC_API_KEY" if provider == "anthropic" else "OPENAI_API_KEY"
         suffix = "(set)" if os.environ.get(env_var) else "(env not set)"
         return f"{env_var} {suffix}"
-    if source in ("oauth", "claude-cli", "openai-codex"):
-        if provider == "anthropic":
-            from core.auth.claude_cli_oauth import get_claude_oauth_metadata
-
-            meta = get_claude_oauth_metadata()
-            if meta is None:
-                return "(no Claude credentials in keychain)"
-            plan = meta.get("subscription_type") or "unknown plan"
-            tier = meta.get("rate_limit_tier")
-            tier_label = f" · {tier}" if tier else ""
-            return f"Claude {plan}{tier_label}"
+    if source in ("oauth", "openai-codex"):
         from core.llm.providers.codex import get_codex_oauth_metadata
 
         meta = get_codex_oauth_metadata()
@@ -805,9 +770,9 @@ def _login_source(args: str) -> None:
     prefix ``geode_product.petri_audit.models.to_inspect_model`` routes a
     ``claude-*`` / ``gpt-5.*`` id through:
 
-    - ``auto``     — env / keychain auto-detect (default)
-    - ``oauth``    — legacy subscription alias (claude-cli / openai-codex)
-    - ``claude-cli`` / ``openai-codex`` — provider-specific subscription route
+    - ``auto``     — configured credential auto-detect (default)
+    - ``oauth``    — legacy OpenAI subscription alias
+    - ``openai-codex`` — OpenAI subscription route
     - ``api_key``  — PAYG env (ANTHROPIC_API_KEY / OPENAI_API_KEY)
     - ``none``     — disabled
     """
@@ -830,6 +795,11 @@ def _login_source(args: str) -> None:
         )
         _pkg.console.print()
         return
+    if source == "claude-cli" or (provider == "anthropic" and source == "oauth"):
+        from core.config.credential_source import CLAUDE_CLI_RETIRED_MESSAGE
+
+        _pkg.console.print(f"  [warning]{CLAUDE_CLI_RETIRED_MESSAGE}[/warning]\n")
+        return
     if source not in _VALID_CREDENTIAL_SOURCES:
         _pkg.console.print(
             f"  [warning]unknown type: {source} "
@@ -837,15 +807,11 @@ def _login_source(args: str) -> None:
         )
         _pkg.console.print()
         return
-    if (source == "claude-cli" and provider != "anthropic") or (
-        source == "openai-codex" and provider != "openai"
-    ):
+    if source == "openai-codex" and provider != "openai":
         _pkg.console.print(
             f"  [warning]{source} is not a credential source for {provider}.[/warning]\n"
         )
         return
-    if provider == "anthropic" and source in ("oauth", "claude-cli"):
-        _print_anthropic_subscription_warning()
     _persist_credential_source(provider, source)
     label = _format_credential_source_label(provider, source)
     _pkg.console.print(
@@ -855,35 +821,8 @@ def _login_source(args: str) -> None:
     _pkg.console.print()
 
 
-def _login_oauth_anthropic() -> None:
-    """Enable the legacy Claude CLI subscription route without owning login."""
-    from core.cli import commands as _pkg
-
-    _pkg.console.print()
-    _print_anthropic_subscription_warning()
-    _persist_credential_source("anthropic", "claude-cli")
-    clear_dry_run_opt_in()
-    _pkg.console.print("  [success]Claude CLI subscription route enabled.[/success]")
-    _pkg.console.print()
-    _pkg.console.print(
-        "  [muted]This command does not perform Claude login or copy its token. "
-        "If needed, run `claude /login` in the official CLI.[/muted]\n"
-    )
-
-
-def _print_anthropic_subscription_warning() -> None:
-    from core.cli import commands as _pkg
-
-    _pkg.console.print(
-        "  [warning]Anthropic recommends API-key authentication for third-party tools, "
-        "including open-source projects. Subscription use remains subject to Anthropic's "
-        "terms and may draw from usage credits.[/warning]"
-    )
-    _pkg.console.print("  [muted]Policy: https://support.claude.com/en/articles/13189465[/muted]")
-
-
 def _login_anthropic_api_key() -> None:
-    """Prompt for an Anthropic API key and persist it to ``auth.toml``.
+    """Prompt for an Anthropic API key and persist its runtime sources.
 
     Tier 0 (PAYG) — ``sk-ant-api…`` saved under the
     ``anthropic-payg-geode`` plan + profile. No refresh logic, no
@@ -895,6 +834,8 @@ def _login_anthropic_api_key() -> None:
 
     from core.auth.profiles import AuthProfile, CredentialType
     from core.cli import commands as _pkg
+    from core.config import settings
+    from core.llm.adapters.registry import invalidate_provider_clients
     from core.llm.strategies.plan_registry import get_plan_registry
     from core.llm.strategies.plans import Plan, PlanKind
     from core.wiring.container import ensure_profile_store
@@ -941,11 +882,15 @@ def _login_anthropic_api_key() -> None:
         save_auth_toml()
     except Exception:
         log.debug("auth.toml persist after anthropic login failed", exc_info=True)
+    settings.anthropic_api_key = api_key
+    _pkg._upsert_env("ANTHROPIC_API_KEY", api_key)
+    _persist_credential_source("anthropic", "api_key")
+    invalidate_provider_clients("anthropic")
     clear_dry_run_opt_in()
 
     _pkg.console.print()
     _pkg.console.print("  [success]✓ Anthropic API key saved.[/success]")
-    _pkg.console.print("  [muted]Stored: ~/.geode/auth.toml[/muted]\n")
+    _pkg.console.print("  [muted]Stored: ~/.geode/.env and ~/.geode/auth.toml[/muted]\n")
 
 
 def _login_set_key(rest: str) -> None:
@@ -1287,8 +1232,8 @@ _HEALTH_SUGGESTIONS: dict[str, str] = {
     "ok": "Ready to dispatch.",
     "missing_key": "Key/token is empty. Run `/login add` (interactive) or "
     "`/login set-key <plan> <key>` to populate.",
-    "expired": "OAuth token past expires_at. Re-run the owning CLI's login "
-    "(e.g. `claude` or `codex`) and then `/login refresh` so GEODE "
+    "expired": "OAuth token past expires_at. Re-run `codex login` and then "
+    "`/login refresh` so GEODE "
     "picks the new token up.",
     "cooling_down": "Backoff after consecutive failures. The verdict line "
     "shows the cooldown deadline — wait it out or "

@@ -111,7 +111,7 @@ def export_run_to_evals(
     run_dir: Path | str,
     dest_dir: Path | str,
     *,
-    mutator_model: str = "claude-cli/claude-opus-4-7",
+    mutator_model: str = "anthropic/claude-opus-4-7",
 ) -> list[Path]:
     """Convert a seed-generation run's JSON artefacts into per-phase
     ``.eval`` files inside ``dest_dir``.

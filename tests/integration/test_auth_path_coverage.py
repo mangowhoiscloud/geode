@@ -1,4 +1,4 @@
-"""Integration test — 4-path × 4-component auth coverage matrix.
+"""Integration test — 3-path × 4-component auth coverage matrix.
 
 Walks every (component, provider, source) cell in
 ``geode_product.seed_generation.auth_coverage.AUTH_COVERAGE_MATRIX`` and
@@ -16,7 +16,7 @@ verifies the routing surface is actually wired:
 
 Also exercises the **TEST_SETUP_PROFILE** the user pinned on
 2026-05-18 (seed_generation + autoresearch + geode_main → openai.openai-codex,
-petri_audit → anthropic.claude-cli).
+petri_audit → anthropic.api_key).
 """
 
 from __future__ import annotations
@@ -34,15 +34,14 @@ from geode_product.seed_generation.auth_coverage import (
 # ---------------------------------------------------------------------------
 
 
-def test_matrix_has_16_cells() -> None:
-    """4 components × 4 paths = 16 cells."""
-    assert len(AUTH_COVERAGE_MATRIX) == 16
+def test_matrix_has_12_cells() -> None:
+    """4 components × 3 paths = 12 cells."""
+    assert len(AUTH_COVERAGE_MATRIX) == 12
 
 
-def test_matrix_covers_all_four_paths_per_component() -> None:
+def test_matrix_covers_all_three_paths_per_component() -> None:
     """Every component must have one cell per supported path."""
     expected_paths = {
-        ("anthropic", "claude-cli"),
         ("anthropic", "api_key"),
         ("openai", "openai-codex"),
         ("openai", "api_key"),
@@ -137,8 +136,7 @@ def test_autoresearch_can_target_cell(cell: AuthCell) -> None:
     PR-MINIMAL-2 (2026-05-21) — ``USE_OAUTH: bool`` module constant
     replaced by ``SOURCE: str`` (B1: aligns shape with
     ``MutatorConfig.source`` + ``PetriRoleConfig.source``).
-    Subscription paths (``claude-cli`` / ``openai-codex``) ride any
-    SOURCE except ``"api_key"``; ``api_key`` rides the env-var
+    The OpenAI subscription path rides ``openai-codex``; ``api_key`` rides the env-var
     branch. The test just confirms the constants + flag plumbing
     exist; live OAuth probing is out of scope here.
     """
@@ -151,9 +149,8 @@ def test_autoresearch_can_target_cell(cell: AuthCell) -> None:
     assert hasattr(train, "_petri_role_model")
     assert callable(train._petri_role_model)
     # Subscription path needs a non-api_key SOURCE; PAYG needs an env key field.
-    if cell.path.source in {"claude-cli", "openai-codex"}:
-        # SOURCE must be a string in the 4-enum the agent can set.
-        assert train.SOURCE in {"auto", "api_key", "claude-cli", "openai-codex"}
+    if cell.path.source == "openai-codex":
+        assert train.SOURCE in {"auto", "api_key", "openai-codex"}
     else:
         from core.config import _settings as settings_module
 
@@ -173,10 +170,6 @@ def test_geode_main_has_credential_field_for_cell(cell: AuthCell) -> None:
     if cell.path.source == "api_key":
         attr = f"{cell.path.provider}_api_key"
         assert hasattr(settings, attr), f"settings missing {attr}"
-    elif cell.path.source == "claude-cli":
-        from core.auth.claude_cli_oauth import is_claude_oauth_available
-
-        assert callable(is_claude_oauth_available)
     elif cell.path.source == "openai-codex":
         from geode_product.petri_audit.codex_provider import is_codex_oauth_available
 
@@ -200,7 +193,7 @@ def test_test_setup_profile_has_all_four_components() -> None:
 def test_test_setup_profile_targets() -> None:
     """The 2026-05-18 user directive pinned the profile."""
     assert str(TEST_SETUP_PROFILE["seed_generation"]) == "openai.openai-codex"
-    assert str(TEST_SETUP_PROFILE["petri_audit"]) == "anthropic.claude-cli"
+    assert str(TEST_SETUP_PROFILE["petri_audit"]) == "anthropic.api_key"
     assert str(TEST_SETUP_PROFILE["autoresearch"]) == "openai.openai-codex"
     assert str(TEST_SETUP_PROFILE["geode_main"]) == "openai.openai-codex"
 
@@ -225,8 +218,8 @@ def test_auth_status_table_renders_all_four_components() -> None:
     out = auth_status_table()
     for component in ("seed_generation", "petri_audit", "autoresearch", "geode_main"):
         assert component in out
-    # Each row must show 4 path columns
-    assert "anth.cli" in out
+    # Each row must show 3 path columns
+    assert "anth.api" in out
     assert "oai.cdx" in out
 
 
@@ -234,4 +227,4 @@ def test_auth_status_table_overlays_resolved_paths() -> None:
     out = auth_status_table(probe_resolved_path=TEST_SETUP_PROFILE)
     assert "resolved (live):" in out
     assert "openai.openai-codex" in out
-    assert "anthropic.claude-cli" in out
+    assert "anthropic.api_key" in out

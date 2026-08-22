@@ -8,8 +8,8 @@ input (``--judge sonnet-4-6``) into the form ``inspect eval`` expects
 
 Mapping policy:
 
-- Raw identifiers pass through except the legacy ``claude-code/`` and
-  ``codex-cli/`` prefixes, which normalize to their maintained routes.
+- Raw identifiers pass through except retired Claude CLI prefixes, which
+  fail before dispatch, and ``codex-cli/``, which normalizes to OpenAI OAuth.
   Other forms remain an escape hatch for ``openai-api/...``,
   ``anthropic/...:tier`` etc.
 - ``claude-*``                → ``anthropic/<model>``      (inspect_ai native)
@@ -152,13 +152,10 @@ def to_inspect_model(
     if not geode_id:
         raise AuditModelMappingError("Empty model id")
     if "/" in geode_id:
-        if geode_id.startswith("claude-code/"):
-            warnings.warn(
-                "claude-code/<model> is a legacy alias; use claude-cli/<model>",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            return f"claude-cli/{geode_id.removeprefix('claude-code/')}"
+        if geode_id.startswith(("claude-code/", "claude-cli/")):
+            from core.config.credential_source import CLAUDE_CLI_RETIRED_MESSAGE
+
+            raise AuditModelMappingError(CLAUDE_CLI_RETIRED_MESSAGE)
         if geode_id.startswith("codex-cli/"):
             warnings.warn(
                 "codex-cli/<model> is a legacy alias; use openai-codex/<model>",
@@ -190,7 +187,11 @@ def to_inspect_model(
     # Cap 'auto' cascade for ids the provider's OAuth backend can't serve
     # (e.g. o3 / o4-mini are not on the Codex catalogue) — force api_key
     # so the 'auto' expansion never lands on the OAuth source for them.
-    if source_override is None and not _supports_oauth_for_provider(geode_id, provider):
+    if (
+        source_override is None
+        and provider != "anthropic"
+        and not _supports_oauth_for_provider(geode_id, provider)
+    ):
         source_override = "api_key"
 
     # P1-G — credential_source layer handles settings → manifest default →
@@ -234,12 +235,9 @@ def to_inspect_model(
 def _supports_oauth_for_provider(model: str, provider: str) -> bool:
     """True when ``provider`` has an OAuth path that serves this model id.
 
-    Mirrors the legacy if/elif chain's behaviour — only ``gpt-5.*`` ids
-    are eligible for the Codex backend on the OpenAI side; all claude-*
-    ids are eligible on the Anthropic side; GLM / zhipuai have no OAuth.
+    Only ``gpt-5.*`` ids are eligible for the Codex backend. Anthropic and
+    zhipuai have no built-in OAuth path.
     """
-    if provider == "anthropic":
-        return model.startswith("claude-")
     if provider == "openai":
         return model.startswith("gpt-5")
     return False
@@ -248,19 +246,14 @@ def _supports_oauth_for_provider(model: str, provider: str) -> bool:
 def _source_from_use_oauth(geode_id: str, provider: str, use_oauth: bool | None) -> str | None:
     """Translate the legacy ``use_oauth`` flag to a manifest source override.
 
-    ``None`` → no override (resolve_credential_source decides via its
-    own cascade). ``False`` → ``api_key`` (legacy "stay on PAYG"
-    semantics). ``True`` → the provider's OAuth source key
-    (``claude-cli`` / ``openai-codex``), capped to ids the Codex
-    backend actually serves (``gpt-5.*``); other ids degrade to
-    ``api_key`` so ``o3`` / ``o4-mini`` retain their legacy routing.
+    ``None`` → no override. ``False`` → ``api_key``. ``True`` selects
+    OpenAI Codex OAuth for supported ``gpt-5.*`` ids; other providers stay
+    on ``api_key``.
     """
     if use_oauth is None:
         return None
     if use_oauth is False:
         return "api_key"
-    if provider == "anthropic" and geode_id.startswith("claude-"):
-        return "claude-cli"
     if provider == "openai" and geode_id.startswith("gpt-5"):
         return "openai-codex"
     return "api_key"
@@ -271,7 +264,8 @@ def is_oauth_routed(inspect_id: str) -> bool:
 
     The cost estimator and audit-report renderer use this to zero out
     the per-token cost line for judge / auditor calls that hit ChatGPT
-    Plus or Claude subscription quota instead of the PAYG endpoint.
+    Plus quota or historical Claude subscription receipts instead of the PAYG
+    endpoint.
 
     ``claude-code/`` and ``codex-cli/`` stay recognised only when reading
     historical eval IDs; new routing rejects those retired execution paths.
@@ -296,6 +290,10 @@ def to_inspect_target(geode_id: str | None) -> str:
     """
     if not geode_id:
         return "geode/default"
+    if geode_id.startswith(("claude-code/", "claude-cli/")):
+        from core.config.credential_source import CLAUDE_CLI_RETIRED_MESSAGE
+
+        raise AuditModelMappingError(CLAUDE_CLI_RETIRED_MESSAGE)
     if "/" in geode_id:
         return geode_id
     return f"geode/{geode_id}"

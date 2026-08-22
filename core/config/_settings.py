@@ -8,10 +8,13 @@ exposed only for type hints and test fixtures.
 
 from __future__ import annotations
 
-from pydantic import AliasChoices, Field, field_validator
+import warnings
+
+from pydantic import AliasChoices, Field, ValidationInfo, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from core.config.credential_source import (
+    CLAUDE_CLI_RETIRED_MESSAGE,
     DISABLE_SENTINEL,
     LEGACY_OAUTH_ALIAS,
     CredentialSource,
@@ -353,8 +356,8 @@ class Settings(BaseSettings):
     agentic_effort: str = "high"  # "low" | "medium" | "high" | "max" | "xhigh"
 
     # Credential source — chosen via the ``/login source`` picker. The picker
-    # reads available sources at runtime (local Claude OAuth keychain,
-    # Codex auth.json JWT, env-var API key) and persists the user's
+    # reads available sources at runtime (Codex auth.json JWT, env-var API
+    # key) and persists the user's
     # choice here so :mod:`geode_product.petri_audit.models.to_inspect_model`
     # routes ids through the matching provider prefix. ``"auto"`` =
     # legacy behaviour (env / OAuth detection order); explicit values
@@ -362,15 +365,16 @@ class Settings(BaseSettings):
     # picker labels each source with the plan info pulled from the
     # active credential blob.
     # Valid values: the canonical ``CredentialSource`` members
-    # (auto / api_key / claude-cli / openai-codex) plus the legacy provider-
-    # agnostic ``oauth`` alias and the ``none`` disable sentinel — validated
+    # (auto / api_key / openai-codex), the retired ``claude-cli`` input,
+    # the legacy provider-agnostic ``oauth`` alias, and the ``none`` disable
+    # sentinel — validated
     # against the single SoT below (PR-CRED-SOURCE-CENTRALIZE).
     anthropic_credential_source: str = "auto"
     openai_credential_source: str = "auto"
 
     @field_validator("anthropic_credential_source", "openai_credential_source")
     @classmethod
-    def _validate_credential_source(cls, v: str) -> str:
+    def _validate_credential_source(cls, v: str, info: ValidationInfo) -> str:
         """Validate against the canonical credential-source set + legacy aliases.
 
         Keeps these operator-facing settings from drifting from
@@ -381,6 +385,10 @@ class Settings(BaseSettings):
         allowed = {s.value for s in CredentialSource} | {LEGACY_OAUTH_ALIAS, DISABLE_SENTINEL}
         if v not in allowed:
             raise ValueError(f"credential source must be one of {sorted(allowed)}, got {v!r}")
+        if v == CredentialSource.LEGACY_CLAUDE_CLI.value or (
+            info.field_name == "anthropic_credential_source" and v == LEGACY_OAUTH_ALIAS
+        ):
+            warnings.warn(CLAUDE_CLI_RETIRED_MESSAGE, UserWarning, stacklevel=2)
         return v
 
     # PR-OBS-LOGGING-CONFIG (2026-06-14) — value validators. pydantic's cheap

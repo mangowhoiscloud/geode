@@ -28,7 +28,10 @@ from core.llm.adapters.registry import _reset_for_test, bootstrap_builtins
 
 
 @pytest.fixture(autouse=True)
-def _registry_with_builtins():
+def _registry_with_builtins(monkeypatch: pytest.MonkeyPatch):
+    from core.config import settings
+
+    monkeypatch.setattr(settings, "anthropic_credential_source", "api_key", raising=False)
     _reset_for_test()
     bootstrap_builtins()
     yield
@@ -64,14 +67,14 @@ def test_concrete_source_attaches_anthropic_adapter() -> None:
 
 
 def test_concrete_source_each_anthropic_variant() -> None:
-    for source, expected_name in (
-        ("payg", "anthropic-payg"),
-        ("subscription", "anthropic-oauth"),
-        ("adapter", "claude-cli"),
-    ):
-        loop = _make_loop(source=source)
-        assert loop._new_adapter is not None
-        assert loop._new_adapter.name == expected_name
+    loop = _make_loop(source="payg")
+    assert loop._new_adapter is not None
+    assert loop._new_adapter.name == "anthropic-payg"
+
+
+def test_raw_anthropic_subscription_source_is_not_registered() -> None:
+    with pytest.raises(AdapterNotFoundError):
+        _make_loop(source="subscription")
 
 
 def test_openai_provider_attaches_new_adapter() -> None:

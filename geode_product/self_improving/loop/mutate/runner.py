@@ -452,6 +452,11 @@ _MUTATION_CONTRACT_SUFFIX = (
     "are fixed audit config and the reflection_depth axis is exhausted, so a "
     "``hyperparam`` mutation is REJECTED at parse. (``retrieval`` was "
     "deprecated in ADR-012 S0d, 2026-05-21 — see policies.py docstring.)\n"
+    "- For ``decomposition``, ``target_section`` must be one of "
+    "``system_prompt``, ``prefix``, or ``suffix``; these are the only "
+    "fields consumed by the advisory planner. If the current policy has a "
+    "non-empty ``system_prompt`` override, mutate that field rather than "
+    "``prefix`` or ``suffix``.\n"
     "- Respond with a single JSON object — NO surrounding prose, NO code fences.\n"
     "\n"
     "Response schema:\n"
@@ -473,6 +478,30 @@ fitness measurement etc. This runner is a single-shot step inside that loop
 that proposes ONE mutation per invocation. The suffix narrows the broader
 contract to the JSON output the parser expects.
 """
+
+
+def _validate_decomposition_target(
+    target_kind: str,
+    target_section: str,
+    current_sections: dict[str, str] | None = None,
+) -> None:
+    if target_kind == "decomposition" and target_section not in {
+        "system_prompt",
+        "prefix",
+        "suffix",
+    }:
+        raise ValueError(
+            "decomposition target_section must be one of 'system_prompt', 'prefix', or 'suffix'"
+        )
+    if (
+        target_kind == "decomposition"
+        and target_section in {"prefix", "suffix"}
+        and current_sections
+        and current_sections.get("system_prompt")
+    ):
+        raise ValueError(
+            "decomposition prefix/suffix has no effect while system_prompt override is set"
+        )
 
 
 def _program_md_path() -> Path:
@@ -646,14 +675,6 @@ def _default_llm_call(
     The mutator therefore inherits I.a's Codex OAuth header dedup and
     F's GLM adapter family on the API path directly.
 
-    The ``claude-cli`` subscription path deliberately stays on the dedicated
-    ``invoke_claude_cli`` helper in :mod:`geode_product.self_improving.loop.mutate.cli_subprocess`
-    rather than going through the Path-B ``ClaudeCliAdapter`` built-in. It was designed
-    for the agentic-loop's streaming JSON event protocol
-    (``--output-format stream-json``), whereas the mutator parser
-    expects plain text output. Forcing the mutator through the streaming adapter
-    would break the JSON mutation-payload extraction.
-
     Resolution order:
 
     1. ``~/.geode/config.toml [self_improving_loop.autoresearch.mutator]
@@ -696,15 +717,10 @@ def _default_llm_call(
         max_tokens,
     )
 
-    # PR-PAPERCLIP (2026-05-21) — source-aware dispatch. The Claude CLI subscription
-    # branch uses the dedicated text-output helper in ``cli_subprocess``
-    # (see docstring above for the streaming-vs-text incompatibility with
-    # the Path-B CLI adapters). The API path (``api_key`` / ``auto``)
-    # falls through to the LLMAdapter Protocol.
     if source == "claude-cli":
-        from geode_product.self_improving.loop.mutate.cli_subprocess import invoke_claude_cli
+        from core.config.credential_source import CLAUDE_CLI_RETIRED_MESSAGE
 
-        return invoke_claude_cli(system_prompt=system_prompt, user_prompt=user_prompt)
+        raise RuntimeError(CLAUDE_CLI_RETIRED_MESSAGE)
     # Step J-b.2 (Path-B API path) — resolve_for + acomplete.
     from core.config import settings as _settings
     from core.llm.adapters import resolve_for
@@ -940,6 +956,7 @@ def parse_mutation(raw: str) -> Mutation:
         _reject_hyperparam_mutation()
     if target_kind not in TARGET_KINDS:
         raise ValueError(f"target_kind {target_kind!r} is not one of {TARGET_KINDS!r}")
+    _validate_decomposition_target(target_kind, target_section.strip())
     mutation_id_raw = payload.get("mutation_id")
     # Mutation has a default_factory; pass only when the LLM supplied one.
     if isinstance(mutation_id_raw, str) and mutation_id_raw.strip():
@@ -1023,6 +1040,7 @@ def apply_mutation(
         if current_sections is not None
         else load_policy(mutation.target_kind)
     )
+    _validate_decomposition_target(mutation.target_kind, mutation.target_section, sections)
     previous_value = sections.get(mutation.target_section, "")
     sections[mutation.target_section] = mutation.new_value
     write_policy(mutation.target_kind, sections)

@@ -135,11 +135,9 @@ class WorkerRequest:
     source: str = ""
     policy_sources: EncodedPolicySourceBundle | None = None
     # PR-JSON-WIRE (2026-05-25) — per-task JSON Schema for
-    # structured-output forcing on the spawned LLM call. Threads
-    # through ``AgenticLoop.response_schema`` →
-    # ``AdapterCallRequest.response_schema`` → claude-cli ``--json-schema``. ``None``
-    # preserves back-compat (caller without a schema gets free-form
-    # text). Per-role schemas live in
+    # structured-output forcing on the spawned LLM call. Threads through
+    # ``AgenticLoop.response_schema`` → ``AdapterCallRequest.response_schema``.
+    # ``None`` preserves free-form output. Per-role schemas live in
     # ``plugins/seed_generation/json_schemas.py`` and are wired in
     # each role's ``_build_tasks``.
     response_schema: dict[str, Any] | None = None
@@ -218,10 +216,8 @@ class WorkerResult:
     ``WorkerResult`` had no usage fields, so everything serialized to the
     parent reported zeros.
 
-    Capture coverage: payg / API-key adapters and claude-cli (PR-CLI-
-    USAGE-CAPTURE, 2026-07-13 — the CLI's terminal ``result`` stream-json
-    event carries token usage even on subscription) populate real numbers.
-    We never fabricate counts; unmetered calls stay honestly at 0.
+    API-key and subscription adapters populate real counts when the provider
+    reports them. We never fabricate counts; unmetered calls stay at 0.
     """
 
     task_id: str
@@ -459,36 +455,6 @@ def _run_agentic(
         from core.agent.activity_channel import set_activity_sink
 
         set_activity_sink(_make_activity_sink(request.task_id))
-
-    # PR-RESUME-NO-PERSIST-FIX (2026-05-25) — bind a per-task isolated
-    # working directory so claude-cli's cwd-keyed session cache
-    # (``~/.claude/projects/<cwd-hash>/sessions/``) is unique per
-    # ``task_id``. This replaces the blunt ``--no-session-persistence``
-    # flag from PR-PERMS-FLAG-FIX B (which disabled ALL persistence and
-    # broke PR-V's intra-task ``--resume`` path). Cross-sub-agent leak
-    # via cwd-cache auto-pickup is now prevented because each task_id
-    # has its own cache pool; within-task continuity still works
-    # because turn N+1 sees the same cwd as turn N.
-    #
-    # PR-CLEANUP-WORKER-REQUEST-RUN-DIR (2026-05-25) — the first cut
-    # of this binding read ``request.run_dir`` (a dead field on
-    # ``WorkerRequest`` that no producer ever populated), so the
-    # guard never fired and the mkdir never ran. Smoke 11 confirmed
-    # the wiring gap (no ``cwd/`` subdir in ``sub_agents/<task_id>/``).
-    # The live SoT for an orchestrator-bound run_dir at the worker
-    # side is :func:`core.observability.run_dir.get_active_run_dir`
-    # — ``worker.main()`` already re-binds the ContextVar from the
-    # ``GEODE_RUN_DIR`` env var on entry, so by the time
-    # ``_run_agentic`` runs the value is available.
-    from core.observability.run_dir import get_active_run_dir
-
-    active_run_dir = get_active_run_dir()
-    if active_run_dir is not None and request.task_id:
-        from core.agent.task_isolation import set_task_isolated_cwd
-
-        task_cwd_path = active_run_dir / "sub_agents" / request.task_id / "cwd"
-        task_cwd_path.mkdir(parents=True, exist_ok=True)
-        set_task_isolated_cwd(task_cwd_path)
 
     # Resolve checkpoint/model identity before freezing the executable policy
     # projection. A resumed child may carry a different provider from the

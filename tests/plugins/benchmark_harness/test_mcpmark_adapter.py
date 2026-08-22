@@ -659,9 +659,23 @@ def test_route_from_geode_model_label() -> None:
     assert _route_from_model("geode-claude-sonnet-4-6") == (
         "claude-sonnet-4-6",
         "anthropic",
-        "subscription",
+        "payg",
     )
     assert _route_from_model("geode-glm-4-6") == ("glm-4-6", "zhipuai", "api_key")
+
+
+def test_claude_route_builds_anthropic_payg_loop() -> None:
+    model, provider, source = _route_from_model("geode-claude-sonnet-4-6")
+    loop = _build_loop(
+        tools=[],
+        instruction="answer",
+        model=model,
+        provider=provider,
+        source=source,
+        effort="high",
+        timeout=30,
+    )
+    assert loop._new_adapter.name == "anthropic-payg"
 
 
 def test_usage_dict_translates_geode_usage_for_mcpmark_summary() -> None:

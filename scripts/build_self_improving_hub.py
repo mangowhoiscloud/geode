@@ -216,7 +216,7 @@ PETRI_SIDEBAR_LIMIT = 3
 # in the hub-read baseline. FOLLOW-UP: read it from role-provenance
 # (``geode_product.self_improving.loop.observe.role_provenance`` records the mutator
 # model+source) so this row stops hardcoding a possibly-stale version.
-DEFAULT_MUTATOR_MODEL = "claude-cli/claude-opus-4-7"
+DEFAULT_MUTATOR_MODEL = "anthropic/claude-opus-4-7"
 # Canonical 20-dim subset displayed on the pilot-score heatmap (the two
 # post-judge analytics dims were removed — PR-DROP-ANALYTICS-DIMS 2026-06-02).
 PILOT_HEATMAP_DIMS: tuple[str, ...] = (
@@ -244,8 +244,8 @@ PILOT_HEATMAP_DIMS: tuple[str, ...] = (
 
 # Map provider prefix (model.split("/")[0]) -> chip class + chip label.
 # Per master DESIGN.md §3 — 4 chips only; palette explosion forbidden.
-# The label names the ACCESS LANE: PAYG = API-key billing; Claude Code = Claude
-# subscription via Claude Code CLI (Max OAuth); ChatGPT = ChatGPT subscription
+# The label names the ACCESS LANE: PAYG = API-key billing; the Claude Code
+# entry renders historical artifacts; ChatGPT = ChatGPT subscription
 # via the Codex CLI/backend (ChatGPT OAuth — see core.config.credential_source
 # OPENAI_CODEX + core.llm.adapters.codex_oauth). The ``openai-codex`` prefix is
 # the ChatGPT-subscription lane, NOT the bare ``openai`` PAYG API lane, so the

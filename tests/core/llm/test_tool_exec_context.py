@@ -62,12 +62,12 @@ def test_tool_context_accepts_loop_routing() -> None:
         provider="anthropic",
         source="subscription",
         model="claude-opus-4-7",
-        adapter_name="anthropic-oauth",
+        adapter_name="anthropic-subscription-test",
     )
     assert ctx.provider == "anthropic"
     assert ctx.source == "subscription"
     assert ctx.model == "claude-opus-4-7"
-    assert ctx.adapter_name == "anthropic-oauth"
+    assert ctx.adapter_name == "anthropic-subscription-test"
 
 
 # ---------------------------------------------------------------------------
@@ -99,17 +99,17 @@ def test_select_adapter_exact_match_required_with_prefer(
     cands = [
         _fake_adapter("openai-payg", "openai", "payg"),
         _fake_adapter("anthropic-payg", "anthropic", "payg"),
-        _fake_adapter("anthropic-oauth", "anthropic", "subscription"),
+        _fake_adapter("anthropic-subscription-test", "anthropic", "subscription"),
     ]
     monkeypatch.setattr("core.llm.adapters.dispatch.list_adapters", lambda: cands)
 
-    # Exact match — anthropic-oauth picked.
+    # Exact subscription match picked.
     picked = _select_adapter(
         "supports_web_search",
         prefer_provider="anthropic",
         prefer_source="subscription",
     )
-    assert picked is not None and picked.name == "anthropic-oauth"
+    assert picked is not None and picked.name == "anthropic-subscription-test"
 
     # No exact match for (openai, subscription) — even though openai-payg
     # is registered, dispatch refuses to widen.
@@ -130,7 +130,7 @@ def test_select_adapter_without_route_returns_none(
 
     cands = [
         _fake_adapter("anthropic-payg", "anthropic", "payg"),
-        _fake_adapter("anthropic-oauth", "anthropic", "subscription"),
+        _fake_adapter("anthropic-subscription-test", "anthropic", "subscription"),
         _fake_adapter("openai-payg", "openai", "payg"),
     ]
     monkeypatch.setattr("core.llm.adapters.dispatch.list_adapters", lambda: cands)
@@ -281,7 +281,7 @@ def test_processor_builds_tool_context_for_each_dispatch() -> None:
         provider="anthropic",
         source="subscription",
         model="claude-opus-4-7",
-        adapter_name="anthropic-oauth",
+        adapter_name="anthropic-subscription-test",
     )
 
     context = processor._new_tool_context("call-1")
@@ -290,7 +290,7 @@ def test_processor_builds_tool_context_for_each_dispatch() -> None:
     assert context.provider == "anthropic"
     assert context.source == "subscription"
     assert context.model == "claude-opus-4-7"
-    assert context.adapter_name == "anthropic-oauth"
+    assert context.adapter_name == "anthropic-subscription-test"
 
 
 # ---------------------------------------------------------------------------
@@ -344,7 +344,7 @@ def test_handler_signature_gating_skips_closed_signature_handlers() -> None:
 
 def test_web_search_via_adapters_routes_to_exact_match() -> None:
     """PR-NO-FALLBACK — when the loop is on anthropic-subscription,
-    dispatch routes to anthropic-oauth (the exact match). The PAYG sibling
+    dispatch routes to the exact subscription match. The PAYG sibling
     is registered but never tried — strict single-adapter mode."""
     from core.llm.adapters.base import WebSearchResult
     from core.llm.adapters.dispatch import web_search_via_adapters
@@ -358,12 +358,14 @@ def test_web_search_via_adapters_routes_to_exact_match() -> None:
         return_value=WebSearchResult(query="q", text="from-payg", adapter_name="anthropic-payg")
     )
     sub = MagicMock(spec_set=["name", "provider", "source", "supports_web_search", "aweb_search"])
-    sub.name = "anthropic-oauth"
+    sub.name = "anthropic-subscription-test"
     sub.provider = "anthropic"
     sub.source = "subscription"
     sub.supports_web_search = True
     sub.aweb_search = AsyncMock(
-        return_value=WebSearchResult(query="q", text="from-sub", adapter_name="anthropic-oauth")
+        return_value=WebSearchResult(
+            query="q", text="from-sub", adapter_name="anthropic-subscription-test"
+        )
     )
 
     with patch("core.llm.adapters.dispatch.list_adapters", return_value=[payg, sub]):
@@ -371,7 +373,7 @@ def test_web_search_via_adapters_routes_to_exact_match() -> None:
             web_search_via_adapters("q", prefer_provider="anthropic", prefer_source="subscription")
         )
 
-    assert result.adapter_name == "anthropic-oauth"
+    assert result.adapter_name == "anthropic-subscription-test"
     sub.aweb_search.assert_called_once()
     payg.aweb_search.assert_not_called()
 

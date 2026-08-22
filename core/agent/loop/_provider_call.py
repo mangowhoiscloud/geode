@@ -126,166 +126,6 @@ async def _acomplete_with_fail_fast_pre_execution_retry(
         return await invoke()
 
 
-def _saved_cwd_matches_current(stored_cwd: str, current_cwd: str) -> bool:
-    """cwd-equality check for the claude-cli resume gate.
-
-    Contract: True when either side is empty (no per-task cwd → skip the
-    gate); otherwise ``Path.resolve()`` equality (normalises symlinks /
-    ``..`` / trailing slashes). Resolution failure → False (force fresh
-    session).
-    """
-    from pathlib import Path
-
-    if not stored_cwd or not current_cwd:
-        return True
-    try:
-        return Path(stored_cwd).resolve() == Path(current_cwd).resolve()
-    except (OSError, RuntimeError):
-        # resolution failure → mismatch (force fresh session)
-        return False
-
-
-def _load_prior_session_id(session_id: str) -> str:
-    """Return the claude-cli session_id from this sub-agent's prior turn.
-
-    Contract: claude-cli session storage is cwd-keyed, so the saved
-    ``cwd`` must equal ``get_task_isolated_cwd()`` or the id is unusable.
-    Returns ``""`` on cwd mismatch, missing session, or any I/O/parse
-    error (force a fresh session — never crash, never resume a stale id).
-    Reads SQLite runtime-state first, then the legacy session.json file.
-    """
-    from core.agent.task_isolation import get_task_isolated_cwd
-
-    current_cwd = get_task_isolated_cwd() or ""
-
-    # SQLite primary — per-agent row landed by record_agent_session_end.
-    try:
-        from core.observability.agent_runtime_state import get_agent_runtime_state
-
-        state = get_agent_runtime_state(session_id)
-        if state is not None and state.claude_cli_session_id:
-            stored_cwd = str(state.session_resume_params.get("cwd", ""))
-            if _saved_cwd_matches_current(stored_cwd, current_cwd):
-                return state.claude_cli_session_id
-            log.info(
-                "session %s saved for cwd=%r — skipping resume in cwd=%r",
-                state.claude_cli_session_id,
-                stored_cwd,
-                current_cwd,
-            )
-            return ""
-    except Exception:
-        log.debug(
-            "agent_runtime_state read failed for %s — falling back to session.json",
-            session_id,
-            exc_info=True,
-        )
-
-    # File fallback — when the SQLite runtime-state row is absent.
-    try:
-        from core.observability.run_dir import resolve_sub_agent_path
-
-        session_path = resolve_sub_agent_path(session_id, "session.json")
-    except Exception:
-        log.debug(
-            "resolve_sub_agent_path failed for %s — no resume id",
-            session_id,
-            exc_info=True,
-        )
-        return ""
-    if session_path is None or not session_path.exists():
-        return ""
-    try:
-        import json
-
-        payload = json.loads(session_path.read_text(encoding="utf-8"))
-        cached = payload.get("claude_cli_session_id", "")
-        if not cached:
-            return ""
-        # same paired-cwd gate; missing key → skip gate (back-compat)
-        stored_cwd_file = str(payload.get("cwd", ""))
-        if not _saved_cwd_matches_current(stored_cwd_file, current_cwd):
-            log.info(
-                "session %s (file) saved for cwd=%r — skipping resume in cwd=%r",
-                cached,
-                stored_cwd_file,
-                current_cwd,
-            )
-            return ""
-        return str(cached)
-    except Exception:
-        log.debug("session.json read failed for %s", session_id, exc_info=True)
-        return ""
-
-
-def _persist_session_id(session_id: str, emitted_session_id: str) -> None:
-    """Persist the claude-cli session_id this turn emitted for the next
-    turn's ``--resume <id>``.
-
-    Dual-write: SQLite ``agent_runtime_state.claude_cli_session_id``
-    (primary, covers the case where the id is emitted before the round's
-    SESSION_ENDED hook fires) + the legacy session.json file. The cwd is
-    paired into both writes (storage is cwd-keyed). Empty
-    ``emitted_session_id`` is a no-op (non-claude-cli adapters).
-    """
-    if not emitted_session_id:
-        return
-
-    # cwd the session was written from — reader's gate is keyed on it
-    from core.agent.task_isolation import get_task_isolated_cwd
-
-    write_cwd = get_task_isolated_cwd() or ""
-    resume_params = {"cwd": write_cwd} if write_cwd else {}
-
-    # SQLite primary write — upsert the resumable session_id
-    try:
-        from core.observability.agent_runtime_state import record_agent_session_end
-
-        record_agent_session_end(
-            agent_id=session_id,
-            claude_cli_session_id=emitted_session_id,
-            session_resume_params=resume_params,
-        )
-    except Exception:
-        log.debug(
-            "agent_runtime_state write failed for %s — file fallback only",
-            session_id,
-            exc_info=True,
-        )
-
-    # File-fallback write — mirrors the SQLite primary.
-    try:
-        from core.observability.run_dir import resolve_sub_agent_path
-
-        session_path = resolve_sub_agent_path(session_id, "session.json")
-    except Exception:
-        log.debug(
-            "resolve_sub_agent_path failed for %s — file fallback skipped",
-            session_id,
-            exc_info=True,
-        )
-        return
-    if session_path is None:
-        return
-    try:
-        import json
-        import time
-
-        payload = {
-            "claude_cli_session_id": emitted_session_id,
-            "updated_at": time.time(),
-        }
-        # pair cwd here too — reader's gate is symmetric across both paths
-        if write_cwd:
-            payload["cwd"] = write_cwd
-        session_path.write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-    except Exception:
-        log.debug("session.json write failed for %s", session_id, exc_info=True)
-
-
 async def _prepare_request(
     loop: Any,
     system: str,
@@ -345,9 +185,6 @@ async def _prepare_request(
         build_adapter_request,
     )
 
-    # prior session_id → adapter ``--resume <id>`` (claude-cli reuses the
-    # cached prefix); empty on first turn (behaviour unchanged)
-    prior_session_id = _load_prior_session_id(loop._session_id)
     session_allowed_tools = (
         frozenset(loop._allowed_tool_names) if loop._allowed_tool_names is not None else None
     )
@@ -401,8 +238,6 @@ async def _prepare_request(
         allowed_tool_names=session_allowed_tools,
         denied_tool_names=executor_denied_tools,
         executable_tool_names=executor_executable_tools,
-        resume_session_id=prior_session_id,
-        # per-loop schema → claude-cli --json-schema / codex --output-schema
         response_schema=(response_schema if response_schema is not None else loop._response_schema),
     )
     import uuid as _uuid
@@ -661,13 +496,6 @@ async def call_llm(
         response = None
     else:
         response = agentic_response_from_adapter_result(result)
-        # persist the emitted session_id for the next turn's resume
-        # (no-op for non-claude-cli adapters)
-        emitted_sid = getattr(result, "session_id", "")
-        _persist_session_id(loop._session_id, emitted_sid)
-        # cache for the SESSION_ENDED claude_cli_session_id write
-        if emitted_sid:
-            loop._last_emitted_session_id = emitted_sid
 
     if response is None:
         adapter_err = getattr(call_adapter, "_last_error", None)
@@ -691,8 +519,5 @@ async def call_llm(
 
 __all__ = [
     "_acomplete_with_fail_fast_pre_execution_retry",
-    "_load_prior_session_id",
-    "_persist_session_id",
-    "_saved_cwd_matches_current",
     "call_llm",
 ]

@@ -99,8 +99,8 @@ class ToolContext:
     from operator settings + ProfileStore — so the tool may land on a
     different (provider, source) pair than the orchestration loop's main
     LLM call. That is fine when the operator has one credential per
-    provider, but breaks the moment a session is intentionally driven by
-    Claude OAuth subscription while PAYG keys also sit in the environment.
+    provider, but breaks when a session intentionally selects one source while
+    another source for the same provider is also configured.
     Tools that read these fields can pass ``prefer_provider`` /
     ``prefer_source`` to ``core.llm.adapters.dispatch`` helpers so the
     candidate ordering matches the loop's choice.

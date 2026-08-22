@@ -5,6 +5,10 @@
 > **Status**: Accepted (2026-05-19)
 > **Scope**: GEODE self-improving-loop (autoresearch + seed-generation). subscription credential(Claude Code OAuth, ChatGPT OAuth)이 실행 도중 quota에 도달하면, 운영자가 계정을 교체하고 이미 끝난 generation / candidate / match에 예산을 다시 쓰지 않으면서 **마지막으로 완료된 작업 단위부터 재개**할 수 있어야 합니다.
 
+> **경로 갱신(2026-08-22):** checkpoint 설계는 유지하지만 Claude CLI 자격
+> 경로와 session resume token은 퇴역했습니다. 아래 Claude 언급은 과거
+> 기록이며 현재 복구 경로는 OpenAI Codex와 API key입니다.
+
 ## 배경 (Context)
 
 2026-05-19 self-improving-loop config 통합 계획은 strict subscription mode(`fallback_to_payg=false` 기본값)를 도입해, subscription 소진 시 PAYG로 조용히 넘어가는 대신 실행 가능한 안내 배너와 함께 중단하도록 했습니다. strict-abort 자체는 올바르지만 새로운 실패 모드를 만듭니다. 긴 self-improving-loop 실행(다세대 seed evolution 또는 overnight autoresearch ratchet)은 중단 시점에 진행 중이던 모든 것을 잃습니다. 사용자가 2026-05-19에 명시적으로 요청했습니다: "self-improving-loop 가 subscription 초과로 끊겨도, 계정 롤아웃해서 이어갈 수 있게 체크포인트와 같은 replay-resume 조치가 되어있는지 점검."
@@ -187,7 +191,7 @@ GEODE에는 이미 더 풍부한 in-process 등가물이 있습니다: `core/aut
 - **PR-ζ4**: LLM call metadata에 idempotency-key 삽입 + 로컬 response cache 조회(`~/.geode/self-improving-loop/<session>/idempotency.db`).
 - **PR-ζ5**: credential-rollover 감지. resume 시 active source를 checkpoint와 비교하고 journal에 `credential_rolled_over_at` event를 방출.
 - **PR-ζ5.5** (신규): `ProfileRotator`를 self-improving-loop credential 경로에 배선. `resolve_self_improving_loop_binding(family) → (source, profile)`이 profile 차원을 추가. `plugins/petri_audit/credential_source.py`는 실패를 in-process suppress set 대신 `ProfileRotator.mark_failure(profile)`로 라우팅. autoresearch + seed-generation은 LLM call metadata에 `profile.name`을 전달해 cooldown이 계정별로 추적되게 함.
-- **PR-ζ5.6** (신규): 2축 계정 picker(provider ←→ × profile ↑↓), `core/cli/effort_picker.py` 미러. 진입점 2개: (a) `/login picker` slash command + red 배너 abort dialog 자동 트리거(PR-γ1 트리거 조건), (b) agent loop의 자연어 문구 인식기가 picker를 programmatic하게 호출. action row: Enter(교체+재개) / n(`claude /login` subprocess delegate로 새 profile 추가) / w(reset 대기) / p(이 실행에 한해 PAYG opt-in) / Esc(중단 유지).
+- **PR-ζ5.6** (신규): 2축 계정 picker(provider ←→ × profile ↑↓), `core/cli/effort_picker.py` 미러. 진입점 2개: (a) `/login picker` slash command + red 배너 abort dialog 자동 트리거(PR-γ1 트리거 조건), (b) agent loop의 자연어 문구 인식기가 picker를 programmatic하게 호출. action row: Enter(교체+재개) / n(provider-owned login 경로; Claude는 `claude auth login --claudeai`) / w(reset 대기) / p(이 실행에 한해 PAYG opt-in) / Esc(중단 유지).
 - **PR-ζ6**: 문서 + resume run-book 샘플(`https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-19-resume-rollout-runbook.md`) + CHANGELOG.
 
 ## 레퍼런스

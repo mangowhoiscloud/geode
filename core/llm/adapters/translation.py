@@ -48,7 +48,6 @@ def build_adapter_request(
     allowed_tool_names: frozenset[str] | None = None,
     denied_tool_names: frozenset[str] = frozenset(),
     executable_tool_names: frozenset[str] = frozenset(),
-    resume_session_id: str = "",
     response_schema: dict[str, Any] | None = None,
     transient_tools: list[dict[str, Any]] | None = None,
     transient_deferred_tool_names: tuple[str, ...] = (),
@@ -163,7 +162,6 @@ def build_adapter_request(
         allowed_tool_names=allowed_tool_names,
         denied_tool_names=denied_tool_names,
         executable_tool_names=executable_tool_names,
-        resume_session_id=resume_session_id,
         response_schema=response_schema,
     )
 

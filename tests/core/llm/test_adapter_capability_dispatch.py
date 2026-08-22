@@ -135,14 +135,6 @@ def test_anthropic_payg_adapter_advertises_web_search_and_text_completion() -> N
     assert adapter.supports_text_completion is True
 
 
-def test_anthropic_oauth_adapter_advertises_web_search_and_text_completion() -> None:
-    from core.llm.adapters.anthropic_oauth import AnthropicOAuthAdapter
-
-    adapter = AnthropicOAuthAdapter()
-    assert isinstance(adapter, WebSearchCapable)
-    assert isinstance(adapter, TextCompletionCapable)
-
-
 def test_openai_payg_adapter_advertises_web_search_and_text_completion() -> None:
     from core.llm.adapters.openai_payg import OpenAIPaygAdapter
 
@@ -309,8 +301,7 @@ def test_web_search_via_adapters_raises_unavailable_when_prefer_does_not_match(
 def test_web_search_via_adapters_prefer_exact_match_routes_to_subscription(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """When the AgenticLoop's adapter is anthropic-oauth, dispatch must
-    route web_search to anthropic-oauth — even though anthropic-payg is
+    """A subscription route selects its exact adapter even when PAYG is
     also registered."""
     _force_payg_first(monkeypatch)
     _install_stubs(
@@ -320,7 +311,7 @@ def test_web_search_via_adapters_prefer_exact_match_routes_to_subscription(
                 name="anthropic-payg", provider="anthropic", source="payg", mode="ok"
             ),
             _StubWebSearchAdapter(
-                name="anthropic-oauth",
+                name="anthropic-subscription-test",
                 provider="anthropic",
                 source="subscription",
                 mode="ok",
@@ -330,7 +321,7 @@ def test_web_search_via_adapters_prefer_exact_match_routes_to_subscription(
     result = asyncio.run(
         web_search_via_adapters("test", prefer_provider="anthropic", prefer_source="subscription")
     )
-    assert result.adapter_name == "anthropic-oauth"
+    assert result.adapter_name == "anthropic-subscription-test"
 
 
 def test_web_search_via_adapters_without_route_is_unavailable(

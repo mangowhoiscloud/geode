@@ -178,7 +178,7 @@ def test_parse_mutation_missing_target_kind_defaults_to_prompt() -> None:
 def test_parse_mutation_extracts_target_kind() -> None:
     raw = json.dumps(
         {
-            "target_section": "s",
+            "target_section": "suffix",
             "new_value": "v",
             "rationale": "r",
             "target_kind": "decomposition",
@@ -230,6 +230,19 @@ def test_parse_mutation_rejects_non_string_target_kind() -> None:
         parse_mutation(raw)
 
 
+def test_parse_mutation_rejects_unused_decomposition_section() -> None:
+    raw = json.dumps(
+        {
+            "target_section": "strategy",
+            "new_value": "depth-first",
+            "rationale": "r",
+            "target_kind": "decomposition",
+        }
+    )
+    with pytest.raises(ValueError, match="decomposition target_section"):
+        parse_mutation(raw)
+
+
 # ---------------------------------------------------------------------------
 # apply_mutation — dispatcher routes by target_kind
 # ---------------------------------------------------------------------------
@@ -260,14 +273,42 @@ def test_apply_mutation_decomposition_writes_to_decomposition_file(
     target = tmp_path / "decomposition.json"
     _redirect_kind(monkeypatch, "decomposition", target)
     m = Mutation(
-        target_section="strategy",
-        new_value="depth-first",
+        target_section="suffix",
+        new_value="Prefer depth-first exploration.",
         rationale="r",
         target_kind="decomposition",
     )
     apply_mutation(m, current_sections={})
     assert target.exists()
-    assert json.loads(target.read_text(encoding="utf-8")) == {"strategy": "depth-first"}
+    assert json.loads(target.read_text(encoding="utf-8")) == {
+        "suffix": "Prefer depth-first exploration."
+    }
+
+
+def test_apply_mutation_rejects_unused_decomposition_section() -> None:
+    with pytest.raises(ValueError, match="decomposition target_section"):
+        apply_mutation(
+            Mutation(
+                target_section="rules",
+                new_value="Build a DAG.",
+                rationale="r",
+                target_kind="decomposition",
+            ),
+            current_sections={},
+        )
+
+
+def test_apply_mutation_rejects_shadowed_decomposition_suffix() -> None:
+    with pytest.raises(ValueError, match="has no effect while system_prompt override is set"):
+        apply_mutation(
+            Mutation(
+                target_section="suffix",
+                new_value="Consider alternatives.",
+                rationale="r",
+                target_kind="decomposition",
+            ),
+            current_sections={"system_prompt": "Use this complete planner prompt."},
+        )
 
 
 def test_apply_mutation_retrieval_is_rejected_post_s0d() -> None:
@@ -535,7 +576,10 @@ def test_parse_mutation_accepts_all_seven_behaviour_kinds() -> None:
     from geode_product.self_improving.loop.mutate.runner import parse_mutation
 
     for kind in TARGET_KINDS:
-        section = "tool.description" if kind in _NESTED_KINDS else "some_section"
+        if kind == "decomposition":
+            section = "suffix"
+        else:
+            section = "tool.description" if kind in _NESTED_KINDS else "some_section"
         payload = json.dumps(
             {
                 "target_kind": kind,

@@ -255,7 +255,7 @@ total_seconds:            315.4
 seed_count:               10
 dim_count:                20
 target_model:             geode/gpt-5.5
-judge_model:              claude-cli/claude-opus-4-6
+judge_model:              anthropic/claude-opus-4-6
 budget_minutes:           5
 wrapper_override_active:  true
 section_count:            5

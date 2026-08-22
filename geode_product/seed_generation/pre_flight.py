@@ -9,8 +9,8 @@ spend is now controlled by the pre-run cost preview + human gate at
 the CLI surface, not by hard caps in the orchestrator):
 
 1. **Auth probe**: for each :class:`RoleBinding` / :class:`VoterBinding`,
-   verify the resolved source's credential is reachable. ``claude-cli``
-   / ``openai-codex`` use the per-provider OAuth helpers; ``api_key``
+   verify the resolved source's credential is reachable. ``openai-codex``
+   uses the provider OAuth helper; ``api_key``
    reads :data:`core.config.settings` env-resolved keys.
 2. **Panel diversity**: piggyback on
    :func:`geode_product.seed_generation.picker.validate_runtime_diversity` so
@@ -75,16 +75,12 @@ class PreFlightReport:
 
 
 def _credential_present(provider: str, source: str) -> bool:
-    """Probe whether the resolved credential is reachable.
+    """Probe whether the resolved credential route is ready.
 
     Returns False (silently) on import or probe error so the
     pre-flight surfaces a structured issue rather than crashing.
     """
     try:
-        if source == "claude-cli":
-            from core.auth.claude_cli_oauth import is_claude_oauth_available
-
-            return is_claude_oauth_available()
         if source == "openai-codex":
             from geode_product.petri_audit.codex_provider import is_codex_oauth_available
 
@@ -141,8 +137,6 @@ def check_auth(picker_result: PickerResult) -> list[PreFlightIssue]:
 
 def _fix_for(provider: str, source: str) -> str:
     """Human-readable remediation hint for a missing credential."""
-    if source == "claude-cli":
-        return "Run `claude login` (or set GEODE_ANTHROPIC_CREDENTIAL_SOURCE=api_key)."
     if source == "openai-codex":
         return "Run `codex login` (or set GEODE_OPENAI_CREDENTIAL_SOURCE=api_key)."
     if source == "api_key":

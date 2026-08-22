@@ -175,13 +175,7 @@ class PetriRoleConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     model: str = ""
-    # PR-SIL-5THEME C6 (2026-05-23) — default ``auto`` → ``claude-cli``.
-    # operator decision (``project_payg_exclusion_decision.md``, 2026-05-23)
-    # 으로 subscription-first 가 새 default. ``auto`` 는 manifest cascade
-    # 가 PAYG 까지 fallback 할 수 있어서 silent leak risk — 명시
-    # ``claude-cli`` (Claude Code Max OAuth) 이 default 면 leak 0. operator
-    # 가 explicit 으로 ``auto`` 또는 ``openai-codex`` 명시 시 그대로 적용.
-    source: CredentialSource = CredentialSource.CLAUDE_CLI
+    source: CredentialSource = CredentialSource.API_KEY
 
 
 class AutoresearchConfig(BaseModel):
@@ -316,18 +310,10 @@ class AutoresearchConfig(BaseModel):
     ``[self_improving_loop.autoresearch.target] model = ...`` shape."""
     judge_model: str | None = None
     """**Deprecated pre-PR #1496 slot** — see :attr:`target_model`."""
-    # PR-SIL-5THEME C6 (2026-05-23) — default ``auto`` → ``claude-cli``.
-    # Operator decision (``project_payg_exclusion_decision.md``, 2026-05-23)
-    # 으로 ``api_key`` 는 ``Source`` literal 에서 제거. ``auto`` 는 manifest
-    # cascade 가 PAYG 까지 silent fallback 가능 → ``claude-cli`` (Claude
-    # Code Max OAuth) 가 새 default.
-    source: CredentialSource = CredentialSource.CLAUDE_CLI
-    """Credential source for the audit subprocess. PR-SIL-5THEME C6 후 PAYG
-    (``api_key``) 는 Source literal 에서 제거. ``claude-cli`` = Claude Code
-    Max OAuth (default), ``openai-codex`` = ChatGPT subscription OAuth, ``auto`` =
-    manifest cascade (subscription-first, ``fallback_to_payg`` 가 True 여야
-    PAYG 까지 fallback). argv translator 가 non-``api_key`` source 를
-    ``--use-oauth`` 로 매핑 (모든 source 가 이제 non-api_key 라 항상 fire)."""
+    source: CredentialSource = CredentialSource.API_KEY
+    """Credential source for the audit subprocess. Anthropic uses ``api_key``;
+    OpenAI may use ``openai-codex``. The retired ``claude-cli`` value loads
+    only to produce an explicit migration error before dispatch."""
     seed_limit: Annotated[int, Field(ge=5, le=1000)] = 10
     """Per-audit seed count — the N that ``dim_extractor._aggregate``
     feeds into ``statistics.stdev(ddof=1)``.
@@ -753,8 +739,8 @@ class SelfImprovingLoopConfig(BaseModel):
         """Restrict the knob to the two OpenAI credential lanes.
 
         ``openai_source`` is an OpenAI-lane selector, not a general source default —
-        ``auto`` / ``claude-cli`` would propagate to the OpenAI roles (e.g. route the
-        mutator through Claude CLI), which is never what an OpenAI-lane knob should do.
+        ``auto`` or another provider's source would propagate to the OpenAI roles,
+        which is never what an OpenAI-lane knob should do.
         """
         if value is not None and value not in (
             CredentialSource.OPENAI_CODEX,

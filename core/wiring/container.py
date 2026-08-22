@@ -40,8 +40,7 @@ DEFAULT_GATEWAY_CONCURRENCY = 4
 # and blocked at 8. The lane cap is now the same load shape the global
 # semaphore can actually deliver, and an explicit invariant test in
 # ``tests/core/orchestration/test_lane_queue.py`` guards future drift. Re-raising the cap is
-# fine once the global lane grows OR a Claude-CLI-specific sub-agent lane
-# isolates that path (see [[project_lanequeue_handoff_2026_05_22]] Phase 2).
+# fine once the global lane grows or the workload gets an isolated lane.
 DEFAULT_SEED_PIPELINE_CONCURRENCY = 50
 
 # Module-level accessors set by build_auth().
@@ -210,25 +209,6 @@ def build_default_lanes() -> LaneQueue:
         max_concurrent=DEFAULT_SEED_PIPELINE_CONCURRENCY,
         timeout_s=300.0,
     )
-    # PR-LQ-Phase2 (2026-05-22) — surface the module-level
-    # claude-cli-subagent lane in the LaneQueue dashboard for parity
-    # with the autoresearch-audit lane pattern. The actual semaphore
-    # lives at :mod:`core.orchestration.claude_cli_lane`; this lane
-    # registration is a dashboard mirror that ``LaneQueue.status()``
-    # consumers can read alongside ``gateway`` / ``global`` /
-    # ``seed-generation``. Both registrations stay in lockstep by
-    # routing through the same constants + ``resolve_*`` resolver.
-    from core.orchestration.claude_cli_lane import (
-        CLAUDE_CLI_LANE_NAME,
-        CLAUDE_CLI_LANE_TIMEOUT_S,
-        resolve_claude_cli_lane_max,
-    )
-
-    queue.add_lane(
-        CLAUDE_CLI_LANE_NAME,
-        max_concurrent=resolve_claude_cli_lane_max(),
-        timeout_s=CLAUDE_CLI_LANE_TIMEOUT_S,
-    )
     return queue
 
 
@@ -238,7 +218,7 @@ def build_default_lanes() -> LaneQueue:
 
 
 def _build_oauth_metadata(creds: Any) -> dict[str, Any]:
-    """Extract subscription/rate-limit metadata from Claude Code credentials."""
+    """Extract subscription/rate-limit metadata from Codex credentials."""
     meta: dict[str, Any] = {}
     if "subscription_type" in creds:
         meta["subscription_type"] = creds["subscription_type"]
@@ -248,11 +228,7 @@ def _build_oauth_metadata(creds: Any) -> dict[str, Any]:
 
 
 def build_auth() -> tuple[ProfileStore, ProfileRotator, CooldownTracker]:
-    """Build auth profile system with API key + OAuth profiles.
-
-    Claude Code OAuth tokens are auto-detected from macOS Keychain or
-    ~/.claude/.credentials.json (OpenClaw managedBy pattern).
-    ProfileRotator selects OAUTH over API_KEY by type priority.
+    """Build auth profiles for API keys and Codex OAuth.
 
     Idempotent: returns the cached singleton on subsequent calls so the
     CLI and runtime bootstrap can both reach for the store without
@@ -266,11 +242,6 @@ def build_auth() -> tuple[ProfileStore, ProfileRotator, CooldownTracker]:
     from core.config import settings
 
     profile_store = ProfileStore()
-
-    # Claude Code OAuth — DISABLED (Anthropic ToS violation since 2026-01-09).
-    # Anthropic prohibits OAuth token usage outside Claude Code/claude.ai.
-    # Code preserved for reference; re-enable only if policy changes.
-    # See: https://www.theregister.com/2026/02/20/anthropic_clarifies_ban_third_party_claude_access
 
     # Optional import of the credential owned by Codex CLI. Inference stays
     # in-process through the OpenAI subscription adapter.

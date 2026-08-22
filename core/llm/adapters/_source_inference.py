@@ -14,15 +14,12 @@ the subscription bucket sat unused.
 
 Resolution order (highest precedence first):
 
-1. Explicit operator pin via ``/login source <provider> <type>`` —
-   ``settings.{provider}_credential_source`` normalises Anthropic's legacy
-   ``"oauth"`` alias to the ``claude-cli`` adapter, OpenAI's alias to its
-   subscription adapter, and ``"api_key"`` to payg. ``"none"`` falls back to
-   payg (the historical default
-   so a disabled credential source still routes through the configured PAYG
-   key rather than raising at the registry).
-2. ``"auto"`` (the unconfigured default) probes :class:`ProfileStore` —
-   any OAuth profile registered for the provider promotes to ``"subscription"``.
+1. Explicit operator pin via ``/login source <provider> <type>`` — OpenAI's
+   legacy ``"oauth"`` alias selects its subscription adapter, ``"api_key"``
+   selects PAYG, and ``"none"`` disables the provider. Retired Anthropic
+   ``"oauth"`` / ``"claude-cli"`` inputs fail before dispatch.
+2. ``"auto"`` probes :class:`ProfileStore` for OpenAI and uses PAYG for
+   Anthropic.
 3. ``"payg"`` fallback so the registry resolution never raises on a missing
    credential source — :func:`resolve_for` will still surface the PAYG
    adapter's own credential miss with its operator-grade hint.
@@ -35,10 +32,9 @@ this helper.
 from __future__ import annotations
 
 import logging
-import warnings
 from typing import TYPE_CHECKING
 
-from core.llm.adapters.base import SOURCE_ADAPTER, SOURCE_PAYG, SOURCE_SUBSCRIPTION
+from core.llm.adapters.base import SOURCE_PAYG, SOURCE_SUBSCRIPTION
 
 if TYPE_CHECKING:
     from core.auth.profiles import ProfileStore
@@ -55,7 +51,6 @@ _SETTINGS_FIELD: dict[str, str] = {
 _OAUTH_PROVIDER_KEY: dict[str, str] = {
     "openai": "openai-codex",
     "openai-codex": "openai-codex",
-    "anthropic": "anthropic",
 }
 
 
@@ -72,29 +67,24 @@ def infer_source(provider: str) -> str:
         return SOURCE_PAYG
 
     raw = _read_setting(field)
-    if provider == "anthropic" and raw in ("oauth", "claude-cli"):
-        _warn_anthropic_subscription_policy()
-        return SOURCE_ADAPTER
+    if raw == "none":
+        raise RuntimeError(
+            f"provider {provider!r} is disabled by {field}='none'; "
+            "select another credential source with /login source"
+        )
+    if raw == "claude-cli" or (provider == "anthropic" and raw == "oauth"):
+        from core.config.credential_source import CLAUDE_CLI_RETIRED_MESSAGE
+
+        raise RuntimeError(CLAUDE_CLI_RETIRED_MESSAGE)
+    if provider == "anthropic" and raw == "openai-codex":
+        raise RuntimeError("openai-codex is not a credential source for provider 'anthropic'")
     if provider in ("openai", "openai-codex") and raw in ("oauth", "openai-codex"):
         return SOURCE_SUBSCRIPTION
-    if raw in ("api_key", "none"):
+    if raw == "api_key":
         return SOURCE_PAYG
     if _has_oauth_profile(provider):
-        if provider == "anthropic":
-            _warn_anthropic_subscription_policy()
         return SOURCE_SUBSCRIPTION
     return SOURCE_PAYG
-
-
-def _warn_anthropic_subscription_policy() -> None:
-    warnings.warn(
-        "Anthropic recommends API-key authentication for third-party tools, "
-        "including open-source projects. Claude subscription routing is a legacy "
-        "compatibility path and remains subject to Anthropic's terms and possible "
-        "usage-credit billing: https://support.claude.com/en/articles/13189465",
-        UserWarning,
-        stacklevel=2,
-    )
 
 
 def _read_setting(field: str) -> str:

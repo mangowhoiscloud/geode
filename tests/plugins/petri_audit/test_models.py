@@ -72,6 +72,12 @@ def test_to_inspect_target_raw_passthrough() -> None:
     assert to_inspect_target("anthropic/claude-opus-4-7") == "anthropic/claude-opus-4-7"
 
 
+@pytest.mark.parametrize("prefix", ["claude-cli", "claude-code"])
+def test_to_inspect_target_rejects_retired_claude_cli_prefix(prefix: str) -> None:
+    with pytest.raises(AuditModelMappingError, match="integration is retired"):
+        to_inspect_target(f"{prefix}/claude-opus-4-7")
+
+
 def test_to_inspect_target_none_returns_default_sentinel() -> None:
     """N6-followup: None / empty → ``geode/default`` sentinel."""
     assert to_inspect_target(None) == "geode/default"
@@ -86,12 +92,7 @@ def test_to_inspect_target_none_returns_default_sentinel() -> None:
 def test_list_audit_models_includes_each_provider() -> None:
     pairs = list_audit_models()
     inspect_ids = {inspect for _, inspect in pairs}
-    # PR B — claude-* now resolves to ``claude-code/`` when the Claude
-    # subscription keychain entry is present, or ``anthropic/`` when
-    # not. Accept either form (same precedent as the gpt-5 OAuth path).
-    assert any(
-        i.startswith("anthropic/claude-") or i.startswith("claude-cli/claude-") for i in inspect_ids
-    )
+    assert any(i.startswith("anthropic/claude-") for i in inspect_ids)
     # PR #6 — gpt-* now resolves to ``openai-codex/`` when a token is
     # available, or ``openai/`` when not. Accept either form so the
     # test passes in both environments.
@@ -114,14 +115,11 @@ def test_list_audit_models_pairs_with_pricing_keys() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_claude_oauth_explicit_use_oauth_wins(monkeypatch: pytest.MonkeyPatch) -> None:
-    """``use_oauth=True`` forces ``claude-code/`` regardless of settings.
-    The CLI flag must still beat the persisted picker choice — matches
-    the codex side's precedence rule."""
+def test_claude_use_oauth_true_stays_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
     from core.config import settings
 
     monkeypatch.setattr(settings, "anthropic_credential_source", "api_key", raising=False)
-    assert to_inspect_model("claude-opus-4-7", use_oauth=True) == "claude-cli/claude-opus-4-7"
+    assert to_inspect_model("claude-opus-4-7", use_oauth=True) == "anthropic/claude-opus-4-7"
 
 
 def test_claude_oauth_explicit_off_wins(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -132,42 +130,32 @@ def test_claude_oauth_explicit_off_wins(monkeypatch: pytest.MonkeyPatch) -> None
     assert to_inspect_model("claude-opus-4-7", use_oauth=False) == "anthropic/claude-opus-4-7"
 
 
-def test_claude_source_oauth_routes_to_claude_code(monkeypatch: pytest.MonkeyPatch) -> None:
-    """``settings.anthropic_credential_source = 'oauth'`` routes
-    ``claude-*`` ids through ``claude-code/`` (subscription quota)."""
+def test_claude_source_oauth_is_retired(monkeypatch: pytest.MonkeyPatch) -> None:
     from core.config import settings
 
     monkeypatch.setattr(settings, "anthropic_credential_source", "oauth", raising=False)
-    assert to_inspect_model("claude-sonnet-4-6") == "claude-cli/claude-sonnet-4-6"
+    with pytest.raises(RuntimeError, match="integration is retired"):
+        to_inspect_model("claude-sonnet-4-6")
 
 
 def test_claude_source_api_key_routes_to_anthropic(monkeypatch: pytest.MonkeyPatch) -> None:
     """``settings.anthropic_credential_source = 'api_key'`` keeps the
-    stock ``anthropic/`` prefix even when a keychain entry exists."""
+    stock ``anthropic/`` prefix."""
     from core.config import settings
-    from geode_product.petri_audit.adapters import claude_cli_backend
 
     monkeypatch.setattr(settings, "anthropic_credential_source", "api_key", raising=False)
-    # Pretend keychain says yes — explicit api_key must still win.
-    monkeypatch.setattr(claude_cli_backend, "is_available", lambda: True)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
     assert to_inspect_model("claude-opus-4-7") == "anthropic/claude-opus-4-7"
 
 
-def test_claude_source_auto_prefers_oauth_when_keychain_present(
+def test_claude_source_auto_uses_api_key(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """In ``auto`` mode the keychain detection takes over — keychain
-    present → ``claude-code/``, absent → ``anthropic/``."""
+    """Anthropic auto has one built-in destination: API key."""
     from core.config import settings
-    from geode_product.petri_audit.adapters import claude_cli_backend
 
     monkeypatch.setattr(settings, "anthropic_credential_source", "auto", raising=False)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
-    monkeypatch.setattr(claude_cli_backend, "is_available", lambda: True)
-    assert to_inspect_model("claude-opus-4-7") == "claude-cli/claude-opus-4-7"
-
-    monkeypatch.setattr(claude_cli_backend, "is_available", lambda: False)
     assert to_inspect_model("claude-opus-4-7") == "anthropic/claude-opus-4-7"
 
 
@@ -190,9 +178,9 @@ def test_legacy_codex_cli_identifier_normalizes() -> None:
         assert to_inspect_model("codex-cli/gpt-5.5") == "openai-codex/gpt-5.5"
 
 
-def test_legacy_claude_code_identifier_normalizes() -> None:
-    with pytest.warns(DeprecationWarning, match="legacy alias"):
-        assert to_inspect_model("claude-code/claude-opus-4-7") == ("claude-cli/claude-opus-4-7")
+def test_legacy_claude_code_identifier_is_retired() -> None:
+    with pytest.raises(AuditModelMappingError, match="integration is retired"):
+        to_inspect_model("claude-code/claude-opus-4-7")
 
 
 def test_gpt_source_api_key_routes_to_openai(monkeypatch: pytest.MonkeyPatch) -> None:

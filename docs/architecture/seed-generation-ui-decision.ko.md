@@ -5,25 +5,25 @@
 > **Status**: Accepted (2026-05-18)
 > **Scope**: seed-generation + Petri의 user-facing surface: credential picker, cost preview, ToS notice, pre-flight check, slash command.
 
-> **Provider 경로 폐기 안내(2026-08-20).** UI 결정은 과거 증거로 보존하지만
-> `claude_code_provider`와 `codex-cli` 추론 경로는 퇴역했습니다. 현재 구독
-> 경로는 `claude-cli`와 direct `openai-codex` OAuth입니다.
+> **경로 퇴역(2026-08-22).** 이 ADR은 과거 증거로 보존합니다. Claude CLI는
+> 퇴역했으며 현재 Anthropic 역할은 `api_key`, OpenAI는 필요하면
+> `openai-codex`를 사용합니다. 아래 예시는 실행 가능한 경로가 아닙니다.
 
 ## 컨텍스트
 
 GEODE의 4 auth path:
 
-- **A**: 로컬 `claude` CLI (macOS keychain 경유 Claude 구독) -- `claude_code_provider`
-- **B**: 로컬 `codex` CLI (ChatGPT OAuth, device-code) -- `codex_provider`
+- **A**: 공식 `claude` subprocess(Claude 구독, 자격은 CLI가 소유) -- `claude-cli`
+- **B**: OpenAI Codex adapter(ChatGPT OAuth/device-code profile) -- `openai-codex`
 - **C**: OpenAI PAYG (sk-…) -- `openai-payg`
 - **D**: Anthropic PAYG (sk-ant-…) -- `anthropic-payg-geode`
 
 Petri는 4-path를 모두 지원합니다 (P1-C 5-adapter split). seed-generation(ADR-001)도 동일한 coverage가 필요합니다. 추가로:
 
 - 3-judge panel의 **provider diversity 강제** (최소 2 family). single-provider panel bias를 방지합니다.
-- subscription path(A, B)의 **ToS 회색지대** 안내. 외부 배포에 부적합하다는 경고입니다.
+- Anthropic 구독 경로의 **provider 정책** 안내. 서드파티/OSS에 API key를 권고합니다.
 - **cost preview**: PAYG 부담 + subscription quota %를 추정한 뒤 user confirm을 받습니다.
-- **auth expiry pre-flight**: OAuth token TTL을 검사하고, 부족하면 abort하며 복구안을 제시합니다.
+- **auth readiness pre-flight**: Claude 자격을 복사하지 않고 provider 상태를 조회합니다.
 
 ## 결정
 
@@ -157,29 +157,26 @@ Source 값은 Petri의 `[petri.source.<family>].allowed`와 1:1입니다 (anthro
 │   anthropic.allowed = [claude-cli, api_key, auto]                          │
 │   openai.allowed    = [openai-codex, api_key, auto]                        │
 │                                                                            │
-│ Cost preview:  $0.30 PAYG + ~12% Plus + ~8% Max                            │
+│ Cost preview:  $0.30 PAYG; subscription usage은 provider가 소유             │
 │ Diversity:     Voter A/B/C = 2 family (anthropic + openai) ✓               │
 │                                                                            │
-│ [1-9] Edit  [a] Auto  [r] Refresh OAuth  [s] Save & exit  [q] Cancel       │
+│ [1-9] Edit  [a] Auto  [r] Refresh status [s] Save & exit  [q] Cancel       │
 ╰────────────────────────────────────────────────────────────────────────────╯
 ```
 
 `required_diversity_families` 위반 시 picker가 save를 reject하고 재선택을 요구합니다.
 
-### 3. ToS notice (subscription path 첫 활성화)
+### 3. Provider 정책 안내 (Anthropic 구독 활성화)
 
-`claude_code_provider.py:38-56`의 policy notice 패턴을 재사용합니다. 본 ADR에서 picker의 inline notice로 통합하며, manifest의 source마다 first-activation hook을 둡니다:
+Picker는 `core/cli/commands/login.py::_print_anthropic_subscription_warning`을 재사용합니다:
 
 ```
-첫 Claude subscription path 활성화 -- ToS 회색지대:
+Anthropic은 OSS를 포함한 서드파티 도구에 API key 인증을
+권고합니다. 구독 사용은 Anthropic의 현행 약관을 적용받으며
+usage credit을 소모할 수 있습니다.
 
-Anthropic Consumer ToS §3 (Acceptable Use)의 "automated access"
-정의가 OAuth-routed subprocess 호출에 적용되는지 모호합니다. 문자
-그대로의 위반은 아니지만, 정신적 위반 가능성이 있습니다 (좁은 해석).
-외부 배포 / 공개 호스팅에 부적합합니다.
-
-Petri / seed-generation 한정 사용을 권장합니다.
-Production chat은 sk-ant-PAYG만 사용합니다.
+GEODE는 공식 `claude` subprocess만 사용하고 자격을 읽거나
+복사하지 않습니다.
 
 활성화하시겠습니까? [y/N]:
 ```
@@ -252,15 +249,15 @@ Aborting.
 기존 `_login_oauth(openai|anthropic)` + `_login_set_key`는 그대로 유지합니다. 단 status view 일관성을 위해:
 
 - `_login_show_status`가 seed-generation manifest의 role binding도 함께 표시합니다 (선택, S11).
-- `geode login claude-cli status`(keychain inspect) sub-action을 신설합니다. seed-generation picker가 이 status에 의존합니다.
+- Claude 준비 상태는 `claude auth status --json`으로 확인하며 picker는 credential storage를 열지 않습니다.
 
 ## 결정 동인
 
 - **Petri 패턴 재사용**: manifest + adapter + credential_source + picker. P1-A~G와 같은 PR 단위 구성입니다.
 - **Co-evolution bias 회피**: 3-judge panel의 provider diversity 강제 (최소 2 family). single-provider 구성에서는 ranker가 한 model로 편향됩니다.
-- **외부 배포 안전망**: subscription path 사용 시 ToS 회색지대를 명시합니다. user가 production 외부 배포 시 PAYG 단일화를 선택할 수 있게 합니다.
+- **외부 배포 안전망**: Anthropic의 서드파티 사용 경고를 명시해 production에서 PAYG를 선택할 수 있게 합니다.
 - **Cost 가시성**: pipeline 1회 ≈ $0.30 PAYG + quota. 무인 진화 시 누적 비용을 피하기 위한 confirmation step입니다.
-- **Auth fragility 완화**: OAuth token expiry는 silent fail입니다. pre-flight가 이를 명시적 abort + 복구안 제시로 바꿉니다.
+- **Auth fragility 완화**: provider 준비 상태 실패를 명시적 abort + 복구안 제시로 바꿉니다.
 
 ## 검토한 옵션
 
@@ -303,7 +300,7 @@ Aborting.
 - ADR-001 -- seed-generation 아키텍처
 - Petri P1-A~G manifest 패턴 -- `plugins/petri_audit/{petri.plugin.toml, manifest.py, cli.py:264,309}`
 - 4-auth path 정의 -- `core/llm/routing/plans.py:PlanKind`
-- ToS notice 패턴 -- `plugins/petri_audit/claude_code_provider.py:38-56`
+- provider 정책 안내 -- `core/cli/commands/login.py::_print_anthropic_subscription_warning`
 - Quota 추정 base -- `core/cli/commands/login.py:_login_quota` (line 886)
 - Pricing loader (P3-A) -- `core/llm/model_pricing.toml`
 - `_login_oauth` flow -- `core/cli/commands/login.py:509-700`

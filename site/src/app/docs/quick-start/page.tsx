@@ -18,7 +18,7 @@ export default function Page() {
             <ul>
               <li>Python 3.12 이상</li>
               <li><code>uv</code> 패키지 매니저 (<a href="https://docs.astral.sh/uv/">설치 안내</a>)</li>
-              <li>프로바이더 자격 1개 이상. ChatGPT Plus 구독(OAuth), Anthropic 구독(OAuth) 또는 API 키 중 하나면 충분합니다.</li>
+              <li>프로바이더 자격 1개 이상. ChatGPT Plus 구독(OAuth) 또는 Anthropic·OpenAI·GLM API 키 중 하나면 충분합니다.</li>
             </ul>
 
             <h2>1. 설치</h2>
@@ -125,7 +125,7 @@ geode uninstall               # 런타임 데이터 + CLI 제거`}</pre>
             <ul>
               <li>Python 3.12+</li>
               <li><code>uv</code> package manager (<a href="https://docs.astral.sh/uv/">install</a>)</li>
-              <li>One provider credential. A ChatGPT Plus subscription (OAuth), an Anthropic subscription (OAuth), or an API key is enough.</li>
+              <li>One provider credential. A ChatGPT Plus subscription (OAuth) or an Anthropic, OpenAI, or GLM API key is enough.</li>
             </ul>
 
             <h2>1. Install</h2>

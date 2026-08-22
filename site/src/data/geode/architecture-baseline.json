@@ -2,14 +2,12 @@
   "built_in_adapters": {
     "classes": [
       "AnthropicPaygAdapter",
-      "AnthropicOAuthAdapter",
-      "ClaudeCliAdapter",
       "OpenAIPaygAdapter",
       "CodexOAuthAdapter",
       "GlmPaygAdapter",
       "GlmCodingPlanAdapter"
     ],
-    "count": 7
+    "count": 5
   },
   "complexity_thresholds": {
     "max_args": 23,
@@ -19,7 +17,7 @@
     "max_statements": 207
   },
   "context_vars": {
-    "count": 30,
+    "count": 29,
     "items": [
       {
         "context_name": "geode_active_cognitive_state",
@@ -69,13 +67,6 @@
         "line": 30,
         "path": "core/agent/safety.py",
         "symbol": "_skip_permissions_var"
-      },
-      {
-        "context_name": "geode_task_isolated_cwd",
-        "has_default": true,
-        "line": 32,
-        "path": "core/agent/task_isolation.py",
-        "symbol": "_task_isolated_cwd"
       },
       {
         "context_name": "conversation_ctx",
@@ -164,7 +155,7 @@
       {
         "context_name": "session_metrics",
         "has_default": true,
-        "line": 90,
+        "line": 88,
         "path": "core/observability/session_metrics.py",
         "symbol": "_current_metrics"
       },
@@ -236,7 +227,7 @@
   "coordinators": {
     "AgenticLoop": {
       "constructor_arg_count": 12,
-      "file_loc": 1113,
+      "file_loc": 1109,
       "method_count": 38,
       "path": "core/agent/loop/agent_loop.py"
     },
@@ -246,7 +237,7 @@
     },
     "SubAgentManager": {
       "constructor_arg_count": 18,
-      "file_loc": 1464,
+      "file_loc": 1461,
       "method_count": 24,
       "path": "core/agent/sub_agent.py"
     }
@@ -373,20 +364,20 @@
   },
   "packages": {
     "core": {
-      "python_files": 405,
-      "python_loc": 122919
+      "python_files": 396,
+      "python_loc": 118940
     },
     "geode_product": {
-      "python_files": 161,
-      "python_loc": 62107
+      "python_files": 153,
+      "python_loc": 60651
     },
     "plugins": {
-      "python_files": 32,
-      "python_loc": 213
+      "python_files": 29,
+      "python_loc": 193
     },
     "tests": {
-      "python_files": 694,
-      "python_loc": 186681
+      "python_files": 676,
+      "python_loc": 180446
     }
   },
   "schema_version": 3,

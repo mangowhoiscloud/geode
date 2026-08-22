@@ -103,8 +103,7 @@ PROVIDER_EQUIVALENCE: dict[str, list[str]] = {
     "openai-codex": ["openai-codex", "openai"],
     "glm": ["glm-coding", "glm"],
     "glm-coding": ["glm-coding", "glm"],
-    # Anthropic stays one model family here; the adapter source axis selects
-    # PAYG, direct OAuth compatibility, or the legacy Claude CLI route.
+    # Anthropic stays one model family; its built-in route is PAYG.
     "anthropic": ["anthropic"],
 }
 

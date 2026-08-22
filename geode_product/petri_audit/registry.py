@@ -53,12 +53,12 @@ class PetriBinding:
     - ``role``: 'auditor' | 'target' | 'judge' (from manifest enabled_roles)
     - ``model``: concrete model id (e.g. 'claude-sonnet-4-6')
     - ``source``: concrete credential source (never 'auto') — e.g.
-      'api_key' / 'claude-cli' / 'openai-codex'
+      'api_key' / 'openai-codex'
     - ``provider``: inferred from model prefix — 'anthropic' / 'openai' /
       'zhipuai'
     - ``adapter_module``: dotted import path to the adapter module
     - ``inspect_prefix``: prefix used by inspect_ai (e.g. 'anthropic',
-      'claude-code', 'openai-codex', 'geode'). For the target role this
+      'openai-codex', 'geode'). For the target role this
       is always 'geode' regardless of provider.
     - ``inspect_id``: ``f"{inspect_prefix}/{model}"`` — ready to pass to
       inspect_ai's ``--model`` / ``--model-role`` flags.

@@ -103,7 +103,6 @@ def initialize_runtime(
         loop._new_adapter = get_adapter(loop._source)
     except AdapterNotFoundError:
         loop._new_adapter = resolve_for(registry_provider, loop._source)
-    loop._last_emitted_session_id = ""
     loop._op_logger = OperationLogger(quiet=quiet)
     loop._error_recovery = ErrorRecoveryStrategy(tool_executor)
 

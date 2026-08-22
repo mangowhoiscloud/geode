@@ -3,7 +3,7 @@
 Centralises the "which credential should I use for *this* provider right
 now" decision so the rest of the Petri plugin (`/petri` picker,
 `to_inspect_model` router, OAuth retry paths) stops re-implementing the
-``settings → keychain → API key`` fallback chain in three different
+``settings → registered adapter → API key`` fallback chain in three different
 places.
 
 Frontier reference: Hermes ``agent/credential_sources.py`` — per-source
@@ -26,10 +26,7 @@ Priority for the ``auto`` sentinel:
    non-auto value (e.g. ``ANTHROPIC_CREDENTIAL_SOURCE=api_key``).
 3. Manifest ``[petri.source.<provider>].default`` if not auto.
 4. Manifest ``[petri.source.<provider>].allowed`` order — first non-auto,
-   non-suppressed, *available* source wins. Manifest ordering is the
-   intent — keep OAuth first so the autoresearch self-improving loop hits
-   subscription quota by default; API-key fallback still resolves when
-   the user has only ``ANTHROPIC_API_KEY`` set.
+   non-suppressed, *available* source wins.
 """
 
 from __future__ import annotations
@@ -72,9 +69,10 @@ Sourced from the canonical :class:`core.config.credential_source.CredentialSourc
 
 Every provider in the Petri manifest has ``api_key`` as its PAYG entry
 (``anthropic.api_key``, ``openai.api_key``, ``zhipuai.api_key``).
-``resolve_credential_source(fallback_to_payg=False)`` filters this
-source out so a subscription run never silently bills the user's API
-key after OAuth quota exhaustion. See
+``resolve_credential_source(fallback_to_payg=False)`` filters an implicit
+PAYG fallback only when that provider also has a subscription source. A
+sole API-key route or an explicitly configured API-key source remains usable.
+See
 ``docs/plans/2026-05-19-self-improving-loop-config-consolidation.md`` Phase β.
 """
 
@@ -100,7 +98,13 @@ class CredentialResolutionError(RuntimeError):
         self.provider = provider
         self.allowed = allowed
         self.subscription_only = subscription_only
-        if subscription_only:
+        if subscription_only and provider == "anthropic":
+            super().__init__(
+                "provider=anthropic: no non-PAYG built-in source is available. "
+                "Claude CLI integration is retired; explicitly pin source='api_key' "
+                "and configure ANTHROPIC_API_KEY to authorize billing."
+            )
+        elif subscription_only:
             super().__init__(
                 f"provider={provider}: no subscription credential source available "
                 f"(allowed={allowed}, PAYG fallback blocked by [self_improving_loop] "
@@ -215,7 +219,7 @@ def list_credential_sources(provider: str) -> list[dict[str, Any]]:
             adapter: str | None,          # dotted module path; None for 'auto'
             inspect_prefix: str | None,
             auth_env_vars: list[str],
-            metadata: dict | None,        # OAuth-only
+            metadata: dict | None,        # subscription-only
         }
 
     The /petri picker consumes this directly.
@@ -310,10 +314,10 @@ def resolve_credential_source(
         override: explicit source request; bypasses both auto resolution
             and the ``fallback_to_payg`` filter (the caller is taking
             responsibility for the choice).
-        fallback_to_payg: when ``False``, the ``api_key`` source is
-            filtered out of auto expansion so subscription-only runs
-            cannot silently fall through to PAYG. The first OAuth-like
-            source's availability is now load-bearing; if it fails, a
+        fallback_to_payg: when ``False``, an implicit ``api_key`` fallback is
+            filtered out for providers that also expose a subscription source.
+            Sole API-key providers and explicit source settings remain usable.
+            If the subscription source fails, a
             ``CredentialResolutionError(subscription_only=True)`` is
             raised with an actionable message. Default ``True`` keeps
             the pre-2026-05-19 behaviour for back-compat callers.
@@ -323,15 +327,25 @@ def resolve_credential_source(
     manifest = load_manifest()
     spec = manifest.get_source(provider)
 
-    candidate = override or _settings_source(provider) or spec.default
+    configured_source = _settings_source(provider)
+    candidate = override or configured_source or spec.default
+    explicit_source = override or configured_source
+    has_subscription_source = any(
+        source not in {AUTO_SOURCE, PAYG_SOURCE} for source in spec.allowed
+    )
+    block_implicit_payg = (
+        not fallback_to_payg and has_subscription_source and explicit_source != PAYG_SOURCE
+    )
+
+    if provider == "anthropic" and candidate == "claude-cli":
+        from core.config.credential_source import CLAUDE_CLI_RETIRED_MESSAGE
+
+        raise RuntimeError(CLAUDE_CLI_RETIRED_MESSAGE)
 
     if candidate != AUTO_SOURCE:
         if candidate not in spec.allowed:
             raise CredentialResolutionError(provider, spec.allowed)
-        # Strict mode also blocks a PAYG-default manifest entry (e.g.
-        # zhipuai whose manifest default is ``api_key``). Explicit
-        # ``override`` is unaffected — caller takes responsibility.
-        if not fallback_to_payg and override is None and candidate == PAYG_SOURCE:
+        if block_implicit_payg and candidate == PAYG_SOURCE:
             raise CredentialResolutionError(
                 provider,
                 spec.allowed,
@@ -346,7 +360,7 @@ def resolve_credential_source(
     for source in spec.allowed:
         if source == AUTO_SOURCE:
             continue
-        if not fallback_to_payg and source == PAYG_SOURCE:
+        if block_implicit_payg and source == PAYG_SOURCE:
             continue
         if is_suppressed(provider, source):
             continue
@@ -355,7 +369,7 @@ def resolve_credential_source(
     raise CredentialResolutionError(
         provider,
         spec.allowed,
-        subscription_only=not fallback_to_payg,
+        subscription_only=block_implicit_payg,
     )
 
 
@@ -367,11 +381,9 @@ def _settings_source(provider: str) -> str | None:
     environments with a stubbed settings module) so this module never
     crashes the picker on a recoverable problem.
 
-    Legacy alias: settings historically used the value ``"oauth"`` to
-    mean "use the provider's OAuth path". The manifest spells the OAuth
-    source as ``claude-cli`` / ``openai-codex`` per provider. We map
-    here so existing .env / config.toml files keep working without
-    rewrites.
+    Legacy alias: settings historically used ``"oauth"`` for provider OAuth.
+    OpenAI maps to ``openai-codex``. Anthropic maps to the retired sentinel so
+    resolution can emit the migration error instead of silently billing PAYG.
     """
     try:
         from core.config import settings
