@@ -757,6 +757,10 @@ def test_context_var_inventory_rejects_forwarded_constructor(
     "source",
     [
         'import importlib\nmodule = importlib.import_module("contextvars")',
+        'def load():\n    import importlib\n    return importlib.import_module("contextvars")\n'
+        "module = load()",
+        'import importlib\nmodule = importlib.import_module(name="contextvars")',
+        'import importlib\nload = importlib.import_module\nmodule = load("contextvars")',
         'module = __import__("contextvars")',
     ],
 )

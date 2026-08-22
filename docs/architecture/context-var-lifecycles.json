@@ -97,11 +97,11 @@
   },
   "core/hooks/tool_hooks.py:_tool_hooks_ctx": {
     "classification": "service_locator",
-    "owner": "core.wiring.bootstrap",
-    "setter": "core.hooks.tool_hooks.set_tool_hooks",
-    "resetter": "core.hooks.tool_hooks.clear_tool_hooks",
-    "lifetime": "one runtime bootstrap context",
-    "teardown": "HookSystem owner cleanup clears the matching binding"
+    "owner": "core.wiring.bootstrap and propagated daemon/session tasks",
+    "setter": "core.hooks.tool_hooks.set_tool_hooks via bootstrap and GeodeBootstrap.propagate_to_thread",
+    "resetter": "core.hooks.tool_hooks.clear_tool_hooks for the owner context; propagated contexts end with their task/thread",
+    "lifetime": "the runtime bootstrap context plus each propagated daemon/session task context",
+    "teardown": "HookSystem owner cleanup clears the matching owner-context binding; propagated bindings disappear when their task/thread context is discarded"
   },
   "core/llm/adapters/dispatch.py:_session_adapter_usage_ctx": {
     "classification": "diagnostic_scope",

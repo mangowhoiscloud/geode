@@ -212,14 +212,14 @@
         "context_name": "tool_hooks",
         "has_default": true,
         "implementation": "ContextVar",
-        "lifetime": "one runtime bootstrap context",
+        "lifetime": "the runtime bootstrap context plus each propagated daemon/session task context",
         "line": 19,
-        "owner": "core.wiring.bootstrap",
+        "owner": "core.wiring.bootstrap and propagated daemon/session tasks",
         "path": "core/hooks/tool_hooks.py",
-        "resetter": "core.hooks.tool_hooks.clear_tool_hooks",
-        "setter": "core.hooks.tool_hooks.set_tool_hooks",
+        "resetter": "core.hooks.tool_hooks.clear_tool_hooks for the owner context; propagated contexts end with their task/thread",
+        "setter": "core.hooks.tool_hooks.set_tool_hooks via bootstrap and GeodeBootstrap.propagate_to_thread",
         "symbol": "_tool_hooks_ctx",
-        "teardown": "HookSystem owner cleanup clears the matching binding"
+        "teardown": "HookSystem owner cleanup clears the matching owner-context binding; propagated bindings disappear when their task/thread context is discarded"
       },
       {
         "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
@@ -708,7 +708,7 @@
     },
     "tests": {
       "python_files": 685,
-      "python_loc": 183453
+      "python_loc": 183457
     }
   },
   "schema_version": 4,

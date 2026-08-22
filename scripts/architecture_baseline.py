@@ -1011,14 +1011,14 @@ def _reject_forwarded_context_modules(
 def _reject_literal_context_imports(path: Path, module: ast.Module) -> None:
     importlib_aliases = {
         alias.asname or alias.name
-        for node in module.body
+        for node in ast.walk(module)
         if isinstance(node, ast.Import)
         for alias in node.names
         if alias.name == "importlib"
     }
     import_module_names = {
         alias.asname or alias.name
-        for node in module.body
+        for node in ast.walk(module)
         if isinstance(node, ast.ImportFrom) and node.module == "importlib"
         for alias in node.names
         if alias.name == "import_module"
@@ -1028,12 +1028,28 @@ def _reject_literal_context_imports(path: Path, module: ast.Module) -> None:
         *import_module_names,
         *(f"{name}.import_module" for name in importlib_aliases),
     }
+    assignments = [node for node in ast.walk(module) if isinstance(node, ast.Assign)]
+    while (
+        aliases := {
+            target.id
+            for node in assignments
+            if _dotted_name(node.value) in lazy_imports
+            for target in node.targets
+            if isinstance(target, ast.Name)
+        }
+        - lazy_imports
+    ):
+        lazy_imports.update(aliases)
     for call in (node for node in ast.walk(module) if isinstance(node, ast.Call)):
+        module_name = (
+            call.args[0]
+            if call.args
+            else next((keyword.value for keyword in call.keywords if keyword.arg == "name"), None)
+        )
         if (
             _dotted_name(call.func) in lazy_imports
-            and call.args
-            and isinstance(call.args[0], ast.Constant)
-            and call.args[0].value in {*CONTEXT_VAR_MODULES, "core.ui.context_local"}
+            and isinstance(module_name, ast.Constant)
+            and module_name.value in {*CONTEXT_VAR_MODULES, "core.ui.context_local"}
         ):
             raise ValueError(
                 f"{path}:{call.lineno}: ContextVar constructors must use static imports"
