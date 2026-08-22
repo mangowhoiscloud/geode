@@ -12,7 +12,7 @@ derived from:
    empirical typical-call sizes calibrated by ADR-001 paper §5
    (10-15 candidates × 2 judges × 3 rounds ≈ 100 LLM calls per gen).
 
-For roles bound to a subscription source (claude-cli / openai-codex)
+For roles bound to a subscription source (currently openai-codex)
 the OAuth quota absorbs the cost — we still surface the *equivalent*
 USD figure so the user can compare "subscription burn rate" vs PAYG.
 

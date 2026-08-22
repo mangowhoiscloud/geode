@@ -130,7 +130,7 @@ except ImportError:
 
 BUDGET_MINUTES = 5
 
-SOURCE = "claude-cli"
+SOURCE = "api_key"
 
 SEED_LIMIT = 10
 

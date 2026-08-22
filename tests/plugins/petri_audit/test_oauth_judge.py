@@ -104,24 +104,6 @@ def test_to_inspect_model_o_series_never_oauth() -> None:
         assert to_inspect_model("o4-mini") == "openai/o4-mini"
 
 
-def test_to_inspect_model_claude_routes_when_oauth_available() -> None:
-    """Claude mapping follows the subscription OAuth route when available."""
-    from geode_product.petri_audit.adapters import claude_cli_backend
-    from geode_product.petri_audit.models import to_inspect_model
-
-    with (
-        patch(
-            "geode_product.petri_audit.adapters.openai_codex_oauth.is_available", return_value=True
-        ),
-        patch.object(claude_cli_backend, "is_available", return_value=True),
-        patch("geode_product.petri_audit.user_overrides.read_role_override", return_value={}),
-    ):
-        # CSA-3 flip — was claude-code/, now claude-cli/.
-        assert (
-            to_inspect_model("claude-haiku-4-5-20251001") == "claude-cli/claude-haiku-4-5-20251001"
-        )
-
-
 # ---------------------------------------------------------------------------
 # is_oauth_routed predicate
 # ---------------------------------------------------------------------------
@@ -229,14 +211,12 @@ def test_estimate_cost_both_oauth_only_target_remains() -> None:
 def test_run_audit_uses_oauth_when_token_present() -> None:
     """End-to-end: auto-detect lights up → judge gets ``openai-codex/``
     in the constructed command + the cost line drops below PAYG."""
-    from geode_product.petri_audit.adapters import claude_cli_backend
     from geode_product.petri_audit.runner import run_audit
 
     with (
         patch(
             "geode_product.petri_audit.adapters.openai_codex_oauth.is_available", return_value=True
         ),
-        patch.object(claude_cli_backend, "is_available", return_value=True),
         patch("geode_product.petri_audit.user_overrides.read_role_override", return_value={}),
     ):
         report = run_audit(

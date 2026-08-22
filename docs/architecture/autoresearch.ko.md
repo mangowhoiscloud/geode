@@ -258,7 +258,7 @@ archive 역할을 한다.
 |---|---|
 | mutation이 GEODE syntax를 깨뜨림 | wrapper override JSON의 schema가 단순하다(str→str dict). syntax break가 없다. env가 잘못되면 `core/agent/system_prompt.py`의 load가 fail-closed하므로 fitness가 기본 wrapper로 조용히 오염되지 않는다. |
 | Generation drift (누적 bias) | per-generation `results.tsv` + cross-axis ratchet(§5) + critical axis strict gate. |
-| long-running loop의 비용 폭주 | per-audit budget 5분 + self-improving-loop agent의 timeout(program.md). ChatGPT subscription / Claude Max OAuth path = per-token $0. |
+| long-running loop의 비용 폭주 | per-audit budget 5분 + self-improving-loop agent의 timeout(program.md). ChatGPT OAuth는 구독 quota를, Anthropic은 설정한 API 예산을 소비한다. |
 | Goodhart's law (rubric self-mutation) | AlphaEval rubric(`plugins/petri_audit/judge_dims/geode_judge_subset.yaml`)은 program.md의 CANNOT 항목이다. seed pool(`plugins/petri_audit/seeds_safe10/`)도 mutation 불가. |
 | 자기참조 loop (autoresearch가 autoresearch를 mutate) | mutation target이 `WRAPPER_PROMPT_SECTIONS` dict 한 곳이다. `autoresearch/` 디렉터리 자체는 mutate할 수 없다(program.md의 in-scope 파일 4개 외 불가). |
 | rejected hypothesis의 정보 손실 | `results.tsv`의 discard row가 다음 hypothesis의 부정적 prior가 된다. agent context에 결과가 누적된다. |

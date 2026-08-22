@@ -5,6 +5,10 @@
 > **Status**: Accepted (2026-05-19)
 > **Scope**: GEODE self-improving-loop (autoresearch + seed-generation). When a subscription credential (Claude Code OAuth, ChatGPT OAuth) hits its quota mid-run, the operator must be able to swap accounts and **resume from the last completed unit of work** without re-spending budget on already-finished generations / candidates / matches.
 
+> **Route update (2026-08-22):** the checkpoint design remains active, but the
+> Claude CLI credential route and its session-resume token are retired. Claude
+> references below are historical; OpenAI Codex and API-key recovery remain.
+
 ## Context
 
 The 2026-05-19 self-improving-loop config consolidation plan introduced strict subscription mode (`fallback_to_payg=false` default) so subscription exhaustion aborts with an actionable banner instead of silently rolling over to PAYG. The strict-abort is correct, but creates a new failure mode: a long self-improving-loop run (multi-generation seed evolution or overnight autoresearch ratchet) loses everything in flight at the moment of abort. The user explicitly asked (2026-05-19): "Check whether a checkpoint-like replay-resume measure is in place so that even when the self-improving-loop is cut off by subscription overrun, it can be continued by rolling out to another account."
@@ -183,7 +187,7 @@ Lives as Phase ζ in `docs/plans/2026-05-19-self-improving-loop-config-consolida
 - **PR-ζ4**: idempotency-key embedding in LLM call metadata + local response cache lookup (`~/.geode/self-improving-loop/<session>/idempotency.db`).
 - **PR-ζ5**: credential-rollover detection — at resume, compare active sources to checkpoint; emit `credential_rolled_over_at` event into journal.
 - **PR-ζ5.5** (NEW): wire `ProfileRotator` into the self-improving-loop credential path. `resolve_self_improving_loop_binding(family) → (source, profile)` adds the profile dimension. `plugins/petri_audit/credential_source.py` routes failures through `ProfileRotator.mark_failure(profile)` instead of the in-process suppress set. autoresearch + seed-generation pass `profile.name` through LLM call metadata so cooldowns track per-account.
-- **PR-ζ5.6** (NEW): 2-axis account picker (provider ←→ × profile ↑↓), mirroring `core/cli/effort_picker.py`. Two entry points: (a) `/login picker` slash command + auto-trigger from the red banner abort dialog (PR-γ1 trigger condition), (b) agent loop natural-language phrase recogniser invokes the picker programmatically. Action row: Enter (swap+resume) / n (add new profile via `claude /login` subprocess delegate) / w (wait for reset) / p (opt-in PAYG for this run) / Esc (keep aborted).
+- **PR-ζ5.6** (NEW): 2-axis account picker (provider ←→ × profile ↑↓), mirroring `core/cli/effort_picker.py`. Two entry points: (a) `/login picker` slash command + auto-trigger from the red banner abort dialog (PR-γ1 trigger condition), (b) agent loop natural-language phrase recogniser invokes the picker programmatically. Action row: Enter (swap+resume) / n (open the provider-owned login path; Claude uses `claude auth login --claudeai`) / w (wait for reset) / p (opt-in PAYG for this run) / Esc (keep aborted).
 - **PR-ζ6**: docs + sample resume run-book (`https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-19-resume-rollout-runbook.md`) + CHANGELOG.
 
 ## Reference

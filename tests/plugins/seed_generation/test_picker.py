@@ -2,7 +2,7 @@
 
 P-checklist application (cycle-skill SKILL.md):
 
-- **P1 Stub Fidelity Audit** — OAuth probe is stubbed (no real keychain
+- **P1 Stub Fidelity Audit** — subscription probe is stubbed (no real provider CLI
   reads), but the stub matches the real boolean signature so the
   resolver doesn't lie about which path it would pick in production.
 - **P4 Environment Anchor** — overrides loaded via explicit path arg
@@ -28,6 +28,7 @@ from geode_product.seed_generation.manifest import (
 from geode_product.seed_generation.picker import (
     SUBSCRIPTION_SOURCES,
     PickerResult,
+    RoleBinding,
     VoterBinding,
     infer_provider,
     iter_distinct_paths,
@@ -38,6 +39,14 @@ from geode_product.seed_generation.picker import (
     reset_tos_notice,
     validate_runtime_diversity,
 )
+
+
+@pytest.fixture(autouse=True)
+def _isolate_voter_overrides(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "geode_product.seed_generation.picker.GLOBAL_CONFIG_TOML",
+        tmp_path / "config.toml",
+    )
 
 
 def _make_manifest() -> SeedGenerationManifest:
@@ -77,7 +86,7 @@ def _make_manifest() -> SeedGenerationManifest:
     }
     judge_panel = JudgePanelSpec(
         voters=[
-            VoterSpec(model="claude-opus-4-7", provider="anthropic", source="claude-cli"),
+            VoterSpec(model="claude-opus-4-7", provider="anthropic", source="api_key"),
             VoterSpec(model="gpt-5.5", provider="openai", source="openai-codex"),
             VoterSpec(model="gpt-5.5", provider="openai", source="openai-codex"),
         ],
@@ -124,27 +133,16 @@ def test_infer_provider_unknown_raises() -> None:
         infer_provider("mystery-model-1")
 
 
-def test_pick_bindings_resolves_all_roles_with_oauth() -> None:
+def test_pick_bindings_anthropic_roles_use_api_key() -> None:
     manifest = _make_manifest()
     with (
         patch("geode_product.seed_generation.picker._probe_oauth", return_value=True),
     ):
         result = pick_bindings(manifest=manifest, overrides={})
     assert set(result.bindings) == set(manifest.enabled_roles)
-    # Non-tool Claude-* roles resolve to claude-cli when OAuth is available.
-    # The pilot is EXCLUDED — it calls petri_audit, which the claude-cli
-    # subprocess adapter cannot deliver, so it reroutes to api_key
-    # (PR-SEEDGEN-PILOT-TOOL-CAPABLE-SOURCE).
-    for role in ("generator", "critic", "ranker", "evolver", "meta_reviewer"):
+    for role in manifest.enabled_roles:
         assert result.bindings[role].provider == "anthropic"
-        assert result.bindings[role].source == "claude-cli"
-    # Pilot reroutes to the tool-capable PAYG source even with OAuth available.
-    assert result.bindings["pilot"].provider == "anthropic"
-    assert result.bindings["pilot"].source == "api_key"
-    # Proximity now runs claude-sonnet completion (CSP-8 LLM-clustering
-    # revert, paper §3); CSP-10 dropped the embedding kind plumbing.
-    assert result.bindings["proximity"].provider == "anthropic"
-    assert result.bindings["proximity"].source == "claude-cli"
+        assert result.bindings[role].source == "api_key"
 
 
 def test_pick_bindings_resolves_payg_when_no_oauth() -> None:
@@ -164,36 +162,16 @@ def test_pick_bindings_no_probe_uses_payg() -> None:
 
 def test_pick_bindings_user_override_source() -> None:
     manifest = _make_manifest()
-    # A claude-cli override on a NON-tool role (critic) is honored; the same
-    # override on the pilot is rerouted to api_key (claude-cli cannot deliver
-    # petri_audit — PR-SEEDGEN-PILOT-TOOL-CAPABLE-SOURCE).
-    overrides = {"generator": {"source": "api_key"}, "critic": {"source": "claude-cli"}}
+    overrides = {"generator": {"source": "api_key"}}
     with patch("geode_product.seed_generation.picker._probe_oauth", return_value=True):
         result = pick_bindings(manifest=manifest, overrides=overrides)
     assert result.bindings["generator"].source == "api_key"
-    assert result.bindings["critic"].source == "claude-cli"
 
 
-def test_pick_bindings_pilot_reroutes_off_tool_incapable_source() -> None:
-    """The pilot calls petri_audit, so it must never bind a tool-incapable
-    (claude-cli subprocess) source — even when explicitly overridden to it or
-    when OAuth would otherwise default it there. It reroutes to api_key."""
+def test_pick_bindings_rejects_retired_claude_cli_override() -> None:
     manifest = _make_manifest()
-    with patch("geode_product.seed_generation.picker._probe_oauth", return_value=True):
-        # (a) explicit claude-cli override on the pilot → rerouted.
-        forced = pick_bindings(manifest=manifest, overrides={"pilot": {"source": "claude-cli"}})
-        assert forced.bindings["pilot"].source == "api_key"
-        # (b) auto-default (OAuth available) would pick claude-cli → rerouted.
-        auto = pick_bindings(manifest=manifest, overrides={})
-        assert auto.bindings["pilot"].source == "api_key"
-        # (c) the new-naming alias "adapter" also maps to ClaudeCliAdapter
-        # (tool-incapable) → rerouted.
-        aliased = pick_bindings(manifest=manifest, overrides={"pilot": {"source": "adapter"}})
-        assert aliased.bindings["pilot"].source == "api_key"
-    # A tool-capable explicit source on the pilot is left untouched.
-    with patch("geode_product.seed_generation.picker._probe_oauth", return_value=True):
-        explicit = pick_bindings(manifest=manifest, overrides={"pilot": {"source": "api_key"}})
-        assert explicit.bindings["pilot"].source == "api_key"
+    with pytest.raises(RuntimeError, match="integration is retired"):
+        pick_bindings(manifest=manifest, overrides={"pilot": {"source": "claude-cli"}})
 
 
 def test_pick_bindings_user_override_model() -> None:
@@ -210,11 +188,7 @@ def test_pick_bindings_voter_panel_resolved() -> None:
         result = pick_bindings(manifest=manifest, overrides={})
     assert len(result.voters) == 3
     sources = {v.source for v in result.voters}
-    # Shipped panel (PR-UPGRADE-ROLES-TOP-TIER 2026-05-26): 2× openai-codex
-    # (gpt-5.5) + 1× claude-cli (claude-opus-4-7). Both diversity gates
-    # are satisfied (providers ≥ 2, paths ≥ 2). None are "auto" so the
-    # OAuth probe doesn't change them.
-    assert sources == {"claude-cli", "openai-codex"}
+    assert sources == {"api_key", "openai-codex"}
 
 
 def test_pick_bindings_diversity_providers_count() -> None:
@@ -228,8 +202,6 @@ def test_pick_bindings_subscription_paths_in_use() -> None:
     manifest = _make_manifest()
     with patch("geode_product.seed_generation.picker._probe_oauth", return_value=True):
         result = pick_bindings(manifest=manifest, overrides={})
-    # OAuth available → roles use claude-cli; voters include claude-cli + openai-codex
-    assert "claude-cli" in result.subscription_paths_in_use
     assert "openai-codex" in result.subscription_paths_in_use
 
 
@@ -237,9 +209,7 @@ def test_pick_bindings_no_subscription_when_payg() -> None:
     manifest = _make_manifest()
     with patch("geode_product.seed_generation.picker._probe_oauth", return_value=False):
         result = pick_bindings(manifest=manifest, overrides={})
-    # Roles all fall back to api_key; only voters with explicit subscription sources remain.
-    # Voters: claude-cli (explicit, not auto so probe doesn't matter) + openai-codex + api_key.
-    assert "claude-cli" in result.subscription_paths_in_use
+    # Roles use api_key; explicit OpenAI voter subscriptions remain.
     assert "openai-codex" in result.subscription_paths_in_use
 
 
@@ -281,15 +251,14 @@ def test_print_tos_notice_emits_when_subscription_in_use() -> None:
         bindings={},
         voters=[],
         diversity_providers=2,
-        subscription_paths_in_use=frozenset({"claude-cli"}),
+        subscription_paths_in_use=frozenset({"openai-codex"}),
     )
     buf = io.StringIO()
     print_tos_notice(result, file=buf)
     out = buf.getvalue()
     assert "ToS notice" in out
-    assert "claude-cli" in out
-    assert "Anthropic" in out
-    assert "open-source" in out
+    assert "openai-codex" in out
+    assert "OpenAI" in out
 
 
 def test_print_tos_notice_silent_when_no_subscription() -> None:
@@ -341,7 +310,7 @@ def test_print_tos_notice_quiet_suppresses() -> None:
         bindings={},
         voters=[],
         diversity_providers=2,
-        subscription_paths_in_use=frozenset({"claude-cli"}),
+        subscription_paths_in_use=frozenset({"openai-codex"}),
     )
     buf = io.StringIO()
     print_tos_notice(result, file=buf, quiet=True)
@@ -352,7 +321,7 @@ def test_validate_runtime_diversity_pass() -> None:
     result = PickerResult(
         bindings={},
         voters=[
-            VoterBinding(model="m1", provider="anthropic", source="claude-cli"),
+            VoterBinding(model="m1", provider="anthropic", source="api_key"),
             VoterBinding(model="m2", provider="openai", source="openai-codex"),
             VoterBinding(model="m3", provider="anthropic", source="api_key"),
         ],
@@ -367,8 +336,8 @@ def test_validate_runtime_diversity_provider_collapse_raises() -> None:
     result = PickerResult(
         bindings={},
         voters=[
-            VoterBinding(model="m1", provider="anthropic", source="claude-cli"),
-            VoterBinding(model="m2", provider="anthropic", source="api_key"),
+            VoterBinding(model="m1", provider="anthropic", source="api_key"),
+            VoterBinding(model="m2", provider="anthropic", source="external"),
         ],
         diversity_providers=1,
         subscription_paths_in_use=frozenset(),
@@ -381,25 +350,30 @@ def test_validate_runtime_diversity_path_collapse_raises() -> None:
     result = PickerResult(
         bindings={},
         voters=[
-            VoterBinding(model="m1", provider="anthropic", source="claude-cli"),
-            VoterBinding(model="m2", provider="anthropic", source="claude-cli"),
-            VoterBinding(model="m3", provider="anthropic", source="claude-cli"),
+            VoterBinding(model="m1", provider="anthropic", source="api_key"),
+            VoterBinding(model="m2", provider="anthropic", source="api_key"),
+            VoterBinding(model="m3", provider="anthropic", source="api_key"),
         ],
         diversity_providers=1,
-        subscription_paths_in_use=frozenset({"claude-cli"}),
+        subscription_paths_in_use=frozenset(),
     )
     with pytest.raises(ValueError, match=r"runtime"):
         validate_runtime_diversity(result)
 
 
 def test_list_subscription_roles() -> None:
-    manifest = _make_manifest()
-    with patch("geode_product.seed_generation.picker._probe_oauth", return_value=True):
-        result = pick_bindings(manifest=manifest, overrides={})
+    result = PickerResult(
+        bindings={
+            "generator": RoleBinding(
+                role="generator", model="gpt-5.5", provider="openai", source="openai-codex"
+            )
+        },
+        voters=[],
+        diversity_providers=0,
+        subscription_paths_in_use=frozenset({"openai-codex"}),
+    )
     roles = list_subscription_roles(result)
-    # All claude-* roles → claude-cli when OAuth available
     assert "generator" in roles
-    assert "ranker" in roles
 
 
 def test_iter_distinct_paths_dedupes() -> None:
@@ -412,8 +386,7 @@ def test_iter_distinct_paths_dedupes() -> None:
 
 
 def test_subscription_sources_set_pinned() -> None:
-    """Regression guard — only claude-cli / openai-codex are subscriptions."""
-    assert frozenset({"claude-cli", "openai-codex"}) == SUBSCRIPTION_SOURCES
+    assert frozenset({"openai-codex"}) == SUBSCRIPTION_SOURCES
 
 
 def test_pick_bindings_role_binding_immutable() -> None:
@@ -477,7 +450,7 @@ def test_pick_bindings_enforce_diversity_off_allows_collapsed_panel() -> None:
     object.__setattr__(
         manifest.judge_panel,
         "voters",
-        [VoterSpec(model="claude-sonnet-4-6", provider="anthropic", source="claude-cli")],
+        [VoterSpec(model="claude-sonnet-4-6", provider="anthropic", source="api_key")],
     )
     # With enforce_diversity=False the picker returns without raising.
     result = pick_bindings(
@@ -488,7 +461,7 @@ def test_pick_bindings_enforce_diversity_off_allows_collapsed_panel() -> None:
 
 def test_default_judge_panel_voters_are_payg_api_key() -> None:
     """PR-VOTER-PAYG-PARALLEL (2026-06-03) — the manifest default judge panel rides
-    PAYG ``api_key`` HTTP-API paths (not subscription CLI: openai-codex / claude-cli)
+    PAYG ``api_key`` HTTP-API paths (not the OpenAI subscription route)
     so the ranker's 59×3=177 voter calls fan out concurrently on the env-tunable
     ``openai_api_lane`` / ``anthropic_api_lane`` instead of a per-process CLI lane.
     Diversity is preserved: 2 providers + 2 distinct (provider, source) pairs."""
@@ -512,9 +485,9 @@ def test_config_voter_override_wins_over_manifest_default(tmp_path: Path) -> Non
         "[[seed_generation.judge_panel.voters]]\n"
         'model = "gpt-5.5"\nprovider = "openai"\nsource = "openai-codex"\n\n'
         "[[seed_generation.judge_panel.voters]]\n"
-        'model = "claude-opus-4-8"\nprovider = "anthropic"\nsource = "claude-cli"\n',
+        'model = "claude-opus-4-8"\nprovider = "anthropic"\nsource = "api_key"\n',
         encoding="utf-8",
     )
     overridden = pk._load_config_toml_voter_overrides(cfg)
     assert overridden is not None
-    assert [v.source for v in overridden] == ["openai-codex", "claude-cli"]
+    assert [v.source for v in overridden] == ["openai-codex", "api_key"]

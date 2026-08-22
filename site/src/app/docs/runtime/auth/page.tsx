@@ -15,10 +15,9 @@ export default function Page() {
         ko={
           <>
             <p>
-              GEODE는 프로바이더마다 두 종류의 자격을 받습니다. 구독
-              OAuth와 PAYG API 키입니다. 어느 쪽을 쓸지는
-              <code>CredentialSource</code> 하나로 표현되고, 프로파일과 플랜은
-              <code>~/.geode/auth.toml</code>에, API 키는
+              GEODE는 구독 경로와 PAYG API 키를 받습니다. 어느 쪽을
+              쓸지는 <code>CredentialSource</code> 하나로 표현됩니다.
+              OpenAI 구독 프로파일과 플랜은 <code>~/.geode/auth.toml</code>에, API 키는
               <code>~/.geode/.env</code>에 저장됩니다.
             </p>
 
@@ -34,17 +33,16 @@ export default function Page() {
               <tbody>
                 <tr><td><code>auto</code></td><td>매니페스트 순서 해석. OAuth 우선, PAYG는 <code>fallback_to_payg</code>가 켜진 경우에만.</td></tr>
                 <tr><td><code>api_key</code></td><td>PAYG API 키.</td></tr>
-                <tr><td><code>claude-cli</code></td><td>claude CLI 구독을 통한 Anthropic OAuth.</td></tr>
+                <tr><td><code>claude-cli</code></td><td>퇴역한 Anthropic 입력. migration 오류만 내며 실행되지 않습니다.</td></tr>
                 <tr><td><code>openai-codex</code></td><td>프로세스 내부 <code>codex-oauth</code> 어댑터를 통한 ChatGPT 구독 OAuth.</td></tr>
-                <tr><td><code>oauth</code></td><td>레거시 별칭. Settings 검증이 받아줍니다.</td></tr>
+                <tr><td><code>oauth</code></td><td>OpenAI는 Codex OAuth 별칭, Anthropic은 퇴역 오류 입력.</td></tr>
                 <tr><td><code>none</code></td><td>해당 프로바이더 비활성 센티널.</td></tr>
               </tbody>
             </table>
             <p>
-              Anthropic은 오픈소스를 포함한 서드파티 도구에 API 키 인증을
-              권장합니다. <code>claude-cli</code>는 경고가 붙는 레거시 호환
-              경로이며 구독 사용량이 usage credit에서 차감될 수 있습니다.{" "}
-              <a href="https://support.claude.com/en/articles/13189465-log-in-to-your-claude-account">현행 Anthropic 안내</a>를 확인하세요.
+              Anthropic의 내장 경로는 <code>api_key</code>뿐입니다. 과거
+              <code>claude-cli</code>/<code>oauth</code> 값은 migration 안내를
+              위해 읽지만 binary나 네트워크 호출 전에 중단됩니다.
             </p>
             <p>
               선택은 <code>[llm] anthropic_credential_source</code> /
@@ -53,8 +51,7 @@ export default function Page() {
               toml에만 쓰므로 <code>.env</code>를 지워도 선택이 살아남습니다.
               (provider, source) 쌍마다 구체 어댑터가 하나씩 레지스트리에
               등록됩니다(<code>core/llm/adapters/</code>의
-              <code>anthropic_payg</code>, <code>anthropic_oauth</code>,
-              <code>claude_cli</code>, <code>openai_payg</code>,
+              <code>anthropic_payg</code>, <code>openai_payg</code>,
               <code>codex_oauth</code>,
               <code>glm_coding_plan</code>, <code>glm_payg</code>).
             </p>
@@ -72,7 +69,7 @@ export default function Page() {
               </thead>
               <tbody>
                 <tr><td><code>/login openai</code></td><td>ChatGPT 구독 OAuth 로그인. device-code 플로우는 <code>core/auth/oauth_login.py</code>이고, 결과는 <code>auth.toml</code>에 OAUTH_BORROWED 플랜 + 프로파일 쌍으로 저장됩니다.</td></tr>
-                <tr><td><code>/login anthropic</code></td><td>경고를 표시하고 레거시 <code>claude-cli</code> 경로를 선택합니다. 로그인은 공식 CLI에서 <code>claude /login</code>으로 별도 수행합니다.</td></tr>
+                <tr><td><code>/login anthropic</code></td><td><code>ANTHROPIC_API_KEY</code>를 등록하고 <code>api_key</code> 경로를 선택합니다.</td></tr>
                 <tr><td><code>/login google</code></td><td>Gmail, Calendar, Drive, Docs, Sheets, Tasks, Contacts용 Google Workspace OAuth. 사용자가 만든 Desktop 앱 클라이언트를 가져오며 LLM 프로바이더 자격과 분리됩니다.</td></tr>
                 <tr><td><code>/login add</code></td><td>자격 추가. 키 모양(<code>sk-ant-</code>, <code>sk-proj-</code>, GLM {`{id}.{secret}`})으로 프로바이더를 추정합니다.</td></tr>
                 <tr><td><code>/login use</code> / <code>remove</code></td><td>프로파일 선택과 제거.</td></tr>
@@ -182,7 +179,7 @@ ZAI_API_KEY={id}.{secret}`}</pre>
                 <tr>
                   <td>구독이 있는데 PAYG로 과금</td>
                   <td><code>auto</code>가 OAuth를 못 찾고 키로 해석</td>
-                  <td><code>/login route</code>와 <code>/login quota</code>로 플랜 상태를 확인하고, 필요하면 소스를 <code>claude-cli</code>/<code>openai-codex</code>로 고정합니다.</td>
+                  <td>OpenAI는 <code>/login route</code>와 <code>/login quota</code>를 확인하고 <code>openai-codex</code>로 고정합니다. Anthropic은 <code>api_key</code>만 지원합니다.</td>
                 </tr>
               </tbody>
             </table>
@@ -199,11 +196,11 @@ ZAI_API_KEY={id}.{secret}`}</pre>
         en={
           <>
             <p>
-              GEODE accepts two kinds of credentials per provider:
-              subscription OAuth and PAYG API keys. The choice is expressed by
-              a single <code>CredentialSource</code>; plans and profiles
-              persist in <code>~/.geode/auth.toml</code>, API keys in
-              <code>~/.geode/.env</code>.
+              GEODE accepts subscription routes and PAYG API keys. The choice
+              is expressed by a single <code>CredentialSource</code>. Claude
+              subscription credentials remain inside the official CLI;
+              GEODE-managed plans and profiles persist in
+              <code>~/.geode/auth.toml</code>, and API keys in <code>~/.geode/.env</code>.
             </p>
 
             <h2>Credential sources</h2>
@@ -218,18 +215,16 @@ ZAI_API_KEY={id}.{secret}`}</pre>
               <tbody>
                 <tr><td><code>auto</code></td><td>Manifest-order resolution. OAuth first; PAYG only when <code>fallback_to_payg</code> allows.</td></tr>
                 <tr><td><code>api_key</code></td><td>PAYG API key.</td></tr>
-                <tr><td><code>claude-cli</code></td><td>Anthropic OAuth via the claude CLI subscription.</td></tr>
+                <tr><td><code>claude-cli</code></td><td>Retired Anthropic input. It emits a migration error and never executes.</td></tr>
                 <tr><td><code>openai-codex</code></td><td>ChatGPT subscription OAuth through the in-process <code>codex-oauth</code> adapter.</td></tr>
-                <tr><td><code>oauth</code></td><td>Legacy alias, accepted by Settings validation.</td></tr>
+                <tr><td><code>oauth</code></td><td>Codex OAuth alias for OpenAI; retired-error input for Anthropic.</td></tr>
                 <tr><td><code>none</code></td><td>Disable sentinel for the provider.</td></tr>
               </tbody>
             </table>
             <p>
-              Anthropic recommends API-key authentication for third-party
-              tools, including open-source projects. <code>claude-cli</code> is
-              a warning-bearing legacy compatibility route, and subscription
-              use may draw from usage credits. See the{" "}
-              <a href="https://support.claude.com/en/articles/13189465-log-in-to-your-claude-account">current Anthropic guidance</a>.
+              Anthropic has one built-in source: <code>api_key</code>. Historical
+              <code>claude-cli</code>/<code>oauth</code> values are read only to
+              emit a migration error before binary or network dispatch.
             </p>
             <p>
               The choice persists as <code>[llm]
@@ -240,7 +235,6 @@ ZAI_API_KEY={id}.{secret}`}</pre>
               <code>.env</code> wipe. Each (provider, source) pair maps to one
               concrete adapter in the registry
               (<code>core/llm/adapters/</code>: <code>anthropic_payg</code>,
-              <code>anthropic_oauth</code>, <code>claude_cli</code>,
               <code>openai_payg</code>, <code>codex_oauth</code>,
               <code>glm_coding_plan</code>,
               <code>glm_payg</code>).
@@ -259,7 +253,7 @@ ZAI_API_KEY={id}.{secret}`}</pre>
               </thead>
               <tbody>
                 <tr><td><code>/login openai</code></td><td>ChatGPT subscription OAuth login. The device-code flow lives in <code>core/auth/oauth_login.py</code>; the result lands in <code>auth.toml</code> as an OAUTH_BORROWED plan plus profile pair.</td></tr>
-                <tr><td><code>/login anthropic</code></td><td>Shows the policy warning and selects the legacy <code>claude-cli</code> route. Authenticate separately in the official CLI with <code>claude /login</code>.</td></tr>
+                <tr><td><code>/login anthropic</code></td><td>Registers <code>ANTHROPIC_API_KEY</code> and selects the <code>api_key</code> route.</td></tr>
                 <tr><td><code>/login google</code></td><td>Google Workspace OAuth for Gmail, Calendar, Drive, Docs, Sheets, Tasks, and Contacts. Imports a user-owned Desktop app client and stays separate from LLM-provider credentials.</td></tr>
                 <tr><td><code>/login add</code></td><td>Add a credential. The provider is sniffed from the key shape (<code>sk-ant-</code>, <code>sk-proj-</code>, GLM {`{id}.{secret}`}).</td></tr>
                 <tr><td><code>/login use</code> / <code>remove</code></td><td>Select and remove profiles.</td></tr>
@@ -374,7 +368,7 @@ ZAI_API_KEY={id}.{secret}`}</pre>
                 <tr>
                   <td>Billed PAYG despite a subscription</td>
                   <td><code>auto</code> resolved to a key because OAuth was not found</td>
-                  <td>Inspect <code>/login route</code> and <code>/login quota</code>; pin the source to <code>claude-cli</code> or <code>openai-codex</code> if needed.</td>
+                  <td>For OpenAI, inspect <code>/login route</code> and <code>/login quota</code>, then pin <code>openai-codex</code>. Anthropic supports <code>api_key</code> only.</td>
                 </tr>
               </tbody>
             </table>

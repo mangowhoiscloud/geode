@@ -3,7 +3,7 @@
 Centralises the "which credential should I use for *this* provider right
 now" decision so the rest of the Petri plugin (`/petri` picker,
 `to_inspect_model` router, OAuth retry paths) stops re-implementing the
-``settings → keychain → API key`` fallback chain in three different
+``settings → registered adapter → API key`` fallback chain in three different
 places.
 
 Frontier reference: Hermes ``agent/credential_sources.py`` — per-source
@@ -26,10 +26,7 @@ Priority for the ``auto`` sentinel:
    non-auto value (e.g. ``ANTHROPIC_CREDENTIAL_SOURCE=api_key``).
 3. Manifest ``[petri.source.<provider>].default`` if not auto.
 4. Manifest ``[petri.source.<provider>].allowed`` order — first non-auto,
-   non-suppressed, *available* source wins. Manifest ordering is the
-   intent — keep OAuth first so the autoresearch self-improving loop hits
-   subscription quota by default; API-key fallback still resolves when
-   the user has only ``ANTHROPIC_API_KEY`` set.
+   non-suppressed, *available* source wins.
 """
 
 from __future__ import annotations
@@ -100,7 +97,13 @@ class CredentialResolutionError(RuntimeError):
         self.provider = provider
         self.allowed = allowed
         self.subscription_only = subscription_only
-        if subscription_only:
+        if subscription_only and provider == "anthropic":
+            super().__init__(
+                "provider=anthropic: no non-PAYG built-in source is available. "
+                "Claude CLI integration is retired; explicitly pin source='api_key' "
+                "and configure ANTHROPIC_API_KEY to authorize billing."
+            )
+        elif subscription_only:
             super().__init__(
                 f"provider={provider}: no subscription credential source available "
                 f"(allowed={allowed}, PAYG fallback blocked by [self_improving_loop] "
@@ -215,7 +218,7 @@ def list_credential_sources(provider: str) -> list[dict[str, Any]]:
             adapter: str | None,          # dotted module path; None for 'auto'
             inspect_prefix: str | None,
             auth_env_vars: list[str],
-            metadata: dict | None,        # OAuth-only
+            metadata: dict | None,        # subscription-only
         }
 
     The /petri picker consumes this directly.
@@ -325,6 +328,11 @@ def resolve_credential_source(
 
     candidate = override or _settings_source(provider) or spec.default
 
+    if provider == "anthropic" and candidate == "claude-cli":
+        from core.config.credential_source import CLAUDE_CLI_RETIRED_MESSAGE
+
+        raise RuntimeError(CLAUDE_CLI_RETIRED_MESSAGE)
+
     if candidate != AUTO_SOURCE:
         if candidate not in spec.allowed:
             raise CredentialResolutionError(provider, spec.allowed)
@@ -367,11 +375,9 @@ def _settings_source(provider: str) -> str | None:
     environments with a stubbed settings module) so this module never
     crashes the picker on a recoverable problem.
 
-    Legacy alias: settings historically used the value ``"oauth"`` to
-    mean "use the provider's OAuth path". The manifest spells the OAuth
-    source as ``claude-cli`` / ``openai-codex`` per provider. We map
-    here so existing .env / config.toml files keep working without
-    rewrites.
+    Legacy alias: settings historically used ``"oauth"`` for provider OAuth.
+    OpenAI maps to ``openai-codex``. Anthropic maps to the retired sentinel so
+    resolution can emit the migration error instead of silently billing PAYG.
     """
     try:
         from core.config import settings

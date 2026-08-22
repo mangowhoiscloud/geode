@@ -83,16 +83,9 @@ audit_seeds_app = typer.Typer(
 # while staying opt-in (default off — REPL / regular ``audit-seeds
 # generate`` invocations stay unchanged).
 #
-# Implementation note: this is a *Python-level* tee — we wrap
-# ``sys.stdout`` / ``sys.stderr`` with a ``_TeeStream`` proxy that
-# duplicates every write to the log file. Subprocesses spawned later
-# (claude-cli, codex) actually run with PIPE-captured stdout/stderr
-# (``core/orchestration/isolated_execution.py:414`` +
-# ``geode_product/self_improving/loop/mutate/cli_subprocess.py:97`` both use
-# ``capture_output=True`` / ``stdout=PIPE``), so their raw output
-# never reaches the parent's terminal anyway — it lands in the
-# per-task ``state/seed_generation/<run>/sub_agents/<task>/`` records
-# via the PIPE. What THIS log captures is exactly what the operator
+# Implementation note: this is a *Python-level* tee — we wrap stdout/stderr
+# with a proxy. Child-process output is captured separately, so this log
+# records exactly what the operator
 # sees on their own terminal: the parent process's cost preview
 # banner, ToS notice, phase status echoes, and any tracebacks the
 # orchestrator surfaces.

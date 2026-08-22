@@ -51,9 +51,8 @@ def _stub_settings(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture(autouse=True)
 def _stub_oauth(monkeypatch: pytest.MonkeyPatch) -> None:
-    from geode_product.petri_audit.adapters import claude_cli_backend, openai_codex_oauth
+    from geode_product.petri_audit.adapters import openai_codex_oauth
 
-    monkeypatch.setattr(claude_cli_backend, "is_available", lambda: False)
     monkeypatch.setattr(openai_codex_oauth, "is_available", lambda: False)
 
 
@@ -142,15 +141,9 @@ def test_get_binding_model_override(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_get_binding_source_override(monkeypatch: pytest.MonkeyPatch) -> None:
     """Explicit source override survives even when env var is set."""
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
-    from geode_product.petri_audit.adapters import claude_cli_backend
-
-    monkeypatch.setattr(claude_cli_backend, "is_available", lambda: True)
-    binding = get_binding("auditor", source="claude-cli")
-    assert binding.source == "claude-cli"
-    # CSA-3 (2026-05-22) — flipped from "claude-code" to "claude-cli"
-    # so source="claude-cli" now lands on the paperclip provider.
-    assert binding.inspect_prefix == "claude-cli"
+    binding = get_binding("auditor", model="gpt-5.5", source="openai-codex")
+    assert binding.source == "openai-codex"
+    assert binding.inspect_prefix == "openai-codex"
 
 
 def test_get_binding_model_not_in_allowed_raises() -> None:
@@ -177,20 +170,6 @@ def test_get_binding_no_credential_raises() -> None:
     """No env var → resolve_credential_source raises."""
     with pytest.raises(cs.CredentialResolutionError):
         get_binding("auditor")
-
-
-def test_get_binding_oauth_priority(monkeypatch: pytest.MonkeyPatch) -> None:
-    """When both claude-cli and api_key are available, manifest order wins."""
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
-    from geode_product.petri_audit.adapters import claude_cli_backend
-
-    monkeypatch.setattr(claude_cli_backend, "is_available", lambda: True)
-    binding = get_binding("auditor")
-    assert binding.source == "claude-cli"
-    # CSA-3 flip — was claude-code/, now claude-cli/.
-    assert binding.inspect_prefix == "claude-cli"
-    # Single-SoT (2026-05-22) — auditor default flipped sonnet→opus.
-    assert binding.inspect_id == "claude-cli/claude-opus-4-7"
 
 
 def test_get_binding_target_with_openai_model(monkeypatch: pytest.MonkeyPatch) -> None:

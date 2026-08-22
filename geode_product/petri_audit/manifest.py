@@ -41,7 +41,7 @@ __all__ = [
 DEFAULT_MANIFEST_PATH = Path(__file__).parent / "petri.plugin.toml"
 
 # "auto" is a sentinel — resolved at binding time via
-# ``settings.{provider}_credential_source`` + keychain probe — so it
+# ``settings.{provider}_credential_source`` + provider-owned readiness probe — so it
 # never appears as a concrete adapter key. Sourced from the canonical
 # enum (PR-CRED-SOURCE-CENTRALIZE) so it can't drift from the config layer.
 AUTO_SOURCE = CredentialSource.AUTO.value
@@ -81,7 +81,7 @@ class AdapterSpec(BaseModel):
 
     ``module`` — dotted import path; loaded lazily by the adapter registry.
     ``inspect_prefix`` — prefix that ``to_inspect_model`` emits (e.g.
-    ``anthropic/<model>``, ``claude-cli/<model>``, ``openai-codex/<model>``,
+    ``anthropic/<model>``, ``openai-codex/<model>``,
     ``geode/<model>``).
     ``auth_env_vars`` — env vars consulted for credentials; used by the
     /petri picker to flag missing credentials.

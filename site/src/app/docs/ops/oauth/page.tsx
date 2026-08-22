@@ -85,7 +85,7 @@ export default function Page() {
                 <tr>
                   <td>한 프로파일만 계속 401</td>
                   <td>외부 저장소의 토큰 자체가 만료</td>
-                  <td>Codex는 <code>codex login</code>, Anthropic 구독은 Claude Code 재로그인으로 원본 토큰을 갱신합니다.</td>
+                  <td>Codex는 <code>codex login</code>으로 원본 토큰을 갱신합니다. Anthropic은 <code>ANTHROPIC_API_KEY</code>를 교체합니다.</td>
                 </tr>
                 <tr>
                   <td>호출이 점점 뜸해짐</td>
@@ -181,7 +181,7 @@ export default function Page() {
                 <tr>
                   <td>One profile keeps returning 401</td>
                   <td>The token in external storage itself expired</td>
-                  <td>Renew the origin token: <code>codex login</code> for Codex, re-login Claude Code for the Anthropic subscription.</td>
+                  <td>Run <code>codex login</code> for Codex. Replace <code>ANTHROPIC_API_KEY</code> for Anthropic.</td>
                 </tr>
                 <tr>
                   <td>Calls slow to a trickle</td>

@@ -77,8 +77,7 @@ def cmd_petri(args: str) -> None:
     if head == "source":
         if len(tokens) < 3:
             _pkg.console.print(
-                "  [warning]Usage: /petri source <role> "
-                "<auto|api_key|claude-cli|openai-codex>[/warning]\n"
+                "  [warning]Usage: /petri source <role> <auto|api_key|openai-codex>[/warning]\n"
             )
             return
         _cmd_set_source(role=tokens[1], source_arg=tokens[2])
@@ -126,8 +125,7 @@ def _cmd_set_model(role: str, model_arg: str) -> None:
         return
 
     # Family change resets source to 'auto' (manifest default) — old
-    # source may be incompatible with new provider (e.g. claude-cli on
-    # gpt-* makes no sense).
+    # source may be incompatible with the newly selected provider.
     existing = read_role_override(role)
     extra: dict[str, str | None] = {}
     if "source" in existing:

@@ -661,10 +661,6 @@ def test_run_audit_user_declines(monkeypatch: pytest.MonkeyPatch) -> None:
         "geode_product.petri_audit.runner.shutil.which", lambda _: "/usr/bin/inspect"
     )
     monkeypatch.setattr("core.ui.console.console.input", lambda _p: "n", raising=False)
-    monkeypatch.setattr(
-        "geode_product.petri_audit.adapters.claude_cli_backend.is_available", lambda: False
-    )
-
     with patch("geode_product.petri_audit.runner.subprocess.run") as run_mock:
         report = run_audit(
             judge="claude-haiku-4-5-20251001",

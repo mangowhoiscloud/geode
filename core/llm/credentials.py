@@ -36,9 +36,8 @@ def resolve_provider_key(provider: str, settings_fallback: str) -> str:
     .. deprecated:: v0.99.39
        Global type-priority (OAUTH > TOKEN > API_KEY) loses per-role
        source information. Use the :class:`core.llm.adapters.LLMAdapter`
-       registry instead — each concrete adapter (``anthropic-payg`` /
-       ``anthropic-oauth`` / ``claude-cli``) selects its credential
-       explicitly. Removal target: v1.0.0.
+       registry instead — credential sources remain explicit per adapter.
+       Removal target: v1.0.0.
 
     Args:
         provider: Provider name for rotator lookup ("anthropic", "openai").

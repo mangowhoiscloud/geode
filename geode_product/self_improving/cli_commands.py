@@ -51,8 +51,8 @@ __all__ = ["campaign", "cmd_self_improving", "register_commands"]
 
 _HISTORY_DEFAULT_N = 5
 # PR-PAPERCLIP (2026-05-21) — ``config`` and ``source`` are now wired
-# for interactive + non-interactive selection of paperclip-pattern
-# (claude-cli / openai-codex / api_key) per component. ``history`` and
+# for interactive + non-interactive credential selection per component.
+# ``history`` and
 # ``rollback`` continue to delegate to git natively.
 _RUN_DEFERRED_ACTIONS: frozenset[str] = frozenset()
 _KNOWN_ACTIONS = frozenset(
@@ -74,7 +74,7 @@ _KNOWN_ACTIONS = frozenset(
 _DESIGN_DOC = "docs/plans/2026-05-21-self-improving-loop-ux.md"
 _RUN_DEFAULT_ITERATIONS = 1
 _RUN_MAX_ITERATIONS = 10
-_VALID_SOURCES = ("auto", "api_key", "claude-cli", "openai-codex")
+_VALID_SOURCES = ("auto", "api_key", "openai-codex")
 
 
 def campaign(
@@ -835,9 +835,8 @@ def _cmd_migrate() -> None:
 # ``/self-improving source`` + ``/self-improving config`` — PR-PAPERCLIP
 # ---------------------------------------------------------------------------
 #
-# ``source`` is the paperclip-pattern entry point — operator picks which
-# credential channel (api_key default / claude-cli subscription /
-# openai-codex subscription) the mutator routes its LLM call through.
+# ``source`` lets the operator choose API-key or OpenAI Codex credentials for
+# the mutator call. Retired values load only to produce a migration error.
 # ``config`` is the full interactive settings panel: walk every
 # self-improving-loop component (mutator + petri.<role> + seed_generation.<role>),
 # ask provider/model/source per component, persist to
@@ -914,7 +913,7 @@ def _cmd_source_set(opts: list[str]) -> None:
     """
     if not opts:
         console.print("  [warning]source set: needs at least one key=value pair[/warning]")
-        console.print("  [muted]Example: /self-improving source set source=claude-cli[/muted]")
+        console.print("  [muted]Example: /self-improving source set source=openai-codex[/muted]")
         return
     updates: dict[str, str] = {}
     for tok in opts:

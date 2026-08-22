@@ -264,7 +264,6 @@ export default function Page() {
                 <tr><td><code>[nodes]</code></td><td><code>analyst</code>, <code>evaluator</code>, <code>scoring</code>, <code>synthesizer</code></td><td>파이프라인 노드 모델. 전부 <code>claude-opus-4-8</code> 고정이라 노드가 REPL 모델을 상속하지 않습니다. 조회 순서는 프로젝트 <code>.geode/routing.toml</code>, 매니페스트, 없으면 <code>settings.model</code>.</td></tr>
                 <tr><td><code>[credentials.patterns]</code></td><td><code>sk-ant-</code>, <code>sk-proj-</code>, <code>sk-</code></td><td>키 모양에서 프로바이더를 추정합니다. GLM 키({`{id}.{secret}`} 모양)는 <code>core.config.env_io.is_glm_key</code>가 감지합니다.</td></tr>
                 <tr><td><code>[credentials.env_vars]</code></td><td>3개</td><td>anthropic은 <code>ANTHROPIC_API_KEY</code>, openai는 <code>OPENAI_API_KEY</code>, glm은 <code>ZAI_API_KEY</code>.</td></tr>
-                <tr><td><code>[credentials.keychain]</code></td><td>1개</td><td>anthropic은 <code>&quot;Claude Code-credentials&quot;</code>(macOS). 프로세스 단위 override는 <code>GEODE_&lt;PROVIDER&gt;_KEYCHAIN_SERVICE</code>.</td></tr>
               </tbody>
             </table>
 
@@ -303,7 +302,7 @@ export default function Page() {
                 <tr><td><code>mutator_dedup_window</code></td><td>int = 20</td><td>중복 변이 검사 창.</td></tr>
                 <tr><td><code>mutator_dedup_threshold</code></td><td>float = 0.85</td><td>중복 판정 유사도.</td></tr>
                 <tr><td><code>anchor_confidence_mode</code></td><td>bool = false</td><td>anchor 신뢰도 모드.</td></tr>
-                <tr><td><code>source</code></td><td><code>claude-cli</code></td><td>역할 공통 기본 자격 소스.</td></tr>
+                <tr><td><code>source</code></td><td><code>api_key</code></td><td>역할 공통 기본 자격 소스.</td></tr>
                 <tr><td><code>seed_limit</code></td><td>int = 10 (5-1000)</td><td>감사당 seed 수.</td></tr>
                 <tr><td><code>seed_select</code></td><td><code>&quot;bundled&quot;</code></td><td>패키지에 포함된 공진화 seed 풀.</td></tr>
                 <tr><td><code>held_out_bench</code></td><td>None</td><td>고정 자 역할의 frozen seed 디렉터리.</td></tr>
@@ -320,7 +319,7 @@ export default function Page() {
               역할 서브섹션
               <code>[self_improving_loop.autoresearch.target|judge|auditor]</code>는
               <code>model</code>(기본 <code>&quot;&quot;</code>)과
-              <code>source</code>(기본 <code>claude-cli</code>)를 받고,
+              <code>source</code>(기본 <code>api_key</code>)를 받고,
               mutator 서브섹션은 <code>default_model</code>(None이면
               <code>Settings.model</code> 상속),
               <code>source</code>(<code>auto</code>),
@@ -627,7 +626,6 @@ export default function Page() {
                 <tr><td><code>[nodes]</code></td><td><code>analyst</code>, <code>evaluator</code>, <code>scoring</code>, <code>synthesizer</code></td><td>Pipeline-node models, all pinned to <code>claude-opus-4-8</code>, so nodes never inherit the REPL model. Lookup: project <code>.geode/routing.toml</code>, then the manifest, else <code>settings.model</code>.</td></tr>
                 <tr><td><code>[credentials.patterns]</code></td><td><code>sk-ant-</code>, <code>sk-proj-</code>, <code>sk-</code></td><td>Key shape to provider. GLM keys ({`{id}.{secret}`} shape) are sniffed by <code>core.config.env_io.is_glm_key</code>.</td></tr>
                 <tr><td><code>[credentials.env_vars]</code></td><td>3</td><td>anthropic to <code>ANTHROPIC_API_KEY</code>, openai to <code>OPENAI_API_KEY</code>, glm to <code>ZAI_API_KEY</code>.</td></tr>
-                <tr><td><code>[credentials.keychain]</code></td><td>1</td><td>anthropic to <code>&quot;Claude Code-credentials&quot;</code> (macOS). Per-process override: <code>GEODE_&lt;PROVIDER&gt;_KEYCHAIN_SERVICE</code>.</td></tr>
               </tbody>
             </table>
 
@@ -666,7 +664,7 @@ export default function Page() {
                 <tr><td><code>mutator_dedup_window</code></td><td>int = 20</td><td>Duplicate-mutation check window.</td></tr>
                 <tr><td><code>mutator_dedup_threshold</code></td><td>float = 0.85</td><td>Duplicate similarity threshold.</td></tr>
                 <tr><td><code>anchor_confidence_mode</code></td><td>bool = false</td><td>Anchor confidence mode.</td></tr>
-                <tr><td><code>source</code></td><td><code>claude-cli</code></td><td>Default credential source shared by the roles.</td></tr>
+                <tr><td><code>source</code></td><td><code>api_key</code></td><td>Default credential source shared by the roles.</td></tr>
                 <tr><td><code>seed_limit</code></td><td>int = 10 (5-1000)</td><td>Seeds per audit.</td></tr>
                 <tr><td><code>seed_select</code></td><td><code>&quot;bundled&quot;</code></td><td>Packaged co-evolving seed pool.</td></tr>
                 <tr><td><code>held_out_bench</code></td><td>None</td><td>Frozen fixed-ruler seed dir.</td></tr>
@@ -683,7 +681,7 @@ export default function Page() {
               The role sub-sections
               <code>[self_improving_loop.autoresearch.target|judge|auditor]</code>
               take <code>model</code> (default <code>&quot;&quot;</code>) and
-              <code>source</code> (default <code>claude-cli</code>); the
+              <code>source</code> (default <code>api_key</code>); the
               mutator sub-section takes <code>default_model</code> (None
               inherits <code>Settings.model</code>), <code>source</code>
               (<code>auto</code>), and <code>max_tokens</code> (1024). Legacy

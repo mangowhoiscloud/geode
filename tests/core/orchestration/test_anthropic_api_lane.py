@@ -1,9 +1,8 @@
 """PR-OAUTH-API-LANES (2026-05-26) — anthropic-api lane invariants.
 
-Mirrors the test pattern of tests/test_claude_cli_lane.py — singleton
-identity, default cap, env override, reset isolation between tests.
-The lane gates direct Anthropic API calls (anthropic_oauth +
-anthropic_payg adapters) so a PR-RANKER-PARALLEL burst stays under
+Pins singleton identity, default cap, env override, and reset isolation.
+The lane gates direct Anthropic API calls (the anthropic_payg adapter)
+so a PR-RANKER-PARALLEL burst stays under
 the per-account 429 floor.
 """
 

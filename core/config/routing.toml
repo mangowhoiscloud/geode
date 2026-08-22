@@ -12,7 +12,6 @@
 #   [routing.prefixes]                   — model-id prefix → provider
 #   [nodes]                              — pipeline node → model (analyst etc.)
 #   [credentials.patterns]               — API-key regex → provider
-#   [credentials.keychain]               — keychain service name per provider
 #
 # Loader: core.config.routing_manifest.load_routing_manifest() →
 # :class:`RoutingManifest` (pydantic).
@@ -117,12 +116,3 @@ synthesizer = "claude-opus-4-8"
 anthropic = "ANTHROPIC_API_KEY"
 openai = "OPENAI_API_KEY"
 glm = "ZAI_API_KEY"
-
-# ── Keychain service names (per provider, per platform) ────────────────────
-#
-# Per-process override via env var GEODE_<PROVIDER>_KEYCHAIN_SERVICE (e.g.
-# GEODE_ANTHROPIC_KEYCHAIN_SERVICE=Claude\ Code-credentials).
-# macOS-only for now — Linux/Windows keychain backends added later.
-
-[credentials.keychain]
-anthropic = "Claude Code-credentials"

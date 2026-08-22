@@ -149,19 +149,19 @@ def test_anthropic_auditor_judge_default_to_api_key_payg() -> None:
     assert "claude-cli/" not in joined  # PAYG api_key path, not OAuth
 
 
-def test_explicit_source_override_wins_over_payg_default() -> None:
+def test_explicit_openai_subscription_override_wins_over_payg_default() -> None:
     """An explicit per-role source override is still honored over the api_key
     default (the default only fills when no override is set)."""
     from geode_product.petri_audit.runner import run_audit
 
     def _override(role: str) -> dict[str, str]:
-        return {"source": "claude-cli"} if role in ("auditor", "judge") else {}
+        return {"source": "openai-codex"} if role == "judge" else {}
 
     with patch(
         "geode_product.petri_audit.user_overrides.read_role_override", side_effect=_override
     ):
         report = run_audit(
-            judge="claude-opus-4-8",
+            judge="gpt-5.5",
             auditor="claude-opus-4-8",
             target="claude-opus-4-7",
             seeds=1,
@@ -169,4 +169,4 @@ def test_explicit_source_override_wins_over_payg_default() -> None:
             dry_run=True,
         )
     joined = " ".join(report.command)
-    assert "auditor=claude-cli/claude-opus-4-8" in joined
+    assert "judge=openai-codex/gpt-5.5" in joined

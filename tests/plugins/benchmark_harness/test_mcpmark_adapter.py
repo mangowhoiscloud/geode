@@ -704,7 +704,7 @@ def test_route_from_geode_model_label() -> None:
     assert _route_from_model("geode-claude-sonnet-4-6") == (
         "claude-sonnet-4-6",
         "anthropic",
-        "subscription",
+        "api_key",
     )
     assert _route_from_model("geode-glm-4-6") == ("glm-4-6", "zhipuai", "api_key")
 

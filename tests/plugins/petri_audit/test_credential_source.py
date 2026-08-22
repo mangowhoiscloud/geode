@@ -34,25 +34,9 @@ def _stub_settings(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _stub_oauth_adapters(monkeypatch):
-    """Force OAuth adapter is_available probes to False across the suite.
+    """Keep host OpenAI OAuth state out of resolver tests."""
+    from geode_product.petri_audit.adapters import openai_codex_oauth
 
-    Both ``claude_cli_backend`` and ``openai_codex_oauth`` query the
-    developer machine's keychain / file-based OAuth state — running tests
-    on a host with a live ``Claude Code-credentials`` keychain entry (or
-    a valid Codex OAuth token) would otherwise leak into the resolver.
-
-    Tests that need an OAuth source to register as available opt in by
-    monkeypatching the adapter's ``is_available`` back to a True
-    callable. See ``test_resolve_auto_oauth_priority`` for the pattern.
-
-    NOTE — this fixture papers over a design gap (the resolver consults
-    three hidden sources: settings / keychain / env). The long-term fix
-    is constructor-injected DI à la ``core/auth/rotation.py::ProfileRotator``;
-    tracked as a backlog task. See P1-D PR body for the rationale.
-    """
-    from geode_product.petri_audit.adapters import claude_cli_backend, openai_codex_oauth
-
-    monkeypatch.setattr(claude_cli_backend, "is_available", lambda: False)
     monkeypatch.setattr(openai_codex_oauth, "is_available", lambda: False)
 
 
@@ -63,8 +47,7 @@ def test_list_credential_sources_anthropic_shape(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
     out = cs.list_credential_sources("anthropic")
     sources = [entry["source"] for entry in out]
-    # Default manifest order — OAuth first (P1-D rebalance).
-    assert sources == ["claude-cli", "api_key", "auto"]
+    assert sources == ["api_key", "auto"]
     api_key_entry = next(e for e in out if e["source"] == "api_key")
     assert api_key_entry["available"] is True
     assert api_key_entry["adapter"] == "geode_product.petri_audit.adapters.http_anthropic"
@@ -110,12 +93,9 @@ def test_resolve_override_auto_falls_through_to_expansion(monkeypatch):
     assert cs.resolve_credential_source("anthropic", override="auto") == "api_key"
 
 
-def test_resolve_override_suppressed_falls_through(monkeypatch):
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
-    cs.suppress_credential_source("anthropic", "claude-cli")
-    # claude-cli explicitly requested but suppressed → auto expansion picks
-    # the next available source.
-    assert cs.resolve_credential_source("anthropic", override="claude-cli") == "api_key"
+def test_resolve_retired_claude_cli_override_raises() -> None:
+    with pytest.raises(RuntimeError, match="integration is retired"):
+        cs.resolve_credential_source("anthropic", override="claude-cli")
 
 
 # ── resolve_credential_source — auto expansion ─────────────────────────────
@@ -123,33 +103,21 @@ def test_resolve_override_suppressed_falls_through(monkeypatch):
 
 def test_resolve_auto_returns_first_available(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
-    # claude-cli unavailable (no keychain), api_key available → api_key.
     assert cs.resolve_credential_source("anthropic") == "api_key"
 
 
 def test_resolve_auto_skips_suppressed(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
     cs.suppress_credential_source("anthropic", "api_key")
-    # api_key suppressed, claude-cli unavailable → no resolution.
+    # api_key suppressed → no resolution.
     with pytest.raises(cs.CredentialResolutionError):
         cs.resolve_credential_source("anthropic")
 
 
 def test_resolve_auto_no_available_source_raises():
-    # No env vars, no keychain → both anthropic sources unavailable.
+    # No API key → no Anthropic source is available.
     with pytest.raises(cs.CredentialResolutionError):
         cs.resolve_credential_source("anthropic")
-
-
-def test_resolve_auto_oauth_priority(monkeypatch):
-    """When both claude-cli (OAuth) and api_key are available, manifest order
-    wins — claude-cli is listed first so it should be preferred."""
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
-    # Force claude-cli adapter to report available.
-    from geode_product.petri_audit.adapters import claude_cli_backend
-
-    monkeypatch.setattr(claude_cli_backend, "is_available", lambda: True)
-    assert cs.resolve_credential_source("anthropic") == "claude-cli"
 
 
 def test_resolve_zhipuai_with_env(monkeypatch):
@@ -225,7 +193,6 @@ def test_error_carries_provider_and_allowed():
         cs.resolve_credential_source("anthropic")
     err = excinfo.value
     assert err.provider == "anthropic"
-    assert "claude-cli" in err.allowed
     assert "api_key" in err.allowed
 
 
@@ -245,27 +212,15 @@ def test_fallback_disabled_filters_api_key_from_auto_expansion(monkeypatch):
     assert excinfo.value.subscription_only is True
 
 
-def test_fallback_disabled_returns_oauth_when_available(monkeypatch):
-    """With fallback_to_payg=False and OAuth available, returns OAuth."""
-    monkeypatch.setattr(
-        cs,
-        "is_adapter_available",
-        lambda fam, src: src == "claude-cli",
-    )
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")  # would-be fallback
-    assert cs.resolve_credential_source("anthropic", fallback_to_payg=False) == "claude-cli"
-
-
 def test_subscription_only_error_message_actionable(monkeypatch):
-    """Stripe-style actionable message must mention the config remedy."""
+    """Anthropic strict-mode errors point to the only built-in route."""
     monkeypatch.delenv("ANTHROPIC_OAUTH_TOKEN", raising=False)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
     with pytest.raises(cs.CredentialResolutionError) as excinfo:
         cs.resolve_credential_source("anthropic", fallback_to_payg=False)
     msg = str(excinfo.value)
-    assert "fallback_to_payg = true" in msg
-    assert "[self_improving_loop]" in msg
-    assert "subscription" in msg.lower()
+    assert "source='api_key'" in msg
+    assert "ANTHROPIC_API_KEY" in msg
 
 
 def test_subscription_only_error_carries_flag(monkeypatch):
@@ -400,11 +355,8 @@ def test_smoke_adapter_module_round_trip(monkeypatch):
 # ── P0c — subscription_only error trips the quota banner ────────────────
 
 
-def test_subscription_only_credential_error_trips_banner():
-    """Raising CredentialResolutionError(subscription_only=True) must push
-    the abort state to the active quota banner (P0c writer wiring per
-    docs/audits/2026-05-19-self-improving-loop-observability-gap.md §4).
-    Operators see the red banner immediately without reading tracebacks."""
+def test_anthropic_strict_error_does_not_claim_subscription_quota_abort():
+    """Anthropic has no built-in subscription route, so no quota abort is claimed."""
     from core.cli.quota_banner import (
         SubscriptionQuotaBanner,
         install_banner,
@@ -415,13 +367,9 @@ def test_subscription_only_credential_error_trips_banner():
     install_banner(banner)
     try:
         with pytest.raises(cs.CredentialResolutionError):
-            raise cs.CredentialResolutionError(
-                "anthropic", ["api_key", "claude-cli"], subscription_only=True
-            )
+            raise cs.CredentialResolutionError("anthropic", ["api_key"], subscription_only=True)
         state = banner.state
-        assert state.aborted is True
-        assert "anthropic" in state.abort_reason
-        assert "fallback_to_payg" in state.abort_reason
+        assert state.aborted is False
     finally:
         uninstall_banner()
 
@@ -453,9 +401,7 @@ def test_subscription_only_banner_trip_safe_when_no_banner_installed():
 
     uninstall_banner()
     with pytest.raises(cs.CredentialResolutionError):
-        raise cs.CredentialResolutionError(
-            "anthropic", ["api_key", "claude-cli"], subscription_only=True
-        )
+        raise cs.CredentialResolutionError("anthropic", ["api_key"], subscription_only=True)
 
 
 # ── P1b — credential resolver journal emit ──────────────────────────────
@@ -479,25 +425,13 @@ def _emit_test_journal(tmp_path):
     return journal, sip_home
 
 
-def test_subscription_only_credential_error_emits_journal(tmp_path, monkeypatch):
-    """CredentialResolutionError(subscription_only=True) must emit a
-    credential_subscription_abort event with provider + allowed payload."""
-    import json
-
+def test_anthropic_strict_error_does_not_emit_subscription_abort(tmp_path, monkeypatch):
     from geode_product.self_improving.loop.observe.run_timeline import run_timeline_scope
 
     journal, _ = _emit_test_journal(tmp_path)
     with run_timeline_scope(journal), pytest.raises(cs.CredentialResolutionError):
-        raise cs.CredentialResolutionError(
-            "anthropic", ["api_key", "claude-cli"], subscription_only=True
-        )
-    rows = [json.loads(line) for line in journal.path.read_text().splitlines()]
-    abort_events = [r for r in rows if r["event"] == "credential_subscription_abort"]
-    assert len(abort_events) == 1
-    abort = abort_events[0]
-    assert abort["level"] == "error"
-    assert abort["payload"]["provider"] == "anthropic"
-    assert abort["payload"]["allowed"] == ["api_key", "claude-cli"]
+        raise cs.CredentialResolutionError("anthropic", ["api_key"], subscription_only=True)
+    assert not journal.path.exists()
 
 
 @pytest.mark.policy_real

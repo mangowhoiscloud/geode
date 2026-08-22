@@ -23,9 +23,6 @@ def _isolated_seed_stage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 def test_typer_audit_dry_run_prints_command(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        "geode_product.petri_audit.adapters.claude_cli_backend.is_available", lambda: True
-    )
     result = runner.invoke(
         app,
         [
@@ -48,7 +45,6 @@ def test_typer_audit_dry_run_prints_command(monkeypatch: pytest.MonkeyPatch) -> 
     assert result.exit_code == 0, result.output
     assert "Petri audit" in result.output
     assert "inspect eval inspect_petri/audit" in result.output
-    # CSA-3 flip — was claude-code/, now claude-cli/.
     assert (
         "judge=anthropic/claude-haiku-4-5-20251001" in result.output
     )  # PAYG default (anthropic judge)

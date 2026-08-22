@@ -1,12 +1,7 @@
-"""Paperclip wiring invariants — claude-cli / openai-codex source dispatch.
+"""Mutator source dispatch and TOML wiring invariants.
 
 Pins:
-- ``invoke_claude_cli`` runs the right binary with
-  the right argv shape and return stdout text. Missing binary raises
-  ``CliInvocationError`` with an actionable message.
-- ``_default_llm_call`` dispatches Claude through its CLI and OpenAI through OAuth when
-  ``MutatorConfig.source`` is paperclip; legacy "api_key" / "auto"
-  paths are unaffected.
+- ``_default_llm_call`` dispatches API-key and OpenAI OAuth sources.
 - ``splice_toml_section`` (``core.config.toml_edit``) updates an existing
   TOML section in place, appends a fresh section when missing, and replaces
   a single key while preserving the rest of the section.
@@ -16,98 +11,11 @@ Pins:
 
 from __future__ import annotations
 
-import subprocess
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-
-# cli_subprocess ------------------------------------------------------------
-
-
-def test_invoke_claude_cli_argv_shape(monkeypatch: pytest.MonkeyPatch) -> None:
-    """``claude --print --output-format text --append-system-prompt <SYS> <USER>``."""
-    from geode_product.self_improving.loop.mutate import cli_subprocess
-
-    monkeypatch.setattr(cli_subprocess.shutil, "which", lambda b: f"/usr/local/bin/{b}")
-    captured: dict[str, list[str]] = {}
-
-    def _fake_run(argv: list[str], **_: object) -> subprocess.CompletedProcess[str]:
-        captured["argv"] = argv
-        return subprocess.CompletedProcess(
-            argv, returncode=0, stdout="raw mutator JSON\n", stderr=""
-        )
-
-    monkeypatch.setattr(cli_subprocess.subprocess, "run", _fake_run)
-    out = cli_subprocess.invoke_claude_cli(system_prompt="SYS", user_prompt="USR")
-    assert out == "raw mutator JSON"
-    assert captured["argv"][0] == "/usr/local/bin/claude"
-    assert "--print" in captured["argv"]
-    assert "--output-format" in captured["argv"]
-    assert "--append-system-prompt" in captured["argv"]
-    sys_idx = captured["argv"].index("--append-system-prompt")
-    assert captured["argv"][sys_idx + 1] == "SYS"
-    assert captured["argv"][-1] == "USR"
-
-
-def test_invoke_claude_cli_missing_binary(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Missing binary → CliInvocationError with actionable install hint."""
-    from geode_product.self_improving.loop.mutate import cli_subprocess
-
-    monkeypatch.setattr(cli_subprocess.shutil, "which", lambda b: None)
-    monkeypatch.delenv(cli_subprocess.CLAUDE_CLI_BIN_ENV, raising=False)
-    with pytest.raises(cli_subprocess.CliInvocationError, match="not found on \\$PATH"):
-        cli_subprocess.invoke_claude_cli(system_prompt="s", user_prompt="u")
-
-
-def test_binary_env_override_used(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """``GEODE_CLAUDE_CLI_BIN`` overrides PATH lookup."""
-    from geode_product.self_improving.loop.mutate import cli_subprocess
-
-    bin_path = tmp_path / "custom_claude"
-    bin_path.write_text("#!/bin/sh\n")
-    bin_path.chmod(0o755)
-    monkeypatch.setenv(cli_subprocess.CLAUDE_CLI_BIN_ENV, str(bin_path))
-    monkeypatch.setattr(cli_subprocess.shutil, "which", lambda b: None)
-    captured: dict[str, list[str]] = {}
-
-    def _fake_run(argv: list[str], **_: object) -> subprocess.CompletedProcess[str]:
-        captured["argv"] = argv
-        return subprocess.CompletedProcess(argv, returncode=0, stdout="", stderr="")
-
-    monkeypatch.setattr(cli_subprocess.subprocess, "run", _fake_run)
-    cli_subprocess.invoke_claude_cli(system_prompt="s", user_prompt="u")
-    assert captured["argv"][0] == str(bin_path)
-
-
-def test_invoke_nonzero_exit_raises(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Non-zero exit → CliInvocationError carrying stderr clip."""
-    from geode_product.self_improving.loop.mutate import cli_subprocess
-
-    monkeypatch.setattr(cli_subprocess.shutil, "which", lambda b: f"/bin/{b}")
-
-    def _fake_run(argv: list[str], **_: object) -> subprocess.CompletedProcess[str]:
-        return subprocess.CompletedProcess(argv, returncode=2, stdout="", stderr="auth failed")
-
-    monkeypatch.setattr(cli_subprocess.subprocess, "run", _fake_run)
-    with pytest.raises(cli_subprocess.CliInvocationError, match="auth failed"):
-        cli_subprocess.invoke_claude_cli(system_prompt="s", user_prompt="u")
-
-
-def test_invoke_timeout_raises(monkeypatch: pytest.MonkeyPatch) -> None:
-    """``subprocess.TimeoutExpired`` → ``CliInvocationError`` with timeout hint."""
-    from geode_product.self_improving.loop.mutate import cli_subprocess
-
-    monkeypatch.setattr(cli_subprocess.shutil, "which", lambda b: f"/bin/{b}")
-
-    def _fake_run(argv: list[str], **kw: object) -> subprocess.CompletedProcess[str]:
-        raise subprocess.TimeoutExpired(cmd=argv, timeout=180)
-
-    monkeypatch.setattr(cli_subprocess.subprocess, "run", _fake_run)
-    with pytest.raises(cli_subprocess.CliInvocationError, match="timed out"):
-        cli_subprocess.invoke_claude_cli(system_prompt="s", user_prompt="u")
-
 
 # runner dispatch -----------------------------------------------------------
 
@@ -132,16 +40,7 @@ def _stub_adapter_call_result(
     )
 
 
-def test_default_llm_call_dispatches_to_claude_cli(monkeypatch: pytest.MonkeyPatch) -> None:
-    """source=claude-cli still uses cli_subprocess.invoke_claude_cli (text output).
-
-    Step J-b.2 (2026-05-23) — only the API path (``api_key`` / ``auto``)
-    migrates to the Path-B :class:`LLMAdapter` Protocol. The CLI
-    subscription branch stays on the dedicated text-output helper
-    because ``ClaudeCliAdapter`` speaks the streaming-JSON event protocol used by the agentic loop,
-    not the plain-text shape the mutator parser consumes. Codex MCP
-    BLOCKER fix-up.
-    """
+def test_default_llm_call_rejects_retired_claude_cli(monkeypatch: pytest.MonkeyPatch) -> None:
     from geode_product.self_improving.loop.mutate import runner
 
     cfg_mock = MagicMock()
@@ -154,20 +53,8 @@ def test_default_llm_call_dispatches_to_claude_cli(monkeypatch: pytest.MonkeyPat
     )
     monkeypatch.setattr("core.config._resolve_provider", lambda m: "anthropic")
 
-    invoked = {"called": False, "system": "", "user": ""}
-
-    def _fake_invoke(*, system_prompt: str, user_prompt: str) -> str:
-        invoked["called"] = True
-        invoked["system"] = system_prompt
-        invoked["user"] = user_prompt
-        return "from claude-cli"
-
-    monkeypatch.setattr(
-        "geode_product.self_improving.loop.mutate.cli_subprocess.invoke_claude_cli", _fake_invoke
-    )
-    result = runner._default_llm_call("SYS", "USR")
-    assert result == "from claude-cli"
-    assert invoked == {"called": True, "system": "SYS", "user": "USR"}
+    with pytest.raises(RuntimeError, match="integration is retired"):
+        runner._default_llm_call("SYS", "USR")
 
 
 @pytest.mark.parametrize(
@@ -313,10 +200,10 @@ def test_splice_section_appends_when_missing() -> None:
     out = splice_toml_section(
         "[other]\nfoo = 1\n",
         "self_improving_loop.mutator",
-        {"source": "claude-cli"},
+        {"source": "api_key"},
     )
     assert "[self_improving_loop.mutator]" in out
-    assert 'source = "claude-cli"' in out
+    assert 'source = "api_key"' in out
     assert "[other]" in out  # preserved
 
 
@@ -324,9 +211,8 @@ def test_splice_section_replaces_existing_key() -> None:
     from core.config.toml_edit import splice_toml_section
 
     src = '[self_improving_loop.mutator]\nsource = "api_key"\nmax_tokens = 1024\n'
-    out = splice_toml_section(src, "self_improving_loop.mutator", {"source": "claude-cli"})
-    assert 'source = "claude-cli"' in out
-    assert 'source = "api_key"' not in out
+    out = splice_toml_section(src, "self_improving_loop.mutator", {"source": "openai-codex"})
+    assert 'source = "openai-codex"' in out
     assert "max_tokens = 1024" in out  # untouched neighbor preserved
 
 
@@ -353,11 +239,11 @@ def test_splice_section_does_not_clobber_sibling_section() -> None:
         'source = "api_key"\n'
         'model = "claude-opus-4-7"\n'
     )
-    out = splice_toml_section(src, "self_improving_loop.mutator", {"source": "claude-cli"})
-    assert 'source = "claude-cli"' in out
+    out = splice_toml_section(src, "self_improving_loop.mutator", {"source": "openai-codex"})
+    assert 'source = "openai-codex"' in out
     # Petri section untouched:
     assert "[self_improving_loop.petri.auditor]" in out
-    assert out.count('source = "api_key"') == 1  # petri still has api_key
+    assert out.count('source = "api_key"') == 1
     assert 'model = "claude-opus-4-7"' in out
 
 
@@ -395,25 +281,25 @@ def test_cmd_source_set_rejects_invalid_source(
 def test_cmd_source_set_persists_valid_source(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """source=claude-cli writes the line to ~/.geode/config.toml."""
+    """A supported source writes the line to ~/.geode/config.toml."""
     from geode_product.self_improving import cli_commands as self_improving
 
     fake_toml = tmp_path / "config.toml"
     monkeypatch.setattr("core.paths.GLOBAL_CONFIG_TOML", fake_toml)
     # See sibling test for rationale on patching both symbols.
     monkeypatch.setattr("core.config.toml_edit.GLOBAL_CONFIG_TOML", fake_toml)
-    self_improving._cmd_source_set(["source=claude-cli"])
+    self_improving._cmd_source_set(["source=openai-codex"])
     text = fake_toml.read_text(encoding="utf-8")
     # Step J-b.1 — writer target moved to autoresearch.mutator.
     assert "[self_improving_loop.autoresearch.mutator]" in text
-    assert 'source = "claude-cli"' in text
+    assert 'source = "openai-codex"' in text
 
 
 def test_valid_sources_constant_matches_config_enum() -> None:
     """``_VALID_SOURCES`` must stay in sync with ``MutatorConfig.source`` Literal."""
     from geode_product.self_improving.cli_commands import _VALID_SOURCES
 
-    assert set(_VALID_SOURCES) == {"auto", "api_key", "claude-cli", "openai-codex"}
+    assert set(_VALID_SOURCES) == {"auto", "api_key", "openai-codex"}
 
 
 def test_persist_full_config_uses_plural_roles_path(
@@ -435,7 +321,7 @@ def test_persist_full_config_uses_plural_roles_path(
     self_improving._persist_full_config(
         mutator={},
         petri={},
-        seed_generation={"miner": {"model": "claude-haiku-4-5", "source": "claude-cli"}},
+        seed_generation={"miner": {"model": "claude-haiku-4-5", "source": "api_key"}},
     )
     text = fake_toml.read_text(encoding="utf-8")
     assert "[self_improving_loop.seed_generation.roles.miner]" in text
@@ -443,7 +329,7 @@ def test_persist_full_config_uses_plural_roles_path(
     # Round-trip: the loader must accept what the writer produced.
     cfg = load_self_improving_loop_config()
     assert "miner" in cfg.seed_generation.roles
-    assert cfg.seed_generation.roles["miner"].source == "claude-cli"
+    assert cfg.seed_generation.roles["miner"].source == "api_key"
 
 
 def test_default_llm_call_explicit_api_key_routes_payg_not_inferred_subscription(

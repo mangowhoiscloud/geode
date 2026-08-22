@@ -1611,10 +1611,8 @@ def build_responses_kwargs(
     elif req.temperature is not None and spec.accepts_temperature:
         kwargs["temperature"] = req.temperature
     # PR-CODEX-OAUTH-RESPONSE-SCHEMA (2026-05-25) — Responses API
-    # structured-output enforcement. PR-JSON-WIRE (#79) routed
-    # ``req.response_schema`` through claude-cli (--json-schema) and
-    # codex-cli (--output-schema <FILE>) but silently dropped the
-    # codex-oauth path. Without API-level schema enforcement, gpt-5.x
+    # structured-output enforcement. The old CLI routes handled schemas while
+    # the codex-oauth path silently dropped them. Without API-level schema enforcement, gpt-5.x
     # reasoning models can return ``stop_reason=completed`` with the
     # entire output budget spent on encrypted reasoning items + empty
     # ``output_text`` (smoke 17: 20+ codex-oauth-empty-text dumps,

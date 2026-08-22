@@ -14,9 +14,8 @@ while ``auto`` still never silently bills the API key. See
 ``test_credential_source_centralized.py`` for the resolution-gate + enum-drift
 invariants.
 
-Remaining wiring (unchanged):
-- ``PetriRoleConfig.source`` / ``AutoresearchConfig.source`` default
-  ``claude-cli`` (subscription-first).
+Anthropic defaults to the explicit API-key route. The retired CLI value remains
+parseable only so old configuration can produce an actionable migration error.
 """
 
 from __future__ import annotations
@@ -51,10 +50,9 @@ def test_autoresearch_source_accepts_api_key() -> None:
     assert a.source == CredentialSource.API_KEY
 
 
-def test_petri_role_source_accepts_claude_cli() -> None:
-    """``source = "claude-cli"`` 수락 (subscription default)."""
+def test_petri_role_source_accepts_legacy_claude_cli_for_migration() -> None:
     p = PetriRoleConfig(source="claude-cli")
-    assert p.source == "claude-cli"
+    assert p.source == CredentialSource.LEGACY_CLAUDE_CLI
 
 
 def test_petri_role_source_accepts_openai_codex() -> None:
@@ -75,20 +73,14 @@ def test_petri_role_source_accepts_auto() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_petri_role_default_source_claude_cli() -> None:
-    """PetriRoleConfig 의 source default 가 ``claude-cli`` (subscription-first).
-
-    PR-SIL-5THEME C6 후 default 변경. ``auto`` 는 manifest cascade 가
-    silent PAYG fallback 가능 → 명시 default 로 leak 차단.
-    """
+def test_petri_role_default_source_api_key() -> None:
     p = PetriRoleConfig()
-    assert p.source == "claude-cli"
+    assert p.source == "api_key"
 
 
-def test_autoresearch_config_default_source_claude_cli() -> None:
-    """AutoresearchConfig 의 source default 도 ``claude-cli``."""
+def test_autoresearch_config_default_source_api_key() -> None:
     a = AutoresearchConfig()
-    assert a.source == "claude-cli"
+    assert a.source == "api_key"
 
 
 # ---------------------------------------------------------------------------

@@ -86,12 +86,7 @@ task = SubTask(..., response_schema=DECISION_SCHEMA)`}</pre>
                   <td>strict-compatible schema면 <code>strict=true</code>, 아니면 <code>strict=false</code> hint</td>
                 </tr>
                 <tr>
-                  <td><code>claude-cli</code></td>
-                  <td><code>--json-schema &lt;inline JSON&gt;</code></td>
-                  <td>CLI subprocess 경계에서 schema flag를 전달</td>
-                </tr>
-                <tr>
-                  <td><code>anthropic-payg</code><br /><code>anthropic-oauth</code></td>
+                  <td><code>anthropic-payg</code></td>
                   <td>현재 공통 Messages request builder가 읽지 않음</td>
                   <td>schema field는 무시됨. JSON discipline이 필요하면 caller prompt와 downstream validation이 별도로 필요</td>
                 </tr>
@@ -112,7 +107,7 @@ task = SubTask(..., response_schema=DECISION_SCHEMA)`}</pre>
             <p>
               OpenAI Responses request builder는 tools가 있으면 tool payload와{" "}
               <code>text.format</code>을 같은 요청에 함께 실을 수 있습니다. 반대로
-              두 CLI adapter는 structured-output flag는 전달하지만 GEODE tool
+              기존 CLI adapter와 달리 현재 내장 경로는 GEODE tool
               calling은 지원하지 않습니다. 두 capability는 독립적이며, 이 배선
               사실을 모든 모델의 조합 수용 보장으로 확대하지 않습니다.
             </p>
@@ -174,7 +169,6 @@ task = SubTask(..., response_schema=DECISION_SCHEMA)`}</pre>
               <li><code>core/llm/adapters/base.py</code>: <code>AdapterCallRequest.response_schema</code>.</li>
               <li><code>core/agent/loop/agent_loop.py</code>: loop-level schema와 per-call override.</li>
               <li><code>core/llm/adapters/_openai_common.py</code>: Responses wire와 strict compatibility.</li>
-              <li><code>core/llm/adapters/claude_cli.py</code>, <code>codex_cli.py</code>: CLI flags.</li>
               <li><code>core/agent/worker.py</code>: JSON object 검사와 one-retry gate.</li>
             </ul>
 
@@ -252,8 +246,7 @@ task = SubTask(..., response_schema=DECISION_SCHEMA)`}</pre>
               <thead><tr><th>Path</th><th><code>response_schema</code> wire</th><th>Guarantee boundary</th></tr></thead>
               <tbody>
                 <tr><td><code>openai-payg</code><br /><code>codex-oauth</code></td><td>Responses API <code>json_schema</code> under <code>text.format</code></td><td><code>strict=true</code> when compatible; otherwise a <code>strict=false</code> hint</td></tr>
-                <tr><td><code>claude-cli</code></td><td><code>--json-schema &lt;inline JSON&gt;</code></td><td>Passes the schema flag at the CLI subprocess boundary</td></tr>
-                <tr><td><code>anthropic-payg</code><br /><code>anthropic-oauth</code></td><td>The shared Messages request builder does not currently read it</td><td>The schema field is ignored; JSON discipline requires a caller prompt and downstream validation</td></tr>
+                <tr><td><code>anthropic-payg</code></td><td>The Messages request builder does not currently read it</td><td>The schema field is ignored; JSON discipline requires a caller prompt and downstream validation</td></tr>
                 <tr><td><code>glm-payg</code><br /><code>glm-coding-plan</code></td><td>The Chat Completions request builders do not currently read it</td><td>No provider-side schema enforcement on these paths</td></tr>
               </tbody>
             </table>
@@ -328,7 +321,6 @@ task = SubTask(..., response_schema=DECISION_SCHEMA)`}</pre>
               <li><code>core/llm/adapters/base.py</code>: <code>AdapterCallRequest.response_schema</code>.</li>
               <li><code>core/agent/loop/agent_loop.py</code>: loop-level schema and per-call override.</li>
               <li><code>core/llm/adapters/_openai_common.py</code>: Responses wire and strict compatibility.</li>
-              <li><code>core/llm/adapters/claude_cli.py</code> and <code>codex_cli.py</code>: CLI flags.</li>
               <li><code>core/agent/worker.py</code>: JSON object checks and the one-retry gate.</li>
             </ul>
 

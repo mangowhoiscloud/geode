@@ -49,6 +49,10 @@ functional change.
 
 ### Fixed
 
+- **Benchmark routing respects the Anthropic credential boundary.** MCPMark
+  Claude model labels now select the API-key source instead of the retired
+  subscription source.
+
 - **Step snapshots remain authoritative through tool execution.** Middleware-selected
   routes are finalized without replacing physical-turn history, the response tool
   batch executes against the captured bound plan, step correlation reaches tool
@@ -60,12 +64,10 @@ functional change.
 
 ### Changed
 
-- **Claude subscription compatibility is warning-only.** Legacy
-  `claude-code/<model>` and `codex-cli/<model>` audit identifiers now normalize
-  to their maintained routes instead of raising migration errors. Anthropic's
-  `oauth` setting resolves through the official Claude CLI adapter, `/login`
-  can enable that route without owning or copying Claude credentials, and all
-  exposed notices point to Anthropic's current third-party/OSS guidance.
+- **Anthropic legacy settings fail before dispatch.** Existing `claude-cli` and
+  Anthropic `oauth` values still load so operators receive an actionable
+  migration error, but they never invoke a subprocess or silently authorize
+  PAYG. Historical evaluation and trajectory labels remain readable.
 
 - **Planning is now a single observation-conditioned advisory contract.**
   Explicit `/plan` compares candidate structures with action tools disabled and
@@ -78,6 +80,11 @@ functional change.
   schema or execution authority.
 
 ### Removed
+
+- **Removed every built-in Claude CLI and Anthropic OAuth execution path.** The
+  adapters, subprocess runtime, auth/quota readers, retry classifier, lane,
+  resume state, Petri MCP bridge, and SIL subprocess mutator are gone. Anthropic
+  execution is API-key only; SIL mutation and cognitive verify/replan remain.
 
 - **Removed the duplicate execution-shaped planning stack.** The automatic
   decomposer, `PlanMode`/`PlanStore`, decomposer prompt, and the model-visible

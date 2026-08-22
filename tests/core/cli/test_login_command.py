@@ -84,20 +84,30 @@ class TestSubcommandRouter:
             cmd_login("openai")
             mock_oauth.assert_called_once_with("openai")
 
-    def test_anthropic_login_enables_legacy_cli_route_with_policy_warning(self) -> None:
+    def test_anthropic_login_prompts_for_api_key(self) -> None:
         _reset_state()
+        with patch("core.cli.commands.login._login_anthropic_api_key") as login_api_key:
+            cmd_login("anthropic")
+        login_api_key.assert_called_once_with()
+
+    def test_anthropic_login_persists_the_live_adapter_key(self) -> None:
+        _reset_state()
+        key = "sk-ant-api03-test-key-1234567890"
         with (
-            patch("core.cli.commands.login._persist_credential_source") as persist,
-            patch("core.cli.commands.login.clear_dry_run_opt_in"),
-            patch("core.cli.commands.console") as mock_console,
+            patch("getpass.getpass", return_value=key),
+            patch("core.cli.commands.console"),
+            patch("core.cli.commands._upsert_env") as upsert_env,
+            patch("core.cli.commands.login._persist_credential_source") as persist_source,
+            patch("core.llm.adapters.registry.invalidate_provider_clients") as invalidate,
         ):
             cmd_login("anthropic")
-        persist.assert_called_once_with("anthropic", "claude-cli")
-        text = " ".join(
-            str(call.args[0]) for call in mock_console.print.call_args_list if call.args
-        )
-        assert "open-source projects" in text
-        assert "claude /login" in text
+
+        from core.config import settings
+
+        assert settings.anthropic_api_key == key
+        upsert_env.assert_called_once_with("ANTHROPIC_API_KEY", key)
+        persist_source.assert_called_once_with("anthropic", "api_key")
+        invalidate.assert_called_once_with("anthropic")
 
     def test_unknown_subcommand_warns(self) -> None:
         _reset_state()

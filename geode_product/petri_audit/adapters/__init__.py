@@ -17,10 +17,9 @@ Adapter module contract (loose — registry checks ``hasattr`` per call):
   providers (e.g. plain ``anthropic/``, ``openai/``) need no extra
   registration; the function may be absent or a no-op.
 - ``is_available() -> bool`` — readiness probe. Stock providers fall
-  back to env-var presence; OAuth-backed adapters check the keychain
-  / authoritative token file.
+  back to env-var presence; subscription adapters query their owning CLI.
 - ``metadata() -> dict | None`` (optional) — picker-friendly metadata
-  (subscription plan, scopes, expiry). Only OAuth adapters populate.
+  (subscription plan, scopes, expiry).
 
 Used by the upcoming P1-E registry layer (role × source binding) and
 the /petri picker (P1-F) to keep adapter selection logic out of the
@@ -70,8 +69,7 @@ def register_adapter(provider: str, source: str) -> None:
 
     Stock providers (inspect_ai's native ``anthropic`` / ``openai`` /
     ``geode``) need no explicit registration; their modules either omit
-    ``register`` or implement a no-op. OAuth-backed adapters (claude-cli
-    keychain, codex OAuth) use ``register()`` to wire a ``ModelAPI``
+    ``register`` or implement a no-op. Codex OAuth uses ``register()`` to wire a ``ModelAPI``
     subclass into inspect_ai's registry. Idempotent — inspect_ai's
     registry overwrites existing entries with the same name.
     """
@@ -118,7 +116,7 @@ def is_adapter_available(provider: str, source: str) -> bool:
 def get_adapter_metadata(provider: str, source: str) -> dict[str, Any] | None:
     """Return picker-friendly metadata from the adapter module.
 
-    Only OAuth-backed adapters populate this — stock API-key adapters
+    Only subscription-backed adapters populate this — stock API-key adapters
     return ``None``. Errors collapse to ``None`` (consumer should treat
     missing metadata as benign and fall back to defaults).
     """

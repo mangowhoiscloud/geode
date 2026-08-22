@@ -56,7 +56,11 @@ def test_auth_coverage_source_is_concrete_subset() -> None:
     auth path is never the AUTO resolver mode)."""
     from geode_product.seed_generation.auth_coverage import Source as AuthPathSource
 
-    concrete = {s.value for s in CredentialSource if s is not CredentialSource.AUTO}
+    concrete = {
+        s.value
+        for s in CredentialSource
+        if s not in {CredentialSource.AUTO, CredentialSource.LEGACY_CLAUDE_CLI}
+    }
     assert set(get_args(AuthPathSource)) == concrete
 
 
@@ -93,10 +97,9 @@ def test_explicit_per_role_api_key_routes_to_anthropic_api() -> None:
     from geode_product.petri_audit.models import to_inspect_model
 
     api_key_routed = to_inspect_model("claude-opus-4-8", source="api_key")
-    cli_routed = to_inspect_model("claude-opus-4-8", source="claude-cli")
-    assert api_key_routed != cli_routed
-    assert api_key_routed.startswith("anthropic/")  # PAYG API adapter prefix
-    assert cli_routed.startswith("claude-cli/")  # subscription OAuth adapter prefix
+    assert api_key_routed.startswith("anthropic/")
+    with pytest.raises(RuntimeError, match="integration is retired"):
+        to_inspect_model("claude-opus-4-8", source="claude-cli")
 
 
 def test_to_inspect_model_reraises_strict_subscription_abort(
@@ -110,7 +113,7 @@ def test_to_inspect_model_reraises_strict_subscription_abort(
     from geode_product.petri_audit import models
 
     def _raise_strict(provider: str, **_kw: object) -> str:
-        raise cs.CredentialResolutionError("anthropic", ["claude-cli"], subscription_only=True)
+        raise cs.CredentialResolutionError("anthropic", ["api_key"], subscription_only=True)
 
     monkeypatch.setattr(cs, "resolve_credential_source", _raise_strict)
     with pytest.raises(cs.CredentialResolutionError):

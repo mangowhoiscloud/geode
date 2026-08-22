@@ -329,9 +329,8 @@ def test_build_audit_command_reads_from_config(
     """Monkeypatching _get_autoresearch_config flows through to argv.
 
     PR-MINIMAL-2 (2026-05-21) — ``use_oauth: bool`` replaced by
-    ``source: Source`` (B1). ``source == "api_key"`` is the only
-    value that suppresses ``--use-oauth``; any other source enables
-    it (subscription credential).
+    ``source: Source`` (B1). OpenAI subscription values enable
+    ``--use-oauth``; retired Claude CLI values fail before subprocess spawn.
 
     PR-HYPERPARAM-WIRE (2026-05-28) — point ``GEODE_HYPERPARAM_OVERRIDE``
     at a missing path so the hyperparam SoT override returns ``{}`` and
@@ -390,7 +389,7 @@ def test_build_audit_command_omits_target_judge_when_cfg_unpinned(
             budget_minutes=10,
             target_model=None,
             judge_model=None,
-            source="claude-cli",
+            source="openai-codex",
             seed_limit=5,
             seed_select="plugins/petri_audit/seeds",
             dim_set="subset",
@@ -412,6 +411,26 @@ def test_build_audit_command_omits_target_judge_when_cfg_unpinned(
     assert "subset" in argv
     assert "5" in argv  # max_turns
     assert "--use-oauth" in argv  # source != "api_key"
+
+
+def test_build_audit_command_rejects_retired_claude_cli_source(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(
+        auto_train,
+        "_get_autoresearch_config",
+        lambda: SimpleNamespace(
+            source="claude-cli",
+            seed_limit=5,
+            seed_select="bundled",
+            dim_set="subset",
+            max_turns=5,
+        ),
+    )
+    with pytest.raises(RuntimeError, match="integration is retired"):
+        measure._build_audit_command()
 
 
 def test_resolve_seed_select_falls_back_to_config(

@@ -1,13 +1,12 @@
 """AnthropicPaygAdapter — PAYG (API-key) path to Anthropic models.
 
 Layer 3 adapter (paperclip ``ServerAdapterModule`` shape). Calls the Anthropic
-SDK with the API key from settings — and *not* the OAuth profile, even if
-``ProfileRotator`` would prefer it under the legacy
+SDK with the API key from settings — and *not* another credential, even if
+``ProfileRotator`` would prefer one under the legacy
 ``_resolve_anthropic_key()`` global priority. Codex MCP review 2026-05-23
 flagged the singleton-client sharing as a BLOCKER for source isolation; this
 adapter now owns its client via :func:`_anthropic_common.build_async_anthropic_client`.
-
-Pair with :class:`AnthropicOAuthAdapter` (same provider, different source).
+This is the only built-in Anthropic execution path.
 """
 
 from __future__ import annotations
@@ -85,16 +84,13 @@ class AnthropicPaygAdapter:
         if not api_key:
             raise RuntimeError(
                 "AnthropicPaygAdapter: ANTHROPIC_API_KEY not set. PAYG path requires "
-                "an explicit API key — set ``anthropic_api_key`` in settings or use "
-                "the anthropic-oauth adapter instead."
+                "an explicit API key — set ``anthropic_api_key`` in settings."
             )
         return self._clients.get(lambda: build_async_anthropic_client(api_key))
 
     async def acomplete(self, req: AdapterCallRequest) -> AdapterCallResult:
         client = self._get_client()
-        # PR-OAUTH-API-LANES (2026-05-26) — pooled with anthropic-oauth in
-        # the same per-account anthropic-api lane (Anthropic rate-limits
-        # per-account, not per-source).
+        # The API-key path has its own concurrency lane.
         lane_key = f"anthropic-payg:{req.model}"
         async with acquire_anthropic_api_lane_async(lane_key):
             try:
@@ -178,7 +174,6 @@ class AnthropicPaygAdapter:
                 checks=(("anthropic_api_key", "missing"),),
                 hints=(
                     "Set ``ANTHROPIC_API_KEY`` in your environment or in ~/.geode/config.toml.",
-                    "Or use the anthropic-oauth adapter if you have a Claude subscription.",
                 ),
             )
         return EnvironmentReport(

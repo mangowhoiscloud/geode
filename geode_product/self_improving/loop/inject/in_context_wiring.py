@@ -3,7 +3,7 @@
 Connects the S5 in-context slot schema
 (`geode_product/self_improving/loop/inject/in_context_slots.py`)
 to the Anthropic API inference path. Product composition registers this
-orchestrator as request middleware for the PAYG and OAuth adapters; it applies
+orchestrator as request middleware for the PAYG adapter; it applies
 configured transforms to outgoing ``messages`` + ``system`` text before they
 reach the provider.
 
@@ -64,7 +64,7 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
-_ANTHROPIC_API_ADAPTERS = frozenset({"anthropic-payg", "anthropic-oauth"})
+_ANTHROPIC_API_ADAPTERS = frozenset({"anthropic-payg"})
 _MIDDLEWARE_NAME = "self_improving_in_context"
 
 __all__ = ["apply_in_context_slots", "register_in_context_middleware"]

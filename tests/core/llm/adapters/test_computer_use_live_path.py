@@ -164,19 +164,17 @@ class TestLivePathInjection:
 
 
 class TestComputerUseCapableContract:
-    def test_live_anthropic_adapters_are_computer_use_capable(self) -> None:
-        from core.llm.adapters.anthropic_oauth import AnthropicOAuthAdapter
+    def test_live_anthropic_adapter_is_computer_use_capable(self) -> None:
         from core.llm.adapters.anthropic_payg import AnthropicPaygAdapter
 
-        assert isinstance(AnthropicOAuthAdapter(), ComputerUseCapable)
         assert isinstance(AnthropicPaygAdapter(), ComputerUseCapable)
 
     def test_adapter_param_matches_injected_param(self) -> None:
         """The enumerable contract (``computer_tool_param``) must return the
         exact payload the live builder injects — no drift between the two."""
-        from core.llm.adapters.anthropic_oauth import AnthropicOAuthAdapter
+        from core.llm.adapters.anthropic_payg import AnthropicPaygAdapter
 
-        adapter = AnthropicOAuthAdapter()
+        adapter = AnthropicPaygAdapter()
         from_method = adapter.computer_tool_param(
             display_width=TARGET_WIDTH, display_height=TARGET_HEIGHT
         )

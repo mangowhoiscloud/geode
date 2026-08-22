@@ -235,18 +235,18 @@ def test_builtin_adapters_with_get_client_use_loop_affine_cache() -> None:
     finally:
         registry_mod._REGISTRY = original
 
-    assert len(adapters) >= 7
+    assert len(adapters) >= 5
     checked = 0
     for adapter in adapters:
         if not hasattr(adapter, "_get_client"):
-            continue  # subprocess adapters such as claude-cli own no SDK client
+            continue
         cache = getattr(adapter, "_clients", None)
         assert isinstance(cache, LoopAffineClientCache), (
             f"{adapter.name}: _get_client without a LoopAffineClientCache "
             "— cross-loop pollution risk (PR-LOOP-POLLUTION-FIX)"
         )
         checked += 1
-    assert checked >= 6
+    assert checked >= 5
 
 
 def test_provider_async_clients_are_per_loop(monkeypatch: pytest.MonkeyPatch) -> None:

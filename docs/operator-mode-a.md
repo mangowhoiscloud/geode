@@ -99,7 +99,7 @@ section (PR-MINIMAL-2 G1a defaults to `Settings.model` for both).
 | Mutator LLM | Whatever the external agent runs (typically Claude) | `MutatorConfig.default_model` (toml-only) |
 | Audit log | `git log` over branch | `/self-improving status` + `/self-improving history` (= same `git log`) |
 | Rollback | `git revert` / `git reset --hard <ref>` | `/self-improving rollback <id>` (= `git revert <commit>`) |
-| Subscription quota | External session's quota | `MutatorConfig.source` (auto / api_key / claude-cli / openai-codex) |
+| Subscription quota | External session's quota | `MutatorConfig.source` (auto / api_key / openai-codex; legacy claude-cli fails closed) |
 | Cost gate | Manual — agent watches its quota | `~/.geode/config.toml` `warn_threshold` / `abort_threshold` + `fallback_to_payg` |
 
 ## SoTs shared by both modes

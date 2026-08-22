@@ -142,7 +142,7 @@ def _try_oauth_refresh(provider_label: str) -> bool:
         if not profile or not profile.managed_by:
             return False
 
-        # claude-code OAuth disabled (Anthropic ToS violation)
+        # Only GEODE-managed Codex profiles have a refresh operation here.
         if profile.managed_by == "codex-cli":
             from core.auth.codex_cli_oauth import (
                 refresh_codex_cli_token,

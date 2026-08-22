@@ -23,6 +23,18 @@ from geode_product.seed_generation.picker import pick_bindings
 
 
 @pytest.fixture(autouse=True)
+def _isolate_voter_overrides(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "geode_product.seed_generation.picker.GLOBAL_CONFIG_TOML",
+        tmp_path / "config.toml",
+    )
+    monkeypatch.setattr(
+        "geode_product.seed_generation.picker.GLOBAL_SEED_PIPELINE_TOML",
+        tmp_path / "seed_generation.toml",
+    )
+
+
+@pytest.fixture(autouse=True)
 def _registry_with_builtins() -> Iterator[None]:
     _reset_for_test()
     bootstrap_builtins()

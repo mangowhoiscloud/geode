@@ -387,11 +387,11 @@ const OBSERVE_ROWS: Row[] = [
     path: "core/llm/token_tracker.py",
   },
   {
-    name: "OAuth usage windows",
-    ko: "5시간, 7일 quota 버킷을 추적해 rate-limit 전에 backoff",
-    en: "Tracks the 5-hour and 7-day quota buckets to back off before the rate limit",
+    name: "Codex OAuth usage windows",
+    ko: "Codex 5시간, 7일 quota 버킷을 추적해 rate-limit 전에 backoff",
+    en: "Tracks Codex 5-hour and 7-day quota buckets to back off before the rate limit",
     control: "quota-aware backoff windows",
-    path: "core/llm/oauth_usage.py",
+    path: "core/llm/codex_oauth_usage.py",
   },
   {
     name: "OTel export",

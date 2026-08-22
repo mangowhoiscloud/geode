@@ -1,33 +1,21 @@
 """Adapter client isolation invariants.
 
-Pins Codex MCP review 2026-05-23 BLOCKER fix: each concrete adapter must own
-its own AsyncAnthropic / AsyncOpenAI client. Pre-fix the adapters reused the
-module-level singletons in ``core.llm.providers.{anthropic,openai}.py`` which
-cache the first caller's api_key — so a PAYG adapter constructed first would
-permanently shadow the OAuth adapter's credentials (and vice versa).
+Pins Codex MCP review 2026-05-23 BLOCKER fix: each API adapter must own its
+own AsyncAnthropic / AsyncOpenAI client instead of sharing a module singleton.
 
 The invariants (updated for PR-LOOP-POLLUTION-FIX, 2026-06-12):
 1. Each adapter holds a per-instance ``_clients`` LoopAffineClientCache
    (empty until first call) — clients are additionally partitioned per
    owning event loop, see core/llm/loop_affinity.py.
 2. ``_get_client()`` inside one event loop returns a stable client.
-3. The same call on the OAuth adapter returns a DIFFERENT client object than
-   the PAYG adapter's (separate instances) — proves no singleton sharing.
+3. Separate adapter instances never share clients.
 """
 
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
-from core.llm.adapters.anthropic_oauth import (
-    CLAUDE_CODE_IDENTITY,
-    CLAUDE_OAUTH_TOKEN_PATH,
-    AnthropicOAuthAdapter,
-    _apply_claude_code_identity,
-)
 from core.llm.adapters.anthropic_payg import AnthropicPaygAdapter
 from core.llm.adapters.openai_payg import OpenAIPaygAdapter
 
@@ -43,62 +31,16 @@ def test_anthropic_payg_holds_own_client_cache() -> None:
     assert a._clients is not b._clients
 
 
-def test_payg_and_oauth_anthropic_get_distinct_clients(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """When both PAYG and OAuth adapters are created and their _get_client is
-    forced, they must NOT share the same anthropic client object.
-
-    We can't easily mock anthropic SDK construction, so instead we patch the
-    shared client builder to record each call and assert it's called twice
-    with different api_key values.
-    """
-    import core.llm.adapters.anthropic_oauth as oauth_mod
-    import core.llm.adapters.anthropic_payg as payg_mod
-    from core.llm.adapters import _anthropic_common
-
-    # Stub the SDK boundary so we don't hit anthropic.AsyncAnthropic.
-    seen_keys: list[str] = []
-
-    def _fake_build(api_key: str = "", *, auth_token: str = "") -> object:
-        seen_keys.append(api_key or auth_token)
-        return object()  # opaque marker — unique per call
-
-    monkeypatch.setattr(_anthropic_common, "build_async_anthropic_client", _fake_build)
-    monkeypatch.setattr(payg_mod, "build_async_anthropic_client", _fake_build)
-    monkeypatch.setattr(oauth_mod, "build_async_anthropic_client", _fake_build)
-
-    # Force PAYG to have an api_key and OAuth to have a token file.
-    monkeypatch.setattr("core.config.settings.anthropic_api_key", "test-payg-key-123")
-    token_file = tmp_path / "oauth-token.json"
-    token_file.write_text('{"access_token": "test-oauth-token-456"}', encoding="utf-8")
-    monkeypatch.setattr(oauth_mod, "CLAUDE_OAUTH_TOKEN_PATH", token_file)
-
-    payg = AnthropicPaygAdapter()
-    oauth = AnthropicOAuthAdapter()
-
-    payg_client = payg._get_client()
-    with pytest.warns(UserWarning, match="legacy compatibility path"):
-        oauth_client = oauth._get_client()
-
-    # Distinct instances + distinct keys passed to the builder.
-    assert payg_client is not oauth_client
-    assert "test-payg-key-123" in seen_keys
-    assert "test-oauth-token-456" in seen_keys
-
-
 def test_payg_client_cached_per_instance_within_loop(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Within ONE event loop the same instance reuses its client; a fresh
     instance builds its own (no cross-instance sharing)."""
-    import asyncio
-
     import core.llm.adapters.anthropic_payg as payg_mod
 
     built: list[object] = []
 
-    def _fake_build(api_key: str = "", *, auth_token: str = "") -> object:
+    def _fake_build(api_key: str) -> object:
         marker = object()
         built.append(marker)
         return marker
@@ -133,89 +75,3 @@ def test_payg_raises_without_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
     a = AnthropicPaygAdapter()
     with pytest.raises(RuntimeError, match="ANTHROPIC_API_KEY not set"):
         a._get_client()
-
-
-def test_anthropic_oauth_raises_without_token_file(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """Without ~/.claude/oauth-token.json, OAuth raises — does NOT fall through
-    to settings.anthropic_api_key.
-    """
-    import core.llm.adapters.anthropic_oauth as oauth_mod
-
-    monkeypatch.setattr(oauth_mod, "CLAUDE_OAUTH_TOKEN_PATH", tmp_path / "missing.json")
-    a = AnthropicOAuthAdapter()
-    with (
-        pytest.warns(UserWarning, match="legacy compatibility path"),
-        pytest.raises(RuntimeError, match="Claude OAuth token not found"),
-    ):
-        a._get_client()
-    assert CLAUDE_OAUTH_TOKEN_PATH
-
-
-def test_anthropic_oauth_identity_block_is_independent() -> None:
-    kwargs = _apply_claude_code_identity({"system": f"{CLAUDE_CODE_IDENTITY}\nrest"})
-
-    assert kwargs["system"] == [
-        {"type": "text", "text": CLAUDE_CODE_IDENTITY},
-        {"type": "text", "text": "rest"},
-    ]
-
-
-def test_anthropic_oauth_complete_text_uses_identity_block(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    seen: list[dict] = []
-
-    class _Messages:
-        async def create(self, **kwargs: object) -> object:
-            seen.append(dict(kwargs))
-            return SimpleNamespace(
-                content=[SimpleNamespace(text="ok")],
-                usage=SimpleNamespace(input_tokens=1, output_tokens=1),
-            )
-
-    class _Client:
-        messages = _Messages()
-
-    monkeypatch.setattr(AnthropicOAuthAdapter, "_get_client", lambda self: _Client())
-
-    async def _exercise() -> None:
-        result = await AnthropicOAuthAdapter().acomplete_text(
-            "prompt", system="payload", model="claude-sonnet-4-6"
-        )
-        assert result.text == "ok"
-
-    asyncio.run(_exercise())
-
-    assert seen[0]["system"] == [
-        {"type": "text", "text": CLAUDE_CODE_IDENTITY},
-        {"type": "text", "text": "payload"},
-    ]
-
-
-def test_anthropic_oauth_web_search_uses_identity_block(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    seen: list[dict] = []
-
-    class _Messages:
-        async def create(self, **kwargs: object) -> object:
-            seen.append(dict(kwargs))
-            return SimpleNamespace(
-                content=[SimpleNamespace(text="ok")],
-                usage=SimpleNamespace(input_tokens=1, output_tokens=1),
-            )
-
-    class _Client:
-        messages = _Messages()
-
-    monkeypatch.setattr(AnthropicOAuthAdapter, "_get_client", lambda self: _Client())
-
-    async def _exercise() -> None:
-        result = await AnthropicOAuthAdapter().aweb_search("query", model="claude-sonnet-4-6")
-        assert result.text == "ok"
-
-    asyncio.run(_exercise())
-
-    assert seen[0]["system"] == [{"type": "text", "text": CLAUDE_CODE_IDENTITY}]

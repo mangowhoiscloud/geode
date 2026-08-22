@@ -29,7 +29,6 @@ class _StubAgent(BaseSeedAgent):
     ("picker_source", "expected_adapter_source"),
     [
         ("api_key", "payg"),
-        ("claude-cli", "adapter"),
         ("openai-codex", "subscription"),
         ("payg", "payg"),
         ("subscription", "subscription"),
@@ -46,7 +45,6 @@ def test_picker_source_to_adapter_source(picker_source: str, expected_adapter_so
 @pytest.mark.parametrize(
     ("agent_source", "expected"),
     [
-        ("claude-cli", "adapter"),
         ("api_key", "payg"),
         ("openai-codex", "subscription"),
         ("auto", ""),

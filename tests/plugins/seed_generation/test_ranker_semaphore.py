@@ -31,9 +31,7 @@ def test_default_is_three() -> None:
     operator's M3 16 GB host typically has 150-750 MB unused at
     steady state. Cap 3 brings the burst to ~1.5 GB and survives
     without an explicit desktop-app cleanup pass. New cap balances
-    the three lanes exactly: 3 matches × 3 voters = 9 tasks,
-    saturating claude_cli_lane=3 + 2 × openai_api_lane=6 with zero
-    hidden queue depth."""
+    three concurrent matches while provider lanes independently cap calls."""
     assert DEFAULT_RANKER_MAX_INFLIGHT_MATCHES == 3
     assert resolve_ranker_max_inflight_matches() == 3
 

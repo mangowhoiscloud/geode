@@ -36,7 +36,7 @@ export default function Page() {
                   <td>Anthropic</td>
                   <td><code>claude-opus-4-8</code> (보조 <code>claude-sonnet-4-6</code>, 저비용 <code>claude-haiku-4-5-20251001</code>)</td>
                   <td><code>claude-</code> 접두사</td>
-                  <td>구독 OAuth(claude CLI keychain) 또는 <code>ANTHROPIC_API_KEY</code></td>
+                  <td>공식 <code>claude</code> CLI 구독 또는 <code>ANTHROPIC_API_KEY</code></td>
                 </tr>
                 <tr>
                   <td>OpenAI / Codex</td>
@@ -200,7 +200,7 @@ geode about                   # 실효(EFFECTIVE) 모델 + 프로바이더`}</pr
                   <td>Anthropic</td>
                   <td><code>claude-opus-4-8</code> (secondary <code>claude-sonnet-4-6</code>, budget <code>claude-haiku-4-5-20251001</code>)</td>
                   <td><code>claude-</code> prefix</td>
-                  <td>Subscription OAuth (claude CLI keychain) or <code>ANTHROPIC_API_KEY</code></td>
+                  <td><code>ANTHROPIC_API_KEY</code></td>
                 </tr>
                 <tr>
                   <td>OpenAI / Codex</td>

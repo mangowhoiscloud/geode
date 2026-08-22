@@ -44,10 +44,9 @@ sustained self-improvement.
 
 > **Have a ChatGPT Plus, Pro, Business, Edu, or Enterprise plan?** Route GEODE through that subscription. No API key. [Subscription setup ↓](#path-a--chatgpt-subscription-the-recommended-path-for-openai-users)
 >
-> **Claude Pro / Max?** GEODE keeps a legacy `claude-cli` subscription route,
-> but Anthropic recommends API keys for third-party tools, explicitly including
-> open-source projects. Run `/login anthropic` to enable it after authenticating
-> the official CLI; usage credits may apply. [Current Anthropic guidance](https://support.claude.com/en/articles/13189465-log-in-to-your-claude-account).
+> **Using Anthropic?** GEODE's built-in Anthropic route requires
+> `ANTHROPIC_API_KEY`. The former Claude CLI subscription integration is retired;
+> legacy settings fail before dispatch with a migration hint.
 
 ---
 
@@ -239,13 +238,9 @@ geode                                 # start GEODE
 
 When the token nears expiry, GEODE refreshes it on its own (120 seconds before, plus a 401 retry). You shouldn't see this happen.
 
-**Claude subscription compatibility path.** GEODE can invoke the official
-`claude` CLI through the legacy `claude-cli` route. `/login anthropic` only
-selects that route; it does not implement Claude login or copy the CLI token.
-Run `claude /login` first. Anthropic's current guidance recommends API-key authentication for
-third-party tools, including open-source projects, and says subscription use may
-draw from usage credits. API keys remain the recommended production path.
-([Official guidance](https://support.claude.com/en/articles/13189465-log-in-to-your-claude-account))
+**Anthropic API-key path.** `/login anthropic` now configures
+`ANTHROPIC_API_KEY`. Legacy `claude-cli` or Anthropic `oauth` settings are read
+only to emit a migration error; GEODE never launches the Claude CLI.
 
 ---
 
@@ -526,7 +521,7 @@ geode update --latest # uv tool: explicitly allow minor/major upgrades
 | **Agentic tools + MCP catalog** | Web search, file ops, scheduling, memory, Slack/Discord, the Anthropic-published MCP registry, and optional [Google Workspace](https://mangowhoiscloud.github.io/geode/docs/run/google-workspace) integration. MCP metadata is cached at `~/.geode/mcp/registry-cache.json` |
 | **3-provider failover** | Anthropic + OpenAI + ZhipuAI. ChatGPT subscription OAuth is handled by the in-process OpenAI adapter; pay-as-you-go API keys also work. Failover is in-provider only (no surprise cross-vendor charges, v0.53.0 governance) |
 | **5-tier memory** | SOUL (0) → User Profile (0.5) → Organization (1) → Project (2) → Session (3). Persistent, survives daemon restarts |
-| **Progress plans + review checkpoints** | `update_plan` shows a Codex-style per-turn checklist without blocking execution. `create_plan` + `approve_plan` remain for explicit review checkpoints, persisted in `.geode/plans.json` |
+| **Progress plans + verification replans** | `/plan` installs an observation-conditioned advisory checklist; `update_plan` reports progress without execution authority, and cognitive replanning remains available after verification failure |
 | **MCP server (`geode-mcp`)** | Exposes GEODE itself as an MCP server (stdio): `run_agent`, `self_improving_status`, `self_improving_propose`/`apply` (2-step confirm gate), `query_memory`, `get_health`. Registered for Claude Code via the repo-shipped `.mcp.json` |
 | **Long-running daemon** | `geode serve` runs as background daemon. Slack Socket Mode + Discord / Telegram pollers + scheduler tick + IPC for the thin CLI |
 | **Sub-agents** | Full inheritance of parent capability, depth/cost guards, isolation by Lane |
@@ -587,7 +582,7 @@ A qualitative read on where GEODE sits next to the frontier harnesses (Claude Co
 | | Claude Code | Codex CLI | OpenClaw | **GEODE** |
 |---|---|---|---|---|
 | Multi-provider failover | ✅ Anthropic + AWS Bedrock + Google Vertex (env routing) | ✅✅ OpenAI + Azure + Bedrock + Ollama + any OpenAI-compatible (`model_providers` config) | ✅ `auth.order` cooldown-based auto-failover | ✅ Anthropic + OpenAI + ZhipuAI, in-provider only |
-| Subscription OAuth tier | ✅ Pro / Max | ✅✅ Plus · Pro · Business · Edu · Enterprise | ⚠️ OpenAI + Gemini onboarding | ⚠️ ChatGPT; legacy Claude CLI route with policy warning (API key recommended) |
+| Subscription OAuth tier | ✅ Pro / Max | ✅✅ Plus · Pro · Business · Edu · Enterprise | ⚠️ OpenAI + Gemini onboarding | ChatGPT only; Anthropic uses API keys |
 | Token / cost budget guard | ⚠️ cache token tracking only | ⚠️ retry caps (`request_max_retries`) | ⚠️ partial | ✅ explicit token + cost budget governance |
 | Context overflow handling | ✅ autocompaction | ⚠️ skills progressive disclosure + fork | ✅ compaction + transcript streaming | ✅✅ layered context-overflow handling |
 | Cross-vendor failover policy | ❌ | ⚠️ manual `model_providers` switch | ✅ automatic | ❌ by design (no surprise cross-vendor charges) |
@@ -600,7 +595,7 @@ A qualitative read on where GEODE sits next to the frontier harnesses (Claude Co
 | | Claude Code | Codex CLI | OpenClaw | **GEODE** |
 |---|---|---|---|---|
 | Memory tiers | ✅ CLAUDE.md merge + auto memory (`~/.claude/projects/*/memory`) | ✅ hierarchical AGENTS.md (global `~/.codex/` + repo + nested dirs) | ⚠️ session-scoped | ✅✅ **multi-tier** (SOUL · User · Org · Project · Session) |
-| Progress / review plans | ✅ TodoWrite persistence | ✅ turn plan updates | ✅ task registry | ✅ `update_plan` for progress + `.geode/plans.json` for checkpoints |
+| Progress / review plans | ✅ TodoWrite persistence | ✅ turn plan updates | ✅ task registry | ✅ advisory `update_plan` + durable session events |
 | Permission / sandbox layers | ✅ default / auto / bypass modes + Confirmation UI | ✅ `sandbox_mode` (read-only / workspace-write / danger-full-access) | ✅✅ Policy Chain across many audit surfaces | ✅ Policy Chain + tool gates |
 | Multi-layer guardrails | ⚠️ permission + hooks | ⚠️ hooks + sandbox | ✅ `audit.runtime` engine | ✅ **turn verify** (rule-based + opt-in LLM-judge, `core/agent/verify.py`) → replan on FAIL, plus safety-axis fitness gate in the self-improving loop |
 | Hook events | ✅ PreToolUse / PostToolUse / UserPromptSubmit / Stop / SubagentStop / PreCompact / SessionStart / SessionEnd / Notification | ⚠️ SessionStart / UserPromptSubmit / PreToolUse / PostToolUse / PermissionRequest / Stop | ✅ several event types · many bundled handlers | ✅✅ broad event surface (`docs/architecture/hook-system.md`) |
@@ -680,7 +675,6 @@ Tier 3    Session         In-memory, conversation, tool results, plans
 ├── rules/              # Auto-generated project rules
 ├── vault/              # Permanent artifacts (reports, research)
 ├── skills/             # project runtime skills (5-tier discovery)
-├── plans.json          # Disk-persistent review checkpoints
 └── result_cache/       # Pipeline LRU (SHA-256, 24h TTL)
 ```
 

@@ -43,7 +43,7 @@ replicate = 1                 # 감사 반복 M
 
 [self_improving_loop.autoresearch.target]    # judge / auditor 동일 형태
 model = "..."
-source = "claude_cli"         # 자격 lane
+source = "api_key"            # 자격 lane
 
 [self_improving_loop.autoresearch.mutator]
 default_model = "..."
@@ -129,7 +129,7 @@ replicate = 1                 # audit replicates M
 
 [self_improving_loop.autoresearch.target]    # judge / auditor same shape
 model = "..."
-source = "claude_cli"         # credential lane
+source = "api_key"            # credential lane
 
 [self_improving_loop.autoresearch.mutator]
 default_model = "..."

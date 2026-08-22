@@ -1,25 +1,10 @@
-"""Tests for :func:`core.llm.errors.classify_llm_error`.
-
-PR-DEFECT-AB (2026-05-24) regression pin: the seed-generation smoke
-revealed that ``classify_llm_error`` returned the generic ``unknown``
-classification for ``ClaudeCliTransientUpstreamError`` raised by the
-PR-T subprocess transient classifier, which routed claude-cli 429s
-through the loop's "Unexpected error. Auto-retrying." fallback UI
-instead of the rate-limit retry branch. The cases below pin the new
-mapping so the regression cannot return silently.
-
-paperclip parity reference: ``src/transport/execute.ts:809`` tags the
-same upstream signatures with ``errorCode = "claude_transient_upstream"``
-and dispatches them via the rate-limit retry path.
-"""
+"""Tests for :func:`core.llm.errors.classify_llm_error`."""
 
 from __future__ import annotations
 
 import anthropic
 import httpx
-import pytest
 from core.llm.errors import classify_llm_error
-from geode_product.petri_audit.claude_cli_provider import ClaudeCliTransientUpstreamError
 
 
 def _fake_anthropic_response(status_code: int) -> httpx.Response:
@@ -30,40 +15,8 @@ def _fake_anthropic_response(status_code: int) -> httpx.Response:
     )
 
 
-class TestClassifyClaudeCliTransientUpstream:
-    """PR-DEFECT-AB primary regression pin."""
-
-    def test_transient_upstream_maps_to_rate_limit(self) -> None:
-        exc = ClaudeCliTransientUpstreamError("Error: 429 Too Many Requests")
-        error_type, severity, hint = classify_llm_error(exc)
-        assert error_type == "rate_limit"
-        assert severity == "warning"
-        assert "rate limit" in hint.lower() or "switch model" in hint.lower()
-
-    def test_overload_signature_maps_to_rate_limit(self) -> None:
-        exc = ClaudeCliTransientUpstreamError("overloaded_error: server overloaded")
-        error_type, _severity, _hint = classify_llm_error(exc)
-        assert error_type == "rate_limit"
-
-    def test_quota_signature_maps_to_rate_limit(self) -> None:
-        exc = ClaudeCliTransientUpstreamError("5-hour limit reached, resets at 3:00pm (Pacific)")
-        error_type, _severity, _hint = classify_llm_error(exc)
-        assert error_type == "rate_limit"
-
-    def test_subclass_still_maps_to_rate_limit(self) -> None:
-        """Ensure isinstance gate accepts subclasses if they appear later."""
-
-        class _ChildTransientError(ClaudeCliTransientUpstreamError):
-            pass
-
-        exc = _ChildTransientError("burst")
-        error_type, _severity, _hint = classify_llm_error(exc)
-        assert error_type == "rate_limit"
-
-
 class TestClassifyAnthropicSdkErrorsUnchanged:
-    """Regression guard: the new lazy-import branch must not change
-    classifications of any existing Anthropic SDK exception type."""
+    """Regression guard for Anthropic SDK exception types."""
 
     def test_rate_limit_error(self) -> None:
         exc = anthropic.RateLimitError(
@@ -133,9 +86,7 @@ class TestClassifyAnthropicSdkErrorsUnchanged:
 
 
 class TestClassifyOpenAiSdkErrorsUnchanged:
-    """Regression guard: GLM / OpenAI providers route through
-    ``_classify_openai_error`` — confirm the lazy-import PR-T branch
-    does not short-circuit that path."""
+    """Regression guard for GLM / OpenAI SDK exception types."""
 
     def _fake_openai_response(self, status_code: int) -> httpx.Response:
         return httpx.Response(
@@ -186,21 +137,3 @@ class TestClassifyOpenAiSdkErrorsUnchanged:
         )
         error_type, _severity, _hint = classify_llm_error(exc)
         assert error_type == "server"
-
-
-@pytest.mark.parametrize(
-    "message",
-    [
-        "Error: 429 Too Many Requests",
-        "rate_limit_error: token bucket empty",
-        "overloaded_error: server overloaded",
-        "weekly limit reached. resets at 9am (UTC)",
-    ],
-)
-def test_transient_upstream_precedes_unknown_fallback(message: str) -> None:
-    """Parametric smoke: every PR-T transient signature must NOT fall through to ``unknown``."""
-    exc = ClaudeCliTransientUpstreamError(message)
-    error_type, _severity, _hint = classify_llm_error(exc)
-    assert error_type != "unknown", (
-        f"transient upstream message {message!r} fell through to unknown — Defect A would re-emerge"
-    )

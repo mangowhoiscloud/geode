@@ -49,20 +49,6 @@ def test_adaptive_model_omits_sampling_and_sets_display() -> None:
     assert kwargs["output_config"]["effort"]
 
 
-def test_oauth_identity_composes_with_cache_blocks() -> None:
-    from core.llm.adapters.anthropic_oauth import (
-        CLAUDE_CODE_IDENTITY,
-        _apply_claude_code_identity,
-    )
-
-    system = "STATIC\n\n<dynamic_context>\n\nd\n\n</dynamic_context>"
-    kwargs = build_create_kwargs(_req(system_prompt=system))
-    out = _apply_claude_code_identity(kwargs)
-    blocks = out["system"]
-    assert blocks[0]["text"] == CLAUDE_CODE_IDENTITY, "identity must stay the EXACT first block"
-    assert blocks[1]["cache_control"]["type"] == "ephemeral", "static cache metadata preserved"
-
-
 def test_stream_kwargs_omit_thinking_and_stops() -> None:
     kwargs = build_stream_kwargs(_req(thinking_budget=2048, stop_sequences=("x",)))
     assert "thinking" not in kwargs

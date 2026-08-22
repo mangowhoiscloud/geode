@@ -12,8 +12,7 @@ Migration history:
 - P2-A (2026-05-17): schema + loader (dormant).
 - P2-B: ``ANTHROPIC_PRIMARY`` / ``OPENAI_PRIMARY`` etc. constants now
   load from ``[model.defaults]`` + ``[model.fallbacks.<provider>]``.
-- P2-C: ``onboarding._KEY_PATTERNS`` + ``core.auth.claude_cli_oauth.
-  KEYCHAIN_SERVICE`` route through ``[credentials.*]``.
+- P2-C: ``onboarding._KEY_PATTERNS`` routes through ``[credentials.patterns]``.
 - P2-D: ``core.config._resolve_provider`` + ``petri.models.provider_of``
   delegate to ``[routing.prefixes]`` + ``codex_only_models`` +
   ``codex_suffixes``.
@@ -29,8 +28,6 @@ Sections (mirroring TOML structure):
   limited to executable built-in providers; unsupported families fall through
   to the fallback provider until an adapter exists.
 - :class:`CredentialPatterns` — ``[credentials.patterns]`` regex → provider
-- :class:`CredentialKeychain` — ``[credentials.keychain]`` per-provider
-  macOS keychain service name
 - :class:`RoutingManifest` — top-level container with consistency checks
 
 User override semantics: ``~/.geode/routing.toml`` is merged section-by-
@@ -54,7 +51,6 @@ __all__ = [
     "EXECUTABLE_ROUTING_PROVIDERS",
     "USER_OVERRIDE_PATH",
     "CredentialEnvVars",
-    "CredentialKeychain",
     "CredentialPatterns",
     "ModelDefaults",
     "ModelFallbacks",
@@ -157,17 +153,6 @@ class CredentialPatterns(BaseModel):
     patterns: dict[str, str] = Field(default_factory=dict)
 
 
-class CredentialKeychain(BaseModel):
-    """``[credentials.keychain]`` — provider → macOS keychain service name.
-
-    Used by ``core.auth.claude_cli_oauth`` (and downstream
-    code in P2-C migration) to locate the OAuth blob the local
-    Claude / Codex / etc. CLI persists on login.
-    """
-
-    services: dict[str, str] = Field(default_factory=dict)
-
-
 class CredentialEnvVars(BaseModel):
     """``[credentials.env_vars]`` — provider → env var name.
 
@@ -189,7 +174,6 @@ class RoutingManifest(BaseModel):
     fallbacks: ModelFallbacks
     routing: RoutingRules
     credential_patterns: CredentialPatterns
-    credential_keychain: CredentialKeychain
     credential_env_vars: CredentialEnvVars = Field(default_factory=CredentialEnvVars)
     # P2-E (2026-05-17) — pipeline node → model overrides. Consumed by
     # ``core.config.get_node_model`` after the project-scoped
@@ -283,7 +267,6 @@ def _parse_manifest(data: dict[str, Any]) -> RoutingManifest:
     rules = RoutingRules(**rules_kwargs)
 
     patterns = CredentialPatterns(patterns=credentials_section.get("patterns", {}))
-    keychain = CredentialKeychain(services=credentials_section.get("keychain", {}))
     env_vars = CredentialEnvVars(env_vars=credentials_section.get("env_vars", {}))
 
     return RoutingManifest(
@@ -291,7 +274,6 @@ def _parse_manifest(data: dict[str, Any]) -> RoutingManifest:
         fallbacks=fallbacks,
         routing=rules,
         credential_patterns=patterns,
-        credential_keychain=keychain,
         credential_env_vars=env_vars,
         nodes=dict(nodes_section) if isinstance(nodes_section, dict) else {},
     )
