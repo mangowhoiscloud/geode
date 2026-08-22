@@ -288,7 +288,7 @@ machine-readable artifact is
 | `core/` Python LOC | 119,776 |
 | `geode_product/` Python LOC | 61,204 |
 | `plugins/` Python LOC | 193 |
-| Test Python LOC | 183,191 |
+| Test Python LOC | 183,195 |
 | Tool definitions / executable registrations / valid schemas | 86 / 89 / 86 (definition-only 0; execution-only 3; invalid schema 0) |
 | `RuntimeEvent` members | 57 |
 | Built-in LLM adapters | 5 |
@@ -1082,8 +1082,8 @@ session cap, Lane concurrency, task isolation, and cancellation.
 
 GAP: DI-001.
 
-Classify every module-level `ContextVar` declaration in the generated inventory
-(currently 30):
+Classify every module/class-scoped `ContextVar`-backed binding in the current
+generated inventory:
 
 - request identity;
 - request-local mutable state;

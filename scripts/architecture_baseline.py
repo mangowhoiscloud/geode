@@ -465,7 +465,9 @@ def _context_constructor_module_path(
             continue
         module_path = imported_name
         for part in dotted.removeprefix(f"{alias_name}.").split("."):
-            module_path = module_exports.get(module_path, {}).get(part, "")
+            module_path = module_exports.get(module_path, {}).get(part) or (
+                candidate if (candidate := f"{module_path}.{part}") in constructor_exports else ""
+            )
             if not module_path:
                 break
         if module_path and _exported_context_constructor_paths(
@@ -506,6 +508,16 @@ def _context_alias_assignment(
     if value is None:
         return None
     if isinstance(target, ast.Name):
+        if (
+            isinstance(value, ast.Subscript)
+            and constructor_reference(value) is None
+            and any(
+                constructor_reference(expression) is not None or module_reference(expression)
+                for expression in ast.walk(value.value)
+                if isinstance(expression, ast.expr)
+            )
+        ):
+            raise ValueError(f"{path}:{node.lineno}: ContextVar constructors must assign directly")
         if isinstance(value, ast.Dict | ast.List | ast.Set | ast.Tuple) and any(
             constructor_reference(expression) is not None or module_reference(expression)
             for expression in container_values(value)
@@ -543,6 +555,16 @@ def _unsupported_context_alias(
         return any(
             constructor_reference(candidate) is not None or module_reference(candidate)
             for candidate in ast.walk(node.value)
+            if isinstance(candidate, ast.expr)
+        )
+    if (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Subscript)
+        and constructor_reference(node.func) is None
+    ):
+        return any(
+            constructor_reference(candidate) is not None or module_reference(candidate)
+            for candidate in ast.walk(node.func.value)
             if isinstance(candidate, ast.expr)
         )
     if isinstance(node, ast.Match | ast.comprehension) or (
@@ -632,14 +654,22 @@ def _reject_context_factories(
                     f"{path}:{node.lineno}: ContextVar constructors must be imported "
                     "at module scope"
                 )
-            hides_constructor = any(
-                constructor_reference(expression) is not None
-                for expression in _runtime_expressions(node)
-            ) or any(
-                module_reference(child.value)
-                for child in ast.walk(node)
-                if isinstance(child, ast.Assign | ast.AnnAssign)
-                if child.value is not None
+            hides_constructor = (
+                any(
+                    constructor_reference(expression) is not None
+                    for expression in _runtime_expressions(node)
+                )
+                or any(
+                    module_reference(child.value)
+                    for child in ast.walk(node)
+                    if isinstance(child, ast.Assign | ast.AnnAssign)
+                    if child.value is not None
+                )
+                or any(
+                    child.value is not None and module_reference(child.value)
+                    for child in ast.walk(node)
+                    if isinstance(child, ast.Return)
+                )
             )
             if hides_constructor:
                 raise ValueError(f"{path}:{node.lineno}: ContextVar factories must assign directly")
@@ -846,6 +876,18 @@ def _context_vars(root: Path) -> dict[str, Any]:
             for alias in node.names
             if alias.name in {"contextvars", "core.ui.context_local"} or alias.name in known_modules
         }
+        module_aliases.update(
+            {
+                alias.name.partition(".")[0]: alias.name.partition(".")[0]
+                for node, owner in module_nodes
+                if not owner
+                if isinstance(node, ast.Import)
+                for alias in node.names
+                if alias.asname is None
+                if "." in alias.name
+                if alias.name.partition(".")[0] in known_modules
+            }
+        )
         module_aliases.update(
             {
                 alias.asname or alias.name: "core.ui.context_local"

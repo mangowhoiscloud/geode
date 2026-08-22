@@ -554,6 +554,7 @@ def test_context_var_inventory_detects_reexported_constructors(
         'import core.source as source\nstate = source.cv.ContextVar("state")\n',
         'import core\nstate = core.source.cv.ContextVar("state")\n',
         'from core import source\ncv = source.cv\nstate = cv.ContextVar("state")\n',
+        'import core.source\nmodule = core\nstate = module.source.cv.ContextVar("state")\n',
     ],
 )
 def test_context_var_inventory_detects_reexported_constructor_modules(
@@ -809,6 +810,7 @@ def test_context_var_inventory_ignores_function_local_type_annotation(
         'from contextvars import ContextVar\ndef factory(CV=ContextVar):\n    return CV("state")',
         'import contextvars\ndef factory(cv=contextvars):\n    return cv.ContextVar("state")',
         'import contextvars\ndef factory():\n    cv = contextvars\n    return cv.ContextVar("state")',
+        'import contextvars\ndef factory():\n    return contextvars\nstate = factory().ContextVar("state")',
         'def factory():\n    import core.alias as alias\n    return alias.CV("state")',
     ],
 )
@@ -910,6 +912,8 @@ def test_notification_probe_preserves_process_fallback(tmp_path: Path) -> None:
         'import contextvars\nFactory = contextvars.__dict__["ContextVar"]\nstate = Factory("state")',
         'for Factory in [ContextVar]:\n    state = Factory("state")',
         'states = [Factory("state") for Factory in (ContextVar,)]',
+        'state = [ContextVar][0]("state")',
+        'Factory = (ContextVar,)[0]\nstate = Factory("state")',
         'match ContextVar:\n    case Factory:\n        state = Factory("state")',
     ],
 )
