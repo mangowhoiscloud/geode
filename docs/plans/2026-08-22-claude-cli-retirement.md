@@ -42,5 +42,9 @@ anti-deception을 각각 검사했다. 실행 adapter·auth·subprocess·resume 
 모두 0개였고 SIL mutation 및 cognitive verify/replan은 연결된 상태였다.
 감사에서 발견한 활성 문서·주석의 삭제 모듈명과 Petri의 미사용 `binary`
 필드는 후속 정돈했다. fresh-build 감사에서 확인한 누락도 함께 닫아
-`/grill`·`/geo`의 `.geode/skills`가 wheel/sdist에 포함되도록 했다. 과거 `.eval`·trajectory·fixture의 판독 문자열,
-legacy fail-loud migration 값, 외부 호스트의 일반 Claude Code 참고는 유지한다.
+`/grill`·`/geo`의 `.geode/skills`가 wheel/sdist에 포함되도록 했다. 기본
+설치의 `geode-mcp`가 MCP 2를 받아 깨지던 의존성도 `mcp>=1.28,<2`로
+고정하고 실제 서버 생성 smoke를 추가했다. 현행 design 문서에서는 실행
+source를 동적으로 읽고, Claude CLI 표시는 과거 receipt임을 명시한다.
+과거 `.eval`·trajectory·fixture의 판독 문자열, legacy fail-loud migration
+값, 외부 호스트의 일반 Claude Code 참고는 유지한다.
