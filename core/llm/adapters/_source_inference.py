@@ -25,7 +25,7 @@ Resolution order (highest precedence first):
    adapter's own credential miss with its operator-grade hint.
 
 Only ``openai`` / ``openai-codex`` and ``anthropic`` participate; ``glm`` and
-the local-CLI adapters route through their own picker paths and never reach
+external adapters route through their provider-specific paths and never reach
 this helper.
 """
 

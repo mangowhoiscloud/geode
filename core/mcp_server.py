@@ -72,14 +72,14 @@ def create_mcp_server(
     Returns a FastMCP Server instance with the kernel agentic and memory
     tools/resources plus any explicitly supplied feature contribution.
 
-    Requires the ``mcp`` package to be installed.
+    Requires GEODE's base ``mcp>=1.28,<2`` dependency.
     """
     try:
         from mcp.server.fastmcp import FastMCP
     except ImportError:
         raise ImportError(
             "MCP server requires the 'mcp' package (v1 line — mcp 2.x renames "
-            "FastMCP, see ADR-014). Install with: uv sync --extra mcp"
+            "FastMCP, see ADR-014). Reinstall geode-agent with dependencies."
         ) from None
 
     server_kwargs: dict[str, Any] = {}

@@ -349,9 +349,9 @@ aside ul.nav-list ul.sub-nav a {
         <span class="bucket petri">petri</span>
       </td>
       <td class="muted">2</td>
-      <td><span class="chip claude">Claude Code</span> <code>claude-sonnet-4-6</code></td>
+      <td><span class="chip payg">PAYG</span> <code>anthropic/claude-sonnet-4-6</code></td>
       <td><span class="chip geode">GEODE</span> <code>geode/gpt-5.5</code></td>
-      <td><span class="chip claude">Claude Code</span> <code>claude-opus-4-7</code></td>
+      <td><span class="chip payg">PAYG</span> <code>anthropic/claude-opus-4-7</code></td>
       <td class="muted">2026-05-22 05:56</td>
     </tr>
     <!-- … additional <tr> rows, up to 10 -->
@@ -416,9 +416,9 @@ each role appears as a separate inline group **`chip + code + role-label`**, in 
 
 ```html
 <td>
-  <span class="chip claude">Claude Code</span> <code>claude-opus-4-7</code> <span class="role-label">aud</span>
+  <span class="chip payg">PAYG</span> <code>anthropic/claude-opus-4-7</code> <span class="role-label">aud</span>
   <span class="chip geode">GEODE</span>      <code>geode/gpt-5.5</code>      <span class="role-label">tgt</span>
-  <span class="chip claude">Claude Code</span> <code>claude-sonnet-4-6</code> <span class="role-label">jud</span>
+  <span class="chip payg">PAYG</span> <code>anthropic/claude-sonnet-4-6</code> <span class="role-label">jud</span>
 </td>
 ```
 
@@ -482,7 +482,7 @@ Indent = `padding-left: 24px;` (`1.5rem`). The prefix glyph is U+2514 `└` foll
 | Selector | Visible text | Used when model prefix matches |
 |---|---|---|
 | `.chip.payg`   | `PAYG`        | `anthropic/…`, `openai/…` (raw provider API key billing) |
-| `.chip.claude` | `Claude Code` | `claude-cli/…` (Claude Code Max OAuth) |
+| `.chip.claude` | `Legacy Claude CLI` | historical `claude-cli/…` receipts only |
 | `.chip.codex`  | `Codex`  | `codex/…`, `openai-codex/…` (ChatGPT OAuth) |
 | `.chip.geode`  | `GEODE`       | `geode/…` (self-target wrapper) |
 
@@ -621,7 +621,7 @@ The middle dot is U+00B7 (`·`), surrounded by single spaces.
   <p>Published by <code>.github/workflows/pages.yml</code> on every <code>main</code> push.</p>
   <p>Harness chip legend:
     <span class="chip payg">PAYG</span>API key billing ·
-    <span class="chip claude">Claude Code</span>Max OAuth ·
+    <span class="chip claude">Legacy Claude CLI</span>historical receipts ·
     <span class="chip codex">Codex</span>ChatGPT OAuth ·
     <span class="chip geode">GEODE</span>self-target wrapper.
   </p>
@@ -656,9 +656,10 @@ If any placeholder cannot be resolved at build time → CI fails. **No silent de
 
 ### 8.4 Anchor invariant
 
-The legend paragraph must contain all four chips in the exact order `PAYG · Claude Code · Codex
-· GEODE`. This order is fixed so visitors building muscle memory across pages always see chips in
-the same slot. Per-page DESIGN.md `verification_checklist` test asserts this order via regex.
+The legend paragraph must contain all four chips in the exact order
+`PAYG · Legacy Claude CLI · ChatGPT · GEODE`. This order is fixed so visitors
+building muscle memory across pages always see chips in the same slot. Per-page
+DESIGN.md `verification_checklist` test asserts this order via regex.
 
 ---
 

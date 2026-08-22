@@ -375,7 +375,7 @@ GEODE는 Anthropic, OpenAI(ChatGPT 구독 OAuth 레인 포함), GLM 세 프로�
 
 | 프로바이더 | 기본 모델 | 라우팅 규칙 | 인증 레인 |
 | --- | --- | --- | --- |
-| Anthropic | `claude-opus-4-8` (보조 `claude-sonnet-4-6`, 저비용 `claude-haiku-4-5-20251001`) | `claude-` 접두사 | 공식 `claude` CLI 구독 또는 `ANTHROPIC_API_KEY` |
+| Anthropic | `claude-opus-4-8` (보조 `claude-sonnet-4-6`, 저비용 `claude-haiku-4-5-20251001`) | `claude-` 접두사 | `ANTHROPIC_API_KEY` |
 | OpenAI / Codex | `gpt-5.5` | `gpt-`, `o3-`, `o4-` 접두사. 단 `gpt-5.5`, `gpt-5.5-pro`와 `-codex` 계열 접미사는 Codex OAuth 백엔드로만 라우팅. `gpt-5.6-sol/terra/luna`와 `gpt-5.4` 계열은 듀얼 레인 — 로그인 상태(API 키 ↔ 구독 OAuth)가 백엔드를 결정 | ChatGPT 구독 OAuth(`~/.codex/auth.json`) 또는 `OPENAI_API_KEY` |
 | GLM (ZhipuAI) | `glm-5.2` (무료 티어 `glm-4.7-flash`) | `glm-` 접두사 | `ZAI_API_KEY`. Coding Plan과 PAYG 엔드포인트가 분리되어 있습니다. |
 
@@ -1513,7 +1513,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/runtime/skills.md
 
 | 계층 | 위치 | 성격 |
 | --- | --- | --- |
-| builtin | `core/skills/` (저장소와 함께 배포) | 코드와 같이 버전 관리 |
+| builtin | `<package>/.geode/skills/` (wheel과 함께 배포) | 코드와 같이 버전 관리 |
 | project | `.geode/skills/` | 팀 공유, git에 커밋 |
 | personal | `~/.geode/skills/` | 개인 로컬 전용 |
 
@@ -5431,7 +5431,7 @@ GEODE는 종합입니다. 아래 표의 각 행은 적어도 하나의 frontier 
 | 메모리 | CLAUDE.md 계층 + auto memory (`~/.claude`) | AGENTS.md 계층 + memories 파이프라인 | 채널별 저장소 | persistent + skill 카탈로그 | `program.md` | 5-tier. Identity / User Profile / Org / Project / Session (`core/memory/context.py`) |
 | 자기 검증 | 없음 | sandbox | policy chain | 없음 | ratchet | Petri 적대 감사 + margin 게이트 + 프롬프트 해시 ratchet |
 | 자동화 트리거 | 훅 + scheduled cloud agents | lifecycle 훅 (cron 없음) | cron + standing order | skill auto-generate | overnight 루프 | 훅 이벤트 + 스케줄러 + auto-trigger 사이드카 |
-| 멀티 LLM | Anthropic 모델 전용 (API/Bedrock/Vertex 백엔드) | OpenAI 중심 + `model_providers` 확장 (Bedrock 포함) | 9개 model API 계열 | Anthropic-centric | (single) | 3-프로바이더 라우팅 (Anthropic / OpenAI+Codex / GLM), PAYG·OAuth·CLI 어댑터 레인 |
+| 멀티 LLM | Anthropic 모델 전용 (API/Bedrock/Vertex 백엔드) | OpenAI 중심 + `model_providers` 확장 (Bedrock 포함) | 9개 model API 계열 | Anthropic-centric | (single) | 3-프로바이더 라우팅 (Anthropic / OpenAI+Codex / GLM): PAYG, ChatGPT OAuth, GLM Coding Plan 레인 |
 | 서브에이전트 | Task tool | thread fork (`spawn_subagent`) | spawn + announce | delegate 병렬 spawn | 없음 | 차용. Task tool + OpenClaw Spawn+Announce (`core/agent/sub_agent.py`) |
 | 샌드박스 | bash 샌드박스 (opt-in) | OS 수준 | gateway 격리 | 없음 | 제약 루프 | 6계층 PolicyChain (`core/tools/policy.py`) |
 
@@ -5779,7 +5779,7 @@ HITL 승인 프롬프트(`core/cli/ipc_client.py`의 `_handle_approval_request`)
 | 그룹 | 서브커맨드 | 용도 | 코드 |
 | --- | --- | --- | --- |
 | `geode adapters` | `list` / `detect-model` / `stats` | 등록된 LLM 어댑터(PAYG, 구독, CLI 경로) 점검과 디스패치 통계 | `core/cli/commands/adapters.py` |
-| `geode skill` | `list` / `create` / `remove` / `show` | 3단계 스킬 관리. builtin `core/skills/`, 프로젝트 `.geode/skills/`, 개인 `~/.geode/skills/` | `core/cli/commands/skill.py` |
+| `geode skill` | `list` / `create` / `remove` / `show` | 3단계 스킬 관리. builtin `<package>/.geode/skills/`, 프로젝트 `.geode/skills/`, 개인 `~/.geode/skills/` | `core/cli/commands/skill.py` |
 | `geode config` | `explain [key]` / `migrate-petri-toml` | 설정 레이어별 후보 표. 어느 레이어가 이기고 무엇이 가려졌는지 보여 줍니다 | `core/cli/commands/config.py` |
 | `geode seeds` | `assemble` | cycle-input 시드 풀 조립. repo 체크아웃 전용 래퍼 | `core/cli/commands/seed_pool.py` |
 | `geode hub` | `build` | 자기개선 허브 정적 페이지 빌드. repo 체크아웃 전용 래퍼 | `core/cli/commands/seed_pool.py` |
@@ -6105,7 +6105,7 @@ Tier 2  latex2sympy2 + sympy.pretty  블록 전용. 분수·적분을 2D Unicode
 URL: https://mangowhoiscloud.github.io/geode/docs/reference/changelog
 Markdown: https://mangowhoiscloud.github.io/geode/docs/reference/changelog.md
 
-(body omitted from llms-full: 1522 KB — fetch the Markdown twin above for the complete page)
+(body omitted from llms-full: 1523 KB — fetch the Markdown twin above for the complete page)
 
 ---
 
@@ -6265,8 +6265,8 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 
 | 측정값 | 현재 트리 |
 | --- | --- |
-| 프로덕션 Python 파일 | 578 |
-| 테스트 Python 파일 | 676 |
+| 프로덕션 Python 파일 | 580 |
+| 테스트 Python 파일 | 677 |
 | 도구 정의 / 실행 등록 / 유효 스키마 | 82 / 85 / 82 |
 | RuntimeEvent 멤버 | 57 |
 | 기본 LLM 어댑터 | 5 |
@@ -6296,7 +6296,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 | 서브시스템 | 루트 | 핵심 모듈 |
 | --- | --- | --- |
 | agentic 루프 | `core/agent/loop/` | `agent_loop.py` (AgenticLoop), `_phases.py`, `models.py`, `_context.py` |
-| 서브에이전트 | `core/agent/` | `sub_agent.py`, `worker.py`, `task_isolation.py` |
+| 서브에이전트 | `core/agent/` | `sub_agent.py`, `worker.py` |
 | 시스템 프롬프트 | `core/agent/` | `system_prompt.py` |
 | 가드 | `core/agent/` | `safety.py`, `budget.py`, `approval.py`, `context_manager.py` |
 

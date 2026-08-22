@@ -17,7 +17,7 @@ Adapter module contract (loose — registry checks ``hasattr`` per call):
   providers (e.g. plain ``anthropic/``, ``openai/``) need no extra
   registration; the function may be absent or a no-op.
 - ``is_available() -> bool`` — readiness probe. Stock providers fall
-  back to env-var presence; subscription adapters query their owning CLI.
+  back to env-var presence; custom adapters own their readiness checks.
 - ``metadata() -> dict | None`` (optional) — picker-friendly metadata
   (subscription plan, scopes, expiry).
 

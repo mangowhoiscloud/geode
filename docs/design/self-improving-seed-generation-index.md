@@ -42,7 +42,7 @@ Same schema as Hub's Seed Generation section plus:
 | run_id | `runs[].run_id` (anchor → per-run page) |
 | gen_tag | `runs[].gen_tag` |
 | target_dim | `runs[].target_dim` |
-| mutator | `claude-cli/claude-opus-4-7` (current default) — chip + mono |
+| models | `runs[].harness_models[]` — recorded execution sources, one chip per distinct model |
 | draft → surv | `runs[].candidates_drafted` → `runs[].survivors_count` |
 | evolved | `runs[].evolved_count` |
 | iterations | `runs[].iterations` / `runs[].max_iterations` |

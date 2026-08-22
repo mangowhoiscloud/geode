@@ -175,7 +175,9 @@ class TestNotificationHookRegistration:
         manager = SubAgentManager(IsolatedRunner(), hooks=hooks)
         task = SubTask(task_id="task-1", task_type="analyze", description="test")
 
-        asyncio.run(manager._emit_hook(HookEvent.SUBAGENT_FAILED, task, error="boom"))
+        asyncio.run(
+            manager._announcements.emit_runtime(HookEvent.SUBAGENT_FAILED, task, error="boom")
+        )
 
         mock_adapter.asend_message.assert_awaited_once()
         set_notification(None)

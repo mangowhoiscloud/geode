@@ -15,9 +15,8 @@ The wrapper does three things on top of ``SelfImprovingLoopRunner.run_once``:
    lock is free, if the previous successful firing landed less than
    ``min_interval_minutes`` ago, skip. Cron expressions can over-fire
    on restart / clock skew; this is the cheap defensive floor.
-3. **Source-aware dispatch is inherited** — the wrapper does NOT carry
-   its own 4-backend (Claude Code / Codex CLI / Anthropic PAYG / OpenAI
-   PAYG) selection. It calls :func:`SelfImprovingLoopRunner.run_once`,
+3. **Source-aware dispatch is inherited** — the wrapper carries no provider
+   or credential-source selection. It calls :func:`SelfImprovingLoopRunner.run_once`,
    which already dispatches via PR-PAPERCLIP (#1433) based on
    ``[self_improving_loop.mutator].source``. One credential vocabulary.
 

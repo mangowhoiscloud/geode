@@ -9,7 +9,7 @@ Schema (TOML)::
 
     [petri.auditor]
     model = "claude-opus-4-7"
-    source = "claude-cli"
+    source = "api_key"
 
     [petri.target]
     model = "gpt-5.4-mini"

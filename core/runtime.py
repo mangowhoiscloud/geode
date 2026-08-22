@@ -320,7 +320,7 @@ class GeodeRuntime:
         profile_store, profile_rotator, cooldown_tracker = infra.build_auth()
         # PR-LLMCLIENTPORT-COLLAPSE (2026-05-28) — was
         # ``infra.build_llm_adapters(...)`` whose sole production effect was
-        # registering the 8 LLMAdapter built-ins. Call the registry bootstrap
+        # registering the five LLMAdapter built-ins. Call the registry bootstrap
         # directly now; the legacy ``set_llm_callable`` ContextVar chain that
         # surrounded it had no production consumer.
         from core.llm.adapters.registry import bootstrap_builtins

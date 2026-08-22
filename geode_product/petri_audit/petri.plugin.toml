@@ -5,7 +5,7 @@
 #   2. [petri.role.<name>] — per-role default model + allowed model set + contract
 #   3. [petri.source.<provider>] — per-provider default credential source + allowed sources
 #   4. [petri.adapter.<provider>.<source>] — concrete adapter binding (module, env vars,
-#      inspect_ai prefix, endpoint / binary)
+#      inspect_ai prefix, endpoint)
 #
 # Loader: geode_product.petri_audit.manifest.load_manifest() → PetriManifest (pydantic).
 #

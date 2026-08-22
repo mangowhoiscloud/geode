@@ -127,15 +127,16 @@ iterations              state.current_iteration / state.max_iterations
 
 If `state.json` absent: build script writes a single-page error stub linking back to seed-gen index.
 
-## 7. Mutator chip
+## 7. Execution-source chips
 
 Above all section tables, prominent banner:
 
 ```
-mutator     [Claude Code] claude-cli/claude-opus-4-7
+models      [PAYG] anthropic/claude-opus-4-8  [ChatGPT] openai-codex/gpt-5.5
 ```
 
-For now single mutator per run. Future: per-phase mutator if model split lands.
+Render the sources recorded for the run. Missing historical source metadata
+renders a muted placeholder; it must not invent a default lane.
 
 ## 8. Verification checklist
 

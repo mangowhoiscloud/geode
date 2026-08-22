@@ -93,7 +93,7 @@ class TestWorkerRequestWiring:
 
     def test_build_worker_request_threads_max_tokens_from_settings(self) -> None:
         mgr = SubAgentManager(IsolatedRunner())
-        req = mgr._build_worker_request(
+        req = mgr._protocol.build_worker_request(
             SubTask(task_id="t", description="d", task_type="analyze"),
             default_model="claude-opus-4-8",
         )

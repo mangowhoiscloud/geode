@@ -611,9 +611,8 @@ def run_audit(
     # PR-OL-AUDIT-BURST-FIX (2026-05-22) FIX-3 — inter-process audit
     # lane. Prevents two `geode audit` subprocesses from overlapping
     # on the host (cron-driven + manual collision, REPL + scheduled,
-    # etc.). Lane=1 also matches Anthropic Max OAuth's "interactive
-    # coding" rate budget when the operator is also using their host
-    # Claude Code session.
+    # etc.). Lane=1 also prevents audit traffic from competing with
+    # interactive provider workloads on the same account.
     from core.orchestration.audit_lane import acquire_audit_lane
 
     audit_started = time.time()

@@ -717,8 +717,8 @@ class TestBuildSharedServices:
         assert executor.middleware_registry is middleware_registry
         assert loop._policy_sources is policy_sources
         assert loop._activity_sink_provider is activity_sink_provider
-        assert subagents._policy_sources is policy_sources
-        assert subagents._activity_sink_provider is activity_sink_provider
+        assert subagents._protocol.policy_sources is policy_sources
+        assert subagents._announcements.activity_sink_provider is activity_sink_provider
 
     def test_model_resolved_per_session(self) -> None:
         """v0.82.0 — `SharedServices` no longer freezes `_model` at boot.

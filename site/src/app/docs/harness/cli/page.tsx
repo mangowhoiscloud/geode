@@ -122,7 +122,7 @@ export default function Page() {
               </thead>
               <tbody>
                 <tr><td><code>geode adapters</code></td><td><code>list</code> / <code>detect-model</code> / <code>stats</code></td><td>등록된 LLM 어댑터(PAYG, 구독, CLI 경로) 점검과 디스패치 통계</td><td><code>core/cli/commands/adapters.py</code></td></tr>
-                <tr><td><code>geode skill</code></td><td><code>list</code> / <code>create</code> / <code>remove</code> / <code>show</code></td><td>3단계 스킬 관리. builtin <code>core/skills/</code>, 프로젝트 <code>.geode/skills/</code>, 개인 <code>~/.geode/skills/</code></td><td><code>core/cli/commands/skill.py</code></td></tr>
+                <tr><td><code>geode skill</code></td><td><code>list</code> / <code>create</code> / <code>remove</code> / <code>show</code></td><td>3단계 스킬 관리. builtin <code>&lt;package&gt;/.geode/skills/</code>, 프로젝트 <code>.geode/skills/</code>, 개인 <code>~/.geode/skills/</code></td><td><code>core/cli/commands/skill.py</code></td></tr>
                 <tr><td><code>geode config</code></td><td><code>explain [key]</code> / <code>migrate-petri-toml</code></td><td>설정 레이어별 후보 표. 어느 레이어가 이기고 무엇이 가려졌는지 보여 줍니다</td><td><code>core/cli/commands/config.py</code></td></tr>
                 <tr><td><code>geode seeds</code></td><td><code>assemble</code></td><td>cycle-input 시드 풀 조립. repo 체크아웃 전용 래퍼</td><td><code>core/cli/commands/seed_pool.py</code></td></tr>
                 <tr><td><code>geode hub</code></td><td><code>build</code></td><td>자기개선 허브 정적 페이지 빌드. repo 체크아웃 전용 래퍼</td><td><code>core/cli/commands/seed_pool.py</code></td></tr>
@@ -366,7 +366,7 @@ export default function Page() {
               </thead>
               <tbody>
                 <tr><td><code>geode adapters</code></td><td><code>list</code> / <code>detect-model</code> / <code>stats</code></td><td>Inspect registered LLM adapters (PAYG, subscription, CLI lanes) and dispatch statistics</td><td><code>core/cli/commands/adapters.py</code></td></tr>
-                <tr><td><code>geode skill</code></td><td><code>list</code> / <code>create</code> / <code>remove</code> / <code>show</code></td><td>Manage skills across three tiers: builtin <code>core/skills/</code>, project <code>.geode/skills/</code>, personal <code>~/.geode/skills/</code></td><td><code>core/cli/commands/skill.py</code></td></tr>
+                <tr><td><code>geode skill</code></td><td><code>list</code> / <code>create</code> / <code>remove</code> / <code>show</code></td><td>Manage skills across three tiers: builtin <code>&lt;package&gt;/.geode/skills/</code>, project <code>.geode/skills/</code>, personal <code>~/.geode/skills/</code></td><td><code>core/cli/commands/skill.py</code></td></tr>
                 <tr><td><code>geode config</code></td><td><code>explain [key]</code> / <code>migrate-petri-toml</code></td><td>Per-layer candidate table for a setting: which layer wins, which are masked</td><td><code>core/cli/commands/config.py</code></td></tr>
                 <tr><td><code>geode seeds</code></td><td><code>assemble</code></td><td>Assemble the cycle-input seed pool. Repo-checkout-only wrapper</td><td><code>core/cli/commands/seed_pool.py</code></td></tr>
                 <tr><td><code>geode hub</code></td><td><code>build</code></td><td>Build the self-improving hub static pages. Repo-checkout-only wrapper</td><td><code>core/cli/commands/seed_pool.py</code></td></tr>

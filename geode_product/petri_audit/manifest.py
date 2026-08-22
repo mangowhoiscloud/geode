@@ -85,15 +85,13 @@ class AdapterSpec(BaseModel):
     ``geode/<model>``).
     ``auth_env_vars`` — env vars consulted for credentials; used by the
     /petri picker to flag missing credentials.
-    ``endpoint`` / ``binary`` — adapter-specific extras (HTTP base URL,
-    CLI executable name).
+    ``endpoint`` — optional HTTP base URL.
     """
 
     module: str
     inspect_prefix: str
     auth_env_vars: list[str] = Field(default_factory=list)
     endpoint: str | None = None
-    binary: str | None = None
 
 
 class PetriManifest(BaseModel):

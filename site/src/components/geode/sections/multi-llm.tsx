@@ -223,7 +223,7 @@ export function MultiLlmSection() {
                   <rect x={385} y={155} width={345} height={55} rx={10} fill="rgba(129,140,248,0.04)" stroke="#818CF8" strokeWidth={1} strokeOpacity={0.25} />
                   <text x={557} y={175} textAnchor="middle" fill="#818CF8" fillOpacity={0.7} fontSize={10} fontFamily="ui-monospace, monospace" fontWeight={700}>Retry Policy</text>
                   <text x={557} y={195} textAnchor="middle" fill="#818CF8" fillOpacity={0.4} fontSize={9} fontFamily="ui-monospace, monospace">max 3 retries · exp backoff + jitter · MODEL_SWITCHED hook</text>
-                  <text x={380} y={235} textAnchor="middle" fill="white" fillOpacity={0.2} fontSize={9} fontFamily="ui-monospace, monospace">ClaudeAgenticAdapter · OpenAIAgenticAdapter · GlmAgenticAdapter</text>
+                  <text x={380} y={235} textAnchor="middle" fill="white" fillOpacity={0.2} fontSize={9} fontFamily="ui-monospace, monospace">anthropic-payg · openai-payg · codex-oauth · glm-payg · glm-coding-plan</text>
                   <text x={380} y={252} textAnchor="middle" fill="white" fillOpacity={0.15} fontSize={8} fontFamily="ui-monospace, monospace">
                     {locale === "en" ? "update_model() runtime swap · MODEL_SWITCHED hook · auto context window adapt" : "update_model() 런타임 교체 · MODEL_SWITCHED hook · auto context window adapt"}
                   </text>
@@ -236,7 +236,7 @@ export function MultiLlmSection() {
                 </table>
               </div>
               <div className="mt-4 flex flex-wrap gap-1.5">
-                {["ClaudeAgenticAdapter", "OpenAIAgenticAdapter", "GlmAgenticAdapter", locale === "en" ? "update_model() runtime swap" : "update_model() 런타임 교체", "MODEL_SWITCHED hook"].map((tag) => (
+                {["anthropic-payg", "openai-payg", "codex-oauth", "glm-payg", "glm-coding-plan", locale === "en" ? "update_model() runtime swap" : "update_model() 런타임 교체", "MODEL_SWITCHED hook"].map((tag) => (
                   <span key={tag} className="px-2 py-0.5 rounded text-[11px] font-mono text-[#4ECDC4]/70 bg-[#4ECDC4]/06 border border-[#4ECDC4]/12">{tag}</span>
                 ))}
               </div>

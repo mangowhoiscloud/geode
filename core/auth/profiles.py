@@ -95,7 +95,7 @@ class AuthProfile:
     key: str = ""  # API key or token value
     refresh_token: str = ""  # OAuth only
     expires_at: float = 0.0  # Unix timestamp, 0 = no expiry
-    managed_by: str = ""  # External CLI that owns token lifecycle (e.g. "claude-code")
+    managed_by: str = ""  # External CLI that owns token lifecycle (e.g. "codex-cli")
     last_used: float = 0.0
     error_count: int = 0
     cooldown_until: float = 0.0

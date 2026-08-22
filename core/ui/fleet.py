@@ -10,7 +10,8 @@ interactive surface is a separate later stage, not this module.
 What Stage 1 can populate per agent (all parent-side, all honest):
 
 - ``task_id`` — correlation id (crosses the worker IPC boundary both ways).
-- ``role`` / ``description`` — from the parent's :class:`~core.agent.sub_agent.SubTask`.
+- ``role`` / ``description`` — from the parent's
+  :class:`~core.agent.subagent_protocol.SubTask`.
 - ``status`` — ``running`` at dispatch; ``done`` / ``error`` / ``timeout`` on
   completion (derived from the ``SubResult``).
 - ``start_ts`` / ``end_ts`` / ``elapsed_s`` — parent-side wall clock.
