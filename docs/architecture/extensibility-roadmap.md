@@ -226,7 +226,6 @@ normal review and CI; implementations start only after the claim merges.
 | Closure package | GAP IDs | Owner/session | Implementation branch | Claim evidence | Claimed at (UTC) |
 |---|---|---|---|---|---|
 | R8.3 | REL-004 | `session=codex-root task=r8-3-publication-grace-evidence` | `feature/r8-3-publication-grace-evidence` | Readiness [#3039](https://github.com/mangowhoiscloud/geode/pull/3039); v1.0.23 GitHub/PyPI parity and candidate interval re-audited | `2026-08-20T07:41:19Z` |
-| R3.3 | LOOP-004 | `session=codex-root task=r3-3-structural-ratchets` | `feature/r3-3-structural-ratchets` | Reconciliation/readiness [#3072](https://github.com/mangowhoiscloud/geode/pull/3072); structural closure budgets and current loop baseline re-audited | `2026-08-22T00:39:56Z` |
 
 ## 1. Program objective
 
@@ -528,7 +527,7 @@ and closure evidence are appended in §10.
 | LOOP-001 | `ABSENT` | No immutable object freezes one step's route, policy, tool plan, and trace identity | `StepSnapshot` is created once per step and used by model/tool/telemetry paths | R3.1 | CAP-002 | `IN_DEVELOP` |
 | LOOP-002 | `PARTIAL` | Mutable state is distributed across loop fields, contexts, checkpoints, and helpers | `TurnState` and explicit session/turn/step ownership replace ambiguous lifetimes | R3.1 | LOOP-001 | `IN_DEVELOP` |
 | LOOP-003 | `MISFIT` | `AgenticLoop` owns orchestration plus many independently changing policies | Visible loop delegates to bounded input/model/tool/observe/termination phases | R3.2 | LOOP-001, LOOP-002 | `IN_DEVELOP` |
-| LOOP-004 | `ABSENT` | Loop has 2,714 LOC, 67 methods, and 27 constructor args with no local ratchet | Closure budgets in §7.3 are executable and cannot regress | R3.3 | LOOP-003 | `IN_PROGRESS` |
+| LOOP-004 | `ABSENT` | Loop has 2,714 LOC, 67 methods, and 27 constructor args with no local ratchet | Closure budgets in §7.3 are executable and cannot regress | R3.3 | LOOP-003 | `IN_DEVELOP` |
 | LOOP-005 | `MISFIT` | `SubAgentManager` combines request codec, role resolution, execution, validation, and announcements | Separate collaborators own those responsibilities; manager remains an orchestrator | R3.4 | LOOP-002 | `READY` |
 | DI-001 | `PARTIAL` | 26 module-level `ContextVar` declarations have no lifecycle classification | Generated inventory classifies request identity, diagnostics, mutable request state, request-local cache, and forbidden service lookup | R4.1 | LOOP-002 | `READY` |
 | DI-002 | `PARTIAL` | `GeodeRuntime` groups config, but `RuntimeCoreConfig` still has 17 fields | Cohesive lifecycle groups contain at most seven fields and have explicit owners/teardown | R4.2 | DI-001 | `OPEN` |
@@ -1933,6 +1932,7 @@ pre-release delivery evidence survives after the claim row is gone.
 | R2.4 | TRUST-003 | [#3060](https://github.com/mangowhoiscloud/geode/pull/3060) | `709ccb0d0eb31080ed3b17896d4056f784db0281` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, 10,431 selected non-live tests, lint/format, type check, security, Pages build, official-doc parity, macOS/Ubuntu install smoke, wheel/sdist inspection, clean installed-package smoke, 396 isolated kernel imports plus 42 installed-kernel tests, plan-owned safety/redaction/resource-lock poison coverage, and independent committed-diff review all passed) |
 | R3.1 | LOOP-001, LOOP-002 | [#3067](https://github.com/mangowhoiscloud/geode/pull/3067) with follow-up [#3068](https://github.com/mangowhoiscloud/geode/pull/3068) | `e6ccaf73e1ff6027e510bfc5e4e16b8679f369e4` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature and follow-up CI Gates, 10,398 non-live tests, lint/format, type check, security, Pages build, official-doc parity, macOS/Ubuntu install smoke, additive event schema v5 with public-hook v1 query compatibility, exact step/turn/model/tool/telemetry correlation coverage, and independent committed-diff review all passed; the original feature merged as `c3e309f01e939e69bd22876df7f79b41731ac733`) |
 | R3.2 | LOOP-003 | [#3071](https://github.com/mangowhoiscloud/geode/pull/3071) | `a130ceb75364e128cf0e273edbff65302273bb3e` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, full non-live tests, lint/format, type check, security, Pages build, official-doc parity, macOS/Ubuntu install smoke, wheel/sdist and clean installed-package checks, 397 isolated kernel imports plus 42 installed-kernel tests, ordered six-phase characterization, and two independent committed-diff reviews all passed) |
+| R3.3 | LOOP-004 | [#3074](https://github.com/mangowhoiscloud/geode/pull/3074) | `8469092baddff2d0b453b03230c46ec2b7e79bac` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, 10,411 non-live tests, lint/format, type check, security, Pages build, official-doc parity, macOS/Ubuntu install smoke, wheel/sdist and clean full/kernel installed-package checks, executable structural budgets, and independent committed-diff review all passed) |
 
 ### 10.2 Main closure evidence
 
@@ -2139,19 +2139,19 @@ ordered input, model-call, provider/retry, tool, observation/compaction, and
 termination/result collaborators while preserving the existing public
 `AgenticLoop.arun`, `StepSnapshot`, and `TurnState` behavior.
 
-R3.3 (`LOOP-004`) is `IN_PROGRESS` under the active claim for
-`feature/r3-3-structural-ratchets` after reconciliation/readiness
-[#3072](https://github.com/mangowhoiscloud/geode/pull/3072) merged as
-`abbd1f132e91cd80e9431823fbbfbdc69a3cce0e`. Implementation may start only
-after this claim merges and a fresh worktree is allocated from the updated
-canonical `develop`. The claimed scope enforces §7.3 budgets of at most 1,600
-`agent_loop.py` LOC, 40 `AgenticLoop` methods, 12 direct constructor arguments,
-and the registered local complexity, branch, and statement ceilings without
-hiding responsibilities in generic helpers or service bags. R3.4 (`LOOP-005`)
-and R4.1 (`DI-001`) remain unclaimed `READY` packages later in master order;
-their current re-audit baselines are `SubAgentManager` at 1,464 LOC, 24 methods,
-and 18 constructor arguments, plus 30 generated module-level `ContextVar`
-declarations.
+R3.3 (`LOOP-004`) is `IN_DEVELOP` after feature
+[#3074](https://github.com/mangowhoiscloud/geode/pull/3074) merged as
+`8469092baddff2d0b453b03230c46ec2b7e79bac`. Executable ratchets now hold
+`agent_loop.py` at 1,113 LOC, 38 `AgenticLoop` methods, 12 direct constructor
+arguments, complexity at most 30, branches at most 35, and statements at most
+120; the obsolete constructor exception is removed and legacy policy keywords
+still map to `AgenticLoopConfig`.
+
+R3.4 (`LOOP-005`) is the earliest unclaimed `READY` package in master order.
+R4.1 (`DI-001`) is also unclaimed `READY` but remains later in master order;
+both require their own claim transactions. Their current baselines are
+`SubAgentManager` at 1,464 LOC, 24 methods, and 18 constructor arguments, plus
+30 generated module-level `ContextVar` declarations.
 
 R9.1 (`CODE-001`) was already dependency-satisfied and remains `OPEN` pending
 its own serialized whole-package readiness transaction later in master order.
