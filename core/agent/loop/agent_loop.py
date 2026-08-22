@@ -201,6 +201,7 @@ class AgenticLoop:
         self._yield_after_tool_round = yield_after_tool_round
         self._activity_sink_provider = activity_sink_provider
         self._policy_sources = policy_sources or EMPTY_POLICY_SOURCES
+        self._user_profile = config.user_profile
         from core.tools.plan import BoundToolPlan as _BoundToolPlan
 
         executor_plan = getattr(tool_executor, "_bound_tool_plan", None)

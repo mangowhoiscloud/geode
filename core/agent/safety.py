@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 # Set by the IPC ``client_capability`` handshake in the connection's task /
 # thread (``_adopt_skip_permissions``), BEFORE the first prompt, and read at
 # gate-call time by ``ApprovalWorkflow`` + the plan handler. Per-task isolation
-# (a ContextVar, like ``_current_loop_ctx``) is the load-bearing property: a
+# ContextVar task isolation is the load-bearing property: a
 # process-global flag would let a skip client flip approvals for ANOTHER
 # session that is concurrently awaiting tool work (Codex review HIGH). Unset
 # (internal sessions with no handshake) falls back to the daemon-wide

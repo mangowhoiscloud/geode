@@ -154,7 +154,9 @@ def _parse_extractions(text: str) -> list[tuple[str, str]]:
     return results[:3]  # max 3 per extraction
 
 
-def make_llm_extract_handler() -> tuple[str, Callable[..., Awaitable[None]]]:
+def make_llm_extract_handler(
+    profile_provider: Callable[[], Any] | None = None,
+) -> tuple[str, Callable[..., Awaitable[None]]]:
     """Create TURN_COMPLETE handler for LLM-based learning extraction.
 
     Claude Code extractMemories pattern: cursor-based incremental extraction
@@ -200,9 +202,7 @@ def make_llm_extract_handler() -> tuple[str, Callable[..., Awaitable[None]]]:
             log.debug("LLM extract: skipping — already extracted from this input")
             return
 
-        from core.tools.profile_tools import get_user_profile
-
-        profile = get_user_profile()
+        profile = profile_provider() if profile_provider is not None else None
         if profile is None:
             return
 

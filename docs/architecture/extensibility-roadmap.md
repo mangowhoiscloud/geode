@@ -283,21 +283,21 @@ machine-readable artifact is
 
 | Measure | Current tree |
 |---|---:|
-| Production Python files (`core/` + `geode_product/` + `plugins/`) | 583 |
+| Production Python files (`core/` + `geode_product/` + `plugins/`) | 582 |
 | Test Python files | 685 |
-| `core/` Python LOC | 119,776 |
-| `geode_product/` Python LOC | 61,204 |
+| `core/` Python LOC | 119,754 |
+| `geode_product/` Python LOC | 61,217 |
 | `plugins/` Python LOC | 193 |
-| Test Python LOC | 183,458 |
+| Test Python LOC | 183,377 |
 | Tool definitions / executable registrations / valid schemas | 86 / 89 / 86 (definition-only 0; execution-only 3; invalid schema 0) |
 | `RuntimeEvent` members | 57 |
 | Built-in LLM adapters | 5 |
-| Module/class-scoped `ContextVar`-backed bindings in production packages | 35 |
+| Module/class-scoped `ContextVar`-backed bindings in production packages | 24 |
 | `core` → product import sites | 0 across 0 files |
-| Import-linter contracts / ignored edges | 6 / 19 |
-| `AgenticLoop` file LOC / methods / constructor args | 1,111 / 38 / 12 |
+| Import-linter contracts / ignored edges | 6 / 16 |
+| `AgenticLoop` file LOC / methods / constructor args | 1,112 / 38 / 12 |
 | `SubAgentManager` file LOC / methods / constructor args | 811 / 17 / 18 |
-| `RuntimeCoreConfig` fields | 21 |
+| `RuntimeCoreConfig` fields | 6 |
 | Global Ruff ratchets | complexity 52; args 23; branches 51; returns 18; statements 207 |
 <!-- generated:architecture-baseline:end -->
 

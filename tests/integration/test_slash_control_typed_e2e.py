@@ -15,7 +15,6 @@ from core.agent.plan import Plan, PlanStep
 from core.agent.tool_executor import ToolExecutor
 from core.cli.ipc_client import IPCClient
 from core.cli.routing import compose_command_registry
-from core.cli.session_state import set_current_loop
 from core.cli.tool_handlers.grill import _build_grill_handlers
 from core.llm.agentic_response import AgenticResponse, ResponseUsage, TextBlock, ToolUseBlock
 from core.memory.goals import GoalStore
@@ -37,7 +36,6 @@ class _Services:
         self.mcp_manager = None
 
     def create_session(self, *_args: Any, **_kwargs: Any) -> tuple[None, AgenticLoop]:
-        set_current_loop(self.loop)
         return None, self.loop
 
 

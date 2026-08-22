@@ -64,7 +64,10 @@ def test_run_agent_fork_excludes_denied_tools() -> None:
     )
     transient_handlers = {"computer": MagicMock()}
 
-    def _build_tool_plan():
+    built_with: dict[str, object] = {}
+
+    def _build_tool_plan(**kwargs: object):
+        built_with.update(kwargs)
         return bound, transient_handlers
 
     captured: dict[str, object] = {}
@@ -88,9 +91,11 @@ def test_run_agent_fork_excludes_denied_tools() -> None:
         patch("core.llm.adapters.registry.bootstrap_builtins"),
         patch("core.wiring.bootstrap.ensure_user_profile") as ensure_user_profile,
     ):
+        profile = ensure_user_profile.return_value
         asyncio.run(bootstrap.arun_agentic_oneshot("hi", tool_plan_builder=_build_tool_plan))
 
     ensure_user_profile.assert_called_once_with()
+    assert built_with["persistence"].user_profile is profile
     filtered_bound = captured["bound_tool_plan"]
     assert "run_bash" not in filtered_bound.tool_names
     assert "delegate_task" not in filtered_bound.tool_names

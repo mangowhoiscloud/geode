@@ -15,13 +15,11 @@ def cmd_goal(
     goal_store: GoalStore | None = None,
     session_id: str = "",
     timeline: Any = None,
+    agentic_ref: Any = None,
 ) -> dict[str, Any]:
     """Show, set, or clear the active session's persisted Goal."""
-    active_loop: Any = None
+    active_loop: Any = agentic_ref
     if goal_store is None:
-        from core.cli.session_state import get_current_loop
-
-        active_loop = get_current_loop()
         if active_loop is None or getattr(active_loop, "_goal_store", None) is None:
             raise ValueError("/goal requires an active AgenticLoop session")
         goal_store = active_loop._goal_store

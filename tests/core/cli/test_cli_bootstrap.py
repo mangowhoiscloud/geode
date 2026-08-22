@@ -25,13 +25,6 @@ class TestGeodeBootstrapDefaults:
         assert boot.tool_handlers == {}
         assert boot.readiness is None
 
-    def test_context_snapshot_captured(self) -> None:
-        """_context is a contextvars.Context (snapshot at creation time)."""
-        import contextvars
-
-        boot = GeodeBootstrap()
-        assert isinstance(boot._context, contextvars.Context)
-
 
 # ---------------------------------------------------------------------------
 # propagate_to_thread()
@@ -39,14 +32,10 @@ class TestGeodeBootstrapDefaults:
 
 
 class TestPropagateToThread:
-    def test_propagate_sets_memory_contextvars_in_new_thread(self) -> None:
-        """propagate_to_thread() makes ProjectMemory/OrgMemory available in a child thread."""
-        import core.tools.memory_tools as _mem_mod
-        from core.tools.memory_tools import _org_memory_ctx
-
-        # Create a bootstrap with a mock readiness
+    def test_propagate_keeps_explicit_components_unchanged(self) -> None:
         readiness = MagicMock()
-        boot = GeodeBootstrap(readiness=readiness)
+        handlers = {"memory_search": MagicMock()}
+        boot = GeodeBootstrap(readiness=readiness, tool_handlers=handlers)
 
         results: dict[str, Any] = {}
         errors: list[Exception] = []
@@ -54,8 +43,7 @@ class TestPropagateToThread:
         def worker() -> None:
             try:
                 boot.propagate_to_thread()
-                results["project"] = _mem_mod._project_memory_ctx.get()
-                results["org"] = _org_memory_ctx.get()
+                results["handlers"] = boot.tool_handlers
             except Exception as exc:
                 errors.append(exc)
 
@@ -64,8 +52,7 @@ class TestPropagateToThread:
         t.join(timeout=5)
 
         assert not errors, f"Thread raised: {errors}"
-        assert results.get("project") is not None
-        assert results.get("org") is not None
+        assert results["handlers"] is handlers
 
     def test_propagate_sets_readiness(self) -> None:
         """propagate_to_thread() sets the readiness ContextVar."""

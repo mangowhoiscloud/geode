@@ -11,9 +11,9 @@ from core.tools.memory_tools import (
     MemoryGetTool,
     MemorySaveTool,
     MemorySearchTool,
+    MemoryToolServices,
     RuleDeleteTool,
     RuleUpdateTool,
-    set_project_memory,
 )
 
 
@@ -55,11 +55,6 @@ class TestMemorySearchTool:
 
     def test_search_empty_store(self):
         store = InMemorySessionStore()
-        # Isolate from global project/org contextvars that may leak from other tests
-        from core.tools.memory_tools import set_org_memory as _set_org
-
-        set_project_memory(None)
-        _set_org(None)
         tool = MemorySearchTool(session_store=store)
         result = asyncio.run(tool.aexecute(query="anything"))
         assert result["result"]["total_found"] == 0
@@ -126,7 +121,6 @@ class TestMemorySaveTool:
 
     def test_save_persistent_no_project_memory(self):
         """persistent=True with no ProjectMemory still saves to session."""
-        set_project_memory(None)
         store = InMemorySessionStore()
         tool = MemorySaveTool(session_store=store)
         result = asyncio.run(
@@ -145,24 +139,18 @@ class TestMemorySaveTool:
 
         mem = ProjectMemory(project_root=tmp_path)
         mem.ensure_structure()
-        set_project_memory(mem)
-        try:
-            store = InMemorySessionStore()
-            tool = MemorySaveTool(session_store=store)
-            result = asyncio.run(
-                tool.aexecute(
-                    session_id="persist-test",
-                    data={"content": "persistent insight test"},
-                    persistent=True,
-                )
+        store = InMemorySessionStore()
+        tool = MemorySaveTool(services=MemoryToolServices(session_store=store, project_memory=mem))
+        result = asyncio.run(
+            tool.aexecute(
+                session_id="persist-test",
+                data={"content": "persistent insight test"},
+                persistent=True,
             )
-            assert result["result"]["saved"] is True
-            assert result["result"]["persistent"] is True
-            # Verify written to MEMORY.md
-            content = mem.memory_file.read_text()
-            assert "persistent insight test" in content
-        finally:
-            set_project_memory(None)
+        )
+        assert result["result"]["saved"] is True
+        assert result["result"]["persistent"] is True
+        assert "persistent insight test" in mem.memory_file.read_text()
 
 
 def _make_project_with_rule(tmp_path: Path):
@@ -183,7 +171,6 @@ class TestRuleUpdateTool:
         assert RuleUpdateTool().name == "rule_update"
 
     def test_no_project_memory(self):
-        set_project_memory(None)
         tool = RuleUpdateTool()
         result = asyncio.run(tool.aexecute(name="x", content="y"))
         assert result["result"]["updated"] is False
@@ -191,31 +178,22 @@ class TestRuleUpdateTool:
 
     def test_update_existing_rule(self, tmp_path: Path):
         mem = _make_project_with_rule(tmp_path)
-        set_project_memory(mem)
-        try:
-            tool = RuleUpdateTool()
-            result = asyncio.run(tool.aexecute(name="test-rule", content="# Updated Content"))
-            assert result["result"]["updated"] is True
-            # Verify content updated
-            rules = mem.load_rules("*")
-            matched = [r for r in rules if r["name"] == "test-rule"]
-            assert len(matched) == 1
-            assert "Updated Content" in matched[0]["content"]
-        finally:
-            set_project_memory(None)
+        tool = RuleUpdateTool(MemoryToolServices(project_memory=mem))
+        result = asyncio.run(tool.aexecute(name="test-rule", content="# Updated Content"))
+        assert result["result"]["updated"] is True
+        rules = mem.load_rules("*")
+        matched = [r for r in rules if r["name"] == "test-rule"]
+        assert len(matched) == 1
+        assert "Updated Content" in matched[0]["content"]
 
     def test_update_nonexistent_rule(self, tmp_path: Path):
         from core.memory.project import ProjectMemory
 
         mem = ProjectMemory(project_root=tmp_path)
         mem.ensure_structure()
-        set_project_memory(mem)
-        try:
-            tool = RuleUpdateTool()
-            result = asyncio.run(tool.aexecute(name="no-such-rule", content="x"))
-            assert result["result"]["updated"] is False
-        finally:
-            set_project_memory(None)
+        tool = RuleUpdateTool(MemoryToolServices(project_memory=mem))
+        result = asyncio.run(tool.aexecute(name="no-such-rule", content="x"))
+        assert result["result"]["updated"] is False
 
 
 class TestRuleDeleteTool:
@@ -226,7 +204,6 @@ class TestRuleDeleteTool:
         assert RuleDeleteTool().name == "rule_delete"
 
     def test_no_project_memory(self):
-        set_project_memory(None)
         tool = RuleDeleteTool()
         result = asyncio.run(tool.aexecute(name="x"))
         assert result["result"]["deleted"] is False
@@ -234,93 +211,54 @@ class TestRuleDeleteTool:
 
     def test_delete_existing_rule(self, tmp_path: Path):
         mem = _make_project_with_rule(tmp_path)
-        set_project_memory(mem)
-        try:
-            tool = RuleDeleteTool()
-            result = asyncio.run(tool.aexecute(name="test-rule"))
-            assert result["result"]["deleted"] is True
-            # Verify deleted
-            rules = mem.list_rules()
-            names = [r["name"] for r in rules]
-            assert "test-rule" not in names
-        finally:
-            set_project_memory(None)
+        tool = RuleDeleteTool(MemoryToolServices(project_memory=mem))
+        result = asyncio.run(tool.aexecute(name="test-rule"))
+        assert result["result"]["deleted"] is True
+        names = [r["name"] for r in mem.list_rules()]
+        assert "test-rule" not in names
 
     def test_delete_nonexistent_rule(self, tmp_path: Path):
         from core.memory.project import ProjectMemory
 
         mem = ProjectMemory(project_root=tmp_path)
         mem.ensure_structure()
-        set_project_memory(mem)
-        try:
-            tool = RuleDeleteTool()
-            result = asyncio.run(tool.aexecute(name="no-such-rule"))
-            assert result["result"]["deleted"] is False
-        finally:
-            set_project_memory(None)
+        tool = RuleDeleteTool(MemoryToolServices(project_memory=mem))
+        result = asyncio.run(tool.aexecute(name="no-such-rule"))
+        assert result["result"]["deleted"] is False
 
 
 class TestSessionStoreContract:
-    """PR-AUDIT-AB — fake-success guards for the session-store wiring.
+    """Fake-success guards for explicit session-store wiring."""
 
-    Before the fix, ``set_default_session_store`` had zero callers: every
-    persistent=False save went to a fresh throwaway InMemorySessionStore
-    and still reported ``saved: True``.
-    """
-
-    def test_save_then_get_roundtrip_via_default_store(self):
-        from core.tools.memory_tools import (
-            _default_session_store_ctx,
-            set_default_session_store,
-        )
-
+    def test_save_then_get_roundtrip_via_injected_services(self):
         store = InMemorySessionStore(ttl=3600)
-        token = _default_session_store_ctx.set(None)
-        try:
-            set_default_session_store(store)
-            save = asyncio.run(MemorySaveTool().aexecute(session_id="rt-1", data={"k": "v"}))
-            assert save["result"]["saved"] is True
-            assert save["result"]["ephemeral"] is False
+        services = MemoryToolServices(session_store=store)
+        save = asyncio.run(
+            MemorySaveTool(services=services).aexecute(session_id="rt-1", data={"k": "v"})
+        )
+        assert save["result"]["saved"] is True
+        assert save["result"]["ephemeral"] is False
 
-            got = asyncio.run(MemoryGetTool().aexecute(session_id="rt-1"))
-            assert got["result"]["found"] is True
-            assert got["result"]["data"] == {"k": "v"}
-        finally:
-            _default_session_store_ctx.reset(token)
+        got = asyncio.run(MemoryGetTool(services=services).aexecute(session_id="rt-1"))
+        assert got["result"]["found"] is True
+        assert got["result"]["data"] == {"k": "v"}
 
     def test_unwired_store_reports_ephemeral_not_saved(self):
-        """No injected store + no ContextVar → the save must NOT claim
-        success: ``saved`` is False and ``ephemeral`` is True."""
-        from core.tools.memory_tools import _default_session_store_ctx
+        """No injected store must report the per-call fallback honestly."""
+        save = asyncio.run(MemorySaveTool().aexecute(session_id="eph-1", data={"k": "v"}))
+        assert save["result"]["ephemeral"] is True
+        assert save["result"]["saved"] is False
 
-        token = _default_session_store_ctx.set(None)
-        try:
-            save = asyncio.run(MemorySaveTool().aexecute(session_id="eph-1", data={"k": "v"}))
-            assert save["result"]["ephemeral"] is True
-            assert save["result"]["saved"] is False
+        got = asyncio.run(MemoryGetTool().aexecute(session_id="eph-1"))
+        assert got["result"]["found"] is False
+        assert got["result"]["ephemeral"] is True
 
-            got = asyncio.run(MemoryGetTool().aexecute(session_id="eph-1"))
-            assert got["result"]["found"] is False
-            assert got["result"]["ephemeral"] is True
-        finally:
-            _default_session_store_ctx.reset(token)
-
-    def test_bootstrap_build_memory_wires_default_store(self, tmp_path: Path):
-        """build_memory must call set_default_session_store with the SAME
-        store instance it hands to ContextAssembler."""
+    def test_bootstrap_build_memory_preserves_store_identity(self, tmp_path: Path):
         from unittest.mock import patch
 
-        from core.tools.memory_tools import _default_session_store_ctx, _get_session_store
-
         store = InMemorySessionStore(ttl=3600)
-        token = _default_session_store_ctx.set(None)
-        try:
-            with patch("core.paths.ensure_directories"):
-                from core.wiring.bootstrap import build_memory
+        with patch("core.paths.ensure_directories"):
+            from core.wiring.bootstrap import build_memory
 
-                build_memory(session_store=store, hooks=None)
-            resolved, ephemeral = _get_session_store()
-            assert resolved is store
-            assert ephemeral is False
-        finally:
-            _default_session_store_ctx.reset(token)
+            _, _, assembler, _ = build_memory(session_store=store, hooks=None)
+        assert assembler._session_store is store

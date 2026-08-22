@@ -207,18 +207,15 @@ def test_default_transport_singleton(monkeypatch: pytest.MonkeyPatch) -> None:
         reset_slack_transport()
 
 
-def test_notification_fallback_crosses_threads() -> None:
-    """PR-SLACK-TRANSPORT: poller daemon threads read the process
-    fallback — set in the main thread, visible in a fresh thread."""
+def test_notification_dependency_is_explicit_across_threads() -> None:
     import threading
 
-    from core.mcp.notification_port import get_notification, set_notification
+    from core.tools.output_tools import SendNotificationTool
 
     marker = object()
-    set_notification(marker)  # type: ignore[arg-type]
+    tool = SendNotificationTool(marker)
     seen: list[Any] = []
-    t = threading.Thread(target=lambda: seen.append(get_notification()))
+    t = threading.Thread(target=lambda: seen.append(tool._notification))
     t.start()
     t.join()
-    set_notification(None)
     assert seen == [marker]

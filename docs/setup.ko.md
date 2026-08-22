@@ -142,7 +142,7 @@ nohup geode serve >/dev/null 2>&1 &
 
 ### 시작 순서
 
-1. ContextVars (domain, memory, profile, env)
+1. 데몬 환경 로드
 2. Readiness check (API keys)
 3. GeodeRuntime (MCP 13 servers, 10-30s)
 4. SchedulerService (jobs 로드, 60s tick 시작)

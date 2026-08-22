@@ -564,12 +564,9 @@ class TestSharedServicesCreateSession:
         _, loop = services.create_session(SessionMode.DAEMON, system_suffix="gateway instructions")
         assert "gateway instructions" in loop._system_suffix
 
-    def test_current_loop_ctx_set(self, services: SharedServices) -> None:
-        """create_session sets _current_loop_ctx ContextVar."""
-        from core.cli.session_state import get_current_loop
-
-        _, loop = services.create_session(SessionMode.REPL)
-        assert get_current_loop() is loop
+    def test_loop_owns_its_explicit_executor(self, services: SharedServices) -> None:
+        executor, loop = services.create_session(SessionMode.REPL)
+        assert loop.executor is executor
 
     def test_conversation_injected(self, services: SharedServices) -> None:
         from core.agent.conversation import ConversationContext
@@ -612,16 +609,6 @@ class TestSharedServicesCreateSession:
             _, loop = services.create_session(mode)
             assert loop.max_rounds == 0, f"{mode} has max_rounds={loop.max_rounds}"
 
-    def test_propagate_context_calls_propagate(self, services: SharedServices) -> None:
-        with patch.object(services, "_propagate_contextvars") as mock_prop:
-            services.create_session(SessionMode.SCHEDULER, propagate_context=True)
-            mock_prop.assert_called_once()
-
-    def test_no_propagate_by_default(self, services: SharedServices) -> None:
-        with patch.object(services, "_propagate_contextvars") as mock_prop:
-            services.create_session(SessionMode.REPL)
-            mock_prop.assert_not_called()
-
     def test_product_control_state_factory_reaches_fresh_and_resumed_sessions(self) -> None:
         marker = MagicMock()
         factory = MagicMock(return_value=marker)
@@ -653,6 +640,42 @@ class TestBuildSharedServices:
         )
         assert services.hook_system is not None
 
+    def test_default_hook_and_profile_reach_composed_handlers(self) -> None:
+        from core.cli.tool_handlers.hitl import _build_hitl_handlers
+        from core.hooks import HookEvent
+        from core.wiring.bootstrap import build_hooks as real_build_hooks
+
+        profile = MagicMock()
+        captured: dict[str, object] = {}
+
+        def builder(**kwargs: object):
+            captured.update(kwargs)
+            hitl = _build_hitl_handlers(kwargs["hooks"])
+            return _bound_plan("test_tool"), {"rate_result": hitl["rate_result"]}
+
+        with patch("core.wiring.bootstrap.build_hooks", wraps=real_build_hooks) as build_hooks:
+            services = build_shared_services(
+                tool_plan_builder=builder,
+                worker_module=_TEST_WORKER_MODULE,
+                user_profile=profile,
+            )
+
+        events: list[dict] = []
+        services.hook_system.register(
+            HookEvent.RESULT_FEEDBACK,
+            lambda _event, data: events.append(data),
+            name="test_feedback",
+        )
+        services.tool_handlers["rate_result"](subject="result-1", rating=5)
+
+        assert captured["hooks"] is services.hook_system
+        assert captured["persistence"].user_profile is profile
+        assert build_hooks.call_args.kwargs["user_profile"] is profile
+        assert len(events) == 1
+        assert events[0]["subject"] == "result-1"
+        assert events[0]["verdict"] == "rated"
+        assert events[0]["rating"] == 5
+
     def test_tool_handlers_populated(self) -> None:
         services = build_shared_services(
             tool_plan_builder=_bound_builder,
@@ -664,9 +687,10 @@ class TestBuildSharedServices:
         bound = _bound_plan("test_tool")
         internal = {"internal": MagicMock()}
         builder = MagicMock(return_value=(bound, internal))
+        hooks = MagicMock()
 
         services = build_shared_services(
-            hook_system=MagicMock(),
+            hook_system=hooks,
             lane_queue=MagicMock(),
             tool_plan_builder=builder,
             worker_module=_TEST_WORKER_MODULE,
@@ -678,11 +702,13 @@ class TestBuildSharedServices:
         assert services.transient_tool_handlers == internal
         with pytest.raises(TypeError):
             services.tool_handlers["mutable"] = MagicMock()
-        builder.assert_called_once_with(
-            verbose=False,
-            mcp_manager=None,
-            skill_registry=None,
-        )
+        builder.assert_called_once()
+        builder_kwargs = builder.call_args.kwargs
+        assert builder_kwargs["verbose"] is False
+        assert builder_kwargs["mcp_manager"] is None
+        assert builder_kwargs["skill_registry"] is None
+        assert builder_kwargs["hooks"] is hooks
+        assert builder_kwargs["persistence"].user_profile is services.user_profile
 
     def test_tool_composition_has_one_authority(self) -> None:
         with pytest.raises(RuntimeError, match="injected bound tool-plan builder"):
@@ -811,14 +837,10 @@ class TestSchedulerREPLIsolation:
         )
 
     def test_scheduler_does_not_corrupt_repl_loop(self, services: SharedServices) -> None:
-        """Scheduler create_session sets ContextVar per-thread, not shared ref."""
+        """Scheduler construction does not mutate an existing REPL session."""
         import threading
 
-        from core.cli.session_state import get_current_loop
-
-        # REPL session in main thread
-        _, repl_loop = services.create_session(SessionMode.REPL)
-        assert get_current_loop() is repl_loop
+        repl_executor, repl_loop = services.create_session(SessionMode.REPL)
 
         # Scheduler session in background thread
         sched_loops: list = []
@@ -826,9 +848,7 @@ class TestSchedulerREPLIsolation:
 
         def sched_worker() -> None:
             try:
-                _, sched_loop = services.create_session(
-                    SessionMode.SCHEDULER, propagate_context=False
-                )
+                _, sched_loop = services.create_session(SessionMode.SCHEDULER)
                 sched_loops.append(sched_loop)
             except Exception as exc:
                 errors.append(exc)
@@ -840,8 +860,7 @@ class TestSchedulerREPLIsolation:
         assert not errors, f"Scheduler thread error: {errors}"
         assert len(sched_loops) == 1
 
-        # REPL's ContextVar should still point to repl_loop (not scheduler's)
-        assert get_current_loop() is repl_loop
+        assert repl_loop.executor is repl_executor
         assert sched_loops[0] is not repl_loop
 
     def test_explicit_hook_system_used(self) -> None:

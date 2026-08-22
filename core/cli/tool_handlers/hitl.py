@@ -11,8 +11,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from core.hooks.dispatch import fire_hook
 from core.hooks.system import HookEvent
-from core.hooks.tool_hooks import fire_tool_hook
 from core.tools.handlers.clarification import _clarify
 from core.tools.handlers.registration import UniqueEntries
 from core.ui.console import console
@@ -37,7 +37,7 @@ def _feedback_correlation(kwargs: dict[str, Any]) -> dict[str, str]:
     return {key: value for key, value in values.items() if value}
 
 
-def _build_hitl_handlers() -> UniqueEntries[str, Any]:
+def _build_hitl_handlers(hooks: Any = None) -> UniqueEntries[str, Any]:
     """Build HITL feedback tool handlers."""
 
     def handle_rate_result(**kwargs: Any) -> dict[str, Any]:
@@ -48,7 +48,8 @@ def _build_hitl_handlers() -> UniqueEntries[str, Any]:
         if not (1 <= rating <= 5):
             return _clarify("rate_result", ["rating"], "평점은 1-5 사이로 입력해주세요.")
         comment = kwargs.get("comment", "")
-        fire_tool_hook(
+        fire_hook(
+            hooks,
             HookEvent.RESULT_FEEDBACK,
             {
                 "subject": subject,
@@ -71,7 +72,8 @@ def _build_hitl_handlers() -> UniqueEntries[str, Any]:
         subject = kwargs.get("subject") or kwargs.get("subject_id") or ""
         if not subject:
             return _clarify("accept_result", ["subject"], "어떤 결과를 수락할까요?")
-        fire_tool_hook(
+        fire_hook(
+            hooks,
             HookEvent.RESULT_FEEDBACK,
             {"subject": subject, "verdict": "accepted", **_feedback_correlation(kwargs)},
         )
@@ -88,7 +90,8 @@ def _build_hitl_handlers() -> UniqueEntries[str, Any]:
         if not subject:
             return _clarify("reject_result", ["subject"], "어떤 결과를 거부할까요?")
         reason = kwargs.get("reason", "")
-        fire_tool_hook(
+        fire_hook(
+            hooks,
             HookEvent.RESULT_FEEDBACK,
             {
                 "subject": subject,

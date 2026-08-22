@@ -232,6 +232,7 @@ class ToolExecutor:
         allowed_tools: frozenset[str] | None = None,
         interactive_approval: bool = True,
         resource_lock_pool: ResourceLockPool | None = None,
+        offload_store: Any = None,
     ) -> None:
         if action_handlers is not None and bound_tool_plan is not None:
             raise ValueError("action_handlers and bound_tool_plan are mutually exclusive")
@@ -300,6 +301,7 @@ class ToolExecutor:
         self._approval_callback = approval_callback
         self._interactive_approval = interactive_approval
         self._resource_lock_pool = resource_lock_pool or ResourceLockPool()
+        self._offload_store = offload_store
 
         # HITL approval workflow (extracted — SRP)
         from core.agent.approval import ApprovalWorkflow

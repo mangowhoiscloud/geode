@@ -140,7 +140,7 @@ Anything not in CANNOT is freely permitted. Specifically:
 
 ### Wiring Verification (Anti-Disconnection)
 
-> Static parity invariants for runtime wiring (writer-reader, hook-bootstrap, ContextVar set-get).
+> Static parity invariants for runtime wiring (writer-reader, hook-bootstrap, explicit injection).
 > For *pre-change* workflow (read-before-write, hypothesis), see `explore-reason-act` skill.
 > For *static dependency health* (layer violations, circular imports, eager loading), see `dependency-review` skill.
 
@@ -148,7 +148,7 @@ Anything not in CANNOT is freely permitted. Specifically:
 |------|------|
 | **Read-Write parity** | Every read path (context injection) must have a corresponding write path (data producer). Verify both ends before marking complete. |
 | **Hook registration** | Every hook handler must be registered in bootstrap.py. Handler exists ≠ handler fires. |
-| **ContextVar injection** | Every `get_*()` accessor must have a corresponding `set_*()` call in bootstrap. Unset ContextVar → None → silent skip. |
+| **Runtime service injection** | Process services cross composition boundaries through constructors, grouped config, or `ToolContext`; `ContextVar` is reserved for request identity, diagnostics, request-local mutable state, and caches. |
 | **Singleton lifecycle** | Singleton created at startup may use stale data. Verify refresh/invalidation path exists for mutable state (OAuth tokens, config). |
 | **Conditional read parity** | A reader that loads context in ONE branch (e.g. auto-pick) must load it in the SYMMETRIC branch (explicit input) too — otherwise the feature half-disconnects depending on call shape. *Incident: PR-G3 #1347 (2026-05-20) — `_resolve_target_dim` loaded baseline only for `--target-dim auto`.* |
 | **Writer destination tracked** | Every file the code writes for "audit / history / ledger" must be `git check-ignore`-clean. An ignored path silently breaks `git add`; the writer thinks it persisted, history doesn't. *Incident: PR-G5b #1350 (2026-05-20) — `autoresearch/state/mutations.jsonl` silently ignored, caught by Codex MCP after 8/8 CI green; pinned by `test_policy_files_not_gitignored`.* |

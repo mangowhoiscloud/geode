@@ -8,7 +8,6 @@ notification-worthy event.
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 from core.hooks import HookEvent, HookSystem
@@ -16,7 +15,7 @@ from core.hooks.plugins.notification_hook.hook import (
     _format_message,
     register_notification_hooks,
 )
-from core.mcp.notification_port import NotificationResult, set_notification
+from core.mcp.notification_port import NotificationResult
 
 # ---------------------------------------------------------------------------
 # Message formatting
@@ -62,17 +61,11 @@ class TestNotificationHookRegistration:
         registered = hooks.list_hooks()
         assert "subagent_failed" in registered
 
-    def test_build_hooks_registers_notification_once(self, tmp_path: Path):
-        from core.wiring.bootstrap import build_hooks
-
-        hooks, _, _ = build_hooks(
-            session_key="test",
-            run_id="run-1",
-            log_dir=tmp_path,
-        )
+    def test_registration_is_explicit_and_idempotent(self):
+        hooks = HookSystem()
+        register_notification_hooks(hooks)
         names = hooks.list_hooks(HookEvent.SUBAGENT_FAILED)[HookEvent.SUBAGENT_FAILED.value]
         assert names.count("notification_subagent_failed") == 1
-        hooks.close()
 
     def test_hooks_trigger_notification(self):
         """Verify hooks call NotificationPort.asend_message when triggered."""
@@ -81,10 +74,13 @@ class TestNotificationHookRegistration:
         mock_adapter.asend_message = AsyncMock(
             return_value=NotificationResult(success=True, channel="slack")
         )
-        set_notification(mock_adapter)
-
         hooks = HookSystem()
-        register_notification_hooks(hooks, channel="slack", recipient="#alerts")
+        register_notification_hooks(
+            hooks,
+            channel="slack",
+            recipient="#alerts",
+            notification=mock_adapter,
+        )
 
         asyncio.run(
             hooks.trigger_async(
@@ -99,12 +95,8 @@ class TestNotificationHookRegistration:
         assert call_args[0][1] == "#alerts"
         assert "Sub-agent failed" in call_args[0][2]
 
-        set_notification(None)
-
     def test_hooks_skip_when_no_adapter(self):
         """Hooks should silently skip when no adapter is set."""
-        set_notification(None)
-
         hooks = HookSystem()
         register_notification_hooks(hooks, channel="slack", recipient="#test")
 
@@ -124,10 +116,13 @@ class TestNotificationHookRegistration:
         mock_adapter.asend_message = AsyncMock(
             return_value=NotificationResult(success=False, channel="slack", error="rate limited")
         )
-        set_notification(mock_adapter)
-
         hooks = HookSystem()
-        register_notification_hooks(hooks, channel="slack", recipient="#alerts")
+        register_notification_hooks(
+            hooks,
+            channel="slack",
+            recipient="#alerts",
+            notification=mock_adapter,
+        )
 
         # Should not raise even though send fails
         results = asyncio.run(
@@ -138,8 +133,6 @@ class TestNotificationHookRegistration:
         )
         assert all(r.success for r in results)
 
-        set_notification(None)
-
     def test_custom_channel_and_recipient(self):
         """Can configure custom channel and recipient."""
         mock_adapter = MagicMock()
@@ -147,18 +140,19 @@ class TestNotificationHookRegistration:
         mock_adapter.asend_message = AsyncMock(
             return_value=NotificationResult(success=True, channel="discord")
         )
-        set_notification(mock_adapter)
-
         hooks = HookSystem()
-        register_notification_hooks(hooks, channel="discord", recipient="123456")
+        register_notification_hooks(
+            hooks,
+            channel="discord",
+            recipient="123456",
+            notification=mock_adapter,
+        )
 
         asyncio.run(hooks.trigger_async(HookEvent.SUBAGENT_FAILED, {"task_id": "task_789"}))
 
         call_args = mock_adapter.asend_message.call_args
         assert call_args[0][0] == "discord"
         assert call_args[0][1] == "123456"
-
-        set_notification(None)
 
     def test_subagent_emitter_awaits_notification_once(self):
         from core.agent.sub_agent import SubAgentManager, SubTask
@@ -169,9 +163,13 @@ class TestNotificationHookRegistration:
         mock_adapter.asend_message = AsyncMock(
             return_value=NotificationResult(success=True, channel="slack")
         )
-        set_notification(mock_adapter)
         hooks = HookSystem()
-        register_notification_hooks(hooks, channel="slack", recipient="#alerts")
+        register_notification_hooks(
+            hooks,
+            channel="slack",
+            recipient="#alerts",
+            notification=mock_adapter,
+        )
         manager = SubAgentManager(IsolatedRunner(), hooks=hooks)
         task = SubTask(task_id="task-1", task_type="analyze", description="test")
 
@@ -180,4 +178,3 @@ class TestNotificationHookRegistration:
         )
 
         mock_adapter.asend_message.assert_awaited_once()
-        set_notification(None)

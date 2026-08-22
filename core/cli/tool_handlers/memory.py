@@ -12,7 +12,7 @@ from core.ui.console import console
 log = logging.getLogger(__name__)
 
 
-def _build_memory_handlers() -> UniqueEntries[str, Any]:
+def _build_memory_handlers(project_memory: Any = None) -> UniqueEntries[str, Any]:
     """Build memory-related tool handlers."""
     from core.cli import _handle_memory_action
     from core.memory.project import ProjectMemory
@@ -22,7 +22,7 @@ def _build_memory_handlers() -> UniqueEntries[str, Any]:
         if not query:
             return _clarify("memory_search", ["query"], "무엇을 검색할까요?")
         try:
-            mem = ProjectMemory()
+            mem = project_memory or ProjectMemory()
             content = mem.search(query) if hasattr(mem, "search") else mem.load_memory()
             return {"status": "ok", "action": "memory_search", "content": content[:2000]}
         except Exception as exc:
@@ -35,7 +35,7 @@ def _build_memory_handlers() -> UniqueEntries[str, Any]:
             missing = [k for k, v in {"key": key, "content": content}.items() if not v]
             return _clarify("memory_save", missing, "저장할 키와 내용을 알려주세요.")
         try:
-            mem = ProjectMemory()
+            mem = project_memory or ProjectMemory()
             mem.add_insight(f"{key}: {content}")
             console.print(f"  [success]Saved to memory: {key}[/success]")
             return {"status": "ok", "action": "memory_save", "key": key}
@@ -56,7 +56,7 @@ def _build_memory_handlers() -> UniqueEntries[str, Any]:
         _handle_memory_action(memory_args, "", False)
         # Return rule list for LLM context
         try:
-            mem = ProjectMemory()
+            mem = project_memory or ProjectMemory()
             rules = mem.list_rules() if hasattr(mem, "list_rules") else []
             return {
                 "status": "ok",

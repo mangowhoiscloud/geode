@@ -183,7 +183,6 @@ def test_geode_mcpmark_deadline_includes_mcp_startup(monkeypatch, tmp_path) -> N
     from core.config import settings
 
     monkeypatch.setattr(settings, "max_tool_result_tokens", 12_345)
-    monkeypatch.setattr("core.orchestration.tool_offload.get_offload_store", lambda: None)
 
     class MCPServer:
         exited = False
@@ -245,7 +244,6 @@ def test_geode_mcpmark_receipt_binds_the_raw_tool_schema(monkeypatch, tmp_path) 
         async def amark_session_error(self):
             return None
 
-    monkeypatch.setattr("core.orchestration.tool_offload.get_offload_store", lambda: None)
     agent = _geode_agent_for_execute(monkeypatch, Loop(), mcp_server=MCPServer())
     log_path = tmp_path / "geode-tool-calls.json"
 

@@ -175,7 +175,6 @@ def make_auto_learn_handler(
     Args:
         profile_provider: Callable returning the current user profile.
             Injected at registration to avoid L6→L5 layer violation.
-            Falls back to lazy import if not provided (backwards compat).
 
     Returns (handler_name, handler_fn) for hook registration.
     """
@@ -196,10 +195,7 @@ def make_auto_learn_handler(
     def _get_profile() -> Any:
         if profile_provider is not None:
             return profile_provider()
-        # Fallback for backwards compat (tests that don't inject)
-        from core.tools.profile_tools import get_user_profile
-
-        return get_user_profile()
+        return None
 
     def _on_turn_complete(event: HookEvent, data: dict[str, Any]) -> None:
         nonlocal session_count, last_learn_ts

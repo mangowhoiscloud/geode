@@ -185,28 +185,21 @@ class TestMemoryToolHooks:
 
     def test_rule_create_fires_hook(self):
         """RuleCreateTool.execute() fires RULE_CHANGED with action=created."""
-        from unittest.mock import MagicMock, patch
+        from unittest.mock import MagicMock
 
-        from core.tools.memory_tools import RuleCreateTool, set_memory_hooks
+        from core.tools.memory_tools import MemoryToolServices, RuleCreateTool
 
         mock_hooks = MagicMock()
-        set_memory_hooks(mock_hooks)
-
         mock_proj = MagicMock()
         mock_proj.create_rule.return_value = True
-
-        with patch("core.tools.memory_tools._project_memory_ctx") as ctx:
-            ctx.get.return_value = mock_proj
-            tool = RuleCreateTool()
-            asyncio.run(tool.aexecute(name="test-rule", paths=["*.py"], content="rule body"))
+        tool = RuleCreateTool(MemoryToolServices(project_memory=mock_proj, hooks=mock_hooks))
+        asyncio.run(tool.aexecute(name="test-rule", paths=["*.py"], content="rule body"))
 
         mock_hooks.trigger.assert_called_once()
         call_args = mock_hooks.trigger.call_args
         assert call_args[0][0].value == "rule_changed"
         assert call_args[0][1]["action"] == "created"
         assert call_args[0][1]["name"] == "test-rule"
-
-        set_memory_hooks(None)  # cleanup
 
 
 class TestHookResult:

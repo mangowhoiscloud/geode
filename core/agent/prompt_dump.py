@@ -77,8 +77,12 @@ def assemble_full_prompt(
     previous_surface = os.environ.get("GEODE_SURFACE_TYPE")
     os.environ["GEODE_SURFACE_TYPE"] = surface
     try:
-        ensure_user_profile()
-        base = build_system_prompt(model=model, policy_sources=policy_sources)
+        profile = ensure_user_profile()
+        base = build_system_prompt(
+            model=model,
+            policy_sources=policy_sources,
+            user_profile=profile,
+        )
     finally:
         if previous_surface is None:
             os.environ.pop("GEODE_SURFACE_TYPE", None)

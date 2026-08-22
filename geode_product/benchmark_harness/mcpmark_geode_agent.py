@@ -565,11 +565,10 @@ class GeodeMCPMarkAgent(BaseMCPAgent):
         self._refresh_service_config()
         model, provider, source = _route_from_model(self.litellm_input_model_name)
         from core.config import settings
-        from core.orchestration.tool_offload import get_offload_store
 
         runtime_config: dict[str, Any] = {
             "max_tool_result_tokens": settings.max_tool_result_tokens,
-            "offload_store_bound": get_offload_store() is not None,
+            "offload_store_bound": False,
         }
         loop: Any | None = None
         mcp_server: Any | None = None

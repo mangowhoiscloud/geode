@@ -133,6 +133,7 @@ class ToolContext:
     tool_plan_hash: str = ""
     tool_plan_generation: int = 0
     bound_tool_plan: BoundToolPlan | None = field(default=None, repr=False, compare=False)
+    agent_loop: Any | None = field(default=None, repr=False, compare=False)
     # Effective request metadata is written by ToolExecutor after trusted and
     # public request transforms. ToolCallProcessor consumes it for persistence,
     # privacy classification, and result offload decisions.

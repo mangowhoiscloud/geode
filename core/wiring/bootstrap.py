@@ -48,20 +48,15 @@ CONFIG_WATCHER_DEBOUNCE_MS = 300.0  # Avoid thrashing on rapid file changes
 
 
 def ensure_user_profile() -> FileBasedUserProfile:
-    """Return the context-bound configured profile, creating it once if absent."""
+    """Build the configured profile at the runtime composition root."""
     from core.config import settings
     from core.memory.user_profile import FileBasedUserProfile
     from core.paths import PROJECT_USER_PROFILE_DIR
-    from core.tools.profile_tools import get_user_profile, set_user_profile
 
-    profile = get_user_profile()
-    if profile is None:
-        profile = FileBasedUserProfile(
-            global_dir=Path(settings.user_profile_dir) if settings.user_profile_dir else None,
-            project_dir=PROJECT_USER_PROFILE_DIR,
-        )
-        set_user_profile(profile)
-    return profile
+    return FileBasedUserProfile(
+        global_dir=Path(settings.user_profile_dir) if settings.user_profile_dir else None,
+        project_dir=PROJECT_USER_PROFILE_DIR,
+    )
 
 
 def _build_hook_event_store(log_dir: Path | str | None) -> HookEventStore:
@@ -253,11 +248,14 @@ def build_hooks(
     log_dir: Path | str | None,
     activity_sink_provider: RunEventSinkProvider | None = None,
     feature_hook_registrar: Callable[[HookSystem], None] | None = None,
+    user_profile: FileBasedUserProfile | None = None,
+    hooks: HookSystem | None = None,
 ) -> tuple[HookSystem, HookEventStore, Any]:
     """Build HookSystem with bounded SQLite persistence and metrics."""
     from core.observability.hook_persistence import HookPersistenceSink
 
-    hooks: HookSystem = HookSystem()
+    if hooks is None:
+        hooks = HookSystem()
 
     event_store = _build_hook_event_store(log_dir)
     hooks.register_sink(
@@ -397,21 +395,6 @@ def build_hooks(
 
     _register_plugin("context_action_hook", _reg_context_action)
 
-    # Notification hook plugin (events -> external messaging)
-    def _reg_notification() -> None:
-        from core.config import settings
-        from core.hooks.plugins.notification_hook.hook import (
-            register_notification_hooks,
-        )
-
-        register_notification_hooks(
-            hooks,
-            channel=settings.notification_channel,
-            recipient=settings.notification_recipient,
-        )
-
-    _register_plugin("notification_hook", _reg_notification)
-
     # C2: Journal auto-record hooks (subagent lifecycle -> runs.jsonl)
     def _reg_journal() -> None:
         from core.memory.journal_hooks import make_journal_handlers
@@ -436,9 +419,8 @@ def build_hooks(
     # C3b: Auto-learn user patterns on turn complete (Tier 0.5 cross-session memory)
     def _reg_auto_learn() -> None:
         from core.hooks.auto_learn import make_auto_learn_handler
-        from core.tools.profile_tools import get_user_profile
 
-        name, handler = make_auto_learn_handler(profile_provider=get_user_profile)
+        name, handler = make_auto_learn_handler(profile_provider=lambda: user_profile)
         hooks.register(
             HookEvent.TURN_COMPLETED,
             handler,
@@ -452,7 +434,7 @@ def build_hooks(
     def _reg_llm_extract() -> None:
         from core.hooks.llm_extract_learning import make_llm_extract_handler
 
-        name, handler = make_llm_extract_handler()
+        name, handler = make_llm_extract_handler(profile_provider=lambda: user_profile)
         hooks.register(
             HookEvent.TURN_COMPLETED,
             handler,
@@ -715,6 +697,7 @@ def build_memory(
     session_store: SessionStorePort,
     hooks: Any = None,
     event_store: HookEventStore | None = None,
+    user_profile: FileBasedUserProfile | None = None,
 ) -> tuple[ProjectMemory, MonoLakeOrganizationMemory, ContextAssembler, FileBasedUserProfile]:
     """Build L2 memory components: project, org, context assembler, user profile."""
     from core.config import settings
@@ -732,7 +715,7 @@ def build_memory(
     organization_memory = MonoLakeOrganizationMemory(fixture_dir=fixture_dir)
 
     # Tier 0.5: User Profile
-    user_profile = ensure_user_profile()
+    user_profile = user_profile or ensure_user_profile()
 
     # C2: Project Journal — append-only execution history
     from core.memory.project_journal import ProjectJournal
@@ -763,36 +746,6 @@ def build_memory(
     )
     if isinstance(hooks, HookSystem):
         hooks.add_cleanup("context_artifact_store", context_artifact_store.close)
-
-    # Wire memory into memory tools via contextvars (P1 memory autonomy).
-    # PR-AUDIT-AB (2026-06-10) — set_default_session_store was the one
-    # sibling setter never called here: every memory_save with
-    # persistent=False wrote into a fresh throwaway InMemorySessionStore
-    # and still returned saved=True (fake success). The session_store
-    # built at bootstrap is the same instance ContextAssembler reads.
-    from core.tools.memory_tools import (
-        clear_memory_hooks,
-        set_default_session_store,
-        set_memory_hooks,
-        set_org_memory,
-        set_project_memory,
-    )
-
-    set_default_session_store(session_store)
-    set_project_memory(project_memory)
-    set_org_memory(organization_memory)
-    set_memory_hooks(hooks)
-    if isinstance(hooks, HookSystem):
-        hooks.add_owner_cleanup("memory_tool_hooks", clear_memory_hooks)
-
-    # Shared tool-handler HookSystem injection (PR-PRE10-ROUND2) — lets
-    # cross-layer tool handlers (e.g. HITL feedback in core.cli) persist events
-    # without bootstrap importing the CLI layer (Server-never-CLI contract).
-    from core.hooks.tool_hooks import clear_tool_hooks, set_tool_hooks
-
-    set_tool_hooks(hooks)
-    if isinstance(hooks, HookSystem):
-        hooks.add_owner_cleanup("shared_tool_hooks", clear_tool_hooks)
 
     return project_memory, organization_memory, context_assembler, user_profile
 
@@ -903,7 +856,7 @@ def build_tool_offload(
 ) -> Any:
     """Build P0 tool result offload store and wire cleanup on SESSION_END."""
     from core.config import settings
-    from core.orchestration.tool_offload import ToolResultOffloadStore, set_offload_store
+    from core.orchestration.tool_offload import ToolResultOffloadStore
 
     if settings.tool_offload_threshold <= 0:
         return None
@@ -913,17 +866,14 @@ def build_tool_offload(
         threshold=settings.tool_offload_threshold,
         ttl_hours=settings.tool_offload_ttl_hours,
     )
-    set_offload_store(store)
-
     if hooks:
 
         def _cleanup_offload(_event: Any, _data: Any) -> None:
             store.cleanup_session()
 
-        # The serve daemon wires offload twice on one bus (runtime bootstrap,
-        # then supervised services with its own session store). Last store
-        # wins for set_offload_store, so the cleanup hook must follow the
-        # same last-wins semantic instead of crashing the daemon at startup
+        # The serve daemon may build offload twice on one bus (runtime bootstrap,
+        # then supervised services with its own session store). The last store's
+        # cleanup hook replaces the earlier one instead of crashing the daemon
         # (EX_CONFIG regression after the hook-lifecycle unification, #2593).
         hooks.register(
             HookEvent.SESSION_ENDED,

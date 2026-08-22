@@ -42,7 +42,6 @@ from core.cli.session_state import _get_last_result as _get_last_result
 from core.cli.session_state import _get_readiness as _get_readiness
 from core.cli.session_state import _result_cache as _result_cache
 from core.cli.session_state import _ResultCache as _ResultCache
-from core.cli.session_state import _scheduler_service_ctx as _scheduler_service_ctx
 from core.cli.session_state import _set_last_result as _set_last_result
 from core.cli.session_state import _set_readiness as _set_readiness
 from core.cli.tool_handlers import (

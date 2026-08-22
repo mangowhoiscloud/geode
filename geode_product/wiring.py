@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -86,7 +87,9 @@ def register_scheduling(trigger_manager: Any, hooks: Any) -> None:
     )
 
 
-def build_runtime() -> Any:
+def build_runtime(
+    scheduler_callback: Callable[[str, str, bool, str], None] | None = None,
+) -> Any:
     """Build the gateway runtime with first-party feature contributions."""
     from core.runtime import GeodeRuntime
 
@@ -97,6 +100,7 @@ def build_runtime() -> Any:
         activity_sink_provider=current_activity_sink,
         feature_hook_registrar=register_hooks,
         scheduling_registrar=register_scheduling,
+        scheduler_callback=scheduler_callback,
     )
 
 

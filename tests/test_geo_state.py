@@ -3,7 +3,6 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
-from core.cli.session_state import set_current_loop
 from core.observability.session_timeline import SessionEventStore, SessionTimeline
 from geode_product.geo_state import GeoPhase, GeoStage, GeoStore
 from geode_product.slash_commands import build_geo_prompt
@@ -184,13 +183,15 @@ def test_geo_operator_slash_receipts_are_correlated_and_model_inaccessible(
         "core.cli.commands.skills.build_skill_prompt",
         lambda _registry, name, arguments="": f"{name}:{arguments}",
     )
-    set_current_loop(loop)
-    try:
-        assert build_geo_prompt("approve-live operator-1", skill_registry=None) == "geo:Audit"
-        assert store.advance("s-1", "live_observe").phase is GeoPhase.LIVE_OBSERVE
-        assert build_geo_prompt("preregister prereg-1", skill_registry=None) == "geo:Audit"
-    finally:
-        set_current_loop(None)
+    assert (
+        build_geo_prompt("approve-live operator-1", skill_registry=None, agentic_ref=loop)
+        == "geo:Audit"
+    )
+    assert store.advance("s-1", "live_observe").phase is GeoPhase.LIVE_OBSERVE
+    assert (
+        build_geo_prompt("preregister prereg-1", skill_registry=None, agentic_ref=loop)
+        == "geo:Audit"
+    )
 
     run = store.get("s-1")
     assert run is not None

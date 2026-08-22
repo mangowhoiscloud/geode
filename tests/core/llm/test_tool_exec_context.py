@@ -251,6 +251,19 @@ def test_safe_delegate_without_context_omits_kwarg() -> None:
     assert "_tool_context" not in captured
 
 
+def test_safe_delegate_reports_constructor_type_error_without_masking_it() -> None:
+    from core.tools.handlers.clarification import _safe_delegate
+
+    class _BrokenTool:
+        def __init__(self) -> None:
+            raise TypeError("dependency")
+
+    result = asyncio.run(_safe_delegate(_BrokenTool, {}))
+
+    assert result["error"] == "_BrokenTool requires: dependency"
+    assert result["clarification_needed"] is True
+
+
 # ---------------------------------------------------------------------------
 # 5. ToolCallProcessor builds ToolContext from constructor-injected fields
 # ---------------------------------------------------------------------------

@@ -22,9 +22,9 @@
       "diagnostic_scope": 7,
       "request_identity": 7,
       "request_local_mutable_state": 9,
-      "service_locator": 11
+      "service_locator": 0
     },
-    "count": 35,
+    "count": 24,
     "items": [
       {
         "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
@@ -163,63 +163,18 @@
       },
       {
         "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
-        "classification": "service_locator",
-        "context_name": "scheduler_service",
-        "has_default": true,
-        "implementation": "ContextVar",
-        "lifetime": "daemon process and copied IPC task contexts",
-        "line": 23,
-        "owner": "core.cli.typer_serve.run_serve",
-        "path": "core/cli/session_state.py",
-        "resetter": "none; remove through R4.2 constructor injection",
-        "setter": "core.cli.typer_serve.run_serve and core.server.ipc_server.poller",
-        "symbol": "_scheduler_service_ctx",
-        "teardown": "run_serve stops its scheduler but leaves the binding"
-      },
-      {
-        "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
         "classification": "request_local_mutable_state",
         "context_name": "user_task_graph",
         "has_default": true,
         "implementation": "ContextVar",
         "lifetime": "the long-lived caller task or process",
-        "line": 24,
+        "line": 23,
         "owner": "core.cli.session_state",
         "path": "core/cli/session_state.py",
         "resetter": "none in production; core.cli.session_state._reset_user_task_graph is test-only",
         "setter": "core.cli.session_state._get_user_task_graph",
         "symbol": "_user_task_graph_ctx",
         "teardown": "there is no production reset; task or process exit discards the context"
-      },
-      {
-        "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
-        "classification": "service_locator",
-        "context_name": "current_agentic_loop",
-        "has_default": true,
-        "implementation": "ContextVar",
-        "lifetime": "the caller task; gateway pollers reuse one task and overwrite the binding between sessions",
-        "line": 25,
-        "owner": "core.server.supervised.services.SharedServices",
-        "path": "core/cli/session_state.py",
-        "resetter": "none; remove through R4.2 narrow service injection",
-        "setter": "core.cli.session_state.set_current_loop",
-        "symbol": "_current_loop_ctx",
-        "teardown": "there is no reset; the last loop remains bound until overwrite or caller-task exit"
-      },
-      {
-        "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
-        "classification": "service_locator",
-        "context_name": "tool_hooks",
-        "has_default": true,
-        "implementation": "ContextVar",
-        "lifetime": "the runtime bootstrap context plus each propagated daemon/session task context",
-        "line": 19,
-        "owner": "core.wiring.bootstrap and propagated daemon/session tasks",
-        "path": "core/hooks/tool_hooks.py",
-        "resetter": "core.hooks.tool_hooks.clear_tool_hooks for the owner context; propagated contexts end with their task/thread",
-        "setter": "core.hooks.tool_hooks.set_tool_hooks via bootstrap and GeodeBootstrap.propagate_to_thread",
-        "symbol": "_tool_hooks_ctx",
-        "teardown": "HookSystem owner cleanup clears the matching owner-context binding; propagated bindings disappear when their task/thread context is discarded"
       },
       {
         "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
@@ -268,36 +223,6 @@
       },
       {
         "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
-        "classification": "service_locator",
-        "context_name": "calendar_port",
-        "has_default": true,
-        "implementation": "ContextVar",
-        "lifetime": "runtime process and copied request contexts",
-        "line": 100,
-        "owner": "core.wiring.adapters",
-        "path": "core/mcp/calendar_port.py",
-        "resetter": "core.mcp.calendar_port.set_calendar(None)",
-        "setter": "core.mcp.calendar_port.set_calendar",
-        "symbol": "_calendar_ctx",
-        "teardown": "no production clear; remove through R4.2 port injection"
-      },
-      {
-        "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
-        "classification": "service_locator",
-        "context_name": "notification_port",
-        "has_default": true,
-        "implementation": "ContextVar",
-        "lifetime": "runtime process and copied request contexts",
-        "line": 67,
-        "owner": "core.wiring.adapters",
-        "path": "core/mcp/notification_port.py",
-        "resetter": "core.wiring.adapters sets None when plugin configuration fails",
-        "setter": "core.mcp.notification_port.set_notification",
-        "symbol": "_notification_ctx",
-        "teardown": "plugin failure clears it; otherwise process exit discards the fallback"
-      },
-      {
-        "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
         "classification": "diagnostic_scope",
         "context_name": "geode_active_run_dir",
         "has_default": true,
@@ -343,21 +268,6 @@
       },
       {
         "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
-        "classification": "service_locator",
-        "context_name": "tool_offload_store",
-        "has_default": true,
-        "implementation": "ContextVar",
-        "lifetime": "the runtime or shared-service bootstrap context, shared across later sessions where inherited",
-        "line": 26,
-        "owner": "core.wiring.bootstrap.build_tool_offload",
-        "path": "core/orchestration/tool_offload.py",
-        "resetter": "none in production; remove through R4.2 execution-service injection",
-        "setter": "core.orchestration.tool_offload.set_offload_store",
-        "symbol": "_offload_store_ctx",
-        "teardown": "SESSION_ENDED deletes files but not the binding; gateway and IPC poller contexts do not inherit it"
-      },
-      {
-        "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
         "classification": "request_local_mutable_state",
         "context_name": "geode_runtime_audit_active",
         "has_default": true,
@@ -373,66 +283,6 @@
       },
       {
         "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
-        "classification": "service_locator",
-        "context_name": "default_session_store",
-        "has_default": true,
-        "implementation": "ContextVar",
-        "lifetime": "runtime process and copied request contexts",
-        "line": 31,
-        "owner": "core.wiring.bootstrap.build_memory",
-        "path": "core/tools/memory_tools.py",
-        "resetter": "none; remove through R4.2 persistence-service injection",
-        "setter": "core.tools.memory_tools.set_default_session_store",
-        "symbol": "_default_session_store_ctx",
-        "teardown": "runtime closes the store owner but leaves the binding"
-      },
-      {
-        "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
-        "classification": "service_locator",
-        "context_name": "project_memory_tools",
-        "has_default": true,
-        "implementation": "ContextVar",
-        "lifetime": "runtime process and copied request contexts",
-        "line": 34,
-        "owner": "core.wiring.bootstrap.build_memory",
-        "path": "core/tools/memory_tools.py",
-        "resetter": "core.tools.memory_tools.set_project_memory(None)",
-        "setter": "core.tools.memory_tools.set_project_memory",
-        "symbol": "_project_memory_ctx",
-        "teardown": "no production clear; remove through R4.2 persistence-service injection"
-      },
-      {
-        "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
-        "classification": "service_locator",
-        "context_name": "org_memory_tools",
-        "has_default": true,
-        "implementation": "ContextVar",
-        "lifetime": "runtime process and copied request contexts",
-        "line": 37,
-        "owner": "core.wiring.bootstrap.build_memory",
-        "path": "core/tools/memory_tools.py",
-        "resetter": "core.tools.memory_tools.set_org_memory(None)",
-        "setter": "core.tools.memory_tools.set_org_memory",
-        "symbol": "_org_memory_ctx",
-        "teardown": "no production clear; remove through R4.2 persistence-service injection"
-      },
-      {
-        "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
-        "classification": "service_locator",
-        "context_name": "memory_tools_hooks",
-        "has_default": true,
-        "implementation": "ContextVar",
-        "lifetime": "one runtime bootstrap context",
-        "line": 58,
-        "owner": "core.wiring.bootstrap.build_memory",
-        "path": "core/tools/memory_tools.py",
-        "resetter": "core.tools.memory_tools.clear_memory_hooks",
-        "setter": "core.tools.memory_tools.set_memory_hooks",
-        "symbol": "_hooks_ctx",
-        "teardown": "HookSystem owner cleanup clears the matching binding"
-      },
-      {
-        "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
         "classification": "cache",
         "context_name": "geode_tool_data_policies",
         "has_default": true,
@@ -445,21 +295,6 @@
         "setter": "core.tools.personal_data.set_bound_tool_data_policies",
         "symbol": "_safety_policies",
         "teardown": "the task context is discarded after the session"
-      },
-      {
-        "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
-        "classification": "service_locator",
-        "context_name": "user_profile_tools",
-        "has_default": true,
-        "implementation": "ContextVar",
-        "lifetime": "runtime process and copied request contexts",
-        "line": 23,
-        "owner": "core.wiring.bootstrap.ensure_user_profile",
-        "path": "core/tools/profile_tools.py",
-        "resetter": "core.tools.profile_tools.set_user_profile(None)",
-        "setter": "core.tools.profile_tools.set_user_profile",
-        "symbol": "_user_profile_ctx",
-        "teardown": "no production clear; remove through R4.2 persistence-service injection"
       },
       {
         "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
@@ -553,17 +388,17 @@
       }
     ],
     "lifecycle_source": "docs/architecture/context-var-lifecycles.json",
-    "service_locator_count": 11
+    "service_locator_count": 0
   },
   "coordinators": {
     "AgenticLoop": {
       "constructor_arg_count": 12,
-      "file_loc": 1111,
+      "file_loc": 1112,
       "method_count": 38,
       "path": "core/agent/loop/agent_loop.py"
     },
     "RuntimeCoreConfig": {
-      "field_count": 21,
+      "field_count": 6,
       "path": "core/runtime.py"
     },
     "SubAgentManager": {
@@ -669,10 +504,7 @@
           "core.agent.approval -> core.cli",
           "core.agent.loop.agent_loop -> core.cli.commands",
           "core.server.ipc_server.poller -> core.cli",
-          "core.server.ipc_server.poller -> core.cli.session_state",
-          "core.server.supervised.services -> core.cli.bootstrap",
-          "core.server.supervised.services -> core.cli.commands",
-          "core.server.supervised.services -> core.cli.session_state"
+          "core.server.supervised.services -> core.cli.commands"
         ],
         "name": "Server may host agent but never CLI"
       },
@@ -691,16 +523,16 @@
         "name": "Runtime tool handlers stay capability-neutral"
       }
     ],
-    "ignored_edge_count": 19
+    "ignored_edge_count": 16
   },
   "packages": {
     "core": {
-      "python_files": 400,
-      "python_loc": 119776
+      "python_files": 399,
+      "python_loc": 119754
     },
     "geode_product": {
       "python_files": 154,
-      "python_loc": 61204
+      "python_loc": 61217
     },
     "plugins": {
       "python_files": 29,
@@ -708,7 +540,7 @@
     },
     "tests": {
       "python_files": 685,
-      "python_loc": 183458
+      "python_loc": 183377
     }
   },
   "schema_version": 4,

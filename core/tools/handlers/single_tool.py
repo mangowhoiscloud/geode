@@ -69,11 +69,11 @@ def _build_data_handlers() -> UniqueEntries[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def _build_notification_handlers() -> UniqueEntries[str, Any]:
+def _build_notification_handlers(notification: Any = None) -> UniqueEntries[str, Any]:
     """Build notification tool handlers."""
     from core.tools.output_tools import SendNotificationTool
 
-    notification_tool = SendNotificationTool()
+    notification_tool = SendNotificationTool(notification)
 
     async def handle_send_notification(**kwargs: Any) -> dict[str, Any]:
         return await notification_tool.aexecute(**kwargs)
@@ -112,16 +112,13 @@ def _build_output_handlers() -> UniqueEntries[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def _build_offload_handlers() -> UniqueEntries[str, Any]:
+def _build_offload_handlers(store: Any = None) -> UniqueEntries[str, Any]:
     """Build recall_tool_result handler for retrieving offloaded tool results."""
 
     def handle_recall_tool_result(**kwargs: Any) -> dict[str, Any]:
-        from core.orchestration.tool_offload import get_offload_store
-
         ref_id = kwargs.get("ref_id", "")
         if not ref_id:
             return {"error": "ref_id is required"}
-        store = get_offload_store()
         if store is None:
             return {"error": "Tool offloading is not enabled in this session"}
         result: dict[str, Any] = store.recall(ref_id)
@@ -366,7 +363,10 @@ async def _run_batched_actions(harness: Any, kwargs: dict[str, Any]) -> dict[str
 # ---------------------------------------------------------------------------
 
 
-def _build_calendar_handlers() -> UniqueEntries[str, Any]:
+def _build_calendar_handlers(
+    calendar: Any = None,
+    bridge: Any = None,
+) -> UniqueEntries[str, Any]:
     """Build calendar tool handlers."""
     from core.tools.calendar_tools import (
         CalendarCreateEventTool,
@@ -374,9 +374,9 @@ def _build_calendar_handlers() -> UniqueEntries[str, Any]:
         CalendarSyncSchedulerTool,
     )
 
-    list_tool = CalendarListEventsTool()
-    create_tool = CalendarCreateEventTool()
-    sync_tool = CalendarSyncSchedulerTool()
+    list_tool = CalendarListEventsTool(calendar)
+    create_tool = CalendarCreateEventTool(calendar)
+    sync_tool = CalendarSyncSchedulerTool(bridge)
 
     async def handle_calendar_list_events(**kwargs: Any) -> dict[str, Any]:
         return await list_tool.aexecute(**kwargs)

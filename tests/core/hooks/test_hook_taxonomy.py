@@ -162,16 +162,12 @@ def test_dead_executor_fire_hook_stays_deleted() -> None:
 def test_thin_wrappers_delegate_to_dispatch() -> None:
     """The already-thin module wrappers keep routing through dispatch."""
     import core.cli as cli_module
-    from core.hooks import tool_hooks
     from core.llm.router import _hooks as router_hooks
-    from core.tools import memory_tools
     from geode_product.self_improving.loop import _hooks as sil_hooks
 
     for module, func_name in [
-        (memory_tools, "_fire_hook"),
         (router_hooks, "_fire_hook"),
         (sil_hooks, "_fire_hook"),
-        (tool_hooks, "fire_tool_hook"),
         (cli_module, "_fire_hook"),
     ]:
         source = inspect.getsource(getattr(module, func_name))

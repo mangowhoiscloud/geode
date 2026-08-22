@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+from dataclasses import fields
 from pathlib import Path
 from types import MappingProxyType
 from unittest.mock import MagicMock, patch
@@ -14,7 +16,16 @@ from core.observability.event_store import HookEventStore
 from core.orchestration.hot_reload import ConfigWatcher
 from core.orchestration.lane_queue import LaneQueue
 from core.orchestration.task_system import TaskGraph
-from core.runtime import GeodeRuntime
+from core.runtime import (
+    GeodeRuntime,
+    RuntimeAuthenticationConfig,
+    RuntimeCoreConfig,
+    RuntimeExecutionConfig,
+    RuntimeIdentityConfig,
+    RuntimeIntegrationConfig,
+    RuntimeLifecycleConfig,
+    RuntimePersistenceConfig,
+)
 from core.tools.policy import PolicyChain
 from core.tools.registry import ToolRegistry
 from core.wiring.bootstrap import build_hooks
@@ -32,6 +43,30 @@ pytestmark = pytest.mark.usefixtures("managed_geode_runtimes")
 
 
 class TestGeodeRuntimeCreate:
+    @pytest.mark.parametrize(
+        "group_type",
+        (
+            RuntimeExecutionConfig,
+            RuntimePersistenceConfig,
+            RuntimeLifecycleConfig,
+            RuntimeIntegrationConfig,
+            RuntimeAuthenticationConfig,
+            RuntimeIdentityConfig,
+        ),
+    )
+    def test_service_groups_stay_within_seven_fields(self, group_type: type) -> None:
+        assert len(fields(group_type)) <= 7
+
+    def test_runtime_config_contains_only_service_groups(self) -> None:
+        assert tuple(field.name for field in fields(RuntimeCoreConfig)) == (
+            "execution",
+            "persistence",
+            "lifecycle",
+            "integration",
+            "authentication",
+            "identity",
+        )
+
     def test_create_basic(self, tmp_path: Path):
         runtime = GeodeRuntime.create("demo", log_dir=tmp_path)
         assert runtime.subject_id == "demo"
@@ -44,6 +79,22 @@ class TestGeodeRuntimeCreate:
         assert isinstance(runtime.policy_chain, PolicyChain)
         assert isinstance(runtime.tool_registry, ToolRegistry)
         assert isinstance(runtime.event_store, HookEventStore)
+
+    def test_tool_service_views_preserve_injected_identity(self, tmp_path: Path) -> None:
+        runtime = GeodeRuntime.create("services", log_dir=tmp_path)
+
+        persistence = runtime.persistence_services
+        assert persistence.memory.session_store is runtime.session_store
+        assert persistence.memory.project_memory is runtime.project_memory
+        assert persistence.memory.organization_memory is runtime.organization_memory
+        assert persistence.memory.hooks is runtime.hooks
+        assert persistence.user_profile is runtime.user_profile
+        assert persistence.offload_store is runtime.offload_store
+
+        integrations = runtime.integration_services
+        assert integrations.calendar is runtime.calendar
+        assert integrations.notification is runtime.notification
+        assert integrations.calendar_bridge is runtime.calendar_bridge
 
     def test_create_custom_phase(self, tmp_path: Path):
         runtime = GeodeRuntime.create("Demo Subject", phase="scoring", log_dir=tmp_path)
@@ -223,6 +274,28 @@ class TestRuntimeToolRegistry:
         assert "generate_report" in runtime.tool_registry
         assert "export_json" in runtime.tool_registry
         assert "send_notification" in runtime.tool_registry
+
+    def test_registry_tools_use_runtime_owned_services(self, tmp_path: Path) -> None:
+        runtime = GeodeRuntime.create("registry-services", log_dir=tmp_path)
+
+        saved = asyncio.run(
+            runtime.tool_registry.aexecute(
+                "memory_save",
+                session_id="registry-session",
+                data={"answer": 42},
+            )
+        )
+        loaded = asyncio.run(
+            runtime.tool_registry.aexecute("memory_get", session_id="registry-session")
+        )
+
+        assert saved["result"]["saved"] is True
+        assert saved["result"]["ephemeral"] is False
+        assert loaded["result"]["found"] is True
+        assert loaded["result"]["data"] == {"answer": 42}
+        notification = runtime.tool_registry.get("send_notification")
+        assert notification is not None
+        assert notification._notification is runtime.notification
 
 
 class TestEventPruning:

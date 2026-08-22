@@ -65,11 +65,10 @@ geode serve (데몬)  ←  하나의 GeodeRuntime이 전부 소유`}</pre>
             </p>
             <p>
               배선 불변식 하나가 이 단계 전체를 지배합니다. 핸들러가 존재한다고
-              발화하지 않습니다. 훅 핸들러는 bootstrap에 등록되어야 하고,{" "}
-              <code>get_*()</code> ContextVar 액세서는 대응하는{" "}
-              <code>set_*()</code>가 있어야 합니다. poller 데몬 스레드는{" "}
-              <code>boot.propagate_to_thread()</code>로 ContextVar를 다시
-              주입받습니다(<code>core/cli/bootstrap.py</code>).
+              발화하지 않습니다. 훅 핸들러는 bootstrap에 등록되어야 하고,
+              프로세스 서비스는 그룹형 설정·생성자·<code>ToolContext</code>로
+              명시적으로 주입되어야 합니다. ContextVar는 요청 식별, 진단,
+              요청 로컬 상태와 캐시에만 사용합니다.
             </p>
 
             <h2>데몬이 호스팅하는 것</h2>
@@ -110,8 +109,8 @@ geode serve (데몬)  ←  하나의 GeodeRuntime이 전부 소유`}</pre>
                 </tr>
                 <tr>
                   <td>기능이 조용히 동작하지 않음</td>
-                  <td>핸들러 미등록 또는 ContextVar 미주입</td>
-                  <td>bootstrap 등록 여부를 먼저 봅니다. <code>core/wiring/bootstrap.py</code>의 <code>get_plugin_status()</code>가 플러그인별 등록 상태를 보고합니다.</td>
+                  <td>핸들러 미등록 또는 서비스 구성 누락</td>
+                  <td>bootstrap 등록과 composition root의 명시적 서비스 주입을 확인합니다. <code>core/wiring/bootstrap.py</code>의 <code>get_plugin_status()</code>가 플러그인별 등록 상태를 보고합니다.</td>
                 </tr>
               </tbody>
             </table>
@@ -181,10 +180,10 @@ geode serve (daemon)  ←  one GeodeRuntime owns everything`}</pre>
             <p>
               One wiring invariant rules this whole stage: a handler existing
               does not mean it fires. Hook handlers must register in bootstrap,
-              and every <code>get_*()</code> ContextVar accessor needs a
-              matching <code>set_*()</code>. Poller daemon threads re-inject
-              ContextVars via <code>boot.propagate_to_thread()</code>
-              (<code>core/cli/bootstrap.py</code>).
+              and process services must be injected explicitly through grouped
+              configuration, constructors, or <code>ToolContext</code>.
+              ContextVars are limited to request identity, diagnostics,
+              request-local state, and caches.
             </p>
 
             <h2>What the daemon hosts</h2>
@@ -226,8 +225,8 @@ geode serve (daemon)  ←  one GeodeRuntime owns everything`}</pre>
                 </tr>
                 <tr>
                   <td>A feature silently does nothing</td>
-                  <td>Handler not registered, or a ContextVar never set</td>
-                  <td>Check bootstrap registration first. <code>get_plugin_status()</code> in <code>core/wiring/bootstrap.py</code> reports per-plugin registration state.</td>
+                  <td>Handler not registered, or service composition missing</td>
+                  <td>Check bootstrap registration and explicit service injection at the composition root. <code>get_plugin_status()</code> in <code>core/wiring/bootstrap.py</code> reports per-plugin registration state.</td>
                 </tr>
               </tbody>
             </table>

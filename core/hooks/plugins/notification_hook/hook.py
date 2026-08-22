@@ -38,13 +38,12 @@ def _format_message(event: HookEvent, data: dict[str, Any]) -> str:
 def _make_notification_handler(
     channel: str,
     recipient: str,
+    notification: Any = None,
 ) -> Any:
     """Create a hook handler that sends notifications for mapped events."""
 
     async def handler(event: HookEvent, data: dict[str, Any]) -> None:
-        from core.mcp.notification_port import get_notification
-
-        adapter = get_notification()
+        adapter = notification
         if adapter is None or not await adapter.ais_available(channel):
             log.debug(
                 "Notification skipped for %s: no adapter for channel '%s'",
@@ -73,6 +72,7 @@ def register_notification_hooks(
     *,
     channel: str = "slack",
     recipient: str = "#geode-alerts",
+    notification: Any = None,
 ) -> None:
     """Register notification handlers for lifecycle events.
 
@@ -81,7 +81,7 @@ def register_notification_hooks(
         channel: Default notification channel ("slack", "discord", "telegram").
         recipient: Default recipient (channel name, chat ID, etc.).
     """
-    handler = _make_notification_handler(channel, recipient)
+    handler = _make_notification_handler(channel, recipient, notification)
 
     for event in _SEVERITY_MAP:
         hooks.register(

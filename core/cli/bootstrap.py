@@ -1,19 +1,17 @@
 """Unified bootstrap for REPL and serve modes.
 
 Single initialization path ensures both modes get identical:
-- Memory contextvars (ProjectMemory, OrgMemory)
 - Readiness check
 - MCP manager
 - Skills
 - Tool handlers
 
 The returned GeodeBootstrap carries all initialized components
-and provides propagate_to_thread() for daemon thread ContextVar injection.
+and propagates only request-local CLI readiness to daemon threads.
 """
 
 from __future__ import annotations
 
-import contextvars
 import inspect
 import logging
 from collections.abc import Callable, Mapping
@@ -54,43 +52,12 @@ class GeodeBootstrap:
     readiness: Any = None
     hook_system: Any = None
 
-    # Snapshot of ContextVars for thread propagation
-    _context: contextvars.Context = field(default_factory=contextvars.copy_context)
-
     def propagate_to_thread(self) -> None:
-        """Re-set ContextVars in current (daemon) thread.
-
-        Python ``contextvars`` do not automatically inherit across threads.
-        Call this at the start of ``_gateway_processor`` or any function
-        running in a non-main thread so memory and tool context stay wired.
-        """
-        from core.memory.organization import MonoLakeOrganizationMemory
-        from core.memory.project import ProjectMemory
-        from core.tools.memory_tools import set_org_memory, set_project_memory
-
-        set_project_memory(ProjectMemory())
-        set_org_memory(MonoLakeOrganizationMemory())
-
-        # PR-PRE10-ROUND2: re-inject the tool-handler HookSystem so ctx-fired
-        # tool hooks (HITL RESULT_FEEDBACK) persist from daemon/IPC threads,
-        # which don't inherit ContextVars from the main thread.
-        if self.hook_system is not None:
-            from core.hooks.tool_hooks import set_tool_hooks
-
-            set_tool_hooks(self.hook_system)
-
+        """Re-set request-local CLI readiness in the current thread."""
         if self.readiness is not None:
             from core.cli import _set_readiness
 
             _set_readiness(self.readiness)
-
-        # User profile (Tier 0.5)
-        try:
-            from core.wiring.bootstrap import ensure_user_profile
-
-            ensure_user_profile()
-        except Exception:
-            log.debug("User profile propagation skipped", exc_info=True)
 
 
 def load_daemon_env() -> None:
@@ -147,32 +114,9 @@ def load_daemon_env() -> None:
 
 
 def setup_contextvars(*, load_env: bool = False) -> None:
-    """Initialize ContextVars only (memory, profile, env).
-
-    No resource creation. Call before GeodeRuntime.create() so that
-    memory ContextVars are available to all layers.
-    """
+    """Load daemon environment before explicit runtime composition."""
     if load_env:
         load_daemon_env()
-
-    # 1. Memory contextvars
-    try:
-        from core.memory.organization import MonoLakeOrganizationMemory
-        from core.memory.project import ProjectMemory
-        from core.tools.memory_tools import set_org_memory, set_project_memory
-
-        set_project_memory(ProjectMemory())
-        set_org_memory(MonoLakeOrganizationMemory())
-    except Exception:
-        log.debug("Memory context skipped", exc_info=True)
-
-    # 2.5. User Profile (Tier 0.5) — wire into profile tools via ContextVar
-    try:
-        from core.wiring.bootstrap import ensure_user_profile
-
-        ensure_user_profile()
-    except Exception:
-        log.debug("User profile context skipped", exc_info=True)
 
 
 def bootstrap_geode(
@@ -180,7 +124,7 @@ def bootstrap_geode(
     verbose: bool = False,
     load_env: bool = False,
 ) -> GeodeBootstrap:
-    """REPL bootstrap — ContextVars + MCP + Skills + Handlers.
+    """REPL bootstrap — readiness plus MCP, skills, and handlers.
 
     For serve mode, use ``setup_contextvars()`` + ``GeodeRuntime.create()``
     directly instead.
@@ -232,7 +176,7 @@ async def arun_agentic_oneshot(
     *,
     quiet: bool = True,
     time_budget_s: float = 60.0,
-    tool_plan_builder: Callable[[], tuple[BoundToolPlan, Mapping[str, Any]]] | None = None,
+    tool_plan_builder: Callable[..., tuple[BoundToolPlan, Mapping[str, Any]]] | None = None,
     policy_sources: PolicySourceBundle | None = None,
     middleware_builder: Callable[..., MiddlewareRegistry] | None = None,
     activity_sink_provider: RunEventSinkProvider | None = None,
@@ -248,7 +192,6 @@ async def arun_agentic_oneshot(
     """
     if tool_plan_builder is None:
         raise RuntimeError("agentic one-shot requires an injected bound tool-plan builder")
-    bound_tool_plan, transient_handlers = tool_plan_builder()
 
     from core.agent.conversation import ConversationContext
     from core.agent.loop import AgenticLoop, AgenticLoopConfig
@@ -269,7 +212,26 @@ async def arun_agentic_oneshot(
     # registered adapters are skipped.
     resolved_policy_sources = EMPTY_POLICY_SOURCES if policy_sources is None else policy_sources
     bootstrap_builtins(policy_sources=resolved_policy_sources)
-    ensure_user_profile()
+    user_profile = ensure_user_profile()
+    try:
+        accepts_persistence = any(
+            parameter.kind is inspect.Parameter.VAR_KEYWORD
+            or (
+                parameter.name == "persistence"
+                and parameter.kind is not inspect.Parameter.POSITIONAL_ONLY
+            )
+            for parameter in inspect.signature(tool_plan_builder).parameters.values()
+        )
+    except (TypeError, ValueError):
+        accepts_persistence = False
+    if accepts_persistence:
+        from core.tools.handlers import ToolPersistenceServices
+
+        bound_tool_plan, transient_handlers = tool_plan_builder(
+            persistence=ToolPersistenceServices(user_profile=user_profile)
+        )
+    else:
+        bound_tool_plan, transient_handlers = tool_plan_builder()
 
     from core.agent.loop._tool_factory import project_bound_tool_plan
     from core.llm.adapters._source_inference import infer_source
@@ -329,7 +291,11 @@ async def arun_agentic_oneshot(
     loop = AgenticLoop(
         conversation,
         executor,
-        config=AgenticLoopConfig(time_budget_s=time_budget_s, max_rounds=0),
+        config=AgenticLoopConfig(
+            time_budget_s=time_budget_s,
+            max_rounds=0,
+            user_profile=user_profile,
+        ),
         model=_stk_settings.model,
         provider=provider,
         quiet=quiet,
@@ -357,7 +323,7 @@ def run_agentic_oneshot(
     *,
     quiet: bool = True,
     time_budget_s: float = 60.0,
-    tool_plan_builder: Callable[[], tuple[BoundToolPlan, Mapping[str, Any]]] | None = None,
+    tool_plan_builder: Callable[..., tuple[BoundToolPlan, Mapping[str, Any]]] | None = None,
     policy_sources: PolicySourceBundle | None = None,
     middleware_builder: Callable[..., MiddlewareRegistry] | None = None,
     activity_sink_provider: RunEventSinkProvider | None = None,

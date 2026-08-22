@@ -3,12 +3,11 @@
 Defines the contract for reading/writing calendar events from external
 calendar services (Google Calendar, Apple Calendar via CalDAV).
 
-Injection is managed via contextvars.
+The runtime composition root injects implementations into the tools that use them.
 """
 
 from __future__ import annotations
 
-from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Protocol, runtime_checkable
@@ -91,20 +90,3 @@ class CalendarPort(Protocol):
     async def alist_calendars(self) -> list[str]:
         """Return available calendar names."""
         ...
-
-
-# ---------------------------------------------------------------------------
-# contextvars injection
-# ---------------------------------------------------------------------------
-
-_calendar_ctx: ContextVar[CalendarPort | None] = ContextVar("calendar_port", default=None)
-
-
-def set_calendar(adapter: CalendarPort | None) -> None:
-    """Set the active calendar adapter for the current context."""
-    _calendar_ctx.set(adapter)
-
-
-def get_calendar() -> CalendarPort | None:
-    """Get the active calendar adapter, or None if not set."""
-    return _calendar_ctx.get()
