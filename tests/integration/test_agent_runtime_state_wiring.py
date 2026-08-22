@@ -17,7 +17,7 @@ Coverage map:
   ``_final_hook_payloads`` adds the runtime-state keys with the expected
   values across REPL / sub-agent / no-orchestrator paths.
 * :class:`TestSubagentCompletedPayloadEnrichment` — verifies
-  ``SubAgent._emit_hook`` populates ``component`` + ``status`` on
+  ``SubagentAnnouncements.emit_runtime`` populates ``component`` + ``status`` on
   SUBAGENT_COMPLETED.
 * :class:`TestBootstrapHandlerWiring` — drives the actual
   ``build_hooks()`` factory then triggers SESSION_ENDED /
@@ -132,7 +132,7 @@ class TestSessionEndedPayloadEnrichment:
 
 
 class TestSubagentCompletedPayloadEnrichment:
-    """``SubAgent._emit_hook`` must add ``component`` + ``status`` to
+    """``SubagentAnnouncements.emit_runtime`` must add ``component`` + ``status`` to
     SUBAGENT_COMPLETED so the writer can persist the right row."""
 
     def test_completed_carries_component_and_status(self) -> None:
@@ -157,7 +157,9 @@ class TestSubagentCompletedPayloadEnrichment:
             success=True,
             output={"summary": "done"},
         )
-        asyncio.run(sub._emit_hook(HookEvent.SUBAGENT_COMPLETED, task, sub_result=result))
+        asyncio.run(
+            sub._announcements.emit_runtime(HookEvent.SUBAGENT_COMPLETED, task, result=result)
+        )
 
         assert len(captured) == 1
         assert captured[0]["component"] == "agentic_loop"
@@ -182,10 +184,10 @@ class TestSubagentCompletedPayloadEnrichment:
         task = SubTask(task_id="t-fail", task_type="analyze", description="hi")
         result = SubResult(task_id="t-fail", description="hi", success=False, output={})
         asyncio.run(
-            sub._emit_hook(
+            sub._announcements.emit_runtime(
                 HookEvent.SUBAGENT_FAILED,
                 task,
-                sub_result=result,
+                result=result,
                 error="boom",
             )
         )
@@ -214,7 +216,7 @@ class TestSubagentCompletedPayloadEnrichment:
 
         sub = SubAgentManager(IsolatedRunner(), hooks=hooks)
         task = SubTask(task_id="t-start", task_type="analyze", description="hi")
-        asyncio.run(sub._emit_hook(HookEvent.SUBAGENT_STARTED, task))
+        asyncio.run(sub._announcements.emit_runtime(HookEvent.SUBAGENT_STARTED, task))
 
         assert len(captured) == 1
         assert "status" not in captured[0]

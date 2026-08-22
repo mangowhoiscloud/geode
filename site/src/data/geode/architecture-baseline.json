@@ -237,8 +237,8 @@
     },
     "SubAgentManager": {
       "constructor_arg_count": 18,
-      "file_loc": 1461,
-      "method_count": 24,
+      "file_loc": 811,
+      "method_count": 17,
       "path": "core/agent/sub_agent.py"
     }
   },
@@ -364,8 +364,8 @@
   },
   "packages": {
     "core": {
-      "python_files": 396,
-      "python_loc": 118940
+      "python_files": 398,
+      "python_loc": 118778
     },
     "geode_product": {
       "python_files": 153,
@@ -376,8 +376,8 @@
       "python_loc": 193
     },
     "tests": {
-      "python_files": 676,
-      "python_loc": 180446
+      "python_files": 677,
+      "python_loc": 180468
     }
   },
   "schema_version": 3,

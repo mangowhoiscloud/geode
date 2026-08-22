@@ -1952,8 +1952,7 @@ class TestSubAgentEdgeCases:
 
     def test_malformed_json_output_fallback(self) -> None:
         """Verify graceful fallback when isolation output is not valid JSON."""
-        manager = SubAgentManager.__new__(SubAgentManager)
-        manager._timeout_s = 10.0
+        manager = SubAgentManager(IsolatedRunner(), timeout_s=10)
 
         # Simulate an IsolationResult with non-JSON output
         isolation = MagicMock()
@@ -1962,7 +1961,7 @@ class TestSubAgentEdgeCases:
         isolation.duration_ms = 50.0
 
         task = SubTask("t1", "Malformed test", "analyze", {})
-        result = manager._to_sub_result(task, isolation)
+        result = manager._protocol.to_sub_result(task, isolation)
 
         assert result.success is True
         assert result.output == {"raw": "not valid json {{"}

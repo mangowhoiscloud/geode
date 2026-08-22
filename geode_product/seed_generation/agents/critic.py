@@ -35,7 +35,7 @@ P-checklist application (cycle-skill SKILL.md):
 Wiring history
 ==============
 
-- **S2-wire (RESOLVED)**: ``SubAgentManager._build_worker_request``
+- **S2-wire (RESOLVED)**: ``SubagentProtocol.build_worker_request``
   resolves ``SubTask.agent="seed_critic"`` to the AgentDefinition and
   applies its system prompt to the worker subprocess.
 """

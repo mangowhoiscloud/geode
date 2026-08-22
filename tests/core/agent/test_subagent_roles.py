@@ -203,7 +203,7 @@ def _role_task(role: str, task_id: str = "t1") -> SubTask:
 
 class TestWorkerRequestRoleWiring:
     def test_role_narrows_denied_tools(self) -> None:
-        req = _manager()._build_worker_request(_role_task("repo_researcher"))
+        req = _manager()._protocol.build_worker_request(_role_task("repo_researcher"))
         denied = set(req.denied_tools)
         assert "run_bash" in denied
         assert "write_file" in denied
@@ -214,27 +214,27 @@ class TestWorkerRequestRoleWiring:
     def test_role_supplies_allowlist_when_no_agent_toolkit(self) -> None:
         # Without this, filter_handlers Tier 3 applies the minimal
         # ``_default`` toolkit and strips role tools (verifier's run_bash).
-        req = _manager()._build_worker_request(_role_task("verifier"))
+        req = _manager()._protocol.build_worker_request(_role_task("verifier"))
         assert req.agent_allowed_tools == ["run_bash"]
 
     def test_role_appends_schema_line_to_prompt(self) -> None:
-        req = _manager()._build_worker_request(_role_task("repo_researcher"))
+        req = _manager()._protocol.build_worker_request(_role_task("repo_researcher"))
         assert req.description.startswith("find the retry logic")
         assert "ONLY a JSON object" in req.description
         assert '"findings"' in req.description
 
     def test_unknown_role_passthrough_default_surface(self) -> None:
-        baseline = _manager()._build_worker_request(
+        baseline = _manager()._protocol.build_worker_request(
             SubTask(task_id="t0", description="find the retry logic", task_type="analyze")
         )
-        req = _manager()._build_worker_request(_role_task("no_such_role"))
+        req = _manager()._protocol.build_worker_request(_role_task("no_such_role"))
         # Unknown role = current default behaviour unchanged.
         assert set(req.denied_tools) == set(baseline.denied_tools)
         assert req.agent_allowed_tools == baseline.agent_allowed_tools
         assert req.description == baseline.description
 
     def test_no_role_leaves_legacy_denied_set(self) -> None:
-        req = _manager()._build_worker_request(
+        req = _manager()._protocol.build_worker_request(
             SubTask(task_id="t0", description="d", task_type="analyze")
         )
         assert set(req.denied_tools) == SUBAGENT_DENIED_TOOLS
@@ -247,7 +247,7 @@ class TestParseSiteValidation:
         isolation = IsolationResult(
             session_id="s1", success=True, output=json.dumps(_VALID_FINDINGS)
         )
-        result = mgr._to_sub_result(_role_task("repo_researcher"), isolation)
+        result = mgr._protocol.to_sub_result(_role_task("repo_researcher"), isolation)
         assert result.success is True
         assert result.output["validated"] is True
         assert result.output["data"] == _VALID_FINDINGS
@@ -259,13 +259,13 @@ class TestParseSiteValidation:
             success=True,
             output="prose first\n```json\n" + json.dumps(_VALID_FINDINGS) + "\n```",
         )
-        result = mgr._to_sub_result(_role_task("repo_researcher"), isolation)
+        result = mgr._protocol.to_sub_result(_role_task("repo_researcher"), isolation)
         assert result.output["validated"] is True
 
     def test_garbage_role_output_is_structured_error_not_raise(self) -> None:
         mgr = _manager()
         isolation = IsolationResult(session_id="s1", success=True, output="total garbage {not json")
-        result = mgr._to_sub_result(_role_task("repo_researcher"), isolation)
+        result = mgr._protocol.to_sub_result(_role_task("repo_researcher"), isolation)
         # No exception reached us; contract failure is explicit and observable.
         assert result.success is False
         assert result.output["validated"] is False
@@ -275,14 +275,14 @@ class TestParseSiteValidation:
     def test_unknown_role_keeps_legacy_parse(self) -> None:
         mgr = _manager()
         isolation = IsolationResult(session_id="s1", success=True, output='{"a": 1}')
-        result = mgr._to_sub_result(_role_task("no_such_role"), isolation)
+        result = mgr._protocol.to_sub_result(_role_task("no_such_role"), isolation)
         assert result.output == {"a": 1}
         assert "validated" not in result.output
 
     def test_no_role_keeps_legacy_raw_fallback(self) -> None:
         mgr = _manager()
         isolation = IsolationResult(session_id="s1", success=True, output="plain prose")
-        result = mgr._to_sub_result(
+        result = mgr._protocol.to_sub_result(
             SubTask(task_id="t1", description="d", task_type="analyze"), isolation
         )
         assert result.output == {"raw": "plain prose"}
@@ -290,7 +290,7 @@ class TestParseSiteValidation:
     def test_failed_isolation_unaffected_by_role(self) -> None:
         mgr = _manager()
         isolation = IsolationResult(session_id="s1", success=False, error="boom")
-        result = mgr._to_sub_result(_role_task("repo_researcher"), isolation)
+        result = mgr._protocol.to_sub_result(_role_task("repo_researcher"), isolation)
         assert result.success is False
         assert result.error == "boom"
 

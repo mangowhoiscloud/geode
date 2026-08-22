@@ -86,7 +86,7 @@ class WorkerRequest:
     denied_tools: list[str] = field(default_factory=list)
     # "" = inherit the parent's effective model (resolved from settings.model
     # in ``_run_agentic``). The production spawn always sets these explicitly
-    # (sub_agent.py ``_build_worker_request``); the empty sentinel keeps a
+    # (``SubagentProtocol.build_worker_request``); the empty sentinel keeps a
     # directly-constructed request from pinning a now-stale model literal —
     # mirrors the ``time_budget_s = 0.0 (= inherit)`` convention below.
     model: str = ""
@@ -858,7 +858,7 @@ def _needs_schema_retry(
     # Local import — keep core/agent/worker.py free of a hard sub_agent
     # dependency at module import time (worker.py is the IPC entry point;
     # we want it to bootstrap with the minimum import surface).
-    from core.agent.sub_agent import _last_balanced_json_object
+    from core.agent.subagent_protocol import _last_balanced_json_object
 
     candidate = _last_balanced_json_object(text)
     if candidate is None:
