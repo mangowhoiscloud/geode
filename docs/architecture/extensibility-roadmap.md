@@ -226,6 +226,7 @@ normal review and CI; implementations start only after the claim merges.
 | Closure package | GAP IDs | Owner/session | Implementation branch | Claim evidence | Claimed at (UTC) |
 |---|---|---|---|---|---|
 | R8.3 | REL-004 | `session=codex-root task=r8-3-publication-grace-evidence` | `feature/r8-3-publication-grace-evidence` | Readiness [#3039](https://github.com/mangowhoiscloud/geode/pull/3039); v1.0.23 GitHub/PyPI parity and candidate interval re-audited | `2026-08-20T07:41:19Z` |
+| R5.2 | LLM-002 | `session=codex-root task=r5-2-scoped-discovery` | `feature/r5-2-scoped-discovery` | Readiness and dependency reconciliation [#3098](https://github.com/mangowhoiscloud/geode/pull/3098) | `2026-08-23T00:48:43Z` |
 
 ## 1. Program objective
 
@@ -534,7 +535,7 @@ and closure evidence are appended in §10.
 | DI-003 | `MISFIT` | Downstream modules obtain injectable services through globals and CLI modules | Constructor/factory injection owns services; allowed ambient context is documented and tested | R4.2 | DI-001, DI-002 | `IN_DEVELOP` |
 | DI-004 | `MISFIT` | `MCPServerManager` combines config, discovery, connection, call, trace/persistence, and lifecycle | Separate config catalog, connection pool, invoker, and persistence collaborators preserve public behavior | R4.3 | DI-002 | `IN_DEVELOP` |
 | LLM-001 | `MISFIT` | `LLMAdapter` documentation calls the contract minimal but requires streaming and introspection methods | Minimal completion protocol plus optional capability protocols; no empty stubs required | R5.1 | DI-002 | `IN_DEVELOP` |
-| LLM-002 | `PARTIAL` | Eight built-ins use a mutable registry with broad bootstrap lifetime | Built-in plus entry-point discovery yields immutable session snapshots with generation and collision policy | R5.2 | LLM-001, BND-001 | `READY` |
+| LLM-002 | `PARTIAL` | Eight built-ins use a mutable registry with broad bootstrap lifetime | Built-in plus entry-point discovery yields immutable session snapshots with generation and collision policy | R5.2 | LLM-001, BND-001 | `IN_PROGRESS` |
 | LLM-003 | `PARTIAL` | Provider identity, credential source, transport, and adapter selection overlap | Provider profile, credential route, and transport are separate composable records | R5.3 | LLM-001, LLM-002 | `OPEN` |
 | LLM-004 | `PARTIAL` | Interactive and autonomous LLM paths share taxonomy but retain multiple retry/failover implementations | Explicit `RetryPolicy` preserves intentional differences on one classification/telemetry substrate | R5.4 | LLM-003 | `OPEN` |
 | PROTO-001 | `MISFIT` | Internal `HookEvent` taxonomy can leak into persistence/IPC expectations | Public activity/event projections are separate from internal dispatch events | R6.1 | LOOP-002, DI-002 | `READY` |
@@ -2198,20 +2199,18 @@ route identity plus `acomplete`; streaming and operator introspection are
 independent structural capabilities, unsupported quota stubs are gone, and
 provider wire behavior is unchanged.
 
-R5.2 (`LLM-002`) is `READY` after a whole-package re-audit against
-`origin/develop@7e95c9f42abd77d17bca79b8398105a9c6cf0c99`. LLM-001 and BND-001 are
-`IN_DEVELOP`. The current adapter registry remains a process-global mutable
-dictionary with broad bootstrap lifetime: built-ins instantiate directly into
-that global map, supported entry-point discovery is absent, sessions do not
-freeze an immutable registry generation, and replacement records no origin,
-priority, or trust decision. R5.2 owns explicit built-in and supported
+R5.2 (`LLM-002`) is `IN_PROGRESS` under the active claim recorded after
+readiness and dependency reconciliation
+[#3098](https://github.com/mangowhoiscloud/geode/pull/3098). Implementation may
+start only after this claim PR merges and a fresh worktree is allocated from
+the updated `origin/develop`. R5.2 owns explicit built-in and supported
 entry-point discovery, fail-loud collision/override evidence, and immutable
-generation-bound snapshots for new sessions only. It authorizes no R5.3
+generation-bound registry snapshots for new sessions only. Existing sessions
+must retain their captured generation. It authorizes no R5.3
 provider-profile/transport or R5.4 retry/failover work.
 
-R5.2 is the earliest `READY`, unclaimed package in master order. R6.1
-(`PROTO-001`, `PROTO-002`) also remains `READY` and unclaimed behind it. Each
-requires a separate serialized claim before implementation.
+R6.1 (`PROTO-001`, `PROTO-002`) remains the earliest `READY`, unclaimed package
+behind R5.2 and requires its own serialized claim before implementation.
 
 R9.1 (`CODE-001`) was already dependency-satisfied and remains `OPEN` pending
 its own serialized whole-package readiness transaction later in master order.
