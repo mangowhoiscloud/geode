@@ -226,6 +226,7 @@ normal review and CI; implementations start only after the claim merges.
 | Closure package | GAP IDs | Owner/session | Implementation branch | Claim evidence | Claimed at (UTC) |
 |---|---|---|---|---|---|
 | R8.3 | REL-004 | `session=codex-root task=r8-3-publication-grace-evidence` | `feature/r8-3-publication-grace-evidence` | Readiness [#3039](https://github.com/mangowhoiscloud/geode/pull/3039); v1.0.23 GitHub/PyPI parity and candidate interval re-audited | `2026-08-20T07:41:19Z` |
+| R7.3 | VER-004 | `session=codex-root task=r7-3-architecture-performance` | `feature/r7-3-architecture-performance` | Whole-package performance and behavior baseline readiness [#3120](https://github.com/mangowhoiscloud/geode/pull/3120) | `2026-08-23T17:29:51Z` |
 
 ## 1. Program objective
 
@@ -547,7 +548,7 @@ and closure evidence are appended in §10.
 | VER-001 | `PARTIAL` | Quality gates pass but lack core-only, reverse-import, exception-budget, and tool-plan drift tests | All architecture gates in §9 run in CI and locally | R7.1 | BND-003, BND-004, CAP-005, LOOP-004, DI-003, LLM-002, PROTO-002, GOV-004, VER-003 | `IN_DEVELOP` |
 | VER-002 | `ABSENT` | No contract suite measures how many central edits each extension type requires | Six extension scenarios in §8 pass without forbidden edits | R7.2 | CAP-006, LLM-002, BND-004 | `IN_DEVELOP` |
 | VER-003 | `PARTIAL` | Public/internal metric prose drifts from executable counts | `sync-stats` or one shared generator updates site, AGENTS facts, and roadmap baseline; check mode is green | R0.2 | GOV-001 | `DONE` |
-| VER-004 | `PARTIAL` | Cold-start and runtime metrics exist, but refactors lack one architecture regression baseline | Startup, first-turn, tool-plan build, memory, and event-write budgets are pinned and non-regressing | R7.3 | CAP-005, LOOP-003, DI-004, LLM-004, PROTO-002, STORE-002 | `READY` |
+| VER-004 | `PARTIAL` | Cold-start and runtime metrics exist, but refactors lack one architecture regression baseline | Startup, first-turn, tool-plan build, memory, and event-write budgets are pinned and non-regressing | R7.3 | CAP-005, LOOP-003, DI-004, LLM-004, PROTO-002, STORE-002 | `IN_PROGRESS` |
 | BND-005 | `MISFIT` | Generic agent/provider/observability consumers import self-improving transcript, SoT-resolution, and prompt-injection helpers | Neutral policy snapshot/source, context-contribution, run identity, and activity-sink contracts replace every classified-kernel import of a self-improving helper without changing runtime behavior | R1.4 | BND-001 | `IN_DEVELOP` |
 | BND-006 | `MISFIT` | `core/self_improving` contains 39 Python files and 16,159 LOC of opt-in campaign, Petri/seed orchestration, mutation, gate, CLI/MCP, scheduler, and state policy | One cohesive first-party bundled feature owns the control plane outside the kernel; outer composition wires it, classified kernel modules import it zero times outside the exact forwarding-facade allowlist, a retirement GAP is registered before implementation, and v1.0 commands/imports/config/state behavior pass compatibility and installed-wheel tests | R1.5 | BND-002, BND-005 | `IN_DEVELOP` |
 | REL-001 | `MISFIT` | PyPI and GitHub Releases still publish v1.0.0, while repository metadata and the changelog declare an untagged, unpublished v1.1.0; the operator selected v1.0.1 as the next public release | Wheel, sdist, CLI, daemon, site SOT, changelog, tag, GitHub release, and PyPI all report v1.0.1 with artifact-hash parity and no rewritten v1.0.0 evidence | R1.6 | BND-003, BND-006, GOV-004 | `SUPERSEDED` |
@@ -2274,20 +2275,18 @@ the extension without patching forbidden central files or adding another
 runtime registry. R7.2 remains ineligible for `DONE` until the final R7.4
 closure audit verifies the cross-package change-surface budget on `main`.
 
-R7.3 (`VER-004`) is the sole unclaimed `READY` package after a whole-package
-re-audit against
-`origin/develop@2632ae444364308d3cef0c6aeb4bd46506c9142b`. CAP-005,
-LOOP-003, DI-004, LLM-004, and PROTO-002 are `IN_DEVELOP`; STORE-002 is
-`DONE`. Current latency and behavior characterization is distributed across
-subsystem tests and observability records, but no single architecture
-performance baseline pins import/cold-start, runtime lifecycle, provider-free
-first turn, tool-plan build/refresh, tool dispatch, MCP first/warm call,
-session/event persistence, and memory/descriptor size. R7.3 owns that bounded
-baseline, non-regression gate, and the termination/retry/approval/Google
-consent/storage/protocol characterization matrix. It authorizes no provider
-network calls, benchmark-score claims, runtime feature redesign, or averaged
-result that hides a regressed metric. A separate claim transaction is required
-before implementation.
+R7.3 (`VER-004`) is `IN_PROGRESS` under the active claim for
+`feature/r7-3-architecture-performance`, selected from the whole-package
+readiness [#3120](https://github.com/mangowhoiscloud/geode/pull/3120) on
+`origin/develop@341084c7e50713557db2a817f63c3045a7c7008a`. It owns one
+bounded, provider-network-free performance baseline and CI non-regression gate
+for import/cold-start, runtime lifecycle, first turn, tool-plan build/refresh,
+tool dispatch, MCP first/warm call, session/event persistence, and
+memory/descriptor size, plus the existing behavior-characterization matrix.
+Each metric must fail independently; averaging cannot hide a regression. The
+implementation introduces no benchmark-score claim or runtime feature
+redesign. Work begins only after this claim merges and a fresh worktree is
+allocated from the updated `origin/develop`.
 
 R9.1 (`CODE-001`) was already dependency-satisfied but is later in master
 order and remains `OPEN` for its own serialized readiness transaction.
