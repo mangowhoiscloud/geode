@@ -27,21 +27,45 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
         f"GEO-0{root}.{suffix}" for root in range(1, 7) for suffix in ("root", "p1", "p2", "p3")
     ]
     frozen_at = "2026-08-23T00:00:00Z"
+    approval_path = tmp_path / "approval.json"
+    _write_json(
+        approval_path,
+        {
+            "schema_id": "geode.geo-live-approval@1",
+            "schema_version": 1,
+            "approval_id": "operator-approval-001",
+            "run_id": "geo-quality-test",
+            "operator": "test-operator",
+            "approved_at": "2026-08-22T23:59:00Z",
+            "engine": "example-search",
+            "provider": "example",
+            "credential_source": "subscription",
+            "model": "example-model",
+            "locale": "ko-KR",
+            "account_state": "fresh-session-history-disabled",
+            "repetitions": 5,
+            "requested_result_limit": 10,
+        },
+    )
     workload_path = tmp_path / "workload.json"
     workload = {
         "schema_id": "geode.geo-workload@1",
         "schema_version": 1,
         "run_id": "geo-quality-test",
         "profile": "geo-visibility-v1",
-        "observation_mode": "offline",
         "frozen_at": frozen_at,
         "engine": "example-search",
+        "provider": "example",
+        "credential_source": "subscription",
         "model": "example-model",
         "locale": "ko-KR",
         "account_state": "fresh-session-history-disabled",
-        "repetitions": 1,
+        "repetitions": 5,
         "requested_result_limit": 10,
-        "live_approval_receipt": None,
+        "live_approval_receipt": {
+            "path": approval_path.name,
+            "sha256": _sha256(approval_path),
+        },
         "target_prefixes": ["https://mangowhoiscloud.github.io/geode"],
         "items": [
             {
@@ -60,27 +84,15 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
     target = "https://mangowhoiscloud.github.io/geode/docs/"
     other = "https://example.com/reference"
     for index, workload_id in enumerate(workload_ids):
-        observation_id = f"obs-{index + 1:02d}"
-        query = workload["items"][index]["query"]
-        retrieval = [{"url": target if index % 2 == 0 else other, "rank": 1}]
-        target_cited = index < 8
-        citations = [{"url": target, "visible_rank": 1 if index < 4 else 4}] if target_cited else []
-        native_observations[observation_id] = {
-            "query": query,
-            "engine": "example-search",
-            "model": "example-model",
-            "locale": "ko-KR",
-            "account_state": "fresh-session-history-disabled",
-            "observed_at": "2026-08-23T00:05:00Z",
-            "search_activated": True,
-            "retrieval": retrieval,
-            "citations": citations,
-        }
-        rows.append(
-            {
-                "observation_id": observation_id,
-                "workload_id": workload_id,
-                "repetition": 1,
+        for repetition in range(1, 6):
+            observation_id = f"obs-{index + 1:02d}-r{repetition}"
+            query = workload["items"][index]["query"]
+            retrieval = [{"url": target if index % 2 == 0 else other, "rank": 1}]
+            target_cited = index < 8
+            citations = (
+                [{"url": target, "visible_rank": 1 if index < 4 else 4}] if target_cited else []
+            )
+            native_observations[observation_id] = {
                 "query": query,
                 "engine": "example-search",
                 "model": "example-model",
@@ -90,20 +102,20 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
                 "search_activated": True,
                 "retrieval": retrieval,
                 "citations": citations,
-                "native_receipt": {"path": "native.json", "sha256": "pending"},
-                "native_source_locator": {
-                    "query": f"/observations/{observation_id}/query",
-                    "engine": f"/observations/{observation_id}/engine",
-                    "model": f"/observations/{observation_id}/model",
-                    "locale": f"/observations/{observation_id}/locale",
-                    "account_state": f"/observations/{observation_id}/account_state",
-                    "observed_at": f"/observations/{observation_id}/observed_at",
-                    "search_activated": f"/observations/{observation_id}/search_activated",
-                    "retrieval": f"/observations/{observation_id}/retrieval",
-                    "citations": f"/observations/{observation_id}/citations",
-                },
             }
-        )
+            rows.append(
+                {
+                    "observation_id": observation_id,
+                    "workload_id": workload_id,
+                    "repetition": repetition,
+                    **native_observations[observation_id],
+                    "native_receipt": {"path": "native.json", "sha256": "pending"},
+                    "native_source_locator": {
+                        key: f"/observations/{observation_id}/{key}"
+                        for key in native_observations[observation_id]
+                    },
+                }
+            )
 
     native_path = tmp_path / "native.json"
     _write_json(native_path, {"observations": native_observations})
@@ -117,8 +129,15 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
             "schema_id": "geode.geo-native-results@1",
             "schema_version": 1,
             "run_id": "geo-quality-test",
+            "run_spec_sha256": "0" * 64,
             "workload_sha256": _sha256(workload_path),
             "collected_at": "2026-08-23T00:10:00Z",
+            "producer": {
+                "adapter": "example-search",
+                "provider": "example",
+                "credential_source": "subscription",
+                "model": "example-model",
+            },
             "preflight_context": None,
             "observations": rows,
         },
@@ -147,7 +166,7 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
                     "unit": "ratio",
                     "direction": "maximize",
                     "aggregation": "target-cited observations / all repeated prompts",
-                    "denominator": 24,
+                    "denominator": 120,
                 },
                 "decision_rule": "Remain diagnostic; this run has no promotion authority.",
                 "invalidation_rule": "Invalidate missing, duplicate, or unbound observations.",
@@ -163,7 +182,7 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
                 "model": {
                     "provider": "example",
                     "label": "example-model",
-                    "route": "other",
+                    "route": "subscription",
                     "reasoning": "none",
                 },
                 "environment": {
@@ -178,8 +197,8 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
                     "workload_ids_sha256": hashlib.sha256(
                         json.dumps(workload_ids, separators=(",", ":")).encode()
                     ).hexdigest(),
-                    "repetitions": 1,
-                    "seed_schedule": [0],
+                    "repetitions": 5,
+                    "seed_schedule": [0, 1, 2, 3, 4],
                     "max_concurrency": 1,
                     "timeout_seconds": 60,
                     "budget": {"kind": "wall-time", "limit": 60, "unit": "seconds"},
@@ -205,6 +224,9 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
             },
         },
     )
+    results_payload = json.loads(results_path.read_text(encoding="utf-8"))
+    results_payload["run_spec_sha256"] = _sha256(run_spec_path)
+    _write_json(results_path, results_payload)
     return run_spec_path, workload_path, results_path
 
 
@@ -245,7 +267,7 @@ def _verifier_overlay(tmp_path: Path, results: Path, *, expected_claims: int = 1
         receipt,
         {
             "schema_id": "geode.geo-verifier-receipt@1",
-            "observation_id": "obs-01",
+            "observation_id": "obs-01-r1",
             "producer": "test-verifier",
             "model": "test-model",
             "verified_at": "2026-08-23T00:10:00Z",
@@ -272,7 +294,7 @@ def _verifier_overlay(tmp_path: Path, results: Path, *, expected_claims: int = 1
             },
             "observations": [
                 {
-                    "observation_id": "obs-01",
+                    "observation_id": "obs-01-r1",
                     **verdict,
                     "verifier_receipt": {
                         "path": receipt.name,
@@ -294,13 +316,13 @@ def test_geo_visibility_emits_vector_without_aggregate_score(tmp_path: Path) -> 
         native_results_path=results,
     )
 
-    assert payload["observations"] == {"expected": 24, "observed": 24}
-    assert payload["search_activation"] == {"numerator": 24, "denominator": 24}
+    assert payload["observations"] == {"expected": 120, "observed": 120}
+    assert payload["search_activation"] == {"numerator": 120, "denominator": 120}
     assert payload["run_spec_sha256"] == _sha256(run_spec)
     assert payload["quality_claim_coverage"] == {
         "audited_claims": 0,
         "audited_target_cited_responses": 0,
-        "target_cited_responses": 8,
+        "target_cited_responses": 40,
     }
     assert "aggregate_score" not in payload
     assert {
@@ -308,9 +330,9 @@ def test_geo_visibility_emits_vector_without_aggregate_score(tmp_path: Path) -> 
         for stage, row in payload["vector"].items()
     } == {
         "F": (None, None, "not_measured"),
-        "R": (12, 24, "measured"),
-        "C": (8, 24, "measured"),
-        "P": (4, 8, "measured"),
+        "R": (60, 120, "measured"),
+        "C": (40, 120, "measured"),
+        "P": (20, 40, "measured"),
         "A": (None, None, "not_measured"),
         "Q": (None, None, "not_measured"),
         "O": (None, None, "not_measured"),
@@ -478,7 +500,7 @@ def test_geo_visibility_binds_first_party_outcome_receipt(tmp_path: Path) -> Non
     assert measured["outcome_context"] == {"path": outcome.name, "sha256": _sha256(outcome)}
     assert measured["vector"]["O"] | {"finding": ""} == {
         "stage": "O",
-        "phase": "offline_measure",
+        "phase": "live_observe",
         "status": "measured",
         "numerator": 4,
         "denominator": 100,
@@ -578,36 +600,44 @@ def test_geo_visibility_rejects_unbound_native_projection(tmp_path: Path) -> Non
         )
 
 
-@pytest.mark.parametrize(
-    ("approved", "message"),
-    [
-        (False, "prospective operator approval"),
-        (True, "digest-bound approval receipt"),
-    ],
-)
-def test_geo_visibility_rejects_live_work_without_operator_approval(
-    tmp_path: Path,
-    approved: bool,
-    message: str,
-) -> None:
+def test_geo_visibility_rejects_live_work_without_operator_approval(tmp_path: Path) -> None:
     run_spec, workload, results = _fixture(tmp_path)
-    workload_payload = json.loads(workload.read_text(encoding="utf-8"))
-    workload_payload["observation_mode"] = "live"
-    workload_payload["repetitions"] = 5
-    _write_json(workload, workload_payload)
-    results_payload = json.loads(results.read_text(encoding="utf-8"))
-    results_payload["workload_sha256"] = _sha256(workload)
-    _write_json(results, results_payload)
     run_payload = json.loads(run_spec.read_text(encoding="utf-8"))
-    run_payload["preregistration"]["live_test_approved"] = approved
-    run_payload["reproduction"]["environment"]["initial_state_ref"] = (
-        f"workload.json#sha256={_sha256(workload)}"
-    )
-    run_payload["reproduction"]["execution"]["repetitions"] = 5
-    run_payload["reproduction"]["execution"]["seed_schedule"] = [0, 1, 2, 3, 4]
+    run_payload["preregistration"]["live_test_approved"] = False
     _write_json(run_spec, run_payload)
+    results_payload = json.loads(results.read_text(encoding="utf-8"))
+    results_payload["run_spec_sha256"] = _sha256(run_spec)
+    _write_json(results, results_payload)
 
-    with pytest.raises(ValueError, match=message):
+    with pytest.raises(ValueError, match="prospective operator approval"):
+        validate_and_measure(
+            run_spec_path=run_spec,
+            workload_path=workload,
+            native_results_path=results,
+        )
+
+
+def test_geo_visibility_rejects_retired_offline_mode(tmp_path: Path) -> None:
+    run_spec, workload, results = _fixture(tmp_path)
+    payload = json.loads(workload.read_text(encoding="utf-8"))
+    payload["observation_mode"] = "offline"
+    _write_json(workload, payload)
+
+    with pytest.raises(ValueError, match=r"observation_mode.*unexpected"):
+        validate_and_measure(
+            run_spec_path=run_spec,
+            workload_path=workload,
+            native_results_path=results,
+        )
+
+
+def test_geo_visibility_rejects_native_route_drift(tmp_path: Path) -> None:
+    run_spec, workload, results = _fixture(tmp_path)
+    payload = json.loads(results.read_text(encoding="utf-8"))
+    payload["producer"]["credential_source"] = "payg"
+    _write_json(results, payload)
+
+    with pytest.raises(ValueError, match="native producer does not match"):
         validate_and_measure(
             run_spec_path=run_spec,
             workload_path=workload,
@@ -619,7 +649,7 @@ def test_geo_visibility_rejects_receipt_bound_query_drift(tmp_path: Path) -> Non
     run_spec, workload, results = _fixture(tmp_path)
     native_path = tmp_path / "native.json"
     native = json.loads(native_path.read_text(encoding="utf-8"))
-    native["observations"]["obs-01"]["query"] = "Different executed query"
+    native["observations"]["obs-01-r1"]["query"] = "Different executed query"
     _write_json(native_path, native)
 
     payload = json.loads(results.read_text(encoding="utf-8"))
@@ -659,6 +689,8 @@ def test_geo_visibility_accepts_matching_digest_bound_live_approval(tmp_path: Pa
         "operator": "test-operator",
         "approved_at": "2026-08-22T23:59:00Z",
         "engine": "example-search",
+        "provider": "example",
+        "credential_source": "subscription",
         "model": "example-model",
         "locale": "ko-KR",
         "account_state": "fresh-session-history-disabled",
@@ -671,8 +703,9 @@ def test_geo_visibility_accepts_matching_digest_bound_live_approval(tmp_path: Pa
         workload_path=tmp_path / "workload.json",
         workload={
             "run_id": "geo-live-test",
-            "observation_mode": "live",
             "engine": "example-search",
+            "provider": "example",
+            "credential_source": "subscription",
             "model": "example-model",
             "locale": "ko-KR",
             "account_state": "fresh-session-history-disabled",
@@ -695,6 +728,13 @@ def test_geo_collector_preserves_retrieval_and_citations_separately(
     results.unlink()
     workload_payload = json.loads(workload.read_text(encoding="utf-8"))
     workload_payload["engine"] = "codex-oauth"
+    workload_payload["provider"] = "openai"
+    approval = tmp_path / str(workload_payload["live_approval_receipt"]["path"])
+    approval_payload = json.loads(approval.read_text(encoding="utf-8"))
+    approval_payload["engine"] = "codex-oauth"
+    approval_payload["provider"] = "openai"
+    _write_json(approval, approval_payload)
+    workload_payload["live_approval_receipt"]["sha256"] = _sha256(approval)
     _write_json(workload, workload_payload)
     run_payload = json.loads(run_spec.read_text(encoding="utf-8"))
     run_payload["reproduction"]["model"]["provider"] = "openai"
@@ -723,7 +763,7 @@ def test_geo_collector_preserves_retrieval_and_citations_separately(
         collect(run_spec_path=run_spec, workload_path=workload, output_path=results)
     )
 
-    assert len(payload["observations"]) == 24
+    assert len(payload["observations"]) == 120
     first = payload["observations"][0]
     assert "verifier_context" not in payload
     assert "outcome_context" not in payload
@@ -747,4 +787,4 @@ def test_geo_collector_preserves_retrieval_and_citations_separately(
         native_results_path=results,
     )
     assert measured["vector"]["R"]["numerator"] == 0
-    assert measured["vector"]["C"]["numerator"] == 24
+    assert measured["vector"]["C"]["numerator"] == 120

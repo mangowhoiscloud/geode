@@ -18,7 +18,7 @@
       "required": ["stage", "phase", "status", "numerator", "denominator", "finding", "evidence"],
       "properties": {
         "stage": {"enum": ["F", "R", "C", "P", "A", "Q", "O"]},
-        "phase": {"enum": ["preflight", "offline_measure", "live_observe", "experiment"]},
+        "phase": {"enum": ["preflight", "live_observe", "experiment"]},
         "status": {"enum": ["not_measured", "partial", "measured"]},
         "numerator": {"type": ["integer", "null"], "minimum": 0},
         "denominator": {"type": ["integer", "null"], "minimum": 1},
@@ -63,7 +63,7 @@
       "additionalProperties": false
     }
   },
-  "required": ["schema_id", "schema_version", "run_id", "run_spec_sha256", "workload_sha256", "native_results_sha256", "verifier_results_sha256", "native_producer", "verifier_context", "preflight_context", "outcome_context", "outcome_primary_metric", "observation_mode", "observations", "search_activation", "quality_claim_coverage", "vector"],
+  "required": ["schema_id", "schema_version", "run_id", "run_spec_sha256", "workload_sha256", "native_results_sha256", "verifier_results_sha256", "native_producer", "verifier_context", "preflight_context", "outcome_context", "outcome_primary_metric", "observations", "search_activation", "quality_claim_coverage", "vector"],
   "properties": {
     "schema_id": {"const": "geode.geo-vector@1"},
     "schema_version": {"const": 1},
@@ -74,9 +74,11 @@
     "verifier_results_sha256": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"},
     "native_producer": {
       "type": "object",
-      "required": ["engine", "model"],
+      "required": ["adapter", "provider", "credential_source", "model"],
       "properties": {
-        "engine": {"type": "string", "minLength": 1, "maxLength": 128},
+        "adapter": {"type": "string", "minLength": 1, "maxLength": 128},
+        "provider": {"type": "string", "minLength": 1, "maxLength": 128},
+        "credential_source": {"enum": ["payg", "subscription"]},
         "model": {"type": "string", "minLength": 1, "maxLength": 128}
       },
       "additionalProperties": false
@@ -114,7 +116,6 @@
     },
     "outcome_context": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/evidence_ref"}]},
     "outcome_primary_metric": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/primary_metric"}]},
-    "observation_mode": {"enum": ["offline", "live"]},
     "observations": {
       "type": "object",
       "required": ["expected", "observed"],

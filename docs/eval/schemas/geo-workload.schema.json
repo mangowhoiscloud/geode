@@ -19,9 +19,10 @@
     "schema_version",
     "run_id",
     "profile",
-    "observation_mode",
     "frozen_at",
     "engine",
+    "provider",
+    "credential_source",
     "model",
     "locale",
     "account_state",
@@ -36,17 +37,16 @@
     "schema_version": {"const": 1},
     "run_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$"},
     "profile": {"const": "geo-visibility-v1"},
-    "observation_mode": {"enum": ["offline", "live"]},
     "frozen_at": {"type": "string", "format": "date-time"},
     "engine": {"type": "string", "minLength": 1, "maxLength": 128},
+    "provider": {"type": "string", "minLength": 1, "maxLength": 128},
+    "credential_source": {"enum": ["payg", "subscription"]},
     "model": {"type": "string", "minLength": 1, "maxLength": 128},
     "locale": {"type": "string", "minLength": 2, "maxLength": 35},
     "account_state": {"type": "string", "minLength": 1, "maxLength": 256},
-    "repetitions": {"type": "integer", "minimum": 1, "maximum": 1000},
+    "repetitions": {"const": 5},
     "requested_result_limit": {"type": "integer", "minimum": 1, "maximum": 100},
-    "live_approval_receipt": {
-      "oneOf": [{"type": "null"}, {"$ref": "#/$defs/evidence_ref"}]
-    },
+    "live_approval_receipt": {"$ref": "#/$defs/evidence_ref"},
     "target_prefixes": {
       "type": "array",
       "minItems": 1,
@@ -71,11 +71,5 @@
       }
     }
   },
-  "additionalProperties": false,
-  "allOf": [
-    {
-      "if": {"properties": {"observation_mode": {"const": "live"}}},
-      "then": {"properties": {"repetitions": {"const": 5}}}
-    }
-  ]
+  "additionalProperties": false
 }

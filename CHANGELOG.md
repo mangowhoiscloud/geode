@@ -88,6 +88,12 @@ functional change.
   now have explicit JSON Schemas, and the common eval bundle gate joins native,
   measurement, verifier, outcome, trajectory, analysis, and publication
   authorities without copying their payloads.
+  The unreleased offline-shaped branch is removed: diagnostics now move from
+  deterministic preflight directly to an operator-approved live observation,
+  bind the exact adapter/provider/credential source/model, and reserve the
+  optional experiment phase for preregistered treatment claims. Codex OAuth
+  hosted search now honors the frozen model hint and fails at the canary
+  instead of silently substituting its default model.
 
 - **Third-party extensions now authorize before executable load.** Filesystem
   hooks, package LLM adapters, project/personal skills, and MCP servers project

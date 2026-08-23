@@ -187,7 +187,7 @@ def _geo_vector(run_spec_path: Path, native_path: Path) -> dict[str, object]:
     def metric(stage: str, *, measured: bool = False) -> dict[str, object]:
         return {
             "stage": stage,
-            "phase": "offline_measure" if stage != "F" else "preflight",
+            "phase": "live_observe" if stage != "F" else "preflight",
             "status": "measured" if measured else "not_measured",
             "numerator": 1 if measured else None,
             "denominator": 1 if measured else None,
@@ -203,12 +203,16 @@ def _geo_vector(run_spec_path: Path, native_path: Path) -> dict[str, object]:
         "workload_sha256": "b" * 64,
         "native_results_sha256": contract._sha256(native_path),
         "verifier_results_sha256": None,
-        "native_producer": {"engine": "fixture", "model": "fixture"},
+        "native_producer": {
+            "adapter": "fixture",
+            "provider": "fixture",
+            "credential_source": "subscription",
+            "model": "fixture",
+        },
         "verifier_context": None,
         "preflight_context": None,
         "outcome_context": None,
         "outcome_primary_metric": None,
-        "observation_mode": "offline",
         "observations": {"expected": 1, "observed": 1},
         "search_activation": {"numerator": 1, "denominator": 1},
         "quality_claim_coverage": {

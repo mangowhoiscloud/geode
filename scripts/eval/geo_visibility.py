@@ -140,12 +140,6 @@ def _validate_live_approval(
     frozen_at: datetime,
 ) -> None:
     approval_ref = workload["live_approval_receipt"]
-    if workload["observation_mode"] != "live":
-        if approval_ref is not None:
-            raise ValueError("offline GEO workloads cannot carry a live approval receipt")
-        return
-    if approval_ref is None:
-        raise ValueError("live GEO observation requires a digest-bound approval receipt")
     approval = _load_bound_receipt(
         workload_path,
         approval_ref,
@@ -162,6 +156,8 @@ def _validate_live_approval(
         "run_id": workload["run_id"],
         "operator": preregistration["operator"],
         "engine": workload["engine"],
+        "provider": workload["provider"],
+        "credential_source": workload["credential_source"],
         "model": workload["model"],
         "locale": workload["locale"],
         "account_state": workload["account_state"],
@@ -404,17 +400,32 @@ def validate_and_measure(
         raise ValueError("run spec native_results does not name the supplied GEO receipt")
     if results["workload_sha256"] != workload_sha256:
         raise ValueError("native results do not bind the frozen GEO workload")
+    if results["run_spec_sha256"] != _sha256(run_spec_path):
+        raise ValueError("native results do not bind the frozen GEO run spec")
     if workload["frozen_at"] != run_spec["preregistration"]["frozen_at"]:
         raise ValueError("GEO workload frozen_at must equal the run-spec freeze")
     if workload["model"] != reproduction["model"]["label"]:
         raise ValueError("GEO workload model does not match the run spec")
+    route = str(reproduction["model"]["route"])
+    credential_source = {"api": "payg", "subscription": "subscription"}.get(route)
+    expected_producer = {
+        "adapter": workload["engine"],
+        "provider": workload["provider"],
+        "credential_source": workload["credential_source"],
+        "model": workload["model"],
+    }
+    if (
+        credential_source is None
+        or workload["provider"] != reproduction["model"]["provider"]
+        or workload["credential_source"] != credential_source
+        or results["producer"] != expected_producer
+    ):
+        raise ValueError("GEO native producer does not match the frozen run route")
     repetitions = int(reproduction["execution"]["repetitions"])
     if workload["repetitions"] != repetitions:
         raise ValueError("GEO workload repetitions do not match the run spec")
     preregistration = run_spec["preregistration"]
-    if workload["observation_mode"] == "live" and (
-        preregistration["mode"] != "prospective" or not preregistration["live_test_approved"]
-    ):
+    if preregistration["mode"] != "prospective" or not preregistration["live_test_approved"]:
         raise ValueError("live GEO observation requires prospective operator approval")
     frozen_at = _parse_datetime(workload["frozen_at"])
     collected_at = _parse_datetime(results["collected_at"])
@@ -430,7 +441,7 @@ def validate_and_measure(
 
     preflight_context = results["preflight_context"]
     fetch_metric = _fetch_metric(native_results_path, preflight_context)
-    evidence_phase = "live_observe" if workload["observation_mode"] == "live" else "offline_measure"
+    evidence_phase = "live_observe"
     outcome_metric, outcome_payload, outcome_context = _outcome_metric(
         outcome_path,
         run_dir=run_dir,
@@ -630,7 +641,7 @@ def validate_and_measure(
         extra = sorted(seen_cells - expected_cells)[:8]
         raise ValueError(f"GEO observation matrix drift: missing={missing} extra={extra}")
     total = len(expected_cells)
-    phase = "live_observe" if workload["observation_mode"] == "live" else "offline_measure"
+    phase = "live_observe"
     evidence = f"{results_rel}#/observations"
     verifier_evidence = (
         ""
@@ -700,14 +711,13 @@ def validate_and_measure(
         "workload_sha256": workload_sha256,
         "native_results_sha256": _sha256(native_results_path),
         "verifier_results_sha256": verifier_results_sha256,
-        "native_producer": {"engine": workload["engine"], "model": workload["model"]},
+        "native_producer": results["producer"],
         "verifier_context": verifier_context,
         "preflight_context": preflight_context,
         "outcome_context": outcome_context,
         "outcome_primary_metric": (
             None if outcome_payload is None else outcome_payload["primary_metric"]
         ),
-        "observation_mode": workload["observation_mode"],
         "observations": {"expected": total, "observed": len(seen_cells)},
         "search_activation": {
             "numerator": search_hits,

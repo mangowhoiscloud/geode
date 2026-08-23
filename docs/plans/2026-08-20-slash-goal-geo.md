@@ -109,6 +109,10 @@ inventory 블록만 현재 파일 수로 동기화했다.
 
 ## GEO 실행/측정 계약
 
+> Superseded 2026-08-24: the active runtime removed `offline_measure`; see
+> `docs/plans/2026-08-24-geo-live-only-subscription.md`. The paragraph below
+> remains the original design record.
+
 `/geo`는 `preflight → offline_measure → live_observe → experiment` 순서의
 evidence state machine이다. 결과는 `F,R,C,P,A,Q,O` 벡터로 보존하고,
 prerequisite·승인·동결 workload·receipt가 없는 단계는 `not_measured`다.

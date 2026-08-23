@@ -106,8 +106,9 @@ preregistered.
 
 ## Evidence states and measurement vector
 
-Runs progress through `preflight → offline_measure → live_observe → experiment`.
-An earlier state never proves a later state. Preserve `not_measured` when a
+Runs progress through `preflight → live_observe`; a preregistered treatment
+claim may continue to `experiment`. A diagnostic can close after live
+observation, but it has no promotion authority. Preserve `not_measured` when a
 prerequisite, approval, frozen workload, or receipt is absent. Do not publish
 an aggregate GEO score.
 
@@ -177,8 +178,9 @@ with frozen baseline and treatment arms.
    `k=5` repetitions per engine. Record engine/model surface, locale, account
    state, timestamp, search activation, cited URLs, answer, and screenshots or
    native receipts where permitted. The frozen workload must digest-bind an
-   operator-owned `geode.geo-live-approval@1` receipt for the same run, engine,
-   model, locale, account state, and repetition count.
+   operator-owned `geode.geo-live-approval@1` receipt for the same run, adapter,
+   provider, credential source, model, locale, account state, and repetition
+   count.
    Collect only provider-native retrieval and citation fields through the
    existing adapter registry, then bind the frozen workload and receipts
    through the measurement contract:
@@ -211,7 +213,8 @@ with frozen baseline and treatment arms.
    ```
 
    The command validates the complete 24×K observation matrix and emits
-   separate R/C/P/A/Q denominators, the run-spec digest, native producer,
+   separate R/C/P/A/Q denominators, the run-spec digest, native adapter,
+   provider, credential source, and model,
    verifier/model/rubric identity, preflight/outcome receipt digests, and
    audited-claim coverage. Verifier support rows retain the claim text and an
    exact quote that must occur in the bound source receipt. The verifier adapter
@@ -225,9 +228,10 @@ with frozen baseline and treatment arms.
    has no aggregate score field. The emitted vector is validated as
    `geode.geo-vector@1`; source receipts are independently validated as
    `geode.geo-source-receipt@1` and require verified TLS.
-3. For offline intervention evaluation, hash original, sham, and targeted
-   repair arms; reindex every arm and re-run retrieval, reranking, and
-   generation. Include initial-rank controls and a multi-actor adoption arm.
+3. For intervention evaluation, preregister live baseline and targeted-repair
+   arms. Match workload, route, model, locale, account state, budget, and
+   observation window; invalidate the comparison when index state cannot be
+   made comparable.
 4. Audit citation entailment at claim level. Automatic judgments are secondary
    until a human reviews disagreements and a calibration subset.
 5. Invalidate causal claims when prompt order, engine version, indexing state,
@@ -264,6 +268,11 @@ commercial-engine repetitions can spend quota and expose account-dependent
 state, so they require an explicit prospective run spec and user approval.
 Until then, `/geo` output is an audit and implementation probe, not a scored
 visibility claim.
+
+The typed slash state is an advisory workflow projection. Its model-authored
+numerators and locators do not become benchmark or promotion authority. Only
+the schema- and digest-validated native/vector/verifier/outcome bundle above
+can establish measurement evidence.
 
 The project can publish `/geode/sitemap.xml`, but this repository cannot own
 the GitHub Pages host-root `/robots.txt`. Record host-root behavior as an

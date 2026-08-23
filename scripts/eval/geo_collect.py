@@ -110,9 +110,7 @@ async def collect(
         raise ValueError("run spec ordered_workload_ids must match the GEO workload")
     frozen_at = _parse_datetime(workload["frozen_at"])
     preregistration = run_spec["preregistration"]
-    if workload["observation_mode"] == "live" and (
-        preregistration["mode"] != "prospective" or not preregistration["live_test_approved"]
-    ):
+    if preregistration["mode"] != "prospective" or not preregistration["live_test_approved"]:
         raise ValueError("live GEO collection requires prospective operator approval")
     _validate_live_approval(
         workload_path=workload_path,
@@ -124,6 +122,8 @@ async def collect(
 
     provider = str(reproduction["model"]["provider"])
     source = _source(str(reproduction["model"]["route"]))
+    if (workload["provider"], workload["credential_source"]) != (provider, source):
+        raise ValueError("GEO workload route does not match the frozen run spec")
     timeout = float(reproduction["execution"]["timeout_seconds"])
     semaphore = asyncio.Semaphore(int(reproduction["execution"]["max_concurrency"]))
     items = {str(item["id"]): str(item["query"]) for item in workload["items"]}
@@ -247,8 +247,15 @@ async def collect(
         "schema_id": "geode.geo-native-results@1",
         "schema_version": 1,
         "run_id": workload["run_id"],
+        "run_spec_sha256": _sha256(run_spec_path),
         "workload_sha256": workload_sha256,
         "collected_at": datetime.now(UTC).isoformat(),
+        "producer": {
+            "adapter": workload["engine"],
+            "provider": provider,
+            "credential_source": source,
+            "model": workload["model"],
+        },
         "preflight_context": preflight_context,
         "observations": rows,
     }

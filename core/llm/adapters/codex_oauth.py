@@ -279,10 +279,10 @@ class CodexOAuthAdapter:
         """Codex-subscription web_search via Responses API ``web_search``
         hosted tool.
 
-        ``model`` hint intentionally unused — the Codex backend's
-        per-model web_search support matrix is unverified
-        (doc-before-behaviour, CLAUDE.md §4d); CODEX_PRIMARY stays the
-        search model.
+        The caller's frozen ``model`` is sent when present; otherwise the
+        route uses ``CODEX_PRIMARY``. A GEO route canary remains responsible
+        for proving that the selected model supports hosted search on the
+        operator's account. No model fallback occurs here.
 
         Codex backend requires ``store=False`` (same constraint as
         :meth:`acomplete` — backend reject 400 without it) and uses the
@@ -299,11 +299,11 @@ class CodexOAuthAdapter:
         (because :func:`is_billing_fatal` doesn't match shape errors)
         even though the real issue is the call shape mismatch.
         """
-        del model
         from core.config import CODEX_PRIMARY
         from core.llm.adapters._capability_impls import openai_web_search_urls
 
         client = self._get_client()
+        search_model = model or CODEX_PRIMARY
         text_parts: list[str] = []
         source_urls: list[str] = []
         citation_urls: list[str] = []
@@ -328,7 +328,7 @@ class CodexOAuthAdapter:
             "results with titles, URLs, and brief summaries."
         )
         kwargs = {
-            "model": CODEX_PRIMARY,
+            "model": search_model,
             "instructions": (
                 "Use the web_search tool to find current information. "
                 "Return up to the requested number of relevant results with "
@@ -381,7 +381,7 @@ class CodexOAuthAdapter:
             citation_urls=tuple(dict.fromkeys(citation_urls)),
             search_activated=search_activated,
             retrieval_exposed=search_activated,
-            model=CODEX_PRIMARY,
+            model=search_model,
             adapter_name=self.name,
         )
 

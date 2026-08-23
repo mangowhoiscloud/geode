@@ -130,30 +130,6 @@ def test_each_slash_command_emits_an_isolated_typed_trajectory(
                             },
                         },
                     )
-                return _tool(
-                    "update_geo",
-                    "geo-advance-offline",
-                    {"action": "advance", "phase": "offline_measure"},
-                )
-            if run.phase.value == "offline_measure":
-                if not any(
-                    item.phase.value == "offline_measure" for item in run.measurements.values()
-                ):
-                    return _tool(
-                        "update_geo",
-                        "geo-R",
-                        {
-                            "action": "record",
-                            "evidence": {
-                                "stage": "R",
-                                "status": "not_measured",
-                                "numerator": None,
-                                "denominator": None,
-                                "finding": "No frozen offline retrieval run exists.",
-                                "evidence": [],
-                            },
-                        },
-                    )
                 if "workload_digest" not in run.config:
                     return _tool(
                         "update_geo",
@@ -177,53 +153,29 @@ def test_each_slash_command_emits_an_isolated_typed_trajectory(
                     {"action": "advance", "phase": "live_observe"},
                 )
             if run.phase.value == "live_observe":
-                if not any(
-                    item.phase.value == "live_observe" for item in run.measurements.values()
-                ):
+                if run.missing_stages:
+                    stage = GeoStage(run.missing_stages[0])
                     return _tool(
                         "update_geo",
-                        "geo-C",
+                        f"geo-{stage.value}",
                         {
                             "action": "record",
                             "evidence": {
-                                "stage": "C",
+                                "stage": stage.value,
                                 "status": "not_measured",
                                 "numerator": None,
                                 "denominator": None,
-                                "finding": "No approved citation observation was executed.",
+                                "finding": "No approved live observation was executed.",
                                 "evidence": [],
                             },
                         },
                     )
-                if "preregistration_ref" not in run.config:
-                    return _text("Operator preregistration is required before experiment.")
                 return _tool(
                     "update_geo",
-                    "geo-advance-experiment",
-                    {"action": "advance", "phase": "experiment"},
+                    "geo-complete",
+                    {"action": "complete", "completion_kind": "diagnostic"},
                 )
-            if run.phase.value == "experiment" and run.missing_stages:
-                stage = GeoStage(run.missing_stages[0])
-                return _tool(
-                    "update_geo",
-                    f"geo-{stage.value}",
-                    {
-                        "action": "record",
-                        "evidence": {
-                            "stage": stage.value,
-                            "status": "not_measured",
-                            "numerator": None,
-                            "denominator": None,
-                            "finding": "No preregistered experiment was executed.",
-                            "evidence": [],
-                        },
-                    },
-                )
-            if run.phase.value != "complete":
-                response = _tool("update_geo", "geo-complete", {"action": "complete"})
-            else:
-                response = _text("The seven-stage GEO receipt is complete without a scalar score.")
-            return response
+            return _text("The seven-stage GEO receipt is complete without a scalar score.")
         if "<grill_state" in system:
             grill = grill_store.get(loop._session_id)
             assert grill is not None
@@ -314,24 +266,20 @@ def test_each_slash_command_emits_an_isolated_typed_trajectory(
             expected_calls = {"grill-define", "grill-answer", "grill-complete"}
         else:
             preflight = client.send_command_streaming("/geo", "Audit example.test")
-            assert preflight["control_state"]["phase"] == "offline_measure"
+            assert preflight["control_state"]["phase"] == "preflight"
             live = client.send_command_streaming("/geo", "approve-live operator-receipt")
-            assert live["control_state"]["phase"] == "live_observe"
-            geo = client.send_command_streaming("/geo", "preregister prereg-receipt")
-            assert geo["control_state"]["phase"] == "complete"
-            assert geo["control_state"]["vector"]["F"]["denominator"] == 1
+            assert live["control_state"]["phase"] == "complete"
+            assert live["control_state"]["vector"]["F"]["denominator"] == 1
             assert all(
-                geo["control_state"]["vector"][stage]["status"] == "not_measured"
+                live["control_state"]["vector"][stage]["status"] == "not_measured"
                 for stage in ("R", "C", "P", "A", "Q", "O")
             )
             expected_calls = {
                 "geo-F",
-                "geo-advance-offline",
-                "geo-R",
                 "geo-configure",
                 "geo-advance-live",
+                "geo-R",
                 "geo-C",
-                "geo-advance-experiment",
                 "geo-P",
                 "geo-A",
                 "geo-Q",

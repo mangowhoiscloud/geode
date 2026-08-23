@@ -36,8 +36,10 @@
     "schema_id",
     "schema_version",
     "run_id",
+    "run_spec_sha256",
     "workload_sha256",
     "collected_at",
+    "producer",
     "preflight_context",
     "observations"
   ],
@@ -45,8 +47,20 @@
     "schema_id": {"const": "geode.geo-native-results@1"},
     "schema_version": {"const": 1},
     "run_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$"},
+    "run_spec_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
     "workload_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
     "collected_at": {"type": "string", "format": "date-time"},
+    "producer": {
+      "type": "object",
+      "required": ["adapter", "provider", "credential_source", "model"],
+      "properties": {
+        "adapter": {"type": "string", "minLength": 1, "maxLength": 128},
+        "provider": {"type": "string", "minLength": 1, "maxLength": 128},
+        "credential_source": {"enum": ["payg", "subscription"]},
+        "model": {"type": "string", "minLength": 1, "maxLength": 128}
+      },
+      "additionalProperties": false
+    },
     "preflight_context": {
       "oneOf": [
         {"type": "null"},

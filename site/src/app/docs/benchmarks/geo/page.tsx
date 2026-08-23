@@ -103,8 +103,9 @@ export default function GeoBenchmarkPage() {
             <h2>무엇을 검증하는가</h2>
             <p>
               GEO는 문장을 다시 쓰는 최적화 점수가 아니라 증거 상태머신입니다.
-              <code>preflight → offline_measure → live_observe → experiment</code>의
-              앞 단계가 뒤 단계를 대신하지 못하며, 측정하지 못한 값은 0이 아니라
+              <code>preflight → live_observe</code>로 진단하며, 변경 효과를 주장할 때만
+              사전 등록된 <code>experiment</code>로 진행합니다. 앞 단계가 뒤 단계를
+              대신하지 못하며, 측정하지 못한 값은 0이 아니라
               <code>not_measured</code>로 남습니다.
             </p>
             <p>
@@ -133,6 +134,7 @@ export default function GeoBenchmarkPage() {
             <ol>
               <li>6개 root마다 root query 1개와 paraphrase 3개, 총 24개 문자열을 고정합니다.</li>
               <li><code>run-spec.json</code>이 workload SHA-256과 모델을 동결하고, live는 동일 surface의 별도 operator approval receipt와 정확히 K=5를 요구합니다.</li>
+              <li>native result는 run-spec digest와 adapter·provider·credential source·model을 함께 고정합니다.</li>
               <li>24×K 각 셀은 하나의 native receipt로 돌아가며 검색 활성화, retrieval, citation의 JSON Pointer가 원본과 일치해야 합니다.</li>
               <li>absorption과 quality는 별도 verifier receipt·producer/version/model·digest-bound rubric이 없으면 측정값으로 인정하지 않습니다.</li>
               <li>Q는 verifier가 선언한 전체 target-linked claim 수와 실제 감사 행 수가 같아야 계산합니다.</li>
@@ -177,6 +179,11 @@ export default function GeoBenchmarkPage() {
               manifest는 서로 다른 권한입니다. Inspect가 실행하지 않은 slash run을
               <code>.eval</code>로 포장하지도 않습니다.
             </p>
+            <p>
+              slash의 typed state는 작업 진행을 위한 advisory projection입니다. 모델이
+              기록한 분자나 locator 자체는 벤치마크 권한이 아니며, schema와 digest를
+              통과한 native/vector/verifier/outcome bundle만 측정 근거가 됩니다.
+            </p>
 
             <h2>근거</h2>
             <ul>
@@ -191,8 +198,9 @@ export default function GeoBenchmarkPage() {
             <h2>What it verifies</h2>
             <p>
               GEO is an evidence state machine, not a rewrite-optimization score.
-              An earlier <code>preflight → offline_measure → live_observe → experiment</code>
-              phase cannot prove a later one. An absent measurement remains
+              A diagnostic moves through <code>preflight → live_observe</code>;
+              only a preregistered treatment claim continues to <code>experiment</code>.
+              An earlier phase cannot prove a later one. An absent measurement remains
               <code>not_measured</code>, never zero.
             </p>
             <p>
@@ -223,6 +231,7 @@ export default function GeoBenchmarkPage() {
             <ol>
               <li>Freeze one root query and three paraphrases for each of six roots: 24 exact strings.</li>
               <li><code>run-spec.json</code> freezes the workload SHA-256 and model; live runs require a separate operator approval receipt for the same surface and exactly K=5.</li>
+              <li>The native result binds the run-spec digest plus adapter, provider, credential source, and model.</li>
               <li>Every cell in the 24×K matrix resolves to one native receipt; JSON Pointers for search activation, retrieval, and citations must match the source bytes.</li>
               <li>Absorption and quality remain unmeasured without a separate verifier receipt, producer/version/model, and digest-bound rubric.</li>
               <li>Q is computed only when the verifier-declared target-linked claim universe matches the audited rows.</li>
@@ -267,6 +276,11 @@ export default function GeoBenchmarkPage() {
               Native outcome, verifier judgement, GEODE trajectory, analysis, and
               publication manifest retain separate authority. A slash run is not
               repackaged as <code>.eval</code> unless Inspect produced it.
+            </p>
+            <p>
+              Slash typed state is an advisory workflow projection. Model-authored
+              numerators and locators are not benchmark authority; only the schema-
+              and digest-validated native/vector/verifier/outcome bundle is evidence.
             </p>
 
             <h2>Evidence basis</h2>

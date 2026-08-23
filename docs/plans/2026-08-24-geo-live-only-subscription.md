@@ -1,9 +1,9 @@
 # GEO live-only simplification and subscription measurement
 
 Date: 2026-08-24  
-Status: planned; implementation and paid/live execution not started  
+Status: implemented; non-live gates passed; paid/live execution pending
 Working branch: `codex/geo-benchmark-quality@e30b50ed2c79`  
-Implementation sync target: `origin/develop@48e4f23c1bd2`
+Implementation sync target: `origin/develop@0ac0eecc0`
 
 ## Decision
 
@@ -51,9 +51,9 @@ evidence authority. The useful boundary is smaller:
 | ID | Current state | Problem | Planned closure |
 |---|---|---|---|
 | GEO-L1 | Runtime phases are `preflight → offline_measure → live_observe → experiment`. | The product requires a phase with no executable measurement producer. | Remove active offline admission and allow diagnostic completion from `live_observe`. |
-| GEO-L2 | Workload and vector v1 accept `observation_mode=offline`. | Live-shaped fields become dummy values and historical artifacts risk being reinterpreted. | Introduce live-only v2 contracts; retain v1 only for immutable historical validation. |
+| GEO-L2 | The branch-only workload and vector v1 accept `observation_mode=offline`. | Live-shaped fields become dummy values before this unreleased contract has any compatibility value. | Correct the unreleased v1 contracts in place; do not manufacture a v2 or a fake retention burden. |
 | GEO-L3 | `geo_collect.py` branches on the mode but always calls a provider adapter. | The branch advertises behavior it does not implement. | Reject legacy/offline inputs and remove the mode branch from the canonical collector. |
-| GEO-L4 | Model-visible `update_geo(record)` accepts shape-valid numbers and locators. | Typed shape does not prove a validated measurement artifact. | Add an operator-owned attach/import edge for a schema- and digest-validated vector; keep model prose advisory. |
+| GEO-L4 | Model-visible `update_geo(record)` accepts shape-valid numbers and locators. | Typed shape does not prove a validated measurement artifact. | Keep slash state explicitly advisory; grant measurement authority only to the separately schema- and digest-validated eval bundle instead of importing it into mutable state. |
 | GEO-L5 | Runtime completion requires experiment evidence. | A non-promotional diagnostic cannot close honestly. | Add `completion_kind=diagnostic|experiment`; diagnostic closes after live, experiment closes after a preregistered comparison. |
 | GEO-L6 | A/Q verification re-fetches cited sources at verification time. | The source may drift after the native response. | Bind fetch time, content digest, TLS result, and exact source receipt before verifier admission; invalidate drift. |
 | GEO-L7 | The current public result has only a surface comparator. | More repetitions cannot create causal authority. | Keep diagnostic authority at `none`; require a named paired live comparator and matched observation window for experiment claims. |
@@ -74,10 +74,9 @@ The implementation removes active behavior, not immutable evidence.
 | public docs | offline-runner and frozen-corpus claims | local preflight, live measurement, diagnostic/experiment distinction |
 | FTS5/BM25 | any GEO coupling, corpus schema, qrels, reranker scaffolding | existing session-memory behavior unchanged |
 
-Historical plan text and already published receipts are not rewritten. They
-remain dated evidence. A short supersession note points readers to this plan,
-and the old v1 schema remains validator-only until its retention window is
-explicitly closed.
+Historical plan text and existing local receipts are not rewritten. They remain
+dated evidence, but the branch-only v1 schema is not a published compatibility
+surface and therefore receives no validator-only legacy path.
 
 ## Canonical live measurement contract
 
@@ -137,18 +136,16 @@ replace a provider-native observation.
 
 ## Schema and migration boundary
 
-1. Keep `geode.geo-workload@1` and `geode.geo-vector@1` available only to
-   validate historical artifacts. They do not remain accepted inputs to the
-   canonical collector.
-2. Add live-only v2 workload/vector schemas. Do not include
+1. Correct the unreleased `geode.geo-workload@1` and
+   `geode.geo-vector@1` contracts in place. Do not include
    `observation_mode`; the profile itself is live-only.
-3. Bind the run-spec digest into the canonical native result and bind native,
+2. Bind the run-spec digest into the canonical native result and bind native,
    verifier, preflight, and outcome digests into the vector.
-4. Rebuild the SQLite GEO projection schema without the offline phase.
+3. Rebuild the SQLite GEO projection schema without the offline phase.
    Migration removes offline-phase measurements from the mutable projection,
    records a bounded `legacy_offline_retired` marker, and leaves append-only
    session events untouched.
-5. A legacy run parked in `offline_measure` returns to `preflight`; it cannot
+4. A legacy run parked in `offline_measure` returns to `preflight`; it cannot
    enter live observation until a new operator approval and frozen live
    workload are attached. Runs already in live/experiment/complete retain
    their phase, but legacy offline measurements do not acquire live authority.
@@ -174,12 +171,12 @@ replace a provider-native observation.
    plan/doc surfaces before modifying runtime code.
 2. Add the live-only state transition and projection migration, with focused
    store/tool tests.
-3. Add live-only v2 schemas and switch collector/measurement/bundle validation
-   to them; retain explicit historical v1 validation tests.
+3. Make the branch-only v1 schemas live-only and switch the
+   collector/measurement/bundle validation to the corrected contract.
 4. Remove offline wording and branches from runtime/scaffold skills, public
    docs, schemas, scripts, and active E2E fixtures. Add an `rg` residual gate.
-5. Add an operator-owned validated-vector attach path and prove that model
-   tools cannot fabricate measurement authority.
+5. Prove that slash completion remains advisory and that only the eval bundle
+   validator can grant measurement authority.
 6. Run mocked subscription adapter tests, state migration tests, prompt
    XML/cache checks, targeted Ruff/Mypy/Pytest, and the non-live package gate.
 7. Freeze the prospective run spec and approval, then execute the one-query
@@ -193,7 +190,7 @@ replace a provider-native observation.
 
 ## Acceptance criteria
 
-1. Active runtime, tool schema, runtime skill, scaffold skill, canonical v2
+1. Active runtime, tool schema, runtime skill, scaffold skill, canonical v1
    schemas, collector, measurement script, public docs, and current tests
    contain no `offline_measure` or offline visibility path.
 2. Remaining `offline_measure` literals are allowlisted only in dated
@@ -211,9 +208,10 @@ replace a provider-native observation.
    reordered, pre-freeze, digest-mismatched, or prose-derived observations fail.
 7. F/R/C/P/A/Q/O retain independent denominators and no aggregate GEO score is
    introduced. Missing A/Q/O remain `not_measured`.
-8. Runtime state imports only a schema- and digest-validated vector; a model
-   cannot grant approval, preregister, attach an arbitrary path, or manufacture
-   a measured numerator.
+8. Runtime state cannot grant benchmark or promotion authority. A model cannot
+   grant approval or preregister; model-authored numerators remain advisory,
+   while only the schema- and digest-validated eval bundle is measurement
+   evidence.
 9. Prompt static prefix/cache key, balanced dynamic XML, trajectory call/result
    correlation, privacy classification, and artifact bundle validation pass.
 10. No live result is published until exact-byte privacy review, release
