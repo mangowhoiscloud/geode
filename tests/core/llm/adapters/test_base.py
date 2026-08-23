@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+
 from core.llm.adapters.base import (
     CONCRETE_SOURCES,
     SOURCE_ADAPTER,
@@ -11,11 +13,17 @@ from core.llm.adapters.base import (
     AdapterBillingType,
     AdapterCallRequest,
     AdapterCallResult,
+    CredentialDetectionCapable,
+    EnvironmentDiagnosticCapable,
     EnvironmentReport,
     LLMAdapter,
     Message,
+    ModelListingCapable,
     ModelSpec,
+    QuotaInspectionCapable,
     QuotaWindows,
+    StreamEvent,
+    StreamingCapable,
     ToolSpec,
     UsageSummary,
 )
@@ -94,7 +102,7 @@ def test_adapter_call_result_immutable_tuple_tool_uses() -> None:
 
 
 class _StubAdapter:
-    """Minimum-viable concrete adapter for runtime_checkable Protocol test."""
+    """Completion-only adapter: the entire required Protocol surface."""
 
     name = "stub"
     provider = "stub-provider"
@@ -104,9 +112,10 @@ class _StubAdapter:
     async def acomplete(self, req: AdapterCallRequest) -> AdapterCallResult:
         return AdapterCallResult(text="", usage=UsageSummary(), stop_reason="end_turn")
 
-    async def astream(self, req):  # type: ignore[no-untyped-def]
-        return
-        yield  # pragma: no cover — never reached, satisfies async-generator typing
+
+class _FullyCapableAdapter(_StubAdapter):
+    def astream(self, req: AdapterCallRequest) -> AsyncIterator[StreamEvent]:
+        raise NotImplementedError
 
     def test_environment(self) -> EnvironmentReport:
         return EnvironmentReport(ok=True)
@@ -122,5 +131,20 @@ class _StubAdapter:
 
 
 def test_protocol_runtime_checkable() -> None:
-    """A class satisfying the LLMAdapter Protocol passes isinstance check."""
-    assert isinstance(_StubAdapter(), LLMAdapter)
+    """A completion-only class satisfies LLMAdapter without empty stubs."""
+    adapter = _StubAdapter()
+    assert isinstance(adapter, LLMAdapter)
+    assert not isinstance(adapter, StreamingCapable)
+    assert not isinstance(adapter, EnvironmentDiagnosticCapable)
+    assert not isinstance(adapter, ModelListingCapable)
+    assert not isinstance(adapter, QuotaInspectionCapable)
+    assert not isinstance(adapter, CredentialDetectionCapable)
+
+
+def test_optional_capability_protocols_are_structural() -> None:
+    adapter = _FullyCapableAdapter()
+    assert isinstance(adapter, StreamingCapable)
+    assert isinstance(adapter, EnvironmentDiagnosticCapable)
+    assert isinstance(adapter, ModelListingCapable)
+    assert isinstance(adapter, QuotaInspectionCapable)
+    assert isinstance(adapter, CredentialDetectionCapable)

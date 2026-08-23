@@ -4542,7 +4542,7 @@ from typing import Any
 from core.llm.adapters.base import (
     SOURCE_PAYG, AdapterBillingType,
     AdapterCallRequest, AdapterCallResult,
-    EnvironmentReport, UsageSummary,
+    UsageSummary,
 )
 
 @dataclass
@@ -4561,15 +4561,9 @@ class AcmePaygAdapter:
             usage=UsageSummary(input_tokens=..., output_tokens=...),
             stop_reason=raw.stop_reason,
         )
-
-    def test_environment(self) -> EnvironmentReport:
-        from core.config import settings
-        if not settings.acme_api_key:
-            return EnvironmentReport(ok=False, hints=("set ACME_API_KEY",))
-        return EnvironmentReport(ok=True)
 ```
 
-스트리밍·introspection 메서드(`astream`, `list_models`, `get_quota_windows`, `detect_credential`)는 프로토콜이 요구하지만, 해당 표면을 지원하지 않으면 빈 값이나 `None`을 돌려줘도 됩니다. 단, `test_environment`는 항상 정직해야 합니다.
+스트리밍과 introspection은 필수가 아닙니다. 지원하는 표면만 `StreamingCapable`, `EnvironmentDiagnosticCapable`, `ModelListingCapable`, `QuotaInspectionCapable`, `CredentialDetectionCapable` 구조를 만족시키면 됩니다. 지원하지 않는 메서드를 빈 값이나 `None` stub으로 만들지 마십시오.
 
 ## 2\. 레지스트리에 등록합니다
 
@@ -4612,14 +4606,16 @@ SDK type에 필드가 있다는 사실만으로 지원을 선언하지 않습니
 ```
 uv run python -c "
 from core.llm.adapters.registry import bootstrap_builtins, resolve_for
+from core.llm.adapters import EnvironmentDiagnosticCapable
 bootstrap_builtins()
 a = resolve_for('acme', 'payg')
 print(a.name, a.provider, a.source)
-print(a.test_environment().ok)
+if isinstance(a, EnvironmentDiagnosticCapable):
+    print(a.test_environment().ok)
 "
 ```
 
-어댑터 이름이 출력되면 라우팅이 그 쌍을 찾을 수 있습니다. `test_environment().ok`는 자격증명 상태를 정직하게 보고합니다.
+어댑터 이름이 출력되면 라우팅이 그 쌍을 찾을 수 있습니다. 환경 진단 capability를 구현했다면 `test_environment().ok`도 자격증명 상태를 정직하게 보고합니다.
 
 _참조:_ [Providers](https://mangowhoiscloud.github.io/geode/docs/runtime/llm/providers.md), [Tool calling](https://mangowhoiscloud.github.io/geode/docs/runtime/llm/tool-calling.md), [Structured output](https://mangowhoiscloud.github.io/geode/docs/runtime/llm/structured-output.md), [Pick a path](https://mangowhoiscloud.github.io/geode/docs/run/pick-path.md).
 

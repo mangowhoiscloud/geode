@@ -30,7 +30,6 @@ from core.llm.adapters.base import (
     CredentialDetection,
     EnvironmentReport,
     ModelSpec,
-    QuotaWindows,
     StreamEvent,
     TextCompletionResult,
     WebSearchResult,
@@ -194,10 +193,6 @@ class AnthropicPaygAdapter:
             seen.add(mid)
             models.append(model_spec_for_adapter(mid, provider=self.provider))
         return models
-
-    def get_quota_windows(self) -> QuotaWindows | None:
-        # PAYG is metered per-call; no aggregate quota window.
-        return None
 
     def detect_credential(self) -> CredentialDetection | None:
         from core.config import ANTHROPIC_PRIMARY, settings

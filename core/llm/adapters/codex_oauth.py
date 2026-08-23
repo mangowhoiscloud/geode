@@ -41,7 +41,6 @@ from core.llm.adapters.base import (
     EnvironmentReport,
     Message,
     ModelSpec,
-    QuotaWindows,
     StreamEvent,
     TextCompletionResult,
     WebSearchResult,
@@ -416,15 +415,6 @@ class CodexOAuthAdapter:
             seen.add(mid)
             out.append(model_spec_for_adapter(mid, provider=self.provider))
         return out
-
-    def get_quota_windows(self) -> QuotaWindows | None:
-        """Codex backend exposes rate-limit headers per response but no aggregate.
-
-        Returns ``None`` for now — the UI renders "unknown" rather than
-        guessing. A future ratchet PR can wire the per-response ``rate_limits``
-        block from ``core/llm/providers/codex.py`` into a snapshot cache.
-        """
-        return None
 
     def detect_credential(self) -> CredentialDetection | None:
         from core.llm.providers.codex import resolve_codex_token

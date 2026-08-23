@@ -24,7 +24,7 @@ from core.llm.adapters.registry import _reset_for_test
 
 
 class _Stub:
-    """Minimum LLMAdapter Protocol stub used across registry tests."""
+    """Completion-only LLMAdapter used across registry tests."""
 
     def __init__(self, name: str, provider: str, source: str) -> None:
         self.name = name
@@ -35,23 +35,12 @@ class _Stub:
     async def acomplete(self, req):  # type: ignore[no-untyped-def]
         raise NotImplementedError
 
-    async def astream(self, req):  # type: ignore[no-untyped-def]
-        return
-        yield  # pragma: no cover — never reached, satisfies async-generator typing
 
+class _DiagnosticStub(_Stub):
     def test_environment(self):  # type: ignore[no-untyped-def]
         from core.llm.adapters.base import EnvironmentReport
 
         return EnvironmentReport(ok=True)
-
-    def list_models(self):  # type: ignore[no-untyped-def]
-        return []
-
-    def get_quota_windows(self):  # type: ignore[no-untyped-def]
-        return None
-
-    def detect_credential(self):  # type: ignore[no-untyped-def]
-        return None
 
 
 @pytest.fixture(autouse=True)
@@ -194,13 +183,13 @@ def test_adapter_health_returns_environment_report_for_stub() -> None:
     """``adapter_health(name)`` delegates to ``adapter.test_environment()``.
 
     Step I.c — the accessor is the ergonomic one-call probe over the
-    existing ``LLMAdapter.test_environment`` method. The stub above
+    optional environment-diagnostic capability. The stub above
     always reports ``ok=True``; this confirms the helper threads the
     result through unchanged.
     """
     from core.llm.adapters.base import EnvironmentReport
 
-    register_adapter(_Stub("stub-health-ok", "stub", SOURCE_PAYG))
+    register_adapter(_DiagnosticStub("stub-health-ok", "stub", SOURCE_PAYG))
     report = adapter_health("stub-health-ok")
     assert isinstance(report, EnvironmentReport)
     assert report.ok is True
@@ -213,7 +202,7 @@ def test_adapter_health_surfaces_not_ok_report() -> None:
     """
     from core.llm.adapters.base import EnvironmentReport
 
-    class _UnhealthyStub(_Stub):
+    class _UnhealthyStub(_DiagnosticStub):
         def test_environment(self) -> EnvironmentReport:
             return EnvironmentReport(
                 ok=False,
@@ -226,6 +215,13 @@ def test_adapter_health_surfaces_not_ok_report() -> None:
     assert report.ok is False
     assert report.checks == (("ANTHROPIC_API_KEY", "missing"),)
     assert report.hints == ("set ANTHROPIC_API_KEY",)
+
+
+def test_adapter_health_reports_unsupported_optional_capability() -> None:
+    register_adapter(_Stub("minimal", "stub", SOURCE_PAYG))
+    report = adapter_health("minimal")
+    assert report.ok is False
+    assert report.hints == ("adapter 'minimal' does not support environment diagnostics",)
 
 
 def test_adapter_health_missing_adapter_raises_keyerror() -> None:

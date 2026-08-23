@@ -138,6 +138,13 @@ functional change.
 
 ### Architecture
 
+- **LLM adapters no longer require unsupported stubs.** The core adapter
+  contract now requires only route identity plus `acomplete`; streaming,
+  environment diagnostics, model listing, quota inspection, and credential
+  detection are independent structural capabilities. Existing built-ins keep
+  their provider-call behavior and no longer claim an unavailable quota API;
+  completion-only adapters can register without implementing empty methods.
+
 - **MCP runtime responsibilities now have one owner each.**
   `MCPServerManager` remains the public compatibility facade, while concrete
   catalog, connection-pool, discovery, invocation/trace, and lifecycle
