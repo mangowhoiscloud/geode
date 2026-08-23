@@ -72,9 +72,12 @@ functional change.
   visible citations separately. Local site preflight remains partial until a
   digest-matched public-host HTTP/HTML/canonical/robots receipt is supplied;
   a separate source-aware typed verifier overlay can add A and claim-support Q
-  without rewriting native outcomes. First-party outcomes are admitted only
-  through a completed-window receipt. The evaluator never invents F, A, Q, O,
-  or an aggregate GEO score.
+  without rewriting native outcomes. Failed host checks now retain a partial
+  receipt instead of disappearing as exceptions. Native results no longer
+  carry null verifier/outcome placeholders; verifier claims bind their text and
+  exact source quote, while first-party outcomes attach later through a
+  native-export-bound completed-window receipt. The evaluator never invents F,
+  A, Q, O, or an aggregate GEO score.
 
 - **Third-party extensions now authorize before executable load.** Filesystem
   hooks, package LLM adapters, project/personal skills, and MCP servers project

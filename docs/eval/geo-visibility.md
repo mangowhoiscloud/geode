@@ -22,6 +22,7 @@ eval_contracts:
   - docs/eval/schemas/geo-outcome.schema.json
   - docs/eval/schemas/geo-preflight.schema.json
   - docs/eval/schemas/geo-verifier-results.schema.json
+  - docs/eval/schemas/geo-verifier-receipt.schema.json
   - docs/eval/schemas/geo-workload.schema.json
   - docs/eval/schemas/publication.schema.json
   - docs/eval/schemas/run-spec.schema.json
@@ -137,7 +138,7 @@ of the stage was measured.
 
 | State | What the gap means | Required comparator |
 |---|---|---|
-| F · `partial` | All 78 local URLs and 577/577 internal links passed, but the deployed sitemap had 77 URLs, so no receipt for the same 78-URL set could be bound. | Identity check: local export vs public host with the same URL digest. |
+| F · `partial` | All 78 local URLs and 577/577 internal links passed, but the previous runner discarded the deployed 77/78 sitemap failure as an exception. The current runner preserves it as a partial receipt. | Identity check: local export vs public host with the same URL digest. |
 | R/C/P | Pages measured R 0/120, C 4/120, and P 4/4. R is an observed zero, not an empty cell. | Surface diagnostic: Pages vs GitHub repository, which appeared in retrieval in 109/120 observations and citations in 9/120. |
 | A/Q | A was 4/4 and Q was 43/58; an earlier same-model repeat returned 35/54. Q remains `partial` because it covers claim support only. | Verdict calibration: independent verifier vs a human sample over the same frozen claim set. |
 | O · `not_measured` | No completed Search Console, referral, or conversion window exists, so no eligible denominator was created. | Outcome comparison: baseline vs treatment with the same window, queries, and engine. |
@@ -153,7 +154,9 @@ with frozen baseline and treatment arms.
 1. Run deterministic preflight first. Local export evidence is intentionally
    `partial`; F becomes `measured` only when a separate public-host receipt
    binds the same URL-set digest and passes HTTP, HTML, self-canonical,
-   noindex, and host-root robots checks:
+   noindex, and host-root robots checks. A failed public-host check still writes
+   a `status=fail` receipt and exits non-zero, preserving missing and unexpected
+   sitemap URLs instead of erasing the observation:
 
    ```bash
    cd site
@@ -191,6 +194,9 @@ with frozen baseline and treatment arms.
      --workload <run-dir>/workload.json \
      --native-results <run-dir>/native-results.json \
      --rubric <run-dir>/verifier-rubric.json \
+     --adapter <verifier-adapter> \
+     --model <verifier-model> \
+     --producer-version <version-or-revision> \
      --out <run-dir>/verifier-results.json
 
    uv run python scripts/eval/geo_visibility.py \
@@ -198,16 +204,23 @@ with frozen baseline and treatment arms.
      --workload <run-dir>/workload.json \
      --native-results <run-dir>/native-results.json \
      --verifier-results <run-dir>/verifier-results.json \
+     --outcome <run-dir>/outcome.json \
      --out <run-dir>/geo-vector.json
    ```
 
    The command validates the complete 24×K observation matrix and emits
    separate R/C/P/A/Q denominators, the run-spec digest, native producer,
-   verifier/rubric identity, preflight/outcome receipt digests, and audited-claim
-   coverage. Requested result count is an input constraint, not a promise that
+   verifier/model/rubric identity, preflight/outcome receipt digests, and
+   audited-claim coverage. Verifier support rows retain the claim text and an
+   exact quote that must occur in the bound source receipt. The verifier adapter
+   is explicit so a second provider can produce an independent calibration run.
+   Requested result count is an input constraint, not a promise that
    the provider will expose exactly that many sources. The collector retains
    every provider-native source and citation and never parses answer prose into
-   either field. It has no aggregate score field.
+   either field. Native results contain no verifier or outcome placeholders.
+   A completed first-party analytics receipt binds its native export and joins
+   later through `--outcome`, without rewriting the immutable native result. It
+   has no aggregate score field.
 3. For offline intervention evaluation, hash original, sham, and targeted
    repair arms; reindex every arm and re-run retrieval, reranking, and
    generation. Include initial-rank controls and a multi-actor adoption arm.

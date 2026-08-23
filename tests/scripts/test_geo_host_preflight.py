@@ -39,10 +39,16 @@ def test_host_preflight_binds_public_fetch_to_frozen_sitemap(
         "status": 404,
         "policy": "allow-by-absence",
     }
+    assert receipt["status"] == "pass"
+    assert receipt["sitemap_difference"] == {
+        "missing": [],
+        "unexpected": [],
+        "duplicates": [],
+    }
     assert all(check["numerator"] == check["denominator"] for check in receipt["checks"].values())
 
 
-def test_host_preflight_rejects_sitemap_drift(
+def test_host_preflight_preserves_sitemap_drift(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     expected = tmp_path / "sitemap.xml"
@@ -58,10 +64,33 @@ def test_host_preflight_rejects_sitemap_drift(
         ),
     )
 
-    with pytest.raises(ValueError, match="does not match"):
-        geo_host_preflight.audit(
-            base_url="https://example.com/geode/",
-            expected_sitemap=expected,
-            timeout=1,
-            concurrency=1,
+    receipt = geo_host_preflight.audit(
+        base_url="https://example.com/geode/",
+        expected_sitemap=expected,
+        timeout=1,
+        concurrency=1,
+    )
+
+    assert receipt["status"] == "fail"
+    assert receipt["checks"]["sitemap_parity"] == {"numerator": 0, "denominator": 1}
+    assert receipt["sitemap_difference"] == {
+        "missing": ["https://example.com/geode/"],
+        "unexpected": ["https://example.com/geode/different/"],
+        "duplicates": [],
+    }
+
+    output = tmp_path / "host-preflight.json"
+    assert (
+        geo_host_preflight.main(
+            [
+                "--base-url",
+                "https://example.com/geode/",
+                "--expected-sitemap",
+                str(expected),
+                "--out",
+                str(output),
+            ]
         )
+        == 1
+    )
+    assert output.is_file()

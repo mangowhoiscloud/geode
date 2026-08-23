@@ -10,6 +10,7 @@ from typing import Any
 import pytest
 from core.llm.adapters.base import WebSearchResult
 from scripts.eval.geo_collect import collect
+from scripts.eval.geo_verify import _validate_verdict
 from scripts.eval.geo_visibility import _validate_live_approval, validate_and_measure
 
 
@@ -55,7 +56,6 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
     _write_json(workload_path, workload)
 
     native_observations: dict[str, Any] = {}
-    verifier_observations: dict[str, Any] = {}
     rows: list[dict[str, Any]] = []
     target = "https://mangowhoiscloud.github.io/geode/docs/"
     other = "https://example.com/reference"
@@ -65,19 +65,6 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
         retrieval = [{"url": target if index % 2 == 0 else other, "rank": 1}]
         target_cited = index < 8
         citations = [{"url": target, "visible_rank": 1 if index < 4 else 4}] if target_cited else []
-        absorption = index < 6 if target_cited else None
-        quality = (
-            [
-                {
-                    "claim_id": f"claim-{index + 1}",
-                    "source_url": target,
-                    "supported": index < 7,
-                }
-            ]
-            if target_cited
-            else []
-        )
-        quality_claims_expected = 1 if target_cited else None
         native_observations[observation_id] = {
             "query": query,
             "engine": "example-search",
@@ -89,12 +76,6 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
             "retrieval": retrieval,
             "citations": citations,
         }
-        if target_cited:
-            verifier_observations[observation_id] = {
-                "absorption": absorption,
-                "quality": quality,
-                "quality_claims_expected": quality_claims_expected,
-            }
         rows.append(
             {
                 "observation_id": observation_id,
@@ -109,9 +90,6 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
                 "search_activated": True,
                 "retrieval": retrieval,
                 "citations": citations,
-                "absorption": absorption,
-                "quality": quality,
-                "quality_claims_expected": quality_claims_expected,
                 "native_receipt": {"path": "native.json", "sha256": "pending"},
                 "native_source_locator": {
                     "query": f"/observations/{observation_id}/query",
@@ -124,42 +102,13 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
                     "retrieval": f"/observations/{observation_id}/retrieval",
                     "citations": f"/observations/{observation_id}/citations",
                 },
-                "verifier_receipt": (
-                    {"path": "verifier.json", "sha256": "pending"} if target_cited else None
-                ),
-                "verifier_source_locator": {
-                    "absorption": (
-                        f"/observations/{observation_id}/absorption" if target_cited else None
-                    ),
-                    "quality": (
-                        f"/observations/{observation_id}/quality" if target_cited else None
-                    ),
-                    "quality_claims_expected": (
-                        f"/observations/{observation_id}/quality_claims_expected"
-                        if target_cited
-                        else None
-                    ),
-                },
             }
         )
 
     native_path = tmp_path / "native.json"
-    verifier_path = tmp_path / "verifier.json"
-    rubric_path = tmp_path / "verifier-rubric.json"
     _write_json(native_path, {"observations": native_observations})
-    _write_json(verifier_path, {"observations": verifier_observations})
-    _write_json(
-        rubric_path,
-        {
-            "schema_id": "geode.geo-verifier-rubric@1",
-            "absorption": "Whether the cited target contributes to the answer.",
-            "quality": "Audit every target-linked claim for source support.",
-        },
-    )
     for row in rows:
         row["native_receipt"]["sha256"] = _sha256(native_path)
-        if row["verifier_receipt"] is not None:
-            row["verifier_receipt"]["sha256"] = _sha256(verifier_path)
 
     results_path = tmp_path / "native-results.json"
     _write_json(
@@ -171,12 +120,6 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
             "workload_sha256": _sha256(workload_path),
             "collected_at": "2026-08-23T00:10:00Z",
             "preflight_context": None,
-            "verifier_context": {
-                "producer": "example-independent-verifier",
-                "version": "1",
-                "rubric": {"path": "verifier-rubric.json", "sha256": _sha256(rubric_path)},
-            },
-            "outcome_context": None,
             "observations": rows,
         },
     )
@@ -251,7 +194,7 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
             "artifacts": {
                 "native_results": "native-results.json",
                 "trajectory": None,
-                "verifier_receipts": "verifier.json",
+                "verifier_receipts": None,
                 "attempts": "attempts.jsonl",
                 "analysis": "analysis.json",
                 "publication_manifest": None,
@@ -263,6 +206,77 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
         },
     )
     return run_spec_path, workload_path, results_path
+
+
+def _verifier_overlay(tmp_path: Path, results: Path, *, expected_claims: int = 1) -> Path:
+    rubric = tmp_path / "rubric.json"
+    _write_json(rubric, {"schema_id": "geode.geo-verifier-rubric@1"})
+    verdict = {
+        "absorption": True,
+        "quality": [
+            {
+                "claim_id": "claim-1",
+                "claim_text": "GEODE has documentation.",
+                "source_url": "https://mangowhoiscloud.github.io/geode/docs/",
+                "source_quote": "GEODE documentation",
+                "supported": True,
+                "reason": "The source explicitly describes the documentation.",
+            }
+        ],
+        "quality_claims_expected": expected_claims,
+    }
+    source = tmp_path / "source.json"
+    _write_json(
+        source,
+        {
+            "schema_id": "geode.geo-source-receipt@1",
+            "url": "https://mangowhoiscloud.github.io/geode/docs/",
+            "content": "GEODE documentation describes the runtime.",
+        },
+    )
+    receipt = tmp_path / "verdict.json"
+    _write_json(
+        receipt,
+        {
+            "schema_id": "geode.geo-verifier-receipt@1",
+            "observation_id": "obs-01",
+            "producer": "test-verifier",
+            "model": "test-model",
+            "verified_at": "2026-08-23T00:10:00Z",
+            "rubric_sha256": _sha256(rubric),
+            "sources": [{"path": source.name, "sha256": _sha256(source)}],
+            **verdict,
+            "rationale": "One target-linked claim was audited.",
+        },
+    )
+    overlay = tmp_path / "verifier-results.json"
+    _write_json(
+        overlay,
+        {
+            "schema_id": "geode.geo-verifier-results@1",
+            "schema_version": 1,
+            "run_id": "geo-quality-test",
+            "native_results_sha256": _sha256(results),
+            "verified_at": "2026-08-23T00:10:00Z",
+            "verifier_context": {
+                "producer": "test-verifier",
+                "version": "v1",
+                "model": "test-model",
+                "rubric": {"path": rubric.name, "sha256": _sha256(rubric)},
+            },
+            "observations": [
+                {
+                    "observation_id": "obs-01",
+                    **verdict,
+                    "verifier_receipt": {
+                        "path": receipt.name,
+                        "sha256": _sha256(receipt),
+                    },
+                }
+            ],
+        },
+    )
+    return overlay
 
 
 def test_geo_visibility_emits_vector_without_aggregate_score(tmp_path: Path) -> None:
@@ -278,9 +292,8 @@ def test_geo_visibility_emits_vector_without_aggregate_score(tmp_path: Path) -> 
     assert payload["search_activation"] == {"numerator": 24, "denominator": 24}
     assert payload["run_spec_sha256"] == _sha256(run_spec)
     assert payload["quality_claim_coverage"] == {
-        "audited_claims": 8,
-        "expected_claims": 8,
-        "audited_target_cited_responses": 8,
+        "audited_claims": 0,
+        "audited_target_cited_responses": 0,
         "target_cited_responses": 8,
     }
     assert "aggregate_score" not in payload
@@ -292,8 +305,8 @@ def test_geo_visibility_emits_vector_without_aggregate_score(tmp_path: Path) -> 
         "R": (12, 24, "measured"),
         "C": (8, 24, "measured"),
         "P": (4, 8, "measured"),
-        "A": (6, 8, "measured"),
-        "Q": (7, 8, "partial"),
+        "A": (None, None, "not_measured"),
+        "Q": (None, None, "not_measured"),
         "O": (None, None, "not_measured"),
     }
 
@@ -331,10 +344,13 @@ def test_geo_visibility_requires_public_host_for_complete_fetch(tmp_path: Path) 
         {
             "schema_id": "geode.geo-host-preflight@1",
             "schema_version": 1,
+            "status": "pass",
             "generated_at": "2026-08-23T00:02:00Z",
             "base_url": "https://mangowhoiscloud.github.io/geode/",
             "sitemap_url": "https://mangowhoiscloud.github.io/geode/sitemap.xml",
             "urlset_sha256": urlset_sha256,
+            "observed_urlset_sha256": urlset_sha256,
+            "sitemap_difference": {"missing": [], "unexpected": [], "duplicates": []},
             "robots": {
                 "url": "https://mangowhoiscloud.github.io/robots.txt",
                 "status": 404,
@@ -394,10 +410,32 @@ def test_geo_visibility_requires_public_host_for_complete_fetch(tmp_path: Path) 
     assert measured["vector"]["F"]["numerator"] == 78
     assert "577 internal link occurrences" in measured["vector"]["F"]["finding"]
 
+    failed_host = json.loads(host_receipt.read_text(encoding="utf-8"))
+    failed_host["status"] = "fail"
+    failed_host["sitemap_difference"]["missing"] = [
+        "https://mangowhoiscloud.github.io/geode/docs/benchmarks/geo/"
+    ]
+    failed_host["checks"]["sitemap_parity"]["numerator"] = 77
+    failed_host["checks"]["http_2xx"]["numerator"] = 77
+    _write_json(host_receipt, failed_host)
+    payload["preflight_context"]["host"]["sha256"] = _sha256(host_receipt)
+    _write_json(results, payload)
+
+    partial = validate_and_measure(
+        run_spec_path=run_spec,
+        workload_path=workload,
+        native_results_path=results,
+    )
+    assert partial["vector"]["F"]["status"] == "partial"
+    assert partial["vector"]["F"]["numerator"] == 77
+    assert "1 missing" in partial["vector"]["F"]["finding"]
+
 
 def test_geo_visibility_binds_first_party_outcome_receipt(tmp_path: Path) -> None:
     run_spec, workload, results = _fixture(tmp_path)
     outcome = tmp_path / "outcome.json"
+    source_receipt = tmp_path / "search-console-export.json"
+    _write_json(source_receipt, {"clicks": 4, "impressions": 100})
     _write_json(
         outcome,
         {
@@ -408,6 +446,11 @@ def test_geo_visibility_binds_first_party_outcome_receipt(tmp_path: Path) -> Non
             "collected_at": "2026-08-24T00:00:01Z",
             "window": {"start": "2026-08-23T00:00:00Z", "end": "2026-08-24T00:00:00Z"},
             "source": {"system": "search-console", "property": "sc-domain:example.com"},
+            "source_receipt": {
+                "path": source_receipt.name,
+                "sha256": _sha256(source_receipt),
+            },
+            "source_locator": {"numerator": "/clicks", "denominator": "/impressions"},
             "primary_metric": {
                 "name": "clicks-per-impression",
                 "numerator": 4,
@@ -416,16 +459,17 @@ def test_geo_visibility_binds_first_party_outcome_receipt(tmp_path: Path) -> Non
             },
         },
     )
-    payload = json.loads(results.read_text(encoding="utf-8"))
-    payload["outcome_context"] = {"path": outcome.name, "sha256": _sha256(outcome)}
-    _write_json(results, payload)
+    native_sha256 = _sha256(results)
 
     measured = validate_and_measure(
         run_spec_path=run_spec,
         workload_path=workload,
         native_results_path=results,
+        outcome_path=outcome,
     )
 
+    assert _sha256(results) == native_sha256
+    assert measured["outcome_context"] == {"path": outcome.name, "sha256": _sha256(outcome)}
     assert measured["vector"]["O"] | {"finding": ""} == {
         "stage": "O",
         "phase": "offline_measure",
@@ -436,58 +480,21 @@ def test_geo_visibility_binds_first_party_outcome_receipt(tmp_path: Path) -> Non
         "evidence": ["outcome.json"],
     }
 
+    drifted = json.loads(outcome.read_text(encoding="utf-8"))
+    drifted["primary_metric"]["numerator"] = 5
+    _write_json(outcome, drifted)
+    with pytest.raises(ValueError, match="does not match its native source receipt"):
+        validate_and_measure(
+            run_spec_path=run_spec,
+            workload_path=workload,
+            native_results_path=results,
+            outcome_path=outcome,
+        )
+
 
 def test_geo_visibility_applies_separate_verifier_overlay(tmp_path: Path) -> None:
     run_spec, workload, results = _fixture(tmp_path)
-    native = json.loads(results.read_text(encoding="utf-8"))
-    native["verifier_context"] = None
-    for row in native["observations"]:
-        row["absorption"] = None
-        row["quality"] = []
-        row["quality_claims_expected"] = None
-        row["verifier_receipt"] = None
-        row["verifier_source_locator"] = {
-            "absorption": None,
-            "quality": None,
-            "quality_claims_expected": None,
-        }
-    _write_json(results, native)
-    rubric = tmp_path / "rubric.json"
-    _write_json(rubric, {"schema_id": "geode.geo-verifier-rubric@1"})
-    receipt = tmp_path / "verdict.json"
-    target = "https://mangowhoiscloud.github.io/geode/docs/"
-    verdict = {
-        "absorption": True,
-        "quality": [{"claim_id": "claim-1", "source_url": target, "supported": True}],
-        "quality_claims_expected": 1,
-    }
-    _write_json(receipt, verdict)
-    overlay = tmp_path / "verifier-results.json"
-    _write_json(
-        overlay,
-        {
-            "schema_id": "geode.geo-verifier-results@1",
-            "schema_version": 1,
-            "run_id": "geo-quality-test",
-            "native_results_sha256": _sha256(results),
-            "verified_at": "2026-08-23T00:10:00Z",
-            "verifier_context": {
-                "producer": "test-verifier",
-                "version": "v1",
-                "rubric": {"path": rubric.name, "sha256": _sha256(rubric)},
-            },
-            "observations": [
-                {
-                    "observation_id": "obs-01",
-                    **verdict,
-                    "verifier_receipt": {
-                        "path": receipt.name,
-                        "sha256": _sha256(receipt),
-                    },
-                }
-            ],
-        },
-    )
+    overlay = _verifier_overlay(tmp_path, results)
 
     measured = validate_and_measure(
         run_spec_path=run_spec,
@@ -499,7 +506,42 @@ def test_geo_visibility_applies_separate_verifier_overlay(tmp_path: Path) -> Non
     assert measured["vector"]["A"]["numerator"] == 1
     assert measured["vector"]["A"]["denominator"] == 1
     assert measured["vector"]["A"]["status"] == "partial"
+    assert measured["vector"]["A"]["evidence"] == ["verifier-results.json#/observations"]
+    assert measured["vector"]["Q"]["evidence"] == ["verifier-results.json#/observations"]
     assert measured["verifier_results_sha256"] == _sha256(overlay)
+
+
+@pytest.mark.parametrize(
+    ("source_quote", "message"),
+    [
+        ("", "require an exact source quote"),
+        ("invented source text", "does not occur"),
+    ],
+)
+def test_geo_verifier_rejects_unbound_support_evidence(source_quote: str, message: str) -> None:
+    url = "https://example.com/source"
+    verdict = {
+        "absorption": True,
+        "quality": [
+            {
+                "claim_id": "claim-1",
+                "claim_text": "The source supports this claim.",
+                "source_url": url,
+                "source_quote": source_quote,
+                "supported": True,
+                "reason": "Source support was checked.",
+            }
+        ],
+        "quality_claims_expected": 1,
+        "rationale": "One target-linked claim was audited.",
+    }
+
+    with pytest.raises(ValueError, match=message):
+        _validate_verdict(
+            verdict,
+            target_urls=(url,),
+            fetched={url: {"content": "The exact source text."}},
+        )
 
 
 def test_geo_visibility_rejects_observation_matrix_drift(tmp_path: Path) -> None:
@@ -590,23 +632,14 @@ def test_geo_visibility_rejects_receipt_bound_query_drift(tmp_path: Path) -> Non
 
 def test_geo_visibility_rejects_incomplete_quality_claim_universe(tmp_path: Path) -> None:
     run_spec, workload, results = _fixture(tmp_path)
-    verifier_path = tmp_path / "verifier.json"
-    verifier = json.loads(verifier_path.read_text(encoding="utf-8"))
-    verifier["observations"]["obs-01"]["quality"] = []
-    _write_json(verifier_path, verifier)
-
-    payload = json.loads(results.read_text(encoding="utf-8"))
-    payload["observations"][0]["quality"] = []
-    for observation in payload["observations"]:
-        if observation["verifier_receipt"] is not None:
-            observation["verifier_receipt"]["sha256"] = _sha256(verifier_path)
-    _write_json(results, payload)
+    overlay = _verifier_overlay(tmp_path, results, expected_claims=2)
 
     with pytest.raises(ValueError, match="cover the verifier claim universe"):
         validate_and_measure(
             run_spec_path=run_spec,
             workload_path=workload,
             native_results_path=results,
+            verifier_results_path=overlay,
         )
 
 
@@ -686,6 +719,18 @@ def test_geo_collector_preserves_retrieval_and_citations_separately(
 
     assert len(payload["observations"]) == 24
     first = payload["observations"][0]
+    assert "verifier_context" not in payload
+    assert "outcome_context" not in payload
+    assert (
+        not {
+            "absorption",
+            "quality",
+            "quality_claims_expected",
+            "verifier_receipt",
+            "verifier_source_locator",
+        }
+        & first.keys()
+    )
     assert first["retrieval"] == [{"url": "https://example.com/retrieved", "rank": 1}]
     assert first["citations"] == [
         {"url": "https://mangowhoiscloud.github.io/geode/docs/", "visible_rank": 1}

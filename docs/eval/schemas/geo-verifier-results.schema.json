@@ -23,10 +23,11 @@
     "verified_at": {"type": "string", "format": "date-time"},
     "verifier_context": {
       "type": "object",
-      "required": ["producer", "version", "rubric"],
+      "required": ["producer", "version", "model", "rubric"],
       "properties": {
         "producer": {"type": "string", "minLength": 1, "maxLength": 128},
         "version": {"type": "string", "minLength": 1, "maxLength": 128},
+        "model": {"type": "string", "minLength": 1, "maxLength": 128},
         "rubric": {"$ref": "#/$defs/evidence_ref"}
       },
       "additionalProperties": false
@@ -45,11 +46,14 @@
             "minItems": 1,
             "items": {
               "type": "object",
-              "required": ["claim_id", "source_url", "supported"],
+              "required": ["claim_id", "claim_text", "source_url", "source_quote", "supported", "reason"],
               "properties": {
                 "claim_id": {"type": "string", "minLength": 1, "maxLength": 256},
+                "claim_text": {"type": "string", "minLength": 1, "maxLength": 2000},
                 "source_url": {"type": "string", "format": "uri", "maxLength": 2000},
-                "supported": {"type": "boolean"}
+                "source_quote": {"type": "string", "maxLength": 1000},
+                "supported": {"type": "boolean"},
+                "reason": {"type": "string", "minLength": 1, "maxLength": 2000}
               },
               "additionalProperties": false
             }

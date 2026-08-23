@@ -83,13 +83,17 @@ def audit(
         for url in expected
     ):
         raise ValueError("frozen sitemap URLs must stay under the https base URL")
+    if len(expected) != len(set(expected)):
+        raise ValueError("frozen sitemap URLs must be unique")
     sitemap_url = urljoin(base, "sitemap.xml")
     sitemap_status, _, _, sitemap_body = _get(sitemap_url, timeout)
     if sitemap_status != 200:
         raise ValueError(f"public sitemap returned HTTP {sitemap_status}")
     observed = _urls(sitemap_body)
-    if observed != expected:
-        raise ValueError("public sitemap does not match the frozen exported sitemap")
+    observed_set = set(observed)
+    missing = [url for url in expected if url not in observed_set]
+    unexpected = [url for url in observed if url not in set(expected)]
+    duplicates = list(dict.fromkeys(url for url in observed if observed.count(url) > 1))
 
     robots_url = urljoin(base, "/robots.txt")
     robots_status, _, _, robots_body = _get(robots_url, timeout)
@@ -128,16 +132,32 @@ def audit(
         }
         for index, name in enumerate(names)
     }
-    checks["sitemap_parity"] = {"numerator": len(observed), "denominator": len(expected)}
-    if any(row["numerator"] != row["denominator"] for row in checks.values()):
-        raise ValueError(f"public-host GEO preflight failed: {checks}")
+    checks["sitemap_parity"] = {
+        "numerator": len(expected) - len(missing),
+        "denominator": len(expected),
+    }
+    status = (
+        "pass"
+        if not missing
+        and not unexpected
+        and not duplicates
+        and all(row["numerator"] == row["denominator"] for row in checks.values())
+        else "fail"
+    )
     return {
         "schema_id": "geode.geo-host-preflight@1",
         "schema_version": 1,
+        "status": status,
         "generated_at": datetime.now(UTC).isoformat(),
         "base_url": base,
         "sitemap_url": sitemap_url,
         "urlset_sha256": _digest(expected),
+        "observed_urlset_sha256": _digest(observed),
+        "sitemap_difference": {
+            "missing": missing,
+            "unexpected": unexpected,
+            "duplicates": duplicates,
+        },
         "robots": {"url": robots_url, "status": robots_status, "policy": robots_policy},
         "checks": checks,
     }
@@ -161,7 +181,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     _write_exclusive(args.out, payload)
     print(args.out)
-    return 0
+    return 0 if payload["status"] == "pass" else 1
 
 
 if __name__ == "__main__":

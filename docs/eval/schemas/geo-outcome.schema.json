@@ -3,7 +3,18 @@
   "$id": "https://raw.githubusercontent.com/mangowhoiscloud/geode/main/docs/eval/schemas/geo-outcome.schema.json",
   "title": "GEODE GEO first-party outcome receipt v1",
   "type": "object",
-  "required": ["schema_id", "schema_version", "run_id", "workload_sha256", "collected_at", "window", "source", "primary_metric"],
+  "$defs": {
+    "evidence_ref": {
+      "type": "object",
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1, "maxLength": 1000},
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "required": ["schema_id", "schema_version", "run_id", "workload_sha256", "collected_at", "window", "source", "source_receipt", "source_locator", "primary_metric"],
   "properties": {
     "schema_id": {"const": "geode.geo-outcome@1"},
     "schema_version": {"const": 1},
@@ -25,6 +36,16 @@
       "properties": {
         "system": {"enum": ["search-console", "referral-analytics", "conversion-analytics"]},
         "property": {"type": "string", "minLength": 1, "maxLength": 256}
+      },
+      "additionalProperties": false
+    },
+    "source_receipt": {"$ref": "#/$defs/evidence_ref"},
+    "source_locator": {
+      "type": "object",
+      "required": ["numerator", "denominator"],
+      "properties": {
+        "numerator": {"type": "string", "pattern": "^/", "maxLength": 1000},
+        "denominator": {"type": "string", "pattern": "^/", "maxLength": 1000}
       },
       "additionalProperties": false
     },

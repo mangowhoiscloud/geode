@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import copy
 import hashlib
 import json
 import os
@@ -53,6 +52,12 @@ def _is_target(url: str, prefixes: tuple[str, ...]) -> bool:
         if candidate_path == prefix_path or candidate_path.startswith(prefix_path + "/"):
             return True
     return False
+
+
+def _quote_in_source(quote: str, source: str) -> bool:
+    normalized_quote = " ".join(quote.split()).casefold()
+    normalized_source = " ".join(source.split()).casefold()
+    return bool(normalized_quote) and normalized_quote in normalized_source
 
 
 def _load_bound_receipt(
@@ -190,29 +195,43 @@ def _fetch_metric(results_path: Path, context: dict[str, Any] | None) -> dict[st
         raise ValueError("GEO link-audit pass receipt contains a broken link")
     pages = int(checks["export"]["denominator"])
     host_ref = context["host"]
-    host = None
+    host: dict[str, Any] | None = None
+    host_passes = pages
     if host_ref is not None:
-        host = _load_bound_receipt(results_path, host_ref, kind="geo-host-preflight")
-        if not isinstance(host, dict):
+        loaded_host = _load_bound_receipt(results_path, host_ref, kind="geo-host-preflight")
+        if not isinstance(loaded_host, dict):
             raise ValueError("GEO host preflight receipt must be an object")
+        host = loaded_host
         _validate_schema(host, "geo-host-preflight.schema.json", label="host preflight")
         if host["urlset_sha256"] != site["urlset_sha256"]:
             raise ValueError("GEO local and public host URL sets do not match")
-        if any(row["numerator"] != row["denominator"] for row in host["checks"].values()):
-            raise ValueError("GEO host preflight pass receipt contains an incomplete check")
         if int(host["checks"]["http_2xx"]["denominator"]) != pages:
             raise ValueError("GEO local export and public host page counts do not match")
+        host_passes = min(int(row["numerator"]) for row in host["checks"].values())
+        complete = all(
+            row["numerator"] == row["denominator"] for row in host["checks"].values()
+        ) and not any(host["sitemap_difference"].values())
+        if (host["status"] == "pass") != complete:
+            raise ValueError("GEO host preflight status does not match its checks")
     metric = _metric(
         "F",
         phase="preflight",
-        numerator=pages,
+        numerator=host_passes,
         denominator=pages,
         expected_denominator=pages,
         finding=(
             f"All {pages} exported pages passed sitemap, self-canonical, indexability, "
             f"and LLM-index checks; {links['denominator']} internal link occurrences passed; "
             + (
-                "the public host receipt matched every URL and fetch gate."
+                (
+                    "the public host receipt matched every URL and fetch gate."
+                    if host["status"] == "pass"
+                    else (
+                        "the public host receipt failed with "
+                        f"{len(host['sitemap_difference']['missing'])} missing and "
+                        f"{len(host['sitemap_difference']['unexpected'])} unexpected sitemap URLs."
+                    )
+                )
                 if host is not None
                 else "public-host fetch eligibility was not supplied."
             )
@@ -223,21 +242,21 @@ def _fetch_metric(results_path: Path, context: dict[str, Any] | None) -> dict[st
             if ref is not None
         ],
     )
-    if host is None:
+    if host is None or host["status"] == "fail":
         metric["status"] = "partial"
         GeoEvidence.from_dict(metric)
     return metric
 
 
 def _outcome_metric(
-    results_path: Path,
-    context: dict[str, Any] | None,
+    outcome_path: Path | None,
     *,
+    run_dir: Path,
     run_id: str,
     workload_sha256: str,
     phase: str,
-) -> tuple[dict[str, Any], dict[str, Any] | None]:
-    if context is None:
+) -> tuple[dict[str, Any], dict[str, Any] | None, dict[str, str] | None]:
+    if outcome_path is None:
         return (
             _not_measured(
                 "O",
@@ -245,11 +264,25 @@ def _outcome_metric(
                 finding="First-party impressions, referrals, and conversions were not supplied.",
             ),
             None,
+            None,
         )
-    outcome = _load_bound_receipt(results_path, context, kind="geo-first-party-outcome")
-    if not isinstance(outcome, dict):
-        raise ValueError("GEO outcome receipt must be an object")
+    outcome_path = outcome_path.resolve()
+    outcome = _load_json_object(outcome_path)
     _validate_schema(outcome, "geo-outcome.schema.json", label="GEO outcome")
+    _validate_evidence_refs(
+        outcome_path,
+        [
+            {
+                "kind": "first-party-native-outcome",
+                "path": outcome["source_receipt"]["path"],
+                "sha256": outcome["source_receipt"]["sha256"],
+            }
+        ],
+    )
+    source_path = outcome_path.parent / str(outcome["source_receipt"]["path"])
+    source_payload = _strict_json_loads(
+        source_path.read_text(encoding="utf-8"), label=str(source_path)
+    )
     if outcome["run_id"] != run_id or outcome["workload_sha256"] != workload_sha256:
         raise ValueError("GEO outcome receipt does not bind this run and workload")
     window = outcome["window"]
@@ -258,6 +291,20 @@ def _outcome_metric(
     if _parse_datetime(outcome["collected_at"]) < _parse_datetime(window["end"]):
         raise ValueError("GEO outcome receipt cannot be collected before its window ends")
     primary = outcome["primary_metric"]
+    for field in ("numerator", "denominator"):
+        observed = _resolve_json_pointer(
+            source_payload,
+            str(outcome["source_locator"][field]),
+            label=str(source_path),
+        )
+        if observed != primary[field]:
+            raise ValueError(f"GEO outcome {field} does not match its native source receipt")
+    if int(primary["numerator"]) > int(primary["denominator"]):
+        raise ValueError("GEO outcome numerator cannot exceed its denominator")
+    context = {
+        "path": _relative(outcome_path, run_dir, label="GEO outcome"),
+        "sha256": _sha256(outcome_path),
+    }
     return (
         _metric(
             "O",
@@ -266,20 +313,21 @@ def _outcome_metric(
             denominator=int(primary["denominator"]),
             expected_denominator=int(primary["denominator"]),
             finding=f"First-party {primary['name']} ({primary['unit']}).",
-            evidence=str(context["path"]),
+            evidence=context["path"],
         ),
         outcome,
+        context,
     )
 
 
-def _apply_verifier_overlay(
+def _load_verifier_overlay(
     results: dict[str, Any],
     *,
     native_results_path: Path,
     verifier_results_path: Path | None,
-) -> tuple[dict[str, Any], str | None]:
+) -> tuple[dict[str, Any] | None, dict[str, dict[str, Any]], str | None]:
     if verifier_results_path is None:
-        return results, None
+        return None, {}, None
     verifier_results_path = verifier_results_path.resolve()
     overlay = _load_json_object(verifier_results_path)
     _validate_schema(
@@ -291,29 +339,26 @@ def _apply_verifier_overlay(
         native_results_path
     ):
         raise ValueError("GEO verifier overlay does not bind the native result")
-    projected = copy.deepcopy(results)
-    projected["verifier_context"] = overlay["verifier_context"]
-    by_id = {str(row["observation_id"]): row for row in projected["observations"]}
+    _validate_evidence_refs(
+        verifier_results_path,
+        [
+            {
+                "kind": "verifier-rubric",
+                "path": overlay["verifier_context"]["rubric"]["path"],
+                "sha256": overlay["verifier_context"]["rubric"]["sha256"],
+            }
+        ],
+    )
+    native_ids = {str(row["observation_id"]) for row in results["observations"]}
+    by_id: dict[str, dict[str, Any]] = {}
     seen: set[str] = set()
     for verdict in overlay["observations"]:
         observation_id = str(verdict["observation_id"])
-        if observation_id in seen or observation_id not in by_id:
+        if observation_id in seen or observation_id not in native_ids:
             raise ValueError("GEO verifier overlay contains duplicate or unknown observations")
         seen.add(observation_id)
-        row = by_id[observation_id]
-        for field in (
-            "absorption",
-            "quality",
-            "quality_claims_expected",
-            "verifier_receipt",
-        ):
-            row[field] = verdict[field]
-        row["verifier_source_locator"] = {
-            "absorption": "/absorption",
-            "quality": "/quality",
-            "quality_claims_expected": "/quality_claims_expected",
-        }
-    return projected, _sha256(verifier_results_path)
+        by_id[observation_id] = verdict
+    return overlay["verifier_context"], by_id, _sha256(verifier_results_path)
 
 
 def validate_and_measure(
@@ -322,6 +367,7 @@ def validate_and_measure(
     workload_path: Path,
     native_results_path: Path,
     verifier_results_path: Path | None = None,
+    outcome_path: Path | None = None,
 ) -> dict[str, Any]:
     run_spec_path = run_spec_path.resolve()
     workload_path = workload_path.resolve()
@@ -337,7 +383,7 @@ def validate_and_measure(
         "geo-native-results.schema.json",
         label=str(native_results_path),
     )
-    results, verifier_results_sha256 = _apply_verifier_overlay(
+    verifier_context, verifier_by_id, verifier_results_sha256 = _load_verifier_overlay(
         results,
         native_results_path=native_results_path,
         verifier_results_path=verifier_results_path,
@@ -382,26 +428,12 @@ def validate_and_measure(
         frozen_at=frozen_at,
     )
 
-    verifier_context = results["verifier_context"]
-    if verifier_context is not None:
-        _validate_evidence_refs(
-            native_results_path,
-            [
-                {
-                    "kind": "verifier-rubric",
-                    "path": verifier_context["rubric"]["path"],
-                    "sha256": verifier_context["rubric"]["sha256"],
-                }
-            ],
-        )
-
     preflight_context = results["preflight_context"]
     fetch_metric = _fetch_metric(native_results_path, preflight_context)
-    outcome_context = results["outcome_context"]
     evidence_phase = "live_observe" if workload["observation_mode"] == "live" else "offline_measure"
-    outcome_metric, outcome_payload = _outcome_metric(
-        native_results_path,
-        outcome_context,
+    outcome_metric, outcome_payload, outcome_context = _outcome_metric(
+        outcome_path,
+        run_dir=run_dir,
         run_id=run_id,
         workload_sha256=workload_sha256,
         phase=evidence_phase,
@@ -442,7 +474,6 @@ def validate_and_measure(
     search_hits = retrieval_hits = retrieval_denominator = citation_hits = 0
     placement_hits = absorption_hits = absorption_denominator = 0
     quality_supported = quality_expected_total = quality_responses_audited = 0
-    verifier_used = False
 
     for observation in results["observations"]:
         observation_id = str(observation["observation_id"])
@@ -496,20 +527,33 @@ def validate_and_measure(
             if observed != observation[field]:
                 raise ValueError(f"{observation_id} {field} does not match its native receipt")
 
-        absorption = observation["absorption"]
-        quality = observation["quality"]
-        quality_expected = observation["quality_claims_expected"]
-        verifier_ref = observation["verifier_receipt"]
-        verifier_locator = observation["verifier_source_locator"]
-        if absorption is not None or quality or quality_expected is not None:
-            if verifier_ref is None or verifier_context is None:
+        verdict = verifier_by_id.get(observation_id)
+        absorption = None if verdict is None else verdict["absorption"]
+        quality = [] if verdict is None else verdict["quality"]
+        quality_expected = None if verdict is None else verdict["quality_claims_expected"]
+        verifier_ref = None if verdict is None else verdict["verifier_receipt"]
+        if verdict is not None:
+            if verifier_ref is None or verifier_context is None or verifier_results_path is None:
                 raise ValueError("GEO absorption and quality require a verifier receipt")
-            verifier_used = True
             verifier = _load_bound_receipt(
-                native_results_path,
+                verifier_results_path,
                 verifier_ref,
                 kind="verifier-receipt",
             )
+            if not isinstance(verifier, dict):
+                raise ValueError("GEO verifier receipt must be an object")
+            _validate_schema(
+                verifier,
+                "geo-verifier-receipt.schema.json",
+                label=f"GEO verifier receipt {observation_id}",
+            )
+            if (
+                verifier["observation_id"] != observation_id
+                or verifier["producer"] != verifier_context["producer"]
+                or verifier["model"] != verifier_context["model"]
+                or verifier["rubric_sha256"] != verifier_context["rubric"]["sha256"]
+            ):
+                raise ValueError("GEO verifier receipt does not match its overlay context")
             if verifier_ref["sha256"] == observation["native_receipt"]["sha256"]:
                 raise ValueError("GEO verifier receipt must remain separate from native outcome")
             for field, value in (
@@ -517,27 +561,35 @@ def validate_and_measure(
                 ("quality", quality),
                 ("quality_claims_expected", quality_expected),
             ):
-                locator = verifier_locator[field]
-                unused = value is None or (
-                    field == "quality" and value == [] and quality_expected is None
-                )
-                if unused:
-                    if locator is not None:
-                        raise ValueError(f"unused {field} verifier locator must be null")
-                    continue
-                if locator is None:
-                    raise ValueError(f"{field} verifier locator is required")
                 observed = _resolve_json_pointer(
                     verifier,
-                    str(locator),
+                    f"/{field}",
                     label=f"{native_results_path}:{observation_id}",
                 )
                 if observed != value:
                     raise ValueError(f"{observation_id} {field} does not match its verifier")
-        elif verifier_ref is not None or any(
-            value is not None for value in verifier_locator.values()
-        ):
-            raise ValueError("unused GEO verifier receipt and locators must be null")
+            source_content: dict[str, str] = {}
+            for source_ref in verifier["sources"]:
+                source_receipt = _load_bound_receipt(
+                    verifier_results_path,
+                    source_ref,
+                    kind="verifier-source",
+                )
+                if (
+                    not isinstance(source_receipt, dict)
+                    or source_receipt.get("schema_id") != "geode.geo-source-receipt@1"
+                    or not isinstance(source_receipt.get("url"), str)
+                    or not isinstance(source_receipt.get("content"), str)
+                ):
+                    raise ValueError("GEO verifier source receipt is malformed")
+                source_content[str(source_receipt["url"])] = str(source_receipt["content"])
+            for claim in quality:
+                source = source_content.get(str(claim["source_url"]))
+                quote = str(claim["source_quote"])
+                if source is None or (quote and not _quote_in_source(quote, source)):
+                    raise ValueError("GEO verifier claim is not bound to its source receipt")
+                if claim["supported"] and not quote:
+                    raise ValueError("supported GEO claims require an exact source quote")
 
         target_retrieved = retrieval is not None and any(
             _is_target(str(row["url"]), prefixes) for row in retrieval
@@ -577,12 +629,17 @@ def validate_and_measure(
         missing = sorted(expected_cells - seen_cells)[:8]
         extra = sorted(seen_cells - expected_cells)[:8]
         raise ValueError(f"GEO observation matrix drift: missing={missing} extra={extra}")
-    if verifier_used != (verifier_context is not None):
-        raise ValueError("unused GEO verifier context must be null")
-
     total = len(expected_cells)
     phase = "live_observe" if workload["observation_mode"] == "live" else "offline_measure"
     evidence = f"{results_rel}#/observations"
+    verifier_evidence = (
+        ""
+        if verifier_results_path is None
+        else (
+            f"{_relative(verifier_results_path, run_dir, label='GEO verifier results')}"
+            "#/observations"
+        )
+    )
     vector = {
         "F": fetch_metric,
         "R": _metric(
@@ -619,7 +676,7 @@ def validate_and_measure(
             denominator=absorption_denominator,
             expected_denominator=citation_hits,
             finding="Verifier-marked target contribution among target-cited answers.",
-            evidence=evidence,
+            evidence=verifier_evidence,
         ),
         "Q": _metric(
             "Q",
@@ -631,7 +688,7 @@ def validate_and_measure(
                 "Supported target-linked claims in separately bound verifier receipts; "
                 "other Q dimensions remain unmeasured."
             ),
-            evidence=evidence,
+            evidence=verifier_evidence,
         ),
         "O": outcome_metric,
     }
@@ -658,7 +715,6 @@ def validate_and_measure(
         },
         "quality_claim_coverage": {
             "audited_claims": quality_expected_total,
-            "expected_claims": quality_expected_total,
             "audited_target_cited_responses": quality_responses_audited,
             "target_cited_responses": citation_hits,
         },
@@ -686,6 +742,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--workload", type=Path, required=True)
     parser.add_argument("--native-results", type=Path, required=True)
     parser.add_argument("--verifier-results", type=Path)
+    parser.add_argument("--outcome", type=Path)
     parser.add_argument("--out", type=Path)
     args = parser.parse_args(argv)
     payload = validate_and_measure(
@@ -693,6 +750,7 @@ def main(argv: list[str] | None = None) -> int:
         workload_path=args.workload,
         native_results_path=args.native_results,
         verifier_results_path=args.verifier_results,
+        outcome_path=args.outcome,
     )
     if args.out is None:
         print(json.dumps(payload, ensure_ascii=False, indent=2))

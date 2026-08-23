@@ -47,7 +47,6 @@ async def collect(
     site_preflight_path: Path | None = None,
     link_audit_path: Path | None = None,
     host_preflight_path: Path | None = None,
-    outcome_path: Path | None = None,
 ) -> dict[str, Any]:
     run_spec_path = run_spec_path.resolve()
     workload_path = workload_path.resolve()
@@ -86,12 +85,6 @@ async def collect(
             ),
         }
     )
-    outcome_context = (
-        None
-        if outcome_path is None
-        else bound(outcome_path, "geo-outcome.schema.json", "GEO outcome")
-    )
-
     run_spec = validate_run_spec(run_spec_path)
     workload = _load_json_object(workload_path)
     _validate_schema(workload, "geo-workload.schema.json", label=str(workload_path))
@@ -205,9 +198,6 @@ async def collect(
                     "citations",
                 )
             },
-            "absorption": None,
-            "quality": [],
-            "quality_claims_expected": None,
             "native_source_locator": {
                 key: f"/{key}"
                 for key in (
@@ -221,12 +211,6 @@ async def collect(
                     "retrieval",
                     "citations",
                 )
-            },
-            "verifier_receipt": None,
-            "verifier_source_locator": {
-                "absorption": None,
-                "quality": None,
-                "quality_claims_expected": None,
             },
         }
         return receipt, row
@@ -266,8 +250,6 @@ async def collect(
         "workload_sha256": workload_sha256,
         "collected_at": datetime.now(UTC).isoformat(),
         "preflight_context": preflight_context,
-        "verifier_context": None,
-        "outcome_context": outcome_context,
         "observations": rows,
     }
     try:
@@ -287,7 +269,6 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--site-preflight", type=Path)
     parser.add_argument("--link-audit", type=Path)
     parser.add_argument("--host-preflight", type=Path)
-    parser.add_argument("--outcome", type=Path)
     args = parser.parse_args(argv)
     asyncio.run(
         collect(
@@ -297,7 +278,6 @@ def main(argv: list[str] | None = None) -> int:
             site_preflight_path=args.site_preflight,
             link_audit_path=args.link_audit,
             host_preflight_path=args.host_preflight,
-            outcome_path=args.outcome,
         )
     )
     print(args.out)

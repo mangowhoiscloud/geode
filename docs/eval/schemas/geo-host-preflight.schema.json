@@ -14,14 +14,26 @@
       "additionalProperties": false
     }
   },
-  "required": ["schema_id", "schema_version", "generated_at", "base_url", "sitemap_url", "urlset_sha256", "robots", "checks"],
+  "required": ["schema_id", "schema_version", "status", "generated_at", "base_url", "sitemap_url", "urlset_sha256", "observed_urlset_sha256", "sitemap_difference", "robots", "checks"],
   "properties": {
     "schema_id": {"const": "geode.geo-host-preflight@1"},
     "schema_version": {"const": 1},
+    "status": {"enum": ["pass", "fail"]},
     "generated_at": {"type": "string", "format": "date-time"},
     "base_url": {"type": "string", "format": "uri", "maxLength": 1000},
     "sitemap_url": {"type": "string", "format": "uri", "maxLength": 1000},
     "urlset_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "observed_urlset_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "sitemap_difference": {
+      "type": "object",
+      "required": ["missing", "unexpected", "duplicates"],
+      "properties": {
+        "missing": {"type": "array", "items": {"type": "string", "format": "uri", "maxLength": 2000}},
+        "unexpected": {"type": "array", "items": {"type": "string", "format": "uri", "maxLength": 2000}},
+        "duplicates": {"type": "array", "items": {"type": "string", "format": "uri", "maxLength": 2000}}
+      },
+      "additionalProperties": false
+    },
     "robots": {
       "type": "object",
       "required": ["url", "status", "policy"],

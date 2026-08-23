@@ -7,12 +7,16 @@ const measureCommand = `uv run python scripts/eval/geo_visibility.py \\
   --workload <run-dir>/workload.json \\
   --native-results <run-dir>/native-results.json \\
   --verifier-results <run-dir>/verifier-results.json \\
+  --outcome <run-dir>/outcome.json \\
   --out <run-dir>/geo-vector.json`;
 
 const verifyCommand = `uv run python scripts/eval/geo_verify.py \\
   --workload <run-dir>/workload.json \\
   --native-results <run-dir>/native-results.json \\
   --rubric <run-dir>/verifier-rubric.json \\
+  --adapter <verifier-adapter> \\
+  --model <verifier-model> \\
+  --producer-version <version-or-revision> \\
   --out <run-dir>/verifier-results.json`;
 
 const collectCommand = `uv run python scripts/eval/geo_collect.py \\
@@ -44,14 +48,14 @@ function VectorTable({ ko }: { ko: boolean }) {
 function GapTable({ ko }: { ko: boolean }) {
   const rows = ko
     ? [
-        ["F · partial", "로컬 78/78 URL과 내부 링크 577/577은 통과했지만, 당시 공개 sitemap은 77 URL이어서 동일 78-URL 영수증을 결합할 수 없었습니다.", "동일성 비교: 같은 URL digest의 로컬 export ↔ 공개 호스트"],
+        ["F · partial", "로컬 78/78 URL과 내부 링크 577/577은 통과했지만, 당시 runner는 공개 sitemap 77/78 실패를 예외로 버려 영수증을 결합하지 못했습니다. 현재 runner는 이를 partial receipt로 보존합니다.", "동일성 비교: 같은 URL digest의 로컬 export ↔ 공개 호스트"],
         ["R/C/P", "Pages는 R 0/120, C 4/120, P 4/4로 측정됐습니다. R은 빈칸이 아니라 관측된 0입니다.", "표면 진단: Pages ↔ GitHub 저장소(R 109/120, C 9/120)"],
         ["A/Q", "A 4/4, Q 43/58이지만 같은 모델의 앞선 반복은 35/54였습니다. Q는 claim support만 포함해 partial입니다.", "판정 보정: 고정 claim 집합의 독립 verifier ↔ 사람 표본 판정"],
         ["O · not_measured", "종료된 Search Console·referral·conversion 관측 기간이 없어 분모 자체를 만들지 않았습니다.", "성과 비교: 같은 기간·질의·엔진의 baseline ↔ treatment"],
         ["Promotion · none", "이번 실행은 진단 계약이며 비교 대상과 변경 arm을 사전 등록하지 않았습니다.", "승격 비교: 동결된 baseline ↔ treatment, 동일 index·budget·window"],
       ]
     : [
-        ["F · partial", "All 78 local URLs and 577/577 internal links passed, but the deployed sitemap had 77 URLs, so no receipt for the same 78-URL set could be bound.", "Identity check: local export ↔ public host with the same URL digest"],
+        ["F · partial", "All 78 local URLs and 577/577 internal links passed, but the previous runner discarded the deployed 77/78 sitemap failure as an exception. The current runner preserves it as a partial receipt.", "Identity check: local export ↔ public host with the same URL digest"],
         ["R/C/P", "Pages measured R 0/120, C 4/120, and P 4/4. R is an observed zero, not an empty cell.", "Surface diagnostic: Pages ↔ GitHub repository (R 109/120, C 9/120)"],
         ["A/Q", "A was 4/4 and Q was 43/58; an earlier same-model repeat returned 35/54. Q remains partial because it covers claim support only.", "Verdict calibration: independent verifier ↔ human sample over a frozen claim set"],
         ["O · not_measured", "No completed Search Console, referral, or conversion window exists, so no eligible denominator was created.", "Outcome comparison: baseline ↔ treatment with the same window, queries, and engine"],
@@ -111,8 +115,10 @@ export default function GeoBenchmarkPage() {
               <li>6개 root마다 root query 1개와 paraphrase 3개, 총 24개 문자열을 고정합니다.</li>
               <li><code>run-spec.json</code>이 workload SHA-256과 모델을 동결하고, live는 동일 surface의 별도 operator approval receipt와 정확히 K=5를 요구합니다.</li>
               <li>24×K 각 셀은 하나의 native receipt로 돌아가며 검색 활성화, retrieval, citation의 JSON Pointer가 원본과 일치해야 합니다.</li>
-              <li>absorption과 quality는 별도 verifier receipt·producer/version·digest-bound rubric이 없으면 측정값으로 인정하지 않습니다.</li>
+              <li>absorption과 quality는 별도 verifier receipt·producer/version/model·digest-bound rubric이 없으면 측정값으로 인정하지 않습니다.</li>
               <li>Q는 verifier가 선언한 전체 target-linked claim 수와 실제 감사 행 수가 같아야 계산합니다.</li>
+              <li>Q의 support 판정은 claim 본문과 source receipt에 실제 존재하는 인용 구간을 함께 남깁니다.</li>
+              <li>실패한 public-host preflight도 partial receipt로 보존하며, O는 native 결과를 수정하지 않는 사후 analytics overlay입니다.</li>
               <li>v1은 Q 중 claim support만 측정하므로, 모든 영수증이 있어도 Q 전체는 <code>partial</code>입니다.</li>
             </ol>
             <pre><code>{collectCommand}</code></pre>
@@ -126,6 +132,11 @@ export default function GeoBenchmarkPage() {
               canonical·robots 영수증까지 결합돼야 <code>measured</code>가 됩니다.
               A/Q는 별도 source-aware verifier, O는 관측 기간이 끝난 1차 analytics
               영수증 없이는 측정하지 않습니다.
+            </p>
+            <p>
+              현재 구현은 실패한 host preflight도 보존하고, Q의 claim 본문과 실제
+              source quote를 검증하며, O를 immutable native result에 사후 결합합니다.
+              남은 빈칸은 더미가 아니라 배포·독립 판정·1차 analytics의 실제 증거 부재입니다.
             </p>
             <p>
               native outcome, verifier 판단, GEODE trajectory, analysis와 publication
@@ -179,8 +190,10 @@ export default function GeoBenchmarkPage() {
               <li>Freeze one root query and three paraphrases for each of six roots: 24 exact strings.</li>
               <li><code>run-spec.json</code> freezes the workload SHA-256 and model; live runs require a separate operator approval receipt for the same surface and exactly K=5.</li>
               <li>Every cell in the 24×K matrix resolves to one native receipt; JSON Pointers for search activation, retrieval, and citations must match the source bytes.</li>
-              <li>Absorption and quality remain unmeasured without a separate verifier receipt, producer/version, and digest-bound rubric.</li>
+              <li>Absorption and quality remain unmeasured without a separate verifier receipt, producer/version/model, and digest-bound rubric.</li>
               <li>Q is computed only when the verifier-declared target-linked claim universe matches the audited rows.</li>
+              <li>Each Q support verdict retains the claim text and an exact quote present in the source receipt.</li>
+              <li>Failed public-host checks persist as partial receipts; O is a late analytics overlay that never rewrites native results.</li>
               <li>v1 measures only claim support within Q, so the broader Q stage remains <code>partial</code> even with complete receipts.</li>
             </ol>
             <pre><code>{collectCommand}</code></pre>
@@ -194,6 +207,12 @@ export default function GeoBenchmarkPage() {
               only after a public-host receipt binds the same URL set and passes
               HTTP, HTML, canonical, and robots checks. A/Q need a separate
               source-aware verifier; O needs a completed first-party analytics window.
+            </p>
+            <p>
+              The current implementation preserves failed host preflights, verifies
+              each Q claim against an exact source quote, and joins O after the
+              immutable native result. Remaining gaps now represent missing deployment,
+              independent-judgement, or first-party analytics evidence rather than fillers.
             </p>
             <p>
               Native outcome, verifier judgement, GEODE trajectory, analysis, and
