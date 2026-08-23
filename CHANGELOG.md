@@ -77,7 +77,10 @@ functional change.
   carry null verifier/outcome placeholders; verifier claims bind their text and
   exact source quote, while first-party outcomes attach later through a
   native-export-bound completed-window receipt. The evaluator never invents F,
-  A, Q, O, or an aggregate GEO score.
+  A, Q, O, or an aggregate GEO score. GEO vectors and fetched verifier sources
+  now have explicit JSON Schemas, and the common eval bundle gate joins native,
+  measurement, verifier, outcome, trajectory, analysis, and publication
+  authorities without copying their payloads.
 
 - **Third-party extensions now authorize before executable load.** Filesystem
   hooks, package LLM adapters, project/personal skills, and MCP servers project

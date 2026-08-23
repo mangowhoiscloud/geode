@@ -27,6 +27,9 @@ const collectCommand = `uv run python scripts/eval/geo_collect.py \\
   --host-preflight <run-dir>/host-preflight.json \\
   --out <run-dir>/native-results.json`;
 
+const bundleCommand = `uv run python scripts/eval/contract.py validate-run-bundle \\
+  <run-dir>/run-spec.json`;
+
 function VectorTable({ ko }: { ko: boolean }) {
   const rows = [
     ["F", ko ? "각 preflight 조건을 통과한 URL" : "URLs passing each preflight check", ko ? "감사 대상 URL" : "audited target URLs"],
@@ -65,6 +68,22 @@ function GapTable({ ko }: { ko: boolean }) {
     <table>
       <thead><tr><th>{ko ? "상태" : "State"}</th><th>{ko ? "빈칸이 뜻하는 것" : "What the gap means"}</th><th>{ko ? "필요한 비교군" : "Required comparator"}</th></tr></thead>
       <tbody>{rows.map(([state, meaning, comparator]) => <tr key={state}><td><code>{state}</code></td><td>{meaning}</td><td>{comparator}</td></tr>)}</tbody>
+    </table>
+  );
+}
+
+function ArtifactJoinTable({ ko }: { ko: boolean }) {
+  const rows = [
+    ["native_results", "native-result", ko ? "provider 원본" : "provider-native outcome"],
+    ["measurement_results", "measurement", "geode.geo-vector@1"],
+    ["verifier_receipts", "verifier-receipt", ko ? "독립 A/Q 판정" : "independent A/Q judgement"],
+    ["outcome_receipts", "outcome-receipt", ko ? "종료된 1차 analytics" : "completed first-party analytics"],
+    ["trajectory", "trajectory", "geode.trajectory@1 / release manifest"],
+  ];
+  return (
+    <table>
+      <thead><tr><th>run-spec</th><th>attempt kind</th><th>{ko ? "권한" : "Authority"}</th></tr></thead>
+      <tbody>{rows.map(([artifact, kind, authority]) => <tr key={artifact}><td><code>{artifact}</code></td><td><code>{kind}</code></td><td>{authority}</td></tr>)}</tbody>
     </table>
   );
 }
@@ -124,6 +143,21 @@ export default function GeoBenchmarkPage() {
             <pre><code>{collectCommand}</code></pre>
             <pre><code>{verifyCommand}</code></pre>
             <pre><code>{measureCommand}</code></pre>
+
+            <h2>데이터·artifact 결합</h2>
+            <p>
+              vector 안에 trajectory나 원본 receipt를 복제하지 않습니다.
+              <code>attempts.jsonl</code>의 한 행이 각 파일을 상대 경로와 SHA-256으로
+              결합하고, <code>analysis.json</code>은 <code>measurement</code>의 분자·분모
+              JSON Pointer를 읽어 비율을 재계산합니다.
+            </p>
+            <ArtifactJoinTable ko />
+            <p>
+              trajectory는 행동 증거이며 점수 정본이 아닙니다. publication manifest는
+              선언된 모든 파일을 public 또는 withheld로 분류하고, bundle gate는 schema,
+              digest, run ID, trajectory release scope를 한 번에 확인합니다.
+            </p>
+            <pre><code>{bundleCommand}</code></pre>
 
             <h2>현재 경계</h2>
             <p>
@@ -199,6 +233,21 @@ export default function GeoBenchmarkPage() {
             <pre><code>{collectCommand}</code></pre>
             <pre><code>{verifyCommand}</code></pre>
             <pre><code>{measureCommand}</code></pre>
+
+            <h2>Data and artifact joins</h2>
+            <p>
+              The vector does not copy trajectories or raw receipts. One
+              <code>attempts.jsonl</code> row joins each file by relative path and
+              SHA-256; <code>analysis.json</code> recomputes ratios from the
+              measurement&apos;s numerator and denominator JSON Pointers.
+            </p>
+            <ArtifactJoinTable ko={false} />
+            <p>
+              A trajectory is behavior evidence, not score authority. The publication
+              manifest classifies every declared file as public or withheld, while the
+              bundle gate checks schemas, digests, run ID, and trajectory-release scope.
+            </p>
+            <pre><code>{bundleCommand}</code></pre>
 
             <h2>Current boundary</h2>
             <p>

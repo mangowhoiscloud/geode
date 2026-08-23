@@ -3224,6 +3224,25 @@ uv run python scripts/eval/geo_visibility.py \
   --out <run-dir>/geo-vector.json
 ```
 
+## 데이터·artifact 결합
+
+vector 안에 trajectory나 원본 receipt를 복제하지 않습니다.`attempts.jsonl`의 한 행이 각 파일을 상대 경로와 SHA-256으로 결합하고, `analysis.json`은 `measurement`의 분자·분모 JSON Pointer를 읽어 비율을 재계산합니다.
+
+| run-spec | attempt kind | 권한 |
+| --- | --- | --- |
+| `native_results` | `native-result` | provider 원본 |
+| `measurement_results` | `measurement` | geode.geo-vector@1 |
+| `verifier_receipts` | `verifier-receipt` | 독립 A/Q 판정 |
+| `outcome_receipts` | `outcome-receipt` | 종료된 1차 analytics |
+| `trajectory` | `trajectory` | geode.trajectory@1 / release manifest |
+
+trajectory는 행동 증거이며 점수 정본이 아닙니다. publication manifest는 선언된 모든 파일을 public 또는 withheld로 분류하고, bundle gate는 schema, digest, run ID, trajectory release scope를 한 번에 확인합니다.
+
+```
+uv run python scripts/eval/contract.py validate-run-bundle \
+  <run-dir>/run-spec.json
+```
+
 ## 현재 경계
 
 로컬 export·sitemap·self-canonical·noindex·내부 링크만 확인한 F는`partial`입니다. 동일 URL 집합에 대한 공개 호스트의 HTTP·HTML· canonical·robots 영수증까지 결합돼야 `measured`가 됩니다. A/Q는 별도 source-aware verifier, O는 관측 기간이 끝난 1차 analytics 영수증 없이는 측정하지 않습니다.

@@ -575,13 +575,13 @@ def validate_and_measure(
                     source_ref,
                     kind="verifier-source",
                 )
-                if (
-                    not isinstance(source_receipt, dict)
-                    or source_receipt.get("schema_id") != "geode.geo-source-receipt@1"
-                    or not isinstance(source_receipt.get("url"), str)
-                    or not isinstance(source_receipt.get("content"), str)
-                ):
+                if not isinstance(source_receipt, dict):
                     raise ValueError("GEO verifier source receipt is malformed")
+                _validate_schema(
+                    source_receipt,
+                    "geo-source-receipt.schema.json",
+                    label=f"GEO verifier source receipt {observation_id}",
+                )
                 source_content[str(source_receipt["url"])] = str(source_receipt["content"])
             for claim in quality:
                 source = source_content.get(str(claim["source_url"]))
@@ -692,7 +692,7 @@ def validate_and_measure(
         ),
         "O": outcome_metric,
     }
-    return {
+    payload = {
         "schema_id": "geode.geo-vector@1",
         "schema_version": 1,
         "run_id": run_id,
@@ -720,6 +720,8 @@ def validate_and_measure(
         },
         "vector": vector,
     }
+    _validate_schema(payload, "geo-vector.schema.json", label="GEO vector")
+    return payload
 
 
 def _write_exclusive(path: Path, payload: dict[str, Any]) -> None:

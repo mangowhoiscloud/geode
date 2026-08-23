@@ -45,7 +45,7 @@
       "authority": "process",
       "path": "docs/eval/benchmark-publishing-cycle.md",
       "summary": "End-to-end workflow from preregistered benchmark scope through evidence preservation, publication, and deployment.",
-      "sha256": "8419062e832640c6f9c53c3fd31a298c41aa238877988c1ec0a96689f60c09b1",
+      "sha256": "12b50dc45846e4898a65e3a6f9db05c93dd3b19d6e7bb14236e82b780affeb24",
       "triggers": [
         "attempts JSONL",
         "benchmark run",
@@ -123,7 +123,7 @@
       "authority": "evidence-storage",
       "path": "docs/eval/external-artifact-repository.md",
       "summary": "Canonical append-only publication and disclosure contract for large GEODE evaluation artifacts.",
-      "sha256": "53778e2700ac50d295ee53576f609faba23cec296c17d1320c6c552ab414ae62",
+      "sha256": "326521253d05bedb4fb8c0038e22150c27c0a4921c98da59bd0c244c83f3216a",
       "triggers": [
         "artifact repository",
         "eval-artifact",
@@ -170,7 +170,7 @@
       "authority": "suite-profile",
       "path": "docs/eval/geo-visibility.md",
       "summary": "Reproducible GEODE profile for measuring generative discovery, citation selection, answer absorption, and fidelity without collapsing them into one GEO score.",
-      "sha256": "1660e2c7e5dec55018b33f34ef52b87df4d1e485bce2cf56e632a7e70b0c0153",
+      "sha256": "d6285a14dc5c90b55e8a146be45ec2c319f8a8d0c7ea57a8f765097f444eb454",
       "triggers": [
         "AI search visibility",
         "GEO",
@@ -188,6 +188,8 @@
         "docs/eval/schemas/geo-native-results.schema.json",
         "docs/eval/schemas/geo-outcome.schema.json",
         "docs/eval/schemas/geo-preflight.schema.json",
+        "docs/eval/schemas/geo-source-receipt.schema.json",
+        "docs/eval/schemas/geo-vector.schema.json",
         "docs/eval/schemas/geo-verifier-receipt.schema.json",
         "docs/eval/schemas/geo-verifier-results.schema.json",
         "docs/eval/schemas/geo-workload.schema.json",

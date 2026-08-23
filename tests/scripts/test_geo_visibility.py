@@ -230,8 +230,14 @@ def _verifier_overlay(tmp_path: Path, results: Path, *, expected_claims: int = 1
         source,
         {
             "schema_id": "geode.geo-source-receipt@1",
+            "fetched_at": "2026-08-23T00:09:00Z",
             "url": "https://mangowhoiscloud.github.io/geode/docs/",
+            "source": "https://mangowhoiscloud.github.io/geode/docs/",
             "content": "GEODE documentation describes the runtime.",
+            "truncated": False,
+            "content_type": "text/html; charset=utf-8",
+            "status_code": 200,
+            "tls_verified": True,
         },
     )
     receipt = tmp_path / "verdict.json"

@@ -14,9 +14,9 @@
       "numerator": 0,
       "denominator": 1,
       "unit": "ratio",
-      "source_ref": "<relative-native-result-json-path>",
+      "source_ref": "<relative-native-or-measurement-json-path>",
       "source_locator": {
-        "value": "/<json-pointer-to-value>",
+        "value": null,
         "numerator": "/<json-pointer-to-numerator>",
         "denominator": "/<json-pointer-to-denominator>"
       }

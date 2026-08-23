@@ -147,7 +147,11 @@ async def verify(
     async def fetch(url: str) -> tuple[str, dict[str, Any]]:
         result = await fetcher.aexecute(url=url, max_chars=10_000)
         payload = result.get("result")
-        if not isinstance(payload, dict) or payload.get("status_code") != 200:
+        if (
+            not isinstance(payload, dict)
+            or payload.get("status_code") != 200
+            or payload.get("tls_verified") is not True
+        ):
             raise ValueError(f"GEO verifier source fetch failed: {url}")
         return url, payload
 
@@ -198,17 +202,18 @@ async def verify(
         for url, source in fetched.items():
             filename = f"source-{hashlib.sha256(url.encode()).hexdigest()[:16]}.json"
             path = staging / filename
+            receipt = {
+                **source,
+                "schema_id": "geode.geo-source-receipt@1",
+                "fetched_at": datetime.now(UTC).isoformat(),
+            }
+            _validate_schema(
+                receipt,
+                "geo-source-receipt.schema.json",
+                label=f"GEO source receipt {url}",
+            )
             path.write_text(
-                json.dumps(
-                    {
-                        "schema_id": "geode.geo-source-receipt@1",
-                        "fetched_at": datetime.now(UTC).isoformat(),
-                        **source,
-                    },
-                    ensure_ascii=False,
-                    indent=2,
-                )
-                + "\n",
+                json.dumps(receipt, ensure_ascii=False, indent=2) + "\n",
                 encoding="utf-8",
             )
             source_refs[url] = {

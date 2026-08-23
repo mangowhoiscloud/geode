@@ -21,6 +21,8 @@ eval_contracts:
   - docs/eval/schemas/geo-native-results.schema.json
   - docs/eval/schemas/geo-outcome.schema.json
   - docs/eval/schemas/geo-preflight.schema.json
+  - docs/eval/schemas/geo-source-receipt.schema.json
+  - docs/eval/schemas/geo-vector.schema.json
   - docs/eval/schemas/geo-verifier-results.schema.json
   - docs/eval/schemas/geo-verifier-receipt.schema.json
   - docs/eval/schemas/geo-workload.schema.json
@@ -220,7 +222,9 @@ with frozen baseline and treatment arms.
    either field. Native results contain no verifier or outcome placeholders.
    A completed first-party analytics receipt binds its native export and joins
    later through `--outcome`, without rewriting the immutable native result. It
-   has no aggregate score field.
+   has no aggregate score field. The emitted vector is validated as
+   `geode.geo-vector@1`; source receipts are independently validated as
+   `geode.geo-source-receipt@1` and require verified TLS.
 3. For offline intervention evaluation, hash original, sham, and targeted
    repair arms; reindex every arm and re-run retrieval, reranking, and
    generation. Include initial-rank controls and a multi-actor adoption arm.
@@ -279,6 +283,41 @@ authority corresponding to its run-spec claim class. More data in one
 diagnostic run cannot manufacture that authority.
 
 ## Trajectory and artifact publication
+
+### Run-bundle joins
+
+Do not embed trajectories or raw receipts inside `geo-vector.json`. Freeze the
+expected paths in `run-spec.json`, then let one append-only attempt row join the
+authorities by relative path and SHA-256:
+
+| Run-spec artifact | Attempt evidence kind | Authority |
+|---|---|---|
+| `native_results` | `native-result` | provider-native retrieval, citation, and answer receipt |
+| `measurement_results` | `measurement` | deterministic `geode.geo-vector@1` projection |
+| `verifier_receipts` | `verifier-receipt` | independent A/Q judgement and cited-source receipts |
+| `outcome_receipts` | `outcome-receipt` | completed first-party analytics window |
+| `trajectory` | `trajectory` | `geode.trajectory@1` behavior or a scoped trajectory-release manifest |
+
+`analysis.json` may use a `measurement` as its primary source only when the
+vector binds the same run-spec digest and selected native/verifier/outcome
+digests. Its `source_locator.value` stays null: the validator reads numerator
+and denominator through RFC 6901 pointers and recomputes the ratio rather than
+requiring a duplicate value field. A trajectory remains behavior evidence; it
+never becomes the visibility score authority.
+
+After `attempts.jsonl`, `analysis.json`, and any prepared publication manifest
+exist, close the cross-file contract with one command:
+
+```bash
+uv run python scripts/eval/contract.py validate-run-bundle \
+  <run-dir>/run-spec.json
+```
+
+The bundle gate validates every component schema and digest, verifies a
+trajectory or content-addressed trajectory release, requires its release scope
+to equal the run ID, and ensures a publication manifest classifies every
+declared run artifact as public or withheld. It creates no second evidence
+copy.
 
 ### Authority and format selection
 
