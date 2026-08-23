@@ -566,6 +566,7 @@ and closure evidence are appended in §10.
 | REL-003 | `MISFIT` | PyPI, GitHub Releases, repository metadata, and the changelog report v1.0.22, which predates the delivered boundary refactor | Wheel, sdist, CLI, daemon, site SOT, changelog, tag, GitHub release, and PyPI all report v1.0.23 with artifact-hash parity and no rewritten earlier-release evidence | R1.7 | BND-003, BND-006, GOV-004 | `DONE` |
 | REL-004 | `ABSENT` | No registered gate prevents the v1.0.23 compatibility facade or preserved state roots from being retired immediately after a local tag, draft release, or registry publication | Official GitHub Release and PyPI evidence proves compatible public artifacts continuously exposed the facade and preserved roots for a final qualifying interval of at least 30 consecutive days, starting no earlier than v1.0.23, and every release inside that interval retained them | R8.3 | REL-003 | `IN_PROGRESS` |
 | BND-008 | `ABSENT` | The current `core/self_improving` import and source/module launcher surface has no enumerated consumer census, old-to-new migration map, or removal-only closure gate | After REL-004, every repository and documented consumer is classified, migration guidance names canonical replacements, only the forwarding facade and legacy launchers are removed, and installed-wheel import/CLI/MCP/config/state parity proves the canonical product remains intact | R8.4 | REL-004, STORE-003 | `OPEN` |
+| CODE-002 | `MISFIT` | Verification state is restored from checkpoint `loop_guards`, but `_persist_verify_state` still mirrors every result into `SessionManager` columns whose accessor has no production reader | Production verify-mirror writes and the unused accessor are removed; legacy databases containing the columns still load, checkpoint recovery remains authoritative, and no new store or schema migration is introduced | R9.2 | CODE-001 | `OPEN` |
 
 ## 6. Dependency and merge sequence
 
@@ -1809,6 +1810,26 @@ Acceptance:
 - crash, race, partial-mutation, drift, redaction, and rollback failure modes
   map to observable acceptance tests, and the roadmap validator plus document
   link checks pass without any runtime-code change.
+
+#### R9.2 Verify-state mirror cleanup
+
+GAP: CODE-002.
+
+This package removes a write-only production mirror. It does not change the
+session schema or create another verification, telemetry, or recovery owner.
+
+Acceptance:
+
+- a source-and-test census confirms that checkpoint `loop_guards` own verify
+  recovery and no production caller reads `SessionManager.get_verify_state`;
+- `_persist_verify_state`, `SessionManager.upsert_verify_state`, and
+  `SessionManager.get_verify_state` leave production code, while the existing
+  verify columns remain tolerated as inert legacy schema;
+- existing databases containing those columns open without migration, and
+  checkpoint restore plus current verification metrics/events retain their
+  behavior;
+- focused verification/recovery tests and architecture gates pass without a
+  new store, schema migration, event, hook, or runtime abstraction.
 
 ## 8. Change-surface acceptance scenarios
 
