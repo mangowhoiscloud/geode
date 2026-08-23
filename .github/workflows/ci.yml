@@ -224,12 +224,20 @@ jobs:
         run: |
           uv run pytest -q \
             tests/core/agent/test_loop_architecture_budget.py \
+            tests/core/agent/test_loop_state_machine.py \
+            tests/core/agent/test_approval_fsm.py \
+            tests/core/agent/test_google_workspace_consent.py \
             tests/core/agent/test_subagent_architecture_budget.py \
             tests/core/agent/test_tool_plan_runtime_policy.py \
+            tests/core/llm/test_retry_policy.py \
+            tests/core/observability/test_event_store.py \
             tests/core/test_ipc_protocol.py \
             tests/core/tools/test_tool_plan.py \
             tests/integration/test_architecture_site_inventory.py \
             tests/integration/test_product_composition.py
+      - name: Architecture performance baseline
+        if: needs.changes.outputs.code == 'true'
+        run: uv run python scripts/check_architecture_performance.py --check
       - name: Extension change-surface contracts
         if: needs.changes.outputs.code == 'true'
         run: uv run pytest -q tests/integration/test_extension_change_surfaces.py
