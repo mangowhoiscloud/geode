@@ -226,7 +226,6 @@ normal review and CI; implementations start only after the claim merges.
 | Closure package | GAP IDs | Owner/session | Implementation branch | Claim evidence | Claimed at (UTC) |
 |---|---|---|---|---|---|
 | R8.3 | REL-004 | `session=codex-root task=r8-3-publication-grace-evidence` | `feature/r8-3-publication-grace-evidence` | Readiness [#3039](https://github.com/mangowhoiscloud/geode/pull/3039); v1.0.23 GitHub/PyPI parity and candidate interval re-audited | `2026-08-20T07:41:19Z` |
-| R6.3 | BND-004, TRUST-001, TRUST-002 | `session=codex-root task=r6-3-extension-trust-lifecycle` | `feature/r6-3-extension-trust-lifecycle` | Readiness [#3107](https://github.com/mangowhoiscloud/geode/pull/3107); R6.1 delivery reconciliation [#3110](https://github.com/mangowhoiscloud/geode/pull/3110) and whole-package acceptance re-audited | `2026-08-23T12:37:26Z` |
 
 ## 1. Program objective
 
@@ -518,13 +517,13 @@ and closure evidence are appended in §10.
 | BND-001 | `MISFIT` | `plugins/` contains first-party features that `core` imports | Every package is classified kernel, product shell, bundled feature, or external extension; names match semantics | R1.1 | GOV-002 | `IN_DEVELOP` |
 | BND-002 | `MISFIT` | 31 `core` → `plugins` import sites across 14 files | AST gate reports zero reverse dependency; composition owns feature registration | R1.2 | BND-001 | `IN_DEVELOP` |
 | BND-003 | `ABSENT` | One-off core-only probe fails at `core.cli`; CI does not test an installed kernel without features | Isolated wheel/package test boots and runs kernel tests without bundled/third-party modules | R1.3 | BND-001, BND-002, BND-006 | `IN_DEVELOP` |
-| BND-004 | `PARTIAL` | Skills/hooks/MCP have different discovery rules; Python feature collision/trust behavior is not unified | Each supported external surface declares non-executing discovery, precedence, collision, enablement, trust-before-load, reload, isolation, and teardown | R6.3 | BND-001, LLM-002 | `IN_PROGRESS` |
+| BND-004 | `PARTIAL` | Skills/hooks/MCP have different discovery rules; Python feature collision/trust behavior is not unified | Each supported external surface declares non-executing discovery, precedence, collision, enablement, trust-before-load, reload, isolation, and teardown | R6.3 | BND-001, LLM-002 | `IN_DEVELOP` |
 | CAP-001 | `PARTIAL` | Google service bundles exist but do not own all tool/policy relationships | Generic capability records plus `GoogleServiceDescriptor` are executable SOTs | R2.1 | BND-002 | `IN_DEVELOP` |
 | CAP-002 | `ABSENT` | `ToolRegistry` owns tool objects while other registries/lists own execution and safety | Immutable `ToolRegistration` and `ToolPlan` derive every tool consumer | R2.1 | CAP-001 | `IN_DEVELOP` |
 | CAP-003 | `MISFIT` | Native Google handlers are bound in `core/cli/tool_handlers/delegated.py` | Runtime/composition binds handlers; CLI only renders/forwards user interaction | R2.3 | CAP-002, BND-002 | `IN_DEVELOP` |
 | CAP-004 | `MISFIT` | Google names repeat in safety, approval, policy, personal-data, and CLI modules | Effect/data/auth/resource metadata derives gates; no independent tool-name allowlists | R2.2 | CAP-002 | `IN_DEVELOP` |
 | CAP-005 | `PARTIAL` | `definitions.json`, tool objects, provider schemas, and defer sets can drift | Anthropic/OpenAI/deferred schemas and execution map share one plan hash and parity tests | R2.3 | CAP-002 | `IN_DEVELOP` |
-| CAP-006 | `ABSENT` | Adding a native/Google tool requires edits across several policy files | Change-surface fixture proves the bounded file/registration budget in §8 | R7.2 | CAP-003, CAP-004, CAP-005 | `OPEN` |
+| CAP-006 | `ABSENT` | Adding a native/Google tool requires edits across several policy files | Change-surface fixture proves the bounded file/registration budget in §8 | R7.2 | CAP-003, CAP-004, CAP-005 | `READY` |
 | LOOP-001 | `ABSENT` | No immutable object freezes one step's route, policy, tool plan, and trace identity | `StepSnapshot` is created once per step and used by model/tool/telemetry paths | R3.1 | CAP-002 | `IN_DEVELOP` |
 | LOOP-002 | `PARTIAL` | Mutable state is distributed across loop fields, contexts, checkpoints, and helpers | `TurnState` and explicit session/turn/step ownership replace ambiguous lifetimes | R3.1 | LOOP-001 | `IN_DEVELOP` |
 | LOOP-003 | `MISFIT` | `AgenticLoop` owns orchestration plus many independently changing policies | Visible loop delegates to bounded input/model/tool/observe/termination phases | R3.2 | LOOP-001, LOOP-002 | `IN_DEVELOP` |
@@ -542,11 +541,11 @@ and closure evidence are appended in §10.
 | PROTO-002 | `PARTIAL` | IPC has typed behavior but no single versioned external compatibility contract | Versioned envelopes, capability negotiation, unknown-field behavior, and golden compatibility tests | R6.1 | PROTO-001 | `IN_DEVELOP` |
 | STORE-001 | `PARTIAL` | `SessionStorePort`, `SessionManager`, checkpoints, transcripts, and event store have overlapping ownership | Ports and writers conform to the existing sessions.db/JSONL destination matrix; projections are rebuildable | R6.2 | — | `DONE` |
 | STORE-002 | `PARTIAL` | Logging/transcript/resume/replay plan still contains staged/open parity work | Each subsystem has one declared writer, resume contract, replay doctrine, retention, and redaction test | R6.2 | STORE-001 | `DONE` |
-| TRUST-001 | `ABSENT` | Registration/enabled status does not uniformly distinguish trusted authority | Installed, enabled, trusted, and granted-capability states are separate and observable; executable code is never imported before trust approval | R6.3 | BND-004 | `IN_PROGRESS` |
-| TRUST-002 | `PARTIAL` | Extension seams can receive broader runtime objects than required, and arbitrary in-process Python cannot be capability-confined | Trusted in-process code receives narrow ports for API discipline; untrusted executable code runs out of process behind a brokered capability boundary | R6.3 | DI-002, TRUST-001, TRUST-003 | `IN_PROGRESS` |
+| TRUST-001 | `ABSENT` | Registration/enabled status does not uniformly distinguish trusted authority | Installed, enabled, trusted, and granted-capability states are separate and observable; executable code is never imported before trust approval | R6.3 | BND-004 | `IN_DEVELOP` |
+| TRUST-002 | `PARTIAL` | Extension seams can receive broader runtime objects than required, and arbitrary in-process Python cannot be capability-confined | Trusted in-process code receives narrow ports for API discipline; untrusted executable code runs out of process behind a brokered capability boundary | R6.3 | DI-002, TRUST-001, TRUST-003 | `IN_DEVELOP` |
 | TRUST-003 | `ABSENT` | Mutation serialization is not derived from explicit tool resource metadata | `resource_keys(args)` drives per-resource serialization; no argument-name heuristic | R2.4 | CAP-004 | `IN_DEVELOP` |
-| VER-001 | `PARTIAL` | Quality gates pass but lack core-only, reverse-import, exception-budget, and tool-plan drift tests | All architecture gates in §9 run in CI and locally | R7.1 | BND-003, BND-004, CAP-005, LOOP-004, DI-003, LLM-002, PROTO-002, GOV-004, VER-003 | `OPEN` |
-| VER-002 | `ABSENT` | No contract suite measures how many central edits each extension type requires | Six extension scenarios in §8 pass without forbidden edits | R7.2 | CAP-006, LLM-002, BND-004 | `OPEN` |
+| VER-001 | `PARTIAL` | Quality gates pass but lack core-only, reverse-import, exception-budget, and tool-plan drift tests | All architecture gates in §9 run in CI and locally | R7.1 | BND-003, BND-004, CAP-005, LOOP-004, DI-003, LLM-002, PROTO-002, GOV-004, VER-003 | `READY` |
+| VER-002 | `ABSENT` | No contract suite measures how many central edits each extension type requires | Six extension scenarios in §8 pass without forbidden edits | R7.2 | CAP-006, LLM-002, BND-004 | `READY` |
 | VER-003 | `PARTIAL` | Public/internal metric prose drifts from executable counts | `sync-stats` or one shared generator updates site, AGENTS facts, and roadmap baseline; check mode is green | R0.2 | GOV-001 | `DONE` |
 | VER-004 | `PARTIAL` | Cold-start and runtime metrics exist, but refactors lack one architecture regression baseline | Startup, first-turn, tool-plan build, memory, and event-write budgets are pinned and non-regressing | R7.3 | CAP-005, LOOP-003, DI-004, LLM-004, PROTO-002, STORE-002 | `OPEN` |
 | BND-005 | `MISFIT` | Generic agent/provider/observability consumers import self-improving transcript, SoT-resolution, and prompt-injection helpers | Neutral policy snapshot/source, context-contribution, run identity, and activity-sink contracts replace every classified-kernel import of a self-improving helper without changing runtime behavior | R1.4 | BND-001 | `IN_DEVELOP` |
@@ -1943,6 +1942,7 @@ pre-release delivery evidence survives after the claim row is gone.
 | R5.3 | LLM-003 | [#3103](https://github.com/mangowhoiscloud/geode/pull/3103) | `773dacdc588415f7bec471e1a577357b185a1447` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, 10,433 CI tests at 80.69% coverage, 10,338 local non-live tests, lint/format, type check, security, six import contracts, official-doc and Pages build, macOS/Ubuntu install smoke, wheel/sdist inspection, clean full/kernel installed-package checks with 398 modules and 57 kernel tests, exact built-in and external provider-composition parity, and committed-diff review all passed) |
 | R5.4 | LLM-004 | [#3106](https://github.com/mangowhoiscloud/geode/pull/3106) | `20307e437a87a3ba18fce38c6e92d01c3e3785c8` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, 10,442 CI tests at 80.54% coverage, 10,352 local non-live tests, lint/format, type check, security, six import contracts, official-doc and Pages build, macOS/Ubuntu install smoke, wheel/sdist inspection, clean full/kernel installed-package checks with 398 modules and 57 kernel tests, exact interactive/auxiliary/provider retry-policy parity, and independent review with all six findings resolved all passed) |
 | R6.1 | PROTO-001, PROTO-002 | [#3109](https://github.com/mangowhoiscloud/geode/pull/3109) | `d6381dc34f5614d5a726e4aae1da45b3db2ab2ca` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, 10,368 local non-live tests with 56 skipped and one deselected, lint/format, type check, security, official-doc parity, Pages build, macOS/Ubuntu install smoke, wheel/sdist inspection, clean full/kernel installed-package checks with 399 isolated kernel modules and 57 kernel tests, exact IPC and gateway protocol-version, request-correlation, public-event projection, and v0/v1/future golden compatibility coverage all passed) |
+| R6.3 | BND-004, TRUST-001, TRUST-002 | [#3112](https://github.com/mangowhoiscloud/geode/pull/3112) | `3c79e23cd9a7d758d6aa06c72a1f50efa5a98348` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, 10,486 CI tests at 80.62% coverage, lint/format, type check, security, Pages build, macOS/Ubuntu install smoke, wheel/sdist inspection, clean full/kernel installed-package checks with 401 isolated kernel modules and 59 kernel tests, trust-before-load and brokered-sandbox poison coverage, and the documented SQLite first-access incident plus exact green rerun all passed) |
 
 ### 10.2 Main closure evidence
 
@@ -2240,20 +2240,31 @@ explicit unknown-field/event behavior are covered by v0, v1, and future-version
 golden and poison tests. Internal `RuntimeEvent` and `HookEvent` taxonomies
 remain private and can evolve without becoming external protocol contracts.
 
-R6.3 (`BND-004`, `TRUST-001`, `TRUST-002`) is `IN_PROGRESS` under the active
-claim for `feature/r6-3-extension-trust-lifecycle`, selected after R6.1 delivery
-reconciliation [#3110](https://github.com/mangowhoiscloud/geode/pull/3110).
-BND-001, LLM-002, DI-002, and TRUST-003 are `IN_DEVELOP`; BND-004 → TRUST-001
-→ TRUST-002 remains the package-internal implementation order. The package
-owns manifest-only discovery, explicit lifecycle and collision diagnostics,
-trust-before-load, narrow trusted in-process ports, and fail-closed brokered
-execution for capability-confined code. Implementation may begin only after
-this claim merges and a fresh worktree is allocated from the updated
-`origin/develop`; it does not treat ordinary Python process boundaries as a
-security sandbox or reopen R6.1 protocol work.
+R6.3 (`BND-004`, `TRUST-001`, `TRUST-002`) is `IN_DEVELOP` after feature
+[#3112](https://github.com/mangowhoiscloud/geode/pull/3112) merged as
+`3c79e23cd9a7d758d6aa06c72a1f50efa5a98348`. Existing Hook, LLM-adapter,
+Skill, and MCP metadata now reaches one immutable trust decision before load or
+spawn. Trusted in-process factories receive narrow granted ports; brokered MCP
+requires an available deny-default OS sandbox, exact environment, isolated
+scratch space, and declared mutation resource keys. Bounded health preserves
+rejected, disabled, granted, and degraded states, and stateful owners retain
+deterministic cleanup. Ordinary Python remains explicitly trusted rather than
+being mislabeled as capability-confined.
 
-R9.1 (`CODE-001`) was already dependency-satisfied and remains `OPEN` pending
-its own serialized whole-package readiness transaction later in master order.
+R7.1 (`VER-001`) and R7.2 (`CAP-006`, `VER-002`) are newly dependency-satisfied
+and `READY` after whole-package re-audit against
+`origin/develop@3c79e23cd9a7d758d6aa06c72a1f50efa5a98348`. R7.1 has a measurable
+finite gate inventory spanning generated architecture drift, reverse imports,
+installed kernel isolation, import contracts, tool-plan parity, registry
+generation/collisions, ambient-service bans, structural budgets, protocol
+compatibility, roadmap validation, and documentation. R7.2 has six explicit
+black-box scenarios with allowed product edits and forbidden central edits;
+`CAP-006` → `VER-002` remains its package-internal order. R7.1 is the earliest
+unclaimed package in master order; each package still requires its own claim
+transaction before implementation.
+
+R7.3 (`VER-004`) and R9.1 (`CODE-001`) were already dependency-satisfied and
+remain `OPEN` pending their own serialized whole-package readiness transactions.
 The active R8.3 claim and publication clock remain unchanged. R8.2
 (`STORE-003`) remains `OPEN` behind REL-004 and STORE-001; R8.4 (`BND-008`)
 additionally waits for STORE-003.
