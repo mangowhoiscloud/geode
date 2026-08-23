@@ -226,7 +226,6 @@ normal review and CI; implementations start only after the claim merges.
 | Closure package | GAP IDs | Owner/session | Implementation branch | Claim evidence | Claimed at (UTC) |
 |---|---|---|---|---|---|
 | R8.3 | REL-004 | `session=codex-root task=r8-3-publication-grace-evidence` | `feature/r8-3-publication-grace-evidence` | Readiness [#3039](https://github.com/mangowhoiscloud/geode/pull/3039); v1.0.23 GitHub/PyPI parity and candidate interval re-audited | `2026-08-20T07:41:19Z` |
-| R7.1 | VER-001 | `session=codex-root task=r7-1-architecture-ci` | `feature/r7-1-architecture-ci` | Readiness and R6.3 delivery reconciliation [#3113](https://github.com/mangowhoiscloud/geode/pull/3113) | `2026-08-23T14:57:27Z` |
 
 ## 1. Program objective
 
@@ -545,7 +544,7 @@ and closure evidence are appended in §10.
 | TRUST-001 | `ABSENT` | Registration/enabled status does not uniformly distinguish trusted authority | Installed, enabled, trusted, and granted-capability states are separate and observable; executable code is never imported before trust approval | R6.3 | BND-004 | `IN_DEVELOP` |
 | TRUST-002 | `PARTIAL` | Extension seams can receive broader runtime objects than required, and arbitrary in-process Python cannot be capability-confined | Trusted in-process code receives narrow ports for API discipline; untrusted executable code runs out of process behind a brokered capability boundary | R6.3 | DI-002, TRUST-001, TRUST-003 | `IN_DEVELOP` |
 | TRUST-003 | `ABSENT` | Mutation serialization is not derived from explicit tool resource metadata | `resource_keys(args)` drives per-resource serialization; no argument-name heuristic | R2.4 | CAP-004 | `IN_DEVELOP` |
-| VER-001 | `PARTIAL` | Quality gates pass but lack core-only, reverse-import, exception-budget, and tool-plan drift tests | All architecture gates in §9 run in CI and locally | R7.1 | BND-003, BND-004, CAP-005, LOOP-004, DI-003, LLM-002, PROTO-002, GOV-004, VER-003 | `IN_PROGRESS` |
+| VER-001 | `PARTIAL` | Quality gates pass but lack core-only, reverse-import, exception-budget, and tool-plan drift tests | All architecture gates in §9 run in CI and locally | R7.1 | BND-003, BND-004, CAP-005, LOOP-004, DI-003, LLM-002, PROTO-002, GOV-004, VER-003 | `IN_DEVELOP` |
 | VER-002 | `ABSENT` | No contract suite measures how many central edits each extension type requires | Six extension scenarios in §8 pass without forbidden edits | R7.2 | CAP-006, LLM-002, BND-004 | `READY` |
 | VER-003 | `PARTIAL` | Public/internal metric prose drifts from executable counts | `sync-stats` or one shared generator updates site, AGENTS facts, and roadmap baseline; check mode is green | R0.2 | GOV-001 | `DONE` |
 | VER-004 | `PARTIAL` | Cold-start and runtime metrics exist, but refactors lack one architecture regression baseline | Startup, first-turn, tool-plan build, memory, and event-write budgets are pinned and non-regressing | R7.3 | CAP-005, LOOP-003, DI-004, LLM-004, PROTO-002, STORE-002 | `OPEN` |
@@ -1944,6 +1943,7 @@ pre-release delivery evidence survives after the claim row is gone.
 | R5.4 | LLM-004 | [#3106](https://github.com/mangowhoiscloud/geode/pull/3106) | `20307e437a87a3ba18fce38c6e92d01c3e3785c8` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, 10,442 CI tests at 80.54% coverage, 10,352 local non-live tests, lint/format, type check, security, six import contracts, official-doc and Pages build, macOS/Ubuntu install smoke, wheel/sdist inspection, clean full/kernel installed-package checks with 398 modules and 57 kernel tests, exact interactive/auxiliary/provider retry-policy parity, and independent review with all six findings resolved all passed) |
 | R6.1 | PROTO-001, PROTO-002 | [#3109](https://github.com/mangowhoiscloud/geode/pull/3109) | `d6381dc34f5614d5a726e4aae1da45b3db2ab2ca` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, 10,368 local non-live tests with 56 skipped and one deselected, lint/format, type check, security, official-doc parity, Pages build, macOS/Ubuntu install smoke, wheel/sdist inspection, clean full/kernel installed-package checks with 399 isolated kernel modules and 57 kernel tests, exact IPC and gateway protocol-version, request-correlation, public-event projection, and v0/v1/future golden compatibility coverage all passed) |
 | R6.3 | BND-004, TRUST-001, TRUST-002 | [#3112](https://github.com/mangowhoiscloud/geode/pull/3112) | `3c79e23cd9a7d758d6aa06c72a1f50efa5a98348` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, 10,486 CI tests at 80.62% coverage, lint/format, type check, security, Pages build, macOS/Ubuntu install smoke, wheel/sdist inspection, clean full/kernel installed-package checks with 401 isolated kernel modules and 59 kernel tests, trust-before-load and brokered-sandbox poison coverage, and the documented SQLite first-access incident plus exact green rerun all passed) |
+| R7.1 | VER-001 | [#3115](https://github.com/mangowhoiscloud/geode/pull/3115) | `edac60747d82d941be23517a5c7081fe442d49c5` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, 10,491 CI tests at 80.61% coverage, lint/format, type check, security, six zero-ignore import contracts, official-doc parity, Pages build, macOS/Ubuntu install smoke, wheel/sdist inspection, clean full/kernel installed-package checks with 402 isolated kernel modules and 59 kernel tests, exact 86-way definition/model-execution/schema/policy parity, and anti-deception review all passed) |
 
 ### 10.2 Main closure evidence
 
@@ -2252,17 +2252,16 @@ rejected, disabled, granted, and degraded states, and stateful owners retain
 deterministic cleanup. Ordinary Python remains explicitly trusted rather than
 being mislabeled as capability-confined.
 
-R7.1 (`VER-001`) is `IN_PROGRESS` under the active claim for
-`feature/r7-1-architecture-ci`, selected from the package-atomic readiness and
-R6.3 delivery reconciliation
-[#3113](https://github.com/mangowhoiscloud/geode/pull/3113). It owns the finite
-executable gate inventory spanning generated architecture drift, reverse
-imports, installed kernel isolation, import contracts, tool-plan parity,
-registry generation/collisions, ambient-service bans, structural budgets,
-protocol compatibility, roadmap validation, and documentation. Implementation
-may begin only after this claim merges and a fresh worktree is allocated from
-the updated `origin/develop`; it does not absorb R7.2 scenario fixtures or R7.3
-performance baselines.
+R7.1 (`VER-001`) is `IN_DEVELOP` after feature
+[#3115](https://github.com/mangowhoiscloud/geode/pull/3115) merged as
+`edac60747d82d941be23517a5c7081fe442d49c5`. The delivered architecture CI
+inventory rejects generated-baseline drift, kernel reverse imports,
+import-contract exceptions, service-locator `ContextVar` bindings, and
+tool-plan parity loss before a snapshot can bless them. Named CI steps also
+exercise installed kernel isolation, registry generation/collisions,
+structural budgets, public protocol compatibility, roadmap legality, and
+official-documentation drift. R7.2 scenario fixtures and R7.3 performance
+baselines remain outside this package.
 
 R7.2 (`CAP-006`, `VER-002`) remains the sole unclaimed `READY` package in
 master order. Its six black-box scenarios retain explicit allowed product edits
