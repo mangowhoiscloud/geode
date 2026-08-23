@@ -226,6 +226,7 @@ normal review and CI; implementations start only after the claim merges.
 | Closure package | GAP IDs | Owner/session | Implementation branch | Claim evidence | Claimed at (UTC) |
 |---|---|---|---|---|---|
 | R8.3 | REL-004 | `session=codex-root task=r8-3-publication-grace-evidence` | `feature/r8-3-publication-grace-evidence` | Readiness [#3039](https://github.com/mangowhoiscloud/geode/pull/3039); v1.0.23 GitHub/PyPI parity and candidate interval re-audited | `2026-08-20T07:41:19Z` |
+| R5.3 | LLM-003 | `session=codex-root task=r5-3-provider-profile-transport` | `feature/r5-3-provider-profile-transport` | R5.2 delivery reconciliation and R5.3 readiness [#3101](https://github.com/mangowhoiscloud/geode/pull/3101) | `2026-08-23T02:48:45Z` |
 
 ## 1. Program objective
 
@@ -535,7 +536,7 @@ and closure evidence are appended in §10.
 | DI-004 | `MISFIT` | `MCPServerManager` combines config, discovery, connection, call, trace/persistence, and lifecycle | Separate config catalog, connection pool, invoker, and persistence collaborators preserve public behavior | R4.3 | DI-002 | `IN_DEVELOP` |
 | LLM-001 | `MISFIT` | `LLMAdapter` documentation calls the contract minimal but requires streaming and introspection methods | Minimal completion protocol plus optional capability protocols; no empty stubs required | R5.1 | DI-002 | `IN_DEVELOP` |
 | LLM-002 | `PARTIAL` | Eight built-ins use a mutable registry with broad bootstrap lifetime | Built-in plus entry-point discovery yields immutable session snapshots with generation and collision policy | R5.2 | LLM-001, BND-001 | `IN_DEVELOP` |
-| LLM-003 | `PARTIAL` | Provider identity, credential source, transport, and adapter selection overlap | Provider profile, credential route, and transport are separate composable records | R5.3 | LLM-001, LLM-002 | `READY` |
+| LLM-003 | `PARTIAL` | Provider identity, credential source, transport, and adapter selection overlap | Provider profile, credential route, and transport are separate composable records | R5.3 | LLM-001, LLM-002 | `IN_PROGRESS` |
 | LLM-004 | `PARTIAL` | Interactive and autonomous LLM paths share taxonomy but retain multiple retry/failover implementations | Explicit `RetryPolicy` preserves intentional differences on one classification/telemetry substrate | R5.4 | LLM-003 | `OPEN` |
 | PROTO-001 | `MISFIT` | Internal `HookEvent` taxonomy can leak into persistence/IPC expectations | Public activity/event projections are separate from internal dispatch events | R6.1 | LOOP-002, DI-002 | `READY` |
 | PROTO-002 | `PARTIAL` | IPC has typed behavior but no single versioned external compatibility contract | Versioned envelopes, capability negotiation, unknown-field behavior, and golden compatibility tests | R6.1 | PROTO-001 | `READY` |
@@ -2209,19 +2210,19 @@ goal continuation, while reload affects only new sessions. The compatibility
 registry view remains read-only and no R5.3 provider-profile/transport or R5.4
 retry/failover responsibility moved.
 
-R5.3 (`LLM-003`) is the earliest `READY`, unclaimed package after a
-whole-package re-audit against
-`origin/develop@3be2c070551591f5bee34b52bdb811a87066cd68`. Its external
-dependencies LLM-001 and LLM-002 are `IN_DEVELOP`. Current adapter routes still
-combine provider/model semantics, credential selection, transport shape,
-native capabilities, and retry/quota choices; measurable acceptance is a
-provider profile, credential route, and transport composed without adding a
-closed provider branch, while existing adapter names remain compatibility
-aliases. R5.3 requires its own serialized claim before implementation and does
-not authorize R5.4 retry/failover convergence.
+R5.3 (`LLM-003`) is `IN_PROGRESS` under the active claim for
+`feature/r5-3-provider-profile-transport`, selected after readiness and R5.2
+delivery reconciliation
+[#3101](https://github.com/mangowhoiscloud/geode/pull/3101). Implementation may
+start only after this claim PR merges and a fresh worktree is allocated from
+the updated `origin/develop`. R5.3 owns the smallest composition of provider
+profile, credential route, transport/API shape, optional native capabilities,
+and adapter selection while preserving existing adapter-name aliases. It does
+not authorize R5.4 retry/failover convergence or change call counts, quota,
+billing, fallback, and hook ordering.
 
-R6.1 (`PROTO-001`, `PROTO-002`) remains `READY` and unclaimed behind R5.3 in
-master-ledger order.
+R6.1 (`PROTO-001`, `PROTO-002`) is now the earliest `READY`, unclaimed package
+behind R5.3 in master-ledger order.
 
 R6.3 (`BND-004`, `TRUST-001`, `TRUST-002`) is also package-atomically `READY`
 after the same dependency reconciliation. BND-001, LLM-002, DI-002, and
