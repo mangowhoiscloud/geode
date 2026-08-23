@@ -226,7 +226,6 @@ normal review and CI; implementations start only after the claim merges.
 | Closure package | GAP IDs | Owner/session | Implementation branch | Claim evidence | Claimed at (UTC) |
 |---|---|---|---|---|---|
 | R8.3 | REL-004 | `session=codex-root task=r8-3-publication-grace-evidence` | `feature/r8-3-publication-grace-evidence` | Readiness [#3039](https://github.com/mangowhoiscloud/geode/pull/3039); v1.0.23 GitHub/PyPI parity and candidate interval re-audited | `2026-08-20T07:41:19Z` |
-| R9.2 | CODE-002 | `session=codex-root task=r9-2-verify-state-cleanup` | `feature/r9-2-verify-state-cleanup` | Readiness [#3129](https://github.com/mangowhoiscloud/geode/pull/3129); verify-state writer/reader and checkpoint authority re-audited | `2026-08-23T20:12:51Z` |
 
 ## 1. Program objective
 
@@ -567,7 +566,7 @@ and closure evidence are appended in §10.
 | REL-003 | `MISFIT` | PyPI, GitHub Releases, repository metadata, and the changelog report v1.0.22, which predates the delivered boundary refactor | Wheel, sdist, CLI, daemon, site SOT, changelog, tag, GitHub release, and PyPI all report v1.0.23 with artifact-hash parity and no rewritten earlier-release evidence | R1.7 | BND-003, BND-006, GOV-004 | `DONE` |
 | REL-004 | `ABSENT` | No registered gate prevents the v1.0.23 compatibility facade or preserved state roots from being retired immediately after a local tag, draft release, or registry publication | Official GitHub Release and PyPI evidence proves compatible public artifacts continuously exposed the facade and preserved roots for a final qualifying interval of at least 30 consecutive days, starting no earlier than v1.0.23, and every release inside that interval retained them | R8.3 | REL-003 | `IN_PROGRESS` |
 | BND-008 | `ABSENT` | The current `core/self_improving` import and source/module launcher surface has no enumerated consumer census, old-to-new migration map, or removal-only closure gate | After REL-004, every repository and documented consumer is classified, migration guidance names canonical replacements, only the forwarding facade and legacy launchers are removed, and installed-wheel import/CLI/MCP/config/state parity proves the canonical product remains intact | R8.4 | REL-004, STORE-003 | `OPEN` |
-| CODE-002 | `MISFIT` | Verification state is restored from checkpoint `loop_guards`, but `_persist_verify_state` still mirrors every result into `SessionManager` columns whose accessor has no production reader | Production verify-mirror writes and the unused accessor are removed; legacy databases containing the columns still load, checkpoint recovery remains authoritative, and no new store or schema migration is introduced | R9.2 | CODE-001 | `IN_PROGRESS` |
+| CODE-002 | `MISFIT` | Verification state is restored from checkpoint `loop_guards`, but `_persist_verify_state` still mirrors every result into `SessionManager` columns whose accessor has no production reader | Production verify-mirror writes and the unused accessor are removed; legacy databases containing the columns still load, checkpoint recovery remains authoritative, and no new store or schema migration is introduced | R9.2 | CODE-001 | `IN_DEVELOP` |
 
 ## 6. Dependency and merge sequence
 
@@ -1969,6 +1968,7 @@ pre-release delivery evidence survives after the claim row is gone.
 | R7.2 | CAP-006, VER-002 | [#3118](https://github.com/mangowhoiscloud/geode/pull/3118) | `dc1dfafda209e2c0f89ce990cab45e106e39c346` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, 10,497 CI tests at 80.60% coverage, lint/format, type check, security, official-doc parity, Pages build, macOS/Ubuntu install smoke, wheel/sdist inspection, clean full/kernel installed-package checks with 402 isolated kernel modules and 59 kernel tests, and the named six-scenario project-Skill, filesystem-hook, MCP-server, third-party-adapter, native-tool, and Google-Workspace change-surface contract all passed) |
 | R7.3 | VER-004 | [#3122](https://github.com/mangowhoiscloud/geode/pull/3122) | `3e6f025e498e74241209910e95ba3a29792323e7` | `uv run python scripts/check_architecture_performance.py --check`; `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, 10,414 local non-live tests, lint/format, type check, security, official-doc parity and Pages build, macOS/Ubuntu install smoke, wheel/sdist inspection, clean full/kernel installed-package checks with 402 isolated kernel modules and 59 kernel tests, 13 independent provider-network-free performance budgets calibrated from GitHub Actions `ubuntu-latest`, and anti-deception review all passed) |
 | R9.1 | CODE-001 | [#3126](https://github.com/mangowhoiscloud/geode/pull/3126) | `d81e76b00ea3c7d0fb9b03bb4605f9ba18f3e771` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate and full test-with-coverage job, 480 targeted authority tests, lint/format, type check, security, official-doc parity, 238-page static build, 74 Markdown twins, macOS/Ubuntu install smoke, exact two-file documentation scope, and anti-deception checks all passed) |
+| R9.2 | CODE-002 | [#3131](https://github.com/mangowhoiscloud/geode/pull/3131) | `bd7d79c3d004508eadf379e9403a0a2fb3c2a30a` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, 10,412 local non-live tests and the full CI test-with-coverage job, lint/format, type check, security, six import contracts, official-doc parity and 238-page Pages build, macOS/Ubuntu install smoke, wheel/sdist inspection, clean full/kernel installed-package checks with 402 isolated kernel modules and 59 kernel tests, fresh-schema and legacy-column compatibility coverage, and anti-deception checks all passed) |
 
 ### 10.2 Main closure evidence
 
@@ -2322,15 +2322,15 @@ ChangeSet, review, and lookup work still requires its own measured GAP
 transaction; R9.1 added no runtime API, persisted store, task ledger, policy
 plane, review hook, or migration.
 
-R9.2 (`CODE-002`) is claimed for implementation after readiness
-[#3129](https://github.com/mangowhoiscloud/geode/pull/3129) merged as
-`9356de4f2037de816c765d706ba8726d3f7c41ea`; CODE-001 remains `IN_DEVELOP`.
-The implementation branch may be allocated only after this claim merges on
-canonical `develop`. It may remove only `_persist_verify_state`, the
-`SessionManager` verify writer/accessor, and their obsolete tests while
-preserving legacy-column load compatibility, checkpoint `loop_guards`
-recovery, and current metrics/events without a new schema migration or state
-plane.
+R9.2 (`CODE-002`) is `IN_DEVELOP` after feature
+[#3131](https://github.com/mangowhoiscloud/geode/pull/3131) merged as
+`bd7d79c3d004508eadf379e9403a0a2fb3c2a30a`. Checkpoint `loop_guards` remain
+the sole verify/replan recovery authority; the write-only lifecycle mirror,
+unused `SessionManager` writer/accessor, and fresh/legacy schema addition of
+their seven columns are removed. Databases already carrying those columns
+remain load-compatible as inert extra schema, while current metrics, runtime
+events, and checkpoint restore behavior are unchanged. No replacement store,
+schema migration, event, hook, or runtime abstraction was added.
 
 The active R8.3 claim and publication clock remain unchanged. R8.2
 (`STORE-003`) remains `OPEN` behind REL-004 and STORE-001; R8.4 (`BND-008`)
