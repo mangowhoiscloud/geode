@@ -226,6 +226,7 @@ normal review and CI; implementations start only after the claim merges.
 | Closure package | GAP IDs | Owner/session | Implementation branch | Claim evidence | Claimed at (UTC) |
 |---|---|---|---|---|---|
 | R8.3 | REL-004 | `session=codex-root task=r8-3-publication-grace-evidence` | `feature/r8-3-publication-grace-evidence` | Readiness [#3039](https://github.com/mangowhoiscloud/geode/pull/3039); v1.0.23 GitHub/PyPI parity and candidate interval re-audited | `2026-08-20T07:41:19Z` |
+| R9.1 | CODE-001 | `session=codex-root task=r9-1-coding-runtime-authority` | `feature/r9-1-coding-runtime-authority` | Whole-package coding-runtime authority-contract readiness [#3124](https://github.com/mangowhoiscloud/geode/pull/3124) | `2026-08-23T18:58:06Z` |
 
 ## 1. Program objective
 
@@ -562,7 +563,7 @@ and closure evidence are appended in §10.
 | HOOK-003 | `PARTIAL` | All 13 public hooks are wired, but no production `PostVerify` policy is registered; an empty decision set can deliver a retryable verifier failure, continuation authority is encoded as a user-role pseudo-system message, and durable verification records aggregate handler decisions without a stable candidate target | A deterministic fallback maps pass/retryable failure/non-retryable failure to accept/revise/escalate; revision enters the bounded dynamic system context, reaches the existing verify-fail replan path, and records candidate-digest-bound per-handler decisions without replaying completed side effects or adding a new hook plane | R6.6 | HOOK-001, STORE-002 | `DONE` |
 | MEM-001 | `MISFIT` | One live system-prompt branch creates a default user profile outside the wired project scope, `TURN_COMPLETED` promotes a low-information turn/tool trace into active project memory, and caller-free session-checkpoint plus journal write/aggregate APIs imply competing authorities | The wired profile is the sole prompt profile source; automatic turn traces remain in canonical session records; dead `SessionStorePort` checkpoint and `ProjectJournal` write/aggregate APIs are removed while historical files remain untouched; executable tests and docs identify the live read/write authority without adding a store or framework | R6.7 | HOOK-001, STORE-002 | `DONE` |
 | GOAL-001 | `PARTIAL` | Explicit Goal state, contextual continuation, accounting, and trajectory events persist, but automatic continuation is owned only by one `AgenticLoop.arun()` call; no process owner discovers an active Goal after return or daemon restart, restores its checkpoint, or prevents duplicate idle launches | The existing serve process owns a bounded idle Goal continuation host that restores the same checkpoint as a new session generation, admits at most one continuation per session, uses the internal contextual-Goal path rather than a synthetic user turn, preserves Lane, PostVerify/replan, accounting, and trajectory contracts, and does not hot-loop an unchanged active Goal | R6.8 | HOOK-003, STORE-002 | `DONE` |
-| CODE-001 | `PARTIAL` | Coding work spans session/checkpoint/timeline, task preflight/TaskGraph, Goal, collaboration, worktree workflow, file/bash tools, and reviewer/verification paths, but no canonical contract maps their current writers, recovery authority, or residual coding-runtime boundaries | One reviewed coding-runtime authority contract maps every proposed record and operation to an existing or residual owner, fixes recovery/history/projection and drift/rollback invariants, and proves that no duplicate runtime store, task ledger, policy plane, or implementation API was introduced | R9.1 | STORE-002, HOOK-003, MEM-001, COLLAB-003, GOAL-001 | `READY` |
+| CODE-001 | `PARTIAL` | Coding work spans session/checkpoint/timeline, task preflight/TaskGraph, Goal, collaboration, worktree workflow, file/bash tools, and reviewer/verification paths, but no canonical contract maps their current writers, recovery authority, or residual coding-runtime boundaries | One reviewed coding-runtime authority contract maps every proposed record and operation to an existing or residual owner, fixes recovery/history/projection and drift/rollback invariants, and proves that no duplicate runtime store, task ledger, policy plane, or implementation API was introduced | R9.1 | STORE-002, HOOK-003, MEM-001, COLLAB-003, GOAL-001 | `IN_PROGRESS` |
 | REL-003 | `MISFIT` | PyPI, GitHub Releases, repository metadata, and the changelog report v1.0.22, which predates the delivered boundary refactor | Wheel, sdist, CLI, daemon, site SOT, changelog, tag, GitHub release, and PyPI all report v1.0.23 with artifact-hash parity and no rewritten earlier-release evidence | R1.7 | BND-003, BND-006, GOV-004 | `DONE` |
 | REL-004 | `ABSENT` | No registered gate prevents the v1.0.23 compatibility facade or preserved state roots from being retired immediately after a local tag, draft release, or registry publication | Official GitHub Release and PyPI evidence proves compatible public artifacts continuously exposed the facade and preserved roots for a final qualifying interval of at least 30 consecutive days, starting no earlier than v1.0.23, and every release inside that interval retained them | R8.3 | REL-003 | `IN_PROGRESS` |
 | BND-008 | `ABSENT` | The current `core/self_improving` import and source/module launcher surface has no enumerated consumer census, old-to-new migration map, or removal-only closure gate | After REL-004, every repository and documented consumer is classified, migration guidance names canonical replacements, only the forwarding facade and legacy launchers are removed, and installed-wheel import/CLI/MCP/config/state parity proves the canonical product remains intact | R8.4 | REL-004, STORE-003 | `OPEN` |
@@ -2285,17 +2286,18 @@ and steady-state heap probes prevent averaging or instrumentation overhead from
 hiding a regression, while the named behavior matrix pins architecture
 semantics. R7.3 remains `IN_DEVELOP` until full-program main closure.
 
-R9.1 (`CODE-001`) is the sole unclaimed `READY` package after a whole-package
-re-audit against
-`origin/develop@65c3f6854052b8169065e787f239637abd668ded`. STORE-002, HOOK-003,
-MEM-001, and GOAL-001 are `DONE`; COLLAB-003 is `IN_DEVELOP`. The measurable
-documentation-only acceptance is one source-and-test census and authority
-matrix for coding task, session/turn, workspace, process, mutation/diff,
-review, instructions/context, and cross-domain task lookup, including recovery,
+R9.1 (`CODE-001`) is `IN_PROGRESS` under the active claim for
+`feature/r9-1-coding-runtime-authority`, selected from whole-package readiness
+[#3124](https://github.com/mangowhoiscloud/geode/pull/3124) on
+`origin/develop@b53d1b4138302fe5147c4f04f886df58436f7292`. The package is
+documentation-only: it owns one source-and-test census and authority matrix for
+coding task, session/turn, workspace, process, mutation/diff, review,
+instructions/context, and cross-domain task lookup, including recovery,
 history, projection, drift, redaction, failure, and rollback dispositions. It
 must classify the write-only verify-state mirror and every deferred runtime
 candidate without adding a task store, transcript, policy plane, review hook,
-or implementation API. A separate claim is required before implementation.
+or implementation API. Work begins only after this claim merges and a fresh
+worktree is allocated from the updated `origin/develop`.
 The active R8.3 claim and publication clock remain unchanged. R8.2
 (`STORE-003`) remains `OPEN` behind REL-004 and STORE-001; R8.4 (`BND-008`)
 additionally waits for STORE-003.
