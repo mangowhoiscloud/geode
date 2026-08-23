@@ -226,7 +226,6 @@ normal review and CI; implementations start only after the claim merges.
 | Closure package | GAP IDs | Owner/session | Implementation branch | Claim evidence | Claimed at (UTC) |
 |---|---|---|---|---|---|
 | R8.3 | REL-004 | `session=codex-root task=r8-3-publication-grace-evidence` | `feature/r8-3-publication-grace-evidence` | Readiness [#3039](https://github.com/mangowhoiscloud/geode/pull/3039); v1.0.23 GitHub/PyPI parity and candidate interval re-audited | `2026-08-20T07:41:19Z` |
-| R7.3 | VER-004 | `session=codex-root task=r7-3-architecture-performance` | `feature/r7-3-architecture-performance` | Whole-package performance and behavior baseline readiness [#3120](https://github.com/mangowhoiscloud/geode/pull/3120) | `2026-08-23T17:29:51Z` |
 
 ## 1. Program objective
 
@@ -284,11 +283,11 @@ machine-readable artifact is
 | Measure | Current tree |
 |---|---:|
 | Production Python files (`core/` + `geode_product/` + `plugins/`) | 590 |
-| Test Python files | 692 |
-| `core/` Python LOC | 122,015 |
+| Test Python files | 691 |
+| `core/` Python LOC | 121,804 |
 | `geode_product/` Python LOC | 61,219 |
 | `plugins/` Python LOC | 193 |
-| Test Python LOC | 186,338 |
+| Test Python LOC | 185,522 |
 | Tool definitions / model executions / valid schemas / policies | 86 / 86 / 86 / 86 (exact) |
 | `RuntimeEvent` members | 57 |
 | Built-in LLM adapters | 5 |
@@ -548,7 +547,7 @@ and closure evidence are appended in §10.
 | VER-001 | `PARTIAL` | Quality gates pass but lack core-only, reverse-import, exception-budget, and tool-plan drift tests | All architecture gates in §9 run in CI and locally | R7.1 | BND-003, BND-004, CAP-005, LOOP-004, DI-003, LLM-002, PROTO-002, GOV-004, VER-003 | `IN_DEVELOP` |
 | VER-002 | `ABSENT` | No contract suite measures how many central edits each extension type requires | Six extension scenarios in §8 pass without forbidden edits | R7.2 | CAP-006, LLM-002, BND-004 | `IN_DEVELOP` |
 | VER-003 | `PARTIAL` | Public/internal metric prose drifts from executable counts | `sync-stats` or one shared generator updates site, AGENTS facts, and roadmap baseline; check mode is green | R0.2 | GOV-001 | `DONE` |
-| VER-004 | `PARTIAL` | Cold-start and runtime metrics exist, but refactors lack one architecture regression baseline | Startup, first-turn, tool-plan build, memory, and event-write budgets are pinned and non-regressing | R7.3 | CAP-005, LOOP-003, DI-004, LLM-004, PROTO-002, STORE-002 | `IN_PROGRESS` |
+| VER-004 | `PARTIAL` | Cold-start and runtime metrics exist, but refactors lack one architecture regression baseline | Startup, first-turn, tool-plan build, memory, and event-write budgets are pinned and non-regressing | R7.3 | CAP-005, LOOP-003, DI-004, LLM-004, PROTO-002, STORE-002 | `IN_DEVELOP` |
 | BND-005 | `MISFIT` | Generic agent/provider/observability consumers import self-improving transcript, SoT-resolution, and prompt-injection helpers | Neutral policy snapshot/source, context-contribution, run identity, and activity-sink contracts replace every classified-kernel import of a self-improving helper without changing runtime behavior | R1.4 | BND-001 | `IN_DEVELOP` |
 | BND-006 | `MISFIT` | `core/self_improving` contains 39 Python files and 16,159 LOC of opt-in campaign, Petri/seed orchestration, mutation, gate, CLI/MCP, scheduler, and state policy | One cohesive first-party bundled feature owns the control plane outside the kernel; outer composition wires it, classified kernel modules import it zero times outside the exact forwarding-facade allowlist, a retirement GAP is registered before implementation, and v1.0 commands/imports/config/state behavior pass compatibility and installed-wheel tests | R1.5 | BND-002, BND-005 | `IN_DEVELOP` |
 | REL-001 | `MISFIT` | PyPI and GitHub Releases still publish v1.0.0, while repository metadata and the changelog declare an untagged, unpublished v1.1.0; the operator selected v1.0.1 as the next public release | Wheel, sdist, CLI, daemon, site SOT, changelog, tag, GitHub release, and PyPI all report v1.0.1 with artifact-hash parity and no rewritten v1.0.0 evidence | R1.6 | BND-003, BND-006, GOV-004 | `SUPERSEDED` |
@@ -563,10 +562,11 @@ and closure evidence are appended in §10.
 | HOOK-003 | `PARTIAL` | All 13 public hooks are wired, but no production `PostVerify` policy is registered; an empty decision set can deliver a retryable verifier failure, continuation authority is encoded as a user-role pseudo-system message, and durable verification records aggregate handler decisions without a stable candidate target | A deterministic fallback maps pass/retryable failure/non-retryable failure to accept/revise/escalate; revision enters the bounded dynamic system context, reaches the existing verify-fail replan path, and records candidate-digest-bound per-handler decisions without replaying completed side effects or adding a new hook plane | R6.6 | HOOK-001, STORE-002 | `DONE` |
 | MEM-001 | `MISFIT` | One live system-prompt branch creates a default user profile outside the wired project scope, `TURN_COMPLETED` promotes a low-information turn/tool trace into active project memory, and caller-free session-checkpoint plus journal write/aggregate APIs imply competing authorities | The wired profile is the sole prompt profile source; automatic turn traces remain in canonical session records; dead `SessionStorePort` checkpoint and `ProjectJournal` write/aggregate APIs are removed while historical files remain untouched; executable tests and docs identify the live read/write authority without adding a store or framework | R6.7 | HOOK-001, STORE-002 | `DONE` |
 | GOAL-001 | `PARTIAL` | Explicit Goal state, contextual continuation, accounting, and trajectory events persist, but automatic continuation is owned only by one `AgenticLoop.arun()` call; no process owner discovers an active Goal after return or daemon restart, restores its checkpoint, or prevents duplicate idle launches | The existing serve process owns a bounded idle Goal continuation host that restores the same checkpoint as a new session generation, admits at most one continuation per session, uses the internal contextual-Goal path rather than a synthetic user turn, preserves Lane, PostVerify/replan, accounting, and trajectory contracts, and does not hot-loop an unchanged active Goal | R6.8 | HOOK-003, STORE-002 | `DONE` |
-| CODE-001 | `PARTIAL` | Coding work spans session/checkpoint/timeline, task preflight/TaskGraph, Goal, collaboration, worktree workflow, file/bash tools, and reviewer/verification paths, but no canonical contract maps their current writers, recovery authority, or residual coding-runtime boundaries | One reviewed coding-runtime authority contract maps every proposed record and operation to an existing or residual owner, fixes recovery/history/projection and drift/rollback invariants, and proves that no duplicate runtime store, task ledger, policy plane, or implementation API was introduced | R9.1 | STORE-002, HOOK-003, MEM-001, COLLAB-003, GOAL-001 | `OPEN` |
+| CODE-001 | `PARTIAL` | Coding work spans session/checkpoint/timeline, task preflight/TaskGraph, Goal, collaboration, worktree workflow, file/bash tools, and reviewer/verification paths, but no canonical contract maps their current writers, recovery authority, or residual coding-runtime boundaries | One reviewed coding-runtime authority contract maps every proposed record and operation to an existing or residual owner, fixes recovery/history/projection and drift/rollback invariants, and proves that no duplicate runtime store, task ledger, policy plane, or implementation API was introduced | R9.1 | STORE-002, HOOK-003, MEM-001, COLLAB-003, GOAL-001 | `IN_DEVELOP` |
 | REL-003 | `MISFIT` | PyPI, GitHub Releases, repository metadata, and the changelog report v1.0.22, which predates the delivered boundary refactor | Wheel, sdist, CLI, daemon, site SOT, changelog, tag, GitHub release, and PyPI all report v1.0.23 with artifact-hash parity and no rewritten earlier-release evidence | R1.7 | BND-003, BND-006, GOV-004 | `DONE` |
 | REL-004 | `ABSENT` | No registered gate prevents the v1.0.23 compatibility facade or preserved state roots from being retired immediately after a local tag, draft release, or registry publication | Official GitHub Release and PyPI evidence proves compatible public artifacts continuously exposed the facade and preserved roots for a final qualifying interval of at least 30 consecutive days, starting no earlier than v1.0.23, and every release inside that interval retained them | R8.3 | REL-003 | `IN_PROGRESS` |
 | BND-008 | `ABSENT` | The current `core/self_improving` import and source/module launcher surface has no enumerated consumer census, old-to-new migration map, or removal-only closure gate | After REL-004, every repository and documented consumer is classified, migration guidance names canonical replacements, only the forwarding facade and legacy launchers are removed, and installed-wheel import/CLI/MCP/config/state parity proves the canonical product remains intact | R8.4 | REL-004, STORE-003 | `OPEN` |
+| CODE-002 | `MISFIT` | Verification state is restored from checkpoint `loop_guards`, but `_persist_verify_state` still mirrors every result into `SessionManager` columns whose accessor has no production reader | Production verify-mirror writes and the unused accessor are removed; legacy databases containing the columns still load, checkpoint recovery remains authoritative, and no new store or schema migration is introduced | R9.2 | CODE-001 | `IN_DEVELOP` |
 
 ## 6. Dependency and merge sequence
 
@@ -1811,6 +1811,26 @@ Acceptance:
   map to observable acceptance tests, and the roadmap validator plus document
   link checks pass without any runtime-code change.
 
+#### R9.2 Verify-state mirror cleanup
+
+GAP: CODE-002.
+
+This package removes a write-only production mirror. It does not change the
+session schema or create another verification, telemetry, or recovery owner.
+
+Acceptance:
+
+- a source-and-test census confirms that checkpoint `loop_guards` own verify
+  recovery and no production caller reads `SessionManager.get_verify_state`;
+- `_persist_verify_state`, `SessionManager.upsert_verify_state`, and
+  `SessionManager.get_verify_state` leave production code, while the existing
+  verify columns remain tolerated as inert legacy schema;
+- existing databases containing those columns open without migration, and
+  checkpoint restore plus current verification metrics/events retain their
+  behavior;
+- focused verification/recovery tests and architecture gates pass without a
+  new store, schema migration, event, hook, or runtime abstraction.
+
 ## 8. Change-surface acceptance scenarios
 
 These black-box scenarios define extensibility more usefully than class count.
@@ -1946,6 +1966,9 @@ pre-release delivery evidence survives after the claim row is gone.
 | R6.3 | BND-004, TRUST-001, TRUST-002 | [#3112](https://github.com/mangowhoiscloud/geode/pull/3112) | `3c79e23cd9a7d758d6aa06c72a1f50efa5a98348` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, 10,486 CI tests at 80.62% coverage, lint/format, type check, security, Pages build, macOS/Ubuntu install smoke, wheel/sdist inspection, clean full/kernel installed-package checks with 401 isolated kernel modules and 59 kernel tests, trust-before-load and brokered-sandbox poison coverage, and the documented SQLite first-access incident plus exact green rerun all passed) |
 | R7.1 | VER-001 | [#3115](https://github.com/mangowhoiscloud/geode/pull/3115) | `edac60747d82d941be23517a5c7081fe442d49c5` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, 10,491 CI tests at 80.61% coverage, lint/format, type check, security, six zero-ignore import contracts, official-doc parity, Pages build, macOS/Ubuntu install smoke, wheel/sdist inspection, clean full/kernel installed-package checks with 402 isolated kernel modules and 59 kernel tests, exact 86-way definition/model-execution/schema/policy parity, and anti-deception review all passed) |
 | R7.2 | CAP-006, VER-002 | [#3118](https://github.com/mangowhoiscloud/geode/pull/3118) | `dc1dfafda209e2c0f89ce990cab45e106e39c346` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, 10,497 CI tests at 80.60% coverage, lint/format, type check, security, official-doc parity, Pages build, macOS/Ubuntu install smoke, wheel/sdist inspection, clean full/kernel installed-package checks with 402 isolated kernel modules and 59 kernel tests, and the named six-scenario project-Skill, filesystem-hook, MCP-server, third-party-adapter, native-tool, and Google-Workspace change-surface contract all passed) |
+| R7.3 | VER-004 | [#3122](https://github.com/mangowhoiscloud/geode/pull/3122) | `3e6f025e498e74241209910e95ba3a29792323e7` | `uv run python scripts/check_architecture_performance.py --check`; `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, 10,414 local non-live tests, lint/format, type check, security, official-doc parity and Pages build, macOS/Ubuntu install smoke, wheel/sdist inspection, clean full/kernel installed-package checks with 402 isolated kernel modules and 59 kernel tests, 13 independent provider-network-free performance budgets calibrated from GitHub Actions `ubuntu-latest`, and anti-deception review all passed) |
+| R9.1 | CODE-001 | [#3126](https://github.com/mangowhoiscloud/geode/pull/3126) | `d81e76b00ea3c7d0fb9b03bb4605f9ba18f3e771` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate and full test-with-coverage job, 480 targeted authority tests, lint/format, type check, security, official-doc parity, 238-page static build, 74 Markdown twins, macOS/Ubuntu install smoke, exact two-file documentation scope, and anti-deception checks all passed) |
+| R9.2 | CODE-002 | [#3131](https://github.com/mangowhoiscloud/geode/pull/3131) | `bd7d79c3d004508eadf379e9403a0a2fb3c2a30a` | `uv run python scripts/check_architecture_roadmap.py --check --base-ref origin/develop --target-branch develop --event-mode pull_request` — RESULT: PASS (feature CI Gate, 10,412 local non-live tests and the full CI test-with-coverage job, lint/format, type check, security, six import contracts, official-doc parity and 238-page Pages build, macOS/Ubuntu install smoke, wheel/sdist inspection, clean full/kernel installed-package checks with 402 isolated kernel modules and 59 kernel tests, fresh-schema and legacy-column compatibility coverage, and anti-deception checks all passed) |
 
 ### 10.2 Main closure evidence
 
@@ -2275,21 +2298,40 @@ the extension without patching forbidden central files or adding another
 runtime registry. R7.2 remains ineligible for `DONE` until the final R7.4
 closure audit verifies the cross-package change-surface budget on `main`.
 
-R7.3 (`VER-004`) is `IN_PROGRESS` under the active claim for
-`feature/r7-3-architecture-performance`, selected from the whole-package
-readiness [#3120](https://github.com/mangowhoiscloud/geode/pull/3120) on
-`origin/develop@341084c7e50713557db2a817f63c3045a7c7008a`. It owns one
-bounded, provider-network-free performance baseline and CI non-regression gate
-for import/cold-start, runtime lifecycle, first turn, tool-plan build/refresh,
-tool dispatch, MCP first/warm call, session/event persistence, and
-memory/descriptor size, plus the existing behavior-characterization matrix.
-Each metric must fail independently; averaging cannot hide a regression. The
-implementation introduces no benchmark-score claim or runtime feature
-redesign. Work begins only after this claim merges and a fresh worktree is
-allocated from the updated `origin/develop`.
+R7.3 (`VER-004`) is `IN_DEVELOP` after feature
+[#3122](https://github.com/mangowhoiscloud/geode/pull/3122) merged as
+`3e6f025e498e74241209910e95ba3a29792323e7`. One provider-network-free CI
+baseline now measures 13 independent import, lifecycle, first-turn, tool-plan,
+dispatch, MCP, persistence, and memory/descriptor budgets in isolated
+processes. The recorded `ubuntu-latest` calibration and separate cold-build
+and steady-state heap probes prevent averaging or instrumentation overhead from
+hiding a regression, while the named behavior matrix pins architecture
+semantics. R7.3 remains `IN_DEVELOP` until full-program main closure.
 
-R9.1 (`CODE-001`) was already dependency-satisfied but is later in master
-order and remains `OPEN` for its own serialized readiness transaction.
+R9.1 (`CODE-001`) is `IN_DEVELOP` after documentation feature
+[#3126](https://github.com/mangowhoiscloud/geode/pull/3126) merged as
+`d81e76b00ea3c7d0fb9b03bb4605f9ba18f3e771`. The canonical coding-runtime
+authority contract maps current writers, readers, lifetime, persistence,
+recovery, compatibility, redaction, failure, and rollback across coding task,
+session/turn, workspace, process, mutation/diff, review,
+instructions/context, and cross-domain lookup. It keeps messages/checkpoints
+as recovery authority, SessionTimeline as append-only history, and Goal,
+scheduler, collaboration, and evaluation/promotion as their domain sources of
+truth. Prospective CodingTask, workspace/instruction snapshot, process,
+ChangeSet, review, and lookup work still requires its own measured GAP
+transaction; R9.1 added no runtime API, persisted store, task ledger, policy
+plane, review hook, or migration.
+
+R9.2 (`CODE-002`) is `IN_DEVELOP` after feature
+[#3131](https://github.com/mangowhoiscloud/geode/pull/3131) merged as
+`bd7d79c3d004508eadf379e9403a0a2fb3c2a30a`. Checkpoint `loop_guards` remain
+the sole verify/replan recovery authority; the write-only lifecycle mirror,
+unused `SessionManager` writer/accessor, and fresh/legacy schema addition of
+their seven columns are removed. Databases already carrying those columns
+remain load-compatible as inert extra schema, while current metrics, runtime
+events, and checkpoint restore behavior are unchanged. No replacement store,
+schema migration, event, hook, or runtime abstraction was added.
+
 The active R8.3 claim and publication clock remain unchanged. R8.2
 (`STORE-003`) remains `OPEN` behind REL-004 and STORE-001; R8.4 (`BND-008`)
 additionally waits for STORE-003.

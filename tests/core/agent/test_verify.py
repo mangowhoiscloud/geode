@@ -974,108 +974,18 @@ def test_payload_includes_should_retry() -> None:
     assert payload["should_retry"] is True
 
 
-# -- DB persistence (sessions table verify_* columns) ------------------
+# -- Legacy DB compatibility ------------------------------------------
 
 
-def test_db_persistence_verify_state_round_trip(tmp_path) -> None:
-    """Codex MCP / user directive (2026-05-23): verify telemetry must
-    survive a SessionManager close+reopen cycle. Round-trip the verify
-    state through ``upsert_verify_state`` / ``get_verify_state``."""
-    from core.memory.session_manager import SessionManager, SessionMeta
-
-    db_path = tmp_path / "round_trip.db"
-    mgr = SessionManager(db_path=db_path)
-    mgr.upsert(
-        SessionMeta(
-            session_id="t-persist-vr",
-            created_at=1.0,
-            updated_at=1.0,
-            status="active",
-            model="claude-opus-4-7",
-        )
-    )
-    mgr.upsert_verify_state(
-        "t-persist-vr",
-        verify_pass_count=2,
-        verify_fail_count=1,
-        last_verify_passed=False,
-        last_verify_mode="rule_based",
-        last_verify_effective_mode="rule_based",
-        last_verify_rubric_misses=("empty_turn", "tool_error"),
-        last_verify_should_retry=True,
-    )
-    # Reopen — cross-process semantics simulated by a fresh manager.
-    mgr2 = SessionManager(db_path=db_path)
-    state = mgr2.get_verify_state("t-persist-vr")
-    assert state is not None
-    assert state["verify_pass_count"] == 2
-    assert state["verify_fail_count"] == 1
-    assert state["last_verify_passed"] is False
-    assert state["last_verify_mode"] == "rule_based"
-    assert state["last_verify_effective_mode"] == "rule_based"
-    assert state["last_verify_rubric_misses"] == ["empty_turn", "tool_error"]
-    assert state["last_verify_should_retry"] is True
-
-
-def test_db_persistence_no_session_row_returns_false(tmp_path) -> None:
-    """``upsert_verify_state`` returns False when the session row hasn't
-    been ``upsert``-ed — silent no-op so verify telemetry never breaks
-    the run it observes."""
-    from core.memory.session_manager import SessionManager
-
-    mgr = SessionManager(db_path=tmp_path / "ghost.db")
-    updated = mgr.upsert_verify_state(
-        "ghost-session",
-        verify_pass_count=0,
-        verify_fail_count=1,
-        last_verify_passed=False,
-        last_verify_mode="rule_based",
-        last_verify_effective_mode="rule_based",
-        last_verify_rubric_misses=("empty_turn",),
-        last_verify_should_retry=True,
-    )
-    assert updated is False
-    assert mgr.get_verify_state("ghost-session") is None
-
-
-def test_db_persistence_legacy_migration_adds_verify_cols(tmp_path) -> None:
-    """Pre-PR-CL-A3 DB lacking verify columns gets them via ALTER TABLE
-    when SessionManager opens it. Idempotent on re-open."""
+def test_session_manager_tolerates_legacy_verify_columns(tmp_path) -> None:
+    """Legacy verify columns remain inert and load-compatible."""
     import sqlite3
 
     db_path = tmp_path / "legacy_a3.db"
-    # Build a legacy schema with only the handoff cols (post-BUDGET) but
-    # no verify cols.
-    conn = sqlite3.connect(str(db_path))
-    conn.executescript(
-        """
-        CREATE TABLE sessions (
-            session_id TEXT PRIMARY KEY,
-            created_at REAL NOT NULL,
-            updated_at REAL NOT NULL,
-            status TEXT NOT NULL DEFAULT 'active',
-            model TEXT NOT NULL DEFAULT '',
-            provider TEXT NOT NULL DEFAULT 'anthropic',
-            user_input TEXT NOT NULL DEFAULT '',
-            round_count INTEGER NOT NULL DEFAULT 0,
-            message_count INTEGER NOT NULL DEFAULT 0,
-            handoff_state TEXT NOT NULL DEFAULT '',
-            handoff_platform TEXT NOT NULL DEFAULT '',
-            handoff_error TEXT NOT NULL DEFAULT '',
-            handoff_triggered_at REAL NOT NULL DEFAULT 0.0
-        );
-        INSERT INTO sessions (session_id, created_at, updated_at)
-        VALUES ('legacy-a3', 1.0, 1.0);
-        """
-    )
-    conn.commit()
-    conn.close()
-
-    from core.memory.session_manager import SessionManager
+    from core.memory.session_manager import SessionManager, SessionMeta
 
     mgr = SessionManager(db_path=db_path)
-    cols = {r[1] for r in mgr._conn.execute("PRAGMA table_info(sessions)").fetchall()}
-    for new_col in (
+    verify_columns = (
         "verify_pass_count",
         "verify_fail_count",
         "last_verify_passed",
@@ -1083,63 +993,39 @@ def test_db_persistence_legacy_migration_adds_verify_cols(tmp_path) -> None:
         "last_verify_effective_mode",
         "last_verify_rubric_misses",
         "last_verify_should_retry",
-    ):
-        assert new_col in cols, f"migration missed {new_col}"
-    state = mgr.get_verify_state("legacy-a3")
-    assert state is not None
-    assert state["verify_pass_count"] == 0  # defaults
-    assert state["last_verify_passed"] is True  # default 1
-
-
-def test_lifecycle_persists_to_db(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """The production finalization path persists verify state to SQLite."""
-    from core.agent.loop import _lifecycle
-    from core.memory.session_manager import SessionManager, SessionMeta
-
-    # Redirect the default sessions DB into tmp_path so we don't touch
-    # the user's real ~/.geode/projects/.../sessions.db.
-    monkeypatch.setattr(
-        "core.memory.session_manager._get_default_db_path",
-        lambda: tmp_path / "lifecycle.db",
     )
-    mgr = SessionManager()
-    mgr.upsert(
+    fresh_columns = {row[1] for row in mgr._conn.execute("PRAGMA table_info(sessions)")}
+    assert fresh_columns.isdisjoint(verify_columns)
+    mgr.close()
+
+    conn = sqlite3.connect(db_path)
+    conn.executescript(
+        """
+        ALTER TABLE sessions ADD COLUMN verify_pass_count INTEGER;
+        ALTER TABLE sessions ADD COLUMN verify_fail_count INTEGER;
+        ALTER TABLE sessions ADD COLUMN last_verify_passed INTEGER;
+        ALTER TABLE sessions ADD COLUMN last_verify_mode TEXT;
+        ALTER TABLE sessions ADD COLUMN last_verify_effective_mode TEXT;
+        ALTER TABLE sessions ADD COLUMN last_verify_rubric_misses TEXT;
+        ALTER TABLE sessions ADD COLUMN last_verify_should_retry INTEGER;
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    legacy = SessionManager(db_path=db_path)
+    legacy.upsert(
         SessionMeta(
-            session_id="t-lc-persist",
+            session_id="legacy-a3",
             created_at=1.0,
             updated_at=1.0,
             status="active",
         )
     )
-    loop = SimpleNamespace(
-        _hook_registry=HookRegistry(),
-        _session_id="t-lc-persist",
-        _turn_id="t-1",
-        _verify_root_turn_id="t-1",
-        _verify_attempt=0,
-        _verify_continuation_budget=2,
-        _session_generation=1,
-        _evidence_ledger=None,
-    )
-    result = _make_result(text="", tool_calls=[])  # rule-based: empty_turn fail
-    with session_metrics_scope(session_id="t-lc-persist"):
-        payload, _follow_up, _escalated, _correlation = asyncio.run(
-            _lifecycle._run_public_finalization_async(loop, result)
-        )
-        assert payload is not None
-        assert payload["passed"] is False
-        assert payload["should_retry"] is True
-        # Enriched payload (LOW #8).
-        assert payload["session_id"] == "t-lc-persist"
-        assert "rounds" in payload
-        assert "termination_reason" in payload
-        assert "tool_call_count" in payload
-    state = SessionManager().get_verify_state("t-lc-persist")
-    assert state is not None
-    assert state["verify_fail_count"] == 1
-    assert state["last_verify_passed"] is False
-    assert state["last_verify_should_retry"] is True
-    assert state["last_verify_rubric_misses"] == ["empty_turn"]
+    assert legacy.get("legacy-a3") is not None
+    legacy_columns = {row[1] for row in legacy._conn.execute("PRAGMA table_info(sessions)")}
+    assert set(verify_columns) <= legacy_columns
+    legacy.close()
 
 
 def test_handoff_db_wiring(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:

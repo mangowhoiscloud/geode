@@ -31,7 +31,7 @@ The generated architecture inventory lives at
 `site/src/data/geode/architecture-baseline.json`. Refresh it with
 `uv run python scripts/architecture_baseline.py --update`; CI uses `--check`.
 The current snapshot records 590 production Python files,
-692 test Python files,
+691 test Python files,
 86 tool definitions, and
 57 `RuntimeEvent` members.
 <!-- generated:architecture-baseline:end -->
@@ -101,6 +101,11 @@ The agentic loop. `while(tool_use)` primitive that drives every turn.
 
 Read this first when changing termination paths, loop bounds, or system prompt
 assembly.
+
+For coding-agent state ownership, recovery, workspace/process limits, review,
+and cross-domain task lookup, read
+[`docs/architecture/coding-runtime-authority.md`](docs/architecture/coding-runtime-authority.md)
+before adding a runtime record or store.
 
 ### `core/llm/`
 

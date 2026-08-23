@@ -49,6 +49,13 @@ functional change.
 
 ### Architecture
 
+- **Architecture performance now has independent regression budgets.** A
+  no-network CI probe measures cold import, runtime lifecycle, first turn,
+  tool-plan build and refresh, dispatch, MCP first and warm calls, event
+  persistence, memory peaks, and descriptor/registry size. Each metric fails
+  against its own committed ceiling; behavior contracts separately pin
+  termination, retry, approval, Google consent, storage, and IPC semantics.
+
 - **Extension change surfaces are now executable CI contracts.** Six black-box
   scenarios add a project Skill, filesystem hook, MCP server, package LLM
   adapter, native tool, and Google Workspace service through their supported
@@ -174,6 +181,11 @@ functional change.
   schema or execution authority.
 
 ### Removed
+
+- **Verification recovery now has one persistence authority.** Removed the
+  write-only `SessionManager` verify-state mirror; checkpoint loop guards remain
+  the recovery source, while databases carrying the former columns still open
+  without a destructive migration.
 
 - **Removed the final active Claude CLI residue.** Current architecture and
   provider guidance now describe only supported routes, and Petri no longer
