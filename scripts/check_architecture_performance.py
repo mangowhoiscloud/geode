@@ -210,10 +210,13 @@ def _measure_probe() -> dict[str, float]:
     _current, runtime_peak = tracemalloc.get_traced_memory()
     tracemalloc.stop()
 
-    tracemalloc.start()
     started = time.perf_counter()
     bound, transient = compose_tool_plan()
     plan_build_ms = (time.perf_counter() - started) * 1000.0
+    # Measure the steady-state plan snapshot separately: tracing the lazy
+    # import path distorts both time and heap differently across platforms.
+    tracemalloc.start()
+    compose_tool_plan()
     _current, plan_peak = tracemalloc.get_traced_memory()
     tracemalloc.stop()
     refresh_samples: list[float] = []

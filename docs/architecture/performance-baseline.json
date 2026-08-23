@@ -7,37 +7,37 @@
   "metrics": {
     "event_persist_us": {
       "unit": "us",
-      "observed": 677.333,
+      "observed": 674.959,
       "maximum": 5000.0
     },
     "first_turn_ms": {
       "unit": "ms",
-      "observed": 29.208,
+      "observed": 27.645,
       "maximum": 300.0
     },
     "import_cold_start_ms": {
       "unit": "ms",
-      "observed": 78.28,
+      "observed": 78.148,
       "maximum": 400.0
     },
     "mcp_first_call_ms": {
       "unit": "ms",
-      "observed": 0.208,
+      "observed": 0.203,
       "maximum": 10.0
     },
     "mcp_warm_call_ms": {
       "unit": "ms",
-      "observed": 0.034,
+      "observed": 0.036,
       "maximum": 2.0
     },
     "runtime_create_shutdown_ms": {
       "unit": "ms",
-      "observed": 644.29,
+      "observed": 641.802,
       "maximum": 2500.0
     },
     "runtime_peak_kib": {
       "unit": "KiB",
-      "observed": 15328.034,
+      "observed": 15329.262,
       "maximum": 50000.0
     },
     "tool_descriptor_bytes": {
@@ -47,22 +47,22 @@
     },
     "tool_dispatch_us": {
       "unit": "us",
-      "observed": 94.083,
+      "observed": 90.291,
       "maximum": 750.0
     },
     "tool_plan_build_ms": {
       "unit": "ms",
-      "observed": 161.097,
+      "observed": 34.51,
       "maximum": 750.0
     },
     "tool_plan_peak_kib": {
       "unit": "KiB",
-      "observed": 5644.697,
+      "observed": 1157.058,
       "maximum": 16000.0
     },
     "tool_plan_refresh_ms": {
       "unit": "ms",
-      "observed": 3.289,
+      "observed": 3.299,
       "maximum": 25.0
     },
     "tool_registry_entries": {
