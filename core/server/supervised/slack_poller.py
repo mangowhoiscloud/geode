@@ -264,6 +264,7 @@ class SlackPoller(BasePoller):
             content=content,
             timestamp=parsed_timestamp,
             thread_id=thread_id,
+            message_id=timestamp,
         )
         is_mention = mention_override or self._manager._is_mentioned(inbound)
         is_thread_reply = bool(raw_thread_id and raw_thread_id != timestamp)

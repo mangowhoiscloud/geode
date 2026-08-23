@@ -82,6 +82,7 @@ class DiscordPoller(BasePoller):
                     content=msg.get("content", ""),
                     timestamp=time.time(),
                     metadata={"guild_id": msg.get("guild_id", "")},
+                    message_id=str(msg_id),
                 )
 
                 response = await self._manager.aroute_message(inbound)

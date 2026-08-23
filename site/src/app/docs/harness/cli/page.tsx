@@ -42,8 +42,12 @@ export default function Page() {
               데몬이 없으면 자동 기동합니다(<code>start_serve_if_needed</code>,{" "}
               <code>core/cli/ipc_client.py</code>). 동시 기동 경합은 pidfile
               flock이 막습니다. 그 뒤 thin REPL이 IPC로 붙습니다. 프로토콜은
-              줄 단위 JSON이고 서버 쪽 상대는 <code>CLIPoller</code>
-              (<code>core/server/ipc_server/poller.py</code>)입니다.
+              최대 1 MiB의 줄 단위 JSON인 <code>geode.ipc.v1</code>이고 서버 쪽
+              상대는 <code>CLIPoller</code>
+              (<code>core/server/ipc_server/poller.py</code>)입니다. 연결 시 지원
+              기능의 교집합을 협상하고, 각 요청 ID가 스트림·구조화 이벤트·최종
+              응답에 그대로 붙습니다. 구버전의 version-less peer도 v0 호환
+              경계로 계속 연결됩니다.
             </p>
 
             <h2>환영 화면과 라이브 상태</h2>
@@ -282,8 +286,13 @@ export default function Page() {
               (<code>start_serve_if_needed</code> in{" "}
               <code>core/cli/ipc_client.py</code>, with a pidfile flock against
               concurrent starts). The thin REPL then attaches over IPC. The
-              protocol is line-delimited JSON; the server-side peer is{" "}
+              protocol is <code>geode.ipc.v1</code>, bounded to 1 MiB per
+              line-delimited JSON envelope; the server-side peer is{" "}
               <code>CLIPoller</code> (<code>core/server/ipc_server/poller.py</code>).
+              Peers negotiate the intersection of supported features, and one
+              request ID follows the stream, structured events, and terminal
+              response. Version-less peers remain accepted through the legacy
+              v0 compatibility boundary.
             </p>
 
             <h2>Welcome screen and live status</h2>

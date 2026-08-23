@@ -1,0 +1,1 @@
+{"type":"session","session_id":"cli-current","version":"1.0.23","protocol_version":"geode.ipc.v1","features":["bounded_json","request_correlation","stable_events","future_feature"],"future_field":{"kept":true}}

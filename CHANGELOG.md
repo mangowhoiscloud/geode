@@ -49,6 +49,14 @@ functional change.
 
 ### Added
 
+- **Public runtime boundaries now use explicit versioned envelopes.** Thin CLI
+  IPC negotiates `geode.ipc.v1` features, bounds line-delimited JSON, keeps a
+  stable streaming-event vocabulary, and correlates every event and response
+  with its request. Gateway adapters project messenger input into a bounded
+  `geode.gateway.v1` message with a stable message ID, while public hooks keep
+  their existing bounded, redacted `geode.public-hook.v2` contract and v1
+  compatibility schema.
+
 - **Slash controls now have typed runtime authority.** `/goal` supports
   compare-and-set pause, resume, edit, and empty transitions; `/plan` restores
   strict advisory checkpoints; `/grill` enforces an acyclic dependency
