@@ -54,13 +54,15 @@ async def verify(
     rubric_path: Path,
     output_path: Path,
     model: str,
+    producer_version: str,
     concurrency: int,
 ) -> dict[str, Any]:
     workload_path = workload_path.resolve()
     native_results_path = native_results_path.resolve()
     rubric_path = rubric_path.resolve()
     output_path = output_path.resolve()
-    if output_path.exists() or (output_path.parent / "verifier-evidence").exists():
+    evidence_dir = output_path.parent / f"{output_path.stem}-evidence"
+    if output_path.exists() or evidence_dir.exists():
         raise FileExistsError("GEO verifier output already exists")
 
     workload = _load_json_object(workload_path)
@@ -164,7 +166,10 @@ async def verify(
                 + "\n",
                 encoding="utf-8",
             )
-            source_refs[url] = {"path": f"verifier-evidence/{filename}", "sha256": _sha256(path)}
+            source_refs[url] = {
+                "path": f"{evidence_dir.name}/{filename}",
+                "sha256": _sha256(path),
+            }
 
         rows = []
         for (observation, target_urls), verdict in zip(selected, verdicts, strict=True):
@@ -192,12 +197,12 @@ async def verify(
                         for key in ("absorption", "quality", "quality_claims_expected")
                     },
                     "verifier_receipt": {
-                        "path": f"verifier-evidence/{filename}",
+                        "path": f"{evidence_dir.name}/{filename}",
                         "sha256": _sha256(path),
                     },
                 }
             )
-        os.rename(staging, output_path.parent / "verifier-evidence")
+        os.rename(staging, evidence_dir)
     except Exception:
         shutil.rmtree(staging, ignore_errors=True)
         raise
@@ -212,14 +217,18 @@ async def verify(
         "run_id": workload["run_id"],
         "native_results_sha256": _sha256(native_results_path),
         "verified_at": datetime.now(UTC).isoformat(),
-        "verifier_context": {"producer": "codex-oauth", "version": model, "rubric": rubric_ref},
+        "verifier_context": {
+            "producer": "codex-oauth",
+            "version": producer_version,
+            "rubric": rubric_ref,
+        },
         "observations": rows,
     }
     try:
         _validate_schema(payload, "geo-verifier-results.schema.json", label=str(output_path))
         _write_exclusive(output_path, payload)
     except Exception:
-        shutil.rmtree(output_path.parent / "verifier-evidence", ignore_errors=True)
+        shutil.rmtree(evidence_dir, ignore_errors=True)
         raise
     return payload
 
@@ -231,6 +240,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--rubric", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--model", default="gpt-5.5")
+    parser.add_argument("--producer-version", default="gpt-5.5")
     parser.add_argument("--concurrency", type=int, default=2)
     args = parser.parse_args(argv)
     if args.concurrency <= 0:
@@ -242,6 +252,7 @@ def main(argv: list[str] | None = None) -> int:
             rubric_path=args.rubric,
             output_path=args.out,
             model=args.model,
+            producer_version=args.producer_version,
             concurrency=args.concurrency,
         )
     )
