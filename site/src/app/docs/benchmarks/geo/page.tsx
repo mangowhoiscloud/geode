@@ -41,6 +41,30 @@ function VectorTable({ ko }: { ko: boolean }) {
   );
 }
 
+function GapTable({ ko }: { ko: boolean }) {
+  const rows = ko
+    ? [
+        ["F · partial", "로컬 78/78 URL과 내부 링크 577/577은 통과했지만, 당시 공개 sitemap은 77 URL이어서 동일 78-URL 영수증을 결합할 수 없었습니다.", "동일성 비교: 같은 URL digest의 로컬 export ↔ 공개 호스트"],
+        ["R/C/P", "Pages는 R 0/120, C 4/120, P 4/4로 측정됐습니다. R은 빈칸이 아니라 관측된 0입니다.", "표면 진단: Pages ↔ GitHub 저장소(R 109/120, C 9/120)"],
+        ["A/Q", "A 4/4, Q 43/58이지만 같은 모델의 앞선 반복은 35/54였습니다. Q는 claim support만 포함해 partial입니다.", "판정 보정: 고정 claim 집합의 독립 verifier ↔ 사람 표본 판정"],
+        ["O · not_measured", "종료된 Search Console·referral·conversion 관측 기간이 없어 분모 자체를 만들지 않았습니다.", "성과 비교: 같은 기간·질의·엔진의 baseline ↔ treatment"],
+        ["Promotion · none", "이번 실행은 진단 계약이며 비교 대상과 변경 arm을 사전 등록하지 않았습니다.", "승격 비교: 동결된 baseline ↔ treatment, 동일 index·budget·window"],
+      ]
+    : [
+        ["F · partial", "All 78 local URLs and 577/577 internal links passed, but the deployed sitemap had 77 URLs, so no receipt for the same 78-URL set could be bound.", "Identity check: local export ↔ public host with the same URL digest"],
+        ["R/C/P", "Pages measured R 0/120, C 4/120, and P 4/4. R is an observed zero, not an empty cell.", "Surface diagnostic: Pages ↔ GitHub repository (R 109/120, C 9/120)"],
+        ["A/Q", "A was 4/4 and Q was 43/58; an earlier same-model repeat returned 35/54. Q remains partial because it covers claim support only.", "Verdict calibration: independent verifier ↔ human sample over a frozen claim set"],
+        ["O · not_measured", "No completed Search Console, referral, or conversion window exists, so no eligible denominator was created.", "Outcome comparison: baseline ↔ treatment with the same window, queries, and engine"],
+        ["Promotion · none", "This run is diagnostic; no comparator or intervention arm was preregistered.", "Promotion comparison: frozen baseline ↔ treatment under the same index, budget, and window"],
+      ];
+  return (
+    <table>
+      <thead><tr><th>{ko ? "상태" : "State"}</th><th>{ko ? "빈칸이 뜻하는 것" : "What the gap means"}</th><th>{ko ? "필요한 비교군" : "Required comparator"}</th></tr></thead>
+      <tbody>{rows.map(([state, meaning, comparator]) => <tr key={state}><td><code>{state}</code></td><td>{meaning}</td><td>{comparator}</td></tr>)}</tbody>
+    </table>
+  );
+}
+
 export default function GeoBenchmarkPage() {
   return (
     <DocsShell
@@ -67,6 +91,20 @@ export default function GeoBenchmarkPage() {
               존재하는 관측치나 claim만 각자의 분모로 사용합니다.
             </p>
             <VectorTable ko />
+
+            <h2>빈 칸과 비교군</h2>
+            <p>
+              아래 값은 2026-08-24 로컬 diagnostic receipt를 읽은 결과이며
+              공개 성능 주장이나 승격 근거가 아닙니다. <code>0</code>은 관측 결과,
+              <code>not_measured</code>는 적격 분모·영수증 부재, <code>partial</code>은
+              해당 단계의 일부 하위 지표만 측정했다는 뜻입니다.
+            </p>
+            <GapTable ko />
+            <p>
+              GitHub 저장소는 Pages로 권위가 전달되지 않는 위치를 찾는
+              <strong>표면 진단 비교군</strong>입니다. 콘텐츠 변경의 효과를 주장하려면
+              별도의 <strong>인과 비교군</strong>인 동결 baseline과 treatment가 필요합니다.
+            </p>
 
             <h2>실행 계약</h2>
             <ol>
@@ -119,6 +157,22 @@ export default function GeoBenchmarkPage() {
               observations or claims for which that stage&apos;s evidence exists.
             </p>
             <VectorTable ko={false} />
+
+            <h2>Empty cells and comparators</h2>
+            <p>
+              These values describe a local diagnostic receipt from 2026-08-24;
+              they are not a public performance or promotion claim. <code>0</code>
+              is an observed result, <code>not_measured</code> means no eligible
+              denominator or receipt exists, and <code>partial</code> means only a
+              submetric of that stage was measured.
+            </p>
+            <GapTable ko={false} />
+            <p>
+              The GitHub repository is a <strong>surface diagnostic comparator</strong>
+              used to locate an authority-transfer boundary. A content-effect claim
+              requires a separate <strong>causal comparator</strong>: frozen baseline
+              and treatment arms.
+            </p>
 
             <h2>Execution contract</h2>
             <ol>

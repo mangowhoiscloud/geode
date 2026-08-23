@@ -3168,6 +3168,20 @@ GEO는 문장을 다시 쓰는 최적화 점수가 아니라 증거 상태머신
 | `Q` | source support가 확인된 target 연결 claim | verifier가 선언하고 빠짐없이 감사한 target 연결 claim |
 | `O` | 관측된 referral·engagement·conversion | 측정 가능한 1차 impression·referral·session |
 
+## 빈 칸과 비교군
+
+아래 값은 2026-08-24 로컬 diagnostic receipt를 읽은 결과이며 공개 성능 주장이나 승격 근거가 아닙니다. `0`은 관측 결과,`not_measured`는 적격 분모·영수증 부재, `partial`은 해당 단계의 일부 하위 지표만 측정했다는 뜻입니다.
+
+| 상태 | 빈칸이 뜻하는 것 | 필요한 비교군 |
+| --- | --- | --- |
+| `F · partial` | 로컬 78/78 URL과 내부 링크 577/577은 통과했지만, 공개 호스트의 동일 78-URL 영수증은 결합되지 않았습니다. | 동일성 비교: 같은 URL digest의 로컬 export ↔ 공개 호스트 |
+| `R/C/P` | Pages는 R 0/120, C 4/120, P 4/4로 측정됐습니다. R은 빈칸이 아니라 관측된 0입니다. | 표면 진단: Pages ↔ GitHub 저장소(R 109/120, C 9/120) |
+| `A/Q` | A 4/4, Q 43/58이지만 같은 모델의 앞선 반복은 35/54였습니다. Q는 claim support만 포함해 partial입니다. | 판정 보정: 고정 claim 집합의 독립 verifier ↔ 사람 표본 판정 |
+| `O · not_measured` | 종료된 Search Console·referral·conversion 관측 기간이 없어 분모 자체를 만들지 않았습니다. | 성과 비교: 같은 기간·질의·엔진의 baseline ↔ treatment |
+| `Promotion · none` | 이번 실행은 진단 계약이며 비교 대상과 변경 arm을 사전 등록하지 않았습니다. | 승격 비교: 동결된 baseline ↔ treatment, 동일 index·budget·window |
+
+GitHub 저장소는 Pages로 권위가 전달되지 않는 위치를 찾는**표면 진단 비교군**입니다. 콘텐츠 변경의 효과를 주장하려면 별도의 **인과 비교군**인 동결 baseline과 treatment가 필요합니다.
+
 ## 실행 계약
 
 1.  6개 root마다 root query 1개와 paraphrase 3개, 총 24개 문자열을 고정합니다.

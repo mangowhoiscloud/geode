@@ -128,6 +128,26 @@ It therefore reports Q as `partial` even when every target-cited response has a
 verifier receipt; completeness, authority, and factuality need their own frozen
 rubrics and receipts.
 
+## How to read empty cells and comparators
+
+The 2026-08-24 local diagnostic is not a public performance or promotion
+claim. A numeric zero is an observed result; `not_measured` means that no
+eligible denominator or receipt exists; `partial` means that only a submetric
+of the stage was measured.
+
+| State | What the gap means | Required comparator |
+|---|---|---|
+| F · `partial` | All 78 local URLs and 577/577 internal links passed, but the deployed sitemap had 77 URLs, so no receipt for the same 78-URL set could be bound. | Identity check: local export vs public host with the same URL digest. |
+| R/C/P | Pages measured R 0/120, C 4/120, and P 4/4. R is an observed zero, not an empty cell. | Surface diagnostic: Pages vs GitHub repository, which appeared in retrieval in 109/120 observations and citations in 9/120. |
+| A/Q | A was 4/4 and Q was 43/58; an earlier same-model repeat returned 35/54. Q remains `partial` because it covers claim support only. | Verdict calibration: independent verifier vs a human sample over the same frozen claim set. |
+| O · `not_measured` | No completed Search Console, referral, or conversion window exists, so no eligible denominator was created. | Outcome comparison: baseline vs treatment with the same window, queries, and engine. |
+| Promotion · `none` | The run is diagnostic; no comparator or intervention arm was preregistered. | Promotion comparison: frozen baseline vs treatment under the same index, budget, and observation window. |
+
+The GitHub repository is a **surface diagnostic comparator**: it locates the
+boundary where repository authority fails to transfer to Pages. It cannot
+authorize a content-effect claim. That requires a separate **causal comparator**
+with frozen baseline and treatment arms.
+
 ## Protocol
 
 1. Run deterministic preflight first. Local export evidence is intentionally
