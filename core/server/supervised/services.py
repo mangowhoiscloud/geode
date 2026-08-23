@@ -15,7 +15,6 @@ import logging
 import uuid
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
-from enum import StrEnum
 from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
@@ -28,6 +27,7 @@ from core.agent.safety import (
 from core.agent.safety import (
     headless_denied_tools as plan_headless_denied_tools,
 )
+from core.agent.session_mode import SessionMode
 
 if TYPE_CHECKING:
     from core.agent.loop import AgenticLoop
@@ -39,20 +39,6 @@ if TYPE_CHECKING:
     from core.tools.plan import BoundToolPlan, ToolPlan
 
 log = logging.getLogger(__name__)
-
-
-# ---------------------------------------------------------------------------
-# Session mode enum
-# ---------------------------------------------------------------------------
-
-
-class SessionMode(StrEnum):
-    """Execution mode — determines behavior defaults, not shared resources."""
-
-    REPL = "repl"  # Interactive terminal — hitl=2, verbose=user, time=unlimited
-    IPC = "ipc"  # Thin CLI via Unix socket — hitl=0, WRITE ok, DANGEROUS blocked
-    DAEMON = "daemon"  # Messaging receivers — hitl=0, quiet, time=config
-    SCHEDULER = "scheduler"  # Cron/scheduled jobs — hitl=0, quiet, time=300s cap
 
 
 def _headless_denied_tools_for_mode(
@@ -533,6 +519,7 @@ def build_shared_services(
     integrations: ToolIntegrationServices | None = None,
     scheduler_service: Any = None,
     user_profile: Any = None,
+    cost_budget: float = 0.0,
 ) -> SharedServices:
     """Construct SharedServices with resolved config values.
 
@@ -630,15 +617,6 @@ def build_shared_services(
                 policy_sources=policy_sources,
             )
 
-    # Resolve cost budget
-    cost_budget = 0.0
-    try:
-        from core.cli.commands import _get_cost_budget
-
-        cost_budget = _get_cost_budget()
-    except Exception:
-        log.debug("Cost budget resolution failed, using 0 (unlimited)")
-
     # Build unified LaneQueue if not provided
     if lane_queue is None:
         from core.wiring.container import build_default_lanes
@@ -665,5 +643,5 @@ def build_shared_services(
         user_profile=user_profile,
         offload_store=(persistence.offload_store if persistence is not None else None),
         notification=(integrations.notification if integrations is not None else None),
-        _cost_budget=cost_budget,
+        _cost_budget=float(cost_budget),
     )

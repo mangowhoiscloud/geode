@@ -17,6 +17,7 @@ import logging
 from typing import Any
 
 from core.agent.conversation import ConversationContext
+from core.agent.session_mode import SessionMode
 
 log = logging.getLogger(__name__)
 
@@ -90,8 +91,6 @@ async def drain_scheduler_queue(
                 _lanes_acquired = True
                 try:
                     _iso_conv = ConversationContext()
-                    from core.server.supervised.services import SessionMode
-
                     _, _iso_loop = services.create_session(
                         SessionMode.SCHEDULER,
                         conversation=_iso_conv,

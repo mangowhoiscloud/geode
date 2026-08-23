@@ -142,9 +142,9 @@ def _probe_auth() -> dict[str, Any]:
     """
     import asyncio
 
-    from core.messaging.slack_transport import SlackTransport
+    from core.wiring.adapters import build_slack_transport
 
-    transport = SlackTransport()
+    transport = build_slack_transport()
     if not transport.configured:
         return {"ok": False, "detail": "no token to validate"}
     try:
@@ -201,7 +201,7 @@ def _check_socket_mode() -> dict[str, Any]:
     """Validate the app token by issuing a redacted temporary socket URL."""
     import asyncio
 
-    from core.messaging.slack_transport import open_socket_mode_url
+    from core.wiring.adapters import open_slack_socket_mode_url
 
     app_token, _source = _resolve_env_or_dotenv("SLACK_APP_TOKEN")
     if not app_token:
@@ -211,7 +211,7 @@ def _check_socket_mode() -> dict[str, Any]:
             "hint": "Add an xapp- token with connections:write, then restart geode serve",
         }
     try:
-        asyncio.run(open_socket_mode_url(app_token))
+        asyncio.run(open_slack_socket_mode_url(app_token))
         return {
             "ok": True,
             "detail": "app token accepted; temporary WebSocket URL issued (ticket redacted)",
@@ -285,10 +285,9 @@ def _check_binding_access(auth_team_id: str = "") -> list[dict[str, Any]]:
     """Verify that the bot is a member of every bound Slack channel."""
     import asyncio
 
-    from core.messaging.slack_transport import SlackTransport
-    from core.wiring.adapters import _load_gateway_config
+    from core.wiring.adapters import _load_gateway_config, build_slack_transport
 
-    transport = SlackTransport()
+    transport = build_slack_transport()
     if not transport.configured:
         return []
     try:

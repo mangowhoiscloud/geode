@@ -90,6 +90,21 @@ def refresh_console_width() -> None:
     current.width = _get_terminal_width() or current.width
 
 
+def restore_terminal() -> None:
+    """Restore stdin to cooked mode before an interactive prompt."""
+    try:
+        import termios
+    except ImportError:  # pragma: no cover - Windows has no POSIX terminal API
+        return
+    try:
+        fd = sys.stdin.fileno()
+        attrs = termios.tcgetattr(fd)
+        attrs[3] |= termios.ECHO | termios.ICANON
+        termios.tcsetattr(fd, termios.TCSANOW, attrs)
+    except (ValueError, OSError, termios.error):
+        pass
+
+
 # ───────────────────────────────────────────────────────────────────────────
 # Thread-safe Console proxy
 # ───────────────────────────────────────────────────────────────────────────

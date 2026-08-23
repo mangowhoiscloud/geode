@@ -22,7 +22,7 @@ _CONTEXT_SETTERS = {
     "core/agent/cognitive_state_ctx.py:_active_parent_session_key": "core.agent.cognitive_state_ctx.set_parent_session_key",
     "core/agent/cognitive_state_ctx.py:_active_parent_session_id": "core.agent.cognitive_state_ctx.set_parent_session_id",
     "core/agent/safety.py:_skip_permissions_var": "core.agent.safety.set_skip_permissions",
-    "core/cli/commands/_state.py:_conversation_ctx": "core.cli.commands._state.set_conversation_context",
+    "core/agent/conversation.py:_conversation_ctx": "core.agent.conversation.set_conversation_context",
     "core/cli/session_state.py:_readiness_ctx": "core.cli.session_state._set_readiness",
     "core/observability/session_metrics.py:_current_metrics": "core.observability.session_metrics.set_current_session_metrics",
     "core/observability/session_timeline.py:_CURRENT_SESSION_TIMELINE": "core.observability.session_timeline.set_current_session_timeline",
@@ -76,7 +76,7 @@ def _bind_context_boundary(
         cleanup: Callable[[], object] = _noop
         resets = False
         if label in {
-            "core/cli/commands/_state.py:_conversation_ctx",
+            "core/agent/conversation.py:_conversation_ctx",
             "core/observability/session_metrics.py:_current_metrics",
             "core/observability/session_timeline.py:_CURRENT_SESSION_TIMELINE",
         }:
@@ -167,6 +167,10 @@ def test_build_baseline_is_deterministic_and_internally_consistent() -> None:
     assert tools["definition_count"] == len(tools["definition_names"])
     assert tools["schema_count"] == len(tools["schema_names"])
     assert tools["execution_registration_count"] == len(tools["execution_registration_names"])
+    assert tools["model_execution_registration_count"] == len(
+        tools["model_execution_registration_names"]
+    )
+    assert tools["policy_registration_count"] == len(tools["policy_registration_names"])
     assert set(tools["handler_registration_origins"]) == set(tools["handler_registration_names"])
     assert tools["duplicate_definition_names"] == []
     assert tools["schema_errors"] == []
@@ -176,6 +180,34 @@ def test_build_baseline_is_deterministic_and_internally_consistent() -> None:
         "doctor_slack",
         "recall_tool_result",
     ]
+    assert tools["exact_parity"] is True
+
+
+@pytest.mark.parametrize(
+    ("section", "field", "value", "message"),
+    [
+        ("core_to_product_imports", "site_count", 1, "kernel-to-product"),
+        ("import_linter", "ignored_edge_count", 1, "ignored edges"),
+        ("context_vars", "service_locator_count", 1, "service-locator"),
+        ("tools", "exact_parity", False, "tool definition/plan/schema/policy"),
+    ],
+)
+def test_architecture_invariants_cannot_be_blessed_by_updating_the_snapshot(
+    section: str,
+    field: str,
+    value: object,
+    message: str,
+) -> None:
+    measured = {
+        "core_to_product_imports": {"site_count": 0},
+        "import_linter": {"ignored_edge_count": 0},
+        "context_vars": {"service_locator_count": 0},
+        "tools": {"exact_parity": True},
+    }
+    measured[section][field] = value
+
+    with pytest.raises(ValueError, match=message):
+        baseline.validate_architecture_invariants(measured)
 
 
 def test_inventory_lists_traceable_architecture_details() -> None:

@@ -32,7 +32,7 @@ from core.agent.safety import (
 from core.hooks.system import HookEvent
 from core.tools.google_capabilities import GOOGLE_TOOL_SERVICES
 from core.ui import spinner_glyph
-from core.ui.console import console
+from core.ui.console import console, restore_terminal
 
 if TYPE_CHECKING:
     from core.hooks import HookCorrelation, HookRegistry, HookSystem
@@ -384,9 +384,7 @@ class ApprovalWorkflow:
             )
             return decision
 
-        from core.cli import _restore_terminal
-
-        _restore_terminal()
+        restore_terminal()
         if label not in _BARE_PROMPT_LABELS:
             console.print(f"  [bold]{label}[/bold]")
         self.record_transition(record, "displayed", "console")
@@ -717,9 +715,7 @@ class ApprovalWorkflow:
     ) -> bool:
         """Prompt user for MCP tool confirmation with A=Always option."""
         if self._approval_callback is None and self._interactive_approval:
-            from core.cli import _restore_terminal
-
-            _restore_terminal()
+            restore_terminal()
             console.print()
             console.print(_approval_header(tool_name, "mcp"))
             console.print(f"  [dim]Server:[/dim] [bold]{server}[/bold]")
@@ -757,9 +753,7 @@ class ApprovalWorkflow:
 
         async def gate() -> bool:
             if self._approval_callback is None and self._interactive_approval:
-                from core.cli import _restore_terminal
-
-                _restore_terminal()
+                restore_terminal()
                 console.print()
                 console.print("  [warning]MCP tool requires approval[/warning]")
                 console.print(f"  [dim]Server:[/dim] [bold]{server}[/bold]")
@@ -873,9 +867,7 @@ class ApprovalWorkflow:
         )
         disclosure = boundary + (f" Request: {summary}" if summary else "")
         if self._approval_callback is None and self._interactive_approval:
-            from core.cli import _restore_terminal
-
-            _restore_terminal()
+            restore_terminal()
             console.print()
             console.print(_approval_header(tool_name, "personal data"))
             console.print(f"  [dim]{disclosure}[/dim]")
@@ -927,9 +919,7 @@ class ApprovalWorkflow:
         )
         disclosure = boundary + (f" Request: {summary}" if summary else "")
         if self._approval_callback is None and self._interactive_approval:
-            from core.cli import _restore_terminal
-
-            _restore_terminal()
+            restore_terminal()
             console.print()
             console.print(_approval_header(tool_name, "personal data"))
             console.print(f"  [dim]{disclosure}[/dim]")
@@ -987,9 +977,7 @@ class ApprovalWorkflow:
         """Prompt user for write operation confirmation."""
         summary = self._write_summary(tool_name, tool_input)
         if self._approval_callback is None and self._interactive_approval:
-            from core.cli import _restore_terminal
-
-            _restore_terminal()
+            restore_terminal()
             console.print()
             console.print(_approval_header(tool_name, "write"))
             if summary:
@@ -1035,9 +1023,7 @@ class ApprovalWorkflow:
         """Async write operation confirmation."""
         summary = self._write_summary(tool_name, tool_input)
         if self._approval_callback is None and self._interactive_approval:
-            from core.cli import _restore_terminal
-
-            _restore_terminal()
+            restore_terminal()
             console.print()
             console.print(_approval_header(tool_name, "write"))
             if summary:
@@ -1082,9 +1068,7 @@ class ApprovalWorkflow:
     ) -> bool:
         """Prompt user for cost confirmation with A=Always option."""
         if self._approval_callback is None and self._interactive_approval:
-            from core.cli import _restore_terminal
-
-            _restore_terminal()
+            restore_terminal()
             console.print()
             console.print(_approval_header(tool_name, "expensive"))
             console.print(f"  [dim]Estimated cost:[/dim] ~${estimated_cost:.2f}")
@@ -1124,9 +1108,7 @@ class ApprovalWorkflow:
     ) -> bool:
         """Async cost confirmation with A=Always option."""
         if self._approval_callback is None and self._interactive_approval:
-            from core.cli import _restore_terminal
-
-            _restore_terminal()
+            restore_terminal()
             console.print()
             console.print(_approval_header(tool_name, "expensive"))
             console.print(f"  [dim]Estimated cost:[/dim] ~${estimated_cost:.2f}")
@@ -1163,9 +1145,7 @@ class ApprovalWorkflow:
     ) -> bool:
         """Prompt user for bash command approval with A=Always option."""
         if self._approval_callback is None and self._interactive_approval:
-            from core.cli import _restore_terminal
-
-            _restore_terminal()
+            restore_terminal()
             console.print()
             console.print(_approval_header("run_bash", "bash"))
             console.print(f"  [dim]Command:[/dim] [value]{command}[/value]")
@@ -1206,9 +1186,7 @@ class ApprovalWorkflow:
 
         async def gate() -> bool:
             if self._approval_callback is None and self._interactive_approval:
-                from core.cli import _restore_terminal
-
-                _restore_terminal()
+                restore_terminal()
                 console.print()
                 console.print("  [warning]Bash command requires approval[/warning]")
                 console.print(f"  [dim]Command:[/dim] [value]{command}[/value]")
@@ -1355,11 +1333,9 @@ class ApprovalWorkflow:
 
         def _prompt() -> bool:
             try:
-                from core.cli import _restore_terminal
-
-                _restore_terminal()
+                restore_terminal()
             except Exception:
-                log.debug("_restore_terminal() unavailable in batch approval")
+                log.debug("restore_terminal() unavailable in batch approval")
 
             count = len(items)
             plural = "s" if count != 1 else ""

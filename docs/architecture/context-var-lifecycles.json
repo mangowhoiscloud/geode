@@ -55,11 +55,11 @@
     "lifetime": "one IPC client task",
     "teardown": "the client task context is discarded on disconnect"
   },
-  "core/cli/commands/_state.py:_conversation_ctx": {
+  "core/agent/conversation.py:_conversation_ctx": {
     "classification": "request_local_mutable_state",
     "owner": "core.agent.loop.AgenticLoop",
-    "setter": "core.cli.commands.set_conversation_context",
-    "resetter": "core.cli.commands.set_conversation_context(None)",
+    "setter": "core.agent.conversation.set_conversation_context",
+    "resetter": "core.agent.conversation.set_conversation_context(None)",
     "lifetime": "one AgenticLoop task",
     "teardown": "each response phase rebinds it and task exit discards the context"
   },
