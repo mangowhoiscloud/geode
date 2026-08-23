@@ -16,7 +16,14 @@ from __future__ import annotations
 
 import pytest
 from core.llm.adapters.anthropic_payg import AnthropicPaygAdapter
-from core.llm.adapters.base import AdapterBillingType
+from core.llm.adapters.base import (
+    AdapterBillingType,
+    CredentialDetectionCapable,
+    EnvironmentDiagnosticCapable,
+    ModelListingCapable,
+    QuotaInspectionCapable,
+    StreamingCapable,
+)
 from core.llm.adapters.codex_oauth import CodexOAuthAdapter
 from core.llm.adapters.glm_coding_plan import GlmCodingPlanAdapter
 from core.llm.adapters.glm_payg import GlmPaygAdapter
@@ -57,6 +64,11 @@ def test_adapter_identity(
     assert instance.provider == expected_provider
     assert instance.source == expected_source
     assert instance.billing_type is expected_billing
+    assert isinstance(instance, StreamingCapable)
+    assert isinstance(instance, EnvironmentDiagnosticCapable)
+    assert isinstance(instance, ModelListingCapable)
+    assert not isinstance(instance, QuotaInspectionCapable)
+    assert isinstance(instance, CredentialDetectionCapable)
 
 
 def test_test_environment_returns_report() -> None:

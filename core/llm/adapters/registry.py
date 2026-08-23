@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING
 from core.llm.adapters.base import (
     CONCRETE_SOURCES,
     SOURCE_AUTO,
+    EnvironmentDiagnosticCapable,
     EnvironmentReport,
     LLMAdapter,
 )
@@ -105,22 +106,27 @@ def list_adapters() -> list[LLMAdapter]:
 
 
 def adapter_health(name: str) -> EnvironmentReport:
-    """Probe ``adapter.test_environment`` by registry name.
+    """Probe optional environment diagnostics by registry name.
 
-    Step I.c (2026-05-23) — thin one-call accessor over the existing
-    :meth:`LLMAdapter.test_environment` probe so picker UIs / readiness
+    Step I.c (2026-05-23) — thin one-call accessor over the optional
+    :class:`EnvironmentDiagnosticCapable` probe so picker UIs / readiness
     audits / external consumers (petri_audit's ``credential_source``
     cascade, the ``/auth`` slash, the routing-recovery loop) don't have
     to ``get_adapter(name).test_environment()`` themselves and don't
     need to know which exception ``get_adapter`` raises on a typo.
 
     Raises :class:`KeyError` when no adapter is registered under
-    ``name`` (delegates to :func:`get_adapter`); the underlying
-    ``test_environment`` call NEVER raises — adapters return an
-    :class:`EnvironmentReport` with ``ok=False`` and operator-facing
-    ``hints`` on credential failures by design (paperclip mirror).
+    ``name`` (delegates to :func:`get_adapter`). Unsupported diagnostics
+    and credential failures return an
+    :class:`EnvironmentReport` with ``ok=False`` and operator-facing hints.
     """
-    return get_adapter(name).test_environment()
+    adapter = get_adapter(name)
+    if not isinstance(adapter, EnvironmentDiagnosticCapable):
+        return EnvironmentReport(
+            ok=False,
+            hints=(f"adapter {name!r} does not support environment diagnostics",),
+        )
+    return adapter.test_environment()
 
 
 # PR-DRIFT-ANCHORS (2026-06-10) — single SoT for the legacy→registry

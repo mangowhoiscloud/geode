@@ -45,7 +45,7 @@ from typing import Any
 from core.llm.adapters.base import (
     SOURCE_PAYG, AdapterBillingType,
     AdapterCallRequest, AdapterCallResult,
-    EnvironmentReport, UsageSummary,
+    UsageSummary,
 )
 
 @dataclass
@@ -63,19 +63,16 @@ class AcmePaygAdapter:
             text=raw.text,
             usage=UsageSummary(input_tokens=..., output_tokens=...),
             stop_reason=raw.stop_reason,
-        )
-
-    def test_environment(self) -> EnvironmentReport:
-        from core.config import settings
-        if not settings.acme_api_key:
-            return EnvironmentReport(ok=False, hints=("set ACME_API_KEY",))
-        return EnvironmentReport(ok=True)`}</pre>
+        )`}</pre>
             <p>
-              스트리밍·introspection 메서드(<code>astream</code>,{" "}
-              <code>list_models</code>, <code>get_quota_windows</code>,{" "}
-              <code>detect_credential</code>)는 프로토콜이 요구하지만, 해당
-              표면을 지원하지 않으면 빈 값이나 <code>None</code>을 돌려줘도
-              됩니다. 단, <code>test_environment</code>는 항상 정직해야 합니다.
+              스트리밍과 introspection은 필수가 아닙니다. 지원하는 표면만{" "}
+              <code>StreamingCapable</code>,{" "}
+              <code>EnvironmentDiagnosticCapable</code>,{" "}
+              <code>ModelListingCapable</code>,{" "}
+              <code>QuotaInspectionCapable</code>,{" "}
+              <code>CredentialDetectionCapable</code> 구조를 만족시키면 됩니다.
+              지원하지 않는 메서드를 빈 값이나 <code>None</code> stub으로 만들지
+              마십시오.
             </p>
 
             <h2>2. 레지스트리에 등록합니다</h2>
@@ -158,15 +155,17 @@ for adapter_cls in (..., AcmePaygAdapter):
             </p>
             <pre>{`uv run python -c "
 from core.llm.adapters.registry import bootstrap_builtins, resolve_for
+from core.llm.adapters import EnvironmentDiagnosticCapable
 bootstrap_builtins()
 a = resolve_for('acme', 'payg')
 print(a.name, a.provider, a.source)
-print(a.test_environment().ok)
+if isinstance(a, EnvironmentDiagnosticCapable):
+    print(a.test_environment().ok)
 "`}</pre>
             <p>
               어댑터 이름이 출력되면 라우팅이 그 쌍을 찾을 수 있습니다.{" "}
-              <code>test_environment().ok</code>는 자격증명 상태를 정직하게
-              보고합니다.
+              환경 진단 capability를 구현했다면 <code>test_environment().ok</code>도
+              자격증명 상태를 정직하게 보고합니다.
             </p>
 
             <p className="text-[var(--ink-3)] text-sm">
@@ -211,7 +210,7 @@ from typing import Any
 from core.llm.adapters.base import (
     SOURCE_PAYG, AdapterBillingType,
     AdapterCallRequest, AdapterCallResult,
-    EnvironmentReport, UsageSummary,
+    UsageSummary,
 )
 
 @dataclass
@@ -229,19 +228,14 @@ class AcmePaygAdapter:
             text=raw.text,
             usage=UsageSummary(input_tokens=..., output_tokens=...),
             stop_reason=raw.stop_reason,
-        )
-
-    def test_environment(self) -> EnvironmentReport:
-        from core.config import settings
-        if not settings.acme_api_key:
-            return EnvironmentReport(ok=False, hints=("set ACME_API_KEY",))
-        return EnvironmentReport(ok=True)`}</pre>
+        )`}</pre>
             <p>
-              The streaming and introspection methods (<code>astream</code>,{" "}
-              <code>list_models</code>, <code>get_quota_windows</code>,{" "}
-              <code>detect_credential</code>) are required by the protocol but may
-              return empty values or <code>None</code> for surfaces you do not
-              support. <code>test_environment</code> must always be honest.
+              Streaming and introspection are optional. Implement only the
+              structural capabilities you support: <code>StreamingCapable</code>,{" "}
+              <code>EnvironmentDiagnosticCapable</code>,{" "}
+              <code>ModelListingCapable</code>, <code>QuotaInspectionCapable</code>,
+              or <code>CredentialDetectionCapable</code>. Do not add empty or{" "}
+              <code>None</code> stubs for unsupported surfaces.
             </p>
 
             <h2>2. Register it in the registry</h2>
@@ -324,14 +318,17 @@ for adapter_cls in (..., AcmePaygAdapter):
             </p>
             <pre>{`uv run python -c "
 from core.llm.adapters.registry import bootstrap_builtins, resolve_for
+from core.llm.adapters import EnvironmentDiagnosticCapable
 bootstrap_builtins()
 a = resolve_for('acme', 'payg')
 print(a.name, a.provider, a.source)
-print(a.test_environment().ok)
+if isinstance(a, EnvironmentDiagnosticCapable):
+    print(a.test_environment().ok)
 "`}</pre>
             <p>
               When the adapter name prints, routing can find that pair.{" "}
-              <code>test_environment().ok</code> reports the credential state
+              If the adapter implements environment diagnostics,{" "}
+              <code>test_environment().ok</code> also reports credential state
               honestly.
             </p>
 
