@@ -19,8 +19,8 @@ function ArchitectureBaselineTable({ locale }: { locale: "ko" | "en" }) {
             number.format(architectureBaseline.packages.tests.python_files),
           ],
           [
-            "도구 정의 / 실행 등록 / 유효 스키마",
-            `${architectureBaseline.tools.definition_count} / ${architectureBaseline.tools.execution_registration_count} / ${architectureBaseline.tools.schema_count}`,
+            "도구 정의 / 모델 실행 / 유효 스키마 / 정책",
+            `${architectureBaseline.tools.definition_count} / ${architectureBaseline.tools.model_execution_registration_count} / ${architectureBaseline.tools.schema_count} / ${architectureBaseline.tools.policy_registration_count}`,
           ],
           ["RuntimeEvent 멤버", number.format(architectureBaseline.hook_events.count)],
           ["기본 LLM 어댑터", number.format(architectureBaseline.built_in_adapters.count)],
@@ -41,8 +41,8 @@ function ArchitectureBaselineTable({ locale }: { locale: "ko" | "en" }) {
             number.format(architectureBaseline.packages.tests.python_files),
           ],
           [
-            "Tool definitions / execution bindings / valid schemas",
-            `${architectureBaseline.tools.definition_count} / ${architectureBaseline.tools.execution_registration_count} / ${architectureBaseline.tools.schema_count}`,
+            "Tool definitions / model executions / valid schemas / policies",
+            `${architectureBaseline.tools.definition_count} / ${architectureBaseline.tools.model_execution_registration_count} / ${architectureBaseline.tools.schema_count} / ${architectureBaseline.tools.policy_registration_count}`,
           ],
           ["RuntimeEvent members", number.format(architectureBaseline.hook_events.count)],
           ["Built-in LLM adapters", number.format(architectureBaseline.built_in_adapters.count)],

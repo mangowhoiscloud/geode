@@ -1,7 +1,7 @@
 """Module-level state, registry, and lookups for the slash-command package.
 
 Hosts the ``ModelProfile`` dataclass + ``get_model_profiles`` factory, the
-``COMMAND_MAP`` slash → action lookup, the conversation ContextVar, the
+``COMMAND_MAP`` slash → action lookup, the conversation-state facade, the
 generic help renderer, ``resolve_action``, and the small
 ``_get_profile_store`` accessor. Extracted from the
 monolithic ``core/cli/commands.py`` (Tier 3 #9) — every function body is
@@ -11,12 +11,16 @@ preserved byte-identical from the legacy module.
 from __future__ import annotations
 
 from collections.abc import Iterable
-from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any as _Any
 
+from core.agent import conversation as _conversation
 from core.auth.profiles import ProfileStore
 from core.ui.console import console
+
+_conversation_ctx = _conversation._conversation_ctx
+get_conversation_context = _conversation.get_conversation_context
+set_conversation_context = _conversation.set_conversation_context
 
 # ---------------------------------------------------------------------------
 # Model Registry (OpenClaw Auth Profile Rotation pattern)
@@ -262,23 +266,6 @@ def role_by_name(name: str) -> AgentRole:
         raise ValueError(
             f"unknown agent role {name!r}; expected one of {[r.name for r in AGENT_ROLES]!r}"
         ) from exc
-
-
-# ---------------------------------------------------------------------------
-# Conversation Context ContextVar (shared with tool handlers)
-# ---------------------------------------------------------------------------
-
-_conversation_ctx: ContextVar[_Any] = ContextVar("conversation_ctx", default=None)
-
-
-def set_conversation_context(ctx: _Any) -> None:
-    """Inject the active ConversationContext for command handlers."""
-    _conversation_ctx.set(ctx)
-
-
-def get_conversation_context() -> _Any:
-    """Retrieve the active ConversationContext (None if not set)."""
-    return _conversation_ctx.get(None)
 
 
 # ---------------------------------------------------------------------------

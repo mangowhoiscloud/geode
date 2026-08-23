@@ -272,7 +272,13 @@ def test_each_slash_command_emits_an_isolated_typed_trajectory(
     registry = SkillRegistry()
     SkillLoader(skills_dir=Path(".geode/skills")).load_all(registry=registry)
     socket_path = Path(tempfile.gettempdir()) / f"geode-slash-typed-{uuid.uuid4().hex[:8]}.sock"
-    poller = CLIPoller(_Services(loop, registry), socket_path=socket_path)
+    from core.cli.dispatcher import _handle_command
+
+    poller = CLIPoller(
+        _Services(loop, registry),
+        socket_path=socket_path,
+        command_handler=_handle_command,
+    )
     poller.start()
     client = IPCClient(socket_path)
     expected_calls: set[str] = set()

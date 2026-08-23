@@ -47,6 +47,21 @@ functional change.
 
 ## [Unreleased]
 
+### Architecture
+
+- **Extension change surfaces are now executable CI contracts.** Six black-box
+  scenarios add a project Skill, filesystem hook, MCP server, package LLM
+  adapter, native tool, and Google Workspace service through their supported
+  seams while leaving the forbidden kernel, CLI, provider, policy, and OAuth
+  edit sites untouched.
+
+- **Architecture regressions now fail on explicit CI contracts.** Runtime,
+  CLI, server, and messaging dependencies cross neutral or product-owned
+  composition seams instead of ignored reverse imports. CI now executes the
+  zero-ignore import graph, immutable tool-plan and policy parity, coordinator
+  budgets, protocol compatibility, core-only install, roadmap validation, and
+  official documentation drift gates as named checks.
+
 ### Added
 
 - **GEO visibility measurements now have an executable receipt contract.** A

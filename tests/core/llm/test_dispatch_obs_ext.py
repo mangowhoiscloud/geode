@@ -371,7 +371,7 @@ def test_typer_serve_wires_rotating_file_handler_for_serve_log(monkeypatch) -> N
         lambda _runtime_builder=None, **_kwargs: None,
     )
     with pytest.raises(typer.Exit):
-        typer_serve._serve(3.0)
+        typer_serve._serve(3.0, services_builder=lambda **_kwargs: None)
 
     assert configured == ["serve"]
     serve_file, _fmt = logging_config._MODE_SPECS["serve"]

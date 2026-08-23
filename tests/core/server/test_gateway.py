@@ -20,8 +20,8 @@ from core.messaging.models import (
     ChannelBinding,
     InboundMessage,
 )
+from core.messaging.poller import BasePoller
 from core.server.supervised.discord_poller import DiscordPoller
-from core.server.supervised.poller_base import BasePoller
 from core.server.supervised.slack_poller import SlackPoller
 from core.server.supervised.telegram_poller import TelegramPoller
 

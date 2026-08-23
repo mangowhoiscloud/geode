@@ -7,7 +7,7 @@ import time
 from typing import TYPE_CHECKING, Any
 
 from core.messaging.models import InboundMessage
-from core.server.supervised.poller_base import BasePoller
+from core.messaging.poller import BasePoller
 
 log = logging.getLogger(__name__)
 

@@ -95,7 +95,7 @@ def _tool_args_signature(tool_input: Any) -> str:
 
 def _set_conversation_context(context: ConversationContext) -> None:
     """Publish the active conversation to slash-command guards."""
-    from core.cli.commands import set_conversation_context
+    from core.agent.conversation import set_conversation_context
 
     set_conversation_context(context)
 

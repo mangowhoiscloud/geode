@@ -707,6 +707,7 @@ class TestCLIChannelIntegration:
 
     def test_quit_relayed_returns_should_break(self) -> None:
         """P1 fix: /quit should relay to serve and return should_break=True."""
+        from core.cli.dispatcher import _handle_command
         from core.cli.ipc_client import IPCClient
         from core.server.ipc_server.poller import CLIPoller
 
@@ -715,7 +716,11 @@ class TestCLIChannelIntegration:
         mock_loop = MagicMock()
         mock_services.create_session.return_value = (MagicMock(), mock_loop)
 
-        poller = CLIPoller(mock_services, socket_path=sock_path)
+        poller = CLIPoller(
+            mock_services,
+            socket_path=sock_path,
+            command_handler=_handle_command,
+        )
         poller.start()
         time.sleep(0.1)
 

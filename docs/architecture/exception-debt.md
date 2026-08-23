@@ -4,6 +4,8 @@
 architecture exceptions. It does not replace `pyproject.toml`: import-linter
 and Ruff still execute from their native configuration. The checker requires
 the executable configuration and the ownership ledger to agree exactly.
+R7.1 additionally pins the current import-linter exception count at zero, so a
+new ignored edge cannot be accepted by refreshing the generated baseline.
 
 ## Record model
 
