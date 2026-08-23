@@ -29,9 +29,20 @@ from typing import TYPE_CHECKING, Any
 from core.llm.adapters.base import (
     CONCRETE_SOURCES,
     SOURCE_AUTO,
+    ComputerUseCapable,
     EnvironmentDiagnosticCapable,
     EnvironmentReport,
     LLMAdapter,
+    StreamingCapable,
+    TextCompletionCapable,
+    WebSearchCapable,
+)
+from core.llm.registry import (
+    PROVIDER_VARIANTS,
+    CredentialRoute,
+    ProviderProfile,
+    ProviderSpec,
+    TransportSpec,
 )
 
 log = logging.getLogger(__name__)
@@ -70,12 +81,13 @@ class AdapterOverride:
 
 @dataclass(frozen=True, slots=True)
 class AdapterRegistration:
-    """One immutable registry record; the adapter owns its runtime clients."""
+    """One immutable adapter plus its declarative provider composition."""
 
     adapter: LLMAdapter
     origin: str
     priority: int
     trust_decision: str
+    provider_spec: ProviderSpec | None = None
 
     def __post_init__(self) -> None:
         if not self.origin.strip():
@@ -84,6 +96,9 @@ class AdapterRegistration:
             raise TypeError("adapter registration priority must be an integer")
         if not self.trust_decision.strip():
             raise ValueError("adapter registration trust_decision is empty")
+        spec = self.provider_spec or _legacy_provider_spec(self.adapter)
+        _validate_adapter(self.adapter, provider_spec=spec, prefix="adapter registration")
+        object.__setattr__(self, "provider_spec", spec)
 
 
 @dataclass(frozen=True, slots=True)
@@ -129,6 +144,11 @@ class AdapterRegistrySnapshot:
                 f"adapter {name!r} not registered. Known: {sorted(self.registrations)}"
             ) from exc
 
+    def get_registration(self, name: str) -> AdapterRegistration:
+        """Return the complete declarative registration by canonical ID."""
+        self.get_adapter(name)
+        return self.registrations[name]
+
     def list_adapters(self) -> tuple[LLMAdapter, ...]:
         """Adapters in deterministic discovery order."""
         return tuple(record.adapter for record in self.registrations.values())
@@ -147,21 +167,30 @@ class AdapterRegistrySnapshot:
                 f"(must be one of {sorted(CONCRETE_SOURCES)})"
             )
         candidates = [
-            adapter
-            for adapter in self.list_adapters()
-            if adapter.provider == provider and adapter.source == source
+            record
+            for record in self.registrations.values()
+            if record.provider_spec is not None
+            and record.provider_spec.profile.provider == provider
+            and record.provider_spec.credential.source == source
         ]
         if not candidates:
-            known = [(adapter.provider, adapter.source) for adapter in self.list_adapters()]
+            known = [
+                (
+                    record.provider_spec.profile.provider,
+                    record.provider_spec.credential.source,
+                )
+                for record in self.registrations.values()
+                if record.provider_spec is not None
+            ]
             raise AdapterNotFoundError(
                 f"no adapter for provider={provider!r} source={source!r}. Known pairs: {known}"
             )
         if len(candidates) > 1:
             raise RuntimeError(
                 f"resolve_for: multiple adapters match provider={provider!r} source={source!r}: "
-                f"{[adapter.name for adapter in candidates]} — registry invariant violated"
+                f"{[record.adapter.name for record in candidates]} — registry invariant violated"
             )
-        return candidates[0]
+        return candidates[0].adapter
 
 
 _EMPTY_REPORT = AdapterValidationReport(0, (), ())
@@ -209,7 +238,58 @@ def use_registry_snapshot(snapshot: AdapterRegistrySnapshot) -> Iterator[None]:
         _ACTIVE_SNAPSHOT.reset(token)
 
 
-def _validate_adapter(adapter: LLMAdapter, *, prefix: str) -> None:
+def _native_capabilities(adapter: LLMAdapter) -> frozenset[str]:
+    capabilities: set[str] = set()
+    if isinstance(adapter, StreamingCapable):
+        capabilities.add("streaming")
+    if isinstance(adapter, WebSearchCapable) and adapter.supports_web_search:
+        capabilities.add("web_search")
+    if isinstance(adapter, ComputerUseCapable) and adapter.supports_computer_use:
+        capabilities.add("computer_use")
+    if isinstance(adapter, TextCompletionCapable) and adapter.supports_text_completion:
+        capabilities.add("text_completion")
+    return frozenset(capabilities)
+
+
+def _legacy_provider_spec(adapter: LLMAdapter) -> ProviderSpec:
+    """Conservative composition for pre-R5.3 third-party adapters."""
+    declared = getattr(adapter, "provider_spec", None)
+    if declared is not None:
+        if not isinstance(declared, ProviderSpec):
+            raise TypeError("adapter.provider_spec must be a ProviderSpec")
+        return declared
+    provider = str(adapter.provider)
+    return ProviderSpec(
+        profile=ProviderProfile(
+            id=provider,
+            provider=provider,
+            display_name=provider,
+            default_model_key=provider,
+        ),
+        credential=CredentialRoute(
+            source=adapter.source,
+            account_provider=provider,
+            selector="adapter",
+            auth_type="adapter",
+            billing_type=adapter.billing_type,
+            default=True,
+        ),
+        transport=TransportSpec(
+            id=f"{adapter.name}-transport",
+            api="adapter",
+            default_base_url="",
+            native_capabilities=_native_capabilities(adapter),
+            retry_policy="adapter-owned",
+        ),
+    )
+
+
+def _validate_adapter(
+    adapter: LLMAdapter,
+    *,
+    prefix: str,
+    provider_spec: ProviderSpec,
+) -> None:
     name = adapter.name
     if not name:
         raise ValueError(f"{prefix}: adapter.name is empty")
@@ -217,6 +297,27 @@ def _validate_adapter(adapter: LLMAdapter, *, prefix: str) -> None:
         raise ValueError(
             f"{prefix}: adapter.source={adapter.source!r} is not a concrete value "
             f"(must be one of {sorted(CONCRETE_SOURCES)})"
+        )
+    aliases = (
+        adapter.provider,
+        adapter.source,
+        adapter.billing_type,
+    )
+    canonical = (
+        provider_spec.profile.provider,
+        provider_spec.credential.source,
+        provider_spec.credential.billing_type,
+    )
+    if aliases != canonical:
+        raise ValueError(
+            f"{prefix}: adapter compatibility identity {aliases!r} "
+            f"does not match provider composition {canonical!r}"
+        )
+    capabilities = _native_capabilities(adapter)
+    if capabilities != provider_spec.transport.native_capabilities:
+        raise ValueError(
+            f"{prefix}: adapter native capabilities {sorted(capabilities)!r} "
+            f"do not match transport {sorted(provider_spec.transport.native_capabilities)!r}"
         )
 
 
@@ -230,8 +331,11 @@ def _publish(
     records = dict(registrations)
     route_owners: dict[tuple[str, str], str] = {}
     for canonical_id, registration in records.items():
-        adapter = registration.adapter
-        route = (adapter.provider, adapter.source)
+        assert registration.provider_spec is not None
+        route = (
+            registration.provider_spec.profile.provider,
+            registration.provider_spec.credential.source,
+        )
         if existing := route_owners.get(route):
             raise ValueError(f"adapters {existing!r} and {canonical_id!r} both own route {route!r}")
         route_owners[route] = canonical_id
@@ -248,6 +352,7 @@ def _publish(
 def register_adapter(
     adapter: LLMAdapter,
     *,
+    provider_spec: ProviderSpec | None = None,
     replace: bool = False,
     origin: str | None = None,
     priority: int = 0,
@@ -259,28 +364,27 @@ def register_adapter(
     entry-point group. ``replace=True`` is an explicit trust boundary and must
     record the override decision instead of silently changing ownership.
     """
-    _validate_adapter(adapter, prefix="register_adapter")
     name = adapter.name
+    resolved_origin = origin or (f"runtime:{type(adapter).__module__}:{type(adapter).__qualname__}")
+    registration = AdapterRegistration(
+        adapter=adapter,
+        origin=resolved_origin,
+        priority=priority,
+        trust_decision=trust_decision or "runtime-registration",
+        provider_spec=provider_spec,
+    )
     with _REGISTRY_LOCK:
         records = dict(_CURRENT.registrations)
         if name in records and not replace:
             raise AdapterAlreadyRegisteredError(
                 f"adapter {name!r} already registered; pass replace=True to override"
             )
-        resolved_origin = origin or (
-            f"runtime:{type(adapter).__module__}:{type(adapter).__qualname__}"
-        )
         overrides: tuple[tuple[str, str, int, str], ...] = ()
         if replace:
             if not trust_decision.strip():
                 raise ValueError("register_adapter: replace=True requires trust_decision")
             overrides = ((name, resolved_origin, priority, trust_decision),)
-        records[name] = AdapterRegistration(
-            adapter=adapter,
-            origin=resolved_origin,
-            priority=priority,
-            trust_decision=trust_decision or "runtime-registration",
-        )
+        records[name] = registration
         _publish(records, overrides=overrides)
     log.debug(
         "adapter registered: %s (provider=%s source=%s origin=%s)",
@@ -419,25 +523,26 @@ def _builtin_registrations(
     from core.llm.adapters.glm_payg import GlmPaygAdapter
     from core.llm.adapters.openai_payg import OpenAIPaygAdapter
 
-    factories: tuple[Callable[[], LLMAdapter], ...] = (
-        AnthropicPaygAdapter,
-        OpenAIPaygAdapter,
-        CodexOAuthAdapter,
-        GlmPaygAdapter,
-        GlmCodingPlanAdapter,
+    factories: tuple[tuple[Callable[[], LLMAdapter], str], ...] = (
+        (AnthropicPaygAdapter, "anthropic"),
+        (OpenAIPaygAdapter, "openai"),
+        (CodexOAuthAdapter, "openai-codex"),
+        (GlmPaygAdapter, "glm"),
+        (GlmCodingPlanAdapter, "glm-coding"),
     )
     records: list[AdapterRegistration] = []
-    for factory in factories:
+    for factory, provider_variant in factories:
         instance = factory()
         if isinstance(instance, GlmCodingPlanAdapter):
             instance.routing_sources = (policy_sources or {}).get("provider_routing")
-        _validate_adapter(instance, prefix="builtin adapter")
+        provider_spec = PROVIDER_VARIANTS[provider_variant]
         records.append(
             AdapterRegistration(
                 adapter=instance,
                 origin=f"builtin:{instance.name}",
                 priority=100,
                 trust_decision="bundled-first-party",
+                provider_spec=provider_spec,
             )
         )
     return records
@@ -472,7 +577,6 @@ def _entry_point_registrations() -> list[AdapterRegistration]:
             raise RuntimeError(f"{origin} adapter factory failed") from exc
         if not isinstance(adapter, LLMAdapter):
             raise TypeError(f"{origin} factory did not return an LLMAdapter")
-        _validate_adapter(adapter, prefix=origin)
         if adapter.name != entry_point.name:
             raise ValueError(
                 f"{origin} declares canonical ID {entry_point.name!r} "
@@ -522,6 +626,7 @@ def _resolve_discovery_collisions(
             origin=winner.origin,
             priority=decision.priority,
             trust_decision=decision.trust_decision,
+            provider_spec=winner.provider_spec,
         )
         applied.append((canonical_id, decision.origin, decision.priority, decision.trust_decision))
 

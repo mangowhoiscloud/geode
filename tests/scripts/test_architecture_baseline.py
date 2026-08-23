@@ -182,7 +182,16 @@ def test_inventory_lists_traceable_architecture_details() -> None:
     measured = baseline.build_baseline()
 
     assert measured["hook_events"]["count"] == len(measured["hook_events"]["members"])
-    assert measured["built_in_adapters"]["count"] == len(measured["built_in_adapters"]["classes"])
+    assert measured["built_in_adapters"] == {
+        "count": 5,
+        "classes": [
+            "AnthropicPaygAdapter",
+            "OpenAIPaygAdapter",
+            "CodexOAuthAdapter",
+            "GlmPaygAdapter",
+            "GlmCodingPlanAdapter",
+        ],
+    }
     assert measured["context_vars"]["count"] == len(measured["context_vars"]["items"])
     assert measured["core_to_product_imports"] == {
         "site_count": 0,

@@ -55,7 +55,7 @@ export default function Page() {
             <p>
               (프로바이더, 자격 소스) 조합마다 어댑터가 하나씩 등록됩니다
               (<code>core/llm/adapters/</code>). <code>geode adapters list</code>로
-              현재 등록 상태와 자격 환경을 확인할 수 있습니다.
+              현재 등록 상태, API transport, billing, 자격 환경을 확인할 수 있습니다.
             </p>
 
             <h2>키와 설정이 사는 곳</h2>
@@ -219,7 +219,8 @@ geode about                   # 실효(EFFECTIVE) 모델 + 프로바이더`}</pr
             <p>
               One adapter is registered per (provider, credential source) pair
               (<code>core/llm/adapters/</code>). <code>geode adapters list</code>
-              shows what is registered and whether its credentials are present.
+              shows each registered API transport, billing route, and credential
+              status.
             </p>
 
             <h2>Where keys and settings live</h2>

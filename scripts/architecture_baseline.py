@@ -193,7 +193,10 @@ def _built_in_adapters(root: Path) -> dict[str, Any]:
         if not isinstance(node.target, ast.Name) or node.target.id != "factories":
             continue
         if isinstance(node.value, ast.Tuple):
-            classes.extend(item.id for item in node.value.elts if isinstance(item, ast.Name))
+            for item in node.value.elts:
+                factory = item.elts[0] if isinstance(item, ast.Tuple) and item.elts else item
+                if isinstance(factory, ast.Name):
+                    classes.append(factory.id)
     if not classes:
         raise ValueError(f"{path}: built-in adapter factory tuple not found")
     return {"count": len(classes), "classes": classes}

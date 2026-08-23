@@ -3,7 +3,13 @@
 from __future__ import annotations
 
 from core.auth.profiles import AuthProfile, CredentialType
-from core.llm.registry import PROVIDER_VARIANTS, get_provider_spec
+from core.llm.registry import (
+    PROVIDER_VARIANTS,
+    CredentialRoute,
+    ProviderProfile,
+    TransportSpec,
+    get_provider_spec,
+)
 from core.llm.strategies.plan_registry import (
     PlanRegistry,
     get_plan_registry,
@@ -40,6 +46,19 @@ class TestProviderRegistry:
         assert spec is not None
         assert "/paas/v4" in spec.default_base_url
         assert "/coding/" not in spec.default_base_url
+
+    def test_variants_compose_separate_immutable_records(self) -> None:
+        codex = PROVIDER_VARIANTS["openai-codex"]
+        assert isinstance(codex.profile, ProviderProfile)
+        assert isinstance(codex.credential, CredentialRoute)
+        assert isinstance(codex.transport, TransportSpec)
+        assert codex.profile.provider == "openai"
+        assert codex.profile.default_model() == "gpt-5.5"
+        assert codex.credential.account_provider == "openai-codex"
+        assert codex.credential.selector == "codex-oauth"
+        assert codex.transport.api == "openai-responses"
+        assert codex.transport.retry_policy == "agentic-loop"
+        assert codex.credential.quota_policy == "codex-usage"
 
 
 class TestGlmCodingTiers:
