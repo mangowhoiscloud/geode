@@ -1,43 +1,44 @@
 {
   "schema_version": 1,
   "recorded_at": "2026-08-24",
-  "source_commit": "7a07295a787bf514a89e6288430383159ddbcaff",
-  "method": "Three isolated local-only process samples; median per metric; no provider or MCP network.",
+  "source_commit": "90170951eb762a300a2c476be2afdddbad8ef68b",
+  "calibration_run": "https://github.com/mangowhoiscloud/geode/actions/runs/32657483726",
+  "method": "Three isolated local-only process samples on GitHub Actions ubuntu-latest; median per metric; no provider or MCP network.",
   "policy": "Every metric fails independently. Raising a maximum requires a reviewed, changelogged tradeoff; metrics are never averaged into one score.",
   "metrics": {
     "event_persist_us": {
       "unit": "us",
-      "observed": 674.959,
+      "observed": 1614.147,
       "maximum": 5000.0
     },
     "first_turn_ms": {
       "unit": "ms",
-      "observed": 27.645,
+      "observed": 67.88,
       "maximum": 300.0
     },
     "import_cold_start_ms": {
       "unit": "ms",
-      "observed": 78.148,
+      "observed": 173.807,
       "maximum": 400.0
     },
     "mcp_first_call_ms": {
       "unit": "ms",
-      "observed": 0.203,
+      "observed": 0.449,
       "maximum": 10.0
     },
     "mcp_warm_call_ms": {
       "unit": "ms",
-      "observed": 0.036,
+      "observed": 0.069,
       "maximum": 2.0
     },
     "runtime_create_shutdown_ms": {
       "unit": "ms",
-      "observed": 641.802,
+      "observed": 1084.778,
       "maximum": 2500.0
     },
     "runtime_peak_kib": {
       "unit": "KiB",
-      "observed": 15329.262,
+      "observed": 15289.922,
       "maximum": 50000.0
     },
     "tool_descriptor_bytes": {
@@ -47,22 +48,22 @@
     },
     "tool_dispatch_us": {
       "unit": "us",
-      "observed": 90.291,
+      "observed": 242.609,
       "maximum": 750.0
     },
     "tool_plan_build_ms": {
       "unit": "ms",
-      "observed": 34.51,
-      "maximum": 750.0
+      "observed": 1901.701,
+      "maximum": 3000.0
     },
     "tool_plan_peak_kib": {
       "unit": "KiB",
-      "observed": 1157.058,
+      "observed": 1152.37,
       "maximum": 16000.0
     },
     "tool_plan_refresh_ms": {
       "unit": "ms",
-      "observed": 3.299,
+      "observed": 6.926,
       "maximum": 25.0
     },
     "tool_registry_entries": {
