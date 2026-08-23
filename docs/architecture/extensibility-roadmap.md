@@ -226,6 +226,7 @@ normal review and CI; implementations start only after the claim merges.
 | Closure package | GAP IDs | Owner/session | Implementation branch | Claim evidence | Claimed at (UTC) |
 |---|---|---|---|---|---|
 | R8.3 | REL-004 | `session=codex-root task=r8-3-publication-grace-evidence` | `feature/r8-3-publication-grace-evidence` | Readiness [#3039](https://github.com/mangowhoiscloud/geode/pull/3039); v1.0.23 GitHub/PyPI parity and candidate interval re-audited | `2026-08-20T07:41:19Z` |
+| R6.1 | PROTO-001, PROTO-002 | `session=codex-root task=r6-1-versioned-public-projection` | `feature/r6-1-versioned-public-projection` | Readiness [#3092](https://github.com/mangowhoiscloud/geode/pull/3092); R5.4 delivery reconciliation [#3107](https://github.com/mangowhoiscloud/geode/pull/3107) and whole-package acceptance re-audited | `2026-08-23T07:27:10Z` |
 
 ## 1. Program objective
 
@@ -537,8 +538,8 @@ and closure evidence are appended in §10.
 | LLM-002 | `PARTIAL` | Eight built-ins use a mutable registry with broad bootstrap lifetime | Built-in plus entry-point discovery yields immutable session snapshots with generation and collision policy | R5.2 | LLM-001, BND-001 | `IN_DEVELOP` |
 | LLM-003 | `PARTIAL` | Provider identity, credential source, transport, and adapter selection overlap | Provider profile, credential route, and transport are separate composable records | R5.3 | LLM-001, LLM-002 | `IN_DEVELOP` |
 | LLM-004 | `PARTIAL` | Interactive and autonomous LLM paths share taxonomy but retain multiple retry/failover implementations | Explicit `RetryPolicy` preserves intentional differences on one classification/telemetry substrate | R5.4 | LLM-003 | `IN_DEVELOP` |
-| PROTO-001 | `MISFIT` | Internal `HookEvent` taxonomy can leak into persistence/IPC expectations | Public activity/event projections are separate from internal dispatch events | R6.1 | LOOP-002, DI-002 | `READY` |
-| PROTO-002 | `PARTIAL` | IPC has typed behavior but no single versioned external compatibility contract | Versioned envelopes, capability negotiation, unknown-field behavior, and golden compatibility tests | R6.1 | PROTO-001 | `READY` |
+| PROTO-001 | `MISFIT` | Internal `HookEvent` taxonomy can leak into persistence/IPC expectations | Public activity/event projections are separate from internal dispatch events | R6.1 | LOOP-002, DI-002 | `IN_PROGRESS` |
+| PROTO-002 | `PARTIAL` | IPC has typed behavior but no single versioned external compatibility contract | Versioned envelopes, capability negotiation, unknown-field behavior, and golden compatibility tests | R6.1 | PROTO-001 | `IN_PROGRESS` |
 | STORE-001 | `PARTIAL` | `SessionStorePort`, `SessionManager`, checkpoints, transcripts, and event store have overlapping ownership | Ports and writers conform to the existing sessions.db/JSONL destination matrix; projections are rebuildable | R6.2 | — | `DONE` |
 | STORE-002 | `PARTIAL` | Logging/transcript/resume/replay plan still contains staged/open parity work | Each subsystem has one declared writer, resume contract, replay doctrine, retention, and redaction test | R6.2 | STORE-001 | `DONE` |
 | TRUST-001 | `ABSENT` | Registration/enabled status does not uniformly distinguish trusted authority | Installed, enabled, trusted, and granted-capability states are separate and observable; executable code is never imported before trust approval | R6.3 | BND-004 | `READY` |
@@ -2229,8 +2230,15 @@ boundaries, OAuth refresh, billing-fatal precedence, context recovery, hook
 order, and visible-stream replay guard remain distinct and verified. No R6
 protocol or extension-trust responsibility moved.
 
-R6.1 (`PROTO-001`, `PROTO-002`) is now the earliest unclaimed `READY` package
-behind R5.4 in master-ledger order.
+R6.1 (`PROTO-001`, `PROTO-002`) is `IN_PROGRESS` under the active claim for
+`feature/r6-1-versioned-public-projection`, selected after R5.4 delivery
+reconciliation [#3107](https://github.com/mangowhoiscloud/geode/pull/3107).
+The package owns a versioned public activity/event projection and one
+negotiated IPC compatibility envelope with explicit capability and
+unknown-field behavior, while internal `RuntimeEvent`/`HookEvent` growth
+remains private. Implementation may begin only after this claim merges and a
+fresh worktree is allocated from the updated `origin/develop`; it authorizes
+no R6.3 extension trust or discovery work.
 
 R6.3 (`BND-004`, `TRUST-001`, `TRUST-002`) is also package-atomically `READY`
 after the same dependency reconciliation. BND-001, LLM-002, DI-002, and
