@@ -164,6 +164,11 @@ functional change.
 
 ### Removed
 
+- **Verification recovery now has one persistence authority.** Removed the
+  write-only `SessionManager` verify-state mirror; checkpoint loop guards remain
+  the recovery source, while databases carrying the former columns still open
+  without a destructive migration.
+
 - **Removed the final active Claude CLI residue.** Current architecture and
   provider guidance now describe only supported routes, and Petri no longer
   exposes the unused CLI `binary` adapter field. Historical evidence readers
