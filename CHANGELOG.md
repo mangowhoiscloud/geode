@@ -74,6 +74,11 @@ functional change.
 
 ### Fixed
 
+- **Concurrent first access no longer races SQLite schema setup.** Short-lived
+  projection stores serialize their in-process WAL/schema initialization, so
+  sibling threads cannot fail with `database is locked` during a first-run
+  migration.
+
 - **Runtime-owned scheduling keeps both dispatch directions live.** Calendar
   pull now creates only future, executable one-shot jobs, while legacy
   zero-argument serve builders attach daemon dispatch without losing due work

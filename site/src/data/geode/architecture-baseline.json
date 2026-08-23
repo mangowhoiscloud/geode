@@ -543,7 +543,7 @@
   "packages": {
     "core": {
       "python_files": 406,
-      "python_loc": 121933
+      "python_loc": 121940
     },
     "geode_product": {
       "python_files": 154,
