@@ -226,6 +226,7 @@ normal review and CI; implementations start only after the claim merges.
 | Closure package | GAP IDs | Owner/session | Implementation branch | Claim evidence | Claimed at (UTC) |
 |---|---|---|---|---|---|
 | R8.3 | REL-004 | `session=codex-root task=r8-3-publication-grace-evidence` | `feature/r8-3-publication-grace-evidence` | Readiness [#3039](https://github.com/mangowhoiscloud/geode/pull/3039); v1.0.23 GitHub/PyPI parity and candidate interval re-audited | `2026-08-20T07:41:19Z` |
+| R7.1 | VER-001 | `session=codex-root task=r7-1-architecture-ci` | `feature/r7-1-architecture-ci` | Readiness and R6.3 delivery reconciliation [#3113](https://github.com/mangowhoiscloud/geode/pull/3113) | `2026-08-23T14:57:27Z` |
 
 ## 1. Program objective
 
@@ -544,7 +545,7 @@ and closure evidence are appended in §10.
 | TRUST-001 | `ABSENT` | Registration/enabled status does not uniformly distinguish trusted authority | Installed, enabled, trusted, and granted-capability states are separate and observable; executable code is never imported before trust approval | R6.3 | BND-004 | `IN_DEVELOP` |
 | TRUST-002 | `PARTIAL` | Extension seams can receive broader runtime objects than required, and arbitrary in-process Python cannot be capability-confined | Trusted in-process code receives narrow ports for API discipline; untrusted executable code runs out of process behind a brokered capability boundary | R6.3 | DI-002, TRUST-001, TRUST-003 | `IN_DEVELOP` |
 | TRUST-003 | `ABSENT` | Mutation serialization is not derived from explicit tool resource metadata | `resource_keys(args)` drives per-resource serialization; no argument-name heuristic | R2.4 | CAP-004 | `IN_DEVELOP` |
-| VER-001 | `PARTIAL` | Quality gates pass but lack core-only, reverse-import, exception-budget, and tool-plan drift tests | All architecture gates in §9 run in CI and locally | R7.1 | BND-003, BND-004, CAP-005, LOOP-004, DI-003, LLM-002, PROTO-002, GOV-004, VER-003 | `READY` |
+| VER-001 | `PARTIAL` | Quality gates pass but lack core-only, reverse-import, exception-budget, and tool-plan drift tests | All architecture gates in §9 run in CI and locally | R7.1 | BND-003, BND-004, CAP-005, LOOP-004, DI-003, LLM-002, PROTO-002, GOV-004, VER-003 | `IN_PROGRESS` |
 | VER-002 | `ABSENT` | No contract suite measures how many central edits each extension type requires | Six extension scenarios in §8 pass without forbidden edits | R7.2 | CAP-006, LLM-002, BND-004 | `READY` |
 | VER-003 | `PARTIAL` | Public/internal metric prose drifts from executable counts | `sync-stats` or one shared generator updates site, AGENTS facts, and roadmap baseline; check mode is green | R0.2 | GOV-001 | `DONE` |
 | VER-004 | `PARTIAL` | Cold-start and runtime metrics exist, but refactors lack one architecture regression baseline | Startup, first-turn, tool-plan build, memory, and event-write budgets are pinned and non-regressing | R7.3 | CAP-005, LOOP-003, DI-004, LLM-004, PROTO-002, STORE-002 | `OPEN` |
@@ -2251,17 +2252,22 @@ rejected, disabled, granted, and degraded states, and stateful owners retain
 deterministic cleanup. Ordinary Python remains explicitly trusted rather than
 being mislabeled as capability-confined.
 
-R7.1 (`VER-001`) and R7.2 (`CAP-006`, `VER-002`) are newly dependency-satisfied
-and `READY` after whole-package re-audit against
-`origin/develop@3c79e23cd9a7d758d6aa06c72a1f50efa5a98348`. R7.1 has a measurable
-finite gate inventory spanning generated architecture drift, reverse imports,
-installed kernel isolation, import contracts, tool-plan parity, registry
-generation/collisions, ambient-service bans, structural budgets, protocol
-compatibility, roadmap validation, and documentation. R7.2 has six explicit
-black-box scenarios with allowed product edits and forbidden central edits;
-`CAP-006` → `VER-002` remains its package-internal order. R7.1 is the earliest
-unclaimed package in master order; each package still requires its own claim
-transaction before implementation.
+R7.1 (`VER-001`) is `IN_PROGRESS` under the active claim for
+`feature/r7-1-architecture-ci`, selected from the package-atomic readiness and
+R6.3 delivery reconciliation
+[#3113](https://github.com/mangowhoiscloud/geode/pull/3113). It owns the finite
+executable gate inventory spanning generated architecture drift, reverse
+imports, installed kernel isolation, import contracts, tool-plan parity,
+registry generation/collisions, ambient-service bans, structural budgets,
+protocol compatibility, roadmap validation, and documentation. Implementation
+may begin only after this claim merges and a fresh worktree is allocated from
+the updated `origin/develop`; it does not absorb R7.2 scenario fixtures or R7.3
+performance baselines.
+
+R7.2 (`CAP-006`, `VER-002`) remains the sole unclaimed `READY` package in
+master order. Its six black-box scenarios retain explicit allowed product edits
+and forbidden central edits, with `CAP-006` → `VER-002` as the package-internal
+order; it still requires its own claim transaction.
 
 R7.3 (`VER-004`) and R9.1 (`CODE-001`) were already dependency-satisfied and
 remain `OPEN` pending their own serialized whole-package readiness transactions.
