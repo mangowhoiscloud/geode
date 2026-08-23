@@ -17,6 +17,7 @@ import logging
 from typing import Any
 
 from core.agent.conversation import ConversationContext
+from core.agent.session_mode import SessionMode
 
 log = logging.getLogger(__name__)
 
@@ -90,12 +91,9 @@ async def drain_scheduler_queue(
                 _lanes_acquired = True
                 try:
                     _iso_conv = ConversationContext()
-                    from core.server.supervised.services import SessionMode
-
                     _, _iso_loop = services.create_session(
                         SessionMode.SCHEDULER,
                         conversation=_iso_conv,
-                        propagate_context=True,
                     )
 
                     async def _arun_isolated(
@@ -132,6 +130,7 @@ async def drain_scheduler_queue(
                                             r.text,
                                             session_id=getattr(_loop, "_session_id", ""),
                                             source=f"scheduled:{_jid}",
+                                            notification=getattr(services, "notification", None),
                                         )
                                     _mark_paused_async = getattr(
                                         _loop, "amark_session_paused", None

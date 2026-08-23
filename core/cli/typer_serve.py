@@ -9,13 +9,15 @@ service builders through ``run_serve``.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 from collections.abc import Callable
 from typing import Any
 
 import typer
 
-from core.cli.session_state import _scheduler_service_ctx, _set_readiness
+from core.agent.session_mode import SessionMode
+from core.cli.session_state import _set_readiness
 from core.ui.console import console
 from core.wiring.startup import check_readiness
 
@@ -161,6 +163,9 @@ def _serve(  # noqa: PLR0915
     import signal
     import time as _time
 
+    if services_builder is None:
+        raise RuntimeError("serve requires an injected product services builder")
+
     # PR-DISPATCH-OBS-EXT (2026-05-28) / S-6 (2026-06-11) — serve.log file
     # handler via the unified entry-point switchboard. The lifecycle
     # status command depends on SERVE_LOG_PATH existing (``commands/lifecycle.py``);
@@ -169,7 +174,7 @@ def _serve(  # noqa: PLR0915
 
     configure_logging("serve")
 
-    # ContextVars only (memory, profile, env) — no resource creation
+    # Load daemon environment before explicit runtime composition.
     from core.cli.bootstrap import setup_contextvars
 
     setup_contextvars(load_env=True)
@@ -187,18 +192,26 @@ def _serve(  # noqa: PLR0915
     readiness = check_readiness()
     _set_readiness(readiness)
 
+    # The serve shell supplies the callback; the runtime owns the scheduler.
+    import queue as _queue_mod
+
+    _sched_queue: _queue_mod.Queue[tuple[str, str, bool, str]] = _queue_mod.Queue()
+
     # Build runtime (wires env, notifications, gateway + MCP startup)
     # MCP startup is now inside _build_gateway() via mcp.startup()
-    runtime = _build_runtime_for_serve(runtime_builder)
+    runtime = _build_runtime_for_serve(
+        runtime_builder,
+        scheduler_callback=lambda jid, act, iso, aid: _sched_queue.put((jid, act, iso, aid)),
+    )
     if runtime is None:
         console.print("  [warning]Runtime initialization failed.[/warning]")
         raise typer.Exit(1)
 
     # Wire AgenticLoop as gateway processor
     from core.agent.conversation import ConversationContext
-    from core.messaging.binding import get_gateway
+    from core.wiring.adapters import get_gateway_manager
 
-    gateway = get_gateway()
+    gateway = get_gateway_manager()
     if gateway is None:
         console.print("  [warning]No gateway available after runtime init.[/warning]")
         raise typer.Exit(1)
@@ -231,14 +244,6 @@ def _serve(  # noqa: PLR0915
         "- Format responses for messaging: use short paragraphs, avoid excessive markdown."
     )
 
-    # Build SharedServices for serve mode (same factory as REPL)
-    from core.server.supervised.services import SessionMode
-
-    if services_builder is None:
-        from core.server.supervised.services import build_shared_services
-
-        services_builder = build_shared_services
-
     # ``0`` means unlimited rounds; the per-message gateway time budget remains
     # the active-run safety net. Fallback ``0`` preserves legacy objects.
     _gw_max_turns = gateway.gateway_max_turns if hasattr(gateway, "gateway_max_turns") else 0
@@ -254,6 +259,10 @@ def _serve(  # noqa: PLR0915
         policy_sources=runtime.policy_sources,
         activity_sink_provider=runtime.activity_sink_provider,
         lane_queue=runtime.lane_queue,
+        persistence=runtime.persistence_services,
+        integrations=runtime.integration_services,
+        scheduler_service=runtime.scheduler_service,
+        user_profile=runtime.user_profile,
     )
 
     # Wire module-level hooks so _fire_hook() works in serve mode
@@ -261,25 +270,15 @@ def _serve(  # noqa: PLR0915
 
     _cli_pkg._hooks_ctx = _gw_services.hook_system
 
-    # --- Scheduler daemon (same SchedulerService as REPL, drain in main loop) ---
-    import queue as _queue_mod
-
-    _sched_queue: _queue_mod.Queue[tuple[str, str, bool, str]] = _queue_mod.Queue()
-    _sched_svc = None
+    # --- Runtime-owned scheduler daemon (drained in the serve loop) ---
+    _sched_svc = runtime.scheduler_service
     try:
-        from core.scheduler import create_scheduler
-
-        _sched_svc = create_scheduler(
-            on_job_fired=lambda jid, act, iso, aid: _sched_queue.put((jid, act, iso, aid)),
-            hooks=_gw_services.hook_system,
-            enable_jitter=True,
-        )
-        _sched_svc.load()
+        if _sched_svc is None:
+            raise RuntimeError("runtime scheduler is unavailable")
         _recovered = _sched_svc.recover_missed_tasks()
         if _recovered:
             console.print(f"  [info]Recovered {len(_recovered)} missed scheduled jobs[/info]")
         _sched_svc.start()
-        _scheduler_service_ctx.set(_sched_svc)
         _n_jobs = _sched_svc.job_count
         console.print(f"  [success]Scheduler started ({_n_jobs} jobs loaded)[/success]")
     except Exception:
@@ -300,7 +299,6 @@ def _serve(  # noqa: PLR0915
             conversation=_ask_ctx,
             system_suffix=_GATEWAY_SUFFIX,
             **_gateway_session_overrides(metadata, _gw_time_budget, origin),
-            propagate_context=True,
         )
         # Checkpoint continuity — the single shared resume surgery (same
         # path as the IPC resume handler); arun() re-binds the ContextVars
@@ -324,6 +322,7 @@ def _serve(  # noqa: PLR0915
                         else None
                     ),
                     time_budget_s=_ask_loop._time_budget_s,
+                    notification=runtime.notification,
                 )
                 await _ask_loop.amark_session_paused()
             else:
@@ -379,7 +378,6 @@ def _serve(  # noqa: PLR0915
             conversation=ctx,
             system_suffix=_GATEWAY_SUFFIX,
             **_gateway_session_overrides(metadata, _gw_time_budget),
-            propagate_context=True,
             session_id=_gw_session_id,
         )
         if _gw_session_id:
@@ -461,9 +459,9 @@ def _serve(  # noqa: PLR0915
     _webhook_server = None
     if settings.gateway_enabled and settings.webhook_enabled:
         try:
-            from core.server.supervised.webhook_handler import start_webhook_server
+            from core.wiring.adapters import start_gateway_webhook
 
-            _webhook_server = start_webhook_server(
+            _webhook_server = start_gateway_webhook(
                 _gateway_processor_sync,
                 port=settings.webhook_port,
             )
@@ -478,9 +476,15 @@ def _serve(  # noqa: PLR0915
     # blocking poll loop from start(), but thin CLI clients still need a socket.
     _cli_poller = None
     try:
-        from core.server.ipc_server.poller import CLIPoller
+        from core.cli.dispatcher import _handle_command
+        from core.wiring.adapters import build_cli_poller
 
-        _cli_poller = CLIPoller(_gw_services, scheduler_service=_sched_svc)
+        _cli_poller = build_cli_poller(
+            _gw_services,
+            scheduler_service=_sched_svc,
+            command_handler=_handle_command,
+            context_initializer=lambda: _set_readiness(check_readiness()),
+        )
         _cli_poller.start()
         console.print(f"  [success]CLI channel: {_cli_poller.socket_path}[/success]")
     except Exception as exc:
@@ -643,14 +647,35 @@ def _serve(  # noqa: PLR0915
 run_serve = _serve
 
 
-def _build_runtime_for_serve(runtime_builder: Callable[[], Any] | None = None) -> Any:
+def _build_runtime_for_serve(
+    runtime_builder: Callable[..., Any] | None = None,
+    *,
+    scheduler_callback: Callable[[str, str, bool, str], None] | None = None,
+) -> Any:
     """Minimal runtime init for serve mode without REPL."""
     try:
         if runtime_builder is None:
             from core.runtime import GeodeRuntime
 
-            return GeodeRuntime.create("gateway")
-        return runtime_builder()
+            return GeodeRuntime.create("gateway", scheduler_callback=scheduler_callback)
+        try:
+            accepts_scheduler = any(
+                parameter.kind is inspect.Parameter.VAR_KEYWORD
+                or (
+                    parameter.name == "scheduler_callback"
+                    and parameter.kind is not inspect.Parameter.POSITIONAL_ONLY
+                )
+                for parameter in inspect.signature(runtime_builder).parameters.values()
+            )
+        except (TypeError, ValueError):
+            accepts_scheduler = False
+        if accepts_scheduler:
+            return runtime_builder(scheduler_callback=scheduler_callback)
+        runtime = runtime_builder()
+        scheduler = getattr(runtime, "scheduler_service", None)
+        if scheduler_callback is not None and scheduler is not None:
+            scheduler.set_on_job_fired(scheduler_callback)
+        return runtime
     except Exception as exc:
         log.error("Failed to build runtime for serve: %s", exc, exc_info=True)
         return None

@@ -452,11 +452,7 @@ class TestToolExecutor:
 
     def test_serialize_offloaded_result_awaits_async_hook(self, tmp_path: Any) -> None:
         """Tool result offload observability should support async hooks."""
-        from core.orchestration.tool_offload import (
-            ToolResultOffloadStore,
-            get_offload_store,
-            set_offload_store,
-        )
+        from core.orchestration.tool_offload import ToolResultOffloadStore
 
         hook_calls: list[dict[str, Any]] = []
         hooks = HookSystem()
@@ -468,8 +464,17 @@ class TestToolExecutor:
         hooks.register(HookEvent.TOOL_RESULT_OFFLOADED, record_offload, name="record_offload")
         executor = MagicMock(spec=ToolExecutor)
         executor._contains_restricted_data.return_value = False
+        store = ToolResultOffloadStore(
+            session_id="offload-test",
+            threshold=1,
+            base_dir=tmp_path / "offload",
+        )
         processor = ToolCallProcessor(
-            executor=executor, op_logger=MagicMock(), error_recovery=MagicMock(), hooks=hooks
+            executor=executor,
+            op_logger=MagicMock(),
+            error_recovery=MagicMock(),
+            hooks=hooks,
+            offload_store=store,
         )
         processor._step_snapshot = SimpleNamespace(
             correlation=HookCorrelation(
@@ -481,18 +486,8 @@ class TestToolExecutor:
             ),
             bound_tool_plan=None,
         )
-        prev = get_offload_store()
-        store = ToolResultOffloadStore(
-            session_id="offload-test",
-            threshold=1,
-            base_dir=tmp_path / "offload",
-        )
         payload = {"data": "x" * 110_000}
-        try:
-            set_offload_store(store)
-            result = asyncio.run(processor._serialize_tool_result(payload, "toolu_offload"))
-        finally:
-            set_offload_store(prev)
+        result = asyncio.run(processor._serialize_tool_result(payload, "toolu_offload"))
 
         assert result["tool_use_id"] == "toolu_offload"
         assert store.recall("toolu_offload") == payload
@@ -502,28 +497,22 @@ class TestToolExecutor:
         assert hook_calls[0]["verify_attempt"] == 1
 
     def test_offload_threshold_uses_ceiling_token_estimate(self, tmp_path: Any) -> None:
-        from core.orchestration.tool_offload import (
-            ToolResultOffloadStore,
-            get_offload_store,
-            set_offload_store,
-        )
+        from core.orchestration.tool_offload import ToolResultOffloadStore
 
         executor = MagicMock(spec=ToolExecutor)
         executor._contains_restricted_data.return_value = False
-        processor = ToolCallProcessor(
-            executor=executor, op_logger=MagicMock(), error_recovery=MagicMock()
-        )
-        previous = get_offload_store()
         store = ToolResultOffloadStore(
             session_id="offload-boundary",
             threshold=1,
             base_dir=tmp_path / "offload",
         )
-        try:
-            set_offload_store(store)
-            result = asyncio.run(processor._serialize_tool_result("xxx", "toolu_boundary"))
-        finally:
-            set_offload_store(previous)
+        processor = ToolCallProcessor(
+            executor=executor,
+            op_logger=MagicMock(),
+            error_recovery=MagicMock(),
+            offload_store=store,
+        )
+        result = asyncio.run(processor._serialize_tool_result("xxx", "toolu_boundary"))
 
         assert store.recall("toolu_boundary") == "xxx"
         assert json.loads(result["content"])["_offloaded"] is True
@@ -1069,6 +1058,9 @@ class TestAgenticLoop:
             dispatch.data for dispatch in dispatches if dispatch.event is HookEvent.LLM_CALL_RETRIED
         ]
         assert retry_payloads
+        assert {payload["retry_policy"] for payload in retry_payloads} == {"interactive"}
+        assert {payload["classification"] for payload in retry_payloads} == {"unknown"}
+        assert {payload["exception_type"] for payload in retry_payloads} == {"UnknownError"}
         assert {
             (payload["step_id"], payload["session_generation"], payload["verify_attempt"])
             for payload in retry_payloads

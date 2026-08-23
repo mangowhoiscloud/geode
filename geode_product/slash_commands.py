@@ -7,15 +7,14 @@ from typing import Any
 from core.slash_routing import CommandSpec, RunLocation
 
 
-def build_geo_prompt(arg: str, *, skill_registry: Any) -> str:
+def build_geo_prompt(arg: str, *, skill_registry: Any, agentic_ref: Any) -> str:
     """Render the bundled GEO skill for the shared AgenticLoop."""
     from core.cli.commands.skills import build_skill_prompt
-    from core.cli.session_state import get_current_loop
     from core.observability.session_timeline import SessionEventKind
 
     from geode_product.geo_state import GeoStore
 
-    loop = get_current_loop()
+    loop = agentic_ref
     if loop is None or not getattr(loop, "_session_id", ""):
         raise ValueError("/geo requires an active AgenticLoop session")
     db_path = getattr(getattr(loop, "_timeline", None), "db_path", None)

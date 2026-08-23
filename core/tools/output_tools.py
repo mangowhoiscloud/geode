@@ -196,6 +196,9 @@ class SendNotificationTool:
     available; falls back to stub response in demo mode.
     """
 
+    def __init__(self, notification: Any = None) -> None:
+        self._notification = notification
+
     @property
     def name(self) -> str:
         return "send_notification"
@@ -236,14 +239,12 @@ class SendNotificationTool:
         }
 
     async def aexecute(self, **kwargs: Any) -> dict[str, Any]:
-        from core.mcp.notification_port import get_notification
-
         channel: str = kwargs["channel"]
         message: str = kwargs["message"]
         severity: str = kwargs.get("severity", "info")
         recipient: str = kwargs.get("recipient", "default")
 
-        adapter = get_notification()
+        adapter = self._notification
         if adapter is not None and await adapter.ais_available(channel):
             result = await adapter.asend_message(channel, recipient, message, severity=severity)
             return _notification_result(result, severity, recipient, message)

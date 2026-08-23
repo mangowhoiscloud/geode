@@ -15,7 +15,6 @@ import logging
 import uuid
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
-from enum import StrEnum
 from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
@@ -28,6 +27,7 @@ from core.agent.safety import (
 from core.agent.safety import (
     headless_denied_tools as plan_headless_denied_tools,
 )
+from core.agent.session_mode import SessionMode
 
 if TYPE_CHECKING:
     from core.agent.loop import AgenticLoop
@@ -35,23 +35,10 @@ if TYPE_CHECKING:
     from core.agent.tool_executor.executor import ResourceLockPool
     from core.config.policy_source import PolicySourceBundle
     from core.observability.run_event import RunEventSinkProvider
+    from core.tools.handlers import ToolIntegrationServices, ToolPersistenceServices
     from core.tools.plan import BoundToolPlan, ToolPlan
 
 log = logging.getLogger(__name__)
-
-
-# ---------------------------------------------------------------------------
-# Session mode enum
-# ---------------------------------------------------------------------------
-
-
-class SessionMode(StrEnum):
-    """Execution mode — determines behavior defaults, not shared resources."""
-
-    REPL = "repl"  # Interactive terminal — hitl=2, verbose=user, time=unlimited
-    IPC = "ipc"  # Thin CLI via Unix socket — hitl=0, WRITE ok, DANGEROUS blocked
-    DAEMON = "daemon"  # Messaging receivers — hitl=0, quiet, time=config
-    SCHEDULER = "scheduler"  # Cron/scheduled jobs — hitl=0, quiet, time=300s cap
 
 
 def _headless_denied_tools_for_mode(
@@ -130,8 +117,7 @@ class SharedServices:
 
     Session objects are independent. The process-owned resource lock pool is
     shared deliberately so two sessions cannot mutate the same declared
-    resource concurrently. Tool handlers that need the current loop read from
-    ``_current_loop_ctx`` ContextVar (per-thread, no race condition).
+    resource concurrently.
     """
 
     mcp_manager: Any = None
@@ -151,6 +137,9 @@ class SharedServices:
     worker_module: str | None = None
     agent_search_dirs: tuple[Path, ...] = ()
     control_state_factories: Mapping[str, Callable[[Path], Any]] = field(default_factory=dict)
+    user_profile: Any = None
+    offload_store: Any = None
+    notification: Any = None
 
     # v0.82.0 — Model + provider resolved fresh per session, NOT frozen at
     # bootstrap. The previous shape (`_model: str = ""` cached at
@@ -231,7 +220,6 @@ class SharedServices:
         time_budget_override: float | None = None,
         allowed_tool_names: set[str] | None = None,
         verbose: bool = False,
-        propagate_context: bool = False,
         session_id: str = "",
         **kwargs: Any,
     ) -> tuple[ToolExecutor, AgenticLoop]:
@@ -242,9 +230,6 @@ class SharedServices:
         """
         from core.agent.loop import AgenticLoop, AgenticLoopConfig
         from core.agent.tool_executor import ToolExecutor
-
-        if propagate_context:
-            self._propagate_contextvars()
 
         # Resolve defaults for this mode
         defaults = _MODE_DEFAULTS[mode]
@@ -358,6 +343,7 @@ class SharedServices:
             allowed_tools=effective_allowed_tools,
             interactive_approval=mode in {SessionMode.REPL, SessionMode.IPC},
             resource_lock_pool=self.resource_lock_pool,
+            offload_store=self.offload_store,
         )
 
         # PR-R6 (2026-05-24) — operator's effort choice from ``/model``
@@ -380,6 +366,7 @@ class SharedServices:
                 system_suffix=system_suffix,
                 allowed_tool_names=allowed_tool_names,
                 session_id=session_id,
+                user_profile=self.user_profile,
             ),
             model=settings.model,
             provider=provider,
@@ -401,10 +388,6 @@ class SharedServices:
                     for name, factory in self.control_state_factories.items()
                 }
             )
-        # Set per-thread ContextVar so tool handlers see the correct loop
-        from core.cli.session_state import set_current_loop
-
-        set_current_loop(loop)
         return executor, loop
 
     # --- internal helpers -----------------------------------------------------
@@ -508,18 +491,6 @@ class SharedServices:
         )
         return registry
 
-    def _propagate_contextvars(self) -> None:
-        """Re-inject ContextVars for daemon/scheduler threads."""
-        from core.cli.bootstrap import GeodeBootstrap
-
-        boot = GeodeBootstrap(
-            mcp_manager=self.mcp_manager,
-            skill_registry=self.skill_registry,
-            readiness=None,
-            hook_system=self.hook_system,
-        )
-        boot.propagate_to_thread()
-
 
 # ---------------------------------------------------------------------------
 # Factory — build SharedServices from bootstrap
@@ -544,22 +515,61 @@ def build_shared_services(
     worker_module: str | None = None,
     agent_search_dirs: Sequence[Path] = (),
     control_state_factories: Mapping[str, Callable[[Path], Any]] | None = None,
+    persistence: ToolPersistenceServices | None = None,
+    integrations: ToolIntegrationServices | None = None,
+    scheduler_service: Any = None,
+    user_profile: Any = None,
+    cost_budget: float = 0.0,
 ) -> SharedServices:
     """Construct SharedServices with resolved config values.
 
-    Tool handlers read the current loop from ``_current_loop_ctx`` ContextVar
-    (per-thread, no shared mutable ref).  If *hook_system* is None, a default
-    HookSystem is built via ``build_hooks()``.
+    If *hook_system* is None, a default HookSystem is built via ``build_hooks()``.
     """
     # Validate composition before allocating hooks or process-global offload state.
     if tool_plan_builder is None:
         raise RuntimeError("shared services requires an injected bound tool-plan builder")
     if not worker_module:
         raise RuntimeError("shared services requires an injected product worker module")
+    if user_profile is None:
+        if persistence is not None and persistence.user_profile is not None:
+            user_profile = persistence.user_profile
+        else:
+            from core.wiring.bootstrap import ensure_user_profile
+
+            user_profile = ensure_user_profile()
+    if persistence is None:
+        from core.tools.handlers import ToolPersistenceServices
+
+        persistence = ToolPersistenceServices(user_profile=user_profile)
+    elif persistence.user_profile is not user_profile:
+        from core.tools.handlers import ToolPersistenceServices
+
+        persistence = ToolPersistenceServices(
+            memory=persistence.memory,
+            user_profile=user_profile,
+            offload_store=persistence.offload_store,
+        )
+
+    # Handlers must capture the same bus that the service later owns. Keep the
+    # bus empty until the immutable plan validates, then attach default sinks.
+    owns_hook_system = hook_system is None
+    if hook_system is None:
+        from core.hooks import HookSystem
+
+        hook_system = HookSystem()
+    builder_kwargs = {
+        "verbose": verbose,
+        "mcp_manager": mcp_manager,
+        "skill_registry": skill_registry,
+        "hooks": hook_system,
+        "persistence": persistence,
+    }
+    if integrations is not None:
+        builder_kwargs["integrations"] = integrations
+    if scheduler_service is not None:
+        builder_kwargs["scheduler_service"] = scheduler_service
     bound_tool_plan, transient_tool_handlers = tool_plan_builder(
-        verbose=verbose,
-        mcp_manager=mcp_manager,
-        skill_registry=skill_registry,
+        **builder_kwargs,
     )
     transient_tool_handlers = dict(transient_tool_handlers)
     if collisions := sorted(
@@ -573,8 +583,7 @@ def build_shared_services(
     tool_handlers = {**bound_tool_plan.handlers, **transient_tool_handlers}
 
     # Build hooks if not provided
-    owns_hook_system = hook_system is None
-    if hook_system is None:
+    if owns_hook_system:
         from core.wiring.bootstrap import build_hooks
 
         hook_system, _event_store, _metrics = build_hooks(
@@ -583,6 +592,8 @@ def build_shared_services(
             log_dir=None,
             activity_sink_provider=activity_sink_provider,
             feature_hook_registrar=feature_hook_registrar,
+            user_profile=user_profile,
+            hooks=hook_system,
         )
     elif feature_hook_registrar is not None:
         feature_hook_registrar(hook_system)
@@ -605,23 +616,6 @@ def build_shared_services(
                 events=hook_system,
                 policy_sources=policy_sources,
             )
-
-    # P0: Tool result offloading
-    from core.wiring.bootstrap import build_tool_offload
-
-    build_tool_offload(
-        session_id=f"geode-{uuid.uuid4().hex[:8]}",
-        hooks=hook_system,
-    )
-
-    # Resolve cost budget
-    cost_budget = 0.0
-    try:
-        from core.cli.commands import _get_cost_budget
-
-        cost_budget = _get_cost_budget()
-    except Exception:
-        log.debug("Cost budget resolution failed, using 0 (unlimited)")
 
     # Build unified LaneQueue if not provided
     if lane_queue is None:
@@ -646,5 +640,8 @@ def build_shared_services(
         worker_module=worker_module,
         agent_search_dirs=tuple(agent_search_dirs),
         control_state_factories=control_state_factories or {},
-        _cost_budget=cost_budget,
+        user_profile=user_profile,
+        offload_store=(persistence.offload_store if persistence is not None else None),
+        notification=(integrations.notification if integrations is not None else None),
+        _cost_budget=float(cost_budget),
     )

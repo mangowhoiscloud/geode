@@ -102,7 +102,11 @@ def build_default_policies() -> PolicyChain:
     return build_6layer_chain(profile=profile, org=org, mode_policies=mode_policies)
 
 
-def build_default_registry() -> ToolRegistry:
+def build_default_registry(
+    *,
+    memory_services: Any = None,
+    notification: Any = None,
+) -> ToolRegistry:
     """Build ToolRegistry with GEODE core tools registered.
 
     Specialized tools are expected to be provided by external packages.
@@ -135,19 +139,19 @@ def build_default_registry() -> ToolRegistry:
         RuleUpdateTool,
     )
 
-    registry.register(MemorySearchTool())
-    registry.register(MemoryGetTool())
-    registry.register(MemorySaveTool())
-    registry.register(RuleCreateTool())
-    registry.register(RuleUpdateTool())
-    registry.register(RuleDeleteTool())
-    registry.register(RuleListTool())
+    registry.register(MemorySearchTool(services=memory_services))
+    registry.register(MemoryGetTool(services=memory_services))
+    registry.register(MemorySaveTool(services=memory_services))
+    registry.register(RuleCreateTool(memory_services))
+    registry.register(RuleUpdateTool(memory_services))
+    registry.register(RuleDeleteTool(memory_services))
+    registry.register(RuleListTool(memory_services))
     # Output (3)
     from core.tools.output_tools import ExportJsonTool, GenerateReportTool, SendNotificationTool
 
     registry.register(GenerateReportTool())
     registry.register(ExportJsonTool())
-    registry.register(SendNotificationTool())
+    registry.register(SendNotificationTool(notification))
     # Recall (1) — PR-Hermes-1d (2026-05-22). FTS5-backed search over
     # the current project's session messages (Phase 1c index).
     from core.tools.session_search import SessionSearchTool

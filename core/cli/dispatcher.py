@@ -24,10 +24,7 @@ from core.cli.commands import (
     show_help,
 )
 from core.cli.onboarding import render_readiness
-from core.cli.session_state import (
-    _get_readiness,
-    _scheduler_service_ctx,
-)
+from core.cli.session_state import _get_readiness
 from core.ui.console import console
 from core.wiring.startup import check_readiness
 
@@ -40,6 +37,8 @@ def _handle_command(
     skill_registry: Any = None,
     mcp_manager: Any = None,
     command_registry: Any = None,
+    scheduler_service: Any = None,
+    agentic_ref: Any = None,
 ) -> tuple[bool, bool, Any]:
     """Handle a slash command. Returns (should_break, new_verbose, resume_state)."""
     action = resolve_action(cmd)
@@ -86,11 +85,11 @@ def _handle_command(
     elif action == "goal":
         from core.cli.commands import cmd_goal
 
-        cmd_goal(args)
+        cmd_goal(args, agentic_ref=agentic_ref)
     elif action == "login":
         cmd_login(args)
     elif action == "schedule":
-        cmd_schedule(args, scheduler_service=_scheduler_service_ctx.get(None))
+        cmd_schedule(args, scheduler_service=scheduler_service)
     elif action == "trigger":
         cmd_trigger(args)
     elif action == "status":
@@ -153,7 +152,7 @@ def _handle_command(
         if skill_registry is not None:
             from core.cli.commands import cmd_skill_invoke
 
-            cmd_skill_invoke(skill_registry, args)
+            cmd_skill_invoke(skill_registry, args, agentic_ref=agentic_ref)
         else:
             console.print("  [muted]Skills not loaded.[/muted]")
             console.print()

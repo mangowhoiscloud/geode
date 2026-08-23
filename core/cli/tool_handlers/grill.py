@@ -37,10 +37,8 @@ def _build_grill_handlers(store: GrillStore | None = None) -> UniqueEntries[str,
                 call_id=get_tool_call_id(),
             )
 
-    def _mark_prompt_dirty() -> None:
-        from core.cli.session_state import get_current_loop
-
-        loop = get_current_loop()
+    def _mark_prompt_dirty(context: Any = None) -> None:
+        loop = getattr(context, "agent_loop", None)
         if loop is not None:
             loop._prompt_dirty = True
 
@@ -66,7 +64,7 @@ def _build_grill_handlers(store: GrillStore | None = None) -> UniqueEntries[str,
         except (TypeError, ValueError) as exc:
             return {"error": str(exc), "action": action}
         _record(grill, trigger=f"update_grill:{action}")
-        _mark_prompt_dirty()
+        _mark_prompt_dirty(kwargs.get("_tool_context"))
         return {"status": "ok", "action": action, "grill": grill.to_dict()}
 
     return UniqueEntries((("get_grill", handle_get_grill), ("update_grill", handle_update_grill)))

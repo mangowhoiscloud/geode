@@ -214,7 +214,6 @@ class TestM2SchedulerPolicyChain:
             patch("core.server.supervised.services.SharedServices._build_sub_agent_manager"),
             patch("core.agent.loop.AgenticLoop.__init__", return_value=None),
             patch("core.agent.tool_executor.ToolExecutor.__init__", return_value=None) as te_init,
-            patch("core.cli.session_state.set_current_loop"),
         ):
             services.create_session(SessionMode.SCHEDULER)
             # ToolExecutor should receive filtered handlers
@@ -244,7 +243,6 @@ class TestM2SchedulerPolicyChain:
             patch("core.server.supervised.services.SharedServices._build_sub_agent_manager"),
             patch("core.agent.loop.AgenticLoop.__init__", return_value=None),
             patch("core.agent.tool_executor.ToolExecutor.__init__", return_value=None) as te_init,
-            patch("core.cli.session_state.set_current_loop"),
         ):
             services.create_session(SessionMode.REPL)
             call_kwargs = te_init.call_args

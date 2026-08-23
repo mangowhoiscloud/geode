@@ -36,7 +36,6 @@ Four contracts pinned here:
 
 from __future__ import annotations
 
-import inspect
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -237,10 +236,9 @@ def test_emit_quota_panel_falls_back_to_billing_error_without_provider(
 def test_quota_exhausted_in_ipc_allowlist() -> None:
     """The new event type must be on the thin-client allowlist or it'd
     be silently dropped (v0.52 phase 6 invariant)."""
-    import core.cli.ipc_client as _ipc_mod
+    from core.ipc_protocol import IPC_EVENT_TYPES
 
-    src = inspect.getsource(_ipc_mod)
-    assert '"quota_exhausted"' in src, (
+    assert "quota_exhausted" in IPC_EVENT_TYPES, (
         "quota_exhausted missing from KNOWN_EVENT_TYPES allowlist — "
         "thin client will silently drop the panel event"
     )

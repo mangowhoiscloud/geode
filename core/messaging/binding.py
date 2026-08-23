@@ -18,7 +18,7 @@ from core.memory.session_key import (
     build_gateway_session_key,
 )
 from core.messaging.models import ChannelBinding, InboundMessage
-from core.server.supervised.poller_base import BasePoller
+from core.messaging.poller import BasePoller
 
 MessageProcessor = Callable[[str, dict[str, Any]], Awaitable[str] | str]
 SessionExistsChecker = Callable[[str], bool]
@@ -198,6 +198,8 @@ class ChannelManager:
         )
 
         metadata: dict[str, Any] = {
+            "gateway_schema_version": message.schema_version,
+            "message_id": message.message_id,
             "session_key": session_key,
             "thread_id": message.thread_id,
             "channel": message.channel,

@@ -7,7 +7,7 @@ import time
 from typing import TYPE_CHECKING, Any
 
 from core.messaging.models import InboundMessage
-from core.server.supervised.poller_base import BasePoller
+from core.messaging.poller import BasePoller
 
 log = logging.getLogger(__name__)
 
@@ -78,6 +78,7 @@ class TelegramPoller(BasePoller):
                     sender_name=sender.get("first_name", sender.get("username", "")),
                     content=message.get("text", ""),
                     timestamp=float(message.get("date", time.time())),
+                    message_id=str(update_id),
                 )
 
                 response = await self._manager.aroute_message(inbound)

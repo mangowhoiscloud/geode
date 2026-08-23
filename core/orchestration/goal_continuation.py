@@ -106,7 +106,6 @@ class GoalContinuationHost:
                         else ""
                     ),
                     time_budget_override=self._time_budget_s,
-                    propagate_context=True,
                     session_id=current.session_id,
                 )
                 loop.restore_from_checkpoint(state)

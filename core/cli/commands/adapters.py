@@ -4,13 +4,12 @@ v0.99.40 Follow-up D of the paperclip-style LLMAdapter abstraction
 (``docs/plans/2026-05-23-llm-adapter-abstraction.md``). Surface the
 :class:`core.llm.adapters.LLMAdapter` registry so operators can see what
 PAYG / Subscription / Adapter paths are available + verify each path's
-environment before scheduling a seed-generation run.
+environment when the adapter exposes that optional diagnostic capability.
 
 Three read-only subcommands:
 
 - ``geode adapters list`` — enumerate registered adapters with
-  ``billing_type``, ``test_environment`` summary, and supported model
-  count.
+  ``billing_type`` and an optional ``test_environment`` summary.
 - ``geode adapters detect-model <adapter>`` — paperclip ``detectModel``
   equivalent; reports the currently configured model + provenance from
   the adapter's ``detect_credential()`` hook.
@@ -41,24 +40,35 @@ app = typer.Typer(
 def adapters_list() -> None:
     """List all registered adapters with billing_type + environment status."""
     from core.config.policy_source import EMPTY_POLICY_SOURCES
-    from core.llm.adapters import bootstrap_builtins, list_adapters
+    from core.llm.adapters import (
+        EnvironmentDiagnosticCapable,
+        bootstrap_builtins,
+    )
 
-    bootstrap_builtins(policy_sources=EMPTY_POLICY_SOURCES)
-    adapters = list_adapters()
-    if not adapters:
+    snapshot = bootstrap_builtins(policy_sources=EMPTY_POLICY_SOURCES)
+    registrations = tuple(snapshot.registrations.values())
+    if not registrations:
         typer.echo("No LLM adapters registered.")
         raise typer.Exit()
 
-    header = f"{'NAME':<20} {'PROVIDER':<10} {'SOURCE':<14} {'BILLING':<22} STATUS"
+    header = f"{'NAME':<20} {'PROVIDER':<10} {'SOURCE':<14} {'API':<25} {'BILLING':<22} STATUS"
     typer.echo(header)
     typer.echo("-" * len(header))
-    for a in adapters:
-        report = a.test_environment()
-        status = "ok" if report.ok else "missing — " + (report.hints[0] if report.hints else "")
+    for registration in registrations:
+        a = registration.adapter
+        assert registration.provider_spec is not None
+        spec = registration.provider_spec
+        if isinstance(a, EnvironmentDiagnosticCapable):
+            report = a.test_environment()
+            status = "ok" if report.ok else "missing — " + (report.hints[0] if report.hints else "")
+        else:
+            status = "n/a — diagnostics unsupported"
         typer.echo(
-            f"{a.name:<20} {a.provider:<10} {a.source:<14} {a.billing_type.value:<22} {status}"
+            f"{a.name:<20} {spec.profile.provider:<10} "
+            f"{spec.credential.source:<14} {spec.transport.api:<25} "
+            f"{spec.credential.billing_type.value:<22} {status}"
         )
-    typer.echo(f"\n{len(adapters)} adapter(s) registered.")
+    typer.echo(f"\nRegistry generation {snapshot.generation}: {len(registrations)} adapter(s).")
     typer.echo(
         'Override per role via ~/.geode/config.toml [seed_generation.role.<role>] source = "..."'
     )
@@ -68,7 +78,12 @@ def adapters_list() -> None:
 def adapters_detect_model(name: str) -> None:
     """Report the currently configured model + provenance for ``name``."""
     from core.config.policy_source import EMPTY_POLICY_SOURCES
-    from core.llm.adapters import AdapterNotFoundError, bootstrap_builtins, get_adapter
+    from core.llm.adapters import (
+        AdapterNotFoundError,
+        CredentialDetectionCapable,
+        bootstrap_builtins,
+        get_adapter,
+    )
 
     bootstrap_builtins(policy_sources=EMPTY_POLICY_SOURCES)
     try:
@@ -76,6 +91,10 @@ def adapters_detect_model(name: str) -> None:
     except AdapterNotFoundError as exc:
         typer.echo(f"adapter {name!r} not registered: {exc}")
         raise typer.Exit(code=1) from exc
+
+    if not isinstance(adapter, CredentialDetectionCapable):
+        typer.echo(f"{name}: credential detection not supported by this adapter.")
+        raise typer.Exit(code=2)
 
     detection = adapter.detect_credential()
     if detection is None:

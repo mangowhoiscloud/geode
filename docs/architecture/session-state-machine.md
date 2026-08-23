@@ -115,15 +115,17 @@ inputs, same source) but still a dual-SoT read.
 
 ## Ambient state (accepted, documented)
 
-ContextVars (26 across core) inject cross-cutting references
-(cognitive state, session ids, notification adapter, gateway, scheduler).
-They are NOT machine state: `arun()` re-binds the session-scoped ones
-from the loop's restored fields at every turn, so a correct
-`restore_from_checkpoint` makes the ambient view converge. The wiring
-rules (set/get parity, bootstrap registration) live in CLAUDE.md's
-Wiring Verification table. Reducing the ambient surface is deliberately
-out of scope for the automaton: the risk of rewiring 26 injection points
-exceeds the value while the re-binding contract holds.
+The generated inventory currently records 24 module/class-scoped ContextVars
+across the production packages, including four created by `ContextLocal`: 7 request
+identities, 9 request-local mutable values, 7 diagnostic scopes, and 1 cache.
+Every row records its owner,
+setter/reset boundary, lifetime, and teardown in
+[`context-var-lifecycles.json`](context-var-lifecycles.json); the generated
+architecture baseline attaches the executable async propagation/reset test
+reference to every item. They are NOT machine state: `arun()` re-binds the
+session-scoped values from restored loop state. Runtime services instead cross
+composition boundaries through grouped configuration, constructors, and
+`ToolContext`.
 
 ## Observability
 

@@ -282,56 +282,28 @@ name = "CLI must not import server/messaging (process boundary)"
 type = "forbidden"
 source_modules = ["core.cli"]
 forbidden_modules = ["core.server", "core.messaging"]
-# Owner, rationale, age, target, and expiry metadata are enforced from
-# docs/architecture/exception-debt.toml.
-ignore_imports = [
-    "core.cli.typer_serve -> core.server.supervised.services",
-    "core.cli.typer_serve -> core.server.supervised.webhook_handler",
-    "core.cli.typer_serve -> core.server.ipc_server.poller",
-    "core.cli.typer_serve -> core.messaging.binding",
-    "core.cli.scheduler_drain -> core.server.supervised.services",
-    "core.wiring.adapters -> core.messaging.binding",
-    "core.wiring.adapters -> core.messaging.slack_transport",
-    "core.mcp.slack_adapter -> core.messaging.slack_transport",
-    "core.cli.doctor -> core.messaging.slack_transport",
-]
+# ``core.wiring`` is the legal outer-composition layer. This contract rejects
+# CLI-owned process imports while allowing injected capabilities to traverse
+# that composition boundary.
+allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
 name = "Agent stays pure (no CLI/server)"
 type = "forbidden"
 source_modules = ["core.agent"]
 forbidden_modules = ["core.cli", "core.server"]
-# Metadata and expiry are enforced from the exception-debt ledger.
-ignore_imports = [
-    "core.agent.loop.agent_loop -> core.cli.commands",
-    "core.agent.approval -> core.cli",
-]
 
 [[tool.importlinter.contracts]]
 name = "Server may host agent but never CLI"
 type = "forbidden"
 source_modules = ["core.server"]
 forbidden_modules = ["core.cli"]
-# Metadata and expiry are enforced from the exception-debt ledger.
-ignore_imports = [
-    "core.server.supervised.services -> core.cli.commands",
-    "core.server.supervised.services -> core.cli.session_state",
-    "core.server.supervised.services -> core.cli.bootstrap",
-    "core.agent.loop.agent_loop -> core.cli.commands",
-    "core.agent.approval -> core.cli",
-    "core.server.ipc_server.poller -> core.cli",
-    "core.server.ipc_server.poller -> core.cli.session_state",
-]
 
 [[tool.importlinter.contracts]]
 name = "Messaging integration is capability-pure (no process imports)"
 type = "forbidden"
 source_modules = ["core.messaging"]
 forbidden_modules = ["core.cli", "core.server", "core.agent"]
-# Metadata and expiry are enforced from the exception-debt ledger.
-ignore_imports = [
-    "core.messaging.binding -> core.server.supervised.poller_base",
-]
 
 [[tool.importlinter.contracts]]
 name = "Classified kernel does not import the bundled self-improving product"

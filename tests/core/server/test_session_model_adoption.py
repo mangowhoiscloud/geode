@@ -38,7 +38,11 @@ def test_client_capability_adopts_cli_project_model() -> None:
         )
     )
 
-    assert result == {"type": "ack"}
+    assert result == {
+        "type": "ack",
+        "protocol_version": "geode.ipc.v0",
+        "features": [],
+    }
     loop.update_model_async.assert_awaited_once()
     assert loop.update_model_async.call_args.args[0] == "claude-opus-4-8"
 

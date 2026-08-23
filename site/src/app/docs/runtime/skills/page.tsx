@@ -62,6 +62,28 @@ argument-hint: "[issue-number]"
               <code>{"{skill_context}"}</code> 블록 한 곳으로만 들어갑니다.
             </p>
 
+            <h2>프로젝트·개인 스킬 승인</h2>
+            <p>
+              wheel과 함께 출하되는 builtin 스킬은 1급 코드로 승인됩니다. project와
+              personal 스킬은 계층 우선순위로 승자를 고른 다음
+              <a href="/geode/docs/config/basics">확장 신뢰 정책</a>의
+              <code>skill:&lt;name&gt;</code> 항목을 확인합니다. 승인되지 않은
+              상위 계층 스킬을 발견했다고 하위 계층의 같은 이름으로 몰래
+              fallback하지 않습니다.
+            </p>
+            <pre>{`"skill:my-skill": {
+  "enabled": true,
+  "trusted": true,
+  "execution": "trusted",
+  "capabilities": ["shell"]
+}`}</pre>
+            <p>
+              <code>capabilities: [&quot;shell&quot;]</code>은 본문에
+              <code>!`cmd`</code> 동적 컨텍스트가 있을 때만 필요합니다. 이 권한은
+              명령을 샌드박스에 넣지 않습니다. 해당 스킬을 신뢰해 호출 시점에
+              GEODE 프로세스 권한으로 실행하도록 명시적으로 승인하는 것입니다.
+            </p>
+
             <h2>호출</h2>
             <table>
               <thead>
@@ -110,6 +132,11 @@ argument-hint: "[issue-number]"
                   <td>같은 이름인데 의도한 버전이 안 잡힘</td>
                   <td>스코프 override. 프로젝트가 개인을 이깁니다</td>
                   <td><code>geode skill show &lt;name&gt;</code>으로 어느 계층이 잡혔는지 확인합니다</td>
+                </tr>
+                <tr>
+                  <td>project/personal 스킬이 발견됐지만 목록에 없음</td>
+                  <td><code>skill:&lt;name&gt;</code> 승인 누락 또는 동적 컨텍스트의 <code>shell</code> 권한 누락</td>
+                  <td>extension policy를 고친 뒤 새 세션을 시작합니다. 거부 상태는 runtime health의 <code>extensions</code>에서 확인합니다</td>
                 </tr>
                 <tr>
                   <td>fork 스킬이 메인 대화 컨텍스트를 못 봄</td>
@@ -181,6 +208,29 @@ and !\`cmd\` is replaced with shell output at invocation time.`}</pre>
               <code>core/agent/loop/_context.py</code>.
             </p>
 
+            <h2>Authorizing project and personal skills</h2>
+            <p>
+              Built-in skills shipped in the wheel are approved as first-party
+              code. For project and personal skills, GEODE first selects the
+              winner by tier precedence, then checks its
+              <code>skill:&lt;name&gt;</code> record in the
+              <a href="/geode/docs/config/basics">extension trust policy</a>.
+              A rejected higher-precedence skill does not silently fall back to
+              a same-named skill from a lower tier.
+            </p>
+            <pre>{`"skill:my-skill": {
+  "enabled": true,
+  "trusted": true,
+  "execution": "trusted",
+  "capabilities": ["shell"]
+}`}</pre>
+            <p>
+              <code>capabilities: [&quot;shell&quot;]</code> is required only when
+              the body contains <code>!`cmd`</code> dynamic context. It is not a
+              sandbox: it explicitly trusts that skill to run the command with
+              the GEODE process&apos;s authority at invocation time.
+            </p>
+
             <h2>Invocation</h2>
             <table>
               <thead>
@@ -230,6 +280,11 @@ and !\`cmd\` is replaced with shell output at invocation time.`}</pre>
                   <td>The wrong version of a same-named skill is picked</td>
                   <td>Scope override: project beats personal</td>
                   <td>Check which tier resolved with <code>geode skill show &lt;name&gt;</code></td>
+                </tr>
+                <tr>
+                  <td>A discovered project or personal skill is absent</td>
+                  <td>Missing <code>skill:&lt;name&gt;</code> grant, or missing <code>shell</code> capability for dynamic context</td>
+                  <td>Fix the extension policy and start a new session. Check the rejected decision under <code>extensions</code> in runtime health</td>
                 </tr>
                 <tr>
                   <td>A fork skill cannot see the main conversation</td>

@@ -583,7 +583,7 @@ graph LR
 | **Agent** | AgenticLoop, SubAgentManager, CLIPoller, Gateway wiring | `core/cli/`, `core/server/`, `core/messaging/`, `core/integrations/messaging/`, `core/wiring/` |
 | **Harness** | SessionLane, LaneQueue, PolicyChain, TaskGraph, HookSystem | `core/orchestration/`, `core/hooks/` |
 | **Runtime** | Agentic tools, native ToolRegistry, MCP Catalog (Anthropic registry + 프로젝트 설정 서버), 런타임 Skills, Memory (multi-tier), advisory Plan | `core/tools/`, `core/memory/`, `core/agent/plan.py` |
-| **Model** | 5개 어댑터 레지스트리: Anthropic PAYG, OpenAI PAYG/Codex OAuth, GLM PAYG/Coding Plan | `core/llm/adapters/` |
+| **Model** | 불변 generation 어댑터 레지스트리: 내장 5개 + 지원 패키지 진입점 | `core/llm/adapters/` |
 
 `.geode/` — 에이전트 컨텍스트 라이프사이클 (모든 LLM 호출에 5-tier 계층 어셈블):
 

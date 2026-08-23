@@ -38,7 +38,6 @@ from core.llm.adapters.base import (
     CredentialDetection,
     EnvironmentReport,
     ModelSpec,
-    QuotaWindows,
     StreamEvent,
     TextCompletionResult,
     WebSearchResult,
@@ -224,10 +223,6 @@ class GlmCodingPlanAdapter:
                 )
             )
         return models
-
-    def get_quota_windows(self) -> QuotaWindows | None:
-        # GLM Coding Plan does not expose a programmatic quota surface yet.
-        return None
 
     def detect_credential(self) -> CredentialDetection | None:
         api_key, base_url = _resolve_coding_plan_endpoint(self.routing_sources)

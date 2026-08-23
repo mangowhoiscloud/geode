@@ -7,7 +7,7 @@ import time
 from typing import TYPE_CHECKING, Any
 
 from core.messaging.models import InboundMessage
-from core.server.supervised.poller_base import BasePoller
+from core.messaging.poller import BasePoller
 
 log = logging.getLogger(__name__)
 
@@ -82,6 +82,7 @@ class DiscordPoller(BasePoller):
                     content=msg.get("content", ""),
                     timestamp=time.time(),
                     metadata={"guild_id": msg.get("guild_id", "")},
+                    message_id=str(msg_id),
                 )
 
                 response = await self._manager.aroute_message(inbound)

@@ -36,6 +36,7 @@ class AgenticLoopConfig:
     response_schema: dict[str, Any] | None = None
     allow_actionable_partial_on_empty: bool = False
     yield_after_tool_round: bool = False
+    user_profile: Any = None
 
 
 def initialize_runtime(
@@ -91,18 +92,18 @@ def initialize_runtime(
     loop._last_llm_error = None
     loop._response_schema = config.response_schema
 
-    from core.llm.adapters import resolve_for
     from core.llm.adapters.registry import (
         AdapterNotFoundError,
-        get_adapter,
         normalize_registry_provider,
     )
 
     registry_provider = normalize_registry_provider(loop._provider)
     try:
-        loop._new_adapter = get_adapter(loop._source)
+        loop._new_adapter = loop._adapter_registry_snapshot.get_adapter(loop._source)
     except AdapterNotFoundError:
-        loop._new_adapter = resolve_for(registry_provider, loop._source)
+        loop._new_adapter = loop._adapter_registry_snapshot.resolve_for(
+            registry_provider, loop._source
+        )
     loop._op_logger = OperationLogger(quiet=quiet)
     loop._error_recovery = ErrorRecoveryStrategy(tool_executor)
 
@@ -184,6 +185,8 @@ def initialize_runtime(
         provider=getattr(loop._new_adapter, "provider", loop._provider),
         source=getattr(loop._new_adapter, "source", loop._source),
         adapter_name=getattr(loop._new_adapter, "name", ""),
+        agent_loop=loop,
+        offload_store=getattr(tool_executor, "_offload_store", None),
     )
     loop._consecutive_llm_failures = 0
     loop._LLM_RETRY_CAP = 5

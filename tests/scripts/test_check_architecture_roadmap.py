@@ -935,7 +935,7 @@ def test_failed_language_and_one_character_main_evidence_fail_closed() -> None:
 
 def test_ci_covers_managed_outputs_and_main_to_develop_sync() -> None:
     assert "- 'AGENTS.md'" in CI_WORKFLOW
-    assert "- 'site/src/data/geode/architecture-baseline.json'" in CI_WORKFLOW
+    assert "- 'site/src/**'" in CI_WORKFLOW
     assert "ROADMAP_PR_HEAD_REPO" in CI_WORKFLOW
     assert "ROADMAP_REPOSITORY" in CI_WORKFLOW
     assert "ROADMAP_PR_HEAD_SHA" in CI_WORKFLOW

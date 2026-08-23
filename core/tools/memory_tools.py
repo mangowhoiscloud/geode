@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from contextvars import ContextVar
+from dataclasses import dataclass
 from typing import Any
 
 from core.hooks.dispatch import fire_hook
@@ -27,77 +27,42 @@ from core.tools.base import tool_error
 
 log = logging.getLogger(__name__)
 
-# Thread-safe default stores via contextvars
-_default_session_store_ctx: ContextVar[SessionStorePort | None] = ContextVar(
-    "default_session_store", default=None
-)
-_project_memory_ctx: ContextVar[ProjectMemory | None] = ContextVar(
-    "project_memory_tools", default=None
-)
-_org_memory_ctx: ContextVar[MonoLakeOrganizationMemory | None] = ContextVar(
-    "org_memory_tools", default=None
-)
+
+@dataclass(frozen=True, slots=True)
+class MemoryToolServices:
+    """Narrow persistence dependencies shared by memory tool instances."""
+
+    session_store: SessionStorePort | None = None
+    project_memory: ProjectMemory | None = None
+    organization_memory: MonoLakeOrganizationMemory | None = None
+    hooks: Any = None
 
 
-def set_default_session_store(store: SessionStorePort) -> None:
-    """Set the context-local default session store for memory tools."""
-    _default_session_store_ctx.set(store)
-
-
-def set_project_memory(mem: ProjectMemory | None) -> None:
-    """Set the context-local project memory for memory tools."""
-    _project_memory_ctx.set(mem)
-
-
-def set_org_memory(mem: MonoLakeOrganizationMemory | None) -> None:
-    """Set the context-local organization memory for memory tools."""
-    _org_memory_ctx.set(mem)
-
-
-# Hook system injection (same pattern as core/llm/router.py)
-_hooks_ctx: ContextVar[Any] = ContextVar("memory_tools_hooks", default=None)
-
-
-def set_memory_hooks(hooks: Any) -> None:
-    """Inject HookSystem so memory tool execute() methods can fire events."""
-    _hooks_ctx.set(hooks)
-
-
-def clear_memory_hooks(expected: Any) -> bool:
-    """Clear the current-context binding when it still matches ``expected``."""
-    if _hooks_ctx.get() is not expected:
-        return False
-    _hooks_ctx.set(None)
-    return True
-
-
-def _fire_hook(event: HookEvent, data: dict[str, Any]) -> None:
-    """Fire a hook event using the ContextVar-bound HookSystem (or no-op)."""
-    fire_hook(_hooks_ctx.get(), event, data)
-
-
-def _get_session_store(store: SessionStorePort | None = None) -> tuple[SessionStorePort, bool]:
+def _get_session_store(store: SessionStorePort | None) -> tuple[SessionStorePort, bool]:
     """Resolve the session store; second element is True when ephemeral.
 
     PR-AUDIT-AB (2026-06-10) — the ephemeral fallback creates a FRESH
     InMemorySessionStore per call, so anything written to it is gone by
     the next tool call. Callers must surface that (``ephemeral: true`` in
-    the tool result) instead of reporting a clean success; bootstrap wires
-    ``set_default_session_store`` so production never takes this branch.
+    the tool result) instead of reporting a clean success; production injects
+    its store through ``MemoryToolServices`` so it never takes this branch.
     """
     if store is not None:
         return store, False
-    default = _default_session_store_ctx.get()
-    if default is not None:
-        return default, False
     log.warning(
-        "SessionStore ContextVar not initialized; falling back to ephemeral "
+        "SessionStore not injected; falling back to ephemeral "
         "InMemorySessionStore — data will NOT survive this call"
     )
     return InMemorySessionStore(), True
 
 
 class _AsyncExecuteMixin:
+    def __init__(self, services: MemoryToolServices | None = None) -> None:
+        self._services = services or MemoryToolServices()
+
+    def _fire_hook(self, event: HookEvent, data: dict[str, Any]) -> None:
+        fire_hook(self._services.hooks, event, data)
+
     def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
         raise NotImplementedError
 
@@ -112,8 +77,13 @@ class MemorySearchTool(_AsyncExecuteMixin):
     Searches session, project (MEMORY.md + rules), and organization tiers.
     """
 
-    def __init__(self, session_store: SessionStorePort | None = None) -> None:
-        self._store = session_store
+    def __init__(
+        self,
+        session_store: SessionStorePort | None = None,
+        *,
+        services: MemoryToolServices | None = None,
+    ) -> None:
+        super().__init__(services or MemoryToolServices(session_store=session_store))
 
     @property
     def name(self) -> str:
@@ -155,7 +125,7 @@ class MemorySearchTool(_AsyncExecuteMixin):
         tier: str = kwargs.get("tier", "all")
         limit: int = kwargs.get("limit", 10)
 
-        store, ephemeral = _get_session_store(self._store)
+        store, ephemeral = _get_session_store(self._services.session_store)
         matches: list[dict[str, Any]] = []
         query_lower = query.lower()
 
@@ -179,7 +149,7 @@ class MemorySearchTool(_AsyncExecuteMixin):
 
         # Project tier (MEMORY.md + rules)
         if tier in ("project", "all") and len(matches) < limit:
-            proj = _project_memory_ctx.get()
+            proj = self._services.project_memory
             if proj is not None:
                 # Search MEMORY.md content
                 memory_text = proj.load_memory()
@@ -216,7 +186,7 @@ class MemorySearchTool(_AsyncExecuteMixin):
 
         # Organization tier (fixtures)
         if tier in ("organization", "all") and len(matches) < limit:
-            org = _org_memory_ctx.get()
+            org = self._services.organization_memory
             if org is not None:
                 subject_ctx = org.get_subject_context(query)
                 if subject_ctx:
@@ -243,8 +213,13 @@ class MemorySearchTool(_AsyncExecuteMixin):
 class MemoryGetTool(_AsyncExecuteMixin):
     """Tool for retrieving a specific memory entry by session ID."""
 
-    def __init__(self, session_store: SessionStorePort | None = None) -> None:
-        self._store = session_store
+    def __init__(
+        self,
+        session_store: SessionStorePort | None = None,
+        *,
+        services: MemoryToolServices | None = None,
+    ) -> None:
+        super().__init__(services or MemoryToolServices(session_store=session_store))
 
     @property
     def name(self) -> str:
@@ -270,7 +245,7 @@ class MemoryGetTool(_AsyncExecuteMixin):
     def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
         session_id: str = kwargs["session_id"]
 
-        store, ephemeral = _get_session_store(self._store)
+        store, ephemeral = _get_session_store(self._services.session_store)
         data = store.get(session_id)
 
         if data is None:
@@ -296,8 +271,13 @@ class MemoryGetTool(_AsyncExecuteMixin):
 class MemorySaveTool(_AsyncExecuteMixin):
     """Tool for saving data to session memory."""
 
-    def __init__(self, session_store: SessionStorePort | None = None) -> None:
-        self._store = session_store
+    def __init__(
+        self,
+        session_store: SessionStorePort | None = None,
+        *,
+        services: MemoryToolServices | None = None,
+    ) -> None:
+        super().__init__(services or MemoryToolServices(session_store=session_store))
 
     @property
     def name(self) -> str:
@@ -346,7 +326,7 @@ class MemorySaveTool(_AsyncExecuteMixin):
         merge: bool = kwargs.get("merge", True)
         persistent: bool = kwargs.get("persistent", False)
 
-        store, ephemeral = _get_session_store(self._store)
+        store, ephemeral = _get_session_store(self._services.session_store)
 
         if merge:
             existing = store.get(session_id) or {}
@@ -357,7 +337,7 @@ class MemorySaveTool(_AsyncExecuteMixin):
 
         # Persistent write to MEMORY.md (P1.5)
         if persistent:
-            proj = _project_memory_ctx.get()
+            proj = self._services.project_memory
             if proj is not None:
                 from core.memory.project import ProjectMemory
 
@@ -365,7 +345,7 @@ class MemorySaveTool(_AsyncExecuteMixin):
                     insight = str(data.get("content", data))
                     proj.add_insight(insight)
 
-        _fire_hook(HookEvent.MEMORY_SAVED, {"key": session_id, "persistent": persistent})
+        self._fire_hook(HookEvent.MEMORY_SAVED, {"key": session_id, "persistent": persistent})
 
         return {
             "result": {
@@ -427,13 +407,13 @@ class RuleCreateTool(_AsyncExecuteMixin):
         paths: list[str] = kwargs["paths"]
         content: str = kwargs["content"]
 
-        proj = _project_memory_ctx.get()
+        proj = self._services.project_memory
         if proj is None:
             return {"result": {"created": False, "error": "Project memory not available"}}
 
         success = proj.create_rule(rule_name, paths, content)
         if success:
-            _fire_hook(
+            self._fire_hook(
                 HookEvent.RULE_CHANGED,
                 {"action": "created", "name": rule_name, "paths": paths},
             )
@@ -481,13 +461,13 @@ class RuleUpdateTool(_AsyncExecuteMixin):
         rule_name: str = kwargs["name"]
         content: str = kwargs["content"]
 
-        proj = _project_memory_ctx.get()
+        proj = self._services.project_memory
         if proj is None:
             return {"result": {"updated": False, "error": "Project memory not available"}}
 
         success = proj.update_rule(rule_name, content)
         if success:
-            _fire_hook(HookEvent.RULE_CHANGED, {"action": "updated", "name": rule_name})
+            self._fire_hook(HookEvent.RULE_CHANGED, {"action": "updated", "name": rule_name})
         return {
             "result": {
                 "updated": success,
@@ -523,13 +503,13 @@ class RuleDeleteTool(_AsyncExecuteMixin):
     def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
         rule_name: str = kwargs["name"]
 
-        proj = _project_memory_ctx.get()
+        proj = self._services.project_memory
         if proj is None:
             return {"result": {"deleted": False, "error": "Project memory not available"}}
 
         success = proj.delete_rule(rule_name)
         if success:
-            _fire_hook(HookEvent.RULE_CHANGED, {"action": "deleted", "name": rule_name})
+            self._fire_hook(HookEvent.RULE_CHANGED, {"action": "deleted", "name": rule_name})
         return {
             "result": {
                 "deleted": success,
@@ -560,7 +540,7 @@ class RuleListTool(_AsyncExecuteMixin):
         }
 
     def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
-        proj = _project_memory_ctx.get()
+        proj = self._services.project_memory
         if proj is None:
             return {"result": {"rules": [], "error": "Project memory not available"}}
 
@@ -591,7 +571,7 @@ class NoteSaveTool(_AsyncExecuteMixin):
         key: str = kwargs["key"]
         content: str = kwargs["content"]
 
-        proj = _project_memory_ctx.get()
+        proj = self._services.project_memory
         if proj is None:
             return tool_error(
                 "Project memory not available.",
@@ -627,7 +607,7 @@ class NoteReadTool(_AsyncExecuteMixin):
     def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
         query: str = kwargs.get("query", "")
 
-        proj = _project_memory_ctx.get()
+        proj = self._services.project_memory
         if proj is None:
             return tool_error(
                 "Project memory not available.",

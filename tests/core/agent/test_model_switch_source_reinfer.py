@@ -23,6 +23,7 @@ from typing import Any
 
 import pytest
 from core.agent.loop import _model_switching
+from core.llm.adapters.registry import registry_snapshot
 
 
 class _FakeToolProcessor:
@@ -41,6 +42,7 @@ class _FakeLoop:
         self._source = source
         self._source_explicit = explicit
         self._new_adapter = None
+        self._adapter_registry_snapshot = registry_snapshot()
         self._tool_processor = _FakeToolProcessor()
         self._prompt_dirty = False
 

@@ -9,7 +9,7 @@ Protocol: line-delimited JSON over Unix socket (matches CLIPoller server).
 
 from __future__ import annotations
 
-import json
+import contextlib
 import logging
 import os
 import socket
@@ -17,8 +17,18 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from core.ipc_protocol import (
+    IPC_CONTROL_TYPES,
+    IPC_EVENT_TYPES,
+    IPC_FEATURES,
+    IPC_PROTOCOL_VERSION,
+    MAX_IPC_MESSAGE_BYTES,
+    decode_message,
+    encode_message,
+    negotiate_protocol,
+    new_request_id,
+)
 from core.paths import CLI_SOCKET_PATH
-from core.unicode_safety import sanitize_jsonable
 
 log = logging.getLogger(__name__)
 
@@ -136,13 +146,15 @@ def query_serve_version(socket_path: Path | None = None, timeout_s: float = 2.0)
             if not chunk:
                 return None
             buf += chunk
+            if b"\n" not in buf and len(buf) > MAX_IPC_MESSAGE_BYTES:
+                return None
         line = buf.split(b"\n", 1)[0]
-        greeting = json.loads(line.decode("utf-8"))
+        greeting = decode_message(line)
         if not isinstance(greeting, dict) or greeting.get("type") != "session":
             return None
         return str(greeting.get("version", ""))
     except (OSError, ValueError):
-        # ValueError covers json.JSONDecodeError; OSError covers connect
+        # ValueError covers malformed protocol data; OSError covers connect
         # refusal, socket timeout, and reset.
         return None
     finally:
@@ -165,6 +177,8 @@ class IPCClient:
         self._sock: socket.socket | None = None
         self._buf = b""
         self.session_id: str = ""
+        self.protocol_version: str = ""
+        self.features: tuple[str, ...] = ()
 
     def connect(self) -> bool:
         """Connect to serve. Returns True on success.
@@ -181,25 +195,38 @@ class IPCClient:
             self._sock.connect(str(self._socket_path))
             # Read session greeting
             msg = self._recv()
-            if msg and msg.get("type") == "session":
-                self.session_id = msg.get("session_id", "")
-                log.info("Connected to serve (session=%s)", self.session_id)
+            if not msg or msg.get("type") != "session":
+                raise ValueError("Invalid IPC session greeting")
+            self.session_id = msg.get("session_id", "")
+            self.protocol_version, self.features = negotiate_protocol(
+                msg.get("protocol_version"), msg.get("features")
+            )
+            log.info("Connected to serve (session=%s)", self.session_id)
             # Send terminal capability so the daemon knows whether to
             # emit ANSI / spinner output (v0.84.0). The daemon replies
             # with an ``ack`` which we drain here so subsequent
             # one-shot reads (``send_command`` / ``request_resume``)
             # see their actual response, not the stale ack.
-            self._send_client_capability()
-            ack = self._recv()
+            capability_request_id = self._send_client_capability()
+            ack = self._recv_for(capability_request_id)
             if ack and ack.get("type") != "ack":
                 log.debug("Unexpected response to client_capability: %s", ack)
+                self.close()
+                return False
+            if ack and ack.get("protocol_version"):
+                self.protocol_version, self.features = negotiate_protocol(
+                    ack.get("protocol_version"), ack.get("features")
+                )
             return True
-        except (ConnectionRefusedError, OSError) as exc:
+        except (ConnectionRefusedError, OSError, ValueError) as exc:
             log.debug("IPC connect failed: %s", exc)
+            if self._sock is not None:
+                with contextlib.suppress(OSError):
+                    self._sock.close()
             self._sock = None
             return False
 
-    def _send_client_capability(self) -> None:
+    def _send_client_capability(self) -> str:
         """Send terminal capability to the daemon.
 
         Reports ``is_tty`` (both stdin and stdout are terminals) and
@@ -240,9 +267,11 @@ class IPCClient:
             "true",
             "yes",
         )
-        self._send(
+        return self._send(
             {
                 "type": "client_capability",
+                "protocol_version": IPC_PROTOCOL_VERSION,
+                "features": list(IPC_FEATURES),
                 "is_tty": is_tty,
                 "width": width,
                 "model": model,
@@ -254,8 +283,6 @@ class IPCClient:
     def close(self) -> None:
         """Disconnect from serve."""
         if self._sock:
-            import contextlib
-
             with contextlib.suppress(OSError):
                 self._send({"type": "exit"})
                 self._recv()
@@ -326,13 +353,16 @@ class IPCClient:
         # runs; stale Rich widths make streamed panels/code blocks paint a
         # stair-step background at the old column count.
         self._send_client_capability()
-        self._send(payload)
+        request_id = self._send(payload)
 
         while True:
             response = self._recv()
             if response is None:
                 return {"type": "error", "message": "Connection lost"}
             rtype = response.get("type", "")
+            response_request_id = response.get("request_id")
+            if response_request_id and response_request_id != request_id:
+                continue
             if rtype == "stream":
                 if on_stream is not None:
                     on_stream(response.get("data", ""))
@@ -361,67 +391,18 @@ class IPCClient:
                     }
                 )
                 continue
-            # Structured events — all non-stream, non-terminal types
-            if rtype in (
-                "tool_start",
-                "tool_end",
-                "fast_chat_start",
-                "tokens",
-                "round_start",
-                "thinking_start",
-                "thinking_end",
-                "turn_end",
-                "context_event",
-                "subagent_dispatch",
-                "subagent_progress",
-                "subagent_complete",
-                "subagent_state",  # Stage 1 fleet view — per-agent live state
-                "session_cost",
-                # AgenticLoop state events
-                "model_switch_required",
-                "cost_budget_exceeded",
-                "time_budget_expired",
-                "convergence_detected",
-                "repeated_success_no_progress",
-                "goal_decomposition",
-                "progress_plan",
-                # PR-CL-A1 (2026-05-23) — Dynamic Replan UI events.
-                "plan_step",
-                "replan",
-                "tool_backpressure",
-                "tool_diversity_forced",
-                "model_switched",
-                "checkpoint_saved",
-                # OAuth device-code lifecycle (v0.51.1 IPC parity)
-                "oauth_login_started",
-                "oauth_login_pending",
-                "oauth_login_success",
-                "oauth_login_failed",
-                # Daemon-side error surfaces (v0.51.1 IPC parity)
-                "billing_error",
-                "quota_exhausted",  # v0.53.0 — plan-aware quota panel
-                # LLM lifecycle events
-                "llm_retry",
-                "llm_error",
-                "retry_wait",
-                "budget_warning",
-                "reasoning_summary",  # v0.57.0 R6 — live thinking surface
-                # Pipeline milestone events
-                "pipeline_header",
-                "pipeline_gather",
-                "pipeline_analysis",
-                "pipeline_evaluation",
-                "pipeline_score",
-                "pipeline_verification",
-                "pipeline_result",
-                "feedback_loop",
-                "node_skipped",
-                # Internal protocol acks — silently drop
-                "ack",
-                "exit_ack",
-            ):
+            if rtype in IPC_EVENT_TYPES or rtype in IPC_CONTROL_TYPES:
                 if on_event is not None:
                     on_event(response)
+                continue
+            if rtype not in {
+                "result",
+                "error",
+                "protocol_error",
+                "resume_error",
+                "command_result",
+            }:
+                log.debug("Ignoring unknown IPC event type %r", rtype)
                 continue
             return response
 
@@ -554,8 +535,8 @@ class IPCClient:
             payload["continue"] = True
         elif session_id:
             payload["session_id"] = session_id
-        self._send(payload)
-        response = self._recv()
+        request_id = self._send(payload)
+        response = self._recv_for(request_id)
         if response is None:
             return {"type": "resume_error", "message": "Connection lost"}
         return response
@@ -567,17 +548,18 @@ class IPCClient:
         """
         if not self._sock:
             return {"type": "error", "message": "Not connected"}
-        self._send({"type": "command", "cmd": cmd, "args": args})
-        response = self._recv()
+        request_id = self._send({"type": "command", "cmd": cmd, "args": args})
+        response = self._recv_for(request_id)
         if response is None:
             return {"type": "error", "message": "Connection lost"}
         return response
 
-    def _send(self, data: dict[str, Any]) -> None:
+    def _send(self, data: dict[str, Any]) -> str:
         """Send line-delimited JSON."""
         assert self._sock is not None
-        payload = json.dumps(sanitize_jsonable(data), ensure_ascii=False) + "\n"
-        self._sock.sendall(payload.encode("utf-8"))
+        request_id = str(data.setdefault("request_id", new_request_id()))
+        self._sock.sendall(encode_message(data))
+        return request_id
 
     def _recv(self) -> dict[str, Any] | None:
         """Receive one line-delimited JSON message."""
@@ -588,8 +570,19 @@ class IPCClient:
                 if not chunk:
                     return None
                 self._buf += chunk
+                if b"\n" not in self._buf and len(self._buf) > MAX_IPC_MESSAGE_BYTES:
+                    raise ValueError("IPC response exceeds the protocol size limit")
             except (ConnectionResetError, OSError):
                 return None
         line, self._buf = self._buf.split(b"\n", 1)
-        result: dict[str, Any] = json.loads(line.decode("utf-8"))
-        return result
+        return decode_message(line)
+
+    def _recv_for(self, request_id: str) -> dict[str, Any] | None:
+        """Receive the matching response, accepting legacy uncorrelated peers."""
+        while True:
+            response = self._recv()
+            if response is None:
+                return None
+            response_request_id = response.get("request_id")
+            if not response_request_id or response_request_id == request_id:
+                return response

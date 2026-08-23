@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import sqlite3
+import threading
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
+
+_SCHEMA_LOCK = threading.Lock()
 
 
 @contextmanager
@@ -19,9 +22,13 @@ def short_sqlite_connection(
     conn = sqlite3.connect(str(db_path), timeout=10.0)
     conn.row_factory = sqlite3.Row
     try:
-        conn.execute("PRAGMA journal_mode=WAL")
-        ensure_schema(conn)
-        conn.commit()
+        # SQLite serializes schema changes across processes; this small
+        # in-process gate also prevents sibling first-access threads from
+        # racing the journal-mode transition before that lock can settle.
+        with _SCHEMA_LOCK:
+            conn.execute("PRAGMA journal_mode=WAL")
+            ensure_schema(conn)
+            conn.commit()
         if immediate:
             conn.execute("BEGIN IMMEDIATE")
         try:

@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from core.extensions import ExtensionPolicy, ExtensionState
 from core.hooks import HookEvent, HookSystem
 from core.hooks.discovery import HookPluginLoader, discover_hooks
 
@@ -19,6 +20,23 @@ def hooks_dir(tmp_path: Path) -> Path:
     d = tmp_path / "hooks"
     d.mkdir()
     return d
+
+
+def _trusted_policy(*names: str) -> ExtensionPolicy:
+    return ExtensionPolicy.from_mapping(
+        {
+            "version": 1,
+            "extensions": {
+                f"hook:{name}": {
+                    "enabled": True,
+                    "trusted": True,
+                    "execution": "trusted",
+                    "capabilities": [],
+                }
+                for name in names
+            },
+        }
+    )
 
 
 def _make_yaml_plugin(
@@ -130,7 +148,7 @@ class TestYAMLDiscovery:
     def test_discover_yaml_with_handler_fires(self, hooks_dir: Path) -> None:
         _make_yaml_plugin(hooks_dir, "fire-test", events=["session_start"])
 
-        loader = HookPluginLoader()
+        loader = HookPluginLoader(policy=_trusted_policy("fire-test"))
         plugins = loader.load_from_dirs([hooks_dir])
         assert len(plugins) == 1
 
@@ -142,6 +160,53 @@ class TestYAMLDiscovery:
         assert results[0].success is True
         assert results[0].handler_name == "fire-test"
 
+    def test_untrusted_manifest_never_imports_handler(self, hooks_dir: Path) -> None:
+        _make_yaml_plugin(
+            hooks_dir,
+            "poison",
+            handler_body="raise RuntimeError('untrusted code imported')\n",
+        )
+
+        loader = HookPluginLoader(policy=ExtensionPolicy.empty())
+        assert loader.load_from_dirs([hooks_dir]) == []
+        assert loader.decisions[0].state is ExtensionState.REJECTED
+
+    def test_trusted_factory_receives_only_granted_ports(self, hooks_dir: Path) -> None:
+        calls: list[str] = []
+        _make_yaml_plugin(
+            hooks_dir,
+            "context-hook",
+            extra_yaml="capabilities: [events]\n",
+            handler_body=(
+                "def build_extension(context):\n"
+                "    sink = context.require('events')\n"
+                "    def handle(event, data):\n"
+                "        sink.append(event.value)\n"
+                "    return handle\n"
+            ),
+        )
+        policy = ExtensionPolicy.from_mapping(
+            {
+                "version": 1,
+                "extensions": {
+                    "hook:context-hook": {
+                        "enabled": True,
+                        "trusted": True,
+                        "execution": "trusted",
+                        "capabilities": ["events"],
+                    }
+                },
+            }
+        )
+
+        loader = HookPluginLoader(policy=policy, ports={"events": calls, "runtime": object()})
+        loader.load_from_dirs([hooks_dir])
+        hooks = HookSystem()
+        loader.register_all(hooks)
+        hooks.trigger(HookEvent.TOOL_EXEC_ENDED, {})
+
+        assert calls == ["tool_exec_ended"]
+
 
 # ---------------------------------------------------------------------------
 # Tests: Class-based discovery
@@ -149,29 +214,28 @@ class TestYAMLDiscovery:
 
 
 class TestClassDiscovery:
-    def test_discover_class_plugin(self, hooks_dir: Path) -> None:
-        _make_class_plugin(hooks_dir, "my-class-hook", events=["HookEvent.SESSION_STARTED"])
+    def test_discovery_does_not_import_class_only_plugin(self, hooks_dir: Path) -> None:
+        _make_class_plugin(
+            hooks_dir,
+            "my-class-hook",
+            class_body="raise RuntimeError('discovery executed extension code')\n",
+        )
 
         found = discover_hooks([hooks_dir])
-        assert len(found) == 1
-        meta = found[0]
-        assert meta.name == "my-class-hook"
-        assert HookEvent.SESSION_STARTED in meta.events
+        assert found == []
 
-    def test_class_plugin_fires(self, hooks_dir: Path) -> None:
-        _make_class_plugin(hooks_dir, "class-fire", events=["HookEvent.SESSION_ENDED"])
+    def test_class_only_plugin_is_rejected_without_import(self, hooks_dir: Path) -> None:
+        _make_class_plugin(
+            hooks_dir,
+            "class-fire",
+            class_body="raise RuntimeError('loader executed extension code')\n",
+        )
 
-        loader = HookPluginLoader()
+        loader = HookPluginLoader(policy=_trusted_policy("class-fire"))
         plugins = loader.load_from_dirs([hooks_dir])
-        assert len(plugins) == 1
-
-        hooks = HookSystem()
-        loader.register_all(hooks)
-
-        results = hooks.trigger(HookEvent.SESSION_ENDED, {"node": "analyst"})
-        assert len(results) == 1
-        assert results[0].success is True
-        assert results[0].handler_name == "class-fire"
+        assert plugins == []
+        assert loader.decisions[0].state is ExtensionState.REJECTED
+        assert loader.decisions[0].reason == "hook.yaml manifest required"
 
 
 # ---------------------------------------------------------------------------
@@ -190,7 +254,7 @@ class TestRegistration:
         )
         _make_yaml_plugin(hooks_dir, "hook-b", events=["session_start"], priority=60)
 
-        loader = HookPluginLoader()
+        loader = HookPluginLoader(policy=_trusted_policy("hook-a", "hook-b"))
         loader.load_from_dirs([hooks_dir])
 
         hooks = HookSystem()
@@ -233,7 +297,7 @@ class TestRegistration:
             handler_body=handler_low,
         )
 
-        loader = HookPluginLoader()
+        loader = HookPluginLoader(policy=_trusted_policy("high-prio", "low-prio"))
         loader.load_from_dirs([hooks_dir])
 
         hooks = HookSystem()
@@ -247,7 +311,7 @@ class TestRegistration:
     def test_unregister_all_removes_discovered_hooks(self, hooks_dir: Path) -> None:
         _make_yaml_plugin(hooks_dir, "removable", events=["tool_exec_start", "tool_exec_end"])
 
-        loader = HookPluginLoader()
+        loader = HookPluginLoader(policy=_trusted_policy("removable"))
         loader.load_from_dirs([hooks_dir])
 
         hooks = HookSystem()
@@ -259,6 +323,32 @@ class TestRegistration:
         remaining = hooks.list_hooks()
         for event_name, names in remaining.items():
             assert names == [], f"Event {event_name} still has hooks: {names}"
+
+    def test_unregister_closes_plugins_once_in_reverse_order(
+        self, hooks_dir: Path, tmp_path: Path
+    ) -> None:
+        closed = tmp_path / "closed.txt"
+        for name in ("first", "second"):
+            _make_yaml_plugin(
+                hooks_dir,
+                name,
+                handler_body=(
+                    "from pathlib import Path\n"
+                    "def handle(event, data): pass\n"
+                    "def close():\n"
+                    f"    with Path({str(closed)!r}).open('a') as fh:\n"
+                    f"        fh.write({name!r} + '\\n')\n"
+                ),
+            )
+        loader = HookPluginLoader(policy=_trusted_policy("first", "second"))
+        loader.load_from_dirs([hooks_dir])
+        hooks = HookSystem()
+        loader.register_all(hooks)
+
+        loader.unregister_all(hooks)
+        loader.unregister_all(hooks)
+
+        assert closed.read_text().splitlines() == ["second", "first"]
 
 
 # ---------------------------------------------------------------------------
@@ -281,11 +371,13 @@ class TestEdgeCases:
         _make_yaml_plugin(hooks_dir, "disabled-hook", enabled=False)
 
         found = discover_hooks([hooks_dir])
-        assert len(found) == 0
+        assert len(found) == 1
+        assert found[0].enabled is False
 
         loader = HookPluginLoader()
         plugins = loader.load_from_dirs([hooks_dir])
         assert len(plugins) == 0
+        assert loader.decisions[0].state is ExtensionState.DISABLED
 
     def test_disabled_class_hook_not_loaded(self, hooks_dir: Path) -> None:
         _make_class_plugin(
@@ -308,6 +400,12 @@ class TestEdgeCases:
         with pytest.raises(ValueError, match="Invalid hook event"):
             discover_hooks([hooks_dir])
 
+    def test_manifest_typos_are_rejected(self, hooks_dir: Path) -> None:
+        _make_yaml_plugin(hooks_dir, "typo", extra_yaml="enabledd: false\n")
+
+        with pytest.raises(ValueError, match="Unknown hook manifest fields"):
+            discover_hooks([hooks_dir])
+
     def test_missing_handler_file_skipped(self, hooks_dir: Path) -> None:
         """YAML plugin pointing to non-existent handler file is skipped."""
         plugin_dir = hooks_dir / "missing-handler"
@@ -316,9 +414,16 @@ class TestEdgeCases:
             'name: missing-handler\nevents: ["tool_exec_end"]\nhandler: nonexistent.py\nenabled: true\n'
         )
 
-        loader = HookPluginLoader()
-        plugins = loader.load_from_dirs([hooks_dir])
-        assert len(plugins) == 0
+        loader = HookPluginLoader(policy=_trusted_policy("missing-handler"))
+        with pytest.raises(ValueError, match=r"Handler file .* not found"):
+            loader.load_from_dirs([hooks_dir])
+
+    def test_trusted_module_without_handler_is_degraded(self, hooks_dir: Path) -> None:
+        _make_yaml_plugin(hooks_dir, "no-handler", handler_body="VALUE = 1\n")
+        loader = HookPluginLoader(policy=_trusted_policy("no-handler"))
+
+        assert loader.load_from_dirs([hooks_dir]) == []
+        assert loader.decisions[0].state is ExtensionState.DEGRADED
 
     def test_directory_with_plain_files_ignored(self, hooks_dir: Path) -> None:
         """Files (not directories) at the top level should be skipped."""
@@ -335,7 +440,7 @@ class TestEdgeCases:
         )
         (plugin_dir / "handler.py").write_text("def handle(event, data): pass\n")
 
-        loader = HookPluginLoader()
+        loader = HookPluginLoader(policy=_trusted_policy("no-events"))
         plugins = loader.load_from_dirs([hooks_dir])
         assert len(plugins) == 0
 
@@ -356,7 +461,7 @@ class TestEdgeCases:
     def test_loaded_plugins_property(self, hooks_dir: Path) -> None:
         _make_yaml_plugin(hooks_dir, "prop-test", events=["session_start"])
 
-        loader = HookPluginLoader()
+        loader = HookPluginLoader(policy=_trusted_policy("prop-test"))
         assert loader.loaded_plugins == []
 
         loader.load_from_dirs([hooks_dir])

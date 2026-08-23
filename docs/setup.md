@@ -138,7 +138,7 @@ nohup geode serve >/dev/null 2>&1 &
 
 ### Startup Sequence
 
-1. ContextVars (domain, memory, profile, env)
+1. Daemon environment load
 2. Readiness check (API keys)
 3. GeodeRuntime (MCP 13 servers, 10-30s)
 4. SchedulerService (load jobs, start 60s tick)

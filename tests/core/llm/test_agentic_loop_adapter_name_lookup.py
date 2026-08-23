@@ -21,9 +21,69 @@ have not migrated.
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 import pytest
+
+
+def test_agentic_loop_captures_registry_generation_for_lifetime(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A reload affects a newly built loop, never an existing loop."""
+    from core.agent.conversation import ConversationContext
+    from core.agent.loop import AgenticLoop, AgenticLoopConfig
+    from core.agent.tool_executor import ToolExecutor
+    from core.llm.adapters.registry import (
+        _reset_for_test,
+        active_registry_snapshot,
+        bootstrap_builtins,
+        reload_adapters,
+    )
+
+    try:
+        _reset_for_test()
+        first_generation = bootstrap_builtins()
+        first_loop = AgenticLoop(
+            ConversationContext(),
+            ToolExecutor(action_handlers={}),
+            config=AgenticLoopConfig(source="payg", disable_settings_drift=True),
+            model="claude-opus-4-8",
+            provider="anthropic",
+            quiet=True,
+        )
+        first_adapter = first_loop._new_adapter
+
+        second_generation = reload_adapters()
+        second_loop = AgenticLoop(
+            ConversationContext(),
+            ToolExecutor(action_handlers={}),
+            config=AgenticLoopConfig(source="payg", disable_settings_drift=True),
+            model="claude-opus-4-8",
+            provider="anthropic",
+            quiet=True,
+        )
+
+        assert first_loop._adapter_registry_snapshot is first_generation
+        assert first_loop._new_adapter is first_adapter
+        assert second_loop._adapter_registry_snapshot is second_generation
+        assert second_loop._new_adapter is second_generation.get_adapter("anthropic-payg")
+        assert second_loop._new_adapter is not first_adapter
+        assert second_generation.generation == first_generation.generation + 1
+
+        observed: list[object] = []
+
+        async def fake_run(*_args: object, **_kwargs: object) -> object:
+            observed.append(active_registry_snapshot())
+            return object()
+
+        monkeypatch.setattr("core.agent.loop.agent_loop._goal.run", fake_run)
+        asyncio.run(first_loop.arun("generation poison"))
+        assert observed == [first_generation]
+        assert active_registry_snapshot() is second_generation
+    finally:
+        _reset_for_test()
+        bootstrap_builtins()
 
 
 def test_agentic_loop_resolves_via_get_adapter_first() -> None:

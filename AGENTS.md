@@ -30,8 +30,8 @@ owns only the package version and sync date.
 The generated architecture inventory lives at
 `site/src/data/geode/architecture-baseline.json`. Refresh it with
 `uv run python scripts/architecture_baseline.py --update`; CI uses `--check`.
-The current snapshot records 583 production Python files,
-685 test Python files,
+The current snapshot records 590 production Python files,
+691 test Python files,
 86 tool definitions, and
 57 `RuntimeEvent` members.
 <!-- generated:architecture-baseline:end -->
@@ -102,6 +102,11 @@ The agentic loop. `while(tool_use)` primitive that drives every turn.
 Read this first when changing termination paths, loop bounds, or system prompt
 assembly.
 
+For coding-agent state ownership, recovery, workspace/process limits, review,
+and cross-domain task lookup, read
+[`docs/architecture/coding-runtime-authority.md`](docs/architecture/coding-runtime-authority.md)
+before adding a runtime record or store.
+
 ### `core/llm/`
 
 LLM router, providers, prompt assembly, hashing.
@@ -148,7 +153,10 @@ register in `registry.py`, expose schema in `definitions.json`.
 
 MCP server adapters plus 25K result guard.
 
-- `manager.py` — `MCPServerManager`.
+- `manager.py` — `MCPServerManager` compatibility facade over concrete
+  configuration, connection, discovery/invocation, trace, and lifecycle owners.
+- `config_catalog.py`, `connection_pool.py`, `tool_runtime.py`,
+  `lifecycle.py` — the facade's single-purpose collaborators.
 - `stdio_client.py` — STDIO transport. Declares protocol revision
   `2025-06-18`, records the server-negotiated revision in
   `server_protocol_version`, and fail-loud-rejects revisions outside the

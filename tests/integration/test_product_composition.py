@@ -97,6 +97,7 @@ def test_product_owns_self_improving_typer_commands() -> None:
 
 
 def test_daemon_composition_supplies_product_workers_tools_and_prompts(monkeypatch) -> None:
+    from core.cli import commands as cli_commands
     from core.server.supervised import services
     from core.slash_routing import compose_command_registry
     from geode_product import wiring
@@ -108,6 +109,7 @@ def test_daemon_composition_supplies_product_workers_tools_and_prompts(monkeypat
     policy_sources = object()
     monkeypatch.setattr(services, "build_shared_services", build_core)
     monkeypatch.setattr(wiring, "build_policy_sources", Mock(return_value=policy_sources))
+    monkeypatch.setattr(cli_commands, "_get_cost_budget", lambda: 7.5)
 
     assert wiring.build_shared_services(marker=True) == "services"
     assert build_core.call_args.kwargs == {
@@ -121,6 +123,7 @@ def test_daemon_composition_supplies_product_workers_tools_and_prompts(monkeypat
         "activity_sink_provider": wiring.current_activity_sink,
         "feature_hook_registrar": wiring.register_hooks,
         "command_registry": compose_command_registry(PRODUCT_COMMAND_SPECS),
+        "cost_budget": 7.5,
     }
 
 

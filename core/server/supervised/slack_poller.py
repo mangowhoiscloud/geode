@@ -16,9 +16,9 @@ import time
 from typing import TYPE_CHECKING, Any
 
 from core.messaging.models import InboundMessage
+from core.messaging.poller import BasePoller
 from core.messaging.slack_socket_mode import SlackSocketModeClient
 from core.messaging.slack_transport import SlackTransportError
-from core.server.supervised.poller_base import BasePoller
 
 log = logging.getLogger(__name__)
 
@@ -264,6 +264,7 @@ class SlackPoller(BasePoller):
             content=content,
             timestamp=parsed_timestamp,
             thread_id=thread_id,
+            message_id=timestamp,
         )
         is_mention = mention_override or self._manager._is_mentioned(inbound)
         is_thread_reply = bool(raw_thread_id and raw_thread_id != timestamp)

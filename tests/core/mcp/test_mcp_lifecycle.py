@@ -17,6 +17,7 @@ import signal
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from core.extensions import ExtensionPolicy
 from core.hooks import HookEvent
 from core.mcp.manager import (
     ADAPTER_ONLY_MCP_SERVERS,
@@ -24,6 +25,24 @@ from core.mcp.manager import (
     _normalise_mcp_tool,
 )
 from core.mcp.stdio_client import _CLOSE_TIMEOUT_S, StdioMCPClient
+
+
+def _trusted_policy(*names: str) -> ExtensionPolicy:
+    return ExtensionPolicy.from_mapping(
+        {
+            "version": 1,
+            "extensions": {
+                f"mcp:{name}": {
+                    "enabled": True,
+                    "trusted": True,
+                    "execution": "trusted",
+                    "capabilities": [],
+                }
+                for name in names
+            },
+        }
+    )
+
 
 # ---------------------------------------------------------------------------
 # HookEvent tests
@@ -248,6 +267,22 @@ class TestStdioMCPClientLifecycle:
 class TestMCPManagerStartup:
     """Test MCPServerManager.startup() lifecycle."""
 
+    def test_facade_delegates_state_to_single_purpose_collaborators(self) -> None:
+        manager = MCPServerManager()
+
+        assert set(vars(manager)) == {
+            "_catalog",
+            "_trace",
+            "_pool",
+            "_discovery",
+            "_invoker",
+            "_lifecycle",
+        }
+        assert manager._catalog.servers == {}
+        assert manager._pool.clients == {}
+        assert manager._discovery.last_seen_tools == {}
+        assert manager._trace.text_read_cache == {}
+
     def test_startup_calls_load_config_and_connect(self) -> None:
         mgr = MCPServerManager()
 
@@ -277,7 +312,7 @@ class TestMCPManagerStartup:
 
     def test_calendar_adapter_servers_do_not_expose_raw_tools(self) -> None:
         manager = MCPServerManager()
-        manager._servers = {
+        manager._catalog.servers = {
             "google-calendar": {},
             "caldav": {},
             "ordinary": {},
@@ -286,7 +321,7 @@ class TestMCPManagerStartup:
         calendar_client.list_tools.return_value = [{"name": "list_events", "inputSchema": {}}]
         ordinary_client = MagicMock()
         ordinary_client.list_tools.return_value = [{"name": "other_tool", "inputSchema": {}}]
-        manager._clients = {
+        manager._pool.clients = {
             "google-calendar": calendar_client,
             "caldav": calendar_client,
             "ordinary": ordinary_client,
@@ -337,7 +372,7 @@ class TestMCPManagerShutdown:
 
     def test_shutdown_sets_flag(self) -> None:
         mgr = MCPServerManager()
-        assert mgr._shutdown_called is False
+        assert mgr._lifecycle.shutdown_called is False
 
         with (
             patch.object(mgr, "close_all"),
@@ -345,7 +380,7 @@ class TestMCPManagerShutdown:
         ):
             mgr.shutdown()
 
-        assert mgr._shutdown_called is True
+        assert mgr._lifecycle.shutdown_called is True
 
 
 class TestMCPManagerSignalHandlers:
@@ -363,7 +398,7 @@ class TestMCPManagerSignalHandlers:
         ):
             mgr._install_signal_handlers()
 
-        assert mgr._signal_installed is True
+        assert mgr._lifecycle.signal_installed is True
         # SIGTERM handler should be installed
         mock_signal.assert_called()
         # atexit should be registered
@@ -375,12 +410,12 @@ class TestMCPManagerSignalHandlers:
         with patch("core.mcp.manager._is_main_thread", return_value=False):
             mgr._install_signal_handlers()
 
-        assert mgr._signal_installed is False
+        assert mgr._lifecycle.signal_installed is False
 
     def test_signal_handler_idempotent(self) -> None:
         """Installing twice should not double-register."""
         mgr = MCPServerManager()
-        mgr._signal_installed = True
+        mgr._lifecycle.signal_installed = True
 
         with patch("signal.signal") as mock_signal:
             mgr._install_signal_handlers()
@@ -389,8 +424,8 @@ class TestMCPManagerSignalHandlers:
 
     def test_uninstall_signal_handlers(self) -> None:
         mgr = MCPServerManager()
-        mgr._signal_installed = True
-        mgr._prev_sigterm = signal.SIG_DFL
+        mgr._lifecycle.signal_installed = True
+        mgr._lifecycle.prev_sigterm = signal.SIG_DFL
 
         with (
             patch("core.mcp.manager._is_main_thread", return_value=True),
@@ -398,7 +433,7 @@ class TestMCPManagerSignalHandlers:
         ):
             mgr._uninstall_signal_handlers()
 
-        assert mgr._signal_installed is False
+        assert mgr._lifecycle.signal_installed is False
         mock_signal.assert_called_once_with(signal.SIGTERM, signal.SIG_DFL)
 
 
@@ -407,7 +442,7 @@ class TestMCPManagerAtexitCleanup:
 
     def test_atexit_cleanup_calls_close_all_if_not_shutdown(self) -> None:
         mgr = MCPServerManager()
-        mgr._shutdown_called = False
+        mgr._lifecycle.shutdown_called = False
 
         with patch.object(mgr, "close_all") as mock_close:
             mgr._atexit_cleanup()
@@ -416,7 +451,7 @@ class TestMCPManagerAtexitCleanup:
 
     def test_atexit_cleanup_skips_if_already_shutdown(self) -> None:
         mgr = MCPServerManager()
-        mgr._shutdown_called = True
+        mgr._lifecycle.shutdown_called = True
 
         with patch.object(mgr, "close_all") as mock_close:
             mgr._atexit_cleanup()
@@ -429,25 +464,28 @@ class TestMCPManagerHealthCheck:
 
     def test_health_check_basic(self) -> None:
         mgr = MCPServerManager()
-        mgr._servers = {"server-a": {"command": "echo"}, "server-b": {"command": "cat"}}
+        mgr._catalog.servers = {
+            "server-a": {"command": "echo"},
+            "server-b": {"command": "cat"},
+        }
 
         client_a = MagicMock()
         client_a.is_connected.return_value = True
         client_b = MagicMock()
         client_b.is_connected.return_value = False
 
-        mgr._clients = {"server-a": client_a, "server-b": client_b}
+        mgr._pool.clients = {"server-a": client_a, "server-b": client_b}
 
         result = mgr.check_health()
         assert result == {"server-a": True, "server-b": False}
 
     def test_health_check_auto_restart(self) -> None:
         mgr = MCPServerManager()
-        mgr._servers = {"dead-server": {"command": "echo"}}
+        mgr._catalog.servers = {"dead-server": {"command": "echo"}}
 
         dead_client = MagicMock()
         dead_client.is_connected.return_value = False
-        mgr._clients = {"dead-server": dead_client}
+        mgr._pool.clients = {"dead-server": dead_client}
 
         # Mock _get_client to simulate successful restart
         new_client = MagicMock()
@@ -460,11 +498,11 @@ class TestMCPManagerHealthCheck:
 
     def test_health_check_auto_restart_failure(self) -> None:
         mgr = MCPServerManager()
-        mgr._servers = {"dead-server": {"command": "echo"}}
+        mgr._catalog.servers = {"dead-server": {"command": "echo"}}
 
         dead_client = MagicMock()
         dead_client.is_connected.return_value = False
-        mgr._clients = {"dead-server": dead_client}
+        mgr._pool.clients = {"dead-server": dead_client}
 
         with patch.object(mgr, "_get_client", return_value=None):
             result = mgr.check_health(auto_restart=True)
@@ -474,11 +512,11 @@ class TestMCPManagerHealthCheck:
     def test_health_check_no_auto_restart_by_default(self) -> None:
         """Without auto_restart, dead servers stay dead."""
         mgr = MCPServerManager()
-        mgr._servers = {"dead-server": {"command": "echo"}}
+        mgr._catalog.servers = {"dead-server": {"command": "echo"}}
 
         dead_client = MagicMock()
         dead_client.is_connected.return_value = False
-        mgr._clients = {"dead-server": dead_client}
+        mgr._pool.clients = {"dead-server": dead_client}
 
         with patch.object(mgr, "_get_client") as mock_get:
             result = mgr.check_health()
@@ -498,24 +536,24 @@ class TestMCPManagerCloseAll:
         client_b = MagicMock()
         client_b.pid = 200
 
-        mgr._clients = {"a": client_a, "b": client_b}
+        mgr._pool.clients = {"a": client_a, "b": client_b}
 
         mgr.close_all()
 
         client_a.close.assert_called_once()
         client_b.close.assert_called_once()
-        assert len(mgr._clients) == 0
+        assert len(mgr._pool.clients) == 0
 
     def test_close_all_tolerates_exceptions(self) -> None:
         mgr = MCPServerManager()
         client = MagicMock()
         client.pid = 300
         client.close.side_effect = RuntimeError("boom")
-        mgr._clients = {"failing": client}
+        mgr._pool.clients = {"failing": client}
 
         # Should not raise
         mgr.close_all()
-        assert len(mgr._clients) == 0
+        assert len(mgr._pool.clients) == 0
 
 
 class TestMCPManagerConnectAll:
@@ -523,7 +561,7 @@ class TestMCPManagerConnectAll:
 
     def test_connect_all_counts_successes(self) -> None:
         mgr = MCPServerManager()
-        mgr._servers = {"s1": {}, "s2": {}, "s3": {}}
+        mgr._catalog.servers = {"s1": {}, "s2": {}, "s3": {}}
 
         call_count = 0
 
@@ -542,8 +580,8 @@ class TestMCPManagerConnectAll:
 
     def test_failed_server_is_not_retried_until_cooldown(self) -> None:
         """Repeated tool-list builds must not spam MCP_SERVER_FAILED hooks."""
-        mgr = MCPServerManager()
-        mgr._servers = {"missing": {"command": "missing-mcp"}}
+        mgr = MCPServerManager(extension_policy=_trusted_policy("missing"))
+        mgr._catalog.servers = {"missing": {"command": "missing-mcp", "execution": "trusted"}}
 
         mock_client = MagicMock()
         mock_client.connect.return_value = False
@@ -556,18 +594,19 @@ class TestMCPManagerConnectAll:
             assert mgr._get_client("missing") is None
 
         client_cls.assert_called_once()
+        mock_client.close.assert_called_once()
         fire_hook.assert_called_once()
 
     def test_auto_restart_bypasses_failed_server_cooldown(self) -> None:
         mgr = MCPServerManager()
-        mgr._servers = {"s1": {"command": "mock"}}
-        mgr._failed_at["s1"] = 1.0
+        mgr._catalog.servers = {"s1": {"command": "mock"}}
+        mgr._pool.failed_at["s1"] = 1.0
 
         with patch.object(mgr, "_get_client", return_value=None) as get_client:
             result = mgr.check_health(auto_restart=True)
 
         assert result == {"s1": False}
-        assert "s1" not in mgr._failed_at
+        assert "s1" not in mgr._pool.failed_at
         get_client.assert_called_once_with("s1")
 
 
@@ -872,7 +911,7 @@ class TestServerRecycleResilience:
 
     def test_acall_tool_retries_once_after_mid_call_death(self) -> None:
         mgr = MCPServerManager()
-        mgr._servers["srv"] = {"command": "echo", "args": [], "env": {}}
+        mgr._catalog.servers["srv"] = {"command": "echo", "args": [], "env": {}}
 
         dead = MagicMock()
         dead.list_tools.return_value = [
@@ -880,7 +919,7 @@ class TestServerRecycleResilience:
         ]
         dead.acall_tool = AsyncMock(return_value={"error": "MCP tool call failed: t"})
         dead.is_connected.return_value = False
-        mgr._clients["srv"] = dead
+        mgr._pool.clients["srv"] = dead
 
         fresh = MagicMock()
         fresh.acall_tool = AsyncMock(return_value={"content": [{"type": "text", "text": "ok"}]})
@@ -893,7 +932,7 @@ class TestServerRecycleResilience:
 
     def test_acall_tool_mid_call_death_without_respawn_is_connection_error(self) -> None:
         mgr = MCPServerManager()
-        mgr._servers["srv"] = {"command": "echo", "args": [], "env": {}}
+        mgr._catalog.servers["srv"] = {"command": "echo", "args": [], "env": {}}
 
         dead = MagicMock()
         dead.list_tools.return_value = [
@@ -909,8 +948,13 @@ class TestServerRecycleResilience:
         assert "MCP tool call failed" in result.get("error", "")
 
     def test_connection_epoch_bumps_on_new_client(self) -> None:
-        mgr = MCPServerManager()
-        mgr._servers["srv"] = {"command": "echo", "args": [], "env": {}}
+        mgr = MCPServerManager(extension_policy=_trusted_policy("srv"))
+        mgr._catalog.servers["srv"] = {
+            "command": "echo",
+            "args": [],
+            "env": {},
+            "execution": "trusted",
+        }
         assert mgr.connection_epoch == 0
 
         good = MagicMock()
@@ -925,7 +969,7 @@ class TestServerRecycleResilience:
         from core.agent.tool_executor import ToolExecutor
 
         mgr = MCPServerManager()
-        mgr._last_seen_tools["gone_tool"] = "srv"
+        mgr._discovery.last_seen_tools["gone_tool"] = "srv"
 
         executor = ToolExecutor(action_handlers={}, mcp_manager=mgr, hitl_level=0)
         with patch.object(mgr, "find_server_for_tool", return_value=None):
@@ -936,11 +980,11 @@ class TestServerRecycleResilience:
 
     def test_last_seen_tools_recorded_by_get_all_tools(self) -> None:
         mgr = MCPServerManager()
-        mgr._servers["srv"] = {"command": "echo", "args": [], "env": {}}
+        mgr._catalog.servers["srv"] = {"command": "echo", "args": [], "env": {}}
         client = MagicMock()
         client.is_connected.return_value = True
         client.list_tools.return_value = [{"name": "t1", "inputSchema": {}}]
-        mgr._clients["srv"] = client
+        mgr._pool.clients["srv"] = client
 
         _tools = mgr.get_all_tools()
         assert mgr.last_known_server_for_tool("t1") == "srv"
@@ -950,7 +994,7 @@ class TestServerRecycleResilience:
         """Mid-call death of an unannotated tool must NOT auto-retry — the
         original call may have executed (at-least-once hazard)."""
         mgr = MCPServerManager()
-        mgr._servers["srv"] = {"command": "echo", "args": [], "env": {}}
+        mgr._catalog.servers["srv"] = {"command": "echo", "args": [], "env": {}}
         dead = MagicMock()
         dead.list_tools.return_value = [{"name": "t", "input_schema": {}}]
         dead.acall_tool = AsyncMock(return_value={"error": "MCP tool call failed: t"})
@@ -965,11 +1009,11 @@ class TestServerRecycleResilience:
 
     def test_find_server_for_tool_records_last_seen(self) -> None:
         mgr = MCPServerManager()
-        mgr._servers["srv"] = {"command": "echo", "args": [], "env": {}}
+        mgr._catalog.servers["srv"] = {"command": "echo", "args": [], "env": {}}
         client = MagicMock()
         client.is_connected.return_value = True
         client.list_tools.return_value = [{"name": "t9"}]
-        mgr._clients["srv"] = client
+        mgr._pool.clients["srv"] = client
 
         assert mgr.find_server_for_tool("t9") == "srv"
         assert mgr.last_known_server_for_tool("t9") == "srv"

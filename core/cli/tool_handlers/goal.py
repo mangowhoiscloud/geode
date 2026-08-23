@@ -33,10 +33,8 @@ def _build_goal_handlers(store: GoalStore | None = None) -> UniqueEntries[str, A
                 call_id=get_tool_call_id(),
             )
 
-    def _mark_prompt_dirty() -> None:
-        from core.cli.session_state import get_current_loop
-
-        loop = get_current_loop()
+    def _mark_prompt_dirty(context: Any = None) -> None:
+        loop = getattr(context, "agent_loop", None)
         if loop is not None:
             loop._prompt_dirty = True
 
@@ -52,7 +50,7 @@ def _build_goal_handlers(store: GoalStore | None = None) -> UniqueEntries[str, A
         except (TypeError, ValueError) as exc:
             return {"error": str(exc)}
         _record(goal, created=True, trigger="create_goal")
-        _mark_prompt_dirty()
+        _mark_prompt_dirty(kwargs.get("_tool_context"))
         return {"status": "ok", "goal_status": goal.status.value, "goal": goal.to_dict()}
 
     def handle_get_goal(**_: Any) -> dict[str, Any]:
@@ -81,7 +79,7 @@ def _build_goal_handlers(store: GoalStore | None = None) -> UniqueEntries[str, A
         except ValueError as exc:
             return {"error": str(exc)}
         _record(goal, created=False, trigger="update_goal")
-        _mark_prompt_dirty()
+        _mark_prompt_dirty(kwargs.get("_tool_context"))
         return {"status": "ok", "goal_status": goal.status.value, "goal": goal.to_dict()}
 
     return UniqueEntries(

@@ -57,6 +57,13 @@ export default function Page() {
               </tbody>
             </table>
             <p>
+              receiver는 플랫폼 payload 전체를 넘기지 않고 필요한 필드만{" "}
+              <code>geode.gateway.v1</code> <code>InboundMessage</code>로
+              투영합니다. 본문은 64 KiB, JSON metadata는 32 KiB로 제한되고,
+              플랫폼 메시지 ID가 응답 처리까지 상관관계 ID로 전달됩니다. 알 수
+              없는 upstream 필드는 이 투영 경계에서 무시됩니다.
+            </p>
+            <p>
               데몬 모드 세션은 headless이므로 승인을 받을 사용자가 없습니다.
               그래서 <code>run_bash</code>와 <code>delegate_task</code>는
               게이트웨이 경로에서 차단됩니다
@@ -144,6 +151,14 @@ require_mention = true`}</pre>
                 </tr>
               </tbody>
             </table>
+            <p>
+              Receivers do not forward whole platform payloads. They select the
+              required fields into a <code>geode.gateway.v1</code>{" "}
+              <code>InboundMessage</code>. Content is capped at 64 KiB, JSON
+              metadata at 32 KiB, and the platform message ID remains the
+              correlation ID through response processing. Unknown upstream
+              fields are ignored at this projection boundary.
+            </p>
             <p>
               데몬 로그는 <code>~/.geode/logs/serve.log</code>에 10MB 단위 5개
               파일로 로테이션됩니다

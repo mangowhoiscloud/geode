@@ -11,11 +11,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from core.mcp.apple_calendar_adapter import AppleCalendarAdapter
-from core.mcp.calendar_port import (
-    CalendarEvent,
-    get_calendar,
-    set_calendar,
-)
+from core.mcp.calendar_port import CalendarEvent
 from core.mcp.composite_calendar import CompositeCalendarAdapter
 from core.mcp.google_calendar_adapter import GoogleCalendarAdapter
 from core.tools.calendar_tools import CalendarCreateEventTool, CalendarListEventsTool
@@ -46,17 +42,14 @@ def apple_adapter(mock_manager: MagicMock) -> AppleCalendarAdapter:
 
 
 # ---------------------------------------------------------------------------
-# CalendarPort contextvars
+# CalendarPort injection
 # ---------------------------------------------------------------------------
 
 
 class TestCalendarPort:
-    def test_contextvars_injection(self):
-        mock = MagicMock()
-        set_calendar(mock)
-        assert get_calendar() is mock
-        set_calendar(None)
-        assert get_calendar() is None
+    def test_tool_keeps_injected_adapter(self):
+        adapter = MagicMock()
+        assert CalendarListEventsTool(adapter)._calendar is adapter
 
 
 class TestCalendarEvent:
@@ -322,7 +315,6 @@ class TestCalendarListEventsTool:
         assert "calendar" in tool.description.lower()
 
     def test_execute_no_adapter(self):
-        set_calendar(None)
         tool = CalendarListEventsTool()
         result = asyncio.run(tool.aexecute())
         assert result["result"]["count"] == 0
@@ -341,14 +333,10 @@ class TestCalendarListEventsTool:
         }
         google = GoogleCalendarAdapter(manager=mock_manager)
         composite = CompositeCalendarAdapter([google])
-        set_calendar(composite)
-
-        tool = CalendarListEventsTool()
+        tool = CalendarListEventsTool(composite)
         result = asyncio.run(tool.aexecute())
         assert result["result"]["count"] == 1
         assert result["result"]["events"][0]["title"] == "Test"
-
-        set_calendar(None)
 
     def test_aexecute_with_adapter_uses_async_calendar_path(self, mock_manager: MagicMock):
         mock_manager.acall_tool.return_value = {
@@ -363,15 +351,11 @@ class TestCalendarListEventsTool:
         }
         google = GoogleCalendarAdapter(manager=mock_manager)
         composite = CompositeCalendarAdapter([google])
-        set_calendar(composite)
-
-        tool = CalendarListEventsTool()
+        tool = CalendarListEventsTool(composite)
         result = asyncio.run(tool.aexecute())
         assert result["result"]["count"] == 1
         assert result["result"]["events"][0]["title"] == "Async Test"
         mock_manager.acall_tool.assert_awaited_once()
-
-        set_calendar(None)
 
 
 class TestCalendarCreateEventTool:
@@ -380,7 +364,6 @@ class TestCalendarCreateEventTool:
         assert tool.name == "calendar_create_event"
 
     def test_execute_no_adapter(self):
-        set_calendar(None)
         tool = CalendarCreateEventTool()
         result = asyncio.run(tool.aexecute(title="Test", start_datetime="2026-03-19T14:00:00"))
         assert "error" in result
@@ -388,27 +371,19 @@ class TestCalendarCreateEventTool:
     def test_execute_invalid_datetime(self, mock_manager: MagicMock):
         google = GoogleCalendarAdapter(manager=mock_manager)
         composite = CompositeCalendarAdapter([google])
-        set_calendar(composite)
-
-        tool = CalendarCreateEventTool()
+        tool = CalendarCreateEventTool(composite)
         result = asyncio.run(tool.aexecute(title="Test", start_datetime="not-a-date"))
         assert "error" in result
-
-        set_calendar(None)
 
     def test_aexecute_create_with_adapter_uses_async_calendar_path(self, mock_manager: MagicMock):
         mock_manager.acall_tool.return_value = {"id": "async_new"}
         google = GoogleCalendarAdapter(manager=mock_manager)
         composite = CompositeCalendarAdapter([google])
-        set_calendar(composite)
-
-        tool = CalendarCreateEventTool()
+        tool = CalendarCreateEventTool(composite)
         result = asyncio.run(tool.aexecute(title="Test", start_datetime="2026-03-19T14:00:00"))
         assert result["result"]["created"] is True
         assert result["result"]["event_id"] == "async_new"
         mock_manager.acall_tool.assert_awaited_once()
-
-        set_calendar(None)
 
     def test_cli_handlers_are_async_for_calendar_tools(self):
         from core.tools.handlers.single_tool import _build_calendar_handlers

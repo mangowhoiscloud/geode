@@ -70,7 +70,14 @@ async def _drain_and_settle(action_queue: Any, services: Any) -> None:
 def _run_drain(monkeypatch, termination_reason: str) -> tuple[list[dict[str, Any]], _FakeServices]:
     published: list[dict[str, Any]] = []
 
-    async def _fake_publish(question: str, *, session_id: str, source: str, store: Any = None):
+    async def _fake_publish(
+        question: str,
+        *,
+        session_id: str,
+        source: str,
+        store: Any = None,
+        notification: Any = None,
+    ):
         published.append({"question": question, "session_id": session_id, "source": source})
 
     import core.memory.pending_ask as pending_ask_mod

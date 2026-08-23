@@ -26,13 +26,12 @@ def build_skill_prompt(skill_registry: _Any, name: str, arguments: str = "") -> 
     return f"[skill:{name}] {rendered}"
 
 
-def build_grilling_prompt(arg: str, *, skill_registry: _Any) -> str:
+def build_grilling_prompt(arg: str, *, skill_registry: _Any, agentic_ref: _Any) -> str:
     """Build the `/grill` prompt without adding a second execution engine."""
-    from core.cli.session_state import get_current_loop
     from core.memory.grills import GrillStore
     from core.observability.session_timeline import SessionEventKind
 
-    loop = get_current_loop()
+    loop = agentic_ref
     if loop is None or not getattr(loop, "_session_id", ""):
         raise ValueError("/grill requires an active AgenticLoop session")
     db_path = getattr(getattr(loop, "_timeline", None), "db_path", None)
@@ -165,10 +164,9 @@ def cmd_skill_invoke(skill_registry: _Any, arg: str, *, agentic_ref: _Any = None
         # Fork execution: run in isolated subagent
         _pkg.console.print(f"  [dim]Skill '{name}' → forked subagent[/dim]")
         from core.cli.bootstrap import run_agentic_oneshot
-        from core.cli.session_state import get_current_loop
 
         try:
-            loop = get_current_loop()
+            loop = agentic_ref
             if loop is None:
                 raise RuntimeError("AgenticLoop not available for forked skill execution")
             result = run_agentic_oneshot(
@@ -185,9 +183,7 @@ def cmd_skill_invoke(skill_registry: _Any, arg: str, *, agentic_ref: _Any = None
             _pkg.console.print(f"  [error]Skill fork failed: {exc}[/error]")
     else:
         # Inline execution: inject rendered body as user message into main loop
-        from core.cli.session_state import get_current_loop
-
-        _loop = get_current_loop()
+        _loop = agentic_ref
         if _loop is not None:
             from core.async_runtime import run_process_coroutine
 

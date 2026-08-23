@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from contextvars import ContextVar
 from typing import Any
 
 from core.memory.user_profile import FileBasedUserProfile
@@ -19,23 +18,11 @@ from core.tools.base import tool_error
 
 log = logging.getLogger(__name__)
 
-# Thread-safe user profile via ContextVar
-_user_profile_ctx: ContextVar[FileBasedUserProfile | None] = ContextVar(
-    "user_profile_tools", default=None
-)
-
-
-def set_user_profile(profile: FileBasedUserProfile | None) -> None:
-    """Set the context-local user profile for profile tools."""
-    _user_profile_ctx.set(profile)
-
-
-def get_user_profile() -> FileBasedUserProfile | None:
-    """Get the context-local user profile."""
-    return _user_profile_ctx.get()
-
 
 class _AsyncExecuteMixin:
+    def __init__(self, profile: FileBasedUserProfile | None = None) -> None:
+        self._profile = profile
+
     def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
         raise NotImplementedError
 
@@ -67,7 +54,7 @@ class ProfileShowTool(_AsyncExecuteMixin):
         }
 
     def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
-        profile = _user_profile_ctx.get()
+        profile = self._profile
         if profile is None:
             return tool_error(
                 "User profile not configured.",
@@ -138,7 +125,7 @@ class ProfileUpdateTool(_AsyncExecuteMixin):
         }
 
     def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
-        profile = _user_profile_ctx.get()
+        profile = self._profile
         if profile is None:
             return tool_error(
                 "User profile not configured.",
@@ -194,7 +181,7 @@ class ProfilePreferenceTool(_AsyncExecuteMixin):
         }
 
     def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
-        profile = _user_profile_ctx.get()
+        profile = self._profile
         if profile is None:
             return tool_error(
                 "User profile not configured.",
@@ -261,7 +248,7 @@ class ProfileLearnTool(_AsyncExecuteMixin):
         }
 
     def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
-        profile = _user_profile_ctx.get()
+        profile = self._profile
         if profile is None:
             return tool_error(
                 "User profile not configured.",

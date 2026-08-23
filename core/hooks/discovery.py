@@ -1,8 +1,8 @@
 """Hook Plugin Discovery — directory-based plugin loading for RuntimeEventBus.
 
-Scans directories for hook plugins in two formats:
-  1. Python module: directory with ``hook.py`` containing a class implementing HookPlugin
-  2. YAML config: directory with ``hook.yaml`` containing metadata + handler module path
+Scans ``hook.yaml`` manifests without importing their handler modules. Legacy
+class-only ``hook.py`` directories are rejected because their metadata cannot
+be inspected without executing third-party code.
 
 External developers can add hooks by dropping a plugin directory into a
 configured hooks path, without modifying core GEODE code.
@@ -14,12 +14,25 @@ import importlib.util
 import logging
 import sys
 import types
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Protocol, runtime_checkable
 
 import yaml
 
+from core.extensions import (
+    ExtensionDecision,
+    ExtensionDescriptor,
+    ExtensionExecution,
+    ExtensionPolicy,
+    ExtensionState,
+    ExtensionSurface,
+    decide_extension,
+    extension_context,
+    load_default_extension_policy,
+)
 from core.hooks.system import RuntimeEvent, RuntimeEventBus, resolve_event_value
 
 log = logging.getLogger(__name__)
@@ -70,6 +83,9 @@ class HookPluginMetadata:
     requires: list[str] = field(default_factory=list)
     enabled: bool = True
     source_dir: Path = field(default_factory=lambda: Path("."))
+    handler_path: Path | None = None
+    capabilities: tuple[str, ...] = ()
+    resource_keys: tuple[str, ...] = ()
 
 
 @runtime_checkable
@@ -106,20 +122,6 @@ def _load_module_from_path(module_name: str, file_path: Path) -> types.ModuleTyp
     return module
 
 
-def _find_plugin_class(module: types.ModuleType) -> type[Any] | None:
-    """Find the first class in *module* that satisfies the ``HookPlugin`` protocol."""
-    for attr_name in dir(module):
-        obj = getattr(module, attr_name)
-        if (
-            isinstance(obj, type)
-            and obj is not HookPlugin
-            and hasattr(obj, "handle")
-            and hasattr(obj, "metadata")
-        ):
-            return obj
-    return None
-
-
 # ---------------------------------------------------------------------------
 # YAML-based discovery
 # ---------------------------------------------------------------------------
@@ -131,6 +133,7 @@ class _YAMLPlugin:
 
     _metadata: HookPluginMetadata
     _handler_fn: Any  # Callable[[RuntimeEvent, dict], None]
+    _cleanup_fn: Any = None
 
     @property
     def metadata(self) -> HookPluginMetadata:
@@ -139,9 +142,13 @@ class _YAMLPlugin:
     def handle(self, event: RuntimeEvent, data: dict[str, Any]) -> Any:
         return self._handler_fn(event, data)
 
+    def close(self) -> None:
+        if callable(self._cleanup_fn):
+            self._cleanup_fn()
 
-def _load_yaml_plugin(plugin_dir: Path) -> _YAMLPlugin | None:
-    """Load a plugin described by ``hook.yaml`` inside *plugin_dir*."""
+
+def _read_yaml_metadata(plugin_dir: Path) -> HookPluginMetadata | None:
+    """Read one non-executing hook manifest."""
     yaml_path = plugin_dir / "hook.yaml"
     with yaml_path.open("r") as fh:
         raw: Any = yaml.safe_load(fh)
@@ -149,86 +156,124 @@ def _load_yaml_plugin(plugin_dir: Path) -> _YAMLPlugin | None:
     if not isinstance(raw, dict):
         log.warning("hook.yaml in %s is not a valid mapping", plugin_dir)
         return None
-
-    # Respect the ``enabled`` flag
-    if not raw.get("enabled", True):
-        log.info("Plugin '%s' is disabled, skipping", raw.get("name", plugin_dir.name))
-        return None
+    if unknown := sorted(
+        set(raw)
+        - {
+            "name",
+            "events",
+            "priority",
+            "description",
+            "requires",
+            "enabled",
+            "handler",
+            "capabilities",
+            "resource_keys",
+        }
+    ):
+        raise ValueError(f"Unknown hook manifest fields: {unknown}")
 
     # Validate required keys
     name: str = raw.get("name", plugin_dir.name)
-    raw_events: list[str] = raw.get("events", [])
-    if not raw_events:
+    enabled = raw.get("enabled", True)
+    if not isinstance(name, str) or not isinstance(enabled, bool):
+        raise ValueError("hook name/enabled must be a string and boolean")
+    raw_events: Any = raw.get("events", [])
+    if not isinstance(raw_events, list) or any(not isinstance(event, str) for event in raw_events):
+        raise ValueError(f"Plugin {name!r} events must be a list of strings")
+    if enabled and not raw_events:
         log.warning("Plugin '%s' declares no events", name)
         return None
 
     events = [_resolve_event(e) for e in raw_events]
     priority: int = int(raw.get("priority", 100))
     description: str = raw.get("description", "")
+    if not isinstance(description, str):
+        raise TypeError(f"Plugin {name!r} description must be a string")
     requires_cfg: dict[str, Any] | list[str] = raw.get("requires", {})
     if isinstance(requires_cfg, dict):
-        requires: list[str] = requires_cfg.get("packages", [])
-    else:
+        if set(requires_cfg) - {"packages"}:
+            raise ValueError(f"Plugin {name!r} requires supports only packages")
+        requires = requires_cfg.get("packages", [])
+    elif isinstance(requires_cfg, list):
         requires = list(requires_cfg)
+    else:
+        raise TypeError(f"Plugin {name!r} requires must be a list or object")
+    if any(not isinstance(value, str) for value in requires):
+        raise TypeError(f"Plugin {name!r} requires packages must be strings")
 
     handler_rel: str | None = raw.get("handler")
-    if handler_rel is None:
+    if handler_rel is not None and not isinstance(handler_rel, str):
+        raise TypeError(f"Plugin {name!r} handler must be a string")
+    if enabled and handler_rel is None:
         log.warning("Plugin '%s' has no handler path in hook.yaml", name)
         return None
+    handler_path = (plugin_dir / handler_rel).resolve() if handler_rel is not None else None
+    if handler_path is not None:
+        if not handler_path.is_relative_to(plugin_dir.resolve()):
+            raise ValueError(f"Handler path {handler_path!s} escapes plugin {name!r}")
+        if enabled and not handler_path.exists():
+            raise ValueError(f"Handler file {handler_path!s} not found for plugin {name!r}")
 
-    handler_path = plugin_dir / handler_rel
-    if not handler_path.exists():
-        log.warning("Handler file '%s' not found for plugin '%s'", handler_path, name)
-        return None
-
-    # Load the handler module
-    mod_name = f"core_hook_plugin_{name.replace('-', '_')}_handler"
-    handler_module = _load_module_from_path(mod_name, handler_path)
-    handler_fn = getattr(handler_module, "handle", None)
-    if handler_fn is None:
-        log.warning(
-            "Handler module '%s' has no handle() function for plugin '%s'",
-            handler_path,
-            name,
-        )
-        return None
-
-    meta = HookPluginMetadata(
+    capabilities_raw = raw.get("capabilities", [])
+    resource_keys_raw = raw.get("resource_keys", [])
+    if not isinstance(capabilities_raw, list) or any(
+        not isinstance(value, str) for value in capabilities_raw
+    ):
+        raise ValueError(f"Plugin {name!r} capabilities must be a list of strings")
+    if not isinstance(resource_keys_raw, list) or any(
+        not isinstance(value, str) for value in resource_keys_raw
+    ):
+        raise ValueError(f"Plugin {name!r} resource_keys must be a list of strings")
+    return HookPluginMetadata(
         name=name,
         events=events,
         priority=priority,
         description=description,
         requires=requires,
-        enabled=True,
+        enabled=enabled,
         source_dir=plugin_dir,
+        handler_path=handler_path,
+        capabilities=tuple(capabilities_raw),
+        resource_keys=tuple(resource_keys_raw),
     )
 
-    return _YAMLPlugin(_metadata=meta, _handler_fn=handler_fn)
+
+def _hook_descriptor(meta: HookPluginMetadata) -> ExtensionDescriptor:
+    return ExtensionDescriptor(
+        name=meta.name,
+        surface=ExtensionSurface.HOOK,
+        origin=str(meta.source_dir / "hook.yaml"),
+        execution=ExtensionExecution.TRUSTED,
+        enabled=meta.enabled,
+        capabilities=meta.capabilities,
+        resource_keys=meta.resource_keys,
+    )
 
 
-# ---------------------------------------------------------------------------
-# Class-based discovery (hook.py)
-# ---------------------------------------------------------------------------
-
-
-def _load_class_plugin(plugin_dir: Path) -> Any | None:
-    """Load a class-based plugin from ``hook.py`` inside *plugin_dir*."""
-    hook_py = plugin_dir / "hook.py"
-    mod_name = f"core_hook_plugin_{plugin_dir.name.replace('-', '_')}"
-    module = _load_module_from_path(mod_name, hook_py)
-
-    cls = _find_plugin_class(module)
-    if cls is None:
-        log.warning("No HookPlugin class found in %s", hook_py)
-        return None
-
-    instance = cls()
-    # Verify the instance satisfies the protocol
-    if not hasattr(instance, "metadata") or not hasattr(instance, "handle"):
-        log.warning("Plugin class in %s does not satisfy HookPlugin protocol", hook_py)
-        return None
-
-    return instance
+def _load_yaml_plugin(
+    meta: HookPluginMetadata,
+    decision: ExtensionDecision,
+    ports: Mapping[str, Any],
+) -> _YAMLPlugin:
+    """Import one handler only after its manifest has been authorized."""
+    assert meta.handler_path is not None
+    mod_name = f"core_hook_plugin_{meta.name.replace('-', '_')}_handler"
+    handler_module = _load_module_from_path(mod_name, meta.handler_path)
+    context = extension_context(
+        decision,
+        {name: value for name, value in ports.items() if name in meta.capabilities},
+    )
+    factory = getattr(handler_module, "build_extension", None)
+    handler_fn = factory(context) if callable(factory) else getattr(handler_module, "handle", None)
+    if not callable(handler_fn):
+        raise TypeError(
+            f"Handler module {meta.handler_path!s} has no handle() or build_extension() function"
+        )
+    return _YAMLPlugin(
+        _metadata=meta,
+        _handler_fn=handler_fn,
+        _cleanup_fn=getattr(handler_fn, "close", None) or getattr(handler_module, "close", None),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -240,8 +285,9 @@ def discover_hooks(dirs: list[Path]) -> list[HookPluginMetadata]:
     """Scan directories for hook plugin metadata without loading handlers.
 
     Each entry in *dirs* should be a parent directory containing one or more
-    plugin sub-directories.  A plugin sub-directory is recognised if it
-    contains either ``hook.yaml`` or ``hook.py``.
+    plugin sub-directories. A plugin sub-directory is loadable only when it
+    contains a non-executing ``hook.yaml`` manifest; class-only ``hook.py``
+    directories are reported as rejected by :class:`HookPluginLoader`.
 
     Returns metadata for all discovered (and enabled) plugins.
     """
@@ -254,70 +300,41 @@ def discover_hooks(dirs: list[Path]) -> list[HookPluginMetadata]:
             if not child.is_dir():
                 continue
             yaml_path = child / "hook.yaml"
-            hook_py = child / "hook.py"
             if yaml_path.exists():
                 try:
-                    with yaml_path.open("r") as fh:
-                        raw_val: Any = yaml.safe_load(fh)
-                    if not isinstance(raw_val, dict):
-                        continue
-                    raw = raw_val
-                    if not raw.get("enabled", True):
-                        continue
-                    name = raw.get("name", child.name)
-                    raw_events = raw.get("events", [])
-                    events = [_resolve_event(e) for e in raw_events]
-                    priority = int(raw.get("priority", 100))
-                    description = raw.get("description", "")
-                    requires_cfg = raw.get("requires", {})
-                    if isinstance(requires_cfg, dict):
-                        requires = requires_cfg.get("packages", [])
-                    else:
-                        requires = list(requires_cfg)
-                    results.append(
-                        HookPluginMetadata(
-                            name=name,
-                            events=events,
-                            priority=priority,
-                            description=description,
-                            requires=requires,
-                            enabled=True,
-                            source_dir=child,
-                        )
-                    )
+                    if meta := _read_yaml_metadata(child):
+                        results.append(meta)
                 except ValueError:
                     raise
                 except Exception:
                     log.warning("Failed to read hook.yaml in %s", child, exc_info=True)
-            elif hook_py.exists():
-                try:
-                    mod_name = f"core_hook_discover_{child.name.replace('-', '_')}"
-                    module = _load_module_from_path(mod_name, hook_py)
-                    cls = _find_plugin_class(module)
-                    if cls is None:
-                        continue
-                    instance = cls()
-                    meta: HookPluginMetadata = instance.metadata
-                    if not meta.enabled:
-                        continue
-                    # Ensure source_dir is set
-                    meta.source_dir = child
-                    results.append(meta)
-                except Exception:
-                    log.warning("Failed to load hook.py in %s", child, exc_info=True)
+            elif (child / "hook.py").exists():
+                log.warning("Ignoring class-only hook %s: hook.yaml manifest required", child)
     return results
 
 
 class HookPluginLoader:
     """Load and manage hook plugins from the filesystem."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        policy: ExtensionPolicy | None = None,
+        ports: Mapping[str, Any] | None = None,
+    ) -> None:
         self._loaded: list[Any] = []  # list of HookPlugin-compatible instances
+        self._policy = policy or load_default_extension_policy()
+        self._ports = MappingProxyType(dict(ports or {}))
+        self._decisions: list[ExtensionDecision] = []
 
     @property
     def loaded_plugins(self) -> list[Any]:
         """Return the list of loaded plugin instances."""
         return list(self._loaded)
+
+    @property
+    def decisions(self) -> tuple[ExtensionDecision, ...]:
+        return tuple(self._decisions)
 
     def load_from_dirs(self, dirs: list[Path]) -> list[Any]:
         """Discover and load all enabled hook plugins from *dirs*.
@@ -326,35 +343,68 @@ class HookPluginLoader:
         sub-directories.  Returns a list of loaded plugin instances.
         """
         plugins: list[Any] = []
-        for parent in dirs:
-            if not parent.is_dir():
-                log.debug("Skipping non-existent hook directory: %s", parent)
+        metadata = discover_hooks(dirs)
+        origins: dict[str, str] = {}
+        for meta in metadata:
+            origin = str(meta.source_dir / "hook.yaml")
+            if previous := origins.get(meta.name):
+                raise ValueError(
+                    f"hook {meta.name!r} discovered from multiple origins: {previous}, {origin}"
+                )
+            origins[meta.name] = origin
+
+        class_only = [
+            child
+            for parent in dirs
+            if parent.is_dir()
+            for child in sorted(parent.iterdir())
+            if child.is_dir()
+            and (child / "hook.py").is_file()
+            and not (child / "hook.yaml").is_file()
+        ]
+        rejected_class_hooks = [
+            ExtensionDecision(
+                ExtensionDescriptor(
+                    name=child.name,
+                    surface=ExtensionSurface.HOOK,
+                    origin=str(child / "hook.py"),
+                    execution=ExtensionExecution.TRUSTED,
+                ),
+                ExtensionState.REJECTED,
+                False,
+                False,
+                reason="hook.yaml manifest required",
+            )
+            for child in class_only
+        ]
+        for decision in rejected_class_hooks:
+            log.warning(
+                "Hook extension %s: %s (%s)",
+                decision.descriptor.extension_id,
+                decision.state,
+                decision.reason,
+            )
+        decisions = [decide_extension(_hook_descriptor(meta), self._policy) for meta in metadata]
+        self._decisions = [*rejected_class_hooks, *decisions]
+        for index, (meta, decision) in enumerate(zip(metadata, decisions, strict=True)):
+            if not decision.may_load_in_process:
+                log.warning(
+                    "Hook extension %s: %s (%s)",
+                    decision.descriptor.extension_id,
+                    decision.state,
+                    decision.reason,
+                )
                 continue
-            for child in sorted(parent.iterdir()):
-                if not child.is_dir():
-                    continue
-                yaml_path = child / "hook.yaml"
-                hook_py = child / "hook.py"
-                try:
-                    if yaml_path.exists():
-                        plugin = _load_yaml_plugin(child)
-                        if plugin is not None:
-                            plugins.append(plugin)
-                            log.info("Loaded YAML hook plugin '%s'", plugin.metadata.name)
-                    elif hook_py.exists():
-                        plugin = _load_class_plugin(child)
-                        if plugin is not None:
-                            meta: HookPluginMetadata = plugin.metadata
-                            if not meta.enabled:
-                                log.info(
-                                    "Plugin '%s' is disabled, skipping",
-                                    meta.name,
-                                )
-                                continue
-                            plugins.append(plugin)
-                            log.info("Loaded class hook plugin '%s'", meta.name)
-                except Exception:
-                    log.warning("Failed to load plugin from %s", child, exc_info=True)
+            try:
+                plugin = _load_yaml_plugin(meta, decision, self._ports)
+            except Exception:
+                self._decisions[len(rejected_class_hooks) + index] = decision.degraded(
+                    "handler load failed"
+                )
+                log.warning("Failed to load trusted hook from %s", meta.source_dir, exc_info=True)
+                continue
+            plugins.append(plugin)
+            log.info("Loaded trusted hook plugin '%s'", plugin.metadata.name)
 
         self._loaded = plugins
         return list(plugins)
@@ -378,9 +428,15 @@ class HookPluginLoader:
 
     def unregister_all(self, hooks: RuntimeEventBus) -> None:
         """Remove all loaded plugins from the given runtime event bus."""
-        for plugin in self._loaded:
+        for plugin in reversed(self._loaded):
             meta: HookPluginMetadata = plugin.metadata
             for event in meta.events:
                 hooks.unregister(event, meta.name)
             log.info("Unregistered plugin '%s'", meta.name)
+            close = getattr(plugin, "close", None)
+            if callable(close):
+                try:
+                    close()
+                except Exception:
+                    log.warning("Hook plugin '%s' cleanup failed", meta.name, exc_info=True)
         self._loaded.clear()

@@ -26,7 +26,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import importlib
-import json
 import logging
 import os
 import queue
@@ -35,7 +34,17 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from core.unicode_safety import sanitize_jsonable
+from core.ipc_protocol import (
+    IPC_EVENT_TYPES,
+    IPC_FEATURES,
+    IPC_PROTOCOL_VERSION,
+    MAX_IPC_MESSAGE_BYTES,
+    IPCProtocolError,
+    decode_message,
+    encode_message,
+    negotiate_protocol,
+    validate_client_message,
+)
 
 log = logging.getLogger(__name__)
 
@@ -58,7 +67,13 @@ def _session_greeting(session_id: str) -> dict[str, Any]:
     """
     from core import __version__
 
-    return {"type": "session", "session_id": session_id, "version": __version__}
+    return {
+        "type": "session",
+        "session_id": session_id,
+        "version": __version__,
+        "protocol_version": IPC_PROTOCOL_VERSION,
+        "features": list(IPC_FEATURES),
+    }
 
 
 def _adopt_skip_permissions(msg: dict[str, Any]) -> None:
@@ -98,12 +113,19 @@ class _AsyncClientEndpoint:
         self._approval_responses: queue.Queue[tuple[str, str]] = queue.Queue()
         self._is_tty = True
         self._width = 120
+        self._request_id = ""
 
     async def send_json_async(self, obj: dict[str, Any]) -> None:
-        payload = json.dumps(sanitize_jsonable(obj), ensure_ascii=False) + "\n"
+        if self._request_id and "request_id" not in obj:
+            obj = {**obj, "request_id": self._request_id}
+        payload = encode_message(obj)
         async with self._write_lock:
-            self._writer.write(payload.encode("utf-8"))
+            self._writer.write(payload)
             await self._writer.drain()
+
+    def set_request_id(self, request_id: object) -> None:
+        """Correlate outbound events with the request currently being handled."""
+        self._request_id = request_id if isinstance(request_id, str) else ""
 
     def send_json_nowait(self, obj: dict[str, Any]) -> None:
         """Schedule a write from the endpoint's own event-loop thread."""
@@ -249,6 +271,8 @@ class _StreamingWriter:
 
     def send_event(self, event_type: str, **data: Any) -> None:
         """Send a structured event (tool_start, tool_end, etc.)."""
+        if event_type not in IPC_EVENT_TYPES:
+            raise IPCProtocolError(f"Unknown public IPC event type: {event_type!r}")
         self._send_json({"type": event_type, **data})
 
     def _send_json(self, obj: dict[str, Any]) -> None:
@@ -291,6 +315,8 @@ class CLIPoller:
         *,
         socket_path: Path | None = None,
         scheduler_service: Any = None,
+        command_handler: Callable[..., tuple[bool, bool, Any]] | None = None,
+        context_initializer: Callable[[], None] | None = None,
     ) -> None:
         self._services = services
         self._socket_path = socket_path or DEFAULT_SOCKET_PATH
@@ -303,6 +329,8 @@ class CLIPoller:
         self._active_clients: set[_AsyncClientEndpoint] = set()
         self._clients_lock = threading.Lock()
         self._scheduler_service = scheduler_service
+        self._command_handler = command_handler
+        self._context_initializer = context_initializer
 
     @property
     def channel_name(self) -> str:
@@ -391,6 +419,7 @@ class CLIPoller:
             self._handle_async_client,
             path=str(self._socket_path),
             backlog=5,
+            limit=MAX_IPC_MESSAGE_BYTES + 1,
         )
         os.chmod(str(self._socket_path), 0o600)
         self._ready_event.set()
@@ -453,7 +482,7 @@ class CLIPoller:
         execution for each IPC session.
         """
         from core.agent.conversation import ConversationContext
-        from core.server.supervised.services import SessionMode
+        from core.agent.session_mode import SessionMode
 
         self._propagate_contextvars()
 
@@ -468,7 +497,6 @@ class CLIPoller:
         _executor, agent_loop = self._services.create_session(
             SessionMode.IPC,
             conversation=conversation,
-            propagate_context=True,
             approval_callback=_ipc_approval,
         )
 
@@ -516,8 +544,8 @@ class CLIPoller:
                     if not line:
                         return
                     try:
-                        msg = json.loads(line.decode("utf-8"))
-                    except (json.JSONDecodeError, UnicodeDecodeError):
+                        msg = decode_message(line.rstrip(b"\n"))
+                    except IPCProtocolError:
                         _enqueue({"type": "_invalid_json"})
                         continue
                     if msg.get("type") == "approval_response":
@@ -548,6 +576,7 @@ class CLIPoller:
                     if msg.get("type") == "_invalid_json":
                         await endpoint.send_json_async({"type": "error", "message": "Invalid JSON"})
                         continue
+                    endpoint.set_request_id(msg.get("request_id"))
                     msg["_client"] = endpoint
                     response = await self._process_message_async(
                         msg,
@@ -565,6 +594,8 @@ class CLIPoller:
                 except Exception:
                     log.warning("CLI handler error", exc_info=True)
                     await endpoint.send_json_async({"type": "error", "message": "Internal error"})
+                finally:
+                    endpoint.set_request_id("")
         finally:
             pump_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -578,6 +609,10 @@ class CLIPoller:
         session_id: str,
     ) -> dict[str, Any] | None:
         msg_type = msg.get("type", "")
+        try:
+            validate_client_message(msg)
+        except IPCProtocolError as exc:
+            return {"type": "protocol_error", "message": str(exc)}
 
         if msg_type == "prompt":
             text = msg.get("text", "").strip()
@@ -615,6 +650,12 @@ class CLIPoller:
             return await self._handle_resume_async(msg, loop, conversation)
 
         if msg_type == "client_capability":
+            try:
+                protocol_version, features = negotiate_protocol(
+                    msg.get("protocol_version"), msg.get("features")
+                )
+            except IPCProtocolError as exc:
+                return {"type": "protocol_error", "message": str(exc)}
             endpoint = msg.get("_client")
             is_tty = bool(msg.get("is_tty", True))
             width_raw = msg.get("width", 120)
@@ -649,7 +690,11 @@ class CLIPoller:
                     )
             _adopt_skip_permissions(msg)
             log.debug("client_capability: is_tty=%s width=%d", is_tty, width if width > 0 else 120)
-            return {"type": "ack"}
+            return {
+                "type": "ack",
+                "protocol_version": protocol_version,
+                "features": list(features),
+            }
 
         if msg_type == "exit":
             # Clean client exit — the REPL surface's ACTIVE -> COMPLETED
@@ -723,7 +768,11 @@ class CLIPoller:
             raise ValueError(f"Invalid slash handler path: {spec.handler_path!r}")
         prompt_builder = getattr(importlib.import_module(module_name), attr_name)
         return await self._run_prompt_streaming_async(
-            lambda: prompt_builder(args, skill_registry=self._services.skill_registry),
+            lambda: prompt_builder(
+                args,
+                skill_registry=self._services.skill_registry,
+                agentic_ref=loop,
+            ),
             loop,
             client,
             suppress_public_verify=spec.name in {"/grill", "/geo"},
@@ -970,17 +1019,25 @@ class CLIPoller:
             model_before = (getattr(_pre_settings, "model", "") or "").strip()
             effort_before = (getattr(_pre_settings, "agentic_effort", "") or "").strip()
         try:
-            from core.cli import _handle_command
             from core.ui.console import capture_output
 
+            if self._command_handler is None:
+                return {
+                    "type": "command_result",
+                    "cmd": cmd,
+                    "status": "error",
+                    "message": "daemon command handler is not configured",
+                }
             with capture_output() as buf:
-                should_break, _verbose, _resume = _handle_command(
+                should_break, _verbose, _resume = self._command_handler(
                     cmd,
                     args,
                     False,
                     skill_registry=self._services.skill_registry,
                     mcp_manager=self._services.mcp_manager,
                     command_registry=self._services.command_registry,
+                    scheduler_service=self._scheduler_service,
+                    agentic_ref=loop,
                 )
             # /model writes config.toml + the daemon's Settings singleton but
             # cmd_model does NOT touch the live session's AgenticLoop — its
@@ -1169,24 +1226,10 @@ class CLIPoller:
             return await asyncio.to_thread(self._handle_resume, resolved, loop, conversation)
 
     def _propagate_contextvars(self) -> None:
-        """Set ContextVars needed by slash command handlers in this thread.
-
-        Python ContextVars do NOT inherit across threads. The CLI poller
-        thread must explicitly set readiness, scheduler_service, memory, and
-        profile so that ``_handle_command()`` works correctly.
-        """
+        """Set request-local CLI readiness in this thread."""
+        if self._context_initializer is None:
+            return
         try:
-            from core.cli import _set_readiness
-            from core.cli.session_state import _scheduler_service_ctx
-            from core.wiring.startup import check_readiness
-
-            _set_readiness(check_readiness())
-
-            if self._scheduler_service is not None:
-                _scheduler_service_ctx.set(self._scheduler_service)
-
-            # Memory and profile — delegated to SharedServices helper
-            if hasattr(self._services, "_propagate_contextvars"):
-                self._services._propagate_contextvars()
+            self._context_initializer()
         except Exception:
             log.debug("ContextVar propagation skipped", exc_info=True)

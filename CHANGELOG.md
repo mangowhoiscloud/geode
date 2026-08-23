@@ -47,7 +47,46 @@ functional change.
 
 ## [Unreleased]
 
+### Architecture
+
+- **Architecture performance now has independent regression budgets.** A
+  no-network CI probe measures cold import, runtime lifecycle, first turn,
+  tool-plan build and refresh, dispatch, MCP first and warm calls, event
+  persistence, memory peaks, and descriptor/registry size. Each metric fails
+  against its own committed ceiling; behavior contracts separately pin
+  termination, retry, approval, Google consent, storage, and IPC semantics.
+
+- **Extension change surfaces are now executable CI contracts.** Six black-box
+  scenarios add a project Skill, filesystem hook, MCP server, package LLM
+  adapter, native tool, and Google Workspace service through their supported
+  seams while leaving the forbidden kernel, CLI, provider, policy, and OAuth
+  edit sites untouched.
+
+- **Architecture regressions now fail on explicit CI contracts.** Runtime,
+  CLI, server, and messaging dependencies cross neutral or product-owned
+  composition seams instead of ignored reverse imports. CI now executes the
+  zero-ignore import graph, immutable tool-plan and policy parity, coordinator
+  budgets, protocol compatibility, core-only install, roadmap validation, and
+  official documentation drift gates as named checks.
+
 ### Added
+
+- **Third-party extensions now authorize before executable load.** Filesystem
+  hooks, package LLM adapters, project/personal skills, and MCP servers project
+  their existing manifests into one immutable operator-policy decision. Trusted
+  in-process factories receive a capability-scoped context; brokered MCP
+  servers launch only behind an available deny-default OS sandbox with an exact
+  environment and declared mutation resource keys. Rejected, disabled, and
+  degraded extensions remain visible in bounded runtime health, while Hook and
+  MCP owners retain deterministic cleanup.
+
+- **Public runtime boundaries now use explicit versioned envelopes.** Thin CLI
+  IPC negotiates `geode.ipc.v1` features, bounds line-delimited JSON, keeps a
+  stable streaming-event vocabulary, and correlates every event and response
+  with its request. Gateway adapters project messenger input into a bounded
+  `geode.gateway.v1` message with a stable message ID, while public hooks keep
+  their existing bounded, redacted `geode.public-hook.v2` contract and v1
+  compatibility schema.
 
 - **Slash controls now have typed runtime authority.** `/goal` supports
   compare-and-set pause, resume, edit, and empty transitions; `/plan` restores
@@ -56,6 +95,16 @@ functional change.
   per-stage denominators and explicit `not_measured` states.
 
 ### Fixed
+
+- **Concurrent first access no longer races SQLite schema setup.** Short-lived
+  projection stores serialize their in-process WAL/schema initialization, so
+  sibling threads cannot fail with `database is locked` during a first-run
+  migration.
+
+- **Runtime-owned scheduling keeps both dispatch directions live.** Calendar
+  pull now creates only future, executable one-shot jobs, while legacy
+  zero-argument serve builders attach daemon dispatch without losing due work
+  from an already-running scheduler.
 
 - **Slash trajectories retain control correlation without hijacking cognitive
   verification.** Non-model goal and plan mutations receive turn identities,
@@ -115,6 +164,11 @@ functional change.
 
 ### Removed
 
+- **Verification recovery now has one persistence authority.** Removed the
+  write-only `SessionManager` verify-state mirror; checkpoint loop guards remain
+  the recovery source, while databases carrying the former columns still open
+  without a destructive migration.
+
 - **Removed the final active Claude CLI residue.** Current architecture and
   provider guidance now describe only supported routes, and Petri no longer
   exposes the unused CLI `binary` adapter field. Historical evidence readers
@@ -132,6 +186,53 @@ functional change.
   TaskGraph and immutable runtime ToolPlan are unchanged.
 
 ### Architecture
+
+- **LLM retries now share an explicit policy substrate.** Interactive turns,
+  auxiliary model chains, and provider compatibility retries use one error
+  classification and telemetry contract while retaining their existing call
+  counts, delay shapes, fallback boundaries, OAuth refresh, billing-fatal
+  short-circuit, and stream replay safeguards.
+
+- **LLM adapters no longer require unsupported stubs.** The core adapter
+  contract now requires only route identity plus `acomplete`; streaming,
+  environment diagnostics, model listing, quota inspection, and credential
+  detection are independent structural capabilities. Existing built-ins keep
+  their provider-call behavior and no longer claim an unavailable quota API;
+  completion-only adapters can register without implementing empty methods.
+
+- **LLM adapter discovery is generation-bound.** Built-in factories and the
+  supported `geode.llm_adapters` package entry-point group now produce an
+  immutable registry snapshot with origin and validation evidence. Duplicate
+  canonical IDs fail unless an explicit override records the winning origin,
+  priority, and trust decision. New sessions capture the current generation;
+  live sessions retain their original routing snapshot across reloads.
+
+- **Provider routes are explicit compositions.** Every built-in adapter
+  registration now binds immutable provider/model identity, non-secret
+  credential selection, transport/API shape, and native-capability metadata.
+  Source inference and `geode adapters list` consume that composition, while
+  legacy and explicitly composed third-party entry points remain compatible.
+
+- **MCP runtime responsibilities now have one owner each.**
+  `MCPServerManager` remains the public compatibility facade, while concrete
+  catalog, connection-pool, discovery, invocation/trace, and lifecycle
+  collaborators own their mutable state. Configuration priority, tool order,
+  retry safety, hook events, and shutdown behavior remain unchanged.
+
+- **Runtime services now have explicit lifecycle owners.** The former flat
+  `RuntimeCoreConfig` is split into six cohesive groups of at most seven fields,
+  and eleven ambient service-locator `ContextVar` bindings are replaced by
+  constructor, composition-root, and `ToolContext` injection. The remaining 24
+  ContextVars are limited to request identity, diagnostics, request-local state,
+  and one cache.
+
+- **Ambient state now has a generated lifecycle inventory.** Every module/class-
+  scoped `ContextVar`, including `ContextLocal`-backed bindings, is classified
+  with an owner, setter/reset boundary, lifetime, teardown behavior, and
+  executable async propagation check. New or removed
+  declarations fail the architecture baseline until the inventory is reconciled;
+  the 11 service locators remain explicit R4.2 removal inputs rather than being
+  relabeled as request state.
 
 - **Sub-agent delegation now has bounded collaborators.** `SubAgentManager`
   remains the depth-one orchestration and cancellation owner, while

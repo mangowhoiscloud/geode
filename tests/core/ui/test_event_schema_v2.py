@@ -855,10 +855,9 @@ class TestFleetView:
         assert "2 sub-agents completed" in out
 
     def test_subagent_state_in_ipc_allowlist(self) -> None:
-        from pathlib import Path
+        from core.ipc_protocol import IPC_EVENT_TYPES
 
-        source = Path("core/cli/ipc_client.py").read_text()
-        assert '"subagent_state"' in source
+        assert "subagent_state" in IPC_EVENT_TYPES
 
 
 class TestIPCClientEventWhitelist:
@@ -866,14 +865,8 @@ class TestIPCClientEventWhitelist:
 
     def test_all_events_recognized(self) -> None:
         """IPCClient.send_prompt should recognize all event types as structured."""
-        import re
-        from pathlib import Path
+        from core.ipc_protocol import IPC_EVENT_TYPES
 
-        source = Path("core/cli/ipc_client.py").read_text()
-        # Extract all quoted strings from the event tuple
-        events = re.findall(
-            r'"(\w+)"', source[source.index("# Structured events") : source.index("if on_event")]
-        )
         expected = {
             "tool_start",
             "tool_end",
@@ -906,4 +899,6 @@ class TestIPCClientEventWhitelist:
             "feedback_loop",
             "node_skipped",
         }
-        assert expected.issubset(set(events)), f"Missing: {expected - set(events)}"
+        assert expected.issubset(set(IPC_EVENT_TYPES)), (
+            f"Missing: {expected - set(IPC_EVENT_TYPES)}"
+        )

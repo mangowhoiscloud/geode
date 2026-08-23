@@ -19,12 +19,12 @@ function ArchitectureBaselineTable({ locale }: { locale: "ko" | "en" }) {
             number.format(architectureBaseline.packages.tests.python_files),
           ],
           [
-            "도구 정의 / 실행 등록 / 유효 스키마",
-            `${architectureBaseline.tools.definition_count} / ${architectureBaseline.tools.execution_registration_count} / ${architectureBaseline.tools.schema_count}`,
+            "도구 정의 / 모델 실행 / 유효 스키마 / 정책",
+            `${architectureBaseline.tools.definition_count} / ${architectureBaseline.tools.model_execution_registration_count} / ${architectureBaseline.tools.schema_count} / ${architectureBaseline.tools.policy_registration_count}`,
           ],
           ["RuntimeEvent 멤버", number.format(architectureBaseline.hook_events.count)],
           ["기본 LLM 어댑터", number.format(architectureBaseline.built_in_adapters.count)],
-          ["모듈 수준 ContextVar", number.format(architectureBaseline.context_vars.count)],
+          ["프로덕션 ContextVar", number.format(architectureBaseline.context_vars.count)],
           [
             "core → product import 지점 / 파일",
             `${architectureBaseline.core_to_product_imports.site_count} / ${architectureBaseline.core_to_product_imports.file_count}`,
@@ -41,12 +41,12 @@ function ArchitectureBaselineTable({ locale }: { locale: "ko" | "en" }) {
             number.format(architectureBaseline.packages.tests.python_files),
           ],
           [
-            "Tool definitions / execution bindings / valid schemas",
-            `${architectureBaseline.tools.definition_count} / ${architectureBaseline.tools.execution_registration_count} / ${architectureBaseline.tools.schema_count}`,
+            "Tool definitions / model executions / valid schemas / policies",
+            `${architectureBaseline.tools.definition_count} / ${architectureBaseline.tools.model_execution_registration_count} / ${architectureBaseline.tools.schema_count} / ${architectureBaseline.tools.policy_registration_count}`,
           ],
           ["RuntimeEvent members", number.format(architectureBaseline.hook_events.count)],
           ["Built-in LLM adapters", number.format(architectureBaseline.built_in_adapters.count)],
-          ["Module-level ContextVars", number.format(architectureBaseline.context_vars.count)],
+          ["Production ContextVars", number.format(architectureBaseline.context_vars.count)],
           [
             "core → product import sites / files",
             `${architectureBaseline.core_to_product_imports.site_count} / ${architectureBaseline.core_to_product_imports.file_count}`,
@@ -160,7 +160,7 @@ export default function Page() {
               <thead><tr><th>서브시스템</th><th>루트</th><th>핵심 모듈</th></tr></thead>
               <tbody>
                 <tr><td>도구</td><td><code>core/tools/</code></td><td><code>registry.py</code>, <code>definitions.json</code>, <code>policy.py</code> (PolicyChain), <code>toolkit_registry.py</code> + <code>toolkits.toml</code>, <code>computer_use.py</code></td></tr>
-                <tr><td>MCP 클라이언트</td><td><code>core/mcp/</code></td><td><code>manager.py</code> (MCPServerManager), <code>stdio_client.py</code>, <code>registry.py</code>, 알림/캘린더 어댑터</td></tr>
+                <tr><td>MCP 클라이언트</td><td><code>core/mcp/</code></td><td><code>manager.py</code> facade, <code>config_catalog.py</code>, <code>connection_pool.py</code>, <code>tool_runtime.py</code>, <code>lifecycle.py</code>, <code>stdio_client.py</code>, <code>registry.py</code>, 알림/캘린더 어댑터</td></tr>
                 <tr><td>메모리</td><td><code>core/memory/</code></td><td><code>context.py</code> (ContextAssembler), <code>project.py</code>, <code>session_manager.py</code>, <code>episodic.py</code>, <code>recall_writer.py</code>, <code>user_profile.py</code></td></tr>
                 <tr><td>스킬</td><td><code>core/skills/</code></td><td><code>skills.py</code> (레지스트리), <code>agents.py</code></td></tr>
                 <tr><td>프롬프트</td><td><code>core/llm/prompts/</code></td><td><code>router.md</code>, 해시 핀은 <code>__init__.py</code></td></tr>
@@ -255,7 +255,7 @@ export default function Page() {
               <thead><tr><th>Subsystem</th><th>Root</th><th>Key modules</th></tr></thead>
               <tbody>
                 <tr><td>Tools</td><td><code>core/tools/</code></td><td><code>registry.py</code>, <code>definitions.json</code>, <code>policy.py</code> (PolicyChain), <code>toolkit_registry.py</code> + <code>toolkits.toml</code>, <code>computer_use.py</code></td></tr>
-                <tr><td>MCP client</td><td><code>core/mcp/</code></td><td><code>manager.py</code> (MCPServerManager), <code>stdio_client.py</code>, <code>registry.py</code>, notification/calendar adapters</td></tr>
+                <tr><td>MCP client</td><td><code>core/mcp/</code></td><td><code>manager.py</code> facade, <code>config_catalog.py</code>, <code>connection_pool.py</code>, <code>tool_runtime.py</code>, <code>lifecycle.py</code>, <code>stdio_client.py</code>, <code>registry.py</code>, notification/calendar adapters</td></tr>
                 <tr><td>Memory</td><td><code>core/memory/</code></td><td><code>context.py</code> (ContextAssembler), <code>project.py</code>, <code>session_manager.py</code>, <code>episodic.py</code>, <code>recall_writer.py</code>, <code>user_profile.py</code></td></tr>
                 <tr><td>Skills</td><td><code>core/skills/</code></td><td><code>skills.py</code> (registry), <code>agents.py</code></td></tr>
                 <tr><td>Prompts</td><td><code>core/llm/prompts/</code></td><td><code>router.md</code>; hash pins in <code>__init__.py</code></td></tr>

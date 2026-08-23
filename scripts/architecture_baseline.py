@@ -20,7 +20,8 @@ import json
 import re
 import sys
 import tomllib
-from collections.abc import Sequence
+from collections import Counter
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -29,6 +30,29 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 OUTPUT_FILE = REPO_ROOT / "site" / "src" / "data" / "geode" / "architecture-baseline.json"
 AGENTS_FILE = REPO_ROOT / "AGENTS.md"
 ROADMAP_FILE = REPO_ROOT / "docs" / "architecture" / "extensibility-roadmap.md"
+CONTEXT_VAR_LIFECYCLES = Path("docs/architecture/context-var-lifecycles.json")
+CONTEXT_VAR_PROPAGATION_TEST = (
+    "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets"
+)
+CONTEXT_VAR_CLASSIFICATIONS = (
+    "request_identity",
+    "request_local_mutable_state",
+    "diagnostic_scope",
+    "cache",
+    "service_locator",
+)
+CONTEXT_VAR_LIFECYCLE_FIELDS = (
+    "classification",
+    "owner",
+    "setter",
+    "resetter",
+    "lifetime",
+    "teardown",
+)
+CONTEXT_LOCAL_DEFINING_MODULE_CONSTRUCTORS = {
+    "core.ui.context_local": {"ContextLocal": "ContextLocal"}
+}
+CONTEXT_VAR_MODULES = frozenset({"contextvars", "_contextvars"})
 
 AGENTS_START = "<!-- generated:architecture-baseline:start -->"
 AGENTS_END = "<!-- generated:architecture-baseline:end -->"
@@ -151,73 +175,1284 @@ def _hook_events(root: Path) -> dict[str, Any]:
 def _built_in_adapters(root: Path) -> dict[str, Any]:
     path = root / "core/llm/adapters/registry.py"
     module = _parse_python(path)
-    bootstrap = next(
+    builder = next(
         (
             node
             for node in module.body
-            if isinstance(node, ast.FunctionDef) and node.name == "bootstrap_builtins"
+            if isinstance(node, ast.FunctionDef) and node.name == "_builtin_registrations"
         ),
         None,
     )
-    if bootstrap is None:
-        raise ValueError(f"{path}: bootstrap_builtins() not found")
+    if builder is None:
+        raise ValueError(f"{path}: _builtin_registrations() not found")
 
     classes: list[str] = []
-    for node in ast.walk(bootstrap):
-        if not isinstance(node, ast.For):
+    for node in ast.walk(builder):
+        if not isinstance(node, ast.AnnAssign):
             continue
-        if not isinstance(node.target, ast.Name) or node.target.id != "adapter_cls":
+        if not isinstance(node.target, ast.Name) or node.target.id != "factories":
             continue
-        if not isinstance(node.iter, ast.Tuple):
-            continue
-        classes.extend(item.id for item in node.iter.elts if isinstance(item, ast.Name))
+        if isinstance(node.value, ast.Tuple):
+            for item in node.value.elts:
+                factory = item.elts[0] if isinstance(item, ast.Tuple) and item.elts else item
+                if isinstance(factory, ast.Name):
+                    classes.append(factory.id)
     if not classes:
-        raise ValueError(f"{path}: built-in adapter tuple not found")
+        raise ValueError(f"{path}: built-in adapter factory tuple not found")
     return {"count": len(classes), "classes": classes}
+
+
+def _module_scope_nodes(module: ast.Module) -> Iterator[tuple[ast.stmt, str]]:
+    def walk(node: ast.AST, owner: str = "") -> Iterator[tuple[ast.stmt, str]]:
+        if isinstance(node, ast.stmt):
+            yield node, owner
+        if isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef)):
+            return
+        if isinstance(node, ast.ClassDef):
+            for statement in node.body:
+                yield from walk(statement, f"{owner}{node.name}.")
+            return
+        for child in ast.iter_child_nodes(node):
+            yield from walk(child, owner)
+
+    for node in module.body:
+        yield from walk(node)
+
+
+def _scope_calls(
+    node: ast.AST,
+    *,
+    include_annotations: bool = False,
+) -> Iterator[ast.Call]:
+    """Yield calls evaluated now, excluding deferred function and lambda bodies."""
+
+    if isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef)):
+        expressions = [*node.decorator_list, *node.args.defaults, *node.args.kw_defaults]
+        if include_annotations:
+            expressions.extend(
+                argument.annotation
+                for argument in (
+                    *node.args.posonlyargs,
+                    *node.args.args,
+                    *node.args.kwonlyargs,
+                    node.args.vararg,
+                    node.args.kwarg,
+                )
+                if argument is not None
+            )
+            expressions.append(node.returns)
+        for expression in expressions:
+            if expression is not None:
+                yield from _scope_calls(expression, include_annotations=include_annotations)
+        return
+    if isinstance(node, ast.Lambda):
+        for expression in [*node.args.defaults, *node.args.kw_defaults]:
+            if expression is not None:
+                yield from _scope_calls(expression, include_annotations=include_annotations)
+        return
+    if isinstance(node, ast.AnnAssign):
+        if include_annotations:
+            yield from _scope_calls(node.annotation, include_annotations=True)
+        if node.value is not None:
+            yield from _scope_calls(node.value, include_annotations=include_annotations)
+        return
+    if isinstance(node, ast.GeneratorExp):
+        if node.generators:
+            yield from _scope_calls(
+                node.generators[0].iter, include_annotations=include_annotations
+            )
+        return
+    if isinstance(node, ast.Starred) and isinstance(node.value, ast.GeneratorExp):
+        yield from _scope_calls(node.value.elt, include_annotations=include_annotations)
+        for generator in node.value.generators:
+            yield from _scope_calls(generator.iter, include_annotations=include_annotations)
+            for condition in generator.ifs:
+                yield from _scope_calls(condition, include_annotations=include_annotations)
+    if isinstance(node, ast.ClassDef):
+        for expression in [*node.decorator_list, *node.bases]:
+            yield from _scope_calls(expression, include_annotations=include_annotations)
+        for keyword in node.keywords:
+            yield from _scope_calls(keyword.value, include_annotations=include_annotations)
+        for statement in node.body:
+            yield from _scope_calls(statement, include_annotations=include_annotations)
+        return
+    if isinstance(node, ast.Call):
+        yield node
+        if isinstance(node.func, ast.Lambda):
+            yield from _scope_calls(node.func.body, include_annotations=include_annotations)
+        for argument in [*node.args, *(keyword.value for keyword in node.keywords)]:
+            if isinstance(argument, ast.GeneratorExp):
+                yield from _scope_calls(argument.elt, include_annotations=include_annotations)
+                for comprehension in argument.generators:
+                    yield from _scope_calls(
+                        comprehension.iter, include_annotations=include_annotations
+                    )
+                    for condition in comprehension.ifs:
+                        yield from _scope_calls(condition, include_annotations=include_annotations)
+    for child in ast.iter_child_nodes(node):
+        yield from _scope_calls(child, include_annotations=include_annotations)
+
+
+def _module_scope_calls(module: ast.Module) -> Iterator[ast.Call]:
+    """Yield calls evaluated while defining a module or class, not function bodies."""
+
+    postponed_annotations = any(
+        isinstance(node, ast.ImportFrom)
+        and node.module == "__future__"
+        and any(alias.name == "annotations" for alias in node.names)
+        for node in module.body
+    )
+    for node in module.body:
+        yield from _scope_calls(node, include_annotations=not postponed_annotations)
+
+
+def _dotted_name(node: ast.expr) -> str | None:
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        prefix = _dotted_name(node.value)
+        return f"{prefix}.{node.attr}" if prefix else None
+    return None
+
+
+def _imported_module(node: ast.ImportFrom, package: tuple[str, ...]) -> str:
+    if node.level == 0:
+        return node.module or ""
+    keep = len(package) - (node.level - 1)
+    if keep < 0:
+        return ""
+    relative_parts = tuple(filter(None, (node.module or "").split(".")))
+    return ".".join((*package[:keep], *relative_parts))
+
+
+def _context_constructor_exports(
+    parsed_modules: dict[Path, tuple[ast.Module, tuple[str, ...]]],
+    module_names: dict[Path, str],
+) -> tuple[dict[str, dict[str, str]], dict[str, dict[str, str]]]:
+    """Resolve direct, aliased, and core-re-exported context constructors."""
+
+    known_modules = set(module_names.values())
+    exports: dict[str, dict[str, str]] = {name: {} for name in known_modules}
+    module_exports: dict[str, dict[str, str]] = {name: {} for name in known_modules}
+    while True:
+        changed = False
+        for path, (module, package_parts) in parsed_modules.items():
+            module_name = module_names[path]
+            exported = dict(exports[module_name])
+            module_aliases = dict(module_exports[module_name])
+            for node, owner in _module_scope_nodes(module):
+                if owner:
+                    continue
+                if isinstance(node, ast.Import):
+                    for alias in node.names:
+                        if alias.name in {*CONTEXT_VAR_MODULES, "core.ui.context_local"} or (
+                            alias.name in known_modules
+                        ):
+                            module_aliases[alias.asname or alias.name] = alias.name
+                elif isinstance(node, ast.ImportFrom):
+                    source = _imported_module(node, package_parts)
+                    for alias in node.names:
+                        local_name = alias.asname or alias.name
+                        if source in CONTEXT_VAR_MODULES and alias.name == "ContextVar":
+                            exported[local_name] = "ContextVar"
+                        elif source == "core.ui.context_local" and alias.name == "ContextLocal":
+                            exported[local_name] = "ContextLocal"
+                        elif implementation := exports.get(source, {}).get(alias.name):
+                            exported[local_name] = implementation
+                        elif imported_module := module_exports.get(source, {}).get(alias.name):
+                            module_aliases[local_name] = imported_module
+                        elif f"{source}.{alias.name}" in known_modules:
+                            module_aliases[local_name] = f"{source}.{alias.name}"
+
+            while True:
+                aliases_changed = False
+                for node, owner in _module_scope_nodes(module):
+                    if owner:
+                        continue
+                    target: ast.expr | None = None
+                    value: ast.expr | None = None
+                    if isinstance(node, ast.Assign) and len(node.targets) == 1:
+                        target, value = node.targets[0], node.value
+                    elif isinstance(node, ast.AnnAssign):
+                        target, value = node.target, node.value
+                    if not isinstance(target, ast.Name) or value is None:
+                        continue
+                    dotted = _dotted_name(
+                        value.value if isinstance(value, ast.Subscript) else value
+                    )
+                    implementation = exported.get(dotted or "")
+                    if implementation is None and dotted:
+                        for alias_name, imported_name in module_aliases.items():
+                            prefix = f"{alias_name}."
+                            if dotted.startswith(prefix):
+                                imported_symbol = dotted.removeprefix(prefix)
+                                if (
+                                    imported_name in CONTEXT_VAR_MODULES
+                                    and imported_symbol == "ContextVar"
+                                ):
+                                    implementation = "ContextVar"
+                                elif (
+                                    imported_name == "core.ui.context_local"
+                                    and imported_symbol == "ContextLocal"
+                                ):
+                                    implementation = "ContextLocal"
+                                else:
+                                    implementation = exports.get(imported_name, {}).get(
+                                        imported_symbol
+                                    )
+                                break
+                    if implementation is not None and target.id not in exported:
+                        exported[target.id] = implementation
+                        aliases_changed = True
+                    if dotted in module_aliases and target.id not in module_aliases:
+                        module_aliases[target.id] = module_aliases[dotted]
+                        aliases_changed = True
+                if not aliases_changed:
+                    break
+            if exported != exports[module_name]:
+                exports[module_name] = exported
+                changed = True
+            if module_aliases != module_exports[module_name]:
+                module_exports[module_name] = module_aliases
+                changed = True
+        if not changed:
+            return exports, module_exports
+
+
+def _exported_context_constructor_paths(
+    module_path: str,
+    constructor_exports: dict[str, dict[str, str]],
+    module_exports: dict[str, dict[str, str]],
+    seen: frozenset[str] = frozenset(),
+) -> dict[str, str]:
+    if module_path in CONTEXT_VAR_MODULES:
+        return {"ContextVar": "ContextVar"}
+    if module_path == "core.ui.context_local":
+        return {"ContextLocal": "ContextLocal"}
+    if module_path in seen:
+        return {}
+    paths = dict(constructor_exports.get(module_path, {}))
+    for name, imported in module_exports.get(module_path, {}).items():
+        paths.update(
+            {
+                f"{name}.{nested}": implementation
+                for nested, implementation in _exported_context_constructor_paths(
+                    imported,
+                    constructor_exports,
+                    module_exports,
+                    seen | {module_path},
+                ).items()
+            }
+        )
+    return paths
+
+
+def _context_constructor_module_path(
+    expression: ast.expr,
+    aliases: dict[str, str],
+    constructor_exports: dict[str, dict[str, str]],
+    module_exports: dict[str, dict[str, str]],
+) -> str | None:
+    dotted = _dotted_name(expression.value if isinstance(expression, ast.Subscript) else expression)
+    if dotted is None:
+        return None
+    if dotted in aliases:
+        module_path = aliases[dotted]
+        return (
+            module_path
+            if _exported_context_constructor_paths(module_path, constructor_exports, module_exports)
+            else None
+        )
+    for alias_name, imported_name in aliases.items():
+        if not dotted.startswith(f"{alias_name}."):
+            continue
+        module_path = imported_name
+        for part in dotted.removeprefix(f"{alias_name}.").split("."):
+            module_path = module_exports.get(module_path, {}).get(part) or (
+                candidate if (candidate := f"{module_path}.{part}") in constructor_exports else ""
+            )
+            if not module_path:
+                break
+        if module_path and _exported_context_constructor_paths(
+            module_path, constructor_exports, module_exports
+        ):
+            return module_path
+    return None
+
+
+def _context_alias_assignment(
+    node: ast.stmt,
+    *,
+    path: Path,
+    constructor_reference: Callable[[ast.expr], str | None],
+    module_reference: Callable[[ast.expr], bool],
+) -> tuple[ast.Name, ast.expr] | None:
+    def container_values(value: ast.expr) -> Iterator[ast.expr]:
+        children: Iterable[ast.expr | None]
+        if isinstance(value, ast.Starred):
+            children = (value.value,)
+        elif isinstance(value, ast.Dict):
+            children = (*value.keys, *value.values)
+        elif isinstance(value, ast.List | ast.Set | ast.Tuple):
+            children = value.elts
+        else:
+            yield value
+            return
+        for child in children:
+            if child is not None:
+                yield from container_values(child)
+
+    target: ast.expr | None = None
+    value: ast.expr | None = None
+    if isinstance(node, ast.Assign):
+        value = node.value
+        if len(node.targets) == 1:
+            target = node.targets[0]
+    elif isinstance(node, ast.AnnAssign):
+        target, value = node.target, node.value
+    elif isinstance(node, ast.AugAssign):
+        if any(
+            constructor_reference(expression) is not None or module_reference(expression)
+            for expression in ast.walk(node.value)
+            if isinstance(expression, ast.expr)
+        ):
+            raise ValueError(
+                f"{path}:{node.lineno}: ContextVar constructors must not be stored in containers"
+            )
+        return None
+    if value is None:
+        return None
+    if (
+        isinstance(value, ast.Attribute)
+        and value.attr in {"__call__", "__new__"}
+        and constructor_reference(value.value) is not None
+    ):
+        raise ValueError(
+            f"{path}:{node.lineno}: ContextVar constructor methods must not be aliased"
+        )
+    if isinstance(target, ast.Name):
+        if (
+            isinstance(value, ast.Subscript)
+            and constructor_reference(value) is None
+            and any(
+                constructor_reference(expression) is not None or module_reference(expression)
+                for expression in ast.walk(value.value)
+                if isinstance(expression, ast.expr)
+            )
+        ):
+            raise ValueError(f"{path}:{node.lineno}: ContextVar constructors must assign directly")
+        if isinstance(value, ast.Dict | ast.List | ast.Set | ast.Tuple) and any(
+            constructor_reference(expression) is not None or module_reference(expression)
+            for expression in container_values(value)
+        ):
+            raise ValueError(
+                f"{path}:{node.lineno}: ContextVar constructors must not be stored in containers"
+            )
+        if isinstance(value, ast.BinOp) and any(
+            constructor_reference(expression) is not None or module_reference(expression)
+            for expression in ast.walk(value)
+            if isinstance(expression, ast.expr)
+        ):
+            raise ValueError(
+                f"{path}:{node.lineno}: ContextVar constructors must not be stored in containers"
+            )
+        if isinstance(value, ast.IfExp | ast.BoolOp) and any(
+            constructor_reference(expression) is not None or module_reference(expression)
+            for expression in ast.walk(value)
+            if isinstance(expression, ast.expr) and expression is not value
+        ):
+            raise ValueError(
+                f"{path}:{node.lineno}: ContextVar constructor aliases must reference "
+                "one constructor directly"
+            )
+        return target, value
+    values = container_values(value)
+    if any(constructor_reference(item) is not None or module_reference(item) for item in values):
+        raise ValueError(
+            f"{path}:{node.lineno}: ContextVar constructor aliases must assign "
+            "one module/class name"
+        )
+    return None
+
+
+def _unsupported_context_alias(
+    node: ast.AST,
+    constructor_reference: Callable[[ast.expr], str | None],
+    module_reference: Callable[[ast.expr], bool],
+) -> bool:
+    if isinstance(node, ast.DictComp | ast.ListComp | ast.SetComp):
+        outputs = (node.key, node.value) if isinstance(node, ast.DictComp) else (node.elt,)
+        return any(
+            constructor_reference(candidate) is not None or module_reference(candidate)
+            for output in outputs
+            for candidate in ast.walk(output)
+            if isinstance(candidate, ast.expr)
+        )
+    if isinstance(node, ast.Attribute) and node.attr == "__dict__" and module_reference(node.value):
+        return True
+    if isinstance(node, ast.NamedExpr):
+        return any(
+            constructor_reference(candidate) is not None or module_reference(candidate)
+            for candidate in ast.walk(node.value)
+            if isinstance(candidate, ast.expr)
+        )
+    if (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Subscript | ast.IfExp | ast.BoolOp)
+        and constructor_reference(node.func) is None
+        and any(
+            constructor_reference(candidate) is not None or module_reference(candidate)
+            for candidate in ast.walk(node.func)
+            if isinstance(candidate, ast.expr) and candidate is not node.func
+        )
+    ):
+        return True
+    if (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "ContextVar"
+        and isinstance(node.func.value, ast.Subscript | ast.IfExp | ast.BoolOp)
+    ):
+        return any(
+            module_reference(candidate)
+            for candidate in ast.walk(node.func.value)
+            if isinstance(candidate, ast.expr)
+        )
+    if isinstance(node, ast.Match | ast.comprehension) or (
+        isinstance(node, ast.For | ast.AsyncFor) and not isinstance(node.iter, ast.GeneratorExp)
+    ):
+        source = (
+            node.iter
+            if isinstance(node, ast.For | ast.AsyncFor | ast.comprehension)
+            else node.subject
+        )
+        return any(
+            constructor_reference(candidate) is not None or module_reference(candidate)
+            for candidate in ast.walk(source)
+            if isinstance(candidate, ast.expr)
+        )
+    return isinstance(node, ast.ClassDef) and any(
+        constructor_reference(base) == "ContextLocal" for base in node.bases
+    )
+
+
+def _runtime_expressions(
+    node: ast.AST,
+    *,
+    include_annotations: bool = True,
+) -> Iterator[ast.expr]:
+    """Yield expressions Python evaluates, optionally including annotations."""
+
+    if isinstance(node, ast.Assign | ast.AnnAssign | ast.AugAssign):
+        value = node.value
+        if value is not None:
+            yield from _runtime_expressions(value, include_annotations=include_annotations)
+        return
+    if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+        expressions: list[ast.expr | None] = [
+            *node.decorator_list,
+            *node.args.defaults,
+            *node.args.kw_defaults,
+        ]
+        if include_annotations:
+            expressions.extend(
+                argument.annotation
+                for argument in (
+                    *node.args.posonlyargs,
+                    *node.args.args,
+                    *node.args.kwonlyargs,
+                    node.args.vararg,
+                    node.args.kwarg,
+                )
+                if argument is not None
+            )
+            expressions.append(node.returns)
+        for expression in expressions:
+            if expression is not None:
+                yield from _runtime_expressions(
+                    expression,
+                    include_annotations=include_annotations,
+                )
+        for statement in node.body:
+            yield from _runtime_expressions(
+                statement,
+                include_annotations=include_annotations,
+            )
+        return
+    if isinstance(node, ast.Lambda):
+        for expression in (*node.args.defaults, *node.args.kw_defaults, node.body):
+            if expression is not None:
+                yield from _runtime_expressions(
+                    expression,
+                    include_annotations=include_annotations,
+                )
+        return
+    if isinstance(node, ast.expr):
+        yield node
+    for child in ast.iter_child_nodes(node):
+        yield from _runtime_expressions(child, include_annotations=include_annotations)
+
+
+def _reject_context_factories(
+    path: Path,
+    module_nodes: Sequence[tuple[ast.stmt, str]],
+    constructor_reference: Callable[[ast.expr], str | None],
+    module_reference: Callable[[ast.expr], bool],
+    is_context_import: Callable[[ast.stmt], bool],
+    builtin_observer_calls: set[int],
+    cast_calls: set[int],
+) -> None:
+    postponed_annotations = any(
+        isinstance(node, ast.ImportFrom)
+        and node.module == "__future__"
+        and any(alias.name == "annotations" for alias in node.names)
+        for node, owner in module_nodes
+        if not owner
+    )
+
+    def contains_context_module(expression: ast.expr) -> bool:
+        if module_reference(expression):
+            return True
+        children: Iterable[ast.expr | None]
+        if isinstance(expression, ast.Dict):
+            children = (*expression.keys, *expression.values)
+        elif isinstance(expression, ast.List | ast.Set | ast.Tuple):
+            children = expression.elts
+        elif isinstance(expression, ast.IfExp):
+            children = (expression.body, expression.orelse)
+        elif isinstance(expression, ast.BoolOp):
+            children = expression.values
+        else:
+            return False
+        return any(child is not None and contains_context_module(child) for child in children)
+
+    def contains_context_constructor(expression: ast.expr) -> bool:
+        if constructor_reference(expression) is not None:
+            return True
+        children: Iterable[ast.expr | None]
+        if isinstance(expression, ast.Starred):
+            children = (expression.value,)
+        elif isinstance(expression, ast.Dict):
+            children = (*expression.keys, *expression.values)
+        elif isinstance(expression, ast.List | ast.Set | ast.Tuple):
+            children = expression.elts
+        elif isinstance(expression, ast.IfExp):
+            children = (expression.body, expression.orelse)
+        elif isinstance(expression, ast.BoolOp):
+            children = expression.values
+        else:
+            return False
+        return any(child is not None and contains_context_constructor(child) for child in children)
+
+    for node, owner in module_nodes:
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+            if path.parts[-3:] == ("core", "ui", "context_local.py") and (
+                owner,
+                node.name,
+            ) == ("ContextLocal.", "__init__"):
+                context_calls = [
+                    child
+                    for child in ast.walk(node)
+                    if isinstance(child, ast.Call) and constructor_reference(child.func) is not None
+                ]
+                backing_calls = [
+                    child
+                    for child in ast.walk(node)
+                    if isinstance(child, ast.Call)
+                    and _dotted_name(child.func) == "object.__setattr__"
+                    and len(child.args) >= 3
+                    and isinstance(child.args[1], ast.Constant)
+                    and child.args[1].value == "_ctx"
+                    and child.args[2] in context_calls
+                ]
+                if len(context_calls) != 1 or len(backing_calls) != 1:
+                    raise ValueError(
+                        f"{path}:{node.lineno}: ContextLocal must own exactly one "
+                        "direct _ctx ContextVar backing"
+                    )
+                continue
+            if any(
+                is_context_import(child)
+                for child in ast.walk(node)
+                if isinstance(child, ast.Import | ast.ImportFrom)
+            ):
+                raise ValueError(
+                    f"{path}:{node.lineno}: ContextVar constructors must be imported "
+                    "at module scope"
+                )
+            hides_constructor = (
+                any(
+                    isinstance(expression, ast.Call)
+                    and constructor_reference(expression.func) is not None
+                    for expression in _runtime_expressions(
+                        node,
+                        include_annotations=not postponed_annotations,
+                    )
+                )
+                or any(
+                    contains_context_module(child.value)
+                    or contains_context_constructor(child.value)
+                    for child in ast.walk(node)
+                    if isinstance(child, ast.Assign | ast.AnnAssign | ast.AugAssign)
+                    if child.value is not None
+                )
+                or any(
+                    child.value is not None
+                    and (
+                        contains_context_module(child.value)
+                        or contains_context_constructor(child.value)
+                    )
+                    for child in ast.walk(node)
+                    if isinstance(child, ast.Return | ast.Yield | ast.YieldFrom)
+                )
+            )
+            if hides_constructor:
+                raise ValueError(f"{path}:{node.lineno}: ContextVar factories must assign directly")
+            definition_inputs = (
+                *node.decorator_list,
+                *node.args.defaults,
+                *node.args.kw_defaults,
+            )
+            if any(
+                contains_context_module(expression) or contains_context_constructor(expression)
+                for expression in definition_inputs
+                if expression is not None
+            ):
+                raise ValueError(f"{path}:{node.lineno}: ContextVar factories must assign directly")
+            _reject_forwarded_context_constructors(
+                path,
+                (child for child in ast.walk(node) if isinstance(child, ast.Call)),
+                lambda expression: constructor_reference(expression) is not None,
+                builtin_observer_calls=builtin_observer_calls,
+                cast_calls=cast_calls,
+            )
+            _reject_forwarded_context_modules(
+                path,
+                (
+                    call
+                    for child in node.body
+                    for call in ast.walk(child)
+                    if isinstance(call, ast.Call)
+                ),
+                module_reference,
+            )
+        for deferred in (child for child in ast.walk(node) if isinstance(child, ast.Lambda)):
+            if any(
+                isinstance(expression, ast.Call)
+                and constructor_reference(expression.func) is not None
+                for expression in _runtime_expressions(deferred)
+            ):
+                raise ValueError(
+                    f"{path}:{deferred.lineno}: ContextVar factories must assign directly"
+                )
+            if (
+                any(
+                    contains_context_module(expression) or contains_context_constructor(expression)
+                    for expression in (*deferred.args.defaults, *deferred.args.kw_defaults)
+                    if expression is not None
+                )
+                or contains_context_module(deferred.body)
+                or contains_context_constructor(deferred.body)
+            ):
+                raise ValueError(
+                    f"{path}:{deferred.lineno}: ContextVar factories must assign directly"
+                )
+            _reject_forwarded_context_constructors(
+                path,
+                (child for child in ast.walk(deferred) if isinstance(child, ast.Call)),
+                lambda expression: constructor_reference(expression) is not None,
+                builtin_observer_calls=builtin_observer_calls,
+                cast_calls=cast_calls,
+            )
+
+
+def _reject_deferred_context_generators(
+    path: Path,
+    module_nodes: Sequence[tuple[ast.stmt, str]],
+    constructor_reference: Callable[[ast.expr], str | None],
+    module_reference: Callable[[ast.expr], bool],
+) -> None:
+    def evaluated_generators(node: ast.AST) -> Iterator[ast.GeneratorExp]:
+        if isinstance(node, ast.Lambda | ast.FunctionDef | ast.AsyncFunctionDef):
+            return
+        if isinstance(node, ast.GeneratorExp):
+            yield node
+            return
+        for child in ast.iter_child_nodes(node):
+            yield from evaluated_generators(child)
+
+    for node, _owner in module_nodes:
+        for generator in evaluated_generators(node):
+            if any(
+                constructor_reference(expression) is not None or module_reference(expression)
+                for expression in ast.walk(generator)
+                if isinstance(expression, ast.expr)
+            ):
+                raise ValueError(
+                    f"{path}:{generator.lineno}: ContextVar generators must not be deferred"
+                )
+
+
+def _context_observation_calls(module: ast.Module) -> tuple[set[int], set[int]]:
+    """Resolve builtin type checks and typing.cast calls without trusting names."""
+
+    nodes = tuple(ast.walk(module))
+    shadowed = {
+        node.arg if isinstance(node, ast.arg) else node.id
+        for node in nodes
+        if isinstance(node, ast.arg)
+        or (isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store))
+    }
+    shadowed.update(
+        node.name
+        for node in nodes
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef)
+    )
+
+    cast_names = {
+        alias.asname or alias.name
+        for node in module.body
+        if isinstance(node, ast.ImportFrom) and node.module == "typing"
+        for alias in node.names
+        if alias.name == "cast" and (alias.asname or alias.name) not in shadowed
+    }
+    typing_names = {
+        alias.asname or alias.name
+        for node in module.body
+        if isinstance(node, ast.Import)
+        for alias in node.names
+        if alias.name == "typing" and (alias.asname or alias.name) not in shadowed
+    }
+    builtin_calls: set[int] = set()
+    cast_calls: set[int] = set()
+    for call in (node for node in ast.walk(module) if isinstance(node, ast.Call)):
+        if isinstance(call.func, ast.Name):
+            name = call.func.id
+            if name in {"isinstance", "issubclass"} and name not in shadowed:
+                builtin_calls.add(id(call))
+            elif name in cast_names:
+                cast_calls.add(id(call))
+        elif isinstance(call.func, ast.Attribute) and isinstance(call.func.value, ast.Name):
+            name = call.func.value.id
+            if call.func.attr == "cast" and name in typing_names:
+                cast_calls.add(id(call))
+    return builtin_calls, cast_calls
+
+
+def _reject_forwarded_context_constructors(
+    path: Path,
+    calls: Iterable[ast.Call],
+    context_reference: Callable[[ast.expr], bool],
+    *,
+    builtin_observer_calls: set[int],
+    cast_calls: set[int],
+) -> None:
+    for call in calls:
+        if id(call) in builtin_observer_calls:
+            continue
+        receiver_hides_constructor = not context_reference(call.func) and any(
+            context_reference(expression)
+            for expression in ast.walk(call.func)
+            if isinstance(expression, ast.expr) and expression is not call.func
+        )
+        positional = call.args[1:] if id(call) in cast_calls else call.args
+        arguments = (*positional, *(keyword.value for keyword in call.keywords))
+        if receiver_hides_constructor or any(
+            context_reference(expression)
+            for argument in arguments
+            for expression in ast.walk(argument)
+            if isinstance(expression, ast.expr)
+        ):
+            raise ValueError(
+                f"{path}:{call.lineno}: ContextVar constructors must not be passed "
+                "through factories"
+            )
+
+
+def _reject_forwarded_context_modules(
+    path: Path,
+    calls: Iterable[ast.Call],
+    module_reference: Callable[[ast.expr], bool],
+) -> None:
+    def contains_module(argument: ast.expr) -> bool:
+        if module_reference(argument):
+            return True
+        children: Iterable[ast.expr | None]
+        if isinstance(argument, ast.Starred):
+            children = (argument.value,)
+        elif isinstance(argument, ast.Dict):
+            children = (*argument.keys, *argument.values)
+        elif isinstance(argument, ast.List | ast.Set | ast.Tuple):
+            children = argument.elts
+        elif isinstance(argument, ast.BinOp):
+            children = (argument.left, argument.right)
+        elif isinstance(argument, ast.IfExp):
+            children = (argument.body, argument.orelse)
+        elif isinstance(argument, ast.BoolOp):
+            children = argument.values
+        elif isinstance(argument, ast.Subscript):
+            children = (argument.value, argument.slice)
+        else:
+            return False
+        return any(child is not None and contains_module(child) for child in children)
+
+    for call in calls:
+        arguments = (*call.args, *(keyword.value for keyword in call.keywords))
+        receiver_hides_module = (
+            isinstance(call.func, ast.Attribute)
+            and call.func.attr == "__getattribute__"
+            and contains_module(call.func.value)
+        )
+        if receiver_hides_module or any(contains_module(argument) for argument in arguments):
+            raise ValueError(
+                f"{path}:{call.lineno}: ContextVar constructor modules must not be passed "
+                "through factories"
+            )
+
+
+def _reject_literal_context_imports(path: Path, module: ast.Module) -> None:
+    importlib_aliases = {
+        alias.asname or alias.name
+        for node in ast.walk(module)
+        if isinstance(node, ast.Import)
+        for alias in node.names
+        if alias.name == "importlib"
+    }
+    import_module_names = {
+        alias.asname or alias.name
+        for node in ast.walk(module)
+        if isinstance(node, ast.ImportFrom) and node.module == "importlib"
+        for alias in node.names
+        if alias.name == "import_module"
+    }
+    lazy_imports = {
+        "__import__",
+        *import_module_names,
+        *(f"{name}.import_module" for name in importlib_aliases),
+    }
+    assignments = [node for node in ast.walk(module) if isinstance(node, ast.Assign)]
+    while (
+        aliases := {
+            target.id
+            for node in assignments
+            if _dotted_name(node.value) in lazy_imports
+            for target in node.targets
+            if isinstance(target, ast.Name)
+        }
+        - lazy_imports
+    ):
+        lazy_imports.update(aliases)
+    for call in (node for node in ast.walk(module) if isinstance(node, ast.Call)):
+        module_name = (
+            call.args[0]
+            if call.args
+            else next((keyword.value for keyword in call.keywords if keyword.arg == "name"), None)
+        )
+        if (
+            _dotted_name(call.func) in lazy_imports
+            and isinstance(module_name, ast.Constant)
+            and module_name.value in {*CONTEXT_VAR_MODULES, "core.ui.context_local"}
+        ):
+            raise ValueError(
+                f"{path}:{call.lineno}: ContextVar constructors must use static imports"
+            )
+
+
+def _reject_context_keyword_unpacking(path: Path, calls: Iterable[ast.Call]) -> None:
+    for call in calls:
+        if any(keyword.arg is None for keyword in call.keywords):
+            raise ValueError(
+                f"{path}:{call.lineno}: ContextVar constructors must not unpack keywords"
+            )
 
 
 def _context_vars(root: Path) -> dict[str, Any]:
     items: list[dict[str, Any]] = []
-    for path in _python_files(root, "core"):
-        module = _parse_python(path)
-        for node in module.body:
+    parsed_modules = {
+        path: (_parse_python(path), path.relative_to(root).parent.parts)
+        for package in ("core", *PRODUCT_MODULE_ROOTS)
+        for path in _python_files(root, package)
+    }
+    for path, (module, _package_parts) in parsed_modules.items():
+        _reject_literal_context_imports(path, module)
+
+    module_names = {
+        path: path.relative_to(root)
+        .with_suffix("")
+        .as_posix()
+        .replace("/", ".")
+        .removesuffix(".__init__")
+        for path in parsed_modules
+    }
+    known_modules = set(module_names.values())
+    constructor_exports, constructor_module_exports = _context_constructor_exports(
+        parsed_modules, module_names
+    )
+
+    for path, (module, package_parts) in parsed_modules.items():
+        module_nodes = tuple(_module_scope_nodes(module))
+        module_name = module_names[path]
+        builtin_observer_calls, cast_calls = _context_observation_calls(module)
+
+        def is_context_import(
+            node: ast.stmt,
+            package: tuple[str, ...] = package_parts,
+        ) -> bool:
+            if isinstance(node, ast.Import):
+                return any(
+                    alias.name in {*CONTEXT_VAR_MODULES, "core.ui.context_local"}
+                    or bool(constructor_exports.get(alias.name))
+                    or bool(constructor_module_exports.get(alias.name))
+                    for alias in node.names
+                )
+            if not isinstance(node, ast.ImportFrom):
+                return False
+            source = _imported_module(node, package)
+            return (
+                (
+                    source in CONTEXT_VAR_MODULES
+                    and any(alias.name == "ContextVar" for alias in node.names)
+                )
+                or (
+                    source == "core.ui.context_local"
+                    and any(alias.name == "ContextLocal" for alias in node.names)
+                )
+                or (
+                    source == "core.ui"
+                    and any(alias.name == "context_local" for alias in node.names)
+                )
+                or any(
+                    alias.name in constructor_exports.get(source, {})
+                    or alias.name in constructor_module_exports.get(source, {})
+                    or bool(constructor_exports.get(f"{source}.{alias.name}"))
+                    for alias in node.names
+                )
+            )
+
+        for node, owner in module_nodes:
+            if not owner:
+                continue
+            if is_context_import(node):
+                raise ValueError(
+                    f"{path}:{node.lineno}: ContextVar constructors must be imported "
+                    "at module scope"
+                )
+
+        constructors = {
+            alias.asname or alias.name: "ContextVar"
+            for node, owner in module_nodes
+            if not owner
+            if isinstance(node, ast.ImportFrom) and node.module in CONTEXT_VAR_MODULES
+            for alias in node.names
+            if alias.name == "ContextVar"
+        }
+        constructors.update(CONTEXT_LOCAL_DEFINING_MODULE_CONSTRUCTORS.get(module_name, {}))
+        constructors.update(constructor_exports[module_name])
+        constructors.update(
+            {
+                alias.asname or alias.name: "ContextLocal"
+                for node, owner in module_nodes
+                if not owner
+                if isinstance(node, ast.ImportFrom)
+                and _imported_module(node, package_parts) == "core.ui.context_local"
+                for alias in node.names
+                if alias.name == "ContextLocal"
+            }
+        )
+        module_aliases = {
+            alias.asname or alias.name: alias.name
+            for node, owner in module_nodes
+            if not owner
+            if isinstance(node, ast.Import)
+            for alias in node.names
+            if alias.name in {*CONTEXT_VAR_MODULES, "core.ui.context_local"}
+            or alias.name in known_modules
+        }
+        module_aliases.update(
+            {
+                alias.name.partition(".")[0]: alias.name.partition(".")[0]
+                for node, owner in module_nodes
+                if not owner
+                if isinstance(node, ast.Import)
+                for alias in node.names
+                if alias.asname is None
+                if "." in alias.name
+                if alias.name.partition(".")[0] in known_modules
+            }
+        )
+        module_aliases.update(
+            {
+                alias.asname or alias.name: "core.ui.context_local"
+                for node, owner in module_nodes
+                if not owner
+                if isinstance(node, ast.ImportFrom)
+                and _imported_module(node, package_parts) == "core.ui"
+                for alias in node.names
+                if alias.name == "context_local"
+            }
+        )
+        module_aliases.update(
+            {
+                alias.asname or alias.name: candidate
+                for node, owner in module_nodes
+                if not owner
+                if isinstance(node, ast.ImportFrom)
+                for source in (_imported_module(node, package_parts),)
+                for alias in node.names
+                for candidate in (f"{source}.{alias.name}",)
+                if candidate in known_modules
+            }
+        )
+        module_aliases.update(
+            {
+                alias.asname or alias.name: constructor_module_exports[source][alias.name]
+                for node, owner in module_nodes
+                if not owner
+                if isinstance(node, ast.ImportFrom)
+                for source in (_imported_module(node, package_parts),)
+                for alias in node.names
+                if alias.name in constructor_module_exports.get(source, {})
+            }
+        )
+        qualified_constructors: dict[str, str] = {}
+
+        def constructor_reference(
+            function: ast.expr,
+            direct: dict[str, str] = constructors,
+            qualified: dict[str, str] = qualified_constructors,
+        ) -> str | None:
+            if isinstance(function, ast.Subscript):
+                function = function.value
+            if isinstance(function, ast.Name):
+                return direct.get(function.id)
+            dotted = _dotted_name(function)
+            return qualified.get(dotted) if dotted else None
+
+        def module_path_reference(
+            expression: ast.expr,
+            aliases: dict[str, str] = module_aliases,
+        ) -> str | None:
+            return _context_constructor_module_path(
+                expression,
+                aliases,
+                constructor_exports,
+                constructor_module_exports,
+            )
+
+        def module_reference(expression: ast.expr) -> bool:
+            return module_path_reference(expression) is not None
+
+        while True:
+            for name, module_path in module_aliases.items():
+                qualified_constructors.update(
+                    {
+                        f"{name}.{exported_name}": constructor
+                        for exported_name, constructor in _exported_context_constructor_paths(
+                            module_path, constructor_exports, constructor_module_exports
+                        ).items()
+                    }
+                )
+            constructor_aliases: dict[str, str] = {}
+            new_module_aliases: dict[str, str] = {}
+            for node, owner in module_nodes:
+                assignment = _context_alias_assignment(
+                    node,
+                    path=path,
+                    constructor_reference=constructor_reference,
+                    module_reference=module_reference,
+                )
+                if assignment is None:
+                    continue
+                alias_target, alias_value = assignment
+                implementation = constructor_reference(alias_value)
+                resolved_module = module_path_reference(alias_value)
+                if owner and (implementation is not None or resolved_module is not None):
+                    raise ValueError(
+                        f"{path}:{node.lineno}: ContextVar constructor aliases must be "
+                        "module-scoped"
+                    )
+                if owner:
+                    continue
+                if implementation is not None and alias_target.id not in constructors:
+                    constructor_aliases[alias_target.id] = implementation
+                if resolved_module is not None and alias_target.id not in module_aliases:
+                    new_module_aliases[alias_target.id] = resolved_module
+            if not constructor_aliases and not new_module_aliases:
+                break
+            constructors.update(constructor_aliases)
+            module_aliases.update(new_module_aliases)
+
+        unsupported_alias = next(
+            (
+                expression
+                for expression in ast.walk(module)
+                if _unsupported_context_alias(expression, constructor_reference, module_reference)
+            ),
+            None,
+        )
+        if unsupported_alias is not None:
+            raise ValueError(
+                f"{path}:{getattr(unsupported_alias, 'lineno', 0)}: "
+                "ContextVar-backed constructors must "
+                "assign directly"
+            )
+
+        def constructor_type(
+            candidate: ast.Call,
+            resolve: Callable[[ast.expr], str | None] = constructor_reference,
+        ) -> str | None:
+            return resolve(candidate.func)
+
+        _reject_context_factories(
+            path,
+            module_nodes,
+            constructor_reference,
+            module_reference,
+            is_context_import,
+            builtin_observer_calls,
+            cast_calls,
+        )
+        _reject_forwarded_context_constructors(
+            path,
+            _module_scope_calls(module),
+            lambda expression: constructor_reference(expression) is not None,
+            builtin_observer_calls=builtin_observer_calls,
+            cast_calls=cast_calls,
+        )
+        _reject_forwarded_context_modules(
+            path,
+            _module_scope_calls(module),
+            module_reference,
+        )
+        _reject_deferred_context_generators(
+            path,
+            module_nodes,
+            constructor_reference,
+            module_reference,
+        )
+
+        module_context_calls = {
+            id(candidate): candidate
+            for candidate in _module_scope_calls(module)
+            if constructor_type(candidate) is not None
+        }
+        _reject_context_keyword_unpacking(path, module_context_calls.values())
+        assigned_context_calls: set[int] = set()
+        for node, owner in module_nodes:
             symbol: str | None = None
             value: ast.expr | None = None
-            if isinstance(node, ast.Assign) and len(node.targets) == 1:
-                target = node.targets[0]
-                if isinstance(target, ast.Name):
-                    symbol = target.id
-                    value = node.value
-            elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-                symbol = node.target.id
+            unsupported_assignment = False
+            if isinstance(node, ast.Assign):
                 value = node.value
-            if symbol is None or not isinstance(value, ast.Call):
+                if len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+                    symbol = f"{owner}{node.targets[0].id}"
+                else:
+                    unsupported_assignment = True
+            elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+                symbol = f"{owner}{node.target.id}"
+                value = node.value
+            context_var_calls: list[tuple[ast.Call, str]] = []
+            for candidate in _scope_calls(value) if value is not None else ():
+                implementation = constructor_type(candidate)
+                if implementation is not None:
+                    context_var_calls.append((candidate, implementation))
+            if not context_var_calls:
                 continue
-            function = value.func
-            is_context_var = (isinstance(function, ast.Name) and function.id == "ContextVar") or (
-                isinstance(function, ast.Attribute)
-                and isinstance(function.value, ast.Name)
-                and function.value.id == "contextvars"
-                and function.attr == "ContextVar"
-            )
-            if not is_context_var:
-                continue
+            if (
+                not isinstance(value, ast.Call)
+                or len(context_var_calls) != 1
+                or context_var_calls[0][0] is not value
+                or unsupported_assignment
+                or symbol is None
+            ):
+                raise ValueError(
+                    f"{path}:{node.lineno}: ContextVar-backed state must assign "
+                    "one module/class name"
+                )
             context_name = ""
             if value.args and isinstance(value.args[0], ast.Constant):
                 raw_name = value.args[0].value
                 if isinstance(raw_name, str):
                     context_name = raw_name
+            assigned_context_calls.add(id(value))
             items.append(
                 {
                     "path": path.relative_to(root).as_posix(),
                     "line": node.lineno,
                     "symbol": symbol,
                     "context_name": context_name,
-                    "has_default": any(keyword.arg == "default" for keyword in value.keywords),
+                    "has_default": context_var_calls[0][1] == "ContextLocal"
+                    or any(keyword.arg == "default" for keyword in value.keywords),
+                    "implementation": context_var_calls[0][1],
                 }
             )
+        unsupported_calls = module_context_calls.keys() - assigned_context_calls
+        if unsupported_calls:
+            first = min(unsupported_calls, key=lambda key: module_context_calls[key].lineno)
+            call = module_context_calls[first]
+            raise ValueError(
+                f"{path}:{call.lineno}: ContextVar-backed state must assign one module/class name"
+            )
     items.sort(key=lambda item: (item["path"], item["line"], item["symbol"]))
-    return {"count": len(items), "items": items}
+    lifecycle_path = root / CONTEXT_VAR_LIFECYCLES
+
+    def unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        result = dict(pairs)
+        if len(result) != len(pairs):
+            raise ValueError(f"{lifecycle_path}: duplicate JSON object key")
+        return result
+
+    try:
+        lifecycles = json.loads(
+            lifecycle_path.read_text(encoding="utf-8"), object_pairs_hook=unique_object
+        )
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"cannot read ContextVar lifecycle inventory: {lifecycle_path}") from exc
+    if not isinstance(lifecycles, dict):
+        raise ValueError(f"{lifecycle_path}: expected a JSON object")
+
+    measured_key_list = [f"{item['path']}:{item['symbol']}" for item in items]
+    duplicate_keys = sorted(key for key, count in Counter(measured_key_list).items() if count > 1)
+    if duplicate_keys:
+        raise ValueError(f"duplicate ContextVar lifecycle declarations: {duplicate_keys}")
+    measured_keys = set(measured_key_list)
+    declared_keys = set(lifecycles)
+    if measured_keys != declared_keys:
+        missing = sorted(measured_keys - declared_keys)
+        stale = sorted(declared_keys - measured_keys)
+        raise ValueError(f"ContextVar lifecycle drift: missing={missing}; stale={stale}")
+
+    counts = dict.fromkeys(CONTEXT_VAR_CLASSIFICATIONS, 0)
+    for item in items:
+        key = f"{item['path']}:{item['symbol']}"
+        lifecycle = lifecycles[key]
+        if not isinstance(lifecycle, dict):
+            raise ValueError(f"{lifecycle_path}: {key} must be an object")
+        if set(lifecycle) != set(CONTEXT_VAR_LIFECYCLE_FIELDS):
+            raise ValueError(
+                f"{lifecycle_path}: {key} fields must be {list(CONTEXT_VAR_LIFECYCLE_FIELDS)}"
+            )
+        if any(
+            not isinstance(lifecycle[field], str) or not lifecycle[field].strip()
+            for field in lifecycle
+        ):
+            raise ValueError(f"{lifecycle_path}: {key} fields must be non-empty strings")
+        classification = lifecycle["classification"]
+        if classification not in counts:
+            raise ValueError(
+                f"{lifecycle_path}: {key} has unknown classification {classification!r}"
+            )
+        counts[classification] += 1
+        item.update(lifecycle)
+        item["async_propagation_test"] = CONTEXT_VAR_PROPAGATION_TEST
+
+    return {
+        "count": len(items),
+        "classification_counts": counts,
+        "service_locator_count": counts["service_locator"],
+        "lifecycle_source": CONTEXT_VAR_LIFECYCLES.as_posix(),
+        "items": items,
+    }
 
 
 def _self_improving_facades(root: Path) -> dict[str, Any]:
@@ -497,9 +1732,10 @@ def _tool_inventory(root: Path) -> dict[str, Any]:
     from core.agent.tool_executor.executor import SPECIAL_EXECUTION_BINDINGS
     from core.cli.tool_handlers import _build_tool_handler_catalog
     from core.llm.tool_defer import TOOL_SEARCH_ALWAYS_LOADED
-    from geode_product.tool_handlers import product_handler_groups
+    from geode_product.tool_handlers import compose_tool_plan, product_handler_groups
 
     handler_catalog = _build_tool_handler_catalog(extra_groups=product_handler_groups())
+    bound_plan, transient_handlers = compose_tool_plan()
     handler_names = sorted(handler_catalog.handlers)
     execution_names = sorted(set(handler_names) | set(SPECIAL_EXECUTION_BINDINGS))
     definitions = set(definition_names)
@@ -509,6 +1745,9 @@ def _tool_inventory(root: Path) -> dict[str, Any]:
     definition_only = sorted(definitions - executions)
     invalid_schemas = sorted(definitions - schemas)
     unknown_always_loaded = sorted(always_loaded - definitions)
+    plan_names = set(bound_plan.tool_names)
+    policy_names = {registration.spec.name for registration in bound_plan.plan.registrations}
+    transient_names = set(transient_handlers)
 
     fatal_errors: list[str] = []
     if duplicate_names:
@@ -521,6 +1760,23 @@ def _tool_inventory(root: Path) -> dict[str, Any]:
         fatal_errors.append(f"definitions without valid schemas: {invalid_schemas}")
     if unknown_always_loaded:
         fatal_errors.append(f"unknown always-loaded tools: {unknown_always_loaded}")
+    if plan_names != definitions:
+        fatal_errors.append(
+            "model tool-plan parity drift: "
+            f"missing={sorted(definitions - plan_names)}, extra={sorted(plan_names - definitions)}"
+        )
+    if policy_names != definitions:
+        fatal_errors.append(
+            "tool policy parity drift: "
+            f"missing={sorted(definitions - policy_names)}, "
+            f"extra={sorted(policy_names - definitions)}"
+        )
+    if executions - definitions != transient_names:
+        fatal_errors.append(
+            "internal execution parity drift: "
+            f"catalog_only={sorted(executions - definitions)}, "
+            f"transient={sorted(transient_names)}"
+        )
     if fatal_errors:
         raise ValueError("tool inventory invariant failed; " + "; ".join(fatal_errors))
 
@@ -539,11 +1795,16 @@ def _tool_inventory(root: Path) -> dict[str, Any]:
         "special_execution_bindings": sorted(SPECIAL_EXECUTION_BINDINGS),
         "execution_registration_count": len(execution_names),
         "execution_registration_names": execution_names,
+        "model_execution_registration_count": len(plan_names),
+        "model_execution_registration_names": sorted(plan_names),
+        "policy_registration_count": len(policy_names),
+        "policy_registration_names": sorted(policy_names),
         "definition_only": definition_only,
         "execution_only": sorted(executions - definitions),
         "definition_without_valid_schema": invalid_schemas,
         "schema_without_definition": sorted(schemas - definitions),
-        "exact_parity": definitions == executions == schemas and not duplicate_names,
+        "exact_parity": definitions == plan_names == schemas == policy_names
+        and not duplicate_names,
         "deferred_loading": {
             "always_loaded_count": len(always_loaded),
             "always_loaded_names": sorted(always_loaded),
@@ -563,8 +1824,8 @@ def build_baseline(root: Path = REPO_ROOT) -> dict[str, Any]:
         if (inventory := measure_python_inventory(root, relative))
     }
     self_improving_facades = _self_improving_facades(root)
-    return {
-        "schema_version": 3,
+    baseline = {
+        "schema_version": 4,
         "packages": packages,
         "tools": _tool_inventory(root),
         "hook_events": _hook_events(root),
@@ -579,6 +1840,23 @@ def build_baseline(root: Path = REPO_ROOT) -> dict[str, Any]:
         "coordinators": _coordinator_metrics(root),
         "complexity_thresholds": _complexity_thresholds(root),
     }
+    validate_architecture_invariants(baseline)
+    return baseline
+
+
+def validate_architecture_invariants(baseline: dict[str, Any]) -> None:
+    """Reject forbidden architecture states instead of blessing them on update."""
+    violations: list[str] = []
+    if baseline["core_to_product_imports"]["site_count"]:
+        violations.append("kernel-to-product imports must remain zero")
+    if baseline["import_linter"]["ignored_edge_count"]:
+        violations.append("import-linter ignored edges must remain zero")
+    if baseline["context_vars"]["service_locator_count"]:
+        violations.append("service-locator ContextVars must remain zero")
+    if not baseline["tools"]["exact_parity"]:
+        violations.append("tool definition/plan/schema/policy parity must remain exact")
+    if violations:
+        raise ValueError("architecture invariant failed; " + "; ".join(violations))
 
 
 def serialize_baseline(baseline: dict[str, Any]) -> str:
@@ -648,15 +1926,16 @@ def render_roadmap_block(baseline: dict[str, Any]) -> str:
             f"| `plugins/` Python LOC | {_number(packages['plugins']['python_loc'])} |",
             f"| Test Python LOC | {_number(packages['tests']['python_loc'])} |",
             (
-                f"| Tool definitions / executable registrations / valid schemas "
+                f"| Tool definitions / model executions / valid schemas / policies "
                 f"| {_number(tools['definition_count'])} / "
-                f"{_number(tools['execution_registration_count'])} / "
-                f"{_number(tools['schema_count'])} ({parity}) |"
+                f"{_number(tools['model_execution_registration_count'])} / "
+                f"{_number(tools['schema_count'])} / "
+                f"{_number(tools['policy_registration_count'])} ({parity}) |"
             ),
             f"| `RuntimeEvent` members | {_number(baseline['hook_events']['count'])} |",
             f"| Built-in LLM adapters | {_number(baseline['built_in_adapters']['count'])} |",
             (
-                "| Module-level `ContextVar` declarations under `core/` | "
+                "| Module/class-scoped `ContextVar`-backed bindings in production packages | "
                 f"{_number(baseline['context_vars']['count'])} |"
             ),
             (

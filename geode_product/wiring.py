@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -86,7 +87,9 @@ def register_scheduling(trigger_manager: Any, hooks: Any) -> None:
     )
 
 
-def build_runtime() -> Any:
+def build_runtime(
+    scheduler_callback: Callable[[str, str, bool, str], None] | None = None,
+) -> Any:
     """Build the gateway runtime with first-party feature contributions."""
     from core.runtime import GeodeRuntime
 
@@ -97,11 +100,13 @@ def build_runtime() -> Any:
         activity_sink_provider=current_activity_sink,
         feature_hook_registrar=register_hooks,
         scheduling_registrar=register_scheduling,
+        scheduler_callback=scheduler_callback,
     )
 
 
 def build_shared_services(**kwargs: Any) -> Any:
     """Build kernel services with product tools, workers, and agent prompts."""
+    from core.cli.commands import _get_cost_budget
     from core.server.supervised.services import build_shared_services as build_core_services
     from core.slash_routing import compose_command_registry
 
@@ -114,6 +119,7 @@ def build_shared_services(**kwargs: Any) -> Any:
     kwargs.setdefault("activity_sink_provider", current_activity_sink)
     kwargs.setdefault("feature_hook_registrar", register_hooks)
     kwargs.setdefault("command_registry", compose_command_registry(PRODUCT_COMMAND_SPECS))
+    kwargs.setdefault("cost_budget", _get_cost_budget())
     return build_core_services(
         **kwargs,
         tool_plan_builder=compose_tool_plan,

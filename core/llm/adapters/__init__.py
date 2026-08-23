@@ -5,16 +5,16 @@ Layer 4 of the design in
 
 - :mod:`core.llm.adapters.base` — :class:`LLMAdapter` Protocol + request /
   result / billing-type dataclasses (paperclip ``ServerAdapterModule`` mirror).
-- :mod:`core.llm.adapters.registry` — mutable global registry
-  (``register_adapter`` / ``resolve_for`` / ``bootstrap_builtins``).
+- :mod:`core.llm.adapters.registry` — generation-bound immutable discovery
+  snapshots (``reload_adapters`` / ``resolve_for`` / ``bootstrap_builtins``).
 
 Layer 3 concrete adapters (one per provider × source pair):
 
 - ``anthropic_payg``
 - ``openai_payg`` / ``codex_oauth``
 
-External plugins implement :class:`LLMAdapter` and register via
-:func:`register_adapter` from their entry point.
+External packages expose a no-argument :class:`LLMAdapter` factory in the
+``geode.llm_adapters`` package entry-point group.
 
 PR-LLMCLIENTPORT-COLLAPSE (2026-05-28) — the parallel ``LLMClientPort``
 hierarchy (sync ``ClaudeAdapter`` / ``OpenAIAdapter.generate*`` surface
@@ -38,29 +38,43 @@ from core.llm.adapters.base import (
     AdapterCallRequest,
     AdapterCallResult,
     CredentialDetection,
+    CredentialDetectionCapable,
+    EnvironmentDiagnosticCapable,
     EnvironmentReport,
     LLMAdapter,
     Message,
+    ModelListingCapable,
     ModelSpec,
+    QuotaInspectionCapable,
     QuotaWindows,
     StreamEvent,
+    StreamingCapable,
     ToolSpec,
     UsageSummary,
 )
 from core.llm.adapters.provider_inference import infer_provider_from_model
 from core.llm.adapters.registry import (
+    ADAPTER_ENTRY_POINT_GROUP,
     AdapterAlreadyRegisteredError,
     AdapterNotFoundError,
+    AdapterOverride,
+    AdapterRegistrySnapshot,
+    AdapterValidationReport,
+    active_registry_snapshot,
     adapter_health,
     bootstrap_builtins,
     get_adapter,
     list_adapters,
     register_adapter,
+    registry_snapshot,
+    reload_adapters,
     resolve_for,
     unregister_adapter,
+    use_registry_snapshot,
 )
 
 __all__ = [
+    "ADAPTER_ENTRY_POINT_GROUP",
     "CONCRETE_SOURCES",
     "SOURCE_ADAPTER",
     "SOURCE_AUTO",
@@ -71,15 +85,24 @@ __all__ = [
     "AdapterCallRequest",
     "AdapterCallResult",
     "AdapterNotFoundError",
+    "AdapterOverride",
+    "AdapterRegistrySnapshot",
+    "AdapterValidationReport",
     "CredentialDetection",
+    "CredentialDetectionCapable",
+    "EnvironmentDiagnosticCapable",
     "EnvironmentReport",
     "LLMAdapter",
     "Message",
+    "ModelListingCapable",
     "ModelSpec",
+    "QuotaInspectionCapable",
     "QuotaWindows",
     "StreamEvent",
+    "StreamingCapable",
     "ToolSpec",
     "UsageSummary",
+    "active_registry_snapshot",
     "adapter_health",
     "bootstrap_builtins",
     "build_openai_responses_kwargs",
@@ -87,6 +110,9 @@ __all__ = [
     "infer_provider_from_model",
     "list_adapters",
     "register_adapter",
+    "registry_snapshot",
+    "reload_adapters",
     "resolve_for",
     "unregister_adapter",
+    "use_registry_snapshot",
 ]

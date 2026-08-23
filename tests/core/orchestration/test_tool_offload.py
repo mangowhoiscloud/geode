@@ -10,8 +10,6 @@ from core.orchestration.context_monitor import mask_stale_observations
 from core.orchestration.tool_offload import (
     ToolResultOffloadStore,
     extract_result_summary,
-    get_offload_store,
-    set_offload_store,
 )
 
 # ---------------------------------------------------------------------------
@@ -133,37 +131,26 @@ class TestExtractResultSummary:
 
 
 # ---------------------------------------------------------------------------
-# ContextVar DI
+# Explicit dependency injection
 # ---------------------------------------------------------------------------
 
 
-class TestOffloadContextVar:
-    def test_set_and_get(self, tmp_path: Path):
-        prev = get_offload_store()
-        try:
-            store = ToolResultOffloadStore(
-                session_id="ctx-test",
-                threshold=100,
-                base_dir=tmp_path / "offload",
-            )
-            set_offload_store(store)
-            assert get_offload_store() is store
-        finally:
-            set_offload_store(prev)  # restore
+class TestOffloadInjection:
+    def test_executors_keep_independent_stores(self, tmp_path: Path):
+        from core.agent.tool_executor import ToolExecutor
 
-    def test_set_none_clears(self, tmp_path: Path):
-        prev = get_offload_store()
-        try:
-            store = ToolResultOffloadStore(
-                session_id="ctx-test",
-                threshold=100,
-                base_dir=tmp_path / "offload",
-            )
-            set_offload_store(store)
-            set_offload_store(None)
-            assert get_offload_store() is None
-        finally:
-            set_offload_store(prev)  # restore
+        first = ToolResultOffloadStore(
+            session_id="first",
+            threshold=100,
+            base_dir=tmp_path / "offload",
+        )
+        second = ToolResultOffloadStore(
+            session_id="second",
+            threshold=100,
+            base_dir=tmp_path / "offload",
+        )
+        assert ToolExecutor(offload_store=first)._offload_store is first
+        assert ToolExecutor(offload_store=second)._offload_store is second
 
 
 # ---------------------------------------------------------------------------

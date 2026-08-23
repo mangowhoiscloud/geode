@@ -17,14 +17,12 @@ from core.agent.cognitive_state_ctx import (
 )
 from core.cli.tool_handlers.hitl import _build_hitl_handlers
 from core.hooks.system import HookEvent
-from core.hooks.tool_hooks import set_tool_hooks
 from core.tools.base import ToolContext
 
 
 def _handlers_with_recorder() -> tuple[dict, MagicMock]:
     hooks = MagicMock()
-    set_tool_hooks(hooks)
-    return _build_hitl_handlers(), hooks
+    return _build_hitl_handlers(hooks), hooks
 
 
 def test_accept_fires_result_feedback() -> None:

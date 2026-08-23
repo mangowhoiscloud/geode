@@ -26,6 +26,7 @@ def build_scheduling(
     *,
     hooks: HookSystem,
     feature_registrar: Callable[[TriggerManager, HookSystem], None] | None = None,
+    on_job_fired: Callable[[str, str, bool, str], None] | None = None,
 ) -> dict[str, Any]:
     """Build the scheduler stack and wire its hook handlers.
 
@@ -48,6 +49,7 @@ def build_scheduling(
         scheduler_service = create_scheduler(
             trigger_manager=trigger_manager,
             hooks=hooks,
+            on_job_fired=on_job_fired,
             enable_jitter=settings.scheduler_jitter_enabled,
             max_jitter_ms=settings.scheduler_max_jitter_ms,
         )

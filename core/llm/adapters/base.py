@@ -1,10 +1,9 @@
-"""LLM Adapter base contract — single Protocol for all call paths.
+"""LLM adapter contracts for built-in and externally supplied call paths.
 
-Mirrors paperclip's ``ServerAdapterModule`` (``packages/adapter-utils/src/
-types.ts:349``): one interface covers built-in API/subscription calls and
-externally supplied adapters. Provider routing decisions live inside concrete
-adapters (`Layer 3`) — callers above just pick a name (or provider+source pair)
-and invoke ``acomplete`` / ``astream``.
+The minimum ``LLMAdapter`` owns route identity and ``acomplete``. Streaming,
+operator diagnostics, model listing, quota inspection, and credential detection
+are independent structural capabilities. Provider routing decisions remain in
+concrete adapters (Layer 3); callers above select a name or provider/source pair.
 
 The Protocol is intentionally duck-typed (PEP 544) so external plugins can
 implement it without subclassing — same plug-in friendliness as paperclip's TS
@@ -18,40 +17,17 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Callable, Sequence
 from dataclasses import dataclass, field
-from enum import Enum
 from typing import Any, Protocol, runtime_checkable
 
+from core.llm.registry import (
+    CONCRETE_SOURCES,
+    SOURCE_ADAPTER,
+    SOURCE_AUTO,
+    SOURCE_PAYG,
+    SOURCE_SUBSCRIPTION,
+    AdapterBillingType,
+)
 from core.tools.plan import ToolSpec
-
-
-class AdapterBillingType(str, Enum):  # noqa: UP042 — needs str+Enum for older serialisers
-    """How an adapter's call gets billed.
-
-    Mirrors paperclip ``packages/adapter-utils/src/types.ts:34-43``
-    ``AdapterBillingType``. The 8-value taxonomy lets the UI surface
-    ("PAYG, Subscription, Adapter") map cleanly while still capturing
-    overage/credits/fixed-fee edge cases for non-Anthropic/OpenAI providers.
-    """
-
-    API = "api"
-    SUBSCRIPTION = "subscription"
-    METERED_API = "metered_api"
-    SUBSCRIPTION_INCLUDED = "subscription_included"
-    SUBSCRIPTION_OVERAGE = "subscription_overage"
-    CREDITS = "credits"
-    FIXED = "fixed"
-    UNKNOWN = "unknown"
-
-
-# Concrete source values that picker / overrides emit. Adapter implementations
-# pin themselves to exactly one. ``auto`` is a picker-time sentinel only — never
-# stored on a concrete adapter and never accepted by ``resolve_for``.
-SOURCE_PAYG = "payg"
-SOURCE_SUBSCRIPTION = "subscription"
-SOURCE_ADAPTER = "adapter"
-SOURCE_AUTO = "auto"  # picker sentinel
-
-CONCRETE_SOURCES: frozenset[str] = frozenset({SOURCE_PAYG, SOURCE_SUBSCRIPTION, SOURCE_ADAPTER})
 
 
 class EmptyModelOutputError(RuntimeError):
@@ -129,7 +105,7 @@ class Message:
 
 @dataclass(frozen=True)
 class AdapterCallRequest:
-    """Request envelope handed to ``LLMAdapter.acomplete`` / ``astream``.
+    """Request envelope handed to ``LLMAdapter.acomplete`` or an optional stream.
 
     ``tool_choice`` mirrors the Anthropic ``messages.create`` parameter shape
     (``{"type": "auto" | "any" | "none" | "tool"}`` or the strings
@@ -257,7 +233,7 @@ class AdapterCallResult:
 
 @dataclass(frozen=True)
 class StreamEvent:
-    """One streaming chunk from ``LLMAdapter.astream``.
+    """One streaming chunk from ``StreamingCapable.astream``.
 
     ``kind`` is ``"text" | "tool_use" | "thinking" | "stop" | "usage"``.
     Concrete adapters translate provider stream events into this single shape so
@@ -287,8 +263,8 @@ class ModelSpec:
 class QuotaWindows:
     """Live quota/rate-limit windows for OAuth subscription adapters.
 
-    Mirrors paperclip ``ProviderQuotaResult``. Adapters that don't expose quota
-    (PAYG) return ``None`` from ``get_quota_windows``.
+    Mirrors paperclip ``ProviderQuotaResult``. Adapters expose this only when
+    they implement :class:`QuotaInspectionCapable`.
     """
 
     used_tokens: int
@@ -327,17 +303,15 @@ class CredentialDetection:
 
 @runtime_checkable
 class LLMAdapter(Protocol):
-    """Single adapter contract — paperclip ``ServerAdapterModule`` equivalent.
+    """Minimum adapter contract: route identity plus one completion operation.
 
     Concrete implementations live in ``core/llm/adapters/<name>.py``. External
-    plugins implement this Protocol without subclassing and register via
-    :func:`core.llm.adapters.registry.register_adapter`.
+    packages implement this Protocol without subclassing and expose a factory
+    through the ``geode.llm_adapters`` package entry-point group.
 
-    Three required identity attributes (``name`` / ``provider`` / ``source``)
-    plus ``billing_type`` and one async call method (``acomplete``) form the
-    minimum viable adapter. Streaming + introspection methods are required by
-    the Protocol but can return empty / ``None`` for adapters that don't
-    support those surfaces (test_environment must always be honest).
+    Streaming and operator introspection are separate runtime-checkable
+    capability protocols below. A completion-only adapter does not implement
+    dishonest empty stubs for unsupported surfaces.
     """
 
     name: str
@@ -346,16 +320,6 @@ class LLMAdapter(Protocol):
     billing_type: AdapterBillingType
 
     async def acomplete(self, req: AdapterCallRequest) -> AdapterCallResult: ...
-
-    def astream(self, req: AdapterCallRequest) -> AsyncIterator[StreamEvent]: ...
-
-    def test_environment(self) -> EnvironmentReport: ...
-
-    def list_models(self) -> list[ModelSpec]: ...
-
-    def get_quota_windows(self) -> QuotaWindows | None: ...
-
-    def detect_credential(self) -> CredentialDetection | None: ...
 
 
 # ---------------------------------------------------------------------------
@@ -373,6 +337,41 @@ class LLMAdapter(Protocol):
 # attrs. Tool-side capabilities (web_search, text_completion) are opt-in via
 # mixin so non-LLM or externally supplied adapters can omit them
 # without satisfying spurious stubs.
+
+
+@runtime_checkable
+class StreamingCapable(Protocol):
+    """Adapter that can yield provider-native streaming events."""
+
+    def astream(self, req: AdapterCallRequest) -> AsyncIterator[StreamEvent]: ...
+
+
+@runtime_checkable
+class EnvironmentDiagnosticCapable(Protocol):
+    """Adapter that can report credential/environment readiness."""
+
+    def test_environment(self) -> EnvironmentReport: ...
+
+
+@runtime_checkable
+class ModelListingCapable(Protocol):
+    """Adapter that can enumerate its supported model catalog."""
+
+    def list_models(self) -> list[ModelSpec]: ...
+
+
+@runtime_checkable
+class QuotaInspectionCapable(Protocol):
+    """Adapter that can inspect provider quota windows."""
+
+    def get_quota_windows(self) -> QuotaWindows | None: ...
+
+
+@runtime_checkable
+class CredentialDetectionCapable(Protocol):
+    """Adapter that can detect configured credential/model provenance."""
+
+    def detect_credential(self) -> CredentialDetection | None: ...
 
 
 @dataclass(frozen=True)
@@ -517,12 +516,17 @@ __all__ = [
     "AdapterCallResult",
     "ComputerUseCapable",
     "CredentialDetection",
+    "CredentialDetectionCapable",
+    "EnvironmentDiagnosticCapable",
     "EnvironmentReport",
     "LLMAdapter",
     "Message",
+    "ModelListingCapable",
     "ModelSpec",
+    "QuotaInspectionCapable",
     "QuotaWindows",
     "StreamEvent",
+    "StreamingCapable",
     "TextCompletionCapable",
     "TextCompletionResult",
     "ToolSpec",

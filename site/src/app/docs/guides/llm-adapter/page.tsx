@@ -8,8 +8,8 @@ export default function Page() {
       slug="guides/llm-adapter"
       title="Add an LLM adapter"
       titleKo="LLM 어댑터 추가"
-      summary="Add a provider to the router and adapter layer, with a fallback entry."
-      summaryKo="라우터와 어댑터 레이어에 프로바이더를 추가하고 폴백 항목을 거는 방법입니다."
+      summary="Add a provider through the immutable adapter registry and package entry-point discovery."
+      summaryKo="불변 어댑터 레지스트리와 패키지 진입점 검색으로 프로바이더를 추가하는 방법입니다."
     >
       <Bi
         ko={
@@ -17,7 +17,7 @@ export default function Page() {
             <p>
               어댑터는 하나의 <code>(provider, source)</code> 조합을 실제 호출로
               바꾸는 계층입니다. PAYG API 키 호출이든, OAuth 구독 호출이든,
-              로컬 CLI 서브프로세스든 전부 같은 프로토콜을 따릅니다. 새 백엔드를
+              설치된 외부 어댑터든 전부 같은 프로토콜을 따릅니다. 새 백엔드를
               붙이는 작업은 어댑터 작성, 레지스트리 등록, 라우팅 연결,
               호출 계약 문서화의 네 단계입니다.
             </p>
@@ -45,7 +45,7 @@ from typing import Any
 from core.llm.adapters.base import (
     SOURCE_PAYG, AdapterBillingType,
     AdapterCallRequest, AdapterCallResult,
-    EnvironmentReport, UsageSummary,
+    UsageSummary,
 )
 
 @dataclass
@@ -63,54 +63,98 @@ class AcmePaygAdapter:
             text=raw.text,
             usage=UsageSummary(input_tokens=..., output_tokens=...),
             stop_reason=raw.stop_reason,
-        )
-
-    def test_environment(self) -> EnvironmentReport:
-        from core.config import settings
-        if not settings.acme_api_key:
-            return EnvironmentReport(ok=False, hints=("set ACME_API_KEY",))
-        return EnvironmentReport(ok=True)`}</pre>
+        )`}</pre>
             <p>
-              스트리밍·introspection 메서드(<code>astream</code>,{" "}
-              <code>list_models</code>, <code>get_quota_windows</code>,{" "}
-              <code>detect_credential</code>)는 프로토콜이 요구하지만, 해당
-              표면을 지원하지 않으면 빈 값이나 <code>None</code>을 돌려줘도
-              됩니다. 단, <code>test_environment</code>는 항상 정직해야 합니다.
+              스트리밍과 introspection은 필수가 아닙니다. 지원하는 표면만{" "}
+              <code>StreamingCapable</code>,{" "}
+              <code>EnvironmentDiagnosticCapable</code>,{" "}
+              <code>ModelListingCapable</code>,{" "}
+              <code>QuotaInspectionCapable</code>,{" "}
+              <code>CredentialDetectionCapable</code> 구조를 만족시키면 됩니다.
+              지원하지 않는 메서드를 빈 값이나 <code>None</code> stub으로 만들지
+              마십시오.
             </p>
 
             <h2>2. 레지스트리에 등록합니다</h2>
             <p>
-              어댑터는 프로세스 전역{" "}
-              <code>core/llm/adapters/registry.py</code> 레지스트리로 조회됩니다.
-              내장 어댑터는 <code>bootstrap_builtins()</code>에서 등록되므로,
-              새 내장 어댑터라면 그 함수의 클래스 튜플에 추가합니다. 외부
-              플러그인이면 진입점에서 <code>register_adapter(AcmePaygAdapter())</code>를
-              직접 호출합니다. <code>resolve_for(provider, source)</code>는{" "}
+              어댑터는 <code>core/llm/adapters/registry.py</code>가 발행한 불변
+              generation snapshot으로 조회됩니다. 내장 어댑터는 명시적 factory
+              목록에서 생성합니다. 외부 패키지는 전역 dict를 직접 수정하지 않고{" "}
+              <code>geode.llm_adapters</code> 패키지 진입점에 factory를
+              선언합니다. 진입점 이름은 factory가 반환한 canonical adapter name과
+              같아야 합니다. <code>resolve_for(provider, source)</code>는{" "}
               <code>(provider, source)</code> 쌍이 정확히 하나의 어댑터에
               매칭되도록 강제하므로, 같은 쌍을 둘 등록하면 invariant 위반으로
               곧바로 실패합니다.
             </p>
-            <pre>{`# core/llm/adapters/registry.py — bootstrap_builtins()
-from core.llm.adapters.acme_payg import AcmePaygAdapter
+            <pre>{`# acme-geode-adapter/pyproject.toml
+[project.entry-points."geode.llm_adapters"]
+acme-payg = "acme_geode:create_adapter"
 
-for adapter_cls in (..., AcmePaygAdapter):
-    instance = adapter_cls()
-    if instance.name in _REGISTRY:
-        continue
-    register_adapter(instance)`}</pre>
+# acme_geode/__init__.py
+def create_adapter():
+    return AcmePaygAdapter()`}</pre>
+            <p>
+              진입점 이름과 배포 패키지 metadata는 실행 없이 먼저 열거됩니다.
+              GEODE는 이름 충돌을 해결한 다음
+              <a href="/geode/docs/config/basics">확장 신뢰 정책</a>의
+              <code>llm-adapter:acme-payg</code> 승인을 확인하고 나서야
+              <code>entry_point.load()</code>를 호출합니다. 승인이 없으면 validation
+              report에 <code>REJECTED</code>로 남고 factory는 import되지 않습니다.
+              factory는 기존처럼 인자 없이 만들거나, 정확히 하나의
+              <code>context</code> 인자를 받아 불변 확장 ID와 승인된 포트를 확인할
+              수 있습니다. 다른 signature는 session 시작 전에 실패합니다.
+            </p>
+            <p>
+              기존 factory는 보수적인 호환 composition을 자동으로 얻습니다.
+              실제 인증 선택과 API shape를 선언하려면 반환 객체에 불변
+              <code>ProviderSpec</code>을 추가하십시오. 이 값은
+              <code>ProviderProfile</code>, <code>CredentialRoute</code>,
+              <code>TransportSpec</code>으로 나뉘며 secret이나 SDK client를
+              담지 않습니다. 선언한 provider/source/billing/capability가
+              adapter 호환 속성과 다르면 session 시작 전에 등록이 실패합니다.
+            </p>
+            <pre>{`# acme_geode/__init__.py
+from core.llm.registry import (
+    AdapterBillingType, CredentialRoute, ProviderProfile,
+    ProviderSpec, TransportSpec,
+)
+
+ACME_SPEC = ProviderSpec(
+    profile=ProviderProfile("acme", "acme", "Acme", "acme"),
+    credential=CredentialRoute(
+        source="payg", account_provider="acme", selector="plugin",
+        auth_type="bearer", billing_type=AdapterBillingType.API,
+    ),
+    transport=TransportSpec(
+        id="acme-responses", api="acme-responses",
+        default_base_url="https://api.acme.example/v1",
+    ),
+)
+
+class AcmeComposedAdapter(AcmePaygAdapter):
+    provider_spec = ACME_SPEC
+
+def create_adapter():
+    return AcmeComposedAdapter()`}</pre>
             <p>
               서브프로세스(워커·audit)는 부모의 wiring 컨테이너를 거치지 않으므로{" "}
               <code>bootstrap_builtins()</code>를 명시 호출해야 합니다. 안 그러면
-              레지스트리가 비어 <code>AdapterNotFoundError</code>가 납니다.
+              레지스트리가 비어 <code>AdapterNotFoundError</code>가 납니다. 이 호출은
+              내장 factory와 지원 진입점을 함께 검색하며, generation과 validation
+              report가 붙은 snapshot을 반환합니다. 새 세션은 현재 snapshot을
+              캡처하고, 이미 실행 중인 세션은 reload 뒤에도 기존 generation을
+              유지합니다. canonical ID 충돌은 기본적으로 실패합니다. 의도적인
+              교체만 <code>AdapterOverride</code>로 승자 origin, priority, trust
+              decision을 명시해 <code>reload_adapters()</code>에 전달합니다.
             </p>
 
             <h2>3. 라우팅과 폴백 체인을 연결합니다</h2>
             <p>
-              <code>core/llm/router/calls/_route.py</code>의{" "}
-              <code>_route_provider(model)</code>이 모델 이름을 프로바이더로
-              해석합니다. 등록된 Plan이 있으면 그것을 따르고, 없으면{" "}
-              <code>core.config</code>의 정적 <code>_resolve_provider</code>로
-              떨어집니다. 모델 접두사와 프로바이더의 매핑은{" "}
+              <code>core.config._resolve_provider(model)</code>이 모델 이름을
+              프로바이더로 해석하고, adapter dispatch가 credential metadata로
+              source를 결정합니다. 등록된 Plan은 별도의 routing target으로
+              endpoint와 credential을 선택합니다. 모델 접두사와 프로바이더의 매핑은{" "}
               <code>core/config/routing.toml</code>의{" "}
               <code>[routing.prefixes]</code>가 SoT이고, 사용자 override는{" "}
               <code>~/.geode/routing.toml</code>입니다. 새 프로바이더의 모델
@@ -157,16 +201,19 @@ for adapter_cls in (..., AcmePaygAdapter):
               확인합니다.
             </p>
             <pre>{`uv run python -c "
-from core.llm.adapters.registry import bootstrap_builtins, resolve_for
-bootstrap_builtins()
-a = resolve_for('acme', 'payg')
+from core.llm.adapters.registry import bootstrap_builtins
+from core.llm.adapters import EnvironmentDiagnosticCapable
+snapshot = bootstrap_builtins()
+a = snapshot.resolve_for('acme', 'payg')
+print(snapshot.generation, snapshot.report.origins)
 print(a.name, a.provider, a.source)
-print(a.test_environment().ok)
+if isinstance(a, EnvironmentDiagnosticCapable):
+    print(a.test_environment().ok)
 "`}</pre>
             <p>
               어댑터 이름이 출력되면 라우팅이 그 쌍을 찾을 수 있습니다.{" "}
-              <code>test_environment().ok</code>는 자격증명 상태를 정직하게
-              보고합니다.
+              환경 진단 capability를 구현했다면 <code>test_environment().ok</code>도
+              자격증명 상태를 정직하게 보고합니다.
             </p>
 
             <p className="text-[var(--ink-3)] text-sm">
@@ -183,7 +230,7 @@ print(a.test_environment().ok)
             <p>
               An adapter is the layer that turns one{" "}
               <code>(provider, source)</code> pair into a real call. PAYG API-key
-              calls, OAuth subscription calls, and local CLI subprocess calls all
+              calls, OAuth subscription calls, and installed external adapters all
               satisfy the same protocol. Adding a backend has four parts: write the
               adapter, register it, wire routing, and document the call contract.
             </p>
@@ -211,7 +258,7 @@ from typing import Any
 from core.llm.adapters.base import (
     SOURCE_PAYG, AdapterBillingType,
     AdapterCallRequest, AdapterCallResult,
-    EnvironmentReport, UsageSummary,
+    UsageSummary,
 )
 
 @dataclass
@@ -229,55 +276,103 @@ class AcmePaygAdapter:
             text=raw.text,
             usage=UsageSummary(input_tokens=..., output_tokens=...),
             stop_reason=raw.stop_reason,
-        )
-
-    def test_environment(self) -> EnvironmentReport:
-        from core.config import settings
-        if not settings.acme_api_key:
-            return EnvironmentReport(ok=False, hints=("set ACME_API_KEY",))
-        return EnvironmentReport(ok=True)`}</pre>
+        )`}</pre>
             <p>
-              The streaming and introspection methods (<code>astream</code>,{" "}
-              <code>list_models</code>, <code>get_quota_windows</code>,{" "}
-              <code>detect_credential</code>) are required by the protocol but may
-              return empty values or <code>None</code> for surfaces you do not
-              support. <code>test_environment</code> must always be honest.
+              Streaming and introspection are optional. Implement only the
+              structural capabilities you support: <code>StreamingCapable</code>,{" "}
+              <code>EnvironmentDiagnosticCapable</code>,{" "}
+              <code>ModelListingCapable</code>, <code>QuotaInspectionCapable</code>,
+              or <code>CredentialDetectionCapable</code>. Do not add empty or{" "}
+              <code>None</code> stubs for unsupported surfaces.
             </p>
 
             <h2>2. Register it in the registry</h2>
             <p>
-              Adapters are looked up through the process-global registry in{" "}
-              <code>core/llm/adapters/registry.py</code>. Built-in adapters
-              register in <code>bootstrap_builtins()</code>, so for a new built-in,
-              add the class to that function&apos;s tuple. For an external plugin, call{" "}
-              <code>register_adapter(AcmePaygAdapter())</code> from your entry
-              point. <code>resolve_for(provider, source)</code> enforces that a{" "}
+              Adapters are looked up through immutable generation snapshots
+              published by <code>core/llm/adapters/registry.py</code>. Built-ins
+              come from an explicit factory list. External packages do not mutate
+              a global dictionary; they expose a factory through the{" "}
+              <code>geode.llm_adapters</code> package entry-point group. The entry
+              point name must equal the returned adapter&apos;s canonical name.{" "}
+              <code>resolve_for(provider, source)</code> enforces that a{" "}
               <code>(provider, source)</code> pair matches exactly one adapter, so
               registering two for the same pair fails loudly as an invariant
               violation.
             </p>
-            <pre>{`# core/llm/adapters/registry.py — bootstrap_builtins()
-from core.llm.adapters.acme_payg import AcmePaygAdapter
+            <pre>{`# acme-geode-adapter/pyproject.toml
+[project.entry-points."geode.llm_adapters"]
+acme-payg = "acme_geode:create_adapter"
 
-for adapter_cls in (..., AcmePaygAdapter):
-    instance = adapter_cls()
-    if instance.name in _REGISTRY:
-        continue
-    register_adapter(instance)`}</pre>
+# acme_geode/__init__.py
+def create_adapter():
+    return AcmePaygAdapter()`}</pre>
+            <p>
+              GEODE enumerates the entry-point name and distribution metadata
+              without executing it. It resolves name collisions, checks the
+              <code>llm-adapter:acme-payg</code> grant in the
+              <a href="/geode/docs/config/basics">extension trust policy</a>,
+              and only then calls <code>entry_point.load()</code>. Without that
+              grant the validation report records <code>REJECTED</code> and the
+              factory is never imported. A factory may keep the legacy
+              no-argument signature or accept exactly one <code>context</code>
+              parameter to inspect its immutable extension ID and granted ports.
+              Any other signature fails before a session starts.
+            </p>
+            <p>
+              The legacy factory receives a conservative compatibility
+              composition automatically. To declare the real credential
+              selection and API shape, attach an immutable
+              <code>ProviderSpec</code> to the returned object. It separates
+              <code>ProviderProfile</code>, <code>CredentialRoute</code>, and
+              <code>TransportSpec</code> and contains no secret or SDK client.
+              Registration fails before a session when its
+              provider/source/billing/capabilities disagree with the adapter
+              compatibility attributes.
+            </p>
+            <pre>{`# acme_geode/__init__.py
+from core.llm.registry import (
+    AdapterBillingType, CredentialRoute, ProviderProfile,
+    ProviderSpec, TransportSpec,
+)
+
+ACME_SPEC = ProviderSpec(
+    profile=ProviderProfile("acme", "acme", "Acme", "acme"),
+    credential=CredentialRoute(
+        source="payg", account_provider="acme", selector="plugin",
+        auth_type="bearer", billing_type=AdapterBillingType.API,
+    ),
+    transport=TransportSpec(
+        id="acme-responses", api="acme-responses",
+        default_base_url="https://api.acme.example/v1",
+    ),
+)
+
+class AcmeComposedAdapter(AcmePaygAdapter):
+    provider_spec = ACME_SPEC
+
+def create_adapter():
+    return AcmeComposedAdapter()`}</pre>
             <p>
               Subprocesses (worker, audit) do not pass through the parent wiring
               container, so they must call <code>bootstrap_builtins()</code>{" "}
               explicitly. Without it the registry is empty and you get an{" "}
-              <code>AdapterNotFoundError</code>.
+              <code>AdapterNotFoundError</code>. The call discovers built-in
+              factories and supported entry points together and returns a snapshot
+              with a generation and validation report. New sessions capture the
+              current snapshot; a running session retains its generation after a
+              reload. Canonical-ID collisions fail by default. An intentional
+              replacement must pass an <code>AdapterOverride</code> to{" "}
+              <code>reload_adapters()</code> that records the winning origin,
+              priority, and trust decision.
             </p>
 
             <h2>3. Wire routing and the fallback chain</h2>
             <p>
-              <code>_route_provider(model)</code> in{" "}
-              <code>core/llm/router/calls/_route.py</code> resolves a model name to
-              a provider. It honors a registered Plan if present, otherwise falls
-              back to the static <code>_resolve_provider</code> in{" "}
-              <code>core.config</code>. The model-prefix-to-provider mapping is
+              <code>core.config._resolve_provider(model)</code> resolves a model
+              name to a provider, and adapter dispatch resolves the source from
+              credential metadata. A registered Plan separately selects the
+              routing target&apos;s endpoint and credential. The
+              model-prefix-to-provider mapping is
               owned by <code>[routing.prefixes]</code> in{" "}
               <code>core/config/routing.toml</code>, with the user override at{" "}
               <code>~/.geode/routing.toml</code>; add your provider&apos;s model
@@ -323,15 +418,19 @@ for adapter_cls in (..., AcmePaygAdapter):
               your adapter.
             </p>
             <pre>{`uv run python -c "
-from core.llm.adapters.registry import bootstrap_builtins, resolve_for
-bootstrap_builtins()
-a = resolve_for('acme', 'payg')
+from core.llm.adapters.registry import bootstrap_builtins
+from core.llm.adapters import EnvironmentDiagnosticCapable
+snapshot = bootstrap_builtins()
+a = snapshot.resolve_for('acme', 'payg')
+print(snapshot.generation, snapshot.report.origins)
 print(a.name, a.provider, a.source)
-print(a.test_environment().ok)
+if isinstance(a, EnvironmentDiagnosticCapable):
+    print(a.test_environment().ok)
 "`}</pre>
             <p>
               When the adapter name prints, routing can find that pair.{" "}
-              <code>test_environment().ok</code> reports the credential state
+              If the adapter implements environment diagnostics,{" "}
+              <code>test_environment().ok</code> also reports credential state
               honestly.
             </p>
 

@@ -518,7 +518,7 @@ def _final_hook_payloads(
 def _finalize_verify_outcome(
     loop: AgenticLoop, result: AgenticResult, vr: Any
 ) -> dict[str, Any] | None:
-    """Record one verdict in metrics and SQLite, then build its payload."""
+    """Record one verdict in metrics, then build its payload."""
     from core.agent.verify import VerifyMode
     from core.observability.session_metrics import current_session_metrics
 
@@ -533,7 +533,6 @@ def _finalize_verify_outcome(
         reflection_hint=vr.reflection_hint,
         should_retry=vr.should_retry,
     )
-    _persist_verify_state(loop, metrics, vr.should_retry)
     payload: dict[str, Any] = vr.to_payload()
     payload["session_id"] = getattr(loop, "_session_id", "")
     payload["rounds"] = int(getattr(result, "rounds", 0) or 0)
@@ -870,41 +869,6 @@ async def _emit_verify_runtime_event(
     await loop._hooks.emit_async(event, verify_payload)
 
 
-def _persist_verify_state(loop: AgenticLoop, metrics: Any, should_retry: bool) -> None:
-    """Mirror SessionMetrics verify telemetry into the SessionManager DB row.
-
-    Failures NEVER raise (observability hygiene). Skipped silently when no
-    session_id is set or no SessionManager singleton exists.
-    """
-    session_id = getattr(loop, "_session_id", "")
-    if not session_id:
-        return
-    mgr = None
-    try:
-        from core.memory.session_manager import SessionManager
-
-        mgr = SessionManager()
-        mgr.upsert_verify_state(
-            session_id,
-            verify_pass_count=metrics.verify_pass_count,
-            verify_fail_count=metrics.verify_fail_count,
-            last_verify_passed=metrics.last_verify_passed,
-            last_verify_mode=metrics.last_verify_mode,
-            last_verify_effective_mode=metrics.last_verify_effective_mode,
-            last_verify_rubric_misses=metrics.last_verify_rubric_misses,
-            last_verify_should_retry=should_retry,
-        )
-    except Exception:
-        log.debug("verify state persistence skipped", exc_info=True)
-    finally:
-        # Close to avoid leaked SQLite handles (Codex MCP follow-up 2026-05-23).
-        if mgr is not None:
-            try:
-                mgr.close()
-            except Exception:
-                log.debug("verify SessionManager close failed", exc_info=True)
-
-
 def _skips_public_finalization(result: AgenticResult) -> bool:
     """Return whether a terminal has no candidate answer to verify or stop."""
     return not is_successful_task_termination(result.termination_reason)
@@ -920,8 +884,6 @@ async def _finalize_without_public_verify_async(
     _prepare_final_result(loop, result, user_input, round_idx, persist=False)
     _merge_verify_attempts(loop, result)
     _persist_final_result(loop, result, user_input, round_idx)
-    if getattr(loop, "_suppress_public_verify", False):
-        _persist_verify_state(loop, loop._session_metrics, False)
     if loop._hooks:
         session_ended, turn_completed, reasoning_metrics = _final_hook_payloads(
             loop, result, user_input

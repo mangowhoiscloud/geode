@@ -21,7 +21,7 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 from unittest.mock import patch
 
 import pytest
@@ -803,14 +803,26 @@ class TestReaderPumpResilience:
     def test_pump_sends_sentinel_on_unexpected_death(self) -> None:
         """A poisoned line (undecodable bytes) must not silently kill the pump;
         any unexpected exit still enqueues the None sentinel (Codex MED #1)."""
-        import asyncio
+        from core.server.ipc_server.poller import CLIPoller, _AsyncClientEndpoint
 
-        from core.server.ipc_server import poller as poller_mod
+        async def scenario() -> list[dict[str, Any]]:
+            writer = _FakeStreamWriter()
+            endpoint = _AsyncClientEndpoint(asyncio.get_running_loop(), writer)
+            reader = asyncio.StreamReader()
+            services = SimpleNamespace(create_session=lambda *a, **kw: (object(), object()))
+            poller = CLIPoller.__new__(CLIPoller)
+            poller_state = cast(Any, poller)
+            poller_state._services = services
+            poller_state._stop_event = threading.Event()
+            poller_state._propagate_contextvars = lambda: None
 
-        src = Path(poller_mod.__file__).read_text(encoding="utf-8")
-        assert "UnicodeDecodeError" in src  # decode errors handled like bad JSON
-        assert "finally:" in src and "_enqueue(None)" in src  # sentinel guaranteed
-        assert isinstance(asyncio.Queue, type)
+            reader.feed_data(b"\xff\n")
+            reader.feed_eof()
+            await asyncio.wait_for(poller._handle_client_async(reader, endpoint), timeout=1.0)
+            return writer.lines
+
+        messages = asyncio.run(scenario())
+        assert any(message.get("type") == "error" for message in messages)
 
     def test_msg_queue_is_bounded_with_dropping_put(self) -> None:
         """Backpressure: bounded queue + put_nowait drop, never an awaited put

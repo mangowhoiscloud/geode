@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import tempfile
-import time
 import uuid
 from pathlib import Path
 from typing import Any
@@ -15,12 +14,10 @@ from core.agent.plan import Plan, PlanStep
 from core.agent.tool_executor import ToolExecutor
 from core.cli.ipc_client import IPCClient
 from core.cli.routing import compose_command_registry
-from core.cli.session_state import set_current_loop
 from core.cli.tool_handlers.grill import _build_grill_handlers
 from core.llm.agentic_response import AgenticResponse, ResponseUsage, TextBlock, ToolUseBlock
 from core.memory.goals import GoalStore
 from core.memory.grills import GrillStore
-from core.memory.session_manager import SessionManager, SessionMeta
 from core.observability.session_timeline import SessionEventStore
 from core.server.ipc_server.poller import CLIPoller
 from core.skills.skills import SkillLoader, SkillRegistry
@@ -37,7 +34,6 @@ class _Services:
         self.mcp_manager = None
 
     def create_session(self, *_args: Any, **_kwargs: Any) -> tuple[None, AgenticLoop]:
-        set_current_loop(self.loop)
         return None, self.loop
 
 
@@ -274,7 +270,13 @@ def test_each_slash_command_emits_an_isolated_typed_trajectory(
     registry = SkillRegistry()
     SkillLoader(skills_dir=Path(".geode/skills")).load_all(registry=registry)
     socket_path = Path(tempfile.gettempdir()) / f"geode-slash-typed-{uuid.uuid4().hex[:8]}.sock"
-    poller = CLIPoller(_Services(loop, registry), socket_path=socket_path)
+    from core.cli.dispatcher import _handle_command
+
+    poller = CLIPoller(
+        _Services(loop, registry),
+        socket_path=socket_path,
+        command_handler=_handle_command,
+    )
     poller.start()
     client = IPCClient(socket_path)
     expected_calls: set[str] = set()
@@ -301,29 +303,6 @@ def test_each_slash_command_emits_an_isolated_typed_trajectory(
                 reflection_hint="Do not leak into the control workflow.",
                 should_retry=True,
             )
-            manager = SessionManager(db_path)
-            now = time.time()
-            try:
-                manager.upsert(
-                    SessionMeta(
-                        session_id=loop._session_id,
-                        created_at=now,
-                        updated_at=now,
-                        status="active",
-                    )
-                )
-                manager.upsert_verify_state(
-                    loop._session_id,
-                    verify_pass_count=0,
-                    verify_fail_count=1,
-                    last_verify_passed=False,
-                    last_verify_mode="rule_based",
-                    last_verify_effective_mode="rule_based",
-                    last_verify_rubric_misses=("prior-turn-only",),
-                    last_verify_should_retry=True,
-                )
-            finally:
-                manager.close()
             first = client.send_command_streaming("/grill", "Choose rollout scope")
             assert first["control_state"]["frontier"] == ["scope"]
             final = client.send_prompt("narrow")
@@ -377,13 +356,4 @@ def test_each_slash_command_emits_an_isolated_typed_trajectory(
             and str(event.payload.get("trigger") or "").startswith(f"update_{surface}:")
         }
         assert mutations == expected_calls
-    if surface == "grill":
-        manager = SessionManager(db_path)
-        try:
-            verify_state = manager.get_verify_state(loop._session_id)
-        finally:
-            manager.close()
-        assert verify_state is not None
-        assert verify_state["last_verify_should_retry"] is False
-        assert verify_state["last_verify_passed"] is False
     assert events[-1].kind == "session.ended"

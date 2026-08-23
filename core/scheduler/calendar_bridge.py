@@ -12,6 +12,8 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from core.scheduler.models import Schedule, ScheduledJob, ScheduleKind
+
 log = logging.getLogger(__name__)
 
 GEODE_PREFIX = "[GEODE] "
@@ -142,32 +144,21 @@ class CalendarSchedulerBridge:
 
             try:
                 at_ms = event.start.timestamp() * 1000
+                if at_ms <= datetime.now(UTC).timestamp() * 1000:
+                    continue
                 self._scheduler.add_job(
-                    name=job_name,
-                    schedule_kind="at",
-                    at_ms=at_ms,
-                    metadata={"source": "calendar", "event_id": event.event_id},
+                    ScheduledJob(
+                        job_id=f"calendar-{event.event_id or job_name}",
+                        name=job_name,
+                        schedule=Schedule(kind=ScheduleKind.AT, at_ms=at_ms),
+                        delete_after_run=True,
+                        action=job_name,
+                        created_at_ms=datetime.now(UTC).timestamp() * 1000,
+                        metadata={"source": "calendar", "event_id": event.event_id},
+                    )
                 )
                 pulled += 1
             except Exception as exc:
                 errors.append(f"Failed to pull event '{event.title}': {exc}")
 
         return pulled, errors
-
-
-# ---------------------------------------------------------------------------
-# Module-level singleton
-# ---------------------------------------------------------------------------
-
-_bridge: CalendarSchedulerBridge | None = None
-
-
-def set_calendar_bridge(bridge: CalendarSchedulerBridge | None) -> None:
-    """Set the active calendar bridge."""
-    global _bridge
-    _bridge = bridge
-
-
-def get_calendar_bridge() -> CalendarSchedulerBridge | None:
-    """Get the active calendar bridge, or None if not set."""
-    return _bridge

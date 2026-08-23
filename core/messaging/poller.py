@@ -1,4 +1,4 @@
-"""Base Poller — abstract base for channel pollers."""
+"""Process-neutral base for external messaging pollers."""
 
 from __future__ import annotations
 
@@ -18,17 +18,10 @@ log = logging.getLogger(__name__)
 
 
 class BasePoller(ABC):
-    """Abstract daemon-thread poller for external messaging channels.
+    """Abstract daemon-thread poller for external messaging channels."""
 
-    Subclasses implement _apoll_once() to fetch new messages from
-    their channel and route them through the ChannelManager.
-
-    Subclasses MAY define:
-        _env_config_var: str  — env var name for is_configured() check
-    """
-
-    _env_config_var: str = ""  # Override in subclass for auto is_configured()
-    STOP_JOIN_TIMEOUT_S: float = 5.0  # Override when the loop holds long-lived I/O
+    _env_config_var: str = ""
+    STOP_JOIN_TIMEOUT_S: float = 5.0
 
     def __init__(
         self,
@@ -48,42 +41,35 @@ class BasePoller(ABC):
     @property
     @abstractmethod
     def channel_name(self) -> str:
-        """Return the channel identifier (e.g., 'slack')."""
+        """Return the channel identifier (e.g., ``slack``)."""
         ...
 
     @abstractmethod
     async def _apoll_once(self) -> None:
-        """Fetch new messages and route them via self._manager."""
+        """Fetch new messages and route them through the channel manager."""
         ...
 
     def is_configured(self) -> bool:
-        """Check if the poller has necessary credentials/config."""
-        if self._env_config_var:
-            return bool(os.environ.get(self._env_config_var))
-        return False
-
-    # --- Shared helpers ---
+        """Return whether this poller has its required environment config."""
+        return bool(self._env_config_var and os.environ.get(self._env_config_var))
 
     def _check_mcp_health(self) -> bool:
-        """Return True if MCP manager is available and this channel is healthy."""
+        """Return whether the MCP manager reports this channel healthy."""
         if self._mcp is None:
             return False
-        health = self._mcp.check_health()
-        return health.get(self.channel_name, False)
+        return self._mcp.check_health().get(self.channel_name, False)
 
     def _get_channel_bindings(self) -> list[dict[str, Any]]:
-        """Return bindings for this channel with valid channel IDs."""
-        bindings = self._manager.list_bindings()
+        """Return valid bindings for this poller's channel."""
         return [
-            b
-            for b in bindings
-            if b["channel"] == self.channel_name and b.get("channel_id", "") not in ("", "*")
+            binding
+            for binding in self._manager.list_bindings()
+            if binding["channel"] == self.channel_name
+            and binding.get("channel_id", "") not in ("", "*")
         ]
 
-    # --- Lifecycle ---
-
     def start(self) -> None:
-        """Start the polling daemon thread."""
+        """Start the polling daemon thread when configured."""
         if not self.is_configured():
             log.debug("Poller %s not configured — skipping", self.channel_name)
             return
@@ -110,8 +96,6 @@ class BasePoller(ABC):
         if thread is not None:
             thread.join(timeout=self.STOP_JOIN_TIMEOUT_S)
             if thread.is_alive():
-                # Keep the ref: clearing it would let start() spawn a second
-                # loop while this one is still winding down.
                 log.warning(
                     "Gateway poller %s still stopping after %.0fs join timeout",
                     self.channel_name,
@@ -122,12 +106,12 @@ class BasePoller(ABC):
         log.info("Gateway poller stopped: %s", self.channel_name)
 
     def _run_loop_thread(self) -> None:
-        """Thread entrypoint for the async polling loop."""
+        """Run the async polling loop in the poller's daemon thread."""
         with asyncio.Runner() as runner:
             runner.run(self._run_loop_async())
 
     async def _run_loop_async(self) -> None:
-        """Main polling loop (runs in daemon thread event loop)."""
+        """Poll until stopped, isolating one failed iteration."""
         while not self._stop_event.is_set():
             try:
                 await self._apoll_once()

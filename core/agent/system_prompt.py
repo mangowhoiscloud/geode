@@ -22,6 +22,7 @@ import re
 from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
 
 from core.agent.heuristics_policy import (
     _load_heuristics_override,
@@ -230,6 +231,7 @@ def build_system_prompt(
     model: str = "",
     *,
     policy_sources: PolicySourceBundle | None = None,
+    user_profile: Any = None,
 ) -> str:
     """Build the AgenticLoop system prompt.
 
@@ -349,14 +351,14 @@ def build_system_prompt(
     g2 = _build_geode_memory_context()
     if g2:
         dynamic_parts.append(g2)
-    g3 = _build_learning_context()
+    g3 = _build_learning_context(user_profile)
     if g3:
         dynamic_parts.append(g3)
     g4 = _build_project_memory_context()
     if g4:
         dynamic_parts.append(g4)
 
-    user_ctx = _build_user_context()
+    user_ctx = _build_user_context(user_profile)
     if user_ctx:
         dynamic_parts.append(user_ctx)
 
@@ -495,7 +497,7 @@ def _build_model_card(model: str) -> str:
         return ""
 
 
-def _build_user_context() -> str:
+def _build_user_context(profile: Any = None) -> str:
     """Build user context from profile + career identity.
 
     Sources:
@@ -507,9 +509,6 @@ def _build_user_context() -> str:
     GEODE's identity comes from GEODE.md (G1 layer).
     """
     try:
-        from core.tools.profile_tools import get_user_profile
-
-        profile = get_user_profile()
         if profile is None:
             return ""
         parts: list[str] = []
@@ -661,7 +660,7 @@ def _sanitize_learned_pattern(line: str) -> str:
     return stripped
 
 
-def _build_learning_context() -> str:
+def _build_learning_context(profile: Any = None) -> str:
     """G3 layer: Load learned patterns from UserProfile.
 
     Sources: ~/.geode/user_profile/learned.md (auto_learn hook output).
@@ -671,9 +670,6 @@ def _build_learning_context() -> str:
     do not leak into every system prompt.
     """
     try:
-        from core.tools.profile_tools import get_user_profile
-
-        profile = get_user_profile()
         if profile is None:
             return ""
 

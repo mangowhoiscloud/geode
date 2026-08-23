@@ -16,8 +16,6 @@ from core.mcp.discord_adapter import DiscordNotificationAdapter
 from core.mcp.notification_port import (
     NotificationPort,
     NotificationResult,
-    get_notification,
-    set_notification,
 )
 from core.mcp.slack_adapter import SlackNotificationAdapter
 from core.mcp.telegram_adapter import TelegramNotificationAdapter
@@ -88,21 +86,11 @@ class TestNotificationPort:
             NotificationPort, "__abstractmethods__"
         )
 
-    def test_contextvars_injection(self):
-        """set_notification / get_notification round-trip."""
+    def test_tool_keeps_injected_adapter(self):
+        from core.tools.output_tools import SendNotificationTool
+
         mock_adapter = MagicMock()
-        mock_adapter.send_message = MagicMock(
-            return_value=NotificationResult(success=True, channel="test")
-        )
-        mock_adapter.is_available = MagicMock(return_value=True)
-        mock_adapter.list_channels = MagicMock(return_value=["test"])
-
-        set_notification(mock_adapter)
-        assert get_notification() is mock_adapter
-
-        # Cleanup
-        set_notification(None)
-        assert get_notification() is None
+        assert SendNotificationTool(mock_adapter)._notification is mock_adapter
 
 
 class TestNotificationResult:

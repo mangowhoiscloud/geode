@@ -56,12 +56,17 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any
 
+from core.llm import fallback as _retry
 from core.llm.adapters.base import (
     TextCompletionResult,
     WebSearchResult,
 )
 from core.llm.adapters.registry import list_adapters, normalize_registry_provider
 from core.llm.errors import BillingError, is_billing_fatal
+
+_CONNECTION_TRANSIENT_ERROR_NAMES = _retry.CONNECTION_TRANSIENT_ERROR_NAMES
+_cause_chain = _retry.exception_chain
+_is_connection_transient = _retry.is_connection_transient
 
 log = logging.getLogger(__name__)
 
@@ -384,55 +389,6 @@ def _fire_attempt(attempt: AdapterAttempt) -> None:
 # billing-fatal errors are never retried.
 
 _CONNECTION_TRANSIENT_RETRIES = 1
-
-# Matched by exception type NAME (not isinstance) so the policy covers both
-# ``anthropic.APIConnectionError`` and raw ``httpx`` transport errors without
-# importing either SDK here. Names checked across the __cause__/__context__
-# chain, depth-limited to the first 4 links (see _cause_chain).
-_CONNECTION_TRANSIENT_ERROR_NAMES: frozenset[str] = frozenset(
-    {
-        "APIConnectionError",
-        "APITimeoutError",
-        "ConnectError",
-        "ConnectTimeout",
-        "ReadError",
-        "ReadTimeout",
-        "WriteError",
-        "RemoteProtocolError",
-    }
-)
-
-
-def _cause_chain(exc: BaseException, *, limit: int = 4) -> list[BaseException]:
-    """Return ``exc`` plus its ``__cause__``/``__context__`` chain (cycle-safe)."""
-    chain: list[BaseException] = []
-    seen: set[int] = set()
-    cur: BaseException | None = exc
-    while cur is not None and id(cur) not in seen and len(chain) < limit:
-        seen.add(id(cur))
-        chain.append(cur)
-        cur = cur.__cause__ or cur.__context__
-    return chain
-
-
-def _is_connection_transient(exc: Exception) -> bool:
-    """True when ``exc`` (or any link in its cause chain, depth-limited)
-    is a connection-class transport error eligible for a same-adapter retry.
-
-    Billing-fatal errors are categorically excluded — quota / credit
-    failures must surface immediately (PR-NO-FALLBACK billing honesty).
-    The billing check runs on EVERY chain link, not just the outer
-    exception, so a connection-named wrapper around a billing-fatal root
-    (``raise APIConnectionError(...) from quota_exc``) cannot smuggle a
-    quota failure into the retry path (Codex MCP review 2026-06-11).
-    """
-    chain = _cause_chain(exc)
-    for link in chain:
-        if isinstance(link, BillingError):
-            return False
-        if isinstance(link, Exception) and is_billing_fatal(link):
-            return False
-    return any(type(link).__name__ in _CONNECTION_TRANSIENT_ERROR_NAMES for link in chain)
 
 
 def _error_with_cause(exc: BaseException) -> str:

@@ -20,7 +20,10 @@ import weakref
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from enum import Enum, StrEnum
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from core.extensions import ExtensionDecision
 
 log = logging.getLogger(__name__)
 
@@ -458,8 +461,16 @@ class RuntimeEventBus:
         self._sinks: dict[str, HookSink] = {}
         self._cleanups: dict[str, CleanupCallback] = {}
         self._sink_failure_warned: set[tuple[str, str]] = set()
+        self._extension_decisions: tuple[ExtensionDecision, ...] = ()
         self._closed = False
         self._lock = threading.Lock()
+
+    @property
+    def extension_decisions(self) -> tuple[ExtensionDecision, ...]:
+        return self._extension_decisions
+
+    def set_extension_decisions(self, decisions: tuple[ExtensionDecision, ...]) -> None:
+        self._extension_decisions = decisions
 
     def _register_event(
         self,
