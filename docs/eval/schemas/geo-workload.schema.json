@@ -26,6 +26,7 @@
     "locale",
     "account_state",
     "repetitions",
+    "requested_result_limit",
     "live_approval_receipt",
     "target_prefixes",
     "items"
@@ -42,6 +43,7 @@
     "locale": {"type": "string", "minLength": 2, "maxLength": 35},
     "account_state": {"type": "string", "minLength": 1, "maxLength": 256},
     "repetitions": {"type": "integer", "minimum": 1, "maximum": 1000},
+    "requested_result_limit": {"type": "integer", "minimum": 1, "maximum": 100},
     "live_approval_receipt": {
       "oneOf": [{"type": "null"}, {"$ref": "#/$defs/evidence_ref"}]
     },

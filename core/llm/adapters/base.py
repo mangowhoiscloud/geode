@@ -401,6 +401,10 @@ class WebSearchResult:
     adapter_name: str = ""
     adapter_provider: str = ""
     adapter_source: str = ""
+    citation_urls: tuple[str, ...] = ()
+    search_activated: bool = False
+    retrieval_exposed: bool = False
+    model: str = ""
 
 
 @dataclass(frozen=True)

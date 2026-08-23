@@ -3156,15 +3156,17 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/benchmarks/geo.md
 
 GEO는 문장을 다시 쓰는 최적화 점수가 아니라 증거 상태머신입니다.`preflight → offline_measure → live_observe → experiment`의 앞 단계가 뒤 단계를 대신하지 못하며, 측정하지 못한 값은 0이 아니라`not_measured`로 남습니다.
 
-| Stage | 질문 | 분모 |
+질의 실행 1회가 관측치 1개입니다. live profile은 6개 root × (원문 1개 + paraphrase 3개) × K=5, 즉 120개 관측치를 만듭니다. C는 이 120개 전체를 분모로 쓰지만, R·P·A·Q는 해당 증거가 실제로 존재하는 관측치나 claim만 각자의 분모로 사용합니다.
+
+| Stage | 분자: 무엇을 세는가 | 분모: 어떤 집합에서 보는가 |
 | --- | --- | --- |
-| `F` | Fetch / index 적격성 | 감사한 URL |
-| `R` | 검색 포함 | 검색 표면이 노출된 반복 질의 |
-| `C` | 인용 선택 | 모든 반복 질의 |
-| `P` | 가시 배치 | target 인용 응답 |
-| `A` | 답변 흡수 | 검증된 target 인용 응답 |
-| `Q` | claim support (품질 부분지표) | 감사한 target 연결 claim |
-| `O` | 1차 outcome | 적격 impression / referral / session |
+| `F` | 각 preflight 조건을 통과한 URL | 감사 대상 URL |
+| `R` | target URL이 retrieval 목록에 나온 실행 | retrieval 목록을 노출한 24×K 실행 |
+| `C` | target URL을 인용한 실행 | 전체 24×K 질의 실행 |
+| `P` | target 인용의 visible\_rank가 3 이하인 실행 | target URL을 인용한 실행 |
+| `A` | verifier가 target 내용 사용을 확인한 실행 | A 판정이 있는 target 인용 실행 |
+| `Q` | source support가 확인된 target 연결 claim | verifier가 선언하고 빠짐없이 감사한 target 연결 claim |
+| `O` | 관측된 referral·engagement·conversion | 측정 가능한 1차 impression·referral·session |
 
 ## 실행 계약
 
@@ -3176,6 +3178,16 @@ GEO는 문장을 다시 쓰는 최적화 점수가 아니라 증거 상태머신
 6.  v1은 Q 중 claim support만 측정하므로, 모든 영수증이 있어도 Q 전체는 `partial`입니다.
 
 ```
+uv run python scripts/eval/geo_collect.py \
+  --run-spec <run-dir>/run-spec.json \
+  --workload <run-dir>/workload.json \
+  --site-preflight <run-dir>/site-preflight.json \
+  --link-audit <run-dir>/link-audit.json \
+  --host-preflight <run-dir>/host-preflight.json \
+  --out <run-dir>/native-results.json
+```
+
+```
 uv run python scripts/eval/geo_visibility.py \
   --run-spec <run-dir>/run-spec.json \
   --workload <run-dir>/workload.json \
@@ -3185,7 +3197,7 @@ uv run python scripts/eval/geo_visibility.py \
 
 ## 현재 경계
 
-저장소 CI는 export, sitemap, self-canonical, indexability와 LLM index를`geode.geo-preflight.v2` 영수증으로 확인합니다. R–Q 측정기는 실행 가능하지만 공개된 live 결과는 아직 없습니다. O는 Search Console, referral과 전환 같은 1차 analytics가 들어오기 전까지 측정하지 않습니다.
+로컬 export·sitemap·self-canonical·noindex·내부 링크만 확인한 F는`partial`입니다. 동일 URL 집합에 대한 공개 호스트의 HTTP·HTML· canonical·robots 영수증까지 결합돼야 `measured`가 됩니다. A/Q는 별도 source-aware verifier, O는 관측 기간이 끝난 1차 analytics 영수증 없이는 측정하지 않습니다.
 
 native outcome, verifier 판단, GEODE trajectory, analysis와 publication manifest는 서로 다른 권한입니다. Inspect가 실행하지 않은 slash run을`.eval`로 포장하지도 않습니다.
 

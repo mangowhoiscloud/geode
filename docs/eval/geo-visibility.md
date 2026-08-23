@@ -15,8 +15,12 @@ eval_contracts:
   - core/observability/schemas/trajectory-release.schema.json
   - core/observability/schemas/trajectory.schema.json
   - docs/eval/artifact-publish-manifest.template.json
+  - docs/eval/schemas/geo-host-preflight.schema.json
+  - docs/eval/schemas/geo-link-audit.schema.json
   - docs/eval/schemas/geo-live-approval.schema.json
   - docs/eval/schemas/geo-native-results.schema.json
+  - docs/eval/schemas/geo-outcome.schema.json
+  - docs/eval/schemas/geo-preflight.schema.json
   - docs/eval/schemas/geo-workload.schema.json
   - docs/eval/schemas/publication.schema.json
   - docs/eval/schemas/run-spec.schema.json
@@ -103,15 +107,20 @@ An earlier state never proves a later state. Preserve `not_measured` when a
 prerequisite, approval, frozen workload, or receipt is absent. Do not publish
 an aggregate GEO score.
 
-| Code | Stage | Denominator | Metric |
+One query run is one observation. The live profile has 6 roots × 4 frozen
+wordings × K=5 repetitions, so C uses 120 observations. Other stages preserve
+their own eligible populations rather than silently treating missing evidence
+as failure.
+
+| Code | Stage | Numerator | Denominator |
 |---|---|---|---|
-| F | Fetch/index eligibility | audited URLs | reachable, allowed, canonical, sitemap/internal-link coverage |
-| R | Retrieval inclusion/rank | repeated frozen prompts | source recall@k and rank distribution |
-| C | Citation selection | all repeated prompts | selected/cited-source probability |
-| P | Visible placement/rank | citation-selected responses | citation prominence and user-visible rank |
-| A | Answer absorption | citation-selected responses and audited claims | supported contribution; counterfactual where available |
-| Q | Support/credibility/answer quality | audited claims and sources | entailment, completeness, source authority, factuality |
-| O | First-party outcome | eligible impressions/referrals/sessions | impression, referral, engagement, conversion, separately reported |
+| F | Fetch/index eligibility | URLs passing each preflight condition | audited target URLs |
+| R | Retrieval inclusion/rank | runs whose exposed retrieval list contains a target URL | 24×K runs that expose retrieval |
+| C | Citation selection | runs citing a target URL | all 24×K query runs |
+| P | Visible placement/rank | target-cited runs with `visible_rank ≤ 3` | target-cited runs |
+| A | Answer absorption | runs where a verifier confirms target use | target-cited runs with an A verdict |
+| Q | Claim support submetric | supported target-linked claims | verifier-declared target-linked claims audited in full |
+| O | First-party outcome | observed referrals, engagement, or conversions | eligible first-party impressions, referrals, or sessions |
 
 The executable v1 validator measures only the claim-support component of Q.
 It therefore reports Q as `partial` even when every target-cited response has a
@@ -120,16 +129,23 @@ rubrics and receipts.
 
 ## Protocol
 
-1. Run deterministic preflight first: exported site build, internal links,
-   sitemap, canonical metadata, visible evidence, and structured-data parity.
-   The repository-owned executable check is:
+1. Run deterministic preflight first. Local export evidence is intentionally
+   `partial`; F becomes `measured` only when a separate public-host receipt
+   binds the same URL-set digest and passes HTTP, HTML, self-canonical,
+   noindex, and host-root robots checks:
 
    ```bash
    cd site
    npm run build
    npm run export-md
    npm run verify-metadata
-   npm run verify-geo
+   node scripts/verify-geo-preflight.mjs --receipt <run-dir>/site-preflight.json
+   cd ..
+   uv run python scripts/check_docs_links.py --receipt <run-dir>/link-audit.json
+   uv run python scripts/eval/geo_host_preflight.py \
+     --base-url https://mangowhoiscloud.github.io/geode/ \
+     --expected-sitemap site/out/sitemap.xml \
+     --out <run-dir>/host-preflight.json
    ```
 2. For live engines, use every frozen root and paraphrase in fresh sessions at
    `k=5` repetitions per engine. Record engine/model surface, locale, account
@@ -137,10 +153,19 @@ rubrics and receipts.
    native receipts where permitted. The frozen workload must digest-bind an
    operator-owned `geode.geo-live-approval@1` receipt for the same run, engine,
    model, locale, account state, and repetition count.
-   Bind the frozen workload and native/verifier receipts through the executable
-   measurement contract:
+   Collect only provider-native retrieval and citation fields through the
+   existing adapter registry, then bind the frozen workload and receipts
+   through the measurement contract:
 
    ```bash
+   uv run python scripts/eval/geo_collect.py \
+     --run-spec <run-dir>/run-spec.json \
+     --workload <run-dir>/workload.json \
+     --site-preflight <run-dir>/site-preflight.json \
+     --link-audit <run-dir>/link-audit.json \
+     --host-preflight <run-dir>/host-preflight.json \
+     --out <run-dir>/native-results.json
+
    uv run python scripts/eval/geo_visibility.py \
      --run-spec <run-dir>/run-spec.json \
      --workload <run-dir>/workload.json \
@@ -150,8 +175,11 @@ rubrics and receipts.
 
    The command validates the complete 24×K observation matrix and emits
    separate R/C/P/A/Q denominators, the run-spec digest, native producer,
-   verifier/rubric identity, and audited-claim coverage. It does not infer F or
-   O and has no aggregate score field.
+   verifier/rubric identity, preflight/outcome receipt digests, and audited-claim
+   coverage. Requested result count is an input constraint, not a promise that
+   the provider will expose exactly that many sources. The collector retains
+   every provider-native source and citation and never parses answer prose into
+   either field. It has no aggregate score field.
 3. For offline intervention evaluation, hash original, sham, and targeted
    repair arms; reindex every arm and re-run retrieval, reranking, and
    generation. Include initial-rank controls and a multi-actor adoption arm.
@@ -195,6 +223,19 @@ visibility claim.
 The project can publish `/geode/sitemap.xml`, but this repository cannot own
 the GitHub Pages host-root `/robots.txt`. Record host-root behavior as an
 environment observation instead of claiming this project controls it.
+
+Provider-native citation annotations establish C and P, not A or Q. A requires
+a separate target-use verdict; Q requires a separately digest-bound claim
+universe, cited source content, rubric, and verifier identity. O likewise needs
+a first-party Search Console, referral, or conversion receipt whose observation
+window has ended. Missing receipts remain `not_measured`; they are never filled
+from model prose or a same-run judge.
+
+A diagnostic visibility run deliberately retains `promotion_authority=none`.
+Promotion is a different preregistered experiment: it needs a direct named
+comparator, frozen arms, matching index and observation windows, and the
+authority corresponding to its run-spec claim class. More data in one
+diagnostic run cannot manufacture that authority.
 
 ## Trajectory and artifact publication
 

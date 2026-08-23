@@ -87,7 +87,7 @@ def _metric(
     denominator: int,
     expected_denominator: int,
     finding: str,
-    evidence: str,
+    evidence: str | list[str],
 ) -> dict[str, Any]:
     if denominator == 0:
         payload: dict[str, Any] = {
@@ -107,7 +107,7 @@ def _metric(
             "numerator": numerator,
             "denominator": denominator,
             "finding": finding,
-            "evidence": [evidence],
+            "evidence": [evidence] if isinstance(evidence, str) else evidence,
         }
     GeoEvidence.from_dict(payload)
     return payload
@@ -160,11 +160,115 @@ def _validate_live_approval(
         "locale": workload["locale"],
         "account_state": workload["account_state"],
         "repetitions": repetitions,
+        "requested_result_limit": workload["requested_result_limit"],
     }
     if any(approval[field] != value for field, value in expected.items()):
         raise ValueError("GEO live approval does not match the frozen run surface")
     if _parse_datetime(approval["approved_at"]) > frozen_at:
         raise ValueError("GEO live approval must predate the workload freeze")
+
+
+def _fetch_metric(results_path: Path, context: dict[str, Any] | None) -> dict[str, Any]:
+    if context is None:
+        return _not_measured(
+            "F",
+            phase="preflight",
+            finding="Digest-bound site and internal-link preflight receipts were not supplied.",
+        )
+    site = _load_bound_receipt(results_path, context["site"], kind="geo-site-preflight")
+    links_receipt = _load_bound_receipt(results_path, context["links"], kind="geo-link-audit")
+    if not isinstance(site, dict) or not isinstance(links_receipt, dict):
+        raise ValueError("GEO preflight receipts must be objects")
+    _validate_schema(site, "geo-preflight.schema.json", label="site preflight")
+    _validate_schema(links_receipt, "geo-link-audit.schema.json", label="link audit")
+    checks = site["checks"]
+    if any(row["numerator"] != row["denominator"] for row in checks.values()):
+        raise ValueError("GEO site preflight pass receipt contains an incomplete check")
+    links = links_receipt["internal_links"]
+    if links["numerator"] != links["denominator"] or links["broken"]:
+        raise ValueError("GEO link-audit pass receipt contains a broken link")
+    pages = int(checks["export"]["denominator"])
+    host_ref = context["host"]
+    host = None
+    if host_ref is not None:
+        host = _load_bound_receipt(results_path, host_ref, kind="geo-host-preflight")
+        if not isinstance(host, dict):
+            raise ValueError("GEO host preflight receipt must be an object")
+        _validate_schema(host, "geo-host-preflight.schema.json", label="host preflight")
+        if host["urlset_sha256"] != site["urlset_sha256"]:
+            raise ValueError("GEO local and public host URL sets do not match")
+        if any(row["numerator"] != row["denominator"] for row in host["checks"].values()):
+            raise ValueError("GEO host preflight pass receipt contains an incomplete check")
+        if int(host["checks"]["http_2xx"]["denominator"]) != pages:
+            raise ValueError("GEO local export and public host page counts do not match")
+    metric = _metric(
+        "F",
+        phase="preflight",
+        numerator=pages,
+        denominator=pages,
+        expected_denominator=pages,
+        finding=(
+            f"All {pages} exported pages passed sitemap, self-canonical, indexability, "
+            f"and LLM-index checks; {links['denominator']} internal link occurrences passed; "
+            + (
+                "the public host receipt matched every URL and fetch gate."
+                if host is not None
+                else "public-host fetch eligibility was not supplied."
+            )
+        ),
+        evidence=[
+            str(ref["path"])
+            for ref in (context["site"], context["links"], host_ref)
+            if ref is not None
+        ],
+    )
+    if host is None:
+        metric["status"] = "partial"
+        GeoEvidence.from_dict(metric)
+    return metric
+
+
+def _outcome_metric(
+    results_path: Path,
+    context: dict[str, Any] | None,
+    *,
+    run_id: str,
+    workload_sha256: str,
+    phase: str,
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    if context is None:
+        return (
+            _not_measured(
+                "O",
+                phase=phase,
+                finding="First-party impressions, referrals, and conversions were not supplied.",
+            ),
+            None,
+        )
+    outcome = _load_bound_receipt(results_path, context, kind="geo-first-party-outcome")
+    if not isinstance(outcome, dict):
+        raise ValueError("GEO outcome receipt must be an object")
+    _validate_schema(outcome, "geo-outcome.schema.json", label="GEO outcome")
+    if outcome["run_id"] != run_id or outcome["workload_sha256"] != workload_sha256:
+        raise ValueError("GEO outcome receipt does not bind this run and workload")
+    window = outcome["window"]
+    if _parse_datetime(window["start"]) >= _parse_datetime(window["end"]):
+        raise ValueError("GEO outcome window must have positive duration")
+    if _parse_datetime(outcome["collected_at"]) < _parse_datetime(window["end"]):
+        raise ValueError("GEO outcome receipt cannot be collected before its window ends")
+    primary = outcome["primary_metric"]
+    return (
+        _metric(
+            "O",
+            phase=phase,
+            numerator=int(primary["numerator"]),
+            denominator=int(primary["denominator"]),
+            expected_denominator=int(primary["denominator"]),
+            finding=f"First-party {primary['name']} ({primary['unit']}).",
+            evidence=str(context["path"]),
+        ),
+        outcome,
+    )
 
 
 def validate_and_measure(
@@ -239,6 +343,18 @@ def validate_and_measure(
                 }
             ],
         )
+
+    preflight_context = results["preflight_context"]
+    fetch_metric = _fetch_metric(native_results_path, preflight_context)
+    outcome_context = results["outcome_context"]
+    evidence_phase = "live_observe" if workload["observation_mode"] == "live" else "offline_measure"
+    outcome_metric, outcome_payload = _outcome_metric(
+        native_results_path,
+        outcome_context,
+        run_id=run_id,
+        workload_sha256=workload_sha256,
+        phase=evidence_phase,
+    )
 
     items = workload["items"]
     item_ids = tuple(str(item["id"]) for item in items)
@@ -417,11 +533,7 @@ def validate_and_measure(
     phase = "live_observe" if workload["observation_mode"] == "live" else "offline_measure"
     evidence = f"{results_rel}#/observations"
     vector = {
-        "F": _not_measured(
-            "F",
-            phase="preflight",
-            finding="Fetch eligibility is owned by the separate site preflight receipt.",
-        ),
+        "F": fetch_metric,
         "R": _metric(
             "R",
             phase=phase,
@@ -470,11 +582,7 @@ def validate_and_measure(
             ),
             evidence=evidence,
         ),
-        "O": _not_measured(
-            "O",
-            phase=phase,
-            finding="First-party impressions, referrals, and conversions were not supplied.",
-        ),
+        "O": outcome_metric,
     }
     return {
         "schema_id": "geode.geo-vector@1",
@@ -485,6 +593,11 @@ def validate_and_measure(
         "native_results_sha256": _sha256(native_results_path),
         "native_producer": {"engine": workload["engine"], "model": workload["model"]},
         "verifier_context": verifier_context,
+        "preflight_context": preflight_context,
+        "outcome_context": outcome_context,
+        "outcome_primary_metric": (
+            None if outcome_payload is None else outcome_payload["primary_metric"]
+        ),
         "observation_mode": workload["observation_mode"],
         "observations": {"expected": total, "observed": len(seen_cells)},
         "search_activation": {

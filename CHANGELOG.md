@@ -53,9 +53,11 @@ functional change.
   frozen 24-query workload binds a separate live-approval receipt and exact
   model/K=5 inputs; native outcomes, verifier identity/rubric, run spec, and
   complete audited-claim counts are digest-checked before separate R/C/P/A/Q
-  denominators are emitted. Public site preflight v2 additionally
-  requires one self-canonical URL for every sitemap page and never invents F,
-  O, or an aggregate GEO score.
+  denominators are emitted. Provider adapters preserve retrieval sources and
+  visible citations separately. Local site preflight remains partial until a
+  digest-matched public-host HTTP/HTML/canonical/robots receipt is supplied;
+  first-party outcomes are admitted only through a completed-window receipt.
+  The evaluator never invents F, A, Q, O, or an aggregate GEO score.
 
 - **Third-party extensions now authorize before executable load.** Filesystem
   hooks, package LLM adapters, project/personal skills, and MCP servers project

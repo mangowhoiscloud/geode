@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 from datetime import UTC, datetime
@@ -7,6 +8,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from core.llm.adapters.base import WebSearchResult
+from scripts.eval.geo_collect import collect
 from scripts.eval.geo_visibility import _validate_live_approval, validate_and_measure
 
 
@@ -36,6 +39,7 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
         "locale": "ko-KR",
         "account_state": "fresh-session-history-disabled",
         "repetitions": 1,
+        "requested_result_limit": 10,
         "live_approval_receipt": None,
         "target_prefixes": ["https://mangowhoiscloud.github.io/geode"],
         "items": [
@@ -166,11 +170,13 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
             "run_id": "geo-quality-test",
             "workload_sha256": _sha256(workload_path),
             "collected_at": "2026-08-23T00:10:00Z",
+            "preflight_context": None,
             "verifier_context": {
                 "producer": "example-independent-verifier",
                 "version": "1",
                 "rubric": {"path": "verifier-rubric.json", "sha256": _sha256(rubric_path)},
             },
+            "outcome_context": None,
             "observations": rows,
         },
     )
@@ -289,6 +295,145 @@ def test_geo_visibility_emits_vector_without_aggregate_score(tmp_path: Path) -> 
         "A": (6, 8, "measured"),
         "Q": (7, 8, "partial"),
         "O": (None, None, "not_measured"),
+    }
+
+
+def test_geo_visibility_requires_public_host_for_complete_fetch(tmp_path: Path) -> None:
+    run_spec, workload, results = _fixture(tmp_path)
+    site_receipt = tmp_path / "site-preflight.json"
+    link_receipt = tmp_path / "link-audit.json"
+    host_receipt = tmp_path / "host-preflight.json"
+    urlset_sha256 = "0" * 64
+    _write_json(
+        site_receipt,
+        {
+            "schema": "geode.geo-preflight.v2",
+            "status": "pass",
+            "checks": {
+                name: {"numerator": count, "denominator": count}
+                for name, count in {
+                    "export": 78,
+                    "sitemap": 78,
+                    "self_canonical": 78,
+                    "indexable": 78,
+                    "llm_indexes": 2,
+                }.items()
+            },
+            "noindex": {"count": 0, "audited_pages": 78},
+            "urlset_sha256": urlset_sha256,
+            "llm_indexes": ["llms.txt", "llms-full.txt"],
+            "locators": ["out/sitemap.xml"],
+            "unmeasured": ["retrieval"],
+        },
+    )
+    _write_json(
+        host_receipt,
+        {
+            "schema_id": "geode.geo-host-preflight@1",
+            "schema_version": 1,
+            "generated_at": "2026-08-23T00:02:00Z",
+            "base_url": "https://mangowhoiscloud.github.io/geode/",
+            "sitemap_url": "https://mangowhoiscloud.github.io/geode/sitemap.xml",
+            "urlset_sha256": urlset_sha256,
+            "robots": {
+                "url": "https://mangowhoiscloud.github.io/robots.txt",
+                "status": 404,
+                "policy": "allow-by-absence",
+            },
+            "checks": {
+                name: {"numerator": 78, "denominator": 78}
+                for name in (
+                    "sitemap_parity",
+                    "http_2xx",
+                    "html",
+                    "self_canonical",
+                    "indexable",
+                    "robots_allowed",
+                )
+            },
+        },
+    )
+    _write_json(
+        link_receipt,
+        {
+            "schema": "geode.docs-link-audit.v1",
+            "generated_at": "2026-08-23T00:01:00Z",
+            "status": "pass",
+            "internal_links": {"numerator": 577, "denominator": 577, "broken": 0},
+            "external_links": {"audited": 0, "broken": 0},
+            "unresolved": 4,
+        },
+    )
+    payload = json.loads(results.read_text(encoding="utf-8"))
+    payload["preflight_context"] = {
+        "site": {"path": site_receipt.name, "sha256": _sha256(site_receipt)},
+        "links": {"path": link_receipt.name, "sha256": _sha256(link_receipt)},
+        "host": None,
+    }
+    _write_json(results, payload)
+
+    local_only = validate_and_measure(
+        run_spec_path=run_spec,
+        workload_path=workload,
+        native_results_path=results,
+    )
+    assert local_only["vector"]["F"]["status"] == "partial"
+
+    payload["preflight_context"]["host"] = {
+        "path": host_receipt.name,
+        "sha256": _sha256(host_receipt),
+    }
+    _write_json(results, payload)
+    measured = validate_and_measure(
+        run_spec_path=run_spec,
+        workload_path=workload,
+        native_results_path=results,
+    )
+
+    assert measured["vector"]["F"]["status"] == "measured"
+    assert measured["vector"]["F"]["numerator"] == 78
+    assert "577 internal link occurrences" in measured["vector"]["F"]["finding"]
+
+
+def test_geo_visibility_binds_first_party_outcome_receipt(tmp_path: Path) -> None:
+    run_spec, workload, results = _fixture(tmp_path)
+    outcome = tmp_path / "outcome.json"
+    _write_json(
+        outcome,
+        {
+            "schema_id": "geode.geo-outcome@1",
+            "schema_version": 1,
+            "run_id": "geo-quality-test",
+            "workload_sha256": _sha256(workload),
+            "collected_at": "2026-08-24T00:00:01Z",
+            "window": {"start": "2026-08-23T00:00:00Z", "end": "2026-08-24T00:00:00Z"},
+            "source": {"system": "search-console", "property": "sc-domain:example.com"},
+            "primary_metric": {
+                "name": "clicks-per-impression",
+                "numerator": 4,
+                "denominator": 100,
+                "unit": "clicks/impressions",
+            },
+        },
+    )
+    payload = json.loads(results.read_text(encoding="utf-8"))
+    payload["outcome_context"] = {"path": outcome.name, "sha256": _sha256(outcome)}
+    _write_json(results, payload)
+
+    measured = validate_and_measure(
+        run_spec_path=run_spec,
+        workload_path=workload,
+        native_results_path=results,
+    )
+
+    assert measured["vector"]["O"] | {"finding": ""} == {
+        "stage": "O",
+        "phase": "offline_measure",
+        "status": "measured",
+        "numerator": 4,
+        "denominator": 100,
+        "finding": "",
+        "evidence": ["outcome.json"],
     }
 
 
@@ -414,6 +559,7 @@ def test_geo_visibility_accepts_matching_digest_bound_live_approval(tmp_path: Pa
         "locale": "ko-KR",
         "account_state": "fresh-session-history-disabled",
         "repetitions": 5,
+        "requested_result_limit": 10,
     }
     _write_json(approval_path, approval)
 
@@ -426,6 +572,7 @@ def test_geo_visibility_accepts_matching_digest_bound_live_approval(tmp_path: Pa
             "model": "example-model",
             "locale": "ko-KR",
             "account_state": "fresh-session-history-disabled",
+            "requested_result_limit": 10,
             "live_approval_receipt": {
                 "path": "approval.json",
                 "sha256": _sha256(approval_path),
@@ -435,3 +582,53 @@ def test_geo_visibility_accepts_matching_digest_bound_live_approval(tmp_path: Pa
         repetitions=5,
         frozen_at=datetime(2026, 8, 23, tzinfo=UTC),
     )
+
+
+def test_geo_collector_preserves_retrieval_and_citations_separately(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run_spec, workload, results = _fixture(tmp_path)
+    results.unlink()
+    workload_payload = json.loads(workload.read_text(encoding="utf-8"))
+    workload_payload["engine"] = "codex-oauth"
+    _write_json(workload, workload_payload)
+    run_payload = json.loads(run_spec.read_text(encoding="utf-8"))
+    run_payload["reproduction"]["model"]["provider"] = "openai"
+    run_payload["reproduction"]["model"]["route"] = "subscription"
+    run_payload["reproduction"]["environment"]["initial_state_ref"] = (
+        f"workload.json#sha256={_sha256(workload)}"
+    )
+    _write_json(run_spec, run_payload)
+
+    async def fake_search(query: str, **_: Any) -> WebSearchResult:
+        return WebSearchResult(
+            query=query,
+            text="answer",
+            source_urls=("https://example.com/retrieved",),
+            citation_urls=("https://mangowhoiscloud.github.io/geode/docs/",),
+            adapter_name="codex-oauth",
+            adapter_provider="openai",
+            adapter_source="subscription",
+            search_activated=True,
+            retrieval_exposed=True,
+            model="example-model",
+        )
+
+    monkeypatch.setattr("scripts.eval.geo_collect.web_search_via_adapters", fake_search)
+    payload = asyncio.run(
+        collect(run_spec_path=run_spec, workload_path=workload, output_path=results)
+    )
+
+    assert len(payload["observations"]) == 24
+    first = payload["observations"][0]
+    assert first["retrieval"] == [{"url": "https://example.com/retrieved", "rank": 1}]
+    assert first["citations"] == [
+        {"url": "https://mangowhoiscloud.github.io/geode/docs/", "visible_rank": 1}
+    ]
+    measured = validate_and_measure(
+        run_spec_path=run_spec,
+        workload_path=workload,
+        native_results_path=results,
+    )
+    assert measured["vector"]["R"]["numerator"] == 0
+    assert measured["vector"]["C"]["numerator"] == 24

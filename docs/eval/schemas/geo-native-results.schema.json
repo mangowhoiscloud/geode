@@ -48,7 +48,9 @@
     "run_id",
     "workload_sha256",
     "collected_at",
+    "preflight_context",
     "verifier_context",
+    "outcome_context",
     "observations"
   ],
   "properties": {
@@ -57,8 +59,28 @@
     "run_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$"},
     "workload_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
     "collected_at": {"type": "string", "format": "date-time"},
+    "preflight_context": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "required": ["site", "links", "host"],
+          "properties": {
+            "site": {"$ref": "#/$defs/evidence_ref"},
+            "links": {"$ref": "#/$defs/evidence_ref"},
+            "host": {
+              "oneOf": [{"type": "null"}, {"$ref": "#/$defs/evidence_ref"}]
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
     "verifier_context": {
       "oneOf": [{"type": "null"}, {"$ref": "#/$defs/verifier_context"}]
+    },
+    "outcome_context": {
+      "oneOf": [{"type": "null"}, {"$ref": "#/$defs/evidence_ref"}]
     },
     "observations": {
       "type": "array",

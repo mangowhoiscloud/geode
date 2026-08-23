@@ -1,4 +1,5 @@
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -56,9 +57,13 @@ for (const name of ["llms.txt", "llms-full.txt"]) {
   if (!existsSync(path) || statSync(path).size === 0) throw new Error(`${name}: missing or empty`);
 }
 
-console.log(
-  JSON.stringify(
-    {
+const llmIndexes = ["llms.txt", "llms-full.txt"];
+const urlsetSha256 = createHash("sha256")
+  .update(JSON.stringify(expectedUrls))
+  .digest("hex");
+
+const receipt = JSON.stringify(
+  {
       schema: "geode.geo-preflight.v2",
       status: "pass",
       checks: {
@@ -66,12 +71,22 @@ console.log(
         sitemap: { numerator: urls.length, denominator: expectedUrls.length },
         self_canonical: { numerator: canonicalUrls.length, denominator: expectedUrls.length },
         indexable: { numerator: expectedPaths.length, denominator: expectedPaths.length },
+        llm_indexes: { numerator: llmIndexes.length, denominator: llmIndexes.length },
       },
-      llm_indexes: ["llms.txt", "llms-full.txt"],
+      noindex: { count: 0, audited_pages: expectedPaths.length },
+      urlset_sha256: urlsetSha256,
+      llm_indexes: llmIndexes,
       locators: ["out/sitemap.xml", "out/**/index.html", "out/llms.txt", "out/llms-full.txt"],
       unmeasured: ["retrieval", "citation", "placement", "absorption", "quality", "outcome"],
-    },
-    null,
-    2,
-  ),
+  },
+  null,
+  2,
 );
+const receiptFlag = process.argv.indexOf("--receipt");
+if (receiptFlag >= 0) {
+  const destination = process.argv[receiptFlag + 1];
+  if (!destination) throw new Error("--receipt requires a destination path");
+  writeFileSync(destination, `${receipt}\n`, { encoding: "utf8", flag: "wx" });
+} else {
+  console.log(receipt);
+}

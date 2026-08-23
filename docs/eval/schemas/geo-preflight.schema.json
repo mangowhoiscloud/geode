@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/mangowhoiscloud/geode/main/docs/eval/schemas/geo-preflight.schema.json",
+  "title": "GEODE GEO deterministic site preflight v2",
+  "type": "object",
+  "$defs": {
+    "ratio": {
+      "type": "object",
+      "required": ["numerator", "denominator"],
+      "properties": {
+        "numerator": {"type": "integer", "minimum": 0},
+        "denominator": {"type": "integer", "minimum": 1}
+      },
+      "additionalProperties": false
+    }
+  },
+  "required": ["schema", "status", "checks", "noindex", "urlset_sha256", "llm_indexes", "locators", "unmeasured"],
+  "properties": {
+    "schema": {"const": "geode.geo-preflight.v2"},
+    "status": {"const": "pass"},
+    "checks": {
+      "type": "object",
+      "required": ["export", "sitemap", "self_canonical", "indexable", "llm_indexes"],
+      "properties": {
+        "export": {"$ref": "#/$defs/ratio"},
+        "sitemap": {"$ref": "#/$defs/ratio"},
+        "self_canonical": {"$ref": "#/$defs/ratio"},
+        "indexable": {"$ref": "#/$defs/ratio"},
+        "llm_indexes": {"$ref": "#/$defs/ratio"}
+      },
+      "additionalProperties": false
+    },
+    "noindex": {
+      "type": "object",
+      "required": ["count", "audited_pages"],
+      "properties": {
+        "count": {"const": 0},
+        "audited_pages": {"type": "integer", "minimum": 1}
+      },
+      "additionalProperties": false
+    },
+    "urlset_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "llm_indexes": {
+      "type": "array",
+      "const": ["llms.txt", "llms-full.txt"]
+    },
+    "locators": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+    "unmeasured": {"type": "array", "items": {"type": "string", "minLength": 1}}
+  },
+  "additionalProperties": false
+}

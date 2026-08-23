@@ -14,7 +14,8 @@
     "model",
     "locale",
     "account_state",
-    "repetitions"
+    "repetitions",
+    "requested_result_limit"
   ],
   "properties": {
     "schema_id": {"const": "geode.geo-live-approval@1"},
@@ -27,7 +28,8 @@
     "model": {"type": "string", "minLength": 1, "maxLength": 128},
     "locale": {"type": "string", "minLength": 2, "maxLength": 35},
     "account_state": {"type": "string", "minLength": 1, "maxLength": 256},
-    "repetitions": {"const": 5}
+    "repetitions": {"const": 5},
+    "requested_result_limit": {"type": "integer", "minimum": 1, "maximum": 100}
   },
   "additionalProperties": false
 }

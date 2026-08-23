@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/mangowhoiscloud/geode/main/docs/eval/schemas/geo-host-preflight.schema.json",
+  "title": "GEODE public-host fetch preflight v1",
+  "type": "object",
+  "$defs": {
+    "ratio": {
+      "type": "object",
+      "required": ["numerator", "denominator"],
+      "properties": {
+        "numerator": {"type": "integer", "minimum": 0},
+        "denominator": {"type": "integer", "minimum": 1}
+      },
+      "additionalProperties": false
+    }
+  },
+  "required": ["schema_id", "schema_version", "generated_at", "base_url", "sitemap_url", "urlset_sha256", "robots", "checks"],
+  "properties": {
+    "schema_id": {"const": "geode.geo-host-preflight@1"},
+    "schema_version": {"const": 1},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "base_url": {"type": "string", "format": "uri", "maxLength": 1000},
+    "sitemap_url": {"type": "string", "format": "uri", "maxLength": 1000},
+    "urlset_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "robots": {
+      "type": "object",
+      "required": ["url", "status", "policy"],
+      "properties": {
+        "url": {"type": "string", "format": "uri", "maxLength": 1000},
+        "status": {"type": "integer", "minimum": 100, "maximum": 599},
+        "policy": {"enum": ["allow-by-absence", "parsed"]}
+      },
+      "additionalProperties": false
+    },
+    "checks": {
+      "type": "object",
+      "required": ["sitemap_parity", "http_2xx", "html", "self_canonical", "indexable", "robots_allowed"],
+      "properties": {
+        "sitemap_parity": {"$ref": "#/$defs/ratio"},
+        "http_2xx": {"$ref": "#/$defs/ratio"},
+        "html": {"$ref": "#/$defs/ratio"},
+        "self_canonical": {"$ref": "#/$defs/ratio"},
+        "indexable": {"$ref": "#/$defs/ratio"},
+        "robots_allowed": {"$ref": "#/$defs/ratio"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
