@@ -37,6 +37,7 @@ if TYPE_CHECKING:
     # builders (``core.wiring.{bootstrap,scheduling}``) only when the
     # matching component actually fires.
     from core.config.policy_source import PolicySourceBundle
+    from core.extensions import ExtensionDecision
     from core.memory.context import ContextAssembler
     from core.memory.organization import MonoLakeOrganizationMemory
     from core.memory.project import ProjectMemory
@@ -120,6 +121,7 @@ class RuntimeIntegrationConfig:
     calendar: Any = None
     notification: Any = None
     calendar_bridge: Any = None
+    extension_decisions: tuple[ExtensionDecision, ...] = ()
 
 
 @dataclass
@@ -202,6 +204,7 @@ class GeodeRuntime:
         self.calendar = integration.calendar
         self.notification = integration.notification
         self.calendar_bridge = integration.calendar_bridge
+        self.extension_decisions = integration.extension_decisions
         self.profile_store = authentication.profile_store
         self.profile_rotator = authentication.profile_rotator
         self.cooldown_tracker = authentication.cooldown_tracker or CooldownTracker()
@@ -350,6 +353,14 @@ class GeodeRuntime:
             if scheduling.get("scheduler_service") is not None and tools["calendar"] is not None
             else None
         )
+        from core.llm.adapters.registry import registry_snapshot
+
+        extension_decisions = (
+            *core["hooks"].extension_decisions,
+            *registry_snapshot().report.extensions,
+            *tools["mcp_manager"].extension_decisions,
+            *tools["skill_registry"].extension_decisions,
+        )
         core_config = RuntimeCoreConfig(
             execution=RuntimeExecutionConfig(
                 hooks=core["hooks"],
@@ -380,6 +391,7 @@ class GeodeRuntime:
                 calendar=tools["calendar"],
                 notification=tools["notification"],
                 calendar_bridge=calendar_bridge,
+                extension_decisions=extension_decisions,
             ),
             authentication=RuntimeAuthenticationConfig(
                 profile_store=core["profile_store"],
@@ -631,6 +643,7 @@ class GeodeRuntime:
             "db_path": str(self.event_store.db_path),
         }
         health["hook_metrics"] = self.hook_metrics.summary()
+        health["extensions"] = [decision.status() for decision in self.extension_decisions]
 
         if self.task_graph is not None:
             health["task_graph"] = {

@@ -46,7 +46,7 @@ export default function Page() {
             </table>
             <p>
               서버 env의 <code>${`{VAR}`}</code> 참조는 os.environ을 먼저
-              보고, 없으면 <code>.env</code> 값(전역 먼저, 프로젝트가 덮음)
+              보고, 없으면 <code>.env</code> 값(전역이 프로젝트를 덮음)
               으로 확장됩니다. 필수 env가 빈 값으로 해석된 서버는 연결을
               시도하지 않고 건너뜁니다. 연결과 실패는
               <code>MCP_SERVER_CONNECTED</code> /
@@ -60,6 +60,37 @@ export default function Page() {
               않기 위한 장치입니다. 운영자가 설정을 고쳤거나 서버를 강제로
               재시작하는 경우에는 헬스 체크와 서버 재등록 경로가 이 실패
               캐시를 비우고 다시 연결을 시도합니다.
+            </p>
+
+            <h3>실행 신뢰와 broker 경계</h3>
+            <p>
+              서버 설정은 명령을 찾기 위한 매니페스트일 뿐 승인 자체가 아닙니다.
+              아래 <code>mcp:filesystem</code> ID를
+              <a href="/geode/docs/config/basics">확장 신뢰 정책</a>에서도
+              같은 <code>execution</code>과 capability로 승인해야 합니다.
+            </p>
+            <pre>{`[mcp.servers.filesystem]
+command = "/usr/bin/acme-mcp"
+args = ["--workspace", "/work"]
+execution = "brokered"
+capabilities = ["stdio"]
+resource_keys = ["workspace"]
+
+[mcp.servers.filesystem.env]
+LOG_LEVEL = "warning"`}</pre>
+            <table>
+              <thead><tr><th>모드</th><th>실행 계약</th></tr></thead>
+              <tbody>
+                <tr><td><code>trusted</code></td><td>운영자가 완전히 신뢰한 호환 경로입니다. 기존처럼 sandbox 없이 실행되고 프로세스 환경을 상속합니다.</td></tr>
+                <tr><td><code>brokered</code></td><td>기본 거부·네트워크 차단 OS sandbox 안에서 시스템 runtime 읽기와 격리 scratch만 허용하고, 설정에 적힌 env만 전달합니다. 지원되는 <code>sandbox-exec</code> 또는 <code>bwrap</code>가 없으면 실행하지 않습니다.</td></tr>
+              </tbody>
+            </table>
+            <p>
+              읽기 전용 여부는 MCP tool annotation의 <code>readOnlyHint</code>로
+              판단합니다. 그 외 도구는 config에 하나 이상의 정적
+              <code>resource_keys</code>가 있어야 하며, 없으면 dispatch 전에
+              거부됩니다. GEODE는 MCP 인자 이름을 보고 resource identity를
+              추측하지 않습니다.
             </p>
 
             <h2>클라이언트: 실행 경로와 가드</h2>
@@ -151,6 +182,16 @@ export default function Page() {
                   <td><code>/mcp</code>로 상태를 보고, 참조된 <code>${`{VAR}`}</code>를 <code>.env</code>에 채웁니다.</td>
                 </tr>
                 <tr>
+                  <td>서버가 <code>REJECTED</code> 또는 <code>DEGRADED</code></td>
+                  <td>정책 누락·불일치, broker sandbox 부재, 명령 또는 env 해석 실패</td>
+                  <td>runtime health의 <code>extensions</code>에서 정확한 reason을 확인합니다. brokered 서버를 sandbox 없는 trusted 경로로 자동 하향하지 않습니다.</td>
+                </tr>
+                <tr>
+                  <td>변경 도구가 resource-key 오류로 거부됨</td>
+                  <td><code>readOnlyHint</code>가 아닌 도구인데 server config에 <code>resource_keys</code>가 없음</td>
+                  <td>실제 변경 대상을 대표하는 보수적 정적 key를 매니페스트에 선언합니다.</td>
+                </tr>
+                <tr>
                   <td><code>MCP_SERVER_FAILED</code> 로그가 많음</td>
                   <td>서버 명령을 찾지 못하거나 필수 환경이 빠짐. launchd로 띄운 serve는 셸보다 PATH가 좁을 수 있음</td>
                   <td><code>~/.geode/logs/serve.log</code>에서 실패 서버 이름을 보고 <code>command -v npx</code>, <code>command -v codex</code>, <code>command -v uvx</code>가 serve 환경에서도 보이게 맞춥니다. 수정 후 serve를 재시작하면 실패 캐시가 비워집니다.</td>
@@ -213,7 +254,7 @@ export default function Page() {
             <p>
               <code>${`{VAR}`}</code> references in a server&apos;s env are
               expanded against os.environ first, then <code>.env</code> values
-              (global first, project overriding). A server whose required env
+              (global authoritative over project). A server whose required env
               resolves empty is skipped without a connection attempt.
               Connections and failures are observable through the
               <code>MCP_SERVER_CONNECTED</code> /
@@ -226,6 +267,37 @@ export default function Page() {
               process immediately and spamming <code>MCP_SERVER_FAILED</code>.
               Intentional recovery paths such as health restart or server
               re-registration clear the cache before trying again.
+            </p>
+
+            <h3>Execution trust and the broker boundary</h3>
+            <p>
+              A server definition is a discovery manifest, not an authorization
+              by itself. Its <code>mcp:filesystem</code> ID must also be granted
+              with the same execution mode and capabilities in the
+              <a href="/geode/docs/config/basics">extension trust policy</a>.
+            </p>
+            <pre>{`[mcp.servers.filesystem]
+command = "/usr/bin/acme-mcp"
+args = ["--workspace", "/work"]
+execution = "brokered"
+capabilities = ["stdio"]
+resource_keys = ["workspace"]
+
+[mcp.servers.filesystem.env]
+LOG_LEVEL = "warning"`}</pre>
+            <table>
+              <thead><tr><th>Mode</th><th>Execution contract</th></tr></thead>
+              <tbody>
+                <tr><td><code>trusted</code></td><td>Compatibility path for code the operator fully trusts. It runs unsandboxed and inherits the process environment.</td></tr>
+                <tr><td><code>brokered</code></td><td>Runs under a deny-default, no-network OS sandbox with only system runtime reads, isolated scratch, and the configured environment. Without supported <code>sandbox-exec</code> or <code>bwrap</code>, it does not launch.</td></tr>
+              </tbody>
+            </table>
+            <p>
+              GEODE treats a tool as read-only only when its MCP annotation has
+              <code>readOnlyHint</code>. Every other tool requires at least one
+              static <code>resource_keys</code> entry in server config and is
+              rejected before dispatch if none exists. GEODE never guesses
+              resource identity from MCP argument names.
             </p>
 
             <h2>Client: execution path and guards</h2>
@@ -317,6 +389,16 @@ export default function Page() {
                   <td>A configured server exposes no tools</td>
                   <td>Connection skipped over an unresolved required env</td>
                   <td>Check <code>/mcp</code>, then fill the referenced <code>${`{VAR}`}</code> in <code>.env</code>.</td>
+                </tr>
+                <tr>
+                  <td>A server is <code>REJECTED</code> or <code>DEGRADED</code></td>
+                  <td>Missing or mismatched policy, unavailable broker sandbox, or command/env resolution failure</td>
+                  <td>Read the exact reason under <code>extensions</code> in runtime health. GEODE never silently downgrades a brokered server to trusted execution.</td>
+                </tr>
+                <tr>
+                  <td>A mutating tool is rejected for missing resource keys</td>
+                  <td>The tool lacks <code>readOnlyHint</code> and the server manifest has no <code>resource_keys</code></td>
+                  <td>Declare a conservative static key representing the real mutation target.</td>
                 </tr>
                 <tr>
                   <td>Many <code>MCP_SERVER_FAILED</code> log lines</td>

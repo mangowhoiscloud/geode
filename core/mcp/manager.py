@@ -2,12 +2,20 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import threading
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from core.extensions import (
+    ExtensionDecision,
+    ExtensionPolicy,
+    ExtensionState,
+    load_default_extension_policy,
+)
 from core.mcp.config_catalog import MCPConfigCatalog
 from core.mcp.connection_pool import MCPConnectionPool
 from core.mcp.lifecycle import MCPLifecycle
@@ -56,7 +64,12 @@ def _fire_mcp_hook(event: Any, data: dict[str, Any]) -> None:
 class MCPServerManager:
     """Compatibility facade for MCP configuration, discovery, and dispatch."""
 
-    def __init__(self, config_path: Path | None = None) -> None:
+    def __init__(
+        self,
+        config_path: Path | None = None,
+        *,
+        extension_policy: ExtensionPolicy | None = None,
+    ) -> None:
         path = config_path or (get_project_root() / ".claude" / "mcp_servers.json")
         self._catalog = MCPConfigCatalog(
             path,
@@ -68,6 +81,7 @@ class MCPServerManager:
             self._catalog,
             client_factory=lambda **kwargs: StdioMCPClient(**kwargs),
             event_sink=self._trace.fire,
+            extension_policy=extension_policy or load_default_extension_policy(),
         )
         self._discovery = MCPToolDiscovery(
             self._catalog,
@@ -113,10 +127,27 @@ class MCPServerManager:
 
     def load_config(self) -> int:
         self._pool.failed_at.clear()
-        return self._catalog.load()
+        count = self._catalog.load()
+        for decision in self._pool.refresh_decisions():
+            if decision.state is not ExtensionState.GRANTED:
+                log.warning(
+                    "MCP extension %s: %s (%s)",
+                    decision.descriptor.extension_id,
+                    decision.state,
+                    decision.reason,
+                )
+        return count
 
     def get_status(self) -> dict[str, Any]:
-        return self._catalog.status()
+        status = self._catalog.status()
+        status["extensions"] = [decision.status() for decision in self.extension_decisions]
+        return status
+
+    @property
+    def extension_decisions(self) -> tuple[ExtensionDecision, ...]:
+        return tuple(
+            self._pool.extension_decisions[name] for name in sorted(self._pool.extension_decisions)
+        )
 
     def get_all_tools(self) -> list[dict[str, Any]]:
         return self._discovery.get_all_tools()
@@ -127,6 +158,40 @@ class MCPServerManager:
 
     def last_known_server_for_tool(self, tool_name: str) -> str | None:
         return self._discovery.last_seen_tools.get(tool_name)
+
+    def resource_keys_for_tool(self, tool_name: str) -> tuple[str, ...] | None:
+        """Return declared opaque keys, or None for an undeclared mutation."""
+        server_name = self.last_known_server_for_tool(tool_name) or self.find_server_for_tool(
+            tool_name
+        )
+        if server_name is None:
+            return ()
+        client = self._pool.clients.get(server_name)
+        raw_tool = (
+            next(
+                (tool for tool in client.list_tools() if tool.get("name") == tool_name),
+                {},
+            )
+            if client is not None
+            else {}
+        )
+        annotations = raw_tool.get("annotations") or {}
+        if annotations.get("readOnlyHint") is True:
+            return ()
+        decision = self._pool.extension_decisions.get(server_name)
+        if decision is None or not decision.descriptor.resource_keys:
+            return None
+        return tuple(
+            sorted(
+                hashlib.sha256(
+                    json.dumps(
+                        ("mcp-extension:v1", key),
+                        separators=(",", ":"),
+                    ).encode()
+                ).hexdigest()
+                for key in decision.descriptor.resource_keys
+            )
+        )
 
     async def acall_tool(
         self, server_name: str, tool_name: str, args: dict[str, Any]
@@ -150,6 +215,7 @@ class MCPServerManager:
         env: dict[str, str] | None = None,
     ) -> bool:
         self._pool.failed_at.pop(name, None)
+        self._pool.extension_decisions.pop(name, None)
         return self._catalog.add(name, command, args=args, env=env)
 
     def reload_config(self) -> int:

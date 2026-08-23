@@ -390,6 +390,7 @@ class TestGetHealth:
         assert "lanes" in health
         assert "hook_events" in health
         assert "hook_metrics" in health
+        assert isinstance(health["extensions"], list)
 
     def test_get_health_stats_types(self, tmp_path: Path):
         runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)

@@ -47,6 +47,10 @@ export default function Page() {
                   <td><code>core/config/routing.toml</code></td>
                   <td>출하되는 라우팅 매니페스트. 모델 기본값, provider prefix, 자격 패턴. <code>~/.geode/routing.toml</code>이 섹션 단위로 덮습니다.</td>
                 </tr>
+                <tr>
+                  <td><code>~/.geode/extension-policy.json</code></td>
+                  <td>서드파티 훅·LLM 어댑터·스킬·MCP 서버가 실행 코드를 로드하기 전에 적용하는 운영자 신뢰 정책입니다.</td>
+                </tr>
               </tbody>
             </table>
             <p>
@@ -59,6 +63,54 @@ export default function Page() {
               toml 매핑이 없는 env 전용 키
               (<code>GEODE_GATEWAY_ENABLED</code> 등)를 손으로
               <code>.env</code>에 적는 것은 여전히 유효한 운영 방법입니다.
+            </p>
+
+            <h2>확장 신뢰 정책</h2>
+            <p>
+              번들된 GEODE 기능은 1급 코드로 분류됩니다. 그 밖의 파일시스템 훅,
+              패키지 LLM 어댑터, 프로젝트·개인 스킬, MCP 서버는 기존 매니페스트를
+              발견한 뒤 <code>~/.geode/extension-policy.json</code>의 승인을
+              먼저 확인합니다. 정책이 없거나 해당 ID가 없으면 실행 코드는
+              로드되지 않습니다.
+            </p>
+            <pre>{`{
+  "version": 1,
+  "extensions": {
+    "hook:failure-metrics": {
+      "enabled": true,
+      "trusted": true,
+      "execution": "trusted",
+      "capabilities": ["events"]
+    },
+    "llm-adapter:acme-payg": {
+      "enabled": true,
+      "trusted": true,
+      "execution": "trusted"
+    },
+    "skill:project-review": {
+      "enabled": true,
+      "trusted": true,
+      "execution": "trusted",
+      "capabilities": ["shell"]
+    },
+    "mcp:filesystem": {
+      "enabled": true,
+      "trusted": false,
+      "execution": "brokered",
+      "capabilities": ["stdio"]
+    }
+  }
+}`}</pre>
+            <p>
+              <code>trusted</code>는 신뢰한 Python 코드를 같은 프로세스에서
+              실행하는 API 경계이지 샌드박스가 아닙니다. <code>brokered</code>
+              MCP는 지원되는 OS 샌드박스가 있을 때만 정확한 환경과 격리된 임시
+              디렉터리로 시작하며, 샌드박스를 만들 수 없으면
+              <code>DEGRADED</code> 상태로 남고 실행되지 않습니다. 다른 정책을
+              쓰려면 <code>GEODE_EXTENSION_POLICY_OVERRIDE</code>에 정책 파일
+              경로를 지정합니다. override는 strict하므로 파일 누락이나 잘못된
+              JSON이면 시작이 실패합니다. 결정은 시작 snapshot으로
+              고정되고 runtime health의 <code>extensions</code>에서 확인됩니다.
             </p>
 
             <h2>해석 사다리</h2>
@@ -230,6 +282,10 @@ GEODE_ANTHROPIC_CREDENTIAL_SOURCE  GEODE_OPENAI_CREDENTIAL_SOURCE`}</pre>
                   <td><code>core/config/routing.toml</code></td>
                   <td>Shipped routing manifest: model defaults, provider prefixes, credential patterns. <code>~/.geode/routing.toml</code> overrides it section by section.</td>
                 </tr>
+                <tr>
+                  <td><code>~/.geode/extension-policy.json</code></td>
+                  <td>Operator trust policy applied before third-party hooks, LLM adapters, skills, or MCP servers load executable code.</td>
+                </tr>
               </tbody>
             </table>
             <p>
@@ -243,6 +299,55 @@ GEODE_ANTHROPIC_CREDENTIAL_SOURCE  GEODE_OPENAI_CREDENTIAL_SOURCE`}</pre>
               that have no toml mapping (<code>GEODE_GATEWAY_ENABLED</code>
               and friends) into <code>.env</code> remains a valid operator
               move.
+            </p>
+
+            <h2>Extension trust policy</h2>
+            <p>
+              Bundled GEODE features are classified as first-party code. Other
+              filesystem hooks, package LLM adapters, project or personal
+              skills, and MCP servers are first discovered from their existing
+              manifests, then authorized by
+              <code>~/.geode/extension-policy.json</code>. With no policy or no
+              matching stable ID, executable code is not loaded.
+            </p>
+            <pre>{`{
+  "version": 1,
+  "extensions": {
+    "hook:failure-metrics": {
+      "enabled": true,
+      "trusted": true,
+      "execution": "trusted",
+      "capabilities": ["events"]
+    },
+    "llm-adapter:acme-payg": {
+      "enabled": true,
+      "trusted": true,
+      "execution": "trusted"
+    },
+    "skill:project-review": {
+      "enabled": true,
+      "trusted": true,
+      "execution": "trusted",
+      "capabilities": ["shell"]
+    },
+    "mcp:filesystem": {
+      "enabled": true,
+      "trusted": false,
+      "execution": "brokered",
+      "capabilities": ["stdio"]
+    }
+  }
+}`}</pre>
+            <p>
+              <code>trusted</code> is an in-process API boundary for code you
+              trust; it is not a sandbox. A <code>brokered</code> MCP server
+              starts with an exact environment and isolated scratch directory
+              only when a supported OS sandbox is available. Otherwise it stays
+              <code>DEGRADED</code> and is not launched. To use another policy
+              path, set <code>GEODE_EXTENSION_POLICY_OVERRIDE</code> to the JSON
+              file. The override is strict, so a missing file or invalid JSON
+              fails startup. Decisions are frozen at startup and
+              appear under <code>extensions</code> in runtime health.
             </p>
 
             <h2>The resolution ladder</h2>

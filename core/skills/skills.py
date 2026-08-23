@@ -19,6 +19,15 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from core.config import CONTEXT_BLOCK_MAX_CHARS
+from core.extensions import (
+    ExtensionDecision,
+    ExtensionDescriptor,
+    ExtensionExecution,
+    ExtensionPolicy,
+    ExtensionSurface,
+    decide_extension,
+    load_default_extension_policy,
+)
 from core.skills._frontmatter import parse_yaml_frontmatter
 
 log = logging.getLogger(__name__)
@@ -59,6 +68,7 @@ class SkillDefinition(BaseModel):
     context_fork: bool = False  # True = run in isolated subagent
     argument_hint: str = ""  # autocomplete hint, e.g. "[issue-number]"
     source_path: Path | None = None  # path to SKILL.md for lazy body loading
+    has_dynamic_context: bool = False
 
     model_config = {"arbitrary_types_allowed": True}
 
@@ -132,6 +142,7 @@ class SkillRegistry:
 
     def __init__(self) -> None:
         self._skills: dict[str, SkillDefinition] = {}
+        self._extension_decisions: tuple[ExtensionDecision, ...] = ()
 
     def register(self, skill: SkillDefinition) -> None:
         """Register a skill. Overwrites if name already exists."""
@@ -204,6 +215,13 @@ class SkillRegistry:
     def __contains__(self, name: str) -> bool:
         return name in self._skills
 
+    @property
+    def extension_decisions(self) -> tuple[ExtensionDecision, ...]:
+        return self._extension_decisions
+
+    def set_extension_decisions(self, decisions: tuple[ExtensionDecision, ...]) -> None:
+        self._extension_decisions = decisions
+
 
 # ---------------------------------------------------------------------------
 # Loader (multi-scope discovery)
@@ -225,10 +243,12 @@ class SkillLoader:
         skills_dir: str | Path | None = None,
         extra_dirs: list[Path] | None = None,
         lazy: bool = True,
+        extension_policy: ExtensionPolicy | None = None,
     ) -> None:
         self._primary_dir = Path(skills_dir) if skills_dir else None
         self._extra_dirs = extra_dirs or []
         self._lazy = lazy  # True = load metadata only, defer body
+        self._extension_policy = extension_policy or load_default_extension_policy()
 
     @property
     def skills_dir(self) -> Path:
@@ -253,7 +273,7 @@ class SkillLoader:
             cwd / PROJECT_SKILLS_DIR,  # 3. Project local ({cwd}/.geode/skills)
         ]
         dirs.extend(self._extra_dirs)  # 4. Extra
-        return dirs
+        return list(dict.fromkeys(path.resolve() for path in dirs))
 
     def discover(self) -> list[Path]:
         """Find all SKILL.md files across all scopes."""
@@ -332,6 +352,7 @@ class SkillLoader:
             context_fork=context_fork,
             argument_hint=argument_hint,
             source_path=path,
+            has_dynamic_context=bool(_DYNAMIC_CMD_RE.search(body)),
         )
 
     def load_all(self, registry: SkillRegistry | None = None) -> list[SkillDefinition]:
@@ -340,18 +361,51 @@ class SkillLoader:
         If a registry is provided, skills are automatically registered.
         """
         skills: list[SkillDefinition] = []
-        for path in self.discover():
+        candidates: list[tuple[SkillDefinition, str]] = []
+        for path, tier in self.discover_tiered():
             try:
                 skill = self.load_file(path)
-                skills.append(skill)
-                if registry is not None:
-                    registry.register(skill)
-                log.debug(
-                    "Loaded skill: %s (invocable=%s, fork=%s)",
-                    skill.name,
-                    skill.user_invocable,
-                    skill.context_fork,
-                )
+                candidates.append((skill, tier))
             except Exception:
                 log.warning("Failed to load skill from %s", path, exc_info=True)
+        origins: dict[str, Path | None] = {}
+        for skill, _tier in candidates:
+            if previous := origins.get(skill.name):
+                raise ValueError(
+                    f"skill {skill.name!r} discovered from multiple origins: "
+                    f"{previous}, {skill.source_path}"
+                )
+            origins[skill.name] = skill.source_path
+
+        decisions: list[ExtensionDecision] = []
+        for skill, tier in candidates:
+            descriptor = ExtensionDescriptor(
+                name=skill.name,
+                surface=ExtensionSurface.SKILL,
+                origin=str(skill.source_path),
+                execution=ExtensionExecution.TRUSTED,
+                capabilities=("shell",) if skill.has_dynamic_context else (),
+                bundled=self._primary_dir is not None or tier == "builtin",
+            )
+            decision = decide_extension(descriptor, self._extension_policy)
+            decisions.append(decision)
+            if not decision.may_load_in_process:
+                log.warning(
+                    "Skill extension %s: %s (%s)",
+                    descriptor.extension_id,
+                    decision.state,
+                    decision.reason,
+                )
+                continue
+            skills.append(skill)
+            if registry is not None:
+                registry.register(skill)
+            log.debug(
+                "Loaded skill: %s (invocable=%s, fork=%s)",
+                skill.name,
+                skill.user_invocable,
+                skill.context_fork,
+            )
+        if registry is not None:
+            registry.set_extension_decisions(tuple(decisions))
         return skills
