@@ -29,6 +29,8 @@ class MCPConfigCatalog:
     ) -> None:
         self.config_path = config_path
         self.servers: dict[str, dict[str, Any]] = {}
+        self.origins: dict[str, str] = {}
+        self.collisions: list[dict[str, str]] = []
         self.dotenv_cache: dict[str, str | None] = {}
         self._global_env_path = global_env_path or (lambda: GLOBAL_ENV_FILE)
         self._project_root = project_root or get_project_root
@@ -36,6 +38,8 @@ class MCPConfigCatalog:
     def load(self) -> int:
         """Load global/project TOML plus the legacy JSON fallback."""
         self.servers = {}
+        self.origins = {}
+        self.collisions = []
         for config_toml in (
             GLOBAL_CONFIG_TOML,
             self._project_root() / ".geode" / "config.toml",
@@ -46,11 +50,23 @@ class MCPConfigCatalog:
                 with config_toml.open("rb") as file:
                     mcp_section = tomllib.load(file).get("mcp", {}).get("servers", {})
                 for name, config in mcp_section.items():
-                    entry: dict[str, Any] = {"command": config["command"]}
-                    for key in ("args", "env"):
-                        if key in config:
-                            entry[key] = config[key]
+                    entry: dict[str, Any] = dict(config)
+                    if previous := self.origins.get(name):
+                        self.collisions.append(
+                            {
+                                "name": name,
+                                "replaced": previous,
+                                "selected": str(config_toml),
+                            }
+                        )
+                        log.warning(
+                            "MCP config collision %s: %s replaced by %s",
+                            name,
+                            previous,
+                            config_toml,
+                        )
                     self.servers[name] = entry
+                    self.origins[name] = str(config_toml)
                 if mcp_section:
                     log.info("MCP %s: %d servers", config_toml, len(mcp_section))
             except Exception as exc:
@@ -65,7 +81,22 @@ class MCPConfigCatalog:
                 for name, config in file_servers.items():
                     if name not in self.servers:
                         self.servers[name] = config
+                        self.origins[name] = str(self.config_path)
                         added += 1
+                    else:
+                        self.collisions.append(
+                            {
+                                "name": name,
+                                "replaced": str(self.config_path),
+                                "selected": self.origins[name],
+                            }
+                        )
+                        log.warning(
+                            "MCP config collision %s: %s ignored; selected %s",
+                            name,
+                            self.config_path,
+                            self.origins[name],
+                        )
                 if added:
                     log.info("MCP mcp_servers.json: %d additional servers", added)
             except (json.JSONDecodeError, OSError) as exc:
@@ -80,7 +111,11 @@ class MCPConfigCatalog:
 
     def status(self) -> dict[str, Any]:
         active = [{"name": name, "description": ""} for name in sorted(self.servers)]
-        return {"active": active, "active_count": len(active)}
+        return {
+            "active": active,
+            "active_count": len(active),
+            "collisions": list(self.collisions),
+        }
 
     def resolve_env(self, env: dict[str, str]) -> dict[str, str]:
         """Resolve ``${VAR}`` from the process, project env, then global env."""
@@ -107,6 +142,7 @@ class MCPConfigCatalog:
         if env:
             entry["env"] = env
         self.servers[name] = entry
+        self.origins[name] = str(self.config_path)
         try:
             self.config_path.parent.mkdir(parents=True, exist_ok=True)
             self.config_path.write_text(

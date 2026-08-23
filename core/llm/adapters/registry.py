@@ -22,10 +22,21 @@ from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
+from inspect import signature
 from threading import RLock
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
+from core.extensions import (
+    ExtensionDecision,
+    ExtensionDescriptor,
+    ExtensionExecution,
+    ExtensionPolicy,
+    ExtensionSurface,
+    decide_extension,
+    extension_context,
+    load_default_extension_policy,
+)
 from core.llm.adapters.base import (
     CONCRETE_SOURCES,
     SOURCE_AUTO,
@@ -109,6 +120,7 @@ class AdapterValidationReport:
     loaded: tuple[str, ...]
     origins: tuple[tuple[str, str], ...]
     overrides: tuple[tuple[str, str, int, str], ...] = ()
+    extensions: tuple[ExtensionDecision, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -325,6 +337,7 @@ def _publish(
     registrations: Mapping[str, AdapterRegistration],
     *,
     overrides: tuple[tuple[str, str, int, str], ...] = (),
+    extensions: tuple[ExtensionDecision, ...] = (),
 ) -> AdapterRegistrySnapshot:
     global _CURRENT
     generation = _CURRENT.generation + 1
@@ -344,6 +357,7 @@ def _publish(
         loaded=tuple(records),
         origins=tuple((name, record.origin) for name, record in records.items()),
         overrides=overrides,
+        extensions=extensions,
     )
     _CURRENT = AdapterRegistrySnapshot(generation, records, report)
     return _CURRENT
@@ -557,55 +571,91 @@ def _entry_point_origin(entry_point: Any) -> str:
     return f"entrypoint:{distribution_name}:{entry_point.name}"
 
 
-def _entry_point_registrations() -> list[AdapterRegistration]:
-    """Load no-argument adapter factories from installed package metadata."""
+@dataclass(frozen=True, slots=True)
+class _EntryPointCandidate:
+    name: str
+    origin: str
+    entry_point: Any
+    decision: ExtensionDecision
+
+
+def _entry_point_candidates(policy: ExtensionPolicy) -> list[_EntryPointCandidate]:
+    """Enumerate installed metadata without loading adapter code."""
     from importlib.metadata import entry_points
 
-    records: list[AdapterRegistration] = []
+    records: list[_EntryPointCandidate] = []
     discovered = sorted(
         entry_points(group=ADAPTER_ENTRY_POINT_GROUP),
         key=lambda item: (item.name, item.value),
     )
     for entry_point in discovered:
         origin = _entry_point_origin(entry_point)
-        factory = entry_point.load()
-        if not callable(factory):
-            raise TypeError(f"{origin} must resolve to a no-argument adapter factory")
-        try:
-            adapter = factory()
-        except Exception as exc:
-            raise RuntimeError(f"{origin} adapter factory failed") from exc
-        if not isinstance(adapter, LLMAdapter):
-            raise TypeError(f"{origin} factory did not return an LLMAdapter")
-        if adapter.name != entry_point.name:
-            raise ValueError(
-                f"{origin} declares canonical ID {entry_point.name!r} "
-                f"but returned adapter {adapter.name!r}"
-            )
+        descriptor = ExtensionDescriptor(
+            name=entry_point.name,
+            surface=ExtensionSurface.LLM_ADAPTER,
+            origin=origin,
+            execution=ExtensionExecution.TRUSTED,
+        )
         records.append(
-            AdapterRegistration(
-                adapter=adapter,
-                origin=origin,
-                priority=0,
-                trust_decision="installed-package-entry-point",
+            _EntryPointCandidate(
+                entry_point.name,
+                origin,
+                entry_point,
+                decide_extension(descriptor, policy),
             )
         )
     return records
 
 
-def _resolve_discovery_collisions(
-    candidates: list[AdapterRegistration],
+def _load_entry_point(candidate: _EntryPointCandidate) -> AdapterRegistration:
+    """Load one factory after collision and trust selection."""
+    if not candidate.decision.may_load_in_process:
+        raise PermissionError(f"{candidate.origin} is not authorized: {candidate.decision.reason}")
+    factory = candidate.entry_point.load()
+    origin = candidate.origin
+    context = extension_context(candidate.decision)
+    try:
+        if not callable(factory):
+            raise TypeError(f"{origin} must resolve to a no-argument adapter factory")
+        parameters = tuple(signature(factory).parameters.values())
+        if not parameters:
+            adapter = factory()
+        elif len(parameters) == 1 and parameters[0].name == "context":
+            adapter = factory(context)
+        else:
+            raise TypeError(f"{origin} factory must accept no arguments or one 'context'")
+    except Exception as exc:
+        raise RuntimeError(f"{origin} adapter factory failed") from exc
+    if not isinstance(adapter, LLMAdapter):
+        raise TypeError(f"{origin} factory did not return an LLMAdapter")
+    if adapter.name != candidate.name:
+        raise ValueError(
+            f"{origin} declares canonical ID {candidate.name!r} "
+            f"but returned adapter {adapter.name!r}"
+        )
+    return AdapterRegistration(
+        adapter=adapter,
+        origin=origin,
+        priority=0,
+        trust_decision=candidate.decision.reason,
+    )
+
+
+def _select_discovery_candidates(
+    builtins: list[AdapterRegistration],
+    external: list[_EntryPointCandidate],
     overrides: Mapping[str, AdapterOverride],
 ) -> tuple[dict[str, AdapterRegistration], tuple[tuple[str, str, int, str], ...]]:
-    grouped: dict[str, list[AdapterRegistration]] = {}
-    for candidate in candidates:
-        grouped.setdefault(candidate.adapter.name, []).append(candidate)
+    grouped: dict[str, list[AdapterRegistration | _EntryPointCandidate]] = {}
+    for builtin_candidate in builtins:
+        grouped.setdefault(builtin_candidate.adapter.name, []).append(builtin_candidate)
+    for external_candidate in external:
+        grouped.setdefault(external_candidate.name, []).append(external_candidate)
 
     selected: dict[str, AdapterRegistration] = {}
     applied: list[tuple[str, str, int, str]] = []
     for canonical_id, group in grouped.items():
         if len(group) == 1:
-            selected[canonical_id] = group[0]
             continue
         decision = overrides.get(canonical_id)
         origins = [candidate.origin for candidate in group]
@@ -621,14 +671,31 @@ def _resolve_discovery_collisions(
                 f"adapter override for {canonical_id!r} selects unknown origin "
                 f"{decision.origin!r}; candidates: {origins}"
             ) from exc
+        loaded = _load_entry_point(winner) if isinstance(winner, _EntryPointCandidate) else winner
         selected[canonical_id] = AdapterRegistration(
-            adapter=winner.adapter,
-            origin=winner.origin,
+            adapter=loaded.adapter,
+            origin=loaded.origin,
             priority=decision.priority,
             trust_decision=decision.trust_decision,
-            provider_spec=winner.provider_spec,
+            provider_spec=loaded.provider_spec,
         )
         applied.append((canonical_id, decision.origin, decision.priority, decision.trust_decision))
+
+    for canonical_id, group in grouped.items():
+        if canonical_id in selected or len(group) != 1:
+            continue
+        singleton = group[0]
+        if isinstance(singleton, AdapterRegistration):
+            selected[canonical_id] = singleton
+        elif singleton.decision.may_load_in_process:
+            selected[canonical_id] = _load_entry_point(singleton)
+        else:
+            log.warning(
+                "LLM extension %s: %s (%s)",
+                singleton.decision.descriptor.extension_id,
+                singleton.decision.state,
+                singleton.decision.reason,
+            )
 
     if unused := sorted(set(overrides) - {item[0] for item in applied}):
         raise ValueError(f"adapter overrides did not resolve a collision: {unused}")
@@ -639,13 +706,20 @@ def reload_adapters(
     *,
     policy_sources: PolicySourceBundle | None = None,
     overrides: Mapping[str, AdapterOverride] | None = None,
+    extension_policy: ExtensionPolicy | None = None,
 ) -> AdapterRegistrySnapshot:
     """Discover adapters and publish a new generation for future sessions."""
     global _BOOTSTRAPPED
     with _REGISTRY_LOCK:
-        candidates = [*_builtin_registrations(policy_sources), *_entry_point_registrations()]
-        selected, applied = _resolve_discovery_collisions(candidates, overrides or {})
-        snapshot = _publish(selected, overrides=applied)
+        external = _entry_point_candidates(extension_policy or load_default_extension_policy())
+        selected, applied = _select_discovery_candidates(
+            _builtin_registrations(policy_sources), external, overrides or {}
+        )
+        snapshot = _publish(
+            selected,
+            overrides=applied,
+            extensions=tuple(candidate.decision for candidate in external),
+        )
         _BOOTSTRAPPED = True
         return snapshot
 
@@ -654,6 +728,7 @@ def bootstrap_builtins(
     *,
     policy_sources: PolicySourceBundle | None = None,
     overrides: Mapping[str, AdapterOverride] | None = None,
+    extension_policy: ExtensionPolicy | None = None,
 ) -> AdapterRegistrySnapshot:
     """Idempotently discover built-ins and supported package entry points."""
     with _REGISTRY_LOCK:
@@ -661,7 +736,11 @@ def bootstrap_builtins(
             if overrides:
                 raise RuntimeError("adapter registry is already bootstrapped; call reload_adapters")
             return _CURRENT
-        return reload_adapters(policy_sources=policy_sources, overrides=overrides)
+        return reload_adapters(
+            policy_sources=policy_sources,
+            overrides=overrides,
+            extension_policy=extension_policy,
+        )
 
 
 def _reset_for_test() -> None:

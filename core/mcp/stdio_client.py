@@ -13,6 +13,7 @@ import contextlib
 import json
 import logging
 import os
+import shutil
 import subprocess  # nosec B404 — intentional: MCP server launch from trusted config
 import threading
 import time
@@ -63,11 +64,17 @@ class StdioMCPClient:
         args: list[str] | None = None,
         env: dict[str, str] | None = None,
         timeout_s: float = 30.0,
+        inherit_env: bool = True,
+        working_dir: str | None = None,
+        cleanup_working_dir: bool = False,
     ) -> None:
         self._command = command
         self._args = args or []
         self._env = env or {}
         self._timeout_s = timeout_s
+        self._inherit_env = inherit_env
+        self._working_dir = working_dir
+        self._cleanup_working_dir = cleanup_working_dir
         self._process: subprocess.Popen[bytes] | None = None
         self._connected = False
         self._tools: list[dict[str, Any]] = []
@@ -90,7 +97,7 @@ class StdioMCPClient:
         """Start the MCP server subprocess and initialize."""
         try:
             self.server_protocol_version = None  # reset on (re)connect
-            env = dict(os.environ)
+            env = dict(os.environ) if self._inherit_env else {}
             env.update(self._env)
 
             # bufsize=0: stdout stays UNBUFFERED so readline() never pulls a
@@ -104,6 +111,7 @@ class StdioMCPClient:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 env=env,
+                cwd=self._working_dir,
                 bufsize=0,
             )
             self._pid = self._process.pid
@@ -143,6 +151,7 @@ class StdioMCPClient:
                     )
                     self._process = None
                     self._pid = None
+                    self._remove_working_dir()
                     return False
                 time.sleep(0.5)
 
@@ -201,9 +210,12 @@ class StdioMCPClient:
             )
             return True
 
-        except (OSError, FileNotFoundError) as exc:
+        except Exception as exc:
             log.debug("Failed to start MCP server '%s': %s", self._command, exc)
+            if self._process is not None:
+                self.close()
             self._pid = None
+            self._remove_working_dir()
             return False
 
     def list_tools(self) -> list[dict[str, Any]]:
@@ -258,6 +270,12 @@ class StdioMCPClient:
                     self._process.kill()
             self._process = None
             self._pid = None
+        self._remove_working_dir()
+
+    def _remove_working_dir(self) -> None:
+        if self._cleanup_working_dir and self._working_dir:
+            shutil.rmtree(self._working_dir, ignore_errors=True)
+            self._working_dir = None
 
     def _next_id(self) -> int:
         self._request_id += 1

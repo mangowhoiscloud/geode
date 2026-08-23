@@ -51,6 +51,31 @@ hook_registry.register(
               변경된 요청을 다시 스키마 검증한 뒤 정책과 승인을 수행합니다.
             </p>
 
+            <h3>파일시스템 RuntimeEvent 훅은 매니페스트를 먼저 읽습니다</h3>
+            <p>
+              <code>.geode/hooks/&lt;name&gt;/hook.yaml</code>은 실행 코드를
+              import하지 않고 읽을 수 있는 신뢰 경계입니다. 클래스만 둔
+              <code>hook.py</code> 형식은 거부됩니다. 아래 매니페스트와
+              <a href="/geode/docs/config/basics">확장 신뢰 정책</a>의
+              <code>hook:failure-metrics</code> 승인이 모두 있어야 handler가
+              import됩니다. 이 플러그인은 위의 공개 <code>HookRegistry</code>가
+              아니라 3절의 내부 <code>RuntimeEventBus</code>를 구독합니다.
+            </p>
+            <pre>{`name: failure-metrics
+events: [tool_exec_failed]
+handler: handler.py
+priority: 50
+capabilities: [events]
+resource_keys: []`}</pre>
+            <p>
+              handler 모듈은 기존 <code>handle(event, data)</code> 함수를
+              내보내거나 <code>build_extension(context)</code>에서 함수를
+              반환할 수 있습니다. 후자의 context에는 매니페스트와 정책이 함께
+              허용한 포트만 들어갑니다. 여기서는 <code>events</code> 하나뿐입니다.
+              이름 충돌과 매니페스트 오류는 import 전에 실패하고, 로드된 훅은
+              런타임 종료 때 등록 역순으로 해제됩니다.
+            </p>
+
             <h2>2. 신뢰 미들웨어 등록</h2>
             <p>
               요청 변환과 실행 래핑을 섞지 않습니다. 아래 예시는 실제 provider
@@ -174,6 +199,33 @@ hook_registry.register(
               A rewrite uses actual payload field names. To replace tool
               arguments, return <code>{`updates={"arguments": {...}}`}</code>.
               GEODE revalidates the effective request before policy and approval.
+            </p>
+
+            <h3>Filesystem RuntimeEvent hooks are manifest-first</h3>
+            <p>
+              <code>.geode/hooks/&lt;name&gt;/hook.yaml</code> is the
+              non-executing trust boundary. A class-only <code>hook.py</code>
+              layout is rejected. GEODE imports the handler only when both the
+              manifest below and a <code>hook:failure-metrics</code> grant in the
+              <a href="/geode/docs/config/basics">extension trust policy</a>
+              are present. This plugin subscribes to the internal
+              <code>RuntimeEventBus</code> from section 3, not the public
+              <code>HookRegistry</code> above.
+            </p>
+            <pre>{`name: failure-metrics
+events: [tool_exec_failed]
+handler: handler.py
+priority: 50
+capabilities: [events]
+resource_keys: []`}</pre>
+            <p>
+              The handler module can export the existing
+              <code>handle(event, data)</code> function or return one from
+              <code>build_extension(context)</code>. The latter receives only
+              ports allowed by both manifest and policy—<code>events</code> in
+              this example. Name collisions and manifest errors fail before
+              import, and loaded hooks unregister in reverse order at runtime
+              shutdown.
             </p>
 
             <h2>2. Register trusted middleware</h2>

@@ -1168,7 +1168,7 @@ GEODE는 세 프로바이더를 라우팅합니다. Anthropic, OpenAI(+ChatGPT �
 | 프로바이더 유틸리티 | `core/llm/providers/anthropic.py`, `codex.py`, `glm.py`. 재시도·quota·request shaping을 어댑터에 제공 |
 | 비동기 호출 어댑터 | `core/llm/adapters/`. SDK client와 `acomplete()` 호출 표면 소유 |
 | 프로바이더 composition | `core/llm/registry.py`. 모델 identity, credential route, transport/API shape를 분리해 선언 |
-| 어댑터 레지스트리 | `core/llm/adapters/registry.py`의 `bootstrap_builtins()`. 내장 factory와 `geode.llm_adapters` 진입점을 불변 generation snapshot으로 검색 |
+| 어댑터 레지스트리 | `core/llm/adapters/registry.py`의 `bootstrap_builtins()`. 내장 factory와 운영자 정책이 승인한 `geode.llm_adapters` 진입점을 불변 generation snapshot으로 검색 |
 | 라우팅 매니페스트 | `core/config/routing.toml` (+ `~/.geode/routing.toml` 사용자 오버라이드). 모델 id prefix로 프로바이더 결정 |
 
 서브프로세스 워커는 부모의 wiring 컨테이너를 거치지 않으므로 `bootstrap_builtins()`를 명시적으로 호출해야 합니다. 빈 레지스트리는 `AdapterNotFoundError`로 끝납니다. 각 AgenticLoop 세션은 생성 시 현재 generation을 캡처하므로, reload는 새 세션에만 보이고 실행 중 세션의 라우팅은 바뀌지 않습니다.
@@ -1538,6 +1538,21 @@ argument-hint: "[issue-number]"
 
 로딩은 점진적입니다. 시작 시에는 frontmatter 메타데이터만 읽고, 본문은 호출 시점에 로드합니다. 시스템 프롬프트에는 스킬 카탈로그 요약이 `core/agent/loop/_context.py`의 `{skill_context}` 블록 한 곳으로만 들어갑니다.
 
+## 프로젝트·개인 스킬 승인
+
+wheel과 함께 출하되는 builtin 스킬은 1급 코드로 승인됩니다. project와 personal 스킬은 계층 우선순위로 승자를 고른 다음[확장 신뢰 정책](https://mangowhoiscloud.github.io/geode/docs/config/basics.md)의`skill:<name>` 항목을 확인합니다. 승인되지 않은 상위 계층 스킬을 발견했다고 하위 계층의 같은 이름으로 몰래 fallback하지 않습니다.
+
+```
+"skill:my-skill": {
+  "enabled": true,
+  "trusted": true,
+  "execution": "trusted",
+  "capabilities": ["shell"]
+}
+```
+
+`capabilities: ["shell"]`은 본문에`` !`cmd` `` 동적 컨텍스트가 있을 때만 필요합니다. 이 권한은 명령을 샌드박스에 넣지 않습니다. 해당 스킬을 신뢰해 호출 시점에 GEODE 프로세스 권한으로 실행하도록 명시적으로 승인하는 것입니다.
+
 ## 호출
 
 | 표면 | 동작 |
@@ -1556,6 +1571,7 @@ frontmatter의 `user-invocable: false`는 스킬을 배경 지식으로 돌려 `
 | --- | --- | --- |
 | 새로 만든 스킬이 안 보임 | 레지스트리가 아직 옛 카탈로그를 들고 있음 | `/skills reload` 또는 세션 재시작 |
 | 같은 이름인데 의도한 버전이 안 잡힘 | 스코프 override. 프로젝트가 개인을 이깁니다 | `geode skill show <name>`으로 어느 계층이 잡혔는지 확인합니다 |
+| project/personal 스킬이 발견됐지만 목록에 없음 | `skill:<name>` 승인 누락 또는 동적 컨텍스트의 `shell` 권한 누락 | extension policy를 고친 뒤 새 세션을 시작합니다. 거부 상태는 runtime health의 `extensions`에서 확인합니다 |
 | fork 스킬이 메인 대화 컨텍스트를 못 봄 | `context: fork`는 격리 실행이 목적 | 필요한 내용을 인자로 전달하거나 fork를 빼고 인라인으로 돌립니다 |
 
 ## 다음
@@ -4408,6 +4424,21 @@ hook_registry.register(
 
 rewrite는 payload의 실제 필드명을 사용합니다. 도구 인자를 바꾸려면 `updates={"arguments": {...}}`를 반환하며, GEODE가 변경된 요청을 다시 스키마 검증한 뒤 정책과 승인을 수행합니다.
 
+### 파일시스템 RuntimeEvent 훅은 매니페스트를 먼저 읽습니다
+
+`.geode/hooks/<name>/hook.yaml`은 실행 코드를 import하지 않고 읽을 수 있는 신뢰 경계입니다. 클래스만 둔`hook.py` 형식은 거부됩니다. 아래 매니페스트와[확장 신뢰 정책](https://mangowhoiscloud.github.io/geode/docs/config/basics.md)의`hook:failure-metrics` 승인이 모두 있어야 handler가 import됩니다. 이 플러그인은 위의 공개 `HookRegistry`가 아니라 3절의 내부 `RuntimeEventBus`를 구독합니다.
+
+```
+name: failure-metrics
+events: [tool_exec_failed]
+handler: handler.py
+priority: 50
+capabilities: [events]
+resource_keys: []
+```
+
+handler 모듈은 기존 `handle(event, data)` 함수를 내보내거나 `build_extension(context)`에서 함수를 반환할 수 있습니다. 후자의 context에는 매니페스트와 정책이 함께 허용한 포트만 들어갑니다. 여기서는 `events` 하나뿐입니다. 이름 충돌과 매니페스트 오류는 import 전에 실패하고, 로드된 훅은 런타임 종료 때 등록 역순으로 해제됩니다.
+
 ## 2\. 신뢰 미들웨어 등록
 
 요청 변환과 실행 래핑을 섞지 않습니다. 아래 예시는 실제 provider 호출의 지연만 측정하고 요청은 그대로 전달합니다.
@@ -4622,7 +4653,7 @@ class AcmePaygAdapter:
 
 ## 2\. 레지스트리에 등록합니다
 
-어댑터는 `core/llm/adapters/registry.py`가 발행한 불변 generation snapshot으로 조회됩니다. 내장 어댑터는 명시적 factory 목록에서 생성합니다. 외부 패키지는 전역 dict를 직접 수정하지 않고 `geode.llm_adapters` 패키지 진입점에 인자 없는 factory를 선언합니다. 진입점 이름은 factory가 반환한 canonical adapter name과 같아야 합니다. `resolve_for(provider, source)`는 `(provider, source)` 쌍이 정확히 하나의 어댑터에 매칭되도록 강제하므로, 같은 쌍을 둘 등록하면 invariant 위반으로 곧바로 실패합니다.
+어댑터는 `core/llm/adapters/registry.py`가 발행한 불변 generation snapshot으로 조회됩니다. 내장 어댑터는 명시적 factory 목록에서 생성합니다. 외부 패키지는 전역 dict를 직접 수정하지 않고 `geode.llm_adapters` 패키지 진입점에 factory를 선언합니다. 진입점 이름은 factory가 반환한 canonical adapter name과 같아야 합니다. `resolve_for(provider, source)`는 `(provider, source)` 쌍이 정확히 하나의 어댑터에 매칭되도록 강제하므로, 같은 쌍을 둘 등록하면 invariant 위반으로 곧바로 실패합니다.
 
 ```
 # acme-geode-adapter/pyproject.toml
@@ -4633,6 +4664,8 @@ acme-payg = "acme_geode:create_adapter"
 def create_adapter():
     return AcmePaygAdapter()
 ```
+
+진입점 이름과 배포 패키지 metadata는 실행 없이 먼저 열거됩니다. GEODE는 이름 충돌을 해결한 다음[확장 신뢰 정책](https://mangowhoiscloud.github.io/geode/docs/config/basics.md)의`llm-adapter:acme-payg` 승인을 확인하고 나서야`entry_point.load()`를 호출합니다. 승인이 없으면 validation report에 `REJECTED`로 남고 factory는 import되지 않습니다. factory는 기존처럼 인자 없이 만들거나, 정확히 하나의`context` 인자를 받아 불변 확장 ID와 승인된 포트를 확인할 수 있습니다. 다른 signature는 session 시작 전에 실패합니다.
 
 기존 factory는 보수적인 호환 composition을 자동으로 얻습니다. 실제 인증 선택과 API shape를 선언하려면 반환 객체에 불변`ProviderSpec`을 추가하십시오. 이 값은`ProviderProfile`, `CredentialRoute`,`TransportSpec`으로 나뉘며 secret이나 SDK client를 담지 않습니다. 선언한 provider/source/billing/capability가 adapter 호환 속성과 다르면 session 시작 전에 등록이 실패합니다.
 
@@ -4825,8 +4858,46 @@ GEODE 설정의 규칙은 한 줄입니다. 시크릿은 `.env`에, 동작은 `c
 | `~/.geode/config.toml` | 전역 동작 설정. `[self_improving_loop.*]` 섹션도 이 파일에 삽니다. |
 | `.geode/config.toml` | 프로젝트 동작 설정. 전역 toml을 덮습니다. `/model`의 기본 저장 위치입니다. |
 | `core/config/routing.toml` | 출하되는 라우팅 매니페스트. 모델 기본값, provider prefix, 자격 패턴. `~/.geode/routing.toml`이 섹션 단위로 덮습니다. |
+| `~/.geode/extension-policy.json` | 서드파티 훅·LLM 어댑터·스킬·MCP 서버가 실행 코드를 로드하기 전에 적용하는 운영자 신뢰 정책입니다. |
 
 시크릿 전용 `.env`는 도구가 지키는 계약입니다.`/model`은 더 이상 `GEODE_MODEL`을`.env`에 쓰지 않고 `config.toml`에만 기록합니다. 과거 릴리스가 남긴 `.env`의 모델 줄은 피커가 toml을 쓴 직후 자동으로 지우고 알림을 출력합니다 (`core/config/env_io.py`의 `remove_env`). toml 매핑이 없는 env 전용 키 (`GEODE_GATEWAY_ENABLED` 등)를 손으로`.env`에 적는 것은 여전히 유효한 운영 방법입니다.
+
+## 확장 신뢰 정책
+
+번들된 GEODE 기능은 1급 코드로 분류됩니다. 그 밖의 파일시스템 훅, 패키지 LLM 어댑터, 프로젝트·개인 스킬, MCP 서버는 기존 매니페스트를 발견한 뒤 `~/.geode/extension-policy.json`의 승인을 먼저 확인합니다. 정책이 없거나 해당 ID가 없으면 실행 코드는 로드되지 않습니다.
+
+```
+{
+  "version": 1,
+  "extensions": {
+    "hook:failure-metrics": {
+      "enabled": true,
+      "trusted": true,
+      "execution": "trusted",
+      "capabilities": ["events"]
+    },
+    "llm-adapter:acme-payg": {
+      "enabled": true,
+      "trusted": true,
+      "execution": "trusted"
+    },
+    "skill:project-review": {
+      "enabled": true,
+      "trusted": true,
+      "execution": "trusted",
+      "capabilities": ["shell"]
+    },
+    "mcp:filesystem": {
+      "enabled": true,
+      "trusted": false,
+      "execution": "brokered",
+      "capabilities": ["stdio"]
+    }
+  }
+}
+```
+
+`trusted`는 신뢰한 Python 코드를 같은 프로세스에서 실행하는 API 경계이지 샌드박스가 아닙니다. `brokered`MCP는 지원되는 OS 샌드박스가 있을 때만 정확한 환경과 격리된 임시 디렉터리로 시작하며, 샌드박스를 만들 수 없으면`DEGRADED` 상태로 남고 실행되지 않습니다. 다른 정책을 쓰려면 `GEODE_EXTENSION_POLICY_OVERRIDE`에 정책 파일 경로를 지정합니다. override는 strict하므로 파일 누락이나 잘못된 JSON이면 시작이 실패합니다. 결정은 시작 snapshot으로 고정되고 runtime health의 `extensions`에서 확인됩니다.
 
 ## 해석 사다리
 
@@ -5441,9 +5512,32 @@ manager는 기존 호출 경로를 유지하는 facade입니다. 설정·env는`
 | 2 | `~/.geode/config.toml`의 `[mcp.servers]` | 전역 사용자 설정. |
 | 3 | `.claude/mcp_servers.json` | 레거시 폴백 겸 설치 타깃. 앞 두 층에 없는 이름만 추가됩니다. |
 
-서버 env의 `${VAR}` 참조는 os.environ을 먼저 보고, 없으면 `.env` 값(전역 먼저, 프로젝트가 덮음) 으로 확장됩니다. 필수 env가 빈 값으로 해석된 서버는 연결을 시도하지 않고 건너뜁니다. 연결과 실패는`MCP_SERVER_CONNECTED` /`MCP_SERVER_FAILED` 훅으로 관측됩니다. 전송은 stdio입니다(`core/mcp/stdio_client.py`).
+서버 env의 `${VAR}` 참조는 os.environ을 먼저 보고, 없으면 `.env` 값(전역이 프로젝트를 덮음) 으로 확장됩니다. 필수 env가 빈 값으로 해석된 서버는 연결을 시도하지 않고 건너뜁니다. 연결과 실패는`MCP_SERVER_CONNECTED` /`MCP_SERVER_FAILED` 훅으로 관측됩니다. 전송은 stdio입니다(`core/mcp/stdio_client.py`).
 
 stdio 서버 연결이 실패하면 같은 서버는 짧은 시간 동안 실패로 기억됩니다. 도구 목록을 다시 만들 때 같은 프로세스를 즉시 재시도해 `MCP_SERVER_FAILED` 로그를 반복해서 쌓지 않기 위한 장치입니다. 운영자가 설정을 고쳤거나 서버를 강제로 재시작하는 경우에는 헬스 체크와 서버 재등록 경로가 이 실패 캐시를 비우고 다시 연결을 시도합니다.
+
+### 실행 신뢰와 broker 경계
+
+서버 설정은 명령을 찾기 위한 매니페스트일 뿐 승인 자체가 아닙니다. 아래 `mcp:filesystem` ID를[확장 신뢰 정책](https://mangowhoiscloud.github.io/geode/docs/config/basics.md)에서도 같은 `execution`과 capability로 승인해야 합니다.
+
+```
+[mcp.servers.filesystem]
+command = "/usr/bin/acme-mcp"
+args = ["--workspace", "/work"]
+execution = "brokered"
+capabilities = ["stdio"]
+resource_keys = ["workspace"]
+
+[mcp.servers.filesystem.env]
+LOG_LEVEL = "warning"
+```
+
+| 모드 | 실행 계약 |
+| --- | --- |
+| `trusted` | 운영자가 완전히 신뢰한 호환 경로입니다. 기존처럼 sandbox 없이 실행되고 프로세스 환경을 상속합니다. |
+| `brokered` | 기본 거부·네트워크 차단 OS sandbox 안에서 시스템 runtime 읽기와 격리 scratch만 허용하고, 설정에 적힌 env만 전달합니다. 지원되는 `sandbox-exec` 또는 `bwrap`가 없으면 실행하지 않습니다. |
+
+읽기 전용 여부는 MCP tool annotation의 `readOnlyHint`로 판단합니다. 그 외 도구는 config에 하나 이상의 정적`resource_keys`가 있어야 하며, 없으면 dispatch 전에 거부됩니다. GEODE는 MCP 인자 이름을 보고 resource identity를 추측하지 않습니다.
 
 ## 클라이언트: 실행 경로와 가드
 
@@ -5480,6 +5574,8 @@ geode-mcp --http --host 127.0.0.1 --port 8765
 | 증상 | 원인 | 해법 |
 | --- | --- | --- |
 | 서버가 목록에 있는데 도구가 없음 | 필수 env 미해석으로 연결 건너뜀 | `/mcp`로 상태를 보고, 참조된 `${VAR}`를 `.env`에 채웁니다. |
+| 서버가 `REJECTED` 또는 `DEGRADED` | 정책 누락·불일치, broker sandbox 부재, 명령 또는 env 해석 실패 | runtime health의 `extensions`에서 정확한 reason을 확인합니다. brokered 서버를 sandbox 없는 trusted 경로로 자동 하향하지 않습니다. |
+| 변경 도구가 resource-key 오류로 거부됨 | `readOnlyHint`가 아닌 도구인데 server config에 `resource_keys`가 없음 | 실제 변경 대상을 대표하는 보수적 정적 key를 매니페스트에 선언합니다. |
 | `MCP_SERVER_FAILED` 로그가 많음 | 서버 명령을 찾지 못하거나 필수 환경이 빠짐. launchd로 띄운 serve는 셸보다 PATH가 좁을 수 있음 | `~/.geode/logs/serve.log`에서 실패 서버 이름을 보고 `command -v npx`, `command -v codex`, `command -v uvx`가 serve 환경에서도 보이게 맞춥니다. 수정 후 serve를 재시작하면 실패 캐시가 비워집니다. |
 | MCP 결과가 잘려서 옴 | 결과 크기 가드 작동 | 정상 동작입니다. 더 좁은 쿼리로 다시 호출하거나 `max_tool_result_tokens`를 조정합니다. |
 | `geode-mcp --http`가 exit 2 | 비 loopback 바인드에 토큰 없음 | `GEODE_MCP_TOKEN`을 `~/.geode/.env`나 환경에 설정합니다. |
@@ -6186,7 +6282,7 @@ Tier 2  latex2sympy2 + sympy.pretty  블록 전용. 분수·적분을 2D Unicode
 URL: https://mangowhoiscloud.github.io/geode/docs/reference/changelog
 Markdown: https://mangowhoiscloud.github.io/geode/docs/reference/changelog.md
 
-(body omitted from llms-full: 1528 KB — fetch the Markdown twin above for the complete page)
+(body omitted from llms-full: 1529 KB — fetch the Markdown twin above for the complete page)
 
 ---
 
@@ -6346,8 +6442,8 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 
 | 측정값 | 현재 트리 |
 | --- | --- |
-| 프로덕션 Python 파일 | 587 |
-| 테스트 Python 파일 | 688 |
+| 프로덕션 Python 파일 | 589 |
+| 테스트 Python 파일 | 690 |
 | 도구 정의 / 실행 등록 / 유효 스키마 | 86 / 89 / 86 |
 | RuntimeEvent 멤버 | 57 |
 | 기본 LLM 어댑터 | 5 |

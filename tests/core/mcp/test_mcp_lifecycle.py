@@ -17,6 +17,7 @@ import signal
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from core.extensions import ExtensionPolicy
 from core.hooks import HookEvent
 from core.mcp.manager import (
     ADAPTER_ONLY_MCP_SERVERS,
@@ -24,6 +25,24 @@ from core.mcp.manager import (
     _normalise_mcp_tool,
 )
 from core.mcp.stdio_client import _CLOSE_TIMEOUT_S, StdioMCPClient
+
+
+def _trusted_policy(*names: str) -> ExtensionPolicy:
+    return ExtensionPolicy.from_mapping(
+        {
+            "version": 1,
+            "extensions": {
+                f"mcp:{name}": {
+                    "enabled": True,
+                    "trusted": True,
+                    "execution": "trusted",
+                    "capabilities": [],
+                }
+                for name in names
+            },
+        }
+    )
+
 
 # ---------------------------------------------------------------------------
 # HookEvent tests
@@ -561,8 +580,8 @@ class TestMCPManagerConnectAll:
 
     def test_failed_server_is_not_retried_until_cooldown(self) -> None:
         """Repeated tool-list builds must not spam MCP_SERVER_FAILED hooks."""
-        mgr = MCPServerManager()
-        mgr._catalog.servers = {"missing": {"command": "missing-mcp"}}
+        mgr = MCPServerManager(extension_policy=_trusted_policy("missing"))
+        mgr._catalog.servers = {"missing": {"command": "missing-mcp", "execution": "trusted"}}
 
         mock_client = MagicMock()
         mock_client.connect.return_value = False
@@ -575,6 +594,7 @@ class TestMCPManagerConnectAll:
             assert mgr._get_client("missing") is None
 
         client_cls.assert_called_once()
+        mock_client.close.assert_called_once()
         fire_hook.assert_called_once()
 
     def test_auto_restart_bypasses_failed_server_cooldown(self) -> None:
@@ -928,8 +948,13 @@ class TestServerRecycleResilience:
         assert "MCP tool call failed" in result.get("error", "")
 
     def test_connection_epoch_bumps_on_new_client(self) -> None:
-        mgr = MCPServerManager()
-        mgr._catalog.servers["srv"] = {"command": "echo", "args": [], "env": {}}
+        mgr = MCPServerManager(extension_policy=_trusted_policy("srv"))
+        mgr._catalog.servers["srv"] = {
+            "command": "echo",
+            "args": [],
+            "env": {},
+            "execution": "trusted",
+        }
         assert mgr.connection_epoch == 0
 
         good = MagicMock()

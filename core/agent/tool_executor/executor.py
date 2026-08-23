@@ -995,6 +995,20 @@ class ToolExecutor:
                         "denied": True,
                         "recoverable": False,
                     }
+            elif self._mcp_manager is not None:
+                resolve_mcp_resources = getattr(self._mcp_manager, "resource_keys_for_tool", None)
+                if callable(resolve_mcp_resources):
+                    resolved_mcp_keys = cast(
+                        "tuple[str, ...] | None", resolve_mcp_resources(tool_name)
+                    )
+                    if resolved_mcp_keys is None:
+                        return {
+                            "error": f"MCP resource policy is undeclared for '{tool_name}'.",
+                            "error_type": "resource_key_resolution",
+                            "denied": True,
+                            "recoverable": False,
+                        }
+                    resource_keys = resolved_mcp_keys
             leases = await self._resource_lock_pool.acquire(resource_keys)
             release_deferred = False
 
