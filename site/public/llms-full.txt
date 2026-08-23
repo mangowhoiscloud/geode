@@ -3188,10 +3188,19 @@ uv run python scripts/eval/geo_collect.py \
 ```
 
 ```
+uv run python scripts/eval/geo_verify.py \
+  --workload <run-dir>/workload.json \
+  --native-results <run-dir>/native-results.json \
+  --rubric <run-dir>/verifier-rubric.json \
+  --out <run-dir>/verifier-results.json
+```
+
+```
 uv run python scripts/eval/geo_visibility.py \
   --run-spec <run-dir>/run-spec.json \
   --workload <run-dir>/workload.json \
   --native-results <run-dir>/native-results.json \
+  --verifier-results <run-dir>/verifier-results.json \
   --out <run-dir>/geo-vector.json
 ```
 

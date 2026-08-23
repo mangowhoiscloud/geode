@@ -71,8 +71,10 @@ functional change.
   denominators are emitted. Provider adapters preserve retrieval sources and
   visible citations separately. Local site preflight remains partial until a
   digest-matched public-host HTTP/HTML/canonical/robots receipt is supplied;
-  first-party outcomes are admitted only through a completed-window receipt.
-  The evaluator never invents F, A, Q, O, or an aggregate GEO score.
+  a separate source-aware typed verifier overlay can add A and claim-support Q
+  without rewriting native outcomes. First-party outcomes are admitted only
+  through a completed-window receipt. The evaluator never invents F, A, Q, O,
+  or an aggregate GEO score.
 
 - **Third-party extensions now authorize before executable load.** Filesystem
   hooks, package LLM adapters, project/personal skills, and MCP servers project

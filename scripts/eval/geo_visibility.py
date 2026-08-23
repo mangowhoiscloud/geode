@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import json
 import os
@@ -271,11 +272,56 @@ def _outcome_metric(
     )
 
 
+def _apply_verifier_overlay(
+    results: dict[str, Any],
+    *,
+    native_results_path: Path,
+    verifier_results_path: Path | None,
+) -> tuple[dict[str, Any], str | None]:
+    if verifier_results_path is None:
+        return results, None
+    verifier_results_path = verifier_results_path.resolve()
+    overlay = _load_json_object(verifier_results_path)
+    _validate_schema(
+        overlay,
+        "geo-verifier-results.schema.json",
+        label=str(verifier_results_path),
+    )
+    if overlay["run_id"] != results["run_id"] or overlay["native_results_sha256"] != _sha256(
+        native_results_path
+    ):
+        raise ValueError("GEO verifier overlay does not bind the native result")
+    projected = copy.deepcopy(results)
+    projected["verifier_context"] = overlay["verifier_context"]
+    by_id = {str(row["observation_id"]): row for row in projected["observations"]}
+    seen: set[str] = set()
+    for verdict in overlay["observations"]:
+        observation_id = str(verdict["observation_id"])
+        if observation_id in seen or observation_id not in by_id:
+            raise ValueError("GEO verifier overlay contains duplicate or unknown observations")
+        seen.add(observation_id)
+        row = by_id[observation_id]
+        for field in (
+            "absorption",
+            "quality",
+            "quality_claims_expected",
+            "verifier_receipt",
+        ):
+            row[field] = verdict[field]
+        row["verifier_source_locator"] = {
+            "absorption": "/absorption",
+            "quality": "/quality",
+            "quality_claims_expected": "/quality_claims_expected",
+        }
+    return projected, _sha256(verifier_results_path)
+
+
 def validate_and_measure(
     *,
     run_spec_path: Path,
     workload_path: Path,
     native_results_path: Path,
+    verifier_results_path: Path | None = None,
 ) -> dict[str, Any]:
     run_spec_path = run_spec_path.resolve()
     workload_path = workload_path.resolve()
@@ -290,6 +336,11 @@ def validate_and_measure(
         results,
         "geo-native-results.schema.json",
         label=str(native_results_path),
+    )
+    results, verifier_results_sha256 = _apply_verifier_overlay(
+        results,
+        native_results_path=native_results_path,
+        verifier_results_path=verifier_results_path,
     )
 
     run_id = str(run_spec["run_id"])
@@ -591,6 +642,7 @@ def validate_and_measure(
         "run_spec_sha256": _sha256(run_spec_path),
         "workload_sha256": workload_sha256,
         "native_results_sha256": _sha256(native_results_path),
+        "verifier_results_sha256": verifier_results_sha256,
         "native_producer": {"engine": workload["engine"], "model": workload["model"]},
         "verifier_context": verifier_context,
         "preflight_context": preflight_context,
@@ -633,12 +685,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--run-spec", type=Path, required=True)
     parser.add_argument("--workload", type=Path, required=True)
     parser.add_argument("--native-results", type=Path, required=True)
+    parser.add_argument("--verifier-results", type=Path)
     parser.add_argument("--out", type=Path)
     args = parser.parse_args(argv)
     payload = validate_and_measure(
         run_spec_path=args.run_spec,
         workload_path=args.workload,
         native_results_path=args.native_results,
+        verifier_results_path=args.verifier_results,
     )
     if args.out is None:
         print(json.dumps(payload, ensure_ascii=False, indent=2))

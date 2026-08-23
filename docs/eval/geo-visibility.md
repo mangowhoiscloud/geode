@@ -21,6 +21,7 @@ eval_contracts:
   - docs/eval/schemas/geo-native-results.schema.json
   - docs/eval/schemas/geo-outcome.schema.json
   - docs/eval/schemas/geo-preflight.schema.json
+  - docs/eval/schemas/geo-verifier-results.schema.json
   - docs/eval/schemas/geo-workload.schema.json
   - docs/eval/schemas/publication.schema.json
   - docs/eval/schemas/run-spec.schema.json
@@ -166,10 +167,17 @@ rubrics and receipts.
      --host-preflight <run-dir>/host-preflight.json \
      --out <run-dir>/native-results.json
 
+   uv run python scripts/eval/geo_verify.py \
+     --workload <run-dir>/workload.json \
+     --native-results <run-dir>/native-results.json \
+     --rubric <run-dir>/verifier-rubric.json \
+     --out <run-dir>/verifier-results.json
+
    uv run python scripts/eval/geo_visibility.py \
      --run-spec <run-dir>/run-spec.json \
      --workload <run-dir>/workload.json \
      --native-results <run-dir>/native-results.json \
+     --verifier-results <run-dir>/verifier-results.json \
      --out <run-dir>/geo-vector.json
    ```
 

@@ -437,6 +437,71 @@ def test_geo_visibility_binds_first_party_outcome_receipt(tmp_path: Path) -> Non
     }
 
 
+def test_geo_visibility_applies_separate_verifier_overlay(tmp_path: Path) -> None:
+    run_spec, workload, results = _fixture(tmp_path)
+    native = json.loads(results.read_text(encoding="utf-8"))
+    native["verifier_context"] = None
+    for row in native["observations"]:
+        row["absorption"] = None
+        row["quality"] = []
+        row["quality_claims_expected"] = None
+        row["verifier_receipt"] = None
+        row["verifier_source_locator"] = {
+            "absorption": None,
+            "quality": None,
+            "quality_claims_expected": None,
+        }
+    _write_json(results, native)
+    rubric = tmp_path / "rubric.json"
+    _write_json(rubric, {"schema_id": "geode.geo-verifier-rubric@1"})
+    receipt = tmp_path / "verdict.json"
+    target = "https://mangowhoiscloud.github.io/geode/docs/"
+    verdict = {
+        "absorption": True,
+        "quality": [{"claim_id": "claim-1", "source_url": target, "supported": True}],
+        "quality_claims_expected": 1,
+    }
+    _write_json(receipt, verdict)
+    overlay = tmp_path / "verifier-results.json"
+    _write_json(
+        overlay,
+        {
+            "schema_id": "geode.geo-verifier-results@1",
+            "schema_version": 1,
+            "run_id": "geo-quality-test",
+            "native_results_sha256": _sha256(results),
+            "verified_at": "2026-08-23T00:10:00Z",
+            "verifier_context": {
+                "producer": "test-verifier",
+                "version": "v1",
+                "rubric": {"path": rubric.name, "sha256": _sha256(rubric)},
+            },
+            "observations": [
+                {
+                    "observation_id": "obs-01",
+                    **verdict,
+                    "verifier_receipt": {
+                        "path": receipt.name,
+                        "sha256": _sha256(receipt),
+                    },
+                }
+            ],
+        },
+    )
+
+    measured = validate_and_measure(
+        run_spec_path=run_spec,
+        workload_path=workload,
+        native_results_path=results,
+        verifier_results_path=overlay,
+    )
+
+    assert measured["vector"]["A"]["numerator"] == 1
+    assert measured["vector"]["A"]["denominator"] == 1
+    assert measured["vector"]["A"]["status"] == "partial"
+    assert measured["verifier_results_sha256"] == _sha256(overlay)
+
+
 def test_geo_visibility_rejects_observation_matrix_drift(tmp_path: Path) -> None:
     run_spec, workload, results = _fixture(tmp_path)
     payload = json.loads(results.read_text(encoding="utf-8"))

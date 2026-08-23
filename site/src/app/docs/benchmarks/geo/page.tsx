@@ -6,7 +6,14 @@ const measureCommand = `uv run python scripts/eval/geo_visibility.py \\
   --run-spec <run-dir>/run-spec.json \\
   --workload <run-dir>/workload.json \\
   --native-results <run-dir>/native-results.json \\
+  --verifier-results <run-dir>/verifier-results.json \\
   --out <run-dir>/geo-vector.json`;
+
+const verifyCommand = `uv run python scripts/eval/geo_verify.py \\
+  --workload <run-dir>/workload.json \\
+  --native-results <run-dir>/native-results.json \\
+  --rubric <run-dir>/verifier-rubric.json \\
+  --out <run-dir>/verifier-results.json`;
 
 const collectCommand = `uv run python scripts/eval/geo_collect.py \\
   --run-spec <run-dir>/run-spec.json \\
@@ -71,6 +78,7 @@ export default function GeoBenchmarkPage() {
               <li>v1은 Q 중 claim support만 측정하므로, 모든 영수증이 있어도 Q 전체는 <code>partial</code>입니다.</li>
             </ol>
             <pre><code>{collectCommand}</code></pre>
+            <pre><code>{verifyCommand}</code></pre>
             <pre><code>{measureCommand}</code></pre>
 
             <h2>현재 경계</h2>
@@ -122,6 +130,7 @@ export default function GeoBenchmarkPage() {
               <li>v1 measures only claim support within Q, so the broader Q stage remains <code>partial</code> even with complete receipts.</li>
             </ol>
             <pre><code>{collectCommand}</code></pre>
+            <pre><code>{verifyCommand}</code></pre>
             <pre><code>{measureCommand}</code></pre>
 
             <h2>Current boundary</h2>
