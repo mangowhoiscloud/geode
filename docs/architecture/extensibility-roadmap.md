@@ -226,6 +226,7 @@ normal review and CI; implementations start only after the claim merges.
 | Closure package | GAP IDs | Owner/session | Implementation branch | Claim evidence | Claimed at (UTC) |
 |---|---|---|---|---|---|
 | R8.3 | REL-004 | `session=codex-root task=r8-3-publication-grace-evidence` | `feature/r8-3-publication-grace-evidence` | Readiness [#3039](https://github.com/mangowhoiscloud/geode/pull/3039); v1.0.23 GitHub/PyPI parity and candidate interval re-audited | `2026-08-20T07:41:19Z` |
+| R6.3 | BND-004, TRUST-001, TRUST-002 | `session=codex-root task=r6-3-extension-trust-lifecycle` | `feature/r6-3-extension-trust-lifecycle` | Readiness [#3107](https://github.com/mangowhoiscloud/geode/pull/3107); R6.1 delivery reconciliation [#3110](https://github.com/mangowhoiscloud/geode/pull/3110) and whole-package acceptance re-audited | `2026-08-23T12:37:26Z` |
 
 ## 1. Program objective
 
@@ -517,7 +518,7 @@ and closure evidence are appended in §10.
 | BND-001 | `MISFIT` | `plugins/` contains first-party features that `core` imports | Every package is classified kernel, product shell, bundled feature, or external extension; names match semantics | R1.1 | GOV-002 | `IN_DEVELOP` |
 | BND-002 | `MISFIT` | 31 `core` → `plugins` import sites across 14 files | AST gate reports zero reverse dependency; composition owns feature registration | R1.2 | BND-001 | `IN_DEVELOP` |
 | BND-003 | `ABSENT` | One-off core-only probe fails at `core.cli`; CI does not test an installed kernel without features | Isolated wheel/package test boots and runs kernel tests without bundled/third-party modules | R1.3 | BND-001, BND-002, BND-006 | `IN_DEVELOP` |
-| BND-004 | `PARTIAL` | Skills/hooks/MCP have different discovery rules; Python feature collision/trust behavior is not unified | Each supported external surface declares non-executing discovery, precedence, collision, enablement, trust-before-load, reload, isolation, and teardown | R6.3 | BND-001, LLM-002 | `READY` |
+| BND-004 | `PARTIAL` | Skills/hooks/MCP have different discovery rules; Python feature collision/trust behavior is not unified | Each supported external surface declares non-executing discovery, precedence, collision, enablement, trust-before-load, reload, isolation, and teardown | R6.3 | BND-001, LLM-002 | `IN_PROGRESS` |
 | CAP-001 | `PARTIAL` | Google service bundles exist but do not own all tool/policy relationships | Generic capability records plus `GoogleServiceDescriptor` are executable SOTs | R2.1 | BND-002 | `IN_DEVELOP` |
 | CAP-002 | `ABSENT` | `ToolRegistry` owns tool objects while other registries/lists own execution and safety | Immutable `ToolRegistration` and `ToolPlan` derive every tool consumer | R2.1 | CAP-001 | `IN_DEVELOP` |
 | CAP-003 | `MISFIT` | Native Google handlers are bound in `core/cli/tool_handlers/delegated.py` | Runtime/composition binds handlers; CLI only renders/forwards user interaction | R2.3 | CAP-002, BND-002 | `IN_DEVELOP` |
@@ -541,8 +542,8 @@ and closure evidence are appended in §10.
 | PROTO-002 | `PARTIAL` | IPC has typed behavior but no single versioned external compatibility contract | Versioned envelopes, capability negotiation, unknown-field behavior, and golden compatibility tests | R6.1 | PROTO-001 | `IN_DEVELOP` |
 | STORE-001 | `PARTIAL` | `SessionStorePort`, `SessionManager`, checkpoints, transcripts, and event store have overlapping ownership | Ports and writers conform to the existing sessions.db/JSONL destination matrix; projections are rebuildable | R6.2 | — | `DONE` |
 | STORE-002 | `PARTIAL` | Logging/transcript/resume/replay plan still contains staged/open parity work | Each subsystem has one declared writer, resume contract, replay doctrine, retention, and redaction test | R6.2 | STORE-001 | `DONE` |
-| TRUST-001 | `ABSENT` | Registration/enabled status does not uniformly distinguish trusted authority | Installed, enabled, trusted, and granted-capability states are separate and observable; executable code is never imported before trust approval | R6.3 | BND-004 | `READY` |
-| TRUST-002 | `PARTIAL` | Extension seams can receive broader runtime objects than required, and arbitrary in-process Python cannot be capability-confined | Trusted in-process code receives narrow ports for API discipline; untrusted executable code runs out of process behind a brokered capability boundary | R6.3 | DI-002, TRUST-001, TRUST-003 | `READY` |
+| TRUST-001 | `ABSENT` | Registration/enabled status does not uniformly distinguish trusted authority | Installed, enabled, trusted, and granted-capability states are separate and observable; executable code is never imported before trust approval | R6.3 | BND-004 | `IN_PROGRESS` |
+| TRUST-002 | `PARTIAL` | Extension seams can receive broader runtime objects than required, and arbitrary in-process Python cannot be capability-confined | Trusted in-process code receives narrow ports for API discipline; untrusted executable code runs out of process behind a brokered capability boundary | R6.3 | DI-002, TRUST-001, TRUST-003 | `IN_PROGRESS` |
 | TRUST-003 | `ABSENT` | Mutation serialization is not derived from explicit tool resource metadata | `resource_keys(args)` drives per-resource serialization; no argument-name heuristic | R2.4 | CAP-004 | `IN_DEVELOP` |
 | VER-001 | `PARTIAL` | Quality gates pass but lack core-only, reverse-import, exception-budget, and tool-plan drift tests | All architecture gates in §9 run in CI and locally | R7.1 | BND-003, BND-004, CAP-005, LOOP-004, DI-003, LLM-002, PROTO-002, GOV-004, VER-003 | `OPEN` |
 | VER-002 | `ABSENT` | No contract suite measures how many central edits each extension type requires | Six extension scenarios in §8 pass without forbidden edits | R7.2 | CAP-006, LLM-002, BND-004 | `OPEN` |
@@ -2239,15 +2240,17 @@ explicit unknown-field/event behavior are covered by v0, v1, and future-version
 golden and poison tests. Internal `RuntimeEvent` and `HookEvent` taxonomies
 remain private and can evolve without becoming external protocol contracts.
 
-R6.3 (`BND-004`, `TRUST-001`, `TRUST-002`) remains the sole next unclaimed,
-package-atomically `READY` unit after R6.1 delivery reconciliation. BND-001,
-LLM-002, DI-002, and
-TRUST-003 are `IN_DEVELOP`; BND-004 → TRUST-001 → TRUST-002 is package-internal
-implementation order. Current extension surfaces still discover, enable,
-trust, load, isolate, and tear down through separate rules, and executable
-entry points are not governed by one manifest-first trust and capability-grant
-contract. R6.3 requires its own claim before implementation, and does
-not turn narrow in-process ports into a Python security sandbox.
+R6.3 (`BND-004`, `TRUST-001`, `TRUST-002`) is `IN_PROGRESS` under the active
+claim for `feature/r6-3-extension-trust-lifecycle`, selected after R6.1 delivery
+reconciliation [#3110](https://github.com/mangowhoiscloud/geode/pull/3110).
+BND-001, LLM-002, DI-002, and TRUST-003 are `IN_DEVELOP`; BND-004 → TRUST-001
+→ TRUST-002 remains the package-internal implementation order. The package
+owns manifest-only discovery, explicit lifecycle and collision diagnostics,
+trust-before-load, narrow trusted in-process ports, and fail-closed brokered
+execution for capability-confined code. Implementation may begin only after
+this claim merges and a fresh worktree is allocated from the updated
+`origin/develop`; it does not treat ordinary Python process boundaries as a
+security sandbox or reopen R6.1 protocol work.
 
 R9.1 (`CODE-001`) was already dependency-satisfied and remains `OPEN` pending
 its own serialized whole-package readiness transaction later in master order.
